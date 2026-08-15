@@ -1000,6 +1000,7 @@
 		comments: [ __( 'Comments' ), __( 'Moderation' ) ],
 		orders: [ __( 'Orders' ), 'WooCommerce' ],
 		order: [ __( 'Order' ), 'WooCommerce' ],
+		fieldgroup: [ __( 'Field group' ), 'ACF' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
 		products: [ __( 'Products' ), 'WooCommerce' ],
@@ -2014,6 +2015,10 @@
 				state.editorId = parts[ 2 ] ? parseInt( parts[ 2 ], 10 ) : null;
 			}
 			state.route = 'editor';
+		} else if ( route === 'field-groups' && parts[ 1 ] ) {
+			// /field-groups/group_x — the ACF field group builder page.
+			state.fgbKey = decodeURIComponent( parts[ 1 ] );
+			state.route = 'fieldgroup';
 		} else if ( route === 'orders' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /orders/123 — the order detail page.
 			state.orderPageId = parseInt( parts[ 1 ], 10 );
@@ -12776,7 +12781,9 @@
 
 	function openSurfaceRowMenu( s, coll, item, x, y ) {
 		const entries = [
-			{ label: __( 'Open' ), run: () => openSurfaceDetail( s, item ) },
+			{ label: __( 'Open' ), run: () => ( coll.open && coll.open.route
+				? go( coll.open.route.replace( '{id}', encodeURIComponent( item.id ) ) )
+				: openSurfaceDetail( s, item ) ) },
 		];
 		surfaceListMenuActions( coll, item ).forEach( ( { a } ) => {
 			if ( a.href ) {
@@ -13759,6 +13766,12 @@
 			if ( ! item ) return;
 			row.addEventListener( 'click', ( e ) => {
 				if ( e.target.closest( '.minn-row-more' ) ) return;
+				// collection.open: the row's record lives on its own page
+				// (the orders-page test) — navigate instead of the modal.
+				if ( coll.open && coll.open.route ) {
+					go( coll.open.route.replace( '{id}', encodeURIComponent( item.id ) ) );
+					return;
+				}
 				openSurfaceDetail( s, item );
 			} );
 			if ( hasRowMenu ) {
@@ -37725,6 +37738,329 @@
 		}
 	}
 
+
+	/* ===== ACF field group builder =====
+	 * The schema canvas at /field-groups/{key}: stacked field rows, click a
+	 * row to configure it inline, add / reorder / delete, one Save for the
+	 * whole group (the server overlays only declared settings per row, so
+	 * names and types stay immutable on existing fields and unsupported
+	 * types keep their configuration). Code-registered groups open read-only.
+	 */
+	const FGB_TYPE_LABELS = {
+		text: __( 'Text' ), textarea: __( 'Text area' ), number: __( 'Number' ), range: __( 'Range' ),
+		email: __( 'Email' ), url: 'URL', select: __( 'Select' ), radio: __( 'Radio' ),
+		true_false: __( 'True / False' ), color_picker: __( 'Color' ), image: __( 'Image' ),
+		gallery: __( 'Gallery' ), wysiwyg: __( 'Rich text' ),
+	};
+	// Which extra settings each type edits (base label/name/instructions/
+	// required always render; default_value except for media/rich types).
+	const FGB_EXTRAS = {
+		text: [ 'placeholder' ], textarea: [ 'placeholder', 'rows' ],
+		number: [ 'placeholder', 'min', 'max', 'step' ], range: [ 'min', 'max', 'step' ],
+		email: [ 'placeholder' ], url: [ 'placeholder' ],
+		select: [ 'choices' ], radio: [ 'choices' ],
+		true_false: [ 'ui_on_text', 'ui_off_text' ],
+		color_picker: [], image: [], gallery: [], wysiwyg: [],
+	};
+	const FGB_NO_DEFAULT = [ 'image', 'gallery', 'wysiwyg' ];
+	const fgbSlug = ( label ) => String( label ).toLowerCase().replace( /[^a-z0-9]+/g, '_' ).replace( /^_+|_+$/g, '' );
+
+	let fgbUnloadBound = false;
+
+	function renderFieldGroupBuilder() {
+		const view = $( '#minn-view' );
+		if ( ! state.fgb || state.fgb.key !== state.fgbKey ) {
+			state.fgb = { key: state.fgbKey, loading: true };
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+			api( 'minn-admin/v1/acf/schema/groups/' + encodeURIComponent( state.fgbKey ) + '/full' )
+				.then( ( r ) => {
+					if ( state.route !== 'fieldgroup' || state.fgbKey !== r.group.key ) return;
+					fgbAdopt( r );
+					renderFieldGroupBuilder();
+				} )
+				.catch( ( e ) => { view.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`; } );
+			return;
+		}
+		const fgb = state.fgb;
+		if ( fgb.loading ) return;
+		if ( ! fgbUnloadBound ) {
+			fgbUnloadBound = true;
+			window.addEventListener( 'beforeunload', ( e ) => {
+				if ( state.route === 'fieldgroup' && state.fgb && state.fgb.dirty ) e.preventDefault();
+			} );
+		}
+		const ro = fgb.group.source !== 'db';
+		const dis = ro ? ' disabled' : '';
+
+		const rowHtml = ( f, i ) => {
+			const open = !! fgb.expanded[ i ];
+			const typeLabel = FGB_TYPE_LABELS[ f.type ] || f.type;
+			return `<div class="minn-fgb-row${ open ? ' open' : '' }${ f.editable ? '' : ' minn-fgb-adv' }" data-fi="${ i }">
+				<div class="minn-fgb-head" data-fgbtoggle="${ i }" role="button" tabindex="0" aria-expanded="${ open }">
+					<span class="minn-fgb-chev">${ icon( 'chevron-down' ) }</span>
+					<strong class="minn-fgb-label">${ esc( f.label || __( '(no label)' ) ) }</strong>
+					<span class="minn-fgb-name mono">${ esc( f.name ) }</span>
+					<span class="minn-fgb-type">${ esc( typeLabel ) }${ f.subCount ? ` · ${ f.subCount }` : '' }</span>
+					${ f.required ? `<span class="minn-fgb-req" title="${ esc( __( 'Required' ) ) }">*</span>` : '' }
+					<span class="minn-fgb-ctl">
+						<button type="button" data-fgbmv="${ i }:-1" title="${ esc( __( 'Move up' ) ) }"${ i === 0 ? ' disabled' : '' }${ dis }>↑</button>
+						<button type="button" data-fgbmv="${ i }:1" title="${ esc( __( 'Move down' ) ) }"${ i === fgb.fields.length - 1 ? ' disabled' : '' }${ dis }>↓</button>
+						<button type="button" data-fgbdel="${ i }" title="${ esc( __( 'Remove field' ) ) }"${ dis }>×</button>
+					</span>
+				</div>
+				${ open ? fgbSettingsHtml( f, i, ro ) : '' }
+			</div>`;
+		};
+
+		view.innerHTML = `
+		<div class="minn-card minn-fgb">
+			<div class="minn-fgb-top">
+				<button type="button" class="minn-btn-soft" id="minn-fgb-back">‹ ${ esc( __( 'Field Groups' ) ) }</button>
+				<input class="minn-input minn-fgb-title" id="minn-fgb-title" value="${ esc( fgb.group.title ) }" placeholder="${ esc( __( 'Group title' ) ) }"${ dis }>
+				<label class="minn-fgb-active">${ esc( __( 'Active' ) ) }
+					<button type="button" class="minn-switch${ fgb.group.active ? ' on' : '' }" id="minn-fgb-active" role="switch" aria-checked="${ !! fgb.group.active }"${ dis }><span class="minn-switch-knob"></span></button>
+				</label>
+				<span style="flex:1"></span>
+				${ fgb.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
+				${ ro ? `<span class="minn-fgb-dirty">${ esc( __( 'Registered in code — read only' ) ) }</span>` : `<button type="button" class="minn-btn-primary" id="minn-fgb-save">${ esc( __( 'Save group' ) ) }</button>` }
+			</div>
+			<div class="minn-fgb-meta">
+				<span>${ esc( fgb.group.locationLabel ) }</span>
+				${ fgb.group.adminUrl ? `<a href="${ esc( fgb.group.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in ACF ↗' ) ) }</a>` : '' }
+			</div>
+			<div class="minn-fgb-rows">
+				${ fgb.fields.map( rowHtml ).join( '' ) || `<div class="minn-empty">${ esc( __( 'No fields yet — add the first one below.' ) ) }</div>` }
+			</div>
+			${ ro ? '' : `<button type="button" class="minn-btn-soft" id="minn-fgb-add">+ ${ esc( __( 'Add field' ) ) }</button>` }
+		</div>`;
+		// Bind to the freshly-rendered card, never the persistent #minn-view:
+		// a container-level delegate would stack one listener per re-render
+		// and double every structural click.
+		bindFieldGroupBuilder( $( '.minn-fgb', view ) );
+	}
+
+	function fgbAdopt( r ) {
+		state.fgb = {
+			key: r.group.key,
+			group: { title: r.group.title, active: r.group.active, source: r.group.source, locationLabel: r.group.locationLabel, adminUrl: r.group.adminUrl },
+			fields: r.fields.map( ( f ) => ( { ...f } ) ),
+			expanded: {},
+			dirty: false,
+			loading: false,
+		};
+	}
+
+	function fgbSettingsHtml( f, i, ro ) {
+		const dis = ro || ! f.editable && ! f.isNew ? ( f.editable ? '' : ' disabled' ) : '';
+		const roAttr = ro ? ' disabled' : '';
+		const input = ( key, label, opts = {} ) => `
+			<div class="minn-fgb-set">
+				<div class="minn-field-label">${ esc( label ) }</div>
+				${ opts.area
+					? `<textarea class="minn-input${ opts.mono ? ' mono' : '' }" rows="${ opts.rows || 3 }" data-fgb="${ i }:${ key }" placeholder="${ esc( opts.ph || '' ) }"${ roAttr }>${ esc( f[ key ] == null ? '' : f[ key ] ) }</textarea>`
+					: `<input class="minn-input${ opts.mono ? ' mono' : '' }" data-fgb="${ i }:${ key }" value="${ esc( f[ key ] == null ? '' : f[ key ] ) }" placeholder="${ esc( opts.ph || '' ) }"${ opts.dis || roAttr }>` }
+				${ opts.help ? `<div class="minn-toggle-desc">${ esc( opts.help ) }</div>` : '' }
+			</div>`;
+		if ( ! f.editable ) {
+			return `<div class="minn-fgb-body">
+				${ input( 'label', __( 'Label' ) ) }
+				<div class="minn-fgb-set"><div class="minn-insp-note">${ esc( __( 'This field type configures in ACF’s own editor.' ) ) }</div></div>
+			</div>`;
+		}
+		const extras = FGB_EXTRAS[ f.type ] || [];
+		const typePick = f.isNew ? `
+			<div class="minn-fgb-set">
+				<div class="minn-field-label">${ esc( __( 'Type' ) ) }</div>
+				<select class="minn-input" data-fgb="${ i }:type"${ roAttr }>
+					${ Object.keys( FGB_EXTRAS ).map( ( t ) => `<option value="${ t }"${ t === f.type ? ' selected' : '' }>${ esc( FGB_TYPE_LABELS[ t ] || t ) }</option>` ).join( '' ) }
+				</select>
+			</div>` : '';
+		return `<div class="minn-fgb-body">
+			${ typePick }
+			${ input( 'label', __( 'Label' ) ) }
+			${ input( 'name', __( 'Name' ), f.isNew
+				? { mono: true, help: __( 'Single word, underscores allowed. Locks after the first save.' ) }
+				: { mono: true, dis: ' disabled', help: __( 'Names lock after the first save — renaming would orphan stored values.' ) } ) }
+			${ input( 'instructions', __( 'Instructions' ), { area: true, rows: 2, help: __( 'Shown to writers under the field.' ) } ) }
+			<div class="minn-fgb-set minn-fgb-set-inline">
+				<div class="minn-field-label">${ esc( __( 'Required' ) ) }</div>
+				<button type="button" class="minn-switch${ f.required ? ' on' : '' }" data-fgbreq="${ i }" role="switch" aria-checked="${ !! f.required }"${ roAttr }><span class="minn-switch-knob"></span></button>
+			</div>
+			${ extras.includes( 'choices' ) ? input( 'choices', __( 'Choices' ), { area: true, rows: 4, mono: true, ph: 'value : Label', help: __( 'One per line: value : Label' ) } ) : '' }
+			${ FGB_NO_DEFAULT.includes( f.type ) ? '' : ( 'true_false' === f.type ? `
+			<div class="minn-fgb-set minn-fgb-set-inline">
+				<div class="minn-field-label">${ esc( __( 'Default on' ) ) }</div>
+				<button type="button" class="minn-switch${ f.default_value && '0' !== String( f.default_value ) ? ' on' : '' }" data-fgbdef="${ i }" role="switch" aria-checked="${ !! ( f.default_value && '0' !== String( f.default_value ) ) }"${ roAttr }><span class="minn-switch-knob"></span></button>
+			</div>` : input( 'default_value', __( 'Default value' ) ) ) }
+			${ extras.includes( 'placeholder' ) ? input( 'placeholder', __( 'Placeholder' ) ) : '' }
+			${ extras.includes( 'min' ) ? `<div class="minn-fgb-minmax">${ input( 'min', __( 'Min' ) ) }${ input( 'max', __( 'Max' ) ) }${ input( 'step', __( 'Step' ) ) }</div>` : '' }
+			${ extras.includes( 'rows' ) ? input( 'rows', __( 'Rows' ) ) : '' }
+			${ extras.includes( 'ui_on_text' ) ? `<div class="minn-fgb-minmax">${ input( 'ui_on_text', __( 'On label' ) ) }${ input( 'ui_off_text', __( 'Off label' ) ) }</div>` : '' }
+		</div>`;
+	}
+
+	function bindFieldGroupBuilder( view ) {
+		const fgb = state.fgb;
+		const markDirty = () => {
+			if ( fgb.dirty ) return;
+			fgb.dirty = true;
+			// Light header repaint would lose input focus — flip the pill in
+			// on the next full render; meanwhile show it by force-adding once.
+			const top = $( '.minn-fgb-top', view );
+			if ( top && ! top.querySelector( '.minn-fgb-dirty' ) ) {
+				const pill = document.createElement( 'span' );
+				pill.className = 'minn-fgb-dirty';
+				pill.textContent = __( 'Unsaved changes' );
+				const save = $( '#minn-fgb-save', view );
+				if ( save ) top.insertBefore( pill, save );
+			}
+		};
+		const backBtn = $( '#minn-fgb-back', view );
+		if ( backBtn ) backBtn.addEventListener( 'click', async () => {
+			if ( fgb.dirty && ! await minnConfirm( { title: __( 'Leave without saving?' ), body: __( 'Changes to this field group haven’t been saved.' ), confirmLabel: __( 'Leave' ), danger: true } ) ) return;
+			fgb.dirty = false;
+			go( 'acf-field-groups' );
+		} );
+		const titleEl = $( '#minn-fgb-title', view );
+		if ( titleEl ) titleEl.addEventListener( 'input', () => { fgb.group.title = titleEl.value; markDirty(); } );
+		const activeEl = $( '#minn-fgb-active', view );
+		if ( activeEl ) activeEl.addEventListener( 'click', () => {
+			activeEl.classList.toggle( 'on' );
+			fgb.group.active = activeEl.classList.contains( 'on' );
+			activeEl.setAttribute( 'aria-checked', fgb.group.active );
+			markDirty();
+		} );
+		view.addEventListener( 'input', ( e ) => {
+			const el = e.target.closest( '[data-fgb]' );
+			if ( ! el ) return;
+			const sep = el.dataset.fgb.indexOf( ':' );
+			const i = Number( el.dataset.fgb.slice( 0, sep ) );
+			const key = el.dataset.fgb.slice( sep + 1 );
+			const f = fgb.fields[ i ];
+			if ( ! f ) return;
+			f[ key ] = el.value;
+			if ( 'name' === key ) f._nameAuto = false;
+			// New fields keep name in step with the label until the writer
+			// touches the name themselves (ACF's own behavior).
+			if ( 'label' === key && f.isNew && f._nameAuto !== false ) {
+				f.name = fgbSlug( el.value );
+				const nameEl = view.querySelector( `[data-fgb="${ i }:name"]` );
+				if ( nameEl ) nameEl.value = f.name;
+			}
+			// The header echoes the label live.
+			if ( 'label' === key ) {
+				const head = view.querySelector( `.minn-fgb-row[data-fi="${ i }"] .minn-fgb-label` );
+				if ( head ) head.textContent = el.value || __( '(no label)' );
+			}
+			markDirty();
+		} );
+		view.addEventListener( 'change', ( e ) => {
+			const el = e.target.closest( '[data-fgb]' );
+			if ( ! el || el.tagName !== 'SELECT' ) return;
+			const sep = el.dataset.fgb.indexOf( ':' );
+			const i = Number( el.dataset.fgb.slice( 0, sep ) );
+			const f = fgb.fields[ i ];
+			if ( f && 'type' === el.dataset.fgb.slice( sep + 1 ) ) {
+				f.type = el.value;
+				markDirty();
+				renderFieldGroupBuilder(); // extras change with the type
+			}
+		} );
+		view.addEventListener( 'click', async ( e ) => {
+			const req = e.target.closest( '[data-fgbreq]' );
+			if ( req ) {
+				const f = fgb.fields[ Number( req.dataset.fgbreq ) ];
+				req.classList.toggle( 'on' );
+				f.required = req.classList.contains( 'on' );
+				req.setAttribute( 'aria-checked', f.required );
+				markDirty();
+				return;
+			}
+			const def = e.target.closest( '[data-fgbdef]' );
+			if ( def ) {
+				const f = fgb.fields[ Number( def.dataset.fgbdef ) ];
+				def.classList.toggle( 'on' );
+				f.default_value = def.classList.contains( 'on' ) ? '1' : '0';
+				def.setAttribute( 'aria-checked', def.classList.contains( 'on' ) );
+				markDirty();
+				return;
+			}
+			const mv = e.target.closest( '[data-fgbmv]' );
+			if ( mv ) {
+				const [ i, dir ] = mv.dataset.fgbmv.split( ':' ).map( Number );
+				const j = i + dir;
+				if ( j < 0 || j >= fgb.fields.length ) return;
+				[ fgb.fields[ i ], fgb.fields[ j ] ] = [ fgb.fields[ j ], fgb.fields[ i ] ];
+				const eo = { ...fgb.expanded };
+				fgb.expanded[ i ] = !! eo[ j ];
+				fgb.expanded[ j ] = !! eo[ i ];
+				markDirty();
+				renderFieldGroupBuilder();
+				return;
+			}
+			const del = e.target.closest( '[data-fgbdel]' );
+			if ( del ) {
+				const i = Number( del.dataset.fgbdel );
+				const f = fgb.fields[ i ];
+				if ( ! f.isNew && ! await minnConfirm( { title: __( 'Remove field?' ), body: __( 'The definition is removed on save; values already stored on posts stay in the database.' ), confirmLabel: __( 'Remove' ), danger: true } ) ) return;
+				fgb.fields.splice( i, 1 );
+				fgb.expanded = {};
+				markDirty();
+				renderFieldGroupBuilder();
+				return;
+			}
+			const tog = e.target.closest( '[data-fgbtoggle]' );
+			if ( tog && ! e.target.closest( '.minn-fgb-ctl' ) ) {
+				const i = Number( tog.dataset.fgbtoggle );
+				fgb.expanded[ i ] = ! fgb.expanded[ i ];
+				renderFieldGroupBuilder();
+				return;
+			}
+			if ( e.target.closest( '#minn-fgb-add' ) ) {
+				fgb.fields.push( {
+					isNew: true, editable: true, _nameAuto: true,
+					label: '', name: '', type: 'text', required: false,
+					instructions: '', default_value: '', placeholder: '', choices: '',
+					min: '', max: '', step: '', rows: '', ui_on_text: '', ui_off_text: '', subCount: 0,
+				} );
+				fgb.expanded = { [ fgb.fields.length - 1 ]: true };
+				markDirty();
+				renderFieldGroupBuilder();
+				const labelEl = $( `#minn-view [data-fgb="${ fgb.fields.length - 1 }:label"]` );
+				if ( labelEl ) labelEl.focus( { preventScroll: false } );
+				return;
+			}
+			if ( e.target.closest( '#minn-fgb-save' ) ) {
+				const btn = e.target.closest( '#minn-fgb-save' );
+				btn.disabled = true;
+				btn.textContent = __( 'Saving…' );
+				const rows = fgb.fields.map( ( f ) => {
+					const row = f.key ? { key: f.key } : { type: f.type, name: f.name };
+					[ 'label', 'instructions', 'required', 'default_value', 'placeholder', 'choices', 'min', 'max', 'step', 'rows', 'ui_on_text', 'ui_off_text' ].forEach( ( k ) => { row[ k ] = f[ k ]; } );
+					return row;
+				} );
+				try {
+					const r = await api( 'minn-admin/v1/acf/schema/groups/' + encodeURIComponent( fgb.key ) + '/full', {
+						method: 'POST',
+						body: JSON.stringify( { title: fgb.group.title, active: fgb.group.active, fields: rows } ),
+					} );
+					const wasExpanded = fgb.expanded;
+					fgbAdopt( r );
+					state.fgb.expanded = wasExpanded;
+					// The list view's cache holds stale counts/labels now.
+					const ss = surfaceState( 'acf-field-groups' );
+					if ( ss ) { ss.cache = null; ss.tabsCache = null; }
+					toast( __( 'Field group saved' ) );
+					renderFieldGroupBuilder();
+				} catch ( err ) {
+					toast( err.message, true );
+					btn.disabled = false;
+					btn.textContent = __( 'Save group' );
+				}
+			}
+		} );
+	}
+
 	function renderView() {
 		renderTopbar();
 		announceRoute();
@@ -37757,6 +38093,7 @@
 		if ( state.route !== 'subscription' ) state.subPage = null;
 		// User-edit page data too (same per-visit contract).
 		if ( state.route !== 'useredit' ) state.userEdit = null;
+		if ( state.route !== 'fieldgroup' ) state.fgb = null;
 		switch ( state.route ) {
 			case 'content': return renderContent();
 			case 'media': return renderMedia();
@@ -37780,6 +38117,7 @@
 			case 'system': return renderSystem();
 			case 'database': return renderDatabase();
 			case 'editor': return renderEditor();
+			case 'fieldgroup': return renderFieldGroupBuilder();
 			case 'profile': return renderProfile();
 			default:
 				if ( surfaceById( state.route ) ) return renderSurface( surfaceById( state.route ) );

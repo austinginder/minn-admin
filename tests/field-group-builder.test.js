@@ -1,0 +1,142 @@
+/**
+ * ACF field group builder (/field-groups/{key}): the schema canvas. Rows
+ * open the builder via collection.open, fields build up dynamically (label
+ * auto-derives the name until touched, per-type settings render inline),
+ * the whole group saves as one unit, reorders and deletions persist, and —
+ * the end-to-end proof — the built group renders live in the editor's
+ * Custom fields panel. Cleanup force-deletes through the schema route.
+ */
+const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = require( './helpers' );
+
+( async () => {
+	const t = reporter( 'field-group-builder' );
+	const { browser, page, errors } = await launch();
+	await login( page );
+	await page.goto( BASE + '/minn-admin/acf-field-groups', { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '#minn-surface-add', { timeout: 20000 } );
+
+	const api = ( method, route, body ) => page.evaluate( async ( a ) => {
+		const r = await fetch( window.MINN.restUrl + a.route, {
+			method: a.method, credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+			body: a.body ? JSON.stringify( a.body ) : undefined,
+		} );
+		return { status: r.status, data: await r.json().catch( () => null ) };
+	}, { method, route, body } );
+	const sweep = async () => {
+		const list = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups?_cb=' + Math.random() ) ).data;
+		for ( const g of ( list.items || [] ) ) {
+			if ( /^Builder Suite/.test( g.title ) ) await api( 'DELETE', 'minn-admin/v1/acf/schema/groups/' + g.id + '?force=1' );
+		}
+	};
+	let postId = 0;
+	let gkey = '';
+
+	try {
+		await sweep();
+		// Create a group, open its builder from the row.
+		await page.click( '#minn-surface-add' );
+		await page.waitForSelector( '[data-createfield="title"]', { timeout: 8000 } );
+		await page.type( '[data-createfield="title"]', 'Builder Suite Group' );
+		await page.click( '[data-createfield="location"] .minn-ac-input' );
+		await page.waitForSelector( '[data-createfield="location"] .minn-ac-item[data-acv="post_type:post"]', { timeout: 5000 } );
+		await page.click( '[data-createfield="location"] .minn-ac-item[data-acv="post_type:post"]' );
+		await page.click( '#minn-surface-create' );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Builder Suite Group' ) ),
+		null, { timeout: 15000 } );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '.minn-table-row' ) ).find( ( r ) => r.textContent.includes( 'Builder Suite Group' ) ).click();
+		} );
+		await page.waitForSelector( '#minn-fgb-add', { timeout: 15000 } );
+		t.check( 'row click opens the builder page', ( await page.evaluate( () => location.pathname ) ).includes( '/field-groups/' ) );
+
+		// Build three fields.
+		await page.click( '#minn-fgb-add' );
+		await page.waitForSelector( '[data-fgb="0:label"]', { timeout: 5000 } );
+		await page.type( '[data-fgb="0:label"]', 'Suite Headline' );
+		t.check( 'name auto-derives from the label', await page.$eval( '[data-fgb="0:name"]', ( e ) => e.value ) === 'suite_headline' );
+		await page.type( '[data-fgb="0:placeholder"]', 'Type it' );
+		await page.click( '[data-fgbreq="0"]' );
+
+		await page.click( '#minn-fgb-add' );
+		await page.waitForSelector( '[data-fgb="1:label"]', { timeout: 5000 } );
+		await page.type( '[data-fgb="1:label"]', 'Suite Mood' );
+		await page.selectOption( '[data-fgb="1:type"]', 'select' );
+		await page.waitForSelector( '[data-fgb="1:choices"]', { timeout: 5000 } );
+		await page.type( '[data-fgb="1:choices"]', 'calm : Calm\nbold : Bold' );
+
+		await page.click( '#minn-fgb-add' );
+		await page.waitForSelector( '[data-fgb="2:label"]', { timeout: 5000 } );
+		await page.type( '[data-fgb="2:label"]', 'Suite Flag' );
+		await page.selectOption( '[data-fgb="2:type"]', 'true_false' );
+
+		await page.click( '#minn-fgb-save' );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Field group saved/.test( x.textContent ) ),
+		null, { timeout: 15000 } );
+
+		const list = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups?_cb=' + Math.random() ) ).data;
+		gkey = ( list.items.find( ( g ) => g.title === 'Builder Suite Group' ) || {} ).id;
+		let full = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full' ) ).data;
+		t.check( 'three fields saved with their settings', full.fields.length === 3
+			&& full.fields[ 0 ].name === 'suite_headline' && full.fields[ 0 ].required && full.fields[ 0 ].placeholder === 'Type it'
+			&& full.fields[ 1 ].type === 'select' && /bold : Bold/.test( full.fields[ 1 ].choices )
+			&& full.fields[ 2 ].type === 'true_false',
+			JSON.stringify( full.fields.map( ( f ) => f.name + ':' + f.type ) ) );
+
+		// The end-to-end proof: the built group renders in the editor panel.
+		postId = await createPost( page, { title: 'FGB e2e', content: '<p>x</p>' } );
+		await openEditor( page, postId );
+		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
+		await page.click( '[data-side-door="panel:acf"]' );
+		await page.waitForSelector( '[data-pf$=":suite_headline"]', { timeout: 15000 } );
+		t.check( 'built group renders in the Custom fields panel', true );
+		t.check( 'built select carries its choices', await page.$eval( '[data-pf$=":suite_mood"]', ( e ) =>
+			Array.from( e.options || [] ).some( ( o ) => o.value === 'bold' ) ) );
+
+		// Back in the builder: edit a label, reorder, delete the flag, save.
+		await page.goto( BASE + '/minn-admin/field-groups/' + gkey, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-fgb-row', { timeout: 20000 } );
+		await page.click( '[data-fgbtoggle="0"]' );
+		await page.waitForSelector( '[data-fgb="0:label"]', { timeout: 5000 } );
+		await page.evaluate( () => { document.querySelector( '[data-fgb="0:label"]' ).value = ''; } );
+		await page.type( '[data-fgb="0:label"]', 'Suite Headline Renamed' );
+		t.check( 'existing field name input is locked', await page.$eval( '[data-fgb="0:name"]', ( e ) => e.disabled ) );
+		await page.click( '[data-fgbmv="1:1"]' ); // mood below flag
+		await page.waitForTimeout( 300 );
+		page.once( 'dialog', ( d ) => d.accept() );
+		await page.evaluate( () => {
+			// remove the (now) middle row: Suite Flag
+			const rows = Array.from( document.querySelectorAll( '.minn-fgb-row' ) );
+			const flag = rows.find( ( r ) => r.textContent.includes( 'Suite Flag' ) );
+			flag.querySelector( '[data-fgbdel]' ).click();
+		} );
+		// themed confirm
+		await page.waitForSelector( '.minn-confirm-overlay button.minn-btn-primary, .minn-confirm-overlay .danger', { timeout: 5000 } ).catch( () => {} );
+		await page.evaluate( () => {
+			const ov = document.querySelector( '.minn-confirm-overlay' );
+			if ( ov ) {
+				const btn = Array.from( ov.querySelectorAll( 'button' ) ).find( ( b ) => /Remove/.test( b.textContent ) );
+				if ( btn ) btn.click();
+			}
+		} );
+		await page.waitForFunction( () =>
+			! Array.from( document.querySelectorAll( '.minn-fgb-row' ) ).some( ( r ) => r.textContent.includes( 'Suite Flag' ) ),
+		null, { timeout: 5000 } );
+		await page.click( '#minn-fgb-save' );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Field group saved/.test( x.textContent ) ),
+		null, { timeout: 15000 } );
+		full = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full?_cb=' + Math.random() ) ).data;
+		t.check( 'rename + reorder + delete saved as one unit',
+			full.fields.length === 2 && full.fields[ 0 ].label === 'Suite Headline Renamed'
+			&& full.fields[ 1 ].name === 'suite_mood' && full.fields[ 0 ].name === 'suite_headline',
+			JSON.stringify( full.fields.map( ( f ) => f.name + ':' + f.label ) ) );
+	} finally {
+		if ( postId ) await deletePost( page, postId ).catch( () => {} );
+		await sweep().catch( () => {} );
+	}
+
+	await t.done( browser, errors );
+} )();

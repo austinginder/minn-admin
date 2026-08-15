@@ -188,10 +188,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_acf_schema_active() ) {
 		return $surfaces;
 	}
-	$types = array();
-	foreach ( minn_admin_acf_schema_field_types() as $value => $label ) {
-		$types[] = array( $value, $label );
-	}
 	// One flat "attach to" choice list for new groups: the common single-rule
 	// locations. Multi-rule locations are ACF-editor territory.
 	$locations = array();
@@ -222,6 +218,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => minn_admin_acf_schema_cap(),
 		'collection' => array(
 			'viewLabel' => __( 'Groups', 'minn-admin' ),
+			// Rows open the group builder page (collection.open — the
+			// pages-vs-modals test: a group carries a whole workflow).
+			'open'      => array( 'route' => 'field-groups/{id}' ),
 			'route'     => 'minn-admin/v1/acf/schema/groups',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
@@ -263,30 +262,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'  => array( 'key' => 'status', 'equals' => 'inactive' ),
 				),
 				array(
-					'label'  => __( 'Rename', 'minn-admin' ),
-					'route'  => 'minn-admin/v1/acf/schema/groups/{id}/rename',
-					'when'   => array( 'key' => 'source', 'equals' => 'db' ),
-					'fields' => array(
-						array( 'key' => 'title', 'label' => __( 'Title', 'minn-admin' ) ),
-					),
-				),
-				array(
 					'label' => __( 'Duplicate', 'minn-admin' ),
 					'route' => 'minn-admin/v1/acf/schema/groups/{id}/duplicate',
 					'when'  => array( 'key' => 'source', 'equals' => 'db' ),
-				),
-				array(
-					// Parameterized, so the group context rides the row — a
-					// select of groups in the Fields view's Add form would be
-					// a boot snapshot that misses groups created mid-session.
-					'label'  => __( 'Add field', 'minn-admin' ),
-					'route'  => 'minn-admin/v1/acf/schema/groups/{id}/fields',
-					'when'   => array( 'key' => 'source', 'equals' => 'db' ),
-					'fields' => array(
-						array( 'key' => 'label', 'label' => __( 'Label', 'minn-admin' ) ),
-						array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $types ),
-						array( 'key' => 'choices', 'label' => __( 'Choices (select and radio; one per line, "value : Label")', 'minn-admin' ), 'type' => 'textarea', 'rows' => 3, 'required' => false ),
-					),
 				),
 				array(
 					'label'   => __( 'Move to trash', 'minn-admin' ),
@@ -678,5 +656,263 @@ add_action( 'rest_api_init', function () {
 			}
 			return rest_ensure_response( array( 'ok' => true ) );
 		},
+	) );
+} );
+
+/* ===== The group builder: whole-group read and transactional save ===== */
+
+/**
+ * Field types the builder edits in full, with the settings each carries.
+ * Everything else still lists in the builder (reorder, relabel, delete) but
+ * keeps its configuration in ACF's own editor.
+ *
+ * @return array type => settings keys the save path may write.
+ */
+function minn_admin_acf_builder_types() {
+	$base = array( 'label', 'instructions', 'required', 'default_value' );
+	return array(
+		'text'         => array_merge( $base, array( 'placeholder' ) ),
+		'textarea'     => array_merge( $base, array( 'placeholder', 'rows' ) ),
+		'number'       => array_merge( $base, array( 'placeholder', 'min', 'max', 'step' ) ),
+		'range'        => array_merge( $base, array( 'min', 'max', 'step' ) ),
+		'email'        => array_merge( $base, array( 'placeholder' ) ),
+		'url'          => array_merge( $base, array( 'placeholder' ) ),
+		'select'       => array_merge( $base, array( 'choices' ) ),
+		'radio'        => array_merge( $base, array( 'choices' ) ),
+		'true_false'   => array( 'label', 'instructions', 'required', 'default_value', 'ui_on_text', 'ui_off_text' ),
+		'color_picker' => $base,
+		'image'        => array( 'label', 'instructions', 'required' ),
+		'gallery'      => array( 'label', 'instructions', 'required' ),
+		'wysiwyg'      => array( 'label', 'instructions', 'required' ),
+	);
+}
+
+/**
+ * One field's full builder shape. Choices serialize to the "value : Label"
+ * lines convention; unsupported types carry editable: false and only their
+ * identity survives a save (label, order, existence).
+ *
+ * @param array $f ACF field array.
+ * @return array
+ */
+function minn_admin_acf_builder_field( $f ) {
+	$types   = minn_admin_acf_builder_types();
+	$type    = (string) ( $f['type'] ?? '' );
+	$edit    = array_key_exists( $type, $types );
+	$choices = '';
+	if ( ! empty( $f['choices'] ) && is_array( $f['choices'] ) ) {
+		$lines = array();
+		foreach ( $f['choices'] as $value => $label ) {
+			$lines[] = (string) $value === (string) $label ? (string) $value : $value . ' : ' . $label;
+		}
+		$choices = implode( "\n", $lines );
+	}
+	return array(
+		'key'           => (string) $f['key'],
+		'label'         => (string) $f['label'],
+		'name'          => (string) $f['name'],
+		'type'          => $type,
+		'editable'      => $edit,
+		'required'      => ! empty( $f['required'] ),
+		'instructions'  => (string) ( $f['instructions'] ?? '' ),
+		'default_value' => is_scalar( $f['default_value'] ?? '' ) ? (string) ( $f['default_value'] ?? '' ) : '',
+		'placeholder'   => (string) ( $f['placeholder'] ?? '' ),
+		'choices'       => $choices,
+		'min'           => isset( $f['min'] ) && '' !== $f['min'] ? (string) $f['min'] : '',
+		'max'           => isset( $f['max'] ) && '' !== $f['max'] ? (string) $f['max'] : '',
+		'step'          => isset( $f['step'] ) && '' !== $f['step'] ? (string) $f['step'] : '',
+		'rows'          => isset( $f['rows'] ) && '' !== $f['rows'] ? (string) $f['rows'] : '',
+		'ui_on_text'    => (string) ( $f['ui_on_text'] ?? '' ),
+		'ui_off_text'   => (string) ( $f['ui_off_text'] ?? '' ),
+		'subCount'      => 'repeater' === $type ? count( (array) ( $f['sub_fields'] ?? array() ) ) : 0,
+	);
+}
+
+/**
+ * The whole-group payload the builder reads and the save returns.
+ *
+ * @param array $group ACF group array (with minn_source).
+ * @return array
+ */
+function minn_admin_acf_builder_payload( $group ) {
+	$fields = array();
+	foreach ( (array) acf_get_fields( $group ) as $f ) {
+		$fields[] = minn_admin_acf_builder_field( $f );
+	}
+	return array(
+		'group'  => array(
+			'key'           => $group['key'],
+			'title'         => (string) $group['title'],
+			'active'        => ! empty( $group['active'] ),
+			'source'        => $group['minn_source'],
+			'location'      => (array) $group['location'],
+			'locationLabel' => minn_admin_acf_schema_location_label( $group ),
+			'adminUrl'      => ! empty( $group['ID'] ) ? admin_url( 'post.php?post=' . (int) $group['ID'] . '&action=edit' ) : '',
+		),
+		'fields' => $fields,
+		'types'  => array_keys( minn_admin_acf_builder_types() ),
+	);
+}
+
+/**
+ * Save the whole group as one unit: title, active, ordered field list.
+ * Existing fields overlay ONLY the settings their type declares (name and
+ * type immutable); new fields (no key) are created in place; stored fields
+ * absent from the payload are deleted. Validation happens before any write.
+ *
+ * @param array $group ACF group array (db source, verified by the caller).
+ * @param array $body  Request body.
+ * @return array|WP_Error Fresh payload or refusal.
+ */
+function minn_admin_acf_builder_save( $group, $body ) {
+	$types    = minn_admin_acf_builder_types();
+	$existing = array();
+	foreach ( (array) acf_get_fields( $group ) as $f ) {
+		$existing[ $f['key'] ] = $f;
+	}
+	$title = isset( $body['title'] ) ? trim( (string) $body['title'] ) : (string) $group['title'];
+	if ( '' === $title ) {
+		return new WP_Error( 'invalid', __( 'A title is required.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$rows = isset( $body['fields'] ) && is_array( $body['fields'] ) ? array_values( $body['fields'] ) : null;
+	if ( null === $rows ) {
+		return new WP_Error( 'invalid', __( 'Missing fields list.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+
+	// ---- Validate every row before writing anything. ----
+	$names = array();
+	$plans = array();
+	foreach ( $rows as $i => $row ) {
+		$row = (array) $row;
+		$key = isset( $row['key'] ) ? (string) $row['key'] : '';
+		if ( $key && isset( $existing[ $key ] ) ) {
+			$cur  = $existing[ $key ];
+			$name = (string) $cur['name'];
+			$type = (string) $cur['type'];
+		} else {
+			$type = sanitize_key( (string) ( $row['type'] ?? '' ) );
+			if ( ! array_key_exists( $type, $types ) ) {
+				return new WP_Error( 'invalid', __( 'New fields need one of the supported types.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$label = trim( (string) ( $row['label'] ?? '' ) );
+			if ( '' === $label ) {
+				return new WP_Error( 'invalid', __( 'Every field needs a label.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$name = str_replace( '-', '_', sanitize_title( trim( (string) ( $row['name'] ?? '' ) ) ?: $label ) );
+			if ( '' === $name ) {
+				return new WP_Error( 'invalid', __( 'Every field needs a name.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$cur = null;
+			$key = '';
+		}
+		if ( isset( $names[ $name ] ) ) {
+			/* translators: %s: the duplicated field name. */
+			return new WP_Error( 'invalid', sprintf( __( 'Two fields share the name “%s”.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
+		}
+		$names[ $name ] = true;
+		if ( in_array( $type, array( 'select', 'radio' ), true ) ) {
+			$choices = minn_admin_acf_schema_parse_choices( (string) ( $row['choices'] ?? '' ) );
+			if ( ! $choices ) {
+				return new WP_Error( 'invalid', __( 'Select and radio fields need at least one choice.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+		}
+		$plans[] = array( 'row' => $row, 'key' => $key, 'cur' => $cur, 'type' => $type, 'name' => $name, 'order' => $i );
+	}
+
+	// ---- Group settings. ----
+	$group['title'] = $title;
+	if ( array_key_exists( 'active', $body ) ) {
+		$group['active'] = ! empty( $body['active'] );
+	}
+	acf_update_field_group( $group );
+
+	// ---- Fields: update / create in payload order, then delete the absent. ----
+	$kept = array();
+	foreach ( $plans as $plan ) {
+		$row      = $plan['row'];
+		$type     = $plan['type'];
+		$settings = isset( $types[ $type ] ) ? $types[ $type ] : array( 'label' );
+		if ( $plan['cur'] ) {
+			$field = $plan['cur'];
+			// Unsupported types keep everything but their label and order.
+			if ( ! isset( $types[ $type ] ) ) {
+				$settings = array( 'label' );
+			}
+		} else {
+			$field = array(
+				'key'    => uniqid( 'field_' ),
+				'name'   => $plan['name'],
+				'type'   => $type,
+				'parent' => $group['ID'],
+			);
+			if ( 'image' === $type ) {
+				$field['return_format'] = 'id';
+			}
+		}
+		foreach ( $settings as $setting ) {
+			if ( ! array_key_exists( $setting, $row ) ) {
+				continue;
+			}
+			$v = $row[ $setting ];
+			if ( 'required' === $setting ) {
+				$field['required'] = ! empty( $v ) && 'false' !== $v ? 1 : 0;
+			} elseif ( 'choices' === $setting ) {
+				$field['choices'] = minn_admin_acf_schema_parse_choices( (string) $v );
+			} elseif ( in_array( $setting, array( 'min', 'max', 'step', 'rows' ), true ) ) {
+				$field[ $setting ] = '' === trim( (string) $v ) ? '' : (float) $v;
+			} elseif ( 'label' === $setting ) {
+				$field['label'] = trim( (string) $v ) ?: $field['label'];
+			} else {
+				$field[ $setting ] = is_scalar( $v ) ? (string) $v : '';
+			}
+		}
+		$field['menu_order'] = $plan['order'];
+		$saved = acf_update_field( $field );
+		if ( $saved ) {
+			$kept[ $saved['key'] ] = true;
+		}
+	}
+	foreach ( $existing as $key => $f ) {
+		if ( ! isset( $kept[ $key ] ) ) {
+			acf_delete_field( $f['ID'] );
+		}
+	}
+	$fresh = minn_admin_acf_schema_group( $group['key'] );
+	return minn_admin_acf_builder_payload( $fresh ? $fresh : $group );
+}
+
+add_action( 'rest_api_init', function () {
+	if ( ! minn_admin_acf_schema_active() ) {
+		return;
+	}
+	$perm = function () {
+		return current_user_can( minn_admin_acf_schema_cap() );
+	};
+	register_rest_route( 'minn-admin/v1', '/acf/schema/groups/(?P<key>[a-zA-Z0-9_\-]+)/full', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$group = minn_admin_acf_schema_group( (string) $request['key'] );
+				if ( ! $group ) {
+					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				return rest_ensure_response( minn_admin_acf_builder_payload( $group ) );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$group = minn_admin_acf_schema_group( (string) $request['key'] );
+				if ( ! $group ) {
+					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				if ( 'db' !== $group['minn_source'] ) {
+					return new WP_Error( 'read_only', __( 'This group is registered in code — edit it where it is defined.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				return rest_ensure_response( minn_admin_acf_builder_save( $group, (array) $request->get_json_params() ) );
+			},
+		),
 	) );
 } );

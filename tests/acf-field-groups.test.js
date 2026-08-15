@@ -67,30 +67,13 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		const gkey = ( ( await groupsRest() ).items.find( ( g ) => g.title === 'Suite Group' ) || {} ).id;
 		t.check( 'group created active on Posts', !! gkey, gkey );
 
-		/* ===== Add a field through the group row's parameterized action —
-		 * the group context rides the row, so a group created seconds ago
-		 * works without a reload (a static group select would be a boot
-		 * snapshot). ===== */
-		await page.evaluate( () => {
-			Array.from( document.querySelectorAll( '.minn-table-row' ) )
-				.find( ( r ) => r.textContent.includes( 'Suite Group' ) ).click();
+		/* ===== Add fields through the nested route (the UI add path lives
+		 * in the group builder now — tests/field-group-builder.test.js;
+		 * group rows navigate there via collection.open). ===== */
+		const addText = await api( 'POST', `minn-admin/v1/acf/schema/groups/${ gkey }/fields`, {
+			label: 'Suite Headline', type: 'text',
 		} );
-		await page.waitForSelector( '[data-saction]', { timeout: 10000 } );
-		await page.evaluate( () => {
-			Array.from( document.querySelectorAll( '[data-saction]' ) )
-				.find( ( b ) => /Add field/.test( b.textContent ) ).click();
-		} );
-		await page.waitForSelector( '[data-actfield="label"]', { timeout: 8000 } );
-		await page.type( '[data-actfield="label"]', 'Suite Headline' );
-		await page.click( '[data-actfield="type"] .minn-ac-input' );
-		await page.waitForSelector( '[data-actfield="type"] .minn-ac-item[data-acv="text"]', { timeout: 5000 } );
-		await page.click( '[data-actfield="type"] .minn-ac-item[data-acv="text"]' );
-		await page.click( '[data-actgo]' );
-		await page.waitForFunction( () =>
-			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Add field/.test( x.textContent ) ),
-		null, { timeout: 15000 } );
-		let fields0 = ( await api( 'GET', `minn-admin/v1/acf/schema/groups/${ gkey }/fields?_cb=` + Math.random() ) ).data;
-		t.check( 'row-action add field persisted', fields0.items.some( ( f ) => f.name === 'suite_headline' ), JSON.stringify( fields0.items ) );
+		t.check( 'add field persisted', addText.status === 200 && addText.data.name === 'suite_headline', JSON.stringify( addText.data ) );
 
 		const addSelect = await api( 'POST', `minn-admin/v1/acf/schema/groups/${ gkey }/fields`, {
 			label: 'Suite Tone', type: 'select', choices: 'calm : Calm\nbold : Bold',
@@ -98,7 +81,6 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		t.check( 'select field with parsed choices', addSelect.status === 200 && addSelect.data.name === 'suite_tone', JSON.stringify( addSelect.data ) );
 
 		/* ===== Fields view renders the group tab with its rows ===== */
-		await page.keyboard.press( 'Escape' );
 		await page.click( '[data-sview="x0"]' );
 		await page.waitForSelector( `[data-stab="${ gkey }"]`, { timeout: 15000 } );
 		t.check( 'new group gets its own Fields tab', true );
