@@ -152,11 +152,11 @@ translation keeps updating even if nobody currently has it set.
 ### What does NOT ship in the plugin zip
 
 `bin/build-zip.sh` owns the exclusion list, because the release runbook's copy
-had already drifted. `languages/*.po` and `languages/*.pot` are excluded — 5.3MB
-of translation SOURCE that WordPress never reads, once shipped to every user in
-every locale — along with `bin/`, `tests/`, `dist/`, `CLAUDE.md` and repository
-plumbing. `docs/` ships: the REST layer serves `docs/user-guide.md`. The zip
-went from 3.86MB to 2.02MB.
+had already drifted. The whole `languages/` tree is excluded — translation
+SOURCE (`.po`/`.pot` plus `reviewed/`) that WordPress never reads at runtime,
+once shipped to every user in every locale — along with `bin/`, `tests/`,
+`dist/`, `CLAUDE.md` and repository plumbing. `docs/` ships: the REST layer
+serves `docs/user-guide.md`. The zip went from 3.86MB to 2.02MB.
 
 ### Security: hash the packs like the plugin
 

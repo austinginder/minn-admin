@@ -16,7 +16,8 @@
 #   CLAUDE.md                    agent instructions, dev only
 #   bin/                         the i18n and release toolchain, dev only
 #   dist/                        build output, including the packs themselves
-#   languages/*.po, *.pot        translation SOURCES; runtime reads packs
+#   languages/                   translation SOURCES + reviewed notes; runtime
+#                                reads language PACKS from WP_LANG_DIR/plugins
 #
 # docs/ SHIPS: includes/class-minn-admin-rest.php serves docs/user-guide.md.
 #
@@ -42,8 +43,7 @@ zip -r -q -X "$OUT" "$NAME" \
 	-x "$NAME/bin/*" \
 	-x "$NAME/dist/*" \
 	-x "$NAME/CLAUDE.md" \
-	-x "$NAME/languages/*.po" \
-	-x "$NAME/languages/*.pot" \
+	-x "$NAME/languages/*" \
 	-x "*.DS_Store"
 
 # Assert rather than trust: a silently fattened zip is invisible until someone
@@ -54,10 +54,10 @@ zip -r -q -X "$OUT" "$NAME" \
 # the first hit, unzip takes SIGPIPE, and the pipeline inherits its status.
 listing="$( unzip -l "$OUT" )"
 
-leaked="$( grep -cE "$NAME/(tests|bin|dist|\.git)/|\.(po|pot)$|CLAUDE\.md" <<< "$listing" || true )"
+leaked="$( grep -cE "$NAME/(tests|bin|dist|languages|\.git)/|\.(po|pot)$|CLAUDE\.md" <<< "$listing" || true )"
 [ "$leaked" = "0" ] || {
 	echo "FAIL: $leaked dev file(s) leaked into the zip" >&2
-	grep -E "$NAME/(tests|bin|dist)/|\.(po|pot)$" <<< "$listing" | head >&2
+	grep -E "$NAME/(tests|bin|dist|languages)/|\.(po|pot)$" <<< "$listing" | head >&2
 	exit 1
 }
 

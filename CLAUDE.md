@@ -162,9 +162,10 @@ literal, so the app runs with zero tooling. The convention:
   that on every run, so a no-op regeneration would re-offer every pack. A
   translation-only fix is therefore a patch release.
 - **`bin/build-zip.sh` builds the release zip**, and owns the exclusion list so
-  it stops drifting in a runbook. `languages/*.po`/`*.pot` and `bin/` are
-  excluded — translation SOURCE and toolchain, never read at runtime. `docs/`
-  ships (the REST layer serves `docs/user-guide.md`).
+  it stops drifting in a runbook. `languages/` and `bin/` are excluded —
+  translation SOURCE and toolchain, never read at runtime (packs land in
+  `WP_LANG_DIR/plugins`). `docs/` ships (the REST layer serves
+  `docs/user-guide.md`).
 - **Guards:** `tests/i18n-static.test.js` (no browser, ~1s) fails on a new
   unwrapped literal, a `%s` string with no translators comment, anything routing
   off a translated label, and an `_n()` plural wrapped in `__()`.
