@@ -76,6 +76,56 @@ function minn_admin_acf_map_field( $f ) {
 }
 
 /**
+ * Map an ACF repeater (Pro) onto the panel's `rows` control, or null when no
+ * sub-field is editable. One level deep: sub-fields from the picker-less
+ * simple set edit in rows; image/gallery/nested-repeater subs count as
+ * locked per row, and their stored values are PRESERVED by the write path's
+ * row merge (an edit overlays only the mapped subs onto the original row).
+ *
+ * @param array $f ACF repeater field array.
+ * @return array|null { name, label, type: 'rows', subfields, subLocked, key, subs }
+ */
+function minn_admin_acf_map_repeater( $f ) {
+	if ( empty( $f['name'] ) || empty( $f['key'] ) ) {
+		return null;
+	}
+	$simple = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker' );
+	$subs   = array();
+	$locked = 0;
+	foreach ( (array) ( $f['sub_fields'] ?? array() ) as $sub ) {
+		if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
+			continue;
+		}
+		if ( empty( $sub['name'] ) || ! in_array( $sub['type'] ?? '', $simple, true ) || ! empty( $sub['multiple'] ) ) {
+			$locked++;
+			continue;
+		}
+		$subs[] = array(
+			'name'    => $sub['name'],
+			'label'   => $sub['label'],
+			'type'    => $sub['type'],
+			'choices' => ! empty( $sub['choices'] ) ? $sub['choices'] : null,
+			'key'     => $sub['key'],
+		);
+	}
+	if ( ! $subs ) {
+		return null;
+	}
+	return array(
+		'name'      => $f['name'],
+		'label'     => $f['label'],
+		'type'      => 'rows',
+		'subfields' => array_map( function ( $s ) {
+			unset( $s['key'] ); // internal — the client keys sub-inputs by name
+			return $s;
+		}, $subs ),
+		'subLocked' => $locked,
+		'key'       => $f['key'],
+		'subs'      => $subs,
+	);
+}
+
+/**
  * Build the fieldsRoute response for a post.
  *
  * @param int    $post_id   Post ID (0 for new).
@@ -90,6 +140,19 @@ function minn_admin_acf_fields_payload( $post_id, $post_type ) {
 		$locked = 0;
 		foreach ( (array) $fields as $f ) {
 			if ( in_array( $f['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
+				continue;
+			}
+			// Repeaters (Pro) ride the `rows` control when any sub is simple.
+			// Panel-only: options pages and block dataForms keep them locked
+			// (their engines have no rows binding).
+			if ( 'repeater' === ( $f['type'] ?? '' ) ) {
+				$rep = minn_admin_acf_map_repeater( $f );
+				if ( $rep ) {
+					unset( $rep['key'], $rep['subs'] );
+					$mapped[] = $rep;
+				} else {
+					$locked++;
+				}
 				continue;
 			}
 			$simple = minn_admin_acf_map_field( $f );
@@ -125,6 +188,13 @@ function minn_admin_acf_simple_fields_for_post( $post_id ) {
 	$out = array();
 	foreach ( minn_admin_acf_groups_for( $post_id, $post->post_type ) as $group ) {
 		foreach ( (array) acf_get_fields( $group ) as $f ) {
+			if ( 'repeater' === ( $f['type'] ?? '' ) ) {
+				$rep = minn_admin_acf_map_repeater( $f );
+				if ( $rep ) {
+					$out[ $rep['name'] ] = $rep;
+				}
+				continue;
+			}
 			$simple = minn_admin_acf_map_field( $f );
 			if ( $simple ) {
 				$out[ $simple['name'] ] = $simple;
@@ -169,6 +239,26 @@ function minn_admin_acf_read_values( $post_id ) {
 				}
 			}
 			$out[ $name ] = $items;
+		} elseif ( 'rows' === $field['type'] ) {
+			// Repeater rows: [{ __idx, values }] — __idx is the row's position
+			// in ACF's stored rows, the write path's merge anchor. Raw rows key
+			// by subfield KEY; the client speaks names.
+			$rows = array();
+			foreach ( array_values( is_array( $val ) ? $val : array() ) as $i => $raw_row ) {
+				$vals = array();
+				foreach ( $field['subs'] as $sub ) {
+					$v = is_array( $raw_row ) && array_key_exists( $sub['key'], $raw_row ) ? $raw_row[ $sub['key'] ] : null;
+					if ( 'true_false' === $sub['type'] ) {
+						$vals[ $sub['name'] ] = ! empty( $v );
+					} elseif ( is_array( $v ) ) {
+						$vals[ $sub['name'] ] = '';
+					} else {
+						$vals[ $sub['name'] ] = null === $v ? '' : $v;
+					}
+				}
+				$rows[] = array( '__idx' => $i, 'values' => (object) $vals );
+			}
+			$out[ $name ] = $rows;
 		} elseif ( is_array( $val ) ) {
 			// Shouldn't appear for simple non-multiple fields; don't leak structure.
 			$out[ $name ] = '';
@@ -221,6 +311,41 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 				}
 			}
 			$value = $ids;
+		} elseif ( 'rows' === $field['type'] ) {
+			// Repeater merge: each incoming row overlays ONLY the mapped subs
+			// onto the original stored row it references (__idx), so complex
+			// sub values (images, nested repeaters) survive edits, reorders
+			// and deletions untouched. Rows without __idx are new; omission
+			// deletes; the incoming order is the new order.
+			if ( ! is_array( $value ) ) {
+				continue;
+			}
+			$orig = get_field( $field['key'], $post_id, false );
+			$orig = is_array( $orig ) ? array_values( $orig ) : array();
+			$new  = array();
+			foreach ( $value as $row ) {
+				$row  = (array) $row;
+				$vals = isset( $row['values'] ) ? (array) $row['values'] : array();
+				$base = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] )
+					? $orig[ (int) $row['__idx'] ]
+					: array();
+				foreach ( $field['subs'] as $sub ) {
+					if ( ! array_key_exists( $sub['name'], $vals ) ) {
+						continue;
+					}
+					$v = $vals[ $sub['name'] ];
+					if ( 'true_false' === $sub['type'] ) {
+						$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
+					} elseif ( null === $v || false === $v ) {
+						$v = '';
+					} elseif ( ! is_scalar( $v ) ) {
+						continue;
+					}
+					$base[ $sub['key'] ] = $v;
+				}
+				$new[] = $base;
+			}
+			$value = $new;
 		} elseif ( null === $value || false === $value ) {
 			// The panel clears fields with empty values; ACF's own form save
 			// stores '' rather than deleting the row — match it.

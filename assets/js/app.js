@@ -1305,7 +1305,15 @@
 				</div>
 			</div>`;
 		}
-	// Gallery: an ordered list of attachments ({ id, url } entries or bare
+	// Rows: repeating groups of sub-fields (ACF repeaters). The value is an
+		// ordered [{ __idx?, values }] list — __idx anchors a kept row to its
+		// original stored position so the server can merge edits onto it and
+		// preserve sub-values the form doesn't render. The shell is empty; the
+		// CALLER binds bindRowsField, which owns rendering and state.
+		if ( t === 'rows' ) {
+			return `<div class="minn-field-rows" ${ attr }="${ esc( id ) }" data-ftype="rows" data-rows-def="${ esc( JSON.stringify( f.subfields || [] ) ) }" data-rows-val="${ esc( JSON.stringify( Array.isArray( v ) ? v : [] ) ) }"${ f.subLocked ? ` data-rows-locked="${ parseInt( f.subLocked, 10 ) }"` : '' }></div>`;
+		}
+		// Gallery: an ordered list of attachments ({ id, url } entries or bare
 		// ids). The control shows a thumb strip + an edit doorway; the CALLER
 		// binds [data-gal-edit] to the images editor's items mode and repaints
 		// via the data-gal payload (formControlValue reads it back).
@@ -1340,6 +1348,10 @@
 		}
 		if ( kind === 'gallery' ) {
 			try { return JSON.parse( el.dataset.gal || '[]' ); } catch ( e ) { return []; }
+		}
+		if ( kind === 'rows' ) {
+			if ( el._rowsValue !== undefined ) return el._rowsValue;
+			try { return JSON.parse( el.dataset.rowsVal || '[]' ); } catch ( e ) { return []; }
 		}
 		if ( kind === 'combobox' ) {
 			const input = el.querySelector( '.minn-ac-input' );
@@ -1416,6 +1428,97 @@
 		} );
 		input.addEventListener( 'keydown', ( e ) => {
 			if ( e.key === 'Escape' ) { close(); input.blur(); }
+		} );
+	}
+
+	// Arm one rows control (data-ftype="rows" — ACF repeaters). The wrap owns
+	// its state: [{ __idx?, values }] where __idx anchors a kept row to its
+	// original stored position (the server merges edits onto that row, so
+	// sub-values the form doesn't render survive). Structural ops (add,
+	// remove, move) re-render; typing only updates state, keeping focus.
+	function bindRowsField( wrap, onChange ) {
+		if ( wrap._minnRowsBound ) return;
+		wrap._minnRowsBound = true;
+		let def = [];
+		let rows = [];
+		try { def = JSON.parse( wrap.dataset.rowsDef || '[]' ); } catch ( e ) {}
+		try { rows = JSON.parse( wrap.dataset.rowsVal || '[]' ); } catch ( e ) {}
+		rows = rows.map( ( r ) => ( { __idx: r.__idx, values: { ...( r.values || {} ) } } ) );
+		const locked = parseInt( wrap.dataset.rowsLocked || '0', 10 );
+		const commit = () => {
+			wrap._rowsValue = rows.map( ( r ) => ( r.__idx != null ? { __idx: r.__idx, values: r.values } : { values: r.values } ) );
+			onChange( wrap._rowsValue );
+		};
+		const rowHtml = ( r, i ) => `
+			<div class="minn-rows-card">
+				<div class="minn-rows-head">
+					<span class="minn-rows-n">${ i + 1 }</span>
+					<span class="minn-rows-spring"></span>
+					<button type="button" data-rmv="${ i }:-1" title="${ esc( __( 'Move up' ) ) }"${ i === 0 ? ' disabled' : '' }>↑</button>
+					<button type="button" data-rmv="${ i }:1" title="${ esc( __( 'Move down' ) ) }"${ i === rows.length - 1 ? ' disabled' : '' }>↓</button>
+					<button type="button" data-rdel="${ i }" title="${ esc( __( 'Remove row' ) ) }">×</button>
+				</div>
+				${ def.map( ( sf ) => {
+					const nf = formNormField( sf );
+					if ( nf.type === 'select' ) nf.clearable = true;
+					const ctl = formControlHtml( nf, r.values[ sf.name ], 'data-rowsub', `${ i }:${ sf.name }` );
+					return `<div class="minn-panel-field${ nf.type === 'toggle' ? ' inline' : '' }">
+						<div class="minn-field-label">${ esc( sf.label || sf.name ) }</div>
+						${ ctl }
+					</div>`;
+				} ).join( '' ) }
+			</div>`;
+		const render = () => {
+			wrap.innerHTML = rows.map( rowHtml ).join( '' )
+				+ ( locked ? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of per-row fields only editable in wp-admin. */ _n( '%d more field per row lives in wp-admin.', '%d more fields per row live in wp-admin.', locked ) ), locked ) }</div>` : '' )
+				+ `<button type="button" class="minn-btn-soft" data-radd>+ ${ esc( __( 'Add row' ) ) }</button>`;
+		};
+		render();
+		wrap.addEventListener( 'input', ( e ) => {
+			const el = e.target.closest( '[data-rowsub]' );
+			if ( ! el ) return;
+			const sep = el.dataset.rowsub.indexOf( ':' );
+			const row = rows[ Number( el.dataset.rowsub.slice( 0, sep ) ) ];
+			if ( ! row ) return;
+			row.values[ el.dataset.rowsub.slice( sep + 1 ) ] = formControlValue( el );
+			commit();
+		} );
+		wrap.addEventListener( 'click', ( e ) => {
+			const tg = e.target.closest( '[data-rowsub][data-ftype="toggle"]' );
+			if ( tg ) {
+				tg.classList.toggle( 'on' );
+				tg.setAttribute( 'aria-checked', tg.classList.contains( 'on' ) );
+				const sep = tg.dataset.rowsub.indexOf( ':' );
+				const row = rows[ Number( tg.dataset.rowsub.slice( 0, sep ) ) ];
+				if ( row ) { row.values[ tg.dataset.rowsub.slice( sep + 1 ) ] = tg.classList.contains( 'on' ); commit(); }
+				return;
+			}
+			const add = e.target.closest( '[data-radd]' );
+			if ( add ) {
+				const values = {};
+				def.forEach( ( sf ) => { values[ sf.name ] = sf.type === 'true_false' ? false : ''; } );
+				rows.push( { values } );
+				render();
+				commit();
+				return;
+			}
+			const del = e.target.closest( '[data-rdel]' );
+			if ( del ) {
+				rows.splice( parseInt( del.dataset.rdel, 10 ), 1 );
+				render();
+				commit();
+				return;
+			}
+			const mv = e.target.closest( '[data-rmv]' );
+			if ( mv ) {
+				const [ i, dir ] = mv.dataset.rmv.split( ':' ).map( Number );
+				const j = i + dir;
+				if ( j >= 0 && j < rows.length ) {
+					[ rows[ i ], rows[ j ] ] = [ rows[ j ], rows[ i ] ];
+					render();
+					commit();
+				}
+			}
 		} );
 	}
 
@@ -23770,6 +23873,10 @@
 				bindSuggestField( input, ( value, label ) => {
 					write( value === '' ? '' : { value, label } );
 				} );
+			} else if ( input.dataset.ftype === 'rows' ) {
+				// Repeater rows own their rendering and state; every edit
+				// (typed or structural) lands in panelValues like any field.
+				bindRowsField( input, ( v ) => write( v ) );
 			} else if ( input.dataset.ftype === 'gallery' ) {
 				// Gallery fields reuse the islands images editor in items mode.
 				// The hosting panel modal closes first: the images editor sits

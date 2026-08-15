@@ -1110,6 +1110,23 @@ button.minn-nav-label:hover { color: var(--text2); }
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 11px; color: var(--muted);
 }
+/* Rows control (ACF repeaters): one card per row, chrome in its header. */
+.minn-field-rows { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.minn-rows-card {
+  border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px 12px;
+  background: var(--panel2); display: flex; flex-direction: column; gap: 8px;
+}
+.minn-rows-head { display: flex; align-items: center; gap: 4px; }
+.minn-rows-n { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.minn-rows-spring { flex: 1; }
+.minn-rows-head button {
+  background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
+  width: 24px; height: 22px; line-height: 1; cursor: pointer; font-size: 12px;
+}
+.minn-rows-head button:hover:not(:disabled) { color: var(--text); border-color: var(--border2); }
+.minn-rows-head button:disabled { opacity: 0.35; cursor: default; }
+.minn-rows-head [data-rdel]:hover { color: var(--red, #e5484d); border-color: currentColor; }
+.minn-field-rows > [data-radd] { align-self: flex-start; }
 .minn-rev-list {
   max-height: min(70vh, 640px); overflow-y: auto; padding: 4px 0 10px;
 }
