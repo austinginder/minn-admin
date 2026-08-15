@@ -1171,8 +1171,20 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 ```
 
 Supported field types: `text`, `textarea`, `number`, `range`, `email`, `url`, `select`, `radio`,
-`true_false`, `suggest`. Report anything else in the `locked` count; Minn shows "N advanced
-fields — edit in wp-admin ↗" rather than rendering something unsafe. Values ride the normal
+`true_false`, `color_picker` (edits as text), `image` (`{ id, url }`, media picker), `gallery`
+(ordered `[{ id, url }]`, Minn's images editor), `suggest`, and `rows` (below). Report anything
+else in the `locked` count; Minn shows "N advanced fields — edit in wp-admin ↗" rather than
+rendering something unsafe.
+
+**`rows` (since 0.31.0)** is a repeating group — the ACF-repeater shape. The field declares
+`subfields` (the simple vocabulary above, minus pickers and nested rows) and optionally
+`subLocked`, an honest count of per-row fields the form can't render. The value is an ordered
+`[{ "__idx": n, "values": { name: v } }]` list: `__idx` is the row's position in YOUR stored
+data at read time, and comes back on kept rows so your write path can merge edits onto the
+original row — that's what keeps sub-values the form never rendered (images, nested
+structures) intact through edits, reorders and deletions. Rows without `__idx` are new;
+omitted rows are deleted; the list order is the new order. The bundled ACF adapter's
+repeater support is the reference. Values ride the normal
 post save (autosave included), so your plugin only needs its values readable/writable on the
 post REST response (`register_rest_field`, the way the bundled ACF adapter's `minn_acf`
 field works).
