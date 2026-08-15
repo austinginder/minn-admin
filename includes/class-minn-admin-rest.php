@@ -3774,6 +3774,21 @@ class Minn_Admin_REST {
 	}
 
 	/**
+	 * The order id an order route's permission callback authorized.
+	 *
+	 * $request['id'] resolves through get_parameter_order(), which reads JSON,
+	 * then POST, then GET, and only then URL — so a body or query `id` outranks
+	 * the path segment. The order permission callback checks edit_post against
+	 * the URL segment, so a handler reading $request['id'] can act on a
+	 * different order than the one that was authorized. Read the same source
+	 * the gate read, the way target_user_id() does for the user routes.
+	 */
+	private static function target_order_id( WP_REST_Request $request ) {
+		$url = $request->get_url_params();
+		return isset( $url['id'] ) ? (int) $url['id'] : 0;
+	}
+
+	/**
 	 * GET minn-admin/v1/me/appearance — current user's color scheme preference.
 	 */
 	public static function get_my_appearance( WP_REST_Request $request ) {
@@ -4450,7 +4465,7 @@ class Minn_Admin_REST {
 		if ( ! function_exists( 'wc_get_order' ) ) {
 			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		$order = wc_get_order( (int) $request['id'] );
+		$order = wc_get_order( self::target_order_id( $request ) );
 		if ( ! $order ) {
 			return new WP_Error( 'not_found', __( 'Order not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
@@ -4597,7 +4612,7 @@ class Minn_Admin_REST {
 		if ( ! function_exists( 'wc_get_order' ) ) {
 			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		$order = wc_get_order( (int) $request['id'] );
+		$order = wc_get_order( self::target_order_id( $request ) );
 		if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
 			return new WP_Error( 'not_found', __( 'Order not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
@@ -4693,7 +4708,7 @@ class Minn_Admin_REST {
 		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_order' ) ) {
 			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		$order = wc_get_order( (int) $request['id'] );
+		$order = wc_get_order( self::target_order_id( $request ) );
 		if ( ! $order ) {
 			return new WP_Error( 'not_found', __( 'Order not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
@@ -4729,7 +4744,7 @@ class Minn_Admin_REST {
 		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_order' ) ) {
 			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		$order = wc_get_order( (int) $request['id'] );
+		$order = wc_get_order( self::target_order_id( $request ) );
 		if ( ! $order ) {
 			return new WP_Error( 'not_found', __( 'Order not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
