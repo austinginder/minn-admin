@@ -1130,8 +1130,8 @@ Supported field types: `text`, `textarea`, `number`, `range`, `email`, `url`, `s
 `true_false`, `suggest`. Report anything else in the `locked` count; Minn shows "N advanced
 fields — edit in wp-admin ↗" rather than rendering something unsafe. Values ride the normal
 post save (autosave included), so your plugin only needs its values readable/writable on the
-post REST response (`register_rest_field` or, for ACF, the field group's "Show in REST API"
-toggle).
+post REST response (`register_rest_field`, the way the bundled ACF adapter's `minn_acf`
+field works).
 
 **`suggest` (since 0.18.0)** is an async-searching picker for linked records whose option
 list is too large or too live for a `select` (venues, organizers, related posts). The field

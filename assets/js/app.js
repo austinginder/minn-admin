@@ -35734,7 +35734,7 @@
 			else if ( s.collection && s.collection.route ) detected.push( `- ${ s.label }${ s.sub ? ' (' + s.sub + ')' : '' }: \`${ s.collection.route }\`` );
 		} );
 		( B.editorPanels || [] ).forEach( ( p ) => {
-			if ( p.id === 'acf' ) detected.push( '- ACF: field groups with “Show in REST API” read/write through the `acf` key on post responses' );
+			if ( p.id === 'acf' ) detected.push( '- ACF: simple field values read/write through the `minn_acf` key on post responses (all applicable field groups, no “Show in REST API” needed)' );
 		} );
 		L.push( ...( detected.length ? detected : [ '- (nothing beyond core detected)' ] ) );
 		L.push(

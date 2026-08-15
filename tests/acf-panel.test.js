@@ -11,7 +11,12 @@
  *
  * Fixture: ACF free with the group_minn_test "Post details" group
  * (subtitle text, layout select, featured_story true_false, editor_notes
- * textarea, photo_gallery gallery — the gallery only feeds the locked count).
+ * textarea, photo_gallery gallery — the gallery only feeds the locked count)
+ * PLUS group_minn_norest "Slideshow settings" (slideshow_caption text,
+ * slideshow_arrows true_false) with "Show in REST API" OFF — the default on
+ * real sites. Values ride the dedicated `minn_acf` REST field now, so the
+ * no-REST group must render and save like any other while staying absent
+ * from ACF's own `acf` REST object.
  */
 const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
@@ -93,6 +98,24 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		acf = await readAcf();
 		t.check( 'select cleared via "—"', acf && ( acf.layout === false || acf.layout === '' || acf.layout === null ), JSON.stringify( acf ) );
 		t.check( 'toggle=off persisted', acf && acf.featured_story === false, JSON.stringify( acf ) );
+
+		// The no-REST group (show_in_rest OFF, the real-site default): its
+		// fields render and save through minn_acf like any other group.
+		const capSel = '[data-pf$=":slideshow_caption"]';
+		t.check( 'no-REST group renders in the panel', !! ( await page.$( capSel ) ) );
+		await page.fill( capSel, 'Around the shop' );
+		await save();
+		const minnAcf = await page.evaluate( async ( pid ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=minn_acf', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce },
+			} );
+			return ( await r.json() ).minn_acf;
+		}, id );
+		t.check( 'no-REST group value persisted via minn_acf', minnAcf && minnAcf.slideshow_caption === 'Around the shop', JSON.stringify( minnAcf ) );
+		// Minn widening its own read path must not widen ACF's REST surface.
+		acf = await readAcf();
+		t.check( 'no-REST field stays absent from ACF\'s own `acf` object', acf && ! ( 'slideshow_caption' in acf ), JSON.stringify( acf ) );
+
 		t.check( 'no save was rejected across the run', saves.every( ( s ) => s < 400 ), saves.join( ',' ) );
 	} finally {
 		await deletePost( page, id );
