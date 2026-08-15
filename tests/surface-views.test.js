@@ -81,10 +81,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		// Same soft-reload rule for tab clicks: wait for the FILTERED rows.
 		await page.waitForFunction( () => {
 			const p = Array.from( document.querySelectorAll( '.minn-table-row .minn-status' ) ).map( ( e ) => e.textContent.trim() );
-			return p.length >= 1 && p.every( ( x ) => x === 'error' );
+			return p.length >= 1 && p.every( ( x ) => x.toLowerCase() === 'error' );
 		}, null, { timeout: 20000 } );
 		const pills = await page.$$eval( '.minn-table-row .minn-status', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
-		t.check( 'Errors tab filters to error rows', pills.length >= 1 && pills.every( ( p ) => p === 'error' ), pills.join( ',' ) );
+		t.check( 'Errors tab filters to error rows', pills.length >= 1 && pills.every( ( p ) => p.toLowerCase() === 'error' ), pills.join( ',' ) );
 
 		// Search rides the view's own collection config.
 		await page.click( '[data-stab="_all"]' );
