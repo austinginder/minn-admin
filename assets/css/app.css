@@ -3605,6 +3605,9 @@ button.minn-ac-item:hover { background: var(--hover); }
   border: 1px solid var(--border2); background: var(--panel2); flex-shrink: 0;
 }
 .minn-insp-img-row button { margin-inline-start: auto; }
+/* dataForm image field row: attachment id badge + Set/Replace + remove. */
+.minn-insp-dfimg { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.minn-insp-dfimg-id { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
 /* Compact move cluster: tight icon buttons reading as one control. */
 .minn-insp-move { display: inline-flex; gap: 3px; }

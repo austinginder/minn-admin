@@ -17,7 +17,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false' );
+// color_picker stores a plain color string and renders as a text input;
+// image stores an attachment id and rides the form engine's image control
+// ({ id, url }) in the editor panel and a pick-button row in the inspector.
+const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker', 'image' );
 
 /** Layout-only ACF field types: chrome, not data — never mapped, never counted as locked. */
 const MINN_ADMIN_ACF_CHROME_TYPES = array( 'tab', 'message', 'accordion' );
@@ -145,6 +148,13 @@ function minn_admin_acf_read_values( $post_id ) {
 		$val = get_field( $field['key'], $post_id, false );
 		if ( 'true_false' === $field['type'] ) {
 			$out[ $name ] = ! empty( $val );
+		} elseif ( 'image' === $field['type'] ) {
+			// The form engine's image control speaks { id, url }.
+			$id = is_numeric( $val ) ? (int) $val : 0;
+			$out[ $name ] = $id ? array(
+				'id'  => $id,
+				'url' => (string) wp_get_attachment_image_url( $id, 'thumbnail' ),
+			) : '';
 		} elseif ( is_array( $val ) ) {
 			// Shouldn't appear for simple non-multiple fields; don't leak structure.
 			$out[ $name ] = '';
@@ -176,6 +186,13 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 		$field = $allowed[ $name ];
 		if ( 'true_false' === $field['type'] ) {
 			$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
+		} elseif ( 'image' === $field['type'] ) {
+			// { id, url } from the image control, a bare id, or empty = clear.
+			if ( is_array( $value ) || is_object( $value ) ) {
+				$value = (array) $value;
+				$value = isset( $value['id'] ) ? (int) $value['id'] : 0;
+			}
+			$value = is_numeric( $value ) && (int) $value > 0 ? (int) $value : '';
 		} elseif ( null === $value || false === $value ) {
 			// The panel clears fields with empty values; ACF's own form save
 			// stores '' rather than deleting the row — match it.
@@ -234,6 +251,9 @@ function minn_admin_acf_block_forms() {
 				case 'select':
 				case 'radio':
 					$entry['control'] = 'select';
+					break;
+				case 'image':
+					$entry['control'] = 'image';
 					break;
 				default:
 					$entry['control'] = 'text';
@@ -463,7 +483,9 @@ function minn_admin_acf_options_tabs( $page ) {
 				$open( $group['title'] );
 			}
 			$simple = minn_admin_acf_map_field( $f );
-			if ( ! $simple ) {
+			// Image fields count as locked here: the settings engine has no
+			// media-picker binding (the editor panel and block inspector do).
+			if ( ! $simple || 'image' === $simple['type'] ) {
 				$tabs[ $current ]['locked']++;
 				continue;
 			}

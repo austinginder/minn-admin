@@ -26879,7 +26879,7 @@
 			// Object-attribute subform (ACF-style blocks): those fields ARE the
 			// child's content, so they render in the card body, not behind the
 			// Settings toggle.
-			const dfRows = dataFormRows( c.name, c.attrs, String( i ) );
+			const dfRows = dataFormRows( c.name, c.attrs, String( i ), { media: false } );
 			// Seed from __text when a structure op re-rendered mid-edit
 			// (collect stored the live value; the pristine tail would
 			// silently revert it).
@@ -27111,17 +27111,32 @@
 		return df && df.attr && Array.isArray( df.fields ) ? df : null;
 	}
 
-	function dataFormRows( blockName, attrs, prefix ) {
+	function dataFormRows( blockName, attrs, prefix, opts ) {
 		const df = dataFormFor( blockName );
 		if ( ! df || ( ! df.fields.length && ! df.locked ) ) return '';
+		// Image picks apply immediately through the media picker, which the
+		// content-editor modal can't host (z-stack + its own Done semantics) —
+		// there they fold into the locked count instead.
+		const media = ! opts || opts.media !== false;
 		const cur = ( attrs && typeof attrs[ df.attr ] === 'object' && attrs[ df.attr ] ) || {};
+		let lockedCount = df.locked || 0;
 		const rows = df.fields.map( ( f ) => {
+			let v = cur[ f.name ];
+			const label = f.label || humanizeAttrKey( f.name );
+			if ( f.control === 'image' ) {
+				if ( ! media ) { lockedCount++; return ''; }
+				const iid = v != null && /^\d+$/.test( String( v ) ) ? parseInt( v, 10 ) : 0;
+				return `<div class="minn-field-label">${ esc( label ) }</div>
+					<div class="minn-insp-dfimg">
+						${ iid ? `<span class="minn-insp-dfimg-id">#${ iid }</span>` : '' }
+						<button type="button" class="minn-btn-soft" data-inspdfimg="${ esc( prefix ) }:${ esc( f.name ) }">${ iid ? esc( __( 'Replace image…' ) ) : esc( __( 'Set image…' ) ) }</button>
+						${ iid ? `<button type="button" class="minn-btn-soft danger" data-inspdfimgx="${ esc( prefix ) }:${ esc( f.name ) }" title="${ esc( __( 'Remove image' ) ) }">×</button>` : '' }
+					</div>`;
+			}
 			const options = Array.isArray( f.options ) && f.options.length
 				? f.options.map( ( o ) => ( Array.isArray( o ) ? o : [ o, o ] ) ) : null;
-			let v = cur[ f.name ];
 			// ACF stores true_false as 1/'1'/0/'' — normalize for the checkbox.
 			if ( f.control === 'checkbox' ) v = ! ( v == null || v === '' || v === '0' || v === 0 || v === false );
-			const label = f.label || humanizeAttrKey( f.name );
 			const controlHtml = formControlHtml( {
 				key: f.name, label,
 				type: f.control || ( options ? 'select' : 'text' ), options,
@@ -27131,8 +27146,8 @@
 			return f.control === 'checkbox' ? controlHtml
 				: `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }`;
 		} ).join( '' );
-		const locked = df.locked
-			? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of fields only editable in the block editor. */ _n( '%d advanced field lives in the block editor.', '%d advanced fields live in the block editor.', df.locked ) ), df.locked ) }</div>`
+		const locked = lockedCount
+			? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of fields only editable in the block editor. */ _n( '%d advanced field lives in the block editor.', '%d advanced fields live in the block editor.', lockedCount ) ), lockedCount ) }</div>`
 			: '';
 		return rows + locked;
 	}
@@ -27844,6 +27859,47 @@
 				if ( ! info ) { toast( __( 'These images can’t be edited safely here.' ), true ); return; }
 				closeInspector();
 				openImagesEditor( idx, el, base, info );
+				return;
+			}
+			const dfi = e.target.closest( '[data-inspdfimg], [data-inspdfimgx]' );
+			if ( dfi ) {
+				// dataForm image fields: the value is an attachment id inside
+				// the object attribute. Picks apply immediately (the media
+				// picker closes the popover), same fold-first discipline as
+				// image replace below.
+				const ref = dfi.dataset.inspdfimg !== undefined ? dfi.dataset.inspdfimg : dfi.dataset.inspdfimgx;
+				const sep = ref.indexOf( ':' );
+				const prefix = ref.slice( 0, sep );
+				const fname = ref.slice( sep + 1 );
+				const child = prefix === 'own' ? null : insp.model.children[ Number( prefix ) ];
+				const dfBlock = prefix === 'own' ? insp.model.parts.name : child && child.name;
+				const dfAttrs = prefix === 'own' ? insp.model.ownAttrs : child && child.attrs;
+				const df = dfBlock ? dataFormFor( dfBlock ) : null;
+				if ( ! df || ! dfAttrs ) return;
+				collectInspectorForms(); // typed values survive
+				const setVal = ( val ) => {
+					const obj = ( typeof dfAttrs[ df.attr ] === 'object' && dfAttrs[ df.attr ] ) || {};
+					obj[ fname ] = val;
+					const alias = ( df.alias || {} )[ fname ];
+					if ( alias && obj[ '_' + fname ] === undefined ) obj[ '_' + fname ] = alias;
+					dfAttrs[ df.attr ] = obj;
+				};
+				const { idx, islandEl: el } = insp;
+				if ( dfi.dataset.inspdfimgx !== undefined ) {
+					setVal( '' );
+					const raw = buildInspectorRaw( insp );
+					closeInspector();
+					replaceIsland( idx, el, raw );
+					toast( __( 'Image removed' ) );
+					return;
+				}
+				closeInspector();
+				openMediaPicker( ( it ) => {
+					if ( ! it || ! it.id ) return;
+					setVal( it.id );
+					replaceIsland( idx, el, buildInspectorRaw( insp ) );
+					toast( __( 'Image set' ) );
+				} );
 				return;
 			}
 			const rep = e.target.closest( '[data-inspimg]' );

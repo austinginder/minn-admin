@@ -116,6 +116,35 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		acf = await readAcf();
 		t.check( 'no-REST field stays absent from ACF\'s own `acf` object', acf && ! ( 'slideshow_caption' in acf ), JSON.stringify( acf ) );
 
+		const readMinnAcf = () => page.evaluate( async ( pid ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=minn_acf', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce },
+			} );
+			return ( await r.json() ).minn_acf;
+		}, id );
+
+		// color_picker rides as a plain text input.
+		const colorSel = '[data-pf$=":slideshow_accent"]';
+		t.check( 'color_picker renders as a text input',
+			await page.$eval( colorSel, ( e ) => e.tagName === 'INPUT' && e.type === 'text' ) );
+		await page.fill( colorSel, '#ff6600' );
+		await save();
+		let mv = await readMinnAcf();
+		t.check( 'color value persisted', mv && mv.slideshow_accent === '#ff6600', JSON.stringify( mv ) );
+
+		// image field: the form engine's { id, url } control with the media picker.
+		const imgSel = '[data-pf$=":slideshow_cover"][data-ftype="image"]';
+		t.check( 'image field renders the image control', !! ( await page.$( imgSel ) ) );
+		await page.click( `${ imgSel } [data-img-pick]` );
+		await page.waitForSelector( '.minn-picker-item[data-pick]', { timeout: 15000 } );
+		await page.click( '.minn-picker-item[data-pick]' );
+		await page.waitForTimeout( 800 );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'picked image persisted as { id, url }',
+			mv && mv.slideshow_cover && mv.slideshow_cover.id > 0 && typeof mv.slideshow_cover.url === 'string',
+			JSON.stringify( mv && mv.slideshow_cover ) );
+
 		t.check( 'no save was rejected across the run', saves.every( ( s ) => s < 400 ), saves.join( ',' ) );
 	} finally {
 		await deletePost( page, id );
