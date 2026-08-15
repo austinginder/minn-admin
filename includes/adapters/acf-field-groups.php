@@ -210,6 +210,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		if ( preg_match( '/^(acf-|wp_|edd_|elementor_)/', $pt->name ) || 'attachment' === $pt->name ) {
 			continue;
 		}
+		/* translators: %s: post type name, e.g. Posts. */
 		$locations[] = array( 'post_type:' . $pt->name, sprintf( __( 'Post type: %s', 'minn-admin' ), $pt->labels->name ) );
 	}
 	if ( function_exists( 'acf_get_options_pages' ) ) {
@@ -217,11 +218,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			if ( empty( $page['menu_slug'] ) ) {
 				continue;
 			}
+			/* translators: %s: ACF options page title. */
 			$locations[] = array( 'options_page:' . $page['menu_slug'], sprintf( __( 'Options page: %s', 'minn-admin' ), $page['page_title'] ?: $page['menu_slug'] ) );
 		}
 	}
 	if ( function_exists( 'acf_get_block_types' ) ) {
 		foreach ( acf_get_block_types() as $name => $bt ) {
+			/* translators: %s: ACF block title. */
 			$locations[] = array( 'block:' . $name, sprintf( __( 'Block: %s', 'minn-admin' ), ! empty( $bt['title'] ) ? $bt['title'] : $name ) );
 		}
 	}
@@ -466,6 +469,7 @@ add_action( 'rest_api_init', function () {
 					return new WP_Error( 'unsupported', __( 'This ACF version cannot duplicate groups.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				$copy = acf_duplicate_field_group( $group['ID'] );
+				/* translators: %s: title of the newly created copy. */
 				return rest_ensure_response( array( 'ok' => true, 'message' => $copy ? sprintf( __( 'Duplicated as “%s”.', 'minn-admin' ), $copy['title'] ) : __( 'Duplicate failed.', 'minn-admin' ) ) );
 			}
 			if ( 'rename' === $verb ) {
