@@ -42,6 +42,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForTimeout( 600 ); // adopt + re-render settle
 		return res.status();
 	};
+	// The builder's selects are strict comboboxes: open by clicking the
+	// input, pick by clicking the item (rule-70 driving pattern).
+	const comboPick = async ( wrapSel, value ) => {
+		await page.click( wrapSel + ' .minn-ac-input' );
+		await page.waitForSelector( `${ wrapSel } .minn-ac-item[data-acv="${ value }"]`, { timeout: 5000 } );
+		await page.click( `${ wrapSel } .minn-ac-item[data-acv="${ value }"]` );
+		await page.waitForTimeout( 250 ); // possible re-render behind the pick
+	};
 	const themedConfirm = async ( label ) => {
 		await page.waitForSelector( '.minn-confirm-overlay button', { timeout: 5000 } ).catch( () => {} );
 		await page.evaluate( ( lb ) => {
@@ -77,7 +85,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.click( '#minn-fgb-add' );
 		await page.waitForSelector( '[data-fgb="0:label"]', { timeout: 5000 } );
 		await page.type( '[data-fgb="0:label"]', 'Team' );
-		await page.selectOption( '[data-fgb="0:type"]', 'repeater' );
+		await comboPick( '[data-fgbtype="0"]', 'repeater' );
 		await page.waitForSelector( '[data-fgbsubadd="0"]', { timeout: 5000 } );
 		t.check( 'repeater settings render min/max + button label',
 			!! ( await page.$( '[data-fgb="0:min"]' ) ) && !! ( await page.$( '[data-fgb="0:button_label"]' ) ) );
@@ -90,10 +98,13 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		await page.click( '[data-fgbsubadd="0"]' );
 		await page.waitForSelector( '[data-fgb="0.1:label"]', { timeout: 5000 } );
-		t.check( 'sub type list drops repeater (one level)', await page.$eval( '[data-fgb="0.1:type"]', ( e ) =>
-			! Array.from( e.options ).some( ( o ) => o.value === 'repeater' ) ) );
+		await page.click( '[data-fgbtype="0.1"] .minn-ac-input' );
+		await page.waitForSelector( '[data-fgbtype="0.1"] .minn-ac-item', { timeout: 5000 } );
+		t.check( 'sub type list drops repeater (one level)', await page.$eval( '[data-fgbtype="0.1"]', ( w ) =>
+			! Array.from( w.querySelectorAll( '.minn-ac-item' ) ).some( ( i ) => i.dataset.acv === 'repeater' ) ) );
+		await page.keyboard.press( 'Escape' );
 		await page.type( '[data-fgb="0.1:label"]', 'Member Role' );
-		await page.selectOption( '[data-fgb="0.1:type"]', 'select' );
+		await comboPick( '[data-fgbtype="0.1"]', 'select' );
 		await page.waitForSelector( '[data-fgb="0.1:choices"]', { timeout: 5000 } );
 		await page.type( '[data-fgb="0.1:choices"]', 'lead : Lead\nsupport : Support' );
 

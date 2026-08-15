@@ -42,6 +42,14 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		await page.waitForTimeout( 600 ); // adopt + re-render settle
 		return res.status();
 	};
+	// The builder's selects are strict comboboxes: open by clicking the
+	// input, pick by clicking the item (rule-70 driving pattern).
+	const comboPick = async ( wrapSel, value ) => {
+		await page.click( wrapSel + ' .minn-ac-input' );
+		await page.waitForSelector( `${ wrapSel } .minn-ac-item[data-acv="${ value }"]`, { timeout: 5000 } );
+		await page.click( `${ wrapSel } .minn-ac-item[data-acv="${ value }"]` );
+		await page.waitForTimeout( 250 ); // possible re-render behind the pick
+	};
 
 	try {
 		await sweep();
@@ -73,14 +81,14 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		await page.click( '#minn-fgb-add' );
 		await page.waitForSelector( '[data-fgb="1:label"]', { timeout: 5000 } );
 		await page.type( '[data-fgb="1:label"]', 'Suite Mood' );
-		await page.selectOption( '[data-fgb="1:type"]', 'select' );
+		await comboPick( '[data-fgbtype="1"]', 'select' );
 		await page.waitForSelector( '[data-fgb="1:choices"]', { timeout: 5000 } );
 		await page.type( '[data-fgb="1:choices"]', 'calm : Calm\nbold : Bold' );
 
 		await page.click( '#minn-fgb-add' );
 		await page.waitForSelector( '[data-fgb="2:label"]', { timeout: 5000 } );
 		await page.type( '[data-fgb="2:label"]', 'Suite Flag' );
-		await page.selectOption( '[data-fgb="2:type"]', 'true_false' );
+		await comboPick( '[data-fgbtype="2"]', 'true_false' );
 
 		t.check( 'save round-trips', ( await saveGroup() ) === 200 );
 
@@ -143,12 +151,12 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		 * set, save, verify the exact structure — and the invalid-value
 		 * refusal writes nothing. ===== */
 		await page.waitForSelector( '.minn-fgb-loc', { timeout: 10000 } );
-		await page.selectOption( '[data-lgv="0:0"]', 'page' );
+		await comboPick( '[data-lgv="0:0"]', 'page' );
 		await page.click( '[data-lgand="0"]' );
 		await page.waitForSelector( '[data-lgp="0:1"]', { timeout: 5000 } );
-		await page.selectOption( '[data-lgp="0:1"]', 'current_user_role' );
+		await comboPick( '[data-lgp="0:1"]', 'current_user_role' );
 		await page.waitForTimeout( 300 );
-		await page.selectOption( '[data-lgo="0:1"]', '!=' );
+		await comboPick( '[data-lgo="0:1"]', '!=' );
 		await page.click( '#minn-fgb-locadd' );
 		await page.waitForSelector( '[data-lgp="1:0"]', { timeout: 5000 } );
 		t.check( 'save round-trips', ( await saveGroup() ) === 200 );

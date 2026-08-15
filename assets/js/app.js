@@ -18309,9 +18309,13 @@
 			const below = window.innerHeight - r.bottom - 10;
 			const above = r.top - 10;
 			panel.style.position = 'fixed';
-			panel.style.left = panelLeftFor( r, panel.offsetWidth ) + 'px';
+			// Width first: with position:fixed set, the stylesheet's
+			// left:0/right:0 briefly renders the panel viewport-wide, so an
+			// offsetWidth read here would clamp left to the screen edge on
+			// the first paint. The fixed panel's width IS the input's.
 			panel.style.width = r.width + 'px';
 			panel.style.right = 'auto';
+			panel.style.left = panelLeftFor( r, r.width ) + 'px';
 			if ( below < 160 && above > below ) {
 				panel.style.top = 'auto';
 				panel.style.bottom = ( window.innerHeight - r.top + 4 ) + 'px';
@@ -37901,10 +37905,13 @@
 	function fgbLocationHtml( fgb, ro ) {
 		const dis = ro ? ' disabled' : '';
 		const cat = fgb.locationChoices;
-		const opSel = ( gi, ri, op ) => `<select class="minn-input minn-fgb-loc-op" data-lgo="${ gi }:${ ri }"${ dis }>
-			<option value="=="${ op !== '!=' ? ' selected' : '' }>${ esc( __( 'is' ) ) }</option>
-			<option value="!="${ op === '!=' ? ' selected' : '' }>${ esc( __( 'is not' ) ) }</option>
-		</select>`;
+		// Strict comboboxes (bound in bindFieldGroupBuilder). The markup
+		// carries the current LABEL so read-only groups render right unbound
+		// and there's no unlabeled flash before binding.
+		const combo = ( attr, extra, display ) => `<div class="minn-ac${ extra }" ${ attr }>
+			<input class="minn-input minn-ac-input" value="${ esc( display ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false"${ dis }>
+			<div class="minn-ac-panel" hidden></div>
+		</div>`;
 		const groups = ( fgb.location || [] ).map( ( rules, gi ) => `
 			${ gi ? `<div class="minn-fgb-loc-or">${ esc( __( 'or' ) ) }</div>` : '' }
 			<div class="minn-fgb-loc-group">
@@ -37917,14 +37924,11 @@
 							<button type="button" data-lgx="${ gi }:${ ri }" title="${ esc( __( 'Remove rule' ) ) }"${ dis }>×</button>
 						</div>`;
 					}
+					const pair = known.values.find( ( p ) => String( p[ 0 ] ) === String( r.value ) );
 					return `<div class="minn-fgb-loc-rule">
-						<select class="minn-input" data-lgp="${ gi }:${ ri }"${ dis }>
-							${ Object.keys( cat ).map( ( pk ) => `<option value="${ esc( pk ) }"${ pk === r.param ? ' selected' : '' }>${ esc( cat[ pk ].label ) }</option>` ).join( '' ) }
-						</select>
-						${ opSel( gi, ri, r.operator ) }
-						<select class="minn-input" data-lgv="${ gi }:${ ri }"${ dis }>
-							${ known.values.map( ( pair ) => `<option value="${ esc( String( pair[ 0 ] ) ) }"${ String( pair[ 0 ] ) === String( r.value ) ? ' selected' : '' }>${ esc( String( pair[ 1 ] ) ) }</option>` ).join( '' ) }
-						</select>
+						${ combo( `data-lgp="${ gi }:${ ri }"`, '', known.label ) }
+						${ combo( `data-lgo="${ gi }:${ ri }"`, ' minn-fgb-loc-op', '!=' === r.operator ? __( 'is not' ) : __( 'is' ) ) }
+						${ combo( `data-lgv="${ gi }:${ ri }"`, '', pair ? String( pair[ 1 ] ) : String( r.value ) ) }
 						<button type="button" data-lgx="${ gi }:${ ri }" title="${ esc( __( 'Remove rule' ) ) }"${ dis }>×</button>
 					</div>`;
 				} ).join( '' ) }
@@ -37964,14 +37968,16 @@
 			</div>`;
 		}
 		const extras = FGB_EXTRAS[ f.type ] || [];
-		// Repeaters nest exactly one level, so the sub type list drops repeater.
-		const typeChoices = ( state.fgb.types || Object.keys( FGB_EXTRAS ) ).filter( ( t ) => ! isSub || 'repeater' !== t );
+		// Strict combobox (bound in bindFieldGroupBuilder — options resolve
+		// there so the sub-level list can drop repeater). The markup carries
+		// the current LABEL so the control reads right before binding.
 		const typePick = f.isNew ? `
 			<div class="minn-fgb-set">
 				<div class="minn-field-label">${ esc( __( 'Type' ) ) }</div>
-				<select class="minn-input" data-fgb="${ tok }:type"${ roAttr }>
-					${ typeChoices.map( ( t ) => `<option value="${ t }"${ t === f.type ? ' selected' : '' }>${ esc( FGB_TYPE_LABELS[ t ] || t ) }</option>` ).join( '' ) }
-				</select>
+				<div class="minn-ac" data-fgbtype="${ tok }">
+					<input class="minn-input minn-ac-input" value="${ esc( FGB_TYPE_LABELS[ f.type ] || f.type ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false"${ roAttr }>
+					<div class="minn-ac-panel" hidden></div>
+				</div>
 			</div>` : '';
 		const repeaterHtml = 'repeater' !== f.type ? '' : `
 			<div class="minn-fgb-minmax">${ input( 'min', __( 'Min rows' ) ) }${ input( 'max', __( 'Max rows' ) ) }</div>
@@ -38010,6 +38016,7 @@
 
 	function bindFieldGroupBuilder( view ) {
 		const fgb = state.fgb;
+		const ro = fgb.group.source !== 'db';
 		const markDirty = () => {
 			if ( fgb.dirty ) return;
 			fgb.dirty = true;
@@ -38096,41 +38103,59 @@
 			}
 			markDirty();
 		} );
-		view.addEventListener( 'change', ( e ) => {
-			const lgp = e.target.closest( '[data-lgp]' );
-			if ( lgp ) {
-				const [ gi, ri ] = lgp.dataset.lgp.split( ':' ).map( Number );
-				const rule = fgb.location[ gi ][ ri ];
-				rule.param = lgp.value;
-				const first = ( fgb.locationChoices[ rule.param ] || { values: [] } ).values[ 0 ];
+		// The builder's selects are the themed strict combobox (the adapter
+		// dialects upgrade via comboUpgrade; this bespoke page binds its own
+		// wraps directly with per-control onPick handlers). Read-only groups
+		// render the current label in a disabled input and never bind.
+		const bindCombo = ( wrap, options, seed, onPick ) => {
+			if ( ro ) return;
+			bindAutocomplete( wrap, options, { strict: true, value: seed, onPick } );
+		};
+		$$( '[data-fgbtype]', view ).forEach( ( wrap ) => {
+			const tok = wrap.dataset.fgbtype;
+			const f = fgbAt( tok );
+			if ( ! f ) return;
+			// Repeaters nest exactly one level, so the sub type list drops repeater.
+			const isSub = tok.includes( '.' );
+			const options = ( fgb.types || Object.keys( FGB_EXTRAS ) )
+				.filter( ( t2 ) => ! isSub || 'repeater' !== t2 )
+				.map( ( t2 ) => ( { value: t2, label: FGB_TYPE_LABELS[ t2 ] || t2 } ) );
+			bindCombo( wrap, options, f.type, ( v ) => {
+				f.type = v;
+				markDirty();
+				renderFieldGroupBuilder(); // extras change with the type
+			} );
+		} );
+		$$( '[data-lgp]', view ).forEach( ( wrap ) => {
+			const [ gi, ri ] = wrap.dataset.lgp.split( ':' ).map( Number );
+			const rule = fgb.location[ gi ][ ri ];
+			const options = Object.keys( fgb.locationChoices ).map( ( pk ) => ( { value: pk, label: fgb.locationChoices[ pk ].label } ) );
+			bindCombo( wrap, options, rule.param, ( v ) => {
+				rule.param = v;
+				const first = ( fgb.locationChoices[ v ] || { values: [] } ).values[ 0 ];
 				rule.value = first ? String( first[ 0 ] ) : '';
 				markDirty();
 				renderFieldGroupBuilder(); // the value list follows the param
-				return;
-			}
-			const lgo = e.target.closest( '[data-lgo]' );
-			if ( lgo ) {
-				const [ gi, ri ] = lgo.dataset.lgo.split( ':' ).map( Number );
-				fgb.location[ gi ][ ri ].operator = lgo.value;
+			} );
+		} );
+		$$( '[data-lgo]', view ).forEach( ( wrap ) => {
+			const [ gi, ri ] = wrap.dataset.lgo.split( ':' ).map( Number );
+			const options = [ { value: '==', label: __( 'is' ) }, { value: '!=', label: __( 'is not' ) } ];
+			bindCombo( wrap, options, '!=' === fgb.location[ gi ][ ri ].operator ? '!=' : '==', ( v ) => {
+				fgb.location[ gi ][ ri ].operator = v;
 				markDirty();
-				return;
-			}
-			const lgv = e.target.closest( '[data-lgv]' );
-			if ( lgv ) {
-				const [ gi, ri ] = lgv.dataset.lgv.split( ':' ).map( Number );
-				fgb.location[ gi ][ ri ].value = lgv.value;
+			} );
+		} );
+		$$( '[data-lgv]', view ).forEach( ( wrap ) => {
+			const [ gi, ri ] = wrap.dataset.lgv.split( ':' ).map( Number );
+			const rule = fgb.location[ gi ][ ri ];
+			const known = fgb.locationChoices[ rule.param ];
+			if ( ! known ) return;
+			const options = known.values.map( ( pair ) => ( { value: String( pair[ 0 ] ), label: String( pair[ 1 ] ) } ) );
+			bindCombo( wrap, options, String( rule.value ), ( v ) => {
+				rule.value = v;
 				markDirty();
-				return;
-			}
-			const el = e.target.closest( '[data-fgb]' );
-			if ( ! el || el.tagName !== 'SELECT' ) return;
-			const sep = el.dataset.fgb.indexOf( ':' );
-			const f = fgbAt( el.dataset.fgb.slice( 0, sep ) );
-			if ( f && 'type' === el.dataset.fgb.slice( sep + 1 ) ) {
-				f.type = el.value;
-				markDirty();
-				renderFieldGroupBuilder(); // extras change with the type
-			}
+			} );
 		} );
 		// Drag to reorder: the grip drags its row; dropping on another row in
 		// the SAME list lands above or below its midpoint (the menus
