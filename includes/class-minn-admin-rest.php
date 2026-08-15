@@ -5232,10 +5232,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		$skin     = new WP_Ajax_Upgrader_Skin();
 		$upgrader = new Theme_Upgrader( $skin );
-		$result   = $upgrader->install( $package );
+		$result   = $upgrader->install( $package, array( 'overwrite_package' => ! empty( $request['overwrite'] ) ) );
 		@unlink( $package ); // phpcs:ignore
 
 		if ( ! $result || is_wp_error( $result ) ) {
+			$offer = self::upload_overwrite_offer( $upgrader, $result, 'theme' );
+			if ( $offer ) {
+				return $offer;
+			}
 			$errors = $skin->get_error_messages();
 			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Install failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
@@ -5421,10 +5425,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		$skin     = new WP_Ajax_Upgrader_Skin();
 		$upgrader = new Plugin_Upgrader( $skin );
-		$result   = $upgrader->install( $package );
+		$result   = $upgrader->install( $package, array( 'overwrite_package' => ! empty( $request['overwrite'] ) ) );
 		@unlink( $package ); // phpcs:ignore
 
 		if ( ! $result || is_wp_error( $result ) ) {
+			$offer = self::upload_overwrite_offer( $upgrader, $result, 'plugin' );
+			if ( $offer ) {
+				return $offer;
+			}
 			$errors = $skin->get_error_messages();
 			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Install failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
@@ -5433,6 +5441,58 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			array(
 				'installed' => true,
 				'plugin'    => $upgrader->plugin_info(),
+			)
+		);
+	}
+
+	/**
+	 * When an uploaded zip's install fails because its folder already exists,
+	 * answer 409 with what is installed versus what was uploaded, so the
+	 * client can offer wp-admin's "replace current with uploaded" flow. Any
+	 * other failure returns null and the caller's generic error stands.
+	 *
+	 * @param WP_Upgrader $upgrader The upgrader that just failed.
+	 * @param mixed       $result   Its install() return value.
+	 * @param string      $kind     'plugin' or 'theme'.
+	 * @return WP_Error|null
+	 */
+	private static function upload_overwrite_offer( $upgrader, $result, $kind ) {
+		$err = is_wp_error( $result ) ? $result : ( isset( $upgrader->result ) && is_wp_error( $upgrader->result ) ? $upgrader->result : null );
+		if ( ! $err || 'folder_exists' !== $err->get_error_code() ) {
+			return null;
+		}
+		$folder          = basename( untrailingslashit( (string) $err->get_error_data( 'folder_exists' ) ) );
+		$current_name    = '';
+		$current_version = '';
+		if ( 'plugin' === $kind ) {
+			foreach ( get_plugins() as $file => $data ) {
+				if ( 0 === strpos( $file, $folder . '/' ) || $file === $folder . '.php' ) {
+					$current_name    = (string) $data['Name'];
+					$current_version = (string) $data['Version'];
+					break;
+				}
+			}
+		} else {
+			$theme = wp_get_theme( $folder );
+			if ( $theme->exists() ) {
+				$current_name    = (string) $theme->get( 'Name' );
+				$current_version = (string) $theme->get( 'Version' );
+			}
+		}
+		// check_package() stored the uploaded copy's headers before the
+		// destination collision stopped the install.
+		$new = 'plugin' === $kind
+			? (array) ( $upgrader->new_plugin_data ?? array() )
+			: (array) ( $upgrader->new_theme_data ?? array() );
+		return new WP_Error(
+			'folder_exists',
+			/* translators: %s: the installed plugin or theme's name. */
+			sprintf( __( '%s is already installed.', 'minn-admin' ), $current_name ? $current_name : $folder ),
+			array(
+				'status'          => 409,
+				'name'            => $current_name ? $current_name : (string) ( $new['Name'] ?? $folder ),
+				'current_version' => $current_version,
+				'new_version'     => (string) ( $new['Version'] ?? '' ),
 			)
 		);
 	}

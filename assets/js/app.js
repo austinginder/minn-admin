@@ -35254,7 +35254,7 @@
 
 		const zone = $( '#minn-ti-dropzone' );
 		const file = $( '#minn-ti-file' );
-		const uploadZip = async ( f ) => {
+		const uploadZip = async ( f, overwrite ) => {
 			if ( ! f ) return;
 			if ( ! /\.zip$/i.test( f.name ) ) {
 				toast( __( 'Theme uploads must be .zip files' ), true );
@@ -35265,13 +35265,43 @@
 			toast( sprintf( __( 'Installing %s…' ), f.name ) );
 			const fd = new FormData();
 			fd.append( 'file', f );
+			if ( overwrite ) fd.append( 'overwrite', '1' );
 			try {
 				await api( 'minn-admin/v1/themes/upload', { method: 'POST', body: fd } );
-				toast( __( 'Theme installed — activate it from the Themes tab' ) );
+				toast( overwrite ? __( 'Theme replaced with the uploaded version' ) : __( 'Theme installed — activate it from the Themes tab' ) );
 				state.cache.themes = null;
 				closeModal();
 				if ( state.route === 'extensions' ) renderExtensions();
 			} catch ( e ) {
+				// Already installed: offer the replace-current-with-uploaded
+				// flow instead of a dead-end error.
+				if ( 'folder_exists' === e.code && ! overwrite ) {
+					zone.classList.remove( 'minn-busy' );
+					const d = e.data || {};
+					const versions = d.current_version && d.new_version
+						/* translators: 1: the installed version. 2: the uploaded version. */
+						? ' ' + sprintf( __( 'Installed: %1$s. Uploaded: %2$s.' ), d.current_version, d.new_version )
+						: '';
+					if ( await minnConfirm( {
+						/* translators: %s: the theme's name. */
+						title: sprintf( __( 'Replace %s?' ), d.name || f.name ),
+						body: e.message + versions + ' ' + __( 'Replacing swaps the files; settings and content stay.' ),
+						confirmLabel: __( 'Replace' ),
+					} ) ) {
+						uploadZip( f, true );
+					}
+					return;
+				}
+				// Dropped socket: the install may have completed while the
+				// worker died — refresh and let the list show the truth.
+				if ( e instanceof TypeError ) {
+					await new Promise( ( r ) => setTimeout( r, 1500 ) );
+					state.cache.themes = null;
+					closeModal();
+					if ( state.route === 'extensions' ) renderExtensions();
+					toast( __( 'The connection dropped mid-install — check the list, the upload may have completed.' ), true );
+					return;
+				}
 				toast( e.message, true );
 				zone.classList.remove( 'minn-busy' );
 			}
@@ -35817,7 +35847,7 @@
 
 		const zone = $( '#minn-pi-dropzone' );
 		const file = $( '#minn-pi-file' );
-		const uploadZip = async ( f ) => {
+		const uploadZip = async ( f, overwrite ) => {
 			if ( ! f ) return;
 			if ( ! /\.zip$/i.test( f.name ) ) {
 				toast( __( 'Plugin uploads must be .zip files' ), true );
@@ -35828,14 +35858,46 @@
 			toast( sprintf( __( 'Installing %s…' ), f.name ) );
 			const fd = new FormData();
 			fd.append( 'file', f );
+			if ( overwrite ) fd.append( 'overwrite', '1' );
 			try {
 				await api( 'minn-admin/v1/plugins/upload', { method: 'POST', body: fd } );
-				toast( __( 'Plugin installed — activate it from the list' ) );
+				toast( overwrite ? __( 'Plugin replaced with the uploaded version' ) : __( 'Plugin installed — activate it from the list' ) );
 				state.cache.plugins = null;
 				await loadPlugins().catch( () => {} );
 				closeModal();
 				if ( state.route === 'extensions' ) renderExtensions();
 			} catch ( e ) {
+				// Already installed: offer wp-admin's replace-current-with-
+				// uploaded flow instead of a dead-end error.
+				if ( 'folder_exists' === e.code && ! overwrite ) {
+					zone.classList.remove( 'minn-busy' );
+					const d = e.data || {};
+					const versions = d.current_version && d.new_version
+						/* translators: 1: the installed version. 2: the uploaded version. */
+						? ' ' + sprintf( __( 'Installed: %1$s. Uploaded: %2$s.' ), d.current_version, d.new_version )
+						: '';
+					if ( await minnConfirm( {
+						/* translators: %s: the plugin's name. */
+						title: sprintf( __( 'Replace %s?' ), d.name || f.name ),
+						body: e.message + versions + ' ' + __( 'Replacing swaps the files; settings and content stay.' ),
+						confirmLabel: __( 'Replace' ),
+					} ) ) {
+						uploadZip( f, true );
+					}
+					return;
+				}
+				// A dropped socket can mean the server did the work and the
+				// reply died with the worker (the cache-purge double-drop
+				// rule) — refresh and let the list show the truth.
+				if ( e instanceof TypeError ) {
+					await new Promise( ( r ) => setTimeout( r, 1500 ) );
+					state.cache.plugins = null;
+					await loadPlugins().catch( () => {} );
+					closeModal();
+					if ( state.route === 'extensions' ) renderExtensions();
+					toast( __( 'The connection dropped mid-install — check the list, the upload may have completed.' ), true );
+					return;
+				}
 				toast( e.message, true );
 				zone.classList.remove( 'minn-busy' );
 			}
