@@ -193,5 +193,20 @@ const { launch, login, reporter } = require( './helpers' );
 		t.check( 'relation clear persisted', Array.isArray( rl ) && rl.length === 0, JSON.stringify( rl ) );
 	}
 
+	// Conditional display on options: the promo row follows the badges
+	// multicheck live (ACF conditional logic in the settings engine).
+	const promoRow = () => page.$eval( '[data-srow="field_minn_optlab_promo"]', ( e ) => e.hidden ).catch( () => null );
+	if ( ( await promoRow() ) === null ) {
+		console.log( 'SKIP conditional check: no conditional field on this tab' );
+	} else {
+		// Baseline: untick every badge first (a prior run may have left one).
+		await page.$$eval( '[data-sset="field_minn_optlab_badges"] input:checked', ( els ) => els.forEach( ( e ) => e.click() ) );
+		t.check( 'conditional options row starts hidden with no controller value', ( await promoRow() ) === true );
+		await page.click( '[data-sset="field_minn_optlab_badges"] input[value="ssl"]' );
+		t.check( 'ticking the controller reveals the conditional row', ( await promoRow() ) === false );
+		await page.click( '[data-sset="field_minn_optlab_badges"] input[value="ssl"]' );
+		t.check( 'unticking hides it again', ( await promoRow() ) === true );
+	}
+
 	await t.done( browser, errors );
 } )();

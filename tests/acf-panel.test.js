@@ -135,6 +135,23 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		let mv = await readMinnAcf();
 		t.check( 'color value persisted', mv && mv.slideshow_accent === '#ff6600', JSON.stringify( mv ) );
 
+		// Conditional display: autoplay follows the arrows toggle LIVE (ACF
+		// conditional logic honored at edit time). A fresh post starts with
+		// the controller off, and a hidden field keeps its value.
+		const cndRow = () => page.$eval( '[data-pf$=":slideshow_autoplay_secs"]',
+			( e ) => e.closest( '.minn-panel-field' ).hidden ).catch( () => null );
+		t.check( 'conditional field starts hidden (controller off)', ( await cndRow() ) === true );
+		await page.click( '[data-pf$=":slideshow_arrows"][data-ftype="toggle"]' );
+		t.check( 'conditional field shows when the controller flips on', ( await cndRow() ) === false );
+		await page.fill( '[data-pf$=":slideshow_autoplay_secs"]', '7' );
+		await page.click( '[data-pf$=":slideshow_arrows"][data-ftype="toggle"]' );
+		t.check( 'conditional field hides again when the controller flips off', ( await cndRow() ) === true );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'hidden conditional value is preserved, not cleared',
+			String( mv.slideshow_autoplay_secs ) === '7' && mv.slideshow_arrows === false,
+			JSON.stringify( { autoplay: mv.slideshow_autoplay_secs, arrows: mv.slideshow_arrows } ) );
+
 		// checkbox field: the multicheck control (one tick row per choice,
 		// value = the checked choice keys in choice order).
 		const mcSel = '[data-pf$=":slideshow_tags"][data-ftype="multicheck"]';

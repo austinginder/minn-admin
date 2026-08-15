@@ -1550,6 +1550,38 @@
 		} );
 	}
 
+	// ACF conditional logic: OR groups of AND rules ([[{ f, op, v }]]),
+	// evaluated against live control values. Mirrors the server's
+	// minn_admin_acf_eval_cond — the two must stay in sync. Unknown
+	// operators answer true (never hide a field over a rule Minn does not
+	// model); an unchecked toggle, '', null and an empty list all read as
+	// "no value" for ==empty / !=empty.
+	function acfCondShow( cond, getVal ) {
+		if ( ! Array.isArray( cond ) || ! cond.length ) return true;
+		const norm = ( x ) => ( x && typeof x === 'object' && ! Array.isArray( x ) )
+			? String( x.value != null ? x.value : ( x.id != null ? x.id : '' ) )
+			: x;
+		const ruleOk = ( r ) => {
+			let cur = norm( getVal( r.f ) );
+			const list = Array.isArray( cur ) ? cur.map( norm ).map( String ) : null;
+			const val = String( r.v == null ? '' : r.v );
+			const has = list ? list.length > 0 : ! ( cur == null || cur === '' || cur === false || String( cur ) === '0' );
+			const curS = cur === true ? '1' : ( ( cur === false || cur == null ) ? '0' : String( cur ) );
+			switch ( r.op || '==' ) {
+				case '==empty': return ! has;
+				case '!=empty': return has;
+				case '==': return list ? list.includes( val ) : curS === val;
+				case '!=': return list ? ! list.includes( val ) : curS !== val;
+				case '==contains': return list ? list.includes( val ) : ( val !== '' && curS.indexOf( val ) !== -1 );
+				case '==pattern': try { return new RegExp( val ).test( curS ); } catch ( e ) { return false; }
+				case '>': return curS !== '' && ! isNaN( +curS ) && +curS > +val;
+				case '<': return curS !== '' && ! isNaN( +curS ) && +curS < +val;
+			}
+			return true;
+		};
+		return cond.some( ( g ) => Array.isArray( g ) && g.length > 0 && g.every( ruleOk ) );
+	}
+
 	// Arm one relation control (data-ftype="relation"): an ordered chip list
 	// with an append-only suggest input. Search mirrors bindSuggestField
 	// (route + &q=, seq-guarded, mousedown picks); already-picked rows are
@@ -14898,14 +14930,24 @@
 		bindChrome();
 
 		const dirty = {};
-		// showWhen: { key, equals } — row visibility follows the controlling
-		// field LIVE, reading the current control value, not the saved one.
+		// Row visibility follows the controlling fields LIVE, reading current
+		// control values, not saved ones. Two dialects: showWhen ({ key,
+		// equals }, the adapter-settings contract) and cond (ACF conditional
+		// logic, [[{ f, op, v }]] over field keys — acfCondShow).
 		const applyDeps = () => fields.forEach( ( f ) => {
-			if ( ! f.showWhen || ! f.showWhen.key ) return;
+			const hasWhen = f.showWhen && f.showWhen.key;
+			const hasCond = Array.isArray( f.cond ) && f.cond.length;
+			if ( ! hasWhen && ! hasCond ) return;
 			const row = view.querySelector( `[data-srow="${ f.key }"]` );
-			const dep = view.querySelector( `[data-sset="${ f.showWhen.key }"]` );
-			const cur = dep ? formControlValue( dep ) : values[ f.showWhen.key ];
-			if ( row ) row.hidden = String( cur ) !== String( f.showWhen.equals );
+			if ( ! row ) return;
+			const depVal = ( key ) => {
+				const dep = view.querySelector( `[data-sset="${ key }"]` );
+				return dep ? formControlValue( dep ) : values[ key ];
+			};
+			let show = true;
+			if ( hasWhen ) show = String( depVal( f.showWhen.key ) ) === String( f.showWhen.equals );
+			if ( show && hasCond ) show = acfCondShow( f.cond, depVal );
+			row.hidden = ! show;
 		} );
 		applyDeps();
 		// Combobox fields (declared, or selects upgraded by comboUpgrade)
@@ -24804,7 +24846,7 @@
 				${ p.groups.map( ( g ) => `
 					${ p.groups.length > 1 ? `<div class="minn-panel-group">${ esc( g.group ) }</div>` : '' }
 					${ g.fields.map( ( f ) => `
-						<div class="minn-panel-field${ f.type === 'true_false' ? ' inline' : '' }">
+						<div class="minn-panel-field${ f.type === 'true_false' ? ' inline' : '' }"${ f.cond ? ` data-pfcond="${ esc( JSON.stringify( f.cond ) ) }"` : '' }>
 							<div class="minn-field-label">${ esc( f.label ) }</div>
 							${ panelInput( pid, f, values[ f.name ] ) }
 						</div>` ).join( '' ) }` ).join( '' ) }
@@ -25092,12 +25134,26 @@
 	}
 
 	function bindEditorPanelFields( root, ed ) {
+		// Conditional rows (data-pfcond) follow their controlling fields
+		// LIVE: every write re-evaluates. Hidden fields keep their values —
+		// the panel round-trips them untouched, it just stops showing them.
+		const applyConds = () => {
+			$$( '[data-pfcond]', root ).forEach( ( row ) => {
+				let cond = [];
+				try { cond = JSON.parse( row.dataset.pfcond || '[]' ); } catch ( e ) {}
+				row.hidden = ! acfCondShow( cond, ( name ) => {
+					const dep = root.querySelector( `[data-pf$=":${ name }"]` );
+					return dep ? formControlValue( dep ) : '';
+				} );
+			} );
+		};
 		$$( '[data-pf]', root ).forEach( ( input ) => {
 			const write = ( val ) => {
 				const [ pid, name ] = input.dataset.pf.split( ':' );
 				( state.editor.panelValues[ pid ] = state.editor.panelValues[ pid ] || {} )[ name ] = val;
 				state.editor.panelDirty[ pid ] = true;
 				scheduleAutosave();
+				applyConds();
 			};
 			if ( input.dataset.ftype === 'toggle' ) {
 				input.addEventListener( 'click', () => {
@@ -25169,6 +25225,7 @@
 				} );
 			}
 		} );
+		applyConds(); // initial visibility from the seeded values
 	}
 
 	function bindEditorSettingsFields( root, ed ) {

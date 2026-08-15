@@ -612,14 +612,92 @@ function minn_admin_acf_map_repeater( $f ) {
 }
 
 /**
+ * Evaluate ACF conditional logic (OR groups of AND rules) against values
+ * from $get_value( field_key ). Mirrors acfCondShow in app.js — the two
+ * must stay in sync.
+ *
+ * @param mixed    $logic     The field's conditional_logic setting.
+ * @param callable $get_value Field key => current value.
+ * @return bool Show the field.
+ */
+function minn_admin_acf_eval_cond( $logic, $get_value ) {
+	if ( empty( $logic ) || ! is_array( $logic ) ) {
+		return true;
+	}
+	foreach ( $logic as $group ) {
+		if ( ! is_array( $group ) || ! $group ) {
+			continue;
+		}
+		$ok = true;
+		foreach ( $group as $rule ) {
+			if ( ! is_array( $rule ) || ! minn_admin_acf_eval_rule( $rule, $get_value ) ) {
+				$ok = false;
+				break;
+			}
+		}
+		if ( $ok ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * One conditional rule. Unknown operators answer true (never hide a field
+ * over a rule Minn does not model).
+ *
+ * @param array    $rule      { field, operator, value }.
+ * @param callable $get_value Field key => current value.
+ * @return bool
+ */
+function minn_admin_acf_eval_rule( $rule, $get_value ) {
+	$op  = isset( $rule['operator'] ) ? (string) $rule['operator'] : '==';
+	$val = isset( $rule['value'] ) ? (string) $rule['value'] : '';
+	$cur = call_user_func( $get_value, isset( $rule['field'] ) ? (string) $rule['field'] : '' );
+	// An unchecked toggle (0/'0'), '', null and an empty list all read as
+	// "no value" — ACF's own condition semantics for ==empty / !=empty.
+	$has  = is_array( $cur ) ? count( $cur ) > 0 : ! ( null === $cur || false === $cur || '' === $cur || '0' === (string) $cur );
+	$curS = ( true === $cur ) ? '1' : ( ( false === $cur || null === $cur ) ? '0' : ( is_scalar( $cur ) ? (string) $cur : '' ) );
+	$list = is_array( $cur ) ? array_map( 'strval', array_filter( $cur, 'is_scalar' ) ) : null;
+	switch ( $op ) {
+		case '==empty':
+			return ! $has;
+		case '!=empty':
+			return $has;
+		case '==':
+			return null !== $list ? in_array( $val, $list, true ) : $curS === $val;
+		case '!=':
+			return null !== $list ? ! in_array( $val, $list, true ) : $curS !== $val;
+		case '==contains':
+			return null !== $list ? in_array( $val, $list, true ) : ( '' !== $val && false !== strpos( $curS, $val ) );
+		case '==pattern':
+			return (bool) @preg_match( '/' . str_replace( '/', '\/', $val ) . '/', $curS );
+		case '>':
+			return is_numeric( $curS ) && is_numeric( $val ) && (float) $curS > (float) $val;
+		case '<':
+			return is_numeric( $curS ) && is_numeric( $val ) && (float) $curS < (float) $val;
+	}
+	return true;
+}
+
+/**
  * Build the fieldsRoute response for a post.
+ *
+ * Conditional logic: when EVERY controlling field is itself rendered in the
+ * payload, the condition ships as `cond` (rule field keys translated to
+ * sibling names, [[{ f, op, v }]]) and the client shows/hides live. When a
+ * controller is not rendered (locked type, another screen), the condition is
+ * evaluated ONCE here against stored values — its answer cannot change
+ * mid-session because the controller has no control — and a false hides the
+ * field entirely, exactly like ACF's own screen.
  *
  * @param int    $post_id   Post ID (0 for new).
  * @param string $post_type Post type slug.
  * @return array{groups: array}
  */
 function minn_admin_acf_fields_payload( $post_id, $post_type ) {
-	$out = array();
+	$out    = array();
+	$by_key = array(); // mapped field key => name, across ALL groups (ACF conditions may cross groups)
 	foreach ( minn_admin_acf_groups_for( $post_id, $post_type ) as $group ) {
 		$fields = acf_get_fields( $group );
 		$mapped = array();
@@ -628,14 +706,17 @@ function minn_admin_acf_fields_payload( $post_id, $post_type ) {
 			if ( in_array( $f['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 				continue;
 			}
+			$cond = ! empty( $f['conditional_logic'] ) && is_array( $f['conditional_logic'] ) ? $f['conditional_logic'] : null;
 			// Repeaters (Pro) ride the `rows` control when any sub is simple.
 			// Panel-only: options pages and block dataForms keep them locked
 			// (their engines have no rows binding).
 			if ( 'repeater' === ( $f['type'] ?? '' ) ) {
 				$rep = minn_admin_acf_map_repeater( $f );
 				if ( $rep ) {
-					unset( $rep['key'], $rep['subs'] );
-					$mapped[] = $rep;
+					$by_key[ $rep['key'] ] = $rep['name'];
+					unset( $rep['subs'] );
+					$rep['_cond'] = $cond;
+					$mapped[]     = $rep;
 				} else {
 					$locked++;
 				}
@@ -646,8 +727,9 @@ function minn_admin_acf_fields_payload( $post_id, $post_type ) {
 				$locked++;
 				continue;
 			}
-			unset( $simple['key'] ); // internal — the panel keys inputs by name
-			$mapped[] = $simple;
+			$by_key[ $simple['key'] ] = $simple['name'];
+			$simple['_cond']          = $cond;
+			$mapped[]                 = $simple;
 		}
 		if ( $mapped || $locked ) {
 			$out[] = array(
@@ -657,6 +739,50 @@ function minn_admin_acf_fields_payload( $post_id, $post_type ) {
 			);
 		}
 	}
+	// Second pass: translate or statically evaluate each condition.
+	$stored = function ( $key ) use ( $post_id ) {
+		if ( $post_id ) {
+			return get_field( $key, $post_id, false );
+		}
+		$acf = acf_get_field( $key );
+		return $acf && isset( $acf['default_value'] ) ? $acf['default_value'] : '';
+	};
+	foreach ( $out as $gi => $group ) {
+		$fields = array();
+		foreach ( $group['fields'] as $f ) {
+			$cond = $f['_cond'];
+			unset( $f['_cond'], $f['key'] ); // key is internal — the panel keys inputs by name
+			if ( $cond ) {
+				$all_mapped = true;
+				foreach ( $cond as $rules ) {
+					foreach ( (array) $rules as $rule ) {
+						if ( ! isset( $by_key[ $rule['field'] ?? '' ] ) ) {
+							$all_mapped = false;
+						}
+					}
+				}
+				if ( $all_mapped ) {
+					$f['cond'] = array_map( function ( $rules ) use ( $by_key ) {
+						return array_map( function ( $rule ) use ( $by_key ) {
+							return array(
+								'f'  => $by_key[ $rule['field'] ],
+								'op' => isset( $rule['operator'] ) ? (string) $rule['operator'] : '==',
+								'v'  => isset( $rule['value'] ) ? (string) $rule['value'] : '',
+							);
+						}, (array) $rules );
+					}, $cond );
+				} elseif ( ! minn_admin_acf_eval_cond( $cond, $stored ) ) {
+					continue; // statically hidden, exactly like ACF's screen
+				}
+			}
+			$fields[] = $f;
+		}
+		$out[ $gi ]['fields'] = $fields;
+	}
+	// A group left with no visible fields and nothing locked drops entirely.
+	$out = array_values( array_filter( $out, function ( $g ) {
+		return $g['fields'] || $g['locked'];
+	} ) );
 	return array( 'groups' => $out );
 }
 
@@ -1286,8 +1412,53 @@ function minn_admin_acf_options_tabs( $page ) {
 				$tabs[ $current ]['locked']++;
 				continue;
 			}
+			$simple['_cond']              = ! empty( $f['conditional_logic'] ) && is_array( $f['conditional_logic'] ) ? $f['conditional_logic'] : null;
 			$tabs[ $current ]['fields'][] = $simple;
 		}
+	}
+	// Conditional logic: live (`cond`, rule fields = keys — options controls
+	// already key by field key) when every controller sits on the SAME tab;
+	// otherwise a one-time evaluation against stored values, hiding the
+	// field like ACF's own screen would.
+	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
+	$stored  = function ( $key ) use ( $post_id ) {
+		return get_field( $key, $post_id, false );
+	};
+	foreach ( $tabs as $ti => $tab ) {
+		$keys = array();
+		foreach ( $tab['fields'] as $f ) {
+			$keys[ $f['key'] ] = true;
+		}
+		$fields = array();
+		foreach ( $tab['fields'] as $f ) {
+			$cond = $f['_cond'];
+			unset( $f['_cond'] );
+			if ( $cond ) {
+				$same_tab = true;
+				foreach ( $cond as $rules ) {
+					foreach ( (array) $rules as $rule ) {
+						if ( ! isset( $keys[ $rule['field'] ?? '' ] ) ) {
+							$same_tab = false;
+						}
+					}
+				}
+				if ( $same_tab ) {
+					$f['cond'] = array_map( function ( $rules ) {
+						return array_map( function ( $rule ) {
+							return array(
+								'f'  => (string) $rule['field'],
+								'op' => isset( $rule['operator'] ) ? (string) $rule['operator'] : '==',
+								'v'  => isset( $rule['value'] ) ? (string) $rule['value'] : '',
+							);
+						}, (array) $rules );
+					}, $cond );
+				} elseif ( ! minn_admin_acf_eval_cond( $cond, $stored ) ) {
+					continue;
+				}
+			}
+			$fields[] = $f;
+		}
+		$tabs[ $ti ]['fields'] = $fields;
 	}
 	$out = array();
 	foreach ( $tabs as $tab ) {
@@ -1346,6 +1517,9 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 		);
 		if ( ! empty( $f['route'] ) ) {
 			$sf['route'] = $f['route'];
+		}
+		if ( ! empty( $f['cond'] ) ) {
+			$sf['cond'] = $f['cond'];
 		}
 		if ( in_array( $sf['type'], array( 'select', 'multicheck' ), true ) ) {
 			$sf['options'] = array();
