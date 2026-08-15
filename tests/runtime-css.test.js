@@ -107,6 +107,13 @@ const OVER_URL = BASE + '/?minn_test_css=over';
 			};
 		} );
 		t.check( 'frame still clips at its base height', geo.frameH === 200, JSON.stringify( geo ) );
+		// The base sheet carries a sticky-footer body{min-height:100vh} rule:
+		// shell-mapped canvas rules must never size the preview box (a 50px
+		// spacer once rendered viewport-tall on a theme with this pattern).
+		t.check( 'shell-mapped canvas sizing is stripped from previews', await page.evaluate( () => {
+			const prev = document.querySelector( '.minn-block-island .minn-island-preview' );
+			return prev && parseFloat( getComputedStyle( prev ).minHeight || '0' ) < window.innerHeight / 2;
+		} ) );
 		t.check( 'runtime rule applied (grid overlay)', geo.display === 'grid' && geo.gridArea === '1 / 1', JSON.stringify( geo ) );
 
 		// The harvested sheet must arrive scoped, through the same pipeline as

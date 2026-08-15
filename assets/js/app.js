@@ -21470,6 +21470,13 @@
 				// Keep the leading delimiter (space/{/;) so the next property stays valid.
 				const lead = m.match( /^[;{\s]/ );
 				return lead ? lead[ 0 ] : '';
+			} )
+			// Sizing on the page canvas must not size the preview BOX: a
+			// sticky-footer `body { min-height: 100vh }` otherwise makes every
+			// island viewport-tall (a 50px spacer rendered as a full screen).
+			.replace( /(?:^|[;{\s])(?:min-|max-)?(?:height|block-size)\s*:[^;}{]+;?/gi, ( m ) => {
+				const lead = m.match( /^[;{\s]/ );
+				return lead ? lead[ 0 ] : '';
 			} );
 		const walk = ( rules ) => {
 			let out = '';
