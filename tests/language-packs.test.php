@@ -36,6 +36,14 @@ $manifest = (object) array(
 	),
 );
 
+class Minn_Admin_Updater_Manifest_Drift_Test extends Minn_Admin_Updater {
+	public $mock_manifest;
+
+	public function request() {
+		return $this->mock_manifest;
+	}
+}
+
 /* --- hash lookup is three-state ------------------------------------------ */
 $check( 'Plugin zip resolves its own hash', 'aaaa' === $updater->hash_for_package( $manifest, $manifest->download_url ) );
 $check( 'Language pack resolves its hash', 'bbbb' === $updater->hash_for_package( $manifest, $ok_url ) );
@@ -44,8 +52,25 @@ $check(
 	'' === $updater->hash_for_package( $manifest, $manifest->translations[1]->package )
 );
 $check(
-	'Unclaimed URL returns null so other plugins download normally',
+	'Hash lookup distinguishes an unclaimed URL',
 	null === $updater->hash_for_package( $manifest, 'https://github.com/austinginder/minn-admin/releases/download/v0.30.0/unrelated.zip' )
+);
+
+/* --- cached offers stay bound to a hash after manifest drift ------------- */
+$drift = new Minn_Admin_Updater_Manifest_Drift_Test();
+$drift->mock_manifest = (object) array(
+	'download_url' => 'https://github.com/austinginder/minn-admin/releases/download/v0.30.1/minn-admin.zip',
+	'sha256'       => str_repeat( 'a', 64 ),
+	'translations' => array(),
+);
+$drift_result = $drift->verify_package( false, $ok_url, null );
+$check(
+	'A cached Minn package absent from the current manifest is refused',
+	is_wp_error( $drift_result ) && 'minn_admin_missing_package_hash' === $drift_result->get_error_code()
+);
+$check(
+	'An unrelated package still passes through untouched',
+	false === $drift->verify_package( false, 'https://downloads.wordpress.org/plugin/hello-dolly.zip', null )
 );
 
 /* --- package URL gate ---------------------------------------------------- */

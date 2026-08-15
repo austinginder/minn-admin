@@ -122,8 +122,9 @@ class Minn_Admin_Updater {
 	 * The sha256 the manifest publishes for a given package URL.
 	 *
 	 * Three-state on purpose:
-	 *   null  the manifest does not claim this URL at all, so it is not ours
-	 *         to verify and the download passes through untouched.
+	 *   null  the manifest does not claim this URL at all. The caller decides
+	 *         whether it is unrelated; verify_package() has already established
+	 *         ownership from the URL and therefore refuses this state.
 	 *   ''    the manifest claims it but publishes no hash. That is a refusal,
 	 *         not a pass: treating "no sha256" as "verification not required"
 	 *         makes integrity opt-out for whoever serves the manifest, and
@@ -180,10 +181,7 @@ class Minn_Admin_Updater {
 		// package is a downloaded file like any other: skipping the check for
 		// it would make integrity opt-out for whoever serves the manifest.
 		$expected = $this->hash_for_package( $remote, $package );
-		if ( null === $expected ) {
-			return $reply;
-		}
-		if ( '' === $expected ) {
+		if ( null === $expected || '' === $expected ) {
 			return new WP_Error(
 				'minn_admin_missing_package_hash',
 				__( 'Minn Admin update rejected: the release manifest does not publish a sha256 for this package.', 'minn-admin' )
