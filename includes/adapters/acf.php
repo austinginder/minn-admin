@@ -25,7 +25,11 @@ defined( 'ABSPATH' ) || exit;
 // stores an HTML fragment and edits in the rich-text modal; checkbox (and a
 // select with `multiple`) stores an ordered choice-key array and rides the
 // engine's multicheck control; button_group is a styled radio.
-const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'button_group', 'checkbox', 'true_false', 'color_picker', 'image', 'gallery', 'wysiwyg' );
+// Date fields map onto the app's own picker: date_picker stores 'Ymd' and
+// rides the engine's date control ('YYYY-MM-DD'), date_time_picker stores
+// 'Y-m-d H:i:s' and rides datetime ('YYYY-MM-DDTHH:mm'), time_picker stores
+// 'H:i:s' and rides the lenient time text control ('HH:mm').
+const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'button_group', 'checkbox', 'true_false', 'color_picker', 'image', 'gallery', 'wysiwyg', 'date_picker', 'date_time_picker', 'time_picker' );
 
 /** Layout-only ACF field types: chrome, not data — never mapped, never counted as locked. */
 const MINN_ADMIN_ACF_CHROME_TYPES = array( 'tab', 'message', 'accordion' );
@@ -126,6 +130,102 @@ function minn_admin_acf_choices_in( $value, $field ) {
 }
 
 /**
+ * Stored ACF date ('Ymd') → the date control's 'YYYY-MM-DD' ('' when unset).
+ *
+ * @param mixed $val Raw stored value.
+ * @return string
+ */
+function minn_admin_acf_date_out( $val ) {
+	$val = is_scalar( $val ) ? (string) $val : '';
+	if ( preg_match( '/^(\d{4})(\d{2})(\d{2})$/', $val, $m ) ) {
+		return $m[1] . '-' . $m[2] . '-' . $m[3];
+	}
+	return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $val ) ? $val : '';
+}
+
+/**
+ * Incoming date ('YYYY-MM-DD' or 'Ymd') → ACF's stored 'Ymd'.
+ * '' clears; null means invalid — the caller skips the write.
+ *
+ * @param mixed $value Incoming value.
+ * @return string|null
+ */
+function minn_admin_acf_date_in( $value ) {
+	if ( null === $value || false === $value || '' === $value ) {
+		return '';
+	}
+	if ( ! is_scalar( $value ) ) {
+		return null;
+	}
+	$value = (string) $value;
+	if ( preg_match( '/^(\d{4})-?(\d{2})-?(\d{2})$/', $value, $m ) && checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ) {
+		return $m[1] . $m[2] . $m[3];
+	}
+	return null;
+}
+
+/**
+ * Stored ACF datetime ('Y-m-d H:i:s') → 'YYYY-MM-DDTHH:mm' ('' when unset).
+ *
+ * @param mixed $val Raw stored value.
+ * @return string
+ */
+function minn_admin_acf_datetime_out( $val ) {
+	$val = is_scalar( $val ) ? (string) $val : '';
+	return preg_match( '/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(:\d{2})?$/', $val, $m ) ? $m[1] . 'T' . $m[2] : '';
+}
+
+/**
+ * Incoming datetime → ACF's stored 'Y-m-d H:i:s'. '' clears; null = invalid.
+ *
+ * @param mixed $value Incoming value.
+ * @return string|null
+ */
+function minn_admin_acf_datetime_in( $value ) {
+	if ( null === $value || false === $value || '' === $value ) {
+		return '';
+	}
+	if ( ! is_scalar( $value ) ) {
+		return null;
+	}
+	if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(:\d{2})?$/', (string) $value, $m )
+		&& checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) && (int) $m[4] < 24 && (int) $m[5] < 60 ) {
+		return $m[1] . '-' . $m[2] . '-' . $m[3] . ' ' . $m[4] . ':' . $m[5] . ( $m[6] ? $m[6] : ':00' );
+	}
+	return null;
+}
+
+/**
+ * Stored ACF time ('H:i:s') → 'HH:mm' ('' when unset).
+ *
+ * @param mixed $val Raw stored value.
+ * @return string
+ */
+function minn_admin_acf_time_out( $val ) {
+	$val = is_scalar( $val ) ? (string) $val : '';
+	return preg_match( '/^(\d{2}:\d{2})(:\d{2})?$/', $val, $m ) ? $m[1] : '';
+}
+
+/**
+ * Incoming time → ACF's stored 'H:i:s'. '' clears; null = invalid.
+ *
+ * @param mixed $value Incoming value.
+ * @return string|null
+ */
+function minn_admin_acf_time_in( $value ) {
+	if ( null === $value || false === $value || '' === $value ) {
+		return '';
+	}
+	if ( ! is_scalar( $value ) ) {
+		return null;
+	}
+	if ( preg_match( '/^(\d{1,2}):(\d{2})(:\d{2})?$/', (string) $value, $m ) && (int) $m[1] < 24 && (int) $m[2] < 60 ) {
+		return str_pad( $m[1], 2, '0', STR_PAD_LEFT ) . ':' . $m[2] . ( $m[3] ? $m[3] : ':00' );
+	}
+	return null;
+}
+
+/**
  * Incoming gallery value ([{ id, url }] entries or bare ids) → validated
  * attachment-id list. An empty list clears (ACF stores an empty array).
  *
@@ -190,6 +290,12 @@ function minn_admin_acf_map_field( $f ) {
 		$type = 'radio';
 	} elseif ( 'checkbox' === $type || ( 'select' === $type && ! empty( $f['multiple'] ) ) ) {
 		$type = 'multicheck';
+	} elseif ( 'date_picker' === $type ) {
+		$type = 'date';
+	} elseif ( 'date_time_picker' === $type ) {
+		$type = 'datetime';
+	} elseif ( 'time_picker' === $type ) {
+		$type = 'time';
 	}
 	if ( ! empty( $f['multiple'] ) && 'multicheck' !== $type ) {
 		return null;
@@ -364,6 +470,12 @@ function minn_admin_acf_read_values( $post_id ) {
 			$out[ $name ] = minn_admin_acf_gallery_out( $val );
 		} elseif ( 'multicheck' === $field['type'] ) {
 			$out[ $name ] = minn_admin_acf_choices_out( $val );
+		} elseif ( 'date' === $field['type'] ) {
+			$out[ $name ] = minn_admin_acf_date_out( $val );
+		} elseif ( 'datetime' === $field['type'] ) {
+			$out[ $name ] = minn_admin_acf_datetime_out( $val );
+		} elseif ( 'time' === $field['type'] ) {
+			$out[ $name ] = minn_admin_acf_time_out( $val );
 		} elseif ( 'rows' === $field['type'] ) {
 			// Repeater rows: [{ __idx, values }] — __idx is the row's position
 			// in ACF's stored rows, the write path's merge anchor. Raw rows key
@@ -381,6 +493,12 @@ function minn_admin_acf_read_values( $post_id ) {
 						$vals[ $sub['name'] ] = minn_admin_acf_gallery_out( $v );
 					} elseif ( 'multicheck' === $sub['type'] ) {
 						$vals[ $sub['name'] ] = minn_admin_acf_choices_out( $v );
+					} elseif ( 'date' === $sub['type'] ) {
+						$vals[ $sub['name'] ] = minn_admin_acf_date_out( $v );
+					} elseif ( 'datetime' === $sub['type'] ) {
+						$vals[ $sub['name'] ] = minn_admin_acf_datetime_out( $v );
+					} elseif ( 'time' === $sub['type'] ) {
+						$vals[ $sub['name'] ] = minn_admin_acf_time_out( $v );
 					} elseif ( is_array( $v ) ) {
 						$vals[ $sub['name'] ] = '';
 					} else {
@@ -429,6 +547,12 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 			$value = minn_admin_acf_gallery_in( $value );
 		} elseif ( 'multicheck' === $field['type'] ) {
 			$value = minn_admin_acf_choices_in( $value, $field );
+		} elseif ( in_array( $field['type'], array( 'date', 'datetime', 'time' ), true ) ) {
+			$in = array( 'date' => 'minn_admin_acf_date_in', 'datetime' => 'minn_admin_acf_datetime_in', 'time' => 'minn_admin_acf_time_in' );
+			$value = call_user_func( $in[ $field['type'] ], $value );
+			if ( null === $value ) {
+				continue; // invalid input never clobbers a stored date
+			}
 		} elseif ( 'wysiwyg' === $field['type'] ) {
 			// The same trust boundary WordPress applies to post content: users
 			// without unfiltered_html get their markup run through kses.
@@ -467,6 +591,12 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 						$v = minn_admin_acf_gallery_in( $v );
 					} elseif ( 'multicheck' === $sub['type'] ) {
 						$v = minn_admin_acf_choices_in( $v, $sub );
+					} elseif ( in_array( $sub['type'], array( 'date', 'datetime', 'time' ), true ) ) {
+						$in = array( 'date' => 'minn_admin_acf_date_in', 'datetime' => 'minn_admin_acf_datetime_in', 'time' => 'minn_admin_acf_time_in' );
+						$v = call_user_func( $in[ $sub['type'] ], $v );
+						if ( null === $v ) {
+							continue; // invalid input keeps the stored value
+						}
 					} elseif ( null === $v || false === $v ) {
 						$v = '';
 					} elseif ( ! is_scalar( $v ) ) {
@@ -514,6 +644,13 @@ function minn_admin_acf_block_forms() {
 			}
 			$simple = minn_admin_acf_map_field( $f );
 			if ( ! $simple ) {
+				$locked++;
+				continue;
+			}
+			// Date types stay locked in block forms: their values live in the
+			// block's data attribute in ACF's raw storage formats, and the
+			// inspector has no adapter layer (or picker arming) to translate.
+			if ( in_array( $simple['type'], array( 'date', 'datetime', 'time' ), true ) ) {
 				$locked++;
 				continue;
 			}
@@ -839,7 +976,7 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'multicheck' ), true ) ? $f['type'] : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'multicheck', 'date', 'datetime', 'time' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
 		if ( in_array( $sf['type'], array( 'select', 'multicheck' ), true ) ) {
 			$sf['options'] = array();
@@ -858,6 +995,12 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			$values[ $f['key'] ] = minn_admin_acf_image_out( $v );
 		} elseif ( 'multicheck' === $sf['type'] ) {
 			$values[ $f['key'] ] = minn_admin_acf_choices_out( $v );
+		} elseif ( 'date' === $sf['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_date_out( $v );
+		} elseif ( 'datetime' === $sf['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_datetime_out( $v );
+		} elseif ( 'time' === $sf['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_time_out( $v );
 		} elseif ( is_array( $v ) ) {
 			$values[ $f['key'] ] = '';
 		} else {
@@ -905,6 +1048,12 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$v = minn_admin_acf_image_in( $v );
 		} elseif ( 'multicheck' === $byKey[ $key ]['type'] ) {
 			$v = minn_admin_acf_choices_in( $v, $byKey[ $key ] );
+		} elseif ( in_array( $byKey[ $key ]['type'], array( 'date', 'datetime', 'time' ), true ) ) {
+			$in = array( 'date' => 'minn_admin_acf_date_in', 'datetime' => 'minn_admin_acf_datetime_in', 'time' => 'minn_admin_acf_time_in' );
+			$v = call_user_func( $in[ $byKey[ $key ]['type'] ], $v );
+			if ( null === $v ) {
+				continue; // invalid input never clobbers a stored date
+			}
 		} elseif ( 'wysiwyg' === $byKey[ $key ]['type'] ) {
 			// The post-content trust boundary, same as the panel write path.
 			$v = is_scalar( $v ) ? (string) $v : '';

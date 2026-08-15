@@ -1335,6 +1335,20 @@
 				<button type="button" class="minn-btn-soft" data-rt-edit>${ s ? esc( __( 'Edit content…' ) ) : esc( __( 'Add content…' ) ) }</button>
 			</div>`;
 		}
+		// Date / datetime: the app's own date-picker popover, never the
+		// unstyleable native control. The machine value rides data-dp
+		// ('YYYY-MM-DD' or 'YYYY-MM-DDTHH:mm'); the CALLER arms
+		// bindDatePicker — the input is readonly, so commits fire no input
+		// events and generic input tracking cannot cover it.
+		if ( t === 'date' || t === 'datetime' ) {
+			const s = String( v == null ? '' : v );
+			return `<input class="${ cls }" readonly ${ attr }="${ esc( id ) }" data-ftype="${ t }" data-dp="${ esc( s ) }" value="${ esc( dpPretty( s ) ) }" placeholder="${ esc( __( 'Pick a date…' ) ) }">`;
+		}
+		// Time: lenient text ("7:30 pm", "19:30" — dpParseTime), normalized
+		// to HH:mm by the delegated change listener and at collect time.
+		if ( t === 'time' ) {
+			return `<input class="${ cls } mono" ${ attr }="${ esc( id ) }" data-ftype="time" value="${ esc( String( v == null ? '' : v ) ) }" placeholder="19:30" spellcheck="false" autocomplete="off">`;
+		}
 		// Rows: repeating groups of sub-fields (ACF repeaters). The value is an
 		// ordered [{ __idx?, values }] list — __idx anchors a kept row to its
 		// original stored position so the server can merge edits onto it and
@@ -1374,6 +1388,13 @@
 		if ( kind === 'multicheck' ) {
 			return $$( 'input[type="checkbox"]', el ).filter( ( c ) => c.checked ).map( ( c ) => c.value );
 		}
+		if ( kind === 'date' || kind === 'datetime' ) return el.dataset.dp || '';
+		if ( kind === 'time' ) {
+			const s = el.value.trim();
+			if ( ! s ) return '';
+			const t = dpParseTime( s );
+			return t ? String( t.h ).padStart( 2, '0' ) + ':' + String( t.m ).padStart( 2, '0' ) : '';
+		}
 		if ( kind === 'image' ) {
 			const id = parseInt( el.dataset.imgId || '0', 10 );
 			if ( ! id ) return null;
@@ -1402,6 +1423,18 @@
 		}
 		return el.value;
 	}
+
+	// Time control: normalize whatever was typed to HH:mm on blur (or blank
+	// it when unparsable — visible feedback that the entry didn't take). One
+	// delegated listener serves every dialect, like the color sync below.
+	document.addEventListener( 'change', ( e ) => {
+		const el = e.target.closest( 'input[data-ftype="time"]' );
+		if ( ! el ) return;
+		const s = el.value.trim();
+		if ( ! s ) return;
+		const t = dpParseTime( s );
+		el.value = t ? String( t.h ).padStart( 2, '0' ) + ':' + String( t.m ).padStart( 2, '0' ) : '';
+	} );
 
 	// Color control: keep the swatch and the hex text in sync from either
 	// side (one delegated listener serves every dialect; the wrap's own
@@ -1648,8 +1681,9 @@
 			wrap.innerHTML = rows.map( rowHtml ).join( '' )
 				+ ( locked ? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of per-row fields only editable in wp-admin. */ _n( '%d more field per row lives in wp-admin.', '%d more fields per row live in wp-admin.', locked ) ), locked ) }</div>` : '' )
 				+ `<button type="button" class="minn-btn-soft" data-radd>+ ${ esc( __( 'Add row' ) ) }</button>`;
-			// Image subs need per-node arming (no input events to delegate);
-			// structural ops re-render, so fresh nodes re-wire here each time.
+			// Image and date subs need per-node arming (no input events to
+			// delegate); structural ops re-render, so fresh nodes re-wire
+			// here each time.
 			$$( '[data-rowsub][data-ftype="image"]', wrap ).forEach( ( el ) => {
 				const sep = el.dataset.rowsub.indexOf( ':' );
 				const row = rows[ Number( el.dataset.rowsub.slice( 0, sep ) ) ];
@@ -1657,6 +1691,14 @@
 				bindImageField( el, ( v ) => {
 					if ( row ) { row.values[ name ] = v; commit(); }
 				} );
+			} );
+			$$( '[data-rowsub][data-ftype="date"], [data-rowsub][data-ftype="datetime"]', wrap ).forEach( ( el ) => {
+				const sep = el.dataset.rowsub.indexOf( ':' );
+				const row = rows[ Number( el.dataset.rowsub.slice( 0, sep ) ) ];
+				const name = el.dataset.rowsub.slice( sep + 1 );
+				bindDatePicker( el, ( machine ) => {
+					if ( row ) { row.values[ name ] = machine || ''; commit(); }
+				}, { dateOnly: el.dataset.ftype === 'date', marks: false } );
 			} );
 		};
 		render();
@@ -14711,6 +14753,9 @@
 				// The save reads the wrap's data-img-* at save time
 				// (formControlValue); picking or clearing just dirties the key.
 				bindImageField( input, mark );
+			} else if ( input.dataset.ftype === 'date' || input.dataset.ftype === 'datetime' ) {
+				// Readonly input: the picker's commit is the only edit signal.
+				bindDatePicker( input, mark, { dateOnly: input.dataset.ftype === 'date', marks: false } );
 			} else if ( input.dataset.ftype === 'gallery' ) {
 				// Settings live on a page, so the images editor opens right
 				// over it (and the media picker still stacks above). Apply
@@ -24203,10 +24248,14 @@
 
 	function dpPretty( machine ) {
 		if ( ! machine ) return '';
-		const d = new Date( machine );
+		// A bare date ('YYYY-MM-DD') must parse as LOCAL midnight — the bare
+		// form is UTC per spec, which shifts the shown day in negative-offset
+		// timezones — and prints without a time.
+		const dateOnly = machine.length === 10;
+		const d = new Date( dateOnly ? machine + 'T00:00' : machine );
 		if ( isNaN( d ) ) return '';
-		return d.toLocaleDateString( uiLocale(), { month: 'short', day: 'numeric', year: 'numeric' } )
-			+ ' · ' + d.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } );
+		const day = d.toLocaleDateString( uiLocale(), { month: 'short', day: 'numeric', year: 'numeric' } );
+		return dateOnly ? day : day + ' · ' + d.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } );
 	}
 
 	// Lenient time parse: "7", "7:30", "7:30 pm", "19:30" → {h, m} (24h).
@@ -24303,7 +24352,13 @@
 		if ( dpPop && ! dpPop.contains( e.target ) && ! e.target.classList.contains( 'minn-dp-input' ) ) hideDatePicker();
 	}
 
-	function bindDatePicker( input, onChange ) {
+	// opts.dateOnly commits a bare 'YYYY-MM-DD' machine value (no time row);
+	// opts.marks === false skips the month's other-posts heatmap (ACF date
+	// fields have no business showing the content calendar).
+	function bindDatePicker( input, onChange, opts = {} ) {
+		const dateOnly = !! opts.dateOnly;
+		const marks = opts.marks !== false;
+		const mach = ( d ) => dateOnly ? dpMachine( d ).slice( 0, 10 ) : dpMachine( d );
 		const commit = ( machine ) => {
 			input.dataset.dp = machine || '';
 			input.value = dpPretty( machine );
@@ -24313,7 +24368,8 @@
 		const open = () => {
 			hideDatePicker();
 			// The selection (or now) seeds both the grid month and the time.
-			const sel = input.dataset.dp ? new Date( input.dataset.dp ) : null;
+			// (A bare date parses as local midnight, never the UTC default.)
+			const sel = input.dataset.dp ? new Date( input.dataset.dp.length === 10 ? input.dataset.dp + 'T00:00' : input.dataset.dp ) : null;
 			const seed = sel && ! isNaN( sel ) ? new Date( sel ) : new Date();
 			let view = new Date( seed.getFullYear(), seed.getMonth(), 1 );
 			const restType = ( state.editor && state.editor.type ) || 'posts';
@@ -24329,7 +24385,7 @@
 				first.setDate( 1 - first.getDay() ); // back to Sunday
 				const y = view.getFullYear();
 				const m = view.getMonth();
-				const cached = dpMonthCache[ `${ restType }:${ y }-${ m }` ] || null;
+				const cached = marks ? ( dpMonthCache[ `${ restType }:${ y }-${ m }` ] || null ) : null;
 				let days = '';
 				const d = new Date( first );
 				for ( let i = 0; i < 42; i++ ) {
@@ -24351,12 +24407,12 @@
 						${ days }
 					</div>
 					<div class="minn-dp-legend" data-dp-legend hidden>${ esc( restType === 'pages' ? __( 'Highlighted days already have other pages.' ) : __( 'Highlighted days already have other posts.' ) ) }</div>
-					<div class="minn-dp-time">
+					${ dateOnly ? '' : `<div class="minn-dp-time">
 						<span class="minn-side-key">${ esc( __( 'Time' ) ) }</span>
 						<input type="text" class="minn-input minn-dp-time-input" value="${ esc( seed.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } ) ) }" spellcheck="false" autocomplete="off">
-					</div>
+					</div>` }
 					<div class="minn-dp-foot">
-						<button type="button" class="minn-btn-soft" data-dp-now>${ esc( __( 'Now' ) ) }</button>
+						<button type="button" class="minn-btn-soft" data-dp-now>${ esc( dateOnly ? __( 'Today' ) : __( 'Now' ) ) }</button>
 						<button type="button" class="minn-btn-soft" data-dp-clear>${ esc( __( 'Clear' ) ) }</button>
 						<button type="button" class="minn-btn-primary" data-dp-done>${ esc( __( 'Done' ) ) }</button>
 					</div>`;
@@ -24382,7 +24438,7 @@
 				}
 
 				// Soft paint when the month's other posts arrive (no full re-render).
-				if ( ! cached ) {
+				if ( marks && ! cached ) {
 					const loadY = y;
 					const loadM = m;
 					dpLoadMonthMarks( y, m, restType ).then( ( byDay ) => {
@@ -24411,8 +24467,10 @@
 					grid.addEventListener( 'focusout', () => hideFloatTip() );
 				}
 
-				const timeOf = () => dpParseTime( $( '.minn-dp-time-input', dpPop ).value )
-					|| { h: seed.getHours(), m: seed.getMinutes() };
+				const timeOf = () => {
+					const ti = $( '.minn-dp-time-input', dpPop );
+					return ( ti && dpParseTime( ti.value ) ) || { h: seed.getHours(), m: seed.getMinutes() };
+				};
 				$$( '.minn-dp-nav', dpPop ).forEach( ( b ) => b.addEventListener( 'click', () => {
 					hideFloatTip();
 					view.setMonth( view.getMonth() + parseInt( b.dataset.nav, 10 ) );
@@ -24424,22 +24482,24 @@
 					const picked = new Date( b.dataset.day + 'T00:00' );
 					picked.setHours( t.h, t.m );
 					seed.setTime( picked.getTime() );
-					commit( dpMachine( picked ) );
+					commit( mach( picked ) );
 					render(); // reflect the new selection; stays open for time tweaks
 				} ) );
 				const timeInput = $( '.minn-dp-time-input', dpPop );
-				timeInput.addEventListener( 'change', () => {
-					const t = dpParseTime( timeInput.value );
-					if ( ! t ) { timeInput.value = seed.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } ); return; }
-					seed.setHours( t.h, t.m );
-					if ( input.dataset.dp ) commit( dpMachine( seed ) );
-					timeInput.value = seed.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } );
-				} );
-				timeInput.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) { e.preventDefault(); timeInput.blur(); } } );
+				if ( timeInput ) {
+					timeInput.addEventListener( 'change', () => {
+						const t = dpParseTime( timeInput.value );
+						if ( ! t ) { timeInput.value = seed.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } ); return; }
+						seed.setHours( t.h, t.m );
+						if ( input.dataset.dp ) commit( dpMachine( seed ) );
+						timeInput.value = seed.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } );
+					} );
+					timeInput.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) { e.preventDefault(); timeInput.blur(); } } );
+				}
 				$( '[data-dp-now]', dpPop ).addEventListener( 'click', () => {
 					const now = new Date();
 					seed.setTime( now.getTime() );
-					commit( dpMachine( now ) );
+					commit( mach( now ) );
 					hideDatePicker();
 				} );
 				$( '[data-dp-clear]', dpPop ).addEventListener( 'click', () => {
@@ -24453,7 +24513,7 @@
 					if ( input.dataset.dp ) {
 						const t = timeOf();
 						seed.setHours( t.h, t.m );
-						commit( dpMachine( seed ) );
+						commit( mach( seed ) );
 					}
 					hideDatePicker();
 				} );
@@ -24904,6 +24964,11 @@
 				} );
 			} else if ( input.dataset.ftype === 'image' ) {
 				bindImageField( input, ( v ) => write( v ) );
+			} else if ( input.dataset.ftype === 'date' || input.dataset.ftype === 'datetime' ) {
+				// Readonly input — commits fire no input events, so the
+				// picker's onChange is the write path.
+				bindDatePicker( input, ( machine ) => write( machine || '' ),
+					{ dateOnly: input.dataset.ftype === 'date', marks: false } );
 			} else {
 				input.addEventListener( 'input', () => {
 					let v = formControlValue( input );

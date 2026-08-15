@@ -139,5 +139,22 @@ const { launch, login, reporter } = require( './helpers' );
 		t.check( 'cleared image persisted as empty', iv === '', JSON.stringify( iv ) );
 	}
 
+	// datetime field: the shared date picker with its time row (the value
+	// path is the same picker commit the panel suite proves end to end).
+	const lastTab2 = surface.settings.tabs[ surface.settings.tabs.length - 1 ];
+	if ( surface.settings.tabs.length > 1 ) {
+		await page.click( `[data-ssettab="${ lastTab2.id }"]` );
+	}
+	const dtEl = await page.waitForSelector( '.minn-surface-settings [data-ftype="datetime"]', { timeout: 8000 } ).catch( () => null );
+	if ( ! dtEl ) {
+		console.log( 'SKIP datetime check: no datetime field on this options page' );
+	} else {
+		await dtEl.click();
+		await page.waitForSelector( '.minn-dp-pop .minn-dp-day', { timeout: 10000 } );
+		t.check( 'datetime field opens the date picker with its time row',
+			!! ( await page.$( '.minn-dp-pop .minn-dp-time' ) ) );
+		await page.keyboard.press( 'Escape' );
+	}
+
 	await t.done( browser, errors );
 } )();

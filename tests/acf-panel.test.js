@@ -156,6 +156,28 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		mv = await readMinnAcf();
 		t.check( 'button_group choice persisted', mv.slideshow_size === 'lg', JSON.stringify( mv && mv.slideshow_size ) );
 
+		// date field: the app's own date-picker popover in date-only mode
+		// (no time row; machine value YYYY-MM-DD, stored by ACF as Ymd).
+		const dtSel = '[data-pf$=":slideshow_starts"][data-ftype="date"]';
+		t.check( 'date field renders the picker input', !! ( await page.$( dtSel ) ) );
+		await page.click( dtSel );
+		await page.waitForSelector( '.minn-dp-pop .minn-dp-day', { timeout: 10000 } );
+		t.check( 'date-only popover hides the time row', ! ( await page.$( '.minn-dp-pop .minn-dp-time' ) ) );
+		await page.click( '.minn-dp-pop .minn-dp-day:not(.out)' );
+		await page.click( '.minn-dp-pop [data-dp-done]' );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'picked date persisted as YYYY-MM-DD',
+			/^\d{4}-\d{2}-\d{2}$/.test( mv.slideshow_starts ), JSON.stringify( mv && mv.slideshow_starts ) );
+
+		// time field: lenient text ("7:30 pm") normalized to HH:mm.
+		const tmSel = '[data-pf$=":slideshow_daily_at"][data-ftype="time"]';
+		t.check( 'time field renders', !! ( await page.$( tmSel ) ) );
+		await page.fill( tmSel, '7:30 pm' );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'time persisted normalized', mv.slideshow_daily_at === '19:30', JSON.stringify( mv && mv.slideshow_daily_at ) );
+
 		// image field: the form engine's { id, url } control with the media picker.
 		const imgSel = '[data-pf$=":slideshow_cover"][data-ftype="image"]';
 		t.check( 'image field renders the image control', !! ( await page.$( imgSel ) ) );
