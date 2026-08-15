@@ -181,9 +181,23 @@ its own.
    re-read afterwards so a second save updates them rather than creating
    duplicates.
 
-   Per-variation images and the variation-level shipping and tax fields are not
-   here yet; the card covers what a shop owner changes rather than everything
-   the resource holds.
+   The card later became a LIST of variants rather than a grid of inputs: six
+   variants of five fields each was thirty boxes and no answer to the question
+   the card exists for, which is what this product sells and for how much. A
+   row carries the picture, the variant, the price and what is available, and
+   opens the variant's own editor: attribute values, prices, SKU, stock status,
+   tracking with its quantity, and a picture.
+
+   The editor works on a COPY. A half-typed value left on the live model would
+   ride the next save of anything else on the page, so Cancel has to be a real
+   cancel; Done writes it back and the batch still goes with the page's single
+   Save. Two findings sit under it. WooCommerce clears a variation's picture on
+   `{ id: 0 }` (and on `null`) and sets one on `{ id }`, both verified against
+   a live store. And the media picker has to outrank a dialog it was opened
+   FROM, or it renders behind whatever asked for it.
+
+   Variation-level shipping and tax fields are still not here; the card covers
+   what a shop owner changes rather than everything the resource holds.
 
 Waves 2 through 5 cover what a shop owner touches weekly. Waves 8 and 9 are
 where WooCommerce's own UI is a canvas, so they need their own scoping pass
@@ -198,8 +212,14 @@ product is in that term, and a row toggles without closing, so filing a
 product in four categories is four clicks. Typing still searches the server: a
 store can have hundreds of terms, and filtering the first page locally would
 lie about what exists. The first page is cached per taxonomy so reopening is
-instant. Add new is offered for the flat taxonomies only, for the same reason
-Enter never created a category.
+instant.
+
+Add new opens a dialog, and that dialog is what makes the door reasonable for
+a hierarchy too. The objection was never creating a category, it was creating
+one by ACCIDENT: Enter-to-create still refuses a hierarchy, because a stray
+branch from a typo is not something this field cleans up. A dialog is
+deliberate, and it can ask the one question a hierarchy needs, which is the
+parent.
 
 Every search says that it is searching, in the slot the chevron occupies so
 nothing shifts when the answer lands. Requests carry a generation: a slow
