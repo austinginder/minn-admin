@@ -1208,6 +1208,9 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-fgb-set-inline .minn-field-label { margin: 0; }
 .minn-fgb-minmax { display: flex; gap: 10px; }
 .minn-fgb-minmax .minn-fgb-set { flex: 1; }
+.minn-fgb-subs { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 12px; }
+.minn-fgb-subs .minn-fgb-rows { margin: 8px 0 10px; }
+.minn-fgb-subs .minn-fgb-row { background: var(--panel); }
 @media (max-width: 800px) { .minn-fgb-body { grid-template-columns: 1fr; } }
 /* Location rules: OR sets of AND rows. */
 .minn-fgb-loc { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }

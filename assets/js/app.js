@@ -37750,20 +37750,49 @@
 		text: __( 'Text' ), textarea: __( 'Text area' ), number: __( 'Number' ), range: __( 'Range' ),
 		email: __( 'Email' ), url: 'URL', select: __( 'Select' ), radio: __( 'Radio' ),
 		true_false: __( 'True / False' ), color_picker: __( 'Color' ), image: __( 'Image' ),
-		gallery: __( 'Gallery' ), wysiwyg: __( 'Rich text' ),
+		gallery: __( 'Gallery' ), wysiwyg: __( 'Rich text' ), repeater: __( 'Repeater' ),
 	};
 	// Which extra settings each type edits (base label/name/instructions/
 	// required always render; default_value except for media/rich types).
+	// Repeater renders its own block: min/max rows, button label, sub fields.
 	const FGB_EXTRAS = {
 		text: [ 'placeholder' ], textarea: [ 'placeholder', 'rows' ],
 		number: [ 'placeholder', 'min', 'max', 'step' ], range: [ 'min', 'max', 'step' ],
 		email: [ 'placeholder' ], url: [ 'placeholder' ],
 		select: [ 'choices' ], radio: [ 'choices' ],
 		true_false: [ 'ui_on_text', 'ui_off_text' ],
-		color_picker: [], image: [], gallery: [], wysiwyg: [],
+		color_picker: [], image: [], gallery: [], wysiwyg: [], repeater: [],
 	};
-	const FGB_NO_DEFAULT = [ 'image', 'gallery', 'wysiwyg' ];
+	const FGB_NO_DEFAULT = [ 'image', 'gallery', 'wysiwyg', 'repeater' ];
 	const fgbSlug = ( label ) => String( label ).toLowerCase().replace( /[^a-z0-9]+/g, '_' ).replace( /^_+|_+$/g, '' );
+
+	// Token addressing: "2" is a top-level field, "2.1" is sub field 1 of
+	// repeater field 2 (the mini-builder nests exactly one level).
+	const fgbAt = ( tok ) => {
+		const [ i, j ] = String( tok ).split( '.' );
+		const f = state.fgb.fields[ Number( i ) ];
+		if ( j == null || ! f ) return f || null;
+		return ( f.sub_fields || [] )[ Number( j ) ] || null;
+	};
+	const fgbListAt = ( tok ) => {
+		const [ i, j ] = String( tok ).split( '.' );
+		if ( j == null ) return state.fgb.fields;
+		const f = state.fgb.fields[ Number( i ) ];
+		if ( ! f ) return null;
+		f.sub_fields = f.sub_fields || [];
+		return f.sub_fields;
+	};
+	const fgbListPrefix = ( tok ) => {
+		const p = String( tok ).split( '.' );
+		return p.length > 1 ? p[ 0 ] + '.' : '';
+	};
+	const fgbNewField = () => ( {
+		isNew: true, editable: true, _nameAuto: true,
+		label: '', name: '', type: 'text', required: false,
+		instructions: '', default_value: '', placeholder: '', choices: '',
+		min: '', max: '', step: '', rows: '', ui_on_text: '', ui_off_text: '',
+		button_label: '', subCount: 0,
+	} );
 
 	let fgbUnloadBound = false;
 
@@ -37792,28 +37821,6 @@
 		const ro = fgb.group.source !== 'db';
 		const dis = ro ? ' disabled' : '';
 
-		const rowHtml = ( f, i ) => {
-			const open = !! fgb.expanded[ i ];
-			const typeLabel = FGB_TYPE_LABELS[ f.type ] || f.type;
-			return `<div class="minn-fgb-row${ open ? ' open' : '' }${ f.editable ? '' : ' minn-fgb-adv' }" data-fi="${ i }">
-				<div class="minn-fgb-head" data-fgbtoggle="${ i }" role="button" tabindex="0" aria-expanded="${ open }">
-					${ ro ? '' : `<span class="minn-fgb-grip" draggable="true" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>` }
-					<span class="minn-fgb-chev">${ icon( 'chevron-down' ) }</span>
-					<strong class="minn-fgb-label">${ esc( f.label || __( '(no label)' ) ) }</strong>
-					<span class="minn-fgb-name mono">${ esc( f.name ) }</span>
-					<span class="minn-fgb-type">${ esc( typeLabel ) }${ f.subCount ? ` · ${ f.subCount }` : '' }</span>
-					${ f.required ? `<span class="minn-fgb-req" title="${ esc( __( 'Required' ) ) }">*</span>` : '' }
-					<span class="minn-fgb-ctl">
-						<button type="button" data-fgbmv="${ i }:-1" title="${ esc( __( 'Move up' ) ) }"${ i === 0 ? ' disabled' : '' }${ dis }>↑</button>
-						<button type="button" data-fgbmv="${ i }:1" title="${ esc( __( 'Move down' ) ) }"${ i === fgb.fields.length - 1 ? ' disabled' : '' }${ dis }>↓</button>
-						${ f.editable ? `<button type="button" data-fgbdup="${ i }" title="${ esc( __( 'Duplicate field' ) ) }"${ dis }>⧉</button>` : '' }
-						<button type="button" data-fgbdel="${ i }" title="${ esc( __( 'Remove field' ) ) }"${ dis }>×</button>
-					</span>
-				</div>
-				${ open ? fgbSettingsHtml( f, i, ro ) : '' }
-			</div>`;
-		};
-
 		view.innerHTML = `
 		<div class="minn-card minn-fgb">
 			<div class="minn-fgb-top">
@@ -37831,7 +37838,7 @@
 				${ fgb.group.adminUrl ? `<a href="${ esc( fgb.group.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in ACF ↗' ) ) }</a>` : '' }
 			</div>
 			<div class="minn-fgb-rows">
-				${ fgb.fields.map( rowHtml ).join( '' ) || `<div class="minn-empty">${ esc( __( 'No fields yet — add the first one below.' ) ) }</div>` }
+				${ fgb.fields.map( ( f, i ) => fgbRowHtml( f, String( i ), fgb.fields, ro ) ).join( '' ) || `<div class="minn-empty">${ esc( __( 'No fields yet — add the first one below.' ) ) }</div>` }
 			</div>
 			${ ro ? '' : `<button type="button" class="minn-btn-soft" id="minn-fgb-add">+ ${ esc( __( 'Add field' ) ) }</button>` }
 			${ fgbLocationHtml( fgb, ro ) }
@@ -37846,13 +37853,46 @@
 		state.fgb = {
 			key: r.group.key,
 			group: { title: r.group.title, active: r.group.active, source: r.group.source, locationLabel: r.group.locationLabel, adminUrl: r.group.adminUrl },
-			fields: r.fields.map( ( f ) => ( { ...f } ) ),
+			fields: r.fields.map( ( f ) => ( { ...f, sub_fields: f.sub_fields ? f.sub_fields.map( ( s ) => ( { ...s } ) ) : f.sub_fields } ) ),
 			location: JSON.parse( JSON.stringify( r.group.location || [] ) ),
 			locationChoices: r.locationChoices || {},
+			types: r.types || Object.keys( FGB_EXTRAS ),
 			expanded: {},
 			dirty: false,
 			loading: false,
 		};
+	}
+
+	// One builder row at either level: tok addresses the field, siblings is
+	// the list it lives in (top-level fields or a repeater's sub_fields).
+	function fgbRowHtml( f, tok, siblings, ro ) {
+		const fgb = state.fgb;
+		const dis = ro ? ' disabled' : '';
+		const open = !! fgb.expanded[ tok ];
+		const typeLabel = FGB_TYPE_LABELS[ f.type ] || f.type;
+		const subCount = f.sub_fields ? f.sub_fields.length : f.subCount;
+		const idx = Number( String( tok ).split( '.' ).pop() );
+		// A copy is created as NEW fields on save, so every piece must be a
+		// type the save path can create — a repeater with an unsupported sub
+		// can't be duplicated faithfully and offers no button.
+		const canDup = f.editable && ( ! f.sub_fields || f.sub_fields.every( ( s ) => s.editable ) );
+		return `<div class="minn-fgb-row${ open ? ' open' : '' }${ f.editable ? '' : ' minn-fgb-adv' }" data-fi="${ tok }">
+			<div class="minn-fgb-head" data-fgbtoggle="${ tok }" role="button" tabindex="0" aria-expanded="${ open }">
+				${ ro ? '' : `<span class="minn-fgb-grip" draggable="true" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>` }
+				<span class="minn-fgb-chev">${ icon( 'chevron-down' ) }</span>
+				<strong class="minn-fgb-label">${ esc( f.label || __( '(no label)' ) ) }</strong>
+				<span class="minn-fgb-name mono">${ esc( f.name ) }</span>
+				<span class="minn-fgb-type">${ esc( typeLabel ) }${ subCount ? ` · ${ subCount }` : '' }</span>
+				${ f.required ? `<span class="minn-fgb-req" title="${ esc( __( 'Required' ) ) }">*</span>` : '' }
+				<span class="minn-fgb-ctl">
+					<button type="button" data-fgbmv="${ tok }:-1" title="${ esc( __( 'Move up' ) ) }"${ idx === 0 ? ' disabled' : '' }${ dis }>↑</button>
+					<button type="button" data-fgbmv="${ tok }:1" title="${ esc( __( 'Move down' ) ) }"${ idx === siblings.length - 1 ? ' disabled' : '' }${ dis }>↓</button>
+					${ canDup ? `<button type="button" data-fgbdup="${ tok }" title="${ esc( __( 'Duplicate field' ) ) }"${ dis }>⧉</button>` : '' }
+					<button type="button" data-fgbdel="${ tok }" title="${ esc( __( 'Remove field' ) ) }"${ dis }>×</button>
+				</span>
+			</div>
+			${ open ? fgbSettingsHtml( f, tok, ro ) : '' }
+		</div>`;
 	}
 
 	// Location rules: OR groups of AND rows over the server's live catalog.
@@ -37906,15 +37946,15 @@
 		return { param, operator: '==', value: first ? String( first[ 0 ] ) : '' };
 	}
 
-	function fgbSettingsHtml( f, i, ro ) {
-		const dis = ro || ! f.editable && ! f.isNew ? ( f.editable ? '' : ' disabled' ) : '';
+	function fgbSettingsHtml( f, tok, ro ) {
 		const roAttr = ro ? ' disabled' : '';
+		const isSub = String( tok ).includes( '.' );
 		const input = ( key, label, opts = {} ) => `
 			<div class="minn-fgb-set">
 				<div class="minn-field-label">${ esc( label ) }</div>
 				${ opts.area
-					? `<textarea class="minn-input${ opts.mono ? ' mono' : '' }" rows="${ opts.rows || 3 }" data-fgb="${ i }:${ key }" placeholder="${ esc( opts.ph || '' ) }"${ roAttr }>${ esc( f[ key ] == null ? '' : f[ key ] ) }</textarea>`
-					: `<input class="minn-input${ opts.mono ? ' mono' : '' }" data-fgb="${ i }:${ key }" value="${ esc( f[ key ] == null ? '' : f[ key ] ) }" placeholder="${ esc( opts.ph || '' ) }"${ opts.dis || roAttr }>` }
+					? `<textarea class="minn-input${ opts.mono ? ' mono' : '' }" rows="${ opts.rows || 3 }" data-fgb="${ tok }:${ key }" placeholder="${ esc( opts.ph || '' ) }"${ roAttr }>${ esc( f[ key ] == null ? '' : f[ key ] ) }</textarea>`
+					: `<input class="minn-input${ opts.mono ? ' mono' : '' }" data-fgb="${ tok }:${ key }" value="${ esc( f[ key ] == null ? '' : f[ key ] ) }" placeholder="${ esc( opts.ph || '' ) }"${ opts.dis || roAttr }>` }
 				${ opts.help ? `<div class="minn-toggle-desc">${ esc( opts.help ) }</div>` : '' }
 			</div>`;
 		if ( ! f.editable ) {
@@ -37924,13 +37964,25 @@
 			</div>`;
 		}
 		const extras = FGB_EXTRAS[ f.type ] || [];
+		// Repeaters nest exactly one level, so the sub type list drops repeater.
+		const typeChoices = ( state.fgb.types || Object.keys( FGB_EXTRAS ) ).filter( ( t ) => ! isSub || 'repeater' !== t );
 		const typePick = f.isNew ? `
 			<div class="minn-fgb-set">
 				<div class="minn-field-label">${ esc( __( 'Type' ) ) }</div>
-				<select class="minn-input" data-fgb="${ i }:type"${ roAttr }>
-					${ Object.keys( FGB_EXTRAS ).map( ( t ) => `<option value="${ t }"${ t === f.type ? ' selected' : '' }>${ esc( FGB_TYPE_LABELS[ t ] || t ) }</option>` ).join( '' ) }
+				<select class="minn-input" data-fgb="${ tok }:type"${ roAttr }>
+					${ typeChoices.map( ( t ) => `<option value="${ t }"${ t === f.type ? ' selected' : '' }>${ esc( FGB_TYPE_LABELS[ t ] || t ) }</option>` ).join( '' ) }
 				</select>
 			</div>` : '';
+		const repeaterHtml = 'repeater' !== f.type ? '' : `
+			<div class="minn-fgb-minmax">${ input( 'min', __( 'Min rows' ) ) }${ input( 'max', __( 'Max rows' ) ) }</div>
+			${ input( 'button_label', __( 'Add-row button label' ), { ph: __( 'Add Row' ) } ) }
+			<div class="minn-fgb-subs">
+				<div class="minn-field-label">${ esc( __( 'Sub fields' ) ) }</div>
+				<div class="minn-fgb-rows">
+					${ ( f.sub_fields || [] ).map( ( s, j ) => fgbRowHtml( s, `${ tok }.${ j }`, f.sub_fields, ro ) ).join( '' ) || `<div class="minn-empty">${ esc( __( 'No sub fields yet.' ) ) }</div>` }
+				</div>
+				${ ro ? '' : `<button type="button" class="minn-btn-soft" data-fgbsubadd="${ tok }">+ ${ esc( __( 'Add sub field' ) ) }</button>` }
+			</div>`;
 		return `<div class="minn-fgb-body">
 			${ typePick }
 			${ input( 'label', __( 'Label' ) ) }
@@ -37940,18 +37992,19 @@
 			${ input( 'instructions', __( 'Instructions' ), { area: true, rows: 2, help: __( 'Shown to writers under the field.' ) } ) }
 			<div class="minn-fgb-set minn-fgb-set-inline">
 				<div class="minn-field-label">${ esc( __( 'Required' ) ) }</div>
-				<button type="button" class="minn-switch${ f.required ? ' on' : '' }" data-fgbreq="${ i }" role="switch" aria-checked="${ !! f.required }"${ roAttr }><span class="minn-switch-knob"></span></button>
+				<button type="button" class="minn-switch${ f.required ? ' on' : '' }" data-fgbreq="${ tok }" role="switch" aria-checked="${ !! f.required }"${ roAttr }><span class="minn-switch-knob"></span></button>
 			</div>
 			${ extras.includes( 'choices' ) ? input( 'choices', __( 'Choices' ), { area: true, rows: 4, mono: true, ph: 'value : Label', help: __( 'One per line: value : Label' ) } ) : '' }
 			${ FGB_NO_DEFAULT.includes( f.type ) ? '' : ( 'true_false' === f.type ? `
 			<div class="minn-fgb-set minn-fgb-set-inline">
 				<div class="minn-field-label">${ esc( __( 'Default on' ) ) }</div>
-				<button type="button" class="minn-switch${ f.default_value && '0' !== String( f.default_value ) ? ' on' : '' }" data-fgbdef="${ i }" role="switch" aria-checked="${ !! ( f.default_value && '0' !== String( f.default_value ) ) }"${ roAttr }><span class="minn-switch-knob"></span></button>
+				<button type="button" class="minn-switch${ f.default_value && '0' !== String( f.default_value ) ? ' on' : '' }" data-fgbdef="${ tok }" role="switch" aria-checked="${ !! ( f.default_value && '0' !== String( f.default_value ) ) }"${ roAttr }><span class="minn-switch-knob"></span></button>
 			</div>` : input( 'default_value', __( 'Default value' ) ) ) }
 			${ extras.includes( 'placeholder' ) ? input( 'placeholder', __( 'Placeholder' ) ) : '' }
 			${ extras.includes( 'min' ) ? `<div class="minn-fgb-minmax">${ input( 'min', __( 'Min' ) ) }${ input( 'max', __( 'Max' ) ) }${ input( 'step', __( 'Step' ) ) }</div>` : '' }
 			${ extras.includes( 'rows' ) ? input( 'rows', __( 'Rows' ) ) : '' }
 			${ extras.includes( 'ui_on_text' ) ? `<div class="minn-fgb-minmax">${ input( 'ui_on_text', __( 'On label' ) ) }${ input( 'ui_off_text', __( 'Off label' ) ) }</div>` : '' }
+			${ repeaterHtml }
 		</div>`;
 	}
 
@@ -37971,16 +38024,35 @@
 				if ( save ) top.insertBefore( pill, save );
 			}
 		};
-		// Move a field from one index to another, carrying expanded flags
-		// with their rows (the map is index-keyed).
-		const moveField = ( from, to ) => {
-			const flags = fgb.fields.map( ( _, idx ) => !! fgb.expanded[ idx ] );
-			const [ f ] = fgb.fields.splice( from, 1 );
-			fgb.fields.splice( to, 0, f );
-			const [ fl ] = flags.splice( from, 1 );
-			flags.splice( to, 0, fl );
-			fgb.expanded = {};
-			flags.forEach( ( v, idx ) => { if ( v ) fgb.expanded[ idx ] = true; } );
+		// Move a row inside its list, remapping expanded tokens (a top-level
+		// move carries its "i.j" sub tokens along; a sub move touches only
+		// its own parent's tokens).
+		const moveField = ( tok, to ) => {
+			const list = fgbListAt( tok );
+			const prefix = fgbListPrefix( tok );
+			const from = Number( String( tok ).split( '.' ).pop() );
+			if ( ! list || to < 0 || to >= list.length || to === from ) return;
+			const [ f ] = list.splice( from, 1 );
+			list.splice( to, 0, f );
+			const mapIdx = ( idx ) => {
+				if ( idx === from ) return to;
+				if ( from < to ) return idx > from && idx <= to ? idx - 1 : idx;
+				return idx >= to && idx < from ? idx + 1 : idx;
+			};
+			const next = {};
+			Object.keys( fgb.expanded ).forEach( ( k ) => {
+				if ( ! fgb.expanded[ k ] ) return;
+				let nk = k;
+				if ( prefix ) {
+					if ( k.startsWith( prefix ) ) nk = prefix + mapIdx( Number( k.slice( prefix.length ) ) );
+				} else {
+					const kp = k.split( '.' );
+					kp[ 0 ] = String( mapIdx( Number( kp[ 0 ] ) ) );
+					nk = kp.join( '.' );
+				}
+				next[ nk ] = true;
+			} );
+			fgb.expanded = next;
 			markDirty();
 			renderFieldGroupBuilder();
 		};
@@ -38003,9 +38075,9 @@
 			const el = e.target.closest( '[data-fgb]' );
 			if ( ! el ) return;
 			const sep = el.dataset.fgb.indexOf( ':' );
-			const i = Number( el.dataset.fgb.slice( 0, sep ) );
+			const tok = el.dataset.fgb.slice( 0, sep );
 			const key = el.dataset.fgb.slice( sep + 1 );
-			const f = fgb.fields[ i ];
+			const f = fgbAt( tok );
 			if ( ! f ) return;
 			f[ key ] = el.value;
 			if ( 'name' === key ) f._nameAuto = false;
@@ -38013,12 +38085,13 @@
 			// touches the name themselves (ACF's own behavior).
 			if ( 'label' === key && f.isNew && f._nameAuto !== false ) {
 				f.name = fgbSlug( el.value );
-				const nameEl = view.querySelector( `[data-fgb="${ i }:name"]` );
+				const nameEl = view.querySelector( `[data-fgb="${ tok }:name"]` );
 				if ( nameEl ) nameEl.value = f.name;
 			}
-			// The header echoes the label live.
+			// The header echoes the label live (direct child: an open
+			// repeater's body holds sub rows with their own labels).
 			if ( 'label' === key ) {
-				const head = view.querySelector( `.minn-fgb-row[data-fi="${ i }"] .minn-fgb-label` );
+				const head = view.querySelector( `.minn-fgb-row[data-fi="${ tok }"] > .minn-fgb-head .minn-fgb-label` );
 				if ( head ) head.textContent = el.value || __( '(no label)' );
 			}
 			markDirty();
@@ -38052,33 +38125,35 @@
 			const el = e.target.closest( '[data-fgb]' );
 			if ( ! el || el.tagName !== 'SELECT' ) return;
 			const sep = el.dataset.fgb.indexOf( ':' );
-			const i = Number( el.dataset.fgb.slice( 0, sep ) );
-			const f = fgb.fields[ i ];
+			const f = fgbAt( el.dataset.fgb.slice( 0, sep ) );
 			if ( f && 'type' === el.dataset.fgb.slice( sep + 1 ) ) {
 				f.type = el.value;
 				markDirty();
 				renderFieldGroupBuilder(); // extras change with the type
 			}
 		} );
-		// Drag to reorder: the grip drags its row; dropping on another row
-		// lands above or below its midpoint (the menus precedent).
-		let dragFi = null;
+		// Drag to reorder: the grip drags its row; dropping on another row in
+		// the SAME list lands above or below its midpoint (the menus
+		// precedent). Tokens keep sub rows inside their own repeater — a sub
+		// can't be dropped between top-level fields or into another repeater.
+		let dragTok = null;
 		view.addEventListener( 'dragstart', ( e ) => {
 			const grip = e.target.closest( '.minn-fgb-grip' );
 			if ( ! grip ) return;
 			const row = grip.closest( '.minn-fgb-row' );
-			dragFi = Number( row.dataset.fi );
+			dragTok = row.dataset.fi;
 			row.classList.add( 'dragging' );
 			e.dataTransfer.effectAllowed = 'move';
-			e.dataTransfer.setData( 'text/plain', String( dragFi ) );
+			e.dataTransfer.setData( 'text/plain', dragTok );
 		} );
 		view.addEventListener( 'dragend', () => {
-			dragFi = null;
+			dragTok = null;
 			$$( '.minn-fgb-row', view ).forEach( ( r ) => r.classList.remove( 'dragging', 'drop-above', 'drop-below' ) );
 		} );
 		view.addEventListener( 'dragover', ( e ) => {
 			const row = e.target.closest( '.minn-fgb-row' );
-			if ( dragFi === null || ! row || Number( row.dataset.fi ) === dragFi ) return;
+			if ( dragTok === null || ! row || row.dataset.fi === dragTok
+				|| fgbListPrefix( row.dataset.fi ) !== fgbListPrefix( dragTok ) ) return;
 			e.preventDefault();
 			e.dataTransfer.dropEffect = 'move';
 			const r = row.getBoundingClientRect();
@@ -38092,17 +38167,18 @@
 		} );
 		view.addEventListener( 'drop', ( e ) => {
 			const row = e.target.closest( '.minn-fgb-row' );
-			if ( dragFi === null || ! row ) return;
+			if ( dragTok === null || ! row ) return;
 			e.preventDefault();
 			const below = row.classList.contains( 'drop-below' );
 			row.classList.remove( 'drop-above', 'drop-below' );
-			const from = dragFi;
-			const ti = Number( row.dataset.fi );
-			dragFi = null;
-			if ( ti === from ) return;
+			const from = dragTok;
+			dragTok = null;
+			if ( row.dataset.fi === from || fgbListPrefix( row.dataset.fi ) !== fgbListPrefix( from ) ) return;
+			const fromIdx = Number( String( from ).split( '.' ).pop() );
+			const ti = Number( String( row.dataset.fi ).split( '.' ).pop() );
 			let to = ti + ( below ? 1 : 0 );
-			if ( from < to ) to--;
-			if ( to !== from ) moveField( from, to );
+			if ( fromIdx < to ) to--;
+			if ( to !== fromIdx ) moveField( from, to );
 		} );
 		view.addEventListener( 'click', async ( e ) => {
 			const lgx = e.target.closest( '[data-lgx]' );
@@ -38134,7 +38210,7 @@
 			}
 			const req = e.target.closest( '[data-fgbreq]' );
 			if ( req ) {
-				const f = fgb.fields[ Number( req.dataset.fgbreq ) ];
+				const f = fgbAt( req.dataset.fgbreq );
 				req.classList.toggle( 'on' );
 				f.required = req.classList.contains( 'on' );
 				req.setAttribute( 'aria-checked', f.required );
@@ -38143,7 +38219,7 @@
 			}
 			const def = e.target.closest( '[data-fgbdef]' );
 			if ( def ) {
-				const f = fgb.fields[ Number( def.dataset.fgbdef ) ];
+				const f = fgbAt( def.dataset.fgbdef );
 				def.classList.toggle( 'on' );
 				f.default_value = def.classList.contains( 'on' ) ? '1' : '0';
 				def.setAttribute( 'aria-checked', def.classList.contains( 'on' ) );
@@ -38152,32 +38228,50 @@
 			}
 			const mv = e.target.closest( '[data-fgbmv]' );
 			if ( mv ) {
-				const [ i, dir ] = mv.dataset.fgbmv.split( ':' ).map( Number );
-				const j = i + dir;
-				if ( j < 0 || j >= fgb.fields.length ) return;
-				moveField( i, j );
+				const sep = mv.dataset.fgbmv.lastIndexOf( ':' );
+				const tok = mv.dataset.fgbmv.slice( 0, sep );
+				const dir = Number( mv.dataset.fgbmv.slice( sep + 1 ) );
+				moveField( tok, Number( String( tok ).split( '.' ).pop() ) + dir );
 				return;
 			}
 			const dup = e.target.closest( '[data-fgbdup]' );
 			if ( dup ) {
-				const i = Number( dup.dataset.fgbdup );
-				const f = fgb.fields[ i ];
+				const tok = dup.dataset.fgbdup;
+				const list = fgbListAt( tok );
+				const prefix = fgbListPrefix( tok );
+				const i = Number( String( tok ).split( '.' ).pop() );
+				const f = list[ i ];
 				// The copy is a NEW field: it needs a name no sibling holds
 				// (the save refuses duplicates) and gets its own key on save.
 				const taken = {};
-				fgb.fields.forEach( ( x ) => { taken[ x.name ] = true; } );
+				list.forEach( ( x ) => { taken[ x.name ] = true; } );
 				let name = f.name + '_copy';
 				for ( let n = 2; taken[ name ]; n++ ) name = f.name + '_copy' + n;
 				const copy = { ...f, isNew: true, _nameAuto: false, name };
 				delete copy.key;
 				/* translators: %s: the duplicated field's label. */
 				copy.label = sprintf( __( '%s (copy)' ), f.label );
-				fgb.fields.splice( i + 1, 0, copy );
+				// A repeater's subs clone as new fields too (same names are
+				// fine — the copy's list is its own).
+				if ( copy.sub_fields ) copy.sub_fields = copy.sub_fields.map( ( s ) => {
+					const c = { ...s, isNew: true };
+					delete c.key;
+					return c;
+				} );
+				list.splice( i + 1, 0, copy );
 				const open = {};
 				Object.keys( fgb.expanded ).forEach( ( k ) => {
-					if ( fgb.expanded[ k ] ) open[ Number( k ) > i ? Number( k ) + 1 : k ] = true;
+					if ( ! fgb.expanded[ k ] ) return;
+					let nk = k;
+					if ( prefix ) {
+						if ( k.startsWith( prefix ) && Number( k.slice( prefix.length ) ) > i ) nk = prefix + ( Number( k.slice( prefix.length ) ) + 1 );
+					} else {
+						const kp = k.split( '.' );
+						if ( Number( kp[ 0 ] ) > i ) { kp[ 0 ] = String( Number( kp[ 0 ] ) + 1 ); nk = kp.join( '.' ); }
+					}
+					open[ nk ] = true;
 				} );
-				open[ i + 1 ] = true;
+				open[ prefix + ( i + 1 ) ] = true;
 				fgb.expanded = open;
 				markDirty();
 				renderFieldGroupBuilder();
@@ -38185,29 +38279,46 @@
 			}
 			const del = e.target.closest( '[data-fgbdel]' );
 			if ( del ) {
-				const i = Number( del.dataset.fgbdel );
-				const f = fgb.fields[ i ];
+				const tok = del.dataset.fgbdel;
+				const list = fgbListAt( tok );
+				const i = Number( String( tok ).split( '.' ).pop() );
+				const f = list[ i ];
 				if ( ! f.isNew && ! await minnConfirm( { title: __( 'Remove field?' ), body: __( 'The definition is removed on save; values already stored on posts stay in the database.' ), confirmLabel: __( 'Remove' ), danger: true } ) ) return;
-				fgb.fields.splice( i, 1 );
-				fgb.expanded = {};
+				list.splice( i, 1 );
+				// A sub delete keeps the parent open; its sibling tokens are
+				// stale, so they simply collapse.
+				const prefix = fgbListPrefix( tok );
+				if ( prefix ) {
+					Object.keys( fgb.expanded ).forEach( ( k ) => { if ( k.startsWith( prefix ) ) delete fgb.expanded[ k ]; } );
+				} else {
+					fgb.expanded = {};
+				}
 				markDirty();
 				renderFieldGroupBuilder();
 				return;
 			}
+			const subadd = e.target.closest( '[data-fgbsubadd]' );
+			if ( subadd ) {
+				const pTok = subadd.dataset.fgbsubadd;
+				const parent = fgbAt( pTok );
+				parent.sub_fields = parent.sub_fields || [];
+				parent.sub_fields.push( fgbNewField() );
+				fgb.expanded[ `${ pTok }.${ parent.sub_fields.length - 1 }` ] = true;
+				markDirty();
+				renderFieldGroupBuilder();
+				const subLabel = $( `#minn-view [data-fgb="${ pTok }.${ parent.sub_fields.length - 1 }:label"]` );
+				if ( subLabel ) subLabel.focus( { preventScroll: false } );
+				return;
+			}
 			const tog = e.target.closest( '[data-fgbtoggle]' );
 			if ( tog && ! e.target.closest( '.minn-fgb-ctl' ) && ! e.target.closest( '.minn-fgb-grip' ) ) {
-				const i = Number( tog.dataset.fgbtoggle );
-				fgb.expanded[ i ] = ! fgb.expanded[ i ];
+				const tok = tog.dataset.fgbtoggle;
+				fgb.expanded[ tok ] = ! fgb.expanded[ tok ];
 				renderFieldGroupBuilder();
 				return;
 			}
 			if ( e.target.closest( '#minn-fgb-add' ) ) {
-				fgb.fields.push( {
-					isNew: true, editable: true, _nameAuto: true,
-					label: '', name: '', type: 'text', required: false,
-					instructions: '', default_value: '', placeholder: '', choices: '',
-					min: '', max: '', step: '', rows: '', ui_on_text: '', ui_off_text: '', subCount: 0,
-				} );
+				fgb.fields.push( fgbNewField() );
 				fgb.expanded = { [ fgb.fields.length - 1 ]: true };
 				markDirty();
 				renderFieldGroupBuilder();
@@ -38219,11 +38330,16 @@
 				const btn = e.target.closest( '#minn-fgb-save' );
 				btn.disabled = true;
 				btn.textContent = __( 'Saving…' );
-				const rows = fgb.fields.map( ( f ) => {
+				const rowOf = ( f ) => {
 					const row = f.key ? { key: f.key } : { type: f.type, name: f.name };
-					[ 'label', 'instructions', 'required', 'default_value', 'placeholder', 'choices', 'min', 'max', 'step', 'rows', 'ui_on_text', 'ui_off_text' ].forEach( ( k ) => { row[ k ] = f[ k ]; } );
+					[ 'label', 'instructions', 'required', 'default_value', 'placeholder', 'choices', 'min', 'max', 'step', 'rows', 'ui_on_text', 'ui_off_text', 'button_label' ].forEach( ( k ) => { row[ k ] = f[ k ]; } );
+					// Editable repeaters carry their one-level sub list; an
+					// uneditable one (free ACF listing a stored Pro field)
+					// sends nothing and the server keeps its subs.
+					if ( 'repeater' === f.type && f.editable ) row.sub_fields = ( f.sub_fields || [] ).map( rowOf );
 					return row;
-				} );
+				};
+				const rows = fgb.fields.map( rowOf );
 				try {
 					const r = await api( 'minn-admin/v1/acf/schema/groups/' + encodeURIComponent( fgb.key ) + '/full', {
 						method: 'POST',

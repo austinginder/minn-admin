@@ -684,8 +684,8 @@ add_action( 'rest_api_init', function () {
  * @return array type => settings keys the save path may write.
  */
 function minn_admin_acf_builder_types() {
-	$base = array( 'label', 'instructions', 'required', 'default_value' );
-	return array(
+	$base  = array( 'label', 'instructions', 'required', 'default_value' );
+	$types = array(
 		'text'         => array_merge( $base, array( 'placeholder' ) ),
 		'textarea'     => array_merge( $base, array( 'placeholder', 'rows' ) ),
 		'number'       => array_merge( $base, array( 'placeholder', 'min', 'max', 'step' ) ),
@@ -700,6 +700,12 @@ function minn_admin_acf_builder_types() {
 		'gallery'      => array( 'label', 'instructions', 'required' ),
 		'wysiwyg'      => array( 'label', 'instructions', 'required' ),
 	);
+	// Repeater is a Pro type: only offer it where ACF registers it (free
+	// ACF would store a field it cannot render).
+	if ( function_exists( 'acf_get_field_type' ) && acf_get_field_type( 'repeater' ) ) {
+		$types['repeater'] = array( 'label', 'instructions', 'required', 'min', 'max', 'button_label' );
+	}
+	return $types;
 }
 
 /**
@@ -707,13 +713,19 @@ function minn_admin_acf_builder_types() {
  * lines convention; unsupported types carry editable: false and only their
  * identity survives a save (label, order, existence).
  *
- * @param array $f ACF field array.
+ * @param array $f     ACF field array.
+ * @param int   $depth 0 for top-level fields, 1 inside a repeater.
  * @return array
  */
-function minn_admin_acf_builder_field( $f ) {
-	$types   = minn_admin_acf_builder_types();
-	$type    = (string) ( $f['type'] ?? '' );
-	$edit    = array_key_exists( $type, $types );
+function minn_admin_acf_builder_field( $f, $depth = 0 ) {
+	$types = minn_admin_acf_builder_types();
+	$type  = (string) ( $f['type'] ?? '' );
+	$edit  = array_key_exists( $type, $types );
+	// Repeaters nest one level: a repeater inside a repeater still lists
+	// (label, order, existence) but configures in ACF's own editor.
+	if ( 'repeater' === $type && $depth > 0 ) {
+		$edit = false;
+	}
 	$choices = '';
 	if ( ! empty( $f['choices'] ) && is_array( $f['choices'] ) ) {
 		$lines = array();
@@ -722,7 +734,7 @@ function minn_admin_acf_builder_field( $f ) {
 		}
 		$choices = implode( "\n", $lines );
 	}
-	return array(
+	$out = array(
 		'key'           => (string) $f['key'],
 		'label'         => (string) $f['label'],
 		'name'          => (string) $f['name'],
@@ -739,8 +751,17 @@ function minn_admin_acf_builder_field( $f ) {
 		'rows'          => isset( $f['rows'] ) && '' !== $f['rows'] ? (string) $f['rows'] : '',
 		'ui_on_text'    => (string) ( $f['ui_on_text'] ?? '' ),
 		'ui_off_text'   => (string) ( $f['ui_off_text'] ?? '' ),
+		'button_label'  => (string) ( $f['button_label'] ?? '' ),
 		'subCount'      => 'repeater' === $type ? count( (array) ( $f['sub_fields'] ?? array() ) ) : 0,
 	);
+	if ( 'repeater' === $type && $edit ) {
+		$subs = array();
+		foreach ( (array) ( $f['sub_fields'] ?? array() ) as $sf ) {
+			$subs[] = minn_admin_acf_builder_field( $sf, $depth + 1 );
+		}
+		$out['sub_fields'] = $subs;
+	}
+	return $out;
 }
 
 
@@ -888,10 +909,96 @@ function minn_admin_acf_builder_payload( $group ) {
 }
 
 /**
+ * Resolve one submitted builder row against the stored fields it may
+ * reference: an existing key keeps its stored name and type (immutable), a
+ * new row must carry a supported type, a label and a usable name. $names
+ * accumulates by reference for duplicate detection within one list.
+ *
+ * @param mixed $row    Submitted row.
+ * @param array $stored key => stored ACF field array for this list.
+ * @param array $names  Names already claimed in this list (by reference).
+ * @param int   $order  Position in the submitted list.
+ * @param bool  $sub    True inside a repeater (repeaters nest one level).
+ * @return array|WP_Error Plan array or refusal.
+ */
+function minn_admin_acf_builder_plan_row( $row, $stored, &$names, $order, $sub = false ) {
+	$types = minn_admin_acf_builder_types();
+	$row   = (array) $row;
+	$key   = isset( $row['key'] ) ? (string) $row['key'] : '';
+	if ( $key && isset( $stored[ $key ] ) ) {
+		$cur  = $stored[ $key ];
+		$name = (string) $cur['name'];
+		$type = (string) $cur['type'];
+	} else {
+		$type = sanitize_key( (string) ( $row['type'] ?? '' ) );
+		if ( ! array_key_exists( $type, $types ) || ( $sub && 'repeater' === $type ) ) {
+			return new WP_Error( 'invalid', $sub
+				? __( 'Sub fields need one of the supported types; repeaters nest one level.', 'minn-admin' )
+				: __( 'New fields need one of the supported types.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$label = trim( (string) ( $row['label'] ?? '' ) );
+		if ( '' === $label ) {
+			return new WP_Error( 'invalid', __( 'Every field needs a label.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$name = str_replace( '-', '_', sanitize_title( trim( (string) ( $row['name'] ?? '' ) ) ?: $label ) );
+		if ( '' === $name ) {
+			return new WP_Error( 'invalid', __( 'Every field needs a name.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$cur = null;
+		$key = '';
+	}
+	if ( isset( $names[ $name ] ) ) {
+		/* translators: %s: the duplicated field name. */
+		return new WP_Error( 'invalid', sprintf( __( 'Two fields share the name “%s”.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
+	}
+	$names[ $name ] = true;
+	// New choice fields must arrive with choices; an existing row may omit
+	// the key entirely (absent = keep what's stored).
+	if ( in_array( $type, array( 'select', 'radio' ), true ) && ( ! $key || array_key_exists( 'choices', $row ) ) ) {
+		if ( ! minn_admin_acf_schema_parse_choices( (string) ( $row['choices'] ?? '' ) ) ) {
+			return new WP_Error( 'invalid', __( 'Select and radio fields need at least one choice.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+	}
+	return array( 'row' => $row, 'key' => $key, 'cur' => $cur, 'type' => $type, 'name' => $name, 'order' => $order );
+}
+
+/**
+ * Overlay a submitted row's declared settings onto a field array. Only the
+ * keys in $settings are touched; everything else survives verbatim.
+ *
+ * @param array $field    ACF field array (stored or new).
+ * @param array $row      Submitted row.
+ * @param array $settings Setting keys the field's type declares.
+ * @return array
+ */
+function minn_admin_acf_builder_overlay( $field, $row, $settings ) {
+	foreach ( $settings as $setting ) {
+		if ( ! array_key_exists( $setting, $row ) ) {
+			continue;
+		}
+		$v = $row[ $setting ];
+		if ( 'required' === $setting ) {
+			$field['required'] = ! empty( $v ) && 'false' !== $v ? 1 : 0;
+		} elseif ( 'choices' === $setting ) {
+			$field['choices'] = minn_admin_acf_schema_parse_choices( (string) $v );
+		} elseif ( in_array( $setting, array( 'min', 'max', 'step', 'rows' ), true ) ) {
+			$field[ $setting ] = '' === trim( (string) $v ) ? '' : (float) $v;
+		} elseif ( 'label' === $setting ) {
+			$field['label'] = trim( (string) $v ) ?: $field['label'];
+		} else {
+			$field[ $setting ] = is_scalar( $v ) ? (string) $v : '';
+		}
+	}
+	return $field;
+}
+
+/**
  * Save the whole group as one unit: title, active, ordered field list.
  * Existing fields overlay ONLY the settings their type declares (name and
  * type immutable); new fields (no key) are created in place; stored fields
- * absent from the payload are deleted. Validation happens before any write.
+ * absent from the payload are deleted. Repeaters carry a one-level
+ * sub_fields list saved under the same discipline against the repeater's
+ * own children. Validation happens before any write.
  *
  * @param array $group ACF group array (db source, verified by the caller).
  * @param array $body  Request body.
@@ -916,42 +1023,34 @@ function minn_admin_acf_builder_save( $group, $body ) {
 	$names = array();
 	$plans = array();
 	foreach ( $rows as $i => $row ) {
-		$row = (array) $row;
-		$key = isset( $row['key'] ) ? (string) $row['key'] : '';
-		if ( $key && isset( $existing[ $key ] ) ) {
-			$cur  = $existing[ $key ];
-			$name = (string) $cur['name'];
-			$type = (string) $cur['type'];
-		} else {
-			$type = sanitize_key( (string) ( $row['type'] ?? '' ) );
-			if ( ! array_key_exists( $type, $types ) ) {
-				return new WP_Error( 'invalid', __( 'New fields need one of the supported types.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$label = trim( (string) ( $row['label'] ?? '' ) );
-			if ( '' === $label ) {
-				return new WP_Error( 'invalid', __( 'Every field needs a label.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$name = str_replace( '-', '_', sanitize_title( trim( (string) ( $row['name'] ?? '' ) ) ?: $label ) );
-			if ( '' === $name ) {
-				return new WP_Error( 'invalid', __( 'Every field needs a name.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$cur = null;
-			$key = '';
+		$plan = minn_admin_acf_builder_plan_row( $row, $existing, $names, $i );
+		if ( is_wp_error( $plan ) ) {
+			return $plan;
 		}
-		if ( isset( $names[ $name ] ) ) {
-			/* translators: %s: the duplicated field name. */
-			return new WP_Error( 'invalid', sprintf( __( 'Two fields share the name “%s”.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
-		}
-		$names[ $name ] = true;
-	// New choice fields must arrive with choices; an existing row may
-		// omit the key entirely (absent = keep what's stored).
-		if ( in_array( $type, array( 'select', 'radio' ), true ) && ( ! $key || array_key_exists( 'choices', $row ) ) ) {
-			$choices = minn_admin_acf_schema_parse_choices( (string) ( $row['choices'] ?? '' ) );
-			if ( ! $choices ) {
-				return new WP_Error( 'invalid', __( 'Select and radio fields need at least one choice.', 'minn-admin' ), array( 'status' => 400 ) );
+		// Repeaters carry their own one-level list; validate it now so a
+		// bad sub refuses before anything is written. A row without the
+		// sub_fields key keeps its stored children untouched.
+		if ( 'repeater' === $plan['type'] && ( ! $plan['key'] || array_key_exists( 'sub_fields', $plan['row'] ) ) ) {
+			$cur_subs = array();
+			if ( $plan['cur'] ) {
+				foreach ( (array) ( $plan['cur']['sub_fields'] ?? array() ) as $sf ) {
+					$cur_subs[ $sf['key'] ] = $sf;
+				}
 			}
+			$sub_rows  = isset( $plan['row']['sub_fields'] ) && is_array( $plan['row']['sub_fields'] ) ? array_values( $plan['row']['sub_fields'] ) : array();
+			$sub_names = array();
+			$sub_plans = array();
+			foreach ( $sub_rows as $j => $srow ) {
+				$sp = minn_admin_acf_builder_plan_row( $srow, $cur_subs, $sub_names, $j, true );
+				if ( is_wp_error( $sp ) ) {
+					return $sp;
+				}
+				$sub_plans[] = $sp;
+			}
+			$plan['subs']     = $sub_plans;
+			$plan['cur_subs'] = $cur_subs;
 		}
-		$plans[] = array( 'row' => $row, 'key' => $key, 'cur' => $cur, 'type' => $type, 'name' => $name, 'order' => $i );
+		$plans[] = $plan;
 	}
 
 	// ---- Group settings. ----
@@ -971,7 +1070,6 @@ function minn_admin_acf_builder_save( $group, $body ) {
 	// ---- Fields: update / create in payload order, then delete the absent. ----
 	$kept = array();
 	foreach ( $plans as $plan ) {
-		$row      = $plan['row'];
 		$type     = $plan['type'];
 		$settings = isset( $types[ $type ] ) ? $types[ $type ] : array( 'label' );
 		if ( $plan['cur'] ) {
@@ -991,27 +1089,48 @@ function minn_admin_acf_builder_save( $group, $body ) {
 				$field['return_format'] = 'id';
 			}
 		}
-		foreach ( $settings as $setting ) {
-			if ( ! array_key_exists( $setting, $row ) ) {
-				continue;
-			}
-			$v = $row[ $setting ];
-			if ( 'required' === $setting ) {
-				$field['required'] = ! empty( $v ) && 'false' !== $v ? 1 : 0;
-			} elseif ( 'choices' === $setting ) {
-				$field['choices'] = minn_admin_acf_schema_parse_choices( (string) $v );
-			} elseif ( in_array( $setting, array( 'min', 'max', 'step', 'rows' ), true ) ) {
-				$field[ $setting ] = '' === trim( (string) $v ) ? '' : (float) $v;
-			} elseif ( 'label' === $setting ) {
-				$field['label'] = trim( (string) $v ) ?: $field['label'];
-			} else {
-				$field[ $setting ] = is_scalar( $v ) ? (string) $v : '';
-			}
-		}
+		$field               = minn_admin_acf_builder_overlay( $field, $plan['row'], $settings );
 		$field['menu_order'] = $plan['order'];
+		// Repeater children are separate fields written below; ACF's own
+		// update path strips this key too.
+		unset( $field['sub_fields'] );
 		$saved = acf_update_field( $field );
-		if ( $saved ) {
-			$kept[ $saved['key'] ] = true;
+		if ( ! $saved ) {
+			continue;
+		}
+		$kept[ $saved['key'] ] = true;
+		if ( isset( $plan['subs'] ) ) {
+			$kept_subs = array();
+			foreach ( $plan['subs'] as $sp ) {
+				// A nested repeater sub keeps everything but label and order
+				// (one editable level), same as unsupported types.
+				$ssettings = isset( $types[ $sp['type'] ] ) && 'repeater' !== $sp['type'] ? $types[ $sp['type'] ] : array( 'label' );
+				if ( $sp['cur'] ) {
+					$sub = $sp['cur'];
+				} else {
+					$sub = array(
+						'key'  => uniqid( 'field_' ),
+						'name' => $sp['name'],
+						'type' => $sp['type'],
+					);
+					if ( 'image' === $sp['type'] ) {
+						$sub['return_format'] = 'id';
+					}
+				}
+				$sub               = minn_admin_acf_builder_overlay( $sub, $sp['row'], $ssettings );
+				$sub['menu_order'] = $sp['order'];
+				$sub['parent']     = $saved['ID'];
+				unset( $sub['sub_fields'] );
+				$ssaved = acf_update_field( $sub );
+				if ( $ssaved ) {
+					$kept_subs[ $ssaved['key'] ] = true;
+				}
+			}
+			foreach ( $plan['cur_subs'] as $skey => $sf ) {
+				if ( ! isset( $kept_subs[ $skey ] ) ) {
+					acf_delete_field( $sf['ID'] );
+				}
+			}
 		}
 	}
 	foreach ( $existing as $key => $f ) {
