@@ -393,3 +393,258 @@ add_action( 'rest_api_init', function () {
 		);
 	}
 } );
+
+/* ===== ACF options pages (Pro) as settings-only surfaces ===== */
+
+/**
+ * Options pages are ACF Pro; the free plugin has no registry to read.
+ *
+ * @return bool
+ */
+function minn_admin_acf_options_active() {
+	return minn_admin_acf_active() && function_exists( 'acf_get_options_pages' );
+}
+
+/**
+ * Options pages the current user may manage, keyed by menu slug. Each page
+ * declares its own capability (ACF defaults to edit_posts); Minn honors it
+ * rather than inventing a gate.
+ *
+ * @return array
+ */
+function minn_admin_acf_options_pages_allowed() {
+	$out = array();
+	foreach ( (array) acf_get_options_pages() as $page ) {
+		if ( empty( $page['menu_slug'] ) ) {
+			continue;
+		}
+		// Redirect parents exist only to hold children in the admin menu.
+		if ( ! empty( $page['redirect'] ) && ! empty( $page['child_slugs'] ) ) {
+			continue;
+		}
+		$cap = ! empty( $page['capability'] ) ? $page['capability'] : 'edit_posts';
+		if ( ! current_user_can( $cap ) ) {
+			continue;
+		}
+		$out[ $page['menu_slug'] ] = $page;
+	}
+	return $out;
+}
+
+/**
+ * Tab layout for one options page. ACF `tab` fields are the natural section
+ * boundaries: each starts a Minn tab that collects the fields after it (ACF's
+ * own semantics); fields before any tab land in a tab named for their group.
+ * Ids are positional (tab-0…) — both GET and POST re-derive the same walk, so
+ * they stay stable within a schema version.
+ *
+ * @param array $page Options page array.
+ * @return array[] { id, label, fields (simple maps incl. key), locked }
+ */
+function minn_admin_acf_options_tabs( $page ) {
+	$tabs    = array();
+	$current = -1;
+	$open    = function ( $label ) use ( &$tabs, &$current ) {
+		$tabs[]  = array( 'label' => $label, 'fields' => array(), 'locked' => 0 );
+		$current = count( $tabs ) - 1;
+	};
+	foreach ( acf_get_field_groups( array( 'options_page' => $page['menu_slug'] ) ) as $group ) {
+		$current = -1;
+		foreach ( (array) acf_get_fields( $group ) as $f ) {
+			$type = $f['type'] ?? '';
+			if ( 'tab' === $type ) {
+				$open( $f['label'] );
+				continue;
+			}
+			if ( in_array( $type, MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
+				continue;
+			}
+			if ( $current < 0 ) {
+				$open( $group['title'] );
+			}
+			$simple = minn_admin_acf_map_field( $f );
+			if ( ! $simple ) {
+				$tabs[ $current ]['locked']++;
+				continue;
+			}
+			$tabs[ $current ]['fields'][] = $simple;
+		}
+	}
+	$out = array();
+	foreach ( $tabs as $tab ) {
+		if ( ! $tab['fields'] && ! $tab['locked'] ) {
+			continue;
+		}
+		$tab['id'] = 'tab-' . count( $out );
+		$out[]     = $tab;
+	}
+	return $out;
+}
+
+/**
+ * The wp-admin URL for an options page (its locked-fields link-out).
+ *
+ * @param array $page Options page array.
+ * @return string
+ */
+function minn_admin_acf_options_admin_url( $page ) {
+	$parent = ! empty( $page['parent_slug'] ) ? (string) $page['parent_slug'] : '';
+	$base   = ( $parent && false !== strpos( $parent, '.php' ) ) ? $parent : 'admin.php';
+	return admin_url( $base . '?page=' . rawurlencode( $page['menu_slug'] ) );
+}
+
+/**
+ * GET/POST shape for one options-page tab: { groups, values, adminUrl }.
+ * Values key by ACF field KEY (unique and unambiguous across groups).
+ *
+ * @param array  $page   Options page array.
+ * @param string $tab_id Positional tab id.
+ * @return array|WP_Error
+ */
+function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
+	$tabs = minn_admin_acf_options_tabs( $page );
+	$tab  = null;
+	foreach ( $tabs as $t ) {
+		if ( $t['id'] === $tab_id ) {
+			$tab = $t;
+			break;
+		}
+	}
+	if ( ! $tab ) {
+		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
+	$fields  = array();
+	$values  = array();
+	foreach ( $tab['fields'] as $f ) {
+		$sf = array(
+			'key'   => $f['key'],
+			'label' => $f['label'],
+			'type'  => 'true_false' === $f['type'] ? 'toggle'
+				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
+				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
+				: ( 'textarea' === $f['type'] ? 'textarea' : 'text' ) ) ),
+		);
+		if ( 'select' === $sf['type'] ) {
+			$sf['options'] = array();
+			foreach ( (array) ( $f['choices'] ?? array() ) as $value => $label ) {
+				$sf['options'][] = array( (string) $value, (string) $label );
+			}
+		}
+		$fields[] = $sf;
+
+		$v = get_field( $f['key'], $post_id, false );
+		if ( 'toggle' === $sf['type'] ) {
+			$values[ $f['key'] ] = ! empty( $v );
+		} elseif ( is_array( $v ) ) {
+			$values[ $f['key'] ] = '';
+		} else {
+			$values[ $f['key'] ] = null === $v ? '' : $v;
+		}
+	}
+	return array(
+		'groups'   => array(
+			array(
+				'title'  => '',
+				'fields' => $fields,
+				'locked' => $tab['locked'],
+			),
+		),
+		'values'   => $values,
+		'adminUrl' => minn_admin_acf_options_admin_url( $page ),
+	);
+}
+
+/**
+ * Save edited values through ACF's own setter. Keys are whitelisted against
+ * the page's mapped fields (never an arbitrary update_field), coerced to
+ * ACF's stored shapes (1/0 for true_false, strings otherwise).
+ *
+ * @param array $page   Options page array.
+ * @param array $values Field key => value.
+ */
+function minn_admin_acf_options_save( $page, $values ) {
+	$byKey = array();
+	foreach ( minn_admin_acf_options_tabs( $page ) as $tab ) {
+		foreach ( $tab['fields'] as $f ) {
+			$byKey[ $f['key'] ] = $f;
+		}
+	}
+	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
+	foreach ( (array) $values as $key => $v ) {
+		if ( ! isset( $byKey[ $key ] ) ) {
+			continue;
+		}
+		if ( 'true_false' === $byKey[ $key ]['type'] ) {
+			$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
+		} elseif ( null === $v || false === $v ) {
+			$v = '';
+		} elseif ( ! is_scalar( $v ) ) {
+			continue;
+		}
+		update_field( $key, $v, $post_id );
+	}
+}
+
+add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
+	if ( ! minn_admin_acf_options_active() ) {
+		return $surfaces;
+	}
+	foreach ( minn_admin_acf_options_pages_allowed() as $slug => $page ) {
+		$tabs = minn_admin_acf_options_tabs( $page );
+		if ( ! $tabs ) {
+			continue;
+		}
+		$tab_list = array();
+		foreach ( $tabs as $t ) {
+			$tab_list[] = array( 'id' => $t['id'], 'label' => $t['label'] );
+		}
+		$surfaces[ 'acf-options-' . sanitize_key( $slug ) ] = array(
+			'label'    => $page['page_title'] ? $page['page_title'] : $page['menu_slug'],
+			'sub'      => 'ACF',
+			'icon'     => 'gear',
+			'cap'      => ! empty( $page['capability'] ) ? $page['capability'] : 'edit_posts',
+			'settings' => array(
+				'label' => __( 'Settings', 'minn-admin' ),
+				'tabs'  => $tab_list,
+				'route' => 'minn-admin/v1/acf/options/' . rawurlencode( $slug ) . '/{tab}',
+			),
+		);
+	}
+	return $surfaces;
+} );
+
+add_action( 'rest_api_init', function () {
+	if ( ! minn_admin_acf_options_active() ) {
+		return;
+	}
+	$resolve = function ( $req ) {
+		$pages = minn_admin_acf_options_pages_allowed();
+		$slug  = rawurldecode( (string) $req['page'] );
+		return isset( $pages[ $slug ] ) ? $pages[ $slug ] : null;
+	};
+	register_rest_route( 'minn-admin/v1', '/acf/options/(?P<page>[A-Za-z0-9_%.\-]+)/(?P<tab>tab-\d+)', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => function ( $req ) use ( $resolve ) {
+				return (bool) $resolve( $req ); // allowed-pages already filters by the page's own capability
+			},
+			'callback'            => function ( $req ) use ( $resolve ) {
+				return rest_ensure_response( minn_admin_acf_options_tab_shape( $resolve( $req ), (string) $req['tab'] ) );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => function ( $req ) use ( $resolve ) {
+				return (bool) $resolve( $req );
+			},
+			'callback'            => function ( $req ) use ( $resolve ) {
+				$page   = $resolve( $req );
+				$body   = $req->get_json_params();
+				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+				minn_admin_acf_options_save( $page, $values );
+				return rest_ensure_response( minn_admin_acf_options_tab_shape( $page, (string) $req['tab'] ) );
+			},
+		),
+	) );
+} );
