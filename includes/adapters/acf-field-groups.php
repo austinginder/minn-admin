@@ -60,21 +60,36 @@ function minn_admin_acf_schema_location_label( $group ) {
 	foreach ( $rules as $rule ) {
 		$param = (string) ( $rule['param'] ?? '' );
 		$value = (string) ( $rule['value'] ?? '' );
+		$disp  = $value;
+		$name  = $param;
 		if ( 'post_type' === $param ) {
-			$obj     = get_post_type_object( $value );
-			$parts[] = sprintf( __( 'Post type: %s', 'minn-admin' ), $obj ? $obj->labels->name : $value );
+			$obj  = get_post_type_object( $value );
+			$name = __( 'Post type', 'minn-admin' );
+			$disp = $obj ? $obj->labels->name : $value;
 		} elseif ( 'block' === $param ) {
-			$bt      = WP_Block_Type_Registry::get_instance()->get_registered( $value );
-			$parts[] = sprintf( __( 'Block: %s', 'minn-admin' ), $bt && $bt->title ? $bt->title : $value );
+			$bt   = WP_Block_Type_Registry::get_instance()->get_registered( $value );
+			$name = __( 'Block', 'minn-admin' );
+			$disp = $bt && $bt->title ? $bt->title : $value;
 		} elseif ( 'options_page' === $param ) {
-			$page    = function_exists( 'acf_get_options_page' ) ? acf_get_options_page( $value ) : null;
-			$parts[] = sprintf( __( 'Options page: %s', 'minn-admin' ), $page && ! empty( $page['page_title'] ) ? $page['page_title'] : $value );
+			$page = function_exists( 'acf_get_options_page' ) ? acf_get_options_page( $value ) : null;
+			$name = __( 'Options page', 'minn-admin' );
+			$disp = $page && ! empty( $page['page_title'] ) ? $page['page_title'] : $value;
 		} elseif ( 'taxonomy' === $param ) {
-			$tax     = get_taxonomy( $value );
-			$parts[] = sprintf( __( 'Taxonomy: %s', 'minn-admin' ), $tax ? $tax->labels->name : $value );
-		} else {
-			$parts[] = $param . ' = ' . $value;
+			$tax  = get_taxonomy( $value );
+			$name = __( 'Taxonomy', 'minn-admin' );
+			$disp = $tax ? $tax->labels->name : $value;
+		} elseif ( 'current_user_role' === $param ) {
+			$name = __( 'User role', 'minn-admin' );
+		} elseif ( 'page_template' === $param || 'post_template' === $param ) {
+			$name = __( 'Template', 'minn-admin' );
+		} elseif ( 'post_status' === $param ) {
+			$name = __( 'Status', 'minn-admin' );
 		}
+		if ( '!=' === ( $rule['operator'] ?? '==' ) ) {
+			/* translators: %s: the value a location rule excludes. */
+			$disp = sprintf( __( 'not %s', 'minn-admin' ), $disp );
+		}
+		$parts[] = $name . ': ' . $disp;
 	}
 	$extra = count( (array) $group['location'] ) - 1;
 	$label = implode( ' & ', $parts );
@@ -728,6 +743,123 @@ function minn_admin_acf_builder_field( $f ) {
 	);
 }
 
+
+/**
+ * The location-rule vocabulary the builder edits: params with their value
+ * choices, resolved live. Rules with params outside this set still render
+ * (read-only) and survive saves verbatim — exotic locations stay ACF-editor
+ * territory without being lost.
+ *
+ * @return array param => { label, values: [ [ value, label ] ] }
+ */
+function minn_admin_acf_location_choices() {
+	$out = array();
+	$pt  = array();
+	foreach ( get_post_types( array( 'show_ui' => true ), 'objects' ) as $obj ) {
+		if ( preg_match( '/^(acf-|wp_|edd_|elementor_)/', $obj->name ) || 'attachment' === $obj->name ) {
+			continue;
+		}
+		$pt[] = array( $obj->name, $obj->labels->name );
+	}
+	$out['post_type'] = array( 'label' => __( 'Post type', 'minn-admin' ), 'values' => $pt );
+
+	$tpl = array( array( 'default', __( 'Default template', 'minn-admin' ) ) );
+	foreach ( (array) wp_get_theme()->get_page_templates() as $file => $label ) {
+		$tpl[] = array( (string) $file, (string) $label );
+	}
+	$out['page_template'] = array( 'label' => __( 'Page template', 'minn-admin' ), 'values' => $tpl );
+
+	$statuses = array();
+	foreach ( (array) get_post_statuses() as $slug => $label ) {
+		$statuses[] = array( (string) $slug, (string) $label );
+	}
+	$out['post_status'] = array( 'label' => __( 'Post status', 'minn-admin' ), 'values' => $statuses );
+
+	$tax = array();
+	foreach ( get_taxonomies( array( 'show_ui' => true ), 'objects' ) as $t ) {
+		$tax[] = array( $t->name, $t->labels->name );
+	}
+	$out['taxonomy'] = array( 'label' => __( 'Taxonomy', 'minn-admin' ), 'values' => $tax );
+
+	if ( function_exists( 'acf_get_options_pages' ) ) {
+		$ops = array();
+		foreach ( (array) acf_get_options_pages() as $page ) {
+			if ( ! empty( $page['menu_slug'] ) ) {
+				$ops[] = array( $page['menu_slug'], $page['page_title'] ?: $page['menu_slug'] );
+			}
+		}
+		if ( $ops ) {
+			$out['options_page'] = array( 'label' => __( 'Options page', 'minn-admin' ), 'values' => $ops );
+		}
+	}
+	if ( function_exists( 'acf_get_block_types' ) ) {
+		$blocks = array();
+		foreach ( acf_get_block_types() as $name => $bt ) {
+			$blocks[] = array( $name, ! empty( $bt['title'] ) ? $bt['title'] : $name );
+		}
+		if ( $blocks ) {
+			$out['block'] = array( 'label' => __( 'Block', 'minn-admin' ), 'values' => $blocks );
+		}
+	}
+	$roles = array();
+	foreach ( (array) wp_roles()->get_names() as $slug => $label ) {
+		$roles[] = array( (string) $slug, translate_user_role( $label ) );
+	}
+	$out['current_user_role'] = array( 'label' => __( 'User role', 'minn-admin' ), 'values' => $roles );
+	return $out;
+}
+
+/**
+ * Validate + sanitize a submitted location shape: OR groups of AND rules.
+ * Editable params must carry a value from the live catalog; unknown params
+ * pass through verbatim (the builder only ever re-sends them unchanged).
+ *
+ * @param mixed $location Submitted location.
+ * @return array|WP_Error
+ */
+function minn_admin_acf_location_sanitize( $location ) {
+	if ( ! is_array( $location ) ) {
+		return new WP_Error( 'invalid', __( 'Malformed location rules.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$choices = minn_admin_acf_location_choices();
+	$groups  = array();
+	foreach ( $location as $rules ) {
+		if ( ! is_array( $rules ) ) {
+			return new WP_Error( 'invalid', __( 'Malformed location rules.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$clean = array();
+		foreach ( $rules as $rule ) {
+			$rule     = (array) $rule;
+			$param    = (string) ( $rule['param'] ?? '' );
+			$operator = '!=' === ( $rule['operator'] ?? '' ) ? '!=' : '==';
+			$value    = (string) ( $rule['value'] ?? '' );
+			if ( '' === $param || '' === $value ) {
+				return new WP_Error( 'invalid', __( 'Every rule needs a value.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( isset( $choices[ $param ] ) ) {
+				$ok = false;
+				foreach ( $choices[ $param ]['values'] as $pair ) {
+					if ( (string) $pair[0] === $value ) {
+						$ok = true;
+						break;
+					}
+				}
+				if ( ! $ok ) {
+					return new WP_Error( 'invalid', __( 'That location value isn’t available on this site.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+			}
+			$clean[] = array( 'param' => $param, 'operator' => $operator, 'value' => $value );
+		}
+		if ( $clean ) {
+			$groups[] = $clean;
+		}
+	}
+	if ( ! $groups ) {
+		return new WP_Error( 'invalid', __( 'A field group needs at least one location rule.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	return $groups;
+}
+
 /**
  * The whole-group payload the builder reads and the save returns.
  *
@@ -749,8 +881,9 @@ function minn_admin_acf_builder_payload( $group ) {
 			'locationLabel' => minn_admin_acf_schema_location_label( $group ),
 			'adminUrl'      => ! empty( $group['ID'] ) ? admin_url( 'post.php?post=' . (int) $group['ID'] . '&action=edit' ) : '',
 		),
-		'fields' => $fields,
-		'types'  => array_keys( minn_admin_acf_builder_types() ),
+		'fields'          => $fields,
+		'types'           => array_keys( minn_admin_acf_builder_types() ),
+		'locationChoices' => minn_admin_acf_location_choices(),
 	);
 }
 
@@ -810,7 +943,9 @@ function minn_admin_acf_builder_save( $group, $body ) {
 			return new WP_Error( 'invalid', sprintf( __( 'Two fields share the name “%s”.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
 		}
 		$names[ $name ] = true;
-		if ( in_array( $type, array( 'select', 'radio' ), true ) ) {
+	// New choice fields must arrive with choices; an existing row may
+		// omit the key entirely (absent = keep what's stored).
+		if ( in_array( $type, array( 'select', 'radio' ), true ) && ( ! $key || array_key_exists( 'choices', $row ) ) ) {
 			$choices = minn_admin_acf_schema_parse_choices( (string) ( $row['choices'] ?? '' ) );
 			if ( ! $choices ) {
 				return new WP_Error( 'invalid', __( 'Select and radio fields need at least one choice.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -823,6 +958,13 @@ function minn_admin_acf_builder_save( $group, $body ) {
 	$group['title'] = $title;
 	if ( array_key_exists( 'active', $body ) ) {
 		$group['active'] = ! empty( $body['active'] );
+	}
+	if ( array_key_exists( 'location', $body ) ) {
+		$loc = minn_admin_acf_location_sanitize( $body['location'] );
+		if ( is_wp_error( $loc ) ) {
+			return $loc;
+		}
+		$group['location'] = $loc;
 	}
 	acf_update_field_group( $group );
 

@@ -31,6 +31,17 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 	};
 	let postId = 0;
 	let gkey = '';
+	// Save-wait on the POST response, never the toast: a prior save's toast
+	// lingers long enough to satisfy a text wait while the post-save adopt +
+	// re-render is still racing the next interactions (the rule-51 class).
+	const saveGroup = async () => {
+		const wait = page.waitForResponse( ( res ) =>
+			res.request().method() === 'POST' && /acf\/schema\/groups\/[^/]+\/full/.test( res.url() ), { timeout: 20000 } );
+		await page.click( '#minn-fgb-save' );
+		const res = await wait;
+		await page.waitForTimeout( 600 ); // adopt + re-render settle
+		return res.status();
+	};
 
 	try {
 		await sweep();
@@ -71,10 +82,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		await page.type( '[data-fgb="2:label"]', 'Suite Flag' );
 		await page.selectOption( '[data-fgb="2:type"]', 'true_false' );
 
-		await page.click( '#minn-fgb-save' );
-		await page.waitForFunction( () =>
-			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Field group saved/.test( x.textContent ) ),
-		null, { timeout: 15000 } );
+		t.check( 'save round-trips', ( await saveGroup() ) === 200 );
 
 		const list = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups?_cb=' + Math.random() ) ).data;
 		gkey = ( list.items.find( ( g ) => g.title === 'Builder Suite Group' ) || {} ).id;
@@ -124,15 +132,40 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		await page.waitForFunction( () =>
 			! Array.from( document.querySelectorAll( '.minn-fgb-row' ) ).some( ( r ) => r.textContent.includes( 'Suite Flag' ) ),
 		null, { timeout: 5000 } );
-		await page.click( '#minn-fgb-save' );
-		await page.waitForFunction( () =>
-			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Field group saved/.test( x.textContent ) ),
-		null, { timeout: 15000 } );
+		t.check( 'save round-trips', ( await saveGroup() ) === 200 );
 		full = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full?_cb=' + Math.random() ) ).data;
 		t.check( 'rename + reorder + delete saved as one unit',
 			full.fields.length === 2 && full.fields[ 0 ].label === 'Suite Headline Renamed'
 			&& full.fields[ 1 ].name === 'suite_mood' && full.fields[ 0 ].name === 'suite_headline',
 			JSON.stringify( full.fields.map( ( f ) => f.name + ':' + f.label ) ) );
+
+		/* ===== Location rules: switch the value, add an AND rule and an OR
+		 * set, save, verify the exact structure — and the invalid-value
+		 * refusal writes nothing. ===== */
+		await page.waitForSelector( '.minn-fgb-loc', { timeout: 10000 } );
+		await page.selectOption( '[data-lgv="0:0"]', 'page' );
+		await page.click( '[data-lgand="0"]' );
+		await page.waitForSelector( '[data-lgp="0:1"]', { timeout: 5000 } );
+		await page.selectOption( '[data-lgp="0:1"]', 'current_user_role' );
+		await page.waitForTimeout( 300 );
+		await page.selectOption( '[data-lgo="0:1"]', '!=' );
+		await page.click( '#minn-fgb-locadd' );
+		await page.waitForSelector( '[data-lgp="1:0"]', { timeout: 5000 } );
+		t.check( 'save round-trips', ( await saveGroup() ) === 200 );
+		full = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full?_cb=' + Math.random() ) ).data;
+		t.check( 'location rules save as OR sets of AND rows',
+			full.group.location.length === 2
+			&& full.group.location[ 0 ][ 0 ].value === 'page'
+			&& full.group.location[ 0 ][ 1 ].param === 'current_user_role'
+			&& full.group.location[ 0 ][ 1 ].operator === '!=',
+			JSON.stringify( full.group.location ) );
+		const badLoc = await api( 'POST', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full', {
+			fields: full.fields.map( ( f ) => ( { key: f.key } ) ),
+			location: [ [ { param: 'post_type', operator: '==', value: 'no_such_type' } ] ],
+		} );
+		t.check( 'invalid location value refuses', badLoc.status === 400, JSON.stringify( badLoc.data ) );
+		const after = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full?_cb=' + Math.random() ) ).data;
+		t.check( 'refused save wrote nothing', JSON.stringify( after.group.location ) === JSON.stringify( full.group.location ) );
 	} finally {
 		if ( postId ) await deletePost( page, postId ).catch( () => {} );
 		await sweep().catch( () => {} );

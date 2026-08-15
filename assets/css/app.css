@@ -1166,7 +1166,9 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-rt-body ul, .minn-rt-body ol { margin: 0 0 0.8em; padding-inline-start: 1.4em; }
 .minn-rt-body a { color: var(--accent); }
 .minn-rt-foot { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
-/* Field group builder (/field-groups/{key}): stacked rows, inline settings. */
+/* Field group builder (/field-groups/{key}): stacked rows, inline settings.
+   .minn-card ships unpadded — the builder pads itself. */
+.minn-fgb { padding: 18px 20px 20px; }
 .minn-fgb-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
 .minn-fgb-title { flex: 1; min-width: 220px; font-size: 16px; font-weight: 600; }
 .minn-fgb-active { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text2); }
@@ -1201,6 +1203,26 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-fgb-minmax { display: flex; gap: 10px; }
 .minn-fgb-minmax .minn-fgb-set { flex: 1; }
 @media (max-width: 800px) { .minn-fgb-body { grid-template-columns: 1fr; } }
+/* Location rules: OR sets of AND rows. */
+.minn-fgb-loc { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+.minn-fgb-loc-head { font-size: 14px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.minn-fgb-loc-head .minn-toggle-desc { font-weight: 400; }
+.minn-fgb-loc-group {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel2);
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;
+}
+.minn-fgb-loc-or { text-align: center; color: var(--muted); font-size: 12px; margin: 2px 0 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+.minn-fgb-loc-rule { display: flex; gap: 8px; align-items: center; }
+.minn-fgb-loc-rule .minn-input { flex: 1; min-width: 0; }
+.minn-fgb-loc-op { flex: 0 0 92px !important; }
+.minn-fgb-loc-raw { flex: 1; font-size: 12px; color: var(--text2); }
+.minn-fgb-loc-hint { font-size: 11px; color: var(--muted); }
+.minn-fgb-loc-rule [data-lgx] {
+  background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
+  width: 24px; height: 24px; cursor: pointer; flex-shrink: 0;
+}
+.minn-fgb-loc-rule [data-lgx]:hover:not(:disabled) { color: var(--red-text); border-color: currentColor; }
+.minn-fgb-loc-and { align-self: flex-start; padding: 3px 10px !important; font-size: 12px !important; }
 /* Rows control (ACF repeaters): one card per row, chrome in its header. */
 .minn-field-rows { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .minn-rows-card {

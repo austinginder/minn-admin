@@ -37832,6 +37832,7 @@
 				${ fgb.fields.map( rowHtml ).join( '' ) || `<div class="minn-empty">${ esc( __( 'No fields yet — add the first one below.' ) ) }</div>` }
 			</div>
 			${ ro ? '' : `<button type="button" class="minn-btn-soft" id="minn-fgb-add">+ ${ esc( __( 'Add field' ) ) }</button>` }
+			${ fgbLocationHtml( fgb, ro ) }
 		</div>`;
 		// Bind to the freshly-rendered card, never the persistent #minn-view:
 		// a container-level delegate would stack one listener per re-render
@@ -37844,10 +37845,63 @@
 			key: r.group.key,
 			group: { title: r.group.title, active: r.group.active, source: r.group.source, locationLabel: r.group.locationLabel, adminUrl: r.group.adminUrl },
 			fields: r.fields.map( ( f ) => ( { ...f } ) ),
+			location: JSON.parse( JSON.stringify( r.group.location || [] ) ),
+			locationChoices: r.locationChoices || {},
 			expanded: {},
 			dirty: false,
 			loading: false,
 		};
+	}
+
+	// Location rules: OR groups of AND rows over the server's live catalog.
+	// Params outside the catalog render read-only and re-send verbatim —
+	// exotic locations survive saves without being editable here.
+	function fgbLocationHtml( fgb, ro ) {
+		const dis = ro ? ' disabled' : '';
+		const cat = fgb.locationChoices;
+		const opSel = ( gi, ri, op ) => `<select class="minn-input minn-fgb-loc-op" data-lgo="${ gi }:${ ri }"${ dis }>
+			<option value="=="${ op !== '!=' ? ' selected' : '' }>${ esc( __( 'is' ) ) }</option>
+			<option value="!="${ op === '!=' ? ' selected' : '' }>${ esc( __( 'is not' ) ) }</option>
+		</select>`;
+		const groups = ( fgb.location || [] ).map( ( rules, gi ) => `
+			${ gi ? `<div class="minn-fgb-loc-or">${ esc( __( 'or' ) ) }</div>` : '' }
+			<div class="minn-fgb-loc-group">
+				${ rules.map( ( r, ri ) => {
+					const known = cat[ r.param ];
+					if ( ! known ) {
+						return `<div class="minn-fgb-loc-rule">
+							<span class="minn-fgb-loc-raw mono">${ esc( r.param ) } ${ esc( r.operator ) } ${ esc( r.value ) }</span>
+							<span class="minn-fgb-loc-hint">${ esc( __( 'edited in ACF' ) ) }</span>
+							<button type="button" data-lgx="${ gi }:${ ri }" title="${ esc( __( 'Remove rule' ) ) }"${ dis }>×</button>
+						</div>`;
+					}
+					return `<div class="minn-fgb-loc-rule">
+						<select class="minn-input" data-lgp="${ gi }:${ ri }"${ dis }>
+							${ Object.keys( cat ).map( ( pk ) => `<option value="${ esc( pk ) }"${ pk === r.param ? ' selected' : '' }>${ esc( cat[ pk ].label ) }</option>` ).join( '' ) }
+						</select>
+						${ opSel( gi, ri, r.operator ) }
+						<select class="minn-input" data-lgv="${ gi }:${ ri }"${ dis }>
+							${ known.values.map( ( pair ) => `<option value="${ esc( String( pair[ 0 ] ) ) }"${ String( pair[ 0 ] ) === String( r.value ) ? ' selected' : '' }>${ esc( String( pair[ 1 ] ) ) }</option>` ).join( '' ) }
+						</select>
+						<button type="button" data-lgx="${ gi }:${ ri }" title="${ esc( __( 'Remove rule' ) ) }"${ dis }>×</button>
+					</div>`;
+				} ).join( '' ) }
+				${ ro ? '' : `<button type="button" class="minn-btn-soft minn-fgb-loc-and" data-lgand="${ gi }">+ ${ esc( __( 'and' ) ) }</button>` }
+			</div>` ).join( '' );
+		return `<div class="minn-fgb-loc">
+			<div class="minn-fgb-loc-head">${ esc( __( 'Location rules' ) ) }
+				<span class="minn-toggle-desc">${ esc( __( 'Show this group when every rule in a set matches; sets combine with or.' ) ) }</span>
+			</div>
+			${ groups || `<div class="minn-empty">${ esc( __( 'No rules yet.' ) ) }</div>` }
+			${ ro ? '' : `<button type="button" class="minn-btn-soft" id="minn-fgb-locadd">+ ${ esc( __( 'Add rule set' ) ) }</button>` }
+		</div>`;
+	}
+
+	function fgbDefaultRule( fgb ) {
+		const cat = fgb.locationChoices;
+		const param = cat.post_type ? 'post_type' : Object.keys( cat )[ 0 ];
+		const first = param && cat[ param ].values[ 0 ];
+		return { param, operator: '==', value: first ? String( first[ 0 ] ) : '' };
 	}
 
 	function fgbSettingsHtml( f, i, ro ) {
@@ -37955,6 +38009,31 @@
 			markDirty();
 		} );
 		view.addEventListener( 'change', ( e ) => {
+			const lgp = e.target.closest( '[data-lgp]' );
+			if ( lgp ) {
+				const [ gi, ri ] = lgp.dataset.lgp.split( ':' ).map( Number );
+				const rule = fgb.location[ gi ][ ri ];
+				rule.param = lgp.value;
+				const first = ( fgb.locationChoices[ rule.param ] || { values: [] } ).values[ 0 ];
+				rule.value = first ? String( first[ 0 ] ) : '';
+				markDirty();
+				renderFieldGroupBuilder(); // the value list follows the param
+				return;
+			}
+			const lgo = e.target.closest( '[data-lgo]' );
+			if ( lgo ) {
+				const [ gi, ri ] = lgo.dataset.lgo.split( ':' ).map( Number );
+				fgb.location[ gi ][ ri ].operator = lgo.value;
+				markDirty();
+				return;
+			}
+			const lgv = e.target.closest( '[data-lgv]' );
+			if ( lgv ) {
+				const [ gi, ri ] = lgv.dataset.lgv.split( ':' ).map( Number );
+				fgb.location[ gi ][ ri ].value = lgv.value;
+				markDirty();
+				return;
+			}
 			const el = e.target.closest( '[data-fgb]' );
 			if ( ! el || el.tagName !== 'SELECT' ) return;
 			const sep = el.dataset.fgb.indexOf( ':' );
@@ -37967,6 +38046,33 @@
 			}
 		} );
 		view.addEventListener( 'click', async ( e ) => {
+			const lgx = e.target.closest( '[data-lgx]' );
+			if ( lgx ) {
+				const [ gi, ri ] = lgx.dataset.lgx.split( ':' ).map( Number );
+				const total = fgb.location.reduce( ( n, g ) => n + g.length, 0 );
+				if ( total <= 1 ) {
+					toast( __( 'A field group needs at least one location rule.' ), true );
+					return;
+				}
+				fgb.location[ gi ].splice( ri, 1 );
+				if ( ! fgb.location[ gi ].length ) fgb.location.splice( gi, 1 );
+				markDirty();
+				renderFieldGroupBuilder();
+				return;
+			}
+			const lgand = e.target.closest( '[data-lgand]' );
+			if ( lgand ) {
+				fgb.location[ Number( lgand.dataset.lgand ) ].push( fgbDefaultRule( fgb ) );
+				markDirty();
+				renderFieldGroupBuilder();
+				return;
+			}
+			if ( e.target.closest( '#minn-fgb-locadd' ) ) {
+				fgb.location.push( [ fgbDefaultRule( fgb ) ] );
+				markDirty();
+				renderFieldGroupBuilder();
+				return;
+			}
 			const req = e.target.closest( '[data-fgbreq]' );
 			if ( req ) {
 				const f = fgb.fields[ Number( req.dataset.fgbreq ) ];
@@ -38042,7 +38148,7 @@
 				try {
 					const r = await api( 'minn-admin/v1/acf/schema/groups/' + encodeURIComponent( fgb.key ) + '/full', {
 						method: 'POST',
-						body: JSON.stringify( { title: fgb.group.title, active: fgb.group.active, fields: rows } ),
+						body: JSON.stringify( { title: fgb.group.title, active: fgb.group.active, location: fgb.location, fields: rows } ),
 					} );
 					const wasExpanded = fgb.expanded;
 					fgbAdopt( r );
