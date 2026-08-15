@@ -8823,6 +8823,10 @@
 			regular_price: v.regular_price || '',
 			sale_price: v.sale_price || '',
 			stock_status: v.stock_status || 'instock',
+			manage_stock: !! v.manage_stock,
+			// null is "not tracked", which is not the same as none left.
+			stock_quantity: v.stock_quantity == null ? null : v.stock_quantity,
+			image: v.image && v.image.id ? { id: v.image.id, src: v.image.src || '' } : null,
 			attributes: ( v.attributes || [] ).map( ( a ) => ( { id: a.id || 0, name: a.name || '', option: a.option || '' } ) ),
 		} ) );
 		m.variationsRemoved = [];
@@ -8842,6 +8846,33 @@
 		} ).join( ' · ' );
 	}
 
+	/**
+	 * The Variations card is a list of variants, not a grid of inputs: name,
+	 * picture, price and what is available, with everything modifiable behind
+	 * the row (openVariationDialog). Six variants of five fields each was 30
+	 * boxes on screen and no way to see, at a glance, what the product sells.
+	 */
+	function variationRowHtml( m, v, i ) {
+		const label = variationLabel( m, v );
+		const price = v.sale_price
+			? `$${ esc( v.sale_price ) }<span class="minn-prod-was">$${ esc( v.regular_price || '' ) }</span>`
+			: ( v.regular_price ? `$${ esc( v.regular_price ) }` : '—' );
+		// Available means a number only when the variant tracks stock; the
+		// status is the honest answer otherwise, and it is what WooCommerce
+		// itself falls back to.
+		const avail = v.manage_stock
+			? esc( String( v.stock_quantity == null ? 0 : v.stock_quantity ) )
+			: esc( ( { instock: __( 'In stock' ), outofstock: __( 'Out of stock' ), onbackorder: __( 'On backorder' ) } )[ v.stock_status ] || __( 'In stock' ) );
+		return `
+			<div class="minn-pvar-row" data-pvaropen="${ i }" role="button" tabindex="0" aria-label="${ esc( sprintf( /* translators: %s: the variation label, for example "Large / Blue". */ __( 'Edit variation %s' ), label ) ) }">
+				<span class="minn-pvar-thumb">${ v.image && v.image.src ? `<img src="${ esc( v.image.src ) }" alt="" loading="lazy">` : icon( 'img' ) }</span>
+				<span class="minn-pvar-name minn-cell-clip">${ esc( label ) }${ v.id ? '' : `<span class="minn-pvar-new">${ esc( __( 'New' ) ) }</span>` }</span>
+				<span class="minn-pvar-price">${ price }</span>
+				<span class="minn-pvar-avail">${ avail }</span>
+				<button type="button" class="minn-pdl-x" data-pvarx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( sprintf( /* translators: %s: the variation label, for example "Large / Blue". */ __( 'Remove variation %s' ), label ) ) }">×</button>
+			</div>`;
+	}
+
 	function productVariationsHtml( m ) {
 		const axes = variationAxes( m );
 		if ( ! axes.length ) {
@@ -8850,28 +8881,162 @@
 		if ( ! ( m.variations || [] ).length ) {
 			return `<div class="minn-pdl-empty">${ esc( __( 'No variations yet. Generate them from the attributes, or add one at a time.' ) ) }</div>`;
 		}
-		return m.variations.map( ( v, i ) => `
-			<div class="minn-pvar-row">
-				<div class="minn-pvar-axes">
-					${ axes.map( ( a, ai ) => {
-						const hit = ( v.attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
-						const cur = ( hit && hit.option ) || '';
-						const anyLabel = sprintf( /* translators: %s: a product attribute name, for example Colour. */ __( 'Any %s' ), a.name );
-						return `<div class="minn-ac minn-pvar-axis" data-pvaraxis="${ i }:${ ai }">
-							<input class="minn-input minn-ac-input" value="${ esc( cur || anyLabel ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( a.name ) }">
+		return `
+			<div class="minn-pvar-head">
+				<span></span>
+				<span>${ esc( __( 'Variant' ) ) }</span>
+				<span>${ esc( __( 'Price' ) ) }</span>
+				<span>${ esc( __( 'Available' ) ) }</span>
+				<span></span>
+			</div>`
+			+ m.variations.map( ( v, i ) => variationRowHtml( m, v, i ) ).join( '' );
+	}
+
+	/**
+	 * One variant, everything about it, in a dialog. Cancel and Done, not a
+	 * live model: half-typed values on a row that also feeds the batch save
+	 * would reach the server on any other save, so the dialog edits a copy and
+	 * only Done writes it back. Nothing here talks to the server either way;
+	 * variations still ride the page's single Save, which is the contract
+	 * documented in woocommerce-products.md.
+	 *
+	 * Built like openTermDialog, and for the same reason: it opens over a card
+	 * that repaints under it.
+	 */
+	function openVariationDialog( m, index ) {
+		return new Promise( ( resolve ) => {
+			const src = m.variations[ index ];
+			if ( ! src ) { resolve( false ); return; }
+			// The working copy. attributes are cloned deep enough that picking
+			// an axis in the dialog cannot reach the row behind it.
+			const v = Object.assign( {}, src, {
+				attributes: ( src.attributes || [] ).map( ( a ) => Object.assign( {}, a ) ),
+				image: src.image ? Object.assign( {}, src.image ) : null,
+			} );
+			const axes = variationAxes( m );
+			const stockOptions = [
+				{ value: 'instock', label: __( 'In stock' ) },
+				{ value: 'outofstock', label: __( 'Out of stock' ) },
+				{ value: 'onbackorder', label: __( 'On backorder' ) },
+			];
+			const overlay = document.createElement( 'div' );
+			overlay.className = 'minn-modal-overlay minn-confirm-overlay';
+			overlay.id = 'minn-var-dialog';
+			const imageHtml = () => ( v.image && v.image.src
+				? `<img src="${ esc( v.image.src ) }" alt="">`
+				: icon( 'img' ) );
+			overlay.innerHTML = `
+			<div class="minn-modal minn-confirm-modal" role="dialog" aria-modal="true" aria-label="${ esc( variationLabel( m, v ) ) }">
+				<div class="minn-confirm-title">${ esc( sprintf( /* translators: %s: the variation label, for example "Large / Blue". */ __( 'Edit %s' ), variationLabel( m, v ) ) ) }</div>
+				<div class="minn-order-fields minn-var-fields">
+					<div class="minn-var-imagerow">
+						<div class="minn-var-image" id="minn-var-image">${ imageHtml() }</div>
+						<div class="minn-var-imageacts">
+							<button type="button" class="minn-btn-soft" id="minn-var-img-pick">${ esc( __( 'Choose image…' ) ) }</button>
+							<button type="button" class="minn-btn-soft" id="minn-var-img-x"${ v.image ? '' : ' hidden' }>${ esc( __( 'Remove image' ) ) }</button>
+						</div>
+					</div>
+					${ axes.length ? `<div class="minn-order-field-row">${ axes.map( ( a, ai ) => `
+						<div>
+							<div class="minn-field-label">${ esc( a.name ) }</div>
+							<div class="minn-ac" data-varaxis="${ ai }">
+								<input class="minn-input minn-ac-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( a.name ) }">
+								<div class="minn-ac-panel" hidden></div>
+							</div>
+						</div>` ).join( '' ) }</div>` : '' }
+					<div class="minn-order-field-row">
+						<div><div class="minn-field-label">${ esc( __( 'Regular price' ) ) }</div><input class="minn-input" id="minn-var-regular" inputmode="decimal" value="${ esc( v.regular_price ) }"></div>
+						<div><div class="minn-field-label">${ esc( __( 'Sale price' ) ) }</div><input class="minn-input" id="minn-var-sale" inputmode="decimal" value="${ esc( v.sale_price ) }" placeholder="${ esc( __( 'Optional' ) ) }"></div>
+					</div>
+					<div><div class="minn-field-label">${ esc( __( 'SKU' ) ) }</div><input class="minn-input" id="minn-var-sku" value="${ esc( v.sku ) }" placeholder="${ esc( __( 'Optional' ) ) }"></div>
+					<div>
+						<div class="minn-field-label">${ esc( __( 'Stock status' ) ) }</div>
+						<div class="minn-ac" data-varstock>
+							<input class="minn-input minn-ac-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Stock status' ) ) }">
 							<div class="minn-ac-panel" hidden></div>
-						</div>`;
-					} ).join( '' ) }
+						</div>
+					</div>
+					${ productToggleHtml( 'minn-var-track', __( 'Track stock quantity' ), v.manage_stock ) }
+					<div id="minn-var-qty-row"${ v.manage_stock ? '' : ' hidden' }>
+						<div class="minn-field-label">${ esc( __( 'Quantity' ) ) }</div>
+						<input class="minn-input" id="minn-var-qty" type="number" step="1" value="${ v.stock_quantity == null ? '' : esc( String( v.stock_quantity ) ) }">
+					</div>
 				</div>
-				<input class="minn-input minn-pvar-sku" data-pvarsku="${ i }" value="${ esc( v.sku ) }" placeholder="${ esc( __( 'SKU' ) ) }" aria-label="${ esc( __( 'Variation SKU' ) ) }">
-				<input class="minn-input minn-pvar-price" data-pvarreg="${ i }" value="${ esc( v.regular_price ) }" inputmode="decimal" placeholder="${ esc( __( 'Price' ) ) }" aria-label="${ esc( __( 'Regular price' ) ) }">
-				<input class="minn-input minn-pvar-price" data-pvarsale="${ i }" value="${ esc( v.sale_price ) }" inputmode="decimal" placeholder="${ esc( __( 'Sale' ) ) }" aria-label="${ esc( __( 'Sale price' ) ) }">
-				<div class="minn-ac minn-pvar-stock" data-pvarstock="${ i }">
-					<input class="minn-input minn-ac-input" value="${ esc( ( { instock: __( 'In stock' ), outofstock: __( 'Out of stock' ), onbackorder: __( 'On backorder' ) } )[ v.stock_status ] || __( 'In stock' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Stock status' ) ) }">
-					<div class="minn-ac-panel" hidden></div>
+				<div class="minn-toggle-desc minn-var-note">${ esc( __( 'Variations save with the rest of the page.' ) ) }</div>
+				<div class="minn-confirm-actions">
+					<button class="minn-btn-soft" data-var-cancel type="button">${ esc( __( 'Cancel' ) ) }</button>
+					<button class="minn-btn-primary" data-var-done type="button">${ esc( __( 'Done' ) ) }</button>
 				</div>
-				<button type="button" class="minn-pdl-x" data-pvarx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( sprintf( /* translators: %s: the variation label, for example "Large / Blue". */ __( 'Remove variation %s' ), variationLabel( m, v ) ) ) }">×</button>
-			</div>` ).join( '' );
+			</div>`;
+			document.body.appendChild( overlay );
+			const done = ( ok ) => {
+				overlay.remove();
+				document.removeEventListener( 'keydown', onKey );
+				resolve( !! ok );
+			};
+			const onKey = ( e ) => { if ( e.key === 'Escape' ) { e.stopPropagation(); done( false ); } };
+			document.addEventListener( 'keydown', onKey );
+			overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) done( false ); } );
+			overlay.querySelector( '[data-var-cancel]' ).addEventListener( 'click', () => done( false ) );
+
+			// Comboboxes, not native selects, as everywhere else on this page.
+			$$( '[data-varaxis]', overlay ).forEach( ( wrap ) => {
+				const ai = parseInt( wrap.dataset.varaxis, 10 );
+				const a = axes[ ai ];
+				const hit = ( v.attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
+				bindAutocomplete( wrap, [ { value: '', label: sprintf( /* translators: %s: a product attribute name, for example Colour. */ __( 'Any %s' ), a.name ) } ]
+					.concat( a.options.map( ( o ) => ( { value: o, label: o } ) ) ), {
+					strict: true,
+					value: ( hit && hit.option ) || '',
+					onPick: ( picked ) => {
+						v.attributes = ( v.attributes || [] ).filter( ( x ) => ( a.id ? x.id !== a.id : x.name !== a.name ) );
+						if ( picked ) v.attributes.push( { id: a.id || 0, name: a.name, option: picked } );
+					},
+				} );
+			} );
+			bindAutocomplete( overlay.querySelector( '[data-varstock]' ), stockOptions, {
+				strict: true,
+				value: v.stock_status || 'instock',
+				onPick: ( picked ) => { v.stock_status = picked; },
+			} );
+			const track = overlay.querySelector( '#minn-var-track' );
+			const qtyRow = overlay.querySelector( '#minn-var-qty-row' );
+			if ( track ) track.addEventListener( 'click', () => {
+				const on = track.classList.toggle( 'on' );
+				track.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				qtyRow.hidden = ! on;
+			} );
+
+			const imgBox = overlay.querySelector( '#minn-var-image' );
+			const imgX = overlay.querySelector( '#minn-var-img-x' );
+			const paintImage = () => {
+				imgBox.innerHTML = imageHtml();
+				imgX.hidden = ! v.image;
+			};
+			overlay.querySelector( '#minn-var-img-pick' ).addEventListener( 'click', () => {
+				openMediaPicker( ( picked ) => {
+					if ( ! picked ) return;
+					v.image = { id: picked.id, src: picked.thumb || picked.url || '' };
+					paintImage();
+				} );
+			} );
+			imgX.addEventListener( 'click', () => { v.image = null; paintImage(); } );
+
+			overlay.querySelector( '[data-var-done]' ).addEventListener( 'click', () => {
+				v.regular_price = ( overlay.querySelector( '#minn-var-regular' ).value || '' ).trim();
+				v.sale_price = ( overlay.querySelector( '#minn-var-sale' ).value || '' ).trim();
+				v.sku = ( overlay.querySelector( '#minn-var-sku' ).value || '' ).trim();
+				v.manage_stock = track.classList.contains( 'on' );
+				const raw = ( overlay.querySelector( '#minn-var-qty' ).value || '' ).trim();
+				v.stock_quantity = v.manage_stock ? ( raw === '' ? 0 : parseInt( raw, 10 ) ) : null;
+				m.variations[ index ] = v;
+				done( true );
+			} );
+			setTimeout( () => {
+				const first = overlay.querySelector( '#minn-var-regular' );
+				if ( first ) first.focus();
+			}, 30 );
+		} );
 	}
 
 	function bindProductVariations( m ) {
@@ -8883,59 +9048,47 @@
 			const gen = $( '#minn-p-var-gen' );
 			if ( gen ) gen.disabled = ! variationAxes( m ).length;
 		};
-		const setAxis = ( vi, ai, option ) => {
-			const axes = variationAxes( m );
-			const a = axes[ ai ];
-			if ( ! a ) return;
-			const v = m.variations[ vi ];
-			v.attributes = ( v.attributes || [] ).filter( ( x ) => ( a.id ? x.id !== a.id : x.name !== a.name ) );
-			if ( option ) v.attributes.push( { id: a.id || 0, name: a.name, option } );
+		const open = async ( i ) => {
+			const changed = await openVariationDialog( m, i );
+			if ( ! changed ) return;
+			repaint();
+			// The dialog is outside this card, so the save bar never saw the
+			// click that changed anything in it.
+			if ( m.syncDirty ) m.syncDirty();
 		};
 		const bindRows = () => {
-			[ [ 'pvarsku', 'sku' ], [ 'pvarreg', 'regular_price' ], [ 'pvarsale', 'sale_price' ] ].forEach( ( [ attr, key ] ) => {
-				$$( `[data-${ attr }]`, list ).forEach( ( el ) => el.addEventListener( 'input', () => {
-					m.variations[ parseInt( el.dataset[ attr ], 10 ) ][ key ] = el.value.trim();
-				} ) );
-			} );
-			// Comboboxes, not native selects, like every other choice on this
-			// page. The pick writes straight to the model, so nothing has to
-			// read a label back out of the DOM at save time.
-			$$( '[data-pvarstock]', list ).forEach( ( wrap ) => {
-				const i = parseInt( wrap.dataset.pvarstock, 10 );
-				bindAutocomplete( wrap, [
-					{ value: 'instock', label: __( 'In stock' ) },
-					{ value: 'outofstock', label: __( 'Out of stock' ) },
-					{ value: 'onbackorder', label: __( 'On backorder' ) },
-				], {
-					strict: true,
-					value: m.variations[ i ].stock_status || 'instock',
-					onPick: ( v ) => { m.variations[ i ].stock_status = v; },
+			$$( '[data-pvaropen]', list ).forEach( ( row ) => {
+				const i = parseInt( row.dataset.pvaropen, 10 );
+				row.addEventListener( 'click', ( e ) => {
+					// The remove button lives inside the row (a button inside a
+					// button is invalid markup, so the row is not one), and its
+					// click must not also open the editor.
+					if ( e.target.closest( '[data-pvarx]' ) ) return;
+					open( i );
+				} );
+				row.addEventListener( 'keydown', ( e ) => {
+					if ( e.key !== 'Enter' && e.key !== ' ' ) return;
+					e.preventDefault();
+					open( i );
 				} );
 			} );
-			$$( '[data-pvaraxis]', list ).forEach( ( wrap ) => {
-				const [ vi, ai ] = wrap.dataset.pvaraxis.split( ':' ).map( Number );
-				const a = variationAxes( m )[ ai ];
-				if ( ! a ) return;
-				const hit = ( m.variations[ vi ].attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
-				bindAutocomplete( wrap, [ { value: '', label: sprintf( /* translators: %s: a product attribute name, for example Colour. */ __( 'Any %s' ), a.name ) } ]
-					.concat( a.options.map( ( o ) => ( { value: o, label: o } ) ) ), {
-					strict: true,
-					value: ( hit && hit.option ) || '',
-					onPick: ( v ) => setAxis( vi, ai, v ),
-				} );
-			} );
-			$$( '[data-pvarx]', list ).forEach( ( el ) => el.addEventListener( 'click', () => {
+			$$( '[data-pvarx]', list ).forEach( ( el ) => el.addEventListener( 'click', ( e ) => {
+				// Keeps the row underneath from opening the editor — and, with
+				// it, keeps this click from reaching the save bar's watcher,
+				// which is why the bar is told directly below.
+				e.stopPropagation();
 				const i = parseInt( el.dataset.pvarx, 10 );
 				const gone = m.variations.splice( i, 1 )[ 0 ];
 				// An id means it exists on the server and has to be deleted there.
 				if ( gone && gone.id ) m.variationsRemoved.push( gone.id );
 				repaint();
+				if ( m.syncDirty ) m.syncDirty();
 			} ) );
 		};
 		bindRows();
 		const add = $( '#minn-p-var-add' );
 		if ( add ) add.addEventListener( 'click', () => {
-			m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', attributes: [] } );
+			m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', manage_stock: false, stock_quantity: null, image: null, attributes: [] } );
 			repaint();
 		} );
 		// Every combination the attributes allow, minus the ones already here.
@@ -8957,7 +9110,7 @@
 			let added = 0;
 			combos.forEach( ( attrs ) => {
 				if ( have.has( keyOf( attrs ) ) ) return;
-				m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', attributes: attrs } );
+				m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', manage_stock: false, stock_quantity: null, image: null, attributes: attrs } );
 				added++;
 			} );
 			repaint();
@@ -8978,8 +9131,17 @@
 				regular_price: v.regular_price,
 				sale_price: v.sale_price,
 				stock_status: v.stock_status,
+				manage_stock: !! v.manage_stock,
+				// { id: 0 } is how WooCommerce is told to drop a variation's
+				// picture; verified against a live store, along with the fact
+				// that null does the same. Sending the pair explicitly keeps
+				// set and clear symmetrical.
+				image: v.image && v.image.id ? { id: v.image.id } : { id: 0 },
 				attributes: ( v.attributes || [] ).map( ( a ) => ( a.id ? { id: a.id, option: a.option } : { name: a.name, option: a.option } ) ),
 			};
+			// Only meaningful while tracking, and WooCommerce reads a null here
+			// as "stop tracking", which the switch above already said.
+			if ( v.manage_stock ) row.stock_quantity = v.stock_quantity == null ? 0 : v.stock_quantity;
 			if ( v.id ) body.update.push( Object.assign( { id: v.id }, row ) );
 			else body.create.push( row );
 		} );
@@ -9359,7 +9521,7 @@
 				// are fetched here rather than filled in after the paint.
 				let variationRows = [];
 				if ( ( full.type || '' ) === 'variable' ) {
-					variationRows = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,attributes` )
+					variationRows = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,manage_stock,stock_quantity,image,attributes` )
 						.catch( () => [] );
 				}
 				if ( ! isCur() ) return;
@@ -10542,7 +10704,7 @@
 				// re-reading them a second save would create duplicates.
 				let freshVariations = [];
 				if ( ( ( full || {} ).type || '' ) === 'variable' ) {
-					freshVariations = await api( `wc/v3/products/${ p.id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,attributes` )
+					freshVariations = await api( `wc/v3/products/${ p.id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,manage_stock,stock_quantity,image,attributes` )
 						.catch( () => [] );
 				}
 				if ( isCur() ) {
@@ -33480,7 +33642,7 @@
 			const items = m.items;
 			const any = !! m.any;
 			return `
-			<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal-overlay minn-picker-over" id="minn-modal-overlay">
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ m.multi ? esc( __( 'Build a gallery' ) ) : ( any ? esc( __( 'Insert file' ) ) : esc( __( 'Insert image' ) ) ) }</div>
