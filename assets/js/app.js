@@ -35450,6 +35450,12 @@
 						if ( m.upload ) { m.upload = null; renderOverlays(); }
 					}
 				};
+				// The picker joins the window-level drop routing, so a file
+				// aimed at this zone but landing a few pixels outside it
+				// uploads here instead of navigating the app to Media and
+				// dropping the picture there.
+				drop._accept = ( file ) => uploadAndUse( [ file ] );
+				drop._acceptAll = ( files ) => uploadAndUse( files );
 				drop.addEventListener( 'click', () => fileInput.click() );
 				fileInput.addEventListener( 'change', () => uploadAndUse( fileInput.files ) );
 				// stopPropagation keeps the app-wide drop-to-media-library handler out of it.
@@ -38826,7 +38832,7 @@
 				<div class="minn-field-label">${ esc( __( 'Required' ) ) }</div>
 				<button type="button" class="minn-switch${ f.required ? ' on' : '' }" data-fgbreq="${ tok }" role="switch" aria-checked="${ !! f.required }"${ roAttr }><span class="minn-switch-knob"></span></button>
 			</div>
-			${ extras.includes( 'choices' ) ? input( 'choices', __( 'Choices' ), { area: true, rows: 4, mono: true, ph: 'value : Label', help: __( 'One per line: value : Label' ) } ) : '' }
+			${ extras.includes( 'choices' ) ? input( 'choices', __( 'Choices' ), { area: true, rows: 4, mono: true, ph: __( 'value : Label' ), help: __( 'One per line: value : Label' ) } ) : '' }
 			${ FGB_NO_DEFAULT.includes( f.type ) ? '' : ( 'true_false' === f.type ? `
 			<div class="minn-fgb-set minn-fgb-set-inline">
 				<div class="minn-field-label">${ esc( __( 'Default on' ) ) }</div>
@@ -39636,7 +39642,9 @@
 		// the chips' _target/_kind convention.
 		if ( B.caps.upload ) {
 			const installDropZone = () => {
-				const z = $( '#minn-pi-dropzone' ) || $( '#minn-ti-dropzone' ) || $( '#minn-imgedit-drop' ) || $( '#minn-simport-drop' );
+				// The media picker comes first: it stacks above the images
+				// editor, so while both are open the topmost one owns the drop.
+				const z = $( '#minn-picker-drop' ) || $( '#minn-pi-dropzone' ) || $( '#minn-ti-dropzone' ) || $( '#minn-imgedit-drop' ) || $( '#minn-simport-drop' );
 				return z && ( z._accept || z._acceptAll ) ? z : null;
 			};
 			let dragDepth = 0;
