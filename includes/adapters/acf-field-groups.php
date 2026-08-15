@@ -219,7 +219,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Field Groups', 'minn-admin' ),
 		'sub'        => 'ACF',
 		'icon'       => 'grid',
-		'group'      => 'manage',
 		'cap'        => minn_admin_acf_schema_cap(),
 		'collection' => array(
 			'viewLabel' => __( 'Groups', 'minn-admin' ),
