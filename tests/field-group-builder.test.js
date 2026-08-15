@@ -166,6 +166,26 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		t.check( 'invalid location value refuses', badLoc.status === 400, JSON.stringify( badLoc.data ) );
 		const after = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full?_cb=' + Math.random() ) ).data;
 		t.check( 'refused save wrote nothing', JSON.stringify( after.group.location ) === JSON.stringify( full.group.location ) );
+
+		/* ===== Drag to reorder: real mouse drag of the grip, drop above the
+		 * first row, save, verify the persisted order flipped. ===== */
+		await page.waitForSelector( '.minn-fgb-row[data-fi="1"] .minn-fgb-grip', { timeout: 5000 } );
+		const gripBox = await ( await page.$( '.minn-fgb-row[data-fi="1"] .minn-fgb-grip' ) ).boundingBox();
+		const firstBox = await ( await page.$( '.minn-fgb-row[data-fi="0"]' ) ).boundingBox();
+		await page.mouse.move( gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2 );
+		await page.mouse.down();
+		await page.mouse.move( firstBox.x + 80, firstBox.y + firstBox.height * 0.2, { steps: 8 } );
+		await page.mouse.move( firstBox.x + 80, firstBox.y + firstBox.height * 0.2 + 1 );
+		await page.mouse.up();
+		await page.waitForFunction( () => {
+			const names = document.querySelectorAll( '.minn-fgb-rows .minn-fgb-name' );
+			return names.length === 2 && names[ 0 ].textContent === 'suite_mood';
+		}, null, { timeout: 5000 } );
+		t.check( 'grip drag reorders rows in place', true );
+		t.check( 'save round-trips', ( await saveGroup() ) === 200 );
+		full = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full?_cb=' + Math.random() ) ).data;
+		t.check( 'dragged order persists', full.fields[ 0 ].name === 'suite_mood' && full.fields[ 1 ].name === 'suite_headline',
+			JSON.stringify( full.fields.map( ( f ) => f.name ) ) );
 	} finally {
 		if ( postId ) await deletePost( page, postId ).catch( () => {} );
 		await sweep().catch( () => {} );

@@ -37797,6 +37797,7 @@
 			const typeLabel = FGB_TYPE_LABELS[ f.type ] || f.type;
 			return `<div class="minn-fgb-row${ open ? ' open' : '' }${ f.editable ? '' : ' minn-fgb-adv' }" data-fi="${ i }">
 				<div class="minn-fgb-head" data-fgbtoggle="${ i }" role="button" tabindex="0" aria-expanded="${ open }">
+					${ ro ? '' : `<span class="minn-fgb-grip" draggable="true" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>` }
 					<span class="minn-fgb-chev">${ icon( 'chevron-down' ) }</span>
 					<strong class="minn-fgb-label">${ esc( f.label || __( '(no label)' ) ) }</strong>
 					<span class="minn-fgb-name mono">${ esc( f.name ) }</span>
@@ -37969,6 +37970,19 @@
 				if ( save ) top.insertBefore( pill, save );
 			}
 		};
+		// Move a field from one index to another, carrying expanded flags
+		// with their rows (the map is index-keyed).
+		const moveField = ( from, to ) => {
+			const flags = fgb.fields.map( ( _, idx ) => !! fgb.expanded[ idx ] );
+			const [ f ] = fgb.fields.splice( from, 1 );
+			fgb.fields.splice( to, 0, f );
+			const [ fl ] = flags.splice( from, 1 );
+			flags.splice( to, 0, fl );
+			fgb.expanded = {};
+			flags.forEach( ( v, idx ) => { if ( v ) fgb.expanded[ idx ] = true; } );
+			markDirty();
+			renderFieldGroupBuilder();
+		};
 		const backBtn = $( '#minn-fgb-back', view );
 		if ( backBtn ) backBtn.addEventListener( 'click', async () => {
 			if ( fgb.dirty && ! await minnConfirm( { title: __( 'Leave without saving?' ), body: __( 'Changes to this field group haven’t been saved.' ), confirmLabel: __( 'Leave' ), danger: true } ) ) return;
@@ -38045,6 +38059,50 @@
 				renderFieldGroupBuilder(); // extras change with the type
 			}
 		} );
+		// Drag to reorder: the grip drags its row; dropping on another row
+		// lands above or below its midpoint (the menus precedent).
+		let dragFi = null;
+		view.addEventListener( 'dragstart', ( e ) => {
+			const grip = e.target.closest( '.minn-fgb-grip' );
+			if ( ! grip ) return;
+			const row = grip.closest( '.minn-fgb-row' );
+			dragFi = Number( row.dataset.fi );
+			row.classList.add( 'dragging' );
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData( 'text/plain', String( dragFi ) );
+		} );
+		view.addEventListener( 'dragend', () => {
+			dragFi = null;
+			$$( '.minn-fgb-row', view ).forEach( ( r ) => r.classList.remove( 'dragging', 'drop-above', 'drop-below' ) );
+		} );
+		view.addEventListener( 'dragover', ( e ) => {
+			const row = e.target.closest( '.minn-fgb-row' );
+			if ( dragFi === null || ! row || Number( row.dataset.fi ) === dragFi ) return;
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'move';
+			const r = row.getBoundingClientRect();
+			const below = e.clientY > r.top + r.height / 2;
+			row.classList.toggle( 'drop-below', below );
+			row.classList.toggle( 'drop-above', ! below );
+		} );
+		view.addEventListener( 'dragleave', ( e ) => {
+			const row = e.target.closest( '.minn-fgb-row' );
+			if ( row ) row.classList.remove( 'drop-above', 'drop-below' );
+		} );
+		view.addEventListener( 'drop', ( e ) => {
+			const row = e.target.closest( '.minn-fgb-row' );
+			if ( dragFi === null || ! row ) return;
+			e.preventDefault();
+			const below = row.classList.contains( 'drop-below' );
+			row.classList.remove( 'drop-above', 'drop-below' );
+			const from = dragFi;
+			const ti = Number( row.dataset.fi );
+			dragFi = null;
+			if ( ti === from ) return;
+			let to = ti + ( below ? 1 : 0 );
+			if ( from < to ) to--;
+			if ( to !== from ) moveField( from, to );
+		} );
 		view.addEventListener( 'click', async ( e ) => {
 			const lgx = e.target.closest( '[data-lgx]' );
 			if ( lgx ) {
@@ -38096,12 +38154,7 @@
 				const [ i, dir ] = mv.dataset.fgbmv.split( ':' ).map( Number );
 				const j = i + dir;
 				if ( j < 0 || j >= fgb.fields.length ) return;
-				[ fgb.fields[ i ], fgb.fields[ j ] ] = [ fgb.fields[ j ], fgb.fields[ i ] ];
-				const eo = { ...fgb.expanded };
-				fgb.expanded[ i ] = !! eo[ j ];
-				fgb.expanded[ j ] = !! eo[ i ];
-				markDirty();
-				renderFieldGroupBuilder();
+				moveField( i, j );
 				return;
 			}
 			const del = e.target.closest( '[data-fgbdel]' );
@@ -38116,7 +38169,7 @@
 				return;
 			}
 			const tog = e.target.closest( '[data-fgbtoggle]' );
-			if ( tog && ! e.target.closest( '.minn-fgb-ctl' ) ) {
+			if ( tog && ! e.target.closest( '.minn-fgb-ctl' ) && ! e.target.closest( '.minn-fgb-grip' ) ) {
 				const i = Number( tog.dataset.fgbtoggle );
 				fgb.expanded[ i ] = ! fgb.expanded[ i ];
 				renderFieldGroupBuilder();
