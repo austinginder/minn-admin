@@ -171,6 +171,10 @@
 		return uiLocaleTag;
 	};
 
+	// Counts rendered into translated sentences: the sentence comes from the
+	// catalog, the digits from the locale's own grouping.
+	const formattedNumber = ( n ) => ( Number( n ) || 0 ).toLocaleString( uiLocale() );
+
 	// Writing direction, read from the document rather than the locale: the
 	// shell sets dir from is_rtl(), and a site can override it. Anything that
 	// positions a floating element in PIXELS has to consult this, because CSS
