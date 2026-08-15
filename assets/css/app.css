@@ -1573,6 +1573,10 @@ button.minn-ac-item.minn-ac-check { display: flex; align-items: center; gap: 9px
 .minn-ac-foot { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
 button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; color: var(--accent2); font-weight: 600; }
 .minn-ac-add svg { width: 14px; height: 14px; }
+/* The Add-a-term dialog: minnConfirm's shell with a form in it. */
+.minn-term-fields { margin: 14px 0 4px; }
+.minn-term-error { margin-top: 10px; font-size: 13px; color: var(--red); }
+.minn-term-error[hidden] { display: none; }
 /* Upload readout: which file, how far, and where it sits in the batch. Outside
    the drop zone on purpose — the zone dims while it is busy, and the one thing
    worth reading must not dim with it. */

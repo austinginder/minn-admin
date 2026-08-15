@@ -9042,10 +9042,14 @@
 
 	// The Organization card's taxonomies. A store without brands answers with
 	// no `brands` key at all, which is how that field knows to stay away.
+	// `create` is Enter-to-create, which stays off for a hierarchy: a typo
+	// would land a stray term in a tree this field does not edit. `hierarchy`
+	// is what makes the Add dialog offer a parent. Every taxonomy can be added
+	// to from the dialog, where the name is typed on purpose.
 	const PRODUCT_TERM_FIELDS = [
-		{ key: 'categories', label: __( 'Categories' ), route: 'products/categories', create: false, placeholder: __( 'Search categories' ) },
-		{ key: 'tags', label: __( 'Tags' ), route: 'products/tags', create: true, placeholder: __( 'Search or add tags' ), addLabel: __( 'Add new tag' ) },
-		{ key: 'brands', label: __( 'Brands' ), route: 'products/brands', create: true, placeholder: __( 'Search or add brands' ), addLabel: __( 'Add new brand' ) },
+		{ key: 'categories', label: __( 'Categories' ), route: 'products/categories', create: false, hierarchy: true, placeholder: __( 'Search categories' ), addLabel: __( 'Add new category' ), newTitle: __( 'New category' ), nameLabel: __( 'Category name' ) },
+		{ key: 'tags', label: __( 'Tags' ), route: 'products/tags', create: true, placeholder: __( 'Search or add tags' ), addLabel: __( 'Add new tag' ), newTitle: __( 'New tag' ), nameLabel: __( 'Tag name' ) },
+		{ key: 'brands', label: __( 'Brands' ), route: 'products/brands', create: true, placeholder: __( 'Search or add brands' ), addLabel: __( 'Add new brand' ), newTitle: __( 'New brand' ), nameLabel: __( 'Brand name' ) },
 	];
 
 	// Downloadable files ride the model too. WooCommerce mints the id for a new
@@ -9995,13 +9999,132 @@
 			: ( rows.length
 				? rows.map( ( x ) => `<button type="button" class="minn-ac-item minn-ac-check" role="option" aria-selected="${ chosen.has( x.id ) ? 'true' : 'false' }" data-ptpick="${ x.id }" data-ptname="${ esc( x.name ) }"><span class="minn-check" aria-hidden="true"></span><span class="minn-cell-clip">${ esc( x.name ) }</span></button>` ).join( '' )
 				: `<div class="minn-ac-empty">${ t.create ? esc( __( 'No matches. Press Enter to create it.' ) ) : esc( __( 'No matches' ) ) }</div>` );
-		// Creating from the list is for flat taxonomies only. A category is a
-		// place in a hierarchy, and a typo would leave junk in a tree this
-		// field is not editing (the Terms manager and WooCommerce own that).
-		const foot = t.create
-			? `<div class="minn-ac-foot"><button type="button" class="minn-ac-item minn-ac-add" data-ptadd>${ icon( 'plus' ) }<span>${ esc( t.addLabel || __( 'Add new' ) ) }</span></button></div>`
-			: '';
+		// Every taxonomy can be added to from here, hierarchy included: the
+		// dialog behind this asks for the name (and the parent) on purpose,
+		// which is the deliberate step Enter-to-create never had.
+		const foot = `<div class="minn-ac-foot"><button type="button" class="minn-ac-item minn-ac-add" data-ptadd>${ icon( 'plus' ) }<span>${ esc( t.addLabel || __( 'Add new' ) ) }</span></button></div>`;
 		return body + foot;
+	}
+
+	/**
+	 * The dialog behind a taxonomy field's Add new. A term is made from a name
+	 * typed in a dialog, which is the deliberate step that makes offering this
+	 * for CATEGORIES reasonable: Enter-to-create still refuses a hierarchy,
+	 * because a stray branch from a typo is not something this field cleans up.
+	 * A hierarchy also gets a parent, fetched when the dialog opens.
+	 *
+	 * Built like minnConfirm: its own overlay on document.body (it opens over a
+	 * panel that closes on blur, so it cannot live inside it), Escape peels
+	 * exactly one layer, and the backdrop cancels. Resolves with the new term,
+	 * or null if the reader backed out.
+	 */
+	function openTermDialog( t, presetName ) {
+		return new Promise( ( resolve ) => {
+			const overlay = document.createElement( 'div' );
+			overlay.className = 'minn-modal-overlay minn-confirm-overlay';
+			overlay.id = 'minn-term-dialog';
+			overlay.innerHTML = `
+			<div class="minn-modal minn-confirm-modal" role="dialog" aria-modal="true" aria-label="${ esc( t.newTitle || __( 'New term' ) ) }">
+				<div class="minn-confirm-title">${ esc( t.newTitle || __( 'New term' ) ) }</div>
+				<div class="minn-order-fields minn-term-fields">
+					<div>
+						<div class="minn-field-label">${ esc( t.nameLabel || __( 'Name' ) ) }</div>
+						<input class="minn-input" id="minn-term-name" autocomplete="off" spellcheck="false" value="${ esc( presetName || '' ) }">
+					</div>
+					${ t.hierarchy ? `
+					<div>
+						<div class="minn-field-label">${ esc( __( 'Parent' ) ) }</div>
+						<div class="minn-ac" data-termparent>
+							<input class="minn-input minn-ac-input" placeholder="${ esc( __( 'Top level' ) ) }" autocomplete="off" spellcheck="false" aria-label="${ esc( __( 'Parent' ) ) }">
+							<div class="minn-ac-panel" hidden></div>
+						</div>
+					</div>` : '' }
+				</div>
+				<div class="minn-term-error" hidden></div>
+				<div class="minn-confirm-actions">
+					<button class="minn-btn-soft" data-term-cancel type="button">${ esc( __( 'Cancel' ) ) }</button>
+					<button class="minn-btn-primary" data-term-create type="button">${ esc( __( 'Create' ) ) }</button>
+				</div>
+			</div>`;
+			document.body.appendChild( overlay );
+			const nameInput = overlay.querySelector( '#minn-term-name' );
+			const errBox = overlay.querySelector( '.minn-term-error' );
+			const okBtn = overlay.querySelector( '[data-term-create]' );
+			let parentId = 0;
+			const done = ( val ) => {
+				overlay.remove();
+				document.removeEventListener( 'keydown', onKey );
+				resolve( val );
+			};
+			// stopPropagation: this sits over a page (and sometimes a modal)
+			// whose own Escape handlers would otherwise close the layer under
+			// it from the same keypress.
+			const onKey = ( e ) => { if ( e.key === 'Escape' ) { e.stopPropagation(); done( null ); } };
+			document.addEventListener( 'keydown', onKey );
+			overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) done( null ); } );
+			overlay.querySelector( '[data-term-cancel]' ).addEventListener( 'click', () => done( null ) );
+
+			const parentWrap = overlay.querySelector( '[data-termparent]' );
+			if ( parentWrap ) {
+				const pInput = parentWrap.querySelector( '.minn-ac-input' );
+				const pPanel = parentWrap.querySelector( '.minn-ac-panel' );
+				let loaded = null;
+				const paint = () => {
+					const rows = loaded == null
+						? `<div class="minn-ac-empty">${ esc( __( 'Searching…' ) ) }</div>`
+						: `<button type="button" class="minn-ac-item" data-parent="0">${ esc( __( 'Top level' ) ) }</button>`
+							+ loaded.map( ( x ) => `<button type="button" class="minn-ac-item" data-parent="${ x.id }">${ esc( x.name ) }</button>` ).join( '' );
+					pPanel.innerHTML = rows;
+					pPanel.hidden = false;
+					$$( '[data-parent]', pPanel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
+						e.preventDefault();
+						parentId = parseInt( b.dataset.parent, 10 ) || 0;
+						pInput.value = parentId ? b.textContent.trim() : '';
+						pPanel.hidden = true;
+					} ) );
+				};
+				pInput.addEventListener( 'focus', async () => {
+					if ( loaded ) { paint(); return; }
+					parentWrap.classList.add( 'is-loading' );
+					paint();
+					try {
+						const items = await api( `wc/v3/${ t.route }?per_page=100&orderby=name&order=asc&_fields=id,name` );
+						loaded = ( Array.isArray( items ) ? items : [] ).map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) );
+					} catch ( e ) {
+						loaded = [];
+					}
+					parentWrap.classList.remove( 'is-loading' );
+					paint();
+				} );
+				pInput.addEventListener( 'blur', () => setTimeout( () => { pPanel.hidden = true; }, 150 ) );
+			}
+
+			const submit = async () => {
+				const name = nameInput.value.trim();
+				if ( ! name ) { nameInput.focus(); return; }
+				okBtn.disabled = true;
+				okBtn.textContent = __( 'Creating…' );
+				errBox.hidden = true;
+				try {
+					const payload = { name };
+					if ( t.hierarchy && parentId ) payload.parent = parentId;
+					const made = await api( `wc/v3/${ t.route }`, { method: 'POST', body: JSON.stringify( payload ) } );
+					done( { id: made.id, name: decodeEntities( made.name || name ) } );
+				} catch ( e ) {
+					// WooCommerce owns the refusals here (a duplicate name is
+					// the common one) and says it better than we would.
+					errBox.textContent = e.message;
+					errBox.hidden = false;
+					okBtn.disabled = false;
+					okBtn.textContent = __( 'Create' );
+				}
+			};
+			okBtn.addEventListener( 'click', submit );
+			nameInput.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Enter' ) { e.preventDefault(); submit(); }
+			} );
+			setTimeout( () => nameInput.focus(), 30 );
+		} );
 	}
 
 	/**
@@ -10082,7 +10205,22 @@
 					toggle( { id: parseInt( b.dataset.ptpick, 10 ), name: b.dataset.ptname } );
 				} ) );
 				const addBtn = $( '[data-ptadd]', panel );
-				if ( addBtn ) addBtn.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); create(); } );
+				if ( addBtn ) addBtn.addEventListener( 'mousedown', ( e ) => {
+					e.preventDefault();
+					// Whatever is half-typed in the field is the name offered,
+					// so Add new after typing is not a second round of typing.
+					openTermDialog( t, input.value.trim() ).then( ( made ) => {
+						if ( ! made ) { input.focus( { preventScroll: true } ); return; }
+						if ( Array.isArray( cache[ t.key ] ) ) cache[ t.key ].unshift( made );
+						if ( ! m.terms[ t.key ].some( ( x ) => x.id === made.id ) ) m.terms[ t.key ].push( made );
+						input.value = '';
+						repaintChips();
+						// Reopen on the plain list: the new term is in it, and
+						// ticked, which is the confirmation that it landed.
+						load( '' );
+						input.focus( { preventScroll: true } );
+					} );
+				} );
 			};
 			const load = async ( q ) => {
 				const mine = ++seq;
