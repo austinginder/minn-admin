@@ -653,10 +653,10 @@ function minn_admin_acf_options_tabs( $page ) {
 				$open( $group['title'] );
 			}
 			$simple = minn_admin_acf_map_field( $f );
-			// Image and gallery fields count as locked here: the settings
-			// engine has no media-picker binding (the editor panel and block
-			// inspector do). Wysiwyg rides the rich-text modal since v0.31.0.
-			if ( ! $simple || in_array( $simple['type'], array( 'image', 'gallery' ), true ) ) {
+			// Image fields count as locked here: the settings engine has no
+			// single-image binding yet. Gallery and wysiwyg ride the images
+			// editor and the rich-text modal since v0.31.0.
+			if ( ! $simple || 'image' === $simple['type'] ) {
 				$tabs[ $current ]['locked']++;
 				continue;
 			}
@@ -716,7 +716,7 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg' ), true ) ? $f['type'] : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
 		if ( 'select' === $sf['type'] ) {
 			$sf['options'] = array();
@@ -729,6 +729,17 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 		$v = get_field( $f['key'], $post_id, false );
 		if ( 'toggle' === $sf['type'] ) {
 			$values[ $f['key'] ] = ! empty( $v );
+		} elseif ( 'gallery' === $sf['type'] ) {
+			$items = array();
+			foreach ( (array) $v as $gid ) {
+				if ( is_numeric( $gid ) && (int) $gid > 0 ) {
+					$items[] = array(
+						'id'  => (int) $gid,
+						'url' => (string) wp_get_attachment_image_url( (int) $gid, 'thumbnail' ),
+					);
+				}
+			}
+			$values[ $f['key'] ] = $items;
 		} elseif ( is_array( $v ) ) {
 			$values[ $f['key'] ] = '';
 		} else {
@@ -770,6 +781,18 @@ function minn_admin_acf_options_save( $page, $values ) {
 		}
 		if ( 'true_false' === $byKey[ $key ]['type'] ) {
 			$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
+		} elseif ( 'gallery' === $byKey[ $key ]['type'] ) {
+			$ids = array();
+			foreach ( (array) $v as $entry ) {
+				if ( is_array( $entry ) || is_object( $entry ) ) {
+					$entry = (array) $entry;
+					$entry = isset( $entry['id'] ) ? $entry['id'] : 0;
+				}
+				if ( is_numeric( $entry ) && (int) $entry > 0 && 'attachment' === get_post_type( (int) $entry ) ) {
+					$ids[] = (int) $entry;
+				}
+			}
+			$v = $ids;
 		} elseif ( 'wysiwyg' === $byKey[ $key ]['type'] ) {
 			// The post-content trust boundary, same as the panel write path.
 			$v = is_scalar( $v ) ? (string) $v : '';

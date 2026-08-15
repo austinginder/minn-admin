@@ -14042,6 +14042,33 @@
 					input.setAttribute( 'aria-checked', input.classList.contains( 'on' ) );
 					mark();
 				} );
+			} else if ( input.dataset.ftype === 'gallery' ) {
+				// Settings live on a page, so the images editor opens right
+				// over it (and the media picker still stacks above). Apply
+				// repaints the control in place and dirties the key.
+				const galBtn = input.querySelector( '[data-gal-edit]' );
+				if ( galBtn ) galBtn.addEventListener( 'click', ( e ) => {
+					e.preventDefault();
+					let items = [];
+					try { items = JSON.parse( input.dataset.gal || '[]' ); } catch ( err ) {}
+					openImagesEditor( null, null, null, null, {
+						items: items.map( ( x ) => ( { id: x.id, thumb: x.url || '' } ) ),
+						onApply: ( ids2, out ) => {
+							const next = out.map( ( x ) => ( { id: x.id, url: x.url } ) );
+							input.dataset.gal = JSON.stringify( next );
+							const thumbs = input.querySelector( '.minn-field-gallery-thumbs' );
+							if ( thumbs ) {
+								thumbs.innerHTML = next.slice( 0, 6 ).map( ( x ) => x.url
+									? `<img src="${ esc( x.url ) }" alt="" loading="lazy">`
+									: `<span class="minn-field-gallery-ph">#${ esc( String( x.id ) ) }</span>` ).join( '' )
+									+ ( next.length > 6 ? `<span class="minn-field-gallery-more">+${ next.length - 6 }</span>` : '' );
+							}
+							/* translators: %d: number of images in the gallery field. */
+							galBtn.textContent = next.length ? sprintf( _n( 'Edit %d image…', 'Edit %d images…', next.length ), next.length ) : __( 'Add images…' );
+							mark();
+						},
+					} );
+				} );
 			} else if ( input.dataset.ftype === 'wysiwyg' ) {
 				// Settings live on a page, so the rich-text modal opens right
 				// over it — no hosting-modal close dance. Apply updates the
