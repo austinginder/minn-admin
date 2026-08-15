@@ -877,8 +877,13 @@ class Minn_Admin_REST {
 		// WooCommerce order helpers (email + resend WC transactional emails).
 		// Order CRUD/refunds ride wc/v3; these cover what core WC REST leaves out.
 		if ( class_exists( 'WooCommerce' ) ) {
-			$order_cap = function () {
-				return current_user_can( 'edit_shop_orders' );
+			$order_cap = function ( WP_REST_Request $request ) {
+				if ( ! current_user_can( 'edit_shop_orders' ) ) {
+					return false;
+				}
+				$url_params = $request->get_url_params();
+				$id         = absint( $url_params['id'] ?? 0 );
+				return ! $id || current_user_can( 'edit_post', $id );
 			};
 			register_rest_route(
 				self::NS,
@@ -4545,6 +4550,13 @@ class Minn_Admin_REST {
 		$ids = array_slice( array_values( array_unique( $ids ) ), 0, 60 );
 		$out = array();
 		foreach ( $ids as $id ) {
+			// The route capability answers whether the caller may work with
+			// orders at all. WooCommerce's mapped meta capability answers the
+			// separate question this batch endpoint must ask for every supplied
+			// ID, including HPOS orders without a normal wp_posts row.
+			if ( ! current_user_can( 'edit_post', $id ) ) {
+				continue;
+			}
 			$found = null;
 			foreach ( array( 'parent', 'renewal', 'resubscribe', 'switch' ) as $kind ) {
 				$subs = wcs_get_subscriptions_for_order( $id, array( 'order_type' => $kind ) );
