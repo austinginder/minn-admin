@@ -80,11 +80,22 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		} );
 		t.check( 'select field with parsed choices', addSelect.status === 200 && addSelect.data.name === 'suite_tone', JSON.stringify( addSelect.data ) );
 
-		/* ===== Fields view renders the group tab with its rows ===== */
+		/* ===== Fields view renders the group tab with its rows. More than
+		 * six groups turn the tab strip into the combobox — handle both
+		 * (the surface-tab suite rule). ===== */
+		const pickGroupTab = async () => {
+			await page.waitForSelector( `[data-stab="${ gkey }"], [data-stabcombo]`, { timeout: 15000 } );
+			if ( await page.$( `[data-stab="${ gkey }"]` ) ) {
+				await page.click( `[data-stab="${ gkey }"]` );
+				return;
+			}
+			await page.click( '[data-stabcombo] .minn-ac-input' );
+			await page.waitForSelector( `[data-stabcombo] .minn-ac-item[data-acv="${ gkey }"]`, { timeout: 10000 } );
+			await page.click( `[data-stabcombo] .minn-ac-item[data-acv="${ gkey }"]` );
+		};
 		await page.click( '[data-sview="x0"]' );
-		await page.waitForSelector( `[data-stab="${ gkey }"]`, { timeout: 15000 } );
+		await pickGroupTab();
 		t.check( 'new group gets its own Fields tab', true );
-		await page.click( `[data-stab="${ gkey }"]` );
 		await page.waitForFunction( () =>
 			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'suite_headline' ) ),
 		null, { timeout: 15000 } );
@@ -104,8 +115,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		await page.goto( BASE + '/minn-admin/acf-field-groups', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '[data-sview="x0"]', { timeout: 20000 } );
 		await page.click( '[data-sview="x0"]' );
-		await page.waitForSelector( `[data-stab="${ gkey }"]`, { timeout: 15000 } );
-		await page.click( `[data-stab="${ gkey }"]` );
+		await pickGroupTab();
 		await page.waitForFunction( () =>
 			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'suite_headline' ) ),
 		null, { timeout: 15000 } );

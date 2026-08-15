@@ -86,5 +86,58 @@ const { launch, login, reporter } = require( './helpers' );
 		t.check( 'original value restored', ( await readBack() ) === orig );
 	}
 
+	// Single image field: the { id, url } control on a settings PAGE — the
+	// media picker opens right over it (no modal close dance). Find a tab
+	// carrying one via the adapter route (live-robust: another site's
+	// options page may not have an image field).
+	let imgTab = null, imgKey = null;
+	for ( const tb of surface.settings.tabs ) {
+		const shape = await page.evaluate( async ( route ) => {
+			const r = await fetch( window.MINN.restUrl + route, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return r.ok ? await r.json() : null;
+		}, surface.settings.route.replace( '{tab}', tb.id ) );
+		const f = ( ( ( ( shape || {} ).groups || [] )[ 0 ] || {} ).fields || [] ).find( ( x ) => x.type === 'image' );
+		if ( f ) { imgTab = tb; imgKey = f.key; break; }
+	}
+	if ( ! imgTab ) {
+		console.log( 'SKIP image test: no single-image field on this options page' );
+	} else {
+		const imgRoute = surface.settings.route.replace( '{tab}', imgTab.id );
+		const imgSel = `.minn-surface-settings [data-sset="${ imgKey }"][data-ftype="image"]`;
+		if ( surface.settings.tabs.length > 1 ) {
+			await page.click( `[data-ssettab="${ imgTab.id }"]` );
+		}
+		await page.waitForSelector( imgSel, { timeout: 15000 } );
+		t.check( 'image field renders the image control', !! ( await page.$( imgSel ) ) );
+		const saveImg = async () => {
+			const wait = page.waitForResponse( ( res ) => res.request().method() === 'POST'
+				&& res.url().includes( imgRoute ), { timeout: 20000 } );
+			await page.click( '#minn-sset-save' );
+			const res = await wait;
+			await page.waitForTimeout( 600 );
+			return res.status();
+		};
+		const readImg = () => page.evaluate( async ( args ) => {
+			const r = await fetch( window.MINN.restUrl + args.route, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return ( ( await r.json() ).values || {} )[ args.key ];
+		}, { route: imgRoute, key: imgKey } );
+
+		await page.click( `${ imgSel } [data-img-pick]` );
+		await page.waitForSelector( '.minn-picker-item[data-pick]', { timeout: 15000 } );
+		await page.click( '.minn-picker-item[data-pick]' );
+		await page.waitForTimeout( 400 );
+		t.check( 'image save succeeds', ( await saveImg() ) === 200 );
+		let iv = await readImg();
+		t.check( 'picked image persisted as { id, url }', iv && iv.id > 0 && typeof iv.url === 'string',
+			JSON.stringify( iv ) );
+
+		// The save re-rendered the view; the control now shows Remove.
+		await page.waitForSelector( `${ imgSel } [data-img-clear]`, { timeout: 15000 } );
+		await page.click( `${ imgSel } [data-img-clear]` );
+		t.check( 'clear save succeeds', ( await saveImg() ) === 200 );
+		iv = await readImg();
+		t.check( 'cleared image persisted as empty', iv === '', JSON.stringify( iv ) );
+	}
+
 	await t.done( browser, errors );
 } )();

@@ -8,9 +8,9 @@
  * panel never rendered at all. Values now ride a dedicated `minn_acf` REST
  * field (the Meta Box / Pods pattern), read and written through ACF's own
  * get_field / update_field by field key, so every applicable group shows up
- * regardless of that setting. Complex field types (repeaters, galleries,
- * relationships…) defer to wp-admin, mirroring the editor's locked-mode
- * philosophy.
+ * regardless of that setting. Complex field types the app has no control for
+ * (relationships, flexible content, clone…) defer to wp-admin, mirroring the
+ * editor's locked-mode philosophy.
  *
  * @package minn-admin
  */
@@ -27,6 +27,73 @@ const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range'
 
 /** Layout-only ACF field types: chrome, not data — never mapped, never counted as locked. */
 const MINN_ADMIN_ACF_CHROME_TYPES = array( 'tab', 'message', 'accordion' );
+
+/**
+ * Stored image value (attachment id) → the { id, url } shape the image
+ * control speaks, or '' when unset.
+ *
+ * @param mixed $val Raw stored value.
+ * @return array|string
+ */
+function minn_admin_acf_image_out( $val ) {
+	$id = is_numeric( $val ) ? (int) $val : 0;
+	return $id > 0 ? array(
+		'id'  => $id,
+		'url' => (string) wp_get_attachment_image_url( $id, 'thumbnail' ),
+	) : '';
+}
+
+/**
+ * Stored gallery value (ordered attachment-id list) → [{ id, url }].
+ *
+ * @param mixed $val Raw stored value.
+ * @return array[]
+ */
+function minn_admin_acf_gallery_out( $val ) {
+	$items = array();
+	foreach ( (array) $val as $gid ) {
+		if ( is_numeric( $gid ) && (int) $gid > 0 ) {
+			$items[] = array(
+				'id'  => (int) $gid,
+				'url' => (string) wp_get_attachment_image_url( (int) $gid, 'thumbnail' ),
+			);
+		}
+	}
+	return $items;
+}
+
+/**
+ * Incoming image value ({ id, url }, a bare id, or empty) → validated
+ * attachment id, or '' to clear (ACF's own form save stores '').
+ *
+ * @param mixed $value Incoming value.
+ * @return int|string
+ */
+function minn_admin_acf_image_in( $value ) {
+	if ( is_array( $value ) || is_object( $value ) ) {
+		$value = (array) $value;
+		$value = isset( $value['id'] ) ? $value['id'] : 0;
+	}
+	return is_numeric( $value ) && (int) $value > 0 && 'attachment' === get_post_type( (int) $value ) ? (int) $value : '';
+}
+
+/**
+ * Incoming gallery value ([{ id, url }] entries or bare ids) → validated
+ * attachment-id list. An empty list clears (ACF stores an empty array).
+ *
+ * @param mixed $value Incoming value.
+ * @return int[]
+ */
+function minn_admin_acf_gallery_in( $value ) {
+	$ids = array();
+	foreach ( (array) $value as $entry ) {
+		$id = minn_admin_acf_image_in( $entry );
+		if ( '' !== $id ) {
+			$ids[] = $id;
+		}
+	}
+	return $ids;
+}
 
 /**
  * @return bool
@@ -78,10 +145,12 @@ function minn_admin_acf_map_field( $f ) {
 
 /**
  * Map an ACF repeater (Pro) onto the panel's `rows` control, or null when no
- * sub-field is editable. One level deep: sub-fields from the picker-less
- * simple set edit in rows; image/gallery/nested-repeater subs count as
- * locked per row, and their stored values are PRESERVED by the write path's
- * row merge (an edit overlays only the mapped subs onto the original row).
+ * sub-field is editable. One level deep: sub-fields from the simple set edit
+ * in rows — including image (media picker) and gallery (images editor) since
+ * the row cards learned those controls; nested-repeater and other complex
+ * subs count as locked per row, and their stored values are PRESERVED by the
+ * write path's row merge (an edit overlays only the mapped subs onto the
+ * original row).
  *
  * @param array $f ACF repeater field array.
  * @return array|null { name, label, type: 'rows', subfields, subLocked, key, subs }
@@ -90,7 +159,7 @@ function minn_admin_acf_map_repeater( $f ) {
 	if ( empty( $f['name'] ) || empty( $f['key'] ) ) {
 		return null;
 	}
-	$simple = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker' );
+	$simple = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker', 'image', 'gallery' );
 	$subs   = array();
 	$locked = 0;
 	foreach ( (array) ( $f['sub_fields'] ?? array() ) as $sub ) {
@@ -223,23 +292,10 @@ function minn_admin_acf_read_values( $post_id ) {
 			$out[ $name ] = ! empty( $val );
 		} elseif ( 'image' === $field['type'] ) {
 			// The form engine's image control speaks { id, url }.
-			$id = is_numeric( $val ) ? (int) $val : 0;
-			$out[ $name ] = $id ? array(
-				'id'  => $id,
-				'url' => (string) wp_get_attachment_image_url( $id, 'thumbnail' ),
-			) : '';
+			$out[ $name ] = minn_admin_acf_image_out( $val );
 		} elseif ( 'gallery' === $field['type'] ) {
 			// The gallery control speaks an ordered [{ id, url }] list.
-			$items = array();
-			foreach ( (array) $val as $gid ) {
-				if ( is_numeric( $gid ) && (int) $gid > 0 ) {
-					$items[] = array(
-						'id'  => (int) $gid,
-						'url' => (string) wp_get_attachment_image_url( (int) $gid, 'thumbnail' ),
-					);
-				}
-			}
-			$out[ $name ] = $items;
+			$out[ $name ] = minn_admin_acf_gallery_out( $val );
 		} elseif ( 'rows' === $field['type'] ) {
 			// Repeater rows: [{ __idx, values }] — __idx is the row's position
 			// in ACF's stored rows, the write path's merge anchor. Raw rows key
@@ -251,6 +307,10 @@ function minn_admin_acf_read_values( $post_id ) {
 					$v = is_array( $raw_row ) && array_key_exists( $sub['key'], $raw_row ) ? $raw_row[ $sub['key'] ] : null;
 					if ( 'true_false' === $sub['type'] ) {
 						$vals[ $sub['name'] ] = ! empty( $v );
+					} elseif ( 'image' === $sub['type'] ) {
+						$vals[ $sub['name'] ] = minn_admin_acf_image_out( $v );
+					} elseif ( 'gallery' === $sub['type'] ) {
+						$vals[ $sub['name'] ] = minn_admin_acf_gallery_out( $v );
 					} elseif ( is_array( $v ) ) {
 						$vals[ $sub['name'] ] = '';
 					} else {
@@ -293,25 +353,10 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 			$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
 		} elseif ( 'image' === $field['type'] ) {
 			// { id, url } from the image control, a bare id, or empty = clear.
-			if ( is_array( $value ) || is_object( $value ) ) {
-				$value = (array) $value;
-				$value = isset( $value['id'] ) ? (int) $value['id'] : 0;
-			}
-			$value = is_numeric( $value ) && (int) $value > 0 && 'attachment' === get_post_type( (int) $value ) ? (int) $value : '';
+			$value = minn_admin_acf_image_in( $value );
 		} elseif ( 'gallery' === $field['type'] ) {
-			// [{ id, url }] entries or bare ids; an empty list clears (ACF's
-			// own save stores an empty array).
-			$ids = array();
-			foreach ( (array) $value as $entry ) {
-				if ( is_array( $entry ) || is_object( $entry ) ) {
-					$entry = (array) $entry;
-					$entry = isset( $entry['id'] ) ? $entry['id'] : 0;
-				}
-				if ( is_numeric( $entry ) && (int) $entry > 0 && 'attachment' === get_post_type( (int) $entry ) ) {
-					$ids[] = (int) $entry;
-				}
-			}
-			$value = $ids;
+			// [{ id, url }] entries or bare ids; an empty list clears.
+			$value = minn_admin_acf_gallery_in( $value );
 		} elseif ( 'wysiwyg' === $field['type'] ) {
 			// The same trust boundary WordPress applies to post content: users
 			// without unfiltered_html get their markup run through kses.
@@ -344,6 +389,10 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 					$v = $vals[ $sub['name'] ];
 					if ( 'true_false' === $sub['type'] ) {
 						$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
+					} elseif ( 'image' === $sub['type'] ) {
+						$v = minn_admin_acf_image_in( $v );
+					} elseif ( 'gallery' === $sub['type'] ) {
+						$v = minn_admin_acf_gallery_in( $v );
 					} elseif ( null === $v || false === $v ) {
 						$v = '';
 					} elseif ( ! is_scalar( $v ) ) {
@@ -653,10 +702,7 @@ function minn_admin_acf_options_tabs( $page ) {
 				$open( $group['title'] );
 			}
 			$simple = minn_admin_acf_map_field( $f );
-			// Image fields count as locked here: the settings engine has no
-			// single-image binding yet. Gallery and wysiwyg ride the images
-			// editor and the rich-text modal since v0.31.0.
-			if ( ! $simple || 'image' === $simple['type'] ) {
+			if ( ! $simple ) {
 				$tabs[ $current ]['locked']++;
 				continue;
 			}
@@ -716,7 +762,7 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery' ), true ) ? $f['type'] : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
 		if ( 'select' === $sf['type'] ) {
 			$sf['options'] = array();
@@ -730,16 +776,9 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 		if ( 'toggle' === $sf['type'] ) {
 			$values[ $f['key'] ] = ! empty( $v );
 		} elseif ( 'gallery' === $sf['type'] ) {
-			$items = array();
-			foreach ( (array) $v as $gid ) {
-				if ( is_numeric( $gid ) && (int) $gid > 0 ) {
-					$items[] = array(
-						'id'  => (int) $gid,
-						'url' => (string) wp_get_attachment_image_url( (int) $gid, 'thumbnail' ),
-					);
-				}
-			}
-			$values[ $f['key'] ] = $items;
+			$values[ $f['key'] ] = minn_admin_acf_gallery_out( $v );
+		} elseif ( 'image' === $sf['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_image_out( $v );
 		} elseif ( is_array( $v ) ) {
 			$values[ $f['key'] ] = '';
 		} else {
@@ -782,17 +821,9 @@ function minn_admin_acf_options_save( $page, $values ) {
 		if ( 'true_false' === $byKey[ $key ]['type'] ) {
 			$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
 		} elseif ( 'gallery' === $byKey[ $key ]['type'] ) {
-			$ids = array();
-			foreach ( (array) $v as $entry ) {
-				if ( is_array( $entry ) || is_object( $entry ) ) {
-					$entry = (array) $entry;
-					$entry = isset( $entry['id'] ) ? $entry['id'] : 0;
-				}
-				if ( is_numeric( $entry ) && (int) $entry > 0 && 'attachment' === get_post_type( (int) $entry ) ) {
-					$ids[] = (int) $entry;
-				}
-			}
-			$v = $ids;
+			$v = minn_admin_acf_gallery_in( $v );
+		} elseif ( 'image' === $byKey[ $key ]['type'] ) {
+			$v = minn_admin_acf_image_in( $v );
 		} elseif ( 'wysiwyg' === $byKey[ $key ]['type'] ) {
 			// The post-content trust boundary, same as the panel write path.
 			$v = is_scalar( $v ) ? (string) $v : '';

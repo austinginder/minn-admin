@@ -1293,18 +1293,12 @@
 			return `<input class="${ cls }" type="number" ${ attr }="${ esc( id ) }" data-ftype="number" value="${ esc( String( v ) ) }"${ f.min != null ? ` min="${ esc( String( f.min ) ) }"` : '' }${ f.max != null ? ` max="${ esc( String( f.max ) ) }"` : '' } placeholder="${ esc( f.placeholder || '' ) }">`;
 		}
 		// Image: attachment id + optional preview URL ({ id, url } or bare id).
-		// Used by Rank Math social thumbnail; Set/Replace opens the media picker.
+		// Set/Replace opens the media picker; the CALLER arms bindImageField.
 		if ( t === 'image' ) {
 			const img = ( v && typeof v === 'object' ) ? v : ( v ? { id: v, url: '' } : null );
 			const has = img && img.id;
 			const url = has ? ( img.url || '' ) : '';
-			return `<div class="minn-field-image" ${ attr }="${ esc( id ) }" data-ftype="image" data-img-id="${ has ? esc( String( img.id ) ) : '' }" data-img-url="${ esc( url ) }">
-				${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
-				<div class="minn-field-image-actions">
-					<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : esc( __( 'Set image' ) ) }</button>
-					${ has ? `<button type="button" class="minn-btn-soft danger" data-img-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
-				</div>
-			</div>`;
+			return `<div class="minn-field-image" ${ attr }="${ esc( id ) }" data-ftype="image" data-img-id="${ has ? esc( String( img.id ) ) : '' }" data-img-url="${ esc( url ) }">${ imageControlChrome( has, url ) }</div>`;
 		}
 	// Color: a swatch + the hex text, synced both ways by the delegated
 		// listener below formControlValue. The TEXT input is the truth (it can
@@ -1641,6 +1635,16 @@
 			wrap.innerHTML = rows.map( rowHtml ).join( '' )
 				+ ( locked ? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of per-row fields only editable in wp-admin. */ _n( '%d more field per row lives in wp-admin.', '%d more fields per row live in wp-admin.', locked ) ), locked ) }</div>` : '' )
 				+ `<button type="button" class="minn-btn-soft" data-radd>+ ${ esc( __( 'Add row' ) ) }</button>`;
+			// Image subs need per-node arming (no input events to delegate);
+			// structural ops re-render, so fresh nodes re-wire here each time.
+			$$( '[data-rowsub][data-ftype="image"]', wrap ).forEach( ( el ) => {
+				const sep = el.dataset.rowsub.indexOf( ':' );
+				const row = rows[ Number( el.dataset.rowsub.slice( 0, sep ) ) ];
+				const name = el.dataset.rowsub.slice( sep + 1 );
+				bindImageField( el, ( v ) => {
+					if ( row ) { row.values[ name ] = v; commit(); }
+				} );
+			} );
 		};
 		render();
 		wrap.addEventListener( 'input', ( e ) => {
@@ -1661,6 +1665,32 @@
 				const row = rows[ Number( tg.dataset.rowsub.slice( 0, sep ) ) ];
 				if ( row ) { row.values[ tg.dataset.rowsub.slice( sep + 1 ) ] = tg.classList.contains( 'on' ); commit(); }
 				return;
+			}
+			const gal = e.target.closest( '[data-gal-edit]' );
+			if ( gal ) {
+				const gw = gal.closest( '[data-rowsub][data-ftype="gallery"]' );
+				if ( gw ) {
+					const sep = gw.dataset.rowsub.indexOf( ':' );
+					const row = rows[ Number( gw.dataset.rowsub.slice( 0, sep ) ) ];
+					const name = gw.dataset.rowsub.slice( sep + 1 );
+					if ( ! row ) return;
+					// Rows live inside the editor-panel modal, and the images
+					// editor sits UNDER .minn-modal by design (the media picker
+					// must stack on it) — one-way flow: close the host first.
+					// The row state lives in this closure, so the apply still
+					// commits through onChange after the wrap's DOM is gone.
+					const cur = Array.isArray( row.values[ name ] ) ? row.values[ name ] : [];
+					closeModal();
+					openImagesEditor( null, null, null, null, {
+						items: cur.map( ( x ) => ( { id: x.id, thumb: x.url || '' } ) ),
+						onApply: ( ids, out ) => {
+							row.values[ name ] = out.map( ( x ) => ( { id: x.id, url: x.url } ) );
+							commit();
+							toast( __( 'Gallery updated — saves with the post' ) );
+						},
+					} );
+					return;
+				}
 			}
 			const add = e.target.closest( '[data-radd]' );
 			if ( add ) {
@@ -1689,6 +1719,54 @@
 				}
 			}
 		} );
+	}
+
+	// Inner chrome for the image control, shared between the initial render
+	// (formControlHtml) and bindImageField's repaint after a pick/clear.
+	function imageControlChrome( has, url ) {
+		return `${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
+			<div class="minn-field-image-actions">
+				<button type="button" class="minn-btn-soft" data-img-pick>${ has ? esc( __( 'Replace' ) ) : esc( __( 'Set image' ) ) }</button>
+				${ has ? `<button type="button" class="minn-btn-soft danger" data-img-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
+			</div>`;
+	}
+
+	// Arm one image control (data-ftype="image"): Set/Replace opens the media
+	// picker, Remove clears. The picker REPLACES any hosting modal in
+	// state.modal (established one-way flow), so callers whose control lives
+	// in a modal must keep their value in state, not the DOM. The wrap's
+	// data-img-* attrs stay the readable truth (formControlValue reads them);
+	// onChange receives { id, url } or null.
+	function bindImageField( wrap, onChange ) {
+		const paint = ( img ) => {
+			const has = !! ( img && img.id );
+			wrap.dataset.imgId = has ? String( img.id ) : '';
+			wrap.dataset.imgUrl = has ? ( img.url || '' ) : '';
+			wrap.innerHTML = imageControlChrome( has, has ? ( img.url || '' ) : '' );
+			wire();
+		};
+		const wire = () => {
+			$$( '[data-img-pick]', wrap ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', ( e ) => {
+					e.preventDefault();
+					e.stopPropagation();
+					openMediaPicker( ( it ) => {
+						const next = { id: it.id, url: it.thumb || it.url || '' };
+						paint( next );
+						onChange( next );
+					} );
+				} )
+			);
+			$$( '[data-img-clear]', wrap ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', ( e ) => {
+					e.preventDefault();
+					e.stopPropagation();
+					paint( null );
+					onChange( null );
+				} )
+			);
+		};
+		wire();
 	}
 
 	// Adapter-form selects render as the strict themed combobox:
@@ -14615,6 +14693,11 @@
 					input.setAttribute( 'aria-checked', input.classList.contains( 'on' ) );
 					mark();
 				} );
+			} else if ( input.dataset.ftype === 'image' ) {
+				// Settings live on a page, so the picker opens right over it.
+				// The save reads the wrap's data-img-* at save time
+				// (formControlValue); picking or clearing just dirties the key.
+				bindImageField( input, mark );
 			} else if ( input.dataset.ftype === 'gallery' ) {
 				// Settings live on a page, so the images editor opens right
 				// over it (and the media picker still stacks above). Apply
@@ -24807,49 +24890,7 @@
 					} );
 				} );
 			} else if ( input.dataset.ftype === 'image' ) {
-				const [ pid, name ] = ( input.dataset.pf || '' ).split( ':' );
-				const paint = ( img ) => {
-					if ( img && img.id ) {
-						input.dataset.imgId = String( img.id );
-						input.dataset.imgUrl = img.url || '';
-					} else {
-						input.dataset.imgId = '';
-						input.dataset.imgUrl = '';
-					}
-					// Rebuild chrome so thumb/buttons match state.
-					const wrap = input;
-					const has = !!( img && img.id );
-					const url = has ? ( img.url || '' ) : '';
-					wrap.innerHTML = `
-						${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
-						<div class="minn-field-image-actions">
-							<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : esc( __( 'Set image' ) ) }</button>
-							${ has ? `<button type="button" class="minn-btn-soft danger" data-img-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
-						</div>`;
-					wire();
-				};
-				const wire = () => {
-					$$( '[data-img-pick]', input ).forEach( ( btn ) =>
-						btn.addEventListener( 'click', ( e ) => {
-							e.preventDefault();
-							e.stopPropagation();
-							openMediaPicker( ( it ) => {
-								const next = { id: it.id, url: it.thumb || it.url || '' };
-								paint( next );
-								write( next );
-							} );
-						} )
-					);
-					$$( '[data-img-clear]', input ).forEach( ( btn ) =>
-						btn.addEventListener( 'click', ( e ) => {
-							e.preventDefault();
-							e.stopPropagation();
-							paint( null );
-							write( null );
-						} )
-					);
-				};
-				wire();
+				bindImageField( input, ( v ) => write( v ) );
 			} else {
 				input.addEventListener( 'input', () => {
 					let v = formControlValue( input );

@@ -1,16 +1,15 @@
 /**
  * ACF repeater fields through the panel's `rows` control: rows render one
- * card each with the simple sub-fields, edits/adds/reorders/deletes save
- * through the server-side row merge ({ __idx, values } — each kept row
- * overlays only its mapped subs onto the original stored row, so sub-values
- * the form doesn't render survive; that preservation half is proven at the
- * adapter level on the lab site, since no REST path can seed an image sub).
+ * card each with the sub-field controls — including image (media picker)
+ * and gallery (images editor in items mode) — and edits/adds/reorders/
+ * deletes save through the server-side row merge ({ __idx, values } — each
+ * kept row overlays only its mapped subs onto the original stored row, so
+ * sub-values the form doesn't render survive).
  *
- * Repeaters are ACF Pro, so on the minnadmin dev site this suite SKIPs
- * (exit 0). Run it for real against an ACF Pro site with a repeater on
- * posts, e.g. the ACF Pro lab and its "Minn Repeater Lab" group
- * (team_members: name text, role select, bio textarea, headshot image —
- * the image sub feeds the locked-note count):
+ * Repeaters are ACF Pro. minnadmin runs Pro with the "Minn Repeater Lab"
+ * group (team_members: name text, role select, bio textarea, photo image,
+ * shots gallery), so this runs there; without Pro or a repeater on posts it
+ * SKIPs (exit 0). Run it against another ACF Pro site with:
  *
  *   MINN_TEST_URL=https://acf-pro.localhost MINN_TEST_USER=austin \
  *   MINN_TEST_PASS=… node acf-repeater.test.js
@@ -102,6 +101,50 @@ const { launch, login, deletePost, openEditor, reporter, BASE } = require( './he
 		t.check( 'edit + add persisted in order', rows.length === 2
 			&& rows[ 0 ].values[ textSub ] === 'Row one edited' && rows[ 1 ].values[ textSub ] === 'Row two',
 			JSON.stringify( rows ) );
+
+		// Image sub: the media picker REPLACES the panel modal (the app's
+		// one-way flow), so the pick lands in panelValues and ⌘S from the
+		// editor saves it like any panel edit.
+		const imgSub = ( rowsField.subfields.find( ( s ) => s.type === 'image' ) || {} ).name;
+		const galSub = ( rowsField.subfields.find( ( s ) => s.type === 'gallery' ) || {} ).name;
+		if ( imgSub ) {
+			t.check( 'image sub renders the image control in the row card',
+				!! ( await page.$( `[data-rowsub="0:${ imgSub }"][data-ftype="image"]` ) ) );
+			await page.click( `[data-rowsub="0:${ imgSub }"] [data-img-pick]` );
+			await page.waitForSelector( '.minn-picker-item[data-pick]', { timeout: 15000 } );
+			await page.click( '.minn-picker-item[data-pick]' );
+			await page.waitForTimeout( 800 );
+			await save();
+			rows = await readRows();
+			t.check( 'picked row image persisted as { id, url }',
+				rows[ 0 ].values[ imgSub ] && rows[ 0 ].values[ imgSub ].id > 0,
+				JSON.stringify( rows[ 0 ] && rows[ 0 ].values[ imgSub ] ) );
+		}
+
+		// Gallery sub: the images editor in items mode (the row's Edit
+		// button closes the panel modal first — the media picker must be
+		// able to stack above the images editor).
+		if ( galSub ) {
+			await openPanel();
+			t.check( 'gallery sub renders the gallery control in the row card',
+				!! ( await page.$( `[data-rowsub="0:${ galSub }"][data-ftype="gallery"]` ) ) );
+			await page.click( `[data-rowsub="0:${ galSub }"] [data-gal-edit]` );
+			await page.waitForSelector( '#minn-imgedit-add', { timeout: 10000 } );
+			await page.click( '#minn-imgedit-add' );
+			await page.waitForSelector( '.minn-picker-item[data-pick]', { timeout: 15000 } );
+			await page.click( '.minn-picker-item[data-pick="0"]' );
+			await page.click( '.minn-picker-item[data-pick="1"]' );
+			await page.click( '#minn-picker-done' );
+			await page.waitForFunction( () => document.querySelectorAll( '.minn-imgedit-tile' ).length === 2, null, { timeout: 10000 } );
+			await page.click( '#minn-imgedit-apply' );
+			await page.waitForTimeout( 600 );
+			await save();
+			rows = await readRows();
+			t.check( 'picked row gallery persisted as ordered { id, url } items',
+				Array.isArray( rows[ 0 ].values[ galSub ] ) && rows[ 0 ].values[ galSub ].length === 2
+				&& rows[ 0 ].values[ galSub ].every( ( x ) => x.id > 0 ),
+				JSON.stringify( rows[ 0 ] && rows[ 0 ].values[ galSub ] ) );
+		}
 
 		// Fresh anchors from the server, then move row 2 up and delete the old
 		// row 1 — the merge must follow the referenced rows, not positions.
