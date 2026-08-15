@@ -338,4 +338,7 @@ Edit and go. There's no build step. Lint with `node --check assets/js/app.js` an
 
 ## License
 
-[MIT](LICENSE) © [Austin Ginder](https://austinginder.com)
+[MIT](license) © [Austin Ginder](https://austinginder.com)
+
+Bundled Hanken Grotesk and JetBrains Mono are SIL OFL 1.1. See
+[assets/fonts/](assets/fonts/).
