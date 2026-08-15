@@ -55,11 +55,14 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   refunds** with quantity steppers and restocking, resend/custom email, pay URL, **New order**,
   **Analytics** with long-range revenue and top products, and a Store strip on the Overview naming
   the orders that need work today.
-  **Products** open as full pages as well (pricing with its sale schedule and tax class, inventory
-  down to GTIN and backorders, shipping, the product image and gallery as tiles you drag to reorder,
-  categories, tags and brands, upsells and cross-sells, attributes, and variations a variable product
-  can generate from its own attributes, with the long description in Minn's own editor), alongside
-  stock filters, bulk and **Add product**. The orders list filters the way a storefront back
+  **Products** open as full pages as well, in the order page's shape: a main column for what the
+  product is (pricing with its sale schedule and tax class, inventory down to GTIN and backorders,
+  shipping, the image and gallery as tiles you drag to reorder, attributes, and variations a variable
+  product can generate from its own attributes, each one a row that opens its own editor) and a
+  sidebar for what it is filed under (status, type, categories, tags and brands as checkable lists
+  you can add to, upsells and cross-sells), with a save bar that offers Discard beside Save and the
+  long description in Minn's own editor. The products list carries stock filters, bulk actions and
+  **Add product**. The orders list filters the way a storefront back
   office does: a status view, search and **Add filter** in one row, active filters as removable
   chips, multi-status, date window, customer and product all narrowing on the server, and the
   whole set living in the URL so a filtered list can be pasted to someone else. Orders can

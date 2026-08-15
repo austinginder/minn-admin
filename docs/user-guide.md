@@ -298,14 +298,17 @@ Customers, and with WooCommerce Subscriptions it gains Subscriptions too.
   with editable items and schedule, coupons, a notes timeline and a quick
   view of related orders. The subscriptions list wears the same filter
   bar with its own status vocabulary.
-- **Products** open as a page too. It holds on one screen what WooCommerce
-  spreads across the tabs of its Product data box: name and status, pricing
+- **Products** open as a page too, in the order page's shape. The main
+  column holds what the product is: name and summary, pictures, pricing
   with an optional sale schedule and tax class, inventory (SKU, GTIN,
   whether you track quantity, backorders, a low stock threshold, the
   one-per-order limit), shipping (weight, dimensions, shipping class),
-  images, organization (categories, tags, brands, the address slug,
-  featured), attributes, upsells and cross-sells, and a purchase note.
-  Everything saves together with one Save changes.
+  attributes and variations. The sidebar holds what it is filed under:
+  published or not, product type, categories, tags and brands, the address
+  slug, featured, and linked products. A purchase note sits with the rest.
+  Everything saves together: a bar rises along the bottom as soon as
+  something changes, offering Discard beside Save, so a long product is
+  never a scroll away from either.
 
   A few things follow the product rather than sitting there always. Marking
   a product virtual removes the shipping fields, because nothing ships.
@@ -314,15 +317,28 @@ Customers, and with WooCommerce Subscriptions it gains Subscriptions too.
   product asks for the address and button text that send shoppers away. A
   variable product gains a Variations card: give an attribute some values
   and turn on its Variations switch, then Generate from attributes builds
-  every combination you do not already have, each with its own SKU, price
-  and stock.
+  every combination you do not already have. The card reads as a list of
+  what the product sells, one row per variation with its picture, its name,
+  its price and what is available. Click a row to open that variation on
+  its own: attribute values, regular and sale price, SKU, stock status,
+  quantity tracking, and its picture. Cancel leaves it untouched; Done
+  writes it back, and the whole set still saves with the page's Save.
+
+  Categories, tags and brands drop a list when you click them, with a tick
+  box per row and a tick where the product already sits. A row toggles
+  without closing the list, and typing searches the whole site. When the
+  term you want does not exist yet, Add new opens a small dialog for it,
+  which is where a category is asked for its parent.
 
   Images are tiles you drag to reorder. The first one is the picture your
   shop shows, so promoting a gallery photo is a drag rather than a trip to
   WooCommerce. Click a tile to swap it, hover it for the × that removes it.
+  Adding pictures takes a whole selection at once, from the file dialog or
+  dropped straight in, and names each file as it uploads.
 
   The long description opens in Minn's own editor, with blocks, autosave
-  and revisions, rather than sending you elsewhere. If you would rather see
+  and revisions, rather than sending you elsewhere, and the editor carries
+  a button back to the product you came from. If you would rather see
   a product without leaving the list, hover its row and click the eye for a
   quick look with the same fields.
 
