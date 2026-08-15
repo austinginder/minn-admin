@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.29.0. This file ships inside the plugin, so the copy you
+*Current as of v0.30.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -256,15 +256,48 @@ Plugins also have hard budgets for how much space they may claim in the
 sidebar, palette and menus, so the interface stays calm as you install
 more of them.
 
+## Minn in your language
+
+Pick a language on **Your profile** and all of Minn follows: buttons,
+table headings, empty states, confirmations, error messages, counts.
+Twenty-three languages ship with the plugin, and a language you have not
+installed yet is downloaded for you when you save the choice. Your pick
+is yours alone; it never changes what anybody else sees.
+
+Right-to-left languages such as Arabic, Hebrew and Persian get a
+genuinely mirrored interface: the sidebar, menus and settings move to
+the correct side, while addresses, file paths and version numbers stay
+readable left to right inside the surrounding text.
+
+Translations arrive as WordPress language packs through the same
+Updates screen as everything else and update alongside the plugin, so
+there is nothing extra to install or maintain.
+
 ## Your store
 
 With WooCommerce active, the sidebar gains Orders, Products, Coupons and
-Customers.
+Customers, and with WooCommerce Subscriptions it gains Subscriptions too.
 
 - **Orders** open as their own page, at their own address, so an order can
-  be linked to or kept in a second tab. You can take a payment by hand,
-  refund whole lines or an arbitrary amount, resend an email and read the
-  order's notes without leaving Minn.
+  be linked to or kept in a second tab. The main column holds the work:
+  items with the money broken down, status, payment, refunds, mail and the
+  timeline. The sidebar holds the context: customer, shipping,
+  attribution and other orders from the same customer, each card showing
+  text until its pencil opens the form. You can take a payment by hand,
+  refund whole lines or an arbitrary amount, apply or remove a coupon,
+  resend an email and read the order's notes without leaving Minn, and
+  the Back button returns you to wherever the visit started.
+- **The orders list filters like a storefront back office.** One row
+  holds a status view, the search box and Add filter; active filters sit
+  beneath as removable chips. Status accepts more than one at a time, and
+  a date window, customer or product filter narrows on the server, so it
+  survives paging. Filters live in the address, so a filtered list can be
+  reloaded or pasted to someone else. Orders that belong to a
+  subscription carry a small badge that opens a summary of it.
+- **Subscriptions** open on their own page in the order page's shape,
+  with editable items and schedule, coupons, a notes timeline and a quick
+  view of related orders. The subscriptions list wears the same filter
+  bar with its own status vocabulary.
 - **Products** open as a page too. It holds on one screen what WooCommerce
   spreads across the tabs of its Product data box: name and status, pricing
   with an optional sale schedule and tax class, inventory (SKU, GTIN,
