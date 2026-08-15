@@ -10,6 +10,7 @@
  *   MINN_TEST_URL          base URL of a dev site (default https://minnadmin.localhost)
  *   MINN_TEST_USER         admin username        (default admin)
  *   MINN_TEST_PASS         admin password        (required)
+ *   MINN_TEST_WP           WordPress root for wp-cli (default four levels up from tests/)
  *   MINN_TEST_CHROME       Chrome binary path    (default macOS system Chrome)
  *   MINN_TEST_FRESH_LOGIN  set to 1 to skip the shared cookie and form-login
  *   MINN_TEST_AUTH_DIR     where to store Playwright storageState (default tests/.auth)
@@ -22,6 +23,7 @@ const { chromium } = require( 'playwright-core' );
 const BASE = process.env.MINN_TEST_URL || 'https://minnadmin.localhost';
 const USER = process.env.MINN_TEST_USER || 'admin';
 const PASS = process.env.MINN_TEST_PASS || '';
+const WP = process.env.MINN_TEST_WP || path.resolve( __dirname, '../../../..' );
 const CHROME = process.env.MINN_TEST_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const AUTH_DIR = process.env.MINN_TEST_AUTH_DIR || path.join( __dirname, '.auth' );
 
@@ -295,4 +297,4 @@ function switchOn( page, sel ) {
 	}, sel );
 }
 
-module.exports = { BASE, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath };
+module.exports = { BASE, WP, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath };

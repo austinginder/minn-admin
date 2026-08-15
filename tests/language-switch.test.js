@@ -22,8 +22,7 @@
 const { chromium } = require( 'playwright-core' );
 const { execSync } = require( 'child_process' );
 
-const BASE = 'https://minnadmin.localhost';
-const WP = '/Users/austin/Cove/Sites/minnadmin.localhost/public';
+const { BASE, WP } = require( './helpers' );
 const PASS = process.env.MINN_TEST_PASS;
 
 if ( ! PASS ) {

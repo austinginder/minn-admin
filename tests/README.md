@@ -60,6 +60,7 @@ Environment (all optional except the password):
 | `MINN_TEST_URL` | `https://minnadmin.localhost` |
 | `MINN_TEST_USER` | `admin` |
 | `MINN_TEST_PASS` | — required |
+| `MINN_TEST_WP` | WordPress root (default: four levels up from `tests/`) |
 | `MINN_TEST_CHROME` | macOS system Chrome path |
 | `MINN_TEST_FRESH_LOGIN` | unset. Set to `1` to skip the shared cookie and form-login |
 | `MINN_TEST_AUTH_DIR` | `tests/.auth` (Playwright storageState, gitignored) |

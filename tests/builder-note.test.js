@@ -5,10 +5,8 @@
  * and a builder page with NO previewable content drops the misleading
  * "Keep writing…" placeholder for an honest nothing-to-preview line.
  */
-const { BASE, launch, login, createPost, deletePost, reporter } = require( './helpers' );
+const { BASE, WP, launch, login, createPost, deletePost, reporter } = require( './helpers' );
 const { execSync } = require( 'child_process' );
-
-const WP = '/Users/austin/Cove/Sites/minnadmin.localhost/public';
 
 ( async () => {
 	const { browser, page, errors } = await launch();

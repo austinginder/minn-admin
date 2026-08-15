@@ -13,10 +13,7 @@ const { execSync } = require( 'child_process' );
 const fs = require( 'fs' );
 const os = require( 'os' );
 const path = require( 'path' );
-const { BASE, launch, login, reporter } = require( './helpers' );
-
-const WP = process.env.MINN_TEST_WP
-	|| '/Users/austin/Cove/Sites/minnadmin.localhost/public';
+const { BASE, WP, launch, login, reporter } = require( './helpers' );
 
 function purgeMinnSnippets() {
 	// eval-file, never inline `wp eval`: the shell expands $wpdb/$t inside
