@@ -1964,7 +1964,7 @@ class Minn_Admin_REST {
 		$user = get_userdata( $other );
 		return array(
 			'user' => (int) $other,
-			'name' => $user ? $user->display_name : 'Someone',
+			'name' => $user ? $user->display_name : __( 'Someone', 'minn-admin' ),
 		);
 	}
 
@@ -3145,7 +3145,7 @@ class Minn_Admin_REST {
 					'acquired' => false,
 					'holder'   => array(
 						'id'     => $other,
-						'name'   => $user ? $user->display_name : 'Someone',
+						'name'   => $user ? $user->display_name : __( 'Someone', 'minn-admin' ),
 						'avatar' => get_avatar_url( $other, array( 'size' => 96 ) ),
 					),
 				)
