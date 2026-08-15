@@ -123,11 +123,14 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 			return ( await r.json() ).minn_acf;
 		}, id );
 
-		// color_picker rides as a plain text input.
-		const colorSel = '[data-pf$=":slideshow_accent"]';
-		t.check( 'color_picker renders as a text input',
-			await page.$eval( colorSel, ( e ) => e.tagName === 'INPUT' && e.type === 'text' ) );
-		await page.fill( colorSel, '#ff6600' );
+		// color_picker rides the color control: swatch + hex text, synced.
+		const colorSel = '[data-pf$=":slideshow_accent"][data-ftype="color"]';
+		t.check( 'color_picker renders the color control (swatch + text)',
+			await page.$eval( colorSel, ( e ) =>
+				!! e.querySelector( 'input[type="color"]' ) && !! e.querySelector( 'input[type="text"]' ) ) );
+		await page.fill( `${ colorSel } input[type="text"]`, '#ff6600' );
+		t.check( 'typing a hex syncs the swatch', await page.$eval( colorSel,
+			( e ) => e.querySelector( 'input[type="color"]' ).value === '#ff6600' ) );
 		await save();
 		let mv = await readMinnAcf();
 		t.check( 'color value persisted', mv && mv.slideshow_accent === '#ff6600', JSON.stringify( mv ) );

@@ -1110,6 +1110,15 @@ button.minn-nav-label:hover { color: var(--text2); }
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 11px; color: var(--muted);
 }
+/* Color field: native swatch + the hex text (the text is the truth). */
+.minn-field-color { display: flex; gap: 8px; align-items: center; }
+.minn-field-color input[type="color"] {
+  width: 38px; height: 34px; padding: 2px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--panel2); cursor: pointer; flex-shrink: 0;
+}
+.minn-field-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+.minn-field-color input[type="color"]::-webkit-color-swatch { border: none; border-radius: 5px; }
+.minn-field-color .minn-input { flex: 1; min-width: 0; }
 /* Wysiwyg field: text preview + the rich-text modal doorway. */
 .minn-field-rt { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .minn-field-rt-preview {

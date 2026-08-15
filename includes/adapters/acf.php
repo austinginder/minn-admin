@@ -422,6 +422,9 @@ function minn_admin_acf_block_forms() {
 				case 'wysiwyg':
 					$entry['control'] = 'richtext';
 					break;
+				case 'color_picker':
+					$entry['control'] = 'color';
+					break;
 				default:
 					$entry['control'] = 'text';
 			}
@@ -650,10 +653,10 @@ function minn_admin_acf_options_tabs( $page ) {
 				$open( $group['title'] );
 			}
 			$simple = minn_admin_acf_map_field( $f );
-			// Image, gallery and wysiwyg fields count as locked here: the
-			// settings engine has no picker or rich-text binding (the editor
-			// panel and block inspector do).
-			if ( ! $simple || in_array( $simple['type'], array( 'image', 'gallery', 'wysiwyg' ), true ) ) {
+			// Image and gallery fields count as locked here: the settings
+			// engine has no media-picker binding (the editor panel and block
+			// inspector do). Wysiwyg rides the rich-text modal since v0.31.0.
+			if ( ! $simple || in_array( $simple['type'], array( 'image', 'gallery' ), true ) ) {
 				$tabs[ $current ]['locked']++;
 				continue;
 			}
@@ -713,7 +716,7 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( 'textarea' === $f['type'] ? 'textarea' : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
 		if ( 'select' === $sf['type'] ) {
 			$sf['options'] = array();
@@ -767,6 +770,12 @@ function minn_admin_acf_options_save( $page, $values ) {
 		}
 		if ( 'true_false' === $byKey[ $key ]['type'] ) {
 			$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
+		} elseif ( 'wysiwyg' === $byKey[ $key ]['type'] ) {
+			// The post-content trust boundary, same as the panel write path.
+			$v = is_scalar( $v ) ? (string) $v : '';
+			if ( ! current_user_can( 'unfiltered_html' ) ) {
+				$v = wp_kses_post( $v );
+			}
 		} elseif ( null === $v || false === $v ) {
 			$v = '';
 		} elseif ( ! is_scalar( $v ) ) {

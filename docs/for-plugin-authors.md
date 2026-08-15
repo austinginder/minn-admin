@@ -1173,7 +1173,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 ```
 
 Supported field types: `text`, `textarea`, `number`, `range`, `email`, `url`, `select`, `radio`,
-`true_false`, `color_picker` (edits as text), `image` (`{ id, url }`, media picker), `gallery`
+`true_false`, `color_picker` (swatch + hex text), `image` (`{ id, url }`, media picker), `gallery`
 (ordered `[{ id, url }]`, Minn's images editor), `wysiwyg` (an HTML fragment string, edited
 in Minn's rich-text modal with pastes cleaned through the shared sanitizer), `suggest`, and
 `rows` (below). Report anything

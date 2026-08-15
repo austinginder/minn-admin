@@ -1224,7 +1224,7 @@
 	 * hook for the callers' existing CSS, not a descriptor key. */
 
 	function formNormField( f ) {
-		const alias = { true_false: 'toggle', range: 'number', radio: 'select' };
+		const alias = { true_false: 'toggle', range: 'number', radio: 'select', color_picker: 'color' };
 		let type = alias[ f.type ] || f.type || 'text';
 		let options = null;
 		if ( Array.isArray( f.options ) && f.options.length ) {
@@ -1305,7 +1305,20 @@
 				</div>
 			</div>`;
 		}
-	// Wysiwyg: an HTML fragment string edited in the rich-text modal. The
+	// Color: a swatch + the hex text, synced both ways by the delegated
+		// listener below formControlValue. The TEXT input is the truth (it can
+		// hold rgba() or empty, which the native swatch cannot represent);
+		// events bubble to the wrap, so every dialect's generic input binding
+		// works unchanged.
+		if ( t === 'color' ) {
+			const val = String( v == null ? '' : v ).trim();
+			const hex = /^#[0-9a-fA-F]{6}$/.test( val ) ? val : '#ffffff';
+			return `<div class="minn-field-color" ${ attr }="${ esc( id ) }" data-ftype="color">
+				<input type="color" value="${ esc( hex ) }" aria-label="${ esc( ( f.label || '' ) + ' — ' + __( 'pick a color' ) ) }">
+				<input type="text" class="minn-input mono" value="${ esc( val ) }" placeholder="#000000" spellcheck="false" autocomplete="off">
+			</div>`;
+		}
+		// Wysiwyg: an HTML fragment string edited in the rich-text modal. The
 		// control shows a text-only preview + the doorway; the CALLER binds
 		// [data-rt-edit] and keeps the live value on el._rtValue (data-rt is
 		// the render-time seed formControlValue falls back to).
@@ -1368,6 +1381,10 @@
 		if ( kind === 'wysiwyg' ) {
 			return el._rtValue !== undefined ? el._rtValue : ( el.dataset.rt || '' );
 		}
+		if ( kind === 'color' ) {
+			const text = el.querySelector( 'input[type="text"]' );
+			return text ? text.value.trim() : '';
+		}
 		if ( kind === 'combobox' ) {
 			const input = el.querySelector( '.minn-ac-input' );
 			return input && input.dataset.acValue !== undefined ? input.dataset.acValue : '';
@@ -1377,6 +1394,19 @@
 		}
 		return el.value;
 	}
+
+	// Color control: keep the swatch and the hex text in sync from either
+	// side (one delegated listener serves every dialect; the wrap's own
+	// input events already bubble into each dialect's dirty tracking).
+	document.addEventListener( 'input', ( e ) => {
+		const wrap = e.target.closest( '[data-ftype="color"]' );
+		if ( ! wrap ) return;
+		const swatch = wrap.querySelector( 'input[type="color"]' );
+		const text = wrap.querySelector( 'input[type="text"]' );
+		if ( ! swatch || ! text ) return;
+		if ( e.target === swatch ) text.value = swatch.value;
+		else if ( /^#[0-9a-fA-F]{6}$/.test( text.value.trim() ) ) swatch.value = text.value.trim();
+	} );
 
 	// Arm one async-suggest picker (data-ftype="suggest"): typing fetches the
 	// field's route with &q=, rows pick on mousedown (selection survival),
@@ -14011,6 +14041,27 @@
 					input.classList.toggle( 'on' );
 					input.setAttribute( 'aria-checked', input.classList.contains( 'on' ) );
 					mark();
+				} );
+			} else if ( input.dataset.ftype === 'wysiwyg' ) {
+				// Settings live on a page, so the rich-text modal opens right
+				// over it — no hosting-modal close dance. Apply updates the
+				// preview in place and dirties the key like any typed edit.
+				const rtBtn = input.querySelector( '[data-rt-edit]' );
+				if ( rtBtn ) rtBtn.addEventListener( 'click', ( e ) => {
+					e.preventDefault();
+					const f = fields.find( ( x ) => x.key === input.dataset.sset );
+					const cur = input._rtValue !== undefined ? input._rtValue : ( input.dataset.rt || '' );
+					openRichTextModal( cur, ( out ) => {
+						input._rtValue = out;
+						mark();
+						const preview = input.querySelector( '.minn-field-rt-preview' );
+						const text = out.replace( /<[^>]*>/g, ' ' ).replace( /\s+/g, ' ' ).trim();
+						if ( preview ) {
+							preview.textContent = text.slice( 0, 160 ) || __( 'No content yet' );
+							preview.classList.toggle( 'empty', ! text );
+						}
+						rtBtn.textContent = out ? __( 'Edit content…' ) : __( 'Add content…' );
+					}, { title: f && f.label } );
 				} );
 			} else {
 				input.addEventListener( 'input', mark );
