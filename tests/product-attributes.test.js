@@ -59,7 +59,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '#minn-p-attrs', { timeout: 20000 } );
 
 		const card = await page.evaluate( () => ( {
-			titles: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
+			titles: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
 			empty: /No attributes yet/.test( ( document.querySelector( '#minn-p-attrs' ) || {} ).textContent || '' ),
 			add: !! document.querySelector( '#minn-p-attr-add' ),
 			pick: !! document.querySelector( '[data-pattrglobal]' ),

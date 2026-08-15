@@ -9120,12 +9120,34 @@
 			regular_price: v.regular_price || '',
 			sale_price: v.sale_price || '',
 			stock_status: v.stock_status || 'instock',
+			manage_stock: !! v.manage_stock,
+			// null is "not tracked", which is not the same as none left.
+			stock_quantity: v.stock_quantity == null ? null : v.stock_quantity,
+			image: v.image && v.image.id ? { id: v.image.id, src: v.image.src || '' } : null,
 			attributes: ( v.attributes || [] ).map( ( a ) => ( { id: a.id || 0, name: a.name || '', option: a.option || '' } ) ),
 		} ) );
 		m.variationsRemoved = [];
 	}
 
 	// The attributes a variable product varies by, with their allowed values.
+	/**
+	 * A sale price has to sit BELOW the regular one. WooCommerce does not
+	 * refuse a higher (or equal) one: it answers 200 and drops the sale price
+	 * without a word, on a product and on a variation alike, verified against a
+	 * live store. So without this the reader gets a success toast and no sale.
+	 * Returns the reason it is wrong, or '' when the pair is fine.
+	 */
+	function salePriceProblem( regular, sale ) {
+		const s = String( sale == null ? '' : sale ).trim();
+		if ( ! s ) return '';
+		const sv = parseFloat( s );
+		const rv = parseFloat( String( regular == null ? '' : regular ).trim() );
+		if ( Number.isNaN( sv ) ) return __( 'The sale price is not a number.' );
+		if ( Number.isNaN( rv ) ) return __( 'Set a regular price before a sale price.' );
+		if ( sv >= rv ) return __( 'The sale price has to be lower than the regular price.' );
+		return '';
+	}
+
 	function variationAxes( m ) {
 		return ( m.attributes || [] ).filter( ( a ) => a.variation && a.options.length );
 	}
@@ -9139,6 +9161,33 @@
 		} ).join( ' · ' );
 	}
 
+	/**
+	 * The Variations card is a list of variants, not a grid of inputs: name,
+	 * picture, price and what is available, with everything modifiable behind
+	 * the row (openVariationDialog). Six variants of five fields each was 30
+	 * boxes on screen and no way to see, at a glance, what the product sells.
+	 */
+	function variationRowHtml( m, v, i ) {
+		const label = variationLabel( m, v );
+		const price = v.sale_price
+			? `$${ esc( v.sale_price ) }<span class="minn-prod-was">$${ esc( v.regular_price || '' ) }</span>`
+			: ( v.regular_price ? `$${ esc( v.regular_price ) }` : '—' );
+		// Available means a number only when the variant tracks stock; the
+		// status is the honest answer otherwise, and it is what WooCommerce
+		// itself falls back to.
+		const avail = v.manage_stock
+			? esc( String( v.stock_quantity == null ? 0 : v.stock_quantity ) )
+			: esc( ( { instock: __( 'In stock' ), outofstock: __( 'Out of stock' ), onbackorder: __( 'On backorder' ) } )[ v.stock_status ] || __( 'In stock' ) );
+		return `
+			<div class="minn-pvar-row" data-pvaropen="${ i }" role="button" tabindex="0" aria-label="${ esc( sprintf( /* translators: %s: the variation label, for example "Large / Blue". */ __( 'Edit variation %s' ), label ) ) }">
+				<span class="minn-pvar-thumb">${ v.image && v.image.src ? `<img src="${ esc( v.image.src ) }" alt="" loading="lazy">` : icon( 'img' ) }</span>
+				<span class="minn-pvar-name minn-cell-clip">${ esc( label ) }${ v.id ? '' : `<span class="minn-pvar-new">${ esc( __( 'New' ) ) }</span>` }</span>
+				<span class="minn-pvar-price">${ price }</span>
+				<span class="minn-pvar-avail">${ avail }</span>
+				<button type="button" class="minn-pdl-x" data-pvarx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( sprintf( /* translators: %s: the variation label, for example "Large / Blue". */ __( 'Remove variation %s' ), label ) ) }">×</button>
+			</div>`;
+	}
+
 	function productVariationsHtml( m ) {
 		const axes = variationAxes( m );
 		if ( ! axes.length ) {
@@ -9147,28 +9196,186 @@
 		if ( ! ( m.variations || [] ).length ) {
 			return `<div class="minn-pdl-empty">${ esc( __( 'No variations yet. Generate them from the attributes, or add one at a time.' ) ) }</div>`;
 		}
-		return m.variations.map( ( v, i ) => `
-			<div class="minn-pvar-row">
-				<div class="minn-pvar-axes">
-					${ axes.map( ( a, ai ) => {
-						const hit = ( v.attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
-						const cur = ( hit && hit.option ) || '';
-						const anyLabel = sprintf( /* translators: %s: a product attribute name, for example Colour. */ __( 'Any %s' ), a.name );
-						return `<div class="minn-ac minn-pvar-axis" data-pvaraxis="${ i }:${ ai }">
-							<input class="minn-input minn-ac-input" value="${ esc( cur || anyLabel ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( a.name ) }">
+		return `
+			<div class="minn-pvar-head">
+				<span></span>
+				<span>${ esc( __( 'Variant' ) ) }</span>
+				<span>${ esc( __( 'Price' ) ) }</span>
+				<span>${ esc( __( 'Available' ) ) }</span>
+				<span></span>
+			</div>`
+			+ m.variations.map( ( v, i ) => variationRowHtml( m, v, i ) ).join( '' );
+	}
+
+	/**
+	 * One variant, everything about it, in a dialog. Cancel and Done, not a
+	 * live model: half-typed values on a row that also feeds the batch save
+	 * would reach the server on any other save, so the dialog edits a copy and
+	 * only Done writes it back. Nothing here talks to the server either way;
+	 * variations still ride the page's single Save, which is the contract
+	 * documented in woocommerce-products.md.
+	 *
+	 * Built like openTermDialog, and for the same reason: it opens over a card
+	 * that repaints under it.
+	 */
+	function openVariationDialog( m, index ) {
+		return new Promise( ( resolve ) => {
+			const src = m.variations[ index ];
+			if ( ! src ) { resolve( false ); return; }
+			// The working copy. attributes are cloned deep enough that picking
+			// an axis in the dialog cannot reach the row behind it.
+			const v = Object.assign( {}, src, {
+				attributes: ( src.attributes || [] ).map( ( a ) => Object.assign( {}, a ) ),
+				image: src.image ? Object.assign( {}, src.image ) : null,
+			} );
+			const axes = variationAxes( m );
+			const stockOptions = [
+				{ value: 'instock', label: __( 'In stock' ) },
+				{ value: 'outofstock', label: __( 'Out of stock' ) },
+				{ value: 'onbackorder', label: __( 'On backorder' ) },
+			];
+			const overlay = document.createElement( 'div' );
+			overlay.className = 'minn-modal-overlay minn-confirm-overlay';
+			overlay.id = 'minn-var-dialog';
+			const imageHtml = () => ( v.image && v.image.src
+				? `<img src="${ esc( v.image.src ) }" alt="">`
+				: icon( 'img' ) );
+			overlay.innerHTML = `
+			<div class="minn-modal minn-confirm-modal" role="dialog" aria-modal="true" aria-label="${ esc( variationLabel( m, v ) ) }">
+				<div class="minn-confirm-title">${ esc( sprintf( /* translators: %s: the variation label, for example "Large / Blue". */ __( 'Edit %s' ), variationLabel( m, v ) ) ) }</div>
+				<div class="minn-order-fields minn-var-fields">
+					<div class="minn-var-imagerow">
+						<div class="minn-var-image" id="minn-var-image">${ imageHtml() }</div>
+						<div class="minn-var-imageacts">
+							<button type="button" class="minn-btn-soft" id="minn-var-img-pick">${ esc( __( 'Choose image…' ) ) }</button>
+							<button type="button" class="minn-btn-soft" id="minn-var-img-x"${ v.image ? '' : ' hidden' }>${ esc( __( 'Remove image' ) ) }</button>
+						</div>
+					</div>
+					${ axes.length ? `<div class="minn-order-field-row">${ axes.map( ( a, ai ) => `
+						<div>
+							<div class="minn-field-label">${ esc( a.name ) }</div>
+							<div class="minn-ac" data-varaxis="${ ai }">
+								<input class="minn-input minn-ac-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( a.name ) }">
+								<div class="minn-ac-panel" hidden></div>
+							</div>
+						</div>` ).join( '' ) }</div>` : '' }
+					<div class="minn-order-field-row">
+						<div><div class="minn-field-label">${ esc( __( 'Regular price' ) ) }</div><input class="minn-input" id="minn-var-regular" inputmode="decimal" value="${ esc( v.regular_price ) }"></div>
+						<div><div class="minn-field-label">${ esc( __( 'Sale price' ) ) }</div><input class="minn-input" id="minn-var-sale" inputmode="decimal" value="${ esc( v.sale_price ) }" placeholder="${ esc( __( 'Optional' ) ) }"></div>
+					</div>
+					<div><div class="minn-field-label">${ esc( __( 'SKU' ) ) }</div><input class="minn-input" id="minn-var-sku" value="${ esc( v.sku ) }" placeholder="${ esc( __( 'Optional' ) ) }"></div>
+					<div>
+						<div class="minn-field-label">${ esc( __( 'Stock status' ) ) }</div>
+						<div class="minn-ac" data-varstock>
+							<input class="minn-input minn-ac-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Stock status' ) ) }">
 							<div class="minn-ac-panel" hidden></div>
-						</div>`;
-					} ).join( '' ) }
+						</div>
+					</div>
+					${ productToggleHtml( 'minn-var-track', __( 'Track stock quantity' ), v.manage_stock ) }
+					<div id="minn-var-qty-row"${ v.manage_stock ? '' : ' hidden' }>
+						<div class="minn-field-label">${ esc( __( 'Quantity' ) ) }</div>
+						<input class="minn-input" id="minn-var-qty" type="number" step="1" value="${ v.stock_quantity == null ? '' : esc( String( v.stock_quantity ) ) }">
+					</div>
 				</div>
-				<input class="minn-input minn-pvar-sku" data-pvarsku="${ i }" value="${ esc( v.sku ) }" placeholder="${ esc( __( 'SKU' ) ) }" aria-label="${ esc( __( 'Variation SKU' ) ) }">
-				<input class="minn-input minn-pvar-price" data-pvarreg="${ i }" value="${ esc( v.regular_price ) }" inputmode="decimal" placeholder="${ esc( __( 'Price' ) ) }" aria-label="${ esc( __( 'Regular price' ) ) }">
-				<input class="minn-input minn-pvar-price" data-pvarsale="${ i }" value="${ esc( v.sale_price ) }" inputmode="decimal" placeholder="${ esc( __( 'Sale' ) ) }" aria-label="${ esc( __( 'Sale price' ) ) }">
-				<div class="minn-ac minn-pvar-stock" data-pvarstock="${ i }">
-					<input class="minn-input minn-ac-input" value="${ esc( ( { instock: __( 'In stock' ), outofstock: __( 'Out of stock' ), onbackorder: __( 'On backorder' ) } )[ v.stock_status ] || __( 'In stock' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Stock status' ) ) }">
-					<div class="minn-ac-panel" hidden></div>
+				<div class="minn-var-error" hidden></div>
+				<div class="minn-toggle-desc minn-var-note">${ esc( __( 'Variations save with the rest of the page.' ) ) }</div>
+				<div class="minn-confirm-actions">
+					<button class="minn-btn-soft" data-var-cancel type="button">${ esc( __( 'Cancel' ) ) }</button>
+					<button class="minn-btn-primary" data-var-done type="button">${ esc( __( 'Done' ) ) }</button>
 				</div>
-				<button type="button" class="minn-pdl-x" data-pvarx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( sprintf( /* translators: %s: the variation label, for example "Large / Blue". */ __( 'Remove variation %s' ), variationLabel( m, v ) ) ) }">×</button>
-			</div>` ).join( '' );
+			</div>`;
+			document.body.appendChild( overlay );
+			const done = ( ok ) => {
+				overlay.remove();
+				document.removeEventListener( 'keydown', onKey );
+				resolve( !! ok );
+			};
+			const onKey = ( e ) => { if ( e.key === 'Escape' ) { e.stopPropagation(); done( false ); } };
+			document.addEventListener( 'keydown', onKey );
+			overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) done( false ); } );
+			overlay.querySelector( '[data-var-cancel]' ).addEventListener( 'click', () => done( false ) );
+
+			// Comboboxes, not native selects, as everywhere else on this page.
+			$$( '[data-varaxis]', overlay ).forEach( ( wrap ) => {
+				const ai = parseInt( wrap.dataset.varaxis, 10 );
+				const a = axes[ ai ];
+				const hit = ( v.attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
+				bindAutocomplete( wrap, [ { value: '', label: sprintf( /* translators: %s: a product attribute name, for example Colour. */ __( 'Any %s' ), a.name ) } ]
+					.concat( a.options.map( ( o ) => ( { value: o, label: o } ) ) ), {
+					strict: true,
+					value: ( hit && hit.option ) || '',
+					onPick: ( picked ) => {
+						v.attributes = ( v.attributes || [] ).filter( ( x ) => ( a.id ? x.id !== a.id : x.name !== a.name ) );
+						if ( picked ) v.attributes.push( { id: a.id || 0, name: a.name, option: picked } );
+					},
+				} );
+			} );
+			bindAutocomplete( overlay.querySelector( '[data-varstock]' ), stockOptions, {
+				strict: true,
+				value: v.stock_status || 'instock',
+				onPick: ( picked ) => { v.stock_status = picked; },
+			} );
+			const track = overlay.querySelector( '#minn-var-track' );
+			const qtyRow = overlay.querySelector( '#minn-var-qty-row' );
+			if ( track ) track.addEventListener( 'click', () => {
+				const on = track.classList.toggle( 'on' );
+				track.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				qtyRow.hidden = ! on;
+			} );
+
+			const imgBox = overlay.querySelector( '#minn-var-image' );
+			const imgX = overlay.querySelector( '#minn-var-img-x' );
+			const paintImage = () => {
+				imgBox.innerHTML = imageHtml();
+				imgX.hidden = ! v.image;
+			};
+			overlay.querySelector( '#minn-var-img-pick' ).addEventListener( 'click', () => {
+				openMediaPicker( ( picked ) => {
+					if ( ! picked ) return;
+					v.image = { id: picked.id, src: picked.thumb || picked.url || '' };
+					paintImage();
+				} );
+			} );
+			imgX.addEventListener( 'click', () => { v.image = null; paintImage(); } );
+
+			const errBox = overlay.querySelector( '.minn-var-error' );
+			const refuse = ( msg, field ) => {
+				errBox.textContent = msg;
+				errBox.hidden = false;
+				const el = overlay.querySelector( field );
+				if ( el ) el.focus();
+			};
+			overlay.querySelector( '[data-var-done]' ).addEventListener( 'click', () => {
+				const regular = ( overlay.querySelector( '#minn-var-regular' ).value || '' ).trim();
+				const sale = ( overlay.querySelector( '#minn-var-sale' ).value || '' ).trim();
+				const sku = ( overlay.querySelector( '#minn-var-sku' ).value || '' ).trim();
+				const priceProblem = salePriceProblem( regular, sale );
+				if ( priceProblem ) { refuse( priceProblem, '#minn-var-sale' ); return; }
+				// SKUs are unique store-wide, and WooCommerce enforces that at
+				// save time. What can be answered here without a request is the
+				// clash inside this product, which is the common one: the
+				// parent's SKU and the other variants'.
+				if ( sku ) {
+					const parentSku = ( ( $( '#minn-p-sku' ) || {} ).value || '' ).trim();
+					const taken = parentSku.toLowerCase() === sku.toLowerCase()
+						|| m.variations.some( ( x, i ) => i !== index && ( x.sku || '' ).trim().toLowerCase() === sku.toLowerCase() );
+					if ( taken ) { refuse( __( 'That SKU is already used on this product.' ), '#minn-var-sku' ); return; }
+				}
+				errBox.hidden = true;
+				v.regular_price = regular;
+				v.sale_price = sale;
+				v.sku = sku;
+				v.manage_stock = track.classList.contains( 'on' );
+				const raw = ( overlay.querySelector( '#minn-var-qty' ).value || '' ).trim();
+				v.stock_quantity = v.manage_stock ? ( raw === '' ? 0 : parseInt( raw, 10 ) ) : null;
+				m.variations[ index ] = v;
+				done( true );
+			} );
+			setTimeout( () => {
+				const first = overlay.querySelector( '#minn-var-regular' );
+				if ( first ) first.focus();
+			}, 30 );
+		} );
 	}
 
 	function bindProductVariations( m ) {
@@ -9180,59 +9387,47 @@
 			const gen = $( '#minn-p-var-gen' );
 			if ( gen ) gen.disabled = ! variationAxes( m ).length;
 		};
-		const setAxis = ( vi, ai, option ) => {
-			const axes = variationAxes( m );
-			const a = axes[ ai ];
-			if ( ! a ) return;
-			const v = m.variations[ vi ];
-			v.attributes = ( v.attributes || [] ).filter( ( x ) => ( a.id ? x.id !== a.id : x.name !== a.name ) );
-			if ( option ) v.attributes.push( { id: a.id || 0, name: a.name, option } );
+		const open = async ( i ) => {
+			const changed = await openVariationDialog( m, i );
+			if ( ! changed ) return;
+			repaint();
+			// The dialog is outside this card, so the save bar never saw the
+			// click that changed anything in it.
+			if ( m.syncDirty ) m.syncDirty();
 		};
 		const bindRows = () => {
-			[ [ 'pvarsku', 'sku' ], [ 'pvarreg', 'regular_price' ], [ 'pvarsale', 'sale_price' ] ].forEach( ( [ attr, key ] ) => {
-				$$( `[data-${ attr }]`, list ).forEach( ( el ) => el.addEventListener( 'input', () => {
-					m.variations[ parseInt( el.dataset[ attr ], 10 ) ][ key ] = el.value.trim();
-				} ) );
-			} );
-			// Comboboxes, not native selects, like every other choice on this
-			// page. The pick writes straight to the model, so nothing has to
-			// read a label back out of the DOM at save time.
-			$$( '[data-pvarstock]', list ).forEach( ( wrap ) => {
-				const i = parseInt( wrap.dataset.pvarstock, 10 );
-				bindAutocomplete( wrap, [
-					{ value: 'instock', label: __( 'In stock' ) },
-					{ value: 'outofstock', label: __( 'Out of stock' ) },
-					{ value: 'onbackorder', label: __( 'On backorder' ) },
-				], {
-					strict: true,
-					value: m.variations[ i ].stock_status || 'instock',
-					onPick: ( v ) => { m.variations[ i ].stock_status = v; },
+			$$( '[data-pvaropen]', list ).forEach( ( row ) => {
+				const i = parseInt( row.dataset.pvaropen, 10 );
+				row.addEventListener( 'click', ( e ) => {
+					// The remove button lives inside the row (a button inside a
+					// button is invalid markup, so the row is not one), and its
+					// click must not also open the editor.
+					if ( e.target.closest( '[data-pvarx]' ) ) return;
+					open( i );
+				} );
+				row.addEventListener( 'keydown', ( e ) => {
+					if ( e.key !== 'Enter' && e.key !== ' ' ) return;
+					e.preventDefault();
+					open( i );
 				} );
 			} );
-			$$( '[data-pvaraxis]', list ).forEach( ( wrap ) => {
-				const [ vi, ai ] = wrap.dataset.pvaraxis.split( ':' ).map( Number );
-				const a = variationAxes( m )[ ai ];
-				if ( ! a ) return;
-				const hit = ( m.variations[ vi ].attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
-				bindAutocomplete( wrap, [ { value: '', label: sprintf( /* translators: %s: a product attribute name, for example Colour. */ __( 'Any %s' ), a.name ) } ]
-					.concat( a.options.map( ( o ) => ( { value: o, label: o } ) ) ), {
-					strict: true,
-					value: ( hit && hit.option ) || '',
-					onPick: ( v ) => setAxis( vi, ai, v ),
-				} );
-			} );
-			$$( '[data-pvarx]', list ).forEach( ( el ) => el.addEventListener( 'click', () => {
+			$$( '[data-pvarx]', list ).forEach( ( el ) => el.addEventListener( 'click', ( e ) => {
+				// Keeps the row underneath from opening the editor — and, with
+				// it, keeps this click from reaching the save bar's watcher,
+				// which is why the bar is told directly below.
+				e.stopPropagation();
 				const i = parseInt( el.dataset.pvarx, 10 );
 				const gone = m.variations.splice( i, 1 )[ 0 ];
 				// An id means it exists on the server and has to be deleted there.
 				if ( gone && gone.id ) m.variationsRemoved.push( gone.id );
 				repaint();
+				if ( m.syncDirty ) m.syncDirty();
 			} ) );
 		};
 		bindRows();
 		const add = $( '#minn-p-var-add' );
 		if ( add ) add.addEventListener( 'click', () => {
-			m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', attributes: [] } );
+			m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', manage_stock: false, stock_quantity: null, image: null, attributes: [] } );
 			repaint();
 		} );
 		// Every combination the attributes allow, minus the ones already here.
@@ -9254,7 +9449,7 @@
 			let added = 0;
 			combos.forEach( ( attrs ) => {
 				if ( have.has( keyOf( attrs ) ) ) return;
-				m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', attributes: attrs } );
+				m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', manage_stock: false, stock_quantity: null, image: null, attributes: attrs } );
 				added++;
 			} );
 			repaint();
@@ -9275,16 +9470,40 @@
 				regular_price: v.regular_price,
 				sale_price: v.sale_price,
 				stock_status: v.stock_status,
+				manage_stock: !! v.manage_stock,
+				// { id: 0 } is how WooCommerce is told to drop a variation's
+				// picture; verified against a live store, along with the fact
+				// that null does the same. Sending the pair explicitly keeps
+				// set and clear symmetrical.
+				image: v.image && v.image.id ? { id: v.image.id } : { id: 0 },
 				attributes: ( v.attributes || [] ).map( ( a ) => ( a.id ? { id: a.id, option: a.option } : { name: a.name, option: a.option } ) ),
 			};
+			// Only meaningful while tracking, and WooCommerce reads a null here
+			// as "stop tracking", which the switch above already said.
+			if ( v.manage_stock ) row.stock_quantity = v.stock_quantity == null ? 0 : v.stock_quantity;
 			if ( v.id ) body.update.push( Object.assign( { id: v.id }, row ) );
 			else body.create.push( row );
 		} );
 		if ( ! body.create.length && ! body.update.length && ! body.delete.length ) return;
-		await api( `wc/v3/products/${ productId }/variations/batch`, {
+		const res = await api( `wc/v3/products/${ productId }/variations/batch`, {
 			method: 'POST',
 			body: JSON.stringify( body ),
 		} );
+		// A batch answers 200 even when it refused an item: the refusal rides
+		// INSIDE that item. Verified with a duplicate SKU, which comes back as
+		// product_invalid_sku and even names a SKU that is free. Swallowing it
+		// let a save report success while the variation kept its old value.
+		const refused = [ 'create', 'update', 'delete' ]
+			.reduce( ( all, k ) => all.concat( Array.isArray( ( res || {} )[ k ] ) ? res[ k ] : [] ), [] )
+			.filter( ( row ) => row && row.error );
+		if ( refused.length ) {
+			const err = refused[ 0 ].error || {};
+			const free = err.data && err.data.unique_sku;
+			throw new Error( free
+				/* translators: 1: WooCommerce's own error message, 2: a SKU that is not taken. */
+				? sprintf( __( '%1$s Try %2$s.' ), err.message || __( 'A variation was refused.' ), free )
+				: ( err.message || __( 'A variation was refused.' ) ) );
+		}
 		m.variationsRemoved = [];
 	}
 
@@ -9339,10 +9558,14 @@
 
 	// The Organization card's taxonomies. A store without brands answers with
 	// no `brands` key at all, which is how that field knows to stay away.
+	// `create` is Enter-to-create, which stays off for a hierarchy: a typo
+	// would land a stray term in a tree this field does not edit. `hierarchy`
+	// is what makes the Add dialog offer a parent. Every taxonomy can be added
+	// to from the dialog, where the name is typed on purpose.
 	const PRODUCT_TERM_FIELDS = [
-		{ key: 'categories', label: __( 'Categories' ), route: 'products/categories', create: false, placeholder: __( 'Search categories…' ) },
-		{ key: 'tags', label: __( 'Tags' ), route: 'products/tags', create: true, placeholder: __( 'Add a tag, press Enter' ) },
-		{ key: 'brands', label: __( 'Brands' ), route: 'products/brands', create: true, placeholder: __( 'Add a brand, press Enter' ) },
+		{ key: 'categories', label: __( 'Categories' ), route: 'products/categories', create: false, hierarchy: true, placeholder: __( 'Search categories' ), addLabel: __( 'Add new category' ), newTitle: __( 'New category' ), nameLabel: __( 'Category name' ) },
+		{ key: 'tags', label: __( 'Tags' ), route: 'products/tags', create: true, placeholder: __( 'Search or add tags' ), addLabel: __( 'Add new tag' ), newTitle: __( 'New tag' ), nameLabel: __( 'Tag name' ) },
+		{ key: 'brands', label: __( 'Brands' ), route: 'products/brands', create: true, placeholder: __( 'Search or add brands' ), addLabel: __( 'Add new brand' ), newTitle: __( 'New brand' ), nameLabel: __( 'Brand name' ) },
 	];
 
 	// Downloadable files ride the model too. WooCommerce mints the id for a new
@@ -9372,6 +9595,9 @@
 		const repaint = () => {
 			list.innerHTML = productDownloadsHtml( m.downloads );
 			bindRows();
+			// Files can arrive from the media picker, which is a modal over
+			// the page: same blind spot as the images grid.
+			if ( m.syncDirty ) m.syncDirty();
 		};
 		const bindRows = () => {
 			$$( '[data-pdlname]', list ).forEach( ( el ) => el.addEventListener( 'input', () => {
@@ -9649,12 +9875,19 @@
 				// are fetched here rather than filled in after the paint.
 				let variationRows = [];
 				if ( ( full.type || '' ) === 'variable' ) {
-					variationRows = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,attributes` )
+					variationRows = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,manage_stock,stock_quantity,image,attributes` )
 						.catch( () => [] );
 				}
 				if ( ! isCur() ) return;
 				m.full = full;
 				m.loading = false;
+				// Discard needs the product as it arrived, and m.full is not
+				// that: flipping the type harvests the form into it, on
+				// purpose. So keep a copy nobody writes to, plus the two
+				// side-loads the seeds need to rebuild from it.
+				m.loaded = JSON.parse( JSON.stringify( full ) );
+				m.loadedVariations = variationRows;
+				m.linkNames = names;
 				seedProductTerms( m );
 				seedProductImages( m );
 				seedProductDownloads( m );
@@ -9700,9 +9933,6 @@
 		const priceOk = productPriceEditable( p );
 		const cats = ( p.categories || [] ).map( ( c ) => c.name ).filter( Boolean ).join( ', ' );
 		const thumb = p.images && p.images[ 0 ] ? ( p.images[ 0 ].src || p.images[ 0 ].thumbnail || '' ) : '';
-		const stockOpts = [ [ 'instock', __( 'In stock' ) ], [ 'outofstock', __( 'Out of stock' ) ], [ 'onbackorder', __( 'On backorder' ) ] ];
-		const visOpts = [ [ 'visible', __( 'Shop and search results' ) ], [ 'catalog', __( 'Shop only' ) ], [ 'search', __( 'Search results only' ) ], [ 'hidden', 'Hidden' ] ];
-		const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', __( 'Pending review' ) ] ];
 		const combos = productComboSpecs( p );
 		const combo = ( id ) => productComboHtml( combos.find( ( c ) => c.id === id ) );
 		const dims = p.dimensions || {};
@@ -9713,29 +9943,43 @@
 		const isExternal = ( p.type || 'simple' ) === 'external';
 		// A downloadable product carries its files; nothing else does.
 		const isDownloadable = !! p.downloadable;
-		return `
-					<div class="minn-order-body">
-						<div class="minn-order-grid minn-grid-rows">
-							<div class="minn-order-panel">
+		// Shopify's split, and the reason it reads well: the main column is what
+		// the product IS (name, pictures, price, stock, size), the sidebar is
+		// what it is FILED UNDER (published or not, type, taxonomies, links).
+		// Both are one flat list of cards. The two-column grid belongs to the
+		// PAGE's stylesheet, so the quick-view modal takes this same markup and
+		// stacks it — one body, two hosts, as on an order.
+		// data-pcard names a card so a test can assert where it is drawn rather
+		// than where it sits in the markup.
+		const card = ( key, title, inner ) => `
+							<div class="minn-order-sec" data-pcard="${ esc( key ) }">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( title ) }</div></div>
+								${ inner }
+							</div>`;
+		const main = `
+							${ card( 'basics', __( 'Basics' ), `
 								${ canEdit ? '' : ( thumb ? `<div class="minn-prod-modal-img"><img src="${ esc( thumb ) }" alt=""></div>` : '' ) }
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Basics' ) ) }</div>
 								${ canEdit ? `
 								<div class="minn-order-fields">
 									<div><div class="minn-field-label">${ esc( __( 'Name' ) ) }</div><input class="minn-input" id="minn-p-name" value="${ esc( p.name || '' ) }"></div>
-									${ combo( 'minn-p-type' ) }
-									${ productToggleHtml( 'minn-p-virtual', __( 'Virtual' ), !! p.virtual ) }
-									${ productToggleHtml( 'minn-p-downloadable', __( 'Downloadable' ), !! p.downloadable ) }
-									${ combo( 'minn-p-status' ) }
-									${ combo( 'minn-p-vis' ) }
+									<div>
+										<div class="minn-field-label">${ esc( __( 'Short description' ) ) }</div>
+										<textarea class="minn-input" id="minn-p-short" rows="3" placeholder="${ esc( __( 'Shown near the price in the shop…' ) ) }">${ esc( wcPlainText( p.short_description ) ) }</textarea>
+										<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( "Plain text summary. The full description, with blocks and images, opens in Minn's editor." ) ) }</div>
+									</div>
 								</div>` : `
 								<div class="minn-modal-meta" style="padding:0;">
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Name' ) ) }</span><span>${ esc( p.name || '' ) }</span></div>
 									${ p.sku ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'SKU' ) ) }</span><span>${ esc( p.sku ) }</span></div>` : '' }
 									${ cats ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Categories' ) ) }</span><span>${ esc( cats ) }</span></div>` : '' }
-								</div>` }
-							</div>
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Pricing' ) ) }</div>
+								</div>` }` ) }
+							${ canEdit ? card( 'media', __( 'Images' ), `
+								<div class="minn-imgedit-grid minn-pimg-grid" id="minn-p-images">${ productImagesGridHtml( m.images || [] ) }</div>
+								<div class="minn-pimg-foot">
+									<button type="button" class="minn-btn-soft" id="minn-p-img-add">${ esc( __( 'Add images…' ) ) }</button>
+									<span class="minn-toggle-desc">${ esc( __( 'The first image is the product image, the rest are the gallery. Drag a tile to reorder, click one to replace it.' ) ) }</span>
+								</div>` ) : '' }
+							${ card( 'pricing', __( 'Pricing' ), `
 								${ canEdit && priceOk ? `
 								<div class="minn-order-fields">
 									<div class="minn-order-field-row">
@@ -9760,20 +10004,8 @@
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Price' ) ) }</span><span>${ productPriceLabel( p ) }</span></div>
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Stock' ) ) }</span><span>${ esc( productStockLabel( p ) ) }</span></div>
 									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">${ p.type ? sprintf( /* translators: %s: the localized product type (e.g. "Variable product"). */ esc( __( 'Price and stock for %s products are managed in WooCommerce (variations or grouped children).' ) ), esc( productTypeLabel( p.type ) ) ) : esc( __( 'Price and stock for this type of product are managed in WooCommerce (variations or grouped children).' ) ) }</div>` : '' }
-								</div>` }
-							</div>
-							${ canEdit ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Images' ) ) }</div>
-								<div class="minn-imgedit-grid minn-pimg-grid" id="minn-p-images">${ productImagesGridHtml( m.images || [] ) }</div>
-								<div class="minn-pimg-foot">
-									<button type="button" class="minn-btn-soft" id="minn-p-img-add">${ esc( __( 'Add images…' ) ) }</button>
-									<span class="minn-toggle-desc">${ esc( __( 'The first image is the product image, the rest are the gallery. Drag a tile to reorder, click one to replace it.' ) ) }</span>
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Inventory' ) ) }</div>
+								</div>` }` ) }
+							${ canEdit ? card( 'inventory', __( 'Inventory' ), `
 								<div class="minn-order-fields">
 									<div class="minn-order-field-row">
 										<div><div class="minn-field-label">${ esc( __( 'SKU' ) ) }</div><input class="minn-input" id="minn-p-sku" value="${ esc( p.sku || '' ) }" placeholder="${ esc( __( 'Optional' ) ) }"></div>
@@ -9790,11 +10022,8 @@
 									</div>
 									${ combo( 'minn-p-stock' ) }` : '' }
 									${ productToggleHtml( 'minn-p-solo', __( 'Limit purchases to 1 item per order' ), p.sold_individually ) }
-								</div>
-							</div>` : '' }
-							${ canEdit && shipOk ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Shipping' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit && shipOk ? card( 'shipping', __( 'Shipping' ), `
 								<div class="minn-order-fields">
 									<div><div class="minn-field-label">${ esc( __( 'Weight' ) ) }</div><input class="minn-input" id="minn-p-weight" type="text" inputmode="decimal" value="${ esc( p.weight || '' ) }" placeholder="0"></div>
 									<div>
@@ -9807,26 +10036,8 @@
 									</div>
 									${ combo( 'minn-p-shipclass' ) }
 									<div class="minn-toggle-desc">${ esc( __( 'Units come from your WooCommerce store settings.' ) ) }</div>
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Organization' ) ) }</div>
-								<div class="minn-order-fields">
-									${ PRODUCT_TERM_FIELDS.map( ( t ) => productTermFieldHtml( m, t ) ).join( '' ) }
-									<div><div class="minn-field-label">${ esc( __( 'Slug' ) ) }</div>
-										<div class="minn-slug-field">
-											<span class="minn-slug-prefix">/</span>
-											<input class="minn-input minn-slug-input" id="minn-p-slug" value="${ esc( p.slug || '' ) }" placeholder="${ esc( __( 'set-on-save' ) ) }" autocomplete="off" spellcheck="false">
-										</div>
-										${ p.status === 'publish' ? `<div class="minn-slug-note">${ esc( __( 'Changing this breaks the current URL.' ) ) }</div>` : '' }
-									</div>
-									${ productToggleHtml( 'minn-p-featured', __( 'Featured product' ), p.featured ) }
-								</div>
-							</div>` : '' }
-							${ canEdit && isDownloadable ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Downloads' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit && isDownloadable ? card( 'downloads', __( 'Downloads' ), `
 								<div class="minn-pdl-list" id="minn-p-downloads">${ productDownloadsHtml( m.downloads || [] ) }</div>
 								<div class="minn-pimg-foot">
 									<button type="button" class="minn-btn-soft" id="minn-p-dl-add">${ esc( __( 'Add file' ) ) }</button>
@@ -9835,23 +10046,8 @@
 								<div class="minn-order-field-row" style="margin-top:12px;">
 									<div><div class="minn-field-label">${ esc( __( 'Download limit' ) ) }</div><input class="minn-input" id="minn-p-dllimit" type="number" step="1" min="-1" value="${ p.download_limit != null && p.download_limit >= 0 ? esc( String( p.download_limit ) ) : '' }" placeholder="${ esc( __( 'Unlimited' ) ) }"></div>
 									<div><div class="minn-field-label">${ esc( __( 'Expires after (days)' ) ) }</div><input class="minn-input" id="minn-p-dlexpiry" type="number" step="1" min="-1" value="${ p.download_expiry != null && p.download_expiry >= 0 ? esc( String( p.download_expiry ) ) : '' }" placeholder="${ esc( __( 'Never' ) ) }"></div>
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Advanced' ) ) }</div>
-								<div class="minn-order-fields">
-									<div>
-										<div class="minn-field-label">${ esc( __( 'Purchase note' ) ) }</div>
-										<textarea class="minn-input" id="minn-p-note" rows="3" placeholder="${ esc( __( 'Sent to the customer after they buy this…' ) ) }">${ esc( wcPlainText( p.purchase_note ) ) }</textarea>
-									</div>
-									<div><div class="minn-field-label">${ esc( __( 'Menu order' ) ) }</div><input class="minn-input" id="minn-p-menuorder" type="number" step="1" value="${ esc( String( p.menu_order != null ? p.menu_order : 0 ) ) }"></div>
-									${ productToggleHtml( 'minn-p-reviews', __( 'Enable reviews' ), p.reviews_allowed ) }
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Attributes' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit ? card( 'attributes', __( 'Attributes' ), `
 								<div class="minn-pattr-list" id="minn-p-attrs">${ productAttributesHtml( m ) }</div>
 								<div class="minn-pimg-foot">
 									<button type="button" class="minn-btn-soft" id="minn-p-attr-add">${ esc( __( 'Add attribute' ) ) }</button>
@@ -9861,33 +10057,63 @@
 										<div class="minn-ac-panel" hidden></div>
 									</div>` : '' }
 									<span class="minn-toggle-desc">${ esc( __( 'Values are separated by commas. Turn on Variations to vary a variable product by an attribute.' ) ) }</span>
-								</div>
-							</div>` : '' }
-							${ canEdit && ( p.type || 'simple' ) === 'variable' ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Variations' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit && ( p.type || 'simple' ) === 'variable' ? card( 'variations', __( 'Variations' ), `
 								<div class="minn-pvar-list" id="minn-p-variations">${ productVariationsHtml( m ) }</div>
 								<div class="minn-pimg-foot">
 									<button type="button" class="minn-btn-soft" id="minn-p-var-gen">${ esc( __( 'Generate from attributes' ) ) }</button>
 									<button type="button" class="minn-btn-soft" id="minn-p-var-add">${ esc( __( 'Add variation' ) ) }</button>
 									<span class="minn-toggle-desc">${ esc( __( 'Variations save with the rest of the page.' ) ) }</span>
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Linked products' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit ? card( 'advanced', __( 'Advanced' ), `
+								<div class="minn-order-fields">
+									<div>
+										<div class="minn-field-label">${ esc( __( 'Purchase note' ) ) }</div>
+										<textarea class="minn-input" id="minn-p-note" rows="3" placeholder="${ esc( __( 'Sent to the customer after they buy this…' ) ) }">${ esc( wcPlainText( p.purchase_note ) ) }</textarea>
+									</div>
+									<div><div class="minn-field-label">${ esc( __( 'Menu order' ) ) }</div><input class="minn-input" id="minn-p-menuorder" type="number" step="1" value="${ esc( String( p.menu_order != null ? p.menu_order : 0 ) ) }"></div>
+									${ productToggleHtml( 'minn-p-reviews', __( 'Enable reviews' ), p.reviews_allowed ) }
+								</div>` ) : '' }`;
+		// The sidebar is editing-only: with no capability the page is a summary,
+		// and an empty 340px column beside it would be a hole in the layout.
+		const side = ! canEdit ? '' : `
+							${ card( 'status', __( 'Status' ), `
+								<div class="minn-order-fields">
+									${ combo( 'minn-p-status' ) }
+									${ combo( 'minn-p-vis' ) }
+									${ productToggleHtml( 'minn-p-featured', __( 'Featured product' ), p.featured ) }
+								</div>` ) }
+							${ card( 'organization', __( 'Organization' ), `
+								<div class="minn-order-fields">
+									${ combo( 'minn-p-type' ) }
+									${ productToggleHtml( 'minn-p-virtual', __( 'Virtual' ), !! p.virtual ) }
+									${ productToggleHtml( 'minn-p-downloadable', __( 'Downloadable' ), !! p.downloadable ) }
+									${ PRODUCT_TERM_FIELDS.map( ( t ) => productTermFieldHtml( m, t ) ).join( '' ) }
+									<div><div class="minn-field-label">${ esc( __( 'Slug' ) ) }</div>
+										<div class="minn-slug-field">
+											<span class="minn-slug-prefix">/</span>
+											<input class="minn-input minn-slug-input" id="minn-p-slug" value="${ esc( p.slug || '' ) }" placeholder="${ esc( __( 'set-on-save' ) ) }" autocomplete="off" spellcheck="false">
+										</div>
+										${ p.status === 'publish' ? `<div class="minn-slug-note">${ esc( __( 'Changing this breaks the current URL.' ) ) }</div>` : '' }
+									</div>
+								</div>` ) }
+							${ card( 'linked', __( 'Linked products' ), `
 								<div class="minn-order-fields">
 									${ PRODUCT_LINK_FIELDS.map( ( f ) => productLinkFieldHtml( m, f ) ).join( '' ) }
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Short description' ) ) }</div>
-								<textarea class="minn-input" id="minn-p-short" rows="3" placeholder="${ esc( __( 'Shown near the price in the shop…' ) ) }">${ esc( wcPlainText( p.short_description ) ) }</textarea>
-								<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( "Plain text summary. The full description, with blocks and images, opens in Minn's editor." ) ) }</div>
-							</div>` : '' }
+								</div>` ) }`;
+		return `
+					<div class="minn-order-body">
+						<div class="minn-order-layout${ side ? '' : ' minn-order-layout-solo' }">
+							<div class="minn-order-main">${ main }</div>
+							${ side ? `<div class="minn-order-side">${ side }</div>` : '' }
 						</div>
-						${ canEdit ? `
+						${ canEdit && m.page ? `
+						<div class="minn-psavebar" id="minn-p-savebar" hidden>
+							<span class="minn-psavebar-note">${ esc( __( 'Unsaved changes' ) ) }</span>
+							<button class="minn-btn-soft" id="minn-p-discard" type="button">${ esc( __( 'Discard' ) ) }</button>
+							<button class="minn-btn-primary" id="minn-product-save" type="button">${ esc( __( 'Save changes' ) ) }</button>
+						</div>` : '' }
+						${ canEdit && ! m.page ? `
 						<div class="minn-media-edit minn-order-status">
 							<button class="minn-btn-primary" id="minn-product-save" type="button">${ esc( __( 'Save changes' ) ) }</button>
 							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Saves the fields on this page and the short description.' ) ) }</div>
@@ -10020,6 +10246,10 @@
 		const repaint = () => {
 			grid.innerHTML = productImagesGridHtml( m.images );
 			bindTiles();
+			// The media picker is a modal over the page, so the click that
+			// changed this never bubbled through the body the save bar
+			// watches. Tell it directly.
+			if ( m.syncDirty ) m.syncDirty();
 		};
 		const bindTiles = () => {
 			$$( '[data-pimgx]', grid ).forEach( ( b ) => b.addEventListener( 'click', ( e ) => {
@@ -10196,16 +10426,26 @@
 			const repaintChips = () => {
 				chips.innerHTML = productTermChipsHtml( m.links[ f.key ] );
 				bindChips();
+				if ( m.syncDirty ) m.syncDirty();
 			};
 			bindChips();
 			let timer = null;
+			// One generation per request: a slow answer to an earlier keystroke
+			// must not repaint over a newer one or stop its spinner.
+			let seq = 0;
 			input.addEventListener( 'input', () => {
 				clearTimeout( timer );
 				timer = setTimeout( async () => {
 					const q = input.value.trim();
-					if ( ! q ) { panel.hidden = true; return; }
+					if ( ! q ) { panel.hidden = true; wrap.classList.remove( 'is-loading' ); return; }
+					const mine = ++seq;
+					wrap.classList.add( 'is-loading' );
+					panel.innerHTML = `<div class="minn-ac-empty">${ esc( __( 'Searching…' ) ) }</div>`;
+					panel.hidden = false;
 					try {
 						const rows = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=20&_fields=id,name,sku` );
+						if ( mine !== seq ) return;
+						wrap.classList.remove( 'is-loading' );
 						const chosen = new Set( ( m.links[ f.key ] || [] ).map( ( x ) => x.id ) );
 						const items = ( Array.isArray( rows ) ? rows : [] )
 							.filter( ( r ) => r.id !== p.id && ! chosen.has( r.id ) );
@@ -10224,7 +10464,14 @@
 							panel.hidden = true;
 							repaintChips();
 						} ) );
-					} catch ( e ) { /* search hiccup — keep typing */ }
+					} catch ( e ) {
+						// Search hiccup: keep typing, but never leave the field
+						// spinning at a request that is not coming back.
+						if ( mine === seq ) {
+							wrap.classList.remove( 'is-loading' );
+							panel.hidden = true;
+						}
+					}
 				}, 250 );
 			} );
 			input.addEventListener( 'keydown', ( e ) => {
@@ -10255,10 +10502,155 @@
 	}
 
 	/**
-	 * Chips plus an async suggest per taxonomy. Tags and brands are flat, so
-	 * Enter creates one that does not exist yet; categories are pick-only,
-	 * because a typo there would leave junk in a hierarchy Minn is not
-	 * editing here (the Terms manager and WooCommerce own that).
+	 * The list a taxonomy field drops: every row a tick box, ticked when the
+	 * product is in that term. Rows come from the server (a store can have
+	 * hundreds of categories, so the filtering is not local), and the first
+	 * page is cached per taxonomy, which is what makes reopening the field
+	 * instant while a search still asks.
+	 */
+	function productTermRowsHtml( m, t, rows ) {
+		const chosen = new Set( ( ( m.terms || {} )[ t.key ] || [] ).map( ( x ) => x.id ) );
+		const body = rows == null
+			? `<div class="minn-ac-empty">${ esc( __( 'Searching…' ) ) }</div>`
+			: ( rows.length
+				? rows.map( ( x ) => `<button type="button" class="minn-ac-item minn-ac-check" role="option" aria-selected="${ chosen.has( x.id ) ? 'true' : 'false' }" data-ptpick="${ x.id }" data-ptname="${ esc( x.name ) }"><span class="minn-check" aria-hidden="true"></span><span class="minn-cell-clip">${ esc( x.name ) }</span></button>` ).join( '' )
+				: `<div class="minn-ac-empty">${ t.create ? esc( __( 'No matches. Press Enter to create it.' ) ) : esc( __( 'No matches' ) ) }</div>` );
+		// Every taxonomy can be added to from here, hierarchy included: the
+		// dialog behind this asks for the name (and the parent) on purpose,
+		// which is the deliberate step Enter-to-create never had.
+		const foot = `<div class="minn-ac-foot"><button type="button" class="minn-ac-item minn-ac-add" data-ptadd>${ icon( 'plus' ) }<span>${ esc( t.addLabel || __( 'Add new' ) ) }</span></button></div>`;
+		return body + foot;
+	}
+
+	/**
+	 * The dialog behind a taxonomy field's Add new. A term is made from a name
+	 * typed in a dialog, which is the deliberate step that makes offering this
+	 * for CATEGORIES reasonable: Enter-to-create still refuses a hierarchy,
+	 * because a stray branch from a typo is not something this field cleans up.
+	 * A hierarchy also gets a parent, fetched when the dialog opens.
+	 *
+	 * Built like minnConfirm: its own overlay on document.body (it opens over a
+	 * panel that closes on blur, so it cannot live inside it), Escape peels
+	 * exactly one layer, and the backdrop cancels. Resolves with the new term,
+	 * or null if the reader backed out.
+	 */
+	function openTermDialog( t, presetName ) {
+		return new Promise( ( resolve ) => {
+			const overlay = document.createElement( 'div' );
+			overlay.className = 'minn-modal-overlay minn-confirm-overlay';
+			overlay.id = 'minn-term-dialog';
+			overlay.innerHTML = `
+			<div class="minn-modal minn-confirm-modal" role="dialog" aria-modal="true" aria-label="${ esc( t.newTitle || __( 'New term' ) ) }">
+				<div class="minn-confirm-title">${ esc( t.newTitle || __( 'New term' ) ) }</div>
+				<div class="minn-order-fields minn-term-fields">
+					<div>
+						<div class="minn-field-label">${ esc( t.nameLabel || __( 'Name' ) ) }</div>
+						<input class="minn-input" id="minn-term-name" autocomplete="off" spellcheck="false" value="${ esc( presetName || '' ) }">
+					</div>
+					${ t.hierarchy ? `
+					<div>
+						<div class="minn-field-label">${ esc( __( 'Parent' ) ) }</div>
+						<div class="minn-ac" data-termparent>
+							<input class="minn-input minn-ac-input" placeholder="${ esc( __( 'Top level' ) ) }" autocomplete="off" spellcheck="false" aria-label="${ esc( __( 'Parent' ) ) }">
+							<div class="minn-ac-panel" hidden></div>
+						</div>
+					</div>` : '' }
+				</div>
+				<div class="minn-term-error" hidden></div>
+				<div class="minn-confirm-actions">
+					<button class="minn-btn-soft" data-term-cancel type="button">${ esc( __( 'Cancel' ) ) }</button>
+					<button class="minn-btn-primary" data-term-create type="button">${ esc( __( 'Create' ) ) }</button>
+				</div>
+			</div>`;
+			document.body.appendChild( overlay );
+			const nameInput = overlay.querySelector( '#minn-term-name' );
+			const errBox = overlay.querySelector( '.minn-term-error' );
+			const okBtn = overlay.querySelector( '[data-term-create]' );
+			let parentId = 0;
+			const done = ( val ) => {
+				overlay.remove();
+				document.removeEventListener( 'keydown', onKey );
+				resolve( val );
+			};
+			// stopPropagation: this sits over a page (and sometimes a modal)
+			// whose own Escape handlers would otherwise close the layer under
+			// it from the same keypress.
+			const onKey = ( e ) => { if ( e.key === 'Escape' ) { e.stopPropagation(); done( null ); } };
+			document.addEventListener( 'keydown', onKey );
+			overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) done( null ); } );
+			overlay.querySelector( '[data-term-cancel]' ).addEventListener( 'click', () => done( null ) );
+
+			const parentWrap = overlay.querySelector( '[data-termparent]' );
+			if ( parentWrap ) {
+				const pInput = parentWrap.querySelector( '.minn-ac-input' );
+				const pPanel = parentWrap.querySelector( '.minn-ac-panel' );
+				let loaded = null;
+				const paint = () => {
+					const rows = loaded == null
+						? `<div class="minn-ac-empty">${ esc( __( 'Searching…' ) ) }</div>`
+						: `<button type="button" class="minn-ac-item" data-parent="0">${ esc( __( 'Top level' ) ) }</button>`
+							+ loaded.map( ( x ) => `<button type="button" class="minn-ac-item" data-parent="${ x.id }">${ esc( x.name ) }</button>` ).join( '' );
+					pPanel.innerHTML = rows;
+					pPanel.hidden = false;
+					$$( '[data-parent]', pPanel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
+						e.preventDefault();
+						parentId = parseInt( b.dataset.parent, 10 ) || 0;
+						pInput.value = parentId ? b.textContent.trim() : '';
+						pPanel.hidden = true;
+					} ) );
+				};
+				pInput.addEventListener( 'focus', async () => {
+					if ( loaded ) { paint(); return; }
+					parentWrap.classList.add( 'is-loading' );
+					paint();
+					try {
+						const items = await api( `wc/v3/${ t.route }?per_page=100&orderby=name&order=asc&_fields=id,name` );
+						loaded = ( Array.isArray( items ) ? items : [] ).map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) );
+					} catch ( e ) {
+						loaded = [];
+					}
+					parentWrap.classList.remove( 'is-loading' );
+					paint();
+				} );
+				pInput.addEventListener( 'blur', () => setTimeout( () => { pPanel.hidden = true; }, 150 ) );
+			}
+
+			const submit = async () => {
+				const name = nameInput.value.trim();
+				if ( ! name ) { nameInput.focus(); return; }
+				okBtn.disabled = true;
+				okBtn.textContent = __( 'Creating…' );
+				errBox.hidden = true;
+				try {
+					const payload = { name };
+					if ( t.hierarchy && parentId ) payload.parent = parentId;
+					const made = await api( `wc/v3/${ t.route }`, { method: 'POST', body: JSON.stringify( payload ) } );
+					done( { id: made.id, name: decodeEntities( made.name || name ) } );
+				} catch ( e ) {
+					// WooCommerce owns the refusals here (a duplicate name is
+					// the common one) and says it better than we would.
+					errBox.textContent = e.message;
+					errBox.hidden = false;
+					okBtn.disabled = false;
+					okBtn.textContent = __( 'Create' );
+				}
+			};
+			okBtn.addEventListener( 'click', submit );
+			nameInput.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Enter' ) { e.preventDefault(); submit(); }
+			} );
+			setTimeout( () => nameInput.focus(), 30 );
+		} );
+	}
+
+	/**
+	 * Chips plus a list per taxonomy, in the shape Shopify's collections field
+	 * has: clicking the field shows what exists rather than asking the reader
+	 * to guess a search term, and a row toggles without closing, so putting a
+	 * product in four categories is four clicks and not four searches.
+	 *
+	 * Tags and brands are flat, so Enter (or Add new) creates one that does not
+	 * exist yet; categories are pick-only.
 	 */
 	function bindProductTermFields( m ) {
 		PRODUCT_TERM_FIELDS.forEach( ( t ) => {
@@ -10267,53 +10659,35 @@
 			if ( ! wrap || ! chips || ! Array.isArray( ( m.terms || {} )[ t.key ] ) ) return;
 			const input = wrap.querySelector( '.minn-ac-input' );
 			const panel = wrap.querySelector( '.minn-ac-panel' );
+			const cache = ( state.cache.productTerms = state.cache.productTerms || {} );
+			let rows = null;
+			// Every request carries a generation. A slow answer to an earlier
+			// keystroke must not repaint the panel over a newer one, nor call
+			// off the spinner the newer one turned on.
+			let seq = 0;
 			const bindChips = () => $$( '[data-ptchip]', chips ).forEach( ( ch ) =>
 				ch.addEventListener( 'click', () => {
 					const id = parseInt( ch.dataset.ptchip, 10 );
 					m.terms[ t.key ] = m.terms[ t.key ].filter( ( x ) => x.id !== id );
 					repaintChips();
+					if ( ! panel.hidden ) renderPanel();
 				} )
 			);
 			const repaintChips = () => {
 				chips.innerHTML = productTermChipsHtml( m.terms[ t.key ] );
 				bindChips();
+				if ( m.syncDirty ) m.syncDirty();
 			};
-			const add = ( item ) => {
-				if ( ! m.terms[ t.key ].some( ( x ) => x.id === item.id ) ) m.terms[ t.key ].push( item );
-				input.value = '';
-				panel.hidden = true;
+			const toggle = ( item ) => {
+				const at = m.terms[ t.key ].findIndex( ( x ) => x.id === item.id );
+				if ( at === -1 ) m.terms[ t.key ].push( item );
+				else m.terms[ t.key ].splice( at, 1 );
 				repaintChips();
+				renderPanel(); // the tick has to move, and the list stays open
 			};
-			bindChips();
-			let timer = null;
-			input.addEventListener( 'input', () => {
-				clearTimeout( timer );
-				timer = setTimeout( async () => {
-					const q = input.value.trim();
-					if ( ! q ) { panel.hidden = true; return; }
-					try {
-						const items = await api( `wc/v3/${ t.route }?search=${ encodeURIComponent( q ) }&per_page=20&_fields=id,name` );
-						const chosen = new Set( m.terms[ t.key ].map( ( x ) => x.id ) );
-						const rows = ( Array.isArray( items ) ? items : [] )
-							.map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) )
-							.filter( ( x ) => ! chosen.has( x.id ) );
-						panel.innerHTML = rows.length
-							? rows.map( ( x ) => `<button type="button" class="minn-ac-item" data-ptpick="${ x.id }" data-ptname="${ esc( x.name ) }">${ esc( x.name ) }</button>` ).join( '' )
-							: `<div class="minn-ac-empty">${ t.create ? esc( __( 'No matches. Press Enter to create it.' ) ) : esc( __( 'No matches' ) ) }</div>`;
-						panel.hidden = false;
-						$$( '[data-ptpick]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
-							e.preventDefault(); // a plain click blurs the field first
-							add( { id: parseInt( b.dataset.ptpick, 10 ), name: b.dataset.ptname } );
-						} ) );
-					} catch ( e ) { /* search hiccup — keep typing */ }
-				}, 250 );
-			} );
-			input.addEventListener( 'keydown', async ( e ) => {
-				if ( e.key !== 'Enter' ) return;
-				e.preventDefault(); // Enter here must never submit anything
-				if ( ! t.create ) return;
+			const create = async () => {
 				const name = input.value.trim();
-				if ( ! name ) return;
+				if ( ! name ) { input.focus( { preventScroll: true } ); return; }
 				input.disabled = true;
 				try {
 					// Reuse an existing term before making a duplicate.
@@ -10324,13 +10698,81 @@
 					if ( ! match ) {
 						const created = await api( `wc/v3/${ t.route }`, { method: 'POST', body: JSON.stringify( { name } ) } );
 						match = { id: created.id, name: decodeEntities( created.name || name ) };
+						// The cached first page is what the field reopens into,
+						// so a term made here belongs in it.
+						if ( Array.isArray( cache[ t.key ] ) ) cache[ t.key ].unshift( match );
 					}
-					add( match );
+					if ( ! m.terms[ t.key ].some( ( x ) => x.id === match.id ) ) m.terms[ t.key ].push( match );
+					input.value = '';
+					rows = null;
+					panel.hidden = true;
+					repaintChips();
 				} catch ( err ) {
 					toast( err.message, true );
 				}
 				input.disabled = false;
 				input.focus( { preventScroll: true } );
+			};
+			const renderPanel = () => {
+				panel.innerHTML = productTermRowsHtml( m, t, rows );
+				panel.hidden = false;
+				$$( '[data-ptpick]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
+					e.preventDefault(); // a plain click blurs the field first
+					toggle( { id: parseInt( b.dataset.ptpick, 10 ), name: b.dataset.ptname } );
+				} ) );
+				const addBtn = $( '[data-ptadd]', panel );
+				if ( addBtn ) addBtn.addEventListener( 'mousedown', ( e ) => {
+					e.preventDefault();
+					// Whatever is half-typed in the field is the name offered,
+					// so Add new after typing is not a second round of typing.
+					openTermDialog( t, input.value.trim() ).then( ( made ) => {
+						if ( ! made ) { input.focus( { preventScroll: true } ); return; }
+						if ( Array.isArray( cache[ t.key ] ) ) cache[ t.key ].unshift( made );
+						if ( ! m.terms[ t.key ].some( ( x ) => x.id === made.id ) ) m.terms[ t.key ].push( made );
+						input.value = '';
+						repaintChips();
+						// Reopen on the plain list: the new term is in it, and
+						// ticked, which is the confirmation that it landed.
+						load( '' );
+						input.focus( { preventScroll: true } );
+					} );
+				} );
+			};
+			const load = async ( q ) => {
+				const mine = ++seq;
+				if ( ! q && Array.isArray( cache[ t.key ] ) ) {
+					rows = cache[ t.key ];
+					renderPanel();
+					return;
+				}
+				rows = null;
+				wrap.classList.add( 'is-loading' );
+				renderPanel(); // Searching…, so the panel is never a blank box
+				try {
+					const items = await api( `wc/v3/${ t.route }?${ q ? 'search=' + encodeURIComponent( q ) + '&' : '' }per_page=20&_fields=id,name` );
+					if ( mine !== seq ) return;
+					rows = ( Array.isArray( items ) ? items : [] )
+						.map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) );
+					if ( ! q ) cache[ t.key ] = rows;
+				} catch ( e ) {
+					if ( mine !== seq ) return;
+					rows = [];
+				}
+				wrap.classList.remove( 'is-loading' );
+				renderPanel();
+			};
+			bindChips();
+			let timer = null;
+			input.addEventListener( 'focus', () => load( input.value.trim() ) );
+			input.addEventListener( 'input', () => {
+				clearTimeout( timer );
+				timer = setTimeout( () => load( input.value.trim() ), 250 );
+			} );
+			input.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' ) { panel.hidden = true; return; }
+				if ( e.key !== 'Enter' ) return;
+				e.preventDefault(); // Enter here must never submit anything
+				if ( t.create ) create();
 			} );
 			input.addEventListener( 'blur', () => setTimeout( () => { panel.hidden = true; }, 150 ) );
 		} );
@@ -10439,6 +10881,19 @@
 	}
 
 	/**
+	 * What the page would save, as one string. The save bar rides this rather
+	 * than a dirty flag per control: buildProductPayload already reads every
+	 * field on screen, so what it produces IS the answer to "did anything
+	 * change", and it cannot drift from the save the way a second reader would.
+	 * Opening a picker and cancelling leaves it untouched; a chip, a dragged
+	 * image tile or a flipped switch does not, and none of those fire an input
+	 * event. Variations ride along because they save with the page.
+	 */
+	function productFingerprint( m ) {
+		return JSON.stringify( [ buildProductPayload( m, m.full || m.product ), m.variations || [] ] );
+	}
+
+	/**
 	 * Type, Virtual and Downloadable decide which cards exist, so changing one
 	 * has to repaint the page. Everything on screen is read back into the model
 	 * FIRST: a repaint rebuilds the form from m.full, and without this the
@@ -10454,6 +10909,51 @@
 		PRODUCT_LINK_FIELDS.forEach( ( f ) => delete payload[ f.key ] );
 		delete payload.attributes;
 		m.full = Object.assign( {}, m.full, payload );
+	}
+
+	/**
+	 * The page's save bar: hidden until the form stops matching the product as
+	 * it loaded, and hidden again the moment it matches once more, because
+	 * typing an edit and typing it back really is no change.
+	 *
+	 * It watches clicks as well as input, since half of this page is not
+	 * typing: switches, chips, image tiles and combobox picks all move the
+	 * payload without ever firing an input event. The click check is deferred a
+	 * tick so the handler behind it has already mutated the model. Controls
+	 * that live OUTSIDE this body — the media picker, the date picker — call
+	 * m.syncDirty() themselves, because their clicks never reach here.
+	 */
+	function bindProductDirtyBar( m ) {
+		const bar = $( '#minn-p-savebar' );
+		if ( ! bar ) return;
+		// The line is drawn here rather than at load time: every vocabulary the
+		// form needs is fetched BEFORE the first paint (loadProductDetail waits
+		// on all of them), so the first bind sees the product exactly as it
+		// arrived and no late render can move the line under it.
+		if ( m.clean == null ) m.clean = productFingerprint( m );
+		const sync = () => { bar.hidden = productFingerprint( m ) === m.clean; };
+		m.syncDirty = sync;
+		sync();
+		const body = bar.parentElement;
+		if ( body ) {
+			[ 'input', 'change' ].forEach( ( ev ) => body.addEventListener( ev, sync ) );
+			body.addEventListener( 'click', () => setTimeout( sync, 0 ) );
+		}
+		const discard = $( '#minn-p-discard' );
+		if ( discard ) discard.addEventListener( 'click', () => {
+			if ( ! m.loaded ) return;
+			// Rebuild from the untouched copy, not from m.full: a type flip
+			// harvests the form into m.full, so by now it can hold the very
+			// edits being discarded.
+			m.full = JSON.parse( JSON.stringify( m.loaded ) );
+			seedProductTerms( m );
+			seedProductImages( m );
+			seedProductDownloads( m );
+			seedProductVariations( m, m.loadedVariations || [] );
+			seedProductLinks( m, m.linkNames || {} );
+			seedProductAttributes( m );
+			renderProductPage();
+		} );
 	}
 
 	/**
@@ -10511,7 +11011,16 @@
 		// /editor/product/{id} is the real writing surface, with blocks and
 		// revisions (docs/woocommerce-products.md).
 		const edBtn = $( '#minn-p-editor' );
-		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
+		if ( edBtn ) edBtn.addEventListener( 'click', () => {
+			// Leave a trail, the way an order does for a subscription: the
+			// editor's own exits are the nav and the browser's Back, so a
+			// description opened from here would otherwise be a one-way door.
+			// Only from the page — the modal keeps its host on screen.
+			const label = p.name || __( 'Product' );
+			if ( m.page ) setPageReturn( 'products/' + p.id, label.length > 32 ? label.slice( 0, 31 ) + '…' : label );
+			go( 'editor/product/' + p.id );
+		} );
+		bindProductDirtyBar( m );
 		bindProductTermFields( m );
 		bindProductLinkFields( m, p );
 		bindProductAttributes( m );
@@ -10522,13 +11031,27 @@
 		// styled); the value it commits lands on the input's dataset.
 		[ '#minn-p-salefrom', '#minn-p-saleto' ].forEach( ( sel ) => {
 			const el = $( sel );
-			if ( el ) bindDatePicker( el, () => {} );
+			// The picker's popover is not inside the body either, so a date
+			// commits without the save bar seeing a thing.
+			if ( el ) bindDatePicker( el, () => { if ( m.syncDirty ) m.syncDirty(); } );
 		} );
 		const saveBtn = $( '#minn-product-save' );
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 			const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
 			if ( ! name ) {
 				toast( __( 'Name is required' ), true );
+				return;
+			}
+			// Same trap the variant editor guards: WooCommerce takes a sale
+			// price that is not lower with a 200 and quietly drops it.
+			const priceProblem = salePriceProblem(
+				( $( '#minn-p-regular' ) || {} ).value,
+				( $( '#minn-p-sale' ) || {} ).value
+			);
+			if ( priceProblem ) {
+				toast( priceProblem, true );
+				const saleEl = $( '#minn-p-sale' );
+				if ( saleEl ) saleEl.focus();
 				return;
 			}
 			const payload = buildProductPayload( m, p );
@@ -10547,11 +11070,17 @@
 				// re-reading them a second save would create duplicates.
 				let freshVariations = [];
 				if ( ( ( full || {} ).type || '' ) === 'variable' ) {
-					freshVariations = await api( `wc/v3/products/${ p.id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,attributes` )
+					freshVariations = await api( `wc/v3/products/${ p.id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,manage_stock,stock_quantity,image,attributes` )
 						.catch( () => [] );
 				}
 				if ( isCur() ) {
 					m.full = full || updated;
+					// The saved product is the new baseline, for the save bar
+					// and for Discard alike; m.clean is rebuilt on the repaint
+					// that follows, from the form this paints.
+					m.loaded = JSON.parse( JSON.stringify( m.full ) );
+					m.loadedVariations = freshVariations;
+					m.clean = null;
 					seedProductTerms( m );
 					seedProductImages( m );
 					seedProductDownloads( m );
@@ -10602,8 +11131,12 @@
 		const p = m.full || m.product;
 		const loading = !! m.loading && ! m.full;
 		const sub = `${ productTypeLabel( p.type ) }${ p.sku ? ' · SKU ' + p.sku : '' }${ p.id ? ' · #' + p.id : '' }`;
+		// Wide, and no card wrapper around the body: the sections are cards
+		// themselves now, and an overflow:hidden wrapper would also become the
+		// containing block for the sticky save bar, which would then stick to
+		// nothing. Same shell as renderOrderPage.
 		view.innerHTML = `
-		<div class="minn-order-page">
+		<div class="minn-order-page minn-order-page-wide">
 			<div class="minn-order-page-head">
 				<button type="button" class="minn-btn-soft" id="minn-pp-back">← ${ esc( __( 'Products' ) ) }</button>
 				<div class="minn-modal-title-block">
@@ -10612,8 +11145,8 @@
 				</div>
 				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span>` : '' }
 			</div>
-			<div class="minn-order-page-card">
-				${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading product…' ) ) }</div>` : '' }
+			<div class="minn-order-page-body">
+				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading product…' ) ) }</div></div>` : '' }
 				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
 				${ ! loading && ! m.loadError ? productDetailInnerHtml( m ) : '' }
 			</div>
@@ -25314,6 +25847,15 @@
 
 	function renderEditor() {
 		const view = $( '#minn-view' );
+		// The trail is spent on the first render of the arrival and kept
+		// against the id it was left for, so opening a different post drops it
+		// and a reload (which leaves no trail) offers no back at all. The
+		// editor re-renders constantly, hence keeping it rather than reading
+		// takePageReturn() where the button is drawn.
+		const arrived = takePageReturn();
+		if ( arrived ) state.editorReturn = Object.assign( { id: state.editorId }, arrived );
+		const back = state.editorReturn && String( state.editorReturn.id ) === String( state.editorId )
+			? state.editorReturn : null;
 		if ( ! state.editor || ( state.editorId && state.editor.id !== state.editorId ) || ( ! state.editorId && state.editor.id ) ) {
 			state.editor = null;
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading editor…' ) ) }</div>`;
@@ -25337,6 +25879,7 @@
 		view.innerHTML = `
 		<div class="minn-editor">
 			<div>
+				${ back ? `<button type="button" class="minn-btn-soft minn-editor-back" id="minn-editor-back">← ${ esc( back.label ) }</button>` : '' }
 				<textarea class="minn-editor-title" id="minn-editor-title" rows="1" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" aria-label="${ esc( __( 'Title' ) ) }">${ esc( ed.title ) }</textarea>
 				${ ed.type === 'blocks' && ed.id && ed.syncedPattern ? `
 				<div class="minn-editor-locked-note minn-pattern-note">
@@ -25383,6 +25926,8 @@
 			<div class="minn-editor-side" id="minn-editor-side"></div>
 		</div>`;
 
+		const backBtn = $( '#minn-editor-back', view );
+		if ( backBtn ) backBtn.addEventListener( 'click', () => go( back.route ) );
 		const body = $( '#minn-editor-body', view );
 		// Blank posts must not stay truly empty: a contenteditable with no
 		// children puts the first keystrokes in a bare text node, and the
@@ -34002,7 +34547,7 @@
 			const items = m.items;
 			const any = !! m.any;
 			return `
-			<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal-overlay minn-picker-over" id="minn-modal-overlay">
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ m.multi ? esc( __( 'Build a gallery' ) ) : ( any ? esc( __( 'Insert file' ) ) : esc( __( 'Insert image' ) ) ) }</div>
@@ -34012,8 +34557,22 @@
 					${ B.caps.upload && ! any ? `
 					<div class="minn-picker-drop" id="minn-picker-drop">
 						${ icon( 'img' ) }
-						<span>${ sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) }${ m.multi ? '' : ' ' + esc( __( '(it’s used right away)' ) ) }</span>
-						<input type="file" id="minn-picker-file" accept="image/*" hidden>
+						<span>${ m.multi
+							? sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop images here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` )
+							: sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) + ' ' + esc( __( '(it’s used right away)' ) ) }</span>
+						<input type="file" id="minn-picker-file" accept="image/*"${ m.multi ? ' multiple' : '' } hidden>
+					</div>` : '' }
+					${ m.upload ? `
+					<div class="minn-upl" id="minn-picker-upl">
+						<div class="minn-upl-row">
+							<span class="minn-cell-clip" id="minn-picker-upl-name">${ esc( m.upload.name ) }</span>
+							<span class="minn-upl-pct" id="minn-picker-upl-pct">${ esc( percentLabel( m.upload.pct ) ) }</span>
+						</div>
+						<div class="minn-upl-bar"><span id="minn-picker-upl-fill" style="width:${ Math.max( 2, m.upload.pct || 0 ) }%"></span></div>
+						${ m.upload.total > 1 ? `<div class="minn-upl-count">${ sprintf(
+			/* translators: 1: the file being uploaded, 2: how many files in all. */
+			esc( __( 'File %1$s of %2$s' ) ), esc( formattedNumber( m.upload.index ) ), esc( formattedNumber( m.upload.total ) )
+		) }</div>` : '' }
 					</div>` : '' }
 					${ items == null ? `<div class="minn-loading">${ esc( any ? __( 'Loading files…' ) : __( 'Loading images…' ) ) }</div>` : ! items.length ? `<div class="minn-empty">${ esc( any ? __( 'No files in the library yet.' ) : __( 'No images in the library yet.' ) ) }</div>` : `
 					<div class="minn-picker-grid${ any ? ' any' : '' }">
@@ -34813,43 +35372,86 @@
 			const drop = $( '#minn-picker-drop' );
 			if ( drop ) {
 				const fileInput = $( '#minn-picker-file' );
-				const uploadAndUse = async ( file ) => {
-					if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( __( 'Drop an image file' ), true ); return; }
+				// Progress patches the readout in place. A re-render per
+				// percent would rebuild the whole modal (and lose the grid's
+				// scroll) sixty times a file; renderOverlays runs only when
+				// the readout is not on screen yet.
+				const showProgress = ( name, index, total, pct ) => {
+					m.upload = { name, index, total, pct };
+					const fill = $( '#minn-picker-upl-fill' );
+					const pctEl = $( '#minn-picker-upl-pct' );
+					const nameEl = $( '#minn-picker-upl-name' );
+					if ( ! fill || ! pctEl || ! nameEl ) { renderOverlays(); return; }
+					fill.style.width = Math.max( 2, pct ) + '%';
+					pctEl.textContent = percentLabel( pct );
+					nameEl.textContent = name;
+				};
+				const uploadOne = async ( file, index, total ) => {
+					showProgress( file.name, index, total, 0 );
+					const up = await uploadMedia( file, ( pct ) => showProgress( file.name, index, total, pct ) );
+					state.cache.media = null; // library changed
+					const sizes = up.media_details && up.media_details.sizes;
+					return {
+						id: up.id,
+						name: decodeEntities( ( up.title && up.title.rendered ) || file.name ),
+						url: up.source_url,
+						alt: up.alt_text || '',
+						thumb: ( sizes && sizes.medium && sizes.medium.source_url ) || up.source_url,
+						large: ( sizes && sizes.large && sizes.large.source_url ) || up.source_url,
+					};
+				};
+				/**
+				 * Building a gallery is a several-files-at-once job, so the
+				 * whole selection uploads, not files[0]. Sequentially, not with
+				 * Promise.all: a dozen parallel uploads is how a shared host
+				 * answers 503, and the order of the picks is the gallery's
+				 * order. A single-pick picker still takes the first file only,
+				 * because it hands its one result back and closes.
+				 */
+				const uploadAndUse = async ( files ) => {
+					const list = Array.from( files || [] ).filter( ( f ) => f && f.type.startsWith( 'image/' ) );
+					if ( ! list.length ) { toast( __( 'Drop an image file' ), true ); return; }
 					drop.classList.add( 'minn-busy' );
 					toast( __( 'Uploading…' ) );
 					try {
-						const fd = new FormData();
-						fd.append( 'file', file );
-						const up = await api( 'wp/v2/media', { method: 'POST', body: fd } );
-						state.cache.media = null; // library changed
-						const sizes = up.media_details && up.media_details.sizes;
-						const it = {
-							id: up.id,
-							name: decodeEntities( ( up.title && up.title.rendered ) || file.name ),
-							url: up.source_url,
-							alt: up.alt_text || '',
-							thumb: ( sizes && sizes.medium && sizes.medium.source_url ) || up.source_url,
-							large: ( sizes && sizes.large && sizes.large.source_url ) || up.source_url,
-						};
-						if ( m.multi ) {
-							// Add to the gallery selection and keep picking.
-							m.items.unshift( it );
-							m.picked.push( it.id );
-							renderOverlays();
-							toast( __( 'Image uploaded and selected' ) );
+						if ( ! m.multi ) {
+							const it = await uploadOne( list[ 0 ], 1, 1 );
+							const cb = m.callback;
+							closeModal();
+							if ( cb ) cb( it );
+							toast( __( 'Image uploaded' ) );
 							return;
 						}
-						const cb = m.callback;
-						closeModal();
-						if ( cb ) cb( it );
-						toast( __( 'Image uploaded' ) );
+						let done = 0;
+						for ( const file of list ) {
+							const it = await uploadOne( file, done + 1, list.length );
+							// Newest first, and picked, so the gallery grows in
+							// the order the files were handed over.
+							m.items.unshift( it );
+							m.picked.push( it.id );
+							done++;
+							// The readout stays up between files: the batch is
+							// not finished, and a gap would read as one.
+							if ( done < list.length ) m.upload = { name: file.name, index: done + 1, total: list.length, pct: 0 };
+							else m.upload = null;
+							renderOverlays();
+							// The re-render replaced the zone, so the busy mark
+							// goes back on the new one while files remain.
+							const zone = $( '#minn-picker-drop' );
+							if ( zone && done < list.length ) zone.classList.add( 'minn-busy' );
+						}
+						/* translators: %d: number of images uploaded. */
+						toast( sprintf( _n( '%d image uploaded and selected', '%d images uploaded and selected', done ), done ) );
 					} catch ( e ) {
 						toast( e.message, true );
 						drop.classList.remove( 'minn-busy' );
+					} finally {
+						// However it ended, nothing is uploading now.
+						if ( m.upload ) { m.upload = null; renderOverlays(); }
 					}
 				};
 				drop.addEventListener( 'click', () => fileInput.click() );
-				fileInput.addEventListener( 'change', () => uploadAndUse( fileInput.files && fileInput.files[ 0 ] ) );
+				fileInput.addEventListener( 'change', () => uploadAndUse( fileInput.files ) );
 				// stopPropagation keeps the app-wide drop-to-media-library handler out of it.
 				drop.addEventListener( 'dragover', ( e ) => { e.preventDefault(); e.stopPropagation(); drop.classList.add( 'over' ); } );
 				drop.addEventListener( 'dragleave', () => drop.classList.remove( 'over' ) );
@@ -34858,7 +35460,7 @@
 					e.stopPropagation();
 					drop.classList.remove( 'over' );
 					document.body.classList.remove( 'minn-dragging' );
-					uploadAndUse( e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[ 0 ] );
+					uploadAndUse( e.dataTransfer && e.dataTransfer.files );
 				} );
 			}
 		}
@@ -37587,6 +38189,62 @@
 				killAll.disabled = false;
 			}
 		} );
+	}
+
+	/**
+	 * Upload one file to the media library, reporting how much of it has gone
+	 * out. This is the one place in the app that uses XMLHttpRequest rather
+	 * than fetch, and the reason is exactly that: fetch cannot report REQUEST
+	 * progress, so a fetch upload can only say "working" and never "62%".
+	 *
+	 * It carries the same nonce api() does, and on a stale one it refreshes and
+	 * retries once, matching apiRes rather than failing a session that is fine.
+	 */
+	function uploadMedia( file, onProgress, retried ) {
+		return new Promise( ( resolve, reject ) => {
+			const fd = new FormData();
+			fd.append( 'file', file );
+			const xhr = new XMLHttpRequest();
+			xhr.open( 'POST', B.restUrl + 'wp/v2/media' );
+			xhr.setRequestHeader( 'X-WP-Nonce', B.nonce );
+			xhr.withCredentials = true;
+			xhr.upload.addEventListener( 'progress', ( e ) => {
+				if ( ! e.lengthComputable || ! onProgress ) return;
+				onProgress( Math.min( 100, Math.round( ( e.loaded / e.total ) * 100 ) ) );
+			} );
+			// The bytes are out but WordPress is still cutting thumbnails, so
+			// the bar rests at 100 while it works instead of stalling at 99.
+			xhr.upload.addEventListener( 'load', () => { if ( onProgress ) onProgress( 100 ); } );
+			xhr.addEventListener( 'load', async () => {
+				let body = null;
+				try { body = JSON.parse( xhr.responseText ); } catch ( e ) { /* not JSON */ }
+				if ( xhr.status >= 200 && xhr.status < 300 ) { resolve( body ); return; }
+				if ( body && body.code === 'rest_cookie_invalid_nonce' && ! retried && B.ajaxUrl ) {
+					try {
+						await refreshRestNonce();
+					} catch ( e ) {
+						sessionExpiredReload();
+						reject( new Error( __( 'Your session expired.' ) ) );
+						return;
+					}
+					uploadMedia( file, onProgress, true ).then( resolve, reject );
+					return;
+				}
+				reject( new Error( body && body.message ? stripTags( body.message ) : xhr.status + ' ' + xhr.statusText ) );
+			} );
+			xhr.addEventListener( 'error', () => reject( new Error( __( 'Upload failed' ) ) ) );
+			xhr.send( fd );
+		} );
+	}
+
+	// A percentage in the user's locale: the sign is not always trailing, and
+	// this is read while a bar fills, so it has to be a number they recognise.
+	function percentLabel( pct ) {
+		try {
+			return new Intl.NumberFormat( uiLocale(), { style: 'percent' } ).format( ( pct || 0 ) / 100 );
+		} catch ( e ) {
+			return ( pct || 0 ) + '%';
+		}
 	}
 
 	function openMediaPicker( callback, opts = {} ) {

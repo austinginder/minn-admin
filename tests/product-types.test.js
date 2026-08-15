@@ -36,7 +36,7 @@ const { BASE, launch, login, reporter, pickCombo, setSwitch, switchOn } = requir
 	}, { path, opts } );
 
 	const cards = () => page.evaluate( () => Array.from(
-		document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ) );
+		document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ) );
 
 	const suffix = Date.now();
 	let id = null;
@@ -90,7 +90,7 @@ const { BASE, launch, login, reporter, pickCombo, setSwitch, switchOn } = requir
 		await setSwitch( page, '#minn-p-downloadable', true );
 		await page.waitForFunction( () => !! document.querySelector( '#minn-p-downloads' ), null, { timeout: 15000 } ).catch( () => null );
 		const afterDl = await page.evaluate( () => ( {
-			cards: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
+			cards: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
 			sku: ( document.querySelector( '#minn-p-sku' ) || {} ).value,
 			add: !! document.querySelector( '#minn-p-dl-add' ),
 			limit: !! document.querySelector( '#minn-p-dllimit' ),

@@ -44,6 +44,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	const suffix = Date.now();
 	let id = null;
+	let rivalId = null;
 	try {
 		const defs = await api( 'wc/v3/products/attributes?_fields=id,name' );
 		const attr = ( defs.body || [] )[ 0 ];
@@ -76,7 +77,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '#minn-p-variations', { timeout: 20000 } );
 
 		const card = await page.evaluate( () => ( {
-			titles: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
+			titles: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
 			empty: /No variations yet/.test( ( document.querySelector( '#minn-p-variations' ) || {} ).textContent || '' ),
 			gen: !! document.querySelector( '#minn-p-var-gen' ),
 			add: !! document.querySelector( '#minn-p-var-add' ),
@@ -91,10 +92,81 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const rows = await page.evaluate( () => document.querySelectorAll( '.minn-pvar-row' ).length );
 		t.check( 'generating builds one row per attribute value', rows === 2, String( rows ) );
 
-		// Price them, then save through the page's own button.
-		await page.fill( '[data-pvarreg="0"]', '19.00' );
-		await page.fill( '[data-pvarreg="1"]', '24.00' );
-		await page.fill( '[data-pvarsku="0"]', 'VAR-S-' + suffix );
+		// The card is a list of variants, not a wall of inputs: each row reads
+		// as a variant, and the editing happens behind it.
+		const listShape = await page.evaluate( () => {
+			const row = document.querySelector( '.minn-pvar-row' );
+			return {
+				openable: document.querySelectorAll( '.minn-pvar-row[data-pvaropen]' ).length,
+				inlineInputs: document.querySelectorAll( '#minn-p-variations input' ).length,
+				name: ( ( row.querySelector( '.minn-pvar-name' ) || {} ).textContent || '' ).trim(),
+				price: !! row.querySelector( '.minn-pvar-price' ),
+				avail: !! row.querySelector( '.minn-pvar-avail' ),
+				thumb: !! row.querySelector( '.minn-pvar-thumb' ),
+				badge: !! row.querySelector( '.minn-pvar-new' ),
+			};
+		} );
+		t.check( 'the card lists variants rather than rows of inputs',
+			listShape.openable === 2 && listShape.inlineInputs === 0, JSON.stringify( listShape ) );
+		t.check( 'a row carries the variant, a picture slot, price and availability',
+			/Small|Large/.test( listShape.name ) && listShape.price && listShape.avail && listShape.thumb,
+			JSON.stringify( listShape ) );
+		t.check( 'an unsaved variation is badged as new', listShape.badge, JSON.stringify( listShape ) );
+
+		// Everything modifiable lives in the variant's own editor.
+		await ( await page.$( '[data-pvaropen="0"]' ) ).click();
+		await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+		const dlg = await page.evaluate( () => ( {
+			title: ( ( document.querySelector( '#minn-var-dialog .minn-confirm-title' ) || {} ).textContent || '' ).trim(),
+			sku: !! document.querySelector( '#minn-var-sku' ),
+			regular: !! document.querySelector( '#minn-var-regular' ),
+			sale: !! document.querySelector( '#minn-var-sale' ),
+			stock: !! document.querySelector( '#minn-var-dialog [data-varstock]' ),
+			track: !! document.querySelector( '#minn-var-track' ),
+			axes: document.querySelectorAll( '#minn-var-dialog [data-varaxis]' ).length,
+			image: !! document.querySelector( '#minn-var-img-pick' ),
+			natives: document.querySelectorAll( '#minn-var-dialog select' ).length,
+		} ) );
+		t.check( 'the editor opens on the variant it was asked for',
+			/Small|Large/.test( dlg.title ), dlg.title );
+		t.check( 'and holds everything modifiable about it',
+			dlg.sku && dlg.regular && dlg.sale && dlg.stock && dlg.track && dlg.axes === 1 && dlg.image,
+			JSON.stringify( dlg ) );
+		t.check( 'the editor uses Minn comboboxes, not native selects',
+			dlg.natives === 0, String( dlg.natives ) );
+		// Drawn, not just marked hidden: a button's own display beats the
+		// hidden attribute, which is how this shipped visible the first time.
+		const removeShown = await page.evaluate( () => {
+			const b = document.querySelector( '#minn-var-img-x' );
+			return !! b && b.getBoundingClientRect().height > 0;
+		} );
+		t.check( 'a variant with no picture offers no Remove image', ! removeShown, String( removeShown ) );
+
+		// Cancel is not a save: what was typed goes nowhere.
+		await page.fill( '#minn-var-regular', '999.00' );
+		await page.click( '#minn-var-dialog [data-var-cancel]' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
+		const afterCancel = await page.evaluate( () => Array.from(
+			document.querySelectorAll( '.minn-pvar-price' ) ).map( ( e ) => e.textContent.trim() ).join( '|' ) );
+		t.check( 'cancelling the editor changes nothing', ! /999/.test( afterCancel ), afterCancel );
+
+		// Price them through the editor, then save through the page's button.
+		const editVariant = async ( i, fields ) => {
+			await ( await page.$( `[data-pvaropen="${ i }"]` ) ).click();
+			await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+			if ( fields.regular != null ) await page.fill( '#minn-var-regular', fields.regular );
+			if ( fields.sku != null ) await page.fill( '#minn-var-sku', fields.sku );
+			await page.click( '#minn-var-dialog [data-var-done]' );
+			await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
+			await page.waitForTimeout( 150 );
+		};
+		await editVariant( 0, { regular: '19.00', sku: 'VAR-S-' + suffix } );
+		await editVariant( 1, { regular: '24.00' } );
+		const rowPrices = await page.evaluate( () => Array.from(
+			document.querySelectorAll( '.minn-pvar-price' ) ).map( ( e ) => e.textContent.trim() ) );
+		t.check( 'Done writes what was typed back onto the row',
+			rowPrices.some( ( p ) => /19\.00/.test( p ) ) && rowPrices.some( ( p ) => /24\.00/.test( p ) ),
+			JSON.stringify( rowPrices ) );
 		await save();
 
 		const saved = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku,regular_price,attributes` );
@@ -110,7 +182,97 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			list.every( ( v ) => ( v.attributes || [] ).some( ( a ) => /Small|Large/.test( a.option || '' ) ) ),
 			JSON.stringify( list.map( ( v ) => v.attributes ) ) );
 
+		// A sale price that is not BELOW the regular price is refused here,
+		// because WooCommerce does not refuse it: it answers 200 and drops the
+		// sale price without a word, so the reader would get a success toast
+		// and no sale at all.
+		const doneAndRead = async () => {
+			await page.click( '#minn-var-dialog [data-var-done]' );
+			await page.waitForTimeout( 300 );
+			return page.evaluate( () => {
+				const d = document.querySelector( '#minn-var-dialog' );
+				const err = d && d.querySelector( '.minn-var-error' );
+				return { open: !! d, msg: err && ! err.hidden ? err.textContent.trim() : '' };
+			} );
+		};
+		await ( await page.$( '[data-pvaropen="0"]' ) ).click();
+		await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+		await page.fill( '#minn-var-regular', '20.00' );
+		await page.fill( '#minn-var-sale', '30.00' );
+		const higher = await doneAndRead();
+		t.check( 'a sale price above the regular price is refused',
+			higher.open && /lower/i.test( higher.msg ), JSON.stringify( higher ) );
+		await page.fill( '#minn-var-sale', '20.00' );
+		const equal = await doneAndRead();
+		t.check( 'and the same price is not lower either',
+			equal.open && /lower/i.test( equal.msg ), JSON.stringify( equal ) );
+
+		// Two variants of one product cannot share a SKU. That check is local,
+		// so it costs nothing and answers before a save.
+		await page.fill( '#minn-var-sale', '' );
+		await page.fill( '#minn-var-sku', 'VAR-S-' + suffix );
+		const clash = await doneAndRead();
+		t.check( 'a SKU another variation already uses is refused',
+			clash.open && /SKU/i.test( clash.msg ), JSON.stringify( clash ) );
+		await page.fill( '#minn-var-sku', 'VAR-L-' + suffix );
+		await page.fill( '#minn-var-sale', '15.00' );
+		const good = await doneAndRead();
+		t.check( 'a lower sale price and a free SKU go through',
+			! good.open, JSON.stringify( good ) );
+		await save();
+		const priced = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku,sale_price` );
+		t.check( 'the sale price and SKU that passed are what WooCommerce stored',
+			( priced.body || [] ).some( ( v ) => String( v.sale_price ) === '15.00' && v.sku === 'VAR-L-' + suffix ),
+			JSON.stringify( ( priced.body || [] ).map( ( v ) => [ v.sku, v.sale_price ] ) ) );
+
+		// A SKU taken by ANOTHER product is not something the page can know, so
+		// the refusal has to come back from the save. WooCommerce hides it
+		// inside a 200 batch response; it must still reach the reader.
+		const rival = await api( 'wc/v3/products', {
+			method: 'POST',
+			body: JSON.stringify( { name: 'SKU rival ' + suffix, type: 'simple', status: 'draft', sku: 'RIVAL-' + suffix } ),
+		} );
+		rivalId = rival.body && rival.body.id;
+		await ( await page.$( '[data-pvaropen="0"]' ) ).click();
+		await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+		await page.fill( '#minn-var-sku', 'RIVAL-' + suffix );
+		await page.click( '#minn-var-dialog [data-var-done]' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
+		await page.click( '#minn-product-save' );
+		await page.waitForFunction(
+			() => Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /SKU/i.test( x.textContent ) ),
+			null, { timeout: 25000 } ).catch( () => null );
+		const toast = await page.evaluate( () => Array.from( document.querySelectorAll( '.minn-toast' ) ).map( ( x ) => x.textContent.trim() ).join( ' | ' ) );
+		t.check( 'a SKU refused inside the batch reaches the reader',
+			/SKU/i.test( toast ), toast );
+		const stillFree = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku` );
+		t.check( 'and the variation kept the SKU it had',
+			( stillFree.body || [] ).some( ( v ) => v.sku === 'VAR-L-' + suffix ),
+			JSON.stringify( ( stillFree.body || [] ).map( ( v ) => v.sku ) ) );
+		// Put the SKU back. No save follows on purpose: the batch refused that
+		// item, so the server still holds this value, and typing it back makes
+		// the page clean again — which the save bar going down proves.
+		await ( await page.$( '[data-pvaropen="0"]' ) ).click();
+		await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+		await page.fill( '#minn-var-sku', 'VAR-L-' + suffix );
+		await page.click( '#minn-var-dialog [data-var-done]' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
+		await page.waitForTimeout( 300 );
+		const barDown = await page.evaluate( () => {
+			const b = document.querySelector( '#minn-p-savebar' );
+			return !! b && b.hidden;
+		} );
+		t.check( 'undoing the refused edit leaves nothing to save', barDown, String( barDown ) );
+
+		// Saved rows lose the New badge: it means "not on the server yet".
+		const badgesAfterSave = await page.evaluate( () => document.querySelectorAll( '.minn-pvar-new' ).length );
+		t.check( 'a saved variation is no longer badged new', badgesAfterSave === 0, String( badgesAfterSave ) );
+
 		// Saving twice must not duplicate: created rows come back with ids.
+		// The second save needs a real edit to reach: the page's save bar is
+		// down while the form matches what was stored, which is also the point
+		// of the check — the rows that come back carry ids, so this updates.
+		await editVariant( 0, { regular: '19.50' } );
 		await save();
 		const again = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id` );
 		t.check( 'saving twice does not duplicate the variations',
@@ -127,19 +289,50 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '.minn-pvar-row', { timeout: 20000 } );
 		const repop = await page.evaluate( () => ( {
 			rows: document.querySelectorAll( '.minn-pvar-row' ).length,
-			prices: Array.from( document.querySelectorAll( '[data-pvarreg]' ) ).map( ( i ) => i.value ),
-			// The axis is a combobox, so the machine value is on the dataset.
-			axisPicked: Array.from( document.querySelectorAll( '[data-pvaraxis] .minn-ac-input' ) ).map( ( s ) => s.dataset.acValue ),
+			prices: Array.from( document.querySelectorAll( '.minn-pvar-price' ) ).map( ( e ) => e.textContent.trim() ),
+			names: Array.from( document.querySelectorAll( '.minn-pvar-name' ) ).map( ( e ) => e.textContent.trim() ),
 			nativeSelects: document.querySelectorAll( '#minn-p-variations select' ).length,
 		} ) );
 		t.check( 'variations repopulate with their prices and values',
-			repop.rows === 2 && repop.prices.includes( '19.00' )
-			&& repop.axisPicked.filter( Boolean ).length === 2, JSON.stringify( repop ) );
+			repop.rows === 2 && repop.prices.some( ( p ) => /19\.50/.test( p ) )
+			&& repop.names.filter( ( n ) => /Small|Large/.test( n ) ).length === 2, JSON.stringify( repop ) );
 		t.check( 'variation rows use Minn comboboxes, not native selects',
 			repop.nativeSelects === 0, String( repop.nativeSelects ) );
 
-		await page.fill( '[data-pvarreg="0"]', '21.50' );
+		// A picture for one variant, picked from the library through the
+		// editor. The picker opens over the dialog, which is the part worth
+		// proving: a modal inside a modal is where z-index goes wrong.
+		await ( await page.$( '[data-pvaropen="0"]' ) ).click();
+		await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+		await page.click( '#minn-var-img-pick' );
+		await page.waitForSelector( '.minn-picker-item', { timeout: 20000 } );
+		const pickerOnTop = await page.evaluate( () => {
+			const pick = document.querySelector( '#minn-modal-overlay' );
+			const dlg = document.querySelector( '#minn-var-dialog' );
+			if ( ! pick || ! dlg ) return null;
+			const z = ( el ) => parseInt( getComputedStyle( el ).zIndex, 10 ) || 0;
+			const r = pick.querySelector( '.minn-picker-item' ).getBoundingClientRect();
+			const hit = document.elementFromPoint( r.x + r.width / 2, r.y + r.height / 2 );
+			return { pickerZ: z( pick ), dialogZ: z( dlg ), reachable: !! hit && !! hit.closest( '.minn-picker-item' ) };
+		} );
+		t.check( 'the picker opens above the variant editor, clickable',
+			!! pickerOnTop && pickerOnTop.pickerZ > pickerOnTop.dialogZ && pickerOnTop.reachable,
+			JSON.stringify( pickerOnTop ) );
+		await page.click( '.minn-picker-item' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-picker-item' ), null, { timeout: 15000 } ).catch( () => null );
+		await page.waitForTimeout( 300 );
+		const gotThumb = await page.evaluate( () => !! document.querySelector( '#minn-var-image img' ) );
+		t.check( 'the picked image shows in the editor', gotThumb, '' );
+		await page.fill( '#minn-var-regular', '21.50' );
+		await page.click( '#minn-var-dialog [data-var-done]' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
+		const rowThumb = await page.evaluate( () => !! document.querySelector( '.minn-pvar-thumb img' ) );
+		t.check( 'and on the row it came from', rowThumb, '' );
 		await save();
+		const withImage = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,image,regular_price` );
+		t.check( 'the variant picture saves',
+			( withImage.body || [] ).some( ( v ) => v.image && v.image.id ),
+			JSON.stringify( ( withImage.body || [] ).map( ( v ) => ( v.image ? v.image.id : null ) ) ) );
 		const edited = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,regular_price` );
 		t.check( 'editing an existing variation updates it',
 			( edited.body || [] ).some( ( v ) => String( v.regular_price ) === '21.50' )
@@ -162,6 +355,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			! ( await page.$( '#minn-p-variations' ) ), '' );
 	} finally {
 		if ( id ) await api( `wc/v3/products/${ id }?force=true`, { method: 'DELETE' } ).catch( () => null );
+		if ( rivalId ) await api( `wc/v3/products/${ rivalId }?force=true`, { method: 'DELETE' } ).catch( () => null );
 	}
 
 	await t.done( browser, errors );

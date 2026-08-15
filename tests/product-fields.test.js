@@ -69,7 +69,7 @@ const { BASE, launch, login, reporter, pickCombo, comboValue, setSwitch, switchO
 
 		// The groups WooCommerce splits across metabox tabs, on one page.
 		const cards = await page.evaluate( () => Array.from(
-			document.querySelectorAll( '.minn-order-panel .minn-side-title' )
+			document.querySelectorAll( '.minn-order-sec .minn-side-title' )
 		).map( ( el ) => el.textContent.trim() ) );
 		t.check( 'page shows Basics, Pricing, Inventory and Shipping',
 			[ 'Basics', 'Pricing', 'Inventory', 'Shipping' ].every( ( c ) => cards.includes( c ) ),
@@ -181,7 +181,7 @@ const { BASE, launch, login, reporter, pickCombo, comboValue, setSwitch, switchO
 			await page.goto( BASE + '/minn-admin/products/' + virtualId, { waitUntil: 'domcontentloaded' } );
 			await page.waitForSelector( '#minn-p-gtin', { timeout: 20000 } );
 			const vCards = await page.evaluate( () => ( {
-				titles: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( el ) => el.textContent.trim() ),
+				titles: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( el ) => el.textContent.trim() ),
 				weight: !! document.querySelector( '#minn-p-weight' ),
 				gtin: !! document.querySelector( '#minn-p-gtin' ),
 			} ) );

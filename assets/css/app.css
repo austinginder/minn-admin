@@ -1709,6 +1709,52 @@ select.minn-input {
 .minn-ac-item:hover, .minn-ac-item.active { background: var(--hover); }
 .minn-ac-item.current { color: var(--accent2); font-weight: 600; }
 .minn-ac-empty { padding: 7px 10px; color: var(--text3); font-size: 13px; }
+/* A row that toggles rather than picks: the tick box says whether the record
+   is already in that term, so the list is the state and not just a menu. */
+button.minn-ac-item.minn-ac-check { display: flex; align-items: center; gap: 9px; }
+.minn-check {
+  flex: none; width: 15px; height: 15px; border-radius: 4px;
+  border: 1.5px solid var(--border2); background: var(--panel2);
+  position: relative; transition: background 0.12s, border-color 0.12s;
+}
+.minn-ac-check[aria-selected="true"] .minn-check { background: var(--accent); border-color: var(--accent); }
+.minn-ac-check[aria-selected="true"] .minn-check::after {
+  content: ""; position: absolute; inset-inline-start: 4px; top: 1px;
+  width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+/* Add new sits under a divider so it reads as an action, not another row. */
+.minn-ac-foot { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; color: var(--accent2); font-weight: 600; }
+.minn-ac-add svg { width: 14px; height: 14px; }
+/* The Add-a-term dialog: minnConfirm's shell with a form in it. */
+.minn-term-fields { margin: 14px 0 4px; }
+.minn-term-error { margin-top: 10px; font-size: 13px; color: var(--red); }
+.minn-term-error[hidden] { display: none; }
+/* Upload readout: which file, how far, and where it sits in the batch. Outside
+   the drop zone on purpose — the zone dims while it is busy, and the one thing
+   worth reading must not dim with it. */
+.minn-upl {
+  /* Same gutters and inner padding as .minn-picker-drop above it, so the two
+     read as one stack rather than a full-bleed strip under an inset box. */
+  margin: 10px 18px 0; padding: 14px 16px;
+  border: 1px solid var(--border2); border-radius: 11px; background: var(--panel2);
+}
+.minn-upl-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text2); }
+.minn-upl-row > .minn-cell-clip { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-upl-pct { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
+.minn-upl-bar { margin-top: 7px; height: 4px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.minn-upl-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.15s ease; }
+.minn-upl-count { margin-top: 6px; font-size: 12px; color: var(--text3); }
+/* A field waiting on the server says so where its chevron sits: the same
+   16px slot, so nothing moves when the answer lands. */
+.minn-ac.is-loading > .minn-ac-input { background-image: none; }
+.minn-ac.is-loading::after {
+  content: ""; position: absolute; top: 50%; inset-inline-end: 10px; margin-top: -7px;
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--border2); border-top-color: var(--accent);
+  animation: minnSpin 0.7s linear infinite; pointer-events: none;
+}
 /* Site icon field: preview + dropzone. */
 .minn-icon-drop {
   display: flex; align-items: center; gap: 14px; padding: 12px;
@@ -1751,6 +1797,9 @@ select.minn-input {
   white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
 }
 .minn-editor-title::placeholder { color: var(--text3); }
+/* Only drawn when the reader arrived from somewhere with a trail (a product's
+   description, say), so the editor's usual look is untouched. */
+.minn-editor-back { margin-bottom: 10px; }
 /* Sticky so the formatting tools stay reachable in long posts; opaque so
    content scrolls beneath, below the fixed word-count pill (40) and chips.
    -webkit-sticky first for older iOS; solid background is load-bearing
@@ -2841,9 +2890,25 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-bottom: 1px solid var(--border); }
 .minn-order-panel { padding: 14px 18px 16px; border-inline-end: 1px solid var(--border); }
 .minn-order-panel:last-child { border-inline-end: none; }
-/* The product body runs to four panels. The two-panel order body needed no
-   rule between rows; a wrapped grid does, or row two floats. */
-.minn-grid-rows > .minn-order-panel:nth-child(n+3) { border-top: 1px solid var(--border); }
+/* A product with nothing for the sidebar (no edit capability: the page is a
+   summary) drops the second track rather than leaving a 340px hole. */
+.minn-order-page .minn-order-layout-solo { grid-template-columns: minmax(0, 1fr); }
+/* The product page's save bar. Absent until an edit, then pinned to the bottom
+   of the scrollport, because this page runs several screens and a button at
+   the end of it asks for a scroll before every save. sticky, not fixed: fixed
+   would leave the page's column and float over the nav. It also has to stay
+   OUT of any overflow:hidden wrapper — that wrapper would become its scroll
+   container and the bar would stick to nothing (see renderProductPage). */
+.minn-psavebar {
+	position: sticky; bottom: 0; z-index: 5;
+	display: flex; align-items: center; gap: 10px;
+	margin-top: 14px; padding: 10px 14px;
+	background: var(--panel); border: 1px solid var(--border2); border-radius: 12px;
+	box-shadow: var(--shadow);
+}
+/* display:flex would beat the hidden attribute on its own. */
+.minn-psavebar[hidden] { display: none; }
+.minn-psavebar-note { font-size: 13px; color: var(--text2); margin-inline-end: auto; }
 /* The product Images card reuses the island tile grid, inline instead of in a
    modal: the page has the room, and it saves with the rest of the form. */
 .minn-pimg-grid { margin-bottom: 10px; }
@@ -2865,16 +2930,59 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-pattr-flag { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text2); flex: none; }
 .minn-pattr-pick { flex: 0 1 250px; }
 @media (max-width: 720px) { .minn-pattr-name, .minn-pattr-pick { flex-basis: 100%; } }
-/* Variations: the attribute combination, then the fields that differ by it. */
-.minn-pvar-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
-.minn-pvar-row { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
-.minn-pvar-axes { display: flex; gap: 6px; flex: 1 1 220px; min-width: 0; }
-.minn-pvar-axis { flex: 1 1 auto; min-width: 0; }
-.minn-pvar-stock { position: relative; }
-.minn-pvar-sku { flex: 0 1 150px; min-width: 0; }
-.minn-pvar-price { flex: 0 1 92px; min-width: 0; }
-.minn-pvar-stock { flex: 0 1 150px; min-width: 0; }
-@media (max-width: 720px) { .minn-pvar-axes, .minn-pvar-sku, .minn-pvar-stock { flex-basis: 100%; } }
+/* Variations: a list of variants, each row a way into its editor. The row is a
+   div and not a button because it CONTAINS one (remove) — a button inside a
+   button is invalid and the browser drops the inner one. */
+.minn-pvar-list { display: flex; flex-direction: column; margin-bottom: 10px; }
+.minn-pvar-head, .minn-pvar-row {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) 110px 96px 26px;
+  gap: 10px; align-items: center;
+}
+.minn-pvar-head {
+  padding: 0 6px 6px; font-size: 12px; font-weight: 600; color: var(--text3);
+  border-bottom: 1px solid var(--border);
+}
+.minn-pvar-row {
+  padding: 8px 6px; border-bottom: 1px solid var(--border);
+  cursor: pointer; border-radius: 8px; transition: background 0.12s;
+}
+.minn-pvar-row:hover { background: var(--hover); }
+.minn-pvar-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.minn-pvar-thumb {
+  width: 34px; height: 34px; border-radius: 7px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel2); border: 1px solid var(--border); color: var(--text3);
+}
+.minn-pvar-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.minn-pvar-thumb svg { width: 15px; height: 15px; }
+.minn-pvar-name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.minn-pvar-new {
+  flex: none; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: var(--accent2); background: var(--accent-soft);
+}
+.minn-pvar-price, .minn-pvar-avail { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text2); }
+.minn-pvar-price .minn-prod-was { font-size: 11.5px; }
+@media (max-width: 720px) {
+  .minn-pvar-head { display: none; }
+  .minn-pvar-row { grid-template-columns: 34px minmax(0, 1fr) 26px; }
+  .minn-pvar-row > .minn-pvar-price, .minn-pvar-row > .minn-pvar-avail { display: none; }
+}
+/* The variant editor: one variant, everything about it. */
+.minn-var-fields { margin: 14px 0 4px; }
+.minn-var-imagerow { display: flex; align-items: center; gap: 12px; }
+.minn-var-image {
+  width: 64px; height: 64px; flex: none; border-radius: 10px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel2); border: 1px solid var(--border); color: var(--text3);
+}
+.minn-var-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.minn-var-imageacts { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+/* A button's own display beats [hidden], so Remove needs this to stay away
+   until there is a picture to remove. */
+.minn-var-imageacts button[hidden] { display: none; }
+.minn-var-note { margin-top: 12px; }
+.minn-var-error { margin-top: 10px; font-size: 13px; color: var(--red); }
+.minn-var-error[hidden] { display: none; }
 .minn-pimg-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* A group with nothing to sit beside (the short description) takes the row. */
 .minn-order-panel.wide { grid-column: 1 / -1; border-inline-end: none; }
@@ -3121,6 +3229,10 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 
 /* Shared confirm modal — scope disclosure + typed confirmation */
 .minn-confirm-overlay { z-index: 90; }
+/* The media picker is always the topmost thing while it is open: it is a leaf
+   interaction, and it can be opened FROM a dialog (a variant's image), which
+   sits at 90. Anything below this would open behind the dialog that asked. */
+.minn-picker-over { z-index: 95; }
 .minn-confirm-modal { width: 440px; max-width: 92vw; padding: 20px 22px; }
 .minn-confirm-title { font-size: 16.5px; font-weight: 700; margin-bottom: 8px; }
 .minn-confirm-body { font-size: 13.5px; color: var(--text2); line-height: 1.55; }

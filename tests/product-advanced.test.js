@@ -53,7 +53,7 @@ const { BASE, launch, login, reporter, pickCombo, setSwitch } = require( './help
 		await page.waitForSelector( '#minn-p-note', { timeout: 20000 } );
 
 		const present = await page.evaluate( () => ( {
-			titles: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
+			titles: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
 			from: !! document.querySelector( '#minn-p-salefrom' ),
 			to: !! document.querySelector( '#minn-p-saleto' ),
 			taxStatus: !! document.querySelector( '#minn-p-taxstatus' ),
@@ -142,11 +142,13 @@ const { BASE, launch, login, reporter, pickCombo, setSwitch } = require( './help
 			!! repop.from && /Care instructions/.test( repop.note ) && repop.order === '7'
 			&& repop.reviews === false && repop.tax === 'shipping', JSON.stringify( repop ) );
 
-		await page.evaluate( () => {
-			const el = document.querySelector( '#minn-p-salefrom' );
-			el.dataset.dp = '';
-			el.value = '';
-		} );
+		// Cleared through the picker's own Clear, the way a reader does it.
+		// Writing the dataset by hand would fire no event, and the page's save
+		// bar only comes up when something it can observe actually changes.
+		await page.click( '#minn-p-salefrom' );
+		await page.waitForSelector( '.minn-dp-pop [data-dp-clear]', { timeout: 10000 } );
+		await page.click( '.minn-dp-pop [data-dp-clear]' );
+		await page.waitForTimeout( 200 );
 		await page.click( '#minn-product-save' );
 		await page.waitForFunction( () => {
 			const btn = document.querySelector( '#minn-product-save' );

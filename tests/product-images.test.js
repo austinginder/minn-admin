@@ -81,7 +81,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '#minn-p-images', { timeout: 20000 } );
 
 		const card = await page.evaluate( () => ( {
-			titles: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
+			titles: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
 			tiles: document.querySelectorAll( '#minn-p-images [data-pimg]' ).length,
 			badge: ( ( document.querySelector( '#minn-p-images .minn-imgedit-new' ) || {} ).textContent || '' ).trim(),
 			firstBadged: !! document.querySelector( '#minn-p-images [data-pimg="0"] .minn-imgedit-new' ),
@@ -175,6 +175,79 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			return row ? row.src : '';
 		}, id );
 		t.check( 'the list row shows a thumbnail', /\.(png|jpe?g|webp)/i.test( rowImg ), rowImg );
+
+		// Several files from the machine in one go. The browse input has to
+		// accept a multiple selection, and the drop zone has to upload every
+		// file it is handed rather than the first one.
+		await page.goto( BASE + '/minn-admin/products/' + id, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-p-img-add', { timeout: 20000 } );
+		await page.click( '#minn-p-img-add' );
+		await page.waitForSelector( '#minn-picker-drop', { timeout: 15000 } );
+		const takesMany = await page.evaluate( () => {
+			const f = document.querySelector( '#minn-picker-file' );
+			return f ? f.multiple : null;
+		} );
+		t.check( 'the picker browse input takes more than one file', takesMany === true, String( takesMany ) );
+		// A slow answer on purpose: an upload to a local server is over before
+		// a human could see it, and what is being checked is that the wait is
+		// legible while it lasts.
+		await page.route( '**/wp/v2/media**', async ( route ) => {
+			if ( route.request().method() !== 'POST' ) { await route.continue(); return; }
+			await new Promise( ( r ) => setTimeout( r, 1500 ) );
+			await route.continue();
+		} );
+		await page.evaluate( async ( name ) => {
+			const mk = async ( n, colour ) => {
+				const c = document.createElement( 'canvas' );
+				c.width = 50; c.height = 50;
+				const ctx = c.getContext( '2d' );
+				ctx.fillStyle = colour; ctx.fillRect( 0, 0, 50, 50 );
+				const blob = await new Promise( ( r ) => c.toBlob( r, 'image/png' ) );
+				return new File( [ blob ], n + '.png', { type: 'image/png' } );
+			};
+			const dt = new DataTransfer();
+			dt.items.add( await mk( name + '-1', '#8e44ad' ) );
+			dt.items.add( await mk( name + '-2', '#f39c12' ) );
+			// Chrome's DragEvent constructor ignores dataTransfer — pin it on
+			// the instance or the handler sees no files (media-flow, same trap).
+			const ev = new DragEvent( 'drop', { bubbles: true, cancelable: true } );
+			Object.defineProperty( ev, 'dataTransfer', { value: dt } );
+			document.querySelector( '#minn-picker-drop' ).dispatchEvent( ev );
+		}, 'minnmulti-' + suffix );
+		await page.waitForSelector( '#minn-picker-upl', { timeout: 20000 } );
+		const progress = await page.evaluate( () => {
+			const el = document.querySelector( '#minn-picker-upl' );
+			return {
+				text: el ? el.textContent.replace( /\s+/g, ' ' ).trim() : '',
+				bar: !! document.querySelector( '#minn-picker-upl-fill' ),
+			};
+		} );
+		t.check( 'the picker names the file it is uploading, with a percentage',
+			/minnmulti/.test( progress.text ) && /%/.test( progress.text ) && progress.bar,
+			JSON.stringify( progress ) );
+		t.check( 'and counts the file against the batch', /\b2\b/.test( progress.text ), progress.text );
+		await page.waitForFunction(
+			() => document.querySelectorAll( '.minn-picker-item.sel' ).length >= 2,
+			null, { timeout: 40000 } ).catch( () => null );
+		await page.unroute( '**/wp/v2/media**' );
+		t.check( 'the readout goes away when the batch is done',
+			! ( await page.$( '#minn-picker-upl' ) ), '' );
+		const selCount = await page.evaluate( () => document.querySelectorAll( '.minn-picker-item.sel' ).length );
+		t.check( 'both dropped files upload and come back selected', selCount === 2, String( selCount ) );
+		await page.click( '#minn-picker-done' );
+		await page.waitForTimeout( 400 );
+		const tilesNow = await page.evaluate( () => document.querySelectorAll( '#minn-p-images [data-pimg]' ).length );
+		t.check( 'both uploads join the gallery', tilesNow === 4, String( tilesNow ) );
+		await page.click( '#minn-product-save' );
+		await page.waitForFunction( () => {
+			const b = document.querySelector( '#minn-product-save' );
+			return b && ! b.disabled && /Save/.test( b.textContent );
+		}, null, { timeout: 20000 } ).catch( () => null );
+		await page.waitForTimeout( 600 );
+		const grown = await api( `wc/v3/products/${ id }?_fields=id,images` );
+		const grownIds = ( ( grown.body || {} ).images || [] ).map( ( x ) => x.id );
+		grownIds.filter( ( x ) => ! media.includes( x ) ).forEach( ( x ) => media.push( x ) );
+		t.check( 'the pair saves into the gallery', grownIds.length === 4, JSON.stringify( grownIds ) );
 	} finally {
 		if ( id ) await api( `wc/v3/products/${ id }?force=true`, { method: 'DELETE' } ).catch( () => null );
 		for ( const mid of media ) {

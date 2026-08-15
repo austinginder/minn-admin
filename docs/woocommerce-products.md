@@ -8,6 +8,41 @@ The reference for the page shape is the order page (`renderOrderPage`): one
 shared body renderer feeding both a quick-view modal and a full page, with
 `m.page` telling them apart.
 
+## The shape of the page
+
+Cards on a main column plus a 340px sidebar, the same grid the order page
+uses, and for the same reason: this page runs to ten sections and a two-column
+slab of bordered panels reads as one wall.
+
+The split is Shopify's. The main column is what the product **is**: name and
+summary, pictures, price, stock, size, attributes, variations. The sidebar is
+what it is **filed under**: published or not, type, taxonomies, linked
+products. The grid lives in the page's own stylesheet (`.minn-order-page
+.minn-order-layout`), so the quick-view modal takes the identical markup and
+stacks it. One body, two hosts, as on an order.
+
+Each card carries a `data-pcard` name so the layout can be tested by where a
+card is actually **drawn**, not by where it sits in the markup. A page can
+carry every right class name and still paint as one slab if the CSS never
+lands.
+
+**The save bar** appears when something changes and offers Discard beside
+Save. It rides a fingerprint of `buildProductPayload()` rather than a dirty
+flag per control: that function already reads every field on screen, so what
+it produces IS the answer to "did anything change", and it cannot drift from
+what the save sends. Cancelling out of a picker leaves it down; a chip, a
+dragged tile or a flipped switch raises it, and none of those fire an input
+event, which is why the watcher also listens for clicks (deferred a tick, so
+the model has already moved). Controls whose clicks never reach the body, the
+media picker and the date picker, call `m.syncDirty()` themselves.
+
+Discard rebuilds from a copy of the product taken at load. `m.full` is not
+that copy: flipping the type harvests the form into it, on purpose.
+
+The page therefore has no card wrapper around the body. An `overflow: hidden`
+wrapper would become the sticky bar's containing block, and the bar would
+stick to nothing.
+
 ## The wp-admin metabox, mapped
 
 wp-admin puts all of this behind the Product data metabox's vertical tabs plus a
@@ -146,10 +181,64 @@ its own.
    re-read afterwards so a second save updates them rather than creating
    duplicates.
 
-   Per-variation images and the variation-level shipping and tax fields are not
-   here yet; the card covers what a shop owner changes rather than everything
-   the resource holds.
+   The card later became a LIST of variants rather than a grid of inputs: six
+   variants of five fields each was thirty boxes and no answer to the question
+   the card exists for, which is what this product sells and for how much. A
+   row carries the picture, the variant, the price and what is available, and
+   opens the variant's own editor: attribute values, prices, SKU, stock status,
+   tracking with its quantity, and a picture.
+
+   The editor works on a COPY. A half-typed value left on the live model would
+   ride the next save of anything else on the page, so Cancel has to be a real
+   cancel; Done writes it back and the batch still goes with the page's single
+   Save. Two findings sit under it. WooCommerce clears a variation's picture on
+   `{ id: 0 }` (and on `null`) and sets one on `{ id }`, both verified against
+   a live store. And the media picker has to outrank a dialog it was opened
+   FROM, or it renders behind whatever asked for it.
+
+   Variation-level shipping and tax fields are still not here; the card covers
+   what a shop owner changes rather than everything the resource holds.
 
 Waves 2 through 5 cover what a shop owner touches weekly. Waves 8 and 9 are
 where WooCommerce's own UI is a canvas, so they need their own scoping pass
 before anyone starts.
+
+## Two things the fields learned later
+
+**The taxonomy fields open into a list.** Categories, tags and brands were
+search-only, an empty box that answered nothing until you guessed a term that
+exists. They now drop a list on focus with a tick box per row, ticked when the
+product is in that term, and a row toggles without closing, so filing a
+product in four categories is four clicks. Typing still searches the server: a
+store can have hundreds of terms, and filtering the first page locally would
+lie about what exists. The first page is cached per taxonomy so reopening is
+instant.
+
+Add new opens a dialog, and that dialog is what makes the door reasonable for
+a hierarchy too. The objection was never creating a category, it was creating
+one by ACCIDENT: Enter-to-create still refuses a hierarchy, because a stray
+branch from a typo is not something this field cleans up. A dialog is
+deliberate, and it can ask the one question a hierarchy needs, which is the
+parent.
+
+Every search says that it is searching, in the slot the chevron occupies so
+nothing shifts when the answer lands. Requests carry a generation: a slow
+answer to an earlier keystroke must neither repaint over a newer one nor stop
+its spinner. The store-wide attribute picker has no spinner because it never
+waits, its vocabulary is fetched before the first paint.
+
+**The gallery takes several files at once**, and shows each one's name,
+percentage and place in the batch while it uploads. That readout is the reason
+`uploadMedia()` uses XMLHttpRequest: fetch cannot report request progress, so
+a fetch upload can only say "working". Uploads run one after another, not in
+parallel, because a dozen at once is how a shared host answers 503 and because
+the order of the picks is the gallery's order.
+
+**Video does not belong in the gallery, and this is WooCommerce's rule.**
+`set_product_images()` rejects any attachment that is not an image with a 400
+`woocommerce_product_invalid_image_id`, verified against a live store by
+PUTting a `video/mp4` attachment id: the write fails outright, so a picker
+that offered video would offer a save that cannot succeed. A product video
+lives in the long description (Minn's editor takes a video block), in the
+Downloads card for a downloadable product, or in whatever meta field a theme
+reads, which is per-theme and not core.
