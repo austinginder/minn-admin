@@ -3345,6 +3345,14 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-cols-island .wp-block-columns { display: flex; gap: 22px; align-items: flex-start; }
 .minn-cols-island .wp-block-column { flex: 1; min-width: 0; }
 .minn-cols-island .wp-block-column + .wp-block-column { border-inline-start: 1px dashed var(--line); padding-inline-start: 22px; }
+/* Vendor slot containers (Stackable et al): the row/col classes are added to
+   the LIVE wrapper tags only (stored raw untouched), so layout never keys on
+   a vendor's own class names. Vendor wrapper <style> tags ride along, so
+   neutralize the sizing they most often pin. */
+.minn-cols-island .minn-slot-row { display: flex; gap: 22px; align-items: flex-start; }
+.minn-cols-island .minn-slot-col { flex: 1; min-width: 0; }
+.minn-cols-island .minn-slot-row > .minn-slot-col + .minn-slot-col { border-inline-start: 1px dashed var(--line); padding-inline-start: 22px; }
+.minn-cols-island .minn-slot-col .minn-slot { display: block; }
 /* Shortcode island — type the shortcode in place (no browser prompt). */
 .minn-shortcode-island {
   user-select: text;

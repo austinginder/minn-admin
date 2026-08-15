@@ -19675,6 +19675,81 @@
 		return { head: base.head, open: base.open, tag: base.tag, preamble, inner, tail };
 	}
 
+	// Vendor multi-slot containers (the Stackable shape): children live inside
+	// a MARKED content div below the wrapper (extra wrapper divs and per-block
+	// <style> tags around it), and each child nests its own marked content div
+	// two wrappers deep. Same discipline as core slots — every wrapper byte
+	// re-emits verbatim from the stored raw; only slot children serialize.
+	const SLOT_VENDOR = {
+		'stackable/columns': {
+			child: 'stackable/column',
+			rowMarker: 'stk-inner-blocks',
+			childMarker: 'stk-inner-blocks',
+		},
+	};
+
+	// slotParseContainer, marker edition: the slot region is the interior of
+	// the first div carrying the marker class; everything before it (styles,
+	// wrapper divs) folds into `preamble`, and only closing tags may follow
+	// its close. Reassembly identity still rules.
+	function slotParseMarked( raw, marker ) {
+		const base = slotParseContainer( raw );
+		if ( ! base ) return null;
+		const str = base.inner;
+		const om = str.match( new RegExp( '<div[^>]*\\b' + marker.replace( /-/g, '[-]' ) + '\\b[^>]*>' ) );
+		if ( ! om ) return null;
+		// Bytes before the marker are static chrome by definition — a child
+		// block comment there means this isn't the shape we think it is.
+		if ( str.slice( 0, om.index ).indexOf( '<!-- wp:' ) !== -1 ) return null;
+		const openEnd = om.index + om[ 0 ].length;
+		let depth = 1;
+		let i = openEnd;
+		let close = -1;
+		const lower = str.toLowerCase();
+		while ( i < str.length ) {
+			if ( str.startsWith( '<!--', i ) ) {
+				const end = str.indexOf( '-->', i );
+				i = end === -1 ? str.length : end + 3;
+				continue;
+			}
+			if ( str[ i ] === '<' ) {
+				const end = str.indexOf( '>', i );
+				if ( end === -1 ) return null;
+				if ( lower.startsWith( '</div', i ) ) {
+					depth--;
+					if ( depth === 0 ) { close = i; break; }
+				} else if ( lower.startsWith( '<div', i ) && /[\s>\/]/.test( lower[ i + 4 ] || '' ) ) {
+					depth++;
+				}
+				i = end + 1;
+				continue;
+			}
+			i++;
+		}
+		if ( close === -1 ) return null;
+		const closeEnd = str.indexOf( '>', close ) + 1;
+		if ( ! /^(?:\s|<\/div>)*$/i.test( str.slice( closeEnd ) ) ) return null;
+		const preamble = str.slice( 0, openEnd );
+		const inner = str.slice( openEnd, close );
+		const tail = str.slice( close ) + base.tail;
+		if ( base.head + base.open + preamble + inner + tail !== String( raw || '' ) ) return null;
+		return { head: base.head, open: base.open, tag: base.tag, preamble, inner, tail };
+	}
+
+	// DOM-side helpers for vendor wrappers. The stored raw is never touched —
+	// these decorate the LIVE wrapper markup so Minn CSS can lay columns out
+	// without keying on any vendor's class names.
+	const domOpenDivs = ( str ) =>
+		( String( str ).match( /<div\b/gi ) || [] ).length - ( String( str ).match( /<\/div>/gi ) || [] ).length;
+	const addDomClass = ( tagStr, cls ) => String( tagStr ).replace( /^<([a-z][a-z0-9]*)([^>]*)>/i, ( m, t, attrs ) =>
+		/class\s*=\s*"/i.test( attrs )
+			? `<${ t }${ attrs.replace( /class\s*=\s*"/i, ( c ) => c + cls + ' ' ) }>`
+			: `<${ t } class="${ cls }"${ attrs }>` );
+	const addDomClassLast = ( str, cls ) => {
+		const i = String( str ).toLowerCase().lastIndexOf( '<div' );
+		return i === -1 ? String( str ) : str.slice( 0, i ) + addDomClass( str.slice( i ), cls );
+	};
+
 	// A freeform chunk that is only plain HTML comments (+ whitespace) —
 	// AI-generated markup labels sections that way (<!-- Testimonial 1 -->).
 	// Preservable in a slot: comments become DOM comment nodes and the
@@ -19706,7 +19781,8 @@
 
 	function slotIslandHtml( idx, name, raw, ed ) {
 		const short = String( name || '' ).replace( /^core\//, '' );
-		const parts = slotParseContent( raw, short );
+		const vendor = SLOT_VENDOR[ String( name || '' ) ];
+		const parts = vendor ? slotParseMarked( raw, vendor.rowMarker ) : slotParseContent( raw, short );
 		if ( ! parts ) return null;
 		// Row-layout containers (layout:{"type":"flex"}) flow their children
 		// HORIZONTALLY on the front end. The slot keeps Minn typography by
@@ -19746,10 +19822,13 @@
 			}
 			return parts2.join( '\n' );
 		};
-		if ( 'columns' === short ) {
-			// Multi-slot: every direct child must be a core/column — one
-			// editable slot per column, all the wrapper bytes (columns AND
-			// columns' columns) preserved verbatim.
+		if ( vendor || 'columns' === short ) {
+			// Multi-slot: every direct child must be the container's column
+			// block — one editable slot per column, all the wrapper bytes
+			// (columns AND columns' columns, vendor styles included) preserved
+			// verbatim. Vendor columns nest their content in a marked div, so
+			// the slot sits inside the child's preamble and the DOM re-closes
+			// however many wrapper divs that preamble opened.
 			const segs = tokenizeBlocks( parts.inner );
 			if ( ! segs ) return null;
 			const cols = [];
@@ -19763,20 +19842,23 @@
 					cols.push( seg.raw.trim() );
 					continue;
 				}
-				if ( seg.name.replace( /^core\//, '' ) !== 'column' ) return null;
-				const cp = slotParseContainer( seg.raw );
+				const okChild = vendor ? seg.name === vendor.child : seg.name.replace( /^core\//, '' ) === 'column';
+				if ( ! okChild ) return null;
+				const cp = vendor ? slotParseMarked( seg.raw, vendor.childMarker ) : slotParseContainer( seg.raw );
 				if ( ! cp ) return null;
 				const kids = slotChildSegments( cp.inner );
 				if ( ! kids ) return null;
 				const inner = joinKids( kids );
 				if ( inner == null ) return null;
-				cols.push( `${ cp.open }<div class="minn-slot" contenteditable="true">${ inner }</div></${ cp.tag }>` );
+				cols.push( `${ addDomClass( cp.open, 'minn-slot-col' ) }${ cp.preamble }<div class="minn-slot" contenteditable="true">${ inner }</div>${ vendor ? '</div>'.repeat( Math.max( 1, domOpenDivs( cp.open + cp.preamble ) ) ) : '</' + cp.tag + '>' }` );
 				colCount++;
 			}
 			if ( ! colCount ) return null;
+			const rowOpen = vendor ? addDomClassLast( parts.preamble, 'minn-slot-row' ) : '';
+			const closers = vendor ? '</div>'.repeat( Math.max( 1, domOpenDivs( parts.open + parts.preamble ) ) ) : '</' + parts.tag + '>';
 			return `<div class="minn-block-island minn-slot-island minn-cols-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 			${ chip }
-			${ parts.open }${ cols.join( '' ) }</${ parts.tag }>
+			${ parts.open }${ rowOpen }${ cols.join( '' ) }${ closers }
 		</div>`;
 		}
 		const kids = slotChildSegments( parts.inner );
@@ -19839,7 +19921,10 @@
 		const idx = parseInt( el.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || islands[ idx ] == null ) return;
 		const shortName = String( el.dataset.block || '' ).replace( /^core\//, '' );
-		const parts = slotParseContent( String( islands[ idx ] ), shortName );
+		const vendor = SLOT_VENDOR[ String( el.dataset.block || '' ) ];
+		const parts = vendor
+			? slotParseMarked( String( islands[ idx ] ), vendor.rowMarker )
+			: slotParseContent( String( islands[ idx ] ), shortName );
 		if ( ! parts ) return;
 		// OWN slots only — with nesting, a descendant query would also grab
 		// the slots of nested containers (and misalign the columns walk).
@@ -19855,12 +19940,14 @@
 			let ci = 0;
 			const innerOut = segs.map( ( seg ) => {
 				if ( seg.type === 'html' ) return seg.raw;
-				const cp = slotParseContainer( seg.raw );
+				const cp = vendor ? slotParseMarked( seg.raw, vendor.childMarker ) : slotParseContainer( seg.raw );
 				const slot = slots[ ci++ ];
 				if ( ! cp || ! slot ) return seg.raw;
-				return cp.head + cp.open + serializeToBlocks( slot, islands ) + cp.tail;
+				// Vendor children carry a preamble (styles + inner wrappers)
+				// between the wrapper open and the slot content — verbatim.
+				return cp.head + cp.open + cp.preamble + serializeToBlocks( slot, islands ) + cp.tail;
 			} ).join( '' );
-			islands[ idx ] = parts.head + parts.open + innerOut + parts.tail;
+			islands[ idx ] = parts.head + parts.open + ( parts.preamble || '' ) + innerOut + parts.tail;
 			return;
 		}
 		islands[ idx ] = parts.head + parts.open + parts.preamble + serializeToBlocks( slots[ 0 ], islands ) + parts.tail;
@@ -19876,6 +19963,13 @@
 	function columnOp( island, op, refCol ) {
 		const ed = state.editor;
 		if ( ! ed || ! ed.islands || ! island ) return null;
+		// Structural ops write core wp:column markup — inside a vendor
+		// container that would corrupt the block. Add/remove columns for
+		// those live in their own editor, one honest link away.
+		if ( 'columns' !== String( island.dataset.block || '' ).replace( /^core\//, '' ) ) {
+			toast( __( 'This block’s columns are added and removed in the block editor.' ), true );
+			return null;
+		}
 		const idx = parseInt( island.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return null;
 		// The writer has been typing in these columns — take the live text into
@@ -19984,7 +20078,7 @@
 
 	function islandHtml( idx, name, raw, ed ) {
 		const short = String( name || '' ).replace( /^core\//, '' );
-		if ( SLOT_BLOCKS.includes( short ) ) {
+		if ( SLOT_BLOCKS.includes( short ) || SLOT_VENDOR[ String( name || '' ) ] ) {
 			// Editable container: children get a real typing slot; complex
 			// children become nested islands (ed registers them) and nested
 			// containers recurse. Unparseable inner markup falls through to
@@ -25731,6 +25825,9 @@
 			const col = slot && slot.parentElement;
 			const island = col && col.parentElement && col.parentElement.closest( '.minn-cols-island' );
 			if ( ! island || ! body.contains( island ) ) return;
+			// Vendor containers: no core column ops (columnOp would refuse
+			// anyway — no menu beats a menu of refusals).
+			if ( 'columns' !== String( island.dataset.block || '' ).replace( /^core\//, '' ) ) return;
 			// Only this island's OWN columns: a nested Columns block inside a
 			// column has its own slots and owns its own menu.
 			if ( slot.closest( '.minn-slot-island' ) !== island ) return;
