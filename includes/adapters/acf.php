@@ -22,8 +22,10 @@ defined( 'ABSPATH' ) || exit;
 // ({ id, url }) in the editor panel and a pick-button row in the inspector;
 // gallery stores an ordered attachment-id array and rides the islands
 // images editor in items mode (reorder / replace / remove / add); wysiwyg
-// stores an HTML fragment and edits in the rich-text modal.
-const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker', 'image', 'gallery', 'wysiwyg' );
+// stores an HTML fragment and edits in the rich-text modal; checkbox (and a
+// select with `multiple`) stores an ordered choice-key array and rides the
+// engine's multicheck control; button_group is a styled radio.
+const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'button_group', 'checkbox', 'true_false', 'color_picker', 'image', 'gallery', 'wysiwyg' );
 
 /** Layout-only ACF field types: chrome, not data — never mapped, never counted as locked. */
 const MINN_ADMIN_ACF_CHROME_TYPES = array( 'tab', 'message', 'accordion' );
@@ -78,6 +80,52 @@ function minn_admin_acf_image_in( $value ) {
 }
 
 /**
+ * Stored multi-choice value (checkbox / multiple select) → list of strings.
+ *
+ * @param mixed $val Raw stored value.
+ * @return string[]
+ */
+function minn_admin_acf_choices_out( $val ) {
+	$out = array();
+	foreach ( (array) $val as $x ) {
+		if ( is_scalar( $x ) ) {
+			$out[] = (string) $x;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Incoming multi-choice value → deduped list of strings, whitelisted against
+ * the field's choices (skipped for ACF checkbox `allow_custom` fields, whose
+ * custom entries are legitimate values).
+ *
+ * @param mixed $value Incoming value.
+ * @param array $field Mapped field ({ choices, anyChoice }).
+ * @return string[]
+ */
+function minn_admin_acf_choices_in( $value, $field ) {
+	$keys = array();
+	if ( empty( $field['anyChoice'] ) && ! empty( $field['choices'] ) && is_array( $field['choices'] ) ) {
+		$keys = array_map( 'strval', array_keys( $field['choices'] ) );
+	}
+	$out = array();
+	foreach ( (array) $value as $v ) {
+		if ( ! is_scalar( $v ) ) {
+			continue;
+		}
+		$v = (string) $v;
+		if ( $keys && ! in_array( $v, $keys, true ) ) {
+			continue;
+		}
+		if ( ! in_array( $v, $out, true ) ) {
+			$out[] = $v;
+		}
+	}
+	return $out;
+}
+
+/**
  * Incoming gallery value ([{ id, url }] entries or bare ids) → validated
  * attachment-id list. An empty list clears (ACF stores an empty array).
  *
@@ -122,24 +170,39 @@ function minn_admin_acf_groups_for( $post_id, $post_type ) {
 /**
  * Map one ACF field onto the panel vocabulary, or null if locked.
  *
+ * ACF types normalize onto engine types: button_group is a styled radio;
+ * checkbox and a select with `multiple` are the same multi-value control
+ * (`multicheck`, value = ordered choice-key list). `multiple` on anything
+ * else stays locked.
+ *
  * @param array $f ACF field array.
- * @return array|null { name, label, type, choices?, min?, max?, key }
+ * @return array|null { name, label, type, choices?, min?, max?, anyChoice?, key }
  */
 function minn_admin_acf_map_field( $f ) {
 	if ( empty( $f['name'] ) || empty( $f['type'] ) ) {
 		return null;
 	}
-	if ( ! in_array( $f['type'], MINN_ADMIN_ACF_SIMPLE_TYPES, true ) || ! empty( $f['multiple'] ) ) {
+	if ( ! in_array( $f['type'], MINN_ADMIN_ACF_SIMPLE_TYPES, true ) ) {
+		return null;
+	}
+	$type = $f['type'];
+	if ( 'button_group' === $type ) {
+		$type = 'radio';
+	} elseif ( 'checkbox' === $type || ( 'select' === $type && ! empty( $f['multiple'] ) ) ) {
+		$type = 'multicheck';
+	}
+	if ( ! empty( $f['multiple'] ) && 'multicheck' !== $type ) {
 		return null;
 	}
 	return array(
-		'name'    => $f['name'],
-		'label'   => $f['label'],
-		'type'    => $f['type'],
-		'choices' => ! empty( $f['choices'] ) ? $f['choices'] : null,
-		'min'     => isset( $f['min'] ) && '' !== $f['min'] ? $f['min'] : null,
-		'max'     => isset( $f['max'] ) && '' !== $f['max'] ? $f['max'] : null,
-		'key'     => $f['key'],
+		'name'      => $f['name'],
+		'label'     => $f['label'],
+		'type'      => $type,
+		'choices'   => ! empty( $f['choices'] ) ? $f['choices'] : null,
+		'min'       => isset( $f['min'] ) && '' !== $f['min'] ? $f['min'] : null,
+		'max'       => isset( $f['max'] ) && '' !== $f['max'] ? $f['max'] : null,
+		'anyChoice' => ! empty( $f['allow_custom'] ) ? true : null,
+		'key'       => $f['key'],
 	);
 }
 
@@ -159,23 +222,26 @@ function minn_admin_acf_map_repeater( $f ) {
 	if ( empty( $f['name'] ) || empty( $f['key'] ) ) {
 		return null;
 	}
-	$simple = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker', 'image', 'gallery' );
 	$subs   = array();
 	$locked = 0;
 	foreach ( (array) ( $f['sub_fields'] ?? array() ) as $sub ) {
 		if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 			continue;
 		}
-		if ( empty( $sub['name'] ) || ! in_array( $sub['type'] ?? '', $simple, true ) || ! empty( $sub['multiple'] ) ) {
+		// Subs share the field map — everything simple except wysiwyg (the
+		// row cards have no rich-text seat).
+		$m = minn_admin_acf_map_field( $sub );
+		if ( ! $m || 'wysiwyg' === $m['type'] ) {
 			$locked++;
 			continue;
 		}
 		$subs[] = array(
-			'name'    => $sub['name'],
-			'label'   => $sub['label'],
-			'type'    => $sub['type'],
-			'choices' => ! empty( $sub['choices'] ) ? $sub['choices'] : null,
-			'key'     => $sub['key'],
+			'name'      => $m['name'],
+			'label'     => $m['label'],
+			'type'      => $m['type'],
+			'choices'   => $m['choices'],
+			'anyChoice' => $m['anyChoice'],
+			'key'       => $m['key'],
 		);
 	}
 	if ( ! $subs ) {
@@ -296,6 +362,8 @@ function minn_admin_acf_read_values( $post_id ) {
 		} elseif ( 'gallery' === $field['type'] ) {
 			// The gallery control speaks an ordered [{ id, url }] list.
 			$out[ $name ] = minn_admin_acf_gallery_out( $val );
+		} elseif ( 'multicheck' === $field['type'] ) {
+			$out[ $name ] = minn_admin_acf_choices_out( $val );
 		} elseif ( 'rows' === $field['type'] ) {
 			// Repeater rows: [{ __idx, values }] — __idx is the row's position
 			// in ACF's stored rows, the write path's merge anchor. Raw rows key
@@ -311,6 +379,8 @@ function minn_admin_acf_read_values( $post_id ) {
 						$vals[ $sub['name'] ] = minn_admin_acf_image_out( $v );
 					} elseif ( 'gallery' === $sub['type'] ) {
 						$vals[ $sub['name'] ] = minn_admin_acf_gallery_out( $v );
+					} elseif ( 'multicheck' === $sub['type'] ) {
+						$vals[ $sub['name'] ] = minn_admin_acf_choices_out( $v );
 					} elseif ( is_array( $v ) ) {
 						$vals[ $sub['name'] ] = '';
 					} else {
@@ -357,6 +427,8 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 		} elseif ( 'gallery' === $field['type'] ) {
 			// [{ id, url }] entries or bare ids; an empty list clears.
 			$value = minn_admin_acf_gallery_in( $value );
+		} elseif ( 'multicheck' === $field['type'] ) {
+			$value = minn_admin_acf_choices_in( $value, $field );
 		} elseif ( 'wysiwyg' === $field['type'] ) {
 			// The same trust boundary WordPress applies to post content: users
 			// without unfiltered_html get their markup run through kses.
@@ -393,6 +465,8 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 						$v = minn_admin_acf_image_in( $v );
 					} elseif ( 'gallery' === $sub['type'] ) {
 						$v = minn_admin_acf_gallery_in( $v );
+					} elseif ( 'multicheck' === $sub['type'] ) {
+						$v = minn_admin_acf_choices_in( $v, $sub );
 					} elseif ( null === $v || false === $v ) {
 						$v = '';
 					} elseif ( ! is_scalar( $v ) ) {
@@ -461,6 +535,9 @@ function minn_admin_acf_block_forms() {
 				case 'select':
 				case 'radio':
 					$entry['control'] = 'select';
+					break;
+				case 'multicheck':
+					$entry['control'] = 'multicheck';
 					break;
 				case 'image':
 					$entry['control'] = 'image';
@@ -762,9 +839,9 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image' ), true ) ? $f['type'] : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'multicheck' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
-		if ( 'select' === $sf['type'] ) {
+		if ( in_array( $sf['type'], array( 'select', 'multicheck' ), true ) ) {
 			$sf['options'] = array();
 			foreach ( (array) ( $f['choices'] ?? array() ) as $value => $label ) {
 				$sf['options'][] = array( (string) $value, (string) $label );
@@ -779,6 +856,8 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			$values[ $f['key'] ] = minn_admin_acf_gallery_out( $v );
 		} elseif ( 'image' === $sf['type'] ) {
 			$values[ $f['key'] ] = minn_admin_acf_image_out( $v );
+		} elseif ( 'multicheck' === $sf['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_choices_out( $v );
 		} elseif ( is_array( $v ) ) {
 			$values[ $f['key'] ] = '';
 		} else {
@@ -824,6 +903,8 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$v = minn_admin_acf_gallery_in( $v );
 		} elseif ( 'image' === $byKey[ $key ]['type'] ) {
 			$v = minn_admin_acf_image_in( $v );
+		} elseif ( 'multicheck' === $byKey[ $key ]['type'] ) {
+			$v = minn_admin_acf_choices_in( $v, $byKey[ $key ] );
 		} elseif ( 'wysiwyg' === $byKey[ $key ]['type'] ) {
 			// The post-content trust boundary, same as the panel write path.
 			$v = is_scalar( $v ) ? (string) $v : '';

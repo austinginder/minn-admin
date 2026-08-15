@@ -135,6 +135,27 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		let mv = await readMinnAcf();
 		t.check( 'color value persisted', mv && mv.slideshow_accent === '#ff6600', JSON.stringify( mv ) );
 
+		// checkbox field: the multicheck control (one tick row per choice,
+		// value = the checked choice keys in choice order).
+		const mcSel = '[data-pf$=":slideshow_tags"][data-ftype="multicheck"]';
+		t.check( 'checkbox field renders the multicheck control',
+			await page.$eval( mcSel, ( e ) => e.querySelectorAll( 'input[type="checkbox"]' ).length === 3 ).catch( () => false ) );
+		await page.click( `${ mcSel } input[value="new"]` );
+		await page.click( `${ mcSel } input[value="featured"]` );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'checked choices persisted as an ordered list',
+			Array.isArray( mv.slideshow_tags ) && mv.slideshow_tags.join() === 'new,featured',
+			JSON.stringify( mv && mv.slideshow_tags ) );
+
+		// button_group is a styled radio — it rides the select control.
+		t.check( 'button_group renders as a select',
+			!! ( await page.$( '[data-pf$=":slideshow_size"][data-ftype="select"]' ) ) );
+		await page.selectOption( '[data-pf$=":slideshow_size"]', 'lg' );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'button_group choice persisted', mv.slideshow_size === 'lg', JSON.stringify( mv && mv.slideshow_size ) );
+
 		// image field: the form engine's { id, url } control with the media picker.
 		const imgSel = '[data-pf$=":slideshow_cover"][data-ftype="image"]';
 		t.check( 'image field renders the image control', !! ( await page.$( imgSel ) ) );

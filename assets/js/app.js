@@ -1282,6 +1282,16 @@
 		if ( t === 'checkbox' ) {
 			return `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" ${ attr }="${ esc( id ) }" data-ftype="checkbox"${ v ? ' checked' : '' }> ${ esc( f.label || '' ) }</label>`;
 		}
+		// Multicheck: multi-value choices (ACF checkbox / multiple select) as
+		// one tick row per choice; value = the checked choice keys in choice
+		// order. Checkbox input events bubble to the wrap, so every dialect's
+		// generic input binding tracks edits unchanged.
+		if ( t === 'multicheck' ) {
+			const cur = ( Array.isArray( v ) ? v : [] ).map( String );
+			return `<div class="minn-field-multicheck" ${ attr }="${ esc( id ) }" data-ftype="multicheck">
+				${ ( f.options || [] ).map( ( [ ov, ol ] ) => `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" value="${ esc( String( ov ) ) }"${ cur.includes( String( ov ) ) ? ' checked' : '' }> ${ esc( String( ol ) ) }</label>` ).join( '' ) }
+			</div>`;
+		}
 		if ( t === 'tags' ) {
 			const shown = Array.isArray( v ) ? v.join( ', ' ) : String( v );
 			return `<input class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="tags" value="${ esc( shown ) }" placeholder="${ esc( f.placeholder || 'tag-one, tag-two' ) }">`;
@@ -1361,6 +1371,9 @@
 		if ( kind === 'tags' ) return el.value.split( /,\s*/ ).map( ( t ) => t.trim() ).filter( Boolean );
 		if ( kind === 'toggle' ) return el.classList.contains( 'on' );
 		if ( kind === 'checkbox' ) return el.checked;
+		if ( kind === 'multicheck' ) {
+			return $$( 'input[type="checkbox"]', el ).filter( ( c ) => c.checked ).map( ( c ) => c.value );
+		}
 		if ( kind === 'image' ) {
 			const id = parseInt( el.dataset.imgId || '0', 10 );
 			if ( ! id ) return null;
@@ -28349,6 +28362,10 @@
 			const had = name in obj;
 			if ( fdef.control === 'checkbox' ) {
 				v = v ? 1 : 0;
+			} else if ( fdef.control === 'multicheck' ) {
+				// An untouched empty list injects nothing (the empty-never-
+				// present rule; '' can't catch an array).
+				if ( ! had && ! ( v || [] ).length ) return;
 			} else if ( fdef.control === 'number' ) {
 				if ( v == null && ! had ) return;
 				if ( v == null ) v = '';

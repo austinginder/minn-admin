@@ -1091,6 +1091,7 @@ button.minn-nav-label:hover { color: var(--text2); }
   to { opacity: 1; transform: translateY(0); }
 }
 .minn-field-image { display: flex; flex-direction: column; gap: 8px; }
+.minn-field-multicheck { display: flex; flex-direction: column; gap: 6px; }
 .minn-field-image-thumb {
   display: block; width: 100%; max-width: 280px; aspect-ratio: 1.91 / 1;
   border-radius: 9px; background-size: cover; background-position: center;
