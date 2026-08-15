@@ -26876,6 +26876,10 @@
 		const cardHtml = ( c, i ) => {
 			const t = types[ c.name ];
 			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ), c.name ) : '';
+			// Object-attribute subform (ACF-style blocks): those fields ARE the
+			// child's content, so they render in the card body, not behind the
+			// Settings toggle.
+			const dfRows = dataFormRows( c.name, c.attrs, String( i ) );
 			// Seed from __text when a structure op re-rendered mid-edit
 			// (collect stored the live value; the pristine tail would
 			// silently revert it).
@@ -26889,7 +26893,7 @@
 				<button type="button" class="minn-cted-setbtn" data-ctset="${ i }" aria-expanded="false">${ icon( 'chevron-down' ) }${ esc( setLabel ) }</button>
 				<div class="minn-cted-set" data-ctset-panel="${ i }" hidden>${ fields }</div>` : '';
 			const title = ( t && t.title ) || c.name.replace( /^core\//, '' );
-			const content = textRow || runRowsC;
+			const content = ( textRow || runRowsC ) + dfRows;
 			return `<div class="minn-cted-card" data-ci="${ i }">
 				<div class="minn-cted-card-head">
 					<span class="minn-cted-card-title">${ i + 1 }. ${ esc( title ) }</span>
@@ -27093,6 +27097,75 @@
 				<input class="minn-input minn-insp-filter" data-inspmore-filter placeholder="${ esc( __( 'Filter settings…' ) ) }">
 				${ rest.map( ( r ) => `<div class="minn-insp-row" data-fkey="${ esc( ( r.label + ' ' + r.key ).toLowerCase() ) }">${ r.html }</div>` ).join( '' ) }
 			</div>`;
+	}
+
+	// Object-attribute subforms (minn_admin_block_forms `dataForm`): blocks
+	// like ACF's store their real content nested inside ONE object attribute
+	// ({ field: value, _field: field_key }), which the generic form rightly
+	// skips as too structural. The descriptor names the attr and describes its
+	// subfields; rows collect via data-inspdf="<prefix>:<name>" and alias keys
+	// (`_name` → field key) ride along on write so the plugin's renderer can
+	// resolve values.
+	function dataFormFor( blockName ) {
+		const df = ( blockFormFor( blockName ) || {} ).dataForm;
+		return df && df.attr && Array.isArray( df.fields ) ? df : null;
+	}
+
+	function dataFormRows( blockName, attrs, prefix ) {
+		const df = dataFormFor( blockName );
+		if ( ! df || ( ! df.fields.length && ! df.locked ) ) return '';
+		const cur = ( attrs && typeof attrs[ df.attr ] === 'object' && attrs[ df.attr ] ) || {};
+		const rows = df.fields.map( ( f ) => {
+			const options = Array.isArray( f.options ) && f.options.length
+				? f.options.map( ( o ) => ( Array.isArray( o ) ? o : [ o, o ] ) ) : null;
+			let v = cur[ f.name ];
+			// ACF stores true_false as 1/'1'/0/'' — normalize for the checkbox.
+			if ( f.control === 'checkbox' ) v = ! ( v == null || v === '' || v === '0' || v === 0 || v === false );
+			const label = f.label || humanizeAttrKey( f.name );
+			const controlHtml = formControlHtml( {
+				key: f.name, label,
+				type: f.control || ( options ? 'select' : 'text' ), options,
+				clearable: true,
+				klass: f.control === 'textarea' ? 'minn-insp-textarea' : '',
+			}, v == null ? '' : v, 'data-inspdf', `${ prefix }:${ f.name }` );
+			return f.control === 'checkbox' ? controlHtml
+				: `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }`;
+		} ).join( '' );
+		const locked = df.locked
+			? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of fields only editable in the block editor. */ _n( '%d advanced field lives in the block editor.', '%d advanced fields live in the block editor.', df.locked ) ), df.locked ) }</div>`
+			: '';
+		return rows + locked;
+	}
+
+	// Fold data-inspdf inputs back into the object attribute. Unknown and
+	// underscore keys in the existing object are preserved untouched; a field
+	// that never existed and is still empty injects nothing.
+	function collectDataForm( root, blockName, attrs, prefix ) {
+		const df = dataFormFor( blockName );
+		if ( ! df ) return;
+		$$( '[data-inspdf]', root ).forEach( ( input ) => {
+			const sep = input.dataset.inspdf.indexOf( ':' );
+			if ( sep < 0 || input.dataset.inspdf.slice( 0, sep ) !== prefix ) return;
+			const name = input.dataset.inspdf.slice( sep + 1 );
+			const fdef = df.fields.find( ( f ) => f.name === name );
+			if ( ! fdef ) return;
+			let v = formControlValue( input );
+			const obj = ( attrs && typeof attrs[ df.attr ] === 'object' && attrs[ df.attr ] ) || {};
+			const had = name in obj;
+			if ( fdef.control === 'checkbox' ) {
+				v = v ? 1 : 0;
+			} else if ( fdef.control === 'number' ) {
+				if ( v == null && ! had ) return;
+				if ( v == null ) v = '';
+			} else {
+				if ( v == null ) v = '';
+			}
+			if ( ! had && ( v === '' || v === 0 ) ) return;
+			attrs[ df.attr ] = obj;
+			obj[ name ] = v;
+			const alias = ( df.alias || {} )[ name ];
+			if ( alias && obj[ '_' + name ] === undefined ) obj[ '_' + name ] = alias;
+		} );
 	}
 
 	let inspectorEl = null;
@@ -27338,9 +27411,11 @@
 		};
 		const ownType = insp.types[ insp.model.parts.name ];
 		fold( insp.model.ownAttrs, ownType && ownType.attributes, 'own' );
+		collectDataForm( root, insp.model.parts.name, insp.model.ownAttrs, 'own' );
 		insp.model.children.forEach( ( c, i ) => {
 			const t = insp.types[ c.name ];
 			fold( c.attrs, t && t.attributes, String( i ) );
+			collectDataForm( root, c.name, c.attrs, String( i ) );
 			const ta = root.querySelector( `[data-insptext="${ i }"]` );
 			if ( ta ) c.__text = ta.value;
 		} );
@@ -27407,7 +27482,10 @@
 			? inspectorFields( Object.fromEntries( gallerySafe.filter( ( k ) => ownType.attributes[ k ] ).map( ( k ) => [ k, ownType.attributes[ k ] ] ) ), model.ownAttrs, 'own', model.parts.name )
 			+ `<div class="minn-insp-note">${ esc( __( 'Link, size and lightbox options live in the block editor.' ) ) }</div>`
 			: '';
-		const ownFields = mediaRebuild ? galleryFields : ( ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own', model.parts.name ) : '' )
+		// Object-attribute subform (ACF-style blocks) leads — it IS the
+		// block's content; schema attrs follow.
+		const ownFields = mediaRebuild ? galleryFields : dataFormRows( model.parts.name, model.ownAttrs, 'own' )
+			+ ( ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own', model.parts.name ) : '' )
 			+ ( model.wt || [] ).map( ( w, i ) => `<div class="minn-field-label">${ esc( w.label ) }</div>
 			<input class="minn-input" data-insp="wt:${ i }" value="${ esc( w.value ) }">` ).join( '' )
 			+ ( ownRunRows ? `<div class="minn-field-label">${ esc( __( 'Text' ) ) }</div>${ ownRunRows }` : '' );
@@ -27428,7 +27506,8 @@
 			: '';
 		const childSections = mediaRebuild || manyKids ? '' : model.children.map( ( c, i ) => {
 			const t = types[ c.name ];
-			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ), c.name ) : '';
+			const fields = dataFormRows( c.name, c.attrs, String( i ) )
+				+ ( t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ), c.name ) : '' );
 			// The child's text (from its saved HTML) leads the section — it's
 			// what a writer came to change; schema attrs follow. Seed from
 			// __text when a structure op re-rendered mid-edit (collect stored
@@ -27521,7 +27600,7 @@
 		// Fold pending inspector field edits into the island so they ride the save
 		// (clicking Block editor without Apply used to drop them).
 		if ( inspectorState && inspectorEl && ed.islands && inspectorState.idx != null ) {
-			const hasFields = inspectorEl.querySelector( '[data-insp], [data-insprun], [data-insptext], [data-inspimg]' );
+			const hasFields = inspectorEl.querySelector( '[data-insp], [data-inspdf], [data-insprun], [data-insptext], [data-inspimg]' );
 			if ( hasFields || $( '#minn-insp-apply', inspectorEl ) ) {
 				collectInspectorForms();
 				const newRaw = buildInspectorRaw( inspectorState );

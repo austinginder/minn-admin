@@ -187,6 +187,101 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 	}
 }
 
+/**
+ * Map ACF block fields onto a `dataForm` descriptor for the block inspector.
+ *
+ * ACF blocks (Pro) store their content inside the comment's `data` attribute
+ * as { field_name: value, _field_name: field_key }. The generic inspector
+ * rightly skips object attributes, which left these blocks uneditable in Minn
+ * (and worse, exposed the raw name/mode wrapper attrs). This describes each
+ * registered acf/* block's simple fields so the inspector renders a real form.
+ *
+ * @return array Block name => descriptor additions.
+ */
+function minn_admin_acf_block_forms() {
+	if ( ! function_exists( 'acf_get_block_types' ) || ! function_exists( 'acf_get_block_fields' ) ) {
+		return array(); // blocks are ACF Pro
+	}
+	$out = array();
+	foreach ( acf_get_block_types() as $name => $block_type ) {
+		$fields = array();
+		$alias  = array();
+		$locked = 0;
+		foreach ( (array) acf_get_block_fields( array( 'name' => $name ) ) as $f ) {
+			if ( in_array( $f['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
+				continue;
+			}
+			$simple = minn_admin_acf_map_field( $f );
+			if ( ! $simple ) {
+				$locked++;
+				continue;
+			}
+			$entry = array(
+				'name'  => $simple['name'],
+				'label' => $simple['label'],
+			);
+			switch ( $simple['type'] ) {
+				case 'textarea':
+					$entry['control'] = 'textarea';
+					break;
+				case 'number':
+				case 'range':
+					$entry['control'] = 'number';
+					break;
+				case 'true_false':
+					$entry['control'] = 'checkbox';
+					break;
+				case 'select':
+				case 'radio':
+					$entry['control'] = 'select';
+					break;
+				default:
+					$entry['control'] = 'text';
+			}
+			if ( ! empty( $simple['choices'] ) && is_array( $simple['choices'] ) ) {
+				$entry['options'] = array();
+				foreach ( $simple['choices'] as $value => $label ) {
+					$entry['options'][] = array( (string) $value, (string) $label );
+				}
+			}
+			$fields[]                  = $entry;
+			$alias[ $simple['name'] ] = $simple['key'];
+		}
+		$out[ $name ] = array(
+			// The wrapper attrs are plumbing: `name` edits corrupt the block,
+			// `data` is the map the form below owns, `mode` is a Gutenberg UI
+			// concern. Hidden even when no fields mapped.
+			'attributes' => array(
+				'name' => array( 'hide' => true ),
+				'data' => array( 'hide' => true ),
+				'mode' => array( 'hide' => true ),
+				'id'   => array( 'hide' => true ),
+			),
+		);
+		if ( $fields || $locked ) {
+			$out[ $name ]['dataForm'] = array(
+				'attr'   => 'data',
+				'fields' => $fields,
+				'alias'  => $alias,
+				'locked' => $locked,
+			);
+		}
+	}
+	return $out;
+}
+
+add_filter( 'minn_admin_block_forms', function ( $forms ) {
+	if ( ! minn_admin_acf_active() ) {
+		return $forms;
+	}
+	foreach ( minn_admin_acf_block_forms() as $name => $form ) {
+		$forms[ $name ] = isset( $forms[ $name ] ) && is_array( $forms[ $name ] )
+			? array_merge( $forms[ $name ], $form )
+			: $form;
+	}
+	return $forms;
+} );
+
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 	if ( ! minn_admin_acf_active() ) {
 		return $panels;
