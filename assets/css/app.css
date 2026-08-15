@@ -1092,6 +1092,8 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-field-image { display: flex; flex-direction: column; gap: 8px; }
 .minn-field-multicheck { display: flex; flex-direction: column; gap: 6px; }
+.minn-field-file { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.minn-field-file-name { font-size: 13px; word-break: break-all; }
 .minn-field-image-thumb {
   display: block; width: 100%; max-width: 280px; aspect-ratio: 1.91 / 1;
   border-radius: 9px; background-size: cover; background-position: center;

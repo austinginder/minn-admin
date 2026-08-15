@@ -29,7 +29,9 @@ defined( 'ABSPATH' ) || exit;
 // rides the engine's date control ('YYYY-MM-DD'), date_time_picker stores
 // 'Y-m-d H:i:s' and rides datetime ('YYYY-MM-DDTHH:mm'), time_picker stores
 // 'H:i:s' and rides the lenient time text control ('HH:mm').
-const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'button_group', 'checkbox', 'true_false', 'color_picker', 'image', 'gallery', 'wysiwyg', 'date_picker', 'date_time_picker', 'time_picker' );
+// File stores an attachment id like image, but rides the file control (any
+// attachment type, filename shown instead of a thumb).
+const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'button_group', 'checkbox', 'true_false', 'color_picker', 'image', 'gallery', 'file', 'wysiwyg', 'date_picker', 'date_time_picker', 'time_picker' );
 
 /** Layout-only ACF field types: chrome, not data — never mapped, never counted as locked. */
 const MINN_ADMIN_ACF_CHROME_TYPES = array( 'tab', 'message', 'accordion' );
@@ -127,6 +129,28 @@ function minn_admin_acf_choices_in( $value, $field ) {
 		}
 	}
 	return $out;
+}
+
+/**
+ * Stored file value (attachment id) → { id, url, name } for the file
+ * control, or '' when unset. Writes reuse minn_admin_acf_image_in — a file
+ * is the same validated attachment id.
+ *
+ * @param mixed $val Raw stored value.
+ * @return array|string
+ */
+function minn_admin_acf_file_out( $val ) {
+	$id = is_numeric( $val ) ? (int) $val : 0;
+	if ( $id <= 0 ) {
+		return '';
+	}
+	$url = (string) wp_get_attachment_url( $id );
+	$name = $url ? wp_basename( $url ) : '';
+	return array(
+		'id'   => $id,
+		'url'  => $url,
+		'name' => $name ? $name : '#' . $id,
+	);
 }
 
 /**
@@ -468,6 +492,8 @@ function minn_admin_acf_read_values( $post_id ) {
 		} elseif ( 'gallery' === $field['type'] ) {
 			// The gallery control speaks an ordered [{ id, url }] list.
 			$out[ $name ] = minn_admin_acf_gallery_out( $val );
+		} elseif ( 'file' === $field['type'] ) {
+			$out[ $name ] = minn_admin_acf_file_out( $val );
 		} elseif ( 'multicheck' === $field['type'] ) {
 			$out[ $name ] = minn_admin_acf_choices_out( $val );
 		} elseif ( 'date' === $field['type'] ) {
@@ -491,6 +517,8 @@ function minn_admin_acf_read_values( $post_id ) {
 						$vals[ $sub['name'] ] = minn_admin_acf_image_out( $v );
 					} elseif ( 'gallery' === $sub['type'] ) {
 						$vals[ $sub['name'] ] = minn_admin_acf_gallery_out( $v );
+					} elseif ( 'file' === $sub['type'] ) {
+						$vals[ $sub['name'] ] = minn_admin_acf_file_out( $v );
 					} elseif ( 'multicheck' === $sub['type'] ) {
 						$vals[ $sub['name'] ] = minn_admin_acf_choices_out( $v );
 					} elseif ( 'date' === $sub['type'] ) {
@@ -539,8 +567,8 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 		$field = $allowed[ $name ];
 		if ( 'true_false' === $field['type'] ) {
 			$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
-		} elseif ( 'image' === $field['type'] ) {
-			// { id, url } from the image control, a bare id, or empty = clear.
+		} elseif ( 'image' === $field['type'] || 'file' === $field['type'] ) {
+			// { id, … } from the control, a bare id, or empty = clear.
 			$value = minn_admin_acf_image_in( $value );
 		} elseif ( 'gallery' === $field['type'] ) {
 			// [{ id, url }] entries or bare ids; an empty list clears.
@@ -585,7 +613,7 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 					$v = $vals[ $sub['name'] ];
 					if ( 'true_false' === $sub['type'] ) {
 						$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
-					} elseif ( 'image' === $sub['type'] ) {
+					} elseif ( 'image' === $sub['type'] || 'file' === $sub['type'] ) {
 						$v = minn_admin_acf_image_in( $v );
 					} elseif ( 'gallery' === $sub['type'] ) {
 						$v = minn_admin_acf_gallery_in( $v );
@@ -647,10 +675,11 @@ function minn_admin_acf_block_forms() {
 				$locked++;
 				continue;
 			}
-			// Date types stay locked in block forms: their values live in the
-			// block's data attribute in ACF's raw storage formats, and the
-			// inspector has no adapter layer (or picker arming) to translate.
-			if ( in_array( $simple['type'], array( 'date', 'datetime', 'time' ), true ) ) {
+			// Date and file types stay locked in block forms: their values
+			// live in the block's data attribute in ACF's raw storage
+			// formats, and the inspector has no adapter layer (or per-type
+			// picker arming) to translate.
+			if ( in_array( $simple['type'], array( 'date', 'datetime', 'time', 'file' ), true ) ) {
 				$locked++;
 				continue;
 			}
@@ -976,7 +1005,7 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'multicheck', 'date', 'datetime', 'time' ), true ) ? $f['type'] : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'multicheck', 'date', 'datetime', 'time' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
 		if ( in_array( $sf['type'], array( 'select', 'multicheck' ), true ) ) {
 			$sf['options'] = array();
@@ -993,6 +1022,8 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			$values[ $f['key'] ] = minn_admin_acf_gallery_out( $v );
 		} elseif ( 'image' === $sf['type'] ) {
 			$values[ $f['key'] ] = minn_admin_acf_image_out( $v );
+		} elseif ( 'file' === $sf['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_file_out( $v );
 		} elseif ( 'multicheck' === $sf['type'] ) {
 			$values[ $f['key'] ] = minn_admin_acf_choices_out( $v );
 		} elseif ( 'date' === $sf['type'] ) {
@@ -1044,7 +1075,7 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
 		} elseif ( 'gallery' === $byKey[ $key ]['type'] ) {
 			$v = minn_admin_acf_gallery_in( $v );
-		} elseif ( 'image' === $byKey[ $key ]['type'] ) {
+		} elseif ( 'image' === $byKey[ $key ]['type'] || 'file' === $byKey[ $key ]['type'] ) {
 			$v = minn_admin_acf_image_in( $v );
 		} elseif ( 'multicheck' === $byKey[ $key ]['type'] ) {
 			$v = minn_admin_acf_choices_in( $v, $byKey[ $key ] );

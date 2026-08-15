@@ -191,6 +191,25 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 			mv && mv.slideshow_cover && mv.slideshow_cover.id > 0 && typeof mv.slideshow_cover.url === 'string',
 			JSON.stringify( mv && mv.slideshow_cover ) );
 
+		// file field: the any-attachment picker (it also replaces the panel
+		// modal, so re-enter through the door first).
+		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
+		await page.click( '[data-side-door="panel:acf"]' );
+		const flSel = '[data-pf$=":slideshow_manual"][data-ftype="file"]';
+		await page.waitForSelector( flSel, { timeout: 15000 } );
+		t.check( 'file field renders the file control', true );
+		await page.click( `${ flSel } [data-file-pick]` );
+		await page.waitForSelector( '.minn-picker-item[data-pick]', { timeout: 15000 } );
+		t.check( 'file picker lists non-image attachments', await page.evaluate( () =>
+			Array.from( document.querySelectorAll( '.minn-picker-item' ) ).some( ( el ) => /manual/i.test( el.textContent ) ) ) );
+		await page.click( '.minn-picker-item[data-pick]' );
+		await page.waitForTimeout( 600 );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'picked file persisted as { id, url, name }',
+			mv && mv.slideshow_manual && mv.slideshow_manual.id > 0 && typeof mv.slideshow_manual.name === 'string' && mv.slideshow_manual.name.length > 0,
+			JSON.stringify( mv && mv.slideshow_manual ) );
+
 		// gallery field: the islands images editor in items mode. Opening it
 		// closes the panel modal by design (the media picker must be able to
 		// stack above the images editor), so the flow ends back in the editor

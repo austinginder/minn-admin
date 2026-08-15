@@ -1335,6 +1335,14 @@
 				<button type="button" class="minn-btn-soft" data-rt-edit>${ s ? esc( __( 'Edit content…' ) ) : esc( __( 'Add content…' ) ) }</button>
 			</div>`;
 		}
+		// File: any attachment ({ id, url, name }) — Set/Replace opens the
+		// media picker in any-type mode. The CALLER arms bindFileField (no
+		// input events, like image).
+		if ( t === 'file' ) {
+			const fv = ( v && typeof v === 'object' ) ? v : ( v ? { id: v } : null );
+			const has = fv && fv.id;
+			return `<div class="minn-field-file" ${ attr }="${ esc( id ) }" data-ftype="file" data-file-id="${ has ? esc( String( fv.id ) ) : '' }" data-file-url="${ esc( has ? ( fv.url || '' ) : '' ) }" data-file-name="${ esc( has ? ( fv.name || '' ) : '' ) }">${ fileControlChrome( has ? fv : null ) }</div>`;
+		}
 		// Date / datetime: the app's own date-picker popover, never the
 		// unstyleable native control. The machine value rides data-dp
 		// ('YYYY-MM-DD' or 'YYYY-MM-DDTHH:mm'); the CALLER arms
@@ -1387,6 +1395,11 @@
 		if ( kind === 'checkbox' ) return el.checked;
 		if ( kind === 'multicheck' ) {
 			return $$( 'input[type="checkbox"]', el ).filter( ( c ) => c.checked ).map( ( c ) => c.value );
+		}
+		if ( kind === 'file' ) {
+			const id = parseInt( el.dataset.fileId || '0', 10 );
+			if ( ! id ) return null;
+			return { id, url: el.dataset.fileUrl || '', name: el.dataset.fileName || '' };
 		}
 		if ( kind === 'date' || kind === 'datetime' ) return el.dataset.dp || '';
 		if ( kind === 'time' ) {
@@ -1692,6 +1705,14 @@
 					if ( row ) { row.values[ name ] = v; commit(); }
 				} );
 			} );
+			$$( '[data-rowsub][data-ftype="file"]', wrap ).forEach( ( el ) => {
+				const sep = el.dataset.rowsub.indexOf( ':' );
+				const row = rows[ Number( el.dataset.rowsub.slice( 0, sep ) ) ];
+				const name = el.dataset.rowsub.slice( sep + 1 );
+				bindFileField( el, ( v ) => {
+					if ( row ) { row.values[ name ] = v; commit(); }
+				} );
+			} );
 			$$( '[data-rowsub][data-ftype="date"], [data-rowsub][data-ftype="datetime"]', wrap ).forEach( ( el ) => {
 				const sep = el.dataset.rowsub.indexOf( ':' );
 				const row = rows[ Number( el.dataset.rowsub.slice( 0, sep ) ) ];
@@ -1784,6 +1805,52 @@
 				<button type="button" class="minn-btn-soft" data-img-pick>${ has ? esc( __( 'Replace' ) ) : esc( __( 'Set image' ) ) }</button>
 				${ has ? `<button type="button" class="minn-btn-soft danger" data-img-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
 			</div>`;
+	}
+
+	// Inner chrome for the file control (initial render + repaint).
+	function fileControlChrome( fv ) {
+		return `${ fv ? `<span class="minn-field-file-name">${ esc( fv.name || ( '#' + fv.id ) ) }</span>` : '' }
+			<div class="minn-field-image-actions">
+				<button type="button" class="minn-btn-soft" data-file-pick>${ fv ? esc( __( 'Replace' ) ) : esc( __( 'Choose file' ) ) }</button>
+				${ fv ? `<button type="button" class="minn-btn-soft danger" data-file-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
+			</div>`;
+	}
+
+	// Arm one file control (data-ftype="file"): the media picker in any-type
+	// mode (a file field takes PDFs, zips, audio — not just images). Same
+	// contract as bindImageField: data-file-* attrs are the readable truth,
+	// onChange receives { id, url, name } or null.
+	function bindFileField( wrap, onChange ) {
+		const paint = ( fv ) => {
+			const has = !! ( fv && fv.id );
+			wrap.dataset.fileId = has ? String( fv.id ) : '';
+			wrap.dataset.fileUrl = has ? ( fv.url || '' ) : '';
+			wrap.dataset.fileName = has ? ( fv.name || '' ) : '';
+			wrap.innerHTML = fileControlChrome( has ? fv : null );
+			wire();
+		};
+		const wire = () => {
+			$$( '[data-file-pick]', wrap ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', ( e ) => {
+					e.preventDefault();
+					e.stopPropagation();
+					openMediaPicker( ( it ) => {
+						const next = { id: it.id, url: it.url || '', name: it.name || '' };
+						paint( next );
+						onChange( next );
+					}, { any: true } );
+				} )
+			);
+			$$( '[data-file-clear]', wrap ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', ( e ) => {
+					e.preventDefault();
+					e.stopPropagation();
+					paint( null );
+					onChange( null );
+				} )
+			);
+		};
+		wire();
 	}
 
 	// Arm one image control (data-ftype="image"): Set/Replace opens the media
@@ -14753,6 +14820,8 @@
 				// The save reads the wrap's data-img-* at save time
 				// (formControlValue); picking or clearing just dirties the key.
 				bindImageField( input, mark );
+			} else if ( input.dataset.ftype === 'file' ) {
+				bindFileField( input, mark );
 			} else if ( input.dataset.ftype === 'date' || input.dataset.ftype === 'datetime' ) {
 				// Readonly input: the picker's commit is the only edit signal.
 				bindDatePicker( input, mark, { dateOnly: input.dataset.ftype === 'date', marks: false } );
@@ -24964,6 +25033,8 @@
 				} );
 			} else if ( input.dataset.ftype === 'image' ) {
 				bindImageField( input, ( v ) => write( v ) );
+			} else if ( input.dataset.ftype === 'file' ) {
+				bindFileField( input, ( v ) => write( v ) );
 			} else if ( input.dataset.ftype === 'date' || input.dataset.ftype === 'datetime' ) {
 				// Readonly input — commits fire no input events, so the
 				// picker's onChange is the write path.
