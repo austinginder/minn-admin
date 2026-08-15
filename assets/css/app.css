@@ -2827,6 +2827,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
    until there is a picture to remove. */
 .minn-var-imageacts button[hidden] { display: none; }
 .minn-var-note { margin-top: 12px; }
+.minn-var-error { margin-top: 10px; font-size: 13px; color: var(--red); }
+.minn-var-error[hidden] { display: none; }
 .minn-pimg-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* A group with nothing to sit beside (the short description) takes the row. */
 .minn-order-panel.wide { grid-column: 1 / -1; border-inline-end: none; }

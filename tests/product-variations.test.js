@@ -44,6 +44,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	const suffix = Date.now();
 	let id = null;
+	let rivalId = null;
 	try {
 		const defs = await api( 'wc/v3/products/attributes?_fields=id,name' );
 		const attr = ( defs.body || [] )[ 0 ];
@@ -181,6 +182,88 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			list.every( ( v ) => ( v.attributes || [] ).some( ( a ) => /Small|Large/.test( a.option || '' ) ) ),
 			JSON.stringify( list.map( ( v ) => v.attributes ) ) );
 
+		// A sale price that is not BELOW the regular price is refused here,
+		// because WooCommerce does not refuse it: it answers 200 and drops the
+		// sale price without a word, so the reader would get a success toast
+		// and no sale at all.
+		const doneAndRead = async () => {
+			await page.click( '#minn-var-dialog [data-var-done]' );
+			await page.waitForTimeout( 300 );
+			return page.evaluate( () => {
+				const d = document.querySelector( '#minn-var-dialog' );
+				const err = d && d.querySelector( '.minn-var-error' );
+				return { open: !! d, msg: err && ! err.hidden ? err.textContent.trim() : '' };
+			} );
+		};
+		await ( await page.$( '[data-pvaropen="0"]' ) ).click();
+		await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+		await page.fill( '#minn-var-regular', '20.00' );
+		await page.fill( '#minn-var-sale', '30.00' );
+		const higher = await doneAndRead();
+		t.check( 'a sale price above the regular price is refused',
+			higher.open && /lower/i.test( higher.msg ), JSON.stringify( higher ) );
+		await page.fill( '#minn-var-sale', '20.00' );
+		const equal = await doneAndRead();
+		t.check( 'and the same price is not lower either',
+			equal.open && /lower/i.test( equal.msg ), JSON.stringify( equal ) );
+
+		// Two variants of one product cannot share a SKU. That check is local,
+		// so it costs nothing and answers before a save.
+		await page.fill( '#minn-var-sale', '' );
+		await page.fill( '#minn-var-sku', 'VAR-S-' + suffix );
+		const clash = await doneAndRead();
+		t.check( 'a SKU another variation already uses is refused',
+			clash.open && /SKU/i.test( clash.msg ), JSON.stringify( clash ) );
+		await page.fill( '#minn-var-sku', 'VAR-L-' + suffix );
+		await page.fill( '#minn-var-sale', '15.00' );
+		const good = await doneAndRead();
+		t.check( 'a lower sale price and a free SKU go through',
+			! good.open, JSON.stringify( good ) );
+		await save();
+		const priced = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku,sale_price` );
+		t.check( 'the sale price and SKU that passed are what WooCommerce stored',
+			( priced.body || [] ).some( ( v ) => String( v.sale_price ) === '15.00' && v.sku === 'VAR-L-' + suffix ),
+			JSON.stringify( ( priced.body || [] ).map( ( v ) => [ v.sku, v.sale_price ] ) ) );
+
+		// A SKU taken by ANOTHER product is not something the page can know, so
+		// the refusal has to come back from the save. WooCommerce hides it
+		// inside a 200 batch response; it must still reach the reader.
+		const rival = await api( 'wc/v3/products', {
+			method: 'POST',
+			body: JSON.stringify( { name: 'SKU rival ' + suffix, type: 'simple', status: 'draft', sku: 'RIVAL-' + suffix } ),
+		} );
+		rivalId = rival.body && rival.body.id;
+		await ( await page.$( '[data-pvaropen="0"]' ) ).click();
+		await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+		await page.fill( '#minn-var-sku', 'RIVAL-' + suffix );
+		await page.click( '#minn-var-dialog [data-var-done]' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
+		await page.click( '#minn-product-save' );
+		await page.waitForFunction(
+			() => Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /SKU/i.test( x.textContent ) ),
+			null, { timeout: 25000 } ).catch( () => null );
+		const toast = await page.evaluate( () => Array.from( document.querySelectorAll( '.minn-toast' ) ).map( ( x ) => x.textContent.trim() ).join( ' | ' ) );
+		t.check( 'a SKU refused inside the batch reaches the reader',
+			/SKU/i.test( toast ), toast );
+		const stillFree = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku` );
+		t.check( 'and the variation kept the SKU it had',
+			( stillFree.body || [] ).some( ( v ) => v.sku === 'VAR-L-' + suffix ),
+			JSON.stringify( ( stillFree.body || [] ).map( ( v ) => v.sku ) ) );
+		// Put the SKU back. No save follows on purpose: the batch refused that
+		// item, so the server still holds this value, and typing it back makes
+		// the page clean again — which the save bar going down proves.
+		await ( await page.$( '[data-pvaropen="0"]' ) ).click();
+		await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+		await page.fill( '#minn-var-sku', 'VAR-L-' + suffix );
+		await page.click( '#minn-var-dialog [data-var-done]' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
+		await page.waitForTimeout( 300 );
+		const barDown = await page.evaluate( () => {
+			const b = document.querySelector( '#minn-p-savebar' );
+			return !! b && b.hidden;
+		} );
+		t.check( 'undoing the refused edit leaves nothing to save', barDown, String( barDown ) );
+
 		// Saved rows lose the New badge: it means "not on the server yet".
 		const badgesAfterSave = await page.evaluate( () => document.querySelectorAll( '.minn-pvar-new' ).length );
 		t.check( 'a saved variation is no longer badged new', badgesAfterSave === 0, String( badgesAfterSave ) );
@@ -272,6 +355,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			! ( await page.$( '#minn-p-variations' ) ), '' );
 	} finally {
 		if ( id ) await api( `wc/v3/products/${ id }?force=true`, { method: 'DELETE' } ).catch( () => null );
+		if ( rivalId ) await api( `wc/v3/products/${ rivalId }?force=true`, { method: 'DELETE' } ).catch( () => null );
 	}
 
 	await t.done( browser, errors );

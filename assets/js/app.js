@@ -8833,6 +8833,24 @@
 	}
 
 	// The attributes a variable product varies by, with their allowed values.
+	/**
+	 * A sale price has to sit BELOW the regular one. WooCommerce does not
+	 * refuse a higher (or equal) one: it answers 200 and drops the sale price
+	 * without a word, on a product and on a variation alike, verified against a
+	 * live store. So without this the reader gets a success toast and no sale.
+	 * Returns the reason it is wrong, or '' when the pair is fine.
+	 */
+	function salePriceProblem( regular, sale ) {
+		const s = String( sale == null ? '' : sale ).trim();
+		if ( ! s ) return '';
+		const sv = parseFloat( s );
+		const rv = parseFloat( String( regular == null ? '' : regular ).trim() );
+		if ( Number.isNaN( sv ) ) return __( 'The sale price is not a number.' );
+		if ( Number.isNaN( rv ) ) return __( 'Set a regular price before a sale price.' );
+		if ( sv >= rv ) return __( 'The sale price has to be lower than the regular price.' );
+		return '';
+	}
+
 	function variationAxes( m ) {
 		return ( m.attributes || [] ).filter( ( a ) => a.variation && a.options.length );
 	}
@@ -8962,6 +8980,7 @@
 						<input class="minn-input" id="minn-var-qty" type="number" step="1" value="${ v.stock_quantity == null ? '' : esc( String( v.stock_quantity ) ) }">
 					</div>
 				</div>
+				<div class="minn-var-error" hidden></div>
 				<div class="minn-toggle-desc minn-var-note">${ esc( __( 'Variations save with the rest of the page.' ) ) }</div>
 				<div class="minn-confirm-actions">
 					<button class="minn-btn-soft" data-var-cancel type="button">${ esc( __( 'Cancel' ) ) }</button>
@@ -9022,10 +9041,33 @@
 			} );
 			imgX.addEventListener( 'click', () => { v.image = null; paintImage(); } );
 
+			const errBox = overlay.querySelector( '.minn-var-error' );
+			const refuse = ( msg, field ) => {
+				errBox.textContent = msg;
+				errBox.hidden = false;
+				const el = overlay.querySelector( field );
+				if ( el ) el.focus();
+			};
 			overlay.querySelector( '[data-var-done]' ).addEventListener( 'click', () => {
-				v.regular_price = ( overlay.querySelector( '#minn-var-regular' ).value || '' ).trim();
-				v.sale_price = ( overlay.querySelector( '#minn-var-sale' ).value || '' ).trim();
-				v.sku = ( overlay.querySelector( '#minn-var-sku' ).value || '' ).trim();
+				const regular = ( overlay.querySelector( '#minn-var-regular' ).value || '' ).trim();
+				const sale = ( overlay.querySelector( '#minn-var-sale' ).value || '' ).trim();
+				const sku = ( overlay.querySelector( '#minn-var-sku' ).value || '' ).trim();
+				const priceProblem = salePriceProblem( regular, sale );
+				if ( priceProblem ) { refuse( priceProblem, '#minn-var-sale' ); return; }
+				// SKUs are unique store-wide, and WooCommerce enforces that at
+				// save time. What can be answered here without a request is the
+				// clash inside this product, which is the common one: the
+				// parent's SKU and the other variants'.
+				if ( sku ) {
+					const parentSku = ( ( $( '#minn-p-sku' ) || {} ).value || '' ).trim();
+					const taken = parentSku.toLowerCase() === sku.toLowerCase()
+						|| m.variations.some( ( x, i ) => i !== index && ( x.sku || '' ).trim().toLowerCase() === sku.toLowerCase() );
+					if ( taken ) { refuse( __( 'That SKU is already used on this product.' ), '#minn-var-sku' ); return; }
+				}
+				errBox.hidden = true;
+				v.regular_price = regular;
+				v.sale_price = sale;
+				v.sku = sku;
 				v.manage_stock = track.classList.contains( 'on' );
 				const raw = ( overlay.querySelector( '#minn-var-qty' ).value || '' ).trim();
 				v.stock_quantity = v.manage_stock ? ( raw === '' ? 0 : parseInt( raw, 10 ) ) : null;
@@ -9146,10 +9188,25 @@
 			else body.create.push( row );
 		} );
 		if ( ! body.create.length && ! body.update.length && ! body.delete.length ) return;
-		await api( `wc/v3/products/${ productId }/variations/batch`, {
+		const res = await api( `wc/v3/products/${ productId }/variations/batch`, {
 			method: 'POST',
 			body: JSON.stringify( body ),
 		} );
+		// A batch answers 200 even when it refused an item: the refusal rides
+		// INSIDE that item. Verified with a duplicate SKU, which comes back as
+		// product_invalid_sku and even names a SKU that is free. Swallowing it
+		// let a save report success while the variation kept its old value.
+		const refused = [ 'create', 'update', 'delete' ]
+			.reduce( ( all, k ) => all.concat( Array.isArray( ( res || {} )[ k ] ) ? res[ k ] : [] ), [] )
+			.filter( ( row ) => row && row.error );
+		if ( refused.length ) {
+			const err = refused[ 0 ].error || {};
+			const free = err.data && err.data.unique_sku;
+			throw new Error( free
+				/* translators: 1: WooCommerce's own error message, 2: a SKU that is not taken. */
+				? sprintf( __( '%1$s Try %2$s.' ), err.message || __( 'A variation was refused.' ), free )
+				: ( err.message || __( 'A variation was refused.' ) ) );
+		}
 		m.variationsRemoved = [];
 	}
 
@@ -10686,6 +10743,18 @@
 			const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
 			if ( ! name ) {
 				toast( __( 'Name is required' ), true );
+				return;
+			}
+			// Same trap the variant editor guards: WooCommerce takes a sale
+			// price that is not lower with a 200 and quietly drops it.
+			const priceProblem = salePriceProblem(
+				( $( '#minn-p-regular' ) || {} ).value,
+				( $( '#minn-p-sale' ) || {} ).value
+			);
+			if ( priceProblem ) {
+				toast( priceProblem, true );
+				const saleEl = $( '#minn-p-sale' );
+				if ( saleEl ) saleEl.focus();
 				return;
 			}
 			const payload = buildProductPayload( m, p );
