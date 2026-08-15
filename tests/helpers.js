@@ -7,19 +7,55 @@
  * app's own nonce) and deletes them on the way out.
  *
  * Configuration via environment:
- *   MINN_TEST_URL     base URL of a dev site (default https://minnadmin.localhost)
- *   MINN_TEST_USER    admin username        (default admin)
- *   MINN_TEST_PASS    admin password        (required)
- *   MINN_TEST_CHROME  Chrome binary path    (default macOS system Chrome)
+ *   MINN_TEST_URL          base URL of a dev site (default https://minnadmin.localhost)
+ *   MINN_TEST_USER         admin username        (default admin)
+ *   MINN_TEST_PASS         admin password        (required)
+ *   MINN_TEST_CHROME       Chrome binary path    (default macOS system Chrome)
+ *   MINN_TEST_FRESH_LOGIN  set to 1 to skip the shared cookie and form-login
+ *   MINN_TEST_AUTH_DIR     where to store Playwright storageState (default tests/.auth)
  */
+const fs = require( 'fs' );
+const path = require( 'path' );
+const crypto = require( 'crypto' );
 const { chromium } = require( 'playwright-core' );
 
 const BASE = process.env.MINN_TEST_URL || 'https://minnadmin.localhost';
 const USER = process.env.MINN_TEST_USER || 'admin';
 const PASS = process.env.MINN_TEST_PASS || '';
 const CHROME = process.env.MINN_TEST_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const AUTH_DIR = process.env.MINN_TEST_AUTH_DIR || path.join( __dirname, '.auth' );
 
-async function launch() {
+function authPath() {
+	const key = crypto.createHash( 'sha1' ).update( BASE + '\0' + USER ).digest( 'hex' ).slice( 0, 12 );
+	return path.join( AUTH_DIR, key + '.json' );
+}
+
+function cookieAlive( cookie ) {
+	// Playwright writes session cookies as expires: -1. That is not "already
+	// expired" — it means the cookie lasts for the restored context.
+	if ( cookie.expires == null || cookie.expires === -1 ) return true;
+	return cookie.expires > Date.now() / 1000 + 60;
+}
+
+function loadAuthState() {
+	if ( process.env.MINN_TEST_FRESH_LOGIN === '1' ) return null;
+	try {
+		const state = JSON.parse( fs.readFileSync( authPath(), 'utf8' ) );
+		const loggedIn = ( state.cookies || [] ).some( ( c ) =>
+			/wordpress_logged_in_/.test( c.name ) && cookieAlive( c )
+		);
+		return loggedIn ? state : null;
+	} catch ( e ) {
+		return null;
+	}
+}
+
+async function saveAuthState( ctx ) {
+	fs.mkdirSync( AUTH_DIR, { recursive: true } );
+	await ctx.storageState( { path: authPath() } );
+}
+
+async function launch( opts = {} ) {
 	if ( ! PASS ) {
 		console.error( 'Set MINN_TEST_PASS (admin password for the dev site).' );
 		process.exit( 2 );
@@ -37,7 +73,13 @@ async function launch() {
 			'--disable-features=MacAppCodeSignClone',
 		],
 	} );
-	const ctx = await browser.newContext( { ignoreHTTPSErrors: true } );
+	const stored = Object.prototype.hasOwnProperty.call( opts, 'storageState' )
+		? opts.storageState
+		: loadAuthState();
+	const ctx = await browser.newContext( {
+		ignoreHTTPSErrors: true,
+		...( stored ? { storageState: stored } : {} ),
+	} );
 	const page = await ctx.newPage();
 	const errors = [];
 	page.on( 'pageerror', ( e ) => errors.push( 'pageerror: ' + e.message ) );
@@ -47,22 +89,48 @@ async function launch() {
 			errors.push( 'console: ' + m.text() );
 		}
 	} );
-	return { browser, page, errors };
+	return { browser, page, errors, ctx };
 }
 
 async function login( page ) {
-	await page.goto( BASE + '/wp-login.php', { waitUntil: 'domcontentloaded' } );
+	const already = await page.evaluate( () => !!( window.MINN && window.MINN.nonce ) ).catch( () => false );
+	if ( already ) return;
+
+	const dest = BASE + '/minn-admin/overview';
+	// Reuse a stored wordpress_logged_in_* cookie: skip wp-login AND the
+	// default post-login landing on wp-admin (a full dashboard render of
+	// every active plugin). The REST nonce is minted on this page load.
+	if ( loadAuthState() ) {
+		await page.goto( dest, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		if ( ! /wp-login\.php/.test( page.url() ) ) {
+			const reused = await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 45000 } )
+				.then( () => true )
+				.catch( () => false );
+			if ( reused ) {
+				console.log( '  (reusing stored login cookie)' );
+				await saveAuthState( page.context() );
+				return;
+			}
+		}
+	}
+
+	await page.goto( BASE + '/wp-login.php?redirect_to=' + encodeURIComponent( dest ), { waitUntil: 'domcontentloaded' } );
 	await page.fill( '#user_login', USER );
 	await page.fill( '#user_pass', PASS );
-	// Never wait for networkidle here: plugins that poll from wp-admin
-	// (Site Kit) keep the network busy forever.
-	await Promise.all( [
-		page.waitForNavigation( { waitUntil: 'domcontentloaded' } ),
-		page.click( '#wp-submit' ),
-	] );
-	// Land in the app so window.MINN (restUrl + nonce) is available to helpers.
-	await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
-	await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 15000 } );
+	const remember = await page.$( '#rememberme' );
+	if ( remember ) await remember.check().catch( () => {} );
+	// noWaitAfter: the post-login page (wp-admin, or Minn via redirect_to) can
+	// take longer than Playwright's default click-nav timeout on a heavy
+	// fixture. Wait for window.MINN instead of the navigation itself.
+	await page.click( '#wp-submit', { noWaitAfter: true } );
+	const landed = await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 20000 } )
+		.then( () => true )
+		.catch( () => false );
+	if ( ! landed ) {
+		await page.goto( dest, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 20000 } );
+	}
+	await saveAuthState( page.context() );
 }
 
 /* Log a SECOND account in, in its own context, for role-boundary checks.
@@ -227,4 +295,4 @@ function switchOn( page, sel ) {
 	}, sel );
 }
 
-module.exports = { BASE, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, pickCombo, comboValue, setSwitch, switchOn };
+module.exports = { BASE, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath };

@@ -61,6 +61,8 @@ Environment (all optional except the password):
 | `MINN_TEST_USER` | `admin` |
 | `MINN_TEST_PASS` | — required |
 | `MINN_TEST_CHROME` | macOS system Chrome path |
+| `MINN_TEST_FRESH_LOGIN` | unset. Set to `1` to skip the shared cookie and form-login |
+| `MINN_TEST_AUTH_DIR` | `tests/.auth` (Playwright storageState, gitignored) |
 | `MINN_TEST_USER2` | `minn-editor` (lock.test.js's second session; needs Editor role) |
 | `MINN_TEST_PASS2` | `minn-editor-pass-1` |
 | `MINN_MS_SUPER_PASS` | — (multisite.test.js only; unset ⇒ SKIP) |
@@ -68,6 +70,13 @@ Environment (all optional except the password):
 
 ## Conventions (read before writing a suite)
 
+- **Shared login cookie.** `login()` persists Playwright `storageState` under
+  `tests/.auth/` (keyed by URL + user). The next suite in the same session
+  skips `wp-login.php` and the wp-admin landing and goes straight to
+  `/minn-admin/`. The REST nonce is minted on that page load, so it is never
+  reused stale. `run-all.sh` primes the cookie once up front. Role logins
+  (`loginAs`) and anonymous contexts are unchanged. Set `MINN_TEST_FRESH_LOGIN=1`
+  to force a form login.
 - **Use `helpers.js`** — `launch()` (system Chrome, cert + HTTP/2 flags), `login()`,
   `createPost()`/`deletePost()` (REST via the app's own `window.MINN` nonce),
   `openEditor()` (with retries), `freshParagraph()`, `reporter()`.

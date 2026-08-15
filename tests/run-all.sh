@@ -59,6 +59,13 @@ else
 	echo "Running $total suites sequentially → $OUT" | tee "$OUT/summary.txt"
 fi
 
+# One form-login for the whole run. Suites reuse the wordpress_logged_in_*
+# cookie via helpers.js; each page load still mints a fresh REST nonce.
+echo "Priming shared login cookie…" | tee -a "$OUT/summary.txt"
+if ! node auth-setup.js >"$OUT/auth-setup.log" 2>&1; then
+	echo "WARNING: auth setup failed — suites will form-login themselves (see $OUT/auth-setup.log)" | tee -a "$OUT/summary.txt"
+fi
+
 for f in *.test.js; do
 	i=$((i + 1))
 	# Resume: a suite already recorded as PASS in this output dir is skipped

@@ -1,6 +1,8 @@
 node_modules/
 .DS_Store
 tests/package-lock.json
+# Playwright storageState for the shared-login cookie (per URL+user)
+tests/.auth/
 # local full-suite run logs (release preflight)
 tests/.release-*
 # built language packs (attached to releases, never committed)
