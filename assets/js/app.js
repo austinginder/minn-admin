@@ -26648,7 +26648,10 @@
 		// wrapper ELEMENTS until the interior is a uniform run — the units are
 		// still complete sibling blocks, so permuting them stays byte-safe.
 		if ( /<!--\s*wp:/.test( inner ) ) {
-			for ( let level = 0; level < 4; level++ ) {
+			// Six levels reaches a slider's run: outer wrapper → content
+			// wrapper → slider wrapper → the slider element itself (Stackable
+			// carousel), with headroom for one more vendor layer.
+			for ( let level = 0; level < 6; level++ ) {
 				spans = uniformBlockRun( base );
 				if ( spans ) break;
 				const peel = peelWrapperEl( base );
@@ -26865,11 +26868,22 @@
 	// with only whitespace outside it) — a slider's viewport/track markup.
 	// Returns offsets into str, or null when the region isn't shaped that way.
 	function peelWrapperEl( str ) {
-		const m = str.match( /^\s*<([a-z][\w-]*)(?:\s[^>]*)?>/i );
+		// Leading <style> elements are static chrome (Stackable emits one per
+		// block) — fold them into the peel offset so the wrapper behind them
+		// is reachable. Their bytes stay in the caller's prefix, verbatim.
+		let lead = 0;
+		const lower = str.toLowerCase();
+		for ( ;; ) {
+			const sm = str.slice( lead ).match( /^\s*<style\b[^>]*>/i );
+			if ( ! sm ) break;
+			const end = lower.indexOf( '</style>', lead + sm[ 0 ].length );
+			if ( end === -1 ) return null;
+			lead = end + 8;
+		}
+		const m = str.slice( lead ).match( /^\s*<([a-z][\w-]*)(?:\s[^>]*)?>/i );
 		if ( ! m ) return null;
 		const tag = m[ 1 ].toLowerCase();
-		const openEnd = m[ 0 ].length;
-		const lower = str.toLowerCase();
+		const openEnd = lead + m[ 0 ].length;
 		let depth = 1;
 		let i = openEnd;
 		let close = -1;
@@ -26894,7 +26908,13 @@
 			i++;
 		}
 		if ( close === -1 ) return null;
-		if ( str.slice( str.indexOf( '>', close ) + 1 ).trim() !== '' ) return null;
+		// After the wrapper, pure chrome only (a slider's arrow buttons, its
+		// dots strip): anything carrying an image or a child block means this
+		// is NOT the sole content wrapper, and peeling past it would misfile
+		// real content into the suffix. Chrome bytes stay in the suffix,
+		// verbatim, at whatever peel level they fell out.
+		const after = str.slice( str.indexOf( '>', close ) + 1 );
+		if ( after.trim() !== '' && ( /<img\b/i.test( after ) || /<!--\s*wp:/.test( after ) ) ) return null;
 		return { start: openEnd, end: close };
 	}
 
