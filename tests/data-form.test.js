@@ -70,6 +70,8 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 			!! document.querySelector( '[data-inspdfgal="own:pics"]' )
 			&& /0 images|Add images/.test( document.querySelector( '.minn-insp-dfimg-id' )?.textContent + document.querySelector( '[data-inspdfgal="own:pics"]' ).textContent ) ) );
 
+		t.check( 'richtext field renders its doorway', !! ( await page.$( '[data-inspdfrt="own:blurb"]' ) ) );
+
 		// Edit all three controls, Apply, save, verify the stored comment.
 		await page.fill( '[data-inspdf="own:headline"]', 'Hello edited' );
 		await page.selectOption( '[data-inspdf="own:style"]', 'boxed' );
@@ -98,6 +100,23 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 			!! bare && bare.includes( '"_headline":"field_fxhead"' ), String( bare ).slice( 0, 200 ) );
 		t.check( 'untouched empty fields injected nothing',
 			!! bare && ! bare.includes( '"style"' ) && ! bare.includes( '"featured"' ), String( bare ).slice( 0, 200 ) );
+
+		// richtext control, last (its immediate-apply replaces the island —
+		// mid-suite it races the async preview swap under the open popover):
+		// fold → close popover → edit in the rich-text modal → replaceIsland.
+		await page.waitForTimeout( 1500 ); // let the prior save's preview swap settle
+		await openChip( 0 );
+		await page.click( '[data-inspdfrt="own:blurb"]' );
+		await page.waitForSelector( '.minn-rt-body', { timeout: 10000 } );
+		await page.click( '.minn-rt-body' );
+		await page.keyboard.type( 'Blurb line' );
+		await page.click( '#minn-rt-apply' );
+		await page.waitForTimeout( 1500 );
+		await save();
+		const rawRt = await readRaw();
+		t.check( 'richtext edit persisted into the data object with its alias',
+			rawRt.includes( 'Blurb line' ) && rawRt.includes( '"_blurb":"field_fxblurb"' ),
+			rawRt.slice( 0, 300 ) );
 	} finally {
 		await deletePost( page, id );
 	}

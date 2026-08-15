@@ -1305,7 +1305,19 @@
 				</div>
 			</div>`;
 		}
-	// Rows: repeating groups of sub-fields (ACF repeaters). The value is an
+	// Wysiwyg: an HTML fragment string edited in the rich-text modal. The
+		// control shows a text-only preview + the doorway; the CALLER binds
+		// [data-rt-edit] and keeps the live value on el._rtValue (data-rt is
+		// the render-time seed formControlValue falls back to).
+		if ( t === 'wysiwyg' ) {
+			const s = String( v == null ? '' : v );
+			const previewText = s.replace( /<[^>]*>/g, ' ' ).replace( /\s+/g, ' ' ).trim();
+			return `<div class="minn-field-rt" ${ attr }="${ esc( id ) }" data-ftype="wysiwyg" data-rt="${ esc( s ) }">
+				<div class="minn-field-rt-preview${ previewText ? '' : ' empty' }">${ esc( previewText.slice( 0, 160 ) || __( 'No content yet' ) ) }</div>
+				<button type="button" class="minn-btn-soft" data-rt-edit>${ s ? esc( __( 'Edit content…' ) ) : esc( __( 'Add content…' ) ) }</button>
+			</div>`;
+		}
+		// Rows: repeating groups of sub-fields (ACF repeaters). The value is an
 		// ordered [{ __idx?, values }] list — __idx anchors a kept row to its
 		// original stored position so the server can merge edits onto it and
 		// preserve sub-values the form doesn't render. The shell is empty; the
@@ -1352,6 +1364,9 @@
 		if ( kind === 'rows' ) {
 			if ( el._rowsValue !== undefined ) return el._rowsValue;
 			try { return JSON.parse( el.dataset.rowsVal || '[]' ); } catch ( e ) { return []; }
+		}
+		if ( kind === 'wysiwyg' ) {
+			return el._rtValue !== undefined ? el._rtValue : ( el.dataset.rt || '' );
 		}
 		if ( kind === 'combobox' ) {
 			const input = el.querySelector( '.minn-ac-input' );
@@ -1429,6 +1444,129 @@
 		input.addEventListener( 'keydown', ( e ) => {
 			if ( e.key === 'Escape' ) { close(); input.blur(); }
 		} );
+	}
+
+	/* Rich-text modal — the wysiwyg-field editor. A scoped fragment editor,
+	 * deliberately not the main editor: paragraphs, headings-as-received,
+	 * bold/italic/strike, lists and links, with pastes cleaned through the
+	 * shared sanitizer. The value is an HTML fragment string; Apply hands it
+	 * back and Cancel discards. Opened AFTER the hosting modal/popover closes
+	 * (the one-way flow every picker-style field uses).
+	 */
+	let rtEl = null;
+
+	function closeRichText() {
+		if ( rtEl && rtEl._minnEsc ) document.removeEventListener( 'keydown', rtEl._minnEsc, true );
+		if ( rtEl ) rtEl.remove();
+		rtEl = null;
+	}
+
+	function openRichTextModal( html, onApply, opts = {} ) {
+		closeRichText();
+		const overlay = document.createElement( 'div' );
+		overlay.className = 'minn-rt-overlay';
+		const tools = [
+			[ 'bold', 'B', __( 'Bold' ) ],
+			[ 'italic', 'I', __( 'Italic' ) ],
+			[ 'strikeThrough', 'S', __( 'Strikethrough' ) ],
+			[ 'insertUnorderedList', '•', __( 'Bulleted list' ) ],
+			[ 'insertOrderedList', '1.', __( 'Numbered list' ) ],
+		];
+		overlay.innerHTML = `
+			<div class="minn-rt" role="dialog" aria-modal="true" aria-label="${ esc( opts.title || __( 'Edit content' ) ) }">
+				<div class="minn-rt-head">
+					<strong>${ esc( opts.title || __( 'Edit content' ) ) }</strong>
+					<button type="button" class="minn-x-btn" id="minn-rt-close">×</button>
+				</div>
+				<div class="minn-rt-toolbar">
+					${ tools.map( ( [ cmd, glyph, label ] ) => `<button type="button" data-rtcmd="${ cmd }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ glyph }</button>` ).join( '' ) }
+					<button type="button" data-rtlink title="${ esc( __( 'Link' ) ) }">${ icon( 'link' ) }</button>
+					<button type="button" data-rtcmd="unlink" title="${ esc( __( 'Remove link' ) ) }">⌀</button>
+					<span class="minn-rt-linkrow" hidden>
+						<input class="minn-input" type="url" placeholder="https://…" aria-label="${ esc( __( 'Link URL' ) ) }">
+						<button type="button" class="minn-btn-soft" data-rtlinkgo>${ esc( __( 'Link' ) ) }</button>
+					</span>
+				</div>
+				<div class="minn-rt-body" contenteditable="true" spellcheck="true"></div>
+				<div class="minn-rt-foot">
+					<span style="flex:1"></span>
+					<button type="button" class="minn-btn-soft" id="minn-rt-cancel">${ esc( __( 'Cancel' ) ) }</button>
+					<button type="button" class="minn-btn-primary" id="minn-rt-apply">${ esc( __( 'Apply' ) ) }</button>
+				</div>
+			</div>`;
+		document.body.appendChild( overlay );
+		rtEl = overlay;
+		const body = $( '.minn-rt-body', overlay );
+		const s = String( html == null ? '' : html ).trim();
+		// Plain-text values (a wysiwyg field someone filled over the API)
+		// still need paragraphs to edit as blocks.
+		body.innerHTML = s ? ( s.indexOf( '<' ) === -1 ? miniAutop( s ) : s ) : '<p><br></p>';
+
+		const linkRow = $( '.minn-rt-linkrow', overlay );
+		const linkInput = linkRow.querySelector( 'input' );
+		let savedRange = null;
+		overlay.addEventListener( 'mousedown', ( e ) => {
+			if ( e.target === overlay ) { closeRichText(); return; }
+			// Toolbar presses must not blur the selection they act on.
+			if ( e.target.closest( '.minn-rt-toolbar button' ) ) e.preventDefault();
+		} );
+		overlay.addEventListener( 'click', ( e ) => {
+			if ( e.target.closest( '#minn-rt-close' ) || e.target.closest( '#minn-rt-cancel' ) ) { closeRichText(); return; }
+			const cmd = e.target.closest( '[data-rtcmd]' );
+			if ( cmd ) { document.execCommand( cmd.dataset.rtcmd ); body.focus( { preventScroll: true } ); return; }
+			const lk = e.target.closest( '[data-rtlink]' );
+			if ( lk ) {
+				const sel = window.getSelection();
+				savedRange = sel && sel.rangeCount && ! sel.isCollapsed ? sel.getRangeAt( 0 ).cloneRange() : null;
+				if ( ! savedRange ) { toast( __( 'Select some text to link first' ), true ); return; }
+				linkRow.hidden = false;
+				linkInput.focus();
+				return;
+			}
+			const go = e.target.closest( '[data-rtlinkgo]' );
+			if ( go ) {
+				const url = linkInput.value.trim();
+				linkRow.hidden = true;
+				linkInput.value = '';
+				if ( ! url || ! savedRange ) return;
+				const sel = window.getSelection();
+				sel.removeAllRanges();
+				sel.addRange( savedRange );
+				document.execCommand( 'createLink', false, url );
+				savedRange = null;
+				body.focus( { preventScroll: true } );
+				return;
+			}
+			if ( e.target.closest( '#minn-rt-apply' ) ) {
+				modernizeStrikes( body );
+				cleanBoundaryNbsp( body );
+				// Drop a purely-empty trailing affordance paragraph.
+				const last = body.lastElementChild;
+				if ( last && last.tagName === 'P' && ! last.textContent.trim() && ! last.querySelector( 'img,iframe' ) ) last.remove();
+				const out = body.innerHTML.trim();
+				closeRichText();
+				onApply( out );
+			}
+		} );
+		linkInput.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Enter' ) { e.preventDefault(); overlay.querySelector( '[data-rtlinkgo]' ).click(); }
+		} );
+		// Pastes ride the shared sanitizer: the output vocabulary stays what
+		// the field can honestly store, never raw clipboard markup.
+		body.addEventListener( 'paste', ( e ) => {
+			const cd = e.clipboardData;
+			if ( ! cd ) return;
+			e.preventDefault();
+			const rich = cd.getData( 'text/html' );
+			const payload = ( rich && sanitizePastedHtml( rich ) ) || pasteTextPayload( cd.getData( 'text/plain' ) || '' );
+			if ( payload ) document.execCommand( 'insertHTML', false, payload.html );
+		} );
+		const escKey = ( e ) => {
+			if ( e.key === 'Escape' ) { e.stopPropagation(); closeRichText(); }
+		};
+		overlay._minnEsc = escKey;
+		document.addEventListener( 'keydown', escKey, true );
+		body.focus( { preventScroll: true } );
 	}
 
 	// Arm one rows control (data-ftype="rows" — ACF repeaters). The wrap owns
@@ -23877,6 +24015,21 @@
 				// Repeater rows own their rendering and state; every edit
 				// (typed or structural) lands in panelValues like any field.
 				bindRowsField( input, ( v ) => write( v ) );
+			} else if ( input.dataset.ftype === 'wysiwyg' ) {
+				// The rich-text modal opens after the hosting panel modal
+				// closes (the picker-style one-way flow).
+				const rtBtn = input.querySelector( '[data-rt-edit]' );
+				if ( rtBtn ) rtBtn.addEventListener( 'click', ( e ) => {
+					e.preventDefault();
+					const cur = input._rtValue !== undefined ? input._rtValue : ( input.dataset.rt || '' );
+					const label = input.closest( '.minn-panel-field' )?.querySelector( '.minn-field-label' )?.textContent.trim();
+					closeModal();
+					openRichTextModal( cur, ( out ) => {
+						input._rtValue = out;
+						write( out );
+						toast( __( 'Content updated — saves with the post' ) );
+					}, { title: label } );
+				} );
 			} else if ( input.dataset.ftype === 'gallery' ) {
 				// Gallery fields reuse the islands images editor in items mode.
 				// The hosting panel modal closes first: the images editor sits
@@ -27300,6 +27453,15 @@
 		const rows = df.fields.map( ( f ) => {
 			let v = cur[ f.name ];
 			const label = f.label || humanizeAttrKey( f.name );
+			if ( f.control === 'richtext' ) {
+				if ( ! media ) { lockedCount++; return ''; }
+				const previewText = String( v == null ? '' : v ).replace( /<[^>]*>/g, ' ' ).replace( /\s+/g, ' ' ).trim();
+				return `<div class="minn-field-label">${ esc( label ) }</div>
+					<div class="minn-insp-dfimg minn-insp-dfrt">
+						<span class="minn-insp-dfrt-preview${ previewText ? '' : ' empty' }">${ esc( previewText.slice( 0, 80 ) || __( 'No content yet' ) ) }</span>
+						<button type="button" class="minn-btn-soft" data-inspdfrt="${ esc( prefix ) }:${ esc( f.name ) }">${ previewText ? esc( __( 'Edit content…' ) ) : esc( __( 'Add content…' ) ) }</button>
+					</div>`;
+			}
 			if ( f.control === 'gallery' ) {
 				if ( ! media ) { lockedCount++; return ''; }
 				const gids = Array.isArray( v ) ? v.filter( ( x ) => x != null && x !== '' ) : [];
@@ -28045,6 +28207,35 @@
 				if ( ! info ) { toast( __( 'These images can’t be edited safely here.' ), true ); return; }
 				closeInspector();
 				openImagesEditor( idx, el, base, info );
+				return;
+			}
+			const dfrt = e.target.closest( '[data-inspdfrt]' );
+			if ( dfrt ) {
+				// dataForm wysiwyg fields: the rich-text modal, immediate-apply
+				// (fold-first, same one-way flow as the image and gallery picks).
+				const ref = dfrt.dataset.inspdfrt;
+				const sep = ref.indexOf( ':' );
+				const prefix = ref.slice( 0, sep );
+				const fname = ref.slice( sep + 1 );
+				const child = prefix === 'own' ? null : insp.model.children[ Number( prefix ) ];
+				const dfBlock = prefix === 'own' ? insp.model.parts.name : child && child.name;
+				const dfAttrs = prefix === 'own' ? insp.model.ownAttrs : child && child.attrs;
+				const df = dfBlock ? dataFormFor( dfBlock ) : null;
+				if ( ! df || ! dfAttrs ) return;
+				collectInspectorForms(); // typed values survive
+				const obj = ( typeof dfAttrs[ df.attr ] === 'object' && dfAttrs[ df.attr ] ) || {};
+				const cur = typeof obj[ fname ] === 'string' ? obj[ fname ] : '';
+				const fieldDef = df.fields.find( ( x ) => x.name === fname );
+				const { idx, islandEl: el } = insp;
+				closeInspector();
+				openRichTextModal( cur, ( out ) => {
+					obj[ fname ] = out;
+					const alias = ( df.alias || {} )[ fname ];
+					if ( alias && obj[ '_' + fname ] === undefined ) obj[ '_' + fname ] = alias;
+					dfAttrs[ df.attr ] = obj;
+					replaceIsland( idx, el, buildInspectorRaw( insp ) );
+					toast( __( 'Content updated' ) );
+				}, { title: fieldDef && fieldDef.label } );
 				return;
 			}
 			const dfg = e.target.closest( '[data-inspdfgal]' );

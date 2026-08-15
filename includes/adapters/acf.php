@@ -21,8 +21,9 @@ defined( 'ABSPATH' ) || exit;
 // image stores an attachment id and rides the form engine's image control
 // ({ id, url }) in the editor panel and a pick-button row in the inspector;
 // gallery stores an ordered attachment-id array and rides the islands
-// images editor in items mode (reorder / replace / remove / add).
-const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker', 'image', 'gallery' );
+// images editor in items mode (reorder / replace / remove / add); wysiwyg
+// stores an HTML fragment and edits in the rich-text modal.
+const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker', 'image', 'gallery', 'wysiwyg' );
 
 /** Layout-only ACF field types: chrome, not data — never mapped, never counted as locked. */
 const MINN_ADMIN_ACF_CHROME_TYPES = array( 'tab', 'message', 'accordion' );
@@ -311,6 +312,13 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 				}
 			}
 			$value = $ids;
+		} elseif ( 'wysiwyg' === $field['type'] ) {
+			// The same trust boundary WordPress applies to post content: users
+			// without unfiltered_html get their markup run through kses.
+			$value = is_scalar( $value ) ? (string) $value : '';
+			if ( ! current_user_can( 'unfiltered_html' ) ) {
+				$value = wp_kses_post( $value );
+			}
 		} elseif ( 'rows' === $field['type'] ) {
 			// Repeater merge: each incoming row overlays ONLY the mapped subs
 			// onto the original stored row it references (__idx), so complex
@@ -410,6 +418,9 @@ function minn_admin_acf_block_forms() {
 					break;
 				case 'gallery':
 					$entry['control'] = 'gallery';
+					break;
+				case 'wysiwyg':
+					$entry['control'] = 'richtext';
 					break;
 				default:
 					$entry['control'] = 'text';
@@ -639,10 +650,10 @@ function minn_admin_acf_options_tabs( $page ) {
 				$open( $group['title'] );
 			}
 			$simple = minn_admin_acf_map_field( $f );
-			// Image and gallery fields count as locked here: the settings
-			// engine has no media-picker binding (the editor panel and block
-			// inspector do).
-			if ( ! $simple || in_array( $simple['type'], array( 'image', 'gallery' ), true ) ) {
+			// Image, gallery and wysiwyg fields count as locked here: the
+			// settings engine has no picker or rich-text binding (the editor
+			// panel and block inspector do).
+			if ( ! $simple || in_array( $simple['type'], array( 'image', 'gallery', 'wysiwyg' ), true ) ) {
 				$tabs[ $current ]['locked']++;
 				continue;
 			}

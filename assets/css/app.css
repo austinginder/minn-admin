@@ -1110,6 +1110,53 @@ button.minn-nav-label:hover { color: var(--text2); }
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 11px; color: var(--muted);
 }
+/* Wysiwyg field: text preview + the rich-text modal doorway. */
+.minn-field-rt { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.minn-field-rt-preview {
+  font-size: 13px; color: var(--text2); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.minn-field-rt-preview.empty, .minn-insp-dfrt-preview.empty { color: var(--muted); font-style: italic; }
+.minn-insp-dfrt { align-items: flex-start; }
+.minn-insp-dfrt-preview {
+  flex: 1; min-width: 0; font-size: 12px; color: var(--text2); line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+/* Rich-text modal: the wysiwyg-field editor. Same layer as the images
+   editor (z 52, under the media picker) — always opened AFTER its hosting
+   modal/popover closed. */
+.minn-rt-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 52;
+  display: flex; align-items: center; justify-content: center; padding: 4vh 20px;
+}
+.minn-rt {
+  width: 680px; max-width: 94vw; max-height: 88vh; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 14px;
+  box-shadow: var(--shadow); animation: minnScaleIn 0.18s ease;
+}
+.minn-rt-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.minn-rt-head strong { font-size: 16px; flex: 1; min-width: 0; }
+.minn-rt-toolbar {
+  display: flex; align-items: center; gap: 3px; padding: 8px 14px;
+  border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.minn-rt-toolbar > button {
+  background: none; border: 1px solid transparent; border-radius: 7px; color: var(--text2);
+  min-width: 30px; height: 28px; cursor: pointer; font-size: 13px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.minn-rt-toolbar > button:hover { color: var(--text); border-color: var(--border2); }
+.minn-rt-toolbar > button svg { width: 15px; height: 15px; }
+.minn-rt-linkrow { display: inline-flex; gap: 6px; align-items: center; margin-inline-start: 8px; }
+.minn-rt-linkrow .minn-input { width: 240px; height: 28px; }
+.minn-rt-body {
+  flex: 1; min-height: 220px; overflow-y: auto; padding: 16px 20px; outline: none;
+  font-size: 14.5px; line-height: 1.65;
+}
+.minn-rt-body p { margin: 0 0 0.8em; }
+.minn-rt-body ul, .minn-rt-body ol { margin: 0 0 0.8em; padding-inline-start: 1.4em; }
+.minn-rt-body a { color: var(--accent); }
+.minn-rt-foot { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
 /* Rows control (ACF repeaters): one card per row, chrome in its header. */
 .minn-field-rows { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .minn-rows-card {

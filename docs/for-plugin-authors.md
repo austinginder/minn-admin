@@ -799,7 +799,8 @@ $forms['acf/testimonial'] = array(
 ```
 
 Per field: `name` (key inside the object), `label`, `control` (`text` · `textarea` ·
-`select` · `number` · `checkbox` · `image` · `gallery`), `options` (`[value, label]` pairs). `alias`
+`select` · `number` · `checkbox` · `image` · `gallery` · `richtext`), `options`
+(`[value, label]` pairs). `alias`
 maps a field name to a value written as `_name` alongside it (ACF's field-key
 references, so the plugin's renderer can resolve values on blocks Minn created or
 filled). `locked` renders an honest "N advanced fields live in the block editor" note.
@@ -810,7 +811,8 @@ through Minn's media picker and apply immediately (the picker closes the popover
 pending typed values are folded first); in the content-editor modal, image fields fold
 into the locked count instead. `gallery` stores an ordered array of attachment ids
 (written as strings, ACF's block convention) and opens Minn's images editor — reorder,
-replace, remove, add, drop-to-upload — applying immediately the same way. The bundled ACF adapter generates these descriptors automatically
+replace, remove, add, drop-to-upload — applying immediately the same way. `richtext`
+stores an HTML fragment string and opens Minn's rich-text modal, also immediate-apply. The bundled ACF adapter generates these descriptors automatically
 for every registered `acf/*` block from its field groups; declare your own only for
 non-ACF blocks with the same nested-object shape.
 
@@ -1172,7 +1174,9 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 
 Supported field types: `text`, `textarea`, `number`, `range`, `email`, `url`, `select`, `radio`,
 `true_false`, `color_picker` (edits as text), `image` (`{ id, url }`, media picker), `gallery`
-(ordered `[{ id, url }]`, Minn's images editor), `suggest`, and `rows` (below). Report anything
+(ordered `[{ id, url }]`, Minn's images editor), `wysiwyg` (an HTML fragment string, edited
+in Minn's rich-text modal with pastes cleaned through the shared sanitizer), `suggest`, and
+`rows` (below). Report anything
 else in the `locked` count; Minn shows "N advanced fields — edit in wp-admin ↗" rather than
 rendering something unsafe.
 

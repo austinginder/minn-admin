@@ -172,6 +172,28 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 			mv && Array.isArray( mv.photo_gallery ) && mv.photo_gallery.length === 2 && mv.photo_gallery.every( ( x ) => x.id > 0 ),
 			JSON.stringify( mv && mv.photo_gallery ) );
 
+		// wysiwyg field: the rich-text modal (opens after the panel modal
+		// closes, same one-way flow), typed marks round-trip as HTML.
+		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
+		await page.click( '[data-side-door="panel:acf"]' );
+		const rtSel = '[data-pf$=":slideshow_notes"][data-ftype="wysiwyg"]';
+		await page.waitForSelector( rtSel, { timeout: 15000 } );
+		t.check( 'wysiwyg field renders the rich-text control', !! ( await page.$( rtSel ) ) );
+		await page.click( `${ rtSel } [data-rt-edit]` );
+		await page.waitForSelector( '.minn-rt-body', { timeout: 10000 } );
+		await page.click( '.minn-rt-body' );
+		await page.keyboard.type( 'Notes with ' );
+		await page.keyboard.press( 'Meta+b' );
+		await page.keyboard.type( 'bold' );
+		await page.keyboard.press( 'Meta+b' );
+		await page.click( '#minn-rt-apply' );
+		await page.waitForTimeout( 500 );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'wysiwyg round-trips paragraphs and marks',
+			typeof mv.slideshow_notes === 'string' && /<p>Notes with <(b|strong)>bold<\/(b|strong)><\/p>/.test( mv.slideshow_notes ),
+			JSON.stringify( mv && mv.slideshow_notes ) );
+
 		// Emptying the gallery is a legitimate apply in items mode.
 		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
 		await page.click( '[data-side-door="panel:acf"]' );
