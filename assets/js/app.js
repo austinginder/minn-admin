@@ -37806,6 +37806,7 @@
 					<span class="minn-fgb-ctl">
 						<button type="button" data-fgbmv="${ i }:-1" title="${ esc( __( 'Move up' ) ) }"${ i === 0 ? ' disabled' : '' }${ dis }>↑</button>
 						<button type="button" data-fgbmv="${ i }:1" title="${ esc( __( 'Move down' ) ) }"${ i === fgb.fields.length - 1 ? ' disabled' : '' }${ dis }>↓</button>
+						${ f.editable ? `<button type="button" data-fgbdup="${ i }" title="${ esc( __( 'Duplicate field' ) ) }"${ dis }>⧉</button>` : '' }
 						<button type="button" data-fgbdel="${ i }" title="${ esc( __( 'Remove field' ) ) }"${ dis }>×</button>
 					</span>
 				</div>
@@ -38155,6 +38156,31 @@
 				const j = i + dir;
 				if ( j < 0 || j >= fgb.fields.length ) return;
 				moveField( i, j );
+				return;
+			}
+			const dup = e.target.closest( '[data-fgbdup]' );
+			if ( dup ) {
+				const i = Number( dup.dataset.fgbdup );
+				const f = fgb.fields[ i ];
+				// The copy is a NEW field: it needs a name no sibling holds
+				// (the save refuses duplicates) and gets its own key on save.
+				const taken = {};
+				fgb.fields.forEach( ( x ) => { taken[ x.name ] = true; } );
+				let name = f.name + '_copy';
+				for ( let n = 2; taken[ name ]; n++ ) name = f.name + '_copy' + n;
+				const copy = { ...f, isNew: true, _nameAuto: false, name };
+				delete copy.key;
+				/* translators: %s: the duplicated field's label. */
+				copy.label = sprintf( __( '%s (copy)' ), f.label );
+				fgb.fields.splice( i + 1, 0, copy );
+				const open = {};
+				Object.keys( fgb.expanded ).forEach( ( k ) => {
+					if ( fgb.expanded[ k ] ) open[ Number( k ) > i ? Number( k ) + 1 : k ] = true;
+				} );
+				open[ i + 1 ] = true;
+				fgb.expanded = open;
+				markDirty();
+				renderFieldGroupBuilder();
 				return;
 			}
 			const del = e.target.closest( '[data-fgbdel]' );

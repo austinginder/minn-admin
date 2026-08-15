@@ -186,6 +186,19 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		full = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full?_cb=' + Math.random() ) ).data;
 		t.check( 'dragged order persists', full.fields[ 0 ].name === 'suite_mood' && full.fields[ 1 ].name === 'suite_headline',
 			JSON.stringify( full.fields.map( ( f ) => f.name ) ) );
+
+		/* ===== Duplicate: the copy is a new field with a free name, settings
+		 * carried (choices survive), created on save with its own key. ===== */
+		await page.click( '.minn-fgb-row[data-fi="0"] [data-fgbdup]' );
+		await page.waitForSelector( '[data-fgb="1:label"]', { timeout: 5000 } );
+		t.check( 'duplicate inserts an open copy below', await page.$eval( '[data-fgb="1:name"]', ( e ) => e.value ) === 'suite_mood_copy' );
+		t.check( 'save round-trips', ( await saveGroup() ) === 200 );
+		full = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full?_cb=' + Math.random() ) ).data;
+		const copyRow = full.fields.find( ( f ) => f.name === 'suite_mood_copy' );
+		t.check( 'copy persists with settings and its own key', full.fields.length === 3
+			&& !! copyRow && copyRow.type === 'select' && /bold : Bold/.test( copyRow.choices )
+			&& copyRow.key !== full.fields[ 0 ].key,
+			JSON.stringify( full.fields.map( ( f ) => f.name + ':' + f.type ) ) );
 	} finally {
 		if ( postId ) await deletePost( page, postId ).catch( () => {} );
 		await sweep().catch( () => {} );
