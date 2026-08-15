@@ -93,10 +93,17 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 					const after = await ( await fetch( api + 'minn-admin/v1/ccj/snippets/' + id, { headers: hdrs } ) ).json();
 					out.linking = ( after.options && after.options.linking ) || after.linking || '';
-
-					await fetch( api + 'minn-admin/v1/ccj/snippets/' + id, { method: 'DELETE', headers: hdrs } );
+					out.id = id;
 				} finally {
+					// Restore the capability BEFORE cleaning up: deleting a snippet
+					// answers to the same gate as activating one, so a caller
+					// without unfiltered_html cannot remove an inlined snippet and
+					// the row would leak whenever this suite runs against code that
+					// lets the promotion through.
 					await setFlag( false );
+					if ( out.id ) {
+						await fetch( api + 'minn-admin/v1/ccj/snippets/' + out.id, { method: 'DELETE', headers: hdrs } );
+					}
 				}
 				return out;
 			},
