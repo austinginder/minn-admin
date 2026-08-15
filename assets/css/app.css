@@ -1580,7 +1580,12 @@ button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; 
 /* Upload readout: which file, how far, and where it sits in the batch. Outside
    the drop zone on purpose — the zone dims while it is busy, and the one thing
    worth reading must not dim with it. */
-.minn-upl { margin: 0 0 10px; padding: 9px 12px; border: 1px solid var(--border2); border-radius: 10px; background: var(--panel2); }
+.minn-upl {
+  /* Same gutters and inner padding as .minn-picker-drop above it, so the two
+     read as one stack rather than a full-bleed strip under an inset box. */
+  margin: 10px 18px 0; padding: 14px 16px;
+  border: 1px solid var(--border2); border-radius: 11px; background: var(--panel2);
+}
 .minn-upl-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text2); }
 .minn-upl-row > .minn-cell-clip { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-upl-pct { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
