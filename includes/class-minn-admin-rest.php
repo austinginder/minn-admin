@@ -5245,6 +5245,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'move_failed', __( 'Could not store the upload.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
+		if ( empty( $request['overwrite'] ) ) {
+			$offer = self::upload_existing_offer( $package, 'theme' );
+			if ( $offer ) {
+				@unlink( $package ); // phpcs:ignore
+				return $offer;
+			}
+		}
+
 		$skin     = new WP_Ajax_Upgrader_Skin();
 		$upgrader = new Theme_Upgrader( $skin );
 		$result   = $upgrader->install( $package, array( 'overwrite_package' => ! empty( $request['overwrite'] ) ) );
@@ -5438,6 +5446,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'move_failed', __( 'Could not store the upload.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
+		if ( empty( $request['overwrite'] ) ) {
+			$offer = self::upload_existing_offer( $package, 'plugin' );
+			if ( $offer ) {
+				@unlink( $package ); // phpcs:ignore
+				return $offer;
+			}
+		}
+
 		$skin     = new WP_Ajax_Upgrader_Skin();
 		$upgrader = new Plugin_Upgrader( $skin );
 		$result   = $upgrader->install( $package, array( 'overwrite_package' => ! empty( $request['overwrite'] ) ) );
@@ -5471,12 +5487,98 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * @param string      $kind     'plugin' or 'theme'.
 	 * @return WP_Error|null
 	 */
-	private static function upload_overwrite_offer( $upgrader, $result, $kind ) {
-		$err = is_wp_error( $result ) ? $result : ( isset( $upgrader->result ) && is_wp_error( $upgrader->result ) ? $upgrader->result : null );
-		if ( ! $err || 'folder_exists' !== $err->get_error_code() ) {
+	private static function upload_existing_offer( $package, $kind ) {
+		$new = self::upload_zip_identity( $package, $kind );
+		if ( ! $new || empty( $new['folder'] ) ) {
 			return null;
 		}
-		$folder          = basename( untrailingslashit( (string) $err->get_error_data( 'folder_exists' ) ) );
+		$folder = $new['folder'];
+		if ( 'plugin' === $kind ) {
+			if ( ! is_dir( WP_PLUGIN_DIR . '/' . $folder ) && ! is_file( WP_PLUGIN_DIR . '/' . $folder . '.php' ) ) {
+				return null;
+			}
+		} elseif ( ! is_dir( get_theme_root() . '/' . $folder ) ) {
+			return null;
+		}
+		return self::upload_overwrite_error( $kind, $folder, $new );
+	}
+
+	private static function upload_zip_identity( $package, $kind ) {
+		if ( ! class_exists( 'ZipArchive' ) ) {
+			return null;
+		}
+		$za = new ZipArchive();
+		if ( true !== $za->open( $package ) ) {
+			return null;
+		}
+		$top   = array();
+		$names = array();
+		for ( $i = 0, $n = $za->numFiles; $i < $n; $i++ ) {
+			$name = str_replace( '\\', '/', (string) $za->getNameIndex( $i ) );
+			if ( '' === $name || 0 === strpos( $name, '__MACOSX/' ) ) {
+				continue;
+			}
+			$names[] = $name;
+			$first   = strtok( $name, '/' );
+			if ( $first ) {
+				$top[ $first ] = true;
+			}
+		}
+		$tops   = array_keys( $top );
+		$folder = ( 1 === count( $tops ) && false === strpos( $tops[0], '.' ) ) ? $tops[0] : '';
+		$prefix = $folder ? $folder . '/' : '';
+		$buf    = '';
+		foreach ( $names as $name ) {
+			if ( $prefix && 0 !== strpos( $name, $prefix ) ) {
+				continue;
+			}
+			$rel = $prefix ? substr( $name, strlen( $prefix ) ) : $name;
+			if ( false !== strpos( $rel, '/' ) ) {
+				continue;
+			}
+			if ( 'plugin' === $kind && preg_match( '/\.php$/i', $rel ) ) {
+				$candidate = $za->getFromName( $name );
+				if ( is_string( $candidate ) && preg_match( '/^[ \t\/*#@]*Plugin Name:/mi', $candidate ) ) {
+					$buf = $candidate;
+					break;
+				}
+			}
+			if ( 'theme' === $kind && 0 === strcasecmp( $rel, 'style.css' ) ) {
+				$candidate = $za->getFromName( $name );
+				if ( is_string( $candidate ) ) {
+					$buf = $candidate;
+					break;
+				}
+			}
+		}
+		$za->close();
+		if ( '' === $buf && '' === $folder ) {
+			return null;
+		}
+		$tmp = wp_tempnam( 'plugin' === $kind ? 'plugin.php' : 'style.css' );
+		if ( ! $tmp || false === file_put_contents( $tmp, $buf ) ) {
+			return $folder ? array( 'folder' => $folder, 'Name' => $folder, 'Version' => '' ) : null;
+		}
+		if ( 'plugin' === $kind ) {
+			$data = get_plugin_data( $tmp, false, false );
+		} else {
+			$data = get_file_data( $tmp, array( 'Name' => 'Theme Name', 'Version' => 'Version' ) );
+		}
+		@unlink( $tmp ); // phpcs:ignore
+		if ( '' === $folder ) {
+			$folder = ! empty( $data['Name'] ) ? sanitize_title( $data['Name'] ) : '';
+		}
+		if ( '' === $folder ) {
+			return null;
+		}
+		return array(
+			'folder'  => $folder,
+			'Name'    => (string) ( $data['Name'] ?? $folder ),
+			'Version' => (string) ( $data['Version'] ?? '' ),
+		);
+	}
+
+	private static function upload_overwrite_error( $kind, $folder, $new ) {
 		$current_name    = '';
 		$current_version = '';
 		if ( 'plugin' === $kind ) {
@@ -5494,11 +5596,6 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$current_version = (string) $theme->get( 'Version' );
 			}
 		}
-		// check_package() stored the uploaded copy's headers before the
-		// destination collision stopped the install.
-		$new = 'plugin' === $kind
-			? (array) ( $upgrader->new_plugin_data ?? array() )
-			: (array) ( $upgrader->new_theme_data ?? array() );
 		return new WP_Error(
 			'folder_exists',
 			/* translators: %s: the installed plugin or theme's name. */
@@ -5510,6 +5607,24 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'new_version'     => (string) ( $new['Version'] ?? '' ),
 			)
 		);
+	}
+
+	private static function upload_overwrite_offer( $upgrader, $result, $kind ) {
+		$err = is_wp_error( $result ) ? $result : ( isset( $upgrader->result ) && is_wp_error( $upgrader->result ) ? $upgrader->result : null );
+		if ( ( ! $err || 'folder_exists' !== $err->get_error_code() ) && isset( $upgrader->skin ) && method_exists( $upgrader->skin, 'get_errors' ) ) {
+			$skin_err = $upgrader->skin->get_errors();
+			if ( is_wp_error( $skin_err ) && $skin_err->has_errors() && 'folder_exists' === $skin_err->get_error_code() ) {
+				$err = $skin_err;
+			}
+		}
+		if ( ! $err || 'folder_exists' !== $err->get_error_code() ) {
+			return null;
+		}
+		$folder = basename( untrailingslashit( (string) $err->get_error_data( 'folder_exists' ) ) );
+		$new    = 'plugin' === $kind
+			? (array) ( $upgrader->new_plugin_data ?? array() )
+			: (array) ( $upgrader->new_theme_data ?? array() );
+		return self::upload_overwrite_error( $kind, $folder, $new );
 	}
 
 	/**
