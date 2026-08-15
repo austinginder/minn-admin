@@ -19,8 +19,10 @@ defined( 'ABSPATH' ) || exit;
 
 // color_picker stores a plain color string and renders as a text input;
 // image stores an attachment id and rides the form engine's image control
-// ({ id, url }) in the editor panel and a pick-button row in the inspector.
-const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker', 'image' );
+// ({ id, url }) in the editor panel and a pick-button row in the inspector;
+// gallery stores an ordered attachment-id array and rides the islands
+// images editor in items mode (reorder / replace / remove / add).
+const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'true_false', 'color_picker', 'image', 'gallery' );
 
 /** Layout-only ACF field types: chrome, not data — never mapped, never counted as locked. */
 const MINN_ADMIN_ACF_CHROME_TYPES = array( 'tab', 'message', 'accordion' );
@@ -155,6 +157,18 @@ function minn_admin_acf_read_values( $post_id ) {
 				'id'  => $id,
 				'url' => (string) wp_get_attachment_image_url( $id, 'thumbnail' ),
 			) : '';
+		} elseif ( 'gallery' === $field['type'] ) {
+			// The gallery control speaks an ordered [{ id, url }] list.
+			$items = array();
+			foreach ( (array) $val as $gid ) {
+				if ( is_numeric( $gid ) && (int) $gid > 0 ) {
+					$items[] = array(
+						'id'  => (int) $gid,
+						'url' => (string) wp_get_attachment_image_url( (int) $gid, 'thumbnail' ),
+					);
+				}
+			}
+			$out[ $name ] = $items;
 		} elseif ( is_array( $val ) ) {
 			// Shouldn't appear for simple non-multiple fields; don't leak structure.
 			$out[ $name ] = '';
@@ -192,7 +206,21 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 				$value = (array) $value;
 				$value = isset( $value['id'] ) ? (int) $value['id'] : 0;
 			}
-			$value = is_numeric( $value ) && (int) $value > 0 ? (int) $value : '';
+			$value = is_numeric( $value ) && (int) $value > 0 && 'attachment' === get_post_type( (int) $value ) ? (int) $value : '';
+		} elseif ( 'gallery' === $field['type'] ) {
+			// [{ id, url }] entries or bare ids; an empty list clears (ACF's
+			// own save stores an empty array).
+			$ids = array();
+			foreach ( (array) $value as $entry ) {
+				if ( is_array( $entry ) || is_object( $entry ) ) {
+					$entry = (array) $entry;
+					$entry = isset( $entry['id'] ) ? $entry['id'] : 0;
+				}
+				if ( is_numeric( $entry ) && (int) $entry > 0 && 'attachment' === get_post_type( (int) $entry ) ) {
+					$ids[] = (int) $entry;
+				}
+			}
+			$value = $ids;
 		} elseif ( null === $value || false === $value ) {
 			// The panel clears fields with empty values; ACF's own form save
 			// stores '' rather than deleting the row — match it.
@@ -254,6 +282,9 @@ function minn_admin_acf_block_forms() {
 					break;
 				case 'image':
 					$entry['control'] = 'image';
+					break;
+				case 'gallery':
+					$entry['control'] = 'gallery';
 					break;
 				default:
 					$entry['control'] = 'text';
@@ -483,9 +514,10 @@ function minn_admin_acf_options_tabs( $page ) {
 				$open( $group['title'] );
 			}
 			$simple = minn_admin_acf_map_field( $f );
-			// Image fields count as locked here: the settings engine has no
-			// media-picker binding (the editor panel and block inspector do).
-			if ( ! $simple || 'image' === $simple['type'] ) {
+			// Image and gallery fields count as locked here: the settings
+			// engine has no media-picker binding (the editor panel and block
+			// inspector do).
+			if ( ! $simple || in_array( $simple['type'], array( 'image', 'gallery' ), true ) ) {
 				$tabs[ $current ]['locked']++;
 				continue;
 			}

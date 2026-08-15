@@ -799,7 +799,7 @@ $forms['acf/testimonial'] = array(
 ```
 
 Per field: `name` (key inside the object), `label`, `control` (`text` · `textarea` ·
-`select` · `number` · `checkbox` · `image`), `options` (`[value, label]` pairs). `alias`
+`select` · `number` · `checkbox` · `image` · `gallery`), `options` (`[value, label]` pairs). `alias`
 maps a field name to a value written as `_name` alongside it (ACF's field-key
 references, so the plugin's renderer can resolve values on blocks Minn created or
 filled). `locked` renders an honest "N advanced fields live in the block editor" note.
@@ -808,7 +808,9 @@ and a field that was never present and is still empty injects nothing. Checkbox 
 store as `1`/`0` (ACF's convention). `image` stores a bare attachment id: picks go
 through Minn's media picker and apply immediately (the picker closes the popover, so
 pending typed values are folded first); in the content-editor modal, image fields fold
-into the locked count instead. The bundled ACF adapter generates these descriptors automatically
+into the locked count instead. `gallery` stores an ordered array of attachment ids
+(written as strings, ACF's block convention) and opens Minn's images editor — reorder,
+replace, remove, add, drop-to-upload — applying immediately the same way. The bundled ACF adapter generates these descriptors automatically
 for every registered `acf/*` block from its field groups; declare your own only for
 non-ACF blocks with the same nested-object shape.
 

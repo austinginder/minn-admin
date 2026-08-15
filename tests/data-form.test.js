@@ -66,6 +66,9 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 			&& ! document.querySelector( '[data-insp="own:data"]' ) ) );
 		t.check( 'locked count renders as a note', await page.$eval( '.minn-insp-body', ( e ) =>
 			/1 advanced field lives in the block editor/.test( e.textContent ) ) );
+		t.check( 'gallery field renders its editor doorway', await page.evaluate( () =>
+			!! document.querySelector( '[data-inspdfgal="own:pics"]' )
+			&& /0 images|Add images/.test( document.querySelector( '.minn-insp-dfimg-id' )?.textContent + document.querySelector( '[data-inspdfgal="own:pics"]' ).textContent ) ) );
 
 		// Edit all three controls, Apply, save, verify the stored comment.
 		await page.fill( '[data-inspdf="own:headline"]', 'Hello edited' );

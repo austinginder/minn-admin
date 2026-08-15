@@ -1305,6 +1305,24 @@
 				</div>
 			</div>`;
 		}
+	// Gallery: an ordered list of attachments ({ id, url } entries or bare
+		// ids). The control shows a thumb strip + an edit doorway; the CALLER
+		// binds [data-gal-edit] to the images editor's items mode and repaints
+		// via the data-gal payload (formControlValue reads it back).
+		if ( t === 'gallery' ) {
+			const items = ( Array.isArray( v ) ? v : [] )
+				.map( ( x ) => ( x && typeof x === 'object' ) ? { id: x.id, url: x.url || '' } : { id: x, url: '' } )
+				.filter( ( x ) => x.id );
+			return `<div class="minn-field-gallery" ${ attr }="${ esc( id ) }" data-ftype="gallery" data-gal="${ esc( JSON.stringify( items ) ) }">
+				<div class="minn-field-gallery-thumbs">${ items.slice( 0, 6 ).map( ( x ) => x.url
+					? `<img src="${ esc( x.url ) }" alt="" loading="lazy">`
+					: `<span class="minn-field-gallery-ph">#${ esc( String( x.id ) ) }</span>` ).join( '' ) }${ items.length > 6 ? `<span class="minn-field-gallery-more">+${ items.length - 6 }</span>` : '' }</div>
+				<button type="button" class="minn-btn-soft" data-gal-edit>${ items.length
+					/* translators: %d: number of images in the gallery field. */
+					? sprintf( esc( _n( 'Edit %d image…', 'Edit %d images…', items.length ) ), items.length )
+					: esc( __( 'Add images…' ) ) }</button>
+			</div>`;
+		}
 		const itype = t === 'email' || t === 'url' ? t : 'text';
 		return `<input class="${ cls }" type="${ itype }" ${ attr }="${ esc( id ) }" data-ftype="${ esc( t ) }" value="${ esc( String( v ) ) }" placeholder="${ esc( f.placeholder || '' ) }">`;
 	}
@@ -1319,6 +1337,9 @@
 			const id = parseInt( el.dataset.imgId || '0', 10 );
 			if ( ! id ) return null;
 			return { id, url: el.dataset.imgUrl || '' };
+		}
+		if ( kind === 'gallery' ) {
+			try { return JSON.parse( el.dataset.gal || '[]' ); } catch ( e ) { return []; }
 		}
 		if ( kind === 'combobox' ) {
 			const input = el.querySelector( '.minn-ac-input' );
@@ -23749,6 +23770,26 @@
 				bindSuggestField( input, ( value, label ) => {
 					write( value === '' ? '' : { value, label } );
 				} );
+			} else if ( input.dataset.ftype === 'gallery' ) {
+				// Gallery fields reuse the islands images editor in items mode.
+				// The hosting panel modal closes first: the images editor sits
+				// under .minn-modal by design (the media picker must stack on
+				// top of it for tile replace / add), so it cannot open OVER
+				// this modal — same one-way flow as an image field's pick.
+				const editBtn = input.querySelector( '[data-gal-edit]' );
+				if ( editBtn ) editBtn.addEventListener( 'click', ( e ) => {
+					e.preventDefault();
+					let items = [];
+					try { items = JSON.parse( input.dataset.gal || '[]' ); } catch ( err ) {}
+					closeModal();
+					openImagesEditor( null, null, null, null, {
+						items: items.map( ( x ) => ( { id: x.id, thumb: x.url || '' } ) ),
+						onApply: ( ids, out ) => {
+							write( out.map( ( x ) => ( { id: x.id, url: x.url } ) ) );
+							toast( __( 'Gallery updated — saves with the post' ) );
+						},
+					} );
+				} );
 			} else if ( input.dataset.ftype === 'image' ) {
 				const [ pid, name ] = ( input.dataset.pf || '' ).split( ':' );
 				const paint = ( img ) => {
@@ -26502,28 +26543,36 @@
 
 	function openImagesEditor( idx, islandEl, baseRaw, info, opts = {} ) {
 		closeImgEdit();
+		// ITEMS MODE (opts.items + opts.onApply): the same grid operating on a
+		// plain attachment-id list instead of markup units — ACF gallery
+		// fields store exactly that. Apply hands the reordered id list to the
+		// caller; every markup path (units, captions, mirrors, rebuilders) is
+		// bypassed. idx/islandEl/baseRaw/info are unused and may be null.
+		const itemsMode = !! ( opts.items && opts.onApply );
 		// Working list: existing entries reference their verbatim unit; added
 		// entries carry the picked attachment until Apply clones them in;
 		// replaced entries get their unit text rewritten in place (caption
 		// kept) and carry the new attachment id.
-		const list = info.units.map( ( u, i ) => ( {
-			unit: u,
-			orig: i,
-			id: info.ids ? info.ids[ i ] : u.id,
-			thumb: u.src,
-			attachment: null,
-			caption: unitCaption( u.text ),
-			// The parent's mirror entry for this picture, moved verbatim with
-			// its tile (rewritten in place when the tile is replaced).
-			mirror: info.mirror ? info.mirror.entries[ i ] : null,
-		} ) );
-		const canCaption = info.units.some( unitCanCaption );
+		const list = itemsMode
+			? opts.items.map( ( it ) => ( { unit: null, orig: -1, id: it.id, thumb: it.thumb || it.url || '', attachment: null, caption: '', mirror: null } ) )
+			: info.units.map( ( u, i ) => ( {
+				unit: u,
+				orig: i,
+				id: info.ids ? info.ids[ i ] : u.id,
+				thumb: u.src,
+				attachment: null,
+				caption: unitCaption( u.text ),
+				// The parent's mirror entry for this picture, moved verbatim with
+				// its tile (rewritten in place when the tile is replaced).
+				mirror: info.mirror ? info.mirror.entries[ i ] : null,
+			} ) );
+		const canCaption = ! itemsMode && info.units.some( unitCanCaption );
 		// A fixed layout has a set number of openings — offering × or Add would
 		// promise something the block cannot keep. Unless its own plugin can
 		// lay it out again: an image-block adapter takes the images a writer
 		// chose and hands back new markup (Minn_Admin::image_blocks).
-		const rebuilder = ( B.imageBlocks || {} )[ String( islandEl && islandEl.dataset.block || '' ) ];
-		const fixed = !! info.fixedSlots && ! rebuilder;
+		const rebuilder = ! itemsMode && ( B.imageBlocks || {} )[ String( islandEl && islandEl.dataset.block || '' ) ];
+		const fixed = ! itemsMode && !! info.fixedSlots && ! rebuilder;
 		const canUpload = !! ( B.caps && B.caps.upload );
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-imgedit-overlay';
@@ -26570,9 +26619,13 @@
 						<button type="button" data-mv="${ i }:1" title="${ esc( __( 'Move later' ) ) }" aria-label="${ esc( __( 'Move image later' ) ) }"${ i === list.length - 1 ? ' disabled' : '' }>›</button>
 					</span>
 				</div>${ canCaption ? `<input class="minn-imgedit-cap" type="text" data-cap="${ i }" value="${ esc( it.caption || '' ) }" placeholder="${ esc( __( 'Caption' ) ) }" aria-label="${ esc( __( 'Caption' ) ) }" spellcheck="true">` : '' }
-				</div>` ).join( '' ) || `<div class="minn-imgedit-empty">${ esc( __( 'No images left. Add some, or Cancel and remove the whole block from its ⚙ popover instead.' ) ) }</div>`;
+				</div>` ).join( '' ) || `<div class="minn-imgedit-empty">${ esc( itemsMode
+				? __( 'No images left. Add some, or Apply to save the field empty.' )
+				: __( 'No images left. Add some, or Cancel and remove the whole block from its ⚙ popover instead.' ) ) }</div>`;
 			const apply = $( '#minn-imgedit-apply', overlay );
-			if ( apply ) apply.disabled = ! list.length;
+			// A gallery FIELD may legitimately be emptied; a block may not
+			// (an image block with zero images is broken markup).
+			if ( apply ) apply.disabled = ! list.length && ! itemsMode;
 			// Tiles for images that no longer exist say so instead of sitting
 			// blank — the tile is still clickable, which is how you fix it.
 			requestAnimationFrame( () => markMissingImages( grid ) );
@@ -26704,6 +26757,13 @@
 					if ( ! it || ! it.url ) return;
 					const entry = list[ i ];
 					if ( ! entry ) return;
+					if ( itemsMode ) {
+						// No unit to rewrite — the id IS the value.
+						entry.id = it.id;
+						entry.thumb = it.thumb || it.url;
+						renderGrid();
+						return;
+					}
 					if ( entry.attachment ) {
 						// Not yet materialized — just swap the pending pick.
 						entry.attachment = it;
@@ -26726,7 +26786,17 @@
 				} );
 				return;
 			}
-			if ( e.target.closest( '#minn-imgedit-apply' ) && list.length ) {
+			if ( e.target.closest( '#minn-imgedit-apply' ) && ( list.length || itemsMode ) ) {
+				if ( itemsMode ) {
+					const out = list.map( ( it ) => ( {
+						id: it.attachment ? it.attachment.id : it.id,
+						url: it.attachment ? ( it.attachment.thumb || it.attachment.url || '' ) : ( it.thumb || '' ),
+					} ) );
+					if ( out.some( ( x ) => ! x.id ) ) { toast( __( 'Every image needs to be in the media library.' ), true ); return; }
+					closeImgEdit();
+					opts.onApply( out.map( ( x ) => x.id ), out );
+					return;
+				}
 				// Adapter-owned block: the layout is the plugin's to compute,
 				// so send the images in order and take back whole markup.
 				if ( rebuilder ) {
@@ -27123,6 +27193,15 @@
 		const rows = df.fields.map( ( f ) => {
 			let v = cur[ f.name ];
 			const label = f.label || humanizeAttrKey( f.name );
+			if ( f.control === 'gallery' ) {
+				if ( ! media ) { lockedCount++; return ''; }
+				const gids = Array.isArray( v ) ? v.filter( ( x ) => x != null && x !== '' ) : [];
+				return `<div class="minn-field-label">${ esc( label ) }</div>
+					<div class="minn-insp-dfimg">
+						<span class="minn-insp-dfimg-id">${ sprintf( esc( /* translators: %d: number of images in the gallery field. */ _n( '%d image', '%d images', gids.length ) ), gids.length ) }</span>
+						<button type="button" class="minn-btn-soft" data-inspdfgal="${ esc( prefix ) }:${ esc( f.name ) }">${ gids.length ? esc( __( 'Edit images…' ) ) : esc( __( 'Add images…' ) ) }</button>
+					</div>`;
+			}
 			if ( f.control === 'image' ) {
 				if ( ! media ) { lockedCount++; return ''; }
 				const iid = v != null && /^\d+$/.test( String( v ) ) ? parseInt( v, 10 ) : 0;
@@ -27859,6 +27938,52 @@
 				if ( ! info ) { toast( __( 'These images can’t be edited safely here.' ), true ); return; }
 				closeInspector();
 				openImagesEditor( idx, el, base, info );
+				return;
+			}
+			const dfg = e.target.closest( '[data-inspdfgal]' );
+			if ( dfg ) {
+				// dataForm gallery fields: an ordered attachment-id list inside
+				// the object attribute — the islands images editor in items
+				// mode. Fold-first, then close (the media picker must be able
+				// to stack above the images editor for replace / add).
+				const ref = dfg.dataset.inspdfgal;
+				const sep = ref.indexOf( ':' );
+				const prefix = ref.slice( 0, sep );
+				const fname = ref.slice( sep + 1 );
+				const child = prefix === 'own' ? null : insp.model.children[ Number( prefix ) ];
+				const dfBlock = prefix === 'own' ? insp.model.parts.name : child && child.name;
+				const dfAttrs = prefix === 'own' ? insp.model.ownAttrs : child && child.attrs;
+				const df = dfBlock ? dataFormFor( dfBlock ) : null;
+				if ( ! df || ! dfAttrs ) return;
+				collectInspectorForms(); // typed values survive
+				const obj = ( typeof dfAttrs[ df.attr ] === 'object' && dfAttrs[ df.attr ] ) || {};
+				const ids = ( Array.isArray( obj[ fname ] ) ? obj[ fname ] : [] ).filter( ( x ) => x != null && x !== '' );
+				const { idx, islandEl: el } = insp;
+				closeInspector();
+				// Resolve thumbnails for the tiles; ids whose attachment is
+				// gone render as missing tiles, which is the honest state.
+				const thumbReq = ids.length
+					? api( 'wp/v2/media?include=' + ids.join( ',' ) + '&per_page=100&_fields=id,source_url,media_details' ).catch( () => [] )
+					: Promise.resolve( [] );
+				thumbReq.then( ( media ) => {
+					const byId = {};
+					( media || [] ).forEach( ( m ) => {
+						const sizes = ( m.media_details && m.media_details.sizes ) || {};
+						byId[ String( m.id ) ] = ( sizes.medium && sizes.medium.source_url ) || m.source_url || '';
+					} );
+					openImagesEditor( null, null, null, null, {
+						items: ids.map( ( gid ) => ( { id: gid, thumb: byId[ String( gid ) ] || '' } ) ),
+						onApply: ( newIds ) => {
+							// ACF block data stores gallery ids as strings.
+							obj[ fname ] = newIds.map( ( x ) => String( x ) );
+							const alias = ( df.alias || {} )[ fname ];
+							if ( alias && obj[ '_' + fname ] === undefined ) obj[ '_' + fname ] = alias;
+							dfAttrs[ df.attr ] = obj;
+							replaceIsland( idx, el, buildInspectorRaw( insp ) );
+							toast( __( 'Gallery updated' ) );
+						},
+					} );
+				} );
 				return;
 			}
 			const dfi = e.target.closest( '[data-inspdfimg], [data-inspdfimgx]' );

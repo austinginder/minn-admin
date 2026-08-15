@@ -145,6 +145,53 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 			mv && mv.slideshow_cover && mv.slideshow_cover.id > 0 && typeof mv.slideshow_cover.url === 'string',
 			JSON.stringify( mv && mv.slideshow_cover ) );
 
+		// gallery field: the islands images editor in items mode. Opening it
+		// closes the panel modal by design (the media picker must be able to
+		// stack above the images editor), so the flow ends back in the editor
+		// with the value dirty — ⌘S saves it like any panel edit. The image
+		// pick above ALSO closed the modal (the picker replaces it), so
+		// re-enter through the door first.
+		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
+		await page.click( '[data-side-door="panel:acf"]' );
+		const galSel = '[data-pf$=":photo_gallery"][data-ftype="gallery"]';
+		await page.waitForSelector( galSel, { timeout: 15000 } );
+		t.check( 'gallery field renders the gallery control', !! ( await page.$( galSel ) ) );
+		await page.click( `${ galSel } [data-gal-edit]` );
+		await page.waitForSelector( '#minn-imgedit-add', { timeout: 10000 } );
+		await page.click( '#minn-imgedit-add' );
+		await page.waitForSelector( '.minn-picker-item[data-pick]', { timeout: 15000 } );
+		await page.click( '.minn-picker-item[data-pick="0"]' );
+		await page.click( '.minn-picker-item[data-pick="1"]' );
+		await page.click( '#minn-picker-done' );
+		await page.waitForFunction( () => document.querySelectorAll( '.minn-imgedit-tile' ).length === 2, null, { timeout: 10000 } );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 600 );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'picked gallery persisted as ordered { id, url } items',
+			mv && Array.isArray( mv.photo_gallery ) && mv.photo_gallery.length === 2 && mv.photo_gallery.every( ( x ) => x.id > 0 ),
+			JSON.stringify( mv && mv.photo_gallery ) );
+
+		// Emptying the gallery is a legitimate apply in items mode.
+		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
+		await page.click( '[data-side-door="panel:acf"]' );
+		await page.waitForSelector( `${ galSel } [data-gal-edit]`, { timeout: 15000 } );
+		await page.click( `${ galSel } [data-gal-edit]` );
+		await page.waitForSelector( '.minn-imgedit-x', { timeout: 10000 } );
+		// One at a time: each removal re-renders the grid, detaching the other
+		// × buttons (the rule-31 class).
+		await page.waitForFunction( () => {
+			const x = document.querySelector( '.minn-imgedit-x' );
+			if ( x ) x.click();
+			return ! document.querySelector( '.minn-imgedit-x' );
+		}, null, { timeout: 10000, polling: 200 } );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 600 );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'emptied gallery persisted as an empty list',
+			mv && Array.isArray( mv.photo_gallery ) && mv.photo_gallery.length === 0, JSON.stringify( mv && mv.photo_gallery ) );
+
 		t.check( 'no save was rejected across the run', saves.every( ( s ) => s < 400 ), saves.join( ',' ) );
 	} finally {
 		await deletePost( page, id );

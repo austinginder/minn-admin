@@ -1098,6 +1098,18 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-field-image-thumb:hover { border-color: var(--accent); }
 .minn-field-image-actions { display: flex; gap: 8px; }
+/* Gallery field: thumb strip + the images-editor doorway. */
+.minn-field-gallery { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.minn-field-gallery-thumbs { display: flex; gap: 4px; flex-wrap: wrap; }
+.minn-field-gallery-thumbs:empty { display: none; }
+.minn-field-gallery-thumbs img, .minn-field-gallery-ph, .minn-field-gallery-more {
+  width: 44px; height: 44px; object-fit: cover; border-radius: 7px;
+  border: 1px solid var(--border2); background: var(--panel2);
+}
+.minn-field-gallery-ph, .minn-field-gallery-more {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--muted);
+}
 .minn-rev-list {
   max-height: min(70vh, 640px); overflow-y: auto; padding: 4px 0 10px;
 }
