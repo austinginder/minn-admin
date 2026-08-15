@@ -37,6 +37,20 @@ function minn_admin_wsal_admin_url() {
 }
 
 /**
+ * SQL predicate for the WSAL tenant visible in the current site context.
+ *
+ * WP Activity Log uses site_id=0 for a single site's log and for the distinct
+ * network/global stream on multisite. Including zero on a subsite therefore
+ * crosses the tenant boundary; single-site installs still need it for their
+ * ordinary events.
+ *
+ * @return string Placeholder-bearing SQL generated only from WordPress state.
+ */
+function minn_admin_wsal_site_scope_sql() {
+	return is_multisite() ? 'site_id = %d' : 'site_id IN (0, %d)';
+}
+
+/**
  * Status-card model for WP Activity Log (created_on is a UTC float epoch).
  *
  * @return array{rows:array,actions:array}
@@ -59,17 +73,18 @@ function minn_admin_wsal_status_model() {
 	// this site. Counting without it reported every other tenant's event
 	// volume, their critical/high volume and their last-event time to a main
 	// site administrator who is not a super admin.
-	$blog = get_current_blog_id();
-	$total   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE site_id IN (0, %d)", $blog ) );
-	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND site_id IN (0, %d)", $since_d, $blog ) );
-	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND site_id IN (0, %d)", $since_w, $blog ) );
+	$blog  = get_current_blog_id();
+	$scope = minn_admin_wsal_site_scope_sql();
+	$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$scope}", $blog ) );
+	$day   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND {$scope}", $since_d, $blog ) );
+	$week  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND {$scope}", $since_w, $blog ) );
 	// 500 critical + 400 high in the last week.
 	$hot = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND severity IN (500, 400) AND site_id IN (0, %d)",
+		"SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND severity IN (500, 400) AND {$scope}",
 		$since_w,
 		$blog
 	) );
-	$last = $wpdb->get_var( $wpdb->prepare( "SELECT created_on FROM {$table} WHERE site_id IN (0, %d) ORDER BY id DESC LIMIT 1", $blog ) );
+	$last = $wpdb->get_var( $wpdb->prepare( "SELECT created_on FROM {$table} WHERE {$scope} ORDER BY id DESC LIMIT 1", $blog ) );
 	// phpcs:enable
 
 	$last_label = '—';
@@ -184,7 +199,7 @@ add_action( 'rest_api_init', function () {
 			$table    = $wpdb->base_prefix . 'wsal_occurrences';
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$where    = array( 'site_id IN (0, %d)' );
+			$where    = array( minn_admin_wsal_site_scope_sql() );
 			$args     = array( get_current_blog_id() );
 
 			if ( $request['severity'] ) {
@@ -238,8 +253,9 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'minn_admin_wsal_can_view',
 		'callback'            => function ( WP_REST_Request $request ) use ( $severity_label, $alert_title ) {
 			global $wpdb;
-			$occ  = $wpdb->base_prefix . 'wsal_occurrences';
-			$meta = $wpdb->base_prefix . 'wsal_metadata';
+			$occ   = $wpdb->base_prefix . 'wsal_occurrences';
+			$meta  = $wpdb->base_prefix . 'wsal_metadata';
+			$scope = minn_admin_wsal_site_scope_sql();
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			// Scope to this site, exactly like the list route above. Without
 			// it, a subsite administrator on a network-activated install can
@@ -249,7 +265,7 @@ add_action( 'rest_api_init', function () {
 			// the same shape for the same reason; 404 rather than 403 so the
 			// endpoint does not confirm out-of-scope ids exist.)
 			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT * FROM {$occ} WHERE id = %d AND site_id IN (0, %d)",
+				"SELECT * FROM {$occ} WHERE id = %d AND {$scope}",
 				(int) $request['id'],
 				get_current_blog_id()
 			) );
