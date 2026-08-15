@@ -589,9 +589,15 @@ add_action( 'rest_api_init', function () {
 				// an existing css/frontend snippet to js, or moving it onto the admin
 				// or login screen, makes its stored bytes execute in a context this
 				// caller may not write to, so an options-only edit is the same
-				// escalation as a code write.
+				// escalation as a code write. Linking counts for the same reason:
+				// external is the one shape minn_admin_ccj_can_write_code() lets a
+				// caller without unfiltered_html store raw, because it loads through
+				// wp_enqueue_style and cannot break out. Moving it to internal/both
+				// hands those same stored bytes to rebuild_tree()'s inlined
+				// <style>/<script> sink, so the promotion is a code write.
 				$retargets = ( $opts['language'] !== ( isset( $stored['language'] ) ? (string) $stored['language'] : 'css' ) )
-					|| ( $opts['side'] !== ( isset( $stored['side'] ) ? (string) $stored['side'] : 'frontend' ) );
+					|| ( $opts['side'] !== ( isset( $stored['side'] ) ? (string) $stored['side'] : 'frontend' ) )
+					|| ( $opts['linking'] !== ( isset( $stored['linking'] ) ? (string) $stored['linking'] : 'internal' ) );
 				if ( ( array_key_exists( 'code', $body ) || $retargets ) && ! minn_admin_ccj_can_write_code( $opts ) ) {
 					return minn_admin_ccj_code_error( $opts );
 				}
