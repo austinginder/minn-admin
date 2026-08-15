@@ -6,14 +6,10 @@ else.
 
 ## Reporting a vulnerability
 
-Preferred: **[GitHub private vulnerability reporting](https://github.com/austinginder/minn-admin/security/advisories/new)**
-(the "Report a vulnerability" button on the repo's Security tab). Reports
-stay private while a fix is prepared.
-
-Email works too: **austin@anchor.host**. Either way you can expect an
-acknowledgment within 48 hours and a fix or a concrete timeline within a
-week for anything exploitable. Credit is yours unless you ask otherwise;
-coordinated disclosure timing is negotiable and reasonable.
+Email **security@minnadmin.com**. You can expect an acknowledgment within
+48 hours and a fix or a concrete timeline within a week for anything
+exploitable. Credit is yours unless you ask otherwise; coordinated
+disclosure timing is negotiable and reasonable.
 
 Please include the Minn Admin version, the role of the user in your
 reproduction (admin-only issues are still issues, but capability context
