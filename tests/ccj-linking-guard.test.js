@@ -110,6 +110,31 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			{ payload: PAYLOAD, drop: noUnfiltered }
 		);
 
+	// The capability drop rides a dev fixture (minn_test_no_unfiltered_html in
+	// minn-dev-fixtures.php), because a single-site administrator always holds
+	// unfiltered_html and the boundary cannot be exercised otherwise. Without
+	// the fixture every check below would run as a full administrator and read
+	// as a failure of the code rather than of the setup, so say so and skip.
+	const armed = await page.evaluate( async () => {
+		const hdrs = { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce };
+		await fetch( window.MINN.restUrl + 'wp/v2/settings', {
+			method: 'POST', headers: hdrs,
+			body: JSON.stringify( { minn_test_no_unfiltered_html: '1' } ),
+		} );
+		const s = await ( await fetch( window.MINN.restUrl + 'wp/v2/settings', { headers: hdrs } ) ).json();
+		const ok = s.minn_test_no_unfiltered_html === '1';
+		await fetch( window.MINN.restUrl + 'wp/v2/settings', {
+			method: 'POST', headers: hdrs,
+			body: JSON.stringify( { minn_test_no_unfiltered_html: '' } ),
+		} );
+		return ok;
+	} );
+	if ( ! armed ) {
+		console.log( 'SKIP: minn_test_no_unfiltered_html fixture not available' );
+		await t.done( browser, errors );
+		return;
+	}
+
 	/* ===== Without unfiltered_html: the gate must hold ===== */
 	const low = await run( true );
 	t.check( 'inert external css snippet is still creatable', low.created === true, JSON.stringify( low ) );
