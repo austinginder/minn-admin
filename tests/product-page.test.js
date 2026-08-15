@@ -194,6 +194,20 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const barSaved = await barState();
 		t.check( 'saving lowers the save bar', barSaved.present && ! barSaved.shown, JSON.stringify( barSaved ) );
 
+		// A sale price that is not below the regular one never reaches the
+		// server: WooCommerce takes it with a 200 and drops it without a word,
+		// so the save would report success and change nothing.
+		await page.fill( '#minn-p-sale', '99.00' );
+		await page.click( '#minn-product-save' );
+		await page.waitForTimeout( 600 );
+		const saleToast = await page.evaluate( () => Array.from( document.querySelectorAll( '.minn-toast' ) ).map( ( x ) => x.textContent.trim() ).join( ' | ' ) );
+		const notSaved = await api( `wc/v3/products/${ id }?_fields=id,sale_price` );
+		t.check( 'a sale price above the regular price is refused before the save',
+			/lower/i.test( saleToast ) && ! ( ( notSaved.body || {} ).sale_price ),
+			JSON.stringify( { saleToast, sale: ( notSaved.body || {} ).sale_price } ) );
+		await page.fill( '#minn-p-sale', '' );
+		await page.waitForTimeout( 200 );
+
 		// 4. Back goes to the list.
 		await page.click( '#minn-pp-back' );
 		await page.waitForSelector( '.minn-table-row[data-product]', { timeout: 20000 } );
