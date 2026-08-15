@@ -33334,7 +33334,13 @@
 	function bindModal() {
 		const m = state.modal;
 		if ( ! m ) return;
-		$( '#minn-modal-overlay' ).addEventListener( 'click', ( e ) => {
+		// mousedown, never click: a combobox inside the modal picks on
+		// mousedown and hides its panel, so when the option list overhangs the
+		// modal the mouseup lands on the backdrop and the composed click's
+		// target IS the overlay — a pick low in a long list closed the whole
+		// modal. Backdrop dismissal is a mousedown intent anyway (the confirm
+		// and submodal overlays already bind it this way).
+		$( '#minn-modal-overlay' ).addEventListener( 'mousedown', ( e ) => {
 			if ( e.target.id === 'minn-modal-overlay' ) closeModal();
 		} );
 		const closeBtn = $( '#minn-modal-close' );
