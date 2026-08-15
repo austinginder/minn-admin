@@ -27437,6 +27437,43 @@
 	] ) ];
 	const escRegex = ( s ) => s.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
 
+	/* ===== Island links — the image-swap discipline for hrefs. A block's
+	 * link lives in its saved HTML (<a href>, e.g. a Stackable button whose
+	 * schema is empty server-side) and on some vendors is ALSO mirrored in
+	 * comment-attr JSON, so an edit replaces the exact URL everywhere it
+	 * appears rather than patching one attribute. Image-file URLs stay with
+	 * the Images flow; embeds keep their URL as a text node and their own
+	 * rebuild flow. */
+	function islandLinkRows( raw ) {
+		const s = String( raw || '' );
+		const out = [];
+		const re = /<a\s[^>]*?\bhref="([^"]+)"/gi;
+		let m;
+		while ( ( m = re.exec( s ) ) ) {
+			const u = m[ 1 ];
+			if ( /\.(?:jpe?g|png|gif|webp|avif)(?:$|[?#])/i.test( u ) ) continue; // the Images flow's territory
+			if ( ! out.includes( u ) ) out.push( u );
+		}
+		return out;
+	}
+
+	// Replace one link URL across the island. QUOTE-BOUNDED on every form —
+	// href="URL" and comment-JSON "linkUrl":"URL" both hold the URL directly
+	// inside double quotes, and the bound stops a URL that is a prefix of a
+	// longer sibling from corrupting it. One choke point for safety: a link
+	// edit can never plant a script-running URL or break out of the attribute.
+	function swapIslandLink( raw, oldUrl, newUrl ) {
+		newUrl = String( newUrl || '' ).trim()
+			.replace( /"/g, '%22' ).replace( /</g, '%3C' ).replace( />/g, '%3E' ).replace( /\s/g, '%20' );
+		if ( ! newUrl || newUrl === oldUrl || /^(javascript|data|vbscript):/i.test( newUrl ) ) return raw;
+		const encAttr = ( s ) => s.replace( /--/g, '\\u002d\\u002d' ).replace( /</g, '\\u003c' ).replace( />/g, '\\u003e' ).replace( /&/g, '\\u0026' );
+		const slashEsc = ( s ) => s.split( '/' ).join( '\\/' );
+		const q = ( s ) => '"' + s + '"';
+		let out = raw.split( q( oldUrl ) ).join( q( newUrl ) );
+		if ( encAttr( oldUrl ) !== oldUrl ) out = out.split( q( encAttr( oldUrl ) ) ).join( q( encAttr( newUrl ) ) );
+		return out.split( q( slashEsc( oldUrl ) ) ).join( q( slashEsc( newUrl ) ) );
+	}
+
 	/* Media objects in block attributes often describe ONE image with several
 	 * URL keys: a sized copy under "url" and the original under "fullUrl"
 	 * (Gutenslider), a thumbnail under "thumbUrl", and so on. Return the other
@@ -28958,6 +28995,10 @@
 				: ( insp.model.children[ Number( group.slice( 1 ) ) ] || {} ).runs;
 			if ( runs && runs[ Number( j ) ] ) runs[ Number( j ) ].value = input.value;
 		} );
+		// Link URL edits, applied by buildInspectorRaw as global swaps.
+		$$( '[data-insplink]', root ).forEach( ( input ) => {
+			( insp.linkEdits = insp.linkEdits || {} )[ input.dataset.insplink ] = input.value;
+		} );
 	}
 
 	// Generic text-run fields (saved-HTML text nodes, offset-addressed) —
@@ -28998,6 +29039,13 @@
 					<img src="${ esc( u ) }" alt="" loading="lazy">
 					<button class="minn-btn-soft" type="button" data-inspimg="${ i }">${ esc( __( 'Replace…' ) ) }</button>
 				</div>` ).join( '' );
+		// Links anywhere in the island's saved HTML (a button's href, a
+		// card's target) — edited by global exact-URL replacement so any
+		// comment-attr mirror stays in sync (swapIslandLink). Slot containers
+		// leave links to their nested blocks' own chips, like images.
+		const linkSection = mediaRebuild || isSlot || ! ( insp.links || [] ).length ? ''
+			: `<div class="minn-field-label">${ esc( __( 'Links' ) ) }</div>` + insp.links.map( ( u, i ) => `
+				<input class="minn-input mono" data-insplink="${ i }" value="${ esc( u ) }" spellcheck="false" autocomplete="off" aria-label="${ esc( __( 'Link URL' ) ) }">` ).join( '' );
 		// Gallery settings that are SAFE without a rebuild:
 		// columns and crop live in the comment attrs plus figure class tokens
 		// Minn regenerates on Apply; randomOrder is a render-time shuffle with
@@ -29080,7 +29128,7 @@
 			<div class="minn-insp-note">${ esc( __( 'Re-picks the gallery images; per-image captions and layout tweaks reset.' ) ) }</div>`
 		: '';
 
-		const editable = !! ( ownFields || childSections );
+		const editable = !! ( ownFields || childSections || linkSection );
 		inspectorEl.innerHTML = `
 			<div class="minn-insp-head">
 				<span class="minn-insp-title">${ esc( ( ownType && ownType.title ) || model.parts.name.replace( /^core\//, '' ) ) }</span>
@@ -29089,11 +29137,12 @@
 			<div class="minn-insp-body">
 				${ special }
 				${ imgSection }
+				${ linkSection }
 				${ kidsSummary }
 				${ ownFields }
 				${ childSections }
 				${ addRow }
-				${ editable || special || imgSection || kidsSummary ? '' : `<div class="minn-insp-note">${ ownType
+				${ editable || special || imgSection || linkSection || kidsSummary ? '' : `<div class="minn-insp-note">${ ownType
 					? __( 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.' )
 					: __( 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' ) }</div>` }
 			</div>
@@ -29126,7 +29175,7 @@
 		// Fold pending inspector field edits into the island so they ride the save
 		// (clicking Block editor without Apply used to drop them).
 		if ( inspectorState && inspectorEl && ed.islands && inspectorState.idx != null ) {
-			const hasFields = inspectorEl.querySelector( '[data-insp], [data-inspdf], [data-insprun], [data-insptext], [data-inspimg]' );
+			const hasFields = inspectorEl.querySelector( '[data-insp], [data-inspdf], [data-insprun], [data-insptext], [data-inspimg], [data-insplink]' );
 			if ( hasFields || $( '#minn-insp-apply', inspectorEl ) ) {
 				collectInspectorForms();
 				const newRaw = buildInspectorRaw( inspectorState );
@@ -29267,7 +29316,7 @@
 		await Promise.all( [ ...new Set( names ) ].map( async ( n ) => { types[ n ] = await blockTypeFor( n ); } ) );
 		if ( ! inspectorEl ) return; // closed while loading
 
-		inspectorState = { idx, model, types, islandEl, images: islandImageRows( raw ), units: imageUnitsOf( raw ) };
+		inspectorState = { idx, model, types, islandEl, images: islandImageRows( raw ), links: islandLinkRows( raw ), units: imageUnitsOf( raw ) };
 		renderInspectorBody();
 		// Re-apply dialog attrs after the body swap (innerHTML rebuild).
 		armBlockPopA11y( inspectorEl, {
@@ -29627,6 +29676,12 @@
 				return a + toks.join( ' ' ) + z;
 			} );
 		}
+		// Link edits last: global quote-bounded URL replacement is
+		// position-independent, so it follows every splice above safely.
+		( insp.links || [] ).forEach( ( u, i ) => {
+			const next = insp.linkEdits && insp.linkEdits[ i ];
+			if ( next != null && next !== u ) newRaw = swapIslandLink( newRaw, u, next );
+		} );
 		return newRaw;
 	}
 
