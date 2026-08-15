@@ -59,9 +59,16 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   down to GTIN and backorders, shipping, the product image and gallery as tiles you drag to reorder,
   categories, tags and brands, upsells and cross-sells, attributes, and variations a variable product
   can generate from its own attributes, with the long description in Minn's own editor), alongside
-  stock filters, bulk and **Add product**. **Coupons**, **Customers**, and
-  **Subscriptions** when WooCommerce Subscriptions is active (status, next payment, parent order,
-  related orders, customer strip). Orders, products and customers carry **right-click menus** for
+  stock filters, bulk and **Add product**. The orders list filters the way a storefront back
+  office does: a status view, search and **Add filter** in one row, active filters as removable
+  chips, multi-status, date window, customer and product all narrowing on the server, and the
+  whole set living in the URL so a filtered list can be pasted to someone else. Orders can
+  **apply and remove coupons**, and an order that belongs to a subscription carries a badge that
+  opens its summary. **Coupons**, **Customers**, and **Subscriptions** when WooCommerce
+  Subscriptions is active: a subscription opens on its own page in the order page's shape, with
+  editable items and schedule, coupons, a notes timeline, a quick view of related orders, and
+  the same filter bar with its own status vocabulary.
+  Orders, products and customers carry **right-click menus** for
   the common moves (status changes, stock and publish toggles, email, jump to a customer's orders).
   Invoice / packing-slip downloads when PDF Invoices & Packing Slips is active. Product, coupon and
   subscription CPTs are fenced out of Content.
@@ -81,6 +88,11 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   and post-core-update database migrations. Main/current-site, self-lockout, and last-admin
   guards protect destructive actions; account creation/deletion, the long settings tail,
   and very large network upgrades link to WordPress Network Admin
+- **In your language** — the whole interface follows the language you pick, per user, in
+  **twenty-three languages** covering about half of WordPress installs. Right-to-left languages
+  (Arabic, Hebrew, Persian and friends) get a genuinely mirrored layout, counts follow each
+  language's own plural rules, and translations arrive as **WordPress language packs** through
+  the same Updates screen as everything else
 - **Your profile** — a full page at `/minn-admin/profile`: account, public profile (first/last
   name, website, bio, Gravatar), **per-user language** with automatic pack installs, the
   front-end toolbar preference, appearance, hidden integrations, and login sessions
