@@ -1174,6 +1174,8 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-fgb-active { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text2); }
 .minn-fgb-dirty { font-size: 12px; color: var(--amber-text, #c98a1b); }
 .minn-fgb-meta { display: flex; gap: 14px; align-items: center; font-size: 13px; color: var(--text3); margin-bottom: 14px; }
+.minn-fgb-meta button { background: none; border: 0; padding: 0; font-size: 13px; color: var(--accent2); cursor: pointer; }
+.minn-fgb-meta button:hover { text-decoration: underline; }
 .minn-fgb-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .minn-fgb-row { border: 1px solid var(--border); border-radius: 10px; background: var(--panel2); }
 .minn-fgb-row.open { border-color: var(--border2); }

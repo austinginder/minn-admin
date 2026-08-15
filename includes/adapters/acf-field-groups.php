@@ -265,7 +265,18 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'key' => 'location', 'label' => __( 'Shown on', 'minn-admin' ), 'type' => 'select', 'options' => $locations ),
 				),
 			),
+			'import'    => array(
+				'label'  => __( 'Import', 'minn-admin' ),
+				'route'  => 'minn-admin/v1/acf/schema/import',
+				'accept' => '.json,application/json',
+				'hint'   => __( 'Field group JSON exported from ACF or from Minn. Groups that already exist here are updated in place; post types and taxonomies stay in ACF\'s own tools.', 'minn-admin' ),
+			),
 			'actions'   => array(
+				array(
+					'label'    => __( 'Export JSON', 'minn-admin' ),
+					'route'    => 'minn-admin/v1/acf/schema/groups/{id}/export',
+					'download' => true,
+				),
 				array(
 					'label' => __( 'Deactivate', 'minn-admin' ),
 					'route' => 'minn-admin/v1/acf/schema/groups/{id}/deactivate',
@@ -1142,6 +1153,84 @@ function minn_admin_acf_builder_save( $group, $body ) {
 	return minn_admin_acf_builder_payload( $fresh ? $fresh : $group );
 }
 
+/**
+ * Import field groups from ACF-shaped export JSON. A group whose key
+ * already exists as a DB group updates IN PLACE — the round trip ACF's own
+ * tool doesn't offer (acf_import_field_group never resolves the key, so a
+ * plain re-import inserts a duplicate post; passing the existing ID is what
+ * flips it into an update). Code-registered keys refuse: their source of
+ * truth is the codebase. Non-group entries (post types, taxonomies) are
+ * counted and skipped. Validation happens before any write.
+ *
+ * @param string $content Raw JSON: one group object or an array of them.
+ * @return array|WP_Error Summary { ok, created, updated, skipped, message }.
+ */
+function minn_admin_acf_schema_import( $content ) {
+	$data = json_decode( (string) $content, true );
+	if ( null === $data || ! is_array( $data ) ) {
+		return new WP_Error( 'invalid', __( 'That isn’t valid JSON.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	if ( isset( $data['key'] ) ) {
+		$data = array( $data );
+	}
+	$groups  = array();
+	$skipped = 0;
+	foreach ( $data as $entry ) {
+		if ( ! is_array( $entry ) || empty( $entry['key'] ) || ! is_string( $entry['key'] ) ) {
+			return new WP_Error( 'invalid', __( 'That JSON doesn’t look like an ACF export.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( 0 !== strpos( $entry['key'], 'group_' ) ) {
+			$skipped++;
+			continue;
+		}
+		if ( ! isset( $entry['title'] ) || '' === trim( (string) $entry['title'] ) || ! isset( $entry['fields'] ) || ! is_array( $entry['fields'] ) ) {
+			return new WP_Error( 'invalid', __( 'That JSON doesn’t look like an ACF field group export.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$existing = minn_admin_acf_schema_group( $entry['key'] );
+		if ( $existing && 'db' !== $existing['minn_source'] ) {
+			/* translators: %s: the title of a field group registered in code. */
+			return new WP_Error( 'invalid', sprintf( __( '“%s” is registered in code on this site — an import can’t override it.', 'minn-admin' ), $entry['title'] ), array( 'status' => 400 ) );
+		}
+		if ( $existing ) {
+			$entry['ID'] = (int) $existing['ID'];
+		}
+		$groups[] = $entry;
+	}
+	if ( ! $groups ) {
+		return new WP_Error( 'invalid', __( 'No field groups found in that file.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$created = 0;
+	$updated = 0;
+	foreach ( $groups as $entry ) {
+		if ( empty( $entry['ID'] ) ) {
+			$created++;
+		} else {
+			$updated++;
+		}
+		acf_import_field_group( $entry );
+	}
+	$bits = array();
+	if ( $created ) {
+		/* translators: %d: number of field groups created by the import. */
+		$bits[] = sprintf( _n( '%d group imported', '%d groups imported', $created, 'minn-admin' ), $created );
+	}
+	if ( $updated ) {
+		/* translators: %d: number of field groups updated in place by the import. */
+		$bits[] = sprintf( _n( '%d group updated', '%d groups updated', $updated, 'minn-admin' ), $updated );
+	}
+	if ( $skipped ) {
+		/* translators: %d: number of non-field-group entries the import skipped. */
+		$bits[] = sprintf( _n( '%d entry left to ACF’s own tools', '%d entries left to ACF’s own tools', $skipped, 'minn-admin' ), $skipped );
+	}
+	return array(
+		'ok'      => true,
+		'created' => $created,
+		'updated' => $updated,
+		'skipped' => $skipped,
+		'message' => implode( ', ', $bits ) . '.',
+	);
+}
+
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_acf_schema_active() ) {
 		return;
@@ -1149,6 +1238,34 @@ add_action( 'rest_api_init', function () {
 	$perm = function () {
 		return current_user_can( minn_admin_acf_schema_cap() );
 	};
+	register_rest_route( 'minn-admin/v1', '/acf/schema/groups/(?P<key>[a-zA-Z0-9_\-]+)/export', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $request ) {
+			$group = minn_admin_acf_schema_group( (string) $request['key'] );
+			if ( ! $group ) {
+				return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			// ACF's own Tools shape: fields nested on the group, prepared
+			// for export, wrapped in an array — their import reads this
+			// file and ours reads theirs.
+			$group['fields'] = acf_get_fields( $group );
+			$export          = acf_prepare_field_group_for_export( $group );
+			$json            = function_exists( 'acf_json_encode' ) ? acf_json_encode( array( $export ) ) : wp_json_encode( array( $export ), JSON_PRETTY_PRINT );
+			return rest_ensure_response( array(
+				'filename' => 'acf-export-' . sanitize_title( $export['title'] ) . '-' . gmdate( 'Y-m-d' ) . '.json',
+				'content'  => $json,
+				'mime'     => 'application/json',
+			) );
+		},
+	) );
+	register_rest_route( 'minn-admin/v1', '/acf/schema/import', array(
+		'methods'             => 'POST',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $request ) {
+			return rest_ensure_response( minn_admin_acf_schema_import( (string) $request['content'] ) );
+		},
+	) );
 	register_rest_route( 'minn-admin/v1', '/acf/schema/groups/(?P<key>[a-zA-Z0-9_\-]+)/full', array(
 		array(
 			'methods'             => 'GET',

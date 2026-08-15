@@ -462,20 +462,21 @@ Rules of the road:
 | `viewLabel` | Names this collection in the view switcher (with `manage`) and in the search placeholder |
 | `columns` | Array of `{ key, label, format, altKey, width, utc }`. `key` supports dot paths (`initiator_data.user_login`); `altKey` is a fallback key read when the primary is empty. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `num` (right-aligned numeric), `entry-summary` (for form-entry rows whose answers live under numeric field-id keys: renders the first few answer values as the row's summary — see any bundled forms adapter's list). `width` overrides the column's grid width; defaults are sized by format. For `ago`, bare datetimes parse as site-local: set `utc: true` for UTC-stored timestamps (or use a key ending in `_gmt`, or emit a trailing `Z`). Since v0.18.0 a column may also carry `sort`: the `{by}` token your route understands for that column (see `sortQuery` below). Columns without `sort` keep plain headers; without any sort pick, list order stays whatever your route returns, so declare your default in `query` (newest-first is the convention) |
 | `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `sectionsRoute` (server-built display model, an alternative to `detailRoute` + `labels`, below), `labels` (resolve numeric field-id keys to human labels — the per-form fields case: `{ "route": "your/v1/forms/{form_id}/fields", "valueKey": "id", "labelKey": "label", "itemsKey": "fields" }`. `{placeholders}` in the route fill from the item, Minn maps `valueKey` → `labelKey` over the response array — or over `itemsKey` inside it — and caches the map per route URL. Fixed-schema items skip `labels` entirely: snake_case response keys already render as words), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
-| `actions` | Buttons in the detail modal **and** the list-row ⋯ / right-click menu: `{ label, method, route, body, confirm, danger, when, href, fields, settingsItem, list }` — each key detailed in [the `actions` section](#collectionactions--verbs-on-rows-and-in-the-detail-modal) below |
+| `actions` | Buttons in the detail modal **and** the list-row ⋯ / right-click menu: `{ label, method, route, body, confirm, danger, when, href, fields, settingsItem, list, download }` — each key detailed in [the `actions` section](#collectionactions--verbs-on-rows-and-in-the-detail-modal) below |
 | `sortQuery` | *(since v0.18.0)* A query-string template with `{by}` and `{dir}` (e.g. `orderby={by}&direction={dir}`). Columns carrying a `sort` token render clickable headers: first click sorts (numeric and `ago` columns start descending, everything else ascending), a repeat click flips direction, and the template is appended to the list request. Omit it and headers stay plain |
 | `search` | A query-string template with `{q}` (e.g. `filterBy[url]={q}` or `search={q}`). Adds a filter box to the toolbar; the term is debounced and appended to the list request. For APIs that take search criteria as a JSON string (Gravity Forms), use the object form: `array( 'param' => 'search', 'json' => <criteria array with '{q}' where the term goes> )` — the term is JSON-escaped and the criteria double-URL-encoded to match APIs that `urldecode()` the param themselves |
 | `filter` *(v0.12)* | A second list dimension beside `tabs`, rendered as a segmented control — shapes and the json-merge rule in [the `filter` section](#collectionfilter--a-second-dimension-beside-tabs) below |
 | `bulk` | Bulk actions: the same shape as `actions` minus `href` (a batch always needs a `route`). Declaring any adds a checkbox column (shift-range, Select page) and a selection bar. Each action runs **per selected item** (`{id}` replaced; one failure never aborts the rest), `when` is evaluated per item so a mixed selection skips ineligible rows, a button whose `when` matches nothing on the current page isn't offered at all, and the result toast reports done / skipped / failed |
 | `open` *(v0.31)* | `{ "route": "your-page/{id}" }` — row click NAVIGATES to an app route instead of opening the detail modal (and the row menu's Open follows). For records that earn a page by the pages-versus-modals test below: sub-resources and workflows of their own. The bundled ACF Field Groups surface opens its group builder this way |
 | `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array), `email`, `url`. Every field is required unless it declares `required: false`. A failed create (your route returning `WP_Error`) toasts your error message and keeps the form open as typed |
+| `import` *(v0.31)* | `{ label, route, accept, hint }` — adds an "Import" button beside Add that opens a pick-a-file / paste-the-contents dialog. The chosen file's text (or the pasted text) POSTs to `route` as `{ "content": "…" }`; your route validates, does the work, and returns `{ "message": "…" }` for the toast — or `WP_Error` with a plain-language message, which keeps the dialog open. `accept` limits the file picker (e.g. `".json,application/json"`); `hint` renders under the form. The bundled ACF Field Groups surface imports ACF export JSON this way |
 
 ![A detail modal from detailRoute: key/value rows, the messageKey block, prev/next stepping and action buttons (the off-site one marked ↗)](img/detail-modal.png)
 
 ### `collection.actions` — verbs on rows and in the detail modal
 
 Each action is `{ label, method, route, body, confirm, danger, when, href, fields,
-settingsItem, list }`:
+settingsItem, list, download }`:
 
 - **`route`** — `{id}` is replaced with the item id; `method` defaults to POST (DELETE is
   fine; several bundled adapters use it for permanent removal); `body`
@@ -498,6 +499,11 @@ settingsItem, list }`:
 - **`settingsItem: true`** *(v0.13)* fires no request: it opens the surface's
   item-scoped settings view for the row (requires a `settings.route` containing `{id}`;
   see the settings section).
+- **`download: true`** *(v0.31)* makes the action a file download: the route is
+  fetched with GET and must return `{ "filename": "…", "content": "…", "mime": "…" }`;
+  the browser is handed the content as a file. Nothing is assumed to have changed
+  server-side, so the list isn't refreshed and an open detail modal stays put (the
+  bundled ACF Field Groups surface exports a group's JSON this way).
 - Every non-parameterized action also appears on the list row's ⋯ / right-click menu
   (Open is always first); set **`list: false`** to keep a verb detail-only.
 

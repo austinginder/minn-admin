@@ -12712,6 +12712,18 @@
 		return offsiteHref( href ) && ! /↗\s*$/.test( l ) ? l + ' ↗' : l;
 	}
 
+	// Hand the browser a client-built file (surface `download` actions and
+	// the builder's Export button).
+	function minnBlobDownload( filename, content, mime ) {
+		const a = document.createElement( 'a' );
+		a.href = URL.createObjectURL( new Blob( [ content ], { type: mime || 'application/octet-stream' } ) );
+		a.download = filename;
+		document.body.appendChild( a );
+		a.click();
+		a.remove();
+		setTimeout( () => URL.revokeObjectURL( a.href ), 4000 );
+	}
+
 	// when-gate (+ optional adminUrl-dup filter for detail modal hrefs).
 	function surfaceActionVisible( action, item, sections ) {
 		if ( action.when && String( surfaceValue( item, action.when.key ) ) !== String( action.when.equals ) ) {
@@ -12745,6 +12757,15 @@
 	// caches and re-renders. Parameterized `fields` actions use armActionFields
 	// instead (detail modal only).
 	async function runSurfaceItemAction( s, item, action ) {
+		// Download actions fetch { filename, content, mime } and hand the
+		// browser a file. Nothing changes server-side, so no cache bust and
+		// an open detail modal stays put.
+		if ( action.download ) {
+			const r = await api( action.route.replace( '{id}', item.id ) );
+			minnBlobDownload( r.filename || 'download.txt', r.content || '', r.mime );
+			toast( r.filename || action.label );
+			return;
+		}
 		if ( action.settingsItem ) {
 			const ss = surfaceState( s.id );
 			ss.view = 'settings';
@@ -13651,12 +13672,13 @@
 			</div>` : '';
 		const searchHtml = coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="${ esc( sprintf( /* translators: %s: the localized name of the items being searched. */ __( 'Search %s…' ), chromeLabel( coll.viewLabel || __( 'items' ) ) ) ) }" value="${ esc( ss.q || '' ) }">` : '';
 		const createHtml = coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( chromeLabel( coll.create.label || __( 'Add' ) ) ) }</button>` : '';
+		const importHtml = coll.import ? `<button class="minn-btn-soft" id="minn-surface-import">${ icon( 'upload' ) } ${ esc( chromeLabel( coll.import.label || __( 'Import' ) ) ) }</button>` : '';
 		const rowTwo = tabsHtml + filterHtml + searchHtml
-			+ `<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>` + createHtml;
+			+ `<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>` + importHtml + createHtml;
 		// With a view switcher AND list controls, the toolbar splits into two
 		// rows (the Extensions pattern): views on top, this view's own
 		// controls underneath. Simple surfaces keep the single row.
-		const toolbarHtml = switchHtml && ( tabsHtml || filterHtml || searchHtml || createHtml )
+		const toolbarHtml = switchHtml && ( tabsHtml || filterHtml || searchHtml || createHtml || importHtml )
 			? `<div class="minn-toolbar minn-toolbar-views">${ switchHtml }</div>
 			   <div class="minn-toolbar">${ rowTwo }</div>`
 			: `<div class="minn-toolbar">${ switchHtml }${ rowTwo }</div>`;
@@ -13891,6 +13913,11 @@
 			// Carry the ACTIVE collection — `create` can live on `manage`
 			// (Gravity SMTP's Suppressions), not just the main list.
 			state.modal = { type: 'surface-form', surface: s, coll };
+			renderOverlays();
+		} );
+		const importBtn = $( '#minn-surface-import', view );
+		if ( importBtn ) importBtn.addEventListener( 'click', () => {
+			state.modal = { type: 'surface-import', surface: s, coll };
 			renderOverlays();
 		} );
 		bindPager( view, c.page, ( p ) => loadSurfaceItems( s, p ), () => { if ( state.route === s.id ) renderSurface( s ); } );
@@ -33727,6 +33754,38 @@
 			</div>`;
 		}
 
+		if ( m.type === 'surface-import' ) {
+			const im = ( m.coll || m.surface.collection ).import;
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ esc( chromeLabel( im.label || __( 'Import' ) ) ) } — ${ esc( chromeLabel( m.surface.label ) ) }</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">
+						<div class="minn-dropzone compact" id="minn-simport-drop">
+							${ icon( 'upload' ) }
+							${ ( () => {
+								const ext = ( String( im.accept || '' ).match( /\.\w+/ ) || [ '' ] )[ 0 ];
+								/* translators: 1: a file extension like ".json" in bold. 2: a "browse" link. */
+								return `<div class="minn-dropzone-sub">${ sprintf( __( 'Drop a %1$s file here or %2$s' ), `<b>${ esc( ext || __( 'file' ) ) }</b>`, `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>`;
+							} )() }
+							<input type="file" id="minn-simport-file"${ im.accept ? ` accept="${ esc( im.accept ) }"` : '' } hidden>
+						</div>
+						<div>
+							<div class="minn-field-label">${ esc( __( 'Or paste the contents' ) ) }</div>
+							<textarea class="minn-input mono" id="minn-simport-text" rows="8" spellcheck="false"></textarea>
+						</div>
+						${ im.hint ? `<div class="minn-toggle-desc">${ esc( chromeLabel( im.hint ) ) }</div>` : '' }
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-primary" id="minn-simport-go">${ esc( chromeLabel( im.label || __( 'Import' ) ) ) }</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'tax' ) {
 			const t = m.item;
 			const isNew = ! t;
@@ -34620,6 +34679,52 @@
 					createBtn.textContent = cr.label || 'Add';
 				}
 			} );
+		}
+
+		if ( m.type === 'surface-import' ) {
+			const im = ( m.coll || m.surface.collection ).import;
+			const goBtn = $( '#minn-simport-go' );
+			const zone = $( '#minn-simport-drop' );
+			const fileEl = $( '#minn-simport-file' );
+			const doImport = async ( content ) => {
+				content = String( content || '' ).trim();
+				if ( ! content ) {
+					toast( __( 'Choose a file or paste its contents first' ), true );
+					return;
+				}
+				goBtn.disabled = true;
+				goBtn.textContent = __( 'Importing…' );
+				if ( zone ) zone.classList.add( 'minn-busy' );
+				try {
+					const r = await api( im.route, { method: 'POST', body: JSON.stringify( { content } ) } );
+					toast( ( r && r.message ) || __( 'Imported' ) );
+					const ss = surfaceState( m.surface.id );
+					ss.cache = null;
+					ss.tabsCache = null;
+					ss.status = null;
+					closeModal();
+					if ( state.route === m.surface.id ) renderSurface( m.surface );
+				} catch ( e ) {
+					toast( e.message, true );
+					goBtn.disabled = false;
+					goBtn.textContent = chromeLabel( im.label || __( 'Import' ) );
+					if ( zone ) zone.classList.remove( 'minn-busy' );
+				}
+			};
+			// A chosen or dropped file imports immediately (the installer
+			// convention); the button submits the pasted text.
+			const importFile = ( f ) => {
+				if ( ! f ) return;
+				f.text().then( doImport, () => toast( __( 'Couldn’t read that file' ), true ) );
+			};
+			if ( zone ) {
+				zone._accept = importFile; // window-level drops route here while the dialog is open
+				zone.addEventListener( 'click', () => fileEl.click() );
+				zone.addEventListener( 'dragover', ( e ) => { e.preventDefault(); e.stopPropagation(); zone.classList.add( 'over' ); } );
+				zone.addEventListener( 'dragleave', () => zone.classList.remove( 'over' ) );
+			}
+			if ( fileEl ) fileEl.addEventListener( 'change', () => importFile( fileEl.files[ 0 ] ) );
+			if ( goBtn ) goBtn.addEventListener( 'click', () => doImport( $( '#minn-simport-text' ).value ) );
 		}
 
 		if ( m.type === 'tax' ) {
@@ -37840,6 +37945,7 @@
 			<div class="minn-fgb-meta">
 				<span>${ esc( fgb.group.locationLabel ) }</span>
 				${ fgb.group.adminUrl ? `<a href="${ esc( fgb.group.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in ACF ↗' ) ) }</a>` : '' }
+				<button type="button" id="minn-fgb-export">${ esc( __( 'Export JSON' ) ) }</button>
 			</div>
 			<div class="minn-fgb-rows">
 				${ fgb.fields.map( ( f, i ) => fgbRowHtml( f, String( i ), fgb.fields, ro ) ).join( '' ) || `<div class="minn-empty">${ esc( __( 'No fields yet — add the first one below.' ) ) }</div>` }
@@ -38063,6 +38169,16 @@
 			markDirty();
 			renderFieldGroupBuilder();
 		};
+		const exportBtn = $( '#minn-fgb-export', view );
+		if ( exportBtn ) exportBtn.addEventListener( 'click', async () => {
+			try {
+				const r = await api( 'minn-admin/v1/acf/schema/groups/' + encodeURIComponent( fgb.key ) + '/export' );
+				minnBlobDownload( r.filename || 'acf-export.json', r.content || '', r.mime );
+				toast( r.filename || __( 'Exported' ) );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
 		const backBtn = $( '#minn-fgb-back', view );
 		if ( backBtn ) backBtn.addEventListener( 'click', async () => {
 			if ( fgb.dirty && ! await minnConfirm( { title: __( 'Leave without saving?' ), body: __( 'Changes to this field group haven’t been saved.' ), confirmLabel: __( 'Leave' ), danger: true } ) ) return;
@@ -38800,7 +38916,7 @@
 		// the chips' _target/_kind convention.
 		if ( B.caps.upload ) {
 			const installDropZone = () => {
-				const z = $( '#minn-pi-dropzone' ) || $( '#minn-ti-dropzone' ) || $( '#minn-imgedit-drop' );
+				const z = $( '#minn-pi-dropzone' ) || $( '#minn-ti-dropzone' ) || $( '#minn-imgedit-drop' ) || $( '#minn-simport-drop' );
 				return z && ( z._accept || z._acceptAll ) ? z : null;
 			};
 			let dragDepth = 0;
