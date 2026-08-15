@@ -1720,7 +1720,7 @@ button.minn-ac-item.minn-ac-check { display: flex; align-items: center; gap: 9px
 .minn-ac-check[aria-selected="true"] .minn-check { background: var(--accent); border-color: var(--accent); }
 .minn-ac-check[aria-selected="true"] .minn-check::after {
   content: ""; position: absolute; inset-inline-start: 4px; top: 1px;
-  width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0;
+  width: 4px; height: 8px; border: solid var(--accent-fg); border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
 /* Add new sits under a divider so it reads as an action, not another row. */
