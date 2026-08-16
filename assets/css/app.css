@@ -1529,7 +1529,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 [data-theme="light"] .minn-diff { color-scheme: light; }
 .minn-diff::-webkit-scrollbar-corner { background: var(--bg); }
 .minn-diff-headrow {
-  display: grid; grid-template-columns: 1fr 1fr; position: sticky; top: 0; z-index: 1;
+  display: grid; grid-template-columns: 1fr 1fr; position: sticky; top: 0; z-index: 2;
   background: var(--bg2); border-bottom: 1px solid var(--border);
   font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3);
 }
@@ -1554,11 +1554,21 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-diff-row.del .minn-diff-cell:first-child,
 .minn-diff-row.add .minn-diff-cell:last-child { background: color-mix(in srgb, var(--bg2) 60%, transparent); }
 /* Custom-field rows live inside the content diff so This revision /
-   Current is named once. A spanning section + field name, then the
-   same two cells as a content change. */
+   Current is named once. A spanning section + field name, then two
+   compact value cells — deliberately untinted, so a field row reads
+   as key-value metadata and never impersonates a content change.
+   Section rows band the table (Custom fields / Content): a heavier top
+   edge than the row hairlines, and they stick just under the headrow so
+   a long scroll still names the region. top overlaps the headrow's
+   computed ~34.6px height by a fraction — the overlap hides behind the
+   opaque higher-z headrow, where a gap would show a slit of content. */
 .minn-diff-row.minn-diff-sec > div,
 .minn-diff-row.minn-diff-fieldname > div { grid-column: 1 / -1; }
-.minn-diff-row.minn-diff-sec { border-bottom: 0; }
+.minn-diff-row.minn-diff-sec {
+  border-bottom: 0; border-top: 2px solid var(--border);
+  position: sticky; top: 34px; z-index: 1;
+}
+.minn-diff-headrow + .minn-diff-row.minn-diff-sec { border-top: 0; }
 .minn-diff-row.minn-diff-sec > div {
   padding: 8px 14px 2px; font-size: 11px; font-weight: 650; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text3); background: var(--bg2);
@@ -1567,14 +1577,10 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-diff-row.minn-diff-fieldname > div {
   padding: 8px 14px 0; font-size: 12.5px; font-weight: 600; color: var(--text2);
 }
-.minn-diff-row.field .minn-diff-cell:first-child { background: color-mix(in srgb, var(--red) 10%, transparent); }
-.minn-diff-row.field .minn-diff-cell:last-child { background: color-mix(in srgb, var(--green) 10%, transparent); }
-.minn-diff-row.field .minn-diff-cell.empty {
-  background: repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--border) 45%, transparent) 6px, color-mix(in srgb, var(--border) 45%, transparent) 7px);
-}
+.minn-diff-row.field .minn-diff-cell { padding: 5px 14px 9px; font-size: 12.5px; }
 .minn-rev-field-empty { color: var(--text3); font-style: italic; }
 .minn-rev-swatch {
-  display: inline-block; width: 14px; height: 14px; border-radius: 4px;
+  display: inline-block; width: 14px; height: 14px; border-radius: 50%;
   border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
   vertical-align: -2px; margin-inline-end: 7px; overflow: hidden;
   background: repeating-conic-gradient(var(--border) 0% 25%, var(--panel) 0% 50%) 50% / 8px 8px;

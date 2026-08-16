@@ -38215,6 +38215,7 @@
 				<div class="minn-diff" id="minn-diff">
 					<div class="minn-diff-headrow"><div>${ esc( __( 'This revision' ) ) }</div><div>${ esc( __( 'Current' ) ) }</div></div>
 					${ fieldsInner }
+					${ fieldsInner && contentInner ? `<div class="minn-diff-row minn-diff-sec"><div>${ esc( __( 'Content' ) ) }</div></div>` : '' }
 					${ contentInner }
 				</div>` : '' }
 				${ rows ? '' : '<div class="minn-revision-preview" id="minn-revision-preview"></div>' }
