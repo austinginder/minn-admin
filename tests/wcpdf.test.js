@@ -19,15 +19,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	t.check( 'invoice document is enabled', !! boot && boot.docs.some( ( d ) => d.type === 'invoice' ) );
 
 	await page.waitForSelector( '.minn-table-row[data-order]', { timeout: 20000 } );
+	// An order row opens its own PAGE now, not a modal (the order layout
+	// work this cycle), so the document links are found by what they ARE
+	// rather than by the container they used to sit in.
 	await page.click( '.minn-table-row[data-order]' );
-	await page.waitForSelector( '.minn-modal-actions', { timeout: 10000 } );
+	await page.waitForSelector( 'a[href*="generate_wpo_wcpdf"]', { timeout: 15000 } );
 
 	const links = await page.evaluate( () =>
-		Array.from( document.querySelectorAll( '.minn-modal-actions a' ) )
+		Array.from( document.querySelectorAll( 'a[href*="generate_wpo_wcpdf"]' ) )
 			.map( ( a ) => ( { text: a.textContent.trim(), href: a.href } ) ) );
 	const invoice = links.find( ( l ) => /Invoice \(PDF\)/.test( l.text ) );
-	t.check( 'order modal shows an Invoice (PDF) link', !! invoice, JSON.stringify( links.map( ( l ) => l.text ) ) );
-	t.check( 'order modal shows a Packing Slip (PDF) link', links.some( ( l ) => /Packing Slip \(PDF\)/.test( l.text ) ) );
+	t.check( 'the order shows an Invoice (PDF) link', !! invoice, JSON.stringify( links.map( ( l ) => l.text ) ) );
+	t.check( 'the order shows a Packing Slip (PDF) link', links.some( ( l ) => /Packing Slip \(PDF\)/.test( l.text ) ) );
 	t.check( 'link targets the plugin endpoint with its nonce',
 		!! invoice && invoice.href.includes( 'action=generate_wpo_wcpdf' ) && invoice.href.includes( 'access_key=' ) && invoice.href.includes( 'document_type=invoice' ) );
 
