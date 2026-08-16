@@ -119,10 +119,13 @@ const LABEL = 'XSS probe ' + Date.now();
 
 		/* ===== 3. The live helper is the inert shape, not a live-document div ===== */
 		const src = await ( await fetch( `${ BASE }/wp-content/plugins/minn-admin/assets/js/app.js` ) ).text();
-		const head = src.slice( 0, 4000 );
+		// Search the WHOLE source, never a leading slice: this used to read
+		// the first 4000 characters, so the guard on a security invariant
+		// turned red the moment the file's preamble grew past the helper
+		// rather than when the helper changed.
 		t.check(
 			'shipped helper uses createHTMLDocument',
-			/stripTags[\s\S]{0,400}?createHTMLDocument|createHTMLDocument[\s\S]{0,400}?stripTags/.test( head ),
+			/stripTags[\s\S]{0,400}?createHTMLDocument|createHTMLDocument[\s\S]{0,400}?stripTags/.test( src ),
 			'helper region'
 		);
 		t.check(
