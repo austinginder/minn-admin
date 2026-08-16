@@ -30160,10 +30160,21 @@
 		if ( minnMenuEl && ! minnMenuEl.contains( e.target ) ) hideMinnMenu();
 	}
 
+	// Escape closes it, like every other layer in the app. Without this the
+	// menu could only be dismissed by a mousedown elsewhere, so a keyboard
+	// user had no way out and the menu sat over the row it belonged to.
+	function minnMenuKey( e ) {
+		if ( e.key === 'Escape' && minnMenuEl ) {
+			e.stopPropagation();
+			hideMinnMenu();
+		}
+	}
+
 	function hideMinnMenu() {
 		if ( minnMenuEl ) minnMenuEl.remove();
 		minnMenuEl = null;
 		document.removeEventListener( 'mousedown', minnMenuAway, true );
+		document.removeEventListener( 'keydown', minnMenuKey, true );
 	}
 
 	function openMinnMenu( x, y, entries ) {
@@ -30198,6 +30209,7 @@
 		} ) );
 		$$( 'a', minnMenuEl ).forEach( ( a ) => a.addEventListener( 'click', hideMinnMenu ) );
 		document.addEventListener( 'mousedown', minnMenuAway, true );
+		document.addEventListener( 'keydown', minnMenuKey, true );
 	}
 
 	/* ===== Table context menu (right-click a cell) ===== */

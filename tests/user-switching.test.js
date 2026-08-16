@@ -27,9 +27,16 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		! Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) ).some( ( b ) => /Switch to this user/.test( b.textContent ) ) ) );
 	await page.keyboard.press( 'Escape' );
 	await page.evaluate( () => document.body.click() );
+	// The previous menu must be GONE before the next trigger: while it is
+	// still in the DOM the row's ⋯ never settles into Playwright's
+	// visible-enabled-stable state and the click waits out its timeout.
+	await page.waitForFunction( () => ! document.querySelector( '.minn-ctx-menu' ), null, { timeout: 5000 } );
 
-	// Another user's row: entry present under Access.
-	await page.click( '.minn-table-row[data-uname="Minn Author"] .minn-row-more' );
+	// Another user's row: entry present under Access. Evaluate-click, the
+	// convention for menu triggers — a real click races the row re-render
+	// that dismissing the first menu kicks off.
+	await page.evaluate( () =>
+		document.querySelector( '.minn-table-row[data-uname="Minn Author"] .minn-row-more' ).click() );
 	await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
 	const hasSwitch = await page.evaluate( () =>
 		Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) ).some( ( b ) => /Switch to this user/.test( b.textContent ) ) );
