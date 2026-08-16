@@ -4277,14 +4277,30 @@ class Minn_Admin_REST {
 			);
 		}
 
-		$user = get_user_by( 'email', $who );
-		if ( ! $user ) {
+		$network_admin = current_user_can( 'manage_network_users' );
+
+		// Looking an account up by USERNAME is a network administrator's
+		// privilege in wp-admin (user-new.php sends everyone else back with
+		// update=enter_email), because the answer is an existence oracle over
+		// wp_users for the whole network: a site administrator could otherwise
+		// walk a username list and learn which accounts exist on sites they
+		// have nothing to do with. An email address is different — the caller
+		// has to know it already for the lookup to tell them anything.
+		if ( str_contains( $who, '@' ) ) {
+			$user = get_user_by( 'email', $who );
+		} elseif ( $network_admin ) {
 			$user = get_user_by( 'login', $who );
+		} else {
+			return new WP_Error(
+				'enter_email',
+				__( 'Enter the email address of the account you want to add. Only network administrators can add an account by username.', 'minn-admin' ),
+				array( 'status' => 400 )
+			);
 		}
 		if ( ! $user ) {
 			return new WP_Error(
 				'no_such_user',
-				__( 'No account on this network matches that email or username. New accounts are created by a network administrator.', 'minn-admin' ),
+				__( 'No account on this network matches that email address. New accounts are created by a network administrator.', 'minn-admin' ),
 				array( 'status' => 404 )
 			);
 		}
@@ -4296,7 +4312,10 @@ class Minn_Admin_REST {
 				array( 'status' => 400 )
 			);
 		}
-		// Per-target meta cap, same as every role write in wp-admin.
+		// Per-target meta cap, same as every role write in wp-admin. Note this
+		// maps to plain promote_users and carries no protection of its own for
+		// a network administrator as the TARGET, which is why the next check
+		// exists — the same reason remove_user needed one.
 		if ( ! current_user_can( 'promote_user', $user->ID ) ) {
 			return new WP_Error(
 				'cannot_promote',
@@ -4304,6 +4323,75 @@ class Minn_Admin_REST {
 				array( 'status' => 403 )
 			);
 		}
+		if ( is_super_admin( $user->ID ) && ! $network_admin ) {
+			return new WP_Error(
+				'cannot_promote',
+				__( 'Network administrators are added to a site from Network Admin.', 'minn-admin' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		// Attaching an account outright is a network administrator's action.
+		// For anyone else wp-admin sends the account holder a confirmation
+		// link and waits, so joining a site is the account holder's decision
+		// rather than something a single site's administrator can do to them.
+		// Core picks the invitation up again at /newbloguser/<key>/ through
+		// maybe_add_existing_user_to_blog(), so nothing else is needed here.
+		if ( ! $network_admin ) {
+			$key = wp_generate_password( 20, false );
+			add_option(
+				'new_user_' . $key,
+				array(
+					'user_id' => $user->ID,
+					'email'   => $user->user_email,
+					'role'    => $role,
+				)
+			);
+
+			/** This action is documented in wp-admin/user-new.php */
+			do_action( 'invite_user', $user->ID, $editable[ $role ], $key );
+
+			$switched   = switch_to_user_locale( $user->ID );
+			$site_title = '' !== get_option( 'blogname' )
+				? wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES )
+				: wp_parse_url( home_url(), PHP_URL_HOST );
+			wp_mail(
+				$user->user_email,
+				/* translators: Joining confirmation notification email subject. %s: Site title. */
+				sprintf( __( '[%s] Joining Confirmation', 'minn-admin' ), $site_title ),
+				sprintf(
+					/* translators: 1: Site title, 2: Site URL, 3: User role, 4: Activation URL. */
+					__(
+						'Hi,
+
+You\'ve been invited to join \'%1$s\' at
+%2$s with the role of %3$s.
+
+Please click the following link to confirm the invite:
+%4$s',
+						'minn-admin'
+					),
+					get_option( 'blogname' ),
+					home_url(),
+					wp_specialchars_decode( translate_user_role( $editable[ $role ]['name'] ) ),
+					home_url( "/newbloguser/$key/" )
+				)
+			);
+			if ( $switched ) {
+				restore_previous_locale();
+			}
+
+			// Deliberately no name, id or email in the reply: the caller only
+			// proved they knew an email address, and confirming whose account
+			// it is would hand back more than they came with.
+			return rest_ensure_response(
+				array(
+					'pending' => true,
+					'message' => __( 'Invitation sent. The account holder has to confirm before they join this site.', 'minn-admin' ),
+				)
+			);
+		}
+
 		$result = add_user_to_blog( get_current_blog_id(), $user->ID, $role );
 		if ( is_wp_error( $result ) ) {
 			return $result;

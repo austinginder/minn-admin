@@ -36311,8 +36311,14 @@
 						method: 'POST',
 						body: JSON.stringify( { user, role } ),
 					} );
-					/* translators: %s: the user's name. */
-					toast( r && r.name ? sprintf( __( '%s added to this site' ), r.name ) : __( 'User added to this site' ) );
+					if ( r && r.pending ) {
+						// Not a network administrator: the account holder gets a
+						// confirmation link and joins only once they accept.
+						toast( r.message || __( 'Invitation sent' ) );
+					} else {
+						/* translators: %s: the user's name. */
+						toast( r && r.name ? sprintf( __( '%s added to this site' ), r.name ) : __( 'User added to this site' ) );
+					}
 					closeModal();
 					state.cache.users = null;
 					if ( state.route === 'users' ) renderUsers();
