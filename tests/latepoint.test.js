@@ -216,7 +216,7 @@ const evalPhp = ( php ) => {
 
 		const view = await api( `minn-admin/v1/latepoint/bookings/${ seed.pending }` );
 		t.check( 'detail is a contact card with customer + appointment sections',
-			view.status === 200 && view.body.kind === 'entry'
+			view.status === 200 && ( view.body.kind === 'booking' || view.body.kind === 'entry' )
 			&& ( view.body.sections || [] ).some( ( s ) => s.title === 'Customer' && s.rows.some( ( r ) => r.label === 'Email' && /priya-latepoint-suite/.test( r.value ) ) )
 			&& ( view.body.sections || [] ).some( ( s ) => s.title === 'Appointment' && s.rows.some( ( r ) => r.label === 'Service' ) )
 			&& /page=latepoint/.test( view.body.adminUrl || '' ),
@@ -263,6 +263,25 @@ const evalPhp = ( php ) => {
 			const input = sw.querySelector( '.minn-ac-input' );
 			return !!( input && /LatePoint/i.test( input.value || '' ) );
 		} ) );
+
+		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		await page.evaluate( () => {
+			const row = [ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => /Priya/.test( r.textContent || '' ) );
+			if ( row ) row.setAttribute( 'data-bkopen', '1' );
+		} );
+		if ( await page.$( '[data-bkopen]' ) ) {
+			await page.click( '[data-bkopen]' );
+			await page.waitForSelector( '.minn-booking-page .minn-order-customer', { timeout: 20000 } );
+			t.check( 'booking opens as an order-style page with a readable date', await page.evaluate( () => {
+				const p = document.querySelector( '.minn-booking-page' );
+				const head = ( p && p.querySelector( '.minn-order-page-head' ) || {} ).textContent || '';
+				return !!( p && /Customer/.test( p.textContent ) && /Appointment/.test( p.textContent )
+					&& /January|February|March|April|May|June|July|August|September|October|November|December/.test( head )
+					&& ! /T\d{2}:\d{2}:\d{2}Z/.test( head ) );
+			} ) );
+			await page.click( '#minn-bk-back' );
+			await page.waitForSelector( '.minn-surface-status', { timeout: 15000 } );
+		}
 	} finally {
 		if ( seed.customer || seed.pending ) {
 			evalPhp(

@@ -1000,6 +1000,7 @@
 		comments: [ __( 'Comments' ), __( 'Moderation' ) ],
 		orders: [ __( 'Orders' ), 'WooCommerce' ],
 		order: [ __( 'Order' ), 'WooCommerce' ],
+		surfaceitem: [ __( 'Booking' ), '' ],
 		fieldgroup: [ __( 'Field group' ), 'ACF' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
@@ -2568,6 +2569,12 @@
 			// /users/123 — the full-page user editor (GH #8).
 			state.userEditId = parseInt( parts[ 1 ], 10 );
 			state.route = 'useredit';
+		} else if ( surfaceById( route ) && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
+			// /amelia/12 — a bookings-family record on its own page
+			// (the orders-page shape).
+			state.surfaceItemSid = route;
+			state.surfaceItemId = parseInt( parts[ 1 ], 10 );
+			state.route = 'surfaceitem';
 		} else if ( titles()[ route ] || surfaceById( route ) ) {
 			state.route = route;
 		} else {
@@ -3566,7 +3573,8 @@
 	}
 
 	function renderTopbar() {
-		const surface = surfaceById( state.route );
+		const surface = surfaceById( state.route )
+			|| ( state.route === 'surfaceitem' ? surfaceById( state.surfaceItemSid ) : null );
 		const [ title, sub ] = surface ? [ surface.label, surface.sub || '' ] : ( titles()[ state.route ] || [ 'minn', '' ] );
 		$( '#minn-title' ).textContent = title;
 		updateVisChip();
@@ -3638,6 +3646,7 @@
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
 				|| ( 'subscription' === state.route && 'subscriptions' === btn.dataset.nav )
+				|| ( 'surfaceitem' === state.route && ( btn.dataset.nav === state.surfaceItemSid || ( activeFamily && btn.dataset.family === activeFamily ) ) )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
 			btn.title = on && navBtnIsCurrent( btn ) ? refreshHint : '';
@@ -13874,14 +13883,25 @@
 		ss.cache = null;
 		ss.status = null;
 		closeModal();
-		if ( state.route === s.id ) renderSurface( s );
+		if ( state.route === 'surfaceitem' && state.surfaceItemSid === s.id ) {
+			if ( state.surfaceItem ) state.surfaceItem = null;
+			renderSurfaceItem();
+		} else if ( state.route === s.id ) renderSurface( s );
 	}
 
 	function openSurfaceRowMenu( s, coll, item, x, y ) {
 		const entries = [
-			{ label: __( 'Open' ), run: () => ( coll.open && coll.open.route
-				? go( coll.open.route.replace( '{id}', encodeURIComponent( item.id ) ) )
-				: openSurfaceDetail( s, item ) ) },
+			{ label: __( 'Open' ), run: () => {
+				if ( coll.open && coll.open.route ) {
+					go( coll.open.route.replace( '{id}', encodeURIComponent( item.id ) ) );
+					return;
+				}
+				if ( s.family === 'bookings' ) {
+					go( s.id + '/' + item.id );
+					return;
+				}
+				openSurfaceDetail( s, item );
+			} },
 		];
 		surfaceListMenuActions( coll, item ).forEach( ( { a } ) => {
 			if ( a.href ) {
@@ -14097,7 +14117,7 @@
 
 	const PILL_STYLES = {
 		green: [ 'sent', 'active', 'completed', 'publish', 'approved', 'success', 'read', 'received', 'unlocked', 'pinned', 'scheduled' ],
-		red: [ 'failed', 'spam', 'error', 'fatal', 'cancelled', 'locked', 'overdue', 'expired' ],
+		red: [ 'failed', 'spam', 'error', 'fatal', 'cancelled', 'canceled', 'rejected', 'no-show', 'no_show', 'locked', 'overdue', 'expired' ],
 		// inactive (Code Snippets / GF forms) is a quiet draft-like state.
 		amber: [ 'sandboxed', 'pending', 'hold', 'on-hold', 'unread', 'warning', 'paused', 'immediate', 'persistent', 'missing' ],
 	};
@@ -14867,8 +14887,13 @@
 				if ( e.target.closest( '.minn-row-more' ) ) return;
 				// collection.open: the row's record lives on its own page
 				// (the orders-page test) — navigate instead of the modal.
+				// Bookings use the same full-page shape as orders.
 				if ( coll.open && coll.open.route ) {
 					go( coll.open.route.replace( '{id}', encodeURIComponent( item.id ) ) );
+					return;
+				}
+				if ( s.family === 'bookings' ) {
+					go( s.id + '/' + item.id );
 					return;
 				}
 				openSurfaceDetail( s, item );
@@ -15327,6 +15352,232 @@
 		const next = ctx.idx + dir;
 		if ( next < 0 || next >= ctx.items.length ) return;
 		openSurfaceDetail( ctx.surface, ctx.items[ next ] );
+	}
+
+	function bookingWhenLabel( iso ) {
+		if ( ! iso ) return '';
+		const d = new Date( iso );
+		if ( Number.isNaN( d.getTime() ) ) return String( iso );
+		return d.toLocaleString( uiLocale(), { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' } );
+	}
+
+	function bookingTimeLabel( iso ) {
+		if ( ! iso ) return '';
+		const d = new Date( iso );
+		if ( Number.isNaN( d.getTime() ) ) return '';
+		return d.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } );
+	}
+
+	function bookingDurationLabel( start, end ) {
+		const a = new Date( start ), b = new Date( end );
+		if ( Number.isNaN( a.getTime() ) || Number.isNaN( b.getTime() ) || b <= a ) return '';
+		const mins = Math.round( ( b - a ) / 60000 );
+		if ( mins < 60 ) return sprintf( /* translators: %s: minutes. */ __( '%s min' ), String( mins ) );
+		const h = Math.floor( mins / 60 );
+		const m = mins % 60;
+		return m
+			? sprintf( /* translators: 1: hours, 2: leftover minutes. */ __( '%1$sh %2$sm' ), String( h ), String( m ) )
+			: sprintf( /* translators: %s: hours. */ __( '%sh' ), String( h ) );
+	}
+
+	function bookingFromSections( sec ) {
+		const rows = [];
+		( sec.sections || [] ).forEach( ( g ) => ( g.rows || [] ).forEach( ( r ) => rows.push( r ) ) );
+		const find = ( re ) => {
+			const r = rows.find( ( x ) => re.test( x.label || '' ) );
+			const v = r && r.value != null ? String( r.value ) : '';
+			return v && v !== '—' ? v : '';
+		};
+		return {
+			service: find( /^service$/i ),
+			employee: find( /^employee$/i ),
+			starts: find( /^starts$/i ),
+			ends: find( /^ends$/i ),
+			people: find( /^people$/i ),
+			price: find( /^price$/i ),
+			notes: find( /^notes$|^booking note$/i ),
+			code: find( /^code$/i ),
+			customer: {
+				name: find( /^name$/i ),
+				email: find( /^email$/i ),
+				phone: find( /^phone$/i ),
+			},
+		};
+	}
+
+	function bookingModel( sec ) {
+		const fallback = bookingFromSections( sec || {} );
+		const b = ( sec && sec.booking ) || {};
+		const c = ( sec && sec.customer ) || fallback.customer || {};
+		return {
+			title: ( sec && sec.title ) || b.service || fallback.service || __( 'Appointment' ),
+			status: ( sec && sec.status ) || '',
+			service: b.service || fallback.service,
+			employee: b.employee || fallback.employee,
+			starts: b.starts || fallback.starts,
+			ends: b.ends || fallback.ends,
+			people: b.people || fallback.people || 1,
+			price: b.price || fallback.price,
+			notes: b.notes || fallback.notes,
+			code: b.code || fallback.code,
+			customer: {
+				name: c.name || fallback.customer.name,
+				email: c.email || fallback.customer.email,
+				phone: c.phone || fallback.customer.phone,
+			},
+		};
+	}
+
+	async function loadSurfaceItem( p, s ) {
+		const coll = surfaceColl( s, surfaceState( s.id ) );
+		const route = ( ( coll.detail || {} ).sectionsRoute || '' ).replace( '{id}', p.id );
+		try {
+			if ( route ) p.sections = await api( route );
+			const items = surfaceState( s.id ).cache && surfaceState( s.id ).cache.items;
+			const listed = ( items || [] ).find( ( x ) => String( x.id ) === String( p.id ) );
+			p.item = listed ? { ...listed } : { id: p.id };
+			if ( p.sections && p.sections.status ) p.item.status = p.sections.status;
+		} catch ( e ) {
+			p.loadError = e.message || String( e );
+		}
+		p.loading = false;
+		if ( state.route === 'surfaceitem' && state.surfaceItemId === p.id && state.surfaceItemSid === s.id ) {
+			renderSurfaceItem();
+		}
+	}
+
+	function renderSurfaceItem() {
+		const s = surfaceById( state.surfaceItemSid );
+		const view = $( '#minn-view' );
+		if ( ! s ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( "This booking is not available." ) ) }</div>`;
+			return;
+		}
+		let p = state.surfaceItem;
+		if ( ! p || p.sid !== s.id || p.id !== state.surfaceItemId ) {
+			p = state.surfaceItem = { sid: s.id, id: state.surfaceItemId, item: { id: state.surfaceItemId }, sections: null, loading: true };
+			loadSurfaceItem( p, s );
+		}
+		const arrived = takePageReturn();
+		if ( arrived ) p.back = arrived;
+		const back = p.back || { route: s.id, label: s.label || __( 'Bookings' ) };
+		const sec = p.sections || {};
+		const b = bookingModel( sec );
+		const it = p.item || { id: p.id, status: b.status };
+		if ( b.status ) it.status = b.status;
+		const loading = !! p.loading && ! p.sections;
+		const coll = surfaceColl( s, surfaceState( s.id ) );
+		const visibleActions = ( coll.actions || [] )
+			.map( ( a, i ) => ( { a, i } ) )
+			.filter( ( { a } ) => surfaceActionVisible( a, it, sec ) );
+		const startLbl = bookingWhenLabel( b.starts );
+		const endTime = bookingTimeLabel( b.ends );
+		const dur = bookingDurationLabel( b.starts, b.ends );
+		const whenBits = [ startLbl && endTime ? startLbl + ' – ' + endTime : startLbl, dur, b.employee ].filter( Boolean );
+		const priceLbl = b.price && /^\d+(\.\d+)?$/.test( String( b.price ).trim() )
+			? '$' + String( b.price ).trim()
+			: ( b.price || '' );
+		const extras = ( sec.sections || [] ).filter( ( g ) => {
+			const t = ( g.title || '' ).toLowerCase();
+			return t && t !== 'customer' && t !== 'appointment' && ( g.rows || [] ).length;
+		} );
+		const row = ( label, value ) => value
+			? `<div class="minn-order-read"><div class="minn-order-read-sub">${ esc( label ) }</div><div>${ value }</div></div>`
+			: '';
+		const empty = ( text ) => `<span class="minn-order-read-empty">${ esc( text ) }</span>`;
+		const emailHtml = b.customer.email
+			? `<a href="mailto:${ esc( b.customer.email ) }">${ esc( b.customer.email ) }</a>`
+			: empty( __( 'No email address' ) );
+		const phoneHtml = b.customer.phone ? esc( b.customer.phone ) : empty( __( 'No phone number' ) );
+		view.innerHTML = `
+		<div class="minn-order-page minn-order-page-wide minn-booking-page">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-bk-back">← ${ esc( back.label ) }</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-order-head-row">
+						<span class="minn-modal-title">${ esc( b.title ) }</span>
+						${ b.status ? surfacePill( b.status ) : '' }
+					</div>
+					<div class="minn-modal-sub">${ loading ? esc( __( 'Loading…' ) ) : esc( whenBits.join( ' · ' ) || '—' ) }</div>
+				</div>
+				<div class="minn-order-head-actions">
+					${ loading || p.loadError ? '' : visibleActions.map( ( { a, i } ) => {
+						if ( ! a.href ) return `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>`;
+						const href = surfaceFillHref( a.href, it );
+						return `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, href ) ) }</a>`;
+					} ).join( '' ) }
+					${ ! loading && sec.adminUrl ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
+				</div>
+			</div>
+			<div class="minn-order-page-body">
+				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading appointment…' ) ) }</div></div>` : '' }
+				${ p.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( p.loadError ) }</div>` : '' }
+				${ ! loading && ! p.loadError ? `
+				<div class="minn-order-body">
+					<div class="minn-order-layout">
+						<div class="minn-order-main">
+							<div class="minn-order-sec">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Appointment' ) ) }</div>${ b.code ? `<span class="minn-modal-id-tag">${ esc( b.code ) }</span>` : '' }</div>
+								<div class="minn-order-read">
+									${ row( __( 'Service' ), b.service ? esc( b.service ) : empty( __( 'No service' ) ) ) }
+									${ row( __( 'Employee' ), b.employee ? esc( b.employee ) : empty( __( 'No employee' ) ) ) }
+									${ row( __( 'Starts' ), startLbl ? esc( startLbl ) : empty( __( 'No time set' ) ) ) }
+									${ row( __( 'Ends' ), b.ends ? esc( bookingWhenLabel( b.ends ) ) : '' ) }
+									${ row( __( 'Duration' ), dur ? esc( dur ) : '' ) }
+									${ row( __( 'People' ), esc( String( b.people || 1 ) ) ) }
+									${ row( __( 'Status' ), b.status ? surfacePill( b.status ) : '' ) }
+								</div>
+							</div>
+							${ priceLbl ? `
+							<div class="minn-order-sec">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Payment' ) ) }</div></div>
+								<div class="minn-order-items">
+									<div class="minn-order-item"><span class="minn-cell-clip">${ esc( __( 'Service price' ) ) }</span><span class="minn-order-line-total">${ esc( priceLbl ) }</span></div>
+									<div class="minn-order-item total"><span class="minn-cell-clip">${ esc( __( 'Total' ) ) }</span><span class="minn-order-line-total">${ esc( priceLbl ) }</span></div>
+								</div>
+							</div>` : '' }
+							${ extras.map( ( g ) => `
+							<div class="minn-order-sec">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( g.title ) }</div></div>
+								<div class="minn-order-read">${ ( g.rows || [] ).map( ( r ) => row( r.label, esc( String( r.value == null ? '' : r.value ) ) ) ).join( '' ) }</div>
+							</div>` ).join( '' ) }
+						</div>
+						<div class="minn-order-side">
+							<div class="minn-order-sec minn-order-customer">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Customer' ) ) }</div></div>
+								<div class="minn-order-read">
+									<div class="minn-order-read-name">${ esc( b.customer.name || __( '(no name)' ) ) }</div>
+									<div class="minn-order-read-sub">${ esc( __( 'Contact information' ) ) }</div>
+									<div>${ emailHtml }</div>
+									<div>${ phoneHtml }</div>
+								</div>
+							</div>
+							<div class="minn-order-sec">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Notes' ) ) }</div></div>
+								<div class="minn-order-read">${ b.notes ? `<span style="white-space:pre-line;">${ esc( b.notes ) }</span>` : `<span class="minn-order-read-empty">${ esc( __( 'No notes' ) ) }</span>` }</div>
+							</div>
+						</div>
+					</div>
+				</div>` : '' }
+			</div>
+		</div>`;
+		const backBtn = $( '#minn-bk-back' );
+		if ( backBtn ) backBtn.addEventListener( 'click', () => go( back.route ) );
+		if ( ! loading && ! p.loadError ) {
+			$$( '[data-saction]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', async () => {
+					const action = ( coll.actions || [] )[ parseInt( btn.dataset.saction, 10 ) ];
+					if ( ! action ) return;
+					btn.disabled = true;
+					try {
+						await runSurfaceItemAction( s, it, action );
+					} catch ( e ) {
+						toast( e.message, true );
+						btn.disabled = false;
+					}
+				} )
+			);
+		}
 	}
 
 	/* ===== Menus (classic navigation) ===== */
@@ -40042,6 +40293,7 @@
 		// User-edit page data too (same per-visit contract).
 		if ( state.route !== 'useredit' ) state.userEdit = null;
 		if ( state.route !== 'fieldgroup' ) state.fgb = null;
+		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
 		switch ( state.route ) {
 			case 'content': return renderContent();
 			case 'media': return renderMedia();
@@ -40067,6 +40319,7 @@
 			case 'editor': return renderEditor();
 			case 'fieldgroup': return renderFieldGroupBuilder();
 			case 'profile': return renderProfile();
+			case 'surfaceitem': return renderSurfaceItem();
 			default:
 				if ( surfaceById( state.route ) ) return renderSurface( surfaceById( state.route ) );
 				return renderOverview();

@@ -369,8 +369,25 @@ add_action( 'rest_api_init', function () {
 			if ( $row->booking_code ) {
 				$when[] = array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) $row->booking_code );
 			}
+			$service = $row->service_name ? (string) $row->service_name : '';
 			return rest_ensure_response( array(
-				'kind'     => 'entry',
+				'kind'     => 'booking',
+				'status'   => (string) $row->status,
+				'title'    => $service ? $service : __( 'Appointment', 'minn-admin' ),
+				'customer' => array(
+					'name'  => minn_admin_latepoint_display_name( $row->customer_first, $row->customer_last ),
+					'email' => $row->customer_email ? (string) $row->customer_email : '',
+					'phone' => $row->customer_phone ? (string) $row->customer_phone : '',
+				),
+				'booking'  => array(
+					'service'  => $service,
+					'employee' => minn_admin_latepoint_display_name( $row->agent_first, $row->agent_last ),
+					'starts'   => minn_admin_latepoint_utc_iso( $row->start_datetime_utc ),
+					'ends'     => minn_admin_latepoint_utc_iso( $row->end_datetime_utc ),
+					'people'   => max( 1, (int) $row->total_attendees ),
+					'code'     => $row->booking_code ? (string) $row->booking_code : '',
+					'notes'    => '',
+				),
 				'sections' => array(
 					array( 'title' => __( 'Customer', 'minn-admin' ), 'rows' => $who ),
 					array( 'title' => __( 'Appointment', 'minn-admin' ), 'rows' => $when ),

@@ -593,7 +593,12 @@ must return:
 
 `kind` picks the layout: `"entry"` renders the contact-style form-entry view (name and
 email hero, message body, quiet meta), `"activity"` renders the audit-event view (who,
-event message, context chips). Omit it for a plain grouped key/value view. `adminUrl`
+event message, context chips), `"booking"` opens a full page in the same two-column
+card shape as an order (appointment + payment on the left, customer + notes on the
+right; dates render as readable local times, never a raw UTC stamp). Bookings-family
+surfaces (`family: "bookings"`) navigate to `/{surface}/{id}` on row click so the
+record gets a page of its own, the way Orders does. Omit `kind` for a plain grouped
+key/value view. `adminUrl`
 links the item's wp-admin screen and suppresses any `href` action that points at the
 same place. The bundled Gravity Forms adapter (entries) and WP Activity Log adapter
 (events) are the references.

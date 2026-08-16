@@ -433,8 +433,25 @@ add_action( 'rest_api_init', function () {
 			if ( $extra ) {
 				$sections[] = array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $extra );
 			}
+			$service = $row->service_name ? (string) $row->service_name : '';
 			return rest_ensure_response( array(
-				'kind'     => 'entry',
+				'kind'     => 'booking',
+				'status'   => (string) $row->status,
+				'title'    => $service ? $service : __( 'Appointment', 'minn-admin' ),
+				'customer' => array(
+					'name'  => minn_admin_amelia_display_name( $row->customer_first, $row->customer_last ),
+					'email' => $row->customer_email ? (string) $row->customer_email : '',
+					'phone' => $row->customer_phone ? (string) $row->customer_phone : '',
+				),
+				'booking'  => array(
+					'service'  => $service,
+					'employee' => minn_admin_amelia_display_name( $row->provider_first, $row->provider_last ),
+					'starts'   => minn_admin_amelia_utc_iso( $row->bookingStart ),
+					'ends'     => minn_admin_amelia_utc_iso( $row->bookingEnd ),
+					'people'   => max( 1, (int) $row->persons ),
+					'price'    => ( null !== $row->price && '' !== (string) $row->price ) ? (string) $row->price : '',
+					'notes'    => $notes,
+				),
 				'sections' => $sections,
 				'adminUrl' => minn_admin_amelia_admin_url(),
 			) );

@@ -383,8 +383,24 @@ add_action( 'rest_api_init', function () {
 				array( 'label' => __( 'Ends', 'minn-admin' ), 'value' => minn_admin_bookly_local_iso( $row->end_date ) ),
 				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
 			);
+			$service = $row->service_name ? (string) $row->service_name : '';
 			return rest_ensure_response( array(
-				'kind'     => 'entry',
+				'kind'     => 'booking',
+				'status'   => (string) $row->status,
+				'title'    => $service ? $service : __( 'Appointment', 'minn-admin' ),
+				'customer' => array(
+					'name'  => minn_admin_bookly_display_name( $row->customer_first, $row->customer_last, $row->customer_full ),
+					'email' => $row->customer_email ? (string) $row->customer_email : '',
+					'phone' => $row->customer_phone ? (string) $row->customer_phone : '',
+				),
+				'booking'  => array(
+					'service'  => $service,
+					'employee' => $row->staff_name ? (string) $row->staff_name : '',
+					'starts'   => minn_admin_bookly_local_iso( $row->start_date ),
+					'ends'     => minn_admin_bookly_local_iso( $row->end_date ),
+					'people'   => max( 1, (int) $row->number_of_persons ),
+					'notes'    => '',
+				),
 				'sections' => array(
 					array( 'title' => __( 'Customer', 'minn-admin' ), 'rows' => $who ),
 					array( 'title' => __( 'Appointment', 'minn-admin' ), 'rows' => $when ),

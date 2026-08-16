@@ -3168,6 +3168,9 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 @media (max-width: 1020px) {
   .minn-order-page .minn-order-layout { grid-template-columns: minmax(0, 1fr); }
 }
+.minn-booking-page .minn-order-head-actions { flex-wrap: wrap; justify-content: flex-end; }
+.minn-booking-page .minn-order-read + .minn-order-read { margin-top: 10px; }
+.minn-booking-page .minn-order-sec > .minn-order-read > .minn-order-read:first-child .minn-order-read-sub { margin-top: 0; }
 @media (max-width: 720px) {
   .minn-order-grid { grid-template-columns: 1fr; }
   .minn-order-panel { border-inline-end: none; border-bottom: 1px solid var(--border); }
