@@ -11,6 +11,7 @@
  *     plugin was network-activated (the rewrite self-heal).
  *   - The whole role matrix renders with ZERO console/page errors.
  *   - A network-activated plugin shows as "Network active" with no switch.
+ *   - WP Multi Network's global network routes stay super-admin only.
  *   - A subsite admin sees the whole site's user list (not a one-row "list"),
  *     can add an existing network account and remove a member, and gets no
  *     role/removal controls against a network administrator's row.
@@ -627,6 +628,10 @@ async function gotoRoute( page, site, route ) {
 					call( 'GET', 'minn-admin/v1/network/settings/registration' ),
 					call( 'POST', 'minn-admin/v1/network/settings/registration', { values: { registration: 'all' } } ),
 					call( 'POST', 'minn-admin/v1/network/settings/sites', { values: { admin_email: 'attacker@evil.test' } } ),
+					call( 'GET', 'minn-admin/v1/wp-multi-network/networks' ),
+					call( 'POST', 'minn-admin/v1/wp-multi-network/networks', { title: 'P', domain: '', path: '/' } ),
+					call( 'DELETE', 'minn-admin/v1/wp-multi-network/networks/1' ),
+					call( 'POST', 'minn-admin/v1/wp-multi-network/sites/1/move', { network: 2 } ),
 				] );
 				const grp = document.querySelector( '#minn-navgrp-network' );
 				return { navHidden: ! grp || grp.hidden, probes };
@@ -662,6 +667,7 @@ async function gotoRoute( page, site, route ) {
 					get( 'minn-admin/v1/network/users/status' ),
 					get( 'minn-admin/v1/network/settings/registration' ),
 					get( 'minn-admin/v1/my-sites' ),
+					get( 'minn-admin/v1/wp-multi-network/networks' ),
 				] );
 			} );
 			const blocked = allowed.filter( ( p ) => p.status >= 400 );

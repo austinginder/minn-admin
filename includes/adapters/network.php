@@ -78,6 +78,7 @@ function minn_admin_network_site_row( $site, $counts = array() ) {
 
 	return array(
 		'id'           => $id,
+		'networkId'    => (int) $site->network_id,
 		'name'         => $title ? $title : $site->domain,
 		'url'          => $url,
 		'app'          => $app,
@@ -90,6 +91,7 @@ function minn_admin_network_site_row( $site, $counts = array() ) {
 		'canSpam'      => ( ! $main && ! $flags['spam'] ) ? '1' : '0',
 		'canUnspam'    => $flags['spam'] ? '1' : '0',
 		'canDelete'    => ( ! $main && ! $current ) ? '1' : '0',
+		'canMove'      => $main ? '0' : '1',
 	);
 }
 
@@ -224,7 +226,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 			'detail'   => array(
-				'skip' => array( 'app', 'canArchive', 'canUnarchive', 'canSpam', 'canUnspam', 'canDelete' ),
+				'skip' => array( 'app', 'networkId', 'canArchive', 'canUnarchive', 'canSpam', 'canUnspam', 'canDelete', 'canMove' ),
 			),
 			'actions'  => array(
 				array( 'label' => __( 'Open in Minn ↗', 'minn-admin' ), 'href' => '{app}' ),

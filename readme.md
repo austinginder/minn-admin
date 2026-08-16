@@ -88,9 +88,11 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   subsite administrators can add existing network accounts, change roles, and remove site
   memberships. Network administrators get first-class **Sites**, **Network users**, and
   **Network settings** surfaces, plus network-wide plugin activation, theme availability,
-  and post-core-update database migrations. Main/current-site, self-lockout, and last-admin
-  guards protect destructive actions; account creation/deletion, the long settings tail,
-  and very large network upgrades link to WordPress Network Admin
+  and post-core-update database migrations. With WP Multi Network active, a **Networks**
+  surface lists every network, creates networks with root sites, moves sites between them,
+  and safely deletes non-primary networks. Main/current-site, self-lockout, and last-admin
+  guards protect destructive actions; account creation/deletion, network domain and path
+  changes, the long settings tail, and very large network upgrades link to WordPress Network Admin
 - **In your language** — the whole interface follows the language you pick, per user, in
   **twenty-three languages** covering about half of WordPress installs. Right-to-left languages
   (Arabic, Hebrew, Persian and friends) get a genuinely mirrored layout, counts follow each

@@ -92,7 +92,13 @@ an address, a title and the email of someone who already has an account.
 Network users lists every account on the network, shows how many sites each
 belongs to, and lets you promote someone to network administrator or take
 that away. Network settings covers registration, uploads, what site
-administrators may do, and where network mail goes. Two things Minn will not
+administrators may do, and where network mail goes. If WP Multi Network is
+active, Networks lists every network with its address, site count and
+administrator count. You can create a network and its root site there, move
+an ordinary site to another network from the site's detail card, and delete a
+non-primary network with all of its sites after an explicit warning. Changing
+a network's domain or path links to WP Multi Network's own form because that
+operation rewrites every site address in the network. Two things Minn will not
 do: it never offers to archive or delete the main site of the network or the
 site you are currently working in, and it never lets you remove your own
 network-administrator status or the last one on the network. Creating and
@@ -515,6 +521,8 @@ On Windows and Linux, use Ctrl wherever ⌘ appears.
 - **Multisite?** Yes. Site members can switch among the sites they may use,
   subsite administrators can manage local membership, and network
   administrators get daily Sites, Users, Settings, plugin and theme controls.
+  WP Multi Network adds a Networks directory, network creation and deletion,
+  and guarded site moves between networks.
   Account creation and deletion, the long settings tail and very-large-network
   database upgrades stay in Network Admin.
 - **Something looks wrong?** Hard-refresh first (a cached stylesheet

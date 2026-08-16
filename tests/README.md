@@ -34,6 +34,7 @@ MINN_TEST_PASS=<admin password> node seed-orders.js
 # unaffected on the single-site dev box. Create the lab first:
 #   cove add minnms --multisite=subdomain   (see project_minn_multisite_lab)
 MINN_MS_SUPER_PASS=<lab super-admin password> node multisite.test.js
+MINN_MS_SUPER_PASS=<lab super-admin password> node wp-multi-network.test.js
 
 # all suites (release pre-flight / overnight): sequential, settle-guarded,
 # one retry per failed suite, full logs + summary in the output dir

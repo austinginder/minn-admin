@@ -122,6 +122,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/autoptimize.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/asset-cleanup.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/performance-lab.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/network.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/wp-multi-network.php';
 
 Minn_Admin::init();
 Minn_Admin_REST::init();
