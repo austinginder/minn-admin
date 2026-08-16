@@ -29,6 +29,19 @@ const apiGet = ( page, route ) => page.evaluate( async ( r ) => {
 	return { status: res.status, body: await res.json() };
 }, route );
 
+const apiSend = ( page, route, method, body ) => page.evaluate( async ( a ) => {
+	const res = await fetch( window.MINN.restUrl + a.route, {
+		method: a.method,
+		headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+		body: a.body ? JSON.stringify( a.body ) : undefined,
+	} );
+	let out = null;
+	try { out = await res.json(); } catch ( e ) {}
+	return { status: res.status, body: out };
+}, { route, method, body } );
+const apiPost = ( page, route, body ) => apiSend( page, route, 'POST', body );
+const apiDelete = ( page, route ) => apiSend( page, route, 'DELETE', null );
+
 // The signed routes the app hands this user for a post-type's fields.
 const servedRoutes = async ( page ) => {
 	const { body } = await apiGet( page, 'minn-admin/v1/acf/fields?post_type=post' );
@@ -98,6 +111,67 @@ const servedRoutes = async ( page ) => {
 		const own = await apiGet( editor.page, mine.route + '&q=' );
 		t.check( 'the editor’s own signature works', own.status === 200, 'status ' + own.status );
 		t.check( 'each account gets its own signature', mine.route !== served.route );
+	}
+
+	// 4. Unpublished rows are scoped per POST TYPE, not by one blanket cap.
+	// An editor holds `edit_others_posts` and almost never holds
+	// `edit_others_products`, so a picker constrained to products is where a
+	// single blanket check leaks: it would answer for the whole set and hand
+	// back draft titles core refuses the same account outright.
+	//
+	// The fixture is built and torn down through Minn's own routes: a field
+	// group imported with a product-constrained post_object field, and an
+	// admin-authored draft product standing in for "someone else's".
+	const wc = await page.evaluate( () => !! ( window.MINN && window.MINN.wc ) );
+	if ( ! wc ) {
+		console.log( 'SKIP  WooCommerce inactive — per-type scoping check needs a second post type' );
+	} else {
+		const GROUP = 'group_minn_audit_scope';
+		const imported = await apiPost( page, 'minn-admin/v1/acf/schema/import', {
+			content: JSON.stringify( [ {
+				key: GROUP,
+				title: 'Minn audit scope (temporary)',
+				location: [ [ { param: 'post_type', operator: '==', value: 'post' } ] ],
+				fields: [ {
+					key: 'field_minn_audit_scope',
+					label: 'Audit scope product',
+					name: 'audit_scope_product',
+					type: 'post_object',
+					post_type: [ 'product' ],
+					return_format: 'id',
+				} ],
+			} ] ),
+		} );
+		const product = await apiPost( page, 'wc/v3/products', {
+			name: 'ZZ Minn audit scope draft', status: 'draft',
+		} );
+		const pid = product.body && product.body.id;
+		t.check( 'fixture: temp group imported and a draft product exists',
+			imported.status === 200 && !! pid, 'product ' + pid );
+
+		if ( pid ) {
+			// The editor must be served the field (so the signature exists)
+			// and must NOT be offered the draft product behind it.
+			const ed2 = await loginAs( browser, 'minn-editor', 'minn-editor-pass-1' );
+			const r = ( await servedRoutes( ed2.page ) ).find( ( f ) => f.name === 'audit_scope_product' );
+			t.check( 'editor is served the product picker', !! r );
+			if ( r ) {
+				const rows = await apiGet( ed2.page, r.route + '&q=ZZ Minn audit scope' );
+				const ids = ( Array.isArray( rows.body ) ? rows.body : [] ).map( ( x ) => String( x.value ) );
+				t.check( 'editor is not offered another user’s draft product',
+					! ids.includes( String( pid ) ), 'rows: ' + ( ids.join( ', ' ) || 'none' ) );
+			}
+			// Control: the admin who owns it still sees it, so the scope did
+			// not simply blank the picker for everyone.
+			const adminRows = await apiGet( page,
+				( ( await servedRoutes( page ) ).find( ( f ) => f.name === 'audit_scope_product' ) || {} ).route
+				+ '&q=ZZ Minn audit scope' );
+			t.check( 'admin is still offered the draft product',
+				( Array.isArray( adminRows.body ) ? adminRows.body : [] ).some( ( x ) => String( x.value ) === String( pid ) ) );
+			await ed2.ctx.close();
+			await apiDelete( page, 'wc/v3/products/' + pid + '?force=true' );
+		}
+		await apiDelete( page, 'minn-admin/v1/acf/schema/groups/' + GROUP + '?force=1' );
 	}
 
 	await editor.ctx.close();

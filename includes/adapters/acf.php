@@ -1851,11 +1851,43 @@ add_action( 'rest_api_init', function () {
 					}
 				}
 				$posts = get_posts( array_merge( $base, array( 'post_status' => array( 'publish', 'future' ) ) ) );
-				$rest  = array_merge( $base, array( 'post_status' => array( 'draft', 'pending', 'private' ) ) );
-				if ( ! current_user_can( 'edit_others_posts' ) ) {
-					$rest['author'] = get_current_user_id();
+				// Unpublished posts are ownership-scoped, and ownership is a
+				// PER-TYPE question: `edit_others_posts` is the posts type's
+				// own cap, and an editor who holds it routinely lacks
+				// `edit_others_products`. Asking it once for a field that
+				// spans types lets the most permissive type answer for all of
+				// them, so a picker constrained to products would hand an
+				// editor draft titles core refuses them outright. Split the
+				// query and keep every type on its own cap.
+				$types = (array) $base['post_type'];
+				if ( in_array( 'any', $types, true ) ) {
+					$types = get_post_types( array( 'exclude_from_search' => false ) );
 				}
-				$posts = array_merge( $posts, get_posts( $rest ) );
+				$others = array();
+				$own    = array();
+				foreach ( $types as $ptn ) {
+					$obj = get_post_type_object( $ptn );
+					$cap = $obj && ! empty( $obj->cap->edit_others_posts ) ? $obj->cap->edit_others_posts : 'edit_others_posts';
+					if ( current_user_can( $cap ) ) {
+						$others[] = $ptn;
+					} else {
+						$own[] = $ptn;
+					}
+				}
+				$unpublished = array( 'draft', 'pending', 'private' );
+				if ( $others ) {
+					$posts = array_merge( $posts, get_posts( array_merge( $base, array(
+						'post_type'   => $others,
+						'post_status' => $unpublished,
+					) ) ) );
+				}
+				if ( $own ) {
+					$posts = array_merge( $posts, get_posts( array_merge( $base, array(
+						'post_type'   => $own,
+						'post_status' => $unpublished,
+						'author'      => get_current_user_id(),
+					) ) ) );
+				}
 				usort( $posts, function ( $a, $b ) {
 					return strcasecmp( (string) $a->post_title, (string) $b->post_title );
 				} );
