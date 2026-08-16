@@ -638,12 +638,77 @@ function minn_admin_acf_relation_in( $key, $value ) {
  * @param array $sub_fields ACF sub-field list.
  * @return array { subs: array, locked: int }
  */
+/**
+ * Is a conditional rule's field key one of these keys?
+ *
+ * ACF composes clone-derived keys (field_CLONE_field_ORIG) at load time but
+ * leaves conditional logic pointing at the ORIGINAL key, resolving the two by
+ * suffix at render time. Comparing the strings outright would read every rule
+ * inside a cloned group as pointing somewhere else.
+ *
+ * @param string $key  Rule field key.
+ * @param array  $keys Key => true map to test against.
+ * @return bool
+ */
+function minn_admin_acf_key_in( $key, $keys ) {
+	if ( '' === $key ) {
+		return false;
+	}
+	if ( isset( $keys[ $key ] ) ) {
+		return true;
+	}
+	foreach ( $keys as $k => $unused ) {
+		$len = strlen( $key ) + 1;
+		if ( strlen( $k ) > $len && substr( $k, -$len ) === '_' . $key ) {
+			return true;
+		}
+		$len = strlen( $k ) + 1;
+		if ( strlen( $key ) > $len && substr( $key, -$len ) === '_' . $k ) {
+			return true;
+		}
+	}
+	return false;
+}
+
 function minn_admin_acf_flatten_subs( $sub_fields ) {
 	$subs   = array();
 	$locked = 0;
-	$push   = function ( $sub, $label_prefix, $name_prefix, $gpath ) use ( &$push, &$subs, &$locked ) {
+	// Every key inside this unit, so a sub's conditional logic can be told
+	// apart: rules over SIBLINGS vary per row (rendered unconditionally for
+	// now, values always preserved), rules over anything else can never be
+	// satisfied in here — ACF's own screen leaves those hidden, so counting
+	// them as "living in wp-admin" would point at a field nobody can see.
+	$own  = array();
+	$keys = function ( $list ) use ( &$keys, &$own ) {
+		foreach ( (array) $list as $f ) {
+			if ( ! empty( $f['key'] ) ) {
+				$own[ $f['key'] ] = true;
+			}
+			if ( 'group' === ( $f['type'] ?? '' ) && ! empty( $f['sub_fields'] ) ) {
+				$keys( $f['sub_fields'] );
+			}
+		}
+	};
+	$keys( $sub_fields );
+	$push = function ( $sub, $label_prefix, $name_prefix, $gpath ) use ( &$push, &$subs, &$locked, &$own ) {
 		if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 			return;
+		}
+		$cond = ! empty( $sub['conditional_logic'] ) && is_array( $sub['conditional_logic'] ) ? $sub['conditional_logic'] : null;
+		if ( $cond ) {
+			$foreign = true;
+			foreach ( $cond as $rules ) {
+				foreach ( (array) $rules as $rule ) {
+					if ( minn_admin_acf_key_in( $rule['field'] ?? '', $own ) ) {
+						$foreign = false;
+					}
+				}
+			}
+			// A controller that is not in the row answers as no value, exactly
+			// as it does on ACF's screen, where the field simply never shows.
+			if ( $foreign && ! minn_admin_acf_eval_cond( $cond, '__return_null' ) ) {
+				return;
+			}
 		}
 		if ( 'group' === ( $sub['type'] ?? '' ) && ! empty( $sub['sub_fields'] ) && count( $gpath ) < 3 ) {
 			// An unlabelled group namespaces nothing a reader can see, so it
