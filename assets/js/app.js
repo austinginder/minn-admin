@@ -18204,7 +18204,7 @@
 				</div>` : '' }
 				${ g.autoload ? `
 				<div class="minn-sys-tables">
-					<div class="minn-sys-tables-head minn-sys-link" data-sysdetail="autoload" role="button" tabindex="0" title="${ esc( __( 'View every autoloaded option' ) ) }">${ esc( sprintf(
+					<div class="minn-sys-tables-head minn-sys-link" data-sysdetail="autoload" role="button" tabindex="0" title="${ esc( __( 'View every autoloaded option' ) ) }">${ esc( __( 'Autoloaded options' ) ) } — ${ esc( sprintf(
 						/* translators: 1: total autoloaded size, 2: number of autoloaded options. */
 						__( '%1$s across %2$s options loads on every request — see the top offenders in the Database card' ),
 						g.autoload.size_human,

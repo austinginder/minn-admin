@@ -55,7 +55,11 @@ const fs = require( 'fs' );
 		const head = [ ...document.querySelectorAll( '.minn-sys-tables-head' ) ].find( ( h ) => /Autoloaded options/.test( h.textContent ) );
 		return head ? head.textContent : '';
 	} );
-	t.check( 'autoload section renders in the Database card', /Autoloaded options — \d+ options · \S+.*on every request/.test( alUi ), alUi );
+	// Assert the label and the facts, not an English word ORDER: the sentence
+	// is translated and its placeholders move, so pinning the phrasing makes
+	// the check fail on every locale but this one.
+	t.check( 'autoload section renders in the Database card',
+		/Autoloaded options/.test( alUi ) && /\d+ options/.test( alUi ) && /on every request/.test( alUi ), alUi );
 	const extUi = await page.evaluate( () => ( {
 		sections: Array.from( document.querySelectorAll( '.minn-sys-ext-label' ) ).map( ( l ) => l.textContent ),
 		items: document.querySelectorAll( '.minn-sys-ext-item' ).length,
@@ -287,7 +291,7 @@ const fs = require( 'fs' );
 		rows: document.querySelectorAll( '.minn-sysd-row' ).length,
 		sub: document.querySelector( '.minn-sysd-sub' ).textContent,
 	} ) );
-	t.check( 'autoload row opens the full-detail modal', /Autoloaded options/.test( alModal.title ) && alModal.rows > 5 && /autoloaded options load on every request/.test( alModal.sub ), JSON.stringify( alModal ) );
+	t.check( 'autoload row opens the full-detail modal', /Autoloaded options/.test( alModal.title ) && alModal.rows > 5 && /on every request/.test( alModal.sub ) && /\d+ options/.test( alModal.sub ), JSON.stringify( alModal ) );
 	await page.keyboard.press( 'Escape' );
 	await page.waitForTimeout( 250 );
 
