@@ -607,31 +607,23 @@ function minn_admin_acf_relation_in( $key, $value ) {
 }
 
 /**
- * Map an ACF repeater (Pro) onto the panel's `rows` control, or null when no
- * sub-field is editable. One level deep: sub-fields from the simple set edit
- * in rows — including image (media picker) and gallery (images editor) since
- * the row cards learned those controls; nested-repeater and other complex
- * subs count as locked per row, and their stored values are PRESERVED by the
- * write path's row merge (an edit overlays only the mapped subs onto the
- * original row).
+ * Flatten one repeating unit's sub-fields (a repeater's `sub_fields`, or one
+ * flexible-content layout's) onto the row dialect's sub vocabulary.
  *
- * @param array $f ACF repeater field array.
- * @return array|null { name, label, type: 'rows', subfields, subLocked, key, subs }
+ * Subs share the field map — everything simple except wysiwyg (the row cards
+ * have no rich-text seat) and the relational pickers (no arming in the rows
+ * dialect yet). A GROUP sub is a namespace, not a control: its subs flatten
+ * into the row as prefixed columns ("Hover · Bg"), stored nested exactly where
+ * ACF keeps them (gpath = the group-key chain the read/write descend).
+ * Recursion is depth-capped, matching the options flatten.
+ *
+ * @param array $sub_fields ACF sub-field list.
+ * @return array { subs: array, locked: int }
  */
-function minn_admin_acf_map_repeater( $f ) {
-	if ( empty( $f['name'] ) || empty( $f['key'] ) ) {
-		return null;
-	}
+function minn_admin_acf_flatten_subs( $sub_fields ) {
 	$subs   = array();
 	$locked = 0;
-	// Subs share the field map — everything simple except wysiwyg (the row
-	// cards have no rich-text seat) and the relational pickers (no arming in
-	// the rows dialect yet). A GROUP sub is a namespace, not a control: its
-	// subs flatten into the row as prefixed columns ("Hover · Bg"), stored
-	// nested exactly where ACF keeps them (gpath = the group-key chain the
-	// read/write descend). Recursion is depth-capped, matching the options
-	// flatten.
-	$push = function ( $sub, $label_prefix, $name_prefix, $gpath ) use ( &$push, &$subs, &$locked ) {
+	$push   = function ( $sub, $label_prefix, $name_prefix, $gpath ) use ( &$push, &$subs, &$locked ) {
 		if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 			return;
 		}
@@ -661,24 +653,149 @@ function minn_admin_acf_map_repeater( $f ) {
 			'gpath'     => $gpath ? $gpath : null,
 		);
 	};
-	foreach ( (array) ( $f['sub_fields'] ?? array() ) as $sub ) {
+	foreach ( (array) $sub_fields as $sub ) {
 		$push( $sub, '', '', array() );
 	}
-	if ( ! $subs ) {
+	return array(
+		'subs'   => $subs,
+		'locked' => $locked,
+	);
+}
+
+/**
+ * Strip a flattened sub list down to the client shape (the form keys
+ * sub-inputs by name; key and gpath are the write path's business).
+ *
+ * @param array $subs Flattened subs.
+ * @return array
+ */
+function minn_admin_acf_client_subs( $subs ) {
+	return array_map( function ( $s ) {
+		unset( $s['key'], $s['gpath'] );
+		return $s;
+	}, $subs );
+}
+
+/**
+ * Map an ACF repeater (Pro) onto the panel's `rows` control, or null when no
+ * sub-field is editable. One level deep: sub-fields from the simple set edit
+ * in rows — including image (media picker) and gallery (images editor) since
+ * the row cards learned those controls; nested-repeater and other complex
+ * subs count as locked per row, and their stored values are PRESERVED by the
+ * write path's row merge (an edit overlays only the mapped subs onto the
+ * original row).
+ *
+ * @param array $f ACF repeater field array.
+ * @return array|null { name, label, type: 'rows', subfields, subLocked, key, subs }
+ */
+function minn_admin_acf_map_repeater( $f ) {
+	if ( empty( $f['name'] ) || empty( $f['key'] ) ) {
+		return null;
+	}
+	$flat = minn_admin_acf_flatten_subs( $f['sub_fields'] ?? array() );
+	if ( ! $flat['subs'] ) {
 		return null;
 	}
 	return array(
 		'name'      => $f['name'],
 		'label'     => $f['label'],
 		'type'      => 'rows',
-		'subfields' => array_map( function ( $s ) {
-			unset( $s['key'], $s['gpath'] ); // internal — the client keys sub-inputs by name
-			return $s;
-		}, $subs ),
-		'subLocked' => $locked,
+		'subfields' => minn_admin_acf_client_subs( $flat['subs'] ),
+		'subLocked' => $flat['locked'],
 		'key'       => $f['key'],
-		'subs'      => $subs,
+		'subs'      => $flat['subs'],
 	);
+}
+
+/**
+ * Map an ACF flexible-content field (Pro) onto the `flex` control — a rows
+ * control whose every row picks its schema by layout.
+ *
+ * Every declared layout is listed, including one with no mappable sub at all:
+ * a stored section of that layout must still render (as an inert card naming
+ * what lives in wp-admin) rather than silently disappear from a page's
+ * content. Layout SCHEMAS stay ACF's business; Minn edits sections.
+ *
+ * `_acf` is the resolved ACF field array. Clone-derived fields carry composed
+ * keys (field_CLONE_field_ORIG) that `acf_get_field()` cannot resolve, so the
+ * key-based readers answer null for them — the raw read/write helpers fall
+ * back to this array. It is internal: strip it before the payload ships.
+ *
+ * @param array $f ACF flexible-content field array.
+ * @return array|null { name, label, type: 'flex', key, layouts, layoutSubs, _acf }
+ */
+function minn_admin_acf_map_flex( $f ) {
+	if ( empty( $f['name'] ) || empty( $f['key'] ) || empty( $f['layouts'] ) ) {
+		return null;
+	}
+	$layouts = array();
+	$subs    = array();
+	foreach ( (array) $f['layouts'] as $lay ) {
+		$name = isset( $lay['name'] ) ? (string) $lay['name'] : '';
+		if ( '' === $name || isset( $layouts[ $name ] ) ) {
+			continue;
+		}
+		$flat             = minn_admin_acf_flatten_subs( $lay['sub_fields'] ?? array() );
+		$label            = trim( wp_strip_all_tags( (string) ( $lay['label'] ?? '' ) ) );
+		$layouts[ $name ] = array(
+			'label'     => '' !== $label ? $label : $name,
+			'subfields' => minn_admin_acf_client_subs( $flat['subs'] ),
+			'subLocked' => $flat['locked'],
+		);
+		$subs[ $name ]    = $flat['subs'];
+	}
+	if ( ! $layouts ) {
+		return null;
+	}
+	return array(
+		'name'       => $f['name'],
+		'label'      => $f['label'],
+		'type'       => 'flex',
+		'key'        => $f['key'],
+		'layouts'    => $layouts,
+		'layoutSubs' => $subs,
+		'_acf'       => $f,
+	);
+}
+
+/**
+ * Raw stored value for a mapped field, through ACF's own reader.
+ *
+ * @param array      $field   Mapped field (may carry `_acf`).
+ * @param int|string $post_id Post id or options id.
+ * @return mixed
+ */
+function minn_admin_acf_raw_value( $field, $post_id ) {
+	if ( ! empty( $field['_acf'] ) && ! acf_get_field( $field['key'] ) ) {
+		return acf_get_value( acf_get_valid_post_id( $post_id ), $field['_acf'] );
+	}
+	return get_field( $field['key'], $post_id, false );
+}
+
+/**
+ * Write a mapped field's stored value through ACF's own setter.
+ *
+ * @param array      $field   Mapped field (may carry `_acf`).
+ * @param mixed      $value   Stored-shape value.
+ * @param int|string $post_id Post id or options id.
+ */
+function minn_admin_acf_raw_update( $field, $value, $post_id ) {
+	if ( ! empty( $field['_acf'] ) && ! acf_get_field( $field['key'] ) ) {
+		acf_update_value( $value, acf_get_valid_post_id( $post_id ), $field['_acf'] );
+		return;
+	}
+	update_field( $field['key'], $value, $post_id );
+}
+
+/**
+ * Strip a mapped field's internals before it ships to the client.
+ *
+ * @param array $f Mapped field.
+ * @return array
+ */
+function minn_admin_acf_public_field( $f ) {
+	unset( $f['subs'], $f['layoutSubs'], $f['_acf'] );
+	return $f;
 }
 
 /**
@@ -844,23 +961,67 @@ function minn_admin_acf_value_in( $f, $value ) {
 function minn_admin_acf_rows_out( $field, $val ) {
 	$rows = array();
 	foreach ( array_values( is_array( $val ) ? $val : array() ) as $i => $raw_row ) {
-		$vals = array();
-		foreach ( $field['subs'] as $sub ) {
-			// Flattened group subs live nested in the row (gpath descends
-			// the group-key chain to the node carrying the sub).
-			$node = $raw_row;
-			foreach ( (array) ( $sub['gpath'] ?? array() ) as $gk ) {
-				$node = is_array( $node ) && isset( $node[ $gk ] ) ? $node[ $gk ] : null;
-			}
-			$v = is_array( $node ) && array_key_exists( $sub['key'], $node ) ? $node[ $sub['key'] ] : null;
-			$vals[ $sub['name'] ] = minn_admin_acf_value_out( $sub, $v );
-		}
 		$rows[] = array(
 			'__idx'  => $i,
-			'values' => (object) $vals,
+			'values' => (object) minn_admin_acf_row_values_out( $field['subs'], $raw_row ),
 		);
 	}
 	return $rows;
+}
+
+/**
+ * One stored row → the form's { sub name => value } map.
+ *
+ * @param array $subs    Flattened subs (incl. key/gpath).
+ * @param mixed $raw_row The stored row.
+ * @return array
+ */
+function minn_admin_acf_row_values_out( $subs, $raw_row ) {
+	$vals = array();
+	foreach ( $subs as $sub ) {
+		// Flattened group subs live nested in the row (gpath descends the
+		// group-key chain to the node carrying the sub).
+		$node = $raw_row;
+		foreach ( (array) ( $sub['gpath'] ?? array() ) as $gk ) {
+			$node = is_array( $node ) && isset( $node[ $gk ] ) ? $node[ $gk ] : null;
+		}
+		$v = is_array( $node ) && array_key_exists( $sub['key'], $node ) ? $node[ $sub['key'] ] : null;
+		$vals[ $sub['name'] ] = minn_admin_acf_value_out( $sub, $v );
+	}
+	return $vals;
+}
+
+/**
+ * Overlay a form row's edited subs onto the stored row it references. Only
+ * mapped subs are written, so values the form never rendered survive.
+ *
+ * @param array $subs Flattened subs (incl. key/gpath).
+ * @param array $vals Incoming { sub name => value }.
+ * @param array $base The stored row (empty for a new row).
+ * @return array
+ */
+function minn_admin_acf_row_overlay_in( $subs, $vals, $base ) {
+	foreach ( $subs as $sub ) {
+		if ( ! array_key_exists( $sub['name'], $vals ) ) {
+			continue;
+		}
+		$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ] );
+		if ( null === $v ) {
+			continue; // invalid input keeps the stored sub value
+		}
+		// Flattened group subs write back into their nested home, creating
+		// the group arrays on rows that never had them.
+		$ref = &$base;
+		foreach ( (array) ( $sub['gpath'] ?? array() ) as $gk ) {
+			if ( ! isset( $ref[ $gk ] ) || ! is_array( $ref[ $gk ] ) ) {
+				$ref[ $gk ] = array();
+			}
+			$ref = &$ref[ $gk ];
+		}
+		$ref[ $sub['key'] ] = $v;
+		unset( $ref );
+	}
+	return $base;
 }
 
 /**
@@ -887,27 +1048,79 @@ function minn_admin_acf_rows_in( $field, $value, $orig ) {
 		$base = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] )
 			? $orig[ (int) $row['__idx'] ]
 			: array();
-		foreach ( $field['subs'] as $sub ) {
-			if ( ! array_key_exists( $sub['name'], $vals ) ) {
-				continue;
-			}
-			$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ] );
-			if ( null === $v ) {
-				continue; // invalid input keeps the stored sub value
-			}
-			// Flattened group subs write back into their nested home,
-			// creating the group arrays on rows that never had them.
-			$ref = &$base;
-			foreach ( (array) ( $sub['gpath'] ?? array() ) as $gk ) {
-				if ( ! isset( $ref[ $gk ] ) || ! is_array( $ref[ $gk ] ) ) {
-					$ref[ $gk ] = array();
-				}
-				$ref = &$ref[ $gk ];
-			}
-			$ref[ $sub['key'] ] = $v;
-			unset( $ref );
+		$new[] = minn_admin_acf_row_overlay_in( $field['subs'], $vals, $base );
+	}
+	return $new;
+}
+
+/**
+ * Stored flexible-content sections → the flex control's
+ * [{ __idx, __layout, values }] list. Each row maps through its own layout's
+ * subs; a section whose stored layout the field no longer declares comes back
+ * flagged `__locked` with no values, so the form shows it as preserved rather
+ * than dropping it.
+ *
+ * @param array $field Mapped flex field (map_flex output incl. layoutSubs).
+ * @param mixed $val   Raw stored sections.
+ * @return array
+ */
+function minn_admin_acf_flex_out( $field, $val ) {
+	$rows = array();
+	foreach ( array_values( is_array( $val ) ? $val : array() ) as $i => $raw_row ) {
+		$raw_row = (array) $raw_row;
+		$layout  = isset( $raw_row['acf_fc_layout'] ) ? (string) $raw_row['acf_fc_layout'] : '';
+		$known   = isset( $field['layoutSubs'][ $layout ] );
+		$row     = array(
+			'__idx'    => $i,
+			'__layout' => $layout,
+			'values'   => (object) ( $known ? minn_admin_acf_row_values_out( $field['layoutSubs'][ $layout ], $raw_row ) : array() ),
+		);
+		if ( ! $known ) {
+			$row['__locked'] = true;
 		}
-		$new[] = $base;
+		$rows[] = $row;
+	}
+	return $rows;
+}
+
+/**
+ * Incoming sections → merged stored sections. The rows merge, per layout.
+ *
+ * A KEPT row's layout is the stored one: the form offers no layout switch, so
+ * an incoming mismatch is bad input rather than an edit, and re-keying a row
+ * would orphan every sub value under it. A NEW row's layout must be one the
+ * field declares — anything else is dropped rather than stored as a section
+ * ACF cannot render. Rows whose stored layout the field no longer declares
+ * pass through verbatim.
+ *
+ * @param array $field Mapped flex field.
+ * @param mixed $value Incoming [{ __idx?, __layout, values }] list.
+ * @param mixed $orig  The currently stored sections.
+ * @return array|null Null when the incoming shape is not a list.
+ */
+function minn_admin_acf_flex_in( $field, $value, $orig ) {
+	if ( ! is_array( $value ) ) {
+		return null;
+	}
+	$orig = is_array( $orig ) ? array_values( $orig ) : array();
+	$new  = array();
+	foreach ( $value as $row ) {
+		$row      = (array) $row;
+		$anchored = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] );
+		$base     = $anchored ? $orig[ (int) $row['__idx'] ] : array();
+		$layout   = $anchored
+			? (string) ( $base['acf_fc_layout'] ?? '' )
+			: ( isset( $row['__layout'] ) ? (string) $row['__layout'] : '' );
+		if ( ! isset( $field['layoutSubs'][ $layout ] ) ) {
+			if ( $anchored ) {
+				$new[] = $base;
+			}
+			continue;
+		}
+		$vals                  = isset( $row['values'] ) ? (array) $row['values'] : array();
+		$base                  = minn_admin_acf_row_overlay_in( $field['layoutSubs'][ $layout ], $vals, $base );
+		$base['acf_fc_layout'] = $layout;
+		$new[]                 = $base;
 	}
 	return $new;
 }
@@ -946,9 +1159,22 @@ function minn_admin_acf_fields_payload( $post_id, $post_type ) {
 				$rep = minn_admin_acf_map_repeater( $f );
 				if ( $rep ) {
 					$by_key[ $rep['key'] ] = $rep['name'];
-					unset( $rep['subs'] );
-					$rep['_cond'] = $cond;
-					$mapped[]     = $rep;
+					$rep                   = minn_admin_acf_public_field( $rep );
+					$rep['_cond']          = $cond;
+					$mapped[]              = $rep;
+				} else {
+					$locked++;
+				}
+				continue;
+			}
+			// Flexible content (Pro): the `flex` control, sibling of `rows`.
+			if ( 'flexible_content' === ( $f['type'] ?? '' ) ) {
+				$fx = minn_admin_acf_map_flex( $f );
+				if ( $fx ) {
+					$by_key[ $fx['key'] ] = $fx['name'];
+					$fx                   = minn_admin_acf_public_field( $fx );
+					$fx['_cond']          = $cond;
+					$mapped[]             = $fx;
 				} else {
 					$locked++;
 				}
@@ -1039,6 +1265,13 @@ function minn_admin_acf_simple_fields_for_post( $post_id ) {
 				}
 				continue;
 			}
+			if ( 'flexible_content' === ( $f['type'] ?? '' ) ) {
+				$fx = minn_admin_acf_map_flex( $f );
+				if ( $fx ) {
+					$out[ $fx['name'] ] = $fx;
+				}
+				continue;
+			}
 			$simple = minn_admin_acf_map_field( $f );
 			if ( $simple ) {
 				$out[ $simple['name'] ] = $simple;
@@ -1061,10 +1294,14 @@ function minn_admin_acf_simple_fields_for_post( $post_id ) {
 function minn_admin_acf_read_values( $post_id ) {
 	$out = array();
 	foreach ( minn_admin_acf_simple_fields_for_post( $post_id ) as $name => $field ) {
-		$val = get_field( $field['key'], $post_id, false );
-		$out[ $name ] = 'rows' === $field['type']
-			? minn_admin_acf_rows_out( $field, $val )
-			: minn_admin_acf_value_out( $field, $val );
+		$val = minn_admin_acf_raw_value( $field, $post_id );
+		if ( 'rows' === $field['type'] ) {
+			$out[ $name ] = minn_admin_acf_rows_out( $field, $val );
+		} elseif ( 'flex' === $field['type'] ) {
+			$out[ $name ] = minn_admin_acf_flex_out( $field, $val );
+		} else {
+			$out[ $name ] = minn_admin_acf_value_out( $field, $val );
+		}
 	}
 	return $out;
 }
@@ -1089,14 +1326,16 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 		}
 		$field = $allowed[ $name ];
 		if ( 'rows' === $field['type'] ) {
-			$value = minn_admin_acf_rows_in( $field, $value, get_field( $field['key'], $post_id, false ) );
+			$value = minn_admin_acf_rows_in( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
+		} elseif ( 'flex' === $field['type'] ) {
+			$value = minn_admin_acf_flex_in( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
 		} else {
 			$value = minn_admin_acf_value_in( $field, $value );
 		}
 		if ( null === $value ) {
 			continue; // invalid input never clobbers a stored value
 		}
-		update_field( $field['key'], $value, $post_id );
+		minn_admin_acf_raw_update( $field, $value, $post_id );
 	}
 }
 
@@ -1563,9 +1802,14 @@ function minn_admin_acf_options_tabs( $page ) {
 							);
 							continue;
 						}
-						$m = 'repeater' === ( $sub['type'] ?? '' )
-							? minn_admin_acf_map_repeater( $sub )
-							: minn_admin_acf_map_field( $sub );
+						$stype = $sub['type'] ?? '';
+						if ( 'repeater' === $stype ) {
+							$m = minn_admin_acf_map_repeater( $sub );
+						} elseif ( 'flexible_content' === $stype ) {
+							$m = minn_admin_acf_map_flex( $sub );
+						} else {
+							$m = minn_admin_acf_map_field( $sub );
+						}
 						if ( ! $m ) {
 							$lock( $prefix . ( $sub['label'] ?? '' ) );
 							continue;
@@ -1581,8 +1825,8 @@ function minn_admin_acf_options_tabs( $page ) {
 				$flatten( $f['sub_fields'] ?? array(), array( $f['key'] ), '', $cond );
 				continue;
 			}
-			if ( 'repeater' === $type ) {
-				$rep = minn_admin_acf_map_repeater( $f );
+			if ( 'repeater' === $type || 'flexible_content' === $type ) {
+				$rep = 'repeater' === $type ? minn_admin_acf_map_repeater( $f ) : minn_admin_acf_map_flex( $f );
 				if ( ! $rep ) {
 					$lock( $f['label'] ?? '' );
 					continue;
@@ -1706,7 +1950,7 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 	$parent_raw = array(); // top group key => raw array (fetched once per parent)
 	$read_raw   = function ( $f ) use ( $post_id, &$parent_raw ) {
 		if ( empty( $f['_parent'] ) ) {
-			return get_field( $f['key'], $post_id, false );
+			return minn_admin_acf_raw_value( $f, $post_id );
 		}
 		$gk = $f['_parent'];
 		if ( ! array_key_exists( $gk, $parent_raw ) ) {
@@ -1729,11 +1973,14 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'link', 'multicheck', 'date', 'datetime', 'time', 'suggest', 'relation', 'rows', 'color_picker' ), true ) ? $f['type'] : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'link', 'multicheck', 'date', 'datetime', 'time', 'suggest', 'relation', 'rows', 'flex', 'color_picker' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
 		if ( 'rows' === $sf['type'] ) {
 			$sf['subfields'] = $f['subfields'];
 			$sf['subLocked'] = $f['subLocked'];
+		}
+		if ( 'flex' === $sf['type'] ) {
+			$sf['layouts'] = $f['layouts'];
 		}
 		if ( ! empty( $f['route'] ) ) {
 			$sf['route'] = $f['route'];
@@ -1758,9 +2005,13 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 		$sections[ $sec_key ]['fields'][] = $sf;
 
 		$v = $read_raw( $f );
-		$values[ $f['key'] ] = 'rows' === $f['type']
-			? minn_admin_acf_rows_out( $f, $v )
-			: minn_admin_acf_value_out( $f, $v );
+		if ( 'rows' === $f['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_rows_out( $f, $v );
+		} elseif ( 'flex' === $f['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_flex_out( $f, $v );
+		} else {
+			$values[ $f['key'] ] = minn_admin_acf_value_out( $f, $v );
+		}
 	}
 	$groups = array_values( $sections );
 	if ( ! $groups ) {
@@ -1807,7 +2058,7 @@ function minn_admin_acf_options_save( $page, $values ) {
 	// for the __idx merge).
 	$stored_at = function ( $f ) use ( $parent_stored, $post_id ) {
 		if ( empty( $f['_parent'] ) ) {
-			return get_field( $f['key'], $post_id, false );
+			return minn_admin_acf_raw_value( $f, $post_id );
 		}
 		$node = $parent_stored( $f['_parent'] );
 		foreach ( array_slice( (array) ( $f['_path'] ?? array( $f['_parent'] ) ), 1 ) as $step ) {
@@ -1822,6 +2073,8 @@ function minn_admin_acf_options_save( $page, $values ) {
 		$f = $byKey[ $key ];
 		if ( 'rows' === $f['type'] ) {
 			$v = minn_admin_acf_rows_in( $f, $v, $stored_at( $f ) );
+		} elseif ( 'flex' === $f['type'] ) {
+			$v = minn_admin_acf_flex_in( $f, $v, $stored_at( $f ) );
 		} else {
 			$v = minn_admin_acf_value_in( $f, $v );
 		}
@@ -1835,7 +2088,7 @@ function minn_admin_acf_options_save( $page, $values ) {
 				'value' => $v,
 			);
 		} else {
-			update_field( $key, $v, $post_id );
+			minn_admin_acf_raw_update( $f, $v, $post_id );
 		}
 	}
 	// One write per top-level group: the stored array is the base, each
