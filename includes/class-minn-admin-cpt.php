@@ -248,6 +248,37 @@ class Minn_Admin_CPT {
 
 	/* ===== Handlers ===== */
 
+	/**
+	 * Post types the site owner created that WordPress does not expose over
+	 * the REST API — so Minn (and the block editor) cannot list their content
+	 * at all, while wp-admin shows them normally.
+	 *
+	 * Only types created through a UI the owner drives count. A plugin that
+	 * registers a REST-less type for its own internals is not a problem to
+	 * report; a Case Studies type the owner made in CPT UI and cannot find in
+	 * Content is. CPT UI is the common way in: its "Show in REST API" select
+	 * opens with nothing chosen and registers an untouched value as false,
+	 * while its own help text says the default is true.
+	 *
+	 * @return array[] { slug, label }
+	 */
+	public static function hidden_from_rest() {
+		$out = array();
+		foreach ( get_post_types( array( 'show_ui' => true ), 'objects' ) as $pt ) {
+			if ( ! empty( $pt->show_in_rest ) ) {
+				continue;
+			}
+			if ( ! in_array( self::source_of( $pt->name ), array( 'acf', 'cptui', 'minn' ), true ) ) {
+				continue;
+			}
+			$out[] = array(
+				'slug'  => $pt->name,
+				'label' => Minn_Admin::plain_text( $pt->labels->name ),
+			);
+		}
+		return $out;
+	}
+
 	public static function list_types() {
 		$out = array();
 		foreach ( get_post_types( array(), 'objects' ) as $pt ) {

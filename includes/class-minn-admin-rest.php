@@ -6569,6 +6569,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			),
 		);
 
+		// Post types the owner created that REST will not serve: present in
+		// wp-admin, absent from Content, with nothing on screen to say why.
+		$hidden_types = class_exists( 'Minn_Admin_CPT' ) ? Minn_Admin_CPT::hidden_from_rest() : array();
+
 		// Cron: overdue events mean scheduled posts and emails silently stall.
 		$cron_events  = 0;
 		$cron_overdue = 0;
@@ -6720,6 +6724,31 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 					? sprintf( __( '%1$s across %2$s options — healthy', 'minn-admin' ), $autoload['size_human'], number_format_i18n( $autoload['count'] ) )
 					/* translators: 1: total autoloaded size (e.g. "3.1 MB"), 2: how many autoloaded options. */
 					: sprintf( __( '%1$s across %2$s options loads on every request — see the top offenders in the Database card', 'minn-admin' ), $autoload['size_human'], number_format_i18n( $autoload['count'] ) ),
+			),
+			array(
+				'key'    => 'cpt_rest',
+				'label'  => __( 'Post types in Minn', 'minn-admin' ),
+				// A type the owner created that REST will not serve is
+				// invisible in Content with nothing to explain why — the
+				// failure looks like Minn losing it. Name the types, because
+				// "1 post type is hidden" sends people hunting.
+				'status' => $hidden_types ? 'warn' : 'pass',
+				'goto'   => $hidden_types ? 'posttypes' : '',
+				'detail' => $hidden_types
+					/* translators: 1: how many post types are hidden, 2: their names, comma-separated. */
+					? sprintf(
+						_n(
+							'%2$s is not exposed over the REST API, so it cannot appear in Content — turn on Show in REST API',
+							'%1$s post types are not exposed over the REST API, so they cannot appear in Content (%2$s) — turn on Show in REST API',
+							count( $hidden_types ),
+							'minn-admin'
+						),
+						number_format_i18n( count( $hidden_types ) ),
+						implode( ', ', array_map( function ( $t ) {
+							return $t['label'];
+						}, array_slice( $hidden_types, 0, 4 ) ) )
+					)
+					: __( 'Every post type you created is available to Minn', 'minn-admin' ),
 			),
 			array(
 				'key'    => 'cron',

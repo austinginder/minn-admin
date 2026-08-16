@@ -18085,7 +18085,9 @@
 					<div class="minn-row-meta"><span class="minn-permalink">${ esc( t.slug ) }</span></div>
 					<div><span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span></div>
 					<div class="minn-row-meta">${ t.count }</div>
-					<div class="minn-row-meta" title="${ esc( t.show_in_rest ? __( 'Available over the REST API (editable in Minn)' ) : __( 'Not exposed over REST — Minn can’t list or edit its content' ) ) }">${ t.show_in_rest ? '✓' : '—' }</div>
+					<div class="minn-row-meta" title="${ esc( t.show_in_rest ? __( 'Available over the REST API (editable in Minn)' ) : __( 'Not exposed over REST — Minn can’t list or edit its content' ) ) }">${ t.show_in_rest
+						? '✓'
+						: `<span class="minn-status draft">${ esc( __( 'Hidden from Minn' ) ) }</span>` }</div>
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) }
 			</div>`;
@@ -18504,6 +18506,8 @@
 					go( 'extensions' ); // the core-update banner + Update all
 				} else if ( 'backups' === k ) {
 					go( preferredSurfaceId( 'backups' ) || 'updraftplus' );
+				} else if ( 'posttypes' === k ) {
+					go( 'posttypes' );
 				} else if ( 'visibility' === k ) {
 					state.settingsSection = 'Visibility';
 					go( 'settings' );
