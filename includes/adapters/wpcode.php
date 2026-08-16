@@ -107,6 +107,35 @@ function minn_admin_wpcode_clean_code( $code_type, $code ) {
 }
 
 /**
+ * Refuse code WPCode's own form would refuse.
+ *
+ * WPCode's submit listener runs WPCode_Snippet_Execute::is_code_not_allowed()
+ * over the submitted code and wp_die()s on a match ("Restricted Code
+ * Detected"). That check lives in the FORM handler, not in
+ * WPCode_Snippet::save(), so an adapter writing through the model gets the
+ * activation and capability backstops save() carries but not this one. Minn
+ * calls the vendor's own static so the rule stays theirs; without the class
+ * loaded there is nothing to reproduce and the write proceeds.
+ *
+ * @param string $code Raw code about to be stored.
+ * @return WP_Error|true
+ */
+function minn_admin_wpcode_guard_code( $code ) {
+	if ( ! class_exists( 'WPCode_Snippet_Execute' )
+		|| ! method_exists( 'WPCode_Snippet_Execute', 'is_code_not_allowed' ) ) {
+		return true;
+	}
+	if ( WPCode_Snippet_Execute::is_code_not_allowed( (string) $code ) ) {
+		return new WP_Error(
+			'forbidden',
+			__( 'WPCode blocks this code because it contains patterns it treats as unsafe.', 'minn-admin' ),
+			array( 'status' => 403 )
+		);
+	}
+	return true;
+}
+
+/**
  * Types that cannot be repaired by filtering, only refused.
  *
  * kses over a JavaScript body is meaningless, so html/js/css/scss are an
@@ -129,6 +158,12 @@ function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0, $writes_code
 	// minn_admin_wpcode_clean_code(). None of them answers to
 	// code_edits_allowed() below: they are not file editing, they are code
 	// going into the page, and the capability for that is unfiltered_html.
+	//
+	// This is deliberately STRICTER than WPCode 2.3.x, whose own save
+	// listener gates only on wpcode_edit_snippets. Authoring rights there
+	// carry no markup-trust requirement at all, so a principal WordPress
+	// withholds unfiltered_html from can still write a <script> through the
+	// vendor's form. Minn does not widen that hole through its own routes.
 	//
 	// Only when the request actually authors or activates. Renaming,
 	// relocating, deleting or DEACTIVATING an existing snippet stays open:
@@ -410,6 +445,10 @@ add_action( 'rest_api_init', function () {
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
 					}
+					$guard_code = minn_admin_wpcode_guard_code( (string) ( $request['code'] ?? '' ) );
+					if ( is_wp_error( $guard_code ) ) {
+						return $guard_code;
+					}
 					// load_from_array (via the array constructor) can set private
 					// fields like priority/note that are not assignable from outside.
 					$create_type = sanitize_key( (string) ( $request['code_type'] ?? 'php' ) );
@@ -463,10 +502,23 @@ add_action( 'rest_api_init', function () {
 					// carries a new code_type that type must be allowed too —
 					// otherwise a markup-only user retypes an HTML snippet to
 					// php and authors executable code.
+					// Publishing a snippet runs its code, so switching an inactive
+					// one on counts as authoring here exactly as it does on the
+					// dedicated /active route. Deriving this from the presence of
+					// `code` alone left a hole: the editor sends `active` on every
+					// save, so a body of just {"active": true} reached the write
+					// below with the guard told it was not a write, and published
+					// a snippet the same caller was refused permission to edit.
+					//
+					// Only a change counts. Re-sending active:true for a snippet
+					// that is already on is what an ordinary rename does, and
+					// renaming stays open.
+					$activating = ! empty( $request['active'] ) && ! $snippet->is_active();
+
 					$guard = minn_admin_wpcode_guard_type(
 						(string) $snippet->get_code_type(),
 						(int) $request['id'],
-						null !== $request['code']
+						null !== $request['code'] || $activating
 					);
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
@@ -484,6 +536,12 @@ add_action( 'rest_api_init', function () {
 						$guard_new = minn_admin_wpcode_guard_type( $new_type, (int) $request['id'] );
 						if ( is_wp_error( $guard_new ) ) {
 							return $guard_new;
+						}
+					}
+					if ( null !== $request['code'] ) {
+						$guard_code = minn_admin_wpcode_guard_code( (string) $request['code'] );
+						if ( is_wp_error( $guard_code ) ) {
+							return $guard_code;
 						}
 					}
 					// Hydrate getters so load_from_array merges onto real state.
