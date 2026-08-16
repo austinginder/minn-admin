@@ -55,16 +55,29 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'field re-seeds with Deutsch after save', /Deutsch/.test( seeded ), seeded );
 
 		/* ===== Back to the default through the same flow ===== */
+		// Pick by VALUE, never by typing the English label: the page is in
+		// German by now (that is what the previous step saved), so the option
+		// reads "Englisch (Vereinigte Staaten)" and typing English matches
+		// nothing. _acSet is the picker's own commit path.
 		await page.click( '[data-key="minn_language"]' );
-		await page.evaluate( () => { document.querySelector( '[data-key="minn_language"]' ).value = ''; } );
-		await page.type( '[data-key="minn_language"]', 'English (United' );
-		await page.waitForSelector( '.minn-ac-item[data-acv=""]', { timeout: 10000 } );
-		await page.click( '.minn-ac-item[data-acv=""]' );
+		const restored = await page.evaluate( () => {
+			const input = document.querySelector( '[data-key="minn_language"]' );
+			if ( ! input.parentElement._acSet ) return false;
+			input.parentElement._acSet( '' );
+			return input.dataset.acValue === '';
+		} );
+		t.check( 'the default language is selectable by value in any locale', restored );
 		await page.click( '#minn-save-settings' );
-		await page.waitForFunction( () =>
-			[ ...document.querySelectorAll( '.minn-toast' ) ].some( ( x ) => /saved/i.test( x.textContent ) ),
-		null, { timeout: 20000 } );
-		t.check( 'saving English restores the default', ( await siteLocale() ) === '', await siteLocale() );
+		// Wait on the STATE, not on a toast: the toast is translated, so
+		// matching /saved/ hangs for twenty seconds in the German UI this
+		// very test just produced.
+		let back = null;
+		for ( let i = 0; i < 40; i++ ) {
+			back = await siteLocale();
+			if ( back === '' ) break;
+			await page.waitForTimeout( 500 );
+		}
+		t.check( 'saving English restores the default', back === '', String( back ) );
 	} finally {
 		await resetLocale().catch( () => {} );
 	}
