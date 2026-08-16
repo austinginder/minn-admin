@@ -38158,6 +38158,18 @@
 		return esc( t );
 	}
 
+	function revFieldsRowsHtml( fieldGroups ) {
+		if ( ! fieldGroups.length ) return '';
+		return fieldGroups.map( ( g, gi ) => `
+			${ g.label || gi === 0 ? `<div class="minn-diff-row minn-diff-sec"><div>${ esc( g.label || __( 'Custom fields' ) ) }</div></div>` : '' }
+			${ g.rows.map( ( r ) => `
+				<div class="minn-diff-row minn-diff-fieldname"><div>${ esc( r.label ) }</div></div>
+				<div class="minn-diff-row field">
+					<div class="minn-diff-cell${ revFieldEmpty( r.was ) ? ' empty' : '' }">${ revFieldChip( r.was ) }</div>
+					<div class="minn-diff-cell${ revFieldEmpty( r.now ) ? ' empty' : '' }">${ revFieldChip( r.now ) }</div>
+				</div>` ).join( '' ) }` ).join( '' );
+	}
+
 	function renderRevisionModal( m ) {
 		const rev = m.rev;
 		let bodyHtml = '';
@@ -38186,24 +38198,12 @@
 			const summary = rows
 				? ( parts.length ? parts.join( ' · ' ) : __( 'Identical to the current content' ) )
 				: __( 'Post too large to diff — showing the revision as saved' );
-			const fieldsHtml = fieldGroups.length ? `
-				<div class="minn-rev-fields">
-					<div class="minn-rev-fields-head">${ esc( fieldGroups[ 0 ].label || __( 'Custom fields' ) ) }</div>
-					<div class="minn-rev-fields-cols">
-						<div>${ esc( __( 'This revision' ) ) }</div>
-						<div>${ esc( __( 'Current' ) ) }</div>
-					</div>
-					${ fieldGroups.map( ( g, gi ) => `
-						${ gi > 0 && g.label ? `<div class="minn-rev-fields-sub">${ esc( g.label ) }</div>` : '' }
-						${ g.rows.map( ( r ) => `
-							<div class="minn-rev-field">
-								<div class="minn-rev-field-label">${ esc( r.label ) }</div>
-								<div class="minn-rev-field-vals">
-									<div class="minn-rev-field-was${ revFieldEmpty( r.was ) ? ' empty' : '' }">${ revFieldChip( r.was ) }</div>
-									<div class="minn-rev-field-now${ revFieldEmpty( r.now ) ? ' empty' : '' }">${ revFieldChip( r.now ) }</div>
-								</div>
-							</div>` ).join( '' ) }` ).join( '' ) }
-				</div>` : '';
+			const fieldsInner = revFieldsRowsHtml( fieldGroups );
+			const contentInner = rows ? rows.map( ( r ) => `
+					<div class="minn-diff-row ${ r.kind }">
+						<div class="minn-diff-cell${ r.left ? '' : ' empty' }">${ r.left }</div>
+						<div class="minn-diff-cell${ r.right ? '' : ' empty' }">${ r.right }</div>
+					</div>` ).join( '' ) : '';
 			bodyHtml = `
 				<div class="minn-modal-meta">
 					${ titleDiff ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Title' ) ) }</span><span class="minn-diff-inline">${ titleDiff.left } → ${ titleDiff.right }</span></div>`
@@ -38211,16 +38211,13 @@
 					<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Saved' ) ) }</span><span>${ timeAgo( rev.modified ) }</span></div>
 					<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Changes' ) ) }</span><span>${ esc( summary ) }</span></div>
 				</div>
-				${ fieldsHtml }
-				${ rows ? `
+				${ rows || fieldsInner ? `
 				<div class="minn-diff" id="minn-diff">
 					<div class="minn-diff-headrow"><div>${ esc( __( 'This revision' ) ) }</div><div>${ esc( __( 'Current' ) ) }</div></div>
-					${ rows.map( ( r ) => `
-					<div class="minn-diff-row ${ r.kind }">
-						<div class="minn-diff-cell${ r.left ? '' : ' empty' }">${ r.left }</div>
-						<div class="minn-diff-cell${ r.right ? '' : ' empty' }">${ r.right }</div>
-					</div>` ).join( '' ) }
-				</div>` : '<div class="minn-revision-preview" id="minn-revision-preview"></div>' }
+					${ fieldsInner }
+					${ contentInner }
+				</div>` : '' }
+				${ rows ? '' : '<div class="minn-revision-preview" id="minn-revision-preview"></div>' }
 				<div class="minn-modal-actions">
 					<button class="minn-btn-primary" id="minn-restore-rev">${ esc( __( 'Restore this revision' ) ) }</button>
 				</div>`;
