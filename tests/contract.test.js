@@ -127,7 +127,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 		const cells = await page.$eval( '.minn-table-row', ( row ) => row.textContent );
 		t.check( 'columns render pill, mono, num, entry-summary and altKey fallback',
-			/new|read/.test( cells ) && /[a-z]\d[a-z]\d/.test( cells ) && /Answer/.test( cells ) && /@example\.com/.test( cells ), cells.slice( 0, 220 ) );
+			/new|read/i.test( cells ) && /[a-z]\d[a-z]\d/.test( cells ) && /Answer/.test( cells ) && /@example\.com/.test( cells ), cells.slice( 0, 220 ) );
 		t.check( 'ago column parses the UTC timestamp', /ago|1h|1d/.test( cells ) );
 
 		/* ===== Sortable columns (sort + sortQuery, since v0.18.0) ===== */

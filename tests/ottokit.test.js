@@ -103,9 +103,15 @@ const wp = ( args ) => execSync(
 		const sections = ( view.body && view.body.sections ) || [];
 		t.check( 'detail renders sections', view.status === 200 && sections.length >= 2, `${ view.status } / ${ sections.length }` );
 		const labels = sections.flatMap( ( s ) => ( s.rows || [] ).map( ( r ) => r.label ) );
-		t.check( 'detail names the endpoint, status and error',
-			labels.includes( 'Endpoint' ) && labels.includes( 'Status' ) && labels.includes( 'Error' ),
-			labels.join( ',' ) );
+		t.check( 'detail names the endpoint and status',
+			labels.includes( 'Endpoint' ) && labels.includes( 'Status' ), labels.join( ',' ) );
+		// The Error row is CONDITIONAL on the request having recorded
+		// error_info, and this fixture's failed rows record none (status
+		// failed, response_code 0, error_info empty), so there is nothing
+		// here to assert it against — the old check demanded the label from a
+		// SUCCESSFUL request, which asked the detail to invent a row. Seeding
+		// a request with real error text would make the conditional row
+		// testable; until then it stays honestly uncovered.
 		const payload = sections.find( ( s ) => s.title === 'Payload' );
 		t.check( 'payload is decoded and shown as code',
 			!! payload && payload.rows[ 0 ].type === 'code' && /wordpress_webhook_uuid/.test( payload.rows[ 0 ].value ),
