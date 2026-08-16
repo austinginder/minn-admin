@@ -99,6 +99,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'plugin info has icon or installs',
 			!!( info.body.icon || info.body.installs > 0 ) );
 
+		const seoSlugs = await page.$$eval( '.minn-pi-chip', ( els ) =>
+			els.map( ( e ) => e.getAttribute( 'data-slug' ) ).filter( Boolean ) );
+		t.check( 'SEO catalog includes Squirrly', seoSlugs.includes( 'squirrly-seo' ) );
+		t.check( 'SEO catalog includes SureRank', seoSlugs.includes( 'surerank' ) );
+
 		const yoastChip = await page.$( '.minn-pi-chip[data-slug="wordpress-seo"]' );
 		if ( yoastChip ) {
 			await yoastChip.hover();

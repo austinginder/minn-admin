@@ -36968,7 +36968,9 @@
 				{ name: __( 'Rank Math' ), slug: 'seo-by-rank-math' },
 				{ name: __( 'All in One SEO' ), slug: 'all-in-one-seo-pack' },
 				{ name: 'SEOPress', slug: 'wp-seopress' },
+				{ name: 'SureRank', slug: 'surerank' },
 				{ name: 'SiteSEO', slug: 'siteseo' },
+				{ name: __( 'Squirrly SEO' ), slug: 'squirrly-seo' },
 			],
 		},
 		{
