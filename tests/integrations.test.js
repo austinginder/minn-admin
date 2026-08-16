@@ -65,7 +65,8 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'unknown top-level key flagged', problems.some( ( p ) => p.includes( 'unknown key "ikon"' ) ), problems.join( ' | ' ) );
 		t.check( 'missing route flagged', problems.some( ( p ) => p.includes( 'missing route' ) ) );
 		t.check( 'column without key flagged', problems.some( ( p ) => p.includes( 'column without a key' ) ) );
-		t.check( 'problem count shown in the card head', /\d+ problems?/.test( text ) );
+		// Head label since the v0.30.0 i18n pass: "N Needs attention".
+		t.check( 'problem count shown in the card head', /\d+ Needs attention/.test( text ) );
 
 		/* ===== Copy report carries the section ===== */
 		await page.click( '#minn-sys-copy' );
