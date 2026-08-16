@@ -1092,6 +1092,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-field-image { display: flex; flex-direction: column; gap: 8px; }
 .minn-field-multicheck { display: flex; flex-direction: column; gap: 6px; }
+.minn-field-linkval { display: flex; flex-direction: column; gap: 6px; }
 .minn-field-file { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .minn-field-file-name { font-size: 13px; word-break: break-all; }
 /* Relation control: ordered chips (drag to reorder, × removes) over an

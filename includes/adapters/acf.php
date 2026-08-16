@@ -35,7 +35,9 @@ defined( 'ABSPATH' ) || exit;
 // user) map onto ONE picker pair: `suggest` (single, async search) and
 // `relation` (ordered multi with chips), both searching through the
 // /acf/relation route which honors each field's own constraints.
-const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'button_group', 'checkbox', 'true_false', 'color_picker', 'image', 'gallery', 'file', 'wysiwyg', 'date_picker', 'date_time_picker', 'time_picker', 'post_object', 'relationship', 'page_link', 'taxonomy', 'user' );
+// The link type stores { title, url, target } and rides the engine's
+// three-part link control (URL, text, new-tab).
+const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'button_group', 'checkbox', 'true_false', 'color_picker', 'image', 'gallery', 'file', 'link', 'wysiwyg', 'date_picker', 'date_time_picker', 'time_picker', 'post_object', 'relationship', 'page_link', 'taxonomy', 'user' );
 
 /** Layout-only ACF field types: chrome, not data — never mapped, never counted as locked. */
 const MINN_ADMIN_ACF_CHROME_TYPES = array( 'tab', 'message', 'accordion' );
@@ -154,6 +156,55 @@ function minn_admin_acf_file_out( $val ) {
 		'id'   => $id,
 		'url'  => $url,
 		'name' => $name ? $name : '#' . $id,
+	);
+}
+
+/**
+ * Stored ACF link value → { title, url, target } for the link control
+ * ('' when unset). target normalizes to '_blank' or ''.
+ *
+ * @param mixed $val Raw stored value.
+ * @return array|string
+ */
+function minn_admin_acf_link_out( $val ) {
+	if ( ! is_array( $val ) ) {
+		return '';
+	}
+	return array(
+		'title'  => isset( $val['title'] ) && is_scalar( $val['title'] ) ? (string) $val['title'] : '',
+		'url'    => isset( $val['url'] ) && is_scalar( $val['url'] ) ? (string) $val['url'] : '',
+		'target' => empty( $val['target'] ) ? '' : '_blank',
+	);
+}
+
+/**
+ * Incoming link value → ACF's stored { title, url, target } array.
+ * '' clears; null = invalid (script-running URLs refuse the whole write).
+ *
+ * @param mixed $value Incoming value.
+ * @return array|string|null
+ */
+function minn_admin_acf_link_in( $value ) {
+	if ( null === $value || false === $value || '' === $value ) {
+		return '';
+	}
+	if ( ! is_array( $value ) && ! is_object( $value ) ) {
+		return null;
+	}
+	$value = (array) $value;
+	$url   = isset( $value['url'] ) && is_scalar( $value['url'] ) ? trim( (string) $value['url'] ) : '';
+	$title = isset( $value['title'] ) && is_scalar( $value['title'] ) ? (string) $value['title'] : '';
+	if ( preg_match( '/^(javascript|data|vbscript):/i', $url ) ) {
+		return null;
+	}
+	if ( '' === $url && '' === $title ) {
+		return ''; // both emptied = cleared
+	}
+	$target = ! empty( $value['target'] ) && 'false' !== $value['target'] ? '_blank' : '';
+	return array(
+		'title'  => $title,
+		'url'    => $url,
+		'target' => $target,
 	);
 }
 
@@ -681,6 +732,152 @@ function minn_admin_acf_eval_rule( $rule, $get_value ) {
 }
 
 /**
+ * One mapped field's stored value → the engine value shape. Shared by the
+ * panel read path, repeater rows, and the options engine — the per-type
+ * vocabulary lives HERE, once.
+ *
+ * @param array $f Mapped field ({ type, key, choices… }).
+ * @param mixed $v Raw stored value.
+ * @return mixed
+ */
+function minn_admin_acf_value_out( $f, $v ) {
+	switch ( $f['type'] ) {
+		case 'true_false':
+			return ! empty( $v );
+		case 'image':
+			return minn_admin_acf_image_out( $v );
+		case 'file':
+			return minn_admin_acf_file_out( $v );
+		case 'gallery':
+			return minn_admin_acf_gallery_out( $v );
+		case 'link':
+			return minn_admin_acf_link_out( $v );
+		case 'multicheck':
+			return minn_admin_acf_choices_out( $v );
+		case 'date':
+			return minn_admin_acf_date_out( $v );
+		case 'datetime':
+			return minn_admin_acf_datetime_out( $v );
+		case 'time':
+			return minn_admin_acf_time_out( $v );
+		case 'suggest':
+			return minn_admin_acf_suggest_out( $f['key'], $v );
+		case 'relation':
+			return minn_admin_acf_relation_list_out( $f['key'], $v );
+	}
+	if ( is_array( $v ) ) {
+		return ''; // never leak structure through a scalar field
+	}
+	return null === $v ? '' : $v;
+}
+
+/**
+ * One mapped field's incoming value → ACF's stored shape. Null means
+ * invalid — callers skip the write so bad input never clobbers a stored
+ * value. The kses trust boundary for wysiwyg lives here.
+ *
+ * @param array $f     Mapped field.
+ * @param mixed $value Incoming value.
+ * @return mixed|null
+ */
+function minn_admin_acf_value_in( $f, $value ) {
+	switch ( $f['type'] ) {
+		case 'true_false':
+			return ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
+		case 'image':
+		case 'file':
+			return minn_admin_acf_image_in( $value );
+		case 'gallery':
+			return minn_admin_acf_gallery_in( $value );
+		case 'link':
+			return minn_admin_acf_link_in( $value );
+		case 'multicheck':
+			return minn_admin_acf_choices_in( $value, $f );
+		case 'date':
+			return minn_admin_acf_date_in( $value );
+		case 'datetime':
+			return minn_admin_acf_datetime_in( $value );
+		case 'time':
+			return minn_admin_acf_time_in( $value );
+		case 'suggest':
+			return minn_admin_acf_suggest_in( $f['key'], $value );
+		case 'relation':
+			return minn_admin_acf_relation_in( $f['key'], $value );
+		case 'wysiwyg':
+			$value = is_scalar( $value ) ? (string) $value : '';
+			return current_user_can( 'unfiltered_html' ) ? $value : wp_kses_post( $value );
+	}
+	if ( null === $value || false === $value ) {
+		return ''; // clearing stores '' — ACF's own form save does the same
+	}
+	return is_scalar( $value ) ? $value : null;
+}
+
+/**
+ * Stored repeater rows → the rows control's [{ __idx, values }] list.
+ * __idx is the row's position in the stored data, the write merge's anchor;
+ * raw rows key by subfield KEY, the client speaks names.
+ *
+ * @param array $field Mapped repeater (map_repeater output incl. subs).
+ * @param mixed $val   Raw stored rows.
+ * @return array
+ */
+function minn_admin_acf_rows_out( $field, $val ) {
+	$rows = array();
+	foreach ( array_values( is_array( $val ) ? $val : array() ) as $i => $raw_row ) {
+		$vals = array();
+		foreach ( $field['subs'] as $sub ) {
+			$v = is_array( $raw_row ) && array_key_exists( $sub['key'], $raw_row ) ? $raw_row[ $sub['key'] ] : null;
+			$vals[ $sub['name'] ] = minn_admin_acf_value_out( $sub, $v );
+		}
+		$rows[] = array(
+			'__idx'  => $i,
+			'values' => (object) $vals,
+		);
+	}
+	return $rows;
+}
+
+/**
+ * Incoming rows → merged stored rows. Each kept row overlays ONLY its
+ * mapped subs onto the original stored row it references (__idx), so
+ * complex sub values the form never rendered survive edits, reorders and
+ * deletions. Rows without __idx are new; omission deletes; the incoming
+ * order is the new order.
+ *
+ * @param array $field Mapped repeater.
+ * @param mixed $value Incoming [{ __idx?, values }] list.
+ * @param mixed $orig  The currently stored rows.
+ * @return array|null Null when the incoming shape is not a list.
+ */
+function minn_admin_acf_rows_in( $field, $value, $orig ) {
+	if ( ! is_array( $value ) ) {
+		return null;
+	}
+	$orig = is_array( $orig ) ? array_values( $orig ) : array();
+	$new  = array();
+	foreach ( $value as $row ) {
+		$row  = (array) $row;
+		$vals = isset( $row['values'] ) ? (array) $row['values'] : array();
+		$base = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] )
+			? $orig[ (int) $row['__idx'] ]
+			: array();
+		foreach ( $field['subs'] as $sub ) {
+			if ( ! array_key_exists( $sub['name'], $vals ) ) {
+				continue;
+			}
+			$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ] );
+			if ( null === $v ) {
+				continue; // invalid input keeps the stored sub value
+			}
+			$base[ $sub['key'] ] = $v;
+		}
+		$new[] = $base;
+	}
+	return $new;
+}
+
+/**
  * Build the fieldsRoute response for a post.
  *
  * Conditional logic: when EVERY controlling field is itself rendered in the
@@ -830,68 +1027,9 @@ function minn_admin_acf_read_values( $post_id ) {
 	$out = array();
 	foreach ( minn_admin_acf_simple_fields_for_post( $post_id ) as $name => $field ) {
 		$val = get_field( $field['key'], $post_id, false );
-		if ( 'true_false' === $field['type'] ) {
-			$out[ $name ] = ! empty( $val );
-		} elseif ( 'image' === $field['type'] ) {
-			// The form engine's image control speaks { id, url }.
-			$out[ $name ] = minn_admin_acf_image_out( $val );
-		} elseif ( 'gallery' === $field['type'] ) {
-			// The gallery control speaks an ordered [{ id, url }] list.
-			$out[ $name ] = minn_admin_acf_gallery_out( $val );
-		} elseif ( 'file' === $field['type'] ) {
-			$out[ $name ] = minn_admin_acf_file_out( $val );
-		} elseif ( 'suggest' === $field['type'] ) {
-			$out[ $name ] = minn_admin_acf_suggest_out( $field['key'], $val );
-		} elseif ( 'relation' === $field['type'] ) {
-			$out[ $name ] = minn_admin_acf_relation_list_out( $field['key'], $val );
-		} elseif ( 'multicheck' === $field['type'] ) {
-			$out[ $name ] = minn_admin_acf_choices_out( $val );
-		} elseif ( 'date' === $field['type'] ) {
-			$out[ $name ] = minn_admin_acf_date_out( $val );
-		} elseif ( 'datetime' === $field['type'] ) {
-			$out[ $name ] = minn_admin_acf_datetime_out( $val );
-		} elseif ( 'time' === $field['type'] ) {
-			$out[ $name ] = minn_admin_acf_time_out( $val );
-		} elseif ( 'rows' === $field['type'] ) {
-			// Repeater rows: [{ __idx, values }] — __idx is the row's position
-			// in ACF's stored rows, the write path's merge anchor. Raw rows key
-			// by subfield KEY; the client speaks names.
-			$rows = array();
-			foreach ( array_values( is_array( $val ) ? $val : array() ) as $i => $raw_row ) {
-				$vals = array();
-				foreach ( $field['subs'] as $sub ) {
-					$v = is_array( $raw_row ) && array_key_exists( $sub['key'], $raw_row ) ? $raw_row[ $sub['key'] ] : null;
-					if ( 'true_false' === $sub['type'] ) {
-						$vals[ $sub['name'] ] = ! empty( $v );
-					} elseif ( 'image' === $sub['type'] ) {
-						$vals[ $sub['name'] ] = minn_admin_acf_image_out( $v );
-					} elseif ( 'gallery' === $sub['type'] ) {
-						$vals[ $sub['name'] ] = minn_admin_acf_gallery_out( $v );
-					} elseif ( 'file' === $sub['type'] ) {
-						$vals[ $sub['name'] ] = minn_admin_acf_file_out( $v );
-					} elseif ( 'multicheck' === $sub['type'] ) {
-						$vals[ $sub['name'] ] = minn_admin_acf_choices_out( $v );
-					} elseif ( 'date' === $sub['type'] ) {
-						$vals[ $sub['name'] ] = minn_admin_acf_date_out( $v );
-					} elseif ( 'datetime' === $sub['type'] ) {
-						$vals[ $sub['name'] ] = minn_admin_acf_datetime_out( $v );
-					} elseif ( 'time' === $sub['type'] ) {
-						$vals[ $sub['name'] ] = minn_admin_acf_time_out( $v );
-					} elseif ( is_array( $v ) ) {
-						$vals[ $sub['name'] ] = '';
-					} else {
-						$vals[ $sub['name'] ] = null === $v ? '' : $v;
-					}
-				}
-				$rows[] = array( '__idx' => $i, 'values' => (object) $vals );
-			}
-			$out[ $name ] = $rows;
-		} elseif ( is_array( $val ) ) {
-			// Shouldn't appear for simple non-multiple fields; don't leak structure.
-			$out[ $name ] = '';
-		} else {
-			$out[ $name ] = $val;
-		}
+		$out[ $name ] = 'rows' === $field['type']
+			? minn_admin_acf_rows_out( $field, $val )
+			: minn_admin_acf_value_out( $field, $val );
 	}
 	return $out;
 }
@@ -915,89 +1053,13 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 			continue;
 		}
 		$field = $allowed[ $name ];
-		if ( 'true_false' === $field['type'] ) {
-			$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
-		} elseif ( 'image' === $field['type'] || 'file' === $field['type'] ) {
-			// { id, … } from the control, a bare id, or empty = clear.
-			$value = minn_admin_acf_image_in( $value );
-		} elseif ( 'gallery' === $field['type'] ) {
-			// [{ id, url }] entries or bare ids; an empty list clears.
-			$value = minn_admin_acf_gallery_in( $value );
-		} elseif ( 'suggest' === $field['type'] ) {
-			$value = minn_admin_acf_suggest_in( $field['key'], $value );
-			if ( null === $value ) {
-				continue; // invalid pick never clobbers the stored value
-			}
-		} elseif ( 'relation' === $field['type'] ) {
-			$value = minn_admin_acf_relation_in( $field['key'], $value );
-		} elseif ( 'multicheck' === $field['type'] ) {
-			$value = minn_admin_acf_choices_in( $value, $field );
-		} elseif ( in_array( $field['type'], array( 'date', 'datetime', 'time' ), true ) ) {
-			$in = array( 'date' => 'minn_admin_acf_date_in', 'datetime' => 'minn_admin_acf_datetime_in', 'time' => 'minn_admin_acf_time_in' );
-			$value = call_user_func( $in[ $field['type'] ], $value );
-			if ( null === $value ) {
-				continue; // invalid input never clobbers a stored date
-			}
-		} elseif ( 'wysiwyg' === $field['type'] ) {
-			// The same trust boundary WordPress applies to post content: users
-			// without unfiltered_html get their markup run through kses.
-			$value = is_scalar( $value ) ? (string) $value : '';
-			if ( ! current_user_can( 'unfiltered_html' ) ) {
-				$value = wp_kses_post( $value );
-			}
-		} elseif ( 'rows' === $field['type'] ) {
-			// Repeater merge: each incoming row overlays ONLY the mapped subs
-			// onto the original stored row it references (__idx), so complex
-			// sub values (images, nested repeaters) survive edits, reorders
-			// and deletions untouched. Rows without __idx are new; omission
-			// deletes; the incoming order is the new order.
-			if ( ! is_array( $value ) ) {
-				continue;
-			}
-			$orig = get_field( $field['key'], $post_id, false );
-			$orig = is_array( $orig ) ? array_values( $orig ) : array();
-			$new  = array();
-			foreach ( $value as $row ) {
-				$row  = (array) $row;
-				$vals = isset( $row['values'] ) ? (array) $row['values'] : array();
-				$base = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] )
-					? $orig[ (int) $row['__idx'] ]
-					: array();
-				foreach ( $field['subs'] as $sub ) {
-					if ( ! array_key_exists( $sub['name'], $vals ) ) {
-						continue;
-					}
-					$v = $vals[ $sub['name'] ];
-					if ( 'true_false' === $sub['type'] ) {
-						$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
-					} elseif ( 'image' === $sub['type'] || 'file' === $sub['type'] ) {
-						$v = minn_admin_acf_image_in( $v );
-					} elseif ( 'gallery' === $sub['type'] ) {
-						$v = minn_admin_acf_gallery_in( $v );
-					} elseif ( 'multicheck' === $sub['type'] ) {
-						$v = minn_admin_acf_choices_in( $v, $sub );
-					} elseif ( in_array( $sub['type'], array( 'date', 'datetime', 'time' ), true ) ) {
-						$in = array( 'date' => 'minn_admin_acf_date_in', 'datetime' => 'minn_admin_acf_datetime_in', 'time' => 'minn_admin_acf_time_in' );
-						$v = call_user_func( $in[ $sub['type'] ], $v );
-						if ( null === $v ) {
-							continue; // invalid input keeps the stored value
-						}
-					} elseif ( null === $v || false === $v ) {
-						$v = '';
-					} elseif ( ! is_scalar( $v ) ) {
-						continue;
-					}
-					$base[ $sub['key'] ] = $v;
-				}
-				$new[] = $base;
-			}
-			$value = $new;
-		} elseif ( null === $value || false === $value ) {
-			// The panel clears fields with empty values; ACF's own form save
-			// stores '' rather than deleting the row — match it.
-			$value = '';
-		} elseif ( ! is_scalar( $value ) ) {
-			continue;
+		if ( 'rows' === $field['type'] ) {
+			$value = minn_admin_acf_rows_in( $field, $value, get_field( $field['key'], $post_id, false ) );
+		} else {
+			$value = minn_admin_acf_value_in( $field, $value );
+		}
+		if ( null === $value ) {
+			continue; // invalid input never clobbers a stored value
 		}
 		update_field( $field['key'], $value, $post_id );
 	}
@@ -1032,11 +1094,11 @@ function minn_admin_acf_block_forms() {
 				$locked++;
 				continue;
 			}
-			// Date, file and relational types stay locked in block forms:
-			// their values live in the block's data attribute in ACF's raw
-			// storage formats, and the inspector has no adapter layer (or
-			// per-type picker arming) to translate.
-			if ( in_array( $simple['type'], array( 'date', 'datetime', 'time', 'file', 'suggest', 'relation' ), true ) ) {
+			// Date, file, link and relational types stay locked in block
+			// forms: their values live in the block's data attribute in
+			// ACF's raw storage formats, and the inspector has no adapter
+			// layer (or per-type picker arming) to translate.
+			if ( in_array( $simple['type'], array( 'date', 'datetime', 'time', 'file', 'link', 'suggest', 'relation' ), true ) ) {
 				$locked++;
 				continue;
 			}
@@ -1377,14 +1439,20 @@ function minn_admin_acf_options_pages_allowed() {
 }
 
 /**
- * Tab layout for one options page. ACF `tab` fields are the natural section
+ * Tab layout for one options page. ACF `tab` fields are the natural tab
  * boundaries: each starts a Minn tab that collects the fields after it (ACF's
  * own semantics); fields before any tab land in a tab named for their group.
  * Ids are positional (tab-0…) — both GET and POST re-derive the same walk, so
  * they stay stable within a schema version.
  *
+ * GROUP fields flatten into a titled SECTION: each mappable sub (including
+ * repeaters) becomes a tab field that reads and writes through the parent —
+ * group raw arrays key by sub KEY, exactly like repeater rows — carrying
+ * `_section` (the group label) and `_parent` (the group key). The group's own
+ * conditional logic distributes onto every sub (a hidden group hides them all).
+ *
  * @param array $page Options page array.
- * @return array[] { id, label, fields (simple maps incl. key), locked }
+ * @return array[] { id, label, fields (mapped incl. key/_section/_parent), locked }
  */
 function minn_admin_acf_options_tabs( $page ) {
 	$tabs    = array();
@@ -1392,6 +1460,23 @@ function minn_admin_acf_options_tabs( $page ) {
 	$open    = function ( $label ) use ( &$tabs, &$current ) {
 		$tabs[]  = array( 'label' => $label, 'fields' => array(), 'locked' => 0 );
 		$current = count( $tabs ) - 1;
+	};
+	// AND two OR-of-AND conditional trees by distribution: (A|B) AND C
+	// becomes (A,C)|(B,C).
+	$and_conds = function ( $a, $b ) {
+		if ( ! $a ) {
+			return $b;
+		}
+		if ( ! $b ) {
+			return $a;
+		}
+		$out = array();
+		foreach ( $a as $ga ) {
+			foreach ( $b as $gb ) {
+				$out[] = array_merge( (array) $ga, (array) $gb );
+			}
+		}
+		return $out;
 	};
 	foreach ( acf_get_field_groups( array( 'options_page' => $page['menu_slug'] ) ) as $group ) {
 		$current = -1;
@@ -1407,21 +1492,66 @@ function minn_admin_acf_options_tabs( $page ) {
 			if ( $current < 0 ) {
 				$open( $group['title'] );
 			}
+			$cond = ! empty( $f['conditional_logic'] ) && is_array( $f['conditional_logic'] ) ? $f['conditional_logic'] : null;
+			if ( 'group' === $type ) {
+				foreach ( (array) ( $f['sub_fields'] ?? array() ) as $sub ) {
+					if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
+						continue;
+					}
+					$m = 'repeater' === ( $sub['type'] ?? '' )
+						? minn_admin_acf_map_repeater( $sub )
+						: minn_admin_acf_map_field( $sub );
+					if ( ! $m ) {
+						$tabs[ $current ]['locked']++;
+						continue;
+					}
+					$m['_cond']    = $and_conds( $cond, ! empty( $sub['conditional_logic'] ) && is_array( $sub['conditional_logic'] ) ? $sub['conditional_logic'] : null );
+					// Group labels can carry admin-screen markup (dashicons
+					// spans); the section title is plain text.
+					$m['_section'] = trim( wp_strip_all_tags( (string) $f['label'] ) );
+					$m['_parent']  = $f['key'];
+					$tabs[ $current ]['fields'][] = $m;
+				}
+				continue;
+			}
+			if ( 'repeater' === $type ) {
+				$rep = minn_admin_acf_map_repeater( $f );
+				if ( ! $rep ) {
+					$tabs[ $current ]['locked']++;
+					continue;
+				}
+				$rep['_cond']    = $cond;
+				$rep['_section'] = '';
+				$rep['_parent']  = null;
+				$tabs[ $current ]['fields'][] = $rep;
+				continue;
+			}
 			$simple = minn_admin_acf_map_field( $f );
 			if ( ! $simple ) {
 				$tabs[ $current ]['locked']++;
 				continue;
 			}
-			$simple['_cond']              = ! empty( $f['conditional_logic'] ) && is_array( $f['conditional_logic'] ) ? $f['conditional_logic'] : null;
+			$simple['_cond']    = $cond;
+			$simple['_section'] = '';
+			$simple['_parent']  = null;
 			$tabs[ $current ]['fields'][] = $simple;
 		}
 	}
 	// Conditional logic: live (`cond`, rule fields = keys — options controls
 	// already key by field key) when every controller sits on the SAME tab;
 	// otherwise a one-time evaluation against stored values, hiding the
-	// field like ACF's own screen would.
+	// field like ACF's own screen would. A flattened group sub's stored
+	// value reads through its parent.
 	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
 	$stored  = function ( $key ) use ( $post_id ) {
+		$acf = acf_get_field( $key );
+		if ( $acf && ! empty( $acf['parent'] ) ) {
+			$parent = acf_get_field( $acf['parent'] );
+			if ( $parent && 'group' === ( $parent['type'] ?? '' ) ) {
+				$praw = get_field( $parent['key'], $post_id, false );
+				return is_array( $praw ) && array_key_exists( $key, $praw ) ? $praw[ $key ] : null;
+			}
+		}
 		return get_field( $key, $post_id, false );
 	};
 	foreach ( $tabs as $ti => $tab ) {
@@ -1486,6 +1616,8 @@ function minn_admin_acf_options_admin_url( $page ) {
 /**
  * GET/POST shape for one options-page tab: { groups, values, adminUrl }.
  * Values key by ACF field KEY (unique and unambiguous across groups).
+ * Flattened ACF group fields render as their own titled sections; the
+ * tab-level locked count rides the last section.
  *
  * @param array  $page   Options page array.
  * @param string $tab_id Positional tab id.
@@ -1503,9 +1635,21 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 	if ( ! $tab ) {
 		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
-	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
-	$fields  = array();
-	$values  = array();
+	$post_id    = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
+	$parent_raw = array(); // group key => raw array (fetched once per parent)
+	$read_raw   = function ( $f ) use ( $post_id, &$parent_raw ) {
+		if ( empty( $f['_parent'] ) ) {
+			return get_field( $f['key'], $post_id, false );
+		}
+		$gk = $f['_parent'];
+		if ( ! array_key_exists( $gk, $parent_raw ) ) {
+			$raw = get_field( $gk, $post_id, false );
+			$parent_raw[ $gk ] = is_array( $raw ) ? $raw : array();
+		}
+		return array_key_exists( $f['key'], $parent_raw[ $gk ] ) ? $parent_raw[ $gk ][ $f['key'] ] : null;
+	};
+	$sections = array();
+	$values   = array();
 	foreach ( $tab['fields'] as $f ) {
 		$sf = array(
 			'key'   => $f['key'],
@@ -1513,8 +1657,12 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'multicheck', 'date', 'datetime', 'time', 'suggest', 'relation' ), true ) ? $f['type'] : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'link', 'multicheck', 'date', 'datetime', 'time', 'suggest', 'relation', 'rows' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
+		if ( 'rows' === $sf['type'] ) {
+			$sf['subfields'] = $f['subfields'];
+			$sf['subLocked'] = $f['subLocked'];
+		}
 		if ( ! empty( $f['route'] ) ) {
 			$sf['route'] = $f['route'];
 		}
@@ -1527,43 +1675,28 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 				$sf['options'][] = array( (string) $value, (string) $label );
 			}
 		}
-		$fields[] = $sf;
-
-		$v = get_field( $f['key'], $post_id, false );
-		if ( 'toggle' === $sf['type'] ) {
-			$values[ $f['key'] ] = ! empty( $v );
-		} elseif ( 'gallery' === $sf['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_gallery_out( $v );
-		} elseif ( 'image' === $sf['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_image_out( $v );
-		} elseif ( 'file' === $sf['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_file_out( $v );
-		} elseif ( 'suggest' === $sf['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_suggest_out( $f['key'], $v );
-		} elseif ( 'relation' === $sf['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_relation_list_out( $f['key'], $v );
-		} elseif ( 'multicheck' === $sf['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_choices_out( $v );
-		} elseif ( 'date' === $sf['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_date_out( $v );
-		} elseif ( 'datetime' === $sf['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_datetime_out( $v );
-		} elseif ( 'time' === $sf['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_time_out( $v );
-		} elseif ( is_array( $v ) ) {
-			$values[ $f['key'] ] = '';
-		} else {
-			$values[ $f['key'] ] = null === $v ? '' : $v;
+		$sec_key = (string) ( $f['_parent'] ? $f['_parent'] : '' );
+		if ( ! isset( $sections[ $sec_key ] ) ) {
+			$sections[ $sec_key ] = array(
+				'title'  => (string) ( $f['_section'] ?? '' ),
+				'fields' => array(),
+				'locked' => 0,
+			);
 		}
+		$sections[ $sec_key ]['fields'][] = $sf;
+
+		$v = $read_raw( $f );
+		$values[ $f['key'] ] = 'rows' === $f['type']
+			? minn_admin_acf_rows_out( $f, $v )
+			: minn_admin_acf_value_out( $f, $v );
 	}
+	$groups = array_values( $sections );
+	if ( ! $groups ) {
+		$groups = array( array( 'title' => '', 'fields' => array(), 'locked' => 0 ) );
+	}
+	$groups[ count( $groups ) - 1 ]['locked'] = $tab['locked'];
 	return array(
-		'groups'   => array(
-			array(
-				'title'  => '',
-				'fields' => $fields,
-				'locked' => $tab['locked'],
-			),
-		),
+		'groups'   => $groups,
 		'values'   => $values,
 		'adminUrl' => minn_admin_acf_options_admin_url( $page ),
 	);
@@ -1571,8 +1704,11 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 
 /**
  * Save edited values through ACF's own setter. Keys are whitelisted against
- * the page's mapped fields (never an arbitrary update_field), coerced to
- * ACF's stored shapes (1/0 for true_false, strings otherwise).
+ * the page's mapped fields (never an arbitrary update_field) and coerced to
+ * ACF's stored shapes through the shared value_in layer. Flattened group
+ * subs collect into ONE parent write each: the stored group array is the
+ * base, edited subs overlay it, so unmapped subs survive untouched (the
+ * repeater-merge discipline, at group scale).
  *
  * @param array $page   Options page array.
  * @param array $values Field key => value.
@@ -1584,44 +1720,40 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$byKey[ $f['key'] ] = $f;
 		}
 	}
-	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
+	$post_id        = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
+	$parent_updates = array(); // group key => [ sub key => stored value ]
+	$parent_stored  = function ( $gkey ) use ( $post_id ) {
+		$raw = get_field( $gkey, $post_id, false );
+		return is_array( $raw ) ? $raw : array();
+	};
 	foreach ( (array) $values as $key => $v ) {
 		if ( ! isset( $byKey[ $key ] ) ) {
 			continue;
 		}
-		if ( 'true_false' === $byKey[ $key ]['type'] ) {
-			$v = ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 1 : 0;
-		} elseif ( 'gallery' === $byKey[ $key ]['type'] ) {
-			$v = minn_admin_acf_gallery_in( $v );
-		} elseif ( 'image' === $byKey[ $key ]['type'] || 'file' === $byKey[ $key ]['type'] ) {
-			$v = minn_admin_acf_image_in( $v );
-		} elseif ( 'suggest' === $byKey[ $key ]['type'] ) {
-			$v = minn_admin_acf_suggest_in( $key, $v );
-			if ( null === $v ) {
-				continue; // invalid pick never clobbers the stored value
-			}
-		} elseif ( 'relation' === $byKey[ $key ]['type'] ) {
-			$v = minn_admin_acf_relation_in( $key, $v );
-		} elseif ( 'multicheck' === $byKey[ $key ]['type'] ) {
-			$v = minn_admin_acf_choices_in( $v, $byKey[ $key ] );
-		} elseif ( in_array( $byKey[ $key ]['type'], array( 'date', 'datetime', 'time' ), true ) ) {
-			$in = array( 'date' => 'minn_admin_acf_date_in', 'datetime' => 'minn_admin_acf_datetime_in', 'time' => 'minn_admin_acf_time_in' );
-			$v = call_user_func( $in[ $byKey[ $key ]['type'] ], $v );
-			if ( null === $v ) {
-				continue; // invalid input never clobbers a stored date
-			}
-		} elseif ( 'wysiwyg' === $byKey[ $key ]['type'] ) {
-			// The post-content trust boundary, same as the panel write path.
-			$v = is_scalar( $v ) ? (string) $v : '';
-			if ( ! current_user_can( 'unfiltered_html' ) ) {
-				$v = wp_kses_post( $v );
-			}
-		} elseif ( null === $v || false === $v ) {
-			$v = '';
-		} elseif ( ! is_scalar( $v ) ) {
-			continue;
+		$f = $byKey[ $key ];
+		if ( 'rows' === $f['type'] ) {
+			$orig = ! empty( $f['_parent'] )
+				? ( ( $praw = $parent_stored( $f['_parent'] ) ) && array_key_exists( $key, $praw ) ? $praw[ $key ] : array() )
+				: get_field( $key, $post_id, false );
+			$v = minn_admin_acf_rows_in( $f, $v, $orig );
+		} else {
+			$v = minn_admin_acf_value_in( $f, $v );
 		}
-		update_field( $key, $v, $post_id );
+		if ( null === $v ) {
+			continue; // invalid input never clobbers a stored value
+		}
+		if ( ! empty( $f['_parent'] ) ) {
+			$parent_updates[ $f['_parent'] ][ $key ] = $v;
+		} else {
+			update_field( $key, $v, $post_id );
+		}
+	}
+	foreach ( $parent_updates as $gkey => $subs ) {
+		$base = $parent_stored( $gkey );
+		foreach ( $subs as $sk => $sv ) {
+			$base[ $sk ] = $sv;
+		}
+		update_field( $gkey, $base, $post_id );
 	}
 }
 

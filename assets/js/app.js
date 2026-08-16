@@ -1351,6 +1351,17 @@
 				</div>
 			</div>`;
 		}
+		// Link: ACF's { title, url, target } composite — URL, link text and a
+		// new-tab tick in one wrap. Inner input events bubble, so every
+		// dialect's generic tracking works unchanged (no arming needed).
+		if ( t === 'link' ) {
+			const lv = ( v && typeof v === 'object' ) ? v : {};
+			return `<div class="minn-field-linkval" ${ attr }="${ esc( id ) }" data-ftype="link">
+				<input class="minn-input" type="url" data-lk="url" value="${ esc( lv.url || '' ) }" placeholder="https://…" spellcheck="false" autocomplete="off">
+				<input class="minn-input" type="text" data-lk="title" value="${ esc( lv.title || '' ) }" placeholder="${ esc( __( 'Link text' ) ) }">
+				<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-lk="target"${ lv.target ? ' checked' : '' }> ${ esc( __( 'Open in new tab' ) ) }</label>
+			</div>`;
+		}
 		// File: any attachment ({ id, url, name }) — Set/Replace opens the
 		// media picker in any-type mode. The CALLER arms bindFileField (no
 		// input events, like image).
@@ -1420,6 +1431,12 @@
 		if ( kind === 'relation' ) {
 			if ( el._relValue !== undefined ) return el._relValue;
 			try { return JSON.parse( el.dataset.relval || '[]' ); } catch ( e ) { return []; }
+		}
+		if ( kind === 'link' ) {
+			const url = ( ( $( '[data-lk="url"]', el ) || {} ).value || '' ).trim();
+			const title = ( $( '[data-lk="title"]', el ) || {} ).value || '';
+			if ( ! url && ! title.trim() ) return '';
+			return { url, title, target: ( $( '[data-lk="target"]', el ) || {} ).checked ? '_blank' : '' };
 		}
 		if ( kind === 'date' || kind === 'datetime' ) return el.dataset.dp || '';
 		if ( kind === 'time' ) {
@@ -1908,7 +1925,12 @@
 						onApply: ( ids, out ) => {
 							row.values[ name ] = out.map( ( x ) => ( { id: x.id, url: x.url } ) );
 							commit();
-							toast( __( 'Gallery updated — saves with the post' ) );
+							// On a settings PAGE the rows DOM survives this
+							// flow — repaint so the button count is honest
+							// (harmless on the panel path: that node is
+							// orphaned after closeModal).
+							render();
+							toast( __( 'Gallery updated' ) );
 						},
 					} );
 					return;
@@ -14983,6 +15005,10 @@
 				bindSuggestField( input, () => mark() );
 			} else if ( input.dataset.ftype === 'relation' ) {
 				bindRelationField( input, () => mark() );
+			} else if ( input.dataset.ftype === 'rows' ) {
+				// Repeaters on a settings page: the same rows control the
+				// editor panel uses; the save reads el._rowsValue.
+				bindRowsField( input, () => mark() );
 			} else if ( input.dataset.ftype === 'date' || input.dataset.ftype === 'datetime' ) {
 				// Readonly input: the picker's commit is the only edit signal.
 				bindDatePicker( input, mark, { dateOnly: input.dataset.ftype === 'date', marks: false } );

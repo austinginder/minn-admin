@@ -193,6 +193,101 @@ const { launch, login, reporter } = require( './helpers' );
 		t.check( 'relation clear persisted', Array.isArray( rl ) && rl.length === 0, JSON.stringify( rl ) );
 	}
 
+	// Flattened ACF group: a titled section whose subs (a toggle + a
+	// repeater of link fields) read and write through the parent, with live
+	// conditional display between them — the mula Header & Footer shape.
+	const firstTab = surface.settings.tabs[ 0 ];
+	if ( surface.settings.tabs.length > 1 ) {
+		await page.click( `[data-ssettab="${ firstTab.id }"]` );
+	}
+	const navRows = await page.waitForSelector( '.minn-surface-settings [data-sset="field_minn_optlab_nav_links"][data-ftype="rows"]', { timeout: 8000 } ).catch( () => null );
+	if ( ! navRows ) {
+		console.log( 'SKIP group/rows checks: no flattened group fixture on this page' );
+	} else {
+		const tab0Route = surface.settings.route.replace( '{tab}', firstTab.id );
+		const saveTab0 = async () => {
+			const wait = page.waitForResponse( ( res ) => res.request().method() === 'POST'
+				&& res.url().includes( tab0Route ), { timeout: 20000 } );
+			await page.click( '#minn-sset-save' );
+			await wait;
+			await page.waitForTimeout( 600 );
+		};
+		const readTab0 = () => page.evaluate( async ( route ) => {
+			const r = await fetch( window.MINN.restUrl + route, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return ( ( await r.json() ).values || {} );
+		}, tab0Route );
+
+		t.check( 'group renders as a titled section', await page.evaluate( () =>
+			[ ...document.querySelectorAll( '.minn-surface-settings .minn-fields-sub' ) ].some( ( e ) => /Footer Nav/.test( e.textContent ) ) ) );
+		const rowsHidden = () => page.$eval( '[data-srow="field_minn_optlab_nav_links"]', ( e ) => e.hidden );
+		t.check( 'repeater visible with the toggle off', ( await rowsHidden() ) === false );
+		await page.click( '[data-sset="field_minn_optlab_nav_use"]' );
+		t.check( 'repeater hides when the controller toggle flips on', ( await rowsHidden() ) === true );
+		await page.click( '[data-sset="field_minn_optlab_nav_use"]' );
+		t.check( 'and returns when it flips back', ( await rowsHidden() ) === false );
+
+		// Add a row and fill the link composite + the text sub.
+		await page.click( '[data-sset="field_minn_optlab_nav_links"] [data-radd]' );
+		await page.waitForSelector( '[data-rowsub="0:link"][data-ftype="link"]', { timeout: 5000 } );
+		t.check( 'link sub renders the composite control', true );
+		await page.fill( '[data-rowsub="0:link"] [data-lk="url"]', 'https://example.com/pricing/' );
+		await page.fill( '[data-rowsub="0:link"] [data-lk="title"]', 'Pricing' );
+		await page.click( '[data-rowsub="0:link"] [data-lk="target"]' );
+		await page.fill( '[data-rowsub="0:note"]', 'main nav' );
+		await saveTab0();
+		let tv = await readTab0();
+		const row0 = ( tv.field_minn_optlab_nav_links || [] )[ 0 ];
+		t.check( 'link row persisted through the parent group merge',
+			row0 && row0.values.link && row0.values.link.url === 'https://example.com/pricing/'
+			&& row0.values.link.title === 'Pricing' && row0.values.link.target === '_blank'
+			&& row0.values.note === 'main nav',
+			JSON.stringify( row0 ) );
+
+		// Remove the row; the sibling toggle's value survives the merge.
+		await page.click( '[data-sset="field_minn_optlab_nav_links"] [data-rdel="0"]' );
+		await saveTab0();
+		tv = await readTab0();
+		t.check( 'emptied repeater persisted, sibling sub untouched',
+			Array.isArray( tv.field_minn_optlab_nav_links ) && tv.field_minn_optlab_nav_links.length === 0
+			&& tv.field_minn_optlab_nav_use === false,
+			JSON.stringify( { links: tv.field_minn_optlab_nav_links, use: tv.field_minn_optlab_nav_use } ) );
+	}
+
+	// Top-level link field: the { title, url, target } composite.
+	if ( surface.settings.tabs.length > 1 ) {
+		await page.click( `[data-ssettab="${ lastTab2.id }"]` );
+	}
+	const ctaEl = await page.waitForSelector( '.minn-surface-settings [data-sset="field_minn_optlab_cta"][data-ftype="link"]', { timeout: 8000 } ).catch( () => null );
+	if ( ! ctaEl ) {
+		console.log( 'SKIP link-field check: no link field on this options page' );
+	} else {
+		const ctaRoute = surface.settings.route.replace( '{tab}', lastTab2.id );
+		const saveCta = async () => {
+			const wait = page.waitForResponse( ( res ) => res.request().method() === 'POST'
+				&& res.url().includes( ctaRoute ), { timeout: 20000 } );
+			await page.click( '#minn-sset-save' );
+			await wait;
+			await page.waitForTimeout( 600 );
+		};
+		const readCta = () => page.evaluate( async ( route ) => {
+			const r = await fetch( window.MINN.restUrl + route, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return ( ( await r.json() ).values || {} ).field_minn_optlab_cta;
+		}, ctaRoute );
+		const ctaSel = '.minn-surface-settings [data-sset="field_minn_optlab_cta"]';
+		await page.fill( `${ ctaSel } [data-lk="url"]`, 'https://example.com/quote/' );
+		await page.fill( `${ ctaSel } [data-lk="title"]`, 'Get a quote' );
+		await saveCta();
+		let cv = await readCta();
+		t.check( 'link field persisted as { title, url, target }',
+			cv && cv.url === 'https://example.com/quote/' && cv.title === 'Get a quote' && cv.target === '',
+			JSON.stringify( cv ) );
+		await page.fill( `${ ctaSel } [data-lk="url"]`, '' );
+		await page.fill( `${ ctaSel } [data-lk="title"]`, '' );
+		await saveCta();
+		cv = await readCta();
+		t.check( 'emptied link cleared', cv === '', JSON.stringify( cv ) );
+	}
+
 	// Conditional display on options: the promo row follows the badges
 	// multicheck live (ACF conditional logic in the settings engine).
 	const promoRow = () => page.$eval( '[data-srow="field_minn_optlab_promo"]', ( e ) => e.hidden ).catch( () => null );

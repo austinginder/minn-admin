@@ -415,9 +415,14 @@ The route implements one contract per tab:
 Fields use the shared form vocabulary: `key`, `label`, `type` (`text` default ·
 `textarea` · `number` · `select` (rendered as Minn's themed searchable
 dropdown, never a native select popup) · `combobox` (the themed autocomplete over
-`options`, right for long catalogs) · `toggle` · `email` · `url`), `options`
+`options`, right for long catalogs) · `toggle` · `email` · `url` · since
+0.31.0 also `multicheck`, `link` ({ title, url, target }), `image`, `file`,
+`gallery`, `wysiwyg`, `date`/`datetime`/`time`, `suggest`/`relation` (with a
+`route`), and `rows` — a repeater on a settings page, same `subfields` +
+`[{ __idx, values }]` contract as the editor-panel version), `options`
 (`[value, label]` pairs), `placeholder`, `help` (rendered under the control),
-`rows`, `min`/`max`, `mono`, and `showWhen: { "key": …, "equals": … }` (the
+`rows` (textarea height), `min`/`max`, `mono`, and `showWhen: { "key": …,
+"equals": … }` (the
 row shows only while the controlling field holds that value, evaluated live
 as the user edits). A group's `locked` count says "N advanced settings —
 edit in wp-admin ↗" via `adminUrl` for anything too bespoke to render
