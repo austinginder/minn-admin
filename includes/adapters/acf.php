@@ -624,26 +624,45 @@ function minn_admin_acf_map_repeater( $f ) {
 	}
 	$subs   = array();
 	$locked = 0;
-	foreach ( (array) ( $f['sub_fields'] ?? array() ) as $sub ) {
+	// Subs share the field map — everything simple except wysiwyg (the row
+	// cards have no rich-text seat) and the relational pickers (no arming in
+	// the rows dialect yet). A GROUP sub is a namespace, not a control: its
+	// subs flatten into the row as prefixed columns ("Hover · Bg"), stored
+	// nested exactly where ACF keeps them (gpath = the group-key chain the
+	// read/write descend). Recursion is depth-capped, matching the options
+	// flatten.
+	$push = function ( $sub, $label_prefix, $name_prefix, $gpath ) use ( &$push, &$subs, &$locked ) {
 		if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
-			continue;
+			return;
 		}
-		// Subs share the field map — everything simple except wysiwyg (the
-		// row cards have no rich-text seat) and the relational pickers (no
-		// arming in the rows dialect yet).
+		if ( 'group' === ( $sub['type'] ?? '' ) && ! empty( $sub['sub_fields'] ) && count( $gpath ) < 3 ) {
+			foreach ( (array) $sub['sub_fields'] as $s2 ) {
+				$push(
+					$s2,
+					$label_prefix . trim( wp_strip_all_tags( (string) $sub['label'] ) ) . ' · ',
+					$name_prefix . $sub['name'] . '_',
+					array_merge( $gpath, array( $sub['key'] ) )
+				);
+			}
+			return;
+		}
 		$m = minn_admin_acf_map_field( $sub );
 		if ( ! $m || in_array( $m['type'], array( 'wysiwyg', 'suggest', 'relation' ), true ) ) {
 			$locked++;
-			continue;
+			return;
 		}
 		$subs[] = array(
-			'name'      => $m['name'],
-			'label'     => $m['label'],
+			'name'      => $name_prefix . $m['name'],
+			'label'     => $label_prefix . $m['label'],
 			'type'      => $m['type'],
 			'choices'   => $m['choices'],
 			'anyChoice' => $m['anyChoice'],
 			'key'       => $m['key'],
+			'gpath'     => $gpath ? $gpath : null,
 		);
+	};
+	foreach ( (array) ( $f['sub_fields'] ?? array() ) as $sub ) {
+		$push( $sub, '', '', array() );
 	}
 	if ( ! $subs ) {
 		return null;
@@ -653,7 +672,7 @@ function minn_admin_acf_map_repeater( $f ) {
 		'label'     => $f['label'],
 		'type'      => 'rows',
 		'subfields' => array_map( function ( $s ) {
-			unset( $s['key'] ); // internal — the client keys sub-inputs by name
+			unset( $s['key'], $s['gpath'] ); // internal — the client keys sub-inputs by name
 			return $s;
 		}, $subs ),
 		'subLocked' => $locked,
@@ -827,7 +846,13 @@ function minn_admin_acf_rows_out( $field, $val ) {
 	foreach ( array_values( is_array( $val ) ? $val : array() ) as $i => $raw_row ) {
 		$vals = array();
 		foreach ( $field['subs'] as $sub ) {
-			$v = is_array( $raw_row ) && array_key_exists( $sub['key'], $raw_row ) ? $raw_row[ $sub['key'] ] : null;
+			// Flattened group subs live nested in the row (gpath descends
+			// the group-key chain to the node carrying the sub).
+			$node = $raw_row;
+			foreach ( (array) ( $sub['gpath'] ?? array() ) as $gk ) {
+				$node = is_array( $node ) && isset( $node[ $gk ] ) ? $node[ $gk ] : null;
+			}
+			$v = is_array( $node ) && array_key_exists( $sub['key'], $node ) ? $node[ $sub['key'] ] : null;
 			$vals[ $sub['name'] ] = minn_admin_acf_value_out( $sub, $v );
 		}
 		$rows[] = array(
@@ -870,7 +895,17 @@ function minn_admin_acf_rows_in( $field, $value, $orig ) {
 			if ( null === $v ) {
 				continue; // invalid input keeps the stored sub value
 			}
-			$base[ $sub['key'] ] = $v;
+			// Flattened group subs write back into their nested home,
+			// creating the group arrays on rows that never had them.
+			$ref = &$base;
+			foreach ( (array) ( $sub['gpath'] ?? array() ) as $gk ) {
+				if ( ! isset( $ref[ $gk ] ) || ! is_array( $ref[ $gk ] ) ) {
+					$ref[ $gk ] = array();
+				}
+				$ref = &$ref[ $gk ];
+			}
+			$ref[ $sub['key'] ] = $v;
+			unset( $ref );
 		}
 		$new[] = $base;
 	}
@@ -1458,8 +1493,20 @@ function minn_admin_acf_options_tabs( $page ) {
 	$tabs    = array();
 	$current = -1;
 	$open    = function ( $label ) use ( &$tabs, &$current ) {
-		$tabs[]  = array( 'label' => $label, 'fields' => array(), 'locked' => 0 );
+		$tabs[]  = array(
+			'label'        => $label,
+			'fields'       => array(),
+			'locked'       => 0,
+			'lockedLabels' => array(),
+		);
 		$current = count( $tabs ) - 1;
+	};
+	$lock = function ( $label ) use ( &$tabs, &$current ) {
+		$tabs[ $current ]['locked']++;
+		$label = trim( wp_strip_all_tags( (string) $label ) );
+		if ( '' !== $label ) {
+			$tabs[ $current ]['lockedLabels'][] = $label;
+		}
 	};
 	// AND two OR-of-AND conditional trees by distribution: (A|B) AND C
 	// becomes (A,C)|(B,C).
@@ -1494,30 +1541,50 @@ function minn_admin_acf_options_tabs( $page ) {
 			}
 			$cond = ! empty( $f['conditional_logic'] ) && is_array( $f['conditional_logic'] ) ? $f['conditional_logic'] : null;
 			if ( 'group' === $type ) {
-				foreach ( (array) ( $f['sub_fields'] ?? array() ) as $sub ) {
-					if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
-						continue;
+				// Recursive flatten: a group inside a group is still a
+				// namespace — its subs join the top group's SECTION with
+				// prefixed labels ("Bar · Title"), and `_path` records the
+				// group-key chain the read/write descend. Group labels can
+				// carry admin-screen markup (dashicons spans); section and
+				// prefix text is plain.
+				$section = trim( wp_strip_all_tags( (string) $f['label'] ) );
+				$flatten = function ( $sub_fields, $path, $prefix, $inherited ) use ( &$flatten, &$tabs, &$current, $and_conds, $lock, $f, $section ) {
+					foreach ( (array) $sub_fields as $sub ) {
+						if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
+							continue;
+						}
+						$scond = $and_conds( $inherited, ! empty( $sub['conditional_logic'] ) && is_array( $sub['conditional_logic'] ) ? $sub['conditional_logic'] : null );
+						if ( 'group' === ( $sub['type'] ?? '' ) && count( $path ) < 4 ) {
+							$flatten(
+								$sub['sub_fields'] ?? array(),
+								array_merge( $path, array( $sub['key'] ) ),
+								$prefix . trim( wp_strip_all_tags( (string) $sub['label'] ) ) . ' · ',
+								$scond
+							);
+							continue;
+						}
+						$m = 'repeater' === ( $sub['type'] ?? '' )
+							? minn_admin_acf_map_repeater( $sub )
+							: minn_admin_acf_map_field( $sub );
+						if ( ! $m ) {
+							$lock( $prefix . ( $sub['label'] ?? '' ) );
+							continue;
+						}
+						$m['label']    = $prefix . $m['label'];
+						$m['_cond']    = $scond;
+						$m['_section'] = $section;
+						$m['_parent']  = $f['key'];
+						$m['_path']    = $path;
+						$tabs[ $current ]['fields'][] = $m;
 					}
-					$m = 'repeater' === ( $sub['type'] ?? '' )
-						? minn_admin_acf_map_repeater( $sub )
-						: minn_admin_acf_map_field( $sub );
-					if ( ! $m ) {
-						$tabs[ $current ]['locked']++;
-						continue;
-					}
-					$m['_cond']    = $and_conds( $cond, ! empty( $sub['conditional_logic'] ) && is_array( $sub['conditional_logic'] ) ? $sub['conditional_logic'] : null );
-					// Group labels can carry admin-screen markup (dashicons
-					// spans); the section title is plain text.
-					$m['_section'] = trim( wp_strip_all_tags( (string) $f['label'] ) );
-					$m['_parent']  = $f['key'];
-					$tabs[ $current ]['fields'][] = $m;
-				}
+				};
+				$flatten( $f['sub_fields'] ?? array(), array( $f['key'] ), '', $cond );
 				continue;
 			}
 			if ( 'repeater' === $type ) {
 				$rep = minn_admin_acf_map_repeater( $f );
 				if ( ! $rep ) {
-					$tabs[ $current ]['locked']++;
+					$lock( $f['label'] ?? '' );
 					continue;
 				}
 				$rep['_cond']    = $cond;
@@ -1528,7 +1595,7 @@ function minn_admin_acf_options_tabs( $page ) {
 			}
 			$simple = minn_admin_acf_map_field( $f );
 			if ( ! $simple ) {
-				$tabs[ $current ]['locked']++;
+				$lock( $f['label'] ?? '' );
 				continue;
 			}
 			$simple['_cond']    = $cond;
@@ -1636,7 +1703,7 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	$post_id    = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
-	$parent_raw = array(); // group key => raw array (fetched once per parent)
+	$parent_raw = array(); // top group key => raw array (fetched once per parent)
 	$read_raw   = function ( $f ) use ( $post_id, &$parent_raw ) {
 		if ( empty( $f['_parent'] ) ) {
 			return get_field( $f['key'], $post_id, false );
@@ -1646,7 +1713,12 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			$raw = get_field( $gk, $post_id, false );
 			$parent_raw[ $gk ] = is_array( $raw ) ? $raw : array();
 		}
-		return array_key_exists( $f['key'], $parent_raw[ $gk ] ) ? $parent_raw[ $gk ][ $f['key'] ] : null;
+		// Descend the group-key chain past the top parent (nested groups).
+		$node = $parent_raw[ $gk ];
+		foreach ( array_slice( (array) ( $f['_path'] ?? array( $gk ) ), 1 ) as $step ) {
+			$node = is_array( $node ) && isset( $node[ $step ] ) ? $node[ $step ] : null;
+		}
+		return is_array( $node ) && array_key_exists( $f['key'], $node ) ? $node[ $f['key'] ] : null;
 	};
 	$sections = array();
 	$values   = array();
@@ -1657,7 +1729,7 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'link', 'multicheck', 'date', 'datetime', 'time', 'suggest', 'relation', 'rows' ), true ) ? $f['type'] : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'link', 'multicheck', 'date', 'datetime', 'time', 'suggest', 'relation', 'rows', 'color_picker' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
 		if ( 'rows' === $sf['type'] ) {
 			$sf['subfields'] = $f['subfields'];
@@ -1695,6 +1767,11 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 		$groups = array( array( 'title' => '', 'fields' => array(), 'locked' => 0 ) );
 	}
 	$groups[ count( $groups ) - 1 ]['locked'] = $tab['locked'];
+	if ( ! empty( $tab['lockedLabels'] ) ) {
+		// Name what the count hides — "1 advanced setting" alone reads as a
+		// bug when the tab's whole content is one flexible-content builder.
+		$groups[ count( $groups ) - 1 ]['lockedLabels'] = array_values( array_unique( $tab['lockedLabels'] ) );
+	}
 	return array(
 		'groups'   => $groups,
 		'values'   => $values,
@@ -1721,10 +1798,22 @@ function minn_admin_acf_options_save( $page, $values ) {
 		}
 	}
 	$post_id        = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
-	$parent_updates = array(); // group key => [ sub key => stored value ]
+	$parent_updates = array(); // top group key => [ { path (past the top), key, value } ]
 	$parent_stored  = function ( $gkey ) use ( $post_id ) {
 		$raw = get_field( $gkey, $post_id, false );
 		return is_array( $raw ) ? $raw : array();
+	};
+	// Stored value at a field's nested home (rows need their original rows
+	// for the __idx merge).
+	$stored_at = function ( $f ) use ( $parent_stored, $post_id ) {
+		if ( empty( $f['_parent'] ) ) {
+			return get_field( $f['key'], $post_id, false );
+		}
+		$node = $parent_stored( $f['_parent'] );
+		foreach ( array_slice( (array) ( $f['_path'] ?? array( $f['_parent'] ) ), 1 ) as $step ) {
+			$node = is_array( $node ) && isset( $node[ $step ] ) ? $node[ $step ] : null;
+		}
+		return is_array( $node ) && array_key_exists( $f['key'], $node ) ? $node[ $f['key'] ] : null;
 	};
 	foreach ( (array) $values as $key => $v ) {
 		if ( ! isset( $byKey[ $key ] ) ) {
@@ -1732,10 +1821,7 @@ function minn_admin_acf_options_save( $page, $values ) {
 		}
 		$f = $byKey[ $key ];
 		if ( 'rows' === $f['type'] ) {
-			$orig = ! empty( $f['_parent'] )
-				? ( ( $praw = $parent_stored( $f['_parent'] ) ) && array_key_exists( $key, $praw ) ? $praw[ $key ] : array() )
-				: get_field( $key, $post_id, false );
-			$v = minn_admin_acf_rows_in( $f, $v, $orig );
+			$v = minn_admin_acf_rows_in( $f, $v, $stored_at( $f ) );
 		} else {
 			$v = minn_admin_acf_value_in( $f, $v );
 		}
@@ -1743,15 +1829,30 @@ function minn_admin_acf_options_save( $page, $values ) {
 			continue; // invalid input never clobbers a stored value
 		}
 		if ( ! empty( $f['_parent'] ) ) {
-			$parent_updates[ $f['_parent'] ][ $key ] = $v;
+			$parent_updates[ $f['_parent'] ][] = array(
+				'path'  => array_slice( (array) ( $f['_path'] ?? array( $f['_parent'] ) ), 1 ),
+				'key'   => $key,
+				'value' => $v,
+			);
 		} else {
 			update_field( $key, $v, $post_id );
 		}
 	}
-	foreach ( $parent_updates as $gkey => $subs ) {
+	// One write per top-level group: the stored array is the base, each
+	// edited sub set at its nested home (group arrays created as needed),
+	// so subs Minn cannot render survive untouched.
+	foreach ( $parent_updates as $gkey => $edits ) {
 		$base = $parent_stored( $gkey );
-		foreach ( $subs as $sk => $sv ) {
-			$base[ $sk ] = $sv;
+		foreach ( $edits as $edit ) {
+			$ref = &$base;
+			foreach ( $edit['path'] as $step ) {
+				if ( ! isset( $ref[ $step ] ) || ! is_array( $ref[ $step ] ) ) {
+					$ref[ $step ] = array();
+				}
+				$ref = &$ref[ $step ];
+			}
+			$ref[ $edit['key'] ] = $edit['value'];
+			unset( $ref );
 		}
 		update_field( $gkey, $base, $post_id );
 	}

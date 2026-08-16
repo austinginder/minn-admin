@@ -14941,7 +14941,7 @@
 			} ).join( '' );
 			return `${ g.title ? `<div class="minn-fields-sub">${ esc( g.title ) }</div>` : '' }
 				<div class="minn-fields">${ rows }</div>
-				${ g.locked ? `<div class="minn-panel-locked">${ sprintf( /* translators: %s: how many settings are hidden here. */ _n( '%s advanced setting', '%s advanced settings', g.locked ), g.locked ) } — ${ data.adminUrl ? `<a href="${ esc( data.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'edit in wp-admin ↗' ) ) }</a>` : esc( __( 'edit in wp-admin' ) ) }</div>` : '' }`;
+				${ g.locked ? `<div class="minn-panel-locked">${ sprintf( /* translators: %s: how many settings are hidden here. */ _n( '%s advanced setting', '%s advanced settings', g.locked ), g.locked ) }${ ( g.lockedLabels || [] ).length ? ` (${ g.lockedLabels.map( esc ).join( ', ' ) })` : '' } — ${ data.adminUrl ? `<a href="${ esc( data.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'edit in wp-admin ↗' ) ) }</a>` : esc( __( 'edit in wp-admin' ) ) }</div>` : '' }`;
 		} ).join( '<div class="minn-divider"></div>' );
 
 		view.innerHTML = head + `

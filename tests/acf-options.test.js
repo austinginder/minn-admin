@@ -222,6 +222,14 @@ const { launch, login, reporter } = require( './helpers' );
 
 		t.check( 'group renders as a titled section', await page.evaluate( () =>
 			[ ...document.querySelectorAll( '.minn-surface-settings .minn-fields-sub' ) ].some( ( e ) => /Footer Nav/.test( e.textContent ) ) ) );
+		// A group nested INSIDE the group flattens into the same section
+		// with a prefixed label and its real control (the color swatch).
+		t.check( 'nested group sub renders with prefixed label',
+			await page.evaluate( () => {
+				const row = document.querySelector( '[data-srow="field_minn_optlab_nav_accent"]' );
+				return !! row && /Style · Accent/.test( row.textContent )
+					&& !! row.querySelector( '[data-ftype="color"] input[type="color"]' );
+			} ) );
 		const rowsHidden = () => page.$eval( '[data-srow="field_minn_optlab_nav_links"]', ( e ) => e.hidden );
 		t.check( 'repeater visible with the toggle off', ( await rowsHidden() ) === false );
 		await page.click( '[data-sset="field_minn_optlab_nav_use"]' );
@@ -233,10 +241,18 @@ const { launch, login, reporter } = require( './helpers' );
 		await page.click( '[data-sset="field_minn_optlab_nav_links"] [data-radd]' );
 		await page.waitForSelector( '[data-rowsub="0:link"][data-ftype="link"]', { timeout: 5000 } );
 		t.check( 'link sub renders the composite control', true );
+		// A group sub inside the repeater flattens into prefixed row columns.
+		t.check( 'group sub inside the repeater renders as row columns',
+			await page.evaluate( () => {
+				const bg = document.querySelector( '[data-rowsub="0:colors_bg"][data-ftype="color"]' );
+				const card = bg && bg.closest( '.minn-rows-card' );
+				return !! bg && !! card && /Colors · Background/.test( card.textContent );
+			} ) );
 		await page.fill( '[data-rowsub="0:link"] [data-lk="url"]', 'https://example.com/pricing/' );
 		await page.fill( '[data-rowsub="0:link"] [data-lk="title"]', 'Pricing' );
 		await page.click( '[data-rowsub="0:link"] [data-lk="target"]' );
 		await page.fill( '[data-rowsub="0:note"]', 'main nav' );
+		await page.fill( '[data-rowsub="0:colors_bg"] input[type="text"]', '#ff6600' );
 		await saveTab0();
 		let tv = await readTab0();
 		const row0 = ( tv.field_minn_optlab_nav_links || [] )[ 0 ];
@@ -245,6 +261,8 @@ const { launch, login, reporter } = require( './helpers' );
 			&& row0.values.link.title === 'Pricing' && row0.values.link.target === '_blank'
 			&& row0.values.note === 'main nav',
 			JSON.stringify( row0 ) );
+		t.check( 'nested group column persisted inside the row',
+			row0 && row0.values.colors_bg === '#ff6600', JSON.stringify( row0 && row0.values.colors_bg ) );
 
 		// Remove the row; the sibling toggle's value survives the merge.
 		await page.click( '[data-sset="field_minn_optlab_nav_links"] [data-rdel="0"]' );
