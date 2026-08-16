@@ -320,6 +320,14 @@ add_action(
 					if ( ! $post ) {
 						return null;
 					}
+					// Only for someone who can edit the post. This answers which
+					// builder plugin runs the site and hands back that post's
+					// builder editing URL, which is a description of the admin
+					// rather than of the published page, and every sibling field
+					// here is bound to edit_post the same way.
+					if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+						return null;
+					}
 					foreach ( minn_admin_page_builders() as $id => $b ) {
 						if ( ! call_user_func( $b['detect'], $post ) ) {
 							continue;
@@ -339,7 +347,10 @@ add_action(
 				'schema'       => array(
 					'type'        => array( 'object', 'null' ),
 					'description' => __( 'Page builder that manages this post, if any.', 'minn-admin' ),
-					'context'     => array( 'view', 'edit' ),
+					// Editor context only, like every other field this plugin
+					// adds. In view context it rode along on anonymous
+					// wp/v2/posts responses, naming the builder plugin per post.
+					'context'     => array( 'edit' ),
 				),
 			)
 		);

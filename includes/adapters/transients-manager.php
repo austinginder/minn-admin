@@ -55,7 +55,14 @@ function minn_admin_tm_name( $option_name ) {
 }
 
 function minn_admin_tm_is_site( $option_name ) {
-	return false !== strpos( (string) $option_name, '_site_transient' );
+	// Prefix, not substring, so this agrees with minn_admin_tm_name() above,
+	// which strips by prefix. An ordinary per-site transient whose own name
+	// happens to contain the words (_transient_my_site_transient_cache) is a
+	// blog transient; reading it as a site transient sent its delete to the
+	// network store and left the row the operator actually picked in place.
+	$option_name = (string) $option_name;
+	return 0 === strpos( $option_name, '_site_transient_' )
+		|| 0 === strpos( $option_name, '_site_transient_timeout_' );
 }
 
 /**
@@ -451,8 +458,23 @@ add_action( 'rest_api_init', function () {
 				if ( ! $row || false === strpos( $row->option_name, '_transient_' ) || false !== strpos( $row->option_name, '_timeout_' ) ) {
 					return new WP_Error( 'not_found', __( 'Transient not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				$name = minn_admin_tm_name( $row->option_name );
-				$ok   = minn_admin_tm_is_site( $row->option_name )
+				$name    = minn_admin_tm_name( $row->option_name );
+				$is_site = minn_admin_tm_is_site( $row->option_name );
+				// A site transient is network-shared state: on multisite
+				// delete_site_transient() writes sitemeta and flushes a cache
+				// group every tenant reads, which is more than a single site's
+				// manage_options should reach. The main site of a network that
+				// grew out of a single-site install still carries rows like
+				// _site_transient_update_core in its own options table, so this
+				// is ordinary rather than contrived.
+				if ( $is_site && class_exists( 'Minn_Admin' ) && ! Minn_Admin::network_owner() ) {
+					return new WP_Error(
+						'forbidden',
+						__( 'Network-wide transients are cleared by a network administrator.', 'minn-admin' ),
+						array( 'status' => 403 )
+					);
+				}
+				$ok = $is_site
 					? delete_site_transient( $name )
 					: delete_transient( $name );
 				// delete_* returns false when the key was already gone — still treat as done.
