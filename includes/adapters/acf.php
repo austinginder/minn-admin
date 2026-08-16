@@ -1543,6 +1543,152 @@ add_filter( 'minn_admin_block_forms', function ( $forms ) {
 	return $forms;
 } );
 
+/**
+ * One field value as a short display string for the revision comparison.
+ *
+ * Structural values (rows, sections, galleries) are SUMMARIZED rather than
+ * spelled out: a diff that claimed to show every sub-value of nineteen
+ * sections would be unreadable, and half-showing one would be dishonest.
+ * The summary says what changed shape; the fields themselves are one click
+ * away in the panel.
+ *
+ * @param array $f Mapped field.
+ * @param mixed $v Raw stored value.
+ * @return string
+ */
+function minn_admin_acf_display_value( $f, $v ) {
+	$empty = __( 'empty', 'minn-admin' );
+	switch ( $f['type'] ) {
+		case 'rows':
+			$n = is_array( $v ) ? count( $v ) : 0;
+			/* translators: %d: number of repeater rows. */
+			return $n ? sprintf( _n( '%d row', '%d rows', $n, 'minn-admin' ), $n ) : $empty;
+		case 'flex':
+			$names = array();
+			foreach ( (array) $v as $row ) {
+				$row     = (array) $row;
+				$layout  = (string) ( $row['acf_fc_layout'] ?? '' );
+				$names[] = isset( $f['layouts'][ $layout ] ) ? $f['layouts'][ $layout ]['label'] : $layout;
+			}
+			return $names ? implode( ', ', $names ) : $empty;
+		case 'gallery':
+			$n = is_array( $v ) ? count( $v ) : 0;
+			/* translators: %d: number of images in a gallery field. */
+			return $n ? sprintf( _n( '%d image', '%d images', $n, 'minn-admin' ), $n ) : $empty;
+		case 'true_false':
+			return empty( $v ) ? __( 'Off', 'minn-admin' ) : __( 'On', 'minn-admin' );
+		case 'image':
+		case 'file':
+			$id = is_array( $v ) ? ( $v['ID'] ?? $v['id'] ?? 0 ) : $v;
+			if ( ! $id ) {
+				return $empty;
+			}
+			$title = get_the_title( (int) $id );
+			return '' !== $title ? $title : '#' . (int) $id;
+		case 'link':
+			$v = (array) $v;
+			return ( $v['url'] ?? '' ) ? (string) $v['url'] : $empty;
+		case 'multicheck':
+		case 'relation':
+			$parts = array();
+			foreach ( (array) $v as $entry ) {
+				if ( is_scalar( $entry ) ) {
+					$parts[] = ! empty( $f['choices'][ $entry ] ) ? (string) $f['choices'][ $entry ] : (string) $entry;
+				}
+			}
+			return $parts ? implode( ', ', $parts ) : $empty;
+	}
+	if ( is_array( $v ) ) {
+		return $empty;
+	}
+	$s = trim( wp_strip_all_tags( (string) $v ) );
+	if ( '' === $s ) {
+		return $empty;
+	}
+	if ( ! empty( $f['choices'][ $s ] ) ) {
+		$s = (string) $f['choices'][ $s ];
+	}
+	return mb_strlen( $s ) > 160 ? mb_substr( $s, 0, 160 ) . '…' : $s;
+}
+
+/**
+ * A repeating field's value as a bare count, for when the fuller summary
+ * reads the same on both sides of a comparison.
+ *
+ * @param array $f Mapped field.
+ * @param mixed $v Raw stored value.
+ * @return string
+ */
+function minn_admin_acf_count_label( $f, $v ) {
+	$n = is_array( $v ) ? count( $v ) : 0;
+	if ( ! $n ) {
+		return __( 'empty', 'minn-admin' );
+	}
+	if ( 'flex' === $f['type'] ) {
+		/* translators: %d: number of flexible-content sections. */
+		return sprintf( _n( '%d section', '%d sections', $n, 'minn-admin' ), $n );
+	}
+	/* translators: %d: number of repeater rows. */
+	return sprintf( _n( '%d row', '%d rows', $n, 'minn-admin' ), $n );
+}
+
+// Custom fields in the revision comparison. ACF writes its values onto each
+// revision post, so a revision whose only change was a field can finally say
+// so instead of reporting itself identical.
+add_filter( 'minn_admin_revision_fields', function ( $rows, $post_id, $revision_id ) {
+	if ( ! minn_admin_acf_active() ) {
+		return $rows;
+	}
+	$label  = __( 'Custom fields', 'minn-admin' );
+	$fields = minn_admin_acf_simple_fields_for_post( $post_id );
+	// Only fields the revision actually RECORDED can be compared. ACF writes
+	// its values onto a revision as it is taken, so a revision made before the
+	// field existed (or by a path that never stored one) simply has nothing —
+	// reading that as "was empty" would invent a change that never happened.
+	// The `_name` reference meta is what proves a value was written.
+	$fields = array_filter( $fields, function ( $f ) use ( $revision_id ) {
+		return '' !== (string) get_post_meta( $revision_id, '_' . $f['name'], true );
+	} );
+	foreach ( $fields as $field ) {
+		$was = minn_admin_acf_raw_value( $field, $revision_id );
+		$now = minn_admin_acf_raw_value( $field, $post_id );
+		if ( wp_json_encode( $was ) === wp_json_encode( $now ) ) {
+			continue;
+		}
+		$was_s = minn_admin_acf_display_value( $field, $was );
+		$now_s = minn_admin_acf_display_value( $field, $now );
+		// The values differ but their summaries read the same (the same eight
+		// sections, edited inside). Saying "X → X" would report the change as
+		// no change, so name what actually moved.
+		if ( $was_s === $now_s ) {
+			if ( in_array( $field['type'], array( 'rows', 'flex' ), true ) ) {
+				$was_s = minn_admin_acf_count_label( $field, $was );
+				$now_s = minn_admin_acf_count_label( $field, $now );
+				$n     = 0;
+				$old   = is_array( $was ) ? array_values( $was ) : array();
+				foreach ( ( is_array( $now ) ? array_values( $now ) : array() ) as $i => $row ) {
+					if ( ! isset( $old[ $i ] ) || wp_json_encode( $old[ $i ] ) !== wp_json_encode( $row ) ) {
+						$n++;
+					}
+				}
+				if ( $n ) {
+					/* translators: %d: how many rows or sections were edited. */
+					$now_s .= ' · ' . sprintf( _n( '%d edited', '%d edited', $n, 'minn-admin' ), $n );
+				}
+			} else {
+				$now_s .= ' · ' . __( 'changed', 'minn-admin' );
+			}
+		}
+		$rows[] = array(
+			'group' => $label,
+			'label' => trim( wp_strip_all_tags( (string) $field['label'] ) ),
+			'was'   => $was_s,
+			'now'   => $now_s,
+		);
+	}
+	return $rows;
+}, 10, 3 );
+
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 	if ( ! minn_admin_acf_active() ) {
 		return $panels;

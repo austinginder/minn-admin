@@ -37269,6 +37269,18 @@
 			currentTitle: $( '#minn-editor-title' ) ? $( '#minn-editor-title' ).value : ( ed.title || '' ),
 		};
 		renderOverlays();
+		// Custom fields ride their own request: core revisions carry no
+		// postmeta, but field plugins write their values onto the revision,
+		// so a revision that changed nothing but fields still has an answer.
+		// A provider-less site just gets an empty list.
+		api( `minn-admin/v1/revision-fields/${ ed.id }/${ revId }` )
+			.then( ( r ) => {
+				if ( state.modal && state.modal.type === 'revision' && state.modal.revId === revId ) {
+					state.modal.fields = r;
+					renderOverlays();
+				}
+			} )
+			.catch( () => {} );
 		api( `wp/v2/${ ed.type }/${ ed.id }/revisions/${ revId }?context=edit&_fields=id,modified,title,content` )
 			.then( ( rev ) => {
 				if ( state.modal && state.modal.type === 'revision' && state.modal.revId === revId ) {
@@ -37691,9 +37703,33 @@
 			const titleDiff = revTitle !== ( m.currentTitle || '' )
 				? diffWords( revTitle || '(no title)', m.currentTitle || '(no title)' )
 				: null;
+			// Fields count toward the verdict: on a page whose edits all live
+			// in custom fields, "identical" was not merely empty, it was wrong.
+			const fieldGroups = ( m.fields && m.fields.groups ) || [];
+			const fieldCount = ( m.fields && m.fields.changed ) || 0;
+			const parts = [];
+			if ( changed ) {
+				/* translators: %d: how many blocks differ from the current content. */
+				parts.push( sprintf( _n( '%d block differs', '%d blocks differ', changed ), changed ) );
+			}
+			if ( fieldCount ) {
+				/* translators: %d: how many custom fields differ from the current content. */
+				parts.push( sprintf( _n( '%d field changed', '%d fields changed', fieldCount ), fieldCount ) );
+			}
+			if ( titleDiff ) parts.push( __( 'title changed' ) );
 			const summary = rows
-				? ( changed || titleDiff ? `${ changed } block${ changed === 1 ? '' : 's' } differ${ changed === 1 ? 's' : '' } from the current content${ titleDiff ? ' · title changed' : '' }` : __( 'Identical to the current content' ) )
+				? ( parts.length ? parts.join( ' · ' ) : __( 'Identical to the current content' ) )
 				: __( 'Post too large to diff — showing the revision as saved' );
+			const fieldsHtml = fieldGroups.length ? `
+				<div class="minn-rev-fields">
+					${ fieldGroups.map( ( g ) => `
+						${ g.label ? `<div class="minn-fields-sub">${ esc( g.label ) }</div>` : '' }
+						${ g.rows.map( ( r ) => `
+							<div class="minn-side-row">
+								<span class="minn-side-key">${ esc( r.label ) }</span>
+								<span class="minn-diff-inline"><del>${ esc( r.was ) }</del> → <ins>${ esc( r.now ) }</ins></span>
+							</div>` ).join( '' ) }` ).join( '' ) }
+				</div>` : '';
 			bodyHtml = `
 				<div class="minn-modal-meta">
 					${ titleDiff ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Title' ) ) }</span><span class="minn-diff-inline">${ titleDiff.left } → ${ titleDiff.right }</span></div>`
@@ -37701,6 +37737,7 @@
 					<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Saved' ) ) }</span><span>${ timeAgo( rev.modified ) }</span></div>
 					<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Changes' ) ) }</span><span>${ esc( summary ) }</span></div>
 				</div>
+				${ fieldsHtml }
 				${ rows ? `
 				<div class="minn-diff" id="minn-diff">
 					<div class="minn-diff-headrow"><div>${ esc( __( 'This revision' ) ) }</div><div>${ esc( __( 'Current' ) ) }</div></div>

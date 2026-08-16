@@ -738,6 +738,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_visibility_providers` | filter | Report an active maintenance / coming-soon / password mode (Overview banner, topbar chip, System check) |
 | `minn_admin_media_folders` | filter | Feed the Media view's folder filter from your folder plugin (since 0.18.0) |
 | `minn_admin_log_sources` | filter | Add a log to System's log viewer (since 0.19.0) |
+| `minn_admin_revision_fields` | filter | Report what a revision changed OUTSIDE the content, for the revision comparison (since 0.31.0) |
 
 Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
 tooling that wants to render into the page attaches at `minn_admin_template_footer`; the

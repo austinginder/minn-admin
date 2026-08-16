@@ -1553,6 +1553,11 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 }
 .minn-diff-row.del .minn-diff-cell:first-child,
 .minn-diff-row.add .minn-diff-cell:last-child { background: color-mix(in srgb, var(--bg2) 60%, transparent); }
+/* Field changes in a revision: rows above the content diff, since a
+   revision can differ in fields alone. */
+.minn-rev-fields { margin: 0 0 14px; }
+.minn-rev-fields .minn-fields-sub { margin: 4px 0 2px; }
+.minn-rev-fields .minn-diff-inline { text-align: end; overflow-wrap: anywhere; }
 
 /* ===== Themes ===== */
 .minn-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }

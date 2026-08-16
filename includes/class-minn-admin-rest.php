@@ -1273,6 +1273,21 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// What a revision changed OUTSIDE the content: custom fields. Core
+		// revisions carry no postmeta, but field plugins write their own values
+		// onto the revision post, so the comparison is a read away.
+		register_rest_route(
+			'minn-admin/v1',
+			'/revision-fields/(?P<id>\d+)/(?P<revision>\d+)',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'revision_fields' ),
+				'permission_callback' => function ( $request ) {
+					return current_user_can( 'edit_post', (int) $request['id'] );
+				},
+			)
+		);
+
 		// Rebuild an image block's markup for a chosen set of images. The
 		// layout rules belong to the plugin that owns the block; Minn only
 		// says WHICH images, in what order (see Minn_Admin::image_blocks).
@@ -6168,6 +6183,60 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * excerpt, taxonomy terms and meta (builder data, featured image, SEO)
 	 * ride along, so the copy renders like the original everywhere.
 	 */
+	/**
+	 * Custom-field changes between a revision and the post it belongs to.
+	 *
+	 * Core revisions store no postmeta, but field plugins write their values
+	 * onto the revision post themselves (ACF does), so a revision that changed
+	 * nothing but fields can still be compared. Providers answer
+	 * `minn_admin_revision_fields` with display-ready rows; nothing here knows
+	 * any field vocabulary.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function revision_fields( WP_REST_Request $request ) {
+		$post_id  = (int) $request['id'];
+		$revision = get_post( (int) $request['revision'] );
+		if ( ! $revision || 'revision' !== $revision->post_type || (int) $revision->post_parent !== $post_id ) {
+			return new WP_Error( 'minn_bad_revision', __( 'That revision belongs to another post.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		$rows = array();
+		/**
+		 * Filter the field rows shown in a revision comparison.
+		 *
+		 * @param array $rows     [{ group, label, was, now }] — `was` and `now`
+		 *                        are display strings, already formatted.
+		 * @param int   $post_id  The post.
+		 * @param int   $revision The revision being compared against it.
+		 */
+		$rows = apply_filters( 'minn_admin_revision_fields', $rows, $post_id, (int) $revision->ID );
+		$groups = array();
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['label'] ) ) {
+				continue;
+			}
+			$key = (string) ( $row['group'] ?? '' );
+			if ( ! isset( $groups[ $key ] ) ) {
+				$groups[ $key ] = array( 'label' => $key, 'rows' => array() );
+			}
+			$groups[ $key ]['rows'][] = array(
+				'label' => (string) $row['label'],
+				'was'   => (string) ( $row['was'] ?? '' ),
+				'now'   => (string) ( $row['now'] ?? '' ),
+			);
+		}
+		$groups  = array_values( $groups );
+		$changed = 0;
+		foreach ( $groups as $group ) {
+			$changed += count( $group['rows'] );
+		}
+		return rest_ensure_response( array(
+			'changed' => $changed,
+			'groups'  => $groups,
+		) );
+	}
+
 	public static function duplicate_post( WP_REST_Request $request ) {
 		$post = get_post( (int) $request['id'] );
 		if ( ! $post || 'trash' === $post->post_status ) {

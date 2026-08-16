@@ -116,6 +116,23 @@ for untouched content remains the non-negotiable invariant.
   gone. Remaining: the editor-led hero itself; readme.md still opens on "a reimagined
   WordPress admin experience" with an Overview screenshot, not the writing surface.
 
+- **Revision comparison beyond the content.** v0.31.0 opened this: the modal now
+  reports custom-field changes through the `minn_admin_revision_fields` filter,
+  because core revisions carry no postmeta but field plugins write their own
+  values onto each revision post (verified on the mula lab: ACF stores ~390 meta
+  rows per revision). Only fields the revision actually RECORDED are compared —
+  a revision that stored nothing must not read as "every field was empty".
+  Deliberately still summarized rather than deep-diffed: a repeater or a
+  flexible-content field reports its shape and how many rows moved
+  ("11 sections → 11 sections · 2 edited"), never a per-sub diff. Open, in rough
+  order of value: (1) per-row diffing for repeaters and sections, which needs a
+  row-identity story the storage does not provide (positions shift), (2) other
+  field providers joining the filter (Meta Box, Pods, SEO panels), (3) restoring
+  a revision's FIELDS, which core's restore path does not touch and which would
+  need each provider to own its own write-back, (4) the same comparison for
+  autosaves. Nothing here should invent a change that did not happen; a coarse
+  honest summary beats a precise-looking wrong one.
+
 ## What we will never build (unchanged, load-bearing)
 
 **North star:** Minn is the writing editor for WordPress. Gutenberg is the layout tool.
