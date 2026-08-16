@@ -69,7 +69,14 @@ function minn_admin_stackable_library() {
 			$content = json_decode( wp_remote_retrieve_body( $response ), true );
 		}
 		$designs['v4'] = $content;
-		set_transient( 'stackable_get_design_library_v4', $designs, 7 * DAY_IN_SECONDS );
+		// Only a real answer is worth keeping, and this is Stackable's OWN
+		// cache key with their seven day life. Writing the failure into it
+		// left array( 'v4' => null ), which is non-empty, so both this reader
+		// and Stackable's own treated the cache as warm and served an empty
+		// design library to everyone for a week after one unreachable fetch.
+		if ( is_array( $content ) && $content ) {
+			set_transient( 'stackable_get_design_library_v4', $designs, 7 * DAY_IN_SECONDS );
+		}
 	}
 
 	return isset( $designs['v4'] ) && is_array( $designs['v4'] ) ? $designs['v4'] : array();

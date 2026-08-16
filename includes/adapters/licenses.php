@@ -3835,7 +3835,13 @@ function minn_admin_licenses_surecart( $fingerprints ) {
 				"SELECT option_value FROM {$wpdb->options}
 				 WHERE option_name LIKE '%\_license\_options' AND option_value LIKE '%sc\_license%' LIMIT 1"
 			);
-			$opt = $row ? maybe_unserialize( $row ) : array();
+			// Decode without instantiating anything. This row was matched by a
+			// wildcard rather than written by us, so whatever plugin owns it
+			// chose its contents; the reader only wants a *license_key* string
+			// leaf and never needs live objects.
+			$opt = ( $row && is_serialized( $row ) )
+				? unserialize( $row, array( 'allowed_classes' => false ) ) // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+				: $row;
 			$opt = is_array( $opt ) ? $opt : array();
 		}
 		$key = '';
