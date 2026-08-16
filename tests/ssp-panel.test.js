@@ -5,7 +5,7 @@
  * mirror SSP's metabox storage ('on'/'' checkboxes, plain postmeta). Server
  * truth is read back through SSP's OWN registered meta on the REST object.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'ssp-panel' );
@@ -47,14 +47,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.fill( '[data-pf="ssp:audio_file"]', 'https://example.com/minn-suite-ep.mp3' );
 		await page.fill( '[data-pf="ssp:duration"]', '18:45' );
 		await page.fill( '[data-pf="ssp:itunes_episode_number"]', '7' );
-		// Explicit is a true_false switch; episode_type renders as a native
-		// select (the panel dialect aliases radio → select, rule 70).
+		// Explicit is a true_false switch; episode_type is a themed
+		// combobox (the panel dialect aliases radio → select → combobox).
 		await page.evaluate( () => {
 			const explicit = document.querySelector( '[data-pf="ssp:explicit"]' );
 			if ( explicit && explicit.matches( 'button, .minn-switch' ) ) explicit.click();
 			else if ( explicit ) explicit.checked = true, explicit.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 		} );
-		await page.selectOption( '[data-pf="ssp:episode_type"]', 'video' );
+		await pickCombo( page, '[data-pf="ssp:episode_type"] .minn-ac-input', 'video' );
 		await page.keyboard.press( 'Meta+s' );
 
 		let ep = null;

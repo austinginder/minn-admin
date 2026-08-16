@@ -14,7 +14,7 @@
  *   MINN_TEST_URL=https://acf-pro.localhost MINN_TEST_USER=austin \
  *   MINN_TEST_PASS=… node acf-repeater.test.js
  */
-const { launch, login, deletePost, openEditor, reporter, BASE } = require( './helpers' );
+const { launch, login, deletePost, openEditor, reporter, BASE, pickCombo } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'acf-repeater' );
@@ -97,8 +97,18 @@ const { launch, login, deletePost, openEditor, reporter, BASE } = require( './he
 		await page.waitForSelector( `[data-rowsub="1:${ textSub }"]`, { timeout: 5000 } );
 		await page.fill( `[data-rowsub="1:${ textSub }"]`, 'Row two' );
 		if ( selSub ) {
-			const choice = await page.$eval( `[data-rowsub="1:${ selSub }"]`, ( e ) => e.options[ e.options.length - 1 ].value );
-			await page.selectOption( `[data-rowsub="1:${ selSub }"]`, choice );
+			const wrapSel = `[data-rowsub="1:${ selSub }"]`;
+			await page.click( `${ wrapSel } .minn-ac-input` );
+			const choice = await page.evaluate( () => {
+				const items = Array.from( document.querySelectorAll( '.minn-ac-panel:not([hidden]) .minn-ac-item[data-acv]' ) )
+					.map( ( el ) => el.getAttribute( 'data-acv' ) )
+					.filter( ( v ) => v !== '' );
+				return items[ items.length - 1 ] || '';
+			} );
+			if ( choice ) {
+				await page.click( `.minn-ac-panel:not([hidden]) .minn-ac-item[data-acv="${ choice }"]` );
+				await page.waitForTimeout( 120 );
+			}
 		}
 		await save();
 		let rows = await readRows();

@@ -11,7 +11,7 @@
  * (text/select/checkbox), an alias map and locked: 1. The bundled ACF
  * adapter emits the same descriptor shape from real ACF Pro field groups.
  */
-const { launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
+const { launch, login, createPost, deletePost, openEditor, reporter, pickCombo } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'data-form' );
@@ -74,7 +74,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 		// Edit all three controls, Apply, save, verify the stored comment.
 		await page.fill( '[data-inspdf="own:headline"]', 'Hello edited' );
-		await page.selectOption( '[data-inspdf="own:style"]', 'boxed' );
+		await pickCombo( page, '[data-inspdf="own:style"] .minn-ac-input', 'boxed' );
 		await page.click( '[data-inspdf="own:featured"]' );
 		await page.click( '#minn-insp-apply' );
 		await page.waitForTimeout( 1200 );

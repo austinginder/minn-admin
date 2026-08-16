@@ -5,7 +5,7 @@
  * suite seeds a rich blob with hosting/chapter keys, edits through the real
  * UI, and verifies both the managed values and the survivors.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'powerpress-panel' );
@@ -64,7 +64,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.fill( '[data-pf="powerpress:duration"]', '22:15' );
 		await page.fill( '[data-pf="powerpress:episode_no"]', '5' );
 		await page.fill( '[data-pf="powerpress:subtitle"]', 'A suite episode' );
-		await page.selectOption( '[data-pf="powerpress:episode_type"]', 'bonus' );
+		await pickCombo( page, '[data-pf="powerpress:episode_type"] .minn-ac-input', 'bonus' );
 		await page.keyboard.press( 'Meta+s' );
 
 		let pp = null;

@@ -1213,12 +1213,14 @@
 	 * schema-driven settings view). Canonical field:
 	 *   { key, label, type, options, placeholder, help, rows, min, max,
 	 *     mono, required, clearable, klass }
-	 * Types: text (default) · textarea · number · select · toggle ·
-	 * checkbox · tags · email · url · hidden. formNormField() absorbs the
-	 * dialects adapter descriptors already ship: name→key, ACF's
-	 * true_false → toggle, range → number, radio → select (the app always
-	 * rendered radios as selects), choices object-map → [value, label]
-	 * pairs, options implying select on an untyped field. Controls carry
+	 * Types: text (default) · textarea · number · select · combobox ·
+	 * toggle · checkbox · tags · email · url · hidden. formNormField()
+	 * absorbs the dialects adapter descriptors already ship: name→key,
+	 * ACF's true_false → toggle, range → number, radio → select (the
+	 * app always rendered radios as selects), choices object-map →
+	 * [value, label] pairs, options implying select on an untyped field.
+	 * comboUpgrade() then flips select→combobox in adapter forms, editor
+	 * panels, ACF dataForm and repeater rows. Controls carry
 	 * `${ attr }="${ id }"` plus data-ftype so formControlValue() coerces
 	 * reads: number '' → null, tags ⇄ array, toggle/checkbox → boolean.
 	 * Callers own labels and layout; `clearable` prepends a "—" empty
@@ -1259,8 +1261,13 @@
 			// the field's options — reads come back via the inner input's
 			// dataset.acValue in formControlValue(). data-acseed carries the
 			// render-time value so bindFormComboboxes can seed without the
-			// caller re-threading it.
-			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="combobox" data-acseed="${ esc( String( v ) ) }">
+			// caller re-threading it. data-acopts is the rendered vocabulary
+			// (already clearable-prepended), so a dialect whose keys don't
+			// match the field list (panel `pid:name`, row `i:name`) still
+			// binds from the markup.
+			const acopts = ( f.options && f.options.length )
+				? ` data-acopts="${ esc( JSON.stringify( f.options ) ) }"` : '';
+			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="combobox" data-acseed="${ esc( String( v ) ) }"${ acopts }>
 				<input class="minn-input minn-ac-input" placeholder="${ esc( f.placeholder || '' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
 			</div>`;
@@ -1936,7 +1943,7 @@
 		const rowFieldsHtml = ( r, i ) => defFor( r ).map( ( sf ) => {
 			const nf = formNormField( sf );
 			if ( nf.type === 'select' ) nf.clearable = true;
-			const ctl = formControlHtml( nf, r.values[ sf.name ], 'data-rowsub', `${ i }:${ sf.name }` );
+			const ctl = formControlHtml( comboUpgrade( nf ), r.values[ sf.name ], 'data-rowsub', `${ i }:${ sf.name }` );
 			return `<div class="minn-panel-field${ nf.type === 'toggle' ? ' inline' : '' }">
 				<div class="minn-field-label">${ esc( sf.label || sf.name ) }</div>
 				${ ctl }
@@ -1975,9 +1982,18 @@
 			wrap.innerHTML = rows.map( rowHtml ).join( '' )
 				+ ( locked ? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of per-row fields only editable in wp-admin. */ _n( '%d more field per row lives in wp-admin.', '%d more fields per row live in wp-admin.', locked ) ), locked ) }</div>` : '' )
 				+ `<button type="button" class="minn-btn-soft" data-radd>+ ${ esc( flex ? __( 'Add section' ) : __( 'Add row' ) ) }</button>`;
-			// Image and date subs need per-node arming (no input events to
-			// delegate); structural ops re-render, so fresh nodes re-wire
-			// here each time.
+			// Image, date and combobox subs need per-node arming (no input
+			// events to delegate); structural ops re-render, so fresh nodes
+			// re-wire here each time.
+			bindFormComboboxes( wrap, 'data-rowsub', [], ( key ) => {
+				const el = wrap.querySelector( `[data-rowsub="${ key }"]` );
+				if ( ! el ) return;
+				const sep = key.indexOf( ':' );
+				const row = rows[ Number( key.slice( 0, sep ) ) ];
+				if ( ! row ) return;
+				row.values[ key.slice( sep + 1 ) ] = formControlValue( el );
+				commit();
+			} );
 			$$( '[data-rowsub][data-ftype="image"]', wrap ).forEach( ( el ) => {
 				const sep = el.dataset.rowsub.indexOf( ':' );
 				const row = rows[ Number( el.dataset.rowsub.slice( 0, sep ) ) ];
@@ -2225,15 +2241,15 @@
 		wire();
 	}
 
-	// Adapter-form selects render as the strict themed combobox:
-	// the native <select> popup was the last OS-drawn control
-	// left in adapter surfaces. The upgrade happens at render time in the
-	// adapter-form dialects only (surface settings, create/edit, action
-	// fields) — editor panels and the block inspector keep native selects,
-	// their binders don't speak combobox and `clearable` semantics live
-	// there.
+	// Select fields render as the strict themed combobox in every form
+	// dialect (adapter surfaces, editor panels, ACF dataForm, repeater
+	// rows). The native <select> popup is the last OS-drawn control and
+	// does not match the rest of Minn. `clearable` prepends the empty
+	// "—" row so a panel/dataForm field can still be wiped. The block
+	// inspector's generic attr form stays native: its schema-enum
+	// empty-option semantics live on the select itself.
 	function comboUpgrade( nf ) {
-		if ( nf.type === 'select' && nf.options && nf.options.length ) {
+		if ( ( nf.type === 'select' || nf.type === 'combobox' ) && nf.options && nf.options.length ) {
 			if ( nf.clearable && ! nf.options.some( ( o ) => String( o[ 0 ] ) === '' ) ) nf.options = [ [ '', '—' ], ...nf.options ];
 			nf.type = 'combobox';
 		}
@@ -2241,10 +2257,11 @@
 	}
 
 	// Arm every rendered combobox in `scope` from its data-acseed + the
-	// field's options. Strict mode seeds dataset.acValue (falling back to
-	// the first option when the seed isn't in the vocabulary, exactly like
-	// a native select renders), so an untouched control collects the same
-	// value an untouched select would.
+	// field's options (or the wrap's data-acopts stamp). Strict mode
+	// seeds dataset.acValue (falling back to the first option when the
+	// seed isn't in the vocabulary, exactly like a native select
+	// renders), so an untouched control collects the same value an
+	// untouched select would.
 	function bindFormComboboxes( scope, attr, fields, onEdit ) {
 		if ( ! scope ) return;
 		$$( `[${ attr }][data-ftype="combobox"]`, scope ).forEach( ( wrap ) => {
@@ -2252,10 +2269,16 @@
 			wrap._minnAcBound = true;
 			const key = wrap.getAttribute( attr );
 			const f = ( fields || [] ).map( formNormField ).find( ( x ) => x.key === key );
-			if ( ! f || ! f.options ) return;
+			let options = null;
+			try { options = JSON.parse( wrap.dataset.acopts || '' ); } catch ( e ) { /* fall through */ }
+			if ( ! Array.isArray( options ) || ! options.length ) options = f && f.options;
+			if ( ! options || ! options.length ) return;
+			if ( f && f.clearable && ! options.some( ( o ) => String( o[ 0 ] ) === '' ) ) {
+				options = [ [ '', '—' ], ...options ];
+			}
 			let seed = wrap.dataset.acseed || '';
-			if ( ! f.options.some( ( o ) => String( o[ 0 ] ) === seed ) ) seed = String( f.options[ 0 ][ 0 ] );
-			bindAutocomplete( wrap, f.options.map( ( [ value, label ] ) => ( { value, label } ) ), { strict: true, value: seed } );
+			if ( ! options.some( ( o ) => String( o[ 0 ] ) === seed ) ) seed = String( options[ 0 ][ 0 ] );
+			bindAutocomplete( wrap, options.map( ( [ value, label ] ) => ( { value, label } ) ), { strict: true, value: seed } );
 			if ( onEdit ) {
 				// A strict pick sets dataset.acValue programmatically (no
 				// input event fires) — edit tracking watches the attribute,
@@ -25320,10 +25343,11 @@
 
 	function panelInput( pid, f, value ) {
 		// Panel selects always offer the "—" empty choice: clearing a field
-		// is how ACF / SEO values get deleted on save.
+		// is how ACF / SEO values get deleted on save. They render as the
+		// themed combobox (same control as adapter forms).
 		const nf = formNormField( f );
 		if ( nf.type === 'select' ) nf.clearable = true;
-		return formControlHtml( nf, value, 'data-pf', `${ pid }:${ nf.key }` );
+		return formControlHtml( comboUpgrade( nf ), value, 'data-pf', `${ pid }:${ nf.key }` );
 	}
 
 	/** Panel field body (modal). Doors on the rail open this in a large modal. */
@@ -25736,6 +25760,8 @@
 				// picker's onChange is the write path.
 				bindDatePicker( input, ( machine ) => write( machine || '' ),
 					{ dateOnly: input.dataset.ftype === 'date', marks: false } );
+			} else if ( input.dataset.ftype === 'combobox' ) {
+				// Arming below; a strict pick fires no input event.
 			} else {
 				input.addEventListener( 'input', () => {
 					let v = formControlValue( input );
@@ -25743,6 +25769,22 @@
 					write( v );
 				} );
 			}
+		} );
+		// Bind after the per-control walk so an empty "—" pick writes null
+		// (the same sentinel a native select used to collect) and so
+		// applyConds can read the seeded acValue.
+		bindFormComboboxes( root, 'data-pf', [], ( key ) => {
+			const el = root.querySelector( `[data-pf="${ key }"]` );
+			if ( ! el ) return;
+			let v = formControlValue( el );
+			if ( v === '' ) v = null;
+			const sep = key.indexOf( ':' );
+			const pid = key.slice( 0, sep );
+			const name = key.slice( sep + 1 );
+			( state.editor.panelValues[ pid ] = state.editor.panelValues[ pid ] || {} )[ name ] = v;
+			state.editor.panelDirty[ pid ] = true;
+			scheduleAutosave();
+			applyConds();
 		} );
 		applyConds(); // initial visibility from the seeded values
 	}
@@ -28974,6 +29016,7 @@
 				<button class="minn-btn-soft" type="button" id="minn-cted-add"${ addable.length === 1 ? ` data-add-type="${ esc( addable[ 0 ] ) }"` : '' }>+ ${ esc( __( 'Add' ) ) } ${ esc( addable.length === 1 ? addable[ 0 ].split( '/' ).pop() : __( 'block' ) ) }</button>` : '';
 			const apply = $( '#minn-cted-apply', overlay );
 			if ( apply ) apply.disabled = ! model.children.length;
+			bindFormComboboxes( bodyEl, 'data-inspdf', [] );
 		};
 		renderCards();
 
@@ -29209,12 +29252,14 @@
 				? f.options.map( ( o ) => ( Array.isArray( o ) ? o : [ o, o ] ) ) : null;
 			// ACF stores true_false as 1/'1'/0/'' — normalize for the checkbox.
 			if ( f.control === 'checkbox' ) v = ! ( v == null || v === '' || v === '0' || v === 0 || v === false );
-			const controlHtml = formControlHtml( {
+			const nf = formNormField( {
 				key: f.name, label,
 				type: f.control || ( options ? 'select' : 'text' ), options,
 				clearable: true,
 				klass: f.control === 'textarea' ? 'minn-insp-textarea' : '',
-			}, v == null ? '' : v, 'data-inspdf', `${ prefix }:${ f.name }` );
+			} );
+			if ( nf.type === 'select' ) nf.clearable = true;
+			const controlHtml = formControlHtml( comboUpgrade( nf ), v == null ? '' : v, 'data-inspdf', `${ prefix }:${ f.name }` );
 			return f.control === 'checkbox' ? controlHtml
 				: `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }`;
 		} ).join( '' );
@@ -29687,6 +29732,7 @@
 				<button class="minn-btn-soft" id="minn-insp-duplicate" type="button" title="${ esc( __( 'Duplicate this block' ) ) }" aria-label="${ esc( __( 'Duplicate this block' ) ) }">${ icon( 'copy' ) }</button>
 				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="${ esc( __( 'Remove this block' ) ) }">${ icon( 'trash' ) }${ editable ? '' : ' ' + esc( __( 'Remove block' ) ) }</button>
 			</div>`;
+		bindFormComboboxes( inspectorEl, 'data-inspdf', [] );
 		positionInspector( insp.islandEl );
 	}
 

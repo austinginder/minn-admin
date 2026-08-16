@@ -5,7 +5,7 @@
  * sanitize_callback. Server truth is read back through the dedicated
  * minn_wpjm field after a real UI save.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'wpjm-panel' );
@@ -45,7 +45,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.fill( '[data-pf="wpjm:_job_location"]', 'Lancaster, PA' );
 		await page.fill( '[data-pf="wpjm:_company_name"]', 'Anchor Hosting' );
 		await page.fill( '[data-pf="wpjm:_application"]', 'jobs@example.com' );
-		await page.selectOption( '[data-pf="wpjm:_job_salary_unit"]', 'YEAR' );
+		await pickCombo( page, '[data-pf="wpjm:_job_salary_unit"] .minn-ac-input', 'YEAR' );
 		await page.evaluate( () => {
 			const el = document.querySelector( '[data-pf="wpjm:_remote_position"]' );
 			if ( el ) el.click();

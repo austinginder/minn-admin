@@ -1,6 +1,6 @@
 /**
  * ACF editor panel through the shared form engine: the true_false switch,
- * the select's "—" clear option, and the false-sentinel regression.
+ * the select-as-combobox "—" clear option, and the false-sentinel regression.
  *
  * ACF answers `false` over REST for ANY field with no value — including
  * selects and text fields. Panel saves round-trip the whole values object,
@@ -18,7 +18,7 @@
  * no-REST group must render and save like any other while staying absent
  * from ACF's own `acf` REST object.
  */
-const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } = require( './helpers' );
+const { launch, login, loginAs, createPost, deletePost, openEditor, reporter, pickCombo } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'acf-panel' );
@@ -69,11 +69,16 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
 		await page.click( '[data-side-door="panel:acf"]' );
 		const toggleSel = '[data-pf$=":featured_story"][data-ftype="toggle"]';
-		const selectSel = '[data-pf$=":layout"][data-ftype="select"]';
+		const selectSel = '[data-pf$=":layout"][data-ftype="combobox"]';
 		await page.waitForSelector( toggleSel, { timeout: 15000 } );
 
-		t.check( 'select renders with the "—" clear option',
-			await page.$eval( selectSel, ( e ) => e.options[ 0 ].value === '' ) );
+		t.check( 'select renders as a themed combobox with the "—" clear option',
+			await page.$eval( selectSel, ( e ) => {
+				let opts = [];
+				try { opts = JSON.parse( e.dataset.acopts || '[]' ); } catch ( err ) {}
+				return e.dataset.ftype === 'combobox' && !! e.querySelector( '.minn-ac-input' )
+					&& opts[ 0 ] && String( opts[ 0 ][ 0 ] ) === '' && String( opts[ 0 ][ 1 ] ) === '—';
+			} ) );
 
 		// Toggle on → save with the untouched empty select in the payload.
 		await page.click( toggleSel );
@@ -86,13 +91,13 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		t.check( 'toggle=on persisted', acf && acf.featured_story === true, JSON.stringify( acf ) );
 
 		// Set the select, save, verify.
-		await page.selectOption( selectSel, 'wide' );
+		await pickCombo( page, `${ selectSel } .minn-ac-input`, 'wide' );
 		await save();
 		acf = await readAcf();
 		t.check( 'select value persisted', acf && acf.layout === 'wide', JSON.stringify( acf ) );
 
 		// Clear the select via "—" and toggle back off in one save.
-		await page.selectOption( selectSel, '' );
+		await pickCombo( page, `${ selectSel } .minn-ac-input`, '' );
 		await page.click( toggleSel );
 		await save();
 		acf = await readAcf();
@@ -165,10 +170,10 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 			Array.isArray( mv.slideshow_tags ) && mv.slideshow_tags.join() === 'new,featured',
 			JSON.stringify( mv && mv.slideshow_tags ) );
 
-		// button_group is a styled radio — it rides the select control.
-		t.check( 'button_group renders as a select',
-			!! ( await page.$( '[data-pf$=":slideshow_size"][data-ftype="select"]' ) ) );
-		await page.selectOption( '[data-pf$=":slideshow_size"]', 'lg' );
+		// button_group is a styled radio — it rides the themed combobox.
+		t.check( 'button_group renders as a themed combobox',
+			!! ( await page.$( '[data-pf$=":slideshow_size"][data-ftype="combobox"]' ) ) );
+		await pickCombo( page, '[data-pf$=":slideshow_size"] .minn-ac-input', 'lg' );
 		await save();
 		mv = await readMinnAcf();
 		t.check( 'button_group choice persisted', mv.slideshow_size === 'lg', JSON.stringify( mv && mv.slideshow_size ) );
