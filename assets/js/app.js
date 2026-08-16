@@ -1723,6 +1723,39 @@
 		rtEl = null;
 	}
 
+	// Stored wysiwyg markup → the same markup, minus the parts that would run.
+	//
+	// Deliberately NOT sanitizePastedHtml(): that one normalises foreign
+	// clipboard markup down to the vocabulary the block serializers store, so
+	// running it over a value someone already saved would quietly drop tables,
+	// embeds and images, and the next Apply would write the stripped version
+	// back. A field's stored content has to survive being opened.
+	//
+	// So parse inertly (no resource loads, no handlers during the parse) and
+	// scrub only what executes: script/style elements, every on* attribute,
+	// and href/src pointing at a scheme that runs. Everything else is imported
+	// as it was.
+	function rtSeedHtml( s ) {
+		if ( s.indexOf( '<' ) === -1 ) return miniAutop( s );
+		const holder = inertParse( s );
+		$$( 'script, style, noscript', holder ).forEach( ( el ) => el.remove() );
+		$$( '*', holder ).forEach( ( el ) => {
+			Array.from( el.attributes ).forEach( ( at ) => {
+				const name = at.name.toLowerCase();
+				if ( 0 === name.indexOf( 'on' ) ) {
+					el.removeAttribute( at.name );
+					return;
+				}
+				// A relative or http(s) target is fine; anything else (javascript:,
+				// data:, vbscript:) is not, and safeHref already draws that line.
+				if ( ( 'href' === name || 'src' === name || 'xlink:href' === name ) && ! safeHref( at.value ) ) {
+					el.removeAttribute( at.name );
+				}
+			} );
+		} );
+		return holder.innerHTML || '<p><br></p>';
+	}
+
 	function openRichTextModal( html, onApply, opts = {} ) {
 		closeRichText();
 		const overlay = document.createElement( 'div' );
@@ -1761,8 +1794,14 @@
 		const body = $( '.minn-rt-body', overlay );
 		const s = String( html == null ? '' : html ).trim();
 		// Plain-text values (a wysiwyg field someone filled over the API)
-		// still need paragraphs to edit as blocks.
-		body.innerHTML = s ? ( s.indexOf( '<' ) === -1 ? miniAutop( s ) : s ) : '<p><br></p>';
+		// still need paragraphs to edit as blocks. Markup goes through the
+		// paste sanitizer first: `body` is already in the live document, so
+		// assigning stored markup straight in parses it for real and fires any
+		// onload/onerror it carries. Everywhere else in this file parses
+		// untrusted markup inertly; this was the one place that did not, and
+		// the sanitizer's vocabulary is the same one Apply stores anyway, so
+		// nothing survives the round trip that would not have survived it.
+		body.innerHTML = s ? rtSeedHtml( s ) : '<p><br></p>';
 
 		const linkRow = $( '.minn-rt-linkrow', overlay );
 		const linkInput = linkRow.querySelector( 'input' );
@@ -39106,7 +39145,11 @@
 						go( route );
 						return;
 					}
-					window.open( link.url, '_blank' );
+					// Same treatment as the other externally-sourced links:
+					// scheme-checked, and noopener so the page we open cannot
+					// reach back through window.opener and rewrite this tab.
+					const noticeHref = safeHref( link.url );
+					if ( noticeHref ) window.open( noticeHref, '_blank', 'noopener' );
 				} )
 			);
 			// Hide clears the notice from Minn's OWN digest — for nags whose
