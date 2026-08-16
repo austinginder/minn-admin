@@ -542,20 +542,50 @@ function minn_admin_scrutoscope_cron_resolve( $id ) {
  * "Profile this hook" is not a read: Scrutoscope's profile_cron_hook() does a
  * real do_action_ref_array(), so every callback on the hook fires with its
  * scheduled arguments. When WP Crontrol is also installed one of those hooks
- * is crontrol_cron_job, whose callback evals PHP the site stored, and WP
- * Crontrol guards running it with edit_files. Core maps edit_files to
- * do_not_allow under DISALLOW_FILE_EDIT and DISALLOW_FILE_MODS, and for every
- * non-super-admin on multisite, so manage_options alone is a weaker gate than
- * the one both WP Crontrol's screen and Minn's own Crontrol adapter apply.
+ * is crontrol_cron_job, whose callback evals PHP the site stored.
  *
- * Defers to WP Crontrol's own runnable() when it is loaded, so one predicate
- * governs both Diagnostics providers.
+ * WP Crontrol's own runnable() for that hook resolves to
+ * can_run_php_cron_events(), which is manage_options (verified against 1.21.1:
+ * only create/edit/delete use edit_files), and its feature flag reads only
+ * CRONTROL_DISALLOW_PHP_EVENTS, never DISALLOW_FILE_EDIT. So deferring to it
+ * ALONE let a subsite administrator fire PHP a super admin stored, under the
+ * profiler, and then read the SQL and outbound URLs it ran back out of the
+ * stored profile.
  *
- * @param string $hook Cron hook name.
+ * The rule below is therefore a CEILING rather than a fallback: the dangerous
+ * hooks are judged here first, and the vendor's answer can only narrow that
+ * further. One predicate still governs both Diagnostics providers.
+ *
+ * @param string $hook      Cron hook name.
+ * @param int    $timestamp Scheduled timestamp, for resolving the event.
  * @return bool
  */
 function minn_admin_scrutoscope_cron_runnable( $hook, $timestamp = 0 ) {
 	$hook = (string) $hook;
+
+	// Ceiling for the two hooks that DO something when fired. Evaluated before
+	// the vendor deferral below, so a vendor predicate that is more permissive
+	// than this cannot widen it.
+	if ( 'crontrol_cron_job' === $hook ) {
+		if ( defined( 'CRONTROL_DISALLOW_PHP_EVENTS' ) && CRONTROL_DISALLOW_PHP_EVENTS ) {
+			return false;
+		}
+		if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+			return false;
+		}
+		if ( ! current_user_can( 'edit_files' ) ) {
+			return false;
+		}
+	}
+	if ( 'crontrol_url_cron_job' === $hook ) {
+		// Firing this makes a live outbound request to the stored URL.
+		if ( defined( 'CRONTROL_DISALLOW_URL_EVENTS' ) && CRONTROL_DISALLOW_URL_EVENTS ) {
+			return false;
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return false;
+		}
+	}
 
 	// WP Crontrol's find() takes hook, timestamp AND the signature, which is
 	// the key core stores the event under. Passing the hook alone raised an
@@ -584,26 +614,8 @@ function minn_admin_scrutoscope_cron_runnable( $hook, $timestamp = 0 ) {
 		}
 	}
 
-	// Standalone rule for when WP Crontrol is absent or the event has gone.
-	// Both of its executing hooks answer to the constants WP Crontrol offers
-	// for exactly this, which the previous version never consulted.
-	if ( 'crontrol_cron_job' === $hook ) {
-		if ( defined( 'CRONTROL_DISALLOW_PHP_EVENTS' ) && CRONTROL_DISALLOW_PHP_EVENTS ) {
-			return false;
-		}
-		if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
-			return false;
-		}
-		return current_user_can( 'edit_files' );
-	}
-	if ( 'crontrol_url_cron_job' === $hook ) {
-		// Firing this makes a live outbound request to the stored URL.
-		if ( defined( 'CRONTROL_DISALLOW_URL_EVENTS' ) && CRONTROL_DISALLOW_URL_EVENTS ) {
-			return false;
-		}
-		return current_user_can( 'manage_options' );
-	}
-
+	// Nothing narrowed it: the ceiling above already cleared the hook, and
+	// either WP Crontrol is absent or the event has gone.
 	return true;
 }
 

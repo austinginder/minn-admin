@@ -97,8 +97,22 @@ add_action( 'rest_api_init', function () {
 			if ( ! in_array( $post_type, array( 'tribe_events' ), true ) ) {
 				return rest_ensure_response( array( 'groups' => array() ) );
 			}
-			if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
-				return new WP_Error( 'rest_forbidden', __( 'You cannot edit this event.', 'minn-admin' ), array( 'status' => 403 ) );
+			if ( $post_id ) {
+				if ( ! get_post( $post_id ) ) {
+					return new WP_Error( 'not_found', __( 'Event not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				if ( ! current_user_can( 'edit_post', $post_id ) ) {
+					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this event.', 'minn-admin' ), array( 'status' => 403 ) );
+				}
+			} else {
+				// No post to authorize against, so authorize against the TYPE,
+				// the way meta-box and pods already do. The field list here is
+				// fixed today, but the gate should not depend on that staying
+				// true.
+				$type_obj = get_post_type_object( $post_type );
+				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
+					return new WP_Error( 'rest_forbidden', __( 'You cannot edit events.', 'minn-admin' ), array( 'status' => 403 ) );
+				}
 			}
 			$fields = array(
 				array( 'name' => 'start', 'label' => __( 'Starts', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),

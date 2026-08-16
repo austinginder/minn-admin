@@ -204,8 +204,13 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/code-snippets/status', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
+			// get_cap(), not get_cap_name(). The first is their multisite-aware
+			// resolver and returns the NETWORK capability when the network
+			// admin has not enabled the per-site snippets menu; the second is
+			// the raw per-site string, which showed a subsite administrator
+			// counts from a screen the vendor reserves to the network admin.
 			$cap = function_exists( 'Code_Snippets\\code_snippets' )
-				? \Code_Snippets\code_snippets()->get_cap_name()
+				? \Code_Snippets\code_snippets()->get_cap()
 				: 'manage_options';
 			return current_user_can( $cap );
 		},

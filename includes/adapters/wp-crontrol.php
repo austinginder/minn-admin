@@ -508,7 +508,15 @@ add_action( 'rest_api_init', function () {
 			}
 			$user     = minn_admin_crontrol_user_ctx();
 			$features = minn_admin_crontrol_feature_ctx();
-			if ( ! $ev->runnable( $user, $features ) || $ev->is_paused() ) {
+			// Both Diagnostics providers can fire the same hook, so they share
+			// one ceiling. runnable() for a PHP event resolves to
+			// manage_options in WP Crontrol and ignores DISALLOW_FILE_EDIT, so
+			// on its own it is weaker than the bar this adapter's own docblock
+			// describes.
+			$ceiling = function_exists( 'minn_admin_scrutoscope_cron_runnable' )
+				? minn_admin_scrutoscope_cron_runnable( $parts['h'], (int) $parts['t'] )
+				: true;
+			if ( ! $ceiling || ! $ev->runnable( $user, $features ) || $ev->is_paused() ) {
 				return new WP_Error( 'forbidden', __( 'This event cannot be run now.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			// Their run() schedules an immediate spawn and sleeps 1s.

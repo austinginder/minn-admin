@@ -206,8 +206,25 @@ add_action( 'rest_api_init', function () {
 			if ( 'job_listing' !== $post_type ) {
 				return rest_ensure_response( array( 'groups' => array() ) );
 			}
-			if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
-				return new WP_Error( 'rest_forbidden', __( 'You cannot edit this listing.', 'minn-admin' ), array( 'status' => 403 ) );
+			if ( $post_id ) {
+				// A missing post used to fall through with the caller's own
+				// post_type intact, which is the same hole as post_id=0.
+				if ( ! get_post( $post_id ) ) {
+					return new WP_Error( 'not_found', __( 'Listing not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				if ( ! current_user_can( 'edit_post', $post_id ) ) {
+					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this listing.', 'minn-admin' ), array( 'status' => 403 ) );
+				}
+			} else {
+				// No post to authorize against, so authorize against the TYPE.
+				// The field list is site-defined through the
+				// job_manager_job_listing_data_fields filter, so edit_posts
+				// alone let a Contributor read every custom listing field's
+				// meta key, label, placeholder and choices.
+				$type_obj = get_post_type_object( $post_type );
+				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
+					return new WP_Error( 'rest_forbidden', __( 'You cannot edit listings.', 'minn-admin' ), array( 'status' => 403 ) );
+				}
 			}
 			$mapped = minn_admin_wpjm_mapped_fields();
 			return rest_ensure_response( array(
