@@ -33,7 +33,7 @@ Three things to know before anything else:
 
 - **Workspace** — the daily material: Overview, Content, Media, Comments,
   and (with WooCommerce) Orders, Products, Coupons, Customers. Plugins with
-  an inbox of their own (form entries, Amelia or LatePoint appointments) can appear here too.
+  an inbox of their own (form entries, Amelia, LatePoint or Bookly appointments) can appear here too.
 - **Tools** — site plumbing contributed by your plugins: form entries, mail
   logs, activity logs, redirects, backups, snippets. Plugins whose Minn
   presence is purely a settings screen, and a theme's options pages,

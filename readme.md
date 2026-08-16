@@ -248,7 +248,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   notifications across Received / Spam / Trash views, plus a **Feeds** view listing every
   add-on integration across your forms (Everest Forms carries the same three status views
   through its own entry helpers);
-  **Bookings** (Amelia, LatePoint) lists upcoming appointments with pending / today / canceled
+  **Bookings** (Amelia, LatePoint, Bookly) lists upcoming appointments with pending / today / canceled
   filters, a contact card, and approve / cancel / no-show through the plugin so its
   notifications still fire;
   **Email** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging, SureMails,
