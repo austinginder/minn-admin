@@ -216,14 +216,26 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   A pasted key rides one request and is never stored or logged; failures never auto-retry;
   inactive components can be turned back on in place. Third parties register via
   `minn_admin_license_providers`
-- **Editor field panels** — **ACF**, **Meta Box** and **Pods** simple fields in the sidebar
-  (advanced types count as locked with a wp-admin link); **SEO panel** for Yoast SEO, Rank Math,
+- **Editor field panels** — **ACF** fields edit in full: every applying field group renders
+  with no "Show in REST API" setting required, covering text, choices, switches, checkboxes,
+  color, image, gallery, file, date and time, rich text, the relational pickers (Post Object,
+  Relationship, Page Link, Taxonomy, User), **repeaters as row cards** and **flexible content
+  as sections**, with ACF's conditional logic honored live and unrendered values preserved
+  through every edit; **Meta Box** and **Pods** simple fields ride the same panel (their
+  advanced types count as locked with a wp-admin link); **SEO panel** for Yoast SEO, Rank Math,
   All in One SEO, SEOPress or SiteSEO title, meta description and focus keyword (first active
   SEO plugin wins); **Event details** for The Events Calendar (dates, all-day, venue and
   organizer as live search pickers, cost, website); **Job listing** for WP Job Manager, drawn
   live from its own field schema; **Podcast episode** for Seriously Simple Podcasting and
   PowerPress (media file, duration, the Apple Podcasts fields). Every write goes through the
   owning plugin's own save machinery
+- **ACF schema and options** — a **Field Groups** manager plus a full **builder page** per
+  group: stack fields, configure inline, drag to reorder, duplicate, a repeater sub-field
+  builder, and **location rules** edited as readable sentences over the site's real post
+  types, templates and roles; **import and export** in ACF's own Tools JSON with imports that
+  update an existing group in place; **options pages** merged under one **Site Options**
+  sidebar entry with their tabs intact; and **ACF blocks** exposing their real fields in the
+  block inspector (the `dataForm` descriptor, open to any plugin with the same shape)
 - **Menus & Widgets** — classic nav menus with drag-to-reorder (children travel with their
   parent) and right-click menus on every item; classic sidebars with **drag grips** to reorder widgets in an area, plus move
   between areas and in-place edit for block/text/HTML widgets

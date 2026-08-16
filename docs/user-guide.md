@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.30.0. This file ships inside the plugin, so the copy you
+*Current as of v0.31.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -35,7 +35,10 @@ Three things to know before anything else:
   and (with WooCommerce) Orders, Products, Coupons, Customers. Plugins with
   an inbox of their own (form entries, for example) can appear here too.
 - **Tools** — site plumbing contributed by your plugins: form entries, mail
-  logs, activity logs, redirects, backups, snippets.
+  logs, activity logs, redirects, backups, snippets. Plugins whose Minn
+  presence is purely a settings screen, and a theme's options pages,
+  gather under a single **Site Options** entry here rather than each
+  claiming its own sidebar spot.
 - **Manage** — the site itself: Extensions, Users, Menus and Widgets (on
   classic themes), Structure, System, Settings.
 
@@ -134,9 +137,10 @@ away:
   media-and-text blocks are writing surfaces, nested to any depth: click
   in and type, with markdown, the slash menu and paste all working
   inside, and each column its own surface laid out like the front end.
-  The layout itself (widths, colors, spacing) is preserved exactly, and
-  anything you do not touch saves back byte for byte, so the block
-  editor always reopens the page cleanly.
+  Stackable's columns open the same way, each column its own writing
+  surface. The layout itself (widths, colors, spacing) is preserved
+  exactly, and anything you do not touch saves back byte for byte, so
+  the block editor always reopens the page cleanly.
 - **Complex blocks are kept safe, untouched.** If a post contains a block
   Minn's editor doesn't natively edit (a plugin's fancy block, a spacer,
   a row of buttons), it appears as a framed card rendered with your
@@ -145,7 +149,10 @@ away:
   where edits live. Its text and images are usually editable in place,
   and the ⚙ chip holds its settings plus duplicate and move arrows, so
   a testimonial can hop into the next column without leaving Minn; its
-  structure is preserved byte for byte. Hovering any ⚙ chip outlines the
+  structure is preserved byte for byte. A theme's ACF block opens its
+  real fields there, with their own labels, instead of the raw plumbing,
+  and a block that keeps a link only in its markup lists it as an
+  editable field. Hovering any ⚙ chip outlines the
   block it configures, so nested blocks read as distinct controls. One
   click on "Block editor ↗" opens the same post in Gutenberg whenever you
   want the full toolkit. Posts built with page builders (Elementor,
@@ -174,13 +181,58 @@ away:
   unsaved work in your browser and offers to restore it. A live post
   holding edits you never published wears a small amber dot on its status
   in the content list, and the Modified filter there shows only those.
-- **History** shows revisions with side-by-side comparisons; restore takes
-  one click. If someone else has the post open (in Minn or wp-admin), you
-  will be told before you can both edit it.
+- **History** shows revisions with side-by-side comparisons, and a
+  revision also reports what changed in the custom fields, so a page
+  whose edits all live in ACF fields no longer claims to be identical.
+  Restore takes one click. If someone else has the post open (in Minn or
+  wp-admin), you will be told before you can both edit it.
 - **Focus modes:** ⌘⇧D fades everything but the paragraph you are writing;
   ⌘⇧O reduces the screen to the text and an outline. ⌘⇧F is find and
   replace. A word-count pill sits at the bottom right; click it to set a
   session writing goal.
+
+## Custom fields
+
+Many sites carry structured fields beside the post body: a subtitle, an
+event date, a team list, a page assembled from sections. With Advanced
+Custom Fields active, all of it edits in Minn (sites using Pods or Meta
+Box get their fields in the same place):
+
+- **Every field group appears.** The editor sidebar's Custom fields card
+  opens a dialog with every group that applies to what you are editing,
+  with no plugin settings to change first, and everything saves with the
+  post. Fields show and hide the way their rules intend as you flip the
+  switches that control them, and a hidden field always keeps its value.
+- **The everyday types edit in place**: text, choices, switches,
+  checkboxes, colors with a real picker, dates and times on the same
+  calendar the editor's scheduling uses, files and images from the media
+  library, and links to other content, where the picker only ever offers
+  what the field allows.
+- **The structured types are real too.** A repeater is a stack of row
+  cards you add, reorder and remove. Flexible content, the field theme
+  page builders are made of, reads as a list of named sections, each
+  opening into its own fields. A gallery field opens the same images
+  editor the editor's gallery blocks use, and a rich-text field opens a
+  focused writing window that hands you back to the dialog when you
+  finish. Anything a row or dialog cannot show is preserved untouched
+  through every edit, reorder and removal.
+- **Theme settings pages.** ACF options pages (a footer, an announcement
+  banner, a logo strip) live under the sidebar's Site Options entry with
+  their tabs intact, editing the same field types and saving through
+  ACF's own storage, with each page's own permissions honored.
+
+Designing the fields themselves lives under **Field Groups** in the
+sidebar: see every group and where it shows, then open one into a
+builder page where fields stack, configure inline, drag to reorder, and
+save as one change. Location rules edit as readable sentences over your
+site's real post types, templates and roles; repeaters get their own
+sub-field builder; and groups export and import as the same files ACF's
+own tools produce, with an import that updates an existing group in
+place instead of quietly duplicating it. Field names lock after the
+first save so stored content can never be orphaned, groups registered
+in code open read-only because their source of truth is the codebase,
+and anything the builder does not model keeps an honest pointer to
+ACF's own editor.
 
 ## Daily site care
 
@@ -260,9 +312,11 @@ more of them.
 
 Pick a language on **Your profile** and all of Minn follows: buttons,
 table headings, empty states, confirmations, error messages, counts.
-Twenty-three languages ship with the plugin, and a language you have not
-installed yet is downloaded for you when you save the choice. Your pick
-is yours alone; it never changes what anybody else sees.
+Twenty-three languages ship with the plugin. The switch applies the
+moment you save; a language you have not installed yet downloads in the
+background, with plugin translations following behind, so the interface
+never sits waiting on them. Your pick is yours alone; it never changes
+what anybody else sees.
 
 Right-to-left languages such as Arabic, Hebrew and Persian get a
 genuinely mirrored interface: the sidebar, menus and settings move to
@@ -349,7 +403,10 @@ Customers, and with WooCommerce Subscriptions it gains Subscriptions too.
 ## Managing the site
 
 - **Extensions** — three tabs: Plugins, Themes, and Licenses. Install by
-  search, upload, or dropping a zip on the dialog. Toggle, update and
+  search, upload, or dropping a zip on the dialog; uploading a zip of
+  something already installed shows what is installed against what you
+  uploaded and offers to replace it, files swapped, settings and content
+  untouched. Toggle, update and
   delete with plain confirmations. Every plugin and theme card carries an
   Auto pill for WordPress automatic updates, the same setting wp-admin
   manages, and inactive themes offer a Live preview so you can walk the
@@ -384,7 +441,9 @@ Customers, and with WooCommerce Subscriptions it gains Subscriptions too.
   reason, not a bug.
 - **System** — a health check (PHP, HTTPS, caching, backups, loopback),
   an activity view of what is installed, and debug tools when someone
-  technical asks you to turn on logging.
+  technical asks you to turn on logging. It also says plainly when a
+  custom post type is hidden from Minn by its own REST setting, naming
+  the post types affected and where the fix lives.
 - **Structure** — post types, taxonomies and terms: rename, merge and
   re-parent categories and tags safely.
 - **Database** — a window into where your site actually stores things.
