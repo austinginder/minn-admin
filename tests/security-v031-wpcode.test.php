@@ -183,6 +183,47 @@ $check(
 	'status ' . $response->get_status()
 );
 
+// --- 5. the type classifier fails closed --------------------------------
+// `blocks` used to match no arm of it: not executing, so no DISALLOW_FILE_EDIT
+// check; not needs-raw, so no refusal; not the literal 'text', so no kses. It
+// was the one type stored with nothing applied to it.
+$check( 'blocks is treated as raw markup', true === minn_admin_wpcode_type_needs_raw( 'blocks' ) );
+$check( 'text is still filtered rather than refused', false === minn_admin_wpcode_type_needs_raw( 'text' ) );
+$check(
+	'a code type nobody has classified lands on the safe side',
+	true === minn_admin_wpcode_type_executes( 'some_type_added_later' )
+);
+
+wp_set_current_user( $uid );
+$response = $post(
+	'/minn-admin/v1/wpcode/snippets',
+	array( 'name' => 'probe blocks', 'code_type' => 'blocks', 'code' => '<!-- wp:html --><script>x()</script><!-- /wp:html -->' )
+);
+if ( 200 === $response->get_status() ) {
+	$data      = $response->get_data();
+	$created[] = isset( $data['id'] ) ? (int) $data['id'] : 0;
+}
+$check(
+	'A caller without unfiltered_html cannot author a blocks snippet',
+	403 === $response->get_status(),
+	'status ' . $response->get_status()
+);
+
+wp_set_current_user( $admin );
+$response = $post(
+	'/minn-admin/v1/wpcode/snippets',
+	array( 'name' => 'probe blocks ok', 'code_type' => 'blocks', 'code' => '<!-- wp:paragraph --><p>hi</p><!-- /wp:paragraph -->' )
+);
+if ( 200 === $response->get_status() ) {
+	$data      = $response->get_data();
+	$created[] = isset( $data['id'] ) ? (int) $data['id'] : 0;
+}
+$check(
+	'CONTROL an administrator still authors a blocks snippet',
+	200 === $response->get_status(),
+	'status ' . $response->get_status()
+);
+
 // --- cleanup -------------------------------------------------------------
 wp_set_current_user( $admin );
 foreach ( array_unique( array_filter( $created ) ) as $post_id ) {

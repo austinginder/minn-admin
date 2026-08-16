@@ -138,12 +138,25 @@ function minn_admin_wpcode_guard_code( $code ) {
 /**
  * Types that cannot be repaired by filtering, only refused.
  *
- * kses over a JavaScript body is meaningless, so html/js/css/scss are an
- * outright refusal for a caller without unfiltered_html, while `text` is
- * filtered the way the vendor filters it.
+ * kses over a JavaScript body is meaningless, so these are an outright refusal
+ * for a caller without unfiltered_html, while `text` is filtered the way the
+ * vendor filters it.
+ *
+ * Stated as "everything that is not text", not as a list of known-bad types,
+ * so a type nobody here has thought about lands on the safe side. Naming the
+ * four then meant `blocks` matched no arm at all: not executing, so no
+ * DISALLOW_FILE_EDIT check; not needs-raw, so no refusal; not the literal
+ * 'text', so no kses; and not markup, so no re-filter on a retype. It was the
+ * one type stored with nothing applied to it, and block markup can carry a
+ * core/html block, which is a script tag with extra steps.
  */
 function minn_admin_wpcode_type_needs_raw( $code_type ) {
-	return in_array( (string) $code_type, array( 'html', 'js', 'css', 'scss' ), true );
+	$code_type = (string) $code_type;
+	if ( 'text' === $code_type ) {
+		return false; // filtered instead, in minn_admin_wpcode_clean_code()
+	}
+	// An executing type answers to code_edits_allowed() rather than to this.
+	return ! minn_admin_wpcode_type_executes( $code_type );
 }
 
 /**
@@ -427,7 +440,16 @@ add_action( 'rest_api_init', function () {
 					);
 					$items = array();
 					foreach ( $q->posts as $post ) {
-						$items[] = minn_admin_wpcode_item( new WPCode_Snippet( $post ) );
+						$snippet = new WPCode_Snippet( $post );
+						$item    = minn_admin_wpcode_item( $snippet );
+						// Same rule as the single-snippet read: the source of a
+						// snippet whose type this caller cannot author is not
+						// theirs to see. The list does not render `code`
+						// anyway, so blanking it costs the view nothing.
+						if ( is_wp_error( minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), (int) $snippet->get_id(), false ) ) ) {
+							$item['code'] = '';
+						}
+						$items[] = $item;
 					}
 					return rest_ensure_response(
 						array(
@@ -486,6 +508,22 @@ add_action( 'rest_api_init', function () {
 					$snippet = new WPCode_Snippet( (int) $request['id'] );
 					if ( ! $snippet->get_id() ) {
 						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
+					}
+					// Reading a snippet's source is the same bar as editing it.
+					// Deleting one already asks this, on the reasoning that
+					// destroying a snippet needs the same standing as editing
+					// it; reading the PHP a colleague wrote is no smaller a
+					// thing, and snippets are where API keys and webhook
+					// secrets end up. On WPCode Lite every tier collapses to
+					// one capability, so this only bites where Access Control
+					// deliberately drew tiers.
+					$guard = minn_admin_wpcode_guard_type(
+						(string) $snippet->get_code_type(),
+						(int) $request['id'],
+						false
+					);
+					if ( is_wp_error( $guard ) ) {
+						return $guard;
 					}
 					return rest_ensure_response( minn_admin_wpcode_item( $snippet ) );
 				},
