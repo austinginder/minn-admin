@@ -41,14 +41,21 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	} );
 	t.check( 'Last nav item reachable after scrolling', lastReachable );
 
-	// Tall viewport again: no scrollbar needed, nothing regressed.
-	await page.setViewportSize( { width: 1280, height: 1100 } );
+	// Tall enough for the nav it actually has: no scrollbar needed. The
+	// height is DERIVED, never a constant — this site grows a nav item per
+	// installed surface (26 today), so a fixed 1100px stopped being "tall"
+	// and the check went red while the scrolling it guards worked fine.
+	const need = await page.evaluate( () => {
+		const nav = document.querySelector( '.minn-nav-scroll' );
+		return Math.max( 0, nav.scrollHeight - nav.clientHeight );
+	} );
+	await page.setViewportSize( { width: 1280, height: 1100 + need + 40 } );
 	await page.waitForTimeout( 300 );
 	const tall = await page.evaluate( () => {
 		const nav = document.querySelector( '.minn-nav-scroll' );
 		return nav.scrollHeight <= nav.clientHeight + 1;
 	} );
-	t.check( 'Tall viewport needs no nav scrolling', tall );
+	t.check( 'A viewport tall enough for the whole nav needs no scrolling', tall );
 
 	await t.done( browser, errors );
 } )().catch( ( e ) => {

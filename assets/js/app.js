@@ -19422,6 +19422,19 @@
 			panel.hidden = false;
 			openedAt = performance.now();
 			placePanel();
+			// A TRANSFORMED ancestor becomes the containing block for
+			// position:fixed, so an escaped panel opened while its modal is
+			// still running its entrance animation measures against the modal
+			// rather than the viewport — off by the animation's offset, far
+			// enough to hang past the bottom of the screen. The coordinates
+			// are right; the frame they resolve in is not. Re-place once the
+			// animation ends and the transform is gone.
+			const animating = panel.closest( '.minn-modal, .minn-block-picker' );
+			if ( animating && getComputedStyle( animating ).transform !== 'none' ) {
+				animating.addEventListener( 'animationend', () => {
+					if ( ! panel.hidden ) placePanel();
+				}, { once: true } );
+			}
 			if ( ! repositionBound ) {
 				// An ESCAPED (fixed) panel cannot ride a scrolling anchor
 				// frame-accurately: JS repositioning lags the compositor, and
