@@ -82,7 +82,16 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	// --- System health check ------------------------------------------------
 	const checks = ( await api( 'minn-admin/v1/system' ) ).checks;
 	const bk = checks.find( ( c ) => c.label === 'Backups' );
-	t.check( 'System check reports fresh backup', !! bk && bk.status === 'pass', JSON.stringify( bk ) );
+	// Derive the expectation from the last backup's AGE rather than assuming
+	// the fixture is fresh: the resident set ages, so "expect pass" turns red
+	// on its own 36 hours after anyone last ran a backup, which says nothing
+	// about the check. What matters is that the check AGREES with the data.
+	const lastAt = ( status.last && status.last.time ) ? Number( status.last.time ) * 1000 : 0;
+	const ageH = lastAt ? ( Date.now() - lastAt ) / 3600000 : Infinity;
+	const wantFresh = ageH < 36;
+	t.check( 'System check grades the backup by its age',
+		!! bk && ( wantFresh ? bk.status === 'pass' : bk.status !== 'pass' ),
+		`${ Math.round( ageH ) }h old → ${ JSON.stringify( bk ) }` );
 
 	// --- Surface UI -----------------------------------------------------------
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
@@ -93,7 +102,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return !! btn;
 	} );
 	t.check( 'Backups appears in the nav', nav );
-	await page.waitForFunction( () => /Database|Plugins/.test( document.body.textContent ) && /local/.test( document.body.textContent ), null, { timeout: 15000 } );
+	await page.waitForFunction( () => /Database|Plugins/i.test( document.body.textContent ) && /local/i.test( document.body.textContent ), null, { timeout: 15000 } );
 	t.check( 'Backup sets render in the list', true );
 
 	// --- Palette command ------------------------------------------------------
