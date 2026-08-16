@@ -1846,15 +1846,25 @@
 		// an inert card and rides through the save untouched.
 		const layoutOf = ( r ) => ( flex && ! r.__locked ? layouts[ r.__layout ] || null : null );
 		const defFor = ( r ) => ( flex ? ( layoutOf( r ) || {} ).subfields || [] : def );
+		const payload = () => rows.map( ( r ) => {
+			const out = {};
+			if ( r.__idx != null ) out.__idx = r.__idx;
+			if ( flex ) out.__layout = r.__layout;
+			out.values = r.values;
+			return out;
+		} );
 		const commit = () => {
-			wrap._rowsValue = rows.map( ( r ) => {
-				const out = {};
-				if ( r.__idx != null ) out.__idx = r.__idx;
-				if ( flex ) out.__layout = r.__layout;
-				out.values = r.values;
-				return out;
-			} );
+			wrap._rowsValue = payload();
 			onChange( wrap._rowsValue );
+		};
+		// A save stores exactly the order that was sent, so every row's anchor
+		// is its own position again. A host that keeps editing the same
+		// control after a save calls this; without it the NEXT structural edit
+		// merges against the previous order and moves the wrong row.
+		wrap._rowsResync = () => {
+			rows.forEach( ( r, i ) => { r.__idx = i; } );
+			wrap._rowsValue = payload();
+			return wrap._rowsValue;
 		};
 		// Card summary while collapsed: the first text the row carries, so a
 		// stack of sections reads as content rather than as a stack of labels.
@@ -23510,6 +23520,18 @@
 			// A saved pattern changes what the slash menu / picker offer.
 			if ( ed.type === 'blocks' ) bustUserPatterns();
 			localNetClear( ed, capturedAt );
+			// Row and section controls anchor each kept row to its position in
+			// the STORED order, which this save just replaced with the order it
+			// sent. Re-point the anchors so a structural edit made after a save
+			// (reorder, then delete) still merges against the right rows.
+			$$( '[data-pf][data-ftype="rows"], [data-pf][data-ftype="flex"]' ).forEach( ( el ) => {
+				if ( typeof el._rowsResync !== 'function' ) return;
+				const pf = el.dataset.pf || '';
+				const sep = pf.indexOf( ':' );
+				const store = sep > 0 && ed.panelValues ? ed.panelValues[ pf.slice( 0, sep ) ] : null;
+				const v = el._rowsResync();
+				if ( store ) store[ pf.slice( sep + 1 ) ] = v;
+			} );
 			ed.panelDirty = {};
 			ed.featuredDirty = false;
 			ed.parentDirty = false;
