@@ -17,7 +17,7 @@ shared view; "action" = a ⌘K / menu command.
 
 | Area | Plugins | How it shows up |
 |---|---|---|
-| **SEO** | Yoast, Rank Math, AIOSEO, SEOPress, SureRank, SiteSEO | Editor panel (title, meta description, focus keyword; social thumbnail on Rank Math and SureRank) |
+| **SEO** | Yoast, Rank Math, AIOSEO, SEOPress, SureRank, SiteSEO, Squirrly | Editor panel (title, meta description, focus keyword; social thumbnail on Rank Math, SureRank and Squirrly) |
 | **Events** | The Events Calendar | Events are a REST CPT, so the Content list and Minn editor already carry them; the **Event details** editor panel covers start/end, all-day, venue and organizer (async-search pickers over TEC's own records), cost and website, all written through TEC's own saveEventMeta (duration, UTC mirrors and linked-post bookkeeping stay TEC's). Multiple organizers, recurrence, tickets, timezone and venue/organizer creation stay in TEC |
 | **Jobs** | WP Job Manager | Listings are a REST CPT, so the Content list and Minn editor already carry them; the **Job listing** editor panel adds the details estate (location, company fields, application email or URL, salary, remote/filled/featured flags, expiry) read live from WPJM's own field schema, with WPJM's own per-field sanitizers ruling every write |
 | **Podcasting** | Seriously Simple Podcasting, PowerPress | SSP: episodes are a REST CPT, so the Content list and Minn editor already carry them; the **Podcast episode** editor panel adds the whole episode-detail estate (file URL, audio/video type, duration, file size, date recorded, explicit and block flags, the iTunes fields) read live from SSP's own schema and stored in its own conventions (cover image and Castos hosting sync stay SSP's). PowerPress: the same panel on plain posts for the default channel (media URL, size, duration, subtitle, Apple episode fields), rebuilding its enclosure blob diff-based so hosting, chapters and artwork keys survive untouched; custom channels, artwork, explicit and chapters stay on its metabox |
@@ -59,8 +59,8 @@ themselves through the extension filters.
   Activity Log and Snippets surfaces collapse multiple plugins into one nav
   item with a provider switcher when more than one is active.
 - **SEO is one plugin at a time**, in install-base order (Yoast → Rank Math
-  → AIOSEO → SEOPress → SureRank → SiteSEO); the first active one wins. SEO
-  *scores* and content analysis stay in wp-admin.
+  → AIOSEO → SEOPress → SureRank → SiteSEO → Squirrly); the first active
+  one wins. SEO *scores* and content analysis stay in wp-admin.
 - **Backups**: restores stay in wp-admin (surgery, not daily work); Minn
   lists sets, reports freshness, and triggers a new backup.
 - **Disembark is a connector, not a scheduler.** Backups are pulled off-site

@@ -1,16 +1,18 @@
 /**
- * SEO panel mappers — AIOSEO, SEOPress, SiteSEO and SureRank behind the
- * shared minn_seo field.
+ * SEO panel mappers — AIOSEO, SEOPress, SiteSEO, SureRank and Squirrly
+ * behind the shared minn_seo field.
  *
  * Yoast is the dev site's resident SEO plugin; this suite swaps the active
  * provider over REST (one SEO plugin at a time, like real sites), drives
  * the editor panel against AIOSEO (the one with its own table instead of
  * postmeta), REST-verifies SEOPress and SiteSEO (the SEOPress fork with its
- * own meta prefix), and REST-verifies SureRank, which stores GROUPED meta
- * blobs and substitutes site-wide templates for empty values. That last
- * one is why the SureRank section inspects the raw stored group with
- * WP-CLI: reading '' back is not proof, since a stored template also reads
- * back as ''. Yoast is restored in finally.
+ * own meta prefix), REST-verifies SureRank, which stores GROUPED meta
+ * blobs and substitutes site-wide templates for empty values, and
+ * REST-verifies Squirrly, which stores a serialized {prefix}qss row. The
+ * SureRank section inspects the raw stored group with WP-CLI: reading ''
+ * back is not proof, since a stored template also reads back as ''.
+ * Squirrly is checked through its own getSeo API (never unserializing the
+ * qss column). Yoast is restored in finally.
  */
 const { execSync } = require( 'child_process' );
 const path = require( 'path' );
@@ -39,10 +41,10 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 	// name match pointed IDS.yoast at an Admin Columns ADDON. The suite then
 	// deactivated the real Yoast and "restored" the addon, quietly leaving
 	// the dev site without its resident SEO provider after every run.
-	const DIRS = { yoast: 'wordpress-seo', aioseo: 'all-in-one-seo-pack', seopress: 'wp-seopress', siteseo: 'siteseo', surerank: 'surerank' };
+	const DIRS = { yoast: 'wordpress-seo', aioseo: 'all-in-one-seo-pack', seopress: 'wp-seopress', siteseo: 'siteseo', surerank: 'surerank', squirrly: 'squirrly-seo' };
 	const pluginId = ( dir ) => ( plugins.find( ( p ) => p.plugin.split( '/' )[ 0 ] === dir ) || {} ).plugin;
-	const IDS = { yoast: pluginId( DIRS.yoast ), aioseo: pluginId( DIRS.aioseo ), seopress: pluginId( DIRS.seopress ), siteseo: pluginId( DIRS.siteseo ), surerank: pluginId( DIRS.surerank ) };
-	t.check( 'All five SEO plugins installed', !! ( IDS.yoast && IDS.aioseo && IDS.seopress && IDS.siteseo && IDS.surerank ), JSON.stringify( IDS ) );
+	const IDS = { yoast: pluginId( DIRS.yoast ), aioseo: pluginId( DIRS.aioseo ), seopress: pluginId( DIRS.seopress ), siteseo: pluginId( DIRS.siteseo ), surerank: pluginId( DIRS.surerank ), squirrly: pluginId( DIRS.squirrly ) };
+	t.check( 'All six SEO plugins installed', !! ( IDS.yoast && IDS.aioseo && IDS.seopress && IDS.siteseo && IDS.surerank && IDS.squirrly ), JSON.stringify( IDS ) );
 
 	const setStatus = ( id, status ) => page.evaluate( async ( a ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + a.id, {
@@ -69,7 +71,7 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 			// their own directories. An unrelated addon whose NAME mentions
 			// an SEO plugin must never be switched off by this sweep.
 			const dir = p.plugin.split( '/' )[ 0 ];
-			if ( ! /^(wordpress-seo|wordpress-seo-premium|all-in-one-seo-pack|wp-seopress|siteseo|seo-by-rank-math|seo-by-rank-math-pro|surerank)$/.test( dir ) ) continue;
+			if ( ! /^(wordpress-seo|wordpress-seo-premium|all-in-one-seo-pack|wp-seopress|siteseo|seo-by-rank-math|seo-by-rank-math-pro|surerank|squirrly-seo)$/.test( dir ) ) continue;
 			if ( p.plugin === keep ) continue;
 			if ( p.status === 'active' ) await setStatus( p.plugin, 'inactive' );
 		}
@@ -211,6 +213,42 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		const g3 = group();
 		t.check( 'no template text is left in storage after a full clear',
 			! g3 || ( ! JSON.stringify( g3 ).includes( '%' ) ), JSON.stringify( g3 ) );
+
+		// --- Squirrly: own qss table, read/write only through their API ------
+		t.check( 'Squirrly activated', await activateOnly( 'squirrly' ) );
+		const sqStart = await page.evaluate( async ( pid ) => {
+			const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ pid }?context=edit&_fields=minn_seo&_cb=` + Math.random(), {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			return ( await r.json() ).minn_seo;
+		}, postId );
+		t.check( 'Squirrly starts empty (SureRank values not read across)',
+			!! sqStart && sqStart.title === '' && sqStart.focus_keyword === '', JSON.stringify( sqStart ) );
+
+		const sq1 = await writeSeo( postId, { title: 'SQ via Minn', description: 'Squirrly description', focus_keyword: 'squirrly kw' } );
+		t.check( 'Squirrly write/read round-trips',
+			!! sq1 && sq1.title === 'SQ via Minn' && sq1.description === 'Squirrly description' && sq1.focus_keyword === 'squirrly kw',
+			JSON.stringify( sq1 ) );
+
+		// Their official getSeo (never the serialized qss column). No $ in
+		// the snippet: the shell would expand it before PHP sees it.
+		const sqStore = () => {
+			try {
+				return JSON.parse( wpEval( `echo wp_json_encode( SQ_Classes_ObjController::getClass("SQ_Models_Api_Seo")->getSeo(array("post_id"=>${ postId })) );` ) || 'null' );
+			} catch ( e ) {
+				return null;
+			}
+		};
+		const stored = sqStore();
+		const storedSeo = stored && stored.seo ? stored.seo : null;
+		t.check( 'values land in Squirrly through their getSeo API',
+			!! storedSeo && storedSeo.title === 'SQ via Minn' && storedSeo.description === 'Squirrly description' && storedSeo.keywords === 'squirrly kw',
+			JSON.stringify( storedSeo ) );
+
+		const sq2 = await writeSeo( postId, { title: '' } );
+		t.check( 'clearing the Squirrly title leaves the other fields alone',
+			!! sq2 && sq2.title === '' && sq2.description === 'Squirrly description' && sq2.focus_keyword === 'squirrly kw',
+			JSON.stringify( sq2 ) );
 	} finally {
 		await deletePost( page, postId ).catch( () => {} );
 		// Yoast back as the resident provider, everything else off.
@@ -218,6 +256,7 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		await setStatus( IDS.siteseo, 'inactive' ).catch( () => {} );
 		await setStatus( IDS.aioseo, 'inactive' ).catch( () => {} );
 		await setStatus( IDS.surerank, 'inactive' ).catch( () => {} );
+		await setStatus( IDS.squirrly, 'inactive' ).catch( () => {} );
 		await setStatus( IDS.yoast, 'active' ).catch( () => {} );
 	}
 

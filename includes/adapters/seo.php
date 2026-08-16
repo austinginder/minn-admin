@@ -1,7 +1,7 @@
 <?php
 /**
  * Bundled adapter: SEO editor panel — Yoast, Rank Math, AIOSEO, SEOPress,
- * SureRank, SiteSEO.
+ * SureRank, SiteSEO, Squirrly.
  *
  * The valuable 90% of every SEO plugin at write time is three fields: SEO
  * title, meta description and focus keyword. None of them expose those over
@@ -15,11 +15,12 @@
  * reuses when "use Facebook" is on) as an image field on the same panel.
  *
  * Yoast, Rank Math, SEOPress and SiteSEO store postmeta; AIOSEO v4 keeps
- * its own {prefix}aioseo_posts table and SureRank keeps GROUPED postmeta
- * blobs, so providers carry read/write callables and those two go through
- * their own models (never raw SQL into AIOSEO's table, never a hand-built
- * group array for SureRank). Detection order follows install base; the
- * first active plugin wins.
+ * its own {prefix}aioseo_posts table, SureRank keeps GROUPED postmeta
+ * blobs, and Squirrly keeps a serialized {prefix}qss row, so providers
+ * carry read/write callables and those three go through their own models
+ * (never raw SQL into AIOSEO's table, never a hand-built group array for
+ * SureRank, never unserialize of Squirrly's seo column). Detection order
+ * follows install base; the first active plugin wins.
  *
  * @package minn-admin
  */
@@ -333,6 +334,92 @@ function minn_admin_seo_surerank_unset( $post_id, $group, $keys ) {
 }
 
 /**
+ * Squirrly SEO provider.
+ *
+ * Per-page SEO lives in {prefix}qss as a serialized SQ_Models_Domain_Sq
+ * blob (plus a few _sq_* postmeta fallbacks). Never read or write that
+ * column ourselves: Squirrly 14.2 ships SQ_Models_Api_Seo as a
+ * request-free service (getSeo / saveSeo) that owns the hash, the table
+ * and sanitization. Partial writes: only the keys we pass are touched,
+ * empty string clears. Focus keyword maps to their `keywords` field
+ * (comma-separated in their store). Social thumbnail is og_media, a URL.
+ *
+ * Every call is guarded: their model can never break a post save.
+ *
+ * @return array
+ */
+function minn_admin_seo_squirrly_provider() {
+	$api = function () {
+		return SQ_Classes_ObjController::getClass( 'SQ_Models_Api_Seo' );
+	};
+	return array(
+		'name'   => 'Squirrly SEO',
+		'social' => true,
+		'read'   => function ( $post_id ) use ( $api ) {
+			$out = array(
+				'title'         => '',
+				'description'   => '',
+				'focus_keyword' => '',
+				'social_image'  => null,
+			);
+			try {
+				$data = $api()->getSeo( array( 'post_id' => (int) $post_id ) );
+				if ( is_wp_error( $data ) || ! is_array( $data ) ) {
+					return $out;
+				}
+				$seo = ( isset( $data['seo'] ) && is_array( $data['seo'] ) ) ? $data['seo'] : array();
+				$out['title']         = isset( $seo['title'] ) ? (string) $seo['title'] : '';
+				$out['description']   = isset( $seo['description'] ) ? (string) $seo['description'] : '';
+				$out['focus_keyword'] = isset( $seo['keywords'] ) ? (string) $seo['keywords'] : '';
+				$url = isset( $seo['og_media'] ) ? (string) $seo['og_media'] : '';
+				if ( '' !== $url ) {
+					$out['social_image'] = array(
+						'id'  => (int) attachment_url_to_postid( $url ),
+						'url' => $url,
+					);
+				}
+			} catch ( \Throwable $e ) {
+				return $out;
+			}
+			return $out;
+		},
+		'write'  => function ( $post_id, $field, $clean ) use ( $api ) {
+			$post_id = (int) $post_id;
+			try {
+				$fields = array();
+				if ( 'social_image' === $field ) {
+					$url = '';
+					if ( is_array( $clean ) ) {
+						$id  = isset( $clean['id'] ) ? (int) $clean['id'] : 0;
+						$url = isset( $clean['url'] ) ? (string) $clean['url'] : '';
+						if ( $id > 0 && '' === $url ) {
+							$url = (string) wp_get_attachment_url( $id );
+						}
+					} elseif ( is_numeric( $clean ) ) {
+						$url = (string) wp_get_attachment_url( (int) $clean );
+					}
+					$fields['og_media'] = $url;
+				} elseif ( 'title' === $field ) {
+					$fields['title'] = (string) $clean;
+				} elseif ( 'description' === $field ) {
+					$fields['description'] = (string) $clean;
+				} elseif ( 'focus_keyword' === $field ) {
+					$fields['keywords'] = (string) $clean;
+				} else {
+					return;
+				}
+				// Their first save after a missing table creates the table
+				// then returns an error; make sure the table is there first.
+				SQ_Classes_ObjController::getClass( 'SQ_Models_Qss' )->checkTableExists();
+				$api()->saveSeo( array( 'post_id' => $post_id ), $fields );
+			} catch ( \Throwable $e ) {
+				return;
+			}
+		},
+	);
+}
+
+/**
  * The active SEO plugin as { name, read, write } — first active wins, in
  * install-base order.
  *
@@ -371,6 +458,10 @@ function minn_admin_seo_plugin() {
 			'description'   => '_siteseo_titles_desc',
 			'focus_keyword' => '_siteseo_analysis_target_kw',
 		) );
+	}
+	// Squirrly last: own {prefix}qss table, reached only through their API.
+	if ( defined( 'SQ_VERSION' ) && class_exists( 'SQ_Classes_ObjController' ) ) {
+		return minn_admin_seo_squirrly_provider();
 	}
 	return null;
 }
