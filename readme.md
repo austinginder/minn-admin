@@ -248,6 +248,9 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   notifications across Received / Spam / Trash views, plus a **Feeds** view listing every
   add-on integration across your forms (Everest Forms carries the same three status views
   through its own entry helpers);
+  **Bookings** (Amelia) lists upcoming appointments with pending / today / canceled
+  filters, a contact card, and approve / cancel / no-show through Amelia so its
+  notifications still fire;
   **Email** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging, SureMails,
   Site Mailer) shows sent mail with the real HTML body in a **fully sandboxed preview**,
   resend, and search plus delete where the logger supports it, plus Gravity SMTP's **full

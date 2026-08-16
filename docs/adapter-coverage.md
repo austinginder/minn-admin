@@ -111,6 +111,12 @@ Reference depth: **Gravity Forms**.
 | custom-css-js | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | CPT shim; tree rebuild on write; **status card** (active codes, running languages via regex peek) |
 | hfcm | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | hfcm_scripts; page targeting = **L**; **status card** (active/inactive, running types, last change) |
 
+### bookings
+
+| Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| amelia | Y | Y | Y | Y | — | Y | — | — | — | Y | 2026-08-16 | Wave F: `{prefix}amelia_appointments` (UTC `bookingStart`); customer/service/provider joins; upcoming/pending/today/canceled filters; approve/cancel/no-show via Amelia's `UpdateAppointmentStatusController` (notifications fire); status card + Open Amelia **L** for calendar/hours/form; ACTIVE fixture |
+
 ### automation
 
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
