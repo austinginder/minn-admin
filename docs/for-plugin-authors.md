@@ -418,8 +418,13 @@ dropdown, never a native select popup) · `combobox` (the themed autocomplete ov
 `options`, right for long catalogs) · `toggle` · `email` · `url` · since
 0.31.0 also `multicheck`, `link` ({ title, url, target }), `image`, `file`,
 `gallery`, `wysiwyg`, `date`/`datetime`/`time`, `suggest`/`relation` (with a
-`route`), and `rows` — a repeater on a settings page, same `subfields` +
-`[{ __idx, values }]` contract as the editor-panel version), `options`
+`route`), `rows` — a repeater on a settings page, same `subfields` +
+`[{ __idx, values }]` contract as the editor-panel version — and `flex`,
+rows whose every row picks its schema from a `layouts` map
+(`{ name: { label, subfields, subLocked } }`), each row carrying its
+`__layout` alongside `__idx`. Flex cards collapse by default and the add
+button offers the layout list; a row naming a layout the map does not
+declare renders inert and is never rewritten), `options`
 (`[value, label]` pairs), `placeholder`, `help` (rendered under the control),
 `rows` (textarea height), `min`/`max`, `mono`, and `showWhen: { "key": …,
 "equals": … }` (the
