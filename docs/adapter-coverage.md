@@ -116,6 +116,7 @@ Reference depth: **Gravity Forms**.
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | amelia | Y | Y | Y | Y | — | Y | — | — | — | Y | 2026-08-16 | Wave F: `{prefix}amelia_appointments` (UTC `bookingStart`); customer/service/provider joins; upcoming/pending/today/canceled filters; approve/cancel/no-show via Amelia's `UpdateAppointmentStatusController` (notifications fire); status card + Open Amelia **L** for calendar/hours/form; ACTIVE fixture |
+| latepoint | Y | Y | Y | Y | — | Y | — | — | — | Y | 2026-08-16 | `{prefix}latepoint_bookings` (UTC `start_datetime_utc` + local `start_date`/`start_time` minutes); customer/service/agent joins; upcoming/pending/today/canceled filters; approve/cancel/no-show via `OsBookingModel::update_status` (`latepoint_booking_updated`); caps `booking__view`/`booking__edit`; agents scoped to their own records; status card + Open LatePoint **L** for calendar/agents/form; ACTIVE fixture alongside Amelia |
 
 ### automation
 
