@@ -3948,6 +3948,23 @@ class Minn_Admin_REST {
 		if ( ! current_user_can( 'install_languages' ) || ! wp_is_file_mod_allowed( 'download_language_pack' ) ) {
 			return;
 		}
+		// Once per locale, not once per save. Clearing the update cache and
+		// re-checking made every plugin and theme phone home on EVERY language
+		// save, guaranteed — the same forced-update-check storm the
+		// single-plugin update path guards against further down this file. It
+		// blocks the response for seconds, long enough that the app never gets
+		// to repaint into the new language.
+		//
+		// An empty result cannot be the signal: "nothing left to install" and
+		// "the cache predates this locale" look identical, and the first is the
+		// common case, so testing on it would make the ordinary switch the slow
+		// one. A stamp per completed locale is unambiguous. A locale installed
+		// before a later plugin was added gets its packs from wp-admin or cron,
+		// the same places every other translation update comes from.
+		$done = get_option( 'minn_admin_lang_components', array() );
+		if ( is_array( $done ) && isset( $done[ $locale ] ) ) {
+			return;
+		}
 		try {
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 			// The update transients only list translations for languages that
@@ -3961,6 +3978,11 @@ class Minn_Admin_REST {
 					return isset( $u->language ) && $u->language === $locale;
 				}
 			) );
+			// Stamp on a completed pass, including one that found nothing:
+			// the work of ASKING is what must not repeat.
+			$done = is_array( $done ) ? $done : array();
+			$done[ $locale ] = time();
+			update_option( 'minn_admin_lang_components', $done, false );
 			if ( ! $updates ) {
 				return;
 			}
