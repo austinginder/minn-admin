@@ -415,9 +415,32 @@ function minn_admin_acf_map_field( $f ) {
 		'key'       => $f['key'],
 	);
 	if ( in_array( $type, array( 'suggest', 'relation' ), true ) ) {
-		$out['route'] = 'minn-admin/v1/acf/relation?field=' . rawurlencode( $f['key'] );
+		// The route carries a per-field, per-user signature. Mapping a field is
+		// the moment Minn has already decided this caller may be SERVED it (a
+		// post they can edit, a post type they can author, an options page
+		// their capability opened), so signing here is what makes the picker
+		// reachable exactly where the field is — the same binding ACF's own
+		// ajax gets from its per-field nonce. Without it the route's only gate
+		// is `edit_posts`, and any field key on the site answers to any
+		// contributor.
+		$out['route'] = 'minn-admin/v1/acf/relation?field=' . rawurlencode( $f['key'] )
+			. '&sig=' . rawurlencode( minn_admin_acf_relation_sig( $f['key'] ) );
 	}
 	return $out;
+}
+
+/**
+ * Signature proving this user was served this relational field.
+ *
+ * Nonces are user-bound, so a signature minted for one caller is worthless to
+ * another; it expires like any other, which is why the route answers an
+ * exhausted one with "reload the screen" rather than a bare 403.
+ *
+ * @param string $key ACF field key.
+ * @return string
+ */
+function minn_admin_acf_relation_sig( $key ) {
+	return wp_create_nonce( 'minn_acf_relation_' . $key );
 }
 
 /**
@@ -1776,10 +1799,26 @@ add_action( 'rest_api_init', function () {
 		},
 		'args'                => array(
 			'field' => array( 'type' => 'string', 'required' => true ),
+			'sig'   => array( 'type' => 'string', 'default' => '' ),
 			'q'     => array( 'type' => 'string', 'default' => '' ),
 		),
 		'callback'            => function ( WP_REST_Request $request ) {
-			$acf  = acf_get_field( (string) $request['field'] );
+			$key = (string) $request['field'];
+			// `edit_posts` says the caller uses the editor at all; it does not
+			// say WHICH fields are theirs. The signature does, and it exists
+			// only on routes Minn handed this user alongside a field it had
+			// already authorized them to see. Without it a contributor can
+			// point the picker at any field key on the site and read back that
+			// field's choices — for a user field, the whole user list, which
+			// is wider than core shows them.
+			if ( ! wp_verify_nonce( (string) $request['sig'], 'minn_acf_relation_' . $key ) ) {
+				return new WP_Error(
+					'minn_stale_picker',
+					__( 'This picker is no longer available. Reload the screen and try again.', 'minn-admin' ),
+					array( 'status' => 403 )
+				);
+			}
+			$acf  = acf_get_field( $key );
 			$kind = $acf ? minn_admin_acf_relation_kind( $acf ) : '';
 			if ( ! $kind ) {
 				return new WP_Error( 'minn_no_field', __( 'Unknown relational field.', 'minn-admin' ), array( 'status' => 404 ) );
