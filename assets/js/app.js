@@ -15000,8 +15000,14 @@
 			renderSurface( s );
 			return;
 		}
-		const routeFor = ( t ) => cfg.route.replace( '{tab}', t )
-			.replace( '{id}', itemScoped ? encodeURIComponent( ss.settingsItem.id ) : '' );
+		// A tab may carry its OWN route, which is what lets one settings
+		// surface host tabs belonging to several sources (Site Options holds
+		// every options page on the site). Without one it uses the surface's.
+		const routeFor = ( t ) => {
+			const own = ( cfg.tabs || [] ).find( ( x ) => x.id === t );
+			return ( own && own.route ? own.route : cfg.route ).replace( '{tab}', t )
+				.replace( '{id}', itemScoped ? encodeURIComponent( ss.settingsItem.id ) : '' );
+		};
 		if ( ! ss.settingsTab || ! cfg.tabs.some( ( t ) => t.id === ss.settingsTab ) ) ss.settingsTab = cfg.tabs[ 0 ].id;
 		ss.settingsCache = ss.settingsCache || {};
 		const tab = ss.settingsTab;

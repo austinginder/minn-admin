@@ -81,7 +81,98 @@ class Minn_Admin_Surfaces {
 			$surface       = self::with_views_state( $surface );
 			$out[]         = $surface;
 		}
-		return self::collapse_owner_surfaces( $out, $owners, $own );
+		return self::collapse_owner_surfaces( self::fold_into_site_options( $out ), $owners, $own );
+	}
+
+	/**
+	 * Settings-shaped surfaces belong together, not in top-level navigation.
+	 *
+	 * A surface that is nothing but a settings screen, and that names no
+	 * family to belong to, is site configuration: it folds into ONE "Site
+	 * Options" item, contributing its tabs, rather than claiming a nav slot
+	 * of its own. This is the attention-budget rule applied to the other end
+	 * of the sidebar — the workspace guard above stops a surface claiming a
+	 * group it has not earned; this stops configuration bleeding into
+	 * navigation several items at a time as plugins are added.
+	 *
+	 * A family is the opt-out, and it is the honest one: Perfmatters is
+	 * settings-only but belongs to `performance` alongside Performance Lab,
+	 * so it stays on that topic's item. Anything with a collection is a place
+	 * you go to work and is untouched.
+	 *
+	 * Tabs carry their own `route`, so every folded surface still answers on
+	 * its own endpoint with its own capability — nothing is proxied.
+	 *
+	 * @param array[] $surfaces Surfaces in registration order.
+	 * @return array[]
+	 */
+	private static function fold_into_site_options( $surfaces ) {
+		$foldable = array();
+		foreach ( $surfaces as $i => $s ) {
+			if ( ! empty( $s['collection'] ) || empty( $s['settings'] ) || ! empty( $s['family'] ) ) {
+				continue;
+			}
+			if ( empty( $s['settings']['tabs'] ) || empty( $s['settings']['route'] ) ) {
+				continue;
+			}
+			$foldable[ $i ] = $s;
+		}
+		if ( count( $foldable ) < 2 ) {
+			return $surfaces; // one such surface is already one item
+		}
+		// Host = the site's main options home, taken as the source with the
+		// most tabs (registration order breaks ties). Choosing the FIRST
+		// registered one made whichever plugin loaded earliest the host, and
+		// its label the group's.
+		$host_i = array_key_first( $foldable );
+		foreach ( $foldable as $i => $s ) {
+			if ( count( $s['settings']['tabs'] ) > count( $foldable[ $host_i ]['settings']['tabs'] ) ) {
+				$host_i = $i;
+			}
+		}
+		$host = $surfaces[ $host_i ];
+		$tabs = array();
+		// Host first: the site's own options are what someone opening this
+		// came for; guests follow in registration order.
+		$ordered = array( $host_i => $foldable[ $host_i ] );
+		foreach ( $foldable as $i => $s ) {
+			if ( $i !== $host_i ) {
+				$ordered[ $i ] = $s;
+			}
+		}
+		foreach ( $ordered as $i => $s ) {
+			foreach ( (array) $s['settings']['tabs'] as $t ) {
+				if ( $i !== $host_i ) {
+					// Tab ids are only unique WITHIN a surface, so a guest's
+					// tab-0 would collide with the host's and load the wrong
+					// screen. Resolve the guest's route against its own id and
+					// then give the tab a unique one — the id is just a handle
+					// once the route no longer depends on it.
+					$t['route'] = str_replace( '{tab}', $t['id'], $s['settings']['route'] );
+					$t['id']    = 'src' . $i . '-' . $t['id'];
+				} else {
+					$t['route'] = $s['settings']['route'];
+				}
+				// Keep provenance: one source's "General" says nothing next to
+				// another's. The host's own tabs are already at home, so they
+				// stay as they are.
+				if ( $i !== $host_i && ! empty( $s['label'] ) ) {
+					$t['label'] = count( $s['settings']['tabs'] ) > 1
+						? $s['label'] . ' · ' . $t['label']
+						: $s['label'];
+				}
+				$tabs[] = $t;
+			}
+		}
+		$host['label']             = __( 'Site Options', 'minn-admin' );
+		$host['settings']['tabs']  = $tabs;
+		$surfaces[ $host_i ]       = $host;
+		foreach ( array_keys( $foldable ) as $i ) {
+			if ( $i !== $host_i ) {
+				unset( $surfaces[ $i ] );
+			}
+		}
+		return array_values( $surfaces );
 	}
 
 	/**
