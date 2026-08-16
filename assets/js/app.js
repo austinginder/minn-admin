@@ -1504,6 +1504,15 @@
 		if ( e.target === swatch ) text.value = swatch.value;
 		else if ( /^#[0-9a-fA-F]{6}$/.test( text.value.trim() ) ) swatch.value = text.value.trim();
 	} );
+	// Clicking the hex field opens the picker too — the swatch is a small
+	// target, and a field that answers a click with nothing reads as broken.
+	// The caret still lands, so typing or pasting a hex works either way.
+	document.addEventListener( 'click', ( e ) => {
+		const text = e.target.closest( '[data-ftype="color"] input[type="text"]' );
+		if ( ! text ) return;
+		const swatch = text.closest( '[data-ftype="color"]' ).querySelector( 'input[type="color"]' );
+		if ( swatch && ! swatch.disabled ) swatch.click();
+	} );
 
 	// Arm one async-suggest picker (data-ftype="suggest"): typing fetches the
 	// field's route with &q=, rows pick on mousedown (selection survival),
