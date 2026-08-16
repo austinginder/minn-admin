@@ -14,8 +14,15 @@ class Minn_Admin_REST {
 
 	const NS = 'minn-admin/v1';
 
+	const LANG_PACK_HOOK = 'minn_admin_install_lang_packs';
+
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
+		// Plugin and theme translation packs install in the BACKGROUND (see
+		// install_component_translations): the download talks to
+		// wordpress.org for every installed component and must not sit in
+		// front of the language switch the user is waiting to see.
+		add_action( self::LANG_PACK_HOOK, array( __CLASS__, 'run_lang_pack_install' ) );
 		// Minn's in-place content saves carry the post id in an
 		// X-Minn-Expect-Lock header — verified against _edit_lock inside the
 		// save request itself, so a session that lost a lock takeover can't
@@ -3948,12 +3955,53 @@ class Minn_Admin_REST {
 		if ( ! current_user_can( 'install_languages' ) || ! wp_is_file_mod_allowed( 'download_language_pack' ) ) {
 			return;
 		}
+		// Already done for this locale — nothing to schedule.
+		$done = get_option( 'minn_admin_lang_components', array() );
+		if ( is_array( $done ) && isset( $done[ $locale ] ) ) {
+			return;
+		}
+		// OFF the response. The packs being fetched are other plugins' and
+		// themes' strings; Minn's own interface ships its catalogs through its
+		// updater, and core's pack is a separate, already-installed step. So
+		// none of this is what the switch is waiting for, and it cost ~22s of
+		// staring at the old language on a first switch. The backup-now path
+		// schedules the same way.
+		if ( ! wp_next_scheduled( self::LANG_PACK_HOOK, array( $locale ) ) ) {
+			wp_schedule_single_event( time() - 1, self::LANG_PACK_HOOK, array( $locale ) );
+		}
+		spawn_cron();
+	}
+
+	/**
+	 * The scheduled worker: fetch this locale's plugin and theme packs.
+	 *
+	 * Stamped only on a COMPLETED pass, and only from in here — stamping when
+	 * the job was merely queued would mark a locale done that never
+	 * downloaded anything, and it would never be retried.
+	 *
+	 * @param string $locale Locale to install component packs for.
+	 */
+	public static function run_lang_pack_install( $locale ) {
+		$locale = (string) $locale;
+		if ( '' === $locale || 'en_US' === $locale ) {
+			return;
+		}
+		if ( ! wp_is_file_mod_allowed( 'download_language_pack' ) ) {
+			return;
+		}
+		self::install_component_translations_now( $locale );
+	}
+
+	/**
+	 * Do the install. Runs in the background job, never in a user request.
+	 *
+	 * @param string $locale Locale.
+	 */
+	private static function install_component_translations_now( $locale ) {
 		// Once per locale, not once per save. Clearing the update cache and
 		// re-checking made every plugin and theme phone home on EVERY language
 		// save, guaranteed — the same forced-update-check storm the
-		// single-plugin update path guards against further down this file. It
-		// blocks the response for seconds, long enough that the app never gets
-		// to repaint into the new language.
+		// single-plugin update path guards against further down this file.
 		//
 		// An empty result cannot be the signal: "nothing left to install" and
 		// "the cache predates this locale" look identical, and the first is the
@@ -3965,6 +4013,12 @@ class Minn_Admin_REST {
 		if ( is_array( $done ) && isset( $done[ $locale ] ) ) {
 			return;
 		}
+		$stamp = function () use ( $locale ) {
+			$map = get_option( 'minn_admin_lang_components', array() );
+			$map = is_array( $map ) ? $map : array();
+			$map[ $locale ] = time();
+			update_option( 'minn_admin_lang_components', $map, false );
+		};
 		try {
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 			// The update transients only list translations for languages that
@@ -3978,18 +4032,21 @@ class Minn_Admin_REST {
 					return isset( $u->language ) && $u->language === $locale;
 				}
 			) );
-			// Stamp on a completed pass, including one that found nothing:
-			// the work of ASKING is what must not repeat.
-			$done = is_array( $done ) ? $done : array();
-			$done[ $locale ] = time();
-			update_option( 'minn_admin_lang_components', $done, false );
+			// Nothing to fetch is a finished pass: the work of ASKING is what
+			// must not repeat.
 			if ( ! $updates ) {
+				$stamp();
 				return;
 			}
 			$upgrader = new Language_Pack_Upgrader( new Automatic_Upgrader_Skin() );
 			$upgrader->bulk_upgrade( $updates );
+			// Stamp only after the packs actually landed. Stamping earlier
+			// would mark a locale done whose download failed, and nothing
+			// would ever try it again.
+			$stamp();
 		} catch ( \Throwable $e ) {
-			// English fallback is the worst case; never fail the switch.
+			// English fallback is the worst case; never fail the switch, and
+			// leave the locale unstamped so the next switch retries.
 		}
 	}
 

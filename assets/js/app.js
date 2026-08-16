@@ -3225,6 +3225,15 @@
 	 * @param {boolean} silent Skip the confirmation toast (the caller shows
 	 *                         its own).
 	 */
+	// Topbar progress while a language request is in flight. Plugin and theme
+	// packs install in the background now, so the only wait left is core's own
+	// pack on a first switch — rare, but seconds long, and silence there reads
+	// as the setting having been ignored.
+	function langBusy( on ) {
+		const chip = $( '#minn-lang-chip' );
+		if ( chip ) chip.hidden = ! on;
+	}
+
 	async function switchLanguage( silent ) {
 		let p;
 		try {
@@ -3388,6 +3397,7 @@
 						<button class="minn-upd-chip" id="minn-upd-chip" hidden title="${ esc( __( 'Updates are running — click for details' ) ) }">${ icon( 'refresh' ) }<span id="minn-upd-chip-text"></span></button>
 					<button class="minn-vis-chip" id="minn-vis-chip" hidden title="${ esc( __( 'Your site is not fully public' ) ) }">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
 						<button class="minn-core-chip" id="minn-core-chip" hidden title="${ esc( __( 'A WordPress update is available' ) ) }">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
+						<button class="minn-upd-chip" id="minn-lang-chip" hidden title="${ esc( __( 'Setting up the language' ) ) }">${ icon( 'refresh' ) }<span>${ esc( __( 'Installing language…' ) ) }</span></button>
 						<button class="minn-topbar-ver" id="minn-ver-btn" title="${ esc( __( "What's new — full changelog" ) ) }">v${ esc( B.version ) }</button>
 						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="${ esc( __( 'View site' ) ) }" aria-label="${ esc( __( 'View site (opens in a new tab)' ) ) }">${ icon( 'globe' ) }</a>
 						<button class="minn-icon-btn" id="minn-help-btn" title="${ esc( __( 'About Minn' ) ) }" aria-label="${ esc( __( 'About Minn' ) ) }">${ icon( 'help' ) }</button>
@@ -20361,7 +20371,9 @@
 					delete payload.minn_language;
 					if ( cache.languages && langPick !== ( cache.languages.site || '' ) ) {
 						try {
-							const lr = await api( 'minn-admin/v1/site/language', { method: 'POST', body: JSON.stringify( { locale: langPick } ) } );
+							langBusy( true );
+							const lr = await api( 'minn-admin/v1/site/language', { method: 'POST', body: JSON.stringify( { locale: langPick } ) } )
+								.finally( () => langBusy( false ) );
 							cache.languages.site = lr.locale;
 							if ( lr.installed ) toast( __( 'Language pack installed' ) );
 							// Repaint at the END of the save, not here: this
@@ -38716,7 +38728,13 @@
 				await api( `wp/v2/users/${ B.user.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
 				let langPackInstalled = false;
 				if ( langChanged ) {
-					const lr = await api( 'minn-admin/v1/me/language', { method: 'POST', body: JSON.stringify( { locale: langPicked } ) } );
+					langBusy( true );
+					let lr;
+					try {
+						lr = await api( 'minn-admin/v1/me/language', { method: 'POST', body: JSON.stringify( { locale: langPicked } ) } );
+					} finally {
+						langBusy( false );
+					}
 					p.languages.current = lr.locale;
 					if ( lr.installed ) langPackInstalled = true;
 				}
