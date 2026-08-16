@@ -1,0 +1,83 @@
+/**
+ * ACF options parent menus: a "Site Options" parent with child pages is ONE
+ * sidebar surface (named for the parent), its children merged into the tab
+ * strip — a single-tab child's tab takes the page's name — and every tab's
+ * GET/POST delegates to the member page that owns it.
+ *
+ * Fixture: the mu-plugin registers redirect parent "Minn Site Options" with
+ * children Header Bits / Footer Bits (DB groups group_minn_oplab_header /
+ * _footer). ACF rewrites children onto the FIRST child's slug at runtime
+ * regardless of how they were registered, and the floating parent's
+ * menu_slug POINTS at that anchor — the label rule this suite pins.
+ * mula.localhost is the live real-site check of the same shape.
+ */
+const { launch, login, reporter } = require( './helpers' );
+
+( async () => {
+	const t = reporter( 'acf-options-menu' );
+	const { browser, page, errors } = await launch();
+	await login( page );
+
+	await page.goto( ( process.env.MINN_TEST_URL || 'https://minnadmin.localhost' ) + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
+	await page.waitForFunction( () => window.MINN && Array.isArray( window.MINN.surfaces ), null, { timeout: 15000 } );
+
+	const surfaces = await page.evaluate( () =>
+		( window.MINN.surfaces || [] ).filter( ( s ) => s.id && s.id.startsWith( 'acf-options-' ) )
+			.map( ( s ) => ( { id: s.id, label: s.label, tabs: ( s.settings && s.settings.tabs || [] ).map( ( x ) => x.label ) } ) ) );
+	const menu = surfaces.find( ( s ) => s.label === 'Minn Site Options' );
+	if ( ! menu ) {
+		console.log( 'SKIP: no parent-menu fixture on this site' );
+		await browser.close().catch( () => {} );
+		process.exit( 0 );
+	}
+	t.check( 'the parent menu is ONE surface named for the parent',
+		!! menu && menu.tabs.join( '|' ) === 'Header Bits|Footer Bits', JSON.stringify( menu ) );
+	t.check( 'child pages register no surfaces of their own',
+		! surfaces.some( ( s ) => /Header Bits|Footer Bits/.test( s.label ) ), JSON.stringify( surfaces.map( ( s ) => s.label ) ) );
+
+	// One sidebar item, not three.
+	const navCount = await page.evaluate( () =>
+		[ ...document.querySelectorAll( '#minn-navgrp-tools .minn-nav-btn' ) ]
+			.filter( ( b ) => /Minn Site Options|Header Bits|Footer Bits/.test( b.textContent ) ).length );
+	t.check( 'the sidebar shows one item for the whole menu', navCount === 1, String( navCount ) );
+
+	/* ===== Cross-page delegation: write on each tab, verify, restore ===== */
+	await page.goto( ( process.env.MINN_TEST_URL || 'https://minnadmin.localhost' ) + '/minn-admin/' + menu.id, { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '.minn-surface-settings [data-sset]', { timeout: 15000 } );
+
+	const surface = await page.evaluate( ( id ) =>
+		( window.MINN.surfaces || [] ).find( ( s ) => s.id === id ), menu.id );
+	const drive = async ( tabId, key, probe ) => {
+		await page.click( `[data-ssettab="${ tabId }"]` );
+		await page.waitForSelector( `.minn-surface-settings [data-sset="${ key }"]`, { timeout: 15000 } );
+		const route = surface.settings.route.replace( '{tab}', tabId );
+		const readBack = () => page.evaluate( async ( args ) => {
+			const r = await fetch( window.MINN.restUrl + args.route, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return ( ( await r.json() ).values || {} )[ args.key ];
+		}, { route, key } );
+		const save = async () => {
+			const wait = page.waitForResponse( ( res ) => res.request().method() === 'POST'
+				&& res.url().includes( route ), { timeout: 20000 } );
+			await page.click( '#minn-sset-save' );
+			await wait;
+			await page.waitForTimeout( 600 );
+		};
+		const el = await page.$( `.minn-surface-settings [data-sset="${ key }"]` );
+		const orig = await el.inputValue();
+		await el.fill( probe );
+		await save();
+		const got = await readBack();
+		// Restore through the same UI (the save re-rendered the view).
+		const again = await page.$( `.minn-surface-settings [data-sset="${ key }"]` );
+		await again.fill( orig );
+		await save();
+		return { got, restored: await readBack() === orig };
+	};
+
+	const h = await drive( 'tab-0', 'field_minn_oplab_h_title', 'Menu probe H' );
+	t.check( 'tab-0 write delegates to the first member page', h.got === 'Menu probe H' && h.restored, JSON.stringify( h ) );
+	const f = await drive( 'tab-1', 'field_minn_oplab_f_note', 'Menu probe F' );
+	t.check( 'tab-1 write delegates to the second member page', f.got === 'Menu probe F' && f.restored, JSON.stringify( f ) );
+
+	await t.done( browser, errors );
+} )();

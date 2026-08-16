@@ -1757,30 +1757,183 @@ function minn_admin_acf_options_save( $page, $values ) {
 	}
 }
 
+/**
+ * Group options pages into their ACF parent MENUS, so a "Site Options"
+ * parent with four child pages is ONE sidebar item, not four (ACF's own
+ * admin shows exactly one).
+ *
+ * Two registration shapes exist in the wild, both handled: the documented
+ * one (children carry parent_slug = the redirect parent's slug), and the
+ * first-child one (ACF re-parents children onto the FIRST child's slug,
+ * while the real parent floats as a fieldless redirect page registered just
+ * before it — the menu label). The anchor is whatever slug other pages name
+ * as their parent; core-menu parents ('themes.php'…) never group.
+ *
+ * @return array{menus: array, standalone: array} menus: anchor => { label,
+ *         members (allowed page slugs, registration order) }.
+ */
+function minn_admin_acf_options_menu_map() {
+	static $map = null;
+	if ( null !== $map ) {
+		return $map;
+	}
+	$all     = (array) acf_get_options_pages();
+	$allowed = minn_admin_acf_options_pages_allowed();
+	$anchors = array();
+	foreach ( $all as $slug => $p ) {
+		$parent = isset( $p['parent_slug'] ) ? (string) $p['parent_slug'] : '';
+		if ( '' === $parent || false !== strpos( $parent, '.php' ) || ! isset( $all[ $parent ] ) ) {
+			continue;
+		}
+		$anchors[ $parent ] = true;
+	}
+	$menus = array();
+	$used  = array();
+	foreach ( array_keys( $anchors ) as $anchor ) {
+		$members = array();
+		foreach ( $all as $slug => $p ) {
+			$parent = isset( $p['parent_slug'] ) ? (string) $p['parent_slug'] : '';
+			if ( $slug !== $anchor && $parent !== $anchor ) {
+				continue;
+			}
+			$used[ $slug ] = true; // grouped even when cap-filtered for this user
+			if ( isset( $allowed[ $slug ] ) ) {
+				$members[] = $slug;
+			}
+		}
+		if ( ! $members ) {
+			continue;
+		}
+		// The menu label. Documented shape: the anchor IS the fieldless
+		// redirect parent — its title is the label. First-child shape: the
+		// real parent floats as a redirect page whose menu_slug ACF has
+		// REWRITTEN to point at the anchor (its registry KEY keeps the
+		// original slug) — that pointer is the link, and its title is the
+		// menu's name.
+		$label = ! empty( $all[ $anchor ]['page_title'] ) ? $all[ $anchor ]['page_title'] : $anchor;
+		foreach ( $all as $key => $p ) {
+			if ( $key !== $anchor && ! empty( $p['redirect'] ) && $anchor === (string) ( $p['menu_slug'] ?? '' ) ) {
+				$label = ! empty( $p['page_title'] ) ? $p['page_title'] : $label;
+				$used[ $key ] = true;
+				break;
+			}
+		}
+		$menus[ $anchor ] = array(
+			'label'   => $label,
+			'members' => $members,
+		);
+	}
+	$standalone = array();
+	foreach ( $allowed as $slug => $p ) {
+		if ( empty( $used[ $slug ] ) ) {
+			$standalone[] = $slug;
+		}
+	}
+	$map = array(
+		'menus'      => $menus,
+		'standalone' => $standalone,
+	);
+	return $map;
+}
+
+/**
+ * Merged tab list for one menu: each member page's tabs in registration
+ * order, re-numbered positionally. A single-tab member's tab takes the
+ * PAGE's name (it reads as the menu item it was); multi-tab members keep
+ * their own tab labels. Each tab remembers its member page and the
+ * member-local id so GET/POST can delegate.
+ *
+ * @param string $anchor Menu anchor slug.
+ * @return array[]
+ */
+function minn_admin_acf_options_menu_tabs( $anchor ) {
+	$map  = minn_admin_acf_options_menu_map();
+	$menu = isset( $map['menus'][ $anchor ] ) ? $map['menus'][ $anchor ] : null;
+	if ( ! $menu ) {
+		return array();
+	}
+	$allowed = minn_admin_acf_options_pages_allowed();
+	$out     = array();
+	foreach ( $menu['members'] as $slug ) {
+		$page   = $allowed[ $slug ];
+		$tabs   = minn_admin_acf_options_tabs( $page );
+		$single = 1 === count( $tabs );
+		foreach ( $tabs as $t ) {
+			$t['_page'] = $slug;
+			$t['_ptab'] = $t['id'];
+			if ( $single && ! empty( $page['page_title'] ) ) {
+				$t['label'] = $page['page_title'];
+			}
+			$t['id'] = 'tab-' . count( $out );
+			$out[]   = $t;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Resolve one merged tab id to its member page + member-local tab id.
+ *
+ * @param string $anchor Menu anchor slug.
+ * @param string $tab_id Merged tab id.
+ * @return array|null { page (array), tab (member-local id) }
+ */
+function minn_admin_acf_options_menu_target( $anchor, $tab_id ) {
+	$allowed = minn_admin_acf_options_pages_allowed();
+	foreach ( minn_admin_acf_options_menu_tabs( $anchor ) as $t ) {
+		if ( $t['id'] === $tab_id && isset( $allowed[ $t['_page'] ] ) ) {
+			return array(
+				'page' => $allowed[ $t['_page'] ],
+				'tab'  => $t['_ptab'],
+			);
+		}
+	}
+	return null;
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_acf_options_active() ) {
 		return $surfaces;
 	}
-	foreach ( minn_admin_acf_options_pages_allowed() as $slug => $page ) {
-		$tabs = minn_admin_acf_options_tabs( $page );
-		if ( ! $tabs ) {
-			continue;
-		}
+	$map     = minn_admin_acf_options_menu_map();
+	$allowed = minn_admin_acf_options_pages_allowed();
+	$reg     = function ( $id, $label, $cap, $slug, $tabs ) use ( &$surfaces ) {
 		$tab_list = array();
 		foreach ( $tabs as $t ) {
-			$tab_list[] = array( 'id' => $t['id'], 'label' => $t['label'] );
+			$tab_list[] = array(
+				'id'    => $t['id'],
+				'label' => $t['label'],
+			);
 		}
-		$surfaces[ 'acf-options-' . sanitize_key( $slug ) ] = array(
-			'label'    => $page['page_title'] ? $page['page_title'] : $page['menu_slug'],
+		$surfaces[ $id ] = array(
+			'label'    => $label,
 			'sub'      => 'ACF',
 			'icon'     => 'gear',
-			'cap'      => ! empty( $page['capability'] ) ? $page['capability'] : 'edit_posts',
+			'cap'      => $cap,
 			'settings' => array(
 				'label' => __( 'Settings', 'minn-admin' ),
 				'tabs'  => $tab_list,
 				'route' => 'minn-admin/v1/acf/options/' . rawurlencode( $slug ) . '/{tab}',
 			),
 		);
+	};
+	foreach ( $map['menus'] as $anchor => $menu ) {
+		$tabs = minn_admin_acf_options_menu_tabs( $anchor );
+		if ( ! $tabs ) {
+			continue;
+		}
+		// Nav gate: the first member's own capability (per-tab data is
+		// cap-filtered again at request time through pages_allowed).
+		$first = $allowed[ $menu['members'][0] ];
+		$reg( 'acf-options-' . sanitize_key( $anchor ), $menu['label'], ! empty( $first['capability'] ) ? $first['capability'] : 'edit_posts', $anchor, $tabs );
+	}
+	foreach ( $map['standalone'] as $slug ) {
+		$page = $allowed[ $slug ];
+		$tabs = minn_admin_acf_options_tabs( $page );
+		if ( ! $tabs ) {
+			continue;
+		}
+		$reg( 'acf-options-' . sanitize_key( $slug ), $page['page_title'] ? $page['page_title'] : $page['menu_slug'], ! empty( $page['capability'] ) ? $page['capability'] : 'edit_posts', $slug, $tabs );
 	}
 	return $surfaces;
 } );
@@ -1789,10 +1942,25 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_acf_options_active() ) {
 		return;
 	}
+	// A slug is either a standalone allowed page, or a menu anchor whose
+	// merged tab id delegates to the member page owning it (its own
+	// capability already filtered through pages_allowed).
 	$resolve = function ( $req ) {
 		$pages = minn_admin_acf_options_pages_allowed();
 		$slug  = rawurldecode( (string) $req['page'] );
-		return isset( $pages[ $slug ] ) ? $pages[ $slug ] : null;
+		$tab   = (string) $req['tab'];
+		$map   = minn_admin_acf_options_menu_map();
+		if ( isset( $map['menus'][ $slug ] ) ) {
+			$target = minn_admin_acf_options_menu_target( $slug, $tab );
+			return $target ? array(
+				'page' => $target['page'],
+				'tab'  => $target['tab'],
+			) : null;
+		}
+		return isset( $pages[ $slug ] ) ? array(
+			'page' => $pages[ $slug ],
+			'tab'  => $tab,
+		) : null;
 	};
 	register_rest_route( 'minn-admin/v1', '/acf/options/(?P<page>[A-Za-z0-9_%.\-]+)/(?P<tab>tab-\d+)', array(
 		array(
@@ -1801,7 +1969,8 @@ add_action( 'rest_api_init', function () {
 				return (bool) $resolve( $req ); // allowed-pages already filters by the page's own capability
 			},
 			'callback'            => function ( $req ) use ( $resolve ) {
-				return rest_ensure_response( minn_admin_acf_options_tab_shape( $resolve( $req ), (string) $req['tab'] ) );
+				$target = $resolve( $req );
+				return rest_ensure_response( minn_admin_acf_options_tab_shape( $target['page'], $target['tab'] ) );
 			},
 		),
 		array(
@@ -1810,11 +1979,11 @@ add_action( 'rest_api_init', function () {
 				return (bool) $resolve( $req );
 			},
 			'callback'            => function ( $req ) use ( $resolve ) {
-				$page   = $resolve( $req );
+				$target = $resolve( $req );
 				$body   = $req->get_json_params();
 				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-				minn_admin_acf_options_save( $page, $values );
-				return rest_ensure_response( minn_admin_acf_options_tab_shape( $page, (string) $req['tab'] ) );
+				minn_admin_acf_options_save( $target['page'], $values );
+				return rest_ensure_response( minn_admin_acf_options_tab_shape( $target['page'], $target['tab'] ) );
 			},
 		),
 	) );

@@ -24,8 +24,11 @@ const { launch, login, reporter } = require( './helpers' );
 	await page.goto( ( process.env.MINN_TEST_URL || 'https://minnadmin.localhost' ) + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
 	await page.waitForFunction( () => window.MINN && Array.isArray( window.MINN.surfaces ), null, { timeout: 15000 } );
 
+	// Prefer the standalone lab page (the parent-menu fixture registers a
+	// merged surface too — tests/acf-options-menu.test.js covers that one).
 	const surface = await page.evaluate( () =>
-		( window.MINN.surfaces || [] ).find( ( s ) => s.id && s.id.startsWith( 'acf-options-' ) ) || null );
+		( window.MINN.surfaces || [] ).find( ( s ) => s.id === 'acf-options-minn-options-lab' )
+		|| ( window.MINN.surfaces || [] ).find( ( s ) => s.id && s.id.startsWith( 'acf-options-' ) ) || null );
 	if ( ! surface ) {
 		console.log( 'SKIP: no ACF options-page surface on this site (ACF Pro with an options page required)' );
 		await browser.close().catch( () => {} );
