@@ -1195,6 +1195,11 @@ function minn_admin_acf_schema_import( $content ) {
 			/* translators: %s: the title of a field group registered in code. */
 			return new WP_Error( 'invalid', sprintf( __( '“%s” is registered in code on this site — an import can’t override it.', 'minn-admin' ), $entry['title'] ), array( 'status' => 400 ) );
 		}
+		// Identity is ours to decide, never the uploaded file's. A caller-set
+		// ID survives into acf_import_field_group(), which passes it to
+		// wp_update_post() and rewrites whatever post row it names into a
+		// field group. Resolve it from the key we just looked up instead.
+		unset( $entry['ID'] );
 		if ( $existing ) {
 			$entry['ID'] = (int) $existing['ID'];
 		}

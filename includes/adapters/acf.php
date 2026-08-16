@@ -184,6 +184,34 @@ function minn_admin_acf_link_out( $val ) {
  * @param mixed $value Incoming value.
  * @return array|string|null
  */
+/**
+ * Is this URL safe to store for a theme to print into an href?
+ *
+ * An anchored regex over the raw string is not enough. A browser strips C0
+ * control characters and whitespace before it resolves a scheme, so
+ * "java\tscript:alert(1)" and a URL led by a newline both run while reading
+ * as something else to a naive test. Normalise the same way the browser does
+ * before looking at the scheme, and let esc_url_raw() have the final say so
+ * the allowed set is WordPress's rather than a list kept here.
+ *
+ * @param string $url Candidate URL.
+ * @return bool
+ */
+function minn_admin_acf_url_ok( $url ) {
+	$url = (string) $url;
+	if ( '' === trim( $url ) ) {
+		return true; // empty clears the field; callers handle that themselves
+	}
+	$probe = preg_replace( '/[\x00-\x20\x7F]+/', '', $url );
+	if ( preg_match( '/^(javascript|data|vbscript):/i', (string) $probe ) ) {
+		return false;
+	}
+	// esc_url_raw() drops a scheme outside its allowed list entirely, so an
+	// unknown-scheme URL comes back empty or reshaped. Either means do not
+	// store it as given.
+	return '' !== esc_url_raw( $url );
+}
+
 function minn_admin_acf_link_in( $value ) {
 	if ( null === $value || false === $value || '' === $value ) {
 		return '';
@@ -194,7 +222,7 @@ function minn_admin_acf_link_in( $value ) {
 	$value = (array) $value;
 	$url   = isset( $value['url'] ) && is_scalar( $value['url'] ) ? trim( (string) $value['url'] ) : '';
 	$title = isset( $value['title'] ) && is_scalar( $value['title'] ) ? (string) $value['title'] : '';
-	if ( preg_match( '/^(javascript|data|vbscript):/i', $url ) ) {
+	if ( ! minn_admin_acf_url_ok( $url ) ) {
 		return null;
 	}
 	if ( '' === $url && '' === $title ) {
@@ -1021,11 +1049,13 @@ function minn_admin_acf_value_out( $f, $v ) {
  * invalid — callers skip the write so bad input never clobbers a stored
  * value. The kses trust boundary for wysiwyg lives here.
  *
- * @param array $f     Mapped field.
- * @param mixed $value Incoming value.
+ * @param array  $f     Mapped field.
+ * @param mixed  $value Incoming value.
+ * @param string $scope Where the value is headed: 'post' (post meta, the
+ *                      caller's own post) or 'options' (site-global).
  * @return mixed|null
  */
-function minn_admin_acf_value_in( $f, $value ) {
+function minn_admin_acf_value_in( $f, $value, $scope = 'post' ) {
 	switch ( $f['type'] ) {
 		case 'true_false':
 			return ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
@@ -1051,9 +1081,22 @@ function minn_admin_acf_value_in( $f, $value ) {
 		case 'wysiwyg':
 			$value = is_scalar( $value ) ? (string) $value : '';
 			return current_user_can( 'unfiltered_html' ) ? $value : wp_kses_post( $value );
+		case 'url':
+			// A url field's whole purpose is to be printed into an href, and
+			// the link field next door already refuses these schemes.
+			$value = is_scalar( $value ) ? trim( (string) $value ) : '';
+			return minn_admin_acf_url_ok( $value ) ? $value : null;
 	}
 	if ( null === $value || false === $value ) {
 		return ''; // clearing stores '' — ACF's own form save does the same
+	}
+	if ( 'options' === $scope && is_string( $value ) && ! current_user_can( 'unfiltered_html' ) ) {
+		// An options value is site-global and the usual pattern is a theme
+		// printing it with the_field(), which does not escape. On the post
+		// scope this is ACF's own behaviour over one post the caller already
+		// owns; here the blast radius is every page, so the markup-trust rule
+		// that already covers wysiwyg covers the plain string types too.
+		return wp_kses_post( $value );
 	}
 	return is_scalar( $value ) ? $value : null;
 }
@@ -1927,6 +1970,15 @@ add_action( 'rest_api_init', function () {
 				);
 				if ( '' !== $q ) {
 					$args['search'] = '*' . $q . '*';
+					// Pin the columns. WP_User_Query picks its own set from
+					// the search term, and a term containing @ makes it search
+					// user_email, which turns a picker into a way of asking
+					// whether an address has an account here. Someone who may
+					// list users can have core's behaviour; everyone else
+					// searches the names the picker actually shows.
+					if ( ! current_user_can( 'list_users' ) ) {
+						$args['search_columns'] = array( 'display_name', 'user_nicename', 'user_login' );
+					}
 				}
 				if ( ! empty( $acf['role'] ) ) {
 					$args['role__in'] = (array) $acf['role'];
@@ -2004,6 +2056,15 @@ function minn_admin_acf_options_pages_allowed() {
 		}
 		// Redirect parents exist only to hold children in the admin menu.
 		if ( ! empty( $page['redirect'] ) && ! empty( $page['child_slugs'] ) ) {
+			continue;
+		}
+		// Absent and declared-empty are different answers. ACF always injects
+		// a default, so a missing key means the page never said; an empty one
+		// was set on purpose (directly or through acf/validate_options_page,
+		// the documented way to lock a page down) and ACF passes it straight
+		// to add_menu_page, where current_user_can('') denies everyone. Read
+		// that as deny rather than as unset, or Minn grants what ACF refuses.
+		if ( array_key_exists( 'capability', $page ) && empty( $page['capability'] ) ) {
 			continue;
 		}
 		$cap = ! empty( $page['capability'] ) ? $page['capability'] : 'edit_posts';
@@ -2380,7 +2441,7 @@ function minn_admin_acf_options_save( $page, $values ) {
 		} elseif ( 'flex' === $f['type'] ) {
 			$v = minn_admin_acf_flex_in( $f, $v, $stored_at( $f ) );
 		} else {
-			$v = minn_admin_acf_value_in( $f, $v );
+			$v = minn_admin_acf_value_in( $f, $v, 'options' );
 		}
 		if ( null === $v ) {
 			continue; // invalid input never clobbers a stored value
