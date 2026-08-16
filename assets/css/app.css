@@ -1271,6 +1271,22 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-rows-head button:disabled { opacity: 0.35; cursor: default; }
 .minn-rows-head [data-rdel]:hover { color: var(--red, #e5484d); border-color: currentColor; }
 .minn-field-rows > [data-radd] { align-self: flex-start; }
+/* Flex control (ACF flexible content): sections collapse by default, so a
+   page of them reads as a list of what it holds rather than a wall of forms.
+   The body keeps its own display so [hidden] has nothing to fight. */
+.minn-rows-body:not([hidden]) { display: flex; flex-direction: column; gap: 8px; }
+.minn-rows-card.flex { padding-bottom: 10px; }
+.minn-rows-card.flex.open { padding-bottom: 12px; }
+.minn-rows-card.flex .minn-rows-n { color: var(--text); font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.minn-rows-card.flex .minn-rows-spring { flex: 0 0 4px; }
+.minn-rows-preview {
+  flex: 1; min-width: 0; cursor: pointer; font-size: 12px; color: var(--muted);
+  margin-inline-start: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.minn-rows-toggle { flex-shrink: 0; }
+.minn-rows-toggle svg { width: 13px; height: 13px; display: block; margin: 0 auto; transition: transform 0.15s ease; }
+.minn-rows-card.open .minn-rows-toggle svg { transform: rotate(90deg); }
 .minn-rev-list {
   max-height: min(70vh, 640px); overflow-y: auto; padding: 4px 0 10px;
 }

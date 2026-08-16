@@ -1392,6 +1392,12 @@
 		if ( t === 'rows' ) {
 			return `<div class="minn-field-rows" ${ attr }="${ esc( id ) }" data-ftype="rows" data-rows-def="${ esc( JSON.stringify( f.subfields || [] ) ) }" data-rows-val="${ esc( JSON.stringify( Array.isArray( v ) ? v : [] ) ) }"${ f.subLocked ? ` data-rows-locked="${ parseInt( f.subLocked, 10 ) }"` : '' }></div>`;
 		}
+		// Flex: rows whose every row picks its schema by layout (ACF flexible
+		// content). Same [{ __idx?, values }] contract plus __layout; the shell
+		// is empty and bindRowsField owns it, in its flex dialect.
+		if ( t === 'flex' ) {
+			return `<div class="minn-field-rows minn-field-flex" ${ attr }="${ esc( id ) }" data-ftype="flex" data-flex-layouts="${ esc( JSON.stringify( f.layouts || {} ) ) }" data-rows-val="${ esc( JSON.stringify( Array.isArray( v ) ? v : [] ) ) }"></div>`;
+		}
 		// Gallery: an ordered list of attachments ({ id, url } entries or bare
 		// ids). The control shows a thumb strip + an edit doorway; the CALLER
 		// binds [data-gal-edit] to the images editor's items mode and repaints
@@ -1453,7 +1459,7 @@
 		if ( kind === 'gallery' ) {
 			try { return JSON.parse( el.dataset.gal || '[]' ); } catch ( e ) { return []; }
 		}
-		if ( kind === 'rows' ) {
+		if ( kind === 'rows' || kind === 'flex' ) {
 			if ( el._rowsValue !== undefined ) return el._rowsValue;
 			try { return JSON.parse( el.dataset.rowsVal || '[]' ); } catch ( e ) { return []; }
 		}
@@ -1816,47 +1822,91 @@
 		body.focus( { preventScroll: true } );
 	}
 
-	// Arm one rows control (data-ftype="rows" — ACF repeaters). The wrap owns
-	// its state: [{ __idx?, values }] where __idx anchors a kept row to its
-	// original stored position (the server merges edits onto that row, so
-	// sub-values the form doesn't render survive). Structural ops (add,
-	// remove, move) re-render; typing only updates state, keeping focus.
+	// Arm one repeating control: `rows` (ACF repeaters, one schema for every
+	// row) or `flex` (ACF flexible content, where each row picks its schema by
+	// layout). The wrap owns its state: [{ __idx?, __layout?, values }] where
+	// __idx anchors a kept row to its original stored position (the server
+	// merges edits onto that row, so sub-values the form doesn't render
+	// survive). Structural ops (add, remove, move) re-render; typing only
+	// updates state, keeping focus.
 	function bindRowsField( wrap, onChange ) {
 		if ( wrap._minnRowsBound ) return;
 		wrap._minnRowsBound = true;
+		const flex = wrap.dataset.ftype === 'flex';
 		let def = [];
+		let layouts = {};
 		let rows = [];
 		try { def = JSON.parse( wrap.dataset.rowsDef || '[]' ); } catch ( e ) {}
+		try { layouts = JSON.parse( wrap.dataset.flexLayouts || '{}' ); } catch ( e ) {}
 		try { rows = JSON.parse( wrap.dataset.rowsVal || '[]' ); } catch ( e ) {}
-		rows = rows.map( ( r ) => ( { __idx: r.__idx, values: { ...( r.values || {} ) } } ) );
+		rows = rows.map( ( r ) => ( { __idx: r.__idx, __layout: r.__layout, __locked: !! r.__locked, values: { ...( r.values || {} ) } } ) );
 		const locked = parseInt( wrap.dataset.rowsLocked || '0', 10 );
+		// A repeater's rows all share one schema; a flex row's is its layout's.
+		// A layout the field no longer declares has none — that row renders as
+		// an inert card and rides through the save untouched.
+		const layoutOf = ( r ) => ( flex && ! r.__locked ? layouts[ r.__layout ] || null : null );
+		const defFor = ( r ) => ( flex ? ( layoutOf( r ) || {} ).subfields || [] : def );
 		const commit = () => {
-			wrap._rowsValue = rows.map( ( r ) => ( r.__idx != null ? { __idx: r.__idx, values: r.values } : { values: r.values } ) );
+			wrap._rowsValue = rows.map( ( r ) => {
+				const out = {};
+				if ( r.__idx != null ) out.__idx = r.__idx;
+				if ( flex ) out.__layout = r.__layout;
+				out.values = r.values;
+				return out;
+			} );
 			onChange( wrap._rowsValue );
 		};
-		const rowHtml = ( r, i ) => `
-			<div class="minn-rows-card">
-				<div class="minn-rows-head">
-					<span class="minn-rows-n">${ i + 1 }</span>
-					<span class="minn-rows-spring"></span>
-					<button type="button" data-rmv="${ i }:-1" title="${ esc( __( 'Move up' ) ) }"${ i === 0 ? ' disabled' : '' }>↑</button>
-					<button type="button" data-rmv="${ i }:1" title="${ esc( __( 'Move down' ) ) }"${ i === rows.length - 1 ? ' disabled' : '' }>↓</button>
-					<button type="button" data-rdel="${ i }" title="${ esc( __( 'Remove row' ) ) }">×</button>
-				</div>
-				${ def.map( ( sf ) => {
-					const nf = formNormField( sf );
-					if ( nf.type === 'select' ) nf.clearable = true;
-					const ctl = formControlHtml( nf, r.values[ sf.name ], 'data-rowsub', `${ i }:${ sf.name }` );
-					return `<div class="minn-panel-field${ nf.type === 'toggle' ? ' inline' : '' }">
-						<div class="minn-field-label">${ esc( sf.label || sf.name ) }</div>
-						${ ctl }
-					</div>`;
-				} ).join( '' ) }
+		// Card summary while collapsed: the first text the row carries, so a
+		// stack of sections reads as content rather than as a stack of labels.
+		const previewOf = ( r ) => {
+			const sub = defFor( r ).find( ( sf ) => [ 'text', 'textarea', 'email', 'url' ].indexOf( sf.type ) !== -1
+				&& String( r.values[ sf.name ] == null ? '' : r.values[ sf.name ] ).trim() );
+			if ( ! sub ) return '';
+			const s = String( r.values[ sub.name ] ).replace( /\s+/g, ' ' ).trim();
+			return s.length > 70 ? s.slice( 0, 70 ) + '…' : s;
+		};
+		const rowFieldsHtml = ( r, i ) => defFor( r ).map( ( sf ) => {
+			const nf = formNormField( sf );
+			if ( nf.type === 'select' ) nf.clearable = true;
+			const ctl = formControlHtml( nf, r.values[ sf.name ], 'data-rowsub', `${ i }:${ sf.name }` );
+			return `<div class="minn-panel-field${ nf.type === 'toggle' ? ' inline' : '' }">
+				<div class="minn-field-label">${ esc( sf.label || sf.name ) }</div>
+				${ ctl }
 			</div>`;
+		} ).join( '' );
+		const rowHtml = ( r, i ) => {
+			const chrome = `<span class="minn-rows-spring"></span>
+				<button type="button" data-rmv="${ i }:-1" title="${ esc( __( 'Move up' ) ) }"${ i === 0 ? ' disabled' : '' }>↑</button>
+				<button type="button" data-rmv="${ i }:1" title="${ esc( __( 'Move down' ) ) }"${ i === rows.length - 1 ? ' disabled' : '' }>↓</button>
+				<button type="button" data-rdel="${ i }" title="${ esc( flex ? __( 'Remove section' ) : __( 'Remove row' ) ) }">×</button>`;
+			if ( ! flex ) {
+				return `<div class="minn-rows-card">
+					<div class="minn-rows-head"><span class="minn-rows-n">${ i + 1 }</span>${ chrome }</div>
+					${ rowFieldsHtml( r, i ) }
+				</div>`;
+			}
+			const lay = layoutOf( r );
+			const open = !! r._open;
+			const sublock = lay && lay.subLocked ? parseInt( lay.subLocked, 10 ) : 0;
+			const body = lay
+				? rowFieldsHtml( r, i ) + ( sublock
+					? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of this section's fields only editable in wp-admin. */ _n( '%d more field in this section lives in wp-admin.', '%d more fields in this section live in wp-admin.', sublock ) ), sublock ) }</div>`
+					: '' )
+				: `<div class="minn-insp-note">${ esc( __( 'This section is kept exactly as it is. Its layout is no longer part of the field.' ) ) }</div>`;
+			return `<div class="minn-rows-card flex${ open ? ' open' : '' }">
+				<div class="minn-rows-head">
+					<button type="button" class="minn-rows-toggle" data-rtoggle="${ i }" aria-expanded="${ open ? 'true' : 'false' }" title="${ esc( open ? __( 'Collapse section' ) : __( 'Expand section' ) ) }">${ icon( 'chevron-right' ) }</button>
+					<span class="minn-rows-n" data-rtoggle="${ i }">${ esc( lay ? lay.label : ( r.__layout || __( 'Section' ) ) ) }</span>
+					<span class="minn-rows-preview" data-rtoggle="${ i }">${ esc( previewOf( r ) ) }</span>
+					${ chrome }
+				</div>
+				<div class="minn-rows-body"${ open ? '' : ' hidden' }>${ body }</div>
+			</div>`;
+		};
 		const render = () => {
 			wrap.innerHTML = rows.map( rowHtml ).join( '' )
 				+ ( locked ? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of per-row fields only editable in wp-admin. */ _n( '%d more field per row lives in wp-admin.', '%d more fields per row live in wp-admin.', locked ) ), locked ) }</div>` : '' )
-				+ `<button type="button" class="minn-btn-soft" data-radd>+ ${ esc( __( 'Add row' ) ) }</button>`;
+				+ `<button type="button" class="minn-btn-soft" data-radd>+ ${ esc( flex ? __( 'Add section' ) : __( 'Add row' ) ) }</button>`;
 			// Image and date subs need per-node arming (no input events to
 			// delegate); structural ops re-render, so fresh nodes re-wire
 			// here each time.
@@ -1890,10 +1940,18 @@
 			const el = e.target.closest( '[data-rowsub]' );
 			if ( ! el ) return;
 			const sep = el.dataset.rowsub.indexOf( ':' );
-			const row = rows[ Number( el.dataset.rowsub.slice( 0, sep ) ) ];
+			const i = Number( el.dataset.rowsub.slice( 0, sep ) );
+			const row = rows[ i ];
 			if ( ! row ) return;
 			row.values[ el.dataset.rowsub.slice( sep + 1 ) ] = formControlValue( el );
 			commit();
+			// The collapsed summary quotes the row's first text, so it has to
+			// track typing — a full re-render here would take focus with it.
+			if ( flex ) {
+				const card = el.closest( '.minn-rows-card' );
+				const prev = card && $( '.minn-rows-preview', card );
+				if ( prev ) prev.textContent = previewOf( row );
+			}
 		} );
 		wrap.addEventListener( 'click', ( e ) => {
 			const tg = e.target.closest( '[data-rowsub][data-ftype="toggle"]' );
@@ -1936,11 +1994,47 @@
 					return;
 				}
 			}
+			const tog = e.target.closest( '[data-rtoggle]' );
+			if ( tog ) {
+				// Toggling in place, never a re-render: expanding one section
+				// must not rebuild (and re-arm) every other card.
+				const row = rows[ parseInt( tog.dataset.rtoggle, 10 ) ];
+				const card = tog.closest( '.minn-rows-card' );
+				const body = card && $( '.minn-rows-body', card );
+				const btn = card && $( '.minn-rows-toggle', card );
+				if ( ! row || ! body || ! btn ) return;
+				row._open = ! row._open;
+				body.hidden = ! row._open;
+				card.classList.toggle( 'open', !! row._open );
+				btn.setAttribute( 'aria-expanded', row._open ? 'true' : 'false' );
+				btn.title = row._open ? __( 'Collapse section' ) : __( 'Expand section' );
+				return;
+			}
 			const add = e.target.closest( '[data-radd]' );
 			if ( add ) {
-				const values = {};
-				def.forEach( ( sf ) => { values[ sf.name ] = sf.type === 'true_false' ? false : ''; } );
-				rows.push( { values } );
+				const seed = ( subfields ) => {
+					const values = {};
+					( subfields || [] ).forEach( ( sf ) => { values[ sf.name ] = sf.type === 'true_false' ? false : ''; } );
+					return values;
+				};
+				// Flex picks the section's layout first — the schema choice IS
+				// the add. A new row opens expanded; there is nothing to read
+				// in a collapsed empty card.
+				if ( flex ) {
+					const names = Object.keys( layouts );
+					if ( ! names.length ) return;
+					const r = add.getBoundingClientRect();
+					openMinnMenu( r.left, r.bottom + 4, names.map( ( name ) => ( {
+						label: layouts[ name ].label || name,
+						run: () => {
+							rows.push( { __layout: name, values: seed( layouts[ name ].subfields ), _open: true } );
+							render();
+							commit();
+						},
+					} ) ) );
+					return;
+				}
+				rows.push( { values: seed( def ) } );
 				render();
 				commit();
 				return;
@@ -15005,9 +15099,9 @@
 				bindSuggestField( input, () => mark() );
 			} else if ( input.dataset.ftype === 'relation' ) {
 				bindRelationField( input, () => mark() );
-			} else if ( input.dataset.ftype === 'rows' ) {
-				// Repeaters on a settings page: the same rows control the
-				// editor panel uses; the save reads el._rowsValue.
+			} else if ( input.dataset.ftype === 'rows' || input.dataset.ftype === 'flex' ) {
+				// Repeaters and flexible content on a settings page: the same
+				// control the editor panel uses; the save reads el._rowsValue.
 				bindRowsField( input, () => mark() );
 			} else if ( input.dataset.ftype === 'date' || input.dataset.ftype === 'datetime' ) {
 				// Readonly input: the picker's commit is the only edit signal.
@@ -25193,9 +25287,10 @@
 				bindSuggestField( input, ( value, label ) => {
 					write( value === '' ? '' : { value, label } );
 				} );
-			} else if ( input.dataset.ftype === 'rows' ) {
-				// Repeater rows own their rendering and state; every edit
-				// (typed or structural) lands in panelValues like any field.
+			} else if ( input.dataset.ftype === 'rows' || input.dataset.ftype === 'flex' ) {
+				// Repeater rows and flexible-content sections own their
+				// rendering and state; every edit (typed or structural) lands
+				// in panelValues like any field.
 				bindRowsField( input, ( v ) => write( v ) );
 			} else if ( input.dataset.ftype === 'wysiwyg' ) {
 				// The rich-text modal opens after the hosting panel modal
