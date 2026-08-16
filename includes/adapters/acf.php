@@ -357,6 +357,24 @@ function minn_admin_acf_groups_for( $post_id, $post_type ) {
  * @param array $f ACF field array.
  * @return array|null { name, label, type, choices?, min?, max?, anyChoice?, key }
  */
+/**
+ * Choice labels as plain text. ACF renders its own screens as HTML, so a
+ * choice label can carry markup (a dashicon span in front of "Center"); Minn's
+ * selects escape what they are given, which would print the tag verbatim.
+ * A label that was ONLY markup keeps its stored value as the fallback label.
+ *
+ * @param array $choices Stored choices.
+ * @return array
+ */
+function minn_admin_acf_plain_choices( $choices ) {
+	$out = array();
+	foreach ( (array) $choices as $value => $label ) {
+		$plain        = trim( wp_strip_all_tags( (string) $label ) );
+		$out[ $value ] = '' !== $plain ? $plain : (string) $value;
+	}
+	return $out;
+}
+
 function minn_admin_acf_map_field( $f ) {
 	if ( empty( $f['name'] ) || empty( $f['type'] ) ) {
 		return null;
@@ -390,7 +408,7 @@ function minn_admin_acf_map_field( $f ) {
 		'name'      => $f['name'],
 		'label'     => $f['label'],
 		'type'      => $type,
-		'choices'   => ! empty( $f['choices'] ) ? $f['choices'] : null,
+		'choices'   => ! empty( $f['choices'] ) ? minn_admin_acf_plain_choices( $f['choices'] ) : null,
 		'min'       => isset( $f['min'] ) && '' !== $f['min'] ? $f['min'] : null,
 		'max'       => isset( $f['max'] ) && '' !== $f['max'] ? $f['max'] : null,
 		'anyChoice' => ! empty( $f['allow_custom'] ) ? true : null,
@@ -628,10 +646,13 @@ function minn_admin_acf_flatten_subs( $sub_fields ) {
 			return;
 		}
 		if ( 'group' === ( $sub['type'] ?? '' ) && ! empty( $sub['sub_fields'] ) && count( $gpath ) < 3 ) {
+			// An unlabelled group namespaces nothing a reader can see, so it
+			// contributes no prefix (a bare "· Height" reads as a bug).
+			$glabel = trim( wp_strip_all_tags( (string) ( $sub['label'] ?? '' ) ) );
 			foreach ( (array) $sub['sub_fields'] as $s2 ) {
 				$push(
 					$s2,
-					$label_prefix . trim( wp_strip_all_tags( (string) $sub['label'] ) ) . ' · ',
+					$label_prefix . ( '' !== $glabel ? $glabel . ' · ' : '' ),
 					$name_prefix . $sub['name'] . '_',
 					array_merge( $gpath, array( $sub['key'] ) )
 				);
@@ -1794,10 +1815,11 @@ function minn_admin_acf_options_tabs( $page ) {
 						}
 						$scond = $and_conds( $inherited, ! empty( $sub['conditional_logic'] ) && is_array( $sub['conditional_logic'] ) ? $sub['conditional_logic'] : null );
 						if ( 'group' === ( $sub['type'] ?? '' ) && count( $path ) < 4 ) {
+							$glabel = trim( wp_strip_all_tags( (string) ( $sub['label'] ?? '' ) ) );
 							$flatten(
 								$sub['sub_fields'] ?? array(),
 								array_merge( $path, array( $sub['key'] ) ),
-								$prefix . trim( wp_strip_all_tags( (string) $sub['label'] ) ) . ' · ',
+								$prefix . ( '' !== $glabel ? $glabel . ' · ' : '' ),
 								$scond
 							);
 							continue;
