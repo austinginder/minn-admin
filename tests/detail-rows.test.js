@@ -67,7 +67,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			};
 		} );
 
-		t.check( 'pill row renders the shared status pill', probe.pill.trim() === 'sent', probe.pill );
+		t.check( 'pill row renders the shared status pill', /^sent$/i.test( probe.pill.trim() ), probe.pill );
 		t.check( 'email row renders a mailto link', probe.email === 'mailto:dana@example.com', probe.email );
 		t.check( 'url row renders a new-tab link', probe.url );
 		t.check( 'code row shows the script tag as TEXT', probe.code.includes( '<script>window.__rowCodeXss=1</script>' ) && probe.code.includes( 'Content-Type: text/html' ), probe.code.slice( 0, 80 ) );

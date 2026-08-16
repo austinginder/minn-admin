@@ -56,7 +56,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Entries parsed from serialized blobs', list.some( ( r ) => r.includes( 'Priya Nair' ) && r.includes( 'Speaking inquiry' ) ), list[ 0 ] );
 		// The disposable entry reseeds unread every run; Sam is a standing
 		// read fixture (Priya's status depends on earlier runs — not asserted).
-		t.check( 'Unread/read pills from cfdb7_status', list.some( ( r ) => r.includes( 'Cast Off' ) && r.includes( 'unread' ) ) && list.some( ( r ) => r.includes( 'Sam Field' ) && ! r.includes( 'unread' ) ) );
+		t.check( 'Unread/read pills from cfdb7_status', list.some( ( r ) => r.includes( 'Cast Off' ) && /unread/i.test( r ) ) && list.some( ( r ) => r.includes( 'Sam Field' ) && ! /unread/i.test( r ) ) );
 
 		// --- Detail: scanner correctness + open-marks-read ------------------------
 		t.check( 'Row opens detail', await clickRow( 'Priya Nair' ) );
@@ -83,7 +83,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '.minn-table-row', { timeout: 15000 } );
 		await page.waitForFunction( () =>
 			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) =>
-				r.textContent.includes( 'Cast Off' ) && ! r.textContent.includes( 'unread' ) ),
+				r.textContent.includes( 'Cast Off' ) && ! /unread/i.test( r.textContent ) ),
 		null, { timeout: 10000 } );
 		t.check( 'Opening a message marks it read', true );
 

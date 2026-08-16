@@ -40,7 +40,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		} ) );
 		const listText = await page.$eval( '.minn-table', ( el ) => el.textContent );
 		t.check( 'standing suppressions list', /bounce@example\.com/.test( listText ) && /unsubscribed@example\.com/.test( listText ) );
-		t.check( 'reason renders as a pill', /manually added/.test( listText ) );
+		t.check( 'reason renders as a pill', /manually added/i.test( listText ) );
 
 		/* ===== Suppress a new address through the create form ===== */
 		await page.click( '#minn-surface-add' );

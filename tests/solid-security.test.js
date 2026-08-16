@@ -104,7 +104,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			return !! s && s.family === 'activity-log' && s.sub === 'Solid Security';
 		} ) );
 		t.check( 'rows wear lifecycle pills', await page.$$eval( '.minn-table-row .minn-status', ( els ) => {
-			const texts = els.map( ( e ) => e.textContent.trim() );
+			const texts = els.map( ( e ) => e.textContent.trim().toLowerCase() );
 			return texts.includes( 'locked' ) && texts.includes( 'expired' ) && texts.includes( 'released' );
 		} ) );
 
@@ -122,7 +122,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// Release the live one through their own API.
 		await page.evaluate( () => {
 			[ ...document.querySelectorAll( '.minn-table-row' ) ]
-				.find( ( r ) => /198\.51\.100\.9/.test( r.textContent ) && /locked/.test( r.textContent ) ).click();
+				.find( ( r ) => /198\.51\.100\.9/.test( r.textContent ) && /locked/i.test( r.textContent ) ).click();
 		} );
 		await page.waitForFunction( () =>
 			[ ...document.querySelectorAll( '.minn-modal button' ) ].some( ( b ) => /Release lockout/.test( b.textContent ) ),

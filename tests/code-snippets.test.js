@@ -136,8 +136,8 @@ function purgeMinnSnippets() {
 		t.check( 'list shows seeded snippets', list.some( ( r ) => r.title.includes( nameOn ) ) && list.some( ( r ) => r.title.includes( nameOff ) ), JSON.stringify( list.map( ( r ) => r.title ) ) );
 		const activeRow = list.find( ( r ) => r.title.includes( nameOn ) );
 		const inactiveRow = list.find( ( r ) => r.title.includes( nameOff ) );
-		t.check( 'active snippet has active pill', activeRow && activeRow.pills.includes( 'active' ), JSON.stringify( activeRow ) );
-		t.check( 'inactive snippet has inactive pill', inactiveRow && inactiveRow.pills.includes( 'inactive' ), JSON.stringify( inactiveRow ) );
+		t.check( 'active snippet has active pill', activeRow && activeRow.pills.some( ( p ) => /^active$/i.test( p ) ), JSON.stringify( activeRow ) );
+		t.check( 'inactive snippet has inactive pill', inactiveRow && inactiveRow.pills.some( ( p ) => /^inactive$/i.test( p ) ), JSON.stringify( inactiveRow ) );
 
 		// Open the inactive one by title (data-sitem is the row index, not the id).
 		await page.evaluate( ( name ) => {

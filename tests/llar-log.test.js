@@ -97,7 +97,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'status card reports the active lockout', /Locked out now/.test( statusText ) && statusText.includes( '1 IP' ) && statusText.includes( '198.51.100.7' ) );
 	t.check( 'policy row renders from plugin config', /retries, then/.test( statusText ) );
 	t.check( 'rows wear lifecycle pills', await page.$$eval( '.minn-table-row .minn-status', ( els ) => {
-		const texts = els.map( ( e ) => e.textContent.trim() );
+		const texts = els.map( ( e ) => e.textContent.trim().toLowerCase() );
 		return texts.includes( 'locked' ) && texts.includes( 'expired' ) && texts.includes( 'unlocked' );
 	} ) );
 

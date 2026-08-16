@@ -76,7 +76,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'field-type To resolves the field label', body.includes( 'Field: Email Address' ) );
 		t.check( 'routing-type To shows the rule count', body.includes( 'Routing (2 rules)' ) );
 		const pills = await page.$$eval( '.minn-table-row .minn-status', ( els ) => els.map( ( e ) => e.textContent.trim() ).sort() );
-		t.check( 'active and inactive pills render', JSON.stringify( pills ) === JSON.stringify( [ 'active', 'active', 'inactive' ] ), pills.join( ',' ) );
+		t.check( 'active and inactive pills render', JSON.stringify( pills.map( ( p ) => p.toLowerCase() ) ) === JSON.stringify( [ 'active', 'active', 'inactive' ] ), pills.join( ',' ) );
 
 		// Tabs ride gf/v2/forms, which lists ACTIVE forms only — an inactive
 		// form's notifications still appear on the All tab (same shape as

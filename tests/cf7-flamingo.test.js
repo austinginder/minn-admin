@@ -105,7 +105,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Casino Bonanza' ) ),
 		null, { timeout: 10000 } );
 		const spamList = await rows();
-		t.check( 'Spam filter lists standing spam with the spam pill', spamList.some( ( r ) => r.includes( 'Casino Bonanza' ) && r.includes( 'spam' ) ), spamList[ 0 ] );
+		t.check( 'Spam filter lists standing spam with the spam pill', spamList.some( ( r ) => r.includes( 'Casino Bonanza' ) && /spam/i.test( r ) ), spamList[ 0 ] );
 		await page.click( '[data-sfilter="inbox"]' );
 		await waitRow( 'Dana Tester' );
 
@@ -134,7 +134,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await waitRow( 'Minn Fixture Disposable' );
 		await page.waitForFunction( () =>
 			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) =>
-				r.textContent.includes( 'Minn Fixture Disposable' ) && r.textContent.includes( 'spam' ) ),
+				r.textContent.includes( 'Minn Fixture Disposable' ) && /spam/i.test( r.textContent ) ),
 		null, { timeout: 10000 } );
 		t.check( 'Spam filter lists the marked message', true );
 
