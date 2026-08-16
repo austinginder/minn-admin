@@ -13,7 +13,20 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	/* ===== Media ===== */
 	await page.goto( `${ BASE }/minn-admin/media`, { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '[data-media]', { timeout: 15000 } );
-	await page.click( '[data-media]', { button: 'right' } );
+	// Right-click an IMAGE card by its kind badge, never simply the first
+	// card: the library's newest item is whatever a fixture last uploaded
+	// (a PDF, today), and only an image offers the in-app editor.
+	const imgId = await page.evaluate( () => {
+		const card = [ ...document.querySelectorAll( '[data-media]' ) ]
+			.find( ( c ) => /^IMG$/i.test( ( c.querySelector( '.minn-media-badge' ) || {} ).textContent || '' ) );
+		return card ? card.dataset.media : null;
+	} );
+	if ( ! imgId ) {
+		console.log( 'SKIP: no image in the media library' );
+		await browser.close().catch( () => {} );
+		process.exit( 0 );
+	}
+	await page.click( `[data-media="${ imgId }"]`, { button: 'right' } );
 	await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
 	const media = await page.evaluate( () => ( {
 		labels: [ ...document.querySelectorAll( '.minn-ctx-menu button, .minn-ctx-menu a' ) ].map( ( e ) => e.textContent.trim() ),

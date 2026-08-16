@@ -67,7 +67,14 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	/* ===== Media: Edit image deep link ===== */
 	await page.goto( `${ BASE }/minn-admin/media`, { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '.minn-media-item, .minn-media-grid [data-media]', { timeout: 15000 } );
-	await page.click( '.minn-media-item, .minn-media-grid [data-media]' );
+	// Open an IMAGE by its kind badge: the newest library item is whatever a
+	// fixture last uploaded, and Edit image exists only for images.
+	const bImg = await page.evaluate( () => {
+		const card = [ ...document.querySelectorAll( '[data-media]' ) ]
+			.find( ( c ) => /^IMG$/i.test( ( c.querySelector( '.minn-media-badge' ) || {} ).textContent || '' ) );
+		return card ? card.dataset.media : null;
+	} );
+	await page.click( bImg ? `[data-media="${ bImg }"]` : '.minn-media-item, .minn-media-grid [data-media]' );
 	await page.waitForSelector( '#minn-modal-overlay', { timeout: 10000 } );
 	await page.click( '#minn-media-edit-image' );
 	await page.waitForSelector( '#minn-imged-stage', { timeout: 5000 } );
