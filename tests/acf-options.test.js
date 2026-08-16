@@ -27,8 +27,7 @@ const { launch, login, reporter } = require( './helpers' );
 	// Prefer the standalone lab page (the parent-menu fixture registers a
 	// merged surface too — tests/acf-options-menu.test.js covers that one).
 	const surface = await page.evaluate( () =>
-		( window.MINN.surfaces || [] ).find( ( s ) => s.id === 'acf-options-minn-options-lab' )
-		|| ( window.MINN.surfaces || [] ).find( ( s ) => s.id && s.id.startsWith( 'acf-options-' ) ) || null );
+		( window.MINN.surfaces || [] ).find( ( s ) => s.id && /^acf-options/.test( s.id ) ) || null );
 	if ( ! surface ) {
 		console.log( 'SKIP: no ACF options-page surface on this site (ACF Pro with an options page required)' );
 		await browser.close().catch( () => {} );
@@ -199,15 +198,19 @@ const { launch, login, reporter } = require( './helpers' );
 	// Flattened ACF group: a titled section whose subs (a toggle + a
 	// repeater of link fields) read and write through the parent, with live
 	// conditional display between them — the mula Header & Footer shape.
-	const firstTab = surface.settings.tabs[ 0 ];
+	// Every options page merges into ONE surface now, so the tab carrying
+	// these fixtures is not necessarily the first — find it by name rather
+	// than by position, or the checks below silently skip themselves.
+	const labTab = surface.settings.tabs.find( ( x ) => /^General$/i.test( x.label ) )
+		|| surface.settings.tabs[ 0 ];
 	if ( surface.settings.tabs.length > 1 ) {
-		await page.click( `[data-ssettab="${ firstTab.id }"]` );
+		await page.click( `[data-ssettab="${ labTab.id }"]` );
 	}
 	const navRows = await page.waitForSelector( '.minn-surface-settings [data-sset="field_minn_optlab_nav_links"][data-ftype="rows"]', { timeout: 8000 } ).catch( () => null );
 	if ( ! navRows ) {
 		console.log( 'SKIP group/rows checks: no flattened group fixture on this page' );
 	} else {
-		const tab0Route = surface.settings.route.replace( '{tab}', firstTab.id );
+		const tab0Route = surface.settings.route.replace( '{tab}', labTab.id );
 		const saveTab0 = async () => {
 			const wait = page.waitForResponse( ( res ) => res.request().method() === 'POST'
 				&& res.url().includes( tab0Route ), { timeout: 20000 } );

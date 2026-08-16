@@ -233,7 +233,7 @@ const { launch, login, deletePost, openEditor, reporter, BASE } = require( './he
 	// flex field on it.
 	const found = await page.evaluate( async () => {
 		for ( const s of ( window.MINN.surfaces || [] ) ) {
-			if ( ! s.id || s.id.indexOf( 'acf-options-' ) !== 0 || ! s.settings ) continue;
+			if ( ! s.id || ! /^acf-options/.test( s.id ) || ! s.settings ) continue;
 			for ( const tab of ( s.settings.tabs || [] ) ) {
 				const r = await fetch( window.MINN.restUrl + s.settings.route.replace( '{tab}', tab.id ), {
 					headers: { 'X-WP-Nonce': window.MINN.nonce },

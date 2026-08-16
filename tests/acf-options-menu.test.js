@@ -22,24 +22,33 @@ const { launch, login, reporter } = require( './helpers' );
 	await page.waitForFunction( () => window.MINN && Array.isArray( window.MINN.surfaces ), null, { timeout: 15000 } );
 
 	const surfaces = await page.evaluate( () =>
-		( window.MINN.surfaces || [] ).filter( ( s ) => s.id && s.id.startsWith( 'acf-options-' ) )
-			.map( ( s ) => ( { id: s.id, label: s.label, tabs: ( s.settings && s.settings.tabs || [] ).map( ( x ) => x.label ) } ) ) );
-	const menu = surfaces.find( ( s ) => s.label === 'Minn Site Options' );
+		( window.MINN.surfaces || [] ).filter( ( s ) => s.id && /^acf-options/.test( s.id ) )
+			.map( ( s ) => ( {
+				id: s.id, label: s.label,
+				tabs: ( s.settings && s.settings.tabs || [] ).map( ( x ) => x.label ),
+				tabIds: ( s.settings && s.settings.tabs || [] ),
+			} ) ) );
+	const menu = surfaces[ 0 ];
 	if ( ! menu ) {
-		console.log( 'SKIP: no parent-menu fixture on this site' );
+		console.log( 'SKIP: no ACF options page on this site' );
 		await browser.close().catch( () => {} );
 		process.exit( 0 );
 	}
-	t.check( 'the parent menu is ONE surface named for the parent',
-		!! menu && menu.tabs.join( '|' ) === 'Header Bits|Footer Bits', JSON.stringify( menu ) );
-	t.check( 'child pages register no surfaces of their own',
+	// EVERY options page merges into one surface, not one per page and not
+	// one per parent menu: options pages were bleeding into top-level
+	// navigation several items at a time.
+	t.check( 'options pages register exactly one surface', surfaces.length === 1,
+		JSON.stringify( surfaces.map( ( s ) => s.id ) ) );
+	t.check( 'a parent menu\'s children are tabs on it',
+		menu.tabs.includes( 'Header Bits' ) && menu.tabs.includes( 'Footer Bits' ), JSON.stringify( menu.tabs ) );
+	t.check( 'no page registers a surface of its own',
 		! surfaces.some( ( s ) => /Header Bits|Footer Bits/.test( s.label ) ), JSON.stringify( surfaces.map( ( s ) => s.label ) ) );
 
-	// One sidebar item, not three.
+	// One sidebar item, whatever the site registered.
 	const navCount = await page.evaluate( () =>
 		[ ...document.querySelectorAll( '#minn-navgrp-tools .minn-nav-btn' ) ]
-			.filter( ( b ) => /Minn Site Options|Header Bits|Footer Bits/.test( b.textContent ) ).length );
-	t.check( 'the sidebar shows one item for the whole menu', navCount === 1, String( navCount ) );
+			.filter( ( b ) => /Site Options|Options Lab|Header Bits|Footer Bits/.test( b.textContent ) ).length );
+	t.check( 'the sidebar shows one options item', navCount === 1, String( navCount ) );
 
 	/* ===== Cross-page delegation: write on each tab, verify, restore ===== */
 	await page.goto( ( process.env.MINN_TEST_URL || 'https://minnadmin.localhost' ) + '/minn-admin/' + menu.id, { waitUntil: 'domcontentloaded' } );
@@ -74,9 +83,12 @@ const { launch, login, reporter } = require( './helpers' );
 		return { got, restored: await readBack() === orig };
 	};
 
-	const h = await drive( 'tab-0', 'field_minn_oplab_h_title', 'Menu probe H' );
+	// Resolve tab ids by LABEL: positions shift as a site registers more
+	// options pages into the shared strip.
+	const tabIdFor = ( label ) => ( menu.tabIds.find( ( x ) => x.label === label ) || {} ).id;
+	const h = await drive( tabIdFor( 'Header Bits' ), 'field_minn_oplab_h_title', 'Menu probe H' );
 	t.check( 'tab-0 write delegates to the first member page', h.got === 'Menu probe H' && h.restored, JSON.stringify( h ) );
-	const f = await drive( 'tab-1', 'field_minn_oplab_f_note', 'Menu probe F' );
+	const f = await drive( tabIdFor( 'Footer Bits' ), 'field_minn_oplab_f_note', 'Menu probe F' );
 	t.check( 'tab-1 write delegates to the second member page', f.got === 'Menu probe F' && f.restored, JSON.stringify( f ) );
 
 	await t.done( browser, errors );

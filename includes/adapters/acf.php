@@ -2459,6 +2459,81 @@ function minn_admin_acf_options_menu_tabs( $anchor ) {
 }
 
 /**
+ * The anchor standing for "every options page on this site", merged into one
+ * surface. Not a real ACF slug: ACF's own slugs are what the members use.
+ */
+const MINN_ADMIN_ACF_OPTIONS_ALL = '__minn_options__';
+
+/**
+ * Every allowed options page's tabs, merged into ONE strip.
+ *
+ * ACF options pages are registered independently, so a site with three of
+ * them used to put three items in Minn's sidebar — options bleeding into
+ * top-level navigation, which is not how anyone thinks about them (and not
+ * what ACF's own admin does with a parent menu). One "Site Options" item
+ * holds them all, each page contributing its tabs the way a parent menu's
+ * children already do.
+ *
+ * Menu members come first, in menu order, so a parent's children stay
+ * together; standalone pages follow. A page with a single tab is named for
+ * the PAGE, since its own tab label ("General") would say nothing about
+ * which page it came from.
+ *
+ * @return array[] Merged tabs, each carrying _page and _ptab.
+ */
+function minn_admin_acf_options_all_tabs() {
+	$map     = minn_admin_acf_options_menu_map();
+	$allowed = minn_admin_acf_options_pages_allowed();
+	$slugs   = array();
+	foreach ( $map['menus'] as $menu ) {
+		foreach ( $menu['members'] as $slug ) {
+			$slugs[] = $slug;
+		}
+	}
+	foreach ( $map['standalone'] as $slug ) {
+		$slugs[] = $slug;
+	}
+	$out = array();
+	foreach ( $slugs as $slug ) {
+		if ( ! isset( $allowed[ $slug ] ) ) {
+			continue;
+		}
+		$page   = $allowed[ $slug ];
+		$tabs   = minn_admin_acf_options_tabs( $page );
+		$single = 1 === count( $tabs );
+		foreach ( $tabs as $t ) {
+			$t['_page'] = $slug;
+			$t['_ptab'] = $t['id'];
+			if ( $single && ! empty( $page['page_title'] ) ) {
+				$t['label'] = $page['page_title'];
+			}
+			$t['id'] = 'tab-' . count( $out );
+			$out[]   = $t;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Resolve a merged tab id from the all-pages strip.
+ *
+ * @param string $tab_id Merged tab id.
+ * @return array|null { page (array), tab (member-local id) }
+ */
+function minn_admin_acf_options_all_target( $tab_id ) {
+	$allowed = minn_admin_acf_options_pages_allowed();
+	foreach ( minn_admin_acf_options_all_tabs() as $t ) {
+		if ( $t['id'] === $tab_id && isset( $allowed[ $t['_page'] ] ) ) {
+			return array(
+				'page' => $allowed[ $t['_page'] ],
+				'tab'  => $t['_ptab'],
+			);
+		}
+	}
+	return null;
+}
+
+/**
  * Resolve one merged tab id to its member page + member-local tab id.
  *
  * @param string $anchor Menu anchor slug.
@@ -2504,24 +2579,40 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		);
 	};
-	foreach ( $map['menus'] as $anchor => $menu ) {
-		$tabs = minn_admin_acf_options_menu_tabs( $anchor );
-		if ( ! $tabs ) {
-			continue;
-		}
-		// Nav gate: the first member's own capability (per-tab data is
-		// cap-filtered again at request time through pages_allowed).
-		$first = $allowed[ $menu['members'][0] ];
-		$reg( 'acf-options-' . sanitize_key( $anchor ), $menu['label'], ! empty( $first['capability'] ) ? $first['capability'] : 'edit_posts', $anchor, $tabs );
+	// ONE sidebar item for every options page. Registering one per page put
+	// a site's options into top-level navigation three and four items at a
+	// time; they belong together, the way ACF's own parent menu shows them.
+	$tabs = minn_admin_acf_options_all_tabs();
+	if ( ! $tabs ) {
+		return $surfaces;
 	}
-	foreach ( $map['standalone'] as $slug ) {
-		$page = $allowed[ $slug ];
-		$tabs = minn_admin_acf_options_tabs( $page );
-		if ( ! $tabs ) {
-			continue;
-		}
-		$reg( 'acf-options-' . sanitize_key( $slug ), $page['page_title'] ? $page['page_title'] : $page['menu_slug'], ! empty( $page['capability'] ) ? $page['capability'] : 'edit_posts', $slug, $tabs );
+	// Name it after the single source when there IS only one — a site whose
+	// only page is "Theme Options" should say so rather than be renamed by
+	// Minn. More than one, and no page's name can speak for the rest.
+	$sources = array();
+	foreach ( $tabs as $t ) {
+		$sources[ $t['_page'] ] = true;
 	}
+	$menu_label = '';
+	if ( 1 === count( $sources ) ) {
+		$only       = $allowed[ key( $sources ) ];
+		$menu_label = ! empty( $only['page_title'] ) ? $only['page_title'] : $only['menu_slug'];
+	} else {
+		foreach ( $map['menus'] as $anchor => $menu ) {
+			// A parent menu that covers every page keeps its own name.
+			if ( count( $menu['members'] ) === count( $sources ) ) {
+				$menu_label = $menu['label'];
+			}
+		}
+	}
+	if ( '' === $menu_label ) {
+		$menu_label = __( 'Site Options', 'minn-admin' );
+	}
+	// Nav gate: the first contributing page's capability. Every page here
+	// already passed pages_allowed for this user, and each tab's data is
+	// cap-filtered again at request time.
+	$first = $allowed[ key( $sources ) ];
+	$reg( 'acf-options', $menu_label, ! empty( $first['capability'] ) ? $first['capability'] : 'edit_posts', MINN_ADMIN_ACF_OPTIONS_ALL, $tabs );
 	return $surfaces;
 } );
 
@@ -2536,6 +2627,9 @@ add_action( 'rest_api_init', function () {
 		$pages = minn_admin_acf_options_pages_allowed();
 		$slug  = rawurldecode( (string) $req['page'] );
 		$tab   = (string) $req['tab'];
+		if ( MINN_ADMIN_ACF_OPTIONS_ALL === $slug ) {
+			return minn_admin_acf_options_all_target( $tab );
+		}
 		$map   = minn_admin_acf_options_menu_map();
 		if ( isset( $map['menus'][ $slug ] ) ) {
 			$target = minn_admin_acf_options_menu_target( $slug, $tab );
