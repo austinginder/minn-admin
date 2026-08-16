@@ -1767,13 +1767,19 @@
 		const linkRow = $( '.minn-rt-linkrow', overlay );
 		const linkInput = linkRow.querySelector( 'input' );
 		let savedRange = null;
+		// Fires on every user dismissal (apply, cancel, Escape, backdrop) so
+		// a hosting dialog can take the writer back. Deliberately NOT wired
+		// into closeRichText itself: route-change cleanup also calls that,
+		// and reopening a dialog over a view the writer just left would be
+		// wrong.
+		const done = () => { if ( opts.onClose ) opts.onClose(); };
 		overlay.addEventListener( 'mousedown', ( e ) => {
-			if ( e.target === overlay ) { closeRichText(); return; }
+			if ( e.target === overlay ) { closeRichText(); done(); return; }
 			// Toolbar presses must not blur the selection they act on.
 			if ( e.target.closest( '.minn-rt-toolbar button' ) ) e.preventDefault();
 		} );
 		overlay.addEventListener( 'click', ( e ) => {
-			if ( e.target.closest( '#minn-rt-close' ) || e.target.closest( '#minn-rt-cancel' ) ) { closeRichText(); return; }
+			if ( e.target.closest( '#minn-rt-close' ) || e.target.closest( '#minn-rt-cancel' ) ) { closeRichText(); done(); return; }
 			const cmd = e.target.closest( '[data-rtcmd]' );
 			if ( cmd ) { document.execCommand( cmd.dataset.rtcmd ); body.focus( { preventScroll: true } ); return; }
 			const lk = e.target.closest( '[data-rtlink]' );
@@ -1807,7 +1813,10 @@
 				if ( last && last.tagName === 'P' && ! last.textContent.trim() && ! last.querySelector( 'img,iframe' ) ) last.remove();
 				const out = body.innerHTML.trim();
 				closeRichText();
+				// onApply lands the value in state BEFORE done() reopens a
+				// hosting dialog, so the reopened render shows the new value.
 				onApply( out );
+				done();
 			}
 		} );
 		linkInput.addEventListener( 'keydown', ( e ) => {
@@ -1824,7 +1833,7 @@
 			if ( payload ) document.execCommand( 'insertHTML', false, payload.html );
 		} );
 		const escKey = ( e ) => {
-			if ( e.key === 'Escape' ) { e.stopPropagation(); closeRichText(); }
+			if ( e.key === 'Escape' ) { e.stopPropagation(); closeRichText(); done(); }
 		};
 		overlay._minnEsc = escKey;
 		document.addEventListener( 'keydown', escKey, true );
@@ -1992,10 +2001,12 @@
 					if ( ! row ) return;
 					// Rows live inside the editor-panel modal, and the images
 					// editor sits UNDER .minn-modal by design (the media picker
-					// must stack on it) — one-way flow: close the host first.
-					// The row state lives in this closure, so the apply still
-					// commits through onChange after the wrap's DOM is gone.
+					// must stack on it) — one-way flow: close the host first,
+					// then onClose reopens it. The row state lives in this
+					// closure, so the apply still commits through onChange
+					// after the wrap's DOM is gone.
 					const cur = Array.isArray( row.values[ name ] ) ? row.values[ name ] : [];
+					const ret = editorSideReturn();
 					closeModal();
 					openImagesEditor( null, null, null, null, {
 						items: cur.map( ( x ) => ( { id: x.id, thumb: x.url || '' } ) ),
@@ -2005,10 +2016,12 @@
 							// On a settings PAGE the rows DOM survives this
 							// flow — repaint so the button count is honest
 							// (harmless on the panel path: that node is
-							// orphaned after closeModal).
+							// orphaned after closeModal, and the reopened
+							// dialog renders fresh from the committed value).
 							render();
 							toast( __( 'Gallery updated' ) );
 						},
+						onClose: ret || undefined,
 					} );
 					return;
 				}
@@ -25278,6 +25291,29 @@
 		renderOverlays();
 	}
 
+	// Secondary overlays (rich text, images editor, media picker) replace or
+	// sit under the hosting .minn-modal — the z-stack is deliberate, the
+	// media picker must stack above the images editor — so opening one from
+	// an editor-side dialog closes it. Capture the open door BEFORE that
+	// close and the returned closure reopens it when the overlay is
+	// dismissed, applied or cancelled, instead of dumping the writer back in
+	// the editor. Values re-render from panelValues, so the reopened dialog
+	// shows everything typed plus the change just applied; the guards keep a
+	// stale closure from firing after the writer navigated somewhere else.
+	function editorSideReturn() {
+		const m = state.modal;
+		if ( ! m || m.type !== 'editor-side' ) return null;
+		const id = m.id;
+		const scroller = $( '.minn-editor-door-body' );
+		const top = scroller ? scroller.scrollTop : 0;
+		return () => {
+			if ( state.route !== 'editor' || ! state.editor || state.modal || ! editorSideDoorMeta( id ) ) return;
+			openEditorSideDoor( id );
+			const sc = $( '.minn-editor-door-body' );
+			if ( sc ) sc.scrollTop = top;
+		};
+	}
+
 	function editorSideDoorMeta( doorId ) {
 		const ed = state.editor;
 		if ( ! ed ) return null;
@@ -25360,30 +25396,34 @@
 				bindRowsField( input, ( v ) => write( v ) );
 			} else if ( input.dataset.ftype === 'wysiwyg' ) {
 				// The rich-text modal opens after the hosting panel modal
-				// closes (the picker-style one-way flow).
+				// closes (the picker-style one-way flow); onClose hands the
+				// writer back to the dialog they left.
 				const rtBtn = input.querySelector( '[data-rt-edit]' );
 				if ( rtBtn ) rtBtn.addEventListener( 'click', ( e ) => {
 					e.preventDefault();
 					const cur = input._rtValue !== undefined ? input._rtValue : ( input.dataset.rt || '' );
 					const label = input.closest( '.minn-panel-field' )?.querySelector( '.minn-field-label' )?.textContent.trim();
+					const ret = editorSideReturn();
 					closeModal();
 					openRichTextModal( cur, ( out ) => {
 						input._rtValue = out;
 						write( out );
 						toast( __( 'Content updated — saves with the post' ) );
-					}, { title: label } );
+					}, { title: label, onClose: ret || undefined } );
 				} );
 			} else if ( input.dataset.ftype === 'gallery' ) {
 				// Gallery fields reuse the islands images editor in items mode.
 				// The hosting panel modal closes first: the images editor sits
 				// under .minn-modal by design (the media picker must stack on
 				// top of it for tile replace / add), so it cannot open OVER
-				// this modal — same one-way flow as an image field's pick.
+				// this modal — same one-way flow as an image field's pick,
+				// and onClose reopens the dialog afterwards.
 				const editBtn = input.querySelector( '[data-gal-edit]' );
 				if ( editBtn ) editBtn.addEventListener( 'click', ( e ) => {
 					e.preventDefault();
 					let items = [];
 					try { items = JSON.parse( input.dataset.gal || '[]' ); } catch ( err ) {}
+					const ret = editorSideReturn();
 					closeModal();
 					openImagesEditor( null, null, null, null, {
 						items: items.map( ( x ) => ( { id: x.id, thumb: x.url || '' } ) ),
@@ -25391,6 +25431,7 @@
 							write( out.map( ( x ) => ( { id: x.id, url: x.url } ) ) );
 							toast( __( 'Gallery updated — saves with the post' ) );
 						},
+						onClose: ret || undefined,
 					} );
 				} );
 			} else if ( input.dataset.ftype === 'image' ) {
@@ -28248,6 +28289,10 @@
 		imgEditEl = overlay;
 		const grid = $( '#minn-imgedit-grid', overlay );
 		let dragIdx = -1;
+		// Same contract as the rich-text modal: fires on every user
+		// dismissal so a hosting dialog can take the writer back. Kept out
+		// of closeImgEdit — route-change cleanup calls that too.
+		const done = () => { if ( opts.onClose ) opts.onClose(); };
 
 		const renderGrid = () => {
 			grid.innerHTML = list.map( ( it, i ) => `
@@ -28363,7 +28408,7 @@
 			if ( entry ) entry.caption = cap.value;   // never re-render here: it would blur the field
 		} );
 		overlay.addEventListener( 'click', ( e ) => {
-			if ( e.target === overlay || e.target.closest( '#minn-imgedit-close' ) || e.target.closest( '#minn-imgedit-cancel' ) ) { closeImgEdit(); return; }
+			if ( e.target === overlay || e.target.closest( '#minn-imgedit-close' ) || e.target.closest( '#minn-imgedit-cancel' ) ) { closeImgEdit(); done(); return; }
 			const x = e.target.closest( '[data-x]' );
 			if ( x ) { list.splice( parseInt( x.dataset.x, 10 ), 1 ); renderGrid(); return; }
 			// Duplicate: the copy lands right after the original and re-emits
@@ -28437,7 +28482,10 @@
 					} ) );
 					if ( out.some( ( x ) => ! x.id ) ) { toast( __( 'Every image needs to be in the media library.' ), true ); return; }
 					closeImgEdit();
+					// onApply before done(): the value must be in state when a
+					// hosting dialog reopens and re-renders.
 					opts.onApply( out.map( ( x ) => x.id ), out );
+					done();
 					return;
 				}
 				// Adapter-owned block: the layout is the plugin's to compute,
@@ -28453,6 +28501,7 @@
 					} ).then( ( r ) => {
 						closeImgEdit();
 						if ( r && r.markup ) replaceIsland( idx, islandEl, r.markup );
+						done();
 					} ).catch( ( err ) => {
 						if ( applyBtn ) { applyBtn.disabled = false; applyBtn.textContent = 'Apply'; }
 						toast( err.message, true );
@@ -28489,6 +28538,7 @@
 				const newRaw = prefix + bodyStr + info.suffix;
 				closeImgEdit();
 				if ( newRaw !== baseRaw ) replaceIsland( idx, islandEl, newRaw );
+				done();
 			}
 		} );
 		// Drag reorder: drop before/after the target tile by horizontal midpoint.
@@ -28521,7 +28571,7 @@
 		overlay.addEventListener( 'dragend', () => { dragIdx = -1; renderGrid(); } );
 		const escKey = ( e ) => {
 			// The media picker stacks above this modal — its own Escape wins.
-			if ( e.key === 'Escape' && ! state.modal ) { e.stopPropagation(); closeImgEdit(); }
+			if ( e.key === 'Escape' && ! state.modal ) { e.stopPropagation(); closeImgEdit(); done(); }
 		};
 		overlay._minnEsc = escKey;
 		document.addEventListener( 'keydown', escKey, true );
@@ -33839,10 +33889,16 @@
 	/* ===== Modals (media preview · order detail · media picker) ===== */
 
 	function closeModal() {
+		const ret = state.modal && state.modal.ret;
 		state.modal = null;
 		if ( typeof hidePluginTip === 'function' ) hidePluginTip();
 		hideRevHeatTip();
 		renderOverlays();
+		// Deferred one tick: a pick's callback runs AFTER closeModal returns,
+		// and its value must be in state before the dialog it came from
+		// reopens and re-renders. The closure's own guards make a stale
+		// fire (route changed, another modal open) a no-op.
+		if ( ret ) setTimeout( ret, 0 );
 	}
 
 	// Position of the open media item within the loaded library, for prev/next.
@@ -38923,7 +38979,12 @@
 	}
 
 	function openMediaPicker( callback, opts = {} ) {
-		state.modal = { type: 'picker', items: null, callback, multi: !! opts.multi, picked: [], any: !! opts.any, doneLabel: opts.doneLabel || '' };
+		// Opened from an editor-side dialog (an image or file field), the
+		// picker REPLACES it in state.modal — remember the door so closeModal
+		// can hand the writer back, picked or cancelled. Null everywhere else
+		// (pages, the images editor's add/replace), where nothing was closed.
+		const ret = editorSideReturn();
+		state.modal = { type: 'picker', items: null, callback, multi: !! opts.multi, picked: [], any: !! opts.any, doneLabel: opts.doneLabel || '', ret };
 		renderOverlays();
 		// File block needs any attachment type; image/gallery stay image-only.
 		const typeQ = opts.any ? '' : ( opts.mediaType ? '&media_type=' + encodeURIComponent( opts.mediaType ) : '&media_type=image' );

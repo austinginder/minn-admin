@@ -264,7 +264,12 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		await page.click( `${ imgSel } [data-img-pick]` );
 		await page.waitForSelector( '.minn-picker-item[data-pick]', { timeout: 15000 } );
 		await page.click( '.minn-picker-item[data-pick]' );
-		await page.waitForTimeout( 800 );
+		// The picker replaced the panel modal in state.modal; closing it hands
+		// the writer back to the dialog, with the pick already in the control.
+		await page.waitForSelector( imgSel, { timeout: 10000 } );
+		t.check( 'panel dialog reopens after an image pick with the pick shown',
+			await page.$eval( imgSel, ( e ) => !! e.dataset.imgId ) );
+		await page.waitForTimeout( 400 );
 		await save();
 		mv = await readMinnAcf();
 		t.check( 'picked image persisted as { id, url }',
@@ -272,9 +277,7 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 			JSON.stringify( mv && mv.slideshow_cover ) );
 
 		// file field: the any-attachment picker (it also replaces the panel
-		// modal, so re-enter through the door first).
-		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
-		await page.click( '[data-side-door="panel:acf"]' );
+		// modal; the dialog reopens on its own after the pick).
 		const flSel = '[data-pf$=":slideshow_manual"][data-ftype="file"]';
 		await page.waitForSelector( flSel, { timeout: 15000 } );
 		t.check( 'file field renders the file control', true );
@@ -283,7 +286,9 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		t.check( 'file picker lists non-image attachments', await page.evaluate( () =>
 			Array.from( document.querySelectorAll( '.minn-picker-item' ) ).some( ( el ) => /manual/i.test( el.textContent ) ) ) );
 		await page.click( '.minn-picker-item[data-pick]' );
-		await page.waitForTimeout( 600 );
+		// Same return trip as the image pick.
+		await page.waitForSelector( flSel, { timeout: 10000 } );
+		await page.waitForTimeout( 400 );
 		await save();
 		mv = await readMinnAcf();
 		t.check( 'picked file persisted as { id, url, name }',
@@ -292,12 +297,8 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 
 		// gallery field: the islands images editor in items mode. Opening it
 		// closes the panel modal by design (the media picker must be able to
-		// stack above the images editor), so the flow ends back in the editor
-		// with the value dirty — ⌘S saves it like any panel edit. The image
-		// pick above ALSO closed the modal (the picker replaces it), so
-		// re-enter through the door first.
-		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
-		await page.click( '[data-side-door="panel:acf"]' );
+		// stack above the images editor); Apply or Cancel hands the writer
+		// back to the reopened dialog, where ⌘S saves it like any panel edit.
 		const galSel = '[data-pf$=":photo_gallery"][data-ftype="gallery"]';
 		await page.waitForSelector( galSel, { timeout: 15000 } );
 		t.check( 'gallery field renders the gallery control', !! ( await page.$( galSel ) ) );
@@ -310,17 +311,27 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		await page.click( '#minn-picker-done' );
 		await page.waitForFunction( () => document.querySelectorAll( '.minn-imgedit-tile' ).length === 2, null, { timeout: 10000 } );
 		await page.click( '#minn-imgedit-apply' );
-		await page.waitForTimeout( 600 );
+		// The dialog reopens with the applied gallery in the control.
+		await page.waitForSelector( galSel, { timeout: 10000 } );
+		t.check( 'panel dialog reopens after a gallery apply with the images shown',
+			await page.$eval( galSel, ( e ) => ( JSON.parse( e.dataset.gal || '[]' ) ).length === 2 ) );
+		await page.waitForTimeout( 400 );
 		await save();
 		mv = await readMinnAcf();
 		t.check( 'picked gallery persisted as ordered { id, url } items',
 			mv && Array.isArray( mv.photo_gallery ) && mv.photo_gallery.length === 2 && mv.photo_gallery.every( ( x ) => x.id > 0 ),
 			JSON.stringify( mv && mv.photo_gallery ) );
 
+		// Cancel is a return trip too, not a dump back into the editor.
+		await page.click( `${ galSel } [data-gal-edit]` );
+		await page.waitForSelector( '#minn-imgedit-cancel', { timeout: 10000 } );
+		await page.click( '#minn-imgedit-cancel' );
+		await page.waitForSelector( galSel, { timeout: 10000 } );
+		t.check( 'panel dialog reopens after a cancelled images editor', true );
+
 		// wysiwyg field: the rich-text modal (opens after the panel modal
-		// closes, same one-way flow), typed marks round-trip as HTML.
-		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
-		await page.click( '[data-side-door="panel:acf"]' );
+		// closes, same one-way flow with the same return trip), typed marks
+		// round-trip as HTML.
 		const rtSel = '[data-pf$=":slideshow_notes"][data-ftype="wysiwyg"]';
 		await page.waitForSelector( rtSel, { timeout: 15000 } );
 		t.check( 'wysiwyg field renders the rich-text control', !! ( await page.$( rtSel ) ) );
@@ -332,7 +343,10 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		await page.keyboard.type( 'bold' );
 		await page.keyboard.press( 'Meta+b' );
 		await page.click( '#minn-rt-apply' );
-		await page.waitForTimeout( 500 );
+		// The dialog reopens after the rich-text apply.
+		await page.waitForSelector( rtSel, { timeout: 10000 } );
+		t.check( 'panel dialog reopens after a rich-text apply', true );
+		await page.waitForTimeout( 400 );
 		await save();
 		mv = await readMinnAcf();
 		t.check( 'wysiwyg round-trips paragraphs and marks',
@@ -340,8 +354,6 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 			JSON.stringify( mv && mv.slideshow_notes ) );
 
 		// Emptying the gallery is a legitimate apply in items mode.
-		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
-		await page.click( '[data-side-door="panel:acf"]' );
 		await page.waitForSelector( `${ galSel } [data-gal-edit]`, { timeout: 15000 } );
 		await page.click( `${ galSel } [data-gal-edit]` );
 		await page.waitForSelector( '.minn-imgedit-x', { timeout: 10000 } );

@@ -69,6 +69,10 @@ const { launch, login, deletePost, openEditor, reporter, BASE } = require( './he
 		await page.waitForTimeout( 500 );
 	};
 	const openPanel = async () => {
+		// The dialog reopens on its own after picker / images-editor flows —
+		// only knock on the door when it is actually closed (a click through
+		// the open modal's overlay would never land).
+		if ( await page.$( `[data-pf$=":${ F }"][data-ftype="rows"]` ) ) return;
 		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
 		await page.click( '[data-side-door="panel:acf"]' );
 		await page.waitForSelector( `[data-pf$=":${ F }"][data-ftype="rows"]`, { timeout: 15000 } );
@@ -103,8 +107,8 @@ const { launch, login, deletePost, openEditor, reporter, BASE } = require( './he
 			JSON.stringify( rows ) );
 
 		// Image sub: the media picker REPLACES the panel modal (the app's
-		// one-way flow), so the pick lands in panelValues and ⌘S from the
-		// editor saves it like any panel edit.
+		// one-way flow), the pick lands in panelValues and the dialog
+		// reopens on its own; ⌘S saves it like any panel edit.
 		const imgSub = ( rowsField.subfields.find( ( s ) => s.type === 'image' ) || {} ).name;
 		const galSub = ( rowsField.subfields.find( ( s ) => s.type === 'gallery' ) || {} ).name;
 		if ( imgSub ) {
@@ -123,7 +127,7 @@ const { launch, login, deletePost, openEditor, reporter, BASE } = require( './he
 
 		// Gallery sub: the images editor in items mode (the row's Edit
 		// button closes the panel modal first — the media picker must be
-		// able to stack above the images editor).
+		// able to stack above the images editor — and Apply reopens it).
 		if ( galSub ) {
 			await openPanel();
 			t.check( 'gallery sub renders the gallery control in the row card',
