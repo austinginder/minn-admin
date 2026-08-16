@@ -1553,11 +1553,47 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 }
 .minn-diff-row.del .minn-diff-cell:first-child,
 .minn-diff-row.add .minn-diff-cell:last-child { background: color-mix(in srgb, var(--bg2) 60%, transparent); }
-/* Field changes in a revision: rows above the content diff, since a
-   revision can differ in fields alone. */
-.minn-rev-fields { margin: 0 0 14px; }
-.minn-rev-fields .minn-fields-sub { margin: 4px 0 2px; }
-.minn-rev-fields .minn-diff-inline { text-align: end; overflow-wrap: anywhere; }
+/* Field changes in a revision: a two-column card matching the content
+   diff below. Sidebar key/value rows stretch across the XL modal and
+   leave the values marooned on the far edge. */
+.minn-rev-fields {
+  margin: 0 18px 14px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+}
+.minn-rev-fields-head,
+.minn-rev-fields-cols {
+  font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text3); background: var(--bg2);
+}
+.minn-rev-fields-head { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.minn-rev-fields-cols { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); }
+.minn-rev-fields-cols > div { padding: 8px 14px; }
+.minn-rev-fields-cols > div + div { border-inline-start: 1px solid var(--border); }
+.minn-rev-fields-sub {
+  padding: 8px 14px 2px; font-size: 11px; font-weight: 650; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text3);
+}
+.minn-rev-field + .minn-rev-field .minn-rev-field-label {
+  border-top: 1px solid var(--border); margin-top: 2px; padding-top: 10px;
+}
+.minn-rev-field-label {
+  padding: 8px 14px 0; font-size: 12.5px; font-weight: 600; color: var(--text2);
+}
+.minn-rev-field-vals { display: grid; grid-template-columns: 1fr 1fr; }
+.minn-rev-field-vals > div { padding: 6px 14px 10px; min-width: 0; overflow-wrap: anywhere; }
+.minn-rev-field-vals > div + div { border-inline-start: 1px solid var(--border); }
+.minn-rev-field-was { background: color-mix(in srgb, var(--red) 10%, transparent); }
+.minn-rev-field-now { background: color-mix(in srgb, var(--green) 10%, transparent); }
+.minn-rev-field-vals > .empty {
+  background: repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--border) 45%, transparent) 6px, color-mix(in srgb, var(--border) 45%, transparent) 7px);
+}
+.minn-rev-field-empty { color: var(--text3); font-style: italic; }
+.minn-rev-swatch {
+  display: inline-block; width: 14px; height: 14px; border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
+  vertical-align: -2px; margin-inline-end: 7px; overflow: hidden;
+  background: repeating-conic-gradient(var(--border) 0% 25%, var(--panel) 0% 50%) 50% / 8px 8px;
+}
+.minn-rev-swatch > span { display: block; width: 100%; height: 100%; }
 
 /* ===== Themes ===== */
 .minn-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }

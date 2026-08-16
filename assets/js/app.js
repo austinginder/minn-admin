@@ -38140,6 +38140,24 @@
 		</div>`;
 	}
 
+	function revFieldEmpty( s ) {
+		const t = String( s == null ? '' : s ).trim();
+		return ! t || t === __( 'empty' );
+	}
+
+	// Display-ready field strings. A hex color gets a swatch so
+	// "#FFFFFF → empty" is a chip you can see, not two far-apart words.
+	function revFieldChip( s ) {
+		const t = String( s == null ? '' : s ).trim();
+		if ( revFieldEmpty( t ) ) {
+			return `<span class="minn-rev-field-empty">${ esc( __( 'empty' ) ) }</span>`;
+		}
+		if ( /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test( t ) ) {
+			return `<span class="minn-rev-swatch"><span style="background:${ t }"></span></span>${ esc( t ) }`;
+		}
+		return esc( t );
+	}
+
 	function renderRevisionModal( m ) {
 		const rev = m.rev;
 		let bodyHtml = '';
@@ -38170,12 +38188,20 @@
 				: __( 'Post too large to diff — showing the revision as saved' );
 			const fieldsHtml = fieldGroups.length ? `
 				<div class="minn-rev-fields">
-					${ fieldGroups.map( ( g ) => `
-						${ g.label ? `<div class="minn-fields-sub">${ esc( g.label ) }</div>` : '' }
+					<div class="minn-rev-fields-head">${ esc( fieldGroups[ 0 ].label || __( 'Custom fields' ) ) }</div>
+					<div class="minn-rev-fields-cols">
+						<div>${ esc( __( 'This revision' ) ) }</div>
+						<div>${ esc( __( 'Current' ) ) }</div>
+					</div>
+					${ fieldGroups.map( ( g, gi ) => `
+						${ gi > 0 && g.label ? `<div class="minn-rev-fields-sub">${ esc( g.label ) }</div>` : '' }
 						${ g.rows.map( ( r ) => `
-							<div class="minn-side-row">
-								<span class="minn-side-key">${ esc( r.label ) }</span>
-								<span class="minn-diff-inline"><del>${ esc( r.was ) }</del> → <ins>${ esc( r.now ) }</ins></span>
+							<div class="minn-rev-field">
+								<div class="minn-rev-field-label">${ esc( r.label ) }</div>
+								<div class="minn-rev-field-vals">
+									<div class="minn-rev-field-was${ revFieldEmpty( r.was ) ? ' empty' : '' }">${ revFieldChip( r.was ) }</div>
+									<div class="minn-rev-field-now${ revFieldEmpty( r.now ) ? ' empty' : '' }">${ revFieldChip( r.now ) }</div>
+								</div>
 							</div>` ).join( '' ) }` ).join( '' ) }
 				</div>` : '';
 			bodyHtml = `

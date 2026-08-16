@@ -107,7 +107,7 @@ const { launch, login, openEditor, reporter, BASE } = require( './helpers' );
 	const modal = await page.evaluate( () => ( {
 		changes: ( [ ...document.querySelectorAll( '.minn-modal-meta .minn-side-row' ) ]
 			.find( ( r ) => /Changes/.test( r.textContent ) ) || {} ).textContent || '',
-		fieldRows: document.querySelectorAll( '.minn-rev-fields .minn-side-row' ).length,
+		fieldRows: document.querySelectorAll( '.minn-rev-fields .minn-rev-field' ).length,
 	} ) );
 	t.check( 'a revision with identical content and no recorded fields still says identical',
 		/Identical to the current content/.test( modal.changes ) && modal.fieldRows === 0, JSON.stringify( modal ) );
