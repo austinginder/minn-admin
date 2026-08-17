@@ -36038,7 +36038,7 @@
 						</div>
 
 						<h4>${ esc( __( 'Right-click almost anything' ) ) }</h4>
-						<p>${ esc( __( 'One of Minn’s hidden gems, so here it is in writing: rows in Content and Media, comments, the theme button, plugin entries in the sidebar and group headings in the block library all have right-click menus. When in doubt, try a right-click.' ) ) }</p>
+						<p>${ esc( __( 'One of Minn’s hidden gems: almost everything here answers a right-click with a menu of quick actions. Try it on rows in Content and Media, comments, the theme button, plugin entries in the sidebar, and group headings in the block library. When in doubt, right-click.' ) ) }</p>
 
 						<h4>${ esc( __( 'Make it yours' ) ) }</h4>
 						<p>${ esc( __( 'Anything a plugin adds here can be hidden for you alone: right-click its sidebar entry or block-library heading and choose Hide. Everything hidden is listed on Your profile, where one click restores it.' ) ) }</p>
