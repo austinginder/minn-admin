@@ -7,19 +7,32 @@
  */
 const { launch, login, reporter, BASE } = require( './helpers' );
 
+const PAID_UPLOADS = [
+	{ slug: 'gravityforms', vendor: 'Gravity Forms' },
+	{ slug: 'wpforms', vendor: 'WPForms' },
+	{ slug: 'elementor-pro', vendor: 'Elementor' },
+	{ slug: 'woocommerce-subscriptions', vendor: 'WooCommerce.com' },
+	{ slug: 'analyticswp', vendor: 'AnalyticsWP' },
+	{ slug: 'wp-rocket', vendor: 'WP Rocket' },
+	{ slug: 'perfmatters', vendor: 'Perfmatters' },
+	{ slug: 'gravitysmtp', vendor: 'Gravity SMTP' },
+	{ slug: 'advanced-custom-fields-pro', vendor: 'ACF' },
+];
+
 ( async () => {
 	const t = reporter( 'plugin-catalog' );
 	const { browser, page, errors } = await launch();
-	// Hide the locally installed WooCommerce Subscriptions fixture from the
-	// plugin-list response so the suite can exercise its fresh-site paid ZIP
-	// message without deactivating a real extension. Arm this before login,
-	// since login reuses the Minn page and warms its plugin cache.
+	// Hide the locally installed paid fixtures from the plugin-list response
+	// so the suite can exercise their fresh-site ZIP messages without
+	// deactivating real extensions. Arm this before login, since login reuses
+	// the Minn page and warms its plugin cache.
 	await page.route( '**/wp-json/minn-admin/v1/boot-status**', async ( route ) => {
 		const response = await route.fetch();
 		const json = await response.json();
+		const hidden = new Set( PAID_UPLOADS.map( ( p ) => p.slug ) );
 		if ( Array.isArray( json.plugins ) ) {
 			json.plugins = json.plugins.filter( ( p ) =>
-				! String( p.plugin || '' ).startsWith( 'woocommerce-subscriptions/' ) );
+				! hidden.has( String( p.plugin || '' ).split( '/' )[ 0 ] ) );
 		}
 		await route.fulfill( { response, json } );
 	} );
@@ -56,20 +69,30 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			'cmp-coming-soon-maintenance', 'minimal-coming-soon-maintenance-mode', 'password-protected',
 		].every( ( slug ) => catalogSlugs.includes( slug ) ) );
 
-		const wcs = await page.$eval( '.minn-pi-chip[data-slug="woocommerce-subscriptions"]', ( btn ) => ( {
-			badge: btn.querySelector( '.minn-pi-chip-badge' )?.textContent.trim() || '',
-			fallback: btn.getAttribute( 'data-fallback-title' ) || '',
-			disabled: btn.disabled,
-		} ) );
-		t.check( 'WooCommerce Subscriptions is marked as a ZIP upload',
-			wcs.badge === 'ZIP' && /paid extension/i.test( wcs.fallback ) && ! wcs.disabled,
-			JSON.stringify( wcs ) );
-		await page.click( '.minn-pi-chip[data-slug="woocommerce-subscriptions"]' );
-		await page.waitForSelector( '.minn-toast-action', { timeout: 5000 } );
-		const wcsMessage = await page.$eval( '.minn-toast-action', ( el ) => el.textContent.trim() );
-		t.check( 'WooCommerce Subscriptions explains the paid install path',
-			/paid extension/i.test( wcsMessage ) && /WooCommerce\.com/i.test( wcsMessage ) && /upload/i.test( wcsMessage ),
-			wcsMessage );
+		const paidChips = await page.$$eval( '.minn-pi-chip[data-slug]', ( buttons, slugs ) =>
+			slugs.map( ( slug ) => {
+				const btn = buttons.find( ( item ) => item.dataset.slug === slug );
+				return btn ? {
+					slug,
+					badge: btn.querySelector( '.minn-pi-chip-badge' )?.textContent.trim() || '',
+					fallback: btn.getAttribute( 'data-fallback-title' ) || '',
+					disabled: btn.disabled,
+				} : null;
+			} ), PAID_UPLOADS.map( ( p ) => p.slug ) );
+		t.check( 'well-covered paid plugins are present', paidChips.every( Boolean ), JSON.stringify( paidChips ) );
+		t.check( 'paid plugins are marked as fresh-site ZIP uploads', paidChips.every( ( item ) =>
+			item && item.badge === 'ZIP' && /\.zip/i.test( item.fallback ) && ! item.disabled ), JSON.stringify( paidChips ) );
+		for ( const paid of PAID_UPLOADS ) {
+			await page.click( `.minn-pi-chip[data-slug="${ paid.slug }"]` );
+			await page.waitForSelector( '.minn-toast-action', { timeout: 5000 } );
+			const notice = await page.$eval( '.minn-toast-action', ( el ) => ( {
+				message: el.querySelector( '.minn-toast-msg' )?.textContent.trim() || '',
+				action: el.querySelector( '.minn-toast-btn' )?.textContent.trim() || '',
+			} ) );
+			t.check( `${ paid.slug } explains its vendor ZIP path`,
+				/WordPress\.org/i.test( notice.message ) && /upload/i.test( notice.message )
+					&& notice.action.includes( paid.vendor ), JSON.stringify( notice ) );
+		}
 		t.check( 'paid ZIP chip does not call the plugin installer', wpPluginPosts === 0, String( wpPluginPosts ) );
 
 		const disembark = await page.$$eval( '.minn-pi-chip', ( els ) => {
@@ -148,14 +171,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'plugin info has icon or installs',
 			!!( info.body.icon || info.body.installs > 0 ) );
 
-		const wcsInfo = await page.evaluate( async () => {
-			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/plugins/info?slug=woocommerce-subscriptions', {
+		const paidInfo = await page.evaluate( async ( slugs ) => Promise.all( slugs.map( async ( slug ) => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/plugins/info?slug=' + encodeURIComponent( slug ), {
 				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
 			} );
-			return { status: r.status, body: await r.json() };
-		} );
-		t.check( 'paid ZIP plugin info is local and explicit',
-			wcsInfo.status === 200 && wcsInfo.body.source === 'upload' && /paid extension/i.test( wcsInfo.body.description || '' ) );
+			return { slug, status: r.status, body: await r.json() };
+		} ) ), PAID_UPLOADS.map( ( p ) => p.slug ) );
+		t.check( 'paid ZIP plugin info is local and explicit', paidInfo.every( ( item ) =>
+			item.status === 200 && item.body.source === 'upload' && !! item.body.description ), JSON.stringify( paidInfo ) );
 
 		const seoSlugs = await page.$$eval( '.minn-pi-chip', ( els ) =>
 			els.map( ( e ) => e.getAttribute( 'data-slug' ) ).filter( Boolean ) );

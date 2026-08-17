@@ -35518,7 +35518,7 @@
 								// Native title is a fallback; the rich tip replaces it on hover.
 								const title = st === 'active' ? __( 'Already active' )
 									: st === 'activate' ? __( 'Installed — click to activate' )
-									: entry.upload ? __( 'Paid extension. Upload its .zip file.' )
+									: entry.upload ? ( entry.fallback || __( 'Paid plugin. Upload its .zip file.' ) )
 									: ( entry.github ? __( 'Install from GitHub release' ) : __( 'Install from WordPress.org' ) );
 								return `<button type="button" class="minn-pi-chip${ st === 'active' ? ' is-active' : '' }${ st === 'activate' ? ' is-installed' : '' }"
 									data-pi-chip="${ i }" data-cat="${ esc( cat.id ) }" data-slug="${ esc( entry.slug || '' ) }"
@@ -37006,9 +37006,10 @@
 	/* ===== Plugin install modal (catalog + wp.org search + zip upload) ===== */
 
 	// Discovery catalog for the Add plugin dialog. Marketing-library shape
-	// (category cards + chips) but aimed at install: popular free options
-	// people actually add to a site. Paid-only plugins are omitted (they
-	// can't install from here). GitHub-only plugins use { github, asset }.
+	// (category cards + chips) but aimed at install: popular options people
+	// actually add to a site. Paid plugins use { upload, vendor, url } to
+	// explain the vendor ZIP path without sending an impossible wp.org install.
+	// GitHub-only plugins use { github, asset }.
 	// `q` is an optional "browse more" wp.org search for the card header.
 	// `slug` is the plugin directory (matches installed plugin path prefix).
 	const PLUGIN_CATALOG = [
@@ -37027,6 +37028,18 @@
 		{
 			id: 'forms', label: __( 'Forms' ), hint: __( 'Contact forms & entries' ), q: 'contact form',
 			plugins: [
+				{
+					name: 'Gravity Forms', slug: 'gravityforms', upload: true, badge: 'ZIP',
+					vendor: 'Gravity Forms', url: 'https://www.gravityforms.com/pricing/',
+				},
+				{
+					name: __( 'WPForms Pro' ), slug: 'wpforms', upload: true, badge: 'ZIP',
+					vendor: 'WPForms', url: 'https://wpforms.com/pricing/',
+				},
+				{
+					name: 'Elementor Pro', slug: 'elementor-pro', upload: true, badge: 'ZIP',
+					vendor: 'Elementor', url: 'https://elementor.com/pro/',
+				},
 				{ name: __( 'Contact Form 7' ), slug: 'contact-form-7' },
 				{ name: 'Flamingo', slug: 'flamingo' },
 				{ name: __( 'Ninja Forms' ), slug: 'ninja-forms' },
@@ -37038,7 +37051,7 @@
 			],
 		},
 		{
-			id: 'bookings', label: __( 'Bookings' ), hint: __( 'Appointments & scheduling' ), q: 'appointment booking',
+			id: 'bookings', label: __( 'Bookings' ), hint: __( 'Appointments & scheduling' ), q: __( 'appointment booking' ),
 			plugins: [
 				{ name: 'Amelia', slug: 'ameliabooking' },
 				{ name: 'LatePoint', slug: 'latepoint' },
@@ -37051,7 +37064,7 @@
 				{ name: 'WooCommerce', slug: 'woocommerce' },
 				{
 					name: __( 'WooCommerce Subscriptions' ), slug: 'woocommerce-subscriptions', upload: true, badge: 'ZIP',
-					url: 'https://woocommerce.com/products/woocommerce-subscriptions/',
+					vendor: 'WooCommerce.com', url: 'https://woocommerce.com/products/woocommerce-subscriptions/',
 					message: __( 'WooCommerce Subscriptions is a paid extension, so it cannot be installed from WordPress.org. Download it from WooCommerce.com, then upload its .zip file above.' ),
 				},
 				{ name: 'SureCart', slug: 'surecart' },
@@ -37069,7 +37082,7 @@
 			],
 		},
 		{
-			id: 'visibility', label: __( 'Site visibility' ), hint: __( 'Coming soon & private sites' ), q: 'coming soon maintenance',
+			id: 'visibility', label: __( 'Site visibility' ), hint: __( 'Coming soon & private sites' ), q: __( 'coming soon maintenance' ),
 			plugins: [
 				{ name: 'Maintenance', slug: 'maintenance' },
 				{ name: 'SeedProd', slug: 'coming-soon' },
@@ -37095,6 +37108,10 @@
 		{
 			id: 'analytics', label: __( 'Analytics' ), hint: __( 'Privacy-friendly traffic' ), q: 'analytics',
 			plugins: [
+				{
+					name: 'AnalyticsWP', slug: 'analyticswp', upload: true, badge: 'ZIP',
+					vendor: 'AnalyticsWP', url: 'https://analyticswp.com/',
+				},
 				{ name: __( 'Koko Analytics' ), slug: 'koko-analytics' },
 				{ name: __( 'WP Statistics' ), slug: 'wp-statistics' },
 				{ name: 'Burst', slug: 'burst-statistics' },
@@ -37105,6 +37122,10 @@
 		{
 			id: 'cache', label: __( 'Cache' ), hint: __( 'Page & object cache' ), q: 'cache',
 			plugins: [
+				{
+					name: 'WP Rocket', slug: 'wp-rocket', upload: true, badge: 'ZIP',
+					vendor: 'WP Rocket', url: 'https://wp-rocket.me/pricing/',
+				},
 				{ name: __( 'LiteSpeed Cache' ), slug: 'litespeed-cache' },
 				{ name: __( 'WP Super Cache' ), slug: 'wp-super-cache' },
 				{ name: __( 'W3 Total Cache' ), slug: 'w3-total-cache' },
@@ -37117,6 +37138,10 @@
 		{
 			id: 'performance', label: __( 'Performance' ), hint: __( 'Minify, defer, unload' ), q: 'performance',
 			plugins: [
+				{
+					name: 'Perfmatters', slug: 'perfmatters', upload: true, badge: 'ZIP',
+					vendor: 'Perfmatters', url: 'https://perfmatters.io/pricing/',
+				},
 				{ name: 'Autoptimize', slug: 'autoptimize' },
 				{ name: __( 'Asset CleanUp' ), slug: 'wp-asset-clean-up' },
 				{ name: __( 'Performance Lab' ), slug: 'performance-lab' },
@@ -37127,6 +37152,12 @@
 		{
 			id: 'email', label: __( 'Email / SMTP' ), hint: __( 'Delivery & logs' ), q: 'SMTP',
 			plugins: [
+				{
+					name: 'Gravity SMTP', slug: 'gravitysmtp', upload: true, badge: 'ZIP',
+					vendor: 'Gravity SMTP', url: 'https://www.gravityforms.com/gravity-smtp/',
+					fallback: __( 'Available from a qualifying Gravity account. Upload its .zip file.' ),
+					message: __( 'Gravity SMTP is available to qualifying Gravity Forms license holders and is not distributed through WordPress.org. Download its .zip file from your Gravity account, then upload it above.' ),
+				},
 				{ name: 'FluentSMTP', slug: 'fluent-smtp' },
 				{ name: __( 'WP Mail SMTP' ), slug: 'wp-mail-smtp' },
 				{ name: __( 'Post SMTP' ), slug: 'post-smtp' },
@@ -37186,6 +37217,10 @@
 			id: 'fields', label: __( 'Custom fields' ), hint: __( 'Meta & field groups' ), q: 'custom fields',
 			plugins: [
 				{ name: __( 'Advanced Custom Fields' ), slug: 'advanced-custom-fields' },
+				{
+					name: 'ACF PRO', slug: 'advanced-custom-fields-pro', upload: true, badge: 'ZIP',
+					vendor: 'ACF', url: 'https://www.advancedcustomfields.com/pro/',
+				},
 				{ name: __( 'Meta Box' ), slug: 'meta-box' },
 				{ name: 'Pods', slug: 'pods' },
 				{ name: __( 'Custom Post Type UI' ), slug: 'custom-post-type-ui' },
@@ -37390,9 +37425,14 @@
 		const st = catalogChipState( entry );
 		if ( st === 'active' ) return;
 		if ( st === 'install' && entry.upload ) {
+			const vendor = entry.vendor || label;
+			/* translators: 1: plugin name, 2: plugin vendor. */
+			const message = entry.message || sprintf( __( '%1$s is a paid plugin and is not available from WordPress.org. Download its .zip file from %2$s, then upload it above.' ), label, vendor );
+			/* translators: %s: plugin vendor. */
+			const action = sprintf( __( 'Open %s' ), vendor );
 			toastAction(
-				entry.message || __( 'This paid extension is installed from a .zip file. Download it from its vendor, then upload it above.' ),
-				__( 'Open WooCommerce.com' ),
+				message,
+				action,
 				() => window.open( entry.url, '_blank', 'noopener' ),
 				10000
 			);
