@@ -4268,7 +4268,11 @@ function minn_admin_flush_vendor_update_caches() {
 					$ref = new \ReflectionObject( $common );
 					if ( $ref->hasProperty( 'key' ) ) {
 						$prop = $ref->getProperty( 'key' );
-						$prop->setAccessible( true );
+						// Needed on PHP 7.4/8.0, a no-op since 8.1 and a
+						// deprecation warning on 8.5 — hence the guard.
+						if ( PHP_VERSION_ID < 80100 ) {
+							$prop->setAccessible( true );
+						}
 						$prop->setValue( $common, $key );
 					}
 				}
@@ -4285,7 +4289,10 @@ function minn_admin_flush_vendor_update_caches() {
 					foreach ( array( 'plugins', 'license_info' ) as $static ) {
 						if ( $cr->hasProperty( $static ) ) {
 							$sp = $cr->getProperty( $static );
-							$sp->setAccessible( true );
+							// Same PHP 7.4/8.0-only requirement as above.
+							if ( PHP_VERSION_ID < 80100 ) {
+								$sp->setAccessible( true );
+							}
 							$sp->setValue( null, null );
 						}
 					}
