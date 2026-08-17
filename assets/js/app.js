@@ -37696,6 +37696,7 @@
 				{ name: __( 'WP Statistics' ), slug: 'wp-statistics' },
 				{ name: 'Burst', slug: 'burst-statistics' },
 				{ name: __( 'Independent Analytics' ), slug: 'independent-analytics' },
+				{ name: 'Plausible Analytics', slug: 'plausible-analytics' },
 				{ name: __( 'Site Kit' ), slug: 'google-site-kit' },
 			],
 		},

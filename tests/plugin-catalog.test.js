@@ -68,6 +68,15 @@ const PAID_UPLOADS = [
 			'maintenance', 'coming-soon', 'under-construction-page', 'wp-maintenance-mode',
 			'cmp-coming-soon-maintenance', 'minimal-coming-soon-maintenance-mode', 'password-protected',
 		].every( ( slug ) => catalogSlugs.includes( slug ) ) );
+		t.check( 'Analytics lists Plausible', catalogSlugs.includes( 'plausible-analytics' ) );
+		const plausibleChip = await page.$eval( '.minn-pi-chip[data-slug="plausible-analytics"]', ( button ) => ( {
+			text: button.textContent.trim(),
+			installed: button.classList.contains( 'is-installed' ),
+			disabled: button.disabled,
+		} ) );
+		t.check( 'Installed Plausible is ready to activate',
+			plausibleChip.text.includes( 'Plausible Analytics' ) && plausibleChip.installed && ! plausibleChip.disabled,
+			JSON.stringify( plausibleChip ) );
 
 		const paidChips = await page.$$eval( '.minn-pi-chip[data-slug]', ( buttons, slugs ) =>
 			slugs.map( ( slug ) => {
