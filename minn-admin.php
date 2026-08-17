@@ -68,6 +68,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/wp-statistics.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/burst-statistics.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/independent-analytics.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/analyticswp.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/plausible-analytics.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/matomo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/site-kit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/jetpack-stats.php';

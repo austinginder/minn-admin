@@ -26,9 +26,9 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 
 - **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
   is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP,
-  **Matomo**, Google Analytics through **Site Kit**, or **Jetpack Stats**), **click a bar for
+  **Plausible Analytics**, **Matomo**, Google Analytics through **Site Kit**, or **Jetpack Stats**), **click a bar for
   that day's top pages and referrers** (Koko, WP Statistics, Burst, Independent Analytics,
-  Matomo and Jetpack Stats today; others join via `minn_admin_traffic_day`) and step through
+  Plausible Analytics, Matomo and Jetpack Stats today; others join via `minn_admin_traffic_day`) and step through
   days with the arrow keys, plus a recent-activity feed
 - **Content** — posts, pages and custom post types sorted by publish date (scheduled posts
   lead with their go-out dates), with search, category/tag filters, status pills (live posts

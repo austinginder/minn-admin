@@ -1323,8 +1323,9 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 Minn buckets the days to match the selected range (daily up to 45 days, weekly beyond), renders
 the Traffic chart with your plugin's name as the source badge, and leads the stat cards with
 Visitors and a period-over-period delta. Bundled adapters cover **Koko Analytics** (the
-reference implementation), **WP Statistics**, **Burst Statistics** and **Independent
-Analytics**. The first active provider answers, so a plugin registering its own adapter
+reference implementation), **WP Statistics**, **Burst Statistics**, **Independent Analytics**,
+**AnalyticsWP**, **Plausible Analytics**, **Matomo**, **Site Kit** and **Jetpack Stats**.
+The first active provider answers, so a plugin registering its own adapter
 should return early when `$traffic` is already non-null.
 
 ### Day drill-down — top pages for a chart bar
@@ -1365,9 +1366,10 @@ Bundled day adapters: **Koko Analytics** (`post_stats` + `paths` + referrer
 tables), **WP Statistics** (`statistics_pages` for hits +
 `statistics_visitor.referred` for referrers; WPS has no per-URI uniques, so
 both columns report hit totals), **Burst Statistics** (`burst_statistics`
-page_url/page_id + `burst_sessions.referrer`), and **Independent Analytics**
-(views × resources + session referrers). Same first-non-null rule as
-`minn_admin_traffic`.
+page_url/page_id + `burst_sessions.referrer`), **Independent Analytics**
+(views × resources + session referrers), **Plausible Analytics** (server-side
+shared-dashboard queries), **Matomo** (its reporting API), and **Jetpack Stats**
+(the WordPress.com Stats client). Same first-non-null rule as `minn_admin_traffic`.
 
 ## Media folders — feed the Media view's folder filter
 

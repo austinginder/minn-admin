@@ -283,7 +283,7 @@ runs the required database upgrade across the network's sites. Very large
 networks are sent to WordPress's own Upgrade Network screen instead.
 
 **Traffic**: with a supported analytics plugin active (Koko Analytics,
-Matomo, Independent Analytics, Jetpack Stats, Site Kit and others), the
+Plausible Analytics, Matomo, Independent Analytics, Jetpack Stats, Site Kit and others), the
 Overview chart shows daily visitors and pageviews from that plugin's own
 numbers. Click a day for its top pages and referrers, and step through
 days with the arrow keys without closing the dialog.
