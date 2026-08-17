@@ -9572,6 +9572,35 @@
 		loadSubscriptionDetail( m );
 	}
 
+	// The compact daily status moves shared by the list's context menu. A
+	// cancellation gets the same consequence-scaled confirmation as other
+	// meaningful commerce actions; active and on-hold remain quick, reversible
+	// moves. WooCommerce Subscriptions still validates every transition.
+	async function setSubscriptionListStatus( s, status, done ) {
+		if ( status === 'cancelled' ) {
+			const ok = await minnConfirm( {
+				/* translators: %s: subscription number. */
+				title: sprintf( __( 'Cancel subscription #%s?' ), String( s.number || s.id ) ),
+				body: __( 'Future renewals stop. Existing orders and payments stay in WooCommerce.' ),
+				confirmLabel: __( 'Cancel subscription' ),
+				danger: true,
+			} );
+			if ( ! ok ) return;
+		}
+		try {
+			const updated = await api( `wc/v3/subscriptions/${ s.id }`, {
+				method: 'PUT',
+				body: JSON.stringify( { status } ),
+			} );
+			if ( state.cache.subscriptions && state.cache.subscriptions.items ) {
+				const i = state.cache.subscriptions.items.findIndex( ( x ) => x.id === s.id );
+				if ( i >= 0 ) state.cache.subscriptions.items[ i ] = Object.assign( {}, state.cache.subscriptions.items[ i ], updated );
+			}
+			toast( done );
+			if ( state.route === 'subscriptions' ) renderSubscriptions();
+		} catch ( e ) { toast( e.message, true ); }
+	}
+
 	function renderSubscriptions() {
 		const view = $( '#minn-view' );
 		const c = state.cache.subscriptions;
@@ -9645,6 +9674,59 @@
 				e.stopPropagation(); // the row click would navigate
 				const s = c.items.find( ( x ) => x.id === parseInt( btn.dataset.sqv, 10 ) );
 				if ( s ) openSubscriptionModal( s );
+			} )
+		);
+		// Right-click keeps the common work one gesture away: Minn's two detail
+		// depths, related people/orders, the WooCommerce escape, and the three
+		// status moves used in daily subscription operations.
+		$$( '[data-sub]', view ).forEach( ( row ) =>
+			row.addEventListener( 'contextmenu', ( e ) => {
+				const s = c.items.find( ( x ) => x.id === parseInt( row.dataset.sub, 10 ) );
+				if ( ! s ) return;
+				e.preventDefault();
+				const b = s.billing || {};
+				const number = String( s.number || s.id );
+				const entries = [
+					{ label: __( 'Open subscription' ), run: () => go( 'subscriptions/' + s.id ) },
+					{ label: __( 'Quick view' ), run: () => openSubscriptionModal( s ) },
+					...( s.customer_id && B.caps.customers ? [ {
+						label: __( 'View customer' ),
+						run: () => openCustomerModal( {
+							id: s.customer_id,
+							email: b.email || '',
+							first_name: b.first_name || '',
+							last_name: b.last_name || '',
+						} ),
+					} ] : [] ),
+					...( s.parent_id && B.caps.orders ? [ {
+						label: __( 'Open parent order' ),
+						run: () => {
+							setPageReturn( 'subscriptions', __( 'Subscriptions' ) );
+							go( 'orders/' + s.parent_id );
+						},
+					} ] : [] ),
+					...( B.site && B.site.adminUrl ? [ {
+						label: __( 'Edit in WooCommerce' ),
+						href: B.site.adminUrl + 'post.php?post=' + s.id + '&action=edit',
+					} ] : [] ),
+					{ heading: __( 'Change status' ) },
+					...( s.status !== 'active' ? [ {
+						label: __( 'Activate subscription' ),
+						/* translators: %s: subscription number. */
+						run: () => setSubscriptionListStatus( s, 'active', sprintf( __( 'Subscription #%s activated' ), number ) ),
+					} ] : [] ),
+					...( s.status !== 'on-hold' ? [ {
+						label: __( 'Put on hold' ),
+						/* translators: %s: subscription number. */
+						run: () => setSubscriptionListStatus( s, 'on-hold', sprintf( __( 'Subscription #%s put on hold' ), number ) ),
+					} ] : [] ),
+					...( s.status !== 'cancelled' ? [ {
+						label: __( 'Cancel subscription' ), danger: true,
+						/* translators: %s: subscription number. */
+						run: () => setSubscriptionListStatus( s, 'cancelled', sprintf( __( 'Subscription #%s cancelled' ), number ) ),
+					} ] : [] ),
+				];
+				openMinnMenu( e.clientX, e.clientY, entries );
 			} )
 		);
 		bindPager( view, c.page, loadSubscriptions, () => { if ( state.route === 'subscriptions' ) renderSubscriptions(); } );

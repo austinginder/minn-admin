@@ -36,7 +36,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	const suffix = Date.now().toString( 36 );
 	const email = `minn-subpage-${ suffix }@example.com`;
-	let pid = null, subId = null, orderId = null;
+	let pid = null, subId = null, orderId = null, customerId = null;
 	let flatCoupon = null, recCoupon = null, recProd = null, recSub = null;
 
 	const pageReady = async () => {
@@ -54,10 +54,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		} );
 		pid = prod.body && prod.body.id;
 		const billing = { first_name: 'Paige', last_name: 'Subscriber', email, country: 'US' };
+		const customer = await api( 'wc/v3/customers', {
+			method: 'POST',
+			body: JSON.stringify( { first_name: 'Paige', last_name: 'Subscriber', email, billing } ),
+		} );
+		customerId = customer.body && customer.body.id;
 		// A parent order, so the page's related-order navigation has a target.
 		const parent = await api( 'wc/v3/orders', {
 			method: 'POST',
-			body: JSON.stringify( { status: 'completed', set_paid: true, billing, line_items: [ { product_id: pid, quantity: 1 } ] } ),
+			body: JSON.stringify( { status: 'completed', set_paid: true, customer_id: customerId, billing, line_items: [ { product_id: pid, quantity: 1 } ] } ),
 		} );
 		orderId = parent.body && parent.body.id;
 		const sub = await api( 'wc/v3/subscriptions', {
@@ -65,6 +70,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			body: JSON.stringify( {
 				status: 'active',
 				billing,
+				customer_id: customerId,
 				parent_id: orderId,
 				billing_period: 'month',
 				billing_interval: 1,
@@ -77,7 +83,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			} ),
 		} );
 		subId = sub.body && sub.body.id;
-		t.check( 'fixtures created', !! ( pid && orderId && subId ), JSON.stringify( { pid, orderId, subId } ) );
+		t.check( 'fixtures created', !! ( pid && orderId && subId && customerId ), JSON.stringify( { pid, orderId, subId, customerId } ) );
 
 		// ---- Deep link renders the page ----
 		await page.setViewportSize( { width: 1440, height: 1000 } );
@@ -362,8 +368,66 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			( await page.evaluate( () => document.getElementById( 'minn-op-back' ).textContent.trim() ) ).indexOf( 'Subscription' ) === -1, '' );
 
 		// ---- Back to the list, and the row navigates ----
+		// Restore the fixture's opening state so the row-menu assertions prove
+		// the Active subscription actions shown in the product screenshot.
+		await api( `wc/v3/subscriptions/${ subId }`, {
+			method: 'PUT',
+			body: JSON.stringify( { status: 'active' } ),
+		} );
 		await page.goto( `${ BASE }/minn-admin/subscriptions`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( `.minn-table-row[data-sub="${ subId }"]`, { timeout: 25000 } );
+		await page.click( `.minn-table-row[data-sub="${ subId }"]`, { button: 'right' } );
+		await page.waitForSelector( '.minn-ctx-menu' );
+		const contextMenu = await page.evaluate( ( id ) => {
+			const menu = document.querySelector( '.minn-ctx-menu' );
+			const labels = [ ...menu.querySelectorAll( 'button, a' ) ].map( ( el ) => el.textContent.trim() );
+			const cancel = [ ...menu.querySelectorAll( 'button' ) ].find( ( el ) => /Cancel subscription/i.test( el.textContent ) );
+			const admin = [ ...menu.querySelectorAll( 'a' ) ].find( ( el ) => /Edit in WooCommerce/i.test( el.textContent ) );
+			return {
+				labels,
+				heading: ( menu.querySelector( '.minn-new-menu-label' ) || {} ).textContent || '',
+				cancelDanger: !! ( cancel && cancel.classList.contains( 'danger' ) ),
+				adminHref: admin ? admin.href : '',
+				id,
+			};
+		}, subId );
+		t.check( 'right-click exposes subscription destinations',
+			[ 'Open subscription', 'Quick view', 'View customer', 'Open parent order' ].every( ( label ) => contextMenu.labels.includes( label ) ),
+			JSON.stringify( contextMenu ) );
+		t.check( 'right-click exposes WooCommerce and common status moves',
+			/Edit in WooCommerce/.test( contextMenu.labels.join( '|' ) )
+				&& /Change status/.test( contextMenu.heading )
+				&& contextMenu.labels.includes( 'Put on hold' )
+				&& contextMenu.labels.includes( 'Cancel subscription' )
+				&& ! contextMenu.labels.includes( 'Activate subscription' )
+				&& contextMenu.cancelDanger
+				&& contextMenu.adminHref.includes( `post=${ subId }` ), JSON.stringify( contextMenu ) );
+		// Evaluate-click avoids the shared right-click mousedown detach trap.
+		await page.evaluate( () => {
+			const item = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( el ) => el.textContent.trim() === 'Cancel subscription' );
+			if ( item ) item.click();
+		} );
+		await page.waitForSelector( '.minn-confirm-overlay' );
+		const cancelCopy = await page.$eval( '.minn-confirm-overlay', ( el ) => el.textContent.replace( /\s+/g, ' ' ).trim() );
+		t.check( 'cancelling from the menu explains the consequence first',
+			/Future renewals stop/i.test( cancelCopy ) && /Existing orders and payments stay/i.test( cancelCopy ), cancelCopy );
+		await page.click( '.minn-confirm-overlay [data-cancel]' );
+		const afterDismiss = await api( `wc/v3/subscriptions/${ subId }?_fields=status` );
+		t.check( 'dismissing cancellation leaves the subscription active', afterDismiss.body.status === 'active', afterDismiss.body.status );
+
+		await page.click( `.minn-table-row[data-sub="${ subId }"]`, { button: 'right' } );
+		await page.waitForSelector( '.minn-ctx-menu' );
+		await page.evaluate( () => {
+			const item = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( el ) => el.textContent.trim() === 'View customer' );
+			if ( item ) item.click();
+		} );
+		await page.waitForFunction( ( wanted ) => {
+			const modal = document.querySelector( '.minn-modal' );
+			return modal && modal.textContent.includes( wanted );
+		}, email, { timeout: 15000 } );
+		t.check( 'the context menu opens the related customer', true, email );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-modal-overlay' ) );
 		// Click the title cell, not the row's centre: the Items cell lives there
 		// and swallows its own clicks so the list can pop instead of navigating.
 		await page.click( `.minn-table-row[data-sub="${ subId }"] .minn-row-title` );
@@ -400,6 +464,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	} finally {
 		if ( subId ) await api( `wc/v3/subscriptions/${ subId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( orderId ) await api( `wc/v3/orders/${ orderId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( customerId ) await api( `wc/v3/customers/${ customerId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( recSub ) await api( `wc/v3/subscriptions/${ recSub }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( pid ) await api( `wc/v3/products/${ pid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( recProd ) await api( `wc/v3/products/${ recProd }?force=true`, { method: 'DELETE' } ).catch( () => {} );
