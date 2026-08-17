@@ -3312,12 +3312,19 @@ class Minn_Admin_REST {
 		if ( $res ) {
 			$types = array();
 			foreach ( (array) $res->get_data() as $t ) {
-				$t       = (array) $t;
+				$t      = (array) $t;
+				$labels = (array) ( $t['labels'] ?? array() );
 				$types[] = array(
-					'slug'      => $t['slug'] ?? '',
-					'rest_base' => $t['rest_base'] ?? '',
-					'name'      => $t['name'] ?? '',
-					'viewable'  => ! empty( $t['viewable'] ),
+					'slug'         => $t['slug'] ?? '',
+					'rest_base'    => $t['rest_base'] ?? '',
+					'name'         => $t['name'] ?? '',
+					'viewable'     => ! empty( $t['viewable'] ),
+					// The create path (GH #26) derives a blank document's
+					// sidebar controls and the + New menu noun from these —
+					// a seed without them would gate every control off.
+					'labels'       => array( 'singular_name' => $labels['singular_name'] ?? '' ),
+					'supports'     => (array) ( $t['supports'] ?? array() ),
+					'hierarchical' => ! empty( $t['hierarchical'] ),
 				);
 			}
 			$out['types'] = $types;

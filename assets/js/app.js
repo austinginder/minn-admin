@@ -2501,10 +2501,18 @@
 			? `<div class="minn-new-menu-label">${ esc( __( 'Page in…' ) ) }</div>` + B.builders.map( ( b ) =>
 				`<button data-newbuilder="${ esc( b.id ) }"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( b.name ) }</button>` ).join( '' )
 			: '';
+		// Content-map CPTs are creatable too (GH #26). The types cache is
+		// boot-warmed and cap-filtered per type; patterns keep their dedicated
+		// row. A rest_base carrying a slash can't ride the /editor/<type>
+		// route (path segments), so those stay off the menu.
+		const cptRows = creatableCpts()
+			.map( ( t ) => `<button data-newtype="${ esc( t.restBase ) }"><span class="minn-row-icon">${ icon( 'doc' ) }</span> ${ esc( t.singular || t.name ) }</button>` )
+			.join( '' );
 		menu.innerHTML = `
 			<button data-newtype="posts"><span class="minn-row-icon">${ icon( 'pilcrow' ) }</span> ${ esc( __( 'Post' ) ) }</button>
-			<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( __( 'Page' ) ) }</button>
+			${ B.caps.editPages ? `<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( __( 'Page' ) ) }</button>` : '' }
 			<button data-newtype="blocks"><span class="minn-row-icon">${ icon( 'block' ) }</span> ${ esc( __( 'Pattern' ) ) }</button>
+			${ cptRows }
 			${ builderRows }`;
 		document.body.appendChild( menu );
 		const r = btn.getBoundingClientRect();
@@ -3601,7 +3609,9 @@
 		$( '#minn-vis-chip' ).addEventListener( 'click', ( e ) => openVisibilityPopover( e.currentTarget ) );
 		$( '#minn-new-btn' ).addEventListener( 'click', ( e ) => {
 			e.stopPropagation();
-			if ( B.caps.editPages ) toggleNewMenu( e.currentTarget );
+			// The menu is worth opening whenever it holds more than the plain
+			// post row — pages by capability, or any creatable CPT (GH #26).
+			if ( B.caps.editPages || creatableCpts().length ) toggleNewMenu( e.currentTarget );
 			else newContent( 'posts' );
 		} );
 		renderThemeBtn();
@@ -3616,7 +3626,8 @@
 		if ( ed.type === 'pages' ) return 'Page';
 		if ( ed.type === 'posts' ) return 'Post';
 		const t = ( state.cache.types || [] ).find( ( x ) => x.restBase === ed.type );
-		return t ? t.name.replace( /s$/, '' ) : 'Post';
+		// Registered singular beats the naive s-strip ("Stories" → "Story").
+		return t ? ( t.singular || t.name.replace( /s$/, '' ) ) : 'Post';
 	}
 
 	function renderTopbar() {
@@ -4524,11 +4535,23 @@
 	function slimContentTypes( list ) {
 		// Type labels are HTML-context strings (translations legitimately
 		// carry &#039;/&amp;) — decode once here; every consumer re-escapes.
+		// singular + supports + hierarchical ride along for the create path
+		// (GH #26): a blank CPT document derives its sidebar controls from the
+		// type registration, and the + New menu wants the singular noun. The
+		// edit-context listing is already filtered to types the current user
+		// can edit, so anything kept here is creatable-or-403s-honestly.
 		const kept = list
 			.filter( ( t ) => t.viewable && t.rest_base && ! HIDDEN_TYPES.includes( t.slug ) )
-			.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: decodeEntities( t.name ) } ) );
+			.map( ( t ) => ( {
+				slug: t.slug,
+				restBase: t.rest_base,
+				name: decodeEntities( t.name ),
+				singular: decodeEntities( ( t.labels && t.labels.singular_name ) || t.name ),
+				supports: t.supports || {},
+				hierarchical: !! t.hierarchical,
+			} ) );
 		const wpb = list.find( ( t ) => t.slug === 'wp_block' && t.rest_base );
-		if ( wpb ) kept.push( { slug: 'wp_block', restBase: wpb.rest_base, name: decodeEntities( wpb.name ) || __( 'Patterns' ) } );
+		if ( wpb ) kept.push( { slug: 'wp_block', restBase: wpb.rest_base, name: decodeEntities( wpb.name ) || __( 'Patterns' ), singular: decodeEntities( ( wpb.labels && wpb.labels.singular_name ) || '' ) || __( 'Pattern' ), supports: wpb.supports || {}, hierarchical: false } );
 		return kept;
 	}
 	let typesPromise = null;
@@ -4556,6 +4579,11 @@
 	}
 
 	const currentCpt = () => ( state.cache.types || [] ).find( ( t ) => t.restBase === state.filter ) || null;
+
+	// Types the create entry points (+ New menu, ⌘K) can target: the content
+	// map minus patterns (dedicated row) and minus any rest_base carrying a
+	// slash — the /editor/<type> route is path-segmented and can't hold one.
+	const creatableCpts = () => ( state.cache.types || [] ).filter( ( t ) => t.slug !== 'wp_block' && ! String( t.restBase ).includes( '/' ) );
 
 	// The query context a content load belongs to. A load started before a
 	// context change (trash toggle, search, tax filter) must not land its rows
@@ -24060,11 +24088,24 @@
 			}
 		} else {
 			// New content — pages when the New menu (or /editor/pages) asked for
-			// them and the user can edit pages, patterns for /editor/blocks;
-			// everything else starts as a post.
+			// them and the user can edit pages, patterns for /editor/blocks,
+			// and any content-map type for /editor/<rest_base> (GH #26). The
+			// types cache is cap-filtered server-side, so a type the user
+			// can't edit never resolves here; unknown types start as a post.
+			let cpt = null;
+			if ( ! [ 'posts', 'pages', 'blocks' ].includes( state.editorType ) ) {
+				try {
+					cpt = ( await loadTypes() ).find( ( t ) => t.restBase === state.editorType && t.slug !== 'wp_block' ) || null;
+				} catch ( e ) { /* types unreachable — fall back to a post */ }
+			}
 			const newType = state.editorType === 'pages' && B.caps.editPages ? 'pages'
 				: state.editorType === 'blocks' ? 'blocks'
+				: cpt ? cpt.restBase
 				: 'posts';
+			// Sidebar controls on a blank CPT document come from the type's
+			// supports map — mirroring how the existing-item path derives them
+			// from field presence in the REST response.
+			const sup = cpt ? cpt.supports : null;
 			// wp_block supports only title/editor/revisions — no thumb,
 			// discussion, excerpt or page attributes. New patterns are synced
 			// (the default: no 'unsynced' status meta is written on create).
@@ -24079,15 +24120,21 @@
 				// literal 'open' means open (the stored option is '' when the
 				// wp-admin checkbox was unchecked), and core hardcodes new
 				// pages to closed regardless of the option.
-				commentStatus: newType === 'pages' ? 'closed'
+				// Core's default_comment_status option only applies to types
+				// that support comments (get_default_comment_status): a CPT
+				// registered without them starts closed, like pages.
+				commentStatus: newType === 'pages' || ( sup && ! sup.comments ) ? 'closed'
 					: ( B.discussion && B.discussion.comments ) === 'open' ? 'open' : 'closed',
-				pingStatus: newType === 'pages' ? 'closed'
+				pingStatus: newType === 'pages' || ( sup && ! sup.trackbacks ) ? 'closed'
 					: ( B.discussion && B.discussion.pings ) === 'open' ? 'open' : 'closed',
 				password: '', visibility: 'public',
-				sticky: false, serverSticky: false, supportsSticky: newType === 'posts', supportsDiscussion: ! isPattern,
-				supportsThumb: ! isPattern, featuredMedia: 0, featuredThumb: null,
-				parent: 0, menuOrder: 0, template: '', supportsParent: newType === 'pages', supportsOrder: newType === 'pages', templates: null, parentPick: null,
-				excerpt: '', supportsExcerpt: newType === 'posts',
+				sticky: false, serverSticky: false, supportsSticky: newType === 'posts',
+				supportsDiscussion: sup ? !! sup.comments : ! isPattern,
+				supportsThumb: sup ? !! sup.thumbnail : ! isPattern, featuredMedia: 0, featuredThumb: null,
+				parent: 0, menuOrder: 0, template: '',
+				supportsParent: cpt ? cpt.hierarchical : newType === 'pages',
+				supportsOrder: sup ? !! sup[ 'page-attributes' ] : newType === 'pages', templates: null, parentPick: null,
+				excerpt: '', supportsExcerpt: sup ? !! sup.excerpt : newType === 'posts',
 				syncedPattern: isPattern,
 			};
 			// Crash net for never-saved drafts — anything under the new-post
@@ -34660,6 +34707,13 @@
 		cmds.push(
 			{ label: __( 'Write new post' ), kind: 'action', icon: '✎', run: () => newContent( 'posts' ) },
 			...( B.caps.editPages ? [ { label: __( 'Create new page' ), kind: 'action', icon: '▭', run: () => newContent( 'pages' ) } ] : [] ),
+			...creatableCpts().map( ( t ) => ( {
+				/* translators: %s: the post type's singular name. */
+				label: sprintf( __( 'Create new %s' ), t.singular || t.name ),
+				kind: 'action',
+				icon: '✎',
+				run: () => newContent( t.restBase ),
+			} ) ),
 			{ label: __( 'Toggle light / dark' ), kind: 'action', icon: '◐', run: toggleTheme },
 			{ label: __( 'View notifications' ), kind: 'action', icon: '◔', run: () => { state.notifOpen = true; renderOverlays(); loadNotifications().then( () => state.notifOpen && renderOverlays() ); } },
 			...( ( B.cache || [] ).length ? [ {
