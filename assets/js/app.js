@@ -1149,7 +1149,7 @@
 					<input class="minn-input" id="minn-confirm-input" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true">
 				</div>` : '' }
 				<div class="minn-confirm-actions">
-					<button class="minn-btn-soft" data-cancel type="button">${ esc( __( 'Cancel' ) ) }</button>
+					<button class="minn-btn-soft" data-cancel type="button">${ esc( o.cancelLabel || __( 'Cancel' ) ) }</button>
 					<button class="${ o.danger ? 'minn-btn-soft danger' : 'minn-btn-primary' }" data-ok type="button"${ o.typeToConfirm ? ' disabled' : '' }>${ esc( o.confirmLabel || 'Confirm' ) }</button>
 				</div>
 			</div>`;
@@ -17425,8 +17425,8 @@
 		const chip = $( '#minn-upd-chip' );
 		if ( ! chip ) return;
 		const total = state.cache.translationUpdates || 0;
-		/* translators: %d is a number of translation packages currently updating. */
 		const translations = state.updatingTranslations
+			/* translators: %d is a number of translation packages currently updating. */
 			? sprintf( _n( 'Updating %d translation…', 'Updating %d translations…', total ), total )
 			: '';
 		const label = state.updatingAll || translations;
@@ -28001,7 +28001,7 @@
 			// (see Paste cleanup section), never inserted raw; multi-line plain
 			// text → real paragraphs. Single-line plain text keeps Chrome's
 			// native handling.
-			body.addEventListener( 'paste', ( e ) => {
+			body.addEventListener( 'paste', async ( e ) => {
 				const ed2 = state.editor;
 				const cd = e.clipboardData;
 				if ( ! ed2 || ! cd ) return;
@@ -28128,6 +28128,39 @@
 						scheduleAutosave();
 						return;
 					}
+				}
+				// Raw Markdown copied from a text editor often carries a rich
+				// <pre><code> flavor too. The safe HTML path correctly preserves
+				// that as a code block, but a writer may have meant the Markdown
+				// as document structure. Offer that choice only for a conservative
+				// Markdown match and only when the HTML flavor is absent or is
+				// plainly a code wrapper. Word, Docs and web-page HTML keep flowing
+				// through the existing sanitizer without interruption.
+				if ( markdownClipboardCandidate( text, html ) ) {
+					e.preventDefault();
+					const savedRange = sel.rangeCount ? sel.getRangeAt( 0 ).cloneRange() : null;
+					const originalPayload = html
+						? ( sanitizePastedHtml( html ) || ( trimmed ? pasteTextPayload( text ) : null ) )
+						: pasteTextPayload( text );
+					const format = await minnConfirm( {
+						title: __( 'Paste Markdown?' ),
+						body: __( 'This looks like Markdown. Format its headings, lists, links and emphasis, or keep the clipboard content as it is.' ),
+						cancelLabel: __( 'Keep original' ),
+						confirmLabel: __( 'Format Markdown' ),
+					} );
+					// A paste prompt may outlive this editor if the user navigates.
+					if ( ! body.isConnected || state.editor !== ed2 || ! savedRange
+						|| ! body.contains( savedRange.startContainer ) ) return;
+					body.focus();
+					const liveSel = window.getSelection();
+					liveSel.removeAllRanges();
+					liveSel.addRange( savedRange );
+					const liveNode = savedRange.startContainer;
+					const liveAnchor = liveNode.nodeType === Node.ELEMENT_NODE ? liveNode : liveNode.parentNode;
+					const payload = format ? markdownPastePayload( text ) : originalPayload;
+					if ( payload ) pasteInsert( body, payload, liveAnchor );
+					scheduleAutosave();
+					return;
 				}
 				if ( html ) {
 					// Rich flavor present: always ours from here — falling back
@@ -32672,6 +32705,203 @@
 			html: out.join( '' ),
 			list: out.length === 1 && /^<[ou]l[\s>]/.test( out[ 0 ] ) ? out[ 0 ] : null,
 			allParagraphs: out.every( ( b ) => /^<p[\s>]/.test( b ) ),
+		};
+	}
+
+	// A Markdown choice should feel helpful, not like a question on every
+	// multi-line paste. Require recognizable document syntax, then refuse the
+	// prompt when the clipboard already contains real rich content. Code-view
+	// wrappers are the exception: they are precisely how raw Markdown commonly
+	// reaches the clipboard from editors, GitHub and AI tools.
+	function markdownClipboardCandidate( text, html ) {
+		const src = String( text || '' ).replace( /\r\n?/g, '\n' ).trim();
+		if ( ! src ) return false;
+		const lines = src.split( '\n' );
+		const headings = lines.filter( ( l ) => /^ {0,3}#{1,6}\s+\S/.test( l ) ).length;
+		const lists = lines.filter( ( l ) => /^\s*(?:[-+*]|\d+[.)])\s+\S/.test( l ) ).length;
+		let score = Math.min( headings, 2 ) * 3;
+		if ( /^(?: {0,3})(?:```|~~~)/m.test( src ) ) score += 4;
+		if ( lists >= 2 ) score += 3;
+		else if ( lists === 1 ) score += 1;
+		if ( lines.some( ( l, i ) => i && /^ {0,3}(?:=+|-+)\s*$/.test( l ) && lines[ i - 1 ].trim() ) ) score += 3;
+		if ( /^ {0,3}>\s+\S/m.test( src ) ) score += 2;
+		if ( /^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/m.test( src ) ) score += 2;
+		if ( lines.some( ( l, i ) => i < lines.length - 1 && /\|/.test( l )
+			&& /^\s*\|?\s*:?-{3,}:?(?:\s*\|\s*:?-{3,}:?)+\s*\|?\s*$/.test( lines[ i + 1 ] ) ) ) score += 3;
+		if ( /!\[[^\]]*\]\(https?:\/\/[^)\s]+\)/.test( src ) ) score += 3;
+		if ( /\[[^\]\n]+\]\((?:https?:\/\/|mailto:|tel:|#|\/)[^)\s]+\)/.test( src ) ) score += 2;
+		if ( /(?:\*\*|__|~~)[^\n]+(?:\*\*|__|~~)/.test( src ) ) score += 1;
+		if ( /`[^`\n]+`/.test( src ) ) score += 1;
+		if ( score < 3 ) return false;
+		if ( ! String( html || '' ).trim() ) return true;
+		let doc;
+		try { doc = new DOMParser().parseFromString( html, 'text/html' ); } catch ( e ) { return false; }
+		if ( ! doc || ! doc.body || ! doc.body.querySelector( 'pre, code' ) ) return false;
+		const allowed = new Set( [ 'META', 'PRE', 'CODE', 'DIV', 'SPAN', 'BR' ] );
+		return Array.from( doc.body.querySelectorAll( '*' ) ).every( ( el ) => allowed.has( el.tagName ) );
+	}
+
+	function markdownInline( value ) {
+		let src = String( value || '' ).replace( /\0/g, '\uFFFD' );
+		const held = [];
+		const hold = ( html ) => `\u0000${ held.push( html ) - 1 }\u0000`;
+		// Backslash escapes are tokens too, so their literal punctuation cannot
+		// be mistaken for a mark during the small inline pass below.
+		src = src.replace( /\\([\\`*_[\]{}()#+\-.!>~|])/g, ( m, ch ) => hold( esc( ch ) ) );
+		src = src.replace( /`([^`\n]+)`/g, ( m, code ) => hold( `<code>${ esc( code ) }</code>` ) );
+		src = src.replace( /\[([^\]\n]+)\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g, ( m, label, url ) => {
+			const safe = /^(?:https?:|mailto:|tel:|#|\/|\.\.?\/)/i.test( url ) ? url : null;
+			return safe ? hold( `<a href="${ esc( safe ) }">${ esc( label ) }</a>` ) : m;
+		} );
+		src = esc( src )
+			.replace( /\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>' )
+			.replace( /__([^_\n]+)__/g, '<strong>$1</strong>' )
+			.replace( /~~([^~\n]+)~~/g, '<s>$1</s>' )
+			.replace( /(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>' )
+			.replace( /(^|[\s(])_([^_\n]+)_(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>' );
+		return src.replace( /\u0000(\d+)\u0000/g, ( m, i ) => held[ Number( i ) ] || '' );
+	}
+
+	const markdownListMatch = ( line ) => String( line || '' ).match( /^(\s*)([-+*]|\d+[.)])\s+(.+)$/ );
+	const markdownIndent = ( ws ) => String( ws || '' ).replace( /\t/g, '    ' ).length;
+
+	function markdownListAt( lines, start ) {
+		const first = markdownListMatch( lines[ start ] );
+		if ( ! first ) return null;
+		const base = markdownIndent( first[ 1 ] );
+		const ordered = /^\d/.test( first[ 2 ] );
+		const items = [];
+		let i = start;
+		while ( i < lines.length ) {
+			const m = markdownListMatch( lines[ i ] );
+			if ( ! m ) break;
+			const indent = markdownIndent( m[ 1 ] );
+			const thisOrdered = /^\d/.test( m[ 2 ] );
+			if ( indent < base || ( indent === base && thisOrdered !== ordered ) ) break;
+			if ( indent > base ) {
+				if ( ! items.length ) break;
+				const nested = markdownListAt( lines, i );
+				if ( ! nested ) break;
+				items[ items.length - 1 ] += nested.html;
+				i = nested.next;
+				continue;
+			}
+			let content = m[ 3 ];
+			let itemHtml = markdownInline( content.trim() );
+			i++;
+			while ( i < lines.length && lines[ i ].trim() && ! markdownListMatch( lines[ i ] )
+				&& markdownIndent( ( lines[ i ].match( /^\s*/ ) || [ '' ] )[ 0 ] ) > base ) {
+				const hard = / {2}$/.test( content );
+				content = lines[ i ];
+				itemHtml += ( hard ? '<br>' : ' ' ) + markdownInline( content.trim() );
+				i++;
+			}
+			items.push( itemHtml );
+		}
+		if ( ! items.length ) return null;
+		const tag = ordered ? 'ol' : 'ul';
+		const n = ordered ? parseInt( first[ 2 ], 10 ) : 1;
+		const attrs = ordered && n > 1 ? ` start="${ n }"` : '';
+		return { html: `<${ tag }${ attrs }>${ items.map( ( item ) => `<li>${ item }</li>` ).join( '' ) }</${ tag }>`, next: i };
+	}
+
+	const markdownTableCells = ( line ) => String( line ).trim().replace( /^\||\|$/g, '' )
+		.split( /\s*\|\s*/ ).map( ( cell ) => cell.trim() );
+
+	// Raw Markdown → the same safe payload shape as HTML paste. Raw HTML is
+	// escaped rather than interpreted; links and remote images accept only
+	// web-safe schemes. The normal paste router still decides whether blocks
+	// can be inserted at the current caret (headings and list items flatten).
+	function markdownPastePayload( text ) {
+		const lines = String( text || '' ).replace( /\r\n?/g, '\n' ).split( '\n' );
+		const out = [];
+		let i = 0;
+		const isFence = ( line ) => String( line || '' ).match( /^ {0,3}(`{3,}|~{3,})\s*([a-z0-9_+-]*)\s*$/i );
+		const isTableRule = ( line ) => /^\s*\|?\s*:?-{3,}:?(?:\s*\|\s*:?-{3,}:?)+\s*\|?\s*$/.test( String( line || '' ) );
+		const startsBlock = ( n ) => {
+			const line = lines[ n ] || '';
+			return ! line.trim() || !! isFence( line ) || /^ {0,3}#{1,6}\s+\S/.test( line )
+				|| /^ {0,3}>\s?/.test( line ) || /^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test( line )
+				|| !! markdownListMatch( line ) || ( n + 1 < lines.length && isTableRule( lines[ n + 1 ] ) );
+		};
+		while ( i < lines.length ) {
+			if ( ! lines[ i ].trim() ) { i++; continue; }
+			const fence = isFence( lines[ i ] );
+			if ( fence ) {
+				const marker = fence[ 1 ][ 0 ];
+				const size = fence[ 1 ].length;
+				const language = fence[ 2 ] ? fence[ 2 ].toLowerCase() : '';
+				const code = [];
+				i++;
+				while ( i < lines.length && ! new RegExp( `^ {0,3}${ marker }{${ size },}\\s*$` ).test( lines[ i ] ) ) code.push( lines[ i++ ] );
+				if ( i < lines.length ) i++;
+				out.push( `<pre class="wp-block-code"><code${ language ? ` class="language-${ language }"` : '' }>${ esc( code.join( '\n' ) ) }</code></pre>` );
+				continue;
+			}
+			const heading = lines[ i ].match( /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/ );
+			if ( heading ) {
+				const level = heading[ 1 ].length;
+				out.push( `<h${ level }>${ markdownInline( heading[ 2 ] ) }</h${ level }>` );
+				i++;
+				continue;
+			}
+			if ( i + 1 < lines.length && /^ {0,3}(=+|-+)\s*$/.test( lines[ i + 1 ] ) ) {
+				const level = /=/.test( lines[ i + 1 ] ) ? 1 : 2;
+				out.push( `<h${ level }>${ markdownInline( lines[ i ].trim() ) }</h${ level }>` );
+				i += 2;
+				continue;
+			}
+			if ( /^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test( lines[ i ] ) ) {
+				out.push( '<hr>' );
+				i++;
+				continue;
+			}
+			const image = lines[ i ].trim().match( /^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)(?:\s+["'][^"']*["'])?\)$/i );
+			if ( image ) {
+				out.push( `<figure class="wp-block-image"><img src="${ esc( image[ 2 ] ) }" alt="${ esc( image[ 1 ] ) }"></figure>` );
+				i++;
+				continue;
+			}
+			if ( i + 1 < lines.length && /\|/.test( lines[ i ] ) && isTableRule( lines[ i + 1 ] ) ) {
+				const head = markdownTableCells( lines[ i ] );
+				i += 2;
+				const rows = [];
+				while ( i < lines.length && lines[ i ].trim() && /\|/.test( lines[ i ] ) ) rows.push( markdownTableCells( lines[ i++ ] ) );
+				out.push( `<figure class="wp-block-table"><table><thead><tr>${ head.map( ( c ) => `<th>${ markdownInline( c ) }</th>` ).join( '' ) }</tr></thead><tbody>${ rows.map( ( row ) => `<tr>${ row.map( ( c ) => `<td>${ markdownInline( c ) }</td>` ).join( '' ) }</tr>` ).join( '' ) }</tbody></table></figure>` );
+				continue;
+			}
+			const list = markdownListAt( lines, i );
+			if ( list ) {
+				out.push( list.html );
+				i = list.next;
+				continue;
+			}
+			if ( /^ {0,3}>\s?/.test( lines[ i ] ) ) {
+				const quote = [];
+				while ( i < lines.length && /^ {0,3}>\s?/.test( lines[ i ] ) ) quote.push( lines[ i++ ].replace( /^ {0,3}>\s?/, '' ) );
+				const paragraphs = quote.join( '\n' ).split( /\n{2,}/ ).filter( ( p ) => p.trim() )
+					.map( ( p ) => `<p>${ markdownInline( p.replace( /\n/g, ' ' ).trim() ) }</p>` ).join( '' );
+				if ( paragraphs ) out.push( `<blockquote class="wp-block-quote">${ paragraphs }</blockquote>` );
+				continue;
+			}
+			const para = [];
+			while ( i < lines.length && ( ! para.length || ! startsBlock( i ) ) ) para.push( lines[ i++ ] );
+			if ( ! para.length ) { i++; continue; }
+			let body = '';
+			para.forEach( ( line, n ) => {
+				const hard = /(?: {2}|\\)$/.test( line );
+				body += markdownInline( line.replace( /(?: {2}|\\)$/, '' ).trim() );
+				if ( n < para.length - 1 ) body += hard ? '<br>' : ' ';
+			} );
+			if ( pasteHasInk( body ) ) out.push( `<p>${ body }</p>` );
+		}
+		if ( ! out.length ) return null;
+		if ( out.length === 1 && /^<p>/.test( out[ 0 ] ) ) return { kind: 'inline', html: out[ 0 ].slice( 3, -4 ) };
+		return {
+			kind: 'blocks',
+			html: out.join( '' ),
+			list: out.length === 1 && /^<[ou]l[\s>]/.test( out[ 0 ] ) ? out[ 0 ] : null,
+			allParagraphs: out.every( ( block ) => /^<p[\s>]/.test( block ) ),
 		};
 	}
 

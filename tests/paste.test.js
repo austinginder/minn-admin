@@ -151,6 +151,59 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	t.check( 'multi-line text becomes paragraphs with <br>', /<p>para one line one<br>line two<\/p>/.test( raw ) && /<p>para two<\/p>/.test( raw ), raw );
 	t.check( 'single-line text keeps native handling', preventedMulti === true && preventedSingle === false, `multi=${ preventedMulti } single=${ preventedSingle }` );
 
+	/* ===== Raw Markdown: choose formatted blocks or original clipboard ===== */
+	const MARKDOWN = [
+		'# Markdown title',
+		'',
+		'Intro with **bold**, *italics*, and [a link](https://example.com/docs).',
+		'',
+		'- First item',
+		'- Second item',
+		'  - Nested item',
+		'',
+		'> A useful quote.',
+		'',
+		'| Name | Value |',
+		'| --- | --- |',
+		'| Alpha | `one` |',
+		'',
+		'```js',
+		'const x = 1;',
+		'```',
+	].join( '\n' );
+	const markdownCodeHtml = ( md ) => `<pre><code>${ md.replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' ) }</code></pre>`;
+	const markdownId = await createPost( page, { title: 'Paste: Markdown', content: '<!-- wp:paragraph -->\n<p>Start.</p>\n<!-- /wp:paragraph -->' } );
+	await openEditor( page, markdownId );
+	await freshParagraph( page );
+	const markdownPrevented = await paste( { 'text/plain': MARKDOWN, 'text/html': markdownCodeHtml( MARKDOWN ) } );
+	const markdownPrompt = page.locator( '.minn-confirm-modal' );
+	await markdownPrompt.waitFor();
+	const markdownCopy = await markdownPrompt.textContent();
+	await markdownPrompt.getByRole( 'button', { name: 'Format Markdown' } ).click();
+	raw = await save( markdownId );
+	t.check( 'Markdown code-flavor paste offers both choices', markdownPrevented === true
+		&& /Paste Markdown\?/.test( markdownCopy ) && /Keep original/.test( markdownCopy ) && /Format Markdown/.test( markdownCopy ), markdownCopy );
+	t.check( 'Markdown heading, inline marks and link become native formatting',
+		/<!-- wp:heading \{"level":1\} -->[\s\S]*Markdown title/.test( raw )
+		&& /<strong>bold<\/strong>, <em>italics<\/em>, and <a href="https:\/\/example\.com\/docs">a link<\/a>/.test( raw ), raw );
+	t.check( 'Markdown nested list and quote become native blocks',
+		/<!-- wp:list -->[\s\S]*First item[\s\S]*Second item[\s\S]*Nested item[\s\S]*<!-- \/wp:list -->/.test( raw )
+		&& /<!-- wp:quote -->[\s\S]*A useful quote/.test( raw ), raw );
+	t.check( 'Markdown table and fenced code keep their structure',
+		/<!-- wp:table -->[\s\S]*<th>Name<\/th><th>Value<\/th>[\s\S]*<td>Alpha<\/td><td><code>one<\/code><\/td>/.test( raw )
+		&& /<pre class="wp-block-code"><code class="language-js">const x = 1;<\/code><\/pre>/.test( raw ), raw );
+
+	const keepId = await createPost( page, { title: 'Paste: Keep Markdown original', content: '<!-- wp:paragraph -->\n<p>Start.</p>\n<!-- /wp:paragraph -->' } );
+	await openEditor( page, keepId );
+	await freshParagraph( page );
+	const KEEP_MARKDOWN = '## Keep this literal\n\n- One\n- Two';
+	await paste( { 'text/plain': KEEP_MARKDOWN, 'text/html': markdownCodeHtml( KEEP_MARKDOWN ) } );
+	await page.locator( '.minn-confirm-modal' ).getByRole( 'button', { name: 'Keep original' } ).click();
+	raw = await save( keepId );
+	t.check( 'Keep original preserves a code-flavor Markdown paste as code',
+		/<!-- wp:code -->[\s\S]*## Keep this literal\n\n- One\n- Two[\s\S]*<!-- \/wp:code -->/.test( raw )
+		&& ! /<!-- wp:heading/.test( raw ), raw );
+
 	/* ===== Classic mode ===== */
 	const classicId = await createPost( page, { title: 'Paste: Classic', content: '<p>Classic paragraph.</p>' } );
 	await openEditor( page, classicId );
@@ -316,6 +369,6 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	} ) );
 	t.check( 'markup pasted into a code block stays literal', codeShape.literal && codeShape.islands === 0, JSON.stringify( codeShape ) );
 
-	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, classicId, e2eId, linkId, plainId, markupId, codeId ] ) await deletePost( page, id );
+	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, markdownId, keepId, classicId, e2eId, linkId, plainId, markupId, codeId ] ) await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
