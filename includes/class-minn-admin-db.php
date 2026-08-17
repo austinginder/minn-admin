@@ -158,9 +158,9 @@ class Minn_Admin_DB {
 		global $wpdb;
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				'SELECT table_name AS name, engine, table_rows AS rows_est,
-					( data_length + index_length ) AS size, data_free,
-					auto_increment, table_collation AS collation
+				'SELECT table_name AS name, engine AS engine, table_rows AS rows_est,
+					( data_length + index_length ) AS size, data_free AS data_free,
+					auto_increment AS auto_increment, table_collation AS collation
 				 FROM information_schema.TABLES
 				 WHERE table_schema = %s AND table_type = %s
 				 ORDER BY table_name ASC',
@@ -169,6 +169,18 @@ class Minn_Admin_DB {
 			)
 		);
 		$rows = is_array( $rows ) ? $rows : array();
+		// MySQL 8 returns information_schema columns UPPERCASE unless every
+		// one is explicitly aliased; MariaDB returns them as typed. The
+		// aliases above force lowercase on both servers, and this fold keeps
+		// any future bare column from reading as an undefined property on
+		// MySQL (GH #28: engine / data_free / auto_increment warned there
+		// while the MariaDB dev stack stayed silent).
+		$rows = array_map(
+			static function ( $t ) {
+				return (object) array_change_key_case( (array) $t, CASE_LOWER );
+			},
+			$rows
+		);
 
 		// Defence in depth for networks: a subsite only ever sees its own
 		// tables plus the shared ones, so no route can name another tenant's
