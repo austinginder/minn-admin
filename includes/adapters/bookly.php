@@ -182,7 +182,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['bookly'] = array(
 		'label'      => __( 'Bookings', 'minn-admin' ),
 		'family'     => 'bookings',
-		'group'      => 'workspace',
+		'group'      => 'commerce',
 		'sub'        => 'Bookly',
 		'icon'       => 'calendar',
 		'cap'        => 'read',

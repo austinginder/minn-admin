@@ -169,7 +169,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['latepoint'] = array(
 		'label'      => __( 'Bookings', 'minn-admin' ),
 		'family'     => 'bookings',
-		'group'      => 'workspace',
+		'group'      => 'commerce',
 		'sub'        => 'LatePoint',
 		'icon'       => 'calendar',
 		'cap'        => 'read',

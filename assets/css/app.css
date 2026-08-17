@@ -319,7 +319,7 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-nav-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; margin: 0 -4px 4px; padding: 0 4px; }
 .minn-nav-label { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; padding: 8px 10px 4px; }
 .minn-nav-label + .minn-nav-label, .minn-nav-label.later { padding-top: 14px; }
-/* Group labels are collapse toggles (Workspace / Tools / Manage). */
+/* Group labels are collapse toggles (Workspace / Commerce / Tools / Manage). */
 button.minn-nav-label { display: flex; align-items: center; width: 100%; background: none; border: 0; cursor: pointer; font-family: inherit; text-align: start; }
 button.minn-nav-label svg { width: 12px; height: 12px; margin-inline-start: auto; opacity: 0; transition: transform 0.15s ease, opacity 0.15s ease; }
 button.minn-nav-label:hover svg, button.minn-nav-label.collapsed svg { opacity: 0.7; }
@@ -3109,6 +3109,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-read-sub { font-weight: 600; font-size: 12px; color: var(--text); margin-top: 8px; }
 .minn-order-read-empty { color: var(--text3); }
 .minn-order-composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.minn-note-visibility { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--text2); font-size: 13px; }
+.minn-note-visibility > span { line-height: 1.25; }
 /* The Items cell: the first line item by name, the rest one hover away. */
 .minn-items-cell {
 	display: flex; align-items: center; gap: 6px; min-width: 0; width: 100%;

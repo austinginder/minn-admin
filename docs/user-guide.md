@@ -29,14 +29,17 @@ Three things to know before anything else:
 
 ## Getting around
 
-**The sidebar** has three groups:
+**The sidebar** has four groups. Empty groups stay out of the way, so a site
+without a store still has the shorter navigation it needs:
 
-- **Workspace** — the daily material: Overview, Content, Media, Comments,
-  and (with WooCommerce) Orders, Products, Coupons, Customers. Plugins with
-  an inbox of their own (form entries, Amelia, LatePoint or Bookly appointments) can appear here too.
-  Opening an appointment takes you to its own page, laid out like an order:
-  the service and time on one side, the customer on the other.
-- **Tools** — site plumbing contributed by your plugins: form entries, mail
+- **Workspace** — publishing and incoming material: Overview, Content, Media,
+  Comments, and plugin inboxes such as form entries.
+- **Commerce** — store operations in a stable order: Orders, Subscriptions,
+  Bookings, Customers, Products and Coupons. Only the items provided by the
+  site's plugins appear. Opening an appointment takes you to its own page,
+  laid out like an order: the service and time on one side, the customer on
+  the other.
+- **Tools** — site plumbing contributed by your plugins: mail
   logs, activity logs, redirects, backups, snippets. Plugins whose Minn
   presence is purely a settings screen, and a theme's options pages,
   gather under a single **Site Options** entry here rather than each
@@ -337,8 +340,9 @@ there is nothing extra to install or maintain.
 
 ## Your store
 
-With WooCommerce active, the sidebar gains Orders, Products, Coupons and
-Customers, and with WooCommerce Subscriptions it gains Subscriptions too.
+With WooCommerce active, the sidebar gains a Commerce group for Orders,
+Customers, Products and Coupons. WooCommerce Subscriptions adds Subscriptions,
+and a supported appointment plugin adds Bookings in the same operational group.
 
 - **Orders** open as their own page, at their own address, so an order can
   be linked to or kept in a second tab. The main column holds the work:

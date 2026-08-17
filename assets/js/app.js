@@ -2357,13 +2357,12 @@
 	}
 
 	// Nav entries: first-seen family wins (resolved to the preferred member).
-	// `group` places the entry: 'workspace' for inbox-shaped surfaces the
-	// descriptor opts into (form entries), everything else defaults to the
-	// Tools group so the prime real estate stays curated.
+	// `group` places the entry: 'workspace' for publishing/inbox surfaces,
+	// 'commerce' for store operations, and everything else in Tools.
 	// The nav groups a surface may claim. Anything else lands in Tools, which
 	// is the catch-all for site plumbing (the server separately demotes a
 	// workspace claim that is not inbox-shaped).
-	const NAV_GROUPS = [ 'workspace', 'network' ];
+	const NAV_GROUPS = [ 'workspace', 'commerce', 'network' ];
 	const navGroupOf = ( g ) => NAV_GROUPS.includes( g ) ? g : 'tools';
 
 	function surfaceNavItems() {
@@ -2764,8 +2763,9 @@
 			</button>`;
 	}
 
-	// Workspace nav items: the act-on-it set (Overview, content, incoming
-	// human stuff) plus surfaces that opted into group: 'workspace'.
+	// Workspace stays about publishing and incoming human work. Commerce has
+	// its own conditional group below, so different plugin mixes never jumble
+	// store operations into the publishing sequence.
 	// Rebuilt when surfaces re-poll so plugin toggles don't leave stale
 	// sidebar entries.
 	function workspaceNavItems() {
@@ -2777,11 +2777,28 @@
 		if ( commentsAvailable() ) {
 			navItems.push( { id: 'comments', label: __( 'Comments' ), icon: 'chat', commentCount: true } );
 		}
+		surfaceNavItems().filter( ( s ) => s.group === 'workspace' ).forEach( ( s ) =>
+			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
+		);
+		return filterHiddenNavItems( navItems );
+	}
+
+	// Stable workflow order: transactions first, then people, then catalog
+	// configuration. The wrapper hides only when the resulting list is empty;
+	// a destination never jumps groups because it happens to be the only one.
+	function commerceNavItems() {
+		const navItems = [];
 		if ( B.wc && B.caps.orders ) {
 			navItems.push( { id: 'orders', label: __( 'Orders' ), icon: 'cart', orderCount: true } );
 		}
 		if ( B.wcs && B.caps.subscriptions ) {
 			navItems.push( { id: 'subscriptions', label: __( 'Subscriptions' ), icon: 'refresh' } );
+		}
+		surfaceNavItems().filter( ( s ) => s.group === 'commerce' ).forEach( ( s ) =>
+			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
+		);
+		if ( B.wc && B.caps.customers ) {
+			navItems.push( { id: 'customers', label: __( 'Customers' ), icon: 'users' } );
 		}
 		if ( B.wc && B.caps.products ) {
 			navItems.push( { id: 'products', label: __( 'Products' ), icon: 'tag' } );
@@ -2789,19 +2806,13 @@
 		if ( B.wc && B.caps.coupons ) {
 			navItems.push( { id: 'coupons', label: __( 'Coupons' ), icon: 'key' } );
 		}
-		if ( B.wc && B.caps.customers ) {
-			navItems.push( { id: 'customers', label: __( 'Customers' ), icon: 'users' } );
-		}
-		surfaceNavItems().filter( ( s ) => s.group === 'workspace' ).forEach( ( s ) =>
-			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
-		);
 		return filterHiddenNavItems( navItems );
 	}
 
 	// Tools nav items: site plumbing (logs, redirects, snippets, backups) —
 	// where surface families land unless their descriptor claims workspace.
 	function toolsNavItems() {
-		return surfaceNavItems().filter( ( s ) => s.group !== 'workspace' && s.group !== 'network' )
+		return surfaceNavItems().filter( ( s ) => s.group !== 'workspace' && s.group !== 'commerce' && s.group !== 'network' )
 			.map( ( s ) => ( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } ) );
 	}
 
@@ -3382,6 +3393,7 @@
 		};
 		const groupLabels = {
 			workspace: __( 'Workspace' ),
+			commerce: __( 'Commerce' ),
 			tools: __( 'Tools' ),
 			manage: __( 'Manage' ),
 			network: __( 'Network' ),
@@ -3393,7 +3405,7 @@
 			btn.textContent = groupLabels[ key ];
 			if ( chev ) btn.appendChild( chev );
 		} );
-		[ [ 'workspace', workspaceNavItems() ], [ 'tools', toolsNavItems() ], [ 'manage', manageNavItems() ], [ 'network', networkNavItems() ] ].forEach( ( [ key, items ] ) => {
+		[ [ 'workspace', workspaceNavItems() ], [ 'commerce', commerceNavItems() ], [ 'tools', toolsNavItems() ], [ 'manage', manageNavItems() ], [ 'network', networkNavItems() ] ].forEach( ( [ key, items ] ) => {
 			const body = $( '#minn-nav-' + key );
 			if ( ! body ) return;
 			body.innerHTML = items.map( navBtnHtml ).join( '' );
@@ -3449,6 +3461,7 @@
 				</button>
 				<nav class="minn-nav-scroll" aria-label="${ esc( __( 'Main navigation' ) ) }">
 					${ navGroupHtml( 'workspace', __( 'Workspace' ), workspaceNavItems() ) }
+					${ navGroupHtml( 'commerce', __( 'Commerce' ), commerceNavItems(), true ) }
 					${ navGroupHtml( 'tools', __( 'Tools' ), toolsNavItems(), true ) }
 					${ navGroupHtml( 'manage', __( 'Manage' ), manageItems, true ) }
 					${ navGroupHtml( 'network', __( 'Network' ), networkNavItems(), true ) }
@@ -7277,10 +7290,10 @@
 								<div class="minn-order-fields" style="margin:0 0 12px;">
 									<div><textarea class="minn-input" id="${ prefix }-new-note" rows="2" placeholder="${ esc( __( 'Internal note for staff…' ) ) }"></textarea></div>
 									<div class="minn-order-composer-foot">
-										<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
-											<input type="checkbox" id="${ prefix }-note-customer">
-											<span>${ __( 'Visible to the customer' ) }</span>
-										</label>
+										<div class="minn-note-visibility">
+											<span>${ esc( __( 'Customer can see this note' ) ) }</span>
+											<button type="button" class="minn-switch" id="${ prefix }-note-customer" role="switch" aria-checked="false" aria-label="${ esc( __( 'Customer can see this note' ) ) }"><span class="minn-switch-knob"></span></button>
+										</div>
 										<button class="minn-btn-soft" id="${ prefix }-note-add" type="button">${ __( 'Add note' ) }</button>
 									</div>
 								</div>` : '' }
@@ -7307,11 +7320,19 @@
 	function bindNotesComposer( ctx ) {
 		const add = $( '#' + ctx.prefix + '-note-add', ctx.host || document );
 		if ( ! add ) return;
+		const visibility = $( '#' + ctx.prefix + '-note-customer', ctx.host || document );
+		if ( visibility ) {
+			visibility.addEventListener( 'click', () => {
+				const on = visibility.getAttribute( 'aria-checked' ) !== 'true';
+				visibility.setAttribute( 'aria-checked', String( on ) );
+				visibility.classList.toggle( 'on', on );
+			} );
+		}
 		add.addEventListener( 'click', async () => {
 			const ta = $( '#' + ctx.prefix + '-new-note', ctx.host || document );
 			const note = ( ( ta && ta.value ) || '' ).trim();
 			if ( ! note ) { toast( __( 'Write a note first' ), true ); return; }
-			const customer = !! ( $( '#' + ctx.prefix + '-note-customer', ctx.host || document ) || {} ).checked;
+			const customer = !! ( visibility && visibility.getAttribute( 'aria-checked' ) === 'true' );
 			add.disabled = true;
 			try {
 				await api( `${ ctx.route }/notes`, {
@@ -7325,8 +7346,10 @@
 					ta.value = '';
 					ta.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 				}
-				const cb = $( '#' + ctx.prefix + '-note-customer', ctx.host || document );
-				if ( cb ) cb.checked = false;
+				if ( visibility ) {
+					visibility.setAttribute( 'aria-checked', 'false' );
+					visibility.classList.remove( 'on' );
+				}
 				const rows = await api( `${ ctx.route }/notes?per_page=50` );
 				ctx.onSaved( Array.isArray( rows ) ? rows : [] );
 				toast( customer ? __( 'Customer note added' ) : __( 'Private note added' ) );

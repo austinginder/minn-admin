@@ -196,7 +196,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['amelia'] = array(
 		'label'      => __( 'Bookings', 'minn-admin' ),
 		'family'     => 'bookings',
-		'group'      => 'workspace',
+		'group'      => 'commerce',
 		'sub'        => 'Amelia',
 		'icon'       => 'calendar',
 		'cap'        => 'read',

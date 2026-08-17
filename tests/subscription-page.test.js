@@ -295,6 +295,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 		// ---- The timeline takes notes, private and customer-visible ----
 		await page.waitForSelector( '.minn-sub-page .minn-sub-notes', { timeout: 20000 } );
+		t.check( 'note visibility uses a clear switch', await page.evaluate( () => {
+			const sw = document.querySelector( '#minn-s-note-customer' );
+			const label = sw && sw.parentElement.querySelector( ':scope > span' );
+			return !! sw && sw.getAttribute( 'role' ) === 'switch'
+				&& sw.getAttribute( 'aria-checked' ) === 'false'
+				&& sw.getAttribute( 'aria-label' ) === 'Customer can see this note'
+				&& ! document.querySelector( '#minn-s-note-customer[type="checkbox"]' )
+				&& label && label.getBoundingClientRect().height < 20;
+		} ), '' );
 		await page.fill( '#minn-s-new-note', 'Called about the card on file.' );
 		await page.click( '#minn-s-note-add' );
 		await page.waitForFunction( () => /Called about the card on file/.test(
@@ -306,7 +315,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			!! priv && priv.customer_note === false, JSON.stringify( { found: !! priv, customer: priv && priv.customer_note } ) );
 
 		await page.fill( '#minn-s-new-note', 'Your next delivery ships Monday.' );
-		await page.check( '#minn-s-note-customer' );
+		await page.click( '#minn-s-note-customer' );
+		t.check( 'the customer visibility switch turns on',
+			await page.$eval( '#minn-s-note-customer', ( el ) => el.getAttribute( 'aria-checked' ) === 'true' && el.classList.contains( 'on' ) ), '' );
 		await page.click( '#minn-s-note-add' );
 		await page.waitForFunction( () => /ships Monday/.test(
 			( document.querySelector( '.minn-sub-notes' ) || {} ).textContent || '' ), null, { timeout: 20000 } );
