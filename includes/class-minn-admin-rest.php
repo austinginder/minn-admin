@@ -4277,10 +4277,19 @@ class Minn_Admin_REST {
 			'defaultAdmin' => array_key_exists( 'defaultAdmin', $json )
 				? $json['defaultAdmin']
 				: ( $request->has_param( 'defaultAdmin' ) ? $request->get_param( 'defaultAdmin' ) : $cur['defaultAdmin'] ),
+			'frontBar'     => array_key_exists( 'frontBar', $json )
+				? $json['frontBar']
+				: ( $request->has_param( 'frontBar' ) ? $request->get_param( 'frontBar' ) : $cur['frontBar'] ),
 		);
 		// Legacy accent-only body (no scheme key).
 		if ( ! array_key_exists( 'scheme', $json ) && isset( $json['accent'] ) ) {
-			$raw = array_merge( array( 'defaultAdmin' => $cur['defaultAdmin'] ), $json );
+			$raw = array_merge(
+				array(
+					'defaultAdmin' => $cur['defaultAdmin'],
+					'frontBar'     => $cur['frontBar'],
+				),
+				$json
+			);
 		}
 		$norm = Minn_Admin::save_user_appearance( $uid, $raw );
 		return rest_ensure_response( $norm );

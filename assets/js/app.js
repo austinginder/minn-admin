@@ -3291,6 +3291,8 @@
 		}
 		const logo = $( '#minn-logo-home' );
 		if ( logo ) logo.title = __( 'Overview' );
+		const siteLink = $( '#minn-logo-site' );
+		if ( siteLink ) siteLink.title = __( 'View site' );
 		const siteSwitch = $( '#minn-site-switch' );
 		if ( siteSwitch ) {
 			siteSwitch.title = __( 'Switch site' );
@@ -3453,8 +3455,8 @@
 						${ B.site.icon
 							? `<span class="minn-logo-mark minn-logo-mark-icon" style="background-image:url('${ escCssUrl( B.site.icon ) }')"></span>`
 							: '<span class="minn-logo-mark">m</span>' }
-						<span class="minn-logo-name">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</span>
 					</button>
+					<a class="minn-logo-name" id="minn-logo-site" href="${ esc( B.site.url ) }" title="${ esc( __( 'View site' ) ) }">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</a>
 					${ ( B.sites || [] ).length ? `
 					<button class="minn-site-switch" id="minn-site-switch" title="${ esc( __( 'Switch site' ) ) }" aria-label="${ esc( __( 'Switch site' ) ) }" aria-haspopup="menu">
 						${ icon( 'chevron-down' ) }
@@ -3831,7 +3833,8 @@
 			light: normalizeModeTokens( customIn.light, 'light' ),
 		};
 		const defaultAdmin = a.defaultAdmin === true || a.defaultAdmin === 1 || a.defaultAdmin === '1' || a.defaultAdmin === 'true';
-		return { scheme, custom, defaultAdmin };
+		const frontBar = a.frontBar === true || a.frontBar === 1 || a.frontBar === '1' || a.frontBar === 'true';
+		return { scheme, custom, defaultAdmin, frontBar };
 	}
 
 	function clearSchemeInlineVars( root ) {
@@ -3909,6 +3912,7 @@
 			scheme: next.scheme != null ? next.scheme : prev.scheme,
 			custom: next.custom != null ? next.custom : prev.custom,
 			defaultAdmin: next.defaultAdmin != null ? next.defaultAdmin : prev.defaultAdmin,
+			frontBar: next.frontBar != null ? next.frontBar : prev.frontBar,
 		};
 		const norm = appearanceOf( merged );
 		applyAppearance( norm );
@@ -4016,6 +4020,13 @@
 						<div class="minn-toggle-desc">${ esc( __( 'After sign-in, land here. The admin bar Edit link opens the Minn editor. Full wp-admin stays available everywhere else.' ) ) }</div>
 					</div>
 				</div>
+				<div class="minn-toggle-row">
+					<button type="button" class="minn-switch${ ap.frontBar ? ' on' : '' }" id="minn-front-bar" role="switch" aria-checked="${ ap.frontBar ? 'true' : 'false' }" aria-label="${ esc( __( 'Minn admin bar on the site' ) ) }"><span class="minn-switch-knob"></span></button>
+					<div class="minn-toggle-info">
+						<div class="minn-toggle-label">${ esc( __( 'Minn admin bar on the site' ) ) }</div>
+						<div class="minn-toggle-desc">${ esc( __( 'Replace the admin bar on the public site with Minn’s own quiet bar: search, create, edit this page, and a status chip that only appears when something needs attention. Only affects you. wp-admin keeps the classic bar.' ) ) }</div>
+					</div>
+				</div>
 			</div>`;
 	}
 
@@ -4105,6 +4116,17 @@
 				defBtn.classList.toggle( 'on', on );
 				defBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
 				commitAppearance( { defaultAdmin: on } );
+			} );
+		}
+		// Per-user front-end Minn admin bar (replaces the classic bar on the
+		// public site; rendered server-side by Minn_Admin_Bar).
+		const barBtn = $( '#minn-front-bar', wrap );
+		if ( barBtn ) {
+			barBtn.addEventListener( 'click', () => {
+				const on = ! barBtn.classList.contains( 'on' );
+				barBtn.classList.toggle( 'on', on );
+				barBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				commitAppearance( { frontBar: on } );
 			} );
 		}
 	}
@@ -41452,4 +41474,18 @@
 	}
 
 	boot();
+
+	// One-shot intents from the front-end Minn Bar (bar.js parks the flag in
+	// sessionStorage before navigating here; consumed exactly once). This is
+	// the bar's whole keyboard story: it claims no global shortcuts on the
+	// site, so "open the palette" arrives as a click-driven handoff instead.
+	try {
+		const intent = sessionStorage.getItem( 'minn-intent' );
+		if ( intent ) {
+			sessionStorage.removeItem( 'minn-intent' );
+			if ( 'palette' === intent ) openPalette();
+			else if ( 'notifications' === intent ) toggleNotif();
+			else if ( 'new:posts' === intent || 'new:pages' === intent ) newContent( intent.slice( 4 ) );
+		}
+	} catch ( e ) {}
 }() );

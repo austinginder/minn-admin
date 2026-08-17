@@ -243,6 +243,18 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Per-user front-end Minn admin bar opt-in (minn_admin_appearance.frontBar).
+	 */
+	public static function user_wants_front_bar( $user_id = 0 ) {
+		$uid = $user_id ? (int) $user_id : get_current_user_id();
+		if ( $uid <= 0 ) {
+			return false;
+		}
+		$ap = self::get_user_appearance( $uid );
+		return ! empty( $ap['frontBar'] );
+	}
+
+	/**
 	 * REST bases of the post types where this user may edit only their own
 	 * items. Keyed by rest_base so the client can look one up by the route it
 	 * is about to call. Values are always true; absence means "no restriction".
@@ -540,6 +552,9 @@ class Minn_Admin {
 			'custom'       => self::scheme_base_tokens(),
 			// Opt-in only — never seed from the old site option.
 			'defaultAdmin' => false,
+			// Front-end Minn admin bar (replaces the classic bar on the
+			// public site for this user). Opt-in only.
+			'frontBar'     => false,
 		);
 	}
 
@@ -619,6 +634,7 @@ class Minn_Admin {
 					'scheme'       => $hex ? 'custom' : 'minn',
 					'custom'       => $custom,
 					'defaultAdmin' => false,
+					'frontBar'     => false,
 				);
 			}
 			if ( in_array( $accent, $ids, true ) ) {
@@ -626,6 +642,7 @@ class Minn_Admin {
 					'scheme'       => $accent,
 					'custom'       => $defaults['custom'],
 					'defaultAdmin' => false,
+					'frontBar'     => false,
 				);
 			}
 			return $defaults;
@@ -653,10 +670,16 @@ class Minn_Admin {
 			&& '0' !== (string) $raw['defaultAdmin']
 			&& 'false' !== (string) $raw['defaultAdmin'];
 
+		$front_bar = array_key_exists( 'frontBar', $raw )
+			&& ! empty( $raw['frontBar'] )
+			&& '0' !== (string) $raw['frontBar']
+			&& 'false' !== (string) $raw['frontBar'];
+
 		return array(
 			'scheme'       => $scheme,
 			'custom'       => $custom,
 			'defaultAdmin' => $default_admin,
+			'frontBar'     => $front_bar,
 		);
 	}
 
