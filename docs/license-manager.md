@@ -506,6 +506,7 @@ license data on a lab site.
 | WP Rocket | verify only | real license (cache lab) | 2026-07-10 | creds ship in the vendor zip; no paste by design |
 | Gravity Forms | activate / deactivate / verify | bogus key | 2026-07-10 | save_key self-reverts on rejection |
 | Beaver Builder, Brizy Pro, Etch, Bricks, Divi | per-vendor (see Phase 1) | bogus key / lab | 2026-07-10 | Divi proven on a disposable lab |
+| Breakdance Pro | activate / deactivate / verify | real key activation + read | 2026-08-17 | Breakdance 2.8.1 `LicenseKeyManager`; JSON-wrapped EDD state; rejected activation restores the previous key and status |
 | WP All Export Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | lifetime, unlimited activations; deactivate is local (no seats exist) |
 | WP All Import Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | same; stored keys are salt-wrapped, decode before any request |
 | Search & Filter Pro | activate / deactivate / verify | real key, full loop | 2026-07-19 | EDD (item 526297) via their own REST controller callables; state in the free base's `{prefix}search_filter_options` table, JSON row `license-data`; needs base + Pro active for actions; snapshot-restore keeps a rejected key from clobbering a valid activation (their own connect() would) |

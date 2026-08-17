@@ -135,7 +135,7 @@ Reference depth: **Gravity Forms**.
 | performance-lab | features list + status + activate/deactivate; family `performance` | Y | 2026-07-14 | Hub for WP Performance Team standalone plugins |
 | network | multisite Sites + Users + Settings surfaces, plus Extensions controls | Y | 2026-08-16 | Core multisite daily operations; suite `multisite` |
 | wp-multi-network | Networks list + create + detail actions; site move action on core Sites | Y | 2026-08-16 | Uses WP Multi Network APIs; domain/path editing = **L**; suite `wp-multi-network` (17) |
-| licenses | Extensions → Licenses (filter providers) | Y | | Use license-manager skill loop for new vendors |
+| licenses | Extensions → Licenses (filter providers) | Y | 2026-08-17 | Breakdance Pro reads its JSON-wrapped EDD status and uses the vendor manager for activate, deactivate and verify |
 | spam | Settings → Spam cards | Y | | |
 | seo | Editor panel (providers) | Y | 2026-08-16 | Squirrly added (7th provider): `{prefix}qss` row via their request-free `SQ_Models_Api_Seo::getSeo`/`saveSeo` (never unserialize the seo column); focus keyword maps to their `keywords` field; social thumbnail is `og_media` (URL). SureRank (6th): GROUPED postmeta blobs via Get::all_post_meta + Post::update_post_meta_common; empty values UNSET the key because their save substitutes the site-wide template |
 | meta-box | Editor panel (simple fields) | Y | 2026-07-14 | Clone/media = locked + deep link |

@@ -1,6 +1,7 @@
 <?php
 /**
- * Bundled adapter: page builders (Elementor, Beaver Builder, Brizy, Divi, Etch).
+ * Bundled adapter: page builders (Elementor, Beaver Builder, Brizy, Divi,
+ * Breakdance, Etch).
  *
  * Builder users should never have to visit a wp-admin SCREEN — and Minn's
  * editor should never let them corrupt builder-owned content. This adapter
@@ -32,8 +33,9 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Active builders as detector descriptors. Each entry:
- * { name, detect(WP_Post):bool, edit_url(WP_Post):string, owns_content:bool }
+ * Builder detector descriptors. Each entry:
+ * { name, detect(WP_Post):bool, edit_url(WP_Post):string, owns_content:bool,
+ *   active?:bool }
  *
  * Detection deliberately checks the POST, not just the plugin — a site can
  * run a builder for landing pages while writing everything else in Minn.
@@ -158,6 +160,39 @@ function minn_admin_page_builders() {
 		);
 	}
 
+	$breakdance_active = defined( '__BREAKDANCE_VERSION' )
+		&& defined( 'BREAKDANCE_MODE' )
+		&& 'breakdance' === BREAKDANCE_MODE
+		&& function_exists( '\Breakdance\Admin\get_builder_loader_url' );
+	// Keep installed-but-inactive Breakdance pages fenced. Their canonical
+	// tree remains builder-owned even while the plugin cannot render it.
+	if ( $breakdance_active || file_exists( WP_PLUGIN_DIR . '/breakdance/plugin.php' ) ) {
+		$builders['breakdance'] = array(
+			'name'         => 'Breakdance',
+			'active'       => $breakdance_active,
+			// Canonical content is the _breakdance_data element tree.
+			'owns_content' => true,
+			'detect'       => function ( $post ) {
+				return (bool) get_post_meta( $post->ID, '_breakdance_data', true );
+			},
+			// Breakdance's own full-screen builder loader at the site root. The
+			// fallback is returned only as metadata while inactive; the client
+			// points the user to Extensions until Breakdance can handle it.
+			'edit_url'     => function ( $post ) use ( $breakdance_active ) {
+				if ( $breakdance_active ) {
+					return \Breakdance\Admin\get_builder_loader_url( (string) $post->ID );
+				}
+				return add_query_arg(
+					array(
+						'breakdance' => 'builder',
+						'id'         => $post->ID,
+					),
+					home_url( '/' )
+				);
+			},
+		);
+	}
+
 	if ( defined( 'WPB_VC_VERSION' ) ) {
 		$builders['wpbakery'] = array(
 			'name'         => 'WPBakery',
@@ -222,6 +257,9 @@ function minn_admin_page_builders() {
 function minn_admin_page_builders_boot() {
 	$out = array();
 	foreach ( minn_admin_page_builders() as $id => $b ) {
+		if ( isset( $b['active'] ) && ! $b['active'] ) {
+			continue;
+		}
 		$out[] = array(
 			'id'   => $id,
 			'name' => $b['name'],
@@ -232,7 +270,8 @@ function minn_admin_page_builders_boot() {
 
 /**
  * The `minn_builder` REST field: null, or
- * { id, name, edit_url, owns_content } for the builder that owns the post.
+ * { id, name, edit_url, owns_content, active } for the builder that owns the
+ * post.
  * Plus POST /builders/new — create a draft already prepared for a builder
  * and hand back its editing surface, so "+ New → Page in Elementor" is one
  * request and a redirect.
@@ -257,7 +296,7 @@ add_action(
 			)
 		);
 		if ( ! minn_admin_page_builders() ) {
-			return; // No builder active — the field (and its per-row cost) vanishes.
+			return; // No builder to detect — the field and per-row cost vanish.
 		}
 		register_rest_route(
 			'minn-admin/v1',
@@ -270,7 +309,8 @@ add_action(
 				'callback'            => function ( WP_REST_Request $request ) {
 					$builders = minn_admin_page_builders();
 					$bid      = sanitize_key( $request['builder'] );
-					if ( ! isset( $builders[ $bid ] ) ) {
+					if ( ! isset( $builders[ $bid ] )
+						|| ( isset( $builders[ $bid ]['active'] ) && ! $builders[ $bid ]['active'] ) ) {
 						return new WP_Error( 'unknown_builder', __( 'That builder is not active.', 'minn-admin' ), array( 'status' => 404 ) );
 					}
 					$type     = 'posts' === $request['type'] ? 'post' : 'page';
@@ -340,6 +380,7 @@ add_action(
 							'name'         => $b['name'],
 							'edit_url'     => (string) call_user_func( $b['edit_url'], $post ),
 							'owns_content' => $owns,
+							'active'       => ! isset( $b['active'] ) || (bool) $b['active'],
 						);
 					}
 					return null;

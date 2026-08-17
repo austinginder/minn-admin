@@ -5730,6 +5730,18 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 */
 	private static function catalog_external_info( $slug ) {
 		$map = array(
+			'breakdance' => array(
+				'slug'        => 'breakdance',
+				'name'        => 'Breakdance Pro',
+				'author'      => 'Breakdance',
+				'description' => __( 'Build pages visually while Minn protects Breakdance-owned content and links straight to its builder. Download the plugin .zip from Breakdance.', 'minn-admin' ),
+				'installs'    => 0,
+				'version'     => '',
+				'rating'      => 0,
+				'icon'        => '',
+				'source'      => 'upload',
+				'homepage'    => 'https://breakdance.com/',
+			),
 			'gravityforms' => array(
 				'slug'        => 'gravityforms',
 				'name'        => 'Gravity Forms',

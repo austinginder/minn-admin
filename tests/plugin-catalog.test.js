@@ -8,6 +8,7 @@
 const { launch, login, reporter, BASE } = require( './helpers' );
 
 const PAID_UPLOADS = [
+	{ slug: 'breakdance', vendor: 'Breakdance' },
 	{ slug: 'gravityforms', vendor: 'Gravity Forms' },
 	{ slug: 'wpforms', vendor: 'WPForms' },
 	{ slug: 'elementor-pro', vendor: 'Elementor' },
@@ -58,6 +59,7 @@ const PAID_UPLOADS = [
 		t.check( 'Performance card present', cards.includes( 'Performance' ) );
 		t.check( 'Bookings card present', cards.includes( 'Bookings' ) );
 		t.check( 'Site visibility card present', cards.includes( 'Site visibility' ) );
+		t.check( 'Page builders card present', cards.includes( 'Page builders' ) );
 
 		const catalogSlugs = await page.$$eval( '.minn-pi-chip', ( els ) =>
 			els.map( ( e ) => e.getAttribute( 'data-slug' ) ).filter( Boolean ) );
@@ -69,6 +71,7 @@ const PAID_UPLOADS = [
 			'cmp-coming-soon-maintenance', 'minimal-coming-soon-maintenance-mode', 'password-protected',
 		].every( ( slug ) => catalogSlugs.includes( slug ) ) );
 		t.check( 'Analytics lists Plausible', catalogSlugs.includes( 'plausible-analytics' ) );
+		t.check( 'Page builders lists Breakdance Pro', catalogSlugs.includes( 'breakdance' ) );
 		const plausibleChip = await page.$eval( '.minn-pi-chip[data-slug="plausible-analytics"]', ( button ) => ( {
 			text: button.textContent.trim(),
 			installed: button.classList.contains( 'is-installed' ),

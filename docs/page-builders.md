@@ -1,7 +1,7 @@
 # Page builders — coexistence, not competition
 
-**Question:** what happens when a site manages pages with Divi, Elementor, Brizy, Etch or
-Beaver Builder? Can those users keep their builder while never bouncing to a wp-admin
+**Question:** what happens when a site manages pages with Divi, Elementor, Brizy,
+Breakdance, Etch or Beaver Builder? Can those users keep their builder while never bouncing to a wp-admin
 screen — and can Minn stay safe around builder-owned content?
 
 **Answer (verified in a live lab, 2026-07-05):** yes to both. Every major builder has an
@@ -17,7 +17,8 @@ Disposable local WordPress site with minn-admin active; installed Divi 5
 (wp.org; no Elementor Pro zip was on hand for that pass, but Pro rides free's
 storage/URLs). For each builder: opened its editor surface in a real browser,
 saved where scriptable, then inspected `post_content`, postmeta, and how Minn's
-editor presented the same post.
+editor presented the same post. Breakdance 2.8.1 was source-verified and then
+exercised on the primary dev site on 2026-08-17 with its real Pro status.
 
 ## What each builder actually does
 
@@ -30,6 +31,7 @@ editor presented the same post.
 | **Divi 5** | `post_content` | `<!-- wp:divi/* -->` block markup | `permalink?et_fb=1` — pure front end | `_et_pb_use_builder = on` + `wp:divi/` |
 | **Etch** | `post_content` | `<!-- wp:etch/* -->` block markup | `home_url?etch=magic&post_id=N` — front-end app at the **site root** (Etch's `AppRenderer` gates on `is_front_page()`; a permalink URL yields a blank page), admin bar stripped by Etch | `wp:etch/` in content |
 | **Bricks** | `_bricks_page_content_2` postmeta (element tree) | untouched | `permalink?bricks=run` — pure front end | `_bricks_editor_mode = bricks` (or the content meta present) |
+| **Breakdance** | `_breakdance_data` postmeta (element tree) | rendered or empty copy | `home_url?breakdance=builder&id=N` — full-screen builder at the site root | `_breakdance_data` present |
 | **WPBakery** | `post_content` as `[vc_row…]` shortcodes | the shortcode soup | `post.php?vc_action=vc_inline&post_id=N` — wp-admin URL rendering the front-end inline editor | `_wpb_vc_js_status = true` (or `[vc_row` in content) |
 
 Two classes fall out:
@@ -52,7 +54,13 @@ Bricks joins the block-native list conceptually but stores its element tree in *
 shortcode-storage (like legacy Divi 4): content is `[vc_row]` soup in `post_content`,
 which renders through `the_content` but is the builder's to own.
 
-### Meta-storage builders (Elementor, Beaver Builder, Brizy, Bricks) + shortcode Divi 4 / WPBakery — must be fenced
+Breakdance also stores its canonical element tree in postmeta. Minn detects
+`_breakdance_data`, fences the body, and uses Breakdance's own
+`Breakdance\Admin\get_builder_loader_url()` helper for the direct builder link.
+If Breakdance is installed but inactive, the fence stays in place and points
+to Extensions so the plugin can be turned on before opening its builder.
+
+### Meta-storage builders (Elementor, Beaver Builder, Brizy, Bricks, Breakdance) + shortcode Divi 4 / WPBakery — must be fenced
 
 Canonical content lives *outside* `post_content` (or, for Divi 4, inside it as shortcode
 soup the Visual Builder owns). What `post_content` holds is a stale or compiled copy.

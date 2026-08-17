@@ -188,8 +188,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   snapshots every edit within ~1.2s (before the first autosave) and offers recovery on the
   next open. Status-aware autosave: drafts save in place, published posts back up to revisions
   (only Update goes live), with a backup-restore banner.
-- **Page builders** — build a page with **Divi, Elementor, Brizy, Beaver Builder, Etch, Bricks
-  or WPBakery** and keep managing it from Minn: builder-owned pages are marked, edited through
+- **Page builders** — build a page with **Divi, Elementor, Brizy, Beaver Builder, Etch, Bricks,
+  Breakdance or WPBakery** and keep managing it from Minn: builder-owned pages are marked, edited through
   the builder's own chrome-free surface via **Edit in ⟨builder⟩** (no wp-admin screen), and
   fenced so a stray Minn edit can't break the builder's canvas. + New can start a page in any
   active builder. Third parties register via the `minn_admin_page_builders` filter
@@ -208,7 +208,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   state with inactive components collapsed, with **paste-to-activate, deactivate and
   re-verify** wired through each
   vendor's own code for more than twenty vendors (Elementor Pro, ACF PRO, WP Rocket, Gravity
-  Forms & SMTP, WPForms Pro, Divi, Beaver Builder, Brizy, Etch, Bricks, The Events Calendar family, Kadence
+  Forms & SMTP, WPForms Pro, Breakdance Pro, Divi, Beaver Builder, Brizy, Etch, Bricks, The Events Calendar family, Kadence
   Blocks Pro, WPMU DEV, SearchWP, Gravity Perks, GP Premium, Perfmatters, WP All Import/Export,
   Slider Revolution, LayerSlider), plus generic Freemius / EDD / SureCart / StellarWP detection.
   Service keys and account connections ride the same card with a chip saying which they are:

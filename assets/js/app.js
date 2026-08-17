@@ -27158,6 +27158,12 @@
 		}
 		const ed = state.editor;
 		const locked = ed.mode === 'locked';
+		const builderInactive = !!( ed.builder && ed.builder.active === false );
+		const builderHref = ed.builder
+			? safeHref( builderInactive
+				? B.appUrl + ( PATH_MODE ? 'extensions' : '#/extensions' )
+				: ed.builder.edit_url )
+			: '';
 		// A render while unsaved edits sit in the DOM must never eat them:
 		// ed.content can be seconds stale (it's only rebuilt on load/restore),
 		// so a late or stray re-render would silently revert live typing and
@@ -27179,14 +27185,17 @@
 				<div class="minn-editor-locked-note minn-pattern-note">
 					${ __( 'This is a synced pattern — saving changes here updates every post and page that uses it.' ) }
 				</div>` : '' }
-				${ ed.builder && safeHref( ed.builder.edit_url ) ? `
-				<a class="minn-editor-locked-note minn-builder-note" href="${ esc( ed.builder.edit_url ) }" aria-label="Edit in ${ esc( ed.builder.name ) }">
-					<span>${ ed.builder.owns_content
+				${ ed.builder && builderHref ? `
+				<a class="minn-editor-locked-note minn-builder-note" href="${ esc( builderHref ) }" aria-label="${ builderInactive ? esc( __( 'Open Extensions' ) ) : `Edit in ${ esc( ed.builder.name ) }` }">
+					<span>${ builderInactive
+		? `This ${ ed.type === 'pages' ? 'page' : 'post' }'s canvas is managed by <b>${ esc( ed.builder.name ) }</b>, but ${ esc( ed.builder.name ) } is currently off.
+						Its body stays read-only so Minn cannot overwrite the builder content. Turn ${ esc( ed.builder.name ) } on in Extensions to edit it.`
+		: ed.builder.owns_content
 		? `This ${ ed.type === 'pages' ? 'page' : 'post' }'s canvas is managed by <b>${ esc( ed.builder.name ) }</b> —
 						its content lives in the builder, so the body below is a read-only preview.
 						Title, status, URL and the side panel still save from here.`
 		: `Built with <b>${ esc( ed.builder.name ) }</b> — its blocks are preserved exactly; the text around them is editable here.` }</span>
-					<span class="minn-btn-primary minn-builder-open">Edit in ${ esc( ed.builder.name ) } ↗</span>
+					<span class="minn-btn-primary minn-builder-open">${ builderInactive ? esc( __( 'Open Extensions' ) ) + ' →' : `Edit in ${ esc( ed.builder.name ) } ↗` }</span>
 				</a>` : '' }
 				${ locked && ! ( ed.builder && ed.builder.owns_content ) ? `
 				<div class="minn-editor-locked-note">
@@ -37628,6 +37637,15 @@
 				{ name: 'Formidable', slug: 'formidable' },
 				{ name: __( 'Everest Forms' ), slug: 'everest-forms' },
 				{ name: 'CFDB7', slug: 'contact-form-cfdb7' },
+			],
+		},
+		{
+			id: 'builders', label: __( 'Page builders' ), hint: __( 'Visual page editing' ), q: __( 'page builder' ),
+			plugins: [
+				{
+					name: 'Breakdance Pro', slug: 'breakdance', upload: true, badge: 'ZIP',
+					vendor: 'Breakdance', url: 'https://breakdance.com/',
+				},
 			],
 		},
 		{

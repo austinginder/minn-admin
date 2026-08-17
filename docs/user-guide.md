@@ -167,7 +167,7 @@ away:
   block it configures, so nested blocks read as distinct controls. One
   click on "Block editor ↗" opens the same post in Gutenberg whenever you
   want the full toolkit. Posts built with page builders (Elementor,
-  Bricks, Divi and friends) open read-only with an "Edit in your builder"
+  Breakdance, Bricks, Divi and friends) open read-only with an "Edit in your builder"
   button, because the builder owns that content.
 - **Galleries and sliders open an images editor.** Hover a gallery-shaped
   block and the card names the action: click anywhere on it for a tile

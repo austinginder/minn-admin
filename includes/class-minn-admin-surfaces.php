@@ -1245,10 +1245,10 @@ class Minn_Admin_Surfaces {
 			}
 		}
 
-		// Page builders: the registry is already active-only (each bundled
-		// entry gates on its plugin's constant; `detect` is per-post, not
-		// plugin-active). Bundled entries seed before the filter, so the
-		// replay only attributes third-party additions.
+		// Page builders: entries are normally active-only; Breakdance stays
+		// registered while installed but inactive so its content remains
+		// fenced. `detect` is per-post. Bundled entries seed before the filter,
+		// so the replay only attributes third-party additions.
 		$b_rows = array();
 		if ( function_exists( 'minn_admin_page_builders' ) ) {
 			$builders = self::contributions( 'minn_admin_page_builders' );

@@ -982,6 +982,25 @@ function minn_admin_license_default_providers() {
 		}
 		return array( 'invalid', str_replace( '_', ' ', $word ) );
 	};
+	$breakdance_state = function ( $info ) {
+		$edd     = is_array( $info ) && is_array( $info['edd_key_info'] ?? null ) ? $info['edd_key_info'] : array();
+		$status  = strtolower( trim( (string) ( $edd['license'] ?? '' ) ) );
+		$expires = minn_admin_license_expiry( $edd['expires'] ?? '' );
+		$state   = 'unknown';
+		$note    = '';
+		if ( 'valid' === $status ) {
+			$state = minn_admin_license_expired( $expires ) ? 'expired' : 'valid';
+		} elseif ( 'expired' === $status ) {
+			$state = 'expired';
+		} elseif ( in_array( $status, array( 'inactive', 'site_inactive' ), true ) ) {
+			$state = 'invalid';
+			$note  = __( 'Key stored; Breakdance is not activated for this site', 'minn-admin' );
+		} elseif ( '' !== $status ) {
+			$state = 'invalid';
+			$note  = str_replace( '_', ' ', $status );
+		}
+		return array( $state, $expires, $note, $status );
+	};
 
 	$providers = array();
 
@@ -1137,6 +1156,41 @@ function minn_admin_license_default_providers() {
 				'note'  => $key ? 'Key stored; re-verify to check it with Gravity' : '',
 			) ) );
 		},
+	);
+
+	// Breakdance Pro stores both values as JSON through its Data option API.
+	// The validity payload carries EDD's status, expiry and last-check time.
+	$providers['breakdance'] = array(
+		'name'      => 'Breakdance Pro',
+		'component' => 'breakdance/plugin.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'breakdance/plugin.php' );
+		},
+		'read'      => function () use ( $item, $breakdance_state ) {
+			$key  = json_decode( (string) get_option( 'breakdance_license_key', '' ), true );
+			$info = json_decode( (string) get_option( 'breakdance_license_key_validity_info', '' ), true );
+			if ( ! is_string( $key ) || '' === trim( $key ) ) {
+				return array( $item( array( 'name' => 'Breakdance Pro', 'state' => 'missing' ) ) );
+			}
+			if ( ! is_array( $info ) ) {
+				return array( $item( array(
+					'name'  => 'Breakdance Pro',
+					'key'   => true,
+					'note'  => __( 'Key stored; Breakdance has not recorded a check yet', 'minn-admin' ),
+				) ) );
+			}
+			list( $state, $expires, $note ) = $breakdance_state( $info );
+			$checked = isset( $info['checked_at'] ) ? (int) $info['checked_at'] : 0;
+			return array( $item( array(
+				'name'    => 'Breakdance Pro',
+				'state'   => $state,
+				'key'     => true,
+				'expires' => $expires,
+				'note'    => $note,
+				'stale'   => $checked > 0 && $checked < time() - WEEK_IN_SECONDS,
+			) ) );
+		},
+		'activate_url' => admin_url( 'admin.php?page=breakdance_settings&tab=license' ),
 	);
 
 	// Bricks (theme): key option + a 7-day status transient ('active' = good).
@@ -2679,6 +2733,71 @@ function minn_admin_license_default_providers() {
 		$providers['brizy-pro']['deactivate'] = function () {
 			BrizyPro_Admin_License::_init()->deactivate( array() );
 			return array( 'ok' => true );
+		};
+	}
+
+	// Breakdance: changeLicenseKey() is its complete save, check and activate
+	// flow. Failed attempts restore both raw JSON options so a typo cannot
+	// replace a working key or its last known status.
+	if ( class_exists( '\Breakdance\Licensing\LicenseKeyManager' )
+		&& defined( 'BREAKDANCE_MODE' )
+		&& 'breakdance' === BREAKDANCE_MODE ) {
+		$breakdance_result = function ( $manager ) use ( $breakdance_state ) {
+			$info = $manager->getStoredLicenseKeyValidityInfo();
+			if ( ! is_array( $info ) ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Breakdance did not recognize that key.', 'minn-admin' ) );
+			}
+			if ( 'pro' !== (string) ( $info['intended_subscription_mode'] ?? '' ) ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'That key does not include Breakdance Pro.', 'minn-admin' ) );
+			}
+			list( $state, , , $status ) = $breakdance_state( $info );
+			if ( 'valid' === $state ) {
+				return array( 'ok' => true );
+			}
+			if ( 'expired' === $state ) {
+				return array( 'ok' => false, 'code' => 'expired', 'message' => __( 'That Breakdance Pro license has expired.', 'minn-admin' ) );
+			}
+			if ( in_array( $status, array( 'inactive', 'site_inactive' ), true ) ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Breakdance did not activate this site. Check the license site limit in your Breakdance account.', 'minn-admin' ) );
+			}
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => $status ? str_replace( '_', ' ', $status ) : __( 'Breakdance did not recognize that key.', 'minn-admin' ) );
+		};
+		$breakdance_restore = function ( $key, $info ) {
+			false === $key ? delete_option( 'breakdance_license_key' ) : update_option( 'breakdance_license_key', $key, false );
+			false === $info ? delete_option( 'breakdance_license_key_validity_info' ) : update_option( 'breakdance_license_key_validity_info', $info, false );
+		};
+		$providers['breakdance']['secret_label'] = __( 'Breakdance Pro license key', 'minn-admin' );
+		$providers['breakdance']['activate']     = function ( $secret ) use ( $breakdance_result, $breakdance_restore ) {
+			$old_key  = get_option( 'breakdance_license_key', false );
+			$old_info = get_option( 'breakdance_license_key_validity_info', false );
+			$manager  = \Breakdance\Licensing\LicenseKeyManager::getInstance();
+			$manager->changeLicenseKey( trim( (string) $secret ) );
+			$result = $breakdance_result( $manager );
+			if ( empty( $result['ok'] ) ) {
+				$breakdance_restore( $old_key, $old_info );
+			}
+			return $result;
+		};
+		$providers['breakdance']['verify'] = function () use ( $breakdance_result ) {
+			$manager = \Breakdance\Licensing\LicenseKeyManager::getInstance();
+			if ( ! $manager->getStoredLicenseKey() ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No Breakdance Pro key is stored.', 'minn-admin' ) );
+			}
+			$manager->refetchStoredLicenseKeyValidityInfo();
+			return $breakdance_result( $manager );
+		};
+		$providers['breakdance']['deactivate'] = function () {
+			$manager = \Breakdance\Licensing\LicenseKeyManager::getInstance();
+			if ( ! $manager->deactivateLicense() ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Breakdance could not deactivate this license. Use its License screen to review the current status.', 'minn-admin' ) );
+			}
+			$info   = $manager->getStoredLicenseKeyValidityInfo();
+			$status = is_array( $info ) && is_array( $info['edd_key_info'] ?? null ) ? (string) ( $info['edd_key_info']['license'] ?? '' ) : '';
+			if ( 'valid' === $status ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Breakdance still reports this site as active, so the key was kept.', 'minn-admin' ) );
+			}
+			$manager->changeLicenseKey( null );
+			return array( 'ok' => true, 'message' => __( 'The Breakdance Pro license was deactivated and its seat freed.', 'minn-admin' ) );
 		};
 	}
 
