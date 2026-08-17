@@ -297,7 +297,8 @@ function minn_admin_acf_datetime_in( $value ) {
 	}
 	if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(:\d{2})?$/', (string) $value, $m )
 		&& checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) && (int) $m[4] < 24 && (int) $m[5] < 60 ) {
-		return $m[1] . '-' . $m[2] . '-' . $m[3] . ' ' . $m[4] . ':' . $m[5] . ( $m[6] ? $m[6] : ':00' );
+		// Same trailing-optional-group trap as time_in: absent, not ''.
+		return $m[1] . '-' . $m[2] . '-' . $m[3] . ' ' . $m[4] . ':' . $m[5] . ( empty( $m[6] ) ? ':00' : $m[6] );
 	}
 	return null;
 }
@@ -327,7 +328,9 @@ function minn_admin_acf_time_in( $value ) {
 		return null;
 	}
 	if ( preg_match( '/^(\d{1,2}):(\d{2})(:\d{2})?$/', (string) $value, $m ) && (int) $m[1] < 24 && (int) $m[2] < 60 ) {
-		return str_pad( $m[1], 2, '0', STR_PAD_LEFT ) . ':' . $m[2] . ( $m[3] ? $m[3] : ':00' );
+		// A trailing optional group that did not match is ABSENT from $m,
+		// not '' — bare $m[3] warns on every seconds-less time.
+		return str_pad( $m[1], 2, '0', STR_PAD_LEFT ) . ':' . $m[2] . ( empty( $m[3] ) ? ':00' : $m[3] );
 	}
 	return null;
 }

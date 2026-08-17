@@ -535,7 +535,10 @@ add_action( 'rest_api_init', function () {
 			// collection check for context=edit is the blanket post-type
 			// edit_posts cap, so without this a Contributor reading
 			// wp/v2/posts?context=edit gets everyone's focus keywords.
-			$id = (int) $post_arr['id'];
+			// A _fields request that names minn_seo but not id hands this
+			// callback an id-less array (core prepares only requested
+			// fields) — the isset is load-bearing, not defensive noise.
+			$id = isset( $post_arr['id'] ) ? (int) $post_arr['id'] : 0;
 			if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
 				return new stdClass();
 			}

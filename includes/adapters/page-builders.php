@@ -356,7 +356,14 @@ add_action(
 			'minn_builder',
 			array(
 				'get_callback' => function ( $item ) {
-					$post = get_post( $item['id'] );
+					// A _fields request naming minn_builder without id hands
+					// this an id-less array (core prepares only requested
+					// fields), and get_post( 0 ) would fall back to the
+					// global post — refuse explicitly.
+					if ( empty( $item['id'] ) ) {
+						return null;
+					}
+					$post = get_post( (int) $item['id'] );
 					if ( ! $post ) {
 						return null;
 					}
