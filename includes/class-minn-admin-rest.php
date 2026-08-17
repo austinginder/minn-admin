@@ -5590,6 +5590,18 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 */
 	private static function catalog_external_info( $slug ) {
 		$map = array(
+			'woocommerce-subscriptions' => array(
+				'slug'        => 'woocommerce-subscriptions',
+				'name'        => 'WooCommerce Subscriptions',
+				'author'      => 'WooCommerce',
+				'description' => __( 'Sell recurring products and services with WooCommerce. This paid extension is installed by uploading the .zip downloaded from WooCommerce.com.', 'minn-admin' ),
+				'installs'    => 0,
+				'version'     => '',
+				'rating'      => 0,
+				'icon'        => '',
+				'source'      => 'upload',
+				'homepage'    => 'https://woocommerce.com/products/woocommerce-subscriptions/',
+			),
 			'disembark' => array(
 				'slug'        => 'disembark',
 				'name'        => 'Disembark',

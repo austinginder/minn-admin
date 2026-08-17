@@ -35518,6 +35518,7 @@
 								// Native title is a fallback; the rich tip replaces it on hover.
 								const title = st === 'active' ? __( 'Already active' )
 									: st === 'activate' ? __( 'Installed — click to activate' )
+									: entry.upload ? __( 'Paid extension. Upload its .zip file.' )
 									: ( entry.github ? __( 'Install from GitHub release' ) : __( 'Install from WordPress.org' ) );
 								return `<button type="button" class="minn-pi-chip${ st === 'active' ? ' is-active' : '' }${ st === 'activate' ? ' is-installed' : '' }"
 									data-pi-chip="${ i }" data-cat="${ esc( cat.id ) }" data-slug="${ esc( entry.slug || '' ) }"
@@ -37037,10 +37038,22 @@
 			],
 		},
 		{
+			id: 'bookings', label: __( 'Bookings' ), hint: __( 'Appointments & scheduling' ), q: 'appointment booking',
+			plugins: [
+				{ name: 'Amelia', slug: 'ameliabooking' },
+				{ name: 'LatePoint', slug: 'latepoint' },
+				{ name: 'Bookly', slug: 'bookly-responsive-appointment-booking-tool' },
+			],
+		},
+		{
 			id: 'ecommerce', label: __( 'Ecommerce' ), hint: __( 'Store & payments' ), q: 'ecommerce',
 			plugins: [
 				{ name: 'WooCommerce', slug: 'woocommerce' },
-				{ name: __( 'WooCommerce Subscriptions' ), slug: 'woocommerce-subscriptions', tip: __( 'Recurring billing for WooCommerce. In Minn: Workspace → Subscriptions (status, next payment, related orders).' ) },
+				{
+					name: __( 'WooCommerce Subscriptions' ), slug: 'woocommerce-subscriptions', upload: true, badge: 'ZIP',
+					url: 'https://woocommerce.com/products/woocommerce-subscriptions/',
+					message: __( 'WooCommerce Subscriptions is a paid extension, so it cannot be installed from WordPress.org. Download it from WooCommerce.com, then upload its .zip file above.' ),
+				},
 				{ name: 'SureCart', slug: 'surecart' },
 				{ name: __( 'Easy Digital Downloads' ), slug: 'easy-digital-downloads' },
 			],
@@ -37053,6 +37066,18 @@
 				{ name: __( 'Limit Login Attempts' ), slug: 'limit-login-attempts-reloaded' },
 				{ name: __( 'Really Simple SSL' ), slug: 'really-simple-ssl' },
 				{ name: __( 'Sucuri Scanner' ), slug: 'sucuri-scanner' },
+			],
+		},
+		{
+			id: 'visibility', label: __( 'Site visibility' ), hint: __( 'Coming soon & private sites' ), q: 'coming soon maintenance',
+			plugins: [
+				{ name: 'Maintenance', slug: 'maintenance' },
+				{ name: 'SeedProd', slug: 'coming-soon' },
+				{ name: __( 'Under Construction' ), slug: 'under-construction-page' },
+				{ name: 'LightStart', slug: 'wp-maintenance-mode' },
+				{ name: 'CMP', slug: 'cmp-coming-soon-maintenance' },
+				{ name: __( 'Minimal Coming Soon' ), slug: 'minimal-coming-soon-maintenance-mode' },
+				{ name: __( 'Password Protected' ), slug: 'password-protected' },
 			],
 		},
 		{
@@ -37240,7 +37265,8 @@
 					: ( info.installs >= 1000
 						? Math.round( info.installs / 1000 ) + 'k+'
 						: Number( info.installs ).toLocaleString( uiLocale() ) + '+' ) ) + ' installs'
-				: ( info.source === 'github' ? __( 'GitHub release' ) : '' );
+				: ( info.source === 'github' ? __( 'GitHub release' )
+					: info.source === 'upload' ? __( 'Paid ZIP upload' ) : '' );
 			const meta = [ info.author, installs, info.version ? 'v' + info.version : '' ]
 				.filter( Boolean ).join( ' · ' );
 			const letter = ( info.name || '?' ).replace( /[^A-Za-z0-9]/g, '' ).charAt( 0 ).toUpperCase() || '?';
@@ -37363,6 +37389,15 @@
 		const label = entry.name || entry.slug || 'Plugin';
 		const st = catalogChipState( entry );
 		if ( st === 'active' ) return;
+		if ( st === 'install' && entry.upload ) {
+			toastAction(
+				entry.message || __( 'This paid extension is installed from a .zip file. Download it from its vendor, then upload it above.' ),
+				__( 'Open WooCommerce.com' ),
+				() => window.open( entry.url, '_blank', 'noopener' ),
+				10000
+			);
+			return;
+		}
 		if ( btn ) {
 			btn.disabled = true;
 			btn.classList.add( 'busy' );

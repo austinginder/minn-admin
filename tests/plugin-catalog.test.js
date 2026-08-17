@@ -2,13 +2,34 @@
  * Add plugin catalog — curated category cards replace flat search chips.
  * Proves: catalog grid renders on open, chips reflect installed state,
  * "Browse more" runs a directory search, ← Catalog returns, install-url
- * allowlists hosts and resolves Disembark's GitHub release.
+ * allowlists hosts, resolves Disembark's GitHub release, and gives paid ZIP
+ * extensions an explicit upload path without calling the wp.org installer.
  */
 const { launch, login, reporter, BASE } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'plugin-catalog' );
 	const { browser, page, errors } = await launch();
+	// Hide the locally installed WooCommerce Subscriptions fixture from the
+	// plugin-list response so the suite can exercise its fresh-site paid ZIP
+	// message without deactivating a real extension. Arm this before login,
+	// since login reuses the Minn page and warms its plugin cache.
+	await page.route( '**/wp-json/minn-admin/v1/boot-status**', async ( route ) => {
+		const response = await route.fetch();
+		const json = await response.json();
+		if ( Array.isArray( json.plugins ) ) {
+			json.plugins = json.plugins.filter( ( p ) =>
+				! String( p.plugin || '' ).startsWith( 'woocommerce-subscriptions/' ) );
+		}
+		await route.fulfill( { response, json } );
+	} );
+	let wpPluginPosts = 0;
+	await page.route( '**/wp-json/wp/v2/plugins**', async ( route ) => {
+		if ( route.request().method() !== 'GET' ) {
+			wpPluginPosts++;
+		}
+		await route.continue();
+	} );
 	await login( page );
 
 	try {
@@ -22,6 +43,34 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'SEO card present', cards.includes( 'SEO' ) );
 		t.check( 'Backup card present', cards.includes( 'Backup' ) );
 		t.check( 'Performance card present', cards.includes( 'Performance' ) );
+		t.check( 'Bookings card present', cards.includes( 'Bookings' ) );
+		t.check( 'Site visibility card present', cards.includes( 'Site visibility' ) );
+
+		const catalogSlugs = await page.$$eval( '.minn-pi-chip', ( els ) =>
+			els.map( ( e ) => e.getAttribute( 'data-slug' ) ).filter( Boolean ) );
+		t.check( 'Bookings lists all three wired providers', [
+			'ameliabooking', 'latepoint', 'bookly-responsive-appointment-booking-tool',
+		].every( ( slug ) => catalogSlugs.includes( slug ) ) );
+		t.check( 'Site visibility lists its wired providers', [
+			'maintenance', 'coming-soon', 'under-construction-page', 'wp-maintenance-mode',
+			'cmp-coming-soon-maintenance', 'minimal-coming-soon-maintenance-mode', 'password-protected',
+		].every( ( slug ) => catalogSlugs.includes( slug ) ) );
+
+		const wcs = await page.$eval( '.minn-pi-chip[data-slug="woocommerce-subscriptions"]', ( btn ) => ( {
+			badge: btn.querySelector( '.minn-pi-chip-badge' )?.textContent.trim() || '',
+			fallback: btn.getAttribute( 'data-fallback-title' ) || '',
+			disabled: btn.disabled,
+		} ) );
+		t.check( 'WooCommerce Subscriptions is marked as a ZIP upload',
+			wcs.badge === 'ZIP' && /paid extension/i.test( wcs.fallback ) && ! wcs.disabled,
+			JSON.stringify( wcs ) );
+		await page.click( '.minn-pi-chip[data-slug="woocommerce-subscriptions"]' );
+		await page.waitForSelector( '.minn-toast-action', { timeout: 5000 } );
+		const wcsMessage = await page.$eval( '.minn-toast-action', ( el ) => el.textContent.trim() );
+		t.check( 'WooCommerce Subscriptions explains the paid install path',
+			/paid extension/i.test( wcsMessage ) && /WooCommerce\.com/i.test( wcsMessage ) && /upload/i.test( wcsMessage ),
+			wcsMessage );
+		t.check( 'paid ZIP chip does not call the plugin installer', wpPluginPosts === 0, String( wpPluginPosts ) );
 
 		const disembark = await page.$$eval( '.minn-pi-chip', ( els ) => {
 			const btn = els.find( ( e ) => /Disembark/i.test( e.textContent ) );
@@ -98,6 +147,15 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			( info.body.author || '' ) + ' / ' + ( info.body.description || '' ).slice( 0, 40 ) );
 		t.check( 'plugin info has icon or installs',
 			!!( info.body.icon || info.body.installs > 0 ) );
+
+		const wcsInfo = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/plugins/info?slug=woocommerce-subscriptions', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			return { status: r.status, body: await r.json() };
+		} );
+		t.check( 'paid ZIP plugin info is local and explicit',
+			wcsInfo.status === 200 && wcsInfo.body.source === 'upload' && /paid extension/i.test( wcsInfo.body.description || '' ) );
 
 		const seoSlugs = await page.$$eval( '.minn-pi-chip', ( els ) =>
 			els.map( ( e ) => e.getAttribute( 'data-slug' ) ).filter( Boolean ) );
