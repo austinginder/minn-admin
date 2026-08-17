@@ -204,13 +204,11 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .minn-logo { display: flex; align-items: center; gap: 10px; padding: 8px 8px 16px; }
 /* The mark and the site name are SEPARATE controls since the front-bar
-   round: the m mark is Minn (Overview), the site name is the site (front
-   end) — the same rule the Minn Bar teaches from the other side. */
-.minn-logo-home {
-  display: flex; align-items: center; background: none; border: none; padding: 0;
-  cursor: pointer; color: inherit; border-radius: 8px; flex: none;
-}
-.minn-logo-home:hover .minn-logo-mark { filter: brightness(1.12); }
+   round: the mark (often the site's own icon) opens the front end, the
+   site name goes to Overview. The topbar's View-site globe is gone; this
+   IS the doorway to the site now. */
+.minn-logo-marklink { display: flex; align-items: center; border-radius: 8px; flex: none; text-decoration: none; }
+.minn-logo-marklink:hover .minn-logo-mark { filter: brightness(1.12); }
 .minn-logo-mark {
   width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent2));
   display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 16px; letter-spacing: -0.5px; flex: none;
@@ -222,8 +220,9 @@ a { color: var(--accent2); text-decoration: none; }
    long site title can't push the version pill off or wrap the logo row. */
 .minn-logo-name {
   font-weight: 700; font-size: 17px; letter-spacing: -0.3px; min-width: 0; flex: 1;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: inherit; text-decoration: none; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+  background: none; border: none; padding: 0; font-family: inherit;
+  color: inherit; cursor: pointer;
 }
 .minn-logo-name:hover { color: var(--accent2); }
 /* Multisite site switcher: a quiet chevron beside the wordmark (absent off
@@ -4281,7 +4280,7 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
 
   /* Topbar: title + theme + notifications + New (icon only). */
   .minn-topbar { padding: 0 12px; gap: 8px; }
-  .minn-topbar-sub, #minn-view-site, #minn-help-btn, .minn-topbar-ver { display: none; }
+  .minn-topbar-sub, #minn-help-btn, .minn-topbar-ver { display: none; }
   .minn-core-chip span, .minn-vis-chip span, .minn-upd-chip span { display: none; } /* icon-only pill */
   .minn-topbar-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .minn-topbar .minn-btn-primary { font-size: 0; gap: 0; padding: 8px 10px; }

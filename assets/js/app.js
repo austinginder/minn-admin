@@ -3451,12 +3451,12 @@
 		<div class="minn-shell">
 			<aside class="minn-sidebar">
 				<div class="minn-logo">
-					<button class="minn-logo-home" id="minn-logo-home" title="${ esc( __( 'Overview' ) ) }">
+					<a class="minn-logo-marklink" id="minn-logo-site" href="${ esc( B.site.url ) }" title="${ esc( __( 'View site' ) ) }">
 						${ B.site.icon
 							? `<span class="minn-logo-mark minn-logo-mark-icon" style="background-image:url('${ escCssUrl( B.site.icon ) }')"></span>`
 							: '<span class="minn-logo-mark">m</span>' }
-					</button>
-					<a class="minn-logo-name" id="minn-logo-site" href="${ esc( B.site.url ) }" title="${ esc( __( 'View site' ) ) }">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</a>
+					</a>
+					<button class="minn-logo-name" id="minn-logo-home" title="${ esc( __( 'Overview' ) ) }">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</button>
 					${ ( B.sites || [] ).length ? `
 					<button class="minn-site-switch" id="minn-site-switch" title="${ esc( __( 'Switch site' ) ) }" aria-label="${ esc( __( 'Switch site' ) ) }" aria-haspopup="menu">
 						${ icon( 'chevron-down' ) }
@@ -3501,7 +3501,6 @@
 						<button class="minn-core-chip" id="minn-core-chip" hidden title="${ esc( __( 'A WordPress update is available' ) ) }">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
 						<button class="minn-upd-chip" id="minn-lang-chip" hidden title="${ esc( __( 'Setting up the language' ) ) }">${ icon( 'refresh' ) }<span>${ esc( __( 'Installing language…' ) ) }</span></button>
 						<button class="minn-topbar-ver" id="minn-ver-btn" title="${ esc( __( "What's new — full changelog" ) ) }">v${ esc( B.version ) }</button>
-						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="${ esc( __( 'View site' ) ) }" aria-label="${ esc( __( 'View site (opens in a new tab)' ) ) }">${ icon( 'globe' ) }</a>
 						<button class="minn-icon-btn" id="minn-help-btn" title="${ esc( __( 'About Minn' ) ) }" aria-label="${ esc( __( 'About Minn' ) ) }">${ icon( 'help' ) }</button>
 						<button class="minn-icon-btn" id="minn-theme-btn" title="${ esc( __( 'Theme: System (click to switch light and dark, right-click for options)' ) ) }" aria-label="${ esc( __( 'Color theme' ) ) }"></button>
 						<button class="minn-icon-btn" id="minn-notif-btn" title="${ esc( __( 'Notifications' ) ) }" aria-label="${ esc( __( 'Notifications' ) ) }">
