@@ -58,8 +58,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.fill( '#minn-pf-url', 'https://example.com/probe' );
 		await page.fill( '#minn-pf-bio', 'Suite bio probe.' );
 		await page.evaluate( () => { [ ...document.querySelectorAll( '[data-pf-save]' ) ].pop().click(); } );
-		await page.waitForTimeout( 1200 );
-		const pub = await restSelf();
+		// Poll, never a flat wait: a save can take a few seconds under load
+		// (rule-77 class — the flat 1200ms here read stale and failed).
+		let pub = {};
+		for ( let i = 0; i < 10; i++ ) {
+			await page.waitForTimeout( 1000 );
+			pub = await restSelf();
+			if ( pub.url === 'https://example.com/probe' && pub.description === 'Suite bio probe.' ) break;
+		}
 		t.check( 'website + bio persist over REST', pub.url === 'https://example.com/probe' && pub.description === 'Suite bio probe.',
 			JSON.stringify( { url: pub.url, description: pub.description } ) );
 
@@ -92,8 +98,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		const tbBefore = await page.$eval( '#minn-pf-toolbar', ( b ) => b.classList.contains( 'on' ) );
 		await page.click( '#minn-pf-toolbar' );
-		await page.waitForTimeout( 1200 );
-		const tbMeta = ( await restSelf() ).meta || {};
+		let tbMeta = {};
+		for ( let i = 0; i < 10; i++ ) {
+			await page.waitForTimeout( 1000 );
+			tbMeta = ( await restSelf() ).meta || {};
+			if ( ( tbMeta.show_admin_bar_front === 'false' ) === tbBefore ) break;
+		}
 		t.check( 'toolbar preference flips in user meta (instant save)',
 			( tbMeta.show_admin_bar_front === 'false' ) === tbBefore, JSON.stringify( tbMeta ) );
 		const feBar = await page.evaluate( async () =>
