@@ -504,8 +504,9 @@ settingsItem, list, download }`:
   row for an inline form (the create-field vocabulary; every field required unless
   `required: false`) and typed values merge into `body` (dot paths supported) before the
   request fires: "Add note" and "send to ⟨address⟩" shapes. Parameterized actions stay
-  **detail-only** (they need the modal's form chrome). Status-card actions accept
-  `fields` the same way.
+  **detail-only by default**. Set `list: true` to add one to the list-row menu; choosing
+  it opens the same fields in a focused dialog. Status-card actions accept `fields` the
+  same way.
 - **`settingsItem: true`** *(v0.13)* fires no request: it opens the surface's
   item-scoped settings view for the row (requires a `settings.route` containing `{id}`;
   see the settings section).
@@ -515,7 +516,8 @@ settingsItem, list, download }`:
   server-side, so the list isn't refreshed and an open detail modal stays put (the
   bundled ACF Field Groups surface exports a group's JSON this way).
 - Every non-parameterized action also appears on the list row's ⋯ / right-click menu
-  (Open is always first); set **`list: false`** to keep a verb detail-only.
+  (Open is always first); set **`list: false`** to keep a verb detail-only. For a
+  parameterized action, **`list: true`** explicitly adds it to that menu.
 
 ### `collection.filter` — a second dimension beside tabs
 

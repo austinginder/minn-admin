@@ -95,7 +95,7 @@ that away. Network settings covers registration, uploads, what site
 administrators may do, and where network mail goes. If WP Multi Network is
 active, Networks lists every network with its address, site count and
 administrator count. You can create a network and its root site there, move
-an ordinary site to another network from the site's detail card, and delete a
+an ordinary site to another network from its right-click menu or detail card, and delete a
 non-primary network with all of its sites after an explicit warning. Changing
 a network's domain or path links to WP Multi Network's own form because that
 operation rewrites every site address in the network. Two things Minn will not

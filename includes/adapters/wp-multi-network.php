@@ -155,6 +155,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$surfaces['network-sites']['collection']['actions'][] = array(
 			'label'   => __( 'Move to another network', 'minn-admin' ),
 			'route'   => 'minn-admin/v1/wp-multi-network/sites/{id}/move',
+			'list'    => true,
 			'when'    => array( 'key' => 'canMove', 'equals' => '1' ),
 			'confirm' => __( 'Move this site to the selected network? Its address stays the same, but its network settings and administration context change.', 'minn-admin' ),
 			'fields'  => array(

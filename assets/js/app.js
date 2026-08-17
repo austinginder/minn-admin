@@ -13847,24 +13847,26 @@
 	}
 
 	// Actions that ride the list-row ⋯ / right-click menu. Parameterized
-	// `fields` actions stay detail-only (they need the modal's form chrome);
-	// set `list: false` to hide any other verb from the list while keeping
-	// it on the detail card.
+	// `fields` actions stay detail-only unless they explicitly set list:true;
+	// that opt-in opens their fields in a focused modal. Set list:false to hide
+	// any other verb from the list while keeping it on the detail card.
 	function surfaceListMenuActions( coll, item ) {
 		return ( coll.actions || [] )
 			.map( ( a, i ) => ( { a, i } ) )
 			.filter( ( { a } ) => a.list !== false )
-			.filter( ( { a } ) => ! ( a.fields && a.fields.length ) )
+			.filter( ( { a } ) => ! ( a.fields && a.fields.length ) || a.list === true )
 			.filter( ( { a } ) => surfaceActionVisible( a, item, null ) );
 	}
 
 	function collHasListActions( coll ) {
-		return ( coll.actions || [] ).some( ( a ) => a.list !== false && ! ( a.fields && a.fields.length ) );
+		return ( coll.actions || [] ).some( ( a ) =>
+			a.list !== false && ( ! ( a.fields && a.fields.length ) || a.list === true )
+		);
 	}
 
 	// Shared by the detail modal and the list-row menu. Busts list + status
-	// caches and re-renders. Parameterized `fields` actions use armActionFields
-	// instead (detail modal only).
+	// caches and re-renders. Parameterized `fields` actions use the field-form
+	// runner instead.
 	async function runSurfaceItemAction( s, item, action ) {
 		// Download actions fetch { filename, content, mime } and hand the
 		// browser a file. Nothing changes server-side, so no cache bust and
@@ -13912,6 +13914,27 @@
 		} else if ( state.route === s.id ) renderSurface( s );
 	}
 
+	async function runSurfaceFieldsAction( s, item, action, body ) {
+		const r = await api( action.route.replace( '{id}', item.id ), {
+			method: action.method || 'POST',
+			body: JSON.stringify( body ),
+		} );
+		toast( actionToast( r, action ) );
+		const ss = surfaceState( s.id );
+		ss.cache = null;
+		ss.status = null;
+		closeModal();
+		if ( state.route === 'surfaceitem' && state.surfaceItemSid === s.id ) {
+			if ( state.surfaceItem ) state.surfaceItem = null;
+			renderSurfaceItem();
+		} else if ( state.route === s.id ) renderSurface( s );
+	}
+
+	function openSurfaceActionFields( s, item, action ) {
+		state.modal = { type: 'surface-action', surface: s, item, action };
+		renderOverlays();
+	}
+
 	function openSurfaceRowMenu( s, coll, item, x, y ) {
 		const entries = [
 			{ label: __( 'Open' ), run: () => {
@@ -13931,6 +13954,14 @@
 				entries.push( { label: a.label, href: surfaceFillHref( a.href, item ), danger: !! a.danger } );
 				return;
 			}
+			if ( a.fields && a.fields.length ) {
+				entries.push( {
+					label: a.label,
+					danger: !! a.danger,
+					run: () => openSurfaceActionFields( s, item, a ),
+				} );
+				return;
+			}
 			entries.push( {
 				label: a.label,
 				danger: !! a.danger,
@@ -13946,22 +13977,20 @@
 		openMinnMenu( x, y, entries );
 	}
 
-	// Swap `btn`'s row for the field form; `run(body)` fires on Go.
-	function armActionFields( btn, action, onCancel, run ) {
-		const rowEl = btn.parentElement;
-		rowEl.innerHTML = actionFieldsForm( action );
-		bindFormComboboxes( rowEl, 'data-actfield', action.fields );
-		const first = $( '[data-actfield]', rowEl );
+	// Bind an already-rendered action field form; `run(body)` fires on Go.
+	function bindActionFields( container, action, onCancel, run ) {
+		bindFormComboboxes( container, 'data-actfield', action.fields );
+		const first = $( '[data-actfield]', container );
 		if ( first ) first.focus( { preventScroll: true } );
-		$( '[data-actcancel]', rowEl ).addEventListener( 'click', onCancel );
-		$( '[data-actgo]', rowEl ).addEventListener( 'click', async () => {
-			const { body, missing } = collectActionFields( rowEl, action );
+		$( '[data-actcancel]', container ).addEventListener( 'click', onCancel );
+		$( '[data-actgo]', container ).addEventListener( 'click', async () => {
+			const { body, missing } = collectActionFields( container, action );
 			if ( missing ) {
 				toast( __( 'Fill in all fields first' ), true );
 				return;
 			}
 			if ( action.confirm && ! confirm( action.confirm ) ) return;
-			const go = $( '[data-actgo]', rowEl );
+			const go = $( '[data-actgo]', container );
 			go.disabled = true;
 			try {
 				await run( body );
@@ -13970,6 +13999,13 @@
 				go.disabled = false;
 			}
 		} );
+	}
+
+	// Swap `btn`'s row for the field form; `run(body)` fires on Go.
+	function armActionFields( btn, action, onCancel, run ) {
+		const rowEl = btn.parentElement;
+		rowEl.innerHTML = actionFieldsForm( action );
+		bindActionFields( rowEl, action, onCancel, run );
 	}
 
 	function bindSurfaceStatus( s, view ) {
@@ -34826,6 +34862,23 @@
 			</div>`;
 		}
 
+		if ( m.type === 'surface-action' ) {
+			const itemLabel = m.item.title || m.item.name || ( '#' + m.item.id );
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">${ esc( m.action.label ) }</div>
+							<div class="minn-modal-sub">${ esc( itemLabel ) }</div>
+						</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">${ actionFieldsForm( m.action ) }</div>
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'surface' ) {
 			const s = m.surface;
 			const coll = m.coll || s.collection;
@@ -36226,6 +36279,12 @@
 			} );
 		}
 
+		if ( m.type === 'surface-action' ) {
+			bindActionFields( $( '.minn-modal' ), m.action, closeModal, ( body ) =>
+				runSurfaceFieldsAction( m.surface, m.item, m.action, body )
+			);
+		}
+
 		if ( m.type === 'surface-form' ) {
 			bindFormComboboxes( $( '.minn-modal' ), 'data-createfield', ( ( m.coll || m.surface.collection ).create || {} ).fields );
 			const createBtn = $( '#minn-surface-create' );
@@ -36539,18 +36598,9 @@
 					if ( action.fields && action.fields.length ) {
 						// Cancel rebuilds the modal from state, so the action
 						// row (and its handlers) come back exactly as declared.
-						armActionFields( btn, action, () => renderOverlays(), async ( body ) => {
-							const r = await api( action.route.replace( '{id}', m.item.id ), {
-								method: action.method || 'POST',
-								body: JSON.stringify( body ),
-							} );
-							toast( actionToast( r, action ) );
-							const ss = surfaceState( m.surface.id );
-							ss.cache = null;
-							ss.status = null;
-							closeModal();
-							if ( state.route === m.surface.id ) renderSurface( m.surface );
-						} );
+						armActionFields( btn, action, () => renderOverlays(), ( body ) =>
+							runSurfaceFieldsAction( m.surface, m.item, action, body )
+						);
 						return;
 					}
 					btn.disabled = true;

@@ -134,7 +134,7 @@ Reference depth: **Gravity Forms**.
 | asset-cleanup | settings-only (JSON option); family `performance` | Y | 2026-07-14 | Page-level unload manager deep-linked |
 | performance-lab | features list + status + activate/deactivate; family `performance` | Y | 2026-07-14 | Hub for WP Performance Team standalone plugins |
 | network | multisite Sites + Users + Settings surfaces, plus Extensions controls | Y | 2026-08-16 | Core multisite daily operations; suite `multisite` |
-| wp-multi-network | Networks list + create + detail actions; site move action on core Sites | Y | 2026-08-16 | Uses WP Multi Network APIs; domain/path editing = **L**; suite `wp-multi-network` (16) |
+| wp-multi-network | Networks list + create + detail actions; site move action on core Sites | Y | 2026-08-16 | Uses WP Multi Network APIs; domain/path editing = **L**; suite `wp-multi-network` (17) |
 | licenses | Extensions → Licenses (filter providers) | Y | | Use license-manager skill loop for new vendors |
 | spam | Settings → Spam cards | Y | | |
 | seo | Editor panel (providers) | Y | 2026-08-16 | Squirrly added (7th provider): `{prefix}qss` row via their request-free `SQ_Models_Api_Seo::getSeo`/`saveSeo` (never unserialize the seo column); focus keyword maps to their `keywords` field; social thumbnail is `og_media` (URL). SureRank (6th): GROUPED postmeta blobs via Get::all_post_meta + Post::update_post_meta_common; empty values UNSET the key because their save substitutes the site-wide template |
@@ -170,7 +170,7 @@ Reference depth: **Gravity Forms**.
 
 | Date | Scope | Outcome |
 |---|---|---|
-| 2026-08-16 | WP Multi Network 3.0.0 integration | Added a Networks surface to the existing Network group: paginated/searchable network directory, site/admin counts, root-site creation through `add_network()`, protected deletion through `delete_network()`, and a parameterized site move on the core Sites detail card through `move_site()`. Main/current network and main-site guards are re-derived server-side. Network domain/path editing stays **L** because it rewrites every site URL. Dedicated lab suite 16/16, plus four routes added to the durable lower-privilege authorization matrix. |
+| 2026-08-16 | WP Multi Network 3.0.0 integration | Added a Networks surface to the existing Network group: paginated/searchable network directory, site/admin counts, root-site creation through `add_network()`, protected deletion through `delete_network()`, and a parameterized site move on the core Sites right-click menu and detail card through `move_site()`. Main/current network and main-site guards are re-derived server-side. Network domain/path editing stays **L** because it rewrites every site URL. Dedicated lab suite 17/17, plus four routes added to the durable lower-privilege authorization matrix. |
 | 2026-07-12 | Skill + this matrix seeded | Report-first runbook added to `dev-minn-admin`; no auto-ship |
 | 2026-07-13 | v0.14.0 open / Dev tools review | QM classified panel-only; Scrutoscope + WP Crontrol + Transients Manager ranked in plugin-support Wave A; no ship |
 | 2026-07-13 | Scrutoscope adapter | Profiler surface shipped (profiles, detail, status, Cron view, delete); suite 22 checks |

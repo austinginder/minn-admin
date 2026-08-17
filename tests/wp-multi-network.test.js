@@ -2,7 +2,7 @@
  * WP Multi Network adapter coverage.
  *
  * Runs against the separate minnms.localhost lab. The suite creates a network
- * and a site, moves the site through Minn's detail action, then deletes the
+ * and a site, moves the site through Minn's right-click action, then deletes the
  * disposable network through Minn. Cleanup runs through the same guarded API.
  *
  * Required: MINN_MS_SUPER_PASS. Unset or unreachable labs skip cleanly.
@@ -161,11 +161,13 @@ async function api( page, method, path, body ) {
 		await superPage.waitForFunction( ( title ) => [ ...document.querySelectorAll( '#minn-view [data-sitem]' ) ].some( ( row ) => row.textContent.includes( title ) ), siteTitle, { timeout: 20000 } );
 		await superPage.evaluate( ( title ) => {
 			const row = [ ...document.querySelectorAll( '#minn-view [data-sitem]' ) ].find( ( item ) => item.textContent.includes( title ) );
-			row.click();
+			row.dispatchEvent( new MouseEvent( 'contextmenu', { bubbles: true, clientX: 420, clientY: 360 } ) );
 		}, siteTitle );
-		await superPage.waitForSelector( '.minn-modal [data-saction]', { timeout: 12000 } );
+		await superPage.waitForSelector( '.minn-ctx-menu', { timeout: 10000 } );
+		const siteMenu = await superPage.$$eval( '.minn-ctx-menu button, .minn-ctx-menu a', ( items ) => items.map( ( item ) => item.textContent.trim() ) );
+		check( 'site right-click menu offers moving to another network', siteMenu.includes( 'Move to another network' ), siteMenu.join( ' | ' ) );
 		await superPage.evaluate( () => {
-			const button = [ ...document.querySelectorAll( '.minn-modal [data-saction]' ) ].find( ( item ) => item.textContent.trim() === 'Move to another network' );
+			const button = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( item ) => item.textContent.trim() === 'Move to another network' );
 			button.click();
 		} );
 		await superPage.waitForSelector( '[data-actfield="network"] .minn-ac-input', { timeout: 10000 } );
