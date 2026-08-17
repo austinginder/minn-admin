@@ -269,8 +269,8 @@ a { color: var(--accent2); text-decoration: none; }
 /* Version + changelog live in the topbar actions (GH #5: a badge beside the
    logo truncated longer site names, so it moved up beside the view-site
    button). Sized to sit flush with the .minn-icon-btn row. */
-.minn-topbar-ver { height: 34px; padding: 0 11px; display: flex; align-items: center; font-size: 12px; font-family: inherit; color: var(--text3); background: transparent; border: 1px solid var(--border); border-radius: 9px; cursor: pointer; white-space: nowrap; }
-.minn-topbar-ver:hover { color: var(--text); border-color: var(--accent); }
+.minn-topbar-ver { height: 34px; padding: 0 11px; display: flex; align-items: center; font-size: 12px; font-family: inherit; color: var(--text3); background: transparent; border: 1px solid transparent; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+.minn-topbar-ver:hover { color: var(--text); background: var(--hover); }
 
 /* Changelog modal — the mini markdown renderer's vocabulary. */
 .minn-changelog { padding: 4px 18px 18px; max-height: 64vh; overflow-y: auto; font-size: 13.5px; line-height: 1.65; color: var(--text2); }
@@ -509,6 +509,10 @@ button.minn-nav-label:hover { color: var(--text2); }
   background: transparent; border: 1px solid var(--border); border-radius: 9px; color: var(--text2); cursor: pointer;
 }
 .minn-icon-btn:hover { background: var(--hover); color: var(--text); }
+/* Topbar controls sit quiet like the Minn Bar's (the front-end bar set the
+   reference): no resting box, just the soft fill on hover. Card-level
+   .sm utilities keep their border — they need the edge on busy surfaces. */
+.minn-topbar .minn-icon-btn { border-color: transparent; }
 .minn-icon-btn.sm { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; flex-shrink: 0; }
 .minn-new-menu {
   position: fixed; z-index: 60; min-width: 150px; padding: 5px;
