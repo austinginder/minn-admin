@@ -24,7 +24,12 @@ const LANG = 'de_DE';
 	const t = reporter( 'translations' );
 
 	const wpPath = path.resolve( __dirname, '../../../../' );
-	const wpCli = ( args ) => execSync( `wp --path=${ JSON.stringify( wpPath ) } ${ args } 2>/dev/null`, { timeout: 180000 } ).toString().trim();
+	const wpCli = ( args ) => execSync( `wp --path=${ JSON.stringify( wpPath ) } ${ args } 2>/dev/null`, { timeout: 180000 } )
+		.toString()
+		// WP-CLI's bundled dependency emits a PHP deprecation on stdout, so
+		// remove diagnostics before comparing a command's intentional value.
+		.replace( /^Deprecated:.*$/gm, '' )
+		.trim();
 
 	try {
 		wpCli( `option update minn_test_translations ${ LANG }` );
@@ -44,6 +49,8 @@ const LANG = 'de_DE';
 		// --- the count endpoint -------------------------------------------
 		const upd = await api( 'minn-admin/v1/plugin-updates' );
 		t.check( 'plugin-updates reports a waiting translation', upd.body.translations >= 1, JSON.stringify( upd.body.translations ) );
+		const german = ( upd.body.translationGroups || [] ).find( ( group ) => group.locale === LANG );
+		t.check( 'translation updates include a locale summary', !! german && german.total >= 1, JSON.stringify( german || upd.body.translationGroups ) );
 
 		// The bug in one assertion: plugins and themes can be perfectly clear
 		// and the site still owes a language pack.
@@ -87,10 +94,23 @@ const LANG = 'de_DE';
 		} );
 		await page.waitForTimeout( 500 );
 
+		// Clicking the notice itself lands on a translation-specific surface,
+		// not the generic Plugins list.
+		const translationRow = page.locator( '.minn-notif-row' ).filter( { hasText: /translation/i } ).first();
+		await translationRow.locator( '.minn-notif-icon' ).click();
+		await page.waitForSelector( '[data-xtab="translations"].active', { timeout: 20000 } );
+		await page.waitForSelector( '#minn-update-translations', { timeout: 20000 } );
+		const translationView = await page.evaluate( () => document.querySelector( '#minn-view' ).innerText.replace( /\s+/g, ' ' ) );
+		t.check( 'the notice opens the Translations tab', /Translations/i.test( translationView ), translationView.slice( 0, 180 ) );
+		t.check( 'the pending locale is listed', translationView.includes( LANG ), translationView.slice( 0, 220 ) );
+
 		// --- the real install ------------------------------------------------
 		// A live download from wordpress.org. de_DE for the current core
 		// version is a real package, and installing it twice is harmless.
-		const ran = await api( 'minn-admin/v1/translations/update', { method: 'POST' } );
+		const response = page.waitForResponse( ( res ) => res.url().includes( '/minn-admin/v1/translations/update' ) && res.request().method() === 'POST', { timeout: 180000 } );
+		await page.click( '#minn-update-translations' );
+		const liveResponse = await response;
+		const ran = { status: liveResponse.status(), body: await liveResponse.json() };
 		t.check( 'the update route answers', 200 === ran.status, JSON.stringify( ran.body ).slice( 0, 140 ) );
 		t.check( 'it reports at least one pack installed', ran.body && ran.body.updated >= 1, JSON.stringify( ran.body ) );
 

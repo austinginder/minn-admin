@@ -940,6 +940,7 @@
 		extTab: 'plugins',
 		extFilter: 'all',
 		extSearch: '',
+		updatingTranslations: false,
 		orderTab: 'any',
 		orderSearch: '',
 		orderView: 'list', // list | analytics
@@ -984,6 +985,8 @@
 			plugins: null,
 			pluginUpdates: {},
 			themeUpdates: {},
+			translationUpdates: 0,
+			translationGroups: null,
 			settings: null,
 			notifications: null,
 		},
@@ -16522,14 +16525,14 @@
 			// the Extensions dot too — per-theme badges only render inside
 			// the Themes tab. The map also feeds Update everything.
 			state.cache.themeUpdates = ( upd && upd.themes ) || {};
-			// Language packs live outside the plugin/theme/core transients, so
-			// a site can read "all caught up" while wp-admin still offers
-			// Update Translations. Carried as a plain count.
+			// Language packs live outside the plugin/theme/core responses, so
+			// carry both the exact package count and compact locale groups.
 			state.cache.translationUpdates = ( upd && upd.translations ) || 0;
+			state.cache.translationGroups = ( upd && Array.isArray( upd.translationGroups ) ) ? upd.translationGroups : [];
 			state.cache.autoPlugins = ( upd && upd.auto ) || [];
 			state.cache.autoAllowed = !! ( upd && upd.autoAllowed );
 			const dot = $( '#minn-plugin-dot' );
-			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! Object.keys( state.cache.themeUpdates ).length;
+			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! Object.keys( state.cache.themeUpdates ).length && ! state.cache.translationUpdates;
 		} )().finally( () => { pluginsPromise = null; } );
 		return pluginsPromise;
 	}
@@ -16685,7 +16688,10 @@
 			// Keep cache in sync for other cards.
 			if ( state.cache ) state.cache.pluginUpdates = map;
 			if ( upd && upd.themes ) state.cache.themeUpdates = upd.themes;
-			if ( upd ) state.cache.translationUpdates = upd.translations || 0;
+			if ( upd ) {
+				state.cache.translationUpdates = upd.translations || 0;
+				state.cache.translationGroups = Array.isArray( upd.translationGroups ) ? upd.translationGroups : [];
+			}
 			return !! map[ key ];
 		};
 
@@ -16831,16 +16837,18 @@
 		return pluginUpdateChain;
 	}
 
-	const extTabsHtml = () => B.caps.themes || B.caps.settings ? `
+	const extTabsHtml = () => B.caps.themes || B.caps.settings || B.caps.updateLanguages ? `
 			<div class="minn-tabs">
 				<button class="minn-tab${ state.extTab === 'plugins' ? ' active' : '' }" data-xtab="plugins">${ esc( __( 'Plugins' ) ) }</button>
 				${ B.caps.themes ? `<button class="minn-tab${ state.extTab === 'themes' ? ' active' : '' }" data-xtab="themes">${ esc( __( 'Themes' ) ) }</button>` : '' }
+				${ B.caps.updateLanguages ? `<button class="minn-tab minn-translation-tab${ state.extTab === 'translations' ? ' active' : '' }" data-xtab="translations">${ esc( __( 'Translations' ) ) }${ state.cache.translationUpdates ? `<span class="minn-tab-count">${ esc( state.cache.translationUpdates ) }</span>` : '' }</button>` : '' }
 				${ B.caps.licenses ? `<button class="minn-tab${ state.extTab === 'licenses' ? ' active' : '' }" data-xtab="licenses">${ esc( __( 'Licenses' ) ) }</button>` : '' }
 			</div>` : '';
 
-	/** Loading shell that keeps Plugins/Themes/Licenses tabs painted. */
+	/** Loading shell that keeps the Extensions tabs painted. */
 	function extTabLoadingHtml( tab ) {
 		const msg = tab === 'themes' ? __( 'Loading themes…' )
+			: tab === 'translations' ? __( 'Loading translations…' )
 			: tab === 'licenses' ? __( 'Loading licenses…' )
 			: __( 'Loading extensions…' );
 		return `<div class="minn-toolbar minn-toolbar-views">${ extTabsHtml() }</div><div class="minn-loading">${ msg }</div>`;
@@ -16864,6 +16872,7 @@
 			view.innerHTML = `<div class="minn-toolbar minn-toolbar-views">${ extTabsHtml() }</div>`;
 		}
 		const msg = tab === 'themes' ? __( 'Loading themes…' )
+			: tab === 'translations' ? __( 'Loading translations…' )
 			: tab === 'licenses' ? __( 'Loading licenses…' )
 			: __( 'Loading extensions…' );
 		const loading = document.createElement( 'div' );
@@ -16886,10 +16895,11 @@
 				// autofocus like a navigation (Themes tab didn't focus).
 				searchFocusArmed = true;
 				const cached = next === 'themes' ? state.cache.themes
+					: next === 'translations' ? state.cache.translationGroups
 					: next === 'licenses' ? state.cache.licenses
 					: state.cache.plugins;
 				// Cached tab: instant swap. Cold first visit: soft-reload so the
-				// Plugins/Themes/Licenses strip never unmounts.
+				// The Extensions tab strip never unmounts.
 				if ( cached ) {
 					renderExtensions();
 					return;
@@ -16899,6 +16909,7 @@
 					view,
 					paintChrome: () => paintExtTabLoading( view, next ),
 					load: () => ( next === 'themes' ? loadThemes()
+						: next === 'translations' ? loadTranslationUpdates()
 						: next === 'licenses' ? loadLicenses()
 						: loadPlugins() ),
 					render: renderExtensions,
@@ -17110,16 +17121,23 @@
 		if ( res.themeUpdates && typeof res.themeUpdates === 'object' ) {
 			state.cache.themeUpdates = res.themeUpdates;
 		}
+		if ( typeof res.translations === 'number' ) {
+			state.cache.translationUpdates = res.translations;
+		}
+		if ( Array.isArray( res.translationGroups ) ) {
+			state.cache.translationGroups = res.translationGroups;
+		}
 		const pCount = Object.keys( state.cache.pluginUpdates || {} ).length;
 		const tCount = Object.keys( state.cache.themeUpdates || {} ).length;
+		const lCount = state.cache.translationUpdates || 0;
 		const dot = $( '#minn-plugin-dot' );
-		if ( dot ) dot.hidden = ! pCount && ! tCount;
+		if ( dot ) dot.hidden = ! pCount && ! tCount && ! lCount;
 		// Notifications are built from the same update_plugins transient the
 		// force-check just refreshed — drop the cache and re-pull so the
 		// Updates tab picks up newly-unlocked commercial updates.
 		state.cache.notifications = null;
 		loadNotifications().catch( () => {} );
-		const out = { update: res.update || null, plugins: pCount, themes: tCount };
+		const out = { update: res.update || null, plugins: pCount, themes: tCount, translations: lCount };
 		if ( opts && opts.refetch ) {
 			// Second-pass fetch on a clean request after the license is
 			// already stored — vendors whose key is request-scoped need this.
@@ -17129,7 +17147,7 @@
 				const p2 = Object.keys( state.cache.pluginUpdates || {} ).length;
 				const t2 = Object.keys( state.cache.themeUpdates || {} ).length;
 				const d = $( '#minn-plugin-dot' );
-				if ( d ) d.hidden = ! p2 && ! t2;
+				if ( d ) d.hidden = ! p2 && ! t2 && ! state.cache.translationUpdates;
 				if ( state.route === 'extensions' && state.extTab === 'plugins' ) {
 					renderExtensions();
 				}
@@ -17145,7 +17163,7 @@
 		try {
 			const res = await api( 'minn-admin/v1/check-updates', { method: 'POST', body: '{}' } );
 			const applied = applyForcedUpdateCheck( res );
-			const n = ( applied?.plugins || 0 ) + ( applied?.themes || 0 );
+			const n = ( applied?.plugins || 0 ) + ( applied?.themes || 0 ) + ( applied?.translations || 0 );
 			toast( n
 				? `${ n } update${ n === 1 ? '' : 's' } available`
 				: __( 'Everything is up to date' ) );
@@ -17154,6 +17172,7 @@
 			if ( state.route === 'extensions' ) {
 				if ( state.extTab === 'plugins' ) renderExtensions();
 				else if ( state.extTab === 'themes' ) renderThemes();
+				else if ( state.extTab === 'translations' ) renderTranslations();
 			}
 		} catch ( e ) {
 			toast( e.message || __( 'Could not check for updates' ), true );
@@ -17723,6 +17742,7 @@
 
 	function renderExtensions() {
 		if ( state.extTab === 'themes' && B.caps.themes ) return renderThemes();
+		if ( state.extTab === 'translations' && B.caps.updateLanguages ) return renderTranslations();
 		if ( state.extTab === 'licenses' && B.caps.licenses ) return renderLicenses();
 		const view = $( '#minn-view' );
 		const plugins = state.cache.plugins;
@@ -18441,6 +18461,123 @@
 		} else {
 			paintPluginUpdateQueue();
 		}
+	}
+
+	async function loadTranslationUpdates() {
+		const summary = await api( 'minn-admin/v1/translations' );
+		state.cache.translationUpdates = ( summary && summary.count ) || 0;
+		state.cache.translationGroups = ( summary && Array.isArray( summary.groups ) ) ? summary.groups : [];
+		return state.cache.translationGroups;
+	}
+
+	function translationBreakdown( group ) {
+		const counts = group.counts || {};
+		const bits = [];
+		if ( counts.plugin ) {
+			/* translators: %d is a number of plugin translation packages. */
+			bits.push( sprintf( _n( '%d plugin translation', '%d plugin translations', counts.plugin ), counts.plugin ) );
+		}
+		if ( counts.theme ) {
+			/* translators: %d is a number of theme translation packages. */
+			bits.push( sprintf( _n( '%d theme translation', '%d theme translations', counts.theme ), counts.theme ) );
+		}
+		if ( counts.core ) {
+			bits.push( __( 'WordPress translation' ) );
+		}
+		/* translators: %d is a number of translation packages. */
+		return bits.join( ' · ' ) || sprintf( _n( '%d translation', '%d translations', group.total || 0 ), group.total || 0 );
+	}
+
+	function translationLanguageName( group ) {
+		const locale = String( group.locale || '' );
+		if ( group.name && group.name !== locale ) return group.name;
+		if ( ! locale || typeof Intl.DisplayNames !== 'function' ) return locale;
+		const parts = locale.split( '_' ).filter( Boolean );
+		const target = parts.length > 1 ? `${ parts[ 0 ] }-${ parts[ 1 ] }` : parts[ 0 ];
+		try {
+			return new Intl.DisplayNames( [ uiLocale() ], { type: 'language' } ).of( target ) || locale;
+		} catch ( e ) {
+			return locale;
+		}
+	}
+
+	async function performTranslationUpdates() {
+		if ( state.updatingTranslations ) return null;
+		state.updatingTranslations = true;
+		if ( state.route === 'extensions' && state.extTab === 'translations' ) renderTranslations();
+		if ( state.notifOpen ) renderOverlays();
+		try {
+			const result = await api( 'minn-admin/v1/translations/update', { method: 'POST' } );
+			state.cache.translationUpdates = ( result && result.remaining ) || 0;
+			state.cache.translationGroups = ( result && Array.isArray( result.groups ) ) ? result.groups : [];
+			state.cache.notifications = null;
+			await loadNotifications();
+			const done = ( result && result.updated ) || 0;
+			const remaining = state.cache.translationUpdates;
+			if ( remaining ) {
+				/* translators: 1: translation packages updated. 2: translation packages still waiting. */
+				toast( sprintf( _n( 'Updated %1$d translation package. %2$d still need attention.', 'Updated %1$d translation packages. %2$d still need attention.', done ), done, remaining ), true );
+			} else {
+				/* translators: %d is a number of translation packages. */
+				toast( sprintf( _n( '%d translation updated', '%d translations updated', done ), done ) );
+			}
+			return result;
+		} finally {
+			state.updatingTranslations = false;
+			if ( state.route === 'extensions' && state.extTab === 'translations' ) renderTranslations();
+			if ( state.notifOpen ) renderOverlays();
+		}
+	}
+
+	function renderTranslations() {
+		const view = $( '#minn-view' );
+		const groups = state.cache.translationGroups;
+		if ( groups == null ) {
+			if ( softLoadPending( 'extensions' ) ) return;
+			view.innerHTML = extTabLoadingHtml( 'translations' );
+			bindExtTabs( view );
+			loadTranslationUpdates().then( renderIfCurrent( 'extensions' ) ).catch( showErr );
+			return;
+		}
+		const total = state.cache.translationUpdates || 0;
+		const busy = state.updatingTranslations;
+		const displayGroups = groups.map( ( group ) => ( { ...group, displayName: translationLanguageName( group ) } ) )
+			.sort( ( a, b ) => a.displayName.localeCompare( b.displayName, uiLocale() ) );
+		/* translators: %d is a number of translation packages. */
+		const summary = sprintf( _n( 'WordPress found %d translation package across the languages installed on this site.', 'WordPress found %d translation packages across the languages installed on this site.', total ), formattedNumber( total ) );
+		view.innerHTML = `
+		<div class="minn-toolbar minn-toolbar-views">
+			${ extTabsHtml() }
+			<span class="minn-translation-actions">
+				<button class="minn-btn-soft" id="minn-check-updates"${ busy ? ' disabled' : '' }>${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>
+				${ total ? `<button class="minn-btn-soft" id="minn-update-translations"${ busy ? ' disabled' : '' }>${ icon( 'refresh' ) } ${ esc( busy ? __( 'Updating translations…' ) : __( 'Update translations' ) ) }</button>` : '' }
+			</span>
+		</div>
+		${ total ? `
+		<div class="minn-card minn-translation-card">
+			<div class="minn-translation-head">
+				<div class="minn-translation-icon">${ icon( 'globe' ) }</div>
+				<div>
+					<div class="minn-translation-title">${ esc( __( 'Language packs ready to update' ) ) }</div>
+					<div class="minn-translation-sub">${ esc( summary ) }</div>
+				</div>
+			</div>
+			<div class="minn-translation-grid">
+				${ displayGroups.map( ( group ) => `
+				<div class="minn-translation-row">
+					<div>
+						<div class="minn-translation-name">${ esc( group.displayName || group.locale ) }</div>
+						<div class="minn-translation-meta"><code>${ esc( group.locale ) }</code> · ${ esc( translationBreakdown( group ) ) }</div>
+					</div>
+					<span class="minn-tab-count">${ esc( group.total || 0 ) }</span>
+				</div>` ).join( '' ) }
+			</div>
+		</div>` : `<div class="minn-card minn-empty">${ esc( __( 'Translations are up to date.' ) ) }</div>` }`;
+		bindExtTabs( view );
+		const check = $( '#minn-check-updates', view );
+		if ( check ) check.addEventListener( 'click', () => checkForUpdates( check ) );
+		const update = $( '#minn-update-translations', view );
+		if ( update ) update.addEventListener( 'click', () => performTranslationUpdates().catch( ( e ) => toast( e.message || __( 'Translation update failed.' ), true ) ) );
 	}
 
 	// Plugin file keys appear as "minn-admin/minn-admin" (list rows) or
@@ -33796,6 +33933,7 @@
 				const r = await api( 'minn-admin/v1/translations/update', { method: 'POST' } );
 				const did = ( r && r.updated ) || 0;
 				state.cache.translationUpdates = ( r && r.remaining ) || 0;
+				state.cache.translationGroups = ( r && Array.isArray( r.groups ) ) ? r.groups : [];
 				if ( did ) {
 					/* translators: %d is a number of translations. */
 					doneBits.push( sprintf( _n( '%d translation', '%d translations', did ), did ) );
@@ -33860,6 +33998,7 @@
 			/* translators: %s: the version on offer. */
 			return u.version ? sprintf( __( 'Update to %s' ), u.version ) : __( 'Update WordPress' );
 		}
+		if ( u.type === 'translations' ) return __( 'Update translations' );
 		return __( 'Update' );
 	}
 
@@ -33871,6 +34010,7 @@
 			return pluginUpdatePending.has( file ) || pluginUpdateCurrent === file;
 		}
 		if ( u.type === 'core' ) return !! state.updatingAll;
+		if ( u.type === 'translations' ) return !! state.updatingTranslations;
 		return false;
 	}
 
@@ -33930,6 +34070,9 @@
 					B.caps.core ? loadCoreStatus().catch( () => {} ) : Promise.resolve(),
 					loadNotifications(),
 				] );
+			} else if ( u.type === 'translations' ) {
+				if ( ! B.caps.updateLanguages ) throw new Error( __( 'You cannot update translations.' ) );
+				await performTranslationUpdates();
 			} else {
 				throw new Error( __( 'Unknown update type.' ) );
 			}
@@ -33979,6 +34122,7 @@
 				( n.update.type === 'plugin' && B.caps.update )
 				|| ( n.update.type === 'theme' && B.caps.updateThemes )
 				|| ( n.update.type === 'core' && B.caps.core )
+				|| ( n.update.type === 'translations' && B.caps.updateLanguages )
 			) ) {
 				const busy = notifUpdateBusy( n );
 				bits.push( `<button class="minn-notif-link minn-notif-update" data-nupd="${ esc( n.id ) }"${ busy ? ' disabled' : '' }>${ esc( notifUpdateLabel( n ) ) }</button>` );
@@ -39750,6 +39894,7 @@
 					// Take the user to the thing the notification is about.
 					if ( item.kind === 'comments' && B.caps.moderate ) go( 'comments' );
 					else if ( item.id.startsWith( 'theme-' ) && B.caps.themes ) { state.extTab = 'themes'; go( 'extensions' ); }
+					else if ( item.id.startsWith( 'translations-' ) && B.caps.updateLanguages ) { state.extTab = 'translations'; go( 'extensions' ); }
 					else if ( item.kind === 'updates' && B.caps.plugins ) go( 'extensions' );
 					else if ( item.id.startsWith( 'user-' ) && B.caps.users ) go( 'users' );
 					else if ( item.id.startsWith( 'core-' ) && B.caps.core ) go( 'extensions' );
@@ -40681,11 +40826,12 @@
 			state.cache.pluginUpdates = ( d.pluginUpdates && d.pluginUpdates.updates ) || {};
 			state.cache.themeUpdates = ( d.pluginUpdates && d.pluginUpdates.themes ) || {};
 			state.cache.translationUpdates = ( d.pluginUpdates && d.pluginUpdates.translations ) || 0;
+			state.cache.translationGroups = ( d.pluginUpdates && Array.isArray( d.pluginUpdates.translationGroups ) ) ? d.pluginUpdates.translationGroups : [];
 			state.cache.autoPlugins = ( d.pluginUpdates && d.pluginUpdates.auto ) || [];
 			state.cache.autoAllowed = !! ( d.pluginUpdates && d.pluginUpdates.autoAllowed );
 			if ( d.pluginMeta ) state.cache.pluginMeta = d.pluginMeta;
 			const dot = $( '#minn-plugin-dot' );
-			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! Object.keys( state.cache.themeUpdates ).length;
+			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! Object.keys( state.cache.themeUpdates ).length && ! state.cache.translationUpdates;
 		}
 		if ( B.caps.core && d.core ) {
 			state.cache.core = d.core;

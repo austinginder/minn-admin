@@ -945,6 +945,23 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-plugin-delete:hover { background: rgba(228,107,107,0.12); color: var(--red); }
 .minn-plugin-delete:disabled { opacity: 0.5; cursor: default; }
 
+.minn-translation-card { padding: 0; overflow: hidden; }
+.minn-translation-actions { margin-inline-start: auto; display: flex; gap: 8px; align-items: center; }
+.minn-translation-head { display: flex; align-items: center; gap: 13px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
+.minn-translation-icon { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--accent2); background: var(--accent-soft); }
+.minn-translation-icon svg { width: 21px; height: 21px; }
+.minn-translation-title { font-size: 16px; font-weight: 700; }
+.minn-translation-sub { margin-top: 3px; color: var(--text2); font-size: 13.5px; line-height: 1.45; }
+.minn-translation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.minn-translation-row { min-width: 0; padding: 13px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+.minn-translation-row:nth-child(odd) { border-inline-end: 1px solid var(--border); }
+.minn-translation-row:nth-last-child(-n+2) { border-bottom: none; }
+.minn-translation-row:nth-last-child(2):nth-child(even) { border-bottom: 1px solid var(--border); }
+.minn-translation-row > div { min-width: 0; flex: 1; }
+.minn-translation-name { font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-translation-meta { margin-top: 2px; color: var(--text3); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-translation-meta code { color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+
 /* Busy state for cards while a background operation runs */
 .minn-busy { opacity: 0.45; pointer-events: none; animation: minnPulse 1.4s ease infinite; }
 
@@ -4226,6 +4243,9 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   .minn-nav-btn, .minn-search-btn { justify-content: center; }
   .minn-stats { grid-template-columns: repeat(2, 1fr); }
   .minn-dash-grid, .minn-plugin-grid, .minn-editor, .minn-settings, .minn-sys-grid { grid-template-columns: 1fr; }
+  .minn-translation-grid { grid-template-columns: 1fr; }
+  .minn-translation-row:nth-child(odd) { border-inline-end: none; }
+  .minn-translation-row:nth-last-child(2) { border-bottom: 1px solid var(--border); }
 }
 
 /* No hover on touch: media prev/next arrows must be visible without it. */
@@ -4247,6 +4267,9 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
 
   /* Toolbars wrap: tabs get their own full-width (scrolling) row, search stretches. */
   .minn-toolbar { flex-wrap: wrap; gap: 8px; }
+  .minn-translation-tab .minn-tab-count { display: none; }
+  .minn-translation-actions { width: 100%; margin-inline-start: 0; }
+  .minn-translation-actions .minn-btn-soft { flex: 1 1 0; min-width: 0; justify-content: center; padding-inline: 8px; font-size: 13px; }
   .minn-tabscroll, .minn-toolbar > .minn-tabs { flex: 1 1 100%; }
   .minn-toolbar > .minn-tabs.minn-tabs-aux { flex: 0 0 auto; }
   .minn-toolbar-views .minn-type-select { flex: 1 1 auto; max-width: none; }

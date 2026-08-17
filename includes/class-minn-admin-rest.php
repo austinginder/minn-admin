@@ -417,6 +417,20 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/translations',
+			array(
+				'methods'             => 'GET',
+				'callback'            => function () {
+					return rest_ensure_response( self::translation_update_summary() );
+				},
+				'permission_callback' => function () {
+					return current_user_can( 'update_languages' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/translations/update',
 			array(
 				'methods'             => 'POST',
@@ -3613,7 +3627,70 @@ class Minn_Admin_REST {
 		return $out;
 	}
 
+	/**
+	 * Pending language packs, grouped by locale for the Extensions UI.
+	 *
+	 * Core exposes one update per component and locale. A multilingual site can
+	 * therefore have hundreds waiting, which is useful for the upgrader but too
+	 * noisy for a flat interface. Keep the exact package count while returning a
+	 * compact locale summary. Package URLs never leave the server.
+	 *
+	 * @return array{count:int,groups:array<int,array<string,mixed>>}
+	 */
+	public static function translation_update_summary() {
+		if ( ! current_user_can( 'update_languages' ) ) {
+			return array( 'count' => 0, 'groups' => array() );
+		}
+
+		$pending = (array) wp_get_translation_updates();
+		$labels  = array();
+		foreach ( Minn_Admin::available_languages() as $language ) {
+			if ( ! empty( $language[0] ) ) {
+				$labels[ $language[0] ] = $language[1];
+			}
+		}
+
+		$groups = array();
+		foreach ( $pending as $update ) {
+			$update = (object) $update;
+			$locale = isset( $update->language ) ? preg_replace( '/[^A-Za-z0-9_@.-]/', '', (string) $update->language ) : '';
+			if ( '' === $locale ) {
+				continue;
+			}
+			if ( ! isset( $groups[ $locale ] ) ) {
+				$groups[ $locale ] = array(
+					'locale' => $locale,
+					'name'   => isset( $labels[ $locale ] ) ? $labels[ $locale ] : $locale,
+					'total'  => 0,
+					'counts' => array(
+						'plugin' => 0,
+						'theme'  => 0,
+						'core'   => 0,
+					),
+				);
+			}
+			$type = isset( $update->type ) && in_array( $update->type, array( 'plugin', 'theme', 'core' ), true )
+				? $update->type
+				: '';
+			++$groups[ $locale ]['total'];
+			if ( $type ) {
+				++$groups[ $locale ]['counts'][ $type ];
+			}
+		}
+
+		$groups = array_values( $groups );
+		usort( $groups, function ( $a, $b ) {
+			return strcasecmp( $a['name'], $b['name'] );
+		} );
+
+		return array(
+			'count'  => count( $pending ),
+			'groups' => $groups,
+		);
+	}
+
 	public static function plugin_updates() {
+		$translation_summary = self::translation_update_summary();
 		$map = array();
 		foreach ( self::real_plugin_updates() as $file => $data ) {
 			$map[ $file ] = $data->new_version;
@@ -3628,7 +3705,8 @@ class Minn_Admin_REST {
 			array(
 				'updates'      => $map,
 				'themes'       => $theme_map,
-				'translations' => self::translation_update_count(),
+				'translations'      => $translation_summary['count'],
+				'translationGroups' => $translation_summary['groups'],
 				'auto'         => array_values( array_intersect(
 					(array) get_site_option( 'auto_update_plugins', array() ),
 					array_keys( self::all_plugins() )
@@ -3677,10 +3755,12 @@ class Minn_Admin_REST {
 		}
 		// Re-read rather than subtract: a pack that failed is still pending,
 		// and the client decides what to say from what is actually left.
+		$summary = self::translation_update_summary();
 		return rest_ensure_response(
 			array(
 				'updated'   => $done,
-				'remaining' => count( (array) wp_get_translation_updates() ),
+				'remaining' => $summary['count'],
+				'groups'    => $summary['groups'],
 			)
 		);
 	}

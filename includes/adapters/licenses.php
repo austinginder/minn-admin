@@ -4421,7 +4421,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'POST',
 			'permission_callback' => function () {
-				return current_user_can( 'update_plugins' ) || current_user_can( 'update_themes' );
+				return current_user_can( 'update_plugins' ) || current_user_can( 'update_themes' ) || current_user_can( 'update_languages' );
 			},
 			'callback'            => function () {
 				try {
@@ -4429,12 +4429,15 @@ add_action( 'rest_api_init', function () {
 				} catch ( \Throwable $e ) {
 					return new WP_Error( 'check_failed', __( 'Could not check for updates.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
+				$translations = Minn_Admin_REST::translation_update_summary();
 				return rest_ensure_response( array(
-					'ok'             => true,
-					'pluginUpdates'  => $checked['plugins'],
-					'themeUpdates'   => $checked['themes'],
-					'plugins'        => count( $checked['plugins'] ),
-					'themes'         => count( $checked['themes'] ),
+					'ok'                => true,
+					'pluginUpdates'     => $checked['plugins'],
+					'themeUpdates'      => $checked['themes'],
+					'translations'      => $translations['count'],
+					'translationGroups' => $translations['groups'],
+					'plugins'           => count( $checked['plugins'] ),
+					'themes'            => count( $checked['themes'] ),
 				) );
 			},
 		)
