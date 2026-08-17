@@ -79,6 +79,33 @@
 		lastY = y;
 	}, { passive: true } );
 
+	/* ===== Yield to site overlays =====
+	 * The bar's z-index has to beat theme sticky headers, which means it also
+	 * beats most theme lightboxes and full-screen menus — floating over an
+	 * open overlay breaks it. Instead of a z-index war, the bar yields: probe
+	 * the viewport CENTER for a fixed, viewport-sized ancestor that is not
+	 * ours (one hit test plus a few style reads — cheap), on a slow interval
+	 * plus right after the interactions that open and close overlays. */
+	function overlayOpen() {
+		const el = document.elementFromPoint( innerWidth / 2, innerHeight / 2 );
+		if ( ! el || root.contains( el ) ) return false;
+		for ( let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement ) {
+			if ( 'fixed' === getComputedStyle( n ).position ) {
+				const r = n.getBoundingClientRect();
+				if ( r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9 ) return true;
+			}
+		}
+		return false;
+	}
+	function syncOverlay() {
+		if ( bar ) bar.classList.toggle( 'minn-bar-yield', overlayOpen() );
+	}
+	setInterval( syncOverlay, 700 );
+	document.addEventListener( 'click', () => setTimeout( syncOverlay, 120 ), true );
+	document.addEventListener( 'keydown', ( event ) => {
+		if ( 'Escape' === event.key ) setTimeout( syncOverlay, 120 );
+	}, true );
+
 	/* ===== Intents: hand off to the app (palette, create, notifications) ===== */
 	function goWithIntent( intent ) {
 		try {
@@ -206,6 +233,7 @@
 		pencil: '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>',
 		plus: '<path d="M12 5v14M5 12h14"/>',
 		moon: '<path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/>',
+		refresh: '<path d="M18.4 5.6a9 9 0 1 0 .8 8.4"/><path d="M19 3v5h-5"/>',
 		wp: '<path fill="currentColor" stroke-width="0" d="M21.469 6.825c.84 1.537 1.318 3.3 1.318 5.175 0 3.979-2.156 7.456-5.363 9.325l3.295-9.527c.615-1.54.82-2.771.82-3.864 0-.405-.026-.78-.07-1.11m-7.981.105c.647-.03 1.232-.105 1.232-.105.582-.075.514-.93-.067-.899 0 0-1.755.135-2.88.135-1.064 0-2.85-.15-2.85-.15-.585-.03-.661.855-.075.885 0 0 .54.061 1.125.09l1.68 4.605-2.37 7.08L5.354 6.9c.649-.03 1.234-.1 1.234-.1.585-.075.516-.93-.065-.896 0 0-1.746.138-2.874.138-.2 0-.438-.008-.69-.015C4.911 3.15 8.235 1.215 12 1.215c2.809 0 5.365 1.072 7.286 2.833-.046-.003-.091-.009-.141-.009-1.06 0-1.812.923-1.812 1.914 0 .89.513 1.643 1.06 2.531.411.72.89 1.643.89 2.977 0 .915-.354 1.994-.821 3.479l-1.075 3.585-3.9-11.61.001.014zM12 22.784c-1.059 0-2.081-.153-3.048-.437l3.237-9.406 3.315 9.087c.024.053.05.101.078.149-1.12.393-2.325.607-3.582.607M1.211 12c0-1.564.336-3.05.935-4.39L7.29 21.709C3.694 19.96 1.212 16.271 1.211 12M12 0C5.385 0 0 5.385 0 12s5.385 12 12 12 12-5.385 12-12S18.615 0 12 0"/>',
 	};
 	const icon = ( key ) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ( ICONS[ key ] || ICONS.doc ) + '</svg>';
@@ -321,9 +349,58 @@
 		root.setAttribute( 'data-minn-theme', cur );
 	}
 
+	/* ===== Toast: transient feedback under the bar ===== */
+	let toastTimer = 0;
+	function barToast( msg ) {
+		let t = document.getElementById( 'minn-bar-toast' );
+		if ( ! t ) {
+			t = document.createElement( 'div' );
+			t.id = 'minn-bar-toast';
+			t.setAttribute( 'role', 'status' );
+			root.appendChild( t );
+		}
+		t.textContent = msg;
+		t.classList.add( 'show' );
+		clearTimeout( toastTimer );
+		toastTimer = setTimeout( () => t.classList.remove( 'show' ), 4500 );
+	}
+
+	/* ===== Cache purge: the app's one-request-per-provider discipline.
+	 * A purge that resets OPcache recycles the PHP worker and drops the
+	 * browser's kept-alive sockets, so each provider gets its own request,
+	 * a network drop retries once on a fresh socket, and a second drop
+	 * counts as purged (the purge itself is what killed the reply). */
+	async function runCachePurge() {
+		const providers = CFG.purge || [];
+		if ( ! providers.length ) return;
+		barToast( I18N.purging || 'Clearing cache…' );
+		const purged = [];
+		const failed = [];
+		for ( const p of providers ) {
+			const attempt = () => api( 'minn-admin/v1/cache/purge', { method: 'POST', body: JSON.stringify( { provider: p.id } ) } );
+			try {
+				const r = await attempt();
+				( r.purged.length ? purged : failed ).push( p.name );
+			} catch ( e ) {
+				if ( ! ( e instanceof TypeError ) ) { failed.push( p.name ); continue; }
+				await new Promise( ( res ) => setTimeout( res, 1200 ) );
+				try {
+					const r = await attempt();
+					( r.purged.length ? purged : failed ).push( p.name );
+				} catch ( e2 ) {
+					purged.push( p.name );
+				}
+			}
+		}
+		barToast( failed.length
+			? ( I18N.purgeFail || 'Cache cleared (%1$s); failed: %2$s' ).replace( '%1$s', purged.join( ', ' ) ).replace( '%2$s', failed.join( ', ' ) )
+			: ( I18N.purged || 'Cache cleared (%s)' ).replace( '%s', purged.join( ', ' ) ) );
+	}
+
 	function runCommand( c ) {
 		if ( ! c ) return;
 		if ( 'theme' === c.kind ) { closePalette(); toggleThemePref(); return; }
+		if ( 'purge' === c.kind ) { closePalette(); runCachePurge(); return; }
 		if ( 'intent' === c.kind ) { goWithIntent( c.value ); return; }
 		location.href = c.value;
 	}

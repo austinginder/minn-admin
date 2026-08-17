@@ -12,7 +12,8 @@
  *   - the status slot is exception-only: empty on a public site, a chip in
  *     maintenance mode, and the chip's fix really turns the mode off
  */
-const { launch, login, createPost, deletePost, reporter, BASE } = require( './helpers' );
+const { launch, login, createPost, deletePost, reporter, BASE, WP } = require( './helpers' );
+const { execSync } = require( 'child_process' );
 
 ( async () => {
 	const t = reporter( 'admin-bar' );
@@ -210,6 +211,104 @@ const { launch, login, createPost, deletePost, reporter, BASE } = require( './he
 		t.check( 'discouraged search engines raise the blue chip',
 			chip2 && chip2.tone === 'blue' && /Hidden from search/.test( chip2.text ), JSON.stringify( chip2 ) );
 		await setSetting( { blog_public: 1 } );
+
+		// Builder-aware Edit: a page whose canvas Elementor owns edits in
+		// Elementor — Minn's editor would only open a read-only fence, and on
+		// the front end "edit this page" means the tool that renders it.
+		// Created through the captured auth — createPost() needs window.MINN,
+		// which only exists inside the app, and the page is on the front end.
+		draftId = await page.evaluate( async ( { a, title } ) => {
+			const r = await fetch( a.rest + 'wp/v2/posts', {
+				method: 'POST', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': a.nonce },
+				body: JSON.stringify( { title, content: '<p>Managed by a builder.</p>', status: 'publish' } ),
+			} );
+			return ( await r.json() ).id;
+		}, { a: auth, title: 'Minn bar builder fixture ' + Date.now() } );
+		execSync( `wp --path=${ WP } post meta update ${ draftId } _elementor_data "[]"`, { stdio: 'ignore' } );
+		execSync( `wp --path=${ WP } post meta update ${ draftId } _elementor_edit_mode builder`, { stdio: 'ignore' } );
+		const builderLink = await page.evaluate( async ( { a, id } ) => {
+			const r = await fetch( a.rest + 'wp/v2/posts/' + id + '?_fields=link', {
+				headers: { 'X-WP-Nonce': a.nonce }, credentials: 'same-origin',
+			} );
+			return ( await r.json() ).link;
+		}, { a: auth, id: draftId } );
+		await page.goto( builderLink, { waitUntil: 'domcontentloaded' } );
+		const builderEdit = await page.evaluate( () => {
+			const a = document.querySelector( '.minn-bar-edit' );
+			return a ? { href: a.getAttribute( 'href' ), text: a.textContent.trim() } : null;
+		} );
+		t.check( 'a builder-owned page edits in its builder',
+			builderEdit && /Edit in Elementor/.test( builderEdit.text ) && builderEdit.href.includes( 'action=elementor' ),
+			JSON.stringify( builderEdit ) );
+		const builderCmd = await page.evaluate( () =>
+			( ( window.MINN_BAR || {} ).commands || [] ).find( ( c ) => /Edit in Elementor/.test( c.title ) ) || null );
+		t.check( 'the palette Edit command follows the builder too',
+			builderCmd && builderCmd.value.includes( 'action=elementor' ), JSON.stringify( builderCmd ) );
+
+		// Cache purge from the palette: the fixture provider's REST-exposed
+		// counter proves a real purge ran, and the toast reports it.
+		const purgeCount = () => page.evaluate( async ( a ) => {
+			const r = await fetch( a.rest + 'wp/v2/settings', {
+				headers: { 'X-WP-Nonce': a.nonce }, credentials: 'same-origin',
+			} );
+			return parseInt( ( await r.json() ).minn_fixture_cache_purged || '0', 10 );
+		}, auth );
+		const purgesBefore = await purgeCount();
+		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.click( '#minn-bar-search' );
+		await page.waitForSelector( '#minn-bar-palette.open', { timeout: 10000 } );
+		await page.keyboard.type( 'clear site' );
+		await page.waitForFunction( () => Array.from( document.querySelectorAll( '.minn-bar-pal-row' ) )
+			.some( ( r ) => /Clear site cache/.test( r.textContent ) ), null, { timeout: 10000 } );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '.minn-bar-pal-row' ) )
+				.find( ( r ) => /Clear site cache/.test( r.textContent ) ).click();
+		} );
+		await page.waitForFunction( () => {
+			const el = document.getElementById( 'minn-bar-toast' );
+			return el && el.classList.contains( 'show' ) && /Cache cleared/.test( el.textContent );
+		}, null, { timeout: 45000 } );
+		const purgesAfter = await purgeCount();
+		t.check( 'palette cache purge really purges (fixture counter moved)',
+			purgesAfter > purgesBefore, purgesBefore + ' -> ' + purgesAfter );
+
+		// Overlay yield: a site lightbox (fixed, viewport-sized, not ours)
+		// makes the bar step aside instead of floating above it; closing the
+		// overlay brings the bar back.
+		await page.evaluate( () => {
+			const o = document.createElement( 'div' );
+			o.id = 'suite-lightbox';
+			o.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.8);';
+			document.body.appendChild( o );
+		} );
+		await page.waitForFunction( () => document.getElementById( 'minn-bar' ).classList.contains( 'minn-bar-yield' ), null, { timeout: 5000 } );
+		t.check( 'the bar yields to an open full-screen overlay', true );
+		await page.evaluate( () => document.getElementById( 'suite-lightbox' ).remove() );
+		await page.waitForFunction( () => ! document.getElementById( 'minn-bar' ).classList.contains( 'minn-bar-yield' ), null, { timeout: 5000 } );
+		t.check( 'closing the overlay brings the bar back', true );
+
+		// Phones: the floating pill de-floats into a full-width strip (the
+		// float is a desktop treatment) and the push-down shrinks to match.
+		await page.setViewportSize( { width: 390, height: 844 } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		const mob = await page.evaluate( () => {
+			const b = document.getElementById( 'minn-bar' );
+			const r = b.getBoundingClientRect();
+			return {
+				top: r.top,
+				left: r.left,
+				width: r.width,
+				vw: innerWidth,
+				radius: getComputedStyle( b ).borderRadius,
+				margin: getComputedStyle( document.documentElement ).marginTop,
+			};
+		} );
+		t.check( 'mobile: full-width strip welded to the top',
+			mob.top === 0 && mob.left === 0 && Math.abs( mob.width - mob.vw ) < 1 && mob.radius === '0px',
+			JSON.stringify( mob ) );
+		t.check( 'mobile: page offset matches the strip height', mob.margin === '48px', mob.margin );
+		await page.setViewportSize( { width: 1280, height: 800 } );
 
 		// Off again: everything back to core.
 		await setFrontBar( false );

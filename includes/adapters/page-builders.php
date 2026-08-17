@@ -250,6 +250,37 @@ function minn_admin_page_builders() {
 }
 
 /**
+ * The builder managing one post, resolved through the detector table.
+ * Shared by the minn_builder REST field and the front-end bar's contextual
+ * Edit; callers do their own capability gating.
+ *
+ * @param int|WP_Post $post Post (or ID) to resolve.
+ * @return array|null { id, name, edit_url, owns_content, active }
+ */
+function minn_admin_builder_for_post( $post ) {
+	$post = get_post( $post );
+	if ( ! $post ) {
+		return null;
+	}
+	foreach ( minn_admin_page_builders() as $id => $b ) {
+		if ( ! call_user_func( $b['detect'], $post ) ) {
+			continue;
+		}
+		$owns = isset( $b['owns_post'] )
+			? (bool) call_user_func( $b['owns_post'], $post )
+			: (bool) $b['owns_content'];
+		return array(
+			'id'           => $id,
+			'name'         => $b['name'],
+			'edit_url'     => (string) call_user_func( $b['edit_url'], $post ),
+			'owns_content' => $owns,
+			'active'       => ! isset( $b['active'] ) || (bool) $b['active'],
+		);
+	}
+	return null;
+}
+
+/**
  * Active builders for the boot payload — just what the + New menu needs.
  *
  * @return array[] [ { id, name } ]
@@ -375,22 +406,7 @@ add_action(
 					if ( ! current_user_can( 'edit_post', $post->ID ) ) {
 						return null;
 					}
-					foreach ( minn_admin_page_builders() as $id => $b ) {
-						if ( ! call_user_func( $b['detect'], $post ) ) {
-							continue;
-						}
-						$owns = isset( $b['owns_post'] )
-							? (bool) call_user_func( $b['owns_post'], $post )
-							: (bool) $b['owns_content'];
-						return array(
-							'id'           => $id,
-							'name'         => $b['name'],
-							'edit_url'     => (string) call_user_func( $b['edit_url'], $post ),
-							'owns_content' => $owns,
-							'active'       => ! isset( $b['active'] ) || (bool) $b['active'],
-						);
-					}
-					return null;
+					return minn_admin_builder_for_post( $post );
 				},
 				'schema'       => array(
 					'type'        => array( 'object', 'null' ),

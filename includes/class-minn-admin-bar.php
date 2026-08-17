@@ -81,7 +81,9 @@ class Minn_Admin_Bar {
 			return;
 		}
 		// Floating pill: 48px bar + 10px inset, plus breathing room below.
-		echo '<style id="minn-bar-bump">html{margin-top:68px !important;scroll-padding-top:80px;}@media print{#minn-bar-root{display:none !important;}html{margin-top:0 !important;}}</style>' . "\n";
+		// Phones lose the float (bar.css welds the bar to the top at the same
+		// 640px breakpoint), so the offset is just the bar height there.
+		echo '<style id="minn-bar-bump">html{margin-top:68px !important;scroll-padding-top:80px;}@media (max-width:640px){html{margin-top:48px !important;scroll-padding-top:58px;}}@media print{#minn-bar-root{display:none !important;}html{margin-top:0 !important;}}</style>' . "\n";
 	}
 
 	private static function app_path( $path ) {
@@ -184,7 +186,7 @@ class Minn_Admin_Bar {
 	 * happen in PHP. kind: url (navigate) | intent (one-shot app handoff) |
 	 * theme (bar.js toggles the shared minn-theme preference).
 	 */
-	private static function commands( $edit_url, $edit_label ) {
+	private static function commands( $edit_url, $edit_label, $edit_hint ) {
 		$go      = __( 'Go to', 'minn-admin' );
 		$actions = __( 'Actions', 'minn-admin' );
 		$cmds    = array();
@@ -197,11 +199,23 @@ class Minn_Admin_Bar {
 			$cmds[] = array( 'group' => $go, 'icon' => 'gear', 'title' => __( 'Settings', 'minn-admin' ), 'hint' => __( 'Site settings in Minn', 'minn-admin' ), 'kind' => 'url', 'value' => self::app_path( 'settings' ) );
 		}
 		if ( $edit_url ) {
-			$cmds[] = array( 'group' => $actions, 'icon' => 'pencil', 'title' => $edit_label, 'hint' => __( 'Open this page in the Minn editor', 'minn-admin' ), 'kind' => 'url', 'value' => $edit_url );
+			$cmds[] = array( 'group' => $actions, 'icon' => 'pencil', 'title' => $edit_label, 'hint' => $edit_hint, 'kind' => 'url', 'value' => $edit_url );
 		}
 		$cmds[] = array( 'group' => $actions, 'icon' => 'plus', 'title' => __( 'Create a post', 'minn-admin' ), 'hint' => __( 'Start a new draft', 'minn-admin' ), 'kind' => 'intent', 'value' => 'new:posts' );
 		if ( current_user_can( 'edit_pages' ) ) {
 			$cmds[] = array( 'group' => $actions, 'icon' => 'plus', 'title' => __( 'Create a page', 'minn-admin' ), 'hint' => __( 'Start a new page', 'minn-admin' ), 'kind' => 'intent', 'value' => 'new:pages' );
+		}
+		$purgers = self::cache_purgers();
+		if ( $purgers ) {
+			$cmds[] = array(
+				'group' => $actions,
+				'icon'  => 'refresh',
+				/* translators: %s: comma-separated cache provider names. */
+				'title' => sprintf( __( 'Clear site cache (%s)', 'minn-admin' ), implode( ', ', wp_list_pluck( $purgers, 'name' ) ) ),
+				'hint'  => __( 'Purge every detected cache layer', 'minn-admin' ),
+				'kind'  => 'purge',
+				'value' => '',
+			);
 		}
 		$cmds[] = array( 'group' => $actions, 'icon' => 'moon', 'title' => __( 'Toggle appearance', 'minn-admin' ), 'hint' => __( 'Switch light or dark', 'minn-admin' ), 'kind' => 'theme', 'value' => '' );
 		$cmds[] = array( 'group' => $actions, 'icon' => 'wp', 'title' => __( 'Classic admin', 'minn-admin' ), 'hint' => __( 'Open wp-admin', 'minn-admin' ), 'kind' => 'url', 'value' => admin_url() );
@@ -220,16 +234,28 @@ class Minn_Admin_Bar {
 		return $out;
 	}
 
+	/**
+	 * Cache providers this user may purge from the bar — same detection the
+	 * app's ⌘K command rides ({ id, name } each, empty without the cap).
+	 */
+	private static function cache_purgers() {
+		if ( ! current_user_can( 'manage_options' ) || ! function_exists( 'minn_admin_cache_purgers_boot' ) ) {
+			return array();
+		}
+		return minn_admin_cache_purgers_boot();
+	}
+
 	private static function config() {
 		$status = self::status();
-		list( $edit_url, $edit_label ) = self::edit_target();
+		list( $edit_url, $edit_label, $edit_hint ) = self::edit_target();
 		return array(
 			'rest'        => esc_url_raw( rest_url() ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'app'         => Minn_Admin::app_url(),
 			'editorBase'  => self::app_path( 'editor' ),
 			'fix'         => $status && $status['fix'] ? $status['fix'] : null,
-			'commands'    => self::commands( $edit_url, $edit_label ),
+			'commands'    => self::commands( $edit_url, $edit_label, $edit_hint ),
+			'purge'       => self::cache_purgers(),
 			'types'       => self::search_types(),
 			'emptyNotifs' => __( 'All caught up.', 'minn-admin' ),
 			'i18n'        => array(
@@ -238,6 +264,11 @@ class Minn_Admin_Bar {
 				'empty'       => __( 'No matches. Try “content” or “settings”.', 'minn-admin' ),
 				'navigate'    => __( 'navigate', 'minn-admin' ),
 				'open'        => __( 'open', 'minn-admin' ),
+				'purging'     => __( 'Clearing cache…', 'minn-admin' ),
+				/* translators: %s: the providers that cleared. */
+				'purged'      => __( 'Cache cleared (%s)', 'minn-admin' ),
+				/* translators: 1: the providers that cleared. 2: the providers that failed. */
+				'purgeFail'   => __( 'Cache cleared (%1$s); failed: %2$s', 'minn-admin' ),
 			),
 		);
 	}
@@ -257,13 +288,19 @@ class Minn_Admin_Bar {
 
 	/**
 	 * Contextual Edit action: the queried singular object, when this user
-	 * can edit it and its type is REST-editable in Minn.
+	 * can edit it and its type is REST-editable in Minn. A page whose canvas
+	 * a builder OWNS (Elementor, Beaver Builder, Brizy…) edits in that
+	 * builder instead — Minn's editor would only open a read-only fence, and
+	 * on the front end "edit this page" means the tool that renders it.
+	 * Block-native builders (Etch, Divi 5) stay on the Minn editor, which
+	 * handles their markup as islands.
 	 *
-	 * @return array [ url|'' , label ]
+	 * @return array [ url|'' , label, hint ]
 	 */
 	private static function edit_target() {
 		$edit_url   = '';
 		$edit_label = __( 'Edit', 'minn-admin' );
+		$edit_hint  = __( 'Open this page in the Minn editor', 'minn-admin' );
 		if ( is_singular() ) {
 			$obj = get_queried_object();
 			if ( $obj instanceof WP_Post && current_user_can( 'edit_post', $obj->ID ) ) {
@@ -274,10 +311,22 @@ class Minn_Admin_Bar {
 						/* translators: %s: the post type's singular name (Page, Post, Product…). */
 						? sprintf( __( 'Edit %s', 'minn-admin' ), $pto->labels->singular_name )
 						: __( 'Edit', 'minn-admin' );
+					$builder = function_exists( 'minn_admin_builder_for_post' )
+						? minn_admin_builder_for_post( $obj )
+						: null;
+					// Inactive builder: keep the Minn editor, whose fence
+					// explains the state and points at Extensions.
+					if ( $builder && $builder['owns_content'] && $builder['active'] && $builder['edit_url'] ) {
+						$edit_url = $builder['edit_url'];
+						/* translators: %s: the page builder's name. */
+						$edit_label = sprintf( __( 'Edit in %s', 'minn-admin' ), $builder['name'] );
+						/* translators: %s: the page builder's name. */
+						$edit_hint = sprintf( __( 'This page is built with %s', 'minn-admin' ), $builder['name'] );
+					}
 				}
 			}
 		}
-		return array( $edit_url, $edit_label );
+		return array( $edit_url, $edit_label, $edit_hint );
 	}
 
 	public static function render() {
