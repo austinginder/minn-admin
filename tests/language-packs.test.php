@@ -26,7 +26,9 @@ $manifest = (object) array(
 	'download_url' => 'https://github.com/austinginder/minn-admin/releases/download/v0.30.0/minn-admin.zip',
 	'sha256'       => 'aaaa',
 	'translations' => array(
-		(object) array( 'language' => 'de_DE', 'version' => '0.30.0', 'updated' => '2026-08-14 00:00:00', 'package' => $ok_url, 'sha256' => 'bbbb' ),
+		// Deliberately newer than any pack a development site may already have;
+		// this gate is about wanted/verified offers, not installed-version skips.
+		(object) array( 'language' => 'de_DE', 'version' => '99.0.0', 'updated' => '2026-08-14 00:00:00', 'package' => $ok_url, 'sha256' => 'bbbb' ),
 		// No sha256: must be refused, not silently trusted.
 		(object) array( 'language' => 'fr_FR', 'version' => '0.30.0', 'updated' => '2026-08-14 00:00:00', 'package' => 'https://github.com/austinginder/minn-admin/releases/download/v0.30.0/minn-admin-fr_FR.zip' ),
 		// Foreign host.

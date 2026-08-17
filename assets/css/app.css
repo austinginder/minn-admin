@@ -950,17 +950,30 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-translation-head { display: flex; align-items: center; gap: 13px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
 .minn-translation-icon { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--accent2); background: var(--accent-soft); }
 .minn-translation-icon svg { width: 21px; height: 21px; }
+.minn-translation-icon.is-busy svg { animation: minn-upd-rot 1.1s linear infinite; }
 .minn-translation-title { font-size: 16px; font-weight: 700; }
 .minn-translation-sub { margin-top: 3px; color: var(--text2); font-size: 13.5px; line-height: 1.45; }
 .minn-translation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.minn-translation-row { min-width: 0; padding: 13px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+.minn-translation-row { min-width: 0; padding: 13px 20px; display: flex; align-items: center; gap: 12px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; color: var(--text); font: inherit; text-align: start; cursor: pointer; }
+.minn-translation-row:hover { background: var(--hover); }
+.minn-translation-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .minn-translation-row:nth-child(odd) { border-inline-end: 1px solid var(--border); }
 .minn-translation-row:nth-last-child(-n+2) { border-bottom: none; }
 .minn-translation-row:nth-last-child(2):nth-child(even) { border-bottom: 1px solid var(--border); }
-.minn-translation-row > div { min-width: 0; flex: 1; }
+.minn-translation-row.is-open { grid-column: 1 / -1; flex-wrap: wrap; border-inline-end: none; }
+.minn-translation-row-main { min-width: 0; flex: 1; }
 .minn-translation-name { font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-translation-meta { margin-top: 2px; color: var(--text3); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-translation-meta code { color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+.minn-translation-preview { margin-top: 4px; color: var(--text2); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-translation-chevron { display: flex; color: var(--text3); transition: transform 0.15s ease; }
+.minn-translation-chevron svg { width: 15px; height: 15px; }
+.minn-translation-row.is-open .minn-translation-chevron { transform: rotate(180deg); }
+.minn-translation-components { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 7px; padding-top: 12px; border-top: 1px solid var(--border); }
+.minn-translation-component { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel2); font-size: 12.5px; }
+.minn-translation-component > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.minn-translation-component code { margin-inline-start: auto; color: var(--text3); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+.minn-translation-kind { flex: none; color: var(--accent2); font-size: 10.5px; font-weight: 700; letter-spacing: 0.35px; text-transform: uppercase; }
 
 /* Busy state for cards while a background operation runs */
 .minn-busy { opacity: 0.45; pointer-events: none; animation: minnPulse 1.4s ease infinite; }

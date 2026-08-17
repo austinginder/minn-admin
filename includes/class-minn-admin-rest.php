@@ -3633,7 +3633,9 @@ class Minn_Admin_REST {
 	 * Core exposes one update per component and locale. A multilingual site can
 	 * therefore have hundreds waiting, which is useful for the upgrader but too
 	 * noisy for a flat interface. Keep the exact package count while returning a
-	 * compact locale summary. Package URLs never leave the server.
+	 * compact locale summary. Each locale keeps the component identity so the
+	 * interface can explain why one language may need dozens of files. Package
+	 * URLs never leave the server.
 	 *
 	 * @return array{count:int,groups:array<int,array<string,mixed>>}
 	 */
@@ -3648,6 +3650,25 @@ class Minn_Admin_REST {
 			if ( ! empty( $language[0] ) ) {
 				$labels[ $language[0] ] = $language[1];
 			}
+		}
+
+		$plugin_names = array();
+		foreach ( self::all_plugins() as $file => $data ) {
+			$directory = dirname( $file );
+			$slug      = '.' === $directory ? basename( $file, '.php' ) : $directory;
+			$name      = isset( $data['Name'] ) ? wp_strip_all_tags( (string) $data['Name'] ) : '';
+			if ( '' !== $slug && '' !== $name ) {
+				$plugin_names[ $slug ] = $name;
+			}
+			$text_domain = isset( $data['TextDomain'] ) ? sanitize_key( (string) $data['TextDomain'] ) : '';
+			if ( '' !== $text_domain && '' !== $name ) {
+				$plugin_names[ $text_domain ] = $name;
+			}
+		}
+
+		$theme_names = array();
+		foreach ( wp_get_themes() as $stylesheet => $theme ) {
+			$theme_names[ $stylesheet ] = wp_strip_all_tags( (string) $theme->get( 'Name' ) );
 		}
 
 		$groups = array();
@@ -3667,18 +3688,48 @@ class Minn_Admin_REST {
 						'theme'  => 0,
 						'core'   => 0,
 					),
+					'components' => array(),
 				);
 			}
 			$type = isset( $update->type ) && in_array( $update->type, array( 'plugin', 'theme', 'core' ), true )
 				? $update->type
 				: '';
+			$slug = isset( $update->slug ) ? sanitize_key( (string) $update->slug ) : '';
+			if ( 'core' === $type && '' === $slug ) {
+				$slug = 'wordpress';
+			}
+			$name = '';
+			if ( 'plugin' === $type && isset( $plugin_names[ $slug ] ) ) {
+				$name = $plugin_names[ $slug ];
+			} elseif ( 'theme' === $type && isset( $theme_names[ $slug ] ) ) {
+				$name = $theme_names[ $slug ];
+			} elseif ( 'core' === $type ) {
+				$name = 'WordPress';
+			} elseif ( '' !== $slug ) {
+				$name = ucwords( str_replace( array( '-', '_' ), ' ', $slug ) );
+			}
 			++$groups[ $locale ]['total'];
 			if ( $type ) {
 				++$groups[ $locale ]['counts'][ $type ];
+				$groups[ $locale ]['components'][] = array(
+					'type'    => $type,
+					'slug'    => $slug,
+					'name'    => '' !== $name ? $name : $slug,
+					'version' => isset( $update->version ) ? sanitize_text_field( (string) $update->version ) : '',
+				);
 			}
 		}
 
 		$groups = array_values( $groups );
+		foreach ( $groups as &$group ) {
+			usort( $group['components'], function ( $a, $b ) {
+				if ( $a['type'] !== $b['type'] ) {
+					return strcmp( $a['type'], $b['type'] );
+				}
+				return strcasecmp( $a['name'], $b['name'] );
+			} );
+		}
+		unset( $group );
 		usort( $groups, function ( $a, $b ) {
 			return strcasecmp( $a['name'], $b['name'] );
 		} );

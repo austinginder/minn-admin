@@ -51,6 +51,8 @@ const LANG = 'de_DE';
 		t.check( 'plugin-updates reports a waiting translation', upd.body.translations >= 1, JSON.stringify( upd.body.translations ) );
 		const german = ( upd.body.translationGroups || [] ).find( ( group ) => group.locale === LANG );
 		t.check( 'translation updates include a locale summary', !! german && german.total >= 1, JSON.stringify( german || upd.body.translationGroups ) );
+		const coreComponent = german && ( german.components || [] ).find( ( component ) => component.type === 'core' );
+		t.check( 'locale summary identifies the related component', !! coreComponent && coreComponent.name === 'WordPress', JSON.stringify( german ) );
 
 		// The bug in one assertion: plugins and themes can be perfectly clear
 		// and the site still owes a language pack.
@@ -103,12 +105,28 @@ const LANG = 'de_DE';
 		const translationView = await page.evaluate( () => document.querySelector( '#minn-view' ).innerText.replace( /\s+/g, ' ' ) );
 		t.check( 'the notice opens the Translations tab', /Translations/i.test( translationView ), translationView.slice( 0, 180 ) );
 		t.check( 'the pending locale is listed', translationView.includes( LANG ), translationView.slice( 0, 220 ) );
+		t.check( 'the package count explains component-language multiplication', /component/i.test( translationView ) && /separate download/i.test( translationView ), translationView.slice( 0, 320 ) );
+
+		await page.click( `[data-translation-locale="${ LANG }"]` );
+		await page.waitForSelector( `[data-translation-locale="${ LANG }"].is-open .minn-translation-component`, { timeout: 10000 } );
+		const expandedText = await page.locator( `[data-translation-locale="${ LANG }"]` ).innerText();
+		t.check( 'expanding a language names its WordPress component', /WordPress/.test( expandedText ), expandedText.slice( 0, 240 ) );
 
 		// --- the real install ------------------------------------------------
 		// A live download from wordpress.org. de_DE for the current core
 		// version is a real package, and installing it twice is harmless.
 		const response = page.waitForResponse( ( res ) => res.url().includes( '/minn-admin/v1/translations/update' ) && res.request().method() === 'POST', { timeout: 180000 } );
 		await page.click( '#minn-update-translations' );
+		await page.waitForFunction( () => {
+			const chip = document.querySelector( '#minn-upd-chip' );
+			return chip && ! chip.hidden && /translation/i.test( chip.innerText );
+		}, null, { timeout: 10000 } );
+		const busyFeedback = await page.evaluate( () => ( {
+			chip: document.querySelector( '#minn-upd-chip' ).innerText,
+			heading: document.querySelector( '.minn-translation-head' ).innerText.replace( /\s+/g, ' ' ),
+		} ) );
+		t.check( 'updating translations is visible in the top bar', /Updating.*translation/i.test( busyFeedback.chip ), JSON.stringify( busyFeedback ) );
+		t.check( 'the page explains that a large update can take time', /few minutes/i.test( busyFeedback.heading ), busyFeedback.heading );
 		const liveResponse = await response;
 		const ran = { status: liveResponse.status(), body: await liveResponse.json() };
 		t.check( 'the update route answers', 200 === ran.status, JSON.stringify( ran.body ).slice( 0, 140 ) );
@@ -121,6 +139,8 @@ const LANG = 'de_DE';
 		// pack that failed still counts as pending. The fixture re-offers on
 		// every read, so the honest answer here is still 1.
 		t.check( 'remaining is re-read rather than assumed zero', ran.body && typeof ran.body.remaining === 'number', JSON.stringify( ran.body ) );
+		await page.waitForFunction( () => document.querySelector( '#minn-upd-chip' ).hidden, null, { timeout: 30000 } );
+		t.check( 'the top-bar progress clears when the request finishes', true );
 
 		// --- the gate ----------------------------------------------------
 		// Without the capability the count is 0 rather than a leaked number.

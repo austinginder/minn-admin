@@ -941,6 +941,7 @@
 		extFilter: 'all',
 		extSearch: '',
 		updatingTranslations: false,
+		translationOpenLocale: '',
 		orderTab: 'any',
 		orderSearch: '',
 		orderView: 'list', // list | analytics
@@ -3583,6 +3584,11 @@
 		// Bulk-update progress chip → the notification panel's Updates tab,
 		// where the full phase label and the results land.
 		$( '#minn-upd-chip' ).addEventListener( 'click', () => {
+			if ( state.updatingTranslations ) {
+				state.extTab = 'translations';
+				go( 'extensions' );
+				return;
+			}
 			state.notifTab = 'updates';
 			if ( ! state.notifOpen ) {
 				toggleNotif();
@@ -17418,7 +17424,12 @@
 	function updateUpdChip() {
 		const chip = $( '#minn-upd-chip' );
 		if ( ! chip ) return;
-		const label = state.updatingAll || '';
+		const total = state.cache.translationUpdates || 0;
+		/* translators: %d is a number of translation packages currently updating. */
+		const translations = state.updatingTranslations
+			? sprintf( _n( 'Updating %d translation…', 'Updating %d translations…', total ), total )
+			: '';
+		const label = state.updatingAll || translations;
 		chip.hidden = ! label;
 		if ( label ) {
 			$( '#minn-upd-chip-text' ).textContent = label.replace( /…\s*$/, '' );
@@ -18501,9 +18512,28 @@
 		}
 	}
 
+	function translationComponentTypeLabel( type ) {
+		if ( type === 'plugin' ) return __( 'Plugin' );
+		if ( type === 'theme' ) return __( 'Theme' );
+		if ( type === 'core' ) return __( 'WordPress' );
+		return __( 'Component' );
+	}
+
+	function translationComponentPreview( group ) {
+		const components = Array.isArray( group.components ) ? group.components : [];
+		const names = components.slice( 0, 3 ).map( ( component ) => component.name || component.slug ).filter( Boolean );
+		if ( ! names.length ) return '';
+		const preview = names.join( ', ' );
+		const remaining = components.length - names.length;
+		if ( ! remaining ) return preview;
+		/* translators: 1: comma-separated component names. 2: number of additional components. */
+		return sprintf( __( '%1$s and %2$d more' ), preview, remaining );
+	}
+
 	async function performTranslationUpdates() {
 		if ( state.updatingTranslations ) return null;
 		state.updatingTranslations = true;
+		updateUpdChip();
 		if ( state.route === 'extensions' && state.extTab === 'translations' ) renderTranslations();
 		if ( state.notifOpen ) renderOverlays();
 		try {
@@ -18524,6 +18554,7 @@
 			return result;
 		} finally {
 			state.updatingTranslations = false;
+			updateUpdChip();
 			if ( state.route === 'extensions' && state.extTab === 'translations' ) renderTranslations();
 			if ( state.notifOpen ) renderOverlays();
 		}
@@ -18543,8 +18574,24 @@
 		const busy = state.updatingTranslations;
 		const displayGroups = groups.map( ( group ) => ( { ...group, displayName: translationLanguageName( group ) } ) )
 			.sort( ( a, b ) => a.displayName.localeCompare( b.displayName, uiLocale() ) );
-		/* translators: %d is a number of translation packages. */
-		const summary = sprintf( _n( 'WordPress found %d translation package across the languages installed on this site.', 'WordPress found %d translation packages across the languages installed on this site.', total ), formattedNumber( total ) );
+		const componentKeys = new Set();
+		displayGroups.forEach( ( group ) => {
+			( Array.isArray( group.components ) ? group.components : [] ).forEach( ( component ) => {
+				componentKeys.add( `${ component.type || '' }:${ component.slug || component.name || '' }` );
+			} );
+		} );
+		const componentCount = componentKeys.size;
+		const languageCount = displayGroups.length;
+		/* translators: %s is a localized number of translation packages. */
+		const summary = sprintf( _n( 'WordPress found %s translation package across the languages installed on this site.', 'WordPress found %s translation packages across the languages installed on this site.', total ), formattedNumber( total ) );
+		/* translators: %s is a localized number of plugins, themes, or WordPress components. */
+		const componentLabel = sprintf( _n( '%s component', '%s components', componentCount ), formattedNumber( componentCount ) );
+		/* translators: %s is a localized number of languages. */
+		const languageLabel = sprintf( _n( '%s language', '%s languages', languageCount ), formattedNumber( languageCount ) );
+		/* translators: 1: number of components. 2: number of languages. */
+		const explanation = sprintf( __( 'These belong to %1$s across %2$s. Each plugin, theme, or WordPress core translation is a separate download for each language.' ), componentLabel, languageLabel );
+		/* translators: %s is a localized number of translation packages currently updating. */
+		const busySummary = sprintf( _n( 'Updating %s language pack. WordPress installs each package separately, so this may take a few minutes.', 'Updating %s language packs. WordPress installs each package separately, so this may take a few minutes.', total ), formattedNumber( total ) );
 		view.innerHTML = `
 		<div class="minn-toolbar minn-toolbar-views">
 			${ extTabsHtml() }
@@ -18556,21 +18603,30 @@
 		${ total ? `
 		<div class="minn-card minn-translation-card">
 			<div class="minn-translation-head">
-				<div class="minn-translation-icon">${ icon( 'globe' ) }</div>
+				<div class="minn-translation-icon${ busy ? ' is-busy' : '' }">${ icon( busy ? 'refresh' : 'globe' ) }</div>
 				<div>
-					<div class="minn-translation-title">${ esc( __( 'Language packs ready to update' ) ) }</div>
-					<div class="minn-translation-sub">${ esc( summary ) }</div>
+					<div class="minn-translation-title">${ esc( busy ? __( 'Updating language packs…' ) : __( 'Language packs ready to update' ) ) }</div>
+					<div class="minn-translation-sub">${ esc( busy ? busySummary : `${ summary } ${ explanation }` ) }</div>
 				</div>
 			</div>
 			<div class="minn-translation-grid">
-				${ displayGroups.map( ( group ) => `
-				<div class="minn-translation-row">
-					<div>
+				${ displayGroups.map( ( group ) => {
+					const open = state.translationOpenLocale === group.locale;
+					const components = Array.isArray( group.components ) ? group.components : [];
+					return `
+				<button type="button" class="minn-translation-row${ open ? ' is-open' : '' }" data-translation-locale="${ esc( group.locale ) }" aria-expanded="${ open ? 'true' : 'false' }">
+					<div class="minn-translation-row-main">
 						<div class="minn-translation-name">${ esc( group.displayName || group.locale ) }</div>
 						<div class="minn-translation-meta"><code>${ esc( group.locale ) }</code> · ${ esc( translationBreakdown( group ) ) }</div>
+						${ components.length ? `<div class="minn-translation-preview">${ esc( translationComponentPreview( group ) ) }</div>` : '' }
 					</div>
 					<span class="minn-tab-count">${ esc( group.total || 0 ) }</span>
-				</div>` ).join( '' ) }
+					${ components.length ? `<span class="minn-translation-chevron">${ icon( 'chevron-down' ) }</span>` : '' }
+					${ open ? `<span class="minn-translation-components">
+						${ components.map( ( component ) => `<span class="minn-translation-component"><span class="minn-translation-kind">${ esc( translationComponentTypeLabel( component.type ) ) }</span><span>${ esc( component.name || component.slug ) }</span>${ component.version ? `<code>v${ esc( component.version ) }</code>` : '' }</span>` ).join( '' ) }
+					</span>` : '' }
+				</button>`;
+				} ).join( '' ) }
 			</div>
 		</div>` : `<div class="minn-card minn-empty">${ esc( __( 'Translations are up to date.' ) ) }</div>` }`;
 		bindExtTabs( view );
@@ -18578,6 +18634,12 @@
 		if ( check ) check.addEventListener( 'click', () => checkForUpdates( check ) );
 		const update = $( '#minn-update-translations', view );
 		if ( update ) update.addEventListener( 'click', () => performTranslationUpdates().catch( ( e ) => toast( e.message || __( 'Translation update failed.' ), true ) ) );
+		$$( '[data-translation-locale]', view ).forEach( ( row ) => {
+			row.addEventListener( 'click', () => {
+				state.translationOpenLocale = state.translationOpenLocale === row.dataset.translationLocale ? '' : row.dataset.translationLocale;
+				renderTranslations();
+			} );
+		} );
 	}
 
 	// Plugin file keys appear as "minn-admin/minn-admin" (list rows) or
