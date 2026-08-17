@@ -136,19 +136,46 @@
 			'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
 		}[ c ] ) );
 	}
+	// Where a notification takes you — the same kind/id mapping the app's own
+	// panel uses. Tab preselects (themes, translations) ride the intent flag;
+	// plain routes are plain URLs. appPath reuses editorBase so the pretty and
+	// plain-permalink forms both come out right.
+	const appPath = ( p ) => String( CFG.editorBase || '' ).replace( /editor$/, p );
+	function notifDestination( n ) {
+		const id = String( n.id || '' );
+		if ( 'comments' === n.kind ) return { url: appPath( 'comments' ) };
+		if ( id.indexOf( 'theme-' ) === 0 ) return { intent: 'ext:themes' };
+		if ( id.indexOf( 'translations-' ) === 0 ) return { intent: 'ext:translations' };
+		if ( 'updates' === n.kind || id.indexOf( 'core-' ) === 0 ) return { url: appPath( 'extensions' ) };
+		if ( id.indexOf( 'user-' ) === 0 ) return { url: appPath( 'users' ) };
+		// Notices act through their links in the app's panel — open it there.
+		return { intent: 'notifications' };
+	}
 	function renderNotifItems() {
 		const wrap = document.getElementById( 'minn-bar-notif-items' );
 		if ( ! wrap ) return;
 		const items = ( notifItems || [] ).slice( 0, 4 );
-		wrap.innerHTML = items.length ? items.map( ( n ) => `
-			<div class="minn-bar-menu-item minn-bar-menu-static">
+		wrap.innerHTML = items.length ? items.map( ( n, i ) => `
+			<button type="button" class="minn-bar-menu-item" role="menuitem" data-barnotif="${ i }">
 				<span class="minn-bar-notif-icon">${ esc( n.icon ) }</span>
 				<span class="minn-bar-menu-copy">
 					<span class="minn-bar-menu-title">${ esc( n.title ) }</span>
 					<span class="minn-bar-menu-sub">${ esc( n.ago ) }</span>
 				</span>
-			</div>` ).join( '' )
+				${ n.unread ? '<span class="minn-bar-notif-unread"></span>' : '' }
+			</button>` ).join( '' )
 			: '<div class="minn-bar-menu-item minn-bar-menu-static"><span class="minn-bar-menu-copy"><span class="minn-bar-menu-sub">' + esc( CFG.emptyNotifs || 'All caught up.' ) + '</span></span></div>';
+		wrap.querySelectorAll( '[data-barnotif]' ).forEach( ( row ) => row.addEventListener( 'click', () => {
+			const n = ( notifItems || [] )[ Number( row.dataset.barnotif ) ];
+			if ( ! n ) return;
+			if ( n.unread ) {
+				n.unread = false;
+				api( 'minn-admin/v1/notifications/read', { method: 'POST', body: JSON.stringify( { id: n.id } ) } ).catch( () => {} );
+			}
+			const dest = notifDestination( n );
+			if ( dest.intent ) goWithIntent( dest.intent );
+			else location.href = dest.url;
+		} ) );
 	}
 	function loadNotifications() {
 		if ( notifItems ) return Promise.resolve();
@@ -179,7 +206,7 @@
 		pencil: '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>',
 		plus: '<path d="M12 5v14M5 12h14"/>',
 		moon: '<path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/>',
-		wp: '<circle cx="12" cy="12" r="9"/><path d="M8 8l3 9 2-6 3 6 2-9"/>',
+		wp: '<path fill="currentColor" stroke-width="0" d="M21.469 6.825c.84 1.537 1.318 3.3 1.318 5.175 0 3.979-2.156 7.456-5.363 9.325l3.295-9.527c.615-1.54.82-2.771.82-3.864 0-.405-.026-.78-.07-1.11m-7.981.105c.647-.03 1.232-.105 1.232-.105.582-.075.514-.93-.067-.899 0 0-1.755.135-2.88.135-1.064 0-2.85-.15-2.85-.15-.585-.03-.661.855-.075.885 0 0 .54.061 1.125.09l1.68 4.605-2.37 7.08L5.354 6.9c.649-.03 1.234-.1 1.234-.1.585-.075.516-.93-.065-.896 0 0-1.746.138-2.874.138-.2 0-.438-.008-.69-.015C4.911 3.15 8.235 1.215 12 1.215c2.809 0 5.365 1.072 7.286 2.833-.046-.003-.091-.009-.141-.009-1.06 0-1.812.923-1.812 1.914 0 .89.513 1.643 1.06 2.531.411.72.89 1.643.89 2.977 0 .915-.354 1.994-.821 3.479l-1.075 3.585-3.9-11.61.001.014zM12 22.784c-1.059 0-2.081-.153-3.048-.437l3.237-9.406 3.315 9.087c.024.053.05.101.078.149-1.12.393-2.325.607-3.582.607M1.211 12c0-1.564.336-3.05.935-4.39L7.29 21.709C3.694 19.96 1.212 16.271 1.211 12M12 0C5.385 0 0 5.385 0 12s5.385 12 12 12 12-5.385 12-12S18.615 0 12 0"/>',
 	};
 	const icon = ( key ) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ( ICONS[ key ] || ICONS.doc ) + '</svg>';
 	const I18N = CFG.i18n || {};

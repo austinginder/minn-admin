@@ -121,6 +121,25 @@ const { launch, login, createPost, deletePost, reporter, BASE } = require( './he
 		t.check( 'the bar yields on scroll down and returns on scroll up', true );
 		await page.evaluate( () => window.scrollTo( 0, 0 ) );
 
+		// Notifications peek: rows are real — clicking one navigates into the
+		// app at the thing it describes (updates land on Extensions, and so
+		// on). Items vary by live site state, so an empty peek passes too.
+		await page.click( '[data-barmenu="minn-bar-menu-notif"]' );
+		await page.waitForFunction( () => {
+			const w = document.getElementById( 'minn-bar-notif-items' );
+			return w && ! /Loading/.test( w.textContent );
+		}, null, { timeout: 20000 } );
+		const notifRows = await page.$$( '[data-barnotif]' );
+		if ( notifRows.length ) {
+			await notifRows[ 0 ].click();
+			await page.waitForFunction( () => location.pathname.includes( '/minn-admin' ), null, { timeout: 20000 } );
+			t.check( 'a notification row navigates into the app', true, page.url() );
+			await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		} else {
+			t.check( 'a notification row navigates into the app', true, 'no notifications to click' );
+			await page.keyboard.press( 'Escape' );
+		}
+
 		// Search icon opens the FRONT-END palette in place (click only — the
 		// bar claims no global shortcut, and the page never navigates).
 		await page.click( '#minn-bar-search' );

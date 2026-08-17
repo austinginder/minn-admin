@@ -34690,6 +34690,10 @@
 	}
 
 	function openPalette() {
+		// The help dialog is informational, and the modal overlay sits above
+		// the palette's — ⌘K while it is open means "take me somewhere", so
+		// the dialog yields instead of covering the palette.
+		if ( state.modal && state.modal.type === 'help' ) state.modal = null;
 		state.paletteOpen = true;
 		state.paletteSel = 0;
 		paletteSearch = { q: '', items: [] };
@@ -41325,8 +41329,13 @@
 					if ( a && ebody.contains( a ) && ! a.closest( '.minn-block-island' ) ) return openLinkPop( a );
 					if ( ! esel.isCollapsed ) return openLinkPop( null, esel.getRangeAt( 0 ) );
 				}
-				state.paletteOpen = ! state.paletteOpen;
-				renderOverlays();
+				if ( state.paletteOpen ) {
+					state.paletteOpen = false;
+					renderOverlays();
+				} else {
+					// Through openPalette, so the help dialog yields to it.
+					openPalette();
+				}
 			}
 			// ⌘. toggles the navigation (⌘\ works too, but 1Password's Quick
 			// Access owns ⌘\ at the OS level for many users, and ⌘B is bold in
@@ -41499,6 +41508,7 @@
 			if ( 'palette' === intent ) openPalette();
 			else if ( 'notifications' === intent ) toggleNotif();
 			else if ( 'new:posts' === intent || 'new:pages' === intent ) newContent( intent.slice( 4 ) );
+			else if ( intent.indexOf( 'ext:' ) === 0 ) { state.extTab = intent.slice( 4 ); go( 'extensions' ); }
 		}
 	} catch ( e ) {}
 }() );
