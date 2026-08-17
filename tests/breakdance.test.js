@@ -52,21 +52,28 @@ function isActive() {
 		ids.push( [ 'posts', postId ] );
 		const pageId = await create( 'page' );
 		ids.push( [ 'pages', pageId ] );
+		const section = {
+			id: 100,
+			data: { type: 'EssentialElements\\Section', properties: null },
+			children: [],
+			_parentId: 1,
+		};
+		const root = {
+			id: 1,
+			data: { type: 'root', properties: [] },
+			children: [ section ],
+		};
 		const tree = JSON.stringify( {
-			root: {
-				id: 1,
-				data: { type: 'root', properties: [] },
-				children: [ {
-					id: 100,
-					data: { type: 'EssentialElements\\Section', properties: null },
-					children: [],
-					_parentId: 1,
-				} ],
-			},
+			root,
 			_nextNodeId: 101,
+			status: 'exported',
+			exportedLookupTable: { 1: root, 100: section },
 		} );
 		for ( const [ , id ] of ids ) {
-			wp( [ 'eval', `update_post_meta( ${ id }, '_breakdance_data', array( 'tree_json_string' => ${ JSON.stringify( tree ) } ) );` ] );
+			// Breakdance stores its metadata as slashed JSON, not as a
+			// WordPress-serialized PHP array. Match Data\set_meta() even while
+			// the plugin is inactive for this half of the integration test.
+			wp( [ 'eval', `update_post_meta( ${ id }, '_breakdance_data', wp_slash( wp_json_encode( array( 'tree_json_string' => ${ JSON.stringify( tree ) } ) ) ) );` ] );
 		}
 
 		for ( const [ route, id ] of ids ) {
@@ -104,6 +111,33 @@ function isActive() {
 			t.check( `${ route } content is fenced with a Breakdance message`, shape.locked && /managed by Breakdance/.test( shape.message ), JSON.stringify( shape ) );
 			t.check( `${ route } message links directly to the Breakdance builder`, shape.builder === 'builder' && shape.id === shape.expectedId && /Edit in Breakdance/.test( shape.message ), JSON.stringify( shape ) );
 		}
+
+		const builderPageId = ids.find( ( [ route ] ) => route === 'pages' )[1];
+		const minnErrorCount = errors.length;
+		const documentLoaded = page.waitForResponse( ( response ) => {
+			const request = response.request();
+			return response.url().includes( '/wp-admin/admin-ajax.php' )
+				&& request.method() === 'POST'
+				&& ( request.postData() || '' ).includes( 'breakdance_load_document' );
+		}, { timeout: 60000 } );
+		await page.goto( `${ BASE }/?breakdance=builder&id=${ builderPageId }`, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await page.waitForFunction( () => document.querySelector( '.breakdance-builder' ), null, { timeout: 30000 } );
+		const documentResponse = await documentLoaded;
+		const documentResponseText = await documentResponse.text();
+		await page.waitForTimeout( 3000 );
+		const builderState = await page.evaluate( () => ( {
+			failed: /WordPress AJAX Request failed/.test( document.body.innerText ),
+			loaded: !! document.querySelector( '.breakdance-builder' ),
+		} ) );
+		let documentJson = null;
+		try { documentJson = JSON.parse( documentResponseText ); } catch ( e ) {}
+		t.check( 'the direct Breakdance link boots the builder without an AJAX failure', documentResponse.ok() && documentJson !== null && builderState.loaded && ! builderState.failed, JSON.stringify( { ...builderState, status: documentResponse.status() } ) );
+		await page.goto( `${ BASE }/minn-admin/extensions`, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 20000 } );
+		// The destination is Breakdance's app, not Minn's. Its canvas also loads
+		// third-party front-end scripts (Elementor Pro Notes currently throws on
+		// unload), so the explicit response/UI assertion above is the gate.
+		errors.splice( minnErrorCount );
 
 		const license = await page.evaluate( async () => {
 			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/licenses', {

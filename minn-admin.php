@@ -15,6 +15,18 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Breakdance 2.8.x promotes every reported PHP deprecation to an exception
+// during its builder AJAX requests. On PHP 8.5 that lets an unrelated plugin's
+// legacy cast syntax abort the builder before WordPress reaches the AJAX action.
+// Keep real warnings and errors visible; only omit deprecations for the exact
+// request class where Breakdance installs that exception handler.
+if (
+	isset( $_SERVER['HTTP_X_REQUESTED_WITH'] )
+	&& 'breakdancexmlhttprequest' === strtolower( (string) $_SERVER['HTTP_X_REQUESTED_WITH'] )
+) {
+	error_reporting( error_reporting() & ~E_DEPRECATED & ~E_USER_DEPRECATED );
+}
+
 define( 'MINN_ADMIN_VERSION', '0.31.0' );
 define( 'MINN_ADMIN_FILE', __FILE__ );
 define( 'MINN_ADMIN_DIR', plugin_dir_path( __FILE__ ) );
