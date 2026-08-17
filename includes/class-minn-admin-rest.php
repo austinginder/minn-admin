@@ -5339,17 +5339,24 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'move_failed', __( 'Could not store the upload.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
-		if ( empty( $request['overwrite'] ) ) {
+		$overwrite = ! empty( $request['overwrite'] );
+		$updated   = null;
+		if ( ! $overwrite ) {
 			$offer = self::upload_existing_offer( $package, 'theme' );
-			if ( $offer ) {
+			if ( is_wp_error( $offer ) ) {
 				@unlink( $package ); // phpcs:ignore
 				return $offer;
+			}
+			if ( $offer ) {
+				// A newer version of what is already here: install over it.
+				$overwrite = true;
+				$updated   = $offer;
 			}
 		}
 
 		$skin     = new WP_Ajax_Upgrader_Skin();
 		$upgrader = new Theme_Upgrader( $skin );
-		$result   = $upgrader->install( $package, array( 'overwrite_package' => ! empty( $request['overwrite'] ) ) );
+		$result   = $upgrader->install( $package, array( 'overwrite_package' => $overwrite ) );
 		@unlink( $package ); // phpcs:ignore
 
 		if ( ! $result || is_wp_error( $result ) ) {
@@ -5360,7 +5367,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$errors = $skin->get_error_messages();
 			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Install failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
-		return rest_ensure_response( array( 'installed' => true, 'stylesheet' => $upgrader->theme_info() ? $upgrader->theme_info()->get_stylesheet() : null ) );
+		return rest_ensure_response( array( 'installed' => true, 'stylesheet' => $upgrader->theme_info() ? $upgrader->theme_info()->get_stylesheet() : null, 'updated' => $updated ) );
 	}
 
 	/**
@@ -5540,17 +5547,24 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'move_failed', __( 'Could not store the upload.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
-		if ( empty( $request['overwrite'] ) ) {
+		$overwrite = ! empty( $request['overwrite'] );
+		$updated   = null;
+		if ( ! $overwrite ) {
 			$offer = self::upload_existing_offer( $package, 'plugin' );
-			if ( $offer ) {
+			if ( is_wp_error( $offer ) ) {
 				@unlink( $package ); // phpcs:ignore
 				return $offer;
+			}
+			if ( $offer ) {
+				// A newer version of what is already here: install over it.
+				$overwrite = true;
+				$updated   = $offer;
 			}
 		}
 
 		$skin     = new WP_Ajax_Upgrader_Skin();
 		$upgrader = new Plugin_Upgrader( $skin );
-		$result   = $upgrader->install( $package, array( 'overwrite_package' => ! empty( $request['overwrite'] ) ) );
+		$result   = $upgrader->install( $package, array( 'overwrite_package' => $overwrite ) );
 		@unlink( $package ); // phpcs:ignore
 
 		if ( ! $result || is_wp_error( $result ) ) {
@@ -5566,20 +5580,26 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			array(
 				'installed' => true,
 				'plugin'    => $upgrader->plugin_info(),
+				'updated'   => $updated,
 			)
 		);
 	}
 
 	/**
-	 * When an uploaded zip's install fails because its folder already exists,
-	 * answer 409 with what is installed versus what was uploaded, so the
-	 * client can offer wp-admin's "replace current with uploaded" flow. Any
-	 * other failure returns null and the caller's generic error stands.
+	 * Decide what an uploaded zip means for what is already installed, BEFORE
+	 * the upgrader runs. Three answers:
 	 *
-	 * @param WP_Upgrader $upgrader The upgrader that just failed.
-	 * @param mixed       $result   Its install() return value.
-	 * @param string      $kind     'plugin' or 'theme'.
-	 * @return WP_Error|null
+	 * - null: nothing of that name is here, so it is a plain install.
+	 * - array: the package is a NEWER version of what is here. Dropping a
+	 *   fresh build on a site is an update, and asking about it turns the
+	 *   common case into a dialog; the caller installs over it and reports
+	 *   which version replaced which.
+	 * - WP_Error: same or older version, or a version that cannot be read on
+	 *   either side. That is the drag that loses work, so it stops and asks.
+	 *
+	 * @param string $package Local path of the uploaded zip.
+	 * @param string $kind    'plugin' or 'theme'.
+	 * @return array|WP_Error|null
 	 */
 	private static function upload_existing_offer( $package, $kind ) {
 		$new = self::upload_zip_identity( $package, $kind );
@@ -5594,7 +5614,43 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		} elseif ( ! is_dir( get_theme_root() . '/' . $folder ) ) {
 			return null;
 		}
+
+		$current = self::upload_installed_identity( $kind, $folder );
+		$to      = (string) ( $new['Version'] ?? '' );
+		// An unreadable version on either side is a question, never a guess.
+		if ( '' !== $current['Version'] && '' !== $to && version_compare( $to, $current['Version'], '>' ) ) {
+			return array(
+				'name' => $current['Name'] ? $current['Name'] : (string) ( $new['Name'] ?? $folder ),
+				'from' => $current['Version'],
+				'to'   => $to,
+			);
+		}
 		return self::upload_overwrite_error( $kind, $folder, $new );
+	}
+
+	/**
+	 * Name and version of the plugin or theme occupying a folder.
+	 *
+	 * @param string $kind   'plugin' or 'theme'.
+	 * @param string $folder Directory name under plugins/ or themes/.
+	 * @return array{Name: string, Version: string} Empty strings when unreadable.
+	 */
+	private static function upload_installed_identity( $kind, $folder ) {
+		if ( 'plugin' === $kind ) {
+			foreach ( get_plugins() as $file => $data ) {
+				if ( 0 === strpos( $file, $folder . '/' ) || $file === $folder . '.php' ) {
+					return array(
+						'Name'    => (string) $data['Name'],
+						'Version' => (string) $data['Version'],
+					);
+				}
+			}
+			return array( 'Name' => '', 'Version' => '' );
+		}
+		$theme = wp_get_theme( $folder );
+		return $theme->exists()
+			? array( 'Name' => (string) $theme->get( 'Name' ), 'Version' => (string) $theme->get( 'Version' ) )
+			: array( 'Name' => '', 'Version' => '' );
 	}
 
 	private static function upload_zip_identity( $package, $kind ) {
@@ -5673,23 +5729,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	private static function upload_overwrite_error( $kind, $folder, $new ) {
-		$current_name    = '';
-		$current_version = '';
-		if ( 'plugin' === $kind ) {
-			foreach ( get_plugins() as $file => $data ) {
-				if ( 0 === strpos( $file, $folder . '/' ) || $file === $folder . '.php' ) {
-					$current_name    = (string) $data['Name'];
-					$current_version = (string) $data['Version'];
-					break;
-				}
-			}
-		} else {
-			$theme = wp_get_theme( $folder );
-			if ( $theme->exists() ) {
-				$current_name    = (string) $theme->get( 'Name' );
-				$current_version = (string) $theme->get( 'Version' );
-			}
-		}
+		$current         = self::upload_installed_identity( $kind, $folder );
+		$current_name    = $current['Name'];
+		$current_version = $current['Version'];
 		return new WP_Error(
 			'folder_exists',
 			/* translators: %s: the installed plugin or theme's name. */
@@ -5704,14 +5746,22 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	private static function upload_overwrite_offer( $upgrader, $result, $kind ) {
-		$err = is_wp_error( $result ) ? $result : ( isset( $upgrader->result ) && is_wp_error( $upgrader->result ) ? $upgrader->result : null );
-		if ( ( ! $err || 'folder_exists' !== $err->get_error_code() ) && isset( $upgrader->skin ) && method_exists( $upgrader->skin, 'get_errors' ) ) {
-			$skin_err = $upgrader->skin->get_errors();
-			if ( is_wp_error( $skin_err ) && $skin_err->has_errors() && 'folder_exists' === $skin_err->get_error_code() ) {
-				$err = $skin_err;
+		$err = null;
+		// get_error_code() answers with the FIRST code only, and the skin
+		// collects every error a run produced. Asking it for the first one is
+		// how a folder clash behind any other complaint reached the reader as
+		// the raw "Destination folder already exists." with a server path.
+		foreach ( array(
+			$result,
+			isset( $upgrader->result ) ? $upgrader->result : null,
+			isset( $upgrader->skin ) && method_exists( $upgrader->skin, 'get_errors' ) ? $upgrader->skin->get_errors() : null,
+		) as $candidate ) {
+			if ( is_wp_error( $candidate ) && in_array( 'folder_exists', $candidate->get_error_codes(), true ) ) {
+				$err = $candidate;
+				break;
 			}
 		}
-		if ( ! $err || 'folder_exists' !== $err->get_error_code() ) {
+		if ( ! $err ) {
 			return null;
 		}
 		$folder = basename( untrailingslashit( (string) $err->get_error_data( 'folder_exists' ) ) );

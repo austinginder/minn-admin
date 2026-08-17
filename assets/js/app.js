@@ -36557,8 +36557,12 @@
 			fd.append( 'file', f );
 			if ( overwrite ) fd.append( 'overwrite', '1' );
 			try {
-				await api( 'minn-admin/v1/themes/upload', { method: 'POST', body: fd } );
-				toast( overwrite ? __( 'Theme replaced with the uploaded version' ) : __( 'Theme installed — activate it from the Themes tab' ) );
+				const r = await api( 'minn-admin/v1/themes/upload', { method: 'POST', body: fd } );
+				const up = r && r.updated;
+				toast( up
+					/* translators: 1: the theme's name. 2: the version that was installed. 3: the version now installed. */
+					? sprintf( __( '%1$s updated from %2$s to %3$s' ), up.name, up.from, up.to )
+					: ( overwrite ? __( 'Theme replaced with the uploaded version' ) : __( 'Theme installed — activate it from the Themes tab' ) ) );
 				state.cache.themes = null;
 				closeModal();
 				if ( state.route === 'extensions' ) renderExtensions();
@@ -37150,8 +37154,12 @@
 			fd.append( 'file', f );
 			if ( overwrite ) fd.append( 'overwrite', '1' );
 			try {
-				await api( 'minn-admin/v1/plugins/upload', { method: 'POST', body: fd } );
-				toast( overwrite ? __( 'Plugin replaced with the uploaded version' ) : __( 'Plugin installed — activate it from the list' ) );
+				const r = await api( 'minn-admin/v1/plugins/upload', { method: 'POST', body: fd } );
+				const up = r && r.updated;
+				toast( up
+					/* translators: 1: the plugin's name. 2: the version that was installed. 3: the version now installed. */
+					? sprintf( __( '%1$s updated from %2$s to %3$s' ), up.name, up.from, up.to )
+					: ( overwrite ? __( 'Plugin replaced with the uploaded version' ) : __( 'Plugin installed — activate it from the list' ) ) );
 				state.cache.plugins = null;
 				await loadPlugins().catch( () => {} );
 				closeModal();

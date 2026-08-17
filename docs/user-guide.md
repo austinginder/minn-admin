@@ -403,10 +403,13 @@ Customers, and with WooCommerce Subscriptions it gains Subscriptions too.
 ## Managing the site
 
 - **Extensions** — three tabs: Plugins, Themes, and Licenses. Install by
-  search, upload, or dropping a zip on the dialog; uploading a zip of
-  something already installed shows what is installed against what you
-  uploaded and offers to replace it, files swapped, settings and content
-  untouched. Toggle, update and
+  search, upload, or dropping a zip on the dialog. Uploading a zip of
+  something already installed is an update when the zip is newer: it
+  installs over what is there and tells you which version replaced which.
+  A zip carrying the same or an older version stops first and shows what
+  is installed against what you uploaded, so replacing it (files swapped,
+  settings and content untouched) is a decision rather than an accident.
+  Toggle, update and
   delete with plain confirmations. Every plugin and theme card carries an
   Auto pill for WordPress automatic updates, the same setting wp-admin
   manages, and inactive themes offer a Live preview so you can walk the
