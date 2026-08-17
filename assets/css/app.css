@@ -768,7 +768,12 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-toolbar.minn-toolbar-filters { margin-bottom: 18px; }
 /* Extensions filters: quiet text links, not a second boxed pill strip —
    two stacked bordered containers read as chrome soup. */
-.minn-tabs.minn-ext-filters, .minn-tabs.minn-quiet-tabs { background: none; border: none; padding: 0; gap: 4px; overflow: visible; }
+/* Quiet strips must still SCROLL when a crowded row squeezes them — the old
+   overflow: visible painted their pills across the neighboring control and
+   left the ‹ › scroll buttons managing a strip that could not move. The
+   scrollbar stays hidden (the buttons are the affordance on overflow). */
+.minn-tabs.minn-ext-filters, .minn-tabs.minn-quiet-tabs { background: none; border: none; padding: 0; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.minn-tabs.minn-ext-filters::-webkit-scrollbar, .minn-tabs.minn-quiet-tabs::-webkit-scrollbar { display: none; }
 .minn-ext-filters .minn-tab, .minn-quiet-tabs .minn-tab { background: none; border: none; padding: 6px 9px; color: var(--text3); font-weight: 500; }
 .minn-ext-filters .minn-tab:hover, .minn-quiet-tabs .minn-tab:hover { color: var(--text2); }
 .minn-ext-filters .minn-tab.active, .minn-quiet-tabs .minn-tab.active { color: var(--text); font-weight: 600; background: none; box-shadow: none; }

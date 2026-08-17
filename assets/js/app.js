@@ -14937,8 +14937,11 @@
 
 		// A long tab list (a site with a dozen forms) turns the pill strip
 		// into a scroll hunt — swap it for the themed strict combobox (the
-		// Users role-picker precedent). Short lists keep the pills.
-		const manyTabs = ss.tabs && ss.tabs.length > 6;
+		// Users role-picker precedent). Short lists keep the pills. The
+		// character budget matters as much as the count: six tabs whose form
+		// names are sentences overflow just as badly as twelve short ones.
+		const tabChars = ( ss.tabs || [] ).reduce( ( n, t ) => n + String( t[ 1 ] || '' ).length, 0 );
+		const manyTabs = ss.tabs && ( ss.tabs.length > 6 || tabChars > 64 );
 		const allTab = ss.tabs && ss.tabs.length ? ss.tabs[ 0 ] : null;
 		const switchHtml = surfaceViewSwitchHtml( s, ss );
 		// Below a view switcher the tab strip is the SECOND pill row — it goes
