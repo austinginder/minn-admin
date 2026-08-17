@@ -8740,12 +8740,12 @@
 								<input class="minn-input" id="minn-o-refund-reason" placeholder="${ esc( __( 'Optional note on the refund' ) ) }">
 							</div>
 							${ lines.length ? `
-							<label class="minn-check" style="margin-top:10px; display:flex; gap:8px; align-items:center; font-size:13px;">
+							<label class="minn-check-row" style="margin-top:10px;">
 								<input type="checkbox" id="minn-o-refund-restock" checked>
 								<span>${ esc( __( 'Restock refunded items' ) ) }</span>
 							</label>` : '' }
 							${ gw && gw.can_refund ? `
-							<label class="minn-check" style="margin-top:10px; display:flex; gap:8px; align-items:center; font-size:13px;">
+							<label class="minn-check-row" style="margin-top:10px;">
 								<input type="checkbox" id="minn-o-refund-api" checked>
 								<span>${ sprintf( /* translators: %s: the payment gateway's name. */ esc( __( 'Also refund via %s' ) ), esc( gw.title ) ) }</span>
 							</label>` : `
@@ -12440,6 +12440,49 @@
 			row.addEventListener( 'click', () => {
 				const cp = c.items.find( ( x ) => x.id === parseInt( row.dataset.coupon, 10 ) );
 				if ( cp ) openCouponModal( cp );
+			} )
+		);
+		// Right-click a coupon: open + copy + status flip + delete, one row
+		// at a time (the products-list convention).
+		const quickCoupon = async ( cp, body, label ) => {
+			try {
+				const updated = await api( `wc/v3/coupons/${ cp.id }`, { method: 'PUT', body: JSON.stringify( body ) } );
+				const i = c.items.findIndex( ( x ) => x.id === cp.id );
+				if ( i >= 0 ) c.items[ i ] = Object.assign( {}, c.items[ i ], { status: updated.status } );
+				toast( label );
+				if ( state.route === 'coupons' ) renderCoupons();
+			} catch ( e ) { toast( e.message, true ); }
+		};
+		$$( '[data-coupon]', view ).forEach( ( row ) =>
+			row.addEventListener( 'contextmenu', ( e ) => {
+				const cp = c.items.find( ( x ) => x.id === parseInt( row.dataset.coupon, 10 ) );
+				if ( ! cp ) return;
+				e.preventDefault();
+				openMinnMenu( e.clientX, e.clientY, [
+					{ label: __( 'Open coupon' ), run: () => openCouponModal( cp ) },
+					...( cp.code ? [ { label: __( 'Copy code' ), run: async () => {
+						try { await navigator.clipboard.writeText( cp.code ); toast( __( 'Code copied' ) ); }
+						catch ( err ) { toast( __( 'Could not copy' ), true ); }
+					} } ] : [] ),
+					...( B.caps.coupons ? [ {
+						label: cp.status === 'publish' ? __( 'Move to draft' ) : __( 'Publish now' ),
+						run: () => quickCoupon( cp, { status: cp.status === 'publish' ? 'draft' : 'publish' }, cp.status === 'publish' ? __( 'Moved to draft' ) : __( 'Coupon published' ) ),
+					}, {
+						label: __( 'Delete…' ),
+						danger: true,
+						run: async () => {
+							/* translators: %s: the coupon code. */
+							if ( ! await minnConfirm( { title: sprintf( __( 'Delete coupon “%s”?' ), cp.code || cp.id ), body: __( 'It is removed for good; orders that already used it keep their totals.' ), danger: true, confirmLabel: __( 'Delete coupon' ) } ) ) return;
+							try {
+								await api( `wc/v3/coupons/${ cp.id }?force=true`, { method: 'DELETE' } );
+								toast( __( 'Coupon deleted' ) );
+								state.cache.coupons = null;
+								if ( state.route === 'coupons' ) renderCoupons();
+							} catch ( err ) { toast( err.message, true ); }
+						},
+					} ] : [] ),
+					{ label: __( 'Edit in WooCommerce' ), href: B.site.adminUrl + 'post.php?post=' + cp.id + '&action=edit' },
+				] );
 			} )
 		);
 		bindPager( view, c.page, loadCoupons, () => { if ( state.route === 'coupons' ) renderCoupons(); } );
@@ -35266,15 +35309,15 @@
 										<div><div class="minn-field-label">${ esc( __( 'Minimum spend' ) ) }</div><input class="minn-input" id="minn-c-min" type="text" inputmode="decimal" value="${ esc( c.minimum_amount && c.minimum_amount !== '0.00' ? String( c.minimum_amount ) : '' ) }" placeholder="${ esc( __( 'None' ) ) }"></div>
 										<div><div class="minn-field-label">${ esc( __( 'Expires' ) ) }</div><input class="minn-input" id="minn-c-expires" type="date" value="${ esc( exp ) }"></div>
 									</div>
-									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+									<label class="minn-check-row">
 										<input type="checkbox" id="minn-c-individual"${ c.individual_use ? ' checked' : '' }>
 										<span>${ esc( __( 'Individual use only' ) ) }</span>
 									</label>
-									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+									<label class="minn-check-row">
 										<input type="checkbox" id="minn-c-ship"${ c.free_shipping ? ' checked' : '' }>
 										<span>${ esc( __( 'Allow free shipping' ) ) }</span>
 									</label>
-									${ ! isNew ? `<div class="minn-toggle-desc">Used ${ esc( String( c.usage_count || 0 ) ) } time${ ( c.usage_count || 0 ) === 1 ? '' : 's' }.</div>` : '' }
+									${ ! isNew ? `<div class="minn-toggle-desc">${ esc( sprintf( /* translators: %s: how many orders used the coupon. */ _n( 'Used %s time.', 'Used %s times.', c.usage_count || 0 ), String( c.usage_count || 0 ) ) ) }</div>` : '' }
 								</div>` : `
 								<div class="minn-modal-meta" style="padding:0;">
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Usage' ) ) }</span><span>${ esc( couponUsageLabel( c ) ) }</span></div>
@@ -35284,8 +35327,10 @@
 						</div>
 						${ canEdit ? `
 						<div class="minn-media-edit minn-order-status">
-							<button class="minn-btn-primary" id="minn-coupon-save" type="button">${ isNew ? __( 'Create coupon' ) : __( 'Save changes' ) }</button>
-							${ ! isNew ? `<button class="minn-btn-soft danger" id="minn-coupon-delete" type="button" style="margin-left:8px;">${ esc( __( 'Delete' ) ) }</button>` : '' }
+							<div style="display:flex; gap:8px; align-items:center;">
+								<button class="minn-btn-primary" id="minn-coupon-save" type="button">${ isNew ? __( 'Create coupon' ) : __( 'Save changes' ) }</button>
+								${ ! isNew ? `<button class="minn-btn-soft danger" id="minn-coupon-delete" type="button">${ esc( __( 'Delete' ) ) }</button>` : '' }
+							</div>
 							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Saves code, amount, limits and options through WooCommerce.' ) ) }</div>
 						</div>` : '' }
 					</div>

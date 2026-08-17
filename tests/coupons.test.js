@@ -107,12 +107,98 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		if ( ui.hasSave ) {
 			await page.fill( '#minn-c-amount', '20' );
 			await page.click( '#minn-coupon-save' );
-			await page.waitForTimeout( 800 );
+			// Never flat-wait a save: the handler's async continuation (PUT +
+			// re-GET, then a list cache null + cold refetch) can land seconds
+			// later under load and race whatever the suite does next.
+			await page.waitForFunction(
+				() => /Coupon updated/i.test( ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ),
+				null, { timeout: 20000 } );
 			const verify = await api( `wc/v3/coupons/${ couponId }?_fields=id,amount,code` );
 			t.check( 'coupon amount saved',
 				verify.status === 200 && verify.body && String( parseFloat( verify.body.amount ) ) === '20',
 				JSON.stringify( verify.body ) );
 		}
+
+		// Layout: the option checkboxes are real rows, not the term-picker's
+		// 15px tick glyph (a class collision squeezed both labels into each
+		// other and the usage line), and Save/Delete share one row.
+		const layout = await page.evaluate( () => {
+			const indRow = document.querySelector( '#minn-c-individual' )?.closest( 'label' );
+			const shipRow = document.querySelector( '#minn-c-ship' )?.closest( 'label' );
+			const save = document.querySelector( '#minn-coupon-save' );
+			const del = document.querySelector( '#minn-coupon-delete' );
+			const r1 = indRow && indRow.getBoundingClientRect();
+			const r2 = shipRow && shipRow.getBoundingClientRect();
+			return {
+				w: r1 ? Math.round( r1.width ) : 0,
+				overlap: r1 && r2 ? r2.top < r1.bottom - 2 : true,
+				sameRow: save && del
+					? Math.abs( save.getBoundingClientRect().top - del.getBoundingClientRect().top ) < 4
+					: false,
+			};
+		} );
+		t.check( 'option checkboxes render as full rows without overlap', layout.w > 100 && ! layout.overlap, JSON.stringify( layout ) );
+		t.check( 'Save and Delete share one row', layout.sameRow, JSON.stringify( layout ) );
+
+		// Right-click menu: verbs present, status flips through it, and its
+		// Delete (behind the app confirm) really removes the coupon.
+		await page.keyboard.press( 'Escape' );
+		// The save nulled the list cache — wait for the cold refetch to put
+		// the row back before right-clicking it.
+		await page.waitForSelector( `.minn-table-row[data-coupon="${ couponId }"]`, { timeout: 15000 } );
+		// A status flip re-renders the list, so a dispatch can land on a row
+		// mid-replacement — retry the whole open against a fresh node.
+		const openCtx = async () => {
+			for ( let i = 0; i < 5; i++ ) {
+				await page.evaluate( ( id ) => {
+					const row = document.querySelector( `.minn-table-row[data-coupon="${ id }"]` );
+					if ( ! row ) return;
+					const r = row.getBoundingClientRect();
+					row.dispatchEvent( new MouseEvent( 'contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 60, clientY: r.top + 12 } ) );
+				}, couponId );
+				const ok = await page.waitForSelector( '.minn-ctx-menu', { timeout: 2500 } ).then( () => true ).catch( () => false );
+				if ( ok ) return;
+				await page.waitForTimeout( 600 );
+			}
+			throw new Error( 'context menu never opened' );
+		};
+		await openCtx();
+		const menuText = await page.evaluate( () => document.querySelector( '.minn-ctx-menu' ).textContent );
+		t.check( 'coupon context menu offers the verbs',
+			/Open coupon/.test( menuText ) && /Copy code/.test( menuText )
+			&& /Move to draft/.test( menuText ) && /Delete/.test( menuText )
+			&& /Edit in WooCommerce/.test( menuText ), menuText );
+		// Evaluate-click menu items after a right-click opens them (the
+		// mousedown+contextmenu pair can re-open and detach the first node).
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) )
+				.find( ( b ) => /Move to draft/.test( b.textContent ) ).click();
+		} );
+		let flipped = null;
+		for ( let i = 0; i < 12 && ! flipped; i++ ) {
+			await page.waitForTimeout( 500 );
+			const v = await api( `wc/v3/coupons/${ couponId }?_fields=id,status` );
+			if ( v.body && v.body.status === 'draft' ) flipped = v.body;
+		}
+		t.check( 'menu status flip moved the coupon to draft', !! flipped, JSON.stringify( flipped ) );
+
+		await openCtx();
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) )
+				.find( ( b ) => /Delete/.test( b.textContent ) ).click();
+		} );
+		await page.waitForFunction( () => Array.from( document.querySelectorAll( 'button' ) )
+			.some( ( b ) => /Delete coupon/.test( b.textContent ) ), null, { timeout: 8000 } );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( 'button' ) )
+				.find( ( b ) => /Delete coupon/.test( b.textContent ) ).click();
+		} );
+		let goneStatus = 0;
+		for ( let i = 0; i < 12 && goneStatus !== 404; i++ ) {
+			await page.waitForTimeout( 500 );
+			goneStatus = ( await api( `wc/v3/coupons/${ couponId }?_fields=id` ) ).status;
+		}
+		t.check( 'menu delete removes the coupon for good', goneStatus === 404, String( goneStatus ) );
 	}
 
 	// Create via UI.
