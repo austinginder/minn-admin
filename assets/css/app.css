@@ -2854,6 +2854,32 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-help-keys-note { font-size: 12.5px; color: var(--text3); margin-top: 8px; }
 .minn-help-body h4 { color: var(--text); font-size: 14px; margin: 18px 0 4px; }
 .minn-help-body p { margin: 6px 0; }
+/* The flip illustration: the site tile and the m tile overlapping, with a
+   swap badge riding the overlap — the corner tile crosses over. */
+.minn-help-fliprow { display: flex; align-items: center; gap: 16px; margin: 10px 0 4px; }
+.minn-help-fliprow p { flex: 1; margin: 0; }
+.minn-help-flip { display: flex; align-items: center; flex: none; }
+.minn-help-flip-tile {
+  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  font-weight: 800; font-size: 19px; letter-spacing: -0.5px; position: relative; z-index: 1;
+}
+.minn-help-flip-tile.site {
+  background: var(--panel2); border: 1px solid var(--border2); color: var(--text2);
+  background-size: cover; background-position: center;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.minn-help-flip-tile.site svg { width: 19px; height: 19px; }
+.minn-help-flip-tile.mark {
+  background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.minn-help-flip-swap {
+  position: relative; z-index: 3; width: 22px; height: 22px; border-radius: 50%; flex: none;
+  background: var(--panel2); border: 1px solid var(--border2); color: var(--text2);
+  display: grid; place-items: center; box-shadow: 0 0 0 2px var(--panel);
+  margin-inline: -8px;
+}
+.minn-help-flip-swap svg { width: 13px; height: 13px; }
 
 .minn-ti-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; padding: 4px 0; }
 .minn-ti-card { border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: var(--bg2); }

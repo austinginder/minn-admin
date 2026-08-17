@@ -2708,6 +2708,7 @@
 			upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
 			logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
 			globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/>',
+			swap: '<path d="M7 8h10l-3.5-3.5M17 16H7l3.5 3.5"/>',
 			help: '<circle cx="12" cy="12" r="10"/><text x="12" y="16.5" text-anchor="middle" font-size="12.5" font-weight="650" font-family="inherit" fill="currentColor" stroke-width="0">?</text>',
 			// Editor toolbar + slash menu glyphs (same lucide/feather family).
 			bold: '<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>',
@@ -36026,8 +36027,18 @@
 						<h4>${ esc( __( 'Getting around' ) ) }</h4>
 						<p>${ esc( __( 'The sidebar has three groups: Workspace (the daily material), Tools (what your plugins add) and Manage (the site itself). The fastest way anywhere is the command palette:' ) ) } <span class="minn-kbd">⌘K</span>${ esc( __( ', then start typing a view, a post or a command.' ) ) }</p>
 
+						<h4>${ esc( __( 'Flip to the site and back' ) ) }</h4>
+						<div class="minn-help-fliprow">
+							<span class="minn-help-flip" aria-hidden="true">
+								<span class="minn-help-flip-tile site"${ B.site.icon ? ` style="background-image:url('${ escCssUrl( B.site.icon ) }')"` : '' }>${ B.site.icon ? '' : icon( 'globe' ) }</span>
+								<span class="minn-help-flip-swap">${ icon( 'swap' ) }</span>
+								<span class="minn-help-flip-tile mark">m</span>
+							</span>
+							<p>${ esc( __( 'The tile in the corner crosses over. Here, the site icon at the top of the sidebar opens your site, and the site name beside it returns to Overview. Out on the site, the Minn admin bar puts an m tile in the same corner that brings you back (turn the bar on from Your profile). One click each way.' ) ) }</p>
+						</div>
+
 						<h4>${ esc( __( 'Right-click almost anything' ) ) }</h4>
-						<p>${ esc( __( 'The least discoverable thing in Minn, so here it is in writing: rows in Content and Media, comments, the theme button, plugin entries in the sidebar and group headings in the block library all have right-click menus. When in doubt, try a right-click.' ) ) }</p>
+						<p>${ esc( __( 'One of Minn’s hidden gems, so here it is in writing: rows in Content and Media, comments, the theme button, plugin entries in the sidebar and group headings in the block library all have right-click menus. When in doubt, try a right-click.' ) ) }</p>
 
 						<h4>${ esc( __( 'Make it yours' ) ) }</h4>
 						<p>${ esc( __( 'Anything a plugin adds here can be hidden for you alone: right-click its sidebar entry or block-library heading and choose Hide. Everything hidden is listed on Your profile, where one click restores it.' ) ) }</p>
