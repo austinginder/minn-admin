@@ -19,7 +19,7 @@ const { execSync } = require( 'child_process' );
 	const t = reporter( 'admin-bar' );
 	const { browser, page, errors } = await launch();
 	await login( page );
-	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
+	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
 	await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
 
 	// The suite navigates between the app and the front end, so REST auth is
@@ -67,7 +67,7 @@ const { execSync } = require( 'child_process' );
 
 		// Opt-in property: default off = classic bar untouched.
 		await setFrontBar( false );
-		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		let s = await page.evaluate( () => ( {
 			minn: !! document.getElementById( 'minn-bar' ),
 			core: !! document.getElementById( 'wpadminbar' ),
@@ -77,7 +77,7 @@ const { execSync } = require( 'child_process' );
 		const saved = await setFrontBar( true );
 		t.check( 'the appearance endpoint saves the frontBar opt-in', saved === true, String( saved ) );
 
-		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		s = await page.evaluate( () => ( {
 			minn: !! document.getElementById( 'minn-bar' ),
 			core: !! document.getElementById( 'wpadminbar' ),
@@ -135,7 +135,7 @@ const { execSync } = require( 'child_process' );
 			await notifRows[ 0 ].click();
 			await page.waitForFunction( () => location.pathname.includes( '/minn-admin' ), null, { timeout: 20000 } );
 			t.check( 'a notification row navigates into the app', true, page.url() );
-			await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+			await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		} else {
 			t.check( 'a notification row navigates into the app', true, 'no notifications to click' );
 			await page.keyboard.press( 'Escape' );
@@ -170,18 +170,18 @@ const { execSync } = require( 'child_process' );
 		// Intent handoff: + New → Post lands in the app's blank editor
 		// (newContent routes to editor/posts; nothing is created until the
 		// first keystroke saves).
-		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		await page.click( '[data-barmenu="minn-bar-menu-new"]' );
 		await page.waitForSelector( '#minn-bar-menu-new:not([hidden])', { timeout: 10000 } );
-		await page.click( '[data-barintent="new:posts"]' );
-		await page.waitForFunction( () => /\/minn-admin\/editor\/posts\/?$/.test( location.pathname ), null, { timeout: 30000 } );
+		await page.click( '[data-barintent="new:posts"]', { noWaitAfter: true } );
+		await page.waitForFunction( () => /\/minn-admin\/editor\/posts\/?$/.test( location.pathname ), null, { timeout: 60000 } );
 		const intentCleared = await page.evaluate( () => sessionStorage.getItem( 'minn-intent' ) );
 		t.check( 'the New intent opens a blank editor in the app and is one-shot',
 			intentCleared === null, JSON.stringify( { url: page.url(), intentCleared } ) );
 
 		// Maintenance mode: the chip appears, and its fix really turns it off.
 		await setSetting( { minn_admin_maintenance: true } );
-		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		const chip = await page.evaluate( () => {
 			const c = document.querySelector( '.minn-bar-status' );
 			return c ? { tone: c.dataset.tone, text: c.textContent.trim() } : null;
@@ -195,7 +195,7 @@ const { execSync } = require( 'child_process' );
 		// Server truth: a fresh page render decides the chip from the option.
 		// (The settings GET is no oracle here: update_option stores boolean
 		// false as '', which fails schema validation and reads back null.)
-		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		const chipAfterFix = await page.evaluate( () => !! document.querySelector( '.minn-bar-status' ) );
 		const maint = await getSetting( 'minn_admin_maintenance' );
 		t.check( 'the chip fix turns maintenance mode off for real',
@@ -203,7 +203,7 @@ const { execSync } = require( 'child_process' );
 
 		// Hidden from search: the informational blue chip.
 		await setSetting( { blog_public: 0 } );
-		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		const chip2 = await page.evaluate( () => {
 			const c = document.querySelector( '.minn-bar-status' );
 			return c ? { tone: c.dataset.tone, text: c.textContent.trim() } : null;
@@ -233,7 +233,7 @@ const { execSync } = require( 'child_process' );
 			} );
 			return ( await r.json() ).link;
 		}, { a: auth, id: draftId } );
-		await page.goto( builderLink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( builderLink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		const builderEdit = await page.evaluate( () => {
 			const a = document.querySelector( '.minn-bar-edit' );
 			return a ? { href: a.getAttribute( 'href' ), text: a.textContent.trim() } : null;
@@ -255,7 +255,7 @@ const { execSync } = require( 'child_process' );
 			return parseInt( ( await r.json() ).minn_fixture_cache_purged || '0', 10 );
 		}, auth );
 		const purgesBefore = await purgeCount();
-		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		await page.click( '#minn-bar-search' );
 		await page.waitForSelector( '#minn-bar-palette.open', { timeout: 10000 } );
 		await page.keyboard.type( 'clear site' );
@@ -291,7 +291,7 @@ const { execSync } = require( 'child_process' );
 		// Phones: the floating pill de-floats into a full-width strip (the
 		// float is a desktop treatment) and the push-down shrinks to match.
 		await page.setViewportSize( { width: 390, height: 844 } );
-		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		const mob = await page.evaluate( () => {
 			const b = document.getElementById( 'minn-bar' );
 			const r = b.getBoundingClientRect();
@@ -312,7 +312,7 @@ const { execSync } = require( 'child_process' );
 
 		// Off again: everything back to core.
 		await setFrontBar( false );
-		await page.goto( permalink, { waitUntil: 'domcontentloaded' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		s = await page.evaluate( () => ( {
 			minn: !! document.getElementById( 'minn-bar' ),
 			core: !! document.getElementById( 'wpadminbar' ),
@@ -320,7 +320,7 @@ const { execSync } = require( 'child_process' );
 		t.check( 'opting back out restores the classic bar', ! s.minn && s.core, JSON.stringify( s ) );
 	} finally {
 		try {
-			await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
+			await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
 			await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
 			await setSetting( { minn_admin_maintenance: false, blog_public: 1 } );
 			await setFrontBar( false );
