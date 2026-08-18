@@ -107,7 +107,11 @@ Each wave is a card or two plus its save-payload keys, and each is shippable on
 its own.
 
 1. **The page** (shipped): route, shared renderer, quick-view modal kept, parity
-   with the old modal fields, editor link for the description.
+   with the old modal fields, editor link for the description. The modal carries
+   an Open full page button, the way an order and a subscription do, so a quick
+   view can hand off to the route. Creating a product from the list toolbar
+   lands in that same quick view, which is why the button is the difference
+   between a fresh product and a dead end.
 2. **Inventory and shipping** (shipped): GTIN, backorders, low stock, sold
    individually, weight, dimensions, shipping class. This wave also settled the
    page's shape: four cards in a two-column grid named the way WooCommerce

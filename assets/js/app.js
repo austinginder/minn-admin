@@ -11427,6 +11427,7 @@
 						</div>` : '' }
 					</div>
 					<div class="minn-modal-actions">
+						${ m.page ? '' : `<button type="button" class="minn-btn-soft" id="minn-p-fullpage">${ icon( 'columns' ) } ${ esc( __( 'Open full page' ) ) }</button>` }
 						${ p.permalink ? `<a class="minn-btn-soft" href="${ esc( p.permalink ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'View product' ) ) }</a>` : '' }
 						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } ${ esc( __( 'Edit description' ) ) }</button>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ ${ esc( __( 'Edit in WooCommerce' ) ) }</a>
@@ -12312,6 +12313,14 @@
 					repaint();
 				}
 			} );
+		} );
+		// The quick view is a modal; the real editing screen is a route. A
+		// product opened from a row, or just created from the toolbar, would
+		// otherwise have no way over to it.
+		const fullPageBtn = $( '#minn-p-fullpage' );
+		if ( fullPageBtn ) fullPageBtn.addEventListener( 'click', () => {
+			closeModal();
+			go( 'products/' + p.id );
 		} );
 		// The long description is Minn's own editor, not a field here: the
 		// product type registers editor + autosave support, so
