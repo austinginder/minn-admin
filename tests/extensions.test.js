@@ -38,7 +38,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	/* ===== Cards ===== */
 	await page.goto( `${ BASE }/minn-admin/extensions`, { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '.minn-plugin', { timeout: 15000 } );
-	await page.waitForTimeout( 800 ); // icon loads
+	// Plugin metadata paints after the card list. On the full fixture site the
+	// background request can take several seconds, so wait for the DOM swap,
+	// not for remote image bytes and not for a fixed delay.
+	await page.waitForFunction( () =>
+		document.querySelectorAll( '.minn-plugin .minn-plugin-icon img' ).length > 5,
+		null, { timeout: 20000 } ).catch( () => null );
 	const cards = await page.evaluate( () => {
 		const all = [ ...document.querySelectorAll( '.minn-plugin' ) ];
 		const withIcon = all.filter( ( c ) => c.querySelector( '.minn-plugin-icon img' ) );

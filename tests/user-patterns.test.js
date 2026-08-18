@@ -77,8 +77,8 @@ const restJson = ( page, route, opts = {} ) => page.evaluate( async ( a ) => {
 		const slashFind = async ( query, label ) => {
 			await freshParagraph( page );
 			await page.keyboard.type( query, { delay: 30 } );
-			for ( let i = 0; i < 20; i++ ) {
-				await page.waitForTimeout( 300 );
+			for ( let i = 0; i < 50; i++ ) {
+				await page.waitForTimeout( 500 );
 				const hit = await page.$$eval( '.minn-slash-item', ( els, l ) =>
 					els.some( ( e ) => e.textContent.includes( l ) ), label ).catch( () => false );
 				if ( hit ) return true;
@@ -94,7 +94,7 @@ const restJson = ( page, route, opts = {} ) => page.evaluate( async ( a ) => {
 		// Synced: search-only slash entry → wp:block ref island.
 		let found = await slashFind( '/zesty promo', 'Zesty Promo Banner' );
 		t.check( 'synced pattern surfaces in the slash menu', found );
-		await page.keyboard.press( 'Enter' );
+		await page.locator( '.minn-slash-item' ).filter( { hasText: 'Zesty Promo Banner' } ).first().click();
 		await page.waitForSelector( '.minn-block-island[data-block="core/block"]', { timeout: 15000 } );
 		const refPreview = await page.waitForFunction( () => {
 			const p = document.querySelector( '.minn-block-island[data-block="core/block"] .minn-island-preview' );
@@ -107,7 +107,7 @@ const restJson = ( page, route, opts = {} ) => page.evaluate( async ( a ) => {
 		// Unsynced: detached copy as islands/prose, never a ref.
 		found = await slashFind( '/zesty detached', 'Zesty Detached Footer' );
 		t.check( 'unsynced pattern surfaces in the slash menu', found );
-		await page.keyboard.press( 'Enter' );
+		await page.locator( '.minn-slash-item' ).filter( { hasText: 'Zesty Detached Footer' } ).first().click();
 		const copyLanded = await page.waitForFunction( () =>
 			document.querySelector( '#minn-editor-body' ).textContent.includes( 'Detached footer copy.' ),
 		null, { timeout: 15000 } ).then( () => true ).catch( () => false );

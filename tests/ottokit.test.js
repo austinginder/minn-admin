@@ -59,8 +59,12 @@ const wp = ( args ) => execSync(
 		await page.waitForTimeout( 500 );
 	};
 	const rowByMarker = ( marker ) => {
-		const out = wp( `eval "global \\$wpdb; \\$t = \\$wpdb->prefix . 'suretriggers_webhook_requests'; echo wp_json_encode( \\$wpdb->get_row( \\$wpdb->prepare( 'SELECT id, status, response_code, retry_attempts FROM ' . \\$t . ' WHERE request_url = %s', 'http://127.0.0.1:9/${ marker }' ), ARRAY_A ) );"` );
-		try { return JSON.parse( out ); } catch ( e ) { return null; }
+		// This is a direct table read; skip ordinary plugins so unrelated PHP
+		// deprecation output cannot be mixed into the JSON emitted by WP-CLI.
+		const out = wp( `--skip-plugins --skip-themes eval "global \\$wpdb; \\$t = \\$wpdb->prefix . 'suretriggers_webhook_requests'; echo wp_json_encode( \\$wpdb->get_row( \\$wpdb->prepare( 'SELECT id, status, response_code, retry_attempts FROM ' . \\$t . ' WHERE request_url = %s', 'http://127.0.0.1:9/${ marker }' ), ARRAY_A ) );"` );
+		const start = out.indexOf( '{' );
+		const end = out.lastIndexOf( '}' );
+		try { return JSON.parse( start >= 0 && end >= start ? out.slice( start, end + 1 ) : out ); } catch ( e ) { return null; }
 	};
 
 	try {

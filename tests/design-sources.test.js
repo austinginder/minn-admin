@@ -70,8 +70,8 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		const q = '/fixture hero';
 		await page.keyboard.type( q, { delay: 30 } );
 		let found = false;
-		for ( let i = 0; i < 16 && ! found; i++ ) {
-			await page.waitForTimeout( 400 );
+		for ( let i = 0; i < 40 && ! found; i++ ) {
+			await page.waitForTimeout( 500 );
 			found = await page.$$eval( '.minn-slash-item', ( els ) =>
 				els.some( ( e ) => e.textContent.includes( 'Fixture Hero Section' ) && e.textContent.includes( 'minn-test' ) )
 			).catch( () => false );
@@ -109,9 +109,17 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		await page.keyboard.press( 'Escape' );
 		await page.waitForTimeout( 300 );
 
+		const saved = page.waitForResponse( ( res ) =>
+			res.request().method() === 'POST' && new RegExp( '/wp/v2/posts/' + id + '(?:\\?|$)' ).test( res.url() ),
+		{ timeout: 30000 } );
 		await page.keyboard.press( 'Meta+s' );
-		await page.waitForTimeout( 2000 );
-		const raw = await rawContent();
+		await saved;
+		let raw = '';
+		for ( let i = 0; i < 15; i++ ) {
+			raw = await rawContent();
+			if ( raw.includes( 'minn-fixture-hero' ) ) break;
+			await page.waitForTimeout( 800 );
+		}
 		t.check( 'saved markup contains the fixture template',
 			raw.includes( 'minn-fixture-hero' ) && raw.includes( 'Fixture hero heading' ), raw.slice( 0, 160 ) );
 

@@ -56,7 +56,11 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	};
 
 	await openHistoryDoor();
-	const nBefore = await page.evaluate( () => document.querySelectorAll( '#minn-rev-list [data-revlist]' ).length );
+	const historyBefore = await page.evaluate( () => {
+		const rows = [ ...document.querySelectorAll( '#minn-rev-list [data-revlist]' ) ];
+		return { count: rows.length, top: rows[ 0 ] ? rows[ 0 ].dataset.revlist : '' };
+	} );
+	const nBefore = historyBefore.count;
 	t.check( 'history lists at least one previous revision after seed', nBefore >= 1, String( nBefore ) );
 
 	// The dialog hides the newest revision (WP's live-post mirror) while the
@@ -98,9 +102,17 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 	// Edit in the body and click Update: reopening the door must show a new
 	// revision, proving the in-session save landed with no page reload.
-	await page.click( '#minn-editor-body' );
+	await page.click( '#minn-editor-body p' );
+	await page.keyboard.press( 'End' );
 	await page.keyboard.type( ' ' );
 	await page.keyboard.type( 'Edited live.' );
+	const saveResponse = page.waitForResponse( ( res ) =>
+		res.request().method() === 'POST'
+		&& res.url().includes( `/wp-json/wp/v2/posts/${ id }` )
+		&& ! res.url().includes( '/autosaves' ), { timeout: 20000 } );
+	const revisionRefresh = page.waitForResponse( ( res ) =>
+		res.request().method() === 'GET'
+		&& res.url().includes( `/wp-json/wp/v2/posts/${ id }/revisions` ), { timeout: 20000 } );
 	const clicked = await page.evaluate( () => {
 		const btn = [ ...document.querySelectorAll( 'button' ) ].find( ( b ) =>
 			/^(Update|Publish)$/.test( b.textContent.trim() )
@@ -110,13 +122,21 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		return true;
 	} );
 	t.check( 'clicked Update/Publish', clicked, '' );
-	await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-toast' ) ].some( ( x ) => /saved|updated|published/i.test( x.textContent ) ),
-		null, { timeout: 15000 } ).catch( () => {} );
-	await page.waitForTimeout( 1200 ); // revision write settles
+	const saved = await saveResponse;
+	await saved.finished();
+	const refreshed = await revisionRefresh;
+	await refreshed.finished();
 
 	await openHistoryDoor();
-	const after = await page.evaluate( () => document.querySelectorAll( '#minn-rev-list [data-revlist]' ).length );
-	t.check( 'history gains a row after save without refresh', after > nBefore, `before=${ nBefore } after=${ after }` );
+	const historyAfter = await page.evaluate( () => {
+		const rows = [ ...document.querySelectorAll( '#minn-rev-list [data-revlist]' ) ];
+		return { count: rows.length, top: rows[ 0 ] ? rows[ 0 ].dataset.revlist : '' };
+	} );
+	// A site can cap retained revisions, so a fresh save may replace the
+	// oldest row without increasing the count. The top revision id must move.
+	t.check( 'history refreshes to the new revision after save',
+		historyAfter.top && historyAfter.top !== historyBefore.top,
+		JSON.stringify( { before: historyBefore, after: historyAfter } ) );
 	const whenAfter = await page.evaluate( () => {
 		const el = document.querySelector( '#minn-rev-list [data-revlist] .minn-rev-list-ago' );
 		return el ? el.textContent.trim() : '';

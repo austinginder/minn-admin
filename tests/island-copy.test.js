@@ -149,11 +149,18 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 	// Redo, save, and confirm the STORED markup carries two real blocks.
 	await page.keyboard.press( 'Meta+Shift+z' );
-	await page.waitForTimeout( 600 );
+	await page.waitForFunction( () =>
+		document.querySelectorAll( '#minn-editor-body .minn-block-island' ).length === 2,
+		null, { timeout: 5000 } );
+	const saveResponse = page.waitForResponse( ( res ) =>
+		res.request().method() === 'POST'
+		&& res.url().includes( `/wp-json/wp/v2/posts/${ id }` )
+		&& ! res.url().includes( '/autosaves' ), { timeout: 20000 } );
 	await page.keyboard.down( 'Meta' );
 	await page.keyboard.press( 's' );
 	await page.keyboard.up( 'Meta' );
-	await page.waitForTimeout( 3500 );
+	const saveFinished = await saveResponse;
+	await saveFinished.finished();
 	const saved = await page.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_cb=' + Math.random(),
 			{ headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );

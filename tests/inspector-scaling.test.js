@@ -13,6 +13,16 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	const t = reporter( 'inspector-scaling' );
 	const { browser, page, errors } = await launch();
 	await login( page );
+	const openInspector = async () => {
+		for ( let i = 0; i < 8; i++ ) {
+			try {
+				await page.click( '.minn-block-island[data-block="minn-test/big-schema"] .minn-island-chip' );
+				await page.waitForSelector( '[data-inspmore]', { timeout: 6000 } );
+				return true;
+			} catch ( e ) { await page.waitForTimeout( 1200 ); }
+		}
+		throw new Error( 'Could not open the scaling inspector' );
+	};
 
 	const id = await createPost( page, {
 		title: 'Inspector scaling test',
@@ -22,8 +32,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	try {
 		await openEditor( page, id );
 		await page.waitForSelector( '.minn-block-island[data-block="minn-test/big-schema"]', { timeout: 10000 } );
-		await page.click( '.minn-block-island .minn-island-chip' );
-		await page.waitForSelector( '[data-inspmore]', { timeout: 10000 } );
+		await openInspector();
 
 		// Explicitly-set attrs stay in view; the rest collapse.
 		const visible = await page.$$eval( '.minn-insp-body [data-insp]', ( els ) =>
@@ -67,8 +76,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		t.check( 'untouched collapsed fields injected nothing', ! raw.includes( 'setting20' ) );
 
 		// The newly-set field is promoted to the visible tier on reopen.
-		await page.click( '.minn-block-island .minn-island-chip' );
-		await page.waitForSelector( '[data-inspmore]', { timeout: 10000 } );
+		await openInspector();
 		const visible2 = await page.$$eval( '.minn-insp-body [data-insp]', ( els ) =>
 			els.filter( ( e ) => e.offsetParent !== null ).map( ( e ) => e.dataset.insp ) );
 		t.check( 'set field promoted to visible tier', visible2.includes( 'own:setting12' ) && visible2.length === 3, visible2.join( ', ' ) );

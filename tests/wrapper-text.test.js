@@ -29,12 +29,23 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		} );
 		return ( await r.json() ).content.raw;
 	}, id );
+	const openConversationInspector = async () => {
+		for ( let i = 0; i < 8; i++ ) {
+			await page.keyboard.press( 'Escape' ).catch( () => {} );
+			await page.locator( '.minn-block-island[data-block="anchor/conversation"] > .minn-island-chip' )
+				.click( { timeout: 6000 } ).catch( () => {} );
+			try {
+				await page.waitForSelector( '[data-insp="wt:0"]', { timeout: 6000 } );
+				return;
+			} catch ( e ) { await page.waitForTimeout( 1000 ); }
+		}
+		throw new Error( 'Could not open the conversation wrapper inspector' );
+	};
 
 	try {
 		await openEditor( page, id );
 		await page.waitForSelector( '.minn-block-island[data-block="anchor/conversation"]', { timeout: 15000 } );
-		await page.click( '.minn-block-island .minn-island-chip' );
-		await page.waitForSelector( '[data-insp="wt:0"]', { timeout: 10000 } );
+		await openConversationInspector();
 
 		const wtValue = await page.$eval( '[data-insp="wt:0"]', ( el ) => el.value );
 		t.check( 'labeled wrapperText field carries the header', wtValue === HEADER, wtValue );
@@ -65,8 +76,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		// Reload: the field reflects the stored value.
 		await openEditor( page, id );
 		await page.waitForSelector( '.minn-block-island[data-block="anchor/conversation"]', { timeout: 15000 } );
-		await page.click( '.minn-block-island .minn-island-chip' );
-		await page.waitForSelector( '[data-insp="wt:0"]', { timeout: 10000 } );
+		await openConversationInspector();
 		const after = await page.$eval( '[data-insp="wt:0"]', ( el ) => el.value );
 		t.check( 'field round-trips the stored header', after === 'Renamed header', after );
 	} finally {

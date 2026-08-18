@@ -505,13 +505,31 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	await page.goto( BASE + '/minn-admin/editor/posts/' + id5, { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '.minn-cols-island .minn-slot .minn-slot-island', { timeout: 25000 } );
 	await page.waitForTimeout( 800 );
+	const openCardInspector = async ( button, pickLast = false ) => {
+		for ( let i = 0; i < 8; i++ ) {
+			await page.keyboard.press( 'Escape' ).catch( () => {} );
+			const clicked = await page.evaluate( ( last ) => {
+				const cards = [ ...document.querySelectorAll( '.minn-cols-island .minn-slot > .minn-slot-island' ) ];
+				const card = last ? cards[ cards.length - 1 ] : cards[ 0 ];
+				const chip = card && card.querySelector( ':scope > .minn-island-chip' );
+				if ( ! chip ) return false;
+				chip.click();
+				return true;
+			}, pickLast );
+			if ( ! clicked ) {
+				await page.waitForTimeout( 1000 );
+				continue;
+			}
+			try {
+				await page.waitForSelector( button, { timeout: 6000 } );
+				return;
+			} catch ( e ) { await page.waitForTimeout( 1000 ); }
+		}
+		throw new Error( 'Could not open the nested card inspector for ' + button );
+	};
 
 	// Open the nested card's inspector via its chip, then Duplicate.
-	await page.evaluate( () => {
-		const card = document.querySelector( '.minn-cols-island .minn-slot .minn-slot-island' );
-		card.querySelector( '.minn-island-chip' ).click();
-	} );
-	await page.waitForSelector( '#minn-insp-duplicate', { timeout: 10000 } );
+	await openCardInspector( '#minn-insp-duplicate' );
 	await page.click( '#minn-insp-duplicate' );
 	await page.waitForTimeout( 500 );
 	const dupShape = await page.evaluate( () => {
@@ -544,12 +562,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 
 	/* ===== Move the duplicate to the next column (the report's exact
 	 * follow-up: "no idea how to move it to the middle") ===== */
-	await page.evaluate( () => {
-		const col = document.querySelector( '.minn-cols-island .minn-slot' );
-		const cards = col.querySelectorAll( ':scope > .minn-slot-island' );
-		cards[ cards.length - 1 ].querySelector( '.minn-island-chip' ).click();
-	} );
-	await page.waitForSelector( '#minn-insp-move-next', { timeout: 10000 } );
+	await openCardInspector( '#minn-insp-move-next', true );
 	await page.click( '#minn-insp-move-next' );
 	await page.waitForTimeout( 400 );
 	const moveShape = await page.evaluate( () => {

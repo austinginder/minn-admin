@@ -77,8 +77,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			return true;
 		} );
 		t.check( 'the health card is clickable', clicked );
-		await page.waitForTimeout( 2000 );
+		await page.waitForFunction( () => /\/posttypes/.test( location.pathname ), null, { timeout: 30000 } );
 		t.check( 'it lands on the post types manager', /\/posttypes/.test( page.url() ), page.url() );
+		await page.waitForFunction( ( plural ) => [ ...document.querySelectorAll( '.minn-table-row' ) ]
+			.some( ( row ) => row.textContent.includes( plural ) ), hidden[ 0 ].plural, { timeout: 30000 } );
 
 		const row = await page.evaluate( ( plural ) => {
 			const r = [ ...document.querySelectorAll( '.minn-table-row' ) ]

@@ -38,16 +38,17 @@ const { launch, login, createPost, deletePost, openEditor, reporter, pickCombo }
 		await page.waitForTimeout( 500 );
 	};
 	const openChip = async ( islandIdx ) => {
-		await page.evaluate( ( n ) => {
-			const island = document.querySelectorAll( '.minn-block-island[data-block="minn-test/data-form"]' )[ n ];
-			island.scrollIntoView( { block: 'center' } );
-		}, islandIdx );
-		await page.waitForTimeout( 400 );
-		await page.evaluate( ( n ) => {
-			document.querySelectorAll( '.minn-block-island[data-block="minn-test/data-form"]' )[ n ]
-				.querySelector( '.minn-island-chip' ).click();
-		}, islandIdx );
-		await page.waitForSelector( '.minn-insp-body', { timeout: 10000 } );
+		const islands = page.locator( '.minn-block-island[data-block="minn-test/data-form"]' );
+		for ( let i = 0; i < 8; i++ ) {
+			try {
+				const island = islands.nth( islandIdx );
+				await island.scrollIntoViewIfNeeded();
+				await island.locator( '.minn-island-chip' ).click( { timeout: 6000 } );
+				await page.waitForSelector( '.minn-insp-body', { timeout: 6000 } );
+				return true;
+			} catch ( e ) { await page.waitForTimeout( 1200 ); }
+		}
+		throw new Error( `Could not open data-form island ${ islandIdx }` );
 	};
 
 	try {

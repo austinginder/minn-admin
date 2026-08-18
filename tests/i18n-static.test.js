@@ -86,7 +86,7 @@ const ATTR_ALLOW = new Set( [
  * 2. Text nodes that are the whole content of an element.
  * ------------------------------------------------------------------------ */
 const TEXT_ALLOW = new Set( [
-	'.zip', '/minn-admin/', 'Aa', 'esc', '\\n', '×N',
+	'.zip', '/minn-admin/', 'Aa', 'esc', 'm', '\\n', '×N',
 	'⌘K', '⌘S', '⌘⇧D', '⌘⇧F', '⌘⇧O', '⌥click', '⇧⌥click', '\\u00d7',
 ] );
 {

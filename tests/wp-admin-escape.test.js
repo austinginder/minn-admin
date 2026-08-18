@@ -34,7 +34,7 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 
 		// ⌥-click the WordPress button opens the post's wp-admin editor in a
 		// new tab (a plain click stays the dashboard link).
-		const popup = page.context().waitForEvent( 'page', { timeout: 15000 } ).catch( () => null );
+		const popup = page.context().waitForEvent( 'page', { timeout: 45000 } ).catch( () => null );
 		await page.click( '#minn-wp-admin-link', { modifiers: [ 'Alt' ] } );
 		const tab = await popup;
 		t.check( 'a new tab opened', !! tab );

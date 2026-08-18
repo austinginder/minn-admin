@@ -13,10 +13,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 const WP_PATH = path.resolve( __dirname, '../../../..' );
 const MARK = '/minn-suite-redirect-probe';
 
-const db = ( sql ) => execSync(
-	`wp --path=${ JSON.stringify( WP_PATH ) } db query ${ JSON.stringify( sql ) } --skip-column-names 2>/dev/null`,
-	{ encoding: 'utf8' }
-).trim();
+const db = ( sql ) => {
+	const out = execSync(
+		`wp --path=${ JSON.stringify( WP_PATH ) } db query ${ JSON.stringify( sql ) } --skip-column-names 2>/dev/null`,
+		{ encoding: 'utf8' }
+	).trim();
+	// WP-CLI on the lab PHP version can print its own deprecation before the
+	// query result. The database command's result is the final nonempty line.
+	return out.split( /\r?\n/ ).filter( Boolean ).pop() || '';
+};
 
 ( async () => {
 	const t = reporter( 'redirection-status' );

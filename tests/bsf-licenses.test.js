@@ -61,18 +61,22 @@ const STATES = [ 'valid', 'expired', 'invalid', 'missing', 'unknown' ];
 			t.check( `${ name } is listed`, !! row, row ? row.source : 'missing' );
 		}
 
-		// State vocabulary and the controls each state may carry. The
-		// contract: activation is always offered, while deactivate and
-		// verify need a stored key to act on.
+		// State vocabulary and the controls each state may carry. Active
+		// components offer activation, while deactivate and verify need a
+		// stored key to act on. Inactive components can still report their
+		// stored state, but the vendor code that supplies those actions is not
+		// loaded, so they intentionally expose no license actions.
 		let sane = true;
 		let detail = '';
 		for ( const row of rows ) {
 			const can = row.can || [];
-			const ok = STATES.includes( row.state )
-				&& can.includes( 'activate' )
-				&& ( row.key
+			const actionsOk = row.off
+				? can.length === 0
+				: can.includes( 'activate' ) && ( row.key
 					? can.includes( 'deactivate' ) && can.includes( 'verify' )
-					: ! can.includes( 'deactivate' ) && ! can.includes( 'verify' ) )
+					: ! can.includes( 'deactivate' ) && ! can.includes( 'verify' ) );
+			const ok = STATES.includes( row.state )
+				&& actionsOk
 				&& ( row.key || row.state === 'missing' );
 			if ( ! ok ) {
 				sane = false;
@@ -128,17 +132,21 @@ const STATES = [ 'valid', 'expired', 'invalid', 'missing', 'unknown' ];
 		}
 		t.check( 'off flags track the real plugin state', ! offWrong, offWrong || 'all rows match' );
 
-		// Empty-secret activation is refused before any vendor call.
-		const empty = await page.evaluate( async () => {
+		// Empty-secret activation is refused before any vendor call. When the
+		// whole family is installed-inactive, no vendor action is registered;
+		// prove that boundary instead through one known provider id.
+		const activatable = rows.find( ( r ) => ! r.off && ( r.can || [] ).includes( 'activate' ) );
+		const empty = await page.evaluate( async ( provider ) => {
 			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/licenses/action', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
 				credentials: 'same-origin',
-				body: JSON.stringify( { provider: 'bsf-wp-schema-pro', action: 'activate', secret: '' } ),
+				body: JSON.stringify( { provider, action: 'activate', secret: '' } ),
 			} );
 			return r.status;
-		} );
-		t.check( 'empty key is refused before the vendor is called', empty === 400, String( empty ) );
+		}, activatable ? activatable.source : 'bsf-wp-schema-pro' );
+		t.check( activatable ? 'empty key is refused before the vendor is called' : 'inactive products expose no vendor action',
+			empty === ( activatable ? 400 : 404 ), String( empty ) );
 
 		// Unknown BSF provider ids 404 rather than falling through to some
 		// other product's key.
@@ -198,9 +206,11 @@ const STATES = [ 'valid', 'expired', 'invalid', 'missing', 'unknown' ];
 			const ui = byName( name );
 			const row = rows.find( ( r ) => r.name.startsWith( name ) );
 			if ( ! ui || ! row ) continue;
-			const want = row.key
-				? ui.lic.includes( 'deactivate' ) && ui.lic.includes( 'verify' )
-				: ui.lic.includes( 'activate' );
+			const want = row.off
+				? ui.lic.includes( 'turnon' ) && ! ui.lic.some( ( action ) => [ 'activate', 'deactivate', 'verify' ].includes( action ) )
+				: row.key
+					? ui.lic.includes( 'deactivate' ) && ui.lic.includes( 'verify' )
+					: ui.lic.includes( 'activate' );
 			if ( ! want || ui.pill !== row.state ) {
 				controlsWrong = `${ name }: pill=${ ui.pill } state=${ row.state } lic=${ ui.lic.join( '+' ) }`;
 			}

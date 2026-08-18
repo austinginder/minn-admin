@@ -72,17 +72,16 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		/* ===== Gibberish query: no content rows, honest empty state ===== */
 		await page.keyboard.press( 'Meta+k' );
 		await page.waitForSelector( '#minn-palette-input', { timeout: 5000 } );
-		await page.keyboard.type( 'zzqqxxnothingmatches' );
-		await page.waitForFunction( () => {
-			const list = document.querySelector( '#minn-palette-list' );
-			return list && /No results|Searching/.test( list.textContent ) === false
-				? false
-				: list && ! document.querySelector( '.minn-palette-sec' );
-		}, null, { timeout: 15000 } );
-		// Let the debounce land and confirm it settles on No results.
+		const emptyResponse = page.waitForResponse( ( res ) => {
+			if ( ! /\/wp\/v2\/search\?/.test( res.url() ) ) return false;
+			return decodeURIComponent( res.url() ).includes( 'zzqqxxnothingmatches' );
+		}, { timeout: 30000 } );
+		await page.fill( '#minn-palette-input', 'zzqqxxnothingmatches' );
+		await emptyResponse;
+		// Confirm the response has painted the honest empty state.
 		await page.waitForFunction( () =>
 			/No results/.test( document.querySelector( '#minn-palette-list' ).textContent ),
-		null, { timeout: 15000 } );
+		null, { timeout: 10000 } );
 		t.check( 'gibberish settles on the empty state with no content rows',
 			! ( await page.$( '.minn-palette-sec' ) ) );
 		await page.keyboard.press( 'Escape' );

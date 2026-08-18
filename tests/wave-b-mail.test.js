@@ -15,10 +15,12 @@ const path = require( 'path' );
 const { BASE, launch, login, reporter } = require( './helpers' );
 
 const WP_PATH = path.resolve( __dirname, '../../../..' );
+const cleanWpOutput = ( value ) => String( value || '' )
+	.split( /\r?\n/ ).filter( ( line ) => ! /^Deprecated:/.test( line.trim() ) ).join( '\n' ).trim();
 const wp = ( args ) => execSync(
 	`wp --path=${ JSON.stringify( WP_PATH ) } ${ args } 2>/dev/null`,
 	{ encoding: 'utf8', timeout: 60000 }
-).trim();
+).toString().split( /\r?\n/ ).filter( ( line ) => ! /^Deprecated:/.test( line.trim() ) ).join( '\n' ).trim();
 // PHP goes through a temp eval-file, NOT `wp eval "…"`: an inline
 // double-quoted argument lets the shell expand $wpdb before wp-cli sees it.
 // Retry across FrankenPHP restart windows (activation churn crashes the
@@ -29,12 +31,12 @@ const evalPhp = ( php ) => {
 	try {
 		for ( let attempt = 1; attempt <= 4; attempt++ ) {
 			try {
-				return execSync(
+				return cleanWpOutput( execSync(
 					`wp --path=${ JSON.stringify( WP_PATH ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`,
 					{ encoding: 'utf8', timeout: 60000 }
-				).trim();
+				) );
 			} catch ( e ) {
-				if ( attempt === 4 ) return ( e.stdout || '' ).trim();
+				if ( attempt === 4 ) return cleanWpOutput( e.stdout );
 				execSync( 'sleep 3' );
 			}
 		}

@@ -34,8 +34,13 @@ const COLS = [
 	const { browser, page, errors } = await launch();
 	await login( page );
 	const saveAndRead = async ( pid ) => {
+		const saved = page.waitForResponse( ( r ) =>
+			r.request().method() === 'POST'
+			&& r.url().includes( `/wp-json/wp/v2/posts/${ pid }` )
+			&& ! r.url().includes( '/autosaves' ), { timeout: 20000 } ).catch( () => null );
 		await page.keyboard.press( 'Meta+s' );
-		await page.waitForTimeout( 3000 );
+		const response = await saved;
+		if ( response ) await response.finished();
 		return page.evaluate( async ( p2 ) => {
 			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + p2 + '?context=edit&_fields=content&_cb=' + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
 			return ( await r.json() ).content.raw;
@@ -87,12 +92,7 @@ const COLS = [
 		t.check( 'the caret lands in the new column, beside the one you were in', after.caretInNew === 1, JSON.stringify( after ) );
 
 		await page.keyboard.type( 'Third.' );
-		await page.keyboard.press( 'Meta+s' );
-		await page.waitForTimeout( 3000 );
-		let raw = await page.evaluate( async ( pid ) => {
-			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content&_cb=' + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
-			return ( await r.json() ).content.raw;
-		}, id );
+		let raw = await saveAndRead( id );
 		const cols = ( raw.match( /<!-- wp:column -->/g ) || [] ).length;
 		t.check( 'saved markup has three real columns', cols === 3, String( cols ) );
 		t.check( 'the new column carries the typed text', /<p>Left\.<\/p>[\s\S]*Third\.[\s\S]*<p>Right\.<\/p>/.test( raw ), raw.slice( 0, 400 ) );
@@ -194,12 +194,7 @@ const COLS = [
 			await page.waitForTimeout( 1500 );
 			const cols = await page.evaluate( () => document.querySelectorAll( '.minn-cols-island .minn-slot' ).length );
 			t.check( 'the row lands as two writable columns', cols === 2, String( cols ) );
-			await page.keyboard.press( 'Meta+s' );
-			await page.waitForTimeout( 3000 );
-			const raw2 = await page.evaluate( async ( pid ) => {
-				const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content&_cb=' + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
-				return ( await r.json() ).content.raw;
-			}, gid );
+			const raw2 = await saveAndRead( gid );
 			t.check( 'the saved row is a real columns block inside the group',
 				/<!-- wp:group[\s\S]*<!-- wp:columns -->[\s\S]*<!-- wp:column -->[\s\S]*<!-- \/wp:columns -->[\s\S]*<!-- \/wp:group -->/.test( raw2 ),
 				raw2.slice( 0, 300 ) );
@@ -211,8 +206,14 @@ const COLS = [
 
 	// --- A photo in a narrow column gets the space, not the frame ---
 	{
+		const imageUrl = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/media?search=gal-red&per_page=1&_fields=source_url', { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			const rows = await r.json();
+			return rows[ 0 ]?.source_url || '';
+		} );
+		t.check( 'standing photo fixture resolves through Media', !! imageUrl, imageUrl || 'missing gal-red attachment' );
 		const cols = Array.from( { length: 4 }, () =>
-			'<!-- wp:column -->\n<div class="wp-block-column"><!-- wp:image {"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="' + BASE + '/wp-content/uploads/gal-red.png" alt=""/></figure>\n<!-- /wp:image --></div>\n<!-- /wp:column -->' ).join( '\n' );
+			'<!-- wp:column -->\n<div class="wp-block-column"><!-- wp:image {"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="' + imageUrl + '" alt=""/></figure>\n<!-- /wp:image --></div>\n<!-- /wp:column -->' ).join( '\n' );
 		const iid = await createPost( page, { title: 'Column image probe', content: '<!-- wp:columns -->\n<div class="wp-block-columns">' + cols + '</div>\n<!-- /wp:columns -->' } );
 		try {
 			await openEditor( page, iid );

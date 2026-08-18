@@ -54,8 +54,15 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		await page.waitForSelector( '.minn-block-island[data-block="acme/hero"]', { timeout: 10000 } );
 
 		// Inspector lists the image; replace with gal-red.
-		await page.click( '.minn-block-island .minn-island-chip' );
-		await page.waitForSelector( '[data-inspimg]', { timeout: 10000 } );
+		let opened = false;
+		for ( let i = 0; i < 8 && ! opened; i++ ) {
+			try {
+				await page.click( '.minn-block-island[data-block="acme/hero"] .minn-island-chip' );
+				await page.waitForSelector( '[data-inspimg]', { timeout: 6000 } );
+				opened = true;
+			} catch ( e ) { await page.waitForTimeout( 1200 ); }
+		}
+		if ( ! opened ) throw new Error( 'Could not open the synthetic image inspector' );
 		t.check( 'inspector lists the synthetic block image', ( await page.$$( '[data-inspimg]' ) ).length === 1 );
 		await page.click( '[data-inspimg]' );
 		await page.waitForSelector( '.minn-picker-item', { timeout: 15000 } );

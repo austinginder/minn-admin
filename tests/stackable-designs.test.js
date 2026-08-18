@@ -87,8 +87,8 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		await page.waitForTimeout( 400 );
 		await page.keyboard.type( 'call to action', { delay: 40 } );
 		let found = false;
-		for ( let i = 0; i < 30 && ! found; i++ ) {
-			await page.waitForTimeout( 300 );
+		for ( let i = 0; i < 50 && ! found; i++ ) {
+			await page.waitForTimeout( 500 );
 			found = await page.$$eval( '.minn-slash-item', ( els ) =>
 				els.some( ( e ) => e.textContent.includes( 'Call to Action 1' ) && e.textContent.includes( 'stackable' ) )
 			).catch( () => false );
@@ -99,7 +99,7 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		t.check( 'design entry surfaces with namespace badge', found );
 
 		// Insert — async fetch + image sideload, allow a generous window.
-		await page.keyboard.press( 'Enter' );
+		await page.locator( '.minn-slash-item' ).filter( { hasText: 'Call to Action 1' } ).first().click();
 		await page.waitForSelector( '.minn-block-island[data-block^="stackable/"]', { timeout: 45000 } );
 		t.check( 'design inserted as island', true );
 		const preview = await page.waitForFunction( () => {

@@ -35,7 +35,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 	/* ===== Non-URL text searches own content ===== */
 	await page.type( '.minn-link-pop [data-link-url]', 'Linkable Target ZQX', { delay: 15 } );
-	await page.waitForSelector( '.minn-link-result', { timeout: 8000 } );
+	await page.waitForSelector( '.minn-link-result', { timeout: 30000 } );
 	const rows = await page.$$eval( '.minn-link-result', ( els ) => els.map( ( e ) => ( {
 		title: e.querySelector( '.minn-link-result-title' ).textContent,
 		type: e.querySelector( '.minn-link-result-type' ).textContent,

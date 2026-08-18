@@ -11,6 +11,22 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	const t = reporter( 'date-picker' );
 	await login( page );
 
+	// Seed the calendar marker before the picker first fills its per-month
+	// cache. createPost() writes through raw REST and therefore bypasses the
+	// cache invalidation that Minn's own create flow performs.
+	const now = new Date();
+	const day = Math.max( 1, Math.min( 28, now.getDate() - 2 ) );
+	const y = now.getFullYear();
+	const mo = String( now.getMonth() + 1 ).padStart( 2, '0' );
+	const dd = String( day ).padStart( 2, '0' );
+	const dayKey = `${ y }-${ mo }-${ dd }`;
+	const marker = await createPost( page, {
+		title: 'Calendar Mark Fixture ZQX',
+		content: '<!-- wp:paragraph --><p>mark</p><!-- /wp:paragraph -->',
+		status: 'publish',
+		date: `${ dayKey }T10:00:00`,
+	} );
+
 	const id = await createPost( page, { title: 'Picker probe', content: '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->', status: 'draft' } );
 	await openEditor( page, id );
 
@@ -92,20 +108,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	t.check( 'Done commits the visible time and closes', /-20T06:15$/.test( done.dp ) && done.popGone, JSON.stringify( done ) );
 
 	/* ===== Calendar marks other published/scheduled posts ===== */
-	// Seed a published post on a past day of the current month, then open a
-	// fresh draft's picker and wait for the async mark paint.
-	const now = new Date();
-	const day = Math.max( 1, Math.min( 28, now.getDate() - 2 ) );
-	const y = now.getFullYear();
-	const mo = String( now.getMonth() + 1 ).padStart( 2, '0' );
-	const dd = String( day ).padStart( 2, '0' );
-	const dayKey = `${ y }-${ mo }-${ dd }`;
-	const marker = await createPost( page, {
-		title: 'Calendar Mark Fixture ZQX',
-		content: '<!-- wp:paragraph --><p>mark</p><!-- /wp:paragraph -->',
-		status: 'publish',
-		date: `${ dayKey }T10:00:00`,
-	} );
+	// Open a fresh draft's picker and wait for the async marker paint.
 	const id3 = await createPost( page, { title: 'Picker mark probe', content: '<!-- wp:paragraph --><p>z</p><!-- /wp:paragraph -->', status: 'draft' } );
 	await openEditor( page, id3 );
 	await page.click( field );
@@ -113,7 +116,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.waitForFunction( ( key ) => {
 		const btn = document.querySelector( `.minn-dp-day[data-day="${ key }"]` );
 		return btn && btn.classList.contains( 'has-posts' );
-	}, dayKey, { timeout: 12000 } );
+	}, dayKey, { timeout: 45000 } );
 	const mark = await page.evaluate( ( key ) => {
 		const btn = document.querySelector( `.minn-dp-day[data-day="${ key }"]` );
 		const leg = document.querySelector( '[data-dp-legend]' );

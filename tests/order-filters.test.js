@@ -224,17 +224,25 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// an "excludes the old order" check would pass vacuously. What IS ours
 		// to test is the boundary math and that the list mirrors the server for
 		// that window; WooCommerce's own date filtering is its business.
-		await openFilterMenu( 'date' );
-		await page.click( '.minn-of-pop [data-ofval="30"]' );
-		await waitForQuery( /[?&]after=/, 'after=' );
 		const pad = ( n ) => String( n ).padStart( 2, '0' );
 		const from = new Date( Date.now() - 29 * 86400000 );
 		const expected = `after=${ from.getFullYear() }-${ pad( from.getMonth() + 1 ) }-${ pad( from.getDate() ) }T00:00:00`;
+		await openFilterMenu( 'date' );
+		const dateResponse = page.waitForResponse( ( res ) =>
+			res.request().method() === 'GET' && /\/wc\/v3\/orders\?/.test( res.url() )
+			&& decodeURIComponent( res.url() ).includes( expected ), { timeout: 20000 } );
+		await page.click( '.minn-of-pop [data-ofval="30"]' );
+		const dateBody = await ( await dateResponse ).json();
+		await waitForQuery( /[?&]after=/, 'after=' );
 		t.check( 'date preset asks for the right window', lastQuery().indexOf( expected ) !== -1, `${ expected } vs ${ lastQuery().slice( -80 ) }` );
-		await page.waitForFunction( () => ! document.querySelector( '#minn-view .minn-loading' ), null, { timeout: 15000 } );
-		const serverIds = await api( `wc/v3/orders?per_page=25&page=1&orderby=date&order=desc&status=any&${ expected }&_fields=id` );
+		const serverList = ( Array.isArray( dateBody ) ? dateBody : [] ).map( ( o ) => o.id );
+		await page.waitForFunction( ( ids ) => {
+			if ( document.querySelector( '#minn-view .minn-loading' ) ) return false;
+			const shown = Array.from( document.querySelectorAll( '.minn-table-row[data-order]' ) )
+				.map( ( r ) => parseInt( r.dataset.order, 10 ) );
+			return shown.length === ids.length && ids.every( ( id ) => shown.includes( id ) );
+		}, serverList, { timeout: 20000 } );
 		const uiIds = await visibleIds();
-		const serverList = ( serverIds.body || [] ).map( ( o ) => o.id );
 		t.check( 'the list mirrors the server for that window',
 			serverList.length === uiIds.length && serverList.every( ( id ) => uiIds.includes( id ) ),
 			JSON.stringify( { server: serverList.slice( 0, 8 ), ui: uiIds.slice( 0, 8 ) } ) );

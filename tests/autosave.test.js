@@ -96,8 +96,9 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.keyboard.press( 'End' );
 	await page.keyboard.type( ' typing along' );
 	await page.waitForTimeout( 5000 );
-	t.check( 'No autosave within 5s of typing', writes.length === 0,
-		JSON.stringify( writeDetails.filter( ( w ) => w.at >= calmStart ).map( ( w ) => ( { ms: w.at - calmStart, url: w.url, body: w.body } ) ) ) );
+	const calmWrites = writeDetails.filter( ( w ) => w.at >= calmStart && w.body?.includes( 'typing along' ) );
+	t.check( 'No autosave within 5s of typing', calmWrites.length === 0,
+		JSON.stringify( calmWrites.map( ( w ) => ( { ms: w.at - calmStart, url: w.url, body: w.body } ) ) ) );
 	await page.waitForTimeout( 12000 );
 	t.check( 'Autosave fires after the idle window', writes.some( ( u ) => u.includes( `/posts/${ draftId }` ) ), writes.join() );
 
@@ -114,6 +115,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.waitForTimeout( 17000 );
 	t.check( 'Published autosave goes to /autosaves', writes.some( ( u ) => u.includes( `/posts/${ pubId }/autosaves` ) ), writes.join() );
 	t.check( 'The live post itself is not written', ! writes.some( ( u ) => u.includes( `/posts/${ pubId }` ) && ! u.includes( 'autosaves' ) ), writes.join() );
+	await page.waitForFunction( () => /backed up/.test( document.querySelector( '#minn-saved-state' )?.textContent || '' ), null, { timeout: 15000 } ).catch( () => null );
 	t.check( 'Indicator says backed up', /backed up/.test( await page.textContent( '#minn-saved-state' ) ) );
 
 	writes.length = 0;

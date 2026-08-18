@@ -31,8 +31,15 @@ const CARD = `<!-- wp:anchor/report-card {"tag":"FORK","tagColor":"purple","titl
 	await page.waitForSelector( '.minn-block-island', { timeout: 15000 } );
 
 	/* ===== Popover: own attrs + the content doorway (no child wall) ===== */
-	await page.click( '.minn-island-chip' );
-	await page.waitForSelector( '#minn-insp-cted', { timeout: 10000 } );
+	let opened = false;
+	for ( let i = 0; i < 8 && ! opened; i++ ) {
+		try {
+			await page.click( '.minn-block-island .minn-island-chip' );
+			await page.waitForSelector( '#minn-insp-cted', { timeout: 6000 } );
+			opened = true;
+		} catch ( e ) { await page.waitForTimeout( 1200 ); }
+	}
+	if ( ! opened ) throw new Error( 'Could not open the child-text inspector' );
 	const pop = await page.evaluate( () => ( {
 		title: document.querySelector( '[data-insp="own:title"]' ) && document.querySelector( '[data-insp="own:title"]' ).value,
 		head: ( document.querySelector( '.minn-inspector .minn-insp-imghead' ) || {} ).textContent || '',

@@ -108,8 +108,17 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		await page.click( '[data-side-door="panel:acf"]' );
 		await page.waitForSelector( '[data-pf$=":suite_headline"]', { timeout: 15000 } );
 		t.check( 'built group renders in the Custom fields panel', true );
-		t.check( 'built select carries its choices', await page.$eval( '[data-pf$=":suite_mood"]', ( e ) =>
-			Array.from( e.options || [] ).some( ( o ) => o.value === 'bold' ) ) );
+		const mood = page.locator( '[data-pf$=":suite_mood"]' );
+		let moodChoice = false;
+		if ( await mood.evaluate( ( e ) => e.tagName === 'SELECT' ) ) {
+			moodChoice = await mood.evaluate( ( e ) => Array.from( e.options ).some( ( o ) => o.value === 'bold' ) );
+		} else {
+			await mood.locator( '.minn-ac-input' ).click();
+			const bold = mood.locator( '.minn-ac-item[data-acv="bold"]' );
+			await bold.waitFor( { timeout: 5000 } );
+			moodChoice = /Bold/.test( await bold.textContent() );
+		}
+		t.check( 'built select carries its choices', moodChoice );
 
 		// Back in the builder: edit a label, reorder, delete the flag, save.
 		await page.goto( BASE + '/minn-admin/field-groups/' + gkey, { waitUntil: 'domcontentloaded' } );

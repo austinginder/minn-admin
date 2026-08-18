@@ -95,8 +95,13 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 
 		// --- Wide email preview modal ------------------------------------------
 		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
-		await page.click( '.minn-table-row' );
-		await page.waitForSelector( '.minn-modal .minn-modal-actions', { timeout: 15000 } );
+		// Click the title cell so row checkboxes/actions cannot intercept the
+		// detail gesture, then wait for the async sections payload to render.
+		await page.click( '.minn-table-row .minn-row-title' );
+		await page.waitForFunction( () => {
+			const m = document.querySelector( '.minn-modal.mail' );
+			return !! m && !! m.querySelector( '.minn-detail-frame' );
+		}, null, { timeout: 20000 } );
 		const modal = await page.evaluate( () => {
 			const m = document.querySelector( '.minn-modal' );
 			return {

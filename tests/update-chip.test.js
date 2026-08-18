@@ -16,7 +16,8 @@ const path = require( 'path' );
 	const t = reporter( 'update-chip' );
 
 	const wpPath = path.resolve( __dirname, '../../../../' );
-	const wpCli = ( args ) => execSync( `wp --path=${ JSON.stringify( wpPath ) } ${ args } 2>/dev/null`, { timeout: 120000 } ).toString().trim();
+	const wpCli = ( args ) => execSync( `wp --path=${ JSON.stringify( wpPath ) } ${ args } 2>/dev/null`, { timeout: 120000 } )
+		.toString().split( /\r?\n/ ).filter( ( line ) => ! /^Deprecated:/.test( line.trim() ) ).join( '\n' ).trim();
 
 	const TARGET = 'koko-analytics/koko-analytics.php';
 	const beforeVersion = wpCli( 'plugin get koko-analytics --field=version' );

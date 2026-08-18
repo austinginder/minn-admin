@@ -12,15 +12,17 @@ const { execSync } = require( 'child_process' );
 const path = require( 'path' );
 
 const WP = path.resolve( __dirname, '../../../../' );
+const cleanWpOutput = ( value ) => String( value || '' )
+	.split( /\r?\n/ ).filter( ( line ) => ! /^Deprecated:/.test( line.trim() ) ).join( '\n' );
 const wp = ( args ) => {
 	try {
-		return execSync( `wp --path=${ JSON.stringify( WP ) } ${ args }`, {
+		return cleanWpOutput( execSync( `wp --path=${ JSON.stringify( WP ) } ${ args }`, {
 			encoding: 'utf8',
 			stdio: [ 'ignore', 'pipe', 'pipe' ],
 			timeout: 90000,
-		} );
+		} ) );
 	} catch ( e ) {
-		return ( e.stdout || '' ) + ( e.stderr || '' );
+		return cleanWpOutput( ( e.stdout || '' ) + ( e.stderr || '' ) );
 	}
 };
 const isActive = ( slug ) => {
@@ -77,8 +79,19 @@ const phpEval = ( php ) => wp( `eval ${ JSON.stringify( php ) }` );
 		t.check( 'fixture provider carries can:true', !! row && row.can === true );
 
 		// Fresh boot: the banner offers a switch, not a link-out.
-		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '.minn-vis-banner', { timeout: 20000 } );
+		let banner = null;
+		for ( let attempt = 0; attempt < 3 && ! banner; attempt++ ) {
+			await page.goto( BASE + '/minn-admin/overview?_cb=' + Date.now(), { waitUntil: 'domcontentloaded' } );
+			await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+			banner = await page.waitForSelector( '.minn-vis-banner', { timeout: 20000 } ).catch( () => null );
+			if ( ! banner ) {
+				// A plugin activation in the surrounding release sweep can recycle
+				// the local PHP worker between the setting write and this boot.
+				// Re-arm through the live worker, then request a fresh boot payload.
+				await setOpt( 'minn_test_visibility', 'maintenance' );
+			}
+		}
+		if ( ! banner ) throw new Error( 'visibility banner did not boot after fixture was armed' );
 		const sw = await page.$( '.minn-vis-banner .minn-switch[aria-label="Minn Visibility Fixture"]' );
 		t.check( 'banner renders a switch for the toggleable provider', !! sw );
 

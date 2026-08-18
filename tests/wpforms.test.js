@@ -26,7 +26,8 @@ const os = require( 'os' );
 		try {
 			return execSync(
 				`wp --path=${ JSON.stringify( wpPath ) } eval-file ${ JSON.stringify( f ) } --user=admin 2>/dev/null`,
-				{ timeout: 60000 } ).toString().trim();
+				{ timeout: 60000 } ).toString().split( /\r?\n/ )
+				.filter( ( line ) => ! /^Deprecated:/.test( line.trim() ) ).join( '\n' ).trim();
 		} finally {
 			try { fs.unlinkSync( f ); } catch ( e ) { /* tmp cleanup */ }
 		}

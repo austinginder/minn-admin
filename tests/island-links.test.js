@@ -40,12 +40,21 @@ const GROUP = `<!-- wp:stackable/button-group {"uniqueId":"c1ac7fd","contentAlig
 	// Chip clicks can race the async preview swap — retry until the popover
 	// carries the Links input (the undo-toast lesson).
 	const openInspector = async () => {
-		for ( let i = 0; i < 4; i++ ) {
-			await page.click( '.minn-island-chip' ).catch( () => {} );
+		const selectors = [
+			'.minn-block-island[data-block="stackable/button"] > .minn-island-chip',
+			'.minn-block-island[data-block="stackable/button-group"] > .minn-island-chip',
+			'.minn-block-island > .minn-island-chip',
+		];
+		for ( let i = 0; i < 8; i++ ) {
+			await page.keyboard.press( 'Escape' ).catch( () => {} );
+			const choice = selectors[ i % selectors.length ];
+			const chips = page.locator( choice );
+			if ( ! await chips.count() ) continue;
+			await chips.last().click( { timeout: 6000 } ).catch( () => {} );
 			try {
-				await page.waitForSelector( '.minn-inspector [data-insplink]', { timeout: 4000 } );
+				await page.waitForSelector( '.minn-inspector [data-insplink]', { timeout: 6000 } );
 				return true;
-			} catch ( e ) { /* retry */ }
+			} catch ( e ) { /* retry against a fresh island node */ }
 		}
 		return false;
 	};

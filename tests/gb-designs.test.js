@@ -59,8 +59,8 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		await freshParagraph( page );
 		await page.keyboard.type( '/' + q, { delay: 30 } );
 		let found = false;
-		for ( let i = 0; i < 16 && ! found; i++ ) {
-			await page.waitForTimeout( 400 );
+		for ( let i = 0; i < 40 && ! found; i++ ) {
+			await page.waitForTimeout( 500 );
 			found = await page.$$eval( '.minn-slash-item', ( els, l ) =>
 				els.some( ( e ) => e.textContent.includes( l ) && e.textContent.includes( 'generateblocks' ) ), label
 			).catch( () => false );

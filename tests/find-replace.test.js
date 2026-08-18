@@ -115,11 +115,13 @@ const CONTENT = [
 		t.check( 'Count reads 0 after replace-all', ( await count() ) === '0', await count() );
 
 		// --- Saved content ------------------------------------------------------
+		const saved = page.waitForResponse( ( res ) =>
+			res.request().method() === 'POST'
+			&& res.url().includes( `/wp-json/wp/v2/posts/${ pid }` )
+			&& ! res.url().includes( '/autosaves' ), { timeout: 20000 } );
 		await page.keyboard.press( 'Meta+s' );
-		await page.waitForFunction(
-			() => Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Draft saved/.test( x.textContent ) ),
-			null, { timeout: 10000 }
-		);
+		const saveResponse = await saved;
+		await saveResponse.finished();
 		const raw = await fetchRaw();
 		t.check( 'Saved markup carries the replacements (incl. inside the code block)', ( raw.match( /swift crimson/g ) || [] ).length === 4, String( ( raw.match( /swift crimson/g ) || [] ).length ) );
 		t.check( 'Island block saved byte-identical', raw.includes( ISLAND ) );

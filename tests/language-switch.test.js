@@ -80,7 +80,7 @@ const check = ( name, ok, detail ) => {
 		check( 'German is selectable in the profile language picker', picked );
 
 		await page.click( '#minn-pf-save' );
-		await page.waitForTimeout( 4000 );
+		await page.waitForFunction( () => window.MINN && window.MINN.locale === 'de_DE', null, { timeout: 60000 } ).catch( () => null );
 
 		const after = await page.evaluate( () => ( {
 			stamp: window.__minnNoReload,
@@ -110,7 +110,9 @@ const check = ( name, ok, detail ) => {
 		} );
 		check( 'Persian is selectable in the picker', swapped );
 		await page.click( '#minn-pf-save' );
-		await page.waitForTimeout( 4000 );
+		await page.waitForFunction( () =>
+			window.MINN && window.MINN.locale === 'fa_IR' && document.documentElement.getAttribute( 'dir' ) === 'rtl',
+			null, { timeout: 60000 } ).catch( () => null );
 
 		const rtl = await page.evaluate( () => ( {
 			stamp: window.__minnNoReload2,

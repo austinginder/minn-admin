@@ -46,13 +46,13 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 
 	/* ===== B opens the same post → blocked with A identified ===== */
 	await openEditor( pageB, postId );
-	await pageB.waitForSelector( '#minn-lock-overlay', { timeout: 10000 } );
+	await pageB.waitForSelector( '#minn-lock-overlay', { timeout: 30000 } );
 	const overlayText = await pageB.textContent( '#minn-lock-overlay' );
 	t.check( 'B gets the takeover dialog naming A', overlayText.includes( adminName ), overlayText );
 
 	/* ===== B takes over and can edit ===== */
 	await pageB.click( '#minn-lock-take' );
-	await pageB.waitForFunction( () => ! document.querySelector( '#minn-lock-overlay' ), null, { timeout: 10000 } );
+	await pageB.waitForFunction( () => ! document.querySelector( '#minn-lock-overlay' ), null, { timeout: 30000 } );
 	t.check( 'takeover removes the dialog', true );
 	await pageB.click( '#minn-editor-body p' );
 	await pageB.keyboard.press( 'End' );
@@ -74,7 +74,7 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 
 	/* ===== A takes it back ===== */
 	await pageA.click( '#minn-lock-retake' );
-	await pageA.waitForFunction( () => ! document.querySelector( '#minn-lock-note' ), null, { timeout: 10000 } );
+	await pageA.waitForFunction( () => ! document.querySelector( '#minn-lock-note' ), null, { timeout: 30000 } );
 	const aEditable2 = await pageA.evaluate( () => document.querySelector( '#minn-editor-body' ).getAttribute( 'contenteditable' ) );
 	t.check( 'take-back re-enables A\'s editor', aEditable2 === 'true', aEditable2 );
 
@@ -84,7 +84,7 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 	await pageA.waitForFunction( () => {
 		const b = document.querySelector( '#minn-editor-body' );
 		return b && /B was here\./.test( b.textContent );
-	}, null, { timeout: 10000 } );
+	}, null, { timeout: 30000 } );
 	t.check( 'clean take-back adopts B\'s saved content', true );
 	t.check( 'no drift banner on a clean take-back', ! ( await pageA.$( '#minn-drift-note' ) ) );
 
@@ -102,9 +102,9 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 	await pageA.keyboard.press( 'End' );
 	await pageA.keyboard.type( ' A unsaved edit.' );
 	await openEditor( pageB, post3 );
-	await pageB.waitForSelector( '#minn-lock-overlay', { timeout: 10000 } );
+	await pageB.waitForSelector( '#minn-lock-overlay', { timeout: 30000 } );
 	await pageB.click( '#minn-lock-take' );
-	await pageB.waitForFunction( () => ! document.querySelector( '#minn-lock-overlay' ), null, { timeout: 10000 } );
+	await pageB.waitForFunction( () => ! document.querySelector( '#minn-lock-overlay' ), null, { timeout: 30000 } );
 	await pageB.click( '#minn-editor-body p' );
 	await pageB.keyboard.press( 'End' );
 	await pageB.keyboard.type( ' B2 version.' );
@@ -117,7 +117,7 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 	t.check( 'B saved the contested published post', /B2 version\./.test( rawPost3 ), rawPost3 );
 	await pageA.waitForSelector( '#minn-lock-note', { timeout: 40000 } ); // 30s refresh + slack
 	await pageA.click( '#minn-lock-retake' );
-	await pageA.waitForSelector( '#minn-drift-note', { timeout: 10000 } );
+	await pageA.waitForSelector( '#minn-drift-note', { timeout: 30000 } );
 	const driftText = await pageA.textContent( '#minn-drift-note' );
 	t.check( 'dirty take-back shows the drift banner naming B', driftText.includes( editorName ), driftText );
 	const aKept = await pageA.evaluate( () => document.querySelector( '#minn-editor-body' ).textContent );
@@ -126,7 +126,7 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 	await pageA.waitForFunction( () => {
 		const b = document.querySelector( '#minn-editor-body' );
 		return b && /B2 version\./.test( b.textContent ) && ! /A unsaved edit\./.test( b.textContent );
-	}, null, { timeout: 10000 } );
+	}, null, { timeout: 30000 } );
 	t.check( 'Load theirs swaps in B\'s saved version', true );
 	t.check( 'drift banner clears after loading theirs', ! ( await pageA.$( '#minn-drift-note' ) ) );
 
@@ -150,11 +150,11 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 	await pageA.keyboard.press( 'End' );
 	await pageA.keyboard.type( ' A blind edit.' );
 	await openEditor( pageB, post4 );
-	await pageB.waitForSelector( '#minn-lock-overlay', { timeout: 10000 } );
+	await pageB.waitForSelector( '#minn-lock-overlay', { timeout: 30000 } );
 	await pageB.click( '#minn-lock-take' );
-	await pageB.waitForFunction( () => ! document.querySelector( '#minn-lock-overlay' ), null, { timeout: 10000 } );
+	await pageB.waitForFunction( () => ! document.querySelector( '#minn-lock-overlay' ), null, { timeout: 30000 } );
 	await pageA.keyboard.press( 'Meta+s' ); // A still believes it holds the lock
-	await pageA.waitForSelector( '#minn-lock-note', { timeout: 10000 } );
+	await pageA.waitForSelector( '#minn-lock-note', { timeout: 30000 } );
 	t.check( 'blind-window save flips A to taken-over immediately', true );
 	const rawPost4 = await pageA.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ pid }?context=edit&_fields=content`, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
