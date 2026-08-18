@@ -40,6 +40,11 @@ const LOCALES = [
 	{ code: 'es_MX', name: 'Spanish (Mexico)',     share: 0.49, wave: 2, rtl: false, plural: 'nplurals=2; plural=n != 1;' },
 	{ code: 'da_DK', name: 'Danish',               share: 0.47, wave: 2, rtl: false, plural: 'nplurals=2; plural=n != 1;' },
 	{ code: 'he_IL', name: 'Hebrew',               share: 0.41, wave: 2, rtl: true,  plural: 'nplurals=2; plural=n != 1;' },
+
+	// --- community locales -------------------------------------------------
+	// The stats API folds Frisian into "Others". Null avoids inventing a
+	// percentage; the smallest locale it reports separately is 0.10%.
+	{ code: 'fy',    name: 'Frisian',              share: null, wave: 3, rtl: false, plural: 'nplurals=2; plural=n != 1;' },
 ];
 
 const byCode = ( code ) => LOCALES.find( ( l ) => l.code === code );
@@ -74,9 +79,13 @@ if ( require.main === module ) {
 	const w = process.argv[ 2 ] ? Number( process.argv[ 2 ] ) : null;
 	const list = w ? wave( w ) : LOCALES;
 	let total = 0;
+	let unreported = 0;
 	for ( const l of list ) {
-		total += l.share;
-		console.log( `${ l.code.padEnd( 6 ) } ${ String( l.share ).padStart( 5 ) }%  ${ nplurals( l ) } form(s)${ l.rtl ? '  RTL' : '' }  ${ l.name }` );
+		if ( null !== l.share ) total += l.share;
+		else unreported++;
+		const share = null === l.share ? '<0.10' : String( l.share );
+		console.log( `${ l.code.padEnd( 6 ) } ${ share.padStart( 5 ) }%  ${ nplurals( l ) } form(s)${ l.rtl ? '  RTL' : '' }  ${ l.name }` );
 	}
-	console.log( `\n${ list.length } locales, ${ total.toFixed( 2 ) }% of WordPress installs` );
+	const tail = unreported ? ` plus ${ unreported } below the reporting cutoff` : '';
+	console.log( `\n${ list.length } locales, ${ total.toFixed( 2 ) }% of WordPress installs${ tail }` );
 }

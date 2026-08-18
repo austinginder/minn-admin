@@ -60,6 +60,7 @@ const LOCALES = {
 	es_MX: 'nplurals=2; plural=n != 1;',
 	da_DK: 'nplurals=2; plural=n != 1;',
 	he_IL: 'nplurals=2; plural=n != 1;',
+	fy: 'nplurals=2; plural=n != 1;',
 };
 
 // n => expected form index
@@ -87,6 +88,7 @@ const EXPECT = {
 	es_MX: { 1: 0, 2: 1 },
 	da_DK: { 1: 0, 2: 1 },
 	he_IL: { 0: 1, 1: 0, 2: 1 },
+	fy: { 0: 1, 1: 0, 2: 1, 21: 1 },
 };
 
 let pass = 0, fail = 0;

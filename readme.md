@@ -94,7 +94,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   guards protect destructive actions; account creation/deletion, network domain and path
   changes, the long settings tail, and very large network upgrades link to WordPress Network Admin
 - **In your language** — the whole interface follows the language you pick, per user, in
-  **twenty-three languages** covering about half of WordPress installs. Right-to-left languages
+  **twenty-four languages** covering about half of WordPress installs. Right-to-left languages
   (Arabic, Hebrew, Persian and friends) get a genuinely mirrored layout, counts follow each
   language's own plural rules, and translations arrive as **WordPress language packs** through
   the same Updates screen as everything else

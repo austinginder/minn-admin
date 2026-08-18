@@ -323,7 +323,7 @@ more of them.
 
 Pick a language on **Your profile** and all of Minn follows: buttons,
 table headings, empty states, confirmations, error messages, counts.
-Twenty-three languages ship with the plugin. The switch applies the
+Twenty-four languages ship with the plugin. The switch applies the
 moment you save; a language you have not installed yet downloads in the
 background, with plugin translations following behind, so the interface
 never sits waiting on them. Your pick is yours alone; it never changes
