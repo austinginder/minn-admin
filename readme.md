@@ -22,7 +22,41 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
     node -e 'const b=require("fs").readFileSync(".wp-playground/blueprint.json","utf8");console.log("https://playground.wordpress.net/#"+encodeURIComponent(JSON.stringify(JSON.parse(b))).replace(/\(/g,"%28").replace(/\)/g,"%29"))'
 -->
 
-## Features
+## Install
+
+1. Download or clone into `wp-content/plugins/minn-admin`.
+2. Activate through the Plugins screen.
+3. Visit `/minn-admin/`. It is also linked from the admin bar and the wp-admin menu.
+
+Pretty permalinks are recommended for clean routes such as `/minn-admin/content`. Without
+them, Minn falls back to `/?minn_admin=1` with hash routing. Updates arrive through the
+normal WordPress updates screen from GitHub Releases.
+
+## What you can do
+
+- **Run the site:** Manage content, media, comments, users, settings, and WooCommerce from
+  one focused interface.
+- **Write with confidence:** Keep native Gutenberg content while gaining autosave, revision
+  diffs, post locking, recovery, and distraction-free writing tools.
+- **Work with your plugins:** Bring forms, backups, email logs, redirects, snippets,
+  analytics, licenses, and other daily workflows into consistent Minn surfaces.
+- **Care for the site:** Handle updates, diagnostics, logs, visibility warnings, backups,
+  security posture, and cache controls without hunting through plugin menus.
+- **Stay in control:** Classic wp-admin remains available, builder-owned content stays
+  protected, and integrations never inject third-party interfaces into Minn.
+- **Use it your way:** Minn works on phones, supports multisite and twenty-four languages,
+  and includes dark, light, System, and custom per-user color schemes.
+
+For a task-based walkthrough, read [Using Minn Admin](docs/user-guide.md). For exact plugin
+coverage, see the [plugin compatibility map](docs/plugin-support.md).
+
+## Full feature reference
+
+Expand only the part of Minn you want to explore.
+
+<details>
+<summary><strong>Daily site work</strong></summary>
+
 
 - **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
   is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP,
@@ -104,6 +138,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **AI Access** — generate revocable **application passwords** for AI agents plus a site-tailored
   **agent guide** (markdown REST reference) to hand to a coding agent; configuration work stays
   out of Minn by design
+
+</details>
+
+<details>
+<summary><strong>Extensions, structure, and settings</strong></summary>
+
 - **Extensions** — install plugins and themes from WordPress.org or zip upload (Add plugin opens a
   **catalog by category** with install tips, not only free-text search), activate, deactivate,
   delete, per-item and bulk updates with **Queued… / Updating…** feedback that survives worker
@@ -133,6 +173,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   can safely flip the setting, including **turn-off switches with Undo** for detected
   coming-soon and maintenance plugins that write through each plugin's own storage (third
   parties register via `minn_admin_visibility_providers` and `minn_admin_visibility_toggles`)
+
+</details>
+
+<details>
+<summary><strong>Writing and page building</strong></summary>
+
 - **Editor** — a calm, block-aware writing surface that stores **native Gutenberg markup**
   (zero lock-in: open any post in the block editor, any time). Markdown typing conventions
   (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), with wraps
@@ -193,6 +239,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   the builder's own chrome-free surface via **Edit in ⟨builder⟩** (no wp-admin screen), and
   fenced so a stray Minn edit can't break the builder's canvas. + New can start a page in any
   active builder. Third parties register via the `minn_admin_page_builders` filter
+
+</details>
+
+<details>
+<summary><strong>Site care and plugin workflows</strong></summary>
+
 - **System** — a developer diagnostics page with a sticky section **jump bar**: a health strip
   over WordPress / PHP / database / server facts, plus **loopback and REST self-checks**, site
   visibility, **Wordfence firewall & scan posture**, **SSL enforcement** (Really Simple SSL),
@@ -284,6 +336,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   its own cleanup. With **Disembark**: a status card (last scan, database size, working files),
   the exact `disembark connect` command click-to-copy, scan sessions with cleanup, and token
   regeneration
+
+</details>
+
+<details>
+<summary><strong>Control and extensibility</strong></summary>
+
 - **Notifications that respect you** — comments, plugin/theme/core updates and new users in one
   panel, plus an **admin-notice digest**: the notices other plugins print in wp-admin are
   extracted as structured data (never their HTML or JavaScript) into a Notices tab; **Allow /
@@ -320,15 +378,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   scheme with per-slot color pickers, set on Your profile. Bundled fonts, zero external
   requests from the app, responsive down to phones
 
-## Install
-
-1. Download or clone into `wp-content/plugins/minn-admin`.
-2. Activate through the Plugins screen.
-3. Visit `/minn-admin/`. It's also linked from the admin bar and the wp-admin menu.
-
-Pretty permalinks recommended (clean routes like `/minn-admin/content`); without them the app
-falls back to `/?minn_admin=1` with hash routing. Updates are delivered through the normal
-WordPress updates UI via GitHub Releases.
+</details>
 
 ## Extending
 
