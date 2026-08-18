@@ -9,6 +9,13 @@
 	const root = document.getElementById( 'minn-bar-root' );
 	if ( ! root ) return;
 
+	/* Same guard app.js applies at its navigation sinks. A command's value can
+	 * carry a page-builder edit_url, which the minn_admin_page_builders filter
+	 * lets third-party code populate, so it is not first-party by construction.
+	 * Scheme allowlist plus an origin guard: the leading-slash branch refuses a
+	 * second slash or a backslash, which would otherwise resolve off-origin. */
+	const safeHref = ( u ) => ( /^(https?:\/\/|\/(?![/\\]))/i.test( String( u == null ? '' : u ).trim() ) ? String( u ).trim() : '' );
+
 	/* ===== Theme: follow the SPA's saved preference; system when unset ===== */
 	function applyTheme() {
 		let t;
@@ -402,7 +409,9 @@
 		if ( 'theme' === c.kind ) { closePalette(); toggleThemePref(); return; }
 		if ( 'purge' === c.kind ) { closePalette(); runCachePurge(); return; }
 		if ( 'intent' === c.kind ) { goWithIntent( c.value ); return; }
-		location.href = c.value;
+		const dest = safeHref( c.value );
+		if ( ! dest ) return;
+		location.href = dest;
 	}
 
 	function openPalette() {

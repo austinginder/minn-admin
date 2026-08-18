@@ -253,7 +253,11 @@
 	// elsewhere is not on every anchor. Bundled page builders all return
 	// admin_url()/get_permalink()/home_url(), but minn_admin_page_builders is
 	// a filter third-party code can populate.
-	const safeHref = ( u ) => ( /^(https?:\/\/|\/)/i.test( String( u == null ? '' : u ).trim() ) ? String( u ).trim() : '' );
+	// Scheme allowlist AND origin guard. The leading-slash branch must refuse a
+	// second slash or a backslash: "//evil.com", "/\evil.com" and "///evil.com"
+	// are authority forms that resolve off-origin, so a bare /^\// would let a
+	// third-party URL through every sink this protects.
+	const safeHref = ( u ) => ( /^(https?:\/\/|\/(?![/\\]))/i.test( String( u == null ? '' : u ).trim() ) ? String( u ).trim() : '' );
 
 	// Structural parsing of untrusted markup, same inert document and the same
 	// reason as stripTags: a container created from the LIVE document runs the

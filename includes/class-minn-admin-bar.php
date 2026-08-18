@@ -102,9 +102,14 @@ class Minn_Admin_Bar {
 	 */
 	private static function status() {
 		$fixable = current_user_can( 'manage_options' );
-		$v       = function_exists( 'minn_admin_site_visibility' ) ? minn_admin_site_visibility() : null;
+		// Read through the redaction helper, never the raw detector: this bar
+		// renders into a public page for anyone with edit_posts, and provider
+		// identities are reconnaissance the lower tiers do not get elsewhere.
+		$v = class_exists( 'Minn_Admin' ) && method_exists( 'Minn_Admin', 'visibility_for_current_user' )
+			? Minn_Admin::visibility_for_current_user()
+			: null;
 		if ( $v && 'public' !== $v['state'] ) {
-			$providers = $v['providers'];
+			$providers = isset( $v['providers'] ) ? (array) $v['providers'] : array();
 			$names     = implode( ', ', wp_list_pluck( $providers, 'name' ) );
 			$first     = $providers ? $providers[0] : null;
 			// One obvious fix only: offered when exactly one provider is
@@ -135,8 +140,10 @@ class Minn_Admin_Bar {
 					'title' => 'partial' === $v['state']
 						? __( 'Part of the site is hidden', 'minn-admin' )
 						: ( $coming ? __( 'Coming soon mode is on', 'minn-admin' ) : __( 'Maintenance mode is on', 'minn-admin' ) ),
-					/* translators: %s: the plugin(s) hiding the site. */
-					'sub'   => sprintf( __( 'Visitors see a holding page from %s. You see the real site because you are signed in.', 'minn-admin' ), $names ),
+					'sub'   => $names
+						/* translators: %s: the plugin(s) hiding the site. */
+						? sprintf( __( 'Visitors see a holding page from %s. You see the real site because you are signed in.', 'minn-admin' ), $names )
+						: __( 'Visitors see a holding page. You see the real site because you are signed in.', 'minn-admin' ),
 					'fix'   => $fix,
 				);
 			}
@@ -145,8 +152,10 @@ class Minn_Admin_Bar {
 					'tone'  => 'amber',
 					'label' => __( 'Password protected', 'minn-admin' ),
 					'title' => __( 'The whole site is password-protected', 'minn-admin' ),
-					/* translators: %s: the plugin providing the password gate. */
-					'sub'   => sprintf( __( 'Visitors need a password from %s before they can browse.', 'minn-admin' ), $names ),
+					'sub'   => $names
+						/* translators: %s: the plugin providing the password gate. */
+						? sprintf( __( 'Visitors need a password from %s before they can browse.', 'minn-admin' ), $names )
+						: __( 'Visitors need a password before they can browse.', 'minn-admin' ),
 					'fix'   => $fix,
 				);
 			}
@@ -163,7 +172,9 @@ class Minn_Admin_Bar {
 				) : null,
 			);
 		}
-		$env = function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production';
+		// Environment type is a system_info() row everywhere else in the app,
+		// and that route is manage_options. Keep the same bar here.
+		$env = $fixable && function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production';
 		if ( 'production' !== $env ) {
 			$labels = array(
 				'staging'     => __( 'Staging', 'minn-admin' ),

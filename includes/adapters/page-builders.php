@@ -269,10 +269,13 @@ function minn_admin_builder_for_post( $post ) {
 		$owns = isset( $b['owns_post'] )
 			? (bool) call_user_func( $b['owns_post'], $post )
 			: (bool) $b['owns_content'];
+		// edit_url comes from the minn_admin_page_builders filter, so a third
+		// party supplies it. Sanitize once here and every consumer inherits the
+		// scheme allowlist instead of re-deriving it at each sink.
 		return array(
 			'id'           => $id,
 			'name'         => $b['name'],
-			'edit_url'     => (string) call_user_func( $b['edit_url'], $post ),
+			'edit_url'     => esc_url_raw( (string) call_user_func( $b['edit_url'], $post ) ),
 			'owns_content' => $owns,
 			'active'       => ! isset( $b['active'] ) || (bool) $b['active'],
 		);
