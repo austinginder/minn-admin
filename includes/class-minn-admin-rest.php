@@ -1986,7 +1986,15 @@ class Minn_Admin_REST {
 	 * drafts and pending autosave in place, so they never diverge this way.
 	 */
 	public static function post_modified_unsaved( $item ) {
-		$post = get_post( isset( $item['id'] ) ? (int) $item['id'] : 0 );
+		$id = isset( $item['id'] ) ? (int) $item['id'] : 0;
+		// context=edit on a COLLECTION is authorised against the post type's
+		// blanket edit_posts, so the field still has to ask about THIS post.
+		// Without it a contributor reads the editorial state of every published
+		// post on the site.
+		if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
+			return false;
+		}
+		$post = get_post( $id );
 		if ( ! $post || ! in_array( $post->post_status, array( 'publish', 'future', 'private' ), true ) ) {
 			return false;
 		}
@@ -2013,7 +2021,9 @@ class Minn_Admin_REST {
 	 */
 	public static function post_lock_holder( $item ) {
 		$id = isset( $item['id'] ) ? (int) $item['id'] : 0;
-		if ( ! $id ) {
+		// Who is editing a post is only the business of someone who may edit
+		// it; see post_modified_unsaved() for why context alone is not enough.
+		if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
 			return null;
 		}
 		require_once ABSPATH . 'wp-admin/includes/post.php';
@@ -2052,7 +2062,10 @@ class Minn_Admin_REST {
 	 */
 	public static function read_debug_log( WP_REST_Request $request ) {
 		$path = self::debug_log_path();
-		$rel  = str_replace( ABSPATH, '', $path );
+		// A path outside the install does not shorten against ABSPATH, so it
+		// would render as the full server path. Name it without locating it.
+		$owned = ! class_exists( 'Minn_Admin_Logs' ) || Minn_Admin_Logs::site_owned( $path );
+		$rel   = $owned ? str_replace( ABSPATH, '', $path ) : basename( $path );
 		if ( ! file_exists( $path ) ) {
 			return rest_ensure_response(
 				array(
@@ -2098,6 +2111,17 @@ class Minn_Admin_REST {
 	/** Empty the debug log (truncate to zero). */
 	public static function clear_debug_log() {
 		$path = self::debug_log_path();
+		// Same refusal the registry route makes: WP_DEBUG_LOG can point outside
+		// the install, at a host-level log other sites on the box write to, and
+		// truncating that is not ours to do. The guarded route already refuses
+		// it; this alias used to destroy the file.
+		if ( class_exists( 'Minn_Admin_Logs' ) && ! Minn_Admin_Logs::site_owned( $path ) ) {
+			return new WP_Error(
+				'not_clearable',
+				__( 'That log lives outside this site, so Minn will not clear it.', 'minn-admin' ),
+				array( 'status' => 400 )
+			);
+		}
 		if ( ! file_exists( $path ) ) {
 			return rest_ensure_response( array( 'cleared' => true ) );
 		}
@@ -4585,10 +4609,11 @@ class Minn_Admin_REST {
 			);
 		}
 		if ( is_user_member_of_blog( $user->ID ) ) {
+			// Core's equivalent names nobody, and the invite reply deliberately
+			// withholds name, id and email for the same reason.
 			return new WP_Error(
 				'already_member',
-				/* translators: %s: the user's display name. */
-				sprintf( __( '%s is already a member of this site.', 'minn-admin' ), $user->display_name ),
+				__( 'That account is already a member of this site.', 'minn-admin' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -4603,11 +4628,24 @@ class Minn_Admin_REST {
 				array( 'status' => 403 )
 			);
 		}
-		if ( is_super_admin( $user->ID ) && ! $network_admin ) {
-			return new WP_Error(
-				'cannot_promote',
-				__( 'Network administrators are added to a site from Network Admin.', 'minn-admin' ),
-				array( 'status' => 403 )
+		if ( is_super_admin( $user->ID ) ) {
+			if ( $network_admin ) {
+				return new WP_Error(
+					'cannot_promote',
+					__( 'Network administrators are added to a site from Network Admin.', 'minn-admin' ),
+					array( 'status' => 403 )
+				);
+			}
+			// Keep the guard, but stop it being distinguishable. Answering 403
+			// only for a network administrator's address turns this route into
+			// a way of asking which addresses belong to one. Reply exactly as
+			// the invite path does, and simply send no invitation: the caller
+			// learns nothing they did not already supply.
+			return rest_ensure_response(
+				array(
+					'pending' => true,
+					'message' => __( 'Invitation sent. The account holder has to confirm before they join this site.', 'minn-admin' ),
+				)
 			);
 		}
 

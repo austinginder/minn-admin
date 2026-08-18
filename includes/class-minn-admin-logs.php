@@ -51,7 +51,15 @@ class Minn_Admin_Logs {
 	 * PHP error log, another vhost's output. Such a source is never registered
 	 * for clearing, and its absolute path is never echoed back.
 	 */
-	private static function site_owned( $path ) {
+	/**
+	 * Does this path live inside the install?
+	 *
+	 * Public because the legacy /system/debug-log alias has to draw the same
+	 * boundary as the registry route: on shared or multi-vhost hosting
+	 * WP_DEBUG_LOG routinely points at a host-level file other customers write
+	 * to, and that file is neither ours to show in full nor ours to truncate.
+	 */
+	public static function site_owned( $path ) {
 		$real = realpath( $path );
 		if ( ! $real ) {
 			$real = realpath( dirname( $path ) );

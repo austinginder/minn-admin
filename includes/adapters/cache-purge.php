@@ -289,6 +289,14 @@ function minn_admin_cache_purgers() {
  * @return array[] List of {id,label,status,detail} checks.
  */
 function minn_admin_redis_object_cache_checks() {
+	// One object cache backs every site on the network, which is why the purger
+	// below carries network => true and is filtered out for anyone who is not
+	// the network owner. Its version and live connection state are the same
+	// shared fact, so they answer to the same gate rather than to the per-site
+	// manage_options the System page runs at.
+	if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::network_owner() ) {
+		return array();
+	}
 	if ( ! defined( 'WP_REDIS_VERSION' ) || ! class_exists( '\Rhubarb\RedisCache\Plugin' ) ) {
 		return array();
 	}

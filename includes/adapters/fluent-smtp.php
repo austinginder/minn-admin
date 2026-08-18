@@ -161,6 +161,12 @@ function minn_admin_fluent_smtp_health() {
  * @return array[] of { label, status, detail, href? }
  */
 function minn_admin_fluent_smtp_checks() {
+	// The rows name sender addresses of failing connections, so they answer to
+	// the plugin's own capability, which this adapter already resolves for its
+	// routes and simply never applied here.
+	if ( ! current_user_can( minn_admin_fluent_smtp_cap() ) ) {
+		return array();
+	}
 	if ( ! minn_admin_fluent_smtp_active() || ! class_exists( 'FluentMail\\App\\Services\\ConnectionHealth' ) || ! function_exists( 'fluentMailGetSettings' ) ) {
 		return array();
 	}

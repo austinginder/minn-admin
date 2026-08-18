@@ -144,6 +144,12 @@ function minn_admin_aios_login_posture() {
  * @return array[] of { label, status, detail, href? }
  */
 function minn_admin_aios_checks() {
+	// Mirror the plugin's own management permission, which a site owner can
+	// narrow below manage_options; the adapter resolves it for every other
+	// path already.
+	if ( ! minn_admin_aios_can() ) {
+		return array();
+	}
 	if ( ! minn_admin_aios_active() ) {
 		return array();
 	}
