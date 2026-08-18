@@ -1,0 +1,11 @@
+# Reviewed Vietnamese corrections. See reviewed/README.md.
+msgid ""
+msgstr ""
+"Language: vi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# The WordPress core glossary entry contains an unrelated %s placeholder.
+msgid "User deleted"
+msgstr "Đã xóa người dùng"
