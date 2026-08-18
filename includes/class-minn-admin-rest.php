@@ -192,6 +192,32 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Range-wide breakdowns for the Stats page: providers answer
+		// minn_admin_traffic_report, with a traffic-day fallback.
+		register_rest_route(
+			self::NS,
+			'/stats/report',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'stats_report' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'from' => array(
+						'type'     => 'string',
+						'required' => true,
+						'pattern'  => '^\d{4}-\d{2}-\d{2}$',
+					),
+					'to'   => array(
+						'type'     => 'string',
+						'required' => true,
+						'pattern'  => '^\d{4}-\d{2}-\d{2}$',
+					),
+				),
+			)
+		);
+
 		// Traffic day drill-down: top pages (and optional referrers) for a
 		// chart bar's date window. Providers answer minn_admin_traffic_day.
 		register_rest_route(
@@ -2769,6 +2795,136 @@ class Minn_Admin_REST {
 						'delta'        => $delta,
 					),
 				)
+			)
+		);
+	}
+
+	/**
+	 * Range-wide breakdowns for the Stats page.
+	 *
+	 * Providers with richer dimensions answer the `minn_admin_traffic_report`
+	 * filter with { source, sections: [ { id, label, rows: [ { label, sub?,
+	 * url?, postId?, visitors?, pageviews? } ] } ], adminUrl? } — first
+	 * non-null wins, same priority convention as minn_admin_traffic. When no
+	 * provider answers, the endpoint synthesizes Top pages + Referrers from
+	 * `minn_admin_traffic_day`: every bundled drill-down aggregates a date
+	 * window generically (SQL SUMs or range API calls), so the whole family
+	 * gets range-wide breakdowns without new adapter code.
+	 */
+	public static function stats_report( WP_REST_Request $request ) {
+		$from = $request['from'];
+		$to   = $request['to'];
+		if ( $from > $to ) {
+			return new WP_Error( 'bad_range', __( 'from must be on or before to.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$span = (int) ( ( strtotime( $to . ' UTC' ) - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
+		if ( $span > 366 ) {
+			return new WP_Error( 'range_too_long', __( 'Pick a window of a year or less.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$empty = array(
+			'source'   => '',
+			'sections' => array(),
+			'adminUrl' => '',
+		);
+		if ( ! apply_filters( 'minn_admin_traffic_cap', current_user_can( 'manage_options' ) ) ) {
+			return rest_ensure_response( $empty );
+		}
+
+		/**
+		 * Range-wide traffic breakdowns for the Stats page.
+		 *
+		 * @param array|null $report Existing answer (return early when non-null).
+		 * @param string     $from   Inclusive Y-m-d start.
+		 * @param string     $to     Inclusive Y-m-d end.
+		 */
+		$report = apply_filters( 'minn_admin_traffic_report', null, $from, $to );
+		if ( ! is_array( $report ) ) {
+			$day = apply_filters( 'minn_admin_traffic_day', null, $from, $to );
+			if ( ! is_array( $day ) ) {
+				return rest_ensure_response( $empty );
+			}
+			$sections = array();
+			$pages    = array();
+			foreach ( (array) ( $day['pages'] ?? array() ) as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$title   = isset( $row['title'] ) ? (string) $row['title'] : '';
+				$path    = isset( $row['path'] ) ? (string) $row['path'] : '';
+				$pages[] = array(
+					'label'     => '' !== $title ? $title : $path,
+					'sub'       => ( '' !== $path && $path !== $title ) ? $path : '',
+					'url'       => isset( $row['url'] ) ? (string) $row['url'] : '',
+					'postId'    => isset( $row['postId'] ) ? (int) $row['postId'] : 0,
+					'visitors'  => isset( $row['visitors'] ) ? (int) $row['visitors'] : 0,
+					'pageviews' => isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0,
+				);
+			}
+			if ( $pages ) {
+				$sections[] = array(
+					'id'    => 'pages',
+					'label' => __( 'Top pages', 'minn-admin' ),
+					'rows'  => $pages,
+				);
+			}
+			$refs = array();
+			foreach ( (array) ( $day['referrers'] ?? array() ) as $row ) {
+				if ( ! is_array( $row ) || empty( $row['label'] ) ) {
+					continue;
+				}
+				$refs[] = array(
+					'label'     => (string) $row['label'],
+					'visitors'  => isset( $row['visitors'] ) ? (int) $row['visitors'] : 0,
+					'pageviews' => isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0,
+				);
+			}
+			if ( $refs ) {
+				$sections[] = array(
+					'id'    => 'referrers',
+					'label' => __( 'Referrers', 'minn-admin' ),
+					'rows'  => $refs,
+				);
+			}
+			$report = array(
+				'source'   => isset( $day['source'] ) ? (string) $day['source'] : '',
+				'sections' => $sections,
+				'adminUrl' => isset( $day['adminUrl'] ) ? (string) $day['adminUrl'] : '',
+			);
+		}
+
+		// Normalize whatever the filter answered: bounded lists, typed cells.
+		$sections = array();
+		foreach ( array_slice( (array) ( $report['sections'] ?? array() ), 0, 8 ) as $sec ) {
+			if ( ! is_array( $sec ) || empty( $sec['label'] ) || empty( $sec['rows'] ) ) {
+				continue;
+			}
+			$rows = array();
+			foreach ( array_slice( (array) $sec['rows'], 0, 25 ) as $row ) {
+				if ( ! is_array( $row ) || ! isset( $row['label'] ) || '' === (string) $row['label'] ) {
+					continue;
+				}
+				$rows[] = array(
+					'label'     => (string) $row['label'],
+					'sub'       => isset( $row['sub'] ) ? (string) $row['sub'] : '',
+					'url'       => isset( $row['url'] ) ? esc_url_raw( (string) $row['url'] ) : '',
+					'postId'    => isset( $row['postId'] ) ? (int) $row['postId'] : 0,
+					'visitors'  => isset( $row['visitors'] ) ? (int) $row['visitors'] : 0,
+					'pageviews' => isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0,
+				);
+			}
+			if ( $rows ) {
+				$sections[] = array(
+					'id'    => isset( $sec['id'] ) ? sanitize_key( $sec['id'] ) : sanitize_key( $sec['label'] ),
+					'label' => (string) $sec['label'],
+					'rows'  => $rows,
+				);
+			}
+		}
+		return rest_ensure_response(
+			array(
+				'source'   => isset( $report['source'] ) ? (string) $report['source'] : '',
+				'sections' => $sections,
+				'adminUrl' => isset( $report['adminUrl'] ) ? esc_url_raw( (string) $report['adminUrl'] ) : '',
 			)
 		);
 	}

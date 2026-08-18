@@ -105,94 +105,207 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 }, 20, 2 );
 
 /**
- * Overview traffic-day drill-down: top posts and referrers, summarized over
- * the requested window through WPCOM's own summarize flag. WPCOM reports
- * views per page (no per-page visitor count) — visitors stays 0 and the
- * client hides the empty number.
+ * Top posts and referrers for a date window, summarized through WPCOM's own
+ * summarize flag. Shared by the traffic-day drill-down and the range-wide
+ * report. WPCOM reports views per page (no per-page visitor count) —
+ * visitors stays 0 and the client hides the empty number.
+ *
+ * @return array { pages: [...], referrers: [...] } (pages empty = no answer)
+ */
+function minn_admin_jetpack_stats_pages_refs( $wpcom, $from, $to ) {
+	$span = (int) ( ( strtotime( $to . ' UTC' ) - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
+	$base = array(
+		'date'      => $to,
+		'period'    => 'day',
+		'num'       => max( 1, $span ),
+		'summarize' => 1,
+	);
+
+	$top = $wpcom->get_top_posts( $base + array( 'max' => 25 ) );
+	if ( is_wp_error( $top ) ) {
+		return array( 'pages' => array(), 'referrers' => array() );
+	}
+
+	$pages = array();
+	foreach ( (array) ( $top['summary']['postviews'] ?? array() ) as $row ) {
+		if ( ! is_array( $row ) ) {
+			continue;
+		}
+		$href = isset( $row['href'] ) ? (string) $row['href'] : '';
+		$path = $href ? ( wp_parse_url( $href, PHP_URL_PATH ) ?: '/' ) : '';
+		$pages[] = array(
+			'title'     => isset( $row['title'] ) ? (string) $row['title'] : $path,
+			'path'      => $path,
+			'url'       => $href,
+			'postId'    => isset( $row['id'] ) ? (int) $row['id'] : 0,
+			'pageviews' => isset( $row['views'] ) ? (int) $row['views'] : 0,
+		);
+	}
+	if ( ! $pages ) {
+		return array( 'pages' => array(), 'referrers' => array() );
+	}
+
+	$referrers = array();
+	$refs      = $wpcom->get_referrers( $base + array( 'max' => 15 ) );
+	if ( ! is_wp_error( $refs ) ) {
+		foreach ( (array) ( $refs['summary']['groups'] ?? array() ) as $group ) {
+			if ( ! is_array( $group ) ) {
+				continue;
+			}
+			// WPCOM groups referrers ("Search Engines") with the useful
+			// names nested in results ("Google Search") — surface the
+			// specific rows like their own UI does, the group otherwise.
+			$rows = array();
+			foreach ( (array) ( $group['results'] ?? array() ) as $result ) {
+				if ( is_array( $result ) && ! empty( $result['name'] ) && (int) ( $result['views'] ?? 0 ) > 0 ) {
+					$rows[] = array( 'label' => (string) $result['name'], 'pageviews' => (int) $result['views'] );
+				}
+			}
+			if ( ! $rows ) {
+				$label = (string) ( $group['name'] ?? $group['group'] ?? '' );
+				$total = (int) ( $group['total'] ?? 0 );
+				if ( '' !== $label && $total > 0 ) {
+					$rows[] = array( 'label' => $label, 'pageviews' => $total );
+				}
+			}
+			foreach ( $rows as $row ) {
+				$referrers[] = $row;
+			}
+		}
+	}
+
+	return array(
+		'pages'     => $pages,
+		'referrers' => $referrers,
+	);
+}
+
+/**
+ * Overview traffic-day drill-down: the shared builder in the pages/referrers
+ * shape that route expects.
  */
 add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 	if ( null !== $data || ! minn_admin_jetpack_stats_ready() ) {
 		return $data;
 	}
 
-	$span = (int) ( ( strtotime( $to . ' UTC' ) - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
-	$span = max( 1, $span );
-
 	try {
-		$wpcom = new \Automattic\Jetpack\Stats\WPCOM_Stats();
-
-		$top = $wpcom->get_top_posts( array(
-			'date'      => $to,
-			'period'    => 'day',
-			'num'       => $span,
-			'summarize' => 1,
-			'max'       => 25,
-		) );
-		if ( is_wp_error( $top ) ) {
+		$r = minn_admin_jetpack_stats_pages_refs( new \Automattic\Jetpack\Stats\WPCOM_Stats(), $from, $to );
+		if ( ! $r['pages'] ) {
 			return $data;
 		}
-
-		$pages = array();
-		foreach ( (array) ( $top['summary']['postviews'] ?? array() ) as $row ) {
-			if ( ! is_array( $row ) ) {
-				continue;
-			}
-			$href = isset( $row['href'] ) ? (string) $row['href'] : '';
-			$path = $href ? ( wp_parse_url( $href, PHP_URL_PATH ) ?: '/' ) : '';
-			$pages[] = array(
-				'title'     => isset( $row['title'] ) ? (string) $row['title'] : $path,
-				'path'      => $path,
-				'url'       => $href,
-				'postId'    => isset( $row['id'] ) ? (int) $row['id'] : 0,
-				'pageviews' => isset( $row['views'] ) ? (int) $row['views'] : 0,
-			);
-		}
-		if ( ! $pages ) {
-			return $data;
-		}
-
-		$referrers = array();
-		$refs      = $wpcom->get_referrers( array(
-			'date'      => $to,
-			'period'    => 'day',
-			'num'       => $span,
-			'summarize' => 1,
-			'max'       => 15,
-		) );
-		if ( ! is_wp_error( $refs ) ) {
-			foreach ( (array) ( $refs['summary']['groups'] ?? array() ) as $group ) {
-				if ( ! is_array( $group ) ) {
-					continue;
-				}
-				// WPCOM groups referrers ("Search Engines") with the useful
-				// names nested in results ("Google Search") — surface the
-				// specific rows like their own UI does, the group otherwise.
-				$rows = array();
-				foreach ( (array) ( $group['results'] ?? array() ) as $result ) {
-					if ( is_array( $result ) && ! empty( $result['name'] ) && (int) ( $result['views'] ?? 0 ) > 0 ) {
-						$rows[] = array( 'label' => (string) $result['name'], 'pageviews' => (int) $result['views'] );
-					}
-				}
-				if ( ! $rows ) {
-					$label = (string) ( $group['name'] ?? $group['group'] ?? '' );
-					$total = (int) ( $group['total'] ?? 0 );
-					if ( '' !== $label && $total > 0 ) {
-						$rows[] = array( 'label' => $label, 'pageviews' => $total );
-					}
-				}
-				foreach ( $rows as $row ) {
-					$referrers[] = $row;
-				}
-			}
-		}
-
 		return array(
 			'source'    => 'Jetpack Stats',
-			'pages'     => $pages,
-			'referrers' => $referrers,
+			'pages'     => $r['pages'],
+			'referrers' => $r['referrers'],
 			'adminUrl'  => admin_url( 'admin.php?page=stats' ),
 		);
 	} catch ( \Throwable $e ) {
 		return $data;
+	}
+}, 20, 3 );
+
+/**
+ * Range-wide report for the Stats page: pages + referrers from the shared
+ * builder, plus the dimensions only WPCOM has — countries, search terms and
+ * outbound clicks. Search terms are mostly encrypted these days, so that
+ * section only appears when real terms came back.
+ */
+add_filter( 'minn_admin_traffic_report', function ( $report, $from, $to ) {
+	if ( null !== $report || ! minn_admin_jetpack_stats_ready() ) {
+		return $report;
+	}
+
+	try {
+		$wpcom = new \Automattic\Jetpack\Stats\WPCOM_Stats();
+		$r     = minn_admin_jetpack_stats_pages_refs( $wpcom, $from, $to );
+		if ( ! $r['pages'] ) {
+			return $report;
+		}
+		$sections = array();
+		$pages    = array();
+		foreach ( $r['pages'] as $p ) {
+			$pages[] = array(
+				'label'     => $p['title'],
+				'sub'       => $p['path'] !== $p['title'] ? $p['path'] : '',
+				'url'       => $p['url'],
+				'postId'    => $p['postId'],
+				'pageviews' => $p['pageviews'],
+			);
+		}
+		$sections[] = array( 'id' => 'pages', 'label' => __( 'Top pages', 'minn-admin' ), 'rows' => $pages );
+		if ( $r['referrers'] ) {
+			$sections[] = array( 'id' => 'referrers', 'label' => __( 'Referrers', 'minn-admin' ), 'rows' => $r['referrers'] );
+		}
+
+		$span = (int) ( ( strtotime( $to . ' UTC' ) - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
+		$base = array(
+			'date'      => $to,
+			'period'    => 'day',
+			'num'       => max( 1, $span ),
+			'summarize' => 1,
+		);
+
+		// Countries: summary.views is [{country_code, views}] with display
+		// names in the response's top-level country-info map.
+		$geo = $wpcom->get_views_by_country( $base + array( 'max' => 10 ) );
+		if ( ! is_wp_error( $geo ) && ! empty( $geo['summary']['views'] ) ) {
+			$info = (array) ( $geo['country-info'] ?? array() );
+			$rows = array();
+			foreach ( array_slice( (array) $geo['summary']['views'], 0, 10 ) as $row ) {
+				$code = isset( $row['country_code'] ) ? (string) $row['country_code'] : '';
+				if ( '' === $code ) {
+					continue;
+				}
+				$rows[] = array(
+					'label'     => isset( $info[ $code ]['country_full'] ) ? (string) $info[ $code ]['country_full'] : $code,
+					'pageviews' => (int) ( $row['views'] ?? 0 ),
+				);
+			}
+			if ( $rows ) {
+				$sections[] = array( 'id' => 'countries', 'label' => __( 'Countries', 'minn-admin' ), 'rows' => $rows );
+			}
+		}
+
+		$terms = $wpcom->get_search_terms( $base + array( 'max' => 10 ) );
+		if ( ! is_wp_error( $terms ) && ! empty( $terms['summary']['search_terms'] ) ) {
+			$rows = array();
+			foreach ( (array) $terms['summary']['search_terms'] as $row ) {
+				if ( is_array( $row ) && ! empty( $row['term'] ) ) {
+					$rows[] = array(
+						'label'     => (string) $row['term'],
+						'pageviews' => (int) ( $row['views'] ?? 0 ),
+					);
+				}
+			}
+			if ( $rows ) {
+				$sections[] = array( 'id' => 'search', 'label' => __( 'Search terms', 'minn-admin' ), 'rows' => $rows );
+			}
+		}
+
+		$clicks = $wpcom->get_clicks( $base + array( 'max' => 10 ) );
+		if ( ! is_wp_error( $clicks ) && ! empty( $clicks['summary']['clicks'] ) ) {
+			$rows = array();
+			foreach ( (array) $clicks['summary']['clicks'] as $row ) {
+				if ( is_array( $row ) && ! empty( $row['name'] ) ) {
+					$rows[] = array(
+						'label'     => (string) $row['name'],
+						'url'       => isset( $row['url'] ) ? (string) $row['url'] : '',
+						'pageviews' => (int) ( $row['views'] ?? 0 ),
+					);
+				}
+			}
+			if ( $rows ) {
+				$sections[] = array( 'id' => 'clicks', 'label' => __( 'Outbound clicks', 'minn-admin' ), 'rows' => $rows );
+			}
+		}
+
+		return array(
+			'source'   => 'Jetpack Stats',
+			'sections' => $sections,
+			'adminUrl' => admin_url( 'admin.php?page=stats' ),
+		);
+	} catch ( \Throwable $e ) {
+		return $report;
 	}
 }, 20, 3 );

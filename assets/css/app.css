@@ -700,6 +700,8 @@ button.minn-nav-label:hover { color: var(--text2); }
    pattern as .minn-sstat-chart above). */
 .minn-stats-tall .minn-chart { height: 280px; }
 .minn-stats-hint { margin-top: 12px; color: var(--text3); font-size: 12.5px; }
+.minn-stats-breakdowns { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 20px; align-items: start; }
+.minn-stats-panel { padding: 8px 18px 12px; }
 .minn-chart-col { flex: 1; position: relative; height: 100%; min-width: 0; }
 .minn-chart-bar, .minn-chart-views, .minn-chart-visitors {
   position: absolute; bottom: 0; left: 0; right: 0; border-radius: 4px 4px 2px 2px;

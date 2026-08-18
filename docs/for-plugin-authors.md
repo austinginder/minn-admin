@@ -727,6 +727,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_editor_panels` | filter | Per-post fields or status/action panels in the editor sidebar |
 | `minn_admin_traffic` | filter | Overview chart traffic provider |
 | `minn_admin_traffic_day` | filter | Overview traffic bar drill-down (top pages / referrers for a date window) |
+| `minn_admin_traffic_report` | filter | Stats page range-wide breakdowns (generic sections: pages, referrers, countries, devices…) |
 | `minn_admin_block_forms` | filter | Block inspector labels/controls + slash insert templates |
 | `minn_admin_insert_blocks` | filter | Prune or extend the auto-insert slash list |
 | `minn_admin_page_builders` | filter | Register a full-canvas page builder |
@@ -1370,6 +1371,52 @@ page_url/page_id + `burst_sessions.referrer`), **Independent Analytics**
 (views × resources + session referrers), **Plausible Analytics** (server-side
 shared-dashboard queries), **Matomo** (its reporting API), and **Jetpack Stats**
 (the WordPress.com Stats client). Same first-non-null rule as `minn_admin_traffic`.
+
+### Range-wide report — breakdowns for the Stats page
+
+The Stats page (`/minn-admin/stats`) shows breakdown panels for the whole
+selected range, up to a year. Providers with richer dimensions answer a third
+filter with GENERIC sections — Minn renders whatever sections come back, in
+order, so a provider can expose countries, devices, campaigns or anything else
+it tracks without Minn knowing the dimension:
+
+```php
+add_filter( 'minn_admin_traffic_report', function ( $report, $from, $to ) {
+    if ( null !== $report ) {
+        return $report; // another provider already answered
+    }
+    // $from / $to are inclusive Y-m-d dates covering the page's whole range.
+    return array(
+        'source'   => 'My Analytics',
+        'sections' => array(
+            array(
+                'id'    => 'pages',
+                'label' => 'Top pages',
+                'rows'  => array(
+                    // label is required; everything else is optional. A row
+                    // with a url is clickable (opened with noopener).
+                    array( 'label' => 'Homepage', 'sub' => '/', 'url' => home_url( '/' ), 'postId' => 0, 'visitors' => 120, 'pageviews' => 310 ),
+                ),
+            ),
+            array(
+                'id'    => 'countries',
+                'label' => 'Countries',
+                'rows'  => array( array( 'label' => 'United States', 'pageviews' => 408 ) ),
+            ),
+        ),
+        'adminUrl' => admin_url( 'admin.php?page=my-analytics' ), // optional footer link
+    );
+}, 10, 3 );
+```
+
+Sections cap at 8 and rows at 25 server-side. **You do not need this filter
+for basic coverage**: when no provider answers, Minn synthesizes Top pages +
+Referrers sections from your `minn_admin_traffic_day` answer over the same
+range — every bundled day adapter aggregates a date window generically, so
+the whole family gets range-wide breakdowns for free. Answer this filter only
+to add dimensions the day shape cannot carry (bundled: **Matomo** adds
+countries, devices and site searches; **Jetpack Stats** adds countries,
+search terms and outbound clicks).
 
 ## Media folders — feed the Media view's folder filter
 

@@ -4603,9 +4603,11 @@
 		const t = d.totals || { visitors: 0, pageviews: 0, delta: null };
 		const compact = ( n ) => n >= 10000 ? Math.round( n / 100 ) / 10 + 'k' : Number( n ).toLocaleString( uiLocale() );
 		const busiest = d.chart.reduce( ( a, b ) => ( b.value > ( a ? a.value : -1 ) ? b : a ), null );
-		/* translators: 1: up or down arrow, 2: percentage change, 3: number of days. */
+		// The % rides the argument: the JS sprintf helper substitutes %s/%d
+		// only, so a %% in the format string would render literally.
+		/* translators: 1: up or down arrow, 2: percentage change including the % sign, 3: number of days. */
 		const deltaBit = t.delta !== null && t.delta !== undefined
-			? sprintf( __( '%1$s %2$s%% vs prior %3$sd' ), t.delta >= 0 ? '↑' : '↓', Math.abs( t.delta ), days )
+			? sprintf( __( '%1$s %2$s vs prior %3$sd' ), t.delta >= 0 ? '↑' : '↓', Math.abs( t.delta ) + '%', days )
 			: __( 'no prior period to compare' );
 		const max = Math.max( 1, ...d.chart.map( ( x ) => x.views || x.value ) );
 		const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
@@ -4641,13 +4643,79 @@
 					</div>` ).join( '' ) }
 			</div>
 			<div class="minn-stats-hint">${ esc( __( 'Click a bar for its top pages and referrers.' ) ) }</div>
-		</div>`;
+		</div>
+		<div id="minn-stats-breakdowns"></div>`;
 		bindStatsRangeTabs( view );
 		bindChartTooltip( $( '#minn-stats-chart', view ), d.chart, true );
 		$$( '#minn-stats-chart .minn-chart-col', view ).forEach( ( col ) =>
 			col.addEventListener( 'click', () => {
 				const x = d.chart[ parseInt( col.dataset.ci, 10 ) ];
 				if ( x && x.from && ( x.value || 0 ) + ( x.views || 0 ) > 0 ) openChartTraffic( x, d.chart );
+			} )
+		);
+		renderStatsBreakdowns( c );
+	}
+
+	// Range-wide breakdowns under the chart: whatever sections the provider
+	// answered (top pages, referrers, countries, devices, search…), fetched
+	// once per range and cached on the same stats cache object so a range
+	// switch naturally refetches.
+	function renderStatsBreakdowns( c ) {
+		const slot = $( '#minn-stats-breakdowns' );
+		if ( ! slot ) return;
+		const d = c.data;
+		if ( c.report === undefined ) {
+			c.report = null; // in flight
+			const from = d.chart[ 0 ].from;
+			const to = d.chart[ d.chart.length - 1 ].to;
+			api( `minn-admin/v1/stats/report?from=${ encodeURIComponent( from ) }&to=${ encodeURIComponent( to ) }` )
+				.then( ( r ) => { c.report = r; } )
+				.catch( () => { c.report = { sections: [] }; } )
+				.then( () => {
+					// Repaint only when this range's page is still on screen.
+					if ( state.route === 'stats' && state.cache.stats === c ) renderStatsBreakdowns( c );
+				} );
+			slot.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading breakdowns…' ) ) }</div>`;
+			return;
+		}
+		const r = c.report;
+		if ( ! r || ! ( r.sections || [] ).length ) {
+			slot.innerHTML = '';
+			return;
+		}
+		const num = ( n, unit, title ) => n
+			? `<span title="${ esc( title ) }">${ Number( n ).toLocaleString( uiLocale() ) } <em>${ esc( unit ) }</em></span>` : '';
+		slot.innerHTML = `
+		<div class="minn-stats-breakdowns">
+			${ r.sections.map( ( sec, si ) => `
+			<div class="minn-card minn-stats-panel">
+				<div class="minn-traf-sec-label">${ esc( sec.label ) }</div>
+				${ sec.rows.map( ( row, ri ) => {
+					const linked = !! row.url;
+					return `
+					<div class="minn-traf-row${ linked ? ' linked' : '' }"${ linked ? ` data-brow="${ si }:${ ri }"` : '' }>
+						<div class="minn-traf-main">
+							<div class="minn-traf-title">${ esc( row.label ) }</div>
+							${ row.sub ? `<div class="minn-traf-path">${ esc( row.sub ) }</div>` : '' }
+						</div>
+						<div class="minn-traf-nums">
+							${ num( row.visitors, __( 'vis' ), __( 'Visitors' ) ) }
+							${ num( row.pageviews, __( 'views' ), __( 'Pageviews' ) ) }
+						</div>
+					</div>`;
+				} ).join( '' ) }
+			</div>` ).join( '' ) }
+		</div>
+		${ r.adminUrl ? `<div class="minn-traf-foot"><a class="minn-link-btn" href="${ esc( r.adminUrl ) }" target="_blank" rel="noopener">${ esc( sprintf( /* translators: %s: the analytics plugin's name. */ __( 'Open %s' ), r.source || 'analytics' ) ) } ↗</a></div>` : '' }`;
+		// Row URLs come from the analytics provider's response — tracked
+		// visitor data at a navigation sink, so the same safeHref + noopener
+		// discipline as the drill modal's page rows.
+		$$( '[data-brow]', slot ).forEach( ( el ) =>
+			el.addEventListener( 'click', () => {
+				const [ si, ri ] = el.dataset.brow.split( ':' ).map( ( n ) => parseInt( n, 10 ) );
+				const row = ( ( r.sections[ si ] || {} ).rows || [] )[ ri ];
+				const href = row && row.url ? safeHref( row.url ) : '';
+				if ( href ) window.open( href, '_blank', 'noopener' );
 			} )
 		);
 	}

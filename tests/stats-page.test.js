@@ -39,6 +39,28 @@ const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 		t.check( '30d renders 30 daily buckets from the provider',
 			shape.cols === 30 && !! shape.source, JSON.stringify( shape ) );
 
+		/* ===== Range-wide breakdown panels (Koko rides the day fallback) ===== */
+		await page.waitForSelector( '.minn-stats-panel, #minn-stats-breakdowns:empty', { timeout: 20000 } );
+		const bd = await page.evaluate( () => ( {
+			sections: [ ...document.querySelectorAll( '.minn-stats-panel .minn-traf-sec-label' ) ].map( ( el ) => el.textContent.trim() ),
+			rows: document.querySelectorAll( '.minn-stats-panel .minn-traf-row' ).length,
+			deltas: [ ...document.querySelectorAll( '.minn-stat-delta' ) ].map( ( el ) => el.textContent ),
+		} ) );
+		t.check( 'breakdown panels render from the traffic-day fallback',
+			bd.sections.includes( 'Top pages' ) && bd.rows > 0, JSON.stringify( bd.sections ) );
+		t.check( 'no raw %% leaks into the delta text (JS sprintf has no %% escape)',
+			! bd.deltas.some( ( s ) => s.includes( '%%' ) ), JSON.stringify( bd.deltas ) );
+		const report = await page.evaluate( async () => {
+			const to = new Date().toISOString().slice( 0, 10 );
+			const from = new Date( Date.now() - 89 * 86400000 ).toISOString().slice( 0, 10 );
+			const r = await fetch( `${ window.MINN.restUrl }minn-admin/v1/stats/report?from=${ from }&to=${ to }`, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			const d = await r.json();
+			return { status: r.status, source: d.source, ids: ( d.sections || [] ).map( ( s ) => s.id ) };
+		} );
+		t.check( 'report endpoint answers a 90-day window through the fallback',
+			report.status === 200 && report.source === 'Koko Analytics' && report.ids.includes( 'pages' ),
+			JSON.stringify( report ) );
+
 		/* ===== Range switch refetches with the new days ===== */
 		const res365 = page.waitForResponse( ( r ) => r.url().includes( 'minn-admin/v1/stats' ) && r.url().includes( 'days=365' ) );
 		await page.click( '.minn-range-tab[data-range="365"]' );
@@ -108,6 +130,15 @@ const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 		t.check( 'the endpoint answers the author empty (no series, no totals)',
 			apiGate.status === 200 && apiGate.allowed === false && ! apiGate.totals && apiGate.cols === 0,
 			JSON.stringify( apiGate ) );
+		const reportGate = await ap.evaluate( async () => {
+			const to = new Date().toISOString().slice( 0, 10 );
+			const r = await fetch( `${ window.MINN.restUrl }minn-admin/v1/stats/report?from=${ to }&to=${ to }`, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			const d = await r.json();
+			return { status: r.status, source: d.source, sections: ( d.sections || [] ).length };
+		} );
+		t.check( 'the report endpoint answers the author empty too',
+			reportGate.status === 200 && '' === reportGate.source && 0 === reportGate.sections,
+			JSON.stringify( reportGate ) );
 	} finally {
 		await page.evaluate( () => localStorage.removeItem( 'minn-stats-range' ) ).catch( () => {} );
 		if ( authorCtx ) await authorCtx.ctx.close().catch( () => {} );
