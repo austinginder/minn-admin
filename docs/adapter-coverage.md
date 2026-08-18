@@ -129,7 +129,9 @@ Reference depth: **Gravity Forms**.
 
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| yith-gift-cards | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-08-18 | `filterBar` (status + date); create; enable/disable/balance/resend through YITH's object; no REST in either edition; product/bulk/CSV/PDF = **L** |
+| yith-gift-cards | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-08-18 | family `gift-cards`; `filterBar` (status + date); create; enable/disable/balance/resend through YITH's object; no REST in either edition; product/bulk/CSV/PDF = **L** |
+| woocommerce-gift-cards | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-08-18 | family `gift-cards`; official Kestrel plugin; list via `WC_GC()->db->giftcards->query`; remaining via `set_balance`; create via `wc/v3/gift-cards`; product/CSV/email designer = **L** |
+| pw-gift-cards | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-08-18 | family `gift-cards`; free + Pro, mutually exclusive; ledger SUM for balance; writes through `PW_Gift_Card`; Pro REST is not the collection source; email designer/CSV = **L** |
 
 ### settings-only / other surfaces
 

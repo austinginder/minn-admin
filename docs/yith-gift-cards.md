@@ -1,6 +1,6 @@
 # YITH WooCommerce Gift Cards
 
-> Adapter: `includes/adapters/yith-gift-cards.php`. Suite: `tests/yith-gift-cards.test.js`.
+> Adapter: `includes/adapters/yith-gift-cards.php`. Suite: `tests/yith-gift-cards.test.js`. Family: `gift-cards`.
 > The ladder this sits on is in [full-ui-adapters.md](full-ui-adapters.md).
 
 A gift card is a money instrument a store sold and still owes. That is the whole reason

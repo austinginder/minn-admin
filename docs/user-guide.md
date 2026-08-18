@@ -380,17 +380,20 @@ adds Gift cards, all in the same operational group.
   with editable items and schedule, coupons, a notes timeline and a quick
   view of related orders. The subscriptions list wears the same filter
   bar with its own status vocabulary.
-- **Gift cards** (YITH WooCommerce Gift Cards, free or premium) is the
-  list of cards the store has issued and still owes. The same filter bar
-  Orders uses: status (more than one at a time), a date window, search
-  by code or recipient, and the whole narrowing in the address. A status
-  card leads with the outstanding balance. Opening a card shows its
-  code, balance, original amount, recipient and the order it came from,
-  and you can enable or disable it, change the balance, or resend the
-  email. The code copies with one click. Add gift card issues one by hand: amount, an optional code (left
-  blank, YITH generates one), recipient, message, and whether to send
-  the email now. Product amounts, bulk generation, CSV, PDF and QR stay
-  in YITH, one click from the card.
+- **Gift cards** (YITH WooCommerce Gift Cards, official WooCommerce Gift
+  Cards, or PW WooCommerce Gift Cards) is the list of cards the store
+  has issued and still owes. When more than one of those plugins is
+  active they share one Commerce item with a provider switcher. The same
+  filter bar Orders uses: status (more than one at a time), a date
+  window, search by code or recipient, and the whole narrowing in the
+  address. A status card leads with the outstanding balance. Opening a
+  card shows its code, balance, original amount, recipient and the order
+  it came from, and you can enable or disable it, change the balance, or
+  resend the email. The code copies with one click. Add gift card issues
+  one by hand: amount, an optional code (left blank, the plugin
+  generates one), recipient, message, and whether to send the email now.
+  Product amounts, bulk generation, CSV, PDF and QR stay in the plugin,
+  one click from the card.
 - **Products** open as a page too, in the order page's shape. The main
   column holds what the product is: name and summary, pictures, pricing
   with an optional sale schedule and tax class, inventory (SKU, GTIN,
