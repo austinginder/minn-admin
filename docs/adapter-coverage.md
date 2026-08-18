@@ -125,6 +125,12 @@ Reference depth: **Gravity Forms**.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ottokit | Y | Y | Y | Y | — | Y | · | · | · | Y | 2026-08-12 | Connector. Workflows, recipes and run history are CLOUD state with no local copy, so they stay **L** link-outs; their REST is machine-to-machine (`st_authorization` shared secret) and is never called. Local table `{prefix}suretriggers_webhook_requests`; retry through their `WebhookRequestsController::suretriggers_retry_trigger_request` (fires a real `wp_remote_post`, so fixtures point at 127.0.0.1:9 to stay offline); `created_at` is `current_time('mysql')` = site-local, emitted raw; installed-inactive |
 
+### commerce (plugin surfaces)
+
+| Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| yith-gift-cards | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-08-18 | `filterBar` (status + date); create; enable/disable/balance/resend through YITH's object; no REST in either edition; product/bulk/CSV/PDF = **L** |
+
 ### settings-only / other surfaces
 
 | Adapter | Shape | suite | Reviewed | Notes |

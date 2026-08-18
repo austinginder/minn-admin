@@ -36956,17 +36956,17 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal${ formWide ? ' wide' : '' }">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ esc( cr.label || 'Add' ) } — ${ esc( m.surface.label ) }</div>
+						<div class="minn-modal-title">${ esc( chromeLabel( cr.label || __( 'Add' ) ) ) } — ${ esc( chromeLabel( m.surface.label ) ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-modal-form">
 						${ cr.fields.map( ( f ) => `<div>
-							<div class="minn-field-label">${ esc( f.label ) }</div>
+							<div class="minn-field-label">${ esc( chromeLabel( f.label ) ) }</div>
 							${ surfaceFieldHtml( f, f.value, 'data-createfield' ) }
 						</div>` ).join( '' ) }
 					</div>
 					<div class="minn-modal-actions">
-						<button class="minn-btn-primary" id="minn-surface-create">${ esc( cr.label || 'Add' ) }</button>
+						<button class="minn-btn-primary" id="minn-surface-create">${ esc( chromeLabel( cr.label || __( 'Add' ) ) ) }</button>
 					</div>
 				</div>
 			</div>`;
@@ -37913,15 +37913,19 @@
 				createBtn.disabled = true;
 				createBtn.textContent = __( 'Saving…' );
 				try {
-					await api( cr.route, { method: cr.method || 'POST', body: JSON.stringify( body ) } );
-					toast( ( m.surface.label || 'Item' ) + ' added' );
+					const r = await api( cr.route, { method: cr.method || 'POST', body: JSON.stringify( body ) } );
+					toast( ( r && r.message ) || sprintf(
+						/* translators: %s: the localized name of the thing that was added. */
+						__( '%s added' ),
+						chromeLabel( m.surface.label || __( 'Item' ) )
+					) );
 					surfaceState( m.surface.id ).cache = null;
 					closeModal();
 					if ( state.route === m.surface.id ) renderSurface( m.surface );
 				} catch ( e ) {
 					toast( e.message, true );
 					createBtn.disabled = false;
-					createBtn.textContent = cr.label || 'Add';
+					createBtn.textContent = chromeLabel( cr.label || __( 'Add' ) );
 				}
 			} );
 		}

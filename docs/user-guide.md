@@ -357,7 +357,8 @@ bar, so you can continue working while they finish.
 
 With WooCommerce active, the sidebar gains a Commerce group for Orders,
 Customers, Products and Coupons. WooCommerce Subscriptions adds Subscriptions,
-and a supported appointment plugin adds Bookings in the same operational group.
+a supported appointment plugin adds Bookings, and YITH WooCommerce Gift Cards
+adds Gift cards, all in the same operational group.
 
 - **Orders** open as their own page, at their own address, so an order can
   be linked to or kept in a second tab. The main column holds the work:
@@ -379,6 +380,17 @@ and a supported appointment plugin adds Bookings in the same operational group.
   with editable items and schedule, coupons, a notes timeline and a quick
   view of related orders. The subscriptions list wears the same filter
   bar with its own status vocabulary.
+- **Gift cards** (YITH WooCommerce Gift Cards, free or premium) is the
+  list of cards the store has issued and still owes. The same filter bar
+  Orders uses: status (more than one at a time), a date window, search
+  by code or recipient, and the whole narrowing in the address. A status
+  card leads with the outstanding balance. Opening a card shows its
+  code, balance, original amount, recipient and the order it came from,
+  and you can enable or disable it, change the balance, or resend the
+  email. Add gift card issues one by hand: amount, an optional code (left
+  blank, YITH generates one), recipient, message, and whether to send
+  the email now. Product amounts, bulk generation, CSV, PDF and QR stay
+  in YITH, one click from the card.
 - **Products** open as a page too, in the order page's shape. The main
   column holds what the product is: name and summary, pictures, pricing
   with an optional sale schedule and tax class, inventory (SKU, GTIN,
