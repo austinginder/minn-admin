@@ -23,6 +23,9 @@ class Minn_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
+		// Before Minn_Admin_Bar::suppress_core_bar (100), so a 'minn' policy
+		// still lets the Minn bar make the call for its own render.
+		add_filter( 'show_admin_bar', array( __CLASS__, 'enforce_toolbar_policy' ), 99 );
 		add_action( 'init', array( __CLASS__, 'register_x_oembed' ) );
 		add_action( 'init', array( __CLASS__, 'register_oembed_refresh' ), 20 );
 		add_action( 'init', array( __CLASS__, 'register_toolbar_meta' ) );
@@ -230,13 +233,125 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Site-wide role policies for the admin experience (option
+	 * minn_admin_role_defaults). Shape: role => array(
+	 *   'signin'  => 'minn',                // always land in Minn after sign-in
+	 *   'toolbar' => 'minn' | 'wp' | 'off', // which toolbar the role gets on the site
+	 * ). An absent key means the person chooses; only enforced values are
+	 * stored, so an empty option leaves every profile switch behaving as before.
+	 * Enforcement is an overlay resolved at read time: nobody's saved
+	 * preference is written over, and a role returned to "person chooses"
+	 * hands each account its previous choice back.
+	 */
+	public static function role_defaults() {
+		$raw = get_option( 'minn_admin_role_defaults', array() );
+		if ( ! is_array( $raw ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $raw as $role => $p ) {
+			if ( ! is_array( $p ) ) {
+				continue;
+			}
+			$entry = array();
+			if ( isset( $p['signin'] ) && 'minn' === $p['signin'] ) {
+				$entry['signin'] = 'minn';
+			}
+			if ( isset( $p['toolbar'] ) && in_array( $p['toolbar'], array( 'minn', 'wp', 'off' ), true ) ) {
+				$entry['toolbar'] = $p['toolbar'];
+			}
+			if ( $entry ) {
+				$out[ (string) $role ] = $entry;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The enforced policy for one user, resolved across their roles. Values
+	 * are '' when the person chooses. A user holding several roles takes any
+	 * enforced sign-in policy, and the strongest toolbar policy
+	 * (minn > wp > off): when one role grants the Minn bar and another hides
+	 * the toolbar, the grant wins. Minn enforcement needs Minn access, so a
+	 * policy saved against a role that later loses edit_posts falls back to
+	 * personal choice instead of stranding the account.
+	 */
+	public static function policy_for_user( $user_id = 0 ) {
+		$uid = $user_id ? (int) $user_id : get_current_user_id();
+		$out = array(
+			'signin'  => '',
+			'toolbar' => '',
+		);
+		if ( $uid <= 0 ) {
+			return $out;
+		}
+		$defaults = self::role_defaults();
+		if ( ! $defaults ) {
+			return $out;
+		}
+		$user = get_userdata( $uid );
+		if ( ! $user ) {
+			return $out;
+		}
+		$rank = array(
+			'minn' => 3,
+			'wp'   => 2,
+			'off'  => 1,
+		);
+		foreach ( (array) $user->roles as $role ) {
+			if ( empty( $defaults[ $role ] ) ) {
+				continue;
+			}
+			$p = $defaults[ $role ];
+			if ( isset( $p['signin'] ) ) {
+				$out['signin'] = 'minn';
+			}
+			if ( isset( $p['toolbar'] ) && ( '' === $out['toolbar'] || $rank[ $p['toolbar'] ] > $rank[ $out['toolbar'] ] ) ) {
+				$out['toolbar'] = $p['toolbar'];
+			}
+		}
+		if ( 'minn' === $out['signin'] && ! user_can( $user, 'edit_posts' ) ) {
+			$out['signin'] = '';
+		}
+		if ( 'minn' === $out['toolbar'] && ! user_can( $user, 'edit_posts' ) ) {
+			$out['toolbar'] = '';
+		}
+		return $out;
+	}
+
+	/**
+	 * A 'wp' or 'off' toolbar policy overrides the user's own toolbar
+	 * preference on the front end. 'minn' passes through: the Minn bar's own
+	 * gate (priority 100) suppresses the core bar when it renders.
+	 */
+	public static function enforce_toolbar_policy( $show ) {
+		if ( ! is_user_logged_in() ) {
+			return $show;
+		}
+		$policy = self::policy_for_user();
+		if ( 'wp' === $policy['toolbar'] ) {
+			return true;
+		}
+		if ( 'off' === $policy['toolbar'] ) {
+			return false;
+		}
+		return $show;
+	}
+
+	/**
 	 * Per-user "Minn is the default admin" (stored on minn_admin_appearance).
-	 * Falls back to the legacy site option until the user saves a profile preference.
+	 * Falls back to the legacy site option until the user saves a profile
+	 * preference. A role policy of 'minn' wins over the personal preference
+	 * without overwriting it.
 	 */
 	public static function user_wants_default_admin( $user_id = 0 ) {
 		$uid = $user_id ? (int) $user_id : get_current_user_id();
 		if ( $uid <= 0 ) {
 			return false;
+		}
+		$policy = self::policy_for_user( $uid );
+		if ( 'minn' === $policy['signin'] ) {
+			return true;
 		}
 		$ap = self::get_user_appearance( $uid );
 		return ! empty( $ap['defaultAdmin'] );
@@ -244,10 +359,19 @@ class Minn_Admin {
 
 	/**
 	 * Per-user front-end Minn admin bar opt-in (minn_admin_appearance.frontBar).
+	 * A toolbar role policy overlays the preference: 'minn' forces the bar on,
+	 * 'wp' and 'off' force it off.
 	 */
 	public static function user_wants_front_bar( $user_id = 0 ) {
 		$uid = $user_id ? (int) $user_id : get_current_user_id();
 		if ( $uid <= 0 ) {
+			return false;
+		}
+		$policy = self::policy_for_user( $uid );
+		if ( 'minn' === $policy['toolbar'] ) {
+			return true;
+		}
+		if ( 'wp' === $policy['toolbar'] || 'off' === $policy['toolbar'] ) {
 			return false;
 		}
 		$ap = self::get_user_appearance( $uid );
@@ -1082,6 +1206,9 @@ class Minn_Admin {
 				'avatar'     => get_avatar_url( $user->ID, array( 'size' => 64 ) ),
 				// Per-user color scheme (user meta minn_admin_appearance).
 				'appearance' => self::get_user_appearance( $user->ID ),
+				// Role-enforced admin-experience policy ('' = person chooses).
+				// The profile page swaps enforced switches for a locked note.
+				'policy'     => self::policy_for_user( $user->ID ),
 			),
 			// Scheme slot metadata for the profile custom editor (key + CSS var + label).
 			'appearanceSlots' => array_map(

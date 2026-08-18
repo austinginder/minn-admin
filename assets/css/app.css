@@ -3418,6 +3418,19 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 .minn-user-cols.has-cb { grid-template-columns: 34px 40px 52px 1.2fr 1.4fr 130px 110px 40px; }
 .minn-user-id { font-variant-numeric: tabular-nums; color: var(--text3); }
 
+/* Users → Role defaults */
+.minn-users-tabs { margin-bottom: 14px; }
+.minn-role-toolbar { align-items: center; }
+.minn-role-lede { flex: 1 1 320px; min-width: 0; font-size: 13px; color: var(--text2); }
+.minn-role-cols { grid-template-columns: minmax(160px, 1.2fr) 1fr 1fr; align-items: center; }
+.minn-role-cols select.minn-input { width: 100%; max-width: 260px; }
+.minn-role-na { font-size: 13px; color: var(--text3); }
+.minn-role-note { margin-top: 12px; font-size: 12.5px; color: var(--text3); }
+
+/* A role policy locks this profile switch: a state pill replaces the control. */
+.minn-lock-pill { flex-shrink: 0; font-size: 11px; letter-spacing: 0.02em; color: var(--text2); background: var(--hover); border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+.minn-toggle-locked .minn-toggle-label { color: var(--text2); }
+
 /* Terms manager */
 .minn-term-cols { grid-template-columns: 1.6fr 1fr 90px 40px; }
 .minn-term-twig { color: var(--text3); font-size: 12px; }

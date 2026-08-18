@@ -3663,6 +3663,8 @@
 			subEl.textContent = chromeLabel( state.settingsSection || '' );
 		} else if ( state.route === 'content' ) {
 			subEl.textContent = contentTopbarSub();
+		} else if ( state.route === 'users' ) {
+			subEl.textContent = ( state.usersTab || 'people' ) === 'roles' ? __( 'Role defaults' ) : __( 'People' );
 		} else if ( surface && surface.family && surfacesInFamily( surface.family ).length > 1 ) {
 			// Multiple adapters of the same family → topbar badge is a switcher.
 			const members = surfacesInFamily( surface.family );
@@ -4012,6 +4014,7 @@
 		];
 		const ap = appearanceOf( B.user && B.user.appearance );
 		const defOn = !! ap.defaultAdmin;
+		const pol = ( B.user && B.user.policy ) || {};
 		return `
 			<div class="minn-toggle-rows minn-side-toggles minn-theme-mode-toggles" role="radiogroup" aria-label="${ esc( __( 'Theme mode' ) ) }">
 				${ opts.map( ( o ) => `
@@ -4024,21 +4027,37 @@
 				</div>` ).join( '' ) }
 			</div>
 			<div class="minn-toggle-rows minn-side-toggles" style="margin-top:12px;">
+				${ pol.signin === 'minn' ? lockedToggleRowHtml( __( 'Minn is the default admin' ), true ) : `
 				<div class="minn-toggle-row">
 					<button type="button" class="minn-switch${ defOn ? ' on' : '' }" id="minn-default-admin" role="switch" aria-checked="${ defOn ? 'true' : 'false' }" aria-label="${ esc( __( 'Minn is the default admin' ) ) }"><span class="minn-switch-knob"></span></button>
 					<div class="minn-toggle-info">
 						<div class="minn-toggle-label">${ esc( __( 'Minn is the default admin' ) ) }</div>
 						<div class="minn-toggle-desc">${ esc( __( 'After sign-in, land here. The admin bar Edit link opens the Minn editor. Full wp-admin stays available everywhere else.' ) ) }</div>
 					</div>
-				</div>
+				</div>` }
+				${ pol.toolbar ? lockedToggleRowHtml( __( 'Minn admin bar on the site' ), pol.toolbar === 'minn' ) : `
 				<div class="minn-toggle-row">
 					<button type="button" class="minn-switch${ ap.frontBar ? ' on' : '' }" id="minn-front-bar" role="switch" aria-checked="${ ap.frontBar ? 'true' : 'false' }" aria-label="${ esc( __( 'Minn admin bar on the site' ) ) }"><span class="minn-switch-knob"></span></button>
 					<div class="minn-toggle-info">
 						<div class="minn-toggle-label">${ esc( __( 'Minn admin bar on the site' ) ) }</div>
 						<div class="minn-toggle-desc">${ esc( __( 'Replace the WordPress toolbar on the public site with Minn’s quiet bar. Applies only to you.' ) ) }</div>
 					</div>
-				</div>
+				</div>` }
 			</div>`;
+	}
+
+	// A role policy enforces this switch: show its effective state and why,
+	// with no control. The person's own saved preference stays untouched and
+	// returns if the site ever hands the choice back.
+	function lockedToggleRowHtml( label, on ) {
+		return `
+				<div class="minn-toggle-row minn-toggle-locked">
+					<span class="minn-lock-pill">${ esc( on ? __( 'On' ) : __( 'Off' ) ) } · ${ esc( __( 'locked' ) ) }</span>
+					<div class="minn-toggle-info">
+						<div class="minn-toggle-label">${ esc( label ) }</div>
+						<div class="minn-toggle-desc">${ esc( __( 'Required by this site.' ) ) }</div>
+					</div>
+				</div>`;
 	}
 
 	function bindAppearanceSwatches( root ) {
@@ -13292,13 +13311,166 @@
 		if ( state.route === 'users' ) renderUsers();
 	}
 
+	// ── Role defaults (Users → Role defaults) ──────────────────────────────
+	// Site-wide per-role policy for the admin experience. Enforcement is an
+	// overlay the server resolves at read time: nobody's saved preference is
+	// overwritten, and a role returned to "person chooses" hands each account
+	// its previous choice back. Enforced switches on Your profile render as a
+	// locked note instead of a control.
+	const ROLE_SIGNIN_OPTS = () => [
+		[ 'choice', __( 'Person chooses' ) ],
+		[ 'minn', __( 'Always open Minn' ) ],
+	];
+	const ROLE_TOOLBAR_OPTS = () => [
+		[ 'choice', __( 'Person chooses' ) ],
+		[ 'minn', __( 'Minn bar' ) ],
+		[ 'wp', __( 'WordPress toolbar' ) ],
+		[ 'off', __( 'No toolbar' ) ],
+	];
+
+	function usersTabsHtml() {
+		if ( ! B.caps.settings ) return '';
+		const tab = state.usersTab || 'people';
+		return `
+		<div class="minn-tabs minn-users-tabs">
+			<button type="button" class="minn-tab${ tab === 'people' ? ' active' : '' }" data-utab="people">${ esc( __( 'People' ) ) }</button>
+			<button type="button" class="minn-tab${ tab === 'roles' ? ' active' : '' }" data-utab="roles">${ esc( __( 'Role defaults' ) ) }</button>
+		</div>`;
+	}
+
+	function bindUsersTabs( view ) {
+		$$( '[data-utab]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const next = btn.dataset.utab || 'people';
+				if ( ( state.usersTab || 'people' ) === next ) return;
+				state.usersTab = next;
+				renderTopbar();
+				renderUsers();
+			} )
+		);
+	}
+
+	function roleDefaultsDirty( c ) {
+		return c.roles.some( ( r ) => {
+			const p = c.policies[ r.id ] || {};
+			const e = c.edits[ r.id ] || {};
+			return e.signin !== ( p.signin || 'choice' ) || e.toolbar !== ( p.toolbar || 'choice' );
+		} );
+	}
+
+	function renderRoleDefaults() {
+		const view = $( '#minn-view' );
+		const c = state.cache.roleDefaults;
+		if ( ! c ) {
+			view.innerHTML = `${ usersTabsHtml() }<div class="minn-loading">${ esc( __( 'Loading role defaults…' ) ) }</div>`;
+			bindUsersTabs( view );
+			api( 'minn-admin/v1/role-defaults' )
+				.then( ( data ) => {
+					state.cache.roleDefaults = { roles: data.roles || [], policies: data.policies || {}, edits: null };
+				} )
+				.then( renderIfCurrent( 'users' ) )
+				.catch( showErr );
+			return;
+		}
+		if ( ! c.edits ) {
+			c.edits = {};
+			c.roles.forEach( ( r ) => {
+				const p = c.policies[ r.id ] || {};
+				c.edits[ r.id ] = { signin: p.signin || 'choice', toolbar: p.toolbar || 'choice' };
+			} );
+		}
+		const dirty = roleDefaultsDirty( c );
+		const selHtml = ( r, kind ) => {
+			if ( kind === 'signin' && ! r.minn ) {
+				// Sign-in enforcement lands people in Minn; a role that
+				// cannot open Minn has nothing to enforce.
+				return `<div class="minn-role-na" title="${ esc( __( 'This role cannot use Minn, so there is nothing to enforce.' ) ) }">${ esc( __( 'Not available' ) ) }</div>`;
+			}
+			const all = kind === 'signin' ? ROLE_SIGNIN_OPTS() : ROLE_TOOLBAR_OPTS();
+			const opts = r.minn ? all : all.filter( ( [ v ] ) => v !== 'minn' );
+			const cur = c.edits[ r.id ][ kind ];
+			return `<select class="minn-input" data-rdrole="${ esc( r.id ) }" data-rdkind="${ esc( kind ) }" aria-label="${ esc( kind === 'signin' ? __( 'After sign-in' ) : __( 'Toolbar on the site' ) ) }">
+				${ opts.map( ( [ v, label ] ) => `<option value="${ esc( v ) }"${ v === cur ? ' selected' : '' }>${ esc( label ) }</option>` ).join( '' ) }
+			</select>`;
+		};
+		view.innerHTML = `
+		${ usersTabsHtml() }
+		<div class="minn-toolbar minn-toolbar-views minn-role-toolbar">
+			<div class="minn-role-lede">${ esc( __( 'Choose the admin experience by role. A role can keep personal controls, or the site can make the choice; enforced settings replace the matching switches on Your profile with a short locked note.' ) ) }</div>
+			<button type="button" class="minn-btn-soft" id="minn-rd-reset"${ dirty ? '' : ' disabled' }>${ esc( __( 'Reset' ) ) }</button>
+			<button type="button" class="minn-btn-primary" id="minn-rd-save"${ dirty ? '' : ' disabled' }>${ esc( __( 'Save role defaults' ) ) }</button>
+		</div>
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-role-cols">
+				<div>${ esc( __( 'Role' ) ) }</div>
+				<div>${ esc( __( 'After sign-in' ) ) }</div>
+				<div>${ esc( __( 'Toolbar on the site' ) ) }</div>
+			</div>
+			${ c.roles.map( ( r ) => `
+			<div class="minn-table-row minn-role-cols" data-rdrow="${ esc( r.id ) }">
+				<div>
+					<div class="minn-row-title">${ esc( chromeLabel( r.name ) ) }</div>
+					<div class="minn-row-meta">${ esc( sprintf( /* translators: %s: how many accounts hold the role. */ _n( '%s person', '%s people', r.count ), String( r.count ) ) ) }${ r.minn ? '' : ` · ${ esc( __( 'no Minn access' ) ) }` }</div>
+				</div>
+				<div>${ selHtml( r, 'signin' ) }</div>
+				<div>${ selHtml( r, 'toolbar' ) }</div>
+			</div>` ).join( '' ) }
+		</div>
+		<div class="minn-role-note">${ esc( __( 'Changing a policy does not erase anyone’s saved preference. If a role returns to “Person chooses”, each person gets their previous choice back.' ) ) }</div>`;
+		bindUsersTabs( view );
+		const syncButtons = () => {
+			const d = roleDefaultsDirty( c );
+			$( '#minn-rd-save', view ).disabled = ! d;
+			$( '#minn-rd-reset', view ).disabled = ! d;
+		};
+		$$( 'select[data-rdkind]', view ).forEach( ( sel ) =>
+			sel.addEventListener( 'change', () => {
+				c.edits[ sel.dataset.rdrole ][ sel.dataset.rdkind ] = sel.value;
+				syncButtons();
+			} )
+		);
+		$( '#minn-rd-reset', view ).addEventListener( 'click', () => {
+			c.edits = null;
+			renderRoleDefaults();
+		} );
+		$( '#minn-rd-save', view ).addEventListener( 'click', async () => {
+			const saveBtn = $( '#minn-rd-save', view );
+			saveBtn.disabled = true;
+			const policies = {};
+			c.roles.forEach( ( r ) => {
+				const e = c.edits[ r.id ];
+				const entry = {};
+				if ( e.signin && e.signin !== 'choice' && r.minn ) entry.signin = e.signin;
+				if ( e.toolbar && e.toolbar !== 'choice' ) entry.toolbar = e.toolbar;
+				if ( Object.keys( entry ).length ) policies[ r.id ] = entry;
+			} );
+			try {
+				const data = await api( 'minn-admin/v1/role-defaults', {
+					method: 'POST',
+					body: JSON.stringify( { policies } ),
+				} );
+				state.cache.roleDefaults = { roles: data.roles || [], policies: data.policies || {}, edits: null };
+				toast( __( 'Role defaults saved.' ) );
+				renderRoleDefaults();
+			} catch ( e ) {
+				saveBtn.disabled = false;
+				toast( e.message, true );
+			}
+		} );
+	}
+
 	function renderUsers() {
+		if ( B.caps.settings && ( state.usersTab || 'people' ) === 'roles' ) {
+			renderRoleDefaults();
+			return;
+		}
 		const view = $( '#minn-view' );
 		const c = state.cache.users;
 		const userSessionEarly = state.userSession || 'all';
 		if ( ! c ) {
 			if ( softLoadPending( 'users' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
+			${ usersTabsHtml() }
 			<div class="minn-toolbar minn-toolbar-views">
 				<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="${ esc( __( 'Search users…' ) ) }" value="${ esc( state.userSearch || '' ) }" disabled>
 			</div>
@@ -13327,6 +13499,7 @@
 					} );
 				} )
 			);
+			bindUsersTabs( view );
 			loadUsers().then( renderIfCurrent( 'users' ) ).catch( showErr );
 			return;
 		}
@@ -13338,6 +13511,7 @@
 		const userSel = state.userSel || ( state.userSel = new Set() );
 		const userSession = state.userSession || 'all';
 		view.innerHTML = `
+		${ usersTabsHtml() }
 		<div class="minn-toolbar minn-toolbar-views">
 			${ roles.length > 1 ? `<div class="minn-ac minn-tax-select" data-rolecombo>
 				<input class="minn-input minn-ac-input" placeholder="${ esc( __( 'All roles' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
@@ -13384,6 +13558,8 @@
 					: __( 'No users found.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'user' ) }`;
+
+		bindUsersTabs( view );
 
 		// Broken avatar URLs fall back to the letter tile underneath.
 		$$( '.minn-user-row-avatar img', view ).forEach( ( img ) =>
@@ -39863,13 +40039,14 @@
 							<div class="minn-field-label">${ esc( __( 'Theme' ) ) }</div>
 							${ themeModeHtml() }
 							<div class="minn-toggle-rows minn-side-toggles" style="margin-top:12px;">
+								${ ( B.user.policy || {} ).toolbar ? lockedToggleRowHtml( __( 'Show toolbar when viewing the site' ), ( B.user.policy || {} ).toolbar === 'wp' ) : `
 								<div class="minn-toggle-row">
 									<button type="button" class="minn-switch${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' ? ' on' : '' }" id="minn-pf-toolbar" role="switch" aria-checked="${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' }" aria-label="${ esc( __( 'Show toolbar when viewing the site' ) ) }"><span class="minn-switch-knob"></span></button>
 									<div class="minn-toggle-info">
 										<div class="minn-toggle-label">${ esc( __( 'Show toolbar when viewing the site' ) ) }</div>
 										<div class="minn-toggle-desc">${ esc( __( "The WordPress admin bar on the front end while you're signed in. Applies only to you." ) ) }</div>
 									</div>
-								</div>
+								</div>` }
 							</div>
 						</div>
 					</div>

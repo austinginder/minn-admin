@@ -686,6 +686,30 @@ class Minn_Admin_REST {
 				},
 			)
 		);
+		// Role defaults: site-wide admin-experience policy per role (the
+		// Users → Role defaults tab). GET lists roles with people counts and
+		// the stored policies; POST replaces the policies wholesale. A policy
+		// overlays profile preferences at read time and never writes them.
+		register_rest_route(
+			self::NS,
+			'/role-defaults',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'get_role_defaults' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'set_role_defaults' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+			)
+		);
 		// The theme's custom logo (a theme_mod, not a wp/v2 setting) — the
 		// last Site Identity piece. Gated on the active theme declaring
 		// custom-logo support, exactly like the Customizer control.
@@ -3954,6 +3978,115 @@ class Minn_Admin_REST {
 	public static function get_my_appearance( WP_REST_Request $request ) {
 		$uid = self::target_user_id( $request );
 		return rest_ensure_response( Minn_Admin::get_user_appearance( $uid ) );
+	}
+
+	/**
+	 * GET minn-admin/v1/role-defaults — the roles table for Users → Role
+	 * defaults: every role with its people count, whether it can use Minn
+	 * (edit_posts), and the stored policies. Counts come from core's
+	 * count_users(), the same source wp-admin's Users screen uses.
+	 */
+	public static function get_role_defaults( WP_REST_Request $request ) {
+		$counts = count_users();
+		$avail  = isset( $counts['avail_roles'] ) ? (array) $counts['avail_roles'] : array();
+		$roles  = array();
+		foreach ( wp_roles()->role_objects as $id => $role ) {
+			$names   = wp_roles()->role_names;
+			$roles[] = array(
+				'id'    => $id,
+				'name'  => translate_user_role( isset( $names[ $id ] ) ? $names[ $id ] : $id ),
+				'count' => isset( $avail[ $id ] ) ? (int) $avail[ $id ] : 0,
+				// Whether the role passes Minn's own gate; without it the
+				// sign-in policy and the Minn bar cannot apply.
+				'minn'  => $role->has_cap( 'edit_posts' ),
+			);
+		}
+		// Real sites carry dozens of plugin-registered roles nobody holds:
+		// the core five lead in their canonical order, then roles with
+		// people, then the empty tail alphabetically.
+		$core = array(
+			'administrator' => 1,
+			'editor'        => 2,
+			'author'        => 3,
+			'contributor'   => 4,
+			'subscriber'    => 5,
+		);
+		usort(
+			$roles,
+			function ( $a, $b ) use ( $core ) {
+				$ca = isset( $core[ $a['id'] ] ) ? $core[ $a['id'] ] : 99;
+				$cb = isset( $core[ $b['id'] ] ) ? $core[ $b['id'] ] : 99;
+				if ( $ca !== $cb ) {
+					return $ca - $cb;
+				}
+				if ( ( $b['count'] > 0 ) !== ( $a['count'] > 0 ) ) {
+					return ( $b['count'] > 0 ) ? 1 : -1;
+				}
+				if ( $a['count'] !== $b['count'] ) {
+					return $b['count'] - $a['count'];
+				}
+				return strcasecmp( $a['name'], $b['name'] );
+			}
+		);
+		return rest_ensure_response(
+			array(
+				'roles'    => $roles,
+				'policies' => Minn_Admin::role_defaults(),
+			)
+		);
+	}
+
+	/**
+	 * POST minn-admin/v1/role-defaults { policies } — replace the stored role
+	 * policies. Unknown roles, unknown values and "person chooses" entries are
+	 * refused or dropped so the option only ever holds real enforcement.
+	 * Minn-dependent values ('minn') are refused for roles without edit_posts:
+	 * the UI never offers them, so arriving here means a stale or hand-built
+	 * request, and an honest 400 beats silently storing a no-op.
+	 */
+	public static function set_role_defaults( WP_REST_Request $request ) {
+		$json     = $request->get_json_params();
+		$policies = isset( $json['policies'] ) && is_array( $json['policies'] ) ? $json['policies'] : null;
+		if ( null === $policies ) {
+			return new WP_Error( 'minn_admin_bad_policies', __( 'No policies provided.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$all   = wp_roles()->role_objects;
+		$clean = array();
+		foreach ( $policies as $role => $p ) {
+			$role = (string) $role;
+			if ( ! isset( $all[ $role ] ) ) {
+				return new WP_Error( 'minn_admin_bad_role', __( 'Unknown role.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( ! is_array( $p ) ) {
+				continue;
+			}
+			$entry  = array();
+			$signin = isset( $p['signin'] ) ? (string) $p['signin'] : '';
+			if ( 'minn' === $signin ) {
+				$entry['signin'] = 'minn';
+			} elseif ( '' !== $signin && 'choice' !== $signin ) {
+				return new WP_Error( 'minn_admin_bad_policy_value', __( 'Unknown sign-in policy.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$toolbar = isset( $p['toolbar'] ) ? (string) $p['toolbar'] : '';
+			if ( in_array( $toolbar, array( 'minn', 'wp', 'off' ), true ) ) {
+				$entry['toolbar'] = $toolbar;
+			} elseif ( '' !== $toolbar && 'choice' !== $toolbar ) {
+				return new WP_Error( 'minn_admin_bad_policy_value', __( 'Unknown toolbar policy.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$needs_minn = isset( $entry['signin'] ) || ( isset( $entry['toolbar'] ) && 'minn' === $entry['toolbar'] );
+			if ( $needs_minn && ! $all[ $role ]->has_cap( 'edit_posts' ) ) {
+				return new WP_Error( 'minn_admin_role_no_minn', __( 'That role cannot use Minn, so a Minn policy cannot apply to it.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( $entry ) {
+				$clean[ $role ] = $entry;
+			}
+		}
+		if ( $clean ) {
+			update_option( 'minn_admin_role_defaults', $clean );
+		} else {
+			delete_option( 'minn_admin_role_defaults' );
+		}
+		return self::get_role_defaults( $request );
 	}
 
 	/**
