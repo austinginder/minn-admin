@@ -164,6 +164,15 @@ class Minn_Admin_REST {
 						'minimum' => 7,
 						'maximum' => 365,
 					),
+					// Custom window: both or neither; overrides days.
+					'from' => array(
+						'type'    => 'string',
+						'pattern' => '^\d{4}-\d{2}-\d{2}$',
+					),
+					'to'   => array(
+						'type'    => 'string',
+						'pattern' => '^\d{4}-\d{2}-\d{2}$',
+					),
 				),
 			)
 		);
@@ -2698,21 +2707,27 @@ class Minn_Admin_REST {
 	 * negative age → out-of-range index) and could shift a bar off its own
 	 * drill day.
 	 *
+	 * The window is anchored at $end_ts (today by default): rows after the
+	 * anchor day or before the first bucket fall out of range and are simply
+	 * skipped — which is also what slices a wider provider answer down to a
+	 * custom from/to sub-window.
+	 *
 	 * @return array { chart: [{label,value,views,from,to}], visitors, pageviews }
 	 */
-	private static function traffic_chart_data( $traffic, $bucket_days, $buckets ) {
+	private static function traffic_chart_data( $traffic, $bucket_days, $buckets, $end_ts = null ) {
+		$end_ts    = $end_ts ? (int) $end_ts : time();
 		$tseries   = array_fill( 0, $buckets, array( 'v' => 0, 'p' => 0 ) );
 		$visitors  = 0;
 		$pageviews = 0;
-		$today_mid = strtotime( gmdate( 'Y-m-d' ) . ' 00:00:00 UTC' );
+		$anchor_mid = strtotime( gmdate( 'Y-m-d', $end_ts ) . ' 00:00:00 UTC' );
 		foreach ( $traffic['days'] as $date => $row ) {
 			$date_mid = strtotime( $date . ' 00:00:00 UTC' );
 			if ( false === $date_mid ) {
 				continue;
 			}
-			$days_ago = (int) round( ( $today_mid - $date_mid ) / DAY_IN_SECONDS );
+			$days_ago = (int) round( ( $anchor_mid - $date_mid ) / DAY_IN_SECONDS );
 			if ( $days_ago < 0 ) {
-				continue; // a future-dated row (clock skew) — ignore
+				continue; // after the anchor (future row, or past a custom $to)
 			}
 			$idx = $buckets - 1 - (int) floor( $days_ago / $bucket_days );
 			if ( $idx < 0 || $idx >= $buckets ) {
@@ -2728,8 +2743,8 @@ class Minn_Admin_REST {
 			$offset  = ( $buckets - 1 - $i ) * $bucket_days;
 			// Inclusive calendar window for the traffic-day drill-down
 			// (Y-m-d — matches how analytics plugins store daily rows).
-			$from_ts = time() - ( $offset + $bucket_days - 1 ) * DAY_IN_SECONDS;
-			$to_ts   = time() - $offset * DAY_IN_SECONDS;
+			$from_ts = $end_ts - ( $offset + $bucket_days - 1 ) * DAY_IN_SECONDS;
+			$to_ts   = $end_ts - $offset * DAY_IN_SECONDS;
 			if ( 1 === $bucket_days ) {
 				$label = date_i18n( 'M j, Y', $to_ts );
 			} elseif ( $bucket_days >= 28 ) {
@@ -2763,15 +2778,50 @@ class Minn_Admin_REST {
 	 * windows always fit traffic-day's 31-day cap.
 	 */
 	public static function stats( WP_REST_Request $request ) {
-		$days        = (int) $request['days'];
-		$can         = (bool) apply_filters( 'minn_admin_traffic_cap', current_user_can( 'manage_options' ) );
-		$traffic     = $can ? apply_filters( 'minn_admin_traffic', null, $days ) : null;
-		$bucket_days = $days > 190 ? 30 : ( $days > 45 ? 7 : 1 );
-		$buckets     = (int) ceil( $days / $bucket_days );
-		$base        = array(
+		$can  = (bool) apply_filters( 'minn_admin_traffic_cap', current_user_can( 'manage_options' ) );
+		$from = $request['from'];
+		$to   = $request['to'];
+
+		// Custom window: every provider answers minn_admin_traffic with a
+		// day-keyed map covering the last N days, so a from/to range is the
+		// same fetch reaching back to $from, sliced by the $to-anchored
+		// bucketing. No provider needs to know custom ranges exist.
+		if ( $from && $to ) {
+			$today = gmdate( 'Y-m-d' );
+			if ( $from > $to ) {
+				return new WP_Error( 'bad_range', __( 'from must be on or before to.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( $to > $today ) {
+				$to = $today;
+			}
+			$to_ts = strtotime( $to . ' UTC' );
+			$span  = (int) ( ( $to_ts - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
+			$reach = (int) ( ( strtotime( $today . ' UTC' ) - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
+			if ( $reach > 366 ) {
+				return new WP_Error( 'range_too_long', __( 'Custom ranges reach back a year at most.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$days        = $span;
+			$traffic     = $can ? apply_filters( 'minn_admin_traffic', null, $reach ) : null;
+			$bucket_days = $span > 190 ? 30 : ( $span > 45 ? 7 : 1 );
+			$buckets     = (int) ceil( $span / $bucket_days );
+			$anchor      = $to_ts;
+		} else {
+			$days        = (int) $request['days'];
+			$traffic     = $can ? apply_filters( 'minn_admin_traffic', null, $days ) : null;
+			$bucket_days = $days > 190 ? 30 : ( $days > 45 ? 7 : 1 );
+			$buckets     = (int) ceil( $days / $bucket_days );
+			$anchor      = null;
+		}
+
+		// Echo the true inclusive window: the first chart bucket's from can
+		// overshoot it (buckets × bucket_days rounds up past the range), so
+		// bucket edges are never the source of truth for "the selected range".
+		$base = array(
 			'source'     => '',
 			'days'       => $days,
 			'bucketDays' => $bucket_days,
+			'from'       => $anchor ? $from : gmdate( 'Y-m-d', time() - ( $days - 1 ) * DAY_IN_SECONDS ),
+			'to'         => $anchor ? $to : gmdate( 'Y-m-d' ),
 			'chart'      => array(),
 			'totals'     => null,
 			'allowed'    => $can,
@@ -2779,8 +2829,11 @@ class Minn_Admin_REST {
 		if ( ! is_array( $traffic ) || empty( $traffic['days'] ) ) {
 			return rest_ensure_response( $base );
 		}
-		$t     = self::traffic_chart_data( $traffic, $bucket_days, $buckets );
-		$prev  = isset( $traffic['prev_visitors'] ) ? (int) $traffic['prev_visitors'] : 0;
+		$t = self::traffic_chart_data( $traffic, $bucket_days, $buckets, $anchor );
+		// A provider's prev_visitors describes the window before ITS trailing
+		// range, which is not the period before a custom sub-window — the
+		// delta stays honest by going absent there.
+		$prev  = $anchor ? 0 : ( isset( $traffic['prev_visitors'] ) ? (int) $traffic['prev_visitors'] : 0 );
 		$delta = $prev > 0 ? round( ( $t['visitors'] - $prev ) / $prev * 100, 1 ) : null;
 		return rest_ensure_response(
 			array_merge(

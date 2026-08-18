@@ -4565,6 +4565,11 @@
 		[ 365, __( '12m' ) ],
 	];
 
+	// One string per selected window: preset ranges by day count, custom
+	// windows by their dates — the cache and the fetch both key on it.
+	const statsRangeKey = () =>
+		'custom' === state.statsRange ? `${ state.statsFrom }|${ state.statsTo }` : String( state.statsRange );
+
 	function renderStats() {
 		const view = $( '#minn-view' );
 		if ( ! state.statsRange ) {
@@ -4572,11 +4577,15 @@
 			state.statsRange = STATS_RANGES().some( ( [ v ] ) => v === saved ) ? saved : 30;
 		}
 		const days = state.statsRange;
+		const custom = 'custom' === days;
 		const c = state.cache.stats;
-		if ( ! c || c.days !== days ) {
+		if ( ! c || c.key !== statsRangeKey() ) {
+			const key = statsRangeKey();
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading stats…' ) ) }</div>`;
-			api( 'minn-admin/v1/stats?days=' + days )
-				.then( ( data ) => { state.cache.stats = { days, data }; } )
+			api( custom
+				? `minn-admin/v1/stats?from=${ encodeURIComponent( state.statsFrom ) }&to=${ encodeURIComponent( state.statsTo ) }`
+				: 'minn-admin/v1/stats?days=' + days )
+				.then( ( data ) => { state.cache.stats = { key, data }; } )
 				.then( renderIfCurrent( 'stats' ) )
 				.catch( showErr );
 			return;
@@ -4585,7 +4594,15 @@
 		const rangeTabs = `
 			<div class="minn-range-tabs">
 				${ STATS_RANGES().map( ( [ v, label ] ) => `<button class="minn-range-tab${ days === v ? ' active' : '' }" data-range="${ v }">${ esc( label ) }</button>` ).join( '' ) }
+				<button class="minn-range-tab${ custom ? ' active' : '' }" data-range="custom">${ esc( __( 'Custom' ) ) }</button>
 			</div>`;
+		const customRow = custom ? `
+			<div class="minn-stats-dates">
+				<input type="date" class="minn-input" id="minn-stats-from" value="${ esc( state.statsFrom || '' ) }" max="${ esc( gmToday() ) }" aria-label="${ esc( __( 'From' ) ) }">
+				<span>–</span>
+				<input type="date" class="minn-input" id="minn-stats-to" value="${ esc( state.statsTo || '' ) }" max="${ esc( gmToday() ) }" aria-label="${ esc( __( 'To' ) ) }">
+				<button class="minn-btn-soft" id="minn-stats-apply">${ esc( __( 'Apply' ) ) }</button>
+			</div>` : '';
 		if ( ! d.source || ! d.chart.length ) {
 			view.innerHTML = `
 			<div class="minn-card minn-panel-pad">
@@ -4593,6 +4610,7 @@
 					<div class="minn-panel-title">${ esc( __( 'Traffic' ) ) }</div>
 					<div class="minn-chart-head-actions">${ rangeTabs }</div>
 				</div>
+				${ customRow }
 				<div class="minn-empty">${ esc( d.allowed === false
 		? __( 'You need permission to view site traffic.' )
 		: __( 'No analytics provider is reporting traffic. Install one (Koko Analytics, Jetpack Stats, Matomo…) and the chart appears here.' ) ) }</div>
@@ -4635,6 +4653,7 @@
 				<div class="minn-panel-title">${ esc( __( 'Traffic' ) ) } <span class="minn-panel-sub">${ esc( d.source ) }</span></div>
 				<div class="minn-chart-head-actions">${ rangeTabs }</div>
 			</div>
+			${ customRow }
 			<div class="minn-chart clickable" id="minn-stats-chart">
 				${ d.chart.map( ( x, i ) => `
 					<div class="minn-chart-col" data-ci="${ i }">
@@ -4666,8 +4685,11 @@
 		const d = c.data;
 		if ( c.report === undefined ) {
 			c.report = null; // in flight
-			const from = d.chart[ 0 ].from;
-			const to = d.chart[ d.chart.length - 1 ].to;
+			// The server's echoed window, never bucket edges: the first
+			// bucket's from overshoots the range whenever buckets round up
+			// (12m = 13 × 30d), and an overshot window 400s the report.
+			const from = d.from || d.chart[ 0 ].from;
+			const to = d.to || d.chart[ d.chart.length - 1 ].to;
 			api( `minn-admin/v1/stats/report?from=${ encodeURIComponent( from ) }&to=${ encodeURIComponent( to ) }` )
 				.then( ( r ) => { c.report = r; } )
 				.catch( () => { c.report = { sections: [] }; } )
@@ -4720,9 +4742,25 @@
 		);
 	}
 
+	const gmToday = () => new Date().toISOString().slice( 0, 10 );
+
 	function bindStatsRangeTabs( view ) {
 		$$( '.minn-range-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
+				if ( 'custom' === btn.dataset.range ) {
+					if ( 'custom' === state.statsRange ) return;
+					// Seed with the window on screen (the server's echoed
+					// range, never bucket edges — see renderStatsBreakdowns)
+					// so switching to Custom changes the controls, not the data.
+					const cur = ( ( state.cache.stats || {} ).data || {} );
+					state.statsFrom = cur.from || gmToday();
+					state.statsTo = cur.to || gmToday();
+					state.statsRange = 'custom';
+					// A custom window is absolute — stale next week. Only
+					// preset ranges persist.
+					renderStats();
+					return;
+				}
 				const v = parseInt( btn.dataset.range, 10 );
 				if ( v === state.statsRange ) return;
 				state.statsRange = v;
@@ -4730,6 +4768,22 @@
 				renderStats();
 			} )
 		);
+		const apply = $( '#minn-stats-apply', view );
+		if ( apply ) apply.addEventListener( 'click', () => {
+			const from = ( $( '#minn-stats-from', view ) || {} ).value;
+			const to = ( $( '#minn-stats-to', view ) || {} ).value;
+			if ( ! from || ! to ) {
+				toast( __( 'Pick both dates first' ), true );
+				return;
+			}
+			if ( from > to ) {
+				toast( __( 'From must be on or before to' ), true );
+				return;
+			}
+			state.statsFrom = from;
+			state.statsTo = to;
+			renderStats();
+		} );
 	}
 
 	/* ===== Content ===== */
