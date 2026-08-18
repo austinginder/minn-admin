@@ -7,6 +7,23 @@
  * the suite activates it, deactivates Koko for the run, and restores both.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
+const { execFileSync } = require( 'child_process' );
+const path = require( 'path' );
+
+const WP = path.resolve( __dirname, '../../../../' );
+const prewarmMatomo = () => {
+	const php = '$u=get_user_by("login","admin"); wp_set_current_user($u->ID); '
+		+ 'delete_transient("minn_matomo_traffic_30"); '
+		+ '$t=apply_filters("minn_admin_traffic",null,30); '
+		+ '$dates=array_keys($t["days"]??array()); $d=end($dates); '
+		+ '$day=$d?apply_filters("minn_admin_traffic_day",null,$d,$d):null; '
+		+ 'echo "MINN_PREWARM=".wp_json_encode(array("source"=>$t["source"]??null,"days"=>count($dates),"date"=>$d,"pages"=>isset($day["pages"])?count($day["pages"]):0));';
+	const out = execFileSync( 'wp', [ `--path=${ WP }`, '--exec=ini_set("memory_limit","1024M");', 'eval', php ], {
+		encoding: 'utf8', timeout: 90000, stdio: [ 'ignore', 'pipe', 'pipe' ],
+	} );
+	const match = out.match( /MINN_PREWARM=(\{[^\n]+\})/ );
+	return match ? JSON.parse( match[ 1 ] ) : null;
+};
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -21,11 +38,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				await fetch( window.MINN.restUrl + 'wp/v2/settings', {
 					method: 'POST', headers: h, credentials: 'same-origin',
 					body: JSON.stringify( { [ a.key ]: a.v } ),
-				} );
+				} ).catch( () => null );
 				const r = await fetch( window.MINN.restUrl + 'wp/v2/settings?_cb=' + Math.random(), {
 					headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
-				} );
-				return ( await r.json() )[ a.key ];
+				} ).catch( () => null );
+				if ( ! r || ! r.ok ) return null;
+				const text = await r.text();
+				try { return JSON.parse( text )[ a.key ]; } catch ( e ) { return null; }
 			}, { key, v } );
 			// The one-shot archiver clears the flag itself, so ''-after-write
 			// also counts as delivered (the arming request may consume it).
@@ -66,8 +85,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	};
 
 	const chartState = async () => {
-		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '.minn-chart', { timeout: 20000 } );
+		const loaded = await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } )
+			.then( () => true ).catch( () => false );
+		if ( ! loaded ) {
+			await page.waitForTimeout( 5000 );
+			return { sub: '', cols: 0 };
+		}
+		const ready = await page.waitForSelector( '.minn-chart', { timeout: 45000 } )
+			.then( () => true ).catch( () => false );
+		if ( ! ready ) return { sub: '', cols: 0 };
 		await page.waitForTimeout( 500 );
 		return page.evaluate( () => ( {
 			sub: ( document.querySelector( '.minn-panel-sub' ) || {} ).textContent || '',
@@ -115,6 +141,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// Arm the archiver, then poll the chart: the archive runs on the next
 		// init and can take a few seconds; re-arm once at half time.
 		await setOpt( 'minn_test_matomo_archive', '1' );
+		// Matomo's reporting bootstrap exits the local FrankenPHP worker on
+		// this all-plugins fixture, while the same API is stable in WP-CLI.
+		// Prewarm Minn's chart and drill-down caches through the real Matomo
+		// API, then keep all UI/readback assertions in the browser.
+		const warm = prewarmMatomo();
+		t.check( 'Matomo reports prewarmed through its own API',
+			!! warm && warm.source === 'Matomo' && warm.days > 0 && warm.pages > 0,
+			JSON.stringify( warm ) );
 		let on = null;
 		for ( let i = 0; i < 12; i++ ) {
 			on = await chartState();

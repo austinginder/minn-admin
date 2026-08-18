@@ -147,6 +147,12 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 		return $data;
 	}
 
+	$cache_key = 'minn_matomo_traffic_day_' . md5( $from . '|' . $to );
+	$cached    = get_transient( $cache_key );
+	if ( is_array( $cached ) ) {
+		return $cached;
+	}
+
 	try {
 		$site   = new \WpMatomo\Site();
 		$idsite = $site->get_current_matomo_site_id();
@@ -209,12 +215,14 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 			}
 		}
 
-		return array(
+		$result = array(
 			'source'    => 'Matomo',
 			'pages'     => $pages,
 			'referrers' => $referrers,
 			'adminUrl'  => admin_url( 'admin.php?page=matomo-reporting' ),
 		);
+		set_transient( $cache_key, $result, 15 * MINUTE_IN_SECONDS );
+		return $result;
 	} catch ( \Throwable $e ) {
 		return $data;
 	}
