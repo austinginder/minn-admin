@@ -2762,17 +2762,32 @@ function minn_admin_license_default_providers() {
 			}
 			return array( 'ok' => false, 'code' => 'invalid', 'message' => $status ? str_replace( '_', ' ', $status ) : __( 'Breakdance did not recognize that key.', 'minn-admin' ) );
 		};
+		// Restore without a third argument: passing autoload explicitly would
+		// flip the flag Breakdance chose if it stored these autoloaded.
 		$breakdance_restore = function ( $key, $info ) {
-			false === $key ? delete_option( 'breakdance_license_key' ) : update_option( 'breakdance_license_key', $key, false );
-			false === $info ? delete_option( 'breakdance_license_key_validity_info' ) : update_option( 'breakdance_license_key_validity_info', $info, false );
+			false === $key ? delete_option( 'breakdance_license_key' ) : update_option( 'breakdance_license_key', $key );
+			false === $info ? delete_option( 'breakdance_license_key_validity_info' ) : update_option( 'breakdance_license_key_validity_info', $info );
 		};
 		$providers['breakdance']['secret_label'] = __( 'Breakdance Pro license key', 'minn-admin' );
 		$providers['breakdance']['activate']     = function ( $secret ) use ( $breakdance_result, $breakdance_restore ) {
 			$old_key  = get_option( 'breakdance_license_key', false );
 			$old_info = get_option( 'breakdance_license_key_validity_info', false );
 			$manager  = \Breakdance\Licensing\LicenseKeyManager::getInstance();
-			$manager->changeLicenseKey( trim( (string) $secret ) );
-			$result = $breakdance_result( $manager );
+			// changeLicenseKey() persists the pasted key BEFORE the remote check
+			// answers, so anything that throws in here leaves the rejected key
+			// stored and the customer's working one gone. Restore on the
+			// exception path too, exactly as the Kadence provider above does.
+			try {
+				$manager->changeLicenseKey( trim( (string) $secret ) );
+				$result = $breakdance_result( $manager );
+			} catch ( \Throwable $e ) {
+				$breakdance_restore( $old_key, $old_info );
+				return array(
+					'ok'      => false,
+					'code'    => 'error',
+					'message' => trim( wp_strip_all_tags( (string) $e->getMessage() ) ),
+				);
+			}
 			if ( empty( $result['ok'] ) ) {
 				$breakdance_restore( $old_key, $old_info );
 			}
@@ -2796,7 +2811,16 @@ function minn_admin_license_default_providers() {
 			if ( 'valid' === $status ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Breakdance still reports this site as active, so the key was kept.', 'minn-admin' ) );
 			}
-			$manager->changeLicenseKey( null );
+			// The seat is already released remotely at this point, so a failure
+			// clearing the local copy must not read as a failed deactivation.
+			try {
+				$manager->changeLicenseKey( null );
+			} catch ( \Throwable $e ) {
+				return array(
+					'ok'      => true,
+					'message' => __( 'The seat was freed, but the key could not be cleared here. Remove it on the Breakdance License screen.', 'minn-admin' ),
+				);
+			}
 			return array( 'ok' => true, 'message' => __( 'The Breakdance Pro license was deactivated and its seat freed.', 'minn-admin' ) );
 		};
 	}

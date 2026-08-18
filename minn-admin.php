@@ -20,9 +20,18 @@ defined( 'ABSPATH' ) || exit;
 // legacy cast syntax abort the builder before WordPress reaches the AJAX action.
 // Keep real warnings and errors visible; only omit deprecations for the exact
 // request class where Breakdance installs that exception handler.
+// Narrowed to the request class this was written for. The header alone is
+// something any client can send on any request, including an unauthenticated
+// one, which let a caller quiet the deprecation notices their own probing
+// would otherwise leave in the log. Require Breakdance to actually be present
+// and the request to be the builder's own admin-ajax POST. wp_doing_ajax() is
+// not available this early, so test the entry point directly.
 if (
 	isset( $_SERVER['HTTP_X_REQUESTED_WITH'] )
 	&& 'breakdancexmlhttprequest' === strtolower( (string) $_SERVER['HTTP_X_REQUESTED_WITH'] )
+	&& isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === strtoupper( (string) $_SERVER['REQUEST_METHOD'] )
+	&& isset( $_SERVER['SCRIPT_NAME'] ) && 'admin-ajax.php' === basename( (string) $_SERVER['SCRIPT_NAME'] )
+	&& defined( 'WP_PLUGIN_DIR' ) && file_exists( WP_PLUGIN_DIR . '/breakdance/plugin.php' )
 ) {
 	error_reporting( error_reporting() & ~E_DEPRECATED & ~E_USER_DEPRECATED );
 }
