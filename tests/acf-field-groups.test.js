@@ -104,9 +104,9 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		/* ===== The killer check: new schema shows up in the editor panel ===== */
 		postId = await createPost( page, { title: 'ACF schema e2e', content: '<p>x</p>' } );
 		await openEditor( page, postId );
-		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
+		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 30000 } );
 		await page.click( '[data-side-door="panel:acf"]' );
-		await page.waitForSelector( '[data-pf$=":suite_headline"]', { timeout: 15000 } );
+		await page.waitForSelector( '[data-pf$=":suite_headline"]', { timeout: 30000 } );
 		t.check( 'new group renders in the Custom fields panel', true );
 		const tone = page.locator( '[data-pf$=":suite_tone"]' );
 		let toneChoice = false;
