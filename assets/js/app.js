@@ -6850,7 +6850,55 @@
 			render: () => renderSubscriptions(),
 		},
 	};
-	const listSpec = () => LIST_FILTER_SPECS[ state.route === 'subscriptions' ? 'subscriptions' : 'orders' ];
+	/** A plugin surface's filter bar, expressed as a list spec.
+	 *
+	 *  The bar's machine is keyed by route, and the native lists are written
+	 *  above. A surface's id IS its route, but its descriptor arrives from the
+	 *  server at runtime, so its spec is derived on demand from
+	 *  `collection.filterBar`. Everything else — the status dropdown, Add
+	 *  filter, the chips, the URL round trip and the query builder — is the
+	 *  same code the native lists run.
+	 *
+	 *  Memoized per surface because listSpec() is called from every render:
+	 *  rebuilding the closures each time would be pure garbage. */
+	const SURFACE_SPECS = {};
+	function surfaceFilterSpec( id ) {
+		const s = surfaceById( id );
+		if ( ! s ) return null;
+		const bar = ( surfaceColl( s, surfaceState( id ) ) || {} ).filterBar;
+		if ( ! bar ) return null;
+		if ( SURFACE_SPECS[ id ] ) return SURFACE_SPECS[ id ];
+		const statuses = bar.statuses || [];
+		SURFACE_SPECS[ id ] = {
+			route: id,
+			cacheKey: 'surface:' + id,
+			searchKey: 'surfaceSearch:' + id,
+			stateKey: 'surfaceFilters:' + id,
+			statuses: () => statuses.map( ( [ v ] ) => String( v ) ),
+			statusLabel: ( slug ) => ( statuses.find( ( [ v ] ) => String( v ) === String( slug ) ) || [ '', statusLabel( slug ) ] )[ 1 ],
+			presets: () => [ [ 'any', __( 'All' ) ] ].concat( statuses ),
+			// Only the dimensions this surface's route can really narrow on.
+			kinds: ( bar.kinds || [] ).map( ( k ) => String( k ) ),
+			clear: () => { surfaceState( id ).cache = null; },
+			load: ( page ) => {
+				const ss = surfaceState( id );
+				// The shared bar owns the search box, so mirror its value into
+				// the surface's own state before loading: the route builder
+				// and the mid-flight context guard both read ss.q.
+				ss.q = state[ 'surfaceSearch:' + id ] || '';
+				return loadSurfaceItems( surfaceById( id ), page );
+			},
+			render: () => renderSurface( surfaceById( id ) ),
+		};
+		return SURFACE_SPECS[ id ];
+	}
+	// The two native lists key off their own routes; anything else may be a
+	// surface wearing the bar, and orders stays the fallback so every existing
+	// caller behaves exactly as before.
+	// Both native specs are keyed by their own route, so this is the ternary it
+	// replaces, plus the surface case. Orders stays the fallback, so every
+	// existing caller behaves exactly as before.
+	const listSpec = () => LIST_FILTER_SPECS[ state.route ] || surfaceFilterSpec( state.route ) || LIST_FILTER_SPECS.orders;
 
 	const ORDER_FILTER_KINDS = [
 		[ 'status', __( 'Status' ) ],
@@ -7000,6 +7048,28 @@
 	}
 
 
+	/** The filter bar itself, in one place.
+	 *
+	 *  Every list that wears it renders THIS markup with THESE ids, which is
+	 *  what lets one bindListFilterBar wire all of them: orders, subscriptions
+	 *  and any plugin surface that declares a filterBar. Lists differ by three
+	 *  things only — what the search box says it searches, the count on the
+	 *  right, and an optional trailing button — so those are the arguments.
+	 *
+	 *  The search value is read through the active spec rather than a named
+	 *  state field, so a new list is a new spec and not a new toolbar. */
+	function listFilterBarHtml( placeholder, meta, extra ) {
+		const spec = listSpec();
+		return `
+		<div class="minn-toolbar minn-order-bar">
+			<button type="button" class="minn-btn-soft minn-of-drop" id="minn-order-preset">${ esc( orderPresetLabel() ) } ${ icon( 'chevron-down' ) }</button>
+			<input class="minn-input minn-toolbar-search" id="minn-order-search" placeholder="${ esc( placeholder ) }" value="${ esc( state[ spec.searchKey ] || '' ) }">
+			<button type="button" class="minn-btn-soft" id="minn-order-addfilter">${ icon( 'plus' ) } ${ __( 'Add filter' ) }</button>
+			<div class="minn-toolbar-meta">${ meta || '' }</div>
+			${ extra || '' }
+		</div>`;
+	}
+
 	/** Wire a filter bar. Orders and Subscriptions render the same controls
 	 *  and the same ids, and the active list comes from the route. */
 	function bindListFilterBar( view ) {
@@ -7008,25 +7078,7 @@
 		if ( presetBtn ) presetBtn.addEventListener( 'click', () => openOrderFilterPop( presetBtn, 'preset', view ) );
 		const addFilterBtn = $( '#minn-order-addfilter', view );
 		if ( addFilterBtn ) addFilterBtn.addEventListener( 'click', () => openOrderFilterPop( addFilterBtn, null, view ) );
-		$$( '[data-ofremove]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				const f = orderFilters();
-				const kind = btn.dataset.ofremove;
-				if ( kind === 'status' ) f.status = [];
-				else if ( kind === 'date' ) { f.after = ''; f.before = ''; f.datePreset = ''; }
-				else f[ kind ] = null;
-				reloadOrderList( view );
-			} )
-		);
-		$$( '[data-ofchip] > .minn-of-chip-body', view ).forEach( ( body ) =>
-			body.addEventListener( 'click', () =>
-				openOrderFilterPop( body, body.parentNode.dataset.ofchip, view ) )
-		);
-		const clearBtn = $( '#minn-order-clearfilters', view );
-		if ( clearBtn ) clearBtn.addEventListener( 'click', () => {
-			state[ spec.stateKey ] = orderFiltersDefault();
-			reloadOrderList( view );
-		} );
+		bindFilterChips( view );
 		const search = $( '#minn-order-search', view );
 		if ( search ) {
 			let searchTimer = null;
@@ -7050,6 +7102,35 @@
 	/** Repaint the chip bar in place. A filter change reloads the list, and
 	 *  waiting for that round trip to remove a chip the user just dismissed
 	 *  reads as a dead click. The full render that follows rebinds it. */
+	/** Wire the chip bar alone. Split out of bindListFilterBar because the bar
+	 *  is written TWICE: once by the render, and again in place by
+	 *  paintOrderFilterBar — and replacing those nodes drops their listeners.
+	 *  The native lists hid that, because a full render always followed and
+	 *  rebound everything; a plugin surface wearing the bar did not, and
+	 *  Clear all became a dead click. */
+	function bindFilterChips( view ) {
+		const spec = listSpec();
+		$$( '[data-ofremove]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const f = orderFilters();
+				const kind = btn.dataset.ofremove;
+				if ( kind === 'status' ) f.status = [];
+				else if ( kind === 'date' ) { f.after = ''; f.before = ''; f.datePreset = ''; }
+				else f[ kind ] = null;
+				reloadOrderList( view );
+			} )
+		);
+		$$( '[data-ofchip] > .minn-of-chip-body', view ).forEach( ( body ) =>
+			body.addEventListener( 'click', () =>
+				openOrderFilterPop( body, body.parentNode.dataset.ofchip, view ) )
+		);
+		const clearBtn = $( '#minn-order-clearfilters', view );
+		if ( clearBtn ) clearBtn.addEventListener( 'click', () => {
+			state[ spec.stateKey ] = orderFiltersDefault();
+			reloadOrderList( view );
+		} );
+	}
+
 	function paintOrderFilterBar( view ) {
 		const host = view || $( '#minn-view' );
 		if ( ! host ) return;
@@ -7061,11 +7142,15 @@
 		}
 		if ( existing ) {
 			existing.outerHTML = html;
+			bindFilterChips( host );
 			return;
 		}
 		const addBtn = $( '#minn-order-addfilter', host );
 		const row = addBtn && addBtn.closest( '.minn-toolbar' );
-		if ( row ) row.insertAdjacentHTML( 'afterend', html );
+		if ( row ) {
+			row.insertAdjacentHTML( 'afterend', html );
+			bindFilterChips( host );
+		}
 	}
 
 	/** Reload the list under the current filters, keeping the toolbar painted. */
@@ -7074,7 +7159,13 @@
 		softListReload( {
 			route: spec.route,
 			view,
-			clear: () => { state.cache[ spec.cacheKey ] = null; },
+			// A native list caches under state.cache; a surface keeps its own
+			// cache on its surface state, so it overrides the clear rather
+			// than having a dead key written for it.
+			clear: () => {
+				if ( 'function' === typeof spec.clear ) spec.clear();
+				else state.cache[ spec.cacheKey ] = null;
+			},
 			paintChrome: () => {
 				syncOrderFiltersUrl();
 				paintOrderFilterBar( view );
@@ -7116,7 +7207,10 @@
 		orderFilterPop = pop;
 		pop.className = 'minn-of-pop';
 		if ( ! kind ) {
-			pop.innerHTML = ORDER_FILTER_KINDS.map( ( [ id, label ] ) =>
+			// A list may narrow the offered dimensions to the ones its route
+			// can really serve (a surface shim has no customer lookup).
+			const kinds = listSpec().kinds;
+			pop.innerHTML = ORDER_FILTER_KINDS.filter( ( [ id ] ) => ! kinds || kinds.includes( id ) ).map( ( [ id, label ] ) =>
 				`<button type="button" class="minn-of-row" data-offilter="${ id }">${ esc( label ) }</button>` ).join( '' );
 		} else if ( kind === 'preset' ) {
 			// Single-status shortcuts: the old tab strip, folded into a menu.
@@ -9265,12 +9359,7 @@
 					${ delta ? `<div class="minn-stat-delta">${ esc( delta ) }</div>` : '' }
 				</div>` ).join( '' ) }
 		</div>` : '' }
-		<div class="minn-toolbar minn-order-bar">
-			<button type="button" class="minn-btn-soft minn-of-drop" id="minn-order-preset">${ esc( orderPresetLabel() ) } ${ icon( 'chevron-down' ) }</button>
-			<input class="minn-input minn-toolbar-search" id="minn-order-search" placeholder="${ esc( __( 'Search orders (ID, name, email…)' ) ) }" value="${ esc( state.orderSearch || '' ) }">
-			<button type="button" class="minn-btn-soft" id="minn-order-addfilter">${ icon( 'plus' ) } ${ __( 'Add filter' ) }</button>
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'order' ) }</div>
-		</div>
+		${ listFilterBarHtml( __( 'Search orders (ID, name, email…)' ), metaLabel( c.total, 'order' ) ) }
 		${ orderFilterChipsHtml() }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-order-cols">
@@ -10021,12 +10110,7 @@
 		if ( ! c ) {
 			if ( softLoadPending( 'subscriptions' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
-			<div class="minn-toolbar minn-order-bar">
-				<button type="button" class="minn-btn-soft minn-of-drop" id="minn-order-preset">${ esc( orderPresetLabel() ) } ${ icon( 'chevron-down' ) }</button>
-				<input class="minn-input minn-toolbar-search" id="minn-order-search" placeholder="${ esc( __( 'Search subscriptions (ID, name, email…)' ) ) }" value="${ esc( state.subSearch || '' ) }">
-				<button type="button" class="minn-btn-soft" id="minn-order-addfilter">${ icon( 'plus' ) } ${ __( 'Add filter' ) }</button>
-				<div class="minn-toolbar-meta"></div>
-			</div>
+			${ listFilterBarHtml( __( 'Search subscriptions (ID, name, email…)' ), '' ) }
 			${ orderFilterChipsHtml() }
 			<div class="minn-loading">${ esc( __( 'Loading subscriptions…' ) ) }</div>`;
 			bindListFilterBar( view );
@@ -10042,12 +10126,7 @@
 					? __( 'No subscriptions match these filters.' )
 					: __( 'No subscriptions yet. When a customer buys a subscription product, it shows up here with status, next payment and related orders.' );
 		view.innerHTML = `
-		<div class="minn-toolbar minn-order-bar">
-			<button type="button" class="minn-btn-soft minn-of-drop" id="minn-order-preset">${ esc( orderPresetLabel() ) } ${ icon( 'chevron-down' ) }</button>
-			<input class="minn-input minn-toolbar-search" id="minn-order-search" placeholder="${ esc( __( 'Search subscriptions (ID, name, email…)' ) ) }" value="${ esc( state.subSearch || '' ) }">
-			<button type="button" class="minn-btn-soft" id="minn-order-addfilter">${ icon( 'plus' ) } ${ __( 'Add filter' ) }</button>
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'subscription' ) }</div>
-		</div>
+		${ listFilterBarHtml( __( 'Search subscriptions (ID, name, email…)' ), metaLabel( c.total, 'subscription' ) ) }
 		${ orderFilterChipsHtml() }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-sub-cols">
@@ -14829,6 +14908,15 @@
 				.split( '{by}' ).join( encodeURIComponent( ss.sortBy ) )
 				.split( '{dir}' ).join( ss.sortDir === 'desc' ? 'desc' : 'asc' ) );
 		}
+		// A surface declaring `filterBar` rides the shared list-filter machine,
+		// so its narrowing leaves in the same parameters the native lists send
+		// (status / status[] / after / before). The adapter's own route reads
+		// them; nothing is filtered in the browser, because page 2 of an
+		// unfiltered query is not page 2 of a filtered one.
+		if ( col.filterBar ) {
+			const fq = orderFilterQuery( surfaceFilterSpec( s.id ) );
+			if ( fq ) parts.push( fq.replace( /^&/, '' ) );
+		}
 		// {page} is 1-based; {page0} serves APIs that count pages from zero.
 		parts.push( ( col.pageQuery || 'per_page=25&page={page}' ).replace( '{page}', page ).replace( '{page0}', page - 1 ) );
 		return route + ( route.includes( '?' ) ? '&' : '?' ) + parts.join( '&' );
@@ -15540,13 +15628,33 @@
 		const importHtml = coll.import ? `<button class="minn-btn-soft" id="minn-surface-import">${ icon( 'upload' ) } ${ esc( chromeLabel( coll.import.label || __( 'Import' ) ) ) }</button>` : '';
 		const rowTwo = tabsHtml + filterHtml + searchHtml
 			+ `<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>` + importHtml + createHtml;
+		// A surface can ask for the ORDERS bar instead of the pill strip:
+		// status as a multi-select, Add filter, chips beneath and the whole
+		// narrowing in the URL. Same markup, ids and binder as the native
+		// lists, so there is no second bar to drift — the surface supplies
+		// only its own vocabulary, through the spec.
+		const bar = coll.filterBar;
+		const barHtml = bar ? listFilterBarHtml(
+			bar.searchPlaceholder || sprintf(
+				/* translators: %s: the localized name of the items being searched. */
+				__( 'Search %s…' ),
+				chromeLabel( coll.viewLabel || __( 'items' ) )
+			),
+			// The count keeps Minn's own noun: metaLabel's vocabulary is a
+			// finite, extracted list, and a noun arriving from a plugin could
+			// never be pluralized in the reader's language.
+			metaLabel( c.total, 'item' ),
+			importHtml + createHtml
+		) + orderFilterChipsHtml() : '';
 		// With a view switcher AND list controls, the toolbar splits into two
 		// rows (the Extensions pattern): views on top, this view's own
 		// controls underneath. Simple surfaces keep the single row.
-		const toolbarHtml = switchHtml && ( tabsHtml || filterHtml || searchHtml || createHtml || importHtml )
-			? `<div class="minn-toolbar minn-toolbar-views">${ switchHtml }</div>
+		const toolbarHtml = bar
+			? ( switchHtml ? `<div class="minn-toolbar minn-toolbar-views">${ switchHtml }</div>` : '' ) + barHtml
+			: ( switchHtml && ( tabsHtml || filterHtml || searchHtml || createHtml || importHtml )
+				? `<div class="minn-toolbar minn-toolbar-views">${ switchHtml }</div>
 			   <div class="minn-toolbar">${ rowTwo }</div>`
-			: `<div class="minn-toolbar">${ switchHtml }${ rowTwo }</div>`;
+				: `<div class="minn-toolbar">${ switchHtml }${ rowTwo }</div>` );
 
 		view.innerHTML = `
 		${ ss.view === 'main' ? surfaceStatusHtml( ss.status ) : '' }
@@ -15612,6 +15720,10 @@
 				} );
 			} )
 		);
+		// The shared filter bar replaces the pill strip and the surface's own
+		// search box, so it also owns their wiring. Its binder reads the
+		// active spec from the route, which surfaceFilterSpec supplies.
+		if ( coll.filterBar ) bindListFilterBar( view );
 		$$( '[data-stab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				const tab = btn.dataset.stab;
