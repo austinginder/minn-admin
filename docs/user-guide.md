@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.31.0. This file ships inside the plugin, so the copy you
+*Current as of v0.32.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -61,6 +61,17 @@ reload.
 (Ctrl+K on Windows and Linux), start typing, and jump to any view, any
 post, or run a command directly: "Clear site cache", "Back up site now",
 "Create new page". If you learn one thing from this guide, learn ⌘K.
+
+**Minn can travel onto the public site.** Turn on the Minn admin bar from
+**Your profile** to replace WordPress's classic front-end bar for your account.
+The floating bar gives you search and the command palette, a create menu, an
+Edit button for the page you are viewing, notifications and your account. A
+status chip appears beside the site name only when the site needs attention,
+such as maintenance mode, a password gate, hidden search visibility or a
+staging environment. The bar moves out of the way as you scroll down, returns
+when you scroll up, and becomes a simple full-width strip on phones. This is a
+personal choice: other users keep the classic bar until they opt in, and
+wp-admin always keeps the classic bar.
 
 **Right-click is real in Minn.** This is the least discoverable thing in
 the app, so here it is in plain terms: rows in Content and Media have
@@ -335,8 +346,12 @@ the correct side, while addresses, file paths and version numbers stay
 readable left to right inside the surrounding text.
 
 Translations arrive as WordPress language packs through the same
-Updates screen as everything else and update alongside the plugin, so
-there is nothing extra to install or maintain.
+update system as everything else. Open **Extensions → Translations** to see
+pending packs grouped by language, including which plugins, themes or
+WordPress core package each download belongs to. **Update translations** runs
+that queue on its own, while **Check for updates** refreshes it alongside
+plugin and theme updates. Large batches keep their progress visible in the top
+bar, so you can continue working while they finish.
 
 ## Your store
 
@@ -414,7 +429,9 @@ and a supported appointment plugin adds Bookings in the same operational group.
 
 ## Managing the site
 
-- **Extensions** — three tabs: Plugins, Themes, and Licenses. Install by
+- **Extensions** — four tabs: Plugins, Themes, Translations, and Licenses.
+  Translations groups pending language packs by language and names the plugin,
+  theme or WordPress core package behind each download. Install extensions by
   search, upload, or dropping a zip on the dialog; uploading a zip of
   something already installed shows what is installed against what you
   uploaded and offers to replace it, files swapped, settings and content
