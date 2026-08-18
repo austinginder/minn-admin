@@ -1751,25 +1751,61 @@
 	// scrub only what executes: script/style elements, every on* attribute,
 	// and href/src pointing at a scheme that runs. Everything else is imported
 	// as it was.
-	function rtSeedHtml( s ) {
-		if ( s.indexOf( '<' ) === -1 ) return miniAutop( s );
-		const holder = inertParse( s );
-		$$( 'script, style, noscript', holder ).forEach( ( el ) => el.remove() );
-		$$( '*', holder ).forEach( ( el ) => {
+	// Elements that run, navigate, or re-root the document. srcdoc on an iframe
+	// inherits this origin and its content is a fresh navigation, so a plain
+	// <script> inside one DOES run; <base> rewrites every relative URL on the
+	// page; SVG <animate>/<set> can retarget an href after the scrub. None of
+	// these survive wp_kses_post on the way in either, so dropping them costs
+	// no fidelity.
+	const RT_DROP_TAGS = 'script,style,noscript,iframe,object,embed,frame,frameset,form,base,meta,link,applet,portal,template,animate,animatetransform,animatemotion,set';
+	// Attributes that take a URL. Anything not http(s) or a same-origin path is
+	// dropped rather than trusted.
+	const RT_URL_ATTRS = [ 'href', 'src', 'xlink:href', 'action', 'formaction', 'data', 'poster', 'background', 'cite', 'longdesc', 'ping' ];
+	// Never useful in stored content and each one is a way back to execution.
+	const RT_KILL_ATTRS = [ 'srcdoc', 'sandbox', 'attributename', 'values', 'from', 'to', 'by', 'begin', 'http-equiv' ];
+
+	function rtScrub( root ) {
+		$$( RT_DROP_TAGS, root ).forEach( ( el ) => el.remove() );
+		$$( '*', root ).forEach( ( el ) => {
 			Array.from( el.attributes ).forEach( ( at ) => {
 				const name = at.name.toLowerCase();
-				if ( 0 === name.indexOf( 'on' ) ) {
+				if ( 0 === name.indexOf( 'on' ) || RT_KILL_ATTRS.includes( name ) ) {
 					el.removeAttribute( at.name );
 					return;
 				}
 				// A relative or http(s) target is fine; anything else (javascript:,
 				// data:, vbscript:) is not, and safeHref already draws that line.
-				if ( ( 'href' === name || 'src' === name || 'xlink:href' === name ) && ! safeHref( at.value ) ) {
+				if ( RT_URL_ATTRS.includes( name ) && ! safeHref( at.value ) ) {
 					el.removeAttribute( at.name );
 				}
 			} );
+			// querySelectorAll does not descend into a template's content, so an
+			// on* attribute would ride through untouched inside one.
+			if ( el.content && el.content.nodeType === 11 ) rtScrub( el.content );
 		} );
-		return holder.innerHTML || '<p><br></p>';
+		return root;
+	}
+
+	// Seed the editable body from stored markup. Parse inertly, scrub, then
+	// IMPORT the nodes: re-serialising a scrubbed tree back into innerHTML on a
+	// live element re-parses it for real, which is exactly the step the inert
+	// parse existed to avoid, and it re-opens every mutation-XSS shape a string
+	// round trip carries.
+	function rtSeedInto( body, s ) {
+		body.textContent = '';
+		if ( s.indexOf( '<' ) === -1 ) {
+			// No markup: still needs paragraphs to edit as blocks. miniAutop's
+			// output is built from this text, so parse it inertly too.
+			s = miniAutop( s );
+		}
+		const holder = rtScrub( inertParse( s ) );
+		if ( ! holder.firstChild ) {
+			body.innerHTML = '<p><br></p>';
+			return;
+		}
+		Array.from( holder.childNodes ).forEach( ( node ) => {
+			body.appendChild( document.importNode( node, true ) );
+		} );
 	}
 
 	function openRichTextModal( html, onApply, opts = {} ) {
@@ -1809,15 +1845,14 @@
 		rtEl = overlay;
 		const body = $( '.minn-rt-body', overlay );
 		const s = String( html == null ? '' : html ).trim();
-		// Plain-text values (a wysiwyg field someone filled over the API)
-		// still need paragraphs to edit as blocks. Markup goes through the
-		// paste sanitizer first: `body` is already in the live document, so
-		// assigning stored markup straight in parses it for real and fires any
-		// onload/onerror it carries. Everywhere else in this file parses
-		// untrusted markup inertly; this was the one place that did not, and
-		// the sanitizer's vocabulary is the same one Apply stores anyway, so
-		// nothing survives the round trip that would not have survived it.
-		body.innerHTML = s ? rtSeedHtml( s ) : '<p><br></p>';
+		// `body` is already in the live document, so assigning stored markup
+		// straight in parses it for real and fires any onload/onerror it
+		// carries. Seed by inert parse, scrub, then import the nodes.
+		if ( s ) {
+			rtSeedInto( body, s );
+		} else {
+			body.innerHTML = '<p><br></p>';
+		}
 
 		const linkRow = $( '.minn-rt-linkrow', overlay );
 		const linkInput = linkRow.querySelector( 'input' );
