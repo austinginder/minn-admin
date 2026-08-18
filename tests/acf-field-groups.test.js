@@ -108,8 +108,17 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		await page.click( '[data-side-door="panel:acf"]' );
 		await page.waitForSelector( '[data-pf$=":suite_headline"]', { timeout: 15000 } );
 		t.check( 'new group renders in the Custom fields panel', true );
-		t.check( 'choice field renders its choices', await page.$eval( '[data-pf$=":suite_tone"]', ( e ) =>
-			Array.from( e.options || [] ).some( ( o ) => o.value === 'bold' ) ) );
+		const tone = page.locator( '[data-pf$=":suite_tone"]' );
+		let toneChoice = false;
+		if ( await tone.evaluate( ( e ) => e.tagName === 'SELECT' ) ) {
+			toneChoice = await tone.evaluate( ( e ) => Array.from( e.options ).some( ( o ) => o.value === 'bold' ) );
+		} else {
+			await tone.locator( '.minn-ac-input' ).click();
+			const bold = tone.locator( '.minn-ac-item[data-acv="bold"]' );
+			await bold.waitFor( { timeout: 5000 } );
+			toneChoice = /Bold/.test( await bold.textContent() );
+		}
+		t.check( 'choice field renders its choices', toneChoice );
 
 		/* ===== Edit a field through the detail modal ===== */
 		await page.goto( BASE + '/minn-admin/acf-field-groups', { waitUntil: 'domcontentloaded' } );
