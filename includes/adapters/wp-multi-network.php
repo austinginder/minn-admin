@@ -204,7 +204,9 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/wp-multi-network/networks/(?P<id>\d+)', array(
 		'methods'             => 'DELETE',
 		'permission_callback' => function ( WP_REST_Request $request ) {
-			return current_user_can( 'delete_network', (int) $request['id'] );
+			// Same source the handler acts on, so the gate and the action can
+			// never be answering about different networks.
+			return current_user_can( 'delete_network', minn_admin_wpmn_path_id( $request ) );
 		},
 		'callback'            => 'minn_admin_wpmn_network_delete',
 	) );
@@ -290,10 +292,25 @@ function minn_admin_wpmn_network_create( WP_REST_Request $request ) {
 	return rest_ensure_response( minn_admin_wpmn_network_row( $id ) );
 }
 
+/**
+ * The {id} segment from the route PATH.
+ *
+ * WP_REST_Request::offsetGet resolves body and query parameters ahead of URL
+ * ones, so a stray id in the payload would silently retarget these verbs while
+ * the path, and the confirmation the operator read, named something else.
+ * network.php reads get_url_params() on every id-bearing handler for the same
+ * reason. Destroying a network and re-parenting a site are the two least
+ * reversible things this plugin does, so they get the same treatment.
+ */
+function minn_admin_wpmn_path_id( WP_REST_Request $request ) {
+	$url = $request->get_url_params();
+	return isset( $url['id'] ) ? (int) $url['id'] : 0;
+}
+
 /** DELETE /wp-multi-network/networks/{id}. */
 function minn_admin_wpmn_network_delete( WP_REST_Request $request ) {
-	$id      = (int) $request['id'];
-	$network = get_network( $id );
+	$id      = minn_admin_wpmn_path_id( $request );
+	$network = $id ? get_network( $id ) : null;
 	if ( ! $network ) {
 		return new WP_Error( 'no_such_network', __( 'That network does not exist.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
@@ -314,13 +331,21 @@ function minn_admin_wpmn_network_delete( WP_REST_Request $request ) {
 
 /** POST /wp-multi-network/sites/{id}/move. */
 function minn_admin_wpmn_site_move( WP_REST_Request $request ) {
-	$site_id    = (int) $request['id'];
+	$site_id    = minn_admin_wpmn_path_id( $request );
 	$network_id = (int) $request['network'];
-	$site       = get_site( $site_id );
+	$site       = $site_id ? get_site( $site_id ) : null;
 	$network    = get_network( $network_id );
 
 	if ( ! $site ) {
 		return new WP_Error( 'no_such_site', __( 'That site does not exist.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	// A network administrator is an administrator OF A NETWORK: is_super_admin
+	// resolves against the current network's own site_admins list. Authority
+	// over the destination says nothing about the network the site is leaving,
+	// so scope the source the way every site-targeting route in network.php
+	// does through minn_admin_network_target().
+	if ( (int) $site->network_id !== (int) get_current_network_id() ) {
+		return new WP_Error( 'foreign_site', __( 'That site is not part of this network.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	if ( ! $network ) {
 		return new WP_Error( 'no_such_network', __( 'That destination network does not exist.', 'minn-admin' ), array( 'status' => 404 ) );
