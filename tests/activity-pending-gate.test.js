@@ -7,7 +7,7 @@
  * minnadmin runs Disable Comments as a resident fixture, so the suite
  * deactivates it for the run and restores it in finally (rule-53 pattern).
  */
-const { BASE, launch, login, createPost, reporter } = require( './helpers' );
+const { BASE, launch, login, loginAs, createPost, reporter } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -70,14 +70,9 @@ const { BASE, launch, login, createPost, reporter } = require( './helpers' );
 		t.check( 'rendered feed shows the pending row to a moderator', adminRendered.includes( 'Pending Gater' ), adminRendered );
 
 		/* ===== Author (no moderate_comments) sees only the approved row ===== */
-		const ctx2 = await browser.newContext( { ignoreHTTPSErrors: true } );
-		const p2 = await ctx2.newPage();
-		await p2.goto( BASE + '/wp-login.php', { waitUntil: 'domcontentloaded' } );
-		await p2.fill( '#user_login', 'minn-author' );
-		await p2.fill( '#user_pass', 'minn-author-pass-1' );
-		await Promise.all( [ p2.waitForNavigation( { waitUntil: 'domcontentloaded' } ), p2.click( '#wp-submit' ) ] );
-		await p2.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
-		await p2.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 15000 } );
+		const author = await loginAs( browser, 'minn-author', 'minn-author-pass-1' );
+		const ctx2 = author.ctx;
+		const p2 = author.page;
 
 		const authorFeed = await activityTexts( p2 );
 		t.check( 'author response carries no pending comment', ! authorFeed.includes( 'Pending Gater' ) && ! authorFeed.includes( 'awaiting moderation' ), authorFeed );
