@@ -38,7 +38,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	// Create product via UI.
 	await page.goto( BASE + '/minn-admin/products', { waitUntil: 'domcontentloaded' } );
-	await page.waitForSelector( '#minn-product-add, #minn-product-search', { timeout: 20000 } );
+	await page.waitForSelector( '#minn-product-add, #minn-order-search', { timeout: 20000 } );
+	await page.waitForSelector( '.minn-table-row[data-product], .minn-empty', { timeout: 20000 } ).catch( () => null );
 	const addProd = await page.$( '#minn-product-add' );
 	t.check( 'Add product button present', !! addProd, '' );
 	if ( addProd ) {

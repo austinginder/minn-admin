@@ -46,24 +46,35 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'created low-stock product', prod.status === 201 || prod.status === 200, JSON.stringify( prod.status ) );
 	const pid = prod.body && prod.body.id;
 
-	// Products: stock tabs + bulk first (stable path), then low-stock filter.
+	// Products: the stock filter + bulk first (stable path), then low stock.
 	await page.goto( BASE + '/minn-admin/products', { waitUntil: 'domcontentloaded' } );
-	await page.waitForSelector( '#minn-product-search', { timeout: 20000 } );
-	await page.waitForFunction( () => !! document.querySelector( '#minn-prod-sel-all, [data-pstock]' ), null, { timeout: 15000 } ).catch( () => null );
+	// The filter bar paints while the list is still loading, so waiting for the
+	// toolbar does NOT mean the rows have landed: wait for the table itself.
+	await page.waitForSelector( '#minn-order-search', { timeout: 20000 } );
+	await page.waitForSelector( '.minn-table-row[data-product], .minn-empty', { timeout: 20000 } ).catch( () => null );
 	await page.waitForTimeout( 400 );
 
-	const stockTabs = await page.evaluate( () =>
-		Array.from( document.querySelectorAll( '[data-pstock]' ) ).map( ( b ) => b.dataset.pstock )
+	// Stock lives in the shared filter popover now, not in a tab strip.
+	const openStockFilter = async () => {
+		await page.click( '#minn-order-addfilter' );
+		await page.waitForSelector( '[data-offilter="stock"]', { timeout: 8000 } );
+		await page.click( '[data-offilter="stock"]' );
+		await page.waitForSelector( '.minn-of-pop [data-ofval]', { timeout: 8000 } );
+	};
+	await openStockFilter();
+	const stockChoices = await page.evaluate( () =>
+		Array.from( document.querySelectorAll( '.minn-of-pop [data-ofval]' ) ).map( ( b ) => b.dataset.ofval )
 	);
-	t.check( 'product stock filter tabs present',
-		[ 'any', 'instock', 'outofstock', 'onbackorder', 'low' ].every( ( id ) => stockTabs.includes( id ) ),
-		JSON.stringify( stockTabs ) );
+	t.check( 'product stock filter offers every stock state',
+		[ 'instock', 'outofstock', 'onbackorder', 'low' ].every( ( id ) => stockChoices.includes( id ) ),
+		JSON.stringify( stockChoices ) );
+	await page.keyboard.press( 'Escape' );
 
 	const hasCb = await page.$( '#minn-prod-sel-all, [data-psel]' );
 	t.check( 'products list has bulk checkboxes', !! hasCb, '' );
 
 	if ( hasCb && pid ) {
-		await page.fill( '#minn-product-search', String( pid ) );
+		await page.fill( '#minn-order-search', String( pid ) );
 		await page.waitForFunction( ( id ) =>
 			!! document.querySelector( `.minn-table-row[data-product="${ id }"]` ), pid, { timeout: 12000 } ).catch( () => null );
 		const checked = await page.evaluate( ( id ) => {
@@ -105,7 +116,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	}
 
 	// Clear search via Escape (updates SPA state, not only the input value).
-	const searchEl = await page.$( '#minn-product-search' );
+	const searchEl = await page.$( '#minn-order-search' );
 	if ( searchEl ) {
 		await searchEl.focus();
 		await page.keyboard.press( 'Escape' );
@@ -123,10 +134,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			} ),
 		} );
 	}
-	const lowBtn = await page.$( '[data-pstock="low"]' );
+	await openStockFilter().catch( () => null );
+	const lowBtn = await page.$( '.minn-of-pop [data-ofval="low"]' );
 	if ( lowBtn ) {
 		await lowBtn.click();
-		await page.waitForTimeout( 1200 );
+		await page.waitForTimeout( 1800 );
 		let lowHit = await page.evaluate( ( id ) => {
 			const rows = Array.from( document.querySelectorAll( '.minn-table-row[data-product]' ) );
 			return {
@@ -137,7 +149,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		}, pid );
 		if ( ! lowHit.hit ) {
 			// Direct id search while Low stock is active (should still surface managed low qty).
-			await page.fill( '#minn-product-search', String( pid ) );
+			await page.fill( '#minn-order-search', String( pid ) );
 			await page.waitForTimeout( 900 );
 			lowHit = await page.evaluate( ( id ) => {
 				const rows = Array.from( document.querySelectorAll( '.minn-table-row[data-product]' ) );
@@ -148,9 +160,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				};
 			}, pid );
 		}
-		t.check( 'Low stock tab lists the low-qty product', lowHit.hit, JSON.stringify( lowHit ) );
+		t.check( 'Low stock filter lists the low-qty product', lowHit.hit, JSON.stringify( lowHit ) );
 	} else {
-		t.check( 'Low stock tab lists the low-qty product', false, 'no low tab' );
+		t.check( 'Low stock filter lists the low-qty product', false, 'no low choice' );
 	}
 
 	// Order notes.

@@ -59,16 +59,18 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'Content has no Coupons type tab', ! fenced, '' );
 
 	await page.goto( BASE + '/minn-admin/coupons', { waitUntil: 'domcontentloaded' } );
-	await page.waitForSelector( '#minn-coupon-search, .minn-empty, .minn-loading', { timeout: 20000 } );
-	await page.waitForFunction( () => !! document.querySelector( '#minn-coupon-search' ), null, { timeout: 15000 } ).catch( () => null );
+	// The filter bar paints while the list is still loading, so the search box
+	// existing does not mean the rows have landed: wait for the table.
+	await page.waitForSelector( '#minn-order-search, .minn-empty, .minn-loading', { timeout: 20000 } );
+	await page.waitForSelector( '.minn-table-row[data-coupon], .minn-empty', { timeout: 20000 } ).catch( () => null );
 
-	const hasSearch = await page.$( '#minn-coupon-search' );
+	const hasSearch = await page.$( '#minn-order-search' );
 	const hasAdd = await page.$( '#minn-coupon-add' );
 	t.check( 'coupons toolbar has search', !! hasSearch, '' );
 	t.check( 'coupons has Add coupon button', !! hasAdd, '' );
 
 	if ( hasSearch && couponId ) {
-		await page.fill( '#minn-coupon-search', code );
+		await page.fill( '#minn-order-search', code );
 		await page.waitForTimeout( 700 );
 		await page.waitForFunction( ( id ) => {
 			const rows = document.querySelectorAll( '.minn-table-row[data-coupon]' );

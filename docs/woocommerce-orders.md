@@ -90,10 +90,47 @@ one WooCommerce registered, ids have to be positive integers, dates have to look
 dates. A URL can only carry an id, so a restored customer or product filter fetches its
 name and paints it into the chip.
 
-**Subscriptions wears the same bar.** The two lists are the same shape in two
-vocabularies, so the machinery is parameterized by a spec (status vocabulary, state slot,
-loader, renderer) and the active list comes from the route. Subscriptions offers its own
-statuses (active, pending-cancel, expired, switched), and each list keeps its own filters.
+**Four lists wear the same bar.** Orders, subscriptions, products and coupons are the
+same shape in four vocabularies, so the machinery is parameterized by a spec (status
+vocabulary, state slot, loader, renderer, and the dimensions that list offers) and the
+active list comes from the route. Each list keeps its own filters.
+
+A **dimension** is data rather than a branch in the popover: a label, how the value is
+picked (`choices` for a fixed list, `lookup` for an async picker, plus the shared status
+and date slots), and the WooCommerce parameter it becomes. Adding a filter is an entry in
+that table.
+
+| List | Status | Dimensions |
+|---|---|---|
+| Orders | multi (`status[]`) | date, customer, product |
+| Subscriptions | multi (`status[]`) | date, customer, product |
+| Products | single (`status`) | stock, category, tag, type, featured, on sale |
+| Coupons | single (`status`) | date |
+
+Status is multi where WooCommerce registers it as an array and single where it registers
+an enum: products and coupons take one status per query, so their dropdown IS the status
+control and there is no second multi-select behind Add filter.
+
+Two dimensions people ask for are deliberately absent, both for the same reason. **Brand**
+is not a `wc/v3/products` parameter (the collection returns brands but cannot filter on
+them; only the Store API can), and **coupon discount type** is not a `wc/v3/coupons`
+parameter at all. Offering either would mean narrowing one page in the browser, which the
+rule above forbids.
+
+Products keeps one exception, and it is honest about it: **Low stock** is not a
+`stock_status` value. It is the `wc-analytics/products/low-in-stock` lookup with a
+managed-stock scan behind it, so it contributes no query parameter of its own, and the
+suite asserts that no `stock_status=low` ever reaches wc/v3.
+
+Two loads on products cannot ask the server: that Low stock lookup, and the exact-id hit
+for a numeric search. Both re-check the active filters against the rows they hand back.
+That is why `featured` is in the list's `_fields`: a flag the row does not carry cannot
+be honored.
+
+The products search box promised "name, SKU, ID" while WooCommerce's `search` matches the
+name only. It now sends `search_name_or_sku` alongside `search`: WC 11+ honors the former
+and ignores the latter, and an older build ignores the former and honors the latter, so
+the search degrades to name-only instead of returning the whole catalogue.
 
 Not here yet: channel (`created_via` accepts an array but has no enum, so the store's
 actual values need a server-side lookup), a custom date range (the themed picker carries
@@ -128,7 +165,9 @@ click and is never hidden.
 query string, the multi-status chip, chip removal, clear all, the URL round trip through a
 reload, junk in the URL being ignored, the picker's loading state and its thumbnails.
 `tests/subscription-filters.test.js` does the same for subscriptions and proves the two
-lists do not share filters. `tests/order-layout.test.js` covers the detail layout: the two columns on desktop and
+lists do not share filters. `tests/product-filters.test.js` and
+`tests/coupon-filters.test.js` cover the other two, including the Low stock exception and
+the absent discount-type filter. `tests/order-layout.test.js` covers the detail layout: the two columns on desktop and
 their stacking on a narrow viewport and in the modal, the header's badges and actions,
 the read-first sidebar and its dialogs, the copy-from-billing button, refund as a header
 action, items editing (quantity, add, remove) against the saved order, the attribution

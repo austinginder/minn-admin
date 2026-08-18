@@ -199,6 +199,15 @@ its own.
    Variation-level shipping and tax fields are still not here; the card covers
    what a shop owner changes rather than everything the resource holds.
 
+10. **The list's filters** (shipped): the two tab strips (status, stock) are
+    gone, replaced by the filter bar orders and subscriptions already run.
+    Status is the dropdown, and stock, category, tag, type, featured and on
+    sale are dimensions behind Add filter, each a native `wc/v3/products`
+    parameter, each a chip, all of them in the URL. The mechanics and the two
+    filters that are deliberately missing are documented once, in
+    `woocommerce-orders.md` under "The list: filters over native parameters",
+    which is the shared machine's home.
+
 Waves 2 through 5 cover what a shop owner touches weekly. Waves 8 and 9 are
 where WooCommerce's own UI is a canvas, so they need their own scoping pass
 before anyone starts.
