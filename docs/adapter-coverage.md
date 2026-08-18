@@ -226,6 +226,18 @@ Reference depth: **Gravity Forms**.
 | 2026-08-10 | Release pre-flight sweep (v0.27.0 cut) | **Plugins:** 1/3 updated — fluentform 6.2.11→6.2.12; perfmatters 2.6.7 + searchwp 4.6.1 both license-gated (expected). Axis B skim of fluentform 6.2.12: entries list gains a **Spam status filter** (backlog: mirror as a tab in the fluent-forms adapter's entries view); optional MCP server off by default (no adapter surface); output-escaping/authorization hardening aligns with the v0.26 security pass. No storage or API moves. Smoke: fluent-forms entries/forms/status all 200 post-update. **No ship.** |
 | 2026-08-11 | **Multisite security axis** (v0.28.0 network cycle, lab minnms.localhost) | Graded every table-shim adapter for network-shared storage. **Fixed (shipped):** four adapters read a `base_prefix` table holding the WHOLE network's data with only a per-site cap — Wordfence (wfLogins), Duplicator (duplicator_packages), Solid Security (itsec_lockouts, one table no site column), and LLA-R in its network-options mode. Each now denies non-super-admins on multisite (the AIOS v0.28.0 scoping pattern; where scoping by site is possible AIOS already does it, where it isn't the data is super-admin-only). **Verified safe (no change):** stream/wp-activity-log/aryo already carry a `blog_id`/`site_id` WHERE clause; simple-history/most log shims + all forms/mail adapters use per-site `$wpdb->prefix` by definition; transients-manager reads per-site `$wpdb->options`; code-snippets is REST-native and owns its own network scoping. **No greenfield ship.** Lab fixtures: wordfence/duplicator/better-wp-security/limit-login-attempts-reloaded copied in, activated on store subsite. |
 
+### Ranked release-security backlog (2026-08-17, v0.32.0 audit)
+
+The full candidate audit found no critical, high or medium issues. These
+conditional low-severity hardening items are deliberately parked for a normal
+cycle rather than widening the release cut.
+
+| Rank | Surface | Gap | Effort | Why later |
+|---|---|---|---|---|
+| 1 | Image-block rebuild | Require `read_post` (or the editing-equivalent cap) for every submitted attachment id before resolving its URL, alt text and dimensions | S | A contributor with `edit_posts`, a registered image-block provider and a guessed private attachment id can otherwise recover limited attachment metadata; direct media URLs are commonly public, so impact is conditional and low |
+| 2 | Duplicate post | Require the source type's distinct `create_posts` capability before inserting the draft; review taxonomy assignment caps while copying terms | S | Only affects custom roles/types that deliberately allow editing an existing item while denying creation; the result is still a caller-owned draft |
+| 3 | Debug log | Treat a `WP_DEBUG_LOG` path outside the site as read-only or reject it from Minn's source list; make the legacy clear route apply the same `site_owned` rule as the multi-source route | S | Requires an administrator plus an operator-configured external readable/writable path, but clearing it can cross the site's filesystem boundary |
+
 ### Ranked backlog (2026-08-06 sweep)
 
 | Rank | Adapter | Axis | Gap | Effort | Why now |
