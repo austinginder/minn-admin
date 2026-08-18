@@ -19194,15 +19194,38 @@
 				state.modal = { type: 'tax', item: null, backends: tx.backends, types: c.types };
 				renderOverlays();
 			} );
-			$$( '.minn-table-row', view ).forEach( ( row ) =>
+			const openTaxDef = ( t ) => {
+				state.modal = { type: 'tax', item: t, backends: tx.backends, types: c.types };
+				renderOverlays();
+			};
+			const manageTerms = ( t ) => {
+				state.termsTax = t.slug;
+				state.cache.terms = null;
+				goTerms();
+			};
+			const openTaxMenu = ( x, y, t ) => openMinnMenu( x, y, [
+				{ label: t.editable ? __( 'Edit taxonomy' ) : __( 'View definition' ), run: () => openTaxDef( t ) },
+				// The terms manager reads through wp/v2 term routes, so a
+				// non-REST taxonomy has nothing to manage there.
+				...( B.caps.terms && t.show_in_rest ? [ { label: __( 'Manage terms' ), run: () => manageTerms( t ) } ] : [] ),
+				...( t.editable ? [
+					{ heading: __( 'Danger zone' ) },
+					{ label: __( 'Remove taxonomy…' ), danger: true, run: () => removeTaxonomyDef( t ) },
+				] : [] ),
+			] );
+			$$( '.minn-table-row', view ).forEach( ( row ) => {
+				const taxFromRow = () => tx.taxonomies.find( ( x ) => x.slug === row.dataset.tax );
 				row.addEventListener( 'click', () => {
-					const t = tx.taxonomies.find( ( x ) => x.slug === row.dataset.tax );
-					if ( t ) {
-						state.modal = { type: 'tax', item: t, backends: tx.backends, types: c.types };
-						renderOverlays();
-					}
-				} )
-			);
+					const t = taxFromRow();
+					if ( t ) openTaxDef( t );
+				} );
+				row.addEventListener( 'contextmenu', ( e ) => {
+					const t = taxFromRow();
+					if ( ! t ) return;
+					e.preventDefault();
+					openTaxMenu( e.clientX, e.clientY, t );
+				} );
+			} );
 			$$( '[data-managetax]', view ).forEach( ( btn ) => btn.addEventListener( 'click', ( e ) => {
 				e.stopPropagation();
 				state.termsTax = btn.dataset.managetax;
@@ -19240,17 +19263,103 @@
 				state.modal = { type: 'cpt', item: null, backends: c.backends, catalog: c.taxCatalog || [] };
 				renderOverlays();
 			} );
-			$$( '.minn-table-row', view ).forEach( ( row ) =>
+			// The context menu's View/New entries resolve through the content
+			// types cache (cap-filtered, REST-visible only) — warm it so the
+			// entries are there on the first right-click. Boot usually has.
+			if ( ! state.cache.types ) loadTypes().catch( () => {} );
+			const openTypeDef = ( t ) => {
+				state.modal = { type: 'cpt', item: t, backends: c.backends, catalog: c.taxCatalog || [] };
+				renderOverlays();
+			};
+			// Content-view filter id for this type, or null when Minn can't
+			// list it (hidden from REST, cap-filtered away, or a rest_base
+			// with a slash that can't ride the route).
+			const contentTarget = ( t ) => {
+				if ( 'post' === t.slug ) return 'posts';
+				if ( 'page' === t.slug ) return B.caps.editPages ? 'pages' : null;
+				const entry = ( state.cache.types || [] ).find( ( x ) => x.slug === t.slug );
+				return entry && ! String( entry.restBase ).includes( '/' ) ? entry.restBase : null;
+			};
+			const openTypeMenu = ( x, y, t ) => {
+				const target = contentTarget( t );
+				openMinnMenu( x, y, [
+					{ label: t.editable ? __( 'Edit post type' ) : __( 'View definition' ), run: () => openTypeDef( t ) },
+					...( target ? [ { label: __( 'View items' ), run: () => {
+						state.filter = target;
+						state.cache.content = null;
+						go( 'content' );
+					} } ] : [] ),
+					...( target && 'wp_block' !== t.slug ? [ {
+						/* translators: %s: the post type's singular label. */
+						label: sprintf( __( 'New %s' ), t.singular ),
+						run: () => newContent( target ),
+					} ] : [] ),
+					...( t.editable ? [
+						{ heading: __( 'Danger zone' ) },
+						{ label: __( 'Remove post type…' ), danger: true, run: () => removePostTypeDef( t ) },
+					] : [] ),
+				] );
+			};
+			$$( '.minn-table-row', view ).forEach( ( row ) => {
+				const typeFromRow = () => c.types.find( ( x ) => x.slug === row.dataset.cpt );
 				row.addEventListener( 'click', () => {
-					const t = c.types.find( ( x ) => x.slug === row.dataset.cpt );
-					if ( t ) {
-						state.modal = { type: 'cpt', item: t, backends: c.backends, catalog: c.taxCatalog || [] };
-						renderOverlays();
-					}
-				} )
-			);
+					const t = typeFromRow();
+					if ( t ) openTypeDef( t );
+				} );
+				row.addEventListener( 'contextmenu', ( e ) => {
+					const t = typeFromRow();
+					if ( ! t ) return;
+					e.preventDefault();
+					openTypeMenu( e.clientX, e.clientY, t );
+				} );
+			} );
 		}
 
+	}
+
+	// Shared by the definition modals' Remove buttons and the structure
+	// rows' context menus. Content/terms survive removal by design — only
+	// the definition goes, so the confirm says so.
+	async function removePostTypeDef( t ) {
+		const ok = await minnConfirm( {
+			/* translators: %s: the post type's plural label. */
+			title: sprintf( __( 'Remove the “%s” post type?' ), t.plural ),
+			body: __( 'Only the definition goes away. Recreating a type with the same slug brings its content back.' ),
+			keeps: [ __( 'Existing content stays in the database' ) ],
+			danger: true,
+			confirmLabel: __( 'Remove' ),
+		} );
+		if ( ! ok ) return;
+		try {
+			await api( 'minn-admin/v1/post-types/' + t.slug, { method: 'DELETE' } );
+			toast( __( 'Post type removed — content preserved' ) );
+			bustTypeCaches();
+			closeModal();
+			if ( onStructure() ) renderStructure();
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
+	async function removeTaxonomyDef( t ) {
+		const ok = await minnConfirm( {
+			/* translators: %s: the taxonomy's plural label. */
+			title: sprintf( __( 'Remove the “%s” taxonomy?' ), t.plural ),
+			body: __( 'Only the definition goes away. Recreating a taxonomy with the same slug brings its terms back.' ),
+			keeps: [ __( 'Existing terms stay in the database' ) ],
+			danger: true,
+			confirmLabel: __( 'Remove' ),
+		} );
+		if ( ! ok ) return;
+		try {
+			await api( 'minn-admin/v1/taxonomies/' + t.slug, { method: 'DELETE' } );
+			toast( __( 'Taxonomy removed — terms preserved' ) );
+			bustTypeCaches();
+			closeModal();
+			if ( onStructure() ) renderStructure();
+		} catch ( e ) {
+			toast( e.message, true );
+		}
 	}
 
 	// A definition changed — the Content view's type tabs must refetch.
@@ -37341,18 +37450,7 @@
 				}
 			} );
 			const delBtn = $( '#minn-cpt-delete' );
-			if ( delBtn ) delBtn.addEventListener( 'click', async () => {
-				if ( ! confirm( `Remove the “${ m.item.plural }” post type? Existing content stays in the database.` ) ) return;
-				try {
-					await api( 'minn-admin/v1/post-types/' + m.item.slug, { method: 'DELETE' } );
-					toast( __( 'Post type removed — content preserved' ) );
-					bustTypeCaches();
-					closeModal();
-					if ( onStructure() ) renderStructure();
-				} catch ( e ) {
-					toast( e.message, true );
-				}
-			} );
+			if ( delBtn ) delBtn.addEventListener( 'click', () => removePostTypeDef( m.item ) );
 		}
 
 		if ( m.type === 'surface-action' ) {
@@ -37469,18 +37567,7 @@
 				}
 			} );
 			const delBtn = $( '#minn-tax-delete' );
-			if ( delBtn ) delBtn.addEventListener( 'click', async () => {
-				if ( ! confirm( `Remove the “${ m.item.plural }” taxonomy? Existing terms stay in the database.` ) ) return;
-				try {
-					await api( 'minn-admin/v1/taxonomies/' + m.item.slug, { method: 'DELETE' } );
-					toast( __( 'Taxonomy removed — terms preserved' ) );
-					bustTypeCaches();
-					closeModal();
-					if ( onStructure() ) renderStructure();
-				} catch ( e ) {
-					toast( e.message, true );
-				}
-			} );
+			if ( delBtn ) delBtn.addEventListener( 'click', () => removeTaxonomyDef( m.item ) );
 		}
 
 		if ( m.type === 'picker' ) {
