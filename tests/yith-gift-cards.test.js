@@ -395,6 +395,25 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'not one of those refusals left a card behind', countBefore === countAfter,
 			countBefore + ' -> ' + countAfter );
 
+		// The Send now field is declared a select and the core form engine
+		// upgrades every select to its themed combobox, so the value reaches
+		// the body through dataset.acValue rather than a <select>. Asking to
+		// send with the recipient left blank proves the picked value made the
+		// trip: nothing else could produce that refusal.
+		await page.click( '#minn-surface-add' );
+		await page.waitForSelector( '.minn-modal [data-createfield="amount"]', { timeout: 15000 } );
+		await page.fill( '.minn-modal [data-createfield="amount"]', '10' );
+		await page.click( '[data-createfield="send"] .minn-ac-input' );
+		await page.waitForSelector( '[data-createfield="send"] .minn-ac-item[data-acv="yes"]', { timeout: 8000 } );
+		await page.click( '[data-createfield="send"] .minn-ac-item[data-acv="yes"]' );
+		await page.click( '#minn-surface-create' );
+		const sendPicked = await page.waitForFunction(
+			() => /recipient email/i.test( ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ),
+			null, { timeout: 15000 } ).then( () => true ).catch( () => false );
+		t.check( 'the Send now picker carries its value to the server', sendPicked,
+			await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ) );
+		await page.click( '#minn-modal-close' );
+
 		// A refusal keeps the modal open with what was typed still in it, so
 		// the merchant fixes one field rather than retyping the form.
 		await page.click( '#minn-surface-add' );
