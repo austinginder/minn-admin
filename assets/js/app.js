@@ -13457,9 +13457,10 @@
 			const all = kind === 'signin' ? ROLE_SIGNIN_OPTS() : ROLE_TOOLBAR_OPTS();
 			const opts = r.minn ? all : all.filter( ( [ v ] ) => v !== 'minn' );
 			const cur = c.edits[ r.id ][ kind ];
-			return `<select class="minn-input" data-rdrole="${ esc( r.id ) }" data-rdkind="${ esc( kind ) }" aria-label="${ esc( kind === 'signin' ? __( 'After sign-in' ) : __( 'Toolbar on the site' ) ) }">
-				${ opts.map( ( [ v, label ] ) => `<option value="${ esc( v ) }"${ v === cur ? ' selected' : '' }>${ esc( label ) }</option>` ).join( '' ) }
-			</select>`;
+			// The themed strict combobox (rule for every form-engine select).
+			// kind carries no colon, so the key splits back on the LAST one
+			// even if a plugin role id ever carries its own.
+			return formControlHtml( { key: `${ r.id }:${ kind }`, type: 'combobox', options: opts }, cur, 'data-rdpol' );
 		};
 		view.innerHTML = `
 		${ usersTabsHtml() }
@@ -13491,12 +13492,21 @@
 			$( '#minn-rd-save', view ).disabled = ! d;
 			$( '#minn-rd-reset', view ).disabled = ! d;
 		};
-		$$( 'select[data-rdkind]', view ).forEach( ( sel ) =>
-			sel.addEventListener( 'change', () => {
-				c.edits[ sel.dataset.rdrole ][ sel.dataset.rdkind ] = sel.value;
-				syncButtons();
-			} )
-		);
+		bindFormComboboxes( view, 'data-rdpol', null, ( key ) => {
+			const wrap = $$( '[data-rdpol]', view ).find( ( w ) => w.getAttribute( 'data-rdpol' ) === key );
+			if ( ! wrap ) return;
+			const input = $( '.minn-ac-input', wrap );
+			const i = key.lastIndexOf( ':' );
+			c.edits[ key.slice( 0, i ) ][ key.slice( i + 1 ) ] = ( input && input.dataset.acValue ) || 'choice';
+			syncButtons();
+		} );
+		// The old selects carried per-control aria labels; the combobox
+		// wrapper markup is shared, so the labels attach here.
+		$$( '[data-rdpol]', view ).forEach( ( wrap ) => {
+			const input = $( '.minn-ac-input', wrap );
+			if ( input ) input.setAttribute( 'aria-label',
+				wrap.getAttribute( 'data-rdpol' ).endsWith( ':signin' ) ? __( 'After sign-in' ) : __( 'Toolbar on the site' ) );
+		} );
 		$( '#minn-rd-reset', view ).addEventListener( 'click', () => {
 			c.edits = null;
 			renderRoleDefaults();

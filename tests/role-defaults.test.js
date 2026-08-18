@@ -6,7 +6,7 @@
  * policy hands each person's own saved preference back — enforcement is an
  * overlay, never a write.
  */
-const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
+const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -31,15 +31,19 @@ const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 		await page.goto( BASE + '/minn-admin/users', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '[data-utab="roles"]', { timeout: 15000 } );
 		await page.click( '[data-utab="roles"]' );
-		await page.waitForSelector( '[data-rdrow="author"] select[data-rdkind="signin"]', { timeout: 15000 } );
+		// Policy controls are the themed strict combobox (data-rdpol wraps).
+		await page.waitForSelector( '[data-rdpol="author:signin"] .minn-ac-input', { timeout: 15000 } );
 		t.check( 'Role defaults tab renders the policy table', true );
 		const sub = await page.evaluate( () => {
 			const row = document.querySelector( '[data-rdrow="subscriber"]' );
 			if ( ! row ) return null;
+			const toolbar = row.querySelector( '[data-rdpol="subscriber:toolbar"]' );
+			let toolbarOpts = [];
+			try { toolbarOpts = JSON.parse( toolbar.dataset.acopts ).map( ( o ) => o[ 0 ] ); } catch ( e ) { /* leave empty */ }
 			return {
 				na: !! row.querySelector( '.minn-role-na' ),
-				signinSel: !! row.querySelector( 'select[data-rdkind="signin"]' ),
-				toolbarOpts: [ ...row.querySelectorAll( 'select[data-rdkind="toolbar"] option' ) ].map( ( o ) => o.value ),
+				signinSel: !! row.querySelector( '[data-rdpol="subscriber:signin"]' ),
+				toolbarOpts,
 			};
 		} );
 		t.check( 'subscriber sign-in is Not available; toolbar offers no Minn bar',
@@ -48,8 +52,8 @@ const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 
 		/* ===== Save enables on edit, persists on click ===== */
 		const disabledFirst = await page.evaluate( () => document.querySelector( '#minn-rd-save' ).disabled );
-		await page.selectOption( '[data-rdrow="author"] select[data-rdkind="signin"]', 'minn' );
-		await page.selectOption( '[data-rdrow="author"] select[data-rdkind="toolbar"]', 'minn' );
+		await pickCombo( page, '[data-rdpol="author:signin"] .minn-ac-input', 'minn' );
+		await pickCombo( page, '[data-rdpol="author:toolbar"] .minn-ac-input', 'minn' );
 		const enabledAfter = await page.evaluate( () => ! document.querySelector( '#minn-rd-save' ).disabled );
 		t.check( 'Save is disabled until an edit', disabledFirst && enabledAfter,
 			`before:${ disabledFirst } after:${ enabledAfter }` );
