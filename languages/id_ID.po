@@ -11025,8 +11025,8 @@ msgid "Minn admin bar on the site"
 msgstr "Bilah admin Minn di situs"
 
 #: assets/js/app.js:4038
-msgid "Replace the admin bar on the public site with Minn’s own quiet bar: search, create, edit this page, and a status chip that only appears when something needs attention. Only affects you. wp-admin keeps the classic bar."
-msgstr "Ganti bilah admin di situs publik dengan bilah ringkas milik Minn yang menyediakan pencarian, pembuatan konten, pengeditan halaman ini, dan chip status yang hanya muncul saat ada hal yang perlu ditangani. Perubahan ini hanya memengaruhi Anda. wp-admin tetap memakai bilah klasik."
+msgid "Replace the WordPress toolbar on the public site with Minn’s quiet bar. Applies only to you."
+msgstr "Ganti bilah admin WordPress di situs publik dengan bilah tenang Minn. Hanya berlaku untuk Anda."
 
 #: assets/js/app.js:4177
 msgid "awaiting payment"

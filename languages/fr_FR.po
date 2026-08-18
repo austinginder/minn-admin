@@ -11025,8 +11025,8 @@ msgid "Minn admin bar on the site"
 msgstr "Barre d’administration Minn sur le site"
 
 #: assets/js/app.js:4038
-msgid "Replace the admin bar on the public site with Minn’s own quiet bar: search, create, edit this page, and a status chip that only appears when something needs attention. Only affects you. wp-admin keeps the classic bar."
-msgstr "Remplacez la barre d’administration du site public par la barre discrète de Minn : recherche, création, modification de cette page et indicateur d’état qui n’apparaît que si un élément demande votre attention. Cela ne concerne que vous. wp-admin conserve la barre classique."
+msgid "Replace the WordPress toolbar on the public site with Minn’s quiet bar. Applies only to you."
+msgstr "Remplace la barre d’administration WordPress sur le site public par la barre discrète de Minn. Ne s’applique qu’à ce compte."
 
 #: assets/js/app.js:4177
 msgid "awaiting payment"

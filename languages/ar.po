@@ -11202,8 +11202,8 @@ msgid "Minn admin bar on the site"
 msgstr "شريط إدارة Minn على الموقع"
 
 #: assets/js/app.js:4038
-msgid "Replace the admin bar on the public site with Minn’s own quiet bar: search, create, edit this page, and a status chip that only appears when something needs attention. Only affects you. wp-admin keeps the classic bar."
-msgstr "يستبدل شريط الإدارة في الموقع العام بشريط Minn بسيط يتيح البحث والإنشاء وتحرير هذه الصفحة، مع مؤشر حالة لا يظهر إلا عند الحاجة إلى الانتباه. يؤثر هذا عليك وحدك. يحتفظ wp-admin بالشريط التقليدي."
+msgid "Replace the WordPress toolbar on the public site with Minn’s quiet bar. Applies only to you."
+msgstr "استبدل شريط إدارة ووردبريس في واجهة الموقع بشريط Minn الهادئ. ينطبق عليك وحدك."
 
 #: assets/js/app.js:4177
 msgid "awaiting payment"

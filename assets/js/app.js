@@ -4035,7 +4035,7 @@
 					<button type="button" class="minn-switch${ ap.frontBar ? ' on' : '' }" id="minn-front-bar" role="switch" aria-checked="${ ap.frontBar ? 'true' : 'false' }" aria-label="${ esc( __( 'Minn admin bar on the site' ) ) }"><span class="minn-switch-knob"></span></button>
 					<div class="minn-toggle-info">
 						<div class="minn-toggle-label">${ esc( __( 'Minn admin bar on the site' ) ) }</div>
-						<div class="minn-toggle-desc">${ esc( __( 'Replace the admin bar on the public site with Minn’s own quiet bar: search, create, edit this page, and a status chip that only appears when something needs attention. Only affects you. wp-admin keeps the classic bar.' ) ) }</div>
+						<div class="minn-toggle-desc">${ esc( __( 'Replace the WordPress toolbar on the public site with Minn’s quiet bar. Applies only to you.' ) ) }</div>
 					</div>
 				</div>
 			</div>`;
