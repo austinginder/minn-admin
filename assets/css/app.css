@@ -2120,6 +2120,20 @@ button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; 
   white-space: pre-wrap; word-break: break-word; color-scheme: dark;
 }
 [data-theme="light"] .minn-detail-code { color-scheme: light; }
+/* Copy sits inside the code box, same compact icon button as the order
+   card pencils. The wrap is position:relative so the button can pin to
+   the trailing edge without changing the row's stacked layout. */
+.minn-detail-code-wrap { position: relative; width: 100%; }
+.minn-detail-code-wrap > .minn-detail-code { padding-inline-end: 36px; }
+.minn-copy-btn {
+  position: absolute; top: 6px; inset-inline-end: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; color: var(--text3); cursor: pointer;
+  padding: 4px; border-radius: 7px;
+}
+.minn-copy-btn:hover { color: var(--text); background: var(--hover); }
+.minn-copy-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.minn-copy-btn svg { width: 15px; height: 15px; }
 .minn-detail-frame { height: 380px; margin: 0; width: 100%; resize: vertical; overflow: auto; }
 .minn-detail-kv { border-collapse: collapse; font-size: 13px; }
 .minn-detail-kv th, .minn-detail-kv td { text-align: start; padding: 5px 10px; border: 1px solid var(--border); vertical-align: top; }

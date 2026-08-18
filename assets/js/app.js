@@ -15061,7 +15061,8 @@
 			return `<div class="minn-side-row">${ key }${ surfacePill( r.value ) }</div>`;
 		}
 		if ( r.type === 'code' ) {
-			return `<div class="minn-side-row multi block">${ key }<pre class="minn-detail-code">${ esc( String( r.value == null ? '' : r.value ) ) }</pre></div>`;
+			const text = String( r.value == null ? '' : r.value );
+			return `<div class="minn-side-row multi block">${ key }<div class="minn-detail-code-wrap"><pre class="minn-detail-code">${ esc( text ) }</pre>${ text ? `<button type="button" class="minn-copy-btn" data-scopy title="${ esc( __( 'Copy' ) ) }" aria-label="${ esc( __( 'Copy code' ) ) }">${ icon( 'copy' ) }</button>` : '' }</div></div>`;
 		}
 		if ( r.type === 'html-preview' ) {
 			return `<div class="minn-side-row multi block">${ key }<iframe class="minn-email-frame minn-detail-frame" sandbox="" title="${ esc( r.label || 'Preview' ) }" srcdoc="${ esc( String( r.value == null ? '' : r.value ) ) }"></iframe></div>`;
@@ -38152,6 +38153,20 @@
 
 		if ( m.type === 'surface' ) {
 			bindFormComboboxes( $( '.minn-modal' ), 'data-editfield', ( ( ( m.coll || m.surface.collection ).detail || {} ).edit || {} ).fields );
+			$$( '[data-scopy]', $( '.minn-modal' ) ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', async () => {
+					const wrap = btn.closest( '.minn-detail-code-wrap' );
+					const pre = wrap && wrap.querySelector( 'pre' );
+					const text = pre ? pre.textContent : '';
+					if ( ! text ) return;
+					try {
+						await navigator.clipboard.writeText( text );
+						toast( __( 'Code copied' ) );
+					} catch ( e ) {
+						toast( __( 'Could not copy' ), true );
+					}
+				} )
+			);
 			const prevBtn = $( '#minn-surface-prev' );
 			const nextBtn = $( '#minn-surface-next' );
 			if ( prevBtn ) prevBtn.addEventListener( 'click', () => surfaceModalNav( -1 ) );

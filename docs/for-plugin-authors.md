@@ -655,7 +655,7 @@ and `activity` cards have their own structure). Since v0.18.0 the vocabulary is:
 | `url` | A link opening in a new tab (`https?://` values only) |
 | `email` | A `mailto:` link |
 | `pill` | A status pill using Minn's shared status vocabulary (`sent`, `failed`, `active`, `locked`, …) |
-| `code` | An escaped monospace block (headers, raw payloads, stack traces); scrolls past ~14 lines |
+| `code` | An escaped monospace block (headers, raw payloads, stack traces, gift card codes); scrolls past ~14 lines. A non-empty value gets a copy icon button that writes the block to the clipboard |
 | `html-preview` | Your HTML in a fully sandboxed iframe (no scripts, opaque origin) — the honest way to show an email body or rendered template. The HTML never touches Minn's DOM |
 | `kv-table` | A two-column key/value table. `value` may be an object map, an array of `[key, value]` pairs, or an array of `{ "label", "value" }` objects; capped at 60 rows |
 

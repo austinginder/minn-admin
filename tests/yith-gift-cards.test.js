@@ -256,6 +256,19 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			card.code === await page.evaluate( () =>
 				( ( document.querySelector( '.minn-modal-title' ) || {} ).textContent || '' ).trim() ),
 			await page.evaluate( () => ( ( document.querySelector( '.minn-modal-title' ) || {} ).textContent || '' ).trim() ) );
+		const copyBtn = await page.$( '.minn-modal [data-scopy]' );
+		t.check( 'the code row offers a copy button', !! copyBtn, '' );
+		if ( copyBtn ) {
+			await page.context().grantPermissions( [ 'clipboard-read', 'clipboard-write' ] );
+			await copyBtn.click();
+			const copiedToast = await page.waitForFunction(
+				() => /code copied/i.test( ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ),
+				null, { timeout: 8000 } ).then( () => true ).catch( () => false );
+			t.check( 'copying the code says so', copiedToast,
+				await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ) );
+			const clip = await page.evaluate( () => navigator.clipboard.readText() ).catch( () => '' );
+			t.check( 'the clipboard holds the code', clip === card.code, clip );
+		}
 		// View order is gated on has_order, and points into Minn's own order
 		// page rather than wp-admin.
 		t.check( 'the detail offers the order it came from',

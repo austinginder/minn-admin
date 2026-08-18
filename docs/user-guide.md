@@ -387,7 +387,7 @@ adds Gift cards, all in the same operational group.
   card leads with the outstanding balance. Opening a card shows its
   code, balance, original amount, recipient and the order it came from,
   and you can enable or disable it, change the balance, or resend the
-  email. Add gift card issues one by hand: amount, an optional code (left
+  email. The code copies with one click. Add gift card issues one by hand: amount, an optional code (left
   blank, YITH generates one), recipient, message, and whether to send
   the email now. Product amounts, bulk generation, CSV, PDF and QR stay
   in YITH, one click from the card.
