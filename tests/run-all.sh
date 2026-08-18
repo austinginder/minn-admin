@@ -21,26 +21,29 @@ mkdir -p "$OUT"
 BASE="${MINN_TEST_URL:-https://minnadmin.localhost}"
 
 settle() {
-	local tries=0 t ok code probe
+	local tries=0 fast=0 t ok code probe
 	while [ $tries -lt 60 ]; do
-		# Speed alone is not health: when the stack is down the request fails
-		# in milliseconds, which satisfied the old "under a second" test and
-		# sent every remaining suite straight into a doomed run. Require a real
-		# HTTP answer as well (2026-08-12, after a machine-wide overload took
-		# FrankenPHP down mid-run and the guard waved it through).
-		probe=$(curl -sk -o /dev/null -w '%{http_code} %{time_total}' --max-time 5 "$BASE/" 2>/dev/null || echo "000 9")
+		# The homepage can be page-cached while the PHP pool is saturated. Probe
+		# an uncached REST bootstrap instead, and require two healthy answers so
+		# canceled background requests from the prior suite have time to drain.
+		probe=$(curl -sk -o /dev/null -w '%{http_code} %{time_total}' --max-time 8 "$BASE/wp-json/?minn_settle=$tries" 2>/dev/null || echo "000 9")
 		code=${probe%% *}
 		t=${probe##* }
-		ok=$(echo "$t < 1.0" | bc 2>/dev/null || echo 0)
+		ok=$(echo "$t < 3.0" | bc 2>/dev/null || echo 0)
 		case $code in
 		200 | 301 | 302) ;;
 		*) ok=0 ;;
 		esac
-		[ "$ok" = "1" ] && return 0
+		if [ "$ok" = "1" ]; then
+			fast=$((fast + 1))
+			[ $fast -ge 2 ] && return 0
+		else
+			fast=0
+		fi
 		tries=$((tries + 1))
 		sleep 5
 	done
-	echo "WARNING: site never settled (<1s) — continuing anyway" | tee -a "$OUT/summary.txt"
+	echo "WARNING: site never settled (two REST boots <3s) — continuing anyway" | tee -a "$OUT/summary.txt"
 	return 1
 }
 
