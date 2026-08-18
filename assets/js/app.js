@@ -4569,6 +4569,7 @@
 	// windows by their dates — the cache and the fetch both key on it.
 	const statsRangeKey = () =>
 		'custom' === state.statsRange ? `${ state.statsFrom }|${ state.statsTo }` : String( state.statsRange );
+	let statsPendingKey = null; // range key currently being fetched
 
 	function renderStats() {
 		const view = $( '#minn-view' );
@@ -4581,13 +4582,38 @@
 		const c = state.cache.stats;
 		if ( ! c || c.key !== statsRangeKey() ) {
 			const key = statsRangeKey();
-			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading stats…' ) ) }</div>`;
+			if ( statsPendingKey === key ) return; // a stray re-render must not double-fetch
+			statsPendingKey = key;
+			// Soft reload (the list views' rule): when the page is already
+			// painted, a range switch keeps the chrome mounted — head, range
+			// tabs and date row stay put, totals dim, and only the chart area
+			// shows the wait. Cold visits keep the full-page loader.
+			const chartEl = $( '#minn-stats-chart', view );
+			if ( chartEl ) {
+				$$( '.minn-range-tab[data-range]', view ).forEach( ( b ) =>
+					b.classList.toggle( 'active', custom ? 'custom' === b.dataset.range : parseInt( b.dataset.range, 10 ) === days ) );
+				if ( ! custom ) {
+					const row = $( '.minn-stats-dates', view );
+					if ( row ) row.remove();
+				}
+				chartEl.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+				const bd = $( '#minn-stats-breakdowns', view );
+				if ( bd ) bd.innerHTML = '';
+				$$( '.minn-stat', view ).forEach( ( el ) => el.classList.add( 'stale' ) );
+			} else {
+				view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading stats…' ) ) }</div>`;
+			}
 			api( custom
 				? `minn-admin/v1/stats?from=${ encodeURIComponent( state.statsFrom ) }&to=${ encodeURIComponent( state.statsTo ) }`
 				: 'minn-admin/v1/stats?days=' + days )
-				.then( ( data ) => { state.cache.stats = { key, data }; } )
+				.then( ( data ) => {
+					// Commit only when this range is still the one selected —
+					// a slow fetch must not clobber a faster later pick.
+					if ( statsRangeKey() === key ) state.cache.stats = { key, data };
+				} )
 				.then( renderIfCurrent( 'stats' ) )
-				.catch( showErr );
+				.catch( showErr )
+				.finally( () => { if ( statsPendingKey === key ) statsPendingKey = null; } );
 			return;
 		}
 		const d = c.data;
@@ -4602,6 +4628,9 @@
 				<span>–</span>
 				<input type="date" class="minn-input" id="minn-stats-to" value="${ esc( state.statsTo || '' ) }" max="${ esc( gmToday() ) }" aria-label="${ esc( __( 'To' ) ) }">
 				<button class="minn-btn-soft" id="minn-stats-apply">${ esc( __( 'Apply' ) ) }</button>
+				<span class="minn-stats-quick">
+					${ STATS_QUICK().map( ( [ id, label ] ) => `<button class="minn-range-tab" data-quick="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
+				</span>
 			</div>` : '';
 		if ( ! d.source || ! d.chart.length ) {
 			view.innerHTML = `
@@ -4744,8 +4773,32 @@
 
 	const gmToday = () => new Date().toISOString().slice( 0, 10 );
 
+	// Smart windows for the custom picker. Calendar math runs in UTC like
+	// the chart's bucketing (rule: traffic buckets are UTC-anchored).
+	const STATS_QUICK = () => [
+		[ 'this-month', __( 'This month' ) ],
+		[ 'last-month', __( 'Last month' ) ],
+		[ 'this-year', __( 'This year' ) ],
+		[ 'last-year', __( 'Last year' ) ],
+	];
+
+	function statsQuickWindow( id ) {
+		const now = new Date();
+		const y = now.getUTCFullYear();
+		const m = now.getUTCMonth();
+		const d = ( yy, mm, dd ) => new Date( Date.UTC( yy, mm, dd ) ).toISOString().slice( 0, 10 );
+		if ( 'this-month' === id ) return { from: d( y, m, 1 ), to: gmToday() };
+		// Day 0 of a month is the previous month's last day.
+		if ( 'last-month' === id ) return { from: d( y, m - 1, 1 ), to: d( y, m, 0 ) };
+		if ( 'this-year' === id ) return { from: d( y, 0, 1 ), to: gmToday() };
+		if ( 'last-year' === id ) return { from: d( y - 1, 0, 1 ), to: d( y - 1, 11, 31 ) };
+		return null;
+	}
+
 	function bindStatsRangeTabs( view ) {
-		$$( '.minn-range-tab', view ).forEach( ( btn ) =>
+		// [data-range] only: the custom row's quick chips share the class but
+		// carry data-quick and bind below.
+		$$( '.minn-range-tab[data-range]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				if ( 'custom' === btn.dataset.range ) {
 					if ( 'custom' === state.statsRange ) return;
@@ -4756,6 +4809,10 @@
 					state.statsFrom = cur.from || gmToday();
 					state.statsTo = cur.to || gmToday();
 					state.statsRange = 'custom';
+					// The seeded window IS the data on screen, so re-key the
+					// cache instead of refetching — entering Custom is
+					// instant, only the date controls appear.
+					if ( state.cache.stats && cur.from ) state.cache.stats.key = statsRangeKey();
 					// A custom window is absolute — stale next week. Only
 					// preset ranges persist.
 					renderStats();
@@ -4765,6 +4822,15 @@
 				if ( v === state.statsRange ) return;
 				state.statsRange = v;
 				localStorage.setItem( 'minn-stats-range', String( v ) );
+				renderStats();
+			} )
+		);
+		$$( '[data-quick]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const w = statsQuickWindow( btn.dataset.quick );
+				if ( ! w ) return;
+				state.statsFrom = w.from;
+				state.statsTo = w.to;
 				renderStats();
 			} )
 		);

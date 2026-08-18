@@ -704,7 +704,11 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-stats-panel { padding: 8px 18px 12px; }
 /* Custom-range row: native date inputs need color-scheme for their UA
    calendar chrome (the .minn-css-editor precedent). */
-.minn-stats-dates { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--text3); }
+.minn-stats-dates { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; color: var(--text3); }
+.minn-stats-quick { display: flex; align-items: center; gap: 2px; margin-inline-start: 6px; }
+/* Soft range switch: stale totals dim while the chart area alone loads. */
+.minn-stat.stale { opacity: 0.45; transition: opacity 0.15s ease; }
+.minn-stats-tall .minn-chart .minn-loading { margin: auto; }
 .minn-stats-dates input[type="date"] { width: auto; color-scheme: dark; }
 [data-theme="light"] .minn-stats-dates input[type="date"] { color-scheme: light; }
 .minn-chart-col { flex: 1; position: relative; height: 100%; min-width: 0; }

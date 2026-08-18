@@ -120,6 +120,53 @@ const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 		t.check( 'custom window renders one bar per day with no fabricated delta',
 			customOut.cols === 31 && /no prior period/i.test( customOut.delta ), JSON.stringify( customOut ) );
 
+		/* ===== Soft range switch: chrome persists, only the chart loads ===== */
+		await page.evaluate( () => {
+			document.querySelector( '.minn-stats-dates' )._minnProbe = true;
+			document.querySelector( '.minn-range-tabs' )._minnProbe = true;
+		} );
+
+		/* ===== Quick windows: calendar math in UTC ===== */
+		const now = new Date();
+		const utc = ( y, m, dd ) => new Date( Date.UTC( y, m, dd ) ).toISOString().slice( 0, 10 );
+		const lmFrom = utc( now.getUTCFullYear(), now.getUTCMonth() - 1, 1 );
+		const lmTo = utc( now.getUTCFullYear(), now.getUTCMonth(), 0 );
+		const lmDays = parseInt( lmTo.slice( 8 ), 10 );
+		// A route delay makes the busy window deterministic (the soft-reload
+		// suite technique) — localhost otherwise answers before the probe.
+		await page.route( '**/minn-admin/v1/stats?*', async ( route ) => {
+			await new Promise( ( r ) => setTimeout( r, 900 ) );
+			route.continue();
+		} );
+		const resLm = page.waitForResponse( ( r ) => r.url().includes( `from=${ lmFrom }` ) && r.url().includes( `to=${ lmTo }` ) );
+		await page.click( '[data-quick="last-month"]' );
+		// Probe MID-FLIGHT, before the response lands: the chrome must be the
+		// SAME nodes (expando survival — the soft-reload forensic pattern),
+		// with the loader confined to the chart area and the totals dimmed.
+		const midFlight = await page.evaluate( () => ( {
+			datesAlive: !! ( document.querySelector( '.minn-stats-dates' ) || {} )._minnProbe,
+			tabsAlive: !! ( document.querySelector( '.minn-range-tabs' ) || {} )._minnProbe,
+			chartLoading: !! document.querySelector( '#minn-stats-chart .minn-loading' ),
+			totalsStale: !! document.querySelector( '.minn-stat.stale' ),
+		} ) );
+		t.check( 'range switch keeps the chrome mounted; only the chart area loads',
+			midFlight.datesAlive && midFlight.tabsAlive && midFlight.chartLoading && midFlight.totalsStale,
+			JSON.stringify( midFlight ) );
+		t.check( 'Last month fetches the exact calendar month', ( await resLm ).status() === 200, `${ lmFrom }..${ lmTo }` );
+		await page.unroute( '**/minn-admin/v1/stats?*' );
+		await page.waitForFunction( ( n ) =>
+			document.querySelectorAll( '#minn-stats-chart .minn-chart-col' ).length === n, lmDays, { timeout: 20000 } );
+		t.check( 'one bar per day of that month', true, String( lmDays ) );
+		const lyFrom = `${ now.getUTCFullYear() - 1 }-01-01`;
+		const resLy = page.waitForResponse( ( r ) => r.url().includes( `from=${ lyFrom }` ) );
+		await page.click( '[data-quick="last-year"]' );
+		const lyStatus = ( await resLy ).status();
+		await page.waitForFunction( () => {
+			const n = document.querySelectorAll( '#minn-stats-chart .minn-chart-col' ).length;
+			return n >= 12 && n <= 14;
+		}, null, { timeout: 20000 } );
+		t.check( 'Last year reaches past the 12-month presets and buckets monthly', lyStatus === 200 );
+
 		/* ===== Range choice persists across a reload ===== */
 		await page.click( '.minn-range-tab[data-range="365"]' );
 		await page.waitForFunction( () =>

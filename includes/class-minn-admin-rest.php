@@ -2797,8 +2797,14 @@ class Minn_Admin_REST {
 			$to_ts = strtotime( $to . ' UTC' );
 			$span  = (int) ( ( $to_ts - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
 			$reach = (int) ( ( strtotime( $today . ' UTC' ) - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
-			if ( $reach > 366 ) {
-				return new WP_Error( 'range_too_long', __( 'Custom ranges reach back a year at most.', 'minn-admin' ), array( 'status' => 400 ) );
+			// Reach (how far back the fetch goes) allows two years so "Last
+			// year" works from any point in the current one; the WINDOW is
+			// still capped at a year.
+			if ( $reach > 731 ) {
+				return new WP_Error( 'range_too_long', __( 'Custom ranges reach back two years at most.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( $span > 366 ) {
+				return new WP_Error( 'range_too_long', __( 'Pick a window of a year or less.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			$days        = $span;
 			$traffic     = $can ? apply_filters( 'minn_admin_traffic', null, $reach ) : null;
