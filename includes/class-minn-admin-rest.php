@@ -5345,10 +5345,23 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$updates    = get_site_transient( 'update_themes' );
 		$active     = get_stylesheet();
 		$auto       = (array) get_site_option( 'auto_update_themes', array() );
+		$owner      = Minn_Admin::network_owner();
 		// Which themes this network lets its sites choose from (multisite).
 		$network_themes = is_multisite() ? (array) get_site_option( 'allowedthemes', array() ) : array();
+		// switch_themes is an ordinary site administrator's capability and core
+		// does not strip it on multisite, so the tenancy line here is drawn by
+		// FILTERING, exactly as wp_prepare_themes_for_js() does: a site sees the
+		// themes the network allowed it, not the whole host's inventory. The
+		// active theme is always included even if the allowlist dropped it.
+		$all = is_multisite() && ! $owner ? wp_get_themes( array( 'allowed' => true ) ) : wp_get_themes();
+		if ( ! isset( $all[ $active ] ) ) {
+			$all[ $active ] = wp_get_theme();
+		}
+		// Update offers are only meaningful to someone who can act on them;
+		// core suppresses them on multisite for the same reason.
+		$show_updates = current_user_can( 'update_themes' );
 		$items      = array();
-		foreach ( wp_get_themes() as $stylesheet => $theme ) {
+		foreach ( $all as $stylesheet => $theme ) {
 			// update_themes lists only themes WordPress.org (or a licensed
 			// vendor channel) knows about — response = has update, no_update
 			// = current. Used so the context menu can offer a wp.org link
@@ -5370,8 +5383,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'on_wporg'   => (bool) $on_wporg,
 				// Multisite: whether sites may CHOOSE this theme (the network
 				// allowedthemes list). Not the same as being active anywhere.
-				'network'    => is_multisite() && ! empty( $network_themes[ $stylesheet ] ),
-				'update'     => $updates && isset( $updates->response[ $stylesheet ]['new_version'] )
+				// The policy itself is the operator's, so only they read it.
+				'network'    => $owner && is_multisite() && ! empty( $network_themes[ $stylesheet ] ),
+				'update'     => $show_updates && $updates && isset( $updates->response[ $stylesheet ]['new_version'] )
 					? $updates->response[ $stylesheet ]['new_version'] : null,
 				// Block themes live-preview through the Site Editor, classic
 				// themes through the Customizer.
