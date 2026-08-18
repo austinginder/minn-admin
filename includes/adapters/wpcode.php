@@ -201,6 +201,18 @@ function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0, $writes_code
 			array( 'status' => 403 )
 		);
 	}
+	// The bar was inverted: a snippet that merely EMITS markup needed
+	// unfiltered_html, while one the site EXECUTES did not. Every other code
+	// adapter here (custom-css-js, hfcm, fluent-snippets) pairs its directive
+	// check with the capability, so hold the executing types to at least the
+	// bar the inert ones already carry.
+	if ( $writes_code && minn_admin_wpcode_type_executes( $code_type ) && ! current_user_can( 'unfiltered_html' ) ) {
+		return new WP_Error(
+			'forbidden',
+			__( 'Authoring a snippet this site executes needs the unfiltered_html capability.', 'minn-admin' ),
+			array( 'status' => 403 )
+		);
+	}
 	if ( ! minn_admin_wpcode_can_type( $code_type ) ) {
 		return new WP_Error(
 			'forbidden',
@@ -238,6 +250,9 @@ function minn_admin_wpcode_item( $snippet ) {
 		'code_type' => $snippet->get_code_type(),
 		'location'  => $snippet->get_location(),
 		'active'    => (bool) $snippet->is_active(),
+		// WPCode's insert method: on = runs at the location below, off = the
+		// snippet only runs where its shortcode is placed.
+		'auto_insert' => (bool) $snippet->get_auto_insert(),
 		'priority'  => (int) $snippet->get_priority(),
 		'modified'  => $modified,
 	);
@@ -281,6 +296,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'placeholder' => "add_filter( '…', '…' );",
 		),
 		array( 'key' => 'code_type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options ),
+		array( 'key' => 'auto_insert', 'label' => __( 'Insert automatically', 'minn-admin' ), 'type' => 'switch' ),
 		array( 'key' => 'location', 'label' => __( 'Location', 'minn-admin' ), 'type' => 'select', 'options' => $location_options ),
 		array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'type' => 'number' ),
 		array( 'key' => 'tags', 'label' => __( 'Tags', 'minn-admin' ), 'type' => 'tags', 'required' => false ),
@@ -333,7 +349,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'detailRoute' => 'minn-admin/v1/wpcode/snippets/{id}',
 				'skip'        => array(
 					'code', 'name', 'desc', 'scope', 'code_type', 'location',
-					'priority', 'tags', 'active',
+					'priority', 'tags', 'active', 'auto_insert',
 				),
 				'edit'        => array(
 					'route'    => 'minn-admin/v1/wpcode/snippets/{id}',
@@ -552,11 +568,17 @@ add_action( 'rest_api_init', function () {
 					// that is already on is what an ordinary rename does, and
 					// renaming stays open.
 					$activating = ! empty( $request['active'] ) && ! $snippet->is_active();
+					// Promoting a live shortcode-only snippet to auto-insert
+					// starts its bytes running on every request, which is the
+					// same event as switching one on: the guard has to see it.
+					$promoting = ! empty( $request['auto_insert'] )
+						&& ! (int) $snippet->get_auto_insert()
+						&& $snippet->is_active();
 
 					$guard = minn_admin_wpcode_guard_type(
 						(string) $snippet->get_code_type(),
 						(int) $request['id'],
-						null !== $request['code'] || $activating
+						null !== $request['code'] || $activating || $promoting
 					);
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
@@ -601,7 +623,16 @@ add_action( 'rest_api_init', function () {
 					// bytes mean.
 					$eff_type = null !== $new_type ? $new_type : (string) $snippet->get_code_type();
 
-					$patch = array( 'auto_insert' => 1 );
+					// Carry the stored insert method rather than forcing it on.
+					// auto_insert IS the insert method in WPCode: setting it to 1 while
+					// a location is present makes the snippet run everywhere, and
+					// clearing it makes the snippet shortcode-only. Forcing it turned an
+					// ordinary rename into a site-wide publish.
+					$was_auto = (int) $snippet->get_auto_insert();
+					$want_auto = null !== $request['auto_insert']
+						? (int) ( ! empty( $request['auto_insert'] ) )
+						: $was_auto;
+					$patch = array( 'auto_insert' => $want_auto );
 					if ( null !== $request['name'] ) {
 						$patch['title'] = sanitize_text_field( (string) $request['name'] );
 					}

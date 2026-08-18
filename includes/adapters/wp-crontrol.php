@@ -157,7 +157,14 @@ function minn_admin_crontrol_row( $ev ) {
 		'args'       => $args_out,
 		'recurring'  => $ev->is_recurring(),
 		'paused'     => $ev->is_paused(),
-		'can_run'    => $ev->runnable( $user, $features ) && ! $ev->is_paused() && 'immediate' !== $status,
+		// AND the shared ceiling in, the same one the /run route applies and the
+		// Scrutoscope provider applies to its own can_profile flag. WP Crontrol's
+		// runnable() resolves to manage_options and ignores DISALLOW_FILE_EDIT, so
+		// without it a PHP event offers Run now to someone the route then refuses.
+		'can_run'    => ( function_exists( 'minn_admin_scrutoscope_cron_runnable' )
+				? minn_admin_scrutoscope_cron_runnable( (string) $ev->hook, (int) $ev->timestamp )
+				: true )
+			&& $ev->runnable( $user, $features ) && ! $ev->is_paused() && 'immediate' !== $status,
 		'can_delete' => $ev->deletable( $user, $features ) && ! $ev->persistent(),
 		'can_pause'  => $ev->pausable() && ! $ev->is_paused(),
 		'can_resume' => $ev->pausable() && $ev->is_paused(),
