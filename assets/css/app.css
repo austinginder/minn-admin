@@ -969,6 +969,25 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-translation-icon.is-busy svg { animation: minn-upd-rot 1.1s linear infinite; }
 .minn-translation-title { font-size: 16px; font-weight: 700; }
 .minn-translation-sub { margin-top: 3px; color: var(--text2); font-size: 13.5px; line-height: 1.45; }
+/* Installed languages (Translations tab): every language whose files are on
+   disk, with a Remove action for the ones nothing on the site uses. */
+.minn-lang-card { padding: 0; overflow: hidden; margin-top: 14px; }
+.minn-lang-head { padding: 18px 20px; border-bottom: 1px solid var(--border); }
+.minn-lang-title { font-size: 16px; font-weight: 700; }
+.minn-lang-sub { margin-top: 3px; color: var(--text2); font-size: 13.5px; line-height: 1.45; }
+.minn-lang-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.minn-lang-row { min-width: 0; padding: 12px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+.minn-lang-row:nth-child(odd) { border-inline-end: 1px solid var(--border); }
+.minn-lang-row:nth-last-child(-n+2) { border-bottom: none; }
+.minn-lang-row:nth-last-child(2):nth-child(even) { border-bottom: 1px solid var(--border); }
+.minn-lang-row-main { min-width: 0; flex: 1; }
+.minn-lang-name { font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-lang-meta { margin-top: 2px; color: var(--text3); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-lang-meta code { color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+.minn-lang-row .minn-btn-soft { flex-shrink: 0; }
+.minn-lang-lock { flex-shrink: 0; font-size: 11.5px; color: var(--text3); background: var(--hover); border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+@media (max-width: 860px) { .minn-lang-list { grid-template-columns: minmax(0, 1fr); } .minn-lang-row:nth-child(odd) { border-inline-end: none; } .minn-lang-row:nth-last-child(2):nth-child(even) { border-bottom: none; } }
+
 .minn-translation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .minn-translation-row { min-width: 0; padding: 13px 20px; display: flex; align-items: center; gap: 12px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; color: var(--text); font: inherit; text-align: start; cursor: pointer; }
 .minn-translation-row:hover { background: var(--hover); }

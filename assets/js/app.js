@@ -1018,6 +1018,7 @@
 			themeUpdates: {},
 			translationUpdates: 0,
 			translationGroups: null,
+			installedLanguages: null,
 			settings: null,
 			notifications: null,
 		},
@@ -18820,6 +18821,128 @@
 		return state.cache.translationGroups;
 	}
 
+	// Every language whose files are on disk, pending update or not. WordPress
+	// keeps updating a language pack forever once installed, with no core UI to
+	// remove one, so a site that tried a language months ago is still
+	// downloading it — this list is where that becomes visible and reversible.
+	async function loadInstalledLanguages() {
+		const res = await api( 'minn-admin/v1/translations/installed' );
+		state.cache.installedLanguages = ( res && Array.isArray( res.languages ) ) ? res.languages : [];
+		return state.cache.installedLanguages;
+	}
+
+	function languageBreakdown( lang ) {
+		const bits = [];
+		if ( lang.core ) bits.push( __( 'WordPress' ) );
+		if ( lang.plugins ) {
+			/* translators: %d is a number of plugin translation files. */
+			bits.push( sprintf( _n( '%d plugin', '%d plugins', lang.plugins ), lang.plugins ) );
+		}
+		if ( lang.themes ) {
+			/* translators: %d is a number of theme translation files. */
+			bits.push( sprintf( _n( '%d theme', '%d themes', lang.themes ), lang.themes ) );
+		}
+		return bits.join( ' · ' );
+	}
+
+	// Why a language cannot be removed. Both cases mean a real reader depends
+	// on it, so the row says which one rather than just disabling a button.
+	function languageLockNote( lang ) {
+		if ( lang.reason === 'site' ) return __( 'Site language' );
+		/* translators: %d is a number of users who chose this language. */
+		if ( lang.reason === 'users' ) return sprintf( _n( 'Chosen by %d user', 'Chosen by %d users', lang.users ), lang.users );
+		return '';
+	}
+
+	async function removeLanguage( locale, name, btn ) {
+		const ok = await minnConfirm( {
+			/* translators: %s is a language name, e.g. Deutsch. */
+			title: sprintf( __( 'Remove %s from this site?' ), name ),
+			body: __( 'WordPress keeps every installed language up to date on its own schedule, whether or not the site uses it. Removing this one stops those downloads.' ),
+			changes: [
+				__( 'Deletes this language’s WordPress, plugin and theme translation files' ),
+				__( 'Stops WordPress from downloading updates for them' ),
+			],
+			keeps: [
+				__( 'Your content, settings and the site language' ),
+				__( 'Every other installed language' ),
+				__( 'Nothing is permanent: WordPress reinstalls the language if it is ever selected again' ),
+			],
+			danger: true,
+			confirmLabel: __( 'Remove language' ),
+		} );
+		if ( ! ok ) return;
+		if ( btn ) {
+			btn.disabled = true;
+			btn.textContent = __( 'Removing…' );
+		}
+		try {
+			const res = await api( 'minn-admin/v1/translations/remove', {
+				method: 'POST',
+				body: JSON.stringify( { locale } ),
+			} );
+			state.cache.installedLanguages = Array.isArray( res.languages ) ? res.languages : null;
+			state.cache.translationUpdates = res.count || 0;
+			state.cache.translationGroups = Array.isArray( res.groups ) ? res.groups : [];
+			state.cache.notifications = null;
+			updateUpdChip();
+			const files = res.removed || 0;
+			/* translators: 1: a language name. 2: how many files were deleted. */
+			toast( sprintf( _n( '%1$s removed. %2$d file deleted.', '%1$s removed. %2$d files deleted.', files ), name, files ) );
+			if ( state.route === 'extensions' && state.extTab === 'translations' ) renderTranslations();
+		} catch ( e ) {
+			if ( btn ) {
+				btn.disabled = false;
+				btn.textContent = __( 'Remove' );
+			}
+			toast( e.message || __( 'Could not remove the language.' ), true );
+		}
+	}
+
+	function installedLanguagesHtml() {
+		const langs = state.cache.installedLanguages;
+		if ( langs == null ) return `<div class="minn-card minn-lang-card"><div class="minn-loading">${ esc( __( 'Loading installed languages…' ) ) }</div></div>`;
+		if ( ! langs.length ) {
+			return `<div class="minn-card minn-lang-card">
+				<div class="minn-lang-head">
+					<div class="minn-lang-title">${ esc( __( 'Installed languages' ) ) }</div>
+					<div class="minn-lang-sub">${ esc( __( 'This site runs in English with no other language packs installed.' ) ) }</div>
+				</div>
+			</div>`;
+		}
+		const unused = langs.filter( ( l ) => l.removable ).length;
+		const sub = unused
+			/* translators: %d is a number of languages nothing on the site uses. */
+			? sprintf( _n( 'WordPress keeps every installed language up to date, even one nothing uses. %d is not the site language and no user has chosen it.', 'WordPress keeps every installed language up to date, even ones nothing uses. %d are not the site language and no user has chosen them.', unused ), unused )
+			: __( 'Every installed language is in use by the site or by a user.' );
+		return `
+		<div class="minn-card minn-lang-card">
+			<div class="minn-lang-head">
+				<div class="minn-lang-title">${ esc( __( 'Installed languages' ) ) }</div>
+				<div class="minn-lang-sub">${ esc( sub ) }</div>
+			</div>
+			<div class="minn-lang-list">
+				${ langs.map( ( l ) => `
+				<div class="minn-lang-row${ l.removable ? '' : ' is-locked' }" data-lang-row="${ esc( l.locale ) }">
+					<div class="minn-lang-row-main">
+						<div class="minn-lang-name">${ esc( l.name || l.locale ) }</div>
+						<div class="minn-lang-meta"><code>${ esc( l.locale ) }</code>${ languageBreakdown( l ) ? ` · ${ esc( languageBreakdown( l ) ) }` : '' }${ l.pending ? ` · ${ esc( sprintf( /* translators: %d is a number of translation packages waiting to update. */ _n( '%d update waiting', '%d updates waiting', l.pending ), l.pending ) ) }` : '' }</div>
+					</div>
+					${ l.removable
+						? `<button type="button" class="minn-btn-soft danger" data-lang-remove="${ esc( l.locale ) }" data-lang-name="${ esc( l.name || l.locale ) }">${ esc( __( 'Remove' ) ) }</button>`
+						: `<span class="minn-lang-lock">${ esc( languageLockNote( l ) ) }</span>` }
+				</div>` ).join( '' ) }
+			</div>
+		</div>`;
+	}
+
+	function bindInstalledLanguages( view ) {
+		$$( '[data-lang-remove]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () =>
+				removeLanguage( btn.dataset.langRemove, btn.dataset.langName, btn ) )
+		);
+	}
+
 	function translationBreakdown( group ) {
 		const counts = group.counts || {};
 		const bits = [];
@@ -18967,7 +19090,8 @@
 				</button>`;
 				} ).join( '' ) }
 			</div>
-		</div>` : `<div class="minn-card minn-empty">${ esc( __( 'Translations are up to date.' ) ) }</div>` }`;
+		</div>` : `<div class="minn-card minn-empty">${ esc( __( 'Translations are up to date.' ) ) }</div>` }
+		${ installedLanguagesHtml() }`;
 		bindExtTabs( view );
 		const check = $( '#minn-check-updates', view );
 		if ( check ) check.addEventListener( 'click', () => checkForUpdates( check ) );
@@ -18979,6 +19103,14 @@
 				renderTranslations();
 			} );
 		} );
+		bindInstalledLanguages( view );
+		// The installed list is a second, independent fetch: the pending-updates
+		// card paints immediately and the language list fills in when it lands.
+		if ( state.cache.installedLanguages == null ) {
+			loadInstalledLanguages().then( renderIfCurrent( 'extensions' ) ).catch( () => {
+				state.cache.installedLanguages = [];
+			} );
+		}
 	}
 
 	// Plugin file keys appear as "minn-admin/minn-admin" (list rows) or

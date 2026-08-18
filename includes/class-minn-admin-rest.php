@@ -429,6 +429,45 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Every language installed on this site (core + plugin + theme packs),
+		// not just the ones with an update waiting — so an unused language can
+		// be seen and removed even when everything is current.
+		register_rest_route(
+			self::NS,
+			'/translations/installed',
+			array(
+				'methods'             => 'GET',
+				'callback'            => function () {
+					return rest_ensure_response( array( 'languages' => self::installed_languages() ) );
+				},
+				'permission_callback' => function () {
+					return current_user_can( 'update_languages' );
+				},
+			)
+		);
+
+		// Remove one installed language: delete its core + plugin + theme
+		// translation files, then re-check so the pending count settles. The
+		// site language and any locale a user has personally selected are
+		// refused — removing those would break a real reader.
+		register_rest_route(
+			self::NS,
+			'/translations/remove',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'remove_language' ),
+				'permission_callback' => function () {
+					return current_user_can( 'update_languages' );
+				},
+				'args'                => array(
+					'locale' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+				),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/translations/update',
@@ -3792,6 +3831,226 @@ class Minn_Admin_REST {
 		return array(
 			'count'  => count( $pending ),
 			'groups' => $groups,
+		);
+	}
+
+	/**
+	 * Locales that a real reader depends on: the configured site language and
+	 * every locale a user has personally selected. These can never be removed.
+	 * Returns a map locale => in-use count (site language counts as 1 even
+	 * with no user on it) plus a companion flag set.
+	 */
+	private static function protected_locales() {
+		global $wpdb;
+		$site = get_locale();
+		$users = array();
+		$rows  = $wpdb->get_col( "SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'locale' AND meta_value <> ''" );
+		foreach ( (array) $rows as $loc ) {
+			$loc = (string) $loc;
+			if ( '' === $loc ) {
+				continue;
+			}
+			$users[ $loc ] = isset( $users[ $loc ] ) ? $users[ $loc ] + 1 : 1;
+		}
+		return array(
+			'site'  => 'en_US' === $site ? '' : $site,
+			'users' => $users,
+		);
+	}
+
+	/**
+	 * Every language installed on this site, whether or not it has an update
+	 * waiting. Components are counted from wp_get_installed_translations()
+	 * (core collapses to a single WordPress entry). Each language is marked
+	 * removable unless it is the site language or a user's personal locale.
+	 */
+	public static function installed_languages() {
+		if ( ! current_user_can( 'update_languages' ) ) {
+			return array();
+		}
+
+		$labels = array();
+		foreach ( Minn_Admin::available_languages() as $language ) {
+			if ( ! empty( $language[0] ) ) {
+				$labels[ $language[0] ] = $language[1];
+			}
+		}
+		$translations = get_site_transient( 'available_translations' );
+
+		// locale => array( core => bool, plugin => int, theme => int ).
+		$found = array();
+		$bump  = function ( $locale, $type ) use ( &$found ) {
+			if ( 'en_US' === $locale || '' === $locale ) {
+				return;
+			}
+			if ( ! isset( $found[ $locale ] ) ) {
+				$found[ $locale ] = array( 'core' => false, 'plugin' => 0, 'theme' => 0 );
+			}
+			if ( 'core' === $type ) {
+				$found[ $locale ]['core'] = true;
+			} else {
+				++$found[ $locale ][ $type ];
+			}
+		};
+		foreach ( array( 'core', 'plugins', 'themes' ) as $set ) {
+			$type = 'plugins' === $set ? 'plugin' : ( 'themes' === $set ? 'theme' : 'core' );
+			foreach ( (array) wp_get_installed_translations( $set ) as $domain => $locales ) {
+				foreach ( (array) $locales as $loc => $meta ) {
+					$bump( (string) $loc, $type );
+				}
+			}
+		}
+
+		// Pending update count per locale, so a language can say how many of
+		// its packs are waiting.
+		$pending = array();
+		foreach ( (array) wp_get_translation_updates() as $update ) {
+			$update = (object) $update;
+			$loc    = isset( $update->language ) ? (string) $update->language : '';
+			if ( '' !== $loc ) {
+				$pending[ $loc ] = isset( $pending[ $loc ] ) ? $pending[ $loc ] + 1 : 1;
+			}
+		}
+
+		$protected = self::protected_locales();
+		$out       = array();
+		foreach ( $found as $locale => $counts ) {
+			$name = isset( $labels[ $locale ] ) ? $labels[ $locale ]
+				: ( is_array( $translations ) && isset( $translations[ $locale ]['native_name'] ) ? $translations[ $locale ]['native_name'] : $locale );
+			$is_site  = $protected['site'] === $locale;
+			$users    = isset( $protected['users'][ $locale ] ) ? (int) $protected['users'][ $locale ] : 0;
+			$reason   = $is_site ? 'site' : ( $users > 0 ? 'users' : '' );
+			$total    = ( $counts['core'] ? 1 : 0 ) + $counts['plugin'] + $counts['theme'];
+			$out[]    = array(
+				'locale'    => $locale,
+				'name'      => $name,
+				'core'      => (bool) $counts['core'],
+				'plugins'   => (int) $counts['plugin'],
+				'themes'    => (int) $counts['theme'],
+				'total'     => $total,
+				'pending'   => isset( $pending[ $locale ] ) ? (int) $pending[ $locale ] : 0,
+				'site'      => $is_site,
+				'users'     => $users,
+				'removable' => '' === $reason,
+				'reason'    => $reason,
+			);
+		}
+		usort( $out, function ( $a, $b ) {
+			return strcasecmp( $a['name'], $b['name'] );
+		} );
+		return $out;
+	}
+
+	/**
+	 * Delete every translation file for a locale across core, plugins and
+	 * themes. The locale is matched as a bounded token in each filename
+	 * ((start|dash)LOCALE(dot|dash)) so removing de_DE never touches
+	 * de_DE_formal, and only files inside WP_LANG_DIR are ever unlinked.
+	 * Returns the number of files removed.
+	 */
+	private static function remove_language_files( $locale ) {
+		$base    = untrailingslashit( WP_LANG_DIR );
+		$dirs    = array( $base, $base . '/plugins', $base . '/themes' );
+		$quoted  = preg_quote( $locale, '/' );
+		$pattern = '/(^|-)' . $quoted . '(\.|-)/';
+		$exts    = array( 'po', 'mo', 'l10n.php', 'json' );
+		$removed = 0;
+		foreach ( $dirs as $dir ) {
+			if ( ! is_dir( $dir ) ) {
+				continue;
+			}
+			$real_dir = realpath( $dir );
+			foreach ( (array) glob( $dir . '/*' ) as $file ) {
+				if ( ! is_file( $file ) ) {
+					continue;
+				}
+				$name = basename( $file );
+				$ext_ok = false;
+				foreach ( $exts as $ext ) {
+					if ( substr( $name, -( strlen( $ext ) + 1 ) ) === '.' . $ext ) {
+						$ext_ok = true;
+						break;
+					}
+				}
+				if ( ! $ext_ok || ! preg_match( $pattern, $name ) ) {
+					continue;
+				}
+				// Never follow a path outside WP_LANG_DIR.
+				$real = realpath( $file );
+				if ( ! $real || 0 !== strpos( $real, $real_dir ) ) {
+					continue;
+				}
+				if ( @unlink( $file ) ) {
+					++$removed;
+				}
+			}
+		}
+		return $removed;
+	}
+
+	/**
+	 * POST minn-admin/v1/translations/remove { locale } — remove an unused
+	 * language. Refuses the site language and any user's personal locale
+	 * (the client hides the control for those, so arriving here is a stale
+	 * or hand-built request). After deleting the files a fresh update check
+	 * rebuilds the transients so the pending count drops the removed packs.
+	 */
+	public static function remove_language( WP_REST_Request $request ) {
+		$locale = preg_replace( '/[^A-Za-z0-9_@.-]/', '', (string) $request->get_param( 'locale' ) );
+		if ( '' === $locale || 'en_US' === $locale ) {
+			return new WP_Error( 'minn_admin_bad_locale', __( 'That language cannot be removed.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$protected = self::protected_locales();
+		if ( $protected['site'] === $locale ) {
+			return new WP_Error( 'minn_admin_locale_site', __( 'This is the site language, so it cannot be removed.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( isset( $protected['users'][ $locale ] ) ) {
+			return new WP_Error( 'minn_admin_locale_in_use', __( 'A user has chosen this language, so it cannot be removed.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		// Only ever act on a locale this site actually has installed: a
+		// request for anything else is refused rather than answered with a
+		// cheerful "removed nothing".
+		$known = wp_list_pluck( self::installed_languages(), 'locale' );
+		if ( ! in_array( $locale, (array) $known, true ) ) {
+			return new WP_Error( 'minn_admin_locale_absent', __( 'That language is not installed on this site.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+
+		$removed = self::remove_language_files( $locale );
+
+		// WP_Textdomain_Registry caches each language directory's file list for
+		// an hour (cache group translation_files, keyed by md5 of the path WITH
+		// a trailing slash). Without dropping those keys the very next read
+		// still lists the files we just deleted, so the language would appear
+		// to survive its own removal. Core invalidates exactly these keys after
+		// a translation install; mirror that.
+		foreach ( array( WP_LANG_DIR . '/', WP_LANG_DIR . '/plugins/', WP_LANG_DIR . '/themes/' ) as $path ) {
+			wp_cache_delete( md5( $path ), 'translation_files' );
+		}
+
+		// Re-query the update APIs so the pending list no longer offers packs
+		// for a locale we no longer have installed (the same work Check for
+		// updates does).
+		wp_clean_plugins_cache();
+		wp_clean_themes_cache();
+		if ( function_exists( 'wp_update_plugins' ) ) {
+			wp_update_plugins();
+		}
+		if ( function_exists( 'wp_update_themes' ) ) {
+			wp_update_themes();
+		}
+		if ( function_exists( 'wp_version_check' ) ) {
+			wp_version_check();
+		}
+
+		$summary = self::translation_update_summary();
+		return rest_ensure_response(
+			array(
+				'removed'   => $removed,
+				'locale'    => $locale,
+				'languages' => self::installed_languages(),
+				'count'     => $summary['count'],
+				'groups'    => $summary['groups'],
+			)
 		);
 	}
 
