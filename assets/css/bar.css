@@ -58,8 +58,24 @@
 /* Theme defense: the bar renders inside the site's own page, so the theme's
    anchor rules (a and a:hover color, underline) reach our links — Edit Page
    was wearing the theme's link color instead of --accent-fg. The bar's links
-   state their colors with !important; buttons are immune and need none. */
-#minn-bar-root a, #minn-bar-root a:hover, #minn-bar-root a:focus, #minn-bar-root a:visited { text-decoration: none !important; }
+   state their colors with !important; buttons are immune and need none.
+   Sites also style bare a:link/a:visited — a pseudo-class outranks our single
+   component class, so a site's `a:link { display: inline-block; border-bottom:
+   solid 1px }` (a common underline treatment in hand-written custom CSS)
+   overrode the menu items' flex layout and drew a rule under every item. The
+   border/box-shadow/background-image resets cover the three underline
+   substitutes themes reach for, and the display rules restore the two layouts
+   a bar link can have. Inherited typography (a body-level letter-spacing)
+   is neutralized on the root so every surface inherits ours, not the theme's. */
+#minn-bar-root { letter-spacing: normal; word-spacing: normal; text-transform: none; font-style: normal; }
+#minn-bar-root a, #minn-bar-root a:hover, #minn-bar-root a:focus, #minn-bar-root a:visited {
+  text-decoration: none !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+#minn-bar-root a.minn-bar-btn { display: inline-flex !important; }
+#minn-bar-root a.minn-bar-menu-item { display: flex !important; }
 #minn-bar-root .minn-bar-edit, #minn-bar-root .minn-bar-edit:hover,
 #minn-bar-root .minn-bar-edit:focus, #minn-bar-root .minn-bar-edit:visited { color: var(--accent-fg) !important; }
 #minn-bar-root a.minn-bar-menu-item, #minn-bar-root a.minn-bar-menu-item:hover,
