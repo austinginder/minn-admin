@@ -155,11 +155,14 @@ async function loginAs( browser, user, pass ) {
 	await page.goto( BASE + '/wp-login.php?redirect_to=' + encodeURIComponent( dest ), { waitUntil: 'domcontentloaded' } );
 	await page.fill( '#user_login', user );
 	await page.fill( '#user_pass', pass );
-	await Promise.all( [
-		page.waitForNavigation( { waitUntil: 'domcontentloaded', timeout: 60000 } ),
-		page.click( '#wp-submit' ),
-	] );
-	await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 20000 } );
+	await page.click( '#wp-submit', { noWaitAfter: true } );
+	const landed = await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 20000 } )
+		.then( () => true )
+		.catch( () => false );
+	if ( ! landed ) {
+		await page.goto( dest, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 20000 } );
+	}
 	return { ctx, page };
 }
 
