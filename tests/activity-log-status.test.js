@@ -108,6 +108,33 @@ const pluginInstalled = ( slug ) => {
 			const res = await api( opt.route );
 			assertStatusShape( opt.label, res );
 
+			// SH stores date as GMT. Parsing it as site-local made a
+			// just-now event read as "5 hours ago" on America/Chicago
+			// (the Playground blueprint timezone). Force that offset
+			// and require the card to stay in the minute range.
+			if ( 'simple-history' === opt.slug ) {
+				const snapRaw = wp( `eval "echo 'TZSNAP' . wp_json_encode( array( 'tz' => (string) get_option( 'timezone_string' ), 'off' => get_option( 'gmt_offset' ) ) );"` );
+				const snapM = snapRaw.match( /TZSNAP(\{.*\})/ );
+				const snap = snapM ? JSON.parse( snapM[ 1 ] ) : { tz: '', off: 0 };
+				try {
+					wp( 'option update timezone_string America/Chicago' );
+					wp( `eval "if ( function_exists( 'SimpleLogger' ) ) { SimpleLogger()->info( 'minn status tz probe' ); }"` );
+					const tzRes = await api( opt.route );
+					const last = ( tzRes.body.rows || [] ).find( ( r ) => /Last event/i.test( r.label || '' ) );
+					const val = last ? String( last.value ) : '';
+					t.check( 'Simple History last event is recent under America/Chicago',
+						tzRes.status === 200 && /\b(seconds?|minutes?)\b/i.test( val ) && ! /\bhours?\b/i.test( val ),
+						val || JSON.stringify( tzRes.body ) );
+				} finally {
+					if ( snap.tz ) {
+						wp( `option update timezone_string ${ JSON.stringify( snap.tz ) }` );
+					} else {
+						wp( 'option delete timezone_string' );
+						wp( `option update gmt_offset ${ JSON.stringify( String( snap.off == null ? 0 : snap.off ) ) }` );
+					}
+				}
+			}
+
 			// Stream's visibility is its own Role Access setting, and Minn
 			// reads that setting directly because Stream only registers its
 			// view_stream cap filter in wp-admin (its REST-side equivalent

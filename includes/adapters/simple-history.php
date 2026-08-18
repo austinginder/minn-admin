@@ -94,10 +94,13 @@ function minn_admin_simple_history_status_model() {
 	}
 	$readable = " AND logger IN {$scope}";
 
-	// SH stores `date` as site-local MySQL datetime (matches list date_local).
-	$now_ts    = current_time( 'timestamp' );
-	$since_24h = wp_date( 'Y-m-d H:i:s', $now_ts - DAY_IN_SECONDS );
-	$since_7d  = wp_date( 'Y-m-d H:i:s', $now_ts - ( 7 * DAY_IN_SECONDS ) );
+	// SH stores `date` as GMT (`current_time( 'mysql', 1 )`). Their REST
+	// layer exposes that as date_gmt and converts date_local via
+	// get_date_from_gmt. Comparing or parsing the column as site-local
+	// makes "Last event" equal the UTC offset (5 hours on
+	// America/Chicago in summer) while the list still says "just now".
+	$since_24h = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+	$since_7d  = gmdate( 'Y-m-d H:i:s', time() - ( 7 * DAY_IN_SECONDS ) );
 
 	$total   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE 1=1{$readable}" );
 	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE date >= %s{$readable}", $since_24h ) );
@@ -115,16 +118,14 @@ function minn_admin_simple_history_status_model() {
 
 	$last_label = '—';
 	if ( $last ) {
-		try {
-			$dt = date_create( $last, wp_timezone() );
-			if ( $dt ) {
-				$last_label = sprintf(
-					/* translators: %s: human-readable time since the last event. */
-					__( '%s ago', 'minn-admin' ),
-					human_time_diff( $dt->getTimestamp(), time() )
-				);
-			}
-		} catch ( \Throwable $e ) {
+		$ts = strtotime( $last . ' UTC' );
+		if ( $ts ) {
+			$last_label = sprintf(
+				/* translators: %s: human-readable time since the last event. */
+				__( '%s ago', 'minn-admin' ),
+				human_time_diff( $ts, time() )
+			);
+		} else {
 			$last_label = (string) $last;
 		}
 	}
