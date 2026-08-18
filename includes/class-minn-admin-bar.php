@@ -350,7 +350,12 @@ class Minn_Admin_Bar {
 
 		$site_name = Minn_Admin::plain_text( get_bloginfo( 'name' ) );
 		$user      = wp_get_current_user();
-		$avatar    = get_avatar( $user->ID, 52, '', '', array( 'class' => 'minn-bar-avatar-img', 'extra_attr' => 'loading="lazy"' ) );
+		// force_display: the Discussion "Show avatars" setting governs the
+		// site's comments, not Minn's chrome — without it get_avatar() returns
+		// false on avatar-less sites and the account button rendered an empty
+		// circle while the SPA (which reads avatar URLs, uncovered by that
+		// setting) kept showing the picture.
+		$avatar    = get_avatar( $user->ID, 52, '', '', array( 'class' => 'minn-bar-avatar-img', 'extra_attr' => 'loading="lazy"', 'force_display' => true ) );
 
 		echo '<div id="minn-bar-root" data-minn-theme="dark">';
 
