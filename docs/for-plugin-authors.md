@@ -1705,8 +1705,10 @@ If your data lives in custom tables, register a small read-only REST collection 
 descriptor at it. Minn's bundled Gravity SMTP adapter
 (`includes/adapters/gravity-smtp.php`) is the reference implementation: ~60 lines of SQL-to-REST
 plus a descriptor. Rules of the road: check capabilities in `permission_callback`, use
-`$wpdb->prepare`, and never `unserialize()` stored blobs (extract what you need with regex or
-`json_decode`).
+`$wpdb->prepare`, and prefer bounded parsing such as targeted token extraction or `json_decode`
+for stored blobs. If a plugin's own storage leaves no safer option, disable object instantiation
+and validate the decoded scalar or array shape. Allow exact vendor value classes only when its API
+requires them.
 
 ## Notes
 

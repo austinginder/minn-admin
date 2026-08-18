@@ -177,9 +177,10 @@ intelligence lives in the adapter shim, which does two jobs:
   always gated through `GFCommon::current_user_can_any()`. For Gravity SMTP: the
   service container's data stores (which preserve `GRAVITYSMTP_*` constant-lock
   behavior), gated on the granular `gravitysmtp_*` caps. Shim rules stay in force:
-  prefix-scoped queries, never `unserialize()` third-party blobs, sensitive-field
-  sentinels (Gravity SMTP masks secrets as `****************`; an unchanged sentinel
-  must skip the write, matching its own save semantics).
+  prefix-scoped queries, bounded parsing or constrained decoding with the resulting
+  shape validated, and sensitive-field sentinels (Gravity SMTP masks secrets as
+  `****************`; an unchanged sentinel must skip the write, matching its own save
+  semantics).
 
 This rung is where "full UI support" stops being hypothetical: it converts both
 plugins' settings estates, which is most of their admin surface by screen count.

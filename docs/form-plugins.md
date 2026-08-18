@@ -1,11 +1,10 @@
 # Form plugins — Forms family map
 
 Originally a 2026-07-09 source hunt ("which form plugins are worth a Forms
-family member?"). Stale-checked 2026-07-12 during the v0.13.0 cycle: the
-family is live with **eight** providers, the adapter ladder proved out on
-Gravity Forms (entries → notifications → form settings), and the remaining
-work is thin leftovers plus one big brand (WPForms Pro) that needs a
-license for fixtures.
+family member?"). Refreshed 2026-08-18 after v0.32.0: the family is live
+with **eleven** providers, including WPForms Pro and SureForms. The adapter
+ladder proved out on Gravity Forms (entries → notifications → form
+settings), and the remaining work is the thin long tail.
 
 **Today:** `family: 'forms'` with a provider switcher. Deliberately **not**
 a form builder: deep-link to each plugin's editor for create/edit of the
@@ -21,10 +20,12 @@ clean documents live in `docs/native-editors.md` (parked).
 | **Everest Forms** | `everest-forms.php` | Entries with Received/Spam/Trash through EVF_Admin_Entries; form tabs; search; forms manage. Suite `everest-forms`. |
 | **Elementor Pro Forms** | `elementor-forms.php` | Submissions via Elementor's own Query class; soft-trash through `move_to_trash_submission`. Free Elementor has no submissions store. |
 | **Contact Form 7 + Flamingo** | `cf7-flamingo.php` | Inbound messages through Flamingo's own model (spam/unspam/trash); CF7 forms in manage with live channel counts. CF7 alone stores nothing. |
-| **CFDB7** | `cfdb7.php` | Entries from `{prefix}db7_forms` (serialized map scanned by byte-length tokens, never unserialized); open-marks-read; permanent delete. |
+| **CFDB7** | `cfdb7.php` | Entries from `{prefix}db7_forms` (serialized map decoded with object instantiation disabled and flattened to scalar values; byte-length parser fallback for damaged rows); open-marks-read; permanent delete. |
 | **Ninja Forms** | `ninja-forms.php` | Entries as `nf_sub` postmeta cards, form tabs, labeled detail, trash through its own model, forms manage with live entry counts. |
 | **Forminator** | `forminator.php` | Entries from Forminator's own models, labels resolved at runtime, permanent delete through `Forminator_API::delete_entry`, forms manage. Honors `forminator-entries` permission model. |
 | **Formidable** | `formidable.php` | Entries via `FrmEntry`, labels from field models at runtime, UTC stamps, permanent delete through `FrmEntry::destroy`, caps mirroring granular-or-administrator. |
+| **WPForms Pro** | `wpforms.php` | Entries from its own tables with form tabs, read/star/spam/trash workflows, search, bulk actions and detail that marks a received entry viewed through WPForms' own handler. Lite has no local entry store, so the adapter registers only when the Pro entry handler exists. |
+| **SureForms** | `sureforms.php` | Entries from its JSON-backed table with per-form tabs, read/unread/trash actions, search, permanent delete and a status card. |
 
 The family lives under Workspace. Provider preference key: `minn-sf-forms`.
 
@@ -32,9 +33,7 @@ The family lives under Workspace. Provider preference key: `minn-sf-forms`.
 
 | Plugin | Free installs (approx.) | Why it is still open | Fit |
 |---|---|---|---|
-| **WPForms Pro** | 5M+ Lite brand | Lite stores **no** local entries (email / Lite Connect only). Pro uses `wpforms_entries` + meta/fields. Abilities API since 1.9.9 is awkward for the collection descriptor; a SQL/internal shim is cleaner. **Needs a Pro license + fixtures.** | Highest-value uncovered brand; costs a license. |
-| **SureForms** | growing | Free-tier entry storage believed but not source-verified. | Verify storage before promising. |
-| **MetForm** | ~100k+ | Same: free-tier storage not source-verified. | Verify first. |
+| **MetForm** | ~100k+ | Free-tier storage not source-verified. | Verify first. |
 | JetFormBuilder | ~90k | Lower reach; varies by storage. | Low priority. |
 
 Sources for install counts: wordpress.org plugin API (ballpark; refresh when ranking again).
@@ -64,6 +63,9 @@ Sidebar: one **Forms** item. Topbar autocomplete when
 5. Forminator + Formidable — done v0.13.0 cycle.
 6. GF depth (status filters, bulk, notifications view, form settings) — done
    across v0.12.0–v0.13.0; see `docs/full-ui-adapters.md`.
+7. SureForms — done in the v0.16.0 cycle.
+8. WPForms Pro entries + forms-family status cards — done in the v0.24.0
+   cycle.
 
 ## Fixture expectations (for suites)
 
@@ -77,6 +79,7 @@ Sidebar: one **Forms** item. Topbar autocomplete when
 | Forminator | Active form + entries; suites can arm `minn_test_seed_forminator` |
 | Formidable | Active form + entries after `FrmAppController::install()`; suites can arm `minn_test_seed_formidable` |
 | WPForms entries | **WPForms Pro** zip + license (Lite has no local entry store) |
+| SureForms | Active form + entries in its submissions table |
 
 ## Out of scope (same as day one)
 

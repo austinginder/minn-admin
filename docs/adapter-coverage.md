@@ -108,7 +108,7 @@ Reference depth: **Gravity Forms**.
 | code-snippets | Y | · | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | **Status card** (active/inactive/trashed, running scopes, last change, safe-mode warning); first card in the family |
 | wpcode | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | **Status card** (active/inactive, running types, last change) |
 | fluent-snippets | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | **Status card** (active/inactive + file-storage note) |
-| custom-css-js | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | CPT shim; tree rebuild on write; **status card** (active codes, running languages via regex peek) |
+| custom-css-js | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | CPT shim; tree rebuild on write; **status card** (active codes, running languages via constrained array decode with objects disabled) |
 | hfcm | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | hfcm_scripts; page targeting = **L**; **status card** (active/inactive, running types, last change) |
 
 ### bookings
@@ -165,7 +165,7 @@ Reference depth: **Gravity Forms**.
 - Backup **restores** (surgery, not daily ops)
 - GSMTP **routing condition tree** authoring (list/toggle/delete is wired)
 - GF **notification** events / conditional logic / routing rules (daily fields are wired)
-- Pro-only stores without fixtures (WP Mail SMTP Pro full log, WPForms Pro entries)
+- Pro-only stores without fixtures (WP Mail SMTP Pro full log)
 
 ## Sweep log
 

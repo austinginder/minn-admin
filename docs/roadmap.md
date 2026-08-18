@@ -13,7 +13,7 @@ adapters in [plugin-support.md](plugin-support.md), WooCommerce products in
 
 Two kinds of thing live here. **Goals** are outcomes with a number attached, so
 progress is a measurement rather than an opinion. **Unlocks** are pieces of work
-not started, each one a step change rather than an increment.
+not shipped, each one a step change rather than an increment.
 
 Minn phones home to no one, so every number here is one that can be read without
 telemetry: GitHub's public counters, the pattern-corpus probes, the suite ledger,
@@ -43,19 +43,22 @@ you only hit doing real work.
   serves only the current release, so a superseded release's downloads approximate
   the distinct sites that updated during its reign. Plus issues filed by people
   other than the author.
-- **Now (2026-08-13):** 84 stars, 1,685 downloads across 30 releases, 3 open
-  issues. The active-sites estimate is **not currently trustworthy**: the v0.27.0
-  cohort reads 608 against 17 to 69 for every neighbouring release, which is
-  burst-shaped rather than ten-fold growth. The defensible read of the last few
-  months is a few dozen active sites. Fixing the estimate is an unlock below.
+- **Now (2026-08-18):** 110 stars, 2,957 plugin-package downloads across 34
+  releases, 1 open issue. The active-sites estimate is **not currently
+  trustworthy**: closed v0.27.0 through v0.31.0 cohorts read 341 to 608 downloads,
+  against 17 to 69 for the preceding releases. That elevated demand now repeats
+  across several cohorts, but public download counters cannot distinguish sites
+  from automated acquisition. The defensible claim is recurring package demand
+  in the hundreds, not a verified active-site count. Fixing the estimate is an
+  unlock below.
 - **Target:** a trustworthy estimate first, then 100 and 500 real sites. Keep
   external issue intake healthy: every real-work report answered, and the fix
   suite-pinned, in the cycle it arrives in.
 
 ## Goal 3 — plugin authors wire in without us
 
-Fifty-plus bundled adapters prove the primitives generalize. The ecosystem claim
-is only proven when authors nobody here has met ship their own.
+Ninety-four bundled adapter modules prove the primitives generalize. The
+ecosystem claim is only proven when authors nobody here has met ship their own.
 
 - **Metric:** third-party plugins shipping their own Minn adapter, from their own
   repository, not bundled in Minn's.
@@ -79,9 +82,10 @@ abuse Minn.
 - **Target:** cut v1.0 when a release goes out that changed nothing about the two
   promises, because nothing needed changing.
 
-## Unlocks not started
+## Unlocks not shipped
 
-Each of these is a step change rather than an increment, and none has been begun.
+Each of these is a step change rather than an increment. Planning may exist, but
+none has shipped.
 
 - **A `wp minn` command namespace.** Minn's operational model is currently only
   reachable by hand. A command line makes it scriptable across a fleet: license
@@ -98,31 +102,6 @@ Each of these is a step change rather than an increment, and none has been begun
   marketing site is a claim that cannot be defended. Likely shape: a median or
   trimmed mean across closed cohorts, with an outlier guard and a floor on how
   much one cohort may exceed its neighbours.
-- **Minn in a language other than English.** Asked for by a user (German), and
-  the machinery is already built: the text domain loads, PHP uses the core
-  functions, and the app carries its own `__()`, `_n()` and `sprintf()` fed from
-  the boot payload, so a locale is a matter of dropping the normal `.mo` and
-  `wp i18n make-json` output into `languages/`. The gap is coverage, not
-  plumbing. 585 strings are extractable today and roughly the same number is
-  still hardcoded in the app: about 340 unique pieces of visible text and 226
-  placeholder, title and aria-label attributes. The shipped `.pot` compounds it
-  by being four releases stale, stamped 0.25.0 against 353 strings. So a
-  translator handed today's file would produce an admin that reverts to English
-  the moment anyone does real work, since Cancel, Save changes, Status and most
-  placeholders are still literals, and a half-translated interface reads worse
-  than an English one. The order is: regenerate the `.pot`, sweep the remaining
-  literals view by view the way the convention already says, then ship a locale.
-  German is the natural first because the suite already exercises it as a
-  fixture. The open question is not engineering but upkeep. Minn is distributed
-  from GitHub rather than wp.org, so there is no translate.wordpress.org and no
-  volunteer translation community attached, which means every locale shipped
-  becomes a standing obligation on each release. The answer taken is to generate
-  the catalogs from the `.pot` and correct them by hand over time, which puts
-  the standing obligation on one pipeline rather than on twenty relationships.
-  Right-to-left support rides along, proposed with a tested implementation in
-  [issue #19](https://github.com/austinginder/minn-admin/issues/19). The full
-  plan, including the locale set, the language-pack delivery model and the
-  release automation, is in [i18n-roadmap.md](i18n-roadmap.md).
 - **Somebody else's fleet.** Every install today is one person's or one agency's
   choice. The unlock is a host or an agency standardizing on Minn for client
   sites, which is the first time the multi-user and per-user-hiding work gets

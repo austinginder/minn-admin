@@ -16,12 +16,13 @@ live in [roadmap.md](roadmap.md).
 3. **Zero lock-in.** Everything Minn writes is native WordPress: Gutenberg block markup, core
    options, core REST calls. Deactivate the plugin and nothing is lost or broken. Classic
    wp-admin remains fully available at all times — Minn is additive.
-4. **No build step.** One vanilla-JS file, one stylesheet, PHP that reads top to bottom. Anyone
-   can read the whole codebase in an afternoon. Frameworks are a dependency treadmill this
-   project deliberately stays off.
+4. **No build step.** Browser-native JavaScript, one stylesheet and PHP run as shipped. A
+   contributor can trace behavior without reconstructing generated bundles. This is a promise
+   about inspectability, not about keeping the whole codebase small enough to read in one sitting.
 5. **Defensive by architecture.** Never run other plugins' render paths in list contexts (a
-   misbehaving plugin must not be able to take Minn down), never unserialize foreign blobs,
-   check capabilities server-side, escape everything at the edge.
+   misbehaving plugin must not be able to take Minn down), never instantiate arbitrary objects
+   from foreign blobs, prefer bounded parsers and use constrained decoding only when a vendor's
+   storage or API requires it, check capabilities server-side, escape everything at the edge.
 6. **An ecosystem invitation.** Third-party plugins integrate through one declarative filter —
    see `for-plugin-authors.md`. Minn ships adapters for popular plugins; plugin authors can ship
    their own without writing JavaScript.

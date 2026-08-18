@@ -37,29 +37,23 @@ make out loud:
   ecosystems never build this.
 - **A written compatibility promise** (additive-only, deprecation windows, "keys
   not on this page are internal") and reference adapters that are genuinely
-  readable. Fifty-plus bundled adapters prove the primitives generalize across
-  four different settings-schema frameworks.
-- **The quality bar**: ~150 browser suites, verification on clean and
+  readable. Ninety-four bundled adapter modules prove the primitives generalize
+  across four different settings-schema frameworks.
+- **The quality bar**: 286 browser suites, verification on clean and
   production-scale sites, zero-console-error gates.
 
 ## v1.0 gates
 
-*Status check 2026-08-06 (v0.24.0 in tree, unreleased; v0.23.0 released
-2026-08-04): G2 through G6 remain shipped and suite-covered at v0.24.0
-(tests/hide-integrations.test.js, hide-slash-designs.test.js,
-design-sources.test.js, attention-budgets.test.js, offsite-links.test.js,
-contract.test.js plus example-adapter.test.js; the roster has grown from
-~150 suites at the audit to 206). The cycles since the last check (the
-database viewer, visibility toggle switches, per-extension auto-update
-pills, synced patterns, i18n, the bundled user guide, checksum-verified
-updates, WPForms entries) added no new attention surface outside the
-gated vocabulary; the one new extension point since v0.22.0,
-`minn_admin_visibility_toggles`, is a server-side writer callback, not a
-UI placement. G1, the afternoon test with a real outside tester, is still
-the only open gate. Its material is all in place (docs/shim-tutorial.md,
-the suite-enforced docs/examples/minn-example-adapter, the Playground
-blueprint); finding that tester remains scheduling work, not engineering
-work.*
+*Status check 2026-08-18 (v0.32.0 released; current main has 286 browser
+suites): G2 through G6 remain shipped and represented by their canonical
+gate suites (tests/hide-integrations.test.js,
+hide-slash-designs.test.js, design-sources.test.js,
+attention-budgets.test.js, offsite-links.test.js, contract.test.js and
+example-adapter.test.js). G1, the afternoon test with a real outside
+tester, is still the only open gate. Its material is all in place
+(docs/shim-tutorial.md, the suite-enforced
+docs/examples/minn-example-adapter and the Playground blueprint); finding
+that tester remains scheduling work, not engineering work.*
 
 v1.0 ships when all of these are true:
 

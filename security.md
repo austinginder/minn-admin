@@ -39,9 +39,12 @@ A few properties worth knowing before auditing (details in
 - Third-party plugins integrate as data descriptors only. Their PHP never
   runs in Minn's render paths and their HTML/CSS/JS never reaches the app;
   values are escaped at the render edge.
-- Shims never `unserialize()` third-party blobs, and shim SQL is
-  prefix-scoped and prepared.
+- When a shim must read third-party serialized storage, it uses a bounded
+  parser or constrained decoding, validates the resulting shape, and does
+  not instantiate arbitrary classes. An exact vendor class allowlist is
+  used only where the vendor API requires its own value objects. Shim SQL
+  is prefix-scoped and prepared.
 - Updates install only after the downloaded zip's sha256 matches the value
   published in the release manifest.
-- A browser test suite (192 suites at the time of writing) includes an
+- A browser test suite (286 suites at the time of writing) includes an
   enforced zero-external-requests invariant for the app chrome.

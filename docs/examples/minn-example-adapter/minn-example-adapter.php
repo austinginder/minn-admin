@@ -97,8 +97,8 @@ function campfire_can() {
  *   - every route declares `permission_callback` (never __return_true),
  *   - every query goes through $wpdb->prepare,
  *   - per_page is capped,
- *   - stored blobs are never unserialize()d (not needed here, but the rule
- *     that bites real log tables).
+ *   - stored blobs use bounded parsing where possible; any unavoidable
+ *     decoding disables object instantiation and validates the result.
  */
 
 add_action( 'rest_api_init', 'campfire_routes' );

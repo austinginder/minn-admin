@@ -5,9 +5,11 @@ away for anything Minn doesn't surface. On top of that baseline, Minn ships
 **adapters** that bring specific plugins into the Minn UI natively. Every
 adapter is a thin, read-mostly shim: it reaches into a plugin's data through
 the plugin's own API or a prefix-scoped query, never runs foreign PHP inside
-Minn's UI, and never unserializes third-party blobs. Plugin authors can add
-their own coverage through the documented filters (see `for-plugin-authors.md`)
-without Minn shipping code.
+Minn's UI, and never instantiates arbitrary objects from third-party storage.
+When serialized storage is unavoidable, the adapter constrains decoding and
+validates the resulting shape. Plugin authors can add their own coverage
+through the documented filters (see `for-plugin-authors.md`) without Minn
+shipping code.
 
 This page is the map of what's covered today. "Surface" = a nav item;
 "panel" = a card in the editor sidebar; "provider" = feeds an existing
@@ -75,8 +77,9 @@ themselves through the extension filters.
 - **Contact Form 7 stores nothing itself** — entries need a storage plugin.
   Minn covers both popular ones: Flamingo (spam/unspam and trash through
   Flamingo's own handlers, CF7 forms in the Manage view) and CFDB7 (entries
-  parsed from its serialized rows without ever running `unserialize`,
-  open-marks-read, permanent delete). Building forms stays in CF7's editor.
+  decoded with object instantiation disabled and a bounded parser fallback
+  for damaged rows, open-marks-read, permanent delete). Building forms stays
+  in CF7's editor.
 - **Page builders** that store content outside `post_content` (Elementor,
   Beaver, Brizy, Bricks, WPBakery) open read-only in Minn's editor with an
   "Edit in ⟨builder⟩" button; block-native builders (Etch, Divi 5) stay
@@ -87,13 +90,9 @@ themselves through the extension filters.
 
 ## Roadmap candidates
 
-Refreshed 2026-08-06 at **v0.24.0** open. Two releases have shipped since
-the last refresh: v0.22.0 (2026-07-30) brought the read-only database
-viewer, a native developer surface rather than an adapter, plus the Matomo
-and Jetpack Stats traffic providers; v0.23.0 (2026-08-04), the switches
-release, brought visibility toggles, per-extension auto-update pills, theme
-live preview and synced patterns. Coverage history lives in the table
-above; living primitive matrix + sweep log is `docs/adapter-coverage.md`.
+Refreshed 2026-08-18 after **v0.32.0**. Coverage history lives in the table
+above; the living primitive matrix and sweep log are in
+`docs/adapter-coverage.md`.
 
 Recently closed threads: ~~**WPForms Pro entries**~~ ✅ shipped 2026-08-06
 (v0.24.0 cycle; the last big uncovered forms name, unblocked once a Pro zip
