@@ -197,19 +197,36 @@ function minn_admin_acf_link_out( $val ) {
  * @param string $url Candidate URL.
  * @return bool
  */
-function minn_admin_acf_url_ok( $url ) {
+/**
+ * The storable form of a URL a field holds, or null when there is none.
+ *
+ * Checking that esc_url_raw() returns SOMETHING and then storing the original
+ * is weaker than it looks: esc_url_raw strips quotes and encodes spaces rather
+ * than emptying the string, so `http://a" onmouseover="x` passes the check and
+ * the quote is kept, which breaks out of an unescaped href in a theme. The
+ * page_link field next door has always compared the round trip; do the same
+ * here and store the sanitized value, which is what every other URL writer in
+ * the plugin does.
+ *
+ * @param mixed $url Raw field value.
+ * @return string|null Sanitized URL, '' when cleared, null when refused.
+ */
+function minn_admin_acf_url_clean( $url ) {
 	$url = (string) $url;
 	if ( '' === trim( $url ) ) {
-		return true; // empty clears the field; callers handle that themselves
+		return ''; // empty clears the field; callers handle that themselves
 	}
 	$probe = preg_replace( '/[\x00-\x20\x7F]+/', '', $url );
 	if ( preg_match( '/^(javascript|data|vbscript):/i', (string) $probe ) ) {
-		return false;
+		return null;
 	}
-	// esc_url_raw() drops a scheme outside its allowed list entirely, so an
-	// unknown-scheme URL comes back empty or reshaped. Either means do not
-	// store it as given.
-	return '' !== esc_url_raw( $url );
+	$clean = esc_url_raw( $url );
+	return '' === $clean ? null : $clean;
+}
+
+/** Back-compat predicate for callers that only need the yes/no. */
+function minn_admin_acf_url_ok( $url ) {
+	return null !== minn_admin_acf_url_clean( $url );
 }
 
 function minn_admin_acf_link_in( $value ) {
@@ -222,8 +239,15 @@ function minn_admin_acf_link_in( $value ) {
 	$value = (array) $value;
 	$url   = isset( $value['url'] ) && is_scalar( $value['url'] ) ? trim( (string) $value['url'] ) : '';
 	$title = isset( $value['title'] ) && is_scalar( $value['title'] ) ? (string) $value['title'] : '';
-	if ( ! minn_admin_acf_url_ok( $url ) ) {
+	$url   = minn_admin_acf_url_clean( $url );
+	if ( null === $url ) {
 		return null;
+	}
+	// A link's title is free text on the same site-global options path, and a
+	// link value returns before the options-scope filter downstream, so hold it
+	// to the same markup floor the plain text fields get.
+	if ( '' !== $title && ! current_user_can( 'unfiltered_html' ) ) {
+		$title = wp_kses_post( $title );
 	}
 	if ( '' === $url && '' === $title ) {
 		return ''; // both emptied = cleared
@@ -1088,7 +1112,7 @@ function minn_admin_acf_value_in( $f, $value, $scope = 'post' ) {
 			// A url field's whole purpose is to be printed into an href, and
 			// the link field next door already refuses these schemes.
 			$value = is_scalar( $value ) ? trim( (string) $value ) : '';
-			return minn_admin_acf_url_ok( $value ) ? $value : null;
+			return minn_admin_acf_url_clean( $value );
 	}
 	if ( null === $value || false === $value ) {
 		return ''; // clearing stores '' — ACF's own form save does the same
@@ -1155,12 +1179,12 @@ function minn_admin_acf_row_values_out( $subs, $raw_row ) {
  * @param array $base The stored row (empty for a new row).
  * @return array
  */
-function minn_admin_acf_row_overlay_in( $subs, $vals, $base ) {
+function minn_admin_acf_row_overlay_in( $subs, $vals, $base, $scope = 'post' ) {
 	foreach ( $subs as $sub ) {
 		if ( ! array_key_exists( $sub['name'], $vals ) ) {
 			continue;
 		}
-		$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ] );
+		$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ], $scope );
 		if ( null === $v ) {
 			continue; // invalid input keeps the stored sub value
 		}
@@ -1191,7 +1215,7 @@ function minn_admin_acf_row_overlay_in( $subs, $vals, $base ) {
  * @param mixed $orig  The currently stored rows.
  * @return array|null Null when the incoming shape is not a list.
  */
-function minn_admin_acf_rows_in( $field, $value, $orig ) {
+function minn_admin_acf_rows_in( $field, $value, $orig, $scope = 'post' ) {
 	if ( ! is_array( $value ) ) {
 		return null;
 	}
@@ -1203,7 +1227,7 @@ function minn_admin_acf_rows_in( $field, $value, $orig ) {
 		$base = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] )
 			? $orig[ (int) $row['__idx'] ]
 			: array();
-		$new[] = minn_admin_acf_row_overlay_in( $field['subs'], $vals, $base );
+		$new[] = minn_admin_acf_row_overlay_in( $field['subs'], $vals, $base, $scope );
 	}
 	return $new;
 }
@@ -1253,7 +1277,7 @@ function minn_admin_acf_flex_out( $field, $val ) {
  * @param mixed $orig  The currently stored sections.
  * @return array|null Null when the incoming shape is not a list.
  */
-function minn_admin_acf_flex_in( $field, $value, $orig ) {
+function minn_admin_acf_flex_in( $field, $value, $orig, $scope = 'post' ) {
 	if ( ! is_array( $value ) ) {
 		return null;
 	}
@@ -1273,7 +1297,7 @@ function minn_admin_acf_flex_in( $field, $value, $orig ) {
 			continue;
 		}
 		$vals                  = isset( $row['values'] ) ? (array) $row['values'] : array();
-		$base                  = minn_admin_acf_row_overlay_in( $field['layoutSubs'][ $layout ], $vals, $base );
+		$base                  = minn_admin_acf_row_overlay_in( $field['layoutSubs'][ $layout ], $vals, $base, $scope );
 		$base['acf_fc_layout'] = $layout;
 		$new[]                 = $base;
 	}
@@ -1971,16 +1995,26 @@ add_action( 'rest_api_init', function () {
 					'number'  => 20,
 					'orderby' => 'display_name',
 				);
+				$may_list = current_user_can( 'list_users' );
+				if ( ! $may_list ) {
+					// Browsing a directory IS the list_users capability. Without
+					// it, scope to accounts the site already attributes publicly,
+					// which is the line core draws for author queries — otherwise
+					// an empty query pages the whole user table.
+					$args['has_published_posts'] = true;
+				}
 				if ( '' !== $q ) {
 					$args['search'] = '*' . $q . '*';
 					// Pin the columns. WP_User_Query picks its own set from
 					// the search term, and a term containing @ makes it search
 					// user_email, which turns a picker into a way of asking
-					// whether an address has an account here. Someone who may
-					// list users can have core's behaviour; everyone else
-					// searches the names the picker actually shows.
-					if ( ! current_user_can( 'list_users' ) ) {
-						$args['search_columns'] = array( 'display_name', 'user_nicename', 'user_login' );
+					// whether an address has an account here. user_login is out
+					// for the same reason the network user routes refuse a
+					// lookup by username: it answers existence questions about
+					// a name the picker never shows. Someone who may list users
+					// can have core's behaviour.
+					if ( ! $may_list ) {
+						$args['search_columns'] = array( 'display_name', 'user_nicename' );
 					}
 				}
 				if ( ! empty( $acf['role'] ) ) {
@@ -2440,9 +2474,9 @@ function minn_admin_acf_options_save( $page, $values ) {
 		}
 		$f = $byKey[ $key ];
 		if ( 'rows' === $f['type'] ) {
-			$v = minn_admin_acf_rows_in( $f, $v, $stored_at( $f ) );
+			$v = minn_admin_acf_rows_in( $f, $v, $stored_at( $f ), 'options' );
 		} elseif ( 'flex' === $f['type'] ) {
-			$v = minn_admin_acf_flex_in( $f, $v, $stored_at( $f ) );
+			$v = minn_admin_acf_flex_in( $f, $v, $stored_at( $f ), 'options' );
 		} else {
 			$v = minn_admin_acf_value_in( $f, $v, 'options' );
 		}

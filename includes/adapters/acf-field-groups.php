@@ -1158,6 +1158,40 @@ function minn_admin_acf_builder_save( $group, $body ) {
 }
 
 /**
+ * Drop caller-supplied identity from an imported field tree.
+ *
+ * ACF resolves a field's ID from its key only when it already knows that key,
+ * so a field carrying a brand-new key keeps whatever ID the uploaded file set,
+ * and acf_update_field() then rewrites the post row that ID names. Recurse into
+ * sub_fields and layouts, because a repeater or flexible-content field carries
+ * the same slots one level down.
+ *
+ * @param array $fields Field definitions from an uploaded file.
+ * @return array
+ */
+function minn_admin_acf_strip_field_identity( $fields ) {
+	$out = array();
+	foreach ( (array) $fields as $field ) {
+		if ( ! is_array( $field ) ) {
+			continue;
+		}
+		unset( $field['ID'], $field['parent'] );
+		if ( isset( $field['sub_fields'] ) && is_array( $field['sub_fields'] ) ) {
+			$field['sub_fields'] = minn_admin_acf_strip_field_identity( $field['sub_fields'] );
+		}
+		if ( isset( $field['layouts'] ) && is_array( $field['layouts'] ) ) {
+			foreach ( $field['layouts'] as $lk => $layout ) {
+				if ( is_array( $layout ) && isset( $layout['sub_fields'] ) && is_array( $layout['sub_fields'] ) ) {
+					$field['layouts'][ $lk ]['sub_fields'] = minn_admin_acf_strip_field_identity( $layout['sub_fields'] );
+				}
+			}
+		}
+		$out[] = $field;
+	}
+	return $out;
+}
+
+/**
  * Import field groups from ACF-shaped export JSON. A group whose key
  * already exists as a DB group updates IN PLACE — the round trip ACF's own
  * tool doesn't offer (acf_import_field_group never resolves the key, so a
@@ -1202,6 +1236,14 @@ function minn_admin_acf_schema_import( $content ) {
 		unset( $entry['ID'] );
 		if ( $existing ) {
 			$entry['ID'] = (int) $existing['ID'];
+		}
+		// The fields inside carry the same identity slots, and ACF only remaps
+		// an ID for a key it already knows: a field with a new key keeps
+		// whatever ID the file gave it, and acf_update_field() then takes the
+		// wp_update_post() branch and rewrites that post row into an acf-field.
+		// `parent` is the same shape. Let ACF's own key-to-ID map supply both.
+		if ( isset( $entry['fields'] ) && is_array( $entry['fields'] ) ) {
+			$entry['fields'] = minn_admin_acf_strip_field_identity( $entry['fields'] );
 		}
 		$groups[] = $entry;
 	}
