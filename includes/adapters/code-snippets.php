@@ -16,6 +16,29 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * The capability Code Snippets itself gates on.
+ *
+ * get_cap_name() is the raw per-site string; get_cap() is the one that resolves
+ * to a network capability when the network admin has not enabled the per-site
+ * snippets menu. Both the surface's visibility and its status route have to ask
+ * the same question, or the sidebar offers an entry whose route then refuses.
+ *
+ * @return string
+ */
+function minn_admin_code_snippets_cap() {
+	if ( function_exists( 'Code_Snippets\\code_snippets' ) ) {
+		$plugin = \Code_Snippets\code_snippets();
+		if ( method_exists( $plugin, 'get_cap' ) ) {
+			return (string) $plugin->get_cap();
+		}
+		if ( method_exists( $plugin, 'get_cap_name' ) ) {
+			return (string) $plugin->get_cap_name();
+		}
+	}
+	return 'manage_options';
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! defined( 'CODE_SNIPPETS_VERSION' ) ) {
 		return $surfaces;
@@ -23,10 +46,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	// Cap is filterable in Code Snippets itself; mirror it so Minn and the
 	// plugin's own admin stay in lockstep.
-	$cap = 'manage_options';
-	if ( function_exists( 'Code_Snippets\\code_snippets' ) ) {
-		$cap = \Code_Snippets\code_snippets()->get_cap_name();
-	}
+	$cap = minn_admin_code_snippets_cap();
 
 	// Free-tier scopes from Snippet::get_all_scopes(). Pro CSS/JS scopes still
 	// round-trip via preserve if present; the select covers the common set.
@@ -180,14 +200,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		unset( $surfaces['code-snippets']['collection']['detail']['edit'] );
 		// Activating a snippet runs its code. Deactivating one stops code
 		// running, so it stays available on a hardened site.
-		$surfaces['code-snippets']['collection']['actions'] = array_values(
-			array_filter(
-				$surfaces['code-snippets']['collection']['actions'],
-				function ( $a ) {
-					return empty( $a['label'] ) || 'Activate' !== $a['label'];
-				}
-			)
-		);
+		// Identify the activation by the request it sends, never by its label:
+		// the label is translated, so a literal comparison silently stops
+		// matching on every site that is not running in English. The bulk list
+		// carries the same action and is read independently by the client, so
+		// it needs the same filter.
+		$is_activate = function ( $a ) {
+			return ! ( isset( $a['body']['active'] ) && true === $a['body']['active'] );
+		};
+		foreach ( array( 'actions', 'bulk' ) as $list ) {
+			if ( ! empty( $surfaces['code-snippets']['collection'][ $list ] ) ) {
+				$surfaces['code-snippets']['collection'][ $list ] = array_values(
+					array_filter( $surfaces['code-snippets']['collection'][ $list ], $is_activate )
+				);
+			}
+		}
 	}
 
 	return $surfaces;
@@ -204,15 +231,9 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/code-snippets/status', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
-			// get_cap(), not get_cap_name(). The first is their multisite-aware
-			// resolver and returns the NETWORK capability when the network
-			// admin has not enabled the per-site snippets menu; the second is
-			// the raw per-site string, which showed a subsite administrator
-			// counts from a screen the vendor reserves to the network admin.
-			$cap = function_exists( 'Code_Snippets\\code_snippets' )
-				? \Code_Snippets\code_snippets()->get_cap()
-				: 'manage_options';
-			return current_user_can( $cap );
+			// One resolver for the surface and the route, so the sidebar can
+			// never offer an entry this route then refuses.
+			return current_user_can( minn_admin_code_snippets_cap() );
 		},
 		'callback'            => function () {
 			global $wpdb;

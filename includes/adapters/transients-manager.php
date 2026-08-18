@@ -28,6 +28,21 @@ function minn_admin_tm_can() {
 	return current_user_can( 'manage_options' );
 }
 
+/**
+ * The gate for anything that can reach a NETWORK-global transient.
+ *
+ * manage_options is per-site, and the vendor's expired sweep classifies rows
+ * by name and routes matches into delete_site_transient(), which writes to
+ * sitemeta and flushes the network-wide 'site-transient' cache group. The
+ * single-row delete already refuses that to a non-network-owner; the bulk
+ * sweep is the peer that has to draw the same line. Single sites are
+ * unaffected, because network_owner() is true when there is no network.
+ */
+function minn_admin_tm_can_network() {
+	return minn_admin_tm_can()
+		&& ( ! class_exists( 'Minn_Admin' ) || Minn_Admin::network_owner() );
+}
+
 function minn_admin_tm_admin_url() {
 	return admin_url( 'tools.php?page=transients-manager' );
 }
@@ -377,11 +392,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey'  => 'total',
 			'tabs'      => array(
 				'param'    => 'kind',
-				'static'   => array(
+				'static'   => array_values( array_filter( array(
 					array( 'expired', 'Expired' ),
 					array( 'persistent', 'Persistent' ),
-					array( 'site', 'Site-wide' ),
-				),
+					// A network's site-wide values are shared by every site on
+					// it, so only the network owner is offered them.
+					minn_admin_tm_can_network() ? array( 'site', 'Site-wide' ) : null,
+				) ) ),
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
@@ -496,7 +513,7 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/transients/delete-expired', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
+		'permission_callback' => 'minn_admin_tm_can_network',
 		'callback'            => function () {
 			// Prefer their public method (same SQL + delete_transient path).
 			$tm = \AM\TransientsManager\TransientsManager::getInstance();
