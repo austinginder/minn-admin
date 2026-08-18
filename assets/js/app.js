@@ -259,6 +259,17 @@
 	// third-party URL through every sink this protects.
 	const safeHref = ( u ) => ( /^(https?:\/\/|\/(?![/\\]))/i.test( String( u == null ? '' : u ).trim() ) ? String( u ).trim() : '' );
 
+	// A URL an AUTHOR may put in their own content. Wider than safeHref, which
+	// guards server-supplied navigation: a writer legitimately links mailto:,
+	// tel:, an in-page #anchor and a relative path. Still an allowlist, so
+	// javascript: and data: cannot reach an href. The markdown renderer, the
+	// block link renderers and the link popovers all speak this vocabulary.
+	const CONTENT_URL_RE = /^(?:https?:|mailto:|tel:|#|\/|\.\.?\/)/i;
+	const safeLinkHref = ( u ) => {
+		const v = String( u == null ? '' : u ).trim();
+		return CONTENT_URL_RE.test( v ) ? v : '';
+	};
+
 	// Structural parsing of untrusted markup, same inert document and the same
 	// reason as stripTags: a container created from the LIVE document runs the
 	// resource-loading side of parsing, so `<img src=x onerror=…>` fires while
@@ -304,6 +315,21 @@
 
 	async function apiRes( path, opts = {} ) {
 		const url = /^https?:/.test( path ) ? path : B.restUrl + path.replace( /^\//, '' );
+		// The REST nonce goes to this site and nowhere else. Routes reach here
+		// from descriptor registries that third-party code can populate, and
+		// fetch sends headers cross-origin regardless of credentials mode, so a
+		// route naming another host would hand that host a live nonce and
+		// whatever body the action carries. Registries validate on the way out;
+		// this is the backstop that covers every one of them.
+		let sameOrigin = true;
+		try {
+			sameOrigin = new URL( url, location.origin ).origin === location.origin;
+		} catch ( e ) {
+			sameOrigin = false;
+		}
+		if ( ! sameOrigin ) {
+			throw new Error( 'Refused a cross-origin API route: ' + url );
+		}
 		const headers = { 'X-WP-Nonce': B.nonce };
 		if ( opts.body && ! ( opts.body instanceof FormData ) ) {
 			headers[ 'Content-Type' ] = 'application/json';
@@ -1883,7 +1909,9 @@
 			}
 			const go = e.target.closest( '[data-rtlinkgo]' );
 			if ( go ) {
-				const url = linkInput.value.trim();
+				// Author-typed href: same allowlist the block and markdown
+				// renderers enforce, so javascript: cannot reach an anchor.
+				const url = safeLinkHref( linkInput.value );
 				linkRow.hidden = true;
 				linkInput.value = '';
 				if ( ! url || ! savedRange ) return;
@@ -31809,7 +31837,10 @@
 			}
 		};
 		const apply = () => {
-			const url = urlInput.value.trim();
+			// An author types this, and wp_kses_post strips a javascript: href
+			// on save for anyone without unfiltered_html, but the vocabulary the
+			// markdown and block renderers already enforce belongs here too.
+			const url = safeLinkHref( urlInput.value );
 			const newTab = !!( newTabBtn && newTabBtn.classList.contains( 'on' ) );
 			if ( a && a.isConnected ) {
 				if ( url ) {
@@ -31983,7 +32014,9 @@
 		imgPop.querySelector( '[data-img-apply]' ).addEventListener( 'click', () => {
 			img.alt = imgPop.querySelector( '[data-img-alt]' ).value.trim();
 			const cap = imgPop.querySelector( '[data-img-caption]' ).value.trim();
-			const url = linkInput.value.trim();
+			// Same allowlist as the text-link popover: an image link is still
+			// an href an author typed.
+			const url = safeLinkHref( linkInput.value );
 			const newTab = imgPop.querySelector( '[data-img-newtab]' ).checked;
 			const wantLb = ! url && lbBox.checked;
 			let fig = img.closest( 'figure' );
@@ -35003,8 +35036,8 @@
 			{ label: __( 'Your profile — name, email, password' ), kind: 'link', icon: '@', run: () => go( 'profile' ) },
 			{ label: __( 'Open the user guide' ), kind: 'link', icon: '📖', run: openGuide },
 			{ label: __( 'About Minn — help & shortcuts' ), kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
-			{ label: __( 'Visit site' ), kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank' ) },
-			{ label: __( 'Classic wp-admin' ), kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank' ) },
+			{ label: __( 'Visit site' ), kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank', 'noopener' ) },
+			{ label: __( 'Classic wp-admin' ), kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank', 'noopener' ) },
 			{ label: __( 'Log out' ), kind: 'link', icon: '⎋', run: () => { window.location.href = B.site.logout; } },
 		);
 		return cmds;
@@ -36843,7 +36876,14 @@
 			$$( '[data-tp]' ).forEach( ( row ) =>
 				row.addEventListener( 'click', () => {
 					const it = ( m.data && m.data.pages || [] )[ parseInt( row.dataset.tp, 10 ) ];
-					if ( it && it.url ) window.open( it.url, '_blank' );
+					// The path comes from the analytics provider's own response
+					// (Jetpack's Stats API, Matomo's url metadata), which is
+					// ultimately derived from tracked visitor requests, so it is
+					// third-party data at a navigation sink. noopener matters
+					// here too: without it the opened page keeps window.opener
+					// and can rewrite this tab.
+					const href = it && it.url ? safeHref( it.url ) : '';
+					if ( href ) window.open( href, '_blank', 'noopener' );
 				} )
 			);
 			const tprev = $( '#minn-traf-prev' );
@@ -36876,7 +36916,7 @@
 					toast( __( 'Could not copy' ), true );
 				}
 			} );
-			$( '#minn-media-open' ).addEventListener( 'click', () => window.open( it.url, '_blank' ) );
+			$( '#minn-media-open' ).addEventListener( 'click', () => window.open( it.url, '_blank', 'noopener' ) );
 			// Caption + description are edit-context raw; fetch them once when
 			// the detail modal opens and fill the fields in place (the list
 			// stays view-context). The inputs render from it.caption/it.description
@@ -37467,7 +37507,7 @@
 				// text/plain, never text/html — blob: URLs are same-origin, so scripts in
 				// a logged email (which can carry user-submitted content) would run as the app.
 				const blob = new Blob( [ String( msg ) ], { type: 'text/plain' } );
-				window.open( URL.createObjectURL( blob ), '_blank' );
+				window.open( URL.createObjectURL( blob ), '_blank', 'noopener' );
 			} );
 			const saveBtn = $( '#minn-surface-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
@@ -40563,7 +40603,7 @@
 					else if ( item.kind === 'updates' && B.caps.plugins ) go( 'extensions' );
 					else if ( item.id.startsWith( 'user-' ) && B.caps.users ) go( 'users' );
 					else if ( item.id.startsWith( 'core-' ) && B.caps.core ) go( 'extensions' );
-					else if ( item.id.startsWith( 'core-' ) ) window.open( B.site.adminUrl + 'update-core.php', '_blank' );
+					else if ( item.id.startsWith( 'core-' ) ) window.open( B.site.adminUrl + 'update-core.php', '_blank', 'noopener' );
 				} )
 			);
 		}

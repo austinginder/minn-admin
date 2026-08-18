@@ -1608,13 +1608,34 @@ class Minn_Admin {
 	 *
 	 * @return array[] [ { id, label, route } ]
 	 */
+	/**
+	 * A descriptor's REST route, or null when it is not one.
+	 *
+	 * Routes ride the boot payload into apiRes(), which attaches the REST
+	 * nonce, so a descriptor naming an absolute URL would send that nonce to
+	 * another host. Registries take a relative path under the site's own REST
+	 * root and nothing else: the character class excludes ':' and so excludes
+	 * every scheme.
+	 *
+	 * @param mixed $route Raw descriptor value.
+	 * @return string|null Normalised route, or null to drop the entry.
+	 */
+	public static function rest_route_or_null( $route ) {
+		if ( ! is_string( $route ) || '' === $route ) {
+			return null;
+		}
+		$route = ltrim( $route, '/' );
+		return preg_match( '/^[a-z0-9_\-\/{}]+$/i', $route ) ? $route : null;
+	}
+
 	public static function design_sources() {
 		$sources = apply_filters( 'minn_admin_design_sources', array() );
 		$hidden  = Minn_Admin_Surfaces::hidden_map();
 		$out     = array();
 		foreach ( (array) $sources as $id => $src ) {
-			$id = sanitize_key( $id );
-			if ( '' === $id || ! is_array( $src ) || empty( $src['route'] ) || ! is_string( $src['route'] ) ) {
+			$id    = sanitize_key( $id );
+			$route = is_array( $src ) && isset( $src['route'] ) ? self::rest_route_or_null( $src['route'] ) : null;
+			if ( '' === $id || null === $route ) {
 				continue;
 			}
 			// Per-user hide (v1.0 gate G2) — hidden sources leave the payload.
@@ -1626,7 +1647,7 @@ class Minn_Admin {
 				'label' => ( isset( $src['label'] ) && is_string( $src['label'] ) && '' !== $src['label'] )
 					? $src['label']
 					: ucfirst( $id ),
-				'route' => $src['route'],
+				'route' => $route,
 			);
 		}
 		return $out;
@@ -1759,8 +1780,8 @@ class Minn_Admin {
 				}
 			} else {
 				// Relative REST path under the site's rest root, no leading slash.
-				$route = ltrim( $cmd['route'], '/' );
-				if ( ! preg_match( '/^[a-z0-9_\-\/{}]+$/i', $route ) ) {
+				$route = self::rest_route_or_null( $cmd['route'] );
+				if ( null === $route ) {
 					continue;
 				}
 				$item['route']  = $route;
