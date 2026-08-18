@@ -51,28 +51,72 @@ function minn_admin_latepoint_has_tables() {
 }
 
 /**
- * Restrict list queries to these agent ids, or empty for everyone.
+ * The dimensions LatePoint scopes bookings on, for the current user.
  *
- * @return int[] Empty = all; [-1] = none.
+ * OsBookingModel::filter_allowed_records() constrains agent_id AND location_id
+ * AND service_id, each independently, so honouring only the agent dimension
+ * would show a location- or service-restricted role bookings its own screens
+ * hide. A role limited to one location gets every agent who works there in its
+ * allowed-agent list, and those agents' bookings elsewhere would slip through.
+ *
+ * @return array<string,int[]|null> Per dimension: null = unrestricted, int[] =
+ *                                  allowed ids, array( -1 ) = nothing allowed.
  */
-function minn_admin_latepoint_agent_scope() {
+function minn_admin_latepoint_scope() {
+	$open = array( 'agent' => null, 'location' => null, 'service' => null );
 	if ( ! class_exists( 'OsAuthHelper' ) ) {
-		return array();
+		return $open;
 	}
 	try {
 		$user = OsAuthHelper::get_current_user();
 	} catch ( \Throwable $e ) {
-		return array();
+		return $open;
 	}
-	if ( ! $user || ( defined( 'LATEPOINT_USER_TYPE_ADMIN' ) && $user->backend_user_type === LATEPOINT_USER_TYPE_ADMIN ) ) {
-		return array();
+	if ( defined( 'LATEPOINT_USER_TYPE_ADMIN' ) && $user->backend_user_type === LATEPOINT_USER_TYPE_ADMIN ) {
+		return $open;
 	}
-	if ( method_exists( $user, 'are_all_records_allowed' ) && $user->are_all_records_allowed( 'agent' ) ) {
-		return array();
+	$scope = array();
+	foreach ( array_keys( $open ) as $type ) {
+		if ( method_exists( $user, 'are_all_records_allowed' ) && $user->are_all_records_allowed( $type ) ) {
+			$scope[ $type ] = null;
+			continue;
+		}
+		$ids = method_exists( $user, 'get_allowed_records' ) ? $user->get_allowed_records( $type ) : array();
+		$ids = is_array( $ids ) ? array_map( 'intval', $ids ) : array();
+		$scope[ $type ] = $ids ? $ids : array( -1 );
 	}
-	$ids = method_exists( $user, 'get_allowed_records' ) ? $user->get_allowed_records( 'agent' ) : array();
-	$ids = is_array( $ids ) ? array_map( 'intval', $ids ) : array();
-	return $ids ? $ids : array( -1 );
+	return $scope;
+}
+
+/**
+ * One WHERE fragment per restricted dimension, for a bookings table alias.
+ *
+ * Every read and every by-id ownership re-check goes through this, so a
+ * dimension can never be enforced on one path and dropped on another.
+ *
+ * @param array       $scope From minn_admin_latepoint_scope().
+ * @param string      $alias Table alias ('b' or '').
+ * @return array{sql: string[], params: int[], deny: bool}
+ */
+function minn_admin_latepoint_scope_sql( $scope, $alias = 'b' ) {
+	$prefix = '' === $alias ? '' : $alias . '.';
+	$sql    = array();
+	$params = array();
+	$deny   = false;
+	foreach ( array( 'agent', 'location', 'service' ) as $type ) {
+		$ids = isset( $scope[ $type ] ) ? $scope[ $type ] : null;
+		if ( null === $ids ) {
+			continue;
+		}
+		if ( array( -1 ) === $ids ) {
+			$deny = true;
+			continue;
+		}
+		$in     = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$sql[]  = "{$prefix}{$type}_id IN ({$in})";
+		$params = array_merge( $params, $ids );
+	}
+	return array( 'sql' => $sql, 'params' => $params, 'deny' => $deny );
 }
 
 /** UTC MySQL datetime → ISO-8601 with a trailing Z. */
@@ -233,19 +277,16 @@ add_action( 'rest_api_init', function () {
 				$view = 'upcoming';
 			}
 			$search = sanitize_text_field( (string) $request->get_param( 'search' ) );
-			$scope  = minn_admin_latepoint_agent_scope();
+			$scope  = minn_admin_latepoint_scope_sql( minn_admin_latepoint_scope() );
 			$now    = gmdate( 'Y-m-d H:i:s' );
 
 			$where  = array( '1=1' );
 			$params = array();
-			if ( $scope ) {
-				if ( array( -1 ) === $scope ) {
-					return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-				}
-				$in       = implode( ',', array_fill( 0, count( $scope ), '%d' ) );
-				$where[]  = "b.agent_id IN ({$in})";
-				$params   = array_merge( $params, $scope );
+			if ( $scope['deny'] ) {
+				return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
 			}
+			$where  = array_merge( $where, $scope['sql'] );
+			$params = array_merge( $params, $scope['params'] );
 
 			if ( 'pending' === $view ) {
 				$where[] = "b.status IN ('pending','payment_pending')";
@@ -324,16 +365,15 @@ add_action( 'rest_api_init', function () {
 			$services  = minn_admin_latepoint_table( 'services' );
 			$agents    = minn_admin_latepoint_table( 'agents' );
 			$id        = (int) $request['id'];
-			$scope     = minn_admin_latepoint_agent_scope();
+			$scope     = minn_admin_latepoint_scope_sql( minn_admin_latepoint_scope() );
 			$scope_sql = '';
 			$params    = array( $id );
-			if ( $scope ) {
-				if ( array( -1 ) === $scope ) {
-					return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$in        = implode( ',', array_fill( 0, count( $scope ), '%d' ) );
-				$scope_sql = " AND b.agent_id IN ({$in})";
-				$params    = array_merge( $params, $scope );
+			if ( $scope['deny'] ) {
+				return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( $scope['sql'] ) {
+				$scope_sql = ' AND ' . implode( ' AND ', $scope['sql'] );
+				$params    = array_merge( $params, $scope['params'] );
 			}
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$row = $wpdb->get_row( $wpdb->prepare(
@@ -407,18 +447,18 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			$id    = (int) $request['id'];
-			$scope = minn_admin_latepoint_agent_scope();
-			if ( $scope ) {
-				if ( array( -1 ) === $scope ) {
-					return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
+			$scope = minn_admin_latepoint_scope_sql( minn_admin_latepoint_scope(), '' );
+			if ( $scope['deny'] ) {
+				return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( $scope['sql'] ) {
 				global $wpdb;
 				$bookings = minn_admin_latepoint_table( 'bookings' );
-				$in       = implode( ',', array_fill( 0, count( $scope ), '%d' ) );
+				$clauses  = ' AND ' . implode( ' AND ', $scope['sql'] );
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$owned = (int) $wpdb->get_var( $wpdb->prepare(
-					"SELECT id FROM {$bookings} WHERE id = %d AND agent_id IN ({$in})",
-					array_merge( array( $id ), $scope )
+					"SELECT id FROM {$bookings} WHERE id = %d{$clauses}",
+					array_merge( array( $id ), $scope['params'] )
 				) );
 				if ( ! $owned ) {
 					return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -467,19 +507,18 @@ add_action( 'rest_api_init', function () {
 			}
 			global $wpdb;
 			$bookings = minn_admin_latepoint_table( 'bookings' );
-			$scope    = minn_admin_latepoint_agent_scope();
+			$scope    = minn_admin_latepoint_scope_sql( minn_admin_latepoint_scope(), '' );
 			$scoped   = '';
 			$params   = array();
-			if ( $scope ) {
-				if ( array( -1 ) === $scope ) {
-					return rest_ensure_response( array(
-						'rows'    => array( array( 'label' => __( 'Appointments', 'minn-admin' ), 'value' => '—' ) ),
-						'actions' => array( array( 'label' => __( 'Open LatePoint ↗', 'minn-admin' ), 'href' => $admin_url ) ),
-					) );
-				}
-				$in      = implode( ',', array_fill( 0, count( $scope ), '%d' ) );
-				$scoped  = " AND agent_id IN ({$in})";
-				$params  = $scope;
+			if ( $scope['deny'] ) {
+				return rest_ensure_response( array(
+					'rows'    => array( array( 'label' => __( 'Appointments', 'minn-admin' ), 'value' => '—' ) ),
+					'actions' => array( array( 'label' => __( 'Open LatePoint ↗', 'minn-admin' ), 'href' => $admin_url ) ),
+				) );
+			}
+			if ( $scope['sql'] ) {
+				$scoped = ' AND ' . implode( ' AND ', $scope['sql'] );
+				$params = $scope['params'];
 			}
 			$now        = gmdate( 'Y-m-d H:i:s' );
 			$today      = wp_date( 'Y-m-d' );

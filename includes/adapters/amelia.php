@@ -48,11 +48,18 @@ function minn_admin_amelia_has_tables() {
 }
 
 /**
- * Restrict list queries to this provider id, or 0 for everyone.
- * Amelia employees without "read others" only see their own bookings.
+ * Restrict queries to this provider id, or 0 for everyone.
+ *
+ * Amelia employees without "read others" only see their own bookings, and it
+ * grants read and write separately: wpamelia-provider has write_others set to
+ * false while wpamelia-manager has both. Reads answer to read_others, writes to
+ * write_others, so broad visibility never implies broad authority.
+ *
+ * @param bool $for_write Which of the two capabilities decides the scope.
  */
-function minn_admin_amelia_provider_scope() {
-	if ( current_user_can( 'amelia_read_others_appointments' ) ) {
+function minn_admin_amelia_provider_scope( $for_write = false ) {
+	$cap = $for_write ? 'amelia_write_others_appointments' : 'amelia_read_others_appointments';
+	if ( current_user_can( $cap ) ) {
 		return 0;
 	}
 	global $wpdb;
@@ -467,7 +474,7 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			$id    = (int) $request['id'];
-			$scope = minn_admin_amelia_provider_scope();
+			$scope = minn_admin_amelia_provider_scope( true );
 			if ( $scope < 0 ) {
 				return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
