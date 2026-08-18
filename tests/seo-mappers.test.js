@@ -18,10 +18,14 @@ const { execSync } = require( 'child_process' );
 const path = require( 'path' );
 const WP_PATH = path.resolve( __dirname, '../../../..' );
 // No $ in these snippets: the shell would expand it before PHP sees it.
-const wpEval = ( php ) => execSync(
-	`wp --path=${ JSON.stringify( WP_PATH ) } eval ${ JSON.stringify( php ) } 2>/dev/null`,
-	{ encoding: 'utf8', timeout: 60000 }
-).trim();
+const wpEval = ( php ) => {
+	const output = execSync(
+		`wp --path=${ JSON.stringify( WP_PATH ) } eval ${ JSON.stringify( php ) } 2>/dev/null`,
+		{ encoding: 'utf8', timeout: 60000 }
+	).trim();
+	// WP-CLI can print its own PHP deprecations to stdout before the value.
+	return output.split( /\r?\n/ ).filter( Boolean ).pop() || '';
+};
 const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
 ( async () => {

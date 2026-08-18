@@ -51,7 +51,8 @@ const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 
 	try {
 		await page.goto( BASE + '/minn-admin/editor/posts/' + postId, { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '[data-side-door="panel:powerpress"]', { timeout: 20000 } );
+		// Editor panels load after the post and their provider field schemas.
+		await page.waitForSelector( '[data-side-door="panel:powerpress"]', { timeout: 60000 } );
 		const door = await page.$eval( '[data-side-door="panel:powerpress"]', ( el ) => el.textContent );
 		t.check( 'episode door renders with the PowerPress badge', /Podcast episode/.test( door ) && /PowerPress/.test( door ), door.trim().replace( /\s+/g, ' ' ) );
 
