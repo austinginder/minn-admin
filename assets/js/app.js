@@ -1051,6 +1051,7 @@
 		extensions: [ __( 'Extensions' ), __( 'Installed' ) ],
 		posttypes: [ __( 'Structure' ), __( 'Post types, taxonomies & terms' ) ],
 		settings: [ __( 'Settings' ), __( 'Site' ) ],
+		stats: [ __( 'Stats' ), __( 'Traffic' ) ],
 		system: [ __( 'System' ), __( 'Diagnostics' ) ],
 		database: [ __( 'Database' ), __( 'Read-only viewer' ) ],
 		editor: [ __( 'Editor' ), __( 'Draft' ) ],
@@ -2540,6 +2541,9 @@
 		// License rows change with the active-component set (off/turnOn, and
 		// vendor action callables only attach while the vendor code loads).
 		state.cache.licenses = null;
+		// The Stats page's series comes from whichever traffic provider is
+		// active — a plugin toggle can change the answering source.
+		state.cache.stats = null;
 		// Comments nav may have appeared/vanished (Disable Comments toggle).
 		renderNavWorkspace();
 		if ( state.route === 'comments' && ! commentsAvailable() ) go( 'overview' );
@@ -4330,6 +4334,7 @@
 				<div class="minn-chart-head">
 					<div class="minn-panel-title">${ esc( isTraffic ? __( 'Traffic' ) : __( 'Activity' ) ) }${ isTraffic ? ` <span class="minn-panel-sub">${ esc( o.traffic.source ) }</span>` : '' }</div>
 					<div class="minn-chart-head-actions">
+						${ isTraffic ? `<button class="minn-link-btn" id="minn-open-stats">${ esc( __( 'Open stats' ) ) }</button>` : '' }
 						${ sources.length > 1 ? `<button class="minn-icon-btn sm" id="minn-chart-swap" title="${ esc( isTraffic ? __( 'Show Activity' ) : __( 'Show Traffic' ) ) }">⇄</button>` : '' }
 						<div class="minn-range-tabs">
 							${ [ 7, 30, 90 ].map( ( d ) => `<button class="minn-range-tab${ state.range === d ? ' active' : '' }" data-range="${ d }">${ sprintf( /* translators: %s: number of days; "d" abbreviates days. */ esc( __( '%sd' ) ), d ) }</button>` ).join( '' ) }
@@ -4418,6 +4423,8 @@
 			go( 'orders' );
 		} );
 
+		const openStats = $( '#minn-open-stats', view );
+		if ( openStats ) openStats.addEventListener( 'click', () => go( 'stats' ) );
 		const swap = $( '#minn-chart-swap', view );
 		if ( swap ) swap.addEventListener( 'click', () => {
 			state.chartSource = isTraffic ? 'activity' : 'traffic';
@@ -4539,6 +4546,122 @@
 			tip.style.top = Math.max( 8, rect.top - tip.offsetHeight - 10 ) + 'px';
 		} );
 		chart.addEventListener( 'mouseleave', hide );
+	}
+
+	/* ===== Stats (traffic over time) ===== */
+	// The dedicated dig-in behind the Overview traffic card: same provider,
+	// same drill-down modal, but ranges the card never asks for. Buckets grow
+	// with the window server-side so every bar's drill window stays within
+	// traffic-day's cap.
+
+	const STATS_RANGES = () => [
+		/* translators: %s: number of days; "d" abbreviates days. */
+		[ 7, sprintf( __( '%sd' ), 7 ) ],
+		/* translators: %s: number of days; "d" abbreviates days. */
+		[ 30, sprintf( __( '%sd' ), 30 ) ],
+		/* translators: %s: number of days; "d" abbreviates days. */
+		[ 90, sprintf( __( '%sd' ), 90 ) ],
+		[ 180, __( '6m' ) ],
+		[ 365, __( '12m' ) ],
+	];
+
+	function renderStats() {
+		const view = $( '#minn-view' );
+		if ( ! state.statsRange ) {
+			const saved = parseInt( localStorage.getItem( 'minn-stats-range' ) || '30', 10 );
+			state.statsRange = STATS_RANGES().some( ( [ v ] ) => v === saved ) ? saved : 30;
+		}
+		const days = state.statsRange;
+		const c = state.cache.stats;
+		if ( ! c || c.days !== days ) {
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading stats…' ) ) }</div>`;
+			api( 'minn-admin/v1/stats?days=' + days )
+				.then( ( data ) => { state.cache.stats = { days, data }; } )
+				.then( renderIfCurrent( 'stats' ) )
+				.catch( showErr );
+			return;
+		}
+		const d = c.data;
+		const rangeTabs = `
+			<div class="minn-range-tabs">
+				${ STATS_RANGES().map( ( [ v, label ] ) => `<button class="minn-range-tab${ days === v ? ' active' : '' }" data-range="${ v }">${ esc( label ) }</button>` ).join( '' ) }
+			</div>`;
+		if ( ! d.source || ! d.chart.length ) {
+			view.innerHTML = `
+			<div class="minn-card minn-panel-pad">
+				<div class="minn-chart-head">
+					<div class="minn-panel-title">${ esc( __( 'Traffic' ) ) }</div>
+					<div class="minn-chart-head-actions">${ rangeTabs }</div>
+				</div>
+				<div class="minn-empty">${ esc( d.allowed === false
+		? __( 'You need permission to view site traffic.' )
+		: __( 'No analytics provider is reporting traffic. Install one (Koko Analytics, Jetpack Stats, Matomo…) and the chart appears here.' ) ) }</div>
+			</div>`;
+			bindStatsRangeTabs( view );
+			return;
+		}
+		const t = d.totals || { visitors: 0, pageviews: 0, delta: null };
+		const compact = ( n ) => n >= 10000 ? Math.round( n / 100 ) / 10 + 'k' : Number( n ).toLocaleString( uiLocale() );
+		const busiest = d.chart.reduce( ( a, b ) => ( b.value > ( a ? a.value : -1 ) ? b : a ), null );
+		/* translators: 1: up or down arrow, 2: percentage change, 3: number of days. */
+		const deltaBit = t.delta !== null && t.delta !== undefined
+			? sprintf( __( '%1$s %2$s%% vs prior %3$sd' ), t.delta >= 0 ? '↑' : '↓', Math.abs( t.delta ), days )
+			: __( 'no prior period to compare' );
+		const max = Math.max( 1, ...d.chart.map( ( x ) => x.views || x.value ) );
+		const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
+		view.innerHTML = `
+		<div class="minn-stats">
+			<div class="minn-card minn-stat">
+				<div class="minn-stat-label">${ esc( __( 'Visitors' ) ) }</div>
+				<div class="minn-stat-value">${ esc( compact( t.visitors ) ) }</div>
+				<div class="minn-stat-delta${ t.delta !== null && t.delta !== undefined ? ( t.delta >= 0 ? ' up' : ' down' ) : '' }">${ esc( deltaBit ) }</div>
+			</div>
+			<div class="minn-card minn-stat">
+				<div class="minn-stat-label">${ esc( __( 'Pageviews' ) ) }</div>
+				<div class="minn-stat-value">${ esc( compact( t.pageviews ) ) }</div>
+				<div class="minn-stat-delta">${ esc( sprintf( /* translators: %s: pageviews per visitor, e.g. "1.9". */ __( '%s per visitor' ), t.visitors > 0 ? ( Math.round( t.pageviews / t.visitors * 10 ) / 10 ).toLocaleString( uiLocale() ) : '—' ) ) }</div>
+			</div>
+			${ busiest && busiest.value > 0 ? `
+			<div class="minn-card minn-stat">
+				<div class="minn-stat-label">${ esc( 1 === d.bucketDays ? __( 'Busiest day' ) : __( 'Busiest period' ) ) }</div>
+				<div class="minn-stat-value">${ esc( compact( busiest.value ) ) }</div>
+				<div class="minn-stat-delta">${ esc( busiest.label ) }</div>
+			</div>` : '' }
+		</div>
+		<div class="minn-card minn-panel-pad minn-stats-tall">
+			<div class="minn-chart-head">
+				<div class="minn-panel-title">${ esc( __( 'Traffic' ) ) } <span class="minn-panel-sub">${ esc( d.source ) }</span></div>
+				<div class="minn-chart-head-actions">${ rangeTabs }</div>
+			</div>
+			<div class="minn-chart clickable" id="minn-stats-chart">
+				${ d.chart.map( ( x, i ) => `
+					<div class="minn-chart-col" data-ci="${ i }">
+						<div class="minn-chart-views" style="height:${ pct( x.views || 0 ) }%"></div>
+						<div class="minn-chart-visitors" style="height:${ pct( x.value ) }%"></div>
+					</div>` ).join( '' ) }
+			</div>
+			<div class="minn-stats-hint">${ esc( __( 'Click a bar for its top pages and referrers.' ) ) }</div>
+		</div>`;
+		bindStatsRangeTabs( view );
+		bindChartTooltip( $( '#minn-stats-chart', view ), d.chart, true );
+		$$( '#minn-stats-chart .minn-chart-col', view ).forEach( ( col ) =>
+			col.addEventListener( 'click', () => {
+				const x = d.chart[ parseInt( col.dataset.ci, 10 ) ];
+				if ( x && x.from && ( x.value || 0 ) + ( x.views || 0 ) > 0 ) openChartTraffic( x, d.chart );
+			} )
+		);
+	}
+
+	function bindStatsRangeTabs( view ) {
+		$$( '.minn-range-tab', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const v = parseInt( btn.dataset.range, 10 );
+				if ( v === state.statsRange ) return;
+				state.statsRange = v;
+				localStorage.setItem( 'minn-stats-range', String( v ) );
+				renderStats();
+			} )
+		);
 	}
 
 	/* ===== Content ===== */
@@ -35206,6 +35329,7 @@
 		if ( B.caps.plugins ) cmds.push( { label: __( 'Manage Extensions' ), kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'Manage Post Types' ), kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
 		if ( B.caps.terms ) cmds.push( { label: __( 'Manage categories & tags' ), kind: 'nav', icon: '#', run: () => goTerms() } );
+		if ( B.caps.settings ) cmds.push( { label: __( 'View traffic stats' ), kind: 'nav', icon: '📈', run: () => go( 'stats' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'View System diagnostics' ), kind: 'nav', icon: '❤', run: () => go( 'system' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'Browse database (read-only)' ), kind: 'nav', icon: '⛁', run: () => go( 'database' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'View site logs' ), kind: 'nav', icon: '📄', run: () => openLogViewer() } );
@@ -41695,6 +41819,7 @@
 			case 'extensions': return renderExtensions();
 			case 'posttypes': return renderStructure();
 			case 'settings': return renderSettings();
+			case 'stats': return renderStats();
 			case 'system': return renderSystem();
 			case 'database': return renderDatabase();
 			case 'editor': return renderEditor();

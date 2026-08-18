@@ -150,6 +150,26 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/stats',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'stats' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'days' => array(
+						'type'    => 'integer',
+						'default' => 30,
+						'minimum' => 7,
+						'maximum' => 365,
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/overview/activity',
 			array(
 				'methods'             => 'GET',
@@ -2642,6 +2662,118 @@ class Minn_Admin_REST {
 	}
 
 	/**
+	 * Bucket a traffic provider's day-keyed rows into chart columns, shared
+	 * by the Overview card and the Stats page.
+	 *
+	 * Buckets by whole-calendar-day distance from today (both anchored at
+	 * midnight UTC), so a provider's day rows land on the same column their
+	 * drill window queries. The old noon-UTC "age" fudge dropped TODAY's data
+	 * whenever the current UTC time was before noon (a future anchor →
+	 * negative age → out-of-range index) and could shift a bar off its own
+	 * drill day.
+	 *
+	 * @return array { chart: [{label,value,views,from,to}], visitors, pageviews }
+	 */
+	private static function traffic_chart_data( $traffic, $bucket_days, $buckets ) {
+		$tseries   = array_fill( 0, $buckets, array( 'v' => 0, 'p' => 0 ) );
+		$visitors  = 0;
+		$pageviews = 0;
+		$today_mid = strtotime( gmdate( 'Y-m-d' ) . ' 00:00:00 UTC' );
+		foreach ( $traffic['days'] as $date => $row ) {
+			$date_mid = strtotime( $date . ' 00:00:00 UTC' );
+			if ( false === $date_mid ) {
+				continue;
+			}
+			$days_ago = (int) round( ( $today_mid - $date_mid ) / DAY_IN_SECONDS );
+			if ( $days_ago < 0 ) {
+				continue; // a future-dated row (clock skew) — ignore
+			}
+			$idx = $buckets - 1 - (int) floor( $days_ago / $bucket_days );
+			if ( $idx < 0 || $idx >= $buckets ) {
+				continue;
+			}
+			$tseries[ $idx ]['v'] += (int) $row['visitors'];
+			$tseries[ $idx ]['p'] += (int) $row['pageviews'];
+			$visitors             += (int) $row['visitors'];
+			$pageviews            += (int) $row['pageviews'];
+		}
+		$tchart = array();
+		foreach ( $tseries as $i => $bucket ) {
+			$offset  = ( $buckets - 1 - $i ) * $bucket_days;
+			// Inclusive calendar window for the traffic-day drill-down
+			// (Y-m-d — matches how analytics plugins store daily rows).
+			$from_ts = time() - ( $offset + $bucket_days - 1 ) * DAY_IN_SECONDS;
+			$to_ts   = time() - $offset * DAY_IN_SECONDS;
+			if ( 1 === $bucket_days ) {
+				$label = date_i18n( 'M j, Y', $to_ts );
+			} elseif ( $bucket_days >= 28 ) {
+				// A ~monthly window is not a calendar month, so the label is
+				// honest about being a range.
+				/* translators: 1: the window's first day (e.g. "Jun 3"). 2: its last day with the year (e.g. "Jul 2, 2026"). */
+				$label = sprintf( __( '%1$s – %2$s', 'minn-admin' ), date_i18n( 'M j', $from_ts ), date_i18n( 'M j, Y', $to_ts ) );
+			} else {
+				/* translators: %s: the date the week starts on (e.g. "Jun 3, 2026"). */
+				$label = sprintf( __( 'Week of %s', 'minn-admin' ), date_i18n( 'M j, Y', $from_ts ) );
+			}
+			$tchart[] = array(
+				'label' => $label,
+				'value' => $bucket['v'],
+				'views' => $bucket['p'],
+				'from'  => gmdate( 'Y-m-d', $from_ts ),
+				'to'    => gmdate( 'Y-m-d', $to_ts ),
+			);
+		}
+		return array(
+			'chart'     => $tchart,
+			'visitors'  => $visitors,
+			'pageviews' => $pageviews,
+		);
+	}
+
+	/**
+	 * The Stats page: the traffic series alone, over ranges the Overview card
+	 * never asks for. Same provider filter, same capability gate; buckets grow
+	 * with the window (daily ≤45d, weekly ≤190d, ~monthly beyond) so the drill
+	 * windows always fit traffic-day's 31-day cap.
+	 */
+	public static function stats( WP_REST_Request $request ) {
+		$days        = (int) $request['days'];
+		$can         = (bool) apply_filters( 'minn_admin_traffic_cap', current_user_can( 'manage_options' ) );
+		$traffic     = $can ? apply_filters( 'minn_admin_traffic', null, $days ) : null;
+		$bucket_days = $days > 190 ? 30 : ( $days > 45 ? 7 : 1 );
+		$buckets     = (int) ceil( $days / $bucket_days );
+		$base        = array(
+			'source'     => '',
+			'days'       => $days,
+			'bucketDays' => $bucket_days,
+			'chart'      => array(),
+			'totals'     => null,
+			'allowed'    => $can,
+		);
+		if ( ! is_array( $traffic ) || empty( $traffic['days'] ) ) {
+			return rest_ensure_response( $base );
+		}
+		$t     = self::traffic_chart_data( $traffic, $bucket_days, $buckets );
+		$prev  = isset( $traffic['prev_visitors'] ) ? (int) $traffic['prev_visitors'] : 0;
+		$delta = $prev > 0 ? round( ( $t['visitors'] - $prev ) / $prev * 100, 1 ) : null;
+		return rest_ensure_response(
+			array_merge(
+				$base,
+				array(
+					'source' => isset( $traffic['source'] ) ? (string) $traffic['source'] : 'Analytics',
+					'chart'  => $t['chart'],
+					'totals' => array(
+						'visitors'     => $t['visitors'],
+						'pageviews'    => $t['pageviews'],
+						'prevVisitors' => $prev,
+						'delta'        => $delta,
+					),
+				)
+			)
+		);
+	}
+
+	/**
 	 * Dashboard: stat cards, activity chart buckets and a recent-activity feed.
 	 */
 	public static function overview( WP_REST_Request $request ) {
@@ -2766,53 +2898,10 @@ class Minn_Admin_REST {
 		// When an analytics provider responded, bucket its daily numbers the
 		// same way and lead the stats with a Visitors card.
 		if ( is_array( $traffic ) && ! empty( $traffic['days'] ) ) {
-			$tseries = array_fill( 0, $buckets, array( 'v' => 0, 'p' => 0 ) );
-			$visitors  = 0;
-			$pageviews = 0;
-			// Bucket by whole-calendar-day distance from today (both anchored
-			// at midnight UTC), so a provider's day rows land on the same
-			// column their drill window queries. The old noon-UTC "age" fudge
-			// dropped TODAY's data whenever the current UTC time was before
-			// noon (a future anchor → negative age → out-of-range index) and
-			// could shift a bar off its own drill day.
-			$today_mid = strtotime( gmdate( 'Y-m-d' ) . ' 00:00:00 UTC' );
-			foreach ( $traffic['days'] as $date => $row ) {
-				$date_mid = strtotime( $date . ' 00:00:00 UTC' );
-				if ( false === $date_mid ) {
-					continue;
-				}
-				$days_ago = (int) round( ( $today_mid - $date_mid ) / DAY_IN_SECONDS );
-				if ( $days_ago < 0 ) {
-					continue; // a future-dated row (clock skew) — ignore
-				}
-				$idx = $buckets - 1 - (int) floor( $days_ago / $bucket_days );
-				if ( $idx < 0 || $idx >= $buckets ) {
-					continue;
-				}
-				$tseries[ $idx ]['v'] += (int) $row['visitors'];
-				$tseries[ $idx ]['p'] += (int) $row['pageviews'];
-				$visitors             += (int) $row['visitors'];
-				$pageviews            += (int) $row['pageviews'];
-			}
-			$tchart = array();
-			foreach ( $tseries as $i => $bucket ) {
-				$offset   = ( $buckets - 1 - $i ) * $bucket_days;
-				// Inclusive calendar window for the traffic-day drill-down
-				// (Y-m-d — matches how analytics plugins store daily rows).
-				$from_ts  = time() - ( $offset + $bucket_days - 1 ) * DAY_IN_SECONDS;
-				$to_ts    = time() - $offset * DAY_IN_SECONDS;
-				$label    = 1 === $bucket_days
-					? date_i18n( 'M j, Y', $to_ts )
-					/* translators: %s: the date the week starts on (e.g. "Jun 3, 2026"). */
-					: sprintf( __( 'Week of %s', 'minn-admin' ), date_i18n( 'M j, Y', $from_ts ) );
-				$tchart[] = array(
-					'label' => $label,
-					'value' => $bucket['v'],
-					'views' => $bucket['p'],
-					'from'  => gmdate( 'Y-m-d', $from_ts ),
-					'to'    => gmdate( 'Y-m-d', $to_ts ),
-				);
-			}
+			$t         = self::traffic_chart_data( $traffic, $bucket_days, $buckets );
+			$tchart    = $t['chart'];
+			$visitors  = $t['visitors'];
+			$pageviews = $t['pageviews'];
 
 			$compact = function ( $n ) {
 				return $n >= 10000 ? round( $n / 1000, 1 ) . 'k' : number_format_i18n( $n );
