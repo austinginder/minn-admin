@@ -476,6 +476,7 @@ Rules of the road:
 | `sortQuery` | *(since v0.18.0)* A query-string template with `{by}` and `{dir}` (e.g. `orderby={by}&direction={dir}`). Columns carrying a `sort` token render clickable headers: first click sorts (numeric and `ago` columns start descending, everything else ascending), a repeat click flips direction, and the template is appended to the list request. Omit it and headers stay plain |
 | `search` | A query-string template with `{q}` (e.g. `filterBy[url]={q}` or `search={q}`). Adds a filter box to the toolbar; the term is debounced and appended to the list request. For APIs that take search criteria as a JSON string (Gravity Forms), use the object form: `array( 'param' => 'search', 'json' => <criteria array with '{q}' where the term goes> )` — the term is JSON-escaped and the criteria double-URL-encoded to match APIs that `urldecode()` the param themselves |
 | `filter` *(v0.12)* | A second list dimension beside `tabs`, rendered as a segmented control — shapes and the json-merge rule in [the `filter` section](#collectionfilter--a-second-dimension-beside-tabs) below |
+| `filterBar` | Wear the **orders filter bar** instead of the pill strip: a status dropdown that holds more than one status at once, Add filter, chips beneath, and the whole narrowing in the URL. Replaces `tabs`, `filter` and the surface's own search box — see [the `filterBar` section](#collectionfilterbar--the-orders-filter-bar-on-your-surface) below |
 | `bulk` | Bulk actions: the same shape as `actions` minus `href` (a batch always needs a `route`). Declaring any adds a checkbox column (shift-range, Select page) and a selection bar. Each action runs **per selected item** (`{id}` replaced; one failure never aborts the rest), `when` is evaluated per item so a mixed selection skips ineligible rows, a button whose `when` matches nothing on the current page isn't offered at all, and the result toast reports done / skipped / failed |
 | `open` *(v0.31)* | `{ "route": "your-page/{id}" }` — row click NAVIGATES to an app route instead of opening the detail modal (and the row menu's Open follows). For records that earn a page by the pages-versus-modals test below: sub-resources and workflows of their own. The bundled ACF Field Groups surface opens its group builder this way |
 | `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array), `email`, `url`. Every field is required unless it declares `required: false`. A failed create (your route returning `WP_Error`) toasts your error message and keeps the form open as typed |
@@ -532,6 +533,46 @@ the default, always sent.
   each other.
 - Pair filters with `when`-gated actions so each filter view offers the verbs that make
   sense there (Received: Spam / Trash · Trash: Restore / Delete permanently).
+
+### `collection.filterBar` — the orders filter bar on your surface
+
+Tabs answer "show me one status". Some lists need more: two statuses at once, a
+date window, a narrowing worth pasting to a colleague. Declaring `filterBar`
+gives your surface the same bar WooCommerce Orders wears, rendered by Minn:
+
+```php
+'filterBar' => array(
+    'searchPlaceholder' => 'Search gift cards (code, recipient…)',
+    'statuses' => array(              // your own vocabulary, [value, label]
+        array( 'active',   'Active' ),
+        array( 'disabled', 'Disabled' ),
+    ),
+    'kinds'    => array( 'status', 'date' ),   // what Add filter offers
+),
+```
+
+What you get, with no client code: a status dropdown (single-status
+shortcuts, the tab strip folded into a menu), **Add filter** for the `kinds`
+you declared, removable chips with Clear all, and every filter mirrored into
+the URL so a filtered list survives a reload and can be shared.
+
+What your route must answer, in WooCommerce's own parameter vocabulary:
+
+- `status=any` when nothing is selected, and repeated `status[]=<slug>` when
+  one or more are. **Handle `any`**: it means no narrowing, not a status you
+  registered.
+- `after=` / `before=` as ISO datetimes when a date window is active.
+
+`kinds` names the dimensions Add filter offers: `status`, `date`, and the
+WooCommerce-specific `customer` and `product` lookups. **Only declare a
+dimension your route can really narrow on.** Filtering the page in the browser
+is a lie the moment the list paginates: page 2 of an unfiltered query is not
+page 2 of a filtered one, and the count describes neither.
+
+`filterBar` replaces `tabs`, `filter` and the surface's own search box, so
+declare one or the other. The count on the right stays Minn's own noun: its
+plural vocabulary is a fixed, extracted list, and a noun arriving from a
+plugin could never be pluralized in the reader's language.
 
 ### Pages versus modals
 
