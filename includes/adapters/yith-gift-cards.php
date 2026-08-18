@@ -88,6 +88,44 @@ function minn_admin_ywgc_money( $value, $currency = '' ) {
 }
 
 /**
+ * Parse a money amount from a request, or a WP_Error.
+ *
+ * Scientific notation and non-finite values are numeric to PHP and would
+ * otherwise store a $1e20 card. Zero is allowed only when $allow_zero is
+ * true (a balance can be emptied; a new card cannot be worth nothing).
+ *
+ * @param mixed $raw        Request value.
+ * @param bool  $allow_zero Whether 0 is a legal amount.
+ * @return float|WP_Error
+ */
+function minn_admin_ywgc_parse_amount( $raw, $allow_zero = false ) {
+	if ( '' === $raw || null === $raw || ! is_numeric( $raw ) ) {
+		return new WP_Error( 'minn_ywgc_amount', __( 'Enter the amount as a number.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$amount = (float) $raw;
+	if ( ! is_finite( $amount ) ) {
+		return new WP_Error( 'minn_ywgc_amount', __( 'Enter the amount as a number.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$amount = round( $amount, function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2 );
+	if ( $amount < 0 || ( ! $allow_zero && $amount <= 0 ) ) {
+		return new WP_Error(
+			'minn_ywgc_amount',
+			$allow_zero
+				? __( 'A balance cannot be negative.', 'minn-admin' )
+				: __( 'A gift card has to be worth more than nothing.', 'minn-admin' ),
+			array( 'status' => 400 )
+		);
+	}
+	// A money instrument, not a float playground. Nine million and change
+	// is already past any real store card; refuse the rest rather than
+	// writing a scientific-notation title into the liability.
+	if ( $amount > 9999999.99 ) {
+		return new WP_Error( 'minn_ywgc_amount', __( 'Enter an amount no larger than 9,999,999.99.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	return $amount;
+}
+
+/**
  * Read one gift card's row shape straight from post + meta.
  *
  * Deliberately NOT through YITH_YWGC_Gift_Card: its constructor MIGRATES a
@@ -302,6 +340,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'YITH',
 		'icon'       => 'tag',
 		'cap'        => 'manage_woocommerce',
+		'group'      => 'commerce',
 		'status'     => array( 'route' => 'minn-admin/v1/ywgc/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/ywgc/gift-cards',
@@ -651,7 +690,10 @@ add_action( 'rest_api_init', function () {
 			if ( is_wp_error( $gc ) ) {
 				return $gc;
 			}
-			$enabled = (bool) $request->get_param( 'enabled' );
+			// rest_sanitize_boolean, not (bool): the string "false" is
+			// truthy in PHP and would enable a card the merchant meant
+			// to turn off.
+			$enabled = rest_sanitize_boolean( $request->get_param( 'enabled' ) );
 			$gc->set_enabled_status( $enabled );
 
 			return rest_ensure_response( array(
@@ -679,13 +721,9 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => 'minn_admin_ywgc_can_create',
 		'callback'            => function ( $request ) {
-			$raw = $request->get_param( 'amount' );
-			if ( '' === $raw || null === $raw || ! is_numeric( $raw ) ) {
-				return new WP_Error( 'minn_ywgc_amount', __( 'Enter the amount as a number.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$amount = round( (float) $raw, function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2 );
-			if ( $amount <= 0 ) {
-				return new WP_Error( 'minn_ywgc_amount', __( 'A gift card has to be worth more than nothing.', 'minn-admin' ), array( 'status' => 400 ) );
+			$amount = minn_admin_ywgc_parse_amount( $request->get_param( 'amount' ) );
+			if ( is_wp_error( $amount ) ) {
+				return $amount;
 			}
 
 			$typed     = trim( (string) $request->get_param( 'recipient' ) );
@@ -702,8 +740,16 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'minn_ywgc_no_recipient', __( 'Add a recipient email address, or choose not to send the email.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 
-			$code = trim( (string) $request->get_param( 'code' ) );
-			if ( '' !== $code ) {
+			$typed_code = trim( (string) $request->get_param( 'code' ) );
+			$code       = '';
+			if ( '' !== $typed_code ) {
+				$code = sanitize_text_field( $typed_code );
+				// A typed code that is not the same after stripping tags
+				// or collapsing whitespace is not a code: refuse rather
+				// than silently generate a different one.
+				if ( '' === $code || $code !== wp_strip_all_tags( $typed_code ) || strlen( $code ) > 191 ) {
+					return new WP_Error( 'minn_ywgc_code', __( 'That code is not valid. Use plain text, or leave the field blank to generate one.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
 				if ( minn_admin_ywgc_code_taken( $code ) ) {
 					return new WP_Error( 'minn_ywgc_code_taken', __( 'That code is already in use. Leave the field blank to generate one.', 'minn-admin' ), array( 'status' => 409 ) );
 				}
@@ -778,13 +824,9 @@ add_action( 'rest_api_init', function () {
 			if ( is_wp_error( $gc ) ) {
 				return $gc;
 			}
-			$raw = $request->get_param( 'balance' );
-			if ( '' === $raw || null === $raw || ! is_numeric( $raw ) ) {
-				return new WP_Error( 'minn_ywgc_balance', __( 'Enter the new balance as a number.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$balance = round( (float) $raw, function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2 );
-			if ( $balance < 0 ) {
-				return new WP_Error( 'minn_ywgc_balance', __( 'A balance cannot be negative.', 'minn-admin' ), array( 'status' => 400 ) );
+			$balance = minn_admin_ywgc_parse_amount( $request->get_param( 'balance' ), true );
+			if ( is_wp_error( $balance ) ) {
+				return $balance;
 			}
 			$gc->update_balance( $balance );
 
@@ -849,15 +891,26 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function () {
 			global $wpdb;
 
+			// Expiration is meta, not a status: a publish card whose
+			// _ywgc_expiration has passed cannot be spent, so it is not
+			// money the store still owes.
+			$now    = time();
 			$active = (int) $wpdb->get_var( $wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status = 'publish'",
-				YWGC_CUSTOM_POST_TYPE_NAME
+				"SELECT COUNT(*) FROM {$wpdb->posts} p
+				 LEFT JOIN {$wpdb->postmeta} e ON ( e.post_id = p.ID AND e.meta_key = '_ywgc_expiration' )
+				 WHERE p.post_type = %s AND p.post_status = 'publish'
+				   AND ( e.meta_value IS NULL OR e.meta_value + 0 = 0 OR e.meta_value + 0 > %d )",
+				YWGC_CUSTOM_POST_TYPE_NAME,
+				$now
 			) );
 			$outstanding = (float) $wpdb->get_var( $wpdb->prepare(
 				"SELECT SUM( m.meta_value + 0 ) FROM {$wpdb->posts} p
 				 INNER JOIN {$wpdb->postmeta} m ON ( m.post_id = p.ID AND m.meta_key = '_ywgc_balance_total' )
-				 WHERE p.post_type = %s AND p.post_status = 'publish'",
-				YWGC_CUSTOM_POST_TYPE_NAME
+				 LEFT JOIN {$wpdb->postmeta} e ON ( e.post_id = p.ID AND e.meta_key = '_ywgc_expiration' )
+				 WHERE p.post_type = %s AND p.post_status = 'publish'
+				   AND ( e.meta_value IS NULL OR e.meta_value + 0 = 0 OR e.meta_value + 0 > %d )",
+				YWGC_CUSTOM_POST_TYPE_NAME,
+				$now
 			) );
 			$expiring = (int) $wpdb->get_var( $wpdb->prepare(
 				"SELECT COUNT(*) FROM {$wpdb->posts} p

@@ -311,6 +311,17 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			afterDisable && 'disabled' === afterDisable.status && false === afterDisable.enabled,
 			JSON.stringify( afterDisable && afterDisable.status ) );
 
+		// The string "false" is truthy in PHP. Without rest_sanitize_boolean
+		// this would flip the card back on.
+		const stillOff = await api( `minn-admin/v1/ywgc/gift-cards/${ card.id }/status`, {
+			method: 'POST',
+			body: JSON.stringify( { enabled: 'false' } ),
+		} );
+		const afterFalse = await readCard( card.id );
+		t.check( 'the string "false" does not re-enable a disabled card',
+			200 === stillOff.status && afterFalse && 'disabled' === afterFalse.status,
+			JSON.stringify( stillOff.body ) + ' / ' + JSON.stringify( afterFalse && afterFalse.status ) );
+
 		// --- verb: resend refuses honestly when there is no recipient ---
 		const resend = await api( `minn-admin/v1/ywgc/gift-cards/${ card.id }/resend`, { method: 'POST' } );
 		t.check( 'resending a card with no recipient refuses, and says why',
@@ -390,6 +401,16 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'sending with nobody to send it to is refused',
 			400 === sendNoOne.status && /recipient email/i.test( ( sendNoOne.body || {} ).message || '' ),
 			JSON.stringify( sendNoOne.body ) );
+
+		const markup = await post( { amount: 10, code: '<script>alert(1)</script>' } );
+		t.check( 'a code that is not plain text is refused',
+			400 === markup.status && /not valid/i.test( ( markup.body || {} ).message || '' ),
+			JSON.stringify( markup.body ) );
+
+		const huge = await post( { amount: '1e20' } );
+		t.check( 'a scientifically huge amount is refused',
+			400 === huge.status,
+			JSON.stringify( huge.body ) );
 
 		const countAfter = ( ( await api( 'minn-admin/v1/ywgc/gift-cards?per_page=1' ) ).body || {} ).total;
 		t.check( 'not one of those refusals left a card behind', countBefore === countAfter,
