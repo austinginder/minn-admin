@@ -116,15 +116,14 @@ class Minn_Admin_Bar {
 	}
 
 	/**
-	 * Recreate core's front-end admin-bar height contract. Themes commonly
-	 * hardcode these exact 32px/46px offsets for their sticky chrome, while
-	 * newer code reads --wp-admin--admin-bar--height.
+	 * Publish the Minn bar's rendered height through the same token newer
+	 * themes use for WordPress's toolbar, and push the page down to match.
 	 */
 	public static function bump() {
 		if ( ! self::active() || is_embed() ) {
 			return;
 		}
-		echo '<style id="minn-bar-bump">html{--wp-admin--admin-bar--height:32px;margin-top:var(--wp-admin--admin-bar--height) !important;scroll-padding-top:var(--wp-admin--admin-bar--height);}@media screen and (max-width:782px){html{--wp-admin--admin-bar--height:46px;}}@media print{#wpadminbar.minn-wpadminbar{display:none !important;}html{margin-top:0 !important;}}</style>' . "\n";
+		echo '<style id="minn-bar-bump">html{--wp-admin--admin-bar--height:48px;margin-top:var(--wp-admin--admin-bar--height) !important;scroll-padding-top:var(--wp-admin--admin-bar--height);}@media print{#wpadminbar.minn-wpadminbar{display:none !important;}html{margin-top:0 !important;}}</style>' . "\n";
 	}
 
 	private static function app_path( $path ) {

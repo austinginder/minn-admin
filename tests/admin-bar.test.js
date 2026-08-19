@@ -88,7 +88,7 @@ const { execSync } = require( 'child_process' );
 		} ) );
 		t.check( 'opted in: Minn owns the compatible admin-bar shell and core is gone',
 			s.minn && s.shell && s.bodyClass && ! s.core, JSON.stringify( s ) );
-		t.check( 'desktop: page offset matches WordPress core', s.margin === '32px', s.margin );
+		t.check( 'desktop: page offset matches the Minn strip', s.margin === '48px', s.margin );
 		const desktop = await page.evaluate( () => {
 			const b = document.getElementById( 'minn-bar' );
 			const r = b.getBoundingClientRect();
@@ -104,7 +104,7 @@ const { execSync } = require( 'child_process' );
 		} );
 		t.check( 'desktop: static strip uses core geometry',
 			desktop.top === 0 && desktop.left === 0 && Math.abs( desktop.width - desktop.vw ) < 1
-				&& desktop.height === 32 && desktop.radius === '0px' && desktop.token === '32px',
+				&& desktop.height === 48 && desktop.radius === '0px' && desktop.token === '48px',
 			JSON.stringify( desktop ) );
 
 		// Theme headers often sit at z-index 99999 (Divi's #main-header,
@@ -147,8 +147,8 @@ const { execSync } = require( 'child_process' );
 		const closed = await page.evaluate( () => document.getElementById( 'minn-bar-menu-site' ).hidden );
 		t.check( 'Escape closes the bar menu (scoped, nothing else claimed)', closed === true, String( closed ) );
 
-		// The core-shaped strip is persistent. Themes already know how to offset
-		// their sticky chrome from body.admin-bar and the 32px/46px contract.
+		// The static strip is persistent. Themes can identify it through
+		// body.admin-bar and read its actual height from the shared token.
 		await page.evaluate( () => {
 			const tall = document.createElement( 'div' );
 			tall.style.height = '3000px';
@@ -332,7 +332,7 @@ const { execSync } = require( 'child_process' );
 			overlayState.top === 0 && ! overlayState.yielded, JSON.stringify( overlayState ) );
 		await page.evaluate( () => document.getElementById( 'suite-lightbox' ).remove() );
 
-		// WordPress changes the public toolbar contract at 782px.
+		// The roomier Minn height stays consistent on phones.
 		await page.setViewportSize( { width: 390, height: 844 } );
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		const mob = await page.evaluate( () => {
@@ -351,9 +351,9 @@ const { execSync } = require( 'child_process' );
 		} );
 		t.check( 'mobile: full-width strip uses core geometry',
 			mob.top === 0 && mob.left === 0 && Math.abs( mob.width - mob.vw ) < 1
-				&& mob.height === 46 && mob.radius === '0px' && mob.token === '46px',
+				&& mob.height === 48 && mob.radius === '0px' && mob.token === '48px',
 			JSON.stringify( mob ) );
-		t.check( 'mobile: page offset matches WordPress core', mob.margin === '46px', mob.margin );
+		t.check( 'mobile: page offset matches the Minn strip', mob.margin === '48px', mob.margin );
 		await page.setViewportSize( { width: 1280, height: 800 } );
 
 		// The Minn bar stays off builder canvases even when that builder is

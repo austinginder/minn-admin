@@ -70,13 +70,13 @@
 #minn-bar-root { letter-spacing: normal; word-spacing: normal; text-transform: none; font-style: normal; }
 /* Match WordPress's public admin-bar shell. Existing themes commonly target
    #wpadminbar and body.admin-bar, while newer integrations read the shared
-   height custom property. The PHP bump supplies 32px desktop / 46px mobile. */
+   height custom property. Minn publishes its roomier 48px height there. */
 #wpadminbar.minn-wpadminbar {
   position: fixed;
   inset: 0 0 auto;
   width: 100%;
   min-width: 0;
-  height: var(--wp-admin--admin-bar--height, 32px);
+  height: var(--wp-admin--admin-bar--height, 48px);
   z-index: 1000100;
   background: transparent;
 }
@@ -94,8 +94,8 @@
 #minn-bar-root a.minn-bar-menu-item, #minn-bar-root a.minn-bar-menu-item:hover,
 #minn-bar-root a.minn-bar-menu-item:focus, #minn-bar-root a.minn-bar-menu-item:visited { color: var(--text) !important; }
 
-/* A static strip with WordPress's exact outer geometry. Keeping all sizing
-   inside the inherited height lets both desktop and mobile follow core. */
+/* A static strip with Minn's original roomy control sizing. Keeping all
+   sizing inside the inherited height makes the page offset self-consistent. */
 #minn-bar {
   position: relative;
   width: 100%;
@@ -103,15 +103,15 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 0 6px;
+  gap: 12px;
+  padding: 0 12px 0 9px;
   background: var(--bg2);
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
   font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -121,16 +121,16 @@
 .minn-bar-right { justify-content: flex-end; }
 
 .minn-bar-btn {
-  height: 30px;
+  height: 34px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 9px;
   background: transparent;
   color: var(--text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 8px;
+  padding: 0 10px;
   white-space: nowrap;
   cursor: pointer;
   text-decoration: none;
@@ -142,24 +142,24 @@
   outline: 2px solid color-mix(in srgb, var(--accent) 52%, transparent);
   outline-offset: 1px;
 }
-.minn-bar-btn svg { width: 16px; height: 16px; flex: none; }
-.minn-bar-iconbtn { width: 30px; padding: 0; color: var(--text2); }
+.minn-bar-btn svg { width: 17px; height: 17px; flex: none; }
+.minn-bar-iconbtn { width: 34px; padding: 0; color: var(--text2); }
 .minn-bar-iconbtn:hover { color: var(--text); }
 
-.minn-bar-markbtn { width: 30px; padding: 0; flex: none; }
+.minn-bar-markbtn { width: 34px; padding: 0; flex: none; }
 .minn-bar-markbtn:hover .minn-bar-mark { filter: brightness(1.12); }
 .minn-bar-site { padding: 0 8px; max-width: 250px; }
 .minn-bar-mark {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   flex: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: var(--accent-fg);
   font-weight: 800;
-  font-size: 14px;
+  font-size: 15px;
   letter-spacing: -0.04em;
 }
 .minn-bar-sitename {
@@ -174,7 +174,7 @@
 
 /* Status chip: exception states only (the slot is otherwise absent). */
 .minn-bar-status {
-  height: 24px;
+  height: 27px;
   padding: 0 11px 0 10px;
   gap: 7px;
   border-radius: 999px;
@@ -211,10 +211,10 @@
   border: 2px solid var(--bg2);
   pointer-events: none;
 }
-.minn-bar-avatarbtn { width: 30px; }
+.minn-bar-avatarbtn { width: 34px; }
 .minn-bar-avatar {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   overflow: hidden;
   flex: none;
@@ -407,7 +407,7 @@
 /* Toast: transient feedback under the bar (cache purge results). */
 #minn-bar-toast {
   position: fixed;
-  top: calc(var(--wp-admin--admin-bar--height, 32px) + 8px);
+  top: calc(var(--wp-admin--admin-bar--height, 48px) + 8px);
   left: 50%;
   transform: translateX(-50%) translateY(-6px);
   z-index: 1000107;

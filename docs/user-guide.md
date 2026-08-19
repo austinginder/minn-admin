@@ -68,9 +68,9 @@ The static strip gives you search and the command palette, a create menu, an
 Edit button for the page you are viewing, notifications and your account. A
 status chip appears beside the site name only when the site needs attention,
 such as maintenance mode, a password gate, hidden search visibility or a
-staging environment. It uses the same desktop and mobile heights as WordPress's
-classic bar, so theme headers that account for WordPress's toolbar also account
-for Minn. This is a personal choice: other users keep the classic bar until they opt in, and
+staging environment. It uses WordPress's familiar toolbar hooks while keeping
+Minn's roomier height, so themes can identify it and read its actual size. This
+is a personal choice: other users keep the classic bar until they opt in, and
 wp-admin always keeps the classic bar. The bar also stays off a page builder's
 own canvas, the same way the classic admin bar does.
 
