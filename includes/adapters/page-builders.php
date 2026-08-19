@@ -423,3 +423,42 @@ add_action(
 		);
 	}
 );
+
+/**
+ * Elementor's hamburger has no filter for extra exits, so this script
+ * registers through the public app-bar `mainMenu` API (and the older
+ * panel menu as a fallback). Destination is Minn's front door, not the
+ * locked Minn editor for the same post: that editor would immediately
+ * offer "Edit in Elementor" and feel like a bounce.
+ */
+function minn_admin_elementor_exit_config() {
+	return array(
+		'url'    => Minn_Admin::app_url(),
+		'title'  => __( 'Exit to Minn Admin', 'minn-admin' ),
+		'prefer' => Minn_Admin::user_wants_default_admin(),
+	);
+}
+
+function minn_admin_elementor_exit_enqueue() {
+	if ( wp_script_is( 'minn-admin-elementor-exit', 'enqueued' ) ) {
+		return;
+	}
+	if ( ! current_user_can( 'edit_posts' ) ) {
+		return;
+	}
+	$deps = array( 'elementor-editor' );
+	if ( wp_script_is( 'elementor-v2-editor-app-bar', 'registered' ) ) {
+		$deps[] = 'elementor-v2-editor-app-bar';
+	}
+	wp_enqueue_script(
+		'minn-admin-elementor-exit',
+		MINN_ADMIN_URL . 'assets/js/elementor-exit.js',
+		$deps,
+		MINN_ADMIN_VERSION,
+		true
+	);
+	wp_localize_script( 'minn-admin-elementor-exit', 'MINN_ELEMENTOR_EXIT', minn_admin_elementor_exit_config() );
+}
+
+add_action( 'elementor/editor/v2/scripts/enqueue', 'minn_admin_elementor_exit_enqueue' );
+add_action( 'elementor/editor/after_enqueue_scripts', 'minn_admin_elementor_exit_enqueue' );
