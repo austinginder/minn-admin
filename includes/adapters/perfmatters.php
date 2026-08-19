@@ -226,6 +226,42 @@ function minn_admin_perfmatters_code_fields() {
 	return array( 'header_code', 'body_code', 'footer_code' );
 }
 
+/**
+ * Every Perfmatters field whose stored value reaches the page unescaped.
+ *
+ * Naming only the three `assets` code boxes covered the fields that LOOK like code
+ * and missed the ones that behave like it. Perfmatters emits each line of
+ * preload.dns_prefetch as
+ *   echo "&lt;link rel='dns-prefetch' href='" . $url . "'&gt;"
+ * straight into wp_head on every front-end request, with no escaping and no
+ * sanitising beyond a trim and a split -- so a value carrying a quote closes the
+ * attribute and the tag. analytics.tracking_id is the same shape, one sink smaller.
+ *
+ * Keyed section => ids so the test is exact rather than an id match that could
+ * collide across sections.
+ *
+ * @return array<string,string[]> Section id => field ids.
+ */
+function minn_admin_perfmatters_raw_output_fields() {
+	return array(
+		'assets'    => array( 'header_code', 'body_code', 'footer_code' ),
+		'preload'   => array( 'dns_prefetch' ),
+		'analytics' => array( 'tracking_id' ),
+	);
+}
+
+/**
+ * Does this field's value reach the page as raw markup?
+ *
+ * @param string $section Section id.
+ * @param string $id      Field id.
+ * @return bool
+ */
+function minn_admin_perfmatters_is_raw_output( $section, $id ) {
+	$map = minn_admin_perfmatters_raw_output_fields();
+	return isset( $map[ $section ] ) && in_array( (string) $id, $map[ $section ], true );
+}
+
 function minn_admin_perfmatters_save( $values ) {
 	$reg   = minn_admin_perfmatters_registry();
 	$byKey = array();
@@ -245,11 +281,11 @@ function minn_admin_perfmatters_save( $values ) {
 		$args   = $byKey[ $key ]['args'];
 		$type   = $byKey[ $key ]['type'];
 		$option = ! empty( $args['option'] ) ? $args['option'] : 'perfmatters_options';
-		// The three code fields go into the page as raw markup, so they carry
-		// the same rule as every other code-authoring surface here rather than
-		// riding in on manage_options with the ordinary settings.
-		if ( 'assets' === ( $args['section'] ?? '' )
-			&& in_array( $args['id'], minn_admin_perfmatters_code_fields(), true ) ) {
+		// Fields whose value goes into the page as raw markup carry the same rule as
+		// every other code-authoring surface here rather than riding in on
+		// manage_options with the ordinary settings. Keyed on what the value DOES,
+		// not on whether the field is labelled as code.
+		if ( minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) ) ) {
 			if ( ! current_user_can( 'unfiltered_html' ) ) {
 				continue;
 			}
@@ -277,7 +313,17 @@ function minn_admin_perfmatters_save( $values ) {
 				unset( $slot[ $args['id'] ] );
 			}
 		} else {
-			$slot[ $args['id'] ] = is_scalar( $v ) ? (string) $v : '';
+			$val = is_scalar( $v ) ? (string) $v : '';
+			// Belt and braces on the two fields Perfmatters interpolates into a
+			// single-quoted attribute: strip the characters that would close it and
+			// open a tag. Hostnames, protocol-relative and absolute URLs are all
+			// unaffected, so this costs a legitimate value nothing even when the
+			// caller does hold unfiltered_html.
+			if ( minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) )
+				&& ! in_array( (string) $args['id'], minn_admin_perfmatters_code_fields(), true ) ) {
+				$val = str_replace( array( '"', "'", '<', '>' ), '', $val );
+			}
+			$slot[ $args['id'] ] = $val;
 		}
 		unset( $slot );
 	}
