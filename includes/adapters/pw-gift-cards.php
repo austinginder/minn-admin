@@ -458,10 +458,15 @@ add_action( 'rest_api_init', function () {
 			}
 			$clause = implode( ' AND ', $where );
 
-			$total = (int) $wpdb->get_var( $wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				"SELECT COUNT(*) FROM {$table} c {$join} WHERE {$clause}",
-				$params
-			) );
+			// With no status, date or search narrowing, the clause is a bare
+			// 1=1 and carries no placeholder, and prepare() answers a
+			// placeholder-free query with a _doing_it_wrong notice on every
+			// list load. Guard on $params, the way every sibling adapter's
+			// count query already does.
+			$count_sql = "SELECT COUNT(*) FROM {$table} c {$join} WHERE {$clause}";
+			$total     = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$params ? $wpdb->prepare( $count_sql, $params ) : $count_sql
+			);
 
 			$ids = $wpdb->get_col( $wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				"SELECT c.pimwick_gift_card_id FROM {$table} c {$join} WHERE {$clause} ORDER BY c.create_date DESC, c.pimwick_gift_card_id DESC LIMIT %d OFFSET %d",
@@ -553,6 +558,16 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
+			// `enabled` says which way to flip, so an absent one is not a
+			// default: rest_sanitize_boolean( null ) is false, which turned a
+			// request that forgot the field into a silent disable of a live
+			// gift card. Checked here rather than declared in `args` because
+			// core validates args BEFORE the permission callback, and a
+			// caller who may not touch gift cards should be told that, not
+			// handed the shape of the request.
+			if ( null === $request->get_param( 'enabled' ) ) {
+				return new WP_Error( 'minn_pwgc_enabled', __( 'Say whether the gift card should be enabled or disabled.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
 			$card = minn_admin_pwgc_load( (int) $request['id'] );
 			if ( is_wp_error( $card ) ) {
 				return $card;

@@ -686,6 +686,16 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
+			// `enabled` says which way to flip, so an absent one is not a
+			// default: rest_sanitize_boolean( null ) is false, which turned a
+			// request that forgot the field into a silent disable of a live
+			// gift card. Checked here rather than declared in `args` because
+			// core validates args BEFORE the permission callback, and a
+			// caller who may not touch gift cards should be told that, not
+			// handed the shape of the request.
+			if ( null === $request->get_param( 'enabled' ) ) {
+				return new WP_Error( 'minn_ywgc_enabled', __( 'Say whether the gift card should be enabled or disabled.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
 			$id = (int) $request['id'];
 			$gc = minn_admin_ywgc_load( $id );
 			if ( is_wp_error( $gc ) ) {
