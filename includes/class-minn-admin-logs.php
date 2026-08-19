@@ -210,7 +210,23 @@ class Minn_Admin_Logs {
 	 * Tail a file: last TAIL_BYTES with the partial first line dropped.
 	 */
 	public static function tail_file( $path ) {
-		$rel = str_replace( ABSPATH, '', (string) $path );
+		// A log configured outside the install -- on shared hosting often a file the
+		// whole server writes to -- is named, never located or read. str_replace on
+		// ABSPATH does not shorten a path that does not start with it, so the raw
+		// server path used to ride back in the response, and the tail below would
+		// have served another tenant's error output. The clear path already refuses
+		// these; this is the read half of the same rule.
+		$owned = self::site_owned( $path );
+		$rel   = $owned ? str_replace( ABSPATH, '', (string) $path ) : basename( (string) $path );
+		if ( ! $owned ) {
+			return array(
+				'exists'  => file_exists( $path ),
+				'path'    => $rel,
+				'content' => '',
+				'size'    => 0,
+				'note'    => __( 'This log lives outside the site, so Minn does not read it.', 'minn-admin' ),
+			);
+		}
 		if ( ! file_exists( $path ) ) {
 			return array(
 				'exists'  => false,
