@@ -61,6 +61,64 @@ function minn_admin_wpcode_type_executes( $code_type ) {
 }
 
 /**
+ * Does WPCode EXECUTE snippets parked at this LOCATION, whatever their type?
+ *
+ * The code type decides how a snippet is authored; the LOCATION TERM decides
+ * which runner picks it up, and the two are not connected. WPCode groups every
+ * published snippet by its wpcode_location term with no code_type filter at all
+ * (WPCode_Auto_Insert_Type::load_all_snippets_for_type), and
+ * WPCode_Auto_Insert_Everywhere::run_snippets() concatenates get_code() for the
+ * buckets below and hands the result to safe_execute_php() -> eval().
+ *
+ * So a snippet stored as `text` -- the one type authored without unfiltered_html,
+ * because its bytes are kses-filtered rather than executed -- runs as PHP the
+ * moment it sits at one of these locations. Guarding on code_type alone reads the
+ * request's claim about itself and ignores where the bytes actually land.
+ *
+ * `on_demand` is included even though no runner consumes it: it is one PUT away
+ * from a running bucket, and admitting it would leave a parked payload that a
+ * later retarget starts.
+ *
+ * @param string $location WPCode location slug.
+ * @return bool
+ */
+function minn_admin_wpcode_location_executes( $location ) {
+	return in_array(
+		(string) $location,
+		array( 'everywhere', 'admin_only', 'frontend_only', 'frontend_cl', 'on_demand' ),
+		true
+	);
+}
+
+/**
+ * The locations Minn offers for a given code type.
+ *
+ * WPCode's own form filters the location list by type in JavaScript; the REST
+ * layer does not, and neither did this adapter -- it served one flat list, PHP
+ * buckets included, for every type, with `everywhere` as the default. Pair the
+ * vocabularies so the UI cannot offer a markup type a bucket that would execute
+ * it, and so an unknown slug never reaches wp_set_post_terms (wpcode_location is
+ * non-hierarchical, so it silently CREATES whatever slug it is handed).
+ *
+ * @param string $code_type WPCode code type.
+ * @return string[] Allowed location slugs.
+ */
+function minn_admin_wpcode_locations_for_type( $code_type ) {
+	$exec = array( 'everywhere', 'admin_only', 'frontend_only', 'frontend_cl', 'on_demand' );
+	$markup = array(
+		'site_wide_header',
+		'site_wide_body',
+		'site_wide_footer',
+		'before_post',
+		'after_post',
+		'before_content',
+		'after_content',
+		'after_paragraph',
+	);
+	return minn_admin_wpcode_type_executes( $code_type ) ? $exec : $markup;
+}
+
+/**
  * Does this type put the author's MARKUP into the page?
  *
  * Distinct from executing: a `text` or `html` snippet never runs PHP, but
@@ -163,7 +221,48 @@ function minn_admin_wpcode_type_needs_raw( $code_type ) {
  * 403 unless the caller may author this code type (and, on an update, edit
  * this specific snippet — WPCode requires edit_post on the target too).
  */
-function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0, $writes_code = true ) {
+/**
+ * Resolve and validate a request's location against the type it will be stored as.
+ *
+ * Read from $request[...] so the guard and the write can never disagree about
+ * which slot they are talking about, and refuse anything outside the vocabulary
+ * for that type -- an unrecognised slug would otherwise be created as a brand new
+ * wpcode_location term by wp_set_post_terms.
+ *
+ * @param WP_REST_Request $request   Request.
+ * @param string          $code_type Effective code type for the write.
+ * @param string|null     $fallback  Stored location to keep when none was sent.
+ * @return string|WP_Error Location slug, or an error when it is not offered.
+ */
+function minn_admin_wpcode_location_in( $request, $code_type, $fallback = null ) {
+	$allowed = minn_admin_wpcode_locations_for_type( $code_type );
+	$raw     = $request['location'];
+	if ( null === $raw || '' === $raw ) {
+		if ( null !== $fallback ) {
+			return (string) $fallback;
+		}
+		return (string) $allowed[0];
+	}
+	$loc = sanitize_key( (string) $raw );
+	if ( ! in_array( $loc, $allowed, true ) ) {
+		return new WP_Error(
+			'forbidden',
+			__( 'That location is not available for this snippet type.', 'minn-admin' ),
+			array( 'status' => 400 )
+		);
+	}
+	return $loc;
+}
+
+function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0, $writes_code = true, $location = null ) {
+	// The LOCATION decides which runner executes the bytes, and WPCode's grouping
+	// query never looks at the code type -- so a snippet parked at a PHP bucket is
+	// PHP authoring however it is typed. Resolve the effective type from BOTH before
+	// any bar is applied: the guard must judge what the request produces, not what
+	// it calls itself.
+	if ( null !== $location && minn_admin_wpcode_location_executes( $location ) ) {
+		$code_type = 'php';
+	}
 	// html, js, css and scss are all emitted as raw code on every page, and
 	// WPCode's own capability label treats them as one tier: "Edit HTML,
 	// JavaScript & CSS Snippets". kses cannot repair a JavaScript body, so
@@ -270,8 +369,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'html', 'HTML' ),
 		array( 'text', 'Text' ),
 	);
+	// Two tiers, and they are not interchangeable: the first five are the buckets
+	// WPCode executes as PHP, the rest emit markup. The server refuses a pairing it
+	// did not offer (minn_admin_wpcode_location_in), so this list is the honest
+	// vocabulary rather than the only guard.
 	$location_options = array(
-		array( 'everywhere', 'Everywhere' ),
+		array( 'everywhere', __( 'Everywhere', 'minn-admin' ) ),
 		array( 'frontend_only', __( 'Front-end only', 'minn-admin' ) ),
 		array( 'admin_only', __( 'Admin only', 'minn-admin' ) ),
 		array( 'site_wide_header', __( 'Site-wide header', 'minn-admin' ) ),
@@ -296,7 +399,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'placeholder' => "add_filter( '…', '…' );",
 		),
 		array( 'key' => 'code_type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options ),
-		array( 'key' => 'auto_insert', 'label' => __( 'Insert automatically', 'minn-admin' ), 'type' => 'switch' ),
+		array( 'key' => 'auto_insert', 'label' => __( 'Insert automatically', 'minn-admin' ), 'type' => 'toggle' ),
 		array( 'key' => 'location', 'label' => __( 'Location', 'minn-admin' ), 'type' => 'select', 'options' => $location_options ),
 		array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'type' => 'number' ),
 		array( 'key' => 'tags', 'label' => __( 'Tags', 'minn-admin' ), 'type' => 'tags', 'required' => false ),
@@ -330,9 +433,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'method'   => 'POST',
 				'defaults' => array(
 					'active'    => false,
-					'code_type' => 'php',
-					'location'  => 'everywhere',
-					'priority'  => 10,
+					'code_type'   => 'php',
+					'location'    => 'everywhere',
+					'auto_insert' => true,
+					'priority'    => 10,
 					'tags'      => array(),
 					'code'      => '',
 				),
@@ -479,7 +583,12 @@ add_action( 'rest_api_init', function () {
 				'methods'             => 'POST',
 				'permission_callback' => $can_edit,
 				'callback'            => function ( WP_REST_Request $request ) {
-					$guard = minn_admin_wpcode_guard_type( sanitize_key( (string) ( $request['code_type'] ?? 'php' ) ) );
+					$create_type     = sanitize_key( (string) ( $request['code_type'] ?? 'php' ) );
+					$create_location = minn_admin_wpcode_location_in( $request, $create_type );
+					if ( is_wp_error( $create_location ) ) {
+						return $create_location;
+					}
+					$guard = minn_admin_wpcode_guard_type( $create_type, 0, true, $create_location );
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
 					}
@@ -489,17 +598,20 @@ add_action( 'rest_api_init', function () {
 					}
 					// load_from_array (via the array constructor) can set private
 					// fields like priority/note that are not assignable from outside.
-					$create_type = sanitize_key( (string) ( $request['code_type'] ?? 'php' ) );
 					$snippet = new WPCode_Snippet(
 						array(
 							'title'       => sanitize_text_field( (string) $request['name'] ),
 							'code'        => minn_admin_wpcode_clean_code( $create_type, (string) ( $request['code'] ?? '' ) ),
 							'code_type'   => $create_type,
-							'location'    => sanitize_key( (string) ( $request['location'] ?? 'everywhere' ) ),
+							'location'    => $create_location,
 							'priority'    => (int) ( $request['priority'] ?? 10 ),
 							'tags'        => array_map( 'sanitize_text_field', (array) ( $request['tags'] ?? array() ) ),
 							'note'        => sanitize_textarea_field( (string) ( $request['desc'] ?? '' ) ),
-							'auto_insert' => 1,
+							// Carry the requested insert method rather than forcing it on:
+							// auto_insert=1 is what makes WPCode write the location term,
+							// so hardcoding it published every created snippet at its
+							// location whatever the form's own switch said.
+							'auto_insert' => (int) rest_sanitize_boolean( $request['auto_insert'] ?? true ),
 							'active'      => ! empty( $request['active'] ),
 						)
 					);
@@ -571,14 +683,27 @@ add_action( 'rest_api_init', function () {
 					// Promoting a live shortcode-only snippet to auto-insert
 					// starts its bytes running on every request, which is the
 					// same event as switching one on: the guard has to see it.
-					$promoting = ! empty( $request['auto_insert'] )
+					$promoting = null !== $request['auto_insert']
+						&& rest_sanitize_boolean( $request['auto_insert'] )
 						&& ! (int) $snippet->get_auto_insert()
 						&& $snippet->is_active();
+					// Moving a live snippet into a running bucket starts its bytes
+					// executing just as surely as switching it on. The guard keyed on
+					// "did the request carry code?", so a body of only
+					// {"location":"everywhere"} reached the write with the guard told
+					// it was not a write. Activation, promotion and RETARGETING are all
+					// execution without carrying code.
+					$stored_loc  = (string) $snippet->get_location();
+					$want_loc    = null !== $request['location'] ? sanitize_key( (string) $request['location'] ) : $stored_loc;
+					$retargeting = $want_loc !== $stored_loc
+						&& minn_admin_wpcode_location_executes( $want_loc )
+						&& ! minn_admin_wpcode_location_executes( $stored_loc );
 
 					$guard = minn_admin_wpcode_guard_type(
 						(string) $snippet->get_code_type(),
 						(int) $request['id'],
-						null !== $request['code'] || $activating || $promoting
+						null !== $request['code'] || $activating || $promoting || $retargeting,
+						$stored_loc
 					);
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
@@ -593,10 +718,21 @@ add_action( 'rest_api_init', function () {
 					$new_type = $request['code_type'];
 					if ( null !== $new_type ) {
 						$new_type  = sanitize_key( (string) $new_type );
-						$guard_new = minn_admin_wpcode_guard_type( $new_type, (int) $request['id'] );
+						$guard_new = minn_admin_wpcode_guard_type( $new_type, (int) $request['id'], true, $want_loc );
 						if ( is_wp_error( $guard_new ) ) {
 							return $guard_new;
 						}
+					}
+
+					// Resolve the location against the type in force AFTER the write, so
+					// a retype and a move in one request are judged together.
+					$eff_loc = minn_admin_wpcode_location_in(
+						$request,
+						null !== $new_type ? $new_type : (string) $snippet->get_code_type(),
+						$stored_loc
+					);
+					if ( is_wp_error( $eff_loc ) ) {
+						return $eff_loc;
 					}
 					if ( null !== $request['code'] ) {
 						$guard_code = minn_admin_wpcode_guard_code( (string) $request['code'] );
@@ -629,8 +765,11 @@ add_action( 'rest_api_init', function () {
 					// clearing it makes the snippet shortcode-only. Forcing it turned an
 					// ordinary rename into a site-wide publish.
 					$was_auto = (int) $snippet->get_auto_insert();
+					// rest_sanitize_boolean, not ! empty(): a stringly-typed client sends
+					// "false" for an off switch and ! empty( "false" ) is true, which
+					// silently promoted a shortcode-only snippet on an ordinary rename.
 					$want_auto = null !== $request['auto_insert']
-						? (int) ( ! empty( $request['auto_insert'] ) )
+						? (int) rest_sanitize_boolean( $request['auto_insert'] )
 						: $was_auto;
 					$patch = array( 'auto_insert' => $want_auto );
 					if ( null !== $request['name'] ) {
@@ -649,7 +788,7 @@ add_action( 'rest_api_init', function () {
 						$patch['code_type'] = $new_type;
 					}
 					if ( null !== $request['location'] ) {
-						$patch['location'] = sanitize_key( (string) $request['location'] );
+						$patch['location'] = $eff_loc;
 					}
 					if ( null !== $request['priority'] ) {
 						$patch['priority'] = (int) $request['priority'];
