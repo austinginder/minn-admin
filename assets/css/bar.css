@@ -68,6 +68,11 @@
    a bar link can have. Inherited typography (a body-level letter-spacing)
    is neutralized on the root so every surface inherits ours, not the theme's. */
 #minn-bar-root { letter-spacing: normal; word-spacing: normal; text-transform: none; font-style: normal; }
+/* Sit above theme chrome. Divi's fixed #main-header is 99999 and #top-header
+   is 100000; many other themes park sticky headers at 99999 (the same rung
+   as the classic admin bar). The root stacking context lifts every bar
+   surface together. */
+#minn-bar-root { position: relative; z-index: 1000100; }
 #minn-bar-root a, #minn-bar-root a:hover, #minn-bar-root a:focus, #minn-bar-root a:visited {
   text-decoration: none !important;
   border-bottom: 0 !important;
@@ -87,7 +92,7 @@
   position: fixed;
   inset: 10px 10px auto;
   height: 48px;
-  z-index: 99990;
+  z-index: 1000100;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -226,7 +231,7 @@
 /* Menus */
 .minn-bar-menu {
   position: fixed;
-  z-index: 99995;
+  z-index: 1000105;
   width: 270px;
   padding: 6px;
   background: var(--panel);
@@ -297,7 +302,7 @@
 #minn-bar-palette {
   position: fixed;
   inset: 0;
-  z-index: 99996;
+  z-index: 1000106;
   display: none;
   place-items: start center;
   padding: max(88px, 10vh) 18px 24px;
@@ -408,7 +413,7 @@
   top: 68px;
   left: 50%;
   transform: translateX(-50%) translateY(-6px);
-  z-index: 99997;
+  z-index: 1000107;
   max-width: min(92vw, 480px);
   padding: 9px 14px;
   border: 1px solid var(--border2);

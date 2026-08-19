@@ -86,6 +86,25 @@ const { execSync } = require( 'child_process' );
 		} ) );
 		t.check( 'opted in: Minn bar renders and the classic bar is gone', s.minn && ! s.core, JSON.stringify( s ) );
 		t.check( 'the page is pushed below the floating bar', s.margin === '68px', s.margin );
+
+		// Theme headers often sit at z-index 99999 (Divi's #main-header,
+		// the same rung as the classic admin bar). The Minn bar must paint
+		// above them or the homepage looks like the bar is missing.
+		await page.evaluate( () => {
+			const h = document.createElement( 'header' );
+			h.id = 'suite-theme-header';
+			h.style.cssText = 'position:fixed;inset:0 0 auto;height:80px;z-index:99999;background:red;';
+			document.body.appendChild( h );
+		} );
+		const aboveHeader = await page.evaluate( () => {
+			const el = document.elementFromPoint( 40, 24 );
+			return !!( el && el.closest && el.closest( '#minn-bar' ) );
+		} );
+		t.check( 'the bar sits above a theme header at z-index 99999', aboveHeader );
+		await page.evaluate( () => {
+			const h = document.getElementById( 'suite-theme-header' );
+			if ( h ) h.remove();
+		} );
 		t.check( 'status slot is empty on a public production site', ! s.chip, JSON.stringify( s ) );
 
 		const editHref = await page.evaluate( () => {
