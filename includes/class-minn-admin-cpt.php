@@ -200,6 +200,34 @@ class Minn_Admin_CPT {
 		return defined( 'CPTUI_VERSION' );
 	}
 
+	private static function acpt_available() {
+		return function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active();
+	}
+
+	/**
+	 * Slugs ACPT owns, from its own repository. ACPT is read-only here: it
+	 * keeps its models in custom tables behind its own builder, so Minn
+	 * names it as the owner and links out rather than pretending to write.
+	 * Its "native" models describe types WordPress already registered, so
+	 * those are not claimed.
+	 */
+	private static function acpt_types() {
+		if ( ! self::acpt_available() || ! class_exists( '\ACPT\Core\Repository\CustomPostTypeRepository' ) ) {
+			return array();
+		}
+		$map = array();
+		try {
+			foreach ( \ACPT\Core\Repository\CustomPostTypeRepository::get( array() ) as $model ) {
+				if ( ! $model->isNative() ) {
+					$map[ $model->getName() ] = true;
+				}
+			}
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+		return $map;
+	}
+
 	/** Map of slug => ACF settings array for ACF-managed post types. */
 	private static function acf_types() {
 		if ( ! self::acf_available() ) {
@@ -242,6 +270,9 @@ class Minn_Admin_CPT {
 			if ( isset( $cptui[ $slug ] ) ) {
 				return 'cptui';
 			}
+		}
+		if ( array_key_exists( $slug, self::acpt_types() ) ) {
+			return 'acpt';
 		}
 		return 'code';
 	}

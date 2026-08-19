@@ -13,34 +13,46 @@ const { BASE, launch, login, loginAs, reporter, createPost, deletePost, openEdit
 	await login( page );
 
 	try {
-		await page.goto( `${ BASE }/minn-admin/acpt`, { waitUntil: 'domcontentloaded' } );
+		// ACPT does not get a surface of its own. Its post types and
+		// taxonomies are WordPress post types and taxonomies, so they belong
+		// in Structure alongside the ones ACF, CPT UI and Minn create, and a
+		// second list of the same things (which also showed WordPress's own
+		// categories and tags) was duplication rather than integration.
+		await page.goto( `${ BASE }/minn-admin/posttypes`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-app', { timeout: 20000 } );
 
 		const boot = await page.evaluate( () => ( {
 			surface: ( window.MINN.surfaces || [] ).find( ( s ) => s.id === 'acpt' ) || null,
 			panel: ( window.MINN.editorPanels || [] ).find( ( p ) => p.id === 'acpt' ) || null,
 		} ) );
-		t.check( 'ACPT Content models surface is in boot data', !! boot.surface && boot.surface.sub === 'ACPT', JSON.stringify( boot.surface ) );
+		t.check( 'ACPT claims no surface of its own', boot.surface === null, JSON.stringify( boot.surface ) );
 		t.check( 'ACPT editor panel uses its dedicated REST field', !! boot.panel && boot.panel.valuesKey === 'minn_acpt' && boot.panel.writeKey === 'minn_acpt', JSON.stringify( boot.panel ) );
 
-		const inventories = await page.evaluate( async () => {
-			const get = async ( path ) => {
-				const r = await fetch( window.MINN.restUrl + path, { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
-				return { status: r.status, body: await r.json() };
-			};
-			return {
-				groups: await get( 'minn-admin/v1/acpt/meta-groups' ),
-				postTypes: await get( 'minn-admin/v1/acpt/post-types?search=Posts' ),
-				taxonomies: await get( 'minn-admin/v1/acpt/taxonomies?search=Categories' ),
-			};
+		// Structure names ACPT as the owner of the types it defines, and
+		// leaves them read-only: ACPT keeps them in its own tables behind its
+		// own builder, so Minn attributes and links out rather than writing.
+		const types = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/post-types', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
+			const b = await r.json();
+			return ( b.types || b || [] ).map( ( x ) => ( { slug: x.slug, source: x.source, editable: x.editable } ) );
 		} );
-		const inventoryFixture = inventories.groups.body.items.find( ( item ) => item.name === 'minn-acpt-suite' );
-		t.check( 'field-group inventory finds the ACPT fixture', inventories.groups.status === 200 && inventoryFixture && inventoryFixture.fields === 3, JSON.stringify( inventories.groups ) );
-		t.check( 'post-type inventory is backed by ACPT models', inventories.postTypes.status === 200 && inventories.postTypes.body.items.some( ( i ) => i.name === 'post' ), JSON.stringify( inventories.postTypes ) );
-		t.check( 'taxonomy inventory is backed by ACPT models', inventories.taxonomies.status === 200 && inventories.taxonomies.body.items.some( ( i ) => i.slug === 'category' ), JSON.stringify( inventories.taxonomies ) );
-
-		await page.waitForSelector( '.minn-table, .minn-list', { timeout: 20000 } );
-		t.check( 'Content models renders the fixture row', /Minn ACPT suite/.test( await page.locator( '#minn-view' ).innerText() ) );
+		const owned = types.filter( ( x ) => x.source === 'acpt' );
+		// The dev site has ACPT active but defines no custom types through it,
+		// so there may be nothing for ACPT to own. Say which case ran instead
+		// of passing an assertion that never looked at anything.
+		if ( owned.length ) {
+			t.check( 'Structure attributes ACPT-defined types to ACPT', true, JSON.stringify( owned ) );
+			t.check( 'ACPT-owned types are read-only in Structure', owned.every( ( x ) => x.editable === false ), JSON.stringify( owned ) );
+		} else {
+			t.check( 'SKIP: ACPT defines no custom post types on this site', true,
+				'nothing for ACPT to own; create one in ACPT to cover the attribution path' );
+		}
+		// The types ACPT merely mirrors (post, page, attachment) are still
+		// WordPress's, and must not be relabelled.
+		t.check( 'core types keep their own attribution',
+			types.filter( ( x ) => [ 'post', 'page' ].includes( x.slug ) ).every( ( x ) => x.source === 'core' ),
+			JSON.stringify( types.filter( ( x ) => [ 'post', 'page' ].includes( x.slug ) ) ) );
 
 		postId = await createPost( page, { title: 'ACPT panel suite', content: '<p>ACPT.</p>' } );
 		const fields = await page.evaluate( async ( id ) => {
@@ -73,12 +85,22 @@ const { BASE, launch, login, loginAs, reporter, createPost, deletePost, openEdit
 		const panelText = await page.locator( '.minn-editor-side-modal' ).innerText();
 		t.check( 'editor UI shows ACPT fields and the advanced-field count', /ACPT suite text/.test( panelText ) && /ACPT suite choice/.test( panelText ) && /advanced field/i.test( panelText ), panelText );
 
+		// The admin-only schema listings are gone with the surface they fed,
+		// so the remaining question is narrower: the one route left is the
+		// editor panel's own, and it belongs to anyone who may edit posts.
 		const { ctx: editorCtx, page: editorPage } = await loginAs( browser, 'minn-editor', 'minn-editor-pass-1' );
-		const denied = await editorPage.evaluate( async () => {
-			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/acpt/meta-groups', { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
-			return r.status;
+		const asEditor = await editorPage.evaluate( async () => {
+			const get = async ( path ) => ( await fetch( window.MINN.restUrl + path, {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } ) ).status;
+			return {
+				fields: await get( 'minn-admin/v1/acpt/fields?post_id=0&post_type=posts' ),
+				groups: await get( 'minn-admin/v1/acpt/meta-groups' ),
+				types: await get( 'minn-admin/v1/acpt/post-types' ),
+			};
 		} );
-		t.check( 'non-admins cannot enumerate ACPT schemas', denied === 403, String( denied ) );
+		t.check( 'the retired schema listings are gone, not merely hidden',
+			asEditor.groups === 404 && asEditor.types === 404, JSON.stringify( asEditor ) );
+		t.check( 'an editor can still load the panel’s own fields', asEditor.fields === 200, JSON.stringify( asEditor ) );
 		await editorCtx.close();
 
 		const licenses = await page.evaluate( async () => {

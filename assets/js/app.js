@@ -19766,7 +19766,7 @@
 	 * whichever manager owns each one (ACF / CPT UI / Minn's own store —
 	 * see class-minn-admin-cpt.php). Code-registered types are read-only. */
 
-	const CPT_SOURCE_LABEL = { core: 'WordPress', code: __( 'Code' ), acf: 'ACF', cptui: __( 'CPT UI' ), minn: 'Minn' };
+	const CPT_SOURCE_LABEL = { core: 'WordPress', code: __( 'Code' ), acf: 'ACF', cptui: __( 'CPT UI' ), acpt: 'ACPT', minn: 'Minn' };
 	const CPT_SUPPORTS = [
 		[ 'title', 'Title' ], [ 'editor', 'Editor' ], [ 'thumbnail', __( 'Featured image' ) ],
 		[ 'excerpt', 'Excerpt' ], [ 'custom-fields', __( 'Custom fields' ) ], [ 'comments', 'Comments' ],

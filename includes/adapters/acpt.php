@@ -61,101 +61,6 @@ function minn_admin_acpt_resolve_type( $rest_base ) {
 	return 'post';
 }
 
-/** A readable summary of a field group's ACPT location rules. */
-function minn_admin_acpt_location_label( $group ) {
-	$parts = array();
-	foreach ( $group->getBelongs() as $belong ) {
-		$type = (string) $belong->getBelongsTo();
-		$find = $belong->getFind();
-		if ( is_array( $find ) ) {
-			$find = implode( ', ', array_map( 'strval', $find ) );
-		}
-		$labels = array(
-			'customPostType' => __( 'Post type', 'minn-admin' ),
-			'taxonomy'       => __( 'Taxonomy', 'minn-admin' ),
-			'optionPage'     => __( 'Option page', 'minn-admin' ),
-			'user'           => __( 'User', 'minn-admin' ),
-			'comment'        => __( 'Comment', 'minn-admin' ),
-			'media'          => __( 'Media', 'minn-admin' ),
-		);
-		$label = isset( $labels[ $type ] ) ? $labels[ $type ] : ucwords( preg_replace( '/(?<!^)[A-Z]/', ' $0', $type ) );
-		$parts[] = '' !== (string) $find ? $label . ': ' . $find : $label;
-	}
-	return $parts ? implode( ' · ', $parts ) : __( 'No location rules', 'minn-admin' );
-}
-
-/** Filter and paginate an in-memory collection for a Minn list response. */
-function minn_admin_acpt_page( $items, WP_REST_Request $request, $keys ) {
-	$search = trim( (string) $request['search'] );
-	if ( '' !== $search ) {
-		$items = array_values( array_filter( $items, function ( $item ) use ( $search, $keys ) {
-			$text = '';
-			foreach ( $keys as $key ) {
-				$text .= ' ' . (string) ( $item[ $key ] ?? '' );
-			}
-			return false !== stripos( $text, $search );
-		} ) );
-	}
-	$total    = count( $items );
-	$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-	$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-	return array(
-		'items' => array_slice( $items, ( $page - 1 ) * $per_page, $per_page ),
-		'total' => $total,
-	);
-}
-
-/** Field-group inventory from ACPT's repository models. */
-function minn_admin_acpt_meta_groups( WP_REST_Request $request ) {
-	$items = array();
-	foreach ( \ACPT\Core\Repository\MetaRepository::get( array() ) as $group ) {
-		$count = 0;
-		foreach ( $group->getBoxes() as $box ) {
-			$count += count( $box->getFields() );
-		}
-		$items[] = array(
-			'id'       => $group->getId(),
-			'title'    => $group->getUIName(),
-			'name'     => $group->getName(),
-			'fields'   => $count,
-			'location' => minn_admin_acpt_location_label( $group ),
-		);
-	}
-	return minn_admin_acpt_page( $items, $request, array( 'title', 'name', 'location' ) );
-}
-
-/** Custom-post-type inventory from ACPT's repository models. */
-function minn_admin_acpt_post_types( WP_REST_Request $request ) {
-	$items = array();
-	foreach ( \ACPT\Core\Repository\CustomPostTypeRepository::get( array() ) as $model ) {
-		$items[] = array(
-			'id'      => $model->getId(),
-			'title'   => $model->getPlural(),
-			'name'    => $model->getName(),
-			'singular' => $model->getSingular(),
-			'posts'   => $model->getPostCount(),
-			'source'  => $model->isNative() ? __( 'WordPress', 'minn-admin' ) : 'ACPT',
-		);
-	}
-	return minn_admin_acpt_page( $items, $request, array( 'title', 'name', 'singular', 'source' ) );
-}
-
-/** Taxonomy inventory from ACPT's repository models. */
-function minn_admin_acpt_taxonomies( WP_REST_Request $request ) {
-	$items = array();
-	foreach ( \ACPT\Core\Repository\TaxonomyRepository::get( array() ) as $model ) {
-		$items[] = array(
-			'id'       => $model->getId(),
-			'title'    => $model->getPlural(),
-			'slug'     => $model->getSlug(),
-			'singular' => $model->getSingular(),
-			'posts'    => $model->getPostCount(),
-			'source'   => $model->isNative() ? __( 'WordPress', 'minn-admin' ) : 'ACPT',
-		);
-	}
-	return minn_admin_acpt_page( $items, $request, array( 'title', 'slug', 'singular', 'source' ) );
-}
-
 /** Map one ACPT field to Minn's panel vocabulary, or null when complex. */
 function minn_admin_acpt_map_field( $field ) {
 	if ( $field->getParentId() || $field->getBlockId() || $field->getForgedBy() ) {
@@ -311,78 +216,6 @@ function minn_admin_acpt_write_values( $post_id, $values ) {
 	}
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_acpt_active() ) {
-		return $surfaces;
-	}
-	$surfaces['acpt'] = array(
-		'label'      => __( 'Content models', 'minn-admin' ),
-		'sub'        => 'ACPT',
-		'icon'       => 'blocks',
-		'group'      => 'tools',
-		'cap'        => 'manage_options',
-		'collection' => array(
-			'viewLabel' => __( 'Field groups', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/acpt/meta-groups',
-			'pageQuery' => 'per_page=25&page={page}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'search'    => 'search={q}',
-			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Field group', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ), 'format' => 'mono' ),
-				array( 'key' => 'fields', 'label' => __( 'Fields', 'minn-admin' ) ),
-				array( 'key' => 'location', 'label' => __( 'Location', 'minn-admin' ) ),
-			),
-			'detail'    => array(),
-			'actions'   => array(
-				array( 'label' => __( 'Edit in ACPT ↗', 'minn-admin' ), 'href' => minn_admin_acpt_admin_url( 'edit_meta/{id}' ) ),
-			),
-		),
-		'views'      => array(
-			array(
-				'viewLabel' => __( 'Post types', 'minn-admin' ),
-				'route'     => 'minn-admin/v1/acpt/post-types',
-				'pageQuery' => 'per_page=25&page={page}',
-				'itemsKey'  => 'items',
-				'totalKey'  => 'total',
-				'search'    => 'search={q}',
-				'columns'   => array(
-					array( 'key' => 'title', 'label' => __( 'Post type', 'minn-admin' ), 'format' => 'title' ),
-					array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ), 'format' => 'mono' ),
-					array( 'key' => 'singular', 'label' => __( 'Singular', 'minn-admin' ) ),
-					array( 'key' => 'posts', 'label' => __( 'Posts', 'minn-admin' ) ),
-					array( 'key' => 'source', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'pill' ),
-				),
-				'detail'    => array(),
-				'actions'   => array(
-					array( 'label' => __( 'Edit in ACPT ↗', 'minn-admin' ), 'href' => minn_admin_acpt_admin_url( 'edit/{name}' ) ),
-				),
-			),
-			array(
-				'viewLabel' => __( 'Taxonomies', 'minn-admin' ),
-				'route'     => 'minn-admin/v1/acpt/taxonomies',
-				'pageQuery' => 'per_page=25&page={page}',
-				'itemsKey'  => 'items',
-				'totalKey'  => 'total',
-				'search'    => 'search={q}',
-				'columns'   => array(
-					array( 'key' => 'title', 'label' => __( 'Taxonomy', 'minn-admin' ), 'format' => 'title' ),
-					array( 'key' => 'slug', 'label' => __( 'Slug', 'minn-admin' ), 'format' => 'mono' ),
-					array( 'key' => 'singular', 'label' => __( 'Singular', 'minn-admin' ) ),
-					array( 'key' => 'posts', 'label' => __( 'Posts', 'minn-admin' ) ),
-					array( 'key' => 'source', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'pill' ),
-				),
-				'detail'    => array(),
-				'actions'   => array(
-					array( 'label' => __( 'Edit in ACPT ↗', 'minn-admin' ), 'href' => minn_admin_acpt_admin_url( 'edit_taxonomy/{slug}' ) ),
-				),
-			),
-		),
-	);
-	return $surfaces;
-} );
-
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 	if ( ! minn_admin_acpt_active() ) {
 		return $panels;
@@ -403,9 +236,6 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	foreach ( array(
-		'/acpt/meta-groups' => 'minn_admin_acpt_meta_groups',
-		'/acpt/post-types'  => 'minn_admin_acpt_post_types',
-		'/acpt/taxonomies'  => 'minn_admin_acpt_taxonomies',
 	) as $route => $callback ) {
 		register_rest_route( 'minn-admin/v1', $route, array(
 			'methods'             => 'GET',
