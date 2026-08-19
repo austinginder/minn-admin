@@ -63,7 +63,10 @@ Expand only the part of Minn you want to explore.
   **Plausible Analytics**, **Matomo**, Google Analytics through **Site Kit**, or **Jetpack Stats**), **click a bar for
   that day's top pages and referrers** (Koko, WP Statistics, Burst, Independent Analytics,
   Plausible Analytics, Matomo and Jetpack Stats today; others join via `minn_admin_traffic_day`) and step through
-  days with the arrow keys, plus a recent-activity feed
+  days with the arrow keys, plus a recent-activity feed. **Open stats** (also a palette command)
+  opens a dedicated page for longer history: ranges up to twelve months, a custom window
+  inside the last year, and range-wide breakdowns (top pages and referrers everywhere;
+  countries, devices and search terms where the provider tracks them)
 - **Content** — posts, pages and custom post types sorted by publish date (scheduled posts
   lead with their go-out dates), with search, category/tag filters, status pills (live posts
   carrying unsaved edits wear a **Modified** chip, with a matching filter; a post someone
@@ -105,6 +108,11 @@ Expand only the part of Minn you want to explore.
   Subscriptions is active: a subscription opens on its own page in the order page's shape, with
   editable items and schedule, coupons, a notes timeline, a quick view of related orders, and
   the same filter bar with its own status vocabulary.
+  Products and coupons wear that same orders filter bar (status as the dropdown; stock,
+  category, tag, type, featured and on sale on products; a date window on coupons).
+  **Gift cards** when YITH, official WooCommerce Gift Cards, or PW Gift Cards is active:
+  one Commerce item with a provider switcher, the outstanding balance the store still
+  owes, enable/disable, change the balance, resend, and Add gift card.
   Orders, products and customers carry **right-click menus** for
   the common moves (status changes, stock and publish toggles, email, jump to a customer's orders).
   Invoice / packing-slip downloads when PDF Invoices & Packing Slips is active. Product, coupon and
@@ -116,7 +124,10 @@ Expand only the part of Minn you want to explore.
   Editing a user is a **full page at `/minn-admin/users/{id}`**: identity, public profile,
   language, sessions, plus the user's **Minn appearance set by an admin** (color scheme
   including custom palettes, default admin, toolbar) so a client's Minn looks right before
-  their first sign-in, and a **Hidden for them** card restoring anything they hid
+  their first sign-in, and a **Hidden for them** card restoring anything they hid.
+  Administrators also get **Role defaults**: per role, choose what happens after sign-in
+  and which toolbar that role gets on the public site, as an overlay that never erases
+  anyone's saved preference
 - **Multisite** — fuzzy-search the sites you can use from a compact sidebar switcher or
   the command palette;
   subsite administrators can add existing network accounts, change roles, and remove site
@@ -131,7 +142,9 @@ Expand only the part of Minn you want to explore.
   **twenty-four languages** covering about half of WordPress installs. Right-to-left languages
   (Arabic, Hebrew, Persian and friends) get a genuinely mirrored layout, counts follow each
   language's own plural rules, and translations arrive as **WordPress language packs** through
-  the same Updates screen as everything else
+  the same Updates screen as everything else. **Extensions → Translations** lists every
+  language whose files are on the site, not only the ones waiting to update, and can
+  **remove** a language nothing uses so WordPress stops keeping it current forever
 - **Your profile** — a full page at `/minn-admin/profile`: account, public profile (first/last
   name, website, bio, Gravatar), **per-user language** with automatic pack installs, the
   front-end toolbar preference, appearance, hidden integrations, and login sessions
@@ -152,13 +165,16 @@ Expand only the part of Minn you want to explore.
   theme card (core's own `auto_update_*` lists, so Minn and wp-admin always agree), **Live
   preview** on inactive themes (Customizer for classic themes, Site Editor preview for block
   themes), **right-click menus** on plugin and theme cards
-  (Activate, Update, Delete, Open on WordPress.org or GitHub, Copy file), and a **Licenses** tab
-  (below)
+  (Activate, Update, Delete, Open on WordPress.org or GitHub, Copy file), a **Translations**
+  tab that lists every installed language and can remove one nothing uses, and a
+  **Licenses** tab (below)
 - **Structure** — post types, taxonomies and terms on one page. See every registered post type
   and taxonomy and manage definitions through whoever owns them (ACF, Custom Post Type UI, or
   Minn's own store when neither is active; code-registered ones shown read-only), and a full
   **terms manager**: rename, re-parent, **merge** (posts move to the survivor through core's own
-  reassignment) and delete across every taxonomy, with an indented tree for hierarchical ones
+  reassignment) and delete across every taxonomy, with an indented tree for hierarchical ones.
+  Post type and taxonomy rows answer a **right-click** (open the definition, jump to that
+  type's content, start a new item, manage terms, or remove an editable definition)
 - **Settings** — reorganized by intent: **Site** (identity, logo, site language, locale, admin, with timezone picker),
   **Visibility** (search engines, maintenance mode, membership), **Homepage**, **Content**
   (new-content defaults + permalinks with automatic rewrite flushing), **Comments** (discussion +

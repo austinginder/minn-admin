@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.32.0. This file ships inside the plugin, so the copy you
+*Current as of v0.33.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -71,7 +71,8 @@ such as maintenance mode, a password gate, hidden search visibility or a
 staging environment. The bar moves out of the way as you scroll down, returns
 when you scroll up, and becomes a simple full-width strip on phones. This is a
 personal choice: other users keep the classic bar until they opt in, and
-wp-admin always keeps the classic bar.
+wp-admin always keeps the classic bar. The bar also stays off a page builder's
+own canvas, the same way the classic admin bar does.
 
 **Right-click is real in Minn.** This is the least discoverable thing in
 the app, so here it is in plain terms: rows in Content and Media have
@@ -179,7 +180,8 @@ away:
   click on "Block editor ↗" opens the same post in Gutenberg whenever you
   want the full toolkit. Posts built with page builders (Elementor,
   Breakdance, Bricks, Divi and friends) open read-only with an "Edit in your builder"
-  button, because the builder owns that content.
+  button, because the builder owns that content. Elementor's Exit to WordPress
+  and Brizy's Go to Dashboard open Minn instead when Minn is the default admin.
 - **Galleries and sliders open an images editor.** Hover a gallery-shaped
   block and the card names the action: click anywhere on it for a tile
   grid where you reorder (drag or arrows), replace (click a tile), add,
@@ -295,9 +297,19 @@ networks are sent to WordPress's own Upgrade Network screen instead.
 
 **Traffic**: with a supported analytics plugin active (Koko Analytics,
 Plausible Analytics, Matomo, Independent Analytics, Jetpack Stats, Site Kit and others), the
-Overview chart shows daily visitors and pageviews from that plugin's own
-numbers. Click a day for its top pages and referrers, and step through
-days with the arrow keys without closing the dialog.
+Overview chart shows the recent pulse: daily visitors and pageviews from
+that plugin's own numbers. Click a day for its top pages and referrers,
+and step through days with the arrow keys without closing the dialog.
+**Open stats** (also the View traffic stats command in the palette) opens
+a dedicated page for longer history: ranges up to twelve months, including
+a custom window inside the last year, with one-click This month, Last month,
+This year and Last year. Visitor and pageview totals sit above a full-width
+chart, bars group by day, week or month to fit the range, and clicking a
+bar opens that period's top pages and referrers. Below the chart, breakdown
+panels cover the whole selected range: top pages and referrers from every
+analytics plugin Minn already reads, plus richer dimensions where the
+provider tracks them. Roles without reporting permission see a plain
+explanation instead of numbers.
 
 **Cache and backups**: if a caching plugin or host cache is active, ⌘K
 "Clear site cache" purges all of them at once. If a backup plugin is
@@ -347,18 +359,26 @@ readable left to right inside the surrounding text.
 
 Translations arrive as WordPress language packs through the same
 update system as everything else. Open **Extensions → Translations** to see
-pending packs grouped by language, including which plugins, themes or
-WordPress core package each download belongs to. **Update translations** runs
-that queue on its own, while **Check for updates** refreshes it alongside
-plugin and theme updates. Large batches keep their progress visible in the top
-bar, so you can continue working while they finish.
+every language whose files are on this site, not only the ones with an
+update waiting. Each language names how many WordPress, plugin and theme
+translations it carries, and how many are waiting to update. **Update
+translations** runs that queue on its own, while **Check for updates**
+refreshes it alongside plugin and theme updates. Large batches keep their
+progress visible in the top bar, so you can continue working while they
+finish. Languages nothing uses get a Remove action that deletes their
+files and stops the downloads; WordPress otherwise keeps every installed
+language current forever. The site language and any language a person has
+chosen on their profile cannot be removed, and the row says which of the
+two is holding them. Removing is not permanent: WordPress reinstalls a
+language the moment it is selected again.
 
 ## Your store
 
 With WooCommerce active, the sidebar gains a Commerce group for Orders,
 Customers, Products and Coupons. WooCommerce Subscriptions adds Subscriptions,
-a supported appointment plugin adds Bookings, and YITH WooCommerce Gift Cards
-adds Gift cards, all in the same operational group.
+a supported appointment plugin adds Bookings, and a supported gift card
+plugin (YITH, official WooCommerce Gift Cards, or PW Gift Cards) adds Gift
+cards, all in the same operational group.
 
 - **Orders** open as their own page, at their own address, so an order can
   be linked to or kept in a second tab. The main column holds the work:
@@ -368,7 +388,9 @@ adds Gift cards, all in the same operational group.
   text until its pencil opens the form. You can take a payment by hand,
   refund whole lines or an arbitrary amount, apply or remove a coupon,
   resend an email and read the order's notes without leaving Minn, and
-  the Back button returns you to wherever the visit started.
+  the Back button returns you to wherever the visit started. Refund stays
+  in the header; sending an email, copying the payment URL, the PDF
+  documents and the WooCommerce link live behind a More menu.
 - **The orders list filters like a storefront back office.** One row
   holds a status view, the search box and Add filter; active filters sit
   beneath as removable chips. Status accepts more than one at a time, and
@@ -386,7 +408,8 @@ adds Gift cards, all in the same operational group.
   active they share one Commerce item with a provider switcher. The same
   filter bar Orders uses: status (more than one at a time), a date
   window, search by code or recipient, and the whole narrowing in the
-  address. A status card leads with the outstanding balance. Opening a
+  address. A status card leads with the outstanding balance the store
+  still owes, and does not count expired cards. Opening a
   card shows its code, balance, original amount, recipient and the order
   it came from, and you can enable or disable it, change the balance, or
   resend the email. The code copies with one click. Add gift card issues
@@ -410,7 +433,8 @@ adds Gift cards, all in the same operational group.
   dropdown (one at a time, because that is what WooCommerce accepts).
   Stock, category, tag, type, featured and on sale sit behind Add filter
   and live in the address. Low stock is the store's own low-stock lookup,
-  not a stock status. Coupons get the same bar with a date window.
+  not a stock status, and it still applies when you search. Search matches
+  the product name or the SKU. Coupons get the same bar with a date window.
 
   A few things follow the product rather than sitting there always. Marking
   a product virtual removes the shipping fields, because nothing ships.
@@ -442,7 +466,8 @@ adds Gift cards, all in the same operational group.
   and revisions, rather than sending you elsewhere, and the editor carries
   a button back to the product you came from. If you would rather see
   a product without leaving the list, hover its row and click the eye for a
-  quick look with the same fields.
+  quick look with the same fields. Creating a product from the list opens
+  that quick view; **Open full page** takes you to the real product page.
 
   Two jobs stay in WooCommerce on purpose: creating a brand new store-wide
   attribute, which belongs to the whole shop rather than to one product,
@@ -451,8 +476,10 @@ adds Gift cards, all in the same operational group.
 ## Managing the site
 
 - **Extensions** — four tabs: Plugins, Themes, Translations, and Licenses.
-  Translations groups pending language packs by language and names the plugin,
-  theme or WordPress core package behind each download. Install extensions by
+  Translations lists every language whose files are on this site, groups
+  pending packs by language, and names the plugin, theme or WordPress core
+  package behind each download. Languages nothing uses can be removed.
+  Install extensions by
   search, upload, or dropping a zip on the dialog; uploading a zip of
   something already installed shows what is installed against what you
   uploaded and offers to replace it, files swapped, settings and content
@@ -479,7 +506,13 @@ adds Gift cards, all in the same operational group.
   person's device. On a subsite, this page manages site membership rather
   than network accounts: add an existing account by email or username,
   change its role, or remove it from that site. Network administrators are
-  protected from per-site role and removal controls.
+  protected from per-site role and removal controls. Administrators also
+  get a **Role defaults** tab: per role, choose what happens after sign-in
+  (person chooses, or always open Minn) and which toolbar that role gets
+  on the public site (person chooses, the Minn bar, the WordPress toolbar,
+  or none). Enforcement is an overlay, never a write: changing a policy
+  does not erase anyone's saved preference, and a role returned to Person
+  chooses hands each person their previous choice back.
 - **Settings** — the settings people actually change: identity and logo,
   reading and discussion, permalinks, visibility (search engines,
   maintenance mode, and a switch that turns a detected coming-soon or
@@ -495,7 +528,12 @@ adds Gift cards, all in the same operational group.
   custom post type is hidden from Minn by its own REST setting, naming
   the post types affected and where the fix lives.
 - **Structure** — post types, taxonomies and terms: rename, merge and
-  re-parent categories and tags safely.
+  re-parent categories and tags safely. Post type and taxonomy rows answer
+  a right-click the way the rest of Minn does: open the definition, jump
+  to that type's content, start a new item, manage a taxonomy's terms, or
+  remove an editable definition. Entries only appear where they can
+  actually work. Removing a definition asks first, and spells out that
+  existing content and terms stay in the database.
 - **Database** — a window into where your site actually stores things.
   Most sites never need it, so it is not in the sidebar: you reach it from
   the System page's Database card, the command palette ("Browse database"),
@@ -525,7 +563,10 @@ Your account page covers your name and avatar, password and sessions,
 interface language (each user can pick their own), appearance, everything
 you have hidden, and **AI Access**: application passwords for connecting
 an AI assistant or other tool to your site over the standard WordPress
-API, created and revoked per tool.
+API, created and revoked per tool. When a role default is in force for
+your role, the matching switch is replaced by a short locked note that
+says why; your saved preference is still there if the policy is later
+returned to Person chooses.
 
 ## Keyboard shortcuts
 
