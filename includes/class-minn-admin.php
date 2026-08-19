@@ -451,17 +451,26 @@ class Minn_Admin {
 	 * keep the classic URL so those screens stay usable.
 	 */
 	public static function default_admin_url( $url, $path ) {
-		if ( is_admin() || wp_doing_ajax() || wp_is_json_request() ) {
+		if ( is_admin() || wp_doing_ajax() || wp_is_json_request() || wp_doing_cron() ) {
 			return $url;
 		}
-		if ( ! is_user_logged_in() || ! self::user_wants_default_admin() ) {
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return $url;
+		}
+		// Pluggable helpers are not loaded while plugins bootstrap. A plugin
+		// that builds admin URLs from its constructor (WPMU DEV Dashboard)
+		// would otherwise fatal here on every WP-CLI command.
+		if ( ! function_exists( 'is_user_logged_in' ) || ! is_user_logged_in() ) {
+			return $url;
+		}
+		if ( ! self::user_wants_default_admin() ) {
 			return $url;
 		}
 		$path = ltrim( (string) $path, '/' );
 		if ( 0 !== strpos( $path, 'nav-menus.php' ) ) {
 			return $url;
 		}
-		if ( ! current_user_can( 'edit_theme_options' ) || wp_is_block_theme() ) {
+		if ( ! function_exists( 'current_user_can' ) || ! current_user_can( 'edit_theme_options' ) || wp_is_block_theme() ) {
 			return $url;
 		}
 		return self::app_route_url( 'menus' );
