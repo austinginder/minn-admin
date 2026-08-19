@@ -310,6 +310,26 @@ const { execSync } = require( 'child_process' );
 		t.check( 'mobile: page offset matches the strip height', mob.margin === '48px', mob.margin );
 		await page.setViewportSize( { width: 1280, height: 800 } );
 
+		// Builder canvases hide the classic bar; the Minn bar is a
+		// replacement for that bar, so it must stay off too. Elementor's
+		// preview iframe is the reported case (`?elementor-preview=`).
+		let elementorOn = false;
+		try {
+			execSync( `wp --path=${ WP } plugin is-active elementor`, { stdio: 'ignore' } );
+			elementorOn = true;
+		} catch ( e ) { /* not installed */ }
+		if ( elementorOn ) {
+			const sep = permalink.includes( '?' ) ? '&' : '?';
+			await page.goto( permalink + sep + 'elementor-preview=' + postId, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+			const canvas = await page.evaluate( () => ( {
+				minn: !! document.getElementById( 'minn-bar' ),
+				core: !! document.getElementById( 'wpadminbar' ),
+				bump: !! document.getElementById( 'minn-bar-bump' ),
+			} ) );
+			t.check( 'Elementor preview canvas has neither bar',
+				! canvas.minn && ! canvas.core && ! canvas.bump, JSON.stringify( canvas ) );
+		}
+
 		// Off again: everything back to core.
 		await setFrontBar( false );
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );

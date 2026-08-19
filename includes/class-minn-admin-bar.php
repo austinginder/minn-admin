@@ -30,6 +30,8 @@ class Minn_Admin_Bar {
 	/**
 	 * Whether the Minn Bar owns this request's admin bar. Front end only;
 	 * the user must pass Minn's own gate AND have opted in on Your profile.
+	 * Builder canvases are excluded: they hide the classic bar, and this
+	 * bar is a replacement for that bar, not a second chrome layer.
 	 */
 	public static function active() {
 		static $active = null;
@@ -40,8 +42,45 @@ class Minn_Admin_Bar {
 			&& is_user_logged_in()
 			&& current_user_can( 'edit_posts' )
 			&& Minn_Admin::user_wants_front_bar()
-			&& ! is_customize_preview();
+			&& ! is_customize_preview()
+			&& ! self::is_builder_canvas();
 		return $active;
+	}
+
+	/**
+	 * Front-end builder editors (and Elementor's preview iframe) are still
+	 * `! is_admin()`, so they would otherwise get the Minn bar. They already
+	 * hide the classic bar via their own `show_admin_bar` veto; we cannot
+	 * consult `is_admin_bar_showing()` here because this method is itself
+	 * called FROM that filter. The query flags are the same signals the
+	 * builders use to enter canvas mode.
+	 */
+	private static function is_builder_canvas() {
+		if ( isset( $_GET['elementor-preview'] ) ) {
+			return true;
+		}
+		if ( isset( $_GET['fl_builder'] ) ) {
+			return true;
+		}
+		if ( isset( $_GET['et_fb'] ) ) {
+			return true;
+		}
+		if ( isset( $_GET['bricks'] ) && 'run' === $_GET['bricks'] ) {
+			return true;
+		}
+		if ( isset( $_GET['breakdance'] ) && 'builder' === $_GET['breakdance'] ) {
+			return true;
+		}
+		if ( isset( $_GET['etch'] ) && 'magic' === $_GET['etch'] ) {
+			return true;
+		}
+		if ( isset( $_GET['brizy-edit'] ) || isset( $_GET['brizy-edit-iframe'] ) ) {
+			return true;
+		}
+		if ( isset( $_GET['vc_editable'] ) ) {
+			return true;
+		}
+		return false;
 	}
 
 	public static function suppress_core_bar( $show ) {
