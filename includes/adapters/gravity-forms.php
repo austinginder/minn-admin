@@ -441,7 +441,18 @@ add_action( 'rest_api_init', function () {
 					continue;
 				}
 				// use_text=true resolves choice values to their labels.
-				$value = $field->get_value_export( $entry, (string) $field->id, true );
+				if ( 'fileupload' === $field->type && method_exists( $field, 'get_value_entry_detail' ) ) {
+					// get_value_export is the CSV getter: it returns the file's real
+					// stored URL. GF's entry screen calls get_value_entry_detail, which
+					// routes every file through get_download_url so the location is
+					// hidden behind a token -- its own docblock says the point is to
+					// prevent guessing the location of OTHER files in the same form.
+					// The directory hash is the only secret, so emitting one raw URL
+					// exposes every upload that form ever took.
+					$value = $field->get_value_entry_detail( rgar( $entry, (string) $field->id ), $entry, true, 'text' );
+				} else {
+					$value = $field->get_value_export( $entry, (string) $field->id, true );
+				}
 				if ( '' === trim( (string) $value ) ) {
 					continue;
 				}
@@ -475,8 +486,16 @@ add_action( 'rest_api_init', function () {
 			// HTML (<div> wrappers, a "View Email" anchor) that wp-admin
 			// renders; Minn escapes detail values, so serve display-ready
 			// text and surface the first link as its own url row.
+			// Notes are their own GF capability: the vendor gates its Notes meta box
+			// and its own notes route on gravityforms_view_entry_notes, separately from
+			// viewing entries. The table also holds notification logs -- the rendered
+			// outbound email body and its recipients -- so a role deliberately denied
+			// that capability must not read them here.
+			$can_notes = class_exists( 'GFCommon' )
+				&& GFCommon::current_user_can_any( array( 'gravityforms_view_entry_notes', 'gform_full_access' ) );
+
 			$note_rows = array();
-			if ( class_exists( 'GFFormsModel' ) && method_exists( 'GFFormsModel', 'get_lead_notes' ) ) {
+			if ( $can_notes && class_exists( 'GFFormsModel' ) && method_exists( 'GFFormsModel', 'get_lead_notes' ) ) {
 				foreach ( (array) GFFormsModel::get_lead_notes( $entry['id'] ) as $note ) {
 					$raw  = (string) $note->value;
 					$text = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( $raw ) ) );
@@ -525,7 +544,9 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)/notes', array(
 		'methods'             => 'POST',
 		'permission_callback' => function () {
-			return GFCommon::current_user_can_any( array( 'gravityforms_edit_entries', 'gform_full_access' ) );
+			// Writing into the notes trail is its own GF capability, the same one the
+			// vendor requires at both of its own write sites.
+			return GFCommon::current_user_can_any( array( 'gravityforms_edit_entry_notes', 'gform_full_access' ) );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			$entry = GFAPI::get_entry( (int) $request['id'] );
