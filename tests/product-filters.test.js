@@ -163,10 +163,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			regular_price: '20.00', sale_price: '15.00', stock_status: 'outofstock',
 			tags: [ { id: tagId } ],
 		} );
-		// A variable product, for the type filter to have a target.
+		// A variable product, for the type filter to have a target. A low-qty
+		// variation on it proves Low stock remaps to the parent, not the
+		// variation id this list will not open.
 		await mk( 'variable', {
 			name: 'PF Variable ' + suffix, type: 'variable', status: 'publish',
 		} );
+		if ( made.variable ) {
+			const varr = await api( `wc/v3/products/${ made.variable }/variations`, {
+				method: 'POST',
+				body: JSON.stringify( {
+					regular_price: '8.00',
+					manage_stock: true,
+					stock_quantity: Math.max( 0, ( await page.evaluate( () => Number( window.MINN.wcLowStock ) || 2 ) ) - 1 ),
+					stock_status: 'instock',
+				} ),
+			} );
+			made.lowVar = varr.body && varr.body.id;
+		}
 		// A draft, for the status dropdown.
 		await mk( 'draft', {
 			name: 'PF Draft ' + suffix, type: 'simple', status: 'draft', regular_price: '5.00',
@@ -178,7 +192,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			manage_stock: true, stock_quantity: Math.max( 0, thr - 1 ), stock_status: 'instock',
 			featured: true,
 		} );
-		t.check( 'fixtures: five products created', Object.values( made ).every( Boolean ), JSON.stringify( made ) );
+		t.check( 'fixtures: five products created',
+			[ 'featured', 'sale', 'variable', 'draft', 'low' ].every( ( k ) => !! made[ k ] ), JSON.stringify( made ) );
 
 		await page.setViewportSize( { width: 1440, height: 1000 } );
 		await page.goto( `${ BASE }/minn-admin/products`, { waitUntil: 'domcontentloaded' } );
@@ -357,6 +372,26 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'combined low stock asks wc/v3 with include, not a fake stock_status',
 			sent.slice( beforeLow ).some( ( u ) => /include=/.test( u ) ) && ! sent.slice( beforeLow ).some( ( u ) => /stock_status=low/.test( u ) ),
 			sent.slice( beforeLow ).join( ' | ' ).slice( 0, 240 ) );
+		if ( made.lowVar ) {
+			await page.click( '[data-ofchip="featured"] [data-ofremove]' ).catch( () => {} );
+			await settle();
+			const lowIds = await visibleIds();
+			t.check( 'low stock lists the parent, not the low variation',
+				lowIds.includes( made.variable ) && ! lowIds.includes( made.lowVar ),
+				JSON.stringify( { lowIds, parent: made.variable, variation: made.lowVar } ) );
+		}
+		await page.fill( '#minn-order-search', 'PF Featured ' + suffix );
+		await waitForQuery( /[?&]search=/, 'search= under low stock' );
+		await settle();
+		t.check( 'low stock plus search does not surface an in-stock product',
+			await waitRows( [], [ made.featured ] ), JSON.stringify( await visibleIds() ) );
+		await page.fill( '#minn-order-search', 'PF Low ' + suffix );
+		await waitForQuery( /search=PF%20Low|search=PF Low/, 'search= the low product' );
+		await settle();
+		t.check( 'low stock plus search still lists the low product',
+			await waitRows( [ made.low ], [ made.featured ] ), JSON.stringify( await visibleIds() ) );
+		await page.fill( '#minn-order-search', '' );
+		await settle();
 		await clearAll();
 		await waitRows( [ made.featured, made.sale ], [] );
 
@@ -394,8 +429,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			/[?&]search=/.test( lastQuery() ) && new RegExp( '[?&]category=' + catId + '(&|$)' ).test( lastQuery() ),
 			lastQuery().slice( -160 ) );
 	} finally {
-		for ( const id of Object.values( made ) ) {
-			if ( id ) await api( `wc/v3/products/${ id }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( made.lowVar ) await api( `wc/v3/products/${ made.lowVar }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		for ( const [ key, id ] of Object.entries( made ) ) {
+			if ( key === 'lowVar' || ! id ) continue;
+			await api( `wc/v3/products/${ id }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		}
 		if ( catId ) await api( `wc/v3/products/categories/${ catId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( tagId ) await api( `wc/v3/products/tags/${ tagId }?force=true`, { method: 'DELETE' } ).catch( () => {} );

@@ -11143,10 +11143,20 @@
 	   row the filters exclude. Every dimension the bar offers is checked
 	   here, which is why it reads the filter object rather than named fields:
 	   a dimension added to the spec and forgotten here is a wrong row. */
+	function productIsLowStock( p ) {
+		const thr = Number( B.wcLowStock ) || 2;
+		return !! ( p && p.manage_stock
+			&& p.stock_quantity != null
+			&& Number( p.stock_quantity ) >= 0
+			&& Number( p.stock_quantity ) <= thr );
+	}
+
 	function productMatchesFilters( p ) {
 		const f = orderFilters( LIST_FILTER_SPECS.products );
 		if ( f.status.length && f.status.indexOf( p.status ) === -1 ) return false;
-		if ( f.stock && f.stock !== 'low' && p.stock_status !== f.stock ) return false;
+		if ( f.stock === 'low' ) {
+			if ( ! productIsLowStock( p ) ) return false;
+		} else if ( f.stock && p.stock_status !== f.stock ) return false;
 		if ( f.type && ( p.type || 'simple' ) !== f.type ) return false;
 		if ( f.featured && String( !! p.featured ) !== f.featured ) return false;
 		if ( f.onsale && String( !! p.on_sale ) !== f.onsale ) return false;
@@ -11168,35 +11178,86 @@
 		return api( `wc/v3/products/${ p.parent_id }?_fields=${ PRODUCT_LIST_FIELDS }` ).catch( () => null );
 	}
 
+	function uniqueCatalogRows( rows ) {
+		const seen = new Set();
+		const items = [];
+		( rows || [] ).forEach( ( p ) => {
+			if ( ! p || ! p.id || seen.has( p.id ) ) return;
+			seen.add( p.id );
+			items.push( p );
+		} );
+		return items;
+	}
+
+	/** Analytics low-in-stock rows are often variations. The catalog list
+	 *  only opens parents, so prefer parent_id when the lookup sent one. */
+	function catalogIdFromLowStockRow( row ) {
+		if ( ! row ) return 0;
+		const parent = parseInt( row.parent_id, 10 );
+		if ( parent > 0 ) return parent;
+		const id = parseInt( row.id, 10 );
+		return id > 0 ? id : 0;
+	}
+
+	async function lowStockCatalogIds( ctx ) {
+		const ids = [];
+		const seen = new Set();
+		let ap = 1, apPages = 1;
+		do {
+			const chunk = await apiPaged( `wc-analytics/products/low-in-stock?page=${ ap }&per_page=100` );
+			if ( ctx !== productCtx() ) return null;
+			( chunk.items || [] ).forEach( ( row ) => {
+				const id = catalogIdFromLowStockRow( row );
+				if ( ! id || seen.has( id ) ) return;
+				seen.add( id );
+				ids.push( id );
+			} );
+			apPages = chunk.totalPages || 1;
+			ap += 1;
+		} while ( ap <= apPages && ap <= 20 );
+		return ids;
+	}
+
 	async function loadProducts( page = 1 ) {
 		const f = orderFilters( LIST_FILTER_SPECS.products );
 		const stock = f.stock || '';
 		const q0 = ( state.productSearch || '' ).trim();
 		const ctx = productCtx();
+		// Numeric-only: try exact id first (WC search is fuzzy and often misses ids).
+		if ( q0 && /^\d+$/.test( q0 ) ) {
+			try {
+				let one = await api( `wc/v3/products/${ q0 }?_fields=${ PRODUCT_LIST_FIELDS }` );
+				if ( ctx !== productCtx() ) return;
+				one = await catalogProductRow( one );
+				if ( one && one.id && productMatchesFilters( one ) ) {
+					state.cache.products = { items: [ one ], page: 1, totalPages: 1, total: 1 };
+					return;
+				}
+			} catch ( e ) {
+				// 404 → fall through to search.
+			}
+		}
 		// Low stock: prefer wc-analytics (lookup tables + store threshold). Fall
 		// back to a managed-stock scan when Analytics is empty (fresh writes lag).
-		if ( stock === 'low' && ! q0 ) {
+		// Search and the other chips ride include= of PARENT ids: the lookup
+		// is variation-aware, and wc/v3/products is not.
+		if ( stock === 'low' ) {
 			let items = [];
 			let totalPages = 1;
 			let total = 0;
 			try {
-				if ( productHasOtherFilters( f ) ) {
-					// Walk the lookup for ids, then let wc/v3 apply the other
-					// dimensions so the count and page 2 stay honest.
-					const ids = [];
-					let ap = 1, apPages = 1;
-					do {
-						const chunk = await apiPaged( `wc-analytics/products/low-in-stock?page=${ ap }&per_page=100` );
-						if ( ctx !== productCtx() ) return;
-						( chunk.items || [] ).forEach( ( row ) => { if ( row && row.id ) ids.push( row.id ); } );
-						apPages = chunk.totalPages || 1;
-						ap += 1;
-					} while ( ap <= apPages && ap <= 20 );
+				if ( q0 || productHasOtherFilters( f ) ) {
+					const ids = await lowStockCatalogIds( ctx );
+					if ( ids === null ) return;
 					if ( ids.length ) {
-						const r = await apiPaged( `wc/v3/products?per_page=25&page=${ page }&include=${ ids.join( ',' ) }&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }`
-							+ orderFilterQuery( LIST_FILTER_SPECS.products ) );
+						let q = `wc/v3/products?per_page=25&page=${ page }&include=${ ids.join( ',' ) }&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }`
+							+ orderFilterQuery( LIST_FILTER_SPECS.products );
+						if ( q0 ) q += '&search=' + encodeURIComponent( q0 ) + '&search_name_or_sku=' + encodeURIComponent( q0 );
+						const r = await apiPaged( q );
 						if ( ctx !== productCtx() ) return;
-						items = r.items || [];
+						const mapped = await Promise.all( ( r.items || [] ).map( catalogProductRow ) );
+						if ( ctx !== productCtx() ) return;
+						items = uniqueCatalogRows( mapped );
 						totalPages = r.totalPages;
 						total = r.total;
 					}
@@ -11205,53 +11266,40 @@
 					if ( ctx !== productCtx() ) return;
 					const slim = r.items || [];
 					if ( slim.length ) {
-						const enriched = await Promise.all( slim.map( ( row ) =>
-							api( `wc/v3/products/${ row.id }?_fields=${ PRODUCT_LIST_FIELDS }` ).catch( () => null )
-						) );
+						const enriched = await Promise.all( slim.map( ( row ) => {
+							const id = catalogIdFromLowStockRow( row );
+							return id
+								? api( `wc/v3/products/${ id }?_fields=${ PRODUCT_LIST_FIELDS }` ).catch( () => null )
+								: Promise.resolve( null );
+						} ) );
 						if ( ctx !== productCtx() ) return;
-						items = enriched.filter( Boolean );
+						const mapped = await Promise.all( enriched.map( catalogProductRow ) );
+						if ( ctx !== productCtx() ) return;
+						items = uniqueCatalogRows( mapped );
 						totalPages = r.totalPages;
 						total = r.total;
 					}
 				}
 			} catch ( e ) { /* fall through to scan */ }
 			if ( ! items.length && page === 1 ) {
-				const thr = Number( B.wcLowStock ) || 2;
 				const r = await apiPaged( `wc/v3/products?per_page=100&page=1&stock_status=instock&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }` );
 				if ( ctx !== productCtx() ) return;
-				items = ( r.items || [] ).filter( ( p ) =>
-					p.manage_stock
-					&& p.stock_quantity != null
-					&& Number( p.stock_quantity ) >= 0
-					&& Number( p.stock_quantity ) <= thr
-					&& productMatchesFilters( p )
-				);
+				const mapped = await Promise.all( ( r.items || [] ).map( catalogProductRow ) );
+				if ( ctx !== productCtx() ) return;
+				items = uniqueCatalogRows( mapped ).filter( ( p ) => productMatchesFilters( p ) );
+				if ( q0 ) {
+					const needle = q0.toLowerCase();
+					items = items.filter( ( p ) =>
+						String( p.id ) === q0
+						|| ( p.name || '' ).toLowerCase().indexOf( needle ) !== -1
+						|| ( p.sku || '' ).toLowerCase().indexOf( needle ) !== -1
+					);
+				}
 				total = items.length;
 				totalPages = 1;
 			}
 			state.cache.products = { items, page, totalPages, total };
 			return;
-		}
-		// Numeric-only: try exact id first (WC search is fuzzy and often misses ids).
-		if ( q0 && /^\d+$/.test( q0 ) ) {
-			try {
-				let one = await api( `wc/v3/products/${ q0 }?_fields=${ PRODUCT_LIST_FIELDS }` );
-				if ( ctx !== productCtx() ) return;
-				one = await catalogProductRow( one );
-				if ( one && one.id && productMatchesFilters( one ) ) {
-					const thr = Number( B.wcLowStock ) || 2;
-					const isLow = one.manage_stock
-						&& one.stock_quantity != null
-						&& Number( one.stock_quantity ) >= 0
-						&& Number( one.stock_quantity ) <= thr;
-					if ( stock !== 'low' || isLow ) {
-						state.cache.products = { items: [ one ], page: 1, totalPages: 1, total: 1 };
-						return;
-					}
-				}
-			} catch ( e ) {
-				// 404 → fall through to search.
-			}
 		}
 		let q = `wc/v3/products?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }`
 			+ orderFilterQuery( LIST_FILTER_SPECS.products );
@@ -15065,6 +15113,16 @@
 		// split/join instead of replace so "$&"-style values aren't mangled.
 		const criteria = {};
 		let criteriaParam = null;
+		// A filterBar URL carries `q` on the shared searchKey. Cold loads
+		// call this before spec.load copies that onto ss.q, so hydrate first
+		// or a pasted ?q= paints the box and asks an unfiltered list.
+		if ( col.filterBar ) {
+			const spec = surfaceFilterSpec( s.id );
+			if ( spec ) {
+				orderFilters( spec );
+				if ( ! ss.q ) ss.q = state[ spec.searchKey ] || '';
+			}
+		}
 		if ( col.search && ss.q ) {
 			if ( typeof col.search === 'string' ) {
 				parts.push( col.search.split( '{q}' ).join( encodeURIComponent( ss.q ) ) );
@@ -15131,7 +15189,12 @@
 	async function loadSurfaceItems( s, page = 1 ) {
 		const ss = surfaceState( s.id );
 		const col = surfaceColl( s, ss );
-		const ctxOf = () => ss.tab + '|' + ( ss.q || '' ) + '|' + surfaceFilterValue( col, ss ) + '|' + ( ss.sortBy || '' ) + ( ss.sortDir || '' );
+		const ctxOf = () => {
+			const bar = col.filterBar
+				? JSON.stringify( orderFilters( surfaceFilterSpec( s.id ) ) )
+				: '';
+			return ss.tab + '|' + ( ss.q || '' ) + '|' + surfaceFilterValue( col, ss ) + '|' + ( ss.sortBy || '' ) + ( ss.sortDir || '' ) + '|' + bar;
+		};
 		const ctx = ctxOf();
 		const res = await apiRes( surfaceRoute( s, ss, page ) );
 		const body = await res.json();
@@ -16096,6 +16159,10 @@
 			renderOverlays();
 		} );
 		bindPager( view, c.page, ( p ) => loadSurfaceItems( s, p ), () => { if ( state.route === s.id ) renderSurface( s ); } );
+		if ( coll.filterBar ) {
+			syncOrderFiltersUrl();
+			resolveOrderFilterLabels( view );
+		}
 	}
 
 	/* Bulk actions run PER ITEM (one failure never aborts the rest — the

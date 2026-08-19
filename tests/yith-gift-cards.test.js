@@ -226,6 +226,35 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '.minn-order-bar', { timeout: 30000 } );
 		t.check( 'the filters come back from the URL', 'Active' === await presetLabel(), await presetLabel() );
 
+		// Leaving the surface and coming back used to strip the query while
+		// the chips stayed; the list is a place, so the address has to match.
+		await page.evaluate( () => {
+			const btn = Array.from( document.querySelectorAll( '.minn-nav-btn' ) )
+				.find( ( b ) => /Products/i.test( b.textContent || '' ) );
+			if ( btn ) btn.click();
+		} );
+		await page.waitForFunction( () => /\/products\/?$/.test( location.pathname ), null, { timeout: 8000 } ).catch( () => {} );
+		await page.evaluate( () => {
+			const btn = Array.from( document.querySelectorAll( '.minn-nav-btn' ) )
+				.find( ( b ) => /Gift cards/i.test( b.textContent || '' ) );
+			if ( btn ) btn.click();
+		} );
+		await page.waitForSelector( '.minn-order-bar', { timeout: 20000 } );
+		t.check( 'coming back writes the filter into the URL',
+			/status=active/.test( await page.evaluate( () => location.search ) ),
+			await page.evaluate( () => location.search ) );
+
+		await clearFilters();
+		const beforeQ = sent.length;
+		await page.goto( BASE + '/minn-admin/yith-gift-cards?q=' + encodeURIComponent( card.code ), { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-order-bar', { timeout: 30000 } );
+		let sawQ = false;
+		for ( let i = 0; i < 40 && ! sawQ; i++ ) {
+			sawQ = sent.slice( beforeQ ).some( ( u ) => new RegExp( 'search=' + card.code ).test( u ) );
+			if ( ! sawQ ) await new Promise( ( r ) => setTimeout( r, 250 ) );
+		}
+		t.check( 'a pasted search is a server query', sawQ, sent.slice( beforeQ ).join( ' | ' ).slice( 0, 200 ) );
+
 		await clearFilters();
 		t.check( 'Clear all shows it again', await waitRows( true, card.code ), lastQuery() );
 
