@@ -7442,10 +7442,10 @@
 		} else if ( kind === 'preset' ) {
 			// Single-status shortcuts: the old tab strip, folded into a menu.
 			pop.innerHTML = spec.presets().map( ( [ id, label ] ) =>
-				`<button type="button" class="minn-of-row${ orderPresetActive() === id ? ' is-on' : '' }" data-opreset="${ id }">${ esc( label ) }</button>` ).join( '' );
+				`<button type="button" class="minn-of-row${ orderPresetActive() === id ? ' is-on' : '' }" data-opreset="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' );
 		} else if ( dim.type === 'status' ) {
 			pop.innerHTML = spec.statuses().map( ( slug ) =>
-				`<button type="button" class="minn-of-row${ f.status.indexOf( slug ) !== -1 ? ' is-on' : '' }" data-ofval="${ slug }">${ esc( spec.statusLabel( slug ) ) }</button>` ).join( '' )
+				`<button type="button" class="minn-of-row${ f.status.indexOf( slug ) !== -1 ? ' is-on' : '' }" data-ofval="${ esc( slug ) }">${ esc( spec.statusLabel( slug ) ) }</button>` ).join( '' )
 				+ ( spec.statusMulti ? `<div class="minn-of-foot"><button type="button" class="minn-btn-primary" data-ofapply>${ __( 'Apply' ) }</button></div>` : '' );
 		} else if ( dim.type === 'date' ) {
 			pop.innerHTML = ORDER_DATE_PRESETS.map( ( [ days, label ] ) =>
