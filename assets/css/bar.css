@@ -180,7 +180,7 @@
 .minn-bar-iconbtn { width: 38px; padding: 0; color: var(--text2); }
 .minn-bar-iconbtn:hover { color: var(--text); }
 
-.minn-bar-markbtn { width: 38px; padding: 0; flex: none; }
+.minn-bar-markbtn { width: 36px; height: 36px; padding: 0; border: 0; flex: none; }
 .minn-bar-markbtn:hover .minn-bar-mark { filter: brightness(1.12); }
 .minn-bar-site { padding: 0 5px; max-width: 250px; }
 .minn-bar-mark {

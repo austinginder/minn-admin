@@ -111,12 +111,24 @@ const { execSync } = require( 'child_process' );
 				&& desktop.height === 46 && desktop.radius === '14px',
 			JSON.stringify( desktop ) );
 		const siteMark = await page.evaluate( () => {
+			const bar = document.getElementById( 'minn-bar' ).getBoundingClientRect();
 			const r = document.querySelector( '.minn-bar-mark' ).getBoundingClientRect();
-			return { left: r.left, top: r.top, width: r.width, height: r.height };
+			return {
+				left: r.left,
+				top: r.top,
+				width: r.width,
+				height: r.height,
+				insets: {
+					top: r.top - bar.top,
+					right: bar.right - r.right,
+					bottom: bar.bottom - r.bottom,
+					left: r.left - bar.left,
+				},
+			};
 		} );
-		t.check( 'the corner mark sits wholly inside its control',
-			siteMark.left > desktop.left && siteMark.top > desktop.top
-				&& siteMark.width === 36 && siteMark.height === 36,
+		t.check( 'the corner mark has equal padding on every side',
+			siteMark.width === 36 && siteMark.height === 36
+				&& Object.values( siteMark.insets ).every( ( inset ) => Math.abs( inset - 5 ) < 0.1 ),
 			JSON.stringify( { desktop, siteMark } ) );
 		await revealBar();
 		const revealed = await page.evaluate( () => {
