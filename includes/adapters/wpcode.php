@@ -374,9 +374,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// did not offer (minn_admin_wpcode_location_in), so this list is the honest
 	// vocabulary rather than the only guard.
 	$location_options = array(
-		array( 'everywhere', __( 'Everywhere', 'minn-admin' ) ),
-		array( 'frontend_only', __( 'Front-end only', 'minn-admin' ) ),
-		array( 'admin_only', __( 'Admin only', 'minn-admin' ) ),
+		array( 'everywhere', __( 'Everywhere (runs code)', 'minn-admin' ) ),
+		array( 'frontend_only', __( 'Front-end only (runs code)', 'minn-admin' ) ),
+		array( 'admin_only', __( 'Admin only (runs code)', 'minn-admin' ) ),
 		array( 'site_wide_header', __( 'Site-wide header', 'minn-admin' ) ),
 		array( 'site_wide_body', __( 'Site-wide body', 'minn-admin' ) ),
 		array( 'site_wide_footer', __( 'Site-wide footer', 'minn-admin' ) ),
