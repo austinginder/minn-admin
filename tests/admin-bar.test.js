@@ -80,12 +80,32 @@ const { execSync } = require( 'child_process' );
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		s = await page.evaluate( () => ( {
 			minn: !! document.getElementById( 'minn-bar' ),
-			core: !! document.getElementById( 'wpadminbar' ),
+			core: !! document.querySelector( '#wpadminbar:not(.minn-wpadminbar)' ),
+			shell: !! document.querySelector( '#wpadminbar.minn-wpadminbar' ),
+			bodyClass: document.body.classList.contains( 'admin-bar' ),
 			margin: getComputedStyle( document.documentElement ).marginTop,
 			chip: !! document.querySelector( '.minn-bar-status' ),
 		} ) );
-		t.check( 'opted in: Minn bar renders and the classic bar is gone', s.minn && ! s.core, JSON.stringify( s ) );
-		t.check( 'the page is pushed below the floating bar', s.margin === '68px', s.margin );
+		t.check( 'opted in: Minn owns the compatible admin-bar shell and core is gone',
+			s.minn && s.shell && s.bodyClass && ! s.core, JSON.stringify( s ) );
+		t.check( 'desktop: page offset matches WordPress core', s.margin === '32px', s.margin );
+		const desktop = await page.evaluate( () => {
+			const b = document.getElementById( 'minn-bar' );
+			const r = b.getBoundingClientRect();
+			return {
+				top: r.top,
+				left: r.left,
+				width: r.width,
+				height: r.height,
+				vw: innerWidth,
+				radius: getComputedStyle( b ).borderRadius,
+				token: getComputedStyle( document.documentElement ).getPropertyValue( '--wp-admin--admin-bar--height' ).trim(),
+			};
+		} );
+		t.check( 'desktop: static strip uses core geometry',
+			desktop.top === 0 && desktop.left === 0 && Math.abs( desktop.width - desktop.vw ) < 1
+				&& desktop.height === 32 && desktop.radius === '0px' && desktop.token === '32px',
+			JSON.stringify( desktop ) );
 
 		// Theme headers often sit at z-index 99999 (Divi's #main-header,
 		// the same rung as the classic admin bar). The Minn bar must paint
@@ -127,18 +147,21 @@ const { execSync } = require( 'child_process' );
 		const closed = await page.evaluate( () => document.getElementById( 'minn-bar-menu-site' ).hidden );
 		t.check( 'Escape closes the bar menu (scoped, nothing else claimed)', closed === true, String( closed ) );
 
-		// Auto-hide: scrolling down yields the top edge to the theme's own
-		// sticky headers; scrolling up brings the bar back.
+		// The core-shaped strip is persistent. Themes already know how to offset
+		// their sticky chrome from body.admin-bar and the 32px/46px contract.
 		await page.evaluate( () => {
 			const tall = document.createElement( 'div' );
 			tall.style.height = '3000px';
 			document.body.appendChild( tall );
 		} );
 		await page.evaluate( () => window.scrollTo( 0, 800 ) );
-		await page.waitForFunction( () => document.getElementById( 'minn-bar' ).classList.contains( 'minn-bar-away' ), null, { timeout: 5000 } );
-		await page.evaluate( () => window.scrollTo( 0, 700 ) );
-		await page.waitForFunction( () => ! document.getElementById( 'minn-bar' ).classList.contains( 'minn-bar-away' ), null, { timeout: 5000 } );
-		t.check( 'the bar yields on scroll down and returns on scroll up', true );
+		await page.waitForTimeout( 250 );
+		const scrolled = await page.evaluate( () => {
+			const b = document.getElementById( 'minn-bar' );
+			const r = b.getBoundingClientRect();
+			return { top: r.top, hidden: b.classList.contains( 'minn-bar-away' ) || b.classList.contains( 'minn-bar-yield' ) };
+		} );
+		t.check( 'the strip stays at the top while scrolling', scrolled.top === 0 && ! scrolled.hidden, JSON.stringify( scrolled ) );
 		await page.evaluate( () => window.scrollTo( 0, 0 ) );
 
 		// Notifications peek: rows are real — clicking one navigates into the
@@ -292,23 +315,24 @@ const { execSync } = require( 'child_process' );
 		t.check( 'palette cache purge really purges (fixture counter moved)',
 			purgesAfter > purgesBefore, purgesBefore + ' -> ' + purgesAfter );
 
-		// Overlay yield: a site lightbox (fixed, viewport-sized, not ours)
-		// makes the bar step aside instead of floating above it; closing the
-		// overlay brings the bar back.
+		// Core does not inspect a theme's overlays and neither does Minn. This
+		// avoids a polling loop and keeps the toolbar's visibility predictable.
 		await page.evaluate( () => {
 			const o = document.createElement( 'div' );
 			o.id = 'suite-lightbox';
 			o.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.8);';
 			document.body.appendChild( o );
 		} );
-		await page.waitForFunction( () => document.getElementById( 'minn-bar' ).classList.contains( 'minn-bar-yield' ), null, { timeout: 5000 } );
-		t.check( 'the bar yields to an open full-screen overlay', true );
+		await page.waitForTimeout( 850 );
+		const overlayState = await page.evaluate( () => {
+			const b = document.getElementById( 'minn-bar' );
+			return { top: b.getBoundingClientRect().top, yielded: b.classList.contains( 'minn-bar-yield' ) };
+		} );
+		t.check( 'a site overlay does not make the strip disappear',
+			overlayState.top === 0 && ! overlayState.yielded, JSON.stringify( overlayState ) );
 		await page.evaluate( () => document.getElementById( 'suite-lightbox' ).remove() );
-		await page.waitForFunction( () => ! document.getElementById( 'minn-bar' ).classList.contains( 'minn-bar-yield' ), null, { timeout: 5000 } );
-		t.check( 'closing the overlay brings the bar back', true );
 
-		// Phones: the floating pill de-floats into a full-width strip (the
-		// float is a desktop treatment) and the push-down shrinks to match.
+		// WordPress changes the public toolbar contract at 782px.
 		await page.setViewportSize( { width: 390, height: 844 } );
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		const mob = await page.evaluate( () => {
@@ -319,19 +343,22 @@ const { execSync } = require( 'child_process' );
 				left: r.left,
 				width: r.width,
 				vw: innerWidth,
+				height: r.height,
 				radius: getComputedStyle( b ).borderRadius,
 				margin: getComputedStyle( document.documentElement ).marginTop,
+				token: getComputedStyle( document.documentElement ).getPropertyValue( '--wp-admin--admin-bar--height' ).trim(),
 			};
 		} );
-		t.check( 'mobile: full-width strip welded to the top',
-			mob.top === 0 && mob.left === 0 && Math.abs( mob.width - mob.vw ) < 1 && mob.radius === '0px',
+		t.check( 'mobile: full-width strip uses core geometry',
+			mob.top === 0 && mob.left === 0 && Math.abs( mob.width - mob.vw ) < 1
+				&& mob.height === 46 && mob.radius === '0px' && mob.token === '46px',
 			JSON.stringify( mob ) );
-		t.check( 'mobile: page offset matches the strip height', mob.margin === '48px', mob.margin );
+		t.check( 'mobile: page offset matches WordPress core', mob.margin === '46px', mob.margin );
 		await page.setViewportSize( { width: 1280, height: 800 } );
 
-		// Builder canvases hide the classic bar; the Minn bar is a
-		// replacement for that bar, so it must stay off too. Query flags
-		// are enough: Elementor uses elementor-preview, Brizy uses
+		// The Minn bar stays off builder canvases even when that builder is
+		// currently inactive and therefore cannot suppress core's own bar.
+		// Query flags are enough: Elementor uses elementor-preview, Brizy uses
 		// is-editor-iframe on the front-end iframe inside
 		// post.php?action=in-front-editor.
 		const sep = permalink.includes( '?' ) ? '&' : '?';
@@ -345,8 +372,8 @@ const { execSync } = require( 'child_process' );
 				core: !! document.getElementById( 'wpadminbar' ),
 				bump: !! document.getElementById( 'minn-bar-bump' ),
 			} ) );
-			t.check( label + ' canvas has neither bar',
-				! canvas.minn && ! canvas.core && ! canvas.bump, JSON.stringify( canvas ) );
+			t.check( label + ' canvas has no Minn bar or Minn offset',
+				! canvas.minn && ! canvas.bump, JSON.stringify( canvas ) );
 		}
 
 		// Off again: everything back to core.

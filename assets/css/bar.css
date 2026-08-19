@@ -30,7 +30,7 @@
   --red: #e46b6b;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
 }
-#minn-bar-root[data-minn-theme="light"] #minn-bar { box-shadow: 0 4px 16px rgba(30, 30, 50, 0.12); }
+#minn-bar-root[data-minn-theme="light"] #minn-bar { box-shadow: 0 1px 0 rgba(30, 30, 50, 0.12); }
 #minn-bar-root[data-minn-theme="light"] {
   --bg2: #ffffff;
   --panel: #ffffff;
@@ -68,11 +68,19 @@
    a bar link can have. Inherited typography (a body-level letter-spacing)
    is neutralized on the root so every surface inherits ours, not the theme's. */
 #minn-bar-root { letter-spacing: normal; word-spacing: normal; text-transform: none; font-style: normal; }
-/* Sit above theme chrome. Divi's fixed #main-header is 99999 and #top-header
-   is 100000; many other themes park sticky headers at 99999 (the same rung
-   as the classic admin bar). The root stacking context lifts every bar
-   surface together. */
-#minn-bar-root { position: relative; z-index: 1000100; }
+/* Match WordPress's public admin-bar shell. Existing themes commonly target
+   #wpadminbar and body.admin-bar, while newer integrations read the shared
+   height custom property. The PHP bump supplies 32px desktop / 46px mobile. */
+#wpadminbar.minn-wpadminbar {
+  position: fixed;
+  inset: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  height: var(--wp-admin--admin-bar--height, 32px);
+  z-index: 1000100;
+  background: transparent;
+}
+#wpadminbar.minn-wpadminbar #minn-bar-root { position: relative; width: 100%; height: 100%; }
 #minn-bar-root a, #minn-bar-root a:hover, #minn-bar-root a:focus, #minn-bar-root a:visited {
   text-decoration: none !important;
   border-bottom: 0 !important;
@@ -86,54 +94,43 @@
 #minn-bar-root a.minn-bar-menu-item, #minn-bar-root a.minn-bar-menu-item:hover,
 #minn-bar-root a.minn-bar-menu-item:focus, #minn-bar-root a.minn-bar-menu-item:visited { color: var(--text) !important; }
 
-/* Floating pill: an inset overlay that owns nothing but itself — visibly
-   Minn's surface on top of the site rather than a strip welded to it. */
+/* A static strip with WordPress's exact outer geometry. Keeping all sizing
+   inside the inherited height lets both desktop and mobile follow core. */
 #minn-bar {
-  position: fixed;
-  inset: 10px 10px auto;
-  height: 48px;
-  z-index: 1000100;
+  position: relative;
+  width: 100%;
+  height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 0 12px 0 9px;
-  background: color-mix(in srgb, var(--bg2) 94%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 13px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(18px) saturate(130%);
-  transition: transform 0.18s ease, opacity 0.18s ease;
+  gap: 8px;
+  padding: 0 6px;
+  background: var(--bg2);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
   font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.4;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   font-variant-ligatures: no-contextual;
 }
-/* Scrolled away: themes' own sticky headers (which target core's 32px
-   admin-bar offset, not ours) get the top edge to themselves while reading.
-   Scrolling up, or returning to the top, brings the bar back. */
-/* .minn-bar-yield is the same exit for a different reason: a site overlay
-   (lightbox, full-screen menu) owns the viewport, so the bar steps aside
-   instead of floating above it — bar.js probes for open overlays. */
-#minn-bar.minn-bar-away, #minn-bar.minn-bar-yield { transform: translateY(-70px); opacity: 0; pointer-events: none; }
-@media (prefers-reduced-motion: reduce) { #minn-bar { transition: none; } }
-
 .minn-bar-zone { display: flex; align-items: center; min-width: 0; gap: 4px; }
 .minn-bar-right { justify-content: flex-end; }
 
 .minn-bar-btn {
-  height: 34px;
+  height: 30px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 10px;
+  padding: 0 8px;
   white-space: nowrap;
   cursor: pointer;
   text-decoration: none;
@@ -145,24 +142,24 @@
   outline: 2px solid color-mix(in srgb, var(--accent) 52%, transparent);
   outline-offset: 1px;
 }
-.minn-bar-btn svg { width: 17px; height: 17px; flex: none; }
-.minn-bar-iconbtn { width: 34px; padding: 0; color: var(--text2); }
+.minn-bar-btn svg { width: 16px; height: 16px; flex: none; }
+.minn-bar-iconbtn { width: 30px; padding: 0; color: var(--text2); }
 .minn-bar-iconbtn:hover { color: var(--text); }
 
-.minn-bar-markbtn { width: 34px; padding: 0; flex: none; }
+.minn-bar-markbtn { width: 30px; padding: 0; flex: none; }
 .minn-bar-markbtn:hover .minn-bar-mark { filter: brightness(1.12); }
 .minn-bar-site { padding: 0 8px; max-width: 250px; }
 .minn-bar-mark {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
   flex: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: var(--accent-fg);
   font-weight: 800;
-  font-size: 15px;
+  font-size: 14px;
   letter-spacing: -0.04em;
 }
 .minn-bar-sitename {
@@ -177,7 +174,7 @@
 
 /* Status chip: exception states only (the slot is otherwise absent). */
 .minn-bar-status {
-  height: 27px;
+  height: 24px;
   padding: 0 11px 0 10px;
   gap: 7px;
   border-radius: 999px;
@@ -214,10 +211,10 @@
   border: 2px solid var(--bg2);
   pointer-events: none;
 }
-.minn-bar-avatarbtn { width: 34px; }
+.minn-bar-avatarbtn { width: 30px; }
 .minn-bar-avatar {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   overflow: hidden;
   flex: none;
@@ -410,7 +407,7 @@
 /* Toast: transient feedback under the bar (cache purge results). */
 #minn-bar-toast {
   position: fixed;
-  top: 68px;
+  top: calc(var(--wp-admin--admin-bar--height, 32px) + 8px);
   left: 50%;
   transform: translateX(-50%) translateY(-6px);
   z-index: 1000107;
@@ -430,30 +427,16 @@
 }
 #minn-bar-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-@media (max-width: 760px) {
+@media (max-width: 782px) {
+  .minn-bar-btn { height: 40px; }
+  .minn-bar-iconbtn, .minn-bar-markbtn, .minn-bar-avatarbtn { width: 40px; }
+  .minn-bar-mark, .minn-bar-avatar { width: 30px; height: 30px; }
   .minn-bar-divider { display: none; }
   .minn-bar-sitename { max-width: 120px; }
   .minn-bar-status { padding: 0 8px; }
   .minn-bar-status .minn-bar-status-text { display: none; }
   .minn-bar-edit span { display: none; }
   .minn-bar-edit { padding-inline: 9px; }
-}
-/* Phones: the floating pill becomes a full-width strip welded to the top.
-   An inset overlay reads as intentional chrome on a desktop and as a
-   misrendered card on a small screen, so the float is a desktop treatment.
-   The bump style in class-minn-admin-bar.php carries the matching 48px
-   offset — keep the two breakpoints in lockstep. */
-@media (max-width: 640px) {
-  #minn-bar {
-    inset: 0 0 auto;
-    border-radius: 0;
-    border-top: 0;
-    border-left: 0;
-    border-right: 0;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
-  }
-  #minn-bar.minn-bar-away, #minn-bar.minn-bar-yield { transform: translateY(-52px); }
-  #minn-bar-toast { top: 56px; }
 }
 @media (max-width: 440px) {
   .minn-bar-sitename { display: none; }

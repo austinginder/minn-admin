@@ -64,13 +64,13 @@ post, or run a command directly: "Clear site cache", "Back up site now",
 
 **Minn can travel onto the public site.** Turn on the Minn admin bar from
 **Your profile** to replace WordPress's classic front-end bar for your account.
-The floating bar gives you search and the command palette, a create menu, an
+The static strip gives you search and the command palette, a create menu, an
 Edit button for the page you are viewing, notifications and your account. A
 status chip appears beside the site name only when the site needs attention,
 such as maintenance mode, a password gate, hidden search visibility or a
-staging environment. The bar moves out of the way as you scroll down, returns
-when you scroll up, and becomes a simple full-width strip on phones. This is a
-personal choice: other users keep the classic bar until they opt in, and
+staging environment. It uses the same desktop and mobile heights as WordPress's
+classic bar, so theme headers that account for WordPress's toolbar also account
+for Minn. This is a personal choice: other users keep the classic bar until they opt in, and
 wp-admin always keeps the classic bar. The bar also stays off a page builder's
 own canvas, the same way the classic admin bar does.
 

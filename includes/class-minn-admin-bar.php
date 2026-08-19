@@ -91,8 +91,11 @@ class Minn_Admin_Bar {
 	public static function body_class( $classes ) {
 		if ( self::active() && ! is_embed() ) {
 			$classes[] = 'minn-front-bar';
+			// Preserve core's public contract for themes whose sticky chrome is
+			// positioned with body.admin-bar selectors.
+			$classes[] = 'admin-bar';
 		}
-		return $classes;
+		return array_unique( $classes );
 	}
 
 	public static function enqueue() {
@@ -113,17 +116,15 @@ class Minn_Admin_Bar {
 	}
 
 	/**
-	 * Push the page down under the fixed bar (core's _admin_bar_bump_cb
-	 * equivalent). Print hides the bar entirely.
+	 * Recreate core's front-end admin-bar height contract. Themes commonly
+	 * hardcode these exact 32px/46px offsets for their sticky chrome, while
+	 * newer code reads --wp-admin--admin-bar--height.
 	 */
 	public static function bump() {
 		if ( ! self::active() || is_embed() ) {
 			return;
 		}
-		// Floating pill: 48px bar + 10px inset, plus breathing room below.
-		// Phones lose the float (bar.css welds the bar to the top at the same
-		// 640px breakpoint), so the offset is just the bar height there.
-		echo '<style id="minn-bar-bump">html{margin-top:68px !important;scroll-padding-top:80px;}@media (max-width:640px){html{margin-top:48px !important;scroll-padding-top:58px;}}@media print{#minn-bar-root{display:none !important;}html{margin-top:0 !important;}}</style>' . "\n";
+		echo '<style id="minn-bar-bump">html{--wp-admin--admin-bar--height:32px;margin-top:var(--wp-admin--admin-bar--height) !important;scroll-padding-top:var(--wp-admin--admin-bar--height);}@media screen and (max-width:782px){html{--wp-admin--admin-bar--height:46px;}}@media print{#wpadminbar.minn-wpadminbar{display:none !important;}html{margin-top:0 !important;}}</style>' . "\n";
 	}
 
 	private static function app_path( $path ) {
@@ -397,6 +398,9 @@ class Minn_Admin_Bar {
 		// setting) kept showing the picture.
 		$avatar    = get_avatar( $user->ID, 52, '', '', array( 'class' => 'minn-bar-avatar-img', 'extra_attr' => 'loading="lazy"', 'force_display' => true ) );
 
+		// Use core's public shell ID as well as its body class and height token.
+		// A large number of themes key their sticky-header fixes to one or both.
+		echo '<div id="wpadminbar" class="minn-wpadminbar nojq">';
 		echo '<div id="minn-bar-root" data-minn-theme="dark">';
 
 		// Pre-paint the saved Minn theme before first paint of the bar (the
@@ -500,6 +504,7 @@ class Minn_Admin_Bar {
 		echo self::menu_item( wp_logout_url(), '<path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10"/>', __( 'Sign out', 'minn-admin' ) );
 		echo '</div>';
 
+		echo '</div>';
 		echo '</div>';
 	}
 }

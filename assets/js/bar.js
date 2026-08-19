@@ -69,50 +69,6 @@
 		if ( 'Escape' === event.key && menus.some( ( m ) => ! m.hidden ) ) closeMenus();
 	} );
 
-	/* ===== Auto-hide on scroll =====
-	 * Theme sticky headers can't know our geometry (their admin-bar
-	 * workarounds hardcode core's 32px), so instead of asking every theme to
-	 * adapt, the bar yields: scrolling down slides it away and the top edge
-	 * belongs to the site; scrolling up (or being near the top) brings it
-	 * back. */
-	const bar = document.getElementById( 'minn-bar' );
-	let lastY = window.scrollY;
-	window.addEventListener( 'scroll', () => {
-		const y = window.scrollY;
-		if ( bar ) {
-			if ( y > lastY && y > 90 ) bar.classList.add( 'minn-bar-away' );
-			else if ( y < lastY - 2 || y <= 90 ) bar.classList.remove( 'minn-bar-away' );
-		}
-		lastY = y;
-	}, { passive: true } );
-
-	/* ===== Yield to site overlays =====
-	 * The bar's z-index has to beat theme sticky headers, which means it also
-	 * beats most theme lightboxes and full-screen menus — floating over an
-	 * open overlay breaks it. Instead of a z-index war, the bar yields: probe
-	 * the viewport CENTER for a fixed, viewport-sized ancestor that is not
-	 * ours (one hit test plus a few style reads — cheap), on a slow interval
-	 * plus right after the interactions that open and close overlays. */
-	function overlayOpen() {
-		const el = document.elementFromPoint( innerWidth / 2, innerHeight / 2 );
-		if ( ! el || root.contains( el ) ) return false;
-		for ( let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement ) {
-			if ( 'fixed' === getComputedStyle( n ).position ) {
-				const r = n.getBoundingClientRect();
-				if ( r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9 ) return true;
-			}
-		}
-		return false;
-	}
-	function syncOverlay() {
-		if ( bar ) bar.classList.toggle( 'minn-bar-yield', overlayOpen() );
-	}
-	setInterval( syncOverlay, 700 );
-	document.addEventListener( 'click', () => setTimeout( syncOverlay, 120 ), true );
-	document.addEventListener( 'keydown', ( event ) => {
-		if ( 'Escape' === event.key ) setTimeout( syncOverlay, 120 );
-	}, true );
-
 	/* ===== Intents: hand off to the app (palette, create, notifications) ===== */
 	function goWithIntent( intent ) {
 		try {
