@@ -286,6 +286,38 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await clearAll();
 		await waitRows( [ made.sale ], [] );
 
+		// ---- Featured pop hangs on the live Add filter, not the viewport
+		// corner. A list render replaces the toolbar; the kinds menu used to
+		// keep the old button and place Yes/No at left:10 top:10.
+		await pickChoice( 'stock', 'instock' );
+		await waitForQuery( /[?&]stock_status=instock/, 'stock_status=instock' );
+		await settle();
+		await page.click( '#minn-order-addfilter' );
+		await page.waitForSelector( '[data-offilter="featured"]', { timeout: 8000 } );
+		await page.evaluate( () => {
+			const add = document.querySelector( '#minn-order-addfilter' );
+			if ( add ) add.replaceWith( add.cloneNode( true ) );
+		} );
+		await page.click( '[data-offilter="featured"]' );
+		await page.waitForSelector( '.minn-of-pop [data-ofval="true"]', { timeout: 8000 } );
+		const featuredPop = await page.evaluate( () => {
+			const pop = document.querySelector( '.minn-of-pop' );
+			const add = document.querySelector( '#minn-order-addfilter' );
+			if ( ! pop || ! add ) return null;
+			const pr = pop.getBoundingClientRect();
+			const ar = add.getBoundingClientRect();
+			return { popLeft: pr.left, popTop: pr.top, addLeft: ar.left, addBottom: ar.bottom };
+		} );
+		t.check( 'featured pop hangs on the live add button, not the viewport corner',
+			!! featuredPop && featuredPop.popLeft > 80
+				&& Math.abs( featuredPop.popLeft - featuredPop.addLeft ) < 48
+				&& Math.abs( featuredPop.popTop - ( featuredPop.addBottom + 6 ) ) < 24,
+			JSON.stringify( featuredPop ) );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-of-pop' ), null, { timeout: 4000 } ).catch( () => {} );
+		await clearAll();
+		await waitRows( [ made.sale ], [] );
+
 		// ---- On sale ----
 		await pickChoice( 'onsale', 'true' );
 		t.check( 'on-sale filter keeps only discounted products',

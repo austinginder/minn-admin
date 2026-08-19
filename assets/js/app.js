@@ -7383,6 +7383,35 @@
 		document.removeEventListener( 'scroll', orderFilterPopAwayScroll, true );
 		document.removeEventListener( 'keydown', orderFilterPopKey, true );
 	}
+	/** Hang the pop on a node that is still in the document. A list render
+	 *  replaces the toolbar, and getBoundingClientRect() on the old button
+	 *  is 0×0, which the clamp below turns into left:10 top:10. */
+	function liveFilterAnchor( anchor, kind, view ) {
+		const usable = ( el ) => {
+			if ( ! el || ! el.isConnected ) return null;
+			const r = el.getBoundingClientRect();
+			return ( r.width || r.height ) ? el : null;
+		};
+		const host = view || $( '#minn-view' );
+		const chip = kind && kind !== 'preset' && host
+			? $( '[data-ofchip="' + kind + '"] .minn-of-chip-body', host ) : null;
+		const add = host ? $( '#minn-order-addfilter', host ) : null;
+		const preset = host ? $( '#minn-order-preset', host ) : null;
+		return usable( anchor ) || usable( chip ) || usable( add ) || usable( preset );
+	}
+	function placeOrderFilterPop( pop, anchor ) {
+		if ( ! pop ) return;
+		const r = ( anchor && anchor.getBoundingClientRect )
+			? anchor.getBoundingClientRect()
+			: { left: 10, bottom: 4 };
+		// Natural size first: a 0 offsetWidth (not yet laid out) would
+		// make the clamp pick the left/top floor, which is the corner.
+		const w = pop.offsetWidth || 210;
+		const h = pop.offsetHeight || 80;
+		pop.style.right = 'auto';
+		pop.style.left = Math.max( 10, Math.min( r.left, window.innerWidth - w - 10 ) ) + 'px';
+		pop.style.top = Math.max( 10, Math.min( r.bottom + 6, window.innerHeight - h - 10 ) ) + 'px';
+	}
 	function orderFilterPopAway( e ) {
 		if ( orderFilterPop && ! orderFilterPop.contains( e.target ) ) closeOrderFilterPop();
 	}
@@ -7431,15 +7460,18 @@
 			</div>`;
 		}
 		document.body.appendChild( pop );
-		const r = anchor.getBoundingClientRect();
-		pop.style.left = Math.max( 10, Math.min( r.left, window.innerWidth - pop.offsetWidth - 10 ) ) + 'px';
-		pop.style.top = Math.max( 10, Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
+		const live = liveFilterAnchor( anchor, kind, view );
+		if ( ! live ) {
+			closeOrderFilterPop();
+			return;
+		}
+		placeOrderFilterPop( pop, live );
 		document.addEventListener( 'mousedown', orderFilterPopAway, true );
 		document.addEventListener( 'scroll', orderFilterPopAwayScroll, true );
 		document.addEventListener( 'keydown', orderFilterPopKey, true );
 
 		$$( '[data-offilter]', pop ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => openOrderFilterPop( anchor, btn.dataset.offilter, view ) ) );
+			btn.addEventListener( 'click', () => openOrderFilterPop( live, btn.dataset.offilter, view ) ) );
 
 		$$( '[data-opreset]', pop ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
@@ -9537,6 +9569,7 @@
 		const c = state.cache.orders;
 		if ( ! c ) {
 			if ( softLoadPending( 'orders' ) ) return; // a soft reload owns the view
+			closeOrderFilterPop();
 			view.innerHTML = viewSwitch + `<div class="minn-loading">${ esc( __( 'Loading orders…' ) ) }</div>`;
 			$$( '[data-oview]', view ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
@@ -9559,6 +9592,7 @@
 		}
 		if ( s.processing != null ) summaryCards.push( [ __( 'Awaiting fulfillment' ), s.processing, __( 'Processing' ) ] );
 
+		closeOrderFilterPop();
 		view.innerHTML = `
 		${ viewSwitch }
 		${ summaryCards.length ? `<div class="minn-stats" style="grid-template-columns:repeat(${ summaryCards.length },1fr);">
@@ -10319,6 +10353,7 @@
 		const c = state.cache.subscriptions;
 		if ( ! c ) {
 			if ( softLoadPending( 'subscriptions' ) ) return; // a soft reload owns the view
+			closeOrderFilterPop();
 			view.innerHTML = `
 			${ listFilterBarHtml( __( 'Search subscriptions (ID, name, email…)' ), '' ) }
 			${ orderFilterChipsHtml() }
@@ -10335,6 +10370,7 @@
 				: orderFiltersActive()
 					? __( 'No subscriptions match these filters.' )
 					: __( 'No subscriptions yet. When a customer buys a subscription product, it shows up here with status, next payment and related orders.' );
+		closeOrderFilterPop();
 		view.innerHTML = `
 		${ listFilterBarHtml( __( 'Search subscriptions (ID, name, email…)' ), metaLabel( c.total, 'subscription' ) ) }
 		${ orderFilterChipsHtml() }
@@ -12616,6 +12652,7 @@
 		const psel = state.productSel || ( state.productSel = new Set() );
 		if ( ! c ) {
 			if ( softLoadPending( 'products' ) ) return; // a soft reload owns the view
+			closeOrderFilterPop();
 			view.innerHTML = `
 			${ productFilterBarHtml( '' ) }
 			${ orderFilterChipsHtml() }
@@ -12624,6 +12661,7 @@
 			loadProducts().then( renderIfCurrent( 'products' ) ).catch( showErr );
 			return;
 		}
+		closeOrderFilterPop();
 		const canBulk = B.caps.products;
 		view.innerHTML = `
 		${ productFilterBarHtml( metaLabel( c.total, 'product' ) ) }
@@ -12941,6 +12979,7 @@
 		const c = state.cache.coupons;
 		if ( ! c ) {
 			if ( softLoadPending( 'coupons' ) ) return; // a soft reload owns the view
+			closeOrderFilterPop();
 			view.innerHTML = `
 			${ couponFilterBarHtml( '' ) }
 			${ orderFilterChipsHtml() }
@@ -12949,6 +12988,7 @@
 			loadCoupons().then( renderIfCurrent( 'coupons' ) ).catch( showErr );
 			return;
 		}
+		closeOrderFilterPop();
 		view.innerHTML = `
 		${ couponFilterBarHtml( metaLabel( c.total, 'coupon' ) ) }
 		${ orderFilterChipsHtml() }
@@ -15697,6 +15737,7 @@
 				} );
 				return;
 			}
+			closeOrderFilterPop();
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
 			Promise.all( [ loadSurfaceTabs( s ), loadSurfaceItems( s ), loadSurfaceStatus( s ) ] )
 				.then( renderIfCurrent( s.id ) )
@@ -15785,6 +15826,7 @@
 			   <div class="minn-toolbar">${ rowTwo }</div>`
 				: `<div class="minn-toolbar">${ switchHtml }${ rowTwo }</div>` );
 
+		closeOrderFilterPop();
 		view.innerHTML = `
 		${ ss.view === 'main' ? surfaceStatusHtml( ss.status ) : '' }
 		${ toolbarHtml }
@@ -42151,6 +42193,7 @@
 		announceRoute();
 		closeInspector();
 		closeBlockPicker();
+		closeOrderFilterPop();
 		closeImgEdit();
 		closeContentEditor();
 		hideCodePop();
