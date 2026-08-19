@@ -4252,12 +4252,82 @@ class Minn_Admin_REST {
 	 * de_DE_formal, and only files inside WP_LANG_DIR are ever unlinked.
 	 * Returns the number of files removed.
 	 */
+	/**
+	 * Every locale this site could plausibly have files for, longest first.
+	 *
+	 * Longest-first matters: de_DE_formal must be tested before de_DE, or the
+	 * shorter one claims the file.
+	 *
+	 * @param string $extra Locale to include even if nothing is installed for it.
+	 * @return string[]
+	 */
+	private static function known_locales( $extra = '' ) {
+		$locales = get_available_languages();
+		foreach ( array( 'core', 'plugins', 'themes' ) as $set ) {
+			foreach ( (array) wp_get_installed_translations( $set ) as $domain => $per_locale ) {
+				foreach ( (array) $per_locale as $loc => $meta ) {
+					$locales[] = (string) $loc;
+				}
+			}
+		}
+		if ( '' !== $extra ) {
+			$locales[] = $extra;
+		}
+		$locales = array_values( array_unique( array_filter( $locales ) ) );
+		usort( $locales, function ( $a, $b ) {
+			return strlen( $b ) - strlen( $a );
+		} );
+		return $locales;
+	}
+
+	/**
+	 * Which locale does a translation filename belong to?
+	 *
+	 * The locale sits in a dash-delimited slot before the extension, optionally
+	 * followed by a JS-i18n suffix (a script handle or an md5). When several known
+	 * locales match, the LAST one wins: in uk-cookie-consent-de_DE.mo the `uk` is
+	 * part of the textdomain and de_DE is the language.
+	 *
+	 * @param string   $name  Basename.
+	 * @param string[] $known Known locales, longest first.
+	 * @return string Locale, or '' when the file is not a translation file.
+	 */
+	private static function locale_of_file( $name, $known ) {
+		if ( ! preg_match( '/\.(?:po|mo|json|l10n\.php)$/', $name ) ) {
+			return '';
+		}
+		$best     = '';
+		$best_pos = -1;
+		foreach ( $known as $loc ) {
+			$q = preg_quote( $loc, '/' );
+			if ( preg_match( '/(?:^|-)' . $q . '(?:-[^.]*)?\.(?:po|mo|json|l10n\.php)$/', $name, $m, PREG_OFFSET_CAPTURE ) ) {
+				$pos = (int) $m[0][1];
+				if ( $pos > $best_pos ) {
+					$best_pos = $pos;
+					$best     = $loc;
+				}
+			}
+		}
+		return $best;
+	}
+
 	private static function remove_language_files( $locale ) {
 		$base    = untrailingslashit( WP_LANG_DIR );
 		$dirs    = array( $base, $base . '/plugins', $base . '/themes' );
-		$quoted  = preg_quote( $locale, '/' );
-		$pattern = '/(^|-)' . $quoted . '(\.|-)/';
-		$exts    = array( 'po', 'mo', 'l10n.php', 'json' );
+		// Which locale a translation file belongs to cannot be decided by position
+		// alone. A bare (^|-)LOCALE(\.|-) token matches the locale ANYWHERE in the
+		// name, and wp.org slugs routinely contain a token that is itself a shipped
+		// locale code -- 54 of the 131 core locales are three characters or fewer --
+		// so removing `uk` also selected uk-cookie-consent-de_DE.mo, the GERMAN packs
+		// of an unrelated plugin. Anchoring to the end does not work either: the
+		// JS-i18n suffix is not always a hash (WooCommerce ships
+		// woocommerce-nl_NL-wc-admin-app.json).
+		//
+		// So resolve it the way the names are actually built: a file belongs to the
+		// LAST known locale that occupies a locale slot in it. Only files that
+		// resolve to the locale being removed are unlinked; everything else is left
+		// for its own language to remove.
+		$known = self::known_locales( $locale );
 		$removed = 0;
 		foreach ( $dirs as $dir ) {
 			if ( ! is_dir( $dir ) ) {
@@ -4269,14 +4339,7 @@ class Minn_Admin_REST {
 					continue;
 				}
 				$name = basename( $file );
-				$ext_ok = false;
-				foreach ( $exts as $ext ) {
-					if ( substr( $name, -( strlen( $ext ) + 1 ) ) === '.' . $ext ) {
-						$ext_ok = true;
-						break;
-					}
-				}
-				if ( ! $ext_ok || ! preg_match( $pattern, $name ) ) {
+				if ( $locale !== self::locale_of_file( $name, $known ) ) {
 					continue;
 				}
 				// Never follow a path outside WP_LANG_DIR.
