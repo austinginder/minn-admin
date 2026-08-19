@@ -133,17 +133,18 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	try {
 		// ---- Fixtures: one product per dimension this bar can filter on ----
-		const cat = await api( 'wc/v3/products/categories', {
-			method: 'POST',
-			body: JSON.stringify( { name: 'Filter Cat ' + suffix } ),
-		} );
-		catId = cat.body && cat.body.id;
-		const tag = await api( 'wc/v3/products/tags', {
-			method: 'POST',
-			body: JSON.stringify( { name: 'Filter Tag ' + suffix } ),
-		} );
-		tagId = tag.body && tag.body.id;
-		t.check( 'fixtures: category + tag created', !! ( catId && tagId ), JSON.stringify( { catId, tagId } ) );
+		const term = async ( path, name ) => {
+			let r = await api( path, { method: 'POST', body: JSON.stringify( { name } ) } );
+			if ( r.body && r.body.id ) return { id: r.body.id, name, status: r.status };
+			const alt = name + '-2';
+			r = await api( path, { method: 'POST', body: JSON.stringify( { name: alt } ) } );
+			return { id: r.body && r.body.id, name: alt, status: r.status };
+		};
+		const cat = await term( 'wc/v3/products/categories', 'Filter Cat ' + suffix );
+		catId = cat.id;
+		const tag = await term( 'wc/v3/products/tags', 'Filter Tag ' + suffix );
+		tagId = tag.id;
+		t.check( 'fixtures: category + tag created', !! ( catId && tagId ), JSON.stringify( cat ) + ' ' + JSON.stringify( tag ) );
 
 		const mk = async ( key, body ) => {
 			const r = await api( 'wc/v3/products', { method: 'POST', body: JSON.stringify( body ) } );
@@ -230,7 +231,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await waitRows( [ made.featured, made.sale ], [] );
 
 		// ---- Category, through the async picker ----
-		await pickLookup( 'category', 'Filter Cat ' + suffix );
+		if ( ! catId ) {
+			t.check( 'category filter keeps only products in it', false, 'no category fixture' );
+		} else {
+		await pickLookup( 'category', cat.name );
 		t.check( 'category filter keeps only products in it',
 			await waitRows( [ made.featured ], [ made.sale, made.variable ] ), JSON.stringify( await visibleIds() ) );
 		t.check( 'category id travelled to the server',
@@ -244,22 +248,27 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'a reload restores the filtered rows',
 			await waitRows( [ made.featured ], [ made.sale ] ), JSON.stringify( await visibleIds() ) );
 		// The URL can only carry the id; the name arrives on its own request.
-		const nameResolved = await page.waitForFunction( ( s ) =>
-			Array.from( document.querySelectorAll( '[data-ofchip]' ) ).some( ( c ) => c.textContent.indexOf( 'Filter Cat ' + s ) !== -1 ),
-		suffix, { timeout: 10000 } ).then( () => true ).catch( () => false );
+		const nameResolved = await page.waitForFunction( ( n ) =>
+			Array.from( document.querySelectorAll( '[data-ofchip]' ) ).some( ( c ) => c.textContent.indexOf( n ) !== -1 ),
+		cat.name, { timeout: 10000 } ).then( () => true ).catch( () => false );
 		t.check( 'the restored category chip resolves its name, not its id',
 			nameResolved, JSON.stringify( await chipLabels() ) );
 		await clearAll();
 		await waitRows( [ made.featured, made.sale ], [] );
+		}
 
 		// ---- Tag ----
-		await pickLookup( 'tag', 'Filter Tag ' + suffix );
+		if ( ! tagId ) {
+			t.check( 'tag filter keeps only products carrying it', false, 'no tag fixture' );
+		} else {
+		await pickLookup( 'tag', tag.name );
 		t.check( 'tag filter keeps only products carrying it',
 			await waitRows( [ made.sale ], [ made.featured ] ), JSON.stringify( await visibleIds() ) );
 		t.check( 'tag id travelled to the server',
 			new RegExp( '[?&]tag=' + tagId + '(&|$)' ).test( lastQuery() ), lastQuery().slice( -120 ) );
 		await clearAll();
 		await waitRows( [ made.featured, made.sale ], [] );
+		}
 
 		// ---- Type ----
 		await pickChoice( 'type', 'variable' );

@@ -161,12 +161,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				hasRegular: !! document.querySelector( '#minn-p-regular' ),
 				hasStock: !! document.querySelector( '#minn-p-stock' ),
 				hasSave: !! document.querySelector( '#minn-product-save' ),
+				hasFullpage: !! document.querySelector( '#minn-p-fullpage' ),
 				hasWcEdit: /Edit in WooCommerce/.test( text ),
 				hasView: /View product/.test( text ),
 			};
 		} );
 		t.check( 'product modal is wide management UI',
-			ui.open && ui.hasName && ui.hasSku && ui.hasSave && ui.hasWcEdit,
+			ui.open && ui.hasName && ui.hasSku && ui.hasSave && ui.hasFullpage && ui.hasWcEdit,
 			JSON.stringify( ui ) );
 		t.check( 'product modal has price and stock fields',
 			ui.hasRegular && ui.hasStock, JSON.stringify( ui ) );

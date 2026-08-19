@@ -50,11 +50,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.fill( '#minn-pn-price', '11.25' );
 		await page.selectOption( '#minn-pn-status', 'publish' );
 		await page.click( '#minn-pn-create' );
-		await page.waitForFunction( () => {
-			const m = document.querySelector( '.minn-modal' );
-			return m && ( document.querySelector( '#minn-product-save' ) || document.querySelector( '#minn-p-name' ) );
-		}, null, { timeout: 15000 } ).catch( () => null );
-		await page.waitForTimeout( 600 );
+		await page.waitForSelector( '#minn-p-name, #minn-product-save', { timeout: 15000 } ).catch( () => null );
+		await page.waitForSelector( '#minn-p-fullpage', { timeout: 8000 } ).catch( () => null );
 		const listed = await api( `wc/v3/products?search=${ encodeURIComponent( name ) }&_fields=id,name,regular_price` );
 		const hit = ( listed.body || [] ).find( ( p ) => p.name === name );
 		t.check( 'product created via UI', !! hit, JSON.stringify( listed.body && listed.body[ 0 ] ) );
