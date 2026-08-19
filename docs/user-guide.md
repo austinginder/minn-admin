@@ -67,7 +67,8 @@ post, or run a command directly: "Clear site cache", "Back up site now",
 Only the Minn mark rests in the top corner. Hover it or reach it with the
 keyboard to reveal search and the command palette, a create menu, an Edit
 button for the page you are viewing, notifications and your account. On a
-phone the controls remain visible because there is no hover. A status chip
+phone the mark stays collapsed until you tap it, then opens the controls in a
+compact panel with its own Open Minn Admin link. A status chip
 appears beside the site name only when the site needs attention, such as
 maintenance mode, a password gate, hidden search visibility or a staging
 environment. The corner control floats above the site without changing its

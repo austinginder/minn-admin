@@ -408,8 +408,8 @@ const { execSync } = require( 'child_process' );
 			overlayState.top === 12 && ! overlayState.yielded, JSON.stringify( overlayState ) );
 		await page.evaluate( () => document.getElementById( 'suite-lightbox' ).remove() );
 
-		// Phones cannot hover, so the complete control set stays visible in a
-		// contained corner overlay without changing the page offset.
+		// Phones keep only the launcher visible until a tap opens the compact
+		// panel. The site header therefore remains available underneath.
 		await page.setViewportSize( { width: 390, height: 844 } );
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		const mob = await page.evaluate( () => {
@@ -423,13 +423,64 @@ const { execSync } = require( 'child_process' );
 				height: r.height,
 				radius: getComputedStyle( b ).borderRadius,
 				margin: getComputedStyle( document.documentElement ).marginTop,
+				actionsOpacity: getComputedStyle( document.querySelector( '.minn-bar-right' ) ).opacity,
 			};
 		} );
-		t.check( 'mobile: the always-revealed corner control fits the viewport',
-			mob.top === 12 && mob.left === 12 && Math.abs( mob.width - ( mob.vw - 24 ) ) < 1
-				&& mob.height === 46 && mob.radius === '14px',
+		t.check( 'mobile: only the 46px launcher rests over the site',
+			mob.top === 12 && mob.left === 12 && mob.width === 46
+				&& mob.height === 46 && mob.radius === '14px' && mob.actionsOpacity === '0',
 			JSON.stringify( mob ) );
 		t.check( 'mobile: Corner Reveal does not offset the site', mob.margin === '0px', mob.margin );
+		const beforeTap = page.url();
+		await page.click( '.minn-bar-markbtn' );
+		await page.waitForTimeout( 320 );
+		const mobileOpen = await page.evaluate( () => {
+			const root = document.getElementById( 'minn-bar-root' );
+			const bar = document.getElementById( 'minn-bar' ).getBoundingClientRect();
+			const admin = document.querySelector( '.minn-bar-mobile-admin' );
+			return {
+				open: root.classList.contains( 'minn-bar-touch-open' ),
+				width: bar.width,
+				height: bar.height,
+				actionsOpacity: getComputedStyle( document.querySelector( '.minn-bar-right' ) ).opacity,
+				adminVisible: getComputedStyle( admin ).display === 'flex',
+				adminText: admin.textContent.trim(),
+			};
+		} );
+		t.check( 'mobile: tapping the mark opens the compact controls without navigating',
+			page.url() === beforeTap && mobileOpen.open && mobileOpen.width <= 366 && mobileOpen.height > 46
+				&& mobileOpen.actionsOpacity === '1' && mobileOpen.adminVisible && /Open Minn Admin/.test( mobileOpen.adminText ),
+			JSON.stringify( mobileOpen ) );
+		await page.click( '.minn-bar-markbtn' );
+		await page.waitForTimeout( 320 );
+		const mobileClosed = await page.evaluate( () => ( {
+			open: document.getElementById( 'minn-bar-root' ).classList.contains( 'minn-bar-touch-open' ),
+			width: document.getElementById( 'minn-bar' ).getBoundingClientRect().width,
+		} ) );
+		t.check( 'mobile: tapping the mark again closes the panel',
+			! mobileClosed.open && mobileClosed.width === 46, JSON.stringify( mobileClosed ) );
+		await page.click( '.minn-bar-markbtn' );
+		await page.waitForTimeout( 320 );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 320 );
+		const mobileEscape = await page.evaluate( () => ( {
+			open: document.getElementById( 'minn-bar-root' ).classList.contains( 'minn-bar-touch-open' ),
+			width: document.getElementById( 'minn-bar' ).getBoundingClientRect().width,
+			expanded: document.querySelector( '.minn-bar-markbtn' ).getAttribute( 'aria-expanded' ),
+		} ) );
+		t.check( 'mobile: Escape closes the panel and its expanded state',
+			! mobileEscape.open && mobileEscape.width === 46 && mobileEscape.expanded === 'false',
+			JSON.stringify( mobileEscape ) );
+		await page.click( '.minn-bar-markbtn' );
+		await page.waitForTimeout( 320 );
+		await page.mouse.click( 380, 700 );
+		await page.waitForTimeout( 320 );
+		const mobileOutside = await page.evaluate( () => ( {
+			open: document.getElementById( 'minn-bar-root' ).classList.contains( 'minn-bar-touch-open' ),
+			width: document.getElementById( 'minn-bar' ).getBoundingClientRect().width,
+		} ) );
+		t.check( 'mobile: tapping outside closes the panel',
+			! mobileOutside.open && mobileOutside.width === 46, JSON.stringify( mobileOutside ) );
 		await page.setViewportSize( { width: 1280, height: 800 } );
 
 		// The Minn bar stays off builder canvases even when that builder is

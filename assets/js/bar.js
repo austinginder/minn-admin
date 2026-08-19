@@ -35,6 +35,15 @@
 	/* ===== Menus ===== */
 	const menus = Array.from( root.querySelectorAll( '.minn-bar-menu' ) );
 	const triggers = Array.from( root.querySelectorAll( '[data-barmenu]' ) );
+	const markButton = root.querySelector( '.minn-bar-markbtn' );
+	const mobileBar = window.matchMedia( '(max-width: 782px)' );
+
+	function closeTouchReveal() {
+		root.classList.remove( 'minn-bar-touch-open' );
+		if ( markButton ) markButton.setAttribute( 'aria-expanded', 'false' );
+		const focused = document.activeElement;
+		if ( focused && root.contains( focused ) && focused.blur ) focused.blur();
+	}
 
 	function closeMenus() {
 		menus.forEach( ( m ) => { m.hidden = true; } );
@@ -63,12 +72,52 @@
 		positionMenu( menu, button );
 		if ( 'minn-bar-menu-notif' === menu.id ) loadNotifications();
 	} ) );
-	document.addEventListener( 'click', closeMenus );
+	if ( markButton ) {
+		root.addEventListener( 'focusin', () => {
+			if ( mobileBar.matches ) markButton.setAttribute( 'aria-expanded', 'true' );
+		} );
+		root.addEventListener( 'focusout', () => {
+			setTimeout( () => {
+				if ( mobileBar.matches && ! root.contains( document.activeElement )
+					&& ! root.classList.contains( 'minn-bar-touch-open' ) ) {
+					markButton.setAttribute( 'aria-expanded', 'false' );
+				}
+			}, 0 );
+		} );
+		markButton.addEventListener( 'click', ( event ) => {
+			if ( ! mobileBar.matches ) return;
+			event.preventDefault();
+			event.stopPropagation();
+			const opening = ! root.classList.contains( 'minn-bar-touch-open' );
+			closeMenus();
+			if ( opening ) {
+				root.classList.add( 'minn-bar-touch-open' );
+				markButton.setAttribute( 'aria-expanded', 'true' );
+			} else {
+				closeTouchReveal();
+			}
+		} );
+	}
+	document.addEventListener( 'click', () => {
+		closeMenus();
+		closeTouchReveal();
+	} );
 	menus.forEach( ( m ) => m.addEventListener( 'click', ( e ) => e.stopPropagation() ) );
-	addEventListener( 'resize', closeMenus );
-	addEventListener( 'scroll', closeMenus, { passive: true } );
+	addEventListener( 'resize', () => {
+		closeMenus();
+		closeTouchReveal();
+	} );
+	addEventListener( 'scroll', () => {
+		closeMenus();
+		closeTouchReveal();
+	}, { passive: true } );
 	document.addEventListener( 'keydown', ( event ) => {
-		if ( 'Escape' === event.key && menus.some( ( m ) => ! m.hidden ) ) closeMenus();
+		if ( 'Escape' !== event.key ) return;
+		if ( menus.some( ( m ) => ! m.hidden ) ) closeMenus();
+		if ( root.classList.contains( 'minn-bar-touch-open' )
+			|| ( mobileBar.matches && root.contains( document.activeElement ) ) ) {
+			closeTouchReveal();
+		}
 	} );
 
 	/* ===== Intents: hand off to the app (palette, create, notifications) ===== */

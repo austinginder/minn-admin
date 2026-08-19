@@ -73,8 +73,8 @@
    every theme to reserve a toolbar-sized strip. */
 #minn-cornerbar {
   position: fixed;
-  top: 12px;
-  left: 12px;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
   width: 46px;
   min-width: 0;
   height: 46px;
@@ -119,7 +119,8 @@
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   font-variant-ligatures: no-contextual;
-  transition: max-width 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), padding 0.26s ease;
+  max-height: 46px;
+  transition: max-width 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), max-height 0.26s ease, padding 0.26s ease;
 }
 #minn-bar-root:hover #minn-bar,
 #minn-bar-root:focus-within #minn-bar,
@@ -129,6 +130,7 @@
 }
 .minn-bar-zone { display: flex; align-items: center; min-width: 0; flex: none; gap: 4px; }
 .minn-bar-right { justify-content: flex-end; }
+.minn-bar-mobile-admin { display: none; }
 .minn-bar-site,
 .minn-bar-status,
 .minn-bar-left > .minn-bar-divider,
@@ -462,16 +464,61 @@
 #minn-bar-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 @media (max-width: 782px) {
-  #minn-cornerbar { width: calc(100vw - 24px); }
+  #minn-cornerbar { width: 46px; }
   #minn-bar {
-    width: calc(100vw - 24px);
-    max-width: calc(100vw - 24px);
-    padding-right: 8px;
+    width: max-content;
+    max-width: 46px;
+    max-height: 46px;
+    padding: 4px;
   }
+  #minn-bar-root:not(.minn-bar-touch-open) #minn-bar { max-width: 46px; max-height: 46px; padding-right: 4px; }
   .minn-bar-site,
   .minn-bar-status,
   .minn-bar-left > .minn-bar-divider,
-  .minn-bar-right { opacity: 1; pointer-events: auto; }
+  .minn-bar-right { opacity: 0; pointer-events: none; }
+  #minn-bar-root.minn-bar-touch-open #minn-bar,
+  #minn-bar-root:focus-within #minn-bar {
+    width: min(340px, calc(100vw - 24px));
+    max-width: min(340px, calc(100vw - 24px));
+    height: auto;
+    min-height: 46px;
+    max-height: 160px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  #minn-bar-root.minn-bar-touch-open .minn-bar-site,
+  #minn-bar-root.minn-bar-touch-open .minn-bar-status,
+  #minn-bar-root.minn-bar-touch-open .minn-bar-right,
+  #minn-bar-root:focus-within .minn-bar-site,
+  #minn-bar-root:focus-within .minn-bar-status,
+  #minn-bar-root:focus-within .minn-bar-right { opacity: 1; pointer-events: auto; }
+  #minn-bar-root.minn-bar-touch-open .minn-bar-left,
+  #minn-bar-root.minn-bar-touch-open .minn-bar-right,
+  #minn-bar-root:focus-within .minn-bar-left,
+  #minn-bar-root:focus-within .minn-bar-right { width: 100%; }
+  #minn-bar-root.minn-bar-touch-open .minn-bar-site,
+  #minn-bar-root:focus-within .minn-bar-site { flex: 1; justify-content: flex-start; }
+  #minn-bar-root.minn-bar-touch-open .minn-bar-right,
+  #minn-bar-root:focus-within .minn-bar-right {
+    justify-content: space-between;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+  #minn-bar-root.minn-bar-touch-open .minn-bar-mobile-admin,
+  #minn-bar-root:focus-within .minn-bar-mobile-admin {
+    width: 100%;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 9px;
+    background: var(--panel2);
+    color: var(--text);
+    font-weight: 650;
+  }
+  .minn-bar-mobile-admin:hover { background: var(--hover); }
+  .minn-bar-mobile-admin svg { width: 17px; height: 17px; }
   .minn-bar-mark { width: 36px; height: 36px; }
   .minn-bar-avatar { width: 30px; height: 30px; }
   .minn-bar-divider { display: none; }
@@ -483,6 +530,8 @@
 }
 @media (max-width: 440px) {
   .minn-bar-sitename { display: none; }
+  #minn-bar-root.minn-bar-touch-open .minn-bar-sitename,
+  #minn-bar-root:focus-within .minn-bar-sitename { display: block; max-width: 150px; }
   .minn-bar-site { padding-right: 3px; }
 }
 @media (prefers-reduced-motion: reduce) {

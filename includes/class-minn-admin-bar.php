@@ -397,7 +397,7 @@ class Minn_Admin_Bar {
 		echo '<div class="minn-bar-zone minn-bar-left">';
 		// The flip rule, taught from both sides: the m mark is Minn (one click
 		// into the app), the site name is the site (here, its menu).
-		echo '<a class="minn-bar-btn minn-bar-markbtn" href="' . esc_url( Minn_Admin::app_url() ) . '" title="' . esc_attr__( 'Open Minn Admin', 'minn-admin' ) . '"><span class="minn-bar-mark">m</span></a>';
+		echo '<a class="minn-bar-btn minn-bar-markbtn" href="' . esc_url( Minn_Admin::app_url() ) . '" title="' . esc_attr__( 'Open Minn Admin', 'minn-admin' ) . '" aria-expanded="false"><span class="minn-bar-mark">m</span></a>';
 		echo '<button type="button" class="minn-bar-btn minn-bar-site" data-barmenu="minn-bar-menu-site" aria-haspopup="menu" aria-expanded="false">'
 			. '<span class="minn-bar-sitename">' . esc_html( $site_name ) . '</span>'
 			. '<svg class="minn-bar-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>'
@@ -427,6 +427,9 @@ class Minn_Admin_Bar {
 			. '</button><span class="minn-bar-notif-dot" id="minn-bar-notif-dot" hidden></span></span>';
 		echo '<button type="button" class="minn-bar-btn minn-bar-iconbtn minn-bar-avatarbtn" data-barmenu="minn-bar-menu-user" aria-haspopup="menu" aria-expanded="false" aria-label="' . esc_attr__( 'Account menu', 'minn-admin' ) . '"><span class="minn-bar-avatar">' . $avatar . '</span></button>';
 		echo '</div>';
+		echo '<a class="minn-bar-mobile-admin" href="' . esc_url( Minn_Admin::app_url() ) . '">'
+			. self::icon( '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>' )
+			. '<span>' . esc_html__( 'Open Minn Admin', 'minn-admin' ) . '</span></a>';
 		echo '</header>';
 
 		// Site menu.
