@@ -69,6 +69,34 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.click( '[data-migintent="push"]' );
 		await page.waitForTimeout( 250 );
 
+		// This site's own connection info, which is what the other end needs.
+		// The key is a site secret: it must be masked at rest and, more
+		// importantly, must not be sitting in the boot payload where every
+		// page load would carry it.
+		const masked = await page.evaluate( () => ( document.querySelector( '.minn-mig-self-key' ) || {} ).textContent || '' );
+		t.check( 'the secret key is masked until asked for', /^[•]+$/.test( masked.trim() ), masked.trim().slice( 0, 20 ) );
+		t.check( 'the secret key never rides the boot payload',
+			await page.evaluate( () => {
+				const raw = JSON.stringify( window.MINN.wpMigrate || {} );
+				return ! /"key"\s*:\s*"[^"]{8,}"/.test( raw );
+			} ), '' );
+		t.check( 'this site’s address is shown for the other end to use',
+			await page.evaluate( () => ( document.querySelector( '.minn-mig-self-url' ) || {} ).textContent || '' ).then( ( x ) => x.indexOf( 'http' ) === 0 ), '' );
+
+		// Reveal fetches on demand and shows the real key.
+		await page.click( '[data-migreveal]' );
+		await page.waitForFunction( () => ! /•/.test( document.querySelector( '.minn-mig-self-key' ).textContent ), { timeout: 15000 } );
+		t.check( 'Show fetches the key on demand', await page.evaluate( () =>
+			( document.querySelector( '.minn-mig-self-key' ).textContent || '' ).trim().length > 8 ), '' );
+		await page.click( '[data-migreveal]' );
+		await page.waitForTimeout( 300 );
+		t.check( 'Hide masks it again', await page.evaluate( () =>
+			/•/.test( document.querySelector( '.minn-mig-self-key' ).textContent ) ), '' );
+
+		// Both accept switches present, and the page says when neither is on.
+		t.check( 'both accept switches are offered',
+			await page.evaluate( () => document.querySelectorAll( '[data-migaccept]' ).length ) === 2, '' );
+
 		// Nothing may be sent until there is a connection.
 		t.check( 'no run button before connecting', await page.evaluate( () => ! document.querySelector( '[data-migrun]' ) ), '' );
 

@@ -136,3 +136,65 @@ function minn_admin_wp_migrate_boot() {
 		'local'     => minn_admin_wp_migrate_local(),
 	);
 }
+
+/**
+ * The connection info this site hands to the other end, and the two
+ * settings that decide whether the other end may use it.
+ *
+ * The secret key is fetched on demand rather than carried in the boot
+ * payload, the same way the one-time login link and the Disembark command
+ * are handled: a site secret should not ride along on every page load of
+ * the app just so a button can exist.
+ */
+add_action( 'rest_api_init', function () {
+	$perm = function () {
+		return minn_admin_wp_migrate_can();
+	};
+
+	register_rest_route( 'minn-admin/v1', '/wp-migrate/connection', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () {
+			$settings = get_site_option( 'wpmdb_settings' );
+			$settings = is_array( $settings ) ? $settings : array();
+			$key      = isset( $settings['key'] ) ? (string) $settings['key'] : '';
+			if ( '' === $key ) {
+				return new WP_Error(
+					'minn_wpm_no_key',
+					__( 'WP Migrate has not created a secret key for this site yet. Open its settings once to generate one.', 'minn-admin' ),
+					array( 'status' => 409 )
+				);
+			}
+			return rest_ensure_response( array(
+				'url'   => untrailingslashit( network_home_url() ),
+				'key'   => $key,
+				// Their own field is the address and key on separate lines,
+				// so hand back the exact block that can be pasted as is.
+				'block' => untrailingslashit( network_home_url() ) . "\n" . $key,
+			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wp-migrate/accept', array(
+		'methods'             => 'POST',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $request ) {
+			$settings = get_site_option( 'wpmdb_settings' );
+			$settings = is_array( $settings ) ? $settings : array();
+			foreach ( array( 'push', 'pull' ) as $which ) {
+				$val = $request->get_param( $which );
+				if ( null !== $val ) {
+					// Their own storage is a plain boolean on these two keys.
+					$settings[ 'allow_' . $which ] = (bool) rest_sanitize_boolean( $val );
+				}
+			}
+			update_site_option( 'wpmdb_settings', $settings );
+			$fresh = get_site_option( 'wpmdb_settings' );
+			$fresh = is_array( $fresh ) ? $fresh : array();
+			return rest_ensure_response( array(
+				'allowPush' => ! empty( $fresh['allow_push'] ),
+				'allowPull' => ! empty( $fresh['allow_pull'] ),
+			) );
+		},
+	) );
+} );

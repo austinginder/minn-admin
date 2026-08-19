@@ -20755,6 +20755,30 @@
 				${ m.error ? `<div class="minn-note err">${ esc( m.error ) }</div>` : '' }
 			</div>
 
+			<div class="minn-card minn-mig-card">
+				<div class="minn-mig-head"><h3>${ esc( __( 'This site' ) ) }</h3></div>
+				<p class="minn-mig-hint">${ esc( __( 'Paste this into the other site to let it push here or pull from here.' ) ) }</p>
+				<div class="minn-mig-self">
+					<code class="minn-mig-self-url">${ esc( W.siteUrl ) }</code>
+					<code class="minn-mig-self-key">${ m.keyShown ? esc( m.keyShown ) : '••••••••••••••••••••••••' }</code>
+					<div class="minn-mig-self-btns">
+						<button data-migreveal>${ esc( m.keyShown ? __( 'Hide' ) : __( 'Show' ) ) }</button>
+						<button class="minn-btn-primary" data-migcopy>${ esc( __( 'Copy' ) ) }</button>
+					</div>
+				</div>
+				<div class="minn-mig-accept">
+					<div class="minn-mig-accept-row">
+						<button type="button" class="minn-switch${ W.allowPush ? ' on' : '' }" data-migaccept="push" role="switch" aria-checked="${ !! W.allowPush }" aria-label="${ esc( __( 'Allow the other site to push here' ) ) }"><span class="minn-switch-knob"></span></button>
+						<span>${ esc( __( 'Let another site push to this one' ) ) }</span>
+					</div>
+					<div class="minn-mig-accept-row">
+						<button type="button" class="minn-switch${ W.allowPull ? ' on' : '' }" data-migaccept="pull" role="switch" aria-checked="${ !! W.allowPull }" aria-label="${ esc( __( 'Allow the other site to pull from here' ) ) }"><span class="minn-switch-knob"></span></button>
+						<span>${ esc( __( 'Let another site pull from this one' ) ) }</span>
+					</div>
+					${ ( ! W.allowPush && ! W.allowPull ) ? `<div class="minn-mig-hint">${ esc( __( 'With both off, the key alone will not let the other site connect.' ) ) }</div>` : '' }
+				</div>
+			</div>
+
 			${ connected ? `
 			<div class="minn-card minn-mig-card">
 				<div class="minn-mig-head"><h3>${ esc( __( 'What moves' ) ) }</h3></div>
@@ -20880,6 +20904,62 @@
 
 		const goLic = $( '[data-miggo="licenses"]', view );
 		if ( goLic ) goLic.addEventListener( 'click', () => { state.extTab = 'licenses'; go( 'extensions' ); } );
+
+		// The key is fetched only when it is actually needed, so it never
+		// rides a page load. Clipboard denial falls back to showing it
+		// rather than losing it silently.
+		const getConn = async () => {
+			const r = await api( 'minn-admin/v1/wp-migrate/connection' );
+			if ( ! r || ! r.block ) throw new Error( __( 'No connection info returned' ) );
+			return r;
+		};
+		const copyBtn = $( '[data-migcopy]', view );
+		if ( copyBtn ) copyBtn.addEventListener( 'click', async () => {
+			copyBtn.disabled = true;
+			try {
+				const c = await getConn();
+				try {
+					await navigator.clipboard.writeText( c.block );
+					toast( __( 'Connection info copied. Paste it into the other site’s Migrate page.' ) );
+				} catch ( err ) {
+					prompt( __( 'Connection info (copy it now):' ), c.block );
+				}
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+			copyBtn.disabled = false;
+		} );
+		const revealBtn = $( '[data-migreveal]', view );
+		if ( revealBtn ) revealBtn.addEventListener( 'click', async () => {
+			if ( m.keyShown ) { m.keyShown = ''; return rerender(); }
+			revealBtn.disabled = true;
+			try {
+				const c = await getConn();
+				m.keyShown = c.key;
+				rerender();
+			} catch ( e ) {
+				toast( e.message, true );
+				revealBtn.disabled = false;
+			}
+		} );
+		$$( '[data-migaccept]', view ).forEach( ( sw ) => sw.addEventListener( 'click', async () => {
+			const which = sw.dataset.migaccept;
+			const next = ! sw.classList.contains( 'on' );
+			sw.disabled = true;
+			try {
+				const r = await api( 'minn-admin/v1/wp-migrate/accept', {
+					method: 'POST', body: JSON.stringify( { [ which ]: next } ),
+				} );
+				// The boot payload is what the card renders from, so keep it
+				// in step or the switch snaps back on the next paint.
+				B.wpMigrate.allowPush = !! r.allowPush;
+				B.wpMigrate.allowPull = !! r.allowPull;
+				rerender();
+			} catch ( e ) {
+				toast( e.message, true );
+				sw.disabled = false;
+			}
+		} ) );
 
 		const cancel = $( '[data-migcancel]', view );
 		if ( cancel ) cancel.addEventListener( 'click', () => { m.cancel = true; cancel.disabled = true; } );

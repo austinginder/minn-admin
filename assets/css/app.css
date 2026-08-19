@@ -4666,3 +4666,19 @@ body.minn-kb-open .minn-editor-stats .minn-stats-session { display: none; }
 	.minn-mig-dirs { grid-template-columns: 1fr; }
 	.minn-mig-runbar { flex-direction: column; align-items: stretch; gap: 12px; }
 }
+
+/* Migrate — this site's own connection info */
+.minn-mig-self { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.minn-mig-self code { font-family: var(--mono, monospace); font-size: 12px; padding: 7px 10px;
+	border: 1px solid var(--border); border-radius: 7px; background: var(--bg2); color: var(--text2);
+	word-break: break-all; }
+.minn-mig-self-key { letter-spacing: .04em; }
+.minn-mig-self-btns { display: flex; gap: 8px; margin-left: auto; }
+.minn-mig-accept { display: flex; flex-direction: column; gap: 9px; margin-top: 14px;
+	padding-top: 13px; border-top: 1px solid var(--border); }
+.minn-mig-accept-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); }
+.minn-mig-accept .minn-mig-hint { margin: 2px 0 0; }
+@media (max-width: 640px) {
+	.minn-mig-self-btns { margin-left: 0; width: 100%; }
+	.minn-mig-self-btns button { flex: 1; }
+}
