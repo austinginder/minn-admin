@@ -107,7 +107,11 @@ Each wave is a card or two plus its save-payload keys, and each is shippable on
 its own.
 
 1. **The page** (shipped): route, shared renderer, quick-view modal kept, parity
-   with the old modal fields, editor link for the description.
+   with the old modal fields, editor link for the description. The modal carries
+   an Open full page button, the way an order and a subscription do, so a quick
+   view can hand off to the route. Creating a product from the list toolbar
+   lands in that same quick view, which is why the button is the difference
+   between a fresh product and a dead end.
 2. **Inventory and shipping** (shipped): GTIN, backorders, low stock, sold
    individually, weight, dimensions, shipping class. This wave also settled the
    page's shape: four cards in a two-column grid named the way WooCommerce
@@ -198,6 +202,15 @@ its own.
 
    Variation-level shipping and tax fields are still not here; the card covers
    what a shop owner changes rather than everything the resource holds.
+
+10. **The list's filters** (shipped): the two tab strips (status, stock) are
+    gone, replaced by the filter bar orders and subscriptions already run.
+    Status is the dropdown, and stock, category, tag, type, featured and on
+    sale are dimensions behind Add filter, each a native `wc/v3/products`
+    parameter, each a chip, all of them in the URL. The mechanics and the two
+    filters that are deliberately missing are documented once, in
+    `woocommerce-orders.md` under "The list: filters over native parameters",
+    which is the shared machine's home.
 
 Waves 2 through 5 cover what a shop owner touches weekly. Waves 8 and 9 are
 where WooCommerce's own UI is a canvas, so they need their own scoping pass

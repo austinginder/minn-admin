@@ -406,6 +406,12 @@ adds Gift cards, all in the same operational group.
   something changes, offering Discard beside Save, so a long product is
   never a scroll away from either.
 
+  The products list wears the same filter bar as Orders. Status is the
+  dropdown (one at a time, because that is what WooCommerce accepts).
+  Stock, category, tag, type, featured and on sale sit behind Add filter
+  and live in the address. Low stock is the store's own low-stock lookup,
+  not a stock status. Coupons get the same bar with a date window.
+
   A few things follow the product rather than sitting there always. Marking
   a product virtual removes the shipping fields, because nothing ships.
   Marking it downloadable adds a Downloads card where you name each file

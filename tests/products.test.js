@@ -89,14 +89,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	// Products surface loads.
 	await page.goto( BASE + '/minn-admin/products', { waitUntil: 'domcontentloaded' } );
-	await page.waitForSelector( '#minn-product-search, .minn-table-row, .minn-empty, .minn-loading', { timeout: 20000 } );
+	await page.waitForSelector( '#minn-order-search, .minn-table-row, .minn-empty, .minn-loading', { timeout: 20000 } );
 	await page.waitForFunction( () => {
-		return !! document.querySelector( '#minn-product-search' )
+		return !! document.querySelector( '#minn-order-search' )
 			|| !! document.querySelector( '.minn-table-row[data-product]' )
 			|| ( document.querySelector( '.minn-empty' ) && ! document.querySelector( '.minn-loading' ) );
 	}, null, { timeout: 15000 } ).catch( () => null );
 
-	const hasSearch = await page.$( '#minn-product-search' );
+	const hasSearch = await page.$( '#minn-order-search' );
 	t.check( 'products toolbar has search field', !! hasSearch, '' );
 	t.check( 'Products nav route renders',
 		!! hasSearch || !!( await page.$( '.minn-table-row[data-product]' ) ),
@@ -104,7 +104,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	// Search by SKU.
 	if ( hasSearch && productId ) {
-		await page.fill( '#minn-product-search', 'minn-suite-' + suffix );
+		await page.fill( '#minn-order-search', 'minn-suite-' + suffix );
 		await page.waitForTimeout( 700 );
 		await page.waitForFunction( ( id ) => {
 			const rows = document.querySelectorAll( '.minn-table-row[data-product]' );
@@ -114,10 +114,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			const rows = Array.from( document.querySelectorAll( '.minn-table-row[data-product]' ) );
 			return { n: rows.length, hit: rows.some( ( r ) => r.dataset.product === String( id ) ) };
 		}, productId );
+		// WooCommerce's plain `search` is name-only; the SKU half rides
+		// search_name_or_sku, so a hit here proves BOTH parameters went out.
 		t.check( 'search by SKU finds the product', found.hit && found.n >= 1, JSON.stringify( found ) );
 
 		// Also search by exact id.
-		await page.fill( '#minn-product-search', String( productId ) );
+		await page.fill( '#minn-order-search', String( productId ) );
 		await page.waitForTimeout( 700 );
 		await page.waitForFunction( ( id ) => {
 			const rows = document.querySelectorAll( '.minn-table-row[data-product]' );

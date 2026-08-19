@@ -976,11 +976,8 @@
 		orderSearch: '',
 		orderView: 'list', // list | analytics
 		orderAnalyticsRange: 30,
-		productTab: 'any',
-		productStock: 'any',
 		productSearch: '',
 		productSel: null,
-		couponTab: 'any',
 		couponSearch: '',
 		customerSearch: '',
 		userSearch: '',
@@ -4410,7 +4407,7 @@
 		$$( '[data-sotab]', view ).forEach( ( chip ) =>
 			chip.addEventListener( 'click', () => {
 				state.orderView = 'list';
-				state.orderFilters = orderFiltersDefault();
+				state.orderFilters = orderFiltersDefault( LIST_FILTER_SPECS.orders );
 				if ( chip.dataset.sotab && chip.dataset.sotab !== 'any' ) state.orderFilters.status = [ chip.dataset.sotab ];
 				state.orderSearch = '';
 				state.cache.orders = null;
@@ -6803,26 +6800,38 @@
 		cancelled: 'trash-status', refunded: 'draft', failed: 'trash-status',
 	};
 
-	/* The orders list filters. One object drives the quick-access strip, the
-	   chips, the query and the cache key, so there is a single answer to
-	   "what is the list showing" — the old split between a status tab and a
-	   search box could not express two statuses at once, which WooCommerce's
-	   REST has always accepted (status is an array param).
+	/* A list's filters. One object drives the status dropdown, the chips, the
+	   query and the cache key, so there is a single answer to "what is the
+	   list showing" — the old split between a status tab and a search box
+	   could not express two statuses at once, which WooCommerce's order REST
+	   has always accepted (status is an array param there).
 
 	   Every filter here maps to a NATIVE WooCommerce collection parameter.
 	   Filtering client-side would be a lie the moment the list paginates:
-	   page 2 of an unfiltered query is not page 2 of a filtered one. */
-	const orderFiltersDefault = () => ( { status: [], after: '', before: '', datePreset: '', customer: null, product: null } );
+	   page 2 of an unfiltered query is not page 2 of a filtered one.
+
+	   status and the date window have fixed slots; every other dimension the
+	   spec declares gets a key of its own, empty string for a choice list and
+	   null for a picker. */
+	const orderFiltersDefault = ( spec ) => {
+		const s = spec || listSpec();
+		const f = { status: [], after: '', before: '', datePreset: '' };
+		listValueKinds( s ).forEach( ( kind ) => {
+			f[ kind ] = FILTER_DIMS[ kind ].type === 'lookup' ? null : '';
+		} );
+		return f;
+	};
 	const orderFilters = ( spec ) => {
 		const s = spec || listSpec();
 		if ( ! state[ s.stateKey ] ) state[ s.stateKey ] = orderFiltersFromUrl( s );
 		return state[ s.stateKey ];
 	};
-	const orderFiltersActive = () => {
-		const f = orderFilters();
-		return !! ( f.status.length || f.after || f.before || f.customer || f.product );
+	const orderFiltersActive = ( spec ) => {
+		const s = spec || listSpec();
+		const f = orderFilters( s );
+		return !! ( f.status.length || f.after || f.before || listValueKinds( s ).some( ( k ) => f[ k ] ) );
 	};
-	/** The status preset the quick strip should light, or '' when the filters
+	/** The status preset the dropdown should light, or '' when the filters
 	 *  say something no single preset can (two statuses, say). */
 	const orderPresetActive = () => {
 		const f = orderFilters();
@@ -6833,17 +6842,25 @@
 
 	/** Filters as query string, in WooCommerce's own parameter vocabulary. */
 	function orderFilterQuery( spec ) {
-		const f = orderFilters( spec );
+		const s = spec || listSpec();
+		const f = orderFilters( s );
 		let q = '';
-		if ( f.status.length ) {
-			f.status.forEach( ( s ) => { q += '&status[]=' + encodeURIComponent( s ); } );
-		} else {
+		if ( ! f.status.length ) {
 			q += '&status=any';
+		} else if ( s.statusMulti ) {
+			f.status.forEach( ( slug ) => { q += '&status[]=' + encodeURIComponent( slug ); } );
+		} else {
+			q += '&status=' + encodeURIComponent( f.status[ 0 ] );
 		}
 		if ( f.after ) q += '&after=' + encodeURIComponent( f.after );
 		if ( f.before ) q += '&before=' + encodeURIComponent( f.before );
-		if ( f.customer ) q += '&customer=' + encodeURIComponent( f.customer.value );
-		if ( f.product ) q += '&product=' + encodeURIComponent( f.product.value );
+		listValueKinds( s ).forEach( ( kind ) => {
+			const d = FILTER_DIMS[ kind ];
+			const v = f[ kind ];
+			const raw = d.type === 'lookup' ? ( v && v.value ) : v;
+			if ( ! raw ) return;
+			q += d.query ? d.query( raw ) : '&' + d.param + '=' + encodeURIComponent( raw );
+		} );
 		return q;
 	}
 
@@ -6881,11 +6898,13 @@
 
 	/* ===== List filters (chips over native WC parameters) =====
 	 *
-	 * Orders and Subscriptions are the same list in two vocabularies: both
-	 * WooCommerce collections accept status (an array), customer, product and
-	 * a date window, so one filter machine serves both. The spec below is the
-	 * only thing that differs, and the active list is read from the route,
-	 * because these controls only ever run while their own list is on screen.
+	 * Four WooCommerce lists run this one machine: orders, subscriptions,
+	 * products and coupons. A spec says what a list is called and which
+	 * DIMENSIONS it offers; a dimension (below) says how a value is picked,
+	 * what WooCommerce parameter it becomes and how it reads back from a URL.
+	 * Adding a filter is therefore an entry in a table, not a branch in the
+	 * popover. The active list is read from the route, because these controls
+	 * only ever run while their own list is on screen.
 	 */
 	const LIST_FILTER_SPECS = {
 		orders: {
@@ -6893,12 +6912,17 @@
 			cacheKey: 'orders',
 			searchKey: 'orderSearch',
 			stateKey: 'orderFilters',
+			// wc/v3/orders registers status as an ARRAY, so two statuses at
+			// once are expressible. Products and coupons register a single
+			// enum, which is why their status picker is the dropdown alone.
+			statusMulti: true,
 			statuses: () => {
 				const known = Object.keys( B.wcOrderStatuses || {} );
 				return known.length ? known : ORDER_TAB_SLUGS.filter( ( s ) => s !== 'any' );
 			},
 			statusLabel: ( slug ) => orderStatusLabel( slug ),
 			presets: () => ORDER_TABS,
+			kinds: [ 'status', 'date', 'customer', 'product' ],
 			load: ( page ) => loadOrders( page ),
 			render: () => renderOrders(),
 		},
@@ -6907,26 +6931,55 @@
 			cacheKey: 'subscriptions',
 			searchKey: 'subSearch',
 			stateKey: 'subFilters',
+			statusMulti: true,
 			// WooCommerce Subscriptions owns its own status vocabulary, and it
 			// is not the order one: active, expired, pending-cancel.
 			statuses: () => SUB_TABS.map( ( [ id ] ) => id ).filter( ( s ) => s !== 'any' ),
 			statusLabel: ( slug ) => ( SUB_TABS.find( ( [ id ] ) => id === slug ) || [ '', ( slug || '' ).replace( /-/g, ' ' ) ] )[ 1 ],
 			presets: () => SUB_TABS,
+			kinds: [ 'status', 'date', 'customer', 'product' ],
 			load: ( page ) => loadSubscriptions( page ),
 			render: () => renderSubscriptions(),
+		},
+		products: {
+			route: 'products',
+			cacheKey: 'products',
+			searchKey: 'productSearch',
+			stateKey: 'productFilters',
+			statusMulti: false,
+			statuses: () => PRODUCT_TABS.map( ( [ id ] ) => id ).filter( ( s ) => s !== 'any' ),
+			statusLabel: ( slug ) => statusLabel( slug ),
+			presets: () => PRODUCT_TABS,
+			kinds: [ 'stock', 'category', 'tag', 'type', 'featured', 'onsale' ],
+			// A filter change replaces the rows, so a selection made against
+			// the old ones would apply a bulk action to products no longer on
+			// screen. The tab strip used to clear it; the bar has to too.
+			beforeReload: () => { if ( state.productSel ) state.productSel.clear(); },
+			load: ( page ) => loadProducts( page ),
+			render: () => renderProducts(),
+		},
+		coupons: {
+			route: 'coupons',
+			cacheKey: 'coupons',
+			searchKey: 'couponSearch',
+			stateKey: 'couponFilters',
+			statusMulti: false,
+			statuses: () => COUPON_TABS.map( ( [ id ] ) => id ).filter( ( s ) => s !== 'any' ),
+			statusLabel: ( slug ) => statusLabel( slug ),
+			presets: () => COUPON_TABS,
+			// wc/v3/coupons is a thin collection: status, search, code and a
+			// created-date window are the whole vocabulary. Discount type is
+			// NOT a collection parameter, so it is not offered — narrowing it
+			// here would only narrow the page on screen and lie about the
+			// count and every page after the first.
+			kinds: [ 'date' ],
+			load: ( page ) => loadCoupons( page ),
+			render: () => renderCoupons(),
 		},
 	};
 	/** A plugin surface's filter bar, expressed as a list spec.
 	 *
-	 *  The bar's machine is keyed by route, and the native lists are written
-	 *  above. A surface's id IS its route, but its descriptor arrives from the
-	 *  server at runtime, so its spec is derived on demand from
-	 *  `collection.filterBar`. Everything else — the status dropdown, Add
-	 *  filter, the chips, the URL round trip and the query builder — is the
-	 *  same code the native lists run.
-	 *
-	 *  Memoized per surface because listSpec() is called from every render:
-	 *  rebuilding the closures each time would be pure garbage. */
+	 *  Memoized per surface because listSpec() is called from every render. */
 	const SURFACE_SPECS = {};
 	function surfaceFilterSpec( id ) {
 		const s = surfaceById( id );
@@ -6940,17 +6993,15 @@
 			cacheKey: 'surface:' + id,
 			searchKey: 'surfaceSearch:' + id,
 			stateKey: 'surfaceFilters:' + id,
+			// Surfaces inherit the orders array-status unless they say otherwise.
+			statusMulti: bar.statusMulti !== false,
 			statuses: () => statuses.map( ( [ v ] ) => String( v ) ),
 			statusLabel: ( slug ) => ( statuses.find( ( [ v ] ) => String( v ) === String( slug ) ) || [ '', statusLabel( slug ) ] )[ 1 ],
 			presets: () => [ [ 'any', __( 'All' ) ] ].concat( statuses ),
-			// Only the dimensions this surface's route can really narrow on.
 			kinds: ( bar.kinds || [] ).map( ( k ) => String( k ) ),
 			clear: () => { surfaceState( id ).cache = null; },
 			load: ( page ) => {
 				const ss = surfaceState( id );
-				// The shared bar owns the search box, so mirror its value into
-				// the surface's own state before loading: the route builder
-				// and the mid-flight context guard both read ss.q.
 				ss.q = state[ 'surfaceSearch:' + id ] || '';
 				return loadSurfaceItems( surfaceById( id ), page );
 			},
@@ -6958,20 +7009,89 @@
 		};
 		return SURFACE_SPECS[ id ];
 	}
-	// The two native lists key off their own routes; anything else may be a
-	// surface wearing the bar, and orders stays the fallback so every existing
-	// caller behaves exactly as before.
-	// Both native specs are keyed by their own route, so this is the ternary it
-	// replaces, plus the surface case. Orders stays the fallback, so every
-	// existing caller behaves exactly as before.
 	const listSpec = () => LIST_FILTER_SPECS[ state.route ] || surfaceFilterSpec( state.route ) || LIST_FILTER_SPECS.orders;
 
-	const ORDER_FILTER_KINDS = [
-		[ 'status', __( 'Status' ) ],
-		[ 'date', __( 'Date' ) ],
-		[ 'customer', __( 'Customer' ) ],
-		[ 'product', __( 'Product' ) ],
-	];
+	/* A filter dimension must be a native collection parameter. status is the
+	 * list's own vocabulary, date is after/before, choices apply immediately,
+	 * lookup is an async picker. */
+	const FILTER_YES_NO = () => [ [ 'true', __( 'Yes' ) ], [ 'false', __( 'No' ) ] ];
+	/** An async picker over a wc/v3 term collection. The collection is plural
+	 *  (products/categories) while the parameter that filters on it is
+	 *  singular (category), so both are spelled out. */
+	const termLookup = ( sub, param, label, placeholder ) => ( {
+		label,
+		type: 'lookup',
+		param,
+		placeholder,
+		search: ( q ) => api( `wc/v3/products/${ sub }?search=${ encodeURIComponent( q ) }&per_page=8&_fields=id,name` )
+			.then( ( rows ) => ( Array.isArray( rows ) ? rows : [] ).map( ( row ) => ( {
+				value: row.id,
+				label: decodeEntities( row.name || '' ),
+			} ) ) ),
+		resolve: ( id ) => api( `wc/v3/products/${ sub }/${ id }?_fields=id,name` )
+			.then( ( row ) => ( row && row.id ? decodeEntities( row.name || '' ) : '' ) ),
+	} );
+	const FILTER_DIMS = {
+		status: { label: __( 'Status' ), type: 'status' },
+		date: { label: __( 'Date' ), type: 'date' },
+		customer: {
+			label: __( 'Customer' ),
+			type: 'lookup',
+			param: 'customer',
+			placeholder: __( 'Search customers…' ),
+			search: ( q ) => api( `wc/v3/customers?search=${ encodeURIComponent( q ) }&per_page=8&_fields=id,first_name,last_name,email` )
+				.then( ( rows ) => ( Array.isArray( rows ) ? rows : [] ).map( ( row ) => ( {
+					value: row.id,
+					label: [ row.first_name, row.last_name ].filter( Boolean ).join( ' ' ) || row.email,
+				} ) ) ),
+			resolve: ( id ) => api( `wc/v3/customers/${ id }?_fields=id,first_name,last_name,email` )
+				.then( ( row ) => ( row && row.id
+					? ( [ row.first_name, row.last_name ].filter( Boolean ).join( ' ' ) || row.email || '' )
+					: '' ) ),
+		},
+		product: {
+			label: __( 'Product' ),
+			type: 'lookup',
+			param: 'product',
+			placeholder: __( 'Search products…' ),
+			thumbs: true,
+			search: ( q ) => api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,images` )
+				.then( ( rows ) => ( Array.isArray( rows ) ? rows : [] ).map( ( row ) => ( {
+					value: row.id,
+					label: row.name + ( row.sku ? ' · ' + row.sku : '' ),
+					thumb: ( ( row.images || [] )[ 0 ] || {} ).src || '',
+				} ) ) ),
+			resolve: ( id ) => api( `wc/v3/products/${ id }?_fields=id,name,sku` )
+				.then( ( row ) => ( row && row.id ? row.name + ( row.sku ? ' · ' + row.sku : '' ) : '' ) ),
+		},
+		stock: {
+			label: __( 'Stock' ),
+			type: 'choices',
+			param: 'stock_status',
+			choices: () => PRODUCT_STOCK_CHOICES,
+			// Low stock is not a stock_status — it is the wc-analytics lookup
+			// loadProducts owns, with a managed-stock scan behind it. It
+			// therefore contributes no parameter of its own; asking wc/v3 for
+			// stock_status=low would 400 on a value that does not exist.
+			query: ( v ) => ( v === 'low' ? '' : '&stock_status=' + encodeURIComponent( v ) ),
+		},
+		category: termLookup( 'categories', 'category', __( 'Category' ), __( 'Search categories…' ) ),
+		tag: termLookup( 'tags', 'tag', __( 'Tag' ), __( 'Search tags…' ) ),
+		type: {
+			label: __( 'Type' ),
+			type: 'choices',
+			param: 'type',
+			choices: () => PRODUCT_TYPE_CHOICES,
+		},
+		featured: { label: __( 'Featured' ), type: 'choices', param: 'featured', choices: FILTER_YES_NO },
+		onsale: { label: __( 'On sale' ), type: 'choices', param: 'on_sale', choices: FILTER_YES_NO },
+	};
+
+	/** The dimensions a spec offers, minus status and date, which have their
+	 *  own slots in the filter object rather than a key of their own. */
+	const listValueKinds = ( s ) => ( s.kinds || [] ).filter( ( k ) =>
+		FILTER_DIMS[ k ] && FILTER_DIMS[ k ].type !== 'status' && FILTER_DIMS[ k ].type !== 'date' );
+	const listHasDate = ( s ) => ( s.kinds || [] ).indexOf( 'date' ) !== -1;
 	// Windows, not calendars: a custom range wants the themed date picker,
 	// which today carries editor-specific chrome (it marks days that already
 	// have posts). Presets cover the daily question and stay honest.
@@ -6992,34 +7112,46 @@
 	   WooCommerce actually registered, ids have to be positive integers, and
 	   dates have to look like dates. The query Minn sends is built from the
 	   validated state, never from the raw string. */
-	const ORDER_URL_KEYS = [ 'status', 'after', 'before', 'date', 'customer', 'product', 'q' ];
+	const listUrlKeys = ( s ) => [ 'status', 'q' ]
+		.concat( listHasDate( s ) ? [ 'after', 'before', 'date' ] : [] )
+		.concat( listValueKinds( s ) );
 	function orderFiltersFromUrl( spec ) {
 		const s = spec || listSpec();
-		const f = orderFiltersDefault();
+		const f = orderFiltersDefault( s );
 		let p;
 		try { p = new URLSearchParams( location.search ); } catch ( e ) { return f; }
 		const valid = s.statuses();
 		( p.get( 'status' ) || '' ).split( ',' ).forEach( ( slug ) => {
-			const s = slug.trim();
-			if ( s && valid.indexOf( s ) !== -1 && f.status.indexOf( s ) === -1 ) f.status.push( s );
+			const v = slug.trim();
+			if ( ! v || valid.indexOf( v ) === -1 || f.status.indexOf( v ) !== -1 ) return;
+			// A single-status list takes the first valid slug and drops the
+			// rest: sending two would silently filter on neither.
+			if ( ! s.statusMulti && f.status.length ) return;
+			f.status.push( v );
 		} );
-		const preset = p.get( 'date' );
-		if ( preset && ORDER_DATE_PRESETS.some( ( [ d ] ) => d === preset ) ) {
-			Object.assign( f, orderDateWindow( preset ) );
-		} else {
-			const okDate = ( v ) => /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$/.test( v || '' );
-			if ( okDate( p.get( 'after' ) ) ) f.after = p.get( 'after' );
-			if ( okDate( p.get( 'before' ) ) ) f.before = p.get( 'before' );
+		if ( listHasDate( s ) ) {
+			const preset = p.get( 'date' );
+			if ( preset && ORDER_DATE_PRESETS.some( ( [ d ] ) => d === preset ) ) {
+				Object.assign( f, orderDateWindow( preset ) );
+			} else {
+				const okDate = ( v ) => /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$/.test( v || '' );
+				if ( okDate( p.get( 'after' ) ) ) f.after = p.get( 'after' );
+				if ( okDate( p.get( 'before' ) ) ) f.before = p.get( 'before' );
+			}
 		}
-		// The id is all a URL can carry; the name is fetched and painted in.
-		const idOf = ( key ) => {
-			const n = parseInt( p.get( key ) || '', 10 );
-			return n > 0 && String( n ) === ( p.get( key ) || '' ).trim() ? n : 0;
-		};
-		const cid = idOf( 'customer' );
-		if ( cid ) f.customer = { value: cid, label: '#' + cid, unresolved: 'customer' };
-		const pid = idOf( 'product' );
-		if ( pid ) f.product = { value: pid, label: '#' + pid, unresolved: 'product' };
+		listValueKinds( s ).forEach( ( kind ) => {
+			const d = FILTER_DIMS[ kind ];
+			const raw = ( p.get( kind ) || '' ).trim();
+			if ( ! raw ) return;
+			if ( d.type === 'lookup' ) {
+				// The id is all a URL can carry; the name is fetched and
+				// painted in by resolveOrderFilterLabels.
+				const n = parseInt( raw, 10 );
+				if ( n > 0 && String( n ) === raw ) f[ kind ] = { value: n, label: '#' + n, unresolved: kind };
+			} else if ( d.choices().some( ( [ v ] ) => v === raw ) ) {
+				f[ kind ] = raw;
+			}
+		} );
 		const q = ( p.get( 'q' ) || '' ).trim();
 		if ( q && ! state[ s.searchKey ] ) state[ s.searchKey ] = q;
 		return f;
@@ -7039,19 +7171,23 @@
 	/** Write the current filters back to the address bar (never a history entry:
 	 *  narrowing a list is not navigation, and Back should leave the list). */
 	function syncOrderFiltersUrl() {
-		const f = orderFilters();
+		const s = listSpec();
+		const f = orderFilters( s );
 		let url;
 		try { url = new URL( location.href ); } catch ( e ) { return; }
-		ORDER_URL_KEYS.forEach( ( k ) => url.searchParams.delete( k ) );
+		listUrlKeys( s ).forEach( ( k ) => url.searchParams.delete( k ) );
 		if ( f.status.length ) url.searchParams.set( 'status', f.status.join( ',' ) );
 		if ( f.datePreset ) url.searchParams.set( 'date', f.datePreset );
 		else {
 			if ( f.after ) url.searchParams.set( 'after', f.after );
 			if ( f.before ) url.searchParams.set( 'before', f.before );
 		}
-		if ( f.customer ) url.searchParams.set( 'customer', f.customer.value );
-		if ( f.product ) url.searchParams.set( 'product', f.product.value );
-		if ( state[ listSpec().searchKey ] ) url.searchParams.set( 'q', state[ listSpec().searchKey ] );
+		listValueKinds( s ).forEach( ( kind ) => {
+			const v = f[ kind ];
+			if ( ! v ) return;
+			url.searchParams.set( kind, FILTER_DIMS[ kind ].type === 'lookup' ? v.value : v );
+		} );
+		if ( state[ s.searchKey ] ) url.searchParams.set( 'q', state[ s.searchKey ] );
 		history.replaceState( null, '', url.pathname + url.search + url.hash );
 	}
 
@@ -7059,19 +7195,16 @@
 	 *  once and repaint the chips; a failed lookup keeps the id, which is
 	 *  still true. */
 	function resolveOrderFilterLabels( view ) {
-		const f = orderFilters();
-		[ 'customer', 'product' ].forEach( ( kind ) => {
+		const s = listSpec();
+		const f = orderFilters( s );
+		listValueKinds( s ).forEach( ( kind ) => {
+			const d = FILTER_DIMS[ kind ];
 			const pick = f[ kind ];
-			if ( ! pick || ! pick.unresolved ) return;
+			if ( d.type !== 'lookup' || ! pick || ! pick.unresolved ) return;
 			delete pick.unresolved;
-			const route = kind === 'customer'
-				? `wc/v3/customers/${ pick.value }?_fields=id,first_name,last_name,email`
-				: `wc/v3/products/${ pick.value }?_fields=id,name,sku`;
-			api( route ).then( ( row ) => {
-				if ( ! row || ! row.id || f[ kind ] !== pick ) return;
-				pick.label = kind === 'customer'
-					? ( [ row.first_name, row.last_name ].filter( Boolean ).join( ' ' ) || row.email || pick.label )
-					: ( row.name + ( row.sku ? ' · ' + row.sku : '' ) );
+			d.resolve( pick.value ).then( ( label ) => {
+				if ( ! label || f[ kind ] !== pick ) return;
+				pick.label = label;
 				paintOrderFilterBar( view );
 			} ).catch( () => {} );
 		} );
@@ -7095,12 +7228,22 @@
 	};
 
 	function orderFilterChipsHtml() {
-		const f = orderFilters();
+		const s = listSpec();
+		const f = orderFilters( s );
 		const chips = [];
-		if ( f.status.length ) chips.push( [ 'status', __( 'Status' ), f.status.map( listSpec().statusLabel ).join( ', ' ) ] );
+		// Single-status lists already name the status in the dropdown; a chip
+		// would reopen the multi-select Apply picker the query cannot honor.
+		if ( f.status.length && s.statusMulti ) chips.push( [ 'status', __( 'Status' ), f.status.map( s.statusLabel ).join( ', ' ) ] );
 		if ( f.after || f.before ) chips.push( [ 'date', __( 'Date' ), orderDateChipLabel() ] );
-		if ( f.customer ) chips.push( [ 'customer', __( 'Customer' ), f.customer.label ] );
-		if ( f.product ) chips.push( [ 'product', __( 'Product' ), f.product.label ] );
+		listValueKinds( s ).forEach( ( kind ) => {
+			const d = FILTER_DIMS[ kind ];
+			const v = f[ kind ];
+			if ( ! v ) return;
+			const value = d.type === 'lookup'
+				? v.label
+				: ( d.choices().find( ( [ x ] ) => x === v ) || [ '', v ] )[ 1 ];
+			chips.push( [ kind, d.label, value ] );
+		} );
 		if ( ! chips.length ) return '';
 		return `
 		<div class="minn-of-bar">
@@ -7114,16 +7257,6 @@
 	}
 
 
-	/** The filter bar itself, in one place.
-	 *
-	 *  Every list that wears it renders THIS markup with THESE ids, which is
-	 *  what lets one bindListFilterBar wire all of them: orders, subscriptions
-	 *  and any plugin surface that declares a filterBar. Lists differ by three
-	 *  things only — what the search box says it searches, the count on the
-	 *  right, and an optional trailing button — so those are the arguments.
-	 *
-	 *  The search value is read through the active spec rather than a named
-	 *  state field, so a new list is a new spec and not a new toolbar. */
 	function listFilterBarHtml( placeholder, meta, extra ) {
 		const spec = listSpec();
 		return `
@@ -7136,8 +7269,13 @@
 		</div>`;
 	}
 
-	/** Wire a filter bar. Orders and Subscriptions render the same controls
-	 *  and the same ids, and the active list comes from the route. */
+	function paintOrderPresetLabel( view ) {
+		const b = $( '#minn-order-preset', view );
+		if ( b ) b.innerHTML = esc( orderPresetLabel() ) + ' ' + icon( 'chevron-down' );
+	}
+
+	/** Wire a filter bar. All four native lists and any surface with filterBar
+	 *  share these ids; the active list comes from the route. */
 	function bindListFilterBar( view ) {
 		const spec = listSpec();
 		const presetBtn = $( '#minn-order-preset', view );
@@ -7165,15 +7303,9 @@
 		}
 	}
 
-	/** Repaint the chip bar in place. A filter change reloads the list, and
-	 *  waiting for that round trip to remove a chip the user just dismissed
-	 *  reads as a dead click. The full render that follows rebinds it. */
 	/** Wire the chip bar alone. Split out of bindListFilterBar because the bar
-	 *  is written TWICE: once by the render, and again in place by
-	 *  paintOrderFilterBar — and replacing those nodes drops their listeners.
-	 *  The native lists hid that, because a full render always followed and
-	 *  rebound everything; a plugin surface wearing the bar did not, and
-	 *  Clear all became a dead click. */
+	 *  is written twice: once by the render, and again in place by
+	 *  paintOrderFilterBar — and a repaint replaces those nodes. */
 	function bindFilterChips( view ) {
 		const spec = listSpec();
 		$$( '[data-ofremove]', view ).forEach( ( btn ) =>
@@ -7182,8 +7314,8 @@
 				const kind = btn.dataset.ofremove;
 				if ( kind === 'status' ) f.status = [];
 				else if ( kind === 'date' ) { f.after = ''; f.before = ''; f.datePreset = ''; }
-				else f[ kind ] = null;
-				reloadOrderList( view );
+				else f[ kind ] = FILTER_DIMS[ kind ] && FILTER_DIMS[ kind ].type === 'lookup' ? null : '';
+				reloadOrderList( view, () => paintOrderPresetLabel( view ) );
 			} )
 		);
 		$$( '[data-ofchip] > .minn-of-chip-body', view ).forEach( ( body ) =>
@@ -7192,11 +7324,13 @@
 		);
 		const clearBtn = $( '#minn-order-clearfilters', view );
 		if ( clearBtn ) clearBtn.addEventListener( 'click', () => {
-			state[ spec.stateKey ] = orderFiltersDefault();
-			reloadOrderList( view );
+			state[ spec.stateKey ] = orderFiltersDefault( spec );
+			reloadOrderList( view, () => paintOrderPresetLabel( view ) );
 		} );
 	}
 
+	/** Repaint the chip bar in place. Rebind after writing: a URL name-resolve
+	 *  repaints long after the list render, and those new nodes have no listeners. */
 	function paintOrderFilterBar( view ) {
 		const host = view || $( '#minn-view' );
 		if ( ! host ) return;
@@ -7208,20 +7342,19 @@
 		}
 		if ( existing ) {
 			existing.outerHTML = html;
-			bindFilterChips( host );
-			return;
-		}
-		const addBtn = $( '#minn-order-addfilter', host );
-		const row = addBtn && addBtn.closest( '.minn-toolbar' );
-		if ( row ) {
+		} else {
+			const addBtn = $( '#minn-order-addfilter', host );
+			const row = addBtn && addBtn.closest( '.minn-toolbar' );
+			if ( ! row ) return;
 			row.insertAdjacentHTML( 'afterend', html );
-			bindFilterChips( host );
 		}
+		bindFilterChips( host );
 	}
 
 	/** Reload the list under the current filters, keeping the toolbar painted. */
 	function reloadOrderList( view, paintChrome ) {
 		const spec = listSpec();
+		if ( typeof spec.beforeReload === 'function' ) spec.beforeReload();
 		softListReload( {
 			route: spec.route,
 			view,
@@ -7268,30 +7401,32 @@
 	 */
 	function openOrderFilterPop( anchor, kind, view ) {
 		closeOrderFilterPop();
-		const f = orderFilters();
+		const spec = listSpec();
+		const f = orderFilters( spec );
+		const dim = kind ? FILTER_DIMS[ kind ] : null;
 		const pop = document.createElement( 'div' );
 		orderFilterPop = pop;
 		pop.className = 'minn-of-pop';
 		if ( ! kind ) {
-			// A list may narrow the offered dimensions to the ones its route
-			// can really serve (a surface shim has no customer lookup).
-			const kinds = listSpec().kinds;
-			pop.innerHTML = ORDER_FILTER_KINDS.filter( ( [ id ] ) => ! kinds || kinds.includes( id ) ).map( ( [ id, label ] ) =>
-				`<button type="button" class="minn-of-row" data-offilter="${ id }">${ esc( label ) }</button>` ).join( '' );
+			pop.innerHTML = ( spec.kinds || [] ).filter( ( id ) => FILTER_DIMS[ id ] ).map( ( id ) =>
+				`<button type="button" class="minn-of-row" data-offilter="${ id }">${ esc( FILTER_DIMS[ id ].label ) }</button>` ).join( '' );
 		} else if ( kind === 'preset' ) {
 			// Single-status shortcuts: the old tab strip, folded into a menu.
-			pop.innerHTML = listSpec().presets().map( ( [ id, label ] ) =>
+			pop.innerHTML = spec.presets().map( ( [ id, label ] ) =>
 				`<button type="button" class="minn-of-row${ orderPresetActive() === id ? ' is-on' : '' }" data-opreset="${ id }">${ esc( label ) }</button>` ).join( '' );
-		} else if ( kind === 'status' ) {
-			pop.innerHTML = listSpec().statuses().map( ( slug ) =>
-				`<button type="button" class="minn-of-row${ f.status.indexOf( slug ) !== -1 ? ' is-on' : '' }" data-ofval="${ slug }">${ esc( listSpec().statusLabel( slug ) ) }</button>` ).join( '' )
-				+ `<div class="minn-of-foot"><button type="button" class="minn-btn-primary" data-ofapply>${ __( 'Apply' ) }</button></div>`;
-		} else if ( kind === 'date' ) {
+		} else if ( dim.type === 'status' ) {
+			pop.innerHTML = spec.statuses().map( ( slug ) =>
+				`<button type="button" class="minn-of-row${ f.status.indexOf( slug ) !== -1 ? ' is-on' : '' }" data-ofval="${ slug }">${ esc( spec.statusLabel( slug ) ) }</button>` ).join( '' )
+				+ ( spec.statusMulti ? `<div class="minn-of-foot"><button type="button" class="minn-btn-primary" data-ofapply>${ __( 'Apply' ) }</button></div>` : '' );
+		} else if ( dim.type === 'date' ) {
 			pop.innerHTML = ORDER_DATE_PRESETS.map( ( [ days, label ] ) =>
 				`<button type="button" class="minn-of-row${ f.datePreset === days ? ' is-on' : '' }" data-ofval="${ days }">${ esc( label ) }</button>` ).join( '' );
+		} else if ( dim.type === 'choices' ) {
+			pop.innerHTML = dim.choices().map( ( [ value, label ] ) =>
+				`<button type="button" class="minn-of-row${ f[ kind ] === value ? ' is-on' : '' }" data-ofval="${ esc( value ) }">${ esc( label ) }</button>` ).join( '' );
 		} else {
 			pop.innerHTML = `<div class="minn-ac minn-of-search">
-				<input class="minn-input minn-ac-input" placeholder="${ esc( kind === 'customer' ? __( 'Search customers…' ) : __( 'Search products…' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( dim.placeholder ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
 			</div>`;
 		}
@@ -7312,28 +7447,37 @@
 				closeOrderFilterPop();
 				if ( orderPresetActive() === preset ) return;
 				orderFilters().status = preset === 'any' ? [] : [ preset ];
-				reloadOrderList( view, () => {
-					const b = $( '#minn-order-preset', view );
-					if ( b ) b.innerHTML = esc( orderPresetLabel() ) + ' ' + icon( 'chevron-down' );
-				} );
+				reloadOrderList( view, () => paintOrderPresetLabel( view ) );
 			} ) );
 
-		if ( kind === 'status' ) {
-			const picked = f.status.slice();
-			$$( '[data-ofval]', pop ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					const slug = btn.dataset.ofval;
-					const i = picked.indexOf( slug );
-					if ( i === -1 ) picked.push( slug ); else picked.splice( i, 1 );
-					btn.classList.toggle( 'is-on', picked.indexOf( slug ) !== -1 );
-				} ) );
-			const apply = $( '[data-ofapply]', pop );
-			if ( apply ) apply.addEventListener( 'click', () => {
-				f.status = picked;
-				closeOrderFilterPop();
-				reloadOrderList( view );
-			} );
-		} else if ( kind === 'date' ) {
+		if ( ! dim ) return;
+
+		if ( dim.type === 'status' ) {
+			if ( ! spec.statusMulti ) {
+				$$( '[data-ofval]', pop ).forEach( ( btn ) =>
+					btn.addEventListener( 'click', () => {
+						const slug = btn.dataset.ofval;
+						f.status = f.status[ 0 ] === slug ? [] : [ slug ];
+						closeOrderFilterPop();
+						reloadOrderList( view, () => paintOrderPresetLabel( view ) );
+					} ) );
+			} else {
+				const picked = f.status.slice();
+				$$( '[data-ofval]', pop ).forEach( ( btn ) =>
+					btn.addEventListener( 'click', () => {
+						const slug = btn.dataset.ofval;
+						const i = picked.indexOf( slug );
+						if ( i === -1 ) picked.push( slug ); else picked.splice( i, 1 );
+						btn.classList.toggle( 'is-on', picked.indexOf( slug ) !== -1 );
+					} ) );
+				const apply = $( '[data-ofapply]', pop );
+				if ( apply ) apply.addEventListener( 'click', () => {
+					f.status = picked;
+					closeOrderFilterPop();
+					reloadOrderList( view, () => paintOrderPresetLabel( view ) );
+				} );
+			}
+		} else if ( dim.type === 'date' ) {
 			$$( '[data-ofval]', pop ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
 					// WooCommerce compares against the site's own timezone, so
@@ -7342,7 +7486,17 @@
 					closeOrderFilterPop();
 					reloadOrderList( view );
 				} ) );
-		} else if ( kind === 'customer' || kind === 'product' ) {
+		} else if ( dim.type === 'choices' ) {
+			$$( '[data-ofval]', pop ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					// Picking the value already on returns to "any" rather than
+					// leaving a chip the click appeared to dismiss.
+					const value = btn.dataset.ofval;
+					f[ kind ] = f[ kind ] === value ? '' : value;
+					closeOrderFilterPop();
+					reloadOrderList( view );
+				} ) );
+		} else {
 			const wrap = $( '.minn-of-search', pop );
 			const input = $( '.minn-ac-input', wrap );
 			const panel = $( '.minn-ac-panel', wrap );
@@ -7370,22 +7524,12 @@
 					const q = input.value.trim();
 					if ( ! q ) { panel.hidden = true; setSearching( false ); return; }
 					const mine = ++seq;
-					const route = kind === 'customer'
-						? `wc/v3/customers?search=${ encodeURIComponent( q ) }&per_page=8&_fields=id,first_name,last_name,email`
-						: `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,images`;
 					try {
-						const rows = await api( route );
+						const items = await dim.search( q );
 						if ( mine !== seq || ! pop.isConnected ) return;
 						setSearching( false );
-						const items = ( Array.isArray( rows ) ? rows : [] ).map( ( row ) => ( {
-							value: row.id,
-							label: kind === 'customer'
-								? ( [ row.first_name, row.last_name ].filter( Boolean ).join( ' ' ) || row.email )
-								: ( row.name + ( row.sku ? ' · ' + row.sku : '' ) ),
-							thumb: kind === 'product' ? ( ( ( row.images || [] )[ 0 ] || {} ).src || '' ) : '',
-						} ) );
 						if ( ! items.length ) { panel.hidden = true; return; }
-						panel.innerHTML = items.map( ( it ) => ( kind === 'product'
+						panel.innerHTML = items.map( ( it ) => ( dim.thumbs
 							? `<button type="button" class="minn-ac-item minn-of-item" data-acv="${ esc( String( it.value ) ) }"><span class="minn-of-thumb">${ it.thumb ? `<img src="${ esc( it.thumb ) }" alt="" loading="lazy">` : '' }</span><span class="minn-cell-clip">${ esc( it.label ) }</span></button>`
 							: `<button type="button" class="minn-ac-item" data-acv="${ esc( String( it.value ) ) }">${ esc( it.label ) }</button>` ) ).join( '' );
 						panel.hidden = false;
@@ -8535,7 +8679,7 @@
 				if ( ! email ) return;
 				closeHost();
 				state.orderView = 'list';
-				state.orderFilters = orderFiltersDefault();
+				state.orderFilters = orderFiltersDefault( LIST_FILTER_SPECS.orders );
 				state.orderSearch = email;
 				state.cache.orders = null;
 				if ( state.route === 'orders' ) renderOrders();
@@ -10289,6 +10433,9 @@
 			} )
 		);
 		bindPager( view, c.page, loadSubscriptions, () => { if ( state.route === 'subscriptions' ) renderSubscriptions(); } );
+		// Same as orders: canonicalize a filtered URL and resolve restored ids.
+		syncOrderFiltersUrl();
+		resolveOrderFilterLabels( view );
 	}
 
 	/* ===== Products (WooCommerce) ===== */
@@ -10302,12 +10449,21 @@
 		[ 'private', __( 'Private' ) ],
 		[ 'pending', __( 'Pending' ) ],
 	];
-	const PRODUCT_STOCK_TABS = [
-		[ 'any', __( 'Any stock' ) ],
+	// The Stock filter's options. "Any" is not one of them: no filter IS any,
+	// and an explicit any would chip a narrowing that never happened.
+	const PRODUCT_STOCK_CHOICES = [
 		[ 'instock', __( 'In stock' ) ],
 		[ 'outofstock', __( 'Out of stock' ) ],
 		[ 'onbackorder', __( 'On backorder' ) ],
 		[ 'low', __( 'Low stock' ) ],
+	];
+	// wc_get_product_types() is filterable, so a store can carry more; these
+	// are the four core types, which is what the filter offers.
+	const PRODUCT_TYPE_CHOICES = [
+		[ 'simple', __( 'Simple product' ) ],
+		[ 'variable', __( 'Variable product' ) ],
+		[ 'grouped', __( 'Grouped product' ) ],
+		[ 'external', __( 'External or affiliate product' ) ],
 	];
 	const PRODUCT_STATUS_STYLE = {
 		publish: 'publish', draft: 'draft', private: 'private', pending: 'private',
@@ -10315,11 +10471,14 @@
 	const STOCK_STATUS_STYLE = {
 		instock: 'publish', outofstock: 'trash-status', onbackorder: 'future',
 	};
-	const PRODUCT_LIST_FIELDS = 'id,name,type,status,sku,price,regular_price,sale_price,stock_status,stock_quantity,manage_stock,on_sale,catalog_visibility,permalink,date_created,categories,images,total_sales';
+	// `featured` earns its place in the LIST fields: the Low stock lookup and
+	// the exact-id search hand rows to the list without asking the server, so
+	// a Featured filter can only be honored on rows that carry the flag.
+	const PRODUCT_LIST_FIELDS = 'id,name,type,status,sku,price,regular_price,sale_price,stock_status,stock_quantity,manage_stock,on_sale,featured,catalog_visibility,permalink,date_created,categories,tags,images,total_sales,parent_id';
 	const PRODUCT_DETAIL_FIELDS = PRODUCT_LIST_FIELDS + ',short_description,description,date_modified'
 		+ ',global_unique_id,backorders,low_stock_amount,sold_individually'
 		+ ',weight,dimensions,shipping_class,virtual'
-		+ ',slug,featured,tags,brands'
+		+ ',slug,tags,brands'
 		+ ',date_on_sale_from,date_on_sale_to,tax_status,tax_class'
 		+ ',purchase_note,menu_order,reviews_allowed'
 		+ ',downloadable,downloads,download_limit,download_expiry'
@@ -10871,7 +11030,11 @@
 		} );
 	}
 
-	const productCtx = () => ( state.productTab || 'any' ) + '|' + ( state.productStock || 'any' ) + '|' + ( state.productSearch || '' );
+	// The guard against a slow response landing on a list the user has since
+	// re-filtered. It has to hash the WHOLE filter object: hashing three
+	// fields was enough while there were three, and silently stops guarding
+	// the moment a dimension is added.
+	const productCtx = () => JSON.stringify( orderFilters( LIST_FILTER_SPECS.products ) ) + '|' + ( state.productSearch || '' );
 
 	/** True when Minn can safely edit price/stock on the product itself (not variations). */
 	function productPriceEditable( p ) {
@@ -10916,19 +11079,40 @@
 		return labels[ type ] || type || labels.simple;
 	}
 
+	/* Two loads cannot ask the server: the Low stock lookup and the exact-id
+	   hit for a numeric search. Both hand rows straight to the list, so both
+	   have to honor the active filters themselves or the list would show a
+	   row the filters exclude. Every dimension the bar offers is checked
+	   here, which is why it reads the filter object rather than named fields:
+	   a dimension added to the spec and forgotten here is a wrong row. */
 	function productMatchesFilters( p ) {
-		const tab = state.productTab || 'any';
-		const stock = state.productStock || 'any';
-		if ( tab !== 'any' && p.status !== tab ) return false;
-		if ( stock === 'instock' || stock === 'outofstock' || stock === 'onbackorder' ) {
-			if ( p.stock_status !== stock ) return false;
-		}
+		const f = orderFilters( LIST_FILTER_SPECS.products );
+		if ( f.status.length && f.status.indexOf( p.status ) === -1 ) return false;
+		if ( f.stock && f.stock !== 'low' && p.stock_status !== f.stock ) return false;
+		if ( f.type && ( p.type || 'simple' ) !== f.type ) return false;
+		if ( f.featured && String( !! p.featured ) !== f.featured ) return false;
+		if ( f.onsale && String( !! p.on_sale ) !== f.onsale ) return false;
+		const inTerms = ( key, pick ) => ! pick || ( p[ key ] || [] ).some( ( t ) => t.id === pick.value );
+		if ( ! inTerms( 'categories', f.category ) ) return false;
+		if ( ! inTerms( 'tags', f.tag ) ) return false;
 		return true;
 	}
 
+	function productHasOtherFilters( f ) {
+		return !!( f.status.length || f.type || f.featured || f.onsale || f.category || f.tag );
+	}
+
+	/** `search_name_or_sku` also matches variations. This list only opens
+	 *  catalog products, so a variation becomes its parent (or is dropped). */
+	async function catalogProductRow( p ) {
+		if ( ! p || ! p.id || p.type !== 'variation' ) return p || null;
+		if ( ! p.parent_id ) return null;
+		return api( `wc/v3/products/${ p.parent_id }?_fields=${ PRODUCT_LIST_FIELDS }` ).catch( () => null );
+	}
+
 	async function loadProducts( page = 1 ) {
-		const tab = state.productTab || 'any';
-		const stock = state.productStock || 'any';
+		const f = orderFilters( LIST_FILTER_SPECS.products );
+		const stock = f.stock || '';
 		const q0 = ( state.productSearch || '' ).trim();
 		const ctx = productCtx();
 		// Low stock: prefer wc-analytics (lookup tables + store threshold). Fall
@@ -10938,36 +11122,39 @@
 			let totalPages = 1;
 			let total = 0;
 			try {
-				const r = await apiPaged( `wc-analytics/products/low-in-stock?page=${ page }&per_page=25` );
-				if ( ctx !== productCtx() ) return;
-				const slim = r.items || [];
-				if ( slim.length ) {
-					const enriched = await Promise.all( slim.map( ( row ) =>
-						api( `wc/v3/products/${ row.id }?_fields=${ PRODUCT_LIST_FIELDS }` ).catch( () => ( {
-							id: row.id,
-							name: row.name,
-							type: row.type || 'simple',
-							status: 'publish',
-							sku: '',
-							price: '',
-							regular_price: '',
-							sale_price: '',
-							stock_status: 'instock',
-							stock_quantity: row.stock_quantity,
-							manage_stock: true,
-							on_sale: false,
-							catalog_visibility: 'visible',
-							permalink: '',
-							date_created: '',
-							categories: [],
-							images: row.images || [],
-							total_sales: 0,
-						} ) )
-					) );
+				if ( productHasOtherFilters( f ) ) {
+					// Walk the lookup for ids, then let wc/v3 apply the other
+					// dimensions so the count and page 2 stay honest.
+					const ids = [];
+					let ap = 1, apPages = 1;
+					do {
+						const chunk = await apiPaged( `wc-analytics/products/low-in-stock?page=${ ap }&per_page=100` );
+						if ( ctx !== productCtx() ) return;
+						( chunk.items || [] ).forEach( ( row ) => { if ( row && row.id ) ids.push( row.id ); } );
+						apPages = chunk.totalPages || 1;
+						ap += 1;
+					} while ( ap <= apPages && ap <= 20 );
+					if ( ids.length ) {
+						const r = await apiPaged( `wc/v3/products?per_page=25&page=${ page }&include=${ ids.join( ',' ) }&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }`
+							+ orderFilterQuery( LIST_FILTER_SPECS.products ) );
+						if ( ctx !== productCtx() ) return;
+						items = r.items || [];
+						totalPages = r.totalPages;
+						total = r.total;
+					}
+				} else {
+					const r = await apiPaged( `wc-analytics/products/low-in-stock?page=${ page }&per_page=25` );
 					if ( ctx !== productCtx() ) return;
-					items = enriched.filter( ( p ) => p && productMatchesFilters( p ) );
-					totalPages = r.totalPages;
-					total = r.total;
+					const slim = r.items || [];
+					if ( slim.length ) {
+						const enriched = await Promise.all( slim.map( ( row ) =>
+							api( `wc/v3/products/${ row.id }?_fields=${ PRODUCT_LIST_FIELDS }` ).catch( () => null )
+						) );
+						if ( ctx !== productCtx() ) return;
+						items = enriched.filter( Boolean );
+						totalPages = r.totalPages;
+						total = r.total;
+					}
 				}
 			} catch ( e ) { /* fall through to scan */ }
 			if ( ! items.length && page === 1 ) {
@@ -10990,8 +11177,9 @@
 		// Numeric-only: try exact id first (WC search is fuzzy and often misses ids).
 		if ( q0 && /^\d+$/.test( q0 ) ) {
 			try {
-				const one = await api( `wc/v3/products/${ q0 }?_fields=${ PRODUCT_LIST_FIELDS }` );
+				let one = await api( `wc/v3/products/${ q0 }?_fields=${ PRODUCT_LIST_FIELDS }` );
 				if ( ctx !== productCtx() ) return;
+				one = await catalogProductRow( one );
 				if ( one && one.id && productMatchesFilters( one ) ) {
 					const thr = Number( B.wcLowStock ) || 2;
 					const isLow = one.manage_stock
@@ -11007,15 +11195,27 @@
 				// 404 → fall through to search.
 			}
 		}
-		let q = `wc/v3/products?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }`;
-		if ( tab !== 'any' ) q += '&status=' + encodeURIComponent( tab );
-		if ( stock === 'instock' || stock === 'outofstock' || stock === 'onbackorder' ) {
-			q += '&stock_status=' + encodeURIComponent( stock );
+		let q = `wc/v3/products?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }`
+			+ orderFilterQuery( LIST_FILTER_SPECS.products );
+		if ( q0 ) {
+			// WC 11 honors search_name_or_sku and ignores search; an older
+			// build does the opposite. Sending both degrades to a name search
+			// rather than returning the whole catalog.
+			q += '&search=' + encodeURIComponent( q0 ) + '&search_name_or_sku=' + encodeURIComponent( q0 );
 		}
-		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
 		const r = await apiPaged( q );
 		if ( ctx !== productCtx() ) return;
-		state.cache.products = { items: r.items, page, totalPages: r.totalPages, total: r.total };
+		const raw = r.items || [];
+		const mapped = await Promise.all( raw.map( catalogProductRow ) );
+		if ( ctx !== productCtx() ) return;
+		const seen = new Set();
+		const items = [];
+		mapped.forEach( ( p ) => {
+			if ( ! p || ! p.id || seen.has( p.id ) ) return;
+			seen.add( p.id );
+			items.push( p );
+		} );
+		state.cache.products = { items, page, totalPages: r.totalPages, total: r.total };
 	}
 
 	function openProductModal( listProduct ) {
@@ -11337,6 +11537,7 @@
 						</div>` : '' }
 					</div>
 					<div class="minn-modal-actions">
+						${ m.page ? '' : `<button type="button" class="minn-btn-soft" id="minn-p-fullpage">${ icon( 'columns' ) } ${ esc( __( 'Open full page' ) ) }</button>` }
 						${ p.permalink ? `<a class="minn-btn-soft" href="${ esc( p.permalink ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'View product' ) ) }</a>` : '' }
 						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } ${ esc( __( 'Edit description' ) ) }</button>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ ${ esc( __( 'Edit in WooCommerce' ) ) }</a>
@@ -12223,6 +12424,14 @@
 				}
 			} );
 		} );
+		// The quick view is a modal; the real editing screen is a route. A
+		// product opened from a row, or just created from the toolbar, would
+		// otherwise have no way over to it.
+		const fullPageBtn = $( '#minn-p-fullpage' );
+		if ( fullPageBtn ) fullPageBtn.addEventListener( 'click', () => {
+			closeModal();
+			go( 'products/' + p.id );
+		} );
 		// The long description is Minn's own editor, not a field here: the
 		// product type registers editor + autosave support, so
 		// /editor/product/{id} is the real writing surface, with blocks and
@@ -12373,6 +12582,34 @@
 		if ( ! loading && ! m.loadError ) bindProductDetail( m );
 	}
 
+	function productsEmptyMessage() {
+		if ( state.productSearch ) {
+			/* translators: %s: the search term that matched no products. */
+			return sprintf( __( 'No products match “%s”.' ), esc( state.productSearch ) );
+		}
+		const f = orderFilters( LIST_FILTER_SPECS.products );
+		if ( f.stock === 'low' ) return __( 'No low-stock products.' );
+		if ( orderFiltersActive( LIST_FILTER_SPECS.products ) ) return __( 'No products match these filters.' );
+		return __( 'No products here.' );
+	}
+
+	function productFilterBarHtml( meta ) {
+		return listFilterBarHtml(
+			__( 'Search products (name, SKU, ID…)' ),
+			meta,
+			B.caps.products ? `<button class="minn-btn-soft" id="minn-product-add">${ icon( 'plus' ) } ${ esc( __( 'Add product' ) ) }</button>` : ''
+		);
+	}
+
+	/** The toolbar is painted while the list is still loading as well as after
+	 *  it lands, so both branches bind it. Add product does not depend on the
+	 *  rows, and a button that renders before it works is a dead click. */
+	function bindProductToolbar( view ) {
+		bindListFilterBar( view );
+		const addProd = $( '#minn-product-add', view );
+		if ( addProd ) addProd.addEventListener( 'click', () => openNewProductModal() );
+	}
+
 	function renderProducts() {
 		const view = $( '#minn-view' );
 		const c = state.cache.products;
@@ -12380,77 +12617,17 @@
 		if ( ! c ) {
 			if ( softLoadPending( 'products' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
-			<div class="minn-toolbar minn-toolbar-views">
-				<div class="minn-tabs">
-					${ PRODUCT_TABS.map( ( [ id, label ] ) =>
-						`<button class="minn-tab${ state.productTab === id ? ' active' : '' }" data-ptab="${ id }">${ label }</button>` ).join( '' ) }
-				</div>
-			</div>
-			<div class="minn-toolbar">
-				<div class="minn-tabs minn-quiet-tabs">
-					${ PRODUCT_STOCK_TABS.map( ( [ id, label ] ) =>
-						`<button class="minn-tab${ state.productStock === id ? ' active' : '' }" data-pstock="${ id }">${ label }</button>` ).join( '' ) }
-				</div>
-			</div>
+			${ productFilterBarHtml( '' ) }
+			${ orderFilterChipsHtml() }
 			<div class="minn-loading">${ esc( __( 'Loading products…' ) ) }</div>`;
-			$$( '[data-ptab]', view ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					const tab = btn.dataset.ptab;
-					if ( state.productTab === tab ) return;
-					state.productTab = tab;
-					psel.clear();
-					softListReload( {
-						route: 'products',
-						view,
-						clear: () => { state.cache.products = null; },
-						paintChrome: () => {
-							$$( '[data-ptab]', view ).forEach( ( b ) =>
-								b.classList.toggle( 'active', b.dataset.ptab === tab ) );
-						},
-						load: () => loadProducts( 1 ),
-						render: renderProducts,
-					} );
-				} )
-			);
-			$$( '[data-pstock]', view ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					const stock = btn.dataset.pstock;
-					if ( state.productStock === stock ) return;
-					state.productStock = stock;
-					psel.clear();
-					softListReload( {
-						route: 'products',
-						view,
-						clear: () => { state.cache.products = null; },
-						paintChrome: () => {
-							$$( '[data-pstock]', view ).forEach( ( b ) =>
-								b.classList.toggle( 'active', b.dataset.pstock === stock ) );
-						},
-						load: () => loadProducts( 1 ),
-						render: renderProducts,
-					} );
-				} )
-			);
+			bindProductToolbar( view );
 			loadProducts().then( renderIfCurrent( 'products' ) ).catch( showErr );
 			return;
 		}
 		const canBulk = B.caps.products;
 		view.innerHTML = `
-		<div class="minn-toolbar minn-toolbar-views">
-			<div class="minn-tabs">
-				${ PRODUCT_TABS.map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ state.productTab === id ? ' active' : '' }" data-ptab="${ id }">${ label }</button>` ).join( '' ) }
-			</div>
-			${ B.caps.products ? `<button class="minn-btn-soft" id="minn-product-add" style="margin-left:auto;">${ icon( 'plus' ) } ${ esc( __( 'Add product' ) ) }</button>` : '' }
-		</div>
-		<div class="minn-toolbar">
-			<div class="minn-tabs minn-quiet-tabs">
-				${ PRODUCT_STOCK_TABS.map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ state.productStock === id ? ' active' : '' }" data-pstock="${ id }">${ label }</button>` ).join( '' ) }
-			</div>
-			<input class="minn-input minn-toolbar-search" id="minn-product-search" placeholder="${ esc( __( 'Search products (name, SKU, ID…)' ) ) }" value="${ esc( state.productSearch || '' ) }">
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'product' ) }</div>
-		</div>
+		${ productFilterBarHtml( metaLabel( c.total, 'product' ) ) }
+		${ orderFilterChipsHtml() }
 		<div id="minn-prod-bulk-slot"></div>
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-product-cols${ canBulk ? ' with-cb' : '' }">
@@ -12472,82 +12649,11 @@
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ productPriceLabel( p ) }</div>
 					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span></div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-pqv="${ p.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.productSearch ? __( 'No products match “' ) + esc( state.productSearch ) + '”.' : ( state.productStock === 'low' ? __( 'No low-stock products.' ) : __( 'No products here.' ) ) }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ productsEmptyMessage() }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'product' ) }`;
 
-		const addProd = $( '#minn-product-add', view );
-		if ( addProd ) addProd.addEventListener( 'click', () => openNewProductModal() );
-		$$( '[data-ptab]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				const tab = btn.dataset.ptab;
-				if ( state.productTab === tab ) return;
-				state.productTab = tab;
-				psel.clear();
-				softListReload( {
-					route: 'products',
-					view,
-					clear: () => { state.cache.products = null; },
-					paintChrome: () => {
-						$$( '[data-ptab]', view ).forEach( ( b ) =>
-							b.classList.toggle( 'active', b.dataset.ptab === tab ) );
-					},
-					load: () => loadProducts( 1 ),
-					render: renderProducts,
-				} );
-			} )
-		);
-		$$( '[data-pstock]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				const stock = btn.dataset.pstock;
-				if ( state.productStock === stock ) return;
-				state.productStock = stock;
-				psel.clear();
-				softListReload( {
-					route: 'products',
-					view,
-					clear: () => { state.cache.products = null; },
-					paintChrome: () => {
-						$$( '[data-pstock]', view ).forEach( ( b ) =>
-							b.classList.toggle( 'active', b.dataset.pstock === stock ) );
-					},
-					load: () => loadProducts( 1 ),
-					render: renderProducts,
-				} );
-			} )
-		);
-		const productSearch = $( '#minn-product-search', view );
-		if ( productSearch ) {
-			let productSearchTimer = null;
-			productSearch.addEventListener( 'input', () => {
-				clearTimeout( productSearchTimer );
-				productSearchTimer = setTimeout( () => {
-					state.productSearch = productSearch.value.trim();
-					psel.clear();
-					softListReload( {
-						route: 'products',
-						view,
-						clear: () => { state.cache.products = null; },
-						load: () => loadProducts( 1 ),
-						render: renderProducts,
-					} );
-				}, 280 );
-			} );
-			productSearch.addEventListener( 'keydown', ( e ) => {
-				if ( e.key === 'Escape' && productSearch.value ) {
-					productSearch.value = '';
-					state.productSearch = '';
-					psel.clear();
-					softListReload( {
-						route: 'products',
-						view,
-						clear: () => { state.cache.products = null; },
-						load: () => loadProducts( 1 ),
-						render: renderProducts,
-					} );
-				}
-			} );
-		}
+		bindProductToolbar( view );
 		const syncProdBulk = () => {
 			const slot = $( '#minn-prod-bulk-slot', view );
 			if ( ! slot ) return;
@@ -12681,6 +12787,10 @@
 			} )
 		);
 		bindPager( view, c.page, loadProducts, () => { if ( state.route === 'products' ) renderProducts(); } );
+		// Arriving on a filtered URL: keep the address bar canonical (junk
+		// dropped, presets normalized) and turn any restored id into a name.
+		syncOrderFiltersUrl();
+		resolveOrderFilterLabels( view );
 	}
 
 	/* ===== Coupons (WooCommerce) ===== */
@@ -12698,7 +12808,7 @@
 	const COUPON_LIST_FIELDS = 'id,code,amount,status,discount_type,description,date_expires,usage_count,usage_limit,usage_limit_per_user,individual_use,free_shipping,minimum_amount,maximum_amount,date_created';
 	const COUPON_DETAIL_FIELDS = COUPON_LIST_FIELDS + ',exclude_sale_items,date_expires_gmt';
 
-	const couponCtx = () => ( state.couponTab || 'any' ) + '|' + ( state.couponSearch || '' );
+	const couponCtx = () => JSON.stringify( orderFilters( LIST_FILTER_SPECS.coupons ) ) + '|' + ( state.couponSearch || '' );
 
 	function couponAmountLabel( c ) {
 		const amt = c.amount != null ? String( c.amount ) : '0';
@@ -12723,22 +12833,25 @@
 	}
 
 	async function loadCoupons( page = 1 ) {
-		const tab = state.couponTab || 'any';
+		const f = orderFilters( LIST_FILTER_SPECS.coupons );
 		const q0 = ( state.couponSearch || '' ).trim();
 		const ctx = couponCtx();
 		if ( q0 && /^\d+$/.test( q0 ) ) {
 			try {
 				const one = await api( `wc/v3/coupons/${ q0 }?_fields=${ COUPON_LIST_FIELDS }` );
 				if ( ctx !== couponCtx() ) return;
-				if ( one && one.id && ( tab === 'any' || one.status === tab ) ) {
+				// The exact-id hit skips the collection, so it has to honor the
+				// status filter itself. The date window is not checked here: an
+				// id is a deliberate lookup, not a browse.
+				if ( one && one.id && ( ! f.status.length || f.status.indexOf( one.status ) !== -1 ) ) {
 					state.cache.coupons = { items: [ one ], page: 1, totalPages: 1, total: 1 };
 					return;
 				}
 			} catch ( e ) { /* fall through */ }
 		}
 		// Code search: WC search matches code/description.
-		let q = `wc/v3/coupons?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ COUPON_LIST_FIELDS }`;
-		if ( tab !== 'any' ) q += '&status=' + encodeURIComponent( tab );
+		let q = `wc/v3/coupons?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ COUPON_LIST_FIELDS }`
+			+ orderFilterQuery( LIST_FILTER_SPECS.coupons );
 		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
 		const r = await apiPaged( q );
 		if ( ctx !== couponCtx() ) return;
@@ -12788,6 +12901,32 @@
 			} );
 	}
 
+	function couponsEmptyMessage() {
+		if ( state.couponSearch ) {
+			/* translators: %s: the search term that matched no coupons. */
+			return sprintf( __( 'No coupons match “%s”.' ), esc( state.couponSearch ) );
+		}
+		if ( orderFiltersActive( LIST_FILTER_SPECS.coupons ) ) return __( 'No coupons match these filters.' );
+		return __( 'No coupons yet.' );
+	}
+
+	/** The coupons filter bar: the shared controls, Add coupon on the end. */
+	function couponFilterBarHtml( meta ) {
+		return listFilterBarHtml(
+			__( 'Search coupons (code, ID…)' ),
+			meta,
+			B.caps.coupons ? `<button class="minn-btn-soft" id="minn-coupon-add">${ icon( 'plus' ) } ${ esc( __( 'Add coupon' ) ) }</button>` : ''
+		);
+	}
+
+	// Painted while the list loads as well as after it lands, so both branches
+	// bind it: Add coupon does not depend on the rows.
+	function bindCouponToolbar( view ) {
+		bindListFilterBar( view );
+		const addBtn = $( '#minn-coupon-add', view );
+		if ( addBtn ) addBtn.addEventListener( 'click', () => openCouponModal( null, true ) );
+	}
+
 	function renderCoupons() {
 		const view = $( '#minn-view' );
 		// WC Settings → General → Enable coupons. When off, the REST route
@@ -12803,46 +12942,16 @@
 		if ( ! c ) {
 			if ( softLoadPending( 'coupons' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
-			<div class="minn-toolbar minn-toolbar-views">
-				<div class="minn-tabs">
-					${ COUPON_TABS.map( ( [ id, label ] ) =>
-						`<button class="minn-tab${ state.couponTab === id ? ' active' : '' }" data-ctab="${ id }">${ label }</button>` ).join( '' ) }
-				</div>
-			</div>
+			${ couponFilterBarHtml( '' ) }
+			${ orderFilterChipsHtml() }
 			<div class="minn-loading">${ esc( __( 'Loading coupons…' ) ) }</div>`;
-			$$( '[data-ctab]', view ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					const tab = btn.dataset.ctab;
-					if ( state.couponTab === tab ) return;
-					state.couponTab = tab;
-					softListReload( {
-						route: 'coupons',
-						view,
-						clear: () => { state.cache.coupons = null; },
-						paintChrome: () => {
-							$$( '[data-ctab]', view ).forEach( ( b ) =>
-								b.classList.toggle( 'active', b.dataset.ctab === tab ) );
-						},
-						load: () => loadCoupons( 1 ),
-						render: renderCoupons,
-					} );
-				} )
-			);
+			bindCouponToolbar( view );
 			loadCoupons().then( renderIfCurrent( 'coupons' ) ).catch( showErr );
 			return;
 		}
 		view.innerHTML = `
-		<div class="minn-toolbar minn-toolbar-views">
-			<div class="minn-tabs">
-				${ COUPON_TABS.map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ state.couponTab === id ? ' active' : '' }" data-ctab="${ id }">${ label }</button>` ).join( '' ) }
-			</div>
-			${ B.caps.coupons ? `<button class="minn-btn-soft" id="minn-coupon-add" style="margin-left:auto;">${ icon( 'plus' ) } ${ esc( __( 'Add coupon' ) ) }</button>` : '' }
-		</div>
-		<div class="minn-toolbar">
-			<input class="minn-input minn-toolbar-search" id="minn-coupon-search" placeholder="${ esc( __( 'Search coupons (code, ID…)' ) ) }" value="${ esc( state.couponSearch || '' ) }">
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'coupon' ) }</div>
-		</div>
+		${ couponFilterBarHtml( metaLabel( c.total, 'coupon' ) ) }
+		${ orderFilterChipsHtml() }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-coupon-cols">
 				<div>${ esc( __( 'Code' ) ) }</div><div>${ esc( __( 'Type' ) ) }</div><div>${ esc( __( 'Amount' ) ) }</div><div>${ esc( __( 'Usage' ) ) }</div><div>${ esc( __( 'Expires' ) ) }</div><div>${ esc( __( 'Status' ) ) }</div><div></div>
@@ -12859,60 +12968,11 @@
 					<div class="minn-row-meta">${ esc( couponExpiresLabel( cp ) ) }</div>
 					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ cp.status ] || 'draft' }">${ esc( statusLabel( cp.status ) ) }</span></div>
 					<div class="minn-row-arrow">›</div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.couponSearch ? __( 'No coupons match “' ) + esc( state.couponSearch ) + '”.' : __( 'No coupons yet.' ) }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ couponsEmptyMessage() }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'coupon' ) }`;
 
-		$$( '[data-ctab]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				const tab = btn.dataset.ctab;
-				if ( state.couponTab === tab ) return;
-				state.couponTab = tab;
-				softListReload( {
-					route: 'coupons',
-					view,
-					clear: () => { state.cache.coupons = null; },
-					paintChrome: () => {
-						$$( '[data-ctab]', view ).forEach( ( b ) =>
-							b.classList.toggle( 'active', b.dataset.ctab === tab ) );
-					},
-					load: () => loadCoupons( 1 ),
-					render: renderCoupons,
-				} );
-			} )
-		);
-		const addBtn = $( '#minn-coupon-add', view );
-		if ( addBtn ) addBtn.addEventListener( 'click', () => openCouponModal( null, true ) );
-		const couponSearch = $( '#minn-coupon-search', view );
-		if ( couponSearch ) {
-			let couponSearchTimer = null;
-			couponSearch.addEventListener( 'input', () => {
-				clearTimeout( couponSearchTimer );
-				couponSearchTimer = setTimeout( () => {
-					state.couponSearch = couponSearch.value.trim();
-					softListReload( {
-						route: 'coupons',
-						view,
-						clear: () => { state.cache.coupons = null; },
-						load: () => loadCoupons( 1 ),
-						render: renderCoupons,
-					} );
-				}, 280 );
-			} );
-			couponSearch.addEventListener( 'keydown', ( e ) => {
-				if ( e.key === 'Escape' && couponSearch.value ) {
-					couponSearch.value = '';
-					state.couponSearch = '';
-					softListReload( {
-						route: 'coupons',
-						view,
-						clear: () => { state.cache.coupons = null; },
-						load: () => loadCoupons( 1 ),
-						render: renderCoupons,
-					} );
-				}
-			} );
-		}
+		bindCouponToolbar( view );
 		$$( '[data-coupon]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
 				const cp = c.items.find( ( x ) => x.id === parseInt( row.dataset.coupon, 10 ) );
@@ -12963,6 +13023,8 @@
 			} )
 		);
 		bindPager( view, c.page, loadCoupons, () => { if ( state.route === 'coupons' ) renderCoupons(); } );
+		// Arriving on a filtered URL: keep the address bar canonical.
+		syncOrderFiltersUrl();
 	}
 
 	/* ===== Customers (WooCommerce) ===== */

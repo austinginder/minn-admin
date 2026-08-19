@@ -38,7 +38,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	// Create product via UI.
 	await page.goto( BASE + '/minn-admin/products', { waitUntil: 'domcontentloaded' } );
-	await page.waitForSelector( '#minn-product-add, #minn-product-search', { timeout: 20000 } );
+	await page.waitForSelector( '#minn-product-add, #minn-order-search', { timeout: 20000 } );
+	await page.waitForSelector( '.minn-table-row[data-product], .minn-empty', { timeout: 20000 } ).catch( () => null );
 	const addProd = await page.$( '#minn-product-add' );
 	t.check( 'Add product button present', !! addProd, '' );
 	if ( addProd ) {
@@ -60,6 +61,25 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		createdProductId = hit && hit.id;
 		if ( hit ) {
 			t.check( 'created product has price', String( hit.regular_price ) === '11.25', JSON.stringify( hit ) );
+		}
+		// A create drops the reader in the quick view, which is a modal. The
+		// full editing screen is a route, so the modal has to offer the way
+		// over to it or a fresh product is a dead end.
+		const fullBtn = await page.$( '#minn-p-fullpage' );
+		t.check( 'quick view offers the full page', !! fullBtn, '' );
+		if ( fullBtn && hit ) {
+			await page.click( '#minn-p-fullpage' );
+			await page.waitForSelector( '#minn-pp-back', { timeout: 15000 } ).catch( () => null );
+			const landed = await page.evaluate( () => ( {
+				url: location.href,
+				onPage: !! document.querySelector( '#minn-pp-back' ),
+				modal: !! document.querySelector( '#minn-modal-overlay' ),
+			} ) );
+			t.check( 'full page button lands on the product page',
+				landed.onPage && ! landed.modal && landed.url.indexOf( '/products/' + hit.id ) > -1,
+				JSON.stringify( landed ) );
+			await page.goto( BASE + '/minn-admin/products', { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '.minn-table-row[data-product], .minn-empty', { timeout: 20000 } ).catch( () => null );
 		}
 		await page.keyboard.press( 'Escape' );
 	}
