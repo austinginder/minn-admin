@@ -462,3 +462,51 @@ function minn_admin_elementor_exit_enqueue() {
 
 add_action( 'elementor/editor/v2/scripts/enqueue', 'minn_admin_elementor_exit_enqueue' );
 add_action( 'elementor/editor/after_enqueue_scripts', 'minn_admin_elementor_exit_enqueue' );
+
+/**
+ * Brizy's more menu "Go to Dashboard" is the classic editor for the
+ * same post. When Minn is this person's default admin, send that item
+ * (and the shared backToDashboard URL it reads) to Minn's front door
+ * instead. WordPress's destination stays when they have not opted in.
+ * `_top` replaces the whole tab so Minn does not boot inside Brizy's
+ * editor wrapper.
+ */
+function minn_admin_brizy_editor_config( $config, $context = '' ) {
+	if ( 'compile' === $context ) {
+		return $config;
+	}
+	if ( ! is_array( $config ) || ! current_user_can( 'edit_posts' ) ) {
+		return $config;
+	}
+	if ( ! Minn_Admin::user_wants_default_admin() ) {
+		return $config;
+	}
+	$url      = Minn_Admin::app_url();
+	$dash_url = '';
+	if ( isset( $config['urls'] ) && is_array( $config['urls'] ) ) {
+		$dash_url = isset( $config['urls']['backToDashboard'] ) ? (string) $config['urls']['backToDashboard'] : '';
+		$config['urls']['backToDashboard'] = $url;
+	}
+	$options = isset( $config['ui']['leftSidebar']['more']['options'] )
+		? $config['ui']['leftSidebar']['more']['options']
+		: null;
+	if ( ! is_array( $options ) ) {
+		return $config;
+	}
+	foreach ( $options as $i => $opt ) {
+		if ( ! is_array( $opt ) || ( isset( $opt['type'] ) && 'link' !== $opt['type'] ) ) {
+			continue;
+		}
+		$link = isset( $opt['link'] ) ? (string) $opt['link'] : '';
+		$icon = isset( $opt['icon'] ) ? (string) $opt['icon'] : '';
+		$hit  = ( $dash_url && $link === $dash_url ) || ( 'nc-back' === $icon && $link );
+		if ( ! $hit ) {
+			continue;
+		}
+		$config['ui']['leftSidebar']['more']['options'][ $i ]['link']       = $url;
+		$config['ui']['leftSidebar']['more']['options'][ $i ]['linkTarget'] = '_top';
+		break;
+	}
+	return $config;
+}
+add_filter( 'brizy_editor_config', 'minn_admin_brizy_editor_config', 10, 2 );

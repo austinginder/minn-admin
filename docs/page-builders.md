@@ -107,6 +107,11 @@ Client behavior:
   the same post: that editor would immediately offer "Edit in Elementor" and feel
   like a bounce. When the person has "Minn is the default admin" on, the Minn exit
   sits above WordPress's.
+- Brizy's more menu still says **Go to Dashboard**. When Minn is the default admin,
+  that item (and Brizy's `backToDashboard` URL) opens `/minn-admin/` instead of
+  `post.php?action=edit`. The label is unchanged. People who have not opted in keep
+  WordPress's destination. The link uses `target=_top` so Minn replaces the
+  whole tab instead of loading inside Brizy's editor wrapper.
 - Everything around editing — lists, statuses, search, comments, media, users, SEO
   fields — is Minn.
 
