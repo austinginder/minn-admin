@@ -228,9 +228,17 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			ui.hasRefund || true, JSON.stringify( { hasRefund: ui.hasRefund } ) );
 		t.check( 'WC email resend control present', ui.hasWcMail, JSON.stringify( ui ) );
 
-		// Open send-email compose.
+		// Open send-email compose — through the ⋯ menu, the way a user does
+		// (the header keeps only Refund inline; the rest are hidden buttons
+		// the menu is built from).
 		if ( ui.hasEmail ) {
-			await page.click( '#minn-o-email' );
+			await page.click( '#minn-o-more' );
+			await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+			await page.evaluate( () => {
+				const btn = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ]
+					.find( ( b ) => /Send email/.test( b.textContent ) );
+				if ( btn ) btn.click();
+			} );
 			await page.waitForSelector( '#minn-oe-send', { timeout: 5000 } );
 			const compose = await page.evaluate( () => {
 				const sub = document.querySelector( '#minn-oe-subject' );

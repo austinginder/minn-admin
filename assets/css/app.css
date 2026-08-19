@@ -3064,6 +3064,13 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .minn-order-page-head .minn-modal-title-block { min-width: 0; }
 .minn-order-page-head .minn-status { margin-inline-start: auto; }
+/* Phones: the back button takes its own top row instead of squeezing the
+   identity block into a sliver; title and actions then share the width. */
+@media (max-width: 640px) {
+	.minn-order-page-head { flex-wrap: wrap; row-gap: 10px; }
+	.minn-order-page-head > button:first-child { flex-basis: 100%; justify-content: flex-start; }
+	.minn-order-page-head .minn-order-head-actions { margin-inline-start: auto; }
+}
 /* Order head: number + status/paid chips inline with the title; actions
    (email, payment URL, PDFs, WC escape) sit on the right, Shopify-style. */
 .minn-order-head-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

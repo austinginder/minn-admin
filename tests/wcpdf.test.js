@@ -23,7 +23,8 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	// work this cycle), so the document links are found by what they ARE
 	// rather than by the container they used to sit in.
 	await page.click( '.minn-table-row[data-order]' );
-	await page.waitForSelector( 'a[href*="generate_wpo_wcpdf"]', { timeout: 15000 } );
+	// attached, not visible: the PDF links are hidden ⋯-menu sources now.
+	await page.waitForSelector( 'a[href*="generate_wpo_wcpdf"]', { state: 'attached', timeout: 15000 } );
 
 	const links = await page.evaluate( () =>
 		Array.from( document.querySelectorAll( 'a[href*="generate_wpo_wcpdf"]' ) )
