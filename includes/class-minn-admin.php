@@ -1489,6 +1489,10 @@ class Minn_Admin {
 			} )(),
 			// Regenerate Thumbnails present + allowed — a per-image button
 			// on the media detail modal (adapters/regenerate-thumbnails.php).
+			// WP Migrate present + this user may migrate — drives the
+			// Migrate view (adapters/wp-migrate.php). Null otherwise, so
+			// the nonce it carries never reaches a user without their cap.
+			'wpMigrate' => function_exists( 'minn_admin_wp_migrate_boot' ) ? minn_admin_wp_migrate_boot() : null,
 			'regenThumbs' => function_exists( 'minn_admin_regen_thumbs_available' ) && minn_admin_regen_thumbs_available(),
 			// Force Regenerate Thumbnails fallback — { ajax, nonce } for its
 			// own admin-ajax handler; null when RT covers it or FRT is absent.
