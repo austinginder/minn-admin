@@ -23,6 +23,7 @@ class Minn_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
+		add_filter( 'admin_url', array( __CLASS__, 'default_admin_url' ), 10, 2 );
 		// Before Minn_Admin_Bar::suppress_core_bar (100), so a 'minn' policy
 		// still lets the Minn bar make the call for its own render.
 		add_filter( 'show_admin_bar', array( __CLASS__, 'enforce_toolbar_policy' ), 99 );
@@ -430,6 +431,42 @@ class Minn_Admin {
 	 * an explicit redirect_to deep link still wins, and users who can't use
 	 * Minn (no edit_posts) keep core behavior.
 	 */
+	/**
+	 * App URL for an in-app route (`menus`, `editor/pages/12`). Honors the
+	 * pretty-permalink vs hash-routing split that editor_url_for_post uses.
+	 */
+	public static function app_route_url( $route ) {
+		$route = ltrim( (string) $route, '/' );
+		if ( get_option( 'permalink_structure' ) ) {
+			return trailingslashit( self::app_url() ) . $route;
+		}
+		return self::app_url() . '#/' . $route;
+	}
+
+	/**
+	 * Front-end links to screens Minn actually has go to Minn when this user
+	 * treats Minn as the default admin. Beaver Builder's empty-menu
+	 * "Choose Menu" is the reported case (`admin_url( 'nav-menus.php' )`);
+	 * the same rewrite covers Divi and Bricks fallbacks. wp-admin and REST
+	 * keep the classic URL so those screens stay usable.
+	 */
+	public static function default_admin_url( $url, $path ) {
+		if ( is_admin() || wp_doing_ajax() || wp_is_json_request() ) {
+			return $url;
+		}
+		if ( ! is_user_logged_in() || ! self::user_wants_default_admin() ) {
+			return $url;
+		}
+		$path = ltrim( (string) $path, '/' );
+		if ( 0 !== strpos( $path, 'nav-menus.php' ) ) {
+			return $url;
+		}
+		if ( ! current_user_can( 'edit_theme_options' ) || wp_is_block_theme() ) {
+			return $url;
+		}
+		return self::app_route_url( 'menus' );
+	}
+
 	public static function login_redirect( $redirect_to, $requested, $user ) {
 		if ( ! ( $user instanceof WP_User ) || ! $user->has_cap( 'edit_posts' ) ) {
 			return $redirect_to;
