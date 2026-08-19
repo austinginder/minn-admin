@@ -24303,8 +24303,9 @@
 			} );
 			preview.normalize();
 			const base = String( ed.islands[ idx ] );
-			const runs = textRunsOf( base );
-			if ( ! runs.length ) return;
+			const generic = textRunsOf( base );
+			const etch = generic.length ? [] : etchTextRunsOf( base );
+			if ( ! generic.length && ! etch.length ) return;
 			const walker = document.createTreeWalker( preview, NodeFilter.SHOW_TEXT, {
 				acceptNode( n ) {
 					if ( ! n.textContent.trim() ) return NodeFilter.FILTER_REJECT;
@@ -24315,13 +24316,7 @@
 			} );
 			const nodes = [];
 			while ( walker.nextNode() ) nodes.push( walker.currentNode );
-			// Strict alignment: same count, and every node's content is exactly
-			// the run's whitespace-padded text. Anything else → stay read-only.
-			if ( nodes.length !== runs.length ) return;
-			for ( let i = 0; i < runs.length; i++ ) {
-				if ( nodes[ i ].textContent !== runs[ i ].pre + runs[ i ].text + runs[ i ].post ) return;
-			}
-			const spans = nodes.map( ( n, i ) => {
+			const wrapRun = ( n, i ) => {
 				const span = document.createElement( 'span' );
 				span.className = 'minn-island-run';
 				span.setAttribute( 'contenteditable', 'true' );
@@ -24330,8 +24325,38 @@
 				n.parentNode.replaceChild( span, n );
 				span.appendChild( n );
 				return span;
-			} );
-			island._minnRuns = { base, runs, spans };
+			};
+			let runs, spans, splice;
+			if ( generic.length ) {
+				// Strict alignment: same count, and every node's content is exactly
+				// the run's whitespace-padded text. Anything else → stay read-only.
+				if ( nodes.length !== generic.length ) return;
+				for ( let i = 0; i < generic.length; i++ ) {
+					if ( nodes[ i ].textContent !== generic[ i ].pre + generic[ i ].text + generic[ i ].post ) return;
+				}
+				runs = generic;
+				spans = nodes.map( wrapRun );
+				splice = spliceTextRuns;
+			} else {
+				// Etch copy is a named list of strings, not a 1:1 map of every
+				// preview text node (dynamic `{this.title}` renders as the
+				// resolved value). Wrap only the nodes that still match the
+				// stored content, in document order, so a single dynamic field
+				// cannot disable the rest of the island.
+				runs = [];
+				spans = [];
+				let ni = 0;
+				etch.forEach( ( r ) => {
+					while ( ni < nodes.length && nodes[ ni ].textContent !== r.text ) ni++;
+					if ( ni >= nodes.length ) return;
+					spans.push( wrapRun( nodes[ ni ], runs.length ) );
+					runs.push( r );
+					ni++;
+				} );
+				if ( ! runs.length ) return;
+				splice = spliceEtchTextRuns;
+			}
+			island._minnRuns = { base, runs, spans, splice };
 			// This hint is an AFFORDANCE, not a restatement of the ⚙ chip: the
 			// card looks locked but its text is not. Cards with nothing to say
 			// carry no hint element at all now, so create one here.
@@ -24378,7 +24403,7 @@
 			if ( r.post && v.length >= r.post.length && v.endsWith( r.post ) ) v = v.slice( 0, v.length - r.post.length );
 			r.value = v;
 		} );
-		const next = spliceTextRuns( arm.base, arm.runs );
+		const next = ( arm.splice || spliceTextRuns )( arm.base, arm.runs );
 		arm.last = next;
 		if ( stored === next ) return;
 		ed.islands[ idx ] = next;
@@ -30057,6 +30082,67 @@
 			const r = runs[ i ];
 			if ( r.value === r.text ) continue;
 			str = str.slice( 0, r.start ) + r.pre + escTextNode( r.value ) + r.post + str.slice( r.end );
+		}
+		return str;
+	}
+
+	/* Etch copy lives in wp:etch/text comment JSON (`content`), not as HTML
+	 * text nodes, so textRunsOf never sees it. Scan those comments, address
+	 * the quoted JSON string by offset, and splice with Gutenberg comment
+	 * escaping so an untouched island stays byte-identical. */
+	function etchEncodeJsonString( s ) {
+		return JSON.stringify( String( s ) )
+			.replace( /--/g, '\\u002d\\u002d' )
+			.replace( /</g, '\\u003c' )
+			.replace( />/g, '\\u003e' )
+			.replace( /&/g, '\\u0026' )
+			.replace( /\\"/g, '\\u0022' );
+	}
+	function jsonQuotedSpan( str, i ) {
+		if ( str[ i ] !== '"' ) return null;
+		let j = i + 1;
+		while ( j < str.length ) {
+			if ( str[ j ] === '\\' ) { j += 2; continue; }
+			if ( str[ j ] === '"' ) return { start: i, end: j + 1 };
+			j++;
+		}
+		return null;
+	}
+	function etchTextRunsOf( str ) {
+		const runs = [];
+		if ( ! str ) return runs;
+		const re = /<!--\s*wp:etch\/text\s+((?:(?!-->)[\s\S])*?)\s*(\/)?\s*-->/g;
+		let m;
+		while ( ( m = re.exec( str ) ) ) {
+			let attrs;
+			try { attrs = JSON.parse( m[ 1 ].trim() || '{}' ); } catch ( e ) { continue; }
+			if ( typeof attrs.content !== 'string' || ! attrs.content.trim() ) continue;
+			const comment = m[ 0 ];
+			const keyM = comment.match( /"content"\s*:\s*/ );
+			if ( ! keyM ) continue;
+			const span = jsonQuotedSpan( comment, keyM.index + keyM[ 0 ].length );
+			if ( ! span ) continue;
+			let decoded;
+			try { decoded = JSON.parse( comment.slice( span.start, span.end ) ); } catch ( e ) { continue; }
+			if ( decoded !== attrs.content ) continue;
+			runs.push( {
+				start: m.index + span.start,
+				end: m.index + span.end,
+				pre: '',
+				post: '',
+				text: decoded,
+				value: decoded,
+				etch: true,
+			} );
+		}
+		return runs;
+	}
+	function spliceEtchTextRuns( str, runs ) {
+		if ( ! runs || ! runs.length ) return str;
+		for ( let i = runs.length - 1; i >= 0; i-- ) {
+			const r = runs[ i ];
+			if ( r.value === r.text ) continue;
+			str = str.slice( 0, r.start ) + etchEncodeJsonString( r.value ) + str.slice( r.end );
 		}
 		return str;
 	}

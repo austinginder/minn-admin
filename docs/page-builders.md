@@ -40,13 +40,17 @@ Two classes fall out:
 
 Their canonical content is native Gutenberg block markup in `post_content`. Minn's
 island machinery treats `wp:etch/*` / `wp:divi/*` as atomic islands: preserved exactly,
-text between blocks editable, inspector available. Verified: a Minn save round-trips the
-builder markup byte-identically — after WordPress **core's** own one-time REST-save
+with the inspector available. Etch is a special case inside that group: copy is stored
+in `wp:etch/text` `content` attributes (not as HTML text nodes), so the generic
+text-run scan cannot see it. Minn arms those strings as in-place editable runs on the
+preview, and images in `tag:"img"` element attributes show in the inspector Images
+list. Layout wrappers stay in Etch. Verified: a Minn save round-trips the builder
+markup byte-identically, after WordPress **core's** own one-time REST-save
 normalization (the block-hooks machinery parse/re-serializes all block markup on every
 REST insert: `{}` attrs become `[]`, HTML in attrs gets `<`-escaped). Gutenberg
 saves apply the identical normalization; content already in canonical form is a fixed
 point (proved: second save byte-identical). This is the direction the industry is
-moving — Divi 5's whole `builder-5/` server module is block-parser based.
+moving. Divi 5's whole `builder-5/` server module is block-parser based.
 
 Bricks joins the block-native list conceptually but stores its element tree in **postmeta**
 (`_bricks_page_content_2`), so it's fenced like the meta-storage group below — its
@@ -91,7 +95,8 @@ Client behavior:
   the actual product: Minn stays the calm admin *around* the builder.
 - **Editor, `owns_content: false`** (Etch, Divi 5): fully editable as today (islands do
   the protecting), plus the same note in its lighter variant with the Edit-in-builder
-  button.
+  button. Etch pages have no core paragraphs between islands, so copy editing is the
+  in-place run on each `wp:etch/text` string, not "text between blocks."
 
 ## How "never bounce to /wp-admin/" holds up
 

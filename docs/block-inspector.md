@@ -48,7 +48,10 @@ attributes. Changed runs are spliced back last-to-first with text-node escaping 
 untouched runs are never rewritten, preserving byte-identity. Gutenberg stays happy because
 these blocks SOURCE their text attributes from that same HTML. Children already served by
 the single-element text editor (`childTextOf`) keep it — the two paths are mutually
-exclusive per child.
+exclusive per child. **Etch is the exception that lives in the comment:** `wp:etch/text`
+stores copy as a `content` JSON attribute (render reads that, not inner HTML), so a
+sibling scan (`etchTextRunsOf`) arms those strings as in-place preview runs and splices
+the quoted JSON value with Gutenberg comment escaping.
 
 **Image swaps (same cycle):** the sibling move for pictures. Static blocks mirror an
 image's URL between comment JSON (`imageUrl`, `blockBackgroundMediaUrl`) and saved HTML

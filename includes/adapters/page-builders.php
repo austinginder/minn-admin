@@ -218,8 +218,10 @@ function minn_admin_page_builders() {
 	if ( defined( 'ETCH_PLUGIN_FILE' ) ) {
 		$builders['etch'] = array(
 			'name'         => 'Etch',
-			// Etch persists native wp:etch/* blocks — islands keep Minn's
-			// editor fully usable around them.
+			// Etch persists native wp:etch/* blocks. Copy lives in
+			// wp:etch/text `content` attrs (armed as in-place runs); images
+			// in tag:img element attrs show in the inspector. Layout stays
+			// in Etch.
 			'owns_content' => false,
 			'detect'       => function ( $post ) {
 				return false !== strpos( (string) $post->post_content, '<!-- wp:etch/' );

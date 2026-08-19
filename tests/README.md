@@ -14,6 +14,7 @@ MINN_TEST_PASS=<admin password> node paste.test.js      # Word/Docs/web fixtures
 MINN_TEST_PASS=<admin password> node localnet.test.js   # crash net: snapshot → hard-leave → recover
 MINN_TEST_PASS=<admin password> node lock.test.js       # slow (~60s): two sessions ride the 30s lock refresh
 MINN_TEST_PASS=<admin password> node media-flow.test.js # paste/drop image files → library; inline captions
+MINN_TEST_PASS=<admin password> node etch-text.test.js  # SKIPs unless Etch is active (run on etch.localhost)
 MINN_TEST_PASS=<admin password> node editor-sidebar.test.js # slug, discussion, visibility, sticky (~20s)
 MINN_TEST_PASS=<admin password> node system.test.js     # diagnostics endpoint + page + copy-report
 MINN_TEST_PASS=<admin password> node undo-toast.test.js # structural-deletion Undo (islands, tables)
