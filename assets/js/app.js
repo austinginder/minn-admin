@@ -1034,6 +1034,7 @@
 		order: [ __( 'Order' ), 'WooCommerce' ],
 		surfaceitem: [ __( 'Booking' ), '' ],
 		fieldgroup: [ __( 'Field group' ), 'ACF' ],
+		migrate: [ __( 'Migrate' ), 'WP Migrate' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
 		products: [ __( 'Products' ), 'WooCommerce' ],
@@ -2894,8 +2895,13 @@
 	// Tools nav items: site plumbing (logs, redirects, snippets, backups) —
 	// where surface families land unless their descriptor claims workspace.
 	function toolsNavItems() {
-		return surfaceNavItems().filter( ( s ) => s.group !== 'workspace' && s.group !== 'commerce' && s.group !== 'network' )
+		const items = surfaceNavItems().filter( ( s ) => s.group !== 'workspace' && s.group !== 'commerce' && s.group !== 'network' )
 			.map( ( s ) => ( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } ) );
+		// Migrate is a page rather than a surface (it is a flow, not a list),
+		// so it joins Tools directly. The boot payload is null unless WP
+		// Migrate is running and this user may migrate.
+		if ( B.wpMigrate ) items.push( { id: 'migrate', label: __( 'Migrate' ), icon: 'refresh' } );
+		return items;
 	}
 
 	// Network nav items (multisite): surfaces that belong to the whole
@@ -20619,6 +20625,394 @@
 		load();
 	}
 
+	/* ===== Migrate ( /minn-admin/migrate ) =====
+		Push and pull through WP Migrate, driven the way their own screen
+		drives it. Nothing here moves a row: Minn calls their REST control
+		steps (verify-connection, initiate-migration, finalize-migration)
+		and then polls their wpmdb_migrate_table action once per table until
+		that table reports done, which is the loop their React app runs.
+
+		The whole point is that both ends stay WP Migrate's code, so a
+		migration started here behaves exactly like one started on their
+		screen, including the find and replace their connection returns.
+
+		Deliberately not here: media, theme and plugin file transfers are
+		separate add-ons with their own protocols, so this covers the
+		database and says so. */
+
+	const MIG_ADVANCED = () => [
+		[ 'replace_guids', __( 'Replace GUIDs' ) ],
+		[ 'exclude_transients', __( 'Exclude transients' ) ],
+	];
+
+	function migState() {
+		if ( ! state.mig ) {
+			state.mig = {
+				intent: 'push', conn: '', connecting: false, remote: null, local: null,
+				error: '', tablesOption: 'all', selected: [],
+				advanced: [ 'replace_guids', 'exclude_transients' ],
+				backup: false, running: false, cancel: false,
+				phase: '', doneTables: [], activeTable: '', result: null,
+			};
+		}
+		return state.mig;
+	}
+
+	const migRest = async ( route, body ) => {
+		const W = B.wpMigrate;
+		const r = await fetch( B.restUrl + W.restBase + '/' + route, {
+			method: 'POST', credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': B.nonce },
+			body: JSON.stringify( body || {} ),
+		} );
+		const j = await r.json().catch( () => null );
+		// Their handlers answer {success, data}; data carries the message on
+		// failure, so surface theirs rather than inventing one.
+		if ( ! j || ! j.success ) {
+			const msg = j && typeof j.data === 'string' ? j.data : __( 'WP Migrate did not accept that request.' );
+			throw new Error( msg );
+		}
+		return j.data;
+	};
+
+	// Their find and replace pairs: the domain (scheme-less, so http and
+	// https both match) and the filesystem path, source first.
+	function migPairs( m ) {
+		if ( ! m.remote || ! m.local ) return [];
+		// Their verify response names the remote address `url` at the top
+		// level and repeats it as site_url inside site_details; the local
+		// side only has site_url. Read both shapes or the domain rewrite
+		// silently disappears from the summary.
+		const addr = ( d ) => d ? ( d.site_url || d.url || ( d.site_details && d.site_details.site_url ) || '' ) : '';
+		const from = m.intent === 'push' ? m.local : m.remote;
+		const to = m.intent === 'push' ? m.remote : m.local;
+		const bare = ( u ) => String( u || '' ).replace( /^https?:/, '' );
+		const pairs = [];
+		if ( addr( from ) && addr( to ) ) pairs.push( [ bare( addr( from ) ), bare( addr( to ) ) ] );
+		if ( from.path && to.path ) pairs.push( [ from.path, to.path ] );
+		return pairs;
+	}
+
+	function migTables( m ) {
+		// A push sends this site's tables; a pull sends the remote's.
+		const src = m.intent === 'push' ? m.local : m.remote;
+		return ( src && src.tables ) || [];
+	}
+
+	function renderMigrate() {
+		const W = B.wpMigrate;
+		const view = $( '#minn-view' );
+		if ( ! W ) {
+			view.innerHTML = emptyHtml( __( 'WP Migrate is not available' ), __( 'Install and activate WP Migrate, then reload.' ) );
+			return;
+		}
+		const m = migState();
+		const t = migTables( m );
+		const chosen = m.tablesOption === 'all' ? t : m.selected.filter( ( x ) => t.includes( x ) );
+		const pairs = migPairs( m );
+		const connected = !! m.remote;
+		const dirLabel = m.intent === 'push' ? __( 'Push' ) : __( 'Pull' );
+
+		view.innerHTML = `
+		<div class="minn-mig">
+			${ ! W.licensed ? `<div class="minn-note warn">${ esc( __( 'WP Migrate cannot migrate until its license is sorted out.' ) ) }
+				<button class="minn-link" data-miggo="licenses">${ esc( __( 'Open Licenses' ) ) }</button></div>` : '' }
+
+			<div class="minn-card minn-mig-card">
+				<div class="minn-mig-head">
+					<h3>${ esc( __( 'Direction' ) ) }</h3>
+					<span class="minn-mig-sub">${ esc( sprintf( __( 'WP Migrate %s' ), W.version || '' ) ) }</span>
+				</div>
+				<div class="minn-mig-dirs">
+					<button class="minn-mig-dir${ m.intent === 'push' ? ' on' : '' }" data-migintent="push"${ m.running ? ' disabled' : '' }>
+						<span class="minn-mig-dir-t">${ esc( __( 'Push' ) ) }</span>
+						<span class="minn-mig-dir-d">${ esc( __( 'Replace the other site with this one' ) ) }</span>
+					</button>
+					<button class="minn-mig-dir${ m.intent === 'pull' ? ' on' : '' }" data-migintent="pull"${ m.running ? ' disabled' : '' }>
+						<span class="minn-mig-dir-t">${ esc( __( 'Pull' ) ) }</span>
+						<span class="minn-mig-dir-d">${ esc( __( 'Replace this site with the other one' ) ) }</span>
+					</button>
+				</div>
+			</div>
+
+			<div class="minn-card minn-mig-card">
+				<div class="minn-mig-head"><h3>${ esc( __( 'Other site' ) ) }</h3></div>
+				${ connected ? `
+					<div class="minn-mig-conn on">
+						<div>
+							<div class="minn-mig-conn-name">${ esc( m.remote.url || m.remote.site_url || '' ) }</div>
+							<div class="minn-mig-conn-meta">${ esc( sprintf(
+								/* translators: 1: table count on the other site, 2: its table prefix */
+								__( '%1$s tables there · prefix %2$s' ), String( ( m.remote.tables || [] ).length ), m.remote.prefix || '' ) ) }</div>
+						</div>
+						<button data-migdisconnect${ m.running ? ' disabled' : '' }>${ esc( __( 'Change' ) ) }</button>
+					</div>` : `
+					<p class="minn-mig-hint">${ esc( __( 'Paste the connection info from the other site’s WP Migrate settings. It is the site address and its secret key.' ) ) }</p>
+					<textarea class="minn-mig-conn-in" rows="3" spellcheck="false" placeholder="${ esc( __( 'Site address and secret key' ) ) }">${ esc( m.conn ) }</textarea>
+					<div class="minn-mig-actions">
+						<button class="minn-btn-primary" data-migconnect${ m.connecting ? ' disabled' : '' }>${ esc( m.connecting ? __( 'Connecting…' ) : __( 'Connect' ) ) }</button>
+					</div>` }
+				${ m.error ? `<div class="minn-note err">${ esc( m.error ) }</div>` : '' }
+			</div>
+
+			${ connected ? `
+			<div class="minn-card minn-mig-card">
+				<div class="minn-mig-head"><h3>${ esc( __( 'What moves' ) ) }</h3></div>
+				<div class="minn-mig-row">
+					<label><input type="radio" name="migtables" value="all"${ m.tablesOption === 'all' ? ' checked' : '' }${ m.running ? ' disabled' : '' }> ${ esc( sprintf(
+						/* translators: %s: table count */
+						__( 'All %s tables' ), String( t.length ) ) ) }</label>
+					<label><input type="radio" name="migtables" value="selected"${ m.tablesOption === 'selected' ? ' checked' : '' }${ m.running ? ' disabled' : '' }> ${ esc( __( 'Selected tables' ) ) }</label>
+				</div>
+				${ m.tablesOption === 'selected' ? `<div class="minn-mig-tables">${ t.map( ( name ) => `
+					<label><input type="checkbox" data-migtable="${ esc( name ) }"${ m.selected.includes( name ) ? ' checked' : '' }${ m.running ? ' disabled' : '' }> ${ esc( name ) }</label>` ).join( '' ) }</div>` : '' }
+				<div class="minn-mig-row">
+					${ MIG_ADVANCED().map( ( [ k, label ] ) => `
+						<label><input type="checkbox" data-migadv="${ esc( k ) }"${ m.advanced.includes( k ) ? ' checked' : '' }${ m.running ? ' disabled' : '' }> ${ esc( label ) }</label>` ).join( '' ) }
+				</div>
+			</div>
+
+			<div class="minn-card minn-mig-card">
+				<div class="minn-mig-head"><h3>${ esc( __( 'Find and replace' ) ) }</h3></div>
+				<p class="minn-mig-hint">${ esc( __( 'WP Migrate rewrites these as the data moves, so the other site keeps its own address.' ) ) }</p>
+				<div class="minn-mig-pairs">${ pairs.length ? pairs.map( ( [ a, b ] ) => `
+					<div class="minn-mig-pair"><code>${ esc( a ) }</code><span>→</span><code>${ esc( b ) }</code></div>` ).join( '' )
+					: `<div class="minn-mig-pair minn-mig-none">${ esc( __( 'Nothing to rewrite.' ) ) }</div>` }</div>
+			</div>
+
+			<div class="minn-card minn-mig-card minn-mig-run">
+				<div class="minn-mig-runbar">
+					<div>
+						<div class="minn-mig-runtitle">${ esc( m.intent === 'push'
+							? sprintf( __( 'Push %1$s tables to %2$s' ), String( chosen.length ), m.remote.url || m.remote.site_url || '' )
+							: sprintf( __( 'Pull %1$s tables from %2$s' ), String( chosen.length ), m.remote.url || m.remote.site_url || '' ) ) }</div>
+						<div class="minn-mig-runsub">${ esc( m.intent === 'push'
+							? __( 'The other site’s database is replaced. This one is untouched.' )
+							: __( 'This site’s database is replaced. The other one is untouched.' ) ) }</div>
+					</div>
+					${ m.running
+						? `<button data-migcancel>${ esc( __( 'Stop' ) ) }</button>`
+						: `<button class="minn-btn-primary" data-migrun${ ( ! chosen.length || ! W.licensed ) ? ' disabled' : '' }>${ esc( dirLabel ) }</button>` }
+				</div>
+				${ m.running || m.result ? migProgressHtml( m, chosen ) : '' }
+			</div>` : '' }
+		</div>`;
+		bindMigrate();
+	}
+
+	function migProgressHtml( m, chosen ) {
+		const done = m.doneTables.length;
+		const pct = chosen.length ? Math.round( ( done / chosen.length ) * 100 ) : 0;
+		return `
+		<div class="minn-mig-prog">
+			<div class="minn-mig-bar"><span style="width:${ m.result && m.result.ok ? 100 : pct }%"></span></div>
+			<div class="minn-mig-phase">${ esc(
+				m.result
+					? ( m.result.ok
+						? sprintf( __( 'Finished. %s tables moved.' ), String( done ) )
+						: sprintf( __( 'Stopped: %s' ), m.result.message || '' ) )
+					: ( m.activeTable
+						? sprintf( __( '%1$s — %2$s of %3$s' ), m.activeTable, String( done + 1 ), String( chosen.length ) )
+						: m.phase ) ) }</div>
+		</div>`;
+	}
+
+	function bindMigrate() {
+		const view = $( '#minn-view' );
+		const m = migState();
+		const rerender = () => { if ( state.route === 'migrate' ) renderMigrate(); };
+
+		$$( '[data-migintent]', view ).forEach( ( b ) => b.addEventListener( 'click', () => {
+			if ( m.running || m.intent === b.dataset.migintent ) return;
+			m.intent = b.dataset.migintent;
+			// Table choice belongs to a side, so a direction flip clears it.
+			m.selected = []; m.tablesOption = 'all'; m.result = null; m.doneTables = [];
+			rerender();
+		} ) );
+
+		const connIn = $( '.minn-mig-conn-in', view );
+		if ( connIn ) connIn.addEventListener( 'input', () => { m.conn = connIn.value; } );
+
+		const connectBtn = $( '[data-migconnect]', view );
+		if ( connectBtn ) connectBtn.addEventListener( 'click', async () => {
+			const raw = ( m.conn || '' ).trim();
+			// Their own format is the address on one line, the key on the next.
+			const parts = raw.split( /\s+/ ).filter( Boolean );
+			const url = parts[ 0 ] || '';
+			const key = parts.slice( 1 ).join( '' );
+			if ( ! /^https?:\/\//i.test( url ) || ! key ) {
+				m.error = __( 'That does not look like connection info. It should be the site address, then its secret key.' );
+				return rerender();
+			}
+			m.connecting = true; m.error = ''; rerender();
+			try {
+				const remote = await migRest( 'verify-connection', { url, key, intent: m.intent } );
+				m.local = B.wpMigrate.local; m.remote = remote; m.connKey = key; m.connUrl = url;
+				m.result = null; m.doneTables = [];
+			} catch ( e ) {
+				m.error = e.message;
+			}
+			m.connecting = false;
+			rerender();
+		} );
+
+		const disc = $( '[data-migdisconnect]', view );
+		if ( disc ) disc.addEventListener( 'click', () => {
+			m.remote = null; m.result = null; m.doneTables = []; m.error = '';
+			rerender();
+		} );
+
+		$$( 'input[name="migtables"]', view ).forEach( ( r ) => r.addEventListener( 'change', () => {
+			m.tablesOption = r.value;
+			if ( r.value === 'selected' && ! m.selected.length ) m.selected = migTables( m ).slice();
+			rerender();
+		} ) );
+		$$( '[data-migtable]', view ).forEach( ( c ) => c.addEventListener( 'change', () => {
+			const name = c.dataset.migtable;
+			m.selected = c.checked ? m.selected.concat( [ name ] ) : m.selected.filter( ( x ) => x !== name );
+			const btn = $( '[data-migrun]', view );
+			if ( btn ) btn.disabled = ! m.selected.length;
+		} ) );
+		$$( '[data-migadv]', view ).forEach( ( c ) => c.addEventListener( 'change', () => {
+			const k = c.dataset.migadv;
+			m.advanced = c.checked ? m.advanced.concat( [ k ] ) : m.advanced.filter( ( x ) => x !== k );
+		} ) );
+
+		const goLic = $( '[data-miggo="licenses"]', view );
+		if ( goLic ) goLic.addEventListener( 'click', () => { state.extTab = 'licenses'; go( 'extensions' ); } );
+
+		const cancel = $( '[data-migcancel]', view );
+		if ( cancel ) cancel.addEventListener( 'click', () => { m.cancel = true; cancel.disabled = true; } );
+
+		const run = $( '[data-migrun]', view );
+		if ( run ) run.addEventListener( 'click', () => runMigration() );
+	}
+
+	async function runMigration() {
+		const m = migState();
+		const W = B.wpMigrate;
+		const tables = migTables( m );
+		const chosen = m.tablesOption === 'all' ? tables : m.selected.filter( ( x ) => tables.includes( x ) );
+		if ( ! chosen.length ) return;
+		// A pull replaces THIS site, so it gets the confirm wp-admin would give.
+		if ( m.intent === 'pull' && ! window.confirm( sprintf(
+			__( 'Replace this site’s database with %s? This cannot be undone from here.' ), m.remote.url || m.remote.site_url || '' ) ) ) return;
+
+		m.running = true; m.cancel = false; m.result = null; m.doneTables = []; m.activeTable = '';
+		m.phase = __( 'Getting ready…' );
+		renderMigrate();
+
+		const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace( /[xy]/g, ( c ) => {
+			const r = Math.random() * 16 | 0;
+			return ( c === 'x' ? r : ( r & 0x3 | 0x8 ) ).toString( 16 );
+		} );
+		const pairs = migPairs( m );
+		const src = m.intent === 'push' ? m.local : m.remote;
+		const dst = m.intent === 'push' ? m.remote : m.local;
+
+		// Their form_data shape, matched field for field: their handlers and
+		// their remote end both read it, so an approximation is not enough.
+		const form = {
+			current_migration: {
+				connected: true, intent: m.intent, tables_option: m.tablesOption,
+				tables_selected: chosen, backup_option: 'none', backup_tables_selected: [],
+				post_types_option: 'all', post_types_selected: [],
+				advanced_options_selected: m.advanced.slice(),
+				profile_name: 'Minn ' + m.intent, selected_existing_profile: null, profile_type: null,
+				status: '', stages: [ 'tables' ], current_stage: 'initiate_migration', stages_complete: [],
+				running: true, migration_enabled: true, migration_id: uuid(),
+				source_prefix: ( src && src.prefix ) || 'wp_', destination_prefix: ( dst && dst.prefix ) || 'wp_',
+				preview: false, selectedComboOption: 'preview', twoMultisites: false,
+				localSource: m.intent === 'push', databaseEnabled: true,
+				currentPayloadSize: 0, currentMaxPayloadSize: null, fileTransferRequests: 0,
+				payloadSizeHistory: [], fileTransferStats: [], forceHighPerformanceTransfers: true,
+				fseDumpFilename: null, highPerformanceTransfersStatus: false,
+			},
+			search_replace: {
+				standard_search_replace: {
+					domain: { search: pairs[ 0 ] ? pairs[ 0 ][ 0 ] : '', replace: pairs[ 0 ] ? pairs[ 0 ][ 1 ] : '', enabled: !! pairs[ 0 ] },
+					path: { search: pairs[ 1 ] ? pairs[ 1 ][ 0 ] : '', replace: pairs[ 1 ] ? pairs[ 1 ][ 1 ] : '', enabled: !! pairs[ 1 ] },
+				},
+				standard_options_enabled: [ 'domain', 'path' ],
+				standard_search_visible: true,
+				custom_search_replace: [], custom_search_domain_locked: false,
+			},
+			connection_info: {
+				connection_state: { value: m.connUrl + '\n' + m.connKey, url: m.connUrl, key: m.connKey },
+				status: { auth_form: { username: '', password: '' }, show_auth_form: false, connecting: false, error: null },
+			},
+		};
+		const fd = JSON.stringify( form );
+
+		try {
+			const init = await migRest( 'initiate-migration', {
+				intent: m.intent, form_data: fd, stage: 'migrate',
+				stages: JSON.stringify( [ 'tables' ] ),
+				site_details: JSON.stringify( { local: ( m.local && m.local.details ) || {}, remote: m.remote.site_details || m.remote } ),
+				url: m.connUrl, key: m.connKey, temp_prefix: '_mig_',
+			} );
+			const stateId = ( init && ( init.migration_state_id || init.id ) ) || '';
+
+			for ( let i = 0; i < chosen.length; i++ ) {
+				if ( m.cancel ) break;
+				const table = chosen[ i ];
+				m.activeTable = table; m.phase = ''; renderMigrate();
+				let currentRow = -1, primaryKeys = '', guard = 0;
+				// Their loop: re-post the same table with what the last answer
+				// returned until current_row comes back as -1.
+				while ( guard++ < 5000 ) {
+					if ( m.cancel ) break;
+					const body = new FormData();
+					body.append( 'action', 'wpmdb_migrate_table' );
+					body.append( 'table', table );
+					body.append( 'stage', 'migrate' );
+					body.append( 'form_data', fd );
+					body.append( 'current_row', String( currentRow ) );
+					body.append( 'last_table', i === chosen.length - 1 ? '1' : '0' );
+					body.append( 'primary_keys', primaryKeys );
+					body.append( 'gzip', '1' );
+					body.append( 'nonce', W.nonce );
+					if ( stateId ) body.append( 'migration_state_id', String( stateId ) );
+					const r = await fetch( W.ajax, { method: 'POST', credentials: 'same-origin', body } );
+					const j = await r.json().catch( () => null );
+					if ( ! j || ! j.success ) {
+						throw new Error( ( j && typeof j.data === 'string' ) ? j.data : sprintf( __( 'WP Migrate stopped on %s.' ), table ) );
+					}
+					currentRow = j.data.current_row;
+					primaryKeys = j.data.primary_keys || '';
+					if ( String( currentRow ) === '-1' ) break;
+				}
+				if ( m.cancel ) break;
+				m.doneTables.push( table );
+				renderMigrate();
+			}
+
+			if ( m.cancel ) {
+				await migRest( 'cancel-migration', {} ).catch( () => {} );
+				m.result = { ok: false, message: __( 'Stopped before it finished. The other site may hold a partial copy.' ) };
+			} else {
+				m.activeTable = '';
+				m.phase = __( 'Finishing…' );
+				renderMigrate();
+				await migRest( 'finalize-migration', { tables: chosen.join( ',' ), prefix: ( dst && dst.prefix ) || 'wp_' } );
+				m.result = { ok: true };
+				toast( m.intent === 'push'
+					? sprintf( __( 'Pushed %s tables.' ), String( m.doneTables.length ) )
+					: sprintf( __( 'Pulled %s tables.' ), String( m.doneTables.length ) ) );
+			}
+		} catch ( e ) {
+			m.result = { ok: false, message: e.message };
+			toast( e.message, true );
+		}
+		m.running = false; m.activeTable = ''; m.phase = '';
+		renderMigrate();
+		// A pull rewrote this site underneath the app, so the caches the SPA
+		// is holding describe a database that no longer exists.
+		if ( m.intent === 'pull' && m.result && m.result.ok ) {
+			setTimeout( () => location.reload(), 1200 );
+		}
+	}
+
 	/* ===== Database viewer ( /minn-admin/database ) =====
 		Read-only by design (docs/native-editors.md case study 2): a database
 		editor bypasses every plugin's invariants, so writes are a permanent
@@ -35826,6 +36220,7 @@
 		if ( B.caps.settings ) cmds.push( { label: __( 'View traffic stats' ), kind: 'nav', icon: '📈', run: () => go( 'stats' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'View System diagnostics' ), kind: 'nav', icon: '❤', run: () => go( 'system' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'Browse database (read-only)' ), kind: 'nav', icon: '⛁', run: () => go( 'database' ) } );
+		if ( B.wpMigrate ) cmds.push( { label: __( 'Push or pull with WP Migrate' ), kind: 'nav', icon: '⇄', run: () => go( 'migrate' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'View site logs' ), kind: 'nav', icon: '📄', run: () => openLogViewer() } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'Open Settings' ), kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		// Multisite: one entry PER SITE (not a single "Switch site…" that
@@ -42311,6 +42706,8 @@
 		// User-edit page data too (same per-visit contract).
 		if ( state.route !== 'useredit' ) state.userEdit = null;
 		if ( state.route !== 'fieldgroup' ) state.fgb = null;
+		// A finished or abandoned migration should not reappear on return.
+		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
 		switch ( state.route ) {
 			case 'content': return renderContent();
@@ -42336,6 +42733,7 @@
 			case 'system': return renderSystem();
 			case 'database': return renderDatabase();
 			case 'editor': return renderEditor();
+			case 'migrate': return renderMigrate();
 			case 'fieldgroup': return renderFieldGroupBuilder();
 			case 'profile': return renderProfile();
 			case 'surfaceitem': return renderSurfaceItem();

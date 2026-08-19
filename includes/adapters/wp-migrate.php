@@ -76,6 +76,35 @@ function minn_admin_wp_migrate_version() {
 }
 
 /**
+ * This site's own details, built by WP Migrate's own code so a migration
+ * started from Minn describes the local end exactly as their screen does.
+ * Their local-site-details route answers add-on availability only, and
+ * their React app reads the rest from its page bootstrap, so Minn reads it
+ * from the same source: Util::site_details() and the prefix-scoped table
+ * list, which is the set their "all tables with prefix" option means.
+ */
+function minn_admin_wp_migrate_local() {
+	try {
+		$di      = \DeliciousBrains\WPMDB\WPMDBDI::getInstance();
+		$util    = $di->get( \DeliciousBrains\WPMDB\Common\Util\Util::class );
+		$table   = $di->get( \DeliciousBrains\WPMDB\Common\Sql\Table::class );
+		$details = $util->site_details();
+		return array(
+			'site_url' => isset( $details['site_url'] ) ? $details['site_url'] : untrailingslashit( site_url() ),
+			'home_url' => isset( $details['home_url'] ) ? $details['home_url'] : untrailingslashit( home_url() ),
+			'prefix'   => isset( $details['prefix'] ) ? $details['prefix'] : $GLOBALS['wpdb']->base_prefix,
+			// The find-and-replace path pair is the site root on disk, which
+			// is what their remote reports for its own end.
+			'path'     => \DeliciousBrains\WPMDB\Common\Util\Util::get_absolute_root_file_path(),
+			'tables'   => array_values( (array) $table->get_tables( 'prefix' ) ),
+			'details'  => $details,
+		);
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+}
+
+/**
  * Boot payload for the Migrate view. The migrate-table nonce is the same one
  * their own page embeds, so it is handed over only to a user who holds their
  * capability, and never on a site where the plugin is not running.
@@ -102,5 +131,8 @@ function minn_admin_wp_migrate_boot() {
 		'allowPull' => ! empty( $settings['allow_pull'] ),
 		'prefix'    => $GLOBALS['wpdb']->base_prefix,
 		'siteUrl'   => untrailingslashit( home_url() ),
+		// This end of the migration, described the way their own code
+		// describes it.
+		'local'     => minn_admin_wp_migrate_local(),
 	);
 }
