@@ -68,7 +68,11 @@ function minn_admin_wpmn_network_row( $network ) {
 		'dashboard'      => $dashboard,
 		'visit'          => $visit,
 		'edit'           => minn_admin_wpmn_edit_url( $id ),
-		'canDelete'      => ( ! is_main_network( $id ) && $id !== (int) get_current_network_id() ) ? '1' : '0',
+		// Only offer the verb the route will actually accept: not the primary
+		// network, not the one being worked in, and one the caller administers.
+		'canDelete'      => ( ! is_main_network( $id )
+			&& $id !== (int) get_current_network_id()
+			&& true === minn_admin_wpmn_network_target( $id ) ) ? '1' : '0',
 	);
 }
 
@@ -206,9 +210,17 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => function ( WP_REST_Request $request ) {
 			// Same source the handler acts on, so the gate and the action can
 			// never be answering about different networks.
-			return current_user_can( 'delete_network', minn_admin_wpmn_path_id( $request ) );
+			// delete_network maps to the object-agnostic delete_networks, so pair the
+			// capability with a real per-network check (see
+			// minn_admin_wpmn_network_target).
+			$id = minn_admin_wpmn_path_id( $request );
+			return current_user_can( 'delete_network', $id )
+				&& true === minn_admin_wpmn_network_target( $id );
 		},
 		'callback'            => 'minn_admin_wpmn_network_delete',
+		'args'                => array(
+			'delete_sites' => array( 'type' => 'boolean', 'required' => true ),
+		),
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/wp-multi-network/sites/(?P<id>\d+)/move', array(
@@ -308,6 +320,42 @@ function minn_admin_wpmn_path_id( WP_REST_Request $request ) {
 }
 
 /** DELETE /wp-multi-network/networks/{id}. */
+/**
+ * Does the caller administer THIS network?
+ *
+ * current_user_can( 'delete_network', $id ) reads like an object check and is not
+ * one: WP Multi Network maps delete_network to the object-agnostic delete_networks,
+ * which resolves to is_super_admin() -- and is_super_admin() answers for the CURRENT
+ * network, because get_super_admins() reads the current network's own site_admins
+ * list. On an install with several networks that means authority over the one you
+ * are standing in was accepted as authority over the one being destroyed, along with
+ * every site, user and setting inside it.
+ *
+ * @param int $id Network id.
+ * @return true|WP_Error
+ */
+function minn_admin_wpmn_network_target( $id ) {
+	$id = (int) $id;
+	if ( ! $id || ! get_network( $id ) ) {
+		return new WP_Error( 'no_such_network', __( 'That network does not exist.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	// A site-wide $super_admins pins one global list for every network, so there is
+	// no per-network distinction to draw.
+	if ( isset( $GLOBALS['super_admins'] ) ) {
+		return true;
+	}
+	$admins = array_map( 'strtolower', (array) get_network_option( $id, 'site_admins', array() ) );
+	$user   = wp_get_current_user();
+	if ( ! $user || ! $user->exists() || ! in_array( strtolower( $user->user_login ), $admins, true ) ) {
+		return new WP_Error(
+			'foreign_network',
+			__( 'You do not administer that network.', 'minn-admin' ),
+			array( 'status' => 403 )
+		);
+	}
+	return true;
+}
+
 function minn_admin_wpmn_network_delete( WP_REST_Request $request ) {
 	$id      = minn_admin_wpmn_path_id( $request );
 	$network = $id ? get_network( $id ) : null;
@@ -320,9 +368,18 @@ function minn_admin_wpmn_network_delete( WP_REST_Request $request ) {
 	if ( $id === (int) get_current_network_id() ) {
 		return new WP_Error( 'current_network', __( 'You are working in this network right now. Switch to another network first, then delete it.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
+	$target = minn_admin_wpmn_network_target( $id );
+	if ( is_wp_error( $target ) ) {
+		return $target;
+	}
+
+	// The vendor defaults $delete_blogs to false and derives it from a checkbox on
+	// its own screen; forcing it meant one request destroyed every site inside the
+	// network with no server-side statement of intent.
+	$delete_sites = rest_sanitize_boolean( $request['delete_sites'] );
 
 	require_once ABSPATH . 'wp-admin/includes/ms.php';
-	$result = delete_network( $id, true );
+	$result = delete_network( $id, $delete_sites );
 	if ( is_wp_error( $result ) ) {
 		return new WP_Error( 'delete_failed', $result->get_error_message(), array( 'status' => 500 ) );
 	}
