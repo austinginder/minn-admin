@@ -21,6 +21,10 @@ const { execSync } = require( 'child_process' );
 	await login( page );
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
 	await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+	const appMark = await page.evaluate( () => {
+		const r = document.querySelector( '.minn-logo-mark' ).getBoundingClientRect();
+		return { left: r.left, top: r.top, width: r.width, height: r.height };
+	} );
 
 	// The suite navigates between the app and the front end, so REST auth is
 	// captured ONCE from the SPA boot payload — the nonce stays valid from any
@@ -102,10 +106,18 @@ const { execSync } = require( 'child_process' );
 				token: getComputedStyle( document.documentElement ).getPropertyValue( '--wp-admin--admin-bar--height' ).trim(),
 			};
 		} );
-		t.check( 'desktop: static strip uses core geometry',
+		t.check( 'desktop: static strip uses full-width geometry',
 			desktop.top === 0 && desktop.left === 0 && Math.abs( desktop.width - desktop.vw ) < 1
 				&& desktop.height === 48 && desktop.radius === '0px' && desktop.token === '48px',
 			JSON.stringify( desktop ) );
+		const siteMark = await page.evaluate( () => {
+			const r = document.querySelector( '.minn-bar-mark' ).getBoundingClientRect();
+			return { left: r.left, top: r.top, width: r.width, height: r.height };
+		} );
+		t.check( 'the crossover tile stays in the same spot in Minn and on the site',
+			Math.abs( appMark.left - siteMark.left ) < 0.5 && Math.abs( appMark.top - siteMark.top ) < 0.5
+				&& appMark.width === siteMark.width && appMark.height === siteMark.height,
+			JSON.stringify( { appMark, siteMark } ) );
 
 		// Theme headers often sit at z-index 99999 (Divi's #main-header,
 		// the same rung as the classic admin bar). The Minn bar must paint
@@ -349,7 +361,7 @@ const { execSync } = require( 'child_process' );
 				token: getComputedStyle( document.documentElement ).getPropertyValue( '--wp-admin--admin-bar--height' ).trim(),
 			};
 		} );
-		t.check( 'mobile: full-width strip uses core geometry',
+		t.check( 'mobile: full-width strip keeps its geometry',
 			mob.top === 0 && mob.left === 0 && Math.abs( mob.width - mob.vw ) < 1
 				&& mob.height === 48 && mob.radius === '0px' && mob.token === '48px',
 			JSON.stringify( mob ) );
