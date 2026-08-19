@@ -141,7 +141,7 @@ function minn_admin_wcgc_row( $card ) {
 	$created  = (int) $card->get_date_created();
 	return array(
 		'id'        => (int) $card->get_id(),
-		'code'      => (string) $card->get_code(),
+		'code'      => minn_admin_wcgc_code( $card->get_code() ),
 		'amount'    => minn_admin_wcgc_money( $card->get_initial_balance(), $currency ),
 		'balance'   => minn_admin_wcgc_money( $card->get_balance(), $currency ),
 		'status'    => minn_admin_wcgc_status( $card ),
@@ -177,6 +177,39 @@ function minn_admin_wcgc_load( $id ) {
  * @param WC_GC_Gift_Card_Data $card Card.
  * @return void
  */
+/**
+ * A gift card code as this user is allowed to see it.
+ *
+ * WooCommerce Gift Cards masks codes for everyone below administrator by default:
+ * wc_gc_mask_codes( 'admin' ) is true unless the user is a site administrator, or
+ * is a shop manager AND the admin-only Privacy setting says otherwise. The vendor
+ * applies it on the list table, the edit view, the order screen, order notes,
+ * refunds and its CSV exporter. Minn stands in for those screens, so it honours
+ * the same setting rather than handing a support agent a bearer instrument.
+ *
+ * @param string $code Raw gift card code.
+ * @return string Code, masked when the vendor would mask it.
+ */
+function minn_admin_wcgc_code( $code ) {
+	$code = (string) $code;
+	if ( '' === $code ) {
+		return $code;
+	}
+	if ( function_exists( 'wc_gc_mask_codes' ) && function_exists( 'wc_gc_mask_code' ) && wc_gc_mask_codes( 'admin' ) ) {
+		return (string) wc_gc_mask_code( $code );
+	}
+	return $code;
+}
+
+/**
+ * Is this user allowed to see full gift card codes?
+ *
+ * @return bool
+ */
+function minn_admin_wcgc_codes_visible() {
+	return ! ( function_exists( 'wc_gc_mask_codes' ) && wc_gc_mask_codes( 'admin' ) );
+}
+
 function minn_admin_wcgc_send_email( $card ) {
 	$hook = apply_filters( 'woocommerce_gc_force_send_gift_card_hook', 'woocommerce_gc_force_send_gift_card_to_customer', $card );
 	do_action( $hook, $card );
@@ -252,6 +285,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label' => __( 'Resend email', 'minn-admin' ),
 					'route' => 'minn-admin/v1/wcgc/gift-cards/{id}/resend',
+					// The route refuses a disabled card; do not offer the button either.
+					'when'  => array( 'key' => 'enabled', 'equals' => true ),
 				),
 				array(
 					'label' => __( 'View order', 'minn-admin' ),
@@ -414,7 +449,13 @@ add_action( 'rest_api_init', function () {
 			$currency = minn_admin_wcgc_currency( $card );
 
 			$gift = array(
-				array( 'label' => __( 'Code', 'minn-admin' ), 'value' => $card->get_code(), 'type' => 'code' ),
+				// A masked code still identifies the row by its last characters; the
+				// copy affordance is dropped with it, since there is nothing to copy.
+				array(
+					'label' => __( 'Code', 'minn-admin' ),
+					'value' => minn_admin_wcgc_code( $card->get_code() ),
+					'type'  => minn_admin_wcgc_codes_visible() ? 'code' : 'text',
+				),
 				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $row['status'], 'type' => 'pill' ),
 				array( 'label' => __( 'Balance', 'minn-admin' ), 'value' => minn_admin_wcgc_money( $card->get_balance(), $currency ) ),
 				array( 'label' => __( 'Original amount', 'minn-admin' ), 'value' => minn_admin_wcgc_money( $card->get_initial_balance(), $currency ) ),
@@ -471,7 +512,7 @@ add_action( 'rest_api_init', function () {
 			$sections[] = array( 'title' => __( 'Origin', 'minn-admin' ), 'rows' => $origin );
 
 			return rest_ensure_response( array(
-				'title'    => $card->get_code(),
+				'title'    => minn_admin_wcgc_code( $card->get_code() ),
 				'sections' => $sections,
 				'adminUrl' => admin_url( 'admin.php?page=gc_giftcards&section=edit&giftcard=' . (int) $card->get_id() ),
 			) );
@@ -512,12 +553,12 @@ add_action( 'rest_api_init', function () {
 					? sprintf(
 						/* translators: %s: gift card code. */
 						__( '%s is enabled.', 'minn-admin' ),
-						$card->get_code()
+						minn_admin_wcgc_code( $card->get_code() )
 					)
 					: sprintf(
 						/* translators: %s: gift card code. */
 						__( '%s is disabled and can no longer be spent.', 'minn-admin' ),
-						$card->get_code()
+						minn_admin_wcgc_code( $card->get_code() )
 					),
 			) );
 		},
@@ -596,13 +637,13 @@ add_action( 'rest_api_init', function () {
 					? sprintf(
 						/* translators: 1: gift card code; 2: recipient email address. */
 						__( '%1$s created and sent to %2$s.', 'minn-admin' ),
-						$made->get_code(),
+						minn_admin_wcgc_code( $made->get_code() ),
 						$recipient
 					)
 					: sprintf(
 						/* translators: 1: gift card code; 2: formatted money amount. */
 						__( '%1$s created, holding %2$s.', 'minn-admin' ),
-						$made->get_code(),
+						minn_admin_wcgc_code( $made->get_code() ),
 						minn_admin_wcgc_money( $amount )
 					),
 			) );
@@ -630,7 +671,7 @@ add_action( 'rest_api_init', function () {
 				'message' => sprintf(
 					/* translators: 1: gift card code; 2: formatted money amount. */
 					__( '%1$s now holds %2$s.', 'minn-admin' ),
-					$card->get_code(),
+					minn_admin_wcgc_code( $card->get_code() ),
 					minn_admin_wcgc_money( $balance, minn_admin_wcgc_currency( $card ) )
 				),
 			) );
@@ -649,6 +690,27 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error(
 					'minn_wcgc_no_recipient',
 					__( 'This gift card has no recipient address, so there is nothing to resend.', 'minn-admin' ),
+					array( 'status' => 400 )
+				);
+			}
+			// force_trigger() is not a mailer: before sending it calls set_delivered(),
+			// and for a scheduled order-purchased card it rewrites deliver_date and
+			// RECOMPUTES expire_date -- to 0, meaning never expires, when the product
+			// carries no expiry meta -- then save()s. WooCommerce's own screen guards
+			// this action with ! has_expired() && is_active(); without the same guard
+			// a button labelled "Resend email" silently revived a written-off card and
+			// re-broadcast the code of one the store had disabled.
+			if ( method_exists( $card, 'has_expired' ) && $card->has_expired() ) {
+				return new WP_Error(
+					'minn_wcgc_expired',
+					__( 'This gift card has expired, so its code cannot be emailed again.', 'minn-admin' ),
+					array( 'status' => 400 )
+				);
+			}
+			if ( method_exists( $card, 'is_active' ) && ! $card->is_active() ) {
+				return new WP_Error(
+					'minn_wcgc_disabled',
+					__( 'This gift card is disabled, so its code cannot be emailed again.', 'minn-admin' ),
 					array( 'status' => 400 )
 				);
 			}
