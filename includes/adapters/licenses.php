@@ -1108,6 +1108,111 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+
+	// WP Migrate (Delicious Brains / WP Engine). Three key stores, read in
+	// the plugin's own precedence: the WPMDB_LICENCE constant, then user
+	// meta, then the global site option. User meta is where their own
+	// activation writes, so a site licensed through their UI keeps its key
+	// per person and the global option stays empty.
+	// Validity is whatever their API last answered, cached per user in the
+	// wpmdb_licence_response_{uid} site transient. Reads never call the API,
+	// so a row can be stale; verify refreshes it.
+	// Their API returns no expiry date in any response, so a row states the
+	// license's condition without a renewal date.
+	$providers['wp-migrate'] = array(
+		'name'      => 'WP Migrate',
+		'component' => 'wp-migrate-db-pro/wp-migrate-db-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'wp-migrate-db-pro/wp-migrate-db-pro.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$name = 'WP Migrate';
+			$key  = '';
+			$note = '';
+			if ( defined( 'WPMDB_LICENCE' ) && '' !== (string) WPMDB_LICENCE ) {
+				$key  = (string) WPMDB_LICENCE;
+				$note = __( 'Key set in wp-config', 'minn-admin' );
+			}
+			// Their own lookup order: the current user first, then the first
+			// user holding a key at all, so an admin sees the site's license
+			// even when the key belongs to a colleague.
+			$holder = 0;
+			if ( '' === $key ) {
+				$mine = get_user_meta( get_current_user_id(), 'wpmdb_licence_key', true );
+				if ( is_string( $mine ) && '' !== $mine ) {
+					$key    = $mine;
+					$holder = get_current_user_id();
+				}
+			}
+			if ( '' === $key ) {
+				$found = get_users( array(
+					'number'       => 1,
+					'meta_key'     => 'wpmdb_licence_key',
+					'meta_value'   => '',
+					'meta_compare' => '!=',
+					'fields'       => array( 'ID' ),
+				) );
+				if ( ! empty( $found[0]->ID ) ) {
+					$stored = get_user_meta( $found[0]->ID, 'wpmdb_licence_key', true );
+					if ( is_string( $stored ) && '' !== $stored ) {
+						$key    = $stored;
+						$holder = (int) $found[0]->ID;
+						$note   = __( 'Key belongs to another user on this site', 'minn-admin' );
+					}
+				}
+			}
+			if ( '' === $key ) {
+				$settings = get_site_option( 'wpmdb_settings' );
+				if ( is_array( $settings ) && ! empty( $settings['licence'] ) ) {
+					$key = (string) $settings['licence'];
+				}
+			}
+			if ( '' === $key ) {
+				return array( $item( array( 'name' => $name, 'state' => 'missing' ) ) );
+			}
+
+			// The cached API answer is keyed to whichever user holds the key.
+			$raw = false;
+			if ( $holder ) {
+				$raw = get_site_transient( 'wpmdb_licence_response_' . $holder );
+			}
+			if ( false === $raw ) {
+				$raw = get_site_transient( 'wpmdb_licence_response' );
+			}
+			$data = is_string( $raw ) ? json_decode( $raw, true ) : ( is_array( $raw ) ? $raw : null );
+			if ( ! is_array( $data ) ) {
+				return array( $item( array( 'name' => $name, 'state' => 'unknown', 'key' => true, 'note' => '' !== $note ? $note : __( 'Key stored; no check recorded yet', 'minn-admin' ) ) ) );
+			}
+			if ( ! empty( $data['dbrains_api_down'] ) ) {
+				return array( $item( array( 'name' => $name, 'state' => 'unknown', 'key' => true, 'stale' => true, 'note' => __( 'Could not reach the licensing service at the last check', 'minn-admin' ) ) ) );
+			}
+			$errors = ( isset( $data['errors'] ) && is_array( $data['errors'] ) ) ? array_keys( $data['errors'] ) : array();
+			if ( empty( $errors ) ) {
+				return array( $item( array( 'name' => $name, 'state' => 'valid', 'key' => true, 'note' => $note ) ) );
+			}
+			$state = 'invalid';
+			$word  = (string) $errors[0];
+			$notes = array(
+				// Their own wording: an expired subscription keeps the plugin
+				// working, so the row says what is actually lost.
+				'subscription_expired'   => __( 'Subscription expired; migrations still run, updates and support stop', 'minn-admin' ),
+				'subscription_cancelled' => __( 'Subscription cancelled', 'minn-admin' ),
+				'licence_not_found'      => __( 'The licensing service does not recognise this key', 'minn-admin' ),
+				'activation_deactivated' => __( 'This site\'s activation was turned off; activating again re-enables it', 'minn-admin' ),
+				'no_activations_left'    => __( 'Every activation on this license is in use', 'minn-admin' ),
+				'no_licence'             => '',
+			);
+			if ( 'no_licence' === $word ) {
+				return array( $item( array( 'name' => $name, 'state' => 'missing' ) ) );
+			}
+			if ( 'subscription_expired' === $word || 'subscription_cancelled' === $word ) {
+				$state = 'expired';
+			}
+			$why = isset( $notes[ $word ] ) ? $notes[ $word ] : str_replace( '_', ' ', $word );
+			return array( $item( array( 'name' => $name, 'state' => $state, 'key' => true, 'note' => '' !== $note ? $note . '. ' . $why : $why ) ) );
+		},
+	);
+
 	// Gravity Forms stores the key md5-hashed; validity and expiry ride the
 	// gform_version_info option their update checker maintains.
 	$providers['gravityforms'] = array(
@@ -2682,6 +2787,132 @@ function minn_admin_license_default_providers() {
 			$ok  = is_array( $res ) && ! empty( $res['success'] );
 			$msg = is_array( $res ) && isset( $res['message'] ) ? wp_strip_all_tags( (string) $res['message'] ) : '';
 			return array( 'ok' => $ok, 'message' => $msg );
+		};
+	}
+
+
+	// WP Migrate: their activation is one API call plus a local write, which
+	// is exactly what their own handler does. The API answers
+	// activate_licence with an errors map; anything but an empty map means
+	// the key was refused, and their handler still stores the key for the
+	// three conditions where the license exists but cannot serve this site
+	// (expired, api down, activation turned off), so the person is not made
+	// to paste it again. That behaviour is mirrored here rather than
+	// simplified, because their UI reads the same stored key afterwards.
+	// There is no deactivate endpoint in their API at all, so removing is an
+	// honest local removal and the message says the activation is not freed.
+	if ( class_exists( '\DeliciousBrains\WPMDB\Pro\License' ) && class_exists( '\DeliciousBrains\WPMDB\WPMDBDI' ) ) {
+		$wpm_license = function () {
+			return \DeliciousBrains\WPMDB\WPMDBDI::getInstance()->get( \DeliciousBrains\WPMDB\Pro\License::class );
+		};
+		$wpm_api     = function () {
+			return \DeliciousBrains\WPMDB\WPMDBDI::getInstance()->get( \DeliciousBrains\WPMDB\Pro\Api::class );
+		};
+		// Their site_url argument, built the way their handlers build it.
+		$wpm_args    = function ( $key ) {
+			return array(
+				'licence_key' => rawurlencode( $key ),
+				'site_url'    => rawurlencode( untrailingslashit( network_home_url( '', 'http' ) ) ),
+			);
+		};
+		$wpm_classify = function ( $decoded ) {
+			if ( ! is_array( $decoded ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The licensing service returned nothing readable', 'minn-admin' ) );
+			}
+			if ( ! empty( $decoded['dbrains_api_down'] ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach the licensing service', 'minn-admin' ) );
+			}
+			$errors = ( isset( $decoded['errors'] ) && is_array( $decoded['errors'] ) ) ? array_keys( $decoded['errors'] ) : array();
+			if ( empty( $errors ) ) {
+				return array( 'ok' => true );
+			}
+			$word = (string) $errors[0];
+			$map  = array(
+				'subscription_expired'   => array( 'expired', __( 'That subscription has expired. Migrations still run; updates and support stop.', 'minn-admin' ) ),
+				'subscription_cancelled' => array( 'expired', __( 'That subscription was cancelled.', 'minn-admin' ) ),
+				'licence_not_found'      => array( 'invalid', __( 'WP Migrate does not recognise that key.', 'minn-admin' ) ),
+				'no_activations_left'    => array( 'site_limit', __( 'Every activation on that license is in use.', 'minn-admin' ) ),
+				'activation_deactivated' => array( 'invalid', __( 'This site\'s activation was turned off for that license.', 'minn-admin' ) ),
+				'no_licence'             => array( 'invalid', __( 'No license key was sent.', 'minn-admin' ) ),
+			);
+			if ( isset( $map[ $word ] ) ) {
+				return array( 'ok' => false, 'code' => $map[ $word ][0], 'message' => $map[ $word ][1] );
+			}
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => str_replace( '_', ' ', $word ) );
+		};
+
+		$providers['wp-migrate']['secret_label'] = __( 'WP Migrate license key', 'minn-admin' );
+		$providers['wp-migrate']['activate']     = function ( $secret ) use ( $wpm_license, $wpm_api, $wpm_args, $wpm_classify ) {
+			$secret = trim( (string) $secret );
+			if ( '' === $secret ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Enter a license key.', 'minn-admin' ) );
+			}
+			if ( defined( 'WPMDB_LICENCE' ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'This site sets its key in wp-config, which always wins. Change it there.', 'minn-admin' ) );
+			}
+			try {
+				$raw     = $wpm_api()->dbrains_api_request( 'activate_licence', $wpm_args( $secret ) );
+				$decoded = json_decode( (string) $raw, true );
+				$result  = $wpm_classify( $decoded );
+				// Their handler keeps the key for these three: the license is
+				// real, it just cannot serve this site right now.
+				$keep = ! empty( $result['ok'] );
+				if ( ! $keep && is_array( $decoded ) ) {
+					$errors = ( isset( $decoded['errors'] ) && is_array( $decoded['errors'] ) ) ? array_keys( $decoded['errors'] ) : array();
+					$word   = isset( $errors[0] ) ? (string) $errors[0] : '';
+					$keep   = in_array( $word, array( 'subscription_expired', 'activation_deactivated' ), true ) || ! empty( $decoded['dbrains_api_down'] );
+				}
+				if ( $keep ) {
+					$license = $wpm_license();
+					$license->set_licence_key( $secret );
+					// Their own post-activation cleanup, so the plugin's own
+					// screen reads the same state Minn just wrote.
+					delete_site_transient( 'update_plugins' );
+					delete_site_transient( 'wpmdb_upgrade_data' );
+					// Re-run their check so the cached answer matches the key.
+					$license->check_license_status();
+				}
+			} catch ( \Throwable $e ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => $e->getMessage() );
+			}
+			return $result;
+		};
+		$providers['wp-migrate']['deactivate'] = function () use ( $wpm_license ) {
+			if ( defined( 'WPMDB_LICENCE' ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'This site sets its key in wp-config. Remove it there.', 'minn-admin' ) );
+			}
+			try {
+				$license = $wpm_license();
+				// Mirrors their own remove handler, including the transients
+				// that only make sense while a license is held.
+				$license->set_licence_key( '' );
+				delete_site_transient( 'update_plugins' );
+				delete_site_transient( 'wpmdb_upgrade_data' );
+				delete_site_transient( 'wpmdb_licence_response_' . get_current_user_id() );
+				delete_site_transient( 'wpmdb_licence_response' );
+			} catch ( \Throwable $e ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => $e->getMessage() );
+			}
+			return array(
+				'ok'      => true,
+				'message' => __( 'The key was removed from this site. WP Migrate has no way to release the activation remotely, so free the seat in your account if you need it elsewhere.', 'minn-admin' ),
+			);
+		};
+		$providers['wp-migrate']['verify'] = function () use ( $wpm_license, $wpm_api, $wpm_args, $wpm_classify ) {
+			try {
+				$license = $wpm_license();
+				$key     = $license->get_licence_key();
+				if ( ! $key ) {
+					return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No license key is stored on this site.', 'minn-admin' ) );
+				}
+				// check_support_access is the request their own status check
+				// uses, and it refreshes the cached answer the row reads.
+				$raw = $wpm_api()->dbrains_api_request( 'check_support_access', $wpm_args( $key ) );
+				set_site_transient( 'wpmdb_licence_response_' . get_current_user_id(), $raw, HOUR_IN_SECONDS );
+				return $wpm_classify( json_decode( (string) $raw, true ) );
+			} catch ( \Throwable $e ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => $e->getMessage() );
+			}
 		};
 	}
 
