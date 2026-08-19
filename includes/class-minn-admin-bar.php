@@ -48,12 +48,13 @@ class Minn_Admin_Bar {
 	}
 
 	/**
-	 * Front-end builder editors (and Elementor's preview iframe) are still
+	 * Front-end builder editors (and their preview iframes) are still
 	 * `! is_admin()`, so they would otherwise get the Minn bar. They already
 	 * hide the classic bar via their own `show_admin_bar` veto; we cannot
 	 * consult `is_admin_bar_showing()` here because this method is itself
 	 * called FROM that filter. The query flags are the same signals the
-	 * builders use to enter canvas mode.
+	 * builders use to enter canvas mode. Brizy's iframe is
+	 * `?is-editor-iframe=`, not a brizy-* name.
 	 */
 	private static function is_builder_canvas() {
 		if ( isset( $_GET['elementor-preview'] ) ) {
@@ -74,7 +75,7 @@ class Minn_Admin_Bar {
 		if ( isset( $_GET['etch'] ) && 'magic' === $_GET['etch'] ) {
 			return true;
 		}
-		if ( isset( $_GET['brizy-edit'] ) || isset( $_GET['brizy-edit-iframe'] ) ) {
+		if ( isset( $_GET['is-editor-iframe'] ) ) {
 			return true;
 		}
 		if ( isset( $_GET['vc_editable'] ) ) {
