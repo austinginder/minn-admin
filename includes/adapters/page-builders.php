@@ -425,43 +425,21 @@ add_action(
 );
 
 /**
- * Elementor's hamburger has no filter for extra exits, so this script
- * registers through the public app-bar `mainMenu` API (and the older
- * panel menu as a fallback). Destination is Minn's front door, not the
- * locked Minn editor for the same post: that editor would immediately
- * offer "Edit in Elementor" and feel like a bounce.
+ * Elementor's hamburger "Exit to WordPress" reads these document URLs
+ * (this post, all posts, or the dashboard, per the person's exit
+ * preference). When Minn is the default admin, send every path to
+ * Minn's front door instead. The label stays "Exit to WordPress".
+ * People who have not opted in keep WordPress's destination.
  */
-function minn_admin_elementor_exit_config() {
-	return array(
-		'url'    => Minn_Admin::app_url(),
-		'title'  => __( 'Exit to Minn Admin', 'minn-admin' ),
-		'prefer' => Minn_Admin::user_wants_default_admin(),
-	);
+function minn_admin_elementor_exit_url( $url ) {
+	if ( ! current_user_can( 'edit_posts' ) || ! Minn_Admin::user_wants_default_admin() ) {
+		return $url;
+	}
+	return Minn_Admin::app_url();
 }
-
-function minn_admin_elementor_exit_enqueue() {
-	if ( wp_script_is( 'minn-admin-elementor-exit', 'enqueued' ) ) {
-		return;
-	}
-	if ( ! current_user_can( 'edit_posts' ) ) {
-		return;
-	}
-	$deps = array( 'elementor-editor' );
-	if ( wp_script_is( 'elementor-v2-editor-app-bar', 'registered' ) ) {
-		$deps[] = 'elementor-v2-editor-app-bar';
-	}
-	wp_enqueue_script(
-		'minn-admin-elementor-exit',
-		MINN_ADMIN_URL . 'assets/js/elementor-exit.js',
-		$deps,
-		MINN_ADMIN_VERSION,
-		true
-	);
-	wp_localize_script( 'minn-admin-elementor-exit', 'MINN_ELEMENTOR_EXIT', minn_admin_elementor_exit_config() );
-}
-
-add_action( 'elementor/editor/v2/scripts/enqueue', 'minn_admin_elementor_exit_enqueue' );
-add_action( 'elementor/editor/after_enqueue_scripts', 'minn_admin_elementor_exit_enqueue' );
+add_filter( 'elementor/document/urls/exit_to_dashboard', 'minn_admin_elementor_exit_url' );
+add_filter( 'elementor/document/urls/all_post_type', 'minn_admin_elementor_exit_url' );
+add_filter( 'elementor/document/urls/main_dashboard', 'minn_admin_elementor_exit_url' );
 
 /**
  * Brizy's more menu "Go to Dashboard" is the classic editor for the

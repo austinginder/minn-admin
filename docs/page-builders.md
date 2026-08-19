@@ -100,13 +100,10 @@ Client behavior:
 - Elementor, Brizy: the URL is technically `post.php?action=…`, but it renders the
   builder's own full-screen app with zero wp-admin chrome (verified by screenshot). The
   user experience has no wp-admin in it; only the URL bar knows.
-- Elementor's hamburger still offers **Exit to WordPress** (their default, still
-  `post.php?action=edit` or the dashboard). Minn adds a sibling **Exit to Minn Admin**
-  through Elementor's public app-bar `mainMenu.registerLink` (and the older panel menu
-  as a fallback). The destination is `/minn-admin/`, not the locked Minn editor for
-  the same post: that editor would immediately offer "Edit in Elementor" and feel
-  like a bounce. When the person has "Minn is the default admin" on, the Minn exit
-  sits above WordPress's.
+- Elementor's hamburger still says **Exit to WordPress**. When Minn is the default
+  admin, that item (and the three document URLs it can read: this post, all posts,
+  or the dashboard) opens `/minn-admin/` instead of a wp-admin screen. The label is
+  unchanged. People who have not opted in keep WordPress's destination.
 - Brizy's more menu still says **Go to Dashboard**. When Minn is the default admin,
   that item (and Brizy's `backToDashboard` URL) opens `/minn-admin/` instead of
   `post.php?action=edit`. The label is unchanged. People who have not opted in keep
