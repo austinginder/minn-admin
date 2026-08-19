@@ -121,9 +121,9 @@
 .minn-bar-right { justify-content: flex-end; }
 
 .minn-bar-btn {
-  height: 34px;
+  height: 38px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text);
   display: inline-flex;
@@ -142,13 +142,13 @@
   outline: 2px solid color-mix(in srgb, var(--accent) 52%, transparent);
   outline-offset: 1px;
 }
-.minn-bar-btn svg { width: 17px; height: 17px; flex: none; }
-.minn-bar-iconbtn { width: 34px; padding: 0; color: var(--text2); }
+.minn-bar-btn svg { width: 19px; height: 19px; flex: none; }
+.minn-bar-iconbtn { width: 38px; padding: 0; color: var(--text2); }
 .minn-bar-iconbtn:hover { color: var(--text); }
 
-.minn-bar-markbtn { width: 34px; padding: 0; flex: none; }
+.minn-bar-markbtn { width: 38px; padding: 0; flex: none; }
 .minn-bar-markbtn:hover .minn-bar-mark { filter: brightness(1.12); }
-.minn-bar-site { padding: 0 8px; max-width: 250px; }
+.minn-bar-site { padding: 0 5px; max-width: 250px; }
 .minn-bar-mark {
   width: 28px;
   height: 28px;
@@ -170,7 +170,7 @@
   letter-spacing: -0.01em;
 }
 .minn-bar-chevron { width: 13px !important; height: 13px !important; color: var(--text3); }
-.minn-bar-divider { width: 1px; height: 20px; margin: 0 4px; background: var(--border); flex: none; }
+.minn-bar-divider { width: 1px; height: 24px; margin: 0 4px; background: var(--border); flex: none; }
 
 /* Status chip: exception states only (the slot is otherwise absent). */
 .minn-bar-status {
@@ -195,7 +195,7 @@
   background: var(--accent);
   color: var(--accent-fg);
   font-weight: 650;
-  padding-inline: 12px;
+  padding-inline: 14px;
 }
 .minn-bar-edit:hover { background: var(--accent2); }
 
@@ -211,10 +211,10 @@
   border: 2px solid var(--bg2);
   pointer-events: none;
 }
-.minn-bar-avatarbtn { width: 34px; }
+.minn-bar-avatarbtn { width: 38px; }
 .minn-bar-avatar {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   overflow: hidden;
   flex: none;
@@ -228,7 +228,7 @@
 /* Keep the site-to-Minn crossover tile in the same desktop viewport spot as
    the unchanged sidebar tile. Its 28px mark lands at left 20px / top 22px. */
 @media (min-width: 783px) {
-  .minn-bar-markbtn { position: relative; left: 8px; top: 12px; z-index: 1; }
+  .minn-bar-markbtn { position: relative; left: 6px; top: 12px; z-index: 1; }
 }
 
 /* Menus */

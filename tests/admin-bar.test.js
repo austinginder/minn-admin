@@ -118,6 +118,20 @@ const { execSync } = require( 'child_process' );
 			Math.abs( appMark.left - siteMark.left ) < 0.5 && Math.abs( appMark.top - siteMark.top ) < 0.5
 				&& appMark.width === siteMark.width && appMark.height === siteMark.height,
 			JSON.stringify( { appMark, siteMark } ) );
+		const controls = await page.evaluate( () => {
+			const button = document.querySelector( '.minn-bar-iconbtn' );
+			const icon = button.querySelector( 'svg' );
+			const avatar = document.querySelector( '.minn-bar-avatar' );
+			return {
+				button: button.getBoundingClientRect().height,
+				icon: icon.getBoundingClientRect().width,
+				avatar: avatar.getBoundingClientRect().width,
+				divider: document.querySelector( '.minn-bar-divider' ).getBoundingClientRect().height,
+			};
+		} );
+		t.check( 'desktop: menu controls use the expanded concept proportions',
+			controls.button === 38 && controls.icon === 19 && controls.avatar === 30 && controls.divider === 24,
+			JSON.stringify( controls ) );
 
 		// Theme headers often sit at z-index 99999 (Divi's #main-header,
 		// the same rung as the classic admin bar). The Minn bar must paint
