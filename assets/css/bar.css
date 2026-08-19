@@ -228,11 +228,18 @@
 .minn-bar-status-text { white-space: nowrap; }
 
 .minn-bar-edit {
+  height: auto;
+  border: 0;
+  border-radius: 9px;
   background: var(--accent);
   color: var(--accent-fg);
-  font-weight: 650;
-  padding-inline: 14px;
+  gap: 7px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
 }
+.minn-bar-edit svg { width: 17px; height: 17px; }
 .minn-bar-edit:hover { background: var(--accent2); }
 
 .minn-bar-bellwrap { position: relative; display: inline-flex; }

@@ -22,6 +22,22 @@ const { execSync } = require( 'child_process' );
 	await login( page );
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
 	await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+	const appNewButton = await page.evaluate( () => {
+		const button = document.getElementById( 'minn-new-btn' );
+		const style = getComputedStyle( button );
+		const rect = button.getBoundingClientRect();
+		const iconRect = button.querySelector( 'svg' ).getBoundingClientRect();
+		return {
+			height: rect.height,
+			padding: style.padding,
+			radius: style.borderRadius,
+			gap: style.gap,
+			fontSize: style.fontSize,
+			fontWeight: style.fontWeight,
+			lineHeight: style.lineHeight,
+			icon: iconRect.width,
+		};
+	} );
 
 	// The suite navigates between the app and the front end, so REST auth is
 	// captured ONCE from the SPA boot payload — the nonce stays valid from any
@@ -157,16 +173,31 @@ const { execSync } = require( 'child_process' );
 			const button = document.querySelector( '.minn-bar-iconbtn' );
 			const icon = button.querySelector( 'svg' );
 			const avatar = document.querySelector( '.minn-bar-avatar' );
+			const edit = document.querySelector( '.minn-bar-edit' );
+			const editStyle = getComputedStyle( edit );
 			return {
 				button: button.getBoundingClientRect().height,
 				icon: icon.getBoundingClientRect().width,
 				avatar: avatar.getBoundingClientRect().width,
 				divider: document.querySelector( '.minn-bar-divider' ).getBoundingClientRect().height,
+				edit: {
+					height: edit.getBoundingClientRect().height,
+					padding: editStyle.padding,
+					radius: editStyle.borderRadius,
+					gap: editStyle.gap,
+					fontSize: editStyle.fontSize,
+					fontWeight: editStyle.fontWeight,
+					lineHeight: editStyle.lineHeight,
+					icon: edit.querySelector( 'svg' ).getBoundingClientRect().width,
+				},
 			};
 		} );
 		t.check( 'desktop: menu controls use the expanded concept proportions',
 			controls.button === 38 && controls.icon === 19 && controls.avatar === 30 && controls.divider === 24,
 			JSON.stringify( controls ) );
+		t.check( 'desktop: Edit uses the same button geometry as New inside Minn',
+			Object.keys( appNewButton ).every( ( key ) => appNewButton[ key ] === controls.edit[ key ] ),
+			JSON.stringify( { appNewButton, edit: controls.edit } ) );
 
 		// Theme headers often sit at z-index 99999 (Divi's #main-header,
 		// the same rung as the classic admin bar). The Minn bar must paint
