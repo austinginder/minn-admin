@@ -30,7 +30,7 @@
   --red: #e46b6b;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
 }
-#minn-bar-root[data-minn-theme="light"] #minn-bar { box-shadow: 0 1px 0 rgba(30, 30, 50, 0.12); }
+#minn-bar-root[data-minn-theme="light"] #minn-bar { box-shadow: var(--shadow); }
 #minn-bar-root[data-minn-theme="light"] {
   --bg2: #ffffff;
   --panel: #ffffff;
@@ -68,19 +68,20 @@
    a bar link can have. Inherited typography (a body-level letter-spacing)
    is neutralized on the root so every surface inherits ours, not the theme's. */
 #minn-bar-root { letter-spacing: normal; word-spacing: normal; text-transform: none; font-style: normal; }
-/* Match WordPress's public admin-bar shell. Existing themes commonly target
-   #wpadminbar and body.admin-bar, while newer integrations read the shared
-   height custom property. Minn publishes its roomier 48px height there. */
-#wpadminbar.minn-wpadminbar {
+/* Corner Reveal deliberately stays out of WordPress's #wpadminbar and
+   body.admin-bar contracts. It overlays one quiet corner instead of asking
+   every theme to reserve a toolbar-sized strip. */
+#minn-cornerbar {
   position: fixed;
-  inset: 0 0 auto;
-  width: 100%;
+  top: 12px;
+  left: 12px;
+  width: 46px;
   min-width: 0;
-  height: var(--wp-admin--admin-bar--height, 48px);
+  height: 46px;
   z-index: 1000100;
   background: transparent;
 }
-#wpadminbar.minn-wpadminbar #minn-bar-root { position: relative; width: 100%; height: 100%; }
+#minn-cornerbar #minn-bar-root { position: relative; width: 100%; height: 100%; }
 #minn-bar-root a, #minn-bar-root a:hover, #minn-bar-root a:focus, #minn-bar-root a:visited {
   text-decoration: none !important;
   border-bottom: 0 !important;
@@ -94,31 +95,64 @@
 #minn-bar-root a.minn-bar-menu-item, #minn-bar-root a.minn-bar-menu-item:hover,
 #minn-bar-root a.minn-bar-menu-item:focus, #minn-bar-root a.minn-bar-menu-item:visited { color: var(--text) !important; }
 
-/* A static strip with Minn's original roomy control sizing. Keeping all
-   sizing inside the inherited height makes the page offset self-consistent. */
+/* Only the mark occupies the corner at rest. Hover or keyboard focus raises
+   the natural-width control set, so the site never pays a permanent layout
+   cost for admin chrome. max-width is the animated clipping edge; the header
+   itself keeps its max-content width so every revealed control stays intact. */
 #minn-bar {
   position: relative;
-  width: 100%;
-  height: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  width: max-content;
+  max-width: 46px;
+  height: 46px;
+  display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 12px 0 9px;
+  gap: 10px;
+  padding: 4px;
+  overflow: hidden;
   background: var(--bg2);
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
   font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.4;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   font-variant-ligatures: no-contextual;
+  transition: max-width 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), padding 0.26s ease;
 }
-.minn-bar-zone { display: flex; align-items: center; min-width: 0; gap: 4px; }
+#minn-bar-root:hover #minn-bar,
+#minn-bar-root:focus-within #minn-bar,
+#minn-bar-root.minn-bar-menu-open #minn-bar {
+  max-width: calc(100vw - 24px);
+  padding-right: 8px;
+}
+.minn-bar-zone { display: flex; align-items: center; min-width: 0; flex: none; gap: 4px; }
 .minn-bar-right { justify-content: flex-end; }
+.minn-bar-site,
+.minn-bar-status,
+.minn-bar-left > .minn-bar-divider,
+.minn-bar-right {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease 0.02s;
+}
+#minn-bar-root:hover .minn-bar-site,
+#minn-bar-root:hover .minn-bar-status,
+#minn-bar-root:hover .minn-bar-left > .minn-bar-divider,
+#minn-bar-root:hover .minn-bar-right,
+#minn-bar-root:focus-within .minn-bar-site,
+#minn-bar-root:focus-within .minn-bar-status,
+#minn-bar-root:focus-within .minn-bar-left > .minn-bar-divider,
+#minn-bar-root:focus-within .minn-bar-right,
+#minn-bar-root.minn-bar-menu-open .minn-bar-site,
+#minn-bar-root.minn-bar-menu-open .minn-bar-status,
+#minn-bar-root.minn-bar-menu-open .minn-bar-left > .minn-bar-divider,
+#minn-bar-root.minn-bar-menu-open .minn-bar-right {
+  opacity: 1;
+  pointer-events: auto;
+  transition-delay: 0.12s;
+}
 
 .minn-bar-btn {
   height: 38px;
@@ -150,16 +184,16 @@
 .minn-bar-markbtn:hover .minn-bar-mark { filter: brightness(1.12); }
 .minn-bar-site { padding: 0 5px; max-width: 250px; }
 .minn-bar-mark {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   flex: none;
-  border-radius: 8px;
+  border-radius: 11px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: var(--accent-fg);
   font-weight: 800;
-  font-size: 15px;
+  font-size: 21px;
   letter-spacing: -0.04em;
 }
 .minn-bar-sitename {
@@ -224,12 +258,6 @@
   place-items: center;
 }
 .minn-bar-avatar img { width: 100%; height: 100%; display: block; border-radius: 50%; }
-
-/* Keep the site-to-Minn crossover tile in the same desktop viewport spot as
-   the unchanged sidebar tile. Its 28px mark lands at left 20px / top 22px. */
-@media (min-width: 783px) {
-  .minn-bar-markbtn { position: relative; left: 6px; top: 12px; z-index: 1; }
-}
 
 /* Menus */
 .minn-bar-menu {
@@ -413,7 +441,7 @@
 /* Toast: transient feedback under the bar (cache purge results). */
 #minn-bar-toast {
   position: fixed;
-  top: calc(var(--wp-admin--admin-bar--height, 48px) + 8px);
+  top: 70px;
   left: 50%;
   transform: translateX(-50%) translateY(-6px);
   z-index: 1000107;
@@ -434,9 +462,18 @@
 #minn-bar-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 @media (max-width: 782px) {
-  .minn-bar-btn { height: 40px; }
-  .minn-bar-iconbtn, .minn-bar-markbtn, .minn-bar-avatarbtn { width: 40px; }
-  .minn-bar-mark, .minn-bar-avatar { width: 30px; height: 30px; }
+  #minn-cornerbar { width: calc(100vw - 24px); }
+  #minn-bar {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    padding-right: 8px;
+  }
+  .minn-bar-site,
+  .minn-bar-status,
+  .minn-bar-left > .minn-bar-divider,
+  .minn-bar-right { opacity: 1; pointer-events: auto; }
+  .minn-bar-mark { width: 36px; height: 36px; }
+  .minn-bar-avatar { width: 30px; height: 30px; }
   .minn-bar-divider { display: none; }
   .minn-bar-sitename { max-width: 120px; }
   .minn-bar-status { padding: 0 8px; }
@@ -449,5 +486,9 @@
   .minn-bar-site { padding-right: 3px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  #minn-bar { transition-duration: 0.01ms; }
   .minn-bar-menu { animation-duration: 0.01ms; }
+}
+@media print {
+  #minn-cornerbar { display: none !important; }
 }

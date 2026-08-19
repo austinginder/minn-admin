@@ -5,7 +5,8 @@
  * the public site swaps the classic admin bar for Minn's own quiet bar. The
  * properties under test:
  *   - strictly opt-in: default off leaves core's bar untouched
- *   - on: the Minn bar renders, core's bar is gone, the page is pushed down
+ *   - on: the Minn bar renders in its own corner, core's bar is gone, and the
+ *     site keeps its original layout
  *   - the contextual Edit action targets the queried post's Minn editor
  *   - the search icon hands off to the app and the palette opens there
  *     (the bar claims NO global keyboard shortcut by design)
@@ -21,10 +22,6 @@ const { execSync } = require( 'child_process' );
 	await login( page );
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
 	await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
-	const appMark = await page.evaluate( () => {
-		const r = document.querySelector( '.minn-logo-mark' ).getBoundingClientRect();
-		return { left: r.left, top: r.top, width: r.width, height: r.height };
-	} );
 
 	// The suite navigates between the app and the front end, so REST auth is
 	// captured ONCE from the SPA boot payload — the nonce stays valid from any
@@ -52,6 +49,10 @@ const { execSync } = require( 'child_process' );
 		} );
 		return ( await r.json() )[ k ];
 	}, { a: auth, k: key } );
+	const revealBar = async () => {
+		await page.hover( '.minn-bar-markbtn' );
+		await page.waitForTimeout( 320 );
+	};
 
 	let postId = null;
 	let draftId = null;
@@ -84,15 +85,15 @@ const { execSync } = require( 'child_process' );
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		s = await page.evaluate( () => ( {
 			minn: !! document.getElementById( 'minn-bar' ),
-			core: !! document.querySelector( '#wpadminbar:not(.minn-wpadminbar)' ),
-			shell: !! document.querySelector( '#wpadminbar.minn-wpadminbar' ),
+			core: !! document.getElementById( 'wpadminbar' ),
+			shell: !! document.getElementById( 'minn-cornerbar' ),
 			bodyClass: document.body.classList.contains( 'admin-bar' ),
 			margin: getComputedStyle( document.documentElement ).marginTop,
 			chip: !! document.querySelector( '.minn-bar-status' ),
 		} ) );
-		t.check( 'opted in: Minn owns the compatible admin-bar shell and core is gone',
-			s.minn && s.shell && s.bodyClass && ! s.core, JSON.stringify( s ) );
-		t.check( 'desktop: page offset matches the Minn strip', s.margin === '48px', s.margin );
+		t.check( 'opted in: Corner Reveal owns its own shell and core is gone',
+			s.minn && s.shell && ! s.bodyClass && ! s.core, JSON.stringify( s ) );
+		t.check( 'desktop: Corner Reveal does not offset the site', s.margin === '0px', s.margin );
 		const desktop = await page.evaluate( () => {
 			const b = document.getElementById( 'minn-bar' );
 			const r = b.getBoundingClientRect();
@@ -103,21 +104,43 @@ const { execSync } = require( 'child_process' );
 				height: r.height,
 				vw: innerWidth,
 				radius: getComputedStyle( b ).borderRadius,
-				token: getComputedStyle( document.documentElement ).getPropertyValue( '--wp-admin--admin-bar--height' ).trim(),
 			};
 		} );
-		t.check( 'desktop: static strip uses full-width geometry',
-			desktop.top === 0 && desktop.left === 0 && Math.abs( desktop.width - desktop.vw ) < 1
-				&& desktop.height === 48 && desktop.radius === '0px' && desktop.token === '48px',
+		t.check( 'desktop: Corner Reveal rests as a 46px corner control',
+			desktop.top === 12 && desktop.left === 12 && desktop.width === 46
+				&& desktop.height === 46 && desktop.radius === '14px',
 			JSON.stringify( desktop ) );
 		const siteMark = await page.evaluate( () => {
 			const r = document.querySelector( '.minn-bar-mark' ).getBoundingClientRect();
 			return { left: r.left, top: r.top, width: r.width, height: r.height };
 		} );
-		t.check( 'the crossover tile stays in the same spot in Minn and on the site',
-			Math.abs( appMark.left - siteMark.left ) < 0.5 && Math.abs( appMark.top - siteMark.top ) < 0.5
-				&& appMark.width === siteMark.width && appMark.height === siteMark.height,
-			JSON.stringify( { appMark, siteMark } ) );
+		t.check( 'the corner mark sits wholly inside its control',
+			siteMark.left > desktop.left && siteMark.top > desktop.top
+				&& siteMark.width === 36 && siteMark.height === 36,
+			JSON.stringify( { desktop, siteMark } ) );
+		await revealBar();
+		const revealed = await page.evaluate( () => {
+			const bar = document.getElementById( 'minn-bar' );
+			const site = document.querySelector( '.minn-bar-site' );
+			const actions = document.querySelector( '.minn-bar-right' );
+			return {
+				width: bar.getBoundingClientRect().width,
+				max: innerWidth - 24,
+				siteOpacity: getComputedStyle( site ).opacity,
+				actionsOpacity: getComputedStyle( actions ).opacity,
+			};
+		} );
+		t.check( 'desktop: hover reveals the complete natural-width control set',
+			revealed.width > 300 && revealed.width <= revealed.max
+				&& revealed.siteOpacity === '1' && revealed.actionsOpacity === '1',
+			JSON.stringify( revealed ) );
+		await page.mouse.move( 900, 500 );
+		await page.evaluate( () => document.activeElement && document.activeElement.blur() );
+		await page.waitForTimeout( 320 );
+		await page.focus( '.minn-bar-markbtn' );
+		await page.waitForTimeout( 320 );
+		const keyboardWidth = await page.evaluate( () => document.getElementById( 'minn-bar' ).getBoundingClientRect().width );
+		t.check( 'desktop: keyboard focus reveals the complete control set', keyboardWidth > 300, String( keyboardWidth ) );
 		const controls = await page.evaluate( () => {
 			const button = document.querySelector( '.minn-bar-iconbtn' );
 			const icon = button.querySelector( 'svg' );
@@ -161,6 +184,7 @@ const { execSync } = require( 'child_process' );
 			editHref.includes( '/minn-admin/editor/posts/' + postId ), editHref );
 
 		// Site menu opens and keeps the honest escape hatch.
+		await revealBar();
 		await page.click( '.minn-bar-site' );
 		await page.waitForTimeout( 250 );
 		const menu = await page.evaluate( () => {
@@ -169,30 +193,40 @@ const { execSync } = require( 'child_process' );
 		} );
 		t.check( 'site menu opens with the classic-admin escape',
 			menu.open && /Classic admin/.test( menu.text ), JSON.stringify( menu ) );
+		await page.mouse.move( 900, 500 );
+		await page.evaluate( () => document.activeElement && document.activeElement.blur() );
+		await page.waitForTimeout( 320 );
+		const heldOpen = await page.evaluate( () => ( {
+			menu: ! document.getElementById( 'minn-bar-menu-site' ).hidden,
+			width: document.getElementById( 'minn-bar' ).getBoundingClientRect().width,
+		} ) );
+		t.check( 'an open menu keeps the reveal expanded away from the trigger',
+			heldOpen.menu && heldOpen.width > 300, JSON.stringify( heldOpen ) );
 		await page.keyboard.press( 'Escape' );
 		const closed = await page.evaluate( () => document.getElementById( 'minn-bar-menu-site' ).hidden );
 		t.check( 'Escape closes the bar menu (scoped, nothing else claimed)', closed === true, String( closed ) );
 
-		// The static strip is persistent. Themes can identify it through
-		// body.admin-bar and read its actual height from the shared token.
+		// The corner control is persistent without moving the site around.
 		await page.evaluate( () => {
 			const tall = document.createElement( 'div' );
 			tall.style.height = '3000px';
 			document.body.appendChild( tall );
 		} );
 		await page.evaluate( () => window.scrollTo( 0, 800 ) );
+		await page.mouse.move( 900, 500 );
 		await page.waitForTimeout( 250 );
 		const scrolled = await page.evaluate( () => {
 			const b = document.getElementById( 'minn-bar' );
 			const r = b.getBoundingClientRect();
 			return { top: r.top, hidden: b.classList.contains( 'minn-bar-away' ) || b.classList.contains( 'minn-bar-yield' ) };
 		} );
-		t.check( 'the strip stays at the top while scrolling', scrolled.top === 0 && ! scrolled.hidden, JSON.stringify( scrolled ) );
+		t.check( 'the corner control stays put while scrolling', scrolled.top === 12 && ! scrolled.hidden, JSON.stringify( scrolled ) );
 		await page.evaluate( () => window.scrollTo( 0, 0 ) );
 
 		// Notifications peek: rows are real — clicking one navigates into the
 		// app at the thing it describes (updates land on Extensions, and so
 		// on). Items vary by live site state, so an empty peek passes too.
+		await revealBar();
 		await page.click( '[data-barmenu="minn-bar-menu-notif"]' );
 		await page.waitForFunction( () => {
 			const w = document.getElementById( 'minn-bar-notif-items' );
@@ -211,6 +245,7 @@ const { execSync } = require( 'child_process' );
 
 		// Search icon opens the FRONT-END palette in place (click only — the
 		// bar claims no global shortcut, and the page never navigates).
+		await revealBar();
 		await page.click( '#minn-bar-search' );
 		await page.waitForSelector( '#minn-bar-palette.open', { timeout: 10000 } );
 		const palState = await page.evaluate( () => ( {
@@ -239,6 +274,7 @@ const { execSync } = require( 'child_process' );
 		// (newContent routes to editor/posts; nothing is created until the
 		// first keystroke saves).
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await revealBar();
 		await page.click( '[data-barmenu="minn-bar-menu-new"]' );
 		await page.waitForSelector( '#minn-bar-menu-new:not([hidden])', { timeout: 10000 } );
 		await page.click( '[data-barintent="new:posts"]', { noWaitAfter: true } );
@@ -256,6 +292,7 @@ const { execSync } = require( 'child_process' );
 		} );
 		t.check( 'maintenance mode raises an amber chip',
 			chip && chip.tone === 'amber' && /Maintenance/.test( chip.text ), JSON.stringify( chip ) );
+		await revealBar();
 		await page.click( '.minn-bar-status' );
 		await page.waitForSelector( '#minn-bar-status-fix', { timeout: 10000 } );
 		await page.click( '#minn-bar-status-fix' );
@@ -324,6 +361,7 @@ const { execSync } = require( 'child_process' );
 		}, auth );
 		const purgesBefore = await purgeCount();
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await revealBar();
 		await page.click( '#minn-bar-search' );
 		await page.waitForSelector( '#minn-bar-palette.open', { timeout: 10000 } );
 		await page.keyboard.type( 'clear site' );
@@ -354,11 +392,12 @@ const { execSync } = require( 'child_process' );
 			const b = document.getElementById( 'minn-bar' );
 			return { top: b.getBoundingClientRect().top, yielded: b.classList.contains( 'minn-bar-yield' ) };
 		} );
-		t.check( 'a site overlay does not make the strip disappear',
-			overlayState.top === 0 && ! overlayState.yielded, JSON.stringify( overlayState ) );
+		t.check( 'a site overlay does not make Corner Reveal disappear',
+			overlayState.top === 12 && ! overlayState.yielded, JSON.stringify( overlayState ) );
 		await page.evaluate( () => document.getElementById( 'suite-lightbox' ).remove() );
 
-		// The roomier Minn height stays consistent on phones.
+		// Phones cannot hover, so the complete control set stays visible in a
+		// contained corner overlay without changing the page offset.
 		await page.setViewportSize( { width: 390, height: 844 } );
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		const mob = await page.evaluate( () => {
@@ -372,14 +411,13 @@ const { execSync } = require( 'child_process' );
 				height: r.height,
 				radius: getComputedStyle( b ).borderRadius,
 				margin: getComputedStyle( document.documentElement ).marginTop,
-				token: getComputedStyle( document.documentElement ).getPropertyValue( '--wp-admin--admin-bar--height' ).trim(),
 			};
 		} );
-		t.check( 'mobile: full-width strip keeps its geometry',
-			mob.top === 0 && mob.left === 0 && Math.abs( mob.width - mob.vw ) < 1
-				&& mob.height === 48 && mob.radius === '0px' && mob.token === '48px',
+		t.check( 'mobile: the always-revealed corner control fits the viewport',
+			mob.top === 12 && mob.left === 12 && Math.abs( mob.width - ( mob.vw - 24 ) ) < 1
+				&& mob.height === 46 && mob.radius === '14px',
 			JSON.stringify( mob ) );
-		t.check( 'mobile: page offset matches the Minn strip', mob.margin === '48px', mob.margin );
+		t.check( 'mobile: Corner Reveal does not offset the site', mob.margin === '0px', mob.margin );
 		await page.setViewportSize( { width: 1280, height: 800 } );
 
 		// The Minn bar stays off builder canvases even when that builder is
@@ -398,7 +436,7 @@ const { execSync } = require( 'child_process' );
 				core: !! document.getElementById( 'wpadminbar' ),
 				bump: !! document.getElementById( 'minn-bar-bump' ),
 			} ) );
-			t.check( label + ' canvas has no Minn bar or Minn offset',
+			t.check( label + ' canvas has no Minn bar or corner shell',
 				! canvas.minn && ! canvas.bump, JSON.stringify( canvas ) );
 		}
 

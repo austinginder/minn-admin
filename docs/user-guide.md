@@ -64,15 +64,16 @@ post, or run a command directly: "Clear site cache", "Back up site now",
 
 **Minn can travel onto the public site.** Turn on the Minn admin bar from
 **Your profile** to replace WordPress's classic front-end bar for your account.
-The static strip gives you search and the command palette, a create menu, an
-Edit button for the page you are viewing, notifications and your account. A
-status chip appears beside the site name only when the site needs attention,
-such as maintenance mode, a password gate, hidden search visibility or a
-staging environment. It uses WordPress's familiar toolbar hooks while keeping
-Minn's roomier height, so themes can identify it and read its actual size. This
-is a personal choice: other users keep the classic bar until they opt in, and
-wp-admin always keeps the classic bar. The bar also stays off a page builder's
-own canvas, the same way the classic admin bar does.
+Only the Minn mark rests in the top corner. Hover it or reach it with the
+keyboard to reveal search and the command palette, a create menu, an Edit
+button for the page you are viewing, notifications and your account. On a
+phone the controls remain visible because there is no hover. A status chip
+appears beside the site name only when the site needs attention, such as
+maintenance mode, a password gate, hidden search visibility or a staging
+environment. The corner control floats above the site without changing its
+layout. This is a personal choice: other users keep the classic bar until they
+opt in, and wp-admin always keeps the classic bar. The bar also stays off a
+page builder's own canvas, the same way the classic admin bar does.
 
 **Right-click is real in Minn.** This is the least discoverable thing in
 the app, so here it is in plain terms: rows in Content and Media have

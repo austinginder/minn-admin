@@ -39,6 +39,7 @@
 	function closeMenus() {
 		menus.forEach( ( m ) => { m.hidden = true; } );
 		triggers.forEach( ( b ) => b.setAttribute( 'aria-expanded', 'false' ) );
+		root.classList.remove( 'minn-bar-menu-open' );
 	}
 
 	function positionMenu( menu, button ) {
@@ -58,6 +59,7 @@
 		if ( ! opening ) return;
 		menu.hidden = false;
 		button.setAttribute( 'aria-expanded', 'true' );
+		root.classList.add( 'minn-bar-menu-open' );
 		positionMenu( menu, button );
 		if ( 'minn-bar-menu-notif' === menu.id ) loadNotifications();
 	} ) );

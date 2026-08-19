@@ -22,7 +22,6 @@ class Minn_Admin_Bar {
 	public static function init() {
 		add_filter( 'show_admin_bar', array( __CLASS__, 'suppress_core_bar' ), 100 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
-		add_action( 'wp_head', array( __CLASS__, 'bump' ) );
 		add_action( 'wp_footer', array( __CLASS__, 'render' ) );
 		add_filter( 'body_class', array( __CLASS__, 'body_class' ) );
 	}
@@ -91,9 +90,6 @@ class Minn_Admin_Bar {
 	public static function body_class( $classes ) {
 		if ( self::active() && ! is_embed() ) {
 			$classes[] = 'minn-front-bar';
-			// Preserve core's public contract for themes whose sticky chrome is
-			// positioned with body.admin-bar selectors.
-			$classes[] = 'admin-bar';
 		}
 		return array_unique( $classes );
 	}
@@ -113,17 +109,6 @@ class Minn_Admin_Bar {
 			'window.MINN_BAR = ' . wp_json_encode( self::config() ) . ';',
 			'before'
 		);
-	}
-
-	/**
-	 * Publish the Minn bar's rendered height through the same token newer
-	 * themes use for WordPress's toolbar, and push the page down to match.
-	 */
-	public static function bump() {
-		if ( ! self::active() || is_embed() ) {
-			return;
-		}
-		echo '<style id="minn-bar-bump">html{--wp-admin--admin-bar--height:48px;margin-top:var(--wp-admin--admin-bar--height) !important;scroll-padding-top:var(--wp-admin--admin-bar--height);}@media print{#wpadminbar.minn-wpadminbar{display:none !important;}html{margin-top:0 !important;}}</style>' . "\n";
 	}
 
 	private static function app_path( $path ) {
@@ -397,9 +382,9 @@ class Minn_Admin_Bar {
 		// setting) kept showing the picture.
 		$avatar    = get_avatar( $user->ID, 52, '', '', array( 'class' => 'minn-bar-avatar-img', 'extra_attr' => 'loading="lazy"', 'force_display' => true ) );
 
-		// Use core's public shell ID as well as its body class and height token.
-		// A large number of themes key their sticky-header fixes to one or both.
-		echo '<div id="wpadminbar" class="minn-wpadminbar nojq">';
+		// Corner Reveal stays in its own shell so themes do not reserve the
+		// classic toolbar's full-width layout around this small overlay.
+		echo '<div id="minn-cornerbar">';
 		echo '<div id="minn-bar-root" data-minn-theme="dark">';
 
 		// Pre-paint the saved Minn theme before first paint of the bar (the
