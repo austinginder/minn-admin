@@ -48,10 +48,8 @@ SUITES=(
 	paste.test.js
 	island-runs.test.js
 	nested-islands.test.js
-	auto-blocks.test.js
 	patterns.test.js
 	core-blocks-extend.test.js
-	inspector-child-text.test.js
 	image-swap.test.js
 	# core post APIs: autosaves, revisions, locks, post fields
 	autosave.test.js
@@ -68,9 +66,7 @@ SUITES=(
 	media-flow.test.js
 	media-editor.test.js
 	media-bulk.test.js
-	cpt-create.test.js
 	# site plumbing: rewrites, options, widgets, menus, translations
-	rewrite-rules.test.js
 	custom-css.test.js
 	discussion-defaults.test.js
 	site-language.test.js
@@ -83,12 +79,20 @@ SUITES=(
 	system.test.js
 	database.test.js
 	core-update-visibility.test.js
-	extensions.test.js
 	# rendering + i18n
 	i18n.test.js
 	a11y-chrome.test.js
 	rtl.test.js
 )
+
+# Deliberately absent, so the next run does not re-litigate them. Each needs a
+# third-party plugin registered to have a subject at all, which would mean
+# rebuilding the fixture farm here and defeats the point of a bare site:
+#   auto-blocks, inspector-child-text  anchor-blocks (registered blocks)
+#   cpt-create                         Custom Post Type UI (its stored types)
+#   rewrite-rules                      Rewrite Rules Inspector
+#   extensions                         a populated plugin list (icons, scroll)
+# They stay covered by run-all.sh on minnadmin.
 
 UPDATE=1
 FULL=0

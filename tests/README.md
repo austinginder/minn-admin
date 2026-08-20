@@ -85,21 +85,23 @@ otherwise trunk. Between releases there is no beta for weeks, so trunk is the
 resting state rather than a fallback nobody notices. `--version=6.9-RC1` pins
 it, `--no-update` runs against whatever is installed.
 
-Recreate the site if it is ever lost:
+Recreate the site if it is ever lost, or re-provision it any time:
 
 ```bash
-cove add minnadmin-core-latest nightly
-cd ~/Cove/Sites/minnadmin-core-latest.localhost/public
-wp user update admin --user_pass=minn-core-latest-1 --skip-email
-wp user create minn-editor editor@example.com --role=editor --user_pass=minn-editor-pass-1
-wp user create minn-author author@example.com --role=author --user_pass=minn-author-pass-1
-wp rewrite structure '/%postname%/' --hard
-ln -sfn ~/Cove/Sites/minnadmin.localhost/public/wp-content/plugins/minn-admin \
-        wp-content/plugins/minn-admin
-ln -sfn ~/Cove/Sites/minnadmin.localhost/public/wp-content/mu-plugins/minn-dev-fixtures.php \
-        wp-content/mu-plugins/minn-dev-fixtures.php
-wp plugin activate minn-admin
+cove add minnadmin-core-latest nightly   # only when it does not exist
+./core-latest-seed.sh                    # idempotent: safe to re-run
 ```
+
+The seeder is where the site's fixtures live, and it is deliberately short.
+A handful of core-coupled suites need content of a shape core alone does not
+create: a term tree (`terms`), two attachments with known titles
+(`image-swap`), a second installed locale plus a user reading it
+(`language-remove`), and a nav menu with items (`menu-drag`). Everything else
+each suite creates and deletes itself.
+
+Suites that need a third-party plugin registered to have a subject at all are
+listed as deliberately absent at the top of `core-latest.sh`, with the reason.
+They stay covered by `run-all.sh` on minnadmin.
 
 `MINN_TEST_WP` is not optional for this site and the script exports it: the
 plugin directory is a symlink to the dev site, so the harness's default (four
