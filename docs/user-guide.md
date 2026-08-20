@@ -519,8 +519,9 @@ cards, all in the same operational group.
   reading and discussion, permalinks, visibility (search engines,
   maintenance mode, and a switch that turns a detected coming-soon or
   maintenance plugin's mode off in place, with Undo), site language, spam
-  protection (with Akismet, paste or change your key right on its card),
-  custom CSS. The long
+  protection (with Akismet or CleanTalk, paste or change your key right
+  on its card), Connectors (AI providers plus spam services like Akismet
+  and CleanTalk: activate the plugin, then paste the key), custom CSS. The long
   tail of rarely-touched options deliberately stays in wp-admin, one
   click away. If you look for a setting and don't find it, that is the
   reason, not a bug.

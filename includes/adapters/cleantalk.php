@@ -1,6 +1,12 @@
 <?php
 /**
- * CleanTalk Anti-Spam — existing-account cleanup.
+ * CleanTalk Anti-Spam — connector, access key, and existing-account cleanup.
+ *
+ * Registers CleanTalk on WordPress 7.0's connector registry (Settings →
+ * Connectors, next to core's Akismet) as type `spam_filtering`. The access
+ * key is not a flat option, so Minn aliases core's generated connector
+ * setting onto `cleantalk_settings['apikey']` and writes through CleanTalk's
+ * own save-and-check. Licenses and the spam card reuse the same store.
  *
  * CleanTalk already finds spam users (Users → Find spam users): a chunked
  * cloud scan that marks matches with user meta `ct_marked_as_spam`. That
@@ -25,6 +31,149 @@ defined( 'ABSPATH' ) || exit;
 
 function minn_admin_cleantalk_active() {
 	return defined( 'APBCT_VERSION' );
+}
+
+/** True when CLEANTALK_ACCESS_KEY supplies the key (read-only). */
+function minn_admin_cleantalk_key_predefined() {
+	return defined( 'CLEANTALK_ACCESS_KEY' ) && CLEANTALK_ACCESS_KEY;
+}
+
+/**
+ * Access key currently in force. The constant wins over the stored option.
+ *
+ * @return string
+ */
+function minn_admin_cleantalk_stored_key() {
+	if ( minn_admin_cleantalk_key_predefined() ) {
+		return (string) CLEANTALK_ACCESS_KEY;
+	}
+	$settings = get_option( 'cleantalk_settings' );
+	return is_array( $settings ) && ! empty( $settings['apikey'] ) ? (string) $settings['apikey'] : '';
+}
+
+/**
+ * Load CleanTalk's settings API under REST (settings.php is admin-gated).
+ *
+ * @return bool
+ */
+function minn_admin_cleantalk_load_settings_api() {
+	if ( ! defined( 'APBCT_VERSION' ) || ! defined( 'APBCT_DIR_PATH' ) ) {
+		return false;
+	}
+	if ( ! function_exists( 'apbct_settings__save_key' ) && file_exists( APBCT_DIR_PATH . 'inc/cleantalk-settings.php' ) ) {
+		require_once APBCT_DIR_PATH . 'inc/cleantalk-settings.php';
+	}
+	return function_exists( 'apbct_settings__save_key' ) && function_exists( 'ct_account_status_check' );
+}
+
+/**
+ * Restore CleanTalk options + the in-memory $apbct object after a rejected check.
+ *
+ * Their account-status check writes key_is_ok even for a candidate, so a
+ * failed paste must put the previous settings and data back.
+ *
+ * @param mixed $snap_settings Prior cleantalk_settings row, or false.
+ * @param mixed $snap_data     Prior cleantalk_data row, or false.
+ */
+function minn_admin_cleantalk_restore_snapshot( $snap_settings, $snap_data ) {
+	global $apbct;
+	if ( false !== $snap_settings ) {
+		update_option( 'cleantalk_settings', $snap_settings );
+	}
+	if ( false !== $snap_data ) {
+		update_option( 'cleantalk_data', $snap_data );
+	}
+	if ( isset( $apbct ) && is_array( $snap_data ) ) {
+		foreach ( $snap_data as $k => $v ) {
+			$apbct->data[ $k ] = $v;
+		}
+	}
+	if ( isset( $apbct ) && is_array( $snap_settings ) ) {
+		foreach ( $snap_settings as $k => $v ) {
+			$apbct->settings[ $k ] = $v;
+		}
+	}
+}
+
+/**
+ * Store or clear a CleanTalk access key through their own save-and-check.
+ *
+ * Empty $key clears. A non-empty key is checked live, then stored only when
+ * CleanTalk accepts it. A rejection never clobbers a working key.
+ *
+ * @param string $key Access key, or empty to remove.
+ * @return array{ok:bool,code:string,message:string}
+ */
+function minn_admin_cleantalk_save_access_key( $key ) {
+	$key = trim( (string) $key );
+	if ( minn_admin_cleantalk_key_predefined() ) {
+		return array(
+			'ok'      => false,
+			'code'    => 'error',
+			'message' => '' === $key
+				? __( 'The key is supplied in code (CLEANTALK_ACCESS_KEY); remove it there.', 'minn-admin' )
+				: __( 'The key is supplied in code (CLEANTALK_ACCESS_KEY); it cannot be changed here.', 'minn-admin' ),
+		);
+	}
+	if ( ! minn_admin_cleantalk_load_settings_api() ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'CleanTalk settings machinery unavailable.', 'minn-admin' ) );
+	}
+	if ( '' === $key ) {
+		$had = minn_admin_cleantalk_stored_key();
+		if ( '' === $had ) {
+			return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No key stored', 'minn-admin' ) );
+		}
+		apbct_settings__save_key( '', true );
+		return array( 'ok' => true, 'code' => '', 'message' => __( 'Key removed from this site.', 'minn-admin' ) );
+	}
+	if ( function_exists( 'apbct_api_key__is_correct' ) && ! apbct_api_key__is_correct( $key ) ) {
+		return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'That does not look like a CleanTalk access key (3 to 30 letters and digits).', 'minn-admin' ) );
+	}
+	global $apbct;
+	$snap_settings = get_option( 'cleantalk_settings' );
+	$snap_data     = get_option( 'cleantalk_data' );
+	$ok            = false;
+	try {
+		$ok = (bool) ct_account_status_check( $key, false );
+	} catch ( \Throwable $e ) {
+		$ok = false;
+	}
+	if ( ! $ok ) {
+		minn_admin_cleantalk_restore_snapshot( $snap_settings, $snap_data );
+		return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'CleanTalk did not accept that access key.', 'minn-admin' ) );
+	}
+	apbct_settings__save_key( $key, true );
+	$stored = isset( $apbct ) ? (string) $apbct->settings['apikey'] : '';
+	if ( $stored === $key ) {
+		return array( 'ok' => true, 'code' => '', 'message' => '' );
+	}
+	return array( 'ok' => false, 'code' => 'error', 'message' => __( 'CleanTalk did not store that access key.', 'minn-admin' ) );
+}
+
+/**
+ * Re-check the stored CleanTalk access key against their API.
+ *
+ * @return array{ok:bool,code:string,message:string}
+ */
+function minn_admin_cleantalk_verify_access_key() {
+	if ( ! minn_admin_cleantalk_load_settings_api() ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'CleanTalk settings machinery unavailable.', 'minn-admin' ) );
+	}
+	global $apbct;
+	$key = isset( $apbct ) ? (string) $apbct->settings['apikey'] : minn_admin_cleantalk_stored_key();
+	if ( '' === $key ) {
+		return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No key stored', 'minn-admin' ) );
+	}
+	try {
+		$ok = (bool) ct_account_status_check( $key, false );
+	} catch ( \Throwable $e ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach CleanTalk.', 'minn-admin' ) );
+	}
+	return array(
+		'ok'      => $ok,
+		'code'    => $ok ? '' : 'invalid',
+		'message' => $ok ? '' : __( 'CleanTalk reports this access key as invalid.', 'minn-admin' ),
+	);
 }
 
 /**
@@ -285,3 +434,127 @@ function minn_admin_cleantalk_spam_user_action( WP_REST_Request $request ) {
 
 	return new WP_Error( 'bad_action', __( 'Unknown action.', 'minn-admin' ), array( 'status' => 400 ) );
 }
+
+/**
+ * Register CleanTalk on core's connector registry (Settings → Connectors).
+ *
+ * Core auto-generates setting_name `connectors_spam_filtering_cleantalk_api_key`
+ * and REST-registers it while the plugin is active. That option is a facade:
+ * reads alias onto cleantalk_settings['apikey'], writes go through
+ * minn_admin_cleantalk_save_access_key so a rejected paste never lands in a
+ * second store. CLEANTALK_ACCESS_KEY is declared as the constant so Minn's
+ * connector cards lock the field the same way they do for Akismet.
+ *
+ * @param object $registry WP_Connector_Registry.
+ */
+function minn_admin_cleantalk_register_connector( $registry ) {
+	if ( ! is_object( $registry ) || ! method_exists( $registry, 'register' ) ) {
+		return;
+	}
+	$registered = $registry->register(
+		'cleantalk',
+		array(
+			'name'           => __( 'CleanTalk Anti-Spam', 'minn-admin' ),
+			'description'    => __( 'Cloud spam filtering for comments, registrations and forms.', 'minn-admin' ),
+			'type'           => 'spam_filtering',
+			'plugin'         => array(
+				'file'      => 'cleantalk-spam-protect/cleantalk.php',
+				'is_active' => static function () {
+					return defined( 'APBCT_VERSION' );
+				},
+			),
+			'authentication' => array(
+				'method'          => 'api_key',
+				'credentials_url' => 'https://cleantalk.org/my',
+				'constant_name'   => 'CLEANTALK_ACCESS_KEY',
+			),
+		)
+	);
+	if ( ! is_array( $registered ) ) {
+		return;
+	}
+	$setting = isset( $registered['authentication']['setting_name'] )
+		? (string) $registered['authentication']['setting_name']
+		: '';
+	if ( '' === $setting ) {
+		return;
+	}
+	add_filter( "pre_option_{$setting}", 'minn_admin_cleantalk_connector_pre_option' );
+	add_filter(
+		"pre_update_option_{$setting}",
+		static function ( $value, $old ) {
+			unset( $value );
+			// Never persist a second copy of the key as a flat option.
+			return $old;
+		},
+		10,
+		2
+	);
+}
+add_action( 'wp_connectors_init', 'minn_admin_cleantalk_register_connector' );
+
+/** Alias core's connector setting onto the key CleanTalk actually stores. */
+function minn_admin_cleantalk_connector_pre_option() {
+	return minn_admin_cleantalk_stored_key();
+}
+
+/**
+ * Per-request flag: a connector save was rejected, so the REST settings
+ * response should come back empty (Minn's Connectors UI treats that as
+ * the refusal) without clearing a working stored key.
+ *
+ * @param bool|null $set Pass true/false to set, null to read.
+ * @return bool
+ */
+function minn_admin_cleantalk_connector_rejected( $set = null ) {
+	static $rejected = false;
+	if ( null !== $set ) {
+		$rejected = (bool) $set;
+	}
+	return $rejected;
+}
+
+/** Setting name core generated for the CleanTalk connector, or empty. */
+function minn_admin_cleantalk_connector_setting() {
+	if ( ! function_exists( 'wp_get_connector' ) ) {
+		return '';
+	}
+	$c = wp_get_connector( 'cleantalk' );
+	return ( $c && ! empty( $c['authentication']['setting_name'] ) )
+		? (string) $c['authentication']['setting_name']
+		: '';
+}
+
+add_filter(
+	'rest_pre_update_setting',
+	static function ( $updated, $name, $value ) {
+		$setting = minn_admin_cleantalk_connector_setting();
+		if ( '' === $setting || $setting !== $name ) {
+			return $updated;
+		}
+		$key    = is_string( $value ) ? $value : '';
+		$result = minn_admin_cleantalk_save_access_key( $key );
+		if ( ! $result['ok'] ) {
+			minn_admin_cleantalk_connector_rejected( true );
+		}
+		return true;
+	},
+	10,
+	3
+);
+
+add_filter(
+	'rest_pre_get_setting',
+	static function ( $result, $name ) {
+		$setting = minn_admin_cleantalk_connector_setting();
+		if ( '' === $setting || $setting !== $name ) {
+			return $result;
+		}
+		if ( minn_admin_cleantalk_connector_rejected() ) {
+			return '';
+		}
+		return $result;
+	},
+	10,
+	2
+);

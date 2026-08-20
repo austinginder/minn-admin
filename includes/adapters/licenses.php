@@ -1785,10 +1785,12 @@ function minn_admin_license_default_providers() {
 			return $has( 'cleantalk-spam-protect/cleantalk.php' );
 		},
 		'read'      => function () use ( $item ) {
-			$predefined = defined( 'CLEANTALK_ACCESS_KEY' ) && CLEANTALK_ACCESS_KEY;
-			$key        = $predefined
-				? (string) CLEANTALK_ACCESS_KEY
-				: (string) ( ( get_option( 'cleantalk_settings' ) ?: array() )['apikey'] ?? '' );
+			$predefined = function_exists( 'minn_admin_cleantalk_key_predefined' ) && minn_admin_cleantalk_key_predefined();
+			$key        = function_exists( 'minn_admin_cleantalk_stored_key' )
+				? minn_admin_cleantalk_stored_key()
+				: ( $predefined
+					? (string) CLEANTALK_ACCESS_KEY
+					: (string) ( ( get_option( 'cleantalk_settings' ) ?: array() )['apikey'] ?? '' ) );
 			if ( '' === $key ) {
 				return array( $item( array( 'name' => 'CleanTalk Anti-Spam', 'state' => 'missing', 'note' => __( 'cloud access key (free trial, then paid)', 'minn-admin' ) ) ) );
 			}
@@ -3489,107 +3491,19 @@ function minn_admin_license_default_providers() {
 		};
 	}
 
-	// CleanTalk: paste-an-access-key through their own save_key +
-	// account-status check. save_key's AJAX path dies with JSON and
-	// reads $_POST, so REST calls the $direct_call store AFTER a
-	// live ct_account_status_check. That check writes key_is_ok even
-	// for a candidate key, so a rejected paste snapshots
-	// cleantalk_data / settings and restores them (a bad key must
-	// not clobber a working one). settings.php is admin-gated;
-	// require it under REST like Akismet_Admin.
-	if ( defined( 'APBCT_VERSION' ) && defined( 'APBCT_DIR_PATH' ) ) {
-		$ct_settings = function () {
-			if ( ! function_exists( 'apbct_settings__save_key' ) && file_exists( APBCT_DIR_PATH . 'inc/cleantalk-settings.php' ) ) {
-				require_once APBCT_DIR_PATH . 'inc/cleantalk-settings.php';
-			}
-			return function_exists( 'apbct_settings__save_key' ) && function_exists( 'ct_account_status_check' );
-		};
-		$ct_predefined = function () {
-			return defined( 'CLEANTALK_ACCESS_KEY' ) && CLEANTALK_ACCESS_KEY;
-		};
-
+	// CleanTalk: paste-an-access-key through adapters/cleantalk.php
+	// (same store as Settings → Connectors). Actions only attach while
+	// the plugin is loaded, so the row is Turn-on-only while inactive.
+	if ( defined( 'APBCT_VERSION' ) && function_exists( 'minn_admin_cleantalk_save_access_key' ) ) {
 		$providers['cleantalk']['secret_label'] = __( 'CleanTalk access key', 'minn-admin' );
-		$providers['cleantalk']['activate']     = function ( $secret ) use ( $ct_settings, $ct_predefined ) {
-			if ( $ct_predefined() ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The key is supplied in code (CLEANTALK_ACCESS_KEY); it cannot be changed here.', 'minn-admin' ) );
-			}
-			$key = trim( (string) $secret );
-			if ( ! $ct_settings() ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'CleanTalk settings machinery unavailable.', 'minn-admin' ) );
-			}
-			if ( ! apbct_api_key__is_correct( $key ) ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'That does not look like a CleanTalk access key (3 to 30 letters and digits).', 'minn-admin' ) );
-			}
-			global $apbct;
-			$snap_settings = get_option( 'cleantalk_settings' );
-			$snap_data     = get_option( 'cleantalk_data' );
-			$ok            = false;
-			try {
-				$ok = (bool) ct_account_status_check( $key, false );
-			} catch ( \Throwable $e ) {
-				$ok = false;
-			}
-			if ( ! $ok ) {
-				if ( false !== $snap_settings ) {
-					update_option( 'cleantalk_settings', $snap_settings );
-				}
-				if ( false !== $snap_data ) {
-					update_option( 'cleantalk_data', $snap_data );
-				}
-				if ( isset( $apbct ) && is_array( $snap_data ) ) {
-					foreach ( $snap_data as $k => $v ) {
-						$apbct->data[ $k ] = $v;
-					}
-				}
-				if ( isset( $apbct ) && is_array( $snap_settings ) ) {
-					foreach ( $snap_settings as $k => $v ) {
-						$apbct->settings[ $k ] = $v;
-					}
-				}
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'CleanTalk did not accept that access key.', 'minn-admin' ) );
-			}
-			apbct_settings__save_key( $key, true );
-			$stored = isset( $apbct ) ? (string) $apbct->settings['apikey'] : '';
-			if ( $stored === $key ) {
-				return array( 'ok' => true );
-			}
-			return array( 'ok' => false, 'code' => 'error', 'message' => __( 'CleanTalk did not store that access key.', 'minn-admin' ) );
+		$providers['cleantalk']['activate']     = function ( $secret ) {
+			return minn_admin_cleantalk_save_access_key( $secret );
 		};
-		$providers['cleantalk']['deactivate'] = function () use ( $ct_settings, $ct_predefined ) {
-			if ( $ct_predefined() ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The key is supplied in code (CLEANTALK_ACCESS_KEY); remove it there.', 'minn-admin' ) );
-			}
-			if ( ! $ct_settings() ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'CleanTalk settings machinery unavailable.', 'minn-admin' ) );
-			}
-			global $apbct;
-			$had = isset( $apbct ) ? (string) $apbct->settings['apikey'] : '';
-			if ( '' === $had ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No key stored', 'minn-admin' ) );
-			}
-			apbct_settings__save_key( '', true );
-			return array( 'ok' => true, 'message' => __( 'Key removed from this site.', 'minn-admin' ) );
+		$providers['cleantalk']['deactivate'] = function () {
+			return minn_admin_cleantalk_save_access_key( '' );
 		};
-		$providers['cleantalk']['verify'] = function () use ( $ct_settings ) {
-			if ( ! $ct_settings() ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'CleanTalk settings machinery unavailable.', 'minn-admin' ) );
-			}
-			global $apbct;
-			$key = isset( $apbct ) ? (string) $apbct->settings['apikey'] : '';
-			if ( '' === $key ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No key stored', 'minn-admin' ) );
-			}
-			$ok = false;
-			try {
-				$ok = (bool) ct_account_status_check( $key, false );
-			} catch ( \Throwable $e ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach CleanTalk.', 'minn-admin' ) );
-			}
-			return array(
-				'ok'      => $ok,
-				'code'    => $ok ? '' : 'invalid',
-				'message' => $ok ? '' : __( 'CleanTalk reports this access key as invalid.', 'minn-admin' ),
-			);
+		$providers['cleantalk']['verify'] = function () {
+			return minn_admin_cleantalk_verify_access_key();
 		};
 	}
 
@@ -4561,6 +4475,11 @@ function minn_admin_licenses() {
 	if ( function_exists( 'wp_get_connectors' ) ) {
 		foreach ( wp_get_connectors() as $cid => $c ) {
 			try {
+				// Dedicated key providers already list these (spam cards +
+				// Licenses rows). The Connectors section is still the editor.
+				if ( in_array( (string) $cid, array( 'akismet', 'cleantalk' ), true ) ) {
+					continue;
+				}
 				$auth    = isset( $c['authentication'] ) && is_array( $c['authentication'] ) ? $c['authentication'] : array();
 				$env     = isset( $auth['env_var_name'] ) ? (string) $auth['env_var_name'] : '';
 				$const   = isset( $auth['constant_name'] ) ? (string) $auth['constant_name'] : '';

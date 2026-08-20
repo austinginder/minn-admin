@@ -61,6 +61,16 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	const cardText = ( id ) => page.$eval( `[data-conn-card="${ id }"]`, ( el ) => el.textContent );
 
 	try {
+		// CleanTalk is installed-inactive at rest (Antispam Bee is the
+		// spam resident). Live sessions leave it on; seed the baseline
+		// so the Connectors card shows Activate like Akismet.
+		await page.evaluate( async () => {
+			await fetch( window.MINN.restUrl + 'wp/v2/plugins/cleantalk-spam-protect/cleantalk', {
+				method: 'PUT', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				body: JSON.stringify( { status: 'inactive' } ),
+			} ).catch( () => {} );
+		} );
 		t.check( 'mock armed', await setOpt( 'minn_test_connectors', '1' ) );
 		// Baseline: no key stored.
 		await page.evaluate( async () => {
@@ -88,6 +98,13 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'OpenAI card is actionable (install, activate, or key)', openaiOk, openai.slice( 0, 200 ) );
 		const akismet = await cardText( 'akismet' );
 		t.check( 'installed-inactive companion offers activate', /installed but not active/.test( akismet ) && /Activate/.test( akismet ), akismet.slice( 0, 160 ) );
+		const cleantalk = await cardText( 'cleantalk' );
+		t.check( 'CleanTalk sits next to Akismet as spam filtering',
+			/CleanTalk/.test( cleantalk ) && /Spam filtering/.test( cleantalk )
+			&& /installed but not active/.test( cleantalk ) && /Activate/.test( cleantalk ),
+			cleantalk.slice( 0, 200 ) );
+		t.check( 'CleanTalk credentials link goes to their dashboard',
+			!! ( await page.$( '[data-conn-card="cleantalk"] a[href*="cleantalk.org"]' ) ) );
 		// The href comes from the live AI-client registry metadata (not core's
 		// hardcoded fallback), so pin only the vendor domain.
 		t.check( 'credentials link renders', !! ( await page.$( '[data-conn-card="anthropic"] a[href*="anthropic.com"]' ) ) );
@@ -133,6 +150,51 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'remove clears back to Not connected', true );
 		t.check( 'stored key cleared', ( await settingValue() ) === '' );
 
+		/* ===== CleanTalk: same spam_filtering slot as Akismet, own store =====
+		 * Installed-inactive at rest (the card asserted above). Activate,
+		 * paste a bogus access key against live cleantalk.org, refuse, restore. */
+		const ctPut = ( status ) => page.evaluate( async ( s ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/cleantalk-spam-protect/cleantalk', {
+				method: 'PUT', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				body: JSON.stringify( { status: s } ),
+			} );
+			return r.ok;
+		}, status );
+		const ctStatus = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/cleantalk-spam-protect/cleantalk?_fields=status', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			if ( ! r.ok ) return null;
+			return ( await r.json() ).status;
+		} );
+		if ( ctStatus === null ) {
+			t.check( 'CleanTalk is installed for the connector save path', false, 'plugin missing' );
+		} else {
+			await ctPut( 'active' );
+			await openConnectors();
+			await page.waitForSelector( '[data-conn-card="cleantalk"] [data-conn-key]', { timeout: 20000 } );
+			t.check( 'active CleanTalk card offers a paste field', true );
+			await page.fill( '[data-conn-card="cleantalk"] [data-conn-key]', 'notarealcleantalkkey' );
+			await page.click( '[data-conn-save="cleantalk"]' );
+			await page.waitForFunction( () => {
+				const tEl = document.querySelector( '.minn-toast-msg' );
+				return tEl && /rejected/.test( tEl.textContent );
+			}, { timeout: 25000 } );
+			t.check( 'bogus CleanTalk key toasts the refusal', true );
+			t.check( 'typed CleanTalk key stays for a retype', await page.$eval(
+				'[data-conn-card="cleantalk"] [data-conn-key]', ( el ) => el.value === 'notarealcleantalkkey' ) );
+			const ctStored = await page.evaluate( async () => {
+				const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/spam?_cb=' + Math.random(), {
+					headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+				} );
+				const p = ( ( await r.json() ).providers || [] ).find( ( x ) => x.id === 'cleantalk' );
+				return p ? !! p.configured : null;
+			} );
+			t.check( 'refused CleanTalk key stores nothing', ctStored === false, String( ctStored ) );
+			await ctPut( 'inactive' ).catch( () => {} );
+		}
+
 		/* ===== Failed load → Retry recovers (the OpenAI install empty state) =====
 		 * Block minn-admin/v1/connectors until the failed note paints, then
 		 * unblock and click Retry — cards must repaint without a full page
@@ -168,6 +230,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
 				body: JSON.stringify( { connectors_ai_anthropic_api_key: '', minn_test_connectors: '' } ),
 			} );
+			await fetch( window.MINN.restUrl + 'wp/v2/plugins/cleantalk-spam-protect/cleantalk', {
+				method: 'PUT', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				body: JSON.stringify( { status: 'inactive' } ),
+			} ).catch( () => {} );
 		} ).catch( () => {} );
 	}
 
