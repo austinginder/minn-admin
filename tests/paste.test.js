@@ -88,7 +88,11 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	await freshParagraph( page );
 	await paste( { 'text/html': WORD_FIXTURE, 'text/plain': 'x' } );
 	raw = await save( wordId );
-	t.check( 'Word: mso list run becomes a nested ul', /<ul[^>]*><!-- wp:list-item -->\n<li>Bullet one<ul><li>Nested bullet<\/li><\/ul><\/li>\n<!-- \/wp:list-item --><\/ul>/.test( raw.replace( / class="wp-block-list"/g, '' ) ), raw );
+	// A nested list is its own wp:list block inside the parent item. This check
+	// used to expect a bare <ul> there, which parses without a warning but
+	// silently demotes the children out of the block structure.
+	t.check( 'Word: mso list run becomes a nested list block',
+		/<li>Bullet one<!-- wp:list -->\s*<ul[^>]*><!-- wp:list-item -->\s*<li>Nested bullet<\/li>\s*<!-- \/wp:list-item --><\/ul>\s*<!-- \/wp:list --><\/li>/.test( raw ), raw );
 	t.check( 'Word: separate mso list id becomes its own ol', /<!-- wp:list \{"ordered":true\} -->[\s\S]*Numbered item/.test( raw ), raw );
 	t.check( 'Word: table becomes a table block', /<!-- wp:table -->[\s\S]*<td>Cell A<\/td><td>Cell B<\/td>/.test( raw ), raw );
 	t.check( 'Word: nbsp spacer paragraph dropped, o:p gone', ! /o:p|<p> <\/p>|&nbsp;<\/p>/.test( raw ), raw );

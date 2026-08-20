@@ -23128,6 +23128,17 @@
 				} catch ( e ) { /* invalid JSON — stripped, as before */ }
 				return li + tail;
 			} );
+			// A NESTED list's own comment attrs park the same way, so the
+			// recursive serializer re-emits them. Offset 0 is the segment's
+			// outer comment — that one stays with the carry logic below.
+			pre = pre.replace( /<!--\s*wp:list\s+(\{(?:(?!-->)[\s\S])*?\})\s*-->\s*(<(?:ul|ol))([\s>])/g, ( m0, json, open, tail, off ) => {
+				if ( off === 0 ) return m0;
+				try {
+					const a = JSON.parse( json );
+					if ( a && Object.keys( a ).length ) return `${ open } data-minn-attrs="${ esc( JSON.stringify( a ) ) }"${ tail }`;
+				} catch ( e ) { /* invalid JSON — stripped, as before */ }
+				return open + tail;
+			} );
 		}
 		let html = stripBlockComments( pre );
 		// Code blocks that keep their language in the comment attr (the
@@ -25360,6 +25371,88 @@
 			}
 		};
 
+		// A list serializes RECURSIVELY: a nested list is its own wp:list
+		// block inside the parent wp:list-item (Gutenberg's list-v2 shape).
+		// A raw <ul> left inside a list-item's HTML parses without warning
+		// but silently demotes the children to inline content — the block
+		// editor stops seeing them as items.
+		const serializeList = ( listEl ) => {
+			// A list sitting directly inside another list (what Chrome's
+			// indent emits, and what some pasted markup carries) belongs to
+			// the item before it. Without this its items serialize into
+			// nothing, because the walk below only reads direct <li> children.
+			// Safe to mutate: this walk runs on the caller's clone.
+			Array.from( listEl.children ).forEach( ( child ) => {
+				if ( ! /^(UL|OL)$/.test( child.tagName ) ) return;
+				const host = child.previousElementSibling;
+				if ( ! host || host.tagName !== 'LI' ) {
+					// Nothing to nest under: keep the items at this level
+					// rather than dropping them.
+					while ( child.firstChild ) listEl.insertBefore( child.firstChild, child );
+					child.remove();
+					return;
+				}
+				const existing = Array.from( host.children ).find( ( c ) => /^(UL|OL)$/.test( c.tagName ) );
+				if ( existing ) {
+					while ( child.firstChild ) existing.appendChild( child.firstChild );
+					child.remove();
+				} else {
+					host.appendChild( child );
+				}
+			} );
+			// An item that swallowed another item (what outdent can leave
+			// behind) hands it back to this level, or the inner one would
+			// serialize as markup inside its neighbour's text.
+			Array.from( listEl.children ).forEach( ( item ) => {
+				if ( item.tagName !== 'LI' ) return;
+				Array.from( item.children ).forEach( ( c ) => {
+					if ( c.tagName === 'LI' ) listEl.insertBefore( c, item.nextSibling );
+				} );
+			} );
+			const tag = listEl.tagName.toLowerCase();
+			const carried = takeMinnAttrs( listEl );
+			listEl.classList.add( 'wp-block-list' );
+			// Numbering attrs are Minn-editable (list popover) — the DOM is
+			// their truth and overwrites the carried copies; a carried list
+			// keeps its other attrs (fontSize, className, style…) verbatim.
+			const la = carried || ( tag === 'ol' ? {} : null );
+			let listHtmlAttrs = '';
+			if ( tag === 'ol' ) {
+				la.ordered = true;
+				const start = parseInt( listEl.getAttribute( 'start' ), 10 );
+				const type = listEl.getAttribute( 'type' );
+				if ( start ) { la.start = start; listHtmlAttrs += ` start="${ start }"`; } else { delete la.start; }
+				if ( listEl.hasAttribute( 'reversed' ) ) { la.reversed = true; listHtmlAttrs += ' reversed'; } else { delete la.reversed; }
+				if ( type ) { la.type = type; listHtmlAttrs += ` type="${ esc( type ) }"`; } else { delete la.type; }
+			} else if ( carried ) {
+				delete la.ordered;
+				delete la.start;
+				delete la.reversed;
+				delete la.type;
+			}
+			const items = Array.from( listEl.querySelectorAll( ':scope > li' ) )
+				.map( ( li ) => {
+					const liAttrs = takeMinnAttrs( li );
+					// Serialize each nested list in place, then swap it for a
+					// placeholder comment so the item's outerHTML splices the
+					// block markup exactly where the list sat. Safe to mutate:
+					// this whole walk runs on the caller's clone.
+					const nested = Array.from( li.querySelectorAll( ':scope > ul, :scope > ol' ) );
+					const blocks = nested.map( ( nl ) => serializeList( nl ) );
+					nested.forEach( ( nl, i ) => nl.replaceWith( document.createComment( 'minn-list-slot-' + i ) ) );
+					let liHtml = li.outerHTML;
+					// Function replacement — a plain string here would expand $&
+					// and friends inside the serialized block markup.
+					blocks.forEach( ( b, i ) => { liHtml = liHtml.replace( `<!--minn-list-slot-${ i }-->`, () => b ); } );
+					return `<!-- wp:list-item${ serializeBlockAttrs( liAttrs && Object.keys( liAttrs ).length ? liAttrs : null ) } -->\n${ liHtml }\n<!-- /wp:list-item -->`;
+				} ).join( '' );
+			// The open tag is rebuilt — a carried list's inline style is
+			// saved content and must ride along (attribute order may
+			// normalize on first save; the established fixed-point rule).
+			const listStyle = carried && listEl.getAttribute( 'style' ) ? ` style="${ esc( listEl.getAttribute( 'style' ) ) }"` : '';
+			return `<!-- wp:list${ serializeBlockAttrs( la && Object.keys( la ).length ? la : null ) } -->\n<${ tag }${ listHtmlAttrs } class="${ esc( listEl.className ) }"${ listStyle }>${ items }</${ tag }>\n<!-- /wp:list -->`;
+		};
+
 		Array.from( root.childNodes ).forEach( ( n ) => {
 			if ( n.nodeType === Node.TEXT_NODE ) {
 				const t = n.textContent.trim();
@@ -25521,36 +25614,7 @@
 					`<figure class="${ esc( figClass ) }"><table${ table.className ? ` class="${ esc( table.className ) }"` : '' }>${ table.innerHTML }</table>${ caption ? caption.outerHTML : '' }</figure>`
 				);
 			} else if ( tag === 'ul' || tag === 'ol' ) {
-				const carried = takeMinnAttrs( el );
-				el.classList.add( 'wp-block-list' );
-				// Numbering attrs are Minn-editable (list popover) — the DOM is
-				// their truth and overwrites the carried copies; a carried list
-				// keeps its other attrs (fontSize, className, style…) verbatim.
-				const la = carried || ( tag === 'ol' ? {} : null );
-				let listHtmlAttrs = '';
-				if ( tag === 'ol' ) {
-					la.ordered = true;
-					const start = parseInt( el.getAttribute( 'start' ), 10 );
-					const type = el.getAttribute( 'type' );
-					if ( start ) { la.start = start; listHtmlAttrs += ` start="${ start }"`; } else { delete la.start; }
-					if ( el.hasAttribute( 'reversed' ) ) { la.reversed = true; listHtmlAttrs += ' reversed'; } else { delete la.reversed; }
-					if ( type ) { la.type = type; listHtmlAttrs += ` type="${ esc( type ) }"`; } else { delete la.type; }
-				} else if ( carried ) {
-					delete la.ordered;
-					delete la.start;
-					delete la.reversed;
-					delete la.type;
-				}
-				const items = Array.from( el.querySelectorAll( ':scope > li' ) )
-					.map( ( li ) => {
-						const liAttrs = takeMinnAttrs( li );
-						return `<!-- wp:list-item${ serializeBlockAttrs( liAttrs && Object.keys( liAttrs ).length ? liAttrs : null ) } -->\n${ li.outerHTML }\n<!-- /wp:list-item -->`;
-					} ).join( '' );
-				// The open tag is rebuilt — a carried list's inline style is
-				// saved content and must ride along (attribute order may
-				// normalize on first save; the established fixed-point rule).
-				const listStyle = carried && el.getAttribute( 'style' ) ? ` style="${ esc( el.getAttribute( 'style' ) ) }"` : '';
-				pushBlock( 'list', la, `<${ tag }${ listHtmlAttrs } class="${ esc( el.className ) }"${ listStyle }>${ items }</${ tag }>` );
+				out.push( serializeList( el ) );
 			} else if ( tag === 'figure' && ! el.querySelector( 'img, video, audio, table, iframe' ) && ! el.textContent.trim() ) {
 				return; // husk left behind by an undoable image delete
 			} else if ( tag === 'figure' && el.querySelector( 'video' ) ) {
