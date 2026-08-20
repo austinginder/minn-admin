@@ -1628,6 +1628,14 @@ Omit `keyProvider` when the key is supplied in code (a constant or filter) or ma
 cloud-side. Akismet is the reference: its card field and its Licenses row drive the
 same provider.
 
+**Existing-account cleanup (optional).** `userCleanup: { count, checkUrl }` on
+`status()` adds a row under the card: how many accounts the plugin has already
+marked as spam, a Review button into Users, and a Check ↗ link to the plugin's
+own scan screen. Use it when the plugin finds spam *users* (not just comments)
+and the scan itself is a progress UI Minn should not rebuild. CleanTalk is the
+reference: Minn lists and deletes the marked accounts; the cloud scan stays on
+CleanTalk's screen.
+
 ## License state — `minn_admin_license_providers`
 
 Extensions carries a **Licenses** card: every paid component and

@@ -13873,12 +13873,24 @@
 	// Session status from session_tokens meta (server classifies non-expired vs
 	// all-expired vs empty). Core wp/v2/users can't filter this; Minn's
 	// /users endpoint does when session !== all.
-	const USER_SESSION_TABS = () => [
-		[ 'all', __( 'All' ) ],
-		[ 'active', __( 'Active session' ) ],
-		[ 'expired', __( 'Expired session' ) ],
-		[ 'never', __( 'Never signed in' ) ],
-	];
+	const USER_SESSION_TABS = () => {
+		const tabs = [
+			[ 'all', __( 'All' ) ],
+			[ 'active', __( 'Active session' ) ],
+			[ 'expired', __( 'Expired session' ) ],
+			[ 'never', __( 'Never signed in' ) ],
+		];
+		if ( B.spamUsers ) {
+			const n = Number( B.spamUsers.count ) || 0;
+			let spamLabel = __( 'Spam' );
+			if ( n ) {
+				/* translators: %s: how many accounts CleanTalk marked as spam. */
+				spamLabel = sprintf( __( 'Spam (%s)' ), String( n ) );
+			}
+			tabs.push( [ 'spam', spamLabel ] );
+		}
+		return tabs;
+	};
 
 	const usersCtx = () => [ state.userSearch || '', state.userRole || '_all', state.userSession || 'all', state.userOrderby || 'registered_date', state.userOrder || 'desc' ].join( '|' );
 
@@ -13886,8 +13898,22 @@
 		const ctx = usersCtx();
 		const orderby = state.userOrderby || 'registered_date';
 		const order = state.userOrder === 'asc' ? 'asc' : 'desc';
-		const session = state.userSession || 'all';
+		let session = state.userSession || 'all';
 		let q;
+		if ( session === 'spam' && ! B.spamUsers ) {
+			state.userSession = 'all';
+			session = 'all';
+		}
+		if ( session === 'spam' ) {
+			q = `minn-admin/v1/cleantalk/spam-users?per_page=50&orderby=${ encodeURIComponent( orderby ) }&order=${ order }&page=${ page }`;
+			if ( state.userSearch ) q += '&search=' + encodeURIComponent( state.userSearch );
+			if ( state.userRole && state.userRole !== '_all' ) q += '&roles=' + encodeURIComponent( state.userRole );
+			const rSpam = await apiPaged( q );
+			if ( ctx !== usersCtx() ) return;
+			state.cache.users = { items: rSpam.items, page, totalPages: rSpam.totalPages, total: rSpam.total };
+			B.spamUsers.count = rSpam.total;
+			return;
+		}
 		// Multisite always rides Minn's /users route: core's edit-context
 		// list drops every user the caller can't edit_user (a subsite admin
 		// would see a one-row "list" of themselves), and only the Minn route
@@ -14134,6 +14160,45 @@
 		} );
 	}
 
+	async function approveSpamUser( u ) {
+		try {
+			await api( `minn-admin/v1/cleantalk/spam-users/${ u.id }`, {
+				method: 'POST',
+				body: JSON.stringify( { action: 'approve' } ),
+			} );
+			/* translators: %s: the user's name. */
+			toast( u.name ? sprintf( __( '%s marked as not spam' ), u.name ) : __( 'Marked as not spam' ) );
+			if ( B.spamUsers && B.spamUsers.count > 0 ) B.spamUsers.count -= 1;
+			state.cache.users = null;
+			if ( state.route === 'users' ) renderUsers();
+		} catch ( err ) {
+			toast( err.message, true );
+		}
+	}
+
+	async function deleteSpamUser( u ) {
+		const ok = await minnConfirm( {
+			/* translators: %s: the user's name. */
+			title: u.name ? sprintf( __( 'Delete spam account %s?' ), u.name ) : __( 'Delete this spam account?' ),
+			body: __( 'This permanently removes the account. Posts and comments they wrote are deleted with them, the way CleanTalk does it. There is no undo.' ),
+			danger: true,
+			confirmLabel: __( 'Delete account' ),
+		} );
+		if ( ! ok ) return;
+		try {
+			await api( `minn-admin/v1/cleantalk/spam-users/${ u.id }`, {
+				method: 'POST',
+				body: JSON.stringify( { action: 'delete' } ),
+			} );
+			toast( __( 'Spam account deleted' ) );
+			if ( B.spamUsers && B.spamUsers.count > 0 ) B.spamUsers.count -= 1;
+			state.cache.users = null;
+			if ( state.route === 'users' ) renderUsers();
+		} catch ( err ) {
+			toast( err.message, true );
+		}
+	}
+
 	function renderUsers() {
 		if ( B.caps.settings && ( state.usersTab || 'people' ) === 'roles' ) {
 			renderRoleDefaults();
@@ -14141,7 +14206,7 @@
 		}
 		const view = $( '#minn-view' );
 		const c = state.cache.users;
-		const userSessionEarly = state.userSession || 'all';
+		const userSessionEarly = ( state.userSession === 'spam' && ! B.spamUsers ) ? 'all' : ( state.userSession || 'all' );
 		if ( ! c ) {
 			if ( softLoadPending( 'users' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
@@ -14181,10 +14246,11 @@
 		// One searchable combobox, not a tab per role — real sites (Woo,
 		// memberships, LMS) carry 10+ roles and the tab row overflowed.
 		const roles = Object.entries( B.roles || {} ).map( ( [ value, label ] ) => [ value, chromeLabel( label ) ] );
+		const userSession = ( state.userSession === 'spam' && ! B.spamUsers ) ? 'all' : ( state.userSession || 'all' );
 		// Bulk role change is gated on edit-users; lower roles get no checkboxes.
-		const bulkUsers = !! B.caps.editUsers && roles.length > 0;
+		// The spam tab is CleanTalk's result list, not a role-change surface.
+		const bulkUsers = !! B.caps.editUsers && roles.length > 0 && userSession !== 'spam';
 		const userSel = state.userSel || ( state.userSel = new Set() );
-		const userSession = state.userSession || 'all';
 		view.innerHTML = `
 		${ usersTabsHtml() }
 		<div class="minn-toolbar minn-toolbar-views">
@@ -14194,6 +14260,7 @@
 			</div>` : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="${ esc( __( 'Search users…' ) ) }" value="${ esc( state.userSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user' ) }</div>
+			${ userSession === 'spam' && B.spamUsers && B.spamUsers.checkUrl ? `<a class="minn-btn-soft" id="minn-ct-check-users" href="${ esc( B.spamUsers.checkUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Check for spam ↗' ) ) }</a>` : '' }
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } ${ esc( __( 'Add user' ) ) }</button>` : '' }
 			${ B.multisite && B.caps.promoteUsers ? `<button class="minn-btn-soft" id="minn-add-existing-user" style="margin-left:0;" title="${ esc( __( 'Attach an account that already exists on this network' ) ) }">${ icon( 'plus' ) } ${ esc( __( 'Add existing user' ) ) }</button>` : '' }
 		</div>
@@ -14230,6 +14297,7 @@
 				</div>` ).join( '' ) : `<div class="minn-empty">${ userSession === 'active' ? __( 'No users with an active session.' )
 					: userSession === 'expired' ? __( 'No users with only expired sessions.' )
 					: userSession === 'never' ? __( 'No users who have never signed in.' )
+					: userSession === 'spam' ? __( 'No spam users. Run a check to ask CleanTalk about existing accounts.' )
 					: __( 'No users found.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'user' ) }`;
@@ -14331,6 +14399,7 @@
 		};
 		const openUserMenu = ( x, y, u ) => {
 			const isSelf = u.id === B.user.id;
+			const isSpam = userSession === 'spam' || !! u.ctSpam;
 			const entries = [
 				// The user modal reads context=edit — without edit_users the
 				// fetch 403s, so the entry only renders when it can work
@@ -14433,12 +14502,19 @@
 						href: B.site.networkAdminUrl + 'users.php',
 					} ] : [] ),
 				] : [] ),
+				...( isSpam && B.caps.editUsers && ! isSelf ? [
+					{ heading: __( 'CleanTalk' ) },
+					{
+						label: __( 'Not spam' ),
+						run: () => approveSpamUser( u ),
+					},
+				] : [] ),
 				...( ! B.multisite && B.caps.deleteUsers && ! isSelf ? [
 					{ heading: __( 'Danger zone' ) },
 					{
-						label: __( 'Delete user…' ),
+						label: isSpam ? __( 'Delete spam account…' ) : __( 'Delete user…' ),
 						danger: true,
-						run: () => openUserDeleteModal( u ),
+						run: () => isSpam ? deleteSpamUser( u ) : openUserDeleteModal( u ),
 					},
 				] : [] ),
 			];
@@ -22231,6 +22307,15 @@
 									</div>
 									<button class="minn-switch${ t.on ? ' on' : '' }" data-spamtog="${ esc( p.id ) }:${ esc( t.id ) }" role="switch" aria-checked="${ t.on }"><span class="minn-switch-knob"></span></button>
 								</div>` ).join( '' ) }</div>` : '' }
+							${ p.userCleanup ? `
+							<div class="minn-spam-queue" style="margin-top:10px;">
+								<span>${ p.userCleanup.count
+									/* translators: %s: how many accounts CleanTalk marked as spam. */
+									? sprintf( _n( '%s spam user marked', '%s spam users marked', p.userCleanup.count ), String( p.userCleanup.count ) )
+									: __( 'No spam users marked yet' ) }</span>
+								${ B.caps.users ? `<button class="minn-btn-soft" type="button" data-spam-users>${ esc( __( 'Review →' ) ) }</button>` : '' }
+								${ p.userCleanup.checkUrl ? `<a class="minn-btn-soft" href="${ esc( p.userCleanup.checkUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Check for spam ↗' ) ) }</a>` : '' }
+							</div>` : '' }
 						</div>` ).join( '' );
 					const empty = sp.providers.length ? '' : `
 						<div class="minn-editor-locked-note">${ sprintf( /* translators: %s: a link to the Extensions screen. */ __( 'No spam filter plugin is active. Install Akismet, Antispam Bee or CleanTalk from %s and it appears here. Core’s blocklist below still works on its own.' ), `<a href="#" id="minn-spam-ext">${ esc( __( 'Extensions' ) ) }</a>` ) }</div>`;
@@ -22467,6 +22552,14 @@
 				go( 'comments' );
 			} );
 		}
+		$$( '[data-spam-users]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.usersTab = 'people';
+				state.userSession = 'spam';
+				state.cache.users = null;
+				go( 'users' );
+			} )
+		);
 		const spamExt = $( '#minn-spam-ext', view );
 		if ( spamExt ) spamExt.addEventListener( 'click', ( e ) => { e.preventDefault(); go( 'extensions' ); } );
 
@@ -36398,6 +36491,17 @@
 		if ( B.wc && B.caps.coupons ) cmds.push( { label: __( 'View Coupons' ), kind: 'nav', icon: '🔑', run: () => go( 'coupons' ) } );
 		if ( B.wc && B.caps.customers ) cmds.push( { label: __( 'View Customers' ), kind: 'nav', icon: '◉', run: () => go( 'customers' ) } );
 		if ( B.caps.users ) cmds.push( { label: __( 'Browse Users' ), kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
+		if ( B.spamUsers && B.caps.users ) cmds.push( {
+			label: __( 'Find spam users' ),
+			kind: 'action',
+			icon: '◉',
+			run: () => {
+				state.usersTab = 'people';
+				state.userSession = 'spam';
+				state.cache.users = null;
+				go( 'users' );
+			},
+		} );
 		// One palette entry per surface family (preferred member); ungrouped
 		// surfaces keep a single entry as before.
 		surfaceNavItems().forEach( ( s ) => {

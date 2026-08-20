@@ -1516,6 +1516,10 @@ class Minn_Admin {
 			// only; the users row menu mints the single-use link on demand so
 			// the secret never rides a pageload.
 			'otl'      => function_exists( 'minn_admin_otl_active' ) && minn_admin_otl_active(),
+			// CleanTalk's marked-spam users (adapters/cleantalk.php) — { count,
+			// checkUrl } when the plugin is active; drives the Users Spam tab.
+			'spamUsers' => function_exists( 'minn_admin_cleantalk_spam_users_boot' )
+				? minn_admin_cleantalk_spam_users_boot() : null,
 			// Public Post Preview (adapters/public-post-preview.php) — boolean
 			// only; editor + content menu load/toggle the share URL on demand.
 			'ppp'      => function_exists( 'minn_admin_ppp_active' ) && minn_admin_ppp_active(),
