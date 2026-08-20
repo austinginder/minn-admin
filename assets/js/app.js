@@ -29073,16 +29073,39 @@
 		if ( ! locked ) ensureTrailingParagraph( body );
 		highlightCodeBlocks( body );
 		renderIslandPreviews( body, ed );
-		// Focus mode persists across posts/sessions (localStorage), never in locked mode.
-		if ( ! locked ) {
-			try { ed.focus = ed.focus || !! localStorage.getItem( 'minn-focus' ); } catch ( e ) { /* private mode */ }
-			document.body.classList.toggle( 'minn-focus-zen', !! ed.focus );
+		// Focus mode persists across posts/sessions (localStorage), never in
+		// locked mode; outline mode persists the same way (and works in locked
+		// mode — it's pure chrome around a read-only body). Restored ONCE per
+		// editor open: after that ed state is the truth, so a URL-forced exit
+		// below can't be re-overridden by a later re-render's restore.
+		if ( ! ed.modesInit ) {
+			ed.modesInit = true;
+			if ( ! locked ) {
+				try { ed.focus = ed.focus || !! localStorage.getItem( 'minn-focus' ); } catch ( e ) { /* private mode */ }
+			}
+			try { ed.outlineMode = ed.outlineMode || !! localStorage.getItem( 'minn-outline-mode' ); } catch ( e ) { /* private mode */ }
+			// URL entry: ?focus=1 / ?outline=1 (or =0 to force an exit) makes
+			// the modes linkable. Applied once per editor open and never
+			// written to localStorage — the link speaks for this visit only,
+			// so opening a shared link can't flip the reader's own standing
+			// preference. Locked mode keeps its gates (focus never engages).
+			let q = null;
+			try { q = new URLSearchParams( location.search ); } catch ( e ) { /* no-op */ }
+			const uf = q && q.get( 'focus' );
+			const uo = q && q.get( 'outline' );
+			if ( uf === '0' ) ed.focus = false;
+			if ( uo === '0' ) ed.outlineMode = false;
+			if ( uo && uo !== '0' ) { ed.outlineMode = true; ed.focus = false; }
+			if ( uf && uf !== '0' && ! locked ) { ed.focus = true; ed.outlineMode = false; }
+			// A link recipient lands in collapsed chrome with no idea why —
+			// the entry toast names the way out, same as the toggles' own.
+			if ( uf && uf !== '0' && ed.focus ) toast( __( 'Focus mode on — ⌘⇧D to leave' ) );
+			else if ( uo && uo !== '0' && ed.outlineMode ) toast( __( 'Outline mode on — ⌘⇧O to leave' ) );
 		}
-		// Outline mode persists the same way (and works in locked mode — it's
-		// pure chrome around a read-only body). Focus wins if both somehow
-		// persisted — the toggles keep them mutually exclusive.
-		try { ed.outlineMode = ed.outlineMode || !! localStorage.getItem( 'minn-outline-mode' ); } catch ( e ) { /* private mode */ }
+		// Focus wins if both somehow persisted — the toggles keep them
+		// mutually exclusive.
 		if ( ed.focus && ed.outlineMode ) ed.outlineMode = false;
+		if ( ! locked ) document.body.classList.toggle( 'minn-focus-zen', !! ed.focus );
 		document.body.classList.toggle( 'minn-outline-mode', !! ed.outlineMode );
 		// Restored modes surface their exit chip — the topbar rendered
 		// before these flags came back from localStorage.
