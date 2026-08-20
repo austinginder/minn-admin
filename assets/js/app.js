@@ -13233,6 +13233,31 @@
 		}
 	}
 
+	// Deleting a customer IS deleting their WordPress account, so it rides the
+	// same flow as the Users row menu (reassignment picker, danger confirm,
+	// wp/v2/users force delete). What differs is the copy: their orders are not
+	// touched. Verified on the lab — the order survives with the billing
+	// details captured at checkout, and WooCommerce resets customer_id to 0, so
+	// it reads as a guest order afterwards.
+	function canDeleteCustomer( cu ) {
+		return ! B.multisite && !! B.caps.deleteUsers && !! ( cu && cu.id ) && cu.id !== B.user.id;
+	}
+
+	function deleteCustomerFlow( cu ) {
+		if ( ! canDeleteCustomer( cu ) ) return;
+		openUserDeleteModal(
+			{ id: cu.id, name: customerDisplayName( cu ), email: cu.email || ( cu.billing && cu.billing.email ) || '' },
+			{
+				note: __( 'Their orders stay, keep the billing details from checkout, and become guest orders.' ),
+				after: () => {
+					state.cache.customers = null;
+					state.cache.users = null;
+					if ( state.route === 'customers' ) renderCustomers();
+				},
+			}
+		);
+	}
+
 	function renderCustomers() {
 		const view = $( '#minn-view' );
 		const c = state.cache.customers;
@@ -13326,6 +13351,10 @@
 						} ] : [] ),
 					] : [] ),
 					...( cu.id && B.caps.users ? [ { label: __( 'Edit user in wp-admin ↗' ), href: B.site.adminUrl + 'user-edit.php?user_id=' + cu.id } ] : [] ),
+					...( canDeleteCustomer( cu ) ? [
+						{ heading: __( 'Danger zone' ) },
+						{ label: __( 'Delete customer…' ), danger: true, run: () => deleteCustomerFlow( cu ) },
+					] : [] ),
 				] );
 			} )
 		);
@@ -14594,12 +14623,18 @@
 		return name + ' · ' + email;
 	}
 
-	function openUserDeleteModal( u ) {
+	// `after` replaces the users-list refresh: Customers deletes the very same
+	// accounts, and without this the row stays on screen after the delete
+	// lands. `note` adds a sentence about what survives on that surface.
+	function openUserDeleteModal( u, opts ) {
+		const o = opts || {};
 		state.modal = {
 			type: 'user-delete',
 			user: u,
 			reassign: String( B.user.id ),
 			candidates: null,
+			after: o.after || null,
+			note: o.note || '',
 		};
 		renderOverlays();
 		// Load a pick list for reassignment (exclude the user being deleted).
@@ -37095,6 +37130,7 @@
 						${ B.wcs && B.caps.subscriptions ? `<button type="button" class="minn-btn-soft" id="minn-cust-subs-goto">${ esc( __( 'All subscriptions' ) ) }</button>` : '' }
 						${ B.caps.users ? `<a class="minn-btn-soft" href="#/users" id="minn-cust-users" data-goto-users="${ c.id }">↗ ${ esc( __( 'Users' ) ) }</a>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }user-edit.php?user_id=${ c.id }" target="_blank" rel="noopener">↗ ${ esc( __( 'Edit in WordPress' ) ) }</a>
+						${ canDeleteCustomer( c ) ? `<button type="button" class="minn-btn-soft danger" id="minn-cust-delete">${ esc( __( 'Delete customer' ) ) }</button>` : '' }
 					</div>` : '' }
 				</div>
 			</div>`;
@@ -37539,6 +37575,7 @@
 					</div>
 					<div class="minn-help-body" style="border-bottom:0;padding-bottom:4px;">
 						<p>${ esc( __( 'This permanently removes the account. Content they authored must be reassigned to another user.' ) ) }</p>
+						${ m.note ? `<p>${ esc( m.note ) }</p>` : '' }
 					</div>
 					<div class="minn-modal-form" style="padding-top:0;">
 						<div>
@@ -38117,6 +38154,8 @@
 				closeModal();
 				go( 'subscriptions' );
 			} );
+			const custDel = $( '#minn-cust-delete' );
+			if ( custDel ) custDel.addEventListener( 'click', () => deleteCustomerFlow( m.full || m.customer ) );
 		}
 
 		if ( m.type === 'product-new' ) {
@@ -39107,14 +39146,16 @@
 					return;
 				}
 				/* translators: %s: the user's name. */
-				if ( ! await minnConfirm( { title: m.user.name ? sprintf( __( 'Permanently delete %s?' ), m.user.name ) : __( 'Permanently delete this user?' ), body: __( 'The account is removed for good, and their content moves to the user you picked. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete user' ) } ) ) return;
+				const confirmBody = __( 'The account is removed for good, and their content moves to the user you picked. There is no undo for this.' );
+				if ( ! await minnConfirm( { title: m.user.name ? sprintf( __( 'Permanently delete %s?' ), m.user.name ) : __( 'Permanently delete this user?' ), body: m.note ? confirmBody + ' ' + m.note : confirmBody, danger: true, confirmLabel: __( 'Delete user' ) } ) ) return;
 				confirmBtn.disabled = true;
 				try {
 					await api( `wp/v2/users/${ m.user.id }?force=true&reassign=${ encodeURIComponent( reassign ) }`, { method: 'DELETE' } );
 					toast( __( 'User deleted' ) );
 					closeModal();
 					state.cache.users = null;
-					if ( state.route === 'users' ) renderUsers();
+					if ( m.after ) m.after();
+					else if ( state.route === 'users' ) renderUsers();
 				} catch ( err ) {
 					toast( err.message, true );
 					confirmBtn.disabled = false;
