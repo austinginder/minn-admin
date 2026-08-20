@@ -79,17 +79,29 @@ for pair in "gal-red 255 0 0" "gal-blue 0 0 255"; do
 done
 echo "  media: $( w post list --post_type=attachment --format=count ) attachment(s)"
 
-# --- a SECOND installed language, and a user who uses it. language-remove
-# --- proves removal is surgical, which needs another locale to leave intact
-# --- and a locale that is locked because someone reads the site in it.
+# --- a SECOND installed language, so removing one can be shown to leave the
+# --- others intact. language-remove installs the specific locales it asserts
+# --- about; this just keeps the site from being single-language between runs.
 w language core list --status=installed --field=language 2>/dev/null | grep -q de_DE ||
 	w language core install de_DE >/dev/null 2>&1
-if w language core list --status=installed --field=language 2>/dev/null | grep -q de_DE; then
-	w user meta update minn-editor locale de_DE >/dev/null 2>&1
-	echo "  languages: $( w language core list --status=installed --field=language | tr '\n' ' ' )(minn-editor reads de_DE)"
-else
-	echo "  languages: de_DE unavailable for this core build — language-remove will report fixture gaps"
+echo "  languages: $( w language core list --status=installed --field=language 2>/dev/null | tr '\n' ' ' )"
+
+# --- the plugin's OWN language packs. Minn ships these as release assets and
+# --- core installs them alongside an update, so a site already on the current
+# --- version never receives them and its catalog is empty (rtl asserts against
+# --- the Persian one). Copy from the dev site, which runs the same build.
+if [ -d "$DEV/wp-content/languages/plugins" ]; then
+	mkdir -p "$ROOT/wp-content/languages/plugins"
+	cp -p "$DEV"/wp-content/languages/plugins/minn-admin-* "$ROOT/wp-content/languages/plugins/" 2>/dev/null
 fi
+echo "  plugin packs: $( ls "$ROOT"/wp-content/languages/plugins/ 2>/dev/null | grep -c '^minn-admin-' ) file(s)"
+
+# --- a second custom post type. The Content subtitle names a lone custom type
+# --- ("Posts, pages & Patterns") and only switches to the counted plural at
+# --- two or more, which is the form i18n asserts _n() + sprintf against.
+w eval 'if ( ! array_key_exists( "minn_lab_note", (array) get_option( "minn_admin_post_types", array() ) ) ) { $t = (array) get_option( "minn_admin_post_types", array() ); $t["minn_lab_note"] = array( "singular" => "Lab note", "plural" => "Lab notes", "public" => 1, "show_in_rest" => 1, "supports" => array( "title", "editor" ) ); update_option( "minn_admin_post_types", $t ); }' >/dev/null 2>&1
+w rewrite flush --hard >/dev/null 2>&1
+echo "  post types: $( w post-type list --public=1 --field=name --format=csv 2>/dev/null | tr '\n' ' ' )"
 
 # --- a nav menu with items (menu-drag.test.js drags rows; an empty Structure
 # --- page has no rows to drag). The dev-fixtures mu-plugin registers the

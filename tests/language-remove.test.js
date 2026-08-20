@@ -14,6 +14,10 @@ const { execFileSync } = require( 'child_process' );
 // A locale to sacrifice: reinstalled in finally, so pick one the dev site
 // already carries rather than downloading something new.
 const VICTIM = process.env.MINN_TEST_LOCALE || 'nl_NL';
+// The locale the site runs in, and the one a user reads in, for the lock
+// assertions. Both are installed by the baseline below.
+const SITE_LOCALE = 'de_DE';
+const USER_LOCALE = 'fr_FR';
 
 // stdio 'pipe' on stderr: deleting a meta key that is already absent is a
 // normal no-op here, and its WP-CLI warning would otherwise bury the results.
@@ -37,10 +41,18 @@ const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], {
 	}, { method, path, body } );
 
 	try {
-		// Baseline: English site, no personal locales, victim installed.
+		// Baseline: English site, no personal locales, and every locale this
+		// suite names installed. The site language and user locale below were
+		// hardcoded on the assumption that de_DE and fr_FR happen to be
+		// present, which is true of a site that has been experimented on for
+		// years and false of a fresh one — there the user-locale row simply did
+		// not exist and the lock could not be asserted. Install them like the
+		// victim, so the suite provisions everything it asserts about.
 		try { wp( [ 'option', 'delete', 'WPLANG' ] ); } catch ( e ) {}
 		try { wp( [ 'user', 'meta', 'delete', 'minn-editor', 'locale' ] ); } catch ( e ) {}
-		try { wp( [ 'language', 'core', 'install', VICTIM ] ); } catch ( e ) {}
+		for ( const loc of [ VICTIM, SITE_LOCALE, USER_LOCALE ] ) {
+			try { wp( [ 'language', 'core', 'install', loc ] ); } catch ( e ) {}
+		}
 
 		await page.goto( BASE + '/minn-admin/extensions', { waitUntil: 'domcontentloaded' } );
 		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 20000 } );
@@ -56,11 +68,11 @@ const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], {
 			String( ( first.data.languages || [] ).filter( ( l ) => ! l.removable ).length ) );
 
 		/* ===== Site language and a user locale lock their rows ===== */
-		wp( [ 'option', 'update', 'WPLANG', 'de_DE' ] );
-		wp( [ 'user', 'meta', 'update', 'minn-editor', 'locale', 'fr_FR' ] );
+		wp( [ 'option', 'update', 'WPLANG', SITE_LOCALE ] );
+		wp( [ 'user', 'meta', 'update', 'minn-editor', 'locale', USER_LOCALE ] );
 		const locked = await rest( 'GET', 'minn-admin/v1/translations/installed' );
-		const de = ( locked.data.languages || [] ).find( ( l ) => l.locale === 'de_DE' );
-		const fr = ( locked.data.languages || [] ).find( ( l ) => l.locale === 'fr_FR' );
+		const de = ( locked.data.languages || [] ).find( ( l ) => l.locale === SITE_LOCALE );
+		const fr = ( locked.data.languages || [] ).find( ( l ) => l.locale === USER_LOCALE );
 		t.check( 'site language is locked with reason "site"',
 			!! de && de.removable === false && de.reason === 'site' && de.site === true,
 			JSON.stringify( de && { removable: de.removable, reason: de.reason } ) );
@@ -69,8 +81,8 @@ const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], {
 			JSON.stringify( fr && { removable: fr.removable, reason: fr.reason, users: fr.users } ) );
 
 		/* ===== Protected locales are refused by the endpoint too ===== */
-		const refuseSite = await rest( 'POST', 'minn-admin/v1/translations/remove', { locale: 'de_DE' } );
-		const refuseUser = await rest( 'POST', 'minn-admin/v1/translations/remove', { locale: 'fr_FR' } );
+		const refuseSite = await rest( 'POST', 'minn-admin/v1/translations/remove', { locale: SITE_LOCALE } );
+		const refuseUser = await rest( 'POST', 'minn-admin/v1/translations/remove', { locale: USER_LOCALE } );
 		const refuseEn = await rest( 'POST', 'minn-admin/v1/translations/remove', { locale: 'en_US' } );
 		const refuseAbsent = await rest( 'POST', 'minn-admin/v1/translations/remove', { locale: 'xx_ZZ' } );
 		t.check( 'site language refused (400 minn_admin_locale_site)',
