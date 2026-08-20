@@ -26,7 +26,17 @@ const ROUTES = [ 'overview', 'content', 'media', 'users', 'extensions', 'setting
 		for ( const route of ROUTES ) {
 			await page.goto( BASE + '/minn-admin/' + route, { waitUntil: 'domcontentloaded' } );
 			await page.waitForSelector( '.minn-nav-btn', { timeout: 15000 } );
-			await page.waitForTimeout( 2200 );
+			// Wait for the route to actually PAINT before scanning it. A flat
+			// timeout made this suite pass by scanning nothing: on a slow site
+			// the settings fields had not rendered at 2200ms, so axe found an
+			// empty view and called it clean, hiding nine unlabeled inputs
+			// that a faster site reported immediately.
+			await page.waitForFunction( () => {
+				const v = document.querySelector( '#minn-view' );
+				if ( ! v || v.querySelector( '.minn-loading' ) ) return false;
+				return v.querySelectorAll( 'input, button, a, table, .minn-card, .minn-empty' ).length > 2;
+			}, null, { timeout: 25000 } ).catch( () => {} );
+			await page.waitForTimeout( 1200 );
 			await page.addScriptTag( { path: AXE_PATH } );
 			const v = await page.evaluate( async () => {
 				const r = await window.axe.run( document, { resultTypes: [ 'violations' ] } );

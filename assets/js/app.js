@@ -21957,6 +21957,11 @@
 
 	function settingsFields( section, s, cache ) {
 		settingsCombos = {};
+		// A caption sitting next to an input is not a label: screen readers
+		// announced every settings field as an unnamed text box. Each field
+		// gets an id and a real <label for>, which is also what makes the
+		// caption clickable.
+		const fid = ( key ) => 'minn-set-' + String( key ).replace( /[^A-Za-z0-9_-]+/g, '-' );
 		// Strict combobox — a themed, searchable <select> replacement for
 		// option lists that can grow unbounded (roles, categories, pages).
 		const combo = ( key, label, options, current ) => {
@@ -21965,17 +21970,17 @@
 				value: current,
 			};
 			return `<div>
-				<div class="minn-field-label">${ label }</div>
+				<label class="minn-field-label" for="${ fid( key ) }">${ label }</label>
 				<div class="minn-ac" data-combo="${ esc( key ) }">
-					<input class="minn-input minn-ac-input" data-key="${ esc( key ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<input class="minn-input minn-ac-input" id="${ fid( key ) }" data-key="${ esc( key ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 					<div class="minn-ac-panel" hidden></div>
 				</div>
 			</div>`;
 		};
 		const text = ( key, label, value, mono ) => `
 			<div>
-				<div class="minn-field-label">${ label }</div>
-				<input class="minn-input${ mono ? ' mono' : '' }" data-key="${ key }" value="${ esc( value == null ? '' : value ) }">
+				<label class="minn-field-label" for="${ fid( key ) }">${ label }</label>
+				<input class="minn-input${ mono ? ' mono' : '' }" id="${ fid( key ) }" data-key="${ key }" value="${ esc( value == null ? '' : value ) }">
 			</div>`;
 		const toggle = ( t ) => `
 			<div class="minn-toggle-row">
@@ -21990,17 +21995,17 @@
 		// — the wp/v2/settings save (which sweeps data-key) must not pick them up.
 		const permaText = ( key, label, value, mono ) => `
 			<div>
-				<div class="minn-field-label">${ label }</div>
-				<input class="minn-input${ mono ? ' mono' : '' }" data-permakey="${ key }" value="${ esc( value == null ? '' : value ) }">
+				<label class="minn-field-label" for="${ fid( key ) }">${ label }</label>
+				<input class="minn-input${ mono ? ' mono' : '' }" id="${ fid( key ) }" data-permakey="${ key }" value="${ esc( value == null ? '' : value ) }">
 			</div>`;
 		// Strict combobox variant of the permalink fields — the input carries
 		// data-permakey so the wp/v2/settings sweep never picks it up, and the
 		// bind block (which needs the struct-input sync) reads data-pc-value.
 		const permaCombo = ( key, label, current ) => `
 			<div>
-				<div class="minn-field-label">${ label }</div>
+				<label class="minn-field-label" for="${ fid( key ) }">${ label }</label>
 				<div class="minn-ac" data-permacombo="${ esc( key ) }" data-pc-value="${ esc( String( current ) ) }">
-					<input class="minn-input minn-ac-input" data-permakey="${ esc( key ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<input class="minn-input minn-ac-input" id="${ fid( key ) }" data-permakey="${ esc( key ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 					<div class="minn-ac-panel" hidden></div>
 				</div>
 			</div>`;
@@ -22070,9 +22075,9 @@
 					// is anchored in-flow below the input (never shifts) and opens on
 					// click even with a full value. Validated on save.
 					+ `<div>
-						<div class="minn-field-label">${ esc( __( 'Timezone' ) ) }</div>
+						<label class="minn-field-label" for="${ fid( 'timezone' ) }">${ esc( __( 'Timezone' ) ) }</label>
 						<div class="minn-ac" id="minn-tz-ac">
-							<input class="minn-input minn-ac-input" data-key="timezone" value="${ esc( s.timezone || 'UTC' ) }" placeholder="${ esc( __( 'Start typing — e.g. Chicago, Berlin, UTC' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+							<input class="minn-input minn-ac-input" id="${ fid( 'timezone' ) }" data-key="timezone" value="${ esc( s.timezone || 'UTC' ) }" placeholder="${ esc( __( 'Start typing — e.g. Chicago, Berlin, UTC' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 							<div class="minn-ac-panel" hidden></div>
 						</div>
 					</div>`
