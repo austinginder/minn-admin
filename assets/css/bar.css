@@ -81,6 +81,9 @@
   z-index: 1000100;
   background: transparent;
 }
+/* Something has taken the whole screen (an image lightbox, a cover viewer).
+   Sit behind it rather than punching a hole in it; bar.js sets this. */
+#minn-cornerbar.minn-bar-behind { z-index: 1; }
 #minn-cornerbar #minn-bar-root { position: relative; width: 100%; height: 100%; }
 #minn-bar-root a, #minn-bar-root a:hover, #minn-bar-root a:focus, #minn-bar-root a:visited {
   text-decoration: none !important;

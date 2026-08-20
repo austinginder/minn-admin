@@ -111,6 +111,52 @@
 		closeMenus();
 		closeTouchReveal();
 	}, { passive: true } );
+
+	/* ===== Stand down for full-screen overlays ===== */
+	// The bar deliberately outranks WordPress's own toolbar, and that also puts
+	// it above image lightboxes, whose whole job is to blank the page. Lightbox
+	// z-indexes in the wild run from 200 to 999999, so no fixed value sits
+	// under all of them and above ordinary page chrome. Ask the document
+	// instead: whatever is topmost in the middle of the viewport. If that sits
+	// inside a fixed element covering the screen, and it is not ours, something
+	// has taken over and the bar belongs behind it. Decorative full-screen
+	// layers do not trip this, because pointer-events:none elements are never
+	// returned by elementFromPoint.
+	const corner = document.getElementById( 'minn-cornerbar' );
+	let overlayFrame = 0;
+	function screenIsTaken() {
+		const el = document.elementFromPoint( innerWidth / 2, innerHeight / 2 );
+		if ( ! el || ! corner || corner.contains( el ) ) return false;
+		for ( let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement ) {
+			if ( 'fixed' !== getComputedStyle( n ).position ) continue;
+			const r = n.getBoundingClientRect();
+			if ( r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9 ) return true;
+		}
+		return false;
+	}
+	function syncOverlay() {
+		overlayFrame = 0;
+		if ( corner ) corner.classList.toggle( 'minn-bar-behind', screenIsTaken() );
+	}
+	function checkOverlay() {
+		if ( ! overlayFrame ) overlayFrame = requestAnimationFrame( syncOverlay );
+	}
+	// Overlays open on a click or a key and fade in, so sample after the
+	// animation too rather than only on the frame the input landed.
+	function checkOverlaySoon() {
+		checkOverlay();
+		setTimeout( checkOverlay, 90 );
+		setTimeout( checkOverlay, 420 );
+	}
+	document.addEventListener( 'click', checkOverlaySoon, true );
+	document.addEventListener( 'keyup', checkOverlaySoon, true );
+	addEventListener( 'resize', checkOverlay );
+	addEventListener( 'scroll', checkOverlay, { passive: true } );
+	if ( window.MutationObserver && document.body ) {
+		// Most lightboxes append their container to the body as they open.
+		new MutationObserver( checkOverlaySoon ).observe( document.body, { childList: true } );
+	}
+	checkOverlay();
 	document.addEventListener( 'keydown', ( event ) => {
 		if ( 'Escape' !== event.key ) return;
 		if ( menus.some( ( m ) => ! m.hidden ) ) closeMenus();
