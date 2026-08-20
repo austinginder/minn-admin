@@ -109,6 +109,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			// purchase license; installed-inactive resident so the row is
 			// off with Turn on only — actions need their code loaded).
 			'Akismet',
+			// CleanTalk: the same key shape as Akismet (cloud access key,
+			// not a purchase license). Installed-inactive at rest.
+			'CleanTalk Anti-Spam',
 		];
 		for ( const name of FAMILY ) {
 			const info = await page.evaluate( ( n ) => {

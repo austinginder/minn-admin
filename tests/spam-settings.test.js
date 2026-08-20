@@ -197,8 +197,47 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			return row && ! row.hidden && btn && ! btn.disabled;
 		} );
 		t.check( 'failure keeps the form open for a retype', formOpen );
+
+		/* ===== CleanTalk access key on the same card =====
+		   Same contract as Akismet: a cloud key, not a purchase license.
+		   Activate through Extensions so the card appears, then a bogus
+		   access key against live cleantalk.org must refuse and store
+		   nothing. */
+		await spaNav( 'extensions' );
+		await page.waitForSelector( '.minn-plugin[data-plugin^="cleantalk-spam-protect"]', { timeout: 20000 } );
+		const ctOn = await page.$eval( '.minn-plugin[data-plugin^="cleantalk-spam-protect"] .minn-switch', ( el ) => el.classList.contains( 'on' ) );
+		if ( ! ctOn ) {
+			await page.$eval( '.minn-plugin[data-plugin^="cleantalk-spam-protect"]', ( el ) => el.scrollIntoView( { block: 'center' } ) );
+			await page.click( '.minn-plugin[data-plugin^="cleantalk-spam-protect"] .minn-switch' );
+			await page.waitForFunction( () => {
+				const c = document.querySelector( '.minn-plugin[data-plugin^="cleantalk-spam-protect"]' );
+				return c && c.querySelector( '.minn-switch.on' );
+			}, null, { timeout: 30000 } );
+			await page.waitForTimeout( 1500 );
+		}
+		await spaNav( 'settings' );
+		await openSpamSection();
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-spam-provider .minn-spam-name' ) )
+				.some( ( e ) => /CleanTalk/.test( e.textContent ) ), null, { timeout: 15000 } );
+		const ctCard = await page.$$eval( '.minn-spam-provider', ( els ) =>
+			( els.find( ( el ) => /CleanTalk/.test( el.textContent ) ) || { textContent: '' } ).textContent );
+		t.check( 'CleanTalk card offers a paste-a-key field', /Needs setup|Access key/.test( ctCard ), ctCard.slice( 0, 120 ) );
+		await page.waitForSelector( '[data-spamkeyrow="cleantalk"]:not([hidden]) input', { timeout: 10000 } );
+		await page.click( '[data-spamkeyrow="cleantalk"] input' );
+		await page.keyboard.type( 'notarealcleantalkkey' );
+		await page.click( '[data-spamkeysave="cleantalk"]' );
+		await page.waitForFunction( () => {
+			const e = document.querySelector( '[data-spamkeyerr="cleantalk"]' );
+			return e && ! e.hidden && e.textContent.length > 0;
+		}, null, { timeout: 30000 } );
+		const ctErr = await page.$eval( '[data-spamkeyerr="cleantalk"]', ( e ) => e.textContent );
+		t.check( 'bogus CleanTalk key refused inline', /did not accept|invalid|not accept/i.test( ctErr ), ctErr );
+		const ctAfter = ( await spamState() ).providers.find( ( p ) => p.id === 'cleantalk' );
+		t.check( 'refused CleanTalk key stores nothing', ctAfter && ! ctAfter.configured && ctAfter.keyProvider === 'cleantalk', JSON.stringify( ctAfter ) );
 	} finally {
 		await setPlugin( 'akismet/akismet', 'inactive' ).catch( () => {} );
+		await setPlugin( 'cleantalk-spam-protect/cleantalk', 'inactive' ).catch( () => {} );
 		await setPlugin( 'disable-comments/disable-comments', 'active' ).catch( () => {} );
 	}
 

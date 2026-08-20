@@ -136,16 +136,21 @@ function minn_admin_spam_providers() {
 				$counter  = is_array( $data ) && isset( $data['admin_bar__all_time_counter'] ) ? (array) $data['admin_bar__all_time_counter'] : array();
 				$spam_n   = function_exists( 'minn_admin_cleantalk_spam_count' )
 					? minn_admin_cleantalk_spam_count() : 0;
-				$note     = '' !== $key
+				$predefined = defined( 'CLEANTALK_ACCESS_KEY' ) && CLEANTALK_ACCESS_KEY;
+				if ( $predefined ) {
+					$key = (string) CLEANTALK_ACCESS_KEY;
+				}
+				$note = '' !== $key
 					/* translators: %s: first characters of the access key. */
 					? sprintf( __( 'Access key set (%s…)', 'minn-admin' ), substr( $key, 0, 4 ) )
-					: __( 'Needs an access key: connect it on the CleanTalk screen', 'minn-admin' );
+					: __( 'Needs an access key from cleantalk.org (free trial, then paid)', 'minn-admin' );
 				return array(
-					'configured' => '' !== $key,
-					'note'       => $note,
-					'blocked'    => isset( $counter['blocked'] ) ? (int) $counter['blocked'] : 0,
-					'toggles'    => array(), // config is cloud-side; keep read-only
-					'adminUrl'   => admin_url( 'options-general.php?page=cleantalk' ),
+					'configured'  => '' !== $key,
+					'note'        => $note,
+					'keyProvider' => $predefined ? '' : 'cleantalk',
+					'blocked'     => isset( $counter['blocked'] ) ? (int) $counter['blocked'] : 0,
+					'toggles'     => array(),
+					'adminUrl'    => admin_url( 'options-general.php?page=cleantalk' ),
 					// Existing-account cleanup: the Users Spam tab lists
 					// whatever their scan already marked. The scan itself
 					// stays on their screen (date range, cloud, cooldown).
