@@ -43,6 +43,12 @@ MINN_MS_SUPER_PASS=<lab super-admin password> node wp-multi-network.test.js
 # all suites (release pre-flight / overnight): sequential, settle-guarded,
 # one retry per failed suite, full logs + summary in the output dir
 MINN_TEST_PASS=… ./run-all.sh /tmp/minn-run
+
+# the NEXT WordPress (release pre-flight): updates a dedicated Cove site to
+# whatever core is ahead of stable, then runs the core-coupled suites there
+MINN_TEST_PASS=minn-core-latest-1 ./core-latest.sh /tmp/minn-core-latest
+./core-latest.sh --resolve      # print the target core version and exit
+./core-latest.sh --list         # print the core-coupled suite list
 ```
 
 Relaunching `run-all.sh` with the same output dir **resumes**: suites already
@@ -57,6 +63,49 @@ knowing before you believe a full-run failure:
 - **A long run outlives a terminal.** For an overnight run, detach it
   (`nohup ./run-all.sh <dir> &`) so it survives the shell that started it; stop it
   with `pkill -f run-all.sh`.
+
+## The next WordPress (`core-latest.sh`)
+
+Every other run happens on minnadmin.localhost, which tracks a RELEASED
+WordPress. A core release can break the plugin in ways testing against the
+current version cannot reveal, and by then the breakage is already in front of
+users. `core-latest.sh` runs the core-coupled part of the suite against
+whatever core is ahead of stable, on its own site.
+
+The site is **minnadmin-core-latest.localhost** (admin / `minn-core-latest-1`).
+It is deliberately NOT a copy of minnadmin: it carries core, the plugin, and
+the dev-fixtures mu-plugin, nothing else. Two reasons. Adapter suites answer
+"did a plugin change", which is a plugin release's problem, not core's; and the
+fixture farm holds real license keys whose vendors bind seats to a domain, so
+cloning it onto a second host risks burning them.
+
+Which core WordPress it runs is resolved at run time: a beta/RC when one is in
+flight (wp.org's beta channel offers a version the stable channel does not),
+otherwise trunk. Between releases there is no beta for weeks, so trunk is the
+resting state rather than a fallback nobody notices. `--version=6.9-RC1` pins
+it, `--no-update` runs against whatever is installed.
+
+Recreate the site if it is ever lost:
+
+```bash
+cove add minnadmin-core-latest nightly
+cd ~/Cove/Sites/minnadmin-core-latest.localhost/public
+wp user update admin --user_pass=minn-core-latest-1 --skip-email
+wp user create minn-editor editor@example.com --role=editor --user_pass=minn-editor-pass-1
+wp user create minn-author author@example.com --role=author --user_pass=minn-author-pass-1
+wp rewrite structure '/%postname%/' --hard
+ln -sfn ~/Cove/Sites/minnadmin.localhost/public/wp-content/plugins/minn-admin \
+        wp-content/plugins/minn-admin
+ln -sfn ~/Cove/Sites/minnadmin.localhost/public/wp-content/mu-plugins/minn-dev-fixtures.php \
+        wp-content/mu-plugins/minn-dev-fixtures.php
+wp plugin activate minn-admin
+```
+
+`MINN_TEST_WP` is not optional for this site and the script exports it: the
+plugin directory is a symlink to the dev site, so the harness's default (four
+levels up from `tests/`) resolves through it, and every wp-cli call in a suite
+would land on minnadmin.localhost instead. The suites would pass while testing
+nothing.
 
 Environment (all optional except the password):
 
@@ -73,6 +122,8 @@ Environment (all optional except the password):
 | `MINN_TEST_PASS2` | `minn-editor-pass-1` |
 | `MINN_MS_SUPER_PASS` | — (multisite.test.js only; unset ⇒ SKIP) |
 | `MINN_MS_URL` / `MINN_MS_STORE` / `MINN_MS_BLOG` | `https://minnms.localhost` / `store.` / `blog.` |
+| `MINN_CORE_SITE` | `minnadmin-core-latest` (`core-latest.sh` only; the Cove site name) |
+| `MINN_CORE_ROOT` | `~/Cove/Sites/$MINN_CORE_SITE.localhost/public` |
 
 ## Conventions (read before writing a suite)
 
