@@ -29038,22 +29038,22 @@
 				</div>` : '' }
 				${ locked ? `` : `
 				<div class="minn-editor-toolbar" role="toolbar" aria-label="${ esc( __( 'Formatting' ) ) }">
-					<button type="button" class="minn-tool b" data-cmd="bold" title="${ esc( __( 'Bold' ) ) }" aria-label="${ esc( __( 'Bold' ) ) }">${ icon( 'bold' ) }</button>
-					<button type="button" class="minn-tool i" data-cmd="italic" title="${ esc( __( 'Italic' ) ) }" aria-label="${ esc( __( 'Italic' ) ) }">${ icon( 'italic' ) }</button>
-					<button type="button" class="minn-tool" data-cmd="strikeThrough" title="${ esc( __( 'Strikethrough — or wrap it in ~~tildes~~' ) ) }" aria-label="${ esc( __( 'Strikethrough' ) ) }">${ icon( 'strike' ) }</button>
-					<button type="button" class="minn-tool code" data-cmd="inline-code" title="${ esc( __( 'Inline code — or wrap it in backticks' ) ) }" aria-label="${ esc( __( 'Inline code' ) ) }">${ icon( 'code' ) }</button>
-					<button type="button" class="minn-tool" data-block="h2" title="${ esc( __( 'Heading 2' ) ) }" aria-label="${ esc( __( 'Heading 2' ) ) }">${ icon( 'h2' ) }</button>
-					<button type="button" class="minn-tool" data-block="h3" title="${ esc( __( 'Heading 3' ) ) }" aria-label="${ esc( __( 'Heading 3' ) ) }">${ icon( 'h3' ) }</button>
-					<button type="button" class="minn-tool" data-block="blockquote" title="${ esc( __( 'Quote' ) ) }" aria-label="${ esc( __( 'Quote' ) ) }">${ icon( 'quote' ) }</button>
-					<button type="button" class="minn-tool" data-block="pre" title="${ esc( __( 'Code block' ) ) }" aria-label="${ esc( __( 'Code block' ) ) }">${ icon( 'braces' ) }</button>
-					<button type="button" class="minn-tool" data-cmd="insertUnorderedList" title="${ esc( __( 'Bulleted list' ) ) }" aria-label="${ esc( __( 'Bulleted list' ) ) }">${ icon( 'list' ) }</button>
-					<button type="button" class="minn-tool" data-cmd="insertOrderedList" title="${ esc( __( 'Numbered list' ) ) }" aria-label="${ esc( __( 'Numbered list' ) ) }">${ icon( 'olist' ) }</button>
-					<button type="button" class="minn-tool" data-align="center" title="${ esc( __( 'Center — press again to clear' ) ) }" aria-label="${ esc( __( 'Align center' ) ) }">${ icon( 'alignCenter' ) }</button>
-					<button type="button" class="minn-tool" data-align="right" title="${ esc( __( 'Align right — press again to clear' ) ) }" aria-label="${ esc( __( 'Align right' ) ) }">${ icon( 'alignRight' ) }</button>
-					<button type="button" class="minn-tool" data-cmd="link" title="${ esc( __( 'Link — or ⌘K' ) ) }" aria-label="${ esc( __( 'Link' ) ) }">${ icon( 'link' ) }</button>
-					<button type="button" class="minn-tool" data-cmd="image" title="${ esc( __( 'Insert image' ) ) }" aria-label="${ esc( __( 'Insert image' ) ) }">${ icon( 'img' ) }</button>
-					<button type="button" class="minn-tool" data-block="p" title="${ esc( __( 'Paragraph' ) ) }" aria-label="${ esc( __( 'Paragraph' ) ) }">${ icon( 'pilcrow' ) }</button>
-					<button type="button" class="minn-tool" data-cmd="removeFormat" title="${ esc( __( 'Clear formatting' ) ) }" aria-label="${ esc( __( 'Clear formatting' ) ) }">${ icon( 'eraser' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool b" data-cmd="bold" title="${ esc( __( 'Bold' ) ) }" aria-label="${ esc( __( 'Bold' ) ) }">${ icon( 'bold' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool i" data-cmd="italic" title="${ esc( __( 'Italic' ) ) }" aria-label="${ esc( __( 'Italic' ) ) }">${ icon( 'italic' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-cmd="strikeThrough" title="${ esc( __( 'Strikethrough — or wrap it in ~~tildes~~' ) ) }" aria-label="${ esc( __( 'Strikethrough' ) ) }">${ icon( 'strike' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool code" data-cmd="inline-code" title="${ esc( __( 'Inline code — or wrap it in backticks' ) ) }" aria-label="${ esc( __( 'Inline code' ) ) }">${ icon( 'code' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-block="h2" title="${ esc( __( 'Heading 2' ) ) }" aria-label="${ esc( __( 'Heading 2' ) ) }">${ icon( 'h2' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-block="h3" title="${ esc( __( 'Heading 3' ) ) }" aria-label="${ esc( __( 'Heading 3' ) ) }">${ icon( 'h3' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-block="blockquote" title="${ esc( __( 'Quote' ) ) }" aria-label="${ esc( __( 'Quote' ) ) }">${ icon( 'quote' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-block="pre" title="${ esc( __( 'Code block' ) ) }" aria-label="${ esc( __( 'Code block' ) ) }">${ icon( 'braces' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-cmd="insertUnorderedList" title="${ esc( __( 'Bulleted list' ) ) }" aria-label="${ esc( __( 'Bulleted list' ) ) }">${ icon( 'list' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-cmd="insertOrderedList" title="${ esc( __( 'Numbered list' ) ) }" aria-label="${ esc( __( 'Numbered list' ) ) }">${ icon( 'olist' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-align="center" title="${ esc( __( 'Center — press again to clear' ) ) }" aria-label="${ esc( __( 'Align center' ) ) }">${ icon( 'alignCenter' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-align="right" title="${ esc( __( 'Align right — press again to clear' ) ) }" aria-label="${ esc( __( 'Align right' ) ) }">${ icon( 'alignRight' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-cmd="link" title="${ esc( __( 'Link — or ⌘K' ) ) }" aria-label="${ esc( __( 'Link' ) ) }">${ icon( 'link' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-cmd="image" title="${ esc( __( 'Insert image' ) ) }" aria-label="${ esc( __( 'Insert image' ) ) }">${ icon( 'img' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-block="p" title="${ esc( __( 'Paragraph' ) ) }" aria-label="${ esc( __( 'Paragraph' ) ) }">${ icon( 'pilcrow' ) }</button>
+					<button type="button" tabindex="-1" class="minn-tool" data-cmd="removeFormat" title="${ esc( __( 'Clear formatting' ) ) }" aria-label="${ esc( __( 'Clear formatting' ) ) }">${ icon( 'eraser' ) }</button>
 					<span class="minn-tool-hint" aria-hidden="true">${ esc( __( 'type / for blocks' ) ) }</span>
 				</div>` }
 				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }" role="textbox" aria-multiline="true" aria-label="${ esc( __( 'Post content' ) ) }"></div>
@@ -29687,83 +29687,152 @@
 				} );
 			};
 
-			$$( '.minn-tool', view ).forEach( ( btn ) =>
-				btn.addEventListener( 'mousedown', ( e ) => {
-					e.preventDefault(); // keep the selection in the editable region
-					// In-place island text is TEXT-only: formatting marks would
-					// be dropped by the run splice, so refuse loudly instead.
-					const runSel = window.getSelection();
-					const runAnchor = runSel && runSel.rangeCount ? runSel.anchorNode : null;
-					const runAnchorEl = runAnchor && ( runAnchor.nodeType === Node.ELEMENT_NODE ? runAnchor : runAnchor.parentElement );
-					if ( runAnchorEl && runAnchorEl.closest && runAnchorEl.closest( '.minn-island-run' ) ) {
-						toast( __( 'Island text is plain-text only — use ⚙ or the block editor for formatting' ) );
+			// The toolbar is one ARIA stop, out of the Tab ring entirely
+			// (buttons carry tabindex="-1"), so Tab from the title lands
+			// straight in the body. ⌥F10 (the Gutenberg convention) enters
+			// it: arrows move between buttons, Escape or Tab returns to the
+			// caret. The 14-tab-stop strip it replaces was the accessibility
+			// problem — the ARIA toolbar pattern wants a single stop.
+			const tbEl = $( '.minn-editor-toolbar', view );
+			let tbSel = null; // body selection captured at toolbar entry
+			const toolbarReturn = () => {
+				body.focus( { preventScroll: true } );
+				if ( tbSel && tbSel.startContainer.isConnected && body.contains( tbSel.startContainer ) ) {
+					const s = window.getSelection();
+					s.removeAllRanges();
+					s.addRange( tbSel );
+				}
+				tbSel = null;
+			};
+			const enterToolbar = () => {
+				if ( ! tbEl ) return;
+				const s = window.getSelection();
+				tbSel = s.rangeCount && body.contains( s.anchorNode ) ? s.getRangeAt( 0 ).cloneRange() : null;
+				const first = $( '.minn-tool', tbEl );
+				if ( first ) first.focus();
+			};
+			if ( tbEl ) {
+				tbEl.addEventListener( 'keydown', ( e ) => {
+					const tools = $$( '.minn-tool', tbEl );
+					const i = tools.indexOf( document.activeElement );
+					if ( i === -1 ) return;
+					if ( e.key === 'ArrowRight' || e.key === 'ArrowDown' ) {
+						e.preventDefault();
+						tools[ ( i + 1 ) % tools.length ].focus();
+					} else if ( e.key === 'ArrowLeft' || e.key === 'ArrowUp' ) {
+						e.preventDefault();
+						tools[ ( i - 1 + tools.length ) % tools.length ].focus();
+					} else if ( e.key === 'Home' ) {
+						e.preventDefault();
+						tools[ 0 ].focus();
+					} else if ( e.key === 'End' ) {
+						e.preventDefault();
+						tools[ tools.length - 1 ].focus();
+					} else if ( e.key === 'Escape' || e.key === 'Tab' ) {
+						// Escape here leaves the toolbar, never a layer above.
+						e.preventDefault();
+						e.stopPropagation();
+						toolbarReturn();
+					}
+				} );
+			}
+			body.addEventListener( 'keydown', ( e ) => {
+				if ( e.altKey && e.key === 'F10' ) {
+					e.preventDefault();
+					enterToolbar();
+				}
+			} );
+
+			const runTool = ( btn ) => {
+				// In-place island text is TEXT-only: formatting marks would
+				// be dropped by the run splice, so refuse loudly instead.
+				const runSel = window.getSelection();
+				const runAnchor = runSel && runSel.rangeCount ? runSel.anchorNode : null;
+				const runAnchorEl = runAnchor && ( runAnchor.nodeType === Node.ELEMENT_NODE ? runAnchor : runAnchor.parentElement );
+				if ( runAnchorEl && runAnchorEl.closest && runAnchorEl.closest( '.minn-island-run' ) ) {
+					toast( __( 'Island text is plain-text only — use ⚙ or the block editor for formatting' ) );
+					return;
+				}
+				// Block-TYPE conversions are refused on attr-carrying blocks:
+				// formatBlock rebuilds the element and half-drops the styling
+				// (class + marker gone, inline style kept — probed), so the
+				// honest answer is the block editor. Inline marks stay fine.
+				if ( btn.dataset.block || btn.dataset.cmd === 'insertUnorderedList' || btn.dataset.cmd === 'insertOrderedList' ) {
+					const mk = runAnchorEl && runAnchorEl.closest ? runAnchorEl.closest( '[data-minn-attrs]' ) : null;
+					if ( mk && body.contains( mk ) ) {
+						toast( __( 'This block keeps custom styling — change its type in the block editor' ) );
 						return;
 					}
-					// Block-TYPE conversions are refused on attr-carrying blocks:
-					// formatBlock rebuilds the element and half-drops the styling
-					// (class + marker gone, inline style kept — probed), so the
-					// honest answer is the block editor. Inline marks stay fine.
-					if ( btn.dataset.block || btn.dataset.cmd === 'insertUnorderedList' || btn.dataset.cmd === 'insertOrderedList' ) {
-						const mk = runAnchorEl && runAnchorEl.closest ? runAnchorEl.closest( '[data-minn-attrs]' ) : null;
-						if ( mk && body.contains( mk ) ) {
-							toast( __( 'This block keeps custom styling — change its type in the block editor' ) );
-							return;
-						}
+				}
+				if ( btn.dataset.cmd === 'link' ) {
+					const sel2 = window.getSelection();
+					let n = sel2.rangeCount ? sel2.anchorNode : null;
+					while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
+					const a = n && n.closest ? n.closest( 'a' ) : null;
+					if ( a && body.contains( a ) ) openLinkPop( a );
+					else if ( sel2.rangeCount && ! sel2.isCollapsed && body.contains( sel2.anchorNode ) ) openLinkPop( null, sel2.getRangeAt( 0 ) );
+				} else if ( btn.dataset.cmd === 'inline-code' ) {
+					toggleInlineCode( body );
+				} else if ( btn.dataset.cmd === 'image' ) {
+					insertImage();
+				} else if ( btn.dataset.align ) {
+					// Toggle alignment via the Gutenberg class (inline text-align
+					// styles would be stripped at serialize). Paragraphs and
+					// headings only. Pressing the active alignment clears it.
+					const sel3 = window.getSelection();
+					let blk = sel3.rangeCount ? sel3.anchorNode : null;
+					// Canonical root resolution (slots are mini-bodies).
+					blk = topBlockIn( blk, body );
+					if ( blk && blk.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6])$/.test( blk.tagName ) ) {
+						const had = blk.classList.contains( 'has-text-align-' + btn.dataset.align );
+						blk.classList.remove( 'has-text-align-left', 'has-text-align-center', 'has-text-align-right' );
+						if ( ! had ) blk.classList.add( 'has-text-align-' + btn.dataset.align );
+						if ( ! blk.className ) blk.removeAttribute( 'class' );
 					}
-					if ( btn.dataset.cmd === 'link' ) {
-						const sel2 = window.getSelection();
-						let n = sel2.rangeCount ? sel2.anchorNode : null;
-						while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
-						const a = n && n.closest ? n.closest( 'a' ) : null;
-						if ( a && body.contains( a ) ) openLinkPop( a );
-						else if ( sel2.rangeCount && ! sel2.isCollapsed && body.contains( sel2.anchorNode ) ) openLinkPop( null, sel2.getRangeAt( 0 ) );
-					} else if ( btn.dataset.cmd === 'inline-code' ) {
-						toggleInlineCode( body );
-					} else if ( btn.dataset.cmd === 'image' ) {
-						insertImage();
-					} else if ( btn.dataset.align ) {
-						// Toggle alignment via the Gutenberg class (inline text-align
-						// styles would be stripped at serialize). Paragraphs and
-						// headings only. Pressing the active alignment clears it.
-						const sel3 = window.getSelection();
-						let blk = sel3.rangeCount ? sel3.anchorNode : null;
-						// Canonical root resolution (slots are mini-bodies).
-						blk = topBlockIn( blk, body );
-						if ( blk && blk.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6])$/.test( blk.tagName ) ) {
-							const had = blk.classList.contains( 'has-text-align-' + btn.dataset.align );
-							blk.classList.remove( 'has-text-align-left', 'has-text-align-center', 'has-text-align-right' );
-							if ( ! had ) blk.classList.add( 'has-text-align-' + btn.dataset.align );
-							if ( ! blk.className ) blk.removeAttribute( 'class' );
-						}
-					} else if ( btn.dataset.cmd ) {
-						document.execCommand( btn.dataset.cmd, false, null );
-						liftNestedLists( body );
-					} else if ( btn.dataset.block ) {
-						// Block buttons TOGGLE: pressing Quote (or H2…) while
-						// already inside one converts back to a paragraph.
-						// Without this the second press is a no-op that still
-						// pushes a junk undo entry, making ⌘Z look broken.
-						const want = btn.dataset.block;
-						const sel2 = window.getSelection();
-						let n = sel2.rangeCount ? sel2.anchorNode : null;
-						while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
-						const inBlock = want !== 'p' && n && n.closest ? n.closest( want ) : null;
-						if ( inBlock && body.contains( inBlock ) ) {
-							if ( want === 'blockquote' ) {
-								// outdent unwraps the blockquote (formatBlock can't),
-								// but leaves a bare text node — re-wrap it.
-								document.execCommand( 'outdent', false, null );
-								document.execCommand( 'formatBlock', false, 'p' );
-							} else {
-								document.execCommand( 'formatBlock', false, 'p' );
-							}
+				} else if ( btn.dataset.cmd ) {
+					document.execCommand( btn.dataset.cmd, false, null );
+					liftNestedLists( body );
+				} else if ( btn.dataset.block ) {
+					// Block buttons TOGGLE: pressing Quote (or H2…) while
+					// already inside one converts back to a paragraph.
+					// Without this the second press is a no-op that still
+					// pushes a junk undo entry, making ⌘Z look broken.
+					const want = btn.dataset.block;
+					const sel2 = window.getSelection();
+					let n = sel2.rangeCount ? sel2.anchorNode : null;
+					while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
+					const inBlock = want !== 'p' && n && n.closest ? n.closest( want ) : null;
+					if ( inBlock && body.contains( inBlock ) ) {
+						if ( want === 'blockquote' ) {
+							// outdent unwraps the blockquote (formatBlock can't),
+							// but leaves a bare text node — re-wrap it.
+							document.execCommand( 'outdent', false, null );
+							document.execCommand( 'formatBlock', false, 'p' );
 						} else {
-							document.execCommand( 'formatBlock', false, want );
+							document.execCommand( 'formatBlock', false, 'p' );
 						}
+					} else {
+						document.execCommand( 'formatBlock', false, want );
 					}
-					scheduleAutosave();
-				} )
-			);
+				}
+				scheduleAutosave();
+			};
+			$$( '.minn-tool', view ).forEach( ( btn ) => {
+				btn.addEventListener( 'mousedown', ( e ) => {
+					e.preventDefault(); // keep the selection in the editable region
+					runTool( btn );
+				} );
+				// Keyboard activation (Enter/Space fires a detail-0 click):
+				// execCommand acts on the focused editable, so put the caret
+				// back in the body first, then run the same action and stay
+				// there, ready to keep typing. Mouse clicks already ran on
+				// mousedown and are skipped here.
+				btn.addEventListener( 'click', ( e ) => {
+					if ( e.detail !== 0 ) return;
+					toolbarReturn();
+					runTool( btn );
+				} );
+			} );
 
 			// Blink's default block for insertParagraph/list-exit is <div>;
 			// the serializer papered over stray divs, but the markdown prefix
@@ -38009,6 +38078,7 @@
 							<span class="minn-kbd">⌘⏎</span><span>${ esc( __( 'Publish, Update or Schedule' ) ) }</span>
 							<span class="minn-kbd">⌘/</span><span>${ esc( __( 'Block library: browse every block, design and pattern' ) ) }</span>
 							<span class="minn-kbd">⌘⇧F</span><span>${ esc( __( 'Find & replace in the post' ) ) }</span>
+							<span class="minn-kbd">⌥F10</span><span>${ esc( __( 'Formatting toolbar: arrows move between buttons, Escape returns to writing' ) ) }</span>
 							<span class="minn-kbd">⌘⇧D</span><span>${ esc( __( 'Focus mode: fade all but the current paragraph' ) ) }</span>
 							<span class="minn-kbd">⌘⇧O</span><span>${ esc( __( 'Outline mode: just the writing and the outline' ) ) }</span>
 							<span class="minn-kbd">⌘.</span><span>${ esc( __( 'Show or hide the navigation' ) ) }</span>
