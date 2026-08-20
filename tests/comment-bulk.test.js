@@ -37,7 +37,15 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 
 	const ids = [];
 	try {
-		t.check( 'disable-comments deactivates over REST', await setPlugin( 'disable-comments/disable-comments', 'inactive' ) );
+		// Comments must be enabled for this suite to have a subject. On the dev
+		// site that means deactivating disable-comments; a site that never had
+		// it answers 404 and there is nothing to turn off. Assert the end state
+		// rather than the call, so both sites pass for the same reason. (Not
+		// window.MINN.comments: that was read at boot, before this ran.)
+		await setPlugin( 'disable-comments/disable-comments', 'inactive' );
+		const dc = await rest( 'wp/v2/plugins/disable-comments/disable-comments' );
+		t.check( 'comments are not disabled by a plugin',
+			dc.status === 404 || !! ( dc.body && dc.body.status !== 'active' ), String( dc.status ) );
 
 		// Seed three pending comments on post 1 via REST.
 		for ( let i = 0; i < 3; i++ ) {

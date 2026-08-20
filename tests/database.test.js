@@ -8,7 +8,13 @@
  *
  * Run: MINN_TEST_PASS=… node database.test.js
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { execFileSync } = require( 'child_process' );
+const { BASE, WP, launch, login, reporter } = require( './helpers' );
+
+const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], {
+	encoding: 'utf8',
+	stdio: [ 'ignore', 'pipe', 'pipe' ],
+} ).trim();
 
 ( async () => {
 	const t = reporter( 'database' );
@@ -84,20 +90,27 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'Clear-filter control appears', await page.$( '#minn-db-fclear' ) !== null );
 
 	// --- Row detail modal -------------------------------------------------
-	// The cron blob is bigger than the 2 KB list cap, so the modal proves the
-	// full-value refetch: its value block must outgrow what the grid carried.
-	await page.fill( '#minn-db-fq', 'cron' );
+	// A value bigger than the 2 KB list cap proves the full-value refetch: the
+	// modal's value block must outgrow what the grid carried. This used to
+	// read the site's `cron` option and assume it was fat, which is true on a
+	// site with dozens of plugins and false on a fresh one (2039 chars, just
+	// under the cap). Seed the oversized serialized value instead, so the
+	// assertion means the same thing on every site.
+	// Seeded with wp-cli, not through the app: the Database viewer is
+	// read-only by design and must stay that way, so its own suite is not the
+	// reason a write endpoint exists.
+	const BLOB = 'minn_suite_db_blob';
+	wp( [ 'eval', `$v = array(); for ( $i = 0; $i < 90; $i++ ) { $v[ 'k' . $i ] = str_repeat( 'x', 40 ); } update_option( '${ BLOB }', $v, false );` ] );
+	await page.fill( '#minn-db-fq', BLOB );
 	await page.press( '#minn-db-fq', 'Enter' );
-	// Click the row whose option_name is exactly "cron" (the big blob), not
-	// whichever cron-ish option happens to sort first.
-	await page.waitForFunction( () => {
+	await page.waitForFunction( ( name ) => {
 		const rows = [ ...document.querySelectorAll( 'tr[data-dbrow]' ) ];
-		return rows.some( ( r ) => [ ...r.children ].some( ( td ) => td.textContent === 'cron' ) );
-	}, null, { timeout: 15000 } );
-	await page.evaluate( () => {
+		return rows.some( ( r ) => [ ...r.children ].some( ( td ) => td.textContent === name ) );
+	}, BLOB, { timeout: 15000 } );
+	await page.evaluate( ( name ) => {
 		const rows = [ ...document.querySelectorAll( 'tr[data-dbrow]' ) ];
-		rows.find( ( r ) => [ ...r.children ].some( ( td ) => td.textContent === 'cron' ) ).click();
-	} );
+		rows.find( ( r ) => [ ...r.children ].some( ( td ) => td.textContent === name ) ).click();
+	}, BLOB );
 	await page.waitForSelector( '.minn-dbd', { timeout: 15000 } );
 	t.check( 'Detail modal titles the table', ( await page.textContent( '.minn-modal-title' ) ) === 'wp_options' );
 	t.check( 'Detail lists every column', ( await page.$$eval( '.minn-dbd-row', ( r ) => r.length ) ) >= 4 );
@@ -108,11 +121,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const maxLen = await page.$$eval( '.minn-dbd-val', ( vals ) => Math.max( ...vals.map( ( v ) => v.textContent.length ) ) );
 	t.check( 'Full value refetched past the 2 KB list cap', maxLen > 2048, 'longest value ' + maxLen + ' chars' );
 	// Serialized blob stays raw text (never unserialized into structure).
-	const cronVal = await page.$$eval( '.minn-dbd-val', ( vals ) =>
+	const bigVal = await page.$$eval( '.minn-dbd-val', ( vals ) =>
 		vals.map( ( v ) => v.textContent ).find( ( x ) => x.length > 2048 ) || '' );
-	t.check( 'Serialized value renders raw', /^a:\d+:{/.test( cronVal ) );
+	t.check( 'Serialized value renders raw', /^a:\d+:{/.test( bigVal ) );
 	t.check( 'Copy control offered on values', await page.$( '[data-dbcopy]' ) !== null );
 	await page.click( '#minn-modal-close' );
+	wp( [ 'option', 'delete', BLOB ] );
 
 	// --- Back to the table list ------------------------------------------
 	await page.click( '#minn-db-back' );

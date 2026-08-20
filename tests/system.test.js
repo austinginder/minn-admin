@@ -2,7 +2,7 @@
  * System diagnostics page: the minn-admin/v1/system endpoint shape, the
  * rendered health strip + group cards + largest-tables, and copy-report.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, WP, launch, login, reporter } = require( './helpers' );
 const fs = require( 'fs' );
 
 ( async () => {
@@ -100,12 +100,19 @@ const fs = require( 'fs' );
 	t.check( 'Licenses health check is clickable, card is gone', await page.evaluate( () =>
 		!! document.querySelector( '.minn-sys-check[data-sysgoto="licenses"]' )
 		&& ! document.getElementById( 'minn-sys-licenses' ) ) );
-	// Act-on-it health cards: Backups → the Backups surface, Debug mode →
-	// the Debug tools card (both deterministic on the dev site: UpdraftPlus
-	// is a resident-active fixture and wp-config is writable).
-	t.check( 'Backups + Debug mode health cards are clickable', await page.evaluate( () =>
-		!! document.querySelector( '.minn-sys-check[data-sysgoto="backups"]' )
-		&& !! document.querySelector( '.minn-sys-check[data-sysgoto="debug"]' ) ) );
+	// Act-on-it health cards: Debug mode → the Debug tools card, which any
+	// writable wp-config gets. Backups → the Backups surface, but that row is
+	// only rendered where a backups provider is active, so asserting it
+	// unconditionally made this a fixture check. Tie it to the boot flag
+	// instead, which also pins the absence on a site with no provider.
+	const actCards = await page.evaluate( () => ( {
+		debug: !! document.querySelector( '.minn-sys-check[data-sysgoto="debug"]' ),
+		backups: !! document.querySelector( '.minn-sys-check[data-sysgoto="backups"]' ),
+		provider: !! ( window.MINN && window.MINN.backup ),
+	} ) );
+	t.check( 'Debug mode health card is clickable', actCards.debug, JSON.stringify( actCards ) );
+	t.check( 'Backups health card tracks whether a provider is active',
+		actCards.provider === actCards.backups, JSON.stringify( actCards ) );
 	await page.evaluate( () => { document.querySelector( '.minn-scroll' ).scrollTop = 0; } );
 
 	/* ===== Loopback/REST self-checks + Tools card ===== */
@@ -228,13 +235,16 @@ const fs = require( 'fs' );
 		t.check( 'a toggle switch is present for a live constant', ( await page.$$( '.minn-sys-toggle [data-const]' ) ).length > 0 );
 
 		// Guarded write round-trip against the real wp-config, with a
-		// filesystem backup restored in finally no matter what. The path is
-		// resolved relative to this file (…/public/wp-content/plugins/
-		// minn-admin/tests) so nothing site-specific is hardcoded; the test
-		// self-skips if wp-config isn't where a standard install keeps it
-		// (e.g. running against a remote site, or a config kept one level up).
+		// filesystem backup restored in finally no matter what. The path comes
+		// from the harness's WP root (MINN_TEST_WP), NOT from walking up
+		// __dirname: the plugin directory is a symlink on every site but the
+		// dev one, so __dirname walks into the DEV site and this test then
+		// backed up, read and restored the wrong site's wp-config while the
+		// REST write landed on the site under test. The test self-skips if
+		// wp-config isn't where a standard install keeps it (a remote site, or
+		// a config kept one level up).
 		const path = require( 'path' );
-		const wpConfig = path.resolve( __dirname, '..', '..', '..', '..', 'wp-config.php' );
+		const wpConfig = path.resolve( WP, 'wp-config.php' );
 		if ( fs.existsSync( wpConfig ) ) {
 			const backup = wpConfig + '.test-bak';
 			fs.copyFileSync( wpConfig, backup );

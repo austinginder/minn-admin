@@ -52,12 +52,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		null, { timeout: 15000 } );
 		t.check( 'save succeeds through the Settings button', true );
 
-		// Front-end truth: the CSS rides the #wp-custom-css style tag.
+		// Front-end truth: the CSS reaches the page. WHERE it lands depends on
+		// the theme, so the tag id is not the assertion — a classic theme
+		// prints a #wp-custom-css tag, a block theme appends the same CSS to
+		// the global styles inline stylesheet. Asserting the id passed on the
+		// dev site (classic theme) and failed on any block theme while the
+		// feature worked perfectly.
 		const front = await page.evaluate( async () => {
 			const r = await fetch( window.MINN.site.url + '?minn_css_probe=' + Math.random(), { credentials: 'same-origin' } );
 			return r.text();
 		} );
-		t.check( 'front end serves the saved CSS', front.includes( '.minn-suite-css' ) && front.includes( 'wp-custom-css' ) );
+		t.check( 'front end serves the saved CSS',
+			front.includes( '.minn-suite-css' ) && /<style[^>]*>[^<]*\.minn-suite-css/.test( front ), '' );
 
 		// Broken CSS is refused and the typed text SURVIVES the failed save.
 		await page.evaluate( () => { document.querySelector( '#minn-custom-css' ).value = ''; } );

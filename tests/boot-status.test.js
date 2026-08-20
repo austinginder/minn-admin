@@ -80,7 +80,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'Fallback: standalone notifications fetch fires', hits( 'minn-admin/v1/notifications' ) >= 1 );
 	t.check( 'Fallback: standalone types fetch fires', hits( 'wp/v2/types' ) >= 1 );
 	t.check( 'Fallback: standalone plugins fetch fires', hits( 'wp/v2/plugins' ) >= 1 );
-	t.check( 'Fallback: order summary fetches fire', hits( 'wc/v3/reports/sales' ) >= 1 && hits( 'wc/v3/orders' ) >= 1 );
+	// The order summary only exists where WooCommerce does. Asserting it
+	// unconditionally makes this suite a WooCommerce suite, which fails for want
+	// of a fixture on a bare site (the next-core lab) rather than for a bug.
+	const hasWc = await page.evaluate( () => !! ( window.MINN && window.MINN.wc ) );
+	if ( hasWc ) {
+		t.check( 'Fallback: order summary fetches fire', hits( 'wc/v3/reports/sales' ) >= 1 && hits( 'wc/v3/orders' ) >= 1 );
+	} else {
+		console.log( 'SKIP  Fallback: order summary fetches fire (WooCommerce not active)' );
+	}
 	t.check( 'Fallback: core status fetch fires', hits( 'minn-admin/v1/core' ) >= 1 );
 
 	const fb = await page.evaluate( () => {
