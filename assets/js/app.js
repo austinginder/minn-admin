@@ -29800,11 +29800,99 @@
 					}
 				} );
 			}
+			// Chrome's indent inside a list emits the nesting as a SIBLING of
+			// the item — <li>One</li><ul><li>Two</li></ul> — which is invalid
+			// HTML and not the shape core/list stores. hoistStrayLists moves
+			// each one into the item before it (merging when that item already
+			// nests a list), so the DOM matches what the serializer writes and
+			// a second Tab can see its real siblings.
+			const reanchorCaret = ( fn ) => {
+				// A cloned Range is LIVE: removing its subtree during the move
+				// collapses it to the removal point, which is why restoring a
+				// saved Range lands the caret in the wrong item (probed). Hold
+				// the node and offset as plain values and rebuild after.
+				const s = window.getSelection();
+				const node = s && s.rangeCount ? s.anchorNode : null;
+				const off = s ? s.anchorOffset : 0;
+				fn();
+				if ( ! node || ! node.isConnected ) return;
+				const max = node.nodeType === Node.TEXT_NODE ? node.textContent.length : node.childNodes.length;
+				try {
+					const r = document.createRange();
+					r.setStart( node, Math.min( off, max ) );
+					r.collapse( true );
+					const s2 = window.getSelection();
+					s2.removeAllRanges();
+					s2.addRange( r );
+				} catch ( e ) { /* node reshaped — keep Chrome's own caret */ }
+			};
+			const hoistStrayLists = ( root ) => {
+				$$( 'ul, ol', root ).forEach( ( list ) => {
+					const parent = list.parentElement;
+					if ( ! parent || ! /^(UL|OL)$/.test( parent.tagName ) ) return;
+					const host = list.previousElementSibling;
+					if ( ! host || host.tagName !== 'LI' ) return;
+					const existing = Array.from( host.children ).find( ( c ) => /^(UL|OL)$/.test( c.tagName ) );
+					if ( existing && existing !== list ) {
+						while ( list.firstChild ) existing.appendChild( list.firstChild );
+						list.remove();
+					} else {
+						host.appendChild( list );
+					}
+				} );
+				// Outdent unwraps the nested list but leaves the item INSIDE
+				// the item it was nested under — <li>One<li>Two</li></li>.
+				// Hand it back to the list as the host's next sibling, which
+				// is where lifting it was supposed to land.
+				$$( 'li > li', root ).forEach( ( inner ) => {
+					const host = inner.parentElement;
+					const list = host && host.parentElement;
+					if ( ! list || ! /^(UL|OL)$/.test( list.tagName ) ) return;
+					list.insertBefore( inner, host.nextSibling );
+				} );
+			};
+
+			// Tab nests the current list item, Shift+Tab lifts it back out —
+			// the Classic Editor and Gutenberg behaviour. Captured ONLY inside
+			// a list: everywhere else Tab keeps moving focus out of the body
+			// (the first item of a list has nothing to nest under, so it falls
+			// through too). Runs through execCommand so ⌘Z walks it back.
+			const listItemAt = () => {
+				const s = window.getSelection();
+				if ( ! s || ! s.rangeCount ) return null;
+				let n = s.anchorNode;
+				if ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentElement;
+				const li = n && n.closest ? n.closest( 'li' ) : null;
+				return li && body.contains( li ) && ! li.closest( '.minn-block-island' ) ? li : null;
+			};
 			body.addEventListener( 'keydown', ( e ) => {
 				if ( e.altKey && e.key === 'F10' ) {
 					e.preventDefault();
 					enterToolbar();
+					return;
 				}
+				if ( e.key !== 'Tab' || e.metaKey || e.ctrlKey || e.altKey ) return;
+				const li = listItemAt();
+				if ( ! li ) return;
+				if ( e.shiftKey ) {
+					// A top-level item has nowhere to lift to — let Tab do its
+					// normal job rather than silently swallowing the keypress.
+					// The parent list's own parent is an <li> once normalized,
+					// and a <ul>/<ol> in the moment between indent and hoist.
+					const gp = li.parentElement && li.parentElement.parentElement;
+					if ( ! gp || ! /^(UL|OL|LI)$/.test( gp.tagName ) ) return;
+					e.preventDefault();
+					document.execCommand( 'outdent', false, null );
+				} else {
+					// Nesting needs a preceding sibling to nest under — the
+					// same rule the block editor applies.
+					if ( ! li.previousElementSibling ) return;
+					e.preventDefault();
+					document.execCommand( 'indent', false, null );
+				}
+				reanchorCaret( () => hoistStrayLists( body ) );
+				scheduleAutosave();
+				updateEditorStats();
 			} );
 
 			const runTool = ( btn ) => {
@@ -38143,6 +38231,7 @@
 							<span class="minn-kbd">⌘/</span><span>${ esc( __( 'Block library: browse every block, design and pattern' ) ) }</span>
 							<span class="minn-kbd">⌘⇧F</span><span>${ esc( __( 'Find & replace in the post' ) ) }</span>
 							<span class="minn-kbd">⌥F10</span><span>${ esc( __( 'Formatting toolbar: arrows move between buttons, Escape returns to writing' ) ) }</span>
+							<span class="minn-kbd">${ esc( __( 'Tab' ) ) }</span><span>${ esc( __( 'In a list: nest the item under the one above (⇧Tab lifts it back)' ) ) }</span>
 							<span class="minn-kbd">⌘⇧D</span><span>${ esc( __( 'Focus mode: fade all but the current paragraph' ) ) }</span>
 							<span class="minn-kbd">⌘⇧O</span><span>${ esc( __( 'Outline mode: just the writing and the outline' ) ) }</span>
 							<span class="minn-kbd">⌘.</span><span>${ esc( __( 'Show or hide the navigation' ) ) }</span>
