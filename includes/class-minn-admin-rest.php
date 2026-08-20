@@ -2155,51 +2155,12 @@ class Minn_Admin_REST {
 	 * dropped) plus metadata — never the whole thing, which can be enormous.
 	 */
 	public static function read_debug_log( WP_REST_Request $request ) {
-		$path = self::debug_log_path();
-		// A path outside the install does not shorten against ABSPATH, so it
-		// would render as the full server path. Name it without locating it.
-		$owned = ! class_exists( 'Minn_Admin_Logs' ) || Minn_Admin_Logs::site_owned( $path );
-		$rel   = $owned ? str_replace( ABSPATH, '', $path ) : basename( $path );
-		if ( ! file_exists( $path ) ) {
-			return rest_ensure_response(
-				array(
-					'exists'  => false,
-					'path'    => $rel,
-					'content' => '',
-					'size'    => 0,
-				)
-			);
+		$path    = self::debug_log_path();
+		$payload = Minn_Admin_Logs::tail_file( $path );
+		if ( ! empty( $payload['exists'] ) && Minn_Admin_Logs::site_owned( $path ) ) {
+			$payload['writable'] = wp_is_writable( $path );
 		}
-		$max       = 256 * 1024;
-		$size      = (int) filesize( $path );
-		$truncated = $size > $max;
-		$content   = '';
-		$fh        = @fopen( $path, 'rb' );
-		if ( $fh ) {
-			if ( $truncated ) {
-				fseek( $fh, -$max, SEEK_END );
-			}
-			$content = (string) stream_get_contents( $fh );
-			fclose( $fh );
-			if ( $truncated ) {
-				// Drop the partial line the byte-offset seek landed inside.
-				$nl = strpos( $content, "\n" );
-				if ( false !== $nl ) {
-					$content = substr( $content, $nl + 1 );
-				}
-			}
-		}
-		return rest_ensure_response(
-			array(
-				'exists'     => true,
-				'path'       => $rel,
-				'size'       => $size,
-				'size_human' => size_format( $size, 1 ),
-				'truncated'  => $truncated,
-				'writable'   => wp_is_writable( $path ),
-				'content'    => $content,
-			)
-		);
+		return rest_ensure_response( $payload );
 	}
 
 	/** Empty the debug log (truncate to zero). */
@@ -2253,7 +2214,7 @@ class Minn_Admin_REST {
 		foreach ( (array) $req->get_param( 'ids' ) as $id ) {
 			$id = (int) $id;
 			$post = $id ? get_post( $id ) : null;
-			if ( ! $post || 'attachment' !== $post->post_type ) {
+			if ( ! $post || 'attachment' !== $post->post_type || ! current_user_can( 'read_post', $id ) ) {
 				continue;
 			}
 			$meta = wp_get_attachment_metadata( $id );
@@ -5127,6 +5088,12 @@ class Minn_Admin_REST {
 		}
 		foreach ( $rows as $row ) {
 			$uid    = (int) $row->user_id;
+			// list_users is only the collection gate. WooCommerce and other
+			// integrations narrow edit_user per account, and session presence is
+			// private user data just like the email returned by the list below.
+			if ( ! current_user_can( 'edit_user', $uid ) ) {
+				continue;
+			}
 			$tokens = maybe_unserialize( $row->meta_value );
 			$class  = self::classify_session_tokens( $tokens );
 			if ( 'active' === $class ) {
@@ -5423,6 +5390,12 @@ Please click the following link to confirm the invite:
 		$ids   = array_map( 'intval', (array) $query->get_results() );
 		$items = array();
 		foreach ( $ids as $uid ) {
+			// Match core's users collection in edit context: a delegated
+			// list_users capability does not override per-account edit_user
+			// restrictions (notably WooCommerce shop managers).
+			if ( ! current_user_can( 'edit_user', $uid ) ) {
+				continue;
+			}
 			$user = get_userdata( $uid );
 			if ( ! $user ) {
 				continue;
@@ -7487,6 +7460,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $post || 'trash' === $post->post_status ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
+		$type = get_post_type_object( $post->post_type );
+		if ( ! $type || ! current_user_can( $type->cap->create_posts ) ) {
+			return new WP_Error( 'forbidden', __( 'You are not allowed to create this type of content.', 'minn-admin' ), array( 'status' => 403 ) );
+		}
 		$new_id = wp_insert_post(
 			array(
 				'post_title'     => $post->post_title ? $post->post_title : 'Untitled',
@@ -8384,10 +8361,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 
 		$log_path = self::debug_log_path();
+		$log_read = Minn_Admin_Logs::tail_file( $log_path );
 		$log      = array(
-			'path'       => str_replace( ABSPATH, '', $log_path ),
-			'exists'     => file_exists( $log_path ),
-			'size_human' => file_exists( $log_path ) ? size_format( (int) filesize( $log_path ), 1 ) : '',
+			'path'       => (string) ( $log_read['path'] ?? '' ),
+			'exists'     => ! empty( $log_read['exists'] ),
+			'size_human' => (string) ( $log_read['size_human'] ?? '' ),
 		);
 
 		return array(

@@ -179,6 +179,12 @@ add_action( 'rest_api_init', function () {
 					return $ids;
 				}
 				$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $ids ) ) ) );
+				$ids = array_values( array_filter( $ids, function ( $id ) {
+					// Folder plugins return their whole membership set. Core's
+					// media collection still applies read_post per attachment, so
+					// this include-list helper must preserve the same boundary.
+					return current_user_can( 'read_post', $id );
+				} ) );
 				if ( ! $ids ) {
 					return rest_ensure_response( array( 'ids' => array(), 'capped' => false ) );
 				}

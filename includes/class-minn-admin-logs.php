@@ -220,7 +220,7 @@ class Minn_Admin_Logs {
 		$rel   = $owned ? str_replace( ABSPATH, '', (string) $path ) : basename( (string) $path );
 		if ( ! $owned ) {
 			return array(
-				'exists'  => file_exists( $path ),
+				'exists'  => false,
 				'path'    => $rel,
 				'content' => '',
 				'size'    => 0,
@@ -270,7 +270,10 @@ class Minn_Admin_Logs {
 			'label' => $label,
 			'group' => $group,
 			'stat'  => function () use ( $path ) {
-				$exists = file_exists( $path );
+				// A configured host-level log is outside this site's authority.
+				// Do not stat it for the source list: existence, size and
+				// modification time all belong to another boundary.
+				$exists = self::site_owned( $path ) && file_exists( $path );
 				return array(
 					'exists'   => $exists,
 					'size'     => $exists ? (int) filesize( $path ) : 0,

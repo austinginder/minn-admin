@@ -1,0 +1,309 @@
+<?php
+/**
+ * v0.34 object and filesystem boundary regressions.
+ *
+ * Run: wp eval-file tests/security-v034-boundaries.test.php --user=admin --path=<site>
+ *
+ * @package minn-admin
+ */
+
+$results = array();
+$check   = function ( $label, $ok, $detail = '' ) use ( &$results ) {
+	$results[] = $ok;
+	printf( "%s  %s%s\n", $ok ? 'PASS' : 'FAIL', $label, $detail ? " — {$detail}" : '' );
+};
+
+$admin = get_users( array( 'role' => 'administrator', 'number' => 1 ) );
+$admin = $admin ? (int) $admin[0]->ID : 0;
+
+// --- 1. every debug-log projection refuses an outside-install file -------
+$debug_path = Minn_Admin_Logs::debug_log_path();
+$default_log = WP_CONTENT_DIR . '/debug.log';
+if ( $debug_path !== $default_log || is_link( $debug_path ) || ! wp_is_writable( dirname( $debug_path ) ) ) {
+	echo "SKIP  debug log cannot be replaced with a symlink fixture on this site\n";
+} else {
+	$outside = tempnam( sys_get_temp_dir(), 'minn-log-boundary-' );
+	$backup  = $debug_path . '.minn-security-backup-' . wp_generate_password( 12, false, false );
+	$secret  = 'MINN-OUTSIDE-LOG-SECRET-' . wp_generate_password( 20, false, false );
+	$had_log = file_exists( $debug_path );
+	$moved   = ! $had_log || rename( $debug_path, $backup );
+	$linked  = false;
+	try {
+		file_put_contents( $outside, $secret );
+		$linked = $moved && symlink( $outside, $debug_path );
+		clearstatcache( true, $debug_path );
+		$check( 'Outside-log fixture is outside the site boundary', $linked && ! Minn_Admin_Logs::site_owned( $debug_path ) );
+
+		if ( $linked ) {
+			$response = Minn_Admin_REST::read_debug_log( new WP_REST_Request( 'GET', '/minn-admin/v1/system/debug-log' ) );
+			$data     = (array) rest_ensure_response( $response )->get_data();
+			$check(
+				'Legacy debug-log reader returns no outside-install content',
+				false === strpos( (string) ( $data['content'] ?? '' ), $secret ),
+				'content bytes ' . strlen( (string) ( $data['content'] ?? '' ) )
+			);
+			$check(
+				'Legacy debug-log reader exposes no absolute outside path',
+				( $data['path'] ?? '' ) !== $outside && false === strpos( (string) ( $data['path'] ?? '' ), dirname( $outside ) )
+			);
+
+			$reflection = new ReflectionMethod( Minn_Admin_REST::class, 'config_state' );
+			$reflection->setAccessible( true );
+			$config = (array) $reflection->invoke( null );
+			$log    = (array) ( $config['log'] ?? array() );
+			$check(
+				'System config exposes no absolute outside log path or size',
+				( $log['path'] ?? '' ) !== $outside
+					&& false === strpos( (string) ( $log['path'] ?? '' ), dirname( $outside ) )
+					&& empty( $log['size_human'] ),
+				'path ' . (string) ( $log['path'] ?? '' ) . ', size ' . (string) ( $log['size_human'] ?? '' )
+			);
+		}
+	} finally {
+		if ( $linked && is_link( $debug_path ) ) {
+			unlink( $debug_path );
+		}
+		if ( $had_log && file_exists( $backup ) ) {
+			rename( $backup, $debug_path );
+		}
+		if ( file_exists( $outside ) ) {
+			unlink( $outside );
+		}
+	}
+}
+
+// --- 2. duplicate respects a post type's distinct create capability ------
+register_post_type(
+	'minn_boundary_item',
+	array(
+		'public'          => false,
+		'show_ui'         => false,
+		'capability_type' => array( 'minn_boundary_item', 'minn_boundary_items' ),
+		'map_meta_cap'    => true,
+		'capabilities'    => array( 'create_posts' => 'create_minn_boundary_items' ),
+	)
+);
+remove_role( 'minn_boundary_editor' );
+add_role(
+	'minn_boundary_editor',
+	'Minn Boundary Editor',
+	array(
+		'read'                            => true,
+		'edit_posts'                      => true,
+		'list_users'                      => true,
+		'edit_minn_boundary_items'        => true,
+		'edit_others_minn_boundary_items' => true,
+		'edit_published_minn_boundary_items' => true,
+		'read_private_minn_boundary_items'   => true,
+	)
+);
+$uid = username_exists( 'minn_boundary_editor_user' );
+if ( ! $uid ) {
+	$uid = wp_insert_user(
+		array(
+			'user_login' => 'minn_boundary_editor_user',
+			'user_pass'  => wp_generate_password( 24 ),
+			'role'       => 'minn_boundary_editor',
+		)
+	);
+}
+wp_update_user( array( 'ID' => $uid, 'role' => 'minn_boundary_editor' ) );
+wp_set_current_user( $admin );
+$source_id = wp_insert_post(
+	array(
+		'post_type'   => 'minn_boundary_item',
+		'post_status' => 'publish',
+		'post_title'  => 'Minn boundary source',
+	),
+	true
+);
+
+$duplicate_id = 0;
+if ( is_wp_error( $source_id ) ) {
+	$check( 'Duplicate fixture post created', false, $source_id->get_error_message() );
+} else {
+	wp_set_current_user( $uid );
+	$type = get_post_type_object( 'minn_boundary_item' );
+	$check( 'Fixture may edit the source item', current_user_can( 'edit_post', $source_id ) );
+	$check( 'Fixture may not create this post type', ! current_user_can( $type->cap->create_posts ) );
+	$request = new WP_REST_Request( 'POST', '/minn-admin/v1/posts/' . $source_id . '/duplicate' );
+	$request->set_url_params( array( 'id' => $source_id ) );
+	$response = rest_do_request( $request );
+	$data     = (array) $response->get_data();
+	$duplicate_id = isset( $data['id'] ) ? (int) $data['id'] : 0;
+	$check(
+		'Duplicate refuses a caller without the post type create capability',
+		403 === $response->get_status() && ! $duplicate_id,
+		'status ' . $response->get_status() . ', created ' . $duplicate_id
+	);
+}
+
+// --- 3. image-block never resolves an attachment the caller cannot read --
+wp_set_current_user( $admin );
+$private_parent = wp_insert_post(
+	array(
+		'post_type'   => 'post',
+		'post_status' => 'private',
+		'post_title'  => 'Minn private attachment parent',
+	),
+	true
+);
+$attachment_id = is_wp_error( $private_parent ) ? 0 : wp_insert_attachment(
+	array(
+		'post_title'     => 'Minn private attachment',
+		'post_status'    => 'inherit',
+		'post_mime_type' => 'image/png',
+		'post_parent'    => $private_parent,
+	),
+	'',
+	$private_parent,
+	true
+);
+$attachment_id = is_wp_error( $attachment_id ) ? 0 : (int) $attachment_id;
+if ( $attachment_id ) {
+	update_post_meta( $attachment_id, '_wp_attachment_image_alt', 'MINN PRIVATE ALT' );
+}
+$image_filter = function ( $blocks ) {
+	$blocks['minn-test/private-image'] = array(
+		'label'   => 'Private image probe',
+		'rebuild' => function ( $images ) {
+			return '<!-- ' . wp_json_encode( $images ) . ' -->';
+		},
+	);
+	return $blocks;
+};
+add_filter( 'minn_admin_image_blocks', $image_filter );
+
+wp_set_current_user( $uid );
+if ( ! $attachment_id || current_user_can( 'read_post', $attachment_id ) ) {
+	echo "SKIP  this WordPress fixture does not produce an unreadable inherited attachment\n";
+} else {
+	$request = new WP_REST_Request( 'POST', '/minn-admin/v1/image-block' );
+	$request->set_param( 'block', 'minn-test/private-image' );
+	$request->set_param( 'ids', array( $attachment_id ) );
+	$request->set_param( 'raw', '' );
+	$response = rest_do_request( $request );
+	$data     = (array) $response->get_data();
+	$check(
+		'Image-block refuses an attachment the caller cannot read',
+		400 === $response->get_status()
+			&& false === strpos( (string) ( $data['markup'] ?? '' ), 'MINN PRIVATE ALT' ),
+		'status ' . $response->get_status()
+	);
+
+	$routes = rest_get_server()->get_routes();
+	$folder_route = '/minn-admin/v1/media/folders/(?P<id>\d+)/ids';
+	if ( ! isset( $routes[ $folder_route ] ) ) {
+		echo "SKIP  no media-folder provider registered on this site\n";
+	} else {
+		$folder_filter = function () use ( $attachment_id ) {
+			return array(
+				'name'    => 'Boundary fixture',
+				'folders' => function () {
+					return array();
+				},
+				'ids'     => function () use ( $attachment_id ) {
+					return array( $attachment_id );
+				},
+			);
+		};
+		add_filter( 'minn_admin_media_folders', $folder_filter, -999 );
+		$request = new WP_REST_Request( 'GET', '/minn-admin/v1/media/folders/777/ids' );
+		$request->set_url_params( array( 'id' => 777 ) );
+		$response = rest_do_request( $request );
+		$data     = (array) $response->get_data();
+		$check(
+			'Media-folder ids omit attachments the caller cannot read',
+			200 === $response->get_status() && ! in_array( $attachment_id, (array) ( $data['ids'] ?? array() ), true ),
+			'status ' . $response->get_status() . ', ids ' . implode( ',', (array) ( $data['ids'] ?? array() ) )
+		);
+		remove_filter( 'minn_admin_media_folders', $folder_filter, -999 );
+	}
+}
+remove_filter( 'minn_admin_image_blocks', $image_filter );
+
+// --- 4. a delegated list_users grant still respects edit_user per account -
+wp_set_current_user( $admin );
+$forbidden_uid = username_exists( 'minn_boundary_forbidden_user' );
+if ( ! $forbidden_uid ) {
+	$forbidden_uid = wp_insert_user(
+		array(
+			'user_login' => 'minn_boundary_forbidden_user',
+			'user_pass'  => wp_generate_password( 24 ),
+			'user_email' => 'minn-boundary-private@example.test',
+			'role'       => 'editor',
+		)
+	);
+}
+$forbidden_uid = is_wp_error( $forbidden_uid ) ? 0 : (int) $forbidden_uid;
+if ( $forbidden_uid ) {
+	update_user_meta(
+		$forbidden_uid,
+		'session_tokens',
+		array(
+			hash( 'sha256', 'minn-boundary-session' ) => array(
+				'expiration' => time() + HOUR_IN_SECONDS,
+				'login'      => time(),
+				'ip'         => '192.0.2.1',
+				'ua'         => 'Minn boundary fixture',
+			),
+		)
+	);
+}
+$user_scope = function ( $caps, $cap, $user_id, $args ) use ( $uid, $forbidden_uid ) {
+	if ( (int) $user_id !== (int) $uid || 'edit_user' !== $cap ) {
+		return $caps;
+	}
+	$target = isset( $args[0] ) ? (int) $args[0] : 0;
+	return $target === $forbidden_uid ? array( 'do_not_allow' ) : array( 'list_users' );
+};
+add_filter( 'map_meta_cap', $user_scope, 999, 4 );
+wp_set_current_user( $uid );
+if ( ! $forbidden_uid ) {
+	$check( 'User-scope fixture created', false );
+} else {
+	$check( 'Fixture has the collection capability', current_user_can( 'list_users' ) );
+	$check( 'Fixture cannot edit the protected account', ! current_user_can( 'edit_user', $forbidden_uid ) );
+
+	$request = new WP_REST_Request( 'GET', '/minn-admin/v1/users' );
+	$request->set_param( 'per_page', 100 );
+	$response = rest_do_request( $request );
+	$listed   = wp_list_pluck( (array) $response->get_data(), 'id' );
+	$check(
+		'Users list omits accounts outside delegated edit_user scope',
+		200 === $response->get_status() && ! in_array( $forbidden_uid, array_map( 'intval', $listed ), true ),
+		'status ' . $response->get_status()
+	);
+
+	$request = new WP_REST_Request( 'GET', '/minn-admin/v1/users' );
+	$request->set_param( 'per_page', 100 );
+	$request->set_param( 'session', 'active' );
+	$response = rest_do_request( $request );
+	$active   = wp_list_pluck( (array) $response->get_data(), 'id' );
+	$check(
+		'Active-session filter omits accounts outside delegated edit_user scope',
+		200 === $response->get_status() && ! in_array( $forbidden_uid, array_map( 'intval', $active ), true ),
+		'status ' . $response->get_status()
+	);
+}
+remove_filter( 'map_meta_cap', $user_scope, 999 );
+
+// --- cleanup -------------------------------------------------------------
+wp_set_current_user( $admin );
+foreach ( array( $duplicate_id, $attachment_id, is_wp_error( $private_parent ) ? 0 : $private_parent, is_wp_error( $source_id ) ? 0 : $source_id ) as $post_id ) {
+	if ( $post_id ) {
+		wp_delete_post( $post_id, true );
+	}
+}
+if ( ! function_exists( 'wp_delete_user' ) ) {
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+}
+wp_delete_user( $uid );
+if ( $forbidden_uid ) {
+	wp_delete_user( $forbidden_uid );
+}
+remove_role( 'minn_boundary_editor' );
+unregister_post_type( 'minn_boundary_item' );
+
+printf( "\nsecurity-v034-boundaries: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
+exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );
