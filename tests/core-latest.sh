@@ -83,6 +83,10 @@ SUITES=(
 	i18n.test.js
 	a11y-chrome.test.js
 	rtl.test.js
+	# phone widths: layout primitives are what a core release moves first.
+	# mobile-surfaces stays out with the adapter suites — it resolves its
+	# families from the boot payload and has no providers to resolve here.
+	mobile-editor.test.js
 )
 
 # Deliberately absent, so the next run does not re-litigate them. Each needs a
