@@ -3036,6 +3036,12 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* Dim stat values while a new Analytics range is fetching — labels stay put. */
 .minn-wc-analytics-loading .minn-stat-value { color: var(--text3); font-weight: 600; }
 .minn-prod-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* The text half of a thumb + title cell is a flex item, so it keeps the
+   default min-width:auto — and since .minn-row-title never wraps, its
+   min-content width is the whole title. A flex item can't shrink below that,
+   so a long name overflowed the cell and painted across the next column
+   (ellipsis never fired). Same shape .minn-media-col uses in the media list. */
+.minn-prod-name-text { flex: 1; min-width: 0; }
 .minn-order-notes-list { display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow-y: auto; }
 .minn-order-note {
   padding: 10px 12px;
@@ -4423,6 +4429,13 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   .minn-product-cols > :nth-child(5) { display: none; }
   .minn-product-cols.with-cb > :nth-child(3), .minn-product-cols.with-cb > :nth-child(4),
   .minn-product-cols.with-cb > :nth-child(6) { display: none; }
+  /* The checkbox shifts every column along by one, so the two rules above
+     hide DIFFERENT cells and their effect unions: without this line a
+     selectable row keeps only the checkbox and the row-end control. Put the
+     name and price back (name is a flex cell). Same fix as .minn-user-cols
+     .has-cb below. */
+  .minn-product-cols.with-cb > :nth-child(2) { display: flex; }
+  .minn-product-cols.with-cb > :nth-child(5) { display: block; }
   .minn-coupon-cols { grid-template-columns: 1fr 72px 40px; }
   .minn-coupon-cols > :nth-child(2), .minn-coupon-cols > :nth-child(4),
   .minn-coupon-cols > :nth-child(5), .minn-coupon-cols > :nth-child(6) { display: none; }

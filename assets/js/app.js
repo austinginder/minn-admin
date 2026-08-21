@@ -12753,7 +12753,7 @@
 					${ canBulk ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb" data-psel="${ p.id }" aria-label="${ esc( sprintf( /* translators: %s: the title or name of the row being selected. */ __( 'Select %s' ), p.name ) ) }"${ psel.has( p.id ) ? ' checked' : '' }></div>` : '' }
 					<div class="minn-cell-clip minn-prod-name">
 						${ productThumb( p ) }
-						<div>
+						<div class="minn-prod-name-text">
 							<div class="minn-row-title">${ esc( p.name || 'Untitled' ) }</div>
 							<div class="minn-row-slug">${ esc( productTypeLabel( p.type ) ) }${ p.categories && p.categories[ 0 ] ? ' · ' + esc( p.categories[ 0 ].name ) : '' }</div>
 						</div>
@@ -13280,7 +13280,7 @@
 				<div class="minn-table-row minn-customer-cols" data-customer="${ cu.id }">
 					<div class="minn-cell-clip minn-prod-name">
 						${ cu.avatar_url ? `<img class="minn-prod-thumb" src="${ esc( cu.avatar_url ) }" alt="" loading="lazy">` : '' }
-						<div>
+						<div class="minn-prod-name-text">
 							<div class="minn-row-title">${ esc( customerDisplayName( cu ) ) }</div>
 							<div class="minn-row-slug">${ esc( cu.username || '' ) }${ cu.is_paying_customer ? ' · ' + esc( __( 'Paying customer' ) ) : '' }</div>
 						</div>
