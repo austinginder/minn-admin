@@ -178,6 +178,22 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				.filter( ( el ) => /^Perfmatters/.test( el.querySelector( '.minn-sys-ext-name' ).textContent.trim() ) ).length );
 		t.check( 'Perfmatters is not double-counted by the EDD sweep', perfCount === 1, String( perfCount ) );
 
+		// Automatic.css: the generic EDD sweep can never find its options
+		// (the slug tokenizes to automaticcss_plugin, the options say
+		// automatic_css) and used to answer "missing" on licensed sites —
+		// the dedicated reader is the coverage, appearing exactly once.
+		// The fixture is installed-inactive with no key, so missing IS the
+		// truthful state here; on a keyed site it reads the option pair.
+		const acss = await page.evaluate( () =>
+			[ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
+				.filter( ( el ) => /^Automatic\.css/.test( el.querySelector( '.minn-sys-ext-name' ).textContent.trim() ) )
+				.map( ( el ) => ( {
+					state: ( el.querySelector( '.minn-lic-pill' ) || { textContent: '' } ).textContent.trim().toLowerCase(),
+					off: el.classList.contains( 'off' ),
+				} ) ) );
+		t.check( 'Automatic.css rides its dedicated reader exactly once',
+			acss.length === 1 && /no license|missing/.test( acss[ 0 ].state ) && acss[ 0 ].off, JSON.stringify( acss ) );
+
 		// Inactive components carry the dimmed off state + explanation. Use
 		// the Avada THEME row: minnadmin's active theme is minn-admin-theme,
 		// so Avada is reliably inactive regardless of which vendor plugins

@@ -2178,6 +2178,29 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// Automatic.css: a stock EDD client behind a $_POST-driven settings
+	// form. The option pair is automatic_css_license_key / _status (the key
+	// is stored raw; the XXXX… masking on their screen is display-only),
+	// which the generic EDD sweep can never find: the slug tokenizes to
+	// automaticcss_plugin while the options say automatic_css — so the
+	// sweep answered "missing" for a site holding a valid license. No
+	// expiry is stored locally.
+	$providers['automatic-css'] = array(
+		'name'      => 'Automatic.css',
+		'component' => 'automaticcss-plugin/automaticcss-plugin.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'automaticcss-plugin/automaticcss-plugin.php' );
+		},
+		'read'      => function () use ( $item, $edd_state ) {
+			$key = trim( (string) get_option( 'automatic_css_license_key' ) );
+			if ( '' === $key ) {
+				return array( $item( array( 'name' => 'Automatic.css', 'state' => 'missing' ) ) );
+			}
+			list( $state, $note ) = $edd_state( get_option( 'automatic_css_license_status' ) );
+			return array( $item( array( 'name' => 'Automatic.css', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
 	// GeneratePress Premium: its option names break BOTH generic-sweep
 	// assumptions (prefix gen_premium vs slug gp-premium, and the status
 	// option is ..._license_key_status), so it gets a dedicated reader.
@@ -3754,6 +3777,118 @@ function minn_admin_license_default_providers() {
 			$word = ( is_object( $info ) && ! empty( $info->license ) ) ? (string) $info->license : '';
 			$ok   = 'valid' === $word;
 			return array( 'ok' => $ok, 'code' => $ok ? '' : ( 'expired' === $word ? 'expired' : 'invalid' ), 'message' => $ok ? '' : ( $word ? str_replace( '_', ' ', $word ) : __( 'No response from the Perfmatters server', 'minn-admin' ) ) );
+		};
+	}
+
+	// Automatic.css: activation lives in a $_POST-driven admin form whose
+	// handler nonce-checks and redirect-exits, with no public callable — so
+	// the request is mirrored byte-for-byte against their EDD store instead
+	// (the Soflyy exception; every param comes from reading their
+	// handle_license_activation(), never invented). One deliberate
+	// deviation: their form stores even a rejected key, and Minn's contract
+	// wins there — nothing is written on failure.
+	if ( class_exists( '\\Automatic_CSS\\UI\\Settings_Page\\Plugin_Updater' ) ) {
+		$acss_edd = function ( $edd_action, $license ) {
+			$response = wp_remote_post( 'https://automaticcss.com/', array(
+				'timeout'   => 15,
+				'sslverify' => true,
+				'body'      => array(
+					'edd_action'  => $edd_action,
+					'license'     => $license,
+					'item_id'     => 164,
+					'item_name'   => rawurlencode( 'Automatic.css' ),
+					'url'         => site_url(),
+					'environment' => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
+				),
+			) );
+			if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+				return null;
+			}
+			$data = json_decode( wp_remote_retrieve_body( $response ) );
+			return ( is_object( $data ) && isset( $data->license ) ) ? $data : null;
+		};
+		$acss_code = function ( $word ) {
+			if ( 'expired' === $word ) {
+				return 'expired';
+			}
+			return 'no_activations_left' === $word ? 'site_limit' : 'invalid';
+		};
+		// The messages their own screen shows for each EDD answer, minus the
+		// dates it interpolates ('missing' is EDD's word for an unknown key
+		// and reads like Minn's missing STATE if echoed raw).
+		$acss_word = function ( $word ) {
+			switch ( $word ) {
+				case 'missing':
+				case 'item_name_mismatch':
+					return __( 'That isn’t a valid Automatic.css license key.', 'minn-admin' );
+				case 'invalid':
+				case 'site_inactive':
+					return __( 'The license is not active for this site’s URL.', 'minn-admin' );
+				case 'disabled':
+				case 'revoked':
+					return __( 'That license key has been disabled.', 'minn-admin' );
+				case 'expired':
+					return __( 'That license key has expired.', 'minn-admin' );
+				case 'no_activations_left':
+					return __( 'That license key has reached its activation limit.', 'minn-admin' );
+			}
+			return '' !== $word ? str_replace( '_', ' ', $word ) : __( 'Automatic.css did not accept that key.', 'minn-admin' );
+		};
+		$providers['automatic-css']['secret_label'] = __( 'Automatic.css license key', 'minn-admin' );
+		$providers['automatic-css']['activate']     = function ( $secret ) use ( $acss_edd, $acss_code, $acss_word ) {
+			$secret = trim( (string) $secret );
+			// Their own screen shows the stored key masked as XXXX…; a copy
+			// of that mask is not a key.
+			if ( false !== strpos( $secret, 'XXXXXXXX' ) ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'That looks like the masked key from Automatic.css’s screen — paste the full license key.', 'minn-admin' ) );
+			}
+			$data = $acss_edd( 'activate_license', $secret );
+			if ( ! $data ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No response from the Automatic.css server.', 'minn-admin' ) );
+			}
+			if ( empty( $data->success ) ) {
+				$word = (string) ( $data->error ?? $data->license );
+				return array( 'ok' => false, 'code' => $acss_code( $word ), 'message' => $acss_word( $word ) );
+			}
+			// Mirror their success writes: the raw key, and the status word
+			// the server answered with.
+			update_option( 'automatic_css_license_key', sanitize_text_field( $secret ) );
+			update_option( 'automatic_css_license_status', sanitize_key( (string) $data->license ) );
+			return array( 'ok' => true );
+		};
+		$providers['automatic-css']['deactivate'] = function () use ( $acss_edd ) {
+			$key  = trim( (string) get_option( 'automatic_css_license_key' ) );
+			$data = '' !== $key ? $acss_edd( 'deactivate_license', $key ) : null;
+			// Their handler deletes both options whatever the server said,
+			// so removal is always local-true; the message stays honest
+			// about whether the seat was actually released.
+			delete_option( 'automatic_css_license_key' );
+			delete_option( 'automatic_css_license_status' );
+			$freed = $data && 'deactivated' === (string) $data->license;
+			return array(
+				'ok'      => true,
+				'message' => $freed
+					? __( 'Automatic.css deactivated; the seat was released.', 'minn-admin' )
+					: __( 'Key removed from this site. Automatic.css did not confirm releasing the seat — check the account if the activation count matters.', 'minn-admin' ),
+			);
+		};
+		$providers['automatic-css']['verify'] = function () use ( $acss_edd, $acss_code, $acss_word ) {
+			$key = trim( (string) get_option( 'automatic_css_license_key' ) );
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No Automatic.css key is stored.', 'minn-admin' ) );
+			}
+			$data = $acss_edd( 'check_license', $key );
+			if ( ! $data ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No response from the Automatic.css server.', 'minn-admin' ) );
+			}
+			// Read-only, exactly like their own check_license: the stored
+			// status stays whatever the vendor last wrote. EDD answers
+			// site_inactive for a URL the key wasn't activated on — normal
+			// on a dev clone of a licensed site — and persisting that here
+			// would flip a truthfully-valid row on the clone's original.
+			$word = (string) $data->license;
+			$ok   = 'valid' === $word;
+			return array( 'ok' => $ok, 'code' => $ok ? '' : $acss_code( $word ), 'message' => $ok ? '' : $acss_word( $word ) );
 		};
 	}
 
