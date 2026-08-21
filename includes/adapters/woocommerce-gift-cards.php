@@ -664,8 +664,39 @@ add_action( 'rest_api_init', function () {
 			}
 			// Remaining is schema-readonly on their REST. set_balance writes
 			// the remaining column; issued amount is left alone.
+			$old = (float) $card->get_balance();
 			$card->set_balance( $balance );
 			$card->save();
+
+			// The vendor only moves a balance through credit()/debit(), which
+			// each write an Activity row; set_balance() writes none, so a
+			// top-up made here would be invisible in the ledger their own edit
+			// screen renders. Record the adjustment ourselves, naming the
+			// acting user, so the change is auditable. Never let a ledger
+			// failure break the save that already landed.
+			$delta = round( $balance - $old, wc_get_price_decimals() );
+			if ( abs( $delta ) > 0 && function_exists( 'WC_GC' ) && WC_GC()->db && WC_GC()->db->activity ) {
+				try {
+					$actor = wp_get_current_user();
+					WC_GC()->db->activity->add( array(
+						'type'       => $delta > 0 ? 'issued' : 'used',
+						'gc_id'      => $card->get_id(),
+						'gc_code'    => $card->get_code(),
+						'user_id'    => $actor ? $actor->ID : 0,
+						'user_email' => $actor ? $actor->user_email : '',
+						'amount'     => abs( $delta ),
+						/* translators: 1: the user who made the change, 2: formatted new balance. */
+						'note'       => sprintf(
+							__( 'Balance adjusted to %2$s in Minn Admin by %1$s.', 'minn-admin' ),
+							$actor ? $actor->user_login : __( 'a site administrator', 'minn-admin' ),
+							html_entity_decode( wp_strip_all_tags( minn_admin_wcgc_money( $balance, minn_admin_wcgc_currency( $card ) ) ) )
+						),
+					) );
+				} catch ( \Throwable $e ) {
+					// Ledger row is best-effort; the balance change stands.
+					unset( $e );
+				}
+			}
 
 			return rest_ensure_response( array(
 				'message' => sprintf(
