@@ -24505,13 +24505,31 @@
 				// cannot disable the rest of the island.
 				runs = [];
 				spans = [];
+				const used = new Set();
 				let ni = 0;
+				const findNode = ( text ) => {
+					// Prefer the next unused match at or after the cursor, so
+					// repeated copy still pairs in document order.
+					for ( let i = ni; i < nodes.length; i++ ) {
+						if ( ! used.has( i ) && nodes[ i ].textContent === text ) return i;
+					}
+					// Etch does not always render its blocks in the order it
+					// stores them (a hero's mock UI card renders ahead of copy
+					// declared before it), so a forward-only scan walked past
+					// lines it had already been handed and left the rest of the
+					// island read-only. Fall back to any unused match.
+					for ( let i = 0; i < ni; i++ ) {
+						if ( ! used.has( i ) && nodes[ i ].textContent === text ) return i;
+					}
+					return -1;
+				};
 				etch.forEach( ( r ) => {
-					while ( ni < nodes.length && nodes[ ni ].textContent !== r.text ) ni++;
-					if ( ni >= nodes.length ) return;
-					spans.push( wrapRun( nodes[ ni ], runs.length ) );
+					const at = findNode( r.text );
+					if ( at < 0 ) return;
+					used.add( at );
+					spans.push( wrapRun( nodes[ at ], runs.length ) );
 					runs.push( r );
-					ni++;
+					ni = at + 1;
 				} );
 				if ( ! runs.length ) return;
 				splice = spliceEtchTextRuns;
@@ -30501,33 +30519,63 @@
 		}
 		return null;
 	}
+	// One quoted JSON string inside a block comment → a run, addressed by
+	// offset. `from` narrows the search so a key name that also appears
+	// elsewhere in the comment can't be matched in the wrong object.
+	function etchRunForKey( comment, offset, key, expected, from ) {
+		const rest = comment.slice( from || 0 );
+		const keyM = rest.match( new RegExp( '"' + key.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) + '"\\s*:\\s*' ) );
+		if ( ! keyM ) return null;
+		const at = ( from || 0 ) + keyM.index + keyM[ 0 ].length;
+		const span = jsonQuotedSpan( comment, at );
+		if ( ! span ) return null;
+		let decoded;
+		try { decoded = JSON.parse( comment.slice( span.start, span.end ) ); } catch ( e ) { return null; }
+		if ( decoded !== expected ) return null;
+		return {
+			start: offset + span.start,
+			end: offset + span.end,
+			pre: '',
+			post: '',
+			text: decoded,
+			value: decoded,
+			etch: true,
+		};
+	}
+
 	function etchTextRunsOf( str ) {
 		const runs = [];
 		if ( ! str ) return runs;
-		const re = /<!--\s*wp:etch\/text\s+((?:(?!-->)[\s\S])*?)\s*(\/)?\s*-->/g;
+		// wp:etch/text holds one line in `content`; wp:etch/component holds
+		// its copy in per-instance `attributes` (the `ref` points at the
+		// shared definition, so these values belong to THIS page and are
+		// safe to edit here). Anything that isn't visible copy simply never
+		// matches a preview text node and stays unarmed.
+		const re = /<!--\s*wp:etch\/(text|component)\s+((?:(?!-->)[\s\S])*?)\s*(\/)?\s*-->/g;
 		let m;
 		while ( ( m = re.exec( str ) ) ) {
 			let attrs;
-			try { attrs = JSON.parse( m[ 1 ].trim() || '{}' ); } catch ( e ) { continue; }
-			if ( typeof attrs.content !== 'string' || ! attrs.content.trim() ) continue;
+			try { attrs = JSON.parse( m[ 2 ].trim() || '{}' ); } catch ( e ) { continue; }
 			const comment = m[ 0 ];
-			const keyM = comment.match( /"content"\s*:\s*/ );
-			if ( ! keyM ) continue;
-			const span = jsonQuotedSpan( comment, keyM.index + keyM[ 0 ].length );
-			if ( ! span ) continue;
-			let decoded;
-			try { decoded = JSON.parse( comment.slice( span.start, span.end ) ); } catch ( e ) { continue; }
-			if ( decoded !== attrs.content ) continue;
-			runs.push( {
-				start: m.index + span.start,
-				end: m.index + span.end,
-				pre: '',
-				post: '',
-				text: decoded,
-				value: decoded,
-				etch: true,
+			if ( 'text' === m[ 1 ] ) {
+				if ( typeof attrs.content !== 'string' || ! attrs.content.trim() ) continue;
+				const run = etchRunForKey( comment, m.index, 'content', attrs.content, 0 );
+				if ( run ) runs.push( run );
+				continue;
+			}
+			const inner = attrs && attrs.attributes;
+			if ( ! inner || typeof inner !== 'object' ) continue;
+			const from = comment.indexOf( '"attributes"' );
+			if ( from < 0 ) continue;
+			Object.keys( inner ).forEach( ( key ) => {
+				const v = inner[ key ];
+				if ( typeof v !== 'string' || ! v.trim() ) return;
+				const run = etchRunForKey( comment, m.index, key, v, from );
+				if ( run ) runs.push( run );
 			} );
 		}
+		// Splicing walks last-to-first, so the list must be in document order.
+		runs.sort( ( a, b ) => a.start - b.start );
 		return runs;
 	}
 	function spliceEtchTextRuns( str, runs ) {
