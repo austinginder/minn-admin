@@ -91,6 +91,27 @@ function minn_admin_wpcode_location_executes( $location ) {
 }
 
 /**
+ * Whether a location has an actual auto-runner consuming it. This is the
+ * executing set MINUS `on_demand`: WPCode's run_snippets() collects
+ * everywhere / admin_only / frontend_only / frontend_cl and never
+ * on_demand, so a snippet parked at on_demand is inert until something
+ * calls it. Distinct from location_executes(), which counts on_demand as
+ * executing on purpose (a parked payload is guarded as PHP). Used only to
+ * judge whether a RETARGET starts execution: moving from a no-runner
+ * bucket into a runner one does, moving the other way does not.
+ *
+ * @param string $location WPCode location slug.
+ * @return bool
+ */
+function minn_admin_wpcode_location_has_runner( $location ) {
+	return in_array(
+		(string) $location,
+		array( 'everywhere', 'admin_only', 'frontend_only', 'frontend_cl' ),
+		true
+	);
+}
+
+/**
  * The locations Minn offers for a given code type.
  *
  * WPCode's own form filters the location list by type in JavaScript; the REST
@@ -696,9 +717,16 @@ add_action( 'rest_api_init', function () {
 					// execution without carrying code.
 					$stored_loc  = (string) $snippet->get_location();
 					$want_loc    = null !== $request['location'] ? sanitize_key( (string) $request['location'] ) : $stored_loc;
+					// A retarget starts execution when it moves into a bucket
+					// that actually runs from one that does not. Compare by
+					// has_runner, not location_executes: on_demand counts as
+					// executing for the PHP-guard classification but has no
+					// runner, so on_demand -> everywhere must read as starting
+					// execution (location_executes would call both "executing"
+					// and miss it).
 					$retargeting = $want_loc !== $stored_loc
-						&& minn_admin_wpcode_location_executes( $want_loc )
-						&& ! minn_admin_wpcode_location_executes( $stored_loc );
+						&& minn_admin_wpcode_location_has_runner( $want_loc )
+						&& ! minn_admin_wpcode_location_has_runner( $stored_loc );
 
 					$guard = minn_admin_wpcode_guard_type(
 						(string) $snippet->get_code_type(),

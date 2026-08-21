@@ -159,6 +159,34 @@ $check(
 	'status ' . $response->get_status()
 );
 
+// --- 3b. retarget an inert on_demand PHP snippet into a running bucket ---
+// on_demand has no auto-runner, so moving a live PHP snippet from it to
+// `everywhere` starts execution just as switching it on would. The guard
+// must treat that as a code write and refuse a caller without
+// unfiltered_html, even though the body carries no `code`.
+wp_set_current_user( $admin );
+$parked = new WPCode_Snippet(
+	array(
+		'title'       => 'probe parked ' . wp_generate_password( 6, false ),
+		'code'        => 'return 1;',
+		'code_type'   => 'php',
+		'location'    => 'on_demand',
+		'auto_insert' => 1,
+		'active'      => true,
+	)
+);
+$parked_id = (int) $parked->save();
+$created[]  = $parked_id;
+
+wp_set_current_user( $uid );
+$response = $put( $parked_id, array( 'location' => 'everywhere' ) );
+$stored   = new WPCode_Snippet( $parked_id );
+$check(
+	'Retargeting on_demand -> everywhere is refused without unfiltered_html',
+	403 === $response->get_status() && 'on_demand' === (string) $stored->get_location(),
+	'status ' . $response->get_status() . ', location ' . $stored->get_location()
+);
+
 // --- 4. controls: the administrator is unaffected ------------------------
 $response = $post(
 	'/minn-admin/v1/wpcode/snippets',
