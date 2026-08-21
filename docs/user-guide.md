@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.33.0. This file ships inside the plugin, so the copy you
+*Current as of v0.34.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -143,7 +143,13 @@ away:
 
 - **Type markdown, get formatting.** `#` for a heading, `-` for a list,
   `>` for a quote, `**bold**`, `` `code` ``, `[link](url)`, `---` for a
-  divider, triple backticks for a code block. All applied as you type.
+  divider, triple backticks for a code block. All applied as you type,
+  and typing `/hr` (or rule, line, separator) reaches a divider too.
+- **The keys you already press.** Tab from the title drops you straight
+  into the writing, and Tab inside a list nests the item under the one
+  above (Shift+Tab lifts it back). The formatting toolbar is one stop
+  outside the Tab order now, reached with ⌥F10 and driven by the arrow
+  keys, so tabbing through a post no longer walks every button.
 - **The slash menu**: type `/` on an empty line for headings, lists,
   images, embeds, tables and more. **⌘/** opens the full block library,
   including your plugins' blocks and entire designs and patterns you can
@@ -221,8 +227,10 @@ away:
 
 Many sites carry structured fields beside the post body: a subtitle, an
 event date, a team list, a page assembled from sections. With Advanced
-Custom Fields active, all of it edits in Minn (sites using Pods or Meta
-Box get their fields in the same place):
+Custom Fields active, all of it edits in Minn (sites using Pods, Meta
+Box or ACPT get their fields in the same place, ACPT covering the
+everyday types with its images, repeating sections and the rest editing
+right on the post):
 
 - **Every field group appears.** The editor sidebar's Custom fields card
   opens a dialog with every group that applies to what you are editing,
@@ -248,9 +256,12 @@ Box get their fields in the same place):
   ACF's own storage, with each page's own permissions honored.
 
 Designing the fields themselves lives under **Field Groups** in the
-sidebar: see every group and where it shows, then open one into a
-builder page where fields stack, configure inline, drag to reorder, and
-save as one change. Location rules edit as readable sentences over your
+sidebar, one place shared by every plugin that defines them: ACF and
+ACPT each list their groups there, and an ACPT group opens the same
+builder ACF groups use, with its boxes kept as sections and the whole
+group lifecycle (add, duplicate, delete, export and import in ACPT's own
+file format) alongside. Open a group into a builder page where fields
+stack, configure inline, drag to reorder, and save as one change. Location rules edit as readable sentences over your
 site's real post types, templates and roles; repeaters get their own
 sub-field builder; and groups export and import as the same files ACF's
 own tools produce, with an import that updates an existing group in
