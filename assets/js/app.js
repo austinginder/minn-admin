@@ -35389,7 +35389,8 @@
 			[ icon( 'olist' ), __( 'Numbered list' ), () => document.execCommand( 'insertOrderedList', false, null ) ],
 			[ icon( 'img' ), __( 'Image' ), 'image' ],
 			[ icon( 'table' ), __( 'Table' ), { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
-			[ icon( 'minus' ), __( 'Divider' ), { html: '<hr>' } ],
+			// "hr" is what people type for this; the label alone never matched.
+			[ icon( 'minus' ), __( 'Divider' ), { html: '<hr>' }, false, '', [ 'hr', 'horizontal rule', 'rule', 'line', 'separator', 'break' ] ],
 			[ icon( 'play' ), __( 'Embed — YouTube, tweet, audio…' ), 'embed' ],
 			[ icon( 'gallery' ), __( 'Gallery' ), 'gallery' ],
 			[ icon( 'minus' ), __( 'Spacer' ), 'spacer' ],
@@ -35530,7 +35531,10 @@
 		const blocksMode = ed.mode === 'blocks';
 		const groups = [ {
 			title: 'Basics',
-			items: basicSlashItems( blocksMode ).map( ( [ ic, label, action ] ) => ( { ic, label, meta: '', action } ) ),
+			// Carry the keywords slot too, or a basic block is findable by
+			// synonym in the slash menu but not here (Divider by "hr").
+			items: basicSlashItems( blocksMode ).map( ( [ ic, label, action, _so, _ns, keywords ] ) =>
+				( { ic, label, meta: '', action, keywords: keywords || [] } ) ),
 		} ];
 		const byKey = {};
 		// `hide` names the per-user hide target for the group's heading menu:
