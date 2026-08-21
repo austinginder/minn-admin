@@ -867,7 +867,7 @@ add_action( 'rest_api_init', function () {
 	) );
 } );
 
-/* ===== ACPT field groups: a read-only view on the shared Field groups item ===== */
+/* ===== ACPT field groups on the shared Field groups item ===== */
 
 /** Where one ACPT group is attached, in words. */
 function minn_admin_acpt_group_applies_to( $group ) {
@@ -959,6 +959,9 @@ add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
 		'cap'        => 'manage_options',
 		'collection' => array(
 			'viewLabel' => 'ACPT',
+			// Rows open the shared group builder page on its ACPT backend
+			// (collection.open — a group carries a whole workflow).
+			'open'      => array( 'route' => 'field-groups/acpt/{id}' ),
 			'route'     => 'minn-admin/v1/acpt/groups',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
@@ -970,11 +973,692 @@ add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
 				array( 'key' => 'fields', 'label' => __( 'Fields', 'minn-admin' ), 'width' => 90, 'format' => 'num' ),
 			),
 			'actions'   => array(
-				// A canvas Minn does not rebuild is an honest link, not a
-				// half-built form: the row opens the group where it is edited.
+				// The row opens Minn's builder; ACPT's own canvas stays one
+				// click away for everything the builder does not model.
 				array( 'label' => __( 'Edit in ACPT', 'minn-admin' ), 'href' => '{editUrl}' ),
 			),
 		),
 	);
 	return $sources;
+} );
+
+/* ===== ACPT group builder: the shared schema canvas, ACPT backend ===== */
+
+/**
+ * The field types Minn's builder can create and configure for ACPT, keyed by
+ * the builder's shared type ids. `settings` names the extra knobs beyond the
+ * universal label / name / instructions / required / default set — ACPT keeps
+ * min / max / step in a field's advanced options and its choice lists in
+ * option rows, and has no placeholder storage at all, so the vocabulary is
+ * narrower than ACF's.
+ *
+ * @return array id => { acpt: MetaFieldModel type, settings: string[] }
+ */
+function minn_admin_acpt_builder_types() {
+	return array(
+		'text'         => array( 'acpt' => 'Text', 'settings' => array() ),
+		'textarea'     => array( 'acpt' => 'Textarea', 'settings' => array() ),
+		'number'       => array( 'acpt' => 'Number', 'settings' => array( 'min', 'max', 'step' ) ),
+		'range'        => array( 'acpt' => 'Range', 'settings' => array( 'min', 'max', 'step' ) ),
+		'email'        => array( 'acpt' => 'Email', 'settings' => array() ),
+		'url'          => array( 'acpt' => 'Url', 'settings' => array() ),
+		'select'       => array( 'acpt' => 'Select', 'settings' => array( 'choices' ) ),
+		'radio'        => array( 'acpt' => 'Radio', 'settings' => array( 'choices' ) ),
+		'multicheck'   => array( 'acpt' => 'Checkbox', 'settings' => array( 'choices' ) ),
+		'true_false'   => array( 'acpt' => 'Toggle', 'settings' => array() ),
+		'color_picker' => array( 'acpt' => 'Color', 'settings' => array() ),
+		'date'         => array( 'acpt' => 'Date', 'settings' => array() ),
+		'datetime'     => array( 'acpt' => 'DateTime', 'settings' => array() ),
+		'time'         => array( 'acpt' => 'Time', 'settings' => array() ),
+		'phone'        => array( 'acpt' => 'Phone', 'settings' => array() ),
+		'image'        => array( 'acpt' => 'Image', 'settings' => array() ),
+		'repeater'     => array( 'acpt' => 'Repeater', 'settings' => array() ),
+	);
+}
+
+/** Builder id for one ACPT field type, or '' when the builder can't edit it. */
+function minn_admin_acpt_builder_id_of( $acpt_type ) {
+	foreach ( minn_admin_acpt_builder_types() as $id => $def ) {
+		if ( $def['acpt'] === $acpt_type ) {
+			return $id;
+		}
+	}
+	return '';
+}
+
+/** ACPT option rows → the builder's "value : Label" lines. */
+function minn_admin_acpt_builder_choices_out( $options ) {
+	$lines = array();
+	foreach ( (array) $options as $option ) {
+		$value = (string) ( $option['value'] ?? '' );
+		$label = (string) ( $option['label'] ?? '' );
+		$lines[] = ( $value === $label || '' === $label ) ? $value : $value . ' : ' . $label;
+	}
+	return implode( "\n", $lines );
+}
+
+/**
+ * "value : Label" lines → ACPT option rows, ids preserved by value so a
+ * relabel or reorder never orphans stored selections.
+ *
+ * @param string $lines  Submitted choices text.
+ * @param array  $stored Stored option rows for this field (may be empty).
+ * @return array Option rows for fullHydrateFromArray.
+ */
+function minn_admin_acpt_builder_choices_in( $lines, $stored ) {
+	$by_value = array();
+	foreach ( (array) $stored as $option ) {
+		$by_value[ (string) ( $option['value'] ?? '' ) ] = $option;
+	}
+	$out = array();
+	foreach ( preg_split( '/\r\n|\r|\n/', (string) $lines ) as $line ) {
+		$line = trim( $line );
+		if ( '' === $line ) {
+			continue;
+		}
+		$parts = preg_split( '/\s*:\s*/', $line, 2 );
+		$value = $parts[0];
+		$label = isset( $parts[1] ) && '' !== $parts[1] ? $parts[1] : $value;
+		$row   = array( 'label' => $label, 'value' => $value, 'isDefault' => false );
+		if ( isset( $by_value[ $value ] ) ) {
+			$row['id']        = $by_value[ $value ]['id'] ?? null;
+			$row['isDefault'] = ! empty( $by_value[ $value ]['isDefault'] );
+			if ( null === $row['id'] ) {
+				unset( $row['id'] );
+			}
+		}
+		$out[] = $row;
+	}
+	return $out;
+}
+
+/** One advanced-option value from a field's serialized advanced options. */
+function minn_admin_acpt_builder_adv_out( $field_json, $key ) {
+	foreach ( (array) ( $field_json['advancedOptions'] ?? array() ) as $option ) {
+		if ( ( $option['key'] ?? '' ) === $key && '' !== (string) ( $option['value'] ?? '' ) ) {
+			return (string) $option['value'];
+		}
+	}
+	return '';
+}
+
+/**
+ * One stored field (its jsonSerialize array) → a builder row.
+ *
+ * Types outside the map, dataset-forged fields and block children list as
+ * read-only rows: identity, order and label stay editable, configuration
+ * stays ACPT's. A repeater nests one level, so a repeater met below the box
+ * level also locks.
+ *
+ * @param array $field_json Field jsonSerialize array.
+ * @param int   $depth      0 directly in a box, +1 per repeater.
+ * @return array
+ */
+function minn_admin_acpt_builder_field_out( $field_json, $depth = 0 ) {
+	$bid  = minn_admin_acpt_builder_id_of( (string) ( $field_json['type'] ?? '' ) );
+	$edit = '' !== $bid && empty( $field_json['forgedBy'] ) && empty( $field_json['blockId'] );
+	if ( 'repeater' === $bid && $depth > 0 ) {
+		$edit = false;
+	}
+	$children = array();
+	foreach ( (array) ( $field_json['children'] ?? array() ) as $child ) {
+		$children[] = minn_admin_acpt_builder_field_out( $child, $depth + 1 );
+	}
+	$default = $field_json['defaultValue'] ?? '';
+	$out     = array(
+		'key'           => (string) $field_json['id'],
+		'label'         => (string) ( $field_json['label'] ?? '' ),
+		'name'          => (string) ( $field_json['name'] ?? '' ),
+		'type'          => '' !== $bid ? $bid : (string) ( $field_json['type'] ?? '' ),
+		'editable'      => $edit,
+		'required'      => ! empty( $field_json['isRequired'] ),
+		'instructions'  => (string) ( $field_json['description'] ?? '' ),
+		'default_value' => is_scalar( $default ) ? (string) $default : '',
+		'placeholder'   => '',
+		'choices'       => minn_admin_acpt_builder_choices_out( $field_json['options'] ?? array() ),
+		'min'           => minn_admin_acpt_builder_adv_out( $field_json, 'min' ),
+		'max'           => minn_admin_acpt_builder_adv_out( $field_json, 'max' ),
+		'step'          => minn_admin_acpt_builder_adv_out( $field_json, 'step' ),
+		'rows'          => '',
+		'ui_on_text'    => '',
+		'ui_off_text'   => '',
+		'button_label'  => '',
+		'subCount'      => count( $children ),
+	);
+	if ( 'repeater' === $bid && $edit ) {
+		$out['sub_fields'] = $children;
+	}
+	return $out;
+}
+
+/** Fields of one serialized box that are its own (not repeater/block children). */
+function minn_admin_acpt_builder_box_fields( $box_json ) {
+	$out = array();
+	foreach ( (array) ( $box_json['fields'] ?? array() ) as $field ) {
+		if ( ! empty( $field['parentId'] ) || ! empty( $field['blockId'] ) ) {
+			continue;
+		}
+		$out[] = $field;
+	}
+	return $out;
+}
+
+/**
+ * Stored belongs chain → the builder's OR sets of AND rows. ACPT stores a
+ * flat chain where each row's own logic joins it to the next and an OR ends
+ * a block (Logics::extractLogicBlocks), which is the same shape read the
+ * other way round. Rows the catalog covers edit; anything else (user / media
+ * targets, IN lists) renders read-only and re-saves verbatim by its id.
+ */
+function minn_admin_acpt_builder_location_out( $belongs ) {
+	$map    = array(
+		\ACPT\Constants\MetaTypes::CUSTOM_POST_TYPE => 'post_type',
+		\ACPT\Constants\MetaTypes::TAXONOMY         => 'taxonomy',
+		\ACPT\Constants\MetaTypes::OPTION_PAGE      => 'option_page',
+	);
+	$groups  = array();
+	$current = array();
+	$total   = count( (array) $belongs );
+	foreach ( array_values( (array) $belongs ) as $i => $b ) {
+		$kind     = (string) ( $b['belongsTo'] ?? '' );
+		$operator = (string) ( $b['operator'] ?? '' );
+		$find     = (string) ( $b['find'] ?? '' );
+		$simple   = isset( $map[ $kind ] ) && in_array( $operator, array( '=', '!=' ), true ) && false === strpos( $find, ',' );
+		$rule     = $simple
+			? array(
+				'param'    => $map[ $kind ],
+				'operator' => '=' === $operator ? '==' : '!=',
+				'value'    => $find,
+				'id'       => (string) ( $b['id'] ?? '' ),
+			)
+			: array(
+				'param'    => $kind,
+				'operator' => '' !== $operator ? $operator : '·',
+				'value'    => $find,
+				'id'       => (string) ( $b['id'] ?? '' ),
+			);
+		$current[] = $rule;
+		$is_last   = $i === $total - 1;
+		if ( $is_last || 'OR' === (string) ( $b['logic'] ?? '' ) ) {
+			$groups[]  = $current;
+			$current   = array();
+		}
+	}
+	return $groups;
+}
+
+/** The location vocabulary the builder edits for ACPT, resolved live. */
+function minn_admin_acpt_builder_location_choices() {
+	$out = array();
+	$pt  = array();
+	foreach ( get_post_types( array( 'show_ui' => true ), 'objects' ) as $obj ) {
+		if ( preg_match( '/^(acf-|wp_|edd_|elementor_)/', $obj->name ) || 'attachment' === $obj->name ) {
+			continue;
+		}
+		$pt[] = array( $obj->name, $obj->labels->name );
+	}
+	$out['post_type'] = array( 'label' => __( 'Post type', 'minn-admin' ), 'values' => $pt );
+	$tax = array();
+	foreach ( get_taxonomies( array( 'show_ui' => true ), 'objects' ) as $obj ) {
+		$tax[] = array( $obj->name, $obj->labels->name );
+	}
+	if ( $tax ) {
+		$out['taxonomy'] = array( 'label' => __( 'Taxonomy', 'minn-admin' ), 'values' => $tax );
+	}
+	$pages = array();
+	foreach ( minn_admin_acpt_option_pages_allowed() as $slug => $page ) {
+		$pages[] = array( $slug, method_exists( $page, 'getMenuTitle' ) ? $page->getMenuTitle() : $slug );
+	}
+	if ( $pages ) {
+		$out['option_page'] = array( 'label' => __( 'Options page', 'minn-admin' ), 'values' => $pages );
+	}
+	return $out;
+}
+
+/** Resolve one group id to its model, or null. */
+function minn_admin_acpt_builder_group( $id ) {
+	try {
+		$found = \ACPT\Core\Repository\MetaRepository::get( array( 'id' => $id ) );
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+	return ! empty( $found ) ? $found[0] : null;
+}
+
+/** The whole GET …/full payload for one group model. */
+function minn_admin_acpt_builder_payload( $group ) {
+	// jsonSerialize is the faithful shape ACPT's own canvas round-trips —
+	// arrayRepresentation drops keys (quickEdit, rule messages) that a
+	// re-save through the vendor command would then silently reset.
+	$g    = json_decode( wp_json_encode( $group ), true );
+	$rows = array();
+	foreach ( (array) ( $g['boxes'] ?? array() ) as $box ) {
+		$fields = array();
+		foreach ( minn_admin_acpt_builder_box_fields( $box ) as $field ) {
+			$fields[] = minn_admin_acpt_builder_field_out( $field );
+		}
+		$rows[] = array(
+			'key'        => (string) $box['id'],
+			'label'      => (string) ( $box['label'] ?? '' ),
+			'name'       => (string) ( $box['name'] ?? '' ),
+			'type'       => 'box',
+			'editable'   => true,
+			'required'   => false,
+			'sub_fields' => $fields,
+			'subCount'   => count( $fields ),
+		);
+	}
+	$settings = array( 'box' => array() );
+	foreach ( minn_admin_acpt_builder_types() as $id => $def ) {
+		$settings[ $id ] = $def['settings'];
+	}
+	return array(
+		'group'           => array(
+			'key'           => (string) $g['id'],
+			'title'         => (string) ( '' !== (string) ( $g['label'] ?? '' ) ? $g['label'] : $g['name'] ),
+			// No 'active' key: ACPT groups have no on/off flag, so the
+			// builder never renders the switch.
+			'source'        => 'db',
+			'location'      => minn_admin_acpt_builder_location_out( $g['belongs'] ?? array() ),
+			'locationLabel' => minn_admin_acpt_group_applies_to( $group ),
+			'adminUrl'      => minn_admin_acpt_admin_url( 'meta' ),
+		),
+		'fields'          => $rows,
+		'types'           => array_keys( minn_admin_acpt_builder_types() ),
+		'typeSettings'    => $settings,
+		'rootType'        => 'box',
+		'locationChoices' => minn_admin_acpt_builder_location_choices(),
+	);
+}
+
+/**
+ * Rebuild a field's advanced options from submitted min / max / step,
+ * keeping every other advanced option (and the ids of the three when they
+ * already existed) exactly as stored.
+ *
+ * @param array $row    Submitted builder row.
+ * @param array $stored Stored advancedOptions rows.
+ * @return array|WP_Error
+ */
+function minn_admin_acpt_builder_adv_in( $row, $stored ) {
+	$out   = array();
+	$by_key = array();
+	foreach ( (array) $stored as $option ) {
+		$key = (string) ( $option['key'] ?? '' );
+		if ( in_array( $key, array( 'min', 'max', 'step' ), true ) ) {
+			$by_key[ $key ] = $option;
+			continue;
+		}
+		$out[] = $option;
+	}
+	foreach ( array( 'min', 'max', 'step' ) as $key ) {
+		$value = trim( (string) ( $row[ $key ] ?? '' ) );
+		if ( '' === $value ) {
+			continue;
+		}
+		if ( ! is_numeric( $value ) ) {
+			return new WP_Error( 'minn_bad_number', sprintf(
+				/* translators: 1: setting name (min, max, step), 2: field name. */
+				__( '“%1$s” on “%2$s” must be a number.', 'minn-admin' ),
+				$key,
+				(string) ( $row['name'] ?? $row['key'] ?? '' )
+			), array( 'status' => 400 ) );
+		}
+		$entry = array( 'key' => $key, 'value' => $value );
+		if ( isset( $by_key[ $key ]['id'] ) ) {
+			$entry['id'] = $by_key[ $key ]['id'];
+		}
+		$out[] = $entry;
+	}
+	return $out;
+}
+
+/**
+ * Resolve one submitted field row against the stored fields of its list.
+ *
+ * Existing keys keep their stored array whole (name, type, permissions,
+ * visibility conditions, everything the builder does not model) and overlay
+ * only the settings the builder edits; unsupported types overlay label
+ * alone. New rows must carry a supported type, a usable name and, for
+ * choice types, at least one choice. Anything wrong refuses the WHOLE save:
+ * ACPT's own command silently discards malformed rows and then deletes the
+ * fields they stood for, so nothing may reach it unvalidated.
+ *
+ * @param array $row    Submitted row.
+ * @param array $stored id => stored field jsonSerialize array for this list.
+ * @param array $names  Names already claimed in this list (by reference).
+ * @param int   $depth  0 directly in a box, +1 per repeater.
+ * @return array|WP_Error
+ */
+function minn_admin_acpt_builder_plan_field( $row, $stored, &$names, $depth ) {
+	$types = minn_admin_acpt_builder_types();
+	$row   = (array) $row;
+	$key   = isset( $row['key'] ) ? (string) $row['key'] : '';
+
+	if ( '' !== $key ) {
+		if ( ! isset( $stored[ $key ] ) ) {
+			return new WP_Error( 'minn_unknown_field', __( 'A submitted field does not exist in this group — reload and try again.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$base = $stored[ $key ];
+		$bid  = minn_admin_acpt_builder_id_of( (string) ( $base['type'] ?? '' ) );
+		$edit = '' !== $bid && empty( $base['forgedBy'] ) && empty( $base['blockId'] ) && ! ( 'repeater' === $bid && $depth > 0 );
+		$base['label'] = sanitize_text_field( (string) ( $row['label'] ?? '' ) );
+		$names[]       = strtolower( (string) $base['name'] );
+		if ( ! $edit ) {
+			return $base;
+		}
+		$base['description'] = sanitize_textarea_field( (string) ( $row['instructions'] ?? '' ) );
+		$base['isRequired']  = ! empty( $row['required'] );
+		$default             = $row['default_value'] ?? '';
+		$base['defaultValue'] = is_scalar( $default ) ? (string) $default : '';
+		if ( in_array( 'choices', $types[ $bid ]['settings'], true ) ) {
+			$choices = minn_admin_acpt_builder_choices_in( $row['choices'] ?? '', $base['options'] ?? array() );
+			if ( ! $choices ) {
+				return new WP_Error( 'minn_no_choices', sprintf(
+					/* translators: %s: field name. */
+					__( '“%s” needs at least one choice.', 'minn-admin' ),
+					(string) $base['name']
+				), array( 'status' => 400 ) );
+			}
+			$base['options'] = $choices;
+		}
+		if ( in_array( 'min', $types[ $bid ]['settings'], true ) ) {
+			$adv = minn_admin_acpt_builder_adv_in( $row, $base['advancedOptions'] ?? array() );
+			if ( is_wp_error( $adv ) ) {
+				return $adv;
+			}
+			$base['advancedOptions'] = $adv;
+		}
+		if ( 'repeater' === $bid ) {
+			$children = minn_admin_acpt_builder_plan_list( $row['sub_fields'] ?? array(), $base['children'] ?? array(), $depth + 1 );
+			if ( is_wp_error( $children ) ) {
+				return $children;
+			}
+			$base['children'] = $children;
+		}
+		return $base;
+	}
+
+	// New field.
+	$bid = (string) ( $row['type'] ?? '' );
+	if ( ! isset( $types[ $bid ] ) || ( 'repeater' === $bid && $depth > 0 ) ) {
+		return new WP_Error( 'minn_bad_type', __( 'That field type can’t be created here.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$name = strtolower( trim( (string) ( $row['name'] ?? '' ) ) );
+	if ( '' === $name || ! preg_match( '/^[a-z0-9_\-]+$/', $name ) ) {
+		return new WP_Error( 'minn_bad_name', __( 'Every new field needs a name: letters, numbers and underscores.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	if ( in_array( $name, $names, true ) ) {
+		return new WP_Error( 'minn_dup_name', sprintf(
+			/* translators: %s: field name. */
+			__( 'Two fields here would share the name “%s”.', 'minn-admin' ),
+			$name
+		), array( 'status' => 400 ) );
+	}
+	$names[] = $name;
+	$new     = array(
+		'name'        => $name,
+		'label'       => sanitize_text_field( (string) ( $row['label'] ?? '' ) ),
+		'type'        => $types[ $bid ]['acpt'],
+		'description' => sanitize_textarea_field( (string) ( $row['instructions'] ?? '' ) ),
+		'isRequired'  => ! empty( $row['required'] ),
+	);
+	$default = $row['default_value'] ?? '';
+	if ( is_scalar( $default ) && '' !== (string) $default ) {
+		$new['defaultValue'] = (string) $default;
+	}
+	if ( in_array( 'choices', $types[ $bid ]['settings'], true ) ) {
+		$choices = minn_admin_acpt_builder_choices_in( $row['choices'] ?? '', array() );
+		if ( ! $choices ) {
+			return new WP_Error( 'minn_no_choices', sprintf(
+				/* translators: %s: field name. */
+				__( '“%s” needs at least one choice.', 'minn-admin' ),
+				$name
+			), array( 'status' => 400 ) );
+		}
+		$new['options'] = $choices;
+	}
+	if ( in_array( 'min', $types[ $bid ]['settings'], true ) ) {
+		$adv = minn_admin_acpt_builder_adv_in( $row, array() );
+		if ( is_wp_error( $adv ) ) {
+			return $adv;
+		}
+		if ( $adv ) {
+			$new['advancedOptions'] = $adv;
+		}
+	}
+	if ( 'repeater' === $bid ) {
+		$children = minn_admin_acpt_builder_plan_list( $row['sub_fields'] ?? array(), array(), $depth + 1 );
+		if ( is_wp_error( $children ) ) {
+			return $children;
+		}
+		$new['children'] = $children;
+	}
+	return $new;
+}
+
+/**
+ * Resolve one submitted field list (a box's fields or a repeater's subs).
+ *
+ * @param mixed $rows          Submitted rows.
+ * @param array $stored_fields Stored field jsonSerialize arrays for the list.
+ * @param int   $depth         0 directly in a box, +1 per repeater.
+ * @return array|WP_Error
+ */
+function minn_admin_acpt_builder_plan_list( $rows, $stored_fields, $depth ) {
+	$stored = array();
+	foreach ( (array) $stored_fields as $field ) {
+		if ( isset( $field['id'] ) ) {
+			$stored[ (string) $field['id'] ] = $field;
+		}
+	}
+	$out   = array();
+	$names = array();
+	foreach ( (array) $rows as $row ) {
+		if ( ! is_array( $row ) && ! is_object( $row ) ) {
+			return new WP_Error( 'minn_bad_row', __( 'Malformed field row.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$planned = minn_admin_acpt_builder_plan_field( (array) $row, $stored, $names, $depth );
+		if ( is_wp_error( $planned ) ) {
+			return $planned;
+		}
+		$out[] = $planned;
+	}
+	return $out;
+}
+
+/**
+ * The builder's OR sets of AND rows → ACPT's flat belongs chain. Rows on
+ * catalog params write belongsTo / operator / find; rows off it must name a
+ * stored belong by id and re-save it verbatim. Within a set rows join with
+ * AND; the row that closes a set carries OR, which is exactly how ACPT's
+ * own Logics::extractLogicBlocks reads the chain back.
+ *
+ * @param mixed $location       Submitted location groups.
+ * @param array $stored_belongs Stored belongs jsonSerialize arrays.
+ * @return array|WP_Error
+ */
+function minn_admin_acpt_builder_belongs_in( $location, $stored_belongs ) {
+	$map = array(
+		'post_type'   => \ACPT\Constants\MetaTypes::CUSTOM_POST_TYPE,
+		'taxonomy'    => \ACPT\Constants\MetaTypes::TAXONOMY,
+		'option_page' => \ACPT\Constants\MetaTypes::OPTION_PAGE,
+	);
+	$by_id = array();
+	foreach ( (array) $stored_belongs as $belong ) {
+		if ( isset( $belong['id'] ) ) {
+			$by_id[ (string) $belong['id'] ] = $belong;
+		}
+	}
+	$choices = minn_admin_acpt_builder_location_choices();
+	$out     = array();
+	foreach ( (array) $location as $rules ) {
+		$rules = array_values( (array) $rules );
+		$count = count( $rules );
+		foreach ( $rules as $i => $rule ) {
+			$rule  = (array) $rule;
+			$param = (string) ( $rule['param'] ?? '' );
+			$logic = ( $i === $count - 1 ) ? 'OR' : 'AND';
+			if ( isset( $map[ $param ] ) ) {
+				$operator = '!=' === (string) ( $rule['operator'] ?? '' ) ? '!=' : '=';
+				$value    = (string) ( $rule['value'] ?? '' );
+				$allowed  = wp_list_pluck( $choices[ $param ]['values'] ?? array(), 0 );
+				if ( ! in_array( $value, array_map( 'strval', $allowed ), true ) ) {
+					return new WP_Error( 'minn_bad_location', sprintf(
+						/* translators: %s: submitted location value. */
+						__( '“%s” isn’t an available location choice.', 'minn-admin' ),
+						$value
+					), array( 'status' => 400 ) );
+				}
+				$entry = array(
+					'belongsTo' => $map[ $param ],
+					'operator'  => $operator,
+					'find'      => $value,
+					'logic'     => $logic,
+				);
+				$id = (string) ( $rule['id'] ?? '' );
+				if ( '' !== $id && isset( $by_id[ $id ] ) ) {
+					$entry['id'] = $id;
+				}
+				$out[] = $entry;
+				continue;
+			}
+			// Off-catalog rules only ever re-save what is already stored.
+			$id = (string) ( $rule['id'] ?? '' );
+			if ( '' === $id || ! isset( $by_id[ $id ] ) ) {
+				return new WP_Error( 'minn_bad_location', __( 'A location rule of that kind can only be edited in ACPT.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$stored          = $by_id[ $id ];
+			$stored['logic'] = $logic;
+			$out[]           = $stored;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Validate the whole submitted group and write it through ACPT's own
+ * SaveMetaGroupCommand — the same transactional whole-group save its React
+ * canvas uses, orphan removal included, so omitted rows delete exactly as
+ * they would there. Validation happens BEFORE the command is built and any
+ * refusal writes nothing.
+ *
+ * @param object $group Stored MetaGroupModel.
+ * @param array  $body  Submitted { title, location, fields }.
+ * @return true|WP_Error
+ */
+function minn_admin_acpt_builder_save( $group, $body ) {
+	if ( ! class_exists( '\\ACPT\\Core\\CQRS\\Command\\SaveMetaGroupCommand' ) ) {
+		return new WP_Error( 'minn_no_command', __( 'This ACPT build has no group save command.', 'minn-admin' ), array( 'status' => 501 ) );
+	}
+	$g          = json_decode( wp_json_encode( $group ), true );
+	$stored_box = array();
+	foreach ( (array) ( $g['boxes'] ?? array() ) as $box ) {
+		$stored_box[ (string) $box['id'] ] = $box;
+	}
+	$boxes     = array();
+	$box_names = array();
+	foreach ( (array) ( $body['fields'] ?? array() ) as $row ) {
+		$row = (array) $row;
+		$key = isset( $row['key'] ) ? (string) $row['key'] : '';
+		if ( '' !== $key ) {
+			if ( ! isset( $stored_box[ $key ] ) ) {
+				return new WP_Error( 'minn_unknown_box', __( 'A submitted box does not exist in this group — reload and try again.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$base          = $stored_box[ $key ];
+			$base['label'] = sanitize_text_field( (string) ( $row['label'] ?? '' ) );
+			$fields        = minn_admin_acpt_builder_plan_list( $row['sub_fields'] ?? array(), minn_admin_acpt_builder_box_fields( $base ), 0 );
+			if ( is_wp_error( $fields ) ) {
+				return $fields;
+			}
+			$base['fields'] = $fields;
+			$box_names[]    = strtolower( (string) $base['name'] );
+			$boxes[]        = $base;
+			continue;
+		}
+		if ( 'box' !== (string) ( $row['type'] ?? '' ) ) {
+			return new WP_Error( 'minn_bad_row', __( 'Top-level rows in an ACPT group are boxes.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$name = strtolower( trim( (string) ( $row['name'] ?? '' ) ) );
+		if ( '' === $name || ! preg_match( '/^[a-z0-9_\-]+$/', $name ) ) {
+			return new WP_Error( 'minn_bad_name', __( 'Every new box needs a name: letters, numbers and underscores.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( in_array( $name, $box_names, true ) ) {
+			return new WP_Error( 'minn_dup_name', sprintf(
+				/* translators: %s: box name. */
+				__( 'Two boxes here would share the name “%s”.', 'minn-admin' ),
+				$name
+			), array( 'status' => 400 ) );
+		}
+		$box_names[] = $name;
+		$fields      = minn_admin_acpt_builder_plan_list( $row['sub_fields'] ?? array(), array(), 0 );
+		if ( is_wp_error( $fields ) ) {
+			return $fields;
+		}
+		$boxes[] = array(
+			'name'   => $name,
+			'label'  => sanitize_text_field( (string) ( $row['label'] ?? '' ) ),
+			'fields' => $fields,
+		);
+	}
+	$belongs = minn_admin_acpt_builder_belongs_in( $body['location'] ?? array(), $g['belongs'] ?? array() );
+	if ( is_wp_error( $belongs ) ) {
+		return $belongs;
+	}
+	$title = sanitize_text_field( (string) ( $body['title'] ?? '' ) );
+	$data  = array(
+		'id'       => (string) $g['id'],
+		'name'     => (string) $g['name'],
+		'label'    => '' !== $title ? $title : null,
+		'display'  => (string) ( $g['display'] ?? '' ),
+		'context'  => (string) ( $g['context'] ?? '' ),
+		'priority' => (string) ( $g['priority'] ?? '' ),
+		'belongs'  => $belongs,
+		'boxes'    => $boxes,
+	);
+	try {
+		$command = new \ACPT\Core\CQRS\Command\SaveMetaGroupCommand( $data );
+		$command->execute();
+	} catch ( \Throwable $e ) {
+		return new WP_Error( 'minn_acpt_save', wp_strip_all_tags( $e->getMessage() ), array( 'status' => 400 ) );
+	}
+	return true;
+}
+
+add_action( 'rest_api_init', function () {
+	if ( ! minn_admin_acpt_active() ) {
+		return;
+	}
+	register_rest_route( 'minn-admin/v1', '/acpt/schema/groups/(?P<id>[A-Za-z0-9_\-]+)/full', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => 'minn_admin_acpt_can_manage',
+			'callback'            => function ( WP_REST_Request $request ) {
+				$group = minn_admin_acpt_builder_group( (string) $request['id'] );
+				if ( ! $group ) {
+					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				return rest_ensure_response( minn_admin_acpt_builder_payload( $group ) );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => 'minn_admin_acpt_can_manage',
+			'callback'            => function ( WP_REST_Request $request ) {
+				$group = minn_admin_acpt_builder_group( (string) $request['id'] );
+				if ( ! $group ) {
+					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$saved = minn_admin_acpt_builder_save( $group, (array) $request->get_json_params() );
+				if ( is_wp_error( $saved ) ) {
+					return $saved;
+				}
+				$fresh = minn_admin_acpt_builder_group( (string) $request['id'] );
+				if ( ! $fresh ) {
+					return new WP_Error( 'minn_acpt_save', __( 'The group saved but could not be read back.', 'minn-admin' ), array( 'status' => 500 ) );
+				}
+				return rest_ensure_response( minn_admin_acpt_builder_payload( $fresh ) );
+			},
+		),
+	) );
 } );
