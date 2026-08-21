@@ -10,12 +10,21 @@
  * needs-setup card on the next load. Everything created/toggled is
  * restored.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { execSync } = require( 'child_process' );
+const { launch, login, reporter, BASE, WP } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'spam-settings' );
 	const { browser, page, errors } = await launch();
 	await login( page );
+	// A CleanTalk access key left in the options from a live session (or an
+	// earlier run of the paste flow below) marks the provider configured, so
+	// its needs-setup paste row hides and this suite's unconfigured path
+	// can't run. Clear it at baseline; the key is dev cruft, never a fixture.
+	execSync( `wp --path=${ WP } eval-file -`, { input:
+		'<?php $s = get_option( "cleantalk_settings" ); if ( is_array( $s ) ) { $s["apikey"] = ""; update_option( "cleantalk_settings", $s ); }' +
+		' $d = get_option( "cleantalk_data" ); if ( is_array( $d ) ) { unset( $d["key_is_ok"] ); update_option( "cleantalk_data", $d ); }',
+		stdio: [ 'pipe', 'ignore', 'ignore' ] } );
 
 	// Spam is a subsection of the Comments settings tab now (it's comment spam).
 	const openSpam = async () => {
