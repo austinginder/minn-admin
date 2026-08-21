@@ -29,6 +29,13 @@ const MINN_ADMIN_ACPT_SIMPLE = array(
 	'Date'     => 'date',
 	'DateTime' => 'datetime',
 	'Time'     => 'time',
+	// A phone number is a line of text to everything except the keyboard
+	// a browser offers for it, so it round-trips like one.
+	'Phone'    => 'text',
+	// ACPT's own value API speaks attachment ids for these, which is what
+	// the media picker hands back; the URL sibling it also stores is its
+	// business, written by the same call.
+	'Image'    => 'image',
 );
 
 /** Whether the active ACPT build exposes the APIs used by this adapter. */
@@ -67,12 +74,15 @@ function minn_admin_acpt_map_field( $field ) {
 		return null;
 	}
 	$type = $field->getType();
-	if ( ! isset( MINN_ADMIN_ACPT_SIMPLE[ $type ] ) ) {
+	if ( 'Repeater' !== $type && ! isset( MINN_ADMIN_ACPT_SIMPLE[ $type ] ) ) {
 		return null;
 	}
 	$permissions = $field->userPermissions();
 	if ( empty( $permissions['read'] ) || empty( $permissions['edit'] ) ) {
 		return null;
+	}
+	if ( 'Repeater' === $type ) {
+		return minn_admin_acpt_map_repeater( $field );
 	}
 	$mapped = array(
 		'name'  => $field->getId(),
@@ -96,6 +106,64 @@ function minn_admin_acpt_map_field( $field ) {
 		}
 	}
 	return $mapped;
+}
+
+/**
+ * Map an ACPT repeater onto the panel's `rows` control.
+ *
+ * One level deep, like the ACF repeater: sub-fields from the simple set edit
+ * in row cards, anything else counts as locked and is PRESERVED by the write
+ * path's row merge. A repeater whose every sub is unmappable is not offered
+ * at all, since an empty row card would only be a place to lose data.
+ *
+ * @param object $field ACPT MetaFieldModel for the repeater.
+ * @return array|null { name, label, type: 'rows', subfields, subLocked, subs }
+ */
+function minn_admin_acpt_map_repeater( $field ) {
+	$subs   = array();
+	$locked = 0;
+	foreach ( $field->getChildren() as $child ) {
+		$child_type = $child->getType();
+		if ( ! isset( MINN_ADMIN_ACPT_SIMPLE[ $child_type ] ) || 'Repeater' === $child_type ) {
+			++$locked;
+			continue;
+		}
+		$perms = $child->userPermissions();
+		if ( empty( $perms['read'] ) || empty( $perms['edit'] ) ) {
+			++$locked;
+			continue;
+		}
+		$sub = array(
+			// Rows are keyed by the sub-field's own name in ACPT's storage,
+			// not by its id, so that is what a row value must be addressed by.
+			'name'  => $child->getName(),
+			'label' => $child->getLabelOrName(),
+			'type'  => MINN_ADMIN_ACPT_SIMPLE[ $child_type ],
+		);
+		if ( in_array( $child_type, array( 'Select', 'Radio', 'Checkbox' ), true ) ) {
+			$choices = array();
+			foreach ( $child->getOptions() as $option ) {
+				$choices[ $option->getValue() ] = $option->getLabel();
+			}
+			if ( ! $choices ) {
+				++$locked;
+				continue;
+			}
+			$sub['choices'] = $choices;
+		}
+		$subs[] = $sub;
+	}
+	if ( ! $subs ) {
+		return null;
+	}
+	return array(
+		'name'      => $field->getId(),
+		'label'     => $field->getLabelOrName(),
+		'type'      => 'rows',
+		'subfields' => $subs,
+		'subLocked' => $locked,
+		'subs'      => $subs,
+	);
 }
 
 /** ACPT groups visible for one exact post and type. */
@@ -173,16 +241,73 @@ function minn_admin_acpt_read_values( $post_id ) {
 			'format'     => 'only_value',
 			'return'     => 'raw',
 		) );
-		if ( 'Toggle' === $field->getType() ) {
+		$type = $field->getType();
+		if ( 'Toggle' === $type ) {
 			$value = ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
-		} elseif ( 'Checkbox' === $field->getType() ) {
+		} elseif ( 'Checkbox' === $type ) {
 			$value = is_array( $value ) ? array_values( $value ) : ( '' === (string) $value ? array() : array( $value ) );
+		} elseif ( 'Image' === $type ) {
+			// ACPT answers with the attachment id; the picker wants to show
+			// the picture it stands for.
+			$att   = (int) $value;
+			$url   = $att ? wp_get_attachment_image_url( $att, 'medium' ) : '';
+			$value = $att ? array( 'id' => $att, 'url' => $url ? $url : wp_get_attachment_url( $att ) ) : '';
+		} elseif ( 'Repeater' === $type ) {
+			// ACPT hands back rows already in row order, keyed by sub name.
+			$rows = array();
+			foreach ( array_values( is_array( $value ) ? $value : array() ) as $i => $row ) {
+				$rows[] = array(
+					'__idx'  => $i,
+					'values' => (object) ( is_array( $row ) ? $row : array() ),
+				);
+			}
+			$value = $rows;
 		} elseif ( is_array( $value ) || is_object( $value ) ) {
 			$value = '';
 		}
 		$out[ $id ] = $value;
 	}
 	return $out;
+}
+
+/**
+ * The rows control's [{ __idx, values }] → the row list ACPT stores.
+ *
+ * `__idx` names the row a card came from, so a sub-field this panel does not
+ * offer keeps whatever it already held: an edit overlays only the subs it
+ * actually shows. A brand new row starts empty and takes only what was typed.
+ *
+ * @param object $field ACPT MetaFieldModel for the repeater.
+ * @param mixed  $value Submitted rows.
+ * @param array  $args  post_id / box_name / field_name for the read-back.
+ * @return array|null Rows for ACPT, or null when the input is unusable.
+ */
+function minn_admin_acpt_rows_in( $field, $value, $args ) {
+	if ( ! is_array( $value ) ) {
+		return null;
+	}
+	$mapped = minn_admin_acpt_map_repeater( $field );
+	if ( ! $mapped ) {
+		return null;
+	}
+	$names = wp_list_pluck( $mapped['subs'], 'name' );
+	$orig  = get_acpt_field( array_merge( $args, array( 'format' => 'only_value', 'return' => 'raw' ) ) );
+	$orig  = is_array( $orig ) ? array_values( $orig ) : array();
+	$rows  = array();
+	foreach ( $value as $row ) {
+		$row  = (array) $row;
+		$vals = isset( $row['values'] ) ? (array) $row['values'] : array();
+		$base = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] )
+			? $orig[ (int) $row['__idx'] ]
+			: array();
+		foreach ( $names as $name ) {
+			if ( array_key_exists( $name, $vals ) ) {
+				$base[ $name ] = is_scalar( $vals[ $name ] ) ? $vals[ $name ] : '';
+			}
+		}
+		$rows[] = $base;
+	}
+	return $rows;
 }
 
 /** Write allowed simple fields through ACPT's public value helpers. */
@@ -202,14 +327,32 @@ function minn_admin_acpt_write_values( $post_id, $values ) {
 			'box_name'   => $field->getBox()->getName(),
 			'field_name' => $field->getName(),
 		);
-		if ( ( '' === $value || null === $value ) && 'Checkbox' !== $field->getType() ) {
+		$type = $field->getType();
+		if ( ( '' === $value || null === $value ) && ! in_array( $type, array( 'Checkbox', 'Repeater' ), true ) ) {
 			delete_acpt_meta_field_value( $args );
 			continue;
 		}
-		if ( 'Toggle' === $field->getType() ) {
+		if ( 'Toggle' === $type ) {
 			$value = ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
-		} elseif ( 'Checkbox' === $field->getType() ) {
+		} elseif ( 'Checkbox' === $type ) {
 			$value = is_array( $value ) ? array_values( array_map( 'sanitize_text_field', $value ) ) : array();
+		} elseif ( 'Image' === $type ) {
+			// The picker sends { id, url } (or a bare id); ACPT stores by id
+			// and derives the URL itself. An id that is not an attachment is
+			// refused rather than written, so a stray value cannot blank a
+			// picture that is fine.
+			$att = is_array( $value ) || is_object( $value )
+				? (int) ( ( (array) $value )['id'] ?? 0 )
+				: (int) $value;
+			if ( $att < 1 || 'attachment' !== get_post_type( $att ) ) {
+				continue;
+			}
+			$value = $att;
+		} elseif ( 'Repeater' === $type ) {
+			$value = minn_admin_acpt_rows_in( $field, $value, $args );
+			if ( null === $value ) {
+				continue; // malformed input never clobbers stored rows
+			}
 		}
 		$args['value'] = $value;
 		save_acpt_meta_field_value( $args );
