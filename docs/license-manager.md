@@ -75,7 +75,7 @@ Major single vendors, each a small dedicated reader (all verified in source):
 | Admin Columns / Advanced Ads / WP All Import | EDD-style key+status options (per-product names) | Full classification |
 | WPBakery | `wpb_js_js_composer_purchase_code` only; no status is ever stored (lifetime model) | Presence-only |
 | Brizy Pro | postmeta `brizy-license-key` on the Brizy project post, not wp_options | Presence-only |
-| Etch / SureCart licensing SDK | `{name}_license_options` + activation-id option; SDK is shared, so this is a small generic adapter too | Activated/missing, no expiry |
+| Etch / SureCart licensing SDK | `{name}_license_options` (name = the vendor's `Client()` name arg, lowercased with spaces stripped — NOT the directory slug: 'Etch Theme' → `etchtheme_license_options`) holding `sc_license_key` / `sc_license_id` / `sc_activation_id`; SDK is shared, so this is a small generic adapter too. The sweep tries the slug spellings plus the name-derived key and NOTHING else — an earlier any-`sc_`-row wildcard handed the Etch plugin's activation record to the Etch theme as "activation stored" while the theme's own row didn't exist | Activated/missing, no expiry |
 | Gravity Forms | `rg_gforms_key` stores the key md5-hashed | Presence-only |
 
 ### Detector design
