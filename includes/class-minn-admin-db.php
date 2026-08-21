@@ -182,29 +182,31 @@ class Minn_Admin_DB {
 			$rows
 		);
 
-		// Defence in depth for networks: a subsite only ever sees its own
-		// tables plus the shared ones, so no route can name another tenant's
-		// wp_N_options even if the capability gate above is ever loosened.
-		// ($wpdb->prefix is the CURRENT site's; base_prefix covers shared.)
-		if ( is_multisite() ) {
-			$own  = strtolower( $wpdb->prefix );
-			$base = strtolower( $wpdb->base_prefix );
-			$rows = array_values(
-				array_filter(
-					$rows,
-					function ( $t ) use ( $own, $base ) {
-						$name = strtolower( (string) $t->name );
-						if ( 0 === strpos( $name, $own ) ) {
-							return true;
-						}
-						// Base-prefixed tables are shared only when they are
-						// not some OTHER site's wp_N_ table.
-						return 0 === strpos( $name, $base )
-							&& ! preg_match( '/^' . preg_quote( $base, '/' ) . '\d+_/', $name );
+		// Scope to THIS install's own tables — always, not only on networks.
+		// On single-site this matters just as much: shared-database hosting
+		// (one DB, one prefix per install, the standard cPanel pattern) puts
+		// another site's wp2_users — password hashes, reset tokens — in the
+		// same schema, and an unscoped list would let a route name it. A
+		// subsite only ever sees its own tables plus the truly shared ones.
+		// ($wpdb->prefix is the CURRENT site's; base_prefix covers shared;
+		// on single-site the two are equal.)
+		$own  = strtolower( $wpdb->prefix );
+		$base = strtolower( $wpdb->base_prefix );
+		$rows = array_values(
+			array_filter(
+				$rows,
+				function ( $t ) use ( $own, $base ) {
+					$name = strtolower( (string) $t->name );
+					if ( 0 === strpos( $name, $own ) ) {
+						return true;
 					}
-				)
-			);
-		}
+					// Base-prefixed tables are shared only when they are
+					// not some OTHER site's wp_N_ table.
+					return 0 === strpos( $name, $base )
+						&& ! preg_match( '/^' . preg_quote( $base, '/' ) . '\d+_/', $name );
+				}
+			)
+		);
 
 		$memo = $rows;
 		return $memo;
