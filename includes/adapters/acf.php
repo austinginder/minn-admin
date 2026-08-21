@@ -116,11 +116,20 @@ function minn_admin_acf_choices_out( $val ) {
  * @param array $field Mapped field ({ choices, anyChoice }).
  * @return string[]
  */
-function minn_admin_acf_choices_in( $value, $field ) {
+function minn_admin_acf_choices_in( $value, $field, $scope = 'post' ) {
 	$keys = array();
 	if ( empty( $field['anyChoice'] ) && ! empty( $field['choices'] ) && is_array( $field['choices'] ) ) {
 		$keys = array_map( 'strval', array_keys( $field['choices'] ) );
 	}
+	// A declared choice list IS the allowlist: anything outside it is dropped
+	// below, so nothing arbitrary can survive. With ACF's "Allow Custom" set,
+	// or no choices declared at all, there is no list to lean on and the value
+	// is whatever was sent. On the options scope that lands in a site-global
+	// row a theme prints with the_field(), which does not escape, so the same
+	// markup-trust rule the plain string types get in minn_admin_acf_value_in
+	// has to reach the array types too. It cannot be applied there: that guard
+	// only sees strings, and this returns a list.
+	$trusted = $keys || 'options' !== $scope || current_user_can( 'unfiltered_html' );
 	$out = array();
 	foreach ( (array) $value as $v ) {
 		if ( ! is_scalar( $v ) ) {
@@ -129,6 +138,9 @@ function minn_admin_acf_choices_in( $value, $field ) {
 		$v = (string) $v;
 		if ( $keys && ! in_array( $v, $keys, true ) ) {
 			continue;
+		}
+		if ( ! $trusted ) {
+			$v = wp_kses_post( $v );
 		}
 		if ( ! in_array( $v, $out, true ) ) {
 			$out[] = $v;
@@ -1094,7 +1106,7 @@ function minn_admin_acf_value_in( $f, $value, $scope = 'post' ) {
 		case 'link':
 			return minn_admin_acf_link_in( $value );
 		case 'multicheck':
-			return minn_admin_acf_choices_in( $value, $f );
+			return minn_admin_acf_choices_in( $value, $f, $scope );
 		case 'date':
 			return minn_admin_acf_date_in( $value );
 		case 'datetime':

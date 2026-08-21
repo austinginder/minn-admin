@@ -288,6 +288,58 @@ if ( ! $forbidden_uid ) {
 }
 remove_filter( 'map_meta_cap', $user_scope, 999 );
 
+// --- 5. an options-scope multicheck without an allowlist is filtered ------
+// A declared choice list is its own allowlist. With ACF's "Allow Custom" set,
+// or no choices declared, the value is whatever was sent, and on the options
+// scope it lands in a site-global row a theme prints with the_field(), which
+// does not escape. Anyone without unfiltered_html must not get raw markup in
+// there; everyone else must be left alone.
+if ( ! function_exists( 'minn_admin_acf_value_in' ) ) {
+	echo "SKIP  ACF adapter not loaded on this site\n";
+} else {
+	$payload    = '<img src=x onerror=alert(1)>bad';
+	$open_field = array( 'type' => 'multicheck', 'name' => 'boundary_probe', 'key' => 'field_boundary_probe', 'anyChoice' => true, 'choices' => array() );
+	$list_field = array( 'type' => 'multicheck', 'name' => 'boundary_probe2', 'key' => 'field_boundary_probe2', 'choices' => array( 'red' => 'Red' ) );
+
+	$writer = wp_insert_user( array(
+		'user_login' => 'minn-acf-boundary-' . wp_generate_password( 6, false, false ),
+		'user_pass'  => wp_generate_password( 20 ),
+		'role'       => 'author', // has edit_posts, does NOT have unfiltered_html
+	) );
+	if ( is_wp_error( $writer ) ) {
+		$check( 'ACF boundary fixture user created', false, $writer->get_error_message() );
+		$writer = 0;
+	} else {
+		$as = function ( $uid, $field, $scope ) use ( $payload ) {
+			wp_set_current_user( $uid );
+			$out = minn_admin_acf_value_in( $field, array( $payload ), $scope );
+			return is_array( $out ) ? implode( '|', $out ) : '';
+		};
+
+		$check( 'Fixture writer lacks unfiltered_html', ! user_can( $writer, 'unfiltered_html' ) );
+		$check(
+			'Options-scope multicheck strips the handler',
+			false === strpos( $as( $writer, $open_field, 'options' ), 'onerror' ),
+			$as( $writer, $open_field, 'options' )
+		);
+		// Controls: the fix must not over-block, and must not change the post
+		// scope, which is ACF's own behaviour over one post the caller owns.
+		$check(
+			'A user with unfiltered_html still stores markup',
+			false !== strpos( $as( $admin, $open_field, 'options' ), 'onerror' )
+		);
+		$check(
+			'Post scope is unchanged',
+			false !== strpos( $as( $writer, $open_field, 'post' ), 'onerror' )
+		);
+		$check(
+			'A declared choice list still drops anything outside it',
+			'' === $as( $writer, $list_field, 'options' )
+		);
+	}
+	wp_set_current_user( $admin );
+}
+
 // --- cleanup -------------------------------------------------------------
 wp_set_current_user( $admin );
 foreach ( array( $duplicate_id, $attachment_id, is_wp_error( $private_parent ) ? 0 : $private_parent, is_wp_error( $source_id ) ? 0 : $source_id ) as $post_id ) {
@@ -301,6 +353,9 @@ if ( ! function_exists( 'wp_delete_user' ) ) {
 wp_delete_user( $uid );
 if ( $forbidden_uid ) {
 	wp_delete_user( $forbidden_uid );
+}
+if ( ! empty( $writer ) && ! is_wp_error( $writer ) ) {
+	wp_delete_user( $writer );
 }
 remove_role( 'minn_boundary_editor' );
 unregister_post_type( 'minn_boundary_item' );
