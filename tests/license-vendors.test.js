@@ -194,6 +194,19 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'Automatic.css rides its dedicated reader exactly once',
 			acss.length === 1 && /no license|missing/.test( acss[ 0 ].state ) && acss[ 0 ].off, JSON.stringify( acss ) );
 
+		// SEOPress Pro: same token-mismatch class (sweep says wp_seopress,
+		// options say seopress_pro_), same fixture shape — installed
+		// inactive with no key, so missing + off is the truthful row.
+		const spp = await page.evaluate( () =>
+			[ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
+				.filter( ( el ) => /^SEOPress PRO/.test( el.querySelector( '.minn-sys-ext-name' ).textContent.trim() ) )
+				.map( ( el ) => ( {
+					state: ( el.querySelector( '.minn-lic-pill' ) || { textContent: '' } ).textContent.trim().toLowerCase(),
+					off: el.classList.contains( 'off' ),
+				} ) ) );
+		t.check( 'SEOPress PRO rides its dedicated reader exactly once',
+			spp.length === 1 && /no license|missing/.test( spp[ 0 ].state ) && spp[ 0 ].off, JSON.stringify( spp ) );
+
 		// Inactive components carry the dimmed off state + explanation. Use
 		// the Avada THEME row: minnadmin's active theme is minn-admin-theme,
 		// so Avada is reliably inactive regardless of which vendor plugins

@@ -79,6 +79,45 @@ function minn_admin_license_expired( $expires ) {
 	return $expires && 'lifetime' !== $expires && strtotime( $expires . ' 23:59:59' ) < time();
 }
 
+/** Minn's action result code for one EDD error/status word. */
+function minn_admin_license_edd_code( $word ) {
+	if ( 'expired' === $word ) {
+		return 'expired';
+	}
+	return 'no_activations_left' === $word ? 'site_limit' : 'invalid';
+}
+
+/**
+ * The human sentence for one EDD error/status word — the same messages the
+ * EDD-based vendors' own screens show, minus the dates they interpolate.
+ * 'missing' is EDD's word for an unknown key and reads like Minn's missing
+ * STATE if echoed raw.
+ *
+ * @param string $word    EDD error or license status word.
+ * @param string $product Product name for the key-shaped messages.
+ * @return string
+ */
+function minn_admin_license_edd_word( $word, $product ) {
+	switch ( $word ) {
+		case 'missing':
+		case 'item_name_mismatch':
+			/* translators: %s: product name. */
+			return sprintf( __( 'That isn’t a valid %s license key.', 'minn-admin' ), $product );
+		case 'invalid':
+		case 'site_inactive':
+			return __( 'The license is not active for this site’s URL.', 'minn-admin' );
+		case 'disabled':
+		case 'revoked':
+			return __( 'That license key has been disabled.', 'minn-admin' );
+		case 'expired':
+			return __( 'That license key has expired.', 'minn-admin' );
+		case 'no_activations_left':
+			return __( 'That license key has reached its activation limit.', 'minn-admin' );
+	}
+	/* translators: %s: product name. */
+	return '' !== $word ? str_replace( '_', ' ', $word ) : sprintf( __( '%s did not accept that key.', 'minn-admin' ), $product );
+}
+
 /**
  * The WPMU DEV Hub membership state, shared by the WPMU DEV and Smush Pro
  * readers (Smush Pro is unlocked by the same membership). Reads the Hub's
@@ -2201,6 +2240,37 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// SEOPress Pro: stock EDD against seopress.org, key in either the
+	// wp-config SEOPRESS_LICENSE_KEY constant or the
+	// seopress_pro_license_key option, with status + an epoch expiry beside
+	// it. The generic sweep's token (wp_seopress) can never match the
+	// option prefix (seopress_pro_), so a parked Pro plugin's stored
+	// license was invisible — and Pro parked while free runs is a common
+	// resting state.
+	$providers['seopress-pro'] = array(
+		'name'      => 'SEOPress PRO',
+		'component' => 'wp-seopress-pro/seopress-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'wp-seopress-pro/seopress-pro.php' );
+		},
+		'read'      => function () use ( $item, $edd_state ) {
+			$constant = defined( 'SEOPRESS_LICENSE_KEY' ) && SEOPRESS_LICENSE_KEY && is_string( SEOPRESS_LICENSE_KEY );
+			$key      = $constant ? SEOPRESS_LICENSE_KEY : trim( (string) get_option( 'seopress_pro_license_key' ) );
+			if ( '' === $key ) {
+				return array( $item( array( 'name' => 'SEOPress PRO', 'state' => 'missing' ) ) );
+			}
+			list( $state, $note ) = $edd_state( get_option( 'seopress_pro_license_status' ) );
+			$expires = minn_admin_license_expiry( get_option( 'seopress_pro_license_expiry' ) );
+			if ( 'valid' === $state && minn_admin_license_expired( $expires ) ) {
+				$state = 'expired';
+			}
+			if ( $constant ) {
+				$note = trim( ( $note ? $note . '; ' : '' ) . __( 'key defined in wp-config.php', 'minn-admin' ) );
+			}
+			return array( $item( array( 'name' => 'SEOPress PRO', 'state' => $state, 'key' => true, 'expires' => $expires, 'note' => $note ) ) );
+		},
+	);
+
 	// GeneratePress Premium: its option names break BOTH generic-sweep
 	// assumptions (prefix gen_premium vs slug gp-premium, and the status
 	// option is ..._license_key_status), so it gets a dedicated reader.
@@ -3807,32 +3877,9 @@ function minn_admin_license_default_providers() {
 			$data = json_decode( wp_remote_retrieve_body( $response ) );
 			return ( is_object( $data ) && isset( $data->license ) ) ? $data : null;
 		};
-		$acss_code = function ( $word ) {
-			if ( 'expired' === $word ) {
-				return 'expired';
-			}
-			return 'no_activations_left' === $word ? 'site_limit' : 'invalid';
-		};
-		// The messages their own screen shows for each EDD answer, minus the
-		// dates it interpolates ('missing' is EDD's word for an unknown key
-		// and reads like Minn's missing STATE if echoed raw).
+		$acss_code = 'minn_admin_license_edd_code';
 		$acss_word = function ( $word ) {
-			switch ( $word ) {
-				case 'missing':
-				case 'item_name_mismatch':
-					return __( 'That isn’t a valid Automatic.css license key.', 'minn-admin' );
-				case 'invalid':
-				case 'site_inactive':
-					return __( 'The license is not active for this site’s URL.', 'minn-admin' );
-				case 'disabled':
-				case 'revoked':
-					return __( 'That license key has been disabled.', 'minn-admin' );
-				case 'expired':
-					return __( 'That license key has expired.', 'minn-admin' );
-				case 'no_activations_left':
-					return __( 'That license key has reached its activation limit.', 'minn-admin' );
-			}
-			return '' !== $word ? str_replace( '_', ' ', $word ) : __( 'Automatic.css did not accept that key.', 'minn-admin' );
+			return minn_admin_license_edd_word( $word, 'Automatic.css' );
 		};
 		$providers['automatic-css']['secret_label'] = __( 'Automatic.css license key', 'minn-admin' );
 		$providers['automatic-css']['activate']     = function ( $secret ) use ( $acss_edd, $acss_code, $acss_word ) {
@@ -3889,6 +3936,113 @@ function minn_admin_license_default_providers() {
 			$word = (string) $data->license;
 			$ok   = 'valid' === $word;
 			return array( 'ok' => $ok, 'code' => $ok ? '' : $acss_code( $word ), 'message' => $ok ? '' : $acss_word( $word ) );
+		};
+	}
+
+	// SEOPress Pro: their admin flow is options.php + admin_init handlers,
+	// but their own WP-CLI License command spells out the whole protocol —
+	// these actions mirror it request-for-request against seopress.org
+	// (item_id from their constant, url from the `home` option, lifetime
+	// expiries stored as +100 years, EDD updater caches flushed after a
+	// change, 'failed' on deactivate meaning already-inactive = success).
+	// The constants only exist while Pro is active, which is also the gate.
+	if ( defined( 'STORE_URL_SEOPRESS' ) && defined( 'ITEM_ID_SEOPRESS' ) ) {
+		$sp_edd = function ( $edd_action, $license ) {
+			$response = wp_remote_post( STORE_URL_SEOPRESS, array(
+				'user-agent' => 'WordPress/' . get_bloginfo( 'version' ),
+				'timeout'    => 15,
+				'sslverify'  => true,
+				'body'       => array(
+					'edd_action'  => $edd_action,
+					'license'     => $license,
+					'item_id'     => ITEM_ID_SEOPRESS,
+					'url'         => get_option( 'home' ),
+					'environment' => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
+				),
+			) );
+			if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+				return null;
+			}
+			$data = json_decode( wp_remote_retrieve_body( $response ) );
+			return ( is_object( $data ) && isset( $data->license ) ) ? $data : null;
+		};
+		// Their CLI's clear_edd_cache(), so a license change never serves a
+		// stale package URL.
+		$sp_flush = function () {
+			global $wpdb;
+			$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'edd\\_sl\\_%' OR option_name LIKE 'edd\\_api\\_request\\_%' OR option_name LIKE 'edd\\_sl\\_failed\\_http\\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			delete_site_transient( 'update_plugins' );
+		};
+		$sp_word = function ( $word ) {
+			return minn_admin_license_edd_word( $word, 'SEOPress PRO' );
+		};
+		$providers['seopress-pro']['secret_label'] = __( 'SEOPress PRO license key', 'minn-admin' );
+		$providers['seopress-pro']['activate']     = function ( $secret ) use ( $sp_edd, $sp_flush, $sp_word ) {
+			if ( defined( 'SEOPRESS_LICENSE_KEY' ) && SEOPRESS_LICENSE_KEY ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The key is defined in wp-config.php (SEOPRESS_LICENSE_KEY) — change it there.', 'minn-admin' ) );
+			}
+			$secret = trim( (string) $secret );
+			$data   = $sp_edd( 'activate_license', $secret );
+			if ( ! $data ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No response from the SEOPress server.', 'minn-admin' ) );
+			}
+			if ( empty( $data->success ) ) {
+				$word = (string) ( $data->error ?? $data->license );
+				return array( 'ok' => false, 'code' => minn_admin_license_edd_code( $word ), 'message' => $sp_word( $word ) );
+			}
+			// Mirror their CLI's success writes, expiry rule included.
+			update_option( 'seopress_pro_license_key', sanitize_text_field( $secret ) );
+			update_option( 'seopress_pro_license_status', sanitize_key( (string) $data->license ) );
+			if ( isset( $data->expires ) ) {
+				update_option( 'seopress_pro_license_expiry', 'lifetime' === $data->expires ? strtotime( '+100 years' ) : strtotime( (string) $data->expires ), false );
+			}
+			$sp_flush();
+			return array( 'ok' => true );
+		};
+		$providers['seopress-pro']['deactivate'] = function () use ( $sp_edd, $sp_flush ) {
+			$constant = defined( 'SEOPRESS_LICENSE_KEY' ) && SEOPRESS_LICENSE_KEY;
+			$key      = $constant ? SEOPRESS_LICENSE_KEY : trim( (string) get_option( 'seopress_pro_license_key' ) );
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No SEOPress PRO key is stored.', 'minn-admin' ) );
+			}
+			$data = $sp_edd( 'deactivate_license', $key );
+			// Their CLI: 'deactivated' or 'failed' (already inactive on the
+			// server) both count as released; anything else fails WITHOUT
+			// touching local state.
+			if ( ! $data || ! in_array( (string) $data->license, array( 'deactivated', 'failed' ), true ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'SEOPress did not confirm the deactivation — nothing was changed.', 'minn-admin' ) );
+			}
+			// Minn's single Deactivate means release-and-forget, so this is
+			// their reset: every license option, not just the status pair.
+			delete_option( 'seopress_pro_license_status' );
+			delete_option( 'seopress_pro_license_key' );
+			delete_option( 'seopress_pro_license_key_error' );
+			delete_option( 'seopress_pro_license_expiry' );
+			delete_option( 'seopress_pro_license_automatic_attempt' );
+			delete_option( 'seopress_pro_license_home_url' );
+			$sp_flush();
+			return array(
+				'ok'      => true,
+				'message' => $constant
+					? __( 'Seat released. The key itself is defined in wp-config.php and stays there.', 'minn-admin' )
+					: '',
+			);
+		};
+		$providers['seopress-pro']['verify'] = function () use ( $sp_edd, $sp_word ) {
+			$key = defined( 'SEOPRESS_LICENSE_KEY' ) && SEOPRESS_LICENSE_KEY ? SEOPRESS_LICENSE_KEY : trim( (string) get_option( 'seopress_pro_license_key' ) );
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No SEOPress PRO key is stored.', 'minn-admin' ) );
+			}
+			$data = $sp_edd( 'check_license', $key );
+			if ( ! $data ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No response from the SEOPress server.', 'minn-admin' ) );
+			}
+			// Read-only, the Automatic.css lesson: EDD answers site_inactive
+			// for a URL the key wasn't activated on (normal on a dev clone),
+			// and persisting that would flip a truthfully-valid row.
+			$word = (string) $data->license;
+			$ok   = 'valid' === $word;
+			return array( 'ok' => $ok, 'code' => $ok ? '' : minn_admin_license_edd_code( $word ), 'message' => $ok ? '' : $sp_word( $word ) );
 		};
 	}
 
