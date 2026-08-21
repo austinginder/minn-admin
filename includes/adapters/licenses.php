@@ -4541,39 +4541,54 @@ function minn_admin_licenses_edd( $fingerprints ) {
 
 /** SureCart licensing SDK: {name}_license_options + activation id. */
 function minn_admin_licenses_surecart( $fingerprints ) {
-	global $wpdb;
 	$out = array();
 	foreach ( $fingerprints as $fp ) {
-		$token = str_replace( '-', '_', strtolower( $fp['slug'] ) );
-		$opt   = get_option( $token . '_license_options' );
-		if ( ! is_array( $opt ) || empty( $opt ) ) {
-			// The option key is the SDK client's chosen name, which may not
-			// be the slug; sweep for any *_license_options holding sc_ keys.
-			$row = $wpdb->get_var(
-				"SELECT option_value FROM {$wpdb->options}
-				 WHERE option_name LIKE '%\_license\_options' AND option_value LIKE '%sc\_license%' LIMIT 1"
-			);
-			// Decode without instantiating anything. This row was matched by a
-			// wildcard rather than written by us, so whatever plugin owns it
-			// chose its contents; the reader only wants a *license_key* string
-			// leaf and never needs live objects.
-			$opt = ( $row && is_serialized( $row ) )
-				? unserialize( $row, array( 'allowed_classes' => false ) ) // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
-				: $row;
-			$opt = is_array( $opt ) ? $opt : array();
+		// The SDK's Settings class names its option from the CLIENT NAME the
+		// vendor passed in — strtolower, spaces stripped — which is usually
+		// the product's display name, not the directory slug ('Etch Theme' →
+		// etchtheme_license_options). Try the identity-derived spellings and
+		// nothing else: the old any-sc_-row wildcard here handed one
+		// component's activation record to another (the Etch theme wore the
+		// Etch PLUGIN's record as "activation stored" while its own row
+		// simply did not exist). A row matching none of this component's own
+		// names belongs to some other component, and honest missing beats
+		// stolen attribution.
+		$slug       = strtolower( (string) $fp['slug'] );
+		$candidates = array_unique( array(
+			str_replace( '-', '_', $slug ),
+			str_replace( '-', '', $slug ),
+			strtolower( preg_replace( '/\s+/', '', (string) $fp['name'] ) ),
+		) );
+		$opt = array();
+		foreach ( $candidates as $candidate ) {
+			$found = get_option( $candidate . '_license_options' );
+			if ( is_array( $found ) && $found ) {
+				$opt = $found;
+				break;
+			}
 		}
-		$key = '';
+		$key        = '';
+		$activation = '';
 		foreach ( $opt as $k => $v ) {
 			if ( false !== strpos( (string) $k, 'license_key' ) && $v ) {
 				$key = (string) $v;
 			}
+			if ( false !== strpos( (string) $k, 'activation_id' ) && $v ) {
+				$activation = (string) $v;
+			}
+		}
+		$note = '';
+		if ( $key ) {
+			$note = $activation
+				? __( 'Activation stored; SureCart keeps no local expiry', 'minn-admin' )
+				: __( 'Key stored without an activation record', 'minn-admin' );
 		}
 		$out[] = array(
 			'name'      => $fp['name'],
 			'kind'      => $fp['kind'],
 			'state'     => $key ? 'unknown' : 'missing',
 			'key'       => (bool) $key,
-			'note'      => $key ? 'Activation stored; SureCart keeps no local expiry' : '',
+			'note'      => $note,
 			'component' => $fp['component'],
 		);
 	}
