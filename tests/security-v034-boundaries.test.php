@@ -340,6 +340,113 @@ if ( ! function_exists( 'minn_admin_acf_value_in' ) ) {
 	wp_set_current_user( $admin );
 }
 
+// --- 6. comment feeds name their post, so they gate on reading it ---------
+// A comment query is not scoped by post status. Core filters every row of its
+// recent-comments widget through read_post for exactly that reason, because a
+// row carries the post's TITLE. The drill-down is the sharper case: it is a
+// hardcoded query, so no comments_clauses filter runs and plugin rows that are
+// technically comments (WooCommerce order notes, Action Scheduler logs) come
+// with it.
+wp_set_current_user( $admin );
+$secret_title = 'Minn private boundary ' . wp_generate_password( 10, false, false );
+$note_text    = 'MINN-ORDER-NOTE-' . wp_generate_password( 10, false, false );
+$private_id   = wp_insert_post( array(
+	'post_title'   => $secret_title,
+	'post_status'  => 'private',
+	'post_type'    => 'post',
+	'post_content' => 'boundary fixture',
+) );
+$public_id = wp_insert_post( array(
+	'post_title'   => 'Minn public boundary ' . wp_generate_password( 6, false, false ),
+	'post_status'  => 'publish',
+	'post_type'    => 'post',
+	'post_content' => 'boundary fixture',
+) );
+$private_comment = 0;
+$public_comment  = 0;
+$note_comment    = 0;
+if ( ! is_wp_error( $private_id ) && ! is_wp_error( $public_id ) ) {
+	$private_comment = wp_insert_comment( array(
+		'comment_post_ID'  => $private_id,
+		'comment_author'   => 'Boundary Commenter',
+		'comment_content'  => 'on a private post',
+		'comment_approved' => 1,
+	) );
+	$public_comment = wp_insert_comment( array(
+		'comment_post_ID'  => $public_id,
+		'comment_author'   => 'Boundary Commenter',
+		'comment_content'  => 'on a public post',
+		'comment_approved' => 1,
+	) );
+	// A plugin row that is a comment. Uses the public post deliberately: the
+	// point is the comment_type, not the post's readability.
+	$note_comment = wp_insert_comment( array(
+		'comment_post_ID'  => $public_id,
+		'comment_author'   => $note_text,
+		'comment_content'  => $note_text,
+		'comment_type'     => 'order_note',
+		'comment_approved' => 1,
+	) );
+}
+
+$reader = wp_insert_user( array(
+	'user_login' => 'minn-feed-boundary-' . wp_generate_password( 6, false, false ),
+	'user_pass'  => wp_generate_password( 20 ),
+	'role'       => 'author', // edit_posts, but no read_private_posts
+) );
+
+if ( is_wp_error( $reader ) || ! $private_comment || ! $public_comment ) {
+	$check( 'Comment-feed fixtures created', false );
+	$reader = is_wp_error( $reader ) ? 0 : $reader;
+} else {
+	$window = new WP_REST_Request( 'GET', '/minn-admin/v1/overview/activity' );
+	$window->set_param( 'from', gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) );
+	$window->set_param( 'to', gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) );
+	$feed_text = function ( $uid ) use ( $window ) {
+		wp_set_current_user( $uid );
+		$out = array();
+		$drill = (array) rest_ensure_response( Minn_Admin_REST::overview_activity( $window ) )->get_data();
+		foreach ( (array) ( $drill['items'] ?? array() ) as $item ) {
+			$out[] = (string) ( $item['text'] ?? '' );
+		}
+		$over = (array) rest_ensure_response( Minn_Admin_REST::overview( new WP_REST_Request( 'GET', '/minn-admin/v1/overview' ) ) )->get_data();
+		foreach ( (array) ( $over['activity'] ?? array() ) as $item ) {
+			$out[] = (string) ( $item['text'] ?? '' );
+		}
+		foreach ( (array) Minn_Admin_REST::notifications() as $item ) {
+			$out[] = is_array( $item ) ? (string) ( $item['title'] ?? '' ) : '';
+		}
+		return implode( "\n", $out );
+	};
+
+	$reader_sees = $feed_text( $reader );
+	$check( 'Fixture reader cannot read the private post', ! user_can( $reader, 'read_post', $private_id ) );
+	$check(
+		'Comment feeds omit a private post\'s title',
+		false === strpos( $reader_sees, $secret_title ),
+		'feed rows ' . substr_count( $reader_sees, "\n" )
+	);
+	$check(
+		'The activity drill-down omits plugin comment rows',
+		false === strpos( $reader_sees, $note_text )
+	);
+	// Controls: the feed still works, and a reader still sees what they may.
+	$check(
+		'A public post\'s comment still reaches the feed',
+		false !== strpos( $reader_sees, 'Boundary Commenter' )
+	);
+	$admin_sees = $feed_text( $admin );
+	$check(
+		'An administrator still sees the private post\'s comment',
+		false !== strpos( $admin_sees, $secret_title )
+	);
+	$check(
+		'An administrator is not shown plugin comment rows either',
+		false === strpos( $admin_sees, $note_text )
+	);
+}
+wp_set_current_user( $admin );
+
 // --- cleanup -------------------------------------------------------------
 wp_set_current_user( $admin );
 foreach ( array( $duplicate_id, $attachment_id, is_wp_error( $private_parent ) ? 0 : $private_parent, is_wp_error( $source_id ) ? 0 : $source_id ) as $post_id ) {
@@ -356,6 +463,19 @@ if ( $forbidden_uid ) {
 }
 if ( ! empty( $writer ) && ! is_wp_error( $writer ) ) {
 	wp_delete_user( $writer );
+}
+if ( ! empty( $reader ) && ! is_wp_error( $reader ) ) {
+	wp_delete_user( $reader );
+}
+foreach ( array( $private_comment, $public_comment, $note_comment ) as $comment_id ) {
+	if ( $comment_id ) {
+		wp_delete_comment( (int) $comment_id, true );
+	}
+}
+foreach ( array( $private_id, $public_id ) as $post_id ) {
+	if ( $post_id && ! is_wp_error( $post_id ) ) {
+		wp_delete_post( (int) $post_id, true );
+	}
 }
 remove_role( 'minn_boundary_editor' );
 unregister_post_type( 'minn_boundary_item' );

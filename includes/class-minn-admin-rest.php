@@ -2026,6 +2026,30 @@ class Minn_Admin_REST {
 	}
 
 	/**
+	 * May this caller see that a comment exists on this post?
+	 *
+	 * Core asks exactly this before printing a row in its recent-comments
+	 * dashboard widget (wp-admin/includes/dashboard.php), and the reason is
+	 * that a comment row carries the POST'S TITLE and the commenter's name.
+	 * A comment query is not scoped by post status, so without this a feed
+	 * hands anyone who can reach it the titles of private, draft, pending and
+	 * trashed posts that happen to carry a comment.
+	 *
+	 * Being able to edit the post is enough on its own; otherwise the post
+	 * must be readable AND not password-walled.
+	 *
+	 * @param int $post_id Post the comment belongs to.
+	 * @return bool
+	 */
+	private static function comment_row_visible( $post_id ) {
+		$post_id = (int) $post_id;
+		if ( current_user_can( 'edit_post', $post_id ) ) {
+			return true;
+		}
+		return ! post_password_required( $post_id ) && current_user_can( 'read_post', $post_id );
+	}
+
+	/**
 	 * The active debug log path: a string WP_DEBUG_LOG wins, else PHP's
 	 * error_log if it points at a real file, else the WordPress default.
 	 */
@@ -3190,6 +3214,11 @@ class Minn_Admin_REST {
 			)
 		);
 		foreach ( $recent_comments as $c ) {
+			// The status gate above decides which QUEUE a caller may see; this
+			// decides which POSTS, and a comment row names its post.
+			if ( ! self::comment_row_visible( $c->comment_post_ID ) ) {
+				continue;
+			}
 			$pending = '0' === $c->comment_approved;
 			$activity[] = array(
 				'text'  => sprintf(
@@ -3362,14 +3391,27 @@ class Minn_Admin_REST {
 		$comments      = $wpdb->get_results(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- literal fragment chosen above.
+				// comment_type is not decoration. A hardcoded query runs no
+				// comments_clauses filters, so the layer plugins use to keep
+				// their own rows out of comment feeds never runs: WooCommerce
+				// order notes and Action Scheduler logs are comments, and
+				// WooCommerce's source says outright that it relies on a
+				// dashboard's read_post check to cover the queries it cannot
+				// filter. Ask for real comments, and gate every row below.
+				// LIMIT over-fetches because that gate drops rows after the
+				// database has counted them.
 				"SELECT comment_ID, comment_author, comment_post_ID, comment_date_gmt, comment_approved FROM {$wpdb->comments}
 				 WHERE comment_date_gmt > %s AND comment_date_gmt <= %s{$comment_where}
-				 ORDER BY comment_date_gmt DESC LIMIT 100",
+				 AND comment_type IN ( '', 'comment' )
+				 ORDER BY comment_date_gmt DESC LIMIT 300",
 				$from,
 				$to
 			)
 		);
 		foreach ( $comments as $c ) {
+			if ( ! self::comment_row_visible( $c->comment_post_ID ) ) {
+				continue;
+			}
 			$pending = '0' === $c->comment_approved;
 			$items[] = array(
 				'kind'  => 'comment',
@@ -3729,6 +3771,9 @@ class Minn_Admin_REST {
 
 		if ( current_user_can( 'moderate_comments' ) ) {
 			foreach ( get_comments( array( 'status' => 'hold', 'number' => 5 ) ) as $c ) {
+				if ( ! self::comment_row_visible( $c->comment_post_ID ) ) {
+					continue;
+				}
 				$items[] = array(
 					'id'    => 'comment-' . $c->comment_ID,
 					'kind'  => 'comments',
@@ -3739,6 +3784,9 @@ class Minn_Admin_REST {
 			}
 		}
 		foreach ( get_comments( array( 'status' => 'approve', 'number' => 3 ) ) as $c ) {
+			if ( ! self::comment_row_visible( $c->comment_post_ID ) ) {
+				continue;
+			}
 			$items[] = array(
 				'id'    => 'comment-' . $c->comment_ID,
 				'kind'  => 'comments',
