@@ -19669,11 +19669,11 @@
 				${ langs.map( ( l ) => `
 				<div class="minn-lang-row${ l.removable ? '' : ' is-locked' }" data-lang-row="${ esc( l.locale ) }">
 					<div class="minn-lang-row-main">
-						<div class="minn-lang-name">${ esc( l.name || l.locale ) }</div>
+						<div class="minn-lang-name">${ esc( localeDisplayName( l.locale, l.name ) ) }</div>
 						<div class="minn-lang-meta"><code>${ esc( l.locale ) }</code>${ languageBreakdown( l ) ? ` · ${ esc( languageBreakdown( l ) ) }` : '' }${ l.pending ? ` · ${ esc( sprintf( /* translators: %d is a number of translation packages waiting to update. */ _n( '%d update waiting', '%d updates waiting', l.pending ), l.pending ) ) }` : '' }</div>
 					</div>
 					${ l.removable
-						? `<button type="button" class="minn-btn-soft danger" data-lang-remove="${ esc( l.locale ) }" data-lang-name="${ esc( l.name || l.locale ) }">${ esc( __( 'Remove' ) ) }</button>`
+						? `<button type="button" class="minn-btn-soft danger" data-lang-remove="${ esc( l.locale ) }" data-lang-name="${ esc( localeDisplayName( l.locale, l.name ) ) }">${ esc( __( 'Remove' ) ) }</button>`
 						: `<span class="minn-lang-lock">${ esc( languageLockNote( l ) ) }</span>` }
 				</div>` ).join( '' ) }
 			</div>
@@ -19705,17 +19705,27 @@
 		return bits.join( ' · ' ) || sprintf( _n( '%d translation', '%d translations', group.total || 0 ), group.total || 0 );
 	}
 
-	function translationLanguageName( group ) {
-		const locale = String( group.locale || '' );
-		if ( group.name && group.name !== locale ) return group.name;
-		if ( ! locale || typeof Intl.DisplayNames !== 'function' ) return locale;
-		const parts = locale.split( '_' ).filter( Boolean );
+	/* A locale's human name. The server can only name one from WordPress's
+	 * cached list of downloadable translations, which legitimately expires,
+	 * so on a cold cache it answers with the raw code. The browser can always
+	 * name a locale, and does it in the reader's own language — so this is
+	 * the fallback wherever a language is shown, and every language list uses
+	 * it so they cannot disagree with each other. */
+	function localeDisplayName( locale, name ) {
+		const code = String( locale || '' );
+		if ( name && name !== code ) return name;
+		if ( ! code || typeof Intl.DisplayNames !== 'function' ) return code;
+		const parts = code.split( '_' ).filter( Boolean );
 		const target = parts.length > 1 ? `${ parts[ 0 ] }-${ parts[ 1 ] }` : parts[ 0 ];
 		try {
-			return new Intl.DisplayNames( [ uiLocale() ], { type: 'language' } ).of( target ) || locale;
+			return new Intl.DisplayNames( [ uiLocale() ], { type: 'language' } ).of( target ) || code;
 		} catch ( e ) {
-			return locale;
+			return code;
 		}
+	}
+
+	function translationLanguageName( group ) {
+		return localeDisplayName( group.locale, group.name );
 	}
 
 	function translationComponentTypeLabel( type ) {
@@ -22168,7 +22178,13 @@
 					+ ( cache.languages ? combo(
 						'minn_language',
 						__( 'Site language' ),
-						[ [ '', __( 'English (United States)' ) ], ...( cache.languages.installed || [] ).filter( ( p ) => p[ 0 ] !== 'en_US' ), ...( cache.languages.canInstall ? cache.languages.available || [] : [] ) ],
+						// Name every locale the same way the language lists do, so
+						// a cold translations cache can't leave this reading
+						// "pl_PL" where the rest of the admin says "Polski".
+						[ [ '', __( 'English (United States)' ) ],
+							...( cache.languages.installed || [] ).filter( ( p ) => p[ 0 ] !== 'en_US' )
+								.map( ( p ) => [ p[ 0 ], localeDisplayName( p[ 0 ], p[ 1 ] ) ] ),
+							...( cache.languages.canInstall ? ( cache.languages.available || [] ).map( ( p ) => [ p[ 0 ], localeDisplayName( p[ 0 ], p[ 1 ] ) ] ) : [] ) ],
 						cache.languages.site || ''
 					) : '' ),
 				// "Minn is the default admin" lives on Your profile now (per-user).

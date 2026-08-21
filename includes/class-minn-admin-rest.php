@@ -4357,7 +4357,8 @@ class Minn_Admin_REST {
 
 		// Re-query the update APIs so the pending list no longer offers packs
 		// for a locale we no longer have installed (the same work Check for
-		// updates does).
+		// updates does). Clearing the plugin and theme caches is what forces
+		// those two to really ask rather than answer from their transient.
 		wp_clean_plugins_cache();
 		wp_clean_themes_cache();
 		if ( function_exists( 'wp_update_plugins' ) ) {
@@ -4366,8 +4367,15 @@ class Minn_Admin_REST {
 		if ( function_exists( 'wp_update_themes' ) ) {
 			wp_update_themes();
 		}
+		// Core needs the same treatment spelled out. wp_version_check() skips
+		// the request when core was last checked under a minute ago, and this
+		// admin asks for core status on nearly every screen, so the skip is
+		// the normal case rather than a rare one. Its transient also survives
+		// the two cache clears above, so its translations list kept offering
+		// packs for a language that had just been removed.
+		delete_site_transient( 'update_core' );
 		if ( function_exists( 'wp_version_check' ) ) {
-			wp_version_check();
+			wp_version_check( array(), true );
 		}
 
 		$summary = self::translation_update_summary();
@@ -4729,6 +4737,15 @@ class Minn_Admin_REST {
 			foreach ( (array) $translations as $code => $t ) {
 				if ( ! isset( $have[ $code ] ) ) {
 					$available[] = array( $code, isset( $t['native_name'] ) ? $t['native_name'] : $code );
+				}
+			}
+			// available_languages() names locales from the cached catalog, so
+			// while that cache is cold it can only answer with the raw code
+			// and a reader sees "pl_PL" where "Polski" belongs. The fetch
+			// above just filled it, so name the installed ones properly too.
+			foreach ( $installed as $i => $pair ) {
+				if ( isset( $pair[0], $pair[1] ) && $pair[0] === $pair[1] && isset( $translations[ $pair[0] ]['native_name'] ) ) {
+					$installed[ $i ][1] = $translations[ $pair[0] ]['native_name'];
 				}
 			}
 			usort( $available, function ( $a, $b ) {
