@@ -259,6 +259,31 @@
 	// third-party URL through every sink this protects.
 	const safeHref = ( u ) => ( /^(https?:\/\/|\/(?![/\\]))/i.test( String( u == null ? '' : u ).trim() ) ? String( u ).trim() : '' );
 
+	// Is this URL actually ON that host? A substring test says yes to
+	// https://evil.com/?x=wordpress.org and to https://evil.com/github.com/,
+	// and the answer decides whether the UI puts a well-known name to a link
+	// whose address came from a plugin header or its own update server.
+	// Compare the PARSED host, and only ever the host.
+	const urlHost = ( u ) => {
+		try {
+			return new URL( String( u == null ? '' : u ), window.location.origin ).hostname.toLowerCase();
+		} catch ( e ) {
+			return '';
+		}
+	};
+	const urlHostIs = ( u, domain ) => {
+		const h = urlHost( u );
+		return h === domain || h.endsWith( '.' + domain );
+	};
+	const urlPath = ( u ) => {
+		try {
+			return new URL( String( u == null ? '' : u ), window.location.origin ).pathname;
+		} catch ( e ) {
+			return '';
+		}
+	};
+	const isWpOrgUrl = ( u ) => urlHostIs( u, 'wordpress.org' );
+
 	// A URL an AUTHOR may put in their own content. Wider than safeHref, which
 	// guards server-supplied navigation: a writer legitimately links mailto:,
 	// tel:, an in-page #anchor and a relative path. Still an allowlist, so
@@ -563,8 +588,10 @@
 	}
 	function extLinkLabel( href, role, name ) {
 		const h = String( href || '' );
-		const isGithub = /github\.com\//i.test( h );
-		const isOrg = /wordpress\.org\/(?:plugins|themes)\//i.test( h );
+		// Host equality, never a substring: these labels are the only thing
+		// telling a reader whose site a link goes to.
+		const isGithub = urlHostIs( h, 'github.com' );
+		const isOrg = isWpOrgUrl( h ) && /^\/(?:plugins|themes)\//i.test( urlPath( h ) );
 		if ( role === 'author' ) {
 			if ( isGithub ) {
 				/* translators: %s: the extension author's name. */
@@ -19067,7 +19094,7 @@
 						: ( offered ? sprintf( __( 'Update to %s' ), offered ) : __( 'Update' ) );
 				return `
 				<div class="minn-card minn-plugin${ isUpdating ? ' minn-busy' : '' }${ isCurrent ? ' minn-plugin-updating' : '' }${ isUpdating && ! isCurrent ? ' minn-plugin-queued' : '' }" data-plugin="${ esc( p.plugin ) }">
-					${ meta && meta.url ? `<a class="minn-plugin-icon-link" href="${ esc( meta.url ) }" target="_blank" rel="noopener" title="${ /wordpress\.org/.test( meta.url ) ? sprintf( /* translators: %s: the plugin's name. */ esc( __( 'View %s on WordPress.org' ) ), esc( name ) ) : sprintf( /* translators: %s: the plugin's name. */ esc( __( '%s plugin page' ) ), esc( name ) ) }">${ tile }</a>` : tile }
+					${ meta && safeHref( meta.url ) ? `<a class="minn-plugin-icon-link" href="${ esc( safeHref( meta.url ) ) }" target="_blank" rel="noopener" title="${ isWpOrgUrl( meta.url ) ? sprintf( /* translators: %s: the plugin's name. */ esc( __( 'View %s on WordPress.org' ) ), esc( name ) ) : sprintf( /* translators: %s: the plugin's name. */ esc( __( '%s plugin page' ) ), esc( name ) ) }">${ tile }</a>` : tile }
 					<div class="minn-plugin-body">
 						<div class="minn-plugin-head">
 							<div class="minn-plugin-name">${ esc( name ) }</div>
@@ -33929,7 +33956,7 @@
 			<div class="minn-insp-actions">
 				<button class="minn-btn-primary" data-link-apply type="button">${ esc( __( 'Apply' ) ) }</button>
 				${ a ? `<button class="minn-btn-soft danger" data-link-remove type="button">${ esc( __( 'Unlink' ) ) }</button>` : '' }
-				${ a && href ? `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">${ esc( __( 'Open ↗' ) ) }</a>` : '' }
+				${ a && safeLinkHref( href ) ? `<a class="minn-btn-soft" href="${ esc( safeLinkHref( href ) ) }" target="_blank" rel="noopener">${ esc( __( 'Open ↗' ) ) }</a>` : '' }
 			</div>`;
 		document.body.appendChild( linkPop );
 		const rect = ( a || range ).getBoundingClientRect();

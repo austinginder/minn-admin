@@ -80,7 +80,12 @@ class Minn_Admin_REST {
 								'icon' => isset( $icons['svg'] ) ? $icons['svg']
 									: ( isset( $icons['2x'] ) ? $icons['2x']
 									: ( isset( $icons['1x'] ) ? $icons['1x'] : '' ) ),
-								'url'  => isset( $data->url ) && $data->url ? $data->url : 'https://wordpress.org/plugins/' . $slug . '/',
+								// Whatever the plugin's own update server answered
+								// with. A self-hosted updater (EDD-SL, Freemius,
+								// Kernl) puts a vendor-controlled string here,
+								// so it is neither trusted nor a URL until it
+								// has been through esc_url_raw.
+								'url'  => isset( $data->url ) && $data->url ? esc_url_raw( (string) $data->url ) : 'https://wordpress.org/plugins/' . $slug . '/',
 							);
 						}
 					}
