@@ -1490,15 +1490,25 @@ function minn_admin_acpt_builder_belongs_in( $location, $stored_belongs ) {
 			$by_id[ (string) $belong['id'] ] = $belong;
 		}
 	}
-	$choices = minn_admin_acpt_builder_location_choices();
-	$out     = array();
-	foreach ( (array) $location as $rules ) {
-		$rules = array_values( (array) $rules );
+	$choices  = minn_admin_acpt_builder_location_choices();
+	$location = array_values( array_filter( array_map( function ( $rules ) {
+		return array_values( (array) $rules );
+	}, (array) $location ) ) );
+	$sets     = count( $location );
+	$out      = array();
+	foreach ( $location as $gi => $rules ) {
 		$count = count( $rules );
 		foreach ( $rules as $i => $rule ) {
 			$rule  = (array) $rule;
 			$param = (string) ( $rule['param'] ?? '' );
 			$logic = ( $i === $count - 1 ) ? 'OR' : 'AND';
+			// ACPT never reads the chain's final logic, and its own screen
+			// stores it blank — or leaves whatever the row already held.
+			// Mirror that so a no-op save stays byte-identical.
+			if ( $gi === $sets - 1 && $i === $count - 1 ) {
+				$id    = (string) ( $rule['id'] ?? '' );
+				$logic = isset( $by_id[ $id ] ) ? (string) ( $by_id[ $id ]['logic'] ?? '' ) : '';
+			}
 			if ( isset( $map[ $param ] ) ) {
 				$operator = '!=' === (string) ( $rule['operator'] ?? '' ) ? '!=' : '=';
 				$value    = (string) ( $rule['value'] ?? '' );
