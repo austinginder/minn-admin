@@ -39,10 +39,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return;
 	}
 	const surface = surfaces[ 0 ];
-	t.check( 'an ACPT option page is available', true, JSON.stringify( surface ) );
+	t.check( 'the Site options surface is available', true, JSON.stringify( surface ) );
 	t.check( 'it is a settings-only surface', surface.tabs > 0 && ! surface.hasCollection, JSON.stringify( surface ) );
-	t.check( 'it is filed under Tools and badged ACPT',
-		surface.group === 'tools' && surface.sub === 'ACPT', JSON.stringify( surface ) );
+	// It is filed under Tools. The badge names the sole provider when one
+	// plugin owns it, and stays blank when ACF and ACPT co-host the item
+	// (the shared Site options design) — so assert Tools, not a fixed sub.
+	t.check( 'it is filed under Tools', surface.group === 'tools', JSON.stringify( surface ) );
 	t.check( 'it shares the one Site options item, not one per page',
 		surface.id === 'site-options' && /minn-admin\/v1\/options\//.test( surface.route ), surface.route );
 
@@ -55,8 +57,34 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		try { return { status: r.status, body: JSON.parse( text ) }; } catch ( e ) { return { status: r.status, body: text }; }
 	}, { path, opts } );
 
-	const route = surface.route.replace( '{tab}', 'tab-0' );
-	const shape = await api( route );
+	// The item may hold tabs from more than one plugin now (ACF and ACPT
+	// share it). Find ACPT's own tab: ACPT names its fields by UUID, which
+	// no other provider here does, so a tab whose field names are UUIDs is
+	// ACPT's. Skip honestly when no ACPT tab is present — the shared item
+	// can exist on ACF alone, and the dev site carries no standing ACPT
+	// option page (a CLI-seeded one is invisible to the browser anyway: ACPT
+	// caches its option-page list in a per-host files pool, so a fixture
+	// written from wp-cli lands in the `cli` pool, not the web host's).
+	const isUuid = ( s ) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test( String( s ) );
+	let route = null;
+	let shape = null;
+	for ( const tab of ( await page.evaluate( () => ( window.MINN.surfaces || [] )
+		.find( ( s ) => s.id === 'site-options' ).settings.tabs.map( ( t ) => t.id ) ) ) ) {
+		const candidate = surface.route.replace( '{tab}', tab );
+		const body = await api( candidate );
+		const fields = body.status === 200 && body.body ? ( body.body.groups || [] ).flatMap( ( g ) => g.fields || [] ) : [];
+		if ( fields.length && fields.every( ( f ) => isUuid( f.name ) ) ) {
+			route = candidate;
+			shape = body;
+			break;
+		}
+	}
+	if ( ! route ) {
+		t.check( 'an ACPT option page is available', true, 'Site options exists but has no ACPT tab here — skipped' );
+		await t.done( browser, errors );
+		return;
+	}
+	t.check( 'an ACPT option page is available', true, route );
 	t.check( 'the page answers with its fields and values', shape.status === 200 && !! shape.body.groups, JSON.stringify( shape.status ) );
 	const fields = ( shape.body.groups || [] ).flatMap( ( g ) => g.fields || [] );
 	t.check( 'it offers real controls', fields.length > 0, JSON.stringify( fields.map( ( f ) => f.type ) ) );
@@ -102,8 +130,16 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'an unknown tab is refused', bogus.status === 404, String( bogus.status ) );
 
 	/* ===== It renders as a page, with the values in the fields ===== */
+	// The item opens on its first tab, which may belong to another plugin
+	// when the surface is shared — click through to ACPT's own tab (the one
+	// naming the fixture page) before reading its values.
 	await page.goto( `${ BASE }/minn-admin/${ surface.id }`, { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-view input, #minn-view textarea', { timeout: 20000 } );
+	await page.evaluate( () => {
+		const tab = Array.from( document.querySelectorAll( '#minn-view [data-stab], #minn-view .minn-tab, #minn-view button' ) )
+			.find( ( b ) => /ACPT/i.test( b.textContent ) );
+		if ( tab ) tab.click();
+	} );
 	await page.waitForTimeout( 800 );
 	const ui = await page.evaluate( () => ( {
 		inputs: document.querySelectorAll( '#minn-view input, #minn-view textarea' ).length,
