@@ -479,7 +479,7 @@ Rules of the road:
 | `filterBar` | Wear the **orders filter bar** instead of the pill strip: a status dropdown that holds more than one status at once, Add filter, chips beneath, and the whole narrowing in the URL. Replaces `tabs`, `filter` and the surface's own search box — see [the `filterBar` section](#collectionfilterbar--the-orders-filter-bar-on-your-surface) below |
 | `bulk` | Bulk actions: the same shape as `actions` minus `href` (a batch always needs a `route`). Declaring any adds a checkbox column (shift-range, Select page) and a selection bar. Each action runs **per selected item** (`{id}` replaced; one failure never aborts the rest), `when` is evaluated per item so a mixed selection skips ineligible rows, a button whose `when` matches nothing on the current page isn't offered at all, and the result toast reports done / skipped / failed |
 | `open` *(v0.31)* | `{ "route": "your-page/{id}" }` — row click NAVIGATES to an app route instead of opening the detail modal (and the row menu's Open follows). For records that earn a page by the pages-versus-modals test below: sub-resources and workflows of their own. The bundled ACF Field Groups surface opens its group builder this way |
-| `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array), `email`, `url`. Every field is required unless it declares `required: false`. A failed create (your route returning `WP_Error`) toasts your error message and keeps the form open as typed |
+| `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array), `email`, `url`, `toggle` (a switch, submitted as a boolean). Every field is required unless it declares `required: false`. A failed create (your route returning `WP_Error`) toasts your error message and keeps the form open as typed |
 | `import` *(v0.31)* | `{ label, route, accept, hint }` — adds an "Import" button beside Add that opens a pick-a-file / paste-the-contents dialog. The chosen file's text (or the pasted text) POSTs to `route` as `{ "content": "…" }`; your route validates, does the work, and returns `{ "message": "…" }` for the toast — or `WP_Error` with a plain-language message, which keeps the dialog open. `accept` limits the file picker (e.g. `".json,application/json"`); `hint` renders under the form. The bundled ACF Field Groups surface imports ACF export JSON this way |
 
 ![A detail modal from detailRoute: key/value rows, the messageKey block, prev/next stepping and action buttons (the off-site one marked ↗)](img/detail-modal.png)
@@ -778,6 +778,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
 | `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
+| `minn_admin_option_pages` | filter | Add a page of site-wide fields to the shared Site options item |
 | `minn_admin_cache_purgers` | filter | Join the "Clear site cache" palette command |
 | `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
 | `minn_admin_license_providers` | filter | Report your license state on the Licenses card, optionally with activate / deactivate / re-verify |
@@ -1507,6 +1508,47 @@ per-user folder modes work by just reading your own scoped state. The bundled
 providers in `includes/adapters/media-folders.php` (FileBird, Real Media
 Library, Folders by Premio) are the reference; copy whichever storage shape
 matches yours (custom tables, an API, or a plain taxonomy). Since 0.18.0.
+
+## Site options — one item for every plugin's option pages
+
+Plugins that keep site-wide fields (ACF and ACPT among the bundled ones) used to claim
+a sidebar entry each, so a site running two of them grew two or three items describing
+the same kind of thing. They gather under one **Site options** item instead, each page a
+tab. Contribute one through `minn_admin_option_pages`:
+
+```php
+add_filter( 'minn_admin_option_pages', function ( $pages ) {
+	$pages[] = array(
+		'id'     => 'my-plugin:brand',            // unique and stable
+		'label'  => 'Brand kit',                  // names the tab
+		'source' => 'My Plugin',                  // badge, optional
+		'cap'    => 'manage_options',             // who sees the item
+		'tabs'   => array(
+			array( 'id' => 'tab-0', 'label' => 'Basics' ),
+		),
+		'route'  => 'my-plugin/v1/options/{tab}', // `{tab}` is your tab id
+	);
+	return $pages;
+} );
+```
+
+| Key | Required | Meaning |
+|---|---|---|
+| `id` | Yes | Unique and stable; namespace it with your plugin |
+| `label` | Yes | The tab's name. A page with ONE tab is named for the page |
+| `tabs` | Yes | `[{ id, label }]`. A page with no tabs is not offered |
+| `route` | Yes | Answers the settings contract below; `{tab}` is substituted |
+| `cap` | No | Defaults to `manage_options`. An empty string denies everyone, the way WordPress reads it on its own menus; say `read` if you mean anyone |
+| `source` | No | Shown as the item's badge while one source is the only one |
+
+`route` answers **GET** with `{ groups, values, adminUrl }` and **POST** with the same
+shape after saving `{ values }` — the settings contract used everywhere else in Minn
+(see "Settings" above). Minn dispatches to your route internally, so **your own
+permission callback still runs on every request**: this item gathers pages, it does not
+vouch for them. Values are keyed by each field's `name` (or `key`).
+
+Only the label is Minn's: when one page exists it keeps its own name, and when several
+do the item becomes "Site Options" and each tab says which page it came from.
 
 ## Cache purgers — join "Clear site cache"
 
