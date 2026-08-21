@@ -71,10 +71,15 @@
 /* Corner Reveal deliberately stays out of WordPress's #wpadminbar and
    body.admin-bar contracts. It overlays one quiet corner instead of asking
    every theme to reserve a toolbar-sized strip. */
+/* Offset so the mark lands exactly where the admin's sidebar logo sits
+   (12px sidebar padding + 8px logo padding = 20px in, 14px + 8px = 22px
+   down), less this bar's own border and padding. Switching between the front
+   end and the admin then leaves the mark where it was instead of nudging it
+   a few pixels. */
 #minn-cornerbar {
   position: fixed;
-  top: max(12px, env(safe-area-inset-top));
-  left: max(12px, env(safe-area-inset-left));
+  top: max(13px, env(safe-area-inset-top));
+  left: max(11px, env(safe-area-inset-left));
   width: 46px;
   min-width: 0;
   height: 46px;
@@ -110,7 +115,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px;
+  /* Left inset centres the mark inside the resting pill: at rest everything
+     past the mark is clipped, so a uniform 4px left the mark sitting hard
+     against the left edge with the slack piling up on the right. Phones use
+     a larger mark and restore the even padding below. */
+  padding: 4px 4px 4px 8px;
   overflow: hidden;
   background: var(--bg2);
   border: 1px solid var(--border2);
@@ -185,21 +194,25 @@
 .minn-bar-iconbtn { width: 38px; padding: 0; color: var(--text2); }
 .minn-bar-iconbtn:hover { color: var(--text); }
 
-.minn-bar-markbtn { width: 36px; height: 36px; padding: 0; border: 0; flex: none; }
+.minn-bar-markbtn { width: 28px; height: 28px; padding: 0; border: 0; flex: none; }
 .minn-bar-markbtn:hover .minn-bar-mark { filter: brightness(1.12); }
 .minn-bar-site { padding: 0 5px; max-width: 250px; }
+/* Same tile as the admin's own sidebar logo (.minn-logo-mark): a reader
+   moving between the front end and the admin should see one mark, not two
+   sizes of it. Phones keep a larger tile below, where it is the whole
+   resting touch target. */
 .minn-bar-mark {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   flex: none;
-  border-radius: 11px;
+  border-radius: 8px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: var(--accent-fg);
   font-weight: 800;
-  font-size: 21px;
-  letter-spacing: -0.04em;
+  font-size: 16px;
+  letter-spacing: -0.5px;
 }
 .minn-bar-sitename {
   min-width: 0;
@@ -529,7 +542,12 @@
   }
   .minn-bar-mobile-admin:hover { background: var(--hover); }
   .minn-bar-mobile-admin svg { width: 17px; height: 17px; }
-  .minn-bar-mark { width: 36px; height: 36px; }
+  /* The mark IS the resting touch target on a phone, so it keeps the larger
+     tile — button included, or the tile would outgrow what contains it. At
+     36px the tile fills the pill, so the even padding centres it again. */
+  #minn-bar { padding-left: 4px; }
+  .minn-bar-markbtn { width: 36px; height: 36px; }
+  .minn-bar-mark { width: 36px; height: 36px; border-radius: 11px; font-size: 21px; letter-spacing: -0.04em; }
   .minn-bar-avatar { width: 30px; height: 30px; }
   .minn-bar-divider { display: none; }
   .minn-bar-sitename { max-width: 120px; }

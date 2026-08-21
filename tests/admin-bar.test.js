@@ -123,7 +123,7 @@ const { execSync } = require( 'child_process' );
 			};
 		} );
 		t.check( 'desktop: Corner Reveal rests as a 46px corner control',
-			desktop.top === 12 && desktop.left === 12 && desktop.width === 46
+			desktop.top === 13 && desktop.left === 11 && desktop.width === 46
 				&& desktop.height === 46 && desktop.radius === '14px',
 			JSON.stringify( desktop ) );
 		const siteMark = await page.evaluate( () => {
@@ -143,8 +143,8 @@ const { execSync } = require( 'child_process' );
 			};
 		} );
 		t.check( 'the corner mark has equal padding on every side',
-			siteMark.width === 36 && siteMark.height === 36
-				&& Object.values( siteMark.insets ).every( ( inset ) => Math.abs( inset - 5 ) < 0.1 ),
+			siteMark.width === 28 && siteMark.height === 28
+				&& Object.values( siteMark.insets ).every( ( inset ) => Math.abs( inset - 9 ) < 0.1 ),
 			JSON.stringify( { desktop, siteMark } ) );
 		await revealBar();
 		const revealed = await page.evaluate( () => {
@@ -263,7 +263,7 @@ const { execSync } = require( 'child_process' );
 			const r = b.getBoundingClientRect();
 			return { top: r.top, hidden: b.classList.contains( 'minn-bar-away' ) || b.classList.contains( 'minn-bar-yield' ) };
 		} );
-		t.check( 'the corner control stays put while scrolling', scrolled.top === 12 && ! scrolled.hidden, JSON.stringify( scrolled ) );
+		t.check( 'the corner control stays put while scrolling', scrolled.top === 13 && ! scrolled.hidden, JSON.stringify( scrolled ) );
 		await page.evaluate( () => window.scrollTo( 0, 0 ) );
 
 		// Notifications peek: rows are real — clicking one navigates into the
@@ -435,8 +435,10 @@ const { execSync } = require( 'child_process' );
 			const b = document.getElementById( 'minn-bar' );
 			return { top: b.getBoundingClientRect().top, yielded: b.classList.contains( 'minn-bar-yield' ) };
 		} );
+		// 13px down: the corner is offset so the mark lands where the admin's
+		// own sidebar logo sits, not on a round number of its own.
 		t.check( 'a site overlay does not make Corner Reveal disappear',
-			overlayState.top === 12 && ! overlayState.yielded, JSON.stringify( overlayState ) );
+			overlayState.top === 13 && ! overlayState.yielded, JSON.stringify( overlayState ) );
 		await page.evaluate( () => document.getElementById( 'suite-lightbox' ).remove() );
 
 		// Phones keep only the launcher visible until a tap opens the compact
@@ -458,7 +460,7 @@ const { execSync } = require( 'child_process' );
 			};
 		} );
 		t.check( 'mobile: only the 46px launcher rests over the site',
-			mob.top === 12 && mob.left === 12 && mob.width === 46
+			mob.top === 13 && mob.left === 11 && mob.width === 46
 				&& mob.height === 46 && mob.radius === '14px' && mob.actionsOpacity === '0',
 			JSON.stringify( mob ) );
 		t.check( 'mobile: Corner Reveal does not offset the site', mob.margin === '0px', mob.margin );
