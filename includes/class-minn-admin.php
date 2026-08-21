@@ -1219,6 +1219,14 @@ class Minn_Admin {
 
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex' );
+		// Core sends these on every wp-admin/login screen via
+		// send_frame_options_header(), hooked to admin_init/login_init —
+		// neither fires for this front-end template_redirect route. Without
+		// them the whole authenticated SPA (its live wp_rest + plugin nonces)
+		// is framable for clickjacking, so send them here.
+		header( 'X-Frame-Options: SAMEORIGIN' );
+		header( "Content-Security-Policy: frame-ancestors 'self'" );
+		header( 'Referrer-Policy: strict-origin-when-cross-origin' );
 
 		$boot = self::boot_payload();
 

@@ -86,7 +86,13 @@ function minn_admin_cfdb7_values( $blob ) {
 		if ( false === $colon ) {
 			return null;
 		}
-		$n     = (int) substr( $blob, $pos + 2, $colon - $pos - 2 );
+		$n = (int) substr( $blob, $pos + 2, $colon - $pos - 2 );
+		// A negative (length-desynced) count would drive $pos backwards and
+		// spin the caller's loop forever on attacker-supplied submission
+		// content; a real PHP string length is never negative.
+		if ( $n < 0 ) {
+			return null;
+		}
 		$start = $colon + 2; // past :"
 		$val   = substr( $blob, $start, $n );
 		$pos   = $start + $n + 2; // past ";
@@ -100,7 +106,12 @@ function minn_admin_cfdb7_values( $blob ) {
 	};
 
 	while ( $pos < $len && '}' !== $blob[ $pos ] ) {
-		$key = $read_string();
+		// Forward-progress backstop: every branch below must advance $pos.
+		// A malformed token that leaves it where it started (or moves it
+		// back) would spin forever on attacker-supplied content, so bail
+		// the moment an iteration fails to move past its own start.
+		$guard = $pos;
+		$key   = $read_string();
 		if ( null === $key ) {
 			// Not a string key (i:N; for a numeric field name). Skip past it
 			// rather than abandoning the rest of the entry.
@@ -124,7 +135,8 @@ function minn_admin_cfdb7_values( $blob ) {
 			$depth  = 1;
 			$member = array();
 			while ( $pos < $len && $depth > 0 ) {
-				$c = $blob[ $pos ];
+				$inner_guard = $pos;
+				$c           = $blob[ $pos ];
 				if ( '}' === $c ) {
 					$depth--;
 					$pos++;
@@ -139,6 +151,10 @@ function minn_admin_cfdb7_values( $blob ) {
 				} else { // i / d / b keys and scalars
 					$skip_scalar();
 				}
+				if ( $pos <= $inner_guard ) {
+					$pos = $len; // malformed member — stop scanning this blob
+					break;
+				}
 			}
 			$out[ $key ] = implode( ', ', array_filter( $member, 'strlen' ) );
 		} elseif ( 'N' === $type ) {
@@ -148,6 +164,9 @@ function minn_admin_cfdb7_values( $blob ) {
 			break;
 		} else { // i / d / b value
 			$out[ $key ] = $skip_scalar();
+		}
+		if ( $pos <= $guard ) {
+			break; // no forward progress this iteration — malformed blob
 		}
 	}
 	return $out;
