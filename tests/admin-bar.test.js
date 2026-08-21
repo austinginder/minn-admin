@@ -51,6 +51,12 @@ const { execSync } = require( 'child_process' );
 		} );
 		return ( await r.json() ).frontBar;
 	}, { a: auth, v: on } );
+	const previousFrontBar = await page.evaluate( async ( a ) => {
+		const r = await fetch( a.rest + 'minn-admin/v1/me/appearance', {
+			headers: { 'X-WP-Nonce': a.nonce }, credentials: 'same-origin',
+		} );
+		return ( await r.json() ).frontBar;
+	}, auth );
 	const setSetting = ( body ) => page.evaluate( async ( { a, b } ) => {
 		const r = await fetch( a.rest + 'wp/v2/settings', {
 			method: 'POST', credentials: 'same-origin',
@@ -549,7 +555,7 @@ const { execSync } = require( 'child_process' );
 			await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
 			await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
 			await setSetting( { minn_admin_maintenance: false, blog_public: 1 } );
-			await setFrontBar( false );
+			await setFrontBar( previousFrontBar === true );
 			if ( postId ) await deletePost( page, postId );
 			if ( draftId ) await deletePost( page, draftId );
 		} catch ( e ) {}
