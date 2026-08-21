@@ -1060,7 +1060,7 @@
 		orders: [ __( 'Orders' ), 'WooCommerce' ],
 		order: [ __( 'Order' ), 'WooCommerce' ],
 		surfaceitem: [ __( 'Booking' ), '' ],
-		fieldgroup: [ __( 'Field group' ), 'ACF' ],
+		fieldgroup: [ __( 'Field group' ), ( FGB_SOURCES[ state.fgbSrc ] || FGB_SOURCES.acf ).vendor ],
 		migrate: [ __( 'Migrate' ), 'WP Migrate' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
@@ -2787,8 +2787,15 @@
 				state.editorId = parts[ 2 ] ? parseInt( parts[ 2 ], 10 ) : null;
 			}
 			state.route = 'editor';
+		} else if ( route === 'field-groups' && parts[ 1 ] && FGB_SOURCES[ parts[ 1 ] ] && parts[ 2 ] ) {
+			// /field-groups/acpt/<id> — a named backend's group builder page.
+			state.fgbSrc = parts[ 1 ];
+			state.fgbKey = decodeURIComponent( parts[ 2 ] );
+			state.route = 'fieldgroup';
 		} else if ( route === 'field-groups' && parts[ 1 ] ) {
-			// /field-groups/group_x — the ACF field group builder page.
+			// /field-groups/group_x — a bare key is the ACF builder, so links
+			// from before the builder learned other backends keep working.
+			state.fgbSrc = 'acf';
 			state.fgbKey = decodeURIComponent( parts[ 1 ] );
 			state.route = 'fieldgroup';
 		} else if ( route === 'orders' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
@@ -42941,18 +42948,25 @@
 	}
 
 
-	/* ===== ACF field group builder =====
-	 * The schema canvas at /field-groups/{key}: stacked field rows, click a
-	 * row to configure it inline, add / reorder / delete, one Save for the
-	 * whole group (the server overlays only declared settings per row, so
-	 * names and types stay immutable on existing fields and unsupported
-	 * types keep their configuration). Code-registered groups open read-only.
+	/* ===== Field group builder =====
+	 * The schema canvas at /field-groups/{key} (ACF) and
+	 * /field-groups/<source>/{key} (other backends): stacked field rows,
+	 * click a row to configure it inline, add / reorder / delete, one Save
+	 * for the whole group (the server overlays only declared settings per
+	 * row, so names and types stay immutable on existing fields and
+	 * unsupported types keep their configuration). Code-registered groups
+	 * open read-only. Every backend serves the same /full contract; the
+	 * client differs only in where it fetches and what vendor it names.
 	 */
 	const FGB_TYPE_LABELS = {
 		text: __( 'Text' ), textarea: __( 'Text area' ), number: __( 'Number' ), range: __( 'Range' ),
 		email: __( 'Email' ), url: 'URL', select: __( 'Select' ), radio: __( 'Radio' ),
 		true_false: __( 'True / False' ), color_picker: __( 'Color' ), image: __( 'Image' ),
 		gallery: __( 'Gallery' ), wysiwyg: __( 'Rich text' ), repeater: __( 'Repeater' ),
+		// Ids used by non-ACF backends (ACPT maps its own vocabulary onto the
+		// shared ids where semantics match, and onto these where they don't).
+		box: __( 'Box' ), multicheck: __( 'Checkboxes' ), date: __( 'Date' ),
+		datetime: __( 'Date & time' ), time: __( 'Time' ), phone: __( 'Phone' ),
 	};
 	// Which extra settings each type edits (base label/name/instructions/
 	// required always render; default_value except for media/rich types).
@@ -42965,48 +42979,64 @@
 		true_false: [ 'ui_on_text', 'ui_off_text' ],
 		color_picker: [], image: [], gallery: [], wysiwyg: [], repeater: [],
 	};
-	const FGB_NO_DEFAULT = [ 'image', 'gallery', 'wysiwyg', 'repeater' ];
+	const FGB_NO_DEFAULT = [ 'image', 'gallery', 'wysiwyg', 'repeater', 'box' ];
+	// Container types hold a nested field list of their own. A repeater's
+	// list is its row schema; a box (ACPT's grouping level) is a plain
+	// section whose list is the fields inside it.
+	const FGB_CONTAINERS = [ 'repeater', 'box' ];
+	// The builder's backends: each serves the same GET/POST …/full contract
+	// and the client differs only in where it fetches and whose name it
+	// prints. Bare /field-groups/{key} routes resolve to ACF.
+	const FGB_SOURCES = {
+		acf: { base: 'minn-admin/v1/acf/schema/groups/', vendor: 'ACF', export: true },
+		acpt: { base: 'minn-admin/v1/acpt/schema/groups/', vendor: 'ACPT', export: false },
+	};
+	const fgbSource = () => FGB_SOURCES[ state.fgbSrc ] || FGB_SOURCES.acf;
 	const fgbSlug = ( label ) => String( label ).toLowerCase().replace( /[^a-z0-9]+/g, '_' ).replace( /^_+|_+$/g, '' );
 
-	// Token addressing: "2" is a top-level field, "2.1" is sub field 1 of
-	// repeater field 2 (the mini-builder nests exactly one level).
+	// Token addressing: "2" is a top-level row, "2.1" lives in row 2's
+	// nested list, and so on ("0.2.1" is a repeater sub inside a box).
 	const fgbAt = ( tok ) => {
-		const [ i, j ] = String( tok ).split( '.' );
-		const f = state.fgb.fields[ Number( i ) ];
-		if ( j == null || ! f ) return f || null;
-		return ( f.sub_fields || [] )[ Number( j ) ] || null;
+		const parts = String( tok ).split( '.' );
+		let f = state.fgb.fields[ Number( parts[ 0 ] ) ] || null;
+		for ( let n = 1; f && n < parts.length; n++ ) {
+			f = ( f.sub_fields || [] )[ Number( parts[ n ] ) ] || null;
+		}
+		return f;
 	};
 	const fgbListAt = ( tok ) => {
-		const [ i, j ] = String( tok ).split( '.' );
-		if ( j == null ) return state.fgb.fields;
-		const f = state.fgb.fields[ Number( i ) ];
-		if ( ! f ) return null;
-		f.sub_fields = f.sub_fields || [];
-		return f.sub_fields;
+		const parts = String( tok ).split( '.' );
+		if ( parts.length === 1 ) return state.fgb.fields;
+		const parent = fgbAt( parts.slice( 0, -1 ).join( '.' ) );
+		if ( ! parent ) return null;
+		parent.sub_fields = parent.sub_fields || [];
+		return parent.sub_fields;
 	};
 	const fgbListPrefix = ( tok ) => {
 		const p = String( tok ).split( '.' );
-		return p.length > 1 ? p[ 0 ] + '.' : '';
+		return p.length > 1 ? p.slice( 0, -1 ).join( '.' ) + '.' : '';
 	};
-	const fgbNewField = () => ( {
+	const fgbNewField = ( type ) => ( {
 		isNew: true, editable: true, _nameAuto: true,
-		label: '', name: '', type: 'text', required: false,
+		label: '', name: '', type: type || 'text', required: false,
 		instructions: '', default_value: '', placeholder: '', choices: '',
 		min: '', max: '', step: '', rows: '', ui_on_text: '', ui_off_text: '',
 		button_label: '', subCount: 0,
+		...( FGB_CONTAINERS.includes( type || '' ) ? { sub_fields: [] } : {} ),
 	} );
 
 	let fgbUnloadBound = false;
 
 	function renderFieldGroupBuilder() {
 		const view = $( '#minn-view' );
-		if ( ! state.fgb || state.fgb.key !== state.fgbKey ) {
-			state.fgb = { key: state.fgbKey, loading: true };
+		const src = state.fgbSrc && FGB_SOURCES[ state.fgbSrc ] ? state.fgbSrc : 'acf';
+		if ( ! state.fgb || state.fgb.key !== state.fgbKey || state.fgb.src !== src ) {
+			state.fgb = { key: state.fgbKey, src, loading: true };
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
-			api( 'minn-admin/v1/acf/schema/groups/' + encodeURIComponent( state.fgbKey ) + '/full' )
+			api( FGB_SOURCES[ src ].base + encodeURIComponent( state.fgbKey ) + '/full' )
 				.then( ( r ) => {
 					if ( state.route !== 'fieldgroup' || state.fgbKey !== r.group.key ) return;
-					fgbAdopt( r );
+					fgbAdopt( r, src );
 					renderFieldGroupBuilder();
 				} )
 				.catch( ( e ) => { view.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`; } );
@@ -43022,28 +43052,29 @@
 		}
 		const ro = fgb.group.source !== 'db';
 		const dis = ro ? ' disabled' : '';
+		const vendor = fgbSource().vendor;
 
 		view.innerHTML = `
 		<div class="minn-card minn-fgb">
 			<div class="minn-fgb-top">
 				<button type="button" class="minn-btn-soft" id="minn-fgb-back">‹ ${ esc( __( 'Field Groups' ) ) }</button>
 				<input class="minn-input minn-fgb-title" id="minn-fgb-title" value="${ esc( fgb.group.title ) }" placeholder="${ esc( __( 'Group title' ) ) }"${ dis }>
-				<label class="minn-fgb-active">${ esc( __( 'Active' ) ) }
+				${ fgb.group.active == null ? '' : `<label class="minn-fgb-active">${ esc( __( 'Active' ) ) }
 					<button type="button" class="minn-switch${ fgb.group.active ? ' on' : '' }" id="minn-fgb-active" role="switch" aria-checked="${ !! fgb.group.active }"${ dis }><span class="minn-switch-knob"></span></button>
-				</label>
+				</label>` }
 				<span style="flex:1"></span>
 				${ fgb.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
 				${ ro ? `<span class="minn-fgb-dirty">${ esc( __( 'Registered in code — read only' ) ) }</span>` : `<button type="button" class="minn-btn-primary" id="minn-fgb-save">${ esc( __( 'Save group' ) ) }</button>` }
 			</div>
 			<div class="minn-fgb-meta">
 				<span>${ esc( fgb.group.locationLabel ) }</span>
-				${ fgb.group.adminUrl ? `<a href="${ esc( fgb.group.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in ACF ↗' ) ) }</a>` : '' }
-				<button type="button" id="minn-fgb-export">${ esc( __( 'Export JSON' ) ) }</button>
+				${ fgb.group.adminUrl ? `<a href="${ esc( fgb.group.adminUrl ) }" target="_blank" rel="noopener">${ esc( sprintf( /* translators: %s: the plugin that owns the group (ACF, ACPT). */ __( 'Edit in %s ↗' ), vendor ) ) }</a>` : '' }
+				${ fgbSource().export ? `<button type="button" id="minn-fgb-export">${ esc( __( 'Export JSON' ) ) }</button>` : '' }
 			</div>
 			<div class="minn-fgb-rows">
 				${ fgb.fields.map( ( f, i ) => fgbRowHtml( f, String( i ), fgb.fields, ro ) ).join( '' ) || `<div class="minn-empty">${ esc( __( 'No fields yet — add the first one below.' ) ) }</div>` }
 			</div>
-			${ ro ? '' : `<button type="button" class="minn-btn-soft" id="minn-fgb-add">+ ${ esc( __( 'Add field' ) ) }</button>` }
+			${ ro ? '' : `<button type="button" class="minn-btn-soft" id="minn-fgb-add">+ ${ esc( 'box' === fgb.rootType ? __( 'Add box' ) : __( 'Add field' ) ) }</button>` }
 			${ fgbLocationHtml( fgb, ro ) }
 		</div>`;
 		// Bind to the freshly-rendered card, never the persistent #minn-view:
@@ -43052,14 +43083,20 @@
 		bindFieldGroupBuilder( $( '.minn-fgb', view ) );
 	}
 
-	function fgbAdopt( r ) {
+	function fgbAdopt( r, src ) {
+		const cloneRow = ( f ) => ( { ...f, sub_fields: f.sub_fields ? f.sub_fields.map( cloneRow ) : f.sub_fields } );
 		state.fgb = {
 			key: r.group.key,
+			src: src || ( state.fgb && state.fgb.src ) || 'acf',
 			group: { title: r.group.title, active: r.group.active, source: r.group.source, locationLabel: r.group.locationLabel, adminUrl: r.group.adminUrl },
-			fields: r.fields.map( ( f ) => ( { ...f, sub_fields: f.sub_fields ? f.sub_fields.map( ( s ) => ( { ...s } ) ) : f.sub_fields } ) ),
+			fields: r.fields.map( cloneRow ),
 			location: JSON.parse( JSON.stringify( r.group.location || [] ) ),
 			locationChoices: r.locationChoices || {},
 			types: r.types || Object.keys( FGB_EXTRAS ),
+			// Per-type settings vocabulary when the backend's differs from
+			// the ACF map (ACPT has no placeholder storage, for instance).
+			typeSettings: r.typeSettings || null,
+			rootType: r.rootType || 'field',
 			expanded: {},
 			dirty: false,
 			loading: false,
@@ -43076,9 +43113,10 @@
 		const subCount = f.sub_fields ? f.sub_fields.length : f.subCount;
 		const idx = Number( String( tok ).split( '.' ).pop() );
 		// A copy is created as NEW fields on save, so every piece must be a
-		// type the save path can create — a repeater with an unsupported sub
-		// can't be duplicated faithfully and offers no button.
-		const canDup = f.editable && ( ! f.sub_fields || f.sub_fields.every( ( s ) => s.editable ) );
+		// type the save path can create — a container holding an unsupported
+		// field can't be duplicated faithfully and offers no button.
+		const dupOk = ( x ) => x.editable && ( ! x.sub_fields || x.sub_fields.every( dupOk ) );
+		const canDup = dupOk( f );
 		return `<div class="minn-fgb-row${ open ? ' open' : '' }${ f.editable ? '' : ' minn-fgb-adv' }" data-fi="${ tok }">
 			<div class="minn-fgb-head" data-fgbtoggle="${ tok }" role="button" tabindex="0" aria-expanded="${ open }">
 				${ ro ? '' : `<span class="minn-fgb-grip" draggable="true" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>` }
@@ -43151,7 +43189,6 @@
 
 	function fgbSettingsHtml( f, tok, ro ) {
 		const roAttr = ro ? ' disabled' : '';
-		const isSub = String( tok ).includes( '.' );
 		const input = ( key, label, opts = {} ) => `
 			<div class="minn-fgb-set">
 				<div class="minn-field-label">${ esc( label ) }</div>
@@ -43163,10 +43200,27 @@
 		if ( ! f.editable ) {
 			return `<div class="minn-fgb-body">
 				${ input( 'label', __( 'Label' ) ) }
-				<div class="minn-fgb-set"><div class="minn-insp-note">${ esc( __( 'This field type configures in ACF’s own editor.' ) ) }</div></div>
+				<div class="minn-fgb-set"><div class="minn-insp-note">${ esc( sprintf( /* translators: %s: the plugin that owns the field type (ACF, ACPT). */ __( 'This field type configures in %s’s own editor.' ), fgbSource().vendor ) ) }</div></div>
 			</div>`;
 		}
-		const extras = FGB_EXTRAS[ f.type ] || [];
+		const nameHelp = f.isNew
+			? { mono: true, help: __( 'Single word, underscores allowed. Locks after the first save.' ) }
+			: { mono: true, dis: ' disabled', help: __( 'Names lock after the first save — renaming would orphan stored values.' ) };
+		// A box is a plain section: a name, a label and the fields inside it.
+		if ( 'box' === f.type ) {
+			return `<div class="minn-fgb-body">
+				${ input( 'label', __( 'Label' ) ) }
+				${ input( 'name', __( 'Name' ), nameHelp ) }
+				<div class="minn-fgb-subs">
+					<div class="minn-field-label">${ esc( __( 'Fields' ) ) }</div>
+					<div class="minn-fgb-rows">
+						${ ( f.sub_fields || [] ).map( ( s, j ) => fgbRowHtml( s, `${ tok }.${ j }`, f.sub_fields, ro ) ).join( '' ) || `<div class="minn-empty">${ esc( __( 'No fields yet.' ) ) }</div>` }
+					</div>
+					${ ro ? '' : `<button type="button" class="minn-btn-soft" data-fgbsubadd="${ tok }">+ ${ esc( __( 'Add field' ) ) }</button>` }
+				</div>
+			</div>`;
+		}
+		const extras = ( state.fgb.typeSettings && state.fgb.typeSettings[ f.type ] ) || FGB_EXTRAS[ f.type ] || [];
 		// Strict combobox (bound in bindFieldGroupBuilder — options resolve
 		// there so the sub-level list can drop repeater). The markup carries
 		// the current LABEL so the control reads right before binding.
@@ -43178,9 +43232,12 @@
 					<div class="minn-ac-panel" hidden></div>
 				</div>
 			</div>` : '';
+		// Which repeater knobs exist is the backend's call (ACF stores min /
+		// max / button label; ACPT's repeater has none of the three).
+		const repExtras = ( state.fgb.typeSettings && state.fgb.typeSettings.repeater ) || [ 'min', 'max', 'button_label' ];
 		const repeaterHtml = 'repeater' !== f.type ? '' : `
-			<div class="minn-fgb-minmax">${ input( 'min', __( 'Min rows' ) ) }${ input( 'max', __( 'Max rows' ) ) }</div>
-			${ input( 'button_label', __( 'Add-row button label' ), { ph: __( 'Add Row' ) } ) }
+			${ repExtras.includes( 'min' ) ? `<div class="minn-fgb-minmax">${ input( 'min', __( 'Min rows' ) ) }${ input( 'max', __( 'Max rows' ) ) }</div>` : '' }
+			${ repExtras.includes( 'button_label' ) ? input( 'button_label', __( 'Add-row button label' ), { ph: __( 'Add Row' ) } ) : '' }
 			<div class="minn-fgb-subs">
 				<div class="minn-field-label">${ esc( __( 'Sub fields' ) ) }</div>
 				<div class="minn-fgb-rows">
@@ -43191,9 +43248,7 @@
 		return `<div class="minn-fgb-body">
 			${ typePick }
 			${ input( 'label', __( 'Label' ) ) }
-			${ input( 'name', __( 'Name' ), f.isNew
-				? { mono: true, help: __( 'Single word, underscores allowed. Locks after the first save.' ) }
-				: { mono: true, dis: ' disabled', help: __( 'Names lock after the first save — renaming would orphan stored values.' ) } ) }
+			${ input( 'name', __( 'Name' ), nameHelp ) }
 			${ input( 'instructions', __( 'Instructions' ), { area: true, rows: 2, help: __( 'Shown to writers under the field.' ) } ) }
 			<div class="minn-fgb-set minn-fgb-set-inline">
 				<div class="minn-field-label">${ esc( __( 'Required' ) ) }</div>
@@ -43249,12 +43304,12 @@
 			Object.keys( fgb.expanded ).forEach( ( k ) => {
 				if ( ! fgb.expanded[ k ] ) return;
 				let nk = k;
-				if ( prefix ) {
-					if ( k.startsWith( prefix ) ) nk = prefix + mapIdx( Number( k.slice( prefix.length ) ) );
-				} else {
-					const kp = k.split( '.' );
-					kp[ 0 ] = String( mapIdx( Number( kp[ 0 ] ) ) );
-					nk = kp.join( '.' );
+				if ( ! prefix || k.startsWith( prefix ) ) {
+					// Remap the moved list's own segment; deeper segments
+					// (a box's repeater subs) ride along unchanged.
+					const rest = k.slice( prefix.length ).split( '.' );
+					rest[ 0 ] = String( mapIdx( Number( rest[ 0 ] ) ) );
+					nk = prefix + rest.join( '.' );
 				}
 				next[ nk ] = true;
 			} );
@@ -43265,7 +43320,7 @@
 		const exportBtn = $( '#minn-fgb-export', view );
 		if ( exportBtn ) exportBtn.addEventListener( 'click', async () => {
 			try {
-				const r = await api( 'minn-admin/v1/acf/schema/groups/' + encodeURIComponent( fgb.key ) + '/export' );
+				const r = await api( fgbSource().base + encodeURIComponent( fgb.key ) + '/export' );
 				minnBlobDownload( r.filename || 'acf-export.json', r.content || '', r.mime );
 				toast( r.filename || __( 'Exported' ) );
 			} catch ( e ) {
@@ -43276,7 +43331,7 @@
 		if ( backBtn ) backBtn.addEventListener( 'click', async () => {
 			if ( fgb.dirty && ! await minnConfirm( { title: __( 'Leave without saving?' ), body: __( 'Changes to this field group haven’t been saved.' ), confirmLabel: __( 'Leave' ), danger: true } ) ) return;
 			fgb.dirty = false;
-			go( 'acf-field-groups' );
+			go( 'field-groups' );
 		} );
 		const titleEl = $( '#minn-fgb-title', view );
 		if ( titleEl ) titleEl.addEventListener( 'input', () => { fgb.group.title = titleEl.value; markDirty(); } );
@@ -43324,10 +43379,12 @@
 			const tok = wrap.dataset.fgbtype;
 			const f = fgbAt( tok );
 			if ( ! f ) return;
-			// Repeaters nest exactly one level, so the sub type list drops repeater.
-			const isSub = tok.includes( '.' );
+			// Repeaters nest exactly one level, so a repeater's own sub list
+			// drops repeater (a box's field list still offers it).
+			const parent = tok.includes( '.' ) ? fgbAt( tok.slice( 0, tok.lastIndexOf( '.' ) ) ) : null;
+			const inRepeater = parent && 'repeater' === parent.type;
 			const options = ( fgb.types || Object.keys( FGB_EXTRAS ) )
-				.filter( ( t2 ) => ! isSub || 'repeater' !== t2 )
+				.filter( ( t2 ) => ! inRepeater || 'repeater' !== t2 )
 				.map( ( t2 ) => ( { value: t2, label: FGB_TYPE_LABELS[ t2 ] || t2 } ) );
 			bindCombo( wrap, options, f.type, ( v ) => {
 				f.type = v;
@@ -43485,23 +43542,26 @@
 				delete copy.key;
 				/* translators: %s: the duplicated field's label. */
 				copy.label = sprintf( __( '%s (copy)' ), f.label );
-				// A repeater's subs clone as new fields too (same names are
-				// fine — the copy's list is its own).
-				if ( copy.sub_fields ) copy.sub_fields = copy.sub_fields.map( ( s ) => {
+				// A container's fields clone as new fields too, all the way
+				// down (same names are fine — the copy's list is its own).
+				const asNew = ( s ) => {
 					const c = { ...s, isNew: true };
 					delete c.key;
+					if ( c.sub_fields ) c.sub_fields = c.sub_fields.map( asNew );
 					return c;
-				} );
+				};
+				if ( copy.sub_fields ) copy.sub_fields = copy.sub_fields.map( asNew );
 				list.splice( i + 1, 0, copy );
 				const open = {};
 				Object.keys( fgb.expanded ).forEach( ( k ) => {
 					if ( ! fgb.expanded[ k ] ) return;
 					let nk = k;
-					if ( prefix ) {
-						if ( k.startsWith( prefix ) && Number( k.slice( prefix.length ) ) > i ) nk = prefix + ( Number( k.slice( prefix.length ) ) + 1 );
-					} else {
-						const kp = k.split( '.' );
-						if ( Number( kp[ 0 ] ) > i ) { kp[ 0 ] = String( Number( kp[ 0 ] ) + 1 ); nk = kp.join( '.' ); }
+					if ( ! prefix || k.startsWith( prefix ) ) {
+						const rest = k.slice( prefix.length ).split( '.' );
+						if ( Number( rest[ 0 ] ) > i ) {
+							rest[ 0 ] = String( Number( rest[ 0 ] ) + 1 );
+							nk = prefix + rest.join( '.' );
+						}
 					}
 					open[ nk ] = true;
 				} );
@@ -43552,7 +43612,7 @@
 				return;
 			}
 			if ( e.target.closest( '#minn-fgb-add' ) ) {
-				fgb.fields.push( fgbNewField() );
+				fgb.fields.push( fgbNewField( 'box' === fgb.rootType ? 'box' : undefined ) );
 				fgb.expanded = { [ fgb.fields.length - 1 ]: true };
 				markDirty();
 				renderFieldGroupBuilder();
@@ -43567,23 +43627,26 @@
 				const rowOf = ( f ) => {
 					const row = f.key ? { key: f.key } : { type: f.type, name: f.name };
 					[ 'label', 'instructions', 'required', 'default_value', 'placeholder', 'choices', 'min', 'max', 'step', 'rows', 'ui_on_text', 'ui_off_text', 'button_label' ].forEach( ( k ) => { row[ k ] = f[ k ]; } );
-					// Editable repeaters carry their one-level sub list; an
+					// Editable containers carry their nested list; an
 					// uneditable one (free ACF listing a stored Pro field)
-					// sends nothing and the server keeps its subs.
-					if ( 'repeater' === f.type && f.editable ) row.sub_fields = ( f.sub_fields || [] ).map( rowOf );
+					// sends nothing and the server keeps its fields.
+					if ( FGB_CONTAINERS.includes( f.type ) && f.editable ) row.sub_fields = ( f.sub_fields || [] ).map( rowOf );
 					return row;
 				};
 				const rows = fgb.fields.map( rowOf );
+				const body = { title: fgb.group.title, location: fgb.location, fields: rows };
+				// Backends without an on/off flag never rendered the switch.
+				if ( fgb.group.active != null ) body.active = fgb.group.active;
 				try {
-					const r = await api( 'minn-admin/v1/acf/schema/groups/' + encodeURIComponent( fgb.key ) + '/full', {
+					const r = await api( fgbSource().base + encodeURIComponent( fgb.key ) + '/full', {
 						method: 'POST',
-						body: JSON.stringify( { title: fgb.group.title, active: fgb.group.active, location: fgb.location, fields: rows } ),
+						body: JSON.stringify( body ),
 					} );
 					const wasExpanded = fgb.expanded;
 					fgbAdopt( r );
 					state.fgb.expanded = wasExpanded;
 					// The list view's cache holds stale counts/labels now.
-					const ss = surfaceState( 'acf-field-groups' );
+					const ss = surfaceState( 'field-groups' );
 					if ( ss ) { ss.cache = null; ss.tabsCache = null; }
 					toast( __( 'Field group saved' ) );
 					renderFieldGroupBuilder();
