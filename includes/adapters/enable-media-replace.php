@@ -23,9 +23,19 @@ defined( 'ABSPATH' ) || exit;
  * (drives the boot flag; the endpoint re-checks per attachment).
  */
 function minn_admin_emr_available() {
-	return function_exists( 'emr' )
-		&& class_exists( '\EnableMediaReplace\Controller\ReplaceController' )
-		&& current_user_can( 'upload_files' );
+	if ( ! function_exists( 'emr' ) || ! class_exists( '\EnableMediaReplace\Controller\ReplaceController' ) ) {
+		return false;
+	}
+	// EMR's own screen honors an EMR_CAPABILITY wp-config override, but it
+	// reads the constant with an early return that leaves its cap properties
+	// false, so its per-attachment check falls back to edit_post — meaning
+	// the constant locks EMR's UI while a plain upload_files check would let
+	// Minn's route through. When the constant is set (and not the `false`
+	// opt-out), require exactly that capability.
+	if ( defined( 'EMR_CAPABILITY' ) && false !== EMR_CAPABILITY && '' !== EMR_CAPABILITY ) {
+		return current_user_can( (string) EMR_CAPABILITY );
+	}
+	return current_user_can( 'upload_files' );
 }
 
 add_action( 'rest_api_init', function () {

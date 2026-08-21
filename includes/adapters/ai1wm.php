@@ -190,6 +190,14 @@ add_action( 'rest_api_init', function () {
 		// Network-shared archive directory (see minn_admin_ai1wm_active).
 		return current_user_can( 'export' ) && Minn_Admin::network_owner();
 	};
+	// Deleting an archive is destructive (a bare unlink, no trash), and
+	// AI1WM gates its OWN delete on ai1wm_import_site — a meta cap mapping to
+	// import + install_plugins + install_themes, which DISALLOW_FILE_MODS
+	// turns off site-wide. Listing at `export` is parity; deleting at
+	// `export` is not.
+	$perm_delete = function () {
+		return current_user_can( 'ai1wm_import_site' ) && Minn_Admin::network_owner();
+	};
 
 	register_rest_route( 'minn-admin/v1', '/ai1wm/exports', array(
 		'methods'             => 'GET',
@@ -211,7 +219,7 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/ai1wm/exports/(?P<id>[A-Za-z0-9_-]+)', array(
 		'methods'             => 'DELETE',
-		'permission_callback' => $perm,
+		'permission_callback' => $perm_delete,
 		'callback'            => function ( WP_REST_Request $request ) {
 			$filename = minn_admin_ai1wm_id_decode( (string) $request['id'] );
 			if ( ! $filename

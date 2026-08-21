@@ -658,7 +658,14 @@ function minn_admin_acpt_option_pages_allowed() {
 		if ( '' === $slug ) {
 			continue;
 		}
-		$cap = method_exists( $page, 'getCapability' ) ? (string) $page->getCapability() : '';
+		// ACPT's own OptionPageGenerator::capability() gates the page on
+		// "read_<slug>" whenever the page carries role permissions, and only
+		// falls back to getCapability() when it does not — so reading
+		// getCapability() alone would honor a field the vendor abandons in
+		// exactly that configuration. Mirror their rule.
+		$cap = ( method_exists( $page, 'hasPermissions' ) && $page->hasPermissions() )
+			? 'read_' . $slug
+			: ( method_exists( $page, 'getCapability' ) ? (string) $page->getCapability() : '' );
 		if ( '' === $cap || ! current_user_can( $cap ) ) {
 			continue;
 		}
@@ -854,8 +861,22 @@ add_action( 'rest_api_init', function () {
 		),
 		array(
 			'methods'             => 'POST',
+			// A save needs the page's EDIT permission, not just read access:
+			// ACPT gates its own Save button and nonce on
+			// userPermissions()['edit'], and reusing the read gate here would
+			// let a reader (a Contributor holding read_<slug>) write.
 			'permission_callback' => function ( $req ) use ( $resolve ) {
-				return (bool) $resolve( $req );
+				$slug = $resolve( $req );
+				if ( ! $slug ) {
+					return false;
+				}
+				$pages = minn_admin_acpt_option_pages_allowed();
+				$page  = $pages[ $slug ] ?? null;
+				if ( $page && method_exists( $page, 'userPermissions' ) ) {
+					$perms = $page->userPermissions();
+					return ! empty( $perms['edit'] );
+				}
+				return true;
 			},
 			'callback'            => function ( $req ) use ( $resolve ) {
 				$slug = $resolve( $req );

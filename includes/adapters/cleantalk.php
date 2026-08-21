@@ -105,6 +105,15 @@ function minn_admin_cleantalk_restore_snapshot( $snap_settings, $snap_data ) {
  * @return array{ok:bool,code:string,message:string}
  */
 function minn_admin_cleantalk_save_access_key( $key ) {
+	// CleanTalk's own key handler refuses anyone without activate_plugins,
+	// but only when NOT called with its $direct_call flag — which Minn must
+	// pass, so the vendor's own gate never runs. Enforce that cap here, or
+	// on multisite a main-site administrator (who keeps manage_options but
+	// loses activate_plugins) could disable spam filtering through the
+	// wp/v2/settings connector.
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'You are not allowed to change the CleanTalk access key.', 'minn-admin' ) );
+	}
 	$key = trim( (string) $key );
 	if ( minn_admin_cleantalk_key_predefined() ) {
 		return array(

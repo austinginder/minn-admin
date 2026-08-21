@@ -195,6 +195,19 @@ add_action( 'rest_api_init', function () {
 		$cap = apply_filters( 'redirection_role', 'manage_options' );
 		return current_user_can( $cap );
 	};
+	// Redirection splits its permissions: the base redirection_role lets a
+	// non-admin manage redirects, but options (log retention, IP logging)
+	// stay behind a SECOND cap its own settings API enforces. Writing
+	// settings at the base role only would let an editor stop redirect/404
+	// logging site-wide — an anti-forensics primitive. Mirror the vendor's
+	// own gate for the settings write; fall back to the base role on builds
+	// without the granular capability class.
+	$perm_settings_write = function () use ( $perm ) {
+		if ( class_exists( 'Redirection_Capabilities' ) && defined( 'Redirection_Capabilities::CAP_OPTION_MANAGE' ) ) {
+			return Redirection_Capabilities::has_access( Redirection_Capabilities::CAP_OPTION_MANAGE );
+		}
+		return $perm();
+	};
 
 	// Status card. Counts from Redirection's own tables (SHOW TABLES-gated:
 	// a pre-setup install has none). Log timestamps are current_time('mysql')
@@ -365,7 +378,7 @@ add_action( 'rest_api_init', function () {
 		),
 		array(
 			'methods'             => 'POST',
-			'permission_callback' => $perm,
+			'permission_callback' => $perm_settings_write,
 			'callback'            => function ( WP_REST_Request $request ) {
 				$vals = $request->get_param( 'values' );
 				if ( ! is_array( $vals ) ) {
