@@ -566,7 +566,7 @@ add_action( 'rest_api_init', function () {
 						// snippet whose type this caller cannot author is not
 						// theirs to see. The list does not render `code`
 						// anyway, so blanking it costs the view nothing.
-						if ( is_wp_error( minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), (int) $snippet->get_id(), false ) ) ) {
+						if ( is_wp_error( minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), (int) $snippet->get_id(), false, (string) $snippet->get_location() ) ) ) {
 							$item['code'] = '';
 						}
 						$items[] = $item;
@@ -648,7 +648,8 @@ add_action( 'rest_api_init', function () {
 					$guard = minn_admin_wpcode_guard_type(
 						(string) $snippet->get_code_type(),
 						(int) $request['id'],
-						false
+						false,
+						(string) $snippet->get_location()
 					);
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
@@ -822,7 +823,8 @@ add_action( 'rest_api_init', function () {
 					// stored code type's tier AND edit_post on this snippet.
 					// Without it a text/markup-tier user could permanently delete
 					// production PHP snippets they were never allowed to author.
-					$guard = minn_admin_wpcode_guard_type( (string) ( new WPCode_Snippet( $id ) )->get_code_type(), $id, false );
+					$doomed = new WPCode_Snippet( $id );
+					$guard  = minn_admin_wpcode_guard_type( (string) $doomed->get_code_type(), $id, false, (string) $doomed->get_location() );
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
 					}
@@ -853,10 +855,19 @@ add_action( 'rest_api_init', function () {
 				// Publishing a snippet runs its code, so the stored type's tier
 				// gates this too — a text-tier user must not be able to activate
 				// or deactivate someone else's PHP snippet.
+				//
+				// The LOCATION has to travel with the type. WPCode's own form
+				// filters the location list in JavaScript only, so a snippet can
+				// sit at an executing location while still typed text or html,
+				// and judging it by code_type alone reads it as the lowest tier:
+				// activating it would then skip both unfiltered_html and the
+				// site's own no-code-editing directive, and hand the bytes
+				// straight to the runner.
 				$guard = minn_admin_wpcode_guard_type(
 					(string) $snippet->get_code_type(),
 					(int) $request['id'],
-					! empty( $request['active'] )
+					! empty( $request['active'] ),
+					(string) $snippet->get_location()
 				);
 				if ( is_wp_error( $guard ) ) {
 					return $guard;

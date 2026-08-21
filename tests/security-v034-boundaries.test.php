@@ -447,6 +447,84 @@ if ( is_wp_error( $reader ) || ! $private_comment || ! $public_comment ) {
 }
 wp_set_current_user( $admin );
 
+// --- 7. activating a snippet is judged by where it runs, not what it calls itself
+// WPCode's own form filters the location list in JavaScript only, so a snippet
+// can sit at an executing location while still typed html or text. Every write
+// path resolves the effective type from the location first; the activate,
+// delete and read paths passed no location, so those snippets were judged at
+// the lowest tier and slipped past the site's no-code-editing directive.
+//
+// DISALLOW_FILE_EDIT is defined here rather than in wp-config because that is
+// the boundary being tested, and the earlier sections have already run.
+if ( ! defined( 'DISALLOW_FILE_EDIT' ) ) {
+	define( 'DISALLOW_FILE_EDIT', true );
+}
+if ( ! class_exists( 'WPCode_Snippet' ) || ! function_exists( 'minn_admin_wpcode_location_executes' ) ) {
+	echo "SKIP  WPCode not active on this site\n";
+} else {
+	wp_set_current_user( $admin );
+	$snippet_ids = array();
+	$make_snippet = function ( $location ) use ( &$snippet_ids ) {
+		$sid = wp_insert_post( array(
+			'post_type'    => 'wpcode',
+			'post_status'  => 'draft',
+			'post_title'   => 'Minn boundary snippet ' . wp_generate_password( 6, false, false ),
+			'post_content' => '<?php /* boundary fixture */ ?>',
+		) );
+		if ( ! is_wp_error( $sid ) ) {
+			$snippet_ids[] = $sid;
+			wp_set_object_terms( $sid, 'html', 'wpcode_type' ); // the LOW tier
+			wp_set_object_terms( $sid, $location, 'wpcode_location' );
+		}
+		return is_wp_error( $sid ) ? 0 : $sid;
+	};
+	$set_active = function ( $sid, $active ) {
+		$req = new WP_REST_Request( 'POST', "/minn-admin/v1/wpcode/snippets/{$sid}/active" );
+		$req->set_param( 'id', $sid );
+		$req->set_param( 'active', $active );
+		return rest_do_request( $req )->get_status();
+	};
+
+	$executing = $make_snippet( 'everywhere' );
+	$inert     = $make_snippet( 'site_wide_header' );
+	if ( ! $executing || ! $inert ) {
+		$check( 'WPCode boundary fixtures created', false );
+	} else {
+		$check(
+			'Fixture is markup-typed at an executing location',
+			'html' === ( new WPCode_Snippet( $executing ) )->get_code_type()
+				&& minn_admin_wpcode_location_executes( (string) ( new WPCode_Snippet( $executing ) )->get_location() )
+		);
+		$check( 'Site forbids editing code from the dashboard', ! Minn_Admin::code_edits_allowed() );
+
+		$status = $set_active( $executing, true );
+		$check(
+			'Activating it is refused while the site forbids code edits',
+			403 === $status && 'publish' !== get_post_status( $executing ),
+			'status ' . $status . ', post ' . get_post_status( $executing )
+		);
+		// Controls. The directive is about code the site RUNS, so a markup
+		// snippet at a location that only prints it is unaffected; and
+		// switching something off is never blocked by a bar on authoring it.
+		$inert_status = $set_active( $inert, true );
+		$check(
+			'A markup snippet at a non-executing location still activates',
+			200 === $inert_status && 'publish' === get_post_status( $inert ),
+			'status ' . $inert_status . ', post ' . get_post_status( $inert )
+		);
+		wp_update_post( array( 'ID' => $executing, 'post_status' => 'publish' ) );
+		$off_status = $set_active( $executing, false );
+		$check(
+			'Deactivating an executing snippet is still allowed',
+			200 === $off_status && 'publish' !== get_post_status( $executing ),
+			'status ' . $off_status . ', post ' . get_post_status( $executing )
+		);
+	}
+	foreach ( $snippet_ids as $sid ) {
+		wp_delete_post( $sid, true );
+	}
+}
+
 // --- cleanup -------------------------------------------------------------
 wp_set_current_user( $admin );
 foreach ( array( $duplicate_id, $attachment_id, is_wp_error( $private_parent ) ? 0 : $private_parent, is_wp_error( $source_id ) ? 0 : $source_id ) as $post_id ) {
