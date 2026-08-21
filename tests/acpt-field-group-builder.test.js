@@ -2,10 +2,13 @@
  * ACPT backend of the field group builder (/field-groups/acpt/{id}): rows on
  * the shared surface's ACPT view open the schema canvas, boxes ride as
  * container rows above their fields, new boxes and fields build up and save
- * through ACPT's own SaveMetaGroupCommand, reorders keep field ids, and the
- * chrome ACPT has no concept for (active switch, export) stays off the page.
- * The standing `minn-acpt-suite` group is the fixture; everything this suite
- * creates lives in a probe box it removes again.
+ * through ACPT's own SaveMetaGroupCommand, reorders keep field ids, and
+ * chrome ACPT has no concept for (the active switch) stays off the page.
+ * Lifecycle rides ACPT's own machinery too: the create dialog, row-menu
+ * duplicate and permanent delete (native confirm — ACPT has no trash), and
+ * export/import in ACPT's own file format restoring a group under its
+ * original id. The standing `minn-acpt-suite` group is the fixture; probe
+ * boxes and probe groups sweep over REST so a crashed run strands nothing.
  */
 const { launch, login, reporter, BASE } = require( './helpers' );
 
@@ -48,12 +51,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	};
 	const sweep = async ( id ) => {
 		const full = await fullOf( id );
-		if ( ! full.fields.some( ( b ) => b.name === 'probe_box' ) ) return;
-		await api( 'POST', 'minn-admin/v1/acpt/schema/groups/' + id + '/full', {
-			title: full.group.title,
-			location: full.group.location,
-			fields: full.fields.filter( ( b ) => b.name !== 'probe_box' ).map( rowOf ),
-		} );
+		if ( full.fields.some( ( b ) => b.name === 'probe_box' ) ) {
+			await api( 'POST', 'minn-admin/v1/acpt/schema/groups/' + id + '/full', {
+				title: full.group.title,
+				location: full.group.location,
+				fields: full.fields.filter( ( b ) => b.name !== 'probe_box' ).map( rowOf ),
+			} );
+		}
+		// Lifecycle probes from a crashed run: whole probe groups.
+		const list = ( await api( 'GET', 'minn-admin/v1/acpt/groups?_cb=' + Math.random() ) ).data;
+		for ( const g of ( list.items || [] ) ) {
+			if ( /^Probe Created/.test( g.name ) ) await api( 'DELETE', 'minn-admin/v1/acpt/schema/groups/' + g.id );
+		}
 	};
 
 	let gid = '';
@@ -89,7 +98,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			sub: ( document.querySelector( '#minn-topbar-sub, .minn-topbar-sub' ) || { textContent: '' } ).textContent,
 		} ) );
 		t.check( 'no active switch (ACPT groups have no flag)', ! chrome.active );
-		t.check( 'no export button on the ACPT backend', ! chrome.exportBtn );
+		t.check( 'export button present (ACPT\'s own file format)', chrome.exportBtn );
 		t.check( 'top-level add creates boxes', /Add box/.test( chrome.add ), chrome.add );
 		t.check( 'escape hatch names ACPT', /Edit in ACPT/.test( chrome.vendorLink ), chrome.vendorLink );
 
@@ -173,6 +182,112 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			fields: full.fields.map( rowOf ).concat( [ { type: 'box', name: 'refuse_box', label: 'R', sub_fields: [ { type: 'select', name: 'no_choices', label: 'X', choices: '' } ] } ] ),
 		} );
 		t.check( 'choice field without choices refuses 400', bad.status === 400, JSON.stringify( bad.data ) );
+
+		/* ===== Lifecycle: create → export → duplicate → delete → import. ===== */
+		await page.goto( BASE + '/minn-admin/field-groups', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '[data-sview]', { timeout: 20000 } );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '[data-sview]' ) ).find( ( b ) => b.textContent.trim() === 'ACPT' ).click();
+		} );
+		// Wait for the ACPT list itself, not just an Add button: the ACF
+		// view has one too, and clicking before the view re-render lands
+		// opens ACF's create dialog against ACF's route.
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Minn ACPT suite' ) ),
+		null, { timeout: 15000 } );
+		await page.click( '#minn-surface-add' );
+		await page.waitForSelector( '[data-createfield="title"]', { timeout: 8000 } );
+		await page.type( '[data-createfield="title"]', 'Probe Created' );
+		await page.click( '[data-createfield="location"] .minn-ac-input' );
+		await page.waitForSelector( '[data-createfield="location"] .minn-ac-item[data-acv="post_type:page"]', { timeout: 5000 } );
+		await page.click( '[data-createfield="location"] .minn-ac-item[data-acv="post_type:page"]' );
+		await page.click( '#minn-surface-create' );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Probe Created' ) ),
+		null, { timeout: 15000 } );
+		const created = ( ( await api( 'GET', 'minn-admin/v1/acpt/groups?_cb=' + Math.random() ) ).data.items || [] )
+			.find( ( g ) => 'Probe Created' === g.name );
+		t.check( 'create dialog makes a group', !! created );
+		const pid = created.id;
+		const pfull = await fullOf( pid );
+		t.check( 'new group opens with a starter box and its location', pfull.fields.length === 1
+			&& 'probe_created' === pfull.fields[ 0 ].name
+			&& JSON.stringify( pfull.group.location ).includes( '"value":"page"' ),
+			JSON.stringify( { box: pfull.fields[ 0 ] && pfull.fields[ 0 ].name, loc: pfull.group.location } ) );
+
+		const exp = await api( 'GET', 'minn-admin/v1/acpt/schema/groups/' + pid + '/export' );
+		const parsed = JSON.parse( ( exp.data || {} ).content || '{}' );
+		t.check( 'export serves ACPT\'s own file shape', exp.status === 200
+			&& ( parsed.meta || [] ).length === 1 && 'probe-created' === parsed.meta[ 0 ].name,
+			JSON.stringify( Object.keys( parsed ) ) );
+
+		// Duplicate through the row's ⋯ menu; the copy is confirmed over
+		// REST (its title matches the original's, so text can't tell them
+		// apart), then removed the same way to keep the delete row unique.
+		const countBefore = ( ( await api( 'GET', 'minn-admin/v1/acpt/groups?_cb=' + Math.random() ) ).data.items || [] ).length;
+		await page.evaluate( () => {
+			const row = Array.from( document.querySelectorAll( '.minn-table-row' ) ).find( ( r ) => r.textContent.includes( 'Probe Created' ) );
+			row.querySelector( '.minn-row-more' ).click();
+		} );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) ).find( ( b ) => b.textContent.trim() === 'Duplicate' ).click();
+		} );
+		await page.waitForFunction( async ( n ) => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/acpt/groups?_cb=' + Math.random(), {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
+			return ( ( await r.json() ).items || [] ).length > n;
+		}, countBefore, { timeout: 15000 } );
+		const withDup = ( ( await api( 'GET', 'minn-admin/v1/acpt/groups?_cb=' + Math.random() ) ).data.items || [] );
+		const dup = withDup.find( ( g ) => g.id !== pid && g.id !== gid );
+		t.check( 'row menu duplicates the group', !! dup );
+		await api( 'DELETE', 'minn-admin/v1/acpt/schema/groups/' + dup.id );
+
+		// Delete the original through the row menu; ACPT has no trash, so
+		// the confirm says permanent and the row goes for good.
+		await page.reload( { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '[data-sview]', { timeout: 20000 } );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '[data-sview]' ) ).find( ( b ) => b.textContent.trim() === 'ACPT' ).click();
+		} );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Probe Created' ) ),
+		null, { timeout: 15000 } );
+		await page.evaluate( () => {
+			const row = Array.from( document.querySelectorAll( '.minn-table-row' ) ).find( ( r ) => r.textContent.includes( 'Probe Created' ) );
+			row.querySelector( '.minn-row-more' ).click();
+		} );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+		// Surface row actions confirm through the browser's native dialog.
+		let confirmText = '';
+		page.once( 'dialog', ( d ) => { confirmText = d.message(); d.accept(); } );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) ).find( ( b ) => b.textContent.trim() === 'Delete' ).click();
+		} );
+		await page.waitForFunction( () =>
+			! Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Probe Created' ) ),
+		null, { timeout: 15000 } );
+		t.check( 'delete confirm says it is permanent', /for good/.test( confirmText ), confirmText.slice( 0, 160 ) );
+		t.check( 'deleted group leaves the list', ( await api( 'GET', 'minn-admin/v1/acpt/schema/groups/' + pid + '/full' ) ).status === 404 );
+
+		// Import the export file through the dialog: the group returns with
+		// the SAME id (ACPT's import merges by id inside one transaction).
+		await page.waitForSelector( '#minn-surface-import', { timeout: 10000 } );
+		await page.click( '#minn-surface-import' );
+		await page.waitForSelector( '#minn-simport-text', { timeout: 5000 } );
+		await page.evaluate( ( content ) => { document.querySelector( '#minn-simport-text' ).value = content; }, exp.data.content );
+		const importWait = page.waitForResponse( ( res ) =>
+			res.request().method() === 'POST' && /acpt\/schema\/import/.test( res.url() ), { timeout: 15000 } );
+		await page.click( '#minn-simport-go' );
+		t.check( 'import dialog posts and succeeds', ( await importWait ).status() === 200 );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Probe Created' ) ),
+		null, { timeout: 15000 } );
+		const back = await fullOf( pid );
+		t.check( 'import restores the group under its original id', !! back.group
+			&& 'probe_created' === ( back.fields[ 0 ] || {} ).name,
+			JSON.stringify( back.group && back.group.key ) );
+		await api( 'DELETE', 'minn-admin/v1/acpt/schema/groups/' + pid );
 	} finally {
 		if ( gid ) await sweep( gid ).catch( () => {} );
 	}

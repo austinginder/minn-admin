@@ -953,6 +953,15 @@ add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
 	if ( ! minn_admin_acpt_active() || ! minn_admin_acpt_can_manage() ) {
 		return $sources;
 	}
+	// One flat "shown on" choice list for new groups, from the same live
+	// catalog the builder's location editor uses.
+	$locations = array();
+	foreach ( minn_admin_acpt_builder_location_choices() as $param => $def ) {
+		foreach ( $def['values'] as $pair ) {
+			/* translators: 1: location kind (Post type, Taxonomy, Options page), 2: the choice's name. */
+			$locations[] = array( $param . ':' . $pair[0], sprintf( __( '%1$s: %2$s', 'minn-admin' ), $def['label'], $pair[1] ) );
+		}
+	}
 	$sources[] = array(
 		'id'         => 'acpt',
 		'label'      => 'ACPT',
@@ -972,10 +981,41 @@ add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
 				array( 'key' => 'boxes', 'label' => __( 'Boxes', 'minn-admin' ), 'width' => 90, 'format' => 'num' ),
 				array( 'key' => 'fields', 'label' => __( 'Fields', 'minn-admin' ), 'width' => 90, 'format' => 'num' ),
 			),
+			'create'    => array(
+				'label'  => __( 'Add field group', 'minn-admin' ),
+				'route'  => 'minn-admin/v1/acpt/schema/groups',
+				'method' => 'POST',
+				'fields' => array(
+					array( 'key' => 'title', 'label' => __( 'Title', 'minn-admin' ) ),
+					array( 'key' => 'location', 'label' => __( 'Shown on', 'minn-admin' ), 'type' => 'select', 'options' => $locations ),
+				),
+			),
+			'import'    => array(
+				'label'  => __( 'Import', 'minn-admin' ),
+				'route'  => 'minn-admin/v1/acpt/schema/import',
+				'accept' => '.json,application/json',
+				'hint'   => __( 'An ACPT export file, from ACPT\'s own tools or from Minn. Everything in it imports in one transaction — field groups, post types, taxonomies, option pages — and anything that already exists here is updated in place.', 'minn-admin' ),
+			),
 			'actions'   => array(
+				array(
+					'label'    => __( 'Export JSON', 'minn-admin' ),
+					'route'    => 'minn-admin/v1/acpt/schema/groups/{id}/export',
+					'download' => true,
+				),
+				array(
+					'label' => __( 'Duplicate', 'minn-admin' ),
+					'route' => 'minn-admin/v1/acpt/schema/groups/{id}/duplicate',
+				),
 				// The row opens Minn's builder; ACPT's own canvas stays one
 				// click away for everything the builder does not model.
 				array( 'label' => __( 'Edit in ACPT', 'minn-admin' ), 'href' => '{editUrl}' ),
+				array(
+					'label'   => __( 'Delete', 'minn-admin' ),
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/acpt/schema/groups/{id}',
+					'confirm' => __( 'Delete this field group? ACPT has no trash, so the group and its field definitions are removed for good. Values already saved on posts stay in the database.', 'minn-admin' ),
+					'danger'  => true,
+				),
 			),
 		),
 	);
@@ -1600,6 +1640,16 @@ function minn_admin_acpt_builder_save( $group, $body ) {
 				$name
 			), array( 'status' => 400 ) );
 		}
+		// ACPT resolves a new box by name, and on some builds that lookup is
+		// global — a name from another group would adopt that box's id and
+		// silently move it here.
+		if ( minn_admin_acpt_builder_box_name_taken( $name, array_keys( $stored_box ) ) ) {
+			return new WP_Error( 'minn_dup_name', sprintf(
+				/* translators: %s: box name. */
+				__( 'A box named “%s” already exists in another field group — box names are site-wide in ACPT.', 'minn-admin' ),
+				$name
+			), array( 'status' => 400 ) );
+		}
 		$box_names[] = $name;
 		$fields      = minn_admin_acpt_builder_plan_list( $row['sub_fields'] ?? array(), array(), 0 );
 		if ( is_wp_error( $fields ) ) {
@@ -1670,5 +1720,288 @@ add_action( 'rest_api_init', function () {
 				return rest_ensure_response( minn_admin_acpt_builder_payload( $fresh ) );
 			},
 		),
+	) );
+} );
+
+/* ===== ACPT group lifecycle: create, duplicate, delete, export, import ===== */
+
+/**
+ * Whether a box name already exists outside one group. ACPT resolves a new
+ * box BY NAME, and on builds where that lookup is global (2.0.48's
+ * getMetaBoxByName takes no group), reusing another group's box name would
+ * adopt that box's id and silently move it here — so the name is refused
+ * up front on every build.
+ *
+ * @param string $name      Candidate box name (already slugged).
+ * @param array  $own_ids   Box ids that belong to the group being saved.
+ * @return bool
+ */
+function minn_admin_acpt_builder_box_name_taken( $name, $own_ids ) {
+	try {
+		$all = \ACPT\Core\Repository\MetaRepository::getNames();
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+	foreach ( (array) ( $all['boxes'] ?? array() ) as $box ) {
+		if ( 0 === strcasecmp( (string) ( $box['name'] ?? '' ), $name ) && ! in_array( (string) ( $box['id'] ?? '' ), $own_ids, true ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Create one ACPT group: a label, a name derived from it, one location
+ * rule from the flat "param:value" pick, and one starter box named after
+ * the group so the builder opens ready to take fields. An existing name
+ * refuses rather than resolving — ACPT's save command answers a known
+ * group name by UPDATING that group, which a create must never do.
+ *
+ * @param array $body { title, location }
+ * @return array|WP_Error { ok, id }
+ */
+function minn_admin_acpt_builder_create( $body ) {
+	if ( ! class_exists( '\\ACPT\\Core\\CQRS\\Command\\SaveMetaGroupCommand' ) ) {
+		return new WP_Error( 'minn_no_command', __( 'This ACPT build has no group save command.', 'minn-admin' ), array( 'status' => 501 ) );
+	}
+	$title = sanitize_text_field( (string) ( $body['title'] ?? '' ) );
+	$name  = strtolower( trim( preg_replace( '/[^a-z0-9_\-]+/', '-', strtolower( $title ) ), '-' ) );
+	if ( '' === $title || '' === $name ) {
+		return new WP_Error( 'minn_bad_name', __( 'The group needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	try {
+		$names = \ACPT\Core\Repository\MetaRepository::getNames();
+	} catch ( \Throwable $e ) {
+		$names = array( 'groups' => array() );
+	}
+	foreach ( (array) ( $names['groups'] ?? array() ) as $existing ) {
+		if ( 0 === strcasecmp( (string) ( $existing['name'] ?? '' ), $name ) ) {
+			/* translators: %s: the field group title. */
+			return new WP_Error( 'minn_dup_name', sprintf( __( 'A field group named “%s” already exists.', 'minn-admin' ), $title ), array( 'status' => 400 ) );
+		}
+	}
+	$box_name = str_replace( '-', '_', $name );
+	if ( minn_admin_acpt_builder_box_name_taken( $box_name, array() ) ) {
+		$box_name .= '_box';
+	}
+	if ( minn_admin_acpt_builder_box_name_taken( $box_name, array() ) ) {
+		/* translators: %s: the starter box name derived from the group title. */
+		return new WP_Error( 'minn_dup_name', sprintf( __( 'A box named “%s” already exists in another group — pick a different title.', 'minn-admin' ), $box_name ), array( 'status' => 400 ) );
+	}
+	$belongs = array();
+	$pick    = (string) ( $body['location'] ?? '' );
+	if ( '' !== $pick ) {
+		$parts   = explode( ':', $pick, 2 );
+		$map     = array(
+			'post_type'   => \ACPT\Constants\MetaTypes::CUSTOM_POST_TYPE,
+			'taxonomy'    => \ACPT\Constants\MetaTypes::TAXONOMY,
+			'option_page' => \ACPT\Constants\MetaTypes::OPTION_PAGE,
+		);
+		$choices = minn_admin_acpt_builder_location_choices();
+		$param   = $parts[0];
+		$value   = $parts[1] ?? '';
+		$allowed = wp_list_pluck( $choices[ $param ]['values'] ?? array(), 0 );
+		if ( ! isset( $map[ $param ] ) || ! in_array( $value, array_map( 'strval', $allowed ), true ) ) {
+			return new WP_Error( 'minn_bad_location', __( 'Pick where the group should show.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$belongs[] = array(
+			'belongsTo' => $map[ $param ],
+			'operator'  => '=',
+			'find'      => $value,
+			'logic'     => '',
+		);
+	}
+	$data = array(
+		'name'    => $name,
+		'label'   => $title,
+		'belongs' => $belongs,
+		'boxes'   => array(
+			array( 'name' => $box_name, 'label' => '', 'fields' => array() ),
+		),
+	);
+	try {
+		$command = new \ACPT\Core\CQRS\Command\SaveMetaGroupCommand( $data );
+		$id      = $command->execute();
+	} catch ( \Throwable $e ) {
+		return new WP_Error( 'minn_acpt_save', wp_strip_all_tags( $e->getMessage() ), array( 'status' => 400 ) );
+	}
+	return array( 'ok' => true, 'id' => (string) $id );
+}
+
+/**
+ * One group as ACPT's own export file: the exact shape ACPT's import screen
+ * (and Minn's import below) consumes, so schema moves between sites through
+ * either door.
+ *
+ * @param object $group Stored MetaGroupModel.
+ * @return array|WP_Error { filename, content, mime }
+ */
+function minn_admin_acpt_builder_export( $group ) {
+	if ( ! class_exists( '\\ACPT\\Core\\CQRS\\Command\\ExportDataCommand' ) ) {
+		return new WP_Error( 'minn_no_command', __( 'This ACPT build has no export command.', 'minn-admin' ), array( 'status' => 501 ) );
+	}
+	try {
+		$command = new \ACPT\Core\CQRS\Command\ExportDataCommand( 'json', array(
+			'meta' => array(
+				array(
+					'id'      => $group->getId(),
+					'type'    => \ACPT\Constants\MetaTypes::META,
+					'checked' => true,
+				),
+			),
+		) );
+		$content = $command->execute();
+	} catch ( \Throwable $e ) {
+		return new WP_Error( 'minn_acpt_export', wp_strip_all_tags( $e->getMessage() ), array( 'status' => 400 ) );
+	}
+	return array(
+		'filename' => 'acpt-export-' . sanitize_key( $group->getName() ) . '.json',
+		'content'  => (string) $content,
+		'mime'     => 'application/json',
+	);
+}
+
+/**
+ * Import an ACPT export file through ACPT's own transactional pipeline.
+ *
+ * The file may carry more than field groups — post types, taxonomies,
+ * option pages and forms all ride ACPT's format — and all of it goes
+ * through ImportRepository::import, which validates, runs in one database
+ * transaction and merges by id (a group that exists here updates in
+ * place). The report counts what landed per kind.
+ *
+ * @param string $content Raw JSON file content.
+ * @return array|WP_Error { ok, message, … }
+ */
+function minn_admin_acpt_builder_import( $content ) {
+	if ( ! class_exists( '\\ACPT\\Core\\Repository\\ImportRepository' ) ) {
+		return new WP_Error( 'minn_no_command', __( 'This ACPT build has no import pipeline.', 'minn-admin' ), array( 'status' => 501 ) );
+	}
+	$data = json_decode( (string) $content, true );
+	if ( null === $data || ! is_array( $data ) ) {
+		return new WP_Error( 'invalid', __( 'That isn’t valid JSON.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	// Drop the kinds the file names but holds nothing of, so the vendor
+	// validator judges only what is actually being imported.
+	$data = array_filter( $data, function ( $items ) {
+		return is_array( $items ) && ! empty( $items );
+	} );
+	if ( ! $data ) {
+		return new WP_Error( 'invalid', __( 'Nothing to import in that file.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$meta_ids = array();
+	foreach ( (array) ( $data['meta'] ?? array() ) as $entry ) {
+		if ( is_array( $entry ) && ! empty( $entry['id'] ) ) {
+			$meta_ids[] = (string) $entry['id'];
+		}
+	}
+	$updated = 0;
+	foreach ( $meta_ids as $mid ) {
+		if ( minn_admin_acpt_builder_group( $mid ) ) {
+			$updated++;
+		}
+	}
+	try {
+		\ACPT\Core\Repository\ImportRepository::import( $data );
+	} catch ( \Throwable $e ) {
+		$message = wp_strip_all_tags( $e->getMessage() );
+		return new WP_Error( 'minn_acpt_import', '' !== $message ? $message : __( 'ACPT refused that file; nothing was imported.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$bits = array();
+	foreach ( array( 'meta', 'customPostType', 'taxonomy', 'optionPage', 'form' ) as $kind ) {
+		$count = count( (array) ( $data[ $kind ] ?? array() ) );
+		if ( ! $count ) {
+			continue;
+		}
+		switch ( $kind ) {
+			case 'meta':
+				/* translators: %d: number of field groups imported. */
+				$bits[] = sprintf( _n( '%d field group', '%d field groups', $count, 'minn-admin' ), $count );
+				break;
+			case 'customPostType':
+				/* translators: %d: number of post types imported. */
+				$bits[] = sprintf( _n( '%d post type', '%d post types', $count, 'minn-admin' ), $count );
+				break;
+			case 'taxonomy':
+				/* translators: %d: number of taxonomies imported. */
+				$bits[] = sprintf( _n( '%d taxonomy', '%d taxonomies', $count, 'minn-admin' ), $count );
+				break;
+			case 'optionPage':
+				/* translators: %d: number of option pages imported. */
+				$bits[] = sprintf( _n( '%d option page', '%d option pages', $count, 'minn-admin' ), $count );
+				break;
+			case 'form':
+				/* translators: %d: number of forms imported. */
+				$bits[] = sprintf( _n( '%d form', '%d forms', $count, 'minn-admin' ), $count );
+				break;
+		}
+	}
+	/* translators: %s: comma-separated list of what the import brought in, e.g. "2 field groups, 1 post type". */
+	$message = sprintf( __( 'Imported %s.', 'minn-admin' ), implode( ', ', $bits ) );
+	if ( $updated ) {
+		/* translators: %d: number of field groups the import updated in place. */
+		$message .= ' ' . sprintf( _n( '%d group already existed and was updated in place.', '%d groups already existed and were updated in place.', $updated, 'minn-admin' ), $updated );
+	}
+	return array( 'ok' => true, 'message' => $message );
+}
+
+add_action( 'rest_api_init', function () {
+	if ( ! minn_admin_acpt_active() ) {
+		return;
+	}
+	register_rest_route( 'minn-admin/v1', '/acpt/schema/groups', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_acpt_can_manage',
+		'callback'            => function ( WP_REST_Request $request ) {
+			return rest_ensure_response( minn_admin_acpt_builder_create( (array) $request->get_json_params() ) );
+		},
+	) );
+	register_rest_route( 'minn-admin/v1', '/acpt/schema/groups/(?P<id>[A-Za-z0-9_\-]+)/duplicate', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_acpt_can_manage',
+		'callback'            => function ( WP_REST_Request $request ) {
+			if ( ! minn_admin_acpt_builder_group( (string) $request['id'] ) ) {
+				return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			try {
+				( new \ACPT\Core\CQRS\Command\DuplicateMetaGroupCommand( (string) $request['id'] ) )->execute();
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'minn_acpt_duplicate', wp_strip_all_tags( $e->getMessage() ), array( 'status' => 400 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true ) );
+		},
+	) );
+	register_rest_route( 'minn-admin/v1', '/acpt/schema/groups/(?P<id>[A-Za-z0-9_\-]+)', array(
+		'methods'             => 'DELETE',
+		'permission_callback' => 'minn_admin_acpt_can_manage',
+		'callback'            => function ( WP_REST_Request $request ) {
+			if ( ! minn_admin_acpt_builder_group( (string) $request['id'] ) ) {
+				return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			try {
+				( new \ACPT\Core\CQRS\Command\DeleteMetaGroupCommand( (string) $request['id'] ) )->execute();
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'minn_acpt_delete', wp_strip_all_tags( $e->getMessage() ), array( 'status' => 400 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true ) );
+		},
+	) );
+	register_rest_route( 'minn-admin/v1', '/acpt/schema/groups/(?P<id>[A-Za-z0-9_\-]+)/export', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_acpt_can_manage',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$group = minn_admin_acpt_builder_group( (string) $request['id'] );
+			if ( ! $group ) {
+				return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return rest_ensure_response( minn_admin_acpt_builder_export( $group ) );
+		},
+	) );
+	register_rest_route( 'minn-admin/v1', '/acpt/schema/import', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_acpt_can_manage',
+		'callback'            => function ( WP_REST_Request $request ) {
+			return rest_ensure_response( minn_admin_acpt_builder_import( (string) $request['content'] ) );
+		},
 	) );
 } );

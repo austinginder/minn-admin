@@ -42989,7 +42989,7 @@
 	// prints. Bare /field-groups/{key} routes resolve to ACF.
 	const FGB_SOURCES = {
 		acf: { base: 'minn-admin/v1/acf/schema/groups/', vendor: 'ACF', export: true },
-		acpt: { base: 'minn-admin/v1/acpt/schema/groups/', vendor: 'ACPT', export: false },
+		acpt: { base: 'minn-admin/v1/acpt/schema/groups/', vendor: 'ACPT', export: true },
 	};
 	const fgbSource = () => FGB_SOURCES[ state.fgbSrc ] || FGB_SOURCES.acf;
 	const fgbSlug = ( label ) => String( label ).toLowerCase().replace( /[^a-z0-9]+/g, '_' ).replace( /^_+|_+$/g, '' );
