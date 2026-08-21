@@ -1812,6 +1812,113 @@
 		return root;
 	}
 
+	// Stored POST content is a different problem from a stored field value.
+	// It reaches the editor body, the locked preview, island previews and the
+	// revision viewer, and assigning it to a live innerHTML parses it for real
+	// and fires whatever onload/onerror it carries. Anyone holding
+	// unfiltered_html can put that there, and the reader is usually an
+	// administrator, so the plant and the fire are different people.
+	//
+	// rtScrub is the wrong instrument here: it DELETES. Post content round
+	// trips — an html block and a details body are read back out of the DOM at
+	// save — so deleting an attribute on the way in silently rewrites markup
+	// the writer never touched. Instead PARK what executes under a data-
+	// prefix, which the parser treats as inert, and let the serializers put it
+	// back byte-identically on their clone.
+	const RT_PARK_PREFIX = 'data-minn-inert-';
+
+	// Attribute renames are applied by rebuilding the whole set IN ORDER.
+	// Removing one and appending its parked twin would move it to the end, and
+	// both serializers emit attributes in DOM order, so an untouched block
+	// would come back reordered on the next save.
+	function rtRenameAttrs( el, rename ) {
+		if ( ! el.attributes || ! el.attributes.length ) return false;
+		const was = Array.from( el.attributes ).map( ( a ) => [ a.name, a.value ] );
+		const next = was.map( ( [ name, value ] ) => [ rename( name, value, el ), value ] );
+		if ( next.every( ( pair, i ) => pair[ 0 ] === was[ i ][ 0 ] ) ) return false;
+		was.forEach( ( [ name ] ) => el.removeAttribute( name ) );
+		next.forEach( ( [ name, value ] ) => {
+			try {
+				el.setAttribute( name, value );
+			} catch ( e ) { /* a name the parser accepted but setAttribute won't: drop it */ }
+		} );
+		return true;
+	}
+
+	// safeHref is the wrong ruler for stored content: it guards server-supplied
+	// navigation, so it accepts only https?:// and /path, and judging content
+	// by it parks every relative image src, every #anchor and every mailto:.
+	// What matters is whether the scheme can REACH EXECUTION. No scheme at all
+	// is a relative URL and always fine. Whitespace and control characters come
+	// out before the scheme is read, because a browser resolving `java\tscript:`
+	// ignores them and a naive test would not.
+	const RT_SAFE_SCHEMES = [ 'http', 'https', 'mailto', 'tel', 'blob' ];
+	const rtSafeUrl = ( value ) => {
+		const s = String( value == null ? '' : value ).replace( /[\u0000-\u0020\u007f]+/g, '' );
+		const scheme = s.match( /^([a-z][a-z0-9+.\-]*):/i );
+		if ( ! scheme ) return true;
+		const p = scheme[ 1 ].toLowerCase();
+		// An inline image is content; data:text/html and data:image/svg+xml
+		// both carry script, so neither is.
+		if ( 'data' === p ) return /^data:image\/(?!svg)/i.test( s );
+		return RT_SAFE_SCHEMES.includes( p );
+	};
+
+	const rtParkName = ( name, value, el ) => {
+		const lower = name.toLowerCase();
+		if ( 0 === lower.indexOf( RT_PARK_PREFIX ) ) return name;
+		// Every event handler, plus the attributes whose whole purpose is to
+		// reach execution again after the walk (srcdoc, animate's target).
+		if ( 0 === lower.indexOf( 'on' ) || RT_KILL_ATTRS.includes( lower ) ) return RT_PARK_PREFIX + name;
+		// <base href> rewrites every relative URL on the page, so it is not
+		// safe even when the URL itself is: judge the tag, not the scheme.
+		if ( 'href' === lower && el && 'BASE' === el.tagName ) return RT_PARK_PREFIX + name;
+		if ( RT_URL_ATTRS.includes( lower ) && ! rtSafeUrl( value ) ) return RT_PARK_PREFIX + name;
+		return name;
+	};
+
+	// Keeps every TAG. Dropping tags is what rtScrub does for field values, and
+	// doing it here would delete core/embed output and raw-HTML blocks. An
+	// iframe with an https src is legitimate embed output; the same iframe with
+	// srcdoc has its srcdoc parked, which is what actually stops it.
+	function rtNeutralize( root ) {
+		$$( '*', root ).forEach( ( el ) => {
+			rtRenameAttrs( el, rtParkName );
+			if ( el.content && el.content.nodeType === 11 ) rtNeutralize( el.content );
+		} );
+		return root;
+	}
+
+	// Put the parked attributes back. Runs on the SERIALIZER'S CLONE, never on
+	// the live DOM: the document keeps the inert copy, the database gets the
+	// writer's bytes.
+	function rtUnpark( root ) {
+		$$( '*', root ).forEach( ( el ) => {
+			rtRenameAttrs( el, ( name ) => (
+				0 === name.toLowerCase().indexOf( RT_PARK_PREFIX )
+					? name.slice( RT_PARK_PREFIX.length )
+					: name
+			) );
+			if ( el.content && el.content.nodeType === 11 ) rtUnpark( el.content );
+		} );
+		return root;
+	}
+
+	// The one way stored post content should ever reach a live element. Parse
+	// inertly, park what runs, then IMPORT the nodes — the same reasoning as
+	// rtSeedInto, including why the tree is never re-serialised to a string on
+	// the way in.
+	function rtNeutralizeInto( el, html ) {
+		el.textContent = '';
+		const s = String( html == null ? '' : html );
+		if ( ! s ) return el;
+		const holder = rtNeutralize( inertParse( s ) );
+		Array.from( holder.childNodes ).forEach( ( node ) => {
+			el.appendChild( document.importNode( node, true ) );
+		} );
+		return el;
+	}
+
 	// Seed the editable body from stored markup. Parse inertly, scrub, then
 	// IMPORT the nodes: re-serialising a scrubbed tree back into innerHTML on a
 	// live element re-parses it for real, which is exactly the step the inert
@@ -24192,7 +24299,10 @@
 		const body = islandEl.querySelector( '.minn-details-body' );
 		if ( ! sum || ! body ) return;
 		const prev = parseDetailsRaw( ed.islands[ idx ] );
-		const next = buildDetailsRaw( sum.value, body.innerHTML, prev.attrs );
+		// Read the body back through a clone with the parked attributes put
+		// back, or an untouched details block would be rewritten inert on the
+		// first commit after load.
+		const next = buildDetailsRaw( sum.value, rtUnpark( body.cloneNode( true ) ).innerHTML, prev.attrs );
 		if ( ed.islands[ idx ] === next ) return;
 		ed.islands[ idx ] = next;
 		stampSlotDirtyFor( islandEl );
@@ -25151,7 +25261,7 @@
 		delete prev.dataset.sliderWait;
 		delete prev.dataset.harvestWait;
 		delete prev._minnCollapsedSlides;
-		prev.innerHTML = html;
+		rtNeutralizeInto( prev, html );
 	}
 
 	let previewRevealRaf = 0;
@@ -25608,6 +25718,10 @@
 			cleanBoundaryNbsp( el );
 			cleanLeadingNbsp( el );
 			modernizeStrikes( el );
+			// The live body holds stored markup with its executable attributes
+			// parked (rtNeutralizeInto). Restore them HERE, on the clone, so
+			// what lands in the database is byte-identical to what was opened.
+			rtUnpark( el );
 
 			const alignOf = ( node ) => {
 				const m = node.className.match( /has-text-align-(left|center|right)/ );
@@ -26039,7 +26153,7 @@
 							state.editor.content = r.content.rendered;
 							const body = $( '#minn-editor-body' );
 							if ( body ) {
-								body.innerHTML = r.content.rendered;
+								rtNeutralizeInto( body, r.content.rendered );
 								highlightCodeBlocks( body );
 								updateEditorStats();
 							}
@@ -26445,6 +26559,8 @@
 		cleanBoundaryNbsp( clone );
 		Array.from( clone.children ).forEach( cleanLeadingNbsp );
 		modernizeStrikes( clone );
+		// Parked executable attributes go back on the clone — see serializeToBlocks.
+		rtUnpark( clone );
 		$$( '[data-minn-bkt]', clone ).forEach( ( el ) => el.removeAttribute( 'data-minn-bkt' ) );
 		// In-flight uploads hold only a blob: URL; empty captions are chrome.
 		$$( '[data-minn-upload]', clone ).forEach( ( el ) => el.remove() );
@@ -29243,7 +29359,7 @@
 		// Blank posts must not stay truly empty: a contenteditable with no
 		// children puts the first keystrokes in a bare text node, and the
 		// slash menu (and most block ops) need a top-level element.
-		body.innerHTML = ed.content || ( locked ? '' : '<p><br></p>' );
+		rtNeutralizeInto( body, ed.content || ( locked ? '' : '<p><br></p>' ) );
 		if ( ! locked ) seedImageCaptions( body );
 		if ( ! locked ) ensureTrailingParagraph( body );
 		highlightCodeBlocks( body );
@@ -32586,8 +32702,9 @@
 			if ( Number.isFinite( i ) && i !== idx ) ed.islands[ i ] = null;
 		} );
 		ed.islands[ idx ] = newRaw;
-		const tmp = document.createElement( 'div' );
-		tmp.innerHTML = islandHtml( idx, String( islandEl.dataset.block || '' ), newRaw, ed );
+		// Detached, but an <img src> in a detached tree still loads and still
+		// fires onerror, so this is a live sink like any other.
+		const tmp = rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, String( islandEl.dataset.block || '' ), newRaw, ed ) );
 		const fresh = tmp.firstElementChild;
 		if ( ! fresh ) return false;
 		islandEl.replaceWith( fresh );
@@ -33043,19 +33160,19 @@
 			const sum = islandEl.querySelector( '.minn-details-summary' );
 			const bodyEl = islandEl.querySelector( '.minn-details-body' );
 			if ( sum ) sum.value = parts.summary;
-			if ( bodyEl ) bodyEl.innerHTML = parts.bodyHtml && parts.bodyHtml.trim() ? parts.bodyHtml : '<p><br></p>';
+			if ( bodyEl ) rtNeutralizeInto( bodyEl, parts.bodyHtml && parts.bodyHtml.trim() ? parts.bodyHtml : '<p><br></p>' );
 		}
 		const previewEl = document.querySelector( `.minn-island-preview[data-preview="${ insp.idx }"]` );
 		try {
 			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ], post: ( state.editor && state.editor.id ) || 0 } ) } );
 			injectPreviewStyles( r && r.styles );
 			const html = r && r.rendered && r.rendered[ 0 ];
-			if ( previewEl && html && html.trim() ) previewEl.innerHTML = html;
+			if ( previewEl && html && html.trim() ) rtNeutralizeInto( previewEl, html );
 			updateEditorStats();
 		} catch ( e ) {
 			if ( previewEl ) {
 				const inner2 = stripBlockComments( newRaw ).trim();
-				if ( inner2 ) previewEl.innerHTML = inner2;
+				if ( inner2 ) rtNeutralizeInto( previewEl, inner2 );
 			}
 		}
 		toast( __( 'Block updated' ) );
@@ -35552,7 +35669,10 @@
 		segs.forEach( ( seg ) => {
 			if ( seg.type !== 'block' ) return;
 			const idx = ed.islands.push( seg.raw ) - 1;
-			anchor.insertAdjacentHTML( 'beforebegin', islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw, ed ) );
+			// insertAdjacentHTML on a live element parses for real; a pattern is
+			// stored markup like any other, so it lands through the inert path.
+			const holder = rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw, ed ) );
+			Array.from( holder.childNodes ).forEach( ( node ) => anchor.parentNode.insertBefore( node, anchor ) );
 			count++;
 		} );
 		if ( ! count ) { toast( __( 'Nothing insertable in this pattern' ), true ); return; }
@@ -38639,6 +38759,10 @@
 		$( '#minn-modal-overlay' ).addEventListener( 'mousedown', ( e ) => {
 			if ( e.target.id === 'minn-modal-overlay' ) closeModal();
 		} );
+		// The revision diff carries stored post markup, so renderModal leaves
+		// #minn-diff empty and it is seeded here, inertly.
+		const diffWrap = $( '#minn-diff' );
+		if ( diffWrap && m._diffHtml ) rtNeutralizeInto( diffWrap, m._diffHtml );
 		const closeBtn = $( '#minn-modal-close' );
 		if ( closeBtn ) closeBtn.addEventListener( 'click', closeModal );
 		const closeBtn2 = $( '#minn-modal-close2' );
@@ -41309,6 +41433,18 @@
 						<div class="minn-diff-cell${ r.left ? '' : ' empty' }">${ r.left }</div>
 						<div class="minn-diff-cell${ r.right ? '' : ' empty' }">${ r.right }</div>
 					</div>` ).join( '' ) : '';
+			// An unchanged diff row keeps the block's REAL markup so the reader
+			// sees the post, not a code listing — which means stored content,
+			// planted by whoever could edit that post, reaching the reader's
+			// document. The modal template therefore emits an EMPTY #minn-diff
+			// and bindModal seeds it through rtNeutralizeInto; interpolating it
+			// here would parse it for real before anything could neutralize it.
+			m._diffHtml = ( rows || fieldsInner )
+				? `<div class="minn-diff-headrow"><div>${ esc( __( 'This revision' ) ) }</div><div>${ esc( __( 'Current' ) ) }</div></div>
+					${ fieldsInner }
+					${ fieldsInner && contentInner ? `<div class="minn-diff-row minn-diff-sec"><div>${ esc( __( 'Content' ) ) }</div></div>` : '' }
+					${ contentInner }`
+				: '';
 			bodyHtml = `
 				<div class="minn-modal-meta">
 					${ titleDiff ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Title' ) ) }</span><span class="minn-diff-inline">${ titleDiff.left } → ${ titleDiff.right }</span></div>`
@@ -41316,13 +41452,7 @@
 					<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Saved' ) ) }</span><span>${ timeAgo( rev.modified ) }</span></div>
 					<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Changes' ) ) }</span><span>${ esc( summary ) }</span></div>
 				</div>
-				${ rows || fieldsInner ? `
-				<div class="minn-diff" id="minn-diff">
-					<div class="minn-diff-headrow"><div>${ esc( __( 'This revision' ) ) }</div><div>${ esc( __( 'Current' ) ) }</div></div>
-					${ fieldsInner }
-					${ fieldsInner && contentInner ? `<div class="minn-diff-row minn-diff-sec"><div>${ esc( __( 'Content' ) ) }</div></div>` : '' }
-					${ contentInner }
-				</div>` : '' }
+				${ rows || fieldsInner ? '<div class="minn-diff" id="minn-diff"></div>' : '' }
 				${ rows ? '' : '<div class="minn-revision-preview" id="minn-revision-preview"></div>' }
 				<div class="minn-modal-actions">
 					<button class="minn-btn-primary" id="minn-restore-rev">${ esc( __( 'Restore this revision' ) ) }</button>
@@ -41361,7 +41491,7 @@
 		const preview = $( '#minn-revision-preview' );
 		if ( preview ) {
 			const raw = ( rev.content && ( rev.content.raw != null ? rev.content.raw : rev.content.rendered ) ) || '';
-			preview.innerHTML = stripBlockComments( raw ) || `<span style="color:var(--text3);">${ esc( __( '(empty)' ) ) }</span>`;
+			rtNeutralizeInto( preview, stripBlockComments( raw ) || `<span style="color:var(--text3);">${ esc( __( '(empty)' ) ) }</span>` );
 			highlightCodeBlocks( preview );
 		}
 		const restore = $( '#minn-restore-rev' );
