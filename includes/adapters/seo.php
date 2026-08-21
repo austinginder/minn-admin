@@ -30,9 +30,15 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Provider backed by simple postmeta keys. Empty values delete the meta.
  */
-function minn_admin_seo_meta_provider( $name, $keys ) {
+function minn_admin_seo_meta_provider( $name, $keys, $can_edit = null ) {
 	return array(
-		'name'  => $name,
+		'name'    => $name,
+		// A per-vendor predicate on top of edit_post. Several SEO plugins
+		// gate their metabox on an extra per-role capability, so editing at
+		// edit_post alone would let a role the vendor blocks (a Contributor,
+		// under Rank Math) write SEO meta the vendor's own UI withholds.
+		// Null means parity — edit_post is the vendor's own floor too.
+		'can_edit' => $can_edit,
 		'read'  => function ( $post_id ) use ( $keys ) {
 			$out = array();
 			foreach ( $keys as $field => $meta_key ) {
@@ -74,7 +80,14 @@ function minn_admin_seo_aioseo_provider() {
 		return is_array( $decoded ) ? $decoded : array();
 	};
 	return array(
-		'name'  => 'AIOSEO',
+		'name'    => 'AIOSEO',
+		// AIOSEO gates its own post SEO write on aioseo_page_general_settings
+		// (PostsTerms.php), so edit_post alone would grant what it withholds.
+		'can_edit' => function () {
+			return function_exists( 'aioseo' ) && isset( aioseo()->access )
+				? (bool) aioseo()->access->hasCapability( 'aioseo_page_general_settings' )
+				: current_user_can( 'aioseo_page_general_settings' );
+		},
 		'read'  => function ( $post_id ) use ( $model, $phrases_of ) {
 			$out = array( 'title' => '', 'description' => '', 'focus_keyword' => '' );
 			try {
@@ -137,7 +150,14 @@ function minn_admin_seo_rank_math_provider() {
 	$base_read  = $base['read'];
 	$base_write = $base['write'];
 	return array(
-		'name'   => 'Rank Math',
+		'name'    => 'Rank Math',
+		// Rank Math registers no SEO metabox for a role without its
+		// onpage_general capability (Helper::has_cap('onpage_general') →
+		// current_user_can('rank_math_onpage_general')), so editing at
+		// edit_post alone would grant what Rank Math withholds.
+		'can_edit' => function () {
+			return current_user_can( 'rank_math_onpage_general' );
+		},
 		// Extra panel groups beyond Search appearance (client uses this).
 		'social' => true,
 		'read'   => function ( $post_id ) use ( $base_read ) {
@@ -444,7 +464,12 @@ function minn_admin_seo_plugin() {
 			'title'         => '_seopress_titles_title',
 			'description'   => '_seopress_titles_desc',
 			'focus_keyword' => '_seopress_analysis_target_kw',
-		) );
+		), function () {
+			// SEOPress blocks the metabox for roles listed in its advanced
+			// settings; mirror that (super admins are never blocked).
+			return ! function_exists( 'seopress_metabox_role_is_blocked' )
+				|| ! seopress_metabox_role_is_blocked( 'GLOBAL' );
+		} );
 	}
 	if ( defined( 'SURERANK_VERSION' )
 		&& class_exists( '\SureRank\Inc\Functions\Get' )
@@ -457,7 +482,12 @@ function minn_admin_seo_plugin() {
 			'title'         => '_siteseo_titles_title',
 			'description'   => '_siteseo_titles_desc',
 			'focus_keyword' => '_siteseo_analysis_target_kw',
-		) );
+		), function () {
+			// SiteSEO's own metabox-permission check (roles in its advanced
+			// settings); it also covers the logged-in test.
+			return ! function_exists( 'siteseo_user_can_metabox' )
+				|| siteseo_user_can_metabox();
+		} );
 	}
 	// Squirrly last: own {prefix}qss table, reached only through their API.
 	if ( defined( 'SQ_VERSION' ) && class_exists( 'SQ_Classes_ObjController' ) ) {
@@ -550,6 +580,13 @@ add_action( 'rest_api_init', function () {
 			}
 			if ( ! current_user_can( 'edit_post', $post->ID ) ) {
 				return new WP_Error( 'rest_forbidden', __( 'You cannot edit SEO fields on this post.', 'minn-admin' ), array( 'status' => 403 ) );
+			}
+			// The active SEO plugin may withhold its metabox from this user's
+			// role even when they can edit the post; honor that here so Minn
+			// never writes SEO meta the vendor's own screen would refuse.
+			if ( isset( $plugin['can_edit'] ) && is_callable( $plugin['can_edit'] )
+				&& ! call_user_func( $plugin['can_edit'], $post->ID ) ) {
+				return new WP_Error( 'rest_forbidden', __( 'You cannot edit SEO fields on this site.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			foreach ( array( 'title', 'description', 'focus_keyword' ) as $field ) {
 				if ( ! array_key_exists( $field, $value ) ) {
