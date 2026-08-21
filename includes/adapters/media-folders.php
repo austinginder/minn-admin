@@ -57,7 +57,7 @@ function minn_admin_media_folders_provider() {
  * media, else null (gates the folder combobox client-side).
  */
 function minn_admin_media_folders_boot() {
-	if ( ! current_user_can( 'edit_posts' ) ) {
+	if ( ! current_user_can( 'upload_files' ) ) {
 		return null;
 	}
 	$p = minn_admin_media_folders_provider();
@@ -84,7 +84,12 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'GET',
 			'permission_callback' => function () {
-				return current_user_can( 'edit_posts' );
+				// upload_files, the bar every provider sets on this same data:
+				// FileBird's own folder API asks for it, and Real Media Library
+				// and Folders surface the tree only inside the media library.
+				// A folder tree is not neutral on a site that files by client
+				// or by embargo — the names are the roster.
+				return current_user_can( 'upload_files' );
 			},
 			'callback'            => function () {
 				$p = minn_admin_media_folders_provider();
@@ -165,7 +170,12 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'GET',
 			'permission_callback' => function () {
-				return current_user_can( 'edit_posts' );
+				// upload_files, the bar every provider sets on this same data:
+				// FileBird's own folder API asks for it, and Real Media Library
+				// and Folders surface the tree only inside the media library.
+				// A folder tree is not neutral on a site that files by client
+				// or by embargo — the names are the roster.
+				return current_user_can( 'upload_files' );
 			},
 			'callback'            => function ( $req ) {
 				global $wpdb;

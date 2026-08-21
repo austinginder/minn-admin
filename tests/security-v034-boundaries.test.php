@@ -91,6 +91,10 @@ add_role(
 		'read'                            => true,
 		'edit_posts'                      => true,
 		'list_users'                      => true,
+		// The folder routes ask for upload_files at the door (section 9 covers
+		// that bar). This fixture is here to prove the PER-ITEM read_post
+		// filter behind it, so it has to get through the door first.
+		'upload_files'                    => true,
 		'edit_minn_boundary_items'        => true,
 		'edit_others_minn_boundary_items' => true,
 		'edit_published_minn_boundary_items' => true,
@@ -525,6 +529,111 @@ if ( ! class_exists( 'WPCode_Snippet' ) || ! function_exists( 'minn_admin_wpcode
 	}
 }
 
+// --- 8. the SEO panel's social image authorises the ATTACHMENT ------------
+// edit_post authorises the post being written. The attachment arrives as a
+// bare id in the same body, and nothing checked it: posting ids one at a time
+// and reading the stored value back enumerates the media table, and uploads
+// are served without authorisation, so learning a URL is reading the file.
+// The discriminating fixture is an attachment under a PRIVATE post given to an
+// author, who holds upload_files but not read_private_posts.
+wp_set_current_user( $admin );
+$seo_parent = wp_insert_post( array(
+	'post_title'  => 'Minn seo boundary parent',
+	'post_status' => 'private',
+	'post_type'   => 'post',
+) );
+$seo_att = is_wp_error( $seo_parent ) ? 0 : wp_insert_attachment( array(
+	'post_title'     => 'Minn boundary attachment',
+	'post_status'    => 'inherit',
+	'post_mime_type' => 'image/png',
+	'post_parent'    => $seo_parent,
+), 'minn-boundary-fixture.png', $seo_parent );
+
+$seo_author = wp_insert_user( array(
+	'user_login' => 'minn-seo-boundary-' . wp_generate_password( 6, false, false ),
+	'user_pass'  => wp_generate_password( 20 ),
+	'role'       => 'author', // upload_files yes, read_private_posts no
+) );
+$seo_post = 0;
+if ( ! is_wp_error( $seo_author ) ) {
+	wp_set_current_user( $seo_author );
+	$seo_post = wp_insert_post( array(
+		'post_title'  => 'Minn seo boundary draft',
+		'post_status' => 'draft',
+		'post_type'   => 'post',
+		'post_author' => $seo_author,
+	) );
+}
+
+if ( is_wp_error( $seo_author ) || ! $seo_att || ! $seo_post || is_wp_error( $seo_post ) ) {
+	$check( 'SEO social-image fixtures created', false );
+	$seo_author = is_wp_error( $seo_author ) ? 0 : $seo_author;
+} else {
+	$write_social = function ( $uid, $post_id, $att_id ) {
+		wp_set_current_user( $uid );
+		$req = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $post_id );
+		$req->set_header( 'Content-Type', 'application/json' );
+		$req->set_body( wp_json_encode( array( 'minn_seo' => array( 'social_image' => array( 'id' => $att_id ) ) ) ) );
+		return rest_do_request( $req )->get_status();
+	};
+	$check( 'Fixture author holds upload_files', user_can( $seo_author, 'upload_files' ) );
+	$check( 'Fixture author cannot read the attachment', ! user_can( $seo_author, 'read_post', $seo_att ) );
+	$status = $write_social( $seo_author, $seo_post, $seo_att );
+	$check(
+		'Social image refuses an attachment the caller cannot read',
+		403 === $status,
+		'status ' . $status
+	);
+	// Control: the same request, by someone who may read that attachment.
+	$admin_post = wp_insert_post( array( 'post_title' => 'Minn seo boundary admin draft', 'post_status' => 'draft', 'post_type' => 'post' ) );
+	if ( ! is_wp_error( $admin_post ) ) {
+		$ok_status = $write_social( $admin, $admin_post, $seo_att );
+		$check(
+			'An administrator may still set a social image',
+			200 === $ok_status,
+			'status ' . $ok_status
+		);
+		wp_delete_post( $admin_post, true );
+	}
+}
+wp_set_current_user( $admin );
+
+// --- 9. the media-folder tree asks for the same bar its providers do ------
+if ( ! function_exists( 'minn_admin_media_folders_provider' ) || ! minn_admin_media_folders_provider() ) {
+	echo "SKIP  no media-folder provider active on this site\n";
+} elseif ( empty( $seo_author ) ) {
+	echo "SKIP  no fixture user for the folder check\n";
+} else {
+	$folder_status = function ( $uid ) {
+		wp_set_current_user( $uid );
+		return rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/media/folders' ) )->get_status();
+	};
+	$contributor = wp_insert_user( array(
+		'user_login' => 'minn-folder-boundary-' . wp_generate_password( 6, false, false ),
+		'user_pass'  => wp_generate_password( 20 ),
+		'role'       => 'contributor', // edit_posts, but no upload_files
+	) );
+	if ( is_wp_error( $contributor ) ) {
+		$check( 'Folder-boundary fixture created', false );
+		$contributor = 0;
+	} else {
+		$check( 'Fixture contributor lacks upload_files', ! user_can( $contributor, 'upload_files' ) );
+		$check(
+			'Folder tree is refused without upload_files',
+			403 === $folder_status( $contributor ),
+			'status ' . $folder_status( $contributor )
+		);
+		$check(
+			'Someone who may upload still reads the tree',
+			200 === $folder_status( $seo_author ),
+			'status ' . $folder_status( $seo_author )
+		);
+		wp_set_current_user( $admin );
+		wp_delete_user( $contributor );
+	}
+}
+wp_set_current_user( $admin );
+
 // --- cleanup -------------------------------------------------------------
 wp_set_current_user( $admin );
 foreach ( array( $duplicate_id, $attachment_id, is_wp_error( $private_parent ) ? 0 : $private_parent, is_wp_error( $source_id ) ? 0 : $source_id ) as $post_id ) {
@@ -544,6 +653,14 @@ if ( ! empty( $writer ) && ! is_wp_error( $writer ) ) {
 }
 if ( ! empty( $reader ) && ! is_wp_error( $reader ) ) {
 	wp_delete_user( $reader );
+}
+if ( ! empty( $seo_author ) && ! is_wp_error( $seo_author ) ) {
+	wp_delete_user( $seo_author );
+}
+foreach ( array( $seo_post ?? 0, $seo_att ?? 0, $seo_parent ?? 0 ) as $post_id ) {
+	if ( $post_id && ! is_wp_error( $post_id ) ) {
+		wp_delete_post( (int) $post_id, true );
+	}
 }
 foreach ( array( $private_comment, $public_comment, $note_comment ) as $comment_id ) {
 	if ( $comment_id ) {

@@ -562,20 +562,29 @@ add_action( 'rest_api_init', function () {
 			}
 			if ( array_key_exists( 'social_image', $value ) ) {
 				$raw = $value['social_image'];
+				$att = is_array( $raw ) ? (int) ( isset( $raw['id'] ) ? $raw['id'] : 0 ) : ( is_numeric( $raw ) ? (int) $raw : 0 );
 				if ( null === $raw || '' === $raw || false === $raw ) {
 					call_user_func( $plugin['write'], $post->ID, 'social_image', null );
-				} elseif ( is_array( $raw ) ) {
-					call_user_func(
-						$plugin['write'],
-						$post->ID,
-						'social_image',
-						array(
-							'id'  => isset( $raw['id'] ) ? (int) $raw['id'] : 0,
-							'url' => isset( $raw['url'] ) ? esc_url_raw( (string) $raw['url'] ) : '',
-						)
-					);
-				} elseif ( is_numeric( $raw ) ) {
-					call_user_func( $plugin['write'], $post->ID, 'social_image', (int) $raw );
+				} elseif ( $att > 0 ) {
+					// edit_post above authorises the POST. It says nothing about
+					// the ATTACHMENT, which arrives as a bare id in the body.
+					// Without a check here, posting ids one at a time and
+					// reading the stored value back is an enumeration oracle
+					// over the whole media table — and uploads are served with
+					// no authorisation, so learning the URL is reading the file.
+					// The vendors whose field this is put a media modal in
+					// front of it, which means upload_files.
+					if ( ! current_user_can( 'upload_files' )
+						|| 'attachment' !== get_post_type( $att )
+						|| ! current_user_can( 'read_post', $att ) ) {
+						return new WP_Error( 'rest_forbidden', __( 'You cannot use that media item.', 'minn-admin' ), array( 'status' => 403 ) );
+					}
+					// The URL is DERIVED from the id, never taken from the
+					// caller: every provider resolves it the same way, and
+					// accepting one let anyone who can edit a draft pin an
+					// arbitrary third-party image as the og:image of a post
+					// somebody else publishes later.
+					call_user_func( $plugin['write'], $post->ID, 'social_image', $att );
 				}
 			}
 			return null;
