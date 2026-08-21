@@ -38,6 +38,18 @@ const MINN_ADMIN_ACPT_SIMPLE = array(
 	'Image'    => 'image',
 );
 
+/**
+ * Types ACPT stores as a small object around the value a writer types, and
+ * the key holding that value. A URL keeps a display label beside it and a
+ * phone number an international dialling code; the control edits the part a
+ * person types, and the rest is carried through untouched. Reading these as
+ * plain values gave an empty box on a field that had content in it.
+ */
+const MINN_ADMIN_ACPT_STRUCTURED = array(
+	'Phone' => 'value',
+	'Url'   => 'url',
+);
+
 /** Whether the active ACPT build exposes the APIs used by this adapter. */
 function minn_admin_acpt_active() {
 	return defined( 'ACPT_PLUGIN_VERSION' )
@@ -225,6 +237,58 @@ function minn_admin_acpt_fields_payload( $post_id, $post_type, $with_lookup = fa
 	return $with_lookup ? array( 'groups' => $groups, 'lookup' => $lookup ) : array( 'groups' => $groups );
 }
 
+/**
+ * One stored ACPT value → what the form control expects.
+ *
+ * Shared by the post panel and the option pages: both read through the same
+ * vendor helper and hand the result to the same controls, so the coercion
+ * belongs in one place rather than beside each caller.
+ *
+ * @param object $field ACPT MetaFieldModel.
+ * @param mixed  $value Raw value from get_acpt_field.
+ * @return mixed
+ */
+function minn_admin_acpt_value_out( $field, $value ) {
+	$type = $field->getType();
+	if ( 'Toggle' === $type ) {
+		return ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
+	}
+	if ( 'Checkbox' === $type ) {
+		return is_array( $value ) ? array_values( $value ) : ( '' === (string) $value ? array() : array( $value ) );
+	}
+	if ( 'Image' === $type ) {
+		// ACPT answers with the attachment id; the picker wants to show the
+		// picture it stands for.
+		$att = (int) $value;
+		if ( ! $att ) {
+			return '';
+		}
+		$url = wp_get_attachment_image_url( $att, 'medium' );
+		return array( 'id' => $att, 'url' => $url ? $url : wp_get_attachment_url( $att ) );
+	}
+	if ( 'Repeater' === $type ) {
+		// ACPT hands back rows already in row order, keyed by sub name.
+		$rows = array();
+		foreach ( array_values( is_array( $value ) ? $value : array() ) as $i => $row ) {
+			$rows[] = array(
+				'__idx'  => $i,
+				'values' => (object) ( is_array( $row ) ? $row : array() ),
+			);
+		}
+		return $rows;
+	}
+	if ( isset( MINN_ADMIN_ACPT_STRUCTURED[ $type ] ) && ( is_array( $value ) || is_object( $value ) ) ) {
+		$part = ( (array) $value )[ MINN_ADMIN_ACPT_STRUCTURED[ $type ] ] ?? '';
+		return is_scalar( $part ) ? (string) $part : '';
+	}
+	// A field that has never been filled in reads back as null, which a text
+	// control would render as the word "null"; empty is empty.
+	if ( null === $value || is_array( $value ) || is_object( $value ) ) {
+		return '';
+	}
+	return $value;
+}
+
 /** Read simple field values through ACPT's public value helper. */
 function minn_admin_acpt_read_values( $post_id ) {
 	$post = get_post( $post_id );
@@ -241,31 +305,7 @@ function minn_admin_acpt_read_values( $post_id ) {
 			'format'     => 'only_value',
 			'return'     => 'raw',
 		) );
-		$type = $field->getType();
-		if ( 'Toggle' === $type ) {
-			$value = ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
-		} elseif ( 'Checkbox' === $type ) {
-			$value = is_array( $value ) ? array_values( $value ) : ( '' === (string) $value ? array() : array( $value ) );
-		} elseif ( 'Image' === $type ) {
-			// ACPT answers with the attachment id; the picker wants to show
-			// the picture it stands for.
-			$att   = (int) $value;
-			$url   = $att ? wp_get_attachment_image_url( $att, 'medium' ) : '';
-			$value = $att ? array( 'id' => $att, 'url' => $url ? $url : wp_get_attachment_url( $att ) ) : '';
-		} elseif ( 'Repeater' === $type ) {
-			// ACPT hands back rows already in row order, keyed by sub name.
-			$rows = array();
-			foreach ( array_values( is_array( $value ) ? $value : array() ) as $i => $row ) {
-				$rows[] = array(
-					'__idx'  => $i,
-					'values' => (object) ( is_array( $row ) ? $row : array() ),
-				);
-			}
-			$value = $rows;
-		} elseif ( is_array( $value ) || is_object( $value ) ) {
-			$value = '';
-		}
-		$out[ $id ] = $value;
+		$out[ $id ] = minn_admin_acpt_value_out( $field, $value );
 	}
 	return $out;
 }
@@ -322,41 +362,69 @@ function minn_admin_acpt_write_values( $post_id, $values ) {
 			continue;
 		}
 		$field = $schema['lookup'][ $id ];
-		$args  = array(
+		minn_admin_acpt_write_one( $field, $value, array(
 			'post_id'    => $post_id,
 			'box_name'   => $field->getBox()->getName(),
 			'field_name' => $field->getName(),
-		);
-		$type = $field->getType();
-		if ( ( '' === $value || null === $value ) && ! in_array( $type, array( 'Checkbox', 'Repeater' ), true ) ) {
-			delete_acpt_meta_field_value( $args );
-			continue;
-		}
-		if ( 'Toggle' === $type ) {
-			$value = ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
-		} elseif ( 'Checkbox' === $type ) {
-			$value = is_array( $value ) ? array_values( array_map( 'sanitize_text_field', $value ) ) : array();
-		} elseif ( 'Image' === $type ) {
-			// The picker sends { id, url } (or a bare id); ACPT stores by id
-			// and derives the URL itself. An id that is not an attachment is
-			// refused rather than written, so a stray value cannot blank a
-			// picture that is fine.
-			$att = is_array( $value ) || is_object( $value )
-				? (int) ( ( (array) $value )['id'] ?? 0 )
-				: (int) $value;
-			if ( $att < 1 || 'attachment' !== get_post_type( $att ) ) {
-				continue;
-			}
-			$value = $att;
-		} elseif ( 'Repeater' === $type ) {
-			$value = minn_admin_acpt_rows_in( $field, $value, $args );
-			if ( null === $value ) {
-				continue; // malformed input never clobbers stored rows
-			}
-		}
-		$args['value'] = $value;
-		save_acpt_meta_field_value( $args );
+		) );
 	}
+}
+
+/**
+ * Write one field through ACPT's own setter.
+ *
+ * `$args` carries the context ACPT keys a value by, which is a post id for the
+ * editor panel and a menu slug for an option page; everything about coercing
+ * the value is the same either way, so both callers share this.
+ *
+ * @param object $field ACPT MetaFieldModel.
+ * @param mixed  $value Submitted value.
+ * @param array  $args  Context plus box_name / field_name.
+ */
+function minn_admin_acpt_write_one( $field, $value, $args ) {
+	$type = $field->getType();
+	if ( ( '' === $value || null === $value ) && ! in_array( $type, array( 'Checkbox', 'Repeater' ), true ) ) {
+		delete_acpt_meta_field_value( $args );
+		return;
+	}
+	if ( 'Toggle' === $type ) {
+		$value = ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
+	} elseif ( 'Checkbox' === $type ) {
+		$value = is_array( $value ) ? array_values( array_map( 'sanitize_text_field', $value ) ) : array();
+	} elseif ( 'Image' === $type ) {
+		// The picker sends { id, url } (or a bare id); ACPT stores by id and
+		// derives the URL itself. An id that is not an attachment is refused
+		// rather than written, so a stray value cannot blank a picture that
+		// is fine.
+		$att = is_array( $value ) || is_object( $value )
+			? (int) ( ( (array) $value )['id'] ?? 0 )
+			: (int) $value;
+		if ( $att < 1 || 'attachment' !== get_post_type( $att ) ) {
+			return;
+		}
+		$value = $att;
+	} elseif ( 'Url' === $type ) {
+		// ACPT keeps a display label beside the address and, given only an
+		// address, sets the label to match it. A label someone wrote is not
+		// Minn's to overwrite, so it is passed back; one that merely mirrored
+		// the old address follows the new one, which is what ACPT would do.
+		$current   = get_acpt_field( array_merge( $args, array( 'format' => 'only_value', 'return' => 'raw' ) ) );
+		$current   = is_array( $current ) ? $current : array();
+		$old_url   = isset( $current['url'] ) ? (string) $current['url'] : '';
+		$old_label = isset( $current['label'] ) ? (string) $current['label'] : '';
+		$next      = (string) $value;
+		$value     = array(
+			'url'   => $next,
+			'label' => ( '' !== $old_label && $old_label !== $old_url ) ? $old_label : $next,
+		);
+	} elseif ( 'Repeater' === $type ) {
+		$value = minn_admin_acpt_rows_in( $field, $value, $args );
+		if ( null === $value ) {
+			return; // malformed input never clobbers stored rows
+		}
+	}
+	$args['value'] = $value;
+	save_acpt_meta_field_value( $args );
 }
 
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
@@ -561,4 +629,246 @@ add_filter( 'minn_admin_license_providers', function ( $providers ) {
 	}
 
 	return $providers;
+} );
+
+/* ===== ACPT option pages as settings-only surfaces ===== */
+
+/**
+ * Option pages the current user may manage.
+ *
+ * Each page carries its own capability, the one ACPT hands to add_menu_page,
+ * so that is the gate Minn honors rather than inventing one. A page whose
+ * capability is empty denies everyone in wp-admin (current_user_can('')), and
+ * it has to read the same way here or Minn would grant what ACPT refuses.
+ *
+ * @return array Menu slug => option page model.
+ */
+function minn_admin_acpt_option_pages_allowed() {
+	$out = array();
+	if ( ! minn_admin_acpt_active() || ! class_exists( '\\ACPT\\Core\\Repository\\OptionPageRepository' ) ) {
+		return $out;
+	}
+	try {
+		$pages = \ACPT\Core\Repository\OptionPageRepository::get( array() );
+	} catch ( \Throwable $e ) {
+		return $out;
+	}
+	foreach ( (array) $pages as $page ) {
+		$slug = method_exists( $page, 'getMenuSlug' ) ? (string) $page->getMenuSlug() : '';
+		if ( '' === $slug ) {
+			continue;
+		}
+		$cap = method_exists( $page, 'getCapability' ) ? (string) $page->getCapability() : '';
+		if ( '' === $cap || ! current_user_can( $cap ) ) {
+			continue;
+		}
+		$out[ $slug ] = $page;
+	}
+	return $out;
+}
+
+/** The meta groups attached to one option page, visibility rules honored. */
+function minn_admin_acpt_option_groups_for( $slug ) {
+	$groups = array();
+	foreach ( \ACPT\Core\Repository\MetaRepository::get( array(
+		'belongsTo' => \ACPT\Constants\MetaTypes::OPTION_PAGE,
+		'find'      => $slug,
+	) ) as $group ) {
+		if ( $group->isVisible( array(
+			'belongsTo' => \ACPT\Constants\MetaTypes::OPTION_PAGE,
+			'find'      => $slug,
+		) ) ) {
+			$groups[] = $group;
+		}
+	}
+	return $groups;
+}
+
+/**
+ * One tab per meta box on the page: a box is the grouping ACPT's own screen
+ * shows, so it is the one a reader already recognises. Ids are positional and
+ * both reads and writes re-derive the same walk, so they stay stable for a
+ * given schema.
+ *
+ * @param string $slug Option page menu slug.
+ * @return array[] { id, label, fields (mapped), lookup (id => field model), locked }
+ */
+function minn_admin_acpt_option_tabs( $slug ) {
+	$tabs = array();
+	foreach ( minn_admin_acpt_option_groups_for( $slug ) as $group ) {
+		foreach ( $group->getBoxes() as $box ) {
+			$mapped = array();
+			$lookup = array();
+			$locked = 0;
+			foreach ( $box->getFields() as $field ) {
+				$simple = minn_admin_acpt_map_field( $field );
+				if ( ! $simple ) {
+					++$locked;
+					continue;
+				}
+				$mapped[]                  = $simple;
+				$lookup[ $field->getId() ] = $field;
+			}
+			if ( ! $mapped && ! $locked ) {
+				continue;
+			}
+			$tabs[] = array(
+				'id'     => 'tab-' . count( $tabs ),
+				'label'  => $box->getUiName(),
+				'fields' => $mapped,
+				'lookup' => $lookup,
+				'locked' => $locked,
+			);
+		}
+	}
+	return $tabs;
+}
+
+/** Read one option page field through ACPT's own value helper. */
+function minn_admin_acpt_option_value( $slug, $field ) {
+	$value = get_acpt_field( array(
+		'option_page' => $slug,
+		'box_name'    => $field->getBox()->getName(),
+		'field_name'  => $field->getName(),
+		'format'      => 'only_value',
+		'return'      => 'raw',
+	) );
+	return minn_admin_acpt_value_out( $field, $value );
+}
+
+/** The settings payload for one tab: control descriptors plus their values. */
+function minn_admin_acpt_option_tab_shape( $slug, $tab_id ) {
+	$tab = null;
+	foreach ( minn_admin_acpt_option_tabs( $slug ) as $t ) {
+		if ( $t['id'] === $tab_id ) {
+			$tab = $t;
+			break;
+		}
+	}
+	if ( ! $tab ) {
+		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$fields = array();
+	$values = array();
+	foreach ( $tab['fields'] as $f ) {
+		$sf = array(
+			'name'  => $f['name'],
+			'label' => $f['label'],
+			'type'  => $f['type'],
+		);
+		foreach ( array( 'min', 'max', 'step', 'subfields', 'subLocked' ) as $extra ) {
+			if ( isset( $f[ $extra ] ) ) {
+				$sf[ $extra ] = $f[ $extra ];
+			}
+		}
+		if ( isset( $f['choices'] ) ) {
+			$sf['options'] = array();
+			foreach ( (array) $f['choices'] as $value => $label ) {
+				$sf['options'][] = array( (string) $value, (string) $label );
+			}
+		}
+		$fields[] = $sf;
+		$model    = isset( $tab['lookup'][ $f['name'] ] ) ? $tab['lookup'][ $f['name'] ] : null;
+		if ( $model ) {
+			$values[ $f['name'] ] = minn_admin_acpt_option_value( $slug, $model );
+		}
+	}
+	return array(
+		'groups'   => array(
+			array(
+				'title'  => '',
+				'fields' => $fields,
+				'locked' => $tab['locked'],
+			),
+		),
+		'values'   => $values,
+		'adminUrl' => admin_url( 'admin.php?page=' . rawurlencode( $slug ) ),
+	);
+}
+
+/** Write edited option page values through ACPT's own setter. */
+function minn_admin_acpt_option_save( $slug, $values ) {
+	if ( ! is_array( $values ) ) {
+		return;
+	}
+	$lookup = array();
+	foreach ( minn_admin_acpt_option_tabs( $slug ) as $t ) {
+		$lookup += $t['lookup'];
+	}
+	foreach ( $values as $id => $value ) {
+		if ( ! isset( $lookup[ $id ] ) ) {
+			continue; // only ever the page's own mapped fields
+		}
+		$field = $lookup[ $id ];
+		$args  = array(
+			'option_page' => $slug,
+			'box_name'    => $field->getBox()->getName(),
+			'field_name'  => $field->getName(),
+		);
+		minn_admin_acpt_write_one( $field, $value, $args );
+	}
+}
+
+add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
+	$pages = minn_admin_acpt_option_pages_allowed();
+	if ( ! $pages ) {
+		return $surfaces;
+	}
+	foreach ( $pages as $slug => $page ) {
+		$tabs = minn_admin_acpt_option_tabs( $slug );
+		if ( ! $tabs ) {
+			continue; // a page with no fields is a menu entry, not a surface
+		}
+		$tab_list = array();
+		foreach ( $tabs as $t ) {
+			$tab_list[] = array( 'id' => $t['id'], 'label' => $t['label'] );
+		}
+		$surfaces[ 'acpt-options-' . sanitize_key( $slug ) ] = array(
+			'label'    => method_exists( $page, 'getMenuTitle' ) ? $page->getMenuTitle() : $slug,
+			'sub'      => 'ACPT',
+			'icon'     => 'gear',
+			'group'    => 'tools',
+			'cap'      => 'read', // the page's own capability gated the listing
+			'settings' => array(
+				'label' => __( 'Settings', 'minn-admin' ),
+				'tabs'  => $tab_list,
+				'route' => 'minn-admin/v1/acpt/options/' . rawurlencode( $slug ) . '/{tab}',
+			),
+		);
+	}
+	return $surfaces;
+} );
+
+add_action( 'rest_api_init', function () {
+	if ( ! minn_admin_acpt_active() ) {
+		return;
+	}
+	$resolve = function ( $req ) {
+		$slug  = rawurldecode( (string) $req['page'] );
+		$pages = minn_admin_acpt_option_pages_allowed();
+		return isset( $pages[ $slug ] ) ? $slug : null;
+	};
+	register_rest_route( 'minn-admin/v1', '/acpt/options/(?P<page>[A-Za-z0-9_%.\-]+)/(?P<tab>tab-\d+)', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => function ( $req ) use ( $resolve ) {
+				return (bool) $resolve( $req ); // the page's own capability decided this
+			},
+			'callback'            => function ( $req ) use ( $resolve ) {
+				return rest_ensure_response( minn_admin_acpt_option_tab_shape( $resolve( $req ), (string) $req['tab'] ) );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => function ( $req ) use ( $resolve ) {
+				return (bool) $resolve( $req );
+			},
+			'callback'            => function ( $req ) use ( $resolve ) {
+				$slug = $resolve( $req );
+				$body = $req->get_json_params();
+				minn_admin_acpt_option_save( $slug, isset( $body['values'] ) ? $body['values'] : array() );
+				return rest_ensure_response( minn_admin_acpt_option_tab_shape( $slug, (string) $req['tab'] ) );
+			},
+		),
+	) );
 } );
