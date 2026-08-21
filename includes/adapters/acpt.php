@@ -809,34 +809,28 @@ function minn_admin_acpt_option_save( $slug, $values ) {
 	}
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	$pages = minn_admin_acpt_option_pages_allowed();
-	if ( ! $pages ) {
-		return $surfaces;
-	}
-	foreach ( $pages as $slug => $page ) {
+// Option pages gather under the shared Site options item rather than each
+// claiming a place in the sidebar; see adapters/option-pages.php.
+add_filter( 'minn_admin_option_pages', function ( $pages ) {
+	foreach ( minn_admin_acpt_option_pages_allowed() as $slug => $page ) {
 		$tabs = minn_admin_acpt_option_tabs( $slug );
 		if ( ! $tabs ) {
-			continue; // a page with no fields is a menu entry, not a surface
+			continue; // a page with no fields is a menu entry, not a tab
 		}
 		$tab_list = array();
 		foreach ( $tabs as $t ) {
 			$tab_list[] = array( 'id' => $t['id'], 'label' => $t['label'] );
 		}
-		$surfaces[ 'acpt-options-' . sanitize_key( $slug ) ] = array(
-			'label'    => method_exists( $page, 'getMenuTitle' ) ? $page->getMenuTitle() : $slug,
-			'sub'      => 'ACPT',
-			'icon'     => 'gear',
-			'group'    => 'tools',
-			'cap'      => 'read', // the page's own capability gated the listing
-			'settings' => array(
-				'label' => __( 'Settings', 'minn-admin' ),
-				'tabs'  => $tab_list,
-				'route' => 'minn-admin/v1/acpt/options/' . rawurlencode( $slug ) . '/{tab}',
-			),
+		$pages[] = array(
+			'id'     => 'acpt:' . $slug,
+			'label'  => method_exists( $page, 'getMenuTitle' ) ? $page->getMenuTitle() : $slug,
+			'source' => 'ACPT',
+			'cap'    => method_exists( $page, 'getCapability' ) ? (string) $page->getCapability() : 'manage_options',
+			'tabs'   => $tab_list,
+			'route'  => 'minn-admin/v1/acpt/options/' . rawurlencode( $slug ) . '/{tab}',
 		);
 	}
-	return $surfaces;
+	return $pages;
 } );
 
 add_action( 'rest_api_init', function () {

@@ -2722,67 +2722,57 @@ function minn_admin_acf_options_menu_target( $anchor, $tab_id ) {
 	return null;
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
+// Option pages gather under the shared Site options item rather than
+// claiming their own place in the sidebar; see adapters/option-pages.php.
+add_filter( 'minn_admin_option_pages', function ( $pages ) {
 	if ( ! minn_admin_acf_options_active() ) {
-		return $surfaces;
+		return $pages;
 	}
-	$map     = minn_admin_acf_options_menu_map();
 	$allowed = minn_admin_acf_options_pages_allowed();
-	$reg     = function ( $id, $label, $cap, $slug, $tabs ) use ( &$surfaces ) {
-		$tab_list = array();
-		foreach ( $tabs as $t ) {
-			$tab_list[] = array(
-				'id'    => $t['id'],
-				'label' => $t['label'],
-			);
-		}
-		$surfaces[ $id ] = array(
-			'label'    => $label,
-			'sub'      => 'ACF',
-			'icon'     => 'gear',
-			'cap'      => $cap,
-			'settings' => array(
-				'label' => __( 'Settings', 'minn-admin' ),
-				'tabs'  => $tab_list,
-				'route' => 'minn-admin/v1/acf/options/' . rawurlencode( $slug ) . '/{tab}',
-			),
-		);
-	};
-	// ONE sidebar item for every options page. Registering one per page put
-	// a site's options into top-level navigation three and four items at a
-	// time; they belong together, the way ACF's own parent menu shows them.
-	$tabs = minn_admin_acf_options_all_tabs();
-	if ( ! $tabs ) {
-		return $surfaces;
+	$tabs    = minn_admin_acf_options_all_tabs();
+	if ( ! $tabs || ! $allowed ) {
+		return $pages;
 	}
-	// Name it after the single source when there IS only one — a site whose
-	// only page is "Theme Options" should say so rather than be renamed by
-	// Minn. More than one, and no page's name can speak for the rest.
+	// ACF's pages arrive already merged into one tab list, each tab knowing
+	// the page it came from, so they contribute as one entry: the shared
+	// surface names a single-tab entry after itself, and ACF's own naming
+	// (a page title for a one-tab page) already ran on the way here.
+	$map     = minn_admin_acf_options_menu_map();
 	$sources = array();
 	foreach ( $tabs as $t ) {
 		$sources[ $t['_page'] ] = true;
 	}
-	$menu_label = '';
+	$label = '';
 	if ( 1 === count( $sources ) ) {
-		$only       = $allowed[ key( $sources ) ];
-		$menu_label = ! empty( $only['page_title'] ) ? $only['page_title'] : $only['menu_slug'];
+		$only  = $allowed[ key( $sources ) ];
+		$label = ! empty( $only['page_title'] ) ? $only['page_title'] : $only['menu_slug'];
 	} else {
-		foreach ( $map['menus'] as $anchor => $menu ) {
+		foreach ( $map['menus'] as $menu ) {
 			// A parent menu that covers every page keeps its own name.
 			if ( count( $menu['members'] ) === count( $sources ) ) {
-				$menu_label = $menu['label'];
+				$label = $menu['label'];
 			}
 		}
 	}
-	if ( '' === $menu_label ) {
-		$menu_label = __( 'Site Options', 'minn-admin' );
+	if ( '' === $label ) {
+		$label = __( 'Site Options', 'minn-admin' );
 	}
-	// Nav gate: the first contributing page's capability. Every page here
-	// already passed pages_allowed for this user, and each tab's data is
-	// cap-filtered again at request time.
-	$first = $allowed[ key( $sources ) ];
-	$reg( 'acf-options', $menu_label, ! empty( $first['capability'] ) ? $first['capability'] : 'edit_posts', MINN_ADMIN_ACF_OPTIONS_ALL, $tabs );
-	return $surfaces;
+	$first    = $allowed[ key( $sources ) ];
+	$tab_list = array();
+	foreach ( $tabs as $t ) {
+		$tab_list[] = array( 'id' => $t['id'], 'label' => $t['label'] );
+	}
+	$pages[] = array(
+		'id'     => 'acf:options',
+		'label'  => $label,
+		'source' => 'ACF',
+		// Every page here already passed pages_allowed for this user, and each
+		// tab's data is capability-filtered again at request time.
+		'cap'    => ! empty( $first['capability'] ) ? $first['capability'] : 'edit_posts',
+		'tabs'   => $tab_list,
+		'route'  => 'minn-admin/v1/acf/options/' . rawurlencode( MINN_ADMIN_ACF_OPTIONS_ALL ) . '/{tab}',
+	);
+	return $pages;
 } );
 
 add_action( 'rest_api_init', function () {

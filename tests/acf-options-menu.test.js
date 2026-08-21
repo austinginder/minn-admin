@@ -22,7 +22,7 @@ const { launch, login, reporter } = require( './helpers' );
 	await page.waitForFunction( () => window.MINN && Array.isArray( window.MINN.surfaces ), null, { timeout: 15000 } );
 
 	const surfaces = await page.evaluate( () =>
-		( window.MINN.surfaces || [] ).filter( ( s ) => s.id && /^acf-options/.test( s.id ) )
+		( window.MINN.surfaces || [] ).filter( ( s ) => s.id && /^(site-options|acf-options)/.test( s.id ) )
 			.map( ( s ) => ( {
 				id: s.id, label: s.label,
 				tabs: ( s.settings && s.settings.tabs || [] ).map( ( x ) => x.label ),

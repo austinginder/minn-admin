@@ -132,6 +132,8 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/generateblocks.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/otter.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/essential-blocks.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/etch.php';
+// Loaded after every provider so it can gather what they contribute.
+require_once MINN_ADMIN_DIR . 'includes/adapters/option-pages.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/spam.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cleantalk.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/site-status.php';

@@ -25,7 +25,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
 
 	const surfaces = await page.evaluate( () => ( window.MINN.surfaces || [] )
-		.filter( ( s ) => /^acpt-options-/.test( s.id ) )
+		.filter( ( s ) => 'site-options' === s.id )
 		.map( ( s ) => ( {
 			id: s.id, label: s.label, sub: s.sub, group: s.group,
 			tabs: ( s.settings && s.settings.tabs || [] ).length,
@@ -43,6 +43,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'it is a settings-only surface', surface.tabs > 0 && ! surface.hasCollection, JSON.stringify( surface ) );
 	t.check( 'it is filed under Tools and badged ACPT',
 		surface.group === 'tools' && surface.sub === 'ACPT', JSON.stringify( surface ) );
+	t.check( 'it shares the one Site options item, not one per page',
+		surface.id === 'site-options' && /minn-admin\/v1\/options\//.test( surface.route ), surface.route );
 
 	const api = ( path, opts ) => page.evaluate( async ( a ) => {
 		const r = await fetch( window.MINN.restUrl + a.path, Object.assign( {
