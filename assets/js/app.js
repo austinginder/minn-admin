@@ -5087,6 +5087,21 @@
 
 	const STATUS_LABELS = { publish: __( 'Published' ), draft: __( 'Draft' ), future: __( 'Scheduled' ), pending: __( 'Pending' ), private: __( 'Private' ), trash: __( 'Trashed' ) };
 
+	/* What a row's status pill says on hover. Both extra states it can carry
+	 * ride as dots ON the pill rather than as pills of their own: the status
+	 * column is a narrow fixed track, and a second pill wide enough to name
+	 * somebody ("Adashi is editing") simply painted across the author beside
+	 * it. The dot marks it, the tooltip names it. */
+	function statusPillTitle( p ) {
+		const bits = [];
+		if ( p.unsaved ) bits.push( __( 'Unsaved edits: an autosave is newer than what the site is serving.' ) );
+		if ( p.lockedBy ) {
+			/* translators: %s: the name of the person who has the post open. */
+			bits.push( sprintf( __( '%s has this open in an editor right now.' ), p.lockedBy ) );
+		}
+		return bits.join( ' ' );
+	}
+
 	// Title and Date only — author and status are not useful sort keys here
 	// and status is not a WP REST orderby.
 	const CONTENT_SORT_COLS = {
@@ -5268,7 +5283,7 @@
 							${ p.builder ? `<span class="minn-builder-chip" title="Managed with ${ esc( p.builder.name ) }">${ esc( p.builder.name ) }</span>` : '' }
 						</div>
 					</div>
-					<div class="minn-row-status"><span class="minn-status ${ esc( p.status ) }"${ p.unsaved ? ` title="${ esc( __( 'Unsaved edits: an autosave is newer than what the site is serving.' ) ) }"` : '' }>${ STATUS_LABELS[ p.status ] || esc( p.status ) }${ p.unsaved ? `<span class="minn-row-modified" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( __( 'Unsaved edits' ) ) }</span>` : '' }</span>${ p.lockedBy ? `<span class="minn-status editing" title="${ esc( p.lockedBy ) } has this open in an editor right now">${ esc( p.lockedBy ) } is editing</span>` : '' }</div>
+					<div class="minn-row-status"><span class="minn-status ${ esc( p.status ) }"${ statusPillTitle( p ) ? ` title="${ esc( statusPillTitle( p ) ) }"` : '' }>${ STATUS_LABELS[ p.status ] || esc( p.status ) }${ p.unsaved ? `<span class="minn-row-modified" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( __( 'Unsaved edits' ) ) }</span>` : '' }${ p.lockedBy ? `<span class="minn-row-locked" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( sprintf( /* translators: %s: the name of the person editing. */ __( '%s is editing' ), p.lockedBy ) ) }</span>` : '' }</span></div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
 					<div class="minn-row-meta minn-row-date" title="${ esc( parseWpDate( p.date ).toLocaleString( uiLocale() ) ) }">${ timeAgo( p.date ) }</div>
 					${ state.contentTrash ? `
@@ -23790,7 +23805,13 @@
 		// Mutually exclusive with the image and pattern doorways (those win;
 		// their nested text still reaches the modal through the ⚙ popover).
 		// Slot containers never take this path — their children are live DOM.
-		const kidCount = imgTool || patternRef ? 0 : islandChildCount( raw );
+		// A block whose copy lives in comment attributes edits in place, and
+		// the content modal cannot reach those leaves: it offered a card per
+		// child with nothing in it but the wrapper's tag, which is no way to
+		// change a word and every way to break a layout. The ⚙ popover
+		// remains the door to structure.
+		const attrCopy = etchTextRunsOf( raw || '' ).length > 0;
+		const kidCount = imgTool || patternRef || attrCopy ? 0 : islandChildCount( raw );
 		const ctool = kidCount >= 2;
 		/* translators: %d: number of nested blocks */
 		const ctedBadge = ctool ? sprintf( __( 'Edit content · %d' ), kidCount ) : '';
@@ -24439,6 +24460,59 @@
 
 	const ISLAND_RUN_SKIP_BLOCKS = [ 'embed', 'gallery' ]; // mediaRebuild — the URL is itself a text node
 
+	/**
+	 * Anchor an image card's action label over the image itself.
+	 *
+	 * The label is centred on the card by default, which is right when the
+	 * card IS the picture. On a card that holds a whole page section the
+	 * centre is someone's copy, so the label sat on top of the words and
+	 * over the place they are clicked to edit. Falls back to the card centre
+	 * when there is no laid-out image to sit on.
+	 */
+	function placeImgBadge( island ) {
+		if ( ! island ) return;
+		const badge = island.querySelector( ':scope > .minn-imgtool-badge' );
+		if ( ! badge ) return;
+		const preview = island.querySelector( ':scope > .minn-island-preview' );
+		const img = preview ? preview.querySelector( 'img' ) : null;
+		const clear = () => {
+			badge.style.removeProperty( 'top' );
+			badge.style.removeProperty( 'left' );
+			[ 'top', 'left', 'width', 'height' ].forEach( ( k ) => island.style.removeProperty( '--minn-imgbox-' + k ) );
+		};
+		if ( ! img ) return clear();
+		const ir = img.getBoundingClientRect();
+		const br = island.getBoundingClientRect();
+		// An image that hasn't laid out yet (lazy, still loading) would put
+		// the label in the corner; leave it centred until it has a box.
+		if ( ir.width < 8 || ir.height < 8 ) return clear();
+		badge.style.top = Math.round( ir.top - br.top + ir.height / 2 ) + 'px';
+		badge.style.left = Math.round( ir.left - br.left + ir.width / 2 ) + 'px';
+		// The hover wash reads the same box, so it covers the picture rather
+		// than the whole section.
+		island.style.setProperty( '--minn-imgbox-top', Math.round( ir.top - br.top ) + 'px' );
+		island.style.setProperty( '--minn-imgbox-left', Math.round( ir.left - br.left ) + 'px' );
+		island.style.setProperty( '--minn-imgbox-width', Math.round( ir.width ) + 'px' );
+		island.style.setProperty( '--minn-imgbox-height', Math.round( ir.height ) + 'px' );
+		// A preview keeps settling after the pointer arrives: the picture may
+		// still be loading, and the block's own stylesheet lands with it. Both
+		// move the box this was measured against, so take it again once the
+		// frame is done, and again when the picture reports its real size.
+		if ( ! badge._minnPlacing ) {
+			badge._minnPlacing = true;
+			requestAnimationFrame( () => {
+				badge._minnPlacing = false;
+				if ( island.isConnected ) placeImgBadge( island );
+			} );
+		}
+		if ( ! img.complete && ! img._minnBadgeBound ) {
+			img._minnBadgeBound = true;
+			img.addEventListener( 'load', () => {
+				if ( island.isConnected ) placeImgBadge( island );
+			}, { once: true } );
+		}
+	}
+
 	function armIslandTextRuns( body, ed ) {
 		if ( ! body || ! ed || ! ed.islands || ed.mode === 'locked' ) return;
 		$$( '.minn-block-island', body ).forEach( ( island ) => {
@@ -24547,6 +24621,9 @@
 			}
 			hint.textContent = __( 'Text is editable in place · structure via ⚙' );
 		} );
+		// Measure image boxes now rather than on first hover, or the wash
+		// covers the whole card for the frame before the pointer settles.
+		$$( '.minn-block-island[data-imgtool]', body ).forEach( placeImgBadge );
 	}
 
 	// Splice the current span texts back into the island's raw markup. Reads
@@ -29346,7 +29423,15 @@
 				openImagesEditor( idx, island, raw, info, { focus: focus === -1 ? null : focus } );
 				return;
 			}
-			const oldUrl = src && islandImageUrls( raw ).find( ( u ) => u === src || src.endsWith( u ) || u.endsWith( src ) );
+			// A press on the label carries no image of its own, so it stands
+			// for the one picture the card holds. Without this the button
+			// that says "Replace image" did nothing at all, which is easy to
+			// miss while the label sits away from the picture and easy to hit
+			// once it sits on top of it.
+			const urls = islandImageUrls( raw );
+			const oldUrl = src
+				? urls.find( ( u ) => u === src || src.endsWith( u ) || u.endsWith( src ) )
+				: ( badge ? urls[ 0 ] : '' );
 			if ( ! oldUrl ) return;
 			e.preventDefault();
 			closeInspector();
@@ -29651,6 +29736,44 @@
 			e.preventDefault();
 			openLinkPop( a );
 		} );
+		// A link inside a preview answers a right-click, the way everything
+		// else in Minn does. A button in a builder's block is a destination
+		// as much as a phrase, and its text was editable in place while its
+		// destination was only reachable by knowing the ⚙ popover lists it.
+		body.addEventListener( 'contextmenu', ( e ) => {
+			const preview = e.target.closest && e.target.closest( '.minn-block-island > .minn-island-preview' );
+			if ( ! preview ) return;
+			const island = preview.closest( '.minn-block-island' );
+			const ed2 = state.editor;
+			if ( ! island || ! ed2 || ! ed2.islands ) return;
+			const idx = parseInt( island.dataset.island, 10 );
+			const raw = ed2.islands[ idx ];
+			if ( raw == null ) return;
+			const anchor = e.target.closest( 'a' );
+			const href = anchor ? ( anchor.getAttribute( 'href' ) || '' ) : '';
+			const urls = islandLinkRows( raw );
+			// Pair the clicked anchor with the stored destination it came
+			// from; without an anchor, offer the block's links anyway.
+			const hit = href ? urls.findIndex( ( u ) => u === href || href.endsWith( u ) || u.endsWith( href ) ) : -1;
+			if ( ! urls.length ) return;
+			e.preventDefault();
+			e.stopPropagation();
+			openMinnMenu( e.clientX, e.clientY, [
+				{
+					label: hit >= 0 ? __( 'Edit link…' ) : __( 'Edit links…' ),
+					run: () => openInspector( island ).then( () => {
+						// The popover paints its fields after this resolves,
+						// so reach for the field on the next frame.
+						requestAnimationFrame( () => {
+							const field = document.querySelector( `[data-insplink="${ hit >= 0 ? hit : 0 }"]` );
+							if ( ! field ) return;
+							field.focus();
+							field.select();
+						} );
+					} ).catch( () => {} ),
+				},
+			] );
+		} );
 		// Hovering editable text inside an image card: the card stops advertising
 		// itself as one button, because right there it is not one.
 		body.addEventListener( 'pointerover', ( e ) => {
@@ -29658,6 +29781,12 @@
 			$$( '.minn-run-hover', body ).forEach( ( el ) => { if ( el !== isl ) el.classList.remove( 'minn-run-hover' ); } );
 			if ( ! isl ) return;
 			isl.classList.toggle( 'minn-run-hover', !! e.target.closest( '.minn-island-run' ) );
+			// Sit the label on the picture it acts on. It defaults to the
+			// middle of the card, which on a card that is a whole page
+			// section is a paragraph of someone's copy: the label covered the
+			// words and took the space they are edited in. Measured on entry
+			// rather than every frame, since only layout moves it.
+			placeImgBadge( isl );
 		} );
 
 		// Right-click inside a column → column ops on THAT column, the shape the
@@ -30617,13 +30746,21 @@
 	function islandLinkRows( raw ) {
 		const s = String( raw || '' );
 		const out = [];
+		const add = ( u ) => {
+			if ( ! u ) return;
+			if ( /\.(?:jpe?g|png|gif|webp|avif)(?:$|[?#])/i.test( u ) ) return; // the Images flow's territory
+			if ( ! out.includes( u ) ) out.push( u );
+		};
 		const re = /<a\s[^>]*?\bhref="([^"]+)"/gi;
 		let m;
-		while ( ( m = re.exec( s ) ) ) {
-			const u = m[ 1 ];
-			if ( /\.(?:jpe?g|png|gif|webp|avif)(?:$|[?#])/i.test( u ) ) continue; // the Images flow's territory
-			if ( ! out.includes( u ) ) out.push( u );
-		}
+		while ( ( m = re.exec( s ) ) ) add( m[ 1 ] );
+		// A builder that keeps its markup as data rather than as HTML holds
+		// the destination in the block comment instead (Etch writes an anchor
+		// as tag "a" with an attributes object), so a button's link was not
+		// offered anywhere. Read it as written, unescaped: swapIslandLink
+		// puts back whichever spelling the file actually stores.
+		const jsonRe = /"href"\s*:\s*"([^"]+)"/gi;
+		while ( ( m = jsonRe.exec( s ) ) ) add( m[ 1 ].split( '\\/' ).join( '/' ) );
 		return out;
 	}
 

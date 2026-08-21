@@ -2585,6 +2585,16 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   background: rgba(8, 8, 12, 0.45); opacity: 0; transition: opacity 0.15s;
   pointer-events: none;
 }
+/* The wash says "this is the button". When the card IS the picture that is
+   the whole card, but on a card holding a page section it greyed out the
+   copy as well, which is both wrong (the copy is not the button) and in the
+   way of reading it. The measured image box narrows it; a card with no
+   image box measured yet keeps the full-card wash. */
+.minn-block-island[data-imgtool]::after {
+  inset: auto;
+  top: var(--minn-imgbox-top, 0); left: var(--minn-imgbox-left, 0);
+  width: var(--minn-imgbox-width, 100%); height: var(--minn-imgbox-height, 100%);
+}
 .minn-block-island[data-imgtool]:hover::after,
 .minn-block-island[data-cted]:hover::after { opacity: 1; }
 .minn-block-island[data-imgtool] > .minn-island-chip,
@@ -3513,7 +3523,13 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--amber); margin-inline-start: 6px;
 }
-.minn-status.editing { color: var(--blue-text); background: rgba(91,155,224,0.14); }
+/* Someone has this open in an editor. Same dot treatment as unsaved edits,
+   in blue so the two read apart at a glance; the pill's tooltip names who. */
+.minn-row-locked {
+  display: inline-block; vertical-align: middle;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--blue-text); margin-inline-start: 6px;
+}
 
 /* ===== Users ===== */
 .minn-user-cols { grid-template-columns: 40px 52px 1.2fr 1.4fr 130px 110px 40px; }

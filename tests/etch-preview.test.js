@@ -128,5 +128,84 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'the section keeps a painted background',
 		!! ( visual && visual.sectionBg && visual.sectionBg !== 'rgba(0, 0, 0, 0)' ), JSON.stringify( visual ) );
 
+	/* ===== The image label sits on the image, not on the copy =====
+	   A card that holds a whole page section is mostly text, so a label
+	   centred on the card lands on someone's words and over the place they
+	   are clicked to edit. */
+	const imgIsland = await page.$( '.minn-block-island[data-imgtool] img' );
+	if ( imgIsland ) {
+		await imgIsland.hover();
+		await page.waitForTimeout( 600 );
+		const badge = await page.evaluate( () => {
+			const island = document.querySelector( '.minn-block-island[data-imgtool]' );
+			const b = island && island.querySelector( ':scope > .minn-imgtool-badge' );
+			const img = island && island.querySelector( ':scope > .minn-island-preview img' );
+			if ( ! b || ! img ) return null;
+			const br = b.getBoundingClientRect();
+			const ir = img.getBoundingClientRect();
+			const hits = [ ...island.querySelectorAll( '.minn-island-run' ) ].filter( ( r ) => {
+				const rr = r.getBoundingClientRect();
+				return ! ( br.right < rr.left || br.left > rr.right || br.bottom < rr.top || br.top > rr.bottom );
+			} ).length;
+			return {
+				dx: Math.abs( ( br.left + br.right ) / 2 - ( ir.left + ir.right ) / 2 ),
+				dy: Math.abs( ( br.top + br.bottom ) / 2 - ( ir.top + ir.bottom ) / 2 ),
+				overRuns: hits,
+			};
+		} );
+		t.check( 'the image label is anchored to its image', !! badge && badge.dx < 4 && badge.dy < 4, JSON.stringify( badge ) );
+		t.check( 'the image label covers no editable copy', !! badge && badge.overRuns === 0, JSON.stringify( badge ) );
+		// The hover wash marks what the click acts on. On a card that is a
+		// whole page section it used to grey the copy out as well.
+		const wash = await page.evaluate( () => {
+			const island = document.querySelector( '.minn-block-island[data-imgtool]' );
+			const img = island && island.querySelector( ':scope > .minn-island-preview img' );
+			if ( ! img ) return null;
+			const after = getComputedStyle( island, '::after' );
+			const ir = img.getBoundingClientRect();
+			const br = island.getBoundingClientRect();
+			return {
+				washW: parseFloat( after.width ), washH: parseFloat( after.height ),
+				imgW: Math.round( ir.width ), imgH: Math.round( ir.height ),
+				islandH: Math.round( br.height ),
+			};
+		} );
+		t.check( 'the hover wash covers the image, not the whole card',
+			!! wash && Math.abs( wash.washH - wash.imgH ) < 4 && Math.abs( wash.washW - wash.imgW ) < 4,
+			JSON.stringify( wash ) );
+
+		// Pressing the picture opens the picker. The label sits on the
+		// picture now, so a real click lands on the label, which used to
+		// carry no image of its own and quietly did nothing.
+		const box = await ( await page.$( '.minn-block-island[data-imgtool] .minn-island-preview img' ) ).boundingBox();
+		if ( box ) {
+			await page.mouse.click( box.x + box.width / 2, box.y + box.height / 2 );
+			await page.waitForTimeout( 1500 );
+			const opened = await page.evaluate( () => !! document.querySelector( '.minn-modal' ) );
+			t.check( 'clicking the picture opens the replace picker', opened, '' );
+			await page.keyboard.press( 'Escape' );
+			await page.waitForTimeout( 400 );
+		}
+	}
+
+	/* ===== A button's destination is editable ===== */
+	const links = await page.evaluate( () => {
+		const island = [ ...document.querySelectorAll( '.minn-block-island' ) ]
+			.find( ( el ) => el._minnRuns && /"href"\s*:\s*"/.test( el._minnRuns.base ) );
+		if ( ! island ) return { none: true };
+		const stored = ( island._minnRuns.base.match( /"href"\s*:\s*"([^"]+)"/g ) || [] ).length;
+		const chip = island.querySelector( '.minn-island-chip' );
+		if ( chip ) chip.click();
+		return { none: false, stored };
+	} );
+	if ( links.none ) {
+		t.check( 'link destinations are offered', true, 'no links on this page — skipped' );
+	} else {
+		await page.waitForTimeout( 1200 );
+		const shown = await page.evaluate( () => [ ...document.querySelectorAll( '[data-insplink]' ) ].map( ( i ) => i.value ) );
+		t.check( 'link destinations are offered for editing', shown.length > 0,
+			JSON.stringify( { stored: links.stored, shown } ) );
+	}
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
