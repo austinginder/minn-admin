@@ -18,7 +18,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 	const t = reporter( 'acf-field-groups' );
 	const { browser, page, errors } = await launch();
 	await login( page );
-	await page.goto( BASE + '/minn-admin/acf-field-groups', { waitUntil: 'domcontentloaded' } );
+	await page.goto( BASE + '/minn-admin/field-groups', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-surface-add', { timeout: 20000 } );
 
 	const api = ( method, route, body ) => page.evaluate( async ( a ) => {
@@ -121,7 +121,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		t.check( 'choice field renders its choices', toneChoice );
 
 		/* ===== Edit a field through the detail modal ===== */
-		await page.goto( BASE + '/minn-admin/acf-field-groups', { waitUntil: 'domcontentloaded' } );
+		await page.goto( BASE + '/minn-admin/field-groups', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '[data-sview="x0"]', { timeout: 20000 } );
 		await page.click( '[data-sview="x0"]' );
 		await pickGroupTab();

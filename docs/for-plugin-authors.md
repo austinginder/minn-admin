@@ -779,6 +779,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
 | `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
 | `minn_admin_option_pages` | filter | Add a page of site-wide fields to the shared Site options item |
+| `minn_admin_field_group_sources` | filter | Add your field groups as a view on the shared Field Groups item |
 | `minn_admin_cache_purgers` | filter | Join the "Clear site cache" palette command |
 | `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
 | `minn_admin_license_providers` | filter | Report your license state on the Licenses card, optionally with activate / deactivate / re-verify |
@@ -1508,6 +1509,40 @@ per-user folder modes work by just reading your own scoped state. The bundled
 providers in `includes/adapters/media-folders.php` (FileBird, Real Media
 Library, Folders by Premio) are the reference; copy whichever storage shape
 matches yours (custom tables, an API, or a plain taxonomy). Since 0.18.0.
+
+## Field groups — one item, a view per plugin
+
+ACF and ACPT both describe the same idea, a named group of fields attached to
+something, and each used to claim its own sidebar entry. They share one **Field
+Groups** item, a view per plugin:
+
+```php
+add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
+	$sources[] = array(
+		'id'         => 'my-plugin',
+		'label'      => 'My Plugin',   // names the view's tab
+		'cap'        => 'manage_options',
+		'collection' => array( /* the usual collection descriptor */ ),
+		'views'      => array( /* optional: further lists of your own */ ),
+	);
+	return $sources;
+} );
+```
+
+`collection` is the ordinary collection vocabulary documented above, so a
+provider keeps whatever it offers: columns, tabs, actions, `create`, `import`,
+`open`. Bring more lists of your own in `views` and they stay directly behind
+yours in the switcher.
+
+A view rather than one mixed list is deliberate. A row's verbs are not the same
+everywhere: groups that edit inside Minn and groups whose builder lives in the
+plugin's own canvas belong in lists that can each be honest about what they do.
+If your builder is a canvas Minn does not rebuild, list the groups and give the
+row an `href` action into your screen rather than a half-built form.
+
+The first provider's list is the surface's `collection`; the rest become views
+named for their plugin. One provider needs no switcher and badges the item with
+its name instead.
 
 ## Site options — one item for every plugin's option pages
 

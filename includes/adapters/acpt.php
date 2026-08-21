@@ -866,3 +866,115 @@ add_action( 'rest_api_init', function () {
 		),
 	) );
 } );
+
+/* ===== ACPT field groups: a read-only view on the shared Field groups item ===== */
+
+/** Where one ACPT group is attached, in words. */
+function minn_admin_acpt_group_applies_to( $group ) {
+	$labels = array();
+	foreach ( (array) $group->getBelongs() as $belong ) {
+		$kind = method_exists( $belong, 'getBelongsTo' ) ? (string) $belong->getBelongsTo() : '';
+		$find = method_exists( $belong, 'getFind' ) ? (string) $belong->getFind() : '';
+		if ( '' === $find ) {
+			continue;
+		}
+		switch ( $kind ) {
+			case \ACPT\Constants\MetaTypes::CUSTOM_POST_TYPE:
+				$obj      = get_post_type_object( $find );
+				$labels[] = $obj && ! empty( $obj->labels->name ) ? $obj->labels->name : $find;
+				break;
+			case \ACPT\Constants\MetaTypes::OPTION_PAGE:
+				$pages    = minn_admin_acpt_option_pages_allowed();
+				$labels[] = isset( $pages[ $find ] ) && method_exists( $pages[ $find ], 'getMenuTitle' )
+					? $pages[ $find ]->getMenuTitle()
+					: $find;
+				break;
+			case \ACPT\Constants\MetaTypes::TAXONOMY:
+				$tax      = get_taxonomy( $find );
+				$labels[] = $tax && ! empty( $tax->labels->name ) ? $tax->labels->name : $find;
+				break;
+			case \ACPT\Constants\MetaTypes::USER:
+				$labels[] = __( 'Users', 'minn-admin' );
+				break;
+			default:
+				$labels[] = $find;
+		}
+	}
+	return $labels ? implode( ', ', array_unique( $labels ) ) : '';
+}
+
+/** One row per ACPT field group. */
+function minn_admin_acpt_group_rows() {
+	$rows = array();
+	foreach ( \ACPT\Core\Repository\MetaRepository::get( array() ) as $group ) {
+		$boxes  = (array) $group->getBoxes();
+		$fields = 0;
+		foreach ( $boxes as $box ) {
+			$fields += count( (array) $box->getFields() );
+		}
+		$rows[] = array(
+			'id'       => method_exists( $group, 'getId' ) ? (string) $group->getId() : (string) $group->getName(),
+			'name'     => method_exists( $group, 'getUIName' ) ? $group->getUIName() : $group->getName(),
+			'applies'  => minn_admin_acpt_group_applies_to( $group ),
+			'boxes'    => count( $boxes ),
+			'fields'   => $fields,
+			// ACPT's schema builder is its own multi-step canvas, so the row
+			// points at the group there rather than pretending to rebuild it.
+			'editUrl'  => minn_admin_acpt_admin_url( 'meta' ),
+		);
+	}
+	usort( $rows, function ( $a, $b ) {
+		return strcasecmp( (string) $a['name'], (string) $b['name'] );
+	} );
+	return $rows;
+}
+
+add_action( 'rest_api_init', function () {
+	if ( ! minn_admin_acpt_active() ) {
+		return;
+	}
+	register_rest_route( 'minn-admin/v1', '/acpt/groups', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_acpt_can_manage',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$rows = minn_admin_acpt_group_rows();
+			$q    = strtolower( trim( (string) $request->get_param( 'q' ) ) );
+			if ( '' !== $q ) {
+				$rows = array_values( array_filter( $rows, function ( $row ) use ( $q ) {
+					return false !== strpos( strtolower( $row['name'] . ' ' . $row['applies'] ), $q );
+				} ) );
+			}
+			return rest_ensure_response( array( 'items' => $rows, 'total' => count( $rows ) ) );
+		},
+	) );
+} );
+
+add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
+	if ( ! minn_admin_acpt_active() || ! minn_admin_acpt_can_manage() ) {
+		return $sources;
+	}
+	$sources[] = array(
+		'id'         => 'acpt',
+		'label'      => 'ACPT',
+		'cap'        => 'manage_options',
+		'collection' => array(
+			'viewLabel' => 'ACPT',
+			'route'     => 'minn-admin/v1/acpt/groups',
+			'itemsKey'  => 'items',
+			'totalKey'  => 'total',
+			'search'    => true,
+			'columns'   => array(
+				array( 'key' => 'name', 'label' => __( 'Group', 'minn-admin' ) ),
+				array( 'key' => 'applies', 'label' => __( 'Applies to', 'minn-admin' ) ),
+				array( 'key' => 'boxes', 'label' => __( 'Boxes', 'minn-admin' ), 'width' => 90, 'format' => 'num' ),
+				array( 'key' => 'fields', 'label' => __( 'Fields', 'minn-admin' ), 'width' => 90, 'format' => 'num' ),
+			),
+			'actions'   => array(
+				// A canvas Minn does not rebuild is an honest link, not a
+				// half-built form: the row opens the group where it is edited.
+				array( 'label' => __( 'Edit in ACPT', 'minn-admin' ), 'href' => '{editUrl}' ),
+			),
+		),
+	);
+	return $sources;
+} );

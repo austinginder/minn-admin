@@ -13,7 +13,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	const t = reporter( 'acf-import-export' );
 	const { browser, page, errors } = await launch();
 	await login( page );
-	await page.goto( BASE + '/minn-admin/acf-field-groups', { waitUntil: 'domcontentloaded' } );
+	await page.goto( BASE + '/minn-admin/field-groups', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-surface-add', { timeout: 20000 } );
 
 	const api = ( method, route, body ) => page.evaluate( async ( a ) => {

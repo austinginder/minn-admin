@@ -12,7 +12,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 	const t = reporter( 'field-group-builder' );
 	const { browser, page, errors } = await launch();
 	await login( page );
-	await page.goto( BASE + '/minn-admin/acf-field-groups', { waitUntil: 'domcontentloaded' } );
+	await page.goto( BASE + '/minn-admin/field-groups', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-surface-add', { timeout: 20000 } );
 
 	const api = ( method, route, body ) => page.evaluate( async ( a ) => {

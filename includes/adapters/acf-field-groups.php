@@ -199,9 +199,10 @@ function minn_admin_acf_schema_editable_field( $key ) {
 	return array( 'field' => $field, 'group' => $group );
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
+// Field groups share one item across plugins; see adapters/field-groups.php.
+add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
 	if ( ! minn_admin_acf_schema_active() ) {
-		return $surfaces;
+		return $sources;
 	}
 	// One flat "attach to" choice list for new groups: the common single-rule
 	// locations. Multi-rule locations are ACF-editor territory.
@@ -229,13 +230,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		}
 	}
 
-	$surfaces['acf-field-groups'] = array(
-		'label'      => __( 'Field Groups', 'minn-admin' ),
-		'sub'        => 'ACF',
-		'icon'       => 'grid',
+	$sources[] = array(
+		'id'         => 'acf',
+		'label'      => 'ACF',
 		'cap'        => minn_admin_acf_schema_cap(),
 		'collection' => array(
-			'viewLabel' => __( 'Groups', 'minn-admin' ),
+			'viewLabel' => 'ACF',
 			// Rows open the group builder page (collection.open — the
 			// pages-vs-modals test: a group carries a whole workflow).
 			'open'      => array( 'route' => 'field-groups/{id}' ),
@@ -363,7 +363,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 
-	return $surfaces;
+	return $sources;
 } );
 
 add_action( 'rest_api_init', function () {
