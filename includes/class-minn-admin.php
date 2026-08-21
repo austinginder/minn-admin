@@ -326,6 +326,9 @@ class Minn_Admin {
 	 * gate (priority 100) suppresses the core bar when it renders.
 	 */
 	public static function enforce_toolbar_policy( $show ) {
+		if ( ! did_action( 'plugins_loaded' ) || ! function_exists( 'is_user_logged_in' ) || ! function_exists( 'wp_get_current_user' ) ) {
+			return $show;
+		}
 		if ( ! is_user_logged_in() ) {
 			return $show;
 		}
@@ -457,10 +460,16 @@ class Minn_Admin {
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			return $url;
 		}
-		// Pluggable helpers are not loaded while plugins bootstrap. A plugin
-		// that builds admin URLs from its constructor (WPMU DEV Dashboard)
-		// would otherwise fatal here on every WP-CLI command.
-		if ( ! function_exists( 'is_user_logged_in' ) || ! is_user_logged_in() ) {
+		// This filter can run while plugins are still being included, before
+		// pluggable.php exists. function_exists( 'is_user_logged_in' ) is not
+		// enough: another plugin may define that helper itself in terms of
+		// wp_get_current_user(), which is still missing, and the call fatals
+		// on every front-end request. plugins_loaded is the first moment the
+		// real pluggable functions and cookie auth both exist.
+		if ( ! did_action( 'plugins_loaded' ) ) {
+			return $url;
+		}
+		if ( ! function_exists( 'is_user_logged_in' ) || ! function_exists( 'wp_get_current_user' ) || ! is_user_logged_in() ) {
 			return $url;
 		}
 		if ( ! self::user_wants_default_admin() ) {

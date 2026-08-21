@@ -43,6 +43,8 @@ SUITES=(
 	contract.test.js
 	zero-external.test.js
 	nonce-recovery.test.js
+	cli-bootstrap.test.js
+	early-admin-url.test.js
 	# the editor: block serialization + core block markup
 	markdown.test.js
 	paste.test.js

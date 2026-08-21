@@ -33,6 +33,12 @@ class Minn_Admin_Bar {
 	 * bar is a replacement for that bar, not a second chrome layer.
 	 */
 	public static function active() {
+		// show_admin_bar can be asked during plugin include. Do not cache a
+		// not-ready answer: cookie auth does not exist yet, and a cached
+		// false would hide the bar for the rest of the request.
+		if ( ! did_action( 'plugins_loaded' ) || ! function_exists( 'is_user_logged_in' ) || ! function_exists( 'wp_get_current_user' ) ) {
+			return false;
+		}
 		static $active = null;
 		if ( null !== $active ) {
 			return $active;
