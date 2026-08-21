@@ -247,6 +247,18 @@ CaptainCore quicksave archive and installed inactive on the primary test site:
   verify is read-only like their own `check_license` — EDD answers
   `site_inactive` for a URL the key wasn't activated on, which is normal on
   a dev clone, and persisting that would flip a truthfully-valid row.
+- **SEOPress Pro** (`seopress-pro`): stock EDD against seopress.org
+  (`STORE_URL_SEOPRESS` / `ITEM_ID_SEOPRESS` 113). Key in the wp-config
+  `SEOPRESS_LICENSE_KEY` constant (wins) or the `seopress_pro_license_key`
+  option; `seopress_pro_license_status` + `seopress_pro_license_expiry`
+  (epoch; lifetime stored as +100 years) beside it. The generic sweep's
+  token (`wp_seopress`) can never match the `seopress_pro_` option prefix,
+  so a parked Pro plugin's stored license was invisible. Actions mirror
+  their own WP-CLI License command request-for-request (`url` is the `home`
+  option, not site_url; deactivate treats the server's 'failed' as
+  already-inactive success and then runs their full reset including the
+  EDD-cache flush; a constant-defined key refuses paste and survives
+  deactivation). Verify is read-only (the Automatic.css dev-clone lesson).
 - **GP Premium** (`gp-premium`): its option names break both generic-sweep
   assumptions (`gen_premium_` prefix vs `gp-premium` slug, and the status
   option is `..._license_key_status`), so it gets a dedicated reader.
@@ -524,6 +536,7 @@ license data on a lab site.
 | Breakdance Pro | activate / deactivate / verify | real key activation + read | 2026-08-17 | Breakdance 2.8.1 `LicenseKeyManager`; JSON-wrapped EDD state; rejected activation restores the previous key and status |
 | WP All Export Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | lifetime, unlimited activations; deactivate is local (no seats exist) |
 | Automatic.css | activate / deactivate / verify | real key activation + bogus-key refusal + read + verify (etch lab) | 2026-08-21 | mirrored EDD request; deactivate untested against a live seat (mirrors their local delete either way) |
+| SEOPress Pro | activate / deactivate / verify | bogus key + read against a real stored license (etch lab) | 2026-08-21 | mirrors their own WP-CLI License command; real-key pass is the owner's step (the lab's Pro is parked at 9.7.3 under free 10.1) |
 | WP All Import Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | same; stored keys are salt-wrapped, decode before any request |
 | Search & Filter Pro | activate / deactivate / verify | real key, full loop | 2026-07-19 | EDD (item 526297) via their own REST controller callables; state in the free base's `{prefix}search_filter_options` table, JSON row `license-data`; needs base + Pro active for actions; snapshot-restore keeps a rejected key from clobbering a valid activation (their own connect() would) |
 | Admin Columns Pro | activate / deactivate / verify | real key, full loop | 2026-07-19 | own API on admincolumns.com via DI-container services; main file is is_admin()-gated so Minn bootstraps the container headless (autoloaders + api.php + their six definition files, no Loader); activation DELETES the pasted key and stores an activation token (`acp_activation_key`) + `acp_subscription_details` {status active/cancelled/expired, expiry_date ts, null = lifetime}; permissions rules applied exactly as their handlers do |
