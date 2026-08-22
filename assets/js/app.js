@@ -1368,6 +1368,12 @@
 		if ( t === 'hidden' ) {
 			return `<input type="hidden" ${ attr }="${ esc( id ) }" data-ftype="hidden" value="${ esc( String( v ) ) }">`;
 		}
+		// Note: a read-only informational row (the SEO panel's "Schema in
+		// use"). Its value rides the panel read like any field but there is
+		// nothing to bind and the server write path skips the type.
+		if ( t === 'note' ) {
+			return `<div class="minn-insp-note" ${ attr }="${ esc( id ) }" data-ftype="note">${ esc( String( v ) ) }</div>`;
+		}
 		if ( t === 'number' ) {
 			return `<input class="${ cls }" type="number" ${ attr }="${ esc( id ) }" data-ftype="number" value="${ esc( String( v ) ) }"${ f.min != null ? ` min="${ esc( String( f.min ) ) }"` : '' }${ f.max != null ? ` max="${ esc( String( f.max ) ) }"` : '' } placeholder="${ esc( f.placeholder || '' ) }">`;
 		}
@@ -27897,11 +27903,21 @@
 			<div class="minn-panel-fields">
 				${ p.groups.map( ( g ) => `
 					${ p.groups.length > 1 ? `<div class="minn-panel-group">${ esc( g.group ) }</div>` : '' }
-					${ g.fields.map( ( f ) => `
-						<div class="minn-panel-field${ f.type === 'true_false' ? ' inline' : '' }"${ f.cond ? ` data-pfcond="${ esc( JSON.stringify( f.cond ) ) }"` : '' }>
-							<div class="minn-field-label">${ esc( f.label ) }</div>
-							${ panelInput( pid, f, values[ f.name ] ) }
-						</div>` ).join( '' ) }` ).join( '' ) }
+					${ g.fields.map( ( f ) => {
+						const inline = f.type === 'true_false' || f.type === 'toggle';
+						const help = f.help ? `<div class="minn-toggle-desc">${ esc( f.help ) }</div>` : '';
+						// Inline (toggle) rows keep the switch on the right;
+						// help rides under the label so the row stays a row.
+						const body = inline
+							? `<div class="minn-toggle-info"><div class="minn-field-label">${ esc( f.label ) }</div>${ help }</div>
+								${ panelInput( pid, f, values[ f.name ] ) }`
+							: `<div class="minn-field-label">${ esc( f.label ) }</div>
+								${ panelInput( pid, f, values[ f.name ] ) }${ help }`;
+						return `
+						<div class="minn-panel-field${ inline ? ' inline' : '' }"${ f.cond ? ` data-pfcond="${ esc( JSON.stringify( f.cond ) ) }"` : '' }>
+							${ body }
+						</div>`;
+					} ).join( '' ) }` ).join( '' ) }
 				${ lockedTotal && ed.id ? `<div class="minn-panel-locked">${ lockedTotal } advanced field${ lockedTotal === 1 ? '' : 's' } — <a href="${ esc( B.site.adminUrl ) }post.php?post=${ ed.id }&action=edit">${ esc( __( 'edit in wp-admin ↗' ) ) }</a></div>` : '' }
 			</div>`;
 	}

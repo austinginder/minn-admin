@@ -3,16 +3,17 @@
  * Bundled adapter: SEO editor panel — Yoast, Rank Math, AIOSEO, SEOPress,
  * SureRank, SiteSEO, Squirrly.
  *
- * The valuable 90% of every SEO plugin at write time is three fields: SEO
- * title, meta description and focus keyword. None of them expose those over
- * REST, so this adapter registers a dedicated `minn_seo` REST field (NOT
- * the generic meta API — the editor writes its whole panel object back on
- * save, and a dedicated field keeps that write scoped to these values) and
- * describes the panel through the standard editor-panels framework. Scores
- * and content analysis stay in wp-admin — that's the plugins' moat.
- *
- * Rank Math also maps social thumbnail (Facebook OG image, which Twitter
- * reuses when "use Facebook" is on) as an image field on the same panel.
+ * Every provider covers the shared core (SEO title, meta description,
+ * focus keyword); a provider that declares a `fields` callable describes
+ * its full per-post depth — robots meta, canonical URL, the social split,
+ * schema notes (Rank Math is the reference). None of these plugins expose
+ * per-post SEO over REST, so this adapter registers a dedicated `minn_seo`
+ * REST field (NOT the generic meta API — the editor writes its whole panel
+ * object back on save, and a dedicated field keeps that write scoped to
+ * declared values) and describes the panel through the standard
+ * editor-panels framework. The declared field map doubles as the write
+ * whitelist, with per-type sanitizers in the REST layer. Scores and
+ * content analysis stay in wp-admin — that's the plugins' moat.
  *
  * Yoast, Rank Math, SEOPress and SiteSEO store postmeta; AIOSEO v4 keeps
  * its own {prefix}aioseo_posts table, SureRank keeps GROUPED postmeta
@@ -132,9 +133,23 @@ function minn_admin_seo_aioseo_provider() {
 }
 
 /**
- * Rank Math provider: core SEO strings plus social thumbnail
- * (rank_math_facebook_image / _id). Twitter reuses Facebook when
- * rank_math_twitter_use_facebook is on — Minn writes that flag on image set.
+ * Rank Math provider: the full per-post metabox depth — search appearance
+ * strings, pillar content, the Facebook/Twitter social split, robots meta
+ * (rank_math_robots array + rank_math_advanced_robots map), canonical URL
+ * and a read-only "Schema in use" note. The Schema Generator and the
+ * score/analysis checklists stay in their app (locked-field link-out).
+ *
+ * Storage facts this hangs on (their source, verified):
+ * - Their own editor save (rank_math/v1/updateMeta) deletes a meta on any
+ *   empty value, so delete-on-clear is vendor parity, not invention.
+ * - rank_math_robots is an array of directive strings; ABSENT means
+ *   "inherit the post-type default", so an all-off group deletes the meta.
+ * - rank_math_advanced_robots is a { max-snippet, max-video-preview,
+ *   max-image-preview } map; absent inherits titles.advanced_robots_global.
+ * - twitter_use_facebook: absent defaults to ON (their metabox default);
+ *   'off' must be STORED (an empty write would delete and flip it back on),
+ *   so the toggle always writes 'on'/'off' explicitly.
+ * - Card types whitelist mirrors their frontend sanitize_card_type().
  *
  * @return array
  */
@@ -142,13 +157,59 @@ function minn_admin_seo_rank_math_provider() {
 	$base = minn_admin_seo_meta_provider(
 		'Rank Math',
 		array(
-			'title'         => 'rank_math_title',
-			'description'   => 'rank_math_description',
-			'focus_keyword' => 'rank_math_focus_keyword',
+			'title'                => 'rank_math_title',
+			'description'          => 'rank_math_description',
+			'focus_keyword'        => 'rank_math_focus_keyword',
+			'facebook_title'       => 'rank_math_facebook_title',
+			'facebook_description' => 'rank_math_facebook_description',
+			'twitter_title'        => 'rank_math_twitter_title',
+			'twitter_description'  => 'rank_math_twitter_description',
+			'canonical'            => 'rank_math_canonical_url',
 		)
 	);
 	$base_read  = $base['read'];
 	$base_write = $base['write'];
+
+	$robots_toggles = array(
+		'robots_nofollow'     => 'nofollow',
+		'robots_noarchive'    => 'noarchive',
+		'robots_noimageindex' => 'noimageindex',
+		'robots_nosnippet'    => 'nosnippet',
+	);
+	$adv_keys       = array(
+		'adv_max_snippet'       => 'max-snippet',
+		'adv_max_video_preview' => 'max-video-preview',
+		'adv_max_image_preview' => 'max-image-preview',
+	);
+
+	// Read an image pair (facebook_image/_id, twitter_image/_id) into the
+	// { id, url } shape the panel's image control uses.
+	$image_read = function ( $post_id, $prefix ) {
+		$id  = (int) get_post_meta( (int) $post_id, "rank_math_{$prefix}_image_id", true );
+		$url = (string) get_post_meta( (int) $post_id, "rank_math_{$prefix}_image", true );
+		if ( $id && ! $url ) {
+			$url = (string) wp_get_attachment_image_url( $id, 'medium' );
+		}
+		return ( $id || $url ) ? array( 'id' => $id, 'url' => $url ) : null;
+	};
+	// Write one: $att is an authorised attachment id (the REST layer already
+	// vetted it) or 0/null to clear. The URL is DERIVED from the id, never
+	// taken from the caller (og:image pinning, see the REST layer note).
+	$image_write = function ( $post_id, $prefix, $att ) {
+		$att = is_numeric( $att ) ? (int) $att : 0;
+		if ( $att > 0 ) {
+			$url = (string) wp_get_attachment_url( $att );
+			if ( ! $url ) {
+				$url = (string) wp_get_attachment_image_url( $att, 'full' );
+			}
+			update_post_meta( $post_id, "rank_math_{$prefix}_image_id", $att );
+			update_post_meta( $post_id, "rank_math_{$prefix}_image", $url );
+		} else {
+			delete_post_meta( $post_id, "rank_math_{$prefix}_image_id" );
+			delete_post_meta( $post_id, "rank_math_{$prefix}_image" );
+		}
+	};
+
 	return array(
 		'name'    => 'Rank Math',
 		// Rank Math registers no SEO metabox for a role without its
@@ -158,55 +219,239 @@ function minn_admin_seo_rank_math_provider() {
 		'can_edit' => function () {
 			return current_user_can( 'rank_math_onpage_general' );
 		},
-		// Extra panel groups beyond Search appearance (client uses this).
-		'social' => true,
-		'read'   => function ( $post_id ) use ( $base_read ) {
-			$out = call_user_func( $base_read, $post_id );
-			$id  = (int) get_post_meta( (int) $post_id, 'rank_math_facebook_image_id', true );
-			$url = (string) get_post_meta( (int) $post_id, 'rank_math_facebook_image', true );
-			if ( $id && ! $url ) {
-				$url = (string) wp_get_attachment_image_url( $id, 'medium' );
+		'fields' => function () {
+			// Twitter's own fields only apply when the card stops
+			// inheriting Facebook — same reveal as their metabox.
+			$tw = array( array( array( 'f' => 'twitter_use_facebook', 'op' => '==', 'v' => '0' ) ) );
+			return array(
+				array(
+					'group'  => __( 'Search appearance', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text' ),
+						array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea' ),
+						array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
+						array( 'name' => 'pillar_content', 'label' => __( 'Pillar content', 'minn-admin' ), 'type' => 'toggle', 'help' => __( 'Mark this as cornerstone content for internal-link suggestions.', 'minn-admin' ) ),
+					),
+				),
+				array(
+					'group'  => __( 'Social', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'facebook_title', 'label' => __( 'Facebook title', 'minn-admin' ), 'type' => 'text' ),
+						array( 'name' => 'facebook_description', 'label' => __( 'Facebook description', 'minn-admin' ), 'type' => 'textarea' ),
+						array( 'name' => 'social_image', 'label' => __( 'Social thumbnail', 'minn-admin' ), 'type' => 'image' ),
+						array( 'name' => 'twitter_use_facebook', 'label' => __( 'Twitter uses the Facebook card', 'minn-admin' ), 'type' => 'toggle' ),
+						array(
+							'name'    => 'twitter_card_type',
+							'label'   => __( 'Twitter card type', 'minn-admin' ),
+							'type'    => 'select',
+							'cond'    => $tw,
+							'options' => array(
+								array( '', __( 'Site default', 'minn-admin' ) ),
+								array( 'summary_large_image', __( 'Summary with large image', 'minn-admin' ) ),
+								array( 'summary', __( 'Summary', 'minn-admin' ) ),
+							),
+						),
+						array( 'name' => 'twitter_title', 'label' => __( 'Twitter title', 'minn-admin' ), 'type' => 'text', 'cond' => $tw ),
+						array( 'name' => 'twitter_description', 'label' => __( 'Twitter description', 'minn-admin' ), 'type' => 'textarea', 'cond' => $tw ),
+						array( 'name' => 'twitter_image', 'label' => __( 'Twitter image', 'minn-admin' ), 'type' => 'image', 'cond' => $tw ),
+					),
+				),
+				array(
+					'group'  => __( 'Advanced', 'minn-admin' ),
+					'fields' => array(
+						array(
+							'name'    => 'robots_index',
+							'label'   => __( 'Search indexing', 'minn-admin' ),
+							'type'    => 'select',
+							'options' => array(
+								array( '', __( 'Default (post type setting)', 'minn-admin' ) ),
+								array( 'index', __( 'Index', 'minn-admin' ) ),
+								array( 'noindex', __( 'No index', 'minn-admin' ) ),
+							),
+						),
+						array( 'name' => 'robots_nofollow', 'label' => __( 'Nofollow links', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_noarchive', 'label' => __( 'No archive', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_noimageindex', 'label' => __( 'No image index', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_nosnippet', 'label' => __( 'No snippet', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'adv_max_snippet', 'label' => __( 'Max snippet length', 'minn-admin' ), 'type' => 'number', 'help' => __( 'Characters shown in results. -1 sets no limit; empty inherits the site default.', 'minn-admin' ) ),
+						array( 'name' => 'adv_max_video_preview', 'label' => __( 'Max video preview', 'minn-admin' ), 'type' => 'number', 'help' => __( 'Seconds of video preview. -1 sets no limit; empty inherits the site default.', 'minn-admin' ) ),
+						array(
+							'name'    => 'adv_max_image_preview',
+							'label'   => __( 'Max image preview', 'minn-admin' ),
+							'type'    => 'select',
+							'options' => array(
+								array( '', __( 'Site default', 'minn-admin' ) ),
+								array( 'none', __( 'None', 'minn-admin' ) ),
+								array( 'standard', __( 'Standard', 'minn-admin' ) ),
+								array( 'large', __( 'Large', 'minn-admin' ) ),
+							),
+						),
+						array( 'name' => 'canonical', 'label' => __( 'Canonical URL', 'minn-admin' ), 'type' => 'text', 'sanitize' => 'url', 'help' => __( 'Leave empty to use the permalink.', 'minn-admin' ) ),
+					),
+				),
+				array(
+					'group'  => __( 'Schema', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'schema_in_use', 'label' => __( 'Schema in use', 'minn-admin' ), 'type' => 'note' ),
+					),
+					// The Schema Generator is Rank Math's own app; the
+					// locked-field link is the doorway.
+					'locked' => 1,
+				),
+			);
+		},
+		'read'   => function ( $post_id ) use ( $base_read, $robots_toggles, $adv_keys, $image_read ) {
+			$post_id = (int) $post_id;
+			$out     = call_user_func( $base_read, $post_id );
+
+			$robots = get_post_meta( $post_id, 'rank_math_robots', true );
+			$robots = is_array( $robots ) ? $robots : array();
+			$out['robots_index'] = in_array( 'noindex', $robots, true ) ? 'noindex'
+				: ( in_array( 'index', $robots, true ) ? 'index' : '' );
+			foreach ( $robots_toggles as $field => $directive ) {
+				$out[ $field ] = in_array( $directive, $robots, true );
 			}
-			$out['social_image'] = ( $id || $url )
-				? array(
-					'id'  => $id,
-					'url' => $url,
-				)
-				: null;
+
+			$adv = get_post_meta( $post_id, 'rank_math_advanced_robots', true );
+			$adv = is_array( $adv ) ? $adv : array();
+			foreach ( $adv_keys as $field => $key ) {
+				$v = isset( $adv[ $key ] ) ? $adv[ $key ] : '';
+				// Their shape stores false for a disabled directive.
+				if ( false === $v || '' === $v || null === $v ) {
+					$out[ $field ] = 'adv_max_image_preview' === $field ? '' : null;
+				} else {
+					$out[ $field ] = 'adv_max_image_preview' === $field ? (string) $v : (int) $v;
+				}
+			}
+
+			$out['social_image']  = $image_read( $post_id, 'facebook' );
+			$out['twitter_image'] = $image_read( $post_id, 'twitter' );
+			// Absent means ON (their metabox default); only a stored 'off'
+			// turns the inheritance off.
+			$out['twitter_use_facebook'] = 'off' !== (string) get_post_meta( $post_id, 'rank_math_twitter_use_facebook', true );
+			$out['twitter_card_type']    = (string) get_post_meta( $post_id, 'rank_math_twitter_card_type', true );
+			$out['pillar_content']       = 'on' === (string) get_post_meta( $post_id, 'rank_math_pillar_content', true );
+			$out['schema_in_use']        = minn_admin_seo_rank_math_schema_in_use( $post_id );
 			return $out;
 		},
-		'write'  => function ( $post_id, $field, $clean ) use ( $base_write ) {
-			if ( 'social_image' === $field ) {
-				// $clean is null/'' to clear, or { id, url } / attachment id.
-				$id  = 0;
-				$url = '';
-				if ( is_array( $clean ) ) {
-					$id  = isset( $clean['id'] ) ? (int) $clean['id'] : 0;
-					$url = isset( $clean['url'] ) ? (string) $clean['url'] : '';
-				} elseif ( is_numeric( $clean ) ) {
-					$id = (int) $clean;
-				}
-				if ( $id > 0 ) {
-					if ( ! $url ) {
-						$url = (string) wp_get_attachment_url( $id );
+		'write'  => function ( $post_id, $field, $clean ) use ( $base_write, $robots_toggles, $adv_keys, $image_write ) {
+			$post_id = (int) $post_id;
+
+			if ( 'social_image' === $field || 'twitter_image' === $field ) {
+				$image_write( $post_id, 'social_image' === $field ? 'facebook' : 'twitter', $clean );
+				return;
+			}
+
+			if ( 'robots_index' === $field || isset( $robots_toggles[ $field ] ) ) {
+				$robots = get_post_meta( $post_id, 'rank_math_robots', true );
+				$robots = is_array( $robots ) ? array_map( 'strval', $robots ) : array();
+				if ( 'robots_index' === $field ) {
+					$robots = array_diff( $robots, array( 'index', 'noindex' ) );
+					if ( 'index' === $clean || 'noindex' === $clean ) {
+						$robots[] = $clean;
 					}
-					// Prefer full-size source for OG; fall back to medium if missing.
-					if ( ! $url ) {
-						$url = (string) wp_get_attachment_image_url( $id, 'full' );
-					}
-					update_post_meta( $post_id, 'rank_math_facebook_image_id', $id );
-					update_post_meta( $post_id, 'rank_math_facebook_image', $url );
-					// Let Twitter inherit the Facebook image (Rank Math default).
-					update_post_meta( $post_id, 'rank_math_twitter_use_facebook', 'on' );
 				} else {
-					delete_post_meta( $post_id, 'rank_math_facebook_image_id' );
-					delete_post_meta( $post_id, 'rank_math_facebook_image' );
+					$directive = $robots_toggles[ $field ];
+					$robots    = array_diff( $robots, array( $directive ) );
+					if ( $clean ) {
+						$robots[] = $directive;
+					}
+				}
+				// Stable directive order, matching their metabox multicheck.
+				$order  = array( 'index', 'noindex', 'nofollow', 'noarchive', 'noimageindex', 'nosnippet' );
+				$robots = array_values( array_intersect( $order, $robots ) );
+				if ( $robots ) {
+					update_post_meta( $post_id, 'rank_math_robots', $robots );
+				} else {
+					// Nothing explicit left: inherit the post-type default.
+					delete_post_meta( $post_id, 'rank_math_robots' );
 				}
 				return;
 			}
+
+			if ( isset( $adv_keys[ $field ] ) ) {
+				$adv = get_post_meta( $post_id, 'rank_math_advanced_robots', true );
+				$adv = is_array( $adv ) ? $adv : array();
+				if ( '' === $clean || null === $clean ) {
+					unset( $adv[ $adv_keys[ $field ] ] );
+				} else {
+					$adv[ $adv_keys[ $field ] ] = 'adv_max_image_preview' === $field ? (string) $clean : (int) $clean;
+				}
+				// Drop their disabled-directive false sentinels so an
+				// all-cleared map deletes cleanly (absent = inherit).
+				$adv = array_filter( $adv, function ( $v ) {
+					return false !== $v && '' !== $v && null !== $v;
+				} );
+				if ( $adv ) {
+					update_post_meta( $post_id, 'rank_math_advanced_robots', $adv );
+				} else {
+					delete_post_meta( $post_id, 'rank_math_advanced_robots' );
+				}
+				return;
+			}
+
+			if ( 'twitter_use_facebook' === $field ) {
+				// 'off' must be STORED: their save deletes empty values and
+				// an absent meta reads back as ON.
+				update_post_meta( $post_id, 'rank_math_twitter_use_facebook', $clean ? 'on' : 'off' );
+				return;
+			}
+
+			if ( 'pillar_content' === $field ) {
+				if ( $clean ) {
+					update_post_meta( $post_id, 'rank_math_pillar_content', 'on' );
+				} else {
+					delete_post_meta( $post_id, 'rank_math_pillar_content' );
+				}
+				return;
+			}
+
+			if ( 'twitter_card_type' === $field ) {
+				if ( '' === $clean ) {
+					delete_post_meta( $post_id, 'rank_math_twitter_card_type' );
+				} else {
+					update_post_meta( $post_id, 'rank_math_twitter_card_type', $clean );
+				}
+				return;
+			}
+
 			call_user_func( $base_write, $post_id, $field, $clean );
 		},
 	);
+}
+
+/**
+ * What schema this post actually emits, mirroring Rank Math's own
+ * seo_details column: schemas built in their generator live as
+ * rank_math_schema_{Type} postmeta (JSON with @type); with none, the
+ * post-type default applies unless rank_math_rich_snippet says off.
+ *
+ * @param int $post_id Post id.
+ * @return string Human summary ('Article', 'Article, FAQPage', 'None').
+ */
+function minn_admin_seo_rank_math_schema_in_use( $post_id ) {
+	$types = array();
+	$meta  = get_post_meta( (int) $post_id );
+	foreach ( array_keys( is_array( $meta ) ? $meta : array() ) as $key ) {
+		if ( 0 !== strpos( (string) $key, 'rank_math_schema_' ) ) {
+			continue;
+		}
+		// Their generator names the meta key after the @type
+		// ('rank_math_schema_Article'), so the suffix IS the type — no need
+		// to touch the serialized blob (never unserialize third-party data).
+		$types[] = (string) substr( (string) $key, strlen( 'rank_math_schema_' ) );
+	}
+	if ( ! $types ) {
+		try {
+			if ( is_callable( array( '\RankMath\Helper', 'get_default_schema_type' ) ) ) {
+				$default = \RankMath\Helper::get_default_schema_type( (int) $post_id );
+				if ( $default ) {
+					$types[] = ucfirst( (string) $default );
+				}
+			}
+		} catch ( \Throwable $e ) { /* their helper, their exceptions */ }
+	}
+	return $types ? implode( ', ', array_unique( $types ) ) : __( 'None', 'minn-admin' );
 }
 
 /**
@@ -496,6 +741,67 @@ function minn_admin_seo_plugin() {
 	return null;
 }
 
+/**
+ * The panel groups for a provider: its own `fields` callable when it
+ * declares one (Rank Math), else the legacy three-field shape (plus the
+ * social thumbnail for providers flagged `social`).
+ *
+ * @param array $plugin Active provider.
+ * @return array Groups in the editor-panels fields shape.
+ */
+function minn_admin_seo_groups( $plugin ) {
+	if ( isset( $plugin['fields'] ) && is_callable( $plugin['fields'] ) ) {
+		$groups = call_user_func( $plugin['fields'] );
+		return is_array( $groups ) ? $groups : array();
+	}
+	$groups = array(
+		array(
+			'group'  => __( 'Search appearance', 'minn-admin' ),
+			'fields' => array(
+				array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text' ),
+				array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea' ),
+				array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
+			),
+			'locked' => 0,
+		),
+	);
+	if ( ! empty( $plugin['social'] ) ) {
+		$groups[] = array(
+			'group'  => __( 'Social', 'minn-admin' ),
+			'fields' => array(
+				array(
+					'name'  => 'social_image',
+					'label' => __( 'Social thumbnail', 'minn-admin' ),
+					'type'  => 'image',
+				),
+			),
+			'locked' => 0,
+		);
+	}
+	return $groups;
+}
+
+/**
+ * Flat name => field-def map for the write path. The declared fields ARE
+ * the write whitelist: a key the provider never declared is ignored, and
+ * each value is sanitized by its declared type before the provider's
+ * write callable ever sees it.
+ *
+ * @param array $plugin Active provider.
+ * @return array
+ */
+function minn_admin_seo_field_map( $plugin ) {
+	$map = array();
+	foreach ( minn_admin_seo_groups( $plugin ) as $group ) {
+		foreach ( ( isset( $group['fields'] ) && is_array( $group['fields'] ) ? $group['fields'] : array() ) as $field ) {
+			if ( ! empty( $field['name'] ) ) {
+				$map[ (string) $field['name'] ] = $field;
+			}
+		}
+	}
+	return $map;
+}
+
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 	$plugin = minn_admin_seo_plugin();
 	if ( ! $plugin ) {
@@ -524,32 +830,7 @@ add_action( 'rest_api_init', function () {
 			return current_user_can( 'edit_posts' );
 		},
 		'callback'            => function () use ( $plugin ) {
-			$groups = array(
-				array(
-					'group'  => __( 'Search appearance', 'minn-admin' ),
-					'fields' => array(
-						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text' ),
-						array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea' ),
-						array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
-					),
-					'locked' => 0,
-				),
-			);
-			// Rank Math social thumbnail (Facebook OG; Twitter inherits).
-			if ( ! empty( $plugin['social'] ) ) {
-				$groups[] = array(
-					'group'  => 'Social',
-					'fields' => array(
-						array(
-							'name'  => 'social_image',
-							'label' => __( 'Social thumbnail', 'minn-admin' ),
-							'type'  => 'image',
-						),
-					),
-					'locked' => 0,
-				);
-			}
-			return rest_ensure_response( array( 'groups' => $groups ) );
+			return rest_ensure_response( array( 'groups' => minn_admin_seo_groups( $plugin ) ) );
 		},
 	) );
 
@@ -588,47 +869,91 @@ add_action( 'rest_api_init', function () {
 				&& ! call_user_func( $plugin['can_edit'], $post->ID ) ) {
 				return new WP_Error( 'rest_forbidden', __( 'You cannot edit SEO fields on this site.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
-			foreach ( array( 'title', 'description', 'focus_keyword' ) as $field ) {
+			foreach ( minn_admin_seo_field_map( $plugin ) as $field => $def ) {
 				if ( ! array_key_exists( $field, $value ) ) {
 					continue;
 				}
-				$clean = 'description' === $field
-					? sanitize_textarea_field( (string) $value[ $field ] )
-					: sanitize_text_field( (string) $value[ $field ] );
-				call_user_func( $plugin['write'], $post->ID, $field, $clean );
-			}
-			if ( array_key_exists( 'social_image', $value ) ) {
-				$raw = $value['social_image'];
-				$att = is_array( $raw ) ? (int) ( isset( $raw['id'] ) ? $raw['id'] : 0 ) : ( is_numeric( $raw ) ? (int) $raw : 0 );
-				if ( null === $raw || '' === $raw || false === $raw ) {
-					call_user_func( $plugin['write'], $post->ID, 'social_image', null );
-				} elseif ( $att > 0 ) {
-					// edit_post above authorises the POST. It says nothing about
-					// the ATTACHMENT, which arrives as a bare id in the body.
-					// Without a check here, posting ids one at a time and
-					// reading the stored value back is an enumeration oracle
-					// over the whole media table — and uploads are served with
-					// no authorisation, so learning the URL is reading the file.
-					// The vendors whose field this is put a media modal in
-					// front of it, which means upload_files.
-					if ( ! current_user_can( 'upload_files' )
-						|| 'attachment' !== get_post_type( $att )
-						|| ! current_user_can( 'read_post', $att ) ) {
-						return new WP_Error( 'rest_forbidden', __( 'You cannot use that media item.', 'minn-admin' ), array( 'status' => 403 ) );
-					}
-					// The URL is DERIVED from the id, never taken from the
-					// caller: every provider resolves it the same way, and
-					// accepting one let anyone who can edit a draft pin an
-					// arbitrary third-party image as the og:image of a post
-					// somebody else publishes later.
-					call_user_func( $plugin['write'], $post->ID, 'social_image', $att );
+				$type = isset( $def['type'] ) ? $def['type'] : 'text';
+				$raw  = $value[ $field ];
+
+				// Notes are read-only rows; nothing to write.
+				if ( 'note' === $type ) {
+					continue;
 				}
+
+				if ( 'image' === $type ) {
+					$att = is_array( $raw ) ? (int) ( isset( $raw['id'] ) ? $raw['id'] : 0 ) : ( is_numeric( $raw ) ? (int) $raw : 0 );
+					if ( null === $raw || '' === $raw || false === $raw ) {
+						call_user_func( $plugin['write'], $post->ID, $field, null );
+					} elseif ( $att > 0 ) {
+						// edit_post above authorises the POST. It says nothing about
+						// the ATTACHMENT, which arrives as a bare id in the body.
+						// Without a check here, posting ids one at a time and
+						// reading the stored value back is an enumeration oracle
+						// over the whole media table — and uploads are served with
+						// no authorisation, so learning the URL is reading the file.
+						// The vendors whose field this is put a media modal in
+						// front of it, which means upload_files.
+						if ( ! current_user_can( 'upload_files' )
+							|| 'attachment' !== get_post_type( $att )
+							|| ! current_user_can( 'read_post', $att ) ) {
+							return new WP_Error( 'rest_forbidden', __( 'You cannot use that media item.', 'minn-admin' ), array( 'status' => 403 ) );
+						}
+						// The URL is DERIVED from the id, never taken from the
+						// caller: every provider resolves it the same way, and
+						// accepting one let anyone who can edit a draft pin an
+						// arbitrary third-party image as the og:image of a post
+						// somebody else publishes later.
+						call_user_func( $plugin['write'], $post->ID, $field, $att );
+					}
+					continue;
+				}
+
+				if ( 'toggle' === $type ) {
+					call_user_func( $plugin['write'], $post->ID, $field, (bool) $raw );
+					continue;
+				}
+
+				if ( 'number' === $type ) {
+					if ( null === $raw || '' === $raw ) {
+						call_user_func( $plugin['write'], $post->ID, $field, '' );
+					} elseif ( is_numeric( $raw ) ) {
+						call_user_func( $plugin['write'], $post->ID, $field, (int) $raw );
+					}
+					continue;
+				}
+
+				if ( 'select' === $type ) {
+					$raw = ( null === $raw || false === $raw ) ? '' : (string) $raw;
+					// The declared options are the whitelist; '' always
+					// means clear/inherit.
+					$allowed = array();
+					foreach ( ( isset( $def['options'] ) && is_array( $def['options'] ) ? $def['options'] : array() ) as $opt ) {
+						$allowed[] = (string) ( is_array( $opt ) ? $opt[0] : $opt );
+					}
+					if ( '' === $raw || in_array( $raw, $allowed, true ) ) {
+						call_user_func( $plugin['write'], $post->ID, $field, $raw );
+					}
+					continue;
+				}
+
+				$clean = 'textarea' === $type
+					? sanitize_textarea_field( (string) $raw )
+					: sanitize_text_field( (string) $raw );
+				if ( isset( $def['sanitize'] ) && 'url' === $def['sanitize'] ) {
+					$clean = esc_url_raw( trim( (string) $raw ) );
+				}
+				call_user_func( $plugin['write'], $post->ID, $field, $clean );
 			}
 			return null;
 		},
+		// The declared object stays loose on purpose: providers add their
+		// own keys (robots, canonical, Twitter split) and the write path
+		// sanitizes each by its declared type — the field map, not this
+		// schema, is the whitelist.
 		'schema'          => array(
 			'type'        => 'object',
-			'description' => __( 'SEO title, meta description, focus keyword, and social image (Minn Admin editor panel).', 'minn-admin' ),
+			'description' => __( 'Per-post SEO fields for the active SEO plugin (Minn Admin editor panel).', 'minn-admin' ),
 			'context'     => array( 'edit' ),
 			'properties'  => array(
 				'title'         => array( 'type' => 'string' ),
