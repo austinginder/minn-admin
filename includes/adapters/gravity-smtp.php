@@ -56,6 +56,22 @@ function minn_admin_gsmtp_cap( $const ) {
 	return 'manage_options';
 }
 
+/**
+ * May this user read a logged message body?
+ *
+ * Gravity SMTP splits the email log in two: view_email_log_details opens the
+ * delivery metadata, and view_email_log_preview opens the MESSAGE. Their own
+ * details model never returns the body, and both their preview button and their
+ * resend button gate on the preview cap. The split exists so a site can hand an
+ * operator a delivery log without handing them the mail itself, which routinely
+ * carries a live password reset link.
+ *
+ * @return bool
+ */
+function minn_admin_gsmtp_can_preview() {
+	return current_user_can( minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG_PREVIEW' ) );
+}
+
 /** Their data-store router (constant locks first, then options). */
 function minn_admin_gsmtp_router() {
 	return new Gravity_Forms\Gravity_SMTP\Data_Store\Data_Store_Router(
@@ -698,9 +714,11 @@ add_action( 'rest_api_init', function () {
 					'status'       => $row->status,
 					'service'      => $row->service,
 					'date_created' => $row->date_created,
-					'message'      => $row->message,
 					'can_resend'   => true,
 				);
+				if ( minn_admin_gsmtp_can_preview() ) {
+					$out['message'] = $row->message;
+				}
 				// Enrich through their own models (from/cc/bcc parsed by their
 				// code, attachment count, resend eligibility). Their
 				// full_details() needs container services that only register on
@@ -801,18 +819,18 @@ add_action( 'rest_api_init', function () {
 			$delivery[] = array( 'label' => __( 'Service', 'minn-admin' ), 'value' => (string) $row->service );
 			$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $row->date_created . ' UTC' );
 
-			$message  = (string) $row->message;
+			$message      = (string) $row->message;
+			$message_rows = array(
+				array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
+			);
+			if ( minn_admin_gsmtp_can_preview() ) {
+				$message_rows[] = preg_match( '/<\/?[a-z][^>]*>/i', $message )
+					? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $message, 'type' => 'html-preview' )
+					: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $message, 'type' => 'code' );
+			}
 			$sections = array(
 				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-				array(
-					'title' => __( 'Message', 'minn-admin' ),
-					'rows'  => array(
-						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
-						preg_match( '/<\/?[a-z][^>]*>/i', $message )
-							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $message, 'type' => 'html-preview' )
-							: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $message, 'type' => 'code' ),
-					),
-				),
+				array( 'title' => __( 'Message', 'minn-admin' ), 'rows' => $message_rows ),
 			);
 
 			// Stored headers ride the serialized `extra` blob. Regex-decode
@@ -840,7 +858,13 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/events/(?P<id>\d+)/resend', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can( 'EDIT_EMAIL_LOG_DETAILS' ),
+		'permission_callback' => function () {
+			// Their resend button carries the preview cap, not just the edit
+			// cap, so a principal who may not read the message may not
+			// rebroadcast it either.
+			return current_user_can( minn_admin_gsmtp_cap( 'EDIT_EMAIL_LOG_DETAILS' ) )
+				&& minn_admin_gsmtp_can_preview();
+		},
 		'callback'            => 'minn_admin_gravity_smtp_resend',
 	) );
 
