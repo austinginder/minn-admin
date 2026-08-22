@@ -76,11 +76,20 @@ function minn_admin_wpmn_network_row( $network ) {
 	);
 }
 
-/** Destination choices for the site-move action. */
+/**
+ * Destination choices for the site-move action.
+ *
+ * Only networks this user actually administers: the move route refuses the rest,
+ * and a picker that offers a network the caller cannot administer is an invitation
+ * to hand a site somewhere it cannot be retrieved from.
+ */
 function minn_admin_wpmn_network_options( $exclude_id = 0 ) {
 	$options = array();
 	foreach ( get_networks( array( 'number' => 0, 'orderby' => 'domain', 'order' => 'ASC' ) ) as $network ) {
 		if ( (int) $network->id === (int) $exclude_id ) {
+			continue;
+		}
+		if ( true !== minn_admin_wpmn_network_target( $network->id ) ) {
 			continue;
 		}
 		$name = Minn_Admin::plain_text( get_network_option( $network->id, 'site_name', '' ) );
@@ -406,6 +415,15 @@ function minn_admin_wpmn_site_move( WP_REST_Request $request ) {
 	}
 	if ( ! $network ) {
 		return new WP_Error( 'no_such_network', __( 'That destination network does not exist.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	// And the destination, for the same reason. manage_networks resolves through
+	// the object-agnostic is_super_admin(), so it answers for the network being
+	// stood in rather than the one being moved into: without this a super admin
+	// of network B could hand a site to network C, whose administrators they are
+	// not, and the source check above then refuses to let them take it back.
+	$dest = minn_admin_wpmn_network_target( $network_id );
+	if ( is_wp_error( $dest ) ) {
+		return $dest;
 	}
 	if ( (int) get_main_site_id( $site->network_id ) === $site_id ) {
 		return new WP_Error( 'main_site', __( 'A network main site cannot be moved.', 'minn-admin' ), array( 'status' => 400 ) );
