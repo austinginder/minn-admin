@@ -17,7 +17,42 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Has the network owner switched off per-site access to Stream?
+ *
+ * Stream has TWO access dimensions and only one of them is a capability. Role
+ * Access decides which roles may read the log; the network-level Site Access
+ * switch decides whether subsites may read it AT ALL, and its whole purpose is
+ * to keep the log in the Network Admin. Their cap grant knows nothing about it
+ * (filter_user_caps reads role access alone) because they enforce it by simply
+ * not registering the screen. Minn IS that screen here, so the switch has to be
+ * asked before either path below, including the one where Stream's own filter
+ * has already answered yes.
+ *
+ * @return bool
+ */
+function minn_admin_stream_site_access_denied() {
+	if ( ! is_multisite() ) {
+		return false;
+	}
+	try {
+		$plugin = function_exists( 'wp_stream_get_instance' ) ? wp_stream_get_instance() : null;
+		if ( ! $plugin || ! method_exists( $plugin, 'is_multisite_network_activated' )
+			|| ! $plugin->is_multisite_network_activated() ) {
+			return false;
+		}
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+	$options = (array) get_site_option( 'wp_stream_network', array() );
+	$allowed = isset( $options['general_site_access'] ) ? absint( $options['general_site_access'] ) : 1;
+	return ! $allowed;
+}
+
 function minn_admin_stream_can() {
+	if ( minn_admin_stream_site_access_denied() ) {
+		return false;
+	}
 	// Defer entirely to Stream. view_stream is granted dynamically from its
 	// general_role_access setting, so an operator who removes administrator
 	// from Role Access means it — a manage_options backstop would override
