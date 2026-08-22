@@ -268,6 +268,22 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		t.check( 'no template text is left in storage after a full clear',
 			! g3 || ( ! JSON.stringify( g3 ).includes( '%' ) ), JSON.stringify( g3 ) );
 
+		// Depth: robots ride SCALAR surerank_settings_post_no_* metas; the
+		// Twitter split lives in the social blob with same_as_facebook OFF
+		// stored explicitly (absent reads as on).
+		await writeSeo( postId, { robots_noindex: true, twitter_use_facebook: false, twitter_title: 'SR TW depth' } );
+		t.check( 'SureRank depth: scalar robots meta + social blob',
+			wpEval( `echo get_post_meta( ${ postId }, 'surerank_settings_post_no_index', true );` ) === 'yes'
+			&& ( () => {
+				try {
+					const blob = JSON.parse( wpEval( `echo wp_json_encode( get_post_meta( ${ postId }, 'surerank_settings_social', true ) );` ) );
+					return blob && blob.twitter_same_as_facebook === false && blob.twitter_title === 'SR TW depth';
+				} catch ( e ) { return false; }
+			} )() );
+		await writeSeo( postId, { robots_noindex: false, twitter_use_facebook: true, twitter_title: '' } );
+		t.check( 'SureRank depth clears: robots meta deleted',
+			wpEval( `echo wp_json_encode( get_post_meta( ${ postId }, 'surerank_settings_post_no_index', true ) );` ) === '""' );
+
 		// --- Squirrly: own qss table, read/write only through their API ------
 		t.check( 'Squirrly activated', await activateOnly( 'squirrly' ) );
 		const sqStart = await page.evaluate( async ( pid ) => {
@@ -303,6 +319,14 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		t.check( 'clearing the Squirrly title leaves the other fields alone',
 			!! sq2 && sq2.title === '' && sq2.description === 'Squirrly description' && sq2.focus_keyword === 'squirrly kw',
 			JSON.stringify( sq2 ) );
+
+		// Depth: robots/canonical/social through their saveSeo partial writes.
+		await writeSeo( postId, { robots_noindex: true, canonical: 'https://example.com/sq-depth/', facebook_title: 'SQ OG depth' } );
+		const sqDeep = sqStore();
+		const deepSeo = sqDeep && sqDeep.seo ? sqDeep.seo : null;
+		t.check( 'Squirrly depth lands via their API',
+			!! deepSeo && parseInt( deepSeo.noindex, 10 ) === 1 && deepSeo.canonical === 'https://example.com/sq-depth/' && deepSeo.og_title === 'SQ OG depth',
+			JSON.stringify( deepSeo ) );
 	} finally {
 		await deletePost( page, postId ).catch( () => {} );
 		// Yoast back as the resident provider, everything else off.

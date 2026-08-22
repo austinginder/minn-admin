@@ -813,10 +813,64 @@ function minn_admin_seo_surerank_provider() {
 			return array();
 		}
 	};
+	$social_text = array(
+		'facebook_title'       => 'facebook_title',
+		'facebook_description' => 'facebook_description',
+		'twitter_title'        => 'twitter_title',
+		'twitter_description'  => 'twitter_description',
+	);
+	$robots = array(
+		'robots_noindex'   => 'post_no_index',
+		'robots_nofollow'  => 'post_no_follow',
+		'robots_noarchive' => 'post_no_archive',
+	);
 	return array(
 		'name'   => 'SureRank',
-		'social' => true,
-		'read'   => function ( $post_id ) use ( $fields, $site_defaults, $flat ) {
+		'fields' => function () {
+			$tw = array( array( array( 'f' => 'twitter_use_facebook', 'op' => '==', 'v' => '0' ) ) );
+			return array(
+				array(
+					'group'  => __( 'Search appearance', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
+						array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
+						array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
+					),
+				),
+				array(
+					'group'  => __( 'Social', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'facebook_title', 'label' => __( 'Facebook title', 'minn-admin' ), 'type' => 'text' ),
+						array( 'name' => 'facebook_description', 'label' => __( 'Facebook description', 'minn-admin' ), 'type' => 'textarea' ),
+						array( 'name' => 'social_image', 'label' => __( 'Social thumbnail', 'minn-admin' ), 'type' => 'image' ),
+						array( 'name' => 'twitter_use_facebook', 'label' => __( 'X (Twitter) uses the Facebook card', 'minn-admin' ), 'type' => 'toggle' ),
+						array(
+							'name'    => 'twitter_card_type',
+							'label'   => __( 'X (Twitter) card type', 'minn-admin' ),
+							'type'    => 'select',
+							'cond'    => $tw,
+							'options' => array(
+								array( '', __( 'Site default', 'minn-admin' ) ),
+								array( 'summary_large_image', __( 'Summary with large image', 'minn-admin' ) ),
+								array( 'summary', __( 'Summary', 'minn-admin' ) ),
+							),
+						),
+						array( 'name' => 'twitter_title', 'label' => __( 'X (Twitter) title', 'minn-admin' ), 'type' => 'text', 'cond' => $tw ),
+						array( 'name' => 'twitter_description', 'label' => __( 'X (Twitter) description', 'minn-admin' ), 'type' => 'textarea', 'cond' => $tw ),
+						array( 'name' => 'twitter_image', 'label' => __( 'X (Twitter) image', 'minn-admin' ), 'type' => 'image', 'cond' => $tw ),
+					),
+				),
+				array(
+					'group'  => __( 'Advanced', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'robots_noindex', 'label' => __( 'No index', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_nofollow', 'label' => __( 'Nofollow links', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_noarchive', 'label' => __( 'No archive', 'minn-admin' ), 'type' => 'toggle' ),
+					),
+				),
+			);
+		},
+		'read'   => function ( $post_id ) use ( $fields, $site_defaults, $flat, $social_text, $robots ) {
 			$meta = $flat( $post_id );
 			$def  = $site_defaults();
 			$out  = array();
@@ -835,9 +889,26 @@ function minn_admin_seo_surerank_provider() {
 				$url = (string) wp_get_attachment_image_url( $id, 'medium' );
 			}
 			$out['social_image'] = ( $id || $url ) ? array( 'id' => $id, 'url' => $url ) : null;
+			foreach ( $social_text as $field => $key ) {
+				$out[ $field ] = isset( $meta[ $key ] ) ? (string) $meta[ $key ] : '';
+			}
+			$tw_id  = isset( $meta['twitter_image_id'] ) ? (int) $meta['twitter_image_id'] : 0;
+			$tw_url = isset( $meta['twitter_image_url'] ) ? (string) $meta['twitter_image_url'] : '';
+			if ( $tw_id && ! $tw_url ) {
+				$tw_url = (string) wp_get_attachment_image_url( $tw_id, 'medium' );
+			}
+			$out['twitter_image'] = ( $tw_id || $tw_url ) ? array( 'id' => $tw_id, 'url' => $tw_url ) : null;
+			// Absent means ON (their post default is true); only a stored
+			// falsy value turns the inheritance off.
+			$out['twitter_use_facebook'] = ! isset( $meta['twitter_same_as_facebook'] )
+				|| ! in_array( $meta['twitter_same_as_facebook'], array( false, 'false', 0, '0', '' ), true );
+			$out['twitter_card_type'] = isset( $meta['twitter_card_type'] ) ? (string) $meta['twitter_card_type'] : '';
+			foreach ( $robots as $field => $key ) {
+				$out[ $field ] = isset( $meta[ $key ] ) && 'yes' === (string) $meta[ $key ];
+			}
 			return $out;
 		},
-		'write'  => function ( $post_id, $field, $clean ) use ( $fields ) {
+		'write'  => function ( $post_id, $field, $clean ) use ( $fields, $social_text, $robots ) {
 			$post_id = (int) $post_id;
 			try {
 				if ( 'social_image' === $field ) {
@@ -859,6 +930,50 @@ function minn_admin_seo_surerank_provider() {
 						) );
 					} else {
 						minn_admin_seo_surerank_unset( $post_id, 'social', array( 'facebook_image_id', 'facebook_image_url' ) );
+					}
+					return;
+				}
+				if ( 'twitter_image' === $field ) {
+					$id = is_numeric( $clean ) ? (int) $clean : 0;
+					if ( $id > 0 ) {
+						\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array(
+							'twitter_image_id'  => $id,
+							'twitter_image_url' => (string) wp_get_attachment_url( $id ),
+						) );
+					} else {
+						minn_admin_seo_surerank_unset( $post_id, 'social', array( 'twitter_image_id', 'twitter_image_url' ) );
+					}
+					return;
+				}
+				if ( 'twitter_use_facebook' === $field ) {
+					// Absent reads as ON, so off must be STORED explicitly.
+					\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array( 'twitter_same_as_facebook' => (bool) $clean ) );
+					return;
+				}
+				if ( 'twitter_card_type' === $field ) {
+					if ( '' === $clean ) {
+						minn_admin_seo_surerank_unset( $post_id, 'social', array( 'twitter_card_type' ) );
+					} else {
+						\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array( 'twitter_card_type' => $clean ) );
+					}
+					return;
+				}
+				if ( isset( $robots[ $field ] ) ) {
+					// post_no_* are SCALAR metas (surerank_settings_post_no_index),
+					// not group keys; absent means the site-wide robots rules.
+					if ( $clean ) {
+						\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array( $robots[ $field ] => 'yes' ) );
+					} else {
+						delete_post_meta( $post_id, 'surerank_settings_' . $robots[ $field ] );
+					}
+					return;
+				}
+				if ( isset( $social_text[ $field ] ) ) {
+					if ( '' === $clean ) {
+						// The same template trap as the general group.
+						minn_admin_seo_surerank_unset( $post_id, 'social', array( $social_text[ $field ] ) );
+					} else {
+						\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array( $social_text[ $field ] => $clean ) );
 					}
 					return;
 				}
@@ -933,7 +1048,36 @@ function minn_admin_seo_squirrly_provider() {
 	};
 	return array(
 		'name'   => 'Squirrly SEO',
-		'social' => true,
+		'fields' => function () {
+			return array(
+				array(
+					'group'  => __( 'Search appearance', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
+						array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
+						array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
+					),
+				),
+				array(
+					'group'  => __( 'Social', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'facebook_title', 'label' => __( 'Facebook title', 'minn-admin' ), 'type' => 'text' ),
+						array( 'name' => 'facebook_description', 'label' => __( 'Facebook description', 'minn-admin' ), 'type' => 'textarea' ),
+						array( 'name' => 'social_image', 'label' => __( 'Social thumbnail', 'minn-admin' ), 'type' => 'image' ),
+						array( 'name' => 'twitter_title', 'label' => __( 'X (Twitter) title', 'minn-admin' ), 'type' => 'text', 'help' => __( 'Leave empty to reuse the Facebook card.', 'minn-admin' ) ),
+						array( 'name' => 'twitter_description', 'label' => __( 'X (Twitter) description', 'minn-admin' ), 'type' => 'textarea' ),
+					),
+				),
+				array(
+					'group'  => __( 'Advanced', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'robots_noindex', 'label' => __( 'No index', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_nofollow', 'label' => __( 'Nofollow links', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'canonical', 'label' => __( 'Canonical URL', 'minn-admin' ), 'type' => 'text', 'sanitize' => 'url', 'help' => __( 'Leave empty to use the permalink.', 'minn-admin' ) ),
+					),
+				),
+			);
+		},
 		'read'   => function ( $post_id ) use ( $api ) {
 			$out = array(
 				'title'         => '',
@@ -950,6 +1094,13 @@ function minn_admin_seo_squirrly_provider() {
 				$out['title']         = isset( $seo['title'] ) ? (string) $seo['title'] : '';
 				$out['description']   = isset( $seo['description'] ) ? (string) $seo['description'] : '';
 				$out['focus_keyword'] = isset( $seo['keywords'] ) ? (string) $seo['keywords'] : '';
+				$out['robots_noindex']       = ! empty( $seo['noindex'] );
+				$out['robots_nofollow']      = ! empty( $seo['nofollow'] );
+				$out['canonical']            = isset( $seo['canonical'] ) ? (string) $seo['canonical'] : '';
+				$out['facebook_title']       = isset( $seo['og_title'] ) ? (string) $seo['og_title'] : '';
+				$out['facebook_description'] = isset( $seo['og_description'] ) ? (string) $seo['og_description'] : '';
+				$out['twitter_title']        = isset( $seo['tw_title'] ) ? (string) $seo['tw_title'] : '';
+				$out['twitter_description']  = isset( $seo['tw_description'] ) ? (string) $seo['tw_description'] : '';
 				$url = isset( $seo['og_media'] ) ? (string) $seo['og_media'] : '';
 				if ( '' !== $url ) {
 					$out['social_image'] = array(
@@ -984,6 +1135,20 @@ function minn_admin_seo_squirrly_provider() {
 					$fields['description'] = (string) $clean;
 				} elseif ( 'focus_keyword' === $field ) {
 					$fields['keywords'] = (string) $clean;
+				} elseif ( 'robots_noindex' === $field ) {
+					$fields['noindex'] = $clean ? 1 : 0;
+				} elseif ( 'robots_nofollow' === $field ) {
+					$fields['nofollow'] = $clean ? 1 : 0;
+				} elseif ( 'canonical' === $field ) {
+					$fields['canonical'] = (string) $clean;
+				} elseif ( 'facebook_title' === $field ) {
+					$fields['og_title'] = (string) $clean;
+				} elseif ( 'facebook_description' === $field ) {
+					$fields['og_description'] = (string) $clean;
+				} elseif ( 'twitter_title' === $field ) {
+					$fields['tw_title'] = (string) $clean;
+				} elseif ( 'twitter_description' === $field ) {
+					$fields['tw_description'] = (string) $clean;
 				} else {
 					return;
 				}
