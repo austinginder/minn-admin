@@ -2,10 +2,13 @@
 /**
  * Bundled adapter: Gravity Forms.
  *
- * Pure descriptor — Gravity Forms ships its own REST API (gf/v2) with cookie
- * auth, so no shim is needed. Entries are listed per form (tabs), with a
- * detail view that resolves field labels from the form schema, and a Trash
- * action.
+ * Descriptor + GFAPI shims. Gravity Forms ships its own REST API (gf/v2),
+ * but it only registers while the Forms → Settings → REST API switch is on,
+ * and most sites never turn it on — so every route the surface uses is a
+ * Minn shim over GFAPI (always loaded), speaking gf/v2's wire contract.
+ * The surface works identically with their API on or off. Entries are
+ * listed per form (tabs) with a detail view that resolves field labels
+ * from the form schema, plus the full entry workflow.
  *
  * @package minn-admin
  */
@@ -14,13 +17,6 @@ defined( 'ABSPATH' ) || exit;
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! class_exists( 'GFAPI' ) ) {
-		return $surfaces;
-	}
-
-	// Gravity Forms only registers its gf/v2 routes when the REST API is
-	// enabled (Forms → Settings → REST API), so hide the surface until then.
-	$webapi = get_option( 'gravityformsaddon_gravityformswebapi_settings' );
-	if ( empty( $webapi['enabled'] ) ) {
 		return $surfaces;
 	}
 
@@ -50,20 +46,22 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => 'read',
 		'collection' => array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'route'     => 'gf/v2/forms/{tab}/entries',
-			'allRoute'  => 'gf/v2/entries',
+			'route'     => 'minn-admin/v1/gf/forms/{tab}/entries',
+			'allRoute'  => 'minn-admin/v1/gf/entries',
 			'query'     => 'sorting[key]=date_created&sorting[direction]=DESC',
 			'pageQuery' => 'paging[page_size]=25&paging[current_page]={page}',
-			// gf/v2 takes search criteria as a JSON string; key 0 = any field.
+			// The shim keeps gf/v2's contract: search criteria as a JSON
+			// string; key 0 = any field.
 			'search'    => array(
 				'param' => 'search',
 				'json'  => array( 'field_filters' => array( array( 'key' => 0, 'value' => '{q}', 'operator' => 'contains' ) ) ),
 			),
 			'itemsKey'  => 'entries',
 			'totalKey'  => 'total_count',
-			// Second list dimension beside the form tabs. gf/v2 takes status
-			// inside the same JSON `search` criteria the search box uses, so
-			// the json form merges with it instead of clobbering the param.
+			// Second list dimension beside the form tabs. Status rides
+			// inside the same JSON `search` criteria the search box uses
+			// (gf/v2's shape), so the json form merges with it instead of
+			// clobbering the param.
 			'filter'    => array(
 				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
@@ -75,7 +73,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'json'    => array( 'status' => '{v}' ),
 			),
 			'tabs'      => array(
-				'route'    => 'gf/v2/forms',
+				'route'    => 'minn-admin/v1/gf/forms?active=1',
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'allLabel' => __( 'All entries', 'minn-admin' ),
@@ -92,30 +90,28 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// submission details — no client-side label mapping.
 				'sectionsRoute' => 'minn-admin/v1/gf/entries/{id}',
 			),
-			// Entry workflow rides GF's own gf/v2/entries/{id}/properties PUT
-			// (is_starred / is_read / status), gated by GF at
-			// gravityforms_edit_entries. The list shows active entries only
-			// (gf/v2's default), so restore-from-spam/trash stays in wp-admin
-			// until Minn grows a status filter dimension.
+			// Entry workflow rides the properties shim (is_starred /
+			// is_read / status), capability-gated the way gf/v2 gates its
+			// own route (gravityforms_edit_entries via GF's resolver).
 			'actions'   => array(
 				array(
 					'label'  => __( 'Star', 'minn-admin' ),
 					'method' => 'PUT',
-					'route'  => 'gf/v2/entries/{id}/properties',
+					'route'  => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'   => array( 'is_starred' => 1 ),
 					'when'   => array( 'key' => 'is_starred', 'equals' => '0' ),
 				),
 				array(
 					'label'  => __( 'Unstar', 'minn-admin' ),
 					'method' => 'PUT',
-					'route'  => 'gf/v2/entries/{id}/properties',
+					'route'  => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'   => array( 'is_starred' => 0 ),
 					'when'   => array( 'key' => 'is_starred', 'equals' => '1' ),
 				),
 				array(
 					'label'   => __( 'Resend notifications', 'minn-admin' ),
 					'method'  => 'POST',
-					'route'   => 'gf/v2/entries/{id}/notifications',
+					'route'   => 'minn-admin/v1/gf/entries/{id}/notifications',
 					'confirm' => __( 'Resend this entry’s notifications (all active ones for its form)?', 'minn-admin' ),
 				),
 				array(
@@ -133,7 +129,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label'   => __( 'Mark as spam', 'minn-admin' ),
 					'method'  => 'PUT',
-					'route'   => 'gf/v2/entries/{id}/properties',
+					'route'   => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'    => array( 'status' => 'spam' ),
 					'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ),
 					'danger'  => true,
@@ -142,21 +138,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label'  => __( 'Not spam', 'minn-admin' ),
 					'method' => 'PUT',
-					'route'  => 'gf/v2/entries/{id}/properties',
+					'route'  => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'   => array( 'status' => 'active' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 				array(
 					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'PUT',
-					'route'  => 'gf/v2/entries/{id}/properties',
+					'route'  => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'   => array( 'status' => 'active' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
 					'label'   => __( 'Trash entry', 'minn-admin' ),
 					'method'  => 'DELETE',
-					'route'   => 'gf/v2/entries/{id}',
+					'route'   => 'minn-admin/v1/gf/entries/{id}',
 					'confirm' => __( 'Move this entry to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
@@ -164,7 +160,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
-					'route'   => 'gf/v2/entries/{id}?force=1',
+					'route'   => 'minn-admin/v1/gf/entries/{id}?force=1',
 					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
@@ -172,7 +168,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
-					'route'   => 'gf/v2/entries/{id}?force=1',
+					'route'   => 'minn-admin/v1/gf/entries/{id}?force=1',
 					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'spam' ),
@@ -182,21 +178,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label'  => __( 'Star', 'minn-admin' ),
 					'method' => 'PUT',
-					'route'  => 'gf/v2/entries/{id}/properties',
+					'route'  => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'   => array( 'is_starred' => 1 ),
 					'when'   => array( 'key' => 'is_starred', 'equals' => '0' ),
 				),
 				array(
 					'label'  => __( 'Mark read', 'minn-admin' ),
 					'method' => 'PUT',
-					'route'  => 'gf/v2/entries/{id}/properties',
+					'route'  => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'   => array( 'is_read' => 1 ),
 					'when'   => array( 'key' => 'is_read', 'equals' => '0' ),
 				),
 				array(
 					'label'   => __( 'Spam', 'minn-admin' ),
 					'method'  => 'PUT',
-					'route'   => 'gf/v2/entries/{id}/properties',
+					'route'   => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'    => array( 'status' => 'spam' ),
 					'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ),
 					'danger'  => true,
@@ -205,21 +201,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label'  => __( 'Not spam', 'minn-admin' ),
 					'method' => 'PUT',
-					'route'  => 'gf/v2/entries/{id}/properties',
+					'route'  => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'   => array( 'status' => 'active' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 				array(
 					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'PUT',
-					'route'  => 'gf/v2/entries/{id}/properties',
+					'route'  => 'minn-admin/v1/gf/entries/{id}/properties',
 					'body'   => array( 'status' => 'active' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
 					'label'   => __( 'Trash', 'minn-admin' ),
 					'method'  => 'DELETE',
-					'route'   => 'gf/v2/entries/{id}',
+					'route'   => 'minn-admin/v1/gf/entries/{id}',
 					'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
@@ -227,7 +223,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
-					'route'   => 'gf/v2/entries/{id}?force=1',
+					'route'   => 'minn-admin/v1/gf/entries/{id}?force=1',
 					'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
@@ -298,7 +294,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'itemsKey'  => 'items',
 				'totalKey'  => 'total',
 				'tabs'      => array(
-					'route'    => 'gf/v2/forms',
+					'route'    => 'minn-admin/v1/gf/forms?active=1',
 					'valueKey' => 'id',
 					'labelKey' => 'title',
 					'allLabel' => __( 'All notifications', 'minn-admin' ),
@@ -365,7 +361,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'itemsKey'  => 'items',
 				'totalKey'  => 'total',
 				'tabs'      => array(
-					'route'    => 'gf/v2/forms',
+					'route'    => 'minn-admin/v1/gf/forms?active=1',
 					'valueKey' => 'id',
 					'labelKey' => 'title',
 					'allLabel' => __( 'All feeds', 'minn-admin' ),
@@ -414,10 +410,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 } );
 
 /**
- * Shim endpoints. GF's own gf/v2 API covers entry listing, but the entry
- * DETAIL needs the form schema to be readable (labels, choice text, composite
- * fields), and the forms list needs is_active + entry counts that gf/v2/forms
- * doesn't expose — both are one GFAPI call server-side.
+ * Shim endpoints — the surface's whole API, all over GFAPI so nothing
+ * depends on GF's own REST switch. The entry DETAIL needs the form schema
+ * to be readable (labels, choice text, composite fields), the forms list
+ * needs is_active + entry counts, and the list/workflow shims below keep
+ * gf/v2's wire contract so the descriptor reads like their API.
  */
 add_action( 'rest_api_init', function () {
 	if ( ! class_exists( 'GFAPI' ) ) {
@@ -567,14 +564,167 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	// ---- Entry list + workflow shims -----------------------------------
+	// These mirror gf/v2's entries routes over GFAPI so the surface works
+	// whether or not Gravity Forms' REST API setting is on (the setting
+	// only gates their gf/v2 registration; GFAPI is always loaded). The
+	// list accepts gf/v2's exact wire contract — `search` as a JSON string
+	// (or array), `paging[page_size]` / `paging[current_page]`,
+	// `sorting[key]` / `sorting[direction]`, default status active —
+	// so the descriptor's query strings carry over unchanged. Capabilities
+	// mirror gf/v2's own permission callbacks per verb, always resolved
+	// through GFCommon::current_user_can_any (admins hold
+	// gform_full_access, not the granular caps).
+	$list_entries = function ( WP_REST_Request $request ) {
+		$sorting_param = $request->get_param( 'sorting' );
+		$sorting       = array(
+			'key'       => isset( $sorting_param['key'] ) && '' !== $sorting_param['key'] ? (string) $sorting_param['key'] : 'id',
+			'direction' => isset( $sorting_param['direction'] ) && '' !== $sorting_param['direction'] ? (string) $sorting_param['direction'] : 'DESC',
+		);
+		$paging_param = $request->get_param( 'paging' );
+		$page_size    = isset( $paging_param['page_size'] ) ? (int) $paging_param['page_size'] : 25;
+		$page_size    = min( 100, max( 1, $page_size ) );
+		$offset       = isset( $paging_param['current_page'] )
+			? $page_size * ( max( 1, (int) $paging_param['current_page'] ) - 1 )
+			: ( isset( $paging_param['offset'] ) ? max( 0, (int) $paging_param['offset'] ) : 0 );
+		$search = $request->get_param( 'search' );
+		if ( isset( $search ) && ! is_array( $search ) ) {
+			// Their parser's exact sequence: query params arrive slashed
+			// (wp_magic_quotes) and possibly still urlencoded.
+			$search = json_decode( urldecode( stripslashes( (string) $search ) ), true );
+		}
+		$search = is_array( $search ) ? $search : array();
+		if ( ! isset( $search['status'] ) ) {
+			$search['status'] = 'active';
+		}
+		$form_id = (int) $request->get_param( 'form' );
+		$total   = 0;
+		$entries = GFAPI::get_entries( $form_id, $search, $sorting, array( 'offset' => $offset, 'page_size' => $page_size ), $total );
+		if ( is_wp_error( $entries ) ) {
+			return new WP_Error( $entries->get_error_code(), $entries->get_error_message(), array( 'status' => 400 ) );
+		}
+		return rest_ensure_response( array(
+			'total_count' => (int) $total,
+			'entries'     => $entries,
+		) );
+	};
+	$can_view_entries = function () {
+		return GFCommon::current_user_can_any( array( 'gravityforms_view_entries', 'gform_full_access' ) );
+	};
+	register_rest_route( 'minn-admin/v1', '/gf/entries', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can_view_entries,
+		'callback'            => $list_entries,
+	) );
+	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<form>\d+)/entries', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can_view_entries,
+		'callback'            => $list_entries,
+	) );
+
+	// Entry workflow properties. gf/v2's own route forwards ANY key to
+	// update_entry_property; this shim deliberately whitelists the three
+	// the surface uses — read state, star state and status — so an
+	// edit-entries user cannot write arbitrary entry columns through it.
+	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)/properties', array(
+		'methods'             => 'PUT',
+		'permission_callback' => function () {
+			return GFCommon::current_user_can_any( array( 'gravityforms_edit_entries', 'gform_full_access' ) );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			$entry = GFAPI::get_entry( (int) $request['id'] );
+			if ( is_wp_error( $entry ) ) {
+				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$body    = $request->get_json_params();
+			$body    = is_array( $body ) ? $body : array();
+			$written = 0;
+			foreach ( array( 'is_read', 'is_starred' ) as $flag ) {
+				if ( array_key_exists( $flag, $body ) ) {
+					$result = GFAPI::update_entry_property( (int) $entry['id'], $flag, (int) (bool) $body[ $flag ] );
+					if ( is_wp_error( $result ) ) {
+						return new WP_Error( 'update_failed', $result->get_error_message(), array( 'status' => 400 ) );
+					}
+					$written++;
+				}
+			}
+			if ( array_key_exists( 'status', $body ) ) {
+				$status = (string) $body['status'];
+				if ( ! in_array( $status, array( 'active', 'spam', 'trash' ), true ) ) {
+					return new WP_Error( 'bad_status', __( 'Unknown entry status.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$result = GFAPI::update_entry_property( (int) $entry['id'], 'status', $status );
+				if ( is_wp_error( $result ) ) {
+					return new WP_Error( 'update_failed', $result->get_error_message(), array( 'status' => 400 ) );
+				}
+				$written++;
+			}
+			if ( ! $written ) {
+				return new WP_Error( 'no_properties', __( 'Nothing to update.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			return rest_ensure_response( array( 'updated' => true ) );
+		},
+	) );
+
+	// Trash / permanent delete, gf/v2 semantics: no force means trash (410
+	// when already trashed), force means GFAPI::delete_entry for good.
+	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'permission_callback' => function () {
+			return GFCommon::current_user_can_any( array( 'gravityforms_delete_entries', 'gform_full_access' ) );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			$entry = GFAPI::get_entry( (int) $request['id'] );
+			if ( is_wp_error( $entry ) ) {
+				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( $request->get_param( 'force' ) ) {
+				$result = GFAPI::delete_entry( (int) $entry['id'] );
+				if ( is_wp_error( $result ) ) {
+					return new WP_Error( 'delete_failed', $result->get_error_message(), array( 'status' => 400 ) );
+				}
+				return rest_ensure_response( array( 'deleted' => true ) );
+			}
+			if ( 'trash' === rgar( $entry, 'status' ) ) {
+				return new WP_Error( 'already_trashed', __( 'The entry is already in the trash.', 'minn-admin' ), array( 'status' => 410 ) );
+			}
+			GFAPI::update_entry_property( (int) $entry['id'], 'status', 'trash' );
+			return rest_ensure_response( array( 'trashed' => true ) );
+		},
+	) );
+
+	// Resend every active notification for the entry's form, exactly what
+	// gf/v2's notifications POST does with no _notifications filter.
+	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)/notifications', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return GFCommon::current_user_can_any( array( 'gravityforms_edit_entries', 'gform_full_access' ) );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			$entry = GFAPI::get_entry( (int) $request['id'] );
+			if ( is_wp_error( $entry ) ) {
+				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$form = GFAPI::get_form( (int) $entry['form_id'] );
+			if ( ! $form ) {
+				return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$sent = GFAPI::send_notifications( $form, $entry, 'form_submission' );
+			return rest_ensure_response( array( 'notifications' => is_array( $sent ) ? array_values( $sent ) : array() ) );
+		},
+	) );
 	register_rest_route( 'minn-admin/v1', '/gf/forms', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
 			return GFCommon::current_user_can_any( array( 'gravityforms_view_entries', 'gform_full_access' ) );
 		},
-		'callback'            => function () {
-			$rows = array();
-			foreach ( GFFormsModel::get_forms( null, 'title' ) as $f ) {
+		'callback'            => function ( WP_REST_Request $request ) {
+			// ?active=1 lists active forms only — the entry/notification
+			// tab semantics gf/v2/forms had (inactive forms' rows appear
+			// only under All). The manage view keeps the full list.
+			$active_only = (bool) $request->get_param( 'active' );
+			$rows        = array();
+			foreach ( GFFormsModel::get_forms( $active_only ? true : null, 'title' ) as $f ) {
 				$rows[] = array(
 					'id'           => (int) $f->id,
 					'title'        => $f->title,

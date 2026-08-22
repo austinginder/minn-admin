@@ -61,7 +61,7 @@ Reference depth: **Gravity Forms**.
 
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| gravity-forms | Y | Y | Y | Y | Y | · | · | Y | Y | Y | 2026-07-17 | Form settings (item), Notifications view, **Feeds view** (add-on integrations: toggle/delete/deep-link; config mapper deferred, see full-ui-adapters); form builder = **L**; status/chart not needed for GF depth |
+| gravity-forms | Y | Y | Y | Y | Y | · | · | Y | Y | Y | 2026-08-22 | Form settings (item), Notifications view, **Feeds view** (add-on integrations: toggle/delete/deep-link; config mapper deferred, see full-ui-adapters); form builder = **L**; status/chart not needed for GF depth. **No gf/v2 dependency since 2026-08-22**: every route is a GFAPI shim speaking gf/v2's wire contract, so the surface works with GF's REST API switch off (most real sites); properties shim whitelists is_read/is_starred/status where gf/v2 forwards any key. Suite gf-no-api pins the API-off state |
 | fluent-forms | Y | Y | Y | Y | Y | Y | · | · | · | Y | 2026-08-06 | Unread/spam/trash tabs + bulk; suite `fluent-forms` (24); active fixture |
 | elementor-forms | Y | Y | · | Y | · | · | · | · | · | · | 2026-07-14 | Elementor canvas = **L** |
 | cf7-flamingo | Y | Y | Y | Y | Y | Y | · | · | · | Y | 2026-08-06 | CF7 builder = **L**; bulk restore/delete already wired (matrix was stale) |
