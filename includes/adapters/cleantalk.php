@@ -193,7 +193,8 @@ function minn_admin_cleantalk_verify_access_key() {
  * @return array{count:int,checkUrl:string}|null
  */
 function minn_admin_cleantalk_spam_users_boot() {
-	if ( ! minn_admin_cleantalk_active() || ! current_user_can( 'list_users' ) ) {
+	if ( ! minn_admin_cleantalk_active() || ! current_user_can( 'list_users' )
+		|| ! minn_admin_cleantalk_can_manage() ) {
 		return null;
 	}
 	return array(
@@ -224,6 +225,22 @@ function minn_admin_cleantalk_user_is_marked( $user_id ) {
  * signed-in operator. Deleting either through this route would be a
  * different, worse action than spam cleanup.
  */
+/**
+ * CleanTalk's own gate for the spam-account screens.
+ *
+ * Every Find-spam-users page is registered at activate_plugins, so in the vendor
+ * the whole surface is administrator-only. Minn stands in for those screens, so
+ * it asks the same question: WP's user capabilities say who may touch an ACCOUNT,
+ * they do not say who may steer CleanTalk. Approve in particular writes ct_bad,
+ * which drops the account from every future scan and which Minn offers no way to
+ * clear.
+ *
+ * @return bool
+ */
+function minn_admin_cleantalk_can_manage() {
+	return current_user_can( 'activate_plugins' );
+}
+
 function minn_admin_cleantalk_protected_user( $user ) {
 	if ( ! ( $user instanceof WP_User ) ) {
 		return true;
@@ -281,7 +298,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'GET',
 			'permission_callback' => function () {
-				return current_user_can( 'list_users' );
+				return current_user_can( 'list_users' ) && minn_admin_cleantalk_can_manage();
 			},
 			'callback'            => 'minn_admin_cleantalk_list_spam_users',
 		)
@@ -295,11 +312,18 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => function ( WP_REST_Request $request ) {
 				$id     = (int) $request['id'];
 				$action = (string) $request->get_param( 'action' );
+				if ( ! minn_admin_cleantalk_can_manage() ) {
+					return false;
+				}
 				if ( 'approve' === $action ) {
 					return current_user_can( 'edit_users' ) && current_user_can( 'edit_user', $id );
 				}
 				if ( 'delete' === $action ) {
-					return current_user_can( 'delete_users' );
+					// The per-target meta cap, the way core's own users.php and the
+					// REST users controller do it: wp_delete_user() checks nothing
+					// itself, and third-party map_meta_cap filters narrow deletion
+					// per target rather than through the blanket primitive.
+					return current_user_can( 'delete_users' ) && current_user_can( 'delete_user', $id );
 				}
 				return false;
 			},
@@ -362,8 +386,13 @@ function minn_admin_cleantalk_list_spam_users( WP_REST_Request $request ) {
 	$total = (int) $query->get_total();
 	$ids   = array_map( 'intval', (array) $query->get_results() );
 	$items = array();
+	$held  = 0;
 	foreach ( $ids as $uid ) {
-		if ( ! current_user_can( 'edit_user', $uid ) && ! current_user_can( 'delete_users' ) ) {
+		// Both operands per target. A blanket delete_users has no user argument, so
+		// it used to hand every flagged account's row -- name, email, roles,
+		// registration date -- to a caller a map_meta_cap filter forbids acting on.
+		if ( ! current_user_can( 'edit_user', $uid ) && ! current_user_can( 'delete_user', $uid ) ) {
+			++$held;
 			continue;
 		}
 		$user = get_userdata( $uid );
@@ -385,6 +414,9 @@ function minn_admin_cleantalk_list_spam_users( WP_REST_Request $request ) {
 		$items[] = $item;
 	}
 
+	// Report what this caller was actually served. The unfiltered total told a
+	// caller whose every row was withheld exactly how many flagged accounts exist.
+	$total    = max( 0, $total - $held );
 	$pages    = $per_page > 0 ? (int) ceil( $total / $per_page ) : 0;
 	$response = rest_ensure_response( $items );
 	$response->header( 'X-WP-Total', $total );
