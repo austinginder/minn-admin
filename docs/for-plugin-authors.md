@@ -1250,9 +1250,20 @@ name }`, the media picker over every attachment type), `gallery`
 (ordered `[{ id, url }]`, Minn's images editor), `wysiwyg` (an HTML fragment string, edited
 in Minn's rich-text modal with pastes cleaned through the shared sanitizer), `suggest`,
 `relation`, and
-`rows` (below). Report anything
+`rows` (below), and `note` (a read-only informational row; its value rides the panel read
+like any field and nothing is ever written back). Report anything
 else in the `locked` count; Minn shows "N advanced fields — edit in wp-admin ↗" rather than
 rendering something unsafe.
+
+Panel fields also accept `help` (rendered under the control), `counter` (a live
+length readout such as the SEO title's 60, turning red past the limit), and `cond`
+(conditional visibility in the ACF format `[[{ f, op, v }]]` over sibling field
+names; a hidden field keeps its value and round-trips untouched). Since 0.35.0 a
+fields route may include a `preview` object alongside `groups` — `{ url, title,
+description, fields, vars }` — and Minn renders it as a search-result snippet above
+the fields: `fields` maps a preview line to the field name that drives it, and
+`vars` is a token map (`%token%` or `%%token%%`) resolved live while typing. The
+bundled SEO panel is the reference.
 
 **`rows` (since 0.31.0)** is a repeating group — the ACF-repeater shape. The field declares
 `subfields` (the simple vocabulary above, minus pickers and nested rows) and optionally
