@@ -122,6 +122,33 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		}
 		t.check( 'SEO panel save round-trips via door modal', !! aio && aio.title === 'Panel title via Minn' && aio.description === 'Panel description via Minn', JSON.stringify( aio ) );
 
+		// --- AIOSEO depth: robots model + social split through their model ---
+		const aioDepth = await page.evaluate( async ( pid ) => {
+			const h = { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce };
+			const w = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid, {
+				method: 'POST', headers: h, credentials: 'same-origin',
+				body: JSON.stringify( { minn_seo: {
+					robots_default: false, robots_noindex: true, adv_max_snippet: 120,
+					canonical: 'https://example.com/aio-depth/', twitter_use_facebook: false, twitter_card_type: 'summary',
+				} } ),
+			} );
+			const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ pid }?context=edit&_fields=minn_seo`, {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			return { status: w.status, seo: ( await r.json() ).minn_seo };
+		}, postId );
+		t.check( 'AIOSEO depth write accepted', aioDepth.status === 200 );
+		// Their MODEL is the storage truth — the columns, not the REST echo.
+		const aioModel = wpEval( `echo wp_json_encode( array_intersect_key( (array) \\AIOSEO\\Plugin\\Common\\Models\\Post::getPost( ${ postId } )->jsonSerialize(), array_flip( array( 'robots_default', 'robots_noindex', 'robots_max_snippet', 'canonical_url', 'twitter_use_og', 'twitter_card' ) ) ) );` );
+		t.check( 'AIOSEO depth lands in their columns', ( () => {
+			try {
+				const m = JSON.parse( aioModel );
+				return m.robots_default === false && m.robots_noindex === true && parseInt( m.robots_max_snippet, 10 ) === 120
+					&& m.canonical_url === 'https://example.com/aio-depth/' && m.twitter_use_og === false && m.twitter_card === 'summary';
+			} catch ( e ) { return false; }
+		} )(), aioModel );
+		t.check( 'AIOSEO depth reads back through the field', aioDepth.seo && aioDepth.seo.robots_default === false && aioDepth.seo.robots_noindex === true && aioDepth.seo.twitter_card_type === 'summary', JSON.stringify( aioDepth.seo ) );
+
 		// --- SEOPress: shared-code REST round-trip ----------------------------
 		t.check( 'SEOPress activated', await activateOnly( 'seopress' ) );
 		const sp = await page.evaluate( async ( pid ) => {

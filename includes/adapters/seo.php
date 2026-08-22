@@ -61,10 +61,25 @@ function minn_admin_seo_meta_provider( $name, $keys, $can_edit = null ) {
 }
 
 /**
- * AIOSEO v4 provider — reads and writes through AIOSEO's own Post model so
- * its table shape, sanitization and caches stay its business. The focus
+ * AIOSEO v4 provider — full per-post depth through AIOSEO's own Post model
+ * so its table shape, sanitization and caches stay its business. The focus
  * keyword lives inside the `keyphrases` JSON blob; additional keyphrases
  * are preserved untouched.
+ *
+ * Model facts (app/Common/Models/Post.php, verified):
+ * - Robots are COLUMNS behind one robots_default switch: ON means inherit
+ *   everything, OFF reveals the directive booleans plus the max-snippet /
+ *   video / image-preview limits (int_neg1 sanitize: non-numeric becomes
+ *   -1; image preview default 'large'). The panel mirrors that shape with
+ *   a "Use default robots" toggle and conditional fields, because a
+ *   per-directive inherit does not exist in their model.
+ * - twitter_use_og inherits the OG card like Rank Math's use_facebook;
+ *   null means the site option (default on).
+ * - Custom social images are URL columns (og_image_type 'custom' +
+ *   og_image_custom_url); ids resolve back via attachment_url_to_postid
+ *   (the Squirrly-provider convention).
+ * - Groups follow their per-tab access caps (aioseo()->access):
+ *   social_settings, advanced_settings, schema_settings.
  */
 function minn_admin_seo_aioseo_provider() {
 	$model = '\AIOSEO\Plugin\Common\Models\Post';
@@ -80,36 +95,190 @@ function minn_admin_seo_aioseo_provider() {
 		}
 		return is_array( $decoded ) ? $decoded : array();
 	};
+	$has_cap = function ( $cap ) {
+		try {
+			return function_exists( 'aioseo' ) && isset( aioseo()->access )
+				? (bool) aioseo()->access->hasCapability( $cap )
+				: current_user_can( $cap );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	};
+	$robots_toggles = array(
+		'robots_noindex'      => 'robots_noindex',
+		'robots_nofollow'     => 'robots_nofollow',
+		'robots_noarchive'    => 'robots_noarchive',
+		'robots_noimageindex' => 'robots_noimageindex',
+		'robots_nosnippet'    => 'robots_nosnippet',
+	);
 	return array(
 		'name'    => 'AIOSEO',
 		// AIOSEO gates its own post SEO write on aioseo_page_general_settings
 		// (PostsTerms.php), so edit_post alone would grant what it withholds.
-		'can_edit' => function () {
-			return function_exists( 'aioseo' ) && isset( aioseo()->access )
-				? (bool) aioseo()->access->hasCapability( 'aioseo_page_general_settings' )
-				: current_user_can( 'aioseo_page_general_settings' );
+		'can_edit' => function () use ( $has_cap ) {
+			return $has_cap( 'aioseo_page_general_settings' );
 		},
-		'read'  => function ( $post_id ) use ( $model, $phrases_of ) {
+		'fields' => function () use ( $has_cap ) {
+			$dflt = array( array( array( 'f' => 'robots_default', 'op' => '==', 'v' => '0' ) ) );
+			$tw   = array( array( array( 'f' => 'twitter_use_facebook', 'op' => '==', 'v' => '0' ) ) );
+			$groups   = array();
+			$groups[] = array(
+				'group'  => __( 'Search appearance', 'minn-admin' ),
+				'fields' => array(
+					array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
+					array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
+					array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
+					array( 'name' => 'pillar_content', 'label' => __( 'Pillar content', 'minn-admin' ), 'type' => 'toggle', 'help' => __( 'Mark this as cornerstone content.', 'minn-admin' ) ),
+				),
+			);
+			if ( $has_cap( 'aioseo_page_social_settings' ) ) {
+				$groups[] = array(
+					'group'  => __( 'Social', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'facebook_title', 'label' => __( 'Facebook title', 'minn-admin' ), 'type' => 'text' ),
+						array( 'name' => 'facebook_description', 'label' => __( 'Facebook description', 'minn-admin' ), 'type' => 'textarea' ),
+						array( 'name' => 'social_image', 'label' => __( 'Social thumbnail', 'minn-admin' ), 'type' => 'image', 'help' => __( 'Sets a custom Facebook image; empty falls back to their default source.', 'minn-admin' ) ),
+						array( 'name' => 'twitter_use_facebook', 'label' => __( 'X (Twitter) uses the Facebook card', 'minn-admin' ), 'type' => 'toggle' ),
+						array(
+							'name'    => 'twitter_card_type',
+							'label'   => __( 'X (Twitter) card type', 'minn-admin' ),
+							'type'    => 'select',
+							'cond'    => $tw,
+							'options' => array(
+								array( '', __( 'Site default', 'minn-admin' ) ),
+								array( 'summary', __( 'Summary', 'minn-admin' ) ),
+								array( 'summary_large_image', __( 'Summary with large image', 'minn-admin' ) ),
+							),
+						),
+						array( 'name' => 'twitter_title', 'label' => __( 'X (Twitter) title', 'minn-admin' ), 'type' => 'text', 'cond' => $tw ),
+						array( 'name' => 'twitter_description', 'label' => __( 'X (Twitter) description', 'minn-admin' ), 'type' => 'textarea', 'cond' => $tw ),
+						array( 'name' => 'twitter_image', 'label' => __( 'X (Twitter) image', 'minn-admin' ), 'type' => 'image', 'cond' => $tw ),
+					),
+				);
+			}
+			if ( $has_cap( 'aioseo_page_advanced_settings' ) ) {
+				$groups[] = array(
+					'group'  => __( 'Advanced', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'robots_default', 'label' => __( 'Use default robots settings', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_noindex', 'label' => __( 'No index', 'minn-admin' ), 'type' => 'toggle', 'cond' => $dflt ),
+						array( 'name' => 'robots_nofollow', 'label' => __( 'Nofollow links', 'minn-admin' ), 'type' => 'toggle', 'cond' => $dflt ),
+						array( 'name' => 'robots_noarchive', 'label' => __( 'No archive', 'minn-admin' ), 'type' => 'toggle', 'cond' => $dflt ),
+						array( 'name' => 'robots_noimageindex', 'label' => __( 'No image index', 'minn-admin' ), 'type' => 'toggle', 'cond' => $dflt ),
+						array( 'name' => 'robots_nosnippet', 'label' => __( 'No snippet', 'minn-admin' ), 'type' => 'toggle', 'cond' => $dflt ),
+						array( 'name' => 'adv_max_snippet', 'label' => __( 'Max snippet length', 'minn-admin' ), 'type' => 'number', 'cond' => $dflt, 'help' => __( '-1 sets no limit.', 'minn-admin' ) ),
+						array( 'name' => 'adv_max_video_preview', 'label' => __( 'Max video preview', 'minn-admin' ), 'type' => 'number', 'cond' => $dflt, 'help' => __( 'Seconds. -1 sets no limit.', 'minn-admin' ) ),
+						array(
+							'name'    => 'adv_max_image_preview',
+							'label'   => __( 'Max image preview', 'minn-admin' ),
+							'type'    => 'select',
+							'cond'    => $dflt,
+							'options' => array(
+								array( 'none', __( 'None', 'minn-admin' ) ),
+								array( 'standard', __( 'Standard', 'minn-admin' ) ),
+								array( 'large', __( 'Large', 'minn-admin' ) ),
+							),
+						),
+						array( 'name' => 'canonical', 'label' => __( 'Canonical URL', 'minn-admin' ), 'type' => 'text', 'sanitize' => 'url', 'help' => __( 'Leave empty to use the permalink.', 'minn-admin' ) ),
+					),
+				);
+			}
+			if ( $has_cap( 'aioseo_page_schema_settings' ) ) {
+				$groups[] = array(
+					'group'  => __( 'Schema', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'schema_in_use', 'label' => __( 'Schema in use', 'minn-admin' ), 'type' => 'note' ),
+					),
+					// Their schema generator is their own app; the locked
+					// link is the doorway.
+					'locked' => 1,
+				);
+			}
+			return $groups;
+		},
+		'preview' => function ( $post_id ) {
+			try {
+				$post = get_post( (int) $post_id );
+				if ( ! $post || ! function_exists( 'aioseo' ) ) {
+					return null;
+				}
+				// AIOSEO's smart tags are #syntax the client cannot re-run,
+				// so the vars map carries only the generic %tokens%.
+				$vars = array(
+					'title'    => get_the_title( $post ),
+					'sitename' => get_bloginfo( 'name' ),
+					'sitedesc' => get_bloginfo( 'description' ),
+					'sep'      => '-',
+					'excerpt'  => wp_trim_words( (string) get_the_excerpt( $post ), 30 ),
+					'page'     => '',
+				);
+				return array(
+					'url'         => (string) get_permalink( $post ),
+					'title'       => (string) aioseo()->meta->title->getPostTitle( $post ),
+					'description' => (string) aioseo()->meta->description->getPostDescription( $post ),
+					'fields'      => array( 'title' => 'title', 'description' => 'description' ),
+					'vars'        => $vars,
+				);
+			} catch ( \Throwable $e ) {
+				return null;
+			}
+		},
+		'read'  => function ( $post_id ) use ( $model, $phrases_of, $robots_toggles ) {
 			$out = array( 'title' => '', 'description' => '', 'focus_keyword' => '' );
 			try {
 				$post = $model::getPost( (int) $post_id );
-				if ( $post ) {
-					$out['title']       = (string) $post->title;
-					$out['description'] = (string) $post->description;
-					$phrases            = $phrases_of( $post );
-					if ( ! empty( $phrases['focus']['keyphrase'] ) ) {
-						$out['focus_keyword'] = (string) $phrases['focus']['keyphrase'];
-					}
+				if ( ! $post ) {
+					return $out;
 				}
+				$out['title']       = (string) $post->title;
+				$out['description'] = (string) $post->description;
+				$phrases            = $phrases_of( $post );
+				if ( ! empty( $phrases['focus']['keyphrase'] ) ) {
+					$out['focus_keyword'] = (string) $phrases['focus']['keyphrase'];
+				}
+				$out['pillar_content'] = ! empty( $post->pillar_content );
+				// null = never explicit = their defaults.
+				$out['robots_default'] = null === $post->robots_default ? true : (bool) $post->robots_default;
+				foreach ( $robots_toggles as $field => $column ) {
+					$out[ $field ] = ! empty( $post->$column );
+				}
+				$out['adv_max_snippet']       = null === $post->robots_max_snippet ? -1 : (int) $post->robots_max_snippet;
+				$out['adv_max_video_preview'] = null === $post->robots_max_videopreview ? -1 : (int) $post->robots_max_videopreview;
+				$out['adv_max_image_preview'] = null === $post->robots_max_imagepreview || '' === (string) $post->robots_max_imagepreview ? 'large' : (string) $post->robots_max_imagepreview;
+				$out['canonical']             = (string) $post->canonical_url;
+				$out['facebook_title']        = (string) $post->og_title;
+				$out['facebook_description']  = (string) $post->og_description;
+				$og_url = 'custom' === (string) $post->og_image_type ? (string) $post->og_image_custom_url : '';
+				$out['social_image'] = '' !== $og_url ? array( 'id' => (int) attachment_url_to_postid( $og_url ), 'url' => $og_url ) : null;
+				$out['twitter_use_facebook'] = null === $post->twitter_use_og ? true : (bool) $post->twitter_use_og;
+				$out['twitter_card_type']    = null === $post->twitter_card || 'default' === (string) $post->twitter_card ? '' : (string) $post->twitter_card;
+				$out['twitter_title']        = (string) $post->twitter_title;
+				$out['twitter_description']  = (string) $post->twitter_description;
+				$tw_url = 'custom' === (string) $post->twitter_image_type ? (string) $post->twitter_image_custom_url : '';
+				$out['twitter_image'] = '' !== $tw_url ? array( 'id' => (int) attachment_url_to_postid( $tw_url ), 'url' => $tw_url ) : null;
+				$out['schema_in_use'] = minn_admin_seo_aioseo_schema_in_use( $post, get_post_type( (int) $post_id ) );
 			} catch ( \Throwable $e ) { /* their schema, their exceptions — read as empty */ }
 			return $out;
 		},
-		'write' => function ( $post_id, $field, $clean ) use ( $model, $phrases_of ) {
+		'write' => function ( $post_id, $field, $clean ) use ( $model, $phrases_of, $robots_toggles ) {
 			try {
 				$post = $model::getPost( (int) $post_id );
 				if ( ! $post ) {
 					return;
 				}
+				$image_set = function ( $type_col, $url_col ) use ( $post, $clean ) {
+					$att = is_numeric( $clean ) ? (int) $clean : 0;
+					if ( $att > 0 ) {
+						$url = (string) wp_get_attachment_url( $att );
+						if ( '' !== $url ) {
+							$post->$type_col = 'custom';
+							$post->$url_col  = $url;
+						}
+					} else {
+						$post->$type_col = 'default';
+						$post->$url_col  = null;
+					}
+				};
 				if ( 'title' === $field ) {
 					$post->title = '' === $clean ? null : $clean;
 				} elseif ( 'description' === $field ) {
@@ -125,11 +294,96 @@ function minn_admin_seo_aioseo_provider() {
 						);
 					}
 					$post->keyphrases = $phrases ? wp_json_encode( $phrases ) : null;
+				} elseif ( 'pillar_content' === $field ) {
+					$post->pillar_content = (bool) $clean;
+				} elseif ( 'robots_default' === $field ) {
+					$post->robots_default = (bool) $clean;
+				} elseif ( isset( $robots_toggles[ $field ] ) ) {
+					$column        = $robots_toggles[ $field ];
+					$post->$column = (bool) $clean;
+				} elseif ( 'adv_max_snippet' === $field || 'adv_max_video_preview' === $field ) {
+					$column        = 'adv_max_snippet' === $field ? 'robots_max_snippet' : 'robots_max_videopreview';
+					// Their int_neg1 sanitize: anything non-numeric is -1.
+					$post->$column = is_numeric( $clean ) ? (int) $clean : -1;
+				} elseif ( 'adv_max_image_preview' === $field ) {
+					$post->robots_max_imagepreview = '' === $clean ? 'large' : $clean;
+				} elseif ( 'canonical' === $field ) {
+					$post->canonical_url = '' === $clean ? null : $clean;
+				} elseif ( 'facebook_title' === $field ) {
+					$post->og_title = '' === $clean ? null : $clean;
+				} elseif ( 'facebook_description' === $field ) {
+					$post->og_description = '' === $clean ? null : $clean;
+				} elseif ( 'social_image' === $field ) {
+					$image_set( 'og_image_type', 'og_image_custom_url' );
+				} elseif ( 'twitter_use_facebook' === $field ) {
+					$post->twitter_use_og = (bool) $clean;
+				} elseif ( 'twitter_card_type' === $field ) {
+					$post->twitter_card = '' === $clean ? 'default' : $clean;
+				} elseif ( 'twitter_title' === $field ) {
+					$post->twitter_title = '' === $clean ? null : $clean;
+				} elseif ( 'twitter_description' === $field ) {
+					$post->twitter_description = '' === $clean ? null : $clean;
+				} elseif ( 'twitter_image' === $field ) {
+					$image_set( 'twitter_image_type', 'twitter_image_custom_url' );
+				} else {
+					return;
 				}
 				$post->save();
 			} catch ( \Throwable $e ) { /* never let their model break the post save */ }
 		},
 	);
+}
+
+/**
+ * What schema this post emits under AIOSEO: the default graph (unless
+ * disabled) plus any custom graphs, read from the model's auto-decoded
+ * `schema` JSON column. Guarded — a shape change reads as ''.
+ *
+ * A post their app never touched has a null schema column but still emits
+ * the post-type default (dynamicOptions schemaType), so that is what an
+ * empty column reports.
+ *
+ * @param object $post      AIOSEO Post model instance.
+ * @param string $post_type Post type, for the default fallback.
+ * @return string
+ */
+function minn_admin_seo_aioseo_schema_in_use( $post, $post_type = '' ) {
+	$type_default = function () use ( $post_type ) {
+		try {
+			if ( $post_type && function_exists( 'aioseo' ) && aioseo()->dynamicOptions->searchAppearance->postTypes->has( $post_type ) ) {
+				$default = (string) aioseo()->dynamicOptions->searchAppearance->postTypes->$post_type->schemaType;
+				if ( '' !== $default && 'none' !== strtolower( $default ) ) {
+					return $default;
+				}
+			}
+		} catch ( \Throwable $e ) { /* fall through */ }
+		return __( 'None', 'minn-admin' );
+	};
+	try {
+		$schema = json_decode( (string) wp_json_encode( $post->schema ), true );
+		if ( ! is_array( $schema ) ) {
+			return $type_default();
+		}
+		$types = array();
+		$default_enabled = ! isset( $schema['default']['isEnabled'] ) || ! empty( $schema['default']['isEnabled'] );
+		if ( $default_enabled && ! empty( $schema['default']['graphName'] ) ) {
+			$types[] = (string) $schema['default']['graphName'];
+		}
+		foreach ( array( 'graphs', 'customGraphs' ) as $key ) {
+			if ( ! empty( $schema[ $key ] ) && is_array( $schema[ $key ] ) ) {
+				foreach ( $schema[ $key ] as $graph ) {
+					if ( ! empty( $graph['graphName'] ) ) {
+						$types[] = (string) $graph['graphName'];
+					} elseif ( ! empty( $graph['slug'] ) ) {
+						$types[] = (string) $graph['slug'];
+					}
+				}
+			}
+		}
+		return $types ? implode( ', ', array_unique( $types ) ) : $type_default();
+	} catch ( \Throwable $e ) {
+		return '';
+	}
 }
 
 /**
