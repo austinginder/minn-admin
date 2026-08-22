@@ -98,6 +98,29 @@ const { launch, login, createPost, deletePost, openEditor, reporter, pickCombo, 
 		} );
 		t.check( 'Schema group locked link-out renders', /wp-admin/.test( lockedLink ), lockedLink );
 
+		// --- SERP preview ----------------------------------------------------
+		const serp = await page.evaluate( () => {
+			const s = document.querySelector( '.minn-editor-side-modal .minn-serp' );
+			if ( ! s ) return null;
+			return {
+				url: s.querySelector( '.minn-serp-url' ).textContent,
+				title: s.querySelector( '[data-serp-line="title"]' ).textContent,
+				desc: s.querySelector( '[data-serp-line="description"]' ).textContent,
+			};
+		} );
+		t.check( 'SERP preview renders with resolved defaults', !! serp && /^https?:\/\//.test( serp.url ) && serp.title.length > 0, JSON.stringify( serp ) );
+		const siteName = await page.evaluate( () => window.MINN.site.name );
+		await page.fill( '[data-pf="seo:title"]', 'Live probe %sep% %sitename%' );
+		await page.waitForTimeout( 250 );
+		const liveTitle = await page.evaluate( () => document.querySelector( '[data-serp-line="title"]' ).textContent );
+		t.check( 'SERP title tracks typing with %vars% resolved', liveTitle.indexOf( 'Live probe' ) === 0 && liveTitle.indexOf( siteName ) !== -1 && liveTitle.indexOf( '%' ) === -1, liveTitle );
+		const counter = await page.evaluate( () => document.querySelector( '[data-pfcount="seo:title"]' ).textContent );
+		t.check( 'Title counter tracks length', /^\d+ \/ 60$/.test( counter ), counter );
+		await page.fill( '[data-pf="seo:title"]', '' );
+		await page.waitForTimeout( 250 );
+		const backToDefault = await page.evaluate( () => document.querySelector( '[data-serp-line="title"]' ).textContent );
+		t.check( 'Cleared title falls back to the server default', backToDefault === serp.title, backToDefault );
+
 		// --- Conditional Twitter reveal --------------------------------------
 		const twRowHidden = () => page.evaluate( () => {
 			const el = document.querySelector( '.minn-editor-side-modal [data-pf="seo:twitter_title"]' );

@@ -25944,7 +25944,10 @@
 				const r = await api( route );
 				const groups = ( r.groups || [] ).filter( ( g ) => g.fields.length || g.locked );
 				if ( ! groups.length ) return;
-				ed.panels.push( { desc, groups } );
+				// A fields route may also send a search-result preview
+				// ({ url, title, description, fields, vars }) — the SEO
+				// panel's SERP snippet.
+				ed.panels.push( { desc, groups, preview: r.preview || null } );
 				const seeded = ( post && desc.valuesKey && post[ desc.valuesKey ] ) ? { ...post[ desc.valuesKey ] } : {};
 				// ACF answers `false` for a field with NO value — even on select /
 				// text fields. Saves round-trip the whole values object, so that
@@ -27894,6 +27897,30 @@
 		return formControlHtml( comboUpgrade( nf ), value, 'data-pf', `${ pid }:${ nf.key }` );
 	}
 
+	/** Resolve %token% / %%token%% template variables against a vars map
+	 * (the SERP preview's live re-render while the user types). Unknown
+	 * tokens drop out, whitespace collapses — a preview, not an emitter. */
+	function serpResolve( tpl, vars ) {
+		return String( tpl )
+			.replace( /%{1,2}([a-z0-9_]+)%{1,2}/gi, ( m, k ) => {
+				const v = vars && vars[ k.toLowerCase() ];
+				return v != null ? String( v ) : '';
+			} )
+			.replace( /\s+/g, ' ' ).trim();
+	}
+
+	/** The search-result preview block (fields routes may send `preview`). */
+	function serpPreviewHtml( p ) {
+		const pv = p.preview;
+		if ( ! pv ) return '';
+		return `
+			<div class="minn-serp" data-serp-fields="${ esc( JSON.stringify( pv.fields || {} ) ) }" data-serp-vars="${ esc( JSON.stringify( pv.vars || {} ) ) }">
+				<div class="minn-serp-url">${ esc( pv.url || '' ) }</div>
+				<div class="minn-serp-title" data-serp-line="title" data-serp-default="${ esc( pv.title || '' ) }">${ esc( pv.title || '' ) }</div>
+				<div class="minn-serp-desc" data-serp-line="description" data-serp-default="${ esc( pv.description || '' ) }">${ esc( pv.description || '' ) }</div>
+			</div>`;
+	}
+
 	/** Panel field body (modal). Doors on the rail open this in a large modal. */
 	function editorPanelFieldsHtml( ed, p ) {
 		const pid = p.desc.id;
@@ -27901,18 +27928,22 @@
 		const lockedTotal = p.groups.reduce( ( n, g ) => n + ( g.locked || 0 ), 0 );
 		return `
 			<div class="minn-panel-fields">
+			${ serpPreviewHtml( p ) }
 				${ p.groups.map( ( g ) => `
 					${ p.groups.length > 1 ? `<div class="minn-panel-group">${ esc( g.group ) }</div>` : '' }
 					${ g.fields.map( ( f ) => {
 						const inline = f.type === 'true_false' || f.type === 'toggle';
 						const help = f.help ? `<div class="minn-toggle-desc">${ esc( f.help ) }</div>` : '';
+						// A declared counter renders a live length readout
+						// (SEO title 60 / description 160 convention).
+						const count = f.counter ? `<div class="minn-field-count" data-pfcount="${ esc( `${ pid }:${ f.name }` ) }" data-pfmax="${ esc( String( f.counter ) ) }"></div>` : '';
 						// Inline (toggle) rows keep the switch on the right;
 						// help rides under the label so the row stays a row.
 						const body = inline
 							? `<div class="minn-toggle-info"><div class="minn-field-label">${ esc( f.label ) }</div>${ help }</div>
 								${ panelInput( pid, f, values[ f.name ] ) }`
 							: `<div class="minn-field-label">${ esc( f.label ) }</div>
-								${ panelInput( pid, f, values[ f.name ] ) }${ help }`;
+								${ panelInput( pid, f, values[ f.name ] ) }${ count }${ help }`;
 						return `
 						<div class="minn-panel-field${ inline ? ' inline' : '' }"${ f.cond ? ` data-pfcond="${ esc( JSON.stringify( f.cond ) ) }"` : '' }>
 							${ body }
@@ -28225,6 +28256,36 @@
 	}
 
 	function bindEditorPanelFields( root, ed ) {
+		// SERP preview + character counters track typing live. Both read
+		// current control values off the DOM (input events bubble to root),
+		// and the preview falls back to the server-resolved default when a
+		// driving field is empty. Counters seed on bind so they never show
+		// blank until the first keystroke.
+		const syncSerpChrome = () => {
+			$$( '[data-pfcount]', root ).forEach( ( el ) => {
+				const input = root.querySelector( `[data-pf="${ el.dataset.pfcount }"]` );
+				if ( ! input ) return;
+				const len = String( formControlValue( input ) || '' ).length;
+				const max = parseInt( el.dataset.pfmax, 10 ) || 0;
+				el.textContent = `${ len } / ${ max }`;
+				el.classList.toggle( 'over', max > 0 && len > max );
+			} );
+			const serp = $( '.minn-serp', root );
+			if ( ! serp ) return;
+			let fields = {};
+			let vars = {};
+			try { fields = JSON.parse( serp.dataset.serpFields || '{}' ); } catch ( e ) {}
+			try { vars = JSON.parse( serp.dataset.serpVars || '{}' ); } catch ( e ) {}
+			Object.keys( fields ).forEach( ( line ) => {
+				const el = serp.querySelector( `[data-serp-line="${ line }"]` );
+				const input = root.querySelector( `[data-pf$=":${ fields[ line ] }"]` );
+				if ( ! el || ! input ) return;
+				const typed = String( formControlValue( input ) || '' );
+				el.textContent = typed ? serpResolve( typed, vars ) : el.dataset.serpDefault;
+			} );
+		};
+		root.addEventListener( 'input', () => syncSerpChrome() );
+		syncSerpChrome();
 		// Conditional rows (data-pfcond) follow their controlling fields
 		// LIVE: every write re-evaluates. Hidden fields keep their values —
 		// the panel round-trips them untouched, it just stops showing them.

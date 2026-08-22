@@ -219,6 +219,46 @@ function minn_admin_seo_rank_math_provider() {
 		'can_edit' => function () {
 			return current_user_can( 'rank_math_onpage_general' );
 		},
+		// The SERP preview resolves the EFFECTIVE title/description through
+		// Rank Math's own machinery: replace_seo_fields() does their
+		// meta-else-template fallback, and the variables register through
+		// their Manager — created here when absent, because their container
+		// only builds it once the setup wizard has run, and setup() is the
+		// exact call their headless REST module makes (variables never
+		// register on their own under REST). The vars map lets the client
+		// re-resolve %tokens% live while the user types.
+		'preview'  => function ( $post_id ) {
+			try {
+				$post = get_post( (int) $post_id );
+				if ( ! $post || ! function_exists( 'rank_math' ) ) {
+					return null;
+				}
+				$rm = rank_math();
+				if ( ! isset( $rm->variables ) && class_exists( '\RankMath\Replace_Variables\Manager' ) ) {
+					$rm->variables = new \RankMath\Replace_Variables\Manager();
+				}
+				if ( ! isset( $rm->variables ) ) {
+					return null;
+				}
+				$rm->variables->setup();
+				$vars = array();
+				foreach ( array( 'title', 'sitename', 'sitedesc', 'sep', 'excerpt', 'page' ) as $key ) {
+					$resolved = (string) \RankMath\Helper::replace_vars( '%' . $key . '%', $post );
+					$vars[ $key ] = '%' . $key . '%' === $resolved ? '' : $resolved;
+				}
+				return array(
+					'url'         => (string) \RankMath\Helper::replace_seo_fields( '%url%', $post ),
+					'title'       => (string) \RankMath\Helper::replace_seo_fields( '%seo_title%', $post ),
+					'description' => (string) \RankMath\Helper::replace_seo_fields( '%seo_description%', $post ),
+					'fields'      => array( 'title' => 'title', 'description' => 'description' ),
+					'vars'        => $vars,
+				);
+			} catch ( \Throwable $e ) {
+				// Their machinery, their exceptions — the panel just
+				// renders without a preview.
+				return null;
+			}
+		},
 		'fields' => function () {
 			// Twitter's own fields only apply when the card stops
 			// inheriting Facebook — same reveal as their metabox.
@@ -227,8 +267,8 @@ function minn_admin_seo_rank_math_provider() {
 				array(
 					'group'  => __( 'Search appearance', 'minn-admin' ),
 					'fields' => array(
-						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text' ),
-						array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea' ),
+						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
+						array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
 						array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
 						array( 'name' => 'pillar_content', 'label' => __( 'Pillar content', 'minn-admin' ), 'type' => 'toggle', 'help' => __( 'Mark this as cornerstone content for internal-link suggestions.', 'minn-admin' ) ),
 					),
@@ -758,8 +798,8 @@ function minn_admin_seo_groups( $plugin ) {
 		array(
 			'group'  => __( 'Search appearance', 'minn-admin' ),
 			'fields' => array(
-				array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text' ),
-				array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea' ),
+				array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
+				array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
 				array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
 			),
 			'locked' => 0,
@@ -802,6 +842,62 @@ function minn_admin_seo_field_map( $plugin ) {
 	return $map;
 }
 
+/**
+ * The SERP preview for a post: the provider's own `preview` callable when
+ * it declares one (vendor-exact variable resolution), else a naive
+ * approximation from the stored values — good enough to show what a search
+ * result will roughly look like, honest enough never to invent vendor
+ * template semantics it cannot resolve.
+ *
+ * @param array $plugin  Active provider.
+ * @param int   $post_id Post id.
+ * @return array|null { url, title, description, fields, vars } or null.
+ */
+function minn_admin_seo_preview( $plugin, $post_id ) {
+	$post_id = (int) $post_id;
+	if ( $post_id <= 0 ) {
+		return null;
+	}
+	if ( isset( $plugin['preview'] ) && is_callable( $plugin['preview'] ) ) {
+		return call_user_func( $plugin['preview'], $post_id );
+	}
+	$post = get_post( $post_id );
+	if ( ! $post ) {
+		return null;
+	}
+	$vars = array(
+		'title'    => get_the_title( $post ),
+		'sitename' => get_bloginfo( 'name' ),
+		'sitedesc' => get_bloginfo( 'description' ),
+		'sep'      => '-',
+		'excerpt'  => wp_trim_words( (string) get_the_excerpt( $post ), 30 ),
+		'page'     => '',
+	);
+	// Stored values may themselves carry %tokens% (or Yoast's %%tokens%%);
+	// resolve the small shared set, drop the rest.
+	$resolve = function ( $s ) use ( $vars ) {
+		$s = preg_replace_callback( '/%{1,2}([a-z0-9_]+)%{1,2}/i', function ( $m ) use ( $vars ) {
+			$key = strtolower( $m[1] );
+			return isset( $vars[ $key ] ) ? $vars[ $key ] : '';
+		}, (string) $s );
+		return trim( (string) preg_replace( '/\s+/', ' ', (string) $s ) );
+	};
+	try {
+		$read = call_user_func( $plugin['read'], $post_id );
+	} catch ( \Throwable $e ) {
+		$read = array();
+	}
+	$title = isset( $read['title'] ) && '' !== $read['title'] ? $read['title'] : '%title% %sep% %sitename%';
+	$desc  = isset( $read['description'] ) && '' !== $read['description'] ? $read['description'] : '%excerpt%';
+	return array(
+		'url'         => (string) get_permalink( $post ),
+		'title'       => $resolve( $title ),
+		'description' => $resolve( $desc ),
+		'fields'      => array( 'title' => 'title', 'description' => 'description' ),
+		'vars'        => $vars,
+	);
+}
+
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 	$plugin = minn_admin_seo_plugin();
 	if ( ! $plugin ) {
@@ -811,7 +907,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 		'label'       => 'SEO',
 		'sub'         => $plugin['name'],
 		'cap'         => 'edit_posts',
-		'fieldsRoute' => 'minn-admin/v1/seo/fields',
+		'fieldsRoute' => 'minn-admin/v1/seo/fields?post={id}',
 		'valuesKey'   => 'minn_seo',
 		'writeKey'    => 'minn_seo',
 	);
@@ -829,8 +925,21 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => function () {
 			return current_user_can( 'edit_posts' );
 		},
-		'callback'            => function () use ( $plugin ) {
-			return rest_ensure_response( array( 'groups' => minn_admin_seo_groups( $plugin ) ) );
+		'args'                => array(
+			'post' => array( 'type' => 'integer', 'default' => 0 ),
+		),
+		'callback'            => function ( $request ) use ( $plugin ) {
+			$out = array( 'groups' => minn_admin_seo_groups( $plugin ) );
+			// The preview quotes the post's resolved title and excerpt, so
+			// it is gated per POST, not just on the route's edit_posts.
+			$post_id = (int) $request->get_param( 'post' );
+			if ( $post_id > 0 && current_user_can( 'edit_post', $post_id ) ) {
+				$preview = minn_admin_seo_preview( $plugin, $post_id );
+				if ( $preview ) {
+					$out['preview'] = $preview;
+				}
+			}
+			return rest_ensure_response( $out );
 		},
 	) );
 
