@@ -234,7 +234,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey'  => 'total',
 			'search'    => 'search={q}',
 			'filterBar' => array(
-				'searchPlaceholder' => __( 'Search gift cards (code, recipient…)', 'minn-admin' ),
+				'searchPlaceholder' => minn_admin_wcgc_codes_visible()
+					? __( 'Search gift cards (code, recipient…)', 'minn-admin' )
+					: __( 'Search by recipient email', 'minn-admin' ),
 				'statuses'          => array(
 					array( 'active', __( 'Active', 'minn-admin' ) ),
 					array( 'disabled', __( 'Disabled', 'minn-admin' ) ),
@@ -370,7 +372,22 @@ add_action( 'rest_api_init', function () {
 				'order_by' => array( 'create_date' => 'DESC', 'id' => 'DESC' ),
 			);
 			if ( '' !== $search ) {
-				$args['search'] = $search;
+				if ( minn_admin_wcgc_codes_visible() ) {
+					$args['search'] = $search;
+				} elseif ( is_email( $search ) ) {
+					// Masking the response while leaving a code-matching predicate on
+					// the request turns the list into a prefix oracle: search 'A',
+					// 'AB', 'ABC' and watch which rows survive, and a bearer code
+					// falls out in a few hundred requests. The vendor's own search
+					// clause is one unanchored LIKE over code OR sender OR recipient,
+					// with no way to scope it, so a caller who may not see codes gets
+					// the exact-match recipient filter instead. That still answers the
+					// real support question -- which cards belong to this customer --
+					// without ever matching on a code.
+					$args['recipient'] = $search;
+				} else {
+					$args['recipient'] = '\0no-match';
+				}
 			}
 
 			foreach ( array( 'after' => 'start_date', 'before' => 'end_date' ) as $param => $key ) {
