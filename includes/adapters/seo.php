@@ -1266,6 +1266,149 @@ function minn_admin_seo_yoast_provider() {
 }
 
 /**
+ * Shared depth provider for SEOPress and its SiteSEO fork — same storage
+ * shape under different meta prefixes.
+ *
+ * Storage facts (their metabox save + frontend, verified):
+ * - Robots are independent 'yes' flags with INVERTED names: robots_index
+ *   = 'yes' means NOINDEX (their noindex_post_option test), same for
+ *   follow/imageindex/snippet (SiteSEO also keeps archive; SEOPress
+ *   dropped the per-post noarchive). Absent = the site-wide default, so
+ *   off deletes the meta like their own save.
+ * - Social images store FOUR metas per network (img URL, attachment id,
+ *   width, height), delete-on-empty; their og:image:width tags read the
+ *   stored pair.
+ * - Twitter fields fall back to the Facebook card on their own; there is
+ *   no use-Facebook toggle to mirror.
+ *
+ * @param string        $name         Provider display name.
+ * @param string        $mp           Meta prefix ('_seopress_' or '_siteseo_').
+ * @param bool          $with_archive Whether the per-post noarchive flag exists.
+ * @param callable|null $can_edit     Vendor metabox-permission predicate.
+ * @return array
+ */
+function minn_admin_seo_press_family_provider( $name, $mp, $with_archive, $can_edit ) {
+	$base = minn_admin_seo_meta_provider( $name, array(
+		'title'                => "{$mp}titles_title",
+		'description'          => "{$mp}titles_desc",
+		'focus_keyword'        => "{$mp}analysis_target_kw",
+		'facebook_title'       => "{$mp}social_fb_title",
+		'facebook_description' => "{$mp}social_fb_desc",
+		'twitter_title'        => "{$mp}social_twitter_title",
+		'twitter_description'  => "{$mp}social_twitter_desc",
+		'canonical'            => "{$mp}robots_canonical",
+	), $can_edit );
+	$base_read  = $base['read'];
+	$base_write = $base['write'];
+
+	$robots = array(
+		'robots_noindex'      => "{$mp}robots_index",
+		'robots_nofollow'     => "{$mp}robots_follow",
+		'robots_noimageindex' => "{$mp}robots_imageindex",
+		'robots_nosnippet'    => "{$mp}robots_snippet",
+	);
+	if ( $with_archive ) {
+		$robots['robots_noarchive'] = "{$mp}robots_archive";
+	}
+
+	$image_read = function ( $post_id, $net ) use ( $mp ) {
+		$url = (string) get_post_meta( (int) $post_id, "{$mp}social_{$net}_img", true );
+		$id  = (int) get_post_meta( (int) $post_id, "{$mp}social_{$net}_img_attachment_id", true );
+		if ( '' === $url && ! $id ) {
+			return null;
+		}
+		if ( '' === $url && $id ) {
+			$url = (string) wp_get_attachment_image_url( $id, 'medium' );
+		}
+		return array( 'id' => $id, 'url' => $url );
+	};
+	$image_write = function ( $post_id, $net, $att ) use ( $mp ) {
+		$att = is_numeric( $att ) ? (int) $att : 0;
+		$src = $att > 0 ? wp_get_attachment_image_src( $att, 'full' ) : false;
+		if ( $att > 0 && is_array( $src ) && ! empty( $src[0] ) ) {
+			update_post_meta( $post_id, "{$mp}social_{$net}_img", (string) $src[0] );
+			update_post_meta( $post_id, "{$mp}social_{$net}_img_attachment_id", (string) $att );
+			update_post_meta( $post_id, "{$mp}social_{$net}_img_width", (string) $src[1] );
+			update_post_meta( $post_id, "{$mp}social_{$net}_img_height", (string) $src[2] );
+		} else {
+			delete_post_meta( $post_id, "{$mp}social_{$net}_img" );
+			delete_post_meta( $post_id, "{$mp}social_{$net}_img_attachment_id" );
+			delete_post_meta( $post_id, "{$mp}social_{$net}_img_width" );
+			delete_post_meta( $post_id, "{$mp}social_{$net}_img_height" );
+		}
+	};
+
+	return array(
+		'name'     => $name,
+		'can_edit' => $can_edit,
+		'fields'   => function () use ( $with_archive ) {
+			$advanced = array(
+				array( 'name' => 'robots_noindex', 'label' => __( 'No index', 'minn-admin' ), 'type' => 'toggle' ),
+				array( 'name' => 'robots_nofollow', 'label' => __( 'Nofollow links', 'minn-admin' ), 'type' => 'toggle' ),
+			);
+			if ( $with_archive ) {
+				$advanced[] = array( 'name' => 'robots_noarchive', 'label' => __( 'No archive', 'minn-admin' ), 'type' => 'toggle' );
+			}
+			$advanced[] = array( 'name' => 'robots_noimageindex', 'label' => __( 'No image index', 'minn-admin' ), 'type' => 'toggle' );
+			$advanced[] = array( 'name' => 'robots_nosnippet', 'label' => __( 'No snippet', 'minn-admin' ), 'type' => 'toggle' );
+			$advanced[] = array( 'name' => 'canonical', 'label' => __( 'Canonical URL', 'minn-admin' ), 'type' => 'text', 'sanitize' => 'url', 'help' => __( 'Leave empty to use the permalink.', 'minn-admin' ) );
+			return array(
+				array(
+					'group'  => __( 'Search appearance', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
+						array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
+						array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
+					),
+				),
+				array(
+					'group'  => __( 'Social', 'minn-admin' ),
+					'fields' => array(
+						array( 'name' => 'facebook_title', 'label' => __( 'Facebook title', 'minn-admin' ), 'type' => 'text' ),
+						array( 'name' => 'facebook_description', 'label' => __( 'Facebook description', 'minn-admin' ), 'type' => 'textarea' ),
+						array( 'name' => 'social_image', 'label' => __( 'Social thumbnail', 'minn-admin' ), 'type' => 'image' ),
+						array( 'name' => 'twitter_title', 'label' => __( 'X (Twitter) title', 'minn-admin' ), 'type' => 'text', 'help' => __( 'Leave empty to reuse the Facebook card.', 'minn-admin' ) ),
+						array( 'name' => 'twitter_description', 'label' => __( 'X (Twitter) description', 'minn-admin' ), 'type' => 'textarea' ),
+						array( 'name' => 'twitter_image', 'label' => __( 'X (Twitter) image', 'minn-admin' ), 'type' => 'image' ),
+					),
+				),
+				array(
+					'group'  => __( 'Advanced', 'minn-admin' ),
+					'fields' => $advanced,
+				),
+			);
+		},
+		'read'     => function ( $post_id ) use ( $base_read, $robots, $image_read ) {
+			$post_id = (int) $post_id;
+			$out     = call_user_func( $base_read, $post_id );
+			foreach ( $robots as $field => $meta_key ) {
+				$out[ $field ] = 'yes' === (string) get_post_meta( $post_id, $meta_key, true );
+			}
+			$out['social_image']  = $image_read( $post_id, 'fb' );
+			$out['twitter_image'] = $image_read( $post_id, 'twitter' );
+			return $out;
+		},
+		'write'    => function ( $post_id, $field, $clean ) use ( $base_write, $robots, $image_write ) {
+			$post_id = (int) $post_id;
+			if ( 'social_image' === $field || 'twitter_image' === $field ) {
+				$image_write( $post_id, 'social_image' === $field ? 'fb' : 'twitter', $clean );
+				return;
+			}
+			if ( isset( $robots[ $field ] ) ) {
+				// Their save stores 'yes' or deletes; absent = site default.
+				if ( $clean ) {
+					update_post_meta( $post_id, $robots[ $field ], 'yes' );
+				} else {
+					delete_post_meta( $post_id, $robots[ $field ] );
+				}
+				return;
+			}
+			call_user_func( $base_write, $post_id, $field, $clean );
+		},
+	);
+}
+
+/**
  * The active SEO plugin as { name, read, write } — first active wins, in
  * install-base order.
  *
@@ -1282,11 +1425,7 @@ function minn_admin_seo_plugin() {
 		return minn_admin_seo_aioseo_provider();
 	}
 	if ( defined( 'SEOPRESS_VERSION' ) ) {
-		return minn_admin_seo_meta_provider( 'SEOPress', array(
-			'title'         => '_seopress_titles_title',
-			'description'   => '_seopress_titles_desc',
-			'focus_keyword' => '_seopress_analysis_target_kw',
-		), function () {
+		return minn_admin_seo_press_family_provider( 'SEOPress', '_seopress_', false, function () {
 			// SEOPress blocks the metabox for roles listed in its advanced
 			// settings; mirror that (super admins are never blocked).
 			return ! function_exists( 'seopress_metabox_role_is_blocked' )
@@ -1298,13 +1437,10 @@ function minn_admin_seo_plugin() {
 		&& class_exists( '\SureRank\Inc\API\Post' ) ) {
 		return minn_admin_seo_surerank_provider();
 	}
-	// SiteSEO is the SEOPress fork; same postmeta shape under its own prefix.
+	// SiteSEO is the SEOPress fork; same postmeta shape under its own
+	// prefix, and it kept the per-post noarchive flag SEOPress dropped.
 	if ( defined( 'SITESEO_VERSION' ) ) {
-		return minn_admin_seo_meta_provider( 'SiteSEO', array(
-			'title'         => '_siteseo_titles_title',
-			'description'   => '_siteseo_titles_desc',
-			'focus_keyword' => '_siteseo_analysis_target_kw',
-		), function () {
+		return minn_admin_seo_press_family_provider( 'SiteSEO', '_siteseo_', true, function () {
 			// SiteSEO's own metabox-permission check (roles in its advanced
 			// settings); it also covers the logged-in test.
 			return ! function_exists( 'siteseo_user_can_metabox' )

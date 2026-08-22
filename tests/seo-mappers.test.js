@@ -164,6 +164,18 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		}, postId );
 		t.check( 'SEOPress write/read round-trips', !! sp && sp.title === 'SP via Minn' && sp.focus_keyword === 'seopress kw', JSON.stringify( sp ) );
 		t.check( 'Providers are isolated (AIOSEO values not read by SEOPress)', !! sp && sp.description === '' );
+		// Depth: their robots keys are INVERTED 'yes' flags (robots_index =
+		// 'yes' means noindex) — assert the raw meta, not the REST echo.
+		await page.evaluate( async ( pid ) => {
+			await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+				body: JSON.stringify( { minn_seo: { robots_noindex: true, canonical: 'https://example.com/sp-depth/' } } ),
+			} );
+		}, postId );
+		t.check( 'SEOPress depth lands in their yes-flag keys',
+			wpEval( `echo get_post_meta( ${ postId }, '_seopress_robots_index', true ) . '|' . get_post_meta( ${ postId }, '_seopress_robots_canonical', true );` ) === 'yes|https://example.com/sp-depth/' );
 
 		// --- SiteSEO: the SEOPress fork, own _siteseo_ meta prefix -----------
 		t.check( 'SiteSEO activated', await activateOnly( 'siteseo' ) );
@@ -183,6 +195,17 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		}, postId );
 		t.check( 'SiteSEO starts empty (SEOPress values not read by the fork)', !! ss.before && ss.before.title === '' && ss.before.focus_keyword === '' , JSON.stringify( ss.before ) );
 		t.check( 'SiteSEO write/read round-trips', !! ss.after && ss.after.title === 'SS via Minn' && ss.after.focus_keyword === 'siteseo kw', JSON.stringify( ss.after ) );
+		// Depth: the fork kept the per-post noarchive flag SEOPress dropped.
+		await page.evaluate( async ( pid ) => {
+			await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+				body: JSON.stringify( { minn_seo: { robots_noarchive: true, robots_nofollow: true } } ),
+			} );
+		}, postId );
+		t.check( 'SiteSEO depth incl. its extra noarchive flag',
+			wpEval( `echo get_post_meta( ${ postId }, '_siteseo_robots_archive', true ) . '|' . get_post_meta( ${ postId }, '_siteseo_robots_follow', true );` ) === 'yes|yes' );
 
 		// --- SureRank: grouped meta blobs + the empty-value template trap ----
 		t.check( 'SureRank activated', await activateOnly( 'surerank' ) );
