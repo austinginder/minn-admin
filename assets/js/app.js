@@ -26244,6 +26244,15 @@
 				supportsParent: cpt ? cpt.hierarchical : newType === 'pages',
 				supportsOrder: sup ? !! sup[ 'page-attributes' ] : newType === 'pages', templates: null, parentPick: null,
 				excerpt: '', supportsExcerpt: sup ? !! sup.excerpt : newType === 'posts',
+				// Post format, on the same two gates the saved-post path reads
+				// off the REST response: the type supports post-formats (which
+				// is exactly when wp/v2 exposes `format`) and the theme
+				// declares some. A blank document starts on the site's default
+				// format, as core's get_default_post_to_edit() does.
+				format: ( B.postFormats && B.postFormats[ B.defaultPostFormat ] ) ? B.defaultPostFormat : 'standard',
+				formatDirty: false,
+				supportsFormat: ( sup ? !! sup[ 'post-formats' ] : newType === 'posts' )
+					&& !! ( B.postFormats && Object.keys( B.postFormats ).length ),
 				syncedPattern: isPattern,
 			};
 			// Crash net for never-saved drafts — anything under the new-post
@@ -26339,7 +26348,13 @@
 		if ( ed.templateDirty ) payload.template = ed.template || '';
 		if ( ed.orderDirty ) payload.menu_order = ed.menuOrder || 0;
 		if ( ed.excerptDirty ) payload.excerpt = ed.excerpt;
-		if ( ed.formatDirty ) payload.format = ed.format || 'standard';
+		// A first save also carries the format when the site default is not
+		// 'standard'. Core applies that option in wp-admin only (it writes it
+		// onto the auto-draft in get_default_post_to_edit), so a REST create
+		// would store 'standard' while the picker had been showing the default.
+		if ( ed.formatDirty || ( ! ed.id && ed.supportsFormat && ed.format && ed.format !== 'standard' ) ) {
+			payload.format = ed.format || 'standard';
+		}
 		if ( ed.slugDirty ) payload.slug = ed.slugValue;
 		if ( ed.commentDirty ) payload.comment_status = ed.commentStatus;
 		if ( ed.pingDirty ) payload.ping_status = ed.pingStatus;

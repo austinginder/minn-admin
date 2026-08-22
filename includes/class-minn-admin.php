@@ -1588,6 +1588,13 @@ class Minn_Admin {
 			 */
 			'postFormats' => self::supported_post_formats(),
 			/**
+			 * Settings > Writing "Default Post Format", which a new post starts
+			 * on (core does this in get_default_post_to_edit). Falls back to
+			 * 'standard' when the option is unset or names a format the theme
+			 * does not declare, so the picker can always seed from it.
+			 */
+			'defaultPostFormat' => self::default_post_format(),
+			/**
 			 * Site visibility posture (adapters/site-status.php) — drives the
 			 * Overview banner warning when a maintenance/coming-soon/password
 			 * plugin or "discourage search engines" is hiding the site.
@@ -1664,6 +1671,23 @@ class Minn_Admin {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * The format a new post starts on: Settings > Writing "Default Post
+	 * Format", mirroring core's get_default_post_to_edit().
+	 *
+	 * The stored option is 0 when unset, and can name a format the current
+	 * theme dropped support for. Either way the answer is 'standard', so the
+	 * seeded value is always one the picker actually offers.
+	 *
+	 * @return string
+	 */
+	public static function default_post_format() {
+		$default = get_option( 'default_post_format' );
+		$default = is_string( $default ) ? sanitize_key( $default ) : '';
+		$formats = self::supported_post_formats();
+		return ( '' !== $default && isset( $formats[ $default ] ) ) ? $default : 'standard';
 	}
 
 	/**
