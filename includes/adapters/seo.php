@@ -260,11 +260,25 @@ function minn_admin_seo_rank_math_provider() {
 			}
 		},
 		'fields' => function () {
+			// Group visibility mirrors their per-tab capabilities
+			// (canUser in their metabox screen): social needs
+			// onpage_social, advanced needs onpage_advanced AND the site
+			// in advanced setup mode, schema needs onpage_snippet. The
+			// field map is rebuilt per request, so omitting a group here
+			// also removes those keys from the write whitelist for this
+			// user — the same trim their own save performs.
+			$can = function ( $cap ) {
+				return current_user_can( 'rank_math_' . $cap );
+			};
+			$advanced_mode = true;
+			try {
+				$advanced_mode = \RankMath\Helper::is_advanced_mode();
+			} catch ( \Throwable $e ) { /* default to visible */ }
 			// Twitter's own fields only apply when the card stops
 			// inheriting Facebook — same reveal as their metabox.
 			$tw = array( array( array( 'f' => 'twitter_use_facebook', 'op' => '==', 'v' => '0' ) ) );
-			return array(
-				array(
+			$groups = array();
+			$groups[] = array(
 					'group'  => __( 'Search appearance', 'minn-admin' ),
 					'fields' => array(
 						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
@@ -272,8 +286,9 @@ function minn_admin_seo_rank_math_provider() {
 						array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
 						array( 'name' => 'pillar_content', 'label' => __( 'Pillar content', 'minn-admin' ), 'type' => 'toggle', 'help' => __( 'Mark this as cornerstone content for internal-link suggestions.', 'minn-admin' ) ),
 					),
-				),
-				array(
+			);
+			if ( $can( 'onpage_social' ) ) {
+				$groups[] = array(
 					'group'  => __( 'Social', 'minn-admin' ),
 					'fields' => array(
 						array( 'name' => 'facebook_title', 'label' => __( 'Facebook title', 'minn-admin' ), 'type' => 'text' ),
@@ -295,8 +310,10 @@ function minn_admin_seo_rank_math_provider() {
 						array( 'name' => 'twitter_description', 'label' => __( 'Twitter description', 'minn-admin' ), 'type' => 'textarea', 'cond' => $tw ),
 						array( 'name' => 'twitter_image', 'label' => __( 'Twitter image', 'minn-admin' ), 'type' => 'image', 'cond' => $tw ),
 					),
-				),
-				array(
+				);
+			}
+			if ( $can( 'onpage_advanced' ) && $advanced_mode ) {
+				$groups[] = array(
 					'group'  => __( 'Advanced', 'minn-admin' ),
 					'fields' => array(
 						array(
@@ -328,8 +345,10 @@ function minn_admin_seo_rank_math_provider() {
 						),
 						array( 'name' => 'canonical', 'label' => __( 'Canonical URL', 'minn-admin' ), 'type' => 'text', 'sanitize' => 'url', 'help' => __( 'Leave empty to use the permalink.', 'minn-admin' ) ),
 					),
-				),
-				array(
+				);
+			}
+			if ( $can( 'onpage_snippet' ) ) {
+				$groups[] = array(
 					'group'  => __( 'Schema', 'minn-admin' ),
 					'fields' => array(
 						array( 'name' => 'schema_in_use', 'label' => __( 'Schema in use', 'minn-admin' ), 'type' => 'note' ),
@@ -337,8 +356,9 @@ function minn_admin_seo_rank_math_provider() {
 					// The Schema Generator is Rank Math's own app; the
 					// locked-field link is the doorway.
 					'locked' => 1,
-				),
-			);
+				);
+			}
+			return $groups;
 		},
 		'read'   => function ( $post_id ) use ( $base_read, $robots_toggles, $adv_keys, $image_read ) {
 			$post_id = (int) $post_id;
@@ -725,6 +745,273 @@ function minn_admin_seo_squirrly_provider() {
 }
 
 /**
+ * Yoast SEO provider: full per-post metabox depth over their documented
+ * meta keys (their own importers write the same postmeta).
+ *
+ * Storage facts (inc/class-wpseo-meta.php, verified):
+ * - meta-robots-noindex: '0'/absent = post-type default, '2' = index,
+ *   '1' = noindex. meta-robots-nofollow: '1' = nofollow, '0'/absent =
+ *   follow. meta-robots-adv: csv of noimageindex/noarchive/nosnippet.
+ * - is_cornerstone: their indexable builder tests === '1'.
+ * - The advanced fields (robots + canonical) are editable only for users
+ *   with wpseo_edit_advanced_metadata, unless the site turned
+ *   disableadvanced_meta off — mirrored by omitting the group, which also
+ *   trims those keys from the per-user write whitelist, the same strip
+ *   their own save performs (class-wpseo-meta.php save_meta_boxes).
+ * - Social fields exist per network only while the site-wide opengraph /
+ *   twitter switches are on (their init() registers them conditionally).
+ * - Schema page/article types come from Schema_Types::PAGE_TYPES /
+ *   ARTICLE_TYPES; the article select hides on pages like their metabox.
+ *
+ * @return array
+ */
+function minn_admin_seo_yoast_provider() {
+	$keys = array(
+		'title'               => '_yoast_wpseo_title',
+		'description'         => '_yoast_wpseo_metadesc',
+		'focus_keyword'       => '_yoast_wpseo_focuskw',
+		'facebook_title'      => '_yoast_wpseo_opengraph-title',
+		'facebook_description'=> '_yoast_wpseo_opengraph-description',
+		'twitter_title'       => '_yoast_wpseo_twitter-title',
+		'twitter_description' => '_yoast_wpseo_twitter-description',
+		'canonical'           => '_yoast_wpseo_canonical',
+		'schema_page_type'    => '_yoast_wpseo_schema_page_type',
+		'schema_article_type' => '_yoast_wpseo_schema_article_type',
+	);
+	$base       = minn_admin_seo_meta_provider( 'Yoast SEO', $keys );
+	$base_read  = $base['read'];
+	$base_write = $base['write'];
+
+	$adv_directives = array( 'robots_noarchive' => 'noarchive', 'robots_noimageindex' => 'noimageindex', 'robots_nosnippet' => 'nosnippet' );
+
+	// Advanced metadata permission, exactly their metabox test.
+	$adv_allowed = function () {
+		try {
+			if ( class_exists( 'WPSEO_Capability_Utils' ) && \WPSEO_Capability_Utils::current_user_can( 'wpseo_edit_advanced_metadata' ) ) {
+				return true;
+			}
+			return class_exists( 'WPSEO_Options' ) && false === \WPSEO_Options::get( 'disableadvanced_meta' );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	};
+	$social_on = function ( $network ) {
+		try {
+			return class_exists( 'WPSEO_Options' ) && true === \WPSEO_Options::get( $network );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	};
+	$image_read = function ( $post_id, $prefix ) {
+		$id  = (int) get_post_meta( (int) $post_id, "_yoast_wpseo_{$prefix}-image-id", true );
+		$url = (string) get_post_meta( (int) $post_id, "_yoast_wpseo_{$prefix}-image", true );
+		if ( $id && ! $url ) {
+			$url = (string) wp_get_attachment_image_url( $id, 'medium' );
+		}
+		return ( $id || $url ) ? array( 'id' => $id, 'url' => $url ) : null;
+	};
+	$image_write = function ( $post_id, $prefix, $att ) {
+		$att = is_numeric( $att ) ? (int) $att : 0;
+		if ( $att > 0 ) {
+			$url = (string) wp_get_attachment_url( $att );
+			if ( ! $url ) {
+				$url = (string) wp_get_attachment_image_url( $att, 'full' );
+			}
+			// STRING id on purpose: Yoast registers sanitize_post_meta on
+			// its keys and the default case blanks any non-string value
+			// (is_string gate) — an integer id stores as ''.
+			update_post_meta( $post_id, "_yoast_wpseo_{$prefix}-image-id", (string) $att );
+			update_post_meta( $post_id, "_yoast_wpseo_{$prefix}-image", $url );
+		} else {
+			delete_post_meta( $post_id, "_yoast_wpseo_{$prefix}-image-id" );
+			delete_post_meta( $post_id, "_yoast_wpseo_{$prefix}-image" );
+		}
+	};
+
+	return array(
+		'name'    => 'Yoast SEO',
+		'fields'  => function ( $post_id = 0 ) use ( $adv_allowed, $social_on ) {
+			$groups   = array();
+			$groups[] = array(
+				'group'  => __( 'Search appearance', 'minn-admin' ),
+				'fields' => array(
+					array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
+					array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
+					array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
+					array( 'name' => 'is_cornerstone', 'label' => __( 'Cornerstone content', 'minn-admin' ), 'type' => 'toggle', 'help' => __( 'Mark this as one of the most important pages on the site.', 'minn-admin' ) ),
+				),
+			);
+			$social = array();
+			if ( $social_on( 'opengraph' ) ) {
+				$social[] = array( 'name' => 'facebook_title', 'label' => __( 'Facebook title', 'minn-admin' ), 'type' => 'text' );
+				$social[] = array( 'name' => 'facebook_description', 'label' => __( 'Facebook description', 'minn-admin' ), 'type' => 'textarea' );
+				$social[] = array( 'name' => 'social_image', 'label' => __( 'Social thumbnail', 'minn-admin' ), 'type' => 'image' );
+			}
+			if ( $social_on( 'twitter' ) ) {
+				$social[] = array( 'name' => 'twitter_title', 'label' => __( 'X (Twitter) title', 'minn-admin' ), 'type' => 'text', 'help' => __( 'Leave empty to reuse the Facebook card.', 'minn-admin' ) );
+				$social[] = array( 'name' => 'twitter_description', 'label' => __( 'X (Twitter) description', 'minn-admin' ), 'type' => 'textarea' );
+				$social[] = array( 'name' => 'twitter_image', 'label' => __( 'X (Twitter) image', 'minn-admin' ), 'type' => 'image' );
+			}
+			if ( $social ) {
+				$groups[] = array( 'group' => __( 'Social', 'minn-admin' ), 'fields' => $social );
+			}
+			if ( $adv_allowed() ) {
+				$groups[] = array(
+					'group'  => __( 'Advanced', 'minn-admin' ),
+					'fields' => array(
+						array(
+							'name'    => 'robots_index',
+							'label'   => __( 'Search indexing', 'minn-admin' ),
+							'type'    => 'select',
+							'options' => array(
+								array( '', __( 'Default (post type setting)', 'minn-admin' ) ),
+								array( 'index', __( 'Index', 'minn-admin' ) ),
+								array( 'noindex', __( 'No index', 'minn-admin' ) ),
+							),
+						),
+						array( 'name' => 'robots_nofollow', 'label' => __( 'Nofollow links', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_noarchive', 'label' => __( 'No archive', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_noimageindex', 'label' => __( 'No image index', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'robots_nosnippet', 'label' => __( 'No snippet', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'name' => 'canonical', 'label' => __( 'Canonical URL', 'minn-admin' ), 'type' => 'text', 'sanitize' => 'url', 'help' => __( 'Leave empty to use the permalink.', 'minn-admin' ) ),
+					),
+				);
+			}
+			$page_types = array( 'WebPage', 'ItemPage', 'AboutPage', 'FAQPage', 'QAPage', 'ProfilePage', 'ContactPage', 'MedicalWebPage', 'CollectionPage', 'CheckoutPage', 'RealEstateListing', 'SearchResultsPage' );
+			$article_types = array( 'Article', 'BlogPosting', 'SocialMediaPosting', 'NewsArticle', 'AdvertiserContentArticle', 'SatiricalArticle', 'ScholarlyArticle', 'TechArticle', 'Report', 'None' );
+			$schema_fields = array(
+				array(
+					'name'    => 'schema_page_type',
+					'label'   => __( 'Page type', 'minn-admin' ),
+					'type'    => 'select',
+					'options' => array_merge(
+						array( array( '', __( 'Site default', 'minn-admin' ) ) ),
+						array_map( function ( $t ) { return array( $t, $t ); }, $page_types )
+					),
+				),
+			);
+			// Their metabox hides the article select on pages.
+			$post_type = $post_id ? get_post_type( (int) $post_id ) : '';
+			if ( 'page' !== $post_type ) {
+				$schema_fields[] = array(
+					'name'    => 'schema_article_type',
+					'label'   => __( 'Article type', 'minn-admin' ),
+					'type'    => 'select',
+					'options' => array_merge(
+						array( array( '', __( 'Site default', 'minn-admin' ) ) ),
+						array_map( function ( $t ) { return array( $t, $t ); }, $article_types )
+					),
+				);
+			}
+			$groups[] = array( 'group' => __( 'Schema', 'minn-admin' ), 'fields' => $schema_fields );
+			return $groups;
+		},
+		'preview' => function ( $post_id ) {
+			try {
+				$post = get_post( (int) $post_id );
+				if ( ! $post || ! function_exists( 'wpseo_replace_vars' ) || ! class_exists( 'WPSEO_Options' ) ) {
+					return null;
+				}
+				$title_tpl = (string) get_post_meta( $post->ID, '_yoast_wpseo_title', true );
+				if ( '' === $title_tpl ) {
+					$title_tpl = (string) \WPSEO_Options::get( 'title-' . $post->post_type );
+				}
+				if ( '' === $title_tpl ) {
+					$title_tpl = '%%title%% %%sep%% %%sitename%%';
+				}
+				$desc_tpl = (string) get_post_meta( $post->ID, '_yoast_wpseo_metadesc', true );
+				if ( '' === $desc_tpl ) {
+					$desc_tpl = (string) \WPSEO_Options::get( 'metadesc-' . $post->post_type );
+				}
+				if ( '' === $desc_tpl ) {
+					$desc_tpl = '%%excerpt%%';
+				}
+				$vars = array();
+				foreach ( array( 'title', 'sitename', 'sitedesc', 'sep', 'excerpt', 'page' ) as $key ) {
+					$resolved     = (string) wpseo_replace_vars( '%%' . $key . '%%', $post );
+					$vars[ $key ] = '%%' . $key . '%%' === $resolved ? '' : $resolved;
+				}
+				return array(
+					'url'         => (string) get_permalink( $post ),
+					'title'       => (string) wpseo_replace_vars( $title_tpl, $post ),
+					'description' => (string) wpseo_replace_vars( $desc_tpl, $post ),
+					'fields'      => array( 'title' => 'title', 'description' => 'description' ),
+					'vars'        => $vars,
+				);
+			} catch ( \Throwable $e ) {
+				return null;
+			}
+		},
+		'read'    => function ( $post_id ) use ( $base_read, $adv_directives, $image_read ) {
+			$post_id = (int) $post_id;
+			$out     = call_user_func( $base_read, $post_id );
+
+			$noindex = (string) get_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex', true );
+			$out['robots_index']    = '1' === $noindex ? 'noindex' : ( '2' === $noindex ? 'index' : '' );
+			$out['robots_nofollow'] = '1' === (string) get_post_meta( $post_id, '_yoast_wpseo_meta-robots-nofollow', true );
+			$adv = array_filter( array_map( 'trim', explode( ',', (string) get_post_meta( $post_id, '_yoast_wpseo_meta-robots-adv', true ) ) ) );
+			foreach ( $adv_directives as $field => $directive ) {
+				$out[ $field ] = in_array( $directive, $adv, true );
+			}
+			$out['is_cornerstone'] = '1' === (string) get_post_meta( $post_id, '_yoast_wpseo_is_cornerstone', true );
+			$out['social_image']   = $image_read( $post_id, 'opengraph' );
+			$out['twitter_image']  = $image_read( $post_id, 'twitter' );
+			return $out;
+		},
+		'write'   => function ( $post_id, $field, $clean ) use ( $base_write, $adv_directives, $image_write ) {
+			$post_id = (int) $post_id;
+
+			if ( 'social_image' === $field || 'twitter_image' === $field ) {
+				$image_write( $post_id, 'social_image' === $field ? 'opengraph' : 'twitter', $clean );
+				return;
+			}
+			if ( 'robots_index' === $field ) {
+				// '' means the post-type default, which is the ABSENT meta.
+				if ( 'index' === $clean || 'noindex' === $clean ) {
+					update_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex', 'noindex' === $clean ? '1' : '2' );
+				} else {
+					delete_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex' );
+				}
+				return;
+			}
+			if ( 'robots_nofollow' === $field ) {
+				if ( $clean ) {
+					update_post_meta( $post_id, '_yoast_wpseo_meta-robots-nofollow', '1' );
+				} else {
+					delete_post_meta( $post_id, '_yoast_wpseo_meta-robots-nofollow' );
+				}
+				return;
+			}
+			if ( isset( $adv_directives[ $field ] ) ) {
+				$adv = array_filter( array_map( 'trim', explode( ',', (string) get_post_meta( $post_id, '_yoast_wpseo_meta-robots-adv', true ) ) ) );
+				$adv = array_diff( $adv, array( $adv_directives[ $field ] ) );
+				if ( $clean ) {
+					$adv[] = $adv_directives[ $field ];
+				}
+				// Stable order, matching their checkbox order.
+				$adv = array_values( array_intersect( array( 'noimageindex', 'noarchive', 'nosnippet' ), $adv ) );
+				if ( $adv ) {
+					update_post_meta( $post_id, '_yoast_wpseo_meta-robots-adv', implode( ',', $adv ) );
+				} else {
+					delete_post_meta( $post_id, '_yoast_wpseo_meta-robots-adv' );
+				}
+				return;
+			}
+			if ( 'is_cornerstone' === $field ) {
+				// Their indexable builder tests === '1'.
+				if ( $clean ) {
+					update_post_meta( $post_id, '_yoast_wpseo_is_cornerstone', '1' );
+				} else {
+					delete_post_meta( $post_id, '_yoast_wpseo_is_cornerstone' );
+				}
+				return;
+			}
+			call_user_func( $base_write, $post_id, $field, $clean );
+		},
+	);
+}
+
+/**
  * The active SEO plugin as { name, read, write } — first active wins, in
  * install-base order.
  *
@@ -732,11 +1019,7 @@ function minn_admin_seo_squirrly_provider() {
  */
 function minn_admin_seo_plugin() {
 	if ( defined( 'WPSEO_VERSION' ) ) {
-		return minn_admin_seo_meta_provider( 'Yoast SEO', array(
-			'title'         => '_yoast_wpseo_title',
-			'description'   => '_yoast_wpseo_metadesc',
-			'focus_keyword' => '_yoast_wpseo_focuskw',
-		) );
+		return minn_admin_seo_yoast_provider();
 	}
 	if ( defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' ) ) {
 		return minn_admin_seo_rank_math_provider();
@@ -789,9 +1072,9 @@ function minn_admin_seo_plugin() {
  * @param array $plugin Active provider.
  * @return array Groups in the editor-panels fields shape.
  */
-function minn_admin_seo_groups( $plugin ) {
+function minn_admin_seo_groups( $plugin, $post_id = 0 ) {
 	if ( isset( $plugin['fields'] ) && is_callable( $plugin['fields'] ) ) {
-		$groups = call_user_func( $plugin['fields'] );
+		$groups = call_user_func( $plugin['fields'], (int) $post_id );
 		return is_array( $groups ) ? $groups : array();
 	}
 	$groups = array(
@@ -830,9 +1113,9 @@ function minn_admin_seo_groups( $plugin ) {
  * @param array $plugin Active provider.
  * @return array
  */
-function minn_admin_seo_field_map( $plugin ) {
+function minn_admin_seo_field_map( $plugin, $post_id = 0 ) {
 	$map = array();
-	foreach ( minn_admin_seo_groups( $plugin ) as $group ) {
+	foreach ( minn_admin_seo_groups( $plugin, $post_id ) as $group ) {
 		foreach ( ( isset( $group['fields'] ) && is_array( $group['fields'] ) ? $group['fields'] : array() ) as $field ) {
 			if ( ! empty( $field['name'] ) ) {
 				$map[ (string) $field['name'] ] = $field;
@@ -929,10 +1212,12 @@ add_action( 'rest_api_init', function () {
 			'post' => array( 'type' => 'integer', 'default' => 0 ),
 		),
 		'callback'            => function ( $request ) use ( $plugin ) {
-			$out = array( 'groups' => minn_admin_seo_groups( $plugin ) );
+			$post_id = (int) $request->get_param( 'post' );
+			// Groups can be post-aware (Yoast hides the article type on
+			// pages) and are already per-user (capability-gated groups).
+			$out = array( 'groups' => minn_admin_seo_groups( $plugin, $post_id ) );
 			// The preview quotes the post's resolved title and excerpt, so
 			// it is gated per POST, not just on the route's edit_posts.
-			$post_id = (int) $request->get_param( 'post' );
 			if ( $post_id > 0 && current_user_can( 'edit_post', $post_id ) ) {
 				$preview = minn_admin_seo_preview( $plugin, $post_id );
 				if ( $preview ) {
@@ -978,7 +1263,7 @@ add_action( 'rest_api_init', function () {
 				&& ! call_user_func( $plugin['can_edit'], $post->ID ) ) {
 				return new WP_Error( 'rest_forbidden', __( 'You cannot edit SEO fields on this site.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
-			foreach ( minn_admin_seo_field_map( $plugin ) as $field => $def ) {
+			foreach ( minn_admin_seo_field_map( $plugin, $post->ID ) as $field => $def ) {
 				if ( ! array_key_exists( $field, $value ) ) {
 					continue;
 				}
