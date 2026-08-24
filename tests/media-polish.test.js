@@ -61,6 +61,39 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForSelector( `[data-media="${ fx.attached }"]`, { timeout: 20000 } );
 		t.check( 'toggling back restores the attached file', true );
 
+		// Mine: a view filter over core's author query (deliberately not an
+		// access boundary). The loose fixture is reassigned to another user,
+		// so under Mine it drops out while the admin's own upload stays; the
+		// choice persists across a reload via localStorage.
+		t.check( 'toolbar shows the Mine filter', !! ( await page.$( '#minn-media-mine' ) ) );
+		const reassigned = await page.evaluate( async ( id ) => {
+			const head = { 'X-WP-Nonce': window.MINN.nonce, 'Content-Type': 'application/json' };
+			const users = await ( await fetch( window.MINN.restUrl + 'wp/v2/users?slug=minn-author&_fields=id', {
+				headers: head, credentials: 'same-origin' } ) ).json();
+			if ( ! users.length ) return false;
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/media/' + id, {
+				method: 'POST', headers: head, credentials: 'same-origin',
+				body: JSON.stringify( { author: users[ 0 ].id } ),
+			} );
+			return ( await r.json() ).author === users[ 0 ].id;
+		}, fx.loose );
+		t.check( 'fixture reassigned to another author', reassigned === true, String( reassigned ) );
+		await page.click( '#minn-media-mine' );
+		await page.waitForFunction( ( id ) => ! document.querySelector( `[data-media="${ id }"]` ), fx.loose, { timeout: 20000 } );
+		t.check( 'another author\'s file drops out under Mine', true );
+		t.check( 'your own file stays under Mine', !! ( await page.$( `[data-media="${ fx.attached }"]` ) ) );
+		t.check( 'Mine pill reads active', await page.$eval( '#minn-media-mine', ( b ) => b.classList.contains( 'active' ) ) );
+		await page.goto( BASE + '/minn-admin/media', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `[data-media="${ fx.attached }"]`, { timeout: 20000 } );
+		const persisted = await page.evaluate( ( id ) => ( {
+			active: document.getElementById( 'minn-media-mine' ).classList.contains( 'active' ),
+			looseGone: ! document.querySelector( `[data-media="${ id }"]` ),
+		} ), fx.loose );
+		t.check( 'Mine persists across a reload', persisted.active && persisted.looseGone, JSON.stringify( persisted ) );
+		await page.click( '#minn-media-mine' );
+		await page.waitForSelector( `[data-media="${ fx.loose }"]`, { timeout: 20000 } );
+		t.check( 'toggling Mine off restores the other author\'s file', true );
+
 		// Month filter: the current month is a listed option and keeps the
 		// fresh fixtures; the combobox seeds and applies through a real pick.
 		const now = new Date();
@@ -104,6 +137,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'unattached file reads Unattached in the modal', true );
 		t.check( 'no editor jump for an unattached file', ! ( await page.$( '#minn-media-attached' ) ) );
 	} finally {
+		// A crash mid-Mine must not leave the persisted filter armed for
+		// later suites (or for Austin's own browser profile on this site).
+		await page.evaluate( () => {
+			try { localStorage.removeItem( 'minn-media-mine' ); } catch ( e ) {}
+		} ).catch( () => {} );
 		await page.evaluate( async ( fx2 ) => {
 			const head = { 'X-WP-Nonce': window.MINN.nonce };
 			for ( const id of [ fx2.attached, fx2.loose ] ) {

@@ -992,6 +992,11 @@
 		contentOrderby: 'date',
 		contentOrder: 'desc',
 		mediaView: 'grid',
+		// Mine filter survives visits: someone who wants only their own
+		// uploads wants that every time.
+		mediaMine: ( () => {
+			try { return localStorage.getItem( 'minn-media-mine' ) === '1'; } catch ( e ) { return false; }
+		} )(),
 		uploadOpen: false,
 		commentTab: 'hold',
 		extTab: 'plugins',
@@ -5864,7 +5869,8 @@
 	// must not land its rows into the new context.
 	const mediaCtx = () => ( state.mediaSearch || '' ) + '|' + ( state.mediaType || '' )
 		+ '|' + ( state.mediaUnattached ? '1' : '' ) + '|' + ( state.mediaMonth || '' )
-		+ '|' + ( state.mediaFolder == null ? '' : state.mediaFolder );
+		+ '|' + ( state.mediaFolder == null ? '' : state.mediaFolder )
+		+ '|' + ( state.mediaMine ? 'm' : '' );
 
 	// Month filter → an inclusive local-time window for REST after/before
 	// (both are exclusive comparisons against site-local post_date).
@@ -5888,6 +5894,10 @@
 		if ( state.mediaSearch ) q += '&search=' + encodeURIComponent( state.mediaSearch );
 		if ( mediaType ) q += '&media_type=' + encodeURIComponent( mediaType );
 		if ( state.mediaUnattached ) q += '&parent=0';
+		// Mine: a view convenience over core's author query — deliberately
+		// NOT an access boundary (wp/v2/media stays role-governed; anyone
+		// with upload_files can still query everything directly).
+		if ( state.mediaMine && B.user && B.user.id ) q += '&author=' + B.user.id;
 		if ( state.mediaMonth ) {
 			const w = mediaMonthWindow( state.mediaMonth );
 			q += '&after=' + encodeURIComponent( w.after ) + '&before=' + encodeURIComponent( w.before );
@@ -6172,6 +6182,7 @@
 			</div>
 			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
 				<button class="minn-tab${ state.mediaUnattached ? ' active' : '' }" id="minn-media-unattached" title="${ esc( __( 'Files not attached to any post or page' ) ) }">${ esc( __( 'Unattached' ) ) }</button>
+				<button class="minn-tab${ state.mediaMine ? ' active' : '' }" id="minn-media-mine" title="${ esc( __( 'Only files you uploaded' ) ) }">${ esc( __( 'Mine' ) ) }</button>
 			</div>`;
 		const mediaMonthComboHtml = `
 			<div class="minn-ac minn-tax-select" data-monthcombo title="${ esc( __( 'Filter by upload month' ) ) }">
@@ -6257,7 +6268,7 @@
 			<div class="minn-dropzone-title">${ esc( __( 'Drag & drop files here' ) ) }</div>
 			<div class="minn-dropzone-sub">${ sprintf( /* translators: %s: a "browse your computer" link. */ __( 'or %s' ), `<b>${ esc( __( 'browse your computer' ) ) }</b>` ) }</div>
 		</div>` : '' }
-		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType || state.mediaUnattached || state.mediaMonth || state.mediaFolder != null ? __( 'No files match.' ) : __( 'The media library is empty. Drop files anywhere to upload.' ) }</div>` : state.mediaView === 'grid' ? `
+		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType || state.mediaUnattached || state.mediaMine || state.mediaMonth || state.mediaFolder != null ? __( 'No files match.' ) : __( 'The media library is empty. Drop files anywhere to upload.' ) }</div>` : state.mediaView === 'grid' ? `
 		<div class="minn-media-grid">
 			${ mapped.map( ( m ) => `
 				<div class="minn-media-card" data-media="${ m.id }">
@@ -6312,6 +6323,16 @@
 		if ( unattachedBtn ) unattachedBtn.addEventListener( 'click', () => {
 			state.mediaUnattached = ! state.mediaUnattached;
 			mediaReload( () => unattachedBtn.classList.toggle( 'active', !! state.mediaUnattached ) );
+		} );
+		// Mine: only your own uploads.
+		const mineBtn = $( '#minn-media-mine', view );
+		if ( mineBtn ) mineBtn.addEventListener( 'click', () => {
+			state.mediaMine = ! state.mediaMine;
+			try {
+				if ( state.mediaMine ) localStorage.setItem( 'minn-media-mine', '1' );
+				else localStorage.removeItem( 'minn-media-mine' );
+			} catch ( e ) {}
+			mediaReload( () => mineBtn.classList.toggle( 'active', !! state.mediaMine ) );
 		} );
 		// Month filter: options load once per session (months with uploads,
 		// from minn-admin/v1/media/months) and bind as a strict combobox.
