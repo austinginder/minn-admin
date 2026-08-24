@@ -1589,6 +1589,19 @@
 		if ( swatch && ! swatch.disabled ) swatch.click();
 	} );
 
+	// The sidebar mark navigates to the public site from the same screen
+	// spot the front-end bar's mark occupies. Hand the corner off so the
+	// arriving page starts with its (otherwise ghosted) mark visible: a
+	// parked cursor produces no hover event after navigation, so without
+	// the flag the person toggling front and back would land on an
+	// invisible control. One-shot; the bar's pre-paint consumes it.
+	document.addEventListener( 'click', ( e ) => {
+		if ( ! e.target.closest( '#minn-logo-site' ) ) return;
+		try {
+			sessionStorage.setItem( 'minn-bar-corner', String( Date.now() ) );
+		} catch ( err ) {}
+	} );
+
 	// Arm one async-suggest picker (data-ftype="suggest"): typing fetches the
 	// field's route with &q=, rows pick on mousedown (selection survival),
 	// blur restores the committed label, an emptied input clears the value.

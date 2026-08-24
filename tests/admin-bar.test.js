@@ -125,8 +125,17 @@ const { execSync } = require( 'child_process' );
 		t.check( 'opted in: Corner Reveal owns its own shell and core is gone',
 			s.minn && s.shell && ! s.bodyClass && ! s.core, JSON.stringify( s ) );
 		t.check( 'desktop: Corner Reveal does not offset the site', s.margin === '0px', s.margin );
+		// The 46px resting form is the state every non-ghosting page shows
+		// (status chip, coarse pointer, narrow window). On this wide
+		// fine-pointer page the ghost marker hides/expands it, so the
+		// geometry contract is measured with the marker lifted — the class
+		// is the only delta from a chip page — and restored right after.
 		const desktop = await page.evaluate( () => {
 			const b = document.getElementById( 'minn-bar' );
+			// Transition off first: rects read mid-animation otherwise.
+			b.style.transition = 'none';
+			document.getElementById( 'minn-cornerbar' ).classList.remove( 'minn-bar-ghost', 'minn-bar-peek' );
+			void b.offsetWidth;
 			const r = b.getBoundingClientRect();
 			return {
 				top: r.top,
@@ -161,6 +170,12 @@ const { execSync } = require( 'child_process' );
 			siteMark.width === 28 && siteMark.height === 28
 				&& Object.values( siteMark.insets ).every( ( inset ) => Math.abs( inset - 9 ) < 0.1 ),
 			JSON.stringify( { desktop, siteMark } ) );
+		await page.evaluate( () => {
+			const b = document.getElementById( 'minn-bar' );
+			document.getElementById( 'minn-cornerbar' ).classList.add( 'minn-bar-ghost' );
+			void b.offsetWidth;
+			b.style.transition = '';
+		} );
 		await revealBar();
 		const revealed = await page.evaluate( () => {
 			const bar = document.getElementById( 'minn-bar' );
@@ -417,6 +432,148 @@ const { execSync } = require( 'child_process' );
 				&& customScheme.lightAccent === '#0066ff',
 			JSON.stringify( customScheme ) );
 		await setAppearance( { scheme: previousAppearance.scheme, custom: previousAppearance.custom } );
+
+		// Corner ghost: pages start with the bar fully tucked away (the
+		// server ships the marker, so nothing flashes while clicking around
+		// the site), the hit area stays while invisible, and the reveal
+		// goes straight to the complete control set (the peek — no
+		// mark-only middle stop). The corner-handoff flag makes the
+		// front/back round trip land with the bar already open. Real mouse
+		// moves drive the reveal checks; the zero-movement pointerdown
+		// branch is exercised synthetically since any real mouse travel
+		// would reveal via pointermove first.
+		await page.evaluate( () => sessionStorage.removeItem( 'minn-bar-corner' ) );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await page.mouse.move( 640, 400 );
+		await page.waitForFunction( () => getComputedStyle( document.getElementById( 'minn-bar' ) ).opacity === '0',
+			null, { timeout: 4000 } );
+		const arrived = await page.evaluate( () => {
+			const el = document.elementFromPoint( 30, 30 );
+			const corner = document.getElementById( 'minn-cornerbar' );
+			return {
+				ghost: corner.classList.contains( 'minn-bar-ghost' ),
+				peek: corner.classList.contains( 'minn-bar-peek' ),
+				hit: !! ( el && el.closest( '.minn-bar-markbtn' ) ),
+			};
+		} );
+		t.check( 'ghost: a plain arrival starts hidden but keeps the hit area',
+			arrived.ghost && ! arrived.peek && arrived.hit, JSON.stringify( arrived ) );
+		await page.mouse.move( 30, 30, { steps: 8 } );
+		await page.waitForFunction( () => {
+			const b = document.getElementById( 'minn-bar' );
+			return getComputedStyle( b ).opacity === '1' && b.getBoundingClientRect().width > 300;
+		}, null, { timeout: 4000 } );
+		t.check( 'ghost: the pointer entering the corner reveals the full control set', true, 'opacity 1, expanded' );
+		await page.mouse.move( 700, 500, { steps: 8 } );
+		await page.waitForFunction( () => {
+			const corner = document.getElementById( 'minn-cornerbar' );
+			return ! corner.classList.contains( 'minn-bar-peek' )
+				&& getComputedStyle( document.getElementById( 'minn-bar' ) ).opacity === '0';
+		}, null, { timeout: 8000 } );
+		t.check( 'ghost: the pointer leaving tucks it away again', true, 'tucked' );
+		const downReveal = await page.evaluate( () => {
+			document.dispatchEvent( new PointerEvent( 'pointerdown', { clientX: 30, clientY: 30, bubbles: true } ) );
+			return document.getElementById( 'minn-cornerbar' ).classList.contains( 'minn-bar-peek' );
+		} );
+		t.check( 'ghost: a corner pointerdown reveals with zero mouse movement', downReveal, String( downReveal ) );
+		// The handoff flag: a fresh one-shot flag means the last navigation
+		// left from a corner mark, so this arrival starts with the bar
+		// already open and the flag is consumed.
+		await page.evaluate( () => sessionStorage.setItem( 'minn-bar-corner', String( Date.now() ) ) );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		const handoff = await page.evaluate( () => {
+			const corner = document.getElementById( 'minn-cornerbar' );
+			const b = document.getElementById( 'minn-bar' );
+			return {
+				peek: corner.classList.contains( 'minn-bar-peek' ),
+				opacity: getComputedStyle( b ).opacity,
+				width: b.getBoundingClientRect().width,
+				flag: sessionStorage.getItem( 'minn-bar-corner' ),
+			};
+		} );
+		t.check( 'ghost: the corner handoff arrives open and consumes its flag',
+			handoff.peek && handoff.opacity === '1' && handoff.width > 300 && handoff.flag === null,
+			JSON.stringify( handoff ) );
+		// End-to-end round trip: the app sidebar mark sets the flag on the
+		// way out, and the bar mark sets it on the way in.
+		await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await page.waitForSelector( '#minn-logo-site', { timeout: 20000 } );
+		await Promise.all( [
+			page.waitForNavigation( { waitUntil: 'domcontentloaded', timeout: 60000 } ),
+			page.click( '#minn-logo-site' ),
+		] );
+		await page.waitForSelector( '#minn-cornerbar', { timeout: 20000 } );
+		const roundTrip = await page.evaluate( () => {
+			const b = document.getElementById( 'minn-bar' );
+			return {
+				peek: document.getElementById( 'minn-cornerbar' ).classList.contains( 'minn-bar-peek' ),
+				opacity: getComputedStyle( b ).opacity,
+				width: b.getBoundingClientRect().width,
+			};
+		} );
+		t.check( 'ghost: arriving from the app sidebar mark lands open',
+			roundTrip.peek && roundTrip.opacity === '1' && roundTrip.width > 300, JSON.stringify( roundTrip ) );
+		await Promise.all( [
+			page.waitForNavigation( { waitUntil: 'domcontentloaded', timeout: 60000 } ),
+			page.click( '.minn-bar-markbtn' ),
+		] );
+		await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+		const markFlag = await page.evaluate( () => {
+			const v = sessionStorage.getItem( 'minn-bar-corner' );
+			sessionStorage.removeItem( 'minn-bar-corner' );
+			return v;
+		} );
+		t.check( 'ghost: the bar mark hands the corner off on its way to the app',
+			!! markFlag, String( markFlag ) );
+		// An exception chip means the bar must stay visible: chrome present
+		// is the signal that something needs attention.
+		await setSetting( { minn_admin_maintenance: true } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await page.mouse.move( 640, 400 );
+		await page.waitForTimeout( 1000 );
+		const chipGhost = await page.evaluate( () => ( {
+			ghost: document.getElementById( 'minn-cornerbar' ).classList.contains( 'minn-bar-ghost' ),
+			chip: !! document.querySelector( '.minn-bar-status' ),
+		} ) );
+		t.check( 'ghost: an exception chip keeps the bar visible',
+			chipGhost.chip && ! chipGhost.ghost, JSON.stringify( chipGhost ) );
+		await setSetting( { minn_admin_maintenance: false } );
+		// A narrow window shows the classic visible launcher, and widening
+		// it starts ghosting: the exclusion lives in the media query alone,
+		// never in a one-shot marker removal, which left the resting mark
+		// stuck after a mobile-sized load was resized back up.
+		await page.setViewportSize( { width: 390, height: 844 } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		const narrow = await page.evaluate( () => ( {
+			marker: document.getElementById( 'minn-cornerbar' ).classList.contains( 'minn-bar-ghost' ),
+			opacity: getComputedStyle( document.getElementById( 'minn-bar' ) ).opacity,
+		} ) );
+		t.check( 'ghost: a narrow window keeps the visible launcher (marker inert, not removed)',
+			narrow.marker && narrow.opacity === '1', JSON.stringify( narrow ) );
+		await page.setViewportSize( { width: 1280, height: 800 } );
+		await page.waitForFunction( () => getComputedStyle( document.getElementById( 'minn-bar' ) ).opacity === '0',
+			null, { timeout: 4000 } );
+		t.check( 'ghost: widening that window starts ghosting instead of sticking on the mark', true, 'tucked' );
+		// Coarse pointers keep the visible launcher: a second context with
+		// real mobile emulation (pointer: coarse, hover: none), since
+		// resizing the desktop viewport does not change the pointer media.
+		const touchCtx = await browser.newContext( {
+			ignoreHTTPSErrors: true,
+			storageState: await page.context().storageState(),
+			viewport: { width: 390, height: 844 },
+			isMobile: true,
+			hasTouch: true,
+		} );
+		const touchPage = await touchCtx.newPage();
+		await touchPage.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await touchPage.waitForTimeout( 1000 );
+		const touchGhost = await touchPage.evaluate( () => ( {
+			coarse: ! matchMedia( '(hover: hover) and (pointer: fine)' ).matches,
+			opacity: getComputedStyle( document.getElementById( 'minn-bar' ) ).opacity,
+		} ) );
+		t.check( 'ghost: coarse-pointer devices keep the visible launcher',
+			touchGhost.coarse && touchGhost.opacity === '1', JSON.stringify( touchGhost ) );
+		await touchCtx.close();
 
 		// Builder-aware Edit: a page whose canvas Elementor owns edits in
 		// Elementor — Minn's editor would only open a read-only fence, and on

@@ -419,7 +419,11 @@ class Minn_Admin_Bar {
 		// classic toolbar's full-width layout around this small overlay.
 		$appearance = Minn_Admin::get_user_appearance();
 		$scheme     = isset( $appearance['scheme'] ) ? $appearance['scheme'] : 'minn';
-		echo '<div id="minn-cornerbar">';
+		// The corner ships pre-ghosted so the mark never flashes before
+		// bar.js runs; the pre-paint script below un-ghosts it. A status
+		// chip keeps the bar visible instead: chrome present means
+		// something needs attention.
+		echo '<div id="minn-cornerbar"' . ( $status ? '' : ' class="minn-bar-ghost"' ) . '>';
 		echo '<div id="minn-bar-root" data-minn-theme="dark" data-minn-scheme="' . esc_attr( $scheme ) . '">';
 		if ( 'custom' === $scheme ) {
 			echo self::custom_scheme_style( $appearance );
@@ -428,6 +432,18 @@ class Minn_Admin_Bar {
 		// Pre-paint the saved Minn theme before first paint of the bar (the
 		// SPA's localStorage key; system preference when unset).
 		echo '<script>(function(){try{var t=localStorage.getItem("minn-theme");if(t!=="dark"&&t!=="light"){t=window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.getElementById("minn-bar-root").setAttribute("data-minn-theme",t);}catch(e){}})();</script>';
+
+		// Pre-paint the corner handoff: a fresh flag means the last
+		// navigation started from this same corner (the bar mark, or the
+		// app sidebar mark), so the person toggling front and back finds
+		// the bar already open in its full peek form. The flag is one-shot:
+		// consumed here so it never leaks into an unrelated later pageload.
+		// The ghost marker itself is never removed — coarse pointers and
+		// narrow windows are excluded by the stylesheet's media query, so
+		// an environment that later turns wide-and-fine (device emulation
+		// dropped, a mouse plugged in, a window widened) starts ghosting
+		// instead of being stuck on the resting mark.
+		echo '<script>(function(){try{var c=document.getElementById("minn-cornerbar");if(!c||!c.classList.contains("minn-bar-ghost")){return;}var ts=0;try{ts=parseInt(sessionStorage.getItem("minn-bar-corner")||"0",10);sessionStorage.removeItem("minn-bar-corner");}catch(e){}if(ts&&Date.now()-ts<60000){c.classList.add("minn-bar-peek");}}catch(e){}})();</script>';
 
 		echo '<header id="minn-bar" aria-label="' . esc_attr__( 'Minn Admin Bar', 'minn-admin' ) . '">';
 

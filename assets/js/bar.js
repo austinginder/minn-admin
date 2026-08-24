@@ -85,7 +85,15 @@
 			}, 0 );
 		} );
 		markButton.addEventListener( 'click', ( event ) => {
-			if ( ! mobileBar.matches ) return;
+			if ( ! mobileBar.matches ) {
+				// Desktop mark navigates to the app: hand the corner off so
+				// the next front-end load starts with the mark visible for
+				// the person toggling front and back on this same spot.
+				try {
+					sessionStorage.setItem( 'minn-bar-corner', String( Date.now() ) );
+				} catch ( e ) {}
+				return;
+			}
 			event.preventDefault();
 			event.stopPropagation();
 			const opening = ! root.classList.contains( 'minn-bar-touch-open' );
@@ -165,6 +173,80 @@
 			closeTouchReveal();
 		}
 	} );
+
+	/* ===== Corner ghost: invisible at rest on wide fine-pointer screens ===== */
+	// Pages start with the bar fully tucked away (the server ships the
+	// .minn-bar-ghost marker, so nothing flashes while clicking around the
+	// site) and the reveal goes straight to the complete control set — the
+	// .minn-bar-peek class this section toggles — when the pointer enters
+	// the corner zone or keyboard focus arrives. The exception is the
+	// corner round-trip: navigating FROM either corner mark (this bar's,
+	// or the app sidebar's) sets a one-shot handoff flag the render
+	// pre-paint consumes into an arrival peek, so a cursor parked on the
+	// toggle spot finds the bar already open. That handoff exists because
+	// Chromium applies no :hover after navigation until the mouse moves —
+	// a parked cursor produces no event to reveal on. The hit area never
+	// leaves, and pointerdown carries coordinates even with zero mouse
+	// movement, so a blind click on the remembered spot both navigates and
+	// reveals as it lands. An exception status chip disables ghosting
+	// entirely (the server keeps the marker off): chrome present means
+	// something needs attention. Coarse pointers and narrow windows keep
+	// the classic resting mark — invisible chrome is undiscoverable by
+	// touch, and the expanded peek would fight the compact tap panel. That
+	// exclusion lives in the stylesheet's media query and these handlers'
+	// live ghostEnabled() guard, NEVER in removing the marker class: a
+	// one-shot removal left the resting mark stuck after the environment
+	// turned wide-and-fine again (device emulation dropped, a window
+	// widened). Enter/exit zones differ so the bar does not flicker at the
+	// boundary.
+	const ghostZoneEnter = 72;
+	const ghostZoneExit = 110;
+	const finePointer = window.matchMedia ? matchMedia( '(hover: hover) and (pointer: fine)' ) : null;
+	let ghostTimer = 0;
+	let pointerAt = null;
+	function ghostEnabled() {
+		return !! ( corner && corner.classList.contains( 'minn-bar-ghost' )
+			&& finePointer && finePointer.matches && ! mobileBar.matches );
+	}
+	function pointerInZone( limit ) {
+		return !! pointerAt && pointerAt.x <= limit && pointerAt.y <= limit;
+	}
+	function peek() {
+		clearTimeout( ghostTimer );
+		ghostTimer = 0;
+		corner.classList.add( 'minn-bar-peek' );
+	}
+	function tuckNow() {
+		ghostTimer = 0;
+		if ( ! ghostEnabled() || pointerInZone( ghostZoneExit ) ) return;
+		if ( root.matches( ':hover' ) || root.contains( document.activeElement ) ) return;
+		if ( root.classList.contains( 'minn-bar-menu-open' ) || root.classList.contains( 'minn-bar-touch-open' ) ) return;
+		corner.classList.remove( 'minn-bar-peek' );
+	}
+	function tuckSoon( delay ) {
+		clearTimeout( ghostTimer );
+		ghostTimer = setTimeout( tuckNow, delay );
+	}
+	if ( corner && corner.classList.contains( 'minn-bar-ghost' ) && finePointer ) {
+		document.addEventListener( 'pointermove', ( event ) => {
+			if ( ! ghostEnabled() ) return;
+			pointerAt = { x: event.clientX, y: event.clientY };
+			if ( pointerInZone( ghostZoneEnter ) ) {
+				peek();
+			} else if ( ! ghostTimer && corner.classList.contains( 'minn-bar-peek' ) ) {
+				tuckSoon( 700 );
+			}
+		}, { passive: true } );
+		document.addEventListener( 'pointerdown', ( event ) => {
+			if ( ! ghostEnabled() ) return;
+			pointerAt = { x: event.clientX, y: event.clientY };
+			if ( pointerInZone( ghostZoneEnter ) ) peek();
+		}, true );
+		root.addEventListener( 'focusin', () => {
+			if ( ghostEnabled() ) peek();
+		} );
+		root.addEventListener( 'focusout', () => tuckSoon( 700 ) );
+	}
 
 	/* ===== Intents: hand off to the app (palette, create, notifications) ===== */
 	function goWithIntent( intent ) {

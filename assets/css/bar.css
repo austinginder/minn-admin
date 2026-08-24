@@ -218,7 +218,51 @@
   -webkit-font-smoothing: antialiased;
   font-variant-ligatures: no-contextual;
   max-height: 46px;
-  transition: max-width 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), max-height 0.26s ease, padding 0.26s ease;
+  transition: max-width 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), max-height 0.26s ease, padding 0.26s ease,
+    opacity 0.28s ease, transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Corner ghost (wide fine-pointer screens only): at rest the bar tucks
+   fully away — transparent, slid toward the corner — so a healthy public
+   page carries no visible admin chrome at all, and the reveal goes
+   STRAIGHT to the complete control set: a mark-only middle stop would be
+   two reveals, a collapse and then a fade. The hit area never leaves
+   (opacity only, never visibility or pointer-events), so a click on the
+   remembered spot still lands on the mark while invisible. .minn-bar-ghost
+   is the server's "this page ghosts" marker (kept off when an exception
+   status chip needs to stay visible) and PERSISTS; .minn-bar-peek is the
+   revealed state bar.js toggles from the corner zone / focus, and the
+   render pre-paint sets for the corner-handoff arrival. The marker stays
+   put in every environment — this media query alone excludes coarse
+   pointers and narrow windows (the classic resting mark, whose compact
+   tap panel this expansion would fight), so an environment that later
+   turns wide-and-fine starts ghosting instead of sticking on the mark.
+   The :hover/:focus-within overrides are
+   belt-and-braces for pointer sequences the JS zone check misses; all of
+   it applies only to the header, so open menus and the palette (siblings
+   inside the root) are never hidden by it. */
+@media (hover: hover) and (pointer: fine) and (min-width: 783px) {
+  #minn-cornerbar.minn-bar-ghost:not(.minn-bar-peek) #minn-bar {
+    opacity: 0;
+    transform: translate(-14px, -14px) scale(0.85);
+  }
+  #minn-cornerbar.minn-bar-ghost.minn-bar-peek #minn-bar {
+    max-width: calc(100vw - 24px);
+    padding-right: 8px;
+  }
+  #minn-cornerbar.minn-bar-ghost.minn-bar-peek .minn-bar-site,
+  #minn-cornerbar.minn-bar-ghost.minn-bar-peek .minn-bar-status,
+  #minn-cornerbar.minn-bar-ghost.minn-bar-peek .minn-bar-left > .minn-bar-divider,
+  #minn-cornerbar.minn-bar-ghost.minn-bar-peek .minn-bar-right {
+    opacity: 1;
+    pointer-events: auto;
+    transition-delay: 0.12s;
+  }
+  #minn-cornerbar.minn-bar-ghost #minn-bar-root:hover #minn-bar,
+  #minn-cornerbar.minn-bar-ghost #minn-bar-root:focus-within #minn-bar {
+    opacity: 1;
+    transform: none;
+  }
 }
 #minn-bar-root:hover #minn-bar,
 #minn-bar-root:focus-within #minn-bar,
