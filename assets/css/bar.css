@@ -50,6 +50,92 @@
   --shadow: 0 18px 50px rgba(30, 30, 50, 0.16);
 }
 
+/* —— Color schemes (user meta minn_admin_appearance) ——
+   Same named packages as the SPA (app.css), keyed on [data-minn-scheme] which
+   the server stamps from the saved appearance. Status colors stay semantic.
+   scheme "custom" has no block here: render() emits the user's token maps as
+   an inline style scoped to #minn-bar-root. */
+#minn-bar-root[data-minn-theme="dark"][data-minn-scheme="ocean"] {
+  --bg2:#0e1420; --panel:#121a28; --panel2:#182234; --hover:#1e2a40;
+  --border:#243044; --border2:#334860; --text:#e8eef6; --text2:#93a4bc; --text3:#6a7c96;
+  --accent:#3b82f6; --accent2:#60a5fa; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="light"][data-minn-scheme="ocean"] {
+  --bg2:#ffffff; --panel:#ffffff; --panel2:#eef3fa; --hover:#e4ebf6;
+  --border:#d5e0ee; --border2:#c0cfe3; --text:#152033; --text2:#4d607a; --text3:#7a8da8;
+  --accent:#2563eb; --accent2:#1d4ed8; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="dark"][data-minn-scheme="forest"] {
+  --bg2:#0e1611; --panel:#131c16; --panel2:#1a261e; --hover:#213028;
+  --border:#2a3a30; --border2:#3a4e40; --text:#e8f0ea; --text2:#95ad9c; --text3:#6a8272;
+  --accent:#34a06c; --accent2:#4fc48a; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="light"][data-minn-scheme="forest"] {
+  --bg2:#ffffff; --panel:#ffffff; --panel2:#eef4f0; --hover:#e4ede7;
+  --border:#d2e0d6; --border2:#b9ccbf; --text:#15241a; --text2:#4a6554; --text3:#73907d;
+  --accent:#1f8a56; --accent2:#176b43; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="dark"][data-minn-scheme="amber"] {
+  --bg2:#16130e; --panel:#1c1812; --panel2:#262018; --hover:#2e271d;
+  --border:#3a3226; --border2:#4e4434; --text:#f3eee4; --text2:#b3a58c; --text3:#847866;
+  --accent:#d4923a; --accent2:#e8b05c; --accent-fg:#14110c;
+}
+#minn-bar-root[data-minn-theme="light"][data-minn-scheme="amber"] {
+  --bg2:#ffffff; --panel:#ffffff; --panel2:#f5efe6; --hover:#eee4d6;
+  --border:#e4d6c0; --border2:#d2c0a4; --text:#2a2114; --text2:#6b5a3e; --text3:#978564;
+  --accent:#c47a18; --accent2:#a36512; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="dark"][data-minn-scheme="rose"] {
+  --bg2:#160e14; --panel:#1c121a; --panel2:#261822; --hover:#301e2c;
+  --border:#3c2838; --border2:#523a4c; --text:#f4e8f0; --text2:#b89aaf; --text3:#876a7e;
+  --accent:#d063b0; --accent2:#e08cc8; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="light"][data-minn-scheme="rose"] {
+  --bg2:#ffffff; --panel:#ffffff; --panel2:#f6ecf2; --hover:#efdfe9;
+  --border:#e5cddc; --border2:#d4b3c8; --text:#2a1524; --text2:#6b4560; --text3:#987288;
+  --accent:#b84496; --accent2:#9a347d; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="dark"][data-minn-scheme="coral"] {
+  --bg2:#18110f; --panel:#1e1614; --panel2:#2a1e1b; --hover:#342622;
+  --border:#42322e; --border2:#58443e; --text:#f4ebe8; --text2:#b8a09a; --text3:#87746e;
+  --accent:#e06b5a; --accent2:#f08a7c; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="light"][data-minn-scheme="coral"] {
+  --bg2:#ffffff; --panel:#ffffff; --panel2:#f6eeeb; --hover:#efe3df;
+  --border:#e5d2cc; --border2:#d4b8b0; --text:#2a1612; --text2:#6b4a42; --text3:#98756c;
+  --accent:#d14a38; --accent2:#b53a2a; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="dark"][data-minn-scheme="teal"] {
+  --bg2:#0e1616; --panel:#121c1c; --panel2:#182626; --hover:#1e3030;
+  --border:#283c3c; --border2:#385050; --text:#e6f2f1; --text2:#92b0ae; --text3:#688482;
+  --accent:#2aa8a0; --accent2:#4bc4bc; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="light"][data-minn-scheme="teal"] {
+  --bg2:#ffffff; --panel:#ffffff; --panel2:#eaf3f2; --hover:#dfeceb;
+  --border:#c9dedc; --border2:#b0ccc9; --text:#122422; --text2:#44615e; --text3:#6f8f8b;
+  --accent:#1f8a84; --accent2:#176e69; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="dark"][data-minn-scheme="slate"] {
+  --bg2:#111318; --panel:#16181e; --panel2:#1d2028; --hover:#262a34;
+  --border:#303540; --border2:#424856; --text:#e8eaef; --text2:#9aa1b0; --text3:#6d7484;
+  --accent:#7b8599; --accent2:#9aa3b5; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="light"][data-minn-scheme="slate"] {
+  --bg2:#ffffff; --panel:#ffffff; --panel2:#eef0f3; --hover:#e5e8ed;
+  --border:#d5d9e0; --border2:#c0c5d0; --text:#181b22; --text2:#555c6b; --text3:#838a9a;
+  --accent:#5c6678; --accent2:#4a5363; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="dark"][data-minn-scheme="dusk"] {
+  --bg2:#14101a; --panel:#1a1522; --panel2:#221c2c; --hover:#2a2436;
+  --border:#342e42; --border2:#463e58; --text:#efeaf6; --text2:#a89ab8; --text3:#7a6e8e;
+  --accent:#9b7aef; --accent2:#b59af5; --accent-fg:#fff;
+}
+#minn-bar-root[data-minn-theme="light"][data-minn-scheme="dusk"] {
+  --bg2:#ffffff; --panel:#ffffff; --panel2:#f0ebf8; --hover:#e7dff3;
+  --border:#d8cee8; --border2:#c4b6db; --text:#1c1528; --text2:#5a4d72; --text3:#87789e;
+  --accent:#7c5ce0; --accent2:#6548c4; --accent-fg:#fff;
+}
+
 #minn-bar-root, #minn-bar-root * { box-sizing: border-box; }
 #minn-bar-root button { margin: 0; }
 #minn-bar-root svg { display: block; }

@@ -315,6 +315,33 @@ class Minn_Admin_Bar {
 		);
 	}
 
+	/**
+	 * Inline token overrides for scheme "custom": the SPA paints these from
+	 * JS, but the bar is server-rendered and the maps live in user meta, so
+	 * the server emits them directly — one block per mode, scoped under
+	 * #minn-bar-root so nothing reaches the site's theme. Values arrive
+	 * normalized (lowercase #rrggbb) but are re-sanitized before echo.
+	 */
+	private static function custom_scheme_style( $appearance ) {
+		$slots  = Minn_Admin::scheme_slots();
+		$custom = isset( $appearance['custom'] ) && is_array( $appearance['custom'] ) ? $appearance['custom'] : array();
+		$css    = '';
+		foreach ( array( 'dark', 'light' ) as $mode ) {
+			$tokens = isset( $custom[ $mode ] ) && is_array( $custom[ $mode ] ) ? $custom[ $mode ] : array();
+			$decls  = '';
+			foreach ( $slots as $slot => $var ) {
+				$hex = isset( $tokens[ $slot ] ) ? Minn_Admin::sanitize_hex_color( $tokens[ $slot ] ) : '';
+				if ( $hex ) {
+					$decls .= $var . ':' . $hex . ';';
+				}
+			}
+			if ( $decls ) {
+				$css .= '#minn-bar-root[data-minn-theme="' . $mode . '"]{' . $decls . '}';
+			}
+		}
+		return $css ? '<style id="minn-bar-custom-css">' . $css . '</style>' : '';
+	}
+
 	private static function icon( $paths ) {
 		return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $paths . '</svg>';
 	}
@@ -390,8 +417,13 @@ class Minn_Admin_Bar {
 
 		// Corner Reveal stays in its own shell so themes do not reserve the
 		// classic toolbar's full-width layout around this small overlay.
+		$appearance = Minn_Admin::get_user_appearance();
+		$scheme     = isset( $appearance['scheme'] ) ? $appearance['scheme'] : 'minn';
 		echo '<div id="minn-cornerbar">';
-		echo '<div id="minn-bar-root" data-minn-theme="dark">';
+		echo '<div id="minn-bar-root" data-minn-theme="dark" data-minn-scheme="' . esc_attr( $scheme ) . '">';
+		if ( 'custom' === $scheme ) {
+			echo self::custom_scheme_style( $appearance );
+		}
 
 		// Pre-paint the saved Minn theme before first paint of the bar (the
 		// SPA's localStorage key; system preference when unset).

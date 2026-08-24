@@ -51,12 +51,21 @@ const { execSync } = require( 'child_process' );
 		} );
 		return ( await r.json() ).frontBar;
 	}, { a: auth, v: on } );
-	const previousFrontBar = await page.evaluate( async ( a ) => {
+	const setAppearance = ( body ) => page.evaluate( async ( { a, b } ) => {
+		const r = await fetch( a.rest + 'minn-admin/v1/me/appearance', {
+			method: 'POST', credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': a.nonce },
+			body: JSON.stringify( b ),
+		} );
+		return r.json();
+	}, { a: auth, b: body } );
+	const previousAppearance = await page.evaluate( async ( a ) => {
 		const r = await fetch( a.rest + 'minn-admin/v1/me/appearance', {
 			headers: { 'X-WP-Nonce': a.nonce }, credentials: 'same-origin',
 		} );
-		return ( await r.json() ).frontBar;
+		return r.json();
 	}, auth );
+	const previousFrontBar = previousAppearance.frontBar;
 	const setSetting = ( body ) => page.evaluate( async ( { a, b } ) => {
 		const r = await fetch( a.rest + 'wp/v2/settings', {
 			method: 'POST', credentials: 'same-origin',
@@ -366,6 +375,49 @@ const { execSync } = require( 'child_process' );
 			chip2 && chip2.tone === 'blue' && /Hidden from search/.test( chip2.text ), JSON.stringify( chip2 ) );
 		await setSetting( { blog_public: 1 } );
 
+		// Color schemes: the bar wears the user's saved scheme. Presets ride
+		// [data-minn-scheme] token blocks in bar.css; custom rides a
+		// server-emitted inline style built from the user-meta token maps.
+		// The mode attribute is forced to dark before reading so the check is
+		// deterministic regardless of the context's color-scheme preference.
+		await setAppearance( { scheme: 'ocean' } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		const presetScheme = await page.evaluate( () => {
+			const root = document.getElementById( 'minn-bar-root' );
+			root.setAttribute( 'data-minn-theme', 'dark' );
+			const cs = getComputedStyle( root );
+			return {
+				attr: root.getAttribute( 'data-minn-scheme' ),
+				accent: cs.getPropertyValue( '--accent' ).trim(),
+				customCss: !! document.getElementById( 'minn-bar-custom-css' ),
+			};
+		} );
+		t.check( 'a preset color scheme reaches the front bar',
+			presetScheme.attr === 'ocean' && presetScheme.accent === '#3b82f6' && ! presetScheme.customCss,
+			JSON.stringify( presetScheme ) );
+		await setAppearance( { scheme: 'custom', custom: { dark: { panel: '#102030', accent: '#ff6600' }, light: { accent: '#0066ff' } } } );
+		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		const customScheme = await page.evaluate( () => {
+			const root = document.getElementById( 'minn-bar-root' );
+			root.setAttribute( 'data-minn-theme', 'dark' );
+			const cs = getComputedStyle( root );
+			const out = {
+				attr: root.getAttribute( 'data-minn-scheme' ),
+				panel: cs.getPropertyValue( '--panel' ).trim(),
+				accent: cs.getPropertyValue( '--accent' ).trim(),
+				customCss: !! document.getElementById( 'minn-bar-custom-css' ),
+			};
+			root.setAttribute( 'data-minn-theme', 'light' );
+			out.lightAccent = getComputedStyle( root ).getPropertyValue( '--accent' ).trim();
+			return out;
+		} );
+		t.check( 'custom scheme tokens reach the front bar in both modes',
+			customScheme.attr === 'custom' && customScheme.customCss
+				&& customScheme.panel === '#102030' && customScheme.accent === '#ff6600'
+				&& customScheme.lightAccent === '#0066ff',
+			JSON.stringify( customScheme ) );
+		await setAppearance( { scheme: previousAppearance.scheme, custom: previousAppearance.custom } );
+
 		// Builder-aware Edit: a page whose canvas Elementor owns edits in
 		// Elementor — Minn's editor would only open a read-only fence, and on
 		// the front end "edit this page" means the tool that renders it.
@@ -556,6 +608,7 @@ const { execSync } = require( 'child_process' );
 			await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
 			await setSetting( { minn_admin_maintenance: false, blog_public: 1 } );
 			await setFrontBar( previousFrontBar === true );
+			await setAppearance( { scheme: previousAppearance.scheme, custom: previousAppearance.custom } );
 			if ( postId ) await deletePost( page, postId );
 			if ( draftId ) await deletePost( page, draftId );
 		} catch ( e ) {}
