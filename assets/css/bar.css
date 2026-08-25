@@ -246,21 +246,24 @@
     opacity: 0;
     transform: translate(-14px, -14px) scale(0.85);
   }
-  /* The tell: while the bar is hidden, a few accent pixels hug the true
-     screen corner so the spot still says "something lives here". It rides
-     the bar root (NOT the shell) because the scheme tokens live there, so
-     it wears the user's accent; fixed positioning escapes the shell's
-     11/13px inset to reach 0,0. pointer-events:none — the reveal zone and
-     the invisible bar are the interactive surface, this is only a sign. */
+  /* The tell: while the bar is hidden, a small accent dot sits inset in
+     the corner so the spot still says "something lives here". A dot, not
+     a corner-hugging wedge: a filled shape bleeding off the screen edge
+     reads as a broken border-radius, while an inset dot is the indicator
+     vocabulary the bar already speaks (notification dot, status chip).
+     It rides the bar root (NOT the shell) because the scheme tokens live
+     there, so it wears the user's accent; fixed positioning escapes the
+     shell's 11/13px inset. pointer-events:none — the reveal zone and the
+     invisible bar are the interactive surface, this is only a sign. */
   #minn-cornerbar.minn-bar-ghost #minn-bar-root::before {
     content: '';
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 9px;
-    height: 9px;
+    top: 6px;
+    left: 6px;
+    width: 6px;
+    height: 6px;
     background: var(--accent);
-    border-bottom-right-radius: 100%;
+    border-radius: 50%;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.28s ease;

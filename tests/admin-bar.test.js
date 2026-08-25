@@ -477,7 +477,7 @@ const { execSync } = require( 'child_process' );
 		t.check( 'ghost: a plain arrival starts hidden but keeps the hit area',
 			arrived.ghost && ! arrived.peek && arrived.hit, JSON.stringify( arrived ) );
 		t.check( 'ghost: the accent corner tell shows while hidden',
-			arrived.tellOpacity === '1' && arrived.tellWidth === '9px',
+			arrived.tellOpacity === '1' && arrived.tellWidth === '6px',
 			JSON.stringify( { opacity: arrived.tellOpacity, width: arrived.tellWidth } ) );
 		await page.mouse.move( 30, 30, { steps: 8 } );
 		await page.waitForFunction( () => {
