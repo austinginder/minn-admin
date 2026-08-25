@@ -19521,16 +19521,22 @@
 			${ visible.map( ( { t, i } ) => {
 				// Prefer ThemeURI when it is already a hub page; otherwise
 				// fall back to the wordpress.org directory when known.
-				const hubHref = ( t.theme_uri && ( /github\.com\//i.test( t.theme_uri ) || /wordpress\.org\/themes\//i.test( t.theme_uri ) ) )
+				// Host equality, never a substring: the label is the only thing
+				// telling a reader whose site the link goes to, and a Theme URI
+				// is whatever the theme's own header says. extLinkLabel already
+				// works this way.
+				const themeHubIsGithub = urlHostIs( t.theme_uri, 'github.com' );
+				const themeHubIsOrg = isWpOrgUrl( t.theme_uri ) && /^\/themes\//i.test( urlPath( t.theme_uri ) );
+				const hubHref = ( t.theme_uri && ( themeHubIsGithub || themeHubIsOrg ) )
 					? t.theme_uri
 					: ( t.on_wporg && t.stylesheet
 						? 'https://wordpress.org/themes/' + encodeURIComponent( t.stylesheet ) + '/'
 						: ( t.theme_uri || '' ) );
 				const hubTitle = hubHref
-					? ( /github\.com\//i.test( hubHref )
+					? ( urlHostIs( hubHref, 'github.com' )
 						/* translators: %s: the theme's name. */
 						? sprintf( __( 'Open %s on GitHub' ), t.name )
-						: /wordpress\.org\/themes\//i.test( hubHref )
+						: ( isWpOrgUrl( hubHref ) && /^\/themes\//i.test( urlPath( hubHref ) ) )
 							/* translators: %s: the theme's name. */
 							? sprintf( __( 'View %s on WordPress.org' ), t.name )
 							/* translators: %s: the theme's name. */
@@ -24918,7 +24924,7 @@
 			attrs.className = 'wp-embed-aspect-16-9 wp-has-aspect-ratio';
 			classes.push( 'wp-embed-aspect-16-9', 'wp-has-aspect-ratio' );
 		}
-		return `<!-- wp:embed${ serializeBlockAttrs( attrs ) } -->\n<figure class="${ classes.join( ' ' ) }"><div class="wp-block-embed__wrapper">\n${ url }\n</div></figure>\n<!-- /wp:embed -->`;
+		return `<!-- wp:embed${ serializeBlockAttrs( attrs ) } -->\n<figure class="${ classes.join( ' ' ) }"><div class="wp-block-embed__wrapper">\n${ esc( url ) }\n</div></figure>\n<!-- /wp:embed -->`;
 	}
 
 	// Spacer — self-closing-ish island; height lives in attrs + inline style.
@@ -28327,8 +28333,11 @@
 			try { fields = JSON.parse( serp.dataset.serpFields || '{}' ); } catch ( e ) {}
 			try { vars = JSON.parse( serp.dataset.serpVars || '{}' ); } catch ( e ) {}
 			Object.keys( fields ).forEach( ( line ) => {
-				const el = serp.querySelector( `[data-serp-line="${ line }"]` );
-				const input = root.querySelector( `[data-pf$=":${ fields[ line ] }"]` );
+				// Escape the parts: these keys come from the server's field map,
+				// and a stray quote or bracket throws inside an input handler,
+				// which would take the whole live preview down with it.
+				const el = serp.querySelector( `[data-serp-line="${ CSS.escape( String( line ) ) }"]` );
+				const input = root.querySelector( `[data-pf$=":${ CSS.escape( String( fields[ line ] ) ) }"]` );
 				if ( ! el || ! input ) return;
 				const typed = String( formControlValue( input ) || '' );
 				el.textContent = typed ? serpResolve( typed, vars ) : el.dataset.serpDefault;

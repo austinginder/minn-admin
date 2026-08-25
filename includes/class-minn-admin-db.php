@@ -192,11 +192,44 @@ class Minn_Admin_DB {
 		// on single-site the two are equal.)
 		$own  = strtolower( $wpdb->prefix );
 		$base = strtolower( $wpdb->base_prefix );
+
+		// A neighbour whose prefix EXTENDS ours passes a plain prefix test:
+		// wp_ matches wp_staging_ and wp_blog2_ just as happily as wp_posts.
+		// The wp_N_ rule below catches the multisite shape and nothing else,
+		// so on shared-database hosting another install's users table was
+		// listable. Let the schema name its own neighbours instead: a real
+		// install owns options AND posts AND postmeta under one prefix, and
+		// no plugin ships that trio, so requiring all three cannot mistake a
+		// plugin's own <prefix>..._options table for somebody else's site.
+		$suffixes = array( 'options', 'posts', 'postmeta' );
+		$seen     = array();
+		foreach ( $rows as $t ) {
+			$name = strtolower( (string) $t->name );
+			foreach ( $suffixes as $suffix ) {
+				$len = strlen( $name ) - strlen( $suffix );
+				if ( $len > strlen( $own ) && substr( $name, $len ) === $suffix ) {
+					$candidate = substr( $name, 0, $len );
+					$seen[ $candidate ][ $suffix ] = true;
+				}
+			}
+		}
+		$foreign = array();
+		foreach ( $seen as $candidate => $found ) {
+			if ( count( $found ) === count( $suffixes ) ) {
+				$foreign[] = $candidate;
+			}
+		}
+
 		$rows = array_values(
 			array_filter(
 				$rows,
-				function ( $t ) use ( $own, $base ) {
+				function ( $t ) use ( $own, $base, $foreign ) {
 					$name = strtolower( (string) $t->name );
+					foreach ( $foreign as $prefix ) {
+						if ( 0 === strpos( $name, $prefix ) ) {
+							return false;
+						}
+					}
 					if ( 0 === strpos( $name, $own ) ) {
 						return true;
 					}
