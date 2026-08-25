@@ -20,7 +20,10 @@ const path = require( 'path' );
 const { execSync } = require( 'child_process' );
 const { launch, login, reporter, BASE } = require( './helpers' );
 
-const WP_PATH = path.resolve( __dirname, '../../../..' );
+// MINN_TEST_WP first: on core-latest runs the harness points at the bare
+// site, and a __dirname-derived path silently writes the DEV site's
+// database instead — the browser then reads a value the CLI never wrote.
+const WP_PATH = process.env.MINN_TEST_WP || path.resolve( __dirname, '../../../..' );
 const wpEval = ( code ) => execSync(
 	`wp --path=${ JSON.stringify( WP_PATH ) } eval ${ JSON.stringify( code ) } 2>/dev/null`,
 	{ encoding: 'utf8', timeout: 60000 }
@@ -165,11 +168,27 @@ const wpEval = ( code ) => execSync(
 		/* ===== A default the theme does not support falls back to standard ===== */
 		// Written straight to the option: the REST setting is enum-validated,
 		// and this replays a theme that dropped support for the stored format.
-		wpEval( 'update_option( "default_post_format", "not-a-format" );' );
+		// Write-verify-rewrite: belt and braces against the REST-settings
+		// write-visibility heisenbug (an earlier settings POST committing
+		// late would clobber this CLI write). Re-assert until it holds.
+		for ( let i = 0; i < 5; i++ ) {
+			wpEval( 'update_option( "default_post_format", "not-a-format" );' );
+			await page.waitForTimeout( 400 );
+			if ( wpEval( 'echo get_option( "default_post_format" );' ) === 'not-a-format' ) break;
+		}
 		t.check( 'unsupported default resolves to standard',
 			wpEval( 'echo Minn_Admin::default_post_format();' ) === 'standard' );
-		await openNew( 'posts' );
-		t.check( 'new post picker falls back to standard', await pickerValue() === 'standard', String( await pickerValue() ) );
+		let fallback = null;
+		for ( let i = 0; i < 3; i++ ) {
+			await openNew( 'posts' );
+			fallback = await pickerValue();
+			if ( fallback === 'standard' ) break;
+			// A stale read means the clobber landed after our verify — put
+			// the option back and load once more.
+			wpEval( 'update_option( "default_post_format", "not-a-format" );' );
+			await page.waitForTimeout( 400 );
+		}
+		t.check( 'new post picker falls back to standard', fallback === 'standard', String( fallback ) );
 		await closeDoor();
 	} finally {
 		if ( postId ) await rest( `wp/v2/posts/${ postId }?force=true`, { method: 'DELETE' } ).catch( () => {} );

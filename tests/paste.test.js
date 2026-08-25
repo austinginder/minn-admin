@@ -425,7 +425,13 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	} ) );
 	t.check( 'Backspace at a first bullet under an island is a native no-op',
 		guardShape.island && ! guardShape.armed && guardShape.bullets === 2, JSON.stringify( guardShape ) );
-	// A lone empty bullet dissolves the LIST natively; the island survives.
+	// A lone empty bullet: the guard leaves the key to the browser, and the
+	// INVARIANT is that the island survives un-armed. Blink usually outdents
+	// the bullet into a paragraph, but on some pages it declines the edit
+	// entirely (observed on the bare core-latest site: beforeinput fires
+	// unprevented and nothing mutates — its deletion logic consults layout,
+	// which theme CSS changes). Both outcomes are native; neither may touch
+	// the island.
 	await page.evaluate( () => {
 		const ul = document.querySelector( '#minn-editor-body ul' );
 		ul.innerHTML = '<li><br></li>';
@@ -437,17 +443,19 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 		s.addRange( r );
 		document.querySelector( '#minn-editor-body' ).focus();
 	} );
+	await page.waitForTimeout( 200 );
 	await page.keyboard.press( 'Backspace' );
-	await page.waitForTimeout( 250 );
+	await page.waitForTimeout( 300 );
 	const dissolved = await page.evaluate( () => ( {
 		island: !! document.querySelector( '#minn-editor-body .minn-block-island' ),
+		armed: !! document.querySelector( '#minn-editor-body .minn-island-armed' ),
 		list: !! document.querySelector( '#minn-editor-body ul' ),
 	} ) );
-	t.check( 'Backspace on a lone empty bullet dissolves the list, island survives',
-		dissolved.island && ! dissolved.list, JSON.stringify( dissolved ) );
+	t.check( 'Backspace on a lone empty bullet never touches the island',
+		dissolved.island && ! dissolved.armed, JSON.stringify( dissolved ) );
 	const guardRaw = await save( guardId );
 	t.check( 'saved markup keeps the island after bullet deletion',
-		/wp:acme\/guard/.test( guardRaw ) && ! /<ul/.test( guardRaw ), guardRaw.slice( 0, 200 ) );
+		/wp:acme\/guard/.test( guardRaw ), guardRaw.slice( 0, 200 ) );
 
 	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, markdownId, keepId, classicId, e2eId, linkId, plainId, markupId, codeId, shiftId, guardId ] ) await deletePost( page, id );
 	await t.done( browser, errors );
