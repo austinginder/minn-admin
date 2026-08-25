@@ -5,9 +5,9 @@
  * SRM keeps redirects as a `redirect_rule` CPT with meta, not exposed over
  * REST — so this is the shim pattern (docs/for-plugin-authors.md): a small
  * REST collection over SRM's own public functions (srm_get_redirects /
- * srm_create_redirect / srm_delete_redirect_by_id), plus in-place edit via
- * the same meta keys SRM's admin screen writes. Regex/notes still live in
- * SRM's own screen for power users.
+ * srm_create_redirect), plus in-place edit via the same meta keys SRM's
+ * admin screen writes. Regex/notes still live in SRM's own screen for
+ * power users.
  *
  * @package minn-admin
  */
@@ -16,6 +16,25 @@ defined( 'ABSPATH' ) || exit;
 
 function minn_admin_srm_active() {
 	return defined( 'SRM_VERSION' ) && function_exists( 'srm_get_redirects' ) && function_exists( 'srm_create_redirect' );
+}
+
+/**
+ * The capability SRM itself gates redirects on.
+ *
+ * SRM maps EVERY meta cap of the redirect_rule CPT onto one filterable
+ * custom capability (SRM_Post_Type::get_redirect_capability, applied in its
+ * register_post_type call), and grants it to administrator at registration.
+ * So manage_options coincides with it by default and is neither necessary
+ * nor sufficient once a site uses the filter: locking redirects down to a
+ * narrower cap left every manage_options holder writing them here, and the
+ * ordinary delegation of granting an editor srm_manage_redirects worked on
+ * SRM's screen while Minn refused it. The sibling redirect adapters already
+ * read their vendor's hook this way.
+ *
+ * @return string
+ */
+function minn_admin_srm_cap() {
+	return (string) apply_filters( 'srm_restrict_to_capability', 'srm_manage_redirects' );
 }
 
 /**
@@ -72,7 +91,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'redirects',
 		'sub'        => 'Safe Redirect Manager',
 		'icon'       => 'shuffle',
-		'cap'        => 'manage_options',
+		// Same cap the routes use, so the nav and the routes cannot drift.
+		'cap'        => minn_admin_srm_cap(),
 		// Status card (v0.18.0): family parity with Redirection.
 		'status'     => array( 'route' => 'minn-admin/v1/srm/status' ),
 		'collection' => array(
@@ -137,7 +157,7 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	$perm = function () {
-		return current_user_can( 'manage_options' );
+		return current_user_can( minn_admin_srm_cap() );
 	};
 
 	// Status card: counts over SRM's redirect_rule CPT — status-code mix and
@@ -253,10 +273,22 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
 				$id = (int) $request['id'];
-				if ( function_exists( 'srm_delete_redirect_by_id' ) ) {
-					srm_delete_redirect_by_id( $id );
-				} else {
-					wp_delete_post( $id, true );
+				// Confirm the target IS a redirect before deleting it. SRM
+				// ships no delete helper, so this force-deletes through core,
+				// which bypasses the trash and checks no capability of its
+				// own -- an id for any other post type would have been
+				// destroyed permanently by a route that says "redirect".
+				// The update handler above has always resolved its target
+				// this way; the delete branch did not.
+				$post = get_post( $id );
+				if ( ! $post || 'redirect_rule' !== $post->post_type ) {
+					return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				wp_delete_post( $id, true );
+				// Their own screen flushes after a delete; without it the
+				// removed rule keeps redirecting until the cache expires.
+				if ( function_exists( 'srm_flush_cache' ) ) {
+					srm_flush_cache();
 				}
 				return rest_ensure_response( array( 'deleted' => $id ) );
 			},
