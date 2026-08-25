@@ -246,29 +246,30 @@
     opacity: 0;
     transform: translate(-14px, -14px) scale(0.85);
   }
-  /* The tell: while the bar is hidden, a small accent dot sits inset in
-     the corner so the spot still says "something lives here". A dot, not
-     a corner-hugging wedge: a filled shape bleeding off the screen edge
-     reads as a broken border-radius, while an inset dot is the indicator
-     vocabulary the bar already speaks (notification dot, status chip).
-     It rides the bar root (NOT the shell) because the scheme tokens live
-     there, so it wears the user's accent; fixed positioning escapes the
-     shell's 11/13px inset. pointer-events:none — the reveal zone and the
-     invisible bar are the interactive surface, this is only a sign. */
+  /* The tell: while the bar is hidden, two short accent strokes at 45°
+     (a rotated hamburger, the window resize-grip vocabulary) sit inset in
+     the corner so the spot still says "something lives here". Chosen over
+     a dot or a corner-hugging wedge after the Corner Tell Studies board:
+     an inset mark never reads as a broken border-radius, the grip shape
+     hints "this corner is interactive" (which is literally true), and the
+     GAPS between strokes do the contrast work, so it needs no halo and
+     stays visible even on a page whose header matches the accent. Drawn
+     as a mask filled from the accent token, so it follows the user's
+     color scheme like everything else. It rides the bar root (NOT the
+     shell) because the scheme tokens live there; fixed positioning
+     escapes the shell's 11/13px inset. pointer-events:none — the reveal
+     zone and the invisible bar are the interactive surface, this is only
+     a sign. */
   #minn-cornerbar.minn-bar-ghost #minn-bar-root::before {
     content: '';
     position: fixed;
-    top: 6px;
-    left: 6px;
-    width: 6px;
-    height: 6px;
+    top: 4px;
+    left: 4px;
+    width: 14px;
+    height: 14px;
     background: var(--accent);
-    border-radius: 50%;
-    /* Badge halo: a light inner ring and a faint dark rim, in FIXED colors
-       (not theme tokens — the dot sits on the SITE's page, whose colors
-       Minn cannot know), so at least one edge contrasts whether the site
-       behind it is light, dark, or the accent's own hue. */
-    box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.95), 0 0 0 2.5px rgba(17, 17, 20, 0.28);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2 6.5 6.5 2 M4.5 11 11 4.5' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / contain;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2 6.5 6.5 2 M4.5 11 11 4.5' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / contain;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.28s ease;

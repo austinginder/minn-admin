@@ -472,15 +472,15 @@ const { execSync } = require( 'child_process' );
 				hit: !! ( el && el.closest( '.minn-bar-markbtn' ) ),
 				tellOpacity: tell.opacity,
 				tellWidth: tell.width,
-				// The halo rings keep the dot visible on any site background.
-				tellHalo: tell.boxShadow !== 'none' && tell.boxShadow.includes( 'rgba(255, 255, 255' ),
+				// The grip strokes are a mask filled from the accent token.
+				tellMask: ( tell.maskImage || tell.webkitMaskImage || 'none' ) !== 'none',
 			};
 		} );
 		t.check( 'ghost: a plain arrival starts hidden but keeps the hit area',
 			arrived.ghost && ! arrived.peek && arrived.hit, JSON.stringify( arrived ) );
-		t.check( 'ghost: the accent corner tell shows while hidden, with its contrast halo',
-			arrived.tellOpacity === '1' && arrived.tellWidth === '6px' && arrived.tellHalo,
-			JSON.stringify( { opacity: arrived.tellOpacity, width: arrived.tellWidth, halo: arrived.tellHalo } ) );
+		t.check( 'ghost: the accent grip tell shows while hidden',
+			arrived.tellOpacity === '1' && arrived.tellWidth === '14px' && arrived.tellMask,
+			JSON.stringify( { opacity: arrived.tellOpacity, width: arrived.tellWidth, mask: arrived.tellMask } ) );
 		await page.mouse.move( 30, 30, { steps: 8 } );
 		await page.waitForFunction( () => {
 			const b = document.getElementById( 'minn-bar' );
