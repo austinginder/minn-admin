@@ -373,6 +373,82 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	} ) );
 	t.check( 'markup pasted into a code block stays literal', codeShape.literal && codeShape.islands === 0, JSON.stringify( codeShape ) );
 
-	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, markdownId, keepId, classicId, e2eId, linkId, plainId, markupId, codeId ] ) await deletePost( page, id );
+	/* ===== GH #52: Ctrl+Shift+V pastes a lone oEmbed URL as plain text ===== */
+	// The shortcut arms a one-shot keydown flag (Chrome fires a NORMAL paste
+	// event for paste-without-formatting, so the handler alone cannot tell);
+	// an armed paste skips every enriching branch and falls through
+	// un-prevented to the browser's own plain insertion.
+	const YT = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+	const shiftId = await createPost( page, { title: 'Paste: Shift-V', content: '<!-- wp:paragraph -->\n<p>Start.</p>\n<!-- /wp:paragraph -->' } );
+	await openEditor( page, shiftId );
+	await freshParagraph( page );
+	const embedPrevented = await paste( { 'text/plain': YT } );
+	await page.waitForTimeout( 350 );
+	const embedCount = await page.evaluate( () => document.querySelectorAll( '#minn-editor-body .minn-block-island' ).length );
+	t.check( 'plain paste of a lone YouTube URL builds an embed island',
+		embedPrevented && embedCount === 1, JSON.stringify( { embedPrevented, embedCount } ) );
+	await freshParagraph( page );
+	const shiftPrevented = await page.evaluate( ( url ) => {
+		const body = document.querySelector( '#minn-editor-body' );
+		body.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'v', ctrlKey: true, shiftKey: true, bubbles: true } ) );
+		const dt = new DataTransfer();
+		dt.setData( 'text/plain', url );
+		const ev = new ClipboardEvent( 'paste', { bubbles: true, cancelable: true, clipboardData: dt } );
+		body.dispatchEvent( ev );
+		return ev.defaultPrevented;
+	}, YT );
+	await page.waitForTimeout( 350 );
+	const shiftCount = await page.evaluate( () => document.querySelectorAll( '#minn-editor-body .minn-block-island' ).length );
+	t.check( 'Ctrl+Shift+V leaves the URL to the browser default (no embed)',
+		! shiftPrevented && shiftCount === 1, JSON.stringify( { shiftPrevented, shiftCount } ) );
+	const rearmPrevented = await paste( { 'text/plain': YT } );
+	await page.waitForTimeout( 350 );
+	const rearmCount = await page.evaluate( () => document.querySelectorAll( '#minn-editor-body .minn-block-island' ).length );
+	t.check( 'the plain-paste flag is one-shot (the next paste embeds again)',
+		rearmPrevented && rearmCount === 2, JSON.stringify( { rearmPrevented, rearmCount } ) );
+
+	/* ===== GH #52 comment: deleting a bullet under an island ===== */
+	// Native Blink is safe on every list/island edge (probed), so the guard
+	// bails for lists: the first-bullet Backspace must be a no-op instead of
+	// arming and then deleting the island above.
+	const guardId = await createPost( page, { title: 'Paste: Bullet guard', content:
+		'<!-- wp:acme/guard -->\n<div class="g">GUARD</div>\n<!-- /wp:acme/guard -->\n\n<!-- wp:list -->\n<ul class="wp-block-list"><li>alpha</li><li>beta</li></ul>\n<!-- /wp:list -->' } );
+	await openEditor( page, guardId );
+	await page.waitForSelector( '#minn-editor-body .minn-block-island', { timeout: 20000 } );
+	await caretIn( 'ul li', 0 );
+	await page.keyboard.press( 'Backspace' );
+	await page.waitForTimeout( 250 );
+	const guardShape = await page.evaluate( () => ( {
+		island: !! document.querySelector( '#minn-editor-body .minn-block-island' ),
+		armed: !! document.querySelector( '#minn-editor-body .minn-island-armed' ),
+		bullets: document.querySelectorAll( '#minn-editor-body ul li' ).length,
+	} ) );
+	t.check( 'Backspace at a first bullet under an island is a native no-op',
+		guardShape.island && ! guardShape.armed && guardShape.bullets === 2, JSON.stringify( guardShape ) );
+	// A lone empty bullet dissolves the LIST natively; the island survives.
+	await page.evaluate( () => {
+		const ul = document.querySelector( '#minn-editor-body ul' );
+		ul.innerHTML = '<li><br></li>';
+		const s = getSelection();
+		const r = document.createRange();
+		r.setStart( ul.querySelector( 'li' ), 0 );
+		r.collapse( true );
+		s.removeAllRanges();
+		s.addRange( r );
+		document.querySelector( '#minn-editor-body' ).focus();
+	} );
+	await page.keyboard.press( 'Backspace' );
+	await page.waitForTimeout( 250 );
+	const dissolved = await page.evaluate( () => ( {
+		island: !! document.querySelector( '#minn-editor-body .minn-block-island' ),
+		list: !! document.querySelector( '#minn-editor-body ul' ),
+	} ) );
+	t.check( 'Backspace on a lone empty bullet dissolves the list, island survives',
+		dissolved.island && ! dissolved.list, JSON.stringify( dissolved ) );
+	const guardRaw = await save( guardId );
+	t.check( 'saved markup keeps the island after bullet deletion',
+		/wp:acme\/guard/.test( guardRaw ) && ! /<ul/.test( guardRaw ), guardRaw.slice( 0, 200 ) );
+
+	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, markdownId, keepId, classicId, e2eId, linkId, plainId, markupId, codeId, shiftId, guardId ] ) await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

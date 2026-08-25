@@ -30576,12 +30576,29 @@
 			// (see Paste cleanup section), never inserted raw; multi-line plain
 			// text → real paragraphs. Single-line plain text keeps Chrome's
 			// native handling.
+			// Paste-without-formatting (⌘/Ctrl+Shift+V) is the OS-standard
+			// escape from all of that, but Chrome fires a NORMAL paste event
+			// for it, indistinguishable in the handler — so the shortcut is
+			// spotted on keydown (one-shot, short fuse) and the handler skips
+			// every enriching branch: a lone oEmbed URL stays a URL instead
+			// of becoming an embed, copied block markup stays text, rich
+			// flavors are ignored. Code contexts and the multi-line
+			// paragraphs fallback still run; they already insert exactly the
+			// plain text.
+			let plainPasteArmedAt = 0;
+			body.addEventListener( 'keydown', ( e ) => {
+				if ( ( e.metaKey || e.ctrlKey ) && e.shiftKey && ( e.key === 'v' || e.key === 'V' ) ) {
+					plainPasteArmedAt = Date.now();
+				}
+			}, true );
 			body.addEventListener( 'paste', async ( e ) => {
 				const ed2 = state.editor;
 				const cd = e.clipboardData;
 				if ( ! ed2 || ! cd ) return;
 				const text = cd.getData( 'text/plain' ) || '';
 				const trimmed = text.trim();
+				const plainPaste = !! plainPasteArmedAt && Date.now() - plainPasteArmedAt < 1200;
+				plainPasteArmedAt = 0;
 				// The caret's container slot (selection-based, not e.target —
 				// synthetic ClipboardEvents dispatch on the body). Prose paste
 				// works in slots; island-producing paths guard on this.
@@ -30595,7 +30612,7 @@
 				// Runs before the HTML flavor path so browser-copied links
 				// (plain + <a href> HTML) still keep the selected words.
 				const selLink = window.getSelection();
-				if ( selLink && ! selLink.isCollapsed && selLink.rangeCount
+				if ( ! plainPaste && selLink && ! selLink.isCollapsed && selLink.rangeCount
 					&& body.contains( selLink.anchorNode ) ) {
 					const linkUrl = pasteLinkUrl( trimmed );
 					if ( linkUrl ) {
@@ -30610,7 +30627,7 @@
 						}
 					}
 				}
-				if ( ed2.mode === 'blocks' && /^https?:\/\/\S+$/.test( trimmed ) && embedProviderFor( trimmed ) ) {
+				if ( ! plainPaste && ed2.mode === 'blocks' && /^https?:\/\/\S+$/.test( trimmed ) && embedProviderFor( trimmed ) ) {
 					const sel = window.getSelection();
 					let node = sel && sel.anchorNode;
 					// Root-aware since nested islands: a URL pasted into an
@@ -30648,7 +30665,7 @@
 				// Constrained containers (list item, heading, table cell) can't
 				// take a block splice — fall through to the HTML path there.
 				const minnBlocks = cd.getData( 'text/x-minn-blocks' );
-				if ( minnBlocks && ed2.mode !== 'locked'
+				if ( ! plainPaste && minnBlocks && ed2.mode !== 'locked'
 					&& ! anchorEl.closest( 'li,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote' )
 					&& tokenizeBlocks( minnBlocks.trim() ) ) {
 					// Island payloads splice inside slots too since nested
@@ -30687,7 +30704,7 @@
 				// flavor is ignored on purpose — a ChatGPT/code-viewer copy
 				// wraps the markup in code-styled html that would paste as
 				// styled TEXT, while the text flavor holds the real thing.
-				if ( ed2.mode !== 'locked' && /^<!--\s*wp:/.test( trimmed )
+				if ( ! plainPaste && ed2.mode !== 'locked' && /^<!--\s*wp:/.test( trimmed )
 					&& ! anchorEl.closest( 'li,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote' ) ) {
 					const healed = healPastedGroupTags( trimmed );
 					const rawSegs = tokenizeBlocks( healed );
@@ -30711,7 +30728,7 @@
 				// Markdown match and only when the HTML flavor is absent or is
 				// plainly a code wrapper. Word, Docs and web-page HTML keep flowing
 				// through the existing sanitizer without interruption.
-				if ( markdownClipboardCandidate( text, html ) ) {
+				if ( ! plainPaste && markdownClipboardCandidate( text, html ) ) {
 					e.preventDefault();
 					const savedRange = sel.rangeCount ? sel.getRangeAt( 0 ).cloneRange() : null;
 					const originalPayload = html
@@ -30737,7 +30754,7 @@
 					scheduleAutosave();
 					return;
 				}
-				if ( html ) {
+				if ( html && ! plainPaste ) {
 					// Rich flavor present: always ours from here — falling back
 					// to the default would insert the raw vendor HTML.
 					e.preventDefault();
@@ -34598,6 +34615,18 @@
 			}
 			while ( block && block.parentNode !== root ) block = block.parentNode;
 			if ( ! block || block.nodeType !== Node.ELEMENT_NODE ) return;
+
+			// Lists are safe with NATIVE deletion on every island-adjacent
+			// edge (probed with real keys): Backspace at a filled first item
+			// is a no-op, on a lone empty item it outdents to a paragraph,
+			// and Delete at the last item's end is a no-op — the island is
+			// never touched. The guard used to resolve a first-bullet caret
+			// to the UL's own edge and hijack Backspace into arm/remove, so
+			// deleting a bullet under an embed deleted the embed instead.
+			if ( block.tagName === 'UL' || block.tagName === 'OL' ) {
+				disarm();
+				return;
+			}
 
 			// 2) Caret inside an empty atomic block (code <pre>, empty figure…):
 			//    arm/remove THAT block — not the neighbor (was jumping from an
