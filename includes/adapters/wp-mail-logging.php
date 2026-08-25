@@ -31,7 +31,18 @@ function minn_admin_wpml_active() {
 }
 
 function minn_admin_wpml_can() {
-	if ( current_user_can( 'manage_options' ) ) {
+	// Their own answer first: administrator ROLE, or the capability named in
+	// their "can see submission data" setting. manage_options is only their
+	// default for that setting, not the rule itself.
+	if ( class_exists( 'WPML_Utils' )
+		&& method_exists( 'WPML_Utils', 'can_current_user_access_wp_mail_logging_submissions' ) ) {
+		try {
+			return (bool) WPML_Utils::can_current_user_access_wp_mail_logging_submissions();
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the mirrored test below.
+		}
+	}
+	if ( current_user_can( 'administrator' ) ) {
 		return true;
 	}
 	// Their own gate: a role-derived capability from the

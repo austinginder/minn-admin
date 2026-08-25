@@ -132,6 +132,27 @@ function minn_admin_post_smtp_status_model() {
 	);
 }
 
+/**
+ * The capability Post SMTP gates its own log screens on.
+ *
+ * They grant it at activation to the roles that then held activate_plugins,
+ * and it can be taken away again from their settings. A generic settings
+ * capability is not the same question, and these rows carry message bodies,
+ * which routinely contain a live password reset link.
+ *
+ * @return string
+ */
+function minn_admin_post_smtp_cap() {
+	return class_exists( 'Postman' ) && defined( 'Postman::MANAGE_POSTMAN_CAPABILITY_LOGS' )
+		? (string) Postman::MANAGE_POSTMAN_CAPABILITY_LOGS
+		: 'manage_postman_logs';
+}
+
+/** Whether this user may read Post SMTP's log through Minn. */
+function minn_admin_post_smtp_can() {
+	return current_user_can( minn_admin_post_smtp_cap() );
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_post_smtp_active() ) {
 		return $surfaces;
@@ -141,7 +162,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'Post SMTP',
 		'icon'       => 'send',
-		'cap'        => 'manage_options',
+		'cap'        => minn_admin_post_smtp_cap(),
 		'family'     => 'mail',
 		'status'     => array( 'route' => 'minn-admin/v1/post-smtp/status' ),
 		'collection' => array(
@@ -204,7 +225,7 @@ add_action( 'rest_api_init', function () {
 	}
 
 	$perm  = function () {
-		return current_user_can( 'manage_options' );
+		return minn_admin_post_smtp_can();
 	};
 	$table = $GLOBALS['wpdb']->prefix . 'post_smtp_logs';
 

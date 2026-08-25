@@ -15,6 +15,17 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Wordfence registers its whole admin at activate_plugins, not manage_options.
+ * Its login log names usernames, addresses and which attempts used a REAL
+ * account, so a role narrowed to site settings should not read it here.
+ *
+ * @return bool
+ */
+function minn_admin_wordfence_can() {
+	return current_user_can( 'activate_plugins' );
+}
+
 function minn_admin_wordfence_active() {
 	global $wpdb;
 	if ( ! defined( 'WORDFENCE_VERSION' ) && ! class_exists( 'wordfence' ) ) {
@@ -51,7 +62,7 @@ function minn_admin_wordfence_action_label( $action, $fail ) {
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_wordfence_active() || ! current_user_can( 'manage_options' ) ) {
+	if ( ! minn_admin_wordfence_active() || ! minn_admin_wordfence_can() ) {
 		return $surfaces;
 	}
 
@@ -60,7 +71,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'activity-log',
 		'sub'        => 'Wordfence',
 		'icon'       => 'shield',
-		'cap'        => 'manage_options',
+		'cap'        => 'activate_plugins',
 		// Status card reuses the System posture rows (firewall + last scan).
 		'status'     => array( 'route' => 'minn-admin/v1/wordfence/status' ),
 		'collection' => array(
@@ -150,7 +161,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => function () {
 			// Network-shared table (see minn_admin_wordfence_active).
-			return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
+			return minn_admin_wordfence_can() && Minn_Admin::network_owner();
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
@@ -206,7 +217,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => function () {
 			// Network-shared table (see minn_admin_wordfence_active).
-			return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
+			return minn_admin_wordfence_can() && Minn_Admin::network_owner();
 		},
 		'callback'            => function () {
 			return rest_ensure_response( minn_admin_wordfence_status_model() );

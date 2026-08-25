@@ -302,6 +302,18 @@ function minn_admin_wpvivid_status_model() {
 	);
 }
 
+/**
+ * WPvivid sets every one of its menu capabilities to the literal
+ * 'administrator', so their screens ask for the ROLE rather than for a
+ * settings capability. A role granted manage_options without being an
+ * administrator sees nothing of WPvivid, and should see nothing here.
+ *
+ * @return bool
+ */
+function minn_admin_wpvivid_can() {
+	return current_user_can( 'administrator' ) || is_super_admin();
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_wpvivid_active() ) {
 		return $surfaces;
@@ -310,7 +322,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'WPvivid',
 		'icon'       => 'database',
-		'cap'        => 'manage_options',
+		'cap'        => 'administrator',
 		'family'     => 'backups',
 		'status'     => array( 'route' => 'minn-admin/v1/wpvivid/card' ),
 		'collection' => array(
@@ -351,7 +363,7 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-shared archive directory (see minn_admin_wpvivid_active).
-		return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
+		return minn_admin_wpvivid_can() && Minn_Admin::network_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/wpvivid/backups', array(

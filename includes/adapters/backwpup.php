@@ -168,7 +168,7 @@ function minn_admin_backwpup_status_model() {
 	// Offer run-now for the first FOLDER job (the install default "First
 	// backup"), and only to users who hold BackWPup's own start capability —
 	// otherwise the card advertises a button the route will refuse.
-	if ( $jobs && ( current_user_can( 'backwpup_jobs_start' ) || current_user_can( 'manage_options' ) ) ) {
+	if ( $jobs && current_user_can( 'backwpup_jobs_start' ) ) {
 		$actions[] = array(
 			'label'   => __( 'Run first job now', 'minn-admin' ),
 			'route'   => 'minn-admin/v1/backwpup/run',
@@ -219,11 +219,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_backwpup_active() ) {
 		return $surfaces;
 	}
-	if ( ! current_user_can( 'backwpup_backups' ) && ! current_user_can( 'manage_options' ) ) {
+	if ( ! current_user_can( 'backwpup_backups' ) ) {
 		return $surfaces;
 	}
 
-	$can_delete = current_user_can( 'backwpup_backups_delete' ) || current_user_can( 'manage_options' );
+	$can_delete = current_user_can( 'backwpup_backups_delete' );
 	$actions    = array();
 	if ( $can_delete ) {
 		$actions[] = array(
@@ -271,11 +271,11 @@ add_action( 'rest_api_init', function () {
 	// minn_admin_backwpup_active): the per-action BackWPup capabilities below
 	// answer WHICH verb, this answers WHOSE data.
 	$perm = function () {
-		return ( current_user_can( 'backwpup_backups' ) || current_user_can( 'manage_options' ) )
+		return current_user_can( 'backwpup_backups' )
 			&& Minn_Admin::network_owner();
 	};
 	$perm_delete = function () {
-		return ( current_user_can( 'backwpup_backups_delete' ) || current_user_can( 'manage_options' ) )
+		return current_user_can( 'backwpup_backups_delete' )
 			&& Minn_Admin::network_owner();
 	};
 	// STARTING a job is a different capability from viewing the list.
@@ -285,7 +285,7 @@ add_action( 'rest_api_init', function () {
 	// (inc/class-page-jobs.php). Using $perm here let that role kick full
 	// backup runs on demand.
 	$perm_run = function () {
-		return ( current_user_can( 'backwpup_jobs_start' ) || current_user_can( 'manage_options' ) )
+		return current_user_can( 'backwpup_jobs_start' )
 			&& Minn_Admin::network_owner();
 	};
 

@@ -266,6 +266,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 
+	// The Forms view lists every form, inactive ones included, with creation
+	// dates and live entry counts. Gravity Forms registers that screen at
+	// gravityforms_edit_forms and shows a view-entries-only operator nothing
+	// but Entries, so the roster is not theirs to read here either. The
+	// actions on the view already refuse them.
+	if ( ! $can_edit_forms ) {
+		unset( $surfaces['gravity-forms']['manage'] );
+	}
+
 	// The Notifications view: every notification across forms (or per form
 	// via the tabs), with activate/deactivate and the daily edits (name,
 	// send-to address, subject, message) through GF's own storage. NOT a
@@ -760,7 +769,8 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/gf/forms', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
-			return GFCommon::current_user_can_any( array( 'gravityforms_view_entries', 'gform_full_access' ) );
+			// Their Forms screen is registered at gravityforms_edit_forms.
+			return GFCommon::current_user_can_any( array( 'gravityforms_edit_forms', 'gform_full_access' ) );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			// ?active=1 lists active forms only — the entry/notification

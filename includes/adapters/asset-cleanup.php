@@ -308,6 +308,25 @@ function minn_admin_asset_cleanup_save( $values ) {
 	return true;
 }
 
+/**
+ * Asset CleanUp answers this itself: a super admin always, otherwise their
+ * configured access role or their own assetcleanup_manager capability.
+ * manage_options appears nowhere in that answer.
+ *
+ * @return bool
+ */
+function minn_admin_asset_cleanup_can() {
+	if ( class_exists( '\\WpAssetCleanUp\\Menu' )
+		&& method_exists( '\\WpAssetCleanUp\\Menu', 'userCanAccessPlugin' ) ) {
+		try {
+			return (bool) \WpAssetCleanUp\Menu::userCanAccessPlugin();
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the mirrored test below.
+		}
+	}
+	return is_super_admin() || current_user_can( 'administrator' ) || current_user_can( 'assetcleanup_manager' );
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_asset_cleanup_active() ) {
 		return $surfaces;
@@ -321,7 +340,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'      => 'Asset CleanUp',
 		'family'   => 'performance',
 		'icon'     => 'gear',
-		'cap'      => 'manage_options',
+		'cap'      => 'assetcleanup_manager',
 		'settings' => array(
 			'label' => __( 'Settings', 'minn-admin' ),
 			'tabs'  => $tabs,
@@ -339,7 +358,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'GET',
 			'permission_callback' => function () {
-				return current_user_can( 'manage_options' );
+				return minn_admin_asset_cleanup_can();
 			},
 			'callback'            => function ( $req ) {
 				return rest_ensure_response( minn_admin_asset_cleanup_tab_shape( $req['tab'] ) );
@@ -348,7 +367,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'POST',
 			'permission_callback' => function () {
-				return current_user_can( 'manage_options' );
+				return minn_admin_asset_cleanup_can();
 			},
 			'callback'            => function ( $req ) {
 				$body   = $req->get_json_params();
