@@ -278,6 +278,12 @@ function minn_admin_solid_security_checks() {
 	if ( ! Minn_Admin::network_owner() ) {
 		return array();
 	}
+	// Ask the same question the surface and the routes ask: their required
+	// capability is granted through a user-groups matcher, not by holding
+	// manage_options.
+	if ( ! minn_admin_solid_security_can() ) {
+		return array();
+	}
 	if ( ! class_exists( 'ITSEC_Core' ) || ! class_exists( 'ITSEC_Modules' ) ) {
 		return array();
 	}

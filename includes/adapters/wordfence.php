@@ -242,6 +242,12 @@ function minn_admin_wordfence_checks() {
 	if ( ! Minn_Admin::network_owner() ) {
 		return array();
 	}
+	// Ask the same question the surface and the routes ask. These rows carry
+	// firewall mode, scan age and unresolved-issue counts, so a role narrowed
+	// to site settings should not read them here either.
+	if ( ! minn_admin_wordfence_can() ) {
+		return array();
+	}
 	if ( ! defined( 'WORDFENCE_VERSION' ) ) {
 		return array();
 	}

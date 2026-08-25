@@ -34,10 +34,12 @@ function minn_admin_wpml_can() {
 	// Their own answer first: administrator ROLE, or the capability named in
 	// their "can see submission data" setting. manage_options is only their
 	// default for that setting, not the rule itself.
-	if ( class_exists( 'WPML_Utils' )
-		&& method_exists( 'WPML_Utils', 'can_current_user_access_wp_mail_logging_submissions' ) ) {
+	// Their class is namespaced; testing the bare name never matched, so this
+	// branch never ran and the mirrored test below was doing all the work.
+	if ( class_exists( '\\No3x\\WPML\\WPML_Utils' )
+		&& method_exists( '\\No3x\\WPML\\WPML_Utils', 'can_current_user_access_wp_mail_logging_submissions' ) ) {
 		try {
-			return (bool) WPML_Utils::can_current_user_access_wp_mail_logging_submissions();
+			return (bool) \No3x\WPML\WPML_Utils::can_current_user_access_wp_mail_logging_submissions();
 		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 			// Fall through to the mirrored test below.
 		}

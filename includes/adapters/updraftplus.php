@@ -152,15 +152,36 @@ function minn_admin_updraft_status_model() {
 	);
 }
 
+/**
+ * UpdraftPlus answers this itself, through two filters a site can use to
+ * narrow or widen who reaches its screens. manage_options is only the default
+ * that feeds the first of them, so asking for it directly ignored both.
+ *
+ * @return bool
+ */
+function minn_admin_updraftplus_can() {
+	if ( class_exists( 'UpdraftPlus_Options' )
+		&& method_exists( 'UpdraftPlus_Options', 'user_can_manage' ) ) {
+		try {
+			return (bool) UpdraftPlus_Options::user_can_manage();
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the mirrored test below.
+		}
+	}
+	return current_user_can( apply_filters( 'option_page_capability_updraft-options-group', 'manage_options' ) );
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_updraftplus_active() ) {
+	if ( ! minn_admin_updraftplus_active() || ! minn_admin_updraftplus_can() ) {
 		return $surfaces;
 	}
 	$surfaces['updraftplus'] = array(
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'UpdraftPlus',
 		'icon'       => 'database',
-		'cap'        => 'manage_options',
+		// Their answer is a resolver, not a capability name; the filter above
+		// is the real gate (the Solid Security / WP Mail Logging precedent).
+		'cap'        => 'read',
 		'family'     => 'backups',
 		'status'     => array( 'route' => 'minn-admin/v1/updraft/card' ),
 		'collection' => array(
@@ -185,7 +206,7 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-shared archives (see minn_admin_updraftplus_active).
-		return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
+		return minn_admin_updraftplus_can() && Minn_Admin::network_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/updraft/backups', array(

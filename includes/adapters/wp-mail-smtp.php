@@ -37,8 +37,29 @@ function minn_admin_wp_mail_smtp_initiator( $raw ) {
 	return (string) $raw;
 }
 
+/**
+ * WP Mail SMTP resolves this through a filter a site can narrow or widen, and
+ * gates every one of its own screens on the result. manage_options is only the
+ * default that feeds it.
+ *
+ * @return bool
+ */
+function minn_admin_wp_mail_smtp_can() {
+	if ( function_exists( 'wp_mail_smtp' ) ) {
+		try {
+			$core = wp_mail_smtp();
+			if ( $core && method_exists( $core, 'get_capability_manage_options' ) ) {
+				return current_user_can( $core->get_capability_manage_options() );
+			}
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the mirrored test below.
+		}
+	}
+	return current_user_can( 'manage_options' );
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_wp_mail_smtp_active() ) {
+	if ( ! minn_admin_wp_mail_smtp_active() || ! minn_admin_wp_mail_smtp_can() ) {
 		return $surfaces;
 	}
 
@@ -46,7 +67,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'WP Mail SMTP',
 		'icon'       => 'send',
-		'cap'        => 'manage_options',
+		// Their answer is a resolver, not a capability name; the filter above
+		// is the real gate (the Solid Security / WP Mail Logging precedent).
+		'cap'        => 'read',
 		'family'     => 'mail',
 		'collection' => array(
 			'route'     => 'minn-admin/v1/wp-mail-smtp/events',
@@ -83,7 +106,7 @@ add_action( 'rest_api_init', function () {
 	}
 
 	$perm  = function () {
-		return current_user_can( 'manage_options' );
+		return minn_admin_wp_mail_smtp_can();
 	};
 	$table = $GLOBALS['wpdb']->prefix . 'wpmailsmtp_debug_events';
 
