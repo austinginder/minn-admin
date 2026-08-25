@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.34.0. This file ships inside the plugin, so the copy you
+*Current as of v0.35.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -64,17 +64,22 @@ post, or run a command directly: "Clear site cache", "Back up site now",
 
 **Minn can travel onto the public site.** Turn on the Minn admin bar from
 **Your profile** to replace WordPress's classic front-end bar for your account.
-Only the Minn mark rests in the top corner. Hover it or reach it with the
-keyboard to reveal search and the command palette, a create menu, an Edit
-button for the page you are viewing, notifications and your account. On a
-phone the mark stays collapsed until you tap it, then opens the controls in a
-compact panel with its own Open Minn Admin link. A status chip
-appears beside the site name only when the site needs attention, such as
-maintenance mode, a password gate, hidden search visibility or a staging
-environment. The corner control floats above the site without changing its
-layout. This is a personal choice: other users keep the classic bar until they
-opt in, and wp-admin always keeps the classic bar. The bar also stays off a
-page builder's own canvas, the same way the classic admin bar does.
+On a desktop screen the bar shows nothing at all while you read: two small
+strokes in your accent color rest in the very corner to mark the spot, and
+moving your cursor into that corner brings out the complete bar in one
+motion, with search and the command palette, a create menu, an Edit button
+for the page you are viewing, notifications and your account. The corner
+keeps working even while invisible, and hopping between the site and the
+admin by clicking that same corner lands with the bar already open. On a
+phone the Minn mark stays visible and collapsed until you tap it, then opens
+the controls in a compact panel with its own Open Minn Admin link. When the
+site needs attention, such as maintenance mode, a password gate, hidden
+search visibility or a staging environment, the bar stays visible with a
+status chip beside the site name: chrome on screen means something needs
+you. The corner control floats above the site without changing its layout.
+This is a personal choice: other users keep the classic bar until they opt
+in, and wp-admin always keeps the classic bar. The bar also stays off a page
+builder's own canvas, the same way the classic admin bar does.
 
 **Right-click is real in Minn.** This is the least discoverable thing in
 the app, so here it is in plain terms: rows in Content and Media have
@@ -157,7 +162,9 @@ away:
 - **Paste from anywhere.** Word, Google Docs and web pages paste in clean.
   A pasted image or a lone URL to a tweet or video becomes the real thing,
   and raw block markup (from an AI tool or a tutorial) pastes in as real,
-  editable blocks.
+  editable blocks. When you want none of that, paste without formatting
+  (Ctrl+Shift+V, or Cmd+Shift+V on a Mac): the clipboard lands as plain
+  text and a video link stays a link instead of becoming a player.
 - **Your patterns come along.** Patterns you save in WordPress (synced or
   not) appear in the slash menu and the block library, and a Patterns
   entry in the Content list manages them. A synced pattern inserts as a
@@ -271,6 +278,25 @@ in code open read-only because their source of truth is the codebase,
 and anything the builder does not model keeps an honest pointer to
 ACF's own editor.
 
+## Search appearance
+
+With an SEO plugin active (Yoast, Rank Math, All in One SEO, SEOPress,
+SiteSEO, SureRank or Squirrly), the editor sidebar carries an SEO panel
+that edits the plugin's real per-post surface, not a summary of it. The
+panel opens on a live preview of what the post will look like in a Google
+result, resolving your plugin's title templates as you type, with length
+counters on the SEO title and meta description. Below it: search indexing
+and the robots directives, the canonical URL, the Facebook and X cards
+with their own titles, descriptions and images, and your plugin's extras
+such as cornerstone or pillar content, each field in the vocabulary its
+plugin uses. Everything saves through the plugin's own storage, so its
+analysis, sitemaps and caches behave exactly as if its screen had saved
+it, and clearing a field restores the site-wide default rather than
+storing an empty value. Each plugin's own permission model carries over:
+fields a plugin reserves for administrators are reserved here too.
+Building schema stays in your SEO plugin's generator, one click away; the
+panel shows what the post actually emits.
+
 ## Daily site care
 
 **Comments**: approve, reply, edit in place, mark spam, or block a
@@ -279,7 +305,11 @@ with Undo). Bulk-select works across the list.
 
 **Media**: drop files anywhere in the app to upload. Images can be
 cropped and rotated right in Minn, and regenerating thumbnails is one
-button when that plugin is installed.
+button when that plugin is installed. The library filters by type, upload
+month, folder (when a folder plugin is active), files not attached to any
+post, and **Mine**, which narrows the grid to your own uploads and
+remembers that choice between visits. Mine is a view convenience, not a
+wall: WordPress's own permissions still decide who can access what.
 
 **Notifications** (the bell) collects what actually needs attention:
 pending comments, available updates, and Notices.
@@ -593,6 +623,8 @@ returned to Person chooses.
 | **⌘⇧F** | Find and replace in the post |
 | **⌘⇧D** | Focus mode |
 | **⌘⇧O** | Outline mode |
+| **⌘⇧⌥T** | Move the current block up |
+| **⌘⇧⌥Y** | Move the current block down |
 | **⌘.** | Show or hide the navigation |
 | **← →** | Previous / next item in a media or entry dialog; previous / next day in the traffic dialog |
 | **Esc** | Close menus and dialogs |

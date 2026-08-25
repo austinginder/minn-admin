@@ -292,9 +292,12 @@ Expand only the part of Minn you want to explore.
   Relationship, Page Link, Taxonomy, User), **repeaters as row cards** and **flexible content
   as sections**, with ACF's conditional logic honored live and unrendered values preserved
   through every edit; **Meta Box** and **Pods** simple fields ride the same panel (their
-  advanced types count as locked with a wp-admin link); **SEO panel** for Yoast SEO, Rank Math,
-  All in One SEO, SEOPress or SiteSEO title, meta description and focus keyword (first active
-  SEO plugin wins); **Event details** for The Events Calendar (dates, all-day, venue and
+  advanced types count as locked with a wp-admin link); **SEO panel** at full per-post depth for Yoast SEO, Rank Math,
+  All in One SEO, SEOPress, SiteSEO, SureRank or Squirrly (first active SEO plugin wins): a
+  live search-result preview with length counters, title, meta description and focus keyword,
+  robots directives, canonical URL, the Facebook and X cards with images, and each plugin's
+  extras such as cornerstone or pillar content, every write through the plugin's own storage
+  and every field behind the plugin's own permissions; **Event details** for The Events Calendar (dates, all-day, venue and
   organizer as live search pickers, cost, website); **Job listing** for WP Job Manager, drawn
   live from its own field schema; **Podcast episode** for Seriously Simple Podcasting and
   PowerPress (media file, duration, the Apple Podcasts fields). Every write goes through the
