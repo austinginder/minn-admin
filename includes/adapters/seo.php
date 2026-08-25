@@ -122,13 +122,20 @@ function minn_admin_seo_aioseo_provider() {
 			$dflt = array( array( array( 'f' => 'robots_default', 'op' => '==', 'v' => '0' ) ) );
 			$tw   = array( array( array( 'f' => 'twitter_use_facebook', 'op' => '==', 'v' => '0' ) ) );
 			$groups   = array();
+			$appearance = array(
+				array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
+				array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
+			);
+			// AIOSEO files the keyphrase under its Analysis area and reserves
+			// that write to aioseo_page_analysis in their own API, so the
+			// general settings capability does not carry it. Same two-area
+			// shape as SEOPress's target keyword.
+			if ( $has_cap( 'aioseo_page_analysis' ) ) {
+				$appearance[] = array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' );
+			}
 			$groups[] = array(
 				'group'  => __( 'Search appearance', 'minn-admin' ),
-				'fields' => array(
-					array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
-					array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
-					array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
-				),
+				'fields' => $appearance,
 			);
 			if ( $has_cap( 'aioseo_page_social_settings' ) ) {
 				$groups[] = array(
