@@ -342,8 +342,12 @@
 				api( 'minn-admin/v1/notifications/read', { method: 'POST', body: JSON.stringify( { id: n.id } ) } ).catch( () => {} );
 			}
 			const dest = notifDestination( n );
-			if ( dest.intent ) goWithIntent( dest.intent );
-			else location.href = dest.url;
+			if ( dest.intent ) { goWithIntent( dest.intent ); return; }
+			// Every other navigation here goes through safeHref; this one is
+			// built from a server value today, which is a reason it has not
+			// bitten rather than a reason to leave it out.
+			const url = safeHref( dest.url );
+			if ( url ) location.href = url;
 		} ) );
 	}
 	function loadNotifications() {

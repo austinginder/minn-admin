@@ -32,6 +32,9 @@ class Minn_Admin_Bar {
 	 * Builder canvases are excluded: they hide the classic bar, and this
 	 * bar is a replacement for that bar, not a second chrome layer.
 	 */
+	/** Set when something told core not to show a toolbar on this request. */
+	private static $vetoed = false;
+
 	public static function active() {
 		// show_admin_bar can be asked during plugin include. Do not cache a
 		// not-ready answer: cookie auth does not exist yet, and a cached
@@ -43,7 +46,8 @@ class Minn_Admin_Bar {
 		if ( null !== $active ) {
 			return $active;
 		}
-		$active = ! is_admin()
+		$active = ! self::$vetoed
+			&& ! is_admin()
 			&& is_user_logged_in()
 			&& current_user_can( 'edit_posts' )
 			&& Minn_Admin::user_wants_front_bar()
@@ -90,6 +94,14 @@ class Minn_Admin_Bar {
 	}
 
 	public static function suppress_core_bar( $show ) {
+		// Remember what the site decided before we answer. Turning the toolbar
+		// off for everyone is the standard way to say "no admin chrome on the
+		// public site", and replacing the classic bar does not mean overruling
+		// that. This is also how builders veto, so honouring it covers their
+		// canvases by the rule rather than by the query-flag guess below.
+		if ( ! $show ) {
+			self::$vetoed = true;
+		}
 		return self::active() ? false : $show;
 	}
 
@@ -101,7 +113,12 @@ class Minn_Admin_Bar {
 	}
 
 	public static function enqueue() {
-		if ( ! self::active() || is_embed() ) {
+		// render-blocks fires wp_enqueue_scripts inside a REST request on
+		// purpose, to force lazily-registered block styles to register. That
+		// is not a page being built, and is_admin() is false there, so without
+		// this the bar's stylesheet is collected as an editor-preview
+		// stylesheet and injected into island previews.
+		if ( wp_is_json_request() || ! self::active() || is_embed() ) {
 			return;
 		}
 		$ver = function ( $rel ) {
