@@ -4846,6 +4846,12 @@ class Minn_Admin_REST {
 			if ( ! wp_attachment_is_image( $id ) ) {
 				return new WP_Error( 'minn_bad_logo', __( 'That attachment is not an image.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
+			// The same three questions the SEO panel and the field adapters ask
+			// of an image: an id alone says nothing about whether this person
+			// may publish that file, and a logo is published site-wide.
+			if ( ! current_user_can( 'upload_files' ) || ! current_user_can( 'read_post', $id ) ) {
+				return new WP_Error( 'minn_bad_logo', __( 'You cannot use that attachment.', 'minn-admin' ), array( 'status' => 403 ) );
+			}
 			set_theme_mod( 'custom_logo', $id );
 		} else {
 			remove_theme_mod( 'custom_logo' );
