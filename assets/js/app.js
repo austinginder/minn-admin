@@ -30032,6 +30032,12 @@
 		body.addEventListener( 'click', ( e ) => {
 			const a = e.target.closest( 'a' );
 			if ( ! a || ! body.contains( a ) ) return;
+			// A linked image belongs to the IMAGE popover, whose Link URL
+			// field edits this same anchor — without this bail one click
+			// matched both listeners and opened both panels at once, the
+			// same link editable in two places. Text inside a link (even
+			// one that also wraps an image) still opens the link popover.
+			if ( e.target.closest( 'img' ) ) return;
 			const wrap = a.closest( '.minn-block-island, .minn-slot' );
 			if ( wrap && ! wrap.classList.contains( 'minn-slot' ) ) return;
 			e.preventDefault();

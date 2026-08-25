@@ -69,6 +69,11 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		/* ===== Reopen: link prefilled; swap to lightbox ===== */
 		await openPop();
 		t.check( 'link prefills on reopen', await page.$eval( '[data-img-link]', ( el ) => el.value === 'https://example.com/case-study' ) );
+		// One click on a LINKED image opens only the image popover — the
+		// wrapping anchor used to also trigger the text-link popover, so
+		// the same link came up editable in two places at once.
+		t.check( 'a linked image opens one popover, not the link popover too',
+			! ( await page.$( '.minn-link-pop' ) ), '' );
 		await page.fill( '[data-img-link]', '' );
 		t.check( 'clearing the link re-enables lightbox', await page.$eval( '[data-img-lightbox]', ( el ) => ! el.disabled ) );
 		await page.click( '[data-img-lightbox]' );
