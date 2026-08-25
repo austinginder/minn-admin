@@ -26,20 +26,40 @@ defined( 'ABSPATH' ) || exit;
 // would otherwise leave in the log. Require Breakdance to actually be present
 // and the request to be the builder's own admin-ajax POST. wp_doing_ajax() is
 // not available this early, so test the entry point directly.
+$minn_admin_reporting_was = false;
 if (
 	isset( $_SERVER['HTTP_X_REQUESTED_WITH'] )
 	&& 'breakdancexmlhttprequest' === strtolower( (string) $_SERVER['HTTP_X_REQUESTED_WITH'] )
 	&& isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === strtoupper( (string) $_SERVER['REQUEST_METHOD'] )
 	&& isset( $_SERVER['SCRIPT_NAME'] ) && 'admin-ajax.php' === basename( (string) $_SERVER['SCRIPT_NAME'] )
 	// admin-ajax.php answers logged-out callers too, and the header above is
-	// something any client can send, so require a login cookie as well. The
-	// builder's own requests are authenticated by definition. is_user_logged_in()
-	// does not exist this early; the cookie's presence is the cheap stand-in,
-	// and a false negative here costs nothing but a few log lines.
-	&& ! empty( $_COOKIE[ defined( 'LOGGED_IN_COOKIE' ) ? LOGGED_IN_COOKIE : 'wordpress_logged_in' ] )
+	// something any client can send, so require a login cookie as well. Nothing
+	// that can validate a session exists this early, and the deprecation this
+	// omits can fire while plugins are still loading, so the suppression has to
+	// start here on presence alone. It is put back below when the session turns
+	// out not to be a real one.
+	&& ! empty( $_COOKIE[ LOGGED_IN_COOKIE ] )
 	&& defined( 'WP_PLUGIN_DIR' ) && file_exists( WP_PLUGIN_DIR . '/breakdance/plugin.php' )
 ) {
-	error_reporting( error_reporting() & ~E_DEPRECATED & ~E_USER_DEPRECATED );
+	$minn_admin_reporting_was = error_reporting();
+	error_reporting( $minn_admin_reporting_was & ~E_DEPRECATED & ~E_USER_DEPRECATED );
+}
+if ( false !== $minn_admin_reporting_was ) {
+	// The cookie test above is presence only. Its name is derived from the site
+	// address, so any client can send one, which let an unauthenticated caller
+	// quiet the deprecation notices their own probing would otherwise leave in
+	// the log. pluggable.php has loaded by the time this runs, so check the
+	// session for real and restore reporting for anyone who could not be in the
+	// builder in the first place.
+	add_action(
+		'plugins_loaded',
+		function () use ( $minn_admin_reporting_was ) {
+			if ( ! is_user_logged_in() || ! current_user_can( 'edit_posts' ) ) {
+				error_reporting( $minn_admin_reporting_was );
+			}
+		},
+		0
+	);
 }
 
 define( 'MINN_ADMIN_VERSION', '0.35.0' );
