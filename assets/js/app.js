@@ -34695,6 +34695,56 @@
 		body.addEventListener( 'blur', disarm );
 	}
 
+	// Move the caret's top-level block one position up or down — prose,
+	// atomic blocks and islands alike, inside container slots too (the
+	// same root-child model as the island guards). The swap is a direct
+	// DOM move, so it is invisible to native undo by design (structural
+	// DOM ops are safe no-ops under ⌘Z); the inverse shortcut is the
+	// undo, exactly the block editor's model. Range boundaries track node
+	// identity through the move, so re-adding the cloned range restores
+	// the caret where the writer left it.
+	function moveCaretBlock( dir ) {
+		const ed = state.editor;
+		const body = $( '#minn-editor-body' );
+		if ( ! ed || ! body || ed.mode === 'locked' ) return;
+		const sel = window.getSelection();
+		if ( ! sel.rangeCount ) return;
+		const anchor = sel.anchorNode;
+		if ( ! anchor || ! body.contains( anchor ) ) return;
+		const root = blockRootOf( anchor, body );
+		let block = anchor;
+		if ( block.nodeType === Node.ELEMENT_NODE && block.closest ) {
+			const isl = block.closest( '.minn-block-island' );
+			if ( isl && isl.parentNode === root ) block = isl;
+		}
+		while ( block && block.parentNode !== root ) block = block.parentNode;
+		if ( ! block || block.nodeType !== Node.ELEMENT_NODE ) return;
+		const sibling = dir < 0 ? block.previousElementSibling : block.nextElementSibling;
+		if ( ! sibling ) return;
+		// Save the caret as a plain node+offset pair, NOT a live Range:
+		// insertBefore of an in-tree node is remove-then-insert, and the
+		// removal step rewrites any live Range inside the moved subtree to
+		// its old parent — restoring that clone landed the caret outside
+		// the moved block. Node references survive the reparent untouched.
+		const startC = sel.getRangeAt( 0 ).startContainer;
+		const startO = sel.getRangeAt( 0 ).startOffset;
+		if ( dir < 0 ) {
+			root.insertBefore( block, sibling );
+		} else {
+			root.insertBefore( sibling, block );
+		}
+		body.focus( { preventScroll: true } );
+		try {
+			const nr = document.createRange();
+			nr.setStart( startC, startO );
+			nr.collapse( true );
+			sel.removeAllRanges();
+			sel.addRange( nr );
+		} catch ( err ) {}
+		block.scrollIntoView( { block: 'nearest' } );
+		scheduleAutosave();
+	}
+
 	/* ===== Inline code & markdown typing rules ===== */
 
 	// A <code> that flows inside text — not a code block's <code> and not
@@ -38776,6 +38826,8 @@
 							<span class="minn-kbd">${ esc( __( 'Tab' ) ) }</span><span>${ esc( __( 'In a list: nest the item under the one above (⇧Tab lifts it back)' ) ) }</span>
 							<span class="minn-kbd">⌘⇧D</span><span>${ esc( __( 'Focus mode: fade all but the current paragraph' ) ) }</span>
 							<span class="minn-kbd">⌘⇧O</span><span>${ esc( __( 'Outline mode: just the writing and the outline' ) ) }</span>
+							<span class="minn-kbd">⌘⇧⌥T</span><span>${ esc( __( 'Move the current block up' ) ) }</span>
+							<span class="minn-kbd">⌘⇧⌥Y</span><span>${ esc( __( 'Move the current block down' ) ) }</span>
 							<span class="minn-kbd">⌘.</span><span>${ esc( __( 'Show or hide the navigation' ) ) }</span>
 							<span class="minn-kbd">⌥click</span><span>${ esc( __( "A block's ⚙ handle: duplicate that block in place" ) ) }</span>
 							<span class="minn-kbd">⇧⌥click</span><span>${ esc( __( "A block's ⚙ handle: remove that block (⌘Z restores it)" ) ) }</span>
@@ -44179,6 +44231,16 @@
 			if ( ( e.metaKey || e.ctrlKey ) && e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'o' && state.route === 'editor' && state.editor ) {
 				e.preventDefault();
 				toggleOutlineMode();
+			}
+			// ⌘⇧⌥T / ⌘⇧⌥Y move the caret's block up / down — the block
+			// editor's own combination, so the habit carries over. Matched
+			// on e.code: Option+T types "†" on a Mac, so key identity would
+			// never fire there.
+			if ( ( e.metaKey || e.ctrlKey ) && e.shiftKey && e.altKey
+				&& ( e.code === 'KeyT' || e.code === 'KeyY' )
+				&& state.route === 'editor' && state.editor && state.editor.mode !== 'locked' ) {
+				e.preventDefault();
+				moveCaretBlock( e.code === 'KeyT' ? -1 : 1 );
 			}
 			// ⌘⏎ publishes/updates/schedules — the writing-tool standard.
 			if ( ( e.metaKey || e.ctrlKey ) && e.key === 'Enter' && state.route === 'editor' && state.editor ) {
