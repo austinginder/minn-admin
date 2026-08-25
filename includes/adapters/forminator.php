@@ -121,7 +121,14 @@ function minn_admin_forminator_answers( $entry_id ) {
 				continue;
 			}
 			$v = isset( $meta['value'] ) ? $meta['value'] : '';
-			if ( is_array( $v ) ) {
+			// An upload answer is a structure, and one of its leaves is the
+			// file's absolute path on disk. Their own renderer shows the URL
+			// and nothing else, so flattening every leaf printed the server's
+			// directory layout into a row that only needed the address.
+			if ( is_array( $v ) && isset( $v['file']['file_url'] ) ) {
+				$urls = array_filter( array_map( 'strval', (array) $v['file']['file_url'] ) );
+				$v    = implode( ', ', $urls );
+			} elseif ( is_array( $v ) ) {
 				$flat = array();
 				array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
 					if ( '' !== trim( (string) $leaf ) ) {

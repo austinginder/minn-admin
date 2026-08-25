@@ -247,6 +247,12 @@ function minn_admin_perfmatters_raw_output_fields() {
 		'assets'    => array( 'header_code', 'body_code', 'footer_code' ),
 		'preload'   => array( 'dns_prefetch' ),
 		'analytics' => array( 'tracking_id' ),
+		// Substituted into every src= and href= in the finished page, inside
+		// the quotes and without escaping, and their own sanitizer does not
+		// list it. Same rule as the fields above: a real CDN hostname loses
+		// nothing to the quote-stripping these fields get.
+		'cdn'       => array( 'cdn_url' ),
+		'fonts'     => array( 'cdn_url' ),
 	);
 }
 

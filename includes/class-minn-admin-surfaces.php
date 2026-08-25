@@ -644,13 +644,19 @@ class Minn_Admin_Surfaces {
 				'label' => (string) $tab['label'],
 			);
 		}
-		if ( empty( $cfg['route'] ) || ! is_string( $cfg['route'] ) || ! $tabs ) {
+		// Every route a descriptor names rides the boot payload into the
+		// client, which attaches the REST nonce, so an absolute URL would send
+		// that nonce to another host. The design-source and editor-command
+		// registries normalise for this; the surface registry did not, and
+		// leaving it to one client to keep refusing is not the place for it.
+		$settings_route = Minn_Admin::rest_route_or_null( $cfg['route'] ?? null );
+		if ( ! $settings_route || ! $tabs ) {
 			unset( $surface['settings'] );
 			return $surface;
 		}
 		$surface['settings'] = array(
 			'label' => (string) ( $cfg['label'] ?? 'Settings' ),
-			'route' => $cfg['route'],
+			'route' => $settings_route,
 			'tabs'  => $tabs,
 		);
 		return $surface;
@@ -683,6 +689,13 @@ class Minn_Admin_Surfaces {
 				continue;
 			}
 			unset( $v['cap'] );
+			if ( isset( $v['route'] ) ) {
+				$view_route = Minn_Admin::rest_route_or_null( $v['route'] );
+				if ( ! $view_route ) {
+					continue;
+				}
+				$v['route'] = $view_route;
+			}
 			$views[] = $v;
 		}
 		if ( $views ) {

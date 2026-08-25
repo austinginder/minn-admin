@@ -49,6 +49,13 @@ function minn_admin_tec_linked_pick( $id ) {
 	if ( ! $post ) {
 		return '';
 	}
+	// The picker withholds other people's drafts and applies a per-row read
+	// check; reading a linked id back skipped both, so an id typed by hand
+	// answered with a title the picker would not have offered. Same boundary
+	// on the way out as on the way in.
+	if ( ! current_user_can( 'read_post', $post->ID ) ) {
+		return '';
+	}
 	$title = get_the_title( $post );
 	return array(
 		'value' => (string) $id,

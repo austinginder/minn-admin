@@ -4503,7 +4503,12 @@ function minn_admin_licenses_edd( $fingerprints ) {
 		$status      = '';
 		foreach ( $opts as $name => $value ) {
 			$lname = strtolower( $name );
-			if ( false === strpos( $lname, $token ) && false === strpos( $lname, $base ) ) {
+			// Anchored, not "contains": a slug that is a prefix of a sibling's
+			// option namespace was inheriting that sibling's licence row, so a
+			// component with no licence could read as valid. The SureCart sweep
+			// was moved off substring matching for exactly this reason. Honest
+			// missing beats stolen attribution.
+			if ( 0 !== strpos( $lname, $token ) && 0 !== strpos( $lname, $base ) ) {
 				continue;
 			}
 			if ( false !== strpos( $lname, 'license_key' ) && '' !== trim( (string) $value ) ) {
