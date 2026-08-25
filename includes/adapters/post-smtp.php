@@ -20,7 +20,25 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_post_smtp_active() {
-	return defined( 'POST_SMTP_VER' ) || class_exists( 'PostmanOptions' );
+	if ( ! defined( 'POST_SMTP_VER' ) && ! class_exists( 'PostmanOptions' ) ) {
+		return false;
+	}
+	// Post SMTP withdraws its Email Log by not registering the screen at all
+	// when mail logging is switched off, and the rows already stored are not
+	// deleted. No capability check can see a setting, so ask the setting: a
+	// site that turned logging off has said it does not want these message
+	// bodies read, and they hold live password reset links.
+	if ( class_exists( 'PostmanOptions' ) && method_exists( 'PostmanOptions', 'getInstance' ) ) {
+		try {
+			$options = PostmanOptions::getInstance();
+			if ( $options && method_exists( $options, 'isMailLoggingEnabled' ) ) {
+				return (bool) $options->isMailLoggingEnabled();
+			}
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to presence alone when their option layer moves.
+		}
+	}
+	return true;
 }
 
 /** Email addresses out of a maybe-serialized recipient blob. */

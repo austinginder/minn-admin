@@ -177,7 +177,11 @@ function minn_admin_simple_history_status_model() {
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! defined( 'SIMPLE_HISTORY_VERSION' ) ) {
+	// Ask the same question the routes ask. Stealth mode hides the plugin by
+	// removing its own pages, so registering the surface anyway put the name
+	// back in the nav for exactly the people it is hidden from, which is what
+	// the gate exists to prevent.
+	if ( ! defined( 'SIMPLE_HISTORY_VERSION' ) || ! minn_admin_simple_history_can() ) {
 		return $surfaces;
 	}
 
