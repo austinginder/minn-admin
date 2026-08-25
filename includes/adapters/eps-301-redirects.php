@@ -269,8 +269,18 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
 				global $wpdb;
-				$wpdb->delete( $table(), array( 'id' => (int) $request['id'] ) );
-				return rest_ensure_response( array( 'deleted' => (int) $request['id'] ) );
+				$id = (int) $request['id'];
+				// Confirm the target is a redirect before removing it. The list
+				// and the editor both leave status 404 rows alone because those
+				// are their 404 log rather than rules, and a delete that skipped
+				// the same test could take one out through a route that only
+				// ever names redirects.
+				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id, status FROM ' . $table() . ' WHERE id = %d', $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL
+				if ( ! $row || '404' === (string) $row->status ) {
+					return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$wpdb->delete( $table(), array( 'id' => $id ) );
+				return rest_ensure_response( array( 'deleted' => $id ) );
 			},
 		),
 	) );
