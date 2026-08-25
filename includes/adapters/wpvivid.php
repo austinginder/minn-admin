@@ -395,7 +395,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpvivid_plugin;
-			$id = sanitize_key( (string) $request['id'] );
+			$id = sanitize_key( Minn_Admin::path_param( $request ) );
 			if ( ! $id ) {
 				return new WP_Error( 'invalid_id', __( 'Backup id is required.', 'minn-admin' ), array( 'status' => 400 ) );
 			}

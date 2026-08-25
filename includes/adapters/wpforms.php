@@ -506,7 +506,12 @@ add_action( 'rest_api_init', function () {
 				}
 				// Their entry screen marks an opened entry viewed; mirror it
 				// through their handler (hooks fire). Never for spam/trash.
-				if ( ! (int) $row->viewed && ! in_array( (string) $row->status, array( 'spam', 'trash' ), true ) && minn_admin_wpforms_can( 'edit_entries' ) ) {
+				// The flat cap alone is not how anything else in this file
+				// writes: WPForms grades editing per form, so someone allowed
+				// to read form B and edit only form A must not flip a row on B.
+				if ( ! (int) $row->viewed && ! in_array( (string) $row->status, array( 'spam', 'trash' ), true )
+					&& minn_admin_wpforms_can( 'edit_entries' )
+					&& ! is_wp_error( minn_admin_wpforms_guard_entry( (int) $row->entry_id, 'edit_entries_form_single' ) ) ) {
 					try {
 						wpforms()->obj( 'entry' )->update( (int) $row->entry_id, array( 'viewed' => 1 ) );
 					} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch

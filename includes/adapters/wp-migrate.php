@@ -384,7 +384,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$id = (string) $request['id'];
+			$id = Minn_Admin::path_param( $request );
 			// Find the row first so the compressed flag comes from the file
 			// that is really there rather than from the caller.
 			$match = null;

@@ -221,7 +221,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'DELETE',
 		'permission_callback' => $perm_delete,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$filename = minn_admin_ai1wm_id_decode( (string) $request['id'] );
+			$filename = minn_admin_ai1wm_id_decode( Minn_Admin::path_param( $request ) );
 			if ( ! $filename
 				|| false !== strpos( $filename, '..' )
 				|| ( function_exists( 'ai1wm_is_filename_supported' ) && ! ai1wm_is_filename_supported( $filename ) )

@@ -891,6 +891,23 @@ class Minn_Admin {
 	 * wp-config writer and PHP snippet authoring. Ordinary content and
 	 * stylesheet editing are not file editing.
 	 */
+	/**
+	 * The id from the ROUTE PATH, ignoring body and query.
+	 *
+	 * WP_REST_Request resolves JSON, then POST, then GET, and only then URL
+	 * parameters, so a stray id in a payload silently retargets a verb while
+	 * the path -- and the confirmation the operator read -- named something
+	 * else. Destructive verbs should never be steered that way.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @param string          $key     Parameter name.
+	 * @return string
+	 */
+	public static function path_param( $request, $key = 'id' ) {
+		$url = $request->get_url_params();
+		return isset( $url[ $key ] ) ? (string) $url[ $key ] : '';
+	}
+
 	public static function code_edits_allowed() {
 		if ( defined( 'DISALLOW_FILE_EDIT' ) && DISALLOW_FILE_EDIT ) {
 			return false;

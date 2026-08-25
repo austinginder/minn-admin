@@ -1067,6 +1067,15 @@ function minn_admin_network_site_delete( WP_REST_Request $request ) {
 		return $site;
 	}
 	$id = (int) $site->blog_id;
+	// Core pairs delete_sites with the per-target meta cap on both its single
+	// and its bulk delete path. delete_site maps to manage_options and ignores
+	// its argument, so on a stock network this asks nothing new -- but it is
+	// the only way a host can say "not this one", and honouring it is the
+	// whole point of a per-target cap. This release added the same pairing for
+	// deleting a user; deleting a site is the more destructive sibling.
+	if ( ! current_user_can( 'delete_site', $id ) ) {
+		return new WP_Error( 'cannot_delete', __( 'You are not allowed to delete that site.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
 	// wp_delete_site drops the site's tables and fires wp_delete_site /
 	// wp_uninitialize_site so plugins can clean up their own storage.
 	$result = wp_delete_site( $id );

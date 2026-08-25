@@ -313,7 +313,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'DELETE',
 		'permission_callback' => $perm_delete,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$raw = rawurldecode( (string) $request['id'] );
+			$raw = rawurldecode( Minn_Admin::path_param( $request ) );
 			$pos = strpos( $raw, ':' );
 			if ( false === $pos ) {
 				return new WP_Error( 'bad_id', __( 'Invalid backup id.', 'minn-admin' ), array( 'status' => 400 ) );

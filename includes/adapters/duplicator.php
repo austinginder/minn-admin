@@ -173,7 +173,7 @@ add_action( 'rest_api_init', function () {
 			// whose stored ID drifted (site clones, fixtures) silently
 			// no-ops. Pin it, and verify the row is really gone.
 			global $wpdb;
-			$id = (int) $request['id'];
+			$id = (int) Minn_Admin::path_param( $request );
 			try {
 				$package = DUP_Package::getByID( $id );
 				if ( ! $package ) {

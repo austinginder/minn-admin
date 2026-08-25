@@ -272,9 +272,10 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
 			$base = minn_admin_disembark_dir();
-			// The id pattern already forbids traversal; realpath containment
-			// is belt-and-braces before a recursive delete.
-			$dir  = realpath( $base . $request['id'] );
+			// Read the id from the PATH, so the route pattern's own traversal
+			// rule actually applies to the value used here; realpath
+			// containment then backs it up before a recursive delete.
+			$dir  = realpath( $base . Minn_Admin::path_param( $request ) );
 			$root = realpath( $base );
 			if ( ! $dir || ! $root || 0 !== strpos( $dir, $root . DIRECTORY_SEPARATOR ) || ! is_dir( $dir ) ) {
 				return new WP_Error( 'not_found', __( 'No such session.', 'minn-admin' ), array( 'status' => 404 ) );
