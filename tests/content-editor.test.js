@@ -164,6 +164,52 @@ const CONTENT = STATS( 'Type:', 'Residential', 'Location:' ) + '\n\n' + GRP( 'Co
 		} );
 		t.check( 'settings disclosure opens the attr form', ! setState.hidden && setState.fields >= 3, JSON.stringify( setState ) );
 
+		// --- Enum attrs wear the themed combobox (hidden select carries the
+		// value, so the Apply collect is untouched). A real-mouse pick must
+		// sync the select AND leave the modal open: the combobox panel can
+		// overhang onto the backdrop, and the pick's composed click used to
+		// dismiss the modal (the mousedown-dismiss lesson). ---
+		const comboState = await page.evaluate( () => {
+			const panel = document.querySelector( '[data-ctset-panel="0"]' );
+			const sel = panel.querySelector( 'select[data-insp]' );
+			return sel ? {
+				hidden: getComputedStyle( sel ).display === 'none',
+				wrap: !! ( sel.nextElementSibling && sel.nextElementSibling.classList.contains( 'minn-ac' ) ),
+				options: sel.options.length,
+			} : null;
+		} );
+		t.check( 'enum attr renders as a themed combobox over a hidden select',
+			!! comboState && comboState.hidden && comboState.wrap && comboState.options >= 2,
+			JSON.stringify( comboState ) );
+		await page.click( '[data-ctset-panel="0"] select[data-insp] + .minn-ac .minn-ac-input' );
+		await page.waitForSelector( '[data-ctset-panel="0"] .minn-ac-panel:not([hidden]) .minn-ac-item', { timeout: 6000 } );
+		const pickValue = await page.evaluate( () => {
+			const items = Array.from( document.querySelectorAll( '[data-ctset-panel="0"] .minn-ac-panel .minn-ac-item' ) );
+			const pick = items.find( ( el ) => ( el.dataset.acv || '' ) !== '' );
+			return pick ? pick.dataset.acv : null;
+		} );
+		await page.click( `[data-ctset-panel="0"] .minn-ac-item[data-acv="${ pickValue }"]` );
+		await page.waitForTimeout( 200 );
+		const picked = await page.evaluate( () => ( {
+			value: document.querySelector( '[data-ctset-panel="0"] select[data-insp]' ).value,
+			modalOpen: !! document.querySelector( '.minn-cted' ),
+		} ) );
+		t.check( 'a combobox pick syncs the hidden select and keeps the modal open',
+			picked.value === pickValue && picked.modalOpen, JSON.stringify( { pickValue, picked } ) );
+		// Put the enum back to its untouched "—" so the byte-exact
+		// expectations below stay byte-exact.
+		await page.click( '[data-ctset-panel="0"] select[data-insp] + .minn-ac .minn-ac-input' );
+		await page.waitForSelector( '[data-ctset-panel="0"] .minn-ac-panel:not([hidden]) .minn-ac-item', { timeout: 6000 } );
+		await page.evaluate( () => {
+			const empty = Array.from( document.querySelectorAll( '[data-ctset-panel="0"] .minn-ac-panel .minn-ac-item' ) )
+				.find( ( el ) => ( el.dataset.acv || '' ) === '' );
+			if ( empty ) {
+				empty.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+				empty.click();
+			}
+		} );
+		await page.waitForTimeout( 200 );
+
 		// --- Text edit → Apply → byte-exact save ---
 		await page.fill( '.minn-cted-card[data-ci="0"] [data-insptext]', 'Category:' );
 		await page.click( '#minn-cted-apply' );

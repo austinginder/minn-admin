@@ -2496,6 +2496,35 @@
 		return nf;
 	}
 
+	// Dress an already-rendered native <select> as the themed strict
+	// combobox. The select STAYS in the DOM (display:none) as the value
+	// carrier, so every existing collect path reads it unchanged, and the
+	// vocabulary — including the "—" never-written empty option the
+	// schema-enum semantics hang on — comes from the select's own options.
+	// A strict pick fires no input event, so the sync watches data-ac-value
+	// and forwards a change event for any listener the select had.
+	function comboifySelect( sel ) {
+		if ( ! sel || sel._minnComboified || ! sel.options || ! sel.options.length ) return;
+		sel._minnComboified = true;
+		const items = Array.from( sel.options ).map( ( o ) => ( { value: o.value, label: o.textContent } ) );
+		const wrap = document.createElement( 'div' );
+		wrap.className = 'minn-ac';
+		wrap.innerHTML = `<input class="minn-input minn-ac-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false"><div class="minn-ac-panel" hidden></div>`;
+		sel.after( wrap );
+		sel.style.display = 'none';
+		bindAutocomplete( wrap, items, { strict: true, value: sel.value } );
+		const input = $( '.minn-ac-input', wrap );
+		if ( input ) {
+			new MutationObserver( () => {
+				const v = input.dataset.acValue;
+				if ( v != null && v !== sel.value ) {
+					sel.value = v;
+					sel.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+				}
+			} ).observe( input, { attributes: true, attributeFilter: [ 'data-ac-value' ] } );
+		}
+	}
+
 	// Arm every rendered combobox in `scope` from its data-acseed + the
 	// field's options (or the wrap's data-acopts stamp). Strict mode
 	// seeds dataset.acValue (falling back to the first option when the
@@ -32087,6 +32116,13 @@
 			const apply = $( '#minn-cted-apply', overlay );
 			if ( apply ) apply.disabled = ! model.children.length;
 			bindFormComboboxes( bodyEl, 'data-inspdf', [] );
+			// Enum attrs and the add-type picker wear the themed combobox
+			// here (the hidden select stays the value the Apply collect
+			// reads). The ⚙ popover's generic form deliberately keeps its
+			// native selects.
+			$$( 'select[data-insp]', bodyEl ).forEach( comboifySelect );
+			const addType = $( '#minn-cted-add-type', overlay );
+			if ( addType ) comboifySelect( addType );
 		};
 		renderCards();
 
@@ -32116,8 +32152,15 @@
 			} );
 		} );
 
+		// Backdrop dismiss on MOUSEDOWN, not click: a combobox panel can
+		// overhang the modal, and its pick re-renders on mousedown — the
+		// composed CLICK then lands on the backdrop and closed the modal
+		// out from under the pick (the modal-overlay lesson).
+		overlay.addEventListener( 'mousedown', ( e ) => {
+			if ( e.target === overlay ) closeContentEditor();
+		} );
 		overlay.addEventListener( 'click', ( e ) => {
-			if ( e.target === overlay || e.target.closest( '#minn-cted-close' ) || e.target.closest( '#minn-cted-cancel' ) ) { closeContentEditor(); return; }
+			if ( e.target.closest( '#minn-cted-close' ) || e.target.closest( '#minn-cted-cancel' ) ) { closeContentEditor(); return; }
 			const set = e.target.closest( '[data-ctset]' );
 			if ( set ) {
 				const panel = bodyEl.querySelector( `[data-ctset-panel="${ set.dataset.ctset }"]` );
