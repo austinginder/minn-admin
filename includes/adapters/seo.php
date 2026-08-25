@@ -128,7 +128,6 @@ function minn_admin_seo_aioseo_provider() {
 					array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text', 'counter' => 60 ),
 					array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea', 'counter' => 160 ),
 					array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
-					array( 'name' => 'pillar_content', 'label' => __( 'Pillar content', 'minn-admin' ), 'type' => 'toggle', 'help' => __( 'Mark this as cornerstone content.', 'minn-admin' ) ),
 				),
 			);
 			if ( $has_cap( 'aioseo_page_social_settings' ) ) {
@@ -160,6 +159,9 @@ function minn_admin_seo_aioseo_provider() {
 				$groups[] = array(
 					'group'  => __( 'Advanced', 'minn-admin' ),
 					'fields' => array(
+						// Cornerstone lives on their Advanced tab, so it answers
+						// to the Advanced capability rather than the general one.
+						array( 'name' => 'pillar_content', 'label' => __( 'Pillar content', 'minn-admin' ), 'type' => 'toggle', 'help' => __( 'Mark this as cornerstone content.', 'minn-admin' ) ),
 						array( 'name' => 'robots_default', 'label' => __( 'Use default robots settings', 'minn-admin' ), 'type' => 'toggle' ),
 						array( 'name' => 'robots_noindex', 'label' => __( 'No index', 'minn-admin' ), 'type' => 'toggle', 'cond' => $dflt ),
 						array( 'name' => 'robots_nofollow', 'label' => __( 'Nofollow links', 'minn-admin' ), 'type' => 'toggle', 'cond' => $dflt ),
@@ -826,6 +828,14 @@ function minn_admin_seo_surerank_provider() {
 	);
 	return array(
 		'name'   => 'SureRank',
+		// SureRank reserves per-post SEO to manage_options, and it says so in
+		// two places: every one of its post routes registers validate_permission,
+		// which falls through to a manage_options check, and its metabox does
+		// not even load without the same test. Their filter is the documented
+		// way a site widens that, so ask through it rather than hardcoding.
+		'can_edit' => function () {
+			return (bool) apply_filters( 'surerank_content_setting_access', current_user_can( 'manage_options' ) );
+		},
 		'fields' => function () {
 			$tw = array( array( array( 'f' => 'twitter_use_facebook', 'op' => '==', 'v' => '0' ) ) );
 			return array(
@@ -1322,7 +1332,13 @@ function minn_admin_seo_yoast_provider() {
 					),
 				);
 			}
-			$groups[] = array( 'group' => __( 'Schema', 'minn-admin' ), 'fields' => $schema_fields );
+			// Their get_meta_field_defs gates 'schema' on exactly the test it
+			// gates 'advanced' on, and strips both from the save when it fails,
+			// so a principal who may not set a canonical may not set the page's
+			// schema type either.
+			if ( $adv_allowed() ) {
+				$groups[] = array( 'group' => __( 'Schema', 'minn-admin' ), 'fields' => $schema_fields );
+			}
 			return $groups;
 		},
 		'preview' => function ( $post_id ) {
@@ -1593,8 +1609,14 @@ function minn_admin_seo_plugin() {
 		return minn_admin_seo_press_family_provider( 'SEOPress', '_seopress_', false, function () {
 			// SEOPress blocks the metabox for roles listed in its advanced
 			// settings; mirror that (super admins are never blocked).
+			// SEOPress restricts its metaboxes in two independent areas, and
+			// the target keyword is the one field it files under the second
+			// one -- their own meta_auth callback switches on exactly that
+			// key. Ask about both, so a role blocked from content analysis
+			// cannot write the keyword through here.
 			return ! function_exists( 'seopress_metabox_role_is_blocked' )
-				|| ! seopress_metabox_role_is_blocked( 'GLOBAL' );
+				|| ( ! seopress_metabox_role_is_blocked( 'GLOBAL' )
+					&& ! seopress_metabox_role_is_blocked( 'CONTENT_ANALYSIS' ) );
 		} );
 	}
 	if ( defined( 'SURERANK_VERSION' )
