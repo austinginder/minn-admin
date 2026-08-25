@@ -1955,6 +1955,17 @@
 		return root;
 	}
 
+	// The string form of rtNeutralizeInto, for the one sink that cannot take
+	// nodes: execCommand('insertHTML') wants markup. Parse inertly and park
+	// what runs, then hand back the parked markup. The parked attributes ride
+	// into the document exactly as they do on load, and the serializer's
+	// rtUnpark puts the writer's bytes back on the way to the database.
+	function rtNeutralizedHtml( html ) {
+		const s = String( html == null ? '' : html );
+		if ( ! s ) return '';
+		return rtNeutralize( inertParse( s ) ).innerHTML;
+	}
+
 	// The one way stored post content should ever reach a live element. Parse
 	// inertly, park what runs, then IMPORT the nodes — the same reasoning as
 	// rtSeedInto, including why the tree is never re-serialised to a string on
@@ -25023,7 +25034,12 @@
 		if ( islandEl.classList.contains( 'minn-slot-island' ) ) flushSlotIsland( islandEl, ed.islands );
 		const raw = ed.islands[ idx ];
 		const ni = ed.islands.push( raw ) - 1;
-		islandEl.insertAdjacentHTML( 'afterend', islandHtml( ni, islandEl.dataset.block || 'block', raw, ed ) );
+		// insertAdjacentHTML on a live element parses for real, and a stored
+		// block is somebody's markup. Land the copy through the inert path,
+		// the way a pattern insert already does.
+		const dup = rtNeutralizeInto( document.createElement( 'div' ), islandHtml( ni, islandEl.dataset.block || 'block', raw, ed ) );
+		Array.from( dup.childNodes ).reverse().forEach( ( node ) =>
+			islandEl.parentNode.insertBefore( node, islandEl.nextSibling ) );
 		// Direct-DOM insertion fires no input — ancestor slots must re-splice.
 		stampSlotDirtyFor( islandEl );
 		const body = $( '#minn-editor-body' );
@@ -35301,7 +35317,10 @@
 				const idx = parseInt( n.dataset.island, 10 );
 				const ed = state.editor;
 				if ( ed && ed.islands && ed.islands[ idx ] != null ) {
-					emit( islandHtml( idx, n.dataset.block || 'block', ed.islands[ idx ] ) );
+					// Everything else this function emits was rebuilt from an
+					// allowlist; the island is stored markup, so it takes the
+					// inert path before it reaches insertHTML.
+					emit( rtNeutralizedHtml( islandHtml( idx, n.dataset.block || 'block', ed.islands[ idx ] ) ) );
 				} else {
 					flush();
 					const prev = n.querySelector( '.minn-island-preview' );
