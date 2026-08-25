@@ -88,7 +88,16 @@ function minn_admin_acf_image_in( $value ) {
 		$value = (array) $value;
 		$value = isset( $value['id'] ) ? $value['id'] : 0;
 	}
-	return is_numeric( $value ) && (int) $value > 0 && 'attachment' === get_post_type( (int) $value ) ? (int) $value : '';
+	$att = is_numeric( $value ) ? (int) $value : 0;
+	// The same three questions the SEO panel asks of a social image: an id
+	// alone says nothing about whether this person may attach that file.
+	// Uploads are served without authentication, so pointing a field at a
+	// stranger's attachment publishes it, and walking the ids is trivial.
+	if ( $att < 1 || 'attachment' !== get_post_type( $att )
+		|| ! current_user_can( 'upload_files' ) || ! current_user_can( 'read_post', $att ) ) {
+		return '';
+	}
+	return $att;
 }
 
 /**

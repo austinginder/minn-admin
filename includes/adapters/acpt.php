@@ -399,7 +399,10 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 		$att = is_array( $value ) || is_object( $value )
 			? (int) ( ( (array) $value )['id'] ?? 0 )
 			: (int) $value;
-		if ( $att < 1 || 'attachment' !== get_post_type( $att ) ) {
+		// And the same authorization the SEO panel applies: being able to edit
+		// this post says nothing about which files this person may attach.
+		if ( $att < 1 || 'attachment' !== get_post_type( $att )
+			|| ! current_user_can( 'upload_files' ) || ! current_user_can( 'read_post', $att ) ) {
 			return;
 		}
 		$value = $att;
