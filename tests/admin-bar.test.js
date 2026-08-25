@@ -472,13 +472,15 @@ const { execSync } = require( 'child_process' );
 				hit: !! ( el && el.closest( '.minn-bar-markbtn' ) ),
 				tellOpacity: tell.opacity,
 				tellWidth: tell.width,
+				// The halo rings keep the dot visible on any site background.
+				tellHalo: tell.boxShadow !== 'none' && tell.boxShadow.includes( 'rgba(255, 255, 255' ),
 			};
 		} );
 		t.check( 'ghost: a plain arrival starts hidden but keeps the hit area',
 			arrived.ghost && ! arrived.peek && arrived.hit, JSON.stringify( arrived ) );
-		t.check( 'ghost: the accent corner tell shows while hidden',
-			arrived.tellOpacity === '1' && arrived.tellWidth === '6px',
-			JSON.stringify( { opacity: arrived.tellOpacity, width: arrived.tellWidth } ) );
+		t.check( 'ghost: the accent corner tell shows while hidden, with its contrast halo',
+			arrived.tellOpacity === '1' && arrived.tellWidth === '6px' && arrived.tellHalo,
+			JSON.stringify( { opacity: arrived.tellOpacity, width: arrived.tellWidth, halo: arrived.tellHalo } ) );
 		await page.mouse.move( 30, 30, { steps: 8 } );
 		await page.waitForFunction( () => {
 			const b = document.getElementById( 'minn-bar' );
@@ -704,6 +706,17 @@ const { execSync } = require( 'child_process' );
 				&& mob.height === 46 && mob.radius === '14px' && mob.actionsOpacity === '0',
 			JSON.stringify( mob ) );
 		t.check( 'mobile: Corner Reveal does not offset the site', mob.margin === '0px', mob.margin );
+		// One mark, one size, on both sides of the hand-off: the phone tile
+		// must match the admin sidebar logo (28px/8px/16px), with only the
+		// invisible tap button staying larger.
+		const mobMark = await page.evaluate( () => {
+			const cs = getComputedStyle( document.querySelector( '.minn-bar-mark' ) );
+			const btn = getComputedStyle( document.querySelector( '.minn-bar-markbtn' ) );
+			return { w: cs.width, radius: cs.borderRadius, font: cs.fontSize, btnW: btn.width };
+		} );
+		t.check( 'mobile: the mark wears the same 28px tile as the admin logo',
+			mobMark.w === '28px' && mobMark.radius === '8px' && mobMark.font === '16px' && mobMark.btnW === '36px',
+			JSON.stringify( mobMark ) );
 		const beforeTap = page.url();
 		await page.click( '.minn-bar-markbtn' );
 		await page.waitForTimeout( 320 );

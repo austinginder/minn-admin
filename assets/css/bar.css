@@ -264,6 +264,11 @@
     height: 6px;
     background: var(--accent);
     border-radius: 50%;
+    /* Badge halo: a light inner ring and a faint dark rim, in FIXED colors
+       (not theme tokens — the dot sits on the SITE's page, whose colors
+       Minn cannot know), so at least one edge contrasts whether the site
+       behind it is light, dark, or the accent's own hue. */
+    box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.95), 0 0 0 2.5px rgba(17, 17, 20, 0.28);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.28s ease;
@@ -697,12 +702,13 @@
   }
   .minn-bar-mobile-admin:hover { background: var(--hover); }
   .minn-bar-mobile-admin svg { width: 17px; height: 17px; }
-  /* The mark IS the resting touch target on a phone, so it keeps the larger
-     tile — button included, or the tile would outgrow what contains it. At
-     36px the tile fills the pill, so the even padding centres it again. */
+  /* The mark keeps the SAME 28px tile as the admin's sidebar logo and as
+     desktop: one mark, one size, on both sides of the hand-off. Only the
+     BUTTON stays 36px, so the resting touch target does not shrink — the
+     tile is visual, the hit area is not (the tile used to inflate to 36px
+     with the button and read as a different, bigger mark than the admin's). */
   #minn-bar { padding-left: 4px; }
-  .minn-bar-markbtn { width: 36px; height: 36px; }
-  .minn-bar-mark { width: 36px; height: 36px; border-radius: 11px; font-size: 21px; letter-spacing: -0.04em; }
+  .minn-bar-markbtn { width: 36px; height: 36px; justify-content: center; }
   .minn-bar-avatar { width: 30px; height: 30px; }
   .minn-bar-divider { display: none; }
   .minn-bar-sitename { max-width: 120px; }
