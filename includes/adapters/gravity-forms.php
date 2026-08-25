@@ -564,6 +564,50 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	/**
+	 * Replace stored file URLs in an entry with Gravity Forms' tokenized ones.
+	 *
+	 * A fileupload field stores the file's real location, and the per-form
+	 * directory hash in that path is the only thing protecting every other
+	 * file the form ever accepted -- their own get_download_url docblock says
+	 * it exists to stop exactly that enumeration. Their entry LIST tokenizes
+	 * as well as their entry detail, so a list that answers with raw paths
+	 * hands out a permanent unauthenticated URL and voids the two filters
+	 * (gform_require_login_pre_download, gform_permission_granted_pre_download)
+	 * a site uses to lock entry files down. The detail route below already
+	 * routes through get_value_entry_detail for this reason; the list did not.
+	 *
+	 * @param array $entries Entries as GFAPI returned them.
+	 * @return array
+	 */
+	$tokenize_entry_files = function ( $entries ) {
+		$forms = array();
+		foreach ( $entries as $i => $entry ) {
+			if ( ! is_array( $entry ) || empty( $entry['form_id'] ) ) {
+				continue;
+			}
+			$form_id = (int) $entry['form_id'];
+			if ( ! isset( $forms[ $form_id ] ) ) {
+				$forms[ $form_id ] = GFAPI::get_form( $form_id );
+			}
+			$form = $forms[ $form_id ];
+			if ( ! $form || empty( $form['fields'] ) ) {
+				continue;
+			}
+			foreach ( $form['fields'] as $field ) {
+				if ( 'fileupload' !== $field->type || ! method_exists( $field, 'get_value_entry_detail' ) ) {
+					continue;
+				}
+				$key = (string) $field->id;
+				if ( '' === (string) rgar( $entry, $key ) ) {
+					continue;
+				}
+				$entries[ $i ][ $key ] = $field->get_value_entry_detail( rgar( $entry, $key ), $entry, true, 'text' );
+			}
+		}
+		return $entries;
+	};
+
 	// ---- Entry list + workflow shims -----------------------------------
 	// These mirror gf/v2's entries routes over GFAPI so the surface works
 	// whether or not Gravity Forms' REST API setting is on (the setting
@@ -575,7 +619,7 @@ add_action( 'rest_api_init', function () {
 	// mirror gf/v2's own permission callbacks per verb, always resolved
 	// through GFCommon::current_user_can_any (admins hold
 	// gform_full_access, not the granular caps).
-	$list_entries = function ( WP_REST_Request $request ) {
+	$list_entries = function ( WP_REST_Request $request ) use ( $tokenize_entry_files ) {
 		$sorting_param = $request->get_param( 'sorting' );
 		$sorting       = array(
 			'key'       => isset( $sorting_param['key'] ) && '' !== $sorting_param['key'] ? (string) $sorting_param['key'] : 'id',
@@ -605,7 +649,7 @@ add_action( 'rest_api_init', function () {
 		}
 		return rest_ensure_response( array(
 			'total_count' => (int) $total,
-			'entries'     => $entries,
+			'entries'     => $tokenize_entry_files( $entries ),
 		) );
 	};
 	$can_view_entries = function () {
