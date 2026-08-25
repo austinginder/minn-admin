@@ -69,6 +69,16 @@ function minn_admin_emr_replace( $req ) {
 		return new WP_Error( 'minn_emr_no_file', __( 'The upload did not arrive. Try again.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
 
+	// Let the upload filters run before anything reads the bytes. Core fires
+	// this first thing in _wp_handle_upload(), and it is where sanitizers hook:
+	// Safe SVG cleans the SVG in place here and refuses one it cannot clean.
+	// Replacing in place keeps the original URL, so skipping this stored an
+	// unsanitized file at an address that was already published.
+	$file = apply_filters( 'wp_handle_upload_prefilter', $file );
+	if ( ! empty( $file['error'] ) ) {
+		return new WP_Error( 'minn_emr_rejected', (string) $file['error'], array( 'status' => 400 ) );
+	}
+
 	// Validate the upload the way core does, then hold EMR's plain-replace
 	// contract: the file keeps its name and URL, so the new content must be
 	// the same type or the extension would lie about what it serves.
