@@ -643,9 +643,27 @@ add_filter( 'minn_admin_license_providers', function ( $providers ) {
  *
  * @return array Menu slug => option page model.
  */
+/**
+ * Has ACPT actually registered option pages on this install?
+ *
+ * They wrap registerOptionPages() in two constants: their Option Pages
+ * setting, and licence validity. With either off the feature is gone from
+ * wp-admin entirely -- no menu, no screen, nothing to save through. Reading
+ * the repository regardless meant a lapsed licence still listed every page
+ * here and still accepted writes into live site configuration. Per-page
+ * capabilities are asked below; this is the switch above them.
+ *
+ * @return bool
+ */
+function minn_admin_acpt_option_pages_enabled() {
+	return defined( 'ACPT_ENABLE_PAGES' ) && ACPT_ENABLE_PAGES
+		&& defined( 'ACPT_IS_LICENSE_VALID' ) && ACPT_IS_LICENSE_VALID;
+}
+
 function minn_admin_acpt_option_pages_allowed() {
 	$out = array();
-	if ( ! minn_admin_acpt_active() || ! class_exists( '\\ACPT\\Core\\Repository\\OptionPageRepository' ) ) {
+	if ( ! minn_admin_acpt_active() || ! minn_admin_acpt_option_pages_enabled()
+		|| ! class_exists( '\\ACPT\\Core\\Repository\\OptionPageRepository' ) ) {
 		return $out;
 	}
 	try {

@@ -31,6 +31,13 @@ function minn_admin_aios_active() {
  * plugin's own screens stay in lockstep.
  */
 function minn_admin_aios_can() {
+	// Their whole admin sits behind one resolver, and the constant is only the
+	// default that feeds it. A site that answers their filter to deny still had
+	// the audit log -- usernames, addresses, attempted logins -- served here.
+	if ( class_exists( 'AIOWPSecurity_Utility_Permissions' )
+		&& method_exists( 'AIOWPSecurity_Utility_Permissions', 'has_manage_cap' ) ) {
+		return (bool) AIOWPSecurity_Utility_Permissions::has_manage_cap();
+	}
 	$cap = defined( 'AIOWPSEC_MANAGEMENT_PERMISSION' ) ? AIOWPSEC_MANAGEMENT_PERMISSION : 'manage_options';
 	return current_user_can( $cap );
 }

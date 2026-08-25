@@ -23,6 +23,20 @@ defined( 'ABSPATH' ) || exit;
  * dashboard uses.
  */
 function minn_admin_awp_ready() {
+	// AnalyticsWP registers its page at 'read' and decides access in the page
+	// body instead, from a role allowlist an operator edits in its settings.
+	// A capability check cannot see that, so ask their own resolver when it is
+	// loaded and keep manage_options only as the floor for when it is not.
+	if ( class_exists( '\\AnalyticsWP\\Lib\\SuperSimpleWP' )
+		&& method_exists( '\\AnalyticsWP\\Lib\\SuperSimpleWP', 'does_current_user_have_admin_access' ) ) {
+		try {
+			if ( ! \AnalyticsWP\Lib\SuperSimpleWP::does_current_user_have_admin_access() ) {
+				return false;
+			}
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
 	return ( defined( 'ANALYTICSWP_VERSION' ) || class_exists( 'AnalyticsWP\\Plugin' ) )
 		&& current_user_can( 'manage_options' );
 }

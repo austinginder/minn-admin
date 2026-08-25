@@ -347,7 +347,34 @@ function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0, $writes_code
 }
 
 function minn_admin_wpcode_active() {
+	// Headers & Footers mode is WPCode's "just the header scripts, please"
+	// switch: it stops registering the snippets list and the snippet manager,
+	// and refuses to run any snippet while it is on. Offering the manager here
+	// let someone author PHP on a site whose owner had turned snippets off --
+	// dormant while the mode stays on, live the moment it is turned back off.
+	if ( minn_admin_wpcode_headers_footers_mode() ) {
+		return false;
+	}
 	return class_exists( 'WPCode_Snippet' ) || defined( 'WPCODE_VERSION' ) || defined( 'WPCODE_PLUGIN_VERSION' );
+}
+
+/**
+ * Is WPCode restricted to header/footer scripts only?
+ *
+ * @return bool
+ */
+function minn_admin_wpcode_headers_footers_mode() {
+	if ( ! function_exists( 'wpcode' ) ) {
+		return false;
+	}
+	try {
+		$settings = wpcode()->settings;
+		return $settings && method_exists( $settings, 'get_option' )
+			? (bool) $settings->get_option( 'headers_footers_mode' )
+			: false;
+	} catch ( \Throwable $e ) {
+		return false;
+	}
 }
 
 /**

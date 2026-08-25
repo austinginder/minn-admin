@@ -16,6 +16,17 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_simple_history_can() {
+	// Stealth mode exists to keep the plugin out of sight, and it works by
+	// removing its own pages rather than by a capability. Naming the surface
+	// "Activity Log - Simple History" in the nav announces the plugin to
+	// exactly the people it is being hidden from.
+	if ( apply_filters( 'simple_history/full_stealth_mode_enabled', defined( 'SIMPLE_HISTORY_STEALTH_MODE_ENABLE' ) && SIMPLE_HISTORY_STEALTH_MODE_ENABLE ) ) {
+		$allowed = (array) apply_filters( 'simple_history/stealth_mode_allowed_emails', defined( 'SIMPLE_HISTORY_STEALTH_MODE_ALLOWED_EMAILS' ) ? array_map( 'trim', explode( ',', (string) SIMPLE_HISTORY_STEALTH_MODE_ALLOWED_EMAILS ) ) : array() );
+		$user    = wp_get_current_user();
+		if ( ! $user || ! in_array( (string) $user->user_email, $allowed, true ) ) {
+			return false;
+		}
+	}
 	return current_user_can( apply_filters( 'simple_history/view_history_capability', 'edit_pages' ) );
 }
 

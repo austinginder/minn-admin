@@ -18,6 +18,14 @@ defined( 'ABSPATH' ) || exit;
  * activation (includes/class-bootstrap.php).
  */
 function minn_admin_burst_ready() {
+	// In network-wide mode Burst keeps statistics on the main site and simply
+	// does not register its page anywhere else -- and it grants the capability
+	// on every subsite regardless, so the capability cannot express the rule.
+	// This subsite's own table is empty in that mode, so the surface would
+	// report nothing and look broken besides.
+	if ( is_multisite() && ! is_main_site() && get_site_option( 'burst_track_network_wide' ) ) {
+		return false;
+	}
 	return ( defined( 'BURST_VERSION' ) || class_exists( 'Burst\\Burst' ) )
 		&& current_user_can( 'view_burst_statistics' );
 }
