@@ -270,8 +270,14 @@ class Minn_Admin_Updater {
 		$response->author         = $remote->author;
 		$response->author_profile = $remote->author_profile;
 		$response->homepage       = $remote->homepage;
-		$response->download_link  = $remote->download_url;
-		$response->trunk          = $remote->download_url;
+		// The same host allowlist update() applies. This is the field core's
+		// installer downloads from, and a URL that fails the check would also
+		// slip past verify_package(), which declines anything it does not
+		// recognise as ours: the package hash would be skipped, not enforced.
+		if ( $this->is_our_package_url( $remote->download_url ) ) {
+			$response->download_link = $remote->download_url;
+			$response->trunk         = $remote->download_url;
+		}
 		$response->requires_php   = $remote->requires_php;
 		$response->last_updated   = $remote->last_updated;
 		$response->sections       = array( 'description' => $remote->sections->description );
