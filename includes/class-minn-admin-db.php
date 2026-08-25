@@ -148,6 +148,27 @@ class Minn_Admin_DB {
 		return $map;
 	}
 
+	/**
+	 * This site's tables, largest first, for callers outside the browser.
+	 *
+	 * Anything reporting on "the database" wants the same scoped set the
+	 * browser lists. A caller running its own information_schema query with a
+	 * plain prefix LIKE names a neighbouring install's tables, which is the
+	 * rule table_index() exists to apply.
+	 *
+	 * @return object[] Rows carrying name, size and rows_est.
+	 */
+	public static function site_tables() {
+		$rows = (array) self::table_index();
+		usort(
+			$rows,
+			static function ( $a, $b ) {
+				return (int) ( $b->size ?? 0 ) <=> (int) ( $a->size ?? 0 );
+			}
+		);
+		return $rows;
+	}
+
 	private static function table_index() {
 		// Memoized per request: resolve_table() runs once per route call, but
 		// a health run resolves many tables back to back.
@@ -207,10 +228,21 @@ class Minn_Admin_DB {
 			$name = strtolower( (string) $t->name );
 			foreach ( $suffixes as $suffix ) {
 				$len = strlen( $name ) - strlen( $suffix );
-				if ( $len > strlen( $own ) && substr( $name, $len ) === $suffix ) {
-					$candidate = substr( $name, 0, $len );
-					$seen[ $candidate ][ $suffix ] = true;
+				// Measure against the BASE prefix, which is what the admit
+				// branch below tests. Measuring against this site's own prefix
+				// missed every neighbour whose prefix is shorter than it: on a
+				// network at wp_12_, a wp_x_ install never became a candidate
+				// and its users table was admitted as a base-prefixed table.
+				if ( $len < strlen( $base ) || substr( $name, $len ) !== $suffix ) {
+					continue;
 				}
+				$candidate = substr( $name, 0, $len );
+				// Our own prefixes are not neighbours: $own is this site's, and
+				// the base prefix carries the shared and main-site tables.
+				if ( $candidate === $own || $candidate === $base ) {
+					continue;
+				}
+				$seen[ $candidate ][ $suffix ] = true;
 			}
 		}
 		$foreign = array();

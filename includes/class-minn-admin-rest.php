@@ -7719,17 +7719,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$server_info = @mysqli_get_server_info( $wpdb->dbh );
 		}
 		$is_maria = false !== stripos( (string) ( $server_info ? $server_info : $db_version ), 'maria' );
-		// Table count + total data/index size, scoped to this install's prefix
-		// (fast — reads information_schema metadata, not the tables).
-		$tables = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT table_name AS name, ( data_length + index_length ) AS size, table_rows AS rows_count
-				 FROM information_schema.TABLES WHERE table_schema = %s AND table_name LIKE %s
-				 ORDER BY size DESC',
-				DB_NAME,
-				$wpdb->esc_like( $wpdb->prefix ) . '%'
-			)
-		);
+		// Table count + total data/index size, scoped through the browser's own
+		// rule (fast — reads information_schema metadata, not the tables). A
+		// plain prefix LIKE here named a neighbouring install's tables on
+		// shared-database hosting, the same way the browser's list once did.
+		$tables = Minn_Admin_DB::site_tables();
 		$db_size    = 0;
 		$top_tables = array();
 		foreach ( (array) $tables as $i => $tbl ) {
@@ -7738,7 +7732,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$top_tables[] = array(
 					'name' => $tbl->name,
 					'size' => size_format( (int) $tbl->size, 1 ),
-					'rows' => number_format_i18n( (int) $tbl->rows_count ),
+					'rows' => number_format_i18n( (int) ( $tbl->rows_est ?? 0 ) ),
 				);
 			}
 		}
