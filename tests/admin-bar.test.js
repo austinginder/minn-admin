@@ -19,6 +19,21 @@ const { execSync } = require( 'child_process' );
 ( async () => {
 	const t = reporter( 'admin-bar' );
 	const { browser, page, errors } = await launch();
+	// Code Snippets 3.10.0 regression, not Minn: their dist/admin-bar.js
+	// reads the wp-admin-only `pagenow` global at module top level while
+	// their PHP enqueues it on any front-end page where the CORE admin bar
+	// shows — exactly the pages this suite visits when Minn stands down
+	// (the opt-out states and builder canvases). Drop only errors whose
+	// STACK proves that origin, one for one, so a real Minn error with the
+	// same message still fails the gate. Remove when code-snippets ships a
+	// fix (their enqueue_assets has no setting gate, so the fixture cannot
+	// simply switch the feature off).
+	const vendorErrors = [];
+	page.on( 'pageerror', ( e ) => {
+		if ( /code-snippets\/dist\/admin-bar\.js/.test( e.stack || '' ) ) {
+			vendorErrors.push( 'pageerror: ' + e.message );
+		}
+	} );
 	await login( page );
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
 	await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
@@ -450,20 +465,30 @@ const { execSync } = require( 'child_process' );
 		const arrived = await page.evaluate( () => {
 			const el = document.elementFromPoint( 30, 30 );
 			const corner = document.getElementById( 'minn-cornerbar' );
+			const tell = getComputedStyle( document.getElementById( 'minn-bar-root' ), '::before' );
 			return {
 				ghost: corner.classList.contains( 'minn-bar-ghost' ),
 				peek: corner.classList.contains( 'minn-bar-peek' ),
 				hit: !! ( el && el.closest( '.minn-bar-markbtn' ) ),
+				tellOpacity: tell.opacity,
+				tellWidth: tell.width,
 			};
 		} );
 		t.check( 'ghost: a plain arrival starts hidden but keeps the hit area',
 			arrived.ghost && ! arrived.peek && arrived.hit, JSON.stringify( arrived ) );
+		t.check( 'ghost: the accent corner tell shows while hidden',
+			arrived.tellOpacity === '1' && arrived.tellWidth === '9px',
+			JSON.stringify( { opacity: arrived.tellOpacity, width: arrived.tellWidth } ) );
 		await page.mouse.move( 30, 30, { steps: 8 } );
 		await page.waitForFunction( () => {
 			const b = document.getElementById( 'minn-bar' );
 			return getComputedStyle( b ).opacity === '1' && b.getBoundingClientRect().width > 300;
 		}, null, { timeout: 4000 } );
-		t.check( 'ghost: the pointer entering the corner reveals the full control set', true, 'opacity 1, expanded' );
+		await page.waitForFunction( () =>
+			getComputedStyle( document.getElementById( 'minn-bar-root' ), '::before' ).opacity === '0',
+			null, { timeout: 4000 } );
+		t.check( 'ghost: the pointer entering the corner reveals the full control set and fades the tell',
+			true, 'expanded, tell gone' );
 		await page.mouse.move( 700, 500, { steps: 8 } );
 		await page.waitForFunction( () => {
 			const corner = document.getElementById( 'minn-cornerbar' );
@@ -771,5 +796,9 @@ const { execSync } = require( 'child_process' );
 		} catch ( e ) {}
 	}
 
+	vendorErrors.forEach( ( msg ) => {
+		const i = errors.indexOf( msg );
+		if ( i !== -1 ) errors.splice( i, 1 );
+	} );
 	t.done( browser, errors );
 } )();
