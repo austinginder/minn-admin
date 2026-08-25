@@ -31,6 +31,12 @@ if (
 	&& 'breakdancexmlhttprequest' === strtolower( (string) $_SERVER['HTTP_X_REQUESTED_WITH'] )
 	&& isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === strtoupper( (string) $_SERVER['REQUEST_METHOD'] )
 	&& isset( $_SERVER['SCRIPT_NAME'] ) && 'admin-ajax.php' === basename( (string) $_SERVER['SCRIPT_NAME'] )
+	// admin-ajax.php answers logged-out callers too, and the header above is
+	// something any client can send, so require a login cookie as well. The
+	// builder's own requests are authenticated by definition. is_user_logged_in()
+	// does not exist this early; the cookie's presence is the cheap stand-in,
+	// and a false negative here costs nothing but a few log lines.
+	&& ! empty( $_COOKIE[ defined( 'LOGGED_IN_COOKIE' ) ? LOGGED_IN_COOKIE : 'wordpress_logged_in' ] )
 	&& defined( 'WP_PLUGIN_DIR' ) && file_exists( WP_PLUGIN_DIR . '/breakdance/plugin.php' )
 ) {
 	error_reporting( error_reporting() & ~E_DEPRECATED & ~E_USER_DEPRECATED );

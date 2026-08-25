@@ -19,6 +19,7 @@ class Minn_Admin {
 		add_filter( 'query_vars', array( __CLASS__, 'query_vars' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_render_app' ), 0 );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_maintenance_mode' ), 1 );
+		add_filter( 'rest_authentication_errors', array( __CLASS__, 'maintenance_rest' ), 20 );
 		add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar_link' ), 100 );
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
@@ -1197,6 +1198,40 @@ class Minn_Admin {
 			},
 			'dashicons-superhero-alt',
 			2
+		);
+	}
+
+	/**
+	 * Maintenance mode over REST.
+	 *
+	 * template_redirect never runs for a REST request, so the holding page
+	 * covered the front end, the feeds and the sitemaps while /wp-json/ went
+	 * on answering with every published post. On a live site that is the same
+	 * content either way; the case it matters for is the one the holding page
+	 * is written for, a site being staged before launch, where the owner has
+	 * every reason to think the content is not being served yet.
+	 *
+	 * Minn's own namespace is exempt for the same reason the app shell is:
+	 * the people who can still use the site are the people running it.
+	 *
+	 * @param mixed $result Result from a previous filter.
+	 * @return mixed
+	 */
+	public static function maintenance_rest( $result ) {
+		if ( ! empty( $result ) || ! get_option( 'minn_admin_maintenance' ) ) {
+			return $result;
+		}
+		if ( is_user_logged_in() && current_user_can( 'edit_posts' ) ) {
+			return $result;
+		}
+		$route = $GLOBALS['wp']->query_vars['rest_route'] ?? '';
+		if ( is_string( $route ) && 0 === strpos( ltrim( $route, '/' ), Minn_Admin_Rest::NS ) ) {
+			return $result;
+		}
+		return new WP_Error(
+			'minn_admin_maintenance',
+			__( 'This site is undergoing maintenance.', 'minn-admin' ),
+			array( 'status' => 503 )
 		);
 	}
 
