@@ -259,6 +259,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['bricks-templates'] = array(
 		'label'      => __( 'Templates', 'minn-admin' ),
 		'sub'        => 'Bricks',
+		'family'     => 'builder-templates',
 		'icon'       => 'columns',
 		'cap'        => 'edit_posts',
 		'settings'   => array(

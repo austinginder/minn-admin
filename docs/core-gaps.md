@@ -101,13 +101,15 @@ verified empirically at v0.23.0:
    templates/parts as "Edit in Site Editor ↗" rows, current palette). The
    Site Editor canvas itself is a permanent link-out (same reasoning as
    form builders).
-2. **Builder theme templates are invisible (M).** `elementor_library` IS
-   REST-exposed but not `viewable`, so the content switcher (rightly)
-   skips it, meaning a site whose header/footer live in Elementor Theme
-   Builder has no Minn surface listing those templates. Same story for
-   Bricks/Divi template areas. Fits the existing page-builders adapter
-   thesis: list, badge the type (header/footer/popup/archive), show
-   display conditions read-only, deep-link into the builder canvas.
+2. ~~**Builder theme templates are invisible (M).**~~ **SHIPPED for
+   Elementor and Bricks.** `elementor_library` stays hidden from Content
+   (plumbing, not a writing surface) and is listed on a Templates
+   surface instead: type tabs, Pro's Instances column as the conditions
+   summary, create through Elementor's own `documents->create`,
+   duplicate with conditions stripped, export of their interchange JSON,
+   Edit in Elementor. Bricks has the matching surface over
+   `bricks_template`. Remaining: Divi / Beaver Builder template
+   libraries, which still have no listing.
 3. ~~**Per-extension auto-update toggles (S).**~~ **SHIPPED 2026-08-04**
    (v0.23.0 cycle): Auto pills on plugin AND theme cards through
    `minn-admin/v1/auto-updates` (the same option writes as

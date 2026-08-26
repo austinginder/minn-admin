@@ -129,13 +129,15 @@ Third-party builders get the flow for free by including `prepare` in their
 `minn_admin_page_builders` descriptor.
 
 ## Not built (deliberate, candidates for a later round)
-- **Builder templates/libraries** (Elementor library, Divi library, BB saved rows):
-  their CPTs stay hidden from Content (`elementor_library` already is); managing those
-  belongs to the builders.
-- **Theme-builder surfaces** (Divi Theme Builder, Elementor Pro site parts): out of
-  scope — that's site *building*, Minn is site *running*.
-- Elementor Pro was not tested directly (no zip on hand); it shares free's storage and
-  editor URL, so detection and routing hold. Worth a spot-check when a license is around.
+- **Divi / Beaver Builder template libraries:** their CPTs stay hidden from
+  Content; managing those belongs to the builders. Elementor Saved Templates
+  and Theme Builder parts now have a Templates surface (see
+  `adapters/elementor-templates.php`); Bricks has the same shape.
+- **Theme-builder canvases** (Divi Theme Builder, Elementor Pro site parts
+  canvas): still a link-out. Minn lists the parts and deep-links into the
+  builder; it does not reimplement the canvas or the condition pickers.
+- Elementor Pro is a fixture on minnadmin (4.2.2). Detection, fencing, form
+  submissions, and the Templates surface all run against it.
 - Etch's builder booted to a blank app in the lab (SureCart license gate suspected);
   its storage format and edit URL are confirmed from source and its own test fixtures.
 
