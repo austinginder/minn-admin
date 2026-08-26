@@ -242,6 +242,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Bricks',
 		'icon'       => 'columns',
 		'cap'        => 'edit_posts',
+		'settings'   => array(
+			'cap'   => 'manage_options',
+			'tabs'  => array(
+				array( 'id' => 'general', 'label' => __( 'General', 'minn-admin' ) ),
+				array( 'id' => 'templates', 'label' => __( 'Templates', 'minn-admin' ) ),
+				array( 'id' => 'builder', 'label' => __( 'Builder', 'minn-admin' ) ),
+				array( 'id' => 'maintenance', 'label' => __( 'Maintenance', 'minn-admin' ) ),
+			),
+			'route' => 'minn-admin/v1/bricks/settings/{tab}',
+		),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/bricks/templates',
 			'itemsKey'  => 'items',
@@ -464,3 +474,271 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 } );
+
+/* ========================================================================
+ * Bricks global settings — a curated subset on the Templates surface.
+ *
+ * Bricks' settings screen is one hand-rendered form with NO runtime schema
+ * (unlike Perfmatters' Settings-API registry), so mapping all of it would be
+ * a per-version treadmill. This maps the daily-ops subset and counts the
+ * rest as locked with the wp-admin escape per tab. Storage semantics mirror
+ * their save exactly: checkboxes store the literal 'on' and OFF means the
+ * key is ABSENT (their save skips empty values); selects with a Disabled
+ * option unset on ''. Writes are read-modify-write on the whitelisted keys
+ * only — their own save replaces the whole option from the full form, which
+ * Minn must never do from a partial one. The capability pickers, API keys
+ * and custom-code estate are deliberately unmapped (the capability keys
+ * route to role caps through their Capabilities class, not the option).
+ * ======================================================================== */
+
+/**
+ * The curated schema: tab => groups of fields, each field carrying a `store`
+ * spec the write path validates against ('toggle' | 'enum' | 'int' |
+ * 'multicheck' | 'template'). Locked counts are the per-tab remainder of
+ * the Bricks settings screen as of 2.3.12.
+ *
+ * @param string $tab Tab id.
+ * @return array|null Groups array, null for an unknown tab.
+ */
+function minn_admin_bricks_settings_fields( $tab ) {
+	if ( 'general' === $tab ) {
+		$pt_options = array();
+		if ( class_exists( '\Bricks\Helpers' ) && method_exists( '\Bricks\Helpers', 'get_registered_post_types' ) ) {
+			$types = \Bricks\Helpers::get_registered_post_types();
+			unset( $types['attachment'] );
+			foreach ( $types as $slug => $label ) {
+				$pt_options[] = array( $slug, $label );
+			}
+		}
+		return array(
+			array(
+				'title'  => __( 'Editing', 'minn-admin' ),
+				'fields' => array(
+					array( 'key' => 'postTypes', 'label' => __( 'Post types', 'minn-admin' ), 'type' => 'multicheck', 'options' => $pt_options, 'store' => 'multicheck', 'help' => __( 'Which post types can be edited with Bricks.', 'minn-admin' ) ),
+				),
+				'locked' => 12,
+			),
+			array(
+				'title'  => __( 'Features', 'minn-admin' ),
+				'fields' => array(
+					array( 'key' => 'saveFormSubmissions', 'label' => __( 'Save form submissions', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle', 'help' => __( 'Store Bricks form submissions in the database. Turning this on adds a Forms surface to Minn.', 'minn-admin' ) ),
+					array( 'key' => 'disableSeo', 'label' => __( 'Disable Bricks SEO controls', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle', 'help' => __( 'Right when a dedicated SEO plugin owns titles and metas.', 'minn-admin' ) ),
+					array( 'key' => 'disableOpenGraph', 'label' => __( 'Disable Bricks Open Graph tags', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle' ),
+				),
+				'locked' => 18,
+			),
+		);
+	}
+	if ( 'templates' === $tab ) {
+		return array(
+			array(
+				'title'  => __( 'Templates', 'minn-admin' ),
+				'fields' => array(
+					array( 'key' => 'defaultTemplatesDisabled', 'label' => __( 'Disable default templates', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle', 'help' => __( 'Without conditions, published header and footer templates apply everywhere. Turn on to require explicit conditions.', 'minn-admin' ) ),
+					array( 'key' => 'publicTemplates', 'label' => __( 'Public templates', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle', 'help' => __( 'Whether template pages are viewable by anyone, or only logged-in users.', 'minn-admin' ) ),
+					array( 'key' => 'myTemplatesAccess', 'label' => __( 'Remote template access', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle', 'help' => __( 'Allow other sites to browse and insert this site\'s templates from their template library.', 'minn-admin' ) ),
+				),
+				'locked' => 8,
+			),
+		);
+	}
+	if ( 'builder' === $tab ) {
+		return array(
+			array(
+				'title'  => __( 'Autosave', 'minn-admin' ),
+				'fields' => array(
+					array( 'key' => 'builderAutosaveDisabled', 'label' => __( 'Disable autosave', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle' ),
+					array( 'key' => 'builderAutosaveInterval', 'label' => __( 'Autosave interval (seconds)', 'minn-admin' ), 'type' => 'number', 'min' => 15, 'placeholder' => '60', 'store' => 'int', 'showWhen' => array( 'key' => 'builderAutosaveDisabled', 'equals' => false ), 'help' => __( 'Default 60, minimum 15.', 'minn-admin' ) ),
+				),
+			),
+			array(
+				'title'  => __( 'Appearance', 'minn-admin' ),
+				'fields' => array(
+					array( 'key' => 'builderMode', 'label' => __( 'Builder mode', 'minn-admin' ), 'type' => 'select', 'options' => array( array( 'dark', __( 'Dark', 'minn-admin' ) ), array( 'light', __( 'Light', 'minn-admin' ) ), array( 'custom', __( 'Custom', 'minn-admin' ) ) ), 'store' => 'enum', 'enum' => array( 'dark', 'light', 'custom' ), 'help' => __( 'Custom mode\'s CSS is edited on the Bricks settings screen.', 'minn-admin' ) ),
+				),
+				'locked' => 40,
+			),
+		);
+	}
+	if ( 'maintenance' === $tab ) {
+		$template_options = array( array( '', __( 'Default', 'minn-admin' ) ) );
+		$templates        = get_posts( array(
+			'post_type'      => BRICKS_DB_TEMPLATE_SLUG,
+			'posts_per_page' => 100,
+			'orderby'        => 'title',
+			'order'          => 'ASC',
+			'meta_key'       => BRICKS_DB_TEMPLATE_TYPE,
+			'meta_value'     => 'content',
+		) );
+		foreach ( $templates as $tpl ) {
+			$template_options[] = array( (string) $tpl->ID, $tpl->post_title );
+		}
+		return array(
+			array(
+				'title'  => __( 'Maintenance mode', 'minn-admin' ),
+				'fields' => array(
+					array( 'key' => 'maintenanceMode', 'label' => __( 'Mode', 'minn-admin' ), 'type' => 'select', 'options' => array( array( '', __( 'Disabled', 'minn-admin' ) ), array( 'comingSoon', __( 'Coming soon', 'minn-admin' ) ), array( 'maintenance', __( 'Maintenance (503)', 'minn-admin' ) ) ), 'store' => 'enum', 'enum' => array( '', 'comingSoon', 'maintenance' ) ),
+					array( 'key' => 'maintenanceTemplate', 'label' => __( 'Template', 'minn-admin' ), 'type' => 'select', 'options' => $template_options, 'store' => 'template', 'help' => __( 'A Single-type Bricks template to show; Default is Bricks\' built-in holding page.', 'minn-admin' ) ),
+					array( 'key' => 'maintenanceRenderHeader', 'label' => __( 'Render header', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle' ),
+					array( 'key' => 'maintenanceRenderFooter', 'label' => __( 'Render footer', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle' ),
+				),
+				'locked' => 4,
+			),
+		);
+	}
+	return null;
+}
+
+/** Assemble one settings tab's GET payload (groups + current values). */
+function minn_admin_bricks_settings_payload( $tab ) {
+	$groups = minn_admin_bricks_settings_fields( $tab );
+	if ( null === $groups ) {
+		return new WP_Error( 'not_found', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$s      = get_option( 'bricks_global_settings' );
+	$s      = is_array( $s ) ? $s : array();
+	$values = array();
+	$clean  = array();
+	foreach ( $groups as $group ) {
+		$fields = array();
+		foreach ( $group['fields'] as $field ) {
+			$key = $field['key'];
+			switch ( $field['store'] ) {
+				case 'toggle':
+					$values[ $key ] = isset( $s[ $key ] );
+					break;
+				case 'multicheck':
+					$values[ $key ] = isset( $s[ $key ] ) && is_array( $s[ $key ] ) ? array_values( $s[ $key ] ) : array();
+					break;
+				case 'int':
+					$values[ $key ] = isset( $s[ $key ] ) ? (string) $s[ $key ] : '';
+					break;
+				default:
+					$values[ $key ] = isset( $s[ $key ] ) ? (string) $s[ $key ] : ( 'builderMode' === $key ? 'dark' : '' );
+			}
+			unset( $field['store'], $field['enum'] );
+			$fields[] = $field;
+		}
+		$group['fields'] = $fields;
+		$clean[]         = $group;
+	}
+	$anchors = array( 'general' => 'general', 'templates' => 'templates', 'builder' => 'builder', 'maintenance' => 'maintenance' );
+	return array(
+		'groups'   => $clean,
+		'values'   => $values,
+		'adminUrl' => admin_url( 'admin.php?page=bricks-settings#tab-' . $anchors[ $tab ] ),
+	);
+}
+
+add_action( 'rest_api_init', function () {
+	if ( ! minn_admin_bricks_active() ) {
+		return;
+	}
+	register_rest_route( 'minn-admin/v1', '/bricks/settings/(?P<tab>[a-z-]+)', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => function () {
+				return current_user_can( 'manage_options' );
+			},
+			'callback'            => function ( WP_REST_Request $request ) {
+				return rest_ensure_response( minn_admin_bricks_settings_payload( (string) $request['tab'] ) );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => function () {
+				return current_user_can( 'manage_options' );
+			},
+			'callback'            => function ( WP_REST_Request $request ) {
+				$tab    = (string) $request['tab'];
+				$groups = minn_admin_bricks_settings_fields( $tab );
+				if ( null === $groups ) {
+					return new WP_Error( 'not_found', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$incoming = $request['values'];
+				$incoming = is_array( $incoming ) ? $incoming : array();
+				$specs    = array();
+				foreach ( $groups as $group ) {
+					foreach ( $group['fields'] as $field ) {
+						$specs[ $field['key'] ] = $field;
+					}
+				}
+				$s = get_option( 'bricks_global_settings' );
+				$s = is_array( $s ) ? $s : array();
+				$was_saving_submissions = isset( $s['saveFormSubmissions'] );
+				// Only edited keys ride the save; each one validates against
+				// its spec and lands (or unsets) in their storage shape.
+				foreach ( $incoming as $key => $value ) {
+					if ( ! isset( $specs[ $key ] ) ) {
+						continue;
+					}
+					$spec = $specs[ $key ];
+					switch ( $spec['store'] ) {
+						case 'toggle':
+							if ( ! empty( $value ) ) {
+								$s[ $key ] = 'on';
+							} else {
+								unset( $s[ $key ] );
+							}
+							break;
+						case 'multicheck':
+							$allowed = array_map( function ( $o ) {
+								return $o[0];
+							}, $spec['options'] );
+							$picked  = array_values( array_intersect( array_map( 'strval', (array) $value ), $allowed ) );
+							if ( $picked ) {
+								$s[ $key ] = $picked;
+							} else {
+								unset( $s[ $key ] );
+							}
+							break;
+						case 'enum':
+							$value = (string) $value;
+							if ( ! in_array( $value, $spec['enum'], true ) ) {
+								return new WP_Error( 'invalid', __( 'That is not one of the offered choices.', 'minn-admin' ), array( 'status' => 400 ) );
+							}
+							if ( '' === $value ) {
+								unset( $s[ $key ] );
+							} else {
+								$s[ $key ] = $value;
+							}
+							break;
+						case 'int':
+							if ( '' === trim( (string) $value ) ) {
+								unset( $s[ $key ] );
+								break;
+							}
+							$n = (int) $value;
+							if ( isset( $spec['min'] ) && $n < $spec['min'] ) {
+								/* translators: %d: the smallest allowed value. */
+								return new WP_Error( 'invalid', sprintf( __( 'The smallest allowed value is %d.', 'minn-admin' ), $spec['min'] ), array( 'status' => 400 ) );
+							}
+							$s[ $key ] = (string) $n;
+							break;
+						case 'template':
+							$value = (string) $value;
+							if ( '' === $value ) {
+								unset( $s[ $key ] );
+								break;
+							}
+							$tpl = get_post( (int) $value );
+							if ( ! $tpl || BRICKS_DB_TEMPLATE_SLUG !== $tpl->post_type || 'content' !== get_post_meta( $tpl->ID, BRICKS_DB_TEMPLATE_TYPE, true ) ) {
+								return new WP_Error( 'invalid', __( 'Pick a Single-type Bricks template.', 'minn-admin' ), array( 'status' => 400 ) );
+							}
+							$s[ $key ] = (string) $tpl->ID;
+							break;
+					}
+				}
+				update_option( 'bricks_global_settings', $s );
+				// Their own save creates the submissions table the moment the
+				// feature turns on; without it the first submission fatals.
+				if ( ! $was_saving_submissions && isset( $s['saveFormSubmissions'] )
+					&& class_exists( '\Bricks\Integrations\Form\Submission_Database' ) ) {
+					\Bricks\Integrations\Form\Submission_Database::maybe_create_table();
+				}
+				return rest_ensure_response( minn_admin_bricks_settings_payload( $tab ) );
+			},
+		),
+	) );
+} );
+

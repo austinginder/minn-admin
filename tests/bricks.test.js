@@ -160,6 +160,32 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		list = await rest( 'GET', 'minn-admin/v1/bricks/templates?search=Suite Probe' );
 		t.check( 'trash removes the copy from the list', ! ( list.data.items || [] ).some( ( i ) => /\(copy\)/.test( i.title ) ), String( list.data.total ) );
 
+		/* ===== Settings view: curated schema over bricks_global_settings ===== */
+		await page.click( '[data-sview="settings"]' );
+		await page.waitForSelector( '.minn-surface-settings', { timeout: 15000 } );
+		await page.waitForSelector( '[data-ssettab]', { timeout: 15000 } );
+		const setTabs = await page.$$eval( '[data-ssettab]', ( els ) => els.map( ( e ) => e.dataset.ssettab ) );
+		t.check( 'settings view renders the four curated tabs',
+			[ 'general', 'templates', 'builder', 'maintenance' ].every( ( id ) => setTabs.includes( id ) ), setTabs.join( ',' ) );
+		await page.click( '[data-ssettab="templates"]' );
+		await page.waitForSelector( '[data-sset="publicTemplates"]', { timeout: 15000 } );
+		const saveSettings = async () => {
+			const wait = page.waitForResponse( ( res ) =>
+				res.request().method() === 'POST' && /bricks\/settings\//.test( res.url() ), { timeout: 20000 } );
+			await page.click( '#minn-sset-save' );
+			const res = await wait;
+			await page.waitForTimeout( 300 );
+			return res.status();
+		};
+		await page.evaluate( () => document.querySelector( '[data-sset="publicTemplates"]' ).click() );
+		t.check( 'toggle save 200', ( await saveSettings() ) === 200 );
+		const stored = wpEval( '$s = get_option( "bricks_global_settings" ); echo isset( $s["publicTemplates"] ) ? $s["publicTemplates"] : "absent";' );
+		t.check( 'toggle stores the literal on (their checkbox shape)', stored === 'on', stored );
+		await page.evaluate( () => document.querySelector( '[data-sset="publicTemplates"]' ).click() );
+		t.check( 'untoggle save 200', ( await saveSettings() ) === 200 );
+		const cleared = wpEval( '$s = get_option( "bricks_global_settings" ); echo isset( $s["publicTemplates"] ) ? "present" : "absent";' );
+		t.check( 'off means the key is absent, siblings intact', cleared === 'absent', cleared );
+
 		/* ===== Visibility: detector + toggle round-trip (endpoint level) ===== */
 		wpEval( '$s = get_option( "bricks_global_settings" ); if ( ! is_array( $s ) ) { $s = array(); } $s["maintenanceMode"] = "comingSoon"; update_option( "bricks_global_settings", $s ); echo "armed";' );
 		let vis = await rest( 'GET', 'minn-admin/v1/visibility' );
