@@ -742,3 +742,351 @@ add_action( 'rest_api_init', function () {
 	) );
 } );
 
+/* ========================================================================
+ * Bricks form submissions — the forms-family surface.
+ *
+ * Rows live in {prefix}bricks_form_submissions (only while the
+ * saveFormSubmissions setting is on; their save creates the table).
+ * form_data is one JSON map of { field_id: { type, value } }; labels
+ * resolve through Submission_Database::get_form_settings() against the
+ * form element stored in the source post. created_at is UTC
+ * (current_time('mysql', true)). Reading gates on Bricks' own resolved
+ * access flag (Capabilities::$form_submission_access — user cap, then the
+ * explicit _off cap, then role, then the administrator default; set on
+ * init, so it is resolved by REST time). Deleting gates on manage_options,
+ * exactly like their delete_data(); their own screen offers viewers no
+ * read/favorite verbs either, so neither does this one.
+ * ======================================================================== */
+
+function minn_admin_bricks_forms_ready() {
+	if ( ! minn_admin_bricks_active() || ! class_exists( '\Bricks\Integrations\Form\Submission_Database' ) ) {
+		return false;
+	}
+	$s = get_option( 'bricks_global_settings' );
+	if ( ! is_array( $s ) || ! isset( $s['saveFormSubmissions'] ) ) {
+		return false;
+	}
+	global $wpdb;
+	$table = \Bricks\Integrations\Form\Submission_Database::get_table_name();
+	return (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+}
+
+function minn_admin_bricks_forms_can_view() {
+	return class_exists( '\Bricks\Capabilities' ) && ! empty( \Bricks\Capabilities::$form_submission_access );
+}
+
+/** Field-id => label map for one form, through their own settings resolver. */
+function minn_admin_bricks_form_labels( $post_id, $form_id ) {
+	static $cache = array();
+	$key = $post_id . ':' . $form_id;
+	if ( ! isset( $cache[ $key ] ) ) {
+		$labels   = array();
+		$settings = \Bricks\Integrations\Form\Submission_Database::get_form_settings( $post_id, $form_id );
+		foreach ( (array) ( $settings['fields'] ?? array() ) as $field ) {
+			if ( isset( $field['id'] ) ) {
+				$labels[ (string) $field['id'] ] = ! empty( $field['label'] ) ? (string) $field['label'] : (string) ( $field['type'] ?? $field['id'] );
+			}
+		}
+		$cache[ $key ] = array(
+			'labels' => $labels,
+			'name'   => (string) ( $settings['submissionFormName'] ?? '' ),
+		);
+	}
+	return $cache[ $key ];
+}
+
+/** Human name for a form: their submission name, else the source page's title. */
+function minn_admin_bricks_form_title( $post_id, $form_id ) {
+	$info = minn_admin_bricks_form_labels( $post_id, $form_id );
+	if ( '' !== $info['name'] ) {
+		return $info['name'];
+	}
+	$page = $post_id ? get_the_title( $post_id ) : '';
+	return '' !== $page ? $page : $form_id;
+}
+
+/** One field value flattened to display text (arrays joined, files by name). */
+function minn_admin_bricks_field_text( $field ) {
+	$value = $field['value'] ?? '';
+	$type  = $field['type'] ?? '';
+	if ( is_array( $value ) ) {
+		if ( 'file' === $type ) {
+			$names = array();
+			foreach ( $value as $file ) {
+				if ( is_array( $file ) && isset( $file['name'] ) ) {
+					$names[] = (string) $file['name'];
+				}
+			}
+			return implode( ', ', $names );
+		}
+		return implode( ', ', array_map( 'strval', $value ) );
+	}
+	return (string) $value;
+}
+
+/** Normalize a submissions row into a list item. */
+function minn_admin_bricks_entry_item( $row ) {
+	$data  = json_decode( (string) $row->form_data, true );
+	$parts = array();
+	foreach ( (array) $data as $field ) {
+		$text = is_array( $field ) ? minn_admin_bricks_field_text( $field ) : '';
+		if ( '' !== trim( $text ) ) {
+			$parts[] = $text;
+		}
+		if ( count( $parts ) >= 3 ) {
+			break;
+		}
+	}
+	$summary = implode( ' · ', $parts );
+	if ( function_exists( 'mb_substr' ) && mb_strlen( $summary ) > 110 ) {
+		$summary = mb_substr( $summary, 0, 109 ) . '…';
+	}
+	return array(
+		'id'      => (int) $row->id,
+		'summary' => '' !== $summary ? $summary : __( '(empty submission)', 'minn-admin' ),
+		'form'    => minn_admin_bricks_form_title( (int) $row->post_id, (string) $row->form_id ),
+		'form_id' => (string) $row->form_id,
+		'when'    => (string) $row->created_at,
+	);
+}
+
+add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
+	if ( ! minn_admin_bricks_forms_ready() || ! minn_admin_bricks_forms_can_view() ) {
+		return $surfaces;
+	}
+	$actions = array(
+		array(
+			'label' => __( 'Open in Bricks ↗', 'minn-admin' ),
+			'href'  => admin_url( 'admin.php?page=bricks-form-submissions&view=form_entries&form_id={form_id}' ),
+		),
+	);
+	$bulk    = array();
+	if ( current_user_can( 'manage_options' ) ) {
+		array_unshift( $actions, array(
+			'label'   => __( 'Delete entry', 'minn-admin' ),
+			'method'  => 'DELETE',
+			'route'   => 'minn-admin/v1/bricks/entries/{id}',
+			'confirm' => __( 'Delete this submission permanently? Bricks keeps no trash for them.', 'minn-admin' ),
+			'danger'  => true,
+		) );
+		$bulk[] = array(
+			'label'   => __( 'Delete', 'minn-admin' ),
+			'method'  => 'DELETE',
+			'route'   => 'minn-admin/v1/bricks/entries/{id}',
+			'confirm' => __( 'Delete the selected submissions permanently? Bricks keeps no trash for them.', 'minn-admin' ),
+			'danger'  => true,
+		);
+	}
+	$surfaces['bricks-forms'] = array(
+		'label'      => __( 'Forms', 'minn-admin' ),
+		'family'     => 'forms',
+		'group'      => 'workspace',
+		'sub'        => 'Bricks',
+		'icon'       => 'inbox',
+		'cap'        => 'read',
+		'status'     => array( 'route' => 'minn-admin/v1/bricks/forms-status' ),
+		'collection' => array(
+			'viewLabel' => __( 'Submissions', 'minn-admin' ),
+			'route'     => 'minn-admin/v1/bricks/entries',
+			'pageQuery' => 'per_page=25&page={page}',
+			'search'    => 'search={q}',
+			'itemsKey'  => 'items',
+			'totalKey'  => 'total',
+			'tabs'      => array(
+				'route'    => 'minn-admin/v1/bricks/forms',
+				'valueKey' => 'id',
+				'labelKey' => 'title',
+				'param'    => 'form_id',
+				'allLabel' => __( 'All submissions', 'minn-admin' ),
+			),
+			'columns'   => array(
+				array( 'key' => 'summary', 'label' => __( 'Submission', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ) ),
+				array( 'key' => 'when', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
+			),
+			'detail'    => array(
+				'sectionsRoute' => 'minn-admin/v1/bricks/entries/{id}',
+			),
+			'actions'   => $actions,
+		),
+	);
+	if ( $bulk ) {
+		$surfaces['bricks-forms']['collection']['bulk'] = $bulk;
+	}
+	return $surfaces;
+} );
+
+add_action( 'rest_api_init', function () {
+	if ( ! minn_admin_bricks_forms_ready() ) {
+		return;
+	}
+	$view_perm = function () {
+		return minn_admin_bricks_forms_can_view();
+	};
+	$table = \Bricks\Integrations\Form\Submission_Database::get_table_name();
+
+	// The forms tab list: entries grouped by form_id (their overview query).
+	register_rest_route( 'minn-admin/v1', '/bricks/forms', array(
+		'methods'             => 'GET',
+		'permission_callback' => $view_perm,
+		'callback'            => function () use ( $table ) {
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.PreparedSQL -- table name is prefix-built
+			$rows  = $wpdb->get_results( "SELECT form_id, MAX(post_id) AS post_id, COUNT(*) AS entries FROM {$table} GROUP BY form_id ORDER BY MAX(id) DESC LIMIT 50" );
+			$items = array();
+			foreach ( (array) $rows as $row ) {
+				$items[] = array(
+					'id'      => (string) $row->form_id,
+					'title'   => minn_admin_bricks_form_title( (int) $row->post_id, (string) $row->form_id ),
+					'entries' => (int) $row->entries,
+				);
+			}
+			return rest_ensure_response( $items );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/bricks/forms-status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $view_perm,
+		'callback'            => function () use ( $table ) {
+			global $wpdb;
+			// phpcs:disable WordPress.DB.PreparedSQL -- table name is prefix-built
+			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+			$forms = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT form_id) FROM {$table}" );
+			$last  = $wpdb->get_var( "SELECT created_at FROM {$table} ORDER BY id DESC LIMIT 1" );
+			// phpcs:enable
+			$rows = array(
+				array( 'label' => __( 'Submissions', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
+				array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => (string) $forms ),
+			);
+			if ( $last ) {
+				$rows[] = array(
+					'label' => __( 'Last submission', 'minn-admin' ),
+					// created_at is UTC; show it in the site's timezone.
+					'value' => date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( get_date_from_gmt( $last ) ) ),
+				);
+			}
+			return rest_ensure_response( array(
+				'rows'    => $rows,
+				'actions' => array(
+					array( 'label' => __( 'Open Bricks form submissions ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=bricks-form-submissions' ) ),
+				),
+			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/bricks/entries', array(
+		'methods'             => 'GET',
+		'permission_callback' => $view_perm,
+		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
+			global $wpdb;
+			$form_id  = trim( (string) $request['form_id'] );
+			$search   = trim( (string) $request['search'] );
+			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
+			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
+			$where    = '1=1';
+			$args     = array();
+			if ( '' !== $form_id ) {
+				$where .= ' AND form_id = %s';
+				$args[] = $form_id;
+			}
+			if ( '' !== $search ) {
+				// Their screen searches the raw form_data JSON the same way.
+				$where .= ' AND form_data LIKE %s';
+				$args[] = '%' . $wpdb->esc_like( $search ) . '%';
+			}
+			// phpcs:disable WordPress.DB.PreparedSQL -- table name is prefix-built, where prepared above
+			$total = (int) $wpdb->get_var( $args ? $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where}", $args ) : "SELECT COUNT(*) FROM {$table} WHERE {$where}" );
+			$rows  = $wpdb->get_results( $wpdb->prepare(
+				"SELECT * FROM {$table} WHERE {$where} ORDER BY id DESC LIMIT %d OFFSET %d",
+				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
+			) );
+			// phpcs:enable
+			return rest_ensure_response( array(
+				'items' => array_map( 'minn_admin_bricks_entry_item', (array) $rows ),
+				'total' => $total,
+			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/bricks/entries/(?P<id>\d+)', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $view_perm,
+			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
+				global $wpdb;
+				// phpcs:ignore WordPress.DB.PreparedSQL -- table name is prefix-built
+				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $request['id'] ) );
+				if ( ! $row ) {
+					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$info     = minn_admin_bricks_form_labels( (int) $row->post_id, (string) $row->form_id );
+				$data     = json_decode( (string) $row->form_data, true );
+				$response = array();
+				foreach ( (array) $data as $field_id => $field ) {
+					if ( ! is_array( $field ) ) {
+						continue;
+					}
+					$label = $info['labels'][ (string) $field_id ] ?? (string) $field_id;
+					$type  = (string) ( $field['type'] ?? '' );
+					$field_row = array(
+						'label' => $label,
+						'value' => minn_admin_bricks_field_text( $field ),
+					);
+					if ( 'email' === $type ) {
+						$field_row['type'] = 'email';
+					}
+					$response[] = $field_row;
+				}
+				$meta   = array();
+				$meta[] = array(
+					'label' => __( 'Date', 'minn-admin' ),
+					'value' => date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( get_date_from_gmt( (string) $row->created_at ) ) ),
+				);
+				$meta[] = array( 'label' => __( 'Form', 'minn-admin' ), 'value' => minn_admin_bricks_form_title( (int) $row->post_id, (string) $row->form_id ) . ' (' . (string) $row->form_id . ')' );
+				if ( $row->post_id && get_post( (int) $row->post_id ) ) {
+					$meta[] = array( 'label' => __( 'Page', 'minn-admin' ), 'value' => get_permalink( (int) $row->post_id ), 'type' => 'url' );
+				}
+				foreach ( array( 'browser' => __( 'Browser', 'minn-admin' ), 'os' => __( 'System', 'minn-admin' ), 'ip' => __( 'IP address', 'minn-admin' ), 'referrer' => __( 'Referrer', 'minn-admin' ) ) as $col => $label ) {
+					if ( ! empty( $row->{$col} ) ) {
+						$meta[] = array( 'label' => $label, 'value' => (string) $row->{$col} );
+					}
+				}
+				if ( ! empty( $row->user_id ) ) {
+					$user   = get_user_by( 'id', (int) $row->user_id );
+					$meta[] = array( 'label' => __( 'User', 'minn-admin' ), 'value' => $user ? $user->display_name : ( '#' . (int) $row->user_id ) );
+				}
+				return rest_ensure_response( array(
+					'kind'     => 'entry',
+					'sections' => array(
+						array( 'title' => __( 'Response', 'minn-admin' ), 'rows' => $response ),
+						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
+					),
+					'adminUrl' => admin_url( 'admin.php?page=bricks-form-submissions&view=form_entries&form_id=' . rawurlencode( (string) $row->form_id ) ),
+				) );
+			},
+		),
+		array(
+			'methods'             => 'DELETE',
+			'permission_callback' => function () {
+				// Their delete_data gate: viewing is submission access, but
+				// removal is manage_options only.
+				return current_user_can( 'manage_options' );
+			},
+			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
+				global $wpdb;
+				$id = (int) $request['id'];
+				// phpcs:ignore WordPress.DB.PreparedSQL -- table name is prefix-built
+				$exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
+				if ( ! $exists ) {
+					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$deleted = \Bricks\Integrations\Form\Submission_Database::delete_data( $id );
+				if ( ! $deleted ) {
+					return new WP_Error( 'failed', __( 'The submission could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
+				}
+				return rest_ensure_response( array( 'deleted' => $id ) );
+			},
+		),
+	) );
+} );
