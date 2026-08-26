@@ -535,6 +535,25 @@ add_action( 'rest_api_init', function () {
 	) );
 } );
 
+// Bricks generated-CSS regeneration joins "Clear site cache" (the Elementor
+// CSS precedent). Assets_Files only autoloads while the cssLoading setting
+// is 'file' (Assets' constructor gates the include), so the class check IS
+// the external-files-mode check — inline-mode sites never see the provider.
+add_filter( 'minn_admin_cache_purgers', function ( $purgers ) {
+	if ( class_exists( '\Bricks\Assets_Files' ) && method_exists( '\Bricks\Assets_Files', 'regenerate_css_files' ) ) {
+		$purgers[] = array(
+			'id'    => 'bricks-css',
+			'name'  => 'Bricks CSS files',
+			// Synchronous is their own precedent: their post-update admin
+			// notice runs the same call in-request.
+			'purge' => function () {
+				\Bricks\Assets_Files::regenerate_css_files();
+			},
+		);
+	}
+	return $purgers;
+} );
+
 /* ========================================================================
  * Bricks global settings — a curated subset on the Templates surface.
  *

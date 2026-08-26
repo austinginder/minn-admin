@@ -212,6 +212,22 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		const cleared = wpEval( '$s = get_option( "bricks_global_settings" ); echo isset( $s["publicTemplates"] ) ? "present" : "absent";' );
 		t.check( 'off means the key is absent, siblings intact', cleared === 'absent', cleared );
 
+		/* ===== CSS-files purger: only in external-files mode ===== */
+		const cachePurge = () => page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/cache/purge', {
+				method: 'POST', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				body: JSON.stringify( { provider: 'bricks-css' } ),
+			} );
+			return { status: r.status, data: await r.json().catch( () => null ) };
+		} );
+		const inlineTry = await cachePurge();
+		t.check( 'purger absent while CSS is inline', inlineTry.status !== 200 || ! ( inlineTry.data.purged || [] ).length, JSON.stringify( inlineTry.data ) );
+		wpEval( '$s = get_option( "bricks_global_settings" ); $s["cssLoading"] = "file"; update_option( "bricks_global_settings", $s ); echo "armed";' );
+		const fileTry = await cachePurge();
+		t.check( 'file mode regenerates through their Assets_Files', fileTry.status === 200 && ( fileTry.data.purged || [] ).includes( 'Bricks CSS files' ), JSON.stringify( fileTry.data ) );
+		wpEval( '$s = get_option( "bricks_global_settings" ); unset( $s["cssLoading"] ); update_option( "bricks_global_settings", $s ); echo "restored";' );
+
 		/* ===== Visibility: detector + toggle round-trip (endpoint level) ===== */
 		wpEval( '$s = get_option( "bricks_global_settings" ); if ( ! is_array( $s ) ) { $s = array(); } $s["maintenanceMode"] = "comingSoon"; update_option( "bricks_global_settings", $s ); echo "armed";' );
 		let vis = await rest( 'GET', 'minn-admin/v1/visibility' );
