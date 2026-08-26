@@ -69,6 +69,18 @@ function minn_admin_bricks_can_create() {
 	return current_user_can( 'edit_posts' );
 }
 
+/** Whether the current user may export templates, through Bricks' own resolver. */
+function minn_admin_bricks_can_export() {
+	if ( class_exists( '\Bricks\Builder_Permissions' ) && method_exists( '\Bricks\Builder_Permissions', 'user_has_permission' ) ) {
+		try {
+			return (bool) \Bricks\Builder_Permissions::user_has_permission( 'import_export_templates' );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+	return current_user_can( 'edit_posts' );
+}
+
 /**
  * Human-readable summary of a template's display conditions.
  *
@@ -229,6 +241,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route' => 'minn-admin/v1/bricks/templates/{id}/duplicate',
 		);
 	}
+	if ( minn_admin_bricks_can_export() ) {
+		$actions[] = array(
+			'label'    => __( 'Export template', 'minn-admin' ),
+			'route'    => 'minn-admin/v1/bricks/templates/{id}/export',
+			'download' => true,
+		);
+	}
 	$actions[] = array(
 		'label'   => __( 'Move to trash', 'minn-admin' ),
 		'method'  => 'DELETE',
@@ -286,6 +305,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'fields' => array(
 						array( 'key' => 'title', 'label' => __( 'Title', 'minn-admin' ) ),
 						array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_select ),
+						// template_tag is not REST-exposed, so the Terms
+						// manager never sees it — this is the one place tags
+						// can be edited in Minn.
+						array( 'key' => 'tags', 'label' => __( 'Tags', 'minn-admin' ), 'type' => 'tags', 'required' => false ),
 					),
 				),
 			),
@@ -409,6 +432,17 @@ add_action( 'rest_api_init', function () {
 					}
 					update_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, $type );
 				}
+				// Tags ride as an array (an empty one clears); by NAME so new
+				// tags create on the fly, like their tax_input create path.
+				if ( is_array( $request['tags'] ) ) {
+					$tags = array_values( array_filter( array_map( function ( $tag ) {
+						return sanitize_text_field( (string) $tag );
+					}, $request['tags'] ) ) );
+					$set  = wp_set_object_terms( $post->ID, $tags, BRICKS_DB_TEMPLATE_TAX_TAG );
+					if ( is_wp_error( $set ) ) {
+						return $set;
+					}
+				}
 				return rest_ensure_response( minn_admin_bricks_template_item( get_post( $post->ID ) ) );
 			},
 		),
@@ -430,6 +464,32 @@ add_action( 'rest_api_init', function () {
 				return rest_ensure_response( array( 'trashed' => (int) $post->ID ) );
 			},
 		),
+	) );
+
+	// Export through Bricks' own exporter: called with an explicit id outside
+	// ajax it returns { name, content } — the same payload their screen
+	// downloads (element tree, settings, the global classes and variables the
+	// template uses), so the file imports cleanly via Bricks' own importer.
+	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)/export', array(
+		'methods'             => 'GET',
+		'permission_callback' => function ( WP_REST_Request $request ) {
+			return minn_admin_bricks_can_export() && current_user_can( 'edit_post', (int) $request['id'] );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			$post = get_post( (int) $request['id'] );
+			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
+				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$export = \Bricks\Templates::export_template( $post->ID );
+			if ( ! is_array( $export ) || empty( $export['content'] ) ) {
+				return new WP_Error( 'failed', __( 'Bricks could not export this template.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array(
+				'filename' => (string) $export['name'],
+				'content'  => (string) $export['content'],
+				'mime'     => 'application/json',
+			) );
+		},
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)/duplicate', array(

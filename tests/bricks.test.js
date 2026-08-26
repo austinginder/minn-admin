@@ -119,6 +119,32 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		probe = ( list.data.items || [] ).find( ( i ) => i.id === probeIds[ 0 ] );
 		t.check( 'edit persists rename + type change', !! probe && probe.title === 'Suite Probe Popup' && probe.type === 'popup', JSON.stringify( probe ) );
 
+		/* ===== Tags edit + Export action (probe row) ===== */
+		await page.waitForFunction( () => ! document.querySelector( '[data-editfield="title"]' ), null, { timeout: 15000 } );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) )
+				.find( ( r ) => r.textContent.includes( 'Suite Probe Popup' ) ).click();
+		} );
+		await page.waitForSelector( '[data-editfield="tags"]', { timeout: 10000 } );
+		t.check( 'detail offers the Export action', await page.evaluate( () =>
+			Array.from( document.querySelectorAll( '[data-saction]' ) ).some( ( b ) => /Export/.test( b.textContent ) ) ) );
+		await page.type( '[data-editfield="tags"]', 'suite-tag-a, suite tag b' );
+		// Wait on the PUT response, never toast text: the rename save's toast
+		// lingers and satisfies a text wait before this save even lands.
+		const tagsSaved = page.waitForResponse( ( res ) =>
+			res.request().method() === 'PUT' && /bricks\/templates\//.test( res.url() ), { timeout: 20000 } );
+		await page.click( '#minn-surface-save' );
+		await tagsSaved;
+		list = await rest( 'GET', 'minn-admin/v1/bricks/templates?search=Suite Probe' );
+		probe = ( list.data.items || [] ).find( ( i ) => i.id === probeIds[ 0 ] );
+		t.check( 'tags create and attach through the edit field', !! probe && /suite-tag-a/.test( probe.tags ) && /suite tag b/.test( probe.tags ), probe && probe.tags );
+		const exported = await rest( 'GET', 'minn-admin/v1/bricks/templates/' + probeIds[ 0 ] + '/export' );
+		let exportPayload = null;
+		try { exportPayload = JSON.parse( exported.data.content ); } catch ( e ) { /* stays null */ }
+		t.check( 'export serves Bricks\' own payload as a download', exported.status === 200
+			&& /\.json$/.test( exported.data.filename ) && !! exportPayload && exportPayload.templateType === 'popup',
+			exported.data.filename );
+
 		/* ===== Duplicate from the detail modal ===== */
 		await page.waitForFunction( () => ! document.querySelector( '[data-editfield="title"]' ), null, { timeout: 15000 } );
 		await page.evaluate( () => {
@@ -208,8 +234,9 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		}, BASE );
 		t.check( 'anonymous front end answers 503 under maintenance', front === 503, String( front ) );
 	} finally {
-		// Resting state: no maintenance key, no restore memory, no probe posts.
-		wpEval( '$s = get_option( "bricks_global_settings" ); if ( is_array( $s ) ) { unset( $s["maintenanceMode"] ); update_option( "bricks_global_settings", $s ); } delete_option( "minn_admin_vis_restore" ); echo "clean";' );
+		// Resting state: no maintenance key, inline CSS, no restore memory,
+		// no probe posts or suite tags.
+		wpEval( '$s = get_option( "bricks_global_settings" ); if ( is_array( $s ) ) { unset( $s["maintenanceMode"], $s["cssLoading"] ); update_option( "bricks_global_settings", $s ); } delete_option( "minn_admin_vis_restore" ); foreach ( get_terms( array( "taxonomy" => "template_tag", "hide_empty" => false, "search" => "suite" ) ) as $t ) { wp_delete_term( $t->term_id, "template_tag" ); } echo "clean";' );
 		for ( const id of probeIds ) {
 			try { wpEval( 'wp_delete_post( ' + id + ', true ); echo "gone";' ); } catch ( e ) { /* already gone */ }
 		}
