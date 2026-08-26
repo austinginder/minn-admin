@@ -142,6 +142,23 @@ function minn_admin_visibility_toggles() {
 		} );
 	}
 
+	if ( defined( 'BRICKS_VERSION' ) ) {
+		// Off = the key ABSENT from bricks_global_settings (their settings save
+		// drops empty values, and the maintenance gate reads the key's truthiness).
+		$t['bricks'] = array( 'set' => function ( $on, $ctx = array() ) {
+			$s = get_option( 'bricks_global_settings' );
+			if ( ! is_array( $s ) ) {
+				$s = array();
+			}
+			if ( $on ) {
+				$s['maintenanceMode'] = isset( $ctx['kind'] ) && 'maintenance' === $ctx['kind'] ? 'maintenance' : 'comingSoon';
+			} else {
+				unset( $s['maintenanceMode'] );
+			}
+			update_option( 'bricks_global_settings', $s );
+		} );
+	}
+
 	/**
 	 * Register a writer for a provider your plugin reports via
 	 * `minn_admin_visibility_providers`. See docs/for-plugin-authors.md.
@@ -295,6 +312,24 @@ function minn_admin_site_visibility() {
 				'id'   => 'elementor',
 				'kind' => 'maintenance' === $el_mode ? 'maintenance' : 'coming-soon',
 				'url'  => admin_url( 'admin.php?page=elementor-tools#tab-maintenance_mode' ),
+			);
+		}
+	}
+
+	// Bricks maintenance mode (theme; Bricks → Settings → Maintenance):
+	// bricks_global_settings['maintenanceMode'] is 'maintenance' | 'comingSoon',
+	// the key absent when off (their save drops empty values). Read the option
+	// directly, never Database::get_setting — its static cache goes stale
+	// within the very request that toggles the mode.
+	if ( defined( 'BRICKS_VERSION' ) ) {
+		$s = get_option( 'bricks_global_settings' );
+		$bricks_mode = is_array( $s ) && isset( $s['maintenanceMode'] ) ? (string) $s['maintenanceMode'] : '';
+		if ( 'maintenance' === $bricks_mode || 'comingSoon' === $bricks_mode ) {
+			$providers[] = array(
+				'name' => __( 'Bricks maintenance mode', 'minn-admin' ),
+				'id'   => 'bricks',
+				'kind' => 'maintenance' === $bricks_mode ? 'maintenance' : 'coming-soon',
+				'url'  => admin_url( 'admin.php?page=bricks-settings#tab-maintenance' ),
 			);
 		}
 	}
