@@ -158,6 +158,27 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		t.check( 'create without a title is refused', bad.status === 400, JSON.stringify( bad.data ) );
 		const badType = await rest( 'POST', 'minn-admin/v1/elementor/templates', { title: 'Nope', type: 'kit' } );
 		t.check( 'create with a skipped type is refused', badType.status === 400, JSON.stringify( badType.data ) );
+
+		t.check( 'type tabs include Floating Buttons',
+			( surface.collection.tabs.static || [] ).some( ( tab ) => tab[ 0 ] === 'floating-buttons' ),
+			String( ( surface.collection.tabs.static || [] ).map( ( tab ) => tab[ 0 ] ) ) );
+		const floated = await rest( 'POST', 'minn-admin/v1/elementor/templates', { title: 'Suite Probe Float', type: 'floating-buttons' } );
+		t.check( 'create a floating button through the same route', floated.status === 200 && floated.data && floated.data.type === 'floating-buttons', JSON.stringify( floated.data ) );
+		if ( floated.data && floated.data.id ) {
+			probeIds.push( floated.data.id );
+			const listed = await rest( 'GET', 'minn-admin/v1/elementor/templates?type=floating-buttons&search=Suite Probe Float' );
+			t.check( 'Floating Buttons tab lists the new item', ( listed.data.items || [] ).some( ( i ) => i.id === floated.data.id ), String( listed.data.total ) );
+			const dupFloat = await rest( 'POST', 'minn-admin/v1/elementor/templates/' + floated.data.id + '/duplicate' );
+			t.check( 'duplicate keeps the floating type', dupFloat.status === 200 && dupFloat.data && dupFloat.data.type === 'floating-buttons', JSON.stringify( dupFloat.data ) );
+			if ( dupFloat.data && dupFloat.data.id ) probeIds.push( dupFloat.data.id );
+		}
+
+		const card = await rest( 'GET', 'minn-admin/v1/elementor/templates/status' );
+		const labels = ( ( card.data && card.data.rows ) || [] ).map( ( r ) => r.label );
+		t.check( 'status card reports template counts', card.status === 200 && labels.includes( 'Templates' ) && labels.includes( 'Floating buttons' ), JSON.stringify( card.data ) );
+		t.check( 'status card links to Elementor',
+			( ( card.data && card.data.actions ) || [] ).some( ( a ) => /post_type=elementor_library/.test( a.href || '' ) ),
+			JSON.stringify( card.data && card.data.actions ) );
 	} finally {
 		for ( const id of probeIds ) {
 			try { wpEval( 'wp_delete_post( ' + id + ', true ); echo "gone";' ); } catch ( e ) { /* already gone */ }

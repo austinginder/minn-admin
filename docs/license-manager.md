@@ -464,7 +464,7 @@ inventory against this list before committing an order.
 | **Delicious Brains / WP Engine** | WP Migrate, WP Offload Media, WP Offload SES | Three products, one vendor. WP Offload SES also has an email log that would slot into the mail family. |
 | **Crocoblock** | JetEngine + the Jet* pack | One license for ~20 Elementor-ecosystem plugins. |
 | **OTGS / multilingual** | WPML, Polylang Pro, TranslatePress | Surfaces are parked structurally (language dimension), but license rows need none of that. WPML runs on a large share of client sites. |
-| **Elementor addon packs** | Essential Addons Pro, Premium Addons Pro, ElementsKit, The Plus | Surfaces deliberately fenced; licenses still readable. Unlimited Elements, Stackable Premium and Permalink Manager Pro are already on the open list above. |
+| **Elementor addon packs** | ~~Essential Addons Pro~~ (SHIPPED 2026-08-26: dedicated reader + activate/deactivate/verify through WPDeveloper License\Manager; OTP is an honest message), Premium Addons Pro, ElementsKit, The Plus | Surfaces deliberately fenced; licenses still readable. Unlimited Elements, Stackable Premium and Permalink Manager Pro are already on the open list above. |
 | **Odds and ends** | MemberPress, Meta Box AIO, WCPDF Pro (WP Overnight), WP Grid Builder, Smart Slider 3 Pro, WP Staging Pro, Barn2, YITH | Meta Box and WCPDF already have surface adapters, so their license rows are cheap completions. YITH is its own multi-product scheme like Crocoblock. |
 
 The category-level surface gaps found in the same inventory (traffic

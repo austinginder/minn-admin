@@ -1088,6 +1088,32 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// Essential Addons Pro: WPDeveloper license client (not stock EDD
+	// option names). Prefix is their item slug. Status is an EDD word.
+	$providers['essential-addons-elementor'] = array(
+		'name'      => 'Essential Addons Pro',
+		'component' => 'essential-addons-elementor/essential_adons_elementor.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'essential-addons-elementor/essential_adons_elementor.php' );
+		},
+		'read'      => function () use ( $item, $edd_state ) {
+			$prefix = 'essential-addons-elementor';
+			$key    = trim( (string) get_option( $prefix . '_license' ) );
+			if ( '' === $key ) {
+				$key = trim( (string) get_option( $prefix . '-license-key' ) );
+			}
+			if ( '' === $key ) {
+				return array( $item( array( 'name' => 'Essential Addons Pro', 'state' => 'missing' ) ) );
+			}
+			$status = (string) get_option( $prefix . '_license_status' );
+			if ( '' === $status ) {
+				$status = (string) get_option( $prefix . '-license-status' );
+			}
+			list( $state, $note ) = $edd_state( $status );
+			return array( $item( array( 'name' => 'Essential Addons Pro', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
 	// ACF Pro: base64 key option + a parsed status array
 	// {status, expiry (epoch), lifetime, refunded, error_msg}.
 	$providers['acf-pro'] = array(
@@ -2895,6 +2921,83 @@ function minn_admin_license_default_providers() {
 				return array( 'ok' => false, 'code' => $code, 'message' => '' !== $err ? str_replace( '_', ' ', $err ) : __( 'Elementor did not confirm the license', 'minn-admin' ) );
 			}
 			return array( 'ok' => true );
+		};
+	}
+
+	// Essential Addons Pro: WPDeveloper License\Manager. Constructed only
+	// in is_admin() by the plugin, so REST must get_instance() with the
+	// same args. required_otp means finish on their settings screen; we
+	// never collect the email code.
+	if ( class_exists( '\Essential_Addons_Elementor\Pro\Classes\License\Manager' ) && defined( 'EAEL_PRO_PLUGIN_FILE' ) ) {
+		$eael_mgr = function () {
+			try {
+				return \Essential_Addons_Elementor\Pro\Classes\License\Manager::get_instance( array(
+					'plugin_file'    => EAEL_PRO_PLUGIN_FILE,
+					'version'        => defined( 'EAEL_PRO_PLUGIN_VERSION' ) ? EAEL_PRO_PLUGIN_VERSION : '',
+					'item_id'        => defined( 'EAEL_SL_ITEM_ID' ) ? EAEL_SL_ITEM_ID : 4372,
+					'item_name'      => defined( 'EAEL_SL_ITEM_NAME' ) ? EAEL_SL_ITEM_NAME : 'Essential Addons for Elementor',
+					'item_slug'      => defined( 'EAEL_SL_ITEM_SLUG' ) ? EAEL_SL_ITEM_SLUG : 'essential-addons-elementor',
+					'textdomain'     => 'essential-addons-elementor',
+					'db_prefix'      => defined( 'EAEL_SL_ITEM_SLUG' ) ? EAEL_SL_ITEM_SLUG : 'essential-addons-elementor',
+					'page_slug'      => 'eael-settings',
+					'scripts_handle' => 'eael-admin-dashboard',
+					'screen_id'      => array( 'toplevel_page_eael-settings' ),
+					'api'            => 'ajax',
+				) );
+			} catch ( \Throwable $e ) {
+				return null;
+			}
+		};
+		$providers['essential-addons-elementor']['secret_label'] = __( 'Essential Addons license key', 'minn-admin' );
+		$providers['essential-addons-elementor']['activate']     = function ( $secret ) use ( $eael_mgr ) {
+			$mgr = call_user_func( $eael_mgr );
+			if ( ! $mgr ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Essential Addons Pro is not loaded.', 'minn-admin' ) );
+			}
+			$res = $mgr->activate( array( 'license_key' => $secret ) );
+			if ( is_wp_error( $res ) ) {
+				$err  = $res->get_error_code();
+				$code = ( 'no_activations_left' === $err ) ? 'site_limit' : ( 'expired' === $err ? 'expired' : 'invalid' );
+				return array( 'ok' => false, 'code' => $code, 'message' => wp_strip_all_tags( $res->get_error_message() ) );
+			}
+			if ( is_object( $res ) && isset( $res->license ) && 'required_otp' === $res->license ) {
+				return array(
+					'ok'      => false,
+					'code'    => 'error',
+					'message' => __( 'Essential Addons sent a confirmation code to the license email. Finish activation on its settings screen.', 'minn-admin' ),
+				);
+			}
+			$ok = is_object( $res ) && ( ! empty( $res->success ) || ( isset( $res->license ) && 'valid' === $res->license ) );
+			return array( 'ok' => $ok, 'code' => $ok ? '' : 'invalid', 'message' => '' );
+		};
+		$providers['essential-addons-elementor']['deactivate'] = function () use ( $eael_mgr ) {
+			$mgr = call_user_func( $eael_mgr );
+			if ( ! $mgr ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Essential Addons Pro is not loaded.', 'minn-admin' ) );
+			}
+			$res = $mgr->deactivate();
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			return array( 'ok' => true );
+		};
+		$providers['essential-addons-elementor']['verify'] = function () use ( $eael_mgr ) {
+			$mgr = call_user_func( $eael_mgr );
+			if ( ! $mgr ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Essential Addons Pro is not loaded.', 'minn-admin' ) );
+			}
+			$res = $mgr->check();
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$license = '';
+			if ( is_object( $res ) && isset( $res->license ) ) {
+				$license = (string) $res->license;
+			} elseif ( is_array( $res ) && isset( $res['license'] ) ) {
+				$license = (string) $res['license'];
+			}
+			$ok = ( 'valid' === $license ) || ( is_object( $res ) && ! empty( $res->success ) ) || ( is_array( $res ) && ! empty( $res['success'] ) );
+			return array( 'ok' => $ok, 'code' => $ok ? '' : 'invalid', 'message' => '' );
 		};
 	}
 

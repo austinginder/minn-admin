@@ -64,6 +64,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			[ 'SearchWP', 'valid' ],
 			[ 'GP Premium', 'expired' ],
 			[ 'Perfmatters', 'valid' ],
+			[ 'Essential Addons Pro', 'valid' ],
 			[ 'WPMU DEV membership', 'valid' ],
 			[ 'Smush Pro', 'valid' ],
 			[ 'Slider Revolution', 'valid' ],

@@ -197,10 +197,10 @@ away:
   Breakdance, Bricks, Divi and friends) open read-only with an "Edit in your builder"
   button, because the builder owns that content. Elementor's Exit to WordPress
   and Brizy's Go to Dashboard open Minn instead when Minn is the default admin.
-  Headers, footers, popups and other site parts live under Templates in Tools
-  (Elementor, and Bricks while it is the active theme): filter by type, rename,
-  duplicate, export, or open the builder in one click. Designing the part itself
-  stays in the builder.
+  Headers, footers, popups, floating buttons and other site parts live under
+  Templates in Tools (Elementor, and Bricks while it is the active theme):
+  filter by type, rename, duplicate, export, or open the builder in one click.
+  Designing the part itself stays in the builder.
 - **Galleries and sliders open an images editor.** Hover a gallery-shaped
   block and the card names the action: click anywhere on it for a tile
   grid where you reorder (drag or arrows), replace (click a tile), add,

@@ -86,6 +86,52 @@ function minn_admin_elementor_forms_item( $sub ) {
 	);
 }
 
+/**
+ * Status card: unread/total from Elementor's own count_submissions_by_status,
+ * form count from distinct widgets that have actually received a submission.
+ *
+ * @return array
+ */
+function minn_admin_elementor_forms_status_model() {
+	$query  = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
+	$counts = $query->count_submissions_by_status();
+	$arr    = ( is_object( $counts ) && method_exists( $counts, 'all' ) ) ? $counts->all() : (array) $counts;
+	$unread = isset( $arr['unread'] ) ? (int) $arr['unread'] : 0;
+	$total  = isset( $arr['all'] ) ? (int) $arr['all'] : 0;
+	$trash  = isset( $arr['trash'] ) ? (int) $arr['trash'] : 0;
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'e_submissions';
+	$nforms = 0;
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
+	$like = $wpdb->esc_like( $table );
+	$has  = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) );
+	if ( $has ) {
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table, no user input.
+		$nforms = (int) $wpdb->get_var(
+			"SELECT COUNT(DISTINCT CONCAT(post_id, '_', element_id)) FROM `{$table}` WHERE status != 'trash'"
+		);
+	}
+
+	$hint = number_format_i18n( $total ) . ' total';
+	if ( $trash ) {
+		$hint .= ', ' . number_format_i18n( $trash ) . ' trash';
+	}
+
+	return array(
+		'rows'    => array(
+			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $nforms ) ),
+		),
+		'actions' => array(
+			array(
+				'label' => __( 'Open Elementor ↗', 'minn-admin' ),
+				'href'  => admin_url( 'admin.php?page=e-form-submissions' ),
+			),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_elementor_forms_ready() ) {
 		return $surfaces;
@@ -101,6 +147,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Elementor',
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gating above + in the shim.
+		'status'     => array( 'route' => 'minn-admin/v1/elementor/status' ),
 		'collection' => array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/elementor/submissions',
@@ -202,6 +249,14 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_elementor_forms_ready() ) {
 		return;
 	}
+
+	register_rest_route( 'minn-admin/v1', '/elementor/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_elementor_forms_can_view',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_elementor_forms_status_model() );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/elementor/forms', array(
 		'methods'             => 'GET',

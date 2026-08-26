@@ -134,8 +134,9 @@ Third-party builders get the flow for free by including `prepare` in their
   and Theme Builder parts now have a Templates surface (see
   `adapters/elementor-templates.php`); Bricks has the same shape.
 - **Theme-builder canvases** (Divi Theme Builder, Elementor Pro site parts
-  canvas): still a link-out. Minn lists the parts and deep-links into the
-  builder; it does not reimplement the canvas or the condition pickers.
+  canvas): still a link-out. Minn lists the parts (including Floating Buttons)
+  and deep-links into the builder; it does not reimplement the canvas or the
+  condition pickers.
 - Elementor Pro is a fixture on minnadmin (4.2.2). Detection, fencing, form
   submissions, and the Templates surface all run against it.
 - Etch's builder booted to a blank app in the lab (SureCart license gate suspected);

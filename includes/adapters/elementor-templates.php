@@ -18,8 +18,9 @@
  * Deliberately not built: the canvas, condition / popup-trigger authoring,
  * changing a template's type after create (a header's widgets are not a
  * footer), the cloud / remote library, import (ajax + $_FILES), landing
- * pages and floating buttons (separate CPTs), and Site Settings (a canvas
- * inside the editor, not a PHP form).
+ * pages (a deprecated experiment on its own CPT), and Site Settings (a
+ * canvas inside the editor, not a PHP form). Floating Buttons live on
+ * `e-floating-buttons` and join this surface as extra type tabs.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -30,13 +31,38 @@ function minn_admin_elementor_templates_ready() {
 		&& class_exists( '\Elementor\TemplateLibrary\Source_Local' );
 }
 
+/** Floating Buttons module is loaded (its own CPT, not the library). */
+function minn_admin_elementor_floating_ready() {
+	return minn_admin_elementor_templates_ready()
+		&& class_exists( '\Elementor\Modules\FloatingButtons\Module' );
+}
+
+/** The Floating Buttons CPT slug, or '' when the module is absent. */
+function minn_admin_elementor_floating_cpt() {
+	return minn_admin_elementor_floating_ready()
+		? \Elementor\Modules\FloatingButtons\Module::CPT_FLOATING_BUTTONS
+		: '';
+}
+
+/** Whether $type is a Floating Buttons / Bars variant. */
+function minn_admin_elementor_is_floating_type( $type ) {
+	return in_array( (string) $type, array( 'floating-buttons', 'floating-bars' ), true );
+}
+
 /** Whether the current user may see and manage the library, through Elementor's own gate. */
 function minn_admin_elementor_can_manage() {
 	if ( ! minn_admin_elementor_templates_ready() ) {
 		return false;
 	}
 	if ( class_exists( '\Elementor\User' ) && method_exists( '\Elementor\User', 'is_current_user_can_edit_post_type' ) ) {
-		return (bool) \Elementor\User::is_current_user_can_edit_post_type( \Elementor\TemplateLibrary\Source_Local::CPT );
+		if ( \Elementor\User::is_current_user_can_edit_post_type( \Elementor\TemplateLibrary\Source_Local::CPT ) ) {
+			return true;
+		}
+		$float = minn_admin_elementor_floating_cpt();
+		if ( $float && \Elementor\User::is_current_user_can_edit_post_type( $float ) ) {
+			return true;
+		}
+		return false;
 	}
 	return current_user_can( 'edit_posts' );
 }
@@ -76,6 +102,7 @@ function minn_admin_elementor_template_types() {
 		'header', 'footer', 'single', 'single-post', 'single-page',
 		'archive', 'search-results', 'error-404', 'product', 'product-archive',
 		'popup', 'loop-item', 'page', 'section', 'container', 'widget',
+		'floating-buttons', 'floating-bars',
 	);
 	$skip = array( 'kit', 'not-supported', 'cloud-template-preview' );
 	$cpt  = \Elementor\TemplateLibrary\Source_Local::CPT;
@@ -118,6 +145,14 @@ function minn_admin_elementor_template_types() {
 		}
 		$label       = is_callable( array( $class, 'get_title' ) ) ? (string) $class::get_title() : $type;
 		$out[ $type ] = $label ? $label : $type;
+	}
+	if ( minn_admin_elementor_floating_ready() ) {
+		$float_types = \Elementor\Modules\FloatingButtons\Module::get_floating_elements_types();
+		if ( is_array( $float_types ) ) {
+			foreach ( $float_types as $slug => $label ) {
+				$out[ (string) $slug ] = (string) $label;
+			}
+		}
 	}
 	$ordered = array();
 	foreach ( $preferred as $type ) {
@@ -175,10 +210,18 @@ function minn_admin_elementor_template_edit_url( $post_id ) {
 	return admin_url( 'post.php?post=' . (int) $post_id . '&action=elementor' );
 }
 
-/** Normalize a library post into a surface item. */
+/** Normalize a library or floating-buttons post into a surface item. */
 function minn_admin_elementor_template_item( $post ) {
 	$types = minn_admin_elementor_template_types();
-	$type  = (string) \Elementor\TemplateLibrary\Source_Local::get_template_type( $post->ID );
+	$float = minn_admin_elementor_floating_cpt();
+	if ( $float && $float === $post->post_type ) {
+		$type = (string) get_post_meta( $post->ID, \Elementor\Modules\FloatingButtons\Module::FLOATING_ELEMENTS_TYPE_META_KEY, true );
+		if ( '' === $type ) {
+			$type = 'floating-buttons';
+		}
+	} else {
+		$type = (string) \Elementor\TemplateLibrary\Source_Local::get_template_type( $post->ID );
+	}
 	return array(
 		'id'         => (int) $post->ID,
 		'title'      => '' !== $post->post_title ? html_entity_decode( $post->post_title, ENT_QUOTES ) : __( '(no title)', 'minn-admin' ),
@@ -198,12 +241,17 @@ function minn_admin_elementor_template_item( $post ) {
  * @return WP_Post|WP_Error
  */
 function minn_admin_elementor_template_post( $id ) {
-	$post = get_post( (int) $id );
-	if ( ! $post || \Elementor\TemplateLibrary\Source_Local::CPT !== $post->post_type ) {
+	$post  = get_post( (int) $id );
+	$float = minn_admin_elementor_floating_cpt();
+	$ok    = $post && (
+		\Elementor\TemplateLibrary\Source_Local::CPT === $post->post_type
+		|| ( $float && $float === $post->post_type )
+	);
+	if ( ! $ok ) {
 		return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
-	$type = (string) \Elementor\TemplateLibrary\Source_Local::get_template_type( $post->ID );
-	if ( ! isset( minn_admin_elementor_template_types()[ $type ] ) ) {
+	$item = minn_admin_elementor_template_item( $post );
+	if ( ! isset( minn_admin_elementor_template_types()[ $item['type'] ] ) ) {
 		return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	return $post;
@@ -254,6 +302,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'builder-templates',
 		'icon'       => 'columns',
 		'cap'        => 'edit_posts',
+		'status'     => array( 'route' => 'minn-admin/v1/elementor/templates/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/elementor/templates',
 			'itemsKey'  => 'items',
@@ -316,6 +365,46 @@ add_action( 'rest_api_init', function () {
 		return minn_admin_elementor_can_manage();
 	};
 
+	register_rest_route( 'minn-admin/v1', '/elementor/templates/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () {
+			$lib = wp_count_posts( \Elementor\TemplateLibrary\Source_Local::CPT );
+			$n   = 0;
+			foreach ( array( 'publish', 'draft', 'pending', 'future', 'private' ) as $st ) {
+				$n += isset( $lib->$st ) ? (int) $lib->$st : 0;
+			}
+			$rows = array(
+				array( 'label' => __( 'Templates', 'minn-admin' ), 'value' => number_format_i18n( $n ) ),
+			);
+			$float = minn_admin_elementor_floating_cpt();
+			if ( $float ) {
+				$fc = wp_count_posts( $float );
+				$fn = 0;
+				foreach ( array( 'publish', 'draft', 'pending', 'future', 'private' ) as $st ) {
+					$fn += isset( $fc->$st ) ? (int) $fc->$st : 0;
+				}
+				$rows[] = array( 'label' => __( 'Floating buttons', 'minn-admin' ), 'value' => number_format_i18n( $fn ) );
+			}
+			$actions = array(
+				array(
+					'label' => __( 'Open Elementor ↗', 'minn-admin' ),
+					'href'  => admin_url( 'edit.php?post_type=' . \Elementor\TemplateLibrary\Source_Local::CPT ),
+				),
+			);
+			if ( defined( 'EAEL_PLUGIN_VERSION' ) && current_user_can( 'manage_options' ) ) {
+				$actions[] = array(
+					'label' => __( 'Open Essential Addons ↗', 'minn-admin' ),
+					'href'  => admin_url( 'admin.php?page=eael-settings' ),
+				);
+			}
+			return rest_ensure_response( array(
+				'rows'    => $rows,
+				'actions' => $actions,
+			) );
+		},
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/elementor/templates', array(
 		array(
 			'methods'             => 'GET',
@@ -327,15 +416,24 @@ add_action( 'rest_api_init', function () {
 				$page    = max( 1, (int) ( $request['page'] ?: 1 ) );
 				$orderby = in_array( $request['orderby'], array( 'title', 'modified' ), true ) ? $request['orderby'] : 'modified';
 				$order   = 'asc' === strtolower( (string) $request['order'] ) ? 'ASC' : 'DESC';
-				$allowed = array_keys( $types );
-				if ( '' !== $type ) {
-					if ( ! isset( $types[ $type ] ) ) {
-						return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-					}
+				$float   = minn_admin_elementor_floating_cpt();
+				if ( '' !== $type && ! isset( $types[ $type ] ) ) {
+					return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
+				}
+				$is_float = minn_admin_elementor_is_floating_type( $type );
+				if ( $is_float && ! $float ) {
+					return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
+				}
+				$allowed = $is_float
+					? array( $type )
+					: array_values( array_filter( array_keys( $types ), function ( $t ) {
+						return ! minn_admin_elementor_is_floating_type( $t );
+					} ) );
+				if ( '' !== $type && ! $is_float ) {
 					$allowed = array( $type );
 				}
 				$args = array(
-					'post_type'      => \Elementor\TemplateLibrary\Source_Local::CPT,
+					'post_type'      => $is_float ? $float : \Elementor\TemplateLibrary\Source_Local::CPT,
 					'post_status'    => array( 'publish', 'draft', 'pending', 'future', 'private' ),
 					'posts_per_page' => 25,
 					'paged'          => $page,
@@ -343,7 +441,9 @@ add_action( 'rest_api_init', function () {
 					'order'          => $order,
 					'meta_query'     => array(
 						array(
-							'key'     => \Elementor\Core\Base\Document::TYPE_META_KEY,
+							'key'     => $is_float
+								? \Elementor\Modules\FloatingButtons\Module::FLOATING_ELEMENTS_TYPE_META_KEY
+								: \Elementor\Core\Base\Document::TYPE_META_KEY,
 							'value'   => $allowed,
 							'compare' => 'IN',
 						),
@@ -373,13 +473,20 @@ add_action( 'rest_api_init', function () {
 				if ( ! isset( minn_admin_elementor_template_types()[ $type ] ) ) {
 					return new WP_Error( 'invalid', __( 'Pick a template type.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
+				$is_float  = minn_admin_elementor_is_floating_type( $type );
+				$float_cpt = minn_admin_elementor_floating_cpt();
+				if ( $is_float && ! $float_cpt ) {
+					return new WP_Error( 'invalid', __( 'Floating Buttons are not available on this site.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$doc_type  = $is_float ? \Elementor\Modules\FloatingButtons\Module::FLOATING_BUTTONS_DOCUMENT_TYPE : $type;
+				$post_type = $is_float ? $float_cpt : \Elementor\TemplateLibrary\Source_Local::CPT;
 				try {
 					$document = \Elementor\Plugin::$instance->documents->create(
-						$type,
+						$doc_type,
 						array(
 							'post_title'  => $title,
 							'post_status' => current_user_can( 'publish_posts' ) ? 'publish' : 'pending',
-							'post_type'   => \Elementor\TemplateLibrary\Source_Local::CPT,
+							'post_type'   => $post_type,
 						)
 					);
 				} catch ( \Throwable $e ) {
@@ -391,6 +498,9 @@ add_action( 'rest_api_init', function () {
 				$id = (int) $document->get_main_id();
 				if ( $id < 1 ) {
 					return new WP_Error( 'failed', __( 'Elementor could not create this template.', 'minn-admin' ), array( 'status' => 500 ) );
+				}
+				if ( $is_float ) {
+					update_post_meta( $id, \Elementor\Modules\FloatingButtons\Module::FLOATING_ELEMENTS_TYPE_META_KEY, $type );
 				}
 				return rest_ensure_response( minn_admin_elementor_template_item( get_post( $id ) ) );
 			},
@@ -492,16 +602,21 @@ add_action( 'rest_api_init', function () {
 			if ( is_wp_error( $post ) ) {
 				return $post;
 			}
-			$type = (string) \Elementor\TemplateLibrary\Source_Local::get_template_type( $post->ID );
+			$item      = minn_admin_elementor_template_item( $post );
+			$type      = $item['type'];
+			$is_float  = minn_admin_elementor_is_floating_type( $type );
+			$float_cpt = minn_admin_elementor_floating_cpt();
+			$doc_type  = $is_float ? \Elementor\Modules\FloatingButtons\Module::FLOATING_BUTTONS_DOCUMENT_TYPE : $type;
+			$post_type = $is_float ? $float_cpt : \Elementor\TemplateLibrary\Source_Local::CPT;
 			/* translators: %s: the source template's title. */
 			$copy_title = sprintf( __( '%s (copy)', 'minn-admin' ), $post->post_title );
 			try {
 				$document = \Elementor\Plugin::$instance->documents->create(
-					$type,
+					$doc_type,
 					array(
 						'post_title'  => $copy_title,
 						'post_status' => current_user_can( 'publish_posts' ) ? 'publish' : 'pending',
-						'post_type'   => \Elementor\TemplateLibrary\Source_Local::CPT,
+						'post_type'   => $post_type,
 					)
 				);
 			} catch ( \Throwable $e ) {
@@ -517,7 +632,11 @@ add_action( 'rest_api_init', function () {
 			// Content-bearing meta only. Conditions stay off the copy: a
 			// second header with "Entire Site" would conflict with the
 			// original. CSS meta regenerates on save().
-			foreach ( array( '_elementor_data', '_elementor_page_settings', '_elementor_popup_display_settings' ) as $key ) {
+			$copy_keys = array( '_elementor_data', '_elementor_page_settings', '_elementor_popup_display_settings' );
+			if ( $is_float ) {
+				$copy_keys[] = \Elementor\Modules\FloatingButtons\Module::FLOATING_ELEMENTS_TYPE_META_KEY;
+			}
+			foreach ( $copy_keys as $key ) {
 				delete_post_meta( $new_id, $key );
 				$values = get_post_meta( $post->ID, $key, false );
 				foreach ( $values as $value ) {
