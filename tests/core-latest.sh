@@ -60,6 +60,7 @@ SUITES=(
 	revision-fields.test.js
 	lock.test.js
 	editor-sidebar.test.js
+	tag-paste.test.js
 	post-format.test.js
 	# core collections Minn re-exposes
 	content-list.test.js

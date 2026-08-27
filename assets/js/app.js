@@ -12538,7 +12538,29 @@
 				if ( e.key === 'Escape' ) { panel.hidden = true; return; }
 				if ( e.key !== 'Enter' ) return;
 				e.preventDefault(); // Enter here must never submit anything
-				if ( t.create ) create();
+				if ( ! t.create ) return;
+				const names = splitTagNames( input.value );
+				if ( names.length > 1 ) {
+					( async () => {
+						for ( const n of names ) { input.value = n; await create(); }
+					} )();
+				} else {
+					create();
+				}
+			} );
+			input.addEventListener( 'paste', ( e ) => {
+				if ( ! t.create ) return;
+				const clip = ( e.clipboardData && e.clipboardData.getData( 'text/plain' ) ) || '';
+				if ( ! clip ) return;
+				const start = input.selectionStart;
+				const end = input.selectionEnd;
+				const next = input.value.slice( 0, start ) + clip + input.value.slice( end );
+				const names = splitTagNames( next );
+				if ( names.length < 2 ) return;
+				e.preventDefault();
+				( async () => {
+					for ( const n of names ) { input.value = n; await create(); }
+				} )();
 			} );
 			input.addEventListener( 'blur', () => setTimeout( () => { panel.hidden = true; }, 150 ) );
 		} );
@@ -28643,6 +28665,24 @@
 					removeEditorTag( ed.tags[ ed.tags.length - 1 ].id );
 				}
 			} );
+			// Gutenberg splits a comma list on paste. Without this, the whole
+			// clipboard lands as one search query (and Enter would then strip
+			// the commas and create a single mashed-together tag).
+			tagInput.addEventListener( 'paste', ( e ) => {
+				const clip = ( e.clipboardData && e.clipboardData.getData( 'text/plain' ) ) || '';
+				if ( ! clip ) return;
+				const start = tagInput.selectionStart;
+				const end = tagInput.selectionEnd;
+				const next = tagInput.value.slice( 0, start ) + clip + tagInput.value.slice( end );
+				if ( splitTagNames( next ).length < 2 ) return;
+				e.preventDefault();
+				tagInput.value = '';
+				if ( tagWrap ) {
+					const panel = $( '.minn-ac-panel', tagWrap );
+					if ( panel ) panel.hidden = true;
+				}
+				addEditorTag( next );
+			} );
 		}
 	}
 
@@ -28706,8 +28746,17 @@
 		if ( ed.id ) scheduleAutosave();
 	}
 
+	function splitTagNames( raw ) {
+		return String( raw || '' ).split( /[,;\n]+/ ).map( ( t ) => t.trim() ).filter( Boolean );
+	}
+
 	async function addEditorTag( name ) {
-		name = ( name || '' ).replace( /,/g, '' ).trim();
+		const names = splitTagNames( name );
+		if ( names.length > 1 ) {
+			for ( const n of names ) await addEditorTag( n );
+			return;
+		}
+		name = names[ 0 ] || '';
 		const ed = state.editor;
 		if ( ! name || ! ed ) return;
 		if ( ( ed.tags || [] ).some( ( t ) => t.name.toLowerCase() === name.toLowerCase() ) ) return;
