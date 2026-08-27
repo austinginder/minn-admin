@@ -25154,6 +25154,76 @@
 		} );
 	}
 
+	// Chrome's native Backspace at a heading/paragraph boundary of a
+	// DIFFERENT tag wraps the absorbed block in a span{font-size,
+	// letter-spacing} so the heading "looks" like it kept its size. The
+	// writer sees two titles jammed together, and deleting the leftover
+	// empty heading then no-ops. Absorb the dropped block's children into
+	// `keep` ourselves and toast Undo (direct-DOM, same class as island
+	// remove).
+	function mergeProseBlocksWithUndo( keep, drop ) {
+		if ( ! keep || ! drop || keep === drop || ! keep.parentNode ) return;
+		const parent = keep.parentNode;
+		const keepHTML = keep.outerHTML;
+		const dropHTML = drop.outerHTML;
+		const keepNext = keep.nextSibling;
+		const beforeCount = keep.childNodes.length;
+		if ( keep.tagName === 'BLOCKQUOTE' && drop.tagName === 'P' ) {
+			keep.appendChild( drop );
+		} else if ( drop.tagName === 'BLOCKQUOTE' && keep.tagName !== 'BLOCKQUOTE' ) {
+			Array.from( drop.children ).forEach( ( c, i ) => {
+				if ( i ) keep.appendChild( document.createElement( 'br' ) );
+				if ( c.tagName === 'P' ) {
+					while ( c.firstChild ) keep.appendChild( c.firstChild );
+				} else {
+					keep.appendChild( c );
+				}
+			} );
+			drop.remove();
+		} else {
+			while ( drop.firstChild ) keep.appendChild( drop.firstChild );
+			drop.remove();
+		}
+		const firstAbsorbed = keep.childNodes[ beforeCount ];
+		if ( firstAbsorbed ) {
+			try {
+				setCaret( firstAbsorbed, 0 );
+			} catch ( err ) {
+				const r = document.createRange();
+				r.selectNodeContents( keep );
+				r.collapse( false );
+				const s = window.getSelection();
+				s.removeAllRanges();
+				s.addRange( r );
+			}
+		} else {
+			const r = document.createRange();
+			r.selectNodeContents( keep );
+			r.collapse( false );
+			const s = window.getSelection();
+			s.removeAllRanges();
+			s.addRange( r );
+		}
+		stampSlotDirtyFor( parent );
+		updateEditorStats();
+		scheduleAutosave();
+		toastAction( __( 'Blocks merged · ⌘Z' ), 'Undo', () => {
+			if ( ! parent.isConnected ) return;
+			const wrap = document.createElement( 'div' );
+			wrap.innerHTML = keepHTML;
+			const k = wrap.firstElementChild;
+			wrap.innerHTML = dropHTML;
+			const d = wrap.firstElementChild;
+			if ( ! k || ! d ) return;
+			if ( keep.isConnected ) keep.replaceWith( k );
+			else parent.insertBefore( k, keepNext && keepNext.isConnected && keepNext.parentNode === parent ? keepNext : null );
+			k.after( d );
+			stampSlotDirtyFor( parent );
+			updateEditorStats();
+			scheduleAutosave();
+		} );
+	}
+
 	/* ===== Front-end styles for island previews ===== */
 
 	// Islands render real block HTML, but Minn's standalone document never
@@ -34718,6 +34788,49 @@
 				return; // deletion stays inside the block — normal editing
 			}
 			const neighbor = back ? block.previousElementSibling : block.nextElementSibling;
+			const isHeadingish = ( el ) => !! ( el && el.tagName && ( /^H[1-6]$/.test( el.tagName ) || el.tagName === 'BLOCKQUOTE' ) );
+			const isMergeableProse = ( el ) => {
+				if ( ! el || el.nodeType !== Node.ELEMENT_NODE || ! isRootChild( el ) ) return false;
+				if ( isIsland( el ) || isAtomicEl( el ) ) return false;
+				const t = el.tagName;
+				return t === 'P' || t === 'BLOCKQUOTE' || /^H[1-6]$/.test( t );
+			};
+			// Empty heading/quote: Chrome leaves <h1><br></h1> after the
+			// writer deletes the title, and further Backspace/Delete is a
+			// no-op. One press removes it (Undo toast). A sole empty heading
+			// becomes a paragraph so the body still has a typing surface.
+			if ( proseEmpty && isHeadingish( block ) ) {
+				const land = neighbor || ( back ? block.nextElementSibling : block.previousElementSibling );
+				if ( land && isRootChild( land ) ) {
+					e.preventDefault();
+					const caretAtEnd = land === block.previousElementSibling;
+					removeAtomicBlockWithUndo( block );
+					if ( land.isConnected ) {
+						const r = document.createRange();
+						r.selectNodeContents( land );
+						r.collapse( ! caretAtEnd );
+						sel.removeAllRanges();
+						sel.addRange( r );
+					}
+					return;
+				}
+				e.preventDefault();
+				const p = document.createElement( 'p' );
+				p.appendChild( document.createElement( 'br' ) );
+				block.replaceWith( p );
+				setCaret( p, 0 );
+				scheduleAutosave();
+				disarm();
+				return;
+			}
+			// Different-tag prose neighbors: take the merge away from Chrome
+			// so it cannot inject a sized span (GH #55).
+			if ( neighbor && isMergeableProse( block ) && isMergeableProse( neighbor )
+				&& block.tagName !== neighbor.tagName ) {
+				e.preventDefault();
+				mergeProseBlocksWithUndo( back ? neighbor : block, back ? block : neighbor );
+				return;
+			}
 			if ( ! isAtomicEl( neighbor ) ) {
 				disarm();
 				return;

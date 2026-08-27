@@ -48,6 +48,7 @@ SUITES=(
 	# the editor: block serialization + core block markup
 	markdown.test.js
 	paste.test.js
+	heading-merge.test.js
 	island-runs.test.js
 	nested-islands.test.js
 	patterns.test.js
