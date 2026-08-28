@@ -43334,9 +43334,15 @@
 	// is already in another field (never steal focus), and skipped entirely
 	// on touch devices where autofocus would pop the software keyboard.
 	let searchFocusArmed = false;
-	// The exact input autofocus last put the caret in, so a later paint can
+	// The exact input the caret was last in — set by the autofocus below AND
+	// by any focus the user gives a list search box — so a later paint can
 	// tell "the DOM swapped underneath us" from "the user moved on".
 	let focusedSearchEl = null;
+	document.addEventListener( 'focusin', ( e ) => {
+		if ( e.target && e.target.matches && e.target.matches( '#minn-view .minn-toolbar-search' ) ) {
+			focusedSearchEl = e.target;
+		}
+	} );
 	function maybeFocusSearch() {
 		const swapped = focusedSearchEl && ! document.contains( focusedSearchEl );
 		if ( ! searchFocusArmed && swapped ) {
@@ -43350,10 +43356,24 @@
 			const ae = document.activeElement;
 			const orphaned = ! ae || ae === document.body;
 			const inp = $( '#minn-view .minn-toolbar-search' );
+			// The rebuilt box carries the last COMMITTED search, which trails
+			// what was typed (the debounce hadn't fired when the view swapped)
+			// — mid-word, refocusing that stale value typed the rest at the
+			// START of a truncated phrase. The detached node still holds the
+			// live text: adopt it, put the caret at the END, and fire input so
+			// the view's own debounce converges the results on it. The
+			// dispatch only happens while the values differ, so the loop
+			// settles the moment state catches up.
+			const live = focusedSearchEl.value;
 			focusedSearchEl = null;
 			if ( orphaned && inp && ! inp.disabled ) {
+				if ( live !== inp.value ) {
+					inp.value = live;
+					inp.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+				}
 				focusedSearchEl = inp;
 				inp.focus( { preventScroll: true } );
+				try { inp.setSelectionRange( inp.value.length, inp.value.length ); } catch ( err ) {}
 			}
 			return;
 		}
@@ -43381,6 +43401,9 @@
 		searchFocusArmed = false;
 		focusedSearchEl = inp;
 		inp.focus( { preventScroll: true } );
+		// A URL-restored query (?q=…) seeds the box; typing should extend it,
+		// not prepend to it.
+		try { inp.setSelectionRange( inp.value.length, inp.value.length ); } catch ( err ) {}
 	}
 
 	// SPA navigations are silent to screen readers by default: announce the
