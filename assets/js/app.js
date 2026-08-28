@@ -25515,7 +25515,15 @@
 	}
 
 	function revealJsGatedPreview( el ) {
-		if ( ! el || ! el.isConnected || el.offsetHeight < 24 ) return;
+		if ( ! el || ! el.isConnected ) return;
+		// Interactivity API blocks (core/tabs) serve panels with a literal
+		// hidden attribute that a data-wp-bind--hidden directive lifts at
+		// runtime; previews never run that JS, so every panel stays hidden
+		// and the preview collapses to nothing. The directive is the proof
+		// the hidden state is runtime-managed rather than authorial — lift
+		// exactly those, preview DOM only (saves splice the stored raw).
+		$$( '[hidden][data-wp-bind--hidden]', el ).forEach( ( n ) => n.removeAttribute( 'hidden' ) );
+		if ( el.offsetHeight < 24 ) return;
 		if ( previewHasVisibleContent( el ) ) return;
 		$$( '*', el ).forEach( ( n ) => {
 			try { if ( getComputedStyle( n ).opacity === '0' ) n.style.opacity = '1'; } catch ( e ) {}

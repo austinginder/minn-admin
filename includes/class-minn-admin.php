@@ -1973,7 +1973,13 @@ class Minn_Admin {
 	 * attributes, and is excluded. Static-save blocks are excluded outright:
 	 * only the block's own JS `save()` can produce their HTML
 	 * (docs/block-inspector.md, "The honest limit"). Core blocks are excluded
-	 * because Minn has native flows for them.
+	 * because Minn has native flows for them — EXCEPT the curated widget-shaped
+	 * allowlist below (Latest Posts, Archives, Calendar…): dynamic content
+	 * lists a writer reasonably drops into a page, which Minn's basics never
+	 * covered and which the same probe + schema-driven inspector serve with
+	 * zero extra machinery. Template-context core blocks (post-*, site-*,
+	 * navigation) stay out on purpose, as does anything the probe finds
+	 * renders empty here (Tag Cloud on a site whose tags miss its threshold).
 	 *
 	 * An adapter descriptor with an `insert` key supersedes the auto entry
 	 * (its hand-written template wins); `insert => false` suppresses a block
@@ -1989,9 +1995,20 @@ class Minn_Admin {
 	 *   applied to the OUTPUT below, after the cache).
 	 */
 	public static function insertable_blocks( $block_forms ) {
+		$core_widgets = array(
+			'core/latest-posts'    => true,
+			'core/latest-comments' => true,
+			'core/archives'        => true,
+			'core/calendar'        => true,
+			'core/categories'      => true,
+			'core/page-list'       => true,
+			'core/search'          => true,
+			'core/loginout'        => true,
+			'core/tag-cloud'       => true,
+		);
 		$candidates = array();
 		foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $name => $type ) {
-			if ( 0 === strpos( $name, 'core/' ) ) {
+			if ( 0 === strpos( $name, 'core/' ) && ! isset( $core_widgets[ $name ] ) ) {
 				continue;
 			}
 			if ( ! $type->is_dynamic() ) {

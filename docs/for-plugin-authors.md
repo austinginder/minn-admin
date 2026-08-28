@@ -895,7 +895,9 @@ dynamic, top-level, inserter-visible non-core block that **renders output from a
 comment** as a search-only slash-menu entry: it doesn't clutter the default menu, but typing
 part of its title (or its namespace, so `/my-plugin` lists everything you ship) surfaces it.
 Insertion drops `<!-- wp:your/block /-->` as an island, renders the real preview, and opens
-the schema-driven inspector.
+the schema-driven inspector. (Core blocks are excluded from the auto list because Minn has
+native flows for them, with one exception: a curated allowlist of widget-shaped core blocks
+— Latest Posts, Archives, Calendar and friends — rides the same probe and entries.)
 
 The render probe is the honesty gate. `is_dynamic` alone doesn't mean a bare comment is
 valid: hybrid blocks (a render_callback **plus** a JS `save()` that emits wrapper HTML, or

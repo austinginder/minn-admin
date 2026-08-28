@@ -132,8 +132,16 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 			( await page.$( '.minn-block-island[data-block="anchor/report-card"]' ) ) !== null );
 		await freshParagraph( page );
 		await page.keyboard.type( 'Round two.', { delay: 20 } );
-		await save();
-		const raw2 = await rawContent();
+		// Poll for the save landing — a flat wait races the ⌘S round trip
+		// under load and reads the PREVIOUS revision (the island is fine;
+		// the typed paragraph just hasn't been stored yet).
+		await page.keyboard.press( 'Meta+s' );
+		let raw2 = '';
+		for ( let i = 0; i < 20; i++ ) {
+			await page.waitForTimeout( 500 );
+			raw2 = await rawContent().catch( () => '' );
+			if ( raw2.includes( 'Round two.' ) ) break;
+		}
 		t.check( 'island round-trips through a second save',
 			raw2.includes( '<!-- wp:anchor/report-card /-->' ) && raw2.includes( 'Round two.' ), raw2 );
 

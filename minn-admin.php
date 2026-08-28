@@ -150,7 +150,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/wpvivid.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/backwpup.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/ai1wm.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/page-builders.php';
-require_once MINN_ADMIN_DIR . 'includes/adapters/core-query.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/core-blocks.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/elementor-templates.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/bricks.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/seo.php';
