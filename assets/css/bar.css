@@ -184,6 +184,10 @@
 }
 #minn-bar-root a.minn-bar-btn { display: inline-flex !important; }
 #minn-bar-root a.minn-bar-menu-item { display: flex !important; }
+/* The phone-only admin doorway needs BOTH states defended: hidden at rest
+   (a theme's a:link display rule resurrects it on desktop, unsized), shown
+   by the touch panel's rule below, which carries matching weight. */
+#minn-bar-root a.minn-bar-mobile-admin { display: none !important; }
 #minn-bar-root .minn-bar-edit, #minn-bar-root .minn-bar-edit:hover,
 #minn-bar-root .minn-bar-edit:focus, #minn-bar-root .minn-bar-edit:visited { color: var(--accent-fg) !important; }
 #minn-bar-root a.minn-bar-menu-item, #minn-bar-root a.minn-bar-menu-item:hover,
@@ -692,7 +696,8 @@
   #minn-bar-root:focus-within .minn-bar-mobile-admin {
     width: 100%;
     height: 36px;
-    display: flex;
+    /* !important pairs with the theme-defense display:none above. */
+    display: flex !important;
     align-items: center;
     justify-content: center;
     gap: 8px;
