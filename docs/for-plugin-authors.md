@@ -875,7 +875,8 @@ references, so the plugin's renderer can resolve values on blocks Minn created o
 filled). `locked` renders an honest "N advanced fields live in the block editor" note.
 On write, unknown and underscore keys already in the object are preserved untouched,
 and a field that was never present and is still empty injects nothing. Checkbox values
-store as `1`/`0` (ACF's convention). `image` stores a bare attachment id: picks go
+store as `1`/`0` (ACF's convention); a key that already holds a real boolean keeps
+its boolean type. `image` stores a bare attachment id: picks go
 through Minn's media picker and apply immediately (the picker closes the popover, so
 pending typed values are folded first); in the content-editor modal, image fields fold
 into the locked count instead. `gallery` stores an ordered array of attachment ids

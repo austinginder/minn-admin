@@ -449,6 +449,8 @@ should keep all three green plus `markdown`, `paste`, `undo-toast`, `island-copy
 `media-flow` (the Enter/clipboard-sensitive neighbours).
 
 The never-build list is unchanged by this plan. Slots edit **content** inside layouts;
-layout itself (spacing, variations, query loops, the block inserter's full catalog) remains
-Gutenberg's job, one click away. Byte-identity for everything untouched stays the
+layout itself (spacing, variations, query-loop inner templates, the block inserter's full
+catalog) remains Gutenberg's job, one click away. (Adding a Query Loop and editing its
+query parameters is Minn-side since the core/query descriptor in
+adapters/core-query.php — the loop's layout still is not.) Byte-identity for everything untouched stays the
 non-negotiable invariant at every phase.

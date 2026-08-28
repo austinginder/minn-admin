@@ -32517,7 +32517,10 @@
 			const obj = ( attrs && typeof attrs[ df.attr ] === 'object' && attrs[ df.attr ] ) || {};
 			const had = name in obj;
 			if ( fdef.control === 'checkbox' ) {
-				v = v ? 1 : 0;
+				// 1/0 is the ACF block convention; a key that already holds a
+				// real boolean (core/query's inherit) keeps its type so the
+				// block editor reads back exactly what it wrote.
+				v = had && typeof obj[ name ] === 'boolean' ? !! v : ( v ? 1 : 0 );
 			} else if ( fdef.control === 'multicheck' ) {
 				// An untouched empty list injects nothing (the empty-never-
 				// present rule; '' can't catch an array).
