@@ -447,3 +447,118 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 		},
 	);
 } );
+
+/**
+ * Bundled provider: HappyFiles Pro (plain WordPress taxonomy
+ * `happyfiles_category`, hierarchical, REST-exposed). Gated on HappyFiles'
+ * OWN access model rather than a capability: per-role option
+ * happyfiles_folder_access overridden by per-user meta, values
+ * none/view/upload/full, administrators always full. 'none' means their
+ * sidebar is disabled for this user, so no provider; only 'full' (their
+ * "view, edit, and move folders" tier) gets the Move control. Folder order
+ * mirrors their sidebar: happyfiles_position termmeta ascending,
+ * unpositioned folders after every positioned one.
+ */
+add_filter( 'minn_admin_media_folders', function ( $provider ) {
+	if ( null !== $provider || ! defined( 'HAPPYFILES_VERSION' ) || ! taxonomy_exists( 'happyfiles_category' ) ) {
+		return $provider;
+	}
+	// Their User class resolves access on init; calling the resolver again is
+	// idempotent and covers any context where init ordering differed.
+	$access = 'view';
+	if ( class_exists( '\HappyFiles\User' ) ) {
+		\HappyFiles\User::get_folder_access();
+		$access = (string) \HappyFiles\User::$folder_access;
+	}
+	if ( 'none' === $access ) {
+		return $provider;
+	}
+	$p = array(
+		'name'    => 'HappyFiles',
+		'folders' => function () {
+			$terms = get_terms( array( 'taxonomy' => 'happyfiles_category', 'hide_empty' => false ) );
+			if ( is_wp_error( $terms ) ) {
+				return array();
+			}
+			// Their sidebar order: positioned folders ascending, the rest
+			// appended in term order (Data::get_folders' running index).
+			$rows = array();
+			$next = count( $terms );
+			foreach ( $terms as $t ) {
+				$pos    = get_term_meta( $t->term_id, HAPPYFILES_POSITION, true );
+				$rows[] = array(
+					'id'     => (int) $t->term_id,
+					'label'  => wp_specialchars_decode( (string) $t->name ),
+					'parent' => (int) $t->parent,
+					'count'  => (int) $t->count,
+					'pos'    => is_numeric( $pos ) ? (int) $pos : ++$next,
+				);
+			}
+			usort( $rows, function ( $a, $b ) {
+				return $a['pos'] <=> $b['pos'];
+			} );
+			$out = array( array( 'id' => 0, 'label' => __( 'Uncategorized', 'minn-admin' ), 'parent' => 0, 'count' => null ) );
+			foreach ( $rows as $r ) {
+				unset( $r['pos'] );
+				$out[] = $r;
+			}
+			return $out;
+		},
+		'ids'     => function ( $folder_id ) {
+			if ( 0 === (int) $folder_id ) {
+				// Their "Uncategorized" folder (id -1): attachments carrying
+				// no happyfiles_category term at all.
+				return get_posts( array(
+					'post_type'      => 'attachment',
+					'post_status'    => 'inherit,private',
+					'posts_per_page' => -1,
+					'fields'         => 'ids',
+					'tax_query'      => array( array(
+						'taxonomy' => 'happyfiles_category',
+						'operator' => 'NOT EXISTS',
+					) ),
+				) );
+			}
+			if ( ! term_exists( (int) $folder_id, 'happyfiles_category' ) ) {
+				return new WP_Error( 'minn_folder_missing', __( 'That folder no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return get_posts( array(
+				'post_type'      => 'attachment',
+				'post_status'    => 'inherit,private',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'tax_query'      => array( array(
+					'taxonomy'         => 'happyfiles_category',
+					'field'            => 'term_id',
+					'terms'            => (int) $folder_id,
+					'include_children' => false, // their sidebar filters direct assignments only
+				) ),
+			) );
+		},
+	);
+	if ( 'full' !== $access ) {
+		return $p;
+	}
+	$p['move'] = function ( $folder_id, array $ids ) {
+		if ( $folder_id && ! term_exists( (int) $folder_id, 'happyfiles_category' ) ) {
+			return new WP_Error( 'minn_folder_missing', __( 'That folder no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		// Mirror their move_item_ids handler: with "multiple folders per
+		// item" enabled a move ADDS the folder, otherwise it replaces; the
+		// contract's folder 0 = out of every folder (their
+		// remove_from_all_folders path).
+		$multiple = (bool) get_option( 'happyfiles_multiple_folders', false );
+		foreach ( $ids as $id ) {
+			if ( ! $folder_id ) {
+				wp_delete_object_term_relationships( $id, 'happyfiles_category' );
+				continue;
+			}
+			$r = wp_set_object_terms( $id, array( (int) $folder_id ), 'happyfiles_category', $multiple );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+		}
+		return true;
+	};
+	return $p;
+} );
