@@ -1542,6 +1542,34 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// HappyFiles Pro: plain options. happyfiles_license_status stores the
+	// vendor's last activation response ({type, message}); type 'error' is
+	// their invalid/limit answer, anything else recorded means the key was
+	// accepted. No expiry is stored locally.
+	$providers['happyfiles-pro'] = array(
+		'name'      => 'HappyFiles Pro',
+		'component' => 'happyfiles-pro/happyfiles-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'happyfiles-pro/happyfiles-pro.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$key = (string) get_option( 'happyfiles_license_key', '' );
+			if ( '' === $key ) {
+				return array( $item( array( 'name' => 'HappyFiles Pro', 'state' => 'missing' ) ) );
+			}
+			$status = get_option( 'happyfiles_license_status', array() );
+			$type   = is_array( $status ) ? strtolower( (string) ( $status['type'] ?? '' ) ) : '';
+			$msg    = is_array( $status ) ? wp_strip_all_tags( (string) ( $status['message'] ?? '' ) ) : '';
+			if ( 'error' === $type ) {
+				return array( $item( array( 'name' => 'HappyFiles Pro', 'state' => 'invalid', 'key' => true, 'note' => $msg ) ) );
+			}
+			if ( '' !== $msg || '' !== $type ) {
+				return array( $item( array( 'name' => 'HappyFiles Pro', 'state' => 'valid', 'key' => true ) ) );
+			}
+			return array( $item( array( 'name' => 'HappyFiles Pro', 'state' => 'unknown', 'key' => true, 'note' => __( 'Key stored; no recorded status', 'minn-admin' ) ) ) );
+		},
+	);
+
 	// Brainstorm Force family (Astra Pro, the Ultimate Addons, Convert Pro,
 	// Schema Pro, WP Portfolio, Spectra Pro, Premium Starter Templates …).
 	// One shared licensing core and one registry option, but a separate
@@ -2691,6 +2719,72 @@ function minn_admin_license_default_providers() {
 				return array( 'ok' => true, 'code' => '', 'message' => '' );
 			}
 			return array( 'ok' => false, 'code' => 'exist' === $res ? 'site_limit' : 'invalid', 'message' => __( 'exist', 'minn-admin' ) === $res ? 'The stored code is now registered to another site.' : 'ThemePunch no longer accepts the stored code.' );
+		};
+	}
+
+	// HappyFiles Pro: the whole lifecycle rides its OWN option hooks —
+	// add_option_happyfiles_license_key runs the remote activation and stores
+	// happyfiles_license_status, delete_option_… deregisters the site. Their
+	// settings page can only ever delete-then-add (the key input is not
+	// submitted while a key is stored), so that is the faithful activate
+	// path for a replacement key too. Hooks only exist while the plugin is
+	// active, hence the class gate.
+	if ( class_exists( '\HappyFiles\Pro_Settings' ) ) {
+		$hf_classify = function () {
+			$status = get_option( 'happyfiles_license_status', array() );
+			$type   = is_array( $status ) ? strtolower( (string) ( $status['type'] ?? '' ) ) : '';
+			$msg    = is_array( $status ) ? wp_strip_all_tags( (string) ( $status['message'] ?? '' ) ) : '';
+			if ( '' === $type && '' === $msg ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'HappyFiles recorded no response; the activation request may not have reached happyfiles.io.', 'minn-admin' ) );
+			}
+			if ( 'error' === $type ) {
+				$limit = ( false !== stripos( $msg, 'limit' ) || false !== stripos( $msg, 'maximum' ) || false !== stripos( $msg, 'exceed' ) );
+				return array( 'ok' => false, 'code' => $limit ? 'site_limit' : 'invalid', 'message' => $msg ? $msg : __( 'happyfiles.io did not accept this license key.', 'minn-admin' ) );
+			}
+			return array( 'ok' => true, 'code' => '', 'message' => $msg );
+		};
+		$providers['happyfiles-pro']['secret_label'] = __( 'HappyFiles license key', 'minn-admin' );
+		$providers['happyfiles-pro']['activate']     = function ( $secret ) use ( $hf_classify ) {
+			$prev = (string) get_option( 'happyfiles_license_key', '' );
+			// Their Remove path: deleting the key deregisters the old one.
+			delete_option( 'happyfiles_license_key' );
+			delete_option( 'happyfiles_license_status' );
+			add_option( 'happyfiles_license_key', trim( (string) $secret ) );
+			$res = $hf_classify();
+			if ( ! $res['ok'] ) {
+				// A rejected key must not clobber a previously working one:
+				// clear it, then re-register the prior key through the same
+				// vendor hook (which also refreshes its status).
+				delete_option( 'happyfiles_license_key' );
+				delete_option( 'happyfiles_license_status' );
+				if ( '' !== $prev ) {
+					add_option( 'happyfiles_license_key', $prev );
+				}
+			}
+			return $res;
+		};
+		$providers['happyfiles-pro']['deactivate'] = function () {
+			if ( '' === (string) get_option( 'happyfiles_license_key', '' ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No license key is stored.', 'minn-admin' ) );
+			}
+			// delete_option fires their license_key_deleted hook, which
+			// deregisters the site with happyfiles.io.
+			delete_option( 'happyfiles_license_key' );
+			delete_option( 'happyfiles_license_status' );
+			delete_site_transient( \HappyFiles\Pro_Settings::UPDATE_DATA_TRANSIENT );
+			return array( 'ok' => true, 'code' => '', 'message' => __( 'The license key was removed and the site deregistered with happyfiles.io.', 'minn-admin' ) );
+		};
+		$providers['happyfiles-pro']['verify'] = function () use ( $hf_classify ) {
+			$key = (string) get_option( 'happyfiles_license_key', '' );
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No license key is stored.', 'minn-admin' ) );
+			}
+			// Their only revalidation path is delete-then-add: the site is
+			// briefly deregistered and re-registered with happyfiles.io.
+			delete_option( 'happyfiles_license_key' );
+			delete_option( 'happyfiles_license_status' );
+			add_option( 'happyfiles_license_key', $key );
+			return $hf_classify();
 		};
 	}
 
