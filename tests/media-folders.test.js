@@ -208,6 +208,109 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await plug( 'filebird/filebird', 'active' ).catch( () => {} );
 	}
 
+	// Phase 3 — provider swap: HappyFiles Pro (active fixture, shadowed by
+	// FileBird at rest). Its happyfiles_category taxonomy is REST-exposed,
+	// so seeding rides core REST; the move check goes through the minn
+	// route, which mirrors HappyFiles' own move semantics. FileBird is
+	// restored in finally (resident).
+	let hf = null;
+	try {
+		await plug( 'filebird/filebird', 'inactive' );
+		await page.goto( BASE + '/minn-admin/media', { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+		t.check( 'HappyFiles answers the contract after the swap', await page.evaluate( () =>
+			!! ( window.MINN.mediaFolders && window.MINN.mediaFolders.name === 'HappyFiles' ) ) );
+		t.check( 'admin gets the Move control (full access tier)', await page.evaluate( () =>
+			!! ( window.MINN.mediaFolders && window.MINN.mediaFolders.move ) ) );
+
+		hf = await page.evaluate( async () => {
+			const jhead = { 'X-WP-Nonce': window.MINN.nonce, 'Content-Type': 'application/json' };
+			const png = async ( color, name ) => {
+				const canvas = document.createElement( 'canvas' );
+				canvas.width = 320;
+				canvas.height = 240;
+				const ctx = canvas.getContext( '2d' );
+				ctx.fillStyle = color;
+				ctx.fillRect( 0, 0, 320, 240 );
+				const blob = await new Promise( ( r ) => canvas.toBlob( r, 'image/png' ) );
+				const fd = new FormData();
+				fd.append( 'file', blob, name );
+				const res = await fetch( window.MINN.restUrl + 'wp/v2/media', {
+					method: 'POST', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin', body: fd,
+				} );
+				return ( await res.json() ).id;
+			};
+			const inFolder = await png( '#3aa56e', 'minn-hf-in.png' );
+			const loose = await png( '#a53a6e', 'minn-hf-loose.png' );
+			const term = await ( await fetch( window.MINN.restUrl + 'wp/v2/happyfiles_category', {
+				method: 'POST', headers: jhead, credentials: 'same-origin',
+				body: JSON.stringify( { name: 'Minn HF Folder' } ),
+			} ) ).json();
+			await fetch( window.MINN.restUrl + 'wp/v2/media/' + inFolder, {
+				method: 'POST', headers: jhead, credentials: 'same-origin',
+				body: JSON.stringify( { happyfiles_category: [ term.id ] } ),
+			} );
+			return { folder: term.id, inFolder, loose };
+		} );
+		t.check( 'HappyFiles folder seeded over core REST', !! ( hf.folder && hf.inFolder && hf.loose ), JSON.stringify( hf ) );
+
+		await page.goto( BASE + '/minn-admin/media', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `[data-media="${ hf.inFolder }"]`, { timeout: 20000 } );
+		const openHf = async ( acv ) => {
+			for ( let i = 0; i < 20; i++ ) {
+				await page.click( '[data-foldercombo] .minn-ac-input' );
+				const hit = await page.waitForSelector( `[data-foldercombo] .minn-ac-item[data-acv="${ acv }"]`, { timeout: 700 } )
+					.then( () => true ).catch( () => false );
+				if ( hit ) return;
+			}
+			throw new Error( 'happyfiles combobox never offered ' + acv );
+		};
+		await openHf( hf.folder );
+		t.check( 'the reserved Uncategorized row is on offer', !! ( await page.$( '[data-foldercombo] .minn-ac-item[data-acv="0"]' ) ) );
+		await page.click( `[data-foldercombo] .minn-ac-item[data-acv="${ hf.folder }"]` );
+		await page.waitForFunction( ( id ) => ! document.querySelector( `[data-media="${ id }"]` ), hf.loose, { timeout: 20000 } );
+		t.check( 'HappyFiles folder filters the library', !! ( await page.$( `[data-media="${ hf.inFolder }"]` ) ) );
+
+		// Move the loose file in through the minn route, then confirm the
+		// ids shim sees both and the stored terms match (replace semantics,
+		// HappyFiles' single-folder default).
+		const moved = await page.evaluate( async ( a ) => {
+			const jhead = { 'X-WP-Nonce': window.MINN.nonce, 'Content-Type': 'application/json' };
+			const mv = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/media/folders/move', {
+				method: 'POST', headers: jhead, credentials: 'same-origin',
+				body: JSON.stringify( { folder: a.folder, ids: [ a.loose ] } ),
+			} ) ).json();
+			const shim = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/media/folders/' + a.folder + '/ids', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} ) ).json();
+			const terms = await ( await fetch( window.MINN.restUrl + 'wp/v2/media/' + a.loose + '?_fields=happyfiles_category', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} ) ).json();
+			return { mv, shim, terms };
+		}, hf );
+		t.check( 'move lands through HappyFiles\' own taxonomy',
+			!! ( moved.mv && moved.mv.ok ) && moved.shim.ids.includes( hf.loose ) && moved.shim.ids.includes( hf.inFolder )
+				&& JSON.stringify( moved.terms.happyfiles_category ) === JSON.stringify( [ hf.folder ] ),
+			JSON.stringify( moved ) );
+	} finally {
+		await page.evaluate( async ( a ) => {
+			if ( ! a ) return;
+			const h = { 'X-WP-Nonce': window.MINN.nonce };
+			if ( a.folder ) {
+				await fetch( window.MINN.restUrl + 'wp/v2/happyfiles_category/' + a.folder + '?force=true', {
+					method: 'DELETE', headers: h, credentials: 'same-origin',
+				} ).catch( () => {} );
+			}
+			for ( const id of [ a.inFolder, a.loose ] ) {
+				if ( ! id ) continue;
+				await fetch( window.MINN.restUrl + 'wp/v2/media/' + id + '?force=true', {
+					method: 'DELETE', headers: h, credentials: 'same-origin',
+				} ).catch( () => {} );
+			}
+		}, hf ).catch( () => {} );
+		await plug( 'filebird/filebird', 'active' ).catch( () => {} );
+	}
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
 	console.error( e );

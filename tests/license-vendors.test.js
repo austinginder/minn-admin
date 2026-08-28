@@ -113,6 +113,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			// CleanTalk: the same key shape as Akismet (cloud access key,
 			// not a purchase license). Installed-inactive at rest.
 			'CleanTalk Anti-Spam',
+			// HappyFiles Pro (active fixture, unlicensed: reads missing until
+			// a real key lands; its own update check rewrites the status
+			// option against happyfiles.io, so never seed a fake key).
+			'HappyFiles Pro',
 		];
 		for ( const name of FAMILY ) {
 			const info = await page.evaluate( ( n ) => {
