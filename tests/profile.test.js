@@ -69,6 +69,26 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'website + bio persist over REST', pub.url === 'https://example.com/probe' && pub.description === 'Suite bio probe.',
 			JSON.stringify( { url: pub.url, description: pub.description } ) );
 
+		/* ===== Typed https:// must not ligature into "https: /host" =====
+		   JetBrains Mono's calt :// ligature kerns the colon away from the
+		   slashes. The stored value was always fine; the field LOOKED mangled.
+		   Type real keystrokes (not fill) so a stray / handler would also fail. */
+		await page.click( '#minn-pf-url', { clickCount: 3 } );
+		await page.keyboard.type( 'https://anchor.host' );
+		const urlField = await page.$eval( '#minn-pf-url', ( el ) => {
+			const cs = getComputedStyle( el );
+			return {
+				value: el.value,
+				ligatures: cs.fontVariantLigatures,
+				features: cs.fontFeatureSettings,
+			};
+		} );
+		t.check( 'typed website URL keeps both slashes', urlField.value === 'https://anchor.host', urlField.value );
+		const ligaOff = /none|no-contextual/.test( urlField.ligatures )
+			|| /calt["' ]+?(0|off)/i.test( urlField.features );
+		t.check( 'website field disables mono :// ligatures', ligaOff,
+			JSON.stringify( { ligatures: urlField.ligatures, features: urlField.features } ) );
+
 		/* ===== Language picker + toolbar preference ===== */
 		t.check( 'language combobox renders', !! await page.$( '#minn-pf-lang' ) );
 		const langCatalog = () => page.evaluate( async () => ( await ( await fetch(

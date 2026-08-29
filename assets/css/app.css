@@ -36,6 +36,10 @@
   font-style: normal;
   font-weight: 100 800;
   font-display: swap;
+  /* calt-off is a face default: form controls reset element-level ligature
+     properties via the UA `font` shorthand, and the :// ligature would
+     otherwise still fire inside those boxes. */
+  font-feature-settings: "calt" 0;
   src: url('../fonts/jetbrains-mono-vietnamese.woff2') format('woff2');
   unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
 }
@@ -44,6 +48,7 @@
   font-style: normal;
   font-weight: 100 800;
   font-display: swap;
+  font-feature-settings: "calt" 0;
   src: url('../fonts/jetbrains-mono-latin-ext.woff2') format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
@@ -52,6 +57,7 @@
   font-style: normal;
   font-weight: 100 800;
   font-display: swap;
+  font-feature-settings: "calt" 0;
   src: url('../fonts/jetbrains-mono.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
@@ -71,8 +77,12 @@ body {
      Minn renders mono for DATA (urls, paths, versions, ip addresses), not for
      code authoring, so contextual alternates are off. `no-contextual` is
      deliberate rather than `none`: it leaves the sans face's ordinary prose
-     ligatures (fi, fl) alone. Inherited, so it covers every mono surface. */
+     ligatures (fi, fl) alone. `calt` 0 is the OpenType switch those ligatures
+     actually key on: some engines (and every text box) ignore the variant
+     property. Inherited on the page; input/textarea re-inherit below because
+     the UA `font` shorthand resets both properties to initial. */
   font-variant-ligatures: no-contextual;
+  font-feature-settings: "calt" 0;
 }
 
 /*
@@ -220,7 +230,14 @@ body {
 }
 
 button { font-family: inherit; }
-input, textarea { font-family: inherit; }
+input, textarea {
+  font-family: inherit;
+  /* UA `font: -webkit-small-control` (and the equivalent elsewhere) resets
+     ligature + feature-settings to initial, undoing the body rule that exists
+     so typed URLs do not ligature. Re-inherit so .minn-input.mono is covered. */
+  font-variant-ligatures: inherit;
+  font-feature-settings: inherit;
+}
 a { color: var(--accent2); text-decoration: none; }
 
 /* ===== Layout ===== */
@@ -1868,7 +1885,15 @@ button.minn-spam-link { background: none; border: 0; padding: 0; cursor: pointer
 }
 .minn-input:focus { outline: none; border-color: var(--accent); }
 textarea.minn-input { font-family: inherit; line-height: 1.5; resize: vertical; min-height: 38px; }
-.minn-input.mono { font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+.minn-input.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  /* Pin, do not rely on inheritance: this is the class a website URL is typed
+     into (Your profile, Edit user, menu links). `none` rather than the page's
+     `no-contextual` — data fields have no use for fi/fl either. */
+  font-variant-ligatures: none;
+  font-feature-settings: "calt" 0;
+}
 select.minn-input {
   -webkit-appearance: none; appearance: none; cursor: pointer; padding-inline-end: 32px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239d9da7' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
