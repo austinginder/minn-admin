@@ -38806,13 +38806,17 @@
 					</div>
 					<div class="minn-help-body" style="border-bottom:0;">
 						${ m.done
-							? `<p>${ sprintf( /* translators: 1: the word "Done." in bold. 2: the word "Plugins" in bold. */ __( '%1$s Heading to the classic dashboard… Reactivate Minn any time from %2$s, and everything here (content, settings, markup) is exactly as you left it.' ), `<b>${ esc( __( 'Done.' ) ) }</b>`, `<b>${ esc( __( 'Plugins' ) ) }</b>` ) }</p>`
+							? ( ENGINE
+								? `<p>${ sprintf( /* translators: 1: the word "Done." in bold. 2: the wp plugin activate command, in code. */ __( '%1$s The site keeps running without an admin interface. Bring Minn back any time with %2$s; everything here (content, settings, markup) is exactly as you left it.' ), `<b>${ esc( __( 'Done.' ) ) }</b>`, '<code>wp plugin activate minn-admin</code>' ) }</p>`
+								: `<p>${ sprintf( /* translators: 1: the word "Done." in bold. 2: the word "Plugins" in bold. */ __( '%1$s Heading to the classic dashboard… Reactivate Minn any time from %2$s, and everything here (content, settings, markup) is exactly as you left it.' ), `<b>${ esc( __( 'Done.' ) ) }</b>`, `<b>${ esc( __( 'Plugins' ) ) }</b>` ) }</p>` )
+							: ENGINE ? `<p>${ sprintf( /* translators: %s: the /minn-admin/ path, in bold. */ __( 'This turns off the %s dashboard. The site, its REST API, cron and command line keep running without an admin interface.' ), `<b>${ esc( __( '/minn-admin/' ) ) }</b>` ) }</p>
+							<p>${ sprintf( /* translators: %s: the wp plugin activate command, in code. */ __( 'Nothing is lost: turn it back on with %s.' ), '<code>wp plugin activate minn-admin</code>' ) }</p>`
 							: `<p>${ sprintf( /* translators: %s: the /minn-admin/ path, in bold. */ __( 'This turns off the %s dashboard and returns you to the classic wp-admin.' ), `<b>${ esc( __( '/minn-admin/' ) ) }</b>` ) }</p>
 							<p>${ esc( __( 'Nothing is lost: Minn writes native WordPress content and options, and reactivating from the Plugins screen brings this dashboard straight back.' ) ) }</p>` }
 					</div>
 					${ m.done ? '' : `
 					<div class="minn-modal-actions">
-						<button class="minn-btn-soft danger" id="minn-off-confirm">${ esc( __( 'Deactivate and go to wp-admin' ) ) }</button>
+						<button class="minn-btn-soft danger" id="minn-off-confirm">${ esc( ENGINE ? __( 'Deactivate' ) : __( 'Deactivate and go to wp-admin' ) ) }</button>
 						<button class="minn-btn-primary" id="minn-off-cancel">${ esc( __( 'Keep Minn' ) ) }</button>
 					</div>` }
 				</div>
