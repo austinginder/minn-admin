@@ -2831,6 +2831,9 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-session-empty { font-size: 13px; color: var(--text3); padding: 6px 0; }
 /* ===== Plugin install modal ===== */
 .minn-pi-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.minn-pi-engine-note { margin: 0; font-size: 13px; color: var(--text2); line-height: 1.5; }
+.minn-pi-urlrow { display: flex; gap: 8px; }
+.minn-pi-urlrow .minn-input { flex: 1; min-width: 0; }
 .minn-dropzone.compact { padding: 16px; margin-bottom: 0; flex-direction: row; justify-content: center; }
 /* Catalog cards — popular plugins to install (marketing-library shape). */
 .minn-modal-pi { max-width: min(920px, 96vw); }
