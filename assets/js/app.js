@@ -6,6 +6,9 @@
 	'use strict';
 
 	const B = window.MINN;
+	// Minn Engine serves the same app with no WordPress behind it: the boot
+	// payload names the engine, and every wp-admin-only control keys off this.
+	const ENGINE = !! ( B && B.engine );
 
 	/* ===== i18n =====
 	 * Translations ride the boot payload (B.i18n), built server-side from
@@ -3774,7 +3777,7 @@
 						<div class="minn-user-role">${ esc( B.user.role ) }</div>
 					</div>
 					<div class="minn-user-acts">
-						<a class="minn-user-logout" id="minn-wp-admin-link" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="${ esc( __( 'WordPress admin (opens in a new tab) · ⌥-click while editing opens this post in the block editor)' ) ) }" aria-label="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }">${ icon( 'wp' ) }</a>
+						${ ENGINE ? '' : `<a class="minn-user-logout" id="minn-wp-admin-link" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="${ esc( __( 'WordPress admin (opens in a new tab) · ⌥-click while editing opens this post in the block editor)' ) ) }" aria-label="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }">${ icon( 'wp' ) }</a>` }
 						<a class="minn-user-logout" href="${ esc( B.site.logout ) }" title="${ esc( __( 'Log out' ) ) }" aria-label="${ esc( __( 'Log out' ) ) }">${ icon( 'logout' ) }</a>
 					</div>
 				</div>
@@ -4307,7 +4310,7 @@
 				</div>` ).join( '' ) }
 			</div>
 			<div class="minn-toggle-rows minn-side-toggles" style="margin-top:12px;">
-				${ pol.signin === 'minn' ? lockedToggleRowHtml( __( 'Minn is the default admin' ), true ) : `
+				${ ENGINE ? '' : pol.signin === 'minn' ? lockedToggleRowHtml( __( 'Minn is the default admin' ), true ) : `
 				<div class="minn-toggle-row">
 					<button type="button" class="minn-switch${ defOn ? ' on' : '' }" id="minn-default-admin" role="switch" aria-checked="${ defOn ? 'true' : 'false' }" aria-label="${ esc( __( 'Minn is the default admin' ) ) }"><span class="minn-switch-knob"></span></button>
 					<div class="minn-toggle-info">
@@ -4315,7 +4318,7 @@
 						<div class="minn-toggle-desc">${ esc( __( 'After sign-in, land here. The admin bar Edit link opens the Minn editor. Full wp-admin stays available everywhere else.' ) ) }</div>
 					</div>
 				</div>` }
-				${ pol.toolbar ? lockedToggleRowHtml( __( 'Minn admin bar on the site' ), pol.toolbar === 'minn' ) : `
+				${ ENGINE ? '' : pol.toolbar ? lockedToggleRowHtml( __( 'Minn admin bar on the site' ), pol.toolbar === 'minn' ) : `
 				<div class="minn-toggle-row">
 					<button type="button" class="minn-switch${ ap.frontBar ? ' on' : '' }" id="minn-front-bar" role="switch" aria-checked="${ ap.frontBar ? 'true' : 'false' }" aria-label="${ esc( __( 'Minn admin bar on the site' ) ) }"><span class="minn-switch-knob"></span></button>
 					<div class="minn-toggle-info">
@@ -20151,7 +20154,7 @@
 	 * whichever manager owns each one (ACF / CPT UI / Minn's own store —
 	 * see class-minn-admin-cpt.php). Code-registered types are read-only. */
 
-	const CPT_SOURCE_LABEL = { core: 'WordPress', code: __( 'Code' ), acf: 'ACF', cptui: __( 'CPT UI' ), acpt: 'ACPT', minn: 'Minn' };
+	const CPT_SOURCE_LABEL = { core: ENGINE ? 'Minn Engine' : 'WordPress', code: __( 'Code' ), acf: 'ACF', cptui: __( 'CPT UI' ), acpt: 'ACPT', minn: 'Minn' };
 	const CPT_SUPPORTS = [
 		[ 'title', 'Title' ], [ 'editor', 'Editor' ], [ 'thumbnail', __( 'Featured image' ) ],
 		[ 'excerpt', 'Excerpt' ], [ 'custom-fields', __( 'Custom fields' ) ], [ 'comments', 'Comments' ],
@@ -37669,7 +37672,7 @@
 			{ label: __( 'Open the user guide' ), kind: 'link', icon: '📖', run: openGuide },
 			{ label: __( 'About Minn — help & shortcuts' ), kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
 			{ label: __( 'Visit site' ), kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank', 'noopener' ) },
-			{ label: __( 'Classic wp-admin' ), kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank', 'noopener' ) },
+			...( ENGINE ? [] : [ { label: __( 'Classic wp-admin' ), kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank', 'noopener' ) } ] ),
 			{ label: __( 'Log out' ), kind: 'link', icon: '⎋', run: () => { window.location.href = B.site.logout; } },
 		);
 		return cmds;
@@ -42353,7 +42356,7 @@
 							${ appearanceSwatchesHtml( ue.appearance, { modes: [ 'dark', 'light' ] } ) }
 						</div>
 						<div>
-							<div class="minn-toggle-rows minn-side-toggles">
+							<div class="minn-toggle-rows minn-side-toggles">${ ENGINE ? '' : `
 								<div class="minn-toggle-row">
 									<button type="button" class="minn-switch${ ue.appearance.defaultAdmin ? ' on' : '' }" id="minn-ue-default-admin" role="switch" aria-checked="${ ue.appearance.defaultAdmin ? 'true' : 'false' }" aria-label="${ esc( __( 'Minn is their default admin' ) ) }"><span class="minn-switch-knob"></span></button>
 									<div class="minn-toggle-info">
@@ -42367,7 +42370,7 @@
 										<div class="minn-toggle-label">${ esc( __( 'Show toolbar when viewing the site' ) ) }</div>
 										<div class="minn-toggle-desc">${ esc( __( 'The WordPress admin bar on the front end while they are signed in.' ) ) }</div>
 									</div>
-								</div>
+								</div>` }
 							</div>
 						</div>
 					</div>
@@ -42766,7 +42769,7 @@
 							<div class="minn-field-label">${ esc( __( 'Theme' ) ) }</div>
 							${ themeModeHtml() }
 							<div class="minn-toggle-rows minn-side-toggles" style="margin-top:12px;">
-								${ ( B.user.policy || {} ).toolbar ? lockedToggleRowHtml( __( 'Show toolbar when viewing the site' ), ( B.user.policy || {} ).toolbar === 'wp' ) : `
+								${ ENGINE ? '' : ( B.user.policy || {} ).toolbar ? lockedToggleRowHtml( __( 'Show toolbar when viewing the site' ), ( B.user.policy || {} ).toolbar === 'wp' ) : `
 								<div class="minn-toggle-row">
 									<button type="button" class="minn-switch${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' ? ' on' : '' }" id="minn-pf-toolbar" role="switch" aria-checked="${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' }" aria-label="${ esc( __( 'Show toolbar when viewing the site' ) ) }"><span class="minn-switch-knob"></span></button>
 									<div class="minn-toggle-info">
