@@ -57,6 +57,31 @@ function minn_admin_bricks_template_types() {
 	return $types;
 }
 
+/**
+ * Whether the current user may see the template library, through Bricks' own
+ * resolver.
+ *
+ * Bricks only puts its Templates menu in front of a non-administrator when its
+ * own permission matrix allows it, and that matrix is a stored setting rather
+ * than a capability. Gating on the plain post capability named the plugin, and
+ * listed every template in it, to exactly the roles Bricks shows no Templates
+ * screen at all. Export and duplicate in this file already ask Bricks; the
+ * list and the sidebar entry ask the same question now.
+ */
+function minn_admin_bricks_can_view_templates() {
+	if ( current_user_can( 'manage_options' ) ) {
+		return true;
+	}
+	if ( class_exists( '\Bricks\Builder_Permissions' ) && method_exists( '\Bricks\Builder_Permissions', 'user_has_permission' ) ) {
+		try {
+			return (bool) \Bricks\Builder_Permissions::user_has_permission( 'edit_templates' );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+	return current_user_can( 'edit_posts' );
+}
+
 /** Whether the current user may create templates, through Bricks' own resolver. */
 function minn_admin_bricks_can_create() {
 	if ( class_exists( '\Bricks\Builder_Permissions' ) && method_exists( '\Bricks\Builder_Permissions', 'user_has_permission' ) ) {
@@ -215,7 +240,7 @@ function minn_admin_bricks_template_item( $post ) {
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_bricks_active() ) {
+	if ( ! minn_admin_bricks_active() || ! minn_admin_bricks_can_view_templates() ) {
 		return $surfaces;
 	}
 	$types       = minn_admin_bricks_template_types();
@@ -261,7 +286,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Bricks',
 		'family'     => 'builder-templates',
 		'icon'       => 'columns',
-		'cap'        => 'edit_posts',
+		// Their answer is a resolver, not a capability name; the guard above
+		// is the real gate (the Solid Security / UpdraftPlus precedent).
+		'cap'        => 'read',
 		'settings'   => array(
 			'cap'   => 'manage_options',
 			'tabs'  => array(
@@ -336,7 +363,7 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	$perm = function () {
-		return current_user_can( 'edit_posts' );
+		return minn_admin_bricks_can_view_templates();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/bricks/templates', array(
@@ -352,6 +379,11 @@ add_action( 'rest_api_init', function () {
 				$args    = array(
 					'post_type'      => BRICKS_DB_TEMPLATE_SLUG,
 					'post_status'    => array( 'publish', 'draft', 'pending', 'future', 'private' ),
+					// Naming the unpublished statuses explicitly switches off
+					// the scoping WP_Query would otherwise apply, so without
+					// this every author sees every other author's unfinished
+					// templates. Their own list screen scopes them.
+					'perm'           => 'readable',
 					'posts_per_page' => 25,
 					'paged'          => $page,
 					'orderby'        => $orderby,
@@ -431,7 +463,30 @@ add_action( 'rest_api_init', function () {
 					if ( ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
 						return new WP_Error( 'invalid', __( 'Unknown template type.', 'minn-admin' ), array( 'status' => 400 ) );
 					}
+					$previous = (string) get_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, true );
 					update_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, $type );
+					// A template's design is stored under one of three keys
+					// chosen by its type, so changing the type without moving
+					// the design leaves it behind and the template renders
+					// empty everywhere it is used. Their own type control moves
+					// it; so must this. Ask them which key each type reads,
+					// rather than keeping a copy of that mapping here.
+					if ( $previous && $previous !== $type && class_exists( '\Bricks\Database' )
+						&& method_exists( '\Bricks\Database', 'get_bricks_data_key' ) ) {
+						$from = \Bricks\Database::get_bricks_data_key( $previous );
+						$to   = \Bricks\Database::get_bricks_data_key( $type );
+						if ( $from && $to && $from !== $to ) {
+							$tree = get_post_meta( $post->ID, $from, true );
+							if ( ! empty( $tree ) ) {
+								$stored = update_post_meta( $post->ID, $to, is_array( $tree ) ? wp_slash( $tree ) : $tree );
+								// Only let go of the original once the copy is
+								// safely in place.
+								if ( $stored ) {
+									delete_post_meta( $post->ID, $from );
+								}
+							}
+						}
+					}
 				}
 				// Tags ride as an array (an empty one clears); by NAME so new
 				// tags create on the fly, like their tax_input create path.
@@ -505,8 +560,33 @@ add_action( 'rest_api_init', function () {
 			}
 			/* translators: %s: the source template's title. */
 			$copy_title = sprintf( __( '%s (copy)', 'minn-admin' ), $post->post_title );
-			$new_id     = wp_insert_post( array(
-				'post_status' => current_user_can( 'publish_posts' ) ? 'publish' : 'pending',
+			// Their own cloner is the only correct one. It starts the copy as a
+			// draft, drops the rules saying where the template applies, and
+			// gives every element a fresh id. Reimplementing it means
+			// reimplementing all three and getting any of them wrong: a copy
+			// that publishes itself inherits "applies to the entire website",
+			// and a template holding a code element carries that code's
+			// signature with it, because the signature is taken over the code
+			// alone. Bricks runs such code on the public site, so a copy is
+			// enough to put it there without ever being allowed to write it.
+			// They also honour the site's own setting for whether duplication
+			// is allowed at all.
+			if ( class_exists( '\Bricks\Admin' ) && method_exists( '\Bricks\Admin', 'duplicate_content' ) ) {
+				$new_id = \Bricks\Admin::duplicate_content( $post->ID );
+				if ( ! $new_id ) {
+					return new WP_Error(
+						'duplicate_failed',
+						__( 'Bricks declined to duplicate this template. Duplication may be turned off in its settings.', 'minn-admin' ),
+						array( 'status' => 403 )
+					);
+				}
+				wp_update_post( array( 'ID' => $new_id, 'post_title' => $copy_title ) );
+				return rest_ensure_response( minn_admin_bricks_template_item( get_post( $new_id ) ) );
+			}
+			// A build without their cloner: a DRAFT copy, never a published
+			// one, and the placement rules stay behind.
+			$new_id = wp_insert_post( array(
+				'post_status' => 'draft',
 				'post_title'  => $copy_title,
 				'post_type'   => BRICKS_DB_TEMPLATE_SLUG,
 			), true );
@@ -524,6 +604,13 @@ add_action( 'rest_api_init', function () {
 				foreach ( $values as $value ) {
 					add_post_meta( $new_id, $key, wp_slash( maybe_unserialize( $value ) ) );
 				}
+			}
+			// Two templates claiming the same slot is their own reason for
+			// stripping these from a copy.
+			$settings = get_post_meta( $post->ID, BRICKS_DB_TEMPLATE_SETTINGS, true );
+			if ( is_array( $settings ) && isset( $settings['templateConditions'] ) ) {
+				unset( $settings['templateConditions'] );
+				update_post_meta( $new_id, BRICKS_DB_TEMPLATE_SETTINGS, wp_slash( $settings ) );
 			}
 			foreach ( array( BRICKS_DB_TEMPLATE_TAX_TAG, BRICKS_DB_TEMPLATE_TAX_BUNDLE ) as $tax ) {
 				$terms = wp_get_object_terms( $post->ID, $tax, array( 'fields' => 'ids' ) );
@@ -616,7 +703,7 @@ function minn_admin_bricks_settings_fields( $tab ) {
 				'fields' => array(
 					array( 'key' => 'defaultTemplatesDisabled', 'label' => __( 'Disable default templates', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle', 'help' => __( 'Without conditions, published header and footer templates apply everywhere. Turn on to require explicit conditions.', 'minn-admin' ) ),
 					array( 'key' => 'publicTemplates', 'label' => __( 'Public templates', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle', 'help' => __( 'Whether template pages are viewable by anyone, or only logged-in users.', 'minn-admin' ) ),
-					array( 'key' => 'myTemplatesAccess', 'label' => __( 'Remote template access', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle', 'help' => __( 'Allow other sites to browse and insert this site\'s templates from their template library.', 'minn-admin' ) ),
+					array( 'key' => 'myTemplatesAccess', 'label' => __( 'Remote template access', 'minn-admin' ), 'type' => 'toggle', 'store' => 'toggle', 'help' => __( 'Allow other sites to browse and insert this site\'s templates. Anyone who knows the address can ask, so set a password or list the allowed sites in Bricks first.', 'minn-admin' ) ),
 				),
 				'locked' => 8,
 			),
@@ -756,6 +843,24 @@ add_action( 'rest_api_init', function () {
 					switch ( $spec['store'] ) {
 						case 'toggle':
 							if ( ! empty( $value ) ) {
+								// Remote template access is the only thing
+								// standing in front of an endpoint that answers
+								// anyone, and the two things that narrow it, a
+								// password and a list of allowed sites, are
+								// optional and live on their settings screen
+								// beside the switch. Minn does not map either,
+								// so turning this on here with neither set
+								// would publish every template on the site to
+								// anyone who asks for them.
+								if ( 'myTemplatesAccess' === $key
+									&& '' === trim( (string) ( $s['myTemplatesPassword'] ?? '' ) )
+									&& empty( $s['myTemplatesWhitelist'] ) ) {
+									return new WP_Error(
+										'invalid',
+										__( 'Set a remote templates password, or list the sites allowed to ask, in Bricks first. Without one of those this opens every template on this site to anyone.', 'minn-admin' ),
+										array( 'status' => 400 )
+									);
+								}
 								$s[ $key ] = 'on';
 							} else {
 								unset( $s[ $key ] );
