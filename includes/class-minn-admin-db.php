@@ -259,6 +259,16 @@ class Minn_Admin_DB {
 					$name = strtolower( (string) $t->name );
 					foreach ( $foreign as $prefix ) {
 						if ( 0 === strpos( $name, $prefix ) ) {
+							// A neighbour's prefix can be the start of ours: a
+							// site at wp_12_ beside one at wp_1 matches here on
+							// every one of its own tables, and this runs before
+							// the branch that admits them, so all of them
+							// vanished. Exempt OUR OWN tables by name, never
+							// the whole prefix, or the neighbour's tables would
+							// come back in with them.
+							if ( 0 === strpos( $name, $own ) ) {
+								continue;
+							}
 							return false;
 						}
 					}

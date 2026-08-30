@@ -683,7 +683,11 @@ add_action( 'rest_api_init', function () {
 				delete_post_meta( $new_id, $key );
 				$values = get_post_meta( $post->ID, $key, false );
 				foreach ( $values as $value ) {
-					add_post_meta( $new_id, $key, wp_slash( maybe_unserialize( $value ) ) );
+					// get_post_meta() has already turned these back into real
+					// values. Doing it a second time would take a value that
+					// merely looks like stored data and rebuild it into an
+					// object, which is a doorway nobody needs open.
+					add_post_meta( $new_id, $key, wp_slash( $value ) );
 				}
 			}
 			try {

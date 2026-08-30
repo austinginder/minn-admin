@@ -69,6 +69,29 @@ function minn_admin_tm_name( $option_name ) {
 	return $option_name;
 }
 
+/**
+ * Whether an option row IS a transient's value (not its expiry sibling).
+ *
+ * Prefix, not substring, the same rule minn_admin_tm_is_site() states below
+ * and minn_admin_tm_name() strips by. An ordinary option whose name merely
+ * contains the words, say acme_transient_key, is not a transient: letting one
+ * through sent its delete to a key that does not exist and then reported
+ * success, while the option the operator actually picked stayed put.
+ *
+ * @param string $option_name Row's option_name.
+ * @return bool
+ */
+function minn_admin_tm_is_data( $option_name ) {
+	$option_name = (string) $option_name;
+	// Expiry siblings first: they also carry the value prefixes.
+	if ( 0 === strpos( $option_name, '_transient_timeout_' )
+		|| 0 === strpos( $option_name, '_site_transient_timeout_' ) ) {
+		return false;
+	}
+	return 0 === strpos( $option_name, '_transient_' )
+		|| 0 === strpos( $option_name, '_site_transient_' );
+}
+
 function minn_admin_tm_is_site( $option_name ) {
 	// Prefix, not substring, so this agrees with minn_admin_tm_name() above,
 	// which strips by prefix. An ordinary per-site transient whose own name
@@ -154,12 +177,16 @@ function minn_admin_tm_list( WP_REST_Request $request ) {
 	$kind     = (string) $request->get_param( 'kind' );
 	$offset   = ( $page - 1 ) * $per_page;
 
-	$esc_name = '%' . $wpdb->esc_like( '_transient_' ) . '%';
-	$esc_time = '%' . $wpdb->esc_like( '_transient_timeout_' ) . '%';
+	// Anchored, so the list agrees with the by-id routes: an option that
+	// merely contains the words is not a transient.
+	$esc_name = $wpdb->esc_like( '_transient_' ) . '%';
+	$esc_site = $wpdb->esc_like( '_site_transient_' ) . '%';
+	$esc_time = $wpdb->esc_like( '_transient_timeout_' ) . '%';
+	$esc_stim = $wpdb->esc_like( '_site_transient_timeout_' ) . '%';
 
 	// Base: data rows only (exclude timeout siblings), same as Transients Manager.
-	$where = 'option_name LIKE %s AND option_name NOT LIKE %s';
-	$args  = array( $esc_name, $esc_time );
+	$where = '( option_name LIKE %s OR option_name LIKE %s ) AND option_name NOT LIKE %s AND option_name NOT LIKE %s';
+	$args  = array( $esc_name, $esc_site, $esc_time, $esc_stim );
 
 	if ( $search ) {
 		$where .= ' AND option_name LIKE %s';
@@ -264,7 +291,7 @@ function minn_admin_tm_detail( $id ) {
 		"SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE option_id = %d",
 		(int) $id
 	) );
-	if ( ! $row || false === strpos( $row->option_name, '_transient_' ) || false !== strpos( $row->option_name, '_timeout_' ) ) {
+	if ( ! $row || ! minn_admin_tm_is_data( $row->option_name ) ) {
 		return new WP_Error( 'not_found', __( 'Transient not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 
@@ -307,13 +334,17 @@ function minn_admin_tm_detail( $id ) {
 function minn_admin_tm_status_model() {
 	global $wpdb;
 
-	$esc_name = '%' . $wpdb->esc_like( '_transient_' ) . '%';
-	$esc_time = '%' . $wpdb->esc_like( '_transient_timeout_' ) . '%';
+	$esc_name = $wpdb->esc_like( '_transient_' ) . '%';
+	$esc_site = $wpdb->esc_like( '_site_transient_' ) . '%';
+	$esc_time = $wpdb->esc_like( '_transient_timeout_' ) . '%';
+	$esc_stim = $wpdb->esc_like( '_site_transient_timeout_' ) . '%';
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	$total = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name NOT LIKE %s",
+		"SELECT COUNT(*) FROM {$wpdb->options} WHERE ( option_name LIKE %s OR option_name LIKE %s ) AND option_name NOT LIKE %s AND option_name NOT LIKE %s",
 		$esc_name,
-		$esc_time
+		$esc_site,
+		$esc_time,
+		$esc_stim
 	) );
 
 	// Expired: timeout rows past now (same shape System uses, scoped to timeout keys).
@@ -472,7 +503,7 @@ add_action( 'rest_api_init', function () {
 					"SELECT option_id, option_name FROM {$wpdb->options} WHERE option_id = %d",
 					$id
 				) );
-				if ( ! $row || false === strpos( $row->option_name, '_transient_' ) || false !== strpos( $row->option_name, '_timeout_' ) ) {
+				if ( ! $row || ! minn_admin_tm_is_data( $row->option_name ) ) {
 					return new WP_Error( 'not_found', __( 'Transient not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$name    = minn_admin_tm_name( $row->option_name );

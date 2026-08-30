@@ -929,17 +929,19 @@ function minn_admin_seo_surerank_provider() {
 			$post_id = (int) $post_id;
 			try {
 				if ( 'social_image' === $field ) {
+					// The address is always worked out from the media item's
+					// number, never accepted from the caller. That is the rule
+					// the write path states and every other provider keeps: an
+					// accepted address would let anyone who can edit a draft
+					// pin any picture on the internet as the social image of a
+					// post somebody else publishes later.
 					$id  = 0;
-					$url = '';
 					if ( is_array( $clean ) ) {
-						$id  = isset( $clean['id'] ) ? (int) $clean['id'] : 0;
-						$url = isset( $clean['url'] ) ? (string) $clean['url'] : '';
+						$id = isset( $clean['id'] ) ? (int) $clean['id'] : 0;
 					} elseif ( is_numeric( $clean ) ) {
 						$id = (int) $clean;
 					}
-					if ( $id > 0 && ! $url ) {
-						$url = (string) wp_get_attachment_url( $id );
-					}
+					$url = $id > 0 ? (string) wp_get_attachment_url( $id ) : '';
 					if ( $id > 0 || '' !== $url ) {
 						\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array(
 							'facebook_image_id'  => $id,
@@ -1135,17 +1137,15 @@ function minn_admin_seo_squirrly_provider() {
 			try {
 				$fields = array();
 				if ( 'social_image' === $field ) {
-					$url = '';
+					// Worked out from the media item's number, never accepted
+					// from the caller. See the note on the same field above.
+					$id = 0;
 					if ( is_array( $clean ) ) {
-						$id  = isset( $clean['id'] ) ? (int) $clean['id'] : 0;
-						$url = isset( $clean['url'] ) ? (string) $clean['url'] : '';
-						if ( $id > 0 && '' === $url ) {
-							$url = (string) wp_get_attachment_url( $id );
-						}
+						$id = isset( $clean['id'] ) ? (int) $clean['id'] : 0;
 					} elseif ( is_numeric( $clean ) ) {
-						$url = (string) wp_get_attachment_url( (int) $clean );
+						$id = (int) $clean;
 					}
-					$fields['og_media'] = $url;
+					$fields['og_media'] = $id > 0 ? (string) wp_get_attachment_url( $id ) : '';
 				} elseif ( 'title' === $field ) {
 					$fields['title'] = (string) $clean;
 				} elseif ( 'description' === $field ) {

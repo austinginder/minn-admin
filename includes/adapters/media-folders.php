@@ -228,7 +228,11 @@ add_action( 'rest_api_init', function () {
 			},
 			'args'                => array(
 				'folder' => array( 'type' => 'integer', 'required' => true, 'minimum' => 0 ),
-				'ids'    => array( 'type' => 'array', 'required' => true, 'items' => array( 'type' => 'integer' ) ),
+				// Every id is authorized one at a time below, so this is not a
+				// permission bound. It is the same ceiling the folder listing
+				// already uses, so one request cannot turn into a five figure
+				// run of term writes and their recounts.
+				'ids'    => array( 'type' => 'array', 'required' => true, 'maxItems' => 500, 'items' => array( 'type' => 'integer' ) ),
 			),
 			'callback'            => function ( $req ) {
 				$p   = minn_admin_media_folders_provider();

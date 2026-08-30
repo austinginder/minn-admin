@@ -94,6 +94,18 @@ function minn_admin_bricks_can_create() {
 	return current_user_can( 'edit_posts' );
 }
 
+/** Whether the current user may delete templates, through Bricks' own resolver. */
+function minn_admin_bricks_can_delete() {
+	if ( class_exists( '\Bricks\Builder_Permissions' ) && method_exists( '\Bricks\Builder_Permissions', 'user_has_permission' ) ) {
+		try {
+			return (bool) \Bricks\Builder_Permissions::user_has_permission( 'delete_templates' );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+	return current_user_can( 'edit_posts' );
+}
+
 /** Whether the current user may export templates, through Bricks' own resolver. */
 function minn_admin_bricks_can_export() {
 	if ( class_exists( '\Bricks\Builder_Permissions' ) && method_exists( '\Bricks\Builder_Permissions', 'user_has_permission' ) ) {
@@ -505,7 +517,11 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'DELETE',
 			'permission_callback' => function ( WP_REST_Request $request ) {
-				return current_user_can( 'delete_post', (int) $request['id'] );
+				// Trash was the one verb here with no Bricks-side check while
+				// create, export and duplicate all route through their
+				// resolver. A site that took template deletion away in their
+				// permission matrix means it.
+				return minn_admin_bricks_can_delete() && current_user_can( 'delete_post', (int) $request['id'] );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				$post = get_post( (int) $request['id'] );
@@ -957,6 +973,18 @@ function minn_admin_bricks_forms_ready() {
 }
 
 function minn_admin_bricks_forms_can_view() {
+	// Their accessor resolves the answer on demand; the raw property is only
+	// filled in by their own start-up, so reading it directly bets on load
+	// order for an authorization answer. Its default is false, so a cold read
+	// says no to everyone, administrators included.
+	if ( class_exists( '\Bricks\Capabilities' )
+		&& method_exists( '\Bricks\Capabilities', 'current_user_can_form_submission_access' ) ) {
+		try {
+			return (bool) \Bricks\Capabilities::current_user_can_form_submission_access();
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the property below.
+		}
+	}
 	return class_exists( '\Bricks\Capabilities' ) && ! empty( \Bricks\Capabilities::$form_submission_access );
 }
 

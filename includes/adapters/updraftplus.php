@@ -168,7 +168,11 @@ function minn_admin_updraftplus_can() {
 			// Fall through to the mirrored test below.
 		}
 	}
-	return current_user_can( apply_filters( 'option_page_capability_updraft-options-group', 'manage_options' ) );
+	$can = current_user_can( apply_filters( 'option_page_capability_updraft-options-group', 'manage_options' ) );
+	// They ask twice: a capability filter, and then a yes-or-no filter that can
+	// grant access outright. Mirroring only the first dropped half of their
+	// answer.
+	return (bool) apply_filters( 'updraft_user_can_manage', $can, false );
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {

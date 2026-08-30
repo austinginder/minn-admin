@@ -1563,8 +1563,16 @@ function minn_admin_license_default_providers() {
 			if ( 'error' === $type ) {
 				return array( $item( array( 'name' => 'HappyFiles Pro', 'state' => 'invalid', 'key' => true, 'note' => $msg ) ) );
 			}
-			if ( '' !== $msg || '' !== $type ) {
+			if ( '' !== $type ) {
+				// A recorded type that is not an error is their success answer.
 				return array( $item( array( 'name' => 'HappyFiles Pro', 'state' => 'valid', 'key' => true ) ) );
+			}
+			if ( '' !== $msg ) {
+				// A message with no type is what their own screen shows as
+				// plain information. It is not evidence the key was accepted,
+				// and calling it valid would report a working license while
+				// updates quietly never arrive.
+				return array( $item( array( 'name' => 'HappyFiles Pro', 'state' => 'unknown', 'key' => true, 'note' => $msg ) ) );
 			}
 			return array( $item( array( 'name' => 'HappyFiles Pro', 'state' => 'unknown', 'key' => true, 'note' => __( 'Key stored; no recorded status', 'minn-admin' ) ) ) );
 		},

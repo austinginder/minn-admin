@@ -19,6 +19,29 @@ defined( 'ABSPATH' ) || exit;
  * this adapter reports site-wide totals, so anything short of full view
  * access is refused rather than silently collapsing that tier.
  */
+/**
+ * The name to show for this provider.
+ *
+ * Independent Analytics can be white labelled, and when it is, it renders
+ * simply as "Analytics" for everyone who is not an administrator. Naming it
+ * anyway showed an agency's clients the plugin the agency paid to hide.
+ *
+ * @return string
+ */
+function minn_admin_iawp_source_name() {
+	if ( class_exists( '\IAWP\Capability_Manager' )
+		&& method_exists( '\IAWP\Capability_Manager', 'show_white_labeled_ui' ) ) {
+		try {
+			if ( \IAWP\Capability_Manager::show_white_labeled_ui() ) {
+				return __( 'Analytics', 'minn-admin' );
+			}
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the product name.
+		}
+	}
+	return 'Independent Analytics';
+}
+
 function minn_admin_iawp_ready() {
 	if ( ! defined( 'IAWP_VERSION' ) && ! class_exists( '\\IAWP\\Capability_Manager' ) ) {
 		return false;
@@ -86,7 +109,7 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	}
 
 	return array(
-		'source'        => 'Independent Analytics',
+		'source'        => minn_admin_iawp_source_name(),
 		'days'          => $map,
 		'prev_visitors' => $prev,
 	);
@@ -235,7 +258,7 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 	}
 
 	return array(
-		'source'    => 'Independent Analytics',
+		'source'    => minn_admin_iawp_source_name(),
 		'pages'     => $pages,
 		'referrers' => $referrers,
 		'adminUrl'  => admin_url( 'admin.php?page=independent-analytics' ),

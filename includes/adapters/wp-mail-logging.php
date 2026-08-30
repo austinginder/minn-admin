@@ -30,6 +30,31 @@ function minn_admin_wpml_active() {
 	return $found && 0 === strcasecmp( (string) $found, $table );
 }
 
+/**
+ * Whether WP Mail Logging is still showing a given field in its own log.
+ *
+ * The plugin records every message and has no switch for that, but it does
+ * withdraw individual fields from its list, its search and its detail view,
+ * for rows already stored. No capability check can see a setting, so ask the
+ * setting: a site that left the sending server's address hidden has said it
+ * does not want it surfaced. Their own default is hidden.
+ *
+ * @param string $key Their setting key.
+ * @return bool
+ */
+function minn_admin_wpml_displays( $key ) {
+	try {
+		if ( class_exists( '\No3x\WPML\Admin\SettingsTab' )
+			&& method_exists( '\No3x\WPML\Admin\SettingsTab', 'get_settings' ) ) {
+			$settings = \No3x\WPML\Admin\SettingsTab::get_settings( array() );
+			return ! empty( $settings[ $key ] );
+		}
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+		// A settings-layer change falls back to their own default: hidden.
+	}
+	return false;
+}
+
 function minn_admin_wpml_can() {
 	// Their own answer first: administrator ROLE, or the capability named in
 	// their "can see submission data" setting. manage_options is only their
@@ -276,7 +301,7 @@ add_action( 'rest_api_init', function () {
 				array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_wpml_receivers( $row->receiver ) ),
 			);
 			$host = '0' === (string) $row->host ? '' : (string) $row->host;
-			if ( '' !== $host ) {
+			if ( '' !== $host && minn_admin_wpml_displays( 'display-host' ) ) {
 				$delivery[] = array( 'label' => __( 'Host', 'minn-admin' ), 'value' => $host );
 			}
 			$attachments = trim( (string) $row->attachments, "0 \n" );
@@ -335,7 +360,7 @@ add_action( 'rest_api_init', function () {
 					'error'       => (string) $row->error,
 					'headers'     => trim( (string) $row->headers ),
 					'attachments' => trim( (string) $row->attachments, "0 \n" ),
-					'host'        => '0' === (string) $row->host ? '' : (string) $row->host,
+					'host'        => minn_admin_wpml_displays( 'display-host' ) && '0' !== (string) $row->host ? (string) $row->host : '',
 					'timestamp'   => $row->timestamp,
 					'message'     => (string) $row->message,
 				) );

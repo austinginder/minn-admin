@@ -36,6 +36,13 @@ add_filter( 'minn_admin_block_forms', function ( $forms ) {
 	// The post types Gutenberg's own Post Type control offers: viewable
 	// and REST-exposed. Built at request time so CPTs registered by other
 	// plugins are always current.
+	//
+	// This list is the UI being honest, NOT the boundary. The preview route
+	// renders whatever markup it is handed and never inspects this. What
+	// actually stops a caller naming a private post type is core: when it
+	// turns a loop's settings into a query it drops any post type that is not
+	// publicly viewable and falls back to posts. If that ever moves, this list
+	// is not what holds.
 	$type_options = array();
 	foreach ( get_post_types( array( 'public' => true, 'show_in_rest' => true ), 'objects' ) as $pt ) {
 		if ( 'attachment' === $pt->name ) {
@@ -75,7 +82,12 @@ add_filter( 'minn_admin_block_forms', function ( $forms ) {
 			'tagName'            => array( 'hide' => true ),
 			'namespace'          => array( 'hide' => true ),
 			'displayLayout'      => array( 'hide' => true ),
-			'enhancedPagination' => array( 'label' => __( 'Instant pagination (no page reload)', 'minn-admin' ) ),
+			// Core only arms instant pagination when the loop also carries an
+			// id, and that id is the block editor's to hand out: Minn cannot
+			// mint one per insert without two loops on a page claiming the
+			// same one. Offering the switch here would be a switch that does
+			// nothing, so it is hidden for the same reason the id is.
+			'enhancedPagination' => array( 'hide' => true ),
 		),
 		'dataForm'   => array(
 			'attr'   => 'query',
