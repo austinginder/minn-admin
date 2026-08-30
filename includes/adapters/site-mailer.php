@@ -22,6 +22,32 @@ function minn_admin_site_mailer_active() {
 	return defined( 'SITE_MAILER_VERSION' );
 }
 
+/**
+ * Whether Site Mailer is still showing message content in its own log.
+ *
+ * Their switch is called "Show email content in log" and it is off by
+ * default. It withdraws the message from their list, their search and their
+ * detail view, for rows already recorded, and nothing deletes the bodies that
+ * were stored while it was on. No capability check can see a setting, so ask
+ * the setting: a site that turned email content off has said it does not want
+ * these bodies read, and their own help text says why. Password reset links
+ * live in exactly these messages.
+ *
+ * @return bool
+ */
+function minn_admin_site_mailer_shows_content() {
+	if ( class_exists( '\SiteMailer\Modules\Settings\Classes\Settings' ) ) {
+		try {
+			return (bool) \SiteMailer\Modules\Settings\Classes\Settings::get(
+				\SiteMailer\Modules\Settings\Classes\Settings::KEEP_LOG
+			);
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the option when their settings layer moves.
+		}
+	}
+	return (bool) get_option( 'site_mailer_keep_log' );
+}
+
 function minn_admin_site_mailer_table() {
 	global $wpdb;
 	return $wpdb->prefix . 'site_mail_logs';
@@ -184,18 +210,21 @@ add_action( 'rest_api_init', function () {
 			if ( '' !== $iso ) {
 				$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $iso );
 			}
-			$body     = (string) $row->message;
+			$body         = (string) $row->message;
+			$message_rows = array(
+				array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
+			);
+			// The subject, the delivery details and the list all stay; only the
+			// body answers to their content switch, which is exactly what their
+			// own screen does when it is off.
+			if ( minn_admin_site_mailer_shows_content() && '' !== $body ) {
+				$message_rows[] = preg_match( '/<\/?[a-z][^>]*>/i', $body )
+					? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
+					: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' );
+			}
 			$sections = array(
 				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-				array(
-					'title' => __( 'Message', 'minn-admin' ),
-					'rows'  => array(
-						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
-						preg_match( '/<\/?[a-z][^>]*>/i', $body )
-							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
-							: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
-					),
-				),
+				array( 'title' => __( 'Message', 'minn-admin' ), 'rows' => $message_rows ),
 			);
 			return rest_ensure_response( array( 'sections' => $sections ) );
 		},

@@ -18,7 +18,19 @@ defined( 'ABSPATH' ) || exit;
  * Elementor Pro submissions module is present and usable.
  */
 function minn_admin_elementor_forms_ready() {
-	return class_exists( '\ElementorPro\Modules\Forms\Submissions\Database\Query' );
+	if ( ! class_exists( '\ElementorPro\Modules\Forms\Submissions\Database\Query' ) ) {
+		return false;
+	}
+	// Elementor withdraws submissions wholesale when their Advanced settings
+	// set Form Submissions to Disable: the module returns before building the
+	// component, so their own screen, their data routes and even the job that
+	// ages out trashed rows all stop registering, while the rows already
+	// recorded stay in the database. Their autoloader still resolves the class
+	// above, so asking whether the code is present sees a feature that is
+	// switched off. No capability check can see a setting, so ask the setting:
+	// these rows carry names, email addresses, IP addresses and the page
+	// someone came from.
+	return '1' !== get_option( 'elementor_form-submissions' );
 }
 
 /**

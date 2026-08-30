@@ -20,11 +20,34 @@ function minn_admin_simple_history_can() {
 	// removing its own pages rather than by a capability. Naming the surface
 	// "Activity Log - Simple History" in the nav announces the plugin to
 	// exactly the people it is being hidden from.
-	if ( apply_filters( 'simple_history/full_stealth_mode_enabled', defined( 'SIMPLE_HISTORY_STEALTH_MODE_ENABLE' ) && SIMPLE_HISTORY_STEALTH_MODE_ENABLE ) ) {
-		$allowed = (array) apply_filters( 'simple_history/stealth_mode_allowed_emails', defined( 'SIMPLE_HISTORY_STEALTH_MODE_ALLOWED_EMAILS' ) ? array_map( 'trim', explode( ',', (string) SIMPLE_HISTORY_STEALTH_MODE_ALLOWED_EMAILS ) ) : array() );
-		$user    = wp_get_current_user();
-		if ( ! $user || ! in_array( (string) $user->user_email, $allowed, true ) ) {
+	//
+	// There are TWO stealth modes and the constant is only one of them. The
+	// full mode hides the log from everyone, before any list of addresses is
+	// consulted. The partial mode needs no constant at all: a non-empty list
+	// of allowed addresses IS the switch, and that is the mode a site actually
+	// deploys, because it leaves a working screen for whoever is on the list.
+	// Ask their own resolver rather than reproducing either rule, since their
+	// log route checks only the capability and would not catch a mistake here.
+	if ( class_exists( '\Simple_History\Services\Stealth_Mode' )
+		&& method_exists( '\Simple_History\Services\Stealth_Mode', 'is_gui_visible_to_user' ) ) {
+		if ( ! \Simple_History\Services\Stealth_Mode::is_gui_visible_to_user() ) {
 			return false;
+		}
+	} else {
+		// A build that does not carry the resolver: reproduce both switches,
+		// and refuse rather than open up when the answer is not clear.
+		if ( apply_filters( 'simple_history/full_stealth_mode_enabled', defined( 'SIMPLE_HISTORY_STEALTH_MODE_ENABLE' ) && true === SIMPLE_HISTORY_STEALTH_MODE_ENABLE ) ) {
+			return false;
+		}
+		$from_constant = defined( 'SIMPLE_HISTORY_STEALTH_MODE_ALLOWED_EMAILS' )
+			? array_filter( array_map( 'trim', explode( ',', (string) SIMPLE_HISTORY_STEALTH_MODE_ALLOWED_EMAILS ) ) )
+			: array();
+		$allowed = array_filter( (array) apply_filters( 'simple_history/stealth_mode_allowed_emails', $from_constant ) );
+		if ( $allowed ) {
+			$user = wp_get_current_user();
+			if ( ! $user || ! in_array( (string) $user->user_email, $allowed, true ) ) {
+				return false;
+			}
 		}
 	}
 	return current_user_can( apply_filters( 'simple_history/view_history_capability', 'edit_pages' ) );
