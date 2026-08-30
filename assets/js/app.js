@@ -7183,7 +7183,7 @@
 	async function loadOrders( page = 1 ) {
 		const q0 = ( state.orderSearch || '' ).trim();
 		const ctx = orderCtx();
-		const fields = 'id,number,status,total,currency_symbol,date_created,billing,line_items';
+		const fields = 'id,number,status,total,currency_symbol,date_created,billing,line_items,payment_method_title';
 		// Numeric-only query: try the order by id first (WC search is fuzzy and
 		// often misses exact ids). Fall through to search if it's not found.
 		if ( q0 && /^\d+$/.test( q0 ) ) {
@@ -9945,7 +9945,7 @@
 		${ orderFilterChipsHtml() }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-order-cols">
-				<div>${ esc( __( 'Order' ) ) }</div><div>${ esc( __( 'Customer' ) ) }</div><div>${ esc( __( 'Status' ) ) }</div><div>${ esc( __( 'Items' ) ) }</div><div>${ esc( __( 'Total' ) ) }</div><div></div>
+				<div>${ esc( __( 'Order' ) ) }</div><div>${ esc( __( 'Customer' ) ) }</div><div>${ esc( __( 'Status' ) ) }</div><div>${ esc( __( 'Items' ) ) }</div><div>${ esc( __( 'Payment' ) ) }</div><div>${ esc( __( 'Total' ) ) }</div><div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( o ) => `
 				<div class="minn-table-row minn-order-cols" data-order="${ o.id }">
@@ -9956,6 +9956,7 @@
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( o ) ) }</div>
 					<div><span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span></div>
 					${ itemsCellHtml( o.line_items ) }
+					<div class="minn-row-meta minn-cell-clip" title="${ esc( o.payment_method_title || '' ) }">${ o.payment_method_title ? esc( o.payment_method_title ) : '—' }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-qv="${ o.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.orderSearch ? __( 'No orders match “' ) + esc( state.orderSearch ) + '”.' : __( 'No orders here.' ) }</div>` }

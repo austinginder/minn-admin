@@ -450,8 +450,10 @@ cards, all in the same operational group.
   beneath as removable chips. Status accepts more than one at a time, and
   a date window, customer or product filter narrows on the server, so it
   survives paging. Filters live in the address, so a filtered list can be
-  reloaded or pasted to someone else. Orders that belong to a
-  subscription carry a small badge that opens a summary of it.
+  reloaded or pasted to someone else. A Payment column shows the method
+  title WooCommerce stored on the order (Stripe, PayPal, a bank transfer).
+  Orders that belong to a subscription carry a small badge that opens a
+  summary of it.
 - **Subscriptions** open on their own page in the order page's shape,
   with editable items and schedule, coupons, a notes timeline and a quick
   view of related orders. The subscriptions list wears the same filter
