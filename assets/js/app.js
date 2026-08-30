@@ -1354,7 +1354,7 @@
 			</div>`;
 		}
 		if ( t === 'toggle' ) {
-			return `<button type="button" class="minn-switch${ v ? ' on' : '' }" ${ attr }="${ esc( id ) }" data-ftype="toggle" role="switch" aria-checked="${ !! v }"><span class="minn-switch-knob"></span></button>`;
+			return `<button type="button" class="minn-switch${ v ? ' on' : '' }" ${ attr }="${ esc( id ) }" data-ftype="toggle" role="switch" aria-checked="${ !! v }"${ f.label ? ` aria-label="${ esc( f.label ) }"` : '' }><span class="minn-switch-knob"></span></button>`;
 		}
 		if ( t === 'checkbox' ) {
 			return `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" ${ attr }="${ esc( id ) }" data-ftype="checkbox"${ v ? ' checked' : '' }> ${ esc( f.label || '' ) }</label>`;
@@ -32324,6 +32324,12 @@
 			if ( e.target === overlay ) closeContentEditor();
 		} );
 		overlay.addEventListener( 'click', ( e ) => {
+			const sw = e.target.closest( '[data-ftype="toggle"]' );
+			if ( sw && overlay.contains( sw ) ) {
+				sw.classList.toggle( 'on' );
+				sw.setAttribute( 'aria-checked', sw.classList.contains( 'on' ) );
+				return;
+			}
 			if ( e.target.closest( '#minn-cted-close' ) || e.target.closest( '#minn-cted-cancel' ) ) { closeContentEditor(); return; }
 			const set = e.target.closest( '[data-ctset]' );
 			if ( set ) {
@@ -32403,6 +32409,16 @@
 		openInspector( islandEl );
 	}
 
+	// Switch first, label beside it — the editor-sidebar toggle row, compacted
+	// for the 320px inspector. Native checkboxes in this popover looked like
+	// a different app.
+	function inspToggleRowHtml( label, controlHtml ) {
+		return `<div class="minn-toggle-row minn-insp-toggle">
+			${ controlHtml }
+			<div class="minn-toggle-info"><div class="minn-toggle-label">${ esc( label ) }</div></div>
+		</div>`;
+	}
+
 	// Form rows for one block's editable attributes. `prefix` namespaces the
 	// inputs ("own" or a child index). A minn_admin_block_forms descriptor for
 	// the block refines labels, controls, options, ordering and hiding.
@@ -32432,7 +32448,7 @@
 				? fd.options.map( ( o ) => ( Array.isArray( o ) ? o : [ o, o ] ) )
 				: ( Array.isArray( def.enum ) && def.enum.length ? def.enum.map( ( v ) => [ v, v ] ) : null );
 			const control = fd.control || ( options ? 'select'
-				: ( type === 'boolean' ? 'checkbox'
+				: ( type === 'boolean' ? 'toggle'
 				: ( type === 'number' || type === 'integer' ? 'number'
 				: ( type === 'string' || type == null
 					? ( key === 'content' || String( cur == null ? '' : cur ).length > 60 ? 'textarea' : 'text' )
@@ -32449,6 +32465,7 @@
 				klass: control === 'textarea' ? 'minn-insp-textarea' : '',
 			}, cur, 'data-insp', id );
 			rows.push( { key, label, priority, html: control === 'checkbox' ? controlHtml
+				: control === 'toggle' ? inspToggleRowHtml( label, controlHtml )
 				: `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }` } );
 		} );
 		// SCALING: design suites register huge schemas (Spectra's post-grid:
@@ -32527,8 +32544,8 @@
 			}
 			const options = Array.isArray( f.options ) && f.options.length
 				? f.options.map( ( o ) => ( Array.isArray( o ) ? o : [ o, o ] ) ) : null;
-			// ACF stores true_false as 1/'1'/0/'' — normalize for the checkbox.
-			if ( f.control === 'checkbox' ) v = ! ( v == null || v === '' || v === '0' || v === 0 || v === false );
+			// ACF stores true_false as 1/'1'/0/'' — normalize for the switch.
+			if ( f.control === 'checkbox' || f.control === 'toggle' || f.control === 'true_false' ) v = ! ( v == null || v === '' || v === '0' || v === 0 || v === false );
 			const nf = formNormField( {
 				key: f.name, label,
 				type: f.control || ( options ? 'select' : 'text' ), options,
@@ -32537,6 +32554,7 @@
 			} );
 			if ( nf.type === 'select' ) nf.clearable = true;
 			const controlHtml = formControlHtml( comboUpgrade( nf ), v == null ? '' : v, 'data-inspdf', `${ prefix }:${ f.name }` );
+			if ( nf.type === 'toggle' ) return inspToggleRowHtml( label, controlHtml );
 			return f.control === 'checkbox' ? controlHtml
 				: `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }`;
 		} ).join( '' );
@@ -32561,7 +32579,7 @@
 			let v = formControlValue( input );
 			const obj = ( attrs && typeof attrs[ df.attr ] === 'object' && attrs[ df.attr ] ) || {};
 			const had = name in obj;
-			if ( fdef.control === 'checkbox' ) {
+			if ( fdef.control === 'checkbox' || fdef.control === 'toggle' || fdef.control === 'true_false' ) {
 				// 1/0 is the ACF block convention; a key that already holds a
 				// real boolean (core/query's inherit) keeps its type so the
 				// block editor reads back exactly what it wrote.
@@ -33194,6 +33212,12 @@
 		inspectorEl.addEventListener( 'click', ( e ) => {
 			const insp = inspectorState;
 			if ( ! insp ) return;
+			const sw = e.target.closest( '[data-ftype="toggle"]' );
+			if ( sw ) {
+				sw.classList.toggle( 'on' );
+				sw.setAttribute( 'aria-checked', sw.classList.contains( 'on' ) );
+				return;
+			}
 			const moreBtn = e.target.closest( '[data-inspmore]' );
 			if ( moreBtn ) {
 				const panel = inspectorEl.querySelector( `[data-inspmore-panel="${ moreBtn.dataset.inspmore }"]` );

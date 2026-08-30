@@ -118,15 +118,23 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		t.check( 'query subform renders', formUp );
 		const insp = await page.evaluate( () => {
 			const el = document.querySelector( '.minn-inspector' );
+			const inherit = el.querySelector( '[data-inspdf="own:inherit"]' );
+			const pag = el.querySelector( '[data-insp="own:enhancedPagination"]' );
 			return {
 				df: [ ...el.querySelectorAll( '[data-inspdf]' ) ].map( ( n ) => n.dataset.inspdf ),
 				locked: /block editor/.test( el.textContent ),
+				inheritSwitch: !!( inherit && inherit.getAttribute( 'role' ) === 'switch' ),
+				pagSwitch: !!( pag && pag.getAttribute( 'role' ) === 'switch' ),
+				nativeChecks: [ ...el.querySelectorAll( 'input[type="checkbox"]' ) ].map( ( n ) => n.closest( 'label' )?.textContent?.trim() ),
 			};
 		} );
 		t.check( 'all eight query fields on offer',
 			[ 'postType', 'perPage', 'orderBy', 'order', 'sticky', 'search', 'offset', 'inherit' ]
 				.every( ( f ) => insp.df.includes( 'own:' + f ) ), JSON.stringify( insp.df ) );
 		t.check( 'locked note names the block editor', insp.locked );
+		t.check( 'Inherit is a Minn switch', insp.inheritSwitch );
+		t.check( 'Instant pagination is a Minn switch', insp.pagSwitch );
+		t.check( 'no native checkboxes in the popover', insp.nativeChecks.length === 0, JSON.stringify( insp.nativeChecks ) );
 
 		// --- perPage edit applies, re-renders, and stores a NUMBER ---
 		await page.evaluate( () => {
@@ -151,6 +159,24 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		t.check( 'unmapped query keys preserved', !! q && Array.isArray( q.exclude ) && 'author' in q );
 		t.check( 'inner template intact after the attr edit',
 			/wp:query-pagination-numbers/.test( raw ) && /wp:query-no-results/.test( raw ) );
+
+		// --- Inherit switch round-trips a real boolean ---
+		for ( let i = 0; i < 8; i++ ) {
+			try {
+				await page.click( '.minn-block-island[data-block$="query"] .minn-island-chip' );
+				await page.waitForSelector( '[data-inspdf="own:inherit"]', { timeout: 6000 } );
+				break;
+			} catch ( e ) { await page.waitForTimeout( 800 ); }
+		}
+		await page.click( '[data-inspdf="own:inherit"]' );
+		await page.evaluate( () => {
+			[ ...document.querySelectorAll( '.minn-inspector button' ) ].find( ( b ) => /^Apply$/.test( b.textContent.trim() ) ).click();
+		} );
+		await page.waitForTimeout( 800 );
+		raw = await save();
+		const m2 = raw.match( /wp:query (\{.*?\}) -->/s );
+		const q2 = m2 ? JSON.parse( m2[ 1 ] ).query : null;
+		t.check( 'inherit toggle stores a boolean true', !! q2 && q2.inherit === true, m2 && m2[ 1 ] );
 	} finally {
 		await deletePost( page, id ).catch( () => {} );
 	}

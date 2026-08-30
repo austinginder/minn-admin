@@ -119,7 +119,7 @@ add_filter( 'minn_admin_block_forms', function ( $forms ) {
 				),
 				array( 'name' => 'search', 'label' => __( 'Search term', 'minn-admin' ), 'control' => 'text' ),
 				array( 'name' => 'offset', 'label' => __( 'Skip first N items', 'minn-admin' ), 'control' => 'number' ),
-				array( 'name' => 'inherit', 'label' => __( 'Inherit the page\'s default query', 'minn-admin' ), 'control' => 'checkbox' ),
+				array( 'name' => 'inherit', 'label' => __( 'Inherit the page\'s default query', 'minn-admin' ), 'control' => 'toggle' ),
 			),
 			// Taxonomy and author filters, and the loop's inner layout, are
 			// the block editor's job.

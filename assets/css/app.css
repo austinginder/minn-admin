@@ -4091,6 +4091,10 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-insp-body .minn-field-label { margin: 4px 0 0; }
 .minn-insp-textarea { min-height: 74px; resize: vertical; font-size: 13.5px; line-height: 1.5; }
 .minn-insp-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 500; padding: 4px 0; cursor: pointer; }
+.minn-insp-body .minn-insp-toggle { gap: 10px; padding: 4px 0; }
+.minn-insp-body .minn-insp-toggle .minn-toggle-label {
+  font-size: 13.5px; font-weight: 500; color: var(--text); line-height: 1.35;
+}
 .minn-insp-child { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; }
 .minn-insp-child-title {
   font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
