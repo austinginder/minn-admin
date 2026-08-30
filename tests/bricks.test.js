@@ -50,6 +50,7 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 	const rowWith = ( text ) => page.evaluate( ( tx ) =>
 		( Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) ).find( ( r ) => r.textContent.includes( tx ) ) || { textContent: '' } ).textContent, text );
 	const probeIds = [];
+	let prevFrontBar = null;
 
 	try {
 		t.check( 'surface declares the type tabs', Array.isArray( surface.collection.tabs.static ) && surface.collection.tabs.static.length >= 8,
@@ -228,6 +229,67 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		t.check( 'file mode regenerates through their Assets_Files', fileTry.status === 200 && ( fileTry.data.purged || [] ).includes( 'Bricks CSS files' ), JSON.stringify( fileTry.data ) );
 		wpEval( '$s = get_option( "bricks_global_settings" ); unset( $s["cssLoading"] ); update_option( "bricks_global_settings", $s ); echo "restored";' );
 
+		/* ===== Front-end bar: templates used on this page ===== */
+		prevFrontBar = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/me/appearance', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			const d = await r.json();
+			return d.frontBar === true;
+		} );
+		await page.evaluate( async () => {
+			await fetch( window.MINN.restUrl + 'minn-admin/v1/me/appearance', {
+				method: 'POST', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				body: JSON.stringify( { frontBar: true } ),
+			} );
+		} );
+		await page.evaluate( () => { try { sessionStorage.removeItem( 'minn-bar-corner' ); } catch ( e ) {} } );
+		await page.goto( BASE + '/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await page.waitForSelector( '#minn-cornerbar', { timeout: 20000 } );
+		await page.hover( '.minn-bar-markbtn' );
+		await page.waitForTimeout( 400 );
+		const homeEdit = await page.evaluate( () => {
+			const a = document.querySelector( 'a.minn-bar-edit' );
+			const cmds = ( window.MINN_BAR || {} ).commands || [];
+			return {
+				text: a ? a.textContent.trim() : '',
+				href: a ? a.getAttribute( 'href' ) : '',
+				headerCmd: cmds.some( ( c ) => /Edit header/.test( c.title ) && /bricks=run/.test( String( c.value || '' ) ) ),
+			};
+		} );
+		t.check( 'home front bar offers Edit header for the Site Header template',
+			/header/i.test( homeEdit.text ) && /bricks=run/.test( homeEdit.href ) && homeEdit.headerCmd,
+			JSON.stringify( homeEdit ) );
+
+		const postLink = wpEval( '$p = get_posts( array( "numberposts" => 1, "post_status" => "publish" ) ); echo $p ? get_permalink( $p[0] ) : "";' );
+		t.check( 'lab has a published post to open', !! postLink, postLink );
+		if ( postLink ) {
+			await page.evaluate( () => { try { sessionStorage.removeItem( 'minn-bar-corner' ); } catch ( e ) {} } );
+			await page.goto( postLink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+			await page.waitForSelector( '#minn-cornerbar', { timeout: 20000 } );
+			await page.hover( '.minn-bar-markbtn' );
+			await page.waitForTimeout( 400 );
+			const postEdit = await page.evaluate( () => {
+				const a = document.querySelector( 'a.minn-bar-edit' );
+				const more = document.querySelector( '.minn-bar-edit-more' );
+				return {
+					text: a ? a.textContent.trim() : '',
+					href: a ? a.getAttribute( 'href' ) : '',
+					hasMore: !! more,
+				};
+			} );
+			t.check( 'a post keeps its own Edit and lists templates under More',
+				!! postEdit.href && postEdit.hasMore, JSON.stringify( postEdit ) );
+			await page.click( '.minn-bar-edit-more' );
+			await page.waitForSelector( '#minn-bar-menu-edit:not([hidden])', { timeout: 5000 } );
+			const menu = await page.evaluate( () => document.getElementById( 'minn-bar-menu-edit' ).textContent );
+			t.check( 'the Edit menu names the Site Header template',
+				/Site Header/.test( menu ) && /Edit header/.test( menu ) && ! /Hello world/i.test( menu ), menu );
+		}
+		await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
+		await page.waitForFunction( () => window.MINN && Array.isArray( window.MINN.surfaces ), null, { timeout: 20000 } );
+
 		/* ===== Visibility: detector + toggle round-trip (endpoint level) ===== */
 		wpEval( '$s = get_option( "bricks_global_settings" ); if ( ! is_array( $s ) ) { $s = array(); } $s["maintenanceMode"] = "comingSoon"; update_option( "bricks_global_settings", $s ); echo "armed";' );
 		let vis = await rest( 'GET', 'minn-admin/v1/visibility' );
@@ -251,7 +313,20 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		t.check( 'anonymous front end answers 503 under maintenance', front === 503, String( front ) );
 	} finally {
 		// Resting state: no maintenance key, inline CSS, no restore memory,
-		// no probe posts or suite tags.
+		// no probe posts or suite tags. Front-bar opt-in is restored too.
+		if ( prevFrontBar !== null ) {
+			try {
+				await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
+				await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+				await page.evaluate( async ( on ) => {
+					await fetch( window.MINN.restUrl + 'minn-admin/v1/me/appearance', {
+						method: 'POST', credentials: 'same-origin',
+						headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+						body: JSON.stringify( { frontBar: on } ),
+					} );
+				}, prevFrontBar );
+			} catch ( e ) { /* appearance restore is best-effort */ }
+		}
 		wpEval( '$s = get_option( "bricks_global_settings" ); if ( is_array( $s ) ) { unset( $s["maintenanceMode"], $s["cssLoading"] ); update_option( "bricks_global_settings", $s ); } delete_option( "minn_admin_vis_restore" ); foreach ( get_terms( array( "taxonomy" => "template_tag", "hide_empty" => false, "search" => "suite" ) ) as $t ) { wp_delete_term( $t->term_id, "template_tag" ); } echo "clean";' );
 		for ( const id of probeIds ) {
 			try { wpEval( 'wp_delete_post( ' + id + ', true ); echo "gone";' ); } catch ( e ) { /* already gone */ }

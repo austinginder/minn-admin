@@ -772,6 +772,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_block_forms` | filter | Block inspector labels/controls + slash insert templates |
 | `minn_admin_insert_blocks` | filter | Prune or extend the auto-insert slash list |
 | `minn_admin_page_builders` | filter | Register a full-canvas page builder |
+| `minn_admin_bar_template_edits` | filter | Extra Edit targets on the front-end bar (templates rendering on this page). Each item is `{ url, label, sub?, hint? }`. Deduped against the page's own Edit URL. |
 | `minn_admin_design_sources` | filter | Register a design/template library for the slash menu + block picker |
 | `minn_admin_editor_commands` | filter | Register free-form slash-menu / block-picker commands (boilerplate HTML, island templates, async routes) |
 | `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |

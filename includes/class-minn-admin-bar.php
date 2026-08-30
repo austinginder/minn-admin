@@ -245,7 +245,7 @@ class Minn_Admin_Bar {
 	 * happen in PHP. kind: url (navigate) | intent (one-shot app handoff) |
 	 * theme (bar.js toggles the shared minn-theme preference).
 	 */
-	private static function commands( $edit_url, $edit_label, $edit_hint ) {
+	private static function commands( $edit_url, $edit_label, $edit_hint, $extras = array() ) {
 		$go      = __( 'Go to', 'minn-admin' );
 		$actions = __( 'Actions', 'minn-admin' );
 		$cmds    = array();
@@ -259,6 +259,16 @@ class Minn_Admin_Bar {
 		}
 		if ( $edit_url ) {
 			$cmds[] = array( 'group' => $actions, 'icon' => 'pencil', 'title' => $edit_label, 'hint' => $edit_hint, 'kind' => 'url', 'value' => $edit_url );
+		}
+		foreach ( $extras as $extra ) {
+			$cmds[] = array(
+				'group' => $actions,
+				'icon'  => 'pencil',
+				'title' => $extra['label'],
+				'hint'  => $extra['sub'] ? $extra['sub'] : $extra['hint'],
+				'kind'  => 'url',
+				'value' => $extra['url'],
+			);
 		}
 		$cmds[] = array( 'group' => $actions, 'icon' => 'plus', 'title' => __( 'Create a post', 'minn-admin' ), 'hint' => __( 'Start a new draft', 'minn-admin' ), 'kind' => 'intent', 'value' => 'new:posts' );
 		if ( current_user_can( 'edit_pages' ) ) {
@@ -307,13 +317,14 @@ class Minn_Admin_Bar {
 	private static function config() {
 		$status = self::status();
 		list( $edit_url, $edit_label, $edit_hint ) = self::edit_target();
+		$extras = self::template_edits( $edit_url );
 		return array(
 			'rest'        => esc_url_raw( rest_url() ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'app'         => Minn_Admin::app_url(),
 			'editorBase'  => self::app_path( 'editor' ),
 			'fix'         => $status && $status['fix'] ? $status['fix'] : null,
-			'commands'    => self::commands( $edit_url, $edit_label, $edit_hint ),
+			'commands'    => self::commands( $edit_url, $edit_label, $edit_hint, $extras ),
 			'purge'       => self::cache_purgers(),
 			'types'       => self::search_types(),
 			'emptyNotifs' => __( 'All caught up.', 'minn-admin' ),
@@ -415,6 +426,41 @@ class Minn_Admin_Bar {
 		return array( $edit_url, $edit_label, $edit_hint );
 	}
 
+	/**
+	 * Extra Edit targets for templates rendering on this page (a Bricks
+	 * header wrapping a Gutenberg post, a footer assigned to the whole
+	 * site). Deduped against the primary Edit URL so a page that IS its
+	 * own Bricks canvas does not list itself twice.
+	 *
+	 * @param string $primary_url The singular Edit target, or ''.
+	 * @return array[] { url, label, sub, hint }
+	 */
+	private static function template_edits( $primary_url = '' ) {
+		$raw  = apply_filters( 'minn_admin_bar_template_edits', array() );
+		$out  = array();
+		$seen = array();
+		if ( $primary_url ) {
+			$seen[ $primary_url ] = true;
+		}
+		foreach ( (array) $raw as $item ) {
+			if ( ! is_array( $item ) || empty( $item['url'] ) || empty( $item['label'] ) ) {
+				continue;
+			}
+			$url = esc_url_raw( (string) $item['url'] );
+			if ( ! $url || isset( $seen[ $url ] ) ) {
+				continue;
+			}
+			$seen[ $url ] = true;
+			$out[]        = array(
+				'url'   => $url,
+				'label' => sanitize_text_field( (string) $item['label'] ),
+				'sub'   => isset( $item['sub'] ) ? sanitize_text_field( (string) $item['sub'] ) : '',
+				'hint'  => isset( $item['hint'] ) ? sanitize_text_field( (string) $item['hint'] ) : '',
+			);
+		}
+		return $out;
+	}
+
 	public static function render() {
 		if ( ! self::active() || is_embed() ) {
 			return;
@@ -422,6 +468,15 @@ class Minn_Admin_Bar {
 
 		$status = self::status();
 		list( $edit_url, $edit_label ) = self::edit_target();
+		$extras = self::template_edits( $edit_url );
+		$edit_primary_url   = $edit_url;
+		$edit_primary_label = $edit_label;
+		$edit_menu          = $extras;
+		if ( ! $edit_primary_url && $extras ) {
+			$first              = array_shift( $edit_menu );
+			$edit_primary_url   = $first['url'];
+			$edit_primary_label = $first['label'];
+		}
 
 		$site_name = Minn_Admin::plain_text( get_bloginfo( 'name' ) );
 		$user      = wp_get_current_user();
@@ -486,10 +541,17 @@ class Minn_Admin_Bar {
 			. self::icon( '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>' ) . '</button>';
 		echo '<button type="button" class="minn-bar-btn minn-bar-iconbtn" data-barmenu="minn-bar-menu-new" aria-haspopup="menu" aria-expanded="false" aria-label="' . esc_attr__( 'Create new', 'minn-admin' ) . '">'
 			. self::icon( '<path d="M12 5v14M5 12h14"/>' ) . '</button>';
-		if ( $edit_url ) {
-			echo '<a class="minn-bar-btn minn-bar-edit" href="' . esc_url( $edit_url ) . '">'
+		if ( $edit_primary_url ) {
+			echo '<span class="minn-bar-edit-wrap' . ( $edit_menu ? ' has-more' : '' ) . '">';
+			echo '<a class="minn-bar-btn minn-bar-edit" href="' . esc_url( $edit_primary_url ) . '">'
 				. self::icon( '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>' )
-				. '<span>' . esc_html( $edit_label ) . '</span></a>';
+				. '<span>' . esc_html( $edit_primary_label ) . '</span></a>';
+			if ( $edit_menu ) {
+				echo '<button type="button" class="minn-bar-btn minn-bar-edit-more" data-barmenu="minn-bar-menu-edit" aria-haspopup="menu" aria-expanded="false" aria-label="' . esc_attr__( 'Templates on this page', 'minn-admin' ) . '">'
+					. '<svg class="minn-bar-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>'
+					. '</button>';
+			}
+			echo '</span>';
 		}
 		echo '<span class="minn-bar-divider"></span>';
 		echo '<span class="minn-bar-bellwrap"><button type="button" class="minn-bar-btn minn-bar-iconbtn" data-barmenu="minn-bar-menu-notif" aria-haspopup="menu" aria-expanded="false" aria-label="' . esc_attr__( 'Notifications', 'minn-admin' ) . '">'
@@ -532,6 +594,20 @@ class Minn_Admin_Bar {
 			}
 			if ( current_user_can( 'manage_options' ) ) {
 				echo self::menu_item( self::app_path( 'settings' ), '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>', __( 'Visibility settings', 'minn-admin' ) );
+			}
+			echo '</div>';
+		}
+
+		if ( $edit_menu ) {
+			echo '<div class="minn-bar-menu" id="minn-bar-menu-edit" role="menu" hidden>';
+			echo '<div class="minn-bar-menu-label">' . esc_html__( 'On this page', 'minn-admin' ) . '</div>';
+			foreach ( $edit_menu as $item ) {
+				echo self::menu_item(
+					$item['url'],
+					'<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>',
+					$item['label'],
+					$item['sub']
+				);
 			}
 			echo '</div>';
 		}

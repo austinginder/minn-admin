@@ -408,6 +408,14 @@
 .minn-bar-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 .minn-bar-status-text { white-space: nowrap; }
 
+.minn-bar-edit-wrap {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.minn-bar-edit-wrap:hover { background: var(--accent2); }
 .minn-bar-edit {
   height: auto;
   border: 0;
@@ -420,8 +428,23 @@
   font-weight: 600;
   line-height: normal;
 }
+.minn-bar-edit-wrap .minn-bar-edit { background: transparent; }
+.minn-bar-edit-wrap.has-more .minn-bar-edit { border-radius: 9px 0 0 9px; padding-right: 10px; }
 .minn-bar-edit svg { width: 17px; height: 17px; }
 .minn-bar-edit:hover { background: var(--accent2); }
+.minn-bar-edit-wrap .minn-bar-edit:hover { background: transparent; }
+.minn-bar-edit-more {
+  height: auto;
+  border: 0;
+  border-radius: 0 9px 9px 0;
+  background: transparent;
+  color: inherit;
+  padding: 0 8px 0 6px;
+  border-left: 1px solid color-mix(in srgb, var(--accent-fg) 22%, transparent);
+}
+.minn-bar-edit-wrap .minn-bar-edit-more:hover,
+.minn-bar-edit-wrap .minn-bar-edit-more[aria-expanded="true"] { background: transparent; }
+.minn-bar-edit-more .minn-bar-chevron { color: inherit; }
 
 .minn-bar-bellwrap { position: relative; display: inline-flex; }
 .minn-bar-notif-dot {
@@ -722,6 +745,7 @@
   .minn-bar-status .minn-bar-status-text { display: none; }
   .minn-bar-edit span { display: none; }
   .minn-bar-edit { padding-inline: 9px; }
+  .minn-bar-edit-wrap.has-more .minn-bar-edit { padding-right: 8px; }
 }
 @media (max-width: 440px) {
   .minn-bar-sitename { display: none; }

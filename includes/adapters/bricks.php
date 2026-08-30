@@ -251,6 +251,90 @@ function minn_admin_bricks_template_item( $post ) {
 	);
 }
 
+/**
+ * Front-end bar extras: Bricks templates rendering on THIS page (header,
+ * content, footer). Bricks' own admin bar lists these under "Edit with
+ * Bricks"; Minn hides that bar, so the same list lives here.
+ *
+ * Reads Database::$active_templates (already resolved for this request)
+ * and the builder URL through Helpers::get_builder_edit_link. Capability
+ * is Bricks' own Capabilities::current_user_can_use_builder per template.
+ *
+ * @param array $edits Existing extras from other adapters.
+ * @return array[] { url, label, sub, hint }
+ */
+function minn_admin_bricks_bar_template_edits( $edits ) {
+	if ( ! minn_admin_bricks_active() ) {
+		return $edits;
+	}
+	if ( ! class_exists( '\Bricks\Database' ) || ! class_exists( '\Bricks\Helpers' ) || ! class_exists( '\Bricks\Capabilities' ) ) {
+		return $edits;
+	}
+	$active = \Bricks\Database::$active_templates;
+	if ( ! is_array( $active ) || ( empty( $active['header'] ) && empty( $active['footer'] ) && empty( $active['content'] ) ) ) {
+		if ( method_exists( '\Bricks\Database', 'set_active_templates' ) ) {
+			try {
+				\Bricks\Database::set_active_templates();
+				$active = \Bricks\Database::$active_templates;
+			} catch ( \Throwable $e ) {
+				return $edits;
+			}
+		}
+	}
+	if ( ! is_array( $active ) ) {
+		return $edits;
+	}
+
+	$slots = array(
+		'header'  => __( 'Edit header', 'minn-admin' ),
+		'content' => __( 'Edit content', 'minn-admin' ),
+		'footer'  => __( 'Edit footer', 'minn-admin' ),
+	);
+	// Same skip Bricks' admin bar uses: a slot whose template IS the
+	// current post is the page itself, not an extra template wrapping it.
+	$current = get_queried_object_id();
+	if ( is_home() ) {
+		$current = (int) get_option( 'page_for_posts' );
+	} elseif ( function_exists( 'is_shop' ) && is_shop() ) {
+		$current = (int) wc_get_page_id( 'shop' );
+	}
+	$seen = array();
+	foreach ( $slots as $slot => $label ) {
+		$id = isset( $active[ $slot ] ) ? (int) $active[ $slot ] : 0;
+		if ( $id < 1 || isset( $seen[ $id ] ) || ( $current && $id === (int) $current ) ) {
+			continue;
+		}
+		try {
+			if ( ! \Bricks\Capabilities::current_user_can_use_builder( $id ) ) {
+				continue;
+			}
+			$url = \Bricks\Helpers::get_builder_edit_link( $id );
+		} catch ( \Throwable $e ) {
+			continue;
+		}
+		if ( ! is_string( $url ) || '' === $url ) {
+			continue;
+		}
+		$title = get_the_title( $id );
+		if ( '' === $title ) {
+			$title = '#' . $id;
+		}
+		$edits[] = array(
+			'url'   => $url,
+			'label' => $label,
+			'sub'   => $title,
+			'hint'  => sprintf(
+				/* translators: %s: a Bricks template title. */
+				__( 'This page uses the %s template', 'minn-admin' ),
+				$title
+			),
+		);
+		$seen[ $id ] = true;
+	}
+	return $edits;
+}
+add_filter( 'minn_admin_bar_template_edits', 'minn_admin_bricks_bar_template_edits' );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_bricks_active() || ! minn_admin_bricks_can_view_templates() ) {
 		return $surfaces;
