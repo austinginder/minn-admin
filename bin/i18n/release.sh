@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 #
-# Translation step of a release. Run AFTER the version bump and BEFORE the
-# GitHub release is created.
+# Translation STAMP of a release. Run AFTER the version bump and BEFORE the
+# GitHub release is created. Generation belongs to prep (bin/i18n/prep.sh)
+# so it can overlap the security audit; this script still FAILS if catalogs
+# were not filled.
 #
 #   bin/i18n/release.sh v0.30.0
 #   bin/i18n/release.sh v0.30.0 --allow-missing   # ship holes as English

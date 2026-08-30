@@ -59,10 +59,19 @@ is the normal one.
 
 ## Releasing
 
-`release.sh v<x.y.z>` translates nothing. It regenerates the `.pot`, reports
-the cycle's translation debt, FAILS if any shipped catalog is missing entries
-(that means strings landed after the last session pass — run the flow above),
-then validates, compiles, builds packs, and stamps `manifest.json`.
+Kick translations off during **release prep**, not after the version bump.
+Catalogs do not need the version number; the package stamp does.
+
+```bash
+bin/i18n/prep.sh          # regenerate .pot, report debt, export /tmp/minn-i18n
+# dispatch grok against the chunks (see below), then import-batch.js per locale
+# gate: node missing.js --all   # 0 = catalogs are ready
+```
+
+`release.sh v<x.y.z>` still translates nothing, and still runs AFTER the
+version bump. By then `missing.js --all` should already be 0, so it validates,
+compiles, builds packs, and stamps `manifest.json`. If strings landed after
+the prep pass it FAILS (run the session flow above, then re-run).
 
 The stamp is **per-language**: a catalog whose content did not change keeps
 its previous version and package URL, so sites are only offered the languages
