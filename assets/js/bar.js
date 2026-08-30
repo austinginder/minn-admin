@@ -188,9 +188,9 @@
 	// a parked cursor produces no event to reveal on. The hit area never
 	// leaves, and pointerdown carries coordinates even with zero mouse
 	// movement, so a blind click on the remembered spot both navigates and
-	// reveals as it lands. An exception status chip disables ghosting
-	// entirely (the server keeps the marker off): chrome present means
-	// something needs attention. Coarse pointers and narrow windows keep
+	// reveals as it lands. A status chip does not disable ghosting: it
+	// waits inside the tucked bar and appears with the rest of the
+	// controls on peek. Coarse pointers and narrow windows keep
 	// the classic resting mark — invisible chrome is undiscoverable by
 	// touch, and the expanded peek would fight the compact tap panel. That
 	// exclusion lives in the stylesheet's media query and these handlers'

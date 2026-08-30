@@ -233,8 +233,8 @@
    two reveals, a collapse and then a fade. The hit area never leaves
    (opacity only, never visibility or pointer-events), so a click on the
    remembered spot still lands on the mark while invisible. .minn-bar-ghost
-   is the server's "this page ghosts" marker (kept off when an exception
-   status chip needs to stay visible) and PERSISTS; .minn-bar-peek is the
+   is always on the shell and PERSISTS; a status chip rides inside the
+   tucked bar rather than pinning the mark on screen. .minn-bar-peek is the
    revealed state bar.js toggles from the corner zone / focus, and the
    render pre-paint sets for the corner-handoff arrival. The marker stays
    put in every environment — this media query alone excludes coarse

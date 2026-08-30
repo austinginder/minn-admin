@@ -12,6 +12,7 @@
  *     (the bar claims NO global keyboard shortcut by design)
  *   - the status slot is exception-only: empty on a public site, a chip in
  *     maintenance mode, and the chip's fix really turns the mode off
+ *   - a status chip never pins the bar on screen; it rides the ghost peek
  */
 const { launch, login, createPost, deletePost, reporter, BASE, WP } = require( './helpers' );
 const { execSync } = require( 'child_process' );
@@ -28,9 +29,13 @@ const { execSync } = require( 'child_process' );
 	// same message still fails the gate. Remove when code-snippets ships a
 	// fix (their enqueue_assets has no setting gate, so the fixture cannot
 	// simply switch the feature off).
+	// Elementor: the builder-Edit fixture marks a post `_elementor_edit_mode`
+	// with empty `_elementor_data`, so Elementor's front-end script boots
+	// without the config object it localizes on a real canvas. Not Minn.
 	const vendorErrors = [];
 	page.on( 'pageerror', ( e ) => {
-		if ( /code-snippets\/dist\/admin-bar\.js/.test( e.stack || '' ) ) {
+		if ( /code-snippets\/dist\/admin-bar\.js/.test( e.stack || '' )
+			|| /elementorFrontendConfig is not defined/.test( e.message || '' ) ) {
 			vendorErrors.push( 'pageerror: ' + e.message );
 		}
 	} );
@@ -140,11 +145,10 @@ const { execSync } = require( 'child_process' );
 		t.check( 'opted in: Corner Reveal owns its own shell and core is gone',
 			s.minn && s.shell && ! s.bodyClass && ! s.core, JSON.stringify( s ) );
 		t.check( 'desktop: Corner Reveal does not offset the site', s.margin === '0px', s.margin );
-		// The 46px resting form is the state every non-ghosting page shows
-		// (status chip, coarse pointer, narrow window). On this wide
-		// fine-pointer page the ghost marker hides/expands it, so the
-		// geometry contract is measured with the marker lifted — the class
-		// is the only delta from a chip page — and restored right after.
+		// The 46px resting form is the state coarse pointers and narrow
+		// windows still show. On this wide fine-pointer page the ghost
+		// marker hides/expands it, so the geometry contract is measured
+		// with the marker lifted and restored right after.
 		const desktop = await page.evaluate( () => {
 			const b = document.getElementById( 'minn-bar' );
 			// Transition off first: rects read mid-animation otherwise.
@@ -304,8 +308,9 @@ const { execSync } = require( 'child_process' );
 		await page.mouse.move( 900, 500 );
 		await page.waitForTimeout( 250 );
 		const scrolled = await page.evaluate( () => {
+			const shell = document.getElementById( 'minn-cornerbar' );
 			const b = document.getElementById( 'minn-bar' );
-			const r = b.getBoundingClientRect();
+			const r = shell.getBoundingClientRect();
 			return { top: r.top, hidden: b.classList.contains( 'minn-bar-away' ) || b.classList.contains( 'minn-bar-yield' ) };
 		} );
 		t.check( 'the corner control stays put while scrolling', scrolled.top === 13 && ! scrolled.hidden, JSON.stringify( scrolled ) );
@@ -403,6 +408,17 @@ const { execSync } = require( 'child_process' );
 		} );
 		t.check( 'discouraged search engines raise the blue chip',
 			chip2 && chip2.tone === 'blue' && /Hidden from search/.test( chip2.text ), JSON.stringify( chip2 ) );
+		await page.mouse.move( 640, 400 );
+		await page.waitForFunction( () => getComputedStyle( document.getElementById( 'minn-bar' ) ).opacity === '0',
+			null, { timeout: 4000 } );
+		const searchGhost = await page.evaluate( () => ( {
+			ghost: document.getElementById( 'minn-cornerbar' ).classList.contains( 'minn-bar-ghost' ),
+			opacity: getComputedStyle( document.getElementById( 'minn-bar' ) ).opacity,
+			tell: getComputedStyle( document.getElementById( 'minn-bar-root' ), '::before' ).opacity,
+		} ) );
+		t.check( 'ghost: hidden-from-search still tucks the bar',
+			searchGhost.ghost && searchGhost.opacity === '0' && searchGhost.tell === '1',
+			JSON.stringify( searchGhost ) );
 		await setSetting( { blog_public: 1 } );
 
 		// Color schemes: the bar wears the user's saved scheme. Presets ride
@@ -552,18 +568,42 @@ const { execSync } = require( 'child_process' );
 		} );
 		t.check( 'ghost: the bar mark hands the corner off on its way to the app',
 			!! markFlag, String( markFlag ) );
-		// An exception chip means the bar must stay visible: chrome present
-		// is the signal that something needs attention.
+		// A status chip still renders, but it no longer pins the bar on
+		// screen: the page stays ghosted and the chip rides the peek.
 		await setSetting( { minn_admin_maintenance: true } );
+		await page.evaluate( () => sessionStorage.removeItem( 'minn-bar-corner' ) );
 		await page.goto( permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		await page.mouse.move( 640, 400 );
-		await page.waitForTimeout( 1000 );
-		const chipGhost = await page.evaluate( () => ( {
-			ghost: document.getElementById( 'minn-cornerbar' ).classList.contains( 'minn-bar-ghost' ),
-			chip: !! document.querySelector( '.minn-bar-status' ),
-		} ) );
-		t.check( 'ghost: an exception chip keeps the bar visible',
-			chipGhost.chip && ! chipGhost.ghost, JSON.stringify( chipGhost ) );
+		await page.waitForFunction( () => getComputedStyle( document.getElementById( 'minn-bar' ) ).opacity === '0',
+			null, { timeout: 4000 } );
+		const chipGhost = await page.evaluate( () => {
+			const corner = document.getElementById( 'minn-cornerbar' );
+			const tell = getComputedStyle( document.getElementById( 'minn-bar-root' ), '::before' );
+			const chip = document.querySelector( '.minn-bar-status' );
+			return {
+				ghost: corner.classList.contains( 'minn-bar-ghost' ),
+				peek: corner.classList.contains( 'minn-bar-peek' ),
+				chip: !! chip,
+				chipText: chip ? chip.textContent.trim() : '',
+				opacity: getComputedStyle( document.getElementById( 'minn-bar' ) ).opacity,
+				tell: tell.opacity,
+			};
+		} );
+		t.check( 'ghost: an exception chip stays in the tucked corner, not on screen',
+			chipGhost.ghost && ! chipGhost.peek && chipGhost.chip
+				&& /Maintenance/.test( chipGhost.chipText )
+				&& chipGhost.opacity === '0' && chipGhost.tell === '1',
+			JSON.stringify( chipGhost ) );
+		await page.mouse.move( 30, 30, { steps: 8 } );
+		await page.waitForFunction( () => {
+			const b = document.getElementById( 'minn-bar' );
+			const chip = document.querySelector( '.minn-bar-status' );
+			return getComputedStyle( b ).opacity === '1'
+				&& chip && getComputedStyle( chip ).opacity === '1'
+				&& b.getBoundingClientRect().width > 300;
+		}, null, { timeout: 4000 } );
+		t.check( 'ghost: reaching the corner reveals the chip with the rest of the bar',
+			true, 'chip visible in peek' );
 		await setSetting( { minn_admin_maintenance: false } );
 		// A narrow window shows the classic visible launcher, and widening
 		// it starts ghosting: the exclusion lives in the media query alone,

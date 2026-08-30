@@ -74,9 +74,10 @@ admin by clicking that same corner lands with the bar already open. On a
 phone the Minn mark stays visible and collapsed until you tap it, then opens
 the controls in a compact panel with its own Open Minn Admin link. When the
 site needs attention, such as maintenance mode, a password gate, hidden
-search visibility or a staging environment, the bar stays visible with a
-status chip beside the site name: chrome on screen means something needs
-you. The corner control floats above the site without changing its layout.
+search visibility or a staging environment, a status chip waits beside the
+site name and appears with the rest of the bar once you reach the corner.
+The page itself stays unmarked except for the two strokes. The corner
+control floats above the site without changing its layout.
 This is a personal choice: other users keep the classic bar until they opt
 in, and wp-admin always keeps the classic bar. The bar also stays off a page
 builder's own canvas, the same way the classic admin bar does.
