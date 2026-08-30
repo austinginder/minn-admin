@@ -11,6 +11,14 @@ class Minn_Admin {
 
 	const QUERY_VAR = 'minn_admin';
 
+	/**
+	 * Whether this request is served by Minn Engine rather than WordPress.
+	 * The engine defines MINN_ENGINE_VERSION at boot; there is no /wp-admin/.
+	 */
+	public static function is_engine() {
+		return defined( 'MINN_ENGINE_VERSION' ) || defined( 'MINN_ENGINE_DIR' );
+	}
+
 	public static function init() {
 		add_filter( 'determine_locale', array( __CLASS__, 'route_locale' ) );
 		add_action( 'init', array( __CLASS__, 'load_textdomain' ) );
@@ -1313,6 +1321,11 @@ class Minn_Admin {
 			'nonce'    => wp_create_nonce( 'wp_rest' ),
 			'appUrl'   => self::app_url(),
 			'version'  => MINN_ADMIN_VERSION,
+			// Named by the plugin, not only by the engine's boot payload, so
+			// every wp-admin bail-out can hide when there is no /wp-admin/.
+			'engine'   => self::is_engine()
+				? ( defined( 'MINN_ENGINE_VERSION' ) ? 'Minn Engine/' . MINN_ENGINE_VERSION : true )
+				: false,
 			'user'     => array(
 				'id'         => $user->ID,
 				'login'      => $user->user_login,

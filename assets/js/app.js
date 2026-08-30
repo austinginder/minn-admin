@@ -10,6 +10,53 @@
 	// payload names the engine, and every wp-admin-only control keys off this.
 	const ENGINE = !! ( B && B.engine );
 
+	// Classic wp-admin screens. The engine has no /wp-admin/, and its
+	// adminUrl is /minn-admin/, so a deep link there is swallowed by the
+	// SPA catch-all. admin-ajax.php is a real endpoint (plugin toggles,
+	// WCPDF) and is never a bail-out. Front-end builder URLs (?fl_builder,
+	// ?et_fb=1, ?etch=magic) are not .php screens and stay.
+	const WP_ADMIN_SCREENS = {
+		'admin.php': 1, 'index.php': 1, 'post.php': 1, 'post-new.php': 1,
+		'edit.php': 1, 'edit-comments.php': 1, 'edit-tags.php': 1,
+		'upload.php': 1, 'media-new.php': 1, 'user-edit.php': 1,
+		'user-new.php': 1, 'users.php': 1, 'profile.php': 1,
+		'customize.php': 1, 'site-editor.php': 1, 'site-health.php': 1,
+		'export.php': 1, 'import.php': 1, 'export-personal-data.php': 1,
+		'erase-personal-data.php': 1, 'options-permalink.php': 1,
+		'options-general.php': 1, 'options-writing.php': 1,
+		'options-reading.php': 1, 'options-discussion.php': 1,
+		'options-media.php': 1, 'options-privacy.php': 1, 'plugins.php': 1,
+		'plugin-install.php': 1, 'plugin-editor.php': 1, 'themes.php': 1,
+		'theme-install.php': 1, 'theme-editor.php': 1, 'widgets.php': 1,
+		'nav-menus.php': 1, 'tools.php': 1, 'update-core.php': 1,
+		'update.php': 1, 'network.php': 1, 'ms-admin.php': 1,
+		'settings.php': 1, 'options.php': 1,
+	};
+	function isWpAdminUrl( href ) {
+		if ( ! href ) return false;
+		const rawHref = String( href );
+		try {
+			const u = new URL( rawHref, location.href );
+			const pth = u.pathname;
+			const file = ( pth.split( '/' ).pop() || '' ).toLowerCase();
+			if ( file === 'admin-ajax.php' ) return false;
+			if ( /\/wp-admin(?:\/|$)/i.test( pth ) ) return true;
+			if ( file === 'index.php' ) {
+				return /\/wp-admin\//i.test( pth ) || /\/minn-admin\//i.test( pth );
+			}
+			return !! WP_ADMIN_SCREENS[ file ];
+		} catch ( e ) {
+			return /\/wp-admin\//i.test( rawHref ) && ! /admin-ajax\.php/i.test( rawHref );
+		}
+	}
+	function stripWpAdminLinks( root ) {
+		if ( ! ENGINE || ! root || ! root.querySelectorAll ) return;
+		root.querySelectorAll( 'a[href]' ).forEach( ( a ) => {
+			if ( a.closest( '#minn-editor-body, .minn-island-preview, .minn-email-frame' ) ) return;
+			if ( isWpAdminUrl( a.getAttribute( 'href' ) ) ) a.remove();
+		} );
+	}
+
 	/* ===== i18n =====
 	 * Translations ride the boot payload (B.i18n), built server-side from
 	 * standard JED files in languages/ (Minn_Admin::js_translations). English
@@ -5644,7 +5691,7 @@
 			rowMenu.innerHTML = `
 				<button type="button" data-ract="open">${ esc( __( 'Open in Minn' ) ) }</button>
 				${ viewUrl ? `<a href="${ esc( viewUrl ) }" target="wp-preview-${ p.id }">${ p.status === 'publish' ? __( 'View on site' ) : __( 'Preview draft' ) } ↗</a>` : '' }
-				<a href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">${ esc( __( 'Edit in block editor ↗' ) ) }</a>
+				${ ENGINE ? '' : `<a href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">${ esc( __( 'Edit in block editor ↗' ) ) }</a>` }
 				${ B.ppp && p.status !== 'publish' && p.status !== 'private' && p.status !== 'trash' ? `<button type="button" data-ract="ppp">${ esc( __( 'Copy public preview link' ) ) }</button>` : '' }
 				<button type="button" data-ract="duplicate">${ esc( __( 'Duplicate' ) ) }</button>
 				<div class="minn-new-menu-label">${ esc( __( 'Status' ) ) }</div>
@@ -5652,6 +5699,7 @@
 				${ p.status !== 'draft' ? `<button type="button" data-ract="draft">${ esc( __( 'Move to draft' ) ) }</button>` : '' }
 				<button type="button" data-ract="trash" class="danger">${ esc( __( 'Move to trash' ) ) }</button>`;
 			document.body.appendChild( rowMenu );
+			stripWpAdminLinks( rowMenu );
 			rowMenu.style.left = menuLeftAt( x, rowMenu.offsetWidth ) + 'px';
 			rowMenu.style.top = Math.max( 10, Math.min( y, window.innerHeight - rowMenu.offsetHeight - 10 ) ) + 'px';
 			$$( '[data-ract]', rowMenu ).forEach( ( b ) => b.addEventListener( 'click', () => {
@@ -15125,9 +15173,10 @@
 				</button>
 				${ st.command.hint ? `<div class="minn-sstat-hint">${ esc( st.command.hint ) }</div>` : '' }
 			</div>` : '';
-		const actions = ( st.actions || [] ).length ? `
+		const statusActions = ( st.actions || [] ).map( ( a, i ) => ( { a, i } ) ).filter( ( { a } ) => ! ( ENGINE && a.href && isWpAdminUrl( a.href ) ) );
+		const actions = statusActions.length ? `
 			<div class="minn-sstat-actions">
-				${ st.actions.map( ( a, i ) => a.href
+				${ statusActions.map( ( { a, i } ) => a.href
 					? `<a class="minn-btn-soft" href="${ esc( a.href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, a.href ) ) }</a>`
 					: `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-sstatact="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 			</div>` : '';
@@ -15240,6 +15289,9 @@
 	// when-gate (+ optional adminUrl-dup filter for detail modal hrefs).
 	function surfaceActionVisible( action, item, sections ) {
 		if ( action.when && String( surfaceValue( item, action.when.key ) ) !== String( action.when.equals ) ) {
+			return false;
+		}
+		if ( action.href && ENGINE && isWpAdminUrl( surfaceFillHref( action.href, item || {} ) ) ) {
 			return false;
 		}
 		if ( action.href && sections && sections.adminUrl ) {
@@ -19617,7 +19669,7 @@
 							: '' }${ t.parent ? ' · ' + esc( sprintf( /* translators: %s: the parent theme's name. */ __( 'child of %s' ), t.parent ) ) : '' }</div>
 						<div class="minn-theme-actions">
 							${ ! t.active ? `<button class="minn-btn-soft" data-tact="activate:${ i }">${ esc( __( 'Activate' ) ) }</button>` : '' }
-							${ ! t.active ? `<a class="minn-btn-soft minn-theme-preview" href="${ esc( B.site.adminUrl + ( t.block ? 'site-editor.php?wp_theme_preview=' : 'customize.php?theme=' ) + encodeURIComponent( t.stylesheet ) ) }" target="_blank" rel="noopener" title="${ esc( themePreviewTitle( t.name ) ) }">${ __( 'Live preview' ) } ↗</a>` : '' }
+							${ ! ENGINE && ! t.active ? `<a class="minn-btn-soft minn-theme-preview" href="${ esc( B.site.adminUrl + ( t.block ? 'site-editor.php?wp_theme_preview=' : 'customize.php?theme=' ) + encodeURIComponent( t.stylesheet ) ) }" target="_blank" rel="noopener" title="${ esc( themePreviewTitle( t.name ) ) }">${ __( 'Live preview' ) } ↗</a>` : '' }
 							${ t.update && B.caps.updateThemes ? `<button class="minn-badge-update as-btn" data-tact="update:${ i }">${ esc( sprintf( /* translators: %s: the version on offer. */ __( 'Update → %s' ), t.update ) ) }</button>` : '' }
 							${ B.caps.updateThemes && state.cache.themesAutoAllowed ? autoToggleHtml( 'theme', t.stylesheet, !! t.auto_update, t.name ) : '' }
 							${ ! t.active && B.caps.deleteThemes ? `<button class="minn-plugin-delete" data-tact="delete:${ i }" title="${ esc( sprintf( /* translators: %s: the theme's name. */ __( 'Delete %s' ), t.name ) ) }">${ icon( 'trash' ) }</button>` : '' }
@@ -20666,9 +20718,10 @@
 						: c.key === 'visibility' ? 'visibility'
 						: ( c.key === 'core' && 'pass' !== c.status ) ? 'core'
 						: '';
-					const clickable = detail || goto || c.href;
+					const href = c.href && ! ( ENGINE && isWpAdminUrl( c.href ) ) ? c.href : '';
+		const clickable = detail || goto || href;
 					return `
-					<div class="minn-sys-check ${ esc( c.status ) }${ clickable ? ' minn-sys-link' : '' }"${ detail ? ` data-sysdetail="${ detail }" role="button" tabindex="0" title="${ esc( __( 'View the full list' ) ) }"` : '' }${ goto ? ` data-sysgoto="${ goto }" role="button" tabindex="0"` : '' }${ ! detail && ! goto && c.href ? ` data-syshref="${ esc( c.href ) }" role="button" tabindex="0" title="${ esc( __( 'Open in wp-admin' ) ) }"` : '' }>
+					<div class="minn-sys-check ${ esc( c.status ) }${ clickable ? ' minn-sys-link' : '' }"${ detail ? ` data-sysdetail="${ detail }" role="button" tabindex="0" title="${ esc( __( 'View the full list' ) ) }"` : '' }${ goto ? ` data-sysgoto="${ goto }" role="button" tabindex="0"` : '' }${ ! detail && ! goto && href ? ` data-syshref="${ esc( href ) }" role="button" tabindex="0" title="${ esc( __( 'Open in wp-admin' ) ) }"` : '' }>
 						${ dot( c.status ) }
 						<div class="minn-sys-check-body">
 							<div class="minn-sys-check-label">${ esc( c.label ) }</div>
@@ -29718,7 +29771,7 @@
 				<div class="minn-editor-locked-note">
 					Minn couldn't safely parse this ${ ed.type === 'pages' ? 'page' : 'post' }'s block structure,
 					so the body is read-only — the title can still be edited here.
-					<button type="button" class="minn-linkish" id="minn-open-block-editor">${ esc( __( 'Open in block editor ↗' ) ) }</button>
+					${ ENGINE ? '' : `<button type="button" class="minn-linkish" id="minn-open-block-editor">${ esc( __( 'Open in block editor ↗' ) ) }</button>` }
 				</div>` : '' }
 				${ locked ? `` : `
 				<div class="minn-editor-toolbar" role="toolbar" aria-label="${ esc( __( 'Formatting' ) ) }">
@@ -33034,7 +33087,7 @@
 			</div>
 			<div class="minn-insp-actions">
 				${ editable ? `<button class="minn-btn-primary" id="minn-insp-apply" type="button">${ esc( __( 'Apply' ) ) }</button>` : '' }
-				${ state.editor ? `<button type="button" class="minn-btn-soft" id="minn-insp-gutenberg" title="${ esc( __( 'Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there.' ) ) }">${ esc( __( 'Block editor ↗' ) ) }</button>` : '' }
+				${ state.editor && ! ENGINE ? `<button type="button" class="minn-btn-soft" id="minn-insp-gutenberg" title="${ esc( __( 'Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there.' ) ) }">${ esc( __( 'Block editor ↗' ) ) }</button>` : '' }
 				<span class="minn-insp-move" role="group" aria-label="${ esc( __( 'Move block' ) ) }">
 					<button class="minn-btn-soft" id="minn-insp-move-up" type="button" title="${ esc( __( 'Move up' ) ) }" aria-label="${ esc( __( 'Move block up' ) ) }">${ icon( 'chevron-up' ) }</button>
 					<button class="minn-btn-soft" id="minn-insp-move-down" type="button" title="${ esc( __( 'Move down' ) ) }" aria-label="${ esc( __( 'Move block down' ) ) }">${ icon( 'chevron-down' ) }</button>
@@ -33053,6 +33106,7 @@
 	// document first — islands/islands edits only exist in the browser until
 	// save, so opening without save shows a stale post.
 	async function openInBlockEditor( triggerEl ) {
+		if ( ENGINE ) return;
 		const ed = state.editor;
 		if ( ! ed ) return;
 		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) {
@@ -33908,6 +33962,18 @@
 
 	function openMinnMenu( x, y, entries ) {
 		hideMinnMenu();
+		if ( ENGINE ) {
+			entries = entries.filter( ( en ) => ! en.href || ! isWpAdminUrl( en.href ) );
+			entries = entries.filter( ( en, i, all ) => {
+				if ( en.heading == null ) return true;
+				for ( let j = i + 1; j < all.length; j++ ) {
+					if ( all[ j ].heading != null ) break;
+					return true;
+				}
+				return false;
+			} );
+			if ( ! entries.length ) return;
+		}
 		minnMenuEl = document.createElement( 'div' );
 		minnMenuEl.className = 'minn-new-menu minn-ctx-menu';
 		minnMenuEl.innerHTML = entries.map( ( en, i ) => {
@@ -33921,6 +33987,7 @@
 				: `<button type="button" data-mi="${ i }"${ clsAttr }>${ esc( en.label ) }</button>`;
 		} ).join( '' );
 		document.body.appendChild( minnMenuEl );
+		stripWpAdminLinks( minnMenuEl );
 		// A context menu opens away from the pointer in the reading direction:
 		// rightward under LTR, leftward under RTL. Clamped either way, so it
 		// can never open past a viewport edge.
@@ -37617,7 +37684,7 @@
 			// editor. Saves first (openInBlockEditor), so unsaved islands are
 			// there when it opens. ⌥-clicking the sidebar's WordPress button
 			// does the same thing.
-			cmds.push( { label: __( 'Edit in the block editor ↗' ), kind: 'action', icon: '↗', run: () => openInBlockEditor() } );
+			if ( ! ENGINE ) cmds.push( { label: __( 'Edit in the block editor ↗' ), kind: 'action', icon: '↗', run: () => openInBlockEditor() } );
 		}
 		cmds.push(
 			{ label: __( 'Go to Overview' ), kind: 'nav', icon: '▦', run: () => go( 'overview' ) },
@@ -43251,6 +43318,7 @@
 		const notifScrollEl = $( '.minn-notif-scroll', root );
 		const keepNotifScroll = notifScrollEl ? notifScrollEl.scrollTop : 0;
 		root.innerHTML = ( state.notifOpen ? renderNotifPanel() : '' ) + ( state.paletteOpen ? renderPalette() : '' ) + renderModal();
+		stripWpAdminLinks( root );
 		Object.keys( had ).forEach( ( sel ) => {
 			if ( ! had[ sel ] ) return;
 			const el = $( sel, root );
@@ -44301,37 +44369,38 @@
 		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
 		switch ( state.route ) {
-			case 'content': return renderContent();
-			case 'media': return renderMedia();
-			case 'comments': return renderComments();
-			case 'orders': return renderOrders();
-			case 'order': return renderOrderPage();
-			case 'subscriptions': return renderSubscriptions();
-			case 'subscription': return renderSubscriptionPage();
-			case 'products': return renderProducts();
-			case 'product': return renderProductPage();
-			case 'coupons': return renderCoupons();
-			case 'customers': return renderCustomers();
-			case 'users': return renderUsers();
-			case 'useredit': return renderUserEdit();
-			case 'terms': return renderStructure();
-			case 'menus': return renderMenus();
-			case 'widgets': return renderWidgets();
-			case 'extensions': return renderExtensions();
-			case 'posttypes': return renderStructure();
-			case 'settings': return renderSettings();
-			case 'stats': return renderStats();
-			case 'system': return renderSystem();
-			case 'database': return renderDatabase();
-			case 'editor': return renderEditor();
-			case 'migrate': return renderMigrate();
-			case 'fieldgroup': return renderFieldGroupBuilder();
-			case 'profile': return renderProfile();
-			case 'surfaceitem': return renderSurfaceItem();
+			case 'content': renderContent(); break;
+			case 'media': renderMedia(); break;
+			case 'comments': renderComments(); break;
+			case 'orders': renderOrders(); break;
+			case 'order': renderOrderPage(); break;
+			case 'subscriptions': renderSubscriptions(); break;
+			case 'subscription': renderSubscriptionPage(); break;
+			case 'products': renderProducts(); break;
+			case 'product': renderProductPage(); break;
+			case 'coupons': renderCoupons(); break;
+			case 'customers': renderCustomers(); break;
+			case 'users': renderUsers(); break;
+			case 'useredit': renderUserEdit(); break;
+			case 'terms': renderStructure(); break;
+			case 'menus': renderMenus(); break;
+			case 'widgets': renderWidgets(); break;
+			case 'extensions': renderExtensions(); break;
+			case 'posttypes': renderStructure(); break;
+			case 'settings': renderSettings(); break;
+			case 'stats': renderStats(); break;
+			case 'system': renderSystem(); break;
+			case 'database': renderDatabase(); break;
+			case 'editor': renderEditor(); break;
+			case 'migrate': renderMigrate(); break;
+			case 'fieldgroup': renderFieldGroupBuilder(); break;
+			case 'profile': renderProfile(); break;
+			case 'surfaceitem': renderSurfaceItem(); break;
 			default:
-				if ( surfaceById( state.route ) ) return renderSurface( surfaceById( state.route ) );
-				return renderOverview();
+				if ( surfaceById( state.route ) ) renderSurface( surfaceById( state.route ) );
+				else renderOverview();
 		}
+		stripWpAdminLinks( $( '#minn-view' ) );
 	}
 
 	/* ===== Boot ===== */
@@ -44461,6 +44530,7 @@
 		if ( view && 'MutationObserver' in window ) {
 			let raf = 0;
 			const obs = new MutationObserver( () => {
+				stripWpAdminLinks( view );
 				cancelAnimationFrame( raf );
 				raf = requestAnimationFrame( () => {
 					enhanceTabStrips();
