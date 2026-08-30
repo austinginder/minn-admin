@@ -2779,6 +2779,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 18px 14px;
   border-top: 1px solid var(--border);
 }
+.minn-metric-picker-foot .minn-metric-as-default { margin-left: auto; }
 /* Side-by-side prose needs real width — the 94vw cap still governs laptops. */
 .minn-modal.xl { width: 1280px; }
 /* HTML email preview: real messages lay out at 600–900px; give the frame

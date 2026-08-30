@@ -4537,6 +4537,7 @@
 
 	async function loadOverview() {
 		state.cache.overview = await api( `minn-admin/v1/overview?days=${ state.range }` );
+		migrateOverviewMetricsFromLocal( state.cache.overview );
 	}
 
 	// "Store needs attention" strip: the day-to-day order buckets, each a
@@ -4549,28 +4550,42 @@
 		return ( o && o.metrics && o.metrics.length ) ? o.metrics : ( ( o && o.stats ) || [] );
 	}
 
-	function overviewMetricDefaults( o ) {
+	function overviewMetricBuiltinKeys( o ) {
 		return ( ( o && o.stats ) || [] ).map( ( s ) => s.key );
 	}
 
-	function readOverviewMetricKeys( o ) {
-		const catalog = overviewMetricCatalog( o );
-		const allowed = new Set( catalog.map( ( m ) => m.key ) );
-		const defaults = overviewMetricDefaults( o );
-		let saved = [];
-		try { saved = JSON.parse( localStorage.getItem( 'minn-overview-metrics' ) || '[]' ); } catch ( e ) { saved = []; }
-		if ( ! Array.isArray( saved ) ) saved = [];
-		const keys = defaults.slice();
-		saved.forEach( ( k, i ) => {
+	function overviewMetricAllowed( o ) {
+		return new Set( overviewMetricCatalog( o ).map( ( m ) => m.key ).filter( Boolean ) );
+	}
+
+	function overlayOverviewMetricKeys( saved, fallback, allowed ) {
+		const keys = fallback.slice();
+		( Array.isArray( saved ) ? saved : [] ).forEach( ( k, i ) => {
 			if ( i < keys.length && allowed.has( k ) ) keys[ i ] = k;
 		} );
 		const seen = new Set();
 		return keys.map( ( k, i ) => {
 			if ( k && ! seen.has( k ) ) { seen.add( k ); return k; }
-			const fallback = defaults.find( ( d ) => d && ! seen.has( d ) && allowed.has( d ) ) || defaults[ i ];
-			if ( fallback ) seen.add( fallback );
-			return fallback;
+			const next = fallback.find( ( d ) => d && ! seen.has( d ) && allowed.has( d ) ) || fallback[ i ];
+			if ( next ) seen.add( next );
+			return next;
 		} );
+	}
+
+	function overviewMetricKeysEqual( a, b ) {
+		return Array.isArray( a ) && Array.isArray( b ) && a.length === b.length && a.every( ( k, i ) => k === b[ i ] );
+	}
+
+	function overviewMetricDefaults( o ) {
+		const builtin = overviewMetricBuiltinKeys( o );
+		const allowed = overviewMetricAllowed( o );
+		return overlayOverviewMetricKeys( o && o.metricDefaults, builtin, allowed );
+	}
+
+	function readOverviewMetricKeys( o ) {
+		const allowed = overviewMetricAllowed( o );
+		const defaults = overviewMetricDefaults( o );
+		return overlayOverviewMetricKeys( o && o.metricKeys, defaults, allowed );
 	}
 
 	function overviewShownMetrics( o ) {
@@ -4581,8 +4596,45 @@
 		return readOverviewMetricKeys( o ).map( ( k, i ) => byKey[ k ] || defaults[ i ] ).filter( Boolean );
 	}
 
-	function writeOverviewMetricKeys( keys ) {
-		localStorage.setItem( 'minn-overview-metrics', JSON.stringify( keys ) );
+	let overviewMetricSaveSeq = 0;
+
+	function persistOverviewMetricKeys( keys, o ) {
+		const defaults = overviewMetricDefaults( o );
+		const asDefault = overviewMetricKeysEqual( keys, defaults );
+		const next = asDefault ? defaults.slice() : keys.slice();
+		if ( o ) {
+			o.metricKeys = next;
+			o.metricCustom = ! asDefault;
+		}
+		try { localStorage.removeItem( 'minn-overview-metrics' ); } catch ( e ) { /* ignore */ }
+		const seq = ++overviewMetricSaveSeq;
+		api( 'minn-admin/v1/overview/metrics', {
+			method: 'POST',
+			body: JSON.stringify( { keys: asDefault ? [] : next } ),
+		} ).then( ( r ) => {
+			if ( seq !== overviewMetricSaveSeq ) return;
+			const cur = state.cache.overview;
+			if ( ! cur || ! r ) return;
+			if ( Array.isArray( r.defaults ) ) cur.metricDefaults = r.defaults;
+			cur.metricCustom = !! r.custom;
+			if ( ! r.custom && Array.isArray( r.keys ) ) cur.metricKeys = r.keys;
+		} ).catch( ( e ) => {
+			if ( seq !== overviewMetricSaveSeq ) return;
+			toast( e.message || __( 'Could not save these cards.' ), true );
+		} );
+	}
+
+	function migrateOverviewMetricsFromLocal( o ) {
+		if ( ! o ) return;
+		let leftover = [];
+		try { leftover = JSON.parse( localStorage.getItem( 'minn-overview-metrics' ) || '[]' ); } catch ( e ) { leftover = []; }
+		try { localStorage.removeItem( 'minn-overview-metrics' ); } catch ( e ) { /* ignore */ }
+		if ( o.metricCustom ) return;
+		if ( ! Array.isArray( leftover ) || ! leftover.length ) return;
+		const allowed = overviewMetricAllowed( o );
+		if ( ! leftover.some( ( k ) => allowed.has( k ) ) ) return;
+		o.metricKeys = leftover;
+		persistOverviewMetricKeys( readOverviewMetricKeys( o ), o );
 	}
 
 	function setOverviewMetric( slot, key, o ) {
@@ -4599,7 +4651,7 @@
 		} else {
 			keys[ slot ] = key;
 		}
-		writeOverviewMetricKeys( keys );
+		persistOverviewMetricKeys( keys, o );
 		renderOverview();
 	}
 
@@ -4608,13 +4660,41 @@
 		const defaults = overviewMetricDefaults( o );
 		if ( slot < 0 || slot >= keys.length ) return;
 		keys[ slot ] = defaults[ slot ];
-		writeOverviewMetricKeys( keys );
+		persistOverviewMetricKeys( keys, o );
 		renderOverview();
 	}
 
 	function resetOverviewMetrics() {
-		localStorage.removeItem( 'minn-overview-metrics' );
+		const o = state.cache.overview;
+		if ( o ) {
+			o.metricKeys = overviewMetricDefaults( o );
+			o.metricCustom = false;
+		}
+		persistOverviewMetricKeys( overviewMetricDefaults( o ), o );
 		renderOverview();
+	}
+
+	async function saveOverviewMetricDefaults() {
+		const o = state.cache.overview;
+		const keys = readOverviewMetricKeys( o );
+		try {
+			const r = await api( 'minn-admin/v1/overview/metric-defaults', {
+				method: 'POST',
+				body: JSON.stringify( { keys } ),
+			} );
+			if ( o ) {
+				o.metricDefaults = keys.slice();
+				o.metricKeys = keys.slice();
+				o.metricCustom = false;
+			}
+			// Drop the personal copy so this account follows the default it just set.
+			persistOverviewMetricKeys( keys, o );
+			toast( __( 'Saved as the default for everyone.' ) );
+			closeModal();
+			renderOverview();
+		} catch ( e ) {
+			toast( e.message || __( 'Could not save the default for everyone.' ), true );
+		}
 	}
 
 	function overviewMetricGroupOrder() {
@@ -38148,6 +38228,8 @@
 			const defaults = overviewMetricDefaults( o );
 			const dirtySlot = current !== defaults[ m.slot ];
 			const dirtyAny = keys.some( ( k, i ) => k !== defaults[ i ] );
+			const canSetDefault = !! ( o.canSetMetricDefaults || ( B.caps && B.caps.settings ) );
+			const showAsDefault = canSetDefault && ! overviewMetricKeysEqual( keys, defaults );
 			const groups = overviewMetricGroupOrder().map( ( group ) => {
 				const rows = catalog.filter( ( row ) => ( row.group || 'content' ) === group );
 				return rows.length ? { group, rows } : null;
@@ -38177,9 +38259,10 @@
 							</div>
 						</div>` ).join( '' ) }
 					</div>
-					${ dirtySlot || dirtyAny ? `<div class="minn-metric-picker-foot">
+					${ dirtySlot || dirtyAny || showAsDefault ? `<div class="minn-metric-picker-foot">
 						${ dirtySlot ? `<button type="button" class="minn-btn-soft" id="minn-metric-reset-one">${ esc( __( 'Reset this card' ) ) }</button>` : '' }
 						${ dirtyAny ? `<button type="button" class="minn-btn-soft" id="minn-metric-reset-all">${ esc( __( 'Reset all cards' ) ) }</button>` : '' }
+						${ showAsDefault ? `<button type="button" class="minn-btn-soft minn-metric-as-default" id="minn-metric-as-default">${ esc( __( 'Use as default for everyone' ) ) }</button>` : '' }
 					</div>` : '' }
 				</div>
 			</div>`;
@@ -39621,6 +39704,10 @@
 			if ( resetAll ) resetAll.addEventListener( 'click', () => {
 				closeModal();
 				resetOverviewMetrics();
+			} );
+			const asDefault = $( '#minn-metric-as-default' );
+			if ( asDefault ) asDefault.addEventListener( 'click', () => {
+				saveOverviewMetricDefaults();
 			} );
 		}
 

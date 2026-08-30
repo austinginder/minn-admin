@@ -152,6 +152,28 @@ class Minn_Admin_REST {
 				),
 			)
 		);
+		register_rest_route(
+			self::NS,
+			'/overview/metrics',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'set_overview_metrics' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/overview/metric-defaults',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'set_overview_metric_defaults' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
 
 		register_rest_route(
 			self::NS,
@@ -3298,15 +3320,22 @@ class Minn_Admin_REST {
 			);
 		}
 
+		$catalog = self::overview_metric_catalog( $posts, $pages, $comments, $media, $store, $stats );
+		$layout  = self::overview_metric_layout( $catalog, $stats );
+
 		return rest_ensure_response(
 			array(
-				'stats'    => $stats,
-				'metrics'  => self::overview_metric_catalog( $posts, $pages, $comments, $media, $store, $stats ),
-				'chart'    => $chart,
-				'traffic'  => $traffic_out,
-				'activity' => $activity,
-				'store'    => $store,
-				'greeting' => self::greeting(),
+				'stats'                 => $stats,
+				'metrics'               => $catalog,
+				'metricKeys'            => $layout['keys'],
+				'metricDefaults'        => $layout['defaults'],
+				'metricCustom'          => $layout['custom'],
+				'canSetMetricDefaults'  => current_user_can( 'manage_options' ),
+				'chart'                 => $chart,
+				'traffic'               => $traffic_out,
+				'activity'              => $activity,
+				'store'                 => $store,
+				'greeting'              => self::greeting(),
 			)
 		);
 	}
@@ -3578,6 +3607,186 @@ class Minn_Admin_REST {
 		}
 
 		return $metrics;
+	}
+
+	/**
+	 * Resolve which Overview cards this user sees.
+	 *
+	 * Personal picks (user meta) win, then the site-wide default
+	 * administrators set, then the built-in stats layout. Unknown keys
+	 * (a Woo metric after WooCommerce was turned off) drop and the slot
+	 * fills from the next fallback. Setting a site default never wipes
+	 * someone else's personal picks.
+	 */
+	private static function overview_metric_layout( $catalog, $stats ) {
+		$allowed = array();
+		foreach ( (array) $catalog as $row ) {
+			if ( ! empty( $row['key'] ) ) {
+				$allowed[ $row['key'] ] = true;
+			}
+		}
+		$builtin = array();
+		foreach ( (array) $stats as $row ) {
+			if ( ! empty( $row['key'] ) ) {
+				$builtin[] = $row['key'];
+			}
+		}
+		$site = self::overlay_overview_metric_keys(
+			self::overview_metric_keys_clean( get_option( 'minn_admin_overview_metric_defaults', array() ) ),
+			$builtin,
+			$allowed
+		);
+		$uid    = get_current_user_id();
+		$raw    = $uid ? get_user_meta( $uid, 'minn_admin_overview_metrics', true ) : '';
+		$custom = is_array( $raw );
+		$keys   = $custom
+			? self::overlay_overview_metric_keys( self::overview_metric_keys_clean( $raw ), $site, $allowed )
+			: $site;
+		return array(
+			'keys'     => $keys,
+			'defaults' => $site,
+			'custom'   => $custom,
+		);
+	}
+
+	/**
+	 * Shape stored in user meta / the site option, without catalog filtering.
+	 * POST handlers return this so a save is not a second Overview round-trip.
+	 */
+	private static function overview_metric_stored_layout() {
+		$uid    = get_current_user_id();
+		$raw    = $uid ? get_user_meta( $uid, 'minn_admin_overview_metrics', true ) : '';
+		$custom = is_array( $raw );
+		$site   = self::overview_metric_keys_clean( get_option( 'minn_admin_overview_metric_defaults', array() ) );
+		return array(
+			'keys'                 => $custom ? self::overview_metric_keys_clean( $raw ) : $site,
+			'defaults'             => $site,
+			'custom'               => $custom,
+			'canSetMetricDefaults' => current_user_can( 'manage_options' ),
+		);
+	}
+
+	/**
+	 * Keep at most six unique sanitize_key metric ids. Empty in, empty out.
+	 */
+	private static function overview_metric_keys_clean( $keys ) {
+		if ( ! is_array( $keys ) ) {
+			return array();
+		}
+		$out  = array();
+		$seen = array();
+		foreach ( $keys as $k ) {
+			if ( ! is_string( $k ) && ! is_numeric( $k ) ) {
+				continue;
+			}
+			$k = sanitize_key( (string) $k );
+			if ( '' === $k || isset( $seen[ $k ] ) ) {
+				continue;
+			}
+			$seen[ $k ] = true;
+			$out[]      = $k;
+			if ( count( $out ) >= 6 ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Overlay saved keys onto a fallback of the same length, dropping
+	 * anything not in $allowed and de-duplicating left to right.
+	 */
+	private static function overlay_overview_metric_keys( $saved, $fallback, $allowed ) {
+		$keys = array_values( (array) $fallback );
+		$i    = 0;
+		foreach ( (array) $saved as $k ) {
+			if ( $i >= count( $keys ) ) {
+				break;
+			}
+			if ( isset( $allowed[ $k ] ) ) {
+				$keys[ $i ] = $k;
+			}
+			++$i;
+		}
+		$seen = array();
+		foreach ( $keys as $i => $k ) {
+			if ( $k && empty( $seen[ $k ] ) && isset( $allowed[ $k ] ) ) {
+				$seen[ $k ] = true;
+				continue;
+			}
+			$next = null;
+			foreach ( $fallback as $d ) {
+				if ( $d && empty( $seen[ $d ] ) && isset( $allowed[ $d ] ) ) {
+					$next = $d;
+					break;
+				}
+			}
+			if ( ! $next && isset( $fallback[ $i ] ) ) {
+				$next = $fallback[ $i ];
+			}
+			$keys[ $i ] = $next;
+			if ( $next ) {
+				$seen[ $next ] = true;
+			}
+		}
+		return $keys;
+	}
+
+	/**
+	 * POST minn-admin/v1/overview/metrics { keys } — this user's Overview
+	 * cards. An empty or null keys list clears the personal pick so the
+	 * site default (or the built-in layout) shows again.
+	 */
+	public static function set_overview_metrics( WP_REST_Request $request ) {
+		$uid = get_current_user_id();
+		if ( $uid <= 0 ) {
+			return new WP_Error( 'minn_admin_no_user', __( 'You must be signed in.', 'minn-admin' ), array( 'status' => 401 ) );
+		}
+		$json = $request->get_json_params();
+		if ( ! is_array( $json ) || ! array_key_exists( 'keys', $json ) ) {
+			return new WP_Error( 'minn_admin_bad_metrics', __( 'No metrics provided.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$keys = $json['keys'];
+		if ( null === $keys || ( is_array( $keys ) && ! $keys ) ) {
+			delete_user_meta( $uid, 'minn_admin_overview_metrics' );
+		} elseif ( ! is_array( $keys ) ) {
+			return new WP_Error( 'minn_admin_bad_metrics', __( 'No metrics provided.', 'minn-admin' ), array( 'status' => 400 ) );
+		} else {
+			$clean = self::overview_metric_keys_clean( $keys );
+			if ( $clean ) {
+				update_user_meta( $uid, 'minn_admin_overview_metrics', $clean );
+			} else {
+				delete_user_meta( $uid, 'minn_admin_overview_metrics' );
+			}
+		}
+		return rest_ensure_response( self::overview_metric_stored_layout() );
+	}
+
+	/**
+	 * POST minn-admin/v1/overview/metric-defaults { keys } — site-wide
+	 * Overview cards for anyone without a personal pick. Does not rewrite
+	 * existing user metas. Empty or null keys restores the built-in layout
+	 * as the default.
+	 */
+	public static function set_overview_metric_defaults( WP_REST_Request $request ) {
+		$json = $request->get_json_params();
+		if ( ! is_array( $json ) || ! array_key_exists( 'keys', $json ) ) {
+			return new WP_Error( 'minn_admin_bad_metrics', __( 'No metrics provided.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$keys = $json['keys'];
+		if ( null === $keys || ( is_array( $keys ) && ! $keys ) ) {
+			delete_option( 'minn_admin_overview_metric_defaults' );
+		} elseif ( ! is_array( $keys ) ) {
+			return new WP_Error( 'minn_admin_bad_metrics', __( 'No metrics provided.', 'minn-admin' ), array( 'status' => 400 ) );
+		} else {
+			$clean = self::overview_metric_keys_clean( $keys );
+			if ( $clean ) {
+				update_option( 'minn_admin_overview_metric_defaults', $clean );
+			} else {
+				delete_option( 'minn_admin_overview_metric_defaults' );
+			}
+		}
+		return rest_ensure_response( self::overview_metric_stored_layout() );
 	}
 
 	/**
