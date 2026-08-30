@@ -19,6 +19,11 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		title: 'Query loop suite',
 		content: '<!-- wp:paragraph -->\n<p>Before the loop.</p>\n<!-- /wp:paragraph -->',
 	} );
+	// The perPage check needs at least two PUBLISHED posts to count — a bare
+	// site (minnadmin-core-latest) ships with one, so the loop's subjects are
+	// suite fixtures too.
+	const seedA = await createPost( page, { title: 'Query loop seed A', status: 'publish', content: '<!-- wp:paragraph --><p>A.</p><!-- /wp:paragraph -->' } );
+	const seedB = await createPost( page, { title: 'Query loop seed B', status: 'publish', content: '<!-- wp:paragraph --><p>B.</p><!-- /wp:paragraph -->' } );
 
 	const rawContent = () => page.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content', {
@@ -182,6 +187,8 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		t.check( 'inherit toggle stores a boolean true', !! q2 && q2.inherit === true, m2 && m2[ 1 ] );
 	} finally {
 		await deletePost( page, id ).catch( () => {} );
+		await deletePost( page, seedA ).catch( () => {} );
+		await deletePost( page, seedB ).catch( () => {} );
 	}
 
 	await t.done( browser, errors );

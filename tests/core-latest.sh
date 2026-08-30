@@ -53,6 +53,8 @@ SUITES=(
 	nested-islands.test.js
 	patterns.test.js
 	core-blocks-extend.test.js
+	query-loop.test.js
+	core-inserts.test.js
 	image-swap.test.js
 	# core post APIs: autosaves, revisions, locks, post fields
 	autosave.test.js
@@ -98,6 +100,7 @@ SUITES=(
 # rebuilding the fixture farm here and defeats the point of a bare site:
 #   auto-blocks, inspector-child-text  anchor-blocks (registered blocks)
 #   cpt-create                         Custom Post Type UI (its stored types)
+#   search-typing                      WooCommerce (drives the Orders search)
 #   rewrite-rules                      Rewrite Rules Inspector
 #   extensions                         a populated plugin list (icons, scroll)
 # They stay covered by run-all.sh on minnadmin.
