@@ -322,6 +322,31 @@ function minn_admin_acpt_read_values( $post_id ) {
  * @param array  $args  post_id / box_name / field_name for the read-back.
  * @return array|null Rows for ACPT, or null when the input is unusable.
  */
+/**
+ * An incoming Image value, as an attachment id this caller may publish.
+ *
+ * The picker sends { id, url } or a bare id; ACPT stores by id and derives
+ * the URL itself. The three questions are the ones the SEO panel asks of a
+ * social image: being able to edit this post says nothing about which files
+ * this person may attach, uploads are served without authentication, so
+ * pointing a field at a stranger's attachment publishes the file itself, and
+ * the ids are sequential. One helper rather than a copy per call site, so the
+ * next field that carries an attachment inherits the checks.
+ *
+ * @param mixed $value Submitted value.
+ * @return int Attachment id, or 0 when it must not be written.
+ */
+function minn_admin_acpt_image_in( $value ) {
+	$att = is_array( $value ) || is_object( $value )
+		? (int) ( ( (array) $value )['id'] ?? 0 )
+		: (int) $value;
+	if ( $att < 1 || 'attachment' !== get_post_type( $att )
+		|| ! current_user_can( 'upload_files' ) || ! current_user_can( 'read_post', $att ) ) {
+		return 0;
+	}
+	return $att;
+}
+
 function minn_admin_acpt_rows_in( $field, $value, $args ) {
 	if ( ! is_array( $value ) ) {
 		return null;
@@ -331,6 +356,15 @@ function minn_admin_acpt_rows_in( $field, $value, $args ) {
 		return null;
 	}
 	$names = wp_list_pluck( $mapped['subs'], 'name' );
+	// A row is not a place where a value stops needing the rules its type
+	// answers to at the top level. Writing every sub as a bare scalar skipped
+	// the Image branch in minn_admin_acpt_write_one() entirely, so a repeater
+	// row could carry an attachment this person may neither attach nor read.
+	// Keep each sub's mapped type to hand so the checks travel with it.
+	$sub_types = array();
+	foreach ( $mapped['subs'] as $sub ) {
+		$sub_types[ $sub['name'] ] = $sub['type'];
+	}
 	$orig  = get_acpt_field( array_merge( $args, array( 'format' => 'only_value', 'return' => 'raw' ) ) );
 	$orig  = is_array( $orig ) ? array_values( $orig ) : array();
 	$rows  = array();
@@ -341,9 +375,19 @@ function minn_admin_acpt_rows_in( $field, $value, $args ) {
 			? $orig[ (int) $row['__idx'] ]
 			: array();
 		foreach ( $names as $name ) {
-			if ( array_key_exists( $name, $vals ) ) {
-				$base[ $name ] = is_scalar( $vals[ $name ] ) ? $vals[ $name ] : '';
+			if ( ! array_key_exists( $name, $vals ) ) {
+				continue;
 			}
+			if ( isset( $sub_types[ $name ] ) && 'image' === $sub_types[ $name ] ) {
+				$att = minn_admin_acpt_image_in( $vals[ $name ] );
+				// A refused id leaves whatever the row already held alone,
+				// rather than blanking a picture that is fine.
+				if ( $att ) {
+					$base[ $name ] = $att;
+				}
+				continue;
+			}
+			$base[ $name ] = is_scalar( $vals[ $name ] ) ? $vals[ $name ] : '';
 		}
 		$rows[] = $base;
 	}
@@ -392,17 +436,11 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 	} elseif ( 'Checkbox' === $type ) {
 		$value = is_array( $value ) ? array_values( array_map( 'sanitize_text_field', $value ) ) : array();
 	} elseif ( 'Image' === $type ) {
-		// The picker sends { id, url } (or a bare id); ACPT stores by id and
-		// derives the URL itself. An id that is not an attachment is refused
-		// rather than written, so a stray value cannot blank a picture that
-		// is fine.
-		$att = is_array( $value ) || is_object( $value )
-			? (int) ( ( (array) $value )['id'] ?? 0 )
-			: (int) $value;
-		// And the same authorization the SEO panel applies: being able to edit
-		// this post says nothing about which files this person may attach.
-		if ( $att < 1 || 'attachment' !== get_post_type( $att )
-			|| ! current_user_can( 'upload_files' ) || ! current_user_can( 'read_post', $att ) ) {
+		// An id that is not an attachment, or one this person may not attach,
+		// is refused rather than written, so a stray value cannot blank a
+		// picture that is fine. Repeater rows answer to the same helper.
+		$att = minn_admin_acpt_image_in( $value );
+		if ( ! $att ) {
 			return;
 		}
 		$value = $att;

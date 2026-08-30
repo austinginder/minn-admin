@@ -252,7 +252,13 @@ add_action( 'rest_api_init', function () {
 				global $wpdb;
 				$id  = (int) $request['id'];
 				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $table() . ' WHERE id = %d', $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL
-				if ( ! $row ) {
+				// Confirm the target is a redirect before rewriting it, the
+				// same test the delete route below makes. Status 404 rows are
+				// their 404 log rather than rules, which is why the list, the
+				// counts and the editor all leave them alone. An edit that
+				// skipped the test would turn a recorded miss into a live
+				// redirect through a route that only ever names rules.
+				if ( ! $row || '404' === (string) $row->status ) {
 					return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$data = minn_admin_eps301_payload( $request );

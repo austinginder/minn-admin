@@ -283,7 +283,12 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				$entry = FrmEntry::getOne( (int) $request['id'], true );
-				if ( ! $entry ) {
+				// Confirm the target is a submitted, top-level entry, the same
+				// test the list and the per-form count make. Their table also
+				// holds drafts and repeater child rows, which belong to
+				// Formidable's own workflows; this surface never lists them, so
+				// a route that only ever names entries must not read one.
+				if ( ! $entry || ! empty( $entry->is_draft ) || (int) $entry->parent_item_id > 0 ) {
 					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$form_id = (int) $entry->form_id;
@@ -330,8 +335,13 @@ add_action( 'rest_api_init', function () {
 				return minn_admin_formidable_can( 'frm_delete_entries' );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) $request['id'];
-				if ( ! FrmEntry::getOne( $id ) ) {
+				$id    = (int) $request['id'];
+				$entry = FrmEntry::getOne( $id, true );
+				// The same discriminator the read route applies. Destroying a
+				// repeater child row would take one sub-row out of a live
+				// parent entry, and a draft belongs to whoever is still filling
+				// it in; neither is ever listed here.
+				if ( ! $entry || ! empty( $entry->is_draft ) || (int) $entry->parent_item_id > 0 ) {
 					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Their complete flow: metas deleted, their hooks fire.

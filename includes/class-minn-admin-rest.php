@@ -7730,6 +7730,24 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// plain prefix LIKE here named a neighbouring install's tables on
 		// shared-database hosting, the same way the browser's list once did.
 		$tables = Minn_Admin_DB::site_tables();
+		// That helper also admits the base-prefixed tables a whole network
+		// shares, the users table among them, plus the main site's content.
+		// That is right for the database browser it was written for, which is
+		// gated on managing the network. This card is gated on managing the
+		// site, which on a network means one site out of many, so narrow it to
+		// this install's own tables for anyone who does not own the network.
+		// Whoever does owns the browser's tier too and keeps the full picture.
+		if ( ! Minn_Admin::network_owner() ) {
+			$own    = strtolower( $wpdb->prefix );
+			$tables = array_values(
+				array_filter(
+					(array) $tables,
+					static function ( $t ) use ( $own ) {
+						return 0 === strpos( strtolower( (string) $t->name ), $own );
+					}
+				)
+			);
+		}
 		$db_size    = 0;
 		$top_tables = array();
 		foreach ( (array) $tables as $i => $tbl ) {
