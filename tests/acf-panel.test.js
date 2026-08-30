@@ -157,13 +157,13 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter, pi
 			String( mv.slideshow_autoplay_secs ) === '7' && mv.slideshow_arrows === false,
 			JSON.stringify( { autoplay: mv.slideshow_autoplay_secs, arrows: mv.slideshow_arrows } ) );
 
-		// checkbox field: the multicheck control (one tick row per choice,
-		// value = the checked choice keys in choice order).
+		// checkbox field: the multicheck control (one Minn switch per choice,
+		// value = the on choice keys in choice order).
 		const mcSel = '[data-pf$=":slideshow_tags"][data-ftype="multicheck"]';
 		t.check( 'checkbox field renders the multicheck control',
-			await page.$eval( mcSel, ( e ) => e.querySelectorAll( 'input[type="checkbox"]' ).length === 3 ).catch( () => false ) );
-		await page.click( `${ mcSel } input[value="new"]` );
-		await page.click( `${ mcSel } input[value="featured"]` );
+			await page.$eval( mcSel, ( e ) => e.querySelectorAll( '.minn-switch[data-mcv]' ).length === 3 ).catch( () => false ) );
+		await page.click( `${ mcSel } [data-mcv="new"]` );
+		await page.click( `${ mcSel } [data-mcv="featured"]` );
 		await save();
 		mv = await readMinnAcf();
 		t.check( 'checked choices persisted as an ordered list',

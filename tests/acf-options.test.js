@@ -318,12 +318,12 @@ const { launch, login, reporter } = require( './helpers' );
 	if ( ( await promoRow() ) === null ) {
 		console.log( 'SKIP conditional check: no conditional field on this tab' );
 	} else {
-		// Baseline: untick every badge first (a prior run may have left one).
-		await page.$$eval( '[data-sset="field_minn_optlab_badges"] input:checked', ( els ) => els.forEach( ( e ) => e.click() ) );
+		// Baseline: turn off every badge first (a prior run may have left one).
+		await page.$$eval( '[data-sset="field_minn_optlab_badges"] .minn-switch.on', ( els ) => els.forEach( ( e ) => e.click() ) );
 		t.check( 'conditional options row starts hidden with no controller value', ( await promoRow() ) === true );
-		await page.click( '[data-sset="field_minn_optlab_badges"] input[value="ssl"]' );
+		await page.click( '[data-sset="field_minn_optlab_badges"] [data-mcv="ssl"]' );
 		t.check( 'ticking the controller reveals the conditional row', ( await promoRow() ) === false );
-		await page.click( '[data-sset="field_minn_optlab_badges"] input[value="ssl"]' );
+		await page.click( '[data-sset="field_minn_optlab_badges"] [data-mcv="ssl"]' );
 		t.check( 'unticking hides it again', ( await promoRow() ) === true );
 	}
 

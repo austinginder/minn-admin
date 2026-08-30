@@ -1246,8 +1246,8 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 ```
 
 Supported field types: `text`, `textarea`, `number`, `range`, `email`, `url`, `select`, `radio`,
-`true_false`, `color_picker` (swatch + hex text), `multicheck` (multi-value choices as tick
-rows; value = the checked choice keys in order; declare `choices`), `date` / `datetime`
+`true_false`, `color_picker` (swatch + hex text), `multicheck` (multi-value choices as Minn
+switches; value = the on choice keys in order; declare `choices`), `date` / `datetime`
 (Minn's calendar popover; values `YYYY-MM-DD` / `YYYY-MM-DDTHH:mm`), `time` (lenient typed
 input normalized to `HH:mm`), `image` (`{ id, url }`, media picker), `file` (`{ id, url,
 name }`, the media picker over every attachment type), `gallery`

@@ -1229,7 +1229,10 @@ button.minn-nav-label:hover { color: var(--text2); }
   to { opacity: 1; transform: translateY(0); }
 }
 .minn-field-image { display: flex; flex-direction: column; gap: 8px; }
-.minn-field-multicheck { display: flex; flex-direction: column; gap: 6px; }
+.minn-field-multicheck { display: flex; flex-direction: column; gap: 10px; }
+.minn-field-multicheck .minn-toggle-label { font-size: 13.5px; font-weight: 500; }
+.minn-insp-body .minn-field-multicheck { gap: 6px; }
+.minn-insp-body .minn-field-multicheck .minn-toggle-row { gap: 10px; padding: 4px 0; }
 .minn-field-linkval { display: flex; flex-direction: column; gap: 6px; }
 .minn-field-file { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .minn-field-file-name { font-size: 13px; word-break: break-all; }

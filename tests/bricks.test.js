@@ -291,6 +291,11 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		const setTabs = await page.$$eval( '[data-ssettab]', ( els ) => els.map( ( e ) => e.dataset.ssettab ) );
 		t.check( 'settings view renders the four curated tabs',
 			[ 'general', 'templates', 'builder', 'maintenance' ].every( ( id ) => setTabs.includes( id ) ), setTabs.join( ',' ) );
+		await page.waitForSelector( '[data-sset="postTypes"] .minn-switch[data-mcv]', { timeout: 8000 } );
+		t.check( 'post types are Minn switches, not native checkboxes',
+			await page.$eval( '[data-sset="postTypes"]', ( el ) =>
+				el.querySelectorAll( '.minn-switch[data-mcv]' ).length >= 2
+				&& el.querySelectorAll( 'input[type="checkbox"]' ).length === 0 ) );
 		await page.click( '[data-ssettab="templates"]' );
 		await page.waitForSelector( '[data-sset="publicTemplates"]', { timeout: 15000 } );
 		const saveSettings = async () => {

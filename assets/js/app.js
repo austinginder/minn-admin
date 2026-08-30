@@ -1407,13 +1407,20 @@
 			return `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" ${ attr }="${ esc( id ) }" data-ftype="checkbox"${ v ? ' checked' : '' }> ${ esc( f.label || '' ) }</label>`;
 		}
 		// Multicheck: multi-value choices (ACF checkbox / multiple select) as
-		// one tick row per choice; value = the checked choice keys in choice
-		// order. Checkbox input events bubble to the wrap, so every dialect's
-		// generic input binding tracks edits unchanged.
+		// one Minn switch per choice; value = the on choice keys in choice
+		// order. Inner switches do not carry data-ftype="toggle" (that would
+		// steal the wrap's identity); a document click flips them and fires
+		// input on the wrap so every dialect's generic binding still tracks.
 		if ( t === 'multicheck' ) {
 			const cur = ( Array.isArray( v ) ? v : [] ).map( String );
 			return `<div class="minn-field-multicheck" ${ attr }="${ esc( id ) }" data-ftype="multicheck">
-				${ ( f.options || [] ).map( ( [ ov, ol ] ) => `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" value="${ esc( String( ov ) ) }"${ cur.includes( String( ov ) ) ? ' checked' : '' }> ${ esc( String( ol ) ) }</label>` ).join( '' ) }
+				${ ( f.options || [] ).map( ( [ ov, ol ] ) => {
+					const on = cur.includes( String( ov ) );
+					return `<div class="minn-toggle-row">
+						<div class="minn-toggle-info"><div class="minn-toggle-label">${ esc( String( ol ) ) }</div></div>
+						<button type="button" class="minn-switch${ on ? ' on' : '' }" role="switch" aria-checked="${ on }" data-mcv="${ esc( String( ov ) ) }" aria-label="${ esc( String( ol ) ) }"><span class="minn-switch-knob"></span></button>
+					</div>`;
+				} ).join( '' ) }
 			</div>`;
 		}
 		if ( t === 'tags' ) {
@@ -1557,7 +1564,7 @@
 		if ( kind === 'toggle' ) return el.classList.contains( 'on' );
 		if ( kind === 'checkbox' ) return el.checked;
 		if ( kind === 'multicheck' ) {
-			return $$( 'input[type="checkbox"]', el ).filter( ( c ) => c.checked ).map( ( c ) => c.value );
+			return $$( '.minn-switch.on[data-mcv]', el ).map( ( s ) => s.dataset.mcv );
 		}
 		if ( kind === 'file' ) {
 			const id = parseInt( el.dataset.fileId || '0', 10 );
@@ -1642,6 +1649,19 @@
 		if ( ! text ) return;
 		const swatch = text.closest( '[data-ftype="color"]' ).querySelector( 'input[type="color"]' );
 		if ( swatch && ! swatch.disabled ) swatch.click();
+	} );
+	// Multicheck choices are Minn switches, not native checkboxes. Flip the
+	// row's switch (label click counts) and fire input on the wrap so every
+	// dialect's existing dirty tracking still runs.
+	document.addEventListener( 'click', ( e ) => {
+		const row = e.target.closest( '.minn-field-multicheck .minn-toggle-row' );
+		if ( ! row ) return;
+		const sw = row.querySelector( '.minn-switch' );
+		if ( ! sw || sw.disabled ) return;
+		sw.classList.toggle( 'on' );
+		sw.setAttribute( 'aria-checked', sw.classList.contains( 'on' ) );
+		const wrap = sw.closest( '[data-ftype="multicheck"]' );
+		if ( wrap ) wrap.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 	} );
 
 	// The sidebar mark navigates to the public site from the same screen
