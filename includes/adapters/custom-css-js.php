@@ -182,6 +182,32 @@ function minn_admin_ccj_item( $post ) {
  * Rebuild custom-css-js-tree + write the upload file for one post.
  * Mirrors CustomCSSandJS_Admin::build_search_tree / options_save essentials.
  */
+/**
+ * Remove every file a snippet could have written.
+ *
+ * Their own cleanup runs on a hook that reads the global current post and
+ * gives up when there is not one, which is always the case in a REST request,
+ * so removing a snippet through Minn left its bytes behind at a public
+ * address the snippet had already published. Nothing else deletes them: the
+ * tree rebuild only ever writes. All three extensions go, not just the
+ * current one, because changing a snippet's language writes it under a new
+ * name and leaves the old file where it was.
+ *
+ * @param int $id Snippet post ID.
+ * @return void
+ */
+function minn_admin_ccj_drop_files( $id ) {
+	if ( ! defined( 'CCJ_UPLOAD_DIR' ) ) {
+		return;
+	}
+	foreach ( array( 'css', 'js', 'html' ) as $language ) {
+		$path = CCJ_UPLOAD_DIR . '/' . (int) $id . '.' . $language;
+		if ( is_file( $path ) ) {
+			wp_delete_file( $path );
+		}
+	}
+}
+
 function minn_admin_ccj_rebuild_tree() {
 	$posts = get_posts( array(
 		'post_type'      => 'custom-css-js',
@@ -617,6 +643,11 @@ add_action( 'rest_api_init', function () {
 				}
 				wp_update_post( $update );
 				update_post_meta( $id, 'options', $opts );
+				// Changing a snippet's language writes it under a new name, so
+				// clear all three first and let the rebuild put back the one
+				// that now applies. Otherwise the file under the old name
+				// stays where it was, still reachable at its own address.
+				minn_admin_ccj_drop_files( $id );
 				minn_admin_ccj_rebuild_tree();
 				return rest_ensure_response( minn_admin_ccj_item( $id ) );
 			},
@@ -630,11 +661,15 @@ add_action( 'rest_api_init', function () {
 				if ( ! $post || 'custom-css-js' !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				// Deleting is a write to the same store, and it takes the file
-				// in CCJ_UPLOAD_DIR with it.
+				// Deleting is a write to the same store.
 				if ( ! minn_admin_ccj_can_activate( $id ) ) {
 					return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
 				}
+				// Take the bytes before the post goes, because their own
+				// cleanup cannot run here. A snippet that puts markup on the
+				// page is a live script, and a delete that leaves it running
+				// is worse than no delete at all.
+				minn_admin_ccj_drop_files( $id );
 				wp_delete_post( $id, true );
 				minn_admin_ccj_rebuild_tree();
 				return rest_ensure_response( array( 'deleted' => true ) );
@@ -662,6 +697,12 @@ add_action( 'rest_api_init', function () {
 				'post_status' => $active ? 'publish' : 'draft',
 			) );
 			update_post_meta( $id, '_active', $active ? 'yes' : 'no' );
+			// Switching a snippet off stops the page loading it, but the file
+			// stays fetchable at the address it already had, so the bytes go
+			// too. Turning it back on writes them again.
+			if ( ! $active ) {
+				minn_admin_ccj_drop_files( $id );
+			}
 			minn_admin_ccj_rebuild_tree();
 			return rest_ensure_response( minn_admin_ccj_item( $id ) );
 		},
