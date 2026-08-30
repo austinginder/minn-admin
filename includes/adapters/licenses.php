@@ -2743,19 +2743,44 @@ function minn_admin_license_default_providers() {
 			}
 			return array( 'ok' => true, 'code' => '', 'message' => $msg );
 		};
-		$providers['happyfiles-pro']['secret_label'] = __( 'HappyFiles license key', 'minn-admin' );
-		$providers['happyfiles-pro']['activate']     = function ( $secret ) use ( $hf_classify ) {
-			$prev = (string) get_option( 'happyfiles_license_key', '' );
-			// Their Remove path: deleting the key deregisters the old one.
+		// Removing the key is what deregisters the site with happyfiles.io, but
+		// WordPress clears an option AND its cache before it announces the
+		// removal, and their listener reads the key when it is announced. It
+		// therefore sends an empty key and the vendor has nothing to match, so
+		// the activation stays used up while Minn reports it released, and their
+		// own Remove button is gone by then because it only appears while a key
+		// is stored. Their settings screen avoids this by taking a copy first.
+		// Hold the value in front of the read for the length of the removal so
+		// their request goes out exactly as it does from their own screen.
+		$hf_release = function ( $key ) {
+			$key = (string) $key;
+			if ( '' === $key ) {
+				delete_option( 'happyfiles_license_key' );
+				return;
+			}
+			$feed = function () use ( $key ) {
+				return $key;
+			};
+			add_filter( 'pre_option_happyfiles_license_key', $feed, 99 );
 			delete_option( 'happyfiles_license_key' );
+			remove_filter( 'pre_option_happyfiles_license_key', $feed, 99 );
+		};
+		$providers['happyfiles-pro']['secret_label'] = __( 'HappyFiles license key', 'minn-admin' );
+		$providers['happyfiles-pro']['activate']     = function ( $secret ) use ( $hf_classify, $hf_release ) {
+			$prev = (string) get_option( 'happyfiles_license_key', '' );
+			// Their Remove path: removing the key deregisters the old one, and
+			// it has to reach the vendor or the previous key keeps its seat.
+			$hf_release( $prev );
 			delete_option( 'happyfiles_license_status' );
 			add_option( 'happyfiles_license_key', trim( (string) $secret ) );
 			$res = $hf_classify();
-			if ( ! $res['ok'] ) {
-				// A rejected key must not clobber a previously working one:
-				// clear it, then re-register the prior key through the same
-				// vendor hook (which also refreshes its status).
-				delete_option( 'happyfiles_license_key' );
+			// Roll back only when the vendor actually said no. "No status
+			// recorded" is also what happyfiles.io leaves behind when it
+			// answered without a message, which their own screen treats as
+			// fine, and throwing the key away then discards an activation the
+			// vendor has already spent.
+			if ( in_array( $res['code'], array( 'invalid', 'site_limit' ), true ) ) {
+				$hf_release( trim( (string) $secret ) );
 				delete_option( 'happyfiles_license_status' );
 				if ( '' !== $prev ) {
 					add_option( 'happyfiles_license_key', $prev );
@@ -2763,13 +2788,14 @@ function minn_admin_license_default_providers() {
 			}
 			return $res;
 		};
-		$providers['happyfiles-pro']['deactivate'] = function () {
-			if ( '' === (string) get_option( 'happyfiles_license_key', '' ) ) {
+		$providers['happyfiles-pro']['deactivate'] = function () use ( $hf_release ) {
+			$key = (string) get_option( 'happyfiles_license_key', '' );
+			if ( '' === $key ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No license key is stored.', 'minn-admin' ) );
 			}
-			// delete_option fires their license_key_deleted hook, which
-			// deregisters the site with happyfiles.io.
-			delete_option( 'happyfiles_license_key' );
+			// Removal is what deregisters the site with happyfiles.io, and
+			// their listener has to be able to read the key while it happens.
+			$hf_release( $key );
 			delete_option( 'happyfiles_license_status' );
 			delete_site_transient( \HappyFiles\Pro_Settings::UPDATE_DATA_TRANSIENT );
 			return array( 'ok' => true, 'code' => '', 'message' => __( 'The license key was removed and the site deregistered with happyfiles.io.', 'minn-admin' ) );
@@ -2779,8 +2805,10 @@ function minn_admin_license_default_providers() {
 			if ( '' === $key ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No license key is stored.', 'minn-admin' ) );
 			}
-			// Their only revalidation path is delete-then-add: the site is
-			// briefly deregistered and re-registered with happyfiles.io.
+			// Their only revalidation path is delete-then-add. This one is
+			// deliberately NOT routed through the release helper: a re-check
+			// must never spend or hand back a paid activation, and a plain
+			// removal leaves their listener nothing to send.
 			delete_option( 'happyfiles_license_key' );
 			delete_option( 'happyfiles_license_status' );
 			add_option( 'happyfiles_license_key', $key );
@@ -3037,6 +3065,23 @@ function minn_admin_license_default_providers() {
 					'scripts_handle' => 'eael-admin-dashboard',
 					'screen_id'      => array( 'toplevel_page_eael-settings' ),
 					'api'            => 'ajax',
+					// Naming the transport obliges us to hand over its own
+					// settings too: their constructor has no default for it and
+					// refuses outright when it is missing. Their plugin only
+					// builds this in the admin, so Minn's call is always the
+					// first one, and without these every license action here
+					// failed before it reached the vendor at all.
+					'ajax'           => array(
+						'textdomain'    => 'essential-addons-elementor',
+						'action_prefix' => 'essential-addons-elementor',
+					),
+					// The same map their own start-up passes, so a site still
+					// using the older key names moves across once, exactly as
+					// it would from their settings screen.
+					'migrate_from'   => array(
+						'license' => 'essential-addons-elementor-license-key',
+						'status'  => 'essential-addons-elementor-license-status',
+					),
 				) );
 			} catch ( \Throwable $e ) {
 				return null;
