@@ -136,17 +136,33 @@ add_filter( 'minn_admin_block_forms', function ( $forms ) {
 			. "\n" . '<!-- /wp:paragraph --></section>'
 			. "\n" . '<!-- /wp:tab-panel -->';
 	};
+	// The clickable tabs live in the tab list's SAVED markup: the block sources
+	// its labels out of the buttons it finds there, and its render step only
+	// decorates buttons that already exist. A tab list saved empty therefore
+	// ships a Tabs block with no tabs at all, where every panel after the first
+	// is unreachable, and the panel labels render nowhere. The two places a
+	// label appears have to agree, so they are written once.
+	$tab_labels = array(
+		esc_html__( 'Tab 1', 'minn-admin' ),
+		esc_html__( 'Tab 2', 'minn-admin' ),
+	);
+	$tab_button = function ( $label ) {
+		// The shape the block editor saves: a button carrying the tab role.
+		return '<button type="button" role="tab">' . $label . '</button>';
+	};
 	$forms['core/tabs'] = array(
 		'insert'     => array(
 			'label'    => __( 'Tabs', 'minn-admin' ),
 			'template' => '<!-- wp:tabs -->'
 				. "\n" . '<div class="wp-block-tabs"><!-- wp:tab-list -->'
-				. "\n" . '<div role="tablist" class="wp-block-tab-list"></div>'
+				. "\n" . '<div role="tablist" class="wp-block-tab-list">'
+					. $tab_button( $tab_labels[0] ) . $tab_button( $tab_labels[1] )
+				. '</div>'
 				. "\n" . '<!-- /wp:tab-list -->'
 				. "\n\n" . '<!-- wp:tab-panels -->'
 				. "\n" . '<div class="wp-block-tab-panels">'
-				. $tab_panel( esc_html__( 'Tab 1', 'minn-admin' ), esc_html__( 'First tab content.', 'minn-admin' ) )
-				. "\n\n" . $tab_panel( esc_html__( 'Tab 2', 'minn-admin' ), esc_html__( 'Second tab content.', 'minn-admin' ) ) . '</div>'
+				. $tab_panel( $tab_labels[0], esc_html__( 'First tab content.', 'minn-admin' ) )
+				. "\n\n" . $tab_panel( $tab_labels[1], esc_html__( 'Second tab content.', 'minn-admin' ) ) . '</div>'
 				. "\n" . '<!-- /wp:tab-panels --></div>'
 				. "\n" . '<!-- /wp:tabs -->',
 		),

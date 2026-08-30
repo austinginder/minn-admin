@@ -2297,6 +2297,29 @@ class Minn_Admin_REST {
 		// editor-styles sweep can never see those. Diff the style queue across
 		// the render and hand the newly-enqueued styles to the client, which
 		// scopes them into the previews like everything else.
+		// A preview is a preview. A Query Loop's settings are a plain object
+		// with no schema behind it, so core rounds "how many items" to a whole
+		// number and asks the database for exactly that many. This route
+		// renders up to a hundred blocks per call for anyone who may write a
+		// post, so one request could ask for a hundred half-million-row
+		// queries. Hold the previewed loop to a readable page; what gets saved
+		// is untouched and the real page still shows the writer's own number.
+		$clamp_preview_query = static function ( $parsed ) {
+			if ( ! is_array( $parsed ) || 'core/query' !== ( $parsed['blockName'] ?? '' )
+				|| empty( $parsed['attrs']['query'] ) || ! is_array( $parsed['attrs']['query'] ) ) {
+				return $parsed;
+			}
+			$q = $parsed['attrs']['query'];
+			if ( isset( $q['perPage'] ) && is_numeric( $q['perPage'] ) ) {
+				$parsed['attrs']['query']['perPage'] = min( 20, max( 1, absint( $q['perPage'] ) ) );
+			}
+			if ( isset( $q['offset'] ) && is_numeric( $q['offset'] ) ) {
+				$parsed['attrs']['query']['offset'] = min( 10000, absint( $q['offset'] ) );
+			}
+			return $parsed;
+		};
+		add_filter( 'render_block_data', $clamp_preview_query );
+
 		$queue_before = wp_styles()->queue;
 		$rendered     = array();
 		foreach ( array_slice( $blocks, 0, 100 ) as $raw ) {
@@ -2319,6 +2342,7 @@ class Minn_Admin_REST {
 			$html       = apply_filters( 'minn_admin_rendered_html', $html, $raw, $post_id );
 			$rendered[] = $html;
 		}
+		remove_filter( 'render_block_data', $clamp_preview_query );
 		$out         = array( 'rendered' => $rendered );
 		$new_handles = array_values( array_diff( wp_styles()->queue, $queue_before ) );
 		$styles      = $new_handles ? self::collect_style_urls( $new_handles ) : array(

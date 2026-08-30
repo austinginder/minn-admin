@@ -67,12 +67,32 @@ function minn_admin_elementor_can_manage() {
 	return current_user_can( 'edit_posts' );
 }
 
-/** Whether the current user may create (and therefore duplicate) a library item. */
-function minn_admin_elementor_can_create() {
+/**
+ * Whether the current user may create (and therefore duplicate) a library item.
+ *
+ * The type decides which post type is written, and the two do not answer to
+ * the same capability. Floating Buttons are their own content type, which
+ * Elementor registers with every capability set to managing site options, so
+ * deriving the answer from the ordinary template library would hand someone
+ * who may write a post the ability to write into an administrators-only type.
+ * The capability has to come from the type about to be created.
+ *
+ * @param string $type Template type slug. '' means the template library.
+ * @return bool
+ */
+function minn_admin_elementor_can_create( $type = '' ) {
 	if ( ! minn_admin_elementor_can_manage() ) {
 		return false;
 	}
-	$pto = get_post_type_object( \Elementor\TemplateLibrary\Source_Local::CPT );
+	$cpt = \Elementor\TemplateLibrary\Source_Local::CPT;
+	if ( minn_admin_elementor_is_floating_type( $type ) ) {
+		$cpt = minn_admin_elementor_floating_cpt();
+		// The module is switched off: there is no type to create into.
+		if ( ! $cpt ) {
+			return false;
+		}
+	}
+	$pto = get_post_type_object( $cpt );
 	if ( ! $pto || empty( $pto->cap->create_posts ) ) {
 		return current_user_can( 'edit_posts' );
 	}
@@ -268,8 +288,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$type_tabs   = array();
 	$type_select = array();
 	foreach ( $types as $value => $label ) {
-		$type_tabs[]   = array( $value, $label );
-		$type_select[] = array( $value, $label );
+		// Filtering the list is a browsing concern; creating is a capability
+		// concern. Someone may look through Floating Buttons without being
+		// offered a new one.
+		$type_tabs[] = array( $value, $label );
+		if ( minn_admin_elementor_can_create( $value ) ) {
+			$type_select[] = array( $value, $label );
+		}
 	}
 
 	$actions = array();
@@ -435,6 +460,13 @@ add_action( 'rest_api_init', function () {
 				$args = array(
 					'post_type'      => $is_float ? $float : \Elementor\TemplateLibrary\Source_Local::CPT,
 					'post_status'    => array( 'publish', 'draft', 'pending', 'future', 'private' ),
+					// Naming the unpublished statuses explicitly switches off
+					// the scoping WP_Query would otherwise apply, so without
+					// this everyone who can write a post sees every author's
+					// unfinished templates. Every action on a row needs
+					// permission for that row anyway, so a row you cannot
+					// edit is a row you cannot use.
+					'perm'           => 'editable',
 					'posts_per_page' => 25,
 					'paged'          => $page,
 					'orderby'        => $orderby,
@@ -461,8 +493,11 @@ add_action( 'rest_api_init', function () {
 		),
 		array(
 			'methods'             => 'POST',
-			'permission_callback' => function () {
-				return minn_admin_elementor_can_create();
+			'permission_callback' => function ( WP_REST_Request $request ) {
+				// Gate on the type being asked for, not on the library: the
+				// two differ by an administrator capability for Floating
+				// Buttons.
+				return minn_admin_elementor_can_create( sanitize_key( (string) $request['type'] ) );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				$title = trim( (string) $request['title'] );
@@ -595,7 +630,15 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/elementor/templates/(?P<id>\d+)/duplicate', array(
 		'methods'             => 'POST',
 		'permission_callback' => function ( WP_REST_Request $request ) {
-			return minn_admin_elementor_can_create() && minn_admin_elementor_can_edit_item( (int) $request['id'] );
+			if ( ! minn_admin_elementor_can_edit_item( (int) $request['id'] ) ) {
+				return false;
+			}
+			// A copy is written into the same type as its source, so the
+			// capability is the source's too.
+			$src   = get_post( (int) $request['id'] );
+			$float = minn_admin_elementor_floating_cpt();
+			$type  = ( $src && $float && $float === $src->post_type ) ? 'floating-buttons' : '';
+			return minn_admin_elementor_can_create( $type );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			$post = minn_admin_elementor_template_post( (int) $request['id'] );
