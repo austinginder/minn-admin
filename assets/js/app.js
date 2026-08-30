@@ -18587,7 +18587,7 @@
 					} else if ( applied && applied.update ) {
 						const u = applied.update;
 						toastAction(
-							`${ action === 'activate' ? esc( __( 'License activated' ) ) : esc( __( 'License re-verified' ) ) } · ${ u.name } ${ u.version } is available`,
+							`${ action === 'activate' ? __( 'License activated' ) : __( 'License re-verified' ) } · ${ u.name } ${ u.version } is available`,
 							__( 'View updates' ),
 							() => { state.extTab = 'plugins'; state.extFilter = 'updates'; go( 'extensions' ); }
 						);
@@ -25261,11 +25261,12 @@
 		scheduleAutosave();
 		toastAction( __( 'Blocks merged · ⌘Z' ), 'Undo', () => {
 			if ( ! parent.isConnected ) return;
-			const wrap = document.createElement( 'div' );
-			wrap.innerHTML = keepHTML;
-			const k = wrap.firstElementChild;
-			wrap.innerHTML = dropHTML;
-			const d = wrap.firstElementChild;
+			// Parse inert, never into a container from the live document: a
+			// live parse runs the resource-loading side of it, so an image
+			// with an error handler fires while the tree is being built.
+			// duplicateIsland takes the same route for the same reason.
+			const k = rtNeutralizeInto( document.createElement( 'div' ), keepHTML ).firstElementChild;
+			const d = rtNeutralizeInto( document.createElement( 'div' ), dropHTML ).firstElementChild;
 			if ( ! k || ! d ) return;
 			if ( keep.isConnected ) keep.replaceWith( k );
 			else parent.insertBefore( k, keepNext && keepNext.isConnected && keepNext.parentNode === parent ? keepNext : null );
@@ -25329,7 +25330,12 @@
 		warmedPreviewUrls.add( url );
 		const frame = document.createElement( 'iframe' );
 		frame.style.cssText = 'position:fixed;width:10px;height:10px;left:-9999px;top:-9999px;visibility:hidden;';
-		frame.src = url;
+		// Same scheme guard as every other navigation here. An iframe source
+		// runs in this page's origin, so a javascript: value would run with
+		// the signed-in session.
+		const safeFrameSrc = safeHref( url );
+		if ( ! safeFrameSrc ) return;
+		frame.src = safeFrameSrc;
 		document.body.appendChild( frame );
 		let tries = 0;
 		const poll = () => {
@@ -25442,7 +25448,16 @@
 				finish( urls );
 			}, 2500 );
 		} );
-		frame.src = url;
+		// Same scheme guard as every other navigation here. An iframe source
+		// runs in this page's origin, so a javascript: value would run with
+		// the signed-in session. Settle through finish() rather than returning
+		// bare, so the bail timer and the frame are cleaned up now.
+		const safeFrameSrc = safeHref( url );
+		if ( ! safeFrameSrc ) {
+			finish( null );
+			return;
+		}
+		frame.src = safeFrameSrc;
 		document.body.appendChild( frame );
 	}
 
@@ -36638,7 +36653,12 @@
 						if ( islandEl ) openIslandTooling( islandEl );
 					} else if ( r && r.html ) {
 						if ( /wp-block-(pullquote|table)/.test( r.html ) ) ensureBlocksMode();
-						p.insertAdjacentHTML( 'beforebegin', r.html );
+						// Adapter-supplied markup lands in the editor body, so
+						// it arrives parked like every other stored value and
+						// the serializer's rtUnpark hands the bytes back on
+						// save. Registry and user patterns already take this
+						// route; these two were the exceptions.
+						p.insertAdjacentHTML( 'beforebegin', rtNeutralizedHtml( r.html ) );
 						stampSlotDirtyFor( p );
 						// Leave the empty p as the caret landing (already focused).
 						scheduleAutosave();
@@ -36789,7 +36809,8 @@
 			if ( /wp-block-(pullquote|table)/.test( action.html ) ) ensureBlocksMode();
 			// Replace the "/" block outright so the inserted markup lands
 			// beside it in its root (never wrapped inside the block's div).
-			target.insertAdjacentHTML( 'beforebegin', action.html );
+			// Parked on the way in, unparked by the serializer on the way out.
+			target.insertAdjacentHTML( 'beforebegin', rtNeutralizedHtml( action.html ) );
 			const p = document.createElement( 'p' );
 			p.appendChild( document.createElement( 'br' ) );
 			target.replaceWith( p );
