@@ -328,7 +328,7 @@ function minn_admin_asset_cleanup_can() {
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_asset_cleanup_active() ) {
+	if ( ! minn_admin_asset_cleanup_active() || ! minn_admin_asset_cleanup_can() ) {
 		return $surfaces;
 	}
 	$tabs = array();
@@ -340,7 +340,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'      => 'Asset CleanUp',
 		'family'   => 'performance',
 		'icon'     => 'gear',
-		'cap'      => 'assetcleanup_manager',
+		// Their answer is a resolver (a super admin, the administrator role, or
+		// the capability their settings screen hands out), not a capability
+		// name, and that capability sits on no role until someone grants it. So
+		// naming it here hid this surface from the very people who own the site.
+		'cap'      => 'read',
 		'settings' => array(
 			'label' => __( 'Settings', 'minn-admin' ),
 			'tabs'  => $tabs,

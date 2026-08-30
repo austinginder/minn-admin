@@ -249,8 +249,36 @@ function minn_admin_autoptimize_save( $values ) {
 	return true;
 }
 
+/**
+ * Whether the current user may read and change Autoptimize's configuration.
+ *
+ * Autoptimize answers this itself, and the answer moves. Turned on across a
+ * network with per-site configuration switched off, the settings ARE the
+ * network's: their own per-site page degrades to a notice pointing at the
+ * network admin, and their option reader quietly starts reading the network's
+ * values. Asking only whether someone manages this site then handed a single
+ * site's administrator the whole network's configuration, and took edits that
+ * their reader would never look at again.
+ *
+ * @return bool
+ */
+function minn_admin_autoptimize_can() {
+	if ( class_exists( 'autoptimizeOptionWrapper', false )
+		&& method_exists( 'autoptimizeOptionWrapper', 'is_ao_active_for_network' ) ) {
+		try {
+			if ( autoptimizeOptionWrapper::is_ao_active_for_network()
+				&& 'on' !== autoptimizeOptionWrapper::get_option( 'autoptimize_enable_site_config' ) ) {
+				return current_user_can( 'manage_network_options' );
+			}
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the per-site test below.
+		}
+	}
+	return current_user_can( 'manage_options' );
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_autoptimize_active() ) {
+	if ( ! minn_admin_autoptimize_active() || ! minn_admin_autoptimize_can() ) {
 		return $surfaces;
 	}
 	$tabs = array();
@@ -262,7 +290,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'      => 'Autoptimize',
 		'family'   => 'performance',
 		'icon'     => 'gear',
-		'cap'      => 'manage_options',
+		// Their answer is a resolver, not a capability name; the guard above
+		// is the real gate (the UpdraftPlus precedent).
+		'cap'      => 'read',
 		'settings' => array(
 			'label' => __( 'Settings', 'minn-admin' ),
 			'tabs'  => $tabs,
@@ -280,7 +310,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'GET',
 			'permission_callback' => function () {
-				return current_user_can( 'manage_options' );
+				return minn_admin_autoptimize_can();
 			},
 			'callback'            => function ( $req ) {
 				return rest_ensure_response( minn_admin_autoptimize_tab_shape( $req['tab'] ) );
@@ -289,7 +319,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'POST',
 			'permission_callback' => function () {
-				return current_user_can( 'manage_options' );
+				return minn_admin_autoptimize_can();
 			},
 			'callback'            => function ( $req ) {
 				$body   = $req->get_json_params();

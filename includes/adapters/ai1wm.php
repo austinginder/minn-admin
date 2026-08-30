@@ -188,7 +188,13 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-shared archive directory (see minn_admin_ai1wm_active).
-		return current_user_can( 'export' ) && Minn_Admin::network_owner();
+		// Their Backups screen is registered to ai1wm_import_site, not to
+		// export, which is their Export screen. The difference matters on a
+		// host that turns off file changes, where that capability resolves to
+		// nobody and AI1WM withdraws the archive list from everyone. Reading
+		// an archive's name is most of the way to downloading it, so it
+		// answers to the same capability their own list does.
+		return current_user_can( 'ai1wm_import_site' ) && Minn_Admin::network_owner();
 	};
 	// Deleting an archive is destructive (a bare unlink, no trash), and
 	// AI1WM gates its OWN delete on ai1wm_import_site — a meta cap mapping to

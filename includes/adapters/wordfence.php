@@ -23,7 +23,20 @@ defined( 'ABSPATH' ) || exit;
  * @return bool
  */
 function minn_admin_wordfence_can() {
-	return current_user_can( 'activate_plugins' );
+	// Wordfence answers this in two places and they are not the same
+	// question. Their menu opens to anyone who may activate plugins, but
+	// every request that fills those screens with data asks whether you may
+	// manage site options (the network, on multisite). What Minn serves IS
+	// that data: firewall mode, when the last scan ran, how many issues are
+	// unresolved, sign-in totals. Ask the data question.
+	if ( class_exists( 'wfUtils' ) && method_exists( 'wfUtils', 'isAdmin' ) ) {
+		try {
+			return (bool) wfUtils::isAdmin();
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the mirrored test below.
+		}
+	}
+	return is_multisite() ? current_user_can( 'manage_network' ) : current_user_can( 'manage_options' );
 }
 
 function minn_admin_wordfence_active() {
@@ -71,7 +84,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'activity-log',
 		'sub'        => 'Wordfence',
 		'icon'       => 'shield',
-		'cap'        => 'activate_plugins',
+		// Their answer is a resolver, not a capability name; the guard
+		// above is the real gate (the UpdraftPlus precedent).
+		'cap'        => 'read',
 		// Status card reuses the System posture rows (firewall + last scan).
 		'status'     => array( 'route' => 'minn-admin/v1/wordfence/status' ),
 		'collection' => array(
