@@ -58,11 +58,12 @@ list in place, so a tab left open all day stays current without a page
 reload.
 
 **Overview** still opens on the same four or five number cards. Click a
-card to open that view. Right-click it to swap the number for a different
-one (orders, products, drafts, pending comments, and others this account
-can see). Picking a number that is already on the dashboard swaps the two
-cards. The choice stays in this browser; Reset this card and Reset all
-cards put the defaults back.
+card to open that view. Right-click it and choose Customize to pick a
+different number: drafts, pending comments, users, and on a store the
+month's sales, orders, items sold and average order, plus the usual
+catalog and queue counts. Picking a number that is already on the
+dashboard swaps the two cards. The choice stays in this browser; Reset
+this card and Reset all cards put the defaults back.
 
 **The command palette** is the fastest way anywhere. Press **⌘K**
 (Ctrl+K on Windows and Linux), start typing, and jump to any view, any

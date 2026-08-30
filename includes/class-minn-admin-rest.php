@@ -3426,6 +3426,59 @@ class Minn_Admin_REST {
 		}
 
 		if ( is_array( $store ) && current_user_can( 'edit_shop_orders' ) ) {
+			$month = self::wc_month_sales();
+			if ( is_array( $month ) ) {
+				$sales_n  = (float) $month['total_sales'];
+				$net_n    = (float) $month['net_sales'];
+				$month_n  = (int) $month['total_orders'];
+				$items_n  = (int) $month['total_items'];
+				$avg_n    = (float) $month['average_sales'];
+				$add(
+					array(
+						'key'   => 'sales_month',
+						'group' => 'store',
+						'label' => __( 'Sales this month', 'minn-admin' ),
+						'value' => self::wc_money( $sales_n ),
+						/* translators: %s: formatted net sales. */
+						'delta' => sprintf( __( 'net %s', 'minn-admin' ), self::wc_money( $net_n ) ),
+						'up'    => null,
+						'goto'  => 'orders:analytics',
+					)
+				);
+				$add(
+					array(
+						'key'   => 'orders_month',
+						'group' => 'store',
+						'label' => __( 'Orders this month', 'minn-admin' ),
+						'value' => number_format_i18n( $month_n ),
+						'delta' => __( 'this month', 'minn-admin' ),
+						'up'    => null,
+						'goto'  => 'orders:analytics',
+					)
+				);
+				$add(
+					array(
+						'key'   => 'items_month',
+						'group' => 'store',
+						'label' => __( 'Items sold', 'minn-admin' ),
+						'value' => number_format_i18n( $items_n ),
+						'delta' => __( 'this month', 'minn-admin' ),
+						'up'    => null,
+						'goto'  => 'orders:analytics',
+					)
+				);
+				$add(
+					array(
+						'key'   => 'average_month',
+						'group' => 'store',
+						'label' => __( 'Average order', 'minn-admin' ),
+						'value' => self::wc_money( $avg_n ),
+						'delta' => __( 'this month', 'minn-admin' ),
+						'up'    => null,
+						'goto'  => 'orders:analytics',
+					)
+				);
+			}
 			$orders_n = self::wc_orders_total();
 			$add(
 				array(
@@ -3525,6 +3578,62 @@ class Minn_Admin_REST {
 		}
 
 		return $metrics;
+	}
+
+	/**
+	 * This calendar month's WooCommerce sales report. Same endpoint the
+	 * Orders list summary uses (`wc/v3/reports/sales?period=month`). Inner
+	 * permission_callback is preserved; a 15-minute transient keeps Overview
+	 * from re-running the report on every dashboard paint.
+	 */
+	private static function wc_month_sales() {
+		if ( ! function_exists( 'wc_rest_check_manager_permissions' )
+			|| ! wc_rest_check_manager_permissions( 'reports', 'read' ) ) {
+			return null;
+		}
+		$month = gmdate( 'Y-m' );
+		$key   = 'minn_admin_wc_sales_' . $month;
+		$hit   = get_transient( $key );
+		if ( is_array( $hit ) && isset( $hit['total_sales'] ) ) {
+			return $hit;
+		}
+		$req = new WP_REST_Request( 'GET', '/wc/v3/reports/sales' );
+		$req->set_param( 'period', 'month' );
+		try {
+			$res = rest_do_request( $req );
+		} catch ( Throwable $e ) {
+			return null;
+		}
+		if ( $res->is_error() ) {
+			return null;
+		}
+		$data = $res->get_data();
+		$row  = ( is_array( $data ) && isset( $data[0] ) && is_array( $data[0] ) ) ? $data[0] : $data;
+		if ( ! is_array( $row ) || ! isset( $row['total_sales'] ) ) {
+			return null;
+		}
+		$out = array(
+			'total_sales'   => $row['total_sales'],
+			'net_sales'     => isset( $row['net_sales'] ) ? $row['net_sales'] : $row['total_sales'],
+			'total_orders'  => isset( $row['total_orders'] ) ? (int) $row['total_orders'] : 0,
+			'total_items'   => isset( $row['total_items'] ) ? (int) $row['total_items'] : 0,
+			'average_sales' => isset( $row['average_sales'] ) ? $row['average_sales'] : 0,
+		);
+		set_transient( $key, $out, 15 * MINUTE_IN_SECONDS );
+		return $out;
+	}
+
+	/**
+	 * A money string for Overview cards: currency symbol plus a compact
+	 * number (no decimals when the amount is whole).
+	 */
+	private static function wc_money( $n ) {
+		$sym = function_exists( 'get_woocommerce_currency_symbol' )
+			? html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' )
+			: '$';
+		$n   = (float) $n;
+		$dec = ( abs( $n - round( $n ) ) < 0.005 ) ? 0 : 2;
+		return $sym . number_format_i18n( $n, $dec );
 	}
 
 	/**

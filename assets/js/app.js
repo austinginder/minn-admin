@@ -4617,37 +4617,30 @@
 		renderOverview();
 	}
 
-	function openOverviewMetricMenu( x, y, slot, o ) {
-		const catalog = overviewMetricCatalog( o );
-		const keys = readOverviewMetricKeys( o );
-		const current = keys[ slot ];
-		const defaults = overviewMetricDefaults( o );
-		const labels = {
+	function overviewMetricGroupOrder() {
+		return ( B.wc && B.caps.orders )
+			? [ 'store', 'traffic', 'content', 'people' ]
+			: OVERVIEW_METRIC_GROUPS;
+	}
+
+	function overviewMetricGroupLabel( group ) {
+		return {
 			traffic: __( 'Traffic' ),
 			content: __( 'Content' ),
 			people: __( 'People' ),
 			store: __( 'Store' ),
-		};
-		const entries = [];
-		OVERVIEW_METRIC_GROUPS.forEach( ( group ) => {
-			const rows = catalog.filter( ( m ) => ( m.group || 'content' ) === group );
-			if ( ! rows.length ) return;
-			entries.push( { heading: labels[ group ] || group } );
-			rows.forEach( ( m ) => {
-				entries.push( {
-					label: m.label,
-					active: m.key === current,
-					run: () => setOverviewMetric( slot, m.key, o ),
-				} );
-			} );
-		} );
-		if ( current !== defaults[ slot ] ) {
-			entries.push( { label: __( 'Reset this card' ), run: () => resetOverviewMetric( slot, o ) } );
-		}
-		if ( keys.some( ( k, i ) => k !== defaults[ i ] ) ) {
-			entries.push( { label: __( 'Reset all cards' ), run: () => resetOverviewMetrics() } );
-		}
-		openMinnMenu( x, y, entries );
+		}[ group ] || group;
+	}
+
+	function openOverviewMetricMenu( x, y, slot ) {
+		openMinnMenu( x, y, [
+			{ label: __( 'Customize…' ), run: () => openOverviewMetricPicker( slot ) },
+		] );
+	}
+
+	function openOverviewMetricPicker( slot ) {
+		state.modal = { type: 'overview-metric', slot };
+		renderOverlays();
 	}
 
 	function storeStripHtml( o ) {
@@ -4789,9 +4782,9 @@
 				if ( ! card.dataset.goto ) return;
 				const [ route, filter ] = card.dataset.goto.split( ':' );
 				if ( route === 'orders' ) {
-					state.orderView = 'list';
+					state.orderView = filter === 'analytics' ? 'analytics' : 'list';
 					state.orderFilters = orderFiltersDefault( LIST_FILTER_SPECS.orders );
-					if ( filter ) state.orderFilters.status = [ filter ];
+					if ( filter && filter !== 'analytics' ) state.orderFilters.status = [ filter ];
 					state.orderSearch = '';
 					state.cache.orders = null;
 					go( 'orders' );
@@ -4808,7 +4801,7 @@
 			card.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) open(); } );
 			card.addEventListener( 'contextmenu', ( e ) => {
 				e.preventDefault();
-				openOverviewMetricMenu( e.clientX, e.clientY, parseInt( card.dataset.mslot, 10 ), o );
+				openOverviewMetricMenu( e.clientX, e.clientY, parseInt( card.dataset.mslot, 10 ) );
 			} );
 		} );
 		// Store chips land on the Orders list pre-filtered to their bucket
@@ -38147,6 +38140,51 @@
 		const m = state.modal;
 		if ( ! m ) return '';
 
+		if ( m.type === 'overview-metric' ) {
+			const o = state.cache.overview || {};
+			const catalog = overviewMetricCatalog( o );
+			const keys = readOverviewMetricKeys( o );
+			const current = keys[ m.slot ];
+			const defaults = overviewMetricDefaults( o );
+			const dirtySlot = current !== defaults[ m.slot ];
+			const dirtyAny = keys.some( ( k, i ) => k !== defaults[ i ] );
+			const groups = overviewMetricGroupOrder().map( ( group ) => {
+				const rows = catalog.filter( ( row ) => ( row.group || 'content' ) === group );
+				return rows.length ? { group, rows } : null;
+			} ).filter( Boolean );
+			const deltaCls = ( up ) => up === true ? ' up' : ( up === 'warn' ? ' warn' : ( up === 'down' ? ' down' : '' ) );
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide" role="dialog" aria-modal="true" aria-label="${ esc( __( 'Customize this card' ) ) }">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">${ esc( __( 'Customize this card' ) ) }</div>
+							<div class="minn-modal-sub">${ esc( __( 'Pick what this number shows.' ) ) }</div>
+						</div>
+						<button class="minn-x-btn" id="minn-modal-close" type="button">×</button>
+					</div>
+					<div class="minn-metric-picker">
+						${ groups.map( ( g ) => `
+						<div>
+							<div class="minn-metric-group-label">${ esc( overviewMetricGroupLabel( g.group ) ) }</div>
+							<div class="minn-metric-grid">
+								${ g.rows.map( ( row ) => `
+								<button type="button" class="minn-metric-tile${ row.key === current ? ' is-on' : '' }" data-metric="${ esc( row.key ) }">
+									<div class="minn-metric-tile-label">${ esc( row.label ) }</div>
+									<div class="minn-metric-tile-value">${ esc( row.value ) }</div>
+									${ row.delta ? `<div class="minn-metric-tile-delta${ deltaCls( row.up ) }">${ esc( row.delta ) }</div>` : '' }
+								</button>` ).join( '' ) }
+							</div>
+						</div>` ).join( '' ) }
+					</div>
+					${ dirtySlot || dirtyAny ? `<div class="minn-metric-picker-foot">
+						${ dirtySlot ? `<button type="button" class="minn-btn-soft" id="minn-metric-reset-one">${ esc( __( 'Reset this card' ) ) }</button>` : '' }
+						${ dirtyAny ? `<button type="button" class="minn-btn-soft" id="minn-metric-reset-all">${ esc( __( 'Reset all cards' ) ) }</button>` : '' }
+					</div>` : '' }
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'chart-activity' ) {
 			const items = m.items;
 			return `
@@ -39564,6 +39602,27 @@
 		if ( closeBtn2 ) closeBtn2.addEventListener( 'click', closeModal );
 		const cancelBtn = $( '#minn-modal-cancel' );
 		if ( cancelBtn ) cancelBtn.addEventListener( 'click', closeModal );
+
+		if ( m.type === 'overview-metric' ) {
+			const o = state.cache.overview;
+			const slot = m.slot;
+			$$( '[data-metric]', $( '#minn-modal-overlay' ) ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					closeModal();
+					setOverviewMetric( slot, btn.dataset.metric, o );
+				} )
+			);
+			const resetOne = $( '#minn-metric-reset-one' );
+			if ( resetOne ) resetOne.addEventListener( 'click', () => {
+				closeModal();
+				resetOverviewMetric( slot, o );
+			} );
+			const resetAll = $( '#minn-metric-reset-all' );
+			if ( resetAll ) resetAll.addEventListener( 'click', () => {
+				closeModal();
+				resetOverviewMetrics();
+			} );
+		}
 
 		if ( m.type === 'editor-side' ) {
 			const meta = editorSideDoorMeta( m.id );

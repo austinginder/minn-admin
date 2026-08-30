@@ -2755,6 +2755,30 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   box-shadow: var(--shadow); animation: minnScaleIn 0.18s ease;
 }
 .minn-modal.wide { width: 720px; }
+.minn-metric-picker { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 16px; }
+.minn-metric-group-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 8px;
+}
+.minn-metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.minn-metric-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 12px 13px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--panel); color: var(--text); cursor: pointer; text-align: start;
+  font-family: inherit;
+}
+.minn-metric-tile:hover { border-color: var(--border2); background: var(--hover); }
+.minn-metric-tile.is-on { border-color: var(--accent); background: var(--accent-soft); }
+.minn-metric-tile-label { font-size: 12.5px; font-weight: 550; color: var(--text2); }
+.minn-metric-tile-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.minn-metric-tile-delta { font-size: 12px; font-weight: 600; color: var(--text3); margin-top: 2px; }
+.minn-metric-tile-delta.up { color: var(--green-text); }
+.minn-metric-tile-delta.warn { color: var(--amber-text); }
+.minn-metric-tile-delta.down { color: var(--red-text); }
+.minn-metric-picker-foot {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 18px 14px;
+  border-top: 1px solid var(--border);
+}
 /* Side-by-side prose needs real width — the 94vw cap still governs laptops. */
 .minn-modal.xl { width: 1280px; }
 /* HTML email preview: real messages lay out at 600–900px; give the frame
