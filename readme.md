@@ -77,8 +77,8 @@ Expand only the part of Minn you want to explore.
   navigation and in-place **title, alt text, caption & description editing**, **bulk select
   and delete** (shift-range, on the grid and the list), a right-click menu, and a built-in
   **image editor** (rotate and crop, saved as a new copy). **Folders** arrive from your folder
-  plugin (FileBird, Real Media Library or Folders by Premio) with a **Move to folder** bulk
-  action through each plugin's own machinery; an **Unattached** filter and a **month picker**
+  plugin (FileBird, Real Media Library, Folders by Premio or HappyFiles Pro) with a **Move to
+  folder** bulk action through each plugin's own machinery; an **Unattached** filter and a **month picker**
   cover the daily cleanup questions; every file's detail names the post it is **attached to**,
   one click from that post's editor; **Replace file** works in place through Enable Media
   Replace; the **SVG** filter tab appears with Safe SVG or SVG Support active, and
@@ -207,7 +207,11 @@ Expand only the part of Minn you want to explore.
   **configurable islands** with real front-end styles, right where they live, with
   **duplicate and move arrows** in the ⚙ popover (left/right hops between columns) and
   in-place text editing. **Pasting raw block markup** (from an AI tool or a pattern file)
-  converts to real blocks instantly. Link popover on ⌘K, text alignment,
+  converts to real blocks instantly. WordPress's own dynamic blocks insert from the slash
+  menu too: the **Query Loop** (post type, ordering, count and more editable from the ⚙
+  gear), the **widget blocks** (Latest Posts, Archives, Calendar, Search…), and **Tabs and
+  Accordion** with starter sections, all saved as exactly the markup the block editor
+  produces. Link popover on ⌘K, text alignment,
   table and image controls in island-style cutouts, at the top level and inside
   containers. Slash commands stay curated and type-to-filter; **Browse all** or **⌘/**
   opens the **block picker**, grouped by source (basics, plugin blocks, design libraries,
@@ -254,7 +258,9 @@ Expand only the part of Minn you want to explore.
   Breakdance or WPBakery** and keep managing it from Minn: builder-owned pages are marked, edited through
   the builder's own chrome-free surface via **Edit in ⟨builder⟩** (no wp-admin screen), and
   fenced so a stray Minn edit can't break the builder's canvas. + New can start a page in any
-  active builder. Third parties register via the `minn_admin_page_builders` filter
+  active builder. **Bricks and Elementor templates** get a Templates surface: list by type,
+  rename, duplicate, export, tag, create, and jump into the builder, all through each
+  builder's own permissions. Third parties register via the `minn_admin_page_builders` filter
 
 </details>
 

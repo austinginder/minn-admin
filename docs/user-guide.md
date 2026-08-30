@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.35.0. This file ships inside the plugin, so the copy you
+*Current as of v0.36.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -156,7 +156,11 @@ away:
   outside the Tab order now, reached with ⌥F10 and driven by the arrow
   keys, so tabbing through a post no longer walks every button.
 - **The slash menu**: type `/` on an empty line for headings, lists,
-  images, embeds, tables and more. **⌘/** opens the full block library,
+  images, embeds, tables and more. WordPress's own dynamic blocks are
+  there too: a Query Loop (with its post type, ordering and count editable
+  from the gear), Latest Posts, Archives, Calendar, Search and the other
+  widget blocks, plus Tabs and Accordion with starter sections ready to
+  fill in. **⌘/** opens the full block library,
   including your plugins' blocks and entire designs and patterns you can
   drop in.
 - **Paste from anywhere.** Word, Google Docs and web pages paste in clean.
