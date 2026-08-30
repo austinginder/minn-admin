@@ -133,7 +133,10 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 				.every( ( f ) => insp.df.includes( 'own:' + f ) ), JSON.stringify( insp.df ) );
 		t.check( 'locked note names the block editor', insp.locked );
 		t.check( 'Inherit is a Minn switch', insp.inheritSwitch );
-		t.check( 'Instant pagination is a Minn switch', insp.pagSwitch );
+		// Deliberately hidden since the security-review pass: core only arms
+		// instant pagination alongside a queryId, which is the block editor's
+		// to mint — the switch would be a switch that does nothing.
+		t.check( 'Instant pagination is not offered', ! insp.pagSwitch && ! await page.$( '[data-insp="own:enhancedPagination"]' ) );
 		t.check( 'no native checkboxes in the popover', insp.nativeChecks.length === 0, JSON.stringify( insp.nativeChecks ) );
 
 		// --- perPage edit applies, re-renders, and stores a NUMBER ---
