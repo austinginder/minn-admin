@@ -38,7 +38,15 @@ if (
 	// omits can fire while plugins are still loading, so the suppression has to
 	// start here on presence alone. It is put back below when the session turns
 	// out not to be a real one.
-	&& ! empty( $_COOKIE[ LOGGED_IN_COOKIE ] )
+	//
+	// LOGGED_IN_COOKIE is defined by wp_cookie_constants(), which wp-settings.php
+	// runs AFTER must-use and network-activated plugins are already included.
+	// This file is one of those whenever Minn is turned on network-wide, so the
+	// constant genuinely may not exist yet and reading it bare is a fatal on a
+	// request any unauthenticated caller can shape. The literal fallback is the
+	// name wp_cookie_constants() builds minus its COOKIEHASH suffix, which is
+	// all a presence test needs.
+	&& ! empty( $_COOKIE[ defined( 'LOGGED_IN_COOKIE' ) ? LOGGED_IN_COOKIE : 'wordpress_logged_in' ] )
 	&& defined( 'WP_PLUGIN_DIR' ) && file_exists( WP_PLUGIN_DIR . '/breakdance/plugin.php' )
 ) {
 	$minn_admin_reporting_was = error_reporting();

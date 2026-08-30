@@ -17,8 +17,18 @@ class Minn_Admin_Updater {
 
 	const MANIFEST_URL = 'https://raw.githubusercontent.com/austinginder/minn-admin/main/manifest.json';
 
-	/** Hosts the update package may legitimately come from. */
-	const PACKAGE_HOSTS = array( 'github.com', 'objects.githubusercontent.com', 'codeload.github.com' );
+	/**
+	 * Hosts the update package may legitimately come from.
+	 *
+	 * github.com is where the manifest publishes every release asset and
+	 * language pack; objects.githubusercontent.com is the redirect target
+	 * download_url() follows internally to fetch one. codeload.github.com
+	 * serves SOURCE archives rather than release assets, so nothing this
+	 * updater distributes ever comes from it: an allowlist entry no
+	 * legitimate download needs is only somewhere else for a package to
+	 * come from.
+	 */
+	const PACKAGE_HOSTS = array( 'github.com', 'objects.githubusercontent.com' );
 
 	/**
 	 * Repository paths packages may live under, as an ALLOWLIST rather than
@@ -110,6 +120,19 @@ class Minn_Admin_Updater {
 		// target inside download_url(), never as a manifest download_url, so it
 		// does not carry the owner/repo pair and legitimately never matches.
 		$path = (string) ( $parts['path'] ?? '' );
+		// Compare a path with no dot segments in it, never the raw one. The
+		// HTTP client resolves ./ and ../ before it puts the request on the
+		// wire, so /austinginder/minn-admin/../../other/repo satisfies the
+		// prefix test here and then fetches /other/repo: the check would be
+		// enforcing a property of the string rather than of the request. A
+		// percent-encoded segment gets the same treatment, since some
+		// intermediaries decode before resolving. Refuse outright instead of
+		// normalising: no release URL carries either, and refusing needs no
+		// agreement with anyone else's normaliser about the edge cases.
+		if ( false !== strpos( $path, '%' )
+			|| preg_match( '#(^|/)\.\.?(/|$)#', $path ) ) {
+			return false;
+		}
 		foreach ( self::PACKAGE_PATHS as $prefix ) {
 			if ( 0 === strpos( $path, $prefix ) ) {
 				return true;
