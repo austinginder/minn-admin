@@ -57,6 +57,13 @@ Clicking the sidebar item for the view you are already on refreshes its
 list in place, so a tab left open all day stays current without a page
 reload.
 
+**Overview** still opens on the same four or five number cards. Click a
+card to open that view. Right-click it to swap the number for a different
+one (orders, products, drafts, pending comments, and others this account
+can see). Picking a number that is already on the dashboard swaps the two
+cards. The choice stays in this browser; Reset this card and Reset all
+cards put the defaults back.
+
 **The command palette** is the fastest way anywhere. Press **⌘K**
 (Ctrl+K on Windows and Linux), start typing, and jump to any view, any
 post, or run a command directly: "Clear site cache", "Back up site now",

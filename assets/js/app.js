@@ -4543,6 +4543,113 @@
 	// door to the Orders list pre-filtered to that status tab. Renders only
 	// when WooCommerce is active and the user can work orders; an all-clear
 	// store says so plainly instead of vanishing.
+	const OVERVIEW_METRIC_GROUPS = [ 'traffic', 'content', 'people', 'store' ];
+
+	function overviewMetricCatalog( o ) {
+		return ( o && o.metrics && o.metrics.length ) ? o.metrics : ( ( o && o.stats ) || [] );
+	}
+
+	function overviewMetricDefaults( o ) {
+		return ( ( o && o.stats ) || [] ).map( ( s ) => s.key );
+	}
+
+	function readOverviewMetricKeys( o ) {
+		const catalog = overviewMetricCatalog( o );
+		const allowed = new Set( catalog.map( ( m ) => m.key ) );
+		const defaults = overviewMetricDefaults( o );
+		let saved = [];
+		try { saved = JSON.parse( localStorage.getItem( 'minn-overview-metrics' ) || '[]' ); } catch ( e ) { saved = []; }
+		if ( ! Array.isArray( saved ) ) saved = [];
+		const keys = defaults.slice();
+		saved.forEach( ( k, i ) => {
+			if ( i < keys.length && allowed.has( k ) ) keys[ i ] = k;
+		} );
+		const seen = new Set();
+		return keys.map( ( k, i ) => {
+			if ( k && ! seen.has( k ) ) { seen.add( k ); return k; }
+			const fallback = defaults.find( ( d ) => d && ! seen.has( d ) && allowed.has( d ) ) || defaults[ i ];
+			if ( fallback ) seen.add( fallback );
+			return fallback;
+		} );
+	}
+
+	function overviewShownMetrics( o ) {
+		const catalog = overviewMetricCatalog( o );
+		const byKey = {};
+		catalog.forEach( ( m ) => { if ( m && m.key ) byKey[ m.key ] = m; } );
+		const defaults = ( o.stats || [] );
+		return readOverviewMetricKeys( o ).map( ( k, i ) => byKey[ k ] || defaults[ i ] ).filter( Boolean );
+	}
+
+	function writeOverviewMetricKeys( keys ) {
+		localStorage.setItem( 'minn-overview-metrics', JSON.stringify( keys ) );
+	}
+
+	function setOverviewMetric( slot, key, o ) {
+		const catalog = overviewMetricCatalog( o );
+		if ( ! catalog.some( ( m ) => m.key === key ) ) return;
+		const keys = readOverviewMetricKeys( o );
+		if ( slot < 0 || slot >= keys.length ) return;
+		const other = keys.indexOf( key );
+		if ( other === slot ) return;
+		if ( other >= 0 ) {
+			const swap = keys[ slot ];
+			keys[ slot ] = keys[ other ];
+			keys[ other ] = swap;
+		} else {
+			keys[ slot ] = key;
+		}
+		writeOverviewMetricKeys( keys );
+		renderOverview();
+	}
+
+	function resetOverviewMetric( slot, o ) {
+		const keys = readOverviewMetricKeys( o );
+		const defaults = overviewMetricDefaults( o );
+		if ( slot < 0 || slot >= keys.length ) return;
+		keys[ slot ] = defaults[ slot ];
+		writeOverviewMetricKeys( keys );
+		renderOverview();
+	}
+
+	function resetOverviewMetrics() {
+		localStorage.removeItem( 'minn-overview-metrics' );
+		renderOverview();
+	}
+
+	function openOverviewMetricMenu( x, y, slot, o ) {
+		const catalog = overviewMetricCatalog( o );
+		const keys = readOverviewMetricKeys( o );
+		const current = keys[ slot ];
+		const defaults = overviewMetricDefaults( o );
+		const labels = {
+			traffic: __( 'Traffic' ),
+			content: __( 'Content' ),
+			people: __( 'People' ),
+			store: __( 'Store' ),
+		};
+		const entries = [];
+		OVERVIEW_METRIC_GROUPS.forEach( ( group ) => {
+			const rows = catalog.filter( ( m ) => ( m.group || 'content' ) === group );
+			if ( ! rows.length ) return;
+			entries.push( { heading: labels[ group ] || group } );
+			rows.forEach( ( m ) => {
+				entries.push( {
+					label: m.label,
+					active: m.key === current,
+					run: () => setOverviewMetric( slot, m.key, o ),
+				} );
+			} );
+		} );
+		if ( current !== defaults[ slot ] ) {
+			entries.push( { label: __( 'Reset this card' ), run: () => resetOverviewMetric( slot, o ) } );
+		}
+		if ( keys.some( ( k, i ) => k !== defaults[ i ] ) ) {
+			entries.push( { label: __( 'Reset all cards' ), run: () => resetOverviewMetrics() } );
+		}
+		openMinnMenu( x, y, entries );
+	}
+
 	function storeStripHtml( o ) {
 		if ( ! o.store || ! B.wc || ! B.caps.orders ) return '';
 		const buckets = [
@@ -4596,13 +4703,13 @@
 		${ visibilityBannerHtml() }
 		${ coreBannerHtml() }
 		<div class="minn-stats">
-			${ o.stats.map( ( s ) => {
+			${ overviewShownMetrics( o ).map( ( s, i ) => {
 				// Each stat is a door to its view, not just a number.
-				// Route on the server's STABLE key, never the label: a translated
-				// label matches nothing and every card silently stops being a door.
-				const goto = { posts: 'content:posts', pages: 'content:pages', comments: 'comments', media: 'media', users: 'users' }[ s.key ] || '';
+				// Route on the server's STABLE key (or the metric's own goto),
+				// never the label: a translated label matches nothing.
+				const goto = s.goto || { posts: 'content:posts', pages: 'content:pages', comments: 'comments', media: 'media', users: 'users' }[ s.key ] || '';
 				return `
-				<div class="minn-card minn-stat${ goto ? ' clickable' : '' }"${ goto ? ` data-goto="${ esc( goto ) }" role="link" tabindex="0"` : '' }>
+				<div class="minn-card minn-stat${ goto ? ' clickable' : '' }" data-mslot="${ i }" data-mkey="${ esc( s.key ) }"${ goto ? ` data-goto="${ esc( goto ) }" role="link" tabindex="0"` : '' }>
 					<div class="minn-stat-label">${ esc( s.label ) }</div>
 					<div class="minn-stat-value">${ esc( s.value ) }</div>
 					<div class="minn-stat-delta${ deltaCls( s.up ) }">${ esc( s.delta ) }</div>
@@ -4677,14 +4784,32 @@
 			$$( '[data-vistoggle]', visBanner ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => runVisToggle( controls[ +btn.dataset.vistoggle ], btn ) ) );
 		}
-		$$( '.minn-stat[data-goto]', view ).forEach( ( card ) => {
+		$$( '.minn-stat', view ).forEach( ( card ) => {
 			const open = () => {
+				if ( ! card.dataset.goto ) return;
 				const [ route, filter ] = card.dataset.goto.split( ':' );
-				if ( filter ) { state.filter = filter; state.cache.content = null; }
+				if ( route === 'orders' ) {
+					state.orderView = 'list';
+					state.orderFilters = orderFiltersDefault( LIST_FILTER_SPECS.orders );
+					if ( filter ) state.orderFilters.status = [ filter ];
+					state.orderSearch = '';
+					state.cache.orders = null;
+					go( 'orders' );
+					return;
+				}
+				if ( route === 'comments' && filter ) {
+					state.commentTab = filter;
+					state.cache.comments = null;
+				}
+				if ( filter && route === 'content' ) { state.filter = filter; state.cache.content = null; }
 				go( route );
 			};
 			card.addEventListener( 'click', open );
 			card.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) open(); } );
+			card.addEventListener( 'contextmenu', ( e ) => {
+				e.preventDefault();
+				openOverviewMetricMenu( e.clientX, e.clientY, parseInt( card.dataset.mslot, 10 ), o );
+			} );
 		} );
 		// Store chips land on the Orders list pre-filtered to their bucket
 		// (the customer View-all jump's pattern).

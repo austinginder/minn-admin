@@ -3037,18 +3037,22 @@ class Minn_Admin_REST {
 		$stats = array(
 			array(
 				'key'   => 'posts',
+				'group' => 'content',
 				'label' => __( 'Published posts', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $posts->publish ),
 				/* translators: %s: number of draft posts. */
 				'delta' => sprintf( _n( '%s draft', '%s drafts', (int) $posts->draft, 'minn-admin' ), number_format_i18n( (int) $posts->draft ) ),
 				'up'    => null,
+				'goto'  => 'content:posts',
 			),
 			array(
 				'key'   => 'pages',
+				'group' => 'content',
 				'label' => __( 'Pages', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $pages->publish ),
 				'delta' => __( 'published', 'minn-admin' ),
 				'up'    => null,
+				'goto'  => 'content:pages',
 			),
 			// Many sites never use comments — an eternal zero is dead weight,
 			// so a comment-less site gets a Users count instead. Pending
@@ -3059,25 +3063,31 @@ class Minn_Admin_REST {
 			// so fall back to the Comments card for them instead.
 			( 0 === (int) $comments->approved && 0 === (int) $comments->moderated && current_user_can( 'list_users' ) ) ? array(
 				'key'   => 'users',
+				'group' => 'people',
 				'label' => __( 'Users', 'minn-admin' ),
 				'value' => number_format_i18n( self::user_count() ),
 				'delta' => __( 'registered', 'minn-admin' ),
 				'up'    => null,
+				'goto'  => 'users',
 			) : array(
 				'key'   => 'comments',
+				'group' => 'content',
 				'label' => __( 'Comments', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $comments->approved ),
 				/* translators: %s: number of comments awaiting moderation. */
 				'delta' => sprintf( __( '%s pending', 'minn-admin' ), number_format_i18n( (int) $comments->moderated ) ),
 				'up'    => (int) $comments->moderated > 0 ? 'warn' : null,
+				'goto'  => 'comments',
 			),
 			array(
 				'key'   => 'media',
+				'group' => 'content',
 				'label' => __( 'Media files', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $media->inherit ),
 				/* translators: %s: disk space used by uploads, already formatted. */
 				'delta' => sprintf( __( '%s used', 'minn-admin' ), size_format( self::uploads_size(), 1 ) ),
 				'up'    => null,
+				'goto'  => 'media',
 			),
 		);
 
@@ -3149,10 +3159,12 @@ class Minn_Admin_REST {
 				$stats,
 				array(
 					'key'   => 'visitors',
+					'group' => 'traffic',
 					'label' => __( 'Visitors', 'minn-admin' ),
 					'value' => $compact( $visitors ),
 					'delta' => $delta_bit,
 					'up'    => null !== $delta ? ( $delta >= 0 ? true : 'down' ) : null,
+					'goto'  => 'stats',
 				)
 			);
 			$traffic_out = array(
@@ -3289,6 +3301,7 @@ class Minn_Admin_REST {
 		return rest_ensure_response(
 			array(
 				'stats'    => $stats,
+				'metrics'  => self::overview_metric_catalog( $posts, $pages, $comments, $media, $store, $stats ),
 				'chart'    => $chart,
 				'traffic'  => $traffic_out,
 				'activity' => $activity,
@@ -3296,6 +3309,237 @@ class Minn_Admin_REST {
 				'greeting' => self::greeting(),
 			)
 		);
+	}
+
+	/**
+	 * Full Overview metric catalog. `stats` is the default layout; the client
+	 * lets a right-click on a card swap that slot for any catalog entry.
+	 * Cap-gated the same way the matching view is, so a Contributor never
+	 * learns the size of the user base or the store.
+	 */
+	private static function overview_metric_catalog( $posts, $pages, $comments, $media, $store, $stats ) {
+		$metrics = array();
+		$push    = static function ( $row ) use ( &$metrics ) {
+			$metrics[] = $row;
+		};
+
+		$have = array();
+		$add  = static function ( $row ) use ( &$have, $push ) {
+			if ( empty( $row['key'] ) || isset( $have[ $row['key'] ] ) ) {
+				return;
+			}
+			$have[ $row['key'] ] = true;
+			$push( $row );
+		};
+		// Seed with the default layout so every card that is already showing
+		// can be picked again after a swap (comments can be on the dashboard
+		// even when the Comments view is hidden).
+		foreach ( (array) $stats as $row ) {
+			$add( $row );
+		}
+
+		$add(
+			array(
+				'key'   => 'posts',
+				'group' => 'content',
+				'label' => __( 'Published posts', 'minn-admin' ),
+				'value' => number_format_i18n( (int) $posts->publish ),
+				/* translators: %s: number of draft posts. */
+				'delta' => sprintf( _n( '%s draft', '%s drafts', (int) $posts->draft, 'minn-admin' ), number_format_i18n( (int) $posts->draft ) ),
+				'up'    => null,
+				'goto'  => 'content:posts',
+			)
+		);
+		$add(
+			array(
+				'key'   => 'drafts',
+				'group' => 'content',
+				'label' => __( 'Drafts', 'minn-admin' ),
+				'value' => number_format_i18n( (int) $posts->draft ),
+				'delta' => __( 'posts', 'minn-admin' ),
+				'up'    => (int) $posts->draft > 0 ? 'warn' : null,
+				'goto'  => 'content:posts',
+			)
+		);
+		$add(
+			array(
+				'key'   => 'pages',
+				'group' => 'content',
+				'label' => __( 'Pages', 'minn-admin' ),
+				'value' => number_format_i18n( (int) $pages->publish ),
+				'delta' => __( 'published', 'minn-admin' ),
+				'up'    => null,
+				'goto'  => 'content:pages',
+			)
+		);
+		if ( Minn_Admin::comments_enabled() ) {
+			$add(
+				array(
+					'key'   => 'comments',
+					'group' => 'content',
+					'label' => __( 'Comments', 'minn-admin' ),
+					'value' => number_format_i18n( (int) $comments->approved ),
+					/* translators: %s: number of comments awaiting moderation. */
+					'delta' => sprintf( __( '%s pending', 'minn-admin' ), number_format_i18n( (int) $comments->moderated ) ),
+					'up'    => (int) $comments->moderated > 0 ? 'warn' : null,
+					'goto'  => 'comments',
+				)
+			);
+			if ( current_user_can( 'moderate_comments' ) ) {
+				$add(
+					array(
+						'key'   => 'comments_pending',
+						'group' => 'content',
+						'label' => __( 'Pending comments', 'minn-admin' ),
+						'value' => number_format_i18n( (int) $comments->moderated ),
+						'delta' => __( 'awaiting review', 'minn-admin' ),
+						'up'    => (int) $comments->moderated > 0 ? 'warn' : null,
+						'goto'  => 'comments:hold',
+					)
+				);
+			}
+		}
+		$add(
+			array(
+				'key'   => 'media',
+				'group' => 'content',
+				'label' => __( 'Media files', 'minn-admin' ),
+				'value' => number_format_i18n( (int) $media->inherit ),
+				/* translators: %s: disk space used by uploads, already formatted. */
+				'delta' => sprintf( __( '%s used', 'minn-admin' ), size_format( self::uploads_size(), 1 ) ),
+				'up'    => null,
+				'goto'  => 'media',
+			)
+		);
+		if ( current_user_can( 'list_users' ) ) {
+			$add(
+				array(
+					'key'   => 'users',
+					'group' => 'people',
+					'label' => __( 'Users', 'minn-admin' ),
+					'value' => number_format_i18n( self::user_count() ),
+					'delta' => __( 'registered', 'minn-admin' ),
+					'up'    => null,
+					'goto'  => 'users',
+				)
+			);
+		}
+
+		if ( is_array( $store ) && current_user_can( 'edit_shop_orders' ) ) {
+			$orders_n = self::wc_orders_total();
+			$add(
+				array(
+					'key'   => 'orders',
+					'group' => 'store',
+					'label' => __( 'All orders', 'minn-admin' ),
+					'value' => number_format_i18n( $orders_n ),
+					/* translators: %s: number of orders awaiting fulfillment. */
+					'delta' => sprintf( _n( '%s to fulfill', '%s to fulfill', (int) $store['processing'], 'minn-admin' ), number_format_i18n( (int) $store['processing'] ) ),
+					'up'    => (int) $store['processing'] > 0 ? 'warn' : null,
+					'goto'  => 'orders',
+				)
+			);
+			$add(
+				array(
+					'key'   => 'orders_pending',
+					'group' => 'store',
+					'label' => __( 'Awaiting payment', 'minn-admin' ),
+					'value' => number_format_i18n( (int) $store['pending'] ),
+					'delta' => __( 'pending orders', 'minn-admin' ),
+					'up'    => (int) $store['pending'] > 0 ? 'warn' : null,
+					'goto'  => 'orders:pending',
+				)
+			);
+			$add(
+				array(
+					'key'   => 'orders_processing',
+					'group' => 'store',
+					'label' => __( 'To fulfill', 'minn-admin' ),
+					'value' => number_format_i18n( (int) $store['processing'] ),
+					'delta' => __( 'processing', 'minn-admin' ),
+					'up'    => (int) $store['processing'] > 0 ? 'warn' : null,
+					'goto'  => 'orders:processing',
+				)
+			);
+			$add(
+				array(
+					'key'   => 'orders_hold',
+					'group' => 'store',
+					'label' => __( 'On hold', 'minn-admin' ),
+					'value' => number_format_i18n( (int) $store['onhold'] ),
+					'delta' => __( 'orders', 'minn-admin' ),
+					'up'    => (int) $store['onhold'] > 0 ? 'warn' : null,
+					'goto'  => 'orders:on-hold',
+				)
+			);
+		}
+		if ( class_exists( 'WooCommerce' ) && post_type_exists( 'product' ) && current_user_can( 'edit_products' ) ) {
+			$products = wp_count_posts( 'product' );
+			$add(
+				array(
+					'key'   => 'products',
+					'group' => 'store',
+					'label' => __( 'Products', 'minn-admin' ),
+					'value' => number_format_i18n( (int) $products->publish ),
+					/* translators: %s: number of draft products. */
+					'delta' => sprintf( _n( '%s draft', '%s drafts', (int) $products->draft, 'minn-admin' ), number_format_i18n( (int) $products->draft ) ),
+					'up'    => null,
+					'goto'  => 'products',
+				)
+			);
+		}
+		if ( class_exists( 'WooCommerce' ) && (
+			current_user_can( 'manage_woocommerce' ) || current_user_can( 'edit_shop_orders' )
+		) ) {
+			$roles = count_users();
+			$cust  = isset( $roles['avail_roles']['customer'] ) ? (int) $roles['avail_roles']['customer'] : 0;
+			$add(
+				array(
+					'key'   => 'customers',
+					'group' => 'store',
+					'label' => __( 'Customers', 'minn-admin' ),
+					'value' => number_format_i18n( $cust ),
+					'delta' => __( 'registered', 'minn-admin' ),
+					'up'    => null,
+					'goto'  => 'customers',
+				)
+			);
+		}
+		if ( class_exists( 'WooCommerce' )
+			&& post_type_exists( 'shop_coupon' )
+			&& current_user_can( 'edit_shop_coupons' )
+			&& ( ! function_exists( 'wc_coupons_enabled' ) || wc_coupons_enabled() )
+		) {
+			$coupons = wp_count_posts( 'shop_coupon' );
+			$add(
+				array(
+					'key'   => 'coupons',
+					'group' => 'store',
+					'label' => __( 'Coupons', 'minn-admin' ),
+					'value' => number_format_i18n( (int) $coupons->publish ),
+					'delta' => __( 'published', 'minn-admin' ),
+					'up'    => null,
+					'goto'  => 'coupons',
+				)
+			);
+		}
+
+		return $metrics;
+	}
+
+	/**
+	 * Count of orders in every registered WooCommerce status. HPOS-safe via
+	 * wc_orders_count(); those counters are cached by WooCommerce.
+	 */
+	private static function wc_orders_total() {
+		if ( ! function_exists( 'wc_orders_count' ) || ! function_exists( 'wc_get_order_statuses' ) ) {
+			return 0;
+		}
+		$n = 0;
+		foreach ( array_keys( wc_get_order_statuses() ) as $slug ) {
+			$n += (int) wc_orders_count( preg_replace( '/^wc-/', '', $slug ) );
+		}
+		return $n;
 	}
 
 	/**
