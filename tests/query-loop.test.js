@@ -76,6 +76,30 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		}, null, { timeout: 45000 } ).then( () => true ).catch( () => false );
 		t.check( 'preview renders real posts', previewed );
 
+		// Frontend CSS arrives after the HTML: :root tokens from a dark-default
+		// theme used to invert title color while the matching background was
+		// stripped, so the list painted then vanished. Wait for that sheet
+		// and pin contrast against the editor theme.
+		await page.waitForSelector( '#minn-frontend-css', { timeout: 30000 } ).catch( () => {} );
+		await page.waitForTimeout( 600 );
+		const afterCss = await page.evaluate( () => {
+			const island = document.querySelector( '.minn-block-island[data-block$="query"]' );
+			const title = island && island.querySelector( '.wp-block-post-title' );
+			if ( ! title ) return { ok: false, why: 'no title' };
+			const c = getComputedStyle( title ).color;
+			const m = c.match( /rgba?\((\d+),\s*(\d+),\s*(\d+)/ );
+			const lum = m ? ( 0.2126 * +m[ 1 ] + 0.7152 * +m[ 2 ] + 0.0722 * +m[ 3 ] ) / 255 : -1;
+			const theme = document.documentElement.getAttribute( 'data-theme' );
+			const readable = theme === 'light' ? lum < 0.55 : lum > 0.45;
+			return {
+				ok: readable, color: c, lum, theme,
+				cted: island.getAttribute( 'data-cted' ),
+				shell: ( island.querySelector( '.minn-island-preview' ) || {} ).getAttribute( 'data-root-theme' ),
+			};
+		} );
+		t.check( 'frontend CSS keeps titles readable against the editor theme', afterCss.ok, JSON.stringify( afterCss ) );
+		t.check( 'Query Loop is not a content-editor card', ! afterCss.cted, String( afterCss.cted ) );
+
 		// --- Saved markup is the canonical shape ---
 		let raw = await save();
 		t.check( 'saved markup carries the full loop',

@@ -3861,6 +3861,7 @@
 					document.documentElement.setAttribute( 'data-theme', e.matches ? 'light' : 'dark' );
 					applyAppearance( B.user && B.user.appearance );
 					renderThemeBtn();
+					stampAllPreviewShells();
 				} );
 			}
 		} catch ( e ) { /* matchMedia unavailable */ }
@@ -3868,6 +3869,7 @@
 		document.addEventListener( 'minn-theme-change', () => {
 			applyAppearance( B.user && B.user.appearance );
 			renderThemeBtn();
+			stampAllPreviewShells();
 		} );
 		$( '#minn-help-btn' ).addEventListener( 'click', () => { state.modal = { type: 'help' }; renderOverlays(); } );
 		$( '#minn-notif-btn' ).addEventListener( 'click', toggleNotif );
@@ -4040,6 +4042,7 @@
 		// Custom accent tokens are mode-dependent — re-derive after light/dark flips.
 		applyAppearance( B.user && B.user.appearance );
 		renderThemeBtn();
+		stampAllPreviewShells();
 	}
 
 	/* ===== Color schemes (user meta minn_admin_appearance) =====
@@ -23973,6 +23976,30 @@
 		return segs.filter( ( s ) => s.type === 'block' ).length;
 	}
 
+	// Query Loop inner blocks are a repeating template (post-template,
+	// pagination, no-results), not unique copy. Counting them as content
+	// cards paints the "Edit content · N" wash over the rendered posts.
+	const CTED_SKIP = {
+		query: 1, 'query-pagination': 1, 'post-template': 1, 'query-no-results': 1,
+		'query-title': 1, 'query-total': 1,
+	};
+
+	// The live light/dark paint, already on <html>. Preview shells wear the
+	// same attributes so theme canvas selectors ([data-root-theme], [data-theme])
+	// match the preview instead of looking for a descendant it never contains.
+	function previewThemeMode() {
+		return document.documentElement.getAttribute( 'data-theme' ) === 'light' ? 'light' : 'dark';
+	}
+	function stampPreviewShell( el ) {
+		if ( ! el ) return;
+		const mode = previewThemeMode();
+		el.setAttribute( 'data-theme', mode );
+		el.setAttribute( 'data-root-theme', mode );
+	}
+	function stampAllPreviewShells() {
+		$$( '.minn-island-preview' ).forEach( stampPreviewShell );
+	}
+
 	function islandHtml( idx, name, raw, ed ) {
 		const short = String( name || '' ).replace( /^core\//, '' );
 		if ( SLOT_BLOCKS.includes( short ) || SLOT_VENDOR[ String( name || '' ) ] ) {
@@ -24063,7 +24090,7 @@
 		// change a word and every way to break a layout. The ⚙ popover
 		// remains the door to structure.
 		const attrCopy = etchTextRunsOf( raw || '' ).length > 0;
-		const kidCount = imgTool || patternRef || attrCopy ? 0 : islandChildCount( raw );
+		const kidCount = imgTool || patternRef || attrCopy || CTED_SKIP[ short ] ? 0 : islandChildCount( raw );
 		const ctool = kidCount >= 2;
 		/* translators: %d: number of nested blocks */
 		const ctedBadge = ctool ? sprintf( __( 'Edit content · %d' ), kidCount ) : '';
@@ -24073,7 +24100,7 @@
 			${ imgBadge ? `<button class="minn-imgtool-badge" type="button" data-imgbadge="1" tabindex="-1">${ esc( imgBadge ) }</button>` : '' }
 			${ ctedBadge ? `<button class="minn-imgtool-badge" type="button" data-ctedbadge="1" tabindex="-1">${ esc( ctedBadge ) }</button>` : '' }
 			${ patternRef ? `<button class="minn-pattern-cover" data-patternedit="${ esc( patternRef ) }" type="button" aria-label="${ esc( __( 'Edit this pattern' ) ) }"><span class="minn-pattern-badge">${ esc( __( 'Edit pattern' ) ) } ↗</span></button>` : '' }
-			<div class="minn-island-preview" data-preview="${ idx }">${ inner || `<div class="minn-island-empty">${ esc( __( 'Dynamic block — rendered on the site' ) ) }</div>` }</div>
+			<div class="minn-island-preview" data-preview="${ idx }" data-theme="${ previewThemeMode() }" data-root-theme="${ previewThemeMode() }">${ inner || `<div class="minn-island-empty">${ esc( __( 'Dynamic block — rendered on the site' ) ) }</div>` }</div>
 		</div>`;
 	}
 
@@ -25663,6 +25690,13 @@
 			let s = sel.trim();
 			if ( ! s ) return s;
 			s = s.replace( /(^|[\s>+~])(:root|html|body)(?![\w-])/gi, ( m0, pre ) => pre + '&' );
+			// Themes put light/dark on the document canvas via an attribute
+			// (`[data-root-theme="light"]`, `[data-theme="dark"]`). The preview
+			// IS that canvas, so those selectors must target the shell — a
+			// descendant form never matches, and :root's dark tokens then
+			// color the text while stripShellCanvas drops the matching
+			// background (light text on the editor's light chrome).
+			s = s.replace( /^(\[data-(?:root-)?theme[^\]]*\])/i, '&$1' );
 			s = s.replace( /^&(\s*&)*/, SCOPE ); // ":root body …" chains collapse
 			s = s.replace( /&/g, SCOPE );
 			return s.startsWith( SCOPE ) ? s : SCOPE + ' ' + s;
