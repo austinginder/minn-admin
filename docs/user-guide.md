@@ -62,10 +62,10 @@ card to open that view. Right-click it and choose Customize to pick a
 different number: drafts, pending comments, users, and on a store the
 month's sales, orders, items sold and average order, plus the usual
 catalog and queue counts. Picking a number that is already on the
-dashboard swaps the two cards. The choice is yours: it follows you on
-any browser you sign in with. Reset this card and Reset all cards put
-the defaults back. Administrators also get Use as default for everyone,
-which sets the starting cards for anyone who has not picked their own.
+dashboard swaps the two cards. Save keeps the layout for you; it
+follows you on any browser you sign in with. Administrators also get
+Save as defaults, which sets the starting cards for anyone who has not
+picked their own. Reset all cards puts the defaults back.
 
 **The command palette** is the fastest way anywhere. Press **⌘K**
 (Ctrl+K on Windows and Linux), start typing, and jump to any view, any

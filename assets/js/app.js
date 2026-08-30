@@ -4637,13 +4637,13 @@
 		persistOverviewMetricKeys( readOverviewMetricKeys( o ), o );
 	}
 
-	function setOverviewMetric( slot, key, o ) {
+	function overviewMetricKeysWithPick( o, slot, key ) {
 		const catalog = overviewMetricCatalog( o );
-		if ( ! catalog.some( ( m ) => m.key === key ) ) return;
 		const keys = readOverviewMetricKeys( o );
-		if ( slot < 0 || slot >= keys.length ) return;
+		if ( ! catalog.some( ( m ) => m.key === key ) ) return keys;
+		if ( slot < 0 || slot >= keys.length ) return keys;
 		const other = keys.indexOf( key );
-		if ( other === slot ) return;
+		if ( other === slot ) return keys;
 		if ( other >= 0 ) {
 			const swap = keys[ slot ];
 			keys[ slot ] = keys[ other ];
@@ -4651,7 +4651,12 @@
 		} else {
 			keys[ slot ] = key;
 		}
-		persistOverviewMetricKeys( keys, o );
+		return keys;
+	}
+
+	function setOverviewMetric( slot, key, o ) {
+		persistOverviewMetricKeys( overviewMetricKeysWithPick( o, slot, key ), o );
+		closeModal();
 		renderOverview();
 	}
 
@@ -4675,10 +4680,13 @@
 	}
 
 	async function saveOverviewMetricDefaults() {
+		const m = state.modal;
 		const o = state.cache.overview;
-		const keys = readOverviewMetricKeys( o );
+		const keys = ( m && m.type === 'overview-metric' )
+			? overviewMetricKeysWithPick( o, m.slot, m.pick )
+			: readOverviewMetricKeys( o );
 		try {
-			const r = await api( 'minn-admin/v1/overview/metric-defaults', {
+			await api( 'minn-admin/v1/overview/metric-defaults', {
 				method: 'POST',
 				body: JSON.stringify( { keys } ),
 			} );
@@ -4719,7 +4727,10 @@
 	}
 
 	function openOverviewMetricPicker( slot ) {
-		state.modal = { type: 'overview-metric', slot };
+		const o = state.cache.overview || {};
+		const keys = readOverviewMetricKeys( o );
+		const i = Number( slot );
+		state.modal = { type: 'overview-metric', slot: i, pick: keys[ i ] };
 		renderOverlays();
 	}
 
@@ -38224,12 +38235,10 @@
 			const o = state.cache.overview || {};
 			const catalog = overviewMetricCatalog( o );
 			const keys = readOverviewMetricKeys( o );
-			const current = keys[ m.slot ];
+			const current = m.pick || keys[ m.slot ];
 			const defaults = overviewMetricDefaults( o );
-			const dirtySlot = current !== defaults[ m.slot ];
 			const dirtyAny = keys.some( ( k, i ) => k !== defaults[ i ] );
 			const canSetDefault = !! ( o.canSetMetricDefaults || ( B.caps && B.caps.settings ) );
-			const showAsDefault = canSetDefault && ! overviewMetricKeysEqual( keys, defaults );
 			const groups = overviewMetricGroupOrder().map( ( group ) => {
 				const rows = catalog.filter( ( row ) => ( row.group || 'content' ) === group );
 				return rows.length ? { group, rows } : null;
@@ -38237,11 +38246,11 @@
 			const deltaCls = ( up ) => up === true ? ' up' : ( up === 'warn' ? ' warn' : ( up === 'down' ? ' down' : '' ) );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal wide" role="dialog" aria-modal="true" aria-label="${ esc( __( 'Customize this card' ) ) }">
+				<div class="minn-modal wide minn-metric-modal" role="dialog" aria-modal="true" aria-label="${ esc( __( 'Customize this card' ) ) }">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
 							<div class="minn-modal-title">${ esc( __( 'Customize this card' ) ) }</div>
-							<div class="minn-modal-sub">${ esc( __( 'Pick what this number shows.' ) ) }</div>
+							<div class="minn-modal-sub">${ esc( __( 'Pick what this number shows, then save.' ) ) }</div>
 						</div>
 						<button class="minn-x-btn" id="minn-modal-close" type="button">×</button>
 					</div>
@@ -38259,11 +38268,13 @@
 							</div>
 						</div>` ).join( '' ) }
 					</div>
-					${ dirtySlot || dirtyAny || showAsDefault ? `<div class="minn-metric-picker-foot">
-						${ dirtySlot ? `<button type="button" class="minn-btn-soft" id="minn-metric-reset-one">${ esc( __( 'Reset this card' ) ) }</button>` : '' }
+					<div class="minn-metric-picker-foot">
 						${ dirtyAny ? `<button type="button" class="minn-btn-soft" id="minn-metric-reset-all">${ esc( __( 'Reset all cards' ) ) }</button>` : '' }
-						${ showAsDefault ? `<button type="button" class="minn-btn-soft minn-metric-as-default" id="minn-metric-as-default">${ esc( __( 'Use as default for everyone' ) ) }</button>` : '' }
-					</div>` : '' }
+						<div class="minn-metric-actions">
+							${ canSetDefault ? `<button type="button" class="minn-btn-soft" id="minn-metric-save-defaults">${ esc( __( 'Save as defaults' ) ) }</button>` : '' }
+							<button type="button" class="minn-btn-primary" id="minn-metric-save">${ esc( __( 'Save' ) ) }</button>
+						</div>
+					</div>
 				</div>
 			</div>`;
 		}
@@ -39688,26 +39699,23 @@
 
 		if ( m.type === 'overview-metric' ) {
 			const o = state.cache.overview;
-			const slot = m.slot;
-			$$( '[data-metric]', $( '#minn-modal-overlay' ) ).forEach( ( btn ) =>
+			const overlay = $( '#minn-modal-overlay' );
+			$$( '[data-metric]', overlay ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
-					closeModal();
-					setOverviewMetric( slot, btn.dataset.metric, o );
+					m.pick = btn.dataset.metric;
+					$$( '[data-metric]', overlay ).forEach( ( b ) =>
+						b.classList.toggle( 'is-on', b.dataset.metric === m.pick )
+					);
 				} )
 			);
-			const resetOne = $( '#minn-metric-reset-one' );
-			if ( resetOne ) resetOne.addEventListener( 'click', () => {
-				closeModal();
-				resetOverviewMetric( slot, o );
-			} );
+			const save = $( '#minn-metric-save' );
+			if ( save ) save.addEventListener( 'click', () => setOverviewMetric( m.slot, m.pick, o ) );
+			const saveDefaults = $( '#minn-metric-save-defaults' );
+			if ( saveDefaults ) saveDefaults.addEventListener( 'click', () => saveOverviewMetricDefaults() );
 			const resetAll = $( '#minn-metric-reset-all' );
 			if ( resetAll ) resetAll.addEventListener( 'click', () => {
 				closeModal();
 				resetOverviewMetrics();
-			} );
-			const asDefault = $( '#minn-metric-as-default' );
-			if ( asDefault ) asDefault.addEventListener( 'click', () => {
-				saveOverviewMetricDefaults();
 			} );
 		}
 

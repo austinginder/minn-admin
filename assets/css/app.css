@@ -2755,7 +2755,14 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   box-shadow: var(--shadow); animation: minnScaleIn 0.18s ease;
 }
 .minn-modal.wide { width: 720px; }
-.minn-metric-picker { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 16px; }
+.minn-modal.minn-metric-modal {
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.minn-metric-modal .minn-modal-head { flex-shrink: 0; }
+.minn-metric-picker {
+  padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 16px;
+  overflow-y: auto; flex: 1; min-height: 0;
+}
 .minn-metric-group-label {
   font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--text3); margin-bottom: 8px;
@@ -2776,10 +2783,12 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-metric-tile-delta.warn { color: var(--amber-text); }
 .minn-metric-tile-delta.down { color: var(--red-text); }
 .minn-metric-picker-foot {
-  display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 18px 14px;
-  border-top: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 18px 14px;
+  border-top: 1px solid var(--border); flex-shrink: 0;
 }
-.minn-metric-picker-foot .minn-metric-as-default { margin-left: auto; }
+.minn-metric-picker-foot .minn-metric-actions {
+  margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px;
+}
 /* Side-by-side prose needs real width — the 94vw cap still governs laptops. */
 .minn-modal.xl { width: 1280px; }
 /* HTML email preview: real messages lay out at 600–900px; give the frame

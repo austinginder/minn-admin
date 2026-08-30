@@ -117,12 +117,13 @@ delete_option( 'minn_admin_overview_metric_defaults' );
 			groups: [ ...document.querySelectorAll( '.minn-metric-group-label' ) ].map( ( el ) => el.textContent.trim() ),
 			keys: [ ...document.querySelectorAll( '.minn-metric-tile' ) ].map( ( el ) => el.dataset.metric ),
 			on: ( document.querySelector( '.minn-metric-tile.is-on' ) || {} ).dataset.metric || '',
-			asDefault: !! document.querySelector( '#minn-metric-as-default' ),
+			save: !! document.querySelector( '#minn-metric-save' ),
+			saveDefaults: ( document.querySelector( '#minn-metric-save-defaults' ) || {} ).textContent || '',
 		} ) );
 		t.check( 'Customize opens a picker modal on this card',
 			picker.on === 'posts' && picker.keys.includes( 'drafts' ), JSON.stringify( picker ) );
-		t.check( 'Use as default stays hidden on the built-in layout',
-			picker.asDefault === false, JSON.stringify( picker ) );
+		t.check( 'the first picker offers Save and Save as defaults',
+			picker.save && /Save as defaults/.test( picker.saveDefaults ), JSON.stringify( picker ) );
 		if ( hasWc ) {
 			t.check( 'picker leads with store sales metrics on a Woo site',
 				picker.groups[ 0 ] === 'Store'
@@ -133,17 +134,26 @@ delete_option( 'minn_admin_overview_metric_defaults' );
 		}
 
 		const pickKey = 'drafts';
+		await page.click( `.minn-metric-tile[data-metric="${ pickKey }"]` );
+		const pending = await page.evaluate( () => ( {
+			picker: !! document.querySelector( '.minn-metric-picker' ),
+			on: ( document.querySelector( '.minn-metric-tile.is-on' ) || {} ).dataset.metric || '',
+			card: ( document.querySelector( '.minn-stat[data-mkey="posts"]' ) || {} ).dataset.mkey || '',
+		} ) );
+		t.check( 'picking a metric stays in the picker until Save',
+			pending.picker && pending.on === pickKey && pending.card === 'posts', JSON.stringify( pending ) );
+
 		const savePersonal = page.waitForResponse( ( r ) =>
 			r.url().includes( 'minn-admin/v1/overview/metrics' ) && r.request().method() === 'POST'
 		);
-		await page.click( `.minn-metric-tile[data-metric="${ pickKey }"]` );
+		await page.click( '#minn-metric-save' );
 		const personalRes = await savePersonal;
-		t.check( 'picking a metric POSTs the personal layout', personalRes.status() === 200, String( personalRes.status() ) );
+		t.check( 'Save POSTs the personal layout', personalRes.status() === 200, String( personalRes.status() ) );
 		await page.waitForFunction( ( a ) => {
 			const el = document.querySelector( '.minn-stat[data-mslot="' + a.slot + '"]' );
 			return el && el.dataset.mkey === a.key && ! document.querySelector( '.minn-metric-picker' );
 		}, { slot: postsSlot, key: pickKey }, { timeout: 8000 } );
-		t.check( 'picking a metric replaces that card', true, '' );
+		t.check( 'Save replaces that card', true, '' );
 
 		const after = await rest( page, 'GET', 'minn-admin/v1/overview?days=30' );
 		const afterSlot = await page.evaluate( ( slot ) =>
@@ -164,15 +174,15 @@ delete_option( 'minn_admin_overview_metric_defaults' );
 		t.check( 'the swap survives a reload', reloaded === pickKey, String( reloaded ) );
 
 		await openCustomize( page, `.minn-stat[data-mslot="${ postsSlot }"]` );
-		await page.waitForSelector( '#minn-metric-as-default', { timeout: 8000 } );
-		t.check( 'an administrator can set the layout as the site default', true, '' );
+		await page.waitForSelector( '#minn-metric-save-defaults', { timeout: 8000 } );
+		t.check( 'an administrator can save the layout as the site default', true, '' );
 
 		const saveDefault = page.waitForResponse( ( r ) =>
 			r.url().includes( 'minn-admin/v1/overview/metric-defaults' ) && r.request().method() === 'POST'
 		);
-		await page.click( '#minn-metric-as-default' );
+		await page.click( '#minn-metric-save-defaults' );
 		const defaultRes = await saveDefault;
-		t.check( 'Use as default POSTs the site layout', defaultRes.status() === 200, String( defaultRes.status() ) );
+		t.check( 'Save as defaults POSTs the site layout', defaultRes.status() === 200, String( defaultRes.status() ) );
 		await page.waitForFunction( () => ! document.querySelector( '.minn-metric-picker' ), null, { timeout: 8000 } );
 
 		const storedDefault = await rest( page, 'GET', 'minn-admin/v1/overview?days=30' );
@@ -203,21 +213,28 @@ delete_option( 'minn_admin_overview_metric_defaults' );
 
 		await openCustomize( ep, `.minn-stat[data-mslot="${ postsSlot }"]` );
 		const editorPicker = await ep.evaluate( () => ( {
-			asDefault: !! document.querySelector( '#minn-metric-as-default' ),
+			saveDefaults: !! document.querySelector( '#minn-metric-save-defaults' ),
+			save: !! document.querySelector( '#minn-metric-save' ),
 			hasMedia: !! document.querySelector( '.minn-metric-tile[data-metric="media"]' ),
 		} ) );
-		t.check( 'an editor does not see Use as default for everyone',
-			editorPicker.asDefault === false && editorPicker.hasMedia, JSON.stringify( editorPicker ) );
+		t.check( 'an editor sees Save but not Save as defaults',
+			editorPicker.save && ! editorPicker.saveDefaults && editorPicker.hasMedia, JSON.stringify( editorPicker ) );
 
+		await ep.click( '.minn-metric-tile[data-metric="media"]' );
+		const editorPending = await ep.evaluate( () =>
+			!! document.querySelector( '.minn-metric-picker' )
+			&& ( document.querySelector( '.minn-metric-tile.is-on' ) || {} ).dataset.metric === 'media'
+		);
+		t.check( 'an editor pick stays in the picker until Save', editorPending, '' );
 		const editorSave = ep.waitForResponse( ( r ) =>
 			r.url().includes( 'minn-admin/v1/overview/metrics' ) && r.request().method() === 'POST'
 		);
-		await ep.click( '.minn-metric-tile[data-metric="media"]' );
+		await ep.click( '#minn-metric-save' );
 		const editorSaveRes = await editorSave;
 		t.check( 'an editor can still save a personal layout', editorSaveRes.status() === 200, String( editorSaveRes.status() ) );
 		await ep.waitForFunction( ( a ) => {
 			const el = document.querySelector( '.minn-stat[data-mslot="' + a.slot + '"]' );
-			return el && el.dataset.mkey === 'media';
+			return el && el.dataset.mkey === 'media' && ! document.querySelector( '.minn-metric-picker' );
 		}, { slot: postsSlot }, { timeout: 8000 } );
 
 		await page.goto( `${ BASE }/minn-admin/overview`, { waitUntil: 'domcontentloaded' } );
