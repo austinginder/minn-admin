@@ -55,6 +55,24 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 	try {
 		t.check( 'surface declares the type tabs', Array.isArray( surface.collection.tabs.static ) && surface.collection.tabs.static.length >= 8,
 			String( ( surface.collection.tabs.static || [] ).length ) );
+		const tabValues = ( surface.collection.tabs.static || [] ).map( ( row ) => row[ 0 ] );
+		const createTypes = ( ( surface.collection.create || {} ).fields || [] )
+			.filter( ( f ) => f.key === 'type' )
+			.flatMap( ( f ) => ( f.options || [] ).map( ( o ) => o[ 0 ] ) );
+		t.check( 'type tabs come from Bricks and end with Trash',
+			tabValues.includes( 'header' ) && tabValues.includes( 'footer' ) && tabValues.includes( 'content' )
+			&& tabValues[ tabValues.length - 1 ] === 'trash' && ! createTypes.includes( 'trash' ),
+			JSON.stringify( { tabValues, createTypes } ) );
+		t.check( 'Import is offered on the templates list',
+			!! ( surface.collection.import && /bricks\/templates\/import/.test( surface.collection.import.route ) ),
+			JSON.stringify( surface.collection.import ) );
+		const liveTypes = JSON.parse( wpEval( 'echo wp_json_encode( minn_admin_bricks_template_types() );' ) );
+		const bricksTypes = JSON.parse( wpEval( 'echo wp_json_encode( \\Bricks\\Setup::get_control_options( "templateTypes" ) );' ) );
+		t.check( 'template types match Bricks\' own control options',
+			JSON.stringify( Object.keys( liveTypes ) ) === JSON.stringify( Object.keys( bricksTypes || {} ) ),
+			JSON.stringify( { live: Object.keys( liveTypes ), bricks: Object.keys( bricksTypes || {} ) } ) );
+		const wooLogin = wpEval( 'add_filter( "bricks/setup/control_options", function ( $o ) { $o["templateTypes"]["wc_account_form_login"] = "WooCommerce - Account - Login"; return $o; }, 99 ); echo isset( minn_admin_bricks_template_types()["wc_account_form_login"] ) ? "yes" : "no";' );
+		t.check( 'Woo types join when Bricks filters them on', wooLogin === 'yes', wooLogin );
 
 		/* ===== List renders the standing fixtures ===== */
 		await page.goto( BASE + '/minn-admin/bricks-templates', { waitUntil: 'domcontentloaded' } );
@@ -146,6 +164,20 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 			&& /\.json$/.test( exported.data.filename ) && !! exportPayload && exportPayload.templateType === 'popup',
 			exported.data.filename );
 
+		/* ===== Import the same JSON back as a new template ===== */
+		const importBody = Object.assign( {}, exportPayload, { title: 'Suite Probe Import' } );
+		const imported = await rest( 'POST', 'minn-admin/v1/bricks/templates/import', { content: JSON.stringify( importBody ) } );
+		t.check( 'import creates a template from Bricks JSON',
+			imported.status === 200 && Array.isArray( imported.data.ids ) && imported.data.ids.length === 1
+			&& /Imported 1 template/.test( imported.data.message || '' ),
+			JSON.stringify( imported.data ) );
+		if ( imported.data && imported.data.ids && imported.data.ids[ 0 ] ) probeIds.push( imported.data.ids[ 0 ] );
+		list = await rest( 'GET', 'minn-admin/v1/bricks/templates?search=Suite Probe Import' );
+		const importedRow = ( list.data.items || [] ).find( ( i ) => i.title === 'Suite Probe Import' );
+		t.check( 'imported template keeps its type', !! importedRow && importedRow.type === 'popup', JSON.stringify( importedRow ) );
+		const badImport = await rest( 'POST', 'minn-admin/v1/bricks/templates/import', { content: 'not json {' } );
+		t.check( 'invalid JSON import refuses 400', badImport.status === 400, JSON.stringify( badImport.data ) );
+
 		/* ===== Duplicate from the detail modal ===== */
 		await page.waitForFunction( () => ! document.querySelector( '[data-editfield="title"]' ), null, { timeout: 15000 } );
 		await page.evaluate( () => {
@@ -186,6 +218,71 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		null, { timeout: 15000 } );
 		list = await rest( 'GET', 'minn-admin/v1/bricks/templates?search=Suite Probe' );
 		t.check( 'trash removes the copy from the list', ! ( list.data.items || [] ).some( ( i ) => /\(copy\)/.test( i.title ) ), String( list.data.total ) );
+		const trashed = await rest( 'GET', 'minn-admin/v1/bricks/templates?type=trash&search=Suite Probe' );
+		const trashRow = ( trashed.data.items || [] ).find( ( i ) => /\(copy\)/.test( i.title ) );
+		t.check( 'Trash tab lists the trashed template', !! trashRow && trashRow.inTrash === true, JSON.stringify( trashRow ) );
+
+		await page.click( '[data-stabcombo] .minn-ac-input' );
+		await page.waitForSelector( '.minn-ac-panel:not([hidden]) .minn-ac-item[data-acv="trash"]', { timeout: 8000 } );
+		await page.click( '.minn-ac-panel:not([hidden]) .minn-ac-item[data-acv="trash"]' );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) ).some( ( r ) => r.textContent.includes( '(copy)' ) ),
+		null, { timeout: 15000 } );
+		t.check( 'Trash tab shows the trashed copy', true );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) )
+				.find( ( r ) => r.textContent.includes( '(copy)' ) ).click();
+		} );
+		await page.waitForSelector( '[data-saction]', { timeout: 10000 } );
+		t.check( 'a trashed template offers Restore, not Edit in Bricks', await page.evaluate( () => {
+			const labels = Array.from( document.querySelectorAll( '[data-saction]' ) ).map( ( b ) => b.textContent );
+			return labels.some( ( l ) => /Restore/.test( l ) ) && ! labels.some( ( l ) => /Edit in Bricks/.test( l ) );
+		} ) );
+		await page.evaluate( () => {
+			Array.from( document.querySelectorAll( '[data-saction]' ) ).find( ( b ) => /Restore/.test( b.textContent ) ).click();
+		} );
+		await page.waitForFunction( () =>
+			! Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) ).some( ( r ) => r.textContent.includes( '(copy)' ) ),
+		null, { timeout: 15000 } );
+		list = await rest( 'GET', 'minn-admin/v1/bricks/templates?search=Suite Probe' );
+		const restoredCopy = ( list.data.items || [] ).find( ( i ) => /\(copy\)/.test( i.title ) );
+		t.check( 'restore returns the copy to the live list', !! restoredCopy && restoredCopy.inTrash === false, JSON.stringify( restoredCopy ) );
+		if ( restoredCopy ) {
+			const retrash = await rest( 'DELETE', 'minn-admin/v1/bricks/templates/' + restoredCopy.id );
+			t.check( 're-trash of a restored copy 200s', retrash.status === 200, JSON.stringify( retrash.data ) );
+			const gone = await rest( 'DELETE', 'minn-admin/v1/bricks/templates/' + restoredCopy.id );
+			t.check( 'delete from trash is permanent', gone.status === 200 && gone.data && gone.data.deleted === restoredCopy.id,
+				JSON.stringify( gone.data ) );
+			const still = await rest( 'GET', 'minn-admin/v1/bricks/templates?type=trash&search=Suite Probe' );
+			t.check( 'permanently deleted copy is gone from Trash',
+				! ( still.data.items || [] ).some( ( i ) => i.id === restoredCopy.id ), String( still.data.total ) );
+			const idx = probeIds.indexOf( restoredCopy.id );
+			if ( idx >= 0 ) probeIds.splice( idx, 1 );
+		}
+
+		await page.click( '[data-stabcombo] .minn-ac-input' );
+		await page.waitForSelector( '.minn-ac-panel:not([hidden]) .minn-ac-item', { timeout: 8000 } );
+		await page.click( '.minn-ac-panel:not([hidden]) .minn-ac-item' );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) ).some( ( r ) => r.textContent.includes( 'CTA Section' ) ),
+		null, { timeout: 15000 } );
+
+		await page.waitForSelector( '#minn-surface-import', { timeout: 8000 } );
+		await page.click( '#minn-surface-import' );
+		await page.waitForSelector( '#minn-simport-text', { timeout: 5000 } );
+		const pastePayload = JSON.stringify( { title: 'Suite Probe Pasted', templateType: 'section', content: [] } );
+		await page.evaluate( ( content ) => { document.querySelector( '#minn-simport-text' ).value = content; }, pastePayload );
+		const pasteWait = page.waitForResponse( ( res ) =>
+			res.request().method() === 'POST' && /bricks\/templates\/import/.test( res.url() ), { timeout: 15000 } );
+		await page.click( '#minn-simport-go' );
+		t.check( 'import dialog posts and succeeds', ( await pasteWait ).status() === 200 );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) ).some( ( r ) => r.textContent.includes( 'Suite Probe Pasted' ) ),
+		null, { timeout: 15000 } );
+		t.check( 'pasted import appears in the list', true );
+		list = await rest( 'GET', 'minn-admin/v1/bricks/templates?search=Suite Probe Pasted' );
+		const pasted = ( list.data.items || [] ).find( ( i ) => i.title === 'Suite Probe Pasted' );
+		if ( pasted ) probeIds.push( pasted.id );
 
 		/* ===== Settings view: curated schema over bricks_global_settings ===== */
 		await page.click( '[data-sview="settings"]' );

@@ -5,9 +5,11 @@
  * Bricks stores templates as `bricks_template` posts (capability_type
  * 'post', deliberately not REST-exposed upstream, so Minn's content
  * switcher never sees them). The template kind lives in postmeta
- * `_bricks_template_type` (header / footer / content ["Single"] / section /
- * popup / archive / search / error, plus password_protection while that
- * feature is enabled); display conditions live as a repeater under
+ * `_bricks_template_type` (Bricks' own `templateTypes` control options:
+ * header / footer / content ["Single"] / section / popup / archive /
+ * search / error, plus password_protection while that feature is enabled,
+ * plus the WooCommerce types while WooCommerce is active); display
+ * conditions live as a repeater under
  * `_bricks_template_settings['templateConditions']`; tags/bundles are the
  * `template_tag` / `template_bundle` taxonomies. The builder edit URL is
  * the template's permalink with `?bricks=run` (pure front-end app, same as
@@ -23,8 +25,10 @@
  *
  * Deliberately not built: template canvas editing (the builder is one click
  * away), condition editing (their repeater has live ajax-fed term/post
- * pickers; conditions render read-only here), and the remote template
- * library (element trees, not blocks — nothing Minn's editor could insert).
+ * pickers; conditions render read-only here), the remote template
+ * library (element trees, not blocks — nothing Minn's editor could insert),
+ * and zip-of-JSON bulk import (their admin form; a single JSON file is
+ * the interchange Minn already exports).
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -34,13 +38,31 @@ function minn_admin_bricks_active() {
 }
 
 /**
- * The template-type vocabulary (raw meta value => label). Mirrors Bricks'
- * own control options; password_protection joins only while their setting
- * enables the feature, exactly like their type picker.
+ * The template-type vocabulary (raw meta value => label).
+ *
+ * Reads Bricks' own `templateTypes` control options so password protection
+ * and every WooCommerce type join on the same terms they do in Bricks
+ * (the Woo types are filtered onto that list only while WooCommerce is
+ * active). A static fallback covers the eight core types if their setup
+ * class has not run yet.
  *
  * @return array
  */
 function minn_admin_bricks_template_types() {
+	if ( class_exists( '\Bricks\Setup' ) && method_exists( '\Bricks\Setup', 'get_control_options' ) ) {
+		try {
+			$from_bricks = \Bricks\Setup::get_control_options( 'templateTypes' );
+		} catch ( \Throwable $e ) {
+			$from_bricks = null;
+		}
+		if ( is_array( $from_bricks ) && $from_bricks ) {
+			$out = array();
+			foreach ( $from_bricks as $value => $label ) {
+				$out[ (string) $value ] = (string) $label;
+			}
+			return $out;
+		}
+	}
 	$types = array(
 		'header'  => __( 'Header', 'minn-admin' ),
 		'footer'  => __( 'Footer', 'minn-admin' ),
@@ -246,8 +268,186 @@ function minn_admin_bricks_template_item( $post ) {
 		'conditions' => minn_admin_bricks_conditions_summary( $post->ID ),
 		'tags'       => ( $tags && ! is_wp_error( $tags ) ) ? implode( ', ', wp_list_pluck( $tags, 'name' ) ) : '',
 		'status'     => (string) $post->post_status,
+		'inTrash'    => 'trash' === $post->post_status,
 		'modified'   => (string) $post->post_modified_gmt,
 		'editUrl'    => add_query_arg( $param, 'run', get_permalink( $post ) ),
+	);
+}
+
+/**
+ * Insert one Bricks template export object.
+ *
+ * Follows Templates::import_template's per-file loop using their Helpers
+ * (sanitize, fresh element ids, template settings, global class merge).
+ * Image sideloading stays their importer's job: same-site round-trips keep
+ * local attachment ids, and remote URLs still render.
+ *
+ * @param array $data Decoded JSON object from Bricks' export.
+ * @return int|WP_Error New post ID.
+ */
+function minn_admin_bricks_import_one( $data ) {
+	if ( ! is_array( $data ) ) {
+		return new WP_Error( 'invalid', __( 'That file is not a Bricks template export.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$title = '';
+	if ( ! empty( $data['title'] ) ) {
+		$title = (string) $data['title'];
+	} elseif ( ! empty( $data['templateTitle'] ) ) {
+		$title = (string) $data['templateTitle'];
+	}
+	if ( '' === $title ) {
+		$title = __( '(no title)', 'minn-admin' );
+	}
+	$insert = array(
+		'post_status' => current_user_can( 'publish_posts' ) ? 'publish' : 'pending',
+		'post_title'  => esc_html( $title ),
+		'post_type'   => BRICKS_DB_TEMPLATE_SLUG,
+	);
+	$tax    = array();
+	if ( ! empty( $data['tags'] ) && is_array( $data['tags'] ) ) {
+		$tax[ BRICKS_DB_TEMPLATE_TAX_TAG ] = array_values( array_filter( array_map( 'strval', $data['tags'] ) ) );
+	}
+	if ( ! empty( $data['bundles'] ) && is_array( $data['bundles'] ) ) {
+		$tax[ BRICKS_DB_TEMPLATE_TAX_BUNDLE ] = array_values( array_filter( array_map( 'strval', $data['bundles'] ) ) );
+	}
+	if ( $tax ) {
+		$insert['tax_input'] = $tax;
+	}
+	$id = wp_insert_post( $insert, true );
+	if ( is_wp_error( $id ) ) {
+		return $id;
+	}
+	$type = '';
+	if ( ! empty( $data['templateType'] ) ) {
+		$type = sanitize_key( (string) $data['templateType'] );
+	} elseif ( ! empty( $data['type'] ) ) {
+		$type = sanitize_key( (string) $data['type'] );
+	}
+	if ( $type ) {
+		update_post_meta( $id, BRICKS_DB_TEMPLATE_TYPE, $type );
+	}
+	if ( ! empty( $data['pageSettings'] ) && is_array( $data['pageSettings'] ) ) {
+		update_post_meta( $id, BRICKS_DB_PAGE_SETTINGS, $data['pageSettings'] );
+	}
+	if ( ! empty( $data['templateSettings'] ) && is_array( $data['templateSettings'] ) && class_exists( '\Bricks\Helpers' ) && method_exists( '\Bricks\Helpers', 'set_template_settings' ) ) {
+		try {
+			\Bricks\Helpers::set_template_settings( $id, $data['templateSettings'] );
+		} catch ( \Throwable $e ) {
+			/* settings are optional; the tree still imported */
+		}
+	}
+
+	$area     = 'content';
+	$meta_key = defined( 'BRICKS_DB_PAGE_CONTENT' ) ? BRICKS_DB_PAGE_CONTENT : '_bricks_page_content_2';
+	if ( ! empty( $data['header'] ) && is_array( $data['header'] ) ) {
+		$area     = 'header';
+		$meta_key = defined( 'BRICKS_DB_PAGE_HEADER' ) ? BRICKS_DB_PAGE_HEADER : '_bricks_page_header_2';
+		$elements = $data['header'];
+	} elseif ( ! empty( $data['footer'] ) && is_array( $data['footer'] ) ) {
+		$area     = 'footer';
+		$meta_key = defined( 'BRICKS_DB_PAGE_FOOTER' ) ? BRICKS_DB_PAGE_FOOTER : '_bricks_page_footer_2';
+		$elements = $data['footer'];
+	} else {
+		$elements = ! empty( $data['content'] ) && is_array( $data['content'] ) ? $data['content'] : array();
+	}
+
+	if ( $elements && class_exists( '\Bricks\Helpers' ) ) {
+		if ( method_exists( '\Bricks\Helpers', 'sanitize_bricks_data' ) ) {
+			try {
+				$elements = \Bricks\Helpers::sanitize_bricks_data( $elements );
+			} catch ( \Throwable $e ) { /* keep the decoded tree */ }
+		}
+		if ( method_exists( '\Bricks\Helpers', 'generate_new_element_ids' ) ) {
+			try {
+				$elements = \Bricks\Helpers::generate_new_element_ids( $elements );
+			} catch ( \Throwable $e ) { /* original ids still unique on a new post */ }
+		}
+	}
+
+	if ( ! empty( $data['global_classes'] ) && is_array( $data['global_classes'] ) && class_exists( '\Bricks\Helpers' ) && method_exists( '\Bricks\Helpers', 'save_global_classes_in_db' ) ) {
+		$global_classes = get_option( defined( 'BRICKS_DB_GLOBAL_CLASSES' ) ? BRICKS_DB_GLOBAL_CLASSES : 'bricks_global_classes', array() );
+		if ( ! is_array( $global_classes ) ) {
+			$global_classes = array();
+		}
+		$existing_ids   = array();
+		$existing_names = array();
+		foreach ( $global_classes as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			if ( isset( $row['id'] ) ) {
+				$existing_ids[ (string) $row['id'] ] = true;
+			}
+			if ( isset( $row['name'] ) ) {
+				$existing_names[ (string) $row['name'] ] = true;
+			}
+		}
+		$changed = false;
+		foreach ( $data['global_classes'] as $incoming ) {
+			if ( ! is_array( $incoming ) || empty( $incoming['id'] ) ) {
+				continue;
+			}
+			if ( isset( $existing_ids[ (string) $incoming['id'] ] ) || ( isset( $incoming['name'] ) && isset( $existing_names[ (string) $incoming['name'] ] ) ) ) {
+				continue;
+			}
+			$global_classes[] = $incoming;
+			$changed          = true;
+		}
+		if ( $changed ) {
+			try {
+				\Bricks\Helpers::save_global_classes_in_db( $global_classes );
+			} catch ( \Throwable $e ) { /* classes are additive; the tree still imported */ }
+		}
+	}
+
+	if ( $elements ) {
+		update_post_meta( $id, $meta_key, $elements );
+		if ( class_exists( '\Bricks\Database' ) && \Bricks\Database::get_setting( 'cssLoading' ) === 'file'
+			&& class_exists( '\Bricks\Assets_Files' ) && method_exists( '\Bricks\Assets_Files', 'generate_post_css_file' ) ) {
+			try {
+				\Bricks\Assets_Files::generate_post_css_file( $id, $area, $elements );
+			} catch ( \Throwable $e ) { /* inline CSS still renders */ }
+		}
+	}
+	return (int) $id;
+}
+
+/**
+ * Import one or more Bricks template JSON documents.
+ *
+ * @param string $content Raw JSON (a single object or an array of them).
+ * @return array|WP_Error { message, ids }
+ */
+function minn_admin_bricks_import_templates( $content ) {
+	$data = json_decode( (string) $content, true );
+	if ( ! is_array( $data ) ) {
+		return new WP_Error( 'invalid', __( 'That file is not JSON, or is not a Bricks template export.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$looks_like_one = isset( $data['title'] ) || isset( $data['templateType'] ) || isset( $data['templateTitle'] )
+		|| isset( $data['content'] ) || isset( $data['header'] ) || isset( $data['footer'] );
+	$list = $looks_like_one ? array( $data ) : $data;
+	if ( ! $list || ! isset( $list[0] ) || ! is_array( $list[0] ) ) {
+		return new WP_Error( 'invalid', __( 'That file is not a Bricks template export.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$ids = array();
+	foreach ( $list as $row ) {
+		if ( ! is_array( $row ) ) {
+			continue;
+		}
+		$one = minn_admin_bricks_import_one( $row );
+		if ( is_wp_error( $one ) ) {
+			return $one;
+		}
+		$ids[] = $one;
+	}
+	if ( ! $ids ) {
+		return new WP_Error( 'invalid', __( 'That file did not contain a template.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$n = count( $ids );
+	return array(
+		/* translators: %d: number of templates imported. */
+		'message' => sprintf( _n( 'Imported %d template.', 'Imported %d templates.', $n, 'minn-admin' ), $n ),
+		'ids'     => $ids,
 	);
 }
 
@@ -347,6 +547,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$type_select[] = array( $value, $label );
 	}
 
+	// Trash is a list tab, not a template type: it is never in the create
+	// select, and create/edit refuse it the same way they refuse any other
+	// key Bricks does not advertise.
+	$type_tabs[] = array( 'trash', __( 'Trash', 'minn-admin' ) );
+
+	$not_trash = array( 'key' => 'inTrash', 'equals' => false );
+	$is_trash  = array( 'key' => 'inTrash', 'equals' => true );
+
 	$actions = array();
 	// Builder access is Bricks' own gate, not a WP capability — a user who can
 	// manage the list without builder access just doesn't get the edit link.
@@ -354,12 +562,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$actions[] = array(
 			'label' => __( 'Edit in Bricks', 'minn-admin' ),
 			'href'  => '{editUrl}',
+			'when'  => $not_trash,
 		);
 	}
 	if ( minn_admin_bricks_can_create() ) {
 		$actions[] = array(
 			'label' => __( 'Duplicate', 'minn-admin' ),
 			'route' => 'minn-admin/v1/bricks/templates/{id}/duplicate',
+			'when'  => $not_trash,
 		);
 	}
 	if ( minn_admin_bricks_can_export() ) {
@@ -367,6 +577,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'label'    => __( 'Export template', 'minn-admin' ),
 			'route'    => 'minn-admin/v1/bricks/templates/{id}/export',
 			'download' => true,
+			'when'     => $not_trash,
 		);
 	}
 	$actions[] = array(
@@ -375,6 +586,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'route'   => 'minn-admin/v1/bricks/templates/{id}',
 		'confirm' => __( 'Move this template to the trash? Anywhere it is assigned stops using it.', 'minn-admin' ),
 		'danger'  => true,
+		'when'    => $not_trash,
+	);
+	$actions[] = array(
+		'label'  => __( 'Restore', 'minn-admin' ),
+		'method' => 'POST',
+		'route'  => 'minn-admin/v1/bricks/templates/{id}/restore',
+		'when'   => $is_trash,
+	);
+	$actions[] = array(
+		'label'   => __( 'Delete permanently', 'minn-admin' ),
+		'method'  => 'DELETE',
+		'route'   => 'minn-admin/v1/bricks/templates/{id}',
+		'confirm' => __( 'Delete this template permanently? There is no undo.', 'minn-admin' ),
+		'danger'  => true,
+		'when'    => $is_trash,
 	);
 
 	$surfaces['bricks-templates'] = array(
@@ -421,8 +647,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_select ),
 				),
 			) : null,
+			'import'    => minn_admin_bricks_can_export() ? array(
+				'label'  => __( 'Import', 'minn-admin' ),
+				'route'  => 'minn-admin/v1/bricks/templates/import',
+				'accept' => '.json,application/json',
+				'hint'   => __( 'JSON exported from Bricks or from Minn. A zip of several files stays on Bricks\' own importer.', 'minn-admin' ),
+			) : null,
 			'detail'    => array(
-				'skip' => array( 'id', 'type', 'typeLabel', 'editUrl' ),
+				'skip' => array( 'id', 'type', 'typeLabel', 'editUrl', 'inTrash', 'status' ),
 				'edit' => array(
 					'route'  => 'minn-admin/v1/bricks/templates/{id}',
 					'method' => 'PUT',
@@ -444,12 +676,30 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'   => 'minn-admin/v1/bricks/templates/{id}',
 					'confirm' => __( 'Move the selected templates to the trash?', 'minn-admin' ),
 					'danger'  => true,
+					'when'    => $not_trash,
+				),
+				array(
+					'label'  => __( 'Restore', 'minn-admin' ),
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/bricks/templates/{id}/restore',
+					'when'   => $is_trash,
+				),
+				array(
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/bricks/templates/{id}',
+					'confirm' => __( 'Delete the selected templates permanently?', 'minn-admin' ),
+					'danger'  => true,
+					'when'    => $is_trash,
 				),
 			),
 		),
 	);
 	if ( null === $surfaces['bricks-templates']['collection']['create'] ) {
 		unset( $surfaces['bricks-templates']['collection']['create'] );
+	}
+	if ( empty( $surfaces['bricks-templates']['collection']['import'] ) ) {
+		unset( $surfaces['bricks-templates']['collection']['import'] );
 	}
 	return $surfaces;
 } );
@@ -488,7 +738,9 @@ add_action( 'rest_api_init', function () {
 				if ( '' !== $search ) {
 					$args['s'] = $search;
 				}
-				if ( '' !== $type ) {
+				if ( 'trash' === $type ) {
+					$args['post_status'] = 'trash';
+				} elseif ( '' !== $type ) {
 					$args['meta_query'] = array(
 						array(
 							'key'   => BRICKS_DB_TEMPLATE_TYPE,
@@ -612,14 +864,52 @@ add_action( 'rest_api_init', function () {
 				if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				// Trash, not delete: assignments are worth being able to undo
-				// from wp-admin's template list.
+				if ( 'trash' === $post->post_status ) {
+					if ( ! wp_delete_post( $post->ID, true ) ) {
+						return new WP_Error( 'failed', __( 'The template could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
+					}
+					return rest_ensure_response( array( 'deleted' => (int) $post->ID ) );
+				}
 				if ( ! wp_trash_post( $post->ID ) ) {
 					return new WP_Error( 'failed', __( 'The template could not be trashed.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
 				return rest_ensure_response( array( 'trashed' => (int) $post->ID ) );
 			},
 		),
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/bricks/templates/import', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return minn_admin_bricks_can_export();
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			$result = minn_admin_bricks_import_templates( (string) $request['content'] );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			return rest_ensure_response( $result );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)/restore', array(
+		'methods'             => 'POST',
+		'permission_callback' => function ( WP_REST_Request $request ) {
+			return minn_admin_bricks_can_delete() && current_user_can( 'delete_post', (int) $request['id'] );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			$post = get_post( (int) $request['id'] );
+			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
+				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( 'trash' !== $post->post_status ) {
+				return new WP_Error( 'not_trashed', __( 'That template is not in the trash.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( ! wp_untrash_post( $post->ID ) ) {
+				return new WP_Error( 'failed', __( 'The template could not be restored.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( minn_admin_bricks_template_item( get_post( $post->ID ) ) );
+		},
 	) );
 
 	// Export through Bricks' own exporter: called with an explicit id outside
