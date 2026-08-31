@@ -2503,14 +2503,17 @@ class Minn_Admin_REST {
 		$raw_block_forms = apply_filters( 'minn_admin_block_forms', array() );
 		$block_forms     = Minn_Admin::filter_block_forms( $raw_block_forms );
 		return rest_ensure_response(
-			array(
-				'insertBlocks'    => Minn_Admin::insertable_blocks( $raw_block_forms ),
-				'blockForms'      => $block_forms,
-				'designs'         => Minn_Admin::design_sources(),
-				'editorCommands'  => Minn_Admin::editor_commands(),
-				// Comments feature can vanish when Disable Comments (etc.) is
-				// toggled — same re-poll path as blocks so the nav tracks live.
-				'comments'        => Minn_Admin::comments_enabled(),
+			array_merge(
+				array(
+					'insertBlocks'   => Minn_Admin::insertable_blocks( $raw_block_forms ),
+					'blockForms'     => $block_forms,
+					'designs'        => Minn_Admin::design_sources(),
+					'editorCommands' => Minn_Admin::editor_commands(),
+				),
+				// Commerce nav, comments, Migrate, PDF invoices — all boot
+				// snapshots that change when a plugin is toggled. Same re-poll
+				// as blocks so the sidebar tracks live without a hard reload.
+				Minn_Admin::session_features()
 			)
 		);
 	}

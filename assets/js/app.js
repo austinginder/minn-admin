@@ -2753,6 +2753,17 @@
 			B.editorCommands = Array.isArray( r.editorCommands ) ? r.editorCommands : [];
 			// Disable Comments (and friends) strip post-type support mid-session.
 			if ( typeof r.comments === 'boolean' ) B.comments = r.comments;
+			// WooCommerce (and similar) flags are a boot snapshot — activating
+			// the plugin left Commerce nav empty until a hard reload.
+			if ( typeof r.wc === 'boolean' ) B.wc = r.wc;
+			if ( typeof r.wcs === 'boolean' ) B.wcs = r.wcs;
+			if ( r.caps && typeof r.caps === 'object' ) {
+				B.caps = Object.assign( {}, B.caps || {}, r.caps );
+			}
+			if ( r.wcOrderStatuses && typeof r.wcOrderStatuses === 'object' ) B.wcOrderStatuses = r.wcOrderStatuses;
+			if ( typeof r.wcLowStock === 'number' ) B.wcLowStock = r.wcLowStock;
+			if ( 'wpMigrate' in r ) B.wpMigrate = r.wpMigrate;
+			if ( 'wcpdf' in r ) B.wcpdf = r.wcpdf;
 		} catch ( e ) { /* leave the snapshot as-is */ }
 		// Design lists + patterns are in-flight promises — drop them so the
 		// next slash-menu open refetches against the new plugin set.
@@ -2813,6 +2824,13 @@
 		// Comments nav may have appeared/vanished (Disable Comments toggle).
 		renderNavWorkspace();
 		if ( state.route === 'comments' && ! commentsAvailable() ) go( 'overview' );
+		// Commerce items ride B.wc / B.caps — leave Orders if WooCommerce just
+		// turned off, rather than a blank permission page.
+		const commerceIds = commerceNavItems().map( ( n ) => n.id );
+		if ( [ 'orders', 'products', 'coupons', 'customers', 'subscriptions' ].includes( state.route )
+			&& commerceIds.indexOf( state.route ) < 0 ) {
+			go( 'overview' );
+		}
 	}
 
 	// Cap + site feature both required (Disable Comments strips the feature

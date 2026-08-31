@@ -1295,6 +1295,111 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Capability flags that ride the boot payload. Recomputed on plugin
+	 * toggle (editor-blocks re-poll) so WooCommerce caps appear the moment
+	 * the plugin is activated, not after a hard reload.
+	 *
+	 * @return array
+	 */
+	public static function boot_caps() {
+		return array(
+			'plugins'      => current_user_can( 'activate_plugins' ),
+			'update'       => current_user_can( 'update_plugins' ),
+			'delete'       => current_user_can( 'delete_plugins' ),
+			'install'      => current_user_can( 'install_plugins' ),
+			'themes'       => current_user_can( 'switch_themes' ),
+			'deleteThemes' => current_user_can( 'delete_themes' ),
+			'updateThemes' => current_user_can( 'update_themes' ),
+			// Core's own gate for the Update Translations button. On a
+			// network this maps to the super admin, the same as core.
+			'updateLanguages' => current_user_can( 'update_languages' ),
+			'installThemes' => current_user_can( 'install_themes' ),
+			'settings'     => current_user_can( 'manage_options' ),
+			// Licences are network-scoped on multisite (see
+			// minn_admin_licenses_can_manage): the Licenses tab would 403
+			// for a subsite administrator, so don't offer it to them.
+			'licenses'     => function_exists( 'minn_admin_licenses_can_manage' )
+				? minn_admin_licenses_can_manage()
+				: current_user_can( 'manage_options' ),
+			'moderate'     => current_user_can( 'moderate_comments' ),
+			'terms'        => current_user_can( 'manage_categories' ),
+			'upload'       => current_user_can( 'upload_files' ),
+			'users'        => current_user_can( 'list_users' ),
+			'readPrivate'  => current_user_can( 'read_private_posts' ),
+			'editPages'    => current_user_can( 'edit_pages' ),
+			'createUsers'  => current_user_can( 'create_users' ),
+			'editUsers'    => current_user_can( 'edit_users' ),
+			'promoteUsers' => current_user_can( 'promote_users' ),
+			'deleteUsers'  => current_user_can( 'delete_users' ),
+			'orders'       => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_orders' ),
+			'products'     => class_exists( 'WooCommerce' ) && current_user_can( 'edit_products' ),
+			// Coupons only when WC has them enabled (Settings → General →
+			// Enable coupons). When off, shop_coupon is not registered and
+			// wc/v3/coupons always 403s "cannot list resources" even for admins.
+			'coupons'      => class_exists( 'WooCommerce' )
+				&& ( ! function_exists( 'wc_coupons_enabled' ) || wc_coupons_enabled() )
+				&& post_type_exists( 'shop_coupon' )
+				&& current_user_can( 'edit_shop_coupons' ),
+			// Customers REST is manage_woocommerce-gated in WC; shop managers
+			// who can edit orders also get the list (read) when that cap holds.
+			'customers'    => class_exists( 'WooCommerce' ) && (
+				current_user_can( 'manage_woocommerce' ) || current_user_can( 'edit_shop_orders' )
+			),
+			// WooCommerce Subscriptions — same order cap; routes only exist
+			// while the extension is active (B.wcs).
+			'subscriptions' => class_exists( 'WooCommerce' )
+				&& class_exists( 'WC_Subscriptions' )
+				&& current_user_can( 'edit_shop_orders' ),
+			'themeOptions' => current_user_can( 'edit_theme_options' ),
+			'core'         => current_user_can( 'update_core' ),
+			// Multisite-only: "Remove from this site" (per-site
+			// membership). Deletion stays a Network Admin job there.
+			'removeUsers'  => is_multisite() && current_user_can( 'remove_users' ),
+			// Network-wide activation of plugins and themes (super admin).
+			'networkPlugins' => is_multisite() && current_user_can( 'manage_network_plugins' ),
+			'networkThemes'  => is_multisite() && current_user_can( 'manage_network_themes' ),
+			// Drives Settings → Design (Additional CSS). Core maps this
+			// from unfiltered_html; multisite keeps it super-admin-only.
+			'editCss'      => current_user_can( 'edit_css' ),
+		);
+	}
+
+	/**
+	 * Boot keys that go stale when a plugin or theme is toggled mid-session.
+	 * editor-blocks re-polls this so Commerce nav (and similar flags) track
+	 * live without a hard reload.
+	 *
+	 * @return array
+	 */
+	public static function session_features() {
+		$wc_statuses = (object) array();
+		if ( function_exists( 'wc_get_order_statuses' ) ) {
+			$raw         = wc_get_order_statuses();
+			$wc_statuses = (object) array_combine(
+				array_map(
+					static function ( $slug ) {
+						return preg_replace( '/^wc-/', '', $slug );
+					},
+					array_keys( $raw )
+				),
+				array_values( $raw )
+			);
+		}
+		return array(
+			'caps'            => self::boot_caps(),
+			'wc'              => class_exists( 'WooCommerce' ),
+			'wcs'             => class_exists( 'WooCommerce' ) && class_exists( 'WC_Subscriptions' ),
+			'wcOrderStatuses' => $wc_statuses,
+			'wcLowStock'      => class_exists( 'WooCommerce' )
+				? max( 0, (int) get_option( 'woocommerce_notify_low_stock_amount', 2 ) )
+				: 0,
+			'comments'        => self::comments_enabled(),
+			'wpMigrate'       => function_exists( 'minn_admin_wp_migrate_boot' ) ? minn_admin_wp_migrate_boot() : null,
+			'wcpdf'           => function_exists( 'minn_admin_wcpdf_boot' ) ? minn_admin_wcpdf_boot() : null,
+		);
+	}
+
+	/**
 	 * The `window.MINN` boot payload.
 	 *
 	 * Extracted from maybe_render_app() so the locale slice can be rebuilt on
@@ -1315,6 +1420,7 @@ class Minn_Admin {
 		$raw_block_forms = apply_filters( 'minn_admin_block_forms', array() );
 		$block_forms     = self::filter_block_forms( $raw_block_forms );
 		$sites_payload   = self::user_sites_payload();
+		$features        = self::session_features();
 
 		$boot = array(
 			'restUrl'  => esc_url_raw( rest_url() ),
@@ -1407,66 +1513,7 @@ class Minn_Admin {
 			'i18nPlural' => self::js_plural_forms(),
 			// Installed admin languages for Your profile's Language picker.
 			'languages' => self::available_languages(),
-			'caps'     => array(
-				'plugins'      => current_user_can( 'activate_plugins' ),
-				'update'       => current_user_can( 'update_plugins' ),
-				'delete'       => current_user_can( 'delete_plugins' ),
-				'install'      => current_user_can( 'install_plugins' ),
-				'themes'       => current_user_can( 'switch_themes' ),
-				'deleteThemes' => current_user_can( 'delete_themes' ),
-				'updateThemes' => current_user_can( 'update_themes' ),
-				// Core's own gate for the Update Translations button. On a
-				// network this maps to the super admin, the same as core.
-				'updateLanguages' => current_user_can( 'update_languages' ),
-				'installThemes' => current_user_can( 'install_themes' ),
-				'settings'     => current_user_can( 'manage_options' ),
-				// Licences are network-scoped on multisite (see
-				// minn_admin_licenses_can_manage): the Licenses tab would 403
-				// for a subsite administrator, so don't offer it to them.
-				'licenses'     => function_exists( 'minn_admin_licenses_can_manage' )
-					? minn_admin_licenses_can_manage()
-					: current_user_can( 'manage_options' ),
-				'moderate'     => current_user_can( 'moderate_comments' ),
-				'terms'        => current_user_can( 'manage_categories' ),
-				'upload'       => current_user_can( 'upload_files' ),
-				'users'        => current_user_can( 'list_users' ),
-				'readPrivate'  => current_user_can( 'read_private_posts' ),
-				'editPages'    => current_user_can( 'edit_pages' ),
-				'createUsers'  => current_user_can( 'create_users' ),
-				'editUsers'    => current_user_can( 'edit_users' ),
-				'promoteUsers' => current_user_can( 'promote_users' ),
-				'deleteUsers'  => current_user_can( 'delete_users' ),
-				'orders'       => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_orders' ),
-				'products'     => class_exists( 'WooCommerce' ) && current_user_can( 'edit_products' ),
-				// Coupons only when WC has them enabled (Settings → General →
-				// Enable coupons). When off, shop_coupon is not registered and
-				// wc/v3/coupons always 403s "cannot list resources" even for admins.
-				'coupons'      => class_exists( 'WooCommerce' )
-					&& ( ! function_exists( 'wc_coupons_enabled' ) || wc_coupons_enabled() )
-					&& post_type_exists( 'shop_coupon' )
-					&& current_user_can( 'edit_shop_coupons' ),
-				// Customers REST is manage_woocommerce-gated in WC; shop managers
-				// who can edit orders also get the list (read) when that cap holds.
-				'customers'    => class_exists( 'WooCommerce' ) && (
-					current_user_can( 'manage_woocommerce' ) || current_user_can( 'edit_shop_orders' )
-				),
-				// WooCommerce Subscriptions — same order cap; routes only exist
-				// while the extension is active (B.wcs).
-				'subscriptions' => class_exists( 'WooCommerce' )
-					&& class_exists( 'WC_Subscriptions' )
-					&& current_user_can( 'edit_shop_orders' ),
-				'themeOptions' => current_user_can( 'edit_theme_options' ),
-				'core'         => current_user_can( 'update_core' ),
-				// Multisite-only: "Remove from this site" (per-site
-				// membership). Deletion stays a Network Admin job there.
-				'removeUsers'  => is_multisite() && current_user_can( 'remove_users' ),
-				// Network-wide activation of plugins and themes (super admin).
-				'networkPlugins' => is_multisite() && current_user_can( 'manage_network_plugins' ),
-				'networkThemes'  => is_multisite() && current_user_can( 'manage_network_themes' ),
-				// Drives Settings → Design (Additional CSS). Core maps this
-				// from unfiltered_html; multisite keeps it super-admin-only.
-				'editCss'      => current_user_can( 'edit_css' ),
-			),
+			'caps'     => $features['caps'],
 			// Post types (by REST base) whose OTHER authors' items this user
 			// cannot edit. wp/v2/<type>?context=edit drops those rows from the
 			// body but still counts them in X-WP-Total, so an author would see
@@ -1484,33 +1531,21 @@ class Minn_Admin {
 			// an unusable menu. Empty off multisite and for single-site users.
 			'sites'     => $sites_payload['sites'],
 			'sitesTotal' => $sites_payload['total'],
-			'wc'       => class_exists( 'WooCommerce' ),
+			'wc'       => $features['wc'],
 			// WooCommerce Subscriptions extension (wc/v3/subscriptions REST).
-			'wcs'      => class_exists( 'WooCommerce' ) && class_exists( 'WC_Subscriptions' ),
+			'wcs'      => $features['wcs'],
 			// Order status labels keyed by REST slug (WC stores them 'wc-'
 			// prefixed). WC owns this vocabulary, translations and all, and
 			// plugins register their own statuses into it — badges and the
 			// status picker read it instead of humanizing the slug.
-			'wcOrderStatuses' => function_exists( 'wc_get_order_statuses' )
-				? (object) array_combine(
-					array_map(
-						static function ( $slug ) {
-							return preg_replace( '/^wc-/', '', $slug );
-						},
-						array_keys( wc_get_order_statuses() )
-					),
-					array_values( wc_get_order_statuses() )
-				)
-				: (object) array(),
+			'wcOrderStatuses' => $features['wcOrderStatuses'],
 			// WooCommerce low-stock threshold (Settings → Products → Inventory).
 			// Used by the Products "Low stock" filter fallback when Analytics
 			// lookup tables lag a fresh write.
-			'wcLowStock' => class_exists( 'WooCommerce' )
-				? max( 0, (int) get_option( 'woocommerce_notify_low_stock_amount', 2 ) )
-				: 0,
+			'wcLowStock' => $features['wcLowStock'],
 			// False when Disable Comments (etc.) has removed the feature —
 			// Comments nav/palette/badge hide even if the user can moderate.
-			'comments'  => self::comments_enabled(),
+			'comments'  => $features['comments'],
 			'pretty'   => (bool) get_option( 'permalink_structure' ),
 			// Site discussion defaults — new-post editor state starts from
 			// these so the sidebar switches match what WP will actually store
@@ -1574,7 +1609,7 @@ class Minn_Admin {
 			// WP Migrate present + this user may migrate — drives the
 			// Migrate view (adapters/wp-migrate.php). Null otherwise, so
 			// the nonce it carries never reaches a user without their cap.
-			'wpMigrate' => function_exists( 'minn_admin_wp_migrate_boot' ) ? minn_admin_wp_migrate_boot() : null,
+			'wpMigrate' => $features['wpMigrate'],
 			'regenThumbs' => function_exists( 'minn_admin_regen_thumbs_available' ) && minn_admin_regen_thumbs_available(),
 			// Force Regenerate Thumbnails fallback — { ajax, nonce } for its
 			// own admin-ajax handler; null when RT covers it or FRT is absent.
@@ -1593,7 +1628,7 @@ class Minn_Admin {
 			// PDF Invoices & Packing Slips — download buttons on the order
 			// detail modal (adapters/wcpdf.php). Null without the plugin or
 			// order access.
-			'wcpdf'    => function_exists( 'minn_admin_wcpdf_boot' ) ? minn_admin_wcpdf_boot() : null,
+			'wcpdf'    => $features['wcpdf'],
 			// One Time Login present (adapters/one-time-login.php) — a boolean
 			// only; the users row menu mints the single-use link on demand so
 			// the secret never rides a pageload.
