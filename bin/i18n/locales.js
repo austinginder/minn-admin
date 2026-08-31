@@ -63,11 +63,20 @@ const nplurals = ( locale ) => {
  * another ~1.5% of installs, where translating them separately would mean
  * four identical files to keep in step.
  *
- * Nothing else belongs here. pt_PT and es_MX differ from pt_BR and es_ES in
- * vocabulary, not just orthography, and get their own catalogs in wave 2.
+ * Formal (Sie / U) variants of a shipped locale belong here too: WordPress
+ * treats de_DE_formal and nl_NL_formal as their own locales, and without a
+ * pack under that exact code the SPA stays English while wp-admin is not.
+ * The runtime also falls back (Minn_Admin::catalog_locales), so a site that
+ * already has the parent pack does not have to wait for this zip.
+ *
+ * Nothing where the difference is vocabulary rather than formality or
+ * orthography belongs here. pt_PT and es_MX differ from pt_BR and es_ES
+ * and get their own catalogs in wave 2.
  */
 const ALIASES = {
 	en_GB: [ 'en_AU', 'en_CA', 'en_NZ', 'en_ZA' ],
+	de_DE: [ 'de_DE_formal' ],
+	nl_NL: [ 'nl_NL_formal' ],
 };
 
 /** Every locale a given catalog should be packed for, itself first. */

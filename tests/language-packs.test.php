@@ -104,6 +104,46 @@ $check( 'Does not offer locales the site cannot display', ! in_array( 'it_IT', $
 $first = $transient->translations[0] ?? array();
 $check( 'Entry is shaped the way core reads it', 'plugin' === ( $first['type'] ?? '' ) && 'minn-admin' === ( $first['slug'] ?? '' ) && true === ( $first['autoupdate'] ?? null ) );
 
+/* --- formal locales fall back to the parent catalog ---------------------- */
+$check( 'de_DE_formal lists de_DE as a catalog parent', array( 'de_DE_formal', 'de_DE' ) === Minn_Admin::catalog_locales( 'de_DE_formal' ) );
+$check( 'nl_NL_formal lists nl_NL as a catalog parent', array( 'nl_NL_formal', 'nl_NL' ) === Minn_Admin::catalog_locales( 'nl_NL_formal' ) );
+$check( 'pt_PT_ao90 lists pt_PT as a catalog parent', array( 'pt_PT_ao90', 'pt_PT' ) === Minn_Admin::catalog_locales( 'pt_PT_ao90' ) );
+$check( 'de_DE is not rewritten', array( 'de_DE' ) === Minn_Admin::catalog_locales( 'de_DE' ) );
+$check( 'pt_PT does not fall through to pt_BR', array( 'pt_PT' ) === Minn_Admin::catalog_locales( 'pt_PT' ) );
+
+remove_all_filters( 'minn_admin_translation_locales' );
+add_filter( 'minn_admin_translation_locales', function () {
+	return array( 'de_DE_formal' );
+} );
+$formal_offer               = new stdClass();
+$formal_offer->translations = array();
+$method->invoke( $updater, $formal_offer, $manifest );
+$offered_formal = wp_list_pluck( $formal_offer->translations, 'language' );
+$check( 'A formal locale still receives the parent pack', in_array( 'de_DE', $offered_formal, true ) );
+
+$installedLookup = new ReflectionMethod( $updater, 'installed_translations' );
+$installedLookup->setAccessible( true );
+$haveDePack = ! empty( $installedLookup->invoke( $updater )['de_DE'] );
+if ( $haveDePack ) {
+	$check( 'plugin_locale remaps de_DE_formal onto the installed de_DE catalog', 'de_DE' === Minn_Admin::plugin_locale( 'de_DE_formal', 'minn-admin' ) );
+	$check( 'plugin_locale leaves other domains alone', 'de_DE_formal' === Minn_Admin::plugin_locale( 'de_DE_formal', 'woocommerce' ) );
+
+	$admin = get_user_by( 'login', 'admin' );
+	if ( $admin ) {
+		$uid  = (int) $admin->ID;
+		$prev = get_user_meta( $uid, 'locale', true );
+		wp_set_current_user( $uid );
+		update_user_meta( $uid, 'locale', 'de_DE_formal' );
+		clean_user_cache( $uid );
+		$formal_map = Minn_Admin::js_translations();
+		update_user_meta( $uid, 'locale', $prev );
+		clean_user_cache( $uid );
+		$check( 'js_translations serves de_DE strings for de_DE_formal', isset( $formal_map['Overview'] ) && 'Übersicht' === $formal_map['Overview'] );
+	}
+} else {
+	echo "SKIP  formal catalog fallback (no de_DE pack installed in wp-content/languages/plugins)\n";
+}
+
 /* --- already-installed packs are skipped by VERSION ------------------------ */
 $reflect = new ReflectionMethod( $updater, 'installed_translations' );
 $reflect->setAccessible( true );

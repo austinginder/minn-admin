@@ -412,11 +412,13 @@ more of them.
 
 Pick a language on **Your profile** and all of Minn follows: buttons,
 table headings, empty states, confirmations, error messages, counts.
-Twenty-four languages ship with the plugin. The switch applies the
-moment you save; a language you have not installed yet downloads in the
-background, with plugin translations following behind, so the interface
-never sits waiting on them. Your pick is yours alone; it never changes
-what anybody else sees.
+Twenty-four languages ship with the plugin. Formal variants such as
+Deutsch (Sie) use the same catalog as the parent language, so Minn
+matches the WordPress dashboard instead of staying in English. The
+switch applies the moment you save; a language you have not installed
+yet downloads in the background, with plugin translations following
+behind, so the interface never sits waiting on them. Your pick is yours
+alone; it never changes what anybody else sees.
 
 Right-to-left languages such as Arabic, Hebrew and Persian get a
 genuinely mirrored interface: the sidebar, menus and settings move to

@@ -5474,6 +5474,7 @@ class Minn_Admin_REST {
 			$locale = '';
 		}
 		update_option( 'WPLANG', $locale );
+		Minn_Admin_Updater::forget_user_locales();
 		self::install_component_translations( $locale );
 		return rest_ensure_response(
 			array(
@@ -5627,6 +5628,7 @@ class Minn_Admin_REST {
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
+		Minn_Admin_Updater::forget_user_locales();
 		self::install_component_translations( $locale );
 		return rest_ensure_response(
 			array(

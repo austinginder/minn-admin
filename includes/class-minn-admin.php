@@ -21,6 +21,7 @@ class Minn_Admin {
 
 	public static function init() {
 		add_filter( 'determine_locale', array( __CLASS__, 'route_locale' ) );
+		add_filter( 'plugin_locale', array( __CLASS__, 'plugin_locale' ), 10, 2 );
 		add_action( 'init', array( __CLASS__, 'load_textdomain' ) );
 		add_action( 'init', array( __CLASS__, 'register_route' ) );
 		add_action( 'wp_loaded', array( __CLASS__, 'maybe_heal_rewrites' ), 20 );
@@ -2260,6 +2261,102 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Locales to try when loading a Minn catalog, exact first.
+	 *
+	 * WordPress treats formal/informal (and a few script variants) as their
+	 * own locale: de_DE_formal, nl_NL_formal, de_CH_informal, pt_PT_ao90.
+	 * Minn ships the parent catalog. Without this, js_translations() looks
+	 * for minn-admin-de_DE_formal-*.json, finds nothing, and the whole SPA
+	 * stays English while wp-admin (which has a core pack for that locale)
+	 * is German.
+	 *
+	 * Regional catalogs that are actually different languages (pt_PT vs
+	 * pt_BR, es_MX vs es_ES) are not stripped: only the trailing variant
+	 * token is.
+	 *
+	 * @param string $locale User or site locale.
+	 * @return string[] Unique locales, preferred first.
+	 */
+	public static function catalog_locales( $locale ) {
+		$locale = preg_replace( '/[^A-Za-z0-9_@-]/', '', (string) $locale );
+		$out    = array();
+		if ( '' !== $locale ) {
+			$out[] = $locale;
+		}
+		if ( preg_match( '/^(.+)_(formal|informal|ao90)$/', $locale, $m ) ) {
+			$out[] = $m[1];
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * The catalog locale PHP should load for this domain.
+	 *
+	 * Tries the exact locale, then the parent from catalog_locales(), and
+	 * only remaps when a file actually exists: a later dedicated
+	 * de_DE_formal pack must win over the de_DE fallback.
+	 *
+	 * @param string $locale Current locale.
+	 * @param string $domain Textdomain.
+	 * @return string
+	 */
+	public static function plugin_locale( $locale, $domain ) {
+		if ( 'minn-admin' !== $domain ) {
+			return $locale;
+		}
+		foreach ( self::catalog_locales( $locale ) as $try ) {
+			if ( self::has_catalog( $try ) ) {
+				return $try;
+			}
+		}
+		return $locale;
+	}
+
+	/**
+	 * Whether a Minn catalog exists on disk for this locale (JSON, mo, or
+	 * l10n.php). Packs live in WP_LANG_DIR/plugins/; the plugin's own
+	 * languages/ only has source .po files, which WordPress does not load.
+	 *
+	 * @param string $locale Locale code.
+	 * @return bool
+	 */
+	public static function has_catalog( $locale ) {
+		$locale = preg_replace( '/[^A-Za-z0-9_@-]/', '', (string) $locale );
+		if ( '' === $locale || 'en_US' === $locale ) {
+			return false;
+		}
+		foreach ( array( MINN_ADMIN_DIR . 'languages', WP_LANG_DIR . '/plugins' ) as $dir ) {
+			if ( glob( $dir . '/minn-admin-' . $locale . '-*.json' )
+				|| glob( $dir . '/minn-admin-' . $locale . '.mo' )
+				|| glob( $dir . '/minn-admin-' . $locale . '.l10n.php' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * JED JSON files for one locale, bundled first so a language pack
+	 * overrides. Empty when that locale has no catalog.
+	 *
+	 * @param string $locale Locale code.
+	 * @return string[] Absolute paths.
+	 */
+	protected static function jed_files( $locale ) {
+		$locale = preg_replace( '/[^A-Za-z0-9_@-]/', '', (string) $locale );
+		$files  = array();
+		if ( '' === $locale ) {
+			return $files;
+		}
+		foreach ( array( MINN_ADMIN_DIR . 'languages', WP_LANG_DIR . '/plugins' ) as $dir ) {
+			foreach ( glob( $dir . '/minn-admin-' . $locale . '-*.json' ) ?: array() as $file ) {
+				$files[] = $file;
+			}
+		}
+		return $files;
+	}
+
+	/**
 	 * Translation map for the SPA's __()/_n() helpers, keyed by SOURCE
 	 * string (English is the source vocabulary — a missing catalog or entry
 	 * falls through to the literal, so the app runs with zero tooling).
@@ -2286,14 +2383,12 @@ class Minn_Admin {
 		// real spelling catalog, so this must not skip every locale starting
 		// with "en".
 		if ( 'en_US' !== $locale ) {
-			// Later directories override earlier ones, so the bundled
-			// fallback is read first and the language pack lands on top.
-			$dirs = array(
-				MINN_ADMIN_DIR . 'languages',
-				WP_LANG_DIR . '/plugins',
-			);
-			foreach ( $dirs as $dir ) {
-				foreach ( glob( $dir . '/minn-admin-' . $locale . '-*.json' ) ?: array() as $file ) {
+			foreach ( self::catalog_locales( $locale ) as $try ) {
+				$files = self::jed_files( $try );
+				if ( ! $files ) {
+					continue;
+				}
+				foreach ( $files as $file ) {
 					$jed     = json_decode( (string) file_get_contents( $file ), true );
 					$entries = $jed['locale_data']['messages'] ?? array();
 					foreach ( (array) $entries as $key => $forms ) {
@@ -2303,6 +2398,7 @@ class Minn_Admin {
 						$map[ $key ] = count( $forms ) > 1 ? array_values( $forms ) : (string) $forms[0];
 					}
 				}
+				break;
 			}
 		}
 		/**
@@ -2333,8 +2429,12 @@ class Minn_Admin {
 		if ( 'en_US' === $locale ) {
 			return apply_filters( 'minn_admin_js_plural_forms', $rule, $locale );
 		}
-		foreach ( array( MINN_ADMIN_DIR . 'languages', WP_LANG_DIR . '/plugins' ) as $dir ) {
-			foreach ( glob( $dir . '/minn-admin-' . $locale . '-*.json' ) ?: array() as $file ) {
+		foreach ( self::catalog_locales( $locale ) as $try ) {
+			$files = self::jed_files( $try );
+			if ( ! $files ) {
+				continue;
+			}
+			foreach ( $files as $file ) {
 				$jed  = json_decode( (string) file_get_contents( $file ), true );
 				$head = $jed['locale_data']['messages'][''] ?? array();
 				if ( ! empty( $head['plural-forms'] ) ) {
@@ -2343,6 +2443,7 @@ class Minn_Admin {
 					$rule = (string) $head['plural_forms'];
 				}
 			}
+			break;
 		}
 		/**
 		 * Filter the SPA plural-forms rule.

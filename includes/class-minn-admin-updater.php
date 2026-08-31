@@ -439,7 +439,20 @@ class Minn_Admin_Updater {
 		 * @param string[] $locales Locale codes.
 		 */
 		$locales = apply_filters( 'minn_admin_translation_locales', $locales );
-		return array_values( array_unique( array_filter( array_map( 'strval', (array) $locales ) ) ) );
+		$expanded = array();
+		foreach ( (array) $locales as $loc ) {
+			$expanded = array_merge( $expanded, Minn_Admin::catalog_locales( (string) $loc ) );
+		}
+		return array_values( array_unique( array_filter( $expanded ) ) );
+	}
+
+	/**
+	 * Drop the cached user-locale list. Language saves must call this or a
+	 * just-chosen locale (de_DE_formal, say) stays invisible to the pack
+	 * offerer until the day-long transient expires.
+	 */
+	public static function forget_user_locales() {
+		delete_transient( self::USER_LOCALES_KEY );
 	}
 
 	/**

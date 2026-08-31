@@ -118,8 +118,13 @@ Some catalogs are packed under more than one locale code. `en_GB` is a spelling
 pass, and Australian, Canadian, New Zealand and South African English take the
 same spellings, so the same bytes ship as `en_AU`, `en_CA`, `en_NZ` and `en_ZA`
 — another ~1.5% of installs for one zip each (`ALIASES` in `bin/i18n/locales.js`).
-Nothing where the difference is vocabulary rather than orthography belongs
-there: `pt_PT` and `es_MX` get their own catalogs in wave 2.
+Formal variants of a shipped locale (`de_DE_formal`, `nl_NL_formal`) belong
+there too: WordPress treats them as distinct locales, and without a pack under
+that exact code the SPA stays English. The runtime also falls back through
+`Minn_Admin::catalog_locales()`, so a site that already has the parent pack
+does not wait on the alias zip. Nothing where the difference is vocabulary
+rather than orthography or formality belongs there: `pt_PT` and `es_MX` get
+their own catalogs in wave 2.
 
 ### When an update is offered
 
@@ -224,9 +229,10 @@ before counting the English variants.
 `pt_PT` (0.56%), `hu_HU` (0.54%), `es_MX` (0.49%), `da_DK` (0.47%), `he_IL`
 (0.41%). That is another 6.4%, and `he_IL` is the third RTL locale.
 
-Two cheap derivations worth taking whenever their parent ships: `de_DE_formal`
-(0.23%) is a Sie form pass over `de_DE`, and `pt_PT` and `es_MX` are regional
-passes over `pt_BR` and `es_ES` rather than fresh translations.
+`de_DE_formal` and `nl_NL_formal` now alias their parent catalogs (runtime
+fallback plus packed zips). A later Sie/U pass over those parents can replace
+the alias with a real catalog without changing the locale code. `pt_PT` and
+`es_MX` stay their own catalogs: regional vocabulary, not a formality toggle.
 
 ## Generating the catalogs
 
