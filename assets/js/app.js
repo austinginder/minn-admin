@@ -26594,6 +26594,100 @@
 		} );
 	}
 
+	/* ===== New-document prefill =====
+	 * A launcher — a desktop widget, a bookmarklet, a shortcut, another app —
+	 * can hand a blank editor its starting document in the link itself:
+	 *   /minn-admin/editor/posts?title=Todays+prompt&content=…&tags=journal
+	 * Everything arrives as PLAIN TEXT. The body is escaped and split into
+	 * paragraphs, so a crafted link can never put markup (an onerror handler,
+	 * a block comment) into the editing surface. Terms are RESOLVED, never
+	 * created: a link starts a document, it does not write to the site's
+	 * taxonomy. Nothing is saved either — the prefill is inert until the
+	 * writer engages, exactly like a blank document.
+	 * Blank documents only: the same params on a saved post are ignored
+	 * rather than overwriting what is already there. */
+	const PREFILL_KEYS = [ 'title', 'content', 'excerpt', 'tags', 'categories', 'category', 'format' ];
+
+	function prefillParams() {
+		let q = null;
+		try { q = new URLSearchParams( location.search ); } catch ( e ) { return null; }
+		const out = {};
+		let any = false;
+		PREFILL_KEYS.forEach( ( k ) => {
+			const v = q.get( k );
+			if ( v == null || v === '' ) return;
+			out[ k ] = v;
+			any = true;
+		} );
+		return any ? out : null;
+	}
+
+	// Blank lines start a new paragraph; single newlines stay inside one, the
+	// same reading of plain text as a paste.
+	function prefillContentHtml( text ) {
+		const chunks = String( text ).replace( /\r\n?/g, '\n' ).split( /\n{2,}/ ).map( ( c ) => c.trim() ).filter( Boolean );
+		if ( ! chunks.length ) return '';
+		return chunks.map( ( c ) => `<p>${ esc( c ).replace( /\n/g, '<br>' ) }</p>` ).join( '' );
+	}
+
+	// Existing terms only, matched on slug first and then on an exact name.
+	async function resolvePrefillTerms( restBase, wanted ) {
+		const names = splitTagNames( wanted );
+		if ( ! names.length ) return [];
+		const eq = ( a, b ) => String( a ).toLowerCase() === String( b ).toLowerCase();
+		const bySlug = await api( `wp/v2/${ restBase }?slug=${ names.map( encodeURIComponent ).join( ',' ) }&per_page=100&_fields=id,name,slug` ).catch( () => [] );
+		const found = ( Array.isArray( bySlug ) ? bySlug : [] ).map( ( t ) => ( { id: t.id, name: decodeEntities( t.name ), slug: t.slug } ) );
+		const missing = names.filter( ( n ) => ! found.some( ( t ) => eq( t.slug, n ) || eq( t.name, n ) ) );
+		for ( const n of missing ) {
+			const hits = await api( `wp/v2/${ restBase }?search=${ encodeURIComponent( n ) }&per_page=20&_fields=id,name,slug` ).catch( () => [] );
+			const m = ( Array.isArray( hits ) ? hits : [] ).find( ( t ) => eq( decodeEntities( t.name ), n ) || eq( t.slug, n ) );
+			if ( m && ! found.some( ( t ) => t.id === m.id ) ) found.push( { id: m.id, name: decodeEntities( m.name ), slug: m.slug } );
+		}
+		return found;
+	}
+
+	function applyEditorPrefill( ed ) {
+		const pre = prefillParams();
+		if ( ! pre ) return;
+		ed.prefilled = true;
+		if ( pre.title ) ed.title = pre.title;
+		if ( pre.content ) ed.content = prefillContentHtml( pre.content );
+		if ( pre.excerpt && ed.supportsExcerpt ) { ed.excerpt = pre.excerpt; ed.excerptDirty = true; }
+		// Only a format this theme actually declares — an unknown one would
+		// save a format the site cannot render.
+		if ( pre.format && ed.supportsFormat && B.postFormats && B.postFormats[ pre.format ] ) {
+			ed.format = pre.format;
+			ed.formatDirty = true;
+		}
+		const wantCats = pre.categories || pre.category || '';
+		if ( ed.type !== 'posts' ) return;
+		// Terms resolve in the background so the document is usable
+		// immediately, and each taxonomy applies on its own: a name that needs
+		// a second lookup must not hold up the one that already answered.
+		if ( wantCats ) applyPrefillTerms( ed, 'categories', wantCats );
+		if ( pre.tags ) applyPrefillTerms( ed, 'tags', pre.tags );
+	}
+
+	function applyPrefillTerms( ed, restBase, wanted ) {
+		resolvePrefillTerms( restBase, wanted ).then( ( terms ) => {
+			// The lookups outlive the visit that started them: a document that
+			// has since been saved, or swapped for another, keeps its own terms.
+			if ( ! terms.length || state.editor !== ed || ed.id ) return;
+			if ( restBase === 'categories' ) {
+				terms.forEach( ( c ) => ed.categoryIds.add( c.id ) );
+				ed.catsDirty = true;
+			} else {
+				terms.forEach( ( t ) => {
+					if ( ed.tagIds.has( t.id ) ) return;
+					ed.tagIds.add( t.id );
+					ed.tags.push( { id: t.id, name: t.name } );
+				} );
+				ed.tagsDirty = true;
+			}
+			if ( state.route === 'editor' ) renderEditorSide();
+		} ).catch( () => {} );
+	}
+
 	async function loadEditor() {
 		if ( state.editorId ) {
 			// content.raw only — asking for content.rendered would run the_content,
@@ -26802,6 +26896,10 @@
 					&& !! ( B.postFormats && Object.keys( B.postFormats ).length ),
 				syncedPattern: isPattern,
 			};
+			// A launcher can hand a blank document its opening title, body and
+			// terms in the link. Applied before the crash-net read below, so a
+			// real unsaved draft still wins the recovery banner.
+			applyEditorPrefill( state.editor );
 			// Crash net for never-saved drafts — anything under the new-post
 			// key is by definition work that never reached the server.
 			try {
@@ -31288,7 +31386,33 @@
 		}
 
 		renderEditorSide();
-		if ( ! ed.id ) $( '#minn-editor-title', view ).focus();
+		if ( ! ed.id ) focusNewDocument( ed, view );
+	}
+
+	// A blank document opens in the title. When a launcher already supplied
+	// one, the writer's next word belongs in the body instead, so the caret
+	// lands at the end of whatever was prefilled there. One-shot: a later
+	// re-render must not yank the caret back out of wherever they moved it.
+	function focusNewDocument( ed, view ) {
+		const titleEl = $( '#minn-editor-title', view );
+		const body = $( '#minn-editor-body', view );
+		if ( ! ed.prefilled || ! ed.title || ! body || ed.mode === 'locked' ) {
+			if ( titleEl ) titleEl.focus();
+			return;
+		}
+		if ( ed.prefillFocused ) return;
+		ed.prefillFocused = true;
+		body.focus( { preventScroll: true } );
+		const last = body.lastElementChild;
+		if ( ! last ) return;
+		// An empty affordance paragraph is <p><br></p>: the caret belongs
+		// before the break, not after it.
+		if ( last.childNodes.length === 1 && last.firstChild.nodeName === 'BR' ) {
+			setCaret( last, 0 );
+			return;
+		}
+		const node = last.lastChild && last.lastChild.nodeType === Node.TEXT_NODE ? last.lastChild : last;
+		setCaret( node, node.nodeType === Node.TEXT_NODE ? node.textContent.length : node.childNodes.length );
 	}
 
 	/* ===== Block inspector (islands) =====

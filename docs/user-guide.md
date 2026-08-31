@@ -248,6 +248,18 @@ away:
   whose edits all live in ACF fields no longer claims to be identical.
   Restore takes one click. If someone else has the post open (in Minn or
   wp-admin), you will be told before you can both edit it.
+- **Start a post from a link, already filled in.** A launcher, a desktop
+  widget, a shortcut or another app can open a new post with the document
+  already begun: put the pieces in the address, as in
+  `/minn-admin/editor/posts?title=Today%27s+prompt&tags=journal`. Title,
+  body (`content`), `excerpt`, `categories`, `tags` and `format` are all
+  accepted, `/editor/pages` starts a page instead, and when the title
+  arrives filled in the cursor starts in the body so you can just write.
+  Everything comes across as plain text, so a link can never put markup
+  into your post. Categories and tags have to be ones you already have; a
+  link never creates a term. Nothing is saved until you write something,
+  and the same address on a post that already exists is ignored, so a link
+  can never overwrite work.
 - **Focus modes:** ⌘⇧D fades everything but the paragraph you are writing;
   ⌘⇧O reduces the screen to the text and an outline. ⌘⇧F is find and
   replace. A word-count pill sits at the bottom right; click it to set a
