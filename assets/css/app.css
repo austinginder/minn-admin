@@ -597,6 +597,9 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-ctx-menu { min-width: 180px; max-height: 80vh; overflow-y: auto; }
 .minn-new-menu a.danger, .minn-new-menu button.danger { color: var(--red); }
 .minn-row-end { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+/* Marks a row whose click leaves Minn for the Site Editor. */
+.minn-row-ext { color: var(--text3); font-size: 13px; line-height: 1; padding: 0 2px; }
+.minn-menu-row:hover .minn-row-ext { color: var(--text2); }
 .minn-row-more {
   width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 7px;
   background: none; color: var(--text2); cursor: pointer; font-size: 15px; line-height: 1;

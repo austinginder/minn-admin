@@ -99,6 +99,20 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 			t.check( 'no plugin-registered templates on this site to check', true, 'skipped' );
 		}
 
+		/* ===== The row itself opens the Site Editor ===== */
+		const opened = await page.evaluate( () => {
+			let url = '';
+			window.open = ( u ) => { url = u; return null; };
+			document.querySelector( '[data-tpl] .minn-menu-info' ).click();
+			return url;
+		} );
+		t.check( 'clicking a row opens that template in the Site Editor',
+			opened.includes( 'site-editor.php' ) && opened.includes( 'canvas=edit' ), opened );
+		t.check( 'the row carries no redundant Edit button',
+			await page.evaluate( () => ! document.querySelector( '[data-tpl] a[href*="site-editor"]' ) ) );
+		t.check( 'the row marks that its click leaves Minn',
+			await page.evaluate( () => !! document.querySelector( '[data-tpl] .minn-row-ext' ) ) );
+
 		/* ===== Tabs ===== */
 		await page.click( '[data-tplkind="wp_template_part"]' );
 		await page.waitForTimeout( 400 );

@@ -18081,7 +18081,7 @@
 						: decodeEntities( stripTags( t.description || '' ) ) || t.slug ) }</span>
 				</div>
 				<div class="minn-menu-ctrls">
-					${ ENGINE ? '' : `<a class="minn-btn-soft" href="${ esc( siteEditorTplUrl( t ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit' ) ) } ↗</a>` }
+					${ ENGINE ? '' : `<span class="minn-row-ext" title="${ esc( __( 'Opens in the Site Editor, in a new tab' ) ) }" aria-hidden="true">↗</span>` }
 					<button class="minn-icon-btn sm" data-tplmenu="${ esc( t.id ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
 				</div>
 			</div>`;
@@ -18157,6 +18157,18 @@
 			openMinnMenu( x, y, entries );
 		};
 
+		// A template is a layout, and layout editing is the Site Editor's job,
+		// so the row opens it there rather than pretending Minn can. It leaves
+		// Minn, hence the new tab and the ↗ the row wears.
+		if ( ! ENGINE ) {
+			$$( '[data-tpl]', view ).forEach( ( row ) =>
+				row.addEventListener( 'click', ( e ) => {
+					if ( e.target.closest( '[data-tplmenu]' ) ) return; // its own menu
+					const t = byId( row.dataset.tpl );
+					if ( t ) window.open( siteEditorTplUrl( t ), '_blank', 'noopener' );
+				} )
+			);
+		}
 		$$( '[data-tplmenu]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', ( e ) => {
 				e.preventDefault();
@@ -18280,7 +18292,6 @@
 					<span class="minn-row-slug minn-cell-clip">${ esc( metaLabel( c.total || 0, 'item' ) ) }${ m.modified_gmt ? ' · ' + esc( timeAgo( m.modified_gmt, { utc: true } ) ) : '' }</span>
 				</div>
 				<div class="minn-menu-ctrls">
-					<button class="minn-btn-soft" data-navopen="${ m.id }">${ esc( __( 'Edit items' ) ) }</button>
 					<button class="minn-icon-btn sm" data-navmenu="${ m.id }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
 				</div>
 			</div>`;
@@ -18360,8 +18371,13 @@
 			] );
 		};
 
-		$$( '[data-navopen]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => go( 'navigation/' + btn.dataset.navopen ) )
+		// The whole row opens the menu's items; the row already carries the
+		// pointer cursor and hover, so a separate button only repeated it.
+		$$( '[data-navrow]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', ( e ) => {
+				if ( e.target.closest( '[data-navmenu]' ) ) return; // its own menu
+				go( 'navigation/' + row.dataset.navrow );
+			} )
 		);
 		$$( '[data-navmenu]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', ( e ) => {

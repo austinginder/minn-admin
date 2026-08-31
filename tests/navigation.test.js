@@ -39,7 +39,6 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 		name: r.dataset.navname,
 		kind: ( r.querySelector( '.minn-menu-kind' ) || {} ).textContent || '',
 		meta: ( r.querySelector( '.minn-row-slug' ) || {} ).textContent || '',
-		hasEdit: !! r.querySelector( '[data-navopen]' ),
 	} ) ) );
 	// Read the row menu's entries without activating one.
 	const rowMenuHrefs = async ( id ) => {
@@ -124,14 +123,17 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 		t.check( 'a brand-new menu reads as unused', /Not used/i.test( created.kind ), created.kind );
 		// Editing a menu's items is Minn's own screen now; the Site Editor
 		// moved to the row menu as the escape hatch rather than the only way in.
-		t.check( 'the row opens Minn’s own item editor', created.hasEdit );
 		const hrefs = await rowMenuHrefs( created.id );
 		t.check( 'the row menu still offers the Site Editor for this menu',
 			hrefs.some( ( h ) => h && h.includes( 'site-editor.php' ) && h.includes( encodeURIComponent( '/wp_navigation/' + created.id ) ) ),
 			JSON.stringify( hrefs ) );
-		await page.evaluate( ( i ) => document.querySelector( `[data-navrow="${ i }"] [data-navopen]` ).click(), created.id );
+		// The whole row is the affordance; there is no separate button.
+		await page.evaluate( ( i ) => document.querySelector( `[data-navrow="${ i }"] .minn-menu-info` ).click(), created.id );
 		await page.waitForFunction( ( i ) => location.pathname.endsWith( '/navigation/' + i ), created.id, { timeout: 10000 } );
-		t.check( 'it lands on the tree editor for that menu', true );
+		t.check( 'clicking the row opens the tree editor for that menu', true );
+		await openNav();
+		t.check( 'the row carries no redundant Edit button',
+			await page.evaluate( () => ! document.querySelector( '[data-navopen]' ) ) );
 		await openNav();
 
 		// Put the menu into the theme's header by saving a template-part
