@@ -90,17 +90,29 @@ Custom CSS, homepage. The gaps cluster on block themes and theme builders,
 verified empirically at v0.23.0:
 
 1. **Block themes lose ground with no replacement (L, needs design).**
-   Minn correctly hides Menus and Widgets when `wp_is_block_theme()`
-   (`B.site.blockTheme`), but nothing steps in: no navigation editing
-   (`wp_navigation` posts have REST parity with what the Menus manager
-   already does for classic menus), no template/template-part LISTING with
-   Site Editor deep links, no global-styles summary. A block-theme site
-   demotes Minn from "the admin" to "the content admin". Scoped build,
-   ranked inside this item: navigation first (real daily work, existing
-   Menus UX transfers), then a read-only Design card (active theme, its
-   templates/parts as "Edit in Site Editor ↗" rows, current palette). The
-   Site Editor canvas itself is a permanent link-out (same reasoning as
-   form builders).
+   **Navigation LISTING SHIPPED** (Phase 1): a `navigation` route takes the
+   sidebar slot Menus vacates on a block theme, listing `wp_navigation`
+   posts with create / rename / delete, item counts, and the answer the
+   Site Editor does not give — WHERE each menu renders, from
+   `minn-admin/v1/navigation/usage`, which scans the active theme's
+   templates and parts (`get_block_templates()` merges theme files with DB
+   overrides; `resolve_pattern_blocks()` first, or a nav inside a theme
+   pattern is invisible and a stock theme reports everything unused).
+   Menus from a previous theme correctly read as unused, and ref-less
+   inline navs are called out since no listed menu represents them.
+   Deleting names the part that loses its links. Suite
+   `tests/navigation.test.js` (activates twentytwentyfive, restores the
+   previous theme in finally).
+   STILL OPEN, ranked: the nav TREE editor (Phase 2 — `wp_navigation`
+   content is one serialized block blob, not menu-item rows, so it is the
+   island discipline applied to a tree, and edits must carry original
+   attrs verbatim because WP 6.5+ injects `metadata.ignoredHookedBlocks`);
+   then a template / template-part surface (customized-vs-theme status,
+   reset, revisions, deep links); then a style-variations picker
+   (`wp/v2/global-styles/themes/{stylesheet}/variations` lists them and
+   applying one is a REST write, so it needs no canvas); then a read-only
+   Design card (active theme, palette, site logo). The Site Editor canvas
+   itself is a permanent link-out (same reasoning as form builders).
 2. ~~**Builder theme templates are invisible (M).**~~ **SHIPPED for
    Elementor and Bricks.** `elementor_library` stays hidden from Content
    (plumbing, not a writing surface) and is listed on a Templates

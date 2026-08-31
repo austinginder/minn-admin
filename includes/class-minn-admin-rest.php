@@ -1205,6 +1205,18 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/navigation/usage',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'navigation_usage' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_theme_options' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/themes/search',
 			array(
 				'methods'             => 'GET',
@@ -6929,6 +6941,127 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'moved' => $moved,
 			'into'  => $into->name,
 		) );
+	}
+
+	/**
+	 * Where the site's navigation menus are actually used, plus their size.
+	 *
+	 * A wp_navigation post carries no record of who renders it: templates
+	 * reference one as `wp:navigation {"ref":N}`, so "used in Header" can only
+	 * be answered by scanning the active theme's markup. get_block_templates()
+	 * merges the theme's own files with any database overrides and scopes the
+	 * result to the active theme, which is exactly the set that renders, so a
+	 * menu left over from a previous theme correctly reports as unused.
+	 *
+	 * Counts ride along because the alternative is shipping every menu's
+	 * markup to the client just to count its links.
+	 */
+	public static function navigation_usage() {
+		$usage  = array();
+		$inline = array();
+
+		foreach ( array( 'wp_template_part', 'wp_template' ) as $type ) {
+			foreach ( get_block_templates( array(), $type ) as $tpl ) {
+				if ( empty( $tpl->content ) ) {
+					continue;
+				}
+				$refs      = array();
+				$has_inline = false;
+				$blocks     = parse_blocks( $tpl->content );
+				// A block theme usually keeps its header in a PATTERN, so the
+				// part's own markup is just `wp:pattern` and the navigation is
+				// one level down. Without expanding those first, a stock theme
+				// reports every menu as unused.
+				if ( function_exists( 'resolve_pattern_blocks' ) ) {
+					$blocks = resolve_pattern_blocks( $blocks );
+				}
+				self::scan_navigation_refs( $blocks, $refs, $has_inline );
+
+				$where = array(
+					'slug'   => isset( $tpl->slug ) ? $tpl->slug : '',
+					'title'  => isset( $tpl->title ) && $tpl->title ? $tpl->title : ( isset( $tpl->slug ) ? $tpl->slug : '' ),
+					// 'header' / 'footer' / 'uncategorized' on parts, absent on templates.
+					'area'   => isset( $tpl->area ) ? $tpl->area : '',
+					'type'   => $type,
+					// 'theme' (shipped as a file) or 'custom' (edited, in the DB).
+					'source' => isset( $tpl->source ) ? $tpl->source : '',
+				);
+				foreach ( array_unique( $refs ) as $ref ) {
+					if ( ! isset( $usage[ $ref ] ) ) {
+						$usage[ $ref ] = array();
+					}
+					$usage[ $ref ][] = $where;
+				}
+				if ( $has_inline ) {
+					$inline[] = $where;
+				}
+			}
+		}
+
+		// Menus are a small set by nature, so counting them all is cheap.
+		$counts = array();
+		$navs   = get_posts( array(
+			'post_type'        => 'wp_navigation',
+			'post_status'      => array( 'publish', 'draft' ),
+			'numberposts'      => 100,
+			'suppress_filters' => false,
+		) );
+		foreach ( $navs as $nav ) {
+			$counts[ $nav->ID ] = self::count_navigation_items( parse_blocks( $nav->post_content ) );
+		}
+
+		return rest_ensure_response( array(
+			'usage'  => (object) $usage,
+			'counts' => (object) $counts,
+			'inline' => $inline,
+		) );
+	}
+
+	/**
+	 * Collect every `ref` a navigation block points at, and note navigation
+	 * blocks that carry no ref at all (their items live inline in the
+	 * template, so no menu in the list represents them).
+	 */
+	private static function scan_navigation_refs( array $blocks, array &$refs, &$has_inline ) {
+		foreach ( $blocks as $block ) {
+			$name = isset( $block['blockName'] ) ? $block['blockName'] : '';
+			if ( 'core/navigation' === $name ) {
+				if ( ! empty( $block['attrs']['ref'] ) ) {
+					$refs[] = (int) $block['attrs']['ref'];
+				} else {
+					$has_inline = true;
+				}
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				self::scan_navigation_refs( $block['innerBlocks'], $refs, $has_inline );
+			}
+		}
+	}
+
+	/** Link / submenu / everything-else tally for one menu, nesting included. */
+	private static function count_navigation_items( array $blocks ) {
+		$out = array( 'total' => 0, 'links' => 0, 'submenus' => 0, 'other' => 0 );
+		foreach ( $blocks as $block ) {
+			$name = isset( $block['blockName'] ) ? $block['blockName'] : '';
+			if ( ! $name ) {
+				continue; // whitespace between blocks
+			}
+			$out['total']++;
+			if ( 'core/navigation-link' === $name ) {
+				$out['links']++;
+			} elseif ( 'core/navigation-submenu' === $name ) {
+				$out['submenus']++;
+			} else {
+				$out['other']++;
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				$inner = self::count_navigation_items( $block['innerBlocks'] );
+				foreach ( $inner as $k => $v ) {
+					$out[ $k ] += $v;
+				}
+			}
+		}
+		return $out;
 	}
 
 	public static function search_themes( WP_REST_Request $request ) {

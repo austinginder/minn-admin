@@ -44,8 +44,8 @@ without a store still has the shorter navigation it needs:
   presence is purely a settings screen, and a theme's options pages,
   gather under a single **Site Options** entry here rather than each
   claiming its own sidebar spot.
-- **Manage** — the site itself: Extensions, Users, Menus and Widgets (on
-  classic themes), Structure, System, Settings.
+- **Manage** — the site itself: Extensions, Users, Navigation (Menus and
+  Widgets on classic themes), Structure, System, Settings.
 
 Group headings collapse when clicked, and the sidebar remembers your
 arrangement. Counts on Content, Comments and Orders show pending work.
@@ -610,6 +610,17 @@ cards, all in the same operational group.
   technical asks you to turn on logging. It also says plainly when a
   custom post type is hidden from Minn by its own REST setting, naming
   the post types affected and where the fix lives.
+- **Navigation** (block themes) — your site's menus, with the question the
+  Site Editor never answers: where each one actually renders. A menu used
+  in your header says so, and a menu left behind by a previous theme reads
+  as not used, which is usually how you discover you have three. Each row
+  shows how many items the menu holds and when it last changed. Create,
+  rename and delete are here, and deleting a menu your theme is currently
+  rendering names the part that will lose its links before you confirm.
+  Editing the links inside a menu opens the Site Editor, one click from
+  any row: the arrangement of a menu is block editing, and that is the
+  tool for it. On a classic theme this screen is **Menus** instead, where
+  Minn edits the menu itself and assigns it to your theme's locations.
 - **Structure** — post types, taxonomies and terms: rename, merge and
   re-parent categories and tags safely. Post type and taxonomy rows answer
   a right-click the way the rest of Minn does: open the definition, jump

@@ -1127,6 +1127,7 @@
 		useredit: [ __( 'Edit user' ), __( 'People' ) ],
 		terms: [ __( 'Terms' ), __( 'Categories & Tags' ) ],
 		menus: [ __( 'Menus' ), __( 'Navigation' ) ],
+		navigation: [ __( 'Navigation' ), __( 'Menus' ) ],
 		widgets: [ __( 'Widgets' ), __( 'Sidebars & footers' ) ],
 		extensions: [ __( 'Extensions' ), __( 'Installed' ) ],
 		posttypes: [ __( 'Structure' ), __( 'Post types, taxonomies & terms' ) ],
@@ -3214,13 +3215,16 @@
 		if ( B.caps.users ) {
 			manageItems.push( { id: 'users', label: __( 'Users' ), icon: 'users' } );
 		}
-		// Classic themes only — block themes manage navigation and widget areas
-		// in the site editor, and wp-admin hides these screens the same way.
+		// Menus and Widgets are classic-theme screens; wp-admin hides them on a
+		// block theme the same way. Block themes get the Navigation item
+		// instead, so neither kind of site is left without a way in.
 		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
 			manageItems.push( { id: 'menus', label: __( 'Menus' ), icon: 'list' } );
 			if ( B.site.hasSidebars ) {
 				manageItems.push( { id: 'widgets', label: __( 'Widgets' ), icon: 'columns' } );
 			}
+		} else if ( B.caps.themeOptions && B.site.blockTheme ) {
+			manageItems.push( { id: 'navigation', label: __( 'Navigation' ), icon: 'list' } );
 		}
 		// One "Structure" item covers Post Types, Taxonomies and Terms as tabs.
 		// Admins get all three; an editor (manage_categories only, no
@@ -3244,7 +3248,7 @@
 	// Hiding is cosmetic (routes stay reachable by URL and ⌘K); restore
 	// lives on Your profile, and admins can restore for others from the
 	// user edit page.
-	const CORE_HIDEABLE_NAV = [ 'content', 'media', 'comments', 'orders', 'subscriptions', 'products', 'coupons', 'customers', 'users', 'terms', 'menus', 'widgets', 'posttypes', 'extensions', 'database', 'system', 'settings' ];
+	const CORE_HIDEABLE_NAV = [ 'content', 'media', 'comments', 'orders', 'subscriptions', 'products', 'coupons', 'customers', 'users', 'terms', 'menus', 'navigation', 'widgets', 'posttypes', 'extensions', 'database', 'system', 'settings' ];
 	const isCoreHidden = ( id ) => ( B.hidden || [] ).some( ( h ) => h.id === 'core:' + id );
 	// Sites commonly hide wp-admin menus for clients (remove_menu_page on
 	// admin_menu — Comments is the classic). The notices capture pageload
@@ -17913,6 +17917,206 @@
 				toast( e.message, true );
 			}
 		} );
+	}
+
+	/* ===== Navigation (block themes) ===== */
+
+	// Block themes replace classic menus with wp_navigation posts, which
+	// wp-admin only exposes inside the Site Editor. This lists them with the
+	// thing that screen never answers — where each one actually renders — and
+	// leaves the tree itself to the Site Editor for now.
+
+	function navState() {
+		if ( ! state.navData ) {
+			state.navData = { menus: null, usage: null, loading: false };
+		}
+		return state.navData;
+	}
+
+	function siteEditorNavUrl( id ) {
+		return B.site.adminUrl + 'site-editor.php?p=' + encodeURIComponent( '/wp_navigation/' + id );
+	}
+
+	async function loadNavigation() {
+		const ns = navState();
+		const [ menus, usage ] = await Promise.all( [
+			api( 'wp/v2/navigation?context=edit&per_page=100&orderby=title&order=asc&_fields=id,title,status,modified_gmt' ),
+			// Usage is Minn's own read; a failure here must not cost the list.
+			api( 'minn-admin/v1/navigation/usage' ).catch( () => null ),
+		] );
+		ns.menus = menus;
+		ns.usage = usage;
+	}
+
+	/** "Header", "Header + Footer", or an honest empty. */
+	function navWhereLabel( places ) {
+		const seen = [];
+		( places || [] ).forEach( ( p ) => {
+			const label = p.area && 'uncategorized' !== p.area
+				? chromeLabel( p.area.charAt( 0 ).toUpperCase() + p.area.slice( 1 ) )
+				: ( p.title || p.slug );
+			if ( ! seen.includes( label ) ) seen.push( label );
+		} );
+		return seen.join( ' · ' );
+	}
+
+	function renderNavigation() {
+		const view = $( '#minn-view' );
+		const ns = navState();
+		if ( ! B.caps.themeOptions ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( 'You need permission to manage navigation.' ) ) }</div>`;
+			return;
+		}
+		// The nav item only appears on a block theme, but the path stays
+		// reachable — a bookmark survives a switch back to a classic theme,
+		// where these menus do not render and the Site Editor does not exist.
+		if ( ! B.site.blockTheme ) {
+			view.innerHTML = `
+			<div class="minn-card minn-panel-pad minn-empty">
+				<div>${ esc( __( 'This site uses a classic theme, which builds its navigation from menus assigned to theme locations.' ) ) }</div>
+				<button class="minn-btn-soft" id="minn-nav-to-menus" style="margin-top:12px;">${ esc( __( 'Go to Menus' ) ) }</button>
+			</div>`;
+			const b = $( '#minn-nav-to-menus', view );
+			if ( b ) b.addEventListener( 'click', () => go( 'menus' ) );
+			return;
+		}
+		if ( ! ns.menus ) {
+			if ( softLoadPending( 'navigation' ) ) return; // a soft reload owns the view
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading navigation…' ) ) }</div>`;
+			// Single-flight: a re-render mid-load must not start a second chain.
+			if ( ! ns.loading ) {
+				ns.loading = true;
+				loadNavigation()
+					.then( () => { ns.loading = false; } )
+					.then( renderIfCurrent( 'navigation' ) )
+					.catch( ( e ) => { ns.loading = false; showErr( e ); } );
+			}
+			return;
+		}
+
+		const usage = ( ns.usage && ns.usage.usage ) || {};
+		const counts = ( ns.usage && ns.usage.counts ) || {};
+		const inline = ( ns.usage && ns.usage.inline ) || [];
+		const n = ns.menus.length;
+
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			<div class="minn-toolbar-meta">${ esc( sprintf( /* translators: %s: localized number of navigation menus. */ _n( '%s menu', '%s menus', n ), String( n ) ) ) }</div>
+			<button class="minn-btn-soft" id="minn-nav-new">${ icon( 'plus' ) } ${ esc( __( 'New menu' ) ) }</button>
+		</div>
+		${ inline.length ? `
+		<div class="minn-card minn-panel-pad minn-nav-inline-note">
+			${ esc( __( 'One of your templates has a navigation block whose links are written into the template itself rather than saved as a reusable menu, so it is not listed here:' ) ) }
+			${ inline.map( ( p ) => `<span class="minn-menu-kind">${ esc( p.title || p.slug ) }</span>` ).join( ' ' ) }
+		</div>` : '' }
+		${ ! n ? `<div class="minn-card minn-empty">${ esc( __( 'No navigation menus yet. Create one, then add links to it in the Site Editor.' ) ) }</div>` : `
+		<div class="minn-card minn-menu-items">
+			${ ns.menus.map( ( m ) => {
+				const places = usage[ m.id ] || [];
+				const c = counts[ m.id ] || {};
+				const where = navWhereLabel( places );
+				const title = decodeEntities( stripTags( ( m.title && ( m.title.rendered || m.title.raw ) ) || '' ) ) || __( '(untitled)' );
+				return `
+			<div class="minn-menu-row" data-navrow="${ m.id }" data-navname="${ esc( title ) }">
+				<div class="minn-menu-info">
+					<span class="minn-row-title">${ esc( title ) }</span>
+					<span class="minn-menu-kind">${ esc( where
+						? sprintf( /* translators: %s: template area(s), e.g. "Header". */ __( 'Used in %s' ), where )
+						: __( 'Not used by this theme' ) ) }</span>
+					<span class="minn-row-slug minn-cell-clip">${ esc( metaLabel( c.total || 0, 'item' ) ) }${ m.modified_gmt ? ' · ' + esc( timeAgo( m.modified_gmt, { utc: true } ) ) : '' }</span>
+				</div>
+				<div class="minn-menu-ctrls">
+					${ ENGINE ? '' : `<a class="minn-btn-soft" href="${ esc( siteEditorNavUrl( m.id ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in Site Editor' ) ) } ↗</a>` }
+					<button class="minn-icon-btn sm" data-navmenu="${ m.id }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
+				</div>
+			</div>`;
+			} ).join( '' ) }
+		</div>` }`;
+
+		bindNavigation( view, ns );
+	}
+
+	function bindNavigation( view, ns ) {
+		const reload = () => { ns.menus = null; ns.usage = null; renderNavigation(); };
+
+		const newBtn = $( '#minn-nav-new', view );
+		if ( newBtn ) newBtn.addEventListener( 'click', async () => {
+			const name = prompt( __( 'Name for the new menu:' ) );
+			if ( ! name || ! name.trim() ) return;
+			try {
+				await api( 'wp/v2/navigation', {
+					method: 'POST',
+					body: JSON.stringify( { title: name.trim(), status: 'publish', content: '' } ),
+				} );
+				toast( __( 'Menu created' ) );
+				reload();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
+
+		const rowMenu = async ( row, x, y ) => {
+			const id = parseInt( row.dataset.navrow, 10 );
+			const name = row.dataset.navname || '';
+			const places = ( ( ns.usage && ns.usage.usage ) || {} )[ id ] || [];
+			openMinnMenu( x, y, [
+				...( ENGINE ? [] : [ { label: __( 'Edit in Site Editor' ), href: siteEditorNavUrl( id ) } ] ),
+				{
+					label: __( 'Rename…' ),
+					run: async () => {
+						const next = prompt( __( 'Menu name:' ), name );
+						if ( ! next || ! next.trim() || next.trim() === name ) return;
+						try {
+							await api( `wp/v2/navigation/${ id }`, { method: 'POST', body: JSON.stringify( { title: next.trim() } ) } );
+							toast( __( 'Menu renamed' ) );
+							reload();
+						} catch ( e ) {
+							toast( e.message, true );
+						}
+					},
+				},
+				{
+					label: __( 'Delete' ),
+					danger: true,
+					run: async () => {
+						// Deleting a menu the theme renders leaves a hole on the
+						// front end, so say so instead of a generic warning.
+						const where = navWhereLabel( places );
+						const body = where
+							? sprintf( /* translators: %s: template area(s), e.g. "Header". */ __( 'This menu is currently rendered in %s, which will lose its links. There is no undo for this.' ), where )
+							: __( 'There is no undo for this.' );
+						if ( ! await minnConfirm( {
+							/* translators: %s: menu name. */
+							title: sprintf( __( 'Delete the menu “%s”?' ), name ),
+							body,
+							danger: true,
+							confirmLabel: __( 'Delete menu' ),
+						} ) ) return;
+						try {
+							await api( `wp/v2/navigation/${ id }?force=true`, { method: 'DELETE' } );
+							toast( __( 'Menu deleted' ) );
+							reload();
+						} catch ( e ) {
+							toast( e.message, true );
+						}
+					},
+				},
+			] );
+		};
+
+		$$( '[data-navmenu]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', ( e ) => {
+				e.preventDefault();
+				const r = btn.getBoundingClientRect();
+				rowMenu( btn.closest( '[data-navrow]' ), r.left, r.bottom + 4 );
+			} )
+		);
+		$$( '[data-navrow]', view ).forEach( ( row ) =>
+			row.addEventListener( 'contextmenu', ( e ) => {
+				e.preventDefault();
+				rowMenu( row, e.clientX, e.clientY );
+			} )
+		);
 	}
 
 	/* ===== Widgets (classic sidebars) ===== */
@@ -38102,6 +38306,8 @@
 		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
 			cmds.push( { label: __( 'Edit Menus' ), kind: 'nav', icon: '☰', run: () => go( 'menus' ) } );
 			if ( B.site.hasSidebars ) cmds.push( { label: __( 'Manage Widgets' ), kind: 'nav', icon: '▥', run: () => go( 'widgets' ) } );
+		} else if ( B.caps.themeOptions && B.site.blockTheme ) {
+			cmds.push( { label: __( 'Edit Navigation' ), kind: 'nav', icon: '☰', run: () => go( 'navigation' ) } );
 		}
 		if ( B.caps.plugins ) cmds.push( { label: __( 'Manage Extensions' ), kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'Manage Post Types' ), kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
@@ -44824,6 +45030,7 @@
 			case 'useredit': renderUserEdit(); break;
 			case 'terms': renderStructure(); break;
 			case 'menus': renderMenus(); break;
+			case 'navigation': renderNavigation(); break;
 			case 'widgets': renderWidgets(); break;
 			case 'extensions': renderExtensions(); break;
 			case 'posttypes': renderStructure(); break;
