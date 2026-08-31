@@ -617,10 +617,21 @@ cards, all in the same operational group.
   shows how many items the menu holds and when it last changed. Create,
   rename and delete are here, and deleting a menu your theme is currently
   rendering names the part that will lose its links before you confirm.
-  Editing the links inside a menu opens the Site Editor, one click from
-  any row: the arrangement of a menu is block editing, and that is the
-  tool for it. On a classic theme this screen is **Menus** instead, where
-  Minn edits the menu itself and assigns it to your theme's locations.
+  Open a menu and you get its items: rename a link, change where it
+  points, drag to reorder, indent one under another to build a dropdown,
+  add a page or a custom link, and remove one with an Undo offered back.
+  Nesting an item under a plain link turns that link into a dropdown, and
+  emptying a dropdown turns it back into a plain link, so you never end up
+  with a menu that opens onto nothing. Items that are not links (an
+  all-pages block, social icons, anything a plugin added) are listed and
+  can be reordered or removed, but they are edited in the Site Editor,
+  one click away on every screen. Anything Minn did not edit is written
+  back exactly as it was found, so a menu's styling and blocks Minn has
+  never heard of come through a rearrangement untouched, and a menu
+  holding markup Minn cannot vouch for says so and stays read-only rather
+  than guessing. On a classic theme this screen is **Menus** instead,
+  where Minn edits the menu itself and assigns it to your theme's
+  locations.
 - **Structure** — post types, taxonomies and terms: rename, merge and
   re-parent categories and tags safely. Post type and taxonomy rows answer
   a right-click the way the rest of Minn does: open the definition, jump

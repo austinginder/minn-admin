@@ -103,11 +103,25 @@ verified empirically at v0.23.0:
    Deleting names the part that loses its links. Suite
    `tests/navigation.test.js` (activates twentytwentyfive, restores the
    previous theme in finally).
-   STILL OPEN, ranked: the nav TREE editor (Phase 2 — `wp_navigation`
-   content is one serialized block blob, not menu-item rows, so it is the
-   island discipline applied to a tree, and edits must carry original
-   attrs verbatim because WP 6.5+ injects `metadata.ignoredHookedBlocks`);
-   then a template / template-part surface (customized-vs-theme status,
+   **TREE EDITOR SHIPPED** (Phase 2): `/navigation/{id}` (route `navedit`)
+   arranges a menu's items. `wp_navigation` content is ONE serialized block
+   document, not menu-item rows, so this is the island discipline applied
+   to a tree: `navParse` builds nodes that each keep their VERBATIM markup
+   (reusing `tokenizeBlocks` per level, byte-identity gate included),
+   reorder/indent/outdent/drag permute those strings, and only an edited
+   node's attrs are rewritten via `navSetAttrs`. Verified empirically:
+   `wp_navigation` content round-trips BYTE-IDENTICAL through REST and is a
+   fixed point (unlike post content, which core re-serializes), so
+   `metadata.ignoredHookedBlocks`, classNames and unregistered blocks all
+   survive. Non-link blocks are opaque (reorder/remove yes, edit no).
+   Indent converts a link to a submenu and emptying one converts it back;
+   both conversions MUTATE the node because undo and drag hold references
+   across them. Drag resolves its target by IDENTITY, not token, since
+   removing the dragged node shifts every later index. Unparseable markup
+   falls to read-only + Site Editor. Suite
+   `tests/navigation-tree.test.js` (25); real-data parse walk on the
+   mmonroe lab covers nested `social-links` and a third-party block.
+   STILL OPEN, ranked: a template / template-part surface (customized-vs-theme status,
    reset, revisions, deep links); then a style-variations picker
    (`wp/v2/global-styles/themes/{stylesheet}/variations` lists them and
    applying one is a REST write, so it needs no canvas); then a read-only

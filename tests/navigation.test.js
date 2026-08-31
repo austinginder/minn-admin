@@ -39,9 +39,18 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 		name: r.dataset.navname,
 		kind: ( r.querySelector( '.minn-menu-kind' ) || {} ).textContent || '',
 		meta: ( r.querySelector( '.minn-row-slug' ) || {} ).textContent || '',
-		editHref: ( r.querySelector( 'a[href*="site-editor"]' ) || {} ).getAttribute
-			? r.querySelector( 'a[href*="site-editor"]' ).getAttribute( 'href' ) : '',
+		hasEdit: !! r.querySelector( '[data-navopen]' ),
 	} ) ) );
+	// Read the row menu's entries without activating one.
+	const rowMenuHrefs = async ( id ) => {
+		await page.evaluate( ( i ) => document.querySelector( `[data-navrow="${ i }"] [data-navmenu]` ).click(), id );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+		const hrefs = await page.evaluate( () =>
+			[ ...document.querySelectorAll( '.minn-ctx-menu a' ) ].map( ( a ) => a.getAttribute( 'href' ) ) );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 150 );
+		return hrefs;
+	};
 	const rowMenuAction = async ( id, label ) => {
 		await page.evaluate( ( i ) => {
 			document.querySelector( `[data-navrow="${ i }"] [data-navmenu]` ).click();
@@ -109,9 +118,17 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 
 		/* ===== Usage badges from real template markup ===== */
 		t.check( 'a brand-new menu reads as unused', /Not used/i.test( created.kind ), created.kind );
-		t.check( 'Site Editor deep link points at this menu',
-			created.editHref.includes( 'site-editor.php' ) && created.editHref.includes( encodeURIComponent( '/wp_navigation/' + created.id ) ),
-			created.editHref );
+		// Editing a menu's items is Minn's own screen now; the Site Editor
+		// moved to the row menu as the escape hatch rather than the only way in.
+		t.check( 'the row opens Minn’s own item editor', created.hasEdit );
+		const hrefs = await rowMenuHrefs( created.id );
+		t.check( 'the row menu still offers the Site Editor for this menu',
+			hrefs.some( ( h ) => h && h.includes( 'site-editor.php' ) && h.includes( encodeURIComponent( '/wp_navigation/' + created.id ) ) ),
+			JSON.stringify( hrefs ) );
+		await page.evaluate( ( i ) => document.querySelector( `[data-navrow="${ i }"] [data-navopen]` ).click(), created.id );
+		await page.waitForFunction( ( i ) => location.pathname.endsWith( '/navigation/' + i ), created.id, { timeout: 10000 } );
+		t.check( 'it lands on the tree editor for that menu', true );
+		await openNav();
 
 		// Put the menu into the theme's header by saving a template-part
 		// override that references it — the same shape the Site Editor writes.

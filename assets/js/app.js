@@ -1128,6 +1128,7 @@
 		terms: [ __( 'Terms' ), __( 'Categories & Tags' ) ],
 		menus: [ __( 'Menus' ), __( 'Navigation' ) ],
 		navigation: [ __( 'Navigation' ), __( 'Menus' ) ],
+		navedit: [ __( 'Navigation' ), __( 'Menu' ) ],
 		widgets: [ __( 'Widgets' ), __( 'Sidebars & footers' ) ],
 		extensions: [ __( 'Extensions' ), __( 'Installed' ) ],
 		posttypes: [ __( 'Structure' ), __( 'Post types, taxonomies & terms' ) ],
@@ -2951,6 +2952,10 @@
 			state.fgbSrc = 'acf';
 			state.fgbKey = decodeURIComponent( parts[ 1 ] );
 			state.route = 'fieldgroup';
+		} else if ( route === 'navigation' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
+			// /navigation/2577 — one menu's tree editor.
+			state.navEditId = parseInt( parts[ 1 ], 10 );
+			state.route = 'navedit';
 		} else if ( route === 'orders' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /orders/123 — the order detail page.
 			state.orderPageId = parseInt( parts[ 1 ], 10 );
@@ -18026,7 +18031,7 @@
 					<span class="minn-row-slug minn-cell-clip">${ esc( metaLabel( c.total || 0, 'item' ) ) }${ m.modified_gmt ? ' · ' + esc( timeAgo( m.modified_gmt, { utc: true } ) ) : '' }</span>
 				</div>
 				<div class="minn-menu-ctrls">
-					${ ENGINE ? '' : `<a class="minn-btn-soft" href="${ esc( siteEditorNavUrl( m.id ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in Site Editor' ) ) } ↗</a>` }
+					<button class="minn-btn-soft" data-navopen="${ m.id }">${ esc( __( 'Edit items' ) ) }</button>
 					<button class="minn-icon-btn sm" data-navmenu="${ m.id }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
 				</div>
 			</div>`;
@@ -18060,6 +18065,7 @@
 			const name = row.dataset.navname || '';
 			const places = ( ( ns.usage && ns.usage.usage ) || {} )[ id ] || [];
 			openMinnMenu( x, y, [
+				{ label: __( 'Edit items' ), run: () => go( 'navigation/' + id ) },
 				...( ENGINE ? [] : [ { label: __( 'Edit in Site Editor' ), href: siteEditorNavUrl( id ) } ] ),
 				{
 					label: __( 'Rename…' ),
@@ -18104,6 +18110,9 @@
 			] );
 		};
 
+		$$( '[data-navopen]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => go( 'navigation/' + btn.dataset.navopen ) )
+		);
 		$$( '[data-navmenu]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', ( e ) => {
 				e.preventDefault();
@@ -18117,6 +18126,531 @@
 				rowMenu( row, e.clientX, e.clientY );
 			} )
 		);
+	}
+
+	/* ===== Navigation tree editor ===== */
+
+	// A wp_navigation post is ONE serialized block document, not the menu-item
+	// rows a classic menu stores, so this is the island discipline applied to a
+	// tree: every node keeps its VERBATIM markup, reordering permutes those
+	// strings, and only a node the writer actually edited has its attributes
+	// rewritten. That is what keeps a submenu's className, a block Minn has
+	// never heard of, and WP's own hooked-block metadata intact through a save.
+	// wp_navigation content round-trips byte-identical through REST (unlike
+	// post content, which core re-serializes), so the guarantee survives.
+
+	const NAV_OPEN_RE = /^<!--\s*wp:([a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?)((?:(?!-->)[\s\S])*?)(\/)?\s*-->/;
+	const NAV_CLOSE_RE = /<!--\s*\/wp:[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?\s*-->$/;
+
+	// Core blocks are written without their namespace in markup.
+	function navBaseName( name ) {
+		return String( name || '' ).replace( /^core\//, '' );
+	}
+
+	function navNode( raw, name ) {
+		const m = NAV_OPEN_RE.exec( raw );
+		if ( ! m ) return null;
+		const base = navBaseName( name );
+		const attrsRaw = ( m[ 2 ] || '' ).trim();
+		let attrs = {};
+		if ( attrsRaw ) {
+			try {
+				attrs = JSON.parse( attrsRaw );
+			} catch ( e ) {
+				attrs = null; // unreadable attrs → opaque, never rewritten
+			}
+		}
+		const node = { name: base, raw, attrs, open: m[ 0 ], close: '', children: null };
+		if ( 'navigation-submenu' === base && ! m[ 3 ] ) {
+			const cm = NAV_CLOSE_RE.exec( raw );
+			if ( ! cm ) return null;
+			node.close = cm[ 0 ];
+			const kids = navParse( raw.slice( m[ 0 ].length, cm.index ) );
+			if ( ! kids ) return null;
+			node.children = kids;
+		}
+		node.editable = attrs !== null && ( 'navigation-link' === base || 'navigation-submenu' === base );
+		return node;
+	}
+
+	/** Markup → node tree, or null when anything is unexpected (read-only). */
+	function navParse( raw ) {
+		const segs = tokenizeBlocks( raw );
+		if ( ! segs ) return null;
+		const nodes = [];
+		for ( const s of segs ) {
+			if ( 'html' === s.type ) {
+				// Only the whitespace WP writes between blocks belongs here.
+				if ( s.raw.trim() ) return null;
+				continue;
+			}
+			const n = navNode( s.raw, s.name );
+			if ( ! n ) return null;
+			nodes.push( n );
+		}
+		return nodes;
+	}
+
+	function navSerializeNode( n ) {
+		if ( n.children ) {
+			return n.children.length
+				? n.open + '\n' + n.children.map( navSerializeNode ).join( '\n\n' ) + '\n' + n.close
+				: n.open + '\n' + n.close;
+		}
+		return n.raw;
+	}
+
+	function navSerialize( nodes ) {
+		return nodes.map( navSerializeNode ).join( '\n\n' );
+	}
+
+	/** Rewrite one node's attributes, leaving every other attribute alone. */
+	function navSetAttrs( n, changes ) {
+		const attrs = Object.assign( {}, n.attrs || {}, changes );
+		Object.keys( attrs ).forEach( ( k ) => {
+			if ( attrs[ k ] === undefined || '' === attrs[ k ] ) delete attrs[ k ];
+		} );
+		const json = Object.keys( attrs ).length ? ' ' + JSON.stringify( attrs ) : '';
+		n.attrs = attrs;
+		n.open = `<!-- wp:${ n.name }${ json }${ n.children ? ' -->' : ' /-->' }`;
+		if ( ! n.children ) n.raw = n.open;
+	}
+
+	// Nesting something under a link turns it into a submenu, which is exactly
+	// what the Site Editor does; attributes carry over untouched.
+	//
+	// Both conversions MUTATE the node rather than returning a replacement:
+	// undo and drag both hold node references across a conversion, and swapping
+	// in a new object would strand them (an undo would lose the submenu its
+	// item came out of).
+	function navToSubmenu( n ) {
+		if ( n.children ) return n;
+		n.open = n.open.replace( /wp:navigation-link/, 'wp:navigation-submenu' ).replace( /\/\s*-->$/, '-->' );
+		n.name = 'navigation-submenu';
+		n.close = '<!-- /wp:navigation-submenu -->';
+		n.children = [];
+		n.raw = '';
+		return n;
+	}
+
+	function navToLink( n ) {
+		n.open = n.open.replace( /wp:navigation-submenu/, 'wp:navigation-link' ).replace( /\s*-->$/, ' /-->' );
+		n.name = 'navigation-link';
+		n.children = null;
+		n.close = '';
+		n.raw = n.open;
+		return n;
+	}
+
+	// A submenu with nothing left under it renders as a dropdown that opens on
+	// nothing, so emptying one turns it back into a plain link.
+	function navNormalize( nodes ) {
+		nodes.forEach( ( n ) => {
+			if ( ! n.children ) return;
+			if ( ! n.children.length && 'navigation-submenu' === n.name ) {
+				navToLink( n );
+			} else {
+				navNormalize( n.children );
+			}
+		} );
+		return nodes;
+	}
+
+	/** Locate a node by identity; indices shift as soon as anything moves. */
+	function navFindNode( nodes, target ) {
+		for ( let i = 0; i < nodes.length; i++ ) {
+			if ( nodes[ i ] === target ) return { list: nodes, index: i };
+			if ( nodes[ i ].children ) {
+				const hit = navFindNode( nodes[ i ].children, target );
+				if ( hit ) return hit;
+			}
+		}
+		return null;
+	}
+
+	/** Depth-first rows carrying a dotted index path ("1", "1.0"). */
+	function navFlatten( nodes, out, path ) {
+		out = out || [];
+		path = path || [];
+		nodes.forEach( ( n, i ) => {
+			const token = path.concat( i );
+			out.push( { node: n, token: token.join( '.' ), depth: path.length } );
+			if ( n.children ) navFlatten( n.children, out, token );
+		} );
+		return out;
+	}
+
+	/** The sibling array a token lives in, plus its index within it. */
+	function navListAt( nodes, token ) {
+		const parts = String( token ).split( '.' ).map( Number );
+		let list = nodes;
+		for ( let i = 0; i < parts.length - 1; i++ ) {
+			if ( ! list[ parts[ i ] ] || ! list[ parts[ i ] ].children ) return null;
+			list = list[ parts[ i ] ].children;
+		}
+		return { list, index: parts[ parts.length - 1 ], parentToken: parts.slice( 0, -1 ).join( '.' ) };
+	}
+
+	function navLabelOf( n ) {
+		const a = n.attrs || {};
+		if ( a.label ) return decodeEntities( stripTags( String( a.label ) ) );
+		return NAV_BLOCK_LABELS[ n.name ] || humanizeAttrKey( n.name.replace( /-/g, ' ' ) );
+	}
+
+	// Blocks a navigation can legitimately hold that are not links. They stay
+	// verbatim; the Site Editor is where their settings live.
+	const NAV_BLOCK_LABELS = {
+		'page-list': __( 'All pages' ),
+		'page-list-item': __( 'Page' ),
+		'home-link': __( 'Home' ),
+		'site-logo': __( 'Site logo' ),
+		'site-title': __( 'Site title' ),
+		'search': __( 'Search' ),
+		'social-links': __( 'Social links' ),
+		'loginout': __( 'Log in / out' ),
+		'spacer': __( 'Spacer' ),
+	};
+
+	function navEditState() {
+		if ( ! state.navEditData || state.navEditData.id !== state.navEditId ) {
+			state.navEditData = { id: state.navEditId, post: null, tree: null, locked: false, loading: false, editing: null, saving: false };
+		}
+		return state.navEditData;
+	}
+
+	async function loadNavEdit() {
+		const ns = navEditState();
+		const post = await api( `wp/v2/navigation/${ ns.id }?context=edit&_fields=id,title,content,status` );
+		ns.post = post;
+		const raw = ( post.content && ( post.content.raw !== undefined ? post.content.raw : post.content.rendered ) ) || '';
+		ns.tree = navParse( raw );
+		ns.locked = ns.tree === null;
+		if ( ns.locked ) ns.tree = [];
+	}
+
+	/**
+	 * Mutate the tree, save the whole document, roll back if the save fails.
+	 * The tree IS the truth here, so a rejected save must not leave the screen
+	 * showing an arrangement the server does not have.
+	 */
+	async function navAction( ns, mutate, msg ) {
+		const before = navSerialize( ns.tree );
+		try {
+			mutate();
+			navNormalize( ns.tree );
+		} catch ( e ) {
+			toast( e.message, true );
+			return false;
+		}
+		ns.editing = null;
+		ns.saving = true;
+		renderNavEdit();
+		try {
+			await api( `wp/v2/navigation/${ ns.id }`, {
+				method: 'POST',
+				body: JSON.stringify( { content: navSerialize( ns.tree ) } ),
+			} );
+			ns.saving = false;
+			if ( msg ) toast( msg );
+			renderNavEdit();
+			return true;
+		} catch ( e ) {
+			ns.tree = navParse( before ) || [];
+			ns.saving = false;
+			toast( e.message, true );
+			renderNavEdit();
+			return false;
+		}
+	}
+
+	function navKindLabel( n ) {
+		const a = n.attrs || {};
+		if ( 'navigation-submenu' === n.name || 'navigation-link' === n.name ) {
+			if ( 'custom' === a.kind || ( ! a.kind && ! a.type ) ) return __( 'Link' );
+			if ( 'taxonomy' === a.kind ) return chromeLabel( a.type === 'category' ? 'Category' : ( a.type || __( 'Term' ) ) );
+			return chromeLabel( 'page' === a.type ? 'Page' : ( 'post' === a.type ? 'Post' : ( a.type || __( 'Link' ) ) ) );
+		}
+		return __( 'Block' );
+	}
+
+	function renderNavEdit() {
+		const view = $( '#minn-view' );
+		const ns = navEditState();
+		if ( ! B.caps.themeOptions ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( 'You need permission to manage navigation.' ) ) }</div>`;
+			return;
+		}
+		if ( ! ns.post ) {
+			if ( softLoadPending( 'navedit' ) ) return;
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading menu…' ) ) }</div>`;
+			if ( ! ns.loading ) {
+				ns.loading = true;
+				Promise.all( [ loadNavEdit(), menusState().pick ? Promise.resolve() : loadMenuPick().catch( () => {} ) ] )
+					.then( () => { ns.loading = false; } )
+					.then( renderIfCurrent( 'navedit' ) )
+					.catch( ( e ) => { ns.loading = false; showErr( e ); } );
+			}
+			return;
+		}
+
+		const rows = navFlatten( ns.tree );
+		const title = decodeEntities( stripTags( ( ns.post.title && ( ns.post.title.raw || ns.post.title.rendered ) ) || '' ) ) || __( '(untitled)' );
+
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			<button class="minn-btn-soft" id="minn-nav-back">← ${ esc( __( 'All menus' ) ) }</button>
+			<div class="minn-toolbar-meta">${ esc( title ) } · ${ esc( metaLabel( rows.length, 'item' ) ) }${ ns.saving ? ' · ' + esc( __( 'Saving…' ) ) : '' }</div>
+			${ ENGINE ? '' : `<a class="minn-btn-soft" href="${ esc( siteEditorNavUrl( ns.id ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in Site Editor' ) ) } ↗</a>` }
+		</div>
+		${ ns.locked ? `
+		<div class="minn-card minn-panel-pad minn-empty">
+			<div>${ esc( __( 'This menu holds markup Minn will not risk rewriting, so it is shown read-only. Nothing here is lost: open it in the Site Editor to make changes.' ) ) }</div>
+		</div>` : `
+		<div class="minn-card minn-menu-items">
+			${ rows.length ? rows.map( ( { node, token, depth } ) => ns.editing === token ? `
+			<div class="minn-menu-row editing" style="padding-left:${ 16 + depth * 26 }px;">
+				<div class="minn-menu-edit">
+					<input class="minn-input" id="minn-navi-label" value="${ esc( ( node.attrs || {} ).label || '' ) }" placeholder="${ esc( __( 'Label' ) ) }">
+					<input class="minn-input mono" id="minn-navi-url" value="${ esc( ( node.attrs || {} ).url || '' ) }" placeholder="https://…">
+					<button class="minn-btn-primary" data-navsave="${ token }">${ esc( __( 'Save' ) ) }</button>
+					<button class="minn-btn-soft" id="minn-navi-cancel">${ esc( __( 'Cancel' ) ) }</button>
+				</div>
+			</div>` : `
+			<div class="minn-menu-row" data-navtoken="${ token }" style="padding-left:${ 16 + depth * 26 }px;">
+				<span class="minn-menu-grip" draggable="true" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>
+				<div class="minn-menu-info">
+					<span class="minn-row-title">${ esc( navLabelOf( node ) ) }</span>
+					<span class="minn-menu-kind">${ esc( navKindLabel( node ) ) }</span>
+					<span class="minn-row-slug minn-cell-clip">${ esc( String( ( node.attrs || {} ).url || '' ).replace( B.site.url, '/' ) ) }</span>
+				</div>
+				<div class="minn-menu-ctrls">
+					<button class="minn-icon-btn sm" data-navmove="up" title="${ esc( __( 'Move up' ) ) }">↑</button>
+					<button class="minn-icon-btn sm" data-navmove="down" title="${ esc( __( 'Move down' ) ) }">↓</button>
+					<button class="minn-icon-btn sm" data-navmove="out" title="${ esc( __( 'Outdent' ) ) }"${ depth ? '' : ' disabled' }>⇤</button>
+					<button class="minn-icon-btn sm" data-navmove="in" title="${ esc( __( 'Make child of the item above' ) ) }">⇥</button>
+					<button class="minn-icon-btn sm danger" data-navdel="${ token }" title="${ esc( __( 'Remove from menu' ) ) }">✕</button>
+				</div>
+			</div>` ).join( '' ) : `<div class="minn-empty">${ esc( __( 'This menu is empty. Add pages or links below.' ) ) }</div>` }
+		</div>
+		<div class="minn-card minn-panel-pad minn-menu-add">
+			<div class="minn-panel-title" style="margin-bottom:10px;">${ esc( __( 'Add to menu' ) ) }</div>
+			<div class="minn-menu-add-row">
+				<div class="minn-ac" id="minn-nav-pick">
+					<input class="minn-input minn-ac-input" placeholder="${ esc( menusState().pick ? __( 'Find a page or post…' ) : __( 'Loading pages…' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<div class="minn-ac-panel" hidden></div>
+				</div>
+				<button class="minn-btn-soft" id="minn-nav-add-content">${ icon( 'plus' ) } ${ esc( __( 'Add' ) ) }</button>
+			</div>
+			<div class="minn-menu-add-row">
+				<input class="minn-input" id="minn-nav-link-label" placeholder="${ esc( __( 'Link label' ) ) }">
+				<input class="minn-input mono" id="minn-nav-link-url" placeholder="https://…">
+				<button class="minn-btn-soft" id="minn-nav-add-link">${ icon( 'plus' ) } ${ esc( __( 'Add link' ) ) }</button>
+			</div>
+		</div>` }`;
+
+		bindNavEdit( view, ns );
+	}
+
+	function bindNavEdit( view, ns ) {
+		const back = $( '#minn-nav-back', view );
+		if ( back ) back.addEventListener( 'click', () => go( 'navigation' ) );
+		if ( ns.locked ) return;
+
+		const nodeAt = ( token ) => {
+			const at = navListAt( ns.tree, token );
+			return at ? at.list[ at.index ] : null;
+		};
+
+		/* Reorder / nest. Each is a permutation of verbatim nodes. */
+		$$( '[data-navmove]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const token = btn.closest( '[data-navtoken]' ).dataset.navtoken;
+				const dir = btn.dataset.navmove;
+				navAction( ns, () => {
+					const at = navListAt( ns.tree, token );
+					if ( ! at ) throw new Error( __( 'That item moved. Try again.' ) );
+					const { list, index } = at;
+					const node = list[ index ];
+					if ( 'up' === dir || 'down' === dir ) {
+						const to = index + ( 'up' === dir ? -1 : 1 );
+						if ( to < 0 || to >= list.length ) throw new Error( __( 'Already at the end of its level.' ) );
+						list.splice( index, 1 );
+						list.splice( to, 0, node );
+					} else if ( 'in' === dir ) {
+						if ( index === 0 ) throw new Error( __( 'Nothing above it to nest under.' ) );
+						list.splice( index, 1 );
+						navToSubmenu( list[ index - 1 ] ).children.push( node );
+					} else if ( 'out' === dir ) {
+						const parts = String( token ).split( '.' ).map( Number );
+						if ( parts.length < 2 ) throw new Error( __( 'Already at the top level.' ) );
+						const parentAt = navListAt( ns.tree, parts.slice( 0, -1 ).join( '.' ) );
+						list.splice( index, 1 );
+						parentAt.list.splice( parentAt.index + 1, 0, node );
+					}
+				} );
+			} )
+		);
+
+		/* Inline edit */
+		$$( '[data-navtoken] .minn-menu-info', view ).forEach( ( info ) =>
+			info.addEventListener( 'click', () => {
+				const row = info.closest( '[data-navtoken]' );
+				const node = nodeAt( row.dataset.navtoken );
+				if ( ! node || ! node.editable ) {
+					toast( __( 'This block is edited in the Site Editor.' ) );
+					return;
+				}
+				ns.editing = row.dataset.navtoken;
+				renderNavEdit();
+			} )
+		);
+		const saveBtn = $( '[data-navsave]', view );
+		if ( saveBtn ) saveBtn.addEventListener( 'click', () => {
+			const token = saveBtn.dataset.navsave;
+			const label = $( '#minn-navi-label', view ).value;
+			const url = $( '#minn-navi-url', view ).value;
+			navAction( ns, () => {
+				const node = nodeAt( token );
+				if ( ! node ) throw new Error( __( 'That item moved. Try again.' ) );
+				navSetAttrs( node, { label, url } );
+			}, __( 'Item saved' ) );
+		} );
+		const cancel = $( '#minn-navi-cancel', view );
+		if ( cancel ) cancel.addEventListener( 'click', () => { ns.editing = null; renderNavEdit(); } );
+
+		/* Delete, with the removed branch offered back */
+		$$( '[data-navdel]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const token = btn.dataset.navdel;
+				const at = navListAt( ns.tree, token );
+				if ( ! at ) return;
+				const removed = at.list[ at.index ];
+				const index = at.index;
+				const label = navLabelOf( removed );
+				// Hold the PARENT node, not its token: removing the last child
+				// turns the submenu back into a link, and the row's own token
+				// stops meaning anything once the list shifts.
+				const parentAt = at.parentToken === '' ? null : navListAt( ns.tree, at.parentToken );
+				const parent = parentAt ? parentAt.list[ parentAt.index ] : null;
+				navAction( ns, () => {
+					const a = navListAt( ns.tree, token );
+					if ( ! a ) throw new Error( __( 'That item moved. Try again.' ) );
+					a.list.splice( a.index, 1 );
+				} ).then( ( ok ) => {
+					if ( ! ok ) return;
+					/* translators: %s: the removed item's label. */
+					toastAction( sprintf( __( 'Removed “%s”' ), label ), __( 'Undo' ), () => {
+						navAction( ns, () => {
+							if ( ! parent ) {
+								ns.tree.splice( Math.min( index, ns.tree.length ), 0, removed );
+								return;
+							}
+							const hit = navFindNode( ns.tree, parent );
+							if ( ! hit ) {
+								ns.tree.push( removed );
+								return;
+							}
+							// Its parent collapsed back to a link when it was
+							// emptied; make it a container again to restore into.
+							const p = navToSubmenu( hit.list[ hit.index ] );
+							p.children.splice( Math.min( index, p.children.length ), 0, removed );
+						}, __( 'Item restored' ) );
+					} );
+				} );
+			} )
+		);
+
+		/* Add */
+		const pickWrap = $( '#minn-nav-pick', view );
+		const pick = menusState().pick;
+		let picked = null;
+		if ( pickWrap && pick ) {
+			bindAutocomplete( pickWrap, pick.map( ( p ) => ( { value: p.key, label: `${ p.title } (${ p.kind })` } ) ), {
+				strict: true,
+				onPick: ( v ) => { picked = pick.find( ( p ) => p.key === v ) || null; },
+			} );
+		}
+		const addContent = $( '#minn-nav-add-content', view );
+		if ( addContent ) addContent.addEventListener( 'click', () => {
+			if ( ! picked ) {
+				toast( __( 'Pick a page or post first.' ), true );
+				return;
+			}
+			const p = picked;
+			navAction( ns, () => {
+				const node = navNode( '<!-- wp:navigation-link /-->', 'navigation-link' );
+				navSetAttrs( node, { label: p.title, type: p.object, id: p.id, url: p.url, kind: 'post-type' } );
+				ns.tree.push( node );
+			}, __( 'Added to menu' ) );
+		} );
+		const addLink = $( '#minn-nav-add-link', view );
+		if ( addLink ) addLink.addEventListener( 'click', () => {
+			const label = $( '#minn-nav-link-label', view ).value.trim();
+			const url = $( '#minn-nav-link-url', view ).value.trim();
+			if ( ! label || ! url ) {
+				toast( __( 'A link needs both a label and a URL.' ), true );
+				return;
+			}
+			navAction( ns, () => {
+				const node = navNode( '<!-- wp:navigation-link /-->', 'navigation-link' );
+				navSetAttrs( node, { label, url, kind: 'custom' } );
+				ns.tree.push( node );
+			}, __( 'Link added' ) );
+		} );
+
+		/* Drag to reorder: drop above or below the row under the pointer. */
+		let dragToken = null;
+		$$( '.minn-menu-grip', view ).forEach( ( grip ) => {
+			const row = grip.closest( '[data-navtoken]' );
+			grip.addEventListener( 'dragstart', ( e ) => {
+				dragToken = row.dataset.navtoken;
+				row.classList.add( 'dragging' );
+				e.dataTransfer.effectAllowed = 'move';
+				e.dataTransfer.setData( 'text/plain', dragToken );
+			} );
+			grip.addEventListener( 'dragend', () => {
+				dragToken = null;
+				$$( '.minn-menu-row', view ).forEach( ( r ) => r.classList.remove( 'dragging', 'drop-above', 'drop-below' ) );
+			} );
+		} );
+		$$( '[data-navtoken]', view ).forEach( ( row ) => {
+			row.addEventListener( 'dragover', ( e ) => {
+				if ( dragToken === null || row.dataset.navtoken === dragToken ) return;
+				e.preventDefault();
+				e.dataTransfer.dropEffect = 'move';
+				const r = row.getBoundingClientRect();
+				const below = e.clientY > r.top + r.height / 2;
+				row.classList.toggle( 'drop-below', below );
+				row.classList.toggle( 'drop-above', ! below );
+			} );
+			row.addEventListener( 'dragleave', () => row.classList.remove( 'drop-above', 'drop-below' ) );
+			row.addEventListener( 'drop', ( e ) => {
+				e.preventDefault();
+				const targetToken = row.dataset.navtoken;
+				const below = row.classList.contains( 'drop-below' );
+				row.classList.remove( 'drop-above', 'drop-below' );
+				if ( dragToken === null || targetToken === dragToken ) return;
+				const moved = dragToken;
+				navAction( ns, () => {
+					// A branch cannot be dropped inside itself.
+					if ( targetToken === moved || targetToken.indexOf( moved + '.' ) === 0 ) {
+						throw new Error( __( 'Can’t drop an item inside itself.' ) );
+					}
+					const from = navListAt( ns.tree, moved );
+					const toAt = navListAt( ns.tree, targetToken );
+					if ( ! from || ! toAt ) throw new Error( __( 'That item moved. Try again.' ) );
+					const node = from.list[ from.index ];
+					// Resolve the DROP TARGET by identity, because removing the
+					// dragged node shifts every index after it and the token
+					// would then name a different row.
+					const target = toAt.list[ toAt.index ];
+					from.list.splice( from.index, 1 );
+					const to = navFindNode( ns.tree, target );
+					if ( ! to ) throw new Error( __( 'That item moved. Try again.' ) );
+					to.list.splice( to.index + ( below ? 1 : 0 ), 0, node );
+				} );
+			} );
+		} );
 	}
 
 	/* ===== Widgets (classic sidebars) ===== */
@@ -45031,6 +45565,7 @@
 			case 'terms': renderStructure(); break;
 			case 'menus': renderMenus(); break;
 			case 'navigation': renderNavigation(); break;
+			case 'navedit': renderNavEdit(); break;
 			case 'widgets': renderWidgets(); break;
 			case 'extensions': renderExtensions(); break;
 			case 'posttypes': renderStructure(); break;
