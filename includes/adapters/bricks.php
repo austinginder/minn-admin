@@ -452,9 +452,81 @@ function minn_admin_bricks_import_templates( $content ) {
 }
 
 /**
+ * Bricks' own "Edit with Bricks" target for the current front-end request.
+ *
+ * Mirrors Setup::admin_bar_menu: a post type Bricks is set to edit opens
+ * itself in the builder. A type it is not set to edit (WooCommerce products
+ * unless product is in Bricks → Post types) falls through to the active
+ * content template, which is the canvas actually painting the page. Null
+ * when Bricks itself would hide the item.
+ *
+ * @return array|null { id, url, supported }
+ */
+function minn_admin_bricks_front_edit() {
+	if ( ! minn_admin_bricks_active() ) {
+		return null;
+	}
+	if ( ! class_exists( '\Bricks\Helpers' ) || ! class_exists( '\Bricks\Capabilities' ) || ! class_exists( '\Bricks\Database' ) ) {
+		return null;
+	}
+
+	$post_id = (int) get_the_ID();
+	if ( is_home() ) {
+		$post_id = (int) get_option( 'page_for_posts' );
+	} elseif ( function_exists( 'is_shop' ) && is_shop() ) {
+		$post_id = (int) wc_get_page_id( 'shop' );
+	} elseif ( is_search() ) {
+		$active  = \Bricks\Database::$active_templates;
+		$post_id = ! empty( $active['search'] )
+			? (int) $active['search']
+			: (int) ( isset( $active['content'] ) ? $active['content'] : 0 );
+	}
+
+	$supported = $post_id > 0 && \Bricks\Helpers::is_post_type_supported( $post_id );
+	if ( ! $supported ) {
+		$active = \Bricks\Database::$active_templates;
+		if ( ! is_array( $active ) || empty( $active['content'] ) ) {
+			if ( method_exists( '\Bricks\Database', 'set_active_templates' ) ) {
+				try {
+					\Bricks\Database::set_active_templates();
+					$active = \Bricks\Database::$active_templates;
+				} catch ( \Throwable $e ) {
+					return null;
+				}
+			}
+		}
+		if ( empty( $active['content'] ) ) {
+			return null;
+		}
+		$post_id = (int) $active['content'];
+	}
+
+	if ( $post_id < 1 ) {
+		return null;
+	}
+	try {
+		if ( ! \Bricks\Capabilities::current_user_can_use_builder( $post_id ) ) {
+			return null;
+		}
+		$url = \Bricks\Helpers::get_builder_edit_link( $post_id );
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+	if ( ! is_string( $url ) || '' === $url ) {
+		return null;
+	}
+	return array(
+		'id'        => $post_id,
+		'url'       => $url,
+		'supported' => $supported,
+	);
+}
+
+/**
  * Front-end bar extras: Bricks templates rendering on THIS page (header,
- * content, footer). Bricks' own admin bar lists these under "Edit with
- * Bricks"; Minn hides that bar, so the same list lives here.
+ * content, footer, plus WooCommerce templates Bricks lists on cart /
+ * checkout / account). Bricks' own admin bar lists these under "Edit
+ * with Bricks"; Minn hides that bar, so the same list lives here.
  *
  * Reads Database::$active_templates (already resolved for this request)
  * and the builder URL through Helpers::get_builder_edit_link. Capability
@@ -530,6 +602,55 @@ function minn_admin_bricks_bar_template_edits( $edits ) {
 			),
 		);
 		$seen[ $id ] = true;
+	}
+
+	// WooCommerce cart / checkout / account templates. Bricks lists these
+	// under Edit with Bricks on those pages; they are not header/content/
+	// footer slots so the loop above never sees them.
+	if ( class_exists( '\Bricks\Woocommerce' )
+		&& method_exists( '\Bricks\Woocommerce', 'get_active_templates_for_current_page' ) ) {
+		$woo_labels = method_exists( '\Bricks\Woocommerce', 'get_woo_templates' )
+			? \Bricks\Woocommerce::get_woo_templates()
+			: array();
+		try {
+			$woo = \Bricks\Woocommerce::get_active_templates_for_current_page();
+		} catch ( \Throwable $e ) {
+			$woo = array();
+		}
+		foreach ( (array) $woo as $slot => $tid ) {
+			$tid = (int) $tid;
+			if ( $tid < 1 || isset( $seen[ $tid ] ) || ( $current && $tid === (int) $current ) ) {
+				continue;
+			}
+			try {
+				if ( ! \Bricks\Capabilities::current_user_can_use_builder( $tid ) ) {
+					continue;
+				}
+				$url = \Bricks\Helpers::get_builder_edit_link( $tid );
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+			if ( ! is_string( $url ) || '' === $url ) {
+				continue;
+			}
+			$title = get_the_title( $tid );
+			if ( '' === $title ) {
+				$title = '#' . $tid;
+			}
+			$label = isset( $woo_labels[ $slot ] ) ? (string) $woo_labels[ $slot ] : $title;
+			$edits[] = array(
+				'url'   => $url,
+				/* translators: %s: a WooCommerce Bricks template type (Cart, Checkout…). */
+				'label' => sprintf( __( 'Edit %s', 'minn-admin' ), $label ),
+				'sub'   => $title,
+				'hint'  => sprintf(
+					/* translators: %s: a Bricks template title. */
+					__( 'This page uses the %s template', 'minn-admin' ),
+					$title
+				),
+			);
+			$seen[ $tid ] = true;
+		}
 	}
 	return $edits;
 }

@@ -389,6 +389,83 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 			t.check( 'the Edit menu names the Site Header template',
 				/Site Header/.test( menu ) && /Edit header/.test( menu ) && ! /Hello world/i.test( menu ), menu );
 		}
+
+		/* Product pages: Bricks is usually NOT set to edit the product type,
+		   so the canvas is a Single Product template. Bricks' own bar offered
+		   "Edit with Bricks" pointing at that template; Minn used to send
+		   Edit to the Minn product screen instead. */
+		const wooOn = wpEval( 'echo class_exists( "WooCommerce" ) ? "yes" : "no";' );
+		t.check( 'WooCommerce is available for the product-page bar check', wooOn === 'yes' || wooOn === 'no', wooOn );
+		if ( wooOn === 'yes' ) {
+			const product = await page.evaluate( async () => {
+				const bar = window.MINN_BAR || {};
+				const r = await fetch( bar.rest + 'wc/v3/products', {
+					method: 'POST', credentials: 'same-origin',
+					headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': bar.nonce },
+					body: JSON.stringify( {
+						name: 'Suite Bricks Product ' + Date.now(),
+						type: 'simple',
+						regular_price: '11',
+						status: 'publish',
+					} ),
+				} );
+				const d = await r.json().catch( () => null );
+				return { status: r.status, id: d && d.id, permalink: d && d.permalink };
+			} );
+			t.check( 'created a product to open on the front end',
+				( product.status === 201 || product.status === 200 ) && !! product.id && !! product.permalink,
+				JSON.stringify( product ) );
+			const tplId = wpEval(
+				'$id = wp_insert_post( array( "post_type" => "bricks_template", "post_title" => "Suite Single Product", "post_status" => "publish" ) );'
+				+ ' update_post_meta( $id, "_bricks_template_type", "wc_product" );'
+				+ ' update_post_meta( $id, "_bricks_editor_mode", "bricks" );'
+				+ ' update_post_meta( $id, "_bricks_template_settings", array( "templateConditions" => array( array( "id" => "s1", "main" => "postType", "postType" => array( "product" ) ) ) ) );'
+				+ ' echo $id;'
+			);
+			t.check( 'created a WooCommerce single-product template', /^\d+$/.test( tplId ) && Number( tplId ) > 0, tplId );
+			if ( /^\d+$/.test( tplId ) ) probeIds.push( Number( tplId ) );
+			if ( product.id && product.permalink ) {
+				await page.evaluate( () => { try { sessionStorage.removeItem( 'minn-bar-corner' ); } catch ( e ) {} } );
+				await page.goto( product.permalink, { waitUntil: 'domcontentloaded', timeout: 60000 } );
+				await page.waitForSelector( '#minn-cornerbar', { timeout: 20000 } );
+				await page.hover( '.minn-bar-markbtn' );
+				await page.waitForTimeout( 400 );
+				const productEdit = await page.evaluate( () => {
+					const a = document.querySelector( 'a.minn-bar-edit' );
+					const more = document.querySelector( '.minn-bar-edit-more' );
+					const cmds = ( window.MINN_BAR || {} ).commands || [];
+					return {
+						text: a ? a.textContent.trim() : '',
+						href: a ? a.getAttribute( 'href' ) : '',
+						hasMore: !! more,
+						productCmd: cmds.some( ( c ) => /Edit Product/.test( c.title ) ),
+						bricksCmd: cmds.some( ( c ) => /Edit in Bricks/.test( c.title ) && /bricks=run/.test( String( c.value || '' ) ) ),
+					};
+				} );
+				t.check( 'a product page Edit opens Bricks on the single-product template',
+					/Edit in Bricks/.test( productEdit.text ) && /bricks=run/.test( productEdit.href )
+					&& /single-product|suite-single-product|template\//.test( productEdit.href ),
+					JSON.stringify( productEdit ) );
+				t.check( 'the product itself stays reachable from the Edit chevron',
+					productEdit.hasMore && productEdit.productCmd && productEdit.bricksCmd,
+					JSON.stringify( productEdit ) );
+				if ( productEdit.hasMore ) {
+					await page.click( '.minn-bar-edit-more' );
+					await page.waitForSelector( '#minn-bar-menu-edit:not([hidden])', { timeout: 5000 } );
+					const pmenu = await page.evaluate( () => document.getElementById( 'minn-bar-menu-edit' ).textContent );
+					t.check( 'the Edit menu names Edit Product and the header template',
+						/Edit Product/.test( pmenu ) && /Site Header/.test( pmenu ), pmenu );
+				}
+				await page.evaluate( async ( id ) => {
+					const bar = window.MINN_BAR || {};
+					await fetch( bar.rest + 'wc/v3/products/' + id + '?force=true', {
+						method: 'DELETE', credentials: 'same-origin',
+						headers: { 'X-WP-Nonce': bar.nonce },
+					} );
+				}, product.id ).catch( () => null );
+			}
+		}
+
 		await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded', timeout: 60000 } );
 		await page.waitForFunction( () => window.MINN && Array.isArray( window.MINN.surfaces ), null, { timeout: 20000 } );
 

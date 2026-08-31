@@ -318,8 +318,8 @@ class Minn_Admin_Bar {
 
 	private static function config() {
 		$status = self::status();
-		list( $edit_url, $edit_label, $edit_hint ) = self::edit_target();
-		$extras = self::template_edits( $edit_url );
+		list( $edit_url, $edit_label, $edit_hint, $own_extras ) = self::edit_target();
+		$extras = array_merge( is_array( $own_extras ) ? $own_extras : array(), self::template_edits( $edit_url ) );
 		return array(
 			'rest'        => esc_url_raw( rest_url() ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
@@ -386,6 +386,21 @@ class Minn_Admin_Bar {
 	}
 
 	/**
+	 * Minn destination for a front-end Edit of this post. Woo products live
+	 * on the Products surface, not the generic editor (that type is fenced
+	 * out of Content).
+	 *
+	 * @param WP_Post $post Post being viewed.
+	 * @return string
+	 */
+	private static function minn_url_for_post( $post ) {
+		if ( 'product' === $post->post_type && class_exists( 'WooCommerce' ) && current_user_can( 'edit_products' ) ) {
+			return Minn_Admin::app_route_url( 'products/' . (int) $post->ID );
+		}
+		return Minn_Admin::editor_url_for_post( $post->ID );
+	}
+
+	/**
 	 * Contextual Edit action: the queried singular object, when this user
 	 * can edit it and its type is REST-editable in Minn. A page whose canvas
 	 * a builder OWNS (Elementor, Beaver Builder, Brizy…) edits in that
@@ -394,16 +409,24 @@ class Minn_Admin_Bar {
 	 * Block-native builders (Etch, Divi 5) stay on the Minn editor, which
 	 * handles their markup as islands.
 	 *
-	 * @return array [ url|'' , label, hint ]
+	 * Bricks is the odd one on WooCommerce products: the product type is
+	 * usually NOT in Bricks → Post types, so the product itself has no
+	 * Bricks data. The canvas is a Single Product template. Bricks' own
+	 * admin bar still offered "Edit with Bricks" pointing at that template;
+	 * Minn hid that bar and used to send Edit to the Minn product screen
+	 * instead, with the template buried as "Edit content" under the chevron.
+	 *
+	 * @return array [ url|'' , label, hint, extras[] ]
 	 */
 	private static function edit_target() {
 		$edit_url   = '';
 		$edit_label = __( 'Edit', 'minn-admin' );
 		$edit_hint  = __( 'Open this page in the Minn editor', 'minn-admin' );
+		$own_extras = array();
 		if ( is_singular() ) {
 			$obj = get_queried_object();
 			if ( $obj instanceof WP_Post && current_user_can( 'edit_post', $obj->ID ) ) {
-				$edit_url = Minn_Admin::editor_url_for_post( $obj->ID );
+				$edit_url = self::minn_url_for_post( $obj );
 				if ( $edit_url ) {
 					$pto = get_post_type_object( $obj->post_type );
 					$edit_label = $pto && ! empty( $pto->labels->singular_name )
@@ -421,11 +444,31 @@ class Minn_Admin_Bar {
 						$edit_label = sprintf( __( 'Edit in %s', 'minn-admin' ), $builder['name'] );
 						/* translators: %s: the page builder's name. */
 						$edit_hint = sprintf( __( 'This page is built with %s', 'minn-admin' ), $builder['name'] );
+					} elseif ( function_exists( 'minn_admin_bricks_front_edit' ) ) {
+						$bricks = minn_admin_bricks_front_edit();
+						// Unsupported type (a Woo product, typically): Bricks'
+						// "Edit with Bricks" is the content template painting
+						// this page. Make that the primary Edit; keep the
+						// Minn destination as an extra so the product itself
+						// is still one click away.
+						if ( $bricks && ! empty( $bricks['url'] ) && empty( $bricks['supported'] ) ) {
+							$own_extras[] = array(
+								'url'   => $edit_url,
+								'label' => $edit_label,
+								'sub'   => '',
+								'hint'  => $edit_hint,
+							);
+							$edit_url   = $bricks['url'];
+							/* translators: %s: the page builder's name. */
+							$edit_label = sprintf( __( 'Edit in %s', 'minn-admin' ), 'Bricks' );
+							/* translators: %s: the page builder's name. */
+							$edit_hint = sprintf( __( 'This page is built with %s', 'minn-admin' ), 'Bricks' );
+						}
 					}
 				}
 			}
 		}
-		return array( $edit_url, $edit_label, $edit_hint );
+		return array( $edit_url, $edit_label, $edit_hint, $own_extras );
 	}
 
 	/**
@@ -469,8 +512,8 @@ class Minn_Admin_Bar {
 		}
 
 		$status = self::status();
-		list( $edit_url, $edit_label ) = self::edit_target();
-		$extras = self::template_edits( $edit_url );
+		list( $edit_url, $edit_label, , $own_extras ) = self::edit_target();
+		$extras = array_merge( is_array( $own_extras ) ? $own_extras : array(), self::template_edits( $edit_url ) );
 		$edit_primary_url   = $edit_url;
 		$edit_primary_label = $edit_label;
 		$edit_menu          = $extras;
