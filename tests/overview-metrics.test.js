@@ -118,12 +118,13 @@ delete_option( 'minn_admin_overview_metric_defaults' );
 			keys: [ ...document.querySelectorAll( '.minn-metric-tile' ) ].map( ( el ) => el.dataset.metric ),
 			on: ( document.querySelector( '.minn-metric-tile.is-on' ) || {} ).dataset.metric || '',
 			save: !! document.querySelector( '#minn-metric-save' ),
+			reset: ( document.querySelector( '#minn-metric-reset' ) || {} ).textContent || '',
 			saveDefaults: ( document.querySelector( '#minn-metric-save-defaults' ) || {} ).textContent || '',
 		} ) );
 		t.check( 'Customize opens a picker modal on this card',
 			picker.on === 'posts' && picker.keys.includes( 'drafts' ), JSON.stringify( picker ) );
-		t.check( 'the first picker offers Save and Save as defaults',
-			picker.save && /Save as defaults/.test( picker.saveDefaults ), JSON.stringify( picker ) );
+		t.check( 'an administrator gets Save, Reset to defaults, and Save as defaults',
+			picker.save && /Reset to defaults/.test( picker.reset ) && /Save as defaults/.test( picker.saveDefaults ), JSON.stringify( picker ) );
 		if ( hasWc ) {
 			t.check( 'picker leads with store sales metrics on a Woo site',
 				picker.groups[ 0 ] === 'Store'
@@ -215,10 +216,11 @@ delete_option( 'minn_admin_overview_metric_defaults' );
 		const editorPicker = await ep.evaluate( () => ( {
 			saveDefaults: !! document.querySelector( '#minn-metric-save-defaults' ),
 			save: !! document.querySelector( '#minn-metric-save' ),
+			reset: ( document.querySelector( '#minn-metric-reset' ) || {} ).textContent || '',
 			hasMedia: !! document.querySelector( '.minn-metric-tile[data-metric="media"]' ),
 		} ) );
-		t.check( 'an editor sees Save but not Save as defaults',
-			editorPicker.save && ! editorPicker.saveDefaults && editorPicker.hasMedia, JSON.stringify( editorPicker ) );
+		t.check( 'an editor can Save or Reset to defaults, not Save as defaults',
+			editorPicker.save && /Reset to defaults/.test( editorPicker.reset ) && ! editorPicker.saveDefaults && editorPicker.hasMedia, JSON.stringify( editorPicker ) );
 
 		await ep.click( '.minn-metric-tile[data-metric="media"]' );
 		const editorPending = await ep.evaluate( () =>
@@ -246,17 +248,17 @@ delete_option( 'minn_admin_overview_metric_defaults' );
 			adminStill === pickKey, String( adminStill ) );
 
 		await openCustomize( ep, `.minn-stat[data-mslot="${ postsSlot }"]` );
-		await ep.waitForSelector( '#minn-metric-reset-all', { timeout: 8000 } );
+		await ep.waitForSelector( '#minn-metric-reset', { timeout: 8000 } );
 		const resetSave = ep.waitForResponse( ( r ) =>
 			r.url().includes( 'minn-admin/v1/overview/metrics' ) && r.request().method() === 'POST'
 		);
-		await ep.click( '#minn-metric-reset-all' );
+		await ep.click( '#minn-metric-reset' );
 		await resetSave;
 		await ep.waitForFunction( ( a ) => {
 			const el = document.querySelector( '.minn-stat[data-mslot="' + a.slot + '"]' );
 			return el && el.dataset.mkey === a.key && ! document.querySelector( '.minn-metric-picker' );
 		}, { slot: postsSlot, key: pickKey }, { timeout: 8000 } );
-		t.check( 'Reset all cards follows the site default, not the built-in posts card', true, '' );
+		t.check( 'Reset to defaults follows the site default, not the built-in posts card', true, '' );
 
 		await page.goto( `${ BASE }/minn-admin/overview`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-stat[data-goto="content:posts"]', { timeout: 20000 } );

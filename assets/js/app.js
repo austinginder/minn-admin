@@ -38236,9 +38236,7 @@
 			const catalog = overviewMetricCatalog( o );
 			const keys = readOverviewMetricKeys( o );
 			const current = m.pick || keys[ m.slot ];
-			const defaults = overviewMetricDefaults( o );
-			const dirtyAny = keys.some( ( k, i ) => k !== defaults[ i ] );
-			const canSetDefault = !! ( o.canSetMetricDefaults || ( B.caps && B.caps.settings ) );
+			const canSetDefault = !! o.canSetMetricDefaults;
 			const groups = overviewMetricGroupOrder().map( ( group ) => {
 				const rows = catalog.filter( ( row ) => ( row.group || 'content' ) === group );
 				return rows.length ? { group, rows } : null;
@@ -38269,7 +38267,7 @@
 						</div>` ).join( '' ) }
 					</div>
 					<div class="minn-metric-picker-foot">
-						${ dirtyAny ? `<button type="button" class="minn-btn-soft" id="minn-metric-reset-all">${ esc( __( 'Reset all cards' ) ) }</button>` : '' }
+						<button type="button" class="minn-btn-soft" id="minn-metric-reset">${ esc( __( 'Reset to defaults' ) ) }</button>
 						<div class="minn-metric-actions">
 							${ canSetDefault ? `<button type="button" class="minn-btn-soft" id="minn-metric-save-defaults">${ esc( __( 'Save as defaults' ) ) }</button>` : '' }
 							<button type="button" class="minn-btn-primary" id="minn-metric-save">${ esc( __( 'Save' ) ) }</button>
@@ -39712,8 +39710,8 @@
 			if ( save ) save.addEventListener( 'click', () => setOverviewMetric( m.slot, m.pick, o ) );
 			const saveDefaults = $( '#minn-metric-save-defaults' );
 			if ( saveDefaults ) saveDefaults.addEventListener( 'click', () => saveOverviewMetricDefaults() );
-			const resetAll = $( '#minn-metric-reset-all' );
-			if ( resetAll ) resetAll.addEventListener( 'click', () => {
+			const reset = $( '#minn-metric-reset' );
+			if ( reset ) reset.addEventListener( 'click', () => {
 				closeModal();
 				resetOverviewMetrics();
 			} );
