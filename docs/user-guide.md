@@ -615,9 +615,17 @@ cards, all in the same operational group.
   which of your theme's templates this site has actually changed. Changed
   ones sort to the top, and every row says which it is: from the theme,
   customized here (naming who changed it and when), added here, or
-  contributed by a plugin. A customized template can be reset to the
+  contributed by a plugin. Each row also says what uses it: a template you
+  can choose for a page reports how many pages chose it, or says plainly
+  that nothing did, and a template part reports how many templates pull it
+  in, so a leftover from an old design is easy to spot. Templates
+  WordPress reaches by its own rules, such as Index or Single Posts, make
+  no such claim, because they are used by rule rather than by being
+  picked. A customized template can be reset to the
   theme's version in one step, which hands the theme's own file back
   rather than deleting anything; your content is not affected either way.
+  Deleting a template names how many pages will fall back to a more
+  general one first.
   Template parts have their own tab. Templates a plugin registered are
   marked as such and offer no delete, because deleting one lasts only
   until that plugin registers it again. Editing a template opens the Site

@@ -137,6 +137,20 @@ verified empirically at v0.23.0:
    (id `templates`), the Structure/Terms precedent; each tab keeps its own
    route and Design stays highlighted across `templates`, `navigation`
    and `navedit`.
+   **TEMPLATE USAGE SHIPPED**: `minn-admin/v1/templates/usage` answers what
+   reaches each one — TEMPLATES by counting `_wp_page_template` assignments
+   (one grouped query; `default` excluded, revisions/auto-drafts excluded),
+   PARTS by counting `wp:template-part {"slug"}` references across
+   templates and parts (patterns resolved first, same as the nav scan;
+   cross-checked against a raw string scan on mmonroe: 9/9/0/0). Feeds the
+   row meta and the delete confirm ("N pages will fall back…").
+   HARD-WON: "unused" is only sayable for templates reached by CHOICE.
+   Core's `is_custom` is exactly that signal (the slug is not one of
+   WP's default template types). The theme's own theme.json
+   `customTemplates` is NOT a substitute — mmonroe declares `page` and
+   `404` there, and an early build wrongly told the user the template
+   behind every page was unused. Note PHP coerces a numeric key like
+   "404" to int if that list is ever read again.
    STILL OPEN, ranked: template REVISIONS (route exists, unused here);
    then a style-variations picker
    (`wp/v2/global-styles/themes/{stylesheet}/variations` lists them and

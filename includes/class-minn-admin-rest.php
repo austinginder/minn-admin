@@ -1217,6 +1217,18 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/templates/usage',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'template_usage' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_theme_options' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/themes/search',
 			array(
 				'methods'             => 'GET',
@@ -7062,6 +7074,96 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * What actually uses each template and template part.
+	 *
+	 * The Site Editor lists templates without saying whether anything reaches
+	 * them, so a template nobody uses looks exactly like the one behind half
+	 * the site. "Used" means two different things and both are answered here:
+	 *
+	 * - A TEMPLATE is chosen per page and stored in `_wp_page_template`, so
+	 *   its usage is a count of the pages assigned to it. Hierarchy templates
+	 *   (single, archive, 404) are reached by rule rather than assignment and
+	 *   simply have no assignments, which is why the client only speaks of a
+	 *   count for templates a person can actually pick.
+	 * - A PART is pulled in by markup, so its usage is the number of templates
+	 *   and parts whose blocks reference its slug.
+	 */
+	public static function template_usage() {
+		global $wpdb;
+
+		// One grouped query rather than a count per template. Revisions and
+		// auto-drafts would inflate the numbers with copies of a real page.
+		$rows = $wpdb->get_results(
+			"SELECT pm.meta_value AS slug, COUNT(*) AS n
+			 FROM {$wpdb->postmeta} pm
+			 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+			 WHERE pm.meta_key = '_wp_page_template'
+			   AND p.post_type != 'revision'
+			   AND p.post_status NOT IN ( 'trash', 'auto-draft' )
+			 GROUP BY pm.meta_value",
+			ARRAY_A
+		);
+		$templates = array();
+		foreach ( (array) $rows as $row ) {
+			// 'default' means "no template chosen", not a template named default.
+			if ( 'default' !== $row['slug'] && '' !== $row['slug'] ) {
+				$templates[ (string) $row['slug'] ] = (int) $row['n'];
+			}
+		}
+
+		// Templates reached ONLY by being chosen, which is what makes "nothing
+		// uses this" a true statement. Core's is_custom is exactly that: the
+		// slug is not one of WordPress's hierarchy template types. The theme's
+		// declared customTemplates is NOT a substitute — a theme may list a
+		// hierarchy name there (mmonroe declares "page" and "404"), and those
+		// serve every page and every 404 whether or not anyone picks them.
+		$assignable = array();
+		foreach ( get_block_templates( array(), 'wp_template' ) as $tpl ) {
+			if ( ! empty( $tpl->is_custom ) ) {
+				$assignable[] = (string) $tpl->slug;
+			}
+		}
+
+		// Which templates and parts pull in each part.
+		$parts = array();
+		foreach ( array( 'wp_template', 'wp_template_part' ) as $type ) {
+			foreach ( get_block_templates( array(), $type ) as $tpl ) {
+				if ( empty( $tpl->content ) ) {
+					continue;
+				}
+				$blocks = parse_blocks( $tpl->content );
+				if ( function_exists( 'resolve_pattern_blocks' ) ) {
+					$blocks = resolve_pattern_blocks( $blocks );
+				}
+				$slugs = array();
+				self::scan_template_part_refs( $blocks, $slugs );
+				foreach ( array_unique( $slugs ) as $slug ) {
+					$parts[ $slug ] = isset( $parts[ $slug ] ) ? $parts[ $slug ] + 1 : 1;
+				}
+			}
+		}
+
+		return rest_ensure_response( array(
+			'templates'  => (object) $templates,
+			'parts'      => (object) $parts,
+			'assignable' => array_values( array_unique( $assignable ) ),
+		) );
+	}
+
+	/** Collect the slug of every template part a block tree pulls in. */
+	private static function scan_template_part_refs( array $blocks, array &$slugs ) {
+		foreach ( $blocks as $block ) {
+			if ( 'core/template-part' === ( isset( $block['blockName'] ) ? $block['blockName'] : '' )
+				&& ! empty( $block['attrs']['slug'] ) ) {
+				$slugs[] = (string) $block['attrs']['slug'];
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				self::scan_template_part_refs( $block['innerBlocks'], $slugs );
+			}
+		}
 	}
 
 	public static function search_themes( WP_REST_Request $request ) {

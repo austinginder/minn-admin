@@ -55,6 +55,9 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 	let prevTheme = '';
 	let customized = false;
 	let indexId = '';
+	let tplId = '';
+	let pageId = 0;
+	const suiteSlug = 'minn-suite-tpl';
 
 	try {
 		prevTheme = ( await rest( 'wp/v2/themes?status=active&_fields=stylesheet' ) ).body[ 0 ].stylesheet;
@@ -148,6 +151,52 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 		t.check( 'the toolbar counts what this site changed',
 			/changed of/.test( await page.evaluate( () => document.querySelector( '.minn-toolbar-meta' ).textContent ) ) );
 
+		/* ===== Usage: what actually reaches each template =====
+		 * A page picks its template explicitly, so a custom template's usage is
+		 * a count of pages. Hierarchy templates are reached by rule and must
+		 * NOT claim to be unused, which is the whole point of the distinction. */
+		const madeTpl = await rest( 'wp/v2/templates', {
+			method: 'POST',
+			body: {
+				slug: suiteSlug,
+				theme: 'twentytwentyfive',
+				title: 'Suite Custom Template',
+				content: '<!-- wp:paragraph --><p>suite</p><!-- /wp:paragraph -->',
+			},
+		} );
+		t.check( 'seeded a custom template', madeTpl.status === 200 || madeTpl.status === 201, `status ${ madeTpl.status }` );
+		tplId = madeTpl.body && madeTpl.body.id;
+
+		await open();
+		const unusedRow = ( await rows() ).find( ( r ) => r.title === 'Suite Custom Template' );
+		t.check( 'a custom template nothing uses says so', unusedRow && /Not used by any page/.test( unusedRow.meta ), JSON.stringify( unusedRow ) );
+
+		const pg = await rest( 'wp/v2/pages', {
+			method: 'POST',
+			body: { title: 'Suite template page', status: 'draft', template: suiteSlug },
+		} );
+		pageId = pg.body && pg.body.id;
+		t.check( 'seeded a page that chooses it', pg.body && pg.body.template === suiteSlug, JSON.stringify( pg.body && pg.body.template ) );
+
+		await open();
+		const usedRow = ( await rows() ).find( ( r ) => r.title === 'Suite Custom Template' );
+		t.check( 'the template now reports the page that uses it',
+			usedRow && /Used by 1 page/.test( usedRow.meta ), JSON.stringify( usedRow ) );
+
+		// The template behind every post must never read as unused.
+		const hierarchyRow = ( await rows() ).find( ( r ) => r.title === 'Index' );
+		t.check( 'a hierarchy template makes no usage claim at all',
+			hierarchyRow && ! /Not used|Used by/.test( hierarchyRow.meta ), JSON.stringify( hierarchyRow ) );
+
+		/* ===== Parts count the templates that pull them in ===== */
+		await page.click( '[data-tplkind="wp_template_part"]' );
+		await page.waitForTimeout( 500 );
+		const partRows = await rows();
+		t.check( 'a part reports how many templates include it',
+			partRows.some( ( r ) => /In \d+ template/.test( r.meta ) ), JSON.stringify( partRows.map( ( r ) => r.meta ).slice( 0, 3 ) ) );
+		await page.click( '[data-tplkind="wp_template"]' );
+		await page.waitForTimeout( 400 );
+
 		/* ===== Reset hands the theme's own file back ===== */
 		t.check( 'a customized template offers Reset to theme', await rowMenuAction( idx.id, 'Reset to theme' ) );
 		await page.waitForFunction( () => {
@@ -177,6 +226,8 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 		if ( customized && indexId ) {
 			await rest( `wp/v2/templates/${ encodeURIComponent( indexId ) }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		}
+		if ( pageId ) await rest( `wp/v2/pages/${ pageId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( tplId ) await rest( `wp/v2/templates/${ encodeURIComponent( tplId ) }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( prevTheme ) await rest( 'minn-admin/v1/themes/activate', { method: 'POST', body: { stylesheet: prevTheme } } ).catch( () => {} );
 	}
 	await t.done( browser, errors );

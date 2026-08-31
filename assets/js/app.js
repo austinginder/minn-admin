@@ -17965,12 +17965,15 @@
 	async function loadTemplates() {
 		const ts = tplState();
 		const fields = 'id,slug,title,description,source,origin,has_theme_file,is_custom,author,modified,type,area';
-		const [ templates, parts ] = await Promise.all( [
+		const [ templates, parts, usage ] = await Promise.all( [
 			api( `wp/v2/templates?context=edit&_fields=${ fields }` ),
 			api( `wp/v2/template-parts?context=edit&_fields=${ fields }` ).catch( () => [] ),
+			// Usage is Minn's own read; losing it must not cost the list.
+			api( 'minn-admin/v1/templates/usage' ).catch( () => null ),
 		] );
 		ts.templates = templates;
 		ts.parts = parts;
+		ts.usage = usage;
 		// Name whoever changed a template, but only ask about the handful of
 		// authors that actually appear on an edited row.
 		const ids = [ ...new Set( templates.concat( parts )
@@ -18005,6 +18008,31 @@
 		}
 		if ( t.has_theme_file ) return { key: 'customized', label: __( 'Customized' ) };
 		return { key: 'added', label: __( 'Added here' ) };
+	}
+
+	/**
+	 * What reaches this template. A page picks its template explicitly, so a
+	 * template's usage is a count of pages; a part is pulled in by markup, so
+	 * its usage is a count of templates.
+	 *
+	 * Hierarchy templates (single, archive, 404) are reached by rule rather
+	 * than by assignment, so "used by 0 pages" would be a plain lie about the
+	 * template behind every post. They say nothing, and only a template
+	 * someone could actually have chosen reports being unused.
+	 */
+	function tplUsageLabel( t, ts ) {
+		const u = ts.usage || {};
+		if ( 'wp_template_part' === t.type ) {
+			const n = ( u.parts || {} )[ t.slug ] || 0;
+			return n
+				/* translators: %s: how many templates include this part. */
+				? sprintf( _n( 'In %s template', 'In %s templates', n ), String( n ) )
+				: __( 'Not used by any template' );
+		}
+		const n = ( u.templates || {} )[ t.slug ] || 0;
+		/* translators: %s: how many pages use this template. */
+		if ( n ) return sprintf( _n( 'Used by %s page', 'Used by %s pages', n ), String( n ) );
+		return ( u.assignable || [] ).indexOf( t.slug ) !== -1 ? __( 'Not used by any page' ) : '';
 	}
 
 	function siteEditorTplUrl( t ) {
@@ -18076,9 +18104,14 @@
 				<div class="minn-menu-info">
 					<span class="minn-row-title">${ esc( decodeEntities( t.title.rendered || t.title.raw || t.slug ) ) }</span>
 					<span class="minn-menu-kind${ 'theme' === st.key ? '' : ' is-on' }">${ esc( st.label ) }</span>
-					<span class="minn-row-slug minn-cell-clip">${ esc( 'custom' === t.source
-						? [ who, t.modified ? timeAgo( t.modified ) : '' ].filter( Boolean ).join( ' · ' )
-						: decodeEntities( stripTags( t.description || '' ) ) || t.slug ) }</span>
+					<span class="minn-row-slug minn-cell-clip">${ esc( [
+						// Usage leads: it is the question this screen exists to
+						// answer, and a long description must not clip it away.
+						tplUsageLabel( t, ts ),
+						'custom' === t.source
+							? [ who, t.modified ? timeAgo( t.modified ) : '' ].filter( Boolean ).join( ' · ' )
+							: decodeEntities( stripTags( t.description || '' ) ) || t.slug,
+					].filter( Boolean ).join( ' · ' ) ) }</span>
 				</div>
 				<div class="minn-menu-ctrls">
 					${ ENGINE ? '' : `<span class="minn-row-ext" title="${ esc( __( 'Opens in the Site Editor, in a new tab' ) ) }" aria-hidden="true">↗</span>` }
@@ -18102,7 +18135,7 @@
 		);
 
 		const byId = ( id ) => rows.find( ( r ) => r.id === id );
-		const reload = () => { ts.templates = null; ts.parts = null; renderTemplates(); };
+		const reload = () => { ts.templates = null; ts.parts = null; ts.usage = null; renderTemplates(); };
 
 		const rowMenu = ( id, x, y ) => {
 			const t = byId( id );
@@ -18137,10 +18170,17 @@
 					label: __( 'Delete' ),
 					danger: true,
 					run: async () => {
+						// Name what breaks. A template nothing reaches is safe to
+						// remove; one behind thirty pages is a different decision.
+						const inUse = ( ( ts.usage && ts.usage.templates ) || {} )[ t.slug ] || 0;
 						if ( ! await minnConfirm( {
 							/* translators: %s: template name. */
 							title: sprintf( __( 'Delete “%s”?' ), name ),
-							body: __( 'This template exists only on this site, so there is no theme version to fall back to: anything using it falls back to a more general template. If a plugin added it, deleting it here may only last until that plugin adds it again. There is no undo for this.' ),
+							body: ( inUse
+								/* translators: %s: how many pages use this template. */
+								? sprintf( _n( '%s page uses this template and will fall back to a more general one. ', '%s pages use this template and will fall back to a more general one. ', inUse ), String( inUse ) )
+								: __( 'Nothing on the site uses this template. ' ) )
+								+ __( 'It exists only on this site, so there is no theme version to fall back to. If a plugin added it, deleting it here may only last until that plugin adds it again. There is no undo for this.' ),
 							danger: true,
 							confirmLabel: __( 'Delete template' ),
 						} ) ) return;
