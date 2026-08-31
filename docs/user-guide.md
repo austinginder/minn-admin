@@ -44,7 +44,7 @@ without a store still has the shorter navigation it needs:
   presence is purely a settings screen, and a theme's options pages,
   gather under a single **Site Options** entry here rather than each
   claiming its own sidebar spot.
-- **Manage** — the site itself: Extensions, Users, Navigation (Menus and
+- **Manage** — the site itself: Extensions, Users, Design (Menus and
   Widgets on classic themes), Structure, System, Settings.
 
 Group headings collapse when clicked, and the sidebar remembers your
@@ -610,7 +610,19 @@ cards, all in the same operational group.
   technical asks you to turn on logging. It also says plainly when a
   custom post type is hidden from Minn by its own REST setting, naming
   the post types affected and where the fix lives.
-- **Navigation** (block themes) — your site's menus, with the question the
+- **Design** (block themes) — two tabs, Templates and Navigation.
+  **Templates** answers the question the Site Editor's flat list cannot:
+  which of your theme's templates this site has actually changed. Changed
+  ones sort to the top, and every row says which it is: from the theme,
+  customized here (naming who changed it and when), added here, or
+  contributed by a plugin. A customized template can be reset to the
+  theme's version in one step, which hands the theme's own file back
+  rather than deleting anything; your content is not affected either way.
+  Template parts have their own tab. Templates a plugin registered are
+  marked as such and offer no delete, because deleting one lasts only
+  until that plugin registers it again. Editing a template opens the Site
+  Editor.
+  **Navigation** is your site's menus, with the question the
   Site Editor never answers: where each one actually renders. A menu used
   in your header says so, and a menu left behind by a previous theme reads
   as not used, which is usually how you discover you have three. Each row
@@ -629,9 +641,10 @@ cards, all in the same operational group.
   back exactly as it was found, so a menu's styling and blocks Minn has
   never heard of come through a rearrangement untouched, and a menu
   holding markup Minn cannot vouch for says so and stays read-only rather
-  than guessing. On a classic theme this screen is **Menus** instead,
-  where Minn edits the menu itself and assigns it to your theme's
-  locations.
+  than guessing. On a classic theme there is no Design item: navigation
+  lives in **Menus**, where Minn edits the menu itself and assigns it to
+  your theme's locations, and the theme's templates are PHP files rather
+  than something WordPress can edit.
 - **Structure** — post types, taxonomies and terms: rename, merge and
   re-parent categories and tags safely. Post type and taxonomy rows answer
   a right-click the way the rest of Minn does: open the definition, jump

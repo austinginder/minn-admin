@@ -1127,8 +1127,9 @@
 		useredit: [ __( 'Edit user' ), __( 'People' ) ],
 		terms: [ __( 'Terms' ), __( 'Categories & Tags' ) ],
 		menus: [ __( 'Menus' ), __( 'Navigation' ) ],
-		navigation: [ __( 'Navigation' ), __( 'Menus' ) ],
-		navedit: [ __( 'Navigation' ), __( 'Menu' ) ],
+		templates: [ __( 'Design' ), __( 'Templates' ) ],
+		navigation: [ __( 'Design' ), __( 'Navigation' ) ],
+		navedit: [ __( 'Design' ), __( 'Menu' ) ],
 		widgets: [ __( 'Widgets' ), __( 'Sidebars & footers' ) ],
 		extensions: [ __( 'Extensions' ), __( 'Installed' ) ],
 		posttypes: [ __( 'Structure' ), __( 'Post types, taxonomies & terms' ) ],
@@ -3069,6 +3070,7 @@
 			panel: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
 			list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
 			columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
+			layout: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
 			chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
 			cart: '<circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
 			users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -3229,7 +3231,7 @@
 				manageItems.push( { id: 'widgets', label: __( 'Widgets' ), icon: 'columns' } );
 			}
 		} else if ( B.caps.themeOptions && B.site.blockTheme ) {
-			manageItems.push( { id: 'navigation', label: __( 'Navigation' ), icon: 'list' } );
+			manageItems.push( { id: 'templates', label: __( 'Design' ), icon: 'layout' } );
 		}
 		// One "Structure" item covers Post Types, Taxonomies and Terms as tabs.
 		// Admins get all three; an editor (manage_categories only, no
@@ -3253,7 +3255,7 @@
 	// Hiding is cosmetic (routes stay reachable by URL and ⌘K); restore
 	// lives on Your profile, and admins can restore for others from the
 	// user edit page.
-	const CORE_HIDEABLE_NAV = [ 'content', 'media', 'comments', 'orders', 'subscriptions', 'products', 'coupons', 'customers', 'users', 'terms', 'menus', 'navigation', 'widgets', 'posttypes', 'extensions', 'database', 'system', 'settings' ];
+	const CORE_HIDEABLE_NAV = [ 'content', 'media', 'comments', 'orders', 'subscriptions', 'products', 'coupons', 'customers', 'users', 'terms', 'menus', 'templates', 'widgets', 'posttypes', 'extensions', 'database', 'system', 'settings' ];
 	const isCoreHidden = ( id ) => ( B.hidden || [] ).some( ( h ) => h.id === 'core:' + id );
 	// Sites commonly hide wp-admin menus for clients (remove_menu_page on
 	// admin_menu — Comments is the classic). The notices capture pageload
@@ -3822,6 +3824,9 @@
 				// Structure folds Terms in: an admin on the 'terms' route (deep
 				// link / ⌘K) keeps the 'posttypes' Structure item highlighted.
 				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
+				// Design folds in Navigation the same way: its tabs and the menu
+				// tree editor all keep the one Design item highlighted.
+				|| ( [ 'navigation', 'navedit' ].indexOf( state.route ) !== -1 && 'templates' === btn.dataset.nav )
 				|| ( surface && surface.family && btn.dataset.family === surface.family );
 			btn.classList.toggle( 'active', on );
 			btn.title = on && navBtnIsCurrent( btn ) ? refreshHint : '';
@@ -4079,6 +4084,9 @@
 				// Structure folds Terms in — an admin on the 'terms' route keeps
 				// the 'posttypes' Structure item highlighted.
 				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
+				// Design folds in Navigation the same way: its tabs and the menu
+				// tree editor all keep the one Design item highlighted.
+				|| ( [ 'navigation', 'navedit' ].indexOf( state.route ) !== -1 && 'templates' === btn.dataset.nav )
 				// The order detail page keeps the Orders item lit.
 				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
 				// Same for the product detail page and Products.
@@ -17924,6 +17932,246 @@
 		} );
 	}
 
+	/* ===== Design: templates, template parts, navigation ===== */
+
+	// One Design item rather than a Templates item and a Navigation item, the
+	// same consolidation Structure makes for post types / taxonomies / terms,
+	// and the same grouping the Site Editor itself uses. Each tab keeps its own
+	// route, so a deep link or a ⌘K command still lands exactly where it says.
+
+	function designTabsHtml( active ) {
+		return `
+		<div class="minn-tabs">
+			<button class="minn-tab${ 'templates' === active ? ' active' : '' }" data-designtab="templates">${ esc( __( 'Templates' ) ) }</button>
+			<button class="minn-tab${ 'navigation' === active ? ' active' : '' }" data-designtab="navigation">${ esc( __( 'Navigation' ) ) }</button>
+		</div>`;
+	}
+
+	function bindDesignTabs( view ) {
+		$$( '[data-designtab]', view ).forEach( ( b ) =>
+			b.addEventListener( 'click', () => {
+				if ( ! b.classList.contains( 'active' ) ) go( b.dataset.designtab );
+			} )
+		);
+	}
+
+	function tplState() {
+		if ( ! state.tplData ) {
+			state.tplData = { kind: 'wp_template', templates: null, parts: null, authors: {}, loading: false };
+		}
+		return state.tplData;
+	}
+
+	async function loadTemplates() {
+		const ts = tplState();
+		const fields = 'id,slug,title,description,source,origin,has_theme_file,is_custom,author,modified,type,area';
+		const [ templates, parts ] = await Promise.all( [
+			api( `wp/v2/templates?context=edit&_fields=${ fields }` ),
+			api( `wp/v2/template-parts?context=edit&_fields=${ fields }` ).catch( () => [] ),
+		] );
+		ts.templates = templates;
+		ts.parts = parts;
+		// Name whoever changed a template, but only ask about the handful of
+		// authors that actually appear on an edited row.
+		const ids = [ ...new Set( templates.concat( parts )
+			.filter( ( x ) => 'custom' === x.source && x.author )
+			.map( ( x ) => x.author ) ) ];
+		if ( ids.length ) {
+			const users = await api( `wp/v2/users?include=${ ids.join( ',' ) }&per_page=100&_fields=id,name` ).catch( () => [] );
+			users.forEach( ( u ) => { ts.authors[ u.id ] = u.name; } );
+		}
+	}
+
+	// "From theme" is the file as shipped; "Customized" overrides a file that
+	// still exists, so it can be reset to it; "Added here" lives only in this
+	// site's database.
+	//
+	// A plugin that registers templates (The Events Calendar, for one) produces
+	// rows core reports as is_custom with a null origin and an author of
+	// whoever happened to be logged in, so those fields cannot tell them from
+	// hand-made ones. The template ID can: it is "<owner>//<slug>", and the
+	// owner is the plugin's slug rather than the theme's. Those get no
+	// destructive action, because deleting one answers 200 and the plugin
+	// simply registers it again on the next request.
+	function tplOwner( t ) {
+		return String( t.id || '' ).split( '//' )[ 0 ];
+	}
+
+	function tplStatus( t ) {
+		if ( 'custom' !== t.source ) return { key: 'theme', label: __( 'From theme' ) };
+		const owner = tplOwner( t );
+		if ( owner && owner !== B.site.stylesheet && owner !== B.site.template ) {
+			return { key: 'plugin', label: __( 'From a plugin' ) };
+		}
+		if ( t.has_theme_file ) return { key: 'customized', label: __( 'Customized' ) };
+		return { key: 'added', label: __( 'Added here' ) };
+	}
+
+	function siteEditorTplUrl( t ) {
+		return B.site.adminUrl + 'site-editor.php?p=' + encodeURIComponent( '/' + t.type + '/' + t.id ) + '&canvas=edit';
+	}
+
+	function renderTemplates() {
+		const view = $( '#minn-view' );
+		const ts = tplState();
+		if ( ! B.caps.themeOptions ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( 'You need permission to manage templates.' ) ) }</div>`;
+			return;
+		}
+		if ( ! B.site.blockTheme ) {
+			view.innerHTML = `
+			<div class="minn-card minn-panel-pad minn-empty">
+				<div>${ esc( __( 'This site uses a classic theme, whose templates are PHP files in the theme itself rather than something WordPress can edit here.' ) ) }</div>
+			</div>`;
+			return;
+		}
+		if ( ! ts.templates ) {
+			if ( softLoadPending( 'templates' ) ) return;
+			view.innerHTML = designTabsHtml( 'templates' ) + `<div class="minn-loading">${ esc( __( 'Loading templates…' ) ) }</div>`;
+			bindDesignTabs( view );
+			if ( ! ts.loading ) {
+				ts.loading = true;
+				loadTemplates()
+					.then( () => { ts.loading = false; } )
+					.then( renderIfCurrent( 'templates' ) )
+					.catch( ( e ) => { ts.loading = false; showErr( e ); } );
+			}
+			return;
+		}
+
+		const all = 'wp_template' === ts.kind ? ts.templates : ts.parts;
+		// What this site changed sorts first, then what a plugin brought, then
+		// the theme's own untouched files: "what has been touched here" is the
+		// question the Site Editor's flat alphabetical list cannot answer.
+		const RANK = { customized: 0, added: 0, plugin: 1, theme: 2 };
+		const rows = all.slice().sort( ( a, b ) => {
+			const d = RANK[ tplStatus( a ).key ] - RANK[ tplStatus( b ).key ];
+			if ( d ) return d;
+			return ( a.title.rendered || a.slug ).localeCompare( b.title.rendered || b.slug );
+		} );
+		// Only what this site did counts as changed; a plugin's own templates
+		// are not something the site owner altered.
+		const changed = all.filter( ( x ) => RANK[ tplStatus( x ).key ] === 0 ).length;
+
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			${ designTabsHtml( 'templates' ) }
+			<div class="minn-toolbar-meta">${ esc( changed
+				/* translators: %1$s: how many templates this site changed, %2$s: how many exist. */
+				? sprintf( __( '%1$s changed of %2$s' ), String( changed ), String( all.length ) )
+				: sprintf( _n( '%s template', '%s templates', all.length ), String( all.length ) ) ) }</div>
+		</div>
+		<div class="minn-toolbar">
+			<div class="minn-tabs minn-quiet-tabs">
+				<button class="minn-tab${ 'wp_template' === ts.kind ? ' active' : '' }" data-tplkind="wp_template">${ esc( __( 'Templates' ) ) } (${ ts.templates.length })</button>
+				<button class="minn-tab${ 'wp_template_part' === ts.kind ? ' active' : '' }" data-tplkind="wp_template_part">${ esc( __( 'Parts' ) ) } (${ ts.parts.length })</button>
+			</div>
+		</div>
+		<div class="minn-card minn-menu-items">
+			${ rows.length ? rows.map( ( t ) => {
+				const st = tplStatus( t );
+				const who = ts.authors[ t.author ];
+				return `
+			<div class="minn-menu-row" data-tpl="${ esc( t.id ) }">
+				<div class="minn-menu-info">
+					<span class="minn-row-title">${ esc( decodeEntities( t.title.rendered || t.title.raw || t.slug ) ) }</span>
+					<span class="minn-menu-kind${ 'theme' === st.key ? '' : ' is-on' }">${ esc( st.label ) }</span>
+					<span class="minn-row-slug minn-cell-clip">${ esc( 'custom' === t.source
+						? [ who, t.modified ? timeAgo( t.modified ) : '' ].filter( Boolean ).join( ' · ' )
+						: decodeEntities( stripTags( t.description || '' ) ) || t.slug ) }</span>
+				</div>
+				<div class="minn-menu-ctrls">
+					${ ENGINE ? '' : `<a class="minn-btn-soft" href="${ esc( siteEditorTplUrl( t ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit' ) ) } ↗</a>` }
+					<button class="minn-icon-btn sm" data-tplmenu="${ esc( t.id ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
+				</div>
+			</div>`;
+			} ).join( '' ) : `<div class="minn-empty">${ esc( __( 'This theme registers none of these.' ) ) }</div>` }
+		</div>`;
+
+		bindDesignTabs( view );
+		bindTemplates( view, ts, rows );
+	}
+
+	function bindTemplates( view, ts, rows ) {
+		$$( '[data-tplkind]', view ).forEach( ( b ) =>
+			b.addEventListener( 'click', () => {
+				if ( ts.kind === b.dataset.tplkind ) return;
+				ts.kind = b.dataset.tplkind;
+				renderTemplates();
+			} )
+		);
+
+		const byId = ( id ) => rows.find( ( r ) => r.id === id );
+		const reload = () => { ts.templates = null; ts.parts = null; renderTemplates(); };
+
+		const rowMenu = ( id, x, y ) => {
+			const t = byId( id );
+			if ( ! t ) return;
+			const st = tplStatus( t );
+			const name = decodeEntities( t.title.rendered || t.title.raw || t.slug );
+			const entries = [];
+			if ( ! ENGINE ) entries.push( { label: __( 'Edit in Site Editor' ), href: siteEditorTplUrl( t ) } );
+			if ( 'customized' === st.key ) {
+				entries.push( {
+					label: __( 'Reset to theme' ),
+					danger: true,
+					run: async () => {
+						if ( ! await minnConfirm( {
+							/* translators: %s: template name. */
+							title: sprintf( __( 'Reset “%s” to the theme version?' ), name ),
+							body: __( 'The changes made to this template on this site are discarded and the version your theme ships takes over again. Your content is not affected.' ),
+							danger: true,
+							confirmLabel: __( 'Reset to theme' ),
+						} ) ) return;
+						try {
+							await api( `wp/v2/${ 'wp_template' === t.type ? 'templates' : 'template-parts' }/${ encodeURIComponent( t.id ) }?force=true`, { method: 'DELETE' } );
+							toast( __( 'Reset to the theme version' ) );
+							reload();
+						} catch ( e ) {
+							toast( e.message, true );
+						}
+					},
+				} );
+			} else if ( 'added' === st.key ) {
+				entries.push( {
+					label: __( 'Delete' ),
+					danger: true,
+					run: async () => {
+						if ( ! await minnConfirm( {
+							/* translators: %s: template name. */
+							title: sprintf( __( 'Delete “%s”?' ), name ),
+							body: __( 'This template exists only on this site, so there is no theme version to fall back to: anything using it falls back to a more general template. If a plugin added it, deleting it here may only last until that plugin adds it again. There is no undo for this.' ),
+							danger: true,
+							confirmLabel: __( 'Delete template' ),
+						} ) ) return;
+						try {
+							await api( `wp/v2/${ 'wp_template' === t.type ? 'templates' : 'template-parts' }/${ encodeURIComponent( t.id ) }?force=true`, { method: 'DELETE' } );
+							toast( __( 'Template deleted' ) );
+							reload();
+						} catch ( e ) {
+							toast( e.message, true );
+						}
+					},
+				} );
+			}
+			openMinnMenu( x, y, entries );
+		};
+
+		$$( '[data-tplmenu]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', ( e ) => {
+				e.preventDefault();
+				const r = btn.getBoundingClientRect();
+				rowMenu( btn.dataset.tplmenu, r.left, r.bottom + 4 );
+			} )
+		);
+		$$( '[data-tpl]', view ).forEach( ( row ) =>
+			row.addEventListener( 'contextmenu', ( e ) => {
+				e.preventDefault();
+				rowMenu( row.dataset.tpl, e.clientX, e.clientY );
+			} )
+		);
+	}
+
 	/* ===== Navigation (block themes) ===== */
 
 	// Block themes replace classic menus with wp_navigation posts, which
@@ -18006,6 +18254,7 @@
 
 		view.innerHTML = `
 		<div class="minn-toolbar">
+			${ designTabsHtml( 'navigation' ) }
 			<div class="minn-toolbar-meta">${ esc( sprintf( /* translators: %s: localized number of navigation menus. */ _n( '%s menu', '%s menus', n ), String( n ) ) ) }</div>
 			<button class="minn-btn-soft" id="minn-nav-new">${ icon( 'plus' ) } ${ esc( __( 'New menu' ) ) }</button>
 		</div>
@@ -18042,6 +18291,7 @@
 	}
 
 	function bindNavigation( view, ns ) {
+		bindDesignTabs( view );
 		const reload = () => { ns.menus = null; ns.usage = null; renderNavigation(); };
 
 		const newBtn = $( '#minn-nav-new', view );
@@ -38842,6 +39092,7 @@
 			if ( B.site.hasSidebars ) cmds.push( { label: __( 'Manage Widgets' ), kind: 'nav', icon: '▥', run: () => go( 'widgets' ) } );
 		} else if ( B.caps.themeOptions && B.site.blockTheme ) {
 			cmds.push( { label: __( 'Edit Navigation' ), kind: 'nav', icon: '☰', run: () => go( 'navigation' ) } );
+			cmds.push( { label: __( 'Manage Templates' ), kind: 'nav', icon: '▤', run: () => go( 'templates' ) } );
 		}
 		if ( B.caps.plugins ) cmds.push( { label: __( 'Manage Extensions' ), kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'Manage Post Types' ), kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
@@ -45564,6 +45815,7 @@
 			case 'useredit': renderUserEdit(); break;
 			case 'terms': renderStructure(); break;
 			case 'menus': renderMenus(); break;
+			case 'templates': renderTemplates(); break;
 			case 'navigation': renderNavigation(); break;
 			case 'navedit': renderNavEdit(); break;
 			case 'widgets': renderWidgets(); break;

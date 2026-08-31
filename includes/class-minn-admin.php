@@ -1491,6 +1491,12 @@ class Minn_Admin {
 				// Minn (like wp-admin) only offers Menus/Widgets on classic themes.
 				'blockTheme'  => wp_is_block_theme(),
 				'hasSidebars' => ! empty( $GLOBALS['wp_registered_sidebars'] ),
+				// Template ids are "<owner>//<slug>", and the owner is the
+				// PLUGIN slug for templates a plugin registers. Comparing
+				// against these two is the only way to tell a theme's own
+				// template from one a plugin contributed.
+				'stylesheet'  => get_stylesheet(),
+				'template'    => get_template(),
 			),
 			// Hours east of UTC (may be fractional, e.g. +5.5). Used by the
 			// client to parse WP REST site-local dates (no zone suffix) so

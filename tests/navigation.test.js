@@ -89,12 +89,16 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 		/* ===== Nav gating ===== */
 		await openNav();
 		const gate = await page.evaluate( () => ( {
-			navigation: !! document.querySelector( '.minn-nav-btn[data-nav="navigation"]' ),
+			design: !! document.querySelector( '.minn-nav-btn[data-nav="templates"]' ),
+			designActive: !! document.querySelector( '.minn-nav-btn[data-nav="templates"].active' ),
 			menus: !! document.querySelector( '.minn-nav-btn[data-nav="menus"]' ),
 			blockTheme: !! ( window.MINN.site && window.MINN.site.blockTheme ),
 		} ) );
 		t.check( 'boot reports a block theme', gate.blockTheme );
-		t.check( 'Navigation nav item present on a block theme', gate.navigation );
+		// Navigation is a tab under one Design item, the way Terms sits under
+		// Structure, so the sidebar stays short on a block theme.
+		t.check( 'Design nav item present on a block theme', gate.design );
+		t.check( 'it is the item highlighted while on Navigation', gate.designActive );
 		t.check( 'Menus nav item gives way to it', ! gate.menus );
 		t.check( 'route renders (not bounced to overview)',
 			await page.evaluate( () => location.pathname.endsWith( '/navigation' ) && !! document.querySelector( '.minn-toolbar' ) ) );

@@ -121,8 +121,24 @@ verified empirically at v0.23.0:
    falls to read-only + Site Editor. Suite
    `tests/navigation-tree.test.js` (25); real-data parse walk on the
    mmonroe lab covers nested `social-links` and a third-party block.
-   STILL OPEN, ranked: a template / template-part surface (customized-vs-theme status,
-   reset, revisions, deep links); then a style-variations picker
+   **TEMPLATES SURFACE SHIPPED**: `/templates` (route `templates`) lists
+   `wp/v2/templates` + `/template-parts` (pure core REST, no Minn endpoint)
+   with the status the Site Editor's flat list cannot give — from theme /
+   customized / added here / from a plugin — changed rows sorted first,
+   author + modified named, and Reset to theme (a DELETE that hands the
+   theme file back; verified `source` returns to `theme`). HARD-WON: a
+   plugin's registered templates (The Events Calendar) are INDISTINGUISHABLE
+   from hand-made ones by `is_custom` / `origin` / `author` — only the
+   `<owner>//<slug>` id says so, compared against boot `site.stylesheet` /
+   `site.template` (both added for this). They get no destructive action
+   because DELETE answers 200 and the plugin re-registers next request.
+   Suite `tests/templates.test.js` (18).
+   IA: Templates and Navigation are TABS under one **Design** nav item
+   (id `templates`), the Structure/Terms precedent; each tab keeps its own
+   route and Design stays highlighted across `templates`, `navigation`
+   and `navedit`.
+   STILL OPEN, ranked: template REVISIONS (route exists, unused here);
+   then a style-variations picker
    (`wp/v2/global-styles/themes/{stylesheet}/variations` lists them and
    applying one is a REST write, so it needs no canvas); then a read-only
    Design card (active theme, palette, site logo). The Site Editor canvas
