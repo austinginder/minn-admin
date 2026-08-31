@@ -391,9 +391,10 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		}
 
 		/* Product pages: Bricks is usually NOT set to edit the product type,
-		   so the canvas is a Single Product template. Bricks' own bar offered
-		   "Edit with Bricks" pointing at that template; Minn used to send
-		   Edit to the Minn product screen instead. */
+		   so the canvas is a Single Product template wrapping the product.
+		   Primary Edit stays Edit Product (this product, in Minn). The
+		   wrapping template is Edit content under More, same as a header
+		   wrapping a Gutenberg post. */
 		const wooOn = wpEval( 'echo class_exists( "WooCommerce" ) ? "yes" : "no";' );
 		t.check( 'WooCommerce is available for the product-page bar check', wooOn === 'yes' || wooOn === 'no', wooOn );
 		if ( wooOn === 'yes' ) {
@@ -438,23 +439,23 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 						text: a ? a.textContent.trim() : '',
 						href: a ? a.getAttribute( 'href' ) : '',
 						hasMore: !! more,
-						productCmd: cmds.some( ( c ) => /Edit Product/.test( c.title ) ),
-						bricksCmd: cmds.some( ( c ) => /Edit in Bricks/.test( c.title ) && /bricks=run/.test( String( c.value || '' ) ) ),
+						contentCmd: cmds.some( ( c ) => /Edit content/.test( c.title ) && /bricks=run/.test( String( c.value || '' ) ) ),
 					};
 				} );
-				t.check( 'a product page Edit opens Bricks on the single-product template',
-					/Edit in Bricks/.test( productEdit.text ) && /bricks=run/.test( productEdit.href )
-					&& /single-product|suite-single-product|template\//.test( productEdit.href ),
+				t.check( 'a product page Edit opens the product in Minn, not a Bricks template',
+					/Edit Product/.test( productEdit.text )
+					&& /\/minn-admin\/products\//.test( productEdit.href )
+					&& ! /bricks=run/.test( productEdit.href ),
 					JSON.stringify( productEdit ) );
-				t.check( 'the product itself stays reachable from the Edit chevron',
-					productEdit.hasMore && productEdit.productCmd && productEdit.bricksCmd,
+				t.check( 'the wrapping Single Product template stays under More',
+					productEdit.hasMore && productEdit.contentCmd,
 					JSON.stringify( productEdit ) );
 				if ( productEdit.hasMore ) {
 					await page.click( '.minn-bar-edit-more' );
 					await page.waitForSelector( '#minn-bar-menu-edit:not([hidden])', { timeout: 5000 } );
 					const pmenu = await page.evaluate( () => document.getElementById( 'minn-bar-menu-edit' ).textContent );
-					t.check( 'the Edit menu names Edit Product and the header template',
-						/Edit Product/.test( pmenu ) && /Site Header/.test( pmenu ), pmenu );
+					t.check( 'the Edit menu names the Single Product template and the header',
+						/Edit content/.test( pmenu ) && /Suite Single Product/.test( pmenu ) && /Site Header/.test( pmenu ), pmenu );
 				}
 				await page.evaluate( async ( id ) => {
 					const bar = window.MINN_BAR || {};

@@ -79,10 +79,9 @@ On a desktop screen the bar shows nothing at all while you read: two small
 strokes in your accent color rest in the very corner to mark the spot, and
 moving your cursor into that corner brings out the complete bar in one
 motion, with search and the command palette, a create menu, an Edit button
-for the page you are viewing (on a Bricks site that is Edit in Bricks when
-a template is painting the page, such as a WooCommerce product, and a
-chevron listing the header, content or footer templates the view uses),
-notifications and your account. The corner
+for the page you are viewing (Edit in Bricks only when that page itself is
+a Bricks canvas; a chevron lists the header, content or footer templates
+wrapping the view), notifications and your account. The corner
 keeps working even while invisible, and hopping between the site and the
 admin by clicking that same corner lands with the bar already open. On a
 phone the Minn mark stays visible and collapsed until you tap it, then opens
