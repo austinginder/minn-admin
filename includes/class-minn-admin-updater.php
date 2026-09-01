@@ -208,7 +208,18 @@ class Minn_Admin_Updater {
 		if ( ! $this->is_our_package_url( $package ) ) {
 			return $reply;
 		}
-		$remote = $this->request();
+		// Remote only. The manifest bundled in the zip names a sha256 for the
+		// release it belongs to, but a zip cannot carry its own hash, so that
+		// value is a build-time placeholder. Judging a download against it
+		// refuses a perfectly good package and reports a mismatch that says
+		// nothing true. Better to say the check could not be made.
+		$remote = $this->request( true );
+		if ( ! is_object( $remote ) ) {
+			return new WP_Error(
+				'minn_admin_unverifiable_package',
+				__( 'Minn Admin update rejected: the release manifest could not be reached, so the download could not be verified. Try again shortly.', 'minn-admin' )
+			);
+		}
 		// Look the hash up BY PACKAGE URL. The manifest publishes one for the
 		// plugin zip and one for every language pack, and a translation
 		// package is a downloaded file like any other: skipping the check for
@@ -238,7 +249,16 @@ class Minn_Admin_Updater {
 		return $file;
 	}
 
-	public function request() {
+	/**
+	 * The release manifest.
+	 *
+	 * @param bool $remote_only Skip the bundled fallback. Verification passes
+	 *                          this: the copy shipped inside the zip cannot
+	 *                          state that zip's own hash, so it is not a thing
+	 *                          integrity can be judged against.
+	 * @return object|null
+	 */
+	public function request( $remote_only = false ) {
 		// Get the local manifest as a fallback.
 		$manifest_file  = dirname( __DIR__ ) . '/manifest.json';
 		$local_manifest = null;
@@ -249,6 +269,10 @@ class Minn_Admin_Updater {
 		if ( ! is_object( $local_manifest ) ) {
 			$local_manifest = new \stdClass();
 		}
+		// Marks this as the copy that shipped inside the zip, so that if the
+		// failure path below caches it, a later verification can tell it apart
+		// from a real fetch.
+		$local_manifest->_minn_local = true;
 
 		$remote = get_transient( $this->cache_key );
 
@@ -265,7 +289,7 @@ class Minn_Admin_Updater {
 				// Back off briefly on failure too, or an unreachable GitHub
 				// re-blocks on the next pageload, and the next, and the next.
 				set_transient( $this->cache_key, $local_manifest, 5 * MINUTE_IN_SECONDS );
-				return $local_manifest;
+				return $remote_only ? null : $local_manifest;
 			}
 
 			$remote = json_decode( wp_remote_retrieve_body( $remote_response ) );
@@ -278,10 +302,17 @@ class Minn_Admin_Updater {
 		}
 
 		if ( is_object( $remote ) ) {
+			// A cached copy can be the bundled manifest parked there by the
+			// failure path above, which is exactly what verification must not
+			// judge against. Tell them apart by identity rather than by
+			// guessing from content.
+			if ( $remote_only && isset( $remote->_minn_local ) ) {
+				return null;
+			}
 			return $remote;
 		}
 
-		return $local_manifest;
+		return $remote_only ? null : $local_manifest;
 	}
 
 	public function info( $response, $action, $args ) {
