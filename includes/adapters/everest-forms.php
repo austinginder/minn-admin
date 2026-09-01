@@ -165,7 +165,9 @@ function minn_admin_everest_flat_value( $v ) {
 	if ( is_array( $v ) ) {
 		$flat = array();
 		array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
-			if ( '' !== trim( (string) $leaf ) ) {
+			// An upload answer carries the file's path on disk beside its
+			// address; the row only ever needed the address.
+			if ( '' !== trim( (string) $leaf ) && ! minn_admin_is_server_path( $leaf ) ) {
 				$flat[] = (string) $leaf;
 			}
 		} );

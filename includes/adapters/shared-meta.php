@@ -66,3 +66,31 @@ function minn_admin_meta_has_incomplete_class( $value, $depth = 0 ) {
 	}
 	return false;
 }
+
+/**
+ * Whether a flattened answer leaf is this server's own filesystem path.
+ *
+ * A file-upload answer is a structure, and one of its leaves is where the file
+ * sits on disk. The renderer wants the address; the path is the server's
+ * directory layout, which is nobody's business in an entries table. Forminator
+ * handles this by knowing its own upload shape, but every form plugin stores
+ * uploads differently, so the shape-independent question is whether the leaf
+ * points inside this install.
+ *
+ * @param string $leaf Flattened leaf.
+ * @return bool
+ */
+function minn_admin_is_server_path( $leaf ) {
+	$leaf = trim( (string) $leaf );
+	if ( '' === $leaf || false !== strpos( $leaf, '://' ) ) {
+		return false; // a URL is the thing we want to keep
+	}
+	foreach ( array( ABSPATH, WP_CONTENT_DIR ) as $root ) {
+		$root = (string) $root;
+		if ( '' !== $root && 0 === strpos( $leaf, $root ) ) {
+			return true;
+		}
+	}
+	$uploads = wp_get_upload_dir();
+	return ! empty( $uploads['basedir'] ) && 0 === strpos( $leaf, (string) $uploads['basedir'] );
+}
