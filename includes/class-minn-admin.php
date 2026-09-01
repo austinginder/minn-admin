@@ -29,6 +29,10 @@ class Minn_Admin {
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_render_app' ), 0 );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_maintenance_mode' ), 1 );
 		add_filter( 'rest_authentication_errors', array( __CLASS__, 'maintenance_rest' ), 20 );
+		// admin-ajax.php and admin-post.php never reach template_redirect and are
+		// not REST, so neither guard above covers them. admin_init runs on both
+		// before the action is dispatched.
+		add_action( 'admin_init', array( __CLASS__, 'maintenance_admin_entry' ), 0 );
 		add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar_link' ), 100 );
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
@@ -1241,6 +1245,48 @@ class Minn_Admin {
 			'minn_admin_maintenance',
 			__( 'This site is undergoing maintenance.', 'minn-admin' ),
 			array( 'status' => 503 )
+		);
+	}
+
+	/**
+	 * Hold back admin-ajax.php and admin-post.php while maintenance mode is on.
+	 *
+	 * The front end is covered on template_redirect and the REST API on
+	 * rest_authentication_errors, but those two entry points go through neither.
+	 * They matter because both have an unauthenticated half: any plugin
+	 * registering a wp_ajax_nopriv_ or admin_post_nopriv_ handler keeps
+	 * answering anonymous callers with the site's real content while the
+	 * operator is looking at a holding page. The case this feature exists for is
+	 * a site being staged before launch, which is exactly when a search
+	 * suggestion or product filter endpoint quietly serving that content is
+	 * worth something to somebody.
+	 *
+	 * Minn's own ajax handler is left alone, the way the REST guard leaves
+	 * Minn's own namespace alone, so the app keeps working for the people
+	 * allowed in.
+	 */
+	public static function maintenance_admin_entry() {
+		if ( ! get_option( 'minn_admin_maintenance' ) ) {
+			return;
+		}
+		$script = isset( $_SERVER['SCRIPT_NAME'] ) ? basename( (string) $_SERVER['SCRIPT_NAME'] ) : '';
+		if ( 'admin-ajax.php' !== $script && 'admin-post.php' !== $script ) {
+			return;
+		}
+		if ( is_user_logged_in() && current_user_can( 'edit_posts' ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading the action name only, to leave Minn's own handler alone.
+		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
+		if ( 0 === strpos( $action, 'minn_' ) ) {
+			return;
+		}
+		status_header( 503 );
+		nocache_headers();
+		wp_die(
+			esc_html__( 'This site is undergoing maintenance.', 'minn-admin' ),
+			esc_html__( 'Maintenance', 'minn-admin' ),
+			array( 'response' => 503 )
 		);
 	}
 
