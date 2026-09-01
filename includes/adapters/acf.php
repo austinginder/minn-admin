@@ -547,10 +547,39 @@ function minn_admin_acf_relation_kind( $acf_field ) {
  * @param mixed  $id   Stored id.
  * @return array|null
  */
+/**
+ * May the current user be shown this account through a relational field?
+ *
+ * Mirrors the picker's own rule: browsing a directory IS `list_users`, and
+ * without it the line core draws for author queries is accounts the site
+ * already attributes publicly. Your own account is always yours to see.
+ *
+ * @param WP_User $u User.
+ * @return bool
+ */
+function minn_admin_acf_may_see_user( $u ) {
+	if ( ! $u instanceof WP_User ) {
+		return false;
+	}
+	if ( (int) $u->ID === get_current_user_id() || current_user_can( 'list_users' ) ) {
+		return true;
+	}
+	return (bool) count_user_posts( $u->ID );
+}
+
 function minn_admin_acf_relation_entry( $kind, $id ) {
 	if ( 'post' === $kind ) {
 		$p = get_post( (int) $id );
 		if ( ! $p || in_array( $p->post_status, array( 'trash', 'auto-draft' ), true ) ) {
+			return null;
+		}
+		// The picker withholds other people's unpublished posts and applies a
+		// per-row read check; reading a stored id back skipped both, so an id
+		// written by hand answered with a title the picker would not have
+		// offered — and the label names the status, so it reported the
+		// existence of a draft as well as its title. Same boundary on the way
+		// out as on the way in.
+		if ( ! current_user_can( 'read_post', $p->ID ) ) {
 			return null;
 		}
 		$label = '' !== $p->post_title ? $p->post_title : '#' . $p->ID;
@@ -566,7 +595,11 @@ function minn_admin_acf_relation_entry( $kind, $id ) {
 	}
 	if ( 'user' === $kind ) {
 		$u = get_userdata( (int) $id );
-		return $u ? array( 'value' => (string) $u->ID, 'label' => $u->display_name ? $u->display_name : $u->user_login ) : null;
+		// Same rule the picker applies when it lists accounts.
+		if ( ! $u || ! minn_admin_acf_may_see_user( $u ) ) {
+			return null;
+		}
+		return array( 'value' => (string) $u->ID, 'label' => $u->display_name ? $u->display_name : $u->user_login );
 	}
 	return null;
 }
@@ -657,6 +690,12 @@ function minn_admin_acf_relation_id_in( $acf, $value ) {
 		if ( ! empty( $acf['post_type'] ) && ! in_array( $p->post_type, (array) $acf['post_type'], true ) ) {
 			return null;
 		}
+		// Refuse an id the caller could not have been offered, so a hand-written
+		// one is never stored and cannot be read back later by someone who may
+		// see it. The read path applies the same check.
+		if ( ! current_user_can( 'read_post', $p->ID ) ) {
+			return null;
+		}
 		return (string) $p->ID;
 	}
 	if ( 'term' === $kind ) {
@@ -677,7 +716,9 @@ function minn_admin_acf_relation_id_in( $acf, $value ) {
 			return null;
 		}
 		$u = get_userdata( (int) $value );
-		if ( ! $u ) {
+		// Same boundary as the picker and the read path: an account the caller
+		// could not have been offered is not storable by hand either.
+		if ( ! $u || ! minn_admin_acf_may_see_user( $u ) ) {
 			return null;
 		}
 		if ( ! empty( $acf['role'] ) && ! array_intersect( (array) $acf['role'], (array) $u->roles ) ) {
