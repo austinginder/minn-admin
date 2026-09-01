@@ -79,6 +79,7 @@ class Minn_Admin_Surfaces {
 			$surface       = self::with_setup_state( $surface );
 			$surface       = self::with_settings_state( $surface );
 			$surface       = self::with_views_state( $surface );
+			$surface       = self::with_route_state( $surface );
 			$out[]         = $surface;
 		}
 		return self::collapse_owner_surfaces( self::fold_into_site_options( $out ), $owners, $own );
@@ -675,11 +676,81 @@ class Minn_Admin_Surfaces {
 	 * @param array $surface Client-bound surface row (id already set).
 	 * @return array The row with `views` normalized or removed.
 	 */
+	/**
+	 * Normalise every route a descriptor names, not just the two that already
+	 * had it.
+	 *
+	 * Each of these rides the boot payload into the client, which attaches the
+	 * REST nonce, so an absolute URL would send that nonce to another host.
+	 * The settings and views registries normalised for this; collection,
+	 * manage, and the route keys nested inside them did not, and leaving it to
+	 * the client to keep refusing is not the place for it.
+	 *
+	 * A bad route drops that entry, never the whole surface — the same
+	 * contract with_views_state already uses.
+	 */
+	private static function with_route_state( $surface ) {
+		foreach ( array( 'collection', 'manage' ) as $section ) {
+			if ( ! empty( $surface[ $section ] ) && is_array( $surface[ $section ] ) ) {
+				$surface[ $section ] = self::normalize_route_group( $surface[ $section ] );
+			}
+		}
+		if ( ! empty( $surface['views'] ) && is_array( $surface['views'] ) ) {
+			foreach ( $surface['views'] as $i => $view ) {
+				if ( is_array( $view ) ) {
+					$surface['views'][ $i ] = self::normalize_route_group( $view );
+				}
+			}
+		}
+		return $surface;
+	}
+
+	/** Normalise the route keys of one collection/manage/view group in place. */
+	private static function normalize_route_group( $group ) {
+		foreach ( array( 'route', 'allRoute' ) as $key ) {
+			if ( isset( $group[ $key ] ) && ! Minn_Admin::rest_route_or_null( $group[ $key ] ) ) {
+				unset( $group[ $key ] );
+			}
+		}
+		if ( ! empty( $group['create'] ) && is_array( $group['create'] ) && isset( $group['create']['route'] )
+			&& ! Minn_Admin::rest_route_or_null( $group['create']['route'] ) ) {
+			unset( $group['create'] );
+		}
+		if ( ! empty( $group['detail'] ) && is_array( $group['detail'] ) ) {
+			foreach ( array( 'detailRoute', 'sectionsRoute' ) as $key ) {
+				if ( isset( $group['detail'][ $key ] ) && ! Minn_Admin::rest_route_or_null( $group['detail'][ $key ] ) ) {
+					unset( $group['detail'][ $key ] );
+				}
+			}
+			if ( ! empty( $group['detail']['edit'] ) && is_array( $group['detail']['edit'] ) && isset( $group['detail']['edit']['route'] )
+				&& ! Minn_Admin::rest_route_or_null( $group['detail']['edit']['route'] ) ) {
+				unset( $group['detail']['edit'] );
+			}
+		}
+		foreach ( array( 'actions', 'bulk' ) as $list ) {
+			if ( empty( $group[ $list ] ) || ! is_array( $group[ $list ] ) ) {
+				continue;
+			}
+			$kept = array();
+			foreach ( $group[ $list ] as $entry ) {
+				if ( is_array( $entry ) && isset( $entry['route'] ) && ! Minn_Admin::rest_route_or_null( $entry['route'] ) ) {
+					continue;
+				}
+				$kept[] = $entry;
+			}
+			$group[ $list ] = array_values( $kept );
+		}
+		return $group;
+	}
+
 	private static function with_views_state( $surface ) {
 		if ( empty( $surface['views'] ) || ! is_array( $surface['views'] ) ) {
 			unset( $surface['views'] );
 			return $surface;
 		}
+		// Note: the nested route keys inside each view (its actions, create
+		// and detail) are normalised by with_route_state, which walks views
+		// as well as collection and manage.
 		$views = array();
 		foreach ( $surface['views'] as $v ) {
 			if ( ! is_array( $v ) || empty( $v['route'] ) || ! is_string( $v['route'] ) || empty( $v['viewLabel'] ) ) {
@@ -910,6 +981,37 @@ class Minn_Admin_Surfaces {
 	}
 
 	/** Contract problems for one surface descriptor (documented keys only). */
+	/**
+	 * Whether a descriptor's cap names something a role or a plugin grants.
+	 *
+	 * A typo fails CLOSED — no role holds "mange_options", so the surface
+	 * simply never appears, with nothing anywhere saying why. Worse on
+	 * multisite, where a super admin passes any string, so the author testing
+	 * it sees it work and every other operator sees nothing. Report it.
+	 *
+	 * Role names are allowed: a descriptor may legitimately gate on one.
+	 */
+	private static function cap_is_known( $cap ) {
+		if ( ! is_string( $cap ) || '' === $cap ) {
+			return false;
+		}
+		$roles = wp_roles();
+		if ( ! $roles ) {
+			return true;
+		}
+		if ( isset( $roles->role_objects[ $cap ] ) ) {
+			return true;
+		}
+		foreach ( $roles->role_objects as $role ) {
+			if ( ! empty( $role->capabilities ) && isset( $role->capabilities[ $cap ] ) ) {
+				return true;
+			}
+		}
+		// Meta caps are mapped rather than granted, so they never appear on a
+		// role. Accept the ones core maps for a bare (object-less) check.
+		return in_array( $cap, array( 'read', 'exist', 'customize', 'edit_theme_options', 'delete_site', 'setup_network', 'upgrade_network' ), true );
+	}
+
 	private static function surface_problems( $surface ) {
 		$problems = array();
 		if ( ! is_array( $surface ) ) {
@@ -920,6 +1022,10 @@ class Minn_Admin_Surfaces {
 		}
 		foreach ( self::unknown_keys( $surface, self::SURFACE_KEYS ) as $k ) {
 			$problems[] = "unknown key \"$k\" (ignored)";
+		}
+		if ( isset( $surface['cap'] ) && ! self::cap_is_known( $surface['cap'] ) ) {
+			$problems[] = 'cap: "' . ( is_string( $surface['cap'] ) ? $surface['cap'] : gettype( $surface['cap'] ) )
+				. '" is not a capability any role grants, so this surface is hidden from everyone';
 		}
 		if ( isset( $surface['group'] ) && 'workspace' === $surface['group'] && ! self::inbox_shaped( $surface ) ) {
 			$problems[] = 'group: workspace is for inbox-shaped surfaces (a collection with an "ago" column); shown under Tools instead';
@@ -1341,6 +1447,18 @@ class Minn_Admin_Surfaces {
 				continue;
 			}
 			unset( $panel['cap'] );
+			// Same reason as the surface routes: these ride the boot payload
+			// and the client attaches the REST nonce to them. A panel that
+			// names an off-site route is dropped rather than shipped.
+			$panel_routes = array_filter(
+				array( 'fieldsRoute', 'statusRoute' ),
+				function ( $key ) use ( $panel ) {
+					return isset( $panel[ $key ] ) && ! Minn_Admin::rest_route_or_null( $panel[ $key ] );
+				}
+			);
+			if ( $panel_routes ) {
+				continue;
+			}
 			$panel['id'] = sanitize_key( $id );
 			$out[]       = $panel;
 		}
