@@ -23,22 +23,35 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const restore = async () => {
 		if ( restored ) return;
 		restored = true;
-		await pluginPut( 'independent-analytics/iawp', 'inactive' ).catch( () => {} );
+		// Put back exactly what was found: the Pro build normally stays
+		// active (licensed fixture), the free one inactive.
+		if ( iaSlug && 'active' !== iaWas ) {
+			await pluginPut( iaSlug, 'inactive' ).catch( () => {} );
+		}
 		await pluginPut( 'koko-analytics/koko-analytics', 'active' ).catch( () => {} );
 	};
+	let iaSlug = '';
+	let iaWas = '';
 
 	try {
-		// Plugin file may be independent-analytics/iawp.php or similar.
-		const slug = await page.evaluate( async () => {
+		// Free and Pro builds are separate folders and Freemius keeps them
+		// mutually exclusive: prefer whichever is already active, else the
+		// Pro folder, else the free one. Never activate the free build
+		// while the Pro one is active (Freemius would swap them).
+		const found = await page.evaluate( async () => {
 			const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins?search=Independent&per_page=20&_fields=plugin,status,name', {
 				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
 			} );
-			const list = await r.json();
-			const hit = ( list || [] ).find( ( p ) => /independent/i.test( p.plugin || '' ) || /Independent Analytics/i.test( p.name || '' ) );
-			return hit ? hit.plugin : 'independent-analytics/iawp';
+			const list = ( await r.json() ) || [];
+			const ia = list.filter( ( p ) => /independent-analytics/i.test( p.plugin || '' ) );
+			const hit = ia.find( ( p ) => p.status === 'active' ) || ia.find( ( p ) => /-pro\//.test( p.plugin ) ) || ia[ 0 ];
+			return hit ? { slug: hit.plugin, status: hit.status } : { slug: 'independent-analytics/iawp', status: 'inactive' };
 		} );
+		iaSlug = found.slug;
+		iaWas = found.status;
+		const slug = iaSlug;
 
-		const on = await pluginPut( slug, 'active' );
+		const on = 'active' === iaWas ? { ok: true, status: 200 } : await pluginPut( slug, 'active' );
 		t.check( 'IA activated', on.ok || on.status === 200, String( on.status ) + ' ' + slug );
 		const off = await pluginPut( 'koko-analytics/koko-analytics', 'inactive' );
 		t.check( 'Koko deactivated for the run', off.ok || off.status === 200, String( off.status ) );

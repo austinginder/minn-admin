@@ -1474,7 +1474,8 @@ range — every bundled day adapter aggregates a date window generically, so
 the whole family gets range-wide breakdowns for free. Answer this filter only
 to add dimensions the day shape cannot carry (bundled: **Matomo** adds
 countries, devices and site searches; **Jetpack Stats** adds countries,
-search terms and outbound clicks).
+search terms and outbound clicks; **Independent Analytics** adds countries,
+cities, devices and browsers, plus campaigns and link clicks under Pro).
 
 ## Media folders — feed the Media view's folder filter
 
