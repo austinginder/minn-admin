@@ -109,6 +109,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/ottokit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/amelia.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/latepoint.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/bookly.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/shared-links.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/acf.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/acf-field-groups.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/acpt.php';

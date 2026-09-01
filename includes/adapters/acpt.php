@@ -387,6 +387,15 @@ function minn_admin_acpt_rows_in( $field, $value, $args ) {
 				}
 				continue;
 			}
+			if ( isset( $sub_types[ $name ] ) && 'url' === $sub_types[ $name ] ) {
+				// Same schemes as a top-level link, and the same rule for a
+				// refusal: keep the address the row already held.
+				$link = minn_admin_url_clean( $vals[ $name ] );
+				if ( null !== $link ) {
+					$base[ $name ] = $link;
+				}
+				continue;
+			}
 			$base[ $name ] = is_scalar( $vals[ $name ] ) ? $vals[ $name ] : '';
 		}
 		$rows[] = $base;
@@ -453,8 +462,15 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 		$current   = is_array( $current ) ? $current : array();
 		$old_url   = isset( $current['url'] ) ? (string) $current['url'] : '';
 		$old_label = isset( $current['label'] ) ? (string) $current['label'] : '';
-		$next      = (string) $value;
-		$value     = array(
+		// Held to the same schemes as every other link the app writes. A
+		// refused address leaves whatever the row already held alone, the way
+		// a refused image id does two branches up, rather than blanking a
+		// working link because someone pasted something odd over it.
+		$next = minn_admin_url_clean( $value );
+		if ( null === $next ) {
+			return;
+		}
+		$value = array(
 			'url'   => $next,
 			'label' => ( '' !== $old_label && $old_label !== $old_url ) ? $old_label : $next,
 		);

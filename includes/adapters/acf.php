@@ -233,16 +233,9 @@ function minn_admin_acf_link_out( $val ) {
  * @return string|null Sanitized URL, '' when cleared, null when refused.
  */
 function minn_admin_acf_url_clean( $url ) {
-	$url = (string) $url;
-	if ( '' === trim( $url ) ) {
-		return ''; // empty clears the field; callers handle that themselves
-	}
-	$probe = preg_replace( '/[\x00-\x20\x7F]+/', '', $url );
-	if ( preg_match( '/^(javascript|data|vbscript):/i', (string) $probe ) ) {
-		return null;
-	}
-	$clean = esc_url_raw( $url );
-	return '' === $clean ? null : $clean;
+	// The rule is shared with every other adapter that stores a typed link;
+	// see includes/adapters/shared-links.php.
+	return minn_admin_url_clean( $url );
 }
 
 /** Back-compat predicate for callers that only need the yes/no. */
