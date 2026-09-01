@@ -1259,6 +1259,32 @@ class Minn_Admin_REST {
 		);
 		register_rest_route(
 			self::NS,
+			'/styles/update',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'styles_update' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_theme_options' );
+				},
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/styles/mix',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'styles_mix' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_theme_options' );
+				},
+				'args'                => array(
+					'kind' => array( 'type' => 'string', 'required' => true, 'enum' => array( 'colors', 'typography' ) ),
+					'id'   => array( 'type' => 'string', 'required' => true ),
+				),
+			)
+		);
+		register_rest_route(
+			self::NS,
 			'/styles/restore',
 			array(
 				'methods'             => 'POST',
@@ -7397,6 +7423,15 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'changes'      => self::gs_describe_changes( array(), $current ),
 			'historyCount' => count( (array) $revision_ids ),
 			'siteEditor'   => self::gs_site_editor_links(),
+			// The editable slice: catalogs for the pickers, the user's raw
+			// values for the whitelisted paths, and the theme's effective
+			// values as placeholders.
+			'edit'         => self::gs_edit_payload( $current ),
+			// Partial variations for mixing (styles/colors, styles/typography).
+			'partials'     => array(
+				'colors'     => self::gs_partials( 'colors' ),
+				'typography' => self::gs_partials( 'typography' ),
+			),
 			// On this site, for this caller, a variation's colors and fonts
 			// cannot be stored: WordPress drops the settings tree for anyone
 			// without unfiltered_html (every subsite administrator on
@@ -7818,6 +7853,347 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 		return $lines;
+	}
+
+	/**
+	 * The paths Minn edits directly, with their value class. Everything
+	 * else in the global-styles record (per-block styles, background
+	 * images, custom presets) stays the Site Editor's.
+	 */
+	private static function gs_editable_paths() {
+		return array(
+			'styles.color.background'                       => 'color',
+			'styles.color.text'                             => 'color',
+			'styles.elements.link.color.text'               => 'color',
+			'styles.elements.heading.color.text'            => 'color',
+			'styles.elements.button.color.background'       => 'color',
+			'styles.elements.button.color.text'             => 'color',
+			'styles.elements.caption.color.text'            => 'color',
+			'styles.typography.fontFamily'                  => 'font',
+			'styles.elements.heading.typography.fontFamily' => 'font',
+			'styles.typography.fontSize'                    => 'size',
+			'styles.typography.lineHeight'                  => 'number',
+			'styles.spacing.blockGap'                       => 'length',
+			'styles.spacing.padding.top'                    => 'length',
+			'styles.spacing.padding.right'                  => 'length',
+			'styles.spacing.padding.bottom'                 => 'length',
+			'styles.spacing.padding.left'                   => 'length',
+			'settings.layout.contentSize'                   => 'length',
+			'settings.layout.wideSize'                      => 'length',
+		);
+	}
+
+	private static function gs_get_path( $tree, $path ) {
+		$node = $tree;
+		foreach ( explode( '.', $path ) as $k ) {
+			if ( ! is_array( $node ) || ! array_key_exists( $k, $node ) ) {
+				return null;
+			}
+			$node = $node[ $k ];
+		}
+		return $node;
+	}
+
+	/** Set (or with null, unset and prune) a dot path on a config tree. */
+	private static function gs_set_path( array $tree, $path, $value ) {
+		$keys = explode( '.', $path );
+		$ref  = &$tree;
+		$trail = array();
+		foreach ( $keys as $i => $k ) {
+			if ( $i === count( $keys ) - 1 ) {
+				if ( null === $value ) {
+					unset( $ref[ $k ] );
+				} else {
+					$ref[ $k ] = $value;
+				}
+				break;
+			}
+			if ( ! isset( $ref[ $k ] ) || ! is_array( $ref[ $k ] ) ) {
+				if ( null === $value ) {
+					return $tree; // nothing to unset
+				}
+				$ref[ $k ] = array();
+			}
+			$trail[] = &$ref;
+			$ref     = &$ref[ $k ];
+		}
+		unset( $ref );
+		if ( null === $value ) {
+			// Prune now-empty parents so a cleared field leaves no husk.
+			for ( $i = count( $keys ) - 2; $i >= 0; $i-- ) {
+				$parent = &$tree;
+				for ( $j = 0; $j < $i; $j++ ) {
+					$parent = &$parent[ $keys[ $j ] ];
+				}
+				if ( isset( $parent[ $keys[ $i ] ] ) && is_array( $parent[ $keys[ $i ] ] ) && empty( $parent[ $keys[ $i ] ] ) ) {
+					unset( $parent[ $keys[ $i ] ] );
+				}
+				unset( $parent );
+			}
+		}
+		return $tree;
+	}
+
+	/** Validate one editable value by class. Returns the clean value or a WP_Error. */
+	private static function gs_clean_value( $class, $value, $catalog ) {
+		$v = is_scalar( $value ) ? trim( (string) $value ) : '';
+		if ( '' === $v ) {
+			return null;
+		}
+		$preset = function ( $kind ) use ( $v, $catalog ) {
+			if ( ! preg_match( '/^var\(\s*--wp--preset--' . $kind . '--([a-z0-9-]+)\s*\)$/i', $v, $m ) ) {
+				return false;
+			}
+			foreach ( (array) ( $catalog[ $kind ] ?? array() ) as $e ) {
+				if ( strtolower( $e['slug'] ) === strtolower( $m[1] ) ) {
+					return 'var(--wp--preset--' . $kind . '--' . $e['slug'] . ')';
+				}
+			}
+			return false;
+		};
+		$length = '/^(0|-?\d*\.?\d+(px|rem|em|%|vw|vh|ch|svw|dvw))$/i';
+		switch ( $class ) {
+			case 'color':
+				if ( $p = $preset( 'color' ) ) { // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments
+					return $p;
+				}
+				if ( preg_match( '/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $v )
+					|| preg_match( '/^(rgb|rgba|hsl|hsla)\(\s*[\d.%,\s\/]+\)$/i', $v )
+					|| 'transparent' === strtolower( $v ) ) {
+					return $v;
+				}
+				return new WP_Error( 'bad_color', __( 'Colors take a palette color, a hex value like #1a1a1a, or rgb()/hsl().', 'minn-admin' ), array( 'status' => 400 ) );
+			case 'font':
+				if ( $p = $preset( 'font-family' ) ) { // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments
+					return $p;
+				}
+				return new WP_Error( 'bad_font', __( 'Fonts must be one of the families the theme (or Font Library) provides.', 'minn-admin' ), array( 'status' => 400 ) );
+			case 'size':
+				if ( $p = $preset( 'font-size' ) ) { // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments
+					return $p;
+				}
+				if ( preg_match( $length, $v ) ) {
+					return $v;
+				}
+				return new WP_Error( 'bad_size', __( 'Text sizes take a preset or a CSS length such as 18px or 1.125rem.', 'minn-admin' ), array( 'status' => 400 ) );
+			case 'number':
+				if ( preg_match( '/^\d*\.?\d+$/', $v ) || preg_match( $length, $v ) ) {
+					return $v;
+				}
+				return new WP_Error( 'bad_number', __( 'Line height takes a number such as 1.6.', 'minn-admin' ), array( 'status' => 400 ) );
+			case 'length':
+				if ( $p = $preset( 'spacing' ) ) { // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments
+					return $p;
+				}
+				if ( preg_match( $length, $v ) ) {
+					return $v;
+				}
+				return new WP_Error( 'bad_length', __( 'Widths and spacing take a CSS length such as 24px, 1.5rem or 5%.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		return new WP_Error( 'bad_value', __( 'Unsupported value.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+
+	/** Preset catalogs (every origin) keyed by CSS preset kind. */
+	private static function gs_catalog( $settings ) {
+		$out  = array( 'color' => array(), 'font-family' => array(), 'font-size' => array(), 'spacing' => array() );
+		$defs = array(
+			array( 'color', 'palette', 'color', 'color' ),
+			array( 'typography', 'fontFamilies', 'font-family', 'fontFamily' ),
+			array( 'typography', 'fontSizes', 'font-size', 'size' ),
+			array( 'spacing', 'spacingSizes', 'spacing', 'size' ),
+		);
+		foreach ( $defs as $d ) {
+			list( $group, $key, $kind, $vk ) = $d;
+			$node = isset( $settings[ $group ][ $key ] ) ? $settings[ $group ][ $key ] : array();
+			$origins = is_array( $node ) && isset( $node[0] ) ? array( 'theme' => $node ) : (array) $node;
+			foreach ( array( 'theme', 'custom', 'default' ) as $origin ) {
+				foreach ( (array) ( $origins[ $origin ] ?? array() ) as $e ) {
+					if ( is_array( $e ) && ! empty( $e['slug'] ) ) {
+						$out[ $kind ][] = array(
+							'slug'   => (string) $e['slug'],
+							'name'   => isset( $e['name'] ) && is_string( $e['name'] ) ? $e['name'] : (string) $e['slug'],
+							'value'  => isset( $e[ $vk ] ) && is_scalar( $e[ $vk ] ) ? (string) $e[ $vk ] : '',
+							'origin' => $origin,
+						);
+					}
+				}
+			}
+		}
+		return $out;
+	}
+
+	/** What the edit form needs: catalogs, the user's raw values, theme placeholders. */
+	private static function gs_edit_payload( $current ) {
+		$merged  = self::gs_merged();
+		$catalog = self::gs_catalog( $merged['settings'] );
+		$map     = self::gs_preset_map( $merged['settings'] );
+		$values  = array();
+		$theme   = array();
+		foreach ( self::gs_editable_paths() as $path => $class ) {
+			$uv = self::gs_get_path( $current, $path );
+			$values[ $path ] = is_scalar( $uv ) ? (string) $uv : '';
+			$mv = self::gs_get_path( $merged, $path );
+			$theme[ $path ] = array(
+				'raw'   => is_scalar( $mv ) ? (string) $mv : '',
+				'label' => is_scalar( $mv ) ? self::gs_resolve( (string) $mv, $map, 'color' === $class ) : '',
+			);
+		}
+		return array(
+			'paths'   => self::gs_editable_paths(),
+			'values'  => $values,
+			'theme'   => $theme,
+			'catalog' => $catalog,
+			// Widths live under settings.*, which WordPress drops for anyone
+			// without unfiltered_html; the client hides those fields then.
+			'settingsWritable' => current_user_can( 'unfiltered_html' ),
+		);
+	}
+
+	/**
+	 * Direct edits to the whitelisted paths: read the user config, apply
+	 * set/clear per path, write through core's global-styles route.
+	 */
+	public static function styles_update( WP_REST_Request $request ) {
+		$changes = $request->get_param( 'changes' );
+		if ( ! is_array( $changes ) || empty( $changes ) ) {
+			return new WP_Error( 'no_changes', __( 'Nothing to change.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$allowed = self::gs_editable_paths();
+		$merged  = self::gs_merged();
+		$catalog = self::gs_catalog( $merged['settings'] );
+		$clean   = array();
+		foreach ( $changes as $path => $value ) {
+			$path = (string) $path;
+			if ( ! isset( $allowed[ $path ] ) ) {
+				/* translators: %s: a theme.json path. */
+				return new WP_Error( 'bad_path', sprintf( __( '%s is not something Minn edits here.', 'minn-admin' ), $path ), array( 'status' => 400 ) );
+			}
+			if ( 0 === strpos( $path, 'settings.' ) && ! current_user_can( 'unfiltered_html' ) ) {
+				return new WP_Error( 'settings_locked', __( 'WordPress only stores layout width changes for someone who can post unfiltered HTML, which this account cannot on this site.', 'minn-admin' ), array( 'status' => 403 ) );
+			}
+			$cv = self::gs_clean_value( $allowed[ $path ], $value, $catalog );
+			if ( is_wp_error( $cv ) ) {
+				return $cv;
+			}
+			$clean[ $path ] = $cv;
+		}
+		$id  = (int) WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+		$req = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $id );
+		$req->set_param( 'context', 'edit' );
+		$res = rest_do_request( $req );
+		if ( $res->is_error() ) {
+			return $res->as_error();
+		}
+		$cfg = self::gs_revision_config( (array) $res->get_data() );
+		foreach ( $clean as $path => $value ) {
+			$cfg = self::gs_set_path( $cfg, $path, $value );
+		}
+		$write = new WP_REST_Request( 'POST', '/wp/v2/global-styles/' . $id );
+		$write->set_body_params( array( 'settings' => (object) ( $cfg['settings'] ?? array() ), 'styles' => (object) ( $cfg['styles'] ?? array() ) ) );
+		$wres = rest_do_request( $write );
+		if ( $wres->is_error() ) {
+			return $wres->as_error();
+		}
+		return rest_ensure_response( array( 'ok' => true, 'changed' => array_keys( $clean ) ) );
+	}
+
+	/**
+	 * Partial variations for mixing: a theme's styles/colors/*.json and
+	 * styles/typography/*.json (Twenty Twenty-Five ships eight of each),
+	 * parent first so a child's same-named file wins. Core's variations
+	 * route mixes these into the full list, which is why the picker reads
+	 * only the top level; here they get their own pickers.
+	 */
+	private static function gs_partials( $kind ) {
+		$files = array();
+		foreach ( array_unique( array( get_template_directory(), get_stylesheet_directory() ) ) as $root ) {
+			$dir = $root . '/styles/' . $kind;
+			foreach ( ( is_dir( $dir ) ? (array) glob( $dir . '/*.json' ) : array() ) as $path ) {
+				$files[ basename( $path ) ] = $path;
+			}
+		}
+		ksort( $files );
+		$out = array();
+		foreach ( $files as $base => $path ) {
+			$decoded = json_decode( (string) file_get_contents( $path ), true );
+			if ( ! is_array( $decoded ) || isset( $decoded['blockTypes'] ) ) {
+				continue;
+			}
+			$settings = isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array();
+			$out[] = array(
+				'id'      => preg_replace( '/\.json$/', '', $base ),
+				'title'   => isset( $decoded['title'] ) && is_string( $decoded['title'] ) ? $decoded['title'] : $base,
+				'palette' => self::variation_palette( $settings ),
+				'fonts'   => self::variation_fonts( $settings ),
+			);
+		}
+		return $out;
+	}
+
+	private static function gs_partial_file( $kind, $id ) {
+		$id = sanitize_file_name( $id );
+		if ( '' === $id ) {
+			return '';
+		}
+		// Child wins, so look there last.
+		$found = '';
+		foreach ( array_unique( array( get_template_directory(), get_stylesheet_directory() ) ) as $root ) {
+			$path = $root . '/styles/' . $kind . '/' . $id . '.json';
+			if ( file_exists( $path ) ) {
+				$found = $path;
+			}
+		}
+		return $found;
+	}
+
+	/** Deep merge: maps recurse, lists and scalars are replaced by the overlay. */
+	private static function gs_merge( array $base, array $over ) {
+		foreach ( $over as $k => $v ) {
+			if ( is_array( $v ) && isset( $base[ $k ] ) && is_array( $base[ $k ] )
+				&& ! ( isset( $v[0] ) || isset( $base[ $k ][0] ) ) ) {
+				$base[ $k ] = self::gs_merge( $base[ $k ], $v );
+			} else {
+				$base[ $k ] = $v;
+			}
+		}
+		return $base;
+	}
+
+	/**
+	 * Mix a partial variation into the current look: its settings and
+	 * styles are merged over the user config (Gutenberg's own model for
+	 * the color / typography pickers), written through core's route.
+	 */
+	public static function styles_mix( WP_REST_Request $request ) {
+		$kind = (string) $request['kind'];
+		$path = self::gs_partial_file( $kind, (string) $request['id'] );
+		if ( '' === $path ) {
+			return new WP_Error( 'no_partial', __( 'That palette or typeset is not part of the active theme.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		$decoded = json_decode( (string) file_get_contents( $path ), true );
+		if ( ! is_array( $decoded ) ) {
+			return new WP_Error( 'bad_partial', __( 'The theme file could not be read.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		if ( ! current_user_can( 'unfiltered_html' ) && ! empty( $decoded['settings'] ) ) {
+			return new WP_Error( 'settings_locked', __( 'WordPress only stores a palette or typeset for someone who can post unfiltered HTML, which this account cannot on this site.', 'minn-admin' ), array( 'status' => 403 ) );
+		}
+		$id  = (int) WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+		$req = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $id );
+		$req->set_param( 'context', 'edit' );
+		$res = rest_do_request( $req );
+		if ( $res->is_error() ) {
+			return $res->as_error();
+		}
+		$cfg = self::gs_revision_config( (array) $res->get_data() );
+		$cfg['settings'] = self::gs_merge( $cfg['settings'], isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array() );
+		$cfg['styles']   = self::gs_merge( $cfg['styles'], isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array() );
+		$write = new WP_REST_Request( 'POST', '/wp/v2/global-styles/' . $id );
+		$write->set_body_params( array( 'settings' => (object) $cfg['settings'], 'styles' => (object) $cfg['styles'] ) );
+		$wres = rest_do_request( $write );
+		if ( $wres->is_error() ) {
+			return $wres->as_error();
+		}
+		return rest_ensure_response( array( 'ok' => true ) );
 	}
 
 	/** One revision's settings/styles as plain arrays. */

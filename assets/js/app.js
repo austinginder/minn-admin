@@ -18039,7 +18039,8 @@
 			<div class="minn-toolbar-meta">${ esc( sprintf( /* translators: %s: localized number of styles. */ _n( '%s style', '%s styles', cards.length ), String( cards.length ) ) ) }</div>
 			<a class="minn-btn-soft" href="${ esc( B.site.url ) }" target="_blank" rel="noopener">${ esc( __( 'View site' ) ) } ↗</a>
 		</div>
-		${ stylesLookHtml( d ) }
+		${ stylesLookHtml( d, ss ) }
+		${ ss.editing ? '' : stylesMixHtml( d ) }
 		${ d.customized && ! d.anyActive ? `
 		<div class="minn-card minn-panel-pad minn-nav-inline-note">
 			${ esc( __( 'No variation below is marked active because the look above was customized. Applying one replaces those customizations; Undo brings them back.' ) ) }
@@ -18061,6 +18062,20 @@
 		if ( resetBtn ) resetBtn.addEventListener( 'click', () => resetStyles( ss ) );
 		const histBtn = $( '#minn-look-history', view );
 		if ( histBtn ) histBtn.addEventListener( 'click', () => openStylesHistory( ss ) );
+		const editBtn = $( '#minn-look-edit', view );
+		if ( editBtn ) editBtn.addEventListener( 'click', () => {
+			ss.editing = ! ss.editing;
+			ss.editVals = ss.editing ? Object.assign( {}, ( d.edit && d.edit.values ) || {} ) : null;
+			renderStyles();
+		} );
+		bindStylesEditForm( view, ss );
+		$$( '[data-mix]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const list = ( d.partials || {} )[ btn.dataset.mix ] || [];
+				const it = list.find( ( x ) => x.id === btn.dataset.mixid );
+				if ( it ) mixStyles( ss, btn.dataset.mix, it.id, it.title );
+			} )
+		);
 	}
 
 	/* The site's current look: the effective palette, fonts, text sizes,
@@ -18070,7 +18085,7 @@
 	 * Rows are links because the canvas stays in the Site Editor; what Minn
 	 * adds is seeing the whole picture at once and protecting it (Reset,
 	 * History). */
-	function stylesLookHtml( d ) {
+	function stylesLookHtml( d, ss ) {
 		const look = d.look;
 		if ( ! look ) return '';
 		const se = d.siteEditor || {};
@@ -18122,11 +18137,13 @@
 			<div class="minn-look-head">
 				<div class="minn-look-title">${ esc( __( 'Current look' ) ) }</div>
 				<div class="minn-look-actions">
+					${ d.edit ? `<button type="button" class="minn-btn-soft" id="minn-look-edit" aria-pressed="${ ss && ss.editing ? 'true' : 'false' }">${ icon( 'pencil' ) } ${ esc( ss && ss.editing ? __( 'Close editor' ) : __( 'Edit look' ) ) }</button>` : '' }
 					${ d.historyCount ? `<button type="button" class="minn-btn-soft" id="minn-look-history">${ icon( 'clock' ) } ${ esc( sprintf( /* translators: %s: localized number of saved versions. */ __( 'History (%s)' ), String( d.historyCount ) ) ) }</button>` : '' }
 					${ d.customized ? `<button type="button" class="minn-btn-soft" id="minn-look-reset">${ esc( __( 'Reset to theme defaults' ) ) }</button>` : '' }
 					${ linkable( se.styles ) ? `<a class="minn-btn-soft" href="${ esc( se.styles ) }" target="_blank" rel="noopener">${ esc( __( 'Site Editor' ) ) } ↗</a>` : '' }
 				</div>
 			</div>
+			${ ss && ss.editing ? stylesEditFormHtml( d, ss ) : `
 			<div class="minn-look-grid">
 				${ row( __( 'Colors' ), paletteHtml, se.colors, 'colors' ) }
 				${ row( __( 'Fonts' ), fontsHtml, se.typography, 'fonts' ) }
@@ -18138,8 +18155,249 @@
 			<div class="minn-look-foot">
 				<div class="minn-look-label">${ esc( __( 'Customized' ) ) }</div>
 				<div class="minn-look-value" id="minn-look-changes">${ changesHtml }</div>
+			</div>` }
+		</div>`;
+	}
+
+	/* ---- Edit look: direct edits to a whitelisted slice of the global
+	 * styles record (element colors, body/heading font, body size and line
+	 * height, page padding, block spacing, content/wide widths). Every
+	 * field shows the theme's effective value as its placeholder, so an
+	 * empty field means "theme default" and clearing one hands the value
+	 * back to the theme. Saves go through minn-admin/v1/styles/update,
+	 * which validates by value class and writes via core's own route; Undo
+	 * restores the whole previous config. ---- */
+	const LOOK_FIELDS = [
+		{ sec: 'colors', label: __( 'Background' ), path: 'styles.color.background' },
+		{ sec: 'colors', label: __( 'Text' ), path: 'styles.color.text' },
+		{ sec: 'colors', label: __( 'Links' ), path: 'styles.elements.link.color.text' },
+		{ sec: 'colors', label: __( 'Headings' ), path: 'styles.elements.heading.color.text' },
+		{ sec: 'colors', label: __( 'Button background' ), path: 'styles.elements.button.color.background' },
+		{ sec: 'colors', label: __( 'Button text' ), path: 'styles.elements.button.color.text' },
+		{ sec: 'colors', label: __( 'Captions' ), path: 'styles.elements.caption.color.text' },
+		{ sec: 'type', label: __( 'Body font' ), path: 'styles.typography.fontFamily' },
+		{ sec: 'type', label: __( 'Heading font' ), path: 'styles.elements.heading.typography.fontFamily' },
+		{ sec: 'type', label: __( 'Body text size' ), path: 'styles.typography.fontSize' },
+		{ sec: 'type', label: __( 'Line height' ), path: 'styles.typography.lineHeight', placeholder: '1.6' },
+		{ sec: 'layout', label: __( 'Content width' ), path: 'settings.layout.contentSize', placeholder: '620px', settings: true },
+		{ sec: 'layout', label: __( 'Wide width' ), path: 'settings.layout.wideSize', placeholder: '1200px', settings: true },
+		{ sec: 'layout', label: __( 'Block spacing' ), path: 'styles.spacing.blockGap', placeholder: '1.5rem' },
+		{ sec: 'layout', label: __( 'Padding top' ), path: 'styles.spacing.padding.top', placeholder: '0' },
+		{ sec: 'layout', label: __( 'Padding right' ), path: 'styles.spacing.padding.right', placeholder: '0' },
+		{ sec: 'layout', label: __( 'Padding bottom' ), path: 'styles.spacing.padding.bottom', placeholder: '0' },
+		{ sec: 'layout', label: __( 'Padding left' ), path: 'styles.spacing.padding.left', placeholder: '0' },
+	];
+	const LOOK_SECTIONS = [
+		[ 'colors', __( 'Colors' ) ],
+		[ 'type', __( 'Type' ) ],
+		[ 'layout', __( 'Layout' ) ],
+	];
+
+	function stylesEditFormHtml( d, ss ) {
+		const e = d.edit;
+		const vals = ss.editVals;
+		const cat = e.catalog || {};
+		const colorPreset = ( v ) => ( String( v || '' ).match( /^var\(--wp--preset--color--([a-z0-9-]+)\)$/i ) || [] )[ 1 ] || '';
+		const themeLabel = ( path ) => ( e.theme && e.theme[ path ] && e.theme[ path ].label ) || '';
+		const field = ( f ) => {
+			const cls = e.paths[ f.path ];
+			const v = vals[ f.path ] || '';
+			const ph = themeLabel( f.path ) || f.placeholder || '';
+			let control = '';
+			if ( 'color' === cls ) {
+				const cur = colorPreset( v );
+				// The theme's own palette (plus custom colors) is the design;
+				// WordPress's stock twelve only show when a theme ships none.
+				const own = ( cat.color || [] ).filter( ( c ) => 'default' !== c.origin );
+				const chips = ( own.length ? own : ( cat.color || [] ) ).map( ( c ) => `<button type="button" class="minn-look-chip${ cur === c.slug ? ' is-on' : '' }" data-lookchip="${ esc( f.path ) }" data-color="var(--wp--preset--color--${ esc( c.slug ) })" title="${ esc( c.name + ' · ' + c.value ) }" style="background:${ escCssColor( c.value ) }" aria-label="${ esc( c.name ) }"></button>` ).join( '' );
+				const custom = cur ? '' : v;
+				control = `
+					<div class="minn-look-chips">${ chips }</div>
+					<div class="minn-field-color" data-lookcolor="${ esc( f.path ) }" data-ftype="color">
+						<input type="color" value="${ esc( /^#[0-9a-f]{6}$/i.test( custom ) ? custom : '#ffffff' ) }" aria-label="${ esc( f.label + ' — ' + __( 'pick a color' ) ) }">
+						<input type="text" class="minn-input mono" data-lookfield="${ esc( f.path ) }" value="${ esc( custom ) }" placeholder="${ esc( ph || '#000000' ) }" spellcheck="false" autocomplete="off">
+					</div>`;
+			} else if ( 'font' === cls || 'size' === cls ) {
+				const kind = 'font' === cls ? 'font-family' : 'font-size';
+				const list = cat[ kind ] || [];
+				const opts = [ { value: '', label: ph ? sprintf( /* translators: %s: the theme's default value. */ __( 'Theme default (%s)' ), ph ) : __( 'Theme default' ) } ]
+					.concat( list.map( ( c ) => ( { value: `var(--wp--preset--${ kind }--${ c.slug })`, label: 'font-size' === kind && c.value ? `${ c.name } (${ c.value })` : c.name } ) ) );
+				control = `<div class="minn-ac" data-lookcombo="${ esc( f.path ) }" data-acopts="${ esc( JSON.stringify( opts ) ) }" data-acseed="${ esc( v ) }">
+					<input class="minn-input minn-ac-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( f.label ) }">
+					<div class="minn-ac-panel" hidden></div>
+				</div>`;
+			} else {
+				control = `<input type="text" class="minn-input mono" data-lookfield="${ esc( f.path ) }" value="${ esc( v ) }" placeholder="${ esc( ph || f.placeholder || '' ) }" spellcheck="false" autocomplete="off" aria-label="${ esc( f.label ) }">`;
+			}
+			return `<div class="minn-look-field${ 'color' === cls ? ' is-color' : '' }" data-lookrow="${ esc( f.path ) }">
+				<div class="minn-look-flabel">${ esc( f.label ) }${ v ? `<button type="button" class="minn-look-clear" data-lookclear="${ esc( f.path ) }" title="${ esc( __( 'Back to theme default' ) ) }">×</button>` : '' }</div>
+				<div class="minn-look-fcontrol">${ control }</div>
+			</div>`;
+		};
+		const secs = LOOK_SECTIONS.map( ( [ id, label ] ) => {
+			const fields = LOOK_FIELDS.filter( ( f ) => f.sec === id && ( ! f.settings || e.settingsWritable ) );
+			if ( ! fields.length ) return '';
+			const note = ( 'layout' === id && ! e.settingsWritable )
+				? `<div class="minn-look-muted">${ esc( __( 'Content and wide widths are not editable for this account: WordPress only stores them for someone who can post unfiltered HTML.' ) ) }</div>` : '';
+			return `<div class="minn-look-fsec"><div class="minn-look-fsec-title">${ esc( label ) }</div><div class="minn-look-fields">${ fields.map( field ).join( '' ) }</div>${ note }</div>`;
+		} ).join( '' );
+		return `
+		<div class="minn-look-form">
+			${ secs }
+			<div class="minn-look-fbar">
+				<button type="button" class="minn-btn-primary" id="minn-look-save" ${ stylesEditDirty( d, ss ) ? '' : 'disabled' }>${ esc( __( 'Save look' ) ) }</button>
+				<button type="button" class="minn-btn-soft" id="minn-look-cancel">${ esc( __( 'Cancel' ) ) }</button>
+				<span class="minn-look-muted">${ esc( __( 'Empty fields keep the theme’s value. Changes reach every visitor as soon as you save.' ) ) }</span>
 			</div>
 		</div>`;
+	}
+
+	function stylesEditDirty( d, ss ) {
+		const base = ( d.edit && d.edit.values ) || {};
+		return Object.keys( ss.editVals || {} ).some( ( k ) => ( ss.editVals[ k ] || '' ) !== ( base[ k ] || '' ) );
+	}
+
+	function bindStylesEditForm( view, ss ) {
+		const d = ss.data;
+		const form = $( '.minn-look-form', view );
+		if ( ! form ) return;
+		const setVal = ( path, v ) => {
+			ss.editVals[ path ] = v;
+			const save = $( '#minn-look-save', view );
+			if ( save ) save.disabled = ! stylesEditDirty( d, ss );
+		};
+		const rerender = () => renderStyles();
+		$$( '[data-lookfield]', form ).forEach( ( inp ) =>
+			inp.addEventListener( 'input', () => {
+				setVal( inp.dataset.lookfield, inp.value.trim() );
+				// A typed custom color un-selects any palette chip.
+				const row = inp.closest( '[data-lookrow]' );
+				if ( row ) $$( '.minn-look-chip.is-on', row ).forEach( ( c ) => c.classList.remove( 'is-on' ) );
+			} )
+		);
+		$$( '[data-lookchip]', form ).forEach( ( chip ) =>
+			chip.addEventListener( 'click', () => {
+				const path = chip.dataset.lookchip;
+				const on = chip.classList.contains( 'is-on' );
+				const row = chip.closest( '[data-lookrow]' );
+				$$( '.minn-look-chip.is-on', row ).forEach( ( c ) => c.classList.remove( 'is-on' ) );
+				const text = $( '[data-lookfield]', row );
+				if ( on ) {
+					setVal( path, '' );
+				} else {
+					chip.classList.add( 'is-on' );
+					setVal( path, chip.dataset.color );
+				}
+				if ( text ) text.value = '';
+			} )
+		);
+		$$( '[data-lookcombo]', form ).forEach( ( wrap ) => {
+			let opts = [];
+			try { opts = JSON.parse( wrap.dataset.acopts || '[]' ); } catch ( e ) { opts = []; }
+			bindAutocomplete( wrap, opts, { strict: true, value: wrap.dataset.acseed || '', onPick: ( v ) => setVal( wrap.dataset.lookcombo, v ) } );
+		} );
+		$$( '[data-lookclear]', form ).forEach( ( b ) =>
+			b.addEventListener( 'click', () => { setVal( b.dataset.lookclear, '' ); rerender(); } )
+		);
+		const cancel = $( '#minn-look-cancel', view );
+		if ( cancel ) cancel.addEventListener( 'click', () => { ss.editing = false; ss.editVals = null; rerender(); } );
+		const save = $( '#minn-look-save', view );
+		if ( save ) save.addEventListener( 'click', async () => {
+			const base = d.edit.values || {};
+			const changes = {};
+			Object.keys( ss.editVals ).forEach( ( k ) => {
+				if ( ( ss.editVals[ k ] || '' ) !== ( base[ k ] || '' ) ) changes[ k ] = ss.editVals[ k ] || null;
+			} );
+			if ( ! Object.keys( changes ).length ) return;
+			save.disabled = true;
+			const prev = d.current || { settings: {}, styles: {} };
+			try {
+				await api( 'minn-admin/v1/styles/update', { method: 'POST', body: JSON.stringify( { changes } ) } );
+			} catch ( e ) {
+				toast( e.message, true );
+				save.disabled = false;
+				return;
+			}
+			ss.editing = false;
+			ss.editVals = null;
+			ss.data = null;
+			if ( state.route === 'styles' ) renderStyles();
+			/* translators: %s: number of fields changed. */
+			toastAction( sprintf( _n( 'Look saved (%s change)', 'Look saved (%s changes)', Object.keys( changes ).length ), String( Object.keys( changes ).length ) ), __( 'Undo' ), async () => {
+				try {
+					await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+					ss.data = null;
+					if ( state.route === 'styles' ) renderStyles();
+					toast( __( 'Previous look restored' ) );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} );
+		} );
+	}
+
+	/* ---- Mixing: a theme's partial variations (styles/colors, styles/
+	 * typography) merged over the current look, Gutenberg's own model for
+	 * its palette and typeset pickers. Themes without partials show
+	 * nothing here. ---- */
+	function stylesMixHtml( d ) {
+		const p = d.partials || {};
+		const colors = p.colors || [];
+		const types = p.typography || [];
+		if ( ! colors.length && ! types.length ) return '';
+		const card = ( kind, title, items, body ) => `
+			<div class="minn-card minn-mix">
+				<div class="minn-mix-title">${ esc( title ) }</div>
+				<div class="minn-mix-items">${ items.map( ( it ) => `
+					<button type="button" class="minn-mix-item" data-mix="${ esc( kind ) }" data-mixid="${ esc( it.id ) }">
+						${ body( it ) }
+						<span class="minn-mix-name">${ esc( it.title ) }</span>
+					</button>` ).join( '' ) }</div>
+			</div>`;
+		return `<div class="minn-mix-row">
+			${ colors.length ? card( 'colors', __( 'Color palettes' ), colors, ( it ) => `<span class="minn-style-swatches">${ ( it.palette.length ? it.palette : [ 'transparent' ] ).map( ( c ) => `<span style="background:${ escCssColor( c ) }"></span>` ).join( '' ) }</span>` ) : '' }
+			${ types.length ? card( 'typography', __( 'Typesets' ), types, ( it ) => `<span class="minn-mix-fonts">${ esc( ( it.fonts || [] ).join( ' · ' ) || '—' ) }</span>` ) : '' }
+		</div>`;
+	}
+
+	async function mixStyles( ss, kind, id, title ) {
+		const d = ss.data;
+		if ( d.lossy ) {
+			await minnConfirm( {
+				title: __( 'This site cannot store palettes or typesets' ),
+				body: __( 'WordPress only saves a palette or typeset for someone who can post unfiltered HTML, which this account cannot on this site.' ),
+				confirmLabel: __( 'Close' ),
+			} );
+			return;
+		}
+		if ( ! await minnConfirm( {
+			/* translators: %s: the palette or typeset's name. */
+			title: sprintf( 'colors' === kind ? __( 'Use the “%s” palette?' ) : __( 'Use the “%s” typeset?' ), title ),
+			body: 'colors' === kind
+				? __( 'Its colors are merged into your current look, for every visitor. Fonts and layout stay as they are. Undo restores the look you have now.' )
+				: __( 'Its fonts are merged into your current look, for every visitor. Colors and layout stay as they are. Undo restores the look you have now.' ),
+			confirmLabel: __( 'Apply' ),
+		} ) ) return;
+		const prev = d.current || { settings: {}, styles: {} };
+		try {
+			await api( 'minn-admin/v1/styles/mix', { method: 'POST', body: JSON.stringify( { kind, id } ) } );
+		} catch ( e ) {
+			toast( e.message, true );
+			return;
+		}
+		ss.data = null;
+		if ( state.route === 'styles' ) renderStyles();
+		/* translators: %s: the palette or typeset's name. */
+		toastAction( sprintf( __( 'Applied “%s”' ), title ), __( 'Undo' ), async () => {
+			try {
+				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				ss.data = null;
+				if ( state.route === 'styles' ) renderStyles();
+				toast( __( 'Previous look restored' ) );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
 	}
 
 	/* Writes an empty config (what the Site Editor's "Reset styles" does)

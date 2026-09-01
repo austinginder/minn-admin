@@ -188,6 +188,70 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		t.check( 'Reset returns the theme defaults for visitors and hides itself', resetFront === before, `${ resetFront } vs ${ before }` );
 		const resetChanges = await page.evaluate( () => document.querySelectorAll( '#minn-look-changes li' ).length );
 		t.check( 'the card reports nothing customized after a reset', resetChanges === 0 );
+
+		/* ===== Edit look: direct edits with validation, save and Undo ===== */
+		await page.click( '#minn-look-edit' );
+		await page.waitForSelector( '.minn-look-form', { timeout: 10000 } );
+		const form = await page.evaluate( () => ( {
+			fields: document.querySelectorAll( '.minn-look-field' ).length,
+			chips: document.querySelectorAll( '[data-lookrow="styles.color.background"] .minn-look-chip' ).length,
+			widths: !! document.querySelector( '[data-lookfield="settings.layout.contentSize"]' ),
+			placeholder: ( document.querySelector( '[data-lookfield="styles.typography.lineHeight"]' ) || {} ).placeholder || '',
+			saveDisabled: document.querySelector( '#minn-look-save' ).disabled,
+		} ) );
+		t.check( 'the edit form offers colors, type and layout fields with palette chips', form.fields >= 15 && form.chips >= 3, JSON.stringify( form ) );
+		t.check( 'width fields show for an unfiltered_html admin', form.widths );
+		t.check( 'empty fields carry the theme value as placeholder', /^\d/.test( form.placeholder ), form.placeholder );
+		t.check( 'Save is disabled until something changes', form.saveDisabled );
+		// A palette chip for the background, a custom hex for text, a line height.
+		const chosen = await page.evaluate( () => { const c = document.querySelectorAll( '[data-lookrow="styles.color.background"] .minn-look-chip' )[ 1 ]; c.click(); return c.dataset.color; } );
+		await page.fill( '[data-lookfield="styles.color.text"]', '#123456' );
+		await page.fill( '[data-lookfield="styles.typography.lineHeight"]', '1.75' );
+		await page.fill( '[data-lookfield="settings.layout.contentSize"]', 'not-a-width' );
+		await page.click( '#minn-look-save' );
+		// Earlier toasts (the Reset one) may still be on screen: wait for the
+		// refusal itself, not the first toast in the DOM.
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-toast' ) ].some( ( el ) => /CSS length/.test( el.textContent ) ), null, { timeout: 10000 } );
+		const rejected = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-toast' ) ].map( ( el ) => el.textContent.trim() ).find( ( x ) => /CSS length/.test( x ) ) || '' );
+		t.check( 'an invalid width is refused with the reason', /CSS length/.test( rejected ), rejected );
+		const cfgAfterReject = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=styles` ) ).body;
+		t.check( 'the refused save wrote nothing', ! ( cfgAfterReject.styles && cfgAfterReject.styles.color ) );
+		await page.fill( '[data-lookfield="settings.layout.contentSize"]', '700px' );
+		await page.click( '#minn-look-save' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-look-form' ) && document.querySelector( '#minn-look-changes li' ), null, { timeout: 20000 } );
+		const saved = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=settings,styles` ) ).body;
+		t.check( 'the saved config carries exactly the edited paths',
+			saved.styles && saved.styles.color && saved.styles.color.background === chosen && saved.styles.color.text === '#123456'
+			&& saved.styles.typography && saved.styles.typography.lineHeight === '1.75'
+			&& saved.settings && saved.settings.layout && saved.settings.layout.contentSize === '700px',
+			JSON.stringify( { styles: saved.styles, layout: saved.settings && saved.settings.layout } ) );
+		const words = await page.evaluate( () => [ ...document.querySelectorAll( '#minn-look-changes li' ) ].map( ( li ) => li.textContent ) );
+		t.check( 'the card describes the edits in words', words.some( ( w ) => /Background color →/.test( w ) ) && words.some( ( w ) => /Content width → 700px/.test( w ) ), JSON.stringify( words ) );
+		// Clear one field back to the theme.
+		await page.click( '#minn-look-edit' );
+		await page.waitForSelector( '.minn-look-form', { timeout: 10000 } );
+		await page.click( '[data-lookclear="styles.typography.lineHeight"]' );
+		await page.waitForSelector( '#minn-look-save:not([disabled])', { timeout: 10000 } );
+		await page.click( '#minn-look-save' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-look-form' ), null, { timeout: 20000 } );
+		const cleared = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=styles` ) ).body;
+		t.check( 'clearing a field hands it back to the theme and prunes the empty branch', ! ( cleared.styles && cleared.styles.typography ) && cleared.styles.color.text === '#123456', JSON.stringify( cleared.styles ) );
+
+		/* ===== Mixing: a color palette merged over the current look ===== */
+		await page.evaluate( ( id ) => fetch( window.MINN.restUrl + 'wp/v2/global-styles/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin', body: JSON.stringify( { settings: {}, styles: {} } ) } ), gsId );
+		await open();
+		const mix = await page.evaluate( () => ( {
+			palettes: document.querySelectorAll( '[data-mix="colors"]' ).length,
+			typesets: document.querySelectorAll( '[data-mix="typography"]' ).length,
+		} ) );
+		t.check( 'Twenty Twenty-Five offers its color palettes and typesets for mixing', mix.palettes >= 5 && mix.typesets >= 5, JSON.stringify( mix ) );
+		const beforeMix = await frontBaseColor();
+		const mixTitle = await page.evaluate( () => { const b = document.querySelector( '[data-mix="colors"]' ); b.click(); return b.querySelector( '.minn-mix-name' ).textContent; } );
+		await page.waitForFunction( () => document.querySelector( '#minn-look-changes li' ), null, { timeout: 20000 } );
+		const afterMix = await frontBaseColor();
+		t.check( 'applying a palette changes the visitor-facing colors', afterMix !== beforeMix, `${ mixTitle }: ${ beforeMix } → ${ afterMix }` );
+		const mixed = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=settings,styles` ) ).body;
+		t.check( 'a palette mix touches colors only, never fonts', !! ( mixed.settings && mixed.settings.color ) && ! ( mixed.settings && mixed.settings.typography && mixed.settings.typography.fontFamilies ), JSON.stringify( Object.keys( mixed.settings || {} ) ) );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {
