@@ -1542,6 +1542,58 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// Independent Analytics Pro: a Freemius product (id 9944, product slug
+	// 'independent-analytics'; the Pro build lives in its own
+	// independent-analytics-pro/ folder). The SDK keeps everything in the
+	// fs_accounts option, so the read needs no vendor code: the site entry
+	// carries license_id + plugin_id, and all_licenses[plugin_id] carries the
+	// license entity (expiration null = lifetime, is_cancelled, quota and
+	// activated counts). The entity also stores the license's secret_key;
+	// only its presence ever leaves this reader.
+	$providers['independent-analytics-pro'] = array(
+		'name'      => 'Independent Analytics Pro',
+		'component' => 'independent-analytics-pro/iawp.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'independent-analytics-pro/iawp.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$fx = minn_admin_freemius_site_license( 'independent-analytics', 'independent-analytics-pro/iawp.php' );
+			if ( ! $fx['site'] || ! $fx['license_id'] ) {
+				return array( $item( array(
+					'name'  => 'Independent Analytics Pro',
+					'state' => 'missing',
+					'note'  => $fx['site'] ? __( 'Pro build installed; no license attached, so it runs as the free version', 'minn-admin' ) : '',
+				) ) );
+			}
+			$lic = $fx['license'];
+			if ( ! $lic ) {
+				return array( $item( array( 'name' => 'Independent Analytics Pro', 'state' => 'unknown', 'key' => true, 'note' => __( 'License attached but not readable locally', 'minn-admin' ) ) ) );
+			}
+			$raw_exp = minn_admin_license_prop( $lic, 'expiration', '' );
+			$expires = ( null === $raw_exp || '' === $raw_exp ) ? 'lifetime' : minn_admin_license_expiry( $raw_exp );
+			$state   = minn_admin_license_expired( $expires ) ? 'expired' : 'valid';
+			$note    = '';
+			if ( minn_admin_license_prop( $lic, 'is_cancelled', false ) ) {
+				$state = 'invalid';
+				$note  = __( 'cancelled', 'minn-admin' );
+			} else {
+				$quota = (int) minn_admin_license_prop( $lic, 'quota', 0 );
+				$used  = (int) minn_admin_license_prop( $lic, 'activated', 0 );
+				$local = (int) minn_admin_license_prop( $lic, 'activated_local', 0 );
+				if ( $quota > 0 ) {
+					/* translators: 1: activations used, 2: activations allowed. */
+					$note = sprintf( __( '%1$d of %2$d activations used', 'minn-admin' ), $used, $quota );
+					// Freemius does not count localhost activations against
+					// the quota, so a licensed dev site reads "0 of N" here.
+					if ( 0 === $used && $local > 0 ) {
+						$note .= ' ' . __( '(localhost activations are not counted)', 'minn-admin' );
+					}
+				}
+			}
+			return array( $item( array( 'name' => 'Independent Analytics Pro', 'state' => $state, 'key' => true, 'expires' => $expires, 'note' => $note ) ) );
+		},
+	);
+
 	// HappyFiles Pro: plain options. happyfiles_license_status stores the
 	// vendor's last activation response ({type, message}); type 'error' is
 	// their invalid/limit answer, anything else recorded means the key was
@@ -3173,6 +3225,35 @@ function minn_admin_license_default_providers() {
 	}
 
 
+	// Independent Analytics Pro: the first Freemius vendor with actions, all
+	// through the SDK the plugin ships (IAWP_FS() is its Freemius instance).
+	// The free build defines the same accessor with is_premium() false, and
+	// activating a key there would start Freemius's premium-download flow
+	// rather than license this install, so actions attach to the Pro build
+	// only. The shared Freemius helpers below carry the reasoning.
+	if ( function_exists( 'IAWP_FS' ) && isset( $providers['independent-analytics-pro'] ) ) {
+		$iawp_fs = function () {
+			try {
+				$fs = IAWP_FS();
+				return ( is_object( $fs ) && method_exists( $fs, 'is_premium' ) && $fs->is_premium() ) ? $fs : null;
+			} catch ( \Throwable $e ) {
+				return null;
+			}
+		};
+		if ( call_user_func( $iawp_fs ) ) {
+			$providers['independent-analytics-pro']['secret_label'] = __( 'Independent Analytics license key', 'minn-admin' );
+			$providers['independent-analytics-pro']['activate']     = function ( $secret ) use ( $iawp_fs ) {
+				return minn_admin_freemius_activate( call_user_func( $iawp_fs ), $secret );
+			};
+			$providers['independent-analytics-pro']['deactivate'] = function () use ( $iawp_fs ) {
+				return minn_admin_freemius_deactivate( call_user_func( $iawp_fs ) );
+			};
+			$providers['independent-analytics-pro']['verify'] = function () use ( $iawp_fs ) {
+				return minn_admin_freemius_verify( call_user_func( $iawp_fs ) );
+			};
+		}
+	}
+
 	// WP Migrate: their activation is one API call plus a local write, which
 	// is exactly what their own handler does. The API answers
 	// activate_licence with an errors map; anything but an empty map means
@@ -4727,6 +4808,224 @@ function minn_admin_licenses_freemius( $fingerprints ) {
 		$out[]   = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => $state, 'key' => true, 'expires' => $expires, 'component' => $fp['component'] );
 	}
 	return $out;
+}
+
+/**
+ * One Freemius product's site entry + license entity out of fs_accounts.
+ *
+ * Freemius keys sites by ITS product slug, not the install directory; the
+ * stored file_slug_map bridges plugin file → product slug, and the passed
+ * product slug is the fallback for an install the SDK has not booted yet.
+ *
+ * @return array { site: object|array|null, license_id: string, license: object|array|null }
+ */
+function minn_admin_freemius_site_license( $product_slug, $component ) {
+	$out = array( 'site' => null, 'license_id' => '', 'license' => null );
+	$acc = get_option( 'fs_accounts' );
+	if ( ! is_array( $acc ) || empty( $acc ) ) {
+		return $out;
+	}
+	$slug = $product_slug;
+	if ( ! empty( $acc['file_slug_map'][ $component ] ) ) {
+		$slug = (string) $acc['file_slug_map'][ $component ];
+	}
+	$site = isset( $acc['sites'] ) && is_array( $acc['sites'] ) ? ( $acc['sites'][ $slug ] ?? null ) : null;
+	if ( ! $site ) {
+		return $out;
+	}
+	$out['site']       = $site;
+	$license_id        = minn_admin_license_prop( $site, 'license_id', null );
+	$out['license_id'] = $license_id ? (string) $license_id : '';
+	if ( '' === $out['license_id'] ) {
+		return $out;
+	}
+	$module_id = (string) minn_admin_license_prop( $site, 'plugin_id', '' );
+	$lics      = isset( $acc['all_licenses'][ $module_id ] ) && is_array( $acc['all_licenses'][ $module_id ] ) ? $acc['all_licenses'][ $module_id ] : array();
+	foreach ( $lics as $l ) {
+		if ( (string) minn_admin_license_prop( $l, 'id', '' ) === $out['license_id'] ) {
+			$out['license'] = $l;
+			break;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Plain text out of whatever Freemius hands back as an error: a WP_Error,
+ * an API error object ({error: {message}}), a bare message object, or a
+ * string. Markup is stripped like every deliberate vendor message.
+ */
+function minn_admin_freemius_error_text( $err ) {
+	if ( is_wp_error( $err ) ) {
+		return trim( wp_strip_all_tags( $err->get_error_message() ) );
+	}
+	if ( is_object( $err ) ) {
+		if ( isset( $err->error ) ) {
+			return minn_admin_freemius_error_text( $err->error );
+		}
+		if ( isset( $err->message ) ) {
+			return trim( wp_strip_all_tags( (string) $err->message ) );
+		}
+		return '';
+	}
+	if ( is_array( $err ) ) {
+		if ( isset( $err['message'] ) ) {
+			return trim( wp_strip_all_tags( (string) $err['message'] ) );
+		}
+		return '';
+	}
+	return trim( wp_strip_all_tags( (string) $err ) );
+}
+
+/**
+ * Freemius's API describes refusals in prose, not codes. The two shapes
+ * that change what the person should do next (a seat limit, an expired
+ * license) are recognized from that prose; everything else is invalid.
+ */
+function minn_admin_freemius_code( $message ) {
+	$m = strtolower( (string) $message );
+	if ( preg_match( '/(activation|license)s? (limit|quota)|maximum number|max(imum)? (activations|sites)|no (more )?activations|already activated on|exceeded/', $m ) ) {
+		return 'site_limit';
+	}
+	if ( false !== strpos( $m, 'expired' ) ) {
+		return 'expired';
+	}
+	return 'invalid';
+}
+
+/**
+ * Activate a Freemius license through the SDK's own flow.
+ *
+ * A registered install (the site already has a Freemius user) goes through
+ * activate_migrated_license(): the SDK's documented programmatic path, an
+ * API PUT on the install plus a license sync, returning {success, error}.
+ * A never-connected install must NOT take that path: it falls through to
+ * opt_in() with $redirect = true, and setup_account() then calls
+ * fs_redirect(), which exits the request. So the unconnected case calls
+ * opt_in() directly with the key and $redirect = false, which is the same
+ * connect-with-license request minus the exit. A refused key writes no
+ * account state in either path (the API rejects before the SDK stores), so
+ * there is nothing to snapshot.
+ */
+function minn_admin_freemius_activate( $fs, $secret ) {
+	if ( ! is_object( $fs ) ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The plugin is not loaded.', 'minn-admin' ) );
+	}
+	$key = trim( (string) $secret );
+	if ( '' === $key ) {
+		return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Paste a key first.', 'minn-admin' ) );
+	}
+	$err = '';
+	try {
+		if ( $fs->is_registered() ) {
+			$res = $fs->activate_migrated_license( $key );
+			if ( is_array( $res ) && empty( $res['success'] ) ) {
+				$err = minn_admin_freemius_error_text( $res['error'] ?? '' );
+				if ( '' === $err ) {
+					$err = __( 'Freemius refused the key.', 'minn-admin' );
+				}
+			}
+		} else {
+			$res = $fs->opt_in( false, false, false, $key, false, false, false, null, array(), false );
+			if ( is_wp_error( $res ) || ( is_object( $res ) && isset( $res->error ) ) ) {
+				$err = minn_admin_freemius_error_text( $res );
+				if ( '' === $err ) {
+					$err = __( 'Freemius refused the key.', 'minn-admin' );
+				}
+			}
+		}
+	} catch ( \Throwable $e ) {
+		$err = trim( wp_strip_all_tags( (string) $e->getMessage() ) );
+	}
+	if ( '' !== $err ) {
+		return array( 'ok' => false, 'code' => minn_admin_freemius_code( $err ), 'message' => $err );
+	}
+	// The request went through; the SDK's own state is the verdict.
+	$ok = false;
+	try {
+		$ok = $fs->has_active_valid_license() || $fs->can_use_premium_code();
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+		// Read failure below reports as not activated.
+	}
+	return array(
+		'ok'      => $ok,
+		'code'    => $ok ? '' : 'invalid',
+		'message' => $ok ? '' : __( 'Freemius accepted the request but no active license is attached to this site.', 'minn-admin' ),
+	);
+}
+
+/**
+ * Release a Freemius license from this site through the SDK's own
+ * _deactivate_license(): an API DELETE on the license followed by the plan
+ * downgrade and account store, exactly what the Account screen's
+ * "Deactivate License" link runs. The method is protected and its only
+ * caller is a nonce-checked GET handler, so it is reached by reflection;
+ * this is the documented exception to never reaching into vendor code
+ * (the Soflyy precedent), taken because the alternative is re-implementing
+ * their downgrade. Success is read back from the site entry, since the
+ * method itself returns nothing and reports failures as admin notices.
+ */
+function minn_admin_freemius_deactivate( $fs ) {
+	if ( ! is_object( $fs ) ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The plugin is not loaded.', 'minn-admin' ) );
+	}
+	$site = $fs->is_registered() ? $fs->get_site() : null;
+	if ( ! is_object( $site ) || ! class_exists( 'FS_Plugin_License' ) || ! \FS_Plugin_License::is_valid_id( $site->license_id ) ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No license is attached to this site.', 'minn-admin' ) );
+	}
+	try {
+		$m = new \ReflectionMethod( $fs, '_deactivate_license' );
+		// Needed on PHP 7.4/8.0, a no-op since 8.1 and a deprecation
+		// warning on 8.5 — hence the guard.
+		if ( PHP_VERSION_ID < 80100 ) {
+			$m->setAccessible( true );
+		}
+		$m->invoke( $fs, false );
+	} catch ( \Throwable $e ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => trim( wp_strip_all_tags( (string) $e->getMessage() ) ) );
+	}
+	$after = $fs->get_site();
+	$ok    = ! is_object( $after ) || ! \FS_Plugin_License::is_valid_id( $after->license_id );
+	return array(
+		'ok'      => $ok,
+		'code'    => $ok ? '' : 'error',
+		'message' => $ok ? '' : __( 'Freemius did not release the license. Its Account screen shows the reason.', 'minn-admin' ),
+	);
+}
+
+/**
+ * Re-check a Freemius license against the service: the SDK's own
+ * _sync_license() (plan + license + install refresh, what the Account
+ * screen's Sync link runs), reached by reflection for the same reason as
+ * the deactivation above. $background = true keeps its notices out.
+ */
+function minn_admin_freemius_verify( $fs ) {
+	if ( ! is_object( $fs ) ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The plugin is not loaded.', 'minn-admin' ) );
+	}
+	if ( ! $fs->is_registered() ) {
+		return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'This site is not connected to Freemius yet. Activate a key first.', 'minn-admin' ) );
+	}
+	try {
+		$m = new \ReflectionMethod( $fs, '_sync_license' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$m->setAccessible( true );
+		}
+		$m->invoke( $fs, true );
+	} catch ( \Throwable $e ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => trim( wp_strip_all_tags( (string) $e->getMessage() ) ) );
+	}
+	$site = $fs->get_site();
+	if ( ! is_object( $site ) || ! class_exists( 'FS_Plugin_License' ) || ! \FS_Plugin_License::is_valid_id( $site->license_id ) ) {
+		return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No license is attached to this site.', 'minn-admin' ) );
+	}
+	$lic = $fs->_get_license();
+	$ok  = (bool) $fs->has_active_valid_license();
+	$code = '';
+	if ( ! $ok ) {
+		$code = ( is_object( $lic ) && method_exists( $lic, 'is_expired' ) && $lic->is_expired() ) ? 'expired' : 'invalid';
+	}
+	return array( 'ok' => $ok, 'code' => $code, 'message' => '' );
 }
 
 /**

@@ -117,6 +117,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			// a real key lands; its own update check rewrites the status
 			// option against happyfiles.io, so never seed a fake key).
 			'HappyFiles Pro',
+			// Independent Analytics Pro (active fixture; the first Freemius
+			// vendor with actions, all through the SDK the plugin ships).
+			// Reads from fs_accounts; its state follows the real license.
+			'Independent Analytics Pro',
 		];
 		for ( const name of FAMILY ) {
 			const info = await page.evaluate( ( n ) => {
