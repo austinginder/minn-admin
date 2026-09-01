@@ -284,6 +284,17 @@
 	const CSS_URL_ESC = { "'": '%27', '"': '%22', '(': '%28', ')': '%29', '\\': '%5C' };
 	const escCssUrl = ( u ) => encodeURI( String( u == null ? '' : u ) ).replace( /['"()\\]/g, ( c ) => CSS_URL_ESC[ c ] );
 
+	// Same hazard one property over: a COLOR interpolated into a style
+	// attribute. esc() stops the attribute breaking out, but not a ';' that
+	// simply appends more declarations, so a theme's palette value could park
+	// a fixed overlay or a beacon background over the admin. A color is a
+	// small grammar — allowlist it rather than escape it.
+	const CSS_COLOR_RE = /^(#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([0-9.,%\s/deg]+\)|var\(--[a-z0-9-]+\)|[a-z]+)$/i;
+	const escCssColor = ( c ) => {
+		const v = String( c == null ? '' : c ).trim();
+		return CSS_COLOR_RE.test( v ) ? v : 'transparent';
+	};
+
 	// Parse in an INERT document. A div created from the live document still
 	// runs the resource-loading side of HTML parsing, so `<img src=x
 	// onerror=…>` fires its handler during the parse — before any escaping of
@@ -17548,8 +17559,11 @@
 			api( 'wp/v2/posts?per_page=100&_fields=id,title,link' ).catch( () => [] ),
 		] );
 		ms.pick = [
-			...pages.map( ( p ) => ( { key: `page:${ p.id }`, object: 'page', id: p.id, title: decodeEntities( p.title.rendered ) || '(no title)', kind: 'Page' } ) ),
-			...posts.map( ( p ) => ( { key: `post:${ p.id }`, object: 'post', id: p.id, title: decodeEntities( p.title.rendered ) || '(no title)', kind: 'Post' } ) ),
+			// `link` is requested in _fields and has to be carried through:
+			// without it the added item stores no url and renders as a link
+			// with no href.
+			...pages.map( ( p ) => ( { key: `page:${ p.id }`, object: 'page', id: p.id, url: p.link, title: decodeEntities( p.title.rendered ) || '(no title)', kind: 'Page' } ) ),
+			...posts.map( ( p ) => ( { key: `post:${ p.id }`, object: 'post', id: p.id, url: p.link, title: decodeEntities( p.title.rendered ) || '(no title)', kind: 'Post' } ) ),
 		];
 	}
 
@@ -17980,7 +17994,7 @@
 	function styleCardHtml( v ) {
 		return `
 		<button type="button" class="minn-style-card${ v.active ? ' is-active' : '' }" data-style="${ esc( v.id ) }" aria-pressed="${ v.active ? 'true' : 'false' }">
-			<span class="minn-style-swatches">${ ( v.palette.length ? v.palette : [ 'transparent' ] ).map( ( c ) => `<span style="background:${ esc( c ) }"></span>` ).join( '' ) }</span>
+			<span class="minn-style-swatches">${ ( v.palette.length ? v.palette : [ 'transparent' ] ).map( ( c ) => `<span style="background:${ escCssColor( c ) }"></span>` ).join( '' ) }</span>
 			<span class="minn-style-name">${ esc( v.title ) }${ v.active ? `<span class="minn-menu-kind is-on">${ esc( __( 'Active' ) ) }</span>` : '' }</span>
 			${ v.fonts.length ? `<span class="minn-style-fonts">${ esc( v.fonts.join( ' · ' ) ) }</span>` : `<span class="minn-style-fonts">${ esc( v.sub || '' ) }</span>` }
 		</button>`;
@@ -18152,7 +18166,10 @@
 	 * someone could actually have chosen reports being unused.
 	 */
 	function tplUsageLabel( t, ts ) {
-		const u = ts.usage || {};
+		// "Not used" is a claim, and a usage fetch that failed cannot support
+		// it. Stay quiet rather than assert something reassuring.
+		if ( ! ts.usage ) return '';
+		const u = ts.usage;
 		if ( 'wp_template_part' === t.type ) {
 			const n = ( u.parts || {} )[ t.slug ] || 0;
 			return n
@@ -18303,21 +18320,36 @@
 					run: async () => {
 						// Name what breaks. A template nothing reaches is safe to
 						// remove; one behind thirty pages is a different decision.
-						const inUse = ( ( ts.usage && ts.usage.templates ) || {} )[ t.slug ] || 0;
+						// Parts are counted in their OWN map — a part slug never
+						// appears in `templates`, so reading that one told every
+						// part it was unused and then deleted it permanently.
+						const isPart = 'wp_template_part' === t.type;
+						const usage = ts.usage && ( isPart ? ts.usage.parts : ts.usage.templates );
+						const inUse = ( usage || {} )[ t.slug ] || 0;
+						// A usage fetch that failed is not a count of zero. Say
+						// what is known rather than promising nothing breaks.
+						const impact = ! ts.usage
+							? __( 'Minn could not check what uses this, so it may still be in use. ' )
+							: ( inUse
+								? ( isPart
+									/* translators: %s: how many templates include this part. */
+									? sprintf( _n( '%s template includes this part and will lose it. ', '%s templates include this part and will lose it. ', inUse ), String( inUse ) )
+									/* translators: %s: how many pages use this template. */
+									: sprintf( _n( '%s page uses this template and will fall back to a more general one. ', '%s pages use this template and will fall back to a more general one. ', inUse ), String( inUse ) ) )
+								: ( isPart
+									? __( 'No template includes this part. ' )
+									: __( 'Nothing on the site uses this template. ' ) ) );
 						if ( ! await minnConfirm( {
-							/* translators: %s: template name. */
+							/* translators: %s: template or template part name. */
 							title: sprintf( __( 'Delete “%s”?' ), name ),
-							body: ( inUse
-								/* translators: %s: how many pages use this template. */
-								? sprintf( _n( '%s page uses this template and will fall back to a more general one. ', '%s pages use this template and will fall back to a more general one. ', inUse ), String( inUse ) )
-								: __( 'Nothing on the site uses this template. ' ) )
+							body: impact
 								+ __( 'It exists only on this site, so there is no theme version to fall back to. If a plugin added it, deleting it here may only last until that plugin adds it again. There is no undo for this.' ),
 							danger: true,
-							confirmLabel: __( 'Delete template' ),
+							confirmLabel: isPart ? __( 'Delete part' ) : __( 'Delete template' ),
 						} ) ) return;
 						try {
 							await api( `wp/v2/${ 'wp_template' === t.type ? 'templates' : 'template-parts' }/${ encodeURIComponent( t.id ) }?force=true`, { method: 'DELETE' } );
-							toast( __( 'Template deleted' ) );
+							toast( isPart ? __( 'Template part deleted' ) : __( 'Template deleted' ) );
 							reload();
 						} catch ( e ) {
 							toast( e.message, true );
@@ -18675,6 +18707,14 @@
 	// item came out of).
 	function navToSubmenu( n ) {
 		if ( n.children ) return n;
+		// Only a link can honestly become a dropdown. Anything else (a page
+		// list, social icons, a plugin's block) is held here verbatim in
+		// n.raw, and the conversion below rewrites only the OPENING delimiter
+		// while hard-coding a submenu closer — on a wrapper block that would
+		// discard its inner content and emit mismatched delimiters, so the
+		// nested item silently vanishes from the front end while Minn keeps
+		// drawing it. Refuse instead, and let the caller say so.
+		if ( 'navigation-link' !== n.name ) return null;
 		n.open = n.open.replace( /wp:navigation-link/, 'wp:navigation-submenu' ).replace( /\/\s*-->$/, '-->' );
 		n.name = 'navigation-submenu';
 		n.close = '<!-- /wp:navigation-submenu -->';
@@ -18845,6 +18885,18 @@
 
 		const rows = navFlatten( ns.tree );
 		const title = decodeEntities( stripTags( ( ns.post.title && ( ns.post.title.raw || ns.post.title.rendered ) ) || '' ) ) || __( '(untitled)' );
+		// Indenting nests an item under its PREVIOUS SIBLING, which only a
+		// link or an existing dropdown can be. The flattened row before this
+		// one may be a deeper descendant, so resolve the sibling by token
+		// rather than by position.
+		const byToken = new Map( rows.map( ( r ) => [ String( r.token ), r.node ] ) );
+		const canIndent = ( token ) => {
+			const parts = String( token ).split( '.' );
+			const last = Number( parts.pop() );
+			if ( ! last ) return false;
+			const prev = byToken.get( parts.concat( String( last - 1 ) ).join( '.' ) );
+			return !! prev && ( !! prev.children || 'navigation-link' === prev.name );
+		};
 
 		view.innerHTML = `
 		<div class="minn-toolbar">
@@ -18877,7 +18929,7 @@
 					<button class="minn-icon-btn sm" data-navmove="up" title="${ esc( __( 'Move up' ) ) }">↑</button>
 					<button class="minn-icon-btn sm" data-navmove="down" title="${ esc( __( 'Move down' ) ) }">↓</button>
 					<button class="minn-icon-btn sm" data-navmove="out" title="${ esc( __( 'Outdent' ) ) }"${ depth ? '' : ' disabled' }>⇤</button>
-					<button class="minn-icon-btn sm" data-navmove="in" title="${ esc( __( 'Make child of the item above' ) ) }">⇥</button>
+					<button class="minn-icon-btn sm" data-navmove="in" title="${ esc( canIndent( token ) ? __( 'Make child of the item above' ) : __( 'The item above cannot hold links' ) ) }"${ canIndent( token ) ? '' : ' disabled' }>⇥</button>
 					<button class="minn-icon-btn sm danger" data-navdel="${ token }" title="${ esc( __( 'Remove from menu' ) ) }">✕</button>
 				</div>
 			</div>` ).join( '' ) : `<div class="minn-empty">${ esc( __( 'This menu is empty. Add pages or links below.' ) ) }</div>` }
@@ -18928,8 +18980,10 @@
 						list.splice( to, 0, node );
 					} else if ( 'in' === dir ) {
 						if ( index === 0 ) throw new Error( __( 'Nothing above it to nest under.' ) );
+						const parent = navToSubmenu( list[ index - 1 ] );
+						if ( ! parent ) throw new Error( __( 'The item above cannot hold links. Nest it under a link instead.' ) );
 						list.splice( index, 1 );
-						navToSubmenu( list[ index - 1 ] ).children.push( node );
+						parent.children.push( node );
 					} else if ( 'out' === dir ) {
 						const parts = String( token ).split( '.' ).map( Number );
 						if ( parts.length < 2 ) throw new Error( __( 'Already at the top level.' ) );
@@ -18958,7 +19012,15 @@
 		if ( saveBtn ) saveBtn.addEventListener( 'click', () => {
 			const token = saveBtn.dataset.navsave;
 			const label = $( '#minn-navi-label', view ).value;
-			const url = $( '#minn-navi-url', view ).value;
+			const raw = $( '#minn-navi-url', view ).value.trim();
+			// A menu link renders on every page. Hold it to the same schemes
+			// as every other author-supplied URL in the app rather than
+			// leaving it to esc_url at render time.
+			const url = safeLinkHref( raw );
+			if ( raw && ! url ) {
+				toast( __( 'That link needs a web address (https://…), a path, or mailto:/tel:.' ), true );
+				return;
+			}
 			navAction( ns, () => {
 				const node = nodeAt( token );
 				if ( ! node ) throw new Error( __( 'That item moved. Try again.' ) );
@@ -19036,9 +19098,14 @@
 		const addLink = $( '#minn-nav-add-link', view );
 		if ( addLink ) addLink.addEventListener( 'click', () => {
 			const label = $( '#minn-nav-link-label', view ).value.trim();
-			const url = $( '#minn-nav-link-url', view ).value.trim();
-			if ( ! label || ! url ) {
+			const raw = $( '#minn-nav-link-url', view ).value.trim();
+			if ( ! label || ! raw ) {
 				toast( __( 'A link needs both a label and a URL.' ), true );
+				return;
+			}
+			const url = safeLinkHref( raw );
+			if ( ! url ) {
+				toast( __( 'That link needs a web address (https://…), a path, or mailto:/tel:.' ), true );
 				return;
 			}
 			navAction( ns, () => {
