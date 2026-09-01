@@ -746,7 +746,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// is the real gate (the Solid Security / UpdraftPlus precedent).
 		'cap'        => 'read',
 		'settings'   => array(
-			'cap'   => 'manage_options',
+			// A descriptor takes a capability name and Bricks' answer is a
+			// resolver, so the tab itself is withheld below rather than
+			// approximated here.
+			'cap'   => 'read',
 			'tabs'  => array(
 				array( 'id' => 'general', 'label' => __( 'General', 'minn-admin' ) ),
 				array( 'id' => 'templates', 'label' => __( 'Templates', 'minn-admin' ) ),
@@ -834,6 +837,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 	if ( empty( $surfaces['bricks-templates']['collection']['import'] ) ) {
 		unset( $surfaces['bricks-templates']['collection']['import'] );
+	}
+	// Withhold the Settings tab from anyone its own routes would refuse, so
+	// the tab and what sits behind it always agree.
+	if ( ! minn_admin_bricks_fallback_access() ) {
+		unset( $surfaces['bricks-templates']['settings'] );
 	}
 	return $surfaces;
 } );
@@ -1337,11 +1345,17 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_bricks_active() ) {
 		return;
 	}
+	// Bricks answers who may change its settings the same way it answers
+	// every other question this adapter asks: through its own permission
+	// model, which a site can grant to a role that is not an administrator
+	// and can take away from one that is. Checking the raw capability is
+	// what this file's own header says never to do, and it was the one pair
+	// of routes still doing it.
 	register_rest_route( 'minn-admin/v1', '/bricks/settings/(?P<tab>[a-z-]+)', array(
 		array(
 			'methods'             => 'GET',
 			'permission_callback' => function () {
-				return current_user_can( 'manage_options' );
+				return minn_admin_bricks_fallback_access();
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				return rest_ensure_response( minn_admin_bricks_settings_payload( (string) $request['tab'] ) );
@@ -1350,7 +1364,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'POST',
 			'permission_callback' => function () {
-				return current_user_can( 'manage_options' );
+				return minn_admin_bricks_fallback_access();
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				$tab    = (string) $request['tab'];
