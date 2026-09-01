@@ -18201,9 +18201,16 @@
 			/* translators: 1: a person's name, 2: how long ago. */
 			return ` <span class="minn-look-who" title="${ esc( m.date ) }">${ esc( sprintf( __( '%1$s, %2$s' ), m.author, timeAgo( m.date ) ) ) }</span>`;
 		};
-		const changesHtml = changes.length
-			? `<ul class="minn-look-changes">${ shown.map( ( c, i ) => `<li>${ esc( c ) }${ who( i ) }</li>` ).join( '' ) }${ changes.length > shown.length ? `<li class="minn-look-muted">${ esc( sprintf( /* translators: %s: number of further changes. */ __( '+%s more' ), String( changes.length - shown.length ) ) ) }</li>` : '' }</ul>`
-			: `<div class="minn-look-muted">${ esc( __( 'The theme’s defaults, unchanged.' ) ) }</div>`;
+		// A look that equals a variation reads as one line, attributed to
+		// its newest save; the parts are one click away in History.
+		let newest = -1;
+		meta.forEach( ( m, i ) => { if ( m && m.date && ( newest < 0 || m.date > meta[ newest ].date ) ) newest = i; } );
+		const changesHtml = d.appliedVariation
+			/* translators: %s: a style variation's name. */
+			? `<ul class="minn-look-changes is-applied"><li id="minn-look-applied">${ esc( sprintf( __( 'Applied “%s”' ), d.appliedVariation ) ) }${ newest >= 0 ? who( newest ) : '' } <span class="minn-look-muted">${ esc( sprintf( /* translators: %s: number of settings the variation sets. */ _n( '(%s setting)', '(%s settings)', changes.length ), String( changes.length ) ) ) }</span></li></ul>`
+			: ( changes.length
+				? `<ul class="minn-look-changes">${ shown.map( ( c, i ) => `<li>${ esc( c ) }${ who( i ) }</li>` ).join( '' ) }${ changes.length > shown.length ? `<li class="minn-look-muted">${ esc( sprintf( /* translators: %s: number of further changes. */ __( '+%s more' ), String( changes.length - shown.length ) ) ) }</li>` : '' }</ul>`
+				: `<div class="minn-look-muted">${ esc( __( 'The theme’s defaults, unchanged.' ) ) }</div>` );
 		return `
 		<div class="minn-card minn-look">
 			<div class="minn-look-head">

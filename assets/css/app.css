@@ -612,7 +612,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-look-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .minn-look-title { font-weight: 600; font-size: 14px; }
 .minn-look-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.minn-look-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+.minn-look-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); }
 .minn-look-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 18px; border: 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; min-width: 0; background: transparent; font: inherit; text-align: start; width: 100%; cursor: default; }
 button.minn-look-row, a.minn-look-row { cursor: pointer; }
 button.minn-look-row:hover, a.minn-look-row:hover { background: var(--hover); }
@@ -621,7 +621,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-look-label { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
 .minn-look-value { font-size: 13.5px; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; line-height: 1.4; }
 .minn-look-go { font-size: 12px; color: var(--accent); opacity: 0.55; white-space: nowrap; }
-.minn-look-swatches { display: inline-flex; gap: 5px; }
+.minn-look-swatches { display: inline-flex; flex-wrap: wrap; gap: 5px; min-width: 0; max-width: 100%; }
 .minn-look-swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--border); flex: none; display: inline-block; }
 .minn-look-swatch.is-custom { box-shadow: 0 0 0 2px var(--accent-soft, rgba(100,100,255,.18)); }
 .minn-look-muted { color: var(--text3); }
@@ -629,6 +629,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-look-foot .minn-look-value { display: block; }
 .minn-look-changes { margin: 0; padding: 0 0 0 16px; font-size: 13px; line-height: 1.55; columns: 2; column-gap: 28px; }
 .minn-look-changes li { break-inside: avoid; }
+.minn-look-changes.is-applied { columns: 1; list-style: none; padding: 0; font-weight: 600; }
 @media (max-width: 720px) { .minn-look-changes { columns: 1; } .minn-look-row, .minn-look-foot { grid-template-columns: 76px minmax(0, 1fr) auto; } }
 
 /* Specimen: the site's own styles on a heading, paragraph, link, button. */
@@ -649,7 +650,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-look-beyond:hover { color: var(--accent); }
 .minn-look-fsec { border-radius: 10px; transition: box-shadow 0.4s ease; }
 .minn-look-fsec.is-focus { box-shadow: 0 0 0 2px var(--accent); padding: 0 10px 8px; margin: 0 -10px; }
-.minn-look-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px 22px; }
+.minn-look-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 12px 22px; }
 .minn-look-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .minn-look-field.is-color { grid-column: span 1; }
 .minn-look-flabel { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }

@@ -7381,9 +7381,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 					'custom'
 				);
 			}
-			$cmp_set   = isset( $sanitized['settings'] ) ? (array) $sanitized['settings'] : array();
-			$cmp_sty   = isset( $sanitized['styles'] ) ? (array) $sanitized['styles'] : array();
-			$active    = $customized && $current['settings'] == $cmp_set && $current['styles'] == $cmp_sty;
+			$cmp       = self::gs_comparable( array( 'settings' => isset( $sanitized['settings'] ) ? (array) $sanitized['settings'] : array(), 'styles' => isset( $sanitized['styles'] ) ? (array) $sanitized['styles'] : array() ) );
+			$cur_cmp   = self::gs_comparable( $current );
+			$active    = $customized && $cur_cmp['settings'] == $cmp['settings'] && $cur_cmp['styles'] == $cmp['styles'];
 			if ( $active ) {
 				$any_active = true;
 			}
@@ -7422,6 +7422,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'look'         => self::gs_look(),
 			'changes'      => self::gs_describe_changes( array(), $current ),
 			'changeMeta'   => $customized ? self::gs_change_meta( $current ) : array(),
+			// The current config equals one of the theme's variations: the
+			// card says so in one line instead of listing its forty parts.
+			'appliedVariation' => $customized ? self::gs_variation_match( $current ) : '',
 			'historyCount' => count( (array) $revision_ids ),
 			'siteEditor'   => self::gs_site_editor_links(),
 			// The editable slice: catalogs for the pickers, the user's raw
@@ -8403,10 +8406,42 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		return $cache;
 	}
 
+	/**
+	 * Drop per-block style-variation branches (styles.blocks.X.variations)
+	 * before comparing configs. WP_Theme_JSON keeps those keys only for
+	 * block-style variations registered at that moment, and registration
+	 * happens as a side effect of loading merged theme data, so the same
+	 * variation file sanitizes differently depending on what ran earlier
+	 * in the request. The stored config may carry them or not for the same
+	 * reason; neither side should decide identity.
+	 */
+	private static function gs_comparable( $cfg ) {
+		$styles = isset( $cfg['styles'] ) && is_array( $cfg['styles'] ) ? $cfg['styles'] : array();
+		if ( isset( $styles['blocks'] ) && is_array( $styles['blocks'] ) ) {
+			foreach ( $styles['blocks'] as $name => $b ) {
+				if ( is_array( $b ) && array_key_exists( 'variations', $b ) ) {
+					unset( $styles['blocks'][ $name ]['variations'] );
+					if ( empty( $styles['blocks'][ $name ] ) ) {
+						unset( $styles['blocks'][ $name ] );
+					}
+				}
+			}
+			if ( empty( $styles['blocks'] ) ) {
+				unset( $styles['blocks'] );
+			}
+		}
+		return array(
+			'settings' => isset( $cfg['settings'] ) && is_array( $cfg['settings'] ) ? $cfg['settings'] : array(),
+			'styles'   => $styles,
+		);
+	}
+
 	/** The variation title a config equals, or ''. */
 	private static function gs_variation_match( $cfg ) {
+		$c = self::gs_comparable( $cfg );
 		foreach ( self::gs_variation_configs() as $v ) {
-			if ( $cfg['settings'] == $v['settings'] && $cfg['styles'] == $v['styles'] ) {
+			$w = self::gs_comparable( $v );
+			if ( $c['settings'] == $w['settings'] && $c['styles'] == $w['styles'] ) {
 				return $v['title'];
 			}
 		}

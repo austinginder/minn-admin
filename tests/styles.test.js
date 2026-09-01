@@ -116,6 +116,7 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 				doors: card.querySelectorAll( 'button.minn-look-row[data-lookopen]' ).length,
 				shadowsOut: !! card.querySelector( 'a.minn-look-row[data-look="shadows"][href*="site-editor.php"]' ),
 				changes: [ ...card.querySelectorAll( '#minn-look-changes li' ) ].map( ( li ) => li.textContent ),
+				applied: ( card.querySelector( '#minn-look-applied' ) || {} ).textContent || '',
 				reset: !! card.querySelector( '#minn-look-reset' ),
 				history: ( card.querySelector( '#minn-look-history' ) || {} ).textContent || '',
 			};
@@ -124,7 +125,8 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 			look && [ 'colors', 'fonts', 'sizes', 'layout', 'background', 'shadows' ].every( ( k ) => look.rows.includes( k ) ), JSON.stringify( look && look.rows ) );
 		t.check( 'look card shows the effective palette and a font', look && look.swatches > 0 && look.fonts.trim().length > 0, look && `${ look.swatches } swatches, fonts "${ look.fonts.trim() }"` );
 		t.check( 'look rows are Minn doorways; only Shadows links out to the Site Editor', look && look.doors === 6 && look.shadowsOut, look && `${ look.doors } doors` );
-		t.check( 'applying Midnight is described in words on the card', look && look.changes.length > 0, JSON.stringify( look && look.changes.slice( 0, 3 ) ) );
+		const appliedSrv = ( await rest( 'minn-admin/v1/styles/variations' ) ).body.appliedVariation;
+		t.check( 'a look equal to a variation reads as one Applied line, not its parts', look && /Applied “Midnight”/.test( look.applied ) && look.changes.length === 1, JSON.stringify( { applied: look && look.applied, server: appliedSrv, first: look && look.changes.slice( 0, 2 ) } ) );
 		t.check( 'Reset to theme defaults is offered once customized', look && look.reset );
 		t.check( 'History button counts the saved versions', look && /History \(\d+\)/.test( look.history ), look && look.history );
 
@@ -332,6 +334,23 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		}, null, { timeout: 20000 } );
 		const stripped = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=settings,styles` ) ).body;
 		t.check( 'Reset colors strips only the color slice and keeps the rest', ! ( stripped.settings && stripped.settings.color ) && ! ( stripped.styles && stripped.styles.color ) && stripped.styles && stripped.styles.typography && stripped.styles.typography.lineHeight === '1.9', JSON.stringify( { settings: Object.keys( stripped.settings || {} ), styles: stripped.styles } ) );
+
+		/* ===== Phone width: nothing overflows sideways ===== */
+		const wide = page.viewportSize();
+		await page.setViewportSize( { width: 390, height: 844 } );
+		await open();
+		const overflow = () => page.evaluate( () => {
+			const sc = document.querySelector( '.minn-scroll' ) || document.documentElement;
+			return { page: document.documentElement.scrollWidth - window.innerWidth, scroller: sc.scrollWidth - sc.clientWidth };
+		} );
+		const readOv = await overflow();
+		t.check( 'the look card fits a 390px phone in read mode', readOv.page <= 0 && readOv.scroller <= 0, JSON.stringify( readOv ) );
+		await page.click( '#minn-look-edit' );
+		await page.waitForSelector( '.minn-look-form', { timeout: 10000 } );
+		const editOv = await overflow();
+		t.check( 'the edit form fits a 390px phone', editOv.page <= 0 && editOv.scroller <= 0, JSON.stringify( editOv ) );
+		await page.click( '#minn-look-cancel' );
+		await page.setViewportSize( wide );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {
