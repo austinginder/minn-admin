@@ -599,6 +599,8 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-row-end { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 /* Style variation cards (Design → Styles). */
 .minn-style-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+/* Design notes above the style cards / menu list (customized-styles warning, inline-menu note): breathe before the grid at the grid's own gap. */
+.minn-nav-inline-note { margin-bottom: 12px; line-height: 1.5; }
 .minn-style-card {
   display: flex; flex-direction: column; align-items: flex-start; gap: 9px; padding: 15px 16px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
