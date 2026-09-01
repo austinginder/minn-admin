@@ -30,7 +30,28 @@ function minn_admin_elementor_forms_ready() {
 	// switched off. No capability check can see a setting, so ask the setting:
 	// these rows carry names, email addresses, IP addresses and the page
 	// someone came from.
-	return '1' !== get_option( 'elementor_form-submissions' );
+	if ( '1' === get_option( 'elementor_form-submissions' ) ) {
+		return false;
+	}
+	// That setting is only half of it. Elementor reads it inside a branch it
+	// enters only when the licence covers submissions, so on an unlicensed,
+	// lapsed or downgraded Pro the component is never built at all: no screen,
+	// no routes, no clean-up job, and the rows already recorded still sitting
+	// in the table. Ask whether the component actually registered rather than
+	// asking the licence API directly, because that is true only when BOTH of
+	// their conditions passed and it does not depend on their internal class
+	// names staying put.
+	if ( class_exists( '\ElementorPro\Plugin' ) ) {
+		try {
+			$forms = \ElementorPro\Plugin::instance()->modules_manager->get_modules( 'forms' );
+			if ( $forms && method_exists( $forms, 'get_component' ) ) {
+				return (bool) $forms->get_component( 'form-submissions' );
+			}
+		} catch ( \Throwable $e ) {
+			return true; // their internals moved; the setting above still stands
+		}
+	}
+	return true;
 }
 
 /**
