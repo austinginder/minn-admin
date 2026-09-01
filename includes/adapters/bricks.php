@@ -90,6 +90,48 @@ function minn_admin_bricks_template_types() {
  * screen at all. Export and duplicate in this file already ask Bricks; the
  * list and the sidebar entry ask the same question now.
  */
+/**
+ * Bricks' page/template settings carry three raw-script keys that the vendor
+ * gates on unfiltered_html. Its own guard is a meta filter shaped for an
+ * admin-ajax request (it early-returns when there is no $_POST['postId'] and
+ * no global post), so on a REST write it does nothing. Reproduce the strip.
+ *
+ * Keeps any value already stored by someone who does hold the capability,
+ * which is what the vendor's filter does when it runs at all.
+ */
+function minn_admin_bricks_strip_unfiltered_html( $settings, $post_id = 0 ) {
+	if ( ! is_array( $settings ) || current_user_can( 'unfiltered_html' ) ) {
+		return $settings;
+	}
+	$script_keys = array( 'customScriptsHeader', 'customScriptsBodyHeader', 'customScriptsBodyFooter' );
+	$existing    = $post_id ? get_post_meta( $post_id, BRICKS_DB_PAGE_SETTINGS, true ) : array();
+	foreach ( $script_keys as $key ) {
+		unset( $settings[ $key ] );
+		if ( is_array( $existing ) && isset( $existing[ $key ] ) ) {
+			$settings[ $key ] = $existing[ $key ];
+		}
+	}
+	return $settings;
+}
+
+/**
+ * The fallback when Bricks exposes no permission resolver.
+ *
+ * Falling back to edit_posts would hand an Author create/import/delete of
+ * templates that render site-wide, so the fallback has to be at least as
+ * strict as the thing it stands in for.
+ */
+function minn_admin_bricks_fallback_access() {
+	if ( class_exists( '\Bricks\Capabilities' ) && method_exists( '\Bricks\Capabilities', 'current_user_has_full_access' ) ) {
+		try {
+			return (bool) \Bricks\Capabilities::current_user_has_full_access();
+		} catch ( \Throwable $e ) {
+			return current_user_can( 'manage_options' );
+		}
+	}
+	return current_user_can( 'manage_options' );
+}
+
 function minn_admin_bricks_can_view_templates() {
 	if ( current_user_can( 'manage_options' ) ) {
 		return true;
@@ -101,7 +143,7 @@ function minn_admin_bricks_can_view_templates() {
 			return false;
 		}
 	}
-	return current_user_can( 'edit_posts' );
+	return minn_admin_bricks_fallback_access();
 }
 
 /** Whether the current user may create templates, through Bricks' own resolver. */
@@ -113,7 +155,7 @@ function minn_admin_bricks_can_create() {
 			return false;
 		}
 	}
-	return current_user_can( 'edit_posts' );
+	return minn_admin_bricks_fallback_access();
 }
 
 /** Whether the current user may delete templates, through Bricks' own resolver. */
@@ -125,7 +167,7 @@ function minn_admin_bricks_can_delete() {
 			return false;
 		}
 	}
-	return current_user_can( 'edit_posts' );
+	return minn_admin_bricks_fallback_access();
 }
 
 /** Whether the current user may export templates, through Bricks' own resolver. */
@@ -137,7 +179,7 @@ function minn_admin_bricks_can_export() {
 			return false;
 		}
 	}
-	return current_user_can( 'edit_posts' );
+	return minn_admin_bricks_fallback_access();
 }
 
 /**
@@ -323,15 +365,30 @@ function minn_admin_bricks_import_one( $data ) {
 	} elseif ( ! empty( $data['type'] ) ) {
 		$type = sanitize_key( (string) $data['type'] );
 	}
+	// Create and edit both validate the type against Bricks' live vocabulary;
+	// import did not, so an unknown key stored here produced a template no
+	// type tab and no Bricks dropdown could ever show again.
+	if ( $type && ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
+		$type = '';
+	}
 	if ( $type ) {
 		update_post_meta( $id, BRICKS_DB_TEMPLATE_TYPE, $type );
 	}
 	if ( ! empty( $data['pageSettings'] ) && is_array( $data['pageSettings'] ) ) {
-		update_post_meta( $id, BRICKS_DB_PAGE_SETTINGS, $data['pageSettings'] );
+		// Bricks strips the three script keys in a meta filter that opens with
+		// `$_POST['postId'] ?: get_the_ID()` and returns early when that is
+		// falsy. Under REST neither exists, so the vendor's guard silently
+		// no-ops and this write would land unfiltered. Its sibling guard
+		// (Ajax::update_bricks_postmeta) covers only the content/header/footer
+		// keys, not this one. Strip here rather than trusting a filter shaped
+		// for an admin-ajax request.
+		update_post_meta( $id, BRICKS_DB_PAGE_SETTINGS, wp_slash( minn_admin_bricks_strip_unfiltered_html( $data['pageSettings'] ) ) );
 	}
 	if ( ! empty( $data['templateSettings'] ) && is_array( $data['templateSettings'] ) && class_exists( '\Bricks\Helpers' ) && method_exists( '\Bricks\Helpers', 'set_template_settings' ) ) {
 		try {
-			\Bricks\Helpers::set_template_settings( $id, $data['templateSettings'] );
+			// set_template_settings is a bare update_post_meta, so the same
+			// strip applies. wp_slash because update_metadata unslashes.
+			\Bricks\Helpers::set_template_settings( $id, wp_slash( minn_admin_bricks_strip_unfiltered_html( $data['templateSettings'] ) ) );
 		} catch ( \Throwable $e ) {
 			/* settings are optional; the tree still imported */
 		}
@@ -353,9 +410,18 @@ function minn_admin_bricks_import_one( $data ) {
 
 	if ( $elements && class_exists( '\Bricks\Helpers' ) ) {
 		if ( method_exists( '\Bricks\Helpers', 'sanitize_bricks_data' ) ) {
-			try {
-				$elements = \Bricks\Helpers::sanitize_bricks_data( $elements );
-			} catch ( \Throwable $e ) { /* keep the decoded tree */ }
+			// sanitize_bricks_data only unsets executeCode and the query
+			// editor. It applies no kses at all.
+			$elements = \Bricks\Helpers::sanitize_bricks_data( $elements );
+		}
+		// The function that actually enforces the unfiltered_html boundary on
+		// an element tree. Bricks calls it at ten sites in its own save paths;
+		// the meta-filter route that would otherwise catch this carries the
+		// same request-shaped early return as the page-settings one above, so
+		// under REST nothing runs it unless we do. Without it an imported Text
+		// element's content reaches the front end raw.
+		if ( method_exists( '\Bricks\Helpers', 'security_check_elements_before_save' ) ) {
+			$elements = \Bricks\Helpers::security_check_elements_before_save( $elements, $id, $area );
 		}
 		if ( method_exists( '\Bricks\Helpers', 'generate_new_element_ids' ) ) {
 			try {
@@ -401,7 +467,11 @@ function minn_admin_bricks_import_one( $data ) {
 	}
 
 	if ( $elements ) {
-		update_post_meta( $id, $meta_key, $elements );
+		// update_metadata unslashes, and the tree came straight from
+		// json_decode, so without this every backslash in custom CSS, a regex
+		// or escaped _content is eaten. The type-move and duplicate paths in
+		// this file already do it; the importer did not.
+		update_post_meta( $id, $meta_key, wp_slash( $elements ) );
 		if ( class_exists( '\Bricks\Database' ) && \Bricks\Database::get_setting( 'cssLoading' ) === 'file'
 			&& class_exists( '\Bricks\Assets_Files' ) && method_exists( '\Bricks\Assets_Files', 'generate_post_css_file' ) ) {
 			try {
@@ -428,6 +498,20 @@ function minn_admin_bricks_import_templates( $content ) {
 	$list = $looks_like_one ? array( $data ) : $data;
 	if ( ! $list || ! isset( $list[0] ) || ! is_array( $list[0] ) ) {
 		return new WP_Error( 'invalid', __( 'That file is not a Bricks template export.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	// Each row is an insert plus several meta writes, and on file-CSS sites a
+	// stylesheet regeneration. One request should not be able to ask for
+	// thousands of them.
+	if ( count( $list ) > 50 ) {
+		return new WP_Error(
+			'too_many',
+			sprintf(
+				/* translators: %s: number of templates in the file. */
+				__( 'That file holds %s templates. Import 50 or fewer at a time.', 'minn-admin' ),
+				number_format_i18n( count( $list ) )
+			),
+			array( 'status' => 400 )
+		);
 	}
 	$ids = array();
 	foreach ( $list as $row ) {
@@ -776,10 +860,13 @@ add_action( 'rest_api_init', function () {
 					'post_type'      => BRICKS_DB_TEMPLATE_SLUG,
 					'post_status'    => array( 'publish', 'draft', 'pending', 'future', 'private' ),
 					// Naming the unpublished statuses explicitly switches off
-					// the scoping WP_Query would otherwise apply, so without
-					// this every author sees every other author's unfinished
-					// templates. Their own list screen scopes them.
-					'perm'           => 'readable',
+					// the scoping WP_Query would otherwise apply. 'readable'
+					// does NOT restore it: core only author-scopes draft,
+					// pending and future under 'editable' ('readable' scopes
+					// private alone), so this needs the stricter value for
+					// anyone who cannot read other people's posts. Bricks' own
+					// list screen is scoped the same way.
+					'perm'           => current_user_can( 'edit_others_posts' ) ? 'readable' : 'editable',
 					'posts_per_page' => 25,
 					'paged'          => $page,
 					'orderby'        => $orderby,
@@ -842,7 +929,13 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'PUT',
 			'permission_callback' => function ( WP_REST_Request $request ) {
-				return current_user_can( 'edit_post', (int) $request['id'] );
+				// PUT was the last verb here with no Bricks-side check. It is
+				// not a rename-only route: changing a template's type MOVES
+				// the design tree between the content/header/footer meta keys,
+				// so it can promote an arbitrary tree into the site header. A
+				// site that took template editing away in their permission
+				// matrix means that.
+				return minn_admin_bricks_can_view_templates() && current_user_can( 'edit_post', (int) $request['id'] );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				$post = get_post( (int) $request['id'] );
@@ -931,7 +1024,10 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/bricks/templates/import', array(
 		'methods'             => 'POST',
 		'permission_callback' => function () {
-			return minn_admin_bricks_can_export();
+			// An import is a WRITE that lands site-wide markup, so it needs the
+			// create permission too — can_export alone is the permission to
+			// read a template out, not to put one in.
+			return minn_admin_bricks_can_export() && minn_admin_bricks_can_create();
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			$result = minn_admin_bricks_import_templates( (string) $request['content'] );

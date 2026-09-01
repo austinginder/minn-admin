@@ -18654,7 +18654,13 @@
 		Object.keys( attrs ).forEach( ( k ) => {
 			if ( attrs[ k ] === undefined || '' === attrs[ k ] ) delete attrs[ k ];
 		} );
-		const json = Object.keys( attrs ).length ? ' ' + JSON.stringify( attrs ) : '';
+		// Block attributes live inside an HTML COMMENT, so a value carrying
+		// `-->` closes the comment and everything after it parses as new block
+		// markup. A menu label is not the admin's own typing: it arrives from
+		// a post title any author can write. serializeBlockAttrs applies
+		// Gutenberg's escaping (-- < > & \") and is what the editor's own
+		// buildOpenComment uses; JSON.stringify alone is not enough here.
+		const json = serializeBlockAttrs( attrs );
 		n.attrs = attrs;
 		n.open = `<!-- wp:${ n.name }${ json }${ n.children ? ' -->' : ' /-->' }`;
 		if ( ! n.children ) n.raw = n.open;
