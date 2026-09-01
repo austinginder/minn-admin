@@ -7649,6 +7649,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$bg_raw = $map[ $mm[1] ]['value'];
 		}
 		return array(
+			'contrast'    => self::gs_contrast_checks( $styles, $map ),
 			'palette'     => $palette,
 			'fonts'       => array_values( array_unique( $fonts ) ),
 			'bodyFont'    => $body_font,
@@ -7861,7 +7862,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * images, custom presets) stays the Site Editor's.
 	 */
 	private static function gs_editable_paths() {
-		return array(
+		$paths = array(
 			'styles.color.background'                       => 'color',
 			'styles.color.text'                             => 'color',
 			'styles.elements.link.color.text'               => 'color',
@@ -7881,6 +7882,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'settings.layout.contentSize'                   => 'length',
 			'settings.layout.wideSize'                      => 'length',
 		);
+		// Per-level heading font and size: real customizations target H1,
+		// H2 and H3 individually far more often than "all headings".
+		for ( $i = 1; $i <= 6; $i++ ) {
+			$paths[ "styles.elements.h{$i}.typography.fontFamily" ] = 'font';
+			$paths[ "styles.elements.h{$i}.typography.fontSize" ]   = 'size';
+		}
+		return $paths;
 	}
 
 	private static function gs_get_path( $tree, $path ) {
@@ -8105,26 +8113,263 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * only the top level; here they get their own pickers.
 	 */
 	private static function gs_partials( $kind ) {
-		$files = array();
-		foreach ( array_unique( array( get_template_directory(), get_stylesheet_directory() ) ) as $root ) {
-			$dir = $root . '/styles/' . $kind;
-			foreach ( ( is_dir( $dir ) ? (array) glob( $dir . '/*.json' ) : array() ) as $path ) {
-				$files[ basename( $path ) ] = $path;
-			}
+		$prop  = 'colors' === $kind ? 'color' : 'typography';
+		$files = self::gs_style_files( $kind );
+		$derived = false;
+		if ( empty( $files ) ) {
+			// No partials shipped: derive the slice from the full variations,
+			// exactly what Gutenberg's palette and typeset pickers do.
+			$files   = self::gs_style_files( '' );
+			$derived = true;
 		}
-		ksort( $files );
 		$out = array();
 		foreach ( $files as $base => $path ) {
 			$decoded = json_decode( (string) file_get_contents( $path ), true );
 			if ( ! is_array( $decoded ) || isset( $decoded['blockTypes'] ) ) {
 				continue;
 			}
+			if ( $derived ) {
+				$decoded = array_merge( $decoded, array(
+					'settings' => self::gs_slice( isset( $decoded['settings'] ) ? $decoded['settings'] : array(), $prop ),
+					'styles'   => self::gs_slice( isset( $decoded['styles'] ) ? $decoded['styles'] : array(), $prop ),
+				) );
+				if ( empty( $decoded['settings'] ) && empty( $decoded['styles'] ) ) {
+					continue;
+				}
+			}
 			$settings = isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array();
+			$styles   = isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array();
+			$fonts    = self::variation_fonts( $settings );
+			if ( ! $fonts && 'typography' === $kind ) {
+				// Variations that only re-point body and heading fonts at the
+				// theme's families carry no fontFamilies of their own; name
+				// those through the theme's presets instead.
+				if ( ! isset( $map ) ) {
+					// A child theme can replace the parent's families while the
+					// parent's variations still name them; the parent's own
+					// theme.json knows those names.
+					$map = self::gs_preset_map( self::gs_merged()['settings'] );
+					$parent_tj = get_template_directory() . '/theme.json';
+					if ( file_exists( $parent_tj ) ) {
+						$pj = json_decode( (string) file_get_contents( $parent_tj ), true );
+						if ( isset( $pj['settings'] ) && is_array( $pj['settings'] ) ) {
+							$map = $map + self::gs_preset_map( $pj['settings'] );
+						}
+					}
+				}
+				foreach ( array( $styles['typography']['fontFamily'] ?? '', $styles['elements']['heading']['typography']['fontFamily'] ?? '', $styles['elements']['h1']['typography']['fontFamily'] ?? '' ) as $ref ) {
+					$name = is_string( $ref ) && '' !== $ref ? self::gs_resolve( $ref, $map ) : '';
+					// Still a var(): the family is not defined anywhere on this
+					// site, so name the slug rather than print CSS.
+					if ( preg_match( '/^var\(\s*--wp--preset--font-family--([a-z0-9-]+)/i', $name, $mm ) ) {
+						$name = ucwords( str_replace( '-', ' ', $mm[1] ) );
+					}
+					if ( '' !== $name && ! in_array( $name, $fonts, true ) ) {
+						$fonts[] = $name;
+					}
+				}
+			}
 			$out[] = array(
 				'id'      => preg_replace( '/\.json$/', '', $base ),
 				'title'   => isset( $decoded['title'] ) && is_string( $decoded['title'] ) ? $decoded['title'] : $base,
 				'palette' => self::variation_palette( $settings ),
-				'fonts'   => self::variation_fonts( $settings ),
+				'fonts'   => $fonts,
+				'derived' => $derived,
+			);
+		}
+		if ( ! $out ) {
+			return array();
+		}
+		// The theme's own slice leads the list: picking it hands just the
+		// colors (or just the type) back to the theme.
+		$tj = self::gs_theme_json_settings();
+		array_unshift( $out, array(
+			'id'      => 'default',
+			'title'   => __( 'Theme default', 'minn-admin' ),
+			'palette' => 'colors' === $kind ? self::variation_palette( $tj ) : array(),
+			'fonts'   => 'typography' === $kind ? self::variation_fonts( $tj ) : array(),
+			'derived' => $derived,
+		) );
+		return $out;
+	}
+
+	/** styles/{sub}/*.json across parent + child (child wins by basename), sorted. */
+	private static function gs_style_files( $sub ) {
+		$files = array();
+		foreach ( array_unique( array( get_template_directory(), get_stylesheet_directory() ) ) as $root ) {
+			$dir = $root . '/styles' . ( '' !== $sub ? '/' . $sub : '' );
+			foreach ( ( is_dir( $dir ) ? (array) glob( $dir . '/*.json' ) : array() ) as $path ) {
+				$files[ basename( $path ) ] = $path;
+			}
+		}
+		ksort( $files );
+		return $files;
+	}
+
+	/** The active theme's own theme.json settings (child first). */
+	private static function gs_theme_json_settings() {
+		foreach ( array( get_stylesheet_directory() . '/theme.json', get_template_directory() . '/theme.json' ) as $tj ) {
+			if ( file_exists( $tj ) ) {
+				$decoded = json_decode( (string) file_get_contents( $tj ), true );
+				return isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array();
+			}
+		}
+		return array();
+	}
+
+	/** Keep only the subtrees under keys named $prop (color / typography), at any depth. */
+	private static function gs_slice( $tree, $prop ) {
+		if ( ! is_array( $tree ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $tree as $k => $v ) {
+			if ( (string) $k === $prop ) {
+				$out[ $k ] = $v;
+				continue;
+			}
+			if ( is_array( $v ) && ! isset( $v[0] ) ) {
+				$sub = self::gs_slice( $v, $prop );
+				if ( $sub ) {
+					$out[ $k ] = $sub;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/** Drop every subtree under keys named $prop, pruning emptied parents. */
+	private static function gs_strip( $tree, $prop ) {
+		if ( ! is_array( $tree ) ) {
+			return $tree;
+		}
+		$out = array();
+		foreach ( $tree as $k => $v ) {
+			if ( (string) $k === $prop ) {
+				continue;
+			}
+			if ( is_array( $v ) && ! isset( $v[0] ) ) {
+				$sub = self::gs_strip( $v, $prop );
+				if ( $sub ) {
+					$out[ $k ] = $sub;
+				}
+				continue;
+			}
+			$out[ $k ] = $v;
+		}
+		return $out;
+	}
+
+	/** A partial's config: from its own file, else sliced from the full variation of that id. */
+	private static function gs_partial_config( $kind, $id ) {
+		$prop = 'colors' === $kind ? 'color' : 'typography';
+		$path = self::gs_partial_file( $kind, $id );
+		if ( '' !== $path ) {
+			$decoded = json_decode( (string) file_get_contents( $path ), true );
+			return is_array( $decoded ) ? array(
+				'settings' => isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array(),
+				'styles'   => isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array(),
+			) : null;
+		}
+		if ( ! empty( self::gs_style_files( $kind ) ) ) {
+			return null; // the theme ships partials; an unknown id is not a full variation to slice
+		}
+		$path = self::gs_partial_file( '', $id );
+		if ( '' === $path ) {
+			return null;
+		}
+		$decoded = json_decode( (string) file_get_contents( $path ), true );
+		if ( ! is_array( $decoded ) || isset( $decoded['blockTypes'] ) ) {
+			return null;
+		}
+		return array(
+			'settings' => self::gs_slice( isset( $decoded['settings'] ) ? $decoded['settings'] : array(), $prop ),
+			'styles'   => self::gs_slice( isset( $decoded['styles'] ) ? $decoded['styles'] : array(), $prop ),
+		);
+	}
+
+	/** Parse a color (preset var, hex, rgb/rgba) to [r,g,b], or null. */
+	private static function gs_rgb( $value, $map ) {
+		if ( ! is_string( $value ) || '' === trim( $value ) ) {
+			return null;
+		}
+		$v = trim( $value );
+		if ( preg_match( '/^var\(\s*(--wp--preset--color--[a-z0-9-]+)/i', $v, $m ) ) {
+			if ( ! isset( $map[ $m[1] ] ) ) {
+				return null;
+			}
+			$v = $map[ $m[1] ]['value'];
+		}
+		if ( preg_match( '/^#([0-9a-f]{3})$/i', $v, $m ) ) {
+			$h = $m[1];
+			return array( hexdec( $h[0] . $h[0] ), hexdec( $h[1] . $h[1] ), hexdec( $h[2] . $h[2] ) );
+		}
+		if ( preg_match( '/^#([0-9a-f]{6})([0-9a-f]{2})?$/i', $v, $m ) ) {
+			// A translucent color composites over something unknown: skip.
+			if ( ! empty( $m[2] ) && hexdec( $m[2] ) < 255 ) {
+				return null;
+			}
+			return array( hexdec( substr( $m[1], 0, 2 ) ), hexdec( substr( $m[1], 2, 2 ) ), hexdec( substr( $m[1], 4, 2 ) ) );
+		}
+		if ( preg_match( '/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i', $v, $m ) ) {
+			if ( isset( $m[4] ) && '' !== $m[4] && (float) $m[4] < 1 ) {
+				return null;
+			}
+			return array( (int) $m[1], (int) $m[2], (int) $m[3] );
+		}
+		if ( 'white' === strtolower( $v ) ) {
+			return array( 255, 255, 255 );
+		}
+		if ( 'black' === strtolower( $v ) ) {
+			return array( 0, 0, 0 );
+		}
+		return null;
+	}
+
+	/** WCAG contrast ratio between two [r,g,b] colors. */
+	private static function gs_contrast_ratio( $a, $b ) {
+		$lum = function ( $rgb ) {
+			$c = array();
+			foreach ( $rgb as $ch ) {
+				$x   = $ch / 255;
+				$c[] = $x <= 0.03928 ? $x / 12.92 : pow( ( $x + 0.055 ) / 1.055, 2.4 );
+			}
+			return 0.2126 * $c[0] + 0.7152 * $c[1] + 0.0722 * $c[2];
+		};
+		$l1 = $lum( $a );
+		$l2 = $lum( $b );
+		return ( max( $l1, $l2 ) + 0.05 ) / ( min( $l1, $l2 ) + 0.05 );
+	}
+
+	/**
+	 * Site-level contrast: body text, links and headings against the page
+	 * background, button text against the button background. AA is 4.5
+	 * for body-size text and 3 for large text (headings). Pairs whose
+	 * colors do not resolve (gradients, transparency, unknown presets)
+	 * are left out rather than guessed.
+	 */
+	private static function gs_contrast_checks( $styles, $map ) {
+		$bg    = self::gs_rgb( $styles['color']['background'] ?? '', $map );
+		$pairs = array(
+			array( 'text', __( 'Text', 'minn-admin' ), $styles['color']['text'] ?? '', $bg, 4.5 ),
+			array( 'links', __( 'Links', 'minn-admin' ), $styles['elements']['link']['color']['text'] ?? '', $bg, 4.5 ),
+			array( 'headings', __( 'Headings', 'minn-admin' ), $styles['elements']['heading']['color']['text'] ?? ( $styles['elements']['h1']['color']['text'] ?? '' ), $bg, 3 ),
+			array( 'buttons', __( 'Buttons', 'minn-admin' ), $styles['elements']['button']['color']['text'] ?? '', self::gs_rgb( $styles['elements']['button']['color']['background'] ?? '', $map ), 4.5 ),
+		);
+		$out = array();
+		foreach ( $pairs as $p ) {
+			list( $id, $label, $fg_raw, $bg_rgb, $need ) = $p;
+			$fg = self::gs_rgb( $fg_raw, $map );
+			if ( ! $fg || ! $bg_rgb ) {
+				continue;
+			}
+			$ratio = self::gs_contrast_ratio( $fg, $bg_rgb );
+			$out[] = array(
+				'id'    => $id,
+				'label' => $label,
+				'ratio' => round( $ratio, 1 ),
+				'need'  => $need,
+				'pass'  => $ratio >= $need,
 			);
 		}
 		return $out;
@@ -8138,7 +8383,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// Child wins, so look there last.
 		$found = '';
 		foreach ( array_unique( array( get_template_directory(), get_stylesheet_directory() ) ) as $root ) {
-			$path = $root . '/styles/' . $kind . '/' . $id . '.json';
+			$path = $root . '/styles/' . ( '' !== $kind ? $kind . '/' : '' ) . $id . '.json';
 			if ( file_exists( $path ) ) {
 				$found = $path;
 			}
@@ -8166,13 +8411,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 */
 	public static function styles_mix( WP_REST_Request $request ) {
 		$kind = (string) $request['kind'];
-		$path = self::gs_partial_file( $kind, (string) $request['id'] );
-		if ( '' === $path ) {
-			return new WP_Error( 'no_partial', __( 'That palette or typeset is not part of the active theme.', 'minn-admin' ), array( 'status' => 404 ) );
-		}
-		$decoded = json_decode( (string) file_get_contents( $path ), true );
+		$mid  = (string) $request['id'];
+		$prop = 'colors' === $kind ? 'color' : 'typography';
+		$is_default = ( 'default' === $mid );
+		$decoded = $is_default ? array( 'settings' => array(), 'styles' => array() ) : self::gs_partial_config( $kind, $mid );
 		if ( ! is_array( $decoded ) ) {
-			return new WP_Error( 'bad_partial', __( 'The theme file could not be read.', 'minn-admin' ), array( 'status' => 500 ) );
+			return new WP_Error( 'no_partial', __( 'That palette or typeset is not part of the active theme.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		if ( ! current_user_can( 'unfiltered_html' ) && ! empty( $decoded['settings'] ) ) {
 			return new WP_Error( 'settings_locked', __( 'WordPress only stores a palette or typeset for someone who can post unfiltered HTML, which this account cannot on this site.', 'minn-admin' ), array( 'status' => 403 ) );
@@ -8185,8 +8429,16 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return $res->as_error();
 		}
 		$cfg = self::gs_revision_config( (array) $res->get_data() );
-		$cfg['settings'] = self::gs_merge( $cfg['settings'], isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array() );
-		$cfg['styles']   = self::gs_merge( $cfg['styles'], isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array() );
+		// A slice replaces the same slice of the current look: strip the
+		// user's color (or type) keys first, then merge the new ones in, so
+		// a palette with fewer colors does not inherit leftovers. Default
+		// is the strip alone.
+		$cfg['settings'] = self::gs_strip( $cfg['settings'], $prop );
+		$cfg['styles']   = self::gs_strip( $cfg['styles'], $prop );
+		if ( ! $is_default ) {
+			$cfg['settings'] = self::gs_merge( $cfg['settings'], isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array() );
+			$cfg['styles']   = self::gs_merge( $cfg['styles'], isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array() );
+		}
 		$write = new WP_REST_Request( 'POST', '/wp/v2/global-styles/' . $id );
 		$write->set_body_params( array( 'settings' => (object) $cfg['settings'], 'styles' => (object) $cfg['styles'] ) );
 		$wres = rest_do_request( $write );

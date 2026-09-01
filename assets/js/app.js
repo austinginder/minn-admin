@@ -18156,6 +18156,11 @@
 		const bgHtml = look.background
 			? `${ look.backgroundSwatch ? `<span class="minn-look-swatch" style="background:${ escCssColor( look.backgroundSwatch ) }"></span>` : '' }${ esc( look.background ) }${ look.text ? ` <span class="minn-look-muted">· ${ esc( sprintf( /* translators: %s: a color. */ __( 'text %s' ), look.text ) ) }</span>` : '' }${ look.hasBackgroundImage ? ` <span class="minn-look-muted">· ${ esc( __( 'image set' ) ) }</span>` : '' }`
 			: `<span class="minn-look-muted">${ esc( __( 'Theme default' ) ) }</span>`;
+		const con = look.contrast || [];
+		const contrastHtml = con.length
+			? con.map( ( c ) => `<span class="minn-look-con ${ c.pass ? 'ok' : 'warn' }" title="${ esc( sprintf( /* translators: 1: contrast ratio, 2: the ratio AA requires. */ __( 'Contrast %1$s:1, AA needs %2$s:1' ), String( c.ratio ), String( c.need ) ) ) }">${ esc( c.label ) } ${ esc( String( c.ratio ) ) }${ c.pass ? ' ✓' : ' ✕' }</span>` ).join( '' )
+			  + ( con.some( ( c ) => ! c.pass ) ? `<span class="minn-look-muted">${ esc( __( 'below AA' ) ) }</span>` : '' )
+			: `<span class="minn-look-muted">${ esc( __( 'Not enough color information' ) ) }</span>`;
 		/* translators: %s: localized number of shadow presets. */
 		const shadowsHtml = look.shadows ? esc( sprintf( _n( '%s preset', '%s presets', look.shadows ), String( look.shadows ) ) ) : `<span class="minn-look-muted">${ esc( __( 'None' ) ) }</span>`;
 		const changes = d.changes || [];
@@ -18181,6 +18186,7 @@
 				${ row( __( 'Text sizes' ), sizesHtml, se.fontSizes, 'sizes', 'type' ) }
 				${ row( __( 'Layout' ), layoutHtml, se.layout, 'layout', 'layout' ) }
 				${ row( __( 'Background' ), bgHtml, se.background, 'background', 'colors' ) }
+				${ row( __( 'Contrast' ), contrastHtml, se.colors, 'contrast', 'colors' ) }
 				${ row( __( 'Shadows' ), shadowsHtml, se.shadows, 'shadows', '' ) }
 			</div>
 			<div class="minn-look-foot">
@@ -18210,6 +18216,12 @@
 		{ sec: 'type', label: __( 'Heading font' ), path: 'styles.elements.heading.typography.fontFamily' },
 		{ sec: 'type', label: __( 'Body text size' ), path: 'styles.typography.fontSize' },
 		{ sec: 'type', label: __( 'Line height' ), path: 'styles.typography.lineHeight', placeholder: '1.6' },
+		...[ 1, 2, 3, 4, 5, 6 ].flatMap( ( n ) => [
+			/* translators: %d: heading level. */
+			{ sec: 'headings', label: sprintf( __( 'H%d font' ), n ), path: `styles.elements.h${ n }.typography.fontFamily` },
+			/* translators: %d: heading level. */
+			{ sec: 'headings', label: sprintf( __( 'H%d size' ), n ), path: `styles.elements.h${ n }.typography.fontSize` },
+		] ),
 		{ sec: 'layout', label: __( 'Content width' ), path: 'settings.layout.contentSize', placeholder: '620px', settings: true },
 		{ sec: 'layout', label: __( 'Wide width' ), path: 'settings.layout.wideSize', placeholder: '1200px', settings: true },
 		{ sec: 'layout', label: __( 'Block spacing' ), path: 'styles.spacing.blockGap', placeholder: '1.5rem' },
@@ -18221,6 +18233,7 @@
 	const LOOK_SECTIONS = [
 		[ 'colors', __( 'Colors' ) ],
 		[ 'type', __( 'Type' ) ],
+		[ 'headings', __( 'Headings' ) ],
 		[ 'layout', __( 'Layout' ) ],
 	];
 
@@ -18386,9 +18399,9 @@
 		if ( ! colors.length && ! types.length ) return '';
 		const card = ( kind, title, items, body ) => `
 			<div class="minn-card minn-mix">
-				<div class="minn-mix-title">${ esc( title ) }</div>
+				<div class="minn-mix-title">${ esc( title ) }${ items.some( ( it ) => it.derived ) ? ` <span class="minn-look-muted">${ esc( 'colors' === kind ? __( 'the colors of each style variation' ) : __( 'the type of each style variation' ) ) }</span>` : '' }</div>
 				<div class="minn-mix-items">${ items.map( ( it ) => `
-					<button type="button" class="minn-mix-item" data-mix="${ esc( kind ) }" data-mixid="${ esc( it.id ) }">
+					<button type="button" class="minn-mix-item${ 'default' === it.id ? ' is-default' : '' }" data-mix="${ esc( kind ) }" data-mixid="${ esc( it.id ) }">
 						${ body( it ) }
 						<span class="minn-mix-name">${ esc( it.title ) }</span>
 					</button>` ).join( '' ) }</div>
@@ -18412,9 +18425,13 @@
 		if ( ! await minnConfirm( {
 			/* translators: %s: the palette or typeset's name. */
 			title: sprintf( 'colors' === kind ? __( 'Use the “%s” palette?' ) : __( 'Use the “%s” typeset?' ), title ),
-			body: 'colors' === kind
-				? __( 'Its colors are merged into your current look, for every visitor. Fonts and layout stay as they are. Undo restores the look you have now.' )
-				: __( 'Its fonts are merged into your current look, for every visitor. Colors and layout stay as they are. Undo restores the look you have now.' ),
+			body: 'default' === id
+				? ( 'colors' === kind
+					? __( 'Every color customization is removed and the theme’s own colors return, for every visitor. Fonts and layout stay as they are. Undo restores the look you have now.' )
+					: __( 'Every font customization is removed and the theme’s own type returns, for every visitor. Colors and layout stay as they are. Undo restores the look you have now.' ) )
+				: ( 'colors' === kind
+					? __( 'Its colors replace the colors of your current look, for every visitor. Fonts and layout stay as they are. Undo restores the look you have now.' )
+					: __( 'Its fonts replace the type of your current look, for every visitor. Colors and layout stay as they are. Undo restores the look you have now.' ) ),
 			confirmLabel: __( 'Apply' ),
 		} ) ) return;
 		const prev = d.current || { settings: {}, styles: {} };

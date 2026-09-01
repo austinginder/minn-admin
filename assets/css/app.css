@@ -647,6 +647,9 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-look-chip.is-on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
 .minn-look-fbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--line); padding-top: 12px; }
 
+.minn-look-con { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.minn-look-con.ok { background: var(--ok-bg, rgba(46,160,67,.12)); color: var(--ok, #1f7a35); }
+.minn-look-con.warn { background: var(--warn-bg, rgba(212,110,0,.14)); color: var(--warn, #a15c00); }
 /* Palette / typeset mixing cards (partial variations). */
 .minn-mix-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .minn-mix { padding: 14px 16px 12px; }
@@ -654,6 +657,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-mix-items { display: flex; flex-wrap: wrap; gap: 8px; }
 .minn-mix-item { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); cursor: pointer; color: inherit; font: inherit; min-width: 120px; text-align: start; }
 .minn-mix-item:hover { background: var(--hover); border-color: var(--accent); }
+.minn-mix-item.is-default { border-style: dashed; }
 .minn-mix-item .minn-style-swatches span { width: 16px; height: 16px; }
 .minn-mix-fonts { font-size: 12px; color: var(--text3); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .minn-mix-name { font-size: 13px; font-weight: 600; }

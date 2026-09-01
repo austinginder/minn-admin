@@ -122,7 +122,7 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		t.check( 'Current look card lists colors, fonts, sizes, layout, background and shadows',
 			look && [ 'colors', 'fonts', 'sizes', 'layout', 'background', 'shadows' ].every( ( k ) => look.rows.includes( k ) ), JSON.stringify( look && look.rows ) );
 		t.check( 'look card shows the effective palette and a font', look && look.swatches > 0 && look.fonts.trim().length > 0, look && `${ look.swatches } swatches, fonts "${ look.fonts.trim() }"` );
-		t.check( 'look rows are Minn doorways; only Shadows links out to the Site Editor', look && look.doors === 5 && look.shadowsOut, look && `${ look.doors } doors` );
+		t.check( 'look rows are Minn doorways; only Shadows links out to the Site Editor', look && look.doors === 6 && look.shadowsOut, look && `${ look.doors } doors` );
 		t.check( 'applying Midnight is described in words on the card', look && look.changes.length > 0, JSON.stringify( look && look.changes.slice( 0, 3 ) ) );
 		t.check( 'Reset to theme defaults is offered once customized', look && look.reset );
 		t.check( 'History button counts the saved versions', look && /History \(\d+\)/.test( look.history ), look && look.history );
@@ -207,11 +207,13 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 			fields: document.querySelectorAll( '.minn-look-field' ).length,
 			chips: document.querySelectorAll( '[data-lookrow="styles.color.background"] .minn-look-chip' ).length,
 			widths: !! document.querySelector( '[data-lookfield="settings.layout.contentSize"]' ),
+			h1: !! document.querySelector( '[data-lookcombo="styles.elements.h1.typography.fontFamily"]' ) && !! document.querySelector( '[data-lookcombo="styles.elements.h6.typography.fontSize"]' ),
 			placeholder: ( document.querySelector( '[data-lookfield="styles.typography.lineHeight"]' ) || {} ).placeholder || '',
 			saveDisabled: document.querySelector( '#minn-look-save' ).disabled,
 		} ) );
 		t.check( 'the edit form offers colors, type and layout fields with palette chips', form.fields >= 15 && form.chips >= 3, JSON.stringify( form ) );
 		t.check( 'width fields show for an unfiltered_html admin', form.widths );
+		t.check( 'every heading level gets its own font and size fields', form.h1 );
 		t.check( 'empty fields carry the theme value as placeholder', /^\d/.test( form.placeholder ), form.placeholder );
 		t.check( 'Save is disabled until something changes', form.saveDisabled );
 		// A palette chip for the background, a custom hex for text, a line height.
@@ -248,6 +250,21 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		const cleared = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=styles` ) ).body;
 		t.check( 'clearing a field hands it back to the theme and prunes the empty branch', ! ( cleared.styles && cleared.styles.typography ) && cleared.styles.color.text === '#123456', JSON.stringify( cleared.styles ) );
 
+		/* ===== Per-heading edits through the same whitelist ===== */
+		const h2 = await rest( 'minn-admin/v1/styles/update', { method: 'POST', body: { changes: { 'styles.elements.h2.typography.fontSize': 'var(--wp--preset--font-size--large)' } } } );
+		t.check( 'an H2 size edit is accepted', h2.status === 200, String( h2.status ) );
+		await open();
+		const h2words = await page.evaluate( () => [ ...document.querySelectorAll( '#minn-look-changes li' ) ].map( ( li ) => li.textContent ) );
+		t.check( 'the card names the H2 size change with the preset name', h2words.some( ( w ) => /^H2 size → /.test( w ) ), JSON.stringify( h2words ) );
+
+		/* ===== Contrast check reacts to a poor text color ===== */
+		const conBefore = await page.evaluate( () => [ ...document.querySelectorAll( '[data-look="contrast"] .minn-look-con' ) ].map( ( el ) => el.className.includes( 'warn' ) ? 'warn:' + el.textContent : 'ok:' + el.textContent ) );
+		t.check( 'the Contrast row grades text and buttons with a ratio each', conBefore.length >= 2 && conBefore.some( ( c ) => /:Text \d/.test( c ) ) && conBefore.some( ( c ) => /:Buttons \d/.test( c ) ), JSON.stringify( conBefore ) );
+		await rest( 'minn-admin/v1/styles/update', { method: 'POST', body: { changes: { 'styles.color.text': '#dddddd', 'styles.color.background': '#ffffff' } } } );
+		await open();
+		const conAfter = await page.evaluate( () => [ ...document.querySelectorAll( '[data-look="contrast"] .minn-look-con' ) ].map( ( el ) => el.className.includes( 'warn' ) ? 'warn:' + el.textContent : 'ok:' + el.textContent ) );
+		t.check( 'light grey text on white is flagged below AA', conAfter.some( ( c ) => /^warn:Text 1\./.test( c ) ), JSON.stringify( conAfter ) );
+
 		/* ===== Mixing: a color palette merged over the current look ===== */
 		await page.evaluate( ( id ) => fetch( window.MINN.restUrl + 'wp/v2/global-styles/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin', body: JSON.stringify( { settings: {}, styles: {} } ) } ), gsId );
 		await open();
@@ -257,12 +274,23 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		} ) );
 		t.check( 'Twenty Twenty-Five offers its color palettes and typesets for mixing', mix.palettes >= 5 && mix.typesets >= 5, JSON.stringify( mix ) );
 		const beforeMix = await frontBaseColor();
-		const mixTitle = await page.evaluate( () => { const b = document.querySelector( '[data-mix="colors"]' ); b.click(); return b.querySelector( '.minn-mix-name' ).textContent; } );
+		// The first item is Theme default; pick a real palette.
+		const mixTitle = await page.evaluate( () => { const b = document.querySelector( '[data-mix="colors"]:not([data-mixid="default"])' ); b.click(); return b.querySelector( '.minn-mix-name' ).textContent; } );
 		await page.waitForFunction( () => document.querySelector( '#minn-look-changes li' ), null, { timeout: 20000 } );
 		const afterMix = await frontBaseColor();
 		t.check( 'applying a palette changes the visitor-facing colors', afterMix !== beforeMix, `${ mixTitle }: ${ beforeMix } → ${ afterMix }` );
 		const mixed = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=settings,styles` ) ).body;
 		t.check( 'a palette mix touches colors only, never fonts', !! ( mixed.settings && mixed.settings.color ) && ! ( mixed.settings && mixed.settings.typography && mixed.settings.typography.fontFamilies ), JSON.stringify( Object.keys( mixed.settings || {} ) ) );
+		// Theme default for colors: the color slice goes, the rest stays.
+		await rest( 'minn-admin/v1/styles/update', { method: 'POST', body: { changes: { 'styles.typography.lineHeight': '1.9' } } } );
+		await open();
+		await page.evaluate( () => document.querySelector( '[data-mix="colors"][data-mixid="default"]' ).click() );
+		await page.waitForFunction( () => {
+			const lis = [ ...document.querySelectorAll( '#minn-look-changes li' ) ].map( ( li ) => li.textContent );
+			return lis.length && ! lis.some( ( w ) => /Background color|Theme palette|Custom colors/.test( w ) );
+		}, null, { timeout: 20000 } );
+		const stripped = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=settings,styles` ) ).body;
+		t.check( 'Theme default strips only the color slice and keeps the rest', ! ( stripped.settings && stripped.settings.color ) && ! ( stripped.styles && stripped.styles.color ) && stripped.styles && stripped.styles.typography && stripped.styles.typography.lineHeight === '1.9', JSON.stringify( { settings: Object.keys( stripped.settings || {} ), styles: stripped.styles } ) );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {
