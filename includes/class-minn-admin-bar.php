@@ -129,7 +129,12 @@ class Minn_Admin_Bar {
 		wp_enqueue_script( 'minn-admin-bar', MINN_ADMIN_URL . 'assets/js/bar.js', array(), $ver( 'assets/js/bar.js' ), true );
 		wp_add_inline_script(
 			'minn-admin-bar',
-			'window.MINN_BAR = ' . wp_json_encode( self::config() ) . ';',
+			// Same flag set as the app shell and the admin-menu redirect: a
+			// value carrying </script> would otherwise close the element and
+			// the rest of the payload would parse as HTML. Core only started
+			// escaping inline script bodies recently, and this plugin supports
+			// back to 6.0.
+			'window.MINN_BAR = ' . wp_json_encode( self::config(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ) . ';',
 			'before'
 		);
 	}

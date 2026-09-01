@@ -2249,8 +2249,15 @@ class Minn_Admin {
 		// Minn's app route and Minn's OWN REST namespace only. Widening this
 		// to every /wp-json/ request would re-language other plugins'
 		// endpoints on this site, which is not Minn's call to make.
-		$is_app = (bool) preg_match( '#(^|/)minn-admin(/|$)#', $path );
-		$is_rest = false !== strpos( $path, '/wp-json/minn-admin/' )
+		// Anchored to the real app path, which also honours a subdirectory
+		// install. An unanchored match would catch any public page whose slug
+		// happens to contain minn-admin (/2026/minn-admin/, /category/minn-admin/)
+		// and render it in the reader's own language — and a URL-keyed page
+		// cache would then serve that to everyone.
+		$app_path = (string) wp_parse_url( home_url( '/minn-admin/' ), PHP_URL_PATH );
+		$rest_path = (string) wp_parse_url( rest_url( Minn_Admin_REST::NS . '/' ), PHP_URL_PATH );
+		$is_app = '' !== $app_path && 0 === strpos( trailingslashit( $path ), $app_path );
+		$is_rest = ( '' !== $rest_path && 0 === strpos( trailingslashit( $path ), $rest_path ) )
 			|| 0 === strpos( $route, '/minn-admin/' );
 		if ( ! $is_app && ! $is_rest ) {
 			return $locale;
@@ -2398,10 +2405,19 @@ class Minn_Admin {
 					$jed     = json_decode( (string) file_get_contents( $file ), true );
 					$entries = $jed['locale_data']['messages'] ?? array();
 					foreach ( (array) $entries as $key => $forms ) {
-						if ( '' === $key || ! is_array( $forms ) || '' === (string) ( $forms[0] ?? '' ) ) {
+						if ( '' === $key || ! is_array( $forms ) ) {
 							continue;
 						}
-						$map[ $key ] = count( $forms ) > 1 ? array_values( $forms ) : (string) $forms[0];
+						// A catalog is a downloaded file like any other. Keep
+						// strings only: a non-string leaf (an INF from a
+						// malformed JED) is something wp_json_encode cannot
+						// encode, and it would take the whole boot payload
+						// down with it.
+						$forms = array_values( array_filter( $forms, 'is_string' ) );
+						if ( ! $forms || '' === $forms[0] ) {
+							continue;
+						}
+						$map[ $key ] = count( $forms ) > 1 ? $forms : $forms[0];
 					}
 				}
 				break;

@@ -3101,8 +3101,12 @@ class Minn_Admin_REST {
 				'group' => 'content',
 				'label' => __( 'Published posts', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $posts->publish ),
-				/* translators: %s: number of draft posts. */
-				'delta' => sprintf( _n( '%s draft', '%s drafts', (int) $posts->draft, 'minn-admin' ), number_format_i18n( (int) $posts->draft ) ),
+				// Same reasoning as the Drafts card: the count covers every
+				// author, so it only belongs to someone who can see their work.
+				'delta' => current_user_can( 'edit_others_posts' )
+					/* translators: %s: number of draft posts. */
+					? sprintf( _n( '%s draft', '%s drafts', (int) $posts->draft, 'minn-admin' ), number_format_i18n( (int) $posts->draft ) )
+					: __( 'published', 'minn-admin' ),
 				'up'    => null,
 				'goto'  => 'content:posts',
 			),
@@ -3136,8 +3140,14 @@ class Minn_Admin_REST {
 				'label' => __( 'Comments', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $comments->approved ),
 				/* translators: %s: number of comments awaiting moderation. */
-				'delta' => sprintf( __( '%s pending', 'minn-admin' ), number_format_i18n( (int) $comments->moderated ) ),
-				'up'    => (int) $comments->moderated > 0 ? 'warn' : null,
+				// The moderation queue size is Editor-and-up data: the
+				// sibling Pending comments card is gated on it, so leaking the
+				// same number through this delta would make that gate pointless.
+				'delta' => current_user_can( 'moderate_comments' )
+					/* translators: %s: number of comments awaiting moderation. */
+					? sprintf( __( '%s pending', 'minn-admin' ), number_format_i18n( (int) $comments->moderated ) )
+					: __( 'approved', 'minn-admin' ),
+				'up'    => current_user_can( 'moderate_comments' ) && (int) $comments->moderated > 0 ? 'warn' : null,
 				'goto'  => 'comments',
 			),
 			array(
@@ -3412,23 +3422,32 @@ class Minn_Admin_REST {
 				'group' => 'content',
 				'label' => __( 'Published posts', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $posts->publish ),
-				/* translators: %s: number of draft posts. */
-				'delta' => sprintf( _n( '%s draft', '%s drafts', (int) $posts->draft, 'minn-admin' ), number_format_i18n( (int) $posts->draft ) ),
+				// Same reasoning as the Drafts card: the count covers every
+				// author, so it only belongs to someone who can see their work.
+				'delta' => current_user_can( 'edit_others_posts' )
+					/* translators: %s: number of draft posts. */
+					? sprintf( _n( '%s draft', '%s drafts', (int) $posts->draft, 'minn-admin' ), number_format_i18n( (int) $posts->draft ) )
+					: __( 'published', 'minn-admin' ),
 				'up'    => null,
 				'goto'  => 'content:posts',
 			)
 		);
-		$add(
-			array(
-				'key'   => 'drafts',
-				'group' => 'content',
-				'label' => __( 'Drafts', 'minn-admin' ),
-				'value' => number_format_i18n( (int) $posts->draft ),
-				'delta' => __( 'posts', 'minn-admin' ),
-				'up'    => (int) $posts->draft > 0 ? 'warn' : null,
-				'goto'  => 'content:posts',
-			)
-		);
+		// A site-wide draft count is other people's unfinished work. The
+		// activity feed below already refuses to show it below
+		// edit_others_posts; the card has to agree.
+		if ( current_user_can( 'edit_others_posts' ) ) {
+			$add(
+				array(
+					'key'   => 'drafts',
+					'group' => 'content',
+					'label' => __( 'Drafts', 'minn-admin' ),
+					'value' => number_format_i18n( (int) $posts->draft ),
+					'delta' => __( 'posts', 'minn-admin' ),
+					'up'    => (int) $posts->draft > 0 ? 'warn' : null,
+					'goto'  => 'content:posts',
+				)
+			);
+		}
 		$add(
 			array(
 				'key'   => 'pages',
@@ -3448,8 +3467,14 @@ class Minn_Admin_REST {
 					'label' => __( 'Comments', 'minn-admin' ),
 					'value' => number_format_i18n( (int) $comments->approved ),
 					/* translators: %s: number of comments awaiting moderation. */
-					'delta' => sprintf( __( '%s pending', 'minn-admin' ), number_format_i18n( (int) $comments->moderated ) ),
-					'up'    => (int) $comments->moderated > 0 ? 'warn' : null,
+				// The moderation queue size is Editor-and-up data: the
+					// sibling Pending comments card is gated on it, so leaking the
+					// same number through this delta would make that gate pointless.
+					'delta' => current_user_can( 'moderate_comments' )
+						/* translators: %s: number of comments awaiting moderation. */
+						? sprintf( __( '%s pending', 'minn-admin' ), number_format_i18n( (int) $comments->moderated ) )
+						: __( 'approved', 'minn-admin' ),
+					'up'    => current_user_can( 'moderate_comments' ) && (int) $comments->moderated > 0 ? 'warn' : null,
 					'goto'  => 'comments',
 				)
 			);
@@ -3719,7 +3744,11 @@ class Minn_Admin_REST {
 				continue;
 			}
 			$k = sanitize_key( (string) $k );
-			if ( '' === $k || isset( $seen[ $k ] ) ) {
+			// A key is a name from the catalog, not free text. Reading is
+			// already filtered against what the caller may see, but there is
+			// no reason to persist a string that can never name a card, and a
+			// length bound keeps the stored row from growing without limit.
+			if ( '' === $k || strlen( $k ) > 32 || isset( $seen[ $k ] ) ) {
 				continue;
 			}
 			$seen[ $k ] = true;

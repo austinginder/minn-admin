@@ -56,7 +56,15 @@ try {
 		document.documentElement.setAttribute( 'data-theme', stored );
 	}
 } catch ( e ) {}
-window.MINN = <?php echo wp_json_encode( $boot, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ); ?>;
+<?php
+// wp_json_encode returns false for anything it cannot repair — an INF from a
+// malformed translation catalog, a resource handed over by a third-party
+// filter. Emitting that raw would print `window.MINN = ;`, a syntax error that
+// takes the whole inline script with it, and on a site where Minn is the admin
+// there is then no way back in. An empty object boots a degraded app instead.
+$minn_boot_json = wp_json_encode( $boot, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT );
+?>
+window.MINN = <?php echo false === $minn_boot_json ? '{}' : $minn_boot_json; ?>;
 // Color scheme from user meta (boot.user.appearance) — apply before paint.
 (function () {
 	try {
