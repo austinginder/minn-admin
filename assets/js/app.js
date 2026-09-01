@@ -18065,10 +18065,35 @@
 		const editBtn = $( '#minn-look-edit', view );
 		if ( editBtn ) editBtn.addEventListener( 'click', () => {
 			ss.editing = ! ss.editing;
+			ss.editFocus = '';
 			ss.editVals = ss.editing ? Object.assign( {}, ( d.edit && d.edit.values ) || {} ) : null;
 			renderStyles();
 		} );
+		$$( '[data-lookopen]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				ss.editing = true;
+				ss.editFocus = btn.dataset.lookopen;
+				if ( ! ss.editVals ) ss.editVals = Object.assign( {}, ( d.edit && d.edit.values ) || {} );
+				renderStyles();
+			} )
+		);
 		bindStylesEditForm( view, ss );
+		// Opened from a row: bring that section into view (scroller math,
+		// never scrollIntoView, which yanks every scroll ancestor) and
+		// seat the caret in its first field.
+		if ( ss.editing && ss.editFocus ) {
+			const sec = $( `[data-looksec="${ ss.editFocus }"]`, view );
+			const sc = $( '.minn-scroll' );
+			if ( sec && sc ) {
+				const top = sec.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 72;
+				sc.scrollTo( { top: Math.max( 0, top ), behavior: 'smooth' } );
+				// Plain fields only: focusing a combobox pops its list open.
+				const first = $( 'input.minn-input:not(.minn-ac-input)', sec );
+				if ( first ) first.focus( { preventScroll: true } );
+				setTimeout( () => sec.classList.remove( 'is-focus' ), 1400 );
+			}
+			ss.editFocus = '';
+		}
 		$$( '[data-mix]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				const list = ( d.partials || {} )[ btn.dataset.mix ] || [];
@@ -18090,13 +18115,19 @@
 		if ( ! look ) return '';
 		const se = d.siteEditor || {};
 		const linkable = ( url ) => !! url && ! ( ENGINE && isWpAdminUrl( url ) );
-		const row = ( label, valueHtml, url, key ) => {
+		// Rows Minn can edit open the form at their section; the one it
+		// cannot (shadows) links out, and says so. Minn is the admin: the
+		// Site Editor is the explicit escape in the header, never the
+		// default click.
+		const row = ( label, valueHtml, url, key, sec ) => {
 			const inner = `
 				<div class="minn-look-label">${ esc( label ) }</div>
-				<div class="minn-look-value">${ valueHtml }</div>
-				${ linkable( url ) ? `<div class="minn-look-go">${ esc( __( 'Edit' ) ) } ↗</div>` : '' }`;
+				<div class="minn-look-value">${ valueHtml }</div>`;
+			if ( sec && d.edit ) {
+				return `<button type="button" class="minn-look-row" data-look="${ esc( key ) }" data-lookopen="${ esc( sec ) }">${ inner }<div class="minn-look-go">${ esc( __( 'Edit' ) ) } ›</div></button>`;
+			}
 			return linkable( url )
-				? `<a class="minn-look-row" data-look="${ esc( key ) }" href="${ esc( url ) }" target="_blank" rel="noopener">${ inner }</a>`
+				? `<a class="minn-look-row" data-look="${ esc( key ) }" href="${ esc( url ) }" target="_blank" rel="noopener">${ inner }<div class="minn-look-go">${ esc( __( 'Site Editor' ) ) } ↗</div></a>`
 				: `<div class="minn-look-row" data-look="${ esc( key ) }">${ inner }</div>`;
 		};
 		const swatches = ( look.palette || [] ).slice( 0, 12 ).map( ( c ) =>
@@ -18145,12 +18176,12 @@
 			</div>
 			${ ss && ss.editing ? stylesEditFormHtml( d, ss ) : `
 			<div class="minn-look-grid">
-				${ row( __( 'Colors' ), paletteHtml, se.colors, 'colors' ) }
-				${ row( __( 'Fonts' ), fontsHtml, se.typography, 'fonts' ) }
-				${ row( __( 'Text sizes' ), sizesHtml, se.fontSizes, 'sizes' ) }
-				${ row( __( 'Layout' ), layoutHtml, se.layout, 'layout' ) }
-				${ row( __( 'Background' ), bgHtml, se.background, 'background' ) }
-				${ row( __( 'Shadows' ), shadowsHtml, se.shadows, 'shadows' ) }
+				${ row( __( 'Colors' ), paletteHtml, se.colors, 'colors', 'colors' ) }
+				${ row( __( 'Fonts' ), fontsHtml, se.typography, 'fonts', 'type' ) }
+				${ row( __( 'Text sizes' ), sizesHtml, se.fontSizes, 'sizes', 'type' ) }
+				${ row( __( 'Layout' ), layoutHtml, se.layout, 'layout', 'layout' ) }
+				${ row( __( 'Background' ), bgHtml, se.background, 'background', 'colors' ) }
+				${ row( __( 'Shadows' ), shadowsHtml, se.shadows, 'shadows', '' ) }
 			</div>
 			<div class="minn-look-foot">
 				<div class="minn-look-label">${ esc( __( 'Customized' ) ) }</div>
@@ -18239,7 +18270,15 @@
 			if ( ! fields.length ) return '';
 			const note = ( 'layout' === id && ! e.settingsWritable )
 				? `<div class="minn-look-muted">${ esc( __( 'Content and wide widths are not editable for this account: WordPress only stores them for someone who can post unfiltered HTML.' ) ) }</div>` : '';
-			return `<div class="minn-look-fsec"><div class="minn-look-fsec-title">${ esc( label ) }</div><div class="minn-look-fields">${ fields.map( field ).join( '' ) }</div>${ note }</div>`;
+			const se = d.siteEditor || {};
+			const linkable = ( url ) => !! url && ! ( ENGINE && isWpAdminUrl( url ) );
+			// What Minn does not edit in a section is named, with the way there.
+			const beyond = 'type' === id && linkable( se.fontSizes )
+				? `<a class="minn-look-beyond" href="${ esc( se.fontSizes ) }" target="_blank" rel="noopener">${ esc( __( 'Text size presets' ) ) } ↗</a>`
+				: ( 'colors' === id && linkable( se.colors )
+					? `<a class="minn-look-beyond" href="${ esc( se.colors ) }" target="_blank" rel="noopener">${ esc( __( 'Palette colors' ) ) } ↗</a>`
+					: '' );
+			return `<div class="minn-look-fsec${ ss.editFocus === id ? ' is-focus' : '' }" data-looksec="${ esc( id ) }"><div class="minn-look-fsec-title">${ esc( label ) }${ beyond }</div><div class="minn-look-fields">${ fields.map( field ).join( '' ) }</div>${ note }</div>`;
 		} ).join( '' );
 		return `
 		<div class="minn-look-form">

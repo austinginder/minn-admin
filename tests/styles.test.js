@@ -112,7 +112,8 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 				rows: [ ...card.querySelectorAll( '.minn-look-row' ) ].map( ( r ) => r.dataset.look ),
 				swatches: card.querySelectorAll( '[data-look="colors"] .minn-look-swatch' ).length,
 				fonts: ( card.querySelector( '[data-look="fonts"] .minn-look-value' ) || {} ).textContent || '',
-				links: [ ...card.querySelectorAll( 'a.minn-look-row' ) ].every( ( a ) => /site-editor\.php\?p=%2Fstyles&section=/.test( a.href ) ),
+				doors: card.querySelectorAll( 'button.minn-look-row[data-lookopen]' ).length,
+				shadowsOut: !! card.querySelector( 'a.minn-look-row[data-look="shadows"][href*="site-editor.php"]' ),
 				changes: [ ...card.querySelectorAll( '#minn-look-changes li' ) ].map( ( li ) => li.textContent ),
 				reset: !! card.querySelector( '#minn-look-reset' ),
 				history: ( card.querySelector( '#minn-look-history' ) || {} ).textContent || '',
@@ -121,7 +122,7 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		t.check( 'Current look card lists colors, fonts, sizes, layout, background and shadows',
 			look && [ 'colors', 'fonts', 'sizes', 'layout', 'background', 'shadows' ].every( ( k ) => look.rows.includes( k ) ), JSON.stringify( look && look.rows ) );
 		t.check( 'look card shows the effective palette and a font', look && look.swatches > 0 && look.fonts.trim().length > 0, look && `${ look.swatches } swatches, fonts "${ look.fonts.trim() }"` );
-		t.check( 'every look row deep-links to its Site Editor panel', look && look.links );
+		t.check( 'look rows are Minn doorways; only Shadows links out to the Site Editor', look && look.doors === 5 && look.shadowsOut, look && `${ look.doors } doors` );
 		t.check( 'applying Midnight is described in words on the card', look && look.changes.length > 0, JSON.stringify( look && look.changes.slice( 0, 3 ) ) );
 		t.check( 'Reset to theme defaults is offered once customized', look && look.reset );
 		t.check( 'History button counts the saved versions', look && /History \(\d+\)/.test( look.history ), look && look.history );
@@ -190,6 +191,16 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		t.check( 'the card reports nothing customized after a reset', resetChanges === 0 );
 
 		/* ===== Edit look: direct edits with validation, save and Undo ===== */
+		// A row opens the editor at its own section, caret seated there.
+		await page.click( '[data-lookopen="type"]' );
+		await page.waitForSelector( '.minn-look-form', { timeout: 10000 } );
+		const opened = await page.evaluate( () => ( {
+			focus: !! document.querySelector( '[data-looksec="type"].is-focus' ),
+			active: !! ( document.activeElement && document.activeElement.closest( '[data-looksec="type"]' ) ),
+		} ) );
+		t.check( 'the Fonts row opens the editor at the Type section with focus there', opened.focus && opened.active, JSON.stringify( opened ) );
+		await page.click( '#minn-look-cancel' );
+		await page.waitForSelector( '.minn-look-form', { state: 'detached', timeout: 10000 } );
 		await page.click( '#minn-look-edit' );
 		await page.waitForSelector( '.minn-look-form', { timeout: 10000 } );
 		const form = await page.evaluate( () => ( {

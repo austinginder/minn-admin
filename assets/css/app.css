@@ -608,9 +608,11 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-look-title { font-weight: 600; font-size: 14px; }
 .minn-look-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .minn-look-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
-.minn-look-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 18px; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; min-width: 0; }
-a.minn-look-row:hover { background: var(--hover); }
-a.minn-look-row:hover .minn-look-go { opacity: 1; }
+.minn-look-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 18px; border: 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; min-width: 0; background: transparent; font: inherit; text-align: start; width: 100%; cursor: default; }
+button.minn-look-row, a.minn-look-row { cursor: pointer; }
+button.minn-look-row:hover, a.minn-look-row:hover { background: var(--hover); }
+button.minn-look-row:hover .minn-look-go, a.minn-look-row:hover .minn-look-go { opacity: 1; }
+button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .minn-look-label { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
 .minn-look-value { font-size: 13.5px; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; line-height: 1.4; }
 .minn-look-go { font-size: 12px; color: var(--accent); opacity: 0.55; white-space: nowrap; }
@@ -626,7 +628,11 @@ a.minn-look-row:hover .minn-look-go { opacity: 1; }
 
 /* Edit look form (inside the Current look card). */
 .minn-look-form { padding: 4px 18px 14px; display: flex; flex-direction: column; gap: 18px; }
-.minn-look-fsec-title { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin: 10px 0 8px; }
+.minn-look-fsec-title { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin: 10px 0 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.minn-look-beyond { font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text3); text-decoration: none; }
+.minn-look-beyond:hover { color: var(--accent); }
+.minn-look-fsec { border-radius: 10px; transition: box-shadow 0.4s ease; }
+.minn-look-fsec.is-focus { box-shadow: 0 0 0 2px var(--accent); padding: 0 10px 8px; margin: 0 -10px; }
 .minn-look-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px 22px; }
 .minn-look-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .minn-look-field.is-color { grid-column: span 1; }
