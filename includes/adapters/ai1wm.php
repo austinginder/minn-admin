@@ -228,7 +228,13 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $perm_delete,
 		'callback'            => function ( WP_REST_Request $request ) {
 			$filename = minn_admin_ai1wm_id_decode( Minn_Admin::path_param( $request ) );
+			// The route pattern constrains the ENCODED id, so it says nothing
+			// about what comes back out of the decode. Shape the decoded name
+			// ourselves rather than resting on a vendor helper that an older
+			// or forked copy may not define — absence of it should not mean
+			// absence of a check.
 			if ( ! $filename
+				|| ! preg_match( '/^[A-Za-z0-9._-]+\.wpress$/', $filename )
 				|| false !== strpos( $filename, '..' )
 				|| ( function_exists( 'ai1wm_is_filename_supported' ) && ! ai1wm_is_filename_supported( $filename ) )
 			) {

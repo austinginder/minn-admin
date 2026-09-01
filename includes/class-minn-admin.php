@@ -2254,10 +2254,16 @@ class Minn_Admin {
 		// happens to contain minn-admin (/2026/minn-admin/, /category/minn-admin/)
 		// and render it in the reader's own language — and a URL-keyed page
 		// cache would then serve that to everyone.
-		$app_path = (string) wp_parse_url( home_url( '/minn-admin/' ), PHP_URL_PATH );
-		$rest_path = (string) wp_parse_url( rest_url( Minn_Admin_REST::NS . '/' ), PHP_URL_PATH );
-		$is_app = '' !== $app_path && 0 === strpos( trailingslashit( $path ), $app_path );
-		$is_rest = ( '' !== $rest_path && 0 === strpos( trailingslashit( $path ), $rest_path ) )
+		//
+		// This runs on `determine_locale`, which core fires while it is still
+		// setting itself up: nothing here may touch another of this plugin's
+		// classes, and the REST namespace stays a literal for that reason.
+		$app_path = function_exists( 'home_url' ) ? (string) wp_parse_url( home_url( '/minn-admin/' ), PHP_URL_PATH ) : '/minn-admin/';
+		if ( '' === $app_path ) {
+			$app_path = '/minn-admin/';
+		}
+		$is_app  = 0 === strpos( trailingslashit( $path ), $app_path );
+		$is_rest = false !== strpos( $path, '/wp-json/minn-admin/' )
 			|| 0 === strpos( $route, '/minn-admin/' );
 		if ( ! $is_app && ! $is_rest ) {
 			return $locale;
