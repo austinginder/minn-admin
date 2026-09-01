@@ -5446,7 +5446,13 @@ class Minn_Admin_REST {
 	 * GET minn-admin/v1/site-logo — { supported, id, url }.
 	 */
 	public static function get_site_logo() {
-		$supported = current_theme_supports( 'custom-logo' );
+		// A block theme rarely DECLARES custom-logo support (stock Twenty
+		// Twenty-Five doesn't), yet its Site Logo block manages one all the
+		// same, and core registers the theme-mod ↔ site_logo-option sync
+		// filters unconditionally — so the mod read/write below works there.
+		// Only a classic theme with no support keeps the field hidden, since
+		// nothing in it would ever render the logo.
+		$supported = current_theme_supports( 'custom-logo' ) || wp_is_block_theme();
 		$id        = $supported ? (int) get_theme_mod( 'custom_logo' ) : 0;
 		return rest_ensure_response(
 			array(
@@ -5463,7 +5469,7 @@ class Minn_Admin_REST {
 	 * writes. Refused when the theme declares no custom-logo support.
 	 */
 	public static function set_site_logo( WP_REST_Request $request ) {
-		if ( ! current_theme_supports( 'custom-logo' ) ) {
+		if ( ! current_theme_supports( 'custom-logo' ) && ! wp_is_block_theme() ) {
 			return new WP_Error( 'minn_no_logo_support', __( 'The active theme does not support a custom logo.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$id = (int) $request->get_param( 'id' );

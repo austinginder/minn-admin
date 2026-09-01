@@ -1,9 +1,13 @@
 /**
  * Site logo (Settings → Site): the theme's custom_logo theme_mod behind
- * minn-admin/v1/site-logo, gated on the active theme declaring
- * custom-logo support (the dev fixture mu-plugin opens the gate — the
- * marketing theme declares none). Sets via REST, asserts the field
- * renders the saved logo, then drives Remove + Save through the real UI.
+ * minn-admin/v1/site-logo. Supported when the theme declares custom-logo
+ * support (the dev fixture opens that gate for the classic marketing
+ * theme) OR when the theme is a block theme, which manages a logo through
+ * the Site Logo block without ever declaring support. Sets via REST,
+ * asserts the field renders the saved logo, drives Remove + Save through
+ * the real UI, then proves the block-theme gate on twentytwentyfive —
+ * including that the theme-mod write syncs to the site_logo OPTION the
+ * block actually reads.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
@@ -21,6 +25,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	}, { path, opts } );
 
 	let mediaId = null;
+	let prevTheme = '';
 	try {
 		const base = await api( 'minn-admin/v1/site-logo' );
 		t.check( 'route reports theme support (fixture gate)', base && base.supported === true, JSON.stringify( base ) );
@@ -62,8 +67,31 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		null, { timeout: 20000 } );
 		const after = await api( 'minn-admin/v1/site-logo' );
 		t.check( 'Remove + Save clears the logo', after && after.id === 0 && '' === after.url, JSON.stringify( after ) );
+
+		/* ===== Block themes: supported WITHOUT declaring custom-logo =====
+		 * Stock block themes (Twenty Twenty-Five included) never call
+		 * add_theme_support('custom-logo') yet manage a logo through the Site
+		 * Logo block, and core syncs the theme mod with the site_logo option
+		 * unconditionally. The fixture only opens the classic gate now, so
+		 * this exercises Minn's own block-theme gate the way a real site
+		 * would. */
+		prevTheme = ( await api( 'wp/v2/themes?status=active&_fields=stylesheet' ) )[ 0 ].stylesheet;
+		await api( 'minn-admin/v1/themes/activate', { method: 'POST', body: JSON.stringify( { stylesheet: 'twentytwentyfive' } ) } );
+		const blockGate = await api( 'minn-admin/v1/site-logo' );
+		t.check( 'a block theme reports logo support without declaring it',
+			blockGate && blockGate.supported === true, JSON.stringify( blockGate ) );
+		const blockSet = await api( 'minn-admin/v1/site-logo', { method: 'POST', body: JSON.stringify( { id: mediaId } ) } );
+		t.check( 'setting the logo works on a block theme', blockSet && blockSet.id === mediaId, JSON.stringify( blockSet ) );
+		// The Site Logo block reads the site_logo OPTION — the sync is the
+		// whole reason the theme-mod write is safe on a block theme.
+		const optionSynced = await api( 'wp/v2/settings?_fields=site_logo' );
+		t.check( 'the write synced to the site_logo option the block reads',
+			optionSynced && optionSynced.site_logo === mediaId, JSON.stringify( optionSynced ) );
+		const blockClear = await api( 'minn-admin/v1/site-logo', { method: 'POST', body: JSON.stringify( { id: 0 } ) } );
+		t.check( 'clearing works on a block theme too', blockClear && blockClear.id === 0 );
 	} finally {
 		await api( 'minn-admin/v1/site-logo', { method: 'POST', body: JSON.stringify( { id: 0 } ) } ).catch( () => {} );
+		if ( prevTheme ) await api( 'minn-admin/v1/themes/activate', { method: 'POST', body: JSON.stringify( { stylesheet: prevTheme } ) } ).catch( () => {} );
 		if ( mediaId ) await api( `wp/v2/media/${ mediaId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 	}
 

@@ -192,7 +192,17 @@ verified empirically at v0.23.0:
    STILL OPEN, ranked: template REVISIONS/history in the editor (route
    exists; loadEditorRevisions guarded off for templates); global-styles
    history (core keeps revisions of the user global-styles post — would
-   extend the Styles tab); site logo in Settings → Identity
+   extend the Styles tab).
+   **SITE LOGO ON BLOCK THEMES FIXED**: the Settings field existed but
+   gated on `current_theme_supports('custom-logo')`, which stock block
+   themes never declare (TT5 included — its style.css "custom-logo" is a
+   directory TAG, not support), so the field hid on exactly the sites
+   moving to block themes; the dev fixture's unconditional
+   add_theme_support masked it (now classic-only). Gate is
+   `supports || wp_is_block_theme()`; the theme-mod write is safe there
+   because core registers the custom_logo-mod ↔ site_logo-option sync
+   filters UNCONDITIONALLY (blocks/site-logo.php), proven both directions.
+   Suite `tests/site-logo.test.js` (10) includes the option-sync proof.
    (`wp/v2/global-styles/themes/{stylesheet}/variations` lists them and
    applying one is a REST write, so it needs no canvas); then a read-only
    Design card (active theme, palette, site logo). The Site Editor canvas
