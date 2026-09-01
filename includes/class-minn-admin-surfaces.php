@@ -695,6 +695,16 @@ class Minn_Admin_Surfaces {
 				$surface[ $section ] = self::normalize_route_group( $surface[ $section ] );
 			}
 		}
+		// The status card carries a route of its own, and the client fetches
+		// it with the site's nonce attached like any other. It is listed in
+		// SURFACE_KEYS beside collection and manage, so it belongs in the same
+		// pass; leaving it out meant one documented route key shipped
+		// unchecked.
+		if ( ! empty( $surface['status'] ) && is_array( $surface['status'] )
+			&& isset( $surface['status']['route'] )
+			&& ! Minn_Admin::rest_route_or_null( $surface['status']['route'] ) ) {
+			unset( $surface['status'] );
+		}
 		if ( ! empty( $surface['views'] ) && is_array( $surface['views'] ) ) {
 			foreach ( $surface['views'] as $i => $view ) {
 				if ( is_array( $view ) ) {
@@ -715,6 +725,12 @@ class Minn_Admin_Surfaces {
 		if ( ! empty( $group['create'] ) && is_array( $group['create'] ) && isset( $group['create']['route'] )
 			&& ! Minn_Admin::rest_route_or_null( $group['create']['route'] ) ) {
 			unset( $group['create'] );
+		}
+		// import is in COLLECTION_KEYS and carries a route the client POSTs a
+		// file to, so it answers to the same rule create does.
+		if ( ! empty( $group['import'] ) && is_array( $group['import'] ) && isset( $group['import']['route'] )
+			&& ! Minn_Admin::rest_route_or_null( $group['import']['route'] ) ) {
+			unset( $group['import'] );
 		}
 		if ( ! empty( $group['detail'] ) && is_array( $group['detail'] ) ) {
 			foreach ( array( 'detailRoute', 'sectionsRoute' ) as $key ) {
