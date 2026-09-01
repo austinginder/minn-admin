@@ -1598,7 +1598,12 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'surface_setup' ),
-				'permission_callback' => 'is_user_logged_in',
+				// Nothing below the app's own floor has any reason to reach a
+				// setup route; the surface's own capability is still checked
+				// in the handler, where the descriptor can be read.
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
 			)
 		);
 
@@ -2594,7 +2599,10 @@ class Minn_Admin_REST {
 		}
 		$cap = isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options';
 		if ( ! current_user_can( $cap ) ) {
-			return new WP_Error( 'forbidden', __( 'You cannot set up this plugin.', 'minn-admin' ), array( 'status' => 403 ) );
+			// Same answer as an unknown id. Telling the two apart lets anyone
+			// who can reach this route enumerate which adapters are registered,
+			// and which of them are sitting unconfigured.
+			return new WP_Error( 'no_setup', __( 'That surface has no setup to run.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$setup = $surface['setup'];
 		if ( empty( $setup['run'] ) || ! is_callable( $setup['run'] ) ) {
