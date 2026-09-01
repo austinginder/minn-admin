@@ -68,6 +68,18 @@ if ( false !== $minn_admin_reporting_was ) {
 		},
 		0
 	);
+	// The restore above is conditional and runs on a hook, so two things can
+	// keep it from happening: a fatal before plugins_loaded, and a request
+	// that legitimately passes the session test and therefore never restores
+	// at all. In both cases the setting stays changed for the rest of the
+	// request, across every other plugin's code. Put it back at the end
+	// regardless of how the request got there, so the altered state can never
+	// outlive the thing it was for.
+	register_shutdown_function(
+		function () use ( $minn_admin_reporting_was ) {
+			error_reporting( $minn_admin_reporting_was );
+		}
+	);
 }
 
 define( 'MINN_ADMIN_VERSION', '0.37.0' );
