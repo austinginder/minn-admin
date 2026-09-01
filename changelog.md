@@ -1,6 +1,8 @@
 # Changelog
 
-## **v0.37.0** - Unreleased
+## **v0.37.0** - September 1 2026
+
+The design release. A block theme keeps the things that decide how a site looks in places only the Site Editor could reach, so Minn gains a Design screen that reaches them: templates that say which ones this site has actually changed and what still uses each one, template parts and navigation menus on their own tabs, and the theme's style variations as swatch cards you can apply and then undo. Templates open in Minn's editor with the same promise the rest of the editor makes, that anything it did not touch comes back byte for byte. Menus are arranged here rather than merely listed, the front-end bar reaches the Bricks templates wrapping the page you are on, and the Overview number cards finally swap for the ones you actually watch. A security pass over the release closed a way a menu label could carry markup into the site header, and brought imported Bricks templates under the same filtering Bricks applies to its own.
 
 ### Added
 

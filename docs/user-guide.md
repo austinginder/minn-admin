@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.36.0. This file ships inside the plugin, so the copy you
+*Current as of v0.37.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -617,8 +617,13 @@ cards, all in the same operational group.
   first and the active one marked. Applying one asks first, because it
   changes the site for every visitor immediately, then offers Undo,
   which restores the exact look you had, including any customizations
-  made in the Site Editor. Deeper style work (editing the palette,
-  typography, per-block styles) stays in the Site Editor.
+  made in the Site Editor. Some sites cannot store a variation's colors
+  and fonts at all: a site on a network, or one whose owner has turned
+  off unfiltered HTML, keeps the layout and drops the palette it refers
+  to. On those the tab says so and does not apply the style, rather than
+  changing half your design and offering an Undo it could not honor.
+  Deeper style work (editing the palette, typography, per-block styles)
+  stays in the Site Editor.
   **Templates** answers the question the Site Editor's flat list cannot:
   which of your theme's templates this site has actually changed. Changed
   ones sort to the top, and every row says which it is: from the theme,
@@ -633,7 +638,9 @@ cards, all in the same operational group.
   theme's version in one step, which hands the theme's own file back
   rather than deleting anything; your content is not affected either way.
   Deleting a template names how many pages will fall back to a more
-  general one first.
+  general one first, and deleting a template part names how many
+  templates include it. If Minn cannot work out what uses something, it
+  says that instead of telling you nothing does.
   Template parts have their own tab. Templates a plugin registered are
   marked as such and offer no delete, because deleting one lasts only
   until that plugin registers it again. Clicking a template opens it in
@@ -657,7 +664,9 @@ cards, all in the same operational group.
   add a page or a custom link, and remove one with an Undo offered back.
   Nesting an item under a plain link turns that link into a dropdown, and
   emptying a dropdown turns it back into a plain link, so you never end up
-  with a menu that opens onto nothing. Items that are not links (an
+  with a menu that opens onto nothing. Only a link or an existing dropdown
+  can take a child, so the indent button is unavailable when the item above
+  is something else. Items that are not links (an
   all-pages block, social icons, anything a plugin added) are listed and
   can be reordered or removed, but they are edited in the Site Editor,
   one click away on every screen. Anything Minn did not edit is written
