@@ -259,14 +259,27 @@ class Minn_Admin_DB {
 					$name = strtolower( (string) $t->name );
 					foreach ( $foreign as $prefix ) {
 						if ( 0 === strpos( $name, $prefix ) ) {
-							// A neighbour's prefix can be the start of ours: a
+							// A neighbour's prefix can be the START of ours: a
 							// site at wp_12_ beside one at wp_1 matches here on
 							// every one of its own tables, and this runs before
-							// the branch that admits them, so all of them
-							// vanished. Exempt OUR OWN tables by name, never
-							// the whole prefix, or the neighbour's tables would
-							// come back in with them.
-							if ( 0 === strpos( $name, $own ) ) {
+							// the branch that admits them, so all of them would
+							// vanish. Exempt our own tables in exactly that
+							// case and no other.
+							//
+							// The exemption has to test all three parts. Asking
+							// only whether the table starts with our prefix is
+							// the same question as the admit branch below, and
+							// on single-site (where our prefix IS the base
+							// prefix) it is true of every neighbour that
+							// extends it — which is every neighbour this rule
+							// exists to catch, so the whole check collapsed and
+							// a co-tenant's users table came back in with our
+							// own. Our prefix must be strictly longer than the
+							// neighbour's AND begin with it before the table's
+							// own prefix means anything.
+							if ( strlen( $own ) > strlen( $prefix )
+								&& 0 === strpos( $own, $prefix )
+								&& 0 === strpos( $name, $own ) ) {
 								continue;
 							}
 							return false;
