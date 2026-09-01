@@ -7268,7 +7268,31 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			// through the same sanitizer before comparing; loose equality then
 			// ignores key order on maps. A miss means no badge, never a wrong
 			// one.
-			$sanitized = ( new WP_Theme_JSON( $decoded, 'custom' ) )->get_raw_data();
+			// Two different sanitizers run depending on the caller. Everyone
+			// gets WP_Theme_JSON's user-origin pass; a caller without
+			// unfiltered_html ALSO gets remove_insecure_properties on the way
+			// into the post, and that one resolves presets only under an
+			// origin key (settings.color.palette.custom). A theme variation
+			// ships a FLAT palette, so it matches nothing and the whole
+			// settings tree is dropped. Compare against what this caller's
+			// write would actually store, or the badge can never match.
+			if ( current_user_can( 'unfiltered_html' ) ) {
+				$sanitized = ( new WP_Theme_JSON( $decoded, 'custom' ) )->get_raw_data();
+			} else {
+				// Compare against exactly what the apply would POST — the raw
+				// settings/styles pair — run through the filter core puts on
+				// the way into the post. Feeding it the WP_Theme_JSON-processed
+				// tree instead gives a different answer than the write does.
+				$sanitized = WP_Theme_JSON::remove_insecure_properties(
+					array(
+						'settings'                    => $settings,
+						'styles'                      => $styles,
+						'isGlobalStylesUserThemeJSON' => true,
+						'version'                     => WP_Theme_JSON::LATEST_SCHEMA,
+					),
+					'custom'
+				);
+			}
 			$cmp_set   = isset( $sanitized['settings'] ) ? (array) $sanitized['settings'] : array();
 			$cmp_sty   = isset( $sanitized['styles'] ) ? (array) $sanitized['styles'] : array();
 			$active    = $customized && $current['settings'] == $cmp_set && $current['styles'] == $cmp_sty;
@@ -7277,7 +7301,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 			$variations[] = array(
 				'id'       => preg_replace( '/\.json$/', '', $base ),
-				'title'    => isset( $decoded['title'] ) ? (string) $decoded['title'] : $base,
+				// A theme is free to put anything here; casting an array to a
+				// string emits a PHP notice that lands ahead of the JSON body.
+				'title'    => isset( $decoded['title'] ) && is_string( $decoded['title'] ) ? $decoded['title'] : $base,
 				'palette'  => self::variation_palette( $settings ),
 				'fonts'    => self::variation_fonts( $settings ),
 				'settings' => (object) $settings,
@@ -7301,6 +7327,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'current'      => array( 'settings' => (object) $current['settings'], 'styles' => (object) $current['styles'] ),
 			'customized'   => $customized,
 			'anyActive'    => $any_active,
+			// On this site, for this caller, a variation's colors and fonts
+			// cannot be stored: WordPress drops the settings tree for anyone
+			// without unfiltered_html (every subsite administrator on
+			// multisite, and everyone under DISALLOW_UNFILTERED_HTML). Saying
+			// so is the difference between an honest refusal and applying half
+			// a design and offering an Undo that destroys the other half.
+			'lossy'        => ! current_user_can( 'unfiltered_html' ),
 			'default'      => array(
 				'palette' => self::variation_palette( $tj_settings ),
 				'fonts'   => self::variation_fonts( $tj_settings ),

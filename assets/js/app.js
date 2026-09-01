@@ -18060,6 +18060,18 @@
 
 	async function applyStyleVariation( ss, v ) {
 		const d = ss.data;
+		// WordPress stores a variation's colors and fonts only for someone who
+		// can post unfiltered HTML. Without that it keeps the styles and drops
+		// the palette they refer to, which leaves the site half-designed and
+		// an Undo that would destroy the rest of it. Say so instead.
+		if ( d.lossy ) {
+			await minnConfirm( {
+				title: __( 'This site cannot store style variations' ),
+				body: __( 'WordPress only saves a variation’s colors and fonts for someone who can post unfiltered HTML, which this account cannot on this site. Applying one would keep the layout and drop the palette it refers to, and Undo could not put it back. The Site Editor is the place for this change.' ),
+				confirmLabel: __( 'Close' ),
+			} );
+			return;
+		}
 		if ( ! await minnConfirm( {
 			/* translators: %s: the style variation's name. */
 			title: sprintf( __( 'Apply the “%s” style?' ), v.title ),
