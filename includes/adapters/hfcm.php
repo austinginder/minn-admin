@@ -460,6 +460,22 @@ add_action( 'rest_api_init', function () {
 					$data['snippet'] = $code;
 					$fmt[]           = '%s';
 				}
+				// Changing what a snippet IS, or where it runs, decides the
+				// context its already-stored bytes execute in: retyping a css
+				// snippet to js, or moving one into the header, runs those
+				// same bytes somewhere the caller was refused permission to
+				// write them. That is a code write even though no code is in
+				// the request, which is the rule the custom-css-js peer
+				// applies to exactly this pair of fields.
+				$retargets = ( isset( $body['snippet_type'] )
+						&& in_array( $body['snippet_type'], array( 'html', 'css', 'js' ), true )
+						&& (string) $body['snippet_type'] !== (string) $item['snippet_type'] )
+					|| ( isset( $body['location'] )
+						&& in_array( $body['location'], array( 'header', 'footer', 'before_content', 'after_content' ), true )
+						&& (string) $body['location'] !== (string) $item['location'] );
+				if ( $retargets && ! minn_admin_hfcm_can_write_code() ) {
+					return minn_admin_hfcm_code_error();
+				}
 				if ( isset( $body['snippet_type'] ) && in_array( $body['snippet_type'], array( 'html', 'css', 'js' ), true ) ) {
 					$data['snippet_type'] = $body['snippet_type'];
 					$fmt[]                = '%s';
