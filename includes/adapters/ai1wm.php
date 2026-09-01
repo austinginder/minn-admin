@@ -140,27 +140,11 @@ function minn_admin_ai1wm_status_model() {
 	);
 }
 
-/**
- * Who may see and manage AI1WM's archives.
- *
- * Their own Backups screen is registered to ai1wm_import_site, a meta cap that
- * maps through install_plugins/install_themes, so it disappears entirely on a
- * host that turns file changes off. Network owners only, since an archive is
- * the whole database.
- */
-function minn_admin_ai1wm_can() {
-	return minn_admin_ai1wm_can();
-}
-
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_ai1wm_active() ) {
 		return $surfaces;
 	}
-	// The routes ask AI1WM's own question; the surface used to ask a
-	// different one, so on a host where file changes are off (which is what
-	// their Backups screen is gated on) an administrator was shown a sidebar
-	// entry, a status card and a list whose every route answers 403.
-	if ( ! minn_admin_ai1wm_can() ) {
+	if ( ! current_user_can( 'export' ) ) {
 		return $surfaces;
 	}
 
@@ -168,9 +152,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'All-in-One WP Migration',
 		'icon'       => 'database',
-		// Their answer is a resolver, not a capability name; the guard above
-		// is the real gate (the Solid Security / UpdraftPlus precedent).
-		'cap'        => 'read',
+		'cap'        => 'export',
 		'family'     => 'backups',
 		'status'     => array( 'route' => 'minn-admin/v1/ai1wm/status' ),
 		'collection' => array(
@@ -212,7 +194,7 @@ add_action( 'rest_api_init', function () {
 		// nobody and AI1WM withdraws the archive list from everyone. Reading
 		// an archive's name is most of the way to downloading it, so it
 		// answers to the same capability their own list does.
-		return minn_admin_ai1wm_can();
+		return current_user_can( 'ai1wm_import_site' ) && Minn_Admin::network_owner();
 	};
 	// Deleting an archive is destructive (a bare unlink, no trash), and
 	// AI1WM gates its OWN delete on ai1wm_import_site — a meta cap mapping to
@@ -220,7 +202,7 @@ add_action( 'rest_api_init', function () {
 	// turns off site-wide. Listing at `export` is parity; deleting at
 	// `export` is not.
 	$perm_delete = function () {
-		return minn_admin_ai1wm_can();
+		return current_user_can( 'ai1wm_import_site' ) && Minn_Admin::network_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/ai1wm/exports', array(
