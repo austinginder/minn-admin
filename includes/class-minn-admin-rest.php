@@ -3190,9 +3190,22 @@ class Minn_Admin_REST {
 				$since
 			)
 		);
-		$comment_dates = $wpdb->get_col(
+		// The bars have to answer the same question the drill-down behind them
+		// answers, or the chart reports a quantity the list it opens will not
+		// show. Both halves matter: comment_type keeps WooCommerce order notes
+		// and Action Scheduler rows out (a hardcoded query runs no
+		// comments_clauses filters, so nothing else excludes them), and the
+		// approved clause keeps the moderation queue out for anyone who cannot
+		// act on it. Without the second, a Contributor could read the height of
+		// a bar against the public comment count and learn how much is waiting
+		// in moderation.
+		$chart_comment_where = current_user_can( 'moderate_comments' ) ? '' : " AND comment_approved = '1'";
+		$comment_dates       = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT comment_date_gmt FROM {$wpdb->comments} WHERE comment_date_gmt >= %s",
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- literal fragment chosen above.
+				"SELECT comment_date_gmt FROM {$wpdb->comments}
+				 WHERE comment_date_gmt >= %s{$chart_comment_where}
+				 AND comment_type IN ( '', 'comment' )",
 				$since
 			)
 		);
@@ -3643,8 +3656,16 @@ class Minn_Admin_REST {
 					'group' => 'store',
 					'label' => __( 'Products', 'minn-admin' ),
 					'value' => number_format_i18n( (int) $products->publish ),
-					/* translators: %s: number of draft products. */
-					'delta' => sprintf( _n( '%s draft', '%s drafts', (int) $products->draft, 'minn-admin' ), number_format_i18n( (int) $products->draft ) ),
+					// Same reasoning as the posts card: the draft count covers
+					// every author. Stock WooCommerce gives edit_products only
+					// to roles that also hold edit_others_products, but every
+					// marketplace plugin grants vendors the first without the
+					// second, and a vendor has no business reading the whole
+					// catalogue's unfinished work.
+					'delta' => current_user_can( 'edit_others_products' )
+						/* translators: %s: number of draft products. */
+						? sprintf( _n( '%s draft', '%s drafts', (int) $products->draft, 'minn-admin' ), number_format_i18n( (int) $products->draft ) )
+						: __( 'published', 'minn-admin' ),
 					'up'    => null,
 					'goto'  => 'products',
 				)
