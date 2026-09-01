@@ -310,7 +310,12 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'POST',
 			'permission_callback' => function ( WP_REST_Request $request ) {
-				$id     = (int) $request['id'];
+				// The account this acts on is the one in the URL, which is the
+				// one the operator was shown and confirmed. Reading it from the
+				// merged request lets a body or query parameter name a
+				// different account than the path did, and this verb deletes
+				// the account it is given.
+				$id     = (int) Minn_Admin::path_param( $request );
 				$action = (string) $request->get_param( 'action' );
 				if ( ! minn_admin_cleantalk_can_manage() ) {
 					return false;
@@ -429,7 +434,9 @@ function minn_admin_cleantalk_list_spam_users( WP_REST_Request $request ) {
  * @return WP_REST_Response|WP_Error
  */
 function minn_admin_cleantalk_spam_user_action( WP_REST_Request $request ) {
-	$id     = (int) $request['id'];
+	// Same source the gate authorised against, so the account checked and the
+	// account acted on cannot be different ones.
+	$id     = (int) Minn_Admin::path_param( $request );
 	$action = (string) $request->get_param( 'action' );
 	$user   = get_userdata( $id );
 	if ( ! $user ) {
