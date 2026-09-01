@@ -440,7 +440,10 @@ function minn_admin_iawp_clicks( $from_dt, $to_dt, $limit = 25 ) {
 			$path = wp_parse_url( $target, PHP_URL_PATH );
 			if ( $host ) {
 				$label = $host . ( $path && '/' !== $path ? $path : '' );
-				$sub   = $target !== $label ? $target : '';
+				// The label already reads as the address; repeat the full
+				// target only when it carries a query or fragment the
+				// label dropped.
+				$sub = ( false !== strpos( $target, '?' ) || false !== strpos( $target, '#' ) ) ? $target : '';
 			}
 		}
 		// The Stats page prints its two numbers as "vis" and "views"; a click
