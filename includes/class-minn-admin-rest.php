@@ -1246,6 +1246,31 @@ class Minn_Admin_REST {
 				},
 			)
 		);
+		register_rest_route(
+			self::NS,
+			'/styles/history',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'styles_history' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_theme_options' );
+				},
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/styles/restore',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'styles_restore' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_theme_options' );
+				},
+				'args'                => array(
+					'revision' => array( 'type' => 'integer', 'required' => true ),
+				),
+			)
+		);
 
 		register_rest_route(
 			self::NS,
@@ -7359,11 +7384,19 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 		$tj_settings = isset( $theme_json['settings'] ) && is_array( $theme_json['settings'] ) ? $theme_json['settings'] : array();
 
+		$revision_ids = wp_get_post_revisions( $user_post_id, array( 'fields' => 'ids' ) );
+
 		return rest_ensure_response( array(
 			'userStylesId' => (int) $user_post_id,
 			'current'      => array( 'settings' => (object) $current['settings'], 'styles' => (object) $current['styles'] ),
 			'customized'   => $customized,
 			'anyActive'    => $any_active,
+			// The site's effective look (theme merged with the user's edits)
+			// and what the user changed, in words.
+			'look'         => self::gs_look(),
+			'changes'      => self::gs_describe_changes( array(), $current ),
+			'historyCount' => count( (array) $revision_ids ),
+			'siteEditor'   => self::gs_site_editor_links(),
 			// On this site, for this caller, a variation's colors and fonts
 			// cannot be stored: WordPress drops the settings tree for anyone
 			// without unfiltered_html (every subsite administrator on
@@ -7421,6 +7454,454 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 		return $out;
+	}
+
+	/** Site Editor deep links for each Styles panel. */
+	private static function gs_site_editor_links() {
+		$base = admin_url( 'site-editor.php?p=' . rawurlencode( '/styles' ) );
+		$sec  = function ( $section ) use ( $base ) {
+			return $base . '&section=' . rawurlencode( $section );
+		};
+		return array(
+			'styles'     => $base,
+			'colors'     => $sec( '/colors' ),
+			'typography' => $sec( '/typography' ),
+			'fontSizes'  => $sec( '/typography/font-sizes' ),
+			'background' => $sec( '/background' ),
+			'shadows'    => $sec( '/shadows' ),
+			'layout'     => $sec( '/layout' ),
+			'revisions'  => $sec( '/revisions' ),
+		);
+	}
+
+	/**
+	 * Preset lookups from a settings tree: CSS custom-property name →
+	 * { name, value }, across every origin (default / theme / custom).
+	 */
+	private static function gs_preset_map( $settings ) {
+		$map   = array();
+		$lists = array(
+			array( 'color', 'palette', 'color', 'color' ),
+			array( 'color', 'gradients', 'gradient', 'gradient' ),
+			array( 'typography', 'fontFamilies', 'font-family', 'fontFamily' ),
+			array( 'typography', 'fontSizes', 'font-size', 'size' ),
+			array( 'spacing', 'spacingSizes', 'spacing', 'size' ),
+			array( 'shadow', 'presets', 'shadow', 'shadow' ),
+		);
+		foreach ( $lists as $l ) {
+			list( $group, $key, $css, $val_key ) = $l;
+			$node = isset( $settings[ $group ][ $key ] ) ? $settings[ $group ][ $key ] : null;
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+			// Processed shape nests by origin; a raw file is a flat list.
+			$origins = isset( $node[0] ) ? array( 'flat' => $node ) : $node;
+			foreach ( (array) $origins as $entries ) {
+				foreach ( (array) $entries as $e ) {
+					if ( ! is_array( $e ) || empty( $e['slug'] ) ) {
+						continue;
+					}
+					$map[ '--wp--preset--' . $css . '--' . $e['slug'] ] = array(
+						'name'  => isset( $e['name'] ) && is_string( $e['name'] ) ? $e['name'] : (string) $e['slug'],
+						// A font family's "value" is its CSS stack, which adds
+						// nothing next to the name; colors and sizes are worth
+						// showing.
+						'value' => in_array( $css, array( 'color', 'font-size', 'spacing' ), true ) && isset( $e[ $val_key ] ) && is_scalar( $e[ $val_key ] ) ? (string) $e[ $val_key ] : '',
+					);
+				}
+			}
+		}
+		return $map;
+	}
+
+	/** Replace var(--wp--preset--…) references with the preset's display name. */
+	private static function gs_resolve( $value, $map, $with_value = false ) {
+		if ( ! is_string( $value ) ) {
+			return is_scalar( $value ) ? (string) $value : '';
+		}
+		return preg_replace_callback(
+			'/var\(\s*(--wp--preset--[a-z0-9-]+)\s*(?:,[^)]*)?\)/i',
+			function ( $m ) use ( $map, $with_value ) {
+				if ( ! isset( $map[ $m[1] ] ) ) {
+					return $m[0];
+				}
+				$p = $map[ $m[1] ];
+				return ( $with_value && '' !== $p['value'] && $p['value'] !== $p['name'] ) ? $p['name'] . ' (' . $p['value'] . ')' : $p['name'];
+			},
+			$value
+		);
+	}
+
+	/** Effective merged theme.json settings + styles (theme + user). */
+	private static function gs_merged() {
+		try {
+			$merged = WP_Theme_JSON_Resolver::get_merged_data();
+			$raw    = $merged->get_raw_data();
+			return array(
+				'settings' => isset( $raw['settings'] ) && is_array( $raw['settings'] ) ? $raw['settings'] : array(),
+				'styles'   => isset( $raw['styles'] ) && is_array( $raw['styles'] ) ? $raw['styles'] : array(),
+			);
+		} catch ( \Throwable $e ) {
+			return array( 'settings' => array(), 'styles' => array() );
+		}
+	}
+
+	/**
+	 * The site's current look in one glance: effective palette, fonts, text
+	 * sizes, layout widths, background and shadow presets. Everything here
+	 * is what the front end actually renders (theme merged with the user's
+	 * global styles), resolved to display names.
+	 */
+	private static function gs_look() {
+		$m        = self::gs_merged();
+		$settings = $m['settings'];
+		$styles   = $m['styles'];
+		$map      = self::gs_preset_map( $settings );
+
+		$palette = array();
+		$node    = isset( $settings['color']['palette'] ) ? $settings['color']['palette'] : array();
+		foreach ( array( 'theme', 'custom' ) as $origin ) {
+			foreach ( (array) ( $node[ $origin ] ?? array() ) as $e ) {
+				if ( is_array( $e ) && ! empty( $e['color'] ) && is_string( $e['color'] ) ) {
+					$palette[] = array(
+						'name'   => isset( $e['name'] ) && is_string( $e['name'] ) ? $e['name'] : (string) ( $e['slug'] ?? '' ),
+						'color'  => $e['color'],
+						'custom' => 'custom' === $origin,
+					);
+				}
+			}
+		}
+		$fonts = array();
+		$fnode = isset( $settings['typography']['fontFamilies'] ) ? $settings['typography']['fontFamilies'] : array();
+		foreach ( array( 'theme', 'custom' ) as $origin ) {
+			foreach ( (array) ( $fnode[ $origin ] ?? array() ) as $e ) {
+				if ( is_array( $e ) && ! empty( $e['name'] ) && is_string( $e['name'] ) ) {
+					$fonts[] = $e['name'];
+				}
+			}
+		}
+		$sizes = array();
+		$snode = isset( $settings['typography']['fontSizes'] ) ? $settings['typography']['fontSizes'] : array();
+		foreach ( array( 'theme', 'custom', 'default' ) as $origin ) {
+			foreach ( (array) ( $snode[ $origin ] ?? array() ) as $e ) {
+				if ( is_array( $e ) && ! empty( $e['slug'] ) ) {
+					$sizes[] = array(
+						'name' => isset( $e['name'] ) && is_string( $e['name'] ) ? $e['name'] : (string) $e['slug'],
+						'size' => isset( $e['size'] ) && is_scalar( $e['size'] ) ? (string) $e['size'] : '',
+					);
+				}
+			}
+			if ( $sizes ) {
+				break; // theme sizes replace the defaults; only fall through when the theme ships none.
+			}
+		}
+		$shadows = 0;
+		foreach ( (array) ( $settings['shadow']['presets'] ?? array() ) as $entries ) {
+			$shadows += is_array( $entries ) ? count( $entries ) : 0;
+		}
+		$body_font    = self::gs_resolve( $styles['typography']['fontFamily'] ?? '', $map );
+		$heading_font = self::gs_resolve(
+			$styles['elements']['heading']['typography']['fontFamily']
+				?? $styles['elements']['h1']['typography']['fontFamily']
+				?? '',
+			$map
+		);
+		$background = self::gs_resolve( $styles['color']['background'] ?? '', $map, true );
+		$text       = self::gs_resolve( $styles['color']['text'] ?? '', $map, true );
+		// A raw hex/rgb for the swatch, when the value resolves to a preset.
+		$bg_raw = $styles['color']['background'] ?? '';
+		if ( is_string( $bg_raw ) && preg_match( '/var\(\s*(--wp--preset--color--[a-z0-9-]+)/i', $bg_raw, $mm ) && isset( $map[ $mm[1] ] ) ) {
+			$bg_raw = $map[ $mm[1] ]['value'];
+		}
+		return array(
+			'palette'     => $palette,
+			'fonts'       => array_values( array_unique( $fonts ) ),
+			'bodyFont'    => $body_font,
+			'headingFont' => $heading_font,
+			'bodySize'    => self::gs_resolve( $styles['typography']['fontSize'] ?? '', $map, true ),
+			'fontSizes'   => $sizes,
+			'layout'      => array(
+				'content' => isset( $settings['layout']['contentSize'] ) ? (string) $settings['layout']['contentSize'] : '',
+				'wide'    => isset( $settings['layout']['wideSize'] ) ? (string) $settings['layout']['wideSize'] : '',
+			),
+			'background'  => $background,
+			'backgroundSwatch' => is_string( $bg_raw ) ? $bg_raw : '',
+			'hasBackgroundImage' => ! empty( $styles['background']['backgroundImage'] ),
+			'text'        => $text,
+			'shadows'     => $shadows,
+		);
+	}
+
+	/**
+	 * Flatten a config tree to dot paths. Preset LISTS (palette, font
+	 * families, sizes, shadows) stay one leaf each, since a list is edited
+	 * as a unit; per-block styles collapse to one leaf per block, since the
+	 * detail belongs to the Site Editor's Blocks panel.
+	 */
+	private static function gs_flatten( $tree, $prefix = '', &$out = array() ) {
+		if ( ! is_array( $tree ) ) {
+			$out[ rtrim( $prefix, '.' ) ] = is_scalar( $tree ) || null === $tree ? $tree : wp_json_encode( $tree );
+			return $out;
+		}
+		if ( empty( $tree ) ) {
+			return $out;
+		}
+		$path = rtrim( $prefix, '.' );
+		if ( array_keys( $tree ) === range( 0, count( $tree ) - 1 ) || preg_match( '/^styles\.blocks\.[^.]+$/', $path ) ) {
+			$out[ $path ] = wp_json_encode( $tree );
+			return $out;
+		}
+		foreach ( $tree as $k => $v ) {
+			self::gs_flatten( $v, $prefix . $k . '.', $out );
+		}
+		return $out;
+	}
+
+	/** A human label for a flattened global-styles path. */
+	private static function gs_label( $path ) {
+		$elements = array(
+			'heading' => __( 'Headings', 'minn-admin' ),
+			'link'    => __( 'Links', 'minn-admin' ),
+			'button'  => __( 'Buttons', 'minn-admin' ),
+			'caption' => __( 'Captions', 'minn-admin' ),
+			'cite'    => __( 'Citations', 'minn-admin' ),
+		);
+		$props = array(
+			'fontFamily'     => __( 'font', 'minn-admin' ),
+			'fontSize'       => __( 'size', 'minn-admin' ),
+			'lineHeight'     => __( 'line height', 'minn-admin' ),
+			'fontWeight'     => __( 'weight', 'minn-admin' ),
+			'fontStyle'      => __( 'style', 'minn-admin' ),
+			'letterSpacing'  => __( 'letter spacing', 'minn-admin' ),
+			'textTransform'  => __( 'case', 'minn-admin' ),
+			'textDecoration' => __( 'decoration', 'minn-admin' ),
+			'textColumns'    => __( 'columns', 'minn-admin' ),
+			'text'           => __( 'color', 'minn-admin' ),
+			'background'     => __( 'background', 'minn-admin' ),
+			'gradient'       => __( 'gradient', 'minn-admin' ),
+			'radius'         => __( 'corner radius', 'minn-admin' ),
+			'width'          => __( 'border width', 'minn-admin' ),
+			'color'          => __( 'border color', 'minn-admin' ),
+		);
+		$pseudo = array( ':hover' => __( 'hover', 'minn-admin' ), ':focus' => __( 'focus', 'minn-admin' ), ':active' => __( 'active', 'minn-admin' ), ':visited' => __( 'visited', 'minn-admin' ) );
+		$fixed  = array(
+			'styles.color.background'              => __( 'Background color', 'minn-admin' ),
+			'styles.color.text'                    => __( 'Text color', 'minn-admin' ),
+			'styles.color.gradient'                => __( 'Background gradient', 'minn-admin' ),
+			'styles.background.backgroundImage'    => __( 'Background image', 'minn-admin' ),
+			'styles.spacing.blockGap'              => __( 'Block spacing', 'minn-admin' ),
+			'settings.layout.contentSize'          => __( 'Content width', 'minn-admin' ),
+			'settings.layout.wideSize'             => __( 'Wide width', 'minn-admin' ),
+			'settings.color.palette.custom'        => __( 'Custom colors', 'minn-admin' ),
+			'settings.color.palette.theme'         => __( 'Theme palette', 'minn-admin' ),
+			'settings.color.gradients.custom'      => __( 'Custom gradients', 'minn-admin' ),
+			'settings.color.duotone.custom'        => __( 'Custom duotone filters', 'minn-admin' ),
+			'settings.typography.fontFamilies.custom' => __( 'Custom fonts', 'minn-admin' ),
+			'settings.typography.fontFamilies.theme'  => __( 'Theme fonts', 'minn-admin' ),
+			'settings.typography.fontSizes.custom'    => __( 'Custom text sizes', 'minn-admin' ),
+			'settings.typography.fontSizes.theme'     => __( 'Text size presets', 'minn-admin' ),
+			'settings.spacing.spacingSizes.custom'    => __( 'Custom spacing presets', 'minn-admin' ),
+			'settings.spacing.spacingSizes.theme'     => __( 'Spacing presets', 'minn-admin' ),
+			'settings.shadow.presets.custom'          => __( 'Custom shadows', 'minn-admin' ),
+			'settings.shadow.presets.theme'           => __( 'Shadow presets', 'minn-admin' ),
+			'styles.css'                              => __( 'Additional CSS', 'minn-admin' ),
+		);
+		if ( isset( $fixed[ $path ] ) ) {
+			return $fixed[ $path ];
+		}
+		$parts = explode( '.', $path );
+		if ( 'styles' === $parts[0] && 'spacing' === ( $parts[1] ?? '' ) && 'padding' === ( $parts[2] ?? '' ) ) {
+			/* translators: %s: top, right, bottom or left. */
+			return sprintf( __( 'Page padding (%s)', 'minn-admin' ), $parts[3] ?? '' );
+		}
+		if ( 'styles' === $parts[0] && 'typography' === ( $parts[1] ?? '' ) ) {
+			$prop = $parts[2] ?? '';
+			/* translators: %s: a typography property such as font or line height. */
+			return sprintf( __( 'Body %s', 'minn-admin' ), $props[ $prop ] ?? $prop );
+		}
+		if ( 'styles' === $parts[0] && 'elements' === ( $parts[1] ?? '' ) ) {
+			$el   = $parts[2] ?? '';
+			$name = $elements[ $el ] ?? ( preg_match( '/^h[1-6]$/', $el ) ? strtoupper( $el ) : ucfirst( $el ) );
+			$rest = array_slice( $parts, 3 );
+			$state = '';
+			if ( $rest && isset( $pseudo[ $rest[0] ] ) ) {
+				$state = $pseudo[ array_shift( $rest ) ];
+			}
+			// e.g. typography.fontFamily → 'font'; color.text → 'color'.
+			$prop = end( $rest );
+			$word = $props[ $prop ] ?? (string) $prop;
+			return trim( $name . ' ' . ( $state ? $state . ' ' : '' ) . $word );
+		}
+		if ( 'styles' === $parts[0] && 'blocks' === ( $parts[1] ?? '' ) ) {
+			$block = $parts[2] ?? '';
+			$type  = class_exists( 'WP_Block_Type_Registry' ) ? WP_Block_Type_Registry::get_instance()->get_registered( $block ) : null;
+			$title = $type && ! empty( $type->title ) ? $type->title : $block;
+			/* translators: %s: a block's name. */
+			return sprintf( __( '%s block', 'minn-admin' ), $title );
+		}
+		if ( 'settings' === $parts[0] ) {
+			/* translators: %s: a theme.json settings path. */
+			return sprintf( __( 'Setting: %s', 'minn-admin' ), implode( ' › ', array_slice( $parts, 1 ) ) );
+		}
+		return ucfirst( str_replace( array( '.', 'styles ' ), array( ' › ', '' ), $path ) );
+	}
+
+	/** Display form of a flattened leaf value. */
+	private static function gs_value( $value, $map ) {
+		if ( null === $value || '' === $value ) {
+			return '';
+		}
+		if ( is_string( $value ) && ( '[' === $value[0] || '{' === $value[0] ) ) {
+			$decoded = json_decode( $value, true );
+			if ( is_array( $decoded ) ) {
+				/* translators: %s: number of entries in an edited list. */
+				return sprintf( _n( '%s entry', '%s entries', count( $decoded ), 'minn-admin' ), number_format_i18n( count( $decoded ) ) );
+			}
+		}
+		$text = self::gs_resolve( $value, $map, true );
+		// Additional CSS and the like: one line of it is enough to recognize.
+		$text = preg_replace( '/\s+/', ' ', trim( $text ) );
+		if ( function_exists( 'mb_strlen' ) ? mb_strlen( $text ) > 60 : strlen( $text ) > 60 ) {
+			$text = ( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, 57 ) : substr( $text, 0, 57 ) ) . '…';
+		}
+		return $text;
+	}
+
+	/**
+	 * Describe the difference between two global-styles configs in words,
+	 * one line per changed thing ("H1 font → Quattrocento", "Background
+	 * color: #ffffff → #f0efee", "Buttons hover color reset").
+	 */
+	private static function gs_describe_changes( $from, $to, $map = null ) {
+		if ( null === $map ) {
+			$map = self::gs_preset_map( self::gs_merged()['settings'] );
+		}
+		$a = self::gs_flatten( array( 'settings' => (array) ( $from['settings'] ?? array() ), 'styles' => (array) ( $from['styles'] ?? array() ) ) );
+		$b = self::gs_flatten( array( 'settings' => (array) ( $to['settings'] ?? array() ), 'styles' => (array) ( $to['styles'] ?? array() ) ) );
+		$paths = array_unique( array_merge( array_keys( $a ), array_keys( $b ) ) );
+		// Styles first (what people see), then settings; stable within.
+		usort( $paths, function ( $x, $y ) {
+			$rx = 0 === strpos( $x, 'styles.' ) ? 0 : 1;
+			$ry = 0 === strpos( $y, 'styles.' ) ? 0 : 1;
+			return $rx === $ry ? strcmp( $x, $y ) : $rx - $ry;
+		} );
+		$lines = array();
+		foreach ( $paths as $path ) {
+			$old = $a[ $path ] ?? null;
+			$new = $b[ $path ] ?? null;
+			if ( $old === $new ) {
+				continue;
+			}
+			$label = self::gs_label( $path );
+			$is_block = 0 === strpos( $path, 'styles.blocks.' );
+			if ( $is_block ) {
+				$oc = is_string( $old ) ? count( self::gs_flatten( json_decode( $old, true ) ?: array() ) ) : 0;
+				$nc = is_string( $new ) ? count( self::gs_flatten( json_decode( $new, true ) ?: array() ) ) : 0;
+				if ( 0 === $nc ) {
+					/* translators: %s: a block's name. */
+					$lines[] = sprintf( __( '%s reset to theme', 'minn-admin' ), $label );
+				} else {
+					/* translators: 1: a block's name, 2: number of style settings. */
+					$lines[] = sprintf( _n( '%1$s: %2$s setting', '%1$s: %2$s settings', $nc, 'minn-admin' ), $label, number_format_i18n( $nc ) );
+				}
+				continue;
+			}
+			$ov = self::gs_value( $old, $map );
+			$nv = self::gs_value( $new, $map );
+			if ( '' === $nv ) {
+				/* translators: %s: what was customized (e.g. "H1 font"). */
+				$lines[] = sprintf( __( '%s reset to theme', 'minn-admin' ), $label );
+			} elseif ( '' === $ov ) {
+				$lines[] = $label . ' → ' . $nv;
+			} else {
+				$lines[] = $label . ': ' . $ov . ' → ' . $nv;
+			}
+		}
+		return $lines;
+	}
+
+	/** One revision's settings/styles as plain arrays. */
+	private static function gs_revision_config( $row ) {
+		return array(
+			'settings' => ! empty( $row['settings'] ) ? (array) json_decode( wp_json_encode( $row['settings'] ), true ) : array(),
+			'styles'   => ! empty( $row['styles'] ) ? (array) json_decode( wp_json_encode( $row['styles'] ), true ) : array(),
+		);
+	}
+
+	/**
+	 * Global-styles history: every revision of the user styles post, newest
+	 * first, each described against the one before it. Pure core REST
+	 * underneath (wp/v2/global-styles/{id}/revisions); this adds the words.
+	 */
+	public static function styles_history() {
+		$id  = (int) WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+		$req = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $id . '/revisions' );
+		$req->set_param( 'context', 'edit' );
+		$req->set_param( 'per_page', 100 );
+		$res = rest_do_request( $req );
+		if ( $res->is_error() ) {
+			return $res->as_error();
+		}
+		$rows = (array) $res->get_data();
+		$cur  = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $id );
+		$cur->set_param( 'context', 'edit' );
+		$cres    = rest_do_request( $cur );
+		$current = $cres->is_error() ? array( 'settings' => array(), 'styles' => array() ) : self::gs_revision_config( (array) $cres->get_data() );
+		$map     = self::gs_preset_map( self::gs_merged()['settings'] );
+
+		// Oldest → newest for the diffs, then flip for display.
+		$asc = array_reverse( $rows );
+		$out = array();
+		$prev = array( 'settings' => array(), 'styles' => array() );
+		$names = array();
+		foreach ( $asc as $r ) {
+			$cfg     = self::gs_revision_config( (array) $r );
+			$changes = self::gs_describe_changes( $prev, $cfg, $map );
+			$uid     = (int) ( $r['author'] ?? 0 );
+			if ( ! isset( $names[ $uid ] ) ) {
+				$u = $uid ? get_userdata( $uid ) : null;
+				$names[ $uid ] = $u ? $u->display_name : __( 'Unknown', 'minn-admin' );
+			}
+			$out[] = array(
+				'id'       => (int) $r['id'],
+				'date'     => isset( $r['date_gmt'] ) ? $r['date_gmt'] . 'Z' : '',
+				'author'   => $names[ $uid ],
+				'changes'  => $changes,
+				'current'  => ( $cfg['settings'] == $current['settings'] && $cfg['styles'] == $current['styles'] ),
+				'empty'    => empty( $cfg['settings'] ) && empty( $cfg['styles'] ),
+			);
+			$prev = $cfg;
+		}
+		return rest_ensure_response( array(
+			'userStylesId' => $id,
+			'total'        => count( $out ),
+			'rows'         => array_reverse( $out ),
+		) );
+	}
+
+	/**
+	 * Restore a global-styles revision by writing its settings + styles
+	 * back through core's own route, so the same sanitization and
+	 * capability checks apply as any Site Editor save. Returns the fresh
+	 * variations payload so the client repaints in one round trip.
+	 */
+	public static function styles_restore( WP_REST_Request $request ) {
+		$id  = (int) WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+		$rev = (int) $request['revision'];
+		$req = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $id . '/revisions/' . $rev );
+		$req->set_param( 'context', 'edit' );
+		$res = rest_do_request( $req );
+		if ( $res->is_error() ) {
+			return $res->as_error();
+		}
+		$cfg   = self::gs_revision_config( (array) $res->get_data() );
+		$write = new WP_REST_Request( 'POST', '/wp/v2/global-styles/' . $id );
+		$write->set_body_params( array( 'settings' => (object) $cfg['settings'], 'styles' => (object) $cfg['styles'] ) );
+		$wres = rest_do_request( $write );
+		if ( $wres->is_error() ) {
+			return $wres->as_error();
+		}
+		return rest_ensure_response( array( 'ok' => true, 'restored' => $rev ) );
 	}
 
 	public static function search_themes( WP_REST_Request $request ) {

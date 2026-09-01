@@ -623,7 +623,7 @@ cards, all in the same operational group.
   to. On those the tab says so and does not apply the style, rather than
   changing half your design and offering an Undo it could not honor.
   Deeper style work (editing the palette, typography, per-block styles)
-  stays in the Site Editor.
+  stays in the Site Editor. Above the cards, **Current look** shows what visitors get right now: the palette, body and heading fonts, text sizes, content and wide widths, background and shadow presets, each with an Edit link to the matching Site Editor panel, and a Customized list that says in plain words what was changed from the theme ("H1 font → Quattrocento"). **Reset to theme defaults** clears every customization with an Undo, and **History** lists every saved version of the site's styles with who saved it, when, and what changed, with Restore on each (and Undo after a restore).
   **Templates** answers the question the Site Editor's flat list cannot:
   which of your theme's templates this site has actually changed. Changed
   ones sort to the top, and every row says which it is: from the theme,

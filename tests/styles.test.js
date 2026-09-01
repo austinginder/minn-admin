@@ -104,6 +104,31 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		t.check( 'the applied card is marked active and Default no longer is',
 			( await cards() ).filter( ( c ) => c.active ).length === 1 );
 
+		/* ===== Current look card + history (new this cycle) ===== */
+		const look = await page.evaluate( () => {
+			const card = document.querySelector( '.minn-look' );
+			if ( ! card ) return null;
+			return {
+				rows: [ ...card.querySelectorAll( '.minn-look-row' ) ].map( ( r ) => r.dataset.look ),
+				swatches: card.querySelectorAll( '[data-look="colors"] .minn-look-swatch' ).length,
+				fonts: ( card.querySelector( '[data-look="fonts"] .minn-look-value' ) || {} ).textContent || '',
+				links: [ ...card.querySelectorAll( 'a.minn-look-row' ) ].every( ( a ) => /site-editor\.php\?p=%2Fstyles&section=/.test( a.href ) ),
+				changes: [ ...card.querySelectorAll( '#minn-look-changes li' ) ].map( ( li ) => li.textContent ),
+				reset: !! card.querySelector( '#minn-look-reset' ),
+				history: ( card.querySelector( '#minn-look-history' ) || {} ).textContent || '',
+			};
+		} );
+		t.check( 'Current look card lists colors, fonts, sizes, layout, background and shadows',
+			look && [ 'colors', 'fonts', 'sizes', 'layout', 'background', 'shadows' ].every( ( k ) => look.rows.includes( k ) ), JSON.stringify( look && look.rows ) );
+		t.check( 'look card shows the effective palette and a font', look && look.swatches > 0 && look.fonts.trim().length > 0, look && `${ look.swatches } swatches, fonts "${ look.fonts.trim() }"` );
+		t.check( 'every look row deep-links to its Site Editor panel', look && look.links );
+		t.check( 'applying Midnight is described in words on the card', look && look.changes.length > 0, JSON.stringify( look && look.changes.slice( 0, 3 ) ) );
+		t.check( 'Reset to theme defaults is offered once customized', look && look.reset );
+		t.check( 'History button counts the saved versions', look && /History \(\d+\)/.test( look.history ), look && look.history );
+
+		// The Apply toast (and its Undo) dismisses itself after a few
+		// seconds, so the history dialog is inspected AFTER the Undo step.
+
 		/* ===== Undo restores the previous look ===== */
 		await page.evaluate( () => {
 			const b = document.querySelector( '.minn-toast button, [data-toast-action]' );
@@ -119,6 +144,50 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		t.check( 'Undo restored the stored config, not an approximation',
 			JSON.stringify( cfg.settings || {} ) === JSON.stringify( snapshot.settings || {} )
 			&& JSON.stringify( cfg.styles || {} ) === JSON.stringify( snapshot.styles || {} ) );
+
+		/* ===== History describes every save; Restore brings one back ===== */
+		await page.click( '#minn-look-history' );
+		await page.waitForSelector( '[data-gsrestore]', { timeout: 20000 } );
+		const hist = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-gs-hist-row' ) ].map( ( r ) => ( {
+			id: r.dataset.gsrev,
+			current: r.classList.contains( 'is-current' ),
+			changes: [ ...r.querySelectorAll( '.minn-gs-hist-changes li:not(.minn-look-muted)' ) ].map( ( li ) => li.textContent ),
+			restore: !! r.querySelector( '[data-gsrestore]' ),
+		} ) ) );
+		t.check( 'the newest version is marked current with no Restore', hist.length >= 2 && hist[ 0 ].current && ! hist[ 0 ].restore, JSON.stringify( hist[ 0 ] ) );
+		t.check( 'the Undo save reads as resets and the Midnight save as changes',
+			hist[ 0 ].changes.every( ( c ) => /reset to theme/.test( c ) ) && hist.some( ( r ) => r.restore && r.changes.some( ( c ) => /: \d+ settings?|→/.test( c ) ) ),
+			JSON.stringify( hist.slice( 0, 2 ).map( ( r ) => r.changes.slice( 0, 2 ) ) ) );
+		// The newest non-current row is the Midnight save (Undo wrote the
+		// default config back as a newer revision).
+		const target = await page.evaluate( () => {
+			// The Midnight save: restorable, and described by real changes
+			// (the row after it, from Undo, only says what was reset).
+			const row = [ ...document.querySelectorAll( '.minn-gs-hist-row' ) ].find( ( r ) => r.querySelector( '[data-gsrestore]' )
+				&& [ ...r.querySelectorAll( 'li' ) ].some( ( li ) => li.textContent.trim() && ! /reset to theme/.test( li.textContent ) ) );
+			if ( ! row ) return null;
+			row.querySelector( '[data-gsrestore]' ).click();
+			return row.dataset.gsrev;
+		} );
+		t.check( 'a restorable earlier version is listed', !! target );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-gs-hist-row' ) && document.querySelector( '.minn-look' ), null, { timeout: 20000 } );
+		await page.waitForFunction( ( b ) => {
+			const first = document.querySelector( '[data-style="default"]' );
+			return first && ! first.classList.contains( 'is-active' );
+		}, null, { timeout: 20000 } );
+		const restoredFront = await frontBaseColor();
+		t.check( 'restoring that version changes the visitor-facing site again', restoredFront === after, `${ restoredFront } vs ${ after }` );
+
+		/* ===== Reset to theme defaults ===== */
+		await page.click( '#minn-look-reset' );
+		await page.waitForFunction( () => {
+			const first = document.querySelector( '[data-style="default"]' );
+			return first && first.classList.contains( 'is-active' ) && ! document.querySelector( '#minn-look-reset' );
+		}, null, { timeout: 20000 } );
+		const resetFront = await frontBaseColor();
+		t.check( 'Reset returns the theme defaults for visitors and hides itself', resetFront === before, `${ resetFront } vs ${ before }` );
+		const resetChanges = await page.evaluate( () => document.querySelectorAll( '#minn-look-changes li' ).length );
+		t.check( 'the card reports nothing customized after a reset', resetChanges === 0 );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {

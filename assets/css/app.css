@@ -601,6 +601,39 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-style-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 /* Design notes above the style cards / menu list (customized-styles warning, inline-menu note): breathe before the grid at the grid's own gap. */
 .minn-nav-inline-note { margin-bottom: 12px; line-height: 1.5; }
+/* Current look card (Design → Styles): effective palette / fonts / sizes /
+   layout / background rows, each a deep link to its Site Editor panel. */
+.minn-look { margin-bottom: 12px; }
+.minn-look-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.minn-look-title { font-weight: 600; font-size: 14px; }
+.minn-look-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.minn-look-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+.minn-look-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 18px; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; min-width: 0; }
+a.minn-look-row:hover { background: var(--hover); }
+a.minn-look-row:hover .minn-look-go { opacity: 1; }
+.minn-look-label { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.minn-look-value { font-size: 13.5px; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; line-height: 1.4; }
+.minn-look-go { font-size: 12px; color: var(--accent); opacity: 0.55; white-space: nowrap; }
+.minn-look-swatches { display: inline-flex; gap: 5px; }
+.minn-look-swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--border); flex: none; display: inline-block; }
+.minn-look-swatch.is-custom { box-shadow: 0 0 0 2px var(--accent-soft, rgba(100,100,255,.18)); }
+.minn-look-muted { color: var(--text3); }
+.minn-look-foot { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; padding: 12px 18px 14px; align-items: start; }
+.minn-look-foot .minn-look-value { display: block; }
+.minn-look-changes { margin: 0; padding: 0 0 0 16px; font-size: 13px; line-height: 1.55; columns: 2; column-gap: 28px; }
+.minn-look-changes li { break-inside: avoid; }
+@media (max-width: 720px) { .minn-look-changes { columns: 1; } .minn-look-row, .minn-look-foot { grid-template-columns: 76px minmax(0, 1fr) auto; } }
+
+/* Style history modal rows. */
+.minn-gs-hist { display: flex; flex-direction: column; }
+.minn-gs-hist-row { display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 12px 18px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.minn-gs-hist-row:last-child { border-bottom: 0; }
+.minn-gs-hist-row.is-current { background: var(--bg2); }
+.minn-gs-hist-when { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 12.5px; }
+.minn-gs-hist-changes { margin: 0; padding: 0 0 0 16px; line-height: 1.5; }
+.minn-gs-hist-act { align-self: center; }
+@media (max-width: 640px) { .minn-gs-hist-row { grid-template-columns: minmax(0, 1fr) auto; } .minn-gs-hist-what { grid-column: 1 / -1; } }
+
 .minn-style-card {
   display: flex; flex-direction: column; align-items: flex-start; gap: 9px; padding: 15px 16px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;

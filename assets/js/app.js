@@ -18039,9 +18039,10 @@
 			<div class="minn-toolbar-meta">${ esc( sprintf( /* translators: %s: localized number of styles. */ _n( '%s style', '%s styles', cards.length ), String( cards.length ) ) ) }</div>
 			<a class="minn-btn-soft" href="${ esc( B.site.url ) }" target="_blank" rel="noopener">${ esc( __( 'View site' ) ) } ↗</a>
 		</div>
+		${ stylesLookHtml( d ) }
 		${ d.customized && ! d.anyActive ? `
 		<div class="minn-card minn-panel-pad minn-nav-inline-note">
-			${ esc( __( 'This site’s styles have been customized (colors or fonts edited in the Site Editor), so no variation below is marked active. Applying one replaces those customizations; Undo brings them back.' ) ) }
+			${ esc( __( 'No variation below is marked active because the look above was customized. Applying one replaces those customizations; Undo brings them back.' ) ) }
 		</div>` : '' }
 		${ d.variations.length ? '' : `
 		<div class="minn-card minn-panel-pad minn-empty">${ esc( __( 'This theme ships a single style. Themes that offer variations will list them here.' ) ) }</div>` }
@@ -18056,6 +18057,215 @@
 				if ( v && ! v.active ) applyStyleVariation( ss, v );
 			} )
 		);
+		const resetBtn = $( '#minn-look-reset', view );
+		if ( resetBtn ) resetBtn.addEventListener( 'click', () => resetStyles( ss ) );
+		const histBtn = $( '#minn-look-history', view );
+		if ( histBtn ) histBtn.addEventListener( 'click', () => openStylesHistory( ss ) );
+	}
+
+	/* The site's current look: the effective palette, fonts, text sizes,
+	 * layout and background the front end renders right now (theme merged
+	 * with the user's global styles), each row deep-linking to the Site
+	 * Editor panel that edits it, plus the user's customizations in words.
+	 * Rows are links because the canvas stays in the Site Editor; what Minn
+	 * adds is seeing the whole picture at once and protecting it (Reset,
+	 * History). */
+	function stylesLookHtml( d ) {
+		const look = d.look;
+		if ( ! look ) return '';
+		const se = d.siteEditor || {};
+		const linkable = ( url ) => !! url && ! ( ENGINE && isWpAdminUrl( url ) );
+		const row = ( label, valueHtml, url, key ) => {
+			const inner = `
+				<div class="minn-look-label">${ esc( label ) }</div>
+				<div class="minn-look-value">${ valueHtml }</div>
+				${ linkable( url ) ? `<div class="minn-look-go">${ esc( __( 'Edit' ) ) } ↗</div>` : '' }`;
+			return linkable( url )
+				? `<a class="minn-look-row" data-look="${ esc( key ) }" href="${ esc( url ) }" target="_blank" rel="noopener">${ inner }</a>`
+				: `<div class="minn-look-row" data-look="${ esc( key ) }">${ inner }</div>`;
+		};
+		const swatches = ( look.palette || [] ).slice( 0, 12 ).map( ( c ) =>
+			`<span class="minn-look-swatch${ c.custom ? ' is-custom' : '' }" style="background:${ escCssColor( c.color ) }" title="${ esc( c.name + ' · ' + c.color ) }"></span>` ).join( '' );
+		const paletteHtml = `<span class="minn-look-swatches">${ swatches || `<span class="minn-look-muted">${ esc( __( 'No palette' ) ) }</span>` }</span>`
+			+ ( ( look.palette || [] ).length > 12 ? `<span class="minn-look-muted">+${ ( look.palette.length - 12 ) }</span>` : '' );
+		const fontsParts = [];
+		if ( look.bodyFont ) fontsParts.push( look.bodyFont );
+		if ( look.headingFont && look.headingFont !== look.bodyFont ) {
+			/* translators: %s: a font family name. */
+			fontsParts.push( sprintf( __( 'headings %s' ), look.headingFont ) );
+		}
+		const fontsHtml = fontsParts.length
+			? esc( fontsParts.join( ' · ' ) )
+			: `<span class="minn-look-muted">${ esc( ( look.fonts || [] ).slice( 0, 3 ).join( ' · ' ) || __( 'Theme default' ) ) }</span>`;
+		const sizes = look.fontSizes || [];
+		const sizesHtml = sizes.length
+			? esc( sizes.map( ( x ) => x.name ).join( ', ' ) ) + ( look.bodySize ? ` <span class="minn-look-muted">· ${ esc( sprintf( /* translators: %s: a text size preset name. */ __( 'body %s' ), look.bodySize ) ) }</span>` : '' )
+			: `<span class="minn-look-muted">${ esc( __( 'Theme default' ) ) }</span>`;
+		const layoutParts = [];
+		/* translators: %s: a CSS width such as 930px. */
+		if ( look.layout && look.layout.content ) layoutParts.push( sprintf( __( '%s content' ), look.layout.content ) );
+		/* translators: %s: a CSS width such as 1140px. */
+		if ( look.layout && look.layout.wide ) layoutParts.push( sprintf( __( '%s wide' ), look.layout.wide ) );
+		const layoutHtml = layoutParts.length ? esc( layoutParts.join( ' · ' ) ) : `<span class="minn-look-muted">${ esc( __( 'Theme default' ) ) }</span>`;
+		const bgHtml = look.background
+			? `${ look.backgroundSwatch ? `<span class="minn-look-swatch" style="background:${ escCssColor( look.backgroundSwatch ) }"></span>` : '' }${ esc( look.background ) }${ look.text ? ` <span class="minn-look-muted">· ${ esc( sprintf( /* translators: %s: a color. */ __( 'text %s' ), look.text ) ) }</span>` : '' }${ look.hasBackgroundImage ? ` <span class="minn-look-muted">· ${ esc( __( 'image set' ) ) }</span>` : '' }`
+			: `<span class="minn-look-muted">${ esc( __( 'Theme default' ) ) }</span>`;
+		/* translators: %s: localized number of shadow presets. */
+		const shadowsHtml = look.shadows ? esc( sprintf( _n( '%s preset', '%s presets', look.shadows ), String( look.shadows ) ) ) : `<span class="minn-look-muted">${ esc( __( 'None' ) ) }</span>`;
+		const changes = d.changes || [];
+		const shown = changes.slice( 0, 8 );
+		const changesHtml = changes.length
+			? `<ul class="minn-look-changes">${ shown.map( ( c ) => `<li>${ esc( c ) }</li>` ).join( '' ) }${ changes.length > shown.length ? `<li class="minn-look-muted">${ esc( sprintf( /* translators: %s: number of further changes. */ __( '+%s more' ), String( changes.length - shown.length ) ) ) }</li>` : '' }</ul>`
+			: `<div class="minn-look-muted">${ esc( __( 'The theme’s defaults, unchanged.' ) ) }</div>`;
+		return `
+		<div class="minn-card minn-look">
+			<div class="minn-look-head">
+				<div class="minn-look-title">${ esc( __( 'Current look' ) ) }</div>
+				<div class="minn-look-actions">
+					${ d.historyCount ? `<button type="button" class="minn-btn-soft" id="minn-look-history">${ icon( 'clock' ) } ${ esc( sprintf( /* translators: %s: localized number of saved versions. */ __( 'History (%s)' ), String( d.historyCount ) ) ) }</button>` : '' }
+					${ d.customized ? `<button type="button" class="minn-btn-soft" id="minn-look-reset">${ esc( __( 'Reset to theme defaults' ) ) }</button>` : '' }
+					${ linkable( se.styles ) ? `<a class="minn-btn-soft" href="${ esc( se.styles ) }" target="_blank" rel="noopener">${ esc( __( 'Site Editor' ) ) } ↗</a>` : '' }
+				</div>
+			</div>
+			<div class="minn-look-grid">
+				${ row( __( 'Colors' ), paletteHtml, se.colors, 'colors' ) }
+				${ row( __( 'Fonts' ), fontsHtml, se.typography, 'fonts' ) }
+				${ row( __( 'Text sizes' ), sizesHtml, se.fontSizes, 'sizes' ) }
+				${ row( __( 'Layout' ), layoutHtml, se.layout, 'layout' ) }
+				${ row( __( 'Background' ), bgHtml, se.background, 'background' ) }
+				${ row( __( 'Shadows' ), shadowsHtml, se.shadows, 'shadows' ) }
+			</div>
+			<div class="minn-look-foot">
+				<div class="minn-look-label">${ esc( __( 'Customized' ) ) }</div>
+				<div class="minn-look-value" id="minn-look-changes">${ changesHtml }</div>
+			</div>
+		</div>`;
+	}
+
+	/* Writes an empty config (what the Site Editor's "Reset styles" does)
+	 * with the current one held for Undo. */
+	async function resetStyles( ss ) {
+		const d = ss.data;
+		if ( ! d || ! d.userStylesId ) return;
+		if ( ! await minnConfirm( {
+			title: __( 'Reset styles to the theme defaults?' ),
+			body: __( 'Every color, font and layout change made in the Site Editor is removed and the theme’s own look returns, for every visitor. Undo brings the customizations back.' ),
+			confirmLabel: __( 'Reset styles' ),
+		} ) ) return;
+		const prev = d.current || { settings: {}, styles: {} };
+		try {
+			await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( { settings: {}, styles: {} } ) } );
+		} catch ( e ) {
+			toast( e.message, true );
+			return;
+		}
+		ss.data = null;
+		if ( state.route === 'styles' ) renderStyles();
+		toastAction( __( 'Styles reset to the theme defaults' ), __( 'Undo' ), async () => {
+			try {
+				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				ss.data = null;
+				if ( state.route === 'styles' ) renderStyles();
+				toast( __( 'Customizations restored' ) );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
+	}
+
+	/* Global-styles history: every saved version of the site's look, newest
+	 * first, each described against the one before it. Restore writes that
+	 * version back; the config from before the restore is the Undo. */
+	function openStylesHistory( ss ) {
+		state.modal = { type: 'styles-history', loading: true, rows: null, ss };
+		renderOverlays();
+		api( 'minn-admin/v1/styles/history' )
+			.then( ( h ) => {
+				const m = state.modal;
+				if ( ! m || m.type !== 'styles-history' ) return;
+				m.loading = false;
+				m.rows = h.rows || [];
+				m.total = h.total || m.rows.length;
+				renderOverlays();
+			} )
+			.catch( ( e ) => {
+				const m = state.modal;
+				if ( ! m || m.type !== 'styles-history' ) return;
+				m.loading = false;
+				m.error = e.message;
+				renderOverlays();
+			} );
+	}
+
+	function renderStylesHistoryModal( m ) {
+		let body;
+		if ( m.loading ) {
+			body = `<div class="minn-loading">${ esc( __( 'Loading history…' ) ) }</div>`;
+		} else if ( m.error ) {
+			body = `<div class="minn-empty">${ esc( m.error ) }</div>`;
+		} else if ( ! m.rows.length ) {
+			body = `<div class="minn-empty">${ esc( __( 'No saved versions yet. WordPress records one each time the site’s styles are saved.' ) ) }</div>`;
+		} else {
+			body = `<div class="minn-gs-hist">${ m.rows.map( ( r, i ) => {
+				const shown = r.changes.slice( 0, 4 );
+				const more = r.changes.length - shown.length;
+				const what = r.changes.length
+					? `<ul class="minn-gs-hist-changes">${ shown.map( ( c ) => `<li>${ esc( c ) }</li>` ).join( '' ) }${ more > 0 ? `<li class="minn-look-muted">${ esc( sprintf( /* translators: %s: number of further changes. */ __( '+%s more' ), String( more ) ) ) }</li>` : '' }</ul>`
+					: `<div class="minn-look-muted">${ esc( r.empty ? __( 'Theme defaults (nothing customized)' ) : __( 'Saved again with no visible change' ) ) }</div>`;
+				return `
+				<div class="minn-gs-hist-row${ r.current ? ' is-current' : '' }" data-gsrev="${ r.id }">
+					<div class="minn-gs-hist-when">
+						<div class="minn-rev-list-ago">${ esc( timeAgo( r.date ) ) }${ r.current ? ` <span class="minn-menu-kind is-on">${ esc( __( 'Current' ) ) }</span>` : '' }</div>
+						<div class="minn-look-muted" title="${ esc( r.date ) }">${ esc( new Date( r.date ).toLocaleString( uiLocale(), { dateStyle: 'medium', timeStyle: 'short' } ) ) } · ${ esc( r.author ) }</div>
+					</div>
+					<div class="minn-gs-hist-what">${ what }</div>
+					<div class="minn-gs-hist-act">${ r.current ? '' : `<button type="button" class="minn-btn-soft" data-gsrestore="${ r.id }">${ esc( __( 'Restore' ) ) }</button>` }</div>
+				</div>`;
+			} ).join( '' ) }</div>`;
+		}
+		return `
+		<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal wide">
+				<div class="minn-modal-head">
+					<div class="minn-modal-title">${ esc( __( 'Style history' ) ) }${ m.total ? ` <span class="minn-panel-sub">${ esc( sprintf( /* translators: %s: localized number of saved versions. */ _n( '%s version', '%s versions', m.total ), String( m.total ) ) ) }</span>` : '' }</div>
+					<button class="minn-x-btn" id="minn-modal-close" type="button">×</button>
+				</div>
+				<div class="minn-modal-scroll">${ body }</div>
+			</div>
+		</div>`;
+	}
+
+	async function restoreStylesRevision( m, revId ) {
+		const ss = m.ss;
+		const d = ss && ss.data;
+		if ( ! d ) return;
+		const row = ( m.rows || [] ).find( ( r ) => r.id === revId );
+		if ( ! await minnConfirm( {
+			/* translators: %s: how long ago the version was saved. */
+			title: sprintf( __( 'Restore the look from %s?' ), row ? timeAgo( row.date ) : '' ),
+			body: __( 'The site’s colors, fonts and layout return to that saved version, for every visitor. Undo brings back the look you have now.' ),
+			confirmLabel: __( 'Restore' ),
+		} ) ) return;
+		const prev = d.current || { settings: {}, styles: {} };
+		try {
+			await api( 'minn-admin/v1/styles/restore', { method: 'POST', body: JSON.stringify( { revision: revId } ) } );
+		} catch ( e ) {
+			toast( e.message, true );
+			return;
+		}
+		closeModal();
+		ss.data = null;
+		if ( state.route === 'styles' ) renderStyles();
+		toastAction( __( 'Saved version restored' ), __( 'Undo' ), async () => {
+			try {
+				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				ss.data = null;
+				if ( state.route === 'styles' ) renderStyles();
+				toast( __( 'Previous look restored' ) );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
 	}
 
 	async function applyStyleVariation( ss, v ) {
@@ -40746,6 +40956,9 @@
 		if ( m.type === 'revisions-list' ) {
 			return renderRevisionsListModal( m );
 		}
+		if ( m.type === 'styles-history' ) {
+			return renderStylesHistoryModal( m );
+		}
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
 		}
@@ -42348,6 +42561,12 @@
 					confirmBtn.disabled = false;
 				}
 			} );
+		}
+
+		if ( m.type === 'styles-history' ) {
+			$$( '[data-gsrestore]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => restoreStylesRevision( m, parseInt( btn.dataset.gsrestore, 10 ) ) )
+			);
 		}
 
 		if ( m.type === 'revisions-list' ) {
