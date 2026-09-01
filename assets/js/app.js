@@ -2937,6 +2937,13 @@
 			if ( parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 				state.editorType = 'posts';
 				state.editorId = parseInt( parts[ 1 ], 10 );
+			} else if ( ( 'templates' === parts[ 1 ] || 'template-parts' === parts[ 1 ] ) && parts[ 2 ] && parts[ 3 ] ) {
+				// /editor/templates/<theme>/<slug> — a block template's id is
+				// "<theme>//<slug>". The double slash collapses in a decoded
+				// path, but neither half may contain a slash, so two path
+				// parts carry it losslessly and the id is a STRING from here.
+				state.editorType = parts[ 1 ];
+				state.editorId = parts[ 2 ] + '//' + parts[ 3 ];
 			} else {
 				state.editorType = parts[ 1 ] || 'posts';
 				state.editorId = parts[ 2 ] ? parseInt( parts[ 2 ], 10 ) : null;
@@ -4009,6 +4016,8 @@
 		if ( ! ed ) return 'Post';
 		if ( ed.type === 'pages' ) return 'Page';
 		if ( ed.type === 'posts' ) return 'Post';
+		if ( ed.type === 'templates' ) return __( 'Template' );
+		if ( ed.type === 'template-parts' ) return __( 'Template part' );
 		const t = ( state.cache.types || [] ).find( ( x ) => x.restBase === ed.type );
 		// Registered singular beats the naive s-strip ("Stories" → "Story").
 		return t ? ( t.singular || t.name.replace( /s$/, '' ) ) : 'Post';
@@ -4025,9 +4034,13 @@
 		// blank new page and a blank new post are otherwise indistinguishable.
 		if ( state.route === 'editor' && state.editor ) {
 			const ed = state.editor;
-			subEl.textContent = ed.id
-				? `${ editorNoun( ed ) } · ${ STATUS_LABELS[ ed.status ] || 'Draft' }`
-				: `New ${ editorNoun( ed ).toLowerCase() }`;
+			// "Published" is meaningless on a template — its status vocabulary
+			// is where the markup lives, the same words the Design list uses.
+			subEl.textContent = ed.isTemplate
+				? `${ editorNoun( ed ) } · ${ 'custom' !== ed.tplSource ? __( 'From theme' ) : ed.tplHasFile ? __( 'Customized' ) : __( 'Added here' ) }`
+				: ed.id
+					? `${ editorNoun( ed ) } · ${ STATUS_LABELS[ ed.status ] || 'Draft' }`
+					: `New ${ editorNoun( ed ).toLowerCase() }`;
 			// Focus/outline had no visible exit (the entry
 			// toast names the shortcut, then you're stranded). A back arrow
 			// would read as "leave the editor" — this is a MODE, so it wears
@@ -18114,7 +18127,7 @@
 					].filter( Boolean ).join( ' · ' ) ) }</span>
 				</div>
 				<div class="minn-menu-ctrls">
-					${ ENGINE ? '' : `<span class="minn-row-ext" title="${ esc( __( 'Opens in the Site Editor, in a new tab' ) ) }" aria-hidden="true">↗</span>` }
+					${ ENGINE || 'plugin' !== st.key ? '' : `<span class="minn-row-ext" title="${ esc( __( 'Opens in the Site Editor, in a new tab' ) ) }" aria-hidden="true">↗</span>` }
 					<button class="minn-icon-btn sm" data-tplmenu="${ esc( t.id ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
 				</div>
 			</div>`;
@@ -18197,18 +18210,25 @@
 			openMinnMenu( x, y, entries );
 		};
 
-		// A template is a layout, and layout editing is the Site Editor's job,
-		// so the row opens it there rather than pretending Minn can. It leaves
-		// Minn, hence the new tab and the ↗ the row wears.
-		if ( ! ENGINE ) {
-			$$( '[data-tpl]', view ).forEach( ( row ) =>
-				row.addEventListener( 'click', ( e ) => {
-					if ( e.target.closest( '[data-tplmenu]' ) ) return; // its own menu
-					const t = byId( row.dataset.tpl );
-					if ( t ) window.open( siteEditorTplUrl( t ), '_blank', 'noopener' );
-				} )
-			);
-		}
+		// The theme's own templates open in Minn's editor (the islands
+		// pipeline classifies their markup like any other block document).
+		// A plugin's templates keep the Site Editor: Minn has not proven the
+		// save path for overrides a plugin owns, so it does not offer one.
+		$$( '[data-tpl]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', ( e ) => {
+				if ( e.target.closest( '[data-tplmenu]' ) ) return; // its own menu
+				const t = byId( row.dataset.tpl );
+				if ( ! t ) return;
+				if ( 'plugin' === tplStatus( t ).key ) {
+					if ( ! ENGINE ) window.open( siteEditorTplUrl( t ), '_blank', 'noopener' );
+					return;
+				}
+				const [ owner, slug ] = String( t.id ).split( '//' );
+				if ( ! owner || ! slug ) return;
+				setPageReturn( 'templates', __( 'Templates' ) );
+				go( `editor/${ 'wp_template' === t.type ? 'templates' : 'template-parts' }/${ owner }/${ slug }` );
+			} )
+		);
 		$$( '[data-tplmenu]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', ( e ) => {
 				e.preventDefault();
@@ -27732,7 +27752,84 @@
 		} ).catch( () => {} );
 	}
 
+	const isTemplateType = ( t ) => 'templates' === t || 'template-parts' === t;
+
+	/**
+	 * Block templates and template parts open in this same editor the way
+	 * patterns do: their markup is ordinary serialized blocks, so the islands
+	 * pipeline already classifies it — groups become editable slot containers,
+	 * structural blocks (query, post-content, template-part) stay atomic
+	 * islands, and untouched blocks splice back byte-identical.
+	 *
+	 * Deliberate differences from a post:
+	 * - The id is a STRING ("theme//slug") and every request path encodes it.
+	 * - No autosave: a timer must never quietly turn a theme's template into a
+	 *   site copy (the autosaves route refuses theme-file templates with a 400
+	 *   anyway). Saving is explicit; the crash net still snapshots locally.
+	 * - No post lock: a theme-file template has no post row to lock, and the
+	 *   Site Editor takes no lock either. Last write wins, stated honestly.
+	 * - The sidebar is template-shaped (renderEditorSide branches on
+	 *   ed.isTemplate); nothing post-shaped is ever sent, because the payload
+	 *   builder only adds fields whose dirty flags exist.
+	 */
+	async function loadTemplateEditor() {
+		const restBase = state.editorType;
+		const tid = String( state.editorId );
+		const p = await api( `wp/v2/${ restBase }/${ encodeURIComponent( tid ) }?context=edit&_fields=id,slug,title,content,status,source,origin,has_theme_file,type,modified,area` );
+		const raw = ( p.content && ( p.content.raw != null ? p.content.raw : '' ) ) || '';
+		const mode = editorModeFor( raw );
+		state.editor = {
+			id: p.id,
+			type: restBase,
+			isTemplate: true,
+			tplSource: p.source || 'theme',
+			tplHasFile: !! p.has_theme_file,
+			title: decodeEntities( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || '' ) || p.slug,
+			content: '',
+			islands: [],
+			mode,
+			builder: null,
+			editUrl: siteEditorTplUrl( { type: p.type || ( 'templates' === restBase ? 'wp_template' : 'wp_template_part' ), id: p.id } ),
+			status: p.status || 'publish',
+			date: null,
+			modified: p.modified || null,
+			newDate: null,
+			slug: '/' + ( p.slug || '' ),
+			slugValue: p.slug || '',
+			link: '',
+			savedAt: null,
+			commentStatus: 'closed', pingStatus: 'closed', password: '', visibility: 'public',
+			sticky: false, serverSticky: false, supportsSticky: false, supportsDiscussion: false,
+			categoryIds: new Set(), tagIds: new Set(), tags: [],
+			revisions: null, panels: null,
+			supportsThumb: false, featuredMedia: 0, featuredThumb: null,
+			parent: 0, menuOrder: 0, template: '', supportsParent: false, supportsOrder: false,
+			templates: null, parentPick: null, excerpt: '', supportsExcerpt: false,
+			format: 'standard', formatDirty: false, supportsFormat: false,
+			syncedPattern: false,
+			noAutosave: true,
+		};
+		state.editor.content = mode === 'blocks' ? buildEditableContent( state.editor, raw )
+			: mode === 'classic' ? miniAutop( raw )
+			: stripBlockComments( raw );
+		// Crash net still applies — a string id keys localStorage fine.
+		try {
+			const stored = localStorage.getItem( localNetKey( state.editor ) );
+			if ( stored ) {
+				const snap = JSON.parse( stored );
+				if ( ( snap.content != null && snap.content !== raw ) || snap.title !== state.editor.title ) {
+					state.editor.localNet = snap;
+				} else {
+					localStorage.removeItem( localNetKey( state.editor ) );
+				}
+			}
+		} catch ( e ) {}
+	}
+
 	async function loadEditor() {
+		if ( state.editorId && isTemplateType( state.editorType ) ) {
+			return loadTemplateEditor();
+		}
 		if ( state.editorId ) {
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
@@ -28069,7 +28166,11 @@
 		state.saving = true;
 		try {
 			let p;
-			if ( ed.id ) {
+			if ( ed.id && isTemplateType( ed.type ) ) {
+				// A template id is a string with a slash in it, and templates
+				// take no Minn lock — the guard header stays off.
+				p = await api( `wp/v2/${ ed.type }/${ encodeURIComponent( ed.id ) }`, { method: 'POST', body: JSON.stringify( payload ) } );
+			} else if ( ed.id ) {
 				// The lock guard header: the server rejects this save with a
 				// 409 if someone else holds a fresh edit lock — closes the
 				// blind window between a takeover and our next lock refresh.
@@ -28099,6 +28200,9 @@
 				}
 			}
 			ed.status = p.status;
+			// The first save of a theme template creates the site's copy —
+			// reflect it so the sidebar flips From theme → Customized.
+			if ( 'source' in p ) ed.tplSource = p.source;
 			ed.slug = '/' + ( p.slug || '' );
 			if ( 'slug' in p ) ed.slugValue = p.slug || '';
 			if ( 'comment_status' in p ) ed.commentStatus = p.comment_status;
@@ -28142,9 +28246,17 @@
 			ed.stickyDirty = false;
 			ed.visibilityDirty = false;
 			state.cache.content = null;
+			// A saved template changes what the Design list reports (status,
+			// author, the changed count) — make its next visit refetch.
+			if ( isTemplateType( ed.type ) && state.tplData ) {
+				state.tplData.templates = null;
+				state.tplData.parts = null;
+				state.tplData.usage = null;
+			}
 			// Manual save/update/publish creates a WP revision — refresh the
-			// History card so it appears without a full page reload.
-			if ( ed.id ) loadEditorRevisions( ed );
+			// History card so it appears without a full page reload. Template
+			// history stays with the Site Editor for now.
+			if ( ed.id && ! isTemplateType( ed.type ) ) loadEditorRevisions( ed );
 			// Publish clears PPP eligibility; re-fetch when still draft-like.
 			if ( pppEligible( ed ) ) loadEditorPpp( ed );
 			else ed.ppp = null;
@@ -30504,6 +30616,51 @@
 			return;
 		}
 		const saved = savedState( ed );
+		if ( ed.isTemplate ) {
+			// A template has no status, visibility, schedule, terms or
+			// thumbnail — its whole sidebar is what it IS and how to leave.
+			const stLabel = 'custom' !== ed.tplSource ? __( 'From theme' )
+				: ed.tplHasFile ? __( 'Customized' ) : __( 'Added here' );
+			el.innerHTML = `
+			<div class="minn-side-card">
+				<div class="minn-side-title">${ esc( editorNoun( ed ) ) }</div>
+				<div class="minn-side-rows">
+					<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Status' ) ) }</span><span class="minn-side-val${ 'custom' === ed.tplSource ? ' amber' : ' green' }" style="font-weight:600;" id="minn-status-state">${ esc( stLabel ) }</span></div>
+					<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Saved' ) ) }</span><span class="minn-side-val ${ saved.cls }" id="minn-saved-state">${ esc( saved.text ) }</span></div>
+				</div>
+				<button class="minn-btn-primary" id="minn-publish-btn">${ esc( 'custom' === ed.tplSource ? __( 'Update' ) : __( 'Save site copy' ) ) }</button>
+				${ ENGINE ? '' : `<a class="minn-side-viewlink" href="${ esc( ed.editUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Open in Site Editor ↗' ) ) }</a>` }
+			</div>
+			${ 'custom' === ed.tplSource && ed.tplHasFile ? `<button class="minn-trash-link" id="minn-tpl-reset">${ esc( __( 'Reset to theme' ) ) }</button>` : '' }
+			<div class="minn-side-card" id="minn-outline-card" hidden>
+				<div class="minn-side-title">${ esc( __( 'Outline' ) ) }</div>
+				<div id="minn-outline"></div>
+			</div>`;
+			$( '#minn-publish-btn', el ).addEventListener( 'click', () => {
+				saveEditor( { _explicit: true } ).then( () => { if ( state.editor === ed ) renderEditorSide(); } );
+			} );
+			const resetBtn = $( '#minn-tpl-reset', el );
+			if ( resetBtn ) resetBtn.addEventListener( 'click', async () => {
+				if ( ! await minnConfirm( {
+					/* translators: %s: template name. */
+					title: sprintf( __( 'Reset “%s” to the theme version?' ), ed.title ),
+					body: __( 'The changes made to this template on this site are discarded and the version your theme ships takes over again. Your content is not affected.' ),
+					danger: true,
+					confirmLabel: __( 'Reset to theme' ),
+				} ) ) return;
+				try {
+					await api( `wp/v2/${ ed.type }/${ encodeURIComponent( ed.id ) }?force=true`, { method: 'DELETE' } );
+					try { localStorage.removeItem( localNetKey( ed ) ); } catch ( e ) {}
+					toast( __( 'Reset to the theme version' ) );
+					if ( state.tplData ) { state.tplData.templates = null; state.tplData.parts = null; state.tplData.usage = null; }
+					state.editor = null;
+					go( 'templates' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} );
+			return;
+		}
 		const dateValue = ( ed.newDate || ( ed.date ? ed.date.slice( 0, 16 ) : '' ) );
 		const historyRows = historyRowsFor( ed );
 		const showAttrs = !!( ed.supportsParent || ( ed.templates && ed.templates.length ) || ed.supportsOrder );
@@ -31144,6 +31301,12 @@
 				${ ed.type === 'blocks' && ed.id && ed.syncedPattern ? `
 				<div class="minn-editor-locked-note minn-pattern-note">
 					${ __( 'This is a synced pattern — saving changes here updates every post and page that uses it.' ) }
+				</div>` : '' }
+				${ ed.isTemplate ? `
+				<div class="minn-editor-locked-note minn-pattern-note">
+					${ 'custom' === ed.tplSource
+		? esc( __( 'This template shapes every page that uses it. Layout blocks are preserved exactly; the text is editable here, and the Site Editor is one click away for layout.' ) )
+		: esc( __( 'This is your theme’s own template. Saving creates this site’s copy of it — the theme file is untouched, and Reset to theme brings it back. Layout blocks are preserved exactly; the text is editable here.' ) ) }
 				</div>` : '' }
 				${ ed.builder && builderHref ? `
 				<a class="minn-editor-locked-note minn-builder-note" href="${ esc( builderHref ) }" aria-label="${ builderInactive ? esc( __( 'Open Extensions' ) ) : `Edit in ${ esc( ed.builder.name ) }` }">

@@ -628,8 +628,15 @@ cards, all in the same operational group.
   general one first.
   Template parts have their own tab. Templates a plugin registered are
   marked as such and offer no delete, because deleting one lasts only
-  until that plugin registers it again. Editing a template opens the Site
-  Editor.
+  until that plugin registers it again. Clicking a template opens it in
+  Minn's own editor: the text is directly editable (a footer's copyright
+  line, the 404 message), layout blocks are preserved exactly, and
+  anything you did not touch is written back byte for byte. Editing one
+  of the theme's own templates creates this site's copy on save (the
+  theme file is untouched), the sidebar flips to Customized, and Reset
+  to theme is right there to undo it. Templates never autosave; saving
+  is a deliberate click. The Site Editor stays one click away for layout
+  work, and a plugin's templates still open there.
   **Navigation** is your site's menus, with the question the
   Site Editor never answers: where each one actually renders. A menu used
   in your header says so, and a menu left behind by a previous theme reads

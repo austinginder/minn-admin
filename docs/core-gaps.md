@@ -151,8 +151,30 @@ verified empirically at v0.23.0:
    `404` there, and an early build wrongly told the user the template
    behind every page was unused. Note PHP coerces a numeric key like
    "404" to int if that list is ever read again.
-   STILL OPEN, ranked: template REVISIONS (route exists, unused here);
-   then a style-variations picker
+   **TEMPLATE EDITING IN MINN SHIPPED** (the patterns precedent, measured
+   first): all 15 real mmonroe templates open in blocks mode — groups are
+   slot containers with editable interiors, structural blocks stay atomic
+   islands, so the daily edits (footer copyright, 404 copy) are direct.
+   Route `/editor/templates/<theme>/<slug>` (+ `template-parts`): the id
+   "theme//slug" collapses in the decoded path into exactly two slash-free
+   parts, so the STRING id rides losslessly; `loadTemplateEditor()` in
+   app.js; every request path `encodeURIComponent`s the id. Deliberate
+   differences from posts, each verified: NO autosave (a timer must never
+   quietly create a site copy of a theme template; the autosaves route
+   refuses theme-file templates with 400 anyway), NO post lock (theme-file
+   templates have no post row; Site Editor takes none either — last write
+   wins), payload degrades to {title, content} because buildSavePayload
+   only adds dirty-flagged fields. First save of a theme template flips
+   source theme→custom (sidebar From theme→Customized, Reset to theme
+   appears; `'source' in p` adoption in doSaveEditor). Whole-document
+   byte identity holds EXCEPT the theme file's trailing newline, which no
+   block serializer re-emits (verified: 1 byte in 2,910, position 2909) —
+   the guarantee is per-block. Plugin-registered templates still open in
+   the Site Editor (their override save path is unproven). Suite
+   `tests/template-editor.test.js` (20).
+   STILL OPEN, ranked: template REVISIONS/history in the editor (route
+   exists; loadEditorRevisions guarded off for templates); then a
+   style-variations picker
    (`wp/v2/global-styles/themes/{stylesheet}/variations` lists them and
    applying one is a REST write, so it needs no canvas); then a read-only
    Design card (active theme, palette, site logo). The Site Editor canvas

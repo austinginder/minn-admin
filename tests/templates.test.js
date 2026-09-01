@@ -102,19 +102,27 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 			t.check( 'no plugin-registered templates on this site to check', true, 'skipped' );
 		}
 
-		/* ===== The row itself opens the Site Editor ===== */
-		const opened = await page.evaluate( () => {
-			let url = '';
-			window.open = ( u ) => { url = u; return null; };
-			document.querySelector( '[data-tpl] .minn-menu-info' ).click();
-			return url;
-		} );
-		t.check( 'clicking a row opens that template in the Site Editor',
-			opened.includes( 'site-editor.php' ) && opened.includes( 'canvas=edit' ), opened );
+		/* ===== Row clicks: a plugin's template leaves for the Site Editor,
+		 * the theme's own open in Minn (template-editor.test.js covers the
+		 * Minn side end to end). ===== */
+		if ( pluginRow ) {
+			const opened = await page.evaluate( ( id ) => {
+				let url = '';
+				window.open = ( u ) => { url = u; return null; };
+				document.querySelector( `[data-tpl="${ CSS.escape( id ) }"] .minn-menu-info` ).click();
+				return url;
+			}, pluginRow.id );
+			t.check( 'clicking a plugin’s row opens that template in the Site Editor',
+				opened.includes( 'site-editor.php' ) && opened.includes( 'canvas=edit' ), opened );
+			t.check( 'only rows that leave Minn wear the ↗ marker',
+				await page.evaluate( ( id ) => !! document.querySelector( `[data-tpl="${ CSS.escape( id ) }"] .minn-row-ext` )
+					&& [ ...document.querySelectorAll( '[data-tpl]' ) ].some( ( r ) => ! r.querySelector( '.minn-row-ext' ) ), pluginRow.id ) );
+		} else {
+			t.check( 'no plugin-registered templates to check row clicks on', true, 'skipped' );
+			t.check( 'no plugin-registered templates to check row clicks on', true, 'skipped' );
+		}
 		t.check( 'the row carries no redundant Edit button',
 			await page.evaluate( () => ! document.querySelector( '[data-tpl] a[href*="site-editor"]' ) ) );
-		t.check( 'the row marks that its click leaves Minn',
-			await page.evaluate( () => !! document.querySelector( '[data-tpl] .minn-row-ext' ) ) );
 
 		/* ===== Tabs ===== */
 		await page.click( '[data-tplkind="wp_template_part"]' );
