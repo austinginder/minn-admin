@@ -1826,8 +1826,37 @@ class Minn_Admin {
 		if ( ! is_string( $route ) || '' === $route ) {
 			return null;
 		}
+		// Anything that could address another origin is refused before the
+		// leading slashes come off, because stripping them is what would turn
+		// //evil.example into something that reads like a relative route.
+		if ( 0 === strpos( $route, '//' )
+			|| preg_match( '#^[a-z][a-z0-9+.\-]*:#i', $route )
+			|| false !== strpos( $route, '\\' )
+			|| preg_match( '/[\x00-\x20\x7F]/', $route ) ) {
+			return null;
+		}
 		$route = ltrim( $route, '/' );
-		return preg_match( '/^[a-z0-9_\-\/{}]+$/i', $route ) ? $route : null;
+		// A descriptor route may carry a query string: the panels pass the post
+		// and its type that way, and every one of them looks like
+		// acf/fields?post_id={id}&post_type={type}. Validating the whole thing
+		// with the path's own character set refused all of them, which silently
+		// emptied the editor's panel list. Path and query answer to their own
+		// rules instead.
+		$path  = $route;
+		$query = '';
+		$mark  = strpos( $route, '?' );
+		if ( false !== $mark ) {
+			$path  = substr( $route, 0, $mark );
+			$query = substr( $route, $mark + 1 );
+		}
+		// No dots in the path, so a host name can never be mistaken for one.
+		if ( ! preg_match( '/^[a-z0-9_\-\/{}]+$/i', $path ) ) {
+			return null;
+		}
+		if ( '' !== $query && ! preg_match( '/^[a-z0-9_\-\/{}=&%.,:\[\]]*$/i', $query ) ) {
+			return null;
+		}
+		return $route;
 	}
 
 	public static function design_sources() {
