@@ -172,9 +172,27 @@ verified empirically at v0.23.0:
    the guarantee is per-block. Plugin-registered templates still open in
    the Site Editor (their override save path is unproven). Suite
    `tests/template-editor.test.js` (20).
+   **STYLE-VARIATIONS PICKER SHIPPED** (Design → Styles, route `styles`):
+   `minn-admin/v1/styles/variations` reads ONLY top-level `styles/*.json`
+   (parent + child dirs, child wins by basename) — core's own variations
+   route recursively sweeps the color/ and typography/ PARTIAL subdirs,
+   which duplicate top-level titles (TT5 ships "Evening" twice) and are
+   meant for mixing; Gutenberg dedupes client-side, Minn server-side.
+   Apply = POST `wp/v2/global-styles/{userStylesId}` with the variation's
+   settings/styles (proven to change the visitor-facing front end);
+   Default = write empty objects; Undo = restore the pre-apply snapshot
+   the endpoint carries (`current`). ACTIVE DETECTION TRAP: the write
+   passes through WP_Theme_JSON's user-origin sanitization (drops
+   styles.variations, among others), so the RAW file never equals the
+   stored config — compare via
+   `( new WP_Theme_JSON( $decoded, 'custom' ) )->get_raw_data()` (both
+   public), the same transform the write applies. Suite
+   `tests/styles.test.js` (14; verifies the FRONT END changes and that
+   Undo restores the stored config exactly).
    STILL OPEN, ranked: template REVISIONS/history in the editor (route
-   exists; loadEditorRevisions guarded off for templates); then a
-   style-variations picker
+   exists; loadEditorRevisions guarded off for templates); global-styles
+   history (core keeps revisions of the user global-styles post — would
+   extend the Styles tab); site logo in Settings → Identity
    (`wp/v2/global-styles/themes/{stylesheet}/variations` lists them and
    applying one is a REST write, so it needs no canvas); then a read-only
    Design card (active theme, palette, site logo). The Site Editor canvas

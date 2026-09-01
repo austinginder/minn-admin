@@ -1229,6 +1229,18 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/styles/variations',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'style_variations' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_theme_options' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/themes/search',
 			array(
 				'methods'             => 'GET',
@@ -7164,6 +7176,146 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				self::scan_template_part_refs( $block['innerBlocks'], $slugs );
 			}
 		}
+	}
+
+	/**
+	 * The theme's style variations, shaped for a picker.
+	 *
+	 * Core's variations route recursively sweeps styles/ INCLUDING the
+	 * color/ and typography/ subdirectories, whose partial variations are
+	 * meant for mixing and duplicate the top-level titles (Twenty
+	 * Twenty-Five ships "Evening" twice); Gutenberg de-duplicates
+	 * client-side. This reads only the top-level styles/*.json — the set
+	 * the Site Editor's own Browse styles shows — parent theme first so a
+	 * child's same-named file wins.
+	 *
+	 * Also carries the user global-styles post id (what a picker writes to),
+	 * the CURRENT user config (what an Undo restores), and which variation,
+	 * if any, the current config matches.
+	 */
+	public static function style_variations() {
+		$files = array();
+		$dirs  = array_unique( array( get_template_directory() . '/styles', get_stylesheet_directory() . '/styles' ) );
+		foreach ( $dirs as $dir ) {
+			$found = is_dir( $dir ) ? glob( $dir . '/*.json' ) : array();
+			foreach ( (array) $found as $path ) {
+				$files[ basename( $path ) ] = $path;
+			}
+		}
+		ksort( $files );
+
+		$user_post_id = WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+		$current      = array( 'settings' => array(), 'styles' => array() );
+		$req          = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $user_post_id );
+		$req->set_param( 'context', 'edit' );
+		$res = rest_do_request( $req );
+		if ( ! $res->is_error() ) {
+			$data                = $res->get_data();
+			$current['settings'] = ! empty( $data['settings'] ) ? (array) json_decode( wp_json_encode( $data['settings'] ), true ) : array();
+			$current['styles']   = ! empty( $data['styles'] ) ? (array) json_decode( wp_json_encode( $data['styles'] ), true ) : array();
+		}
+		$customized = ! empty( $current['settings'] ) || ! empty( $current['styles'] );
+
+		$variations = array();
+		$any_active = false;
+		foreach ( $files as $base => $path ) {
+			$decoded = json_decode( (string) file_get_contents( $path ), true );
+			// blockTypes marks a per-block style variation, not a site style.
+			if ( ! is_array( $decoded ) || isset( $decoded['blockTypes'] ) ) {
+				continue;
+			}
+			$settings = isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array();
+			$styles   = isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array();
+			// "Active" means the stored user config equals this variation —
+			// but a write passes through WP_Theme_JSON's user-origin
+			// sanitization (which drops styles.variations, among others), so
+			// the RAW file never matches what got stored. Run the variation
+			// through the same sanitizer before comparing; loose equality then
+			// ignores key order on maps. A miss means no badge, never a wrong
+			// one.
+			$sanitized = ( new WP_Theme_JSON( $decoded, 'custom' ) )->get_raw_data();
+			$cmp_set   = isset( $sanitized['settings'] ) ? (array) $sanitized['settings'] : array();
+			$cmp_sty   = isset( $sanitized['styles'] ) ? (array) $sanitized['styles'] : array();
+			$active    = $customized && $current['settings'] == $cmp_set && $current['styles'] == $cmp_sty;
+			if ( $active ) {
+				$any_active = true;
+			}
+			$variations[] = array(
+				'id'       => preg_replace( '/\.json$/', '', $base ),
+				'title'    => isset( $decoded['title'] ) ? (string) $decoded['title'] : $base,
+				'palette'  => self::variation_palette( $settings ),
+				'fonts'    => self::variation_fonts( $settings ),
+				'settings' => (object) $settings,
+				'styles'   => (object) $styles,
+				'active'   => $active,
+			);
+		}
+
+		// The default card: the theme as shipped, from its own theme.json.
+		$theme_json = array();
+		foreach ( array( get_stylesheet_directory() . '/theme.json', get_template_directory() . '/theme.json' ) as $tj ) {
+			if ( file_exists( $tj ) ) {
+				$theme_json = json_decode( (string) file_get_contents( $tj ), true );
+				break;
+			}
+		}
+		$tj_settings = isset( $theme_json['settings'] ) && is_array( $theme_json['settings'] ) ? $theme_json['settings'] : array();
+
+		return rest_ensure_response( array(
+			'userStylesId' => (int) $user_post_id,
+			'current'      => array( 'settings' => (object) $current['settings'], 'styles' => (object) $current['styles'] ),
+			'customized'   => $customized,
+			'anyActive'    => $any_active,
+			'default'      => array(
+				'palette' => self::variation_palette( $tj_settings ),
+				'fonts'   => self::variation_fonts( $tj_settings ),
+				'active'  => ! $customized,
+			),
+			'variations'   => $variations,
+		) );
+	}
+
+	/** Up to six swatch colors from a settings tree (raw file or processed shape). */
+	private static function variation_palette( $settings ) {
+		$palette = array();
+		if ( isset( $settings['color']['palette'] ) ) {
+			$palette = $settings['color']['palette'];
+			// The processed shape nests by origin; raw files are a flat list.
+			if ( isset( $palette['theme'] ) ) {
+				$palette = $palette['theme'];
+			}
+		}
+		$out = array();
+		foreach ( (array) $palette as $entry ) {
+			if ( is_array( $entry ) && ! empty( $entry['color'] ) && is_string( $entry['color'] ) ) {
+				$out[] = $entry['color'];
+			}
+			if ( count( $out ) >= 6 ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/** Display names of a settings tree's font families. */
+	private static function variation_fonts( $settings ) {
+		$families = array();
+		if ( isset( $settings['typography']['fontFamilies'] ) ) {
+			$families = $settings['typography']['fontFamilies'];
+			if ( isset( $families['theme'] ) ) {
+				$families = $families['theme'];
+			}
+		}
+		$out = array();
+		foreach ( (array) $families as $entry ) {
+			if ( is_array( $entry ) && ! empty( $entry['name'] ) && is_string( $entry['name'] ) ) {
+				$out[] = $entry['name'];
+			}
+			if ( count( $out ) >= 3 ) {
+				break;
+			}
+		}
+		return $out;
 	}
 
 	public static function search_themes( WP_REST_Request $request ) {

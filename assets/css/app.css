@@ -597,6 +597,20 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-ctx-menu { min-width: 180px; max-height: 80vh; overflow-y: auto; }
 .minn-new-menu a.danger, .minn-new-menu button.danger { color: var(--red); }
 .minn-row-end { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+/* Style variation cards (Design → Styles). */
+.minn-style-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.minn-style-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 9px; padding: 15px 16px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  cursor: pointer; text-align: start; font-family: inherit; color: var(--text);
+}
+.minn-style-card:hover { background: var(--hover); }
+.minn-style-card.is-active { border-color: var(--accent); cursor: default; }
+.minn-style-swatches { display: flex; gap: 6px; }
+.minn-style-swatches span { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border); }
+.minn-style-name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.minn-style-fonts { color: var(--text3); font-size: 12.5px; }
+
 /* Marks a row whose click leaves Minn for the Site Editor. */
 .minn-row-ext { color: var(--text3); font-size: 13px; line-height: 1; padding: 0 2px; }
 .minn-menu-row:hover .minn-row-ext { color: var(--text2); }

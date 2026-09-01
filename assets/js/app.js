@@ -1128,6 +1128,7 @@
 		terms: [ __( 'Terms' ), __( 'Categories & Tags' ) ],
 		menus: [ __( 'Menus' ), __( 'Navigation' ) ],
 		templates: [ __( 'Design' ), __( 'Templates' ) ],
+		styles: [ __( 'Design' ), __( 'Styles' ) ],
 		navigation: [ __( 'Design' ), __( 'Navigation' ) ],
 		navedit: [ __( 'Design' ), __( 'Menu' ) ],
 		widgets: [ __( 'Widgets' ), __( 'Sidebars & footers' ) ],
@@ -3833,7 +3834,7 @@
 				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
 				// Design folds in Navigation the same way: its tabs and the menu
 				// tree editor all keep the one Design item highlighted.
-				|| ( [ 'navigation', 'navedit' ].indexOf( state.route ) !== -1 && 'templates' === btn.dataset.nav )
+				|| ( [ 'navigation', 'navedit', 'styles' ].indexOf( state.route ) !== -1 && 'templates' === btn.dataset.nav )
 				|| ( surface && surface.family && btn.dataset.family === surface.family );
 			btn.classList.toggle( 'active', on );
 			btn.title = on && navBtnIsCurrent( btn ) ? refreshHint : '';
@@ -4099,7 +4100,7 @@
 				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
 				// Design folds in Navigation the same way: its tabs and the menu
 				// tree editor all keep the one Design item highlighted.
-				|| ( [ 'navigation', 'navedit' ].indexOf( state.route ) !== -1 && 'templates' === btn.dataset.nav )
+				|| ( [ 'navigation', 'navedit', 'styles' ].indexOf( state.route ) !== -1 && 'templates' === btn.dataset.nav )
 				// The order detail page keeps the Orders item lit.
 				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
 				// Same for the product detail page and Products.
@@ -17957,7 +17958,124 @@
 		<div class="minn-tabs">
 			<button class="minn-tab${ 'templates' === active ? ' active' : '' }" data-designtab="templates">${ esc( __( 'Templates' ) ) }</button>
 			<button class="minn-tab${ 'navigation' === active ? ' active' : '' }" data-designtab="navigation">${ esc( __( 'Navigation' ) ) }</button>
+			<button class="minn-tab${ 'styles' === active ? ' active' : '' }" data-designtab="styles">${ esc( __( 'Styles' ) ) }</button>
 		</div>`;
+	}
+
+	/* ===== Design: site styles (theme style variations) ===== */
+
+	// Browsing and applying a theme's style variations needs no canvas: the
+	// variation IS a settings/styles document, applying one is a REST write to
+	// the user global-styles post, and the swatches come from the variation's
+	// own palette. What Minn adds over the Site Editor is a real Undo — the
+	// current config is snapshotted before an apply and offered back.
+
+	function stylesState() {
+		if ( ! state.stylesData ) {
+			state.stylesData = { data: null, loading: false };
+		}
+		return state.stylesData;
+	}
+
+	function styleCardHtml( v ) {
+		return `
+		<button type="button" class="minn-style-card${ v.active ? ' is-active' : '' }" data-style="${ esc( v.id ) }" aria-pressed="${ v.active ? 'true' : 'false' }">
+			<span class="minn-style-swatches">${ ( v.palette.length ? v.palette : [ 'transparent' ] ).map( ( c ) => `<span style="background:${ esc( c ) }"></span>` ).join( '' ) }</span>
+			<span class="minn-style-name">${ esc( v.title ) }${ v.active ? `<span class="minn-menu-kind is-on">${ esc( __( 'Active' ) ) }</span>` : '' }</span>
+			${ v.fonts.length ? `<span class="minn-style-fonts">${ esc( v.fonts.join( ' · ' ) ) }</span>` : `<span class="minn-style-fonts">${ esc( v.sub || '' ) }</span>` }
+		</button>`;
+	}
+
+	function renderStyles() {
+		const view = $( '#minn-view' );
+		const ss = stylesState();
+		if ( ! B.caps.themeOptions ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( 'You need permission to manage styles.' ) ) }</div>`;
+			return;
+		}
+		if ( ! B.site.blockTheme ) {
+			view.innerHTML = `
+			<div class="minn-card minn-panel-pad minn-empty">
+				<div>${ esc( __( 'This site uses a classic theme, whose look is set by the theme itself and the Customizer rather than style variations.' ) ) }</div>
+			</div>`;
+			return;
+		}
+		if ( ! ss.data ) {
+			if ( softLoadPending( 'styles' ) ) return;
+			view.innerHTML = designTabsHtml( 'styles' ) + `<div class="minn-loading">${ esc( __( 'Loading styles…' ) ) }</div>`;
+			bindDesignTabs( view );
+			if ( ! ss.loading ) {
+				ss.loading = true;
+				api( 'minn-admin/v1/styles/variations' )
+					.then( ( d ) => { ss.data = d; ss.loading = false; } )
+					.then( renderIfCurrent( 'styles' ) )
+					.catch( ( e ) => { ss.loading = false; showErr( e ); } );
+			}
+			return;
+		}
+
+		const d = ss.data;
+		const cards = [
+			{ id: 'default', title: __( 'Default' ), palette: d.default.palette || [], fonts: d.default.fonts || [], active: !! d.default.active, sub: __( 'The theme as shipped' ) },
+			...d.variations,
+		];
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			${ designTabsHtml( 'styles' ) }
+			<div class="minn-toolbar-meta">${ esc( sprintf( /* translators: %s: localized number of styles. */ _n( '%s style', '%s styles', cards.length ), String( cards.length ) ) ) }</div>
+			<a class="minn-btn-soft" href="${ esc( B.site.url ) }" target="_blank" rel="noopener">${ esc( __( 'View site' ) ) } ↗</a>
+		</div>
+		${ d.customized && ! d.anyActive ? `
+		<div class="minn-card minn-panel-pad minn-nav-inline-note">
+			${ esc( __( 'This site’s styles have been customized (colors or fonts edited in the Site Editor), so no variation below is marked active. Applying one replaces those customizations; Undo brings them back.' ) ) }
+		</div>` : '' }
+		${ d.variations.length ? '' : `
+		<div class="minn-card minn-panel-pad minn-empty">${ esc( __( 'This theme ships a single style. Themes that offer variations will list them here.' ) ) }</div>` }
+		<div class="minn-style-cards">
+			${ cards.map( styleCardHtml ).join( '' ) }
+		</div>`;
+
+		bindDesignTabs( view );
+		$$( '[data-style]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const v = cards.find( ( c ) => c.id === btn.dataset.style );
+				if ( v && ! v.active ) applyStyleVariation( ss, v );
+			} )
+		);
+	}
+
+	async function applyStyleVariation( ss, v ) {
+		const d = ss.data;
+		if ( ! await minnConfirm( {
+			/* translators: %s: the style variation's name. */
+			title: sprintf( __( 'Apply the “%s” style?' ), v.title ),
+			body: __( 'Your site’s colors and fonts change immediately, for every visitor. Undo restores the look you have now.' ),
+			confirmLabel: __( 'Apply style' ),
+		} ) ) return;
+		// The current config is the Undo — captured before anything is written.
+		const prev = d.current || { settings: {}, styles: {} };
+		const payload = 'default' === v.id
+			? { settings: {}, styles: {} }
+			: { settings: v.settings, styles: v.styles };
+		try {
+			await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( payload ) } );
+		} catch ( e ) {
+			toast( e.message, true );
+			return;
+		}
+		ss.data = null;
+		if ( state.route === 'styles' ) renderStyles();
+		/* translators: %s: the style variation's name. */
+		toastAction( sprintf( __( 'Applied “%s”' ), v.title ), __( 'Undo' ), async () => {
+			try {
+				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				ss.data = null;
+				if ( state.route === 'styles' ) renderStyles();
+				toast( __( 'Previous look restored' ) );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
 	}
 
 	function bindDesignTabs( view ) {
@@ -39312,6 +39430,7 @@
 		} else if ( B.caps.themeOptions && B.site.blockTheme ) {
 			cmds.push( { label: __( 'Edit Navigation' ), kind: 'nav', icon: '☰', run: () => go( 'navigation' ) } );
 			cmds.push( { label: __( 'Manage Templates' ), kind: 'nav', icon: '▤', run: () => go( 'templates' ) } );
+			cmds.push( { label: __( 'Browse site styles' ), kind: 'nav', icon: '◍', run: () => go( 'styles' ) } );
 		}
 		if ( B.caps.plugins ) cmds.push( { label: __( 'Manage Extensions' ), kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'Manage Post Types' ), kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
@@ -46035,6 +46154,7 @@
 			case 'terms': renderStructure(); break;
 			case 'menus': renderMenus(); break;
 			case 'templates': renderTemplates(); break;
+			case 'styles': renderStyles(); break;
 			case 'navigation': renderNavigation(); break;
 			case 'navedit': renderNavEdit(); break;
 			case 'widgets': renderWidgets(); break;

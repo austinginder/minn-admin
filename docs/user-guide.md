@@ -610,7 +610,15 @@ cards, all in the same operational group.
   technical asks you to turn on logging. It also says plainly when a
   custom post type is hidden from Minn by its own REST setting, naming
   the post types affected and where the fix lives.
-- **Design** (block themes) — two tabs, Templates and Navigation.
+- **Design** (block themes) — three tabs: Templates, Navigation and
+  Styles.
+  **Styles** lists your theme's style variations as swatch cards drawn
+  from each variation's own colors and fonts, with the theme's default
+  first and the active one marked. Applying one asks first, because it
+  changes the site for every visitor immediately, then offers Undo,
+  which restores the exact look you had, including any customizations
+  made in the Site Editor. Deeper style work (editing the palette,
+  typography, per-block styles) stays in the Site Editor.
   **Templates** answers the question the Site Editor's flat list cannot:
   which of your theme's templates this site has actually changed. Changed
   ones sort to the top, and every row says which it is: from the theme,
