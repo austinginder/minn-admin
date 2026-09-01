@@ -11,7 +11,7 @@
  * Activates twentytwentyfive for the run; snapshots and restores the user
  * global-styles config and the previous theme in finally.
  */
-const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
+const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'styles' );
@@ -54,11 +54,17 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 	try {
 		prevTheme = ( await rest( 'wp/v2/themes?status=active&_fields=stylesheet' ) ).body[ 0 ].stylesheet;
 
-		/* ===== Classic theme explains itself ===== */
-		await page.goto( BASE + '/minn-admin/styles', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '.minn-empty', { timeout: 20000 } );
-		t.check( 'a classic theme explains that variations do not apply',
-			await page.evaluate( () => /classic theme/i.test( document.querySelector( '#minn-view' ).textContent ) ) );
+		/* ===== Classic theme explains itself =====
+		 * The dev site starts classic; the bare next-core site starts on a
+		 * block theme, so activate a classic one rather than assume. */
+		if ( await activateClassicTheme( page ) ) {
+			await page.goto( BASE + '/minn-admin/styles', { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '.minn-empty', { timeout: 20000 } );
+			t.check( 'a classic theme explains that variations do not apply',
+				await page.evaluate( () => /classic theme/i.test( document.querySelector( '#minn-view' ).textContent ) ) );
+		} else {
+			t.check( 'no classic theme installed to check the classic path', true, 'skipped' );
+		}
 
 		await rest( 'minn-admin/v1/themes/activate', { method: 'POST', body: { stylesheet: 'twentytwentyfive' } } );
 

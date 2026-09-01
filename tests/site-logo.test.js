@@ -28,7 +28,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	let prevTheme = '';
 	try {
 		const base = await api( 'minn-admin/v1/site-logo' );
-		t.check( 'route reports theme support (fixture gate)', base && base.supported === true, JSON.stringify( base ) );
+		// Supported either way here: the fixture opens the classic gate on the
+		// dev site, and a block theme (the bare next-core site) qualifies on its own.
+		t.check( 'route reports logo support for the active theme', base && base.supported === true, JSON.stringify( base ) );
 
 		mediaId = await page.evaluate( async () => {
 			const c = document.createElement( 'canvas' );

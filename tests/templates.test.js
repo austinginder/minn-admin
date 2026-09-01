@@ -7,10 +7,12 @@
  * added here) and Reset to theme, which is a DELETE that hands the theme's own
  * file back rather than removing anything.
  *
- * The dev site runs a classic theme, so this activates twentytwentyfive for
- * the run and restores the previous theme in finally.
+ * Runs on either kind of site: the classic phase activates a classic theme
+ * when the site does not already run one, then twentytwentyfive for the rest.
+ * The previously active theme is restored in finally. Checks that need a
+ * plugin-registered template skip honestly where no plugin provides one.
  */
-const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
+const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'templates' );
@@ -62,12 +64,18 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 	try {
 		prevTheme = ( await rest( 'wp/v2/themes?status=active&_fields=stylesheet' ) ).body[ 0 ].stylesheet;
 
-		/* ===== Classic theme says so instead of listing nothing ===== */
-		await page.goto( BASE + '/minn-admin/templates', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '.minn-empty', { timeout: 20000 } );
-		t.check( 'a classic theme explains that its templates are PHP files',
-			await page.evaluate( () => /classic theme/i.test( document.querySelector( '#minn-view' ).textContent )
-				&& ! document.querySelector( '[data-tpl]' ) ) );
+		/* ===== Classic theme says so instead of listing nothing =====
+		 * The dev site starts classic; the bare next-core site starts on a
+		 * block theme, so activate a classic one rather than assume. */
+		if ( await activateClassicTheme( page ) ) {
+			await page.goto( BASE + '/minn-admin/templates', { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '.minn-empty', { timeout: 20000 } );
+			t.check( 'a classic theme explains that its templates are PHP files',
+				await page.evaluate( () => /classic theme/i.test( document.querySelector( '#minn-view' ).textContent )
+					&& ! document.querySelector( '[data-tpl]' ) ) );
+		} else {
+			t.check( 'no classic theme installed to check the classic path', true, 'skipped' );
+		}
 
 		await rest( 'minn-admin/v1/themes/activate', { method: 'POST', body: { stylesheet: 'twentytwentyfive' } } );
 

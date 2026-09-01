@@ -81,6 +81,15 @@ SUITES=(
 	menu-drag.test.js
 	role-defaults.test.js
 	profile.test.js
+	site-logo.test.js
+	# block-theme surfaces: wp_navigation, the templates controller and its
+	# reset-by-DELETE, global styles and their sanitizer. All pure core REST,
+	# and the surfaces a core release is most likely to move next.
+	navigation.test.js
+	navigation-tree.test.js
+	templates.test.js
+	template-editor.test.js
+	styles.test.js
 	# diagnostics + the updater, which read core internals directly
 	system.test.js
 	database.test.js

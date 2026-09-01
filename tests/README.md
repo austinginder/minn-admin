@@ -92,6 +92,16 @@ cove add minnadmin-core-latest nightly   # only when it does not exist
 ./core-latest-seed.sh                    # idempotent: safe to re-run
 ```
 
+**Theme-dependent phases.** The bare site runs a BLOCK theme (Twenty
+Twenty-Five); the dev site runs the classic marketing theme. A suite that
+asserts what Minn does without a block theme must not assume either, so
+`activateClassicTheme( page )` in `helpers.js` activates an installed classic
+theme when the site does not already run one, and returns false when none is
+installed so the phase can skip honestly. Capture the active theme before
+calling it and restore that theme in `finally`, as the Design suites do. The
+first version of those suites assumed the dev site's start state and would have
+failed on the bare site for a fixture reason rather than a real one.
+
 The seeder is where the site's fixtures live, and it is deliberately short.
 A handful of core-coupled suites need content of a shape core alone does not
 create: a term tree (`terms`), two attachments with known titles

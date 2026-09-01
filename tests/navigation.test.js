@@ -5,10 +5,12 @@
  * from real template markup, item counts, create / rename / delete through
  * the UI, and the Site Editor deep link.
  *
- * The dev site runs a CLASSIC theme, so this suite activates twentytwentyfive
- * for the duration and restores the previous theme in finally.
+ * Runs on either kind of site: the classic phase activates a classic theme
+ * when the site does not already run one (the dev site does; the bare
+ * next-core site does not), then twentytwentyfive for the block-theme phases.
+ * The previously active theme is restored in finally.
  */
-const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
+const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'navigation' );
@@ -70,17 +72,23 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 	try {
 		prevTheme = ( await rest( 'wp/v2/themes?status=active&_fields=stylesheet' ) ).body[ 0 ].stylesheet;
 
-		/* ===== Classic theme: the path stays reachable and explains itself ===== */
-		// The dev site is on a classic theme until this suite switches it, so
-		// this is the bookmark-survives-a-theme-switch case, checked for real.
-		await page.goto( BASE + '/minn-admin/navigation', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '#minn-nav-to-menus', { timeout: 20000 } );
-		t.check( 'classic theme explains itself instead of listing block menus',
-			await page.evaluate( () => ! document.querySelector( '[data-navrow]' )
-				&& /classic theme/i.test( document.querySelector( '#minn-view' ).textContent ) ) );
-		await page.click( '#minn-nav-to-menus' );
-		await page.waitForFunction( () => location.pathname.endsWith( '/menus' ), null, { timeout: 10000 } );
-		t.check( 'its Menus button lands on the classic Menus screen', true );
+		/* ===== Classic theme: the path stays reachable and explains itself =====
+		 * The bookmark-survives-a-theme-switch case. The dev site starts
+		 * classic; the bare next-core site starts on a block theme, so a
+		 * classic one is activated first rather than assuming the start state. */
+		if ( await activateClassicTheme( page ) ) {
+			await page.goto( BASE + '/minn-admin/navigation', { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '#minn-nav-to-menus', { timeout: 20000 } );
+			t.check( 'classic theme explains itself instead of listing block menus',
+				await page.evaluate( () => ! document.querySelector( '[data-navrow]' )
+					&& /classic theme/i.test( document.querySelector( '#minn-view' ).textContent ) ) );
+			await page.click( '#minn-nav-to-menus' );
+			await page.waitForFunction( () => location.pathname.endsWith( '/menus' ), null, { timeout: 10000 } );
+			t.check( 'its Menus button lands on the classic Menus screen', true );
+		} else {
+			t.check( 'no classic theme installed to check the classic path', true, 'skipped' );
+			t.check( 'no classic theme installed to check the classic path', true, 'skipped' );
+		}
 
 		const act = await rest( 'minn-admin/v1/themes/activate', { method: 'POST', body: { stylesheet: 'twentytwentyfive' } } );
 		t.check( 'activated twentytwentyfive for the run', act.status === 200, `status ${ act.status }` );

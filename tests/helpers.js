@@ -300,4 +300,37 @@ function switchOn( page, sel ) {
 	}, sel );
 }
 
-module.exports = { BASE, WP, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath };
+/**
+ * Ensure a CLASSIC theme is active, for phases that assert what Minn does on a
+ * site without a block theme.
+ *
+ * The dev site's marketing theme is classic, so those phases run as-is there;
+ * the bare next-core site runs a block theme, where the same assertions need a
+ * classic theme activated first. Callers capture the previously active theme
+ * themselves and restore it in finally. Returns false when the site has no
+ * classic theme installed, so the caller can skip that phase honestly rather
+ * than assert against the wrong kind of theme.
+ */
+async function activateClassicTheme( page ) {
+	return page.evaluate( async () => {
+		const call = async ( path, opts ) => {
+			const r = await fetch( window.MINN.restUrl + path, Object.assign( {
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+			}, opts || {} ) );
+			return r.json();
+		};
+		const active = ( await call( 'wp/v2/themes?status=active&_fields=stylesheet,is_block_theme' ) )[ 0 ];
+		if ( active && ! active.is_block_theme ) return true;
+		const inactive = await call( 'wp/v2/themes?status=inactive&_fields=stylesheet,is_block_theme' );
+		const classic = ( Array.isArray( inactive ) ? inactive : [] ).find( ( x ) => ! x.is_block_theme );
+		if ( ! classic ) return false;
+		await call( 'minn-admin/v1/themes/activate', {
+			method: 'POST',
+			body: JSON.stringify( { stylesheet: classic.stylesheet } ),
+		} );
+		return true;
+	} );
+}
+
+module.exports = { BASE, WP, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, activateClassicTheme, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath };

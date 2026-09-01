@@ -8,8 +8,9 @@
  * hooked-block metadata all have to survive a reorder. Every check reads the
  * SAVED markup back, never just the DOM.
  *
- * The dev site runs a classic theme, so this activates twentytwentyfive for
- * the run and restores the previous theme in finally.
+ * Activates twentytwentyfive for the run and restores the previously active
+ * theme in finally, so it runs on the dev site and the bare next-core site
+ * alike.
  */
 const { launch, login, reporter, BASE } = require( './helpers' );
 
