@@ -18062,6 +18062,15 @@
 		if ( resetBtn ) resetBtn.addEventListener( 'click', () => resetStyles( ss ) );
 		const histBtn = $( '#minn-look-history', view );
 		if ( histBtn ) histBtn.addEventListener( 'click', () => openStylesHistory( ss ) );
+		const moreBtn = $( '#minn-look-more', view );
+		if ( moreBtn ) moreBtn.addEventListener( 'click', ( e ) => {
+			const r = moreBtn.getBoundingClientRect();
+			openMinnMenu( r.left, r.bottom + 4, [
+				{ label: __( 'Copy look as JSON' ), run: () => copyLookJson( ss ) },
+				{ label: __( 'Paste a look…' ), run: () => openPasteLook( ss ) },
+			] );
+			e.stopPropagation();
+		} );
 		const editBtn = $( '#minn-look-edit', view );
 		if ( editBtn ) editBtn.addEventListener( 'click', () => {
 			ss.editing = ! ss.editing;
@@ -18078,6 +18087,7 @@
 			} )
 		);
 		bindStylesEditForm( view, ss );
+		bindSpecimen( view, ss );
 		// Opened from a row: bring that section into view (scroller math,
 		// never scrollIntoView, which yanks every scroll ancestor) and
 		// seat the caret in its first field.
@@ -18164,9 +18174,16 @@
 		/* translators: %s: localized number of shadow presets. */
 		const shadowsHtml = look.shadows ? esc( sprintf( _n( '%s preset', '%s presets', look.shadows ), String( look.shadows ) ) ) : `<span class="minn-look-muted">${ esc( __( 'None' ) ) }</span>`;
 		const changes = d.changes || [];
+		const meta = d.changeMeta || [];
 		const shown = changes.slice( 0, 8 );
+		const who = ( i ) => {
+			const m = meta[ i ];
+			if ( ! m || ! m.author ) return '';
+			/* translators: 1: a person's name, 2: how long ago. */
+			return ` <span class="minn-look-who" title="${ esc( m.date ) }">${ esc( sprintf( __( '%1$s, %2$s' ), m.author, timeAgo( m.date ) ) ) }</span>`;
+		};
 		const changesHtml = changes.length
-			? `<ul class="minn-look-changes">${ shown.map( ( c ) => `<li>${ esc( c ) }</li>` ).join( '' ) }${ changes.length > shown.length ? `<li class="minn-look-muted">${ esc( sprintf( /* translators: %s: number of further changes. */ __( '+%s more' ), String( changes.length - shown.length ) ) ) }</li>` : '' }</ul>`
+			? `<ul class="minn-look-changes">${ shown.map( ( c, i ) => `<li>${ esc( c ) }${ who( i ) }</li>` ).join( '' ) }${ changes.length > shown.length ? `<li class="minn-look-muted">${ esc( sprintf( /* translators: %s: number of further changes. */ __( '+%s more' ), String( changes.length - shown.length ) ) ) }</li>` : '' }</ul>`
 			: `<div class="minn-look-muted">${ esc( __( 'The theme’s defaults, unchanged.' ) ) }</div>`;
 		return `
 		<div class="minn-card minn-look">
@@ -18176,9 +18193,11 @@
 					${ d.edit ? `<button type="button" class="minn-btn-soft" id="minn-look-edit" aria-pressed="${ ss && ss.editing ? 'true' : 'false' }">${ icon( 'pencil' ) } ${ esc( ss && ss.editing ? __( 'Close editor' ) : __( 'Edit look' ) ) }</button>` : '' }
 					${ d.historyCount ? `<button type="button" class="minn-btn-soft" id="minn-look-history">${ icon( 'clock' ) } ${ esc( sprintf( /* translators: %s: localized number of saved versions. */ __( 'History (%s)' ), String( d.historyCount ) ) ) }</button>` : '' }
 					${ d.customized ? `<button type="button" class="minn-btn-soft" id="minn-look-reset">${ esc( __( 'Reset to theme defaults' ) ) }</button>` : '' }
+					<button type="button" class="minn-btn-soft" id="minn-look-more" aria-label="${ esc( __( 'More' ) ) }" title="${ esc( __( 'Copy or paste this look' ) ) }">⋯</button>
 					${ linkable( se.styles ) ? `<a class="minn-btn-soft" href="${ esc( se.styles ) }" target="_blank" rel="noopener">${ esc( __( 'Site Editor' ) ) } ↗</a>` : '' }
 				</div>
 			</div>
+			${ stylesSpecimenHtml( d ) }
 			${ ss && ss.editing ? stylesEditFormHtml( d, ss ) : `
 			<div class="minn-look-grid">
 				${ row( __( 'Colors' ), paletteHtml, se.colors, 'colors', 'colors' ) }
@@ -18194,6 +18213,96 @@
 				<div class="minn-look-value" id="minn-look-changes">${ changesHtml }</div>
 			</div>` }
 		</div>`;
+	}
+
+	/* ---- Specimen: a heading, a paragraph with a link and a button
+	 * rendered with the site's own global stylesheet, the same scoped
+	 * front-end CSS the editor's island previews use (html/body map onto
+	 * .minn-island-preview, @font-face passes through). While editing,
+	 * the form's values are applied inline on top, so the specimen
+	 * previews a change before Save. ---- */
+	function stylesSpecimenHtml( d ) {
+		if ( ! d.look ) return '';
+		return `
+		<div class="minn-look-specimen">
+			<div class="minn-island-preview minn-look-spec" data-lookspec>
+				<h2 class="wp-block-heading" data-spec="h2">${ esc( __( 'Headings set the tone' ) ) }</h2>
+				<p data-spec="p">${ esc( __( 'Body text carries the reading. It sits on the page background with' ) ) } <a href="#" data-spec="a" onclick="return false">${ esc( __( 'links like this one' ) ) }</a>${ esc( __( ', and a button below.' ) ) }</p>
+				<div class="wp-block-buttons"><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="#" data-spec="btn" onclick="return false">${ esc( __( 'Read more' ) ) }</a></div></div>
+			</div>
+		</div>`;
+	}
+
+	// The scoped front-end CSS is collected once per session. A look change
+	// only moves the GLOBAL stylesheet (presets + element styles), not the
+	// plugins' sheets, so re-scope just that part into an override sheet
+	// placed after the session one; re-collecting everything (megabytes on
+	// a plugin-heavy site) stalled the page for seconds per save.
+	let lookCssPromise = null;
+	function refreshFrontendCss() {
+		if ( lookCssPromise ) return lookCssPromise;
+		lookCssPromise = ( async () => {
+			try {
+				await ensureEditorStyles();
+				const r = await api( 'minn-admin/v1/editor-styles' );
+				const scoped = scopeCssToPreviews( r.inline || '' );
+				let el = document.getElementById( 'minn-look-css' );
+				if ( ! el ) {
+					el = document.createElement( 'style' );
+					el.id = 'minn-look-css';
+					document.head.appendChild( el );
+				}
+				el.textContent = scoped || '';
+			} catch ( e ) { /* the specimen keeps the session's sheet */ }
+			lookCssPromise = null;
+		} )();
+		return lookCssPromise;
+	}
+
+	function bindSpecimen( view, ss ) {
+		const spec = $( '[data-lookspec]', view );
+		if ( ! spec ) return;
+		stampPreviewShell( spec );
+		const d = ss.data;
+		const sig = JSON.stringify( ( d && d.current ) || {} );
+		if ( ss.specSig !== undefined && ss.specSig !== sig ) {
+			refreshFrontendCss();
+		} else {
+			ensureEditorStyles();
+		}
+		ss.specSig = sig;
+		syncSpecimen( ss );
+	}
+
+	// Inline overrides from the edit form (var(--wp--preset--…) resolves
+	// inside the scoped root, where the presets are defined).
+	function syncSpecimen( ss ) {
+		const spec = $( '[data-lookspec]' );
+		if ( ! spec ) return;
+		// The scoped stylesheet deliberately keeps the page canvas (body
+		// background, base font) off island previews, so the specimen paints
+		// the site's EFFECTIVE values itself: the form's value while editing,
+		// else the theme-merged value the server resolved for each path.
+		const edit = ( ss.editing && ss.editVals ) ? ss.editVals : {};
+		const theme = ( ss.data && ss.data.edit && ss.data.edit.theme ) || {};
+		const v = new Proxy( {}, { get: ( _, path ) => edit[ path ] || ( theme[ path ] && theme[ path ].raw ) || '' } );
+		// Inline + !important: the preview shell's own rules (Minn typography,
+		// canvas kept transparent) are !important and would otherwise win.
+		const put = ( el, prop, val ) => { if ( el ) { if ( val ) el.style.setProperty( prop, val, 'important' ); else el.style.removeProperty( prop ); } };
+		const h2 = $( '[data-spec="h2"]', spec );
+		const a = $( '[data-spec="a"]', spec );
+		const btn = $( '[data-spec="btn"]', spec );
+		put( spec, 'background-color', v['styles.color.background'] );
+		put( spec, 'color', v['styles.color.text'] );
+		put( spec, 'font-family', v['styles.typography.fontFamily'] );
+		put( spec, 'font-size', v['styles.typography.fontSize'] );
+		put( spec, 'line-height', v['styles.typography.lineHeight'] );
+		put( h2, 'font-family', v['styles.elements.h2.typography.fontFamily'] || v['styles.elements.heading.typography.fontFamily'] );
+		put( h2, 'font-size', v['styles.elements.h2.typography.fontSize'] );
+		put( h2, 'color', v['styles.elements.heading.color.text'] );
+		put( a, 'color', v['styles.elements.link.color.text'] );
+		put( btn, 'background-color', v['styles.elements.button.color.background'] );
+		put( btn, 'color', v['styles.elements.button.color.text'] );
 	}
 
 	/* ---- Edit look: direct edits to a whitelisted slice of the global
@@ -18317,6 +18426,7 @@
 			ss.editVals[ path ] = v;
 			const save = $( '#minn-look-save', view );
 			if ( save ) save.disabled = ! stylesEditDirty( d, ss );
+			syncSpecimen( ss );
 		};
 		const rerender = () => renderStyles();
 		$$( '[data-lookfield]', form ).forEach( ( inp ) =>
@@ -18385,6 +18495,100 @@
 					toast( e.message, true );
 				}
 			} );
+		} );
+	}
+
+	/* ---- Copy / paste a look: the user config is one theme.json-shaped
+	 * object, so it travels as text. Copy wraps the current settings +
+	 * styles as a theme.json document; Paste accepts that (or a bare
+	 * {settings, styles} pair, or a variation file) and writes it through
+	 * core's route, with the current config as the Undo. ---- */
+	async function copyLookJson( ss ) {
+		const d = ss.data;
+		if ( ! d ) return;
+		const doc = {
+			$schema: 'https://schemas.wp.org/trunk/theme.json',
+			version: 3,
+			/* translators: 1: site name, 2: date. */
+			title: sprintf( __( '%1$s look, %2$s' ), B.site.name || '', new Date().toISOString().slice( 0, 10 ) ),
+			settings: ( d.current && d.current.settings ) || {},
+			styles: ( d.current && d.current.styles ) || {},
+		};
+		const text = JSON.stringify( doc, null, 2 );
+		let ok = false;
+		try { await navigator.clipboard.writeText( text ); ok = true; } catch ( e ) { ok = false; }
+		if ( ! ok ) {
+			const ta = document.createElement( 'textarea' );
+			ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+			document.body.appendChild( ta ); ta.select();
+			try { ok = document.execCommand( 'copy' ); } catch ( e ) { ok = false; }
+			ta.remove();
+		}
+		toast( ok ? __( 'Look copied as JSON. Paste it on another site’s Styles tab.' ) : __( 'Could not reach the clipboard' ), ! ok );
+	}
+
+	function openPasteLook( ss ) {
+		state.modal = { type: 'styles-paste', ss };
+		renderOverlays();
+	}
+
+	function renderStylesPasteModal() {
+		return `
+		<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal">
+				<div class="minn-modal-head">
+					<div class="minn-modal-title">${ esc( __( 'Paste a look' ) ) }</div>
+					<button class="minn-x-btn" id="minn-modal-close" type="button">×</button>
+				</div>
+				<div class="minn-modal-scroll minn-paste-look">
+					<p class="minn-look-muted">${ esc( __( 'Paste a look copied from another site’s Styles tab, or any theme.json-shaped file with settings and styles. It replaces this site’s customizations for every visitor; Undo brings the current look back.' ) ) }</p>
+					<textarea class="minn-input mono" id="minn-paste-look-json" rows="12" spellcheck="false" placeholder='{ "settings": { … }, "styles": { … } }'></textarea>
+					<div class="minn-look-fbar">
+						<button type="button" class="minn-btn-primary" id="minn-paste-look-apply">${ esc( __( 'Apply look' ) ) }</button>
+						<button type="button" class="minn-btn-soft" id="minn-modal-close-2">${ esc( __( 'Cancel' ) ) }</button>
+					</div>
+				</div>
+			</div>
+		</div>`;
+	}
+
+	async function applyPastedLook( m ) {
+		const ss = m.ss;
+		const d = ss && ss.data;
+		const ta = $( '#minn-paste-look-json' );
+		if ( ! d || ! ta ) return;
+		let doc;
+		try { doc = JSON.parse( ta.value ); } catch ( e ) { toast( __( 'That is not valid JSON.' ), true ); return; }
+		if ( ! doc || typeof doc !== 'object' || Array.isArray( doc ) ) { toast( __( 'Expected an object with settings and styles.' ), true ); return; }
+		const settings = doc.settings && typeof doc.settings === 'object' && ! Array.isArray( doc.settings ) ? doc.settings : {};
+		const styles = doc.styles && typeof doc.styles === 'object' && ! Array.isArray( doc.styles ) ? doc.styles : {};
+		if ( ! Object.keys( settings ).length && ! Object.keys( styles ).length ) { toast( __( 'Nothing to apply: no settings or styles in that text.' ), true ); return; }
+		if ( d.lossy && Object.keys( settings ).length ) {
+			toast( __( 'This account cannot store the settings part of a look on this site (it needs unfiltered HTML).' ), true );
+			return;
+		}
+		const prev = d.current || { settings: {}, styles: {} };
+		const btn = $( '#minn-paste-look-apply' );
+		if ( btn ) btn.disabled = true;
+		try {
+			await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( { settings, styles } ) } );
+		} catch ( e ) {
+			toast( e.message, true );
+			if ( btn ) btn.disabled = false;
+			return;
+		}
+		closeModal();
+		ss.data = null;
+		if ( state.route === 'styles' ) renderStyles();
+		toastAction( __( 'Look applied' ), __( 'Undo' ), async () => {
+			try {
+				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				ss.data = null;
+				if ( state.route === 'styles' ) renderStyles();
+				toast( __( 'Previous look restored' ) );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
 		} );
 	}
 
@@ -18523,9 +18727,16 @@
 			body = `<div class="minn-gs-hist">${ m.rows.map( ( r, i ) => {
 				const shown = r.changes.slice( 0, 4 );
 				const more = r.changes.length - shown.length;
-				const what = r.changes.length
-					? `<ul class="minn-gs-hist-changes">${ shown.map( ( c ) => `<li>${ esc( c ) }</li>` ).join( '' ) }${ more > 0 ? `<li class="minn-look-muted">${ esc( sprintf( /* translators: %s: number of further changes. */ __( '+%s more' ), String( more ) ) ) }</li>` : '' }</ul>`
+				const applied = r.variation
+					/* translators: %s: a style variation's name. */
+					? `<div class="minn-gs-hist-applied">${ esc( sprintf( __( 'Applied “%s”' ), r.variation ) ) }</div>` : '';
+				const detail = r.changes.length
+					? ( r.variation
+						/* translators: %s: number of changes. */
+						? `<div class="minn-look-muted">${ esc( sprintf( _n( '%s change', '%s changes', r.changes.length ), String( r.changes.length ) ) ) }</div>`
+						: `<ul class="minn-gs-hist-changes">${ shown.map( ( c ) => `<li>${ esc( c ) }</li>` ).join( '' ) }${ more > 0 ? `<li class="minn-look-muted">${ esc( sprintf( /* translators: %s: number of further changes. */ __( '+%s more' ), String( more ) ) ) }</li>` : '' }</ul>` )
 					: `<div class="minn-look-muted">${ esc( r.empty ? __( 'Theme defaults (nothing customized)' ) : __( 'Saved again with no visible change' ) ) }</div>`;
+				const what = applied + detail;
 				return `
 				<div class="minn-gs-hist-row${ r.current ? ' is-current' : '' }" data-gsrev="${ r.id }">
 					<div class="minn-gs-hist-when">
@@ -41273,6 +41484,9 @@
 		if ( m.type === 'styles-history' ) {
 			return renderStylesHistoryModal( m );
 		}
+		if ( m.type === 'styles-paste' ) {
+			return renderStylesPasteModal( m );
+		}
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
 		}
@@ -42881,6 +43095,14 @@
 			$$( '[data-gsrestore]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => restoreStylesRevision( m, parseInt( btn.dataset.gsrestore, 10 ) ) )
 			);
+		}
+		if ( m.type === 'styles-paste' ) {
+			const apply = $( '#minn-paste-look-apply' );
+			if ( apply ) apply.addEventListener( 'click', () => applyPastedLook( m ) );
+			const cancel = $( '#minn-modal-close-2' );
+			if ( cancel ) cancel.addEventListener( 'click', closeModal );
+			const ta = $( '#minn-paste-look-json' );
+			if ( ta ) ta.focus( { preventScroll: true } );
 		}
 
 		if ( m.type === 'revisions-list' ) {

@@ -7421,6 +7421,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			// and what the user changed, in words.
 			'look'         => self::gs_look(),
 			'changes'      => self::gs_describe_changes( array(), $current ),
+			'changeMeta'   => $customized ? self::gs_change_meta( $current ) : array(),
 			'historyCount' => count( (array) $revision_ids ),
 			'siteEditor'   => self::gs_site_editor_links(),
 			// The editable slice: catalogs for the pickers, the user's raw
@@ -7808,7 +7809,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * one line per changed thing ("H1 font → Quattrocento", "Background
 	 * color: #ffffff → #f0efee", "Buttons hover color reset").
 	 */
-	private static function gs_describe_changes( $from, $to, $map = null ) {
+	private static function gs_describe_changes( $from, $to, $map = null, $structured = false ) {
 		if ( null === $map ) {
 			$map = self::gs_preset_map( self::gs_merged()['settings'] );
 		}
@@ -7830,28 +7831,29 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 			$label = self::gs_label( $path );
 			$is_block = 0 === strpos( $path, 'styles.blocks.' );
+			$text = '';
 			if ( $is_block ) {
-				$oc = is_string( $old ) ? count( self::gs_flatten( json_decode( $old, true ) ?: array() ) ) : 0;
 				$nc = is_string( $new ) ? count( self::gs_flatten( json_decode( $new, true ) ?: array() ) ) : 0;
 				if ( 0 === $nc ) {
 					/* translators: %s: a block's name. */
-					$lines[] = sprintf( __( '%s reset to theme', 'minn-admin' ), $label );
+					$text = sprintf( __( '%s reset to theme', 'minn-admin' ), $label );
 				} else {
 					/* translators: 1: a block's name, 2: number of style settings. */
-					$lines[] = sprintf( _n( '%1$s: %2$s setting', '%1$s: %2$s settings', $nc, 'minn-admin' ), $label, number_format_i18n( $nc ) );
+					$text = sprintf( _n( '%1$s: %2$s setting', '%1$s: %2$s settings', $nc, 'minn-admin' ), $label, number_format_i18n( $nc ) );
 				}
-				continue;
-			}
-			$ov = self::gs_value( $old, $map );
-			$nv = self::gs_value( $new, $map );
-			if ( '' === $nv ) {
-				/* translators: %s: what was customized (e.g. "H1 font"). */
-				$lines[] = sprintf( __( '%s reset to theme', 'minn-admin' ), $label );
-			} elseif ( '' === $ov ) {
-				$lines[] = $label . ' → ' . $nv;
 			} else {
-				$lines[] = $label . ': ' . $ov . ' → ' . $nv;
+				$ov = self::gs_value( $old, $map );
+				$nv = self::gs_value( $new, $map );
+				if ( '' === $nv ) {
+					/* translators: %s: what was customized (e.g. "H1 font"). */
+					$text = sprintf( __( '%s reset to theme', 'minn-admin' ), $label );
+				} elseif ( '' === $ov ) {
+					$text = $label . ' → ' . $nv;
+				} else {
+					$text = $label . ': ' . $ov . ' → ' . $nv;
+				}
 			}
+			$lines[] = $structured ? array( 'path' => $path, 'text' => $text ) : $text;
 		}
 		return $lines;
 	}
@@ -8448,6 +8450,111 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		return rest_ensure_response( array( 'ok' => true ) );
 	}
 
+	/** The Customized lines with who/when per line (same order as `changes`). */
+	private static function gs_change_meta( $current ) {
+		$who   = self::gs_attribution( $current );
+		$lines = self::gs_describe_changes( array(), $current, null, true );
+		$out   = array();
+		foreach ( $lines as $l ) {
+			$out[] = isset( $who[ $l['path'] ] ) ? $who[ $l['path'] ] : null;
+		}
+		return $out;
+	}
+
+	/**
+	 * The theme's full variations as the config a write of each would store
+	 * (the same sanitizer the picker's active-detection uses), keyed by id.
+	 */
+	private static function gs_variation_configs() {
+		static $cache = null;
+		if ( null !== $cache ) {
+			return $cache;
+		}
+		$cache = array();
+		foreach ( self::gs_style_files( '' ) as $base => $path ) {
+			$decoded = json_decode( (string) file_get_contents( $path ), true );
+			if ( ! is_array( $decoded ) || isset( $decoded['blockTypes'] ) ) {
+				continue;
+			}
+			$settings = isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array();
+			$styles   = isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array();
+			if ( current_user_can( 'unfiltered_html' ) ) {
+				$san = ( new WP_Theme_JSON( $decoded, 'custom' ) )->get_raw_data();
+			} else {
+				$san = WP_Theme_JSON::remove_insecure_properties(
+					array( 'settings' => $settings, 'styles' => $styles, 'isGlobalStylesUserThemeJSON' => true, 'version' => WP_Theme_JSON::LATEST_SCHEMA ),
+					'custom'
+				);
+			}
+			$cache[ preg_replace( '/\.json$/', '', $base ) ] = array(
+				'title'    => isset( $decoded['title'] ) && is_string( $decoded['title'] ) ? $decoded['title'] : $base,
+				'settings' => isset( $san['settings'] ) ? (array) $san['settings'] : array(),
+				'styles'   => isset( $san['styles'] ) ? (array) $san['styles'] : array(),
+			);
+		}
+		return $cache;
+	}
+
+	/** The variation title a config equals, or ''. */
+	private static function gs_variation_match( $cfg ) {
+		foreach ( self::gs_variation_configs() as $v ) {
+			if ( $cfg['settings'] == $v['settings'] && $cfg['styles'] == $v['styles'] ) {
+				return $v['title'];
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Who last changed each path of the current config, and when: walk the
+	 * revisions oldest to newest and remember the save that set each
+	 * flattened value; a path whose remembered value is still the current
+	 * one carries that save's author and date.
+	 *
+	 * @return array path => { author, date }
+	 */
+	private static function gs_attribution( $current ) {
+		$id  = (int) WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+		$req = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $id . '/revisions' );
+		$req->set_param( 'context', 'edit' );
+		$req->set_param( 'per_page', 100 );
+		$res = rest_do_request( $req );
+		if ( $res->is_error() ) {
+			return array();
+		}
+		$now  = self::gs_flatten( array( 'settings' => (array) ( $current['settings'] ?? array() ), 'styles' => (array) ( $current['styles'] ?? array() ) ) );
+		$seen = array();
+		$last = array();
+		$names = array();
+		foreach ( array_reverse( (array) $res->get_data() ) as $r ) {
+			$cfg  = self::gs_revision_config( (array) $r );
+			$flat = self::gs_flatten( $cfg );
+			$uid  = (int) ( $r['author'] ?? 0 );
+			if ( ! isset( $names[ $uid ] ) ) {
+				$u = $uid ? get_userdata( $uid ) : null;
+				$names[ $uid ] = $u ? $u->display_name : __( 'Unknown', 'minn-admin' );
+			}
+			foreach ( $flat as $path => $val ) {
+				if ( ! array_key_exists( $path, $seen ) || $seen[ $path ] !== $val ) {
+					$seen[ $path ] = $val;
+					$last[ $path ] = array( 'author' => $names[ $uid ], 'date' => isset( $r['date_gmt'] ) ? $r['date_gmt'] . 'Z' : '' );
+				}
+			}
+			foreach ( array_keys( $seen ) as $path ) {
+				if ( ! array_key_exists( $path, $flat ) ) {
+					unset( $seen[ $path ], $last[ $path ] );
+				}
+			}
+		}
+		$out = array();
+		foreach ( $now as $path => $val ) {
+			if ( isset( $last[ $path ] ) && array_key_exists( $path, $seen ) && $seen[ $path ] === $val ) {
+				$out[ $path ] = $last[ $path ];
+			}
+		}
+		return $out;
+	}
+
 	/** One revision's settings/styles as plain arrays. */
 	private static function gs_revision_config( $row ) {
 		return array(
@@ -8491,12 +8598,15 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$names[ $uid ] = $u ? $u->display_name : __( 'Unknown', 'minn-admin' );
 			}
 			$out[] = array(
-				'id'       => (int) $r['id'],
-				'date'     => isset( $r['date_gmt'] ) ? $r['date_gmt'] . 'Z' : '',
-				'author'   => $names[ $uid ],
-				'changes'  => $changes,
-				'current'  => ( $cfg['settings'] == $current['settings'] && $cfg['styles'] == $current['styles'] ),
-				'empty'    => empty( $cfg['settings'] ) && empty( $cfg['styles'] ),
+				'id'        => (int) $r['id'],
+				'date'      => isset( $r['date_gmt'] ) ? $r['date_gmt'] . 'Z' : '',
+				'author'    => $names[ $uid ],
+				'changes'   => $changes,
+				'current'   => ( $cfg['settings'] == $current['settings'] && $cfg['styles'] == $current['styles'] ),
+				'empty'     => empty( $cfg['settings'] ) && empty( $cfg['styles'] ),
+				// A save that equals one of the theme's variations reads as
+				// "Applied X" rather than forty block lines.
+				'variation' => self::gs_variation_match( $cfg ),
 			);
 			$prev = $cfg;
 		}

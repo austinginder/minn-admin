@@ -626,6 +626,17 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-look-changes li { break-inside: avoid; }
 @media (max-width: 720px) { .minn-look-changes { columns: 1; } .minn-look-row, .minn-look-foot { grid-template-columns: 76px minmax(0, 1fr) auto; } }
 
+/* Specimen: the site's own styles on a heading, paragraph, link, button. */
+.minn-look-specimen { padding: 14px 18px 4px; }
+.minn-look-spec { border: 1px solid var(--border); border-radius: 10px; padding: 22px 24px; overflow: hidden; pointer-events: none; }
+.minn-look-spec h2 { margin: 0 0 0.5em; }
+.minn-look-spec p { margin: 0 0 1em; max-width: 60ch; }
+.minn-look-spec .wp-block-buttons { margin: 0; }
+.minn-look-who { color: var(--text3); font-size: 12px; }
+.minn-gs-hist-applied { font-weight: 600; margin-bottom: 2px; }
+.minn-paste-look { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
+.minn-paste-look textarea { width: 100%; box-sizing: border-box; font-size: 12.5px; line-height: 1.45; resize: vertical; color-scheme: dark; }
+[data-theme="light"] .minn-paste-look textarea { color-scheme: light; }
 /* Edit look form (inside the Current look card). */
 .minn-look-form { padding: 4px 18px 14px; display: flex; flex-direction: column; gap: 18px; }
 .minn-look-fsec-title { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin: 10px 0 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }

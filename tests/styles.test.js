@@ -16,6 +16,7 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 ( async () => {
 	const t = reporter( 'styles' );
 	const { browser, page, errors } = await launch();
+	await page.context().grantPermissions( [ 'clipboard-read', 'clipboard-write' ] );
 	await login( page );
 	await autoConfirm( page );
 
@@ -156,6 +157,8 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 			restore: !! r.querySelector( '[data-gsrestore]' ),
 		} ) ) );
 		t.check( 'the newest version is marked current with no Restore', hist.length >= 2 && hist[ 0 ].current && ! hist[ 0 ].restore, JSON.stringify( hist[ 0 ] ) );
+		const appliedRow = await page.evaluate( () => { const el = document.querySelector( '.minn-gs-hist-applied' ); return el ? el.textContent : ''; } );
+		t.check( 'a save that equals a variation is labelled Applied', /Applied “Midnight”/.test( appliedRow ), appliedRow );
 		t.check( 'the Undo save reads as resets and the Midnight save as changes',
 			hist[ 0 ].changes.every( ( c ) => /reset to theme/.test( c ) ) && hist.some( ( r ) => r.restore && r.changes.some( ( c ) => /: \d+ settings?|→/.test( c ) ) ),
 			JSON.stringify( hist.slice( 0, 2 ).map( ( r ) => r.changes.slice( 0, 2 ) ) ) );
@@ -164,8 +167,9 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		const target = await page.evaluate( () => {
 			// The Midnight save: restorable, and described by real changes
 			// (the row after it, from Undo, only says what was reset).
-			const row = [ ...document.querySelectorAll( '.minn-gs-hist-row' ) ].find( ( r ) => r.querySelector( '[data-gsrestore]' )
-				&& [ ...r.querySelectorAll( 'li' ) ].some( ( li ) => li.textContent.trim() && ! /reset to theme/.test( li.textContent ) ) );
+			const rows = [ ...document.querySelectorAll( '.minn-gs-hist-row' ) ].filter( ( r ) => r.querySelector( '[data-gsrestore]' ) );
+			const row = rows.find( ( r ) => /Midnight/.test( ( r.querySelector( '.minn-gs-hist-applied' ) || {} ).textContent || '' ) )
+				|| rows.find( ( r ) => [ ...r.querySelectorAll( 'li' ) ].some( ( li ) => li.textContent.trim() && ! /reset to theme/.test( li.textContent ) ) );
 			if ( ! row ) return null;
 			row.querySelector( '[data-gsrestore]' ).click();
 			return row.dataset.gsrev;
@@ -178,6 +182,14 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		}, null, { timeout: 20000 } );
 		const restoredFront = await frontBaseColor();
 		t.check( 'restoring that version changes the visitor-facing site again', restoredFront === after, `${ restoredFront } vs ${ after }` );
+		// The specimen renders with the site's own stylesheet: Midnight's
+		// base #4433A6 must reach its background once the CSS refreshes.
+		// (Checked here, after Restore, so no toast-bound step waits on it.)
+		const specOk = await page.waitForFunction( () => {
+			const el = document.querySelector( '[data-lookspec]' );
+			return el && getComputedStyle( el ).backgroundColor === 'rgb(68, 51, 166)';
+		}, null, { timeout: 30000 } ).then( () => true ).catch( () => false );
+		t.check( 'the specimen paints in the restored look’s real background', specOk, await page.evaluate( () => { const el = document.querySelector( '[data-lookspec]' ); return el ? getComputedStyle( el ).backgroundColor : 'no specimen'; } ) );
 
 		/* ===== Reset to theme defaults ===== */
 		await page.click( '#minn-look-reset' );
@@ -219,6 +231,8 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		// A palette chip for the background, a custom hex for text, a line height.
 		const chosen = await page.evaluate( () => { const c = document.querySelectorAll( '[data-lookrow="styles.color.background"] .minn-look-chip' )[ 1 ]; c.click(); return c.dataset.color; } );
 		await page.fill( '[data-lookfield="styles.color.text"]', '#123456' );
+		const live = await page.evaluate( () => getComputedStyle( document.querySelector( '[data-lookspec]' ) ).color );
+		t.check( 'the specimen previews a typed color before Save', live === 'rgb(18, 52, 86)', live );
 		await page.fill( '[data-lookfield="styles.typography.lineHeight"]', '1.75' );
 		await page.fill( '[data-lookfield="settings.layout.contentSize"]', 'not-a-width' );
 		await page.click( '#minn-look-save' );
@@ -240,6 +254,29 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 			JSON.stringify( { styles: saved.styles, layout: saved.settings && saved.settings.layout } ) );
 		const words = await page.evaluate( () => [ ...document.querySelectorAll( '#minn-look-changes li' ) ].map( ( li ) => li.textContent ) );
 		t.check( 'the card describes the edits in words', words.some( ( w ) => /Background color →/.test( w ) ) && words.some( ( w ) => /Content width → 700px/.test( w ) ), JSON.stringify( words ) );
+		const who = await page.evaluate( () => [ ...document.querySelectorAll( '#minn-look-changes .minn-look-who' ) ].map( ( el ) => el.textContent ) );
+		t.check( 'each customization names who made it and when', who.length >= 3 && who.every( ( w ) => /admin, /.test( w ) ), JSON.stringify( who ) );
+
+		/* ===== Copy look as JSON, paste it back ===== */
+		await page.click( '#minn-look-more' );
+		await page.waitForSelector( '[data-mi]', { timeout: 5000 } );
+		await page.evaluate( () => [ ...document.querySelectorAll( '[data-mi]' ) ].find( ( b ) => /Copy look/.test( b.textContent ) ).click() );
+		await page.waitForTimeout( 400 );
+		const copied = await page.evaluate( async () => { try { return JSON.parse( await navigator.clipboard.readText() ); } catch ( e ) { return null; } } );
+		t.check( 'Copy look puts a theme.json-shaped document on the clipboard', copied && copied.version === 3 && copied.styles && copied.styles.color && copied.styles.color.text === '#123456', JSON.stringify( copied && Object.keys( copied ) ) );
+		await page.click( '#minn-look-more' );
+		await page.waitForSelector( '[data-mi]', { timeout: 5000 } );
+		await page.evaluate( () => [ ...document.querySelectorAll( '[data-mi]' ) ].find( ( b ) => /Paste a look/.test( b.textContent ) ).click() );
+		await page.waitForSelector( '#minn-paste-look-json', { timeout: 5000 } );
+		await page.fill( '#minn-paste-look-json', 'not json' );
+		await page.click( '#minn-paste-look-apply' );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-toast' ) ].some( ( el ) => /not valid JSON/.test( el.textContent ) ), null, { timeout: 5000 } );
+		t.check( 'a non-JSON paste is refused and the dialog stays open', !! await page.$( '#minn-paste-look-json' ) );
+		await page.fill( '#minn-paste-look-json', JSON.stringify( { settings: copied.settings, styles: Object.assign( {}, copied.styles, { color: { background: copied.styles.color.background, text: '#222222' } } ) } ) );
+		await page.click( '#minn-paste-look-apply' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-paste-look-json' ) && document.querySelector( '#minn-look-changes li' ), null, { timeout: 20000 } );
+		const pasted = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=styles` ) ).body;
+		t.check( 'a pasted look is applied as the whole config', pasted.styles && pasted.styles.color && pasted.styles.color.text === '#222222' && pasted.styles.color.background === copied.styles.color.background, JSON.stringify( pasted.styles ) );
 		// Clear one field back to the theme.
 		await page.click( '#minn-look-edit' );
 		await page.waitForSelector( '.minn-look-form', { timeout: 10000 } );
@@ -248,7 +285,8 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		await page.click( '#minn-look-save' );
 		await page.waitForFunction( () => ! document.querySelector( '.minn-look-form' ), null, { timeout: 20000 } );
 		const cleared = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=styles` ) ).body;
-		t.check( 'clearing a field hands it back to the theme and prunes the empty branch', ! ( cleared.styles && cleared.styles.typography ) && cleared.styles.color.text === '#123456', JSON.stringify( cleared.styles ) );
+		// The pasted look (text #222222) is the config being cleared here.
+		t.check( 'clearing a field hands it back to the theme and prunes the empty branch', ! ( cleared.styles && cleared.styles.typography ) && cleared.styles.color.text === '#222222', JSON.stringify( cleared.styles ) );
 
 		/* ===== Per-heading edits through the same whitelist ===== */
 		const h2 = await rest( 'minn-admin/v1/styles/update', { method: 'POST', body: { changes: { 'styles.elements.h2.typography.fontSize': 'var(--wp--preset--font-size--large)' } } } );
