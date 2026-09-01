@@ -42,6 +42,34 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		};
 	}, name );
 
+	// The seeded Rank Math shape is plaintext; Rank Math itself decrypts
+	// its registration data at file-include time, treats the seed as
+	// corrupt, deletes it and builds a "reconnect" notice through
+	// wp_create_nonce() before pluggable.php has loaded, which 500s the
+	// whole site for that request whenever Rank Math is active. Park it
+	// for the run and put it back exactly as found (rule: seed your own
+	// baseline, never assume which plugins are active).
+	const pluginPut = async ( slug, status ) => page.evaluate( async ( args ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + args.slug, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+			credentials: 'same-origin',
+			body: JSON.stringify( { status: args.status } ),
+		} );
+		return { ok: r.ok, status: r.status };
+	}, { slug, status } );
+	const pluginStatus = ( slug ) => page.evaluate( async ( s ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + s + '?_fields=status', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+		} );
+		return r.ok ? ( await r.json() ).status : null;
+	}, slug );
+	const RANK_MATH = 'seo-by-rank-math/rank-math';
+	const rankMathWas = await pluginStatus( RANK_MATH ).catch( () => null );
+	if ( 'active' === rankMathWas ) {
+		await pluginPut( RANK_MATH, 'inactive' ).catch( () => {} );
+	}
+
 	try {
 		const seededStatus = await seed( 'seed' );
 		t.check( 'seed route accepts admin', seededStatus === 200, String( seededStatus ) );
@@ -236,6 +264,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 	} finally {
 		await seed( 'clear' ).catch( () => {} );
+		if ( 'active' === rankMathWas ) {
+			await pluginPut( RANK_MATH, 'active' ).catch( () => {} );
+		}
 	}
 	await t.done( browser, errors );
 } )();
