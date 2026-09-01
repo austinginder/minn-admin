@@ -3224,7 +3224,8 @@ function minn_admin_license_default_providers() {
 		};
 
 		$providers['wp-migrate']['secret_label'] = __( 'WP Migrate license key', 'minn-admin' );
-		$providers['wp-migrate']['activate']     = function ( $secret ) use ( $wpm_license, $wpm_api, $wpm_args, $wpm_classify ) {
+		$providers['wp-migrate']['key_constant'] = 'WPMDB_LICENCE';
+	$providers['wp-migrate']['activate']     = function ( $secret ) use ( $wpm_license, $wpm_api, $wpm_args, $wpm_classify ) {
 			$secret = trim( (string) $secret );
 			if ( '' === $secret ) {
 				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Enter a license key.', 'minn-admin' ) );
@@ -3474,7 +3475,8 @@ function minn_admin_license_default_providers() {
 	// options its reader above consumes.
 	if ( class_exists( '\Etch\WpAdmin\License' ) ) {
 		$providers['etch']['secret_label'] = __( 'Etch license key', 'minn-admin' );
-		$providers['etch']['activate']     = function ( $secret ) {
+		$providers['etch']['key_constant'] = 'ETCH_LICENSE_KEY';
+	$providers['etch']['activate']     = function ( $secret ) {
 			\Etch\WpAdmin\License::get_instance()->activate_license( $secret );
 			return array( 'ok' => true );
 		};
@@ -3642,7 +3644,8 @@ function minn_admin_license_default_providers() {
 	// would be silently overridden on the next boot.
 	if ( class_exists( 'WPMUDEV_Dashboard' ) && ! ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY ) ) {
 		$providers['wpmudev']['secret_label'] = __( 'WPMU DEV API key', 'minn-admin' );
-		$providers['wpmudev']['activate']     = function ( $secret ) {
+		$providers['wpmudev']['key_constant'] = 'WPMUDEV_APIKEY';
+	$providers['wpmudev']['activate']     = function ( $secret ) {
 			WPMUDEV_Dashboard::$api->set_key( $secret );
 			$res = WPMUDEV_Dashboard::$api->hub_sync( false, true );
 			if ( false === $res ) {
@@ -3673,7 +3676,8 @@ function minn_admin_license_default_providers() {
 	// daily check_license pass and rewrites the stored status.
 	if ( class_exists( '\SearchWP\License' ) ) {
 		$providers['searchwp']['secret_label'] = __( 'SearchWP license key', 'minn-admin' );
-		$providers['searchwp']['activate']     = function ( $secret ) {
+		$providers['searchwp']['key_constant'] = 'SEARCHWP_LICENSE_KEY';
+	$providers['searchwp']['activate']     = function ( $secret ) {
 			$res = \SearchWP\License::activate( $secret );
 			if ( is_array( $res ) && ! empty( $res['success'] ) ) {
 				return array( 'ok' => true );
@@ -3719,7 +3723,8 @@ function minn_admin_license_default_providers() {
 		};
 
 		$providers['wpforms']['secret_label'] = __( 'WPForms license key', 'minn-admin' );
-		$providers['wpforms']['activate']     = function ( $secret ) use ( $wpf_license ) {
+		$providers['wpforms']['key_constant'] = 'WPFORMS_LICENSE_KEY';
+	$providers['wpforms']['activate']     = function ( $secret ) use ( $wpf_license ) {
 			$lic = $wpf_license();
 			if ( $lic->verify_key( $secret, false ) ) {
 				return array( 'ok' => true );
@@ -3839,7 +3844,8 @@ function minn_admin_license_default_providers() {
 	// the plugin is loaded, so the row is Turn-on-only while inactive.
 	if ( defined( 'APBCT_VERSION' ) && function_exists( 'minn_admin_cleantalk_save_access_key' ) ) {
 		$providers['cleantalk']['secret_label'] = __( 'CleanTalk access key', 'minn-admin' );
-		$providers['cleantalk']['activate']     = function ( $secret ) {
+		$providers['cleantalk']['key_constant'] = 'CLEANTALK_ACCESS_KEY';
+	$providers['cleantalk']['activate']     = function ( $secret ) {
 			return minn_admin_cleantalk_save_access_key( $secret );
 		};
 		$providers['cleantalk']['deactivate'] = function () {
@@ -3936,7 +3942,8 @@ function minn_admin_license_default_providers() {
 			return array( 'ok' => false, 'code' => 'invalid', 'message' => $msg ? $msg : __( 'admincolumns.com did not accept that key.', 'minn-admin' ) );
 		};
 		$providers['admin-columns-pro']['secret_label'] = __( 'Admin Columns Pro license key', 'minn-admin' );
-		$providers['admin-columns-pro']['activate']     = function ( $secret ) use ( $acp, $acp_classify_error ) {
+		$providers['admin-columns-pro']['key_constant'] = 'ACP_LICENCE';
+	$providers['admin-columns-pro']['activate']     = function ( $secret ) use ( $acp, $acp_classify_error ) {
 			try {
 				$license_key = new \ACP\Type\LicenseKey( trim( (string) $secret ) );
 			} catch ( \Throwable $e ) {
@@ -4064,7 +4071,8 @@ function minn_admin_license_default_providers() {
 		$pm_set = is_multisite() ? 'update_site_option' : 'update_option';
 		$pm_del = is_multisite() ? 'delete_site_option' : 'delete_option';
 		$providers['perfmatters']['secret_label'] = __( 'Perfmatters license key', 'minn-admin' );
-		$providers['perfmatters']['activate']     = function ( $secret ) use ( $pm_get, $pm_set, $pm_del ) {
+		$providers['perfmatters']['key_constant'] = 'PERFMATTERS_LICENSE_KEY';
+	$providers['perfmatters']['activate']     = function ( $secret ) use ( $pm_get, $pm_set, $pm_del ) {
 			$prev_status = call_user_func( $pm_get, 'perfmatters_edd_license_status' );
 			if ( \Perfmatters\License::activate( $secret ) ) {
 				call_user_func( $pm_set, 'perfmatters_edd_license_key', sanitize_text_field( $secret ) );
@@ -4227,7 +4235,8 @@ function minn_admin_license_default_providers() {
 			return minn_admin_license_edd_word( $word, 'SEOPress PRO' );
 		};
 		$providers['seopress-pro']['secret_label'] = __( 'SEOPress PRO license key', 'minn-admin' );
-		$providers['seopress-pro']['activate']     = function ( $secret ) use ( $sp_edd, $sp_flush, $sp_word ) {
+		$providers['seopress-pro']['key_constant'] = 'SEOPRESS_LICENSE_KEY';
+	$providers['seopress-pro']['activate']     = function ( $secret ) use ( $sp_edd, $sp_flush, $sp_word ) {
 			if ( defined( 'SEOPRESS_LICENSE_KEY' ) && SEOPRESS_LICENSE_KEY ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The key is defined in wp-config.php (SEOPRESS_LICENSE_KEY) — change it there.', 'minn-admin' ) );
 			}
@@ -5347,6 +5356,25 @@ add_action( 'rest_api_init', function () {
 					}
 				} elseif ( 'activate' === $action && '' === $secret ) {
 					return new WP_Error( 'no_secret', __( 'Paste a key first.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				// A key pinned in wp-config wins over the stored one for every
+				// vendor that supports the constant, which is why the read side
+				// treats it as the authoritative source. Activating a different
+				// key anyway spends one of a paid licence's activations at the
+				// vendor for a key this site will then never use, and the row
+				// repaints valid as though it had. Some providers already
+				// refused this in their own closure and their siblings did not,
+				// so the rule belongs here where every provider inherits it and
+				// a new one cannot forget it.
+				if ( 'activate' === $action && ! empty( $p['key_constant'] )
+					&& defined( $p['key_constant'] ) && constant( $p['key_constant'] ) ) {
+					return array(
+						'ok'       => false,
+						'code'     => 'error',
+						/* translators: %s: PHP constant name defined in wp-config.php. */
+						'message'  => sprintf( __( 'This key is defined in wp-config (%s), which takes precedence. Change it there.', 'minn-admin' ), $p['key_constant'] ),
+						'licenses' => minn_admin_licenses(),
+					);
 				}
 				try {
 					$raw = ( 'activate' === $action )
