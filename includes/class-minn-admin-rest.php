@@ -8626,8 +8626,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 			foreach ( $values as $value ) {
 				// get_post_meta(single=false) returns serialized-form strings;
-				// add_post_meta would double-serialize without the unserialize.
-				add_post_meta( $new_id, $key, wp_slash( maybe_unserialize( $value ) ) );
+				// add_post_meta would double-serialize without the decode. The
+				// decode never instantiates classes; see shared-meta.php.
+				add_post_meta( $new_id, $key, wp_slash( minn_admin_meta_copy_value( $value ) ) );
 			}
 		}
 		return rest_ensure_response(

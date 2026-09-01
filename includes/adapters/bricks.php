@@ -1146,7 +1146,8 @@ add_action( 'rest_api_init', function () {
 					continue;
 				}
 				foreach ( $values as $value ) {
-					add_post_meta( $new_id, $key, wp_slash( maybe_unserialize( $value ) ) );
+					// Decoded without instantiating classes; see shared-meta.php.
+					add_post_meta( $new_id, $key, wp_slash( minn_admin_meta_copy_value( $value ) ) );
 				}
 			}
 			// Two templates claiming the same slot is their own reason for
