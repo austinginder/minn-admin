@@ -303,32 +303,35 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		const conAfter = await page.evaluate( () => [ ...document.querySelectorAll( '[data-look="contrast"] .minn-look-con' ) ].map( ( el ) => el.className.includes( 'warn' ) ? 'warn:' + el.textContent : 'ok:' + el.textContent ) );
 		t.check( 'light grey text on white is flagged below AA', conAfter.some( ( c ) => /^warn:Text 1\./.test( c ) ), JSON.stringify( conAfter ) );
 
-		/* ===== Mixing: a color palette merged over the current look ===== */
+		/* ===== Mixing from a style card's menu: colors only, then reset ===== */
 		await page.evaluate( ( id ) => fetch( window.MINN.restUrl + 'wp/v2/global-styles/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin', body: JSON.stringify( { settings: {}, styles: {} } ) } ), gsId );
 		await open();
-		const mix = await page.evaluate( () => ( {
-			palettes: document.querySelectorAll( '[data-mix="colors"]' ).length,
-			typesets: document.querySelectorAll( '[data-mix="typography"]' ).length,
-		} ) );
-		t.check( 'Twenty Twenty-Five offers its color palettes and typesets for mixing', mix.palettes >= 5 && mix.typesets >= 5, JSON.stringify( mix ) );
+		const menuOf = async ( cardId ) => {
+			await page.evaluate( ( id ) => document.querySelector( `[data-stylemore="${ CSS.escape( id ) }"]` ).click(), cardId );
+			await page.waitForSelector( '[data-mi]', { timeout: 5000 } );
+			return page.evaluate( () => [ ...document.querySelectorAll( '[data-mi]' ) ].map( ( b ) => b.textContent.trim() ) );
+		};
+		const midnightMenu = await menuOf( midnight.id );
+		t.check( 'a style card’s menu offers colors-only and type-only', midnightMenu.some( ( x ) => /colors only/.test( x ) ) && midnightMenu.some( ( x ) => /type only/.test( x ) ), JSON.stringify( midnightMenu ) );
 		const beforeMix = await frontBaseColor();
-		// The first item is Theme default; pick a real palette.
-		const mixTitle = await page.evaluate( () => { const b = document.querySelector( '[data-mix="colors"]:not([data-mixid="default"])' ); b.click(); return b.querySelector( '.minn-mix-name' ).textContent; } );
+		await page.evaluate( () => [ ...document.querySelectorAll( '[data-mi]' ) ].find( ( b ) => /colors only/.test( b.textContent ) ).click() );
 		await page.waitForFunction( () => document.querySelector( '#minn-look-changes li' ), null, { timeout: 20000 } );
 		const afterMix = await frontBaseColor();
-		t.check( 'applying a palette changes the visitor-facing colors', afterMix !== beforeMix, `${ mixTitle }: ${ beforeMix } → ${ afterMix }` );
+		t.check( 'using a style’s colors only changes the visitor-facing colors', afterMix !== beforeMix, `${ beforeMix } → ${ afterMix }` );
 		const mixed = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=settings,styles` ) ).body;
-		t.check( 'a palette mix touches colors only, never fonts', !! ( mixed.settings && mixed.settings.color ) && ! ( mixed.settings && mixed.settings.typography && mixed.settings.typography.fontFamilies ), JSON.stringify( Object.keys( mixed.settings || {} ) ) );
-		// Theme default for colors: the color slice goes, the rest stays.
+		t.check( 'a colors-only mix touches colors only, never fonts', !! ( mixed.settings && mixed.settings.color ) && ! ( mixed.settings && mixed.settings.typography && mixed.settings.typography.fontFamilies ), JSON.stringify( Object.keys( mixed.settings || {} ) ) );
+		// Theme default's menu resets one slice: the color slice goes, the rest stays.
 		await rest( 'minn-admin/v1/styles/update', { method: 'POST', body: { changes: { 'styles.typography.lineHeight': '1.9' } } } );
 		await open();
-		await page.evaluate( () => document.querySelector( '[data-mix="colors"][data-mixid="default"]' ).click() );
+		const defaultMenu = await menuOf( 'default' );
+		t.check( 'the Default card’s menu offers per-slice resets', defaultMenu.some( ( x ) => /Reset colors/.test( x ) ) && defaultMenu.some( ( x ) => /Reset type/.test( x ) ), JSON.stringify( defaultMenu ) );
+		await page.evaluate( () => [ ...document.querySelectorAll( '[data-mi]' ) ].find( ( b ) => /Reset colors/.test( b.textContent ) ).click() );
 		await page.waitForFunction( () => {
 			const lis = [ ...document.querySelectorAll( '#minn-look-changes li' ) ].map( ( li ) => li.textContent );
 			return lis.length && ! lis.some( ( w ) => /Background color|Theme palette|Custom colors/.test( w ) );
 		}, null, { timeout: 20000 } );
 		const stripped = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=settings,styles` ) ).body;
-		t.check( 'Theme default strips only the color slice and keeps the rest', ! ( stripped.settings && stripped.settings.color ) && ! ( stripped.styles && stripped.styles.color ) && stripped.styles && stripped.styles.typography && stripped.styles.typography.lineHeight === '1.9', JSON.stringify( { settings: Object.keys( stripped.settings || {} ), styles: stripped.styles } ) );
+		t.check( 'Reset colors strips only the color slice and keeps the rest', ! ( stripped.settings && stripped.settings.color ) && ! ( stripped.styles && stripped.styles.color ) && stripped.styles && stripped.styles.typography && stripped.styles.typography.lineHeight === '1.9', JSON.stringify( { settings: Object.keys( stripped.settings || {} ), styles: stripped.styles } ) );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {

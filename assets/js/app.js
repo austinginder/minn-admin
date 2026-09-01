@@ -17993,11 +17993,14 @@
 
 	function styleCardHtml( v ) {
 		return `
-		<button type="button" class="minn-style-card${ v.active ? ' is-active' : '' }" data-style="${ esc( v.id ) }" aria-pressed="${ v.active ? 'true' : 'false' }">
-			<span class="minn-style-swatches">${ ( v.palette.length ? v.palette : [ 'transparent' ] ).map( ( c ) => `<span style="background:${ escCssColor( c ) }"></span>` ).join( '' ) }</span>
-			<span class="minn-style-name">${ esc( v.title ) }${ v.active ? `<span class="minn-menu-kind is-on">${ esc( __( 'Active' ) ) }</span>` : '' }</span>
-			${ v.fonts.length ? `<span class="minn-style-fonts">${ esc( v.fonts.join( ' · ' ) ) }</span>` : `<span class="minn-style-fonts">${ esc( v.sub || '' ) }</span>` }
-		</button>`;
+		<div class="minn-style-card-wrap">
+			<button type="button" class="minn-style-card${ v.active ? ' is-active' : '' }" data-style="${ esc( v.id ) }" aria-pressed="${ v.active ? 'true' : 'false' }">
+				<span class="minn-style-swatches">${ ( v.palette.length ? v.palette : [ 'transparent' ] ).map( ( c ) => `<span style="background:${ escCssColor( c ) }"></span>` ).join( '' ) }</span>
+				<span class="minn-style-name">${ esc( v.title ) }${ v.active ? `<span class="minn-menu-kind is-on">${ esc( __( 'Active' ) ) }</span>` : '' }</span>
+				${ v.fonts.length ? `<span class="minn-style-fonts">${ esc( v.fonts.join( ' · ' ) ) }</span>` : `<span class="minn-style-fonts">${ esc( v.sub || '' ) }</span>` }
+			</button>
+			<button type="button" class="minn-style-more" data-stylemore="${ esc( v.id ) }" aria-label="${ esc( sprintf( /* translators: %s: a style's name. */ __( 'More options for %s' ), v.title ) ) }" title="${ esc( __( 'Use its colors or type only' ) ) }">⋯</button>
+		</div>`;
 	}
 
 	function renderStyles() {
@@ -18040,7 +18043,6 @@
 			<a class="minn-btn-soft" href="${ esc( B.site.url ) }" target="_blank" rel="noopener">${ esc( __( 'View site' ) ) } ↗</a>
 		</div>
 		${ stylesLookHtml( d, ss ) }
-		${ ss.editing ? '' : stylesMixHtml( d ) }
 		${ d.customized && ! d.anyActive ? `
 		<div class="minn-card minn-panel-pad minn-nav-inline-note">
 			${ esc( __( 'No variation below is marked active because the look above was customized. Applying one replaces those customizations; Undo brings them back.' ) ) }
@@ -18104,11 +18106,28 @@
 			}
 			ss.editFocus = '';
 		}
-		$$( '[data-mix]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				const list = ( d.partials || {} )[ btn.dataset.mix ] || [];
-				const it = list.find( ( x ) => x.id === btn.dataset.mixid );
-				if ( it ) mixStyles( ss, btn.dataset.mix, it.id, it.title );
+		// Per-card menu: apply, or use just this style's colors or type.
+		const cardMenu = ( id, x, y ) => {
+			const v = cards.find( ( c ) => c.id === id );
+			if ( ! v ) return;
+			const isDefault = 'default' === v.id;
+			const entries = [];
+			if ( ! v.active ) entries.push( { label: isDefault ? __( 'Reset everything to the theme' ) : __( 'Apply style' ), run: () => applyStyleVariation( ss, v ) } );
+			entries.push( { label: isDefault ? __( 'Reset colors to the theme' ) : __( 'Use its colors only' ), run: () => mixStyles( ss, 'colors', v.id, v.title ) } );
+			entries.push( { label: isDefault ? __( 'Reset type to the theme' ) : __( 'Use its type only' ), run: () => mixStyles( ss, 'typography', v.id, v.title ) } );
+			openMinnMenu( x, y, entries );
+		};
+		$$( '[data-stylemore]', view ).forEach( ( b ) =>
+			b.addEventListener( 'click', ( e ) => {
+				e.stopPropagation();
+				const r = b.getBoundingClientRect();
+				cardMenu( b.dataset.stylemore, r.left, r.bottom + 4 );
+			} )
+		);
+		$$( '[data-style]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'contextmenu', ( e ) => {
+				e.preventDefault();
+				cardMenu( btn.dataset.style, e.clientX, e.clientY );
 			} )
 		);
 	}
@@ -18592,30 +18611,10 @@
 		} );
 	}
 
-	/* ---- Mixing: a theme's partial variations (styles/colors, styles/
-	 * typography) merged over the current look, Gutenberg's own model for
-	 * its palette and typeset pickers. Themes without partials show
-	 * nothing here. ---- */
-	function stylesMixHtml( d ) {
-		const p = d.partials || {};
-		const colors = p.colors || [];
-		const types = p.typography || [];
-		if ( ! colors.length && ! types.length ) return '';
-		const card = ( kind, title, items, body ) => `
-			<div class="minn-card minn-mix">
-				<div class="minn-mix-title">${ esc( title ) }${ items.some( ( it ) => it.derived ) ? ` <span class="minn-look-muted">${ esc( 'colors' === kind ? __( 'the colors of each style variation' ) : __( 'the type of each style variation' ) ) }</span>` : '' }</div>
-				<div class="minn-mix-items">${ items.map( ( it ) => `
-					<button type="button" class="minn-mix-item${ 'default' === it.id ? ' is-default' : '' }" data-mix="${ esc( kind ) }" data-mixid="${ esc( it.id ) }">
-						${ body( it ) }
-						<span class="minn-mix-name">${ esc( it.title ) }</span>
-					</button>` ).join( '' ) }</div>
-			</div>`;
-		return `<div class="minn-mix-row">
-			${ colors.length ? card( 'colors', __( 'Color palettes' ), colors, ( it ) => `<span class="minn-style-swatches">${ ( it.palette.length ? it.palette : [ 'transparent' ] ).map( ( c ) => `<span style="background:${ escCssColor( c ) }"></span>` ).join( '' ) }</span>` ) : '' }
-			${ types.length ? card( 'typography', __( 'Typesets' ), types, ( it ) => `<span class="minn-mix-fonts">${ esc( ( it.fonts || [] ).join( ' · ' ) || '—' ) }</span>` ) : '' }
-		</div>`;
-	}
-
+	/* ---- Mixing: one slice of a style. A variation's colors (or type)
+	 * replace the same slice of the current look, the model behind
+	 * Gutenberg's palette and typeset pickers; `default` hands that slice
+	 * back to the theme. Reached from each style card's menu. ---- */
 	async function mixStyles( ss, kind, id, title ) {
 		const d = ss.data;
 		if ( d.lossy ) {
@@ -18626,10 +18625,13 @@
 			} );
 			return;
 		}
+		const isDefault = 'default' === id;
 		if ( ! await minnConfirm( {
-			/* translators: %s: the palette or typeset's name. */
-			title: sprintf( 'colors' === kind ? __( 'Use the “%s” palette?' ) : __( 'Use the “%s” typeset?' ), title ),
-			body: 'default' === id
+			title: isDefault
+				? ( 'colors' === kind ? __( 'Reset colors to the theme?' ) : __( 'Reset type to the theme?' ) )
+				/* translators: %s: a style variation's name. */
+				: sprintf( 'colors' === kind ? __( 'Use the colors of “%s”?' ) : __( 'Use the type of “%s”?' ), title ),
+			body: isDefault
 				? ( 'colors' === kind
 					? __( 'Every color customization is removed and the theme’s own colors return, for every visitor. Fonts and layout stay as they are. Undo restores the look you have now.' )
 					: __( 'Every font customization is removed and the theme’s own type returns, for every visitor. Colors and layout stay as they are. Undo restores the look you have now.' ) )
@@ -18647,8 +18649,11 @@
 		}
 		ss.data = null;
 		if ( state.route === 'styles' ) renderStyles();
-		/* translators: %s: the palette or typeset's name. */
-		toastAction( sprintf( __( 'Applied “%s”' ), title ), __( 'Undo' ), async () => {
+		const done = isDefault
+			? ( 'colors' === kind ? __( 'Colors reset to the theme' ) : __( 'Type reset to the theme' ) )
+			/* translators: %s: a style variation's name. */
+			: sprintf( 'colors' === kind ? __( 'Using the colors of “%s”' ) : __( 'Using the type of “%s”' ), title );
+		toastAction( done, __( 'Undo' ), async () => {
 			try {
 				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
 				ss.data = null;

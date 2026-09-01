@@ -7428,11 +7428,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			// values for the whitelisted paths, and the theme's effective
 			// values as placeholders.
 			'edit'         => self::gs_edit_payload( $current ),
-			// Partial variations for mixing (styles/colors, styles/typography).
-			'partials'     => array(
-				'colors'     => self::gs_partials( 'colors' ),
-				'typography' => self::gs_partials( 'typography' ),
-			),
+
 			// On this site, for this caller, a variation's colors and fonts
 			// cannot be stored: WordPress drops the settings tree for anyone
 			// without unfiltered_html (every subsite administrator on
@@ -8107,94 +8103,6 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		return rest_ensure_response( array( 'ok' => true, 'changed' => array_keys( $clean ) ) );
 	}
 
-	/**
-	 * Partial variations for mixing: a theme's styles/colors/*.json and
-	 * styles/typography/*.json (Twenty Twenty-Five ships eight of each),
-	 * parent first so a child's same-named file wins. Core's variations
-	 * route mixes these into the full list, which is why the picker reads
-	 * only the top level; here they get their own pickers.
-	 */
-	private static function gs_partials( $kind ) {
-		$prop  = 'colors' === $kind ? 'color' : 'typography';
-		$files = self::gs_style_files( $kind );
-		$derived = false;
-		if ( empty( $files ) ) {
-			// No partials shipped: derive the slice from the full variations,
-			// exactly what Gutenberg's palette and typeset pickers do.
-			$files   = self::gs_style_files( '' );
-			$derived = true;
-		}
-		$out = array();
-		foreach ( $files as $base => $path ) {
-			$decoded = json_decode( (string) file_get_contents( $path ), true );
-			if ( ! is_array( $decoded ) || isset( $decoded['blockTypes'] ) ) {
-				continue;
-			}
-			if ( $derived ) {
-				$decoded = array_merge( $decoded, array(
-					'settings' => self::gs_slice( isset( $decoded['settings'] ) ? $decoded['settings'] : array(), $prop ),
-					'styles'   => self::gs_slice( isset( $decoded['styles'] ) ? $decoded['styles'] : array(), $prop ),
-				) );
-				if ( empty( $decoded['settings'] ) && empty( $decoded['styles'] ) ) {
-					continue;
-				}
-			}
-			$settings = isset( $decoded['settings'] ) && is_array( $decoded['settings'] ) ? $decoded['settings'] : array();
-			$styles   = isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array();
-			$fonts    = self::variation_fonts( $settings );
-			if ( ! $fonts && 'typography' === $kind ) {
-				// Variations that only re-point body and heading fonts at the
-				// theme's families carry no fontFamilies of their own; name
-				// those through the theme's presets instead.
-				if ( ! isset( $map ) ) {
-					// A child theme can replace the parent's families while the
-					// parent's variations still name them; the parent's own
-					// theme.json knows those names.
-					$map = self::gs_preset_map( self::gs_merged()['settings'] );
-					$parent_tj = get_template_directory() . '/theme.json';
-					if ( file_exists( $parent_tj ) ) {
-						$pj = json_decode( (string) file_get_contents( $parent_tj ), true );
-						if ( isset( $pj['settings'] ) && is_array( $pj['settings'] ) ) {
-							$map = $map + self::gs_preset_map( $pj['settings'] );
-						}
-					}
-				}
-				foreach ( array( $styles['typography']['fontFamily'] ?? '', $styles['elements']['heading']['typography']['fontFamily'] ?? '', $styles['elements']['h1']['typography']['fontFamily'] ?? '' ) as $ref ) {
-					$name = is_string( $ref ) && '' !== $ref ? self::gs_resolve( $ref, $map ) : '';
-					// Still a var(): the family is not defined anywhere on this
-					// site, so name the slug rather than print CSS.
-					if ( preg_match( '/^var\(\s*--wp--preset--font-family--([a-z0-9-]+)/i', $name, $mm ) ) {
-						$name = ucwords( str_replace( '-', ' ', $mm[1] ) );
-					}
-					if ( '' !== $name && ! in_array( $name, $fonts, true ) ) {
-						$fonts[] = $name;
-					}
-				}
-			}
-			$out[] = array(
-				'id'      => preg_replace( '/\.json$/', '', $base ),
-				'title'   => isset( $decoded['title'] ) && is_string( $decoded['title'] ) ? $decoded['title'] : $base,
-				'palette' => self::variation_palette( $settings ),
-				'fonts'   => $fonts,
-				'derived' => $derived,
-			);
-		}
-		if ( ! $out ) {
-			return array();
-		}
-		// The theme's own slice leads the list: picking it hands just the
-		// colors (or just the type) back to the theme.
-		$tj = self::gs_theme_json_settings();
-		array_unshift( $out, array(
-			'id'      => 'default',
-			'title'   => __( 'Theme default', 'minn-admin' ),
-			'palette' => 'colors' === $kind ? self::variation_palette( $tj ) : array(),
-			'fonts'   => 'typography' === $kind ? self::variation_fonts( $tj ) : array(),
-			'derived' => $derived,
-		) );
-		return $out;
-	}
-
 	/** styles/{sub}/*.json across parent + child (child wins by basename), sorted. */
 	private static function gs_style_files( $sub ) {
 		$files = array();
@@ -8273,9 +8181,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'styles'   => isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array(),
 			) : null;
 		}
-		if ( ! empty( self::gs_style_files( $kind ) ) ) {
-			return null; // the theme ships partials; an unknown id is not a full variation to slice
-		}
+		// No partial of that id: slice the full variation (its colors or its
+		// type), which is what "use this style's colors only" means.
 		$path = self::gs_partial_file( '', $id );
 		if ( '' === $path ) {
 			return null;
@@ -8407,9 +8314,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	/**
-	 * Mix a partial variation into the current look: its settings and
-	 * styles are merged over the user config (Gutenberg's own model for
-	 * the color / typography pickers), written through core's route.
+	 * Use one slice of a style: a variation's colors (or type) replace the
+	 * same slice of the current look, the model behind Gutenberg's palette
+	 * and typeset pickers, written through core's route. `default` hands
+	 * that slice back to the theme.
 	 */
 	public static function styles_mix( WP_REST_Request $request ) {
 		$kind = (string) $request['kind'];

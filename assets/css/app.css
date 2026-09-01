@@ -599,6 +599,11 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-row-end { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 /* Style variation cards (Design → Styles). */
 .minn-style-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.minn-style-card-wrap { position: relative; display: flex; }
+.minn-style-card-wrap .minn-style-card { flex: 1; }
+.minn-style-more { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 8px; border: 0; background: transparent; color: var(--text3); font-size: 16px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.minn-style-card-wrap:hover .minn-style-more, .minn-style-more:focus-visible { opacity: 1; }
+.minn-style-more:hover { background: var(--hover); color: var(--text); }
 /* Design notes above the style cards / menu list (customized-styles warning, inline-menu note): breathe before the grid at the grid's own gap. */
 .minn-nav-inline-note { margin-bottom: 12px; line-height: 1.5; }
 /* Current look card (Design → Styles): effective palette / fonts / sizes /
@@ -661,17 +666,6 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-look-con { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin-right: 4px; }
 .minn-look-con.ok { background: var(--ok-bg, rgba(46,160,67,.12)); color: var(--ok, #1f7a35); }
 .minn-look-con.warn { background: var(--warn-bg, rgba(212,110,0,.14)); color: var(--warn, #a15c00); }
-/* Palette / typeset mixing cards (partial variations). */
-.minn-mix-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 12px; }
-.minn-mix { padding: 14px 16px 12px; }
-.minn-mix-title { font-weight: 600; font-size: 13px; margin-bottom: 10px; }
-.minn-mix-items { display: flex; flex-wrap: wrap; gap: 8px; }
-.minn-mix-item { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); cursor: pointer; color: inherit; font: inherit; min-width: 120px; text-align: start; }
-.minn-mix-item:hover { background: var(--hover); border-color: var(--accent); }
-.minn-mix-item.is-default { border-style: dashed; }
-.minn-mix-item .minn-style-swatches span { width: 16px; height: 16px; }
-.minn-mix-fonts { font-size: 12px; color: var(--text3); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.minn-mix-name { font-size: 13px; font-weight: 600; }
 
 /* Style history modal rows. */
 .minn-gs-hist { display: flex; flex-direction: column; }
