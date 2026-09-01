@@ -1765,6 +1765,62 @@ function minn_admin_seo_preview( $plugin, $post_id ) {
 	);
 }
 
+/**
+ * Whether the active SEO plugin still offers its own metabox on this post type.
+ *
+ * Every one of these plugins lets a site switch its SEO controls off for a
+ * given content type, and when it does, the fields disappear from wp-admin for
+ * everybody, administrators included. That is a site-wide decision about what
+ * a content type is for, not a permission, so mirroring it is the difference
+ * between Minn showing the same site wp-admin shows and Minn quietly reopening
+ * a door the owner closed.
+ *
+ * Defaults to true wherever the answer cannot be read, so an unconfigured site
+ * and an unfamiliar vendor both behave exactly as before.
+ *
+ * @param array  $plugin    Active provider descriptor.
+ * @param string $post_type Post type slug.
+ * @return bool
+ */
+function minn_admin_seo_shows_for_type( $plugin, $post_type ) {
+	$post_type = (string) $post_type;
+	if ( '' === $post_type ) {
+		return true;
+	}
+	$name = isset( $plugin['name'] ) ? (string) $plugin['name'] : '';
+	try {
+		if ( 'Yoast SEO' === $name && class_exists( 'WPSEO_Options' ) ) {
+			$v = WPSEO_Options::get( 'display-metabox-pt-' . $post_type, null );
+			return ( null === $v ) ? true : (bool) $v;
+		}
+		if ( 'Rank Math' === $name && class_exists( '\RankMath\Helper' ) ) {
+			$v = \RankMath\Helper::get_settings( 'titles.pt_' . $post_type . '_add_meta_box', null );
+			return ( null === $v ) ? true : (bool) $v;
+		}
+		if ( 'AIOSEO' === $name && function_exists( 'aioseo' ) ) {
+			$types = aioseo()->dynamicOptions->searchAppearance->postTypes;
+			if ( $types && isset( $types->{$post_type} ) ) {
+				$adv = $types->{$post_type}->advanced;
+				if ( $adv && isset( $adv->showMetaBox ) ) {
+					return (bool) $adv->showMetaBox;
+				}
+			}
+			return true;
+		}
+		if ( 'SEOPress' === $name || 'SEOPress PRO' === $name ) {
+			$titles = get_option( 'seopress_titles_option_name' );
+			$key    = 'seopress_titles_single_titles';
+			if ( is_array( $titles ) && isset( $titles[ $key ][ $post_type ]['enable'] ) ) {
+				return (bool) $titles[ $key ][ $post_type ]['enable'];
+			}
+			return true;
+		}
+	} catch ( \Throwable $e ) {
+		return true; // their internals moved; behave as before
+	}
+	return true;
+}
+
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 	$plugin = minn_admin_seo_plugin();
 	if ( ! $plugin ) {
@@ -1797,6 +1853,12 @@ add_action( 'rest_api_init', function () {
 		),
 		'callback'            => function ( $request ) use ( $plugin ) {
 			$post_id = (int) $request->get_param( 'post' );
+			// A post type the vendor withdrew its own metabox from has no SEO
+			// fields on this site, so offer none here either.
+			$ptype = $post_id > 0 ? (string) get_post_type( $post_id ) : '';
+			if ( '' !== $ptype && ! minn_admin_seo_shows_for_type( $plugin, $ptype ) ) {
+				return rest_ensure_response( array( 'groups' => array() ) );
+			}
 			// Groups can be post-aware (Yoast hides the article type on
 			// pages) and are already per-user (capability-gated groups).
 			$out = array( 'groups' => minn_admin_seo_groups( $plugin, $post_id ) );
@@ -1846,6 +1908,11 @@ add_action( 'rest_api_init', function () {
 			if ( isset( $plugin['can_edit'] ) && is_callable( $plugin['can_edit'] )
 				&& ! call_user_func( $plugin['can_edit'], $post->ID ) ) {
 				return new WP_Error( 'rest_forbidden', __( 'You cannot edit SEO fields on this site.', 'minn-admin' ), array( 'status' => 403 ) );
+			}
+			// And the same answer the read side gives: a content type the
+			// vendor withdrew its metabox from is not one Minn writes SEO for.
+			if ( ! minn_admin_seo_shows_for_type( $plugin, (string) $post->post_type ) ) {
+				return new WP_Error( 'rest_forbidden', __( 'SEO fields are switched off for this content type.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			foreach ( minn_admin_seo_field_map( $plugin, $post->ID ) as $field => $def ) {
 				if ( ! array_key_exists( $field, $value ) ) {
