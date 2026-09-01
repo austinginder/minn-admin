@@ -52,7 +52,18 @@ add_action( 'rest_api_init', function () {
 		'/media/(?P<id>\d+)/regenerate',
 		array(
 			'methods'             => 'POST',
-			'permission_callback' => 'minn_admin_regen_thumbs_available',
+			// The plugin's own capability says who may use the tool; it does
+			// not say which attachment. Regenerating rewrites every derived
+			// file for one, so it answers to edit_post on that attachment the
+			// way the media-replace route next door does. It matters wherever
+			// a site has lowered the plugin's capability to delegate its Tools
+			// screen, which is what that property is for.
+			'permission_callback' => function ( $req ) {
+				$id = (int) $req['id'];
+				return minn_admin_regen_thumbs_available()
+					&& 'attachment' === get_post_type( $id )
+					&& current_user_can( 'edit_post', $id );
+			},
 			'callback'            => function ( $req ) {
 				$regenerator = RegenerateThumbnails_Regenerator::get_instance( (int) $req['id'] );
 				if ( is_wp_error( $regenerator ) ) {

@@ -954,9 +954,17 @@ class Minn_Admin_REST {
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'user_reset_password' ),
 				// Per-object meta cap — see $sessions_perm above for why the
-				// plural primitive is not enough on a WooCommerce site.
+				// plural primitive is not enough on a WooCommerce site — plus
+				// the same role floor the email route carries. edit_user
+				// short-circuits against one's own id, so without it any
+				// Subscriber could have the site mint them a reset link from
+				// the admin API. wp-login already offers that to everyone, so
+				// nothing is lost by refusing it here, where the route exists
+				// for an administrator resetting somebody else.
 				'permission_callback' => function ( WP_REST_Request $request ) {
-					return current_user_can( 'edit_user', self::target_user_id( $request ) );
+					$uid = self::target_user_id( $request );
+					return current_user_can( 'edit_user', $uid )
+						&& ( get_current_user_id() !== $uid || current_user_can( 'list_users' ) );
 				},
 			)
 		);
