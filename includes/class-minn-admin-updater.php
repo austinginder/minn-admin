@@ -39,8 +39,18 @@ class Minn_Admin_Updater {
 	 * Each entry is matched ANCHORED at the start of the URL path. Unanchored,
 	 * anyone could satisfy it with a repository of their own containing that
 	 * directory path.
+	 *
+	 * The prefix names the RELEASE ASSET path, not the repository. GitHub
+	 * serves one object store across a repository's whole fork network, so a
+	 * commit pushed to any fork is retrievable from this repository's own URL
+	 * space by hash, and anyone with an account can create such a hash. Those
+	 * are served under /raw/, /blob/ and /archive/, never under
+	 * /releases/download/, so naming the asset path is what makes this a
+	 * statement about content the author published rather than about the shape
+	 * of a URL. Every package the manifest publishes, the plugin zip and all
+	 * of the language packs, already lives under it.
 	 */
-	const PACKAGE_PATHS = array( '/austinginder/minn-admin/' );
+	const PACKAGE_PATHS = array( '/austinginder/minn-admin/releases/download/' );
 
 	/**
 	 * Distinct user locales, cached a day. The query is cheap but it runs on
