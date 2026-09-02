@@ -65,10 +65,10 @@ Reference depth: **Gravity Forms**.
 | fluent-forms | Y | Y | Y | Y | Y | Y | · | · | · | Y | 2026-08-06 | Unread/spam/trash tabs + bulk; suite `fluent-forms` (24); active fixture |
 | elementor-forms | Y | Y | Y | Y | · | Y | · | · | · | Y | 2026-08-26 | Status card via their `count_submissions_by_status`; bulk trash/restore/delete already wired (matrix was stale); canvas = **L**. Covered by `forms-status` |
 | cf7-flamingo | Y | Y | Y | Y | Y | Y | · | · | · | Y | 2026-08-06 | CF7 builder = **L**; bulk restore/delete already wired (matrix was stale) |
-| cfdb7 | Y | Y | Y | Y | · | · | · | · | · | Y | 2026-07-15 | bulk delete already wired (matrix was stale) |
+| cfdb7 | Y | Y | Y | Y | · | Y | · | · | · | Y | 2026-09-02 | bulk delete already wired (matrix was stale); **status card** (unread via the blob token the list uses, total, forms; Open CFDB7). No manage view: CF7 forms live on the Flamingo surface |
 | ninja-forms | Y | Y | Y | Y | Y | Y | · | · | · | Y | 2026-08-06 | bulk trash/delete already wired (matrix was stale) |
 | forminator | Y | Y | Y | Y | Y | Y | · | · | · | Y | 2026-08-06 | Tabs + bulk + search present (matrix was stale) |
-| formidable | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Tabs + bulk + search present (matrix was stale) |
+| formidable | Y | Y | Y | Y | Y | Y | · | · | · | Y | 2026-09-02 | Tabs + bulk + search present (matrix was stale); **status card** (submitted top-level entries + 7-day count over UTC created_at, forms; Open Formidable). Lite tracks no read state, so the first row is Entries |
 | everest-forms | Y | Y | Y | Y | Y | Y | · | · | · | Y | 2026-08-06 | Received/Spam/Trash + bulk; suite `everest-forms` |
 | sureforms | Y | Y | Y | Y | — | Y | · | · | · | Y | 2026-07-17 | Wave B: {prefix}srfm_entries (form_data JSON keyed by label → contact-card entries); per-form tabs; read/unread/trash filter + status actions; search; delete; status card; installed-inactive |
 | bricks (forms) | Y | Y | Y | Y | — | Y | · | — | · | Y | 2026-08-26 | {prefix}bricks_form_submissions (form_data JSON {field_id:{type,value}}, created_at UTC); per-form tabs from the grouped table, labels via their get_form_settings; view gates on Capabilities::$form_submission_access, delete manage_options like their delete_data; their screen has no read/favorite verbs so neither does this; only registers while saveFormSubmissions is on + table exists; suite `bricks-forms` (builders lab, SKIPs elsewhere) |

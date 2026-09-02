@@ -249,6 +249,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'CFDB7',
 		'icon'       => 'inbox',
 		'cap'        => 'read',
+		'status'     => array( 'route' => 'minn-admin/v1/cfdb7/status' ),
 		'collection' => array(
 			'viewLabel' => __( 'Messages', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/cfdb7/entries',
@@ -542,6 +543,41 @@ add_action( 'rest_api_init', function () {
 				$wpdb->update( $table, array( 'form_value' => $patched ), array( 'form_id' => (int) $row->form_id ), array( '%s' ), array( '%d' ) );
 			}
 			return rest_ensure_response( array( 'id' => (int) $row->form_id, 'status' => 'unread', 'message' => __( 'Marked as unread.', 'minn-admin' ) ) );
+		},
+	) );
+	register_rest_route( 'minn-admin/v1', '/cfdb7/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_cfdb7_can_view',
+		'callback'            => function () {
+			global $wpdb;
+			$table = $wpdb->prefix . 'db7_forms';
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
+			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}`" );
+			// Read/unread is a fixed token inside the serialized blob; a row
+			// without the token is unread on their screen too (the list's rule).
+			$unread = (int) $wpdb->get_var( $wpdb->prepare(
+				"SELECT COUNT(*) FROM `{$table}` WHERE form_value NOT LIKE %s",
+				'%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:4:"read"' ) . '%'
+			) );
+			// phpcs:enable
+			$forms = count( minn_admin_cfdb7_form_titles() );
+			return rest_ensure_response( array(
+				'rows'    => array(
+					array(
+						'label' => __( 'Unread entries', 'minn-admin' ),
+						'value' => number_format_i18n( $unread ),
+						'hint'  => sprintf(
+							/* translators: %s: total number of stored entries. */
+							__( '%s total', 'minn-admin' ),
+							number_format_i18n( $total )
+						),
+					),
+					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
+				),
+				'actions' => array(
+					array( 'label' => __( 'Open CFDB7 ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=cfdb7-list.php' ) ),
+				),
+			) );
 		},
 	) );
 } );

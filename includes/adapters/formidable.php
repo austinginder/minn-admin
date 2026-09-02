@@ -128,6 +128,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Formidable',
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gate is the filter above (their cap model)
+		'status'     => array( 'route' => 'minn-admin/v1/formidable/status' ),
 		'collection' => array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/formidable/entries',
@@ -352,5 +353,44 @@ add_action( 'rest_api_init', function () {
 				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
 			},
 		),
+	) );
+	register_rest_route( 'minn-admin/v1', '/formidable/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => function () {
+			return minn_admin_formidable_can();
+		},
+		'callback'            => function () {
+			global $wpdb;
+			$items_t = $wpdb->prefix . 'frm_items';
+			// The same discriminator the list applies: submitted, top-level
+			// entries. Drafts and repeater child rows are Formidable's own
+			// workflows and never count here.
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
+			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$items_t} WHERE is_draft = 0 AND parent_item_id = 0" );
+			// created_at is current_time( 'mysql', 1 ): UTC, so the window is UTC too.
+			$week  = (int) $wpdb->get_var( $wpdb->prepare(
+				"SELECT COUNT(*) FROM {$items_t} WHERE is_draft = 0 AND parent_item_id = 0 AND created_at >= %s",
+				gmdate( 'Y-m-d H:i:s', time() - ( 7 * DAY_IN_SECONDS ) )
+			) );
+			// phpcs:enable
+			$forms = count( minn_admin_formidable_titles() );
+			return rest_ensure_response( array(
+				'rows'    => array(
+					array(
+						'label' => __( 'Entries', 'minn-admin' ),
+						'value' => number_format_i18n( $total ),
+						'hint'  => sprintf(
+							/* translators: %s: number of entries received in the last 7 days. */
+							__( '%s in the last 7 days', 'minn-admin' ),
+							number_format_i18n( $week )
+						),
+					),
+					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
+				),
+				'actions' => array(
+					array( 'label' => __( 'Open Formidable ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=formidable-entries' ) ),
+				),
+			) );
+		},
 	) );
 } );

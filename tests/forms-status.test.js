@@ -1,9 +1,9 @@
 /**
  * Forms family status cards (SureForms parity batch, 2026-08-06):
- * Fluent Forms, Ninja Forms, Forminator, CF7/Flamingo. REST shape for all
- * four + the card rendering on one live surface. All four plugins are
- * active fixtures on minnadmin; counts are live so checks assert shape,
- * never absolute numbers.
+ * Fluent Forms, Ninja Forms, Forminator, CF7/Flamingo, Everest, WPForms,
+ * Elementor, Formidable, CFDB7. REST shape for every card + the card
+ * rendering on one live surface. All are active fixtures on minnadmin;
+ * counts are live so checks assert shape, never absolute numbers.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
@@ -29,6 +29,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		{ slug: 'everest', first: 'Unread entries', open: /evf-entries/ },
 		{ slug: 'wpforms', first: 'Unread entries', open: /wpforms-entries/ },
 		{ slug: 'elementor', first: 'Unread entries', open: /e-form-submissions/ },
+		{ slug: 'formidable', first: 'Entries', open: /formidable-entries/ },
+		{ slug: 'cfdb7', first: 'Unread entries', open: /cfdb7-list/ },
 	];
 
 	for ( const c of CARDS ) {
