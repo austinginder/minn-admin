@@ -149,6 +149,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			// vendor with actions, all through the SDK the plugin ships).
 			// Reads from fs_accounts; its state follows the real license.
 			'Independent Analytics Pro',
+			// Crocoblock (active fixture: the whole Jet pack is installed and
+			// active; one membership key covers every Jet plugin, so the family
+			// is ONE row). Actions ride the Jet Dashboard framework the plugins
+			// ship, so controls are on offer while any Jet plugin is active.
+			'Crocoblock',
 		];
 		for ( const name of FAMILY ) {
 			const info = await page.evaluate( ( n ) => {

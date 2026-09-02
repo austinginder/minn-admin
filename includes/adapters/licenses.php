@@ -978,6 +978,243 @@ function minn_admin_license_fingerprints() {
 }
 
 /**
+ * Crocoblock: the Jet plugins on this site, keyed by plugin file.
+ *
+ * Every Crocoblock product ships in a jet-* folder under the Crocoblock (or,
+ * on older builds, Zemez) author name; that pair is the fingerprint, so a
+ * Jet plugin released after this list was written still counts. The free
+ * Dynamic Data addon carries no license of its own (it rides JetElements),
+ * so it is left out rather than reported as uncovered.
+ *
+ * @return array file => display name, JetEngine first, then alphabetical.
+ */
+function minn_admin_crocoblock_plugins() {
+	static $cache = null;
+	if ( null !== $cache ) {
+		return $cache;
+	}
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	$skip = array( 'jet-elements-dynamic-data/jet-elements-dynamic-data.php' );
+	$out  = array();
+	foreach ( get_plugins() as $file => $data ) {
+		if ( 0 !== strpos( $file, 'jet-' ) || in_array( $file, $skip, true ) ) {
+			continue;
+		}
+		$author = strtolower( (string) ( $data['Author'] ?? '' ) . ' ' . (string) ( $data['AuthorName'] ?? '' ) );
+		if ( false === strpos( $author, 'crocoblock' ) && false === strpos( $author, 'zemez' ) ) {
+			continue;
+		}
+		$out[ $file ] = (string) ( $data['Name'] ?? dirname( $file ) );
+	}
+	uksort( $out, function ( $a, $b ) {
+		if ( 0 === strpos( $a, 'jet-engine/' ) ) {
+			return -1;
+		}
+		if ( 0 === strpos( $b, 'jet-engine/' ) ) {
+			return 1;
+		}
+		return strcmp( $a, $b );
+	} );
+	$cache = $out;
+	return $out;
+}
+
+/**
+ * The site identity Crocoblock binds an activation to: host plus path with
+ * the scheme and a leading www. removed, mirroring Jet_Dashboard\Utils::
+ * get_site_url() so a stored activation can be compared without loading
+ * the vendor's code.
+ */
+function minn_admin_crocoblock_site_url() {
+	$parts = wp_parse_url( site_url( '/' ) );
+	$url   = (string) ( $parts['host'] ?? '' ) . (string) ( $parts['path'] ?? '' );
+	$url   = preg_replace( '#^https?://#', '', rtrim( $url ) );
+	return strtolower( str_replace( 'www.', '', $url ) );
+}
+
+/**
+ * The stored license Jet Dashboard treats as primary.
+ *
+ * jet-license-data['license-list'] is keyed by the license key itself and
+ * can hold several (a Crocoblock membership next to a legacy TemplateMonster
+ * or Envato key). Their get_primary_license_data() prefers the type in the
+ * order crocoblock, tm, envato and then the broadest product category; the
+ * same walk here, so the row agrees with their own Plugin Manager page.
+ *
+ * @return array|null { key, status, details } or null when nothing is stored.
+ */
+function minn_admin_crocoblock_primary() {
+	$data = get_option( 'jet-license-data' );
+	$list = ( is_array( $data ) && isset( $data['license-list'] ) && is_array( $data['license-list'] ) ) ? $data['license-list'] : array();
+	if ( empty( $list ) ) {
+		return null;
+	}
+	$rows = array();
+	foreach ( $list as $key => $row ) {
+		if ( ! is_array( $row ) ) {
+			continue;
+		}
+		$rows[] = array(
+			'key'     => (string) $key,
+			'status'  => (string) ( $row['licenseStatus'] ?? '' ),
+			'details' => ( isset( $row['licenseDetails'] ) && is_array( $row['licenseDetails'] ) ) ? $row['licenseDetails'] : array(),
+		);
+	}
+	if ( empty( $rows ) ) {
+		return null;
+	}
+	$by_type = array();
+	foreach ( array( 'crocoblock', 'tm', 'envato' ) as $type ) {
+		$by_type = array_filter( $rows, function ( $r ) use ( $type ) {
+			return ( $r['details']['type'] ?? '' ) === $type;
+		} );
+		if ( ! empty( $by_type ) ) {
+			break;
+		}
+	}
+	if ( empty( $by_type ) ) {
+		$by_type = $rows;
+	}
+	foreach ( array( 'lifetime', 'all-inclusive', 'plugin-set', 'theme-plugin-bundle', 'single-plugin' ) as $cat ) {
+		foreach ( $by_type as $r ) {
+			$c = (string) ( $r['details']['product_category'] ?? '' );
+			if ( $c === $cat || '' === $c ) {
+				return $r;
+			}
+		}
+	}
+	return array_values( $by_type )[0];
+}
+
+/** Crocoblock's "never expires" sentinels, mirroring Utils::is_lifetime_license_expire(). */
+function minn_admin_crocoblock_expiry( $raw ) {
+	if ( in_array( (string) $raw, array( '0000-00-00 00:00:00', '1000-01-01 00:00:00', 'lifetime', '' ), true ) ) {
+		return 'lifetime';
+	}
+	return minn_admin_license_expiry( $raw );
+}
+
+/**
+ * A Jet_Dashboard\License_Manager that can talk to api.crocoblock.com from a
+ * REST request.
+ *
+ * The plugins boot the dashboard only in wp-admin (is_admin() gate), so
+ * outside it the Dashboard class exists but none of its inc/ files are
+ * loaded. Dashboard::get_instance() loads them (its constructor requires
+ * inc/ relative to its own file) and hooks init/admin_menu, both already
+ * past on a REST request, so nothing else runs. The License_Manager
+ * constructor cannot be used: it registers notices through managers that
+ * never booted here and can fire a network sync. Instantiating it WITHOUT
+ * the constructor leaves its public license_action_query() and
+ * update_license_list() intact, which are the exact calls their ajax
+ * handler makes; the same documented exception as the Soflyy mirror.
+ *
+ * @return object|null
+ */
+function minn_admin_crocoblock_license_manager() {
+	if ( ! class_exists( '\Jet_Dashboard\Dashboard' ) ) {
+		return null;
+	}
+	try {
+		\Jet_Dashboard\Dashboard::get_instance();
+		if ( ! class_exists( '\Jet_Dashboard\License_Manager', false ) || ! class_exists( '\Jet_Dashboard\Utils', false ) ) {
+			return null;
+		}
+		return ( new \ReflectionClass( '\Jet_Dashboard\License_Manager' ) )->newInstanceWithoutConstructor();
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+}
+
+/**
+ * Classify a refusal from api.crocoblock.com.
+ *
+ * The API answers {status: error, code: activation_error, message, log[]}
+ * for every refusal; the log's error entries carry the specific reason
+ * ("Crocoblock License invalid"), the message only the generic one. The
+ * specific entry rides along in the message when it says more.
+ */
+function minn_admin_crocoblock_refusal( $r ) {
+	$message = trim( wp_strip_all_tags( (string) ( $r['message'] ?? '' ) ) );
+	$detail  = '';
+	foreach ( ( isset( $r['log'] ) && is_array( $r['log'] ) ) ? $r['log'] : array() as $entry ) {
+		if ( is_array( $entry ) && 'error' === ( $entry['type'] ?? '' ) && ! empty( $entry['message'] ) ) {
+			$m = trim( wp_strip_all_tags( (string) $entry['message'] ) );
+			if ( '' !== $m && $m !== $message && false === stripos( $m, 'tm public api' ) ) {
+				$detail = $m;
+				break;
+			}
+		}
+	}
+	if ( '' === $message ) {
+		$message = __( 'Crocoblock refused the key', 'minn-admin' );
+	}
+	if ( '' !== $detail ) {
+		$message .= ' (' . $detail . ')';
+	}
+	$hay  = strtolower( $message );
+	$code = 'invalid';
+	if ( false !== strpos( $hay, 'limit' ) || false !== strpos( $hay, 'maximum' ) ) {
+		$code = 'site_limit';
+	} elseif ( false !== strpos( $hay, 'expire' ) ) {
+		$code = 'expired';
+	}
+	return array( 'ok' => false, 'code' => $code, 'message' => $message );
+}
+
+/**
+ * One request to api.crocoblock.com through the vendor's own client, with
+ * the three no-answer shapes named: unreachable, refused, and success with
+ * nothing to store.
+ *
+ * @return array { ok, code, message, data }
+ */
+function minn_admin_crocoblock_query( $action, $key ) {
+	$lm = minn_admin_crocoblock_license_manager();
+	if ( ! $lm ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The Jet Dashboard code is not loaded; activate a Jet plugin first.', 'minn-admin' ), 'data' => array() );
+	}
+	try {
+		$r = $lm->license_action_query( $action, $key );
+	} catch ( \Throwable $e ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => trim( wp_strip_all_tags( $e->getMessage() ) ), 'data' => array() );
+	}
+	if ( ! is_array( $r ) ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach the Crocoblock licensing service.', 'minn-admin' ), 'data' => array() );
+	}
+	if ( 'error' === ( $r['status'] ?? 'error' ) ) {
+		$out         = minn_admin_crocoblock_refusal( $r );
+		$out['data'] = array();
+		return $out;
+	}
+	$data = ( isset( $r['data'] ) && is_array( $r['data'] ) ) ? $r['data'] : array();
+	return array(
+		'ok'      => true,
+		'code'    => '',
+		'message' => trim( wp_strip_all_tags( (string) ( $r['message'] ?? '' ) ) ),
+		'data'    => $data,
+	);
+}
+
+/**
+ * Store an accepted activation the way their handler does: strip the
+ * response's list of every other site on the license (they never keep it),
+ * write the license-list entry, and drop the caches that would otherwise
+ * hide the just-unlocked updates.
+ */
+function minn_admin_crocoblock_store( $key, $data ) {
+	$lm = minn_admin_crocoblock_license_manager();
+	if ( ! $lm || empty( $data['license'] ) ) {
+		return false;
+	}
+	$data = $lm->maybe_modify_responce_data( $data );
+	$lm->update_license_list( $key, $data );
+	delete_site_transient( 'jet_dashboard_license_expire_check' );
+	delete_site_transient( 'update_plugins' );
+	return true;
+}
+
+/**
  * Bundled vendor readers. Every reader only touches wp_options / postmeta
  * through core APIs (which handle their own unserialization); none call
  * into the vendor's classes and none go to the network. Option names and
@@ -1759,6 +1996,112 @@ function minn_admin_license_default_providers() {
 			return array( $item( array( 'name' => 'Smush Pro', 'state' => 'unknown', 'key' => true, 'note' => __( 'Dashboard key present; Smush has not validated it yet', 'minn-admin' ) ) ) );
 		},
 	);
+
+	// Crocoblock: ONE membership key licenses every Jet plugin on the site
+	// through the Jet Dashboard framework each of them bundles (the newest
+	// copy boots). State is option jet-license-data['license-list'], keyed
+	// BY THE KEY ITSELF: { licenseStatus active|expired, licenseKey,
+	// licenseDetails { type crocoblock|tm|envato, product_category
+	// lifetime|all-inclusive|plugin-set|…, expire ('0000-00-00 00:00:00'
+	// or '1000-01-01 00:00:00' = never), site_url the key was activated
+	// for, plugins { file => … } = what the key unlocks, activation_limit
+	// (0 = unlimited), is_sublicense } }. Their handler strips the
+	// response's list of the license's other sites before storing; this
+	// reader takes the key's presence only, never its value. A stored
+	// activation for a different site_url (a clone, a migrated site) is
+	// what their own "site is not activated" notice means, so it reads as
+	// invalid with the reason rather than as valid-looking.
+	$croco_plugins = minn_admin_crocoblock_plugins();
+	if ( ! empty( $croco_plugins ) ) {
+		$croco_component = array_keys( $croco_plugins )[0];
+		foreach ( array_keys( $croco_plugins ) as $file ) {
+			if ( is_plugin_active( $file ) ) {
+				$croco_component = $file;
+				break;
+			}
+		}
+		$providers['crocoblock'] = array(
+			'name'      => 'Crocoblock',
+			'component' => $croco_component,
+			'detect'    => function () {
+				return true;
+			},
+			'read'      => function () use ( $item, $croco_plugins ) {
+				$installed = count( $croco_plugins );
+				$primary   = minn_admin_crocoblock_primary();
+				if ( ! $primary ) {
+					return array( $item( array(
+						'name'  => 'Crocoblock',
+						'state' => 'missing',
+						/* translators: %d: number of installed Jet plugins. */
+						'note'  => sprintf( _n( '%d Jet plugin installed; one Crocoblock key covers it', '%d Jet plugins installed; one Crocoblock key covers them all', $installed, 'minn-admin' ), $installed ),
+					) ) );
+				}
+				$d       = $primary['details'];
+				$expires = minn_admin_crocoblock_expiry( $d['expire'] ?? '' );
+				$state   = 'valid';
+				$notes   = array();
+				$cats    = array(
+					'lifetime'            => __( 'lifetime membership', 'minn-admin' ),
+					'all-inclusive'       => __( 'all-inclusive membership', 'minn-admin' ),
+					'plugin-set'          => __( 'plugin set', 'minn-admin' ),
+					'theme-plugin-bundle' => __( 'theme + plugin bundle', 'minn-admin' ),
+					'single-plugin'       => __( 'single plugin', 'minn-admin' ),
+				);
+				$cat     = (string) ( $d['product_category'] ?? '' );
+				if ( isset( $cats[ $cat ] ) ) {
+					$notes[] = $cats[ $cat ];
+				} elseif ( ! empty( $d['product_name'] ) ) {
+					$notes[] = wp_strip_all_tags( (string) $d['product_name'] );
+				}
+				if ( 'tm' === ( $d['type'] ?? '' ) ) {
+					$notes[] = __( 'TemplateMonster key', 'minn-admin' );
+				} elseif ( 'envato' === ( $d['type'] ?? '' ) ) {
+					$notes[] = __( 'Envato key', 'minn-admin' );
+				}
+				if ( ! empty( $d['is_sublicense'] ) ) {
+					$notes[] = __( 'sublicense', 'minn-admin' );
+				}
+				if ( 'expired' === $primary['status'] || minn_admin_license_expired( $expires ) ) {
+					$state = 'expired';
+				}
+				$site = strtolower( (string) ( $d['site_url'] ?? '' ) );
+				if ( 'valid' === $state && '' !== $site && $site !== minn_admin_crocoblock_site_url() ) {
+					$state = 'invalid';
+					/* translators: %s: the site address the license was activated for. */
+					$notes[] = sprintf( __( 'activated for %s, not this site; deactivate and activate again', 'minn-admin' ), $site );
+				}
+				$covered_map = ( isset( $d['plugins'] ) && is_array( $d['plugins'] ) ) ? $d['plugins'] : array();
+				$uncovered   = array();
+				foreach ( $croco_plugins as $file => $name ) {
+					if ( ! isset( $covered_map[ $file ] ) ) {
+						$uncovered[] = $name;
+					}
+				}
+				if ( ! empty( $covered_map ) ) {
+					if ( empty( $uncovered ) ) {
+						/* translators: %d: number of installed Jet plugins. */
+						$notes[] = sprintf( _n( 'covers the %d installed Jet plugin', 'covers all %d installed Jet plugins', $installed, 'minn-admin' ), $installed );
+					} else {
+						/* translators: 1: covered count, 2: installed count, 3: names of the plugins the license does not cover. */
+						$notes[] = sprintf( __( 'covers %1$d of %2$d installed Jet plugins; not covered: %3$s', 'minn-admin' ), $installed - count( $uncovered ), $installed, implode( ', ', $uncovered ) );
+					}
+				}
+				$limit = (int) ( $d['activation_limit'] ?? 0 );
+				if ( $limit > 0 ) {
+					/* translators: %d: number of sites the license may be activated on. */
+					$notes[] = sprintf( _n( '%d site allowed', '%d sites allowed', $limit, 'minn-admin' ), $limit );
+				}
+				return array( $item( array(
+					'name'    => 'Crocoblock',
+					'state'   => $state,
+					'key'     => true,
+					'expires' => $expires,
+					'note'    => implode( '; ', $notes ),
+				) ) );
+			},
+		);
+	}
 
 	// SearchWP: everything lives in ONE option, searchwp_license
 	// { key, status, expires, remaining, type }. Its bundled EDD updater is
@@ -3252,6 +3595,75 @@ function minn_admin_license_default_providers() {
 				return minn_admin_freemius_verify( call_user_func( $iawp_fs ) );
 			};
 		}
+	}
+
+	// Crocoblock: their ajax handler is one GET to api.crocoblock.com
+	// (action activate_license|deactivate_license, license, site_url) plus a
+	// local write, through License_Manager::license_action_query() and
+	// update_license_list(), both public. Those exact calls are made here
+	// on a constructor-less License_Manager (the helper explains why). One
+	// key covers every Jet plugin, so one row carries the whole family:
+	// activate stores it once, deactivate frees this site on their side
+	// and drops the entry, verify re-activates the stored key (the
+	// vendor's own resync, which their theme-core path also uses) so the
+	// stored details follow the account. The framework's static license
+	// cache is written through the same Utils setter their code uses.
+	// A SUBLICENSE key (an agency seat handed to a client site) is answered
+	// with the parent license's key, and update_license_list() stores the
+	// entry under THAT, so the pasted key is not the stored key: deactivate
+	// and verify always take the stored one, never what was typed.
+	if ( isset( $providers['crocoblock'] ) && class_exists( '\Jet_Dashboard\Dashboard' ) ) {
+		$croco_stored_key = function () {
+			$p = minn_admin_crocoblock_primary();
+			return $p ? $p['key'] : '';
+		};
+		$providers['crocoblock']['secret_label'] = __( 'Crocoblock license key', 'minn-admin' );
+		$providers['crocoblock']['activate']     = function ( $secret ) {
+			$secret = trim( (string) $secret );
+			if ( '' === $secret ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Paste the license key from your Crocoblock account.', 'minn-admin' ) );
+			}
+			$r = minn_admin_crocoblock_query( 'activate_license', $secret );
+			if ( ! $r['ok'] ) {
+				return $r;
+			}
+			if ( empty( $r['data']['license'] ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Crocoblock accepted the key but sent no license details to store.', 'minn-admin' ) );
+			}
+			minn_admin_crocoblock_store( $secret, $r['data'] );
+			$product = ! empty( $r['data']['product_name'] ) ? wp_strip_all_tags( (string) $r['data']['product_name'] ) : '';
+			return array( 'ok' => true, 'message' => $product ? $product : $r['message'] );
+		};
+		$providers['crocoblock']['deactivate'] = function () use ( $croco_stored_key ) {
+			$key = $croco_stored_key();
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No Crocoblock key is stored.', 'minn-admin' ) );
+			}
+			$r = minn_admin_crocoblock_query( 'deactivate_license', $key );
+			if ( ! $r['ok'] ) {
+				return $r;
+			}
+			$list = \Jet_Dashboard\Utils::get_license_data( 'license-list', array() );
+			unset( $list[ $key ] );
+			\Jet_Dashboard\Utils::set_license_data( 'license-list', $list );
+			delete_site_transient( 'jet_dashboard_license_expire_check' );
+			delete_site_transient( 'update_plugins' );
+			return array( 'ok' => true, 'message' => $r['message'] ? $r['message'] : __( 'This site was removed from the license.', 'minn-admin' ) );
+		};
+		$providers['crocoblock']['verify'] = function () use ( $croco_stored_key ) {
+			$key = $croco_stored_key();
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No Crocoblock key is stored.', 'minn-admin' ) );
+			}
+			$r = minn_admin_crocoblock_query( 'activate_license', $key );
+			if ( ! $r['ok'] ) {
+				return $r;
+			}
+			if ( ! empty( $r['data']['license'] ) ) {
+				minn_admin_crocoblock_store( $key, $r['data'] );
+			}
+			return array( 'ok' => true, 'message' => __( 'Crocoblock confirmed the license for this site.', 'minn-admin' ) );
+		};
 	}
 
 	// WP Migrate: their activation is one API call plus a local write, which
