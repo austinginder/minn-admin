@@ -561,6 +561,30 @@ add_action( 'rest_api_init', function () {
 			$next_lbl = $next_ts
 				? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_ts )
 				: '—';
+			// Next 14 site-local days, starting today: the shape of the week ahead.
+			$chart_days = array();
+			for ( $i = 0; $i < 14; $i++ ) {
+				$d                = wp_date( 'Y-m-d', time() + $i * DAY_IN_SECONDS );
+				$chart_days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+			}
+			$chart_to = ( new DateTimeImmutable( 'today', $tz ) )->modify( '+14 days' )->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$chart_rows = $wpdb->get_results( $wpdb->prepare(
+				"SELECT bookingStart, status FROM {$appts} WHERE status IN ('approved','pending') AND bookingStart >= %s AND bookingStart < %s{$scoped}",
+				array_merge( array( $today_from, $chart_to ), $params )
+			) );
+			// phpcs:enable
+			foreach ( (array) $chart_rows as $cr ) {
+				$iso = minn_admin_amelia_utc_iso( $cr->bookingStart );
+				$d   = $iso ? wp_date( 'Y-m-d', strtotime( $iso ) ) : '';
+				if ( ! isset( $chart_days[ $d ] ) ) {
+					continue;
+				}
+				$chart_days[ $d ]['value']++;
+				if ( 'pending' === $cr->status ) {
+					$chart_days[ $d ]['secondary']++;
+				}
+			}
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
@@ -576,6 +600,12 @@ add_action( 'rest_api_init', function () {
 						'value' => $next_lbl,
 						'hint'  => $next_ts ? '' : __( 'Nothing upcoming', 'minn-admin' ),
 					),
+				),
+				'chart'   => array(
+					'title'     => __( 'Next 14 days', 'minn-admin' ),
+					'primary'   => __( 'Booked', 'minn-admin' ),
+					'secondary' => __( 'Pending', 'minn-admin' ),
+					'points'    => array_values( $chart_days ),
 				),
 				'actions' => array( array( 'label' => __( 'Open Amelia ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 			) );

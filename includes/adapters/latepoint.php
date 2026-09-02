@@ -540,6 +540,29 @@ add_action( 'rest_api_init', function () {
 			$next_lbl = $next_ts
 				? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_ts )
 				: '—';
+			// Next 14 site-local days, starting today: the shape of the week ahead.
+			$chart_days = array();
+			for ( $i = 0; $i < 14; $i++ ) {
+				$d                = wp_date( 'Y-m-d', time() + $i * DAY_IN_SECONDS );
+				$chart_days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+			}
+			// start_date is LatePoint's site-local day column, so it buckets directly.
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$chart_rows = $wpdb->get_results( $wpdb->prepare(
+				"SELECT start_date, status, COUNT(*) AS c FROM {$bookings} WHERE status IN ('approved','pending','payment_pending') AND start_date >= %s AND start_date <= %s{$scoped} GROUP BY start_date, status",
+				array_merge( array( $today, wp_date( 'Y-m-d', time() + 13 * DAY_IN_SECONDS ) ), $params )
+			) );
+			// phpcs:enable
+			foreach ( (array) $chart_rows as $cr ) {
+				$d = (string) $cr->start_date;
+				if ( ! isset( $chart_days[ $d ] ) ) {
+					continue;
+				}
+				$chart_days[ $d ]['value'] += (int) $cr->c;
+				if ( 'approved' !== $cr->status ) {
+					$chart_days[ $d ]['secondary'] += (int) $cr->c;
+				}
+			}
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array( 'label' => __( 'Today', 'minn-admin' ), 'value' => number_format_i18n( $today_n ) ),
@@ -549,6 +572,12 @@ add_action( 'rest_api_init', function () {
 						'value' => $next_lbl,
 						'hint'  => $next_ts ? '' : __( 'Nothing upcoming', 'minn-admin' ),
 					),
+				),
+				'chart'   => array(
+					'title'     => __( 'Next 14 days', 'minn-admin' ),
+					'primary'   => __( 'Booked', 'minn-admin' ),
+					'secondary' => __( 'Pending', 'minn-admin' ),
+					'points'    => array_values( $chart_days ),
 				),
 				'actions' => array( array( 'label' => __( 'Open LatePoint ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 			) );

@@ -566,6 +566,37 @@ add_action( 'rest_api_init', function () {
 			$pending = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$from} {$pending_sql}", $pending_p ) );
 			$next    = $wpdb->get_var( $wpdb->prepare( "SELECT b.check_in_date FROM {$from} {$next_sql} ORDER BY b.check_in_date ASC LIMIT 1", $next_p ) );
 			// phpcs:enable
+			// Next 14 site-local days, starting today: the shape of the week ahead.
+			$chart_days = array();
+			for ( $i = 0; $i < 14; $i++ ) {
+				$d                = wp_date( 'Y-m-d', time() + $i * DAY_IN_SECONDS );
+				$chart_days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+			}
+			// check_in_date is a naive day epoch (site day at 00:00 read as UTC),
+			// the same clock their own screens and the views above use.
+			list( $chart_from ) = minn_admin_jet_booking_day_bounds();
+			$chart_pending = array_map( 'strval', minn_admin_jet_booking_status_set( 'in_progress' ) );
+			$chart_invalid = array_map( 'strval', minn_admin_jet_booking_status_set( 'invalid' ) );
+			list( $all_sql, $all_p ) = minn_admin_jet_booking_where( 'all', '', $scope );
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+			$chart_rows = $wpdb->get_results( $wpdb->prepare(
+				"SELECT b.check_in_date, b.status FROM {$from} {$all_sql} AND b.check_in_date >= %d AND b.check_in_date < %d",
+				array_merge( $all_p, array( $chart_from, $chart_from + 14 * DAY_IN_SECONDS ) )
+			) );
+			// phpcs:enable
+			foreach ( (array) $chart_rows as $cr ) {
+				if ( in_array( (string) $cr->status, $chart_invalid, true ) ) {
+					continue;
+				}
+				$d = gmdate( 'Y-m-d', (int) $cr->check_in_date );
+				if ( ! isset( $chart_days[ $d ] ) ) {
+					continue;
+				}
+				$chart_days[ $d ]['value']++;
+				if ( in_array( (string) $cr->status, $chart_pending, true ) ) {
+					$chart_days[ $d ]['secondary']++;
+				}
+			}
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array( 'label' => __( 'Today', 'minn-admin' ), 'value' => number_format_i18n( $today_n ), 'hint' => __( 'check-ins', 'minn-admin' ) ),
@@ -575,6 +606,12 @@ add_action( 'rest_api_init', function () {
 						'value' => $next ? minn_admin_jet_booking_day_label( $next ) : '—',
 						'hint'  => $next ? __( 'check-in', 'minn-admin' ) : __( 'Nothing upcoming', 'minn-admin' ),
 					),
+				),
+				'chart'   => array(
+					'title'     => __( 'Next 14 days', 'minn-admin' ),
+					'primary'   => __( 'Booked', 'minn-admin' ),
+					'secondary' => __( 'Pending', 'minn-admin' ),
+					'points'    => array_values( $chart_days ),
 				),
 				'actions' => $open,
 			) );

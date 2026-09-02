@@ -126,6 +126,12 @@ const CLEANUP = `if ( ! class_exists( '\\\\JET_APB\\\\Plugin' ) ) return;
 			&& ( st.body.rows || [] ).some( ( r ) => r.label === 'Next' )
 			&& ( st.body.actions || [] ).some( ( a ) => /Open JetAppointments/.test( a.label ) && /page=jet-apb-appointments/.test( a.href || '' ) ),
 			JSON.stringify( st.body && { rows: ( st.body.rows || [] ).map( ( r ) => r.label ), actions: st.body.actions } ) );
+		const ch = st.body && st.body.chart;
+		t.check( 'status card carries a Next 14 days chart with the seeded row on its day',
+			!! ch && ch.title === 'Next 14 days' && Array.isArray( ch.points ) && ch.points.length === 14
+			&& ch.points.every( ( pt ) => /^\d{4}-\d{2}-\d{2}$/.test( pt.label ) )
+			&& ch.points.some( ( pt ) => pt.value > 0 ),
+			JSON.stringify( ch ) );
 
 		const del = await api( `minn-admin/v1/jet-appointments/appointments/${ seed.canceled }`, { method: 'DELETE' } );
 		const gone = evalPhp( `global $wpdb; echo (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}jet_appointments WHERE ID = %d", ${ seed.canceled } ) );` );

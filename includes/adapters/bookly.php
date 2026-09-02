@@ -517,6 +517,27 @@ add_action( 'rest_api_init', function () {
 			$next_lbl = $next_ts
 				? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_ts )
 				: '—';
+			// Next 14 site-local days, starting today: the shape of the week ahead.
+			$chart_days = array();
+			for ( $i = 0; $i < 14; $i++ ) {
+				$d                = wp_date( 'Y-m-d', time() + $i * DAY_IN_SECONDS );
+				$chart_days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+			}
+			// start_date is WP-local, so DATE() buckets on the site's own days.
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$chart_sql  = "SELECT DATE(a.start_date) AS d, ca.status, COUNT(*) AS c{$join}{$where} AND ca.status IN ('approved','pending','waitlisted') AND DATE(a.start_date) >= %s AND DATE(a.start_date) <= %s GROUP BY DATE(a.start_date), ca.status";
+			$chart_rows = $wpdb->get_results( $wpdb->prepare( $chart_sql, array_merge( $params, array( $today, wp_date( 'Y-m-d', time() + 13 * DAY_IN_SECONDS ) ) ) ) );
+			// phpcs:enable
+			foreach ( (array) $chart_rows as $cr ) {
+				$d = (string) $cr->d;
+				if ( ! isset( $chart_days[ $d ] ) ) {
+					continue;
+				}
+				$chart_days[ $d ]['value'] += (int) $cr->c;
+				if ( 'approved' !== $cr->status ) {
+					$chart_days[ $d ]['secondary'] += (int) $cr->c;
+				}
+			}
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array( 'label' => __( 'Today', 'minn-admin' ), 'value' => number_format_i18n( $today_n ) ),
@@ -526,6 +547,12 @@ add_action( 'rest_api_init', function () {
 						'value' => $next_lbl,
 						'hint'  => $next_ts ? '' : __( 'Nothing upcoming', 'minn-admin' ),
 					),
+				),
+				'chart'   => array(
+					'title'     => __( 'Next 14 days', 'minn-admin' ),
+					'primary'   => __( 'Booked', 'minn-admin' ),
+					'secondary' => __( 'Pending', 'minn-admin' ),
+					'points'    => array_values( $chart_days ),
 				),
 				'actions' => array( array( 'label' => __( 'Open Bookly ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 			) );
