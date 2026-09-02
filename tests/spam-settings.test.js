@@ -91,6 +91,15 @@ const { launch, login, reporter, BASE, WP } = require( './helpers' );
 			/WP Armour/.test( armourText ) && /Active/.test( armourText ) && /Honeypot protection runs automatically/.test( armourText ), armourText.slice( 0, 120 ) );
 		t.check( 'WP Armour card carries no toggles (tuning stays on its screen)',
 			( await page.$( '[data-spamtog^="wp-armour:"]' ) ) === null );
+		// Disable Comments 2.9+ counts the attempts it turns away; the card
+		// reads their own getter and offers no toggles (closing content
+		// types is policy on their screen).
+		const dcText = await page.$$eval( '.minn-spam-provider', ( els ) =>
+			( els.find( ( el ) => el.textContent.includes( 'Disable Comments' ) ) || { textContent: '' } ).textContent );
+		t.check( 'Disable Comments card renders Active with the blocked-attempt note',
+			/Disable Comments/.test( dcText ) && /Active/.test( dcText ) && /(Turned away|turned away and counted)/.test( dcText ), dcText.slice( 0, 160 ) );
+		t.check( 'Disable Comments card carries no toggles',
+			( await page.$( '[data-spamtog^="disable-comments:"]' ) ) === null );
 		// minnadmin runs Disable Comments (fixture): the queue row must
 		// explain itself instead of offering a Review button into a route
 		// the nav hides (B.comments gating).

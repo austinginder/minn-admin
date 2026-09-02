@@ -189,6 +189,60 @@ function minn_admin_spam_providers() {
 		);
 	}
 
+	// --- Disable Comments (blocked-attempt counter, 2.9+) -------------------
+	// Not a spam filter: it turns comment, trackback and REST comment
+	// attempts away outright and, since 2.9, counts what it refused. Their
+	// counters live in per-vector options behind get_blocked_stats() (in
+	// memory during a request, one write at shutdown), reported on Site
+	// Health; the card reads the same getter. No toggles: which content
+	// types are closed is policy set on their screen.
+	if ( class_exists( 'Disable_Comments' ) && method_exists( 'Disable_Comments', 'get_instance' ) && method_exists( 'Disable_Comments', 'get_blocked_stats' ) ) {
+		$providers[] = array(
+			'id'     => 'disable-comments',
+			'name'   => 'Disable Comments',
+			'status' => function () {
+				$stats = array( 'since' => 0, 'counts' => array(), 'total' => 0 );
+				$labels = array();
+				try {
+					$dc     = Disable_Comments::get_instance();
+					$stats  = (array) $dc->get_blocked_stats();
+					$labels = method_exists( $dc, 'get_blocked_vectors' ) ? (array) $dc->get_blocked_vectors() : array();
+				} catch ( \Throwable $e ) {
+					// A counter that cannot be read is an empty card, never a broken page.
+				}
+				$short = array(
+					'comment'   => __( 'comment', 'minn-admin' ),
+					'trackback' => __( 'trackback', 'minn-admin' ),
+					'rest'      => __( 'REST', 'minn-admin' ),
+				);
+				$parts = array();
+				foreach ( (array) ( $stats['counts'] ?? array() ) as $vector => $n ) {
+					$word    = isset( $short[ $vector ] ) ? $short[ $vector ] : ( isset( $labels[ $vector ] ) ? (string) $labels[ $vector ] : (string) $vector );
+					$parts[] = number_format_i18n( (int) $n ) . ' ' . $word;
+				}
+				$since = (int) ( $stats['since'] ?? 0 );
+				$note  = $parts
+					? sprintf(
+						/* translators: 1: per-kind counts such as "3 comment, 0 trackback, 1 REST"; 2: the date counting started. */
+						__( 'Turned away %1$s attempts since %2$s', 'minn-admin' ),
+						implode( ', ', $parts ),
+						$since ? wp_date( get_option( 'date_format' ), $since ) : __( 'install', 'minn-admin' )
+					)
+					: __( 'Comment, trackback and REST comment attempts are turned away and counted', 'minn-admin' );
+				return array(
+					'configured' => true, // it blocks the moment it is active; nothing to set up
+					'note'       => $note,
+					'blocked'    => (int) ( $stats['total'] ?? 0 ),
+					'toggles'    => array(), // which content types are closed is policy on their screen
+					'adminUrl'   => is_multisite() && is_network_admin()
+						? network_admin_url( 'settings.php?page=disable_comments_settings' )
+						: admin_url( 'options-general.php?page=disable_comments_settings' ),
+				);
+			},
+			'set'    => function () {},
+		);
+	}
+
 	return apply_filters( 'minn_admin_spam_providers', $providers );
 }
 
