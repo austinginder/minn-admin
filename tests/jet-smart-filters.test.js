@@ -19,8 +19,10 @@ const { evalPhp, apiFor, paintSurface } = require( './_jet-common' );
 		t.check( 'the list shows it with its type name from their registry and query variable', list.status === 200 && !! row && /Select/.test( row.kind ) && row.queryVar === 'post_tag', JSON.stringify( row ) );
 		const st = await api( 'minn-admin/v1/jet-smart-filters/status' );
 		const on = ( st.body.rows || [] ).find( ( r ) => r.label === 'Indexer' );
-		t.check( 'status card reports filters, indexer state and index rows', st.status === 200 && !! on && ( st.body.rows || [] ).some( ( r ) => r.label === 'Index rows' ), JSON.stringify( st.body ) );
-		if ( on && on.value === 'On' ) {
+		// The indexer row carries the index size when it is on ("On · 12
+		// rows"); the same rows join the JetSearch card when both are active.
+		t.check( 'status card reports filters and the indexer state with its row count', st.status === 200 && !! on && /^(On · [\d,]+ rows|Off)$/.test( on.value ), JSON.stringify( st.body ) );
+		if ( on && /^On/.test( on.value ) ) {
 			t.check( 'Reindex is offered while the indexer is on', ( st.body.actions || [] ).some( ( a ) => /Reindex/.test( a.label ) ) );
 			const re = await api( 'minn-admin/v1/jet-smart-filters/reindex', { method: 'POST' } );
 			t.check( 'Reindex runs their index_filters() and reports the row count', re.status === 200 && re.body.ok && /Index rebuilt/.test( re.body.message ), JSON.stringify( re.body ) );
@@ -29,7 +31,7 @@ const { evalPhp, apiFor, paintSurface } = require( './_jet-common' );
 		}
 		const del = await api( `minn-admin/v1/jet-smart-filters/filters/${ id }`, { method: 'DELETE' } );
 		t.check( 'trash moves the filter to the trash', del.status === 200 && evalPhp( 'sf2', `echo get_post_status( ${ id } );` ) === 'trash' );
-		t.check( 'the Filters surface paints', await paintSurface( page, BASE, 'jet-smart-filters', 'Indexer' ) );
+		t.check( 'the Filters view paints on the shared Search surface', await paintSurface( page, BASE, 'jet-search', 'Indexer' ) );
 	} finally {
 		if ( id ) evalPhp( 'sf3', `wp_delete_post( ${ id }, true );` );
 		await t.done( browser, errors );

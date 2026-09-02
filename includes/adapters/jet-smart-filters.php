@@ -60,8 +60,34 @@ function minn_admin_jsf_item( $post, $types ) {
 	);
 }
 
+/** The indexer rows + Reindex, shared with the JetSearch status card. */
+function minn_admin_jsf_status_rows() {
+	global $wpdb;
+	$counts = wp_count_posts( 'jet-smart-filters' );
+	$on     = minn_admin_jsf_indexer_on();
+	$t      = $wpdb->prefix . 'jet_smart_filters_indexer';
+	$has    = 0 === strcasecmp( (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ), $t );
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$n      = $has ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t}" ) : 0;
+	$rows   = array(
+		array( 'label' => __( 'Filters', 'minn-admin' ), 'value' => number_format_i18n( (int) ( $counts->publish ?? 0 ) ) ),
+		array( 'label' => __( 'Indexer', 'minn-admin' ), 'value' => $on ? sprintf( /* translators: %s: number of index rows */ __( 'On · %s rows', 'minn-admin' ), number_format_i18n( $n ) ) : __( 'Off', 'minn-admin' ), 'hint' => $on ? '' : __( 'switch it on in JetSmartFilters settings', 'minn-admin' ) ),
+	);
+	$actions = array();
+	if ( $on ) {
+		$actions[] = array( 'label' => __( 'Reindex filters', 'minn-admin' ), 'route' => 'minn-admin/v1/jet-smart-filters/reindex', 'method' => 'POST', 'confirm' => __( 'Rebuild the filter index now? Large sites take a moment.', 'minn-admin' ) );
+	}
+	return array( 'rows' => $rows, 'actions' => $actions );
+}
+
+// Runs after jet-search.php's filter (require order), so the Search
+// surface, when JetSearch is active, is there to join.
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_jsf_active() || ! minn_admin_jsf_can() ) {
+		return $surfaces;
+	}
+	if ( isset( $surfaces['jet-search'] ) ) {
+		$surfaces['jet-search']['views'][] = minn_admin_jsf_collection();
 		return $surfaces;
 	}
 	$surfaces['jet-smart-filters'] = array(
@@ -71,7 +97,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'tools',
 		'cap'        => 'edit_posts',
 		'status'     => array( 'route' => 'minn-admin/v1/jet-smart-filters/status' ),
-		'collection' => array(
+		'collection' => minn_admin_jsf_collection(),
+	);
+	return $surfaces;
+} );
+
+/** The filters list as a collection descriptor (its own surface or a Search view). */
+function minn_admin_jsf_collection() {
+	return array(
+			'viewLabel' => __( 'Filters', 'minn-admin' ),
+			'cap'       => 'edit_posts',
 			'route'     => 'minn-admin/v1/jet-smart-filters/filters',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -94,10 +129,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
-		),
 	);
-	return $surfaces;
-} );
+}
 
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_jsf_active() ) {
@@ -184,26 +217,9 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => $perm,
 		'callback'            => function () {
-			global $wpdb;
-			$counts = wp_count_posts( 'jet-smart-filters' );
-			$on     = minn_admin_jsf_indexer_on();
-			$t      = $wpdb->prefix . 'jet_smart_filters_indexer';
-			$has    = 0 === strcasecmp( (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ), $t );
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$rows   = $has ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t}" ) : 0;
-			$actions = array();
-			if ( $on ) {
-				$actions[] = array( 'label' => __( 'Reindex', 'minn-admin' ), 'route' => 'minn-admin/v1/jet-smart-filters/reindex', 'method' => 'POST', 'confirm' => __( 'Rebuild the filter index now? Large sites take a moment.', 'minn-admin' ) );
-			}
-			$actions[] = array( 'label' => __( 'Open JetSmartFilters ↗', 'minn-admin' ), 'href' => admin_url( 'edit.php?post_type=jet-smart-filters' ) );
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array( 'label' => __( 'Filters', 'minn-admin' ), 'value' => number_format_i18n( (int) ( $counts->publish ?? 0 ) ) ),
-					array( 'label' => __( 'Indexer', 'minn-admin' ), 'value' => $on ? __( 'On', 'minn-admin' ) : __( 'Off', 'minn-admin' ), 'hint' => $on ? '' : __( 'switch it on in JetSmartFilters settings', 'minn-admin' ) ),
-					array( 'label' => __( 'Index rows', 'minn-admin' ), 'value' => number_format_i18n( $rows ) ),
-				),
-				'actions' => $actions,
-			) );
+			$st              = minn_admin_jsf_status_rows();
+			$st['actions'][] = array( 'label' => __( 'Open JetSmartFilters ↗', 'minn-admin' ), 'href' => admin_url( 'edit.php?post_type=jet-smart-filters' ) );
+			return rest_ensure_response( $st );
 		},
 	) );
 } );
