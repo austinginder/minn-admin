@@ -151,11 +151,23 @@ function minn_admin_elementor_forms_status_model() {
 		$hint .= ', ' . number_format_i18n( $trash ) . ' trash';
 	}
 
+	// created_at_gmt is UTC: bucket each row onto the site's day in PHP.
+	$chart = minn_admin_chart_days();
+	if ( $has ) {
+		$chart_rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT created_at_gmt FROM `{$table}` WHERE status != 'trash' AND created_at_gmt >= %s", // phpcs:ignore
+			minn_admin_chart_utc_since()
+		) );
+		foreach ( (array) $chart_rows as $cr ) {
+			minn_admin_chart_bump( $chart, minn_admin_chart_utc_day( $cr->created_at_gmt ) );
+		}
+	}
 	return array(
 		'rows'    => array(
 			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $nforms ) ),
 		),
+		'chart'   => minn_admin_chart_build( $chart, __( 'Submissions', 'minn-admin' ) ),
 		'actions' => array(
 			array(
 				'label' => __( 'Open Elementor ↗', 'minn-admin' ),

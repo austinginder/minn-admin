@@ -160,6 +160,15 @@ function minn_admin_forminator_status_model() {
 	$spam     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$entry} e WHERE e.entry_type = 'custom-forms' AND e.status IN ('active','spam') AND e.is_spam = 1" );
 	// phpcs:enable
 	$forms = count( minn_admin_forminator_titles() );
+	// date_created is date_i18n (site-local), so DATE() groups on the site's days.
+	$chart = minn_admin_chart_days();
+	$chart_rows = $wpdb->get_results( $wpdb->prepare(
+		"SELECT DATE(e.date_created) AS d, e.is_spam, COUNT(*) AS c FROM {$entry} e WHERE e.entry_type = 'custom-forms' AND e.status IN ('active','spam') AND e.date_created >= %s GROUP BY DATE(e.date_created), e.is_spam",
+		minn_admin_chart_local_since()
+	) );
+	foreach ( (array) $chart_rows as $cr ) {
+		minn_admin_chart_bump( $chart, (string) $cr->d, (int) $cr->is_spam === 1, (int) $cr->c );
+	}
 	return array(
 		'rows'    => array(
 			array(
@@ -169,6 +178,7 @@ function minn_admin_forminator_status_model() {
 			),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
+		'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Forminator ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=forminator-entries' ) ),
 		),

@@ -223,11 +223,19 @@ function minn_admin_fluent_forms_status_model() {
 	if ( $spam ) {
 		$hint .= ', ' . number_format_i18n( $spam ) . ' spam';
 	}
+	// created_at is site-local current_time, so DATE() groups on the site's days.
+	$chart = minn_admin_chart_days();
+	$chart_sql  = "SELECT DATE(created_at) AS d, status, COUNT(*) AS c FROM {$subs} WHERE status <> 'trashed' AND created_at >= %s{$clause} GROUP BY DATE(created_at), status";
+	$chart_rows = $wpdb->get_results( $wpdb->prepare( $chart_sql, array_merge( array( minn_admin_chart_local_since() ), $params ) ) );
+	foreach ( (array) $chart_rows as $cr ) {
+		minn_admin_chart_bump( $chart, (string) $cr->d, 'spam' === (string) $cr->status, (int) $cr->c );
+	}
 	return array(
 		'rows'    => array(
 			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $nforms ) ),
 		),
+		'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Fluent Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) ),
 		),

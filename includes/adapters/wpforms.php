@@ -245,11 +245,21 @@ function minn_admin_wpforms_status_model() {
 	if ( $spam ) {
 		$hint .= ', ' . number_format_i18n( $spam ) . ' spam';
 	}
+	// date is UTC: bucket each row onto the site's day in PHP.
+	$chart = minn_admin_chart_days();
+	$chart_rows = $wpdb->get_results( $wpdb->prepare(
+		"SELECT date, status FROM {$table} WHERE status IN ('','spam') AND date >= %s{$scope}", // phpcs:ignore
+		minn_admin_chart_utc_since()
+	) );
+	foreach ( (array) $chart_rows as $cr ) {
+		minn_admin_chart_bump( $chart, minn_admin_chart_utc_day( $cr->date ), 'spam' === (string) $cr->status );
+	}
 	return array(
 		'rows'    => array(
 			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
+		'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open WPForms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=wpforms-entries' ) ),
 		),

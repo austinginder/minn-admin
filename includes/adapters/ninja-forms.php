@@ -155,6 +155,15 @@ function minn_admin_ninja_forms_status_model() {
 	$subs  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'nf_sub' AND post_status = 'publish'" );
 	$trash = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'nf_sub' AND post_status = 'trash'" );
 	$forms = count( minn_admin_ninja_forms_titles() );
+	// nf_sub post_date is site-local, so DATE() groups on the site's days.
+	$chart = minn_admin_chart_days();
+	$chart_rows = $wpdb->get_results( $wpdb->prepare(
+		"SELECT DATE(post_date) AS d, COUNT(*) AS c FROM {$wpdb->posts} WHERE post_type = 'nf_sub' AND post_status = 'publish' AND post_date >= %s GROUP BY DATE(post_date)",
+		minn_admin_chart_local_since()
+	) );
+	foreach ( (array) $chart_rows as $cr ) {
+		minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
+	}
 	return array(
 		'rows'    => array(
 			array(
@@ -167,6 +176,7 @@ function minn_admin_ninja_forms_status_model() {
 			),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
+		'chart'   => minn_admin_chart_build( $chart, __( 'Submissions', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Ninja Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=nf-submissions' ) ),
 		),

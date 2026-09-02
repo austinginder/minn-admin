@@ -561,6 +561,12 @@ add_action( 'rest_api_init', function () {
 			) );
 			// phpcs:enable
 			$forms = count( minn_admin_cfdb7_form_titles() );
+			// form_date is site-local current_time, so DATE() groups on the site's days.
+			$chart = minn_admin_chart_days();
+			$chart_rows = $wpdb->get_results( $wpdb->prepare( "SELECT DATE(form_date) AS d, COUNT(*) AS c FROM `{$table}` WHERE form_date >= %s GROUP BY DATE(form_date)", minn_admin_chart_local_since() ) ); // phpcs:ignore
+			foreach ( (array) $chart_rows as $cr ) {
+				minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
+			}
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
@@ -574,6 +580,7 @@ add_action( 'rest_api_init', function () {
 					),
 					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 				),
+				'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ) ),
 				'actions' => array(
 					array( 'label' => __( 'Open CFDB7 ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=cfdb7-list.php' ) ),
 				),

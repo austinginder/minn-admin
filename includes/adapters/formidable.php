@@ -374,6 +374,12 @@ add_action( 'rest_api_init', function () {
 			) );
 			// phpcs:enable
 			$forms = count( minn_admin_formidable_titles() );
+			// created_at is UTC: bucket each row onto the site's day in PHP.
+			$chart = minn_admin_chart_days();
+			$chart_rows = $wpdb->get_results( $wpdb->prepare( "SELECT created_at FROM {$items_t} WHERE is_draft = 0 AND parent_item_id = 0 AND created_at >= %s", minn_admin_chart_utc_since() ) ); // phpcs:ignore
+			foreach ( (array) $chart_rows as $cr ) {
+				minn_admin_chart_bump( $chart, minn_admin_chart_utc_day( $cr->created_at ) );
+			}
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
@@ -387,6 +393,7 @@ add_action( 'rest_api_init', function () {
 					),
 					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 				),
+				'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ) ),
 				'actions' => array(
 					array( 'label' => __( 'Open Formidable ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=formidable-entries' ) ),
 				),

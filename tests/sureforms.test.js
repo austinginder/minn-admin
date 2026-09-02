@@ -106,6 +106,10 @@ const evalPhp = ( php ) => {
 
 		const st = await api( 'minn-admin/v1/sureforms/status' );
 		t.check( 'status card carries unread + forms rows', st.status === 200 && ( st.body.rows || [] ).some( ( r ) => /Unread/.test( r.label ) ) && ( st.body.rows || [] ).some( ( r ) => r.label === 'Forms' ), JSON.stringify( ( st.body.rows || [] ).map( ( r ) => r.label ) ) );
+		const ch = st.body && st.body.chart;
+		t.check( 'status card charts the last 14 days with the seeded entries on their day',
+			!! ch && ch.title === 'Last 14 days' && Array.isArray( ch.points ) && ch.points.length === 14 && ch.points.some( ( pt ) => pt.value > 0 ),
+			JSON.stringify( ch ) );
 
 		const del = await api( `minn-admin/v1/sureforms/entries/${ entryId }`, { method: 'DELETE' } );
 		const gone = await api( `minn-admin/v1/sureforms/entries/${ entryId }` );

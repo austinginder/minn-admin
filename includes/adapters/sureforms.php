@@ -359,6 +359,15 @@ add_action( 'rest_api_init', function () {
 			$unread = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'unread'" ); // phpcs:ignore
 			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status <> 'trash'" ); // phpcs:ignore
 			$forms  = count( minn_admin_sureforms_form_titles() );
+			// created_at rides the DB session clock (UTC on managed hosts, local on
+			// dev): shift the window bound the same way the list shifts rows.
+			$chart = minn_admin_chart_days();
+			$chart_since = gmdate( 'Y-m-d H:i:s', strtotime( minn_admin_chart_utc_since() . ' UTC' ) + ( function_exists( 'minn_admin_db_utc_offset' ) ? minn_admin_db_utc_offset() : 0 ) );
+			$chart_rows  = $wpdb->get_results( $wpdb->prepare( "SELECT created_at FROM {$table} WHERE status <> 'trash' AND created_at >= %s", $chart_since ) ); // phpcs:ignore
+			foreach ( (array) $chart_rows as $cr ) {
+				$iso = function_exists( 'minn_admin_db_local_to_utc_iso' ) ? minn_admin_db_local_to_utc_iso( $cr->created_at ) : '';
+				minn_admin_chart_bump( $chart, $iso ? wp_date( 'Y-m-d', strtotime( $iso ) ) : '' );
+			}
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
@@ -368,6 +377,7 @@ add_action( 'rest_api_init', function () {
 					),
 					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 				),
+				'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ) ),
 				'actions' => array( array( 'label' => __( 'Open SureForms ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 			) );
 		},

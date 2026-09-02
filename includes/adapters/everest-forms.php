@@ -321,11 +321,19 @@ function minn_admin_everest_status_model() {
 	if ( $spam ) {
 		$hint .= ', ' . number_format_i18n( $spam ) . ' spam';
 	}
+	// date_created is UTC: bucket each row onto the site's day in PHP.
+	$chart = minn_admin_chart_days();
+	$chart_sql  = "SELECT date_created, status FROM {$table} WHERE status IN ('publish','spam') AND date_created >= %s{$clause}"; // phpcs:ignore
+	$chart_rows = $wpdb->get_results( $wpdb->prepare( $chart_sql, array_merge( array( minn_admin_chart_utc_since() ), $params ) ) ); // phpcs:ignore
+	foreach ( (array) $chart_rows as $cr ) {
+		minn_admin_chart_bump( $chart, minn_admin_chart_utc_day( $cr->date_created ), 'spam' === (string) $cr->status );
+	}
 	return array(
 		'rows'    => array(
 			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
+		'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Everest Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=evf-entries' ) ),
 		),

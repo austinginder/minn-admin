@@ -91,6 +91,17 @@ function minn_admin_flamingo_status_model() {
 			number_format_i18n( $trash )
 		);
 	}
+	// Inbound messages are posts; post_date is site-local, so DATE() groups on the site's days.
+	global $wpdb;
+	$chart = minn_admin_chart_days();
+	$chart_rows = $wpdb->get_results( $wpdb->prepare(
+		"SELECT DATE(post_date) AS d, post_status, COUNT(*) AS c FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish','flamingo-spam') AND post_date >= %s GROUP BY DATE(post_date), post_status",
+		Flamingo_Inbound_Message::post_type,
+		minn_admin_chart_local_since()
+	) );
+	foreach ( (array) $chart_rows as $cr ) {
+		minn_admin_chart_bump( $chart, (string) $cr->d, 'flamingo-spam' === (string) $cr->post_status, (int) $cr->c );
+	}
 	return array(
 		'rows'    => array(
 			array(
@@ -100,6 +111,7 @@ function minn_admin_flamingo_status_model() {
 			),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
+		'chart'   => minn_admin_chart_build( $chart, __( 'Messages', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Flamingo ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=flamingo_inbound' ) ),
 		),

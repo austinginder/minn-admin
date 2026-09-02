@@ -43,6 +43,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const href = ( ( r.body && r.body.actions ) || [] )
 			.map( ( a ) => a.href || '' ).find( ( h ) => c.open.test( h ) );
 		t.check( c.slug + ' card links to the plugin screen', !! href, JSON.stringify( r.body && r.body.actions ) );
+		// Every card charts the last 14 site-local days; a spam series rides
+		// only where the plugin tracks spam.
+		const ch = r.body && r.body.chart;
+		t.check( c.slug + ' card charts the last 14 days',
+			!! ch && ch.title === 'Last 14 days' && Array.isArray( ch.points ) && ch.points.length === 14
+			&& ch.points.every( ( pt ) => /^\d{4}-\d{2}-\d{2}$/.test( pt.label ) && Number.isInteger( pt.value ) ),
+			JSON.stringify( ch && { title: ch.title, primary: ch.primary, secondary: ch.secondary, n: ( ch.points || [] ).length } ) );
 	}
 
 	// The card renders above one live forms surface.
