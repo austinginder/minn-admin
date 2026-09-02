@@ -17224,6 +17224,13 @@
 		return d.toLocaleString( uiLocale(), { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' } );
 	}
 
+	function bookingDayLabel( iso ) {
+		if ( ! iso ) return '';
+		const d = new Date( iso );
+		if ( Number.isNaN( d.getTime() ) ) return String( iso );
+		return d.toLocaleDateString( uiLocale(), { month: 'long', day: 'numeric', year: 'numeric' } );
+	}
+
 	function bookingTimeLabel( iso ) {
 		if ( ! iso ) return '';
 		const d = new Date( iso );
@@ -17283,6 +17290,10 @@
 			price: b.price || fallback.price,
 			notes: b.notes || fallback.notes,
 			code: b.code || fallback.code,
+			// A stay (JetBooking rentals) is booked by the day, not the slot:
+			// check-in / check-out dates, a nights count, no employee or slot.
+			allDay: !! b.allDay,
+			nights: b.nights == null ? null : parseInt( b.nights, 10 ),
 			customer: {
 				name: c.name || fallback.customer.name,
 				email: c.email || fallback.customer.email,
@@ -17333,16 +17344,24 @@
 		const visibleActions = ( coll.actions || [] )
 			.map( ( a, i ) => ( { a, i } ) )
 			.filter( ( { a } ) => surfaceActionVisible( a, it, sec ) );
-		const startLbl = bookingWhenLabel( b.starts );
-		const endTime = bookingTimeLabel( b.ends );
-		const dur = bookingDurationLabel( b.starts, b.ends );
-		const whenBits = [ startLbl && endTime ? startLbl + ' – ' + endTime : startLbl, dur, b.employee ].filter( Boolean );
+		const startLbl = b.allDay ? bookingDayLabel( b.starts ) : bookingWhenLabel( b.starts );
+		const endLbl = b.allDay ? bookingDayLabel( b.ends ) : bookingWhenLabel( b.ends );
+		const endTime = b.allDay ? '' : bookingTimeLabel( b.ends );
+		const dur = b.allDay
+			? ( b.nights ? sprintf( /* translators: %s: number of nights. */ _n( '%s night', '%s nights', b.nights ), String( b.nights ) ) : '' )
+			: bookingDurationLabel( b.starts, b.ends );
+		const whenBits = [
+			b.allDay ? [ startLbl, endLbl ].filter( Boolean ).join( ' – ' ) : ( startLbl && endTime ? startLbl + ' – ' + endTime : startLbl ),
+			dur,
+			b.employee,
+		].filter( Boolean );
 		const priceLbl = b.price && /^\d+(\.\d+)?$/.test( String( b.price ).trim() )
 			? '$' + String( b.price ).trim()
 			: ( b.price || '' );
 		const extras = ( sec.sections || [] ).filter( ( g ) => {
 			const t = ( g.title || '' ).toLowerCase();
-			return t && t !== 'customer' && t !== 'appointment' && ( g.rows || [] ).length;
+			// The card above already shows a stay's own rows.
+			return t && t !== 'customer' && t !== 'appointment' && ! ( b.allDay && t === 'booking' ) && ( g.rows || [] ).length;
 		} );
 		const row = ( label, value ) => value
 			? `<div class="minn-order-read"><div class="minn-order-read-sub">${ esc( label ) }</div><div>${ value }</div></div>`
@@ -17380,14 +17399,14 @@
 					<div class="minn-order-layout">
 						<div class="minn-order-main">
 							<div class="minn-order-sec">
-								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Appointment' ) ) }</div>${ b.code ? `<span class="minn-modal-id-tag">${ esc( b.code ) }</span>` : '' }</div>
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( b.allDay ? __( 'Booking' ) : __( 'Appointment' ) ) }</div>${ b.code ? `<span class="minn-modal-id-tag">${ esc( b.code ) }</span>` : '' }</div>
 								<div class="minn-order-read">
-									${ row( __( 'Service' ), b.service ? esc( b.service ) : empty( __( 'No service' ) ) ) }
-									${ row( __( 'Employee' ), b.employee ? esc( b.employee ) : empty( __( 'No employee' ) ) ) }
-									${ row( __( 'Starts' ), startLbl ? esc( startLbl ) : empty( __( 'No time set' ) ) ) }
-									${ row( __( 'Ends' ), b.ends ? esc( bookingWhenLabel( b.ends ) ) : '' ) }
-									${ row( __( 'Duration' ), dur ? esc( dur ) : '' ) }
-									${ row( __( 'People' ), esc( String( b.people || 1 ) ) ) }
+									${ row( b.allDay ? __( 'Booked' ) : __( 'Service' ), b.service ? esc( b.service ) : empty( __( 'No service' ) ) ) }
+									${ b.allDay && ! b.employee ? '' : row( __( 'Employee' ), b.employee ? esc( b.employee ) : empty( __( 'No employee' ) ) ) }
+									${ row( b.allDay ? __( 'Check-in' ) : __( 'Starts' ), startLbl ? esc( startLbl ) : empty( __( 'No time set' ) ) ) }
+									${ row( b.allDay ? __( 'Check-out' ) : __( 'Ends' ), b.ends ? esc( endLbl ) : '' ) }
+									${ row( b.allDay ? __( 'Length' ) : __( 'Duration' ), dur ? esc( dur ) : '' ) }
+									${ b.allDay ? '' : row( __( 'People' ), esc( String( b.people || 1 ) ) ) }
 									${ row( __( 'Status' ), b.status ? surfacePill( b.status ) : '' ) }
 								</div>
 							</div>
