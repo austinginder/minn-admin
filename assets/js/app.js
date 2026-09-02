@@ -3907,6 +3907,7 @@
 					<div class="minn-topbar-sub" id="minn-sub"></div>
 					<div class="minn-topbar-actions">
 						<button class="minn-upd-chip" id="minn-upd-chip" hidden title="${ esc( __( 'Updates are running — click for details' ) ) }">${ icon( 'refresh' ) }<span id="minn-upd-chip-text"></span></button>
+						<button class="minn-upd-chip minn-job-chip" id="minn-job-chip" hidden title="${ esc( __( 'A background job is running — click for details' ) ) }">${ icon( 'refresh' ) }<span id="minn-job-chip-text"></span></button>
 					<button class="minn-vis-chip" id="minn-vis-chip" hidden title="${ esc( __( 'Your site is not fully public' ) ) }">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
 						<button class="minn-core-chip" id="minn-core-chip" hidden title="${ esc( __( 'A WordPress update is available' ) ) }">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
 						<button class="minn-upd-chip" id="minn-lang-chip" hidden title="${ esc( __( 'Setting up the language' ) ) }">${ icon( 'refresh' ) }<span>${ esc( __( 'Installing language…' ) ) }</span></button>
@@ -4010,6 +4011,7 @@
 			}
 		} );
 		$( '#minn-vis-chip' ).addEventListener( 'click', ( e ) => openVisibilityPopover( e.currentTarget ) );
+		$( '#minn-job-chip' ).addEventListener( 'click', openJobModal );
 		$( '#minn-new-btn' ).addEventListener( 'click', ( e ) => {
 			e.stopPropagation();
 			// The menu is worth opening whenever it holds more than the plain
@@ -4824,6 +4826,7 @@
 		// offer and re-render once when one is pending (same as Extensions).
 		if ( B.caps.core && ! state.cache.core ) {
 			loadCoreStatus().then( () => { if ( state.route === 'overview' && state.cache.core && state.cache.core.update ) renderOverview(); } );
+			resumeJob();
 		}
 		// Chart source: traffic (when an analytics adapter answered) or activity.
 		// Traffic leads by default; the swap button cycles and the pick sticks.
@@ -15729,6 +15732,16 @@
 	// Bind an already-rendered action field form; `run(body)` fires on Go.
 	function bindActionFields( container, action, onCancel, run ) {
 		bindFormComboboxes( container, 'data-actfield', action.fields );
+		// Toggle fields are switches that read back through their `on`
+		// class; nothing else in this form binds them, so an unbound switch
+		// looked live and always submitted its initial value.
+		$$( '[data-actfield][data-ftype="toggle"]', container ).forEach( ( sw ) =>
+			sw.addEventListener( 'click', () => {
+				const on = ! sw.classList.contains( 'on' );
+				sw.classList.toggle( 'on', on );
+				sw.setAttribute( 'aria-checked', String( on ) );
+			} )
+		);
 		const first = $( '[data-actfield]', container );
 		if ( first ) first.focus( { preventScroll: true } );
 		$( '[data-actcancel]', container ).addEventListener( 'click', onCancel );
@@ -15783,6 +15796,11 @@
 				if ( a.fields && a.fields.length ) {
 					armActionFields( btn, a, () => renderSurface( s ), async ( body ) => {
 						const r = await api( a.route, { method: a.method || 'POST', body: JSON.stringify( body ) } );
+						if ( a.job && r && r.job ) {
+							startJob( r.job, { surface: s.id } );
+							renderSurface( s );
+							return;
+						}
 						toast( actionToast( r, a ) );
 						finish();
 					} );
@@ -15792,6 +15810,13 @@
 				btn.disabled = true;
 				try {
 					const r = await api( a.route, { method: a.method || 'POST' } );
+					if ( a.job && r && r.job ) {
+						// A long-running job: the chip and modal take it from
+						// here; the surface refreshes when the job ends.
+						startJob( r.job, { surface: s.id } );
+						btn.disabled = false;
+						return;
+					}
 					toast( actionToast( r, a ) );
 					finish();
 				} catch ( e ) {
@@ -15800,6 +15825,189 @@
 				}
 			} )
 		);
+	}
+
+	/* ===== Background jobs =====
+	 * One job at a time, started by a status-card action declared with
+	 * `job: true` whose route answers { job: { id, label, statusRoute,
+	 * stopRoute?, stopMethod? } }. The status route answers { status:
+	 * running|done|error|canceled, percent?, message?, result?: { label,
+	 * href? } }. The topbar chip shows label + percent on every route, the
+	 * modal shows the same with Stop, and the job survives a reload through
+	 * localStorage so a long export is never orphaned by navigation. */
+	const JOB_KEY = 'minn-job';
+	let jobTimer = null;
+
+	function jobSave() {
+		try {
+			if ( state.job && state.job.status === 'running' ) localStorage.setItem( JOB_KEY, JSON.stringify( state.job ) );
+			else localStorage.removeItem( JOB_KEY );
+		} catch ( e ) { /* storage unavailable */ }
+	}
+
+	function startJob( job, opts ) {
+		if ( ! job || ! job.statusRoute ) return;
+		state.job = {
+			id: job.id || '',
+			label: job.label || __( 'Working…' ),
+			statusRoute: job.statusRoute,
+			stopRoute: job.stopRoute || '',
+			stopMethod: job.stopMethod || 'DELETE',
+			surface: ( opts && opts.surface ) || '',
+			status: 'running',
+			percent: null,
+			message: job.message || '',
+			result: null,
+			startedAt: Date.now(),
+		};
+		jobSave();
+		updateJobChip();
+		pollJob();
+	}
+
+	function resumeJob() {
+		let saved = null;
+		try { saved = JSON.parse( localStorage.getItem( JOB_KEY ) || 'null' ); } catch ( e ) { saved = null; }
+		if ( ! saved || ! saved.statusRoute ) return;
+		state.job = Object.assign( saved, { status: 'running' } );
+		updateJobChip();
+		pollJob();
+	}
+
+	async function pollJob() {
+		clearTimeout( jobTimer );
+		const j = state.job;
+		if ( ! j || j.status !== 'running' ) return;
+		let r = null;
+		try {
+			r = await api( j.statusRoute );
+		} catch ( e ) {
+			// A dropped reply is not a failed job (the server recycles under
+			// load); keep polling and let the status route say otherwise.
+			jobTimer = setTimeout( pollJob, 3000 );
+			return;
+		}
+		if ( state.job !== j ) return;
+		if ( r && typeof r.percent === 'number' ) j.percent = Math.max( 0, Math.min( 100, Math.round( r.percent ) ) );
+		if ( r && typeof r.message === 'string' && r.message ) j.message = r.message;
+		if ( r && r.result ) j.result = r.result;
+		const st = r && r.status ? String( r.status ) : 'running';
+		if ( st === 'done' || st === 'error' || st === 'canceled' ) {
+			j.status = st;
+			j.endedAt = Date.now();
+			jobSave();
+			updateJobChip();
+			if ( state.modal && state.modal.type === 'job' ) renderOverlays();
+			if ( st === 'done' ) {
+				/* translators: %s: the job label, e.g. "Exporting site". */
+				toast( j.message || sprintf( __( '%s — done' ), j.label ) );
+			} else if ( st === 'error' ) {
+				toast( j.message || sprintf( /* translators: %s: the job label. */ __( '%s failed' ), j.label ), true );
+			}
+			// The surface that started it shows the outcome (a new export
+			// in its list) on its next paint.
+			if ( j.surface ) {
+				const ss = surfaceState( j.surface );
+				ss.status = null;
+				ss.cache = null;
+				if ( state.route === j.surface ) {
+					const sdef = surfaceById( j.surface );
+					if ( sdef ) renderSurface( sdef );
+				}
+			}
+			// Keep the chip as a quiet "done" pill for a moment, then clear.
+			setTimeout( () => {
+				if ( state.job === j && ! ( state.modal && state.modal.type === 'job' ) ) {
+					state.job = null;
+					updateJobChip();
+				}
+			}, 6000 );
+			return;
+		}
+		updateJobChip();
+		if ( state.modal && state.modal.type === 'job' ) renderJobModalBody();
+		jobTimer = setTimeout( pollJob, 1500 );
+	}
+
+	async function stopJob() {
+		const j = state.job;
+		if ( ! j || ! j.stopRoute || j.status !== 'running' ) return;
+		if ( ! confirm( sprintf( /* translators: %s: the job label. */ __( 'Stop "%s"? Whatever it produced so far is discarded.' ), j.label ) ) ) return;
+		try {
+			await api( j.stopRoute, { method: j.stopMethod || 'DELETE' } );
+		} catch ( e ) {
+			toast( e.message, true );
+			return;
+		}
+		j.status = 'canceled';
+		j.endedAt = Date.now();
+		jobSave();
+		updateJobChip();
+		if ( state.modal && state.modal.type === 'job' ) renderOverlays();
+		toast( sprintf( /* translators: %s: the job label. */ __( '%s stopped' ), j.label ) );
+	}
+
+	function jobChipLabel( j ) {
+		if ( j.status === 'done' ) return sprintf( /* translators: %s: the job label. */ __( '%s — done' ), j.label );
+		if ( j.status === 'error' ) return sprintf( /* translators: %s: the job label. */ __( '%s — failed' ), j.label );
+		if ( j.status === 'canceled' ) return sprintf( /* translators: %s: the job label. */ __( '%s — stopped' ), j.label );
+		return j.percent == null ? j.label : `${ j.label } · ${ j.percent }%`;
+	}
+
+	// Lives in the static topbar like the core chip: updated by explicit
+	// call, never via renderOverlays.
+	function updateJobChip() {
+		const chip = $( '#minn-job-chip' );
+		if ( ! chip ) return;
+		const j = state.job;
+		chip.hidden = ! j;
+		if ( ! j ) return;
+		chip.classList.toggle( 'is-done', j.status === 'done' );
+		chip.classList.toggle( 'is-error', j.status === 'error' || j.status === 'canceled' );
+		chip.classList.toggle( 'is-running', j.status === 'running' );
+		$( '#minn-job-chip-text' ).textContent = jobChipLabel( j );
+	}
+
+	function openJobModal() {
+		if ( ! state.job ) return;
+		state.modal = { type: 'job' };
+		renderOverlays();
+	}
+
+	function jobModalBodyHtml( j ) {
+		const pct = j.percent == null ? null : j.percent;
+		const stateLabel = { running: __( 'Running' ), done: __( 'Done' ), error: __( 'Failed' ), canceled: __( 'Stopped' ) }[ j.status ] || j.status;
+		return `
+			<div class="minn-job-state ${ esc( j.status ) }">${ esc( stateLabel ) }${ pct != null && j.status === 'running' ? ` · ${ pct }%` : '' }</div>
+			<div class="minn-job-bar${ pct == null && j.status === 'running' ? ' indeterminate' : '' }"><div class="minn-job-bar-fill" style="width:${ j.status === 'done' ? 100 : ( pct == null ? 30 : pct ) }%"></div></div>
+			<div class="minn-job-msg">${ esc( j.message || ( j.status === 'running' ? __( 'Working…' ) : '' ) ) }</div>
+			${ j.result && j.result.href ? `<a class="minn-btn-soft minn-job-result" href="${ esc( j.result.href ) }" target="_blank" rel="noopener">${ esc( j.result.label || __( 'Open result' ) ) } ↗</a>` : '' }`;
+	}
+
+	function renderJobModalBody() {
+		const body = $( '#minn-job-body' );
+		if ( body && state.job ) body.innerHTML = jobModalBodyHtml( state.job );
+		const stop = $( '#minn-job-stop' );
+		if ( stop ) stop.hidden = ! ( state.job && state.job.status === 'running' && state.job.stopRoute );
+	}
+
+	function renderJobModal() {
+		const j = state.job;
+		if ( ! j ) return '';
+		return `
+		<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal minn-job-modal">
+				<div class="minn-modal-head">
+					<div class="minn-modal-title">${ esc( j.label ) }</div>
+					<button class="minn-x-btn" id="minn-modal-close">×</button>
+				</div>
+				<div class="minn-job-body" id="minn-job-body">${ jobModalBodyHtml( j ) }</div>
+				<div class="minn-modal-actions">
+					<button type="button" class="minn-btn-soft danger" id="minn-job-stop"${ j.status === 'running' && j.stopRoute ? '' : ' hidden' }>${ esc( __( 'Stop' ) ) }</button>
+					<button type="button" class="minn-btn-soft" id="minn-modal-close-2">${ esc( j.status === 'running' ? __( 'Keep running in background' ) : __( 'Close' ) ) }</button>
+				</div>
+			</div>
+		</div>`;
 	}
 
 	// A surface may declare a second collection under `manage` (e.g. Gravity
@@ -41518,6 +41726,9 @@
 		if ( m.type === 'styles-history' ) {
 			return renderStylesHistoryModal( m );
 		}
+		if ( m.type === 'job' ) {
+			return renderJobModal();
+		}
 		if ( m.type === 'styles-paste' ) {
 			return renderStylesPasteModal( m );
 		}
@@ -43125,6 +43336,16 @@
 			} );
 		}
 
+		if ( m.type === 'job' ) {
+			const stop = $( '#minn-job-stop' );
+			if ( stop ) stop.addEventListener( 'click', stopJob );
+			const close2 = $( '#minn-modal-close-2' );
+			if ( close2 ) close2.addEventListener( 'click', () => {
+				closeModal();
+				// A finished job the reader has now seen leaves the chip.
+				if ( state.job && state.job.status !== 'running' ) { state.job = null; updateJobChip(); }
+			} );
+		}
 		if ( m.type === 'styles-history' ) {
 			$$( '[data-gsrestore]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => restoreStylesRevision( m, parseInt( btn.dataset.gsrestore, 10 ) ) )

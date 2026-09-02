@@ -495,6 +495,22 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-upd-chip span { overflow: hidden; text-overflow: ellipsis; }
 .minn-upd-chip svg { width: 14px; height: 14px; flex: none; animation: minn-upd-rot 1.1s linear infinite; }
 @keyframes minn-upd-rot { to { transform: rotate(360deg); } }
+/* Background-job chip: the updates pill, spinning while running, quiet
+   green once done, red when it failed or was stopped. */
+.minn-job-chip.is-done { color: var(--green-text, #2f7a4b); background: rgba(72,170,110,0.14); border-color: rgba(72,170,110,0.35); }
+.minn-job-chip.is-error { color: var(--red-text, #b13a3a); background: rgba(224,88,88,0.12); border-color: rgba(224,88,88,0.35); }
+.minn-job-chip:not(.is-running) svg { animation: none; }
+.minn-job-modal { max-width: 460px; }
+.minn-job-body { padding: 18px 20px 6px; display: flex; flex-direction: column; gap: 10px; }
+.minn-job-state { font-size: 13px; font-weight: 600; color: var(--muted); }
+.minn-job-state.done { color: var(--green-text, #2f7a4b); }
+.minn-job-state.error, .minn-job-state.canceled { color: var(--red-text, #b13a3a); }
+.minn-job-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.minn-job-bar-fill { height: 100%; border-radius: 999px; background: var(--accent); transition: width 0.4s ease; }
+.minn-job-bar.indeterminate .minn-job-bar-fill { animation: minn-job-slide 1.4s ease-in-out infinite; }
+@keyframes minn-job-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+.minn-job-msg { font-size: 13px; color: var(--text); min-height: 18px; }
+.minn-job-result { align-self: flex-start; }
 /* Site-visibility chip — same amber pill as the core-update chip, on every
    route until the site is fully public again. */
 .minn-vis-chip[hidden] { display: none; }

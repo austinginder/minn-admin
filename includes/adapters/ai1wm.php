@@ -2,12 +2,22 @@
 /**
  * Bundled adapter: All-in-One WP Migration — backups family.
  *
- * LIST-ONLY of local .wpress exports under AI1WM_BACKUPS_PATH via
+ * Lists local .wpress exports under AI1WM_BACKUPS_PATH via
  * Ai1wm_Backups::get_files() (their own recursive iterator). Delete goes
  * through Ai1wm_Backups::delete_file() + delete_label() so label cleanup
- * stays their code. Exports and imports stay on ServMask's multi-step
- * wizard screens (deep links) — free AIOWM does not expose a simple
- * "export now" callable outside that flow.
+ * stays their code.
+ *
+ * EXPORTS RUN FROM MINN as a background job (7.1+ ships a REST controller,
+ * ai1wm/v1): POST exports starts the pipeline, runs its first step and
+ * fires the plugin's own non-blocking loopback chain, answering 202 with a
+ * job id; the per-job status lives in option ai1wm_status_{job}
+ * (type progress|info|download|done|error|canceled, message, archive);
+ * DELETE cancels and cleans the storage folder. Minn dispatches to those
+ * routes through rest_do_request so their permission callbacks decide,
+ * and maps the answer onto its job contract (status, percent parsed from
+ * their "N% complete" messages when the type carries none, the download
+ * link as the result). Imports stay on their screen: an import replaces
+ * the site and asks confirmation questions mid-flight by design.
  *
  * No freshness claims: exports are manual (the Disembark / Duplicator
  * precedent). Cap is `export`, matching their own REST controller.
@@ -127,8 +137,20 @@ function minn_admin_ai1wm_status_model() {
 				'hint'  => $hint,
 			),
 		),
-		'actions' => array(
-			array(
+		'actions' => array_values( array_filter( array(
+			minn_admin_ai1wm_rest_ready() ? array(
+				'label'  => __( 'Export site', 'minn-admin' ),
+				'route'  => 'minn-admin/v1/ai1wm/export',
+				'method' => 'POST',
+				'job'    => true,
+				'fields' => array(
+					array( 'key' => 'no_media', 'label' => __( 'Skip media library', 'minn-admin' ), 'type' => 'toggle', 'value' => false, 'required' => false ),
+					array( 'key' => 'no_plugins', 'label' => __( 'Skip plugins', 'minn-admin' ), 'type' => 'toggle', 'value' => false, 'required' => false ),
+					array( 'key' => 'no_themes', 'label' => __( 'Skip themes', 'minn-admin' ), 'type' => 'toggle', 'value' => false, 'required' => false ),
+					array( 'key' => 'no_spam_comments', 'label' => __( 'Skip spam comments', 'minn-admin' ), 'type' => 'toggle', 'value' => true, 'required' => false ),
+					array( 'key' => 'no_post_revisions', 'label' => __( 'Skip post revisions', 'minn-admin' ), 'type' => 'toggle', 'value' => false, 'required' => false ),
+				),
+			) : array(
 				'label' => __( 'Export site ↗', 'minn-admin' ),
 				'href'  => admin_url( 'admin.php?page=ai1wm_export' ),
 			),
@@ -136,8 +158,74 @@ function minn_admin_ai1wm_status_model() {
 				'label' => __( 'Open backups ↗', 'minn-admin' ),
 				'href'  => admin_url( 'admin.php?page=ai1wm_backups' ),
 			),
-		),
+		) ) ),
 	);
+}
+
+/** Their REST controller (7.1+) is what makes an export drivable from here. */
+function minn_admin_ai1wm_rest_ready() {
+	return class_exists( 'Ai1wm_Rest_Controller' ) && defined( 'AI1WM_SECRET_KEY' );
+}
+
+/** One request to ai1wm/v1 through the REST server, so their gates run. */
+function minn_admin_ai1wm_dispatch( $method, $path, $body = null ) {
+	$req = new WP_REST_Request( $method, '/ai1wm/v1/' . ltrim( $path, '/' ) );
+	if ( null !== $body ) {
+		$req->set_header( 'Content-Type', 'application/json' );
+		$req->set_body( wp_json_encode( $body ) );
+	}
+	$res = rest_do_request( $req );
+	if ( $res->is_error() ) {
+		return $res->as_error();
+	}
+	return array( 'code' => $res->get_status(), 'data' => (array) $res->get_data() );
+}
+
+/**
+ * Their job status → Minn's job contract.
+ *
+ * Their percent rides only on 'progress' entries; the 'info' entries the
+ * archiver writes carry it inside the text ("Archiving 27189 content
+ * files...62% complete"), so it is read from there when absent. The
+ * 'download' entry's message is an anchor to the finished archive: that
+ * becomes the result link, and the export list is what shows the file.
+ */
+function minn_admin_ai1wm_job_status( $data ) {
+	$type    = (string) ( $data['type'] ?? '' );
+	$raw     = (string) ( $data['message'] ?? '' );
+	$status  = (string) ( $data['status'] ?? 'running' );
+	$map     = array( 'complete' => 'done', 'running' => 'running', 'error' => 'error', 'canceled' => 'canceled', 'confirm' => 'running' );
+	$out     = array( 'status' => $map[ $status ] ?? 'running' );
+	$percent = isset( $data['percent'] ) && is_numeric( $data['percent'] ) ? (int) $data['percent'] : null;
+	if ( null === $percent && preg_match( '/(\d{1,3})\s*%/', wp_strip_all_tags( $raw ), $m ) ) {
+		$percent = (int) $m[1];
+	}
+	if ( null !== $percent ) {
+		$out['percent'] = max( 0, min( 100, $percent ) );
+	}
+	$text = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( str_replace( array( '<em>', '<span>' ), ' ', $raw ) ) ) );
+	if ( 'download' === $type ) {
+		$href = '';
+		if ( preg_match( '/href="([^"]+)"/', $raw, $m ) ) {
+			$href = html_entity_decode( $m[1] );
+		}
+		$archive = (string) ( $data['archive'] ?? '' );
+		$out['message'] = $archive
+			/* translators: %s: the export file name. */
+			? sprintf( __( 'Export finished: %s', 'minn-admin' ), $archive )
+			: __( 'Export finished.', 'minn-admin' );
+		if ( $href && 0 === strpos( $href, 'http' ) ) {
+			$out['result'] = array( 'label' => __( 'Download export', 'minn-admin' ), 'href' => $href );
+		}
+	} elseif ( 'done' === $type ) {
+		$out['message'] = '' !== $text ? $text : __( 'Export finished.', 'minn-admin' );
+	} elseif ( 'error' === $type ) {
+		$title          = trim( wp_strip_all_tags( (string) ( $data['title'] ?? '' ) ) );
+		$out['message'] = trim( $title . ( $title && $text ? ': ' : '' ) . $text );
+	} else {
+		$out['message'] = '' !== $text ? $text : __( 'Preparing export…', 'minn-admin' );
+	}
+	return $out;
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
@@ -258,6 +346,79 @@ add_action( 'rest_api_init', function () {
 			}
 			return rest_ensure_response( array( 'deleted' => true ) );
 		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/ai1wm/export', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return minn_admin_ai1wm_rest_ready() && current_user_can( 'export' );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			$options = array();
+			foreach ( array( 'no_media', 'no_plugins', 'no_themes', 'no_spam_comments', 'no_post_revisions', 'no_inactive_themes', 'no_inactive_plugins', 'no_muplugins', 'no_cache', 'no_database' ) as $k ) {
+				$v = $request->get_param( $k );
+				if ( null !== $v && filter_var( $v, FILTER_VALIDATE_BOOLEAN ) ) {
+					$options[ $k ] = true;
+				}
+			}
+			$r = minn_admin_ai1wm_dispatch( 'POST', 'exports', array( 'options' => (object) $options ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			$job = (string) ( $r['data']['job_id'] ?? '' );
+			if ( '' === $job ) {
+				return new WP_Error( 'export_failed', __( 'All-in-One WP Migration did not start the export.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array(
+				'ok'  => true,
+				'job' => array(
+					'id'          => $job,
+					'label'       => __( 'Exporting site', 'minn-admin' ),
+					'message'     => __( 'Preparing export…', 'minn-admin' ),
+					'statusRoute' => 'minn-admin/v1/ai1wm/export/' . $job,
+					'stopRoute'   => 'minn-admin/v1/ai1wm/export/' . $job,
+					'stopMethod'  => 'DELETE',
+				),
+			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/ai1wm/export/(?P<job>[a-f0-9]{13,40})', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => function () {
+				return minn_admin_ai1wm_rest_ready() && current_user_can( 'export' );
+			},
+			'callback'            => function ( WP_REST_Request $request ) {
+				// A stop races the loopback step still running: their cancel
+				// writes 'canceled' and deletes the storage folder, and that
+				// step then overwrites the status with a "could not open"
+				// error. The stop is what the person did, so it is what a
+				// later poll (a reload mid-job) reads.
+				if ( get_transient( 'minn_ai1wm_canceled_' . $request['job'] ) ) {
+					return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Export stopped.', 'minn-admin' ) ) );
+				}
+				$r = minn_admin_ai1wm_dispatch( 'GET', 'exports/' . $request['job'] );
+				if ( is_wp_error( $r ) ) {
+					return $r;
+				}
+				return rest_ensure_response( minn_admin_ai1wm_job_status( $r['data'] ) );
+			},
+		),
+		array(
+			'methods'             => 'DELETE',
+			'permission_callback' => function () {
+				return minn_admin_ai1wm_rest_ready() && current_user_can( 'export' );
+			},
+			'callback'            => function ( WP_REST_Request $request ) {
+				$r = minn_admin_ai1wm_dispatch( 'DELETE', 'exports/' . $request['job'] );
+				if ( is_wp_error( $r ) ) {
+					return $r;
+				}
+				set_transient( 'minn_ai1wm_canceled_' . $request['job'], 1, 10 * MINUTE_IN_SECONDS );
+				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Export stopped.', 'minn-admin' ) ) );
+			},
+		),
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/ai1wm/status', array(

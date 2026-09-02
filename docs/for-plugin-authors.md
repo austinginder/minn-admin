@@ -335,6 +335,29 @@ swaps for an inline form and the values merge into the request body
 reference). Omit any key you don't need; conditional actions are just
 actions your route leaves out of the response.
 
+**Long-running actions — `job: true` (since 0.38.0).** An action that takes
+minutes (a site export, a reindex over a big catalog) should not hold a
+button. Declare `job: true` and have its route answer right away with a
+job descriptor:
+
+```json
+{ "job": { "id": "6a980406ccaff", "label": "Exporting site", "message": "Preparing export…",
+           "statusRoute": "your/v1/export/6a980406ccaff",
+           "stopRoute": "your/v1/export/6a980406ccaff", "stopMethod": "DELETE" } }
+```
+
+Minn then shows the job as a pill in the topbar on every route ("Exporting
+site · 62%"), polls `statusRoute` every 1.5 seconds, opens a small modal on
+click (progress bar, latest message, Stop when `stopRoute` is given), keeps
+the job across a reload, and re-fetches your surface once it ends. The
+status route answers `{ status, percent?, message?, result? }` with `status`
+one of `running`, `done`, `error`, `canceled`; `percent` 0–100 when known
+(omit it and the bar runs indeterminate); `result` `{ label, href? }` names
+the outcome (a download link, say). One job runs at a time; a second start
+replaces the pill. The bundled All-in-One WP Migration adapter is the
+reference: its routes dispatch to the plugin's own `ai1wm/v1` controller and
+translate its status option onto this shape.
+
 Optional `chart` draws a compact bar series under the rows (same visual
 language as the Overview traffic/activity chart). Shape:
 
