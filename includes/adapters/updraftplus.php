@@ -88,6 +88,106 @@ function minn_admin_updraft_last() {
 	);
 }
 
+/** The UpdraftPlus_Admin instance, loading admin.php outside wp-admin (its constructor only hooks admin screens). */
+function minn_admin_updraft_admin() {
+	global $updraftplus_admin;
+	if ( ! class_exists( 'UpdraftPlus_Admin' ) && defined( 'UPDRAFTPLUS_DIR' ) && file_exists( UPDRAFTPLUS_DIR . '/admin.php' ) ) {
+		include_once UPDRAFTPLUS_DIR . '/admin.php';
+	}
+	if ( ! is_a( $updraftplus_admin, 'UpdraftPlus_Admin' ) && class_exists( 'UpdraftPlus_Admin' ) ) {
+		$updraftplus_admin = new UpdraftPlus_Admin();
+	}
+	return is_a( $updraftplus_admin, 'UpdraftPlus_Admin' ) ? $updraftplus_admin : null;
+}
+
+/**
+ * The nonce of the job UpdraftPlus booted for a start at $started: the
+ * newest updraft_jobdata_* row whose backup_time is at or after it.
+ */
+function minn_admin_updraft_find_nonce( $started ) {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$names = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_id DESC LIMIT 20", $wpdb->esc_like( 'updraft_jobdata_' ) . '%' ) );
+	foreach ( (array) $names as $name ) {
+		$data = get_site_option( $name, array() );
+		if ( is_array( $data ) && ! empty( $data['backup_time'] ) && (int) $data['backup_time'] >= $started - 5 ) {
+			return substr( $name, strlen( 'updraft_jobdata_' ) );
+		}
+	}
+	return '';
+}
+
+/**
+ * Minn job status for a start record { started, nonce, canceled? }: the
+ * stage arithmetic is their print_active_job()'s (six stages: begun,
+ * files, database per db, uploading, pruning, finished), read from the
+ * jobdata their backup writes; percent = stage / 6.
+ */
+function minn_admin_updraft_job_status( $rec ) {
+	global $updraftplus;
+	if ( ! empty( $rec['canceled'] ) ) {
+		return array( 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) );
+	}
+	$started = (int) $rec['started'];
+	$nonce   = ! empty( $rec['nonce'] ) ? (string) $rec['nonce'] : minn_admin_updraft_find_nonce( $started );
+	$last    = minn_admin_updraft_last();
+	if ( '' === $nonce ) {
+		if ( $last && $last['time'] >= $started - 5 ) {
+			return array( 'status' => $last['success'] ? 'done' : 'error', 'percent' => 100, 'message' => $last['success'] ? __( 'Backup finished.', 'minn-admin' ) : __( 'Backup finished with errors. Check UpdraftPlus.', 'minn-admin' ) );
+		}
+		if ( time() - $started > 180 && ! minn_admin_updraft_running() ) {
+			return array( 'status' => 'error', 'message' => __( 'UpdraftPlus never started the backup. Check that WP-Cron can run on this site.', 'minn-admin' ) );
+		}
+		return array( 'status' => 'running', 'message' => __( 'Starting UpdraftPlus…', 'minn-admin' ) );
+	}
+	$jobdata = is_object( $updraftplus ) && method_exists( $updraftplus, 'jobdata_getarray' ) ? (array) $updraftplus->jobdata_getarray( $nonce ) : (array) get_site_option( 'updraft_jobdata_' . $nonce, array() );
+	if ( empty( $jobdata ) ) {
+		// UpdraftPlus deletes a job's data when the job ends, so a nonce
+		// whose row is gone is a finished job; updraft_last_backup says how
+		// it went.
+		if ( $last && $last['time'] >= $started - 5 ) {
+			return array( 'status' => $last['success'] ? 'done' : 'error', 'percent' => 100, 'message' => $last['success'] ? __( 'Backup finished.', 'minn-admin' ) : __( 'Backup finished with errors. Check UpdraftPlus.', 'minn-admin' ), '_nonce' => $nonce );
+		}
+		if ( ! minn_admin_updraft_running() ) {
+			return array( 'status' => 'done', 'percent' => 100, 'message' => __( 'Backup finished.', 'minn-admin' ), '_nonce' => $nonce );
+		}
+		return array( 'status' => 'running', 'message' => __( 'Finishing…', 'minn-admin' ), '_nonce' => $nonce );
+	}
+	$status  = isset( $jobdata['jobstatus'] ) ? (string) $jobdata['jobstatus'] : '';
+	$stage   = 0.0;
+	$text    = __( 'Backup begun', 'minn-admin' );
+	if ( 'filescreating' === $status ) {
+		$stage = 1.0;
+		$text  = __( 'Creating file backup zips', 'minn-admin' );
+		if ( isset( $jobdata['filecreating_substatus']['i'], $jobdata['filecreating_substatus']['t'] ) ) {
+			$stage = min( 2.0, 1 + $jobdata['filecreating_substatus']['i'] / max( (int) $jobdata['filecreating_substatus']['t'], 1 ) );
+		}
+	} elseif ( 'filescreated' === $status ) {
+		$stage = 2.0;
+		$text  = __( 'Created file backup zips', 'minn-admin' );
+	} elseif ( 0 === strpos( $status, 'dbcreat' ) || 0 === strpos( $status, 'dbencrypt' ) ) {
+		$stage = 0 === strpos( $status, 'dbcreated' ) || 0 === strpos( $status, 'dbencrypted' ) ? 4.0 : 3.0;
+		$text  = 0 === strpos( $status, 'dbcreated' ) ? __( 'Created database backup', 'minn-admin' ) : __( 'Creating database backup', 'minn-admin' );
+	} elseif ( in_array( $status, array( 'clouduploading', 'partialclouduploading' ), true ) ) {
+		$stage = 4.0;
+		$text  = __( 'Uploading files to remote storage', 'minn-admin' );
+		if ( isset( $jobdata['uploading_substatus']['t'], $jobdata['uploading_substatus']['i'] ) ) {
+			$t = max( (int) $jobdata['uploading_substatus']['t'], 1 );
+			$stage = 4 + min( $jobdata['uploading_substatus']['i'] / $t, 1 );
+		}
+	} elseif ( 'pruning' === $status ) {
+		$stage = 5.0;
+		$text  = __( 'Pruning old backup sets', 'minn-admin' );
+	} elseif ( 'resumingforerrors' === $status ) {
+		$stage = 1.0;
+		$text  = __( 'Waiting to retry after errors', 'minn-admin' );
+	} elseif ( 'finished' === $status ) {
+		$ok = ! ( $last && $last['time'] >= $started - 5 && ! $last['success'] );
+		return array( 'status' => $ok ? 'done' : 'error', 'percent' => 100, 'message' => $ok ? __( 'Backup finished.', 'minn-admin' ) : __( 'Backup finished with errors. Check UpdraftPlus.', 'minn-admin' ), '_nonce' => $nonce );
+	}
+	return array( 'status' => 'running', 'percent' => (int) round( $stage / 6 * 100 ), 'message' => $text, '_nonce' => $nonce );
+}
+
 /** Server-built model for the surface status card (distinct from /updraft/status). */
 function minn_admin_updraft_status_model() {
 	$last    = minn_admin_updraft_last();
@@ -135,6 +235,7 @@ function minn_admin_updraft_status_model() {
 				'label'   => __( 'Back up everything now', 'minn-admin' ),
 				'route'   => 'minn-admin/v1/updraft/backup-now',
 				'method'  => 'POST',
+				'job'     => true,
 				'body'    => array( 'what' => 'all' ),
 				'confirm' => __( 'Start a full backup now? UpdraftPlus will run it in the background.', 'minn-admin' ),
 			),
@@ -142,6 +243,7 @@ function minn_admin_updraft_status_model() {
 				'label'  => __( 'Database only', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/updraft/backup-now',
 				'method' => 'POST',
+				'job'    => true,
 				'body'   => array( 'what' => 'db' ),
 			),
 			array(
@@ -249,6 +351,54 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	register_rest_route( 'minn-admin/v1', '/updraft/job/(?P<token>[A-Za-z0-9]{12})', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$rec = get_transient( 'minn_updraft_job_' . $request['token'] );
+				if ( ! is_array( $rec ) ) {
+					return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$out = minn_admin_updraft_job_status( $rec );
+				if ( ! empty( $out['_nonce'] ) && $out['_nonce'] !== $rec['nonce'] ) {
+					$rec['nonce'] = $out['_nonce'];
+					set_transient( 'minn_updraft_job_' . $request['token'], $rec, 6 * HOUR_IN_SECONDS );
+				}
+				unset( $out['_nonce'] );
+				return rest_ensure_response( $out );
+			},
+		),
+		array(
+			'methods'             => 'DELETE',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$rec = get_transient( 'minn_updraft_job_' . $request['token'] );
+				if ( ! is_array( $rec ) ) {
+					return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$nonce = $rec['nonce'] ? $rec['nonce'] : minn_admin_updraft_find_nonce( (int) $rec['started'] );
+				if ( $nonce ) {
+					$admin = minn_admin_updraft_admin();
+					if ( $admin ) {
+						try {
+							$admin->activejobs_delete( $nonce ); // their "delete job": unschedules the resumption + drops the lock
+						} catch ( \Throwable $e ) {
+							// The flag file below still stops the running resumption.
+						}
+					}
+				}
+				// A start that has not booted yet: drop the one-shot cron events.
+				foreach ( array( 'updraft_backupnow_backup_all', 'updraft_backupnow_backup_database' ) as $hook ) {
+					wp_unschedule_hook( $hook );
+				}
+				$rec['canceled'] = true;
+				set_transient( 'minn_updraft_job_' . $request['token'], $rec, 6 * HOUR_IN_SECONDS );
+				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
+			},
+		),
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/updraft/backup-now', array(
 		'methods'             => 'POST',
 		'permission_callback' => $perm,
@@ -269,10 +419,23 @@ add_action( 'rest_api_init', function () {
 			$message = 'db' === $what
 				? __( 'Database backup started — UpdraftPlus is running it in the background.', 'minn-admin' )
 				: __( 'Full backup started — UpdraftPlus is running it in the background.', 'minn-admin' );
+			// The job id (their nonce) only exists once the cron event has
+			// booted the backup; the token stands in until the status route
+			// finds the jobdata whose backup_time follows this start.
+			$token = wp_generate_password( 12, false );
+			set_transient( 'minn_updraft_job_' . $token, array( 'started' => time(), 'nonce' => '' ), 6 * HOUR_IN_SECONDS );
 			return rest_ensure_response( array(
 				'started' => true,
 				'what'    => 'db' === $what ? 'db' : 'all',
 				'message' => $message,
+				'job'     => array(
+					'id'          => $token,
+					'label'       => 'db' === $what ? __( 'Backing up database', 'minn-admin' ) : __( 'Backing up site', 'minn-admin' ),
+					'message'     => __( 'Starting UpdraftPlus…', 'minn-admin' ),
+					'statusRoute' => 'minn-admin/v1/updraft/job/' . $token,
+					'stopRoute'   => 'minn-admin/v1/updraft/job/' . $token,
+					'stopMethod'  => 'DELETE',
+				),
 			) );
 		},
 	) );

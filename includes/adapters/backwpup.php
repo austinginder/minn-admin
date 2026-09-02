@@ -169,13 +169,23 @@ function minn_admin_backwpup_status_model() {
 	// backup"), and only to users who hold BackWPup's own start capability —
 	// otherwise the card advertises a button the route will refuse.
 	if ( $jobs && current_user_can( 'backwpup_jobs_start' ) ) {
-		$actions[] = array(
-			'label'   => __( 'Run first job now', 'minn-admin' ),
-			'route'   => 'minn-admin/v1/backwpup/run',
-			'method'  => 'POST',
-			'body'    => array( 'jobid' => $jobs[0] ),
-			'confirm' => __( 'Start the BackWPup job now? It runs in the background through BackWPup\'s own runner.', 'minn-admin' ),
+		$options = array();
+		foreach ( $jobs as $jid ) {
+			$name      = BackWPup_Option::get( $jid, 'name' );
+			$options[] = array( (string) $jid, $name ? (string) $name : sprintf( /* translators: %d: job id */ __( 'Job %d', 'minn-admin' ), $jid ) );
+		}
+		$action = array(
+			'label'  => __( 'Run job now', 'minn-admin' ),
+			'route'  => 'minn-admin/v1/backwpup/run',
+			'method' => 'POST',
+			'job'    => true,
 		);
+		if ( count( $options ) > 1 ) {
+			$action['fields'] = array( array( 'key' => 'jobid', 'label' => __( 'Job', 'minn-admin' ), 'type' => 'select', 'options' => $options, 'value' => $options[0][0] ) );
+		} else {
+			$action['body'] = array( 'jobid' => $jobs[0] );
+		}
+		$actions[] = $action;
 	}
 	$actions[] = array(
 		'label' => __( 'Open BackWPup ↗', 'minn-admin' ),
@@ -350,6 +360,82 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	register_rest_route( 'minn-admin/v1', '/backwpup/job/(?P<token>[A-Za-z0-9]{12})', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$rec = get_transient( 'minn_backwpup_job_' . $request['token'] );
+				if ( ! is_array( $rec ) ) {
+					return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				if ( ! empty( $rec['canceled'] ) ) {
+					return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
+				}
+				$started = (int) $rec['started'];
+				$jobid   = (int) $rec['jobid'];
+				$work    = null;
+				try {
+					$work = BackWPup_Job::get_working_data(); // their running-file snapshot
+				} catch ( \Throwable $e ) {
+					$work = null;
+				}
+				if ( $work && is_object( $work ) ) {
+					$job_of = isset( $work->job['jobid'] ) ? (int) $work->job['jobid'] : 0;
+					if ( ! $job_of || $job_of === $jobid ) {
+						$percent = isset( $work->step_percent ) ? (int) $work->step_percent : null;
+						$msg     = isset( $work->lastmsg ) ? trim( wp_strip_all_tags( (string) $work->lastmsg ) ) : '';
+						$out     = array( 'status' => 'running', 'message' => '' !== $msg ? $msg : __( 'Working…', 'minn-admin' ) );
+						if ( null !== $percent ) {
+							$out['percent'] = max( 0, min( 100, $percent ) );
+						}
+						if ( ! empty( $work->user_abort ) ) {
+							$out['message'] = __( 'Stopping…', 'minn-admin' );
+						}
+						return rest_ensure_response( $out );
+					}
+				}
+				// Nothing running: finished when the job's lastrun stamp
+				// moved past our start (they write it at job start, and the
+				// running file is gone only once the job ended). lastrun is
+				// their start_time = current_time( 'timestamp' ), a
+				// site-local naive epoch, so it is shifted to UTC before the
+				// compare.
+				$lastrun = (int) BackWPup_Option::get( $jobid, 'lastrun' ) - (int) ( (float) get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
+				if ( $lastrun >= $started - 5 ) {
+					$errors = (int) BackWPup_Option::get( $jobid, 'lastrunerrors' );
+					return rest_ensure_response( array(
+						'status'  => $errors > 0 ? 'error' : 'done',
+						'percent' => 100,
+						'message' => $errors > 0 ? __( 'Backup finished with errors. Check the BackWPup log.', 'minn-admin' ) : __( 'Backup finished.', 'minn-admin' ),
+					) );
+				}
+				if ( time() - $started > 180 ) {
+					return rest_ensure_response( array( 'status' => 'error', 'message' => __( 'BackWPup never started the job. Check that its runner (wp-cron.php) is reachable.', 'minn-admin' ) ) );
+				}
+				return rest_ensure_response( array( 'status' => 'running', 'message' => __( 'Starting BackWPup…', 'minn-admin' ) ) );
+			},
+		),
+		array(
+			'methods'             => 'DELETE',
+			'permission_callback' => $perm_run,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$rec = get_transient( 'minn_backwpup_job_' . $request['token'] );
+				if ( ! is_array( $rec ) ) {
+					return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				try {
+					BackWPup_Job::user_abort(); // their Abort button
+				} catch ( \Throwable $e ) {
+					return new WP_Error( 'abort_failed', __( 'BackWPup could not stop the job.', 'minn-admin' ), array( 'status' => 500 ) );
+				}
+				$rec['canceled'] = true;
+				set_transient( 'minn_backwpup_job_' . $request['token'], $rec, 6 * HOUR_IN_SECONDS );
+				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
+			},
+		),
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/backwpup/run', array(
 		'methods'             => 'POST',
 		'permission_callback' => $perm_run,
@@ -374,9 +460,21 @@ add_action( 'rest_api_init', function () {
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'run_failed', __( 'BackWPup could not start the job: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
+			$token = wp_generate_password( 12, false );
+			set_transient( 'minn_backwpup_job_' . $token, array( 'started' => time(), 'jobid' => $jobid ), 6 * HOUR_IN_SECONDS );
+			$name = BackWPup_Option::get( $jobid, 'name' );
 			return rest_ensure_response( array(
 				'ok'      => true,
 				'message' => __( 'Backup job started in the background.', 'minn-admin' ),
+				'job'     => array(
+					'id'          => $token,
+					/* translators: %s: BackWPup job name. */
+					'label'       => $name ? sprintf( __( 'Running %s', 'minn-admin' ), $name ) : __( 'Running backup job', 'minn-admin' ),
+					'message'     => __( 'Starting BackWPup…', 'minn-admin' ),
+					'statusRoute' => 'minn-admin/v1/backwpup/job/' . $token,
+					'stopRoute'   => 'minn-admin/v1/backwpup/job/' . $token,
+					'stopMethod'  => 'DELETE',
+				),
 			) );
 		},
 	) );

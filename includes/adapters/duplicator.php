@@ -98,6 +98,92 @@ function minn_admin_duplicator_rows() {
 	return $items;
 }
 
+/** Their build capability (DUP_Util::hasCapability('export') on every build ajax handler). */
+function minn_admin_duplicator_can_build() {
+	return minn_admin_duplicator_active() && class_exists( 'DUP_Package' ) && class_exists( 'DUP_Settings' ) && current_user_can( 'export' );
+}
+
+
+/**
+ * A database-only scan walks no files and leaves no file or folder list
+ * behind, yet their installer step embeds both and stops when either is
+ * missing. Empty lists are what a scan with the root filtered produces,
+ * so leave them in place.
+ */
+function minn_admin_duplicator_ensure_lists( $package ) {
+	if ( ! $package || empty( $package->Archive->ExportOnlyDB ) || ! method_exists( $package, 'get_files_list_filename' ) ) {
+		return;
+	}
+	foreach ( array( $package->get_files_list_filename(), $package->get_dirs_list_filename() ) as $name ) {
+		$path = DUP_Settings::getSsdirTmpPath() . '/' . $name;
+		if ( ! file_exists( $path ) ) {
+			touch( $path );
+		}
+	}
+}
+
+/**
+ * One build chunk for the job record, mirroring their two ajax build
+ * handlers. DupArchive builds are chunked (runDupArchiveBuild() answers
+ * whether it finished); a ZipArchive build runs in one call, as theirs
+ * does. The package's Status is their own progress scale (10 start, 20
+ * database, 40 archive, 60 validation, 65 installer, 100 complete).
+ *
+ * @return array Minn job status (+ _package_id for the caller to remember).
+ */
+function minn_admin_duplicator_build_step( $rec ) {
+	$labels = array(
+		DUP_PackageStatus::START         => __( 'Starting the build…', 'minn-admin' ),
+		DUP_PackageStatus::DBSTART       => __( 'Exporting the database…', 'minn-admin' ),
+		DUP_PackageStatus::DBDONE        => __( 'Database exported. Archiving files…', 'minn-admin' ),
+		DUP_PackageStatus::ARCSTART      => __( 'Archiving files…', 'minn-admin' ),
+		DUP_PackageStatus::ARCVALIDATION => __( 'Validating the archive…', 'minn-admin' ),
+		DUP_PackageStatus::ARCDONE       => __( 'Archive built. Writing the installer…', 'minn-admin' ),
+	);
+	$id      = ! empty( $rec['package_id'] ) ? (int) $rec['package_id'] : 0;
+	$package = $id ? DUP_Package::getByID( $id ) : null;
+	if ( ! $package ) {
+		$package = DUP_Package::getActive();
+		if ( empty( $package->ScanFile ) || ! is_readable( DUP_Settings::getSsdirTmpPath() . '/' . $package->ScanFile ) ) {
+			return array( 'status' => 'error', 'message' => __( 'The scan result is missing; start the build again.', 'minn-admin' ) );
+		}
+		$zip = class_exists( 'DUP_Archive_Build_Mode' ) && $package->Archive->getBuildMode() == DUP_Archive_Build_Mode::ZipArchive; // phpcs:ignore Universal.Operators.StrictComparisons
+		$package->save( $zip ? 'zip' : 'daf' ); // creates the packages row; their ajax does the same on the first call
+		DUP_Settings::Set( 'active_package_id', $package->ID );
+		DUP_Settings::Save();
+		$id = (int) $package->ID;
+	}
+	if ( (int) $package->Status === DUP_PackageStatus::ERROR ) {
+		return array( 'status' => 'error', 'message' => __( 'Duplicator reported a build error. Check its log.', 'minn-admin' ), '_package_id' => $id );
+	}
+	if ( (int) $package->Status >= DUP_PackageStatus::COMPLETE ) {
+		return array( 'status' => 'done', 'percent' => 100, 'message' => __( 'Package built.', 'minn-admin' ), '_package_id' => $id );
+	}
+	$zip = class_exists( 'DUP_Archive_Build_Mode' ) && $package->Archive->getBuildMode() == DUP_Archive_Build_Mode::ZipArchive; // phpcs:ignore Universal.Operators.StrictComparisons
+	@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	if ( $zip ) {
+		minn_admin_duplicator_ensure_lists( $package );
+		$package->runZipBuild(); // their one-shot ZipArchive build
+	} else {
+		$package->runDupArchiveBuild(); // one chunk; their loop calls this until it reports complete
+	}
+	$package = DUP_Package::getByID( $id );
+	$status  = $package ? (int) $package->Status : DUP_PackageStatus::ERROR;
+	if ( DUP_PackageStatus::ERROR === $status ) {
+		return array( 'status' => 'error', 'message' => __( 'Duplicator reported a build error. Check its log.', 'minn-admin' ), '_package_id' => $id );
+	}
+	if ( $status >= DUP_PackageStatus::COMPLETE ) {
+		return array( 'status' => 'done', 'percent' => 100, 'message' => __( 'Package built.', 'minn-admin' ), '_package_id' => $id );
+	}
+	$text = __( 'Building…', 'minn-admin' );
+	foreach ( $labels as $at => $label ) {
+		if ( $status >= $at ) {
+			$text = $label;
+		}
+	}
+	return array( 'status' => 'running', 'percent' => max( 1, min( 99, $status ) ), 'message' => $text, '_package_id' => $id );
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_duplicator_active() ) {
 		return $surfaces;
@@ -192,6 +278,117 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	register_rest_route( 'minn-admin/v1', '/duplicator/build', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_duplicator_can_build',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$name    = sanitize_text_field( (string) $request->get_param( 'name' ) );
+			$db_only = filter_var( $request->get_param( 'db_only' ), FILTER_VALIDATE_BOOLEAN );
+			try {
+				// Their wizard, step by step: save the active package from
+				// the form defaults, scan, remember the scan file. Every
+				// wizard field is sent, empty where the form would be empty,
+				// because saveActive() reads them all.
+				DUP_Util::initSnapshotDirectory();
+				// A fresh package, not getActive(): the stored one comes back
+				// unserialized with the previous run's private file-list
+				// handles, so its scan writes the lists under the old name and
+				// the build looks for them under the new one.
+				$package = new DUP_Package();
+				$package->saveActive( array(
+					'package-name'           => '' !== $name ? $name : DUP_Package::getDefaultName(),
+					'package-notes'          => '',
+					'auto-select-components' => $db_only ? 'database' : '',
+					'dbhost'                 => '',
+					'dbport'                 => '',
+					'dbname'                 => '',
+					'dbuser'                 => '',
+					'dbcharset'              => '',
+					'dbcollation'            => '',
+					'secure-pass'            => '',
+				) );
+				$package = DUP_Package::getActive();
+				$package->runScanner();
+				minn_admin_duplicator_ensure_lists( $package );
+				$package->saveActiveItem( 'ScanFile', $package->ScanFile );
+				$package->Archive->saveActiveItem( $package, 'dirsCount', $package->Archive->dirsCount );
+				$package->Archive->saveActiveItem( $package, 'filesCount', $package->Archive->filesCount );
+				DUP_Settings::Set( 'active_package_id', -1 );
+				DUP_Settings::Save();
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'scan_failed', __( 'Duplicator could not scan the site: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
+			}
+			$token = wp_generate_password( 12, false );
+			set_transient( 'minn_duplicator_job_' . $token, array( 'started' => time(), 'package_id' => 0 ), 6 * HOUR_IN_SECONDS );
+			return rest_ensure_response( array(
+				'ok'  => true,
+				'job' => array(
+					'id'           => $token,
+					'label'        => __( 'Building package', 'minn-admin' ),
+					'message'      => __( 'Site scanned. Building…', 'minn-admin' ),
+					'statusRoute'  => 'minn-admin/v1/duplicator/build/' . $token,
+					'statusMethod' => 'POST',
+					'stopRoute'    => 'minn-admin/v1/duplicator/build/' . $token,
+					'stopMethod'   => 'DELETE',
+				),
+			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/duplicator/build/(?P<token>[A-Za-z0-9]{12})', array(
+		array(
+			// Each poll runs one build chunk, the way their screen's ajax loop
+			// does, and answers with where the package stands.
+			'methods'             => 'POST',
+			'permission_callback' => 'minn_admin_duplicator_can_build',
+			'callback'            => function ( WP_REST_Request $request ) {
+				$rec = get_transient( 'minn_duplicator_job_' . $request['token'] );
+				if ( ! is_array( $rec ) ) {
+					return new WP_Error( 'not_found', __( 'Unknown build', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				if ( ! empty( $rec['canceled'] ) ) {
+					return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Build stopped.', 'minn-admin' ) ) );
+				}
+				try {
+					$out = minn_admin_duplicator_build_step( $rec );
+				} catch ( \Throwable $e ) {
+					$out = array( 'status' => 'error', 'message' => __( 'Duplicator build failed: ', 'minn-admin' ) . $e->getMessage() );
+				}
+				if ( ! empty( $out['_package_id'] ) && (int) $out['_package_id'] !== (int) $rec['package_id'] ) {
+					$rec['package_id'] = (int) $out['_package_id'];
+					set_transient( 'minn_duplicator_job_' . $request['token'], $rec, 6 * HOUR_IN_SECONDS );
+				}
+				unset( $out['_package_id'] );
+				return rest_ensure_response( $out );
+			},
+		),
+		array(
+			'methods'             => 'DELETE',
+			'permission_callback' => 'minn_admin_duplicator_can_build',
+			'callback'            => function ( WP_REST_Request $request ) {
+				$rec = get_transient( 'minn_duplicator_job_' . $request['token'] );
+				if ( ! is_array( $rec ) ) {
+					return new WP_Error( 'not_found', __( 'Unknown build', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				try {
+					if ( ! empty( $rec['package_id'] ) ) {
+						$package = DUP_Package::getByID( (int) $rec['package_id'] );
+						if ( $package ) {
+							$package->setStatus( DUP_PackageStatus::ERROR ); // their stop: the package reads as failed and can be deleted
+						}
+					}
+					DUP_Settings::Set( 'active_package_id', -1 );
+					DUP_Settings::Save();
+				} catch ( \Throwable $e ) {
+					// The token is what stops the next chunk either way.
+				}
+				$rec['canceled'] = true;
+				set_transient( 'minn_duplicator_job_' . $request['token'], $rec, 6 * HOUR_IN_SECONDS );
+				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Build stopped.', 'minn-admin' ) ) );
+			},
+		),
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/duplicator/status', array(
 		'methods'             => 'GET',
 		'permission_callback' => $perm,
@@ -235,9 +432,19 @@ add_action( 'rest_api_init', function () {
 						'hint'  => basename( $dir ),
 					),
 				),
-				'actions' => array(
-					array( 'label' => __( 'Build a package ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=duplicator' ) ),
-				),
+				'actions' => array_values( array_filter( array(
+					minn_admin_duplicator_can_build() ? array(
+						'label'  => __( 'Build a package', 'minn-admin' ),
+						'route'  => 'minn-admin/v1/duplicator/build',
+						'method' => 'POST',
+						'job'    => true,
+						'fields' => array(
+							array( 'key' => 'name', 'label' => __( 'Package name', 'minn-admin' ), 'value' => '', 'placeholder' => __( 'Today\'s date and the site name', 'minn-admin' ), 'required' => false ),
+							array( 'key' => 'db_only', 'label' => __( 'Database only', 'minn-admin' ), 'type' => 'toggle', 'value' => false, 'required' => false ),
+						),
+					) : null,
+					array( 'label' => __( 'Open Duplicator ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=duplicator' ) ),
+				) ) ),
 			) );
 		},
 	) );

@@ -225,6 +225,16 @@ arrived in that release; unmarked keys have been stable since the API shipped.
 | `setup` *(v0.12)* | Optional one-time setup gate (below). While your plugin still needs its own first-run install, the surface renders a setup card instead of the collection, and "Set up now" runs your installer server-side |
 | `settings` *(v0.12)* | Optional settings view (below): schema-driven tabs served by your own route, rendered by Minn's form engine, saved back through your plugin's own settings APIs. Adds a Settings entry to the view switcher |
 
+**Sharing a sidebar item.** Two plugins that do one kind of thing should not
+each add a top-level entry. Filters run late on `minn_admin_surfaces`, so a
+second adapter can check whether the first surface is there and append its
+list as a view instead of registering its own: JetSmartFilters joins
+JetSearch's Search surface this way (`$surfaces['jet-search']['views'][] =
+...`) and only registers a Filters surface when JetSearch is absent. Keep
+each view's routes and gates your own; the host surface's status route can
+merge your rows when a shared card makes sense (`function_exists()` on a
+helper the joining adapter defines).
+
 ### Icons
 
 The canonical set (an unknown name renders empty; there is no fallback glyph):
@@ -353,8 +363,11 @@ the job across a reload, and re-fetches your surface once it ends. The
 status route answers `{ status, percent?, message?, result? }` with `status`
 one of `running`, `done`, `error`, `canceled`; `percent` 0–100 when known
 (omit it and the bar runs indeterminate); `result` `{ label, href? }` names
-the outcome (a download link, say). One job runs at a time; a second start
-replaces the pill. The bundled All-in-One WP Migration adapter is the
+the outcome (a download link, say). A descriptor may set `statusMethod:
+"POST"` when the status route does a chunk of the work on each poll (a
+builder whose engine runs one step per call, the way Duplicator's own
+screen loops); Minn polls every 1.5 seconds either way. One job runs at a
+time; a second start replaces the pill. The bundled All-in-One WP Migration adapter is the
 reference: its routes dispatch to the plugin's own `ai1wm/v1` controller and
 translate its status option onto this shape.
 

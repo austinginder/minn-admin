@@ -87,12 +87,23 @@ function minn_admin_ai1wm_rows() {
 		$size  = array_key_exists( 'size', $file ) && null !== $file['size'] ? (int) $file['size'] : 0;
 		$mtime = isset( $file['mtime'] ) && null !== $file['mtime'] ? (int) $file['mtime'] : 0;
 		$label = isset( $labels[ $filename ] ) ? (string) $labels[ $filename ] : '';
+		// Their download link: the archive URL when the backups folder is
+		// web-readable (ai1wm_direct_download_supported), else their
+		// streamed download through admin-ajax, the same choice their
+		// Backups screen makes per row.
+		$download = '';
+		if ( function_exists( 'ai1wm_backup_url' ) && function_exists( 'ai1wm_direct_download_supported' ) && ai1wm_direct_download_supported() ) {
+			$download = (string) ai1wm_backup_url( array( 'archive' => $filename ) );
+		} elseif ( defined( 'AI1WM_SECRET_KEY' ) ) {
+			$download = add_query_arg( array( 'action' => 'ai1wm_backup_download_file', 'archive' => $filename, 'secret_key' => get_option( AI1WM_SECRET_KEY ) ), admin_url( 'admin-ajax.php' ) );
+		}
 		$items[] = array(
-			'id'       => minn_admin_ai1wm_id_encode( $filename ),
-			'filename' => $filename,
-			'label'    => $label,
-			'title'    => $label ? $label : $filename,
-			'size'     => $size ? size_format( $size ) : '—',
+			'id'          => minn_admin_ai1wm_id_encode( $filename ),
+			'filename'    => $filename,
+			'label'       => $label,
+			'title'       => $label ? $label : $filename,
+			'downloadUrl' => $download,
+			'size'        => $size ? size_format( $size ) : '—',
 			'size_raw' => $size,
 			'date'     => $mtime ? gmdate( 'Y-m-d\TH:i:s\Z', $mtime ) : '',
 			'ts'       => $mtime,
@@ -254,9 +265,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'date', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
-				'skip' => array( 'title', 'size_raw', 'ts', 'label' ),
+				'skip' => array( 'title', 'size_raw', 'ts', 'label', 'downloadUrl' ),
 			),
 			'actions'   => array(
+				array( 'label' => __( 'Download', 'minn-admin' ), 'href' => '{downloadUrl}' ),
 				array(
 					'label'   => __( 'Delete export', 'minn-admin' ),
 					'method'  => 'DELETE',

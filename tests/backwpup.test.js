@@ -94,8 +94,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			!! stat.body && Array.isArray( stat.body.rows ) && stat.body.rows.length >= 3
 			&& stat.body.rows.some( ( r ) => /Local archives|archives/i.test( r.label ) ),
 			JSON.stringify( stat.body && stat.body.rows ) );
-		t.check( 'status card offers Run first job now',
-			!! stat.body && ( stat.body.actions || [] ).some( ( a ) => /Run first job/.test( a.label ) ),
+		t.check( 'status card offers Run job now as a job',
+			!! stat.body && ( stat.body.actions || [] ).some( ( a ) => /Run (first )?job/.test( a.label ) && a.job === true ),
 			JSON.stringify( stat.body && stat.body.actions ) );
 
 		/* ===== Surface in the app ===== */
