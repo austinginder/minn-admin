@@ -123,6 +123,8 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/latepoint.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/bookly.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/jet-booking.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/jet-appointments.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/jet-engine-fields.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/jet-engine-options.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/shared-links.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/shared-meta.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/acf.php';

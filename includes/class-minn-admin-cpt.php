@@ -8,11 +8,14 @@
  *   acf   ACF 6.1+ post types (acf-post-type posts, written via ACF's own
  *         internal-post-type API so definitions stay fully editable in ACF)
  *   cptui Custom Post Type UI (the cptui_post_types option, its shape)
+ *   jet   JetEngine (rows in its jet_post_types / jet_taxonomies tables,
+ *         read and written only through jet_engine()->cpt->data and
+ *         ->taxonomies->data so its own sanitizers and register path apply)
  *   minn  Minn's own lightweight store (minn_admin_post_types option,
  *         registered on init below) — the fallback when no manager is active
  *   code  registered by a theme/plugin in code — shown read-only
  *
- * New definitions go to the preferred writable backend (ACF > CPT UI > Minn)
+ * New definitions go to the preferred writable backend (ACF > CPT UI > JetEngine > Minn)
  * unless the request names one. Deleting a definition never deletes content —
  * the posts stay in the database, same as deactivating any CPT plugin.
  *
@@ -200,6 +203,76 @@ class Minn_Admin_CPT {
 		return defined( 'CPTUI_VERSION' );
 	}
 
+	private static function jet_available() {
+		return function_exists( 'jet_engine' ) && is_object( jet_engine()->cpt ) && is_object( jet_engine()->cpt->data );
+	}
+
+	private static function jet_tax_available() {
+		return function_exists( 'jet_engine' ) && is_object( jet_engine()->taxonomies ) && is_object( jet_engine()->taxonomies->data );
+	}
+
+	/**
+	 * Map of slug => JetEngine row (id + the edit-shaped definition) for the
+	 * post types JetEngine created. Rows with status 'built-in' are its
+	 * overrides of core types, not definitions of its own, so they are not
+	 * claimed.
+	 */
+	private static function jet_types() {
+		if ( ! self::jet_available() ) {
+			return array();
+		}
+		$map = array();
+		try {
+			$data = jet_engine()->cpt->data;
+			self::jet_forget_cache( $data );
+			foreach ( (array) $data->get_items() as $row ) {
+				if ( empty( $row['slug'] ) || 'built-in' === ( $row['status'] ?? '' ) ) {
+					continue;
+				}
+				$map[ (string) $row['slug'] ] = array( 'id' => $row['id'], 'edit' => $data->get_item_for_edit( $row['id'] ) );
+			}
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+		return $map;
+	}
+
+	/**
+	 * JetEngine caches its definition tables twice per request: the data
+	 * class keeps the rows it read (reset_raw_cache) and the shared DB layer
+	 * keeps every table it queried (Jet_Engine_DB::$query_cache, public).
+	 * A write earlier in this same request must be visible to the read that
+	 * follows, so both are dropped before a read.
+	 */
+	private static function jet_forget_cache( $data ) {
+		if ( is_object( jet_engine()->db ) && property_exists( jet_engine()->db, 'query_cache' ) ) {
+			jet_engine()->db->query_cache = array();
+		}
+		if ( method_exists( $data, 'reset_raw_cache' ) ) {
+			$data->reset_raw_cache();
+		}
+	}
+
+	private static function jet_taxonomies() {
+		if ( ! self::jet_tax_available() ) {
+			return array();
+		}
+		$map = array();
+		try {
+			$data = jet_engine()->taxonomies->data;
+			self::jet_forget_cache( $data );
+			foreach ( (array) $data->get_items() as $row ) {
+				if ( empty( $row['slug'] ) || 'built-in' === ( $row['status'] ?? '' ) ) {
+					continue;
+				}
+				$map[ (string) $row['slug'] ] = array( 'id' => $row['id'], 'edit' => $data->get_item_for_edit( $row['id'] ) );
+			}
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+		return $map;
+	}
+
 	private static function acpt_available() {
 		return function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active();
 	}
@@ -250,6 +323,9 @@ class Minn_Admin_CPT {
 		if ( self::cptui_available() ) {
 			$backends[] = 'cptui';
 		}
+		if ( self::jet_available() ) {
+			$backends[] = 'jet';
+		}
 		$backends[] = 'minn';
 		return $backends;
 	}
@@ -270,6 +346,9 @@ class Minn_Admin_CPT {
 			if ( isset( $cptui[ $slug ] ) ) {
 				return 'cptui';
 			}
+		}
+		if ( array_key_exists( $slug, self::jet_types() ) ) {
+			return 'jet';
 		}
 		if ( array_key_exists( $slug, self::acpt_types() ) ) {
 			return 'acpt';
@@ -299,7 +378,7 @@ class Minn_Admin_CPT {
 			if ( ! empty( $pt->show_in_rest ) ) {
 				continue;
 			}
-			if ( ! in_array( self::source_of( $pt->name ), array( 'acf', 'cptui', 'minn' ), true ) ) {
+			if ( ! in_array( self::source_of( $pt->name ), array( 'acf', 'cptui', 'jet', 'minn' ), true ) ) {
 				continue;
 			}
 			$out[] = array(
@@ -339,7 +418,7 @@ class Minn_Admin_CPT {
 				'taxonomies'   => array_values( get_object_taxonomies( $pt->name ) ),
 				'count'        => array_sum( array_intersect_key( $counts, array_flip( array( 'publish', 'future', 'draft', 'pending', 'private' ) ) ) ),
 				'source'       => $source,
-				'editable'     => in_array( $source, array( 'acf', 'cptui', 'minn' ), true ),
+				'editable'     => in_array( $source, array( 'acf', 'cptui', 'jet', 'minn' ), true ),
 			);
 		}
 		// Taxonomies a post type can attach to (drives the CPT modal checkboxes).
@@ -395,6 +474,8 @@ class Minn_Admin_CPT {
 			$result = self::acf_write( $slug, $def, null );
 		} elseif ( 'cptui' === $backend ) {
 			$result = self::cptui_write( $slug, $def );
+		} elseif ( 'jet' === $backend ) {
+			$result = self::jet_write( $slug, $def, null );
 		} else {
 			$result = self::minn_write( $slug, $def );
 		}
@@ -411,7 +492,7 @@ class Minn_Admin_CPT {
 		if ( ! post_type_exists( $slug ) ) {
 			return new WP_Error( 'not_found', __( 'No such post type.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
-		if ( ! in_array( $source, array( 'acf', 'cptui', 'minn' ), true ) ) {
+		if ( ! in_array( $source, array( 'acf', 'cptui', 'jet', 'minn' ), true ) ) {
 			return new WP_Error( 'not_editable', __( 'This post type is registered in code and can only be changed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$def = self::def_from_request( $request );
@@ -424,6 +505,8 @@ class Minn_Admin_CPT {
 			$result   = self::acf_write( $slug, $def, $existing );
 		} elseif ( 'cptui' === $source ) {
 			$result = self::cptui_write( $slug, $def );
+		} elseif ( 'jet' === $source ) {
+			$result = self::jet_write( $slug, $def, self::jet_types()[ $slug ] ?? null );
 		} else {
 			$result = self::minn_write( $slug, $def );
 		}
@@ -451,6 +534,11 @@ class Minn_Admin_CPT {
 			$types = (array) get_option( 'cptui_post_types', array() );
 			unset( $types[ $slug ] );
 			update_option( 'cptui_post_types', $types );
+		} elseif ( 'jet' === $source ) {
+			$result = self::jet_delete( jet_engine()->cpt->data, self::jet_types()[ $slug ] ?? null );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
 		} else {
 			return new WP_Error( 'not_editable', __( 'This post type is registered in code and can only be removed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
@@ -491,6 +579,9 @@ class Minn_Admin_CPT {
 				return 'cptui';
 			}
 		}
+		if ( array_key_exists( $slug, self::jet_taxonomies() ) ) {
+			return 'jet';
+		}
 		return 'code';
 	}
 
@@ -512,7 +603,7 @@ class Minn_Admin_CPT {
 				'object_types' => array_values( (array) $tax->object_type ),
 				'count'        => is_wp_error( $count ) ? 0 : (int) $count,
 				'source'       => $source,
-				'editable'     => in_array( $source, array( 'acf', 'cptui', 'minn' ), true ),
+				'editable'     => in_array( $source, array( 'acf', 'cptui', 'jet', 'minn' ), true ),
 			);
 		}
 		return rest_ensure_response(
@@ -553,6 +644,8 @@ class Minn_Admin_CPT {
 			$result = self::acf_tax_write( $slug, $def, null );
 		} elseif ( 'cptui' === $backend ) {
 			$result = self::cptui_tax_write( $slug, $def );
+		} elseif ( 'jet' === $backend ) {
+			$result = self::jet_tax_write( $slug, $def, null );
 		} else {
 			$result = self::minn_tax_write( $slug, $def );
 		}
@@ -569,7 +662,7 @@ class Minn_Admin_CPT {
 		if ( ! taxonomy_exists( $slug ) ) {
 			return new WP_Error( 'not_found', __( 'No such taxonomy.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
-		if ( ! in_array( $source, array( 'acf', 'cptui', 'minn' ), true ) ) {
+		if ( ! in_array( $source, array( 'acf', 'cptui', 'jet', 'minn' ), true ) ) {
 			return new WP_Error( 'not_editable', __( 'This taxonomy is registered in code and can only be changed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$def = self::tax_def_from_request( $request );
@@ -582,6 +675,8 @@ class Minn_Admin_CPT {
 			$result   = self::acf_tax_write( $slug, $def, $existing );
 		} elseif ( 'cptui' === $source ) {
 			$result = self::cptui_tax_write( $slug, $def );
+		} elseif ( 'jet' === $source ) {
+			$result = self::jet_tax_write( $slug, $def, self::jet_taxonomies()[ $slug ] ?? null );
 		} else {
 			$result = self::minn_tax_write( $slug, $def );
 		}
@@ -609,6 +704,11 @@ class Minn_Admin_CPT {
 			$taxes = (array) get_option( 'cptui_taxonomies', array() );
 			unset( $taxes[ $slug ] );
 			update_option( 'cptui_taxonomies', $taxes );
+		} elseif ( 'jet' === $source ) {
+			$result = self::jet_delete( jet_engine()->taxonomies->data, self::jet_taxonomies()[ $slug ] ?? null );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
 		} else {
 			return new WP_Error( 'not_editable', __( 'This taxonomy is registered in code and can only be removed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
@@ -723,6 +823,139 @@ class Minn_Admin_CPT {
 			return new WP_Error( 'acf_failed', __( 'ACF could not save the post type.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		return true;
+	}
+
+	/**
+	 * Write through JetEngine's own data class, the way its Vue screen does:
+	 * a flat request (labels, args, meta_fields, admin columns) handed to
+	 * set_request() and then create_item() / edit_item() with redirect off.
+	 * An existing row is re-sent whole from its edit shape with only Minn's
+	 * fields changed, so meta fields, admin columns and every advanced flag
+	 * survive. Taxonomy assignment is not part of JetEngine's post type
+	 * model (it lives on the taxonomy's object_type), so def['taxonomies']
+	 * is left to the taxonomy side.
+	 */
+	private static function jet_write( $slug, array $def, $existing ) {
+		$b = function ( $v ) {
+			return $v ? 'true' : 'false';
+		};
+		$edit    = ( $existing && is_array( $existing['edit'] ?? null ) ) ? $existing['edit'] : array();
+		$request = array_merge(
+			(array) ( $edit['advanced_settings'] ?? array() ),
+			(array) ( $edit['labels'] ?? array() ),
+			array(
+				'slug'          => $slug,
+				'name'          => $def['plural'],
+				'singular_name' => $def['singular'],
+				'public'        => $b( $def['public'] ),
+				'show_ui'       => 'true',
+				'show_in_menu'  => 'true',
+				'show_in_rest'  => $b( $def['show_in_rest'] ),
+				'has_archive'   => $b( $def['has_archive'] ),
+				'hierarchical'  => $b( $def['hierarchical'] ),
+				'supports'      => $def['supports'],
+				'meta_fields'   => (array) ( $edit['meta_fields'] ?? array() ),
+				'admin_columns' => (array) ( $edit['admin_columns'] ?? array() ),
+				'admin_filters' => (array) ( $edit['admin_filters'] ?? array() ),
+			)
+		);
+		if ( ! $existing ) {
+			$request += array( 'rewrite' => 'true', 'query_var' => 'true', 'map_meta_cap' => 'true' );
+		}
+		foreach ( array( 'show_edit_link', 'hide_field_names', 'delete_metadata', 'custom_storage' ) as $flag ) {
+			if ( isset( $edit['general_settings'][ $flag ] ) ) {
+				$request[ $flag ] = $edit['general_settings'][ $flag ];
+			}
+		}
+		// Their flag sanitizer treats any non-empty value as true, so stored
+		// PHP false must not ride along as the string "false"'s cousin: drop
+		// falsy entries and let the whitelist default them to false.
+		foreach ( $request as $k => $v ) {
+			if ( false === $v ) {
+				unset( $request[ $k ] );
+			}
+		}
+		try {
+			$data = jet_engine()->cpt->data;
+			$data->set_request( $request );
+			if ( $existing ) {
+				$request['id'] = $existing['id'];
+				$data->set_request( $request );
+				$ok = $data->edit_item( false );
+			} else {
+				$ok = $data->create_item( false );
+			}
+			$data->reset_raw_cache();
+		} catch ( \Throwable $e ) {
+			return new WP_Error( 'jet_failed', __( 'JetEngine could not save the post type.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		if ( empty( $ok ) ) {
+			return new WP_Error( 'jet_failed', __( 'JetEngine could not save the post type.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		return true;
+	}
+
+	private static function jet_tax_write( $slug, array $def, $existing ) {
+		$b = function ( $v ) {
+			return $v ? 'true' : 'false';
+		};
+		$edit    = ( $existing && is_array( $existing['edit'] ?? null ) ) ? $existing['edit'] : array();
+		$request = array_merge(
+			(array) ( $edit['advanced_settings'] ?? array() ),
+			(array) ( $edit['labels'] ?? array() ),
+			array(
+				'slug'          => $slug,
+				'name'          => $def['plural'],
+				'singular_name' => $def['singular'],
+				'object_type'   => $def['object_types'],
+				'public'        => $b( $def['public'] ),
+				'show_ui'       => 'true',
+				'show_in_rest'  => $b( $def['show_in_rest'] ),
+				'hierarchical'  => $b( $def['hierarchical'] ),
+				'meta_fields'   => (array) ( $edit['meta_fields'] ?? array() ),
+			)
+		);
+		if ( ! $existing ) {
+			$request += array( 'rewrite' => 'true', 'query_var' => 'true', 'show_admin_column' => 'true' );
+		}
+		foreach ( $request as $k => $v ) {
+			if ( false === $v ) {
+				unset( $request[ $k ] );
+			}
+		}
+		try {
+			$data = jet_engine()->taxonomies->data;
+			if ( $existing ) {
+				$request['id'] = $existing['id'];
+				$data->set_request( $request );
+				$ok = $data->edit_item( false );
+			} else {
+				$data->set_request( $request );
+				$ok = $data->create_item( false );
+			}
+			$data->reset_raw_cache();
+		} catch ( \Throwable $e ) {
+			return new WP_Error( 'jet_failed', __( 'JetEngine could not save the taxonomy.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		if ( empty( $ok ) ) {
+			return new WP_Error( 'jet_failed', __( 'JetEngine could not save the taxonomy.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		return true;
+	}
+
+	/** Remove a JetEngine row through its own delete_item (runs its before-delete cleanup). */
+	private static function jet_delete( $data, $existing ) {
+		if ( ! $existing || empty( $existing['id'] ) ) {
+			return new WP_Error( 'not_found', __( 'JetEngine definition not found.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		try {
+			$data->set_request( array( 'id' => $existing['id'] ) );
+			$ok = $data->delete_item( false );
+			$data->reset_raw_cache();
+		} catch ( \Throwable $e ) {
+			return new WP_Error( 'jet_failed', __( 'JetEngine could not remove the definition.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		return empty( $ok ) ? new WP_Error( 'jet_failed', __( 'JetEngine could not remove the definition.', 'minn-admin' ), array( 'status' => 500 ) ) : true;
 	}
 
 	/** Write in CPT UI's option shape (string booleans and all). */
