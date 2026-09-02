@@ -5475,7 +5475,10 @@
 	// product / shop_coupon / shop_subscription are WooCommerce: catalog,
 	// promo codes and subscriptions live on their own surfaces (wc/v3), not
 	// the writing editor.
-	const HIDDEN_TYPES = [ 'post', 'page', 'attachment', 'product', 'product_variation', 'shop_coupon', 'shop_subscription', 'elementor_library', 'e-floating-buttons', 'e-landing-page' ];
+	// JetThemeCore theme parts, JetEngine listing items and JetMenu mega-menu
+	// items are builder plumbing with their own surfaces or canvases, the
+	// elementor_library case again; JetPopup stays, a popup is content.
+	const HIDDEN_TYPES = [ 'post', 'page', 'attachment', 'product', 'product_variation', 'shop_coupon', 'shop_subscription', 'elementor_library', 'e-floating-buttons', 'e-landing-page', 'jet-theme-core', 'jet-engine', 'jet-menu' ];
 	// The content-manageable type map: viewable public types minus the curated
 	// hidden set, PLUS wp_block — synced patterns are deliberately allowlisted
 	// past the viewable gate (not publicly queryable, but daily-manageable
