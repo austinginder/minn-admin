@@ -301,10 +301,70 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'where', 'label' => __( 'Stored', 'minn-admin' ), 'format' => 'pill' ),
 				array( 'key' => 'date', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
+			'detail'    => array( 'skip' => array( 'components' ) ),
+			'actions'   => array(
+				// A set is one file per component (a big one splits into
+				// parts); the door streams a lone file and lists several.
+				array( 'label' => __( 'Download', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'updraftplus' ) ),
+				array( 'label' => __( 'Download database', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'updraftplus', '{id}', 'db' ) ),
+				array(
+					'label'   => __( 'Delete set', 'minn-admin' ),
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/updraft/backups/{id}',
+					'confirm' => __( 'Delete this backup set from this server? Copies at remote storage stay.', 'minn-admin' ),
+					'danger'  => true,
+				),
+			),
 		),
 	);
 	return $surfaces;
 } );
+
+/**
+ * The local files of one backup set, for the download door: one entry per
+ * component file (db, plugins, themes, uploads, others, more), parts of a
+ * split component numbered. Files that only exist at remote storage are
+ * left out; the door says so when nothing remains.
+ */
+function minn_admin_updraftplus_download_files( $id ) {
+	global $updraftplus;
+	if ( ! minn_admin_updraftplus_active() || ! minn_admin_updraftplus_can() || ! Minn_Admin::network_owner() ) {
+		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	$history = UpdraftPlus_Backup_History::get_history();
+	$ts      = (int) $id;
+	if ( ! isset( $history[ $ts ] ) || ! is_array( $history[ $ts ] ) ) {
+		return new WP_Error( 'not_found', __( 'Backup set not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$dir      = $updraftplus->backups_dir_location();
+	$labels   = array( 'db' => __( 'Database', 'minn-admin' ), 'plugins' => __( 'Plugins', 'minn-admin' ), 'themes' => __( 'Themes', 'minn-admin' ), 'uploads' => __( 'Uploads', 'minn-admin' ), 'others' => __( 'Others', 'minn-admin' ), 'wpcore' => __( 'Core', 'minn-admin' ), 'more' => __( 'More', 'minn-admin' ) );
+	$entities = array( 'db' );
+	foreach ( (array) $updraftplus->get_backupable_file_entities( true, true ) as $entity => $info ) {
+		$entities[] = (string) $entity;
+	}
+	$files = array();
+	foreach ( $entities as $entity ) {
+		if ( empty( $history[ $ts ][ $entity ] ) ) {
+			continue;
+		}
+		$parts = is_array( $history[ $ts ][ $entity ] ) ? array_values( $history[ $ts ][ $entity ] ) : array( $history[ $ts ][ $entity ] );
+		$label = isset( $labels[ $entity ] ) ? $labels[ $entity ] : ucfirst( $entity );
+		foreach ( $parts as $i => $name ) {
+			$name = (string) $name;
+			if ( '' === $name ) {
+				continue;
+			}
+			$files[] = array(
+				'part'  => $entity . ( $i ? '-' . $i : '' ),
+				'name'  => $name,
+				'label' => count( $parts ) > 1 ? sprintf( /* translators: 1: component, 2: part number, 3: parts total */ __( '%1$s (%2$d of %3$d)', 'minn-admin' ), $label, $i + 1, count( $parts ) ) : $label,
+				'path'  => trailingslashit( $dir ) . $name,
+				'root'  => $dir,
+			);
+		}
+	}
+	return $files;
+}
 
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_updraftplus_active() ) {
@@ -314,6 +374,37 @@ add_action( 'rest_api_init', function () {
 		// Network-shared archives (see minn_admin_updraftplus_active).
 		return minn_admin_updraftplus_can() && Minn_Admin::network_owner();
 	};
+
+	register_rest_route( 'minn-admin/v1', '/updraft/backups/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $request ) {
+			$ts    = (int) $request['id'];
+			$admin = minn_admin_updraft_admin();
+			if ( ! $admin || ! method_exists( $admin, 'delete_set' ) ) {
+				return new WP_Error( 'unavailable', __( 'UpdraftPlus is not loaded.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			$history = UpdraftPlus_Backup_History::get_history();
+			if ( ! isset( $history[ $ts ] ) ) {
+				return new WP_Error( 'not_found', __( 'Backup set not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			try {
+				// Their own delete, local files only: remote copies are a
+				// choice their screen asks about, and the answer here is no.
+				$result = $admin->delete_set( array(
+					'backup_timestamp' => (string) $ts,
+					'delete_remote'    => 0,
+					'is_continuation'  => false,
+				) );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'delete_failed', __( 'UpdraftPlus could not delete the set: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
+			}
+			if ( is_array( $result ) && isset( $result['result'] ) && 'error' === $result['result'] ) {
+				return new WP_Error( 'delete_failed', isset( $result['message'] ) ? (string) $result['message'] : __( 'UpdraftPlus could not delete the set.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Backup set deleted.', 'minn-admin' ) ) );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/updraft/backups', array(
 		'methods'             => 'GET',

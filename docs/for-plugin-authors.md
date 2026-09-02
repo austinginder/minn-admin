@@ -235,6 +235,21 @@ each view's routes and gates your own; the host surface's status route can
 merge your rows when a shared card makes sense (`function_exists()` on a
 helper the joining adapter defines).
 
+**Downloading a file a row stands for.** A REST route cannot serve a
+download: a link opened in a new tab carries no nonce header, and
+WordPress treats a REST request without one as logged out. Minn keeps one
+cookie-authenticated door for this, `admin-post.php?action=minn_admin_backup_download`,
+and `minn_admin_backup_download_url( 'your-provider' )` builds the row
+link (its `{id}` placeholder survives for the row). Define
+`minn_admin_your_provider_download_files( $id )` returning an array of
+`[ 'part' => 'db', 'name' => 'file.zip', 'label' => 'Database', 'path' => '/abs/file.zip', 'root' => '/abs/backups' ]`
+entries, or a `WP_Error` with a `status`; check your own capability
+inside it. Every path is verified to sit under its `root`. One entry
+streams; several show a page of links; pass a third argument to
+`minn_admin_backup_download_url()` to link one part directly. The bundled
+backup adapters (UpdraftPlus, WPvivid, BackWPup, Duplicator) are the
+examples.
+
 ### Icons
 
 The canonical set (an unknown name renders empty; there is no fallback glyph):

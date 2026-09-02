@@ -344,6 +344,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'skip' => array( 'components', 'ts' ),
 			),
 			'actions'   => array(
+				// Only sets with files on this server; remote-only rows say
+				// remote in the Stored pill and get no link.
+				array( 'label' => __( 'Download', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'wpvivid' ), 'when' => array( 'key' => 'where', 'equals' => 'local' ) ),
 				array(
 					'label'   => __( 'Delete backup', 'minn-admin' ),
 					'method'  => 'DELETE',
@@ -358,6 +361,40 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 	return $surfaces;
 } );
+
+/** The local archive files of one WPvivid set, for the download door. */
+function minn_admin_wpvivid_download_files( $id ) {
+	if ( ! minn_admin_wpvivid_active() || ! minn_admin_wpvivid_can() ) {
+		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	$set = class_exists( 'WPvivid_Backuplist' ) ? WPvivid_Backuplist::get_backup_by_id( sanitize_key( $id ) ) : false;
+	if ( ! is_array( $set ) ) {
+		return new WP_Error( 'not_found', __( 'Backup not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$dir   = WP_CONTENT_DIR . '/' . WPvivid_Setting::get_backupdir();
+	$names = array();
+	if ( ! empty( $set['backup']['files'] ) && is_array( $set['backup']['files'] ) ) {
+		foreach ( $set['backup']['files'] as $file ) {
+			if ( ! empty( $file['file_name'] ) ) {
+				$names[] = (string) $file['file_name'];
+			}
+		}
+	}
+	foreach ( (array) ( $set['backup'] ?? array() ) as $type ) {
+		if ( is_array( $type ) && ! empty( $type['files'] ) && is_array( $type['files'] ) ) {
+			foreach ( $type['files'] as $file ) {
+				if ( ! empty( $file['file_name'] ) ) {
+					$names[] = (string) $file['file_name'];
+				}
+			}
+		}
+	}
+	$files = array();
+	foreach ( array_unique( $names ) as $name ) {
+		$files[] = array( 'part' => $name, 'name' => $name, 'path' => trailingslashit( $dir ) . $name, 'root' => $dir );
+	}
+	return $files;
+}
 
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_wpvivid_active() ) {

@@ -54,6 +54,32 @@ function minn_admin_backwpup_folder_job_ids() {
 	return $ids;
 }
 
+/** The one archive a row stands for ("{jobid}:{filename}"), for the download door. */
+function minn_admin_backwpup_download_files( $id ) {
+	// Their own download capability, the one their Backups screen checks.
+	if ( ! minn_admin_backwpup_active() || ! current_user_can( 'backwpup_backups_download' ) || ! Minn_Admin::network_owner() ) {
+		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	$pos = strpos( (string) $id, ':' );
+	if ( false === $pos ) {
+		return new WP_Error( 'not_found', __( 'Archive not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$jobid    = (int) substr( $id, 0, $pos );
+	$filename = basename( substr( $id, $pos + 1 ) );
+	try {
+		$dest  = BackWPup::get_destination( 'FOLDER' );
+		$files = $dest && method_exists( $dest, 'file_get_list' ) ? (array) $dest->file_get_list( $jobid . '_FOLDER' ) : array();
+	} catch ( \Throwable $e ) {
+		$files = array();
+	}
+	foreach ( $files as $file ) {
+		if ( isset( $file['filename'], $file['file'] ) && (string) $file['filename'] === $filename ) {
+			return array( array( 'part' => $filename, 'name' => $filename, 'path' => (string) $file['file'], 'root' => dirname( (string) $file['file'] ) ) );
+		}
+	}
+	return new WP_Error( 'not_found', __( 'Archive not found.', 'minn-admin' ), array( 'status' => 404 ) );
+}
+
 /**
  * Display rows for local FOLDER archives across every job, newest first.
  * Id shape: "{jobid}:{filename}" so delete can target the right jobdest.
@@ -267,7 +293,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'skip' => array( 'filename', 'size_raw', 'ts', 'jobid' ),
 			),
-			'actions'   => $actions,
+			'actions'   => array_merge( array( array( 'label' => __( 'Download', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'backwpup' ) ) ), $actions ),
 		),
 	);
 	return $surfaces;

@@ -86,10 +86,14 @@ function minn_admin_duplicator_rows() {
 			$status = 'error';
 		}
 		$size    = minn_admin_duplicator_archive_size( $r->name, $r->hash );
+		// The installer is a second file beside the archive; a package
+		// restored from elsewhere may have only the archive on disk.
+		$inst    = $r->name && $r->hash ? glob( minn_admin_duplicator_ssdir() . '/' . $r->name . '_' . $r->hash . '_installer.*' ) : array();
 		$items[] = array(
-			'id'      => (int) $r->id,
-			'name'    => (string) $r->name,
-			'status'  => $status,
+			'id'        => (int) $r->id,
+			'name'      => (string) $r->name,
+			'status'    => $status,
+			'installer' => $inst ? 'yes' : 'no',
 			'size'    => $size ? size_format( $size ) : '—',
 			'owner'   => (string) $r->owner,
 			'created' => $gmt ? str_replace( ' ', 'T', (string) $r->created ) . 'Z' : (string) $r->created,
@@ -103,6 +107,50 @@ function minn_admin_duplicator_can_build() {
 	return minn_admin_duplicator_active() && class_exists( 'DUP_Package' ) && class_exists( 'DUP_Settings' ) && current_user_can( 'export' );
 }
 
+
+/**
+ * A package's archive and installer, for the download door. The installer
+ * sits on disk under their server-side extension (.php.bak) and downloads
+ * under the name their screen gives it.
+ */
+function minn_admin_duplicator_download_files( $id ) {
+	if ( ! minn_admin_duplicator_can_build() ) {
+		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	global $wpdb;
+	$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, name, hash FROM {$wpdb->base_prefix}duplicator_packages WHERE id = %d", (int) $id ), ARRAY_A ); // phpcs:ignore WordPress.DB
+	if ( ! $row ) {
+		return new WP_Error( 'not_found', __( 'Package not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$root    = DUP_Settings::getSsdirPath();
+	$package = DUP_Package::getByID( (int) $id );
+	// Their package object names its files; the table row's name and hash
+	// name the same files when the stored object is missing that (their
+	// files are {name}_{hash}_archive.zip and {name}_{hash}_installer.php.bak).
+	$stem    = $row['name'] . '_' . $row['hash'];
+	$zip     = $package ? $package->getLocalPackageFile( DUP_PackageFileType::Archive ) : null;
+	if ( ! $zip ) {
+		$found = glob( $root . '/' . $stem . '_archive.*' );
+		$zip   = $found ? $found[0] : null;
+	}
+	$inst = $package ? $package->getLocalPackageFile( DUP_PackageFileType::Installer ) : null;
+	if ( ! $inst ) {
+		$found = glob( $root . '/' . $stem . '_installer.*' );
+		$inst  = $found ? $found[0] : null;
+	}
+	$files = array();
+	if ( $zip ) {
+		$files[] = array( 'part' => 'archive', 'name' => basename( $zip ), 'label' => __( 'Archive', 'minn-admin' ), 'path' => $zip, 'root' => $root );
+	}
+	if ( $inst ) {
+		$name = $package && method_exists( $package, 'getInstDownloadName' ) ? (string) $package->getInstDownloadName() : '';
+		if ( '' === $name || false === strpos( $name, 'installer' ) ) {
+			$name = $stem . '_installer.php';
+		}
+		$files[] = array( 'part' => 'installer', 'name' => $name, 'label' => __( 'Installer', 'minn-admin' ), 'path' => $inst, 'root' => $root );
+	}
+	return $files;
+}
 
 /**
  * A database-only scan walks no files and leaves no file or folder list
@@ -209,9 +257,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'created', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
-				'skip' => array( 'name' ),
+				'skip' => array( 'name', 'installer' ),
 			),
 			'actions'   => array(
+				// The archive and the installer that goes with it, the pair
+				// their Packages screen offers; nothing until a build finished.
+				array( 'label' => __( 'Download archive', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'duplicator', '{id}', 'archive' ), 'when' => array( 'key' => 'status', 'equals' => 'completed' ) ),
+				array( 'label' => __( 'Download installer', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'duplicator', '{id}', 'installer' ), 'when' => array( 'key' => 'installer', 'equals' => 'yes' ) ),
 				array(
 					'label'   => __( 'Delete package', 'minn-admin' ),
 					'method'  => 'DELETE',
