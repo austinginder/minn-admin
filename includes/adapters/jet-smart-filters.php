@@ -75,10 +75,73 @@ function minn_admin_jsf_status_rows() {
 	);
 	$actions = array();
 	if ( $on ) {
-		$actions[] = array( 'label' => __( 'Reindex filters', 'minn-admin' ), 'route' => 'minn-admin/v1/jet-smart-filters/reindex', 'method' => 'POST', 'confirm' => __( 'Rebuild the filter index now? Large sites take a moment.', 'minn-admin' ) );
+		$actions[] = array( 'label' => __( 'Reindex filters', 'minn-admin' ), 'route' => 'minn-admin/v1/jet-smart-filters/reindex', 'method' => 'POST', 'job' => true, 'confirm' => __( 'Rebuild the filter index now? It runs in the background; large catalogs take a while.', 'minn-admin' ) );
 	}
 	return array( 'rows' => $rows, 'actions' => $actions );
 }
+
+/**
+ * Reindex as a background job. Their index_filters() is one synchronous
+ * rebuild (their own Index button runs it in a single admin-ajax request),
+ * so the background is WP-Cron: a single event carries a job token, the
+ * worker runs their rebuild and records the outcome in a transient the
+ * status route reads. Progress is unknown by nature (one call, no steps),
+ * so the pill runs indeterminate. A queued job that no cron run has picked
+ * up after ten minutes is reported as an error rather than left spinning:
+ * that is the DISABLE_WP_CRON-without-a-system-cron shape.
+ */
+function minn_admin_jsf_job_key( $token ) {
+	return 'minn_jsf_job_' . $token;
+}
+
+function minn_admin_jsf_job_read( $token ) {
+	$rec = get_transient( minn_admin_jsf_job_key( $token ) );
+	return is_array( $rec ) ? $rec : null;
+}
+
+function minn_admin_jsf_job_write( $token, array $rec ) {
+	set_transient( minn_admin_jsf_job_key( $token ), $rec, 6 * HOUR_IN_SECONDS );
+}
+
+function minn_admin_jsf_index_rows() {
+	global $wpdb;
+	$t = $wpdb->prefix . 'jet_smart_filters_indexer';
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t}" );
+}
+
+/** The cron worker: their rebuild, outcome recorded for the status route. */
+function minn_admin_jsf_reindex_worker( $token ) {
+	$token = preg_replace( '/[^A-Za-z0-9]/', '', (string) $token );
+	$rec   = minn_admin_jsf_job_read( $token );
+	if ( ! $rec || 'queued' !== ( $rec['status'] ?? '' ) ) {
+		return; // canceled, already run, or expired
+	}
+	$rec['status']  = 'running';
+	$rec['message'] = __( 'Rebuilding the filter index…', 'minn-admin' );
+	minn_admin_jsf_job_write( $token, $rec );
+	try {
+		if ( ! minn_admin_jsf_active() ) {
+			throw new RuntimeException( 'inactive' );
+		}
+		$indexer = jet_smart_filters()->indexer;
+		if ( ! is_object( $indexer ) || ! method_exists( $indexer, 'index_filters' ) ) {
+			throw new RuntimeException( 'missing' );
+		}
+		$indexer->index_filters(); // their own rebuild, the one their screen's button runs
+		$n = minn_admin_jsf_index_rows();
+		$rec['status']  = 'done';
+		/* translators: %s: number of index rows. */
+		$rec['message'] = sprintf( __( 'Index rebuilt: %s rows.', 'minn-admin' ), number_format_i18n( $n ) );
+		$rec['rows']    = $n;
+	} catch ( \Throwable $e ) {
+		$rec['status']  = 'error';
+		$rec['message'] = __( 'JetSmartFilters could not rebuild the index.', 'minn-admin' );
+	}
+	$rec['finished'] = time();
+	minn_admin_jsf_job_write( $token, $rec );
+}
+add_action( 'minn_admin_jsf_reindex', 'minn_admin_jsf_reindex_worker' );
 
 // Runs after jet-search.php's filter (require order), so the Search
 // surface, when JetSearch is active, is there to join.
@@ -195,22 +258,91 @@ add_action( 'rest_api_init', function () {
 			if ( ! minn_admin_jsf_indexer_on() ) {
 				return new WP_Error( 'indexer_off', __( 'The indexer is switched off in JetSmartFilters settings.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			try {
-				$indexer = jet_smart_filters()->indexer;
-				if ( ! is_object( $indexer ) || ! method_exists( $indexer, 'index_filters' ) ) {
-					return new WP_Error( 'indexer_missing', __( 'The indexer is not loaded.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				$indexer->index_filters(); // their own rebuild, the one their screen's button runs
-			} catch ( \Throwable $e ) {
-				return new WP_Error( 'reindex_failed', __( 'JetSmartFilters could not rebuild the index.', 'minn-admin' ), array( 'status' => 500 ) );
+			$indexer = jet_smart_filters()->indexer;
+			if ( ! is_object( $indexer ) || ! method_exists( $indexer, 'index_filters' ) ) {
+				return new WP_Error( 'indexer_missing', __( 'The indexer is not loaded.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
-			global $wpdb;
-			$t = $wpdb->prefix . 'jet_smart_filters_indexer';
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$n = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t}" );
-			/* translators: %s: number of index rows. */
-			return rest_ensure_response( array( 'ok' => true, 'message' => sprintf( __( 'Index rebuilt: %s rows.', 'minn-admin' ), number_format_i18n( $n ) ) ) );
+			$token = wp_generate_password( 12, false );
+			minn_admin_jsf_job_write( $token, array(
+				'status'  => 'queued',
+				'started' => time(),
+				'message' => __( 'Waiting for WP-Cron to pick the rebuild up…', 'minn-admin' ),
+				'rows'    => minn_admin_jsf_index_rows(),
+			) );
+			wp_schedule_single_event( time() - 1, 'minn_admin_jsf_reindex', array( $token ) );
+			// Kick cron now so the rebuild starts without waiting for the next visitor.
+			spawn_cron();
+			return rest_ensure_response( array(
+				'ok'      => true,
+				'message' => __( 'Reindex started. JetSmartFilters is rebuilding the index in the background.', 'minn-admin' ),
+				'job'     => array(
+					'id'          => $token,
+					'label'       => __( 'Rebuilding filter index', 'minn-admin' ),
+					'message'     => __( 'Starting JetSmartFilters…', 'minn-admin' ),
+					'statusRoute' => 'minn-admin/v1/jet-smart-filters/reindex/' . $token,
+					'stopRoute'   => 'minn-admin/v1/jet-smart-filters/reindex/' . $token,
+					'stopMethod'  => 'DELETE',
+				),
+			) );
 		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/jet-smart-filters/reindex/(?P<token>[A-Za-z0-9]{12})', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$token = (string) $request['token'];
+				$rec   = minn_admin_jsf_job_read( $token );
+				if ( ! $rec ) {
+					return new WP_Error( 'not_found', __( 'Unknown reindex job', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$status = (string) ( $rec['status'] ?? 'queued' );
+				if ( 'queued' === $status && time() - (int) ( $rec['started'] ?? time() ) > 10 * MINUTE_IN_SECONDS ) {
+					// No cron run ever picked it up: say so rather than spin forever.
+					$rec['status']  = 'error';
+					$rec['message'] = __( 'The rebuild never started. WP-Cron did not run; check DISABLE_WP_CRON and the site\'s cron setup.', 'minn-admin' );
+					minn_admin_jsf_job_write( $token, $rec );
+					$status = 'error';
+				}
+				$out = array(
+					'status'  => 'queued' === $status ? 'running' : $status,
+					'message' => (string) ( $rec['message'] ?? '' ),
+				);
+				if ( 'done' === $status ) {
+					$out['percent'] = 100;
+					$out['result']  = array(
+						/* translators: %s: number of index rows. */
+						'label' => sprintf( __( '%s index rows', 'minn-admin' ), number_format_i18n( (int) ( $rec['rows'] ?? 0 ) ) ),
+					);
+				}
+				return rest_ensure_response( $out );
+			},
+		),
+		array(
+			'methods'             => 'DELETE',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$token = (string) $request['token'];
+				$rec   = minn_admin_jsf_job_read( $token );
+				if ( ! $rec ) {
+					return new WP_Error( 'not_found', __( 'Unknown reindex job', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				if ( 'queued' === ( $rec['status'] ?? '' ) ) {
+					// Still waiting for cron: pull the event so it never runs.
+					wp_clear_scheduled_hook( 'minn_admin_jsf_reindex', array( $token ) );
+					$rec['status']  = 'canceled';
+					$rec['message'] = __( 'Reindex canceled before it started.', 'minn-admin' );
+					minn_admin_jsf_job_write( $token, $rec );
+					return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => $rec['message'] ) );
+				}
+				if ( 'running' === ( $rec['status'] ?? '' ) ) {
+					// Their rebuild is one call with no steps; once it runs it finishes.
+					return rest_ensure_response( array( 'ok' => false, 'status' => 'running', 'message' => __( 'The rebuild is already running and finishes on its own; it cannot be stopped mid-way.', 'minn-admin' ) ) );
+				}
+				return rest_ensure_response( array( 'ok' => true, 'status' => (string) $rec['status'], 'message' => (string) ( $rec['message'] ?? '' ) ) );
+			},
+		),
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/jet-smart-filters/status', array(
