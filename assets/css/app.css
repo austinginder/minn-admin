@@ -2290,6 +2290,13 @@ button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; 
 }
 .minn-side-link:hover { text-decoration: underline; }
 /* Sectioned surface detail (e.g. form entries): long/multiline answers stack. */
+/* Plain detail rows: key left, value right, long values (file names,
+   URLs) wrap instead of pushing the dialog wide. */
+.minn-side-row { gap: 18px; }
+.minn-side-row > .minn-surface-val { text-align: end; min-width: 0; overflow-wrap: anywhere; }
+.minn-surface-link { color: var(--accent); text-decoration: none; }
+.minn-surface-link:hover { text-decoration: underline; }
+.minn-surface-val-dim { color: var(--text3); }
 .minn-side-row.multi { flex-direction: column; align-items: flex-start; gap: 3px; }
 .minn-surface-val.multi { white-space: pre-wrap; text-align: start; max-height: 200px; overflow-y: auto; }
 /* Block row types (code / html-preview / kv-table): full-width content. */

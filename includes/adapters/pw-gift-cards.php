@@ -265,7 +265,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Gift cards', 'minn-admin' ),
 		'family'     => 'gift-cards',
 		'sub'        => $pro ? 'PW Pro' : 'PW',
-		'icon'       => 'tag',
+		'icon'       => 'gift',
 		'cap'        => 'manage_woocommerce',
 		'group'      => 'commerce',
 		'status'     => array( 'route' => 'minn-admin/v1/pwgc/status' ),

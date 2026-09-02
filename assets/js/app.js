@@ -770,8 +770,28 @@
 			name: __( 'Name' ), slug: __( 'Slug' ), status: __( 'Status' ), status_label: __( 'Status' ),
 			size: __( 'Size' ), where: __( 'Stored' ), type: __( 'Type' ), date: __( 'Date' ),
 			owner: __( 'By' ), created: __( 'Created' ), locked: __( 'Lock' ),
+			filename: __( 'File' ), url: __( 'URL' ), email: __( 'Email' ), modified: __( 'Modified' ),
 		};
-		return labels[ key ] || String( key || '' ).replace( /_/g, ' ' );
+		if ( labels[ key ] ) return labels[ key ];
+		// downloadUrl → "Download url", last_run → "Last run".
+		const words = String( key || '' ).replace( /([a-z0-9])([A-Z])/g, '$1 $2' ).replace( /[_-]+/g, ' ' ).trim();
+		return words.charAt( 0 ).toUpperCase() + words.slice( 1 );
+	}
+
+	// A raw detail value: links become links, ISO stamps read as time ago
+	// with the full date beside, everything else stays text.
+	function surfaceDetailValue( v ) {
+		const str = String( v );
+		if ( /^https?:\/\/\S+$/i.test( str ) ) {
+			let shown = str;
+			try { const u = new URL( str ); shown = u.host + ( u.pathname.length > 1 ? u.pathname : '' ); } catch ( e ) {}
+			return `<a class="minn-surface-link" href="${ esc( str ) }" target="_blank" rel="noopener" title="${ esc( str ) }">${ esc( shown ) }</a>`;
+		}
+		if ( /^\d{4}-\d\d-\d\d[T ]\d\d:\d\d/.test( str ) ) {
+			const d = parseWpDate( normalizeTimeInput( str, null ) || str );
+			if ( ! isNaN( d.getTime() ) ) return `${ esc( timeAgo( str ) ) } <span class="minn-surface-val-dim">· ${ esc( d.toLocaleString( undefined, { dateStyle: 'medium', timeStyle: 'short' } ) ) }</span>`;
+		}
+		return esc( chromeLabel( stripTags( str ) ) );
 	}
 
 	function statusLabel( value ) {
@@ -3059,6 +3079,9 @@
 			power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
 			shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/>',
 			'arrow-up-right': '<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
+			star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z"/>',
+			gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/><path d="M12 8c-1.5-3.5-5.5-3.5-5.5-1.5S10 8 12 8Zm0 0c1.5-3.5 5.5-3.5 5.5-1.5S14 8 12 8Z"/>',
+			filter: '<path d="M3 5h18l-7 8.5V19l-4 2v-7.5Z"/>',
 			pencil: '<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/>',
 			'chevron-up': '<polyline points="18 15 12 9 6 15"/>',
 			'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
@@ -3189,31 +3212,42 @@
 	// Stable workflow order: transactions first, then people, then catalog
 	// configuration. The wrapper hides only when the resulting list is empty;
 	// a destination never jumps groups because it happens to be the only one.
+	// The store's daily four first (orders, then what they are made of),
+	// then the add-on kinds in name order so the tail reads the same on
+	// every site whatever mix of extensions it runs.
 	function commerceNavItems() {
 		const navItems = [];
 		if ( B.wc && B.caps.orders ) {
 			navItems.push( { id: 'orders', label: __( 'Orders' ), icon: 'cart', orderCount: true } );
 		}
-		if ( B.wcs && B.caps.subscriptions ) {
-			navItems.push( { id: 'subscriptions', label: __( 'Subscriptions' ), icon: 'refresh' } );
-		}
-		surfaceNavItems().filter( ( s ) => s.group === 'commerce' ).forEach( ( s ) =>
-			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
-		);
-		if ( B.wc && B.caps.customers ) {
-			navItems.push( { id: 'customers', label: __( 'Customers' ), icon: 'users' } );
-		}
 		if ( B.wc && B.caps.products ) {
 			navItems.push( { id: 'products', label: __( 'Products' ), icon: 'tag' } );
+		}
+		if ( B.wc && B.caps.customers ) {
+			navItems.push( { id: 'customers', label: __( 'Customers' ), icon: 'users' } );
 		}
 		if ( B.wc && B.caps.coupons ) {
 			navItems.push( { id: 'coupons', label: __( 'Coupons' ), icon: 'key' } );
 		}
-		return filterHiddenNavItems( navItems );
+		const extras = [];
+		if ( B.wcs && B.caps.subscriptions ) {
+			extras.push( { id: 'subscriptions', label: __( 'Subscriptions' ), icon: 'refresh' } );
+		}
+		surfaceNavItems().filter( ( s ) => s.group === 'commerce' ).forEach( ( s ) =>
+			extras.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
+		);
+		extras.sort( ( x, y ) => x.label.localeCompare( y.label ) );
+		return filterHiddenNavItems( navItems.concat( extras ) );
 	}
 
 	// Tools nav items: site plumbing (logs, redirects, snippets, backups) —
 	// where surface families land unless their descriptor claims workspace.
+	// Tools read in three bands: what shapes the site (templates, fields,
+	// options, snippets), what routes visitors and mail through it (search,
+	// redirects, email), then what keeps it running (log, backups, migrate,
+	// performance, diagnostics). Anything Minn does not know lands between
+	// the second and third bands in name order, so the ops tail stays last.
+	const TOOLS_NAV_RANK = [ 'builder-templates', 'field-groups', 'site-options', 'snippets', 'jet-search', 'redirects', 'mail', null, 'activity-log', 'backups', 'migrate', 'performance', 'diagnostics' ];
 	function toolsNavItems() {
 		const items = surfaceNavItems().filter( ( s ) => s.group !== 'workspace' && s.group !== 'commerce' && s.group !== 'network' )
 			.map( ( s ) => ( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } ) );
@@ -3221,7 +3255,15 @@
 		// so it joins Tools directly. The boot payload is null unless WP
 		// Migrate is running and this user may migrate.
 		if ( B.wpMigrate ) items.push( { id: 'migrate', label: __( 'Migrate' ), icon: 'refresh' } );
-		return items;
+		const unknown = TOOLS_NAV_RANK.indexOf( null );
+		const rank = ( it ) => {
+			const byFamily = TOOLS_NAV_RANK.indexOf( it.family );
+			const byId = TOOLS_NAV_RANK.indexOf( it.id );
+			return byFamily >= 0 ? byFamily : ( byId >= 0 ? byId : unknown );
+		};
+		return items.map( ( it, i ) => ( { it, i } ) )
+			.sort( ( a, b ) => rank( a.it ) - rank( b.it ) || a.it.label.localeCompare( b.it.label ) || a.i - b.i )
+			.map( ( x ) => x.it );
 	}
 
 	// Network nav items (multisite): surfaces that belong to the whole
@@ -15851,6 +15893,9 @@
 			id: job.id || '',
 			label: job.label || __( 'Working…' ),
 			statusRoute: job.statusRoute,
+			// A status route may advance the work on each poll (a builder
+			// that runs one chunk per call); then it is a POST.
+			statusMethod: job.statusMethod || 'GET',
 			stopRoute: job.stopRoute || '',
 			stopMethod: job.stopMethod || 'DELETE',
 			surface: ( opts && opts.surface ) || '',
@@ -15880,7 +15925,7 @@
 		if ( ! j || j.status !== 'running' ) return;
 		let r = null;
 		try {
-			r = await api( j.statusRoute );
+			r = await api( j.statusRoute, { method: j.statusMethod || 'GET' } );
 		} catch ( e ) {
 			// A dropped reply is not a failed job (the server recycles under
 			// load); keep polling and let the status route say otherwise.
@@ -41453,11 +41498,18 @@
 			const hasMailPreview = ! isCard && ( ( !! message && isHtml ) || !! ( sec && ( sec.sections || [] ).some( ( g ) =>
 				( g.rows || [] ).some( ( r ) => r.type === 'html-preview' ) ) ) );
 			// Entry title = form name; activity keeps the surface label (message is body).
+			// Plain rows lead with their own name (a file, a filter, a
+			// review) and carry the surface label underneath; an id tag only
+			// when the id is a number or short, an encoded filename is not
+			// something to read.
+			const itemName = ! isCard && ! ( sec && sec.title ) ? String( it.title || it.name || '' ).trim() : '';
 			const headTitle = isActivity
 				? ( s.label || __( 'Activity Log' ) )
 				: ( sec && sec.title
 					? sec.title
-					: ( isEntry && it.form_name ? it.form_name : ( isEntry && it.form_title ? it.form_title : s.label ) ) );
+					: ( isEntry && it.form_name ? it.form_name : ( isEntry && it.form_title ? it.form_title : ( itemName || s.label ) ) ) );
+			const idStr = String( it.id == null ? '' : it.id );
+			const showId = ! isCard && idStr !== '' && ( /^\d+$/.test( idStr ) || idStr.length <= 12 );
 			const headStatus = ( sec && sec.status ) || it.status
 				|| ( isActivity ? ( it.loglevel || it.severity || it.action ) : null );
 			const activityAdmin = ( sec && sec.adminUrl ) || it.permalink || it.link || '';
@@ -41469,8 +41521,9 @@
 							<div class="minn-modal-title">${ esc( headTitle ) }</div>
 							${ isEntry ? `<div class="minn-modal-sub">${ esc( __( 'Entry' ) ) } #${ esc( String( it.id ) ) }</div>` : '' }
 							${ isActivity ? `<div class="minn-modal-sub">${ esc( __( 'Event' ) ) } #${ esc( String( it.id ) ) }</div>` : '' }
+							${ itemName ? `<div class="minn-modal-sub">${ esc( s.label ) }${ s.sub ? ' · ' + esc( s.sub ) : '' }</div>` : '' }
 						</div>
-						${ ! isCard ? `<span class="minn-modal-id-tag">#${ esc( String( it.id ) ) }</span>` : '' }
+						${ showId ? `<span class="minn-modal-id-tag">#${ esc( idStr ) }</span>` : '' }
 						${ headStatus ? surfacePill( headStatus )
 							: ( typeof it.active === 'boolean' ? surfacePill( it.active ? 'active' : 'inactive' ) : '' ) }
 						${ canStep ? `<span class="minn-modal-count">${ sctx.idx + 1 } / ${ sctx.items.length }</span>
@@ -41481,7 +41534,7 @@
 					${ m.loading ? `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` : `
 					${ isEntry ? entryHtml : isActivity ? activityHtml : `
 					<div class="minn-modal-meta">
-						${ sec ? secRows : rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( chromeLabel( stripTags( String( v ) ) ) ) }</span></div>` ).join( '' ) }
+						${ sec ? secRows : rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ surfaceDetailValue( v ) }</span></div>` ).join( '' ) }
 						${ editFields.length ? `<div class="minn-media-edit">
 							${ editFields.map( ( f, i ) => {
 								const val = surfaceValue( it, f.key );
