@@ -2,7 +2,8 @@
  * Activity Log family status cards (Axis A): Simple History, WP Activity Log,
  * Stream, Aryo. WSAL is the resident provider; others activate for the run
  * and restore. Asserts REST shape (rows + Open ↗ action) and that WSAL paints
- * a status strip on the surface.
+ * a status strip on the surface. The Aryo leg also proves the request-source
+ * column + Source filter (Activity Log 2.14) end to end.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 const { execSync } = require( 'child_process' );
@@ -154,6 +155,73 @@ const pluginInstalled = ( slug ) => {
 				const restored = await api( opt.route );
 				t.check( 'Stream reads again once Role Access is back to its default',
 					restored.status === 200, `${ restored.status }` );
+			}
+
+			// Activity Log 2.14 records where each change came from
+			// (request_source) behind a LAZY migration: the column appears on
+			// the first wp-admin load, never on activation. Minn gates the
+			// Source column and filter on the column itself, so prove both
+			// halves: the surface offers nothing until the column exists, and
+			// everything once it does. Their migration is run through their
+			// own upgrade steps (with a stale version option cleared first: a
+			// version option ahead of the schema makes THEIR inserts fail too).
+			if ( 'aryo-activity-log' === opt.slug ) {
+				const probeCol = () => /SRCCOL:1/.test( wp( `eval "global \\$wpdb; echo 'SRCCOL:' . ( \\$wpdb->get_var( \\$wpdb->prepare( 'SHOW COLUMNS FROM ' . \\$wpdb->prefix . 'aryo_activity_log LIKE %s', 'request_source' ) ) ? 1 : 0 );"` ) );
+				if ( ! probeCol() ) {
+					wp( `eval "delete_option( 'activity_log_db_version' ); delete_transient( 'aal_upgrade_failed' ); delete_option( 'aal_manual_db_upgrade' ); AAL_Maintenance::run_upgrade_steps();"` );
+				}
+				t.check( 'Aryo request_source column present after their migration', probeCol(), '' );
+				const SEED = 'minn suite source probe';
+				try {
+					wp( `eval "aal_insert_log( array( 'action' => 'updated', 'object_type' => 'Options', 'object_name' => '${ SEED }', 'request_source' => 'rest|app:Minn Suite' ) );"` );
+					await page.reload( { waitUntil: 'domcontentloaded' } ).catch( () => null );
+					await page.waitForFunction( () => window.MINN && Array.isArray( window.MINN.surfaces ), null, { timeout: 15000 } );
+					const desc = await page.evaluate( () => {
+						const s = ( window.MINN.surfaces || [] ).find( ( x ) => x.id === 'aryo-activity-log' );
+						const c = s && s.collection ? s.collection : {};
+						return {
+							filter: c.filter ? c.filter.options.map( ( o ) => o[ 0 ] ) : null,
+							cols: ( c.columns || [] ).map( ( x ) => x.key ),
+						};
+					} );
+					t.check( 'Aryo surface declares the Source filter with the plugin\'s own channels',
+						!! desc.filter && [ '', 'browser', 'rest', 'cli', 'cron', 'xmlrpc', 'abilities', 'app_password' ].every( ( v ) => desc.filter.includes( v ) ),
+						JSON.stringify( desc.filter ) );
+					t.check( 'Aryo surface lists a Source column', desc.cols.includes( 'source' ), JSON.stringify( desc.cols ) );
+
+					const q = ( src ) => api( 'minn-admin/v1/aryo/events?search=' + encodeURIComponent( SEED ) + '&source=' + src );
+					const rest = await q( 'rest' );
+					const row = ( ( rest.body && rest.body.items ) || [] )[ 0 ];
+					t.check( 'source=rest finds the seeded REST row labeled with the channel and its Application Password',
+						rest.status === 200 && !! row && row.source === 'REST API' && row.app_password === 'Minn Suite',
+						JSON.stringify( row || rest.body ) );
+					const app = await q( 'app_password' );
+					t.check( 'source=app_password matches any Application Password request (their token match)',
+						app.status === 200 && ( app.body.items || [] ).some( ( i ) => i.app_password === 'Minn Suite' ), JSON.stringify( app.body ) );
+					const cron = await q( 'cron' );
+					t.check( 'source=cron excludes it', cron.status === 200 && cron.body.total === 0, JSON.stringify( cron.body ) );
+					const browser = await q( 'browser' );
+					t.check( 'source=browser excludes it', browser.status === 200 && browser.body.total === 0, JSON.stringify( browser.body ) );
+
+					// The real control on the surface: segmented Source filter
+					// narrows the list to the seeded row.
+					await page.evaluate( () => localStorage.setItem( 'minn-sf-activity-log', 'aryo-activity-log' ) );
+					await page.goto( BASE + '/minn-admin/aryo-activity-log', { waitUntil: 'domcontentloaded' } );
+					await page.waitForSelector( '[data-sfilter="rest"]', { timeout: 20000 } );
+					await page.click( '[data-sfilter="rest"]' );
+					await page.waitForFunction( () => {
+						const rows = Array.from( document.querySelectorAll( '.minn-table-row' ) );
+						return rows.length > 0 && rows.every( ( r ) => /REST API/.test( r.textContent || '' ) );
+					}, null, { timeout: 20000 } ).catch( () => null );
+					const ui = await page.evaluate( () => {
+						const rows = Array.from( document.querySelectorAll( '.minn-table-row' ) );
+						return { n: rows.length, allRest: rows.length > 0 && rows.every( ( r ) => /REST API/.test( r.textContent || '' ) ) };
+					} );
+					t.check( 'Source filter on the surface narrows the list to REST API rows', ui.allRest, JSON.stringify( ui ) );
+				} finally {
+					wp( `eval "global \\$wpdb; \\$wpdb->query( \\$wpdb->prepare( 'DELETE FROM ' . \\$wpdb->prefix . 'aryo_activity_log WHERE object_name = %s', '${ SEED }' ) );"` );
+					await page.evaluate( () => localStorage.setItem( 'minn-sf-activity-log', 'wp-activity-log' ) ).catch( () => null );
+				}
 			}
 		} finally {
 			if ( ! was ) wp( `plugin deactivate ${ opt.slug }` );

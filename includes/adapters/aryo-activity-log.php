@@ -11,7 +11,15 @@
  * Status card (v0.16 Axis A): 24h / 7d / all-time + top action. hist_time
  * is WP local epoch (current_time('timestamp')), same trap as the list.
  *
- * last-sweep: 2026-07-15
+ * Request source (Activity Log 2.14): the table gained a request_source
+ * column ("{channel}|app:{name}": rest / cli / cron / xmlrpc / abilities,
+ * empty for an ordinary browser request, plus the Application Password name
+ * when one authenticated the request). Their migration adds the column
+ * lazily (first wp-admin load, and only by hand above 50k rows), so every
+ * read here gates on the column actually existing rather than on the plugin
+ * version; the labels and the filter matching are the plugin's own.
+ *
+ * last-sweep: 2026-09-02
  *
  * @package minn-admin
  */
@@ -47,6 +55,97 @@ function minn_admin_aryo_can_view() {
 
 function minn_admin_aryo_admin_url() {
 	return admin_url( 'admin.php?page=activity-log-page' );
+}
+
+/**
+ * Whether the log table carries the request_source column (Activity Log 2.14+
+ * after its migration has run). The column is what the SQL needs, so this asks
+ * the table, not the plugin's version option.
+ *
+ * @return bool
+ */
+function minn_admin_aryo_source_ready() {
+	static $ready = null;
+	if ( null !== $ready ) {
+		return $ready;
+	}
+	global $wpdb;
+	$table = $wpdb->prefix . 'aryo_activity_log';
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
+	$col   = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM `{$table}` LIKE %s", 'request_source' ) );
+	$ready = ! empty( $col );
+	return $ready;
+}
+
+/**
+ * Channel vocabulary: the plugin's own labels when its API class is loaded,
+ * the same five words otherwise. '' is the browser (their code stores no
+ * channel for an ordinary wp-admin or front-end request).
+ *
+ * @return array<string,string>
+ */
+function minn_admin_aryo_channel_labels() {
+	$labels = array(
+		'rest'      => __( 'REST API', 'minn-admin' ),
+		'cli'       => __( 'WP-CLI', 'minn-admin' ),
+		'cron'      => __( 'WP-Cron', 'minn-admin' ),
+		'xmlrpc'    => __( 'XML-RPC', 'minn-admin' ),
+		'abilities' => __( 'WP Abilities', 'minn-admin' ),
+	);
+	if ( class_exists( 'AAL_API' ) && method_exists( 'AAL_API', 'get_channel_labels' ) ) {
+		$theirs = (array) AAL_API::get_channel_labels();
+		foreach ( $labels as $k => $v ) {
+			if ( ! empty( $theirs[ $k ] ) ) {
+				$labels[ $k ] = (string) $theirs[ $k ];
+			}
+		}
+	}
+	return $labels;
+}
+
+/**
+ * Split a stored request_source into [channel, app_name] through the plugin's
+ * own parser when it exists (same "{channel}|app:{name}" encoding either way).
+ *
+ * @param string $raw Stored value.
+ * @return array{0:string,1:string}
+ */
+function minn_admin_aryo_parse_source( $raw ) {
+	$raw = (string) $raw;
+	if ( class_exists( 'AAL_API' ) && method_exists( 'AAL_API', 'parse_request_source' ) ) {
+		$p = (array) AAL_API::parse_request_source( $raw );
+		return array( (string) ( $p['channel'] ?? '' ), (string) ( $p['app_name'] ?? '' ) );
+	}
+	if ( '' === $raw ) {
+		return array( '', '' );
+	}
+	$pos = strpos( $raw, '|app:' );
+	if ( false !== $pos ) {
+		return array( substr( $raw, 0, $pos ), substr( $raw, $pos + 5 ) );
+	}
+	if ( 0 === strpos( $raw, 'app:' ) ) {
+		return array( '', substr( $raw, 4 ) );
+	}
+	return array( $raw, '' );
+}
+
+/**
+ * Filter options for the Source dimension: the plugin's channels plus the two
+ * their filter dropdown leaves implicit (the browser, and "any Application
+ * Password" which their query matches by token).
+ *
+ * @return array<int,array{0:string,1:string}>
+ */
+function minn_admin_aryo_source_options() {
+	$out = array(
+		array( '', __( 'All sources', 'minn-admin' ) ),
+		array( 'browser', __( 'Browser', 'minn-admin' ) ),
+	);
+	foreach ( minn_admin_aryo_channel_labels() as $k => $label ) {
+		$out[] = array( $k, $label );
+	}
+	$out[] = array( 'app_password', __( 'App password', 'minn-admin' ) );
+	return $out;
 }
 
 /**
@@ -167,6 +266,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		),
 	);
+	if ( minn_admin_aryo_source_ready() ) {
+		// Where the change came from: the daily audit question, and the
+		// column their 2.14 release added. Rendered only once the column
+		// exists, so a site whose migration has not run sees the old list.
+		$surfaces['aryo-activity-log']['collection']['filter']    = array(
+			'label'   => __( 'Source', 'minn-admin' ),
+			'options' => minn_admin_aryo_source_options(),
+			'query'   => 'source={v}',
+		);
+		$surfaces['aryo-activity-log']['collection']['columns'][] = array(
+			'key'   => 'source',
+			'label' => __( 'Source', 'minn-admin' ),
+			'width' => '128px',
+		);
+	}
 	return $surfaces;
 } );
 
@@ -217,6 +331,20 @@ add_action( 'rest_api_init', function () {
 				$where[] = 'action = %s';
 				$args[]  = sanitize_key( (string) $request['action'] );
 			}
+			$source_ready = minn_admin_aryo_source_ready();
+			$source       = $source_ready ? sanitize_key( (string) $request['source'] ) : '';
+			if ( 'browser' === $source ) {
+				// No channel recorded: an ordinary wp-admin or front-end request.
+				$where[] = "( request_source = '' OR request_source IS NULL )";
+			} elseif ( 'app_password' === $source ) {
+				// Their own matching for "any Application Password".
+				$where[] = "( request_source LIKE '%|app:%' OR request_source LIKE 'app:%' )";
+			} elseif ( '' !== $source ) {
+				// Their own matching: the bare channel, or the channel with an app suffix.
+				$where[] = '( request_source = %s OR request_source LIKE %s )';
+				$args[]  = $source;
+				$args[]  = $wpdb->esc_like( $source ) . '|%';
+			}
 			if ( $request['search'] ) {
 				$like    = '%' . $wpdb->esc_like( $request['search'] ) . '%';
 				$where[] = '(object_name LIKE %s OR action LIKE %s OR object_type LIKE %s)';
@@ -228,22 +356,24 @@ add_action( 'rest_api_init', function () {
 			$total = (int) ( $args
 				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", ...$args ) )
 				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}" ) );
+			$source_col = $source_ready ? ', request_source' : '';
 			$rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT histid, action, object_type, object_subtype, object_name, user_id, hist_ip, hist_time
+				"SELECT histid, action, object_type, object_subtype, object_name, user_id, hist_ip, hist_time{$source_col}
 				 FROM {$table} WHERE {$where_sql} ORDER BY hist_time DESC LIMIT %d OFFSET %d",
 				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
 			// phpcs:enable
 
-			$users = array();
-			$items = array();
+			$labels = $source_ready ? minn_admin_aryo_channel_labels() : array();
+			$users  = array();
+			$items  = array();
 			foreach ( (array) $rows as $r ) {
 				$uid = (int) $r->user_id;
 				if ( $uid && ! isset( $users[ $uid ] ) ) {
 					$u             = get_userdata( $uid );
 					$users[ $uid ] = $u ? $u->user_login : '#' . $uid;
 				}
-				$items[] = array(
+				$item = array(
 					'id'      => (int) $r->histid,
 					'message' => trim( $r->object_type . ( $r->object_name ? ': ' . $r->object_name : '' ) ),
 					'who'     => $uid ? $users[ $uid ] : 'Guest',
@@ -255,6 +385,16 @@ add_action( 'rest_api_init', function () {
 					// UTC with Z (hist_time is WP local epoch — shift back first).
 					'date'    => gmdate( 'Y-m-d\TH:i:s\Z', (int) $r->hist_time - (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ),
 				);
+				if ( $source_ready ) {
+					list( $channel, $app ) = minn_admin_aryo_parse_source( isset( $r->request_source ) ? $r->request_source : '' );
+					$item['source'] = '' === $channel
+						? __( 'Browser', 'minn-admin' )
+						: ( isset( $labels[ $channel ] ) ? $labels[ $channel ] : $channel );
+					if ( '' !== $app ) {
+						$item['app_password'] = $app;
+					}
+				}
+				$items[] = $item;
 			}
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
 		},
