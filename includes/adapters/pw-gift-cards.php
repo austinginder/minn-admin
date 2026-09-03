@@ -22,8 +22,16 @@ defined( 'ABSPATH' ) || exit;
  *
  * @return bool
  */
+function minn_admin_pwgc_cap() {
+	// Their own gate, which pimwick_define() leaves overridable: a site that
+	// sets PWGC_REQUIRES_PRIVILEGE in wp-config locks every PW screen to that
+	// capability, and Minn has to move with it rather than keep answering the
+	// default the site owner just replaced.
+	return defined( 'PWGC_REQUIRES_PRIVILEGE' ) ? (string) PWGC_REQUIRES_PRIVILEGE : 'manage_woocommerce';
+}
+
 function minn_admin_pwgc_can() {
-	return current_user_can( 'manage_woocommerce' );
+	return current_user_can( minn_admin_pwgc_cap() );
 }
 
 /**
@@ -266,7 +274,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'gift-cards',
 		'sub'        => $pro ? 'PW Pro' : 'PW',
 		'icon'       => 'gift',
-		'cap'        => 'manage_woocommerce',
+		'cap'        => minn_admin_pwgc_cap(),
 		'group'      => 'commerce',
 		'status'     => array( 'route' => 'minn-admin/v1/pwgc/status' ),
 		'collection' => array(

@@ -64,13 +64,18 @@ function minn_admin_latepoint_has_tables() {
  */
 function minn_admin_latepoint_scope() {
 	$open = array( 'agent' => null, 'location' => null, 'service' => null );
+	// Not knowing the scope is not the same as there being none. If their auth
+	// helper is missing or throws, the answer is unknown, and a booking list is
+	// customer data: an empty list is a bug someone reports, an unscoped one is
+	// a leak nobody sees. Bookly and Amelia fail closed in this same position.
+	$deny = array( 'agent' => array( -1 ), 'location' => array( -1 ), 'service' => array( -1 ) );
 	if ( ! class_exists( 'OsAuthHelper' ) ) {
-		return $open;
+		return $deny;
 	}
 	try {
 		$user = OsAuthHelper::get_current_user();
 	} catch ( \Throwable $e ) {
-		return $open;
+		return $deny;
 	}
 	if ( defined( 'LATEPOINT_USER_TYPE_ADMIN' ) && $user->backend_user_type === LATEPOINT_USER_TYPE_ADMIN ) {
 		return $open;

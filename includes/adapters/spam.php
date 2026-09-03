@@ -320,7 +320,28 @@ add_action( 'rest_api_init', function () {
 							if ( ! isset( $providers[ $pid ] ) || ! is_array( $set ) || ! is_callable( $providers[ $pid ]['set'] ?? null ) ) {
 								continue;
 							}
+							// A provider's set() only ever sees a toggle it
+							// advertised. The provider id is already checked
+							// against the registry; without this the toggle id
+							// rode through verbatim and every provider had to
+							// remember to whitelist it on its own.
+							$declared = array();
+							try {
+								$st = is_callable( $providers[ $pid ]['status'] ?? null )
+									? call_user_func( $providers[ $pid ]['status'] )
+									: array();
+								foreach ( (array) ( $st['toggles'] ?? array() ) as $tg ) {
+									if ( is_array( $tg ) && isset( $tg['id'] ) ) {
+										$declared[] = (string) $tg['id'];
+									}
+								}
+							} catch ( \Throwable $e ) {
+								$declared = array();
+							}
 							foreach ( $set as $tid => $on ) {
+								if ( ! in_array( (string) $tid, $declared, true ) ) {
+									continue;
+								}
 								try {
 									call_user_func( $providers[ $pid ]['set'], (string) $tid, (bool) $on );
 								} catch ( \Throwable $e ) { /* skip the broken toggle */ }
