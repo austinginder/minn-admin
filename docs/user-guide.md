@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.37.0. This file ships inside the plugin, so the copy you
+*Current as of v0.38.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -394,6 +394,17 @@ explanation instead of numbers.
 installed, "Back up site now" is there too, and the System page reports
 how fresh your last backup is.
 
+Backups and exports start from the Backups page's status card and run in
+the background, so you can carry on working or close the tab. A pill in
+the top bar shows how far along the run is on whatever page you are on;
+clicking it opens a small window with the current step, a progress bar
+and a Stop button, and the job is still there after a reload. Every
+finished backup row offers **Download** from its ⋯ menu or a right-click:
+the file streams straight from the plugin's own backup folder through a
+door only your signed-in session can open, so nothing has to be left
+web-readable and the link cannot be passed around. A backup made of
+several files hands you a short page with one link per file.
+
 ## You are in control of the interface
 
 Anything in Minn's menus can be hidden, per user, without touching the
@@ -622,8 +633,7 @@ cards, all in the same operational group.
   off unfiltered HTML, keeps the layout and drops the palette it refers
   to. On those the tab says so and does not apply the style, rather than
   changing half your design and offering an Undo it could not honor.
-  Deeper style work (editing the palette, typography, per-block styles)
-  stays in the Site Editor. Above the cards, **Current look** shows what visitors get right now: the palette, body and heading fonts, text sizes, content and wide widths, background and shadow presets, each row opening Minn's own editor at that section (Shadows, which Minn does not edit, links to the Site Editor and says so), and a Customized list that says in plain words what was changed from the theme ("H1 font → Quattrocento"). **Reset to theme defaults** clears every customization with an Undo, and **History** lists every saved version of the site's styles with who saved it, when, and what changed, with Restore on each (and Undo after a restore). **Edit look** turns the card into a short form for the everyday changes: background, text, link, heading, button and caption colors (pick a palette color or type a hex value), body and heading font, a font and size for each heading level from H1 to H6, body text size and line height, page padding, block spacing, and the content and wide widths. Empty fields keep the theme's value, a × next to a field hands it back to the theme, and Save reaches every visitor at once with an Undo. Each style card's ⋯ menu (or a right-click) also offers **Use its colors only** and **Use its type only**, so you can take one variation's palette with another's fonts; the Default card's menu resets just the colors or just the type to the theme. A **Contrast** row grades body text, links and headings against the page background and button text against the button background by the WCAG AA ratio, so a hard-to-read combination shows up here before a visitor finds it. A specimen at the top of the card, a heading, a paragraph with a link and a button, renders with the site's own stylesheet and follows your edits as you type, so a font or color shows itself before you save. Each line in the Customized list names who made that change and when, and History labels a save that matches a style variation as "Applied" with its name. The ⋯ menu on the card copies the look as a theme.json-shaped document and pastes one from another site, replacing this site's customizations with an Undo. Per-block styles, background images and font uploads stay in the Site Editor.
+  Above the cards, **Current look** shows what visitors get right now: the palette, body and heading fonts, text sizes, content and wide widths, background and shadow presets, each row opening Minn's own editor at that section (Shadows, which Minn does not edit, links to the Site Editor and says so), and a Customized list that says in plain words what was changed from the theme ("H1 font → Quattrocento"). **Reset to theme defaults** clears every customization with an Undo, and **History** lists every saved version of the site's styles with who saved it, when, and what changed, with Restore on each (and Undo after a restore). **Edit look** turns the card into a short form for the everyday changes: background, text, link, heading, button and caption colors (pick a palette color or type a hex value), body and heading font, a font and size for each heading level from H1 to H6, body text size and line height, page padding, block spacing, and the content and wide widths. Empty fields keep the theme's value, a × next to a field hands it back to the theme, and Save reaches every visitor at once with an Undo. Each style card's ⋯ menu (or a right-click) also offers **Use its colors only** and **Use its type only**, so you can take one variation's palette with another's fonts; the Default card's menu resets just the colors or just the type to the theme. A **Contrast** row grades body text, links and headings against the page background and button text against the button background by the WCAG AA ratio, so a hard-to-read combination shows up here before a visitor finds it. A specimen at the top of the card, a heading, a paragraph with a link and a button, renders with the site's own stylesheet and follows your edits as you type, so a font or color shows itself before you save. Each line in the Customized list names who made that change and when, and History labels a save that matches a style variation as "Applied" with its name. The ⋯ menu on the card copies the look as a theme.json-shaped document and pastes one from another site, replacing this site's customizations with an Undo. Per-block styles, background images and font uploads stay in the Site Editor.
   **Templates** answers the question the Site Editor's flat list cannot:
   which of your theme's templates this site has actually changed. Changed
   ones sort to the top, and every row says which it is: from the theme,

@@ -328,6 +328,15 @@ Expand only the part of Minn you want to explore.
   re-point, drag to reorder, indent to build a dropdown, add a page or custom link, remove with
   Undo. **Styles** shows the theme's style variations as swatch cards built from each one's own
   palette, applies one with a real Undo, and says plainly when a site cannot store them
+- **Crocoblock** — the Jet pack's daily work, each surface over the plugin's own tables and
+  code: **JetEngine** meta boxes as an editor **Custom fields** panel, its options pages as
+  **Site options** tabs, and its post types and taxonomies on **Structure**; **JetBooking** and
+  **JetAppointments** in the **Bookings** inbox; **Custom Content Types** as a **Content types**
+  surface with a view per type; **JetReviews** as a **Reviews** inbox with per-field ratings and
+  bulk approve; **JetThemeCore** parts on **Templates** beside Elementor and Bricks;
+  **JetSearch** suggestions and **JetSmartFilters** filters sharing one **Search** item, its
+  indexer reindexing as a background job. One **Crocoblock** membership key on Licenses covers
+  every installed Jet plugin
 - **Surfaces** — Minn's answer to plugin sprawl: one sidebar item per *job*, not per plugin,
   with every capable plugin layered in behind it and a provider switcher when more than one is
   active. **Forms** (Gravity Forms, WPForms, Ninja Forms, Fluent Forms, Forminator, Formidable, Everest
@@ -337,9 +346,10 @@ Expand only the part of Minn you want to explore.
   notifications across Received / Spam / Trash views, plus a **Feeds** view listing every
   add-on integration across your forms (Everest Forms carries the same three status views
   through its own entry helpers);
-  **Bookings** (Amelia, LatePoint, Bookly) lists upcoming appointments with pending / today / canceled
-  filters, a contact card, and approve / cancel / no-show through the plugin so its
-  notifications still fire;
+  **Bookings** (Amelia, LatePoint, Bookly, JetBooking, JetAppointments) lists upcoming
+  appointments with pending / today / canceled
+  filters, a contact card, a **Next 14 days** chart, and approve / cancel / no-show through
+  the plugin so its notifications still fire;
   **Email** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging, SureMails,
   Site Mailer) shows sent mail with the real HTML body in a **fully sandboxed preview**,
   resend, and search plus delete where the logger supports it, plus Gravity SMTP's **full
@@ -370,7 +380,11 @@ Expand only the part of Minn you want to explore.
   with delete. With **Duplicator**: packages with archive sizes read from disk and delete through
   its own cleanup. With **Disembark**: a status card (last scan, database size, working files),
   the exact `disembark connect` command click-to-copy, scan sessions with cleanup, and token
-  regeneration
+  regeneration. Backups and exports **run as background jobs** on UpdraftPlus, WPvivid, BackWPup,
+  Duplicator and All-in-One WP Migration: a **progress pill** in the topbar carries the live step
+  and percent on every route, a modal offers Stop through the plugin's own abort, and the job
+  survives a reload. Every finished row carries **Download**, streamed from the plugin's own
+  backup folder through a nonce-checked `admin-post` door, so nothing has to be web-readable
 
 </details>
 
