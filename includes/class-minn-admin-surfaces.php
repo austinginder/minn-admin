@@ -806,7 +806,7 @@ class Minn_Admin_Surfaces {
 	// (see the Compatibility section of for-plugin-authors.md), so anything
 	// outside these lists is flagged as unknown rather than silently ignored.
 	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'views', 'status', 'setup', 'settings' );
-	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href' );
+	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href', 'cap' );
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
 	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter', 'filterBar', 'sortQuery', 'open', 'import' );
 	const FILTER_KEYS     = array( 'label', 'options', 'query', 'param', 'json' );
@@ -817,7 +817,17 @@ class Minn_Admin_Surfaces {
 	const CREATE_KEYS     = array( 'label', 'route', 'method', 'fields', 'defaults' );
 	const EDIT_KEYS       = array( 'route', 'method', 'preserve', 'fields' );
 	const FIELD_KEYS      = array( 'key', 'label', 'type', 'options', 'value', 'placeholder', 'rows', 'mono', 'required' );
-	const FIELD_TYPES     = array( 'text', 'number', 'textarea', 'select', 'tags', 'email', 'url', 'toggle' );
+	// Every type formControlHtml renders, plus the aliases formNormField
+	// accepts (true_false, range, radio, color_picker). This list and the form
+	// engine have to move together: a type the engine handles but this does not
+	// makes the Integrations card report a healthy adapter as broken.
+	const FIELD_TYPES     = array(
+		'text', 'number', 'textarea', 'select', 'tags', 'email', 'url', 'toggle',
+		'checkbox', 'multicheck', 'color', 'combobox', 'date', 'datetime', 'time',
+		'file', 'flex', 'gallery', 'hidden', 'image', 'link', 'note', 'relation',
+		'rows', 'suggest', 'wysiwyg', 'richtext',
+		'true_false', 'range', 'radio', 'color_picker',
+	);
 	const PANEL_KEYS      = array( 'label', 'sub', 'cap', 'fieldsRoute', 'valuesKey', 'writeKey', 'statusRoute' );
 
 	/**

@@ -79,7 +79,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'sortQuery' => 'orderby={by}&order={dir}',
 			'columns'   => array(
 				array( 'key' => 'name', 'label' => __( 'Suggestion', 'minn-admin' ), 'format' => 'title', 'sort' => 'name' ),
-				array( 'key' => 'weight', 'label' => __( 'Weight', 'minn-admin' ), 'num' => true, 'width' => '110px', 'sort' => 'weight' ),
+				array( 'key' => 'weight', 'label' => __( 'Weight', 'minn-admin' ), 'format' => 'num', 'width' => '110px', 'sort' => 'weight' ),
 				array( 'key' => 'parent', 'label' => __( 'Parent', 'minn-admin' ) ),
 			),
 			'create'    => array(

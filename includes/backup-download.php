@@ -79,8 +79,22 @@ add_action( 'admin_post_' . MINN_ADMIN_BACKUP_DOWNLOAD_ACTION, function () {
 	$provider = isset( $_GET['provider'] ) ? sanitize_key( wp_unslash( $_GET['provider'] ) ) : '';
 	$id       = isset( $_GET['id'] ) ? sanitize_text_field( wp_unslash( $_GET['id'] ) ) : '';
 	$part     = isset( $_GET['part'] ) ? sanitize_text_field( wp_unslash( $_GET['part'] ) ) : '';
-	$resolver = 'minn_admin_' . str_replace( '-', '_', $provider ) . '_download_files';
-	if ( '' === $provider || '' === $id || ! function_exists( $resolver ) ) {
+	// An explicit list, not a name built from the request. Every resolver here
+	// checks its own vendor capability on its first lines, and that is the
+	// door's whole access-control model, so joining it has to be a deliberate
+	// edit rather than a matching function name.
+	$resolvers = apply_filters(
+		'minn_admin_backup_download_providers',
+		array(
+			'updraftplus' => 'minn_admin_updraftplus_download_files',
+			'backwpup'    => 'minn_admin_backwpup_download_files',
+			'duplicator'  => 'minn_admin_duplicator_download_files',
+			'wpvivid'     => 'minn_admin_wpvivid_download_files',
+			'wp-migrate'  => 'minn_admin_wp_migrate_download_files',
+		)
+	);
+	$resolver = isset( $resolvers[ $provider ] ) ? (string) $resolvers[ $provider ] : '';
+	if ( '' === $provider || '' === $id || '' === $resolver || ! function_exists( $resolver ) ) {
 		wp_die( esc_html__( 'Unknown backup provider.', 'minn-admin' ), '', array( 'response' => 404 ) );
 	}
 	// The provider decides who may download (its own capability) and which

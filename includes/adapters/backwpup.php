@@ -66,15 +66,38 @@ function minn_admin_backwpup_download_files( $id ) {
 	}
 	$jobid    = (int) substr( $id, 0, $pos );
 	$filename = basename( substr( $id, $pos + 1 ) );
+	$dest = null;
 	try {
 		$dest  = BackWPup::get_destination( 'FOLDER' );
 		$files = $dest && method_exists( $dest, 'file_get_list' ) ? (array) $dest->file_get_list( $jobid . '_FOLDER' ) : array();
 	} catch ( \Throwable $e ) {
 		$files = array();
 	}
+	// The job's own configured folder, which is what file_get_list() walked.
+	// dirname() of the file itself would ask whether a file is inside its own
+	// directory, which is always true: the door's containment check is the one
+	// defence this provider has and it has to be given a real base to check
+	// against. Their stored value is relative to wp-content, so it goes through
+	// their own resolver, the same call file_get_list() makes.
+	$root = '';
+	try {
+		$stored = (string) BackWPup_Option::get( $jobid, 'backupdir' );
+		if ( '' === $stored && $dest && method_exists( $dest, 'option_defaults' ) ) {
+			$defaults = (array) $dest->option_defaults();
+			$stored   = isset( $defaults['backupdir'] ) ? (string) $defaults['backupdir'] : '';
+		}
+		if ( '' !== $stored && class_exists( 'BackWPup_File' ) && method_exists( 'BackWPup_File', 'get_absolute_path' ) ) {
+			$root = (string) BackWPup_File::get_absolute_path( $stored );
+		}
+	} catch ( \Throwable $e ) {
+		$root = '';
+	}
+	if ( '' === $root ) {
+		return new WP_Error( 'not_found', __( 'The backup folder could not be resolved.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
 	foreach ( $files as $file ) {
 		if ( isset( $file['filename'], $file['file'] ) && (string) $file['filename'] === $filename ) {
-			return array( array( 'part' => $filename, 'name' => $filename, 'path' => (string) $file['file'], 'root' => dirname( (string) $file['file'] ) ) );
+			return array( array( 'part' => $filename, 'name' => $filename, 'path' => (string) $file['file'], 'root' => $root ) );
 		}
 	}
 	return new WP_Error( 'not_found', __( 'Archive not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -293,7 +316,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'skip' => array( 'filename', 'size_raw', 'ts', 'jobid' ),
 			),
-			'actions'   => array_merge( array( array( 'label' => __( 'Download', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'backwpup' ) ) ), $actions ),
+			// Conditioned like Delete above and Run now on the status card:
+			// their own screen hides it without this capability, and the door
+			// refuses it, so offering it here only advertises a 403.
+			'actions'   => array_merge(
+				current_user_can( 'backwpup_backups_download' )
+					? array( array( 'label' => __( 'Download', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'backwpup' ) ) )
+					: array(),
+				$actions
+			),
 		),
 	);
 	return $surfaces;

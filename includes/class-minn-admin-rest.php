@@ -2648,14 +2648,29 @@ class Minn_Admin_REST {
 		if ( ! $surface || empty( $surface['setup'] ) || ! is_array( $surface['setup'] ) ) {
 			return new WP_Error( 'no_setup', __( 'That surface has no setup to run.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
-		$cap = isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options';
+		// This is the one place a descriptor cap is a real authorization
+		// decision rather than nav gating, and the author guide tells adapters
+		// with their own access model to declare 'read' here and gate in the
+		// route instead. A third of the bundled adapters do. 'read' is not an
+		// answer to "may this person run a vendor's installer", so a surface
+		// that gives no real capability gets the floor for site configuration,
+		// and an adapter that wants a different one says so explicitly.
+		$setup = $surface['setup'];
+		$cap   = isset( $setup['cap'] ) && is_string( $setup['cap'] ) && '' !== $setup['cap']
+			? $setup['cap']
+			: ( isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options' );
+		// Only the documented placeholder is overridden. An adapter that names a
+		// real capability has made a choice, and a site that narrowed a vendor's
+		// own role filter meant it.
+		if ( ! is_string( $cap ) || '' === $cap || 'read' === $cap ) {
+			$cap = 'manage_options';
+		}
 		if ( ! current_user_can( $cap ) ) {
 			// Same answer as an unknown id. Telling the two apart lets anyone
 			// who can reach this route enumerate which adapters are registered,
 			// and which of them are sitting unconfigured.
 			return new WP_Error( 'no_setup', __( 'That surface has no setup to run.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
-		$setup = $surface['setup'];
 		if ( empty( $setup['run'] ) || ! is_callable( $setup['run'] ) ) {
 			return new WP_Error( 'no_setup', __( 'This setup runs on the plugin\'s own screen.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
