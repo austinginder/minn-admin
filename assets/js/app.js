@@ -1394,10 +1394,13 @@
 	function formControlHtml( f, val, attr, idKey ) {
 		const id = idKey != null ? idKey : f.key;
 		const v = val == null ? '' : val;
-		const cls = `minn-input${ f.mono ? ' mono' : '' }${ f.klass ? ' ' + f.klass : '' }`;
+		// klass comes off a field descriptor, which a plugin can supply, and it
+		// lands in six attribute slots below. Escaped here so every one of them
+		// is covered rather than six call sites having to remember.
+		const cls = esc( `minn-input${ f.mono ? ' mono' : '' }${ f.klass ? ' ' + f.klass : '' }` );
 		const t = f.type || 'text';
 		if ( t === 'textarea' ) {
-			const rows = f.rows || ( f.mono ? 12 : 3 );
+			const rows = parseInt( f.rows, 10 ) || ( f.mono ? 12 : 3 );
 			return `<textarea class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="textarea" rows="${ rows }" placeholder="${ esc( f.placeholder || '' ) }">${ esc( String( v ) ) }</textarea>`;
 		}
 		if ( t === 'select' ) {
@@ -15098,7 +15101,10 @@
 				// same-tab navigation is the point: you become that user.
 				...( u.minn_switch_url ? [ {
 					label: __( 'Switch to this user' ),
-					run: () => { window.location.href = u.minn_switch_url; },
+					run: () => {
+						const dest = safeHref( u.minn_switch_url );
+						if ( dest ) window.location.href = dest;
+					},
 				} ] : [] ),
 				// One Time Login (adapters/one-time-login.php): mint a
 				// single-use login-as link on demand and copy it. The server
@@ -27651,7 +27657,10 @@
 		}
 		if ( ! ed.islands ) ed.islands = [];
 		const idx = ed.islands.push( template ) - 1;
-		const html = islandHtml( idx, blockName, template, ed );
+		// insertAdjacentHTML on a live element parses for real, so the block's
+		// stored markup arrives parked like every other stored value and the
+		// serializer's rtUnpark hands the bytes back on save.
+		const html = rtNeutralizedHtml( islandHtml( idx, blockName, template, ed ) );
 		if ( anchor ) anchor.insertAdjacentHTML( 'beforebegin', html );
 		else body.insertAdjacentHTML( 'beforeend', html );
 		const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
@@ -39634,7 +39643,7 @@
 			if ( ! ed ) return;
 			if ( ! ed.islands ) ed.islands = [];
 			const idx = ed.islands.push( action.template ) - 1;
-			target.insertAdjacentHTML( 'beforebegin', islandHtml( idx, action.block, action.template, ed ) );
+			target.insertAdjacentHTML( 'beforebegin', rtNeutralizedHtml( islandHtml( idx, action.block, action.template, ed ) ) );
 			const p = document.createElement( 'p' );
 			p.appendChild( document.createElement( 'br' ) );
 			target.replaceWith( p );
