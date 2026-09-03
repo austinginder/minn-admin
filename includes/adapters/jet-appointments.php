@@ -235,20 +235,16 @@ function minn_admin_jet_apb_meta( $id ) {
 }
 
 /**
- * The meta keys their own detail screen shows, key => label.
+ * Labels their own settings give particular meta keys, key => label.
  *
- * JetAppointments decides this with an allowlist: the form fields it was told
- * to display, extendable through their own filter. Minn used the inverse, a
- * short blocklist, which is not the same rule — it printed whatever else had
- * accumulated on the row, and what accumulates there is the plumbing
- * (a Google Calendar id, a raw API error string, a Zoom meeting id, workflow
- * schedule ids), none of which their screen shows.
+ * NOT an allowlist for the detail, though it looks like one: on a real install
+ * get_appointment_fields() returns only the extra columns their settings screen
+ * offers (User Local Date / Time / Timezone), never the fields the booking form
+ * collected. Gating the detail on it hid the guest's phone and comments and
+ * showed the three timezone rows Minn deliberately withholds, which is the
+ * exact inverse of what it should do. It is worth asking for the LABELS it
+ * does define, and nothing more.
  *
- * An empty array means "ask the vendor and it said nothing", and the caller
- * shows no extra rows. Null means the accessor is not there to ask on this
- * version, and the caller falls back to its own conservative list.
- *
- * @param int $id Appointment id.
  * @return array<string,string>|null
  */
 function minn_admin_jet_apb_display_fields() {
@@ -446,25 +442,26 @@ add_action( 'rest_api_init', function () {
 				// Falling back to the blocklist keeps older versions working,
 				// with the operational plumbing named explicitly so it is not
 				// printed either way.
-				$allow  = minn_admin_jet_apb_display_fields();
+				$labels = minn_admin_jet_apb_display_fields();
 				$hidden = array( 'phone', 'user_phone', 'tel', 'telephone', 'user_timezone', 'user_local_time', 'user_local_date' );
 				foreach ( $meta as $k => $v ) {
 					if ( in_array( $k, $hidden, true ) ) {
 						continue;
 					}
-					if ( is_array( $allow ) ) {
-						if ( ! isset( $allow[ $k ] ) ) {
-							continue;
-						}
-					} elseif ( preg_match( '/^(gcal|zoom|_schedule_id)/', $k ) ) {
+					// The integrations write their bookkeeping onto the same
+					// row as the guest's answers: a Google Calendar id, the raw
+					// text of a failed API call, a Zoom meeting id, workflow
+					// schedule ids. Their own screen shows none of it, and it
+					// is not what somebody opens a booking to read.
+					if ( preg_match( '/^(gcal|zoom|_schedule_id)/', $k ) ) {
 						continue;
 					}
 					$v = trim( (string) $v );
 					if ( '' === $v ) {
 						continue;
 					}
-					$label = is_array( $allow ) && '' !== (string) $allow[ $k ]
-						? (string) $allow[ $k ]
+					$label = ( is_array( $labels ) && ! empty( $labels[ $k ] ) )
+						? (string) $labels[ $k ]
 						: ucwords( str_replace( array( '_', '-' ), ' ', $k ) );
 					$who[] = array( 'label' => $label, 'value' => $v );
 					if ( '' === $notes && in_array( $k, array( 'comments', 'comment', 'message', 'notes' ), true ) ) {
