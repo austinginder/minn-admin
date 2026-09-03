@@ -12,14 +12,21 @@
 #
 # Version selection (--resolve prints it and exits):
 #   a beta/RC when one is in flight (wp.org's beta channel offers a version the
-#   stable channel does not), otherwise trunk (nightly). Between releases there
-#   is no beta for weeks at a time, so trunk is the resting state rather than a
-#   fallback nobody notices.
+#   stable channel does not), otherwise trunk (nightly).
+#
+#   When the answer is nightly, this SKIPS by default and exits 0. A nightly is
+#   trunk on an ordinary day: it moves under you, breaks and un-breaks on its
+#   own, and a failure in it is usually core's rather than ours, so 51 suites
+#   against it buys much less than the same run against a beta or an RC. The
+#   run that earns its place is the one against a version real sites are about
+#   to get. Pass --allow-nightly (or pin --version=nightly, which is intent) to
+#   run anyway; between releases, expect this to skip for weeks at a time.
 #
 # Flags:
-#   --resolve      print the target WordPress version and exit
-#   --no-update    run against whatever the site already has
-#   --version=X    pin to a specific version (6.9-RC1, nightly, 7.1)
+#   --resolve       print the target WordPress version and exit
+#   --no-update     run against whatever the site already has
+#   --allow-nightly run even when the target resolves to nightly/trunk
+#   --version=X     pin to a specific version (6.9-RC1, nightly, 7.1)
 #   --full         run EVERY suite, not the core-coupled list (hours; most
 #                  third-party suites SKIP or fail for want of their plugin,
 #                  so this is for investigation, never a release gate)
@@ -116,12 +123,14 @@ SUITES=(
 
 UPDATE=1
 FULL=0
+ALLOW_NIGHTLY=0
 PIN=""
 OUT=""
 for arg in "$@"; do
 	case "$arg" in
 	--resolve) RESOLVE_ONLY=1 ;;
 	--no-update) UPDATE=0 ;;
+	--allow-nightly) ALLOW_NIGHTLY=1 ;;
 	--full) FULL=1 ;;
 	--list)
 		printf '%s\n' "${SUITES[@]}"
@@ -156,6 +165,17 @@ resolve_version() {
 TARGET="${PIN:-$(resolve_version)}"
 if [ -n "${RESOLVE_ONLY:-}" ]; then
 	echo "$TARGET"
+	exit 0
+fi
+
+# Nothing ahead of stable but trunk: skip rather than spend the run. A pinned
+# --version=nightly is a deliberate ask and runs; the bare resolution does not.
+# Exit 0, because a skip is not a failure and a release gate must be able to
+# tell the two apart.
+if [ "$TARGET" = "nightly" ] && [ -z "$PIN" ] && [ "$ALLOW_NIGHTLY" -eq 0 ]; then
+	echo "No beta or RC is in flight; the next WordPress resolves to nightly (trunk)."
+	echo "Skipping: a moving alpha is not what this check is for."
+	echo "Run it anyway with --allow-nightly, or pin one with --version=6.9-RC1."
 	exit 0
 fi
 

@@ -81,9 +81,13 @@ cloning it onto a second host risks burning them.
 
 Which core WordPress it runs is resolved at run time: a beta/RC when one is in
 flight (wp.org's beta channel offers a version the stable channel does not),
-otherwise trunk. Between releases there is no beta for weeks, so trunk is the
-resting state rather than a fallback nobody notices. `--version=6.9-RC1` pins
-it, `--no-update` runs against whatever is installed.
+otherwise trunk (nightly). **When the answer is nightly it skips and exits 0.**
+A nightly is trunk on an ordinary day: it moves under you, breaks and un-breaks
+on its own, and a failure in it is usually core's rather than ours, so the run
+that earns its place is the one against a version real sites are about to get.
+Between releases this legitimately skips for weeks at a time. `--allow-nightly`
+runs it anyway, `--version=6.9-RC1` pins one (an explicit `--version=nightly`
+counts as intent and runs), `--no-update` runs against whatever is installed.
 
 Recreate the site if it is ever lost, or re-provision it any time:
 
