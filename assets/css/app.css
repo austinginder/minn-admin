@@ -4459,6 +4459,9 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-lic-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
 .minn-lic-actions button { font: inherit; font-size: 11.5px; font-weight: 600; color: var(--text2); background: var(--panel2); border: 1px solid var(--border); border-radius: 7px; padding: 3px 10px; cursor: pointer; }
 .minn-lic-actions button:hover { color: var(--text); border-color: var(--text3); }
+/* Wraps onto its own row under the key field: the notice is a disclosure to
+   read before typing, not a hint beside the button. */
+.minn-lic-notice { flex-basis: 100%; font-size: 11.5px; line-height: 1.45; color: var(--text3); margin-top: 2px; }
 .minn-lic-actions button:disabled { opacity: 0.6; cursor: default; }
 /* icon() emits 17px svgs; inside these small buttons (Turn on) shrink inline */
 .minn-lic-actions button svg { width: 11px; height: 11px; vertical-align: -1.5px; margin-inline-end: 2px; }

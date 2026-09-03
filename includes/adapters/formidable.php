@@ -339,7 +339,7 @@ add_action( 'rest_api_init', function () {
 				return minn_admin_formidable_can( 'frm_delete_entries' );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$id    = (int) $request['id'];
+				$id    = (int) Minn_Admin::path_param( $request );
 				$entry = FrmEntry::getOne( $id, true );
 				// The same discriminator the read route applies. Destroying a
 				// repeater child row would take one sub-row out of a live

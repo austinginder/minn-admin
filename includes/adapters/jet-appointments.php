@@ -511,7 +511,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => 'minn_admin_jet_apb_can_delete',
 			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) $request['id'];
+				$id = (int) Minn_Admin::path_param( $request );
 				if ( ! minn_admin_jet_apb_row( $id ) ) {
 					return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}

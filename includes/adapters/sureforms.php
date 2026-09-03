@@ -315,7 +315,7 @@ add_action( 'rest_api_init', function () {
 				global $wpdb;
 				$table = minn_admin_sureforms_table();
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE ID = %d", (int) $request['id'] ) );
+				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE ID = %d", (int) Minn_Admin::path_param( $request ) ) );
 				if ( ! $deleted ) {
 					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}

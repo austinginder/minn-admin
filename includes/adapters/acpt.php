@@ -2071,11 +2071,11 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'DELETE',
 		'permission_callback' => 'minn_admin_acpt_can_manage',
 		'callback'            => function ( WP_REST_Request $request ) {
-			if ( ! minn_admin_acpt_builder_group( (string) $request['id'] ) ) {
+			if ( ! minn_admin_acpt_builder_group( (string) Minn_Admin::path_param( $request ) ) ) {
 				return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			try {
-				( new \ACPT\Core\CQRS\Command\DeleteMetaGroupCommand( (string) $request['id'] ) )->execute();
+				( new \ACPT\Core\CQRS\Command\DeleteMetaGroupCommand( (string) Minn_Admin::path_param( $request ) ) )->execute();
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'minn_acpt_delete', wp_strip_all_tags( $e->getMessage() ), array( 'status' => 400 ) );
 			}

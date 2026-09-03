@@ -675,7 +675,7 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$id    = (int) $request['id'];
+				$id    = (int) Minn_Admin::path_param( $request );
 				$guard = minn_admin_fluent_forms_guard_entry( $id, 'fluentform_manage_entries' );
 				if ( is_wp_error( $guard ) ) {
 					return $guard;

@@ -566,7 +566,7 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$id    = (int) $request['id'];
+				$id    = (int) Minn_Admin::path_param( $request );
 				$guard = minn_admin_wpforms_guard_entry( $id, 'delete_entries_form_single' );
 				if ( is_wp_error( $guard ) ) {
 					return $guard;

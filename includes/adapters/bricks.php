@@ -161,6 +161,36 @@ function minn_admin_bricks_can_view_templates() {
 	return minn_admin_bricks_fallback_access();
 }
 
+/**
+ * Whether the current user holds one of Bricks' own builder permissions.
+ *
+ * The four verbs above each ask their own, so a permission Bricks distinguishes
+ * and Minn does not is a gate Minn silently widens. Page settings, template
+ * settings and global classes are three of those: builder access is granted to
+ * editors on plenty of sites, and it is a license to design pages rather than
+ * to change what the theme does everywhere.
+ *
+ * Unlike the four, an unresolvable permission denies rather than falling back:
+ * these are the extras on an import, and skipping one loses a setting, while
+ * writing one the site withheld does not.
+ *
+ * @param string $permission Bricks permission name.
+ * @return bool
+ */
+function minn_admin_bricks_has_permission( $permission ) {
+	if ( current_user_can( 'manage_options' ) ) {
+		return true;
+	}
+	if ( class_exists( '\Bricks\Builder_Permissions' ) && method_exists( '\Bricks\Builder_Permissions', 'user_has_permission' ) ) {
+		try {
+			return (bool) \Bricks\Builder_Permissions::user_has_permission( $permission );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+	return false;
+}
+
 /** Whether the current user may create templates, through Bricks' own resolver. */
 function minn_admin_bricks_can_create() {
 	if ( class_exists( '\Bricks\Builder_Permissions' ) && method_exists( '\Bricks\Builder_Permissions', 'user_has_permission' ) ) {
@@ -389,7 +419,7 @@ function minn_admin_bricks_import_one( $data ) {
 	if ( $type ) {
 		update_post_meta( $id, BRICKS_DB_TEMPLATE_TYPE, $type );
 	}
-	if ( ! empty( $data['pageSettings'] ) && is_array( $data['pageSettings'] ) ) {
+	if ( ! empty( $data['pageSettings'] ) && is_array( $data['pageSettings'] ) && minn_admin_bricks_has_permission( 'access_page_settings' ) ) {
 		// Bricks strips the three script keys in a meta filter that opens with
 		// `$_POST['postId'] ?: get_the_ID()` and returns early when that is
 		// falsy. Under REST neither exists, so the vendor's guard silently
@@ -399,7 +429,7 @@ function minn_admin_bricks_import_one( $data ) {
 		// for an admin-ajax request.
 		update_post_meta( $id, BRICKS_DB_PAGE_SETTINGS, wp_slash( minn_admin_bricks_strip_unfiltered_html( $data['pageSettings'] ) ) );
 	}
-	if ( ! empty( $data['templateSettings'] ) && is_array( $data['templateSettings'] ) && class_exists( '\Bricks\Helpers' ) && method_exists( '\Bricks\Helpers', 'set_template_settings' ) ) {
+	if ( ! empty( $data['templateSettings'] ) && is_array( $data['templateSettings'] ) && minn_admin_bricks_has_permission( 'access_template_settings' ) && class_exists( '\Bricks\Helpers' ) && method_exists( '\Bricks\Helpers', 'set_template_settings' ) ) {
 		try {
 			// set_template_settings is a bare update_post_meta, so the same
 			// strip applies. wp_slash because update_metadata unslashes.
@@ -445,7 +475,9 @@ function minn_admin_bricks_import_one( $data ) {
 		}
 	}
 
-	if ( ! empty( $data['global_classes'] ) && is_array( $data['global_classes'] ) && class_exists( '\Bricks\Helpers' ) && method_exists( '\Bricks\Helpers', 'save_global_classes_in_db' ) ) {
+	// Global classes are site-wide styling, so they ask Bricks' own permission
+	// for them rather than riding in on the import permission.
+	if ( ! empty( $data['global_classes'] ) && is_array( $data['global_classes'] ) && minn_admin_bricks_has_permission( 'manage_global_classes' ) && class_exists( '\Bricks\Helpers' ) && method_exists( '\Bricks\Helpers', 'save_global_classes_in_db' ) ) {
 		$global_classes = get_option( defined( 'BRICKS_DB_GLOBAL_CLASSES' ) ? BRICKS_DB_GLOBAL_CLASSES : 'bricks_global_classes', array() );
 		if ( ! is_array( $global_classes ) ) {
 			$global_classes = array();
@@ -471,7 +503,20 @@ function minn_admin_bricks_import_one( $data ) {
 			if ( isset( $existing_ids[ (string) $incoming['id'] ] ) || ( isset( $incoming['name'] ) && isset( $existing_names[ (string) $incoming['name'] ] ) ) ) {
 				continue;
 			}
-			$global_classes[] = $incoming;
+			// Take the shape, not the submitted structure. Appending the
+			// row whole put whatever else the caller sent into a site-wide
+			// option that Bricks reads back and renders.
+			$row = array( 'id' => (string) $incoming['id'] );
+			if ( isset( $incoming['name'] ) && is_scalar( $incoming['name'] ) ) {
+				$row['name'] = (string) $incoming['name'];
+			}
+			if ( isset( $incoming['settings'] ) && is_array( $incoming['settings'] ) ) {
+				$row['settings'] = minn_admin_bricks_strip_unfiltered_html( $incoming['settings'] );
+			}
+			if ( isset( $incoming['category'] ) && is_scalar( $incoming['category'] ) ) {
+				$row['category'] = (string) $incoming['category'];
+			}
+			$global_classes[] = $row;
 			$changed          = true;
 		}
 		if ( $changed ) {
@@ -1015,10 +1060,10 @@ add_action( 'rest_api_init', function () {
 				// create, export and duplicate all route through their
 				// resolver. A site that took template deletion away in their
 				// permission matrix means it.
-				return minn_admin_bricks_can_delete() && current_user_can( 'delete_post', (int) $request['id'] );
+				return minn_admin_bricks_can_delete() && current_user_can( 'delete_post', (int) Minn_Admin::path_param( $request ) );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) $request['id'] );
+				$post = get_post( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -1826,7 +1871,7 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
 				global $wpdb;
-				$id = (int) $request['id'];
+				$id = (int) Minn_Admin::path_param( $request );
 				// phpcs:ignore WordPress.DB.PreparedSQL -- table name is prefix-built
 				$exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
 				if ( ! $exists ) {

@@ -489,7 +489,7 @@ add_action( 'rest_api_init', function () {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$exists = $wpdb->get_var( $wpdb->prepare(
 					"SELECT form_id FROM `{$table}` WHERE form_id = %d",
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $exists ) {
 					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -502,7 +502,7 @@ add_action( 'rest_api_init', function () {
 				// pointing at it. Values come from the byte-length scanner rather
 				// than unserialize(), per this adapter's rule about their blob.
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$blob = (string) $wpdb->get_var( $wpdb->prepare( "SELECT form_value FROM {$table} WHERE form_id = %d", (int) $request['id'] ) );
+				$blob = (string) $wpdb->get_var( $wpdb->prepare( "SELECT form_value FROM {$table} WHERE form_id = %d", (int) Minn_Admin::path_param( $request ) ) );
 				$dir  = wp_upload_dir()['basedir'] . '/cfdb7_uploads/';
 				foreach ( minn_admin_cfdb7_values( $blob ) as $key => $value ) {
 					if ( false === strpos( $key, 'cfdb7_file' ) || '' === trim( (string) $value ) ) {
@@ -516,8 +516,8 @@ add_action( 'rest_api_init', function () {
 					}
 				}
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-				$wpdb->delete( $table, array( 'form_id' => (int) $request['id'] ), array( '%d' ) );
-				return rest_ensure_response( array( 'id' => (int) $request['id'], 'deleted' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
+				$wpdb->delete( $table, array( 'form_id' => (int) Minn_Admin::path_param( $request ) ), array( '%d' ) );
+				return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'deleted' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
 			},
 		),
 	) );

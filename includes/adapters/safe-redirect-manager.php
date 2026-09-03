@@ -272,7 +272,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) $request['id'];
+				$id = (int) Minn_Admin::path_param( $request );
 				// Confirm the target IS a redirect before deleting it. SRM
 				// ships no delete helper, so this force-deletes through core,
 				// which bypasses the trash and checks no capability of its

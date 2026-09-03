@@ -87,22 +87,11 @@ function minn_admin_ai1wm_rows() {
 		$size  = array_key_exists( 'size', $file ) && null !== $file['size'] ? (int) $file['size'] : 0;
 		$mtime = isset( $file['mtime'] ) && null !== $file['mtime'] ? (int) $file['mtime'] : 0;
 		$label = isset( $labels[ $filename ] ) ? (string) $labels[ $filename ] : '';
-		// Their download link: the archive URL when the backups folder is
-		// web-readable (ai1wm_direct_download_supported), else their
-		// streamed download through admin-ajax, the same choice their
-		// Backups screen makes per row.
-		$download = '';
-		if ( function_exists( 'ai1wm_backup_url' ) && function_exists( 'ai1wm_direct_download_supported' ) && ai1wm_direct_download_supported() ) {
-			$download = (string) ai1wm_backup_url( array( 'archive' => $filename ) );
-		} elseif ( defined( 'AI1WM_SECRET_KEY' ) ) {
-			$download = add_query_arg( array( 'action' => 'ai1wm_backup_download_file', 'archive' => $filename, 'secret_key' => get_option( AI1WM_SECRET_KEY ) ), admin_url( 'admin-ajax.php' ) );
-		}
 		$items[] = array(
 			'id'          => minn_admin_ai1wm_id_encode( $filename ),
 			'filename'    => $filename,
 			'label'       => $label,
 			'title'       => $label ? $label : $filename,
-			'downloadUrl' => $download,
 			'size'        => $size ? size_format( $size ) : '—',
 			'size_raw' => $size,
 			'date'     => $mtime ? gmdate( 'Y-m-d\TH:i:s\Z', $mtime ) : '',
@@ -243,7 +232,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_ai1wm_active() ) {
 		return $surfaces;
 	}
-	if ( ! current_user_can( 'export' ) ) {
+	// The same predicate the routes behind this surface use. It gated on
+	// `export` while every route it points at asks ai1wm_import_site, so the
+	// nav offered a Backups item that answered 403 on open — and told the
+	// System page a lower bar than the one actually enforced.
+	if ( ! current_user_can( 'ai1wm_import_site' ) || ! Minn_Admin::network_owner() ) {
 		return $surfaces;
 	}
 
@@ -251,7 +244,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'All-in-One WP Migration',
 		'icon'       => 'database',
-		'cap'        => 'export',
+		'cap'        => 'read', // the real gate is on the routes, checked above
 		'family'     => 'backups',
 		'status'     => array( 'route' => 'minn-admin/v1/ai1wm/status' ),
 		'collection' => array(
@@ -265,10 +258,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'date', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
-				'skip' => array( 'title', 'size_raw', 'ts', 'label', 'downloadUrl' ),
+				'skip' => array( 'title', 'size_raw', 'ts', 'label' ),
 			),
 			'actions'   => array(
-				array( 'label' => __( 'Download', 'minn-admin' ), 'href' => '{downloadUrl}' ),
+				array( 'label' => __( 'Download', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'ai1wm', '{id}' ) ),
 				array(
 					'label'   => __( 'Delete export', 'minn-admin' ),
 					'method'  => 'DELETE',
@@ -280,6 +273,48 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 	return $surfaces;
+} );
+
+/**
+ * One export's archive, for the download door.
+ *
+ * AI1WM was the one provider whose Download did not go through the door: it
+ * handed out its own archive URL, which needs the backups folder to be
+ * web-readable and carries no nonce, so the link worked for anyone who had it
+ * — or, on the streamed fallback, carried the site's AI1WM secret key in the
+ * REST payload. The id only chooses a row; the path is built here and the door
+ * proves it is really inside the backups folder before streaming.
+ */
+function minn_admin_ai1wm_download_files( $id ) {
+	if ( ! current_user_can( 'ai1wm_import_site' ) || ! Minn_Admin::network_owner() ) {
+		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	if ( ! defined( 'AI1WM_BACKUPS_PATH' ) ) {
+		return new WP_Error( 'not_found', __( 'The backup folder could not be found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$filename = minn_admin_ai1wm_id_decode( $id );
+	// The same shaping the delete route applies, for the same reason: the
+	// route pattern constrains the ENCODED id and says nothing about what
+	// comes back out of the decode.
+	if ( ! $filename
+		|| ! preg_match( '/^[A-Za-z0-9._-]+\.wpress$/', $filename )
+		|| false !== strpos( $filename, '..' )
+		|| ( function_exists( 'ai1wm_is_filename_supported' ) && ! ai1wm_is_filename_supported( $filename ) )
+	) {
+		return new WP_Error( 'bad_id', __( 'Invalid export id.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	return array(
+		array(
+			'name' => $filename,
+			'path' => trailingslashit( AI1WM_BACKUPS_PATH ) . $filename,
+			'root' => AI1WM_BACKUPS_PATH,
+		),
+	);
+}
+
+add_filter( 'minn_admin_backup_download_providers', function ( $r ) {
+	$r['ai1wm'] = 'minn_admin_ai1wm_download_files';
+	return $r;
 } );
 
 add_action( 'rest_api_init', function () {

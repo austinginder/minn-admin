@@ -203,7 +203,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$from = minn_admin_s301_decode_id( $request['id'] );
+				$from = minn_admin_s301_decode_id( Minn_Admin::path_param( $request ) );
 				$rows = (array) get_option( '301_redirects', array() );
 				if ( isset( $rows[ $from ] ) ) {
 					unset( $rows[ $from ] );

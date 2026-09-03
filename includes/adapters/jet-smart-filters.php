@@ -250,7 +250,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$p = get_post( (int) $request['id'] );
+				$p = get_post( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $p || 'jet-smart-filters' !== $p->post_type || ! current_user_can( 'delete_post', $p->ID ) ) {
 					return new WP_Error( 'not_found', __( 'Filter not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}

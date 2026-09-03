@@ -237,7 +237,7 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$table = minn_admin_site_mailer_table();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id = %d", (int) $request['id'] ) );
+			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $request ) ) );
 			if ( ! $deleted ) {
 				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}

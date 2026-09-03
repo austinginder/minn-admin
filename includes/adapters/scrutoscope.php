@@ -872,7 +872,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) $request['id'];
+				$id = (int) Minn_Admin::path_param( $request );
 				$row = \Scrutoscope\Profiler\Storage::get_profile( $id );
 				if ( null === $row ) {
 					return new WP_Error( 'not_found', __( 'Profile not found.', 'minn-admin' ), array( 'status' => 404 ) );

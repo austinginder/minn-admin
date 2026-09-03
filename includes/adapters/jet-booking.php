@@ -502,7 +502,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$id  = (int) $request['id'];
+				$id  = (int) Minn_Admin::path_param( $request );
 				$row = minn_admin_jet_booking_row( $id, minn_admin_jet_booking_vendor_scope() );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Booking not found', 'minn-admin' ), array( 'status' => 404 ) );

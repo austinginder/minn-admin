@@ -374,7 +374,7 @@ add_action( 'rest_api_init', function () {
 				// Mirrors the plugin's own log-screen delete: permanent, by id.
 				$deleted = $wpdb->query( $wpdb->prepare(
 					"DELETE FROM {$table} WHERE mail_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $deleted ) {
 					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );

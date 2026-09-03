@@ -379,7 +379,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'DELETE',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$ts    = (int) $request['id'];
+			$ts    = (int) Minn_Admin::path_param( $request );
 			$admin = minn_admin_updraft_admin();
 			if ( ! $admin || ! method_exists( $admin, 'delete_set' ) ) {
 				return new WP_Error( 'unavailable', __( 'UpdraftPlus is not loaded.', 'minn-admin' ), array( 'status' => 500 ) );

@@ -476,7 +476,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$parts = minn_admin_crontrol_parse_id( (string) $request['id'] );
+				$parts = minn_admin_crontrol_parse_id( (string) Minn_Admin::path_param( $request ) );
 				if ( ! $parts ) {
 					return new WP_Error( 'bad_id', __( 'Invalid event id.', 'minn-admin' ), array( 'status' => 400 ) );
 				}

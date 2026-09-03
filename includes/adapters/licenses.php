@@ -3138,7 +3138,11 @@ function minn_admin_license_default_providers() {
 			$type   = is_array( $status ) ? strtolower( (string) ( $status['type'] ?? '' ) ) : '';
 			$msg    = is_array( $status ) ? wp_strip_all_tags( (string) ( $status['message'] ?? '' ) ) : '';
 			if ( '' === $type && '' === $msg ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'HappyFiles recorded no response; the activation request may not have reached happyfiles.io.', 'minn-admin' ) );
+				// The key is deliberately KEPT here (see the rollback below),
+				// so say so: everywhere else a failed activation stores
+				// nothing, and an operator is entitled to know this one is the
+				// exception rather than assume the contract held.
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'HappyFiles recorded no response; the activation request may not have reached happyfiles.io. The key has been kept, because happyfiles.io may already have counted the activation.', 'minn-admin' ) );
 			}
 			if ( 'error' === $type ) {
 				$limit = ( false !== stripos( $msg, 'limit' ) || false !== stripos( $msg, 'maximum' ) || false !== stripos( $msg, 'exceed' ) );
@@ -3588,6 +3592,27 @@ function minn_admin_license_default_providers() {
 		};
 		if ( call_user_func( $iawp_fs ) ) {
 			$providers['independent-analytics-pro']['secret_label'] = __( 'Independent Analytics license key', 'minn-admin' );
+			// On a site that has never connected, activating a Freemius
+			// product is an opt-in: it registers the install and sends the
+			// current administrator's name, email address and site address to
+			// freemius.com. Their own Connect screen says so before you click,
+			// and so should this one.
+			$providers['independent-analytics-pro']['connect_notice'] = function () use ( $iawp_fs ) {
+				$fs = call_user_func( $iawp_fs );
+				try {
+					if ( is_object( $fs ) && $fs->is_registered() ) {
+						return '';
+					}
+				} catch ( \Throwable $e ) {
+					return '';
+				}
+				$user = wp_get_current_user();
+				return sprintf(
+					/* translators: %s: the current administrator's email address. */
+					__( 'This site has not been connected yet, so activating registers it with freemius.com and sends your name, %s and the site address.', 'minn-admin' ),
+					$user && $user->user_email ? $user->user_email : __( 'your email address', 'minn-admin' )
+				);
+			};
 			$providers['independent-analytics-pro']['activate']     = function ( $secret ) use ( $iawp_fs ) {
 				return minn_admin_freemius_activate( call_user_func( $iawp_fs ), $secret );
 			};
@@ -4388,12 +4413,31 @@ function minn_admin_license_default_providers() {
 		$providers['search-filter-pro']['secret_label'] = __( 'Search & Filter license key', 'minn-admin' );
 		$providers['search-filter-pro']['activate']     = function ( $secret ) use ( $sfp_classify ) {
 			$prior = \Search_Filter_Pro\Core\License_Server::get_license_data();
-			$req   = new \WP_REST_Request( 'GET', '/search-filter-pro/v1/license/connect' );
-			$req->set_param( 'license', trim( (string) $secret ) );
-			$res = \Search_Filter_Pro\License\Rest_API::connect( $req );
-			$out = $sfp_classify( $res instanceof \WP_REST_Response ? $res->get_data() : null );
-			if ( empty( $out['ok'] ) && 'valid' === ( $prior['status'] ?? '' ) && ! empty( $prior['license'] ) ) {
-				\Search_Filter\Options::update( 'license-data', $prior );
+			// Their connect call writes the pasted key before the answer comes
+			// back, so a refusal has to be rolled back or the endpoint's "a
+			// refused key stores nothing" contract is broken. Restoring only
+			// when a VALID licence preceded it left the refused key sitting in
+			// the option on every site that had none — which is most of the
+			// sites where somebody is mistyping a key. Restore in both
+			// directions, and from a throw as well as a refusal.
+			$restore = function () use ( $prior ) {
+				if ( is_array( $prior ) && ! empty( $prior['license'] ) ) {
+					\Search_Filter\Options::update( 'license-data', $prior );
+					return;
+				}
+				\Search_Filter\Options::update( 'license-data', array() );
+			};
+			try {
+				$req = new \WP_REST_Request( 'GET', '/search-filter-pro/v1/license/connect' );
+				$req->set_param( 'license', trim( (string) $secret ) );
+				$res = \Search_Filter_Pro\License\Rest_API::connect( $req );
+				$out = $sfp_classify( $res instanceof \WP_REST_Response ? $res->get_data() : null );
+			} catch ( \Throwable $e ) {
+				$restore();
+				throw $e;
+			}
+			if ( empty( $out['ok'] ) ) {
+				$restore();
 			}
 			return $out;
 		};
@@ -5687,6 +5731,16 @@ function minn_admin_licenses() {
 			if ( $can ) {
 				$row['can']    = $can;
 				$row['secret'] = isset( $p['secret_label'] ) ? (string) $p['secret_label'] : __( 'License key', 'minn-admin' );
+				// Some activations imply an account handshake with the
+				// vendor, not just a key check. The person clicking Activate
+				// should see the same facts the vendor's own Connect screen
+				// puts in front of them.
+				if ( ! empty( $p['connect_notice'] ) ) {
+					$notice = is_callable( $p['connect_notice'] ) ? call_user_func( $p['connect_notice'] ) : $p['connect_notice'];
+					if ( '' !== (string) $notice ) {
+						$row['connectNotice'] = (string) $notice;
+					}
+				}
 				if ( ! empty( $p['secret_fields'] ) && is_array( $p['secret_fields'] ) ) {
 					$row['secretFields'] = array_values( array_map( function ( $f ) {
 						return array( 'id' => sanitize_key( $f['id'] ), 'label' => (string) $f['label'] );
@@ -6090,8 +6144,14 @@ add_action( 'rest_api_init', function () {
 				// One name or several: a vendor may honour more than one
 				// constant for the same key (Gravity SMTP reads its own, then
 				// falls back to Gravity Forms').
+				// Deactivate as well as activate. Releasing the seat while the
+				// key stays pinned in wp-config left the site in a state the
+				// activate path then refuses to undo: the vendor has dropped
+				// the registration and Minn will not let anyone paste it back,
+				// because the constant still wins. Verify stays allowed — it
+				// only re-reads what the constant already decided.
 				$pinned = '';
-				if ( 'activate' === $action && ! empty( $p['key_constant'] ) ) {
+				if ( in_array( $action, array( 'activate', 'deactivate' ), true ) && ! empty( $p['key_constant'] ) ) {
 					foreach ( (array) $p['key_constant'] as $const_name ) {
 						if ( defined( $const_name ) && constant( $const_name ) ) {
 							$pinned = (string) $const_name;

@@ -293,7 +293,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $find ) {
-				$p = $find( $request['id'] );
+				$p = $find( Minn_Admin::path_param( $request ) );
 				if ( ! $p || ! current_user_can( 'delete_post', $p->ID ) ) {
 					return new WP_Error( 'not_found', __( 'Template not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}

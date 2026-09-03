@@ -236,7 +236,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$id = (int) $request['id'];
+				$id = (int) Minn_Admin::path_param( $request );
 				if ( ! minn_admin_jet_search_row( $id ) ) {
 					return new WP_Error( 'not_found', __( 'Suggestion not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}

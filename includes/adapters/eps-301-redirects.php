@@ -280,7 +280,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
 				global $wpdb;
-				$id = (int) $request['id'];
+				$id = (int) Minn_Admin::path_param( $request );
 				// Confirm the target is a redirect before removing it. The list
 				// and the editor both leave status 404 rows alone because those
 				// are their 404 log rather than rules, and a delete that skipped

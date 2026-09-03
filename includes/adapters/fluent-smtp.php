@@ -811,7 +811,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
 				global $wpdb;
-				$id = (int) $request['id'];
+				$id = (int) Minn_Admin::path_param( $request );
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
 				if ( ! $exists ) {

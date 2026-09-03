@@ -727,7 +727,7 @@ add_action( 'rest_api_init', function () {
 			return GFCommon::current_user_can_any( array( 'gravityforms_delete_entries', 'gform_full_access' ) );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$entry = GFAPI::get_entry( (int) $request['id'] );
+			$entry = GFAPI::get_entry( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $entry ) ) {
 				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -1102,7 +1102,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'DELETE',
 		'permission_callback' => $can_edit_forms,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$id    = (int) $request['id'];
+			$id    = (int) Minn_Admin::path_param( $request );
 			$feeds = GFAPI::get_feeds( array( $id ), null, null, null );
 			if ( is_wp_error( $feeds ) || empty( $feeds ) ) {
 				return new WP_Error( 'not_found', __( 'Feed not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1386,7 +1386,7 @@ function minn_admin_gf_form_settings_shape( $form ) {
  * GFAPI::update_form call: read-modify-write, smallest window.
  */
 function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
-	$form = GFAPI::get_form( (int) $request['id'] );
+	$form = GFAPI::get_form( (int) Minn_Admin::path_param( $request ) );
 	if ( ! $form ) {
 		return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}

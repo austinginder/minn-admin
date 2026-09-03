@@ -570,10 +570,10 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'DELETE',
 			'permission_callback' => function ( WP_REST_Request $request ) {
-				return current_user_can( 'delete_post', (int) $request['id'] ) && minn_admin_elementor_can_manage();
+				return current_user_can( 'delete_post', (int) Minn_Admin::path_param( $request ) ) && minn_admin_elementor_can_manage();
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$post = minn_admin_elementor_template_post( (int) $request['id'] );
+				$post = minn_admin_elementor_template_post( (int) Minn_Admin::path_param( $request ) );
 				if ( is_wp_error( $post ) ) {
 					return $post;
 				}
@@ -683,6 +683,21 @@ add_action( 'rest_api_init', function () {
 				delete_post_meta( $new_id, $key );
 				$values = get_post_meta( $post->ID, $key, false );
 				foreach ( $values as $value ) {
+					// Elementor runs its own kses over an element tree for
+					// anyone without unfiltered_html (core/base/document.php
+					// does this on save), and copying the meta straight across
+					// went around that boundary: an editor duplicating a
+					// template an administrator had authored would carry the
+					// administrator's unfiltered markup onto a post of their
+					// own. Ask the vendor's own filter, not a local guess.
+					if ( '_elementor_data' === $key
+						&& ! current_user_can( 'unfiltered_html' )
+						&& class_exists( '\Elementor\Utils' )
+						&& method_exists( '\Elementor\Utils', 'kses_post_deep' ) ) {
+						try {
+							$value = \Elementor\Utils::kses_post_deep( $value );
+						} catch ( \Throwable $e ) { /* fall through with the stored value */ }
+					}
 					// get_post_meta() has already turned these back into real
 					// values. Doing it a second time would take a value that
 					// merely looks like stored data and rebuild it into an

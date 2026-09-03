@@ -498,7 +498,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$id  = (int) $request['id'];
+				$id  = (int) Minn_Admin::path_param( $request );
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT option_id, option_name FROM {$wpdb->options} WHERE option_id = %d",
 					$id

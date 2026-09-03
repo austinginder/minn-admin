@@ -320,6 +320,28 @@
 	// third-party URL through every sink this protects.
 	const safeHref = ( u ) => ( /^(https?:\/\/|\/(?![/\\]))/i.test( String( u == null ? '' : u ).trim() ) ? String( u ).trim() : '' );
 
+	// The client half of Minn_Admin::rest_route_or_null. Descriptor routes are
+	// validated server-side before the app is pointed at them, but a job's
+	// statusRoute and stopRoute arrive in a route RESPONSE and are replayed
+	// from localStorage, so they never met that rule. apiRes() has a
+	// same-origin backstop, but a contract is better enforced on the way in
+	// than by the thing that catches what got through.
+	const restRouteOrNull = ( route ) => {
+		const r = String( route == null ? '' : route );
+		if ( ! r ) return null;
+		// Refused before the leading slashes come off: stripping them is what
+		// would turn //evil.example into something that reads relative.
+		if ( r.indexOf( '//' ) === 0 || /^[a-z][a-z0-9+.\-]*:/i.test( r )
+			|| r.indexOf( '\\' ) !== -1 || /[\u0000-\u0020\u007f]/.test( r ) ) return null;
+		const bare = r.replace( /^\/+/, '' );
+		const mark = bare.indexOf( '?' );
+		const path = mark === -1 ? bare : bare.slice( 0, mark );
+		const query = mark === -1 ? '' : bare.slice( mark + 1 );
+		if ( ! /^[a-z0-9_\-/{}]+$/i.test( path ) ) return null;
+		if ( query && ! /^[a-z0-9_\-/{}=&%.,:[\]]*$/i.test( query ) ) return null;
+		return bare;
+	};
+
 	// Is this URL actually ON that host? A substring test says yes to
 	// https://evil.com/?x=wordpress.org and to https://evil.com/github.com/,
 	// and the answer decides whether the UI puts a well-known name to a link
@@ -15895,14 +15917,17 @@
 
 	function startJob( job, opts ) {
 		if ( ! job || ! job.statusRoute ) return;
+		const statusRoute = restRouteOrNull( job.statusRoute );
+		const stopRoute = job.stopRoute ? restRouteOrNull( job.stopRoute ) : '';
+		if ( ! statusRoute || stopRoute === null ) return;
 		state.job = {
 			id: job.id || '',
 			label: job.label || __( 'Working…' ),
-			statusRoute: job.statusRoute,
+			statusRoute: statusRoute,
 			// A status route may advance the work on each poll (a builder
 			// that runs one chunk per call); then it is a POST.
 			statusMethod: job.statusMethod || 'GET',
-			stopRoute: job.stopRoute || '',
+			stopRoute: stopRoute || '',
 			stopMethod: job.stopMethod || 'DELETE',
 			surface: ( opts && opts.surface ) || '',
 			status: 'running',
@@ -15920,6 +15945,12 @@
 		let saved = null;
 		try { saved = JSON.parse( localStorage.getItem( JOB_KEY ) || 'null' ); } catch ( e ) { saved = null; }
 		if ( ! saved || ! saved.statusRoute ) return;
+		// Rehydrated from localStorage, so it has been outside the app since
+		// it was written: hold it to the same rule as a fresh one.
+		if ( ! restRouteOrNull( saved.statusRoute ) || ( saved.stopRoute && ! restRouteOrNull( saved.stopRoute ) ) ) {
+			try { localStorage.removeItem( JOB_KEY ); } catch ( e ) { /* private mode */ }
+			return;
+		}
 		state.job = Object.assign( saved, { status: 'running' } );
 		updateJobChip();
 		pollJob();
@@ -16032,7 +16063,17 @@
 			<div class="minn-job-state ${ esc( j.status ) }">${ esc( stateLabel ) }${ pct != null && j.status === 'running' ? ` · ${ pct }%` : '' }</div>
 			<div class="minn-job-bar${ pct == null && j.status === 'running' ? ' indeterminate' : '' }"><div class="minn-job-bar-fill" style="width:${ j.status === 'done' ? 100 : ( pct == null ? 30 : pct ) }%"></div></div>
 			<div class="minn-job-msg">${ esc( j.message || ( j.status === 'running' ? __( 'Working…' ) : '' ) ) }</div>
-			${ j.result && j.result.href ? `<a class="minn-btn-soft minn-job-result" href="${ esc( j.result.href ) }" target="_blank" rel="noopener">${ esc( j.result.label || __( 'Open result' ) ) } ↗</a>` : '' }`;
+			${ ( () => {
+		// The app's own rule for a URL it did not mint. target=_blank happens
+		// to stop javascript: today, but that is a property of the anchor, not
+		// a decision this code made; every other link here is measured.
+		const rhref = j.result ? safeHref( j.result.href ) : '';
+		const rlabel = esc( ( j.result && j.result.label ) || __( 'Open result' ) );
+		if ( ! j.result || ! j.result.label && ! rhref ) return '';
+		return rhref
+			? `<a class="minn-btn-soft minn-job-result" href="${ esc( rhref ) }" target="_blank" rel="noopener">${ rlabel } ↗</a>`
+			: `<span class="minn-job-result-text">${ rlabel }</span>`;
+	} )() }`;
 	}
 
 	function renderJobModalBody() {
@@ -20913,7 +20954,7 @@
 			it.off && it.turnOn
 				? `<button class="lic-menu" data-lic="turnon" data-component="${ esc( it.turnOn ) }" data-name="${ esc( it.name ) }" title="${ esc( it.turnOn.startsWith( 'theme:' ) ? __( 'Switch the site to this theme' ) : __( 'Activate this plugin' ) ) }">${ esc( it.turnOn.startsWith( 'theme:' ) ? __( 'Turn theme on' ) : __( 'Turn plugin on' ) ) }</button>` : '',
 			can.includes( 'activate' ) && it.state !== 'valid'
-				? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || __( 'License key' ) ) }"${ it.secretFields ? ` data-fields="${ esc( JSON.stringify( it.secretFields ) ) }"` : '' }>${ esc( __( 'Activate…' ) ) }</button>` : '',
+				? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || __( 'License key' ) ) }"${ it.connectNotice ? ` data-notice="${ esc( it.connectNotice ) }"` : '' }${ it.secretFields ? ` data-fields="${ esc( JSON.stringify( it.secretFields ) ) }"` : '' }>${ esc( __( 'Activate…' ) ) }</button>` : '',
 			// No link-out on off rows: the vendor's screen does not exist
 			// while its plugin is inactive (Turn on is the affordance).
 			! can.includes( 'activate' ) && it.activateUrl && it.state !== 'valid' && ! it.off
@@ -21273,7 +21314,8 @@
 		? fields.map( ( f ) => `<input type="text" class="minn-lic-key" data-sid="${ esc( f.id ) }" placeholder="${ esc( f.label ) }" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore="true">` ).join( '' )
 		: `<input type="text" class="minn-lic-key" placeholder="${ esc( btn.dataset.secret ) }" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore="true">` }
 				<button data-lic-go>${ esc( __( 'Activate' ) ) }</button>
-				<button data-lic-cancel>${ esc( __( 'Cancel' ) ) }</button>`;
+				<button data-lic-cancel>${ esc( __( 'Cancel' ) ) }</button>
+				${ btn.dataset.notice ? `<div class="minn-lic-notice">${ esc( btn.dataset.notice ) }</div>` : '' }`;
 			const inputs = $$( '.minn-lic-key', wrap );
 			inputs[ 0 ].focus();
 			$( '[data-lic-go]', wrap ).addEventListener( 'click', () => {

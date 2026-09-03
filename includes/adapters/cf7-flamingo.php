@@ -472,7 +472,7 @@ add_action( 'rest_api_init', function () {
 				return current_user_can( 'flamingo_delete_inbound_message' );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) $request['id'] );
+				$post = get_post( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -481,10 +481,10 @@ add_action( 'rest_api_init', function () {
 				if ( $force ) {
 					// Permanent delete (their delete() / force-delete post).
 					$msg->delete();
-					return rest_ensure_response( array( 'id' => (int) $request['id'], 'deleted' => true, 'message' => __( 'Message deleted permanently.', 'minn-admin' ) ) );
+					return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'deleted' => true, 'message' => __( 'Message deleted permanently.', 'minn-admin' ) ) );
 				}
 				$msg->trash();
-				return rest_ensure_response( array( 'id' => (int) $request['id'], 'trashed' => true, 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
+				return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'trashed' => true, 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
 			},
 		),
 	) );

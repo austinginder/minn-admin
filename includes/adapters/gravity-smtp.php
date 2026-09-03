@@ -757,7 +757,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $can( 'DELETE_EMAIL_LOG' ),
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$id    = (int) $request['id'];
+				$id    = (int) Minn_Admin::path_param( $request );
 				$table = $wpdb->prefix . 'gravitysmtp_events';
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
@@ -1128,7 +1128,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $can( 'EDIT_ROUTING' ),
 			'callback'            => function ( WP_REST_Request $request ) {
 				$recipes = minn_admin_gsmtp_routing_recipes();
-				$id      = (int) $request['id'];
+				$id      = (int) Minn_Admin::path_param( $request );
 				if ( ! isset( $recipes[ $id ] ) ) {
 					return new WP_Error( 'not_found', __( 'Routing rule not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
