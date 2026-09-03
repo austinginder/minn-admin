@@ -3546,6 +3546,9 @@ function minn_admin_license_default_providers() {
 	// ACF Pro: their own activate/deactivate return {success, message}
 	// (or WP_Error); $silent = true keeps their admin notices out of it.
 	if ( function_exists( 'acf_pro_activate_license' ) ) {
+		// ACF deactivates a stored key and re-activates the constant's on the
+		// next admin pageload, and hides the field for that reason.
+		$providers['acf-pro']['key_constant'] = 'ACF_PRO_LICENSE';
 		$providers['acf-pro']['secret_label'] = __( 'ACF PRO license key', 'minn-admin' );
 		$providers['acf-pro']['activate']     = function ( $secret ) {
 			$res = acf_pro_activate_license( $secret, true );
@@ -4108,6 +4111,9 @@ function minn_admin_license_default_providers() {
 		$smtp_store = function () {
 			return \Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container()->get( \Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::DATA_STORE_PLUGIN_OPTS );
 		};
+		// Their const store answers before the plugin-opts store, and their own
+		// UI locks the field. GRAVITYSMTP_LICENSE_KEY first, then GF_LICENSE_KEY.
+		$providers['gravitysmtp']['key_constant'] = array( 'GRAVITYSMTP_LICENSE_KEY', 'GF_LICENSE_KEY' );
 		$providers['gravitysmtp']['secret_label'] = __( 'Gravity SMTP license key', 'minn-admin' );
 		$providers['gravitysmtp']['activate']     = function ( $secret ) use ( $smtp_check, $smtp_store ) {
 			$result = $smtp_check( $secret );
@@ -4520,6 +4526,10 @@ function minn_admin_license_default_providers() {
 			$settings['license_key'] = trim( (string) $key );
 			update_site_option( 'gwp_settings', $settings );
 		};
+		// GWPerks::get_license_key() returns the constant ahead of the stored
+		// option, so a pasted key would validate the constant's and be kept
+		// where nothing reads it.
+		$providers['gravityperks']['key_constant'] = 'GPERKS_LICENSE_KEY';
 		$providers['gravityperks']['secret_label'] = __( 'Gravity Perks license key', 'minn-admin' );
 		$providers['gravityperks']['activate']     = function ( $secret ) use ( $gwp_save_key ) {
 			// Their check flow self-activates the stored key, so it must be
@@ -4729,7 +4739,7 @@ function minn_admin_license_default_providers() {
 		};
 		$providers['seopress-pro']['secret_label'] = __( 'SEOPress PRO license key', 'minn-admin' );
 		$providers['seopress-pro']['key_constant'] = 'SEOPRESS_LICENSE_KEY';
-	$providers['seopress-pro']['activate']     = function ( $secret ) use ( $sp_edd, $sp_flush, $sp_word ) {
+		$providers['seopress-pro']['activate']     = function ( $secret ) use ( $sp_edd, $sp_flush, $sp_word ) {
 			if ( defined( 'SEOPRESS_LICENSE_KEY' ) && SEOPRESS_LICENSE_KEY ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The key is defined in wp-config.php (SEOPRESS_LICENSE_KEY) — change it there.', 'minn-admin' ) );
 			}
@@ -6077,13 +6087,24 @@ add_action( 'rest_api_init', function () {
 				// refused this in their own closure and their siblings did not,
 				// so the rule belongs here where every provider inherits it and
 				// a new one cannot forget it.
-				if ( 'activate' === $action && ! empty( $p['key_constant'] )
-					&& defined( $p['key_constant'] ) && constant( $p['key_constant'] ) ) {
+				// One name or several: a vendor may honour more than one
+				// constant for the same key (Gravity SMTP reads its own, then
+				// falls back to Gravity Forms').
+				$pinned = '';
+				if ( 'activate' === $action && ! empty( $p['key_constant'] ) ) {
+					foreach ( (array) $p['key_constant'] as $const_name ) {
+						if ( defined( $const_name ) && constant( $const_name ) ) {
+							$pinned = (string) $const_name;
+							break;
+						}
+					}
+				}
+				if ( '' !== $pinned ) {
 					return array(
 						'ok'       => false,
 						'code'     => 'error',
 						/* translators: %s: PHP constant name defined in wp-config.php. */
-						'message'  => sprintf( __( 'This key is defined in wp-config (%s), which takes precedence. Change it there.', 'minn-admin' ), $p['key_constant'] ),
+						'message'  => sprintf( __( 'This key is defined in wp-config (%s), which takes precedence. Change it there.', 'minn-admin' ), $pinned ),
 						'licenses' => minn_admin_licenses(),
 					);
 				}

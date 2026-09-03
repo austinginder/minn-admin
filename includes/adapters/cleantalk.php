@@ -547,6 +547,34 @@ function minn_admin_cleantalk_connector_pre_option() {
 }
 
 /**
+ * Keep the aliased key out of wp/v2/settings, whoever registers it.
+ *
+ * The alias above exists so Minn's own Connectors reader can say whether a
+ * key is set, and that reader only ever emits the last four characters. The
+ * settings controller does no masking of its own, so if core or a plugin ever
+ * calls register_setting() on this connector's option name, the alias would
+ * hand the whole key to manage_options, which is the role the save path
+ * deliberately refuses (it requires activate_plugins, because CleanTalk's own
+ * gate is skipped under the direct call Minn has to make). Nothing registers
+ * it today; this is what keeps that from becoming the way around the write
+ * rule later.
+ *
+ * @param mixed  $result Short-circuit value.
+ * @param string $name   Setting name being read.
+ * @return mixed
+ */
+function minn_admin_cleantalk_connector_rest_mask( $result, $name ) {
+	if ( ! is_string( $name ) || '' === $name ) {
+		return $result;
+	}
+	if ( $name !== minn_admin_cleantalk_connector_setting() ) {
+		return $result;
+	}
+	return current_user_can( 'activate_plugins' ) ? $result : '';
+}
+add_filter( 'rest_pre_get_setting', 'minn_admin_cleantalk_connector_rest_mask', 10, 2 );
+
+/**
  * Per-request flag: a connector save was rejected, so the REST settings
  * response should come back empty (Minn's Connectors UI treats that as
  * the refusal) without clearing a working stored key.
