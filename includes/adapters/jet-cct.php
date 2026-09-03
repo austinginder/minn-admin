@@ -105,6 +105,33 @@ function minn_admin_jet_cct_row( $slug, $id ) {
 	return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE _ID = %d", (int) $id ), ARRAY_A );
 }
 
+/**
+ * Decode a stored CCT cell without instantiating classes.
+ *
+ * JetEngine decodes these cells through jet_engine_safe_unserialize(), and only
+ * for columns its factory declares array-backed. Reading the table directly
+ * means doing that work here: a CCT row can be inserted by an unauthenticated
+ * visitor through a JetFormBuilder "Insert CCT item" action, so a bare
+ * maybe_unserialize() would let a stored payload name a class and have PHP
+ * build it the moment an administrator opens the list.
+ *
+ * @param mixed $value Raw column value as it came out of the table.
+ * @return mixed Decoded array, or the value unchanged.
+ */
+function minn_admin_jet_cct_decode( $value ) {
+	if ( ! is_string( $value ) || ! is_serialized( $value ) ) {
+		return $value;
+	}
+	// Array payloads only. An object ("O:") or enum ("E:") payload is never
+	// something their field types store, so it is refused rather than decoded.
+	if ( 0 !== strpos( $value, 'a:' ) ) {
+		return $value;
+	}
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	$decoded = @unserialize( $value, array( 'allowed_classes' => false ) );
+	return is_array( $decoded ) ? $decoded : $value;
+}
+
 /** A row as a list/detail item: mapped fields in panel shapes + service columns. */
 function minn_admin_jet_cct_item( $factory, $row ) {
 	$set  = minn_admin_jet_cct_fields( $factory );
@@ -120,7 +147,7 @@ function minn_admin_jet_cct_item( $factory, $row ) {
 	);
 	$title = '';
 	foreach ( $set['fields'] as $name => $f ) {
-		$item[ $name ] = minn_admin_jet_value_out( $f, isset( $row[ $name ] ) ? maybe_unserialize( $row[ $name ] ) : '' );
+		$item[ $name ] = minn_admin_jet_value_out( $f, isset( $row[ $name ] ) ? minn_admin_jet_cct_decode( $row[ $name ] ) : '' );
 		if ( '' === $title && 'text' === $f['type'] && is_string( $item[ $name ] ) && '' !== $item[ $name ] ) {
 			$title = $item[ $name ];
 		}
