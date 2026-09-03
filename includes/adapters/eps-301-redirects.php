@@ -56,8 +56,13 @@ function minn_admin_eps301_item( $row ) {
 
 /** Validate + coerce a submitted rule; WP_Error on bad input. */
 function minn_admin_eps301_payload( WP_REST_Request $request ) {
-	$from   = trim( (string) $request['from'] );
-	$to     = trim( (string) $request['to'] );
+	// sanitize_text_field( urldecode( … ) ) on both sides, matching their own
+	// writer, the same rule the Simple 301 Redirects adapter already follows.
+	// Without it this table ends up holding values the plugin itself would
+	// never store, and a percent-encoded source that their form would have
+	// decoded is kept encoded here and then never matches.
+	$from   = sanitize_text_field( urldecode( trim( (string) $request['from'] ) ) );
+	$to     = sanitize_text_field( urldecode( trim( (string) $request['to'] ) ) );
 	$status = trim( (string) $request['status'] );
 	if ( '' === $from || '' === $to ) {
 		return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );

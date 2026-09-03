@@ -50,7 +50,33 @@ function minn_admin_simple_history_can() {
 			}
 		}
 	}
-	return current_user_can( apply_filters( 'simple_history/view_history_capability', 'edit_pages' ) );
+	return current_user_can( minn_admin_simple_history_view_cap() );
+}
+
+/**
+ * Their own view capability, resolver first.
+ *
+ * Simple History applies TWO filters, the deprecated name before the current
+ * one, so reproducing only the current one answers differently from their own
+ * screen on a site that hardened this years ago with the filter that existed
+ * then. Call their resolver where it is available, the way the WSAL, Stream
+ * and Asset CleanUp adapters do, and reproduce both filters in order only as
+ * a fallback.
+ *
+ * @return string
+ */
+function minn_admin_simple_history_view_cap() {
+	if ( class_exists( '\\Simple_History\\Helpers' ) && method_exists( '\\Simple_History\\Helpers', 'get_view_history_capability' ) ) {
+		try {
+			return (string) \Simple_History\Helpers::get_view_history_capability();
+		} catch ( \Throwable $e ) {
+			// fall through to the filters below
+		}
+	}
+	return (string) apply_filters(
+		'simple_history/view_history_capability',
+		apply_filters( 'simple_history_view_history_capability', 'edit_pages' )
+	);
 }
 
 function minn_admin_simple_history_admin_url() {
@@ -213,7 +239,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'activity-log',
 		'sub'        => 'Simple History',
 		'icon'       => 'clock',
-		'cap'        => apply_filters( 'simple_history/view_history_capability', 'edit_pages' ),
+		'cap'        => minn_admin_simple_history_view_cap(),
 		'status'     => array( 'route' => 'minn-admin/v1/simple-history/status' ),
 		'collection' => array(
 			'route'     => 'simple-history/v1/events',

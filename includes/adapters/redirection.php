@@ -257,11 +257,30 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 
+			// Their log and 404 screens sit behind their own capabilities, not
+			// the base plugin role this route is gated on. has_access() answers
+			// the base role for every name unless a site adds their capability
+			// filter, so on most installs this changes nothing, and on a site
+			// that gave someone redirect management WITHOUT log access it stops
+			// the card reporting log volume they cannot open.
+			$can_cap = function ( $const ) {
+				if ( ! class_exists( 'Redirection_Capabilities' ) || ! defined( 'Redirection_Capabilities::' . $const ) ) {
+					return true;
+				}
+				try {
+					return (bool) Redirection_Capabilities::has_access( constant( 'Redirection_Capabilities::' . $const ) );
+				} catch ( \Throwable $e ) {
+					return true;
+				}
+			};
+			$can_log = $can_cap( 'CAP_LOG_MANAGE' );
+			$can_404 = $can_cap( 'CAP_404_MANAGE' );
+
 			$since  = gmdate( 'Y-m-d H:i:s', strtotime( current_time( 'mysql' ) ) - 7 * DAY_IN_SECONDS );
-			$served = $has( 'redirection_logs' )
+			$served = ( $can_log && $has( 'redirection_logs' ) )
 				? (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}redirection_logs WHERE created >= %s", $since ) ) // phpcs:ignore
 				: null;
-			$missed = $has( 'redirection_404' )
+			$missed = ( $can_404 && $has( 'redirection_404' ) )
 				? (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}redirection_404 WHERE created >= %s", $since ) ) // phpcs:ignore
 				: null;
 			if ( null !== $served ) {
@@ -281,8 +300,9 @@ add_action( 'rest_api_init', function () {
 				$days   = 14;
 				$start  = strtotime( gmdate( 'Y-m-d', strtotime( current_time( 'mysql' ) ) ) ) - ( $days - 1 ) * DAY_IN_SECONDS;
 				$startd = gmdate( 'Y-m-d 00:00:00', $start );
-				$bucket = function ( $suffix ) use ( $wpdb, $has, $startd ) {
-					if ( ! $has( $suffix ) ) {
+				$bucket = function ( $suffix ) use ( $wpdb, $has, $startd, $can_log, $can_404 ) {
+					$allowed = ( 'redirection_logs' === $suffix ) ? $can_log : $can_404;
+					if ( ! $allowed || ! $has( $suffix ) ) {
 						return array();
 					}
 					$out  = array();
