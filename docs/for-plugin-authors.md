@@ -315,8 +315,16 @@ Rules:
   check reads as not-needed: a broken gate can never brick a working surface.
 - `run` must route through **your plugin's own installer**, never a rebuilt
   copy of it. It receives the toggles as booleans (undeclared ids are
-  dropped, absent ones get your declared default) and runs behind the
-  surface's own `cap` via `POST minn-admin/v1/surfaces/{id}/setup`.
+  dropped, absent ones get your declared default) and runs via
+  `POST minn-admin/v1/surfaces/{id}/setup`.
+- **Setup is gated on a real capability (since 0.38.0).** Running an
+  installer is the one place a descriptor `cap` is an authorization decision
+  rather than nav gating, so `read` is not an answer to "may this person run
+  this". The route uses `setup.cap` when you declare one, else the surface's
+  `cap`, and falls back to `manage_options` when that is `read` or empty.
+  This matters if you followed the advice above and declared `cap => 'read'`
+  so you could gate in your own routes: say what setup needs explicitly with
+  `setup.cap`, or it gets the floor for site configuration.
 - Options are the place for your wizard's questions. Default privacy-relevant
   choices (IP logging, telemetry) to off; Minn will not make those choices
   silently.
