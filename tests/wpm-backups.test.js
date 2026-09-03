@@ -53,8 +53,10 @@ const { launch, login, reporter, BASE, WP } = require( './helpers' );
 			&& rows.some( ( x ) => /Before a migration/.test( x ) ) && rows.some( ( x ) => /Backup/.test( x ) ),
 			JSON.stringify( rows.map( ( x ) => x.slice( 0, 80 ) ) ) );
 
-		// Download is a link to THEIR handler carrying the flag their
-		// boolean filter parses — open the gz row's menu and read the href.
+		// Download goes through Minn's own door, not theirs: their handler
+		// checks neither the caller nor the origin of the request, so the
+		// link carries our nonce and the door re-checks the capability and
+		// keeps the resolved path inside the backup folder.
 		await page.evaluate( () => {
 			const row = Array.from( document.querySelectorAll( '.minn-table-row' ) )
 				.find( ( r ) => r.textContent.includes( 'minnsuite' ) && r.textContent.includes( 'Before a migration' ) );
@@ -65,8 +67,12 @@ const { launch, login, reporter, BASE, WP } = require( './helpers' );
 			const a = Array.from( document.querySelectorAll( '.minn-ctx-menu a' ) ).find( ( x ) => /Download/.test( x.textContent ) );
 			return a ? a.getAttribute( 'href' ) : '';
 		} );
-		t.check( 'download link targets their gated admin handler', /wpmdb-download-backup=/.test( href ) && href.includes( GZ ), href );
-		t.check( 'compressed flag rides in their accepted vocabulary', /wpmdb-compressed-backup=(true|1)/.test( href ), href );
+		t.check( 'download link goes through Minn\'s nonce-checked door',
+			/admin-post\.php\?action=minn_admin_backup_download/.test( href )
+			&& /[?&]provider=wp-migrate(&|$)/.test( href )
+			&& /[?&]_wpnonce=[a-f0-9]+/.test( href ), href );
+		t.check( 'the row id names the backup, and their handler is not linked',
+			href.includes( GZ ) && ! /wpmdb-download-backup=/.test( href ), href );
 		await page.keyboard.press( 'Escape' );
 
 		// Delete the plain backup through the row menu; native confirm.
