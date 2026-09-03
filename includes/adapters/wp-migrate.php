@@ -211,10 +211,11 @@ add_action( 'rest_api_init', function () {
  * Reads go through their own Filesystem::get_backups(), which is what
  * their Backups tab lists, and deletes replay their own delete-backup
  * route so a file is removed exactly the way their screen removes it.
- * Downloads are a link to their admin handler rather than the file URL:
- * the backup directory ships an .htaccess and an index.php precisely so a
- * database dump is not fetchable over the web, and their handler streams
- * it behind the same capability that draws their screen.
+ * Downloads stream through Minn's own door, not theirs and not the file
+ * URL: the backup directory ships an .htaccess and an index.php precisely
+ * so a database dump is not fetchable over the web, and their handler
+ * turns out to enforce neither a capability nor a nonce (see
+ * minn_admin_wp_migrate_download_files).
  */
 function minn_admin_wpm_backup_dir() {
 	try {
@@ -274,6 +275,46 @@ function minn_admin_wpm_backups() {
 	return $out;
 }
 
+/**
+ * The files a backup row stands for, for the shared download door.
+ *
+ * Their own download handler cannot be linked to. BackupsManager::register()
+ * hooks trigger_download() on admin_init with no capability check and no
+ * nonce, and download_backup() joins the request value onto the backup
+ * folder and readfile()s it with no containment, so the link this adapter
+ * used to render handed the database to anyone who could load a wp-admin
+ * page. Going through Minn's door instead means this download gets the same
+ * capability, nonce and realpath containment as every other backup adapter.
+ *
+ * @param string $id Row id: their filename without its .sql/.sql.gz suffix.
+ * @return array|WP_Error
+ */
+function minn_admin_wp_migrate_download_files( $id ) {
+	if ( ! minn_admin_wp_migrate_can() ) {
+		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	$root = minn_admin_wpm_backup_dir();
+	if ( '' === $root ) {
+		return new WP_Error( 'not_found', __( 'The backup folder could not be found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	// The id only chooses a row from their own listing. The filename comes
+	// off disk with that row, never from the request, and the door checks
+	// the resolved path is really inside the folder before streaming it.
+	foreach ( minn_admin_wpm_backups() as $row ) {
+		if ( ! isset( $row['id'], $row['file'] ) || (string) $row['id'] !== (string) $id ) {
+			continue;
+		}
+		return array(
+			array(
+				'name' => (string) $row['file'],
+				'path' => rtrim( $root, '/\\' ) . DIRECTORY_SEPARATOR . (string) $row['file'],
+				'root' => $root,
+			),
+		);
+	}
+	return new WP_Error( 'not_found', __( 'Backup not found.', 'minn-admin' ), array( 'status' => 404 ) );
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_wp_migrate_can() ) {
 		return $surfaces;
@@ -302,14 +343,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'actions' => array(
 				array(
 					'label' => __( 'Download', 'minn-admin' ),
-					'href'  => add_query_arg(
-						array(
-							'page'                    => 'wp-migrate-db-pro',
-							'wpmdb-download-backup'   => '{id}',
-							'wpmdb-compressed-backup' => '{compressed}',
-						),
-						network_admin_url( is_multisite() ? 'settings.php' : 'tools.php' )
-					),
+					'href'  => minn_admin_backup_download_url( 'wp-migrate' ),
 				),
 				array(
 					'label'   => __( 'Delete backup', 'minn-admin' ),
