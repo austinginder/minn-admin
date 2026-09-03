@@ -164,8 +164,11 @@ function minn_admin_jet_cct_itemarr( $factory, $values ) {
 		if ( ! isset( $set['fields'][ $name ] ) ) {
 			continue;
 		}
-		$stored       = minn_admin_jet_value_in( $set['fields'][ $name ], $value );
-		$out[ $name ] = null === $stored ? '' : $stored;
+		$stored = minn_admin_jet_value_in( $set['fields'][ $name ], $value );
+		if ( null === $stored ) {
+			continue; // refused: their handler merges, so the column survives
+		}
+		$out[ $name ] = false === $stored ? '' : $stored;
 	}
 	return $out;
 }

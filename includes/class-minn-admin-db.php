@@ -218,11 +218,19 @@ class Minn_Admin_DB {
 		// wp_ matches wp_staging_ and wp_blog2_ just as happily as wp_posts.
 		// The wp_N_ rule below catches the multisite shape and nothing else,
 		// so on shared-database hosting another install's users table was
-		// listable. Let the schema name its own neighbours instead: a real
-		// install owns options AND posts AND postmeta under one prefix, and
-		// no plugin ships that trio, so requiring all three cannot mistake a
-		// plugin's own <prefix>..._options table for somebody else's site.
-		$suffixes = array( 'options', 'posts', 'postmeta' );
+		// listable. Let the schema name its own neighbours instead.
+		//
+		// Requiring options AND posts AND postmeta missed a co-tenant that had
+		// lost one of them — a half-removed install, or one whose postmeta was
+		// renamed — and its users table was admitted. The signal set is wider
+		// now and the bar is TWO distinct core-shaped tables under one prefix:
+		// a real install always has many, while a plugin's own table is
+		// normally alone under its prefix (wp_myplugin_options stays visible).
+		// Getting this wrong in the shy direction hides one row from a
+		// diagnostics viewer; getting it wrong in the other direction shows a
+		// neighbour's password hashes.
+		$suffixes = array( 'options', 'posts', 'postmeta', 'users', 'usermeta', 'comments', 'commentmeta', 'terms', 'termmeta', 'term_taxonomy' );
+		$needed   = 2;
 		$seen     = array();
 		foreach ( $rows as $t ) {
 			$name = strtolower( (string) $t->name );
@@ -247,7 +255,7 @@ class Minn_Admin_DB {
 		}
 		$foreign = array();
 		foreach ( $seen as $candidate => $found ) {
-			if ( count( $found ) === count( $suffixes ) ) {
+			if ( count( $found ) >= $needed ) {
 				$foreign[] = $candidate;
 			}
 		}

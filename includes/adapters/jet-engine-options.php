@@ -113,8 +113,11 @@ function minn_admin_jet_options_save( $slug, $values ) {
 		if ( ! isset( $set['fields'][ $name ] ) ) {
 			continue; // only the page's own mapped fields
 		}
-		$stored        = minn_admin_jet_value_in( $set['fields'][ $name ], $value );
-		$data[ $name ] = null === $stored ? '' : $stored;
+		$stored = minn_admin_jet_value_in( $set['fields'][ $name ], $value );
+		if ( null === $stored ) {
+			continue; // refused: rewrite=false leaves the stored value alone
+		}
+		$data[ $name ] = false === $stored ? '' : $stored;
 	}
 	if ( ! $data ) {
 		return;

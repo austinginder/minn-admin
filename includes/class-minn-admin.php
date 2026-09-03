@@ -32,7 +32,10 @@ class Minn_Admin {
 		// admin-ajax.php and admin-post.php never reach template_redirect and are
 		// not REST, so neither guard above covers them. admin_init runs on both
 		// before the action is dispatched.
-		add_action( 'admin_init', array( __CLASS__, 'maintenance_admin_entry' ), 0 );
+		// init, not admin_init: every direct PHP entry point requires
+		// wp-load.php and so reaches init, while only the two wp-admin ones
+		// reach admin_init. Priority 0 is before any plugin's own handlers.
+		add_action( 'init', array( __CLASS__, 'maintenance_admin_entry' ), 0 );
 		add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar_link' ), 100 );
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
@@ -1231,10 +1234,7 @@ class Minn_Admin {
 	 * @return mixed
 	 */
 	public static function maintenance_rest( $result ) {
-		if ( ! empty( $result ) || ! get_option( 'minn_admin_maintenance' ) ) {
-			return $result;
-		}
-		if ( is_user_logged_in() && current_user_can( 'edit_posts' ) ) {
+		if ( ! empty( $result ) || ! self::maintenance_holds_back() ) {
 			return $result;
 		}
 		$route = $GLOBALS['wp']->query_vars['rest_route'] ?? '';
@@ -1249,31 +1249,65 @@ class Minn_Admin {
 	}
 
 	/**
-	 * Hold back admin-ajax.php and admin-post.php while maintenance mode is on.
+	 * Is maintenance mode holding this caller back?
 	 *
-	 * The front end is covered on template_redirect and the REST API on
-	 * rest_authentication_errors, but those two entry points go through neither.
-	 * They matter because both have an unauthenticated half: any plugin
-	 * registering a wp_ajax_nopriv_ or admin_post_nopriv_ handler keeps
-	 * answering anonymous callers with the site's real content while the
-	 * operator is looking at a holding page. The case this feature exists for is
-	 * a site being staged before launch, which is exactly when a search
-	 * suggestion or product filter endpoint quietly serving that content is
-	 * worth something to somebody.
+	 * One predicate, because the guard is applied from several entry points
+	 * and five copies of "on, and not somebody allowed in" would drift.
+	 *
+	 * @return bool
+	 */
+	public static function maintenance_holds_back() {
+		if ( ! get_option( 'minn_admin_maintenance' ) ) {
+			return false;
+		}
+		return ! ( is_user_logged_in() && current_user_can( 'edit_posts' ) );
+	}
+
+	/**
+	 * The PHP entry points that bypass both template_redirect and REST.
+	 *
+	 * admin-ajax and admin-post matter because both have an unauthenticated
+	 * half: any plugin registering a wp_ajax_nopriv_ or admin_post_nopriv_
+	 * handler keeps answering anonymous callers with the site's real content
+	 * while the operator is looking at a holding page. The rest are the peers
+	 * that sweep found: an anonymous caller could still read the bookmark list
+	 * out of wp-links-opml.php, post a comment or a trackback into a site that
+	 * is supposed to be closed, or register on a network being staged.
+	 *
+	 * Deliberately absent, and documented in security.md so the next reader
+	 * knows this list is finished rather than unfinished: wp-login.php (you
+	 * have to be able to log in to a site you are staging) and wp-cron.php
+	 * (scheduled work should keep running behind the holding page).
+	 */
+	const MAINTENANCE_ENTRY_SCRIPTS = array(
+		'admin-ajax.php',
+		'admin-post.php',
+		'xmlrpc.php',
+		'wp-comments-post.php',
+		'wp-trackback.php',
+		'wp-links-opml.php',
+		'wp-signup.php',
+		'wp-activate.php',
+		'wp-mail.php',
+	);
+
+	/**
+	 * Hold back the direct PHP entry points while maintenance mode is on.
+	 *
+	 * Every one of these requires wp-load.php, so they all reach `init` — which
+	 * is earlier than the admin_init this used to ride, and is the one hook
+	 * they share.
 	 *
 	 * Minn's own ajax handler is left alone, the way the REST guard leaves
 	 * Minn's own namespace alone, so the app keeps working for the people
 	 * allowed in.
 	 */
 	public static function maintenance_admin_entry() {
-		if ( ! get_option( 'minn_admin_maintenance' ) ) {
-			return;
-		}
 		$script = isset( $_SERVER['SCRIPT_NAME'] ) ? basename( (string) $_SERVER['SCRIPT_NAME'] ) : '';
-		if ( 'admin-ajax.php' !== $script && 'admin-post.php' !== $script ) {
+		if ( ! in_array( $script, self::MAINTENANCE_ENTRY_SCRIPTS, true ) ) {
 			return;
 		}
-		if ( is_user_logged_in() && current_user_can( 'edit_posts' ) ) {
+		if ( ! self::maintenance_holds_back() ) {
 			return;
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading the action name only, to leave Minn's own handler alone.
@@ -1294,10 +1328,7 @@ class Minn_Admin {
 	 * Simple maintenance mode: show a 503 holding page to visitors when enabled.
 	 */
 	public static function maybe_maintenance_mode() {
-		if ( ! get_option( 'minn_admin_maintenance' ) ) {
-			return;
-		}
-		if ( is_user_logged_in() && current_user_can( 'edit_posts' ) ) {
+		if ( ! self::maintenance_holds_back() ) {
 			return;
 		}
 		status_header( 503 );

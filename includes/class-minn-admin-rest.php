@@ -598,9 +598,15 @@ class Minn_Admin_REST {
 		// IPs and force them out. Also require a session and a real target: an
 		// anonymous request has get_current_user_id() === 0, and the route
 		// regex happily matches /users/0/sessions.
+		// The same floor $edit_user_gate carries, and for the same reason:
+		// edit_user short-circuits to true against one's own id, so without
+		// it these routes answered a Subscriber about their own account —
+		// below the bar for using Minn at all. Core's profile page does show
+		// its Sessions box to every role, but that is core's surface; this is
+		// Minn's, and every other /users/{id}/* route here asks this first.
 		$sessions_perm = function ( WP_REST_Request $request ) {
 			$uid = self::target_user_id( $request );
-			return is_user_logged_in() && $uid > 0
+			return is_user_logged_in() && $uid > 0 && current_user_can( 'edit_posts' )
 				&& ( get_current_user_id() === $uid || current_user_can( 'edit_user', $uid ) );
 		};
 
@@ -3271,16 +3277,35 @@ class Minn_Admin_REST {
 		// act on it. Without the second, a Contributor could read the height of
 		// a bar against the public comment count and learn how much is waiting
 		// in moderation.
+		//
+		// The third half, and the one the first pass missed: the drill-down
+		// also drops every comment whose POST the caller may not read, so a
+		// chart that counts them reports activity the list behind it will not
+		// show — and the difference between the bar and the list is itself a
+		// per-day reading of how much is happening on content you are not
+		// allowed to see. Over-fetch the post id and run the drill-down's own
+		// predicate, memoised because a busy post carries many comments.
 		$chart_comment_where = current_user_can( 'moderate_comments' ) ? '' : " AND comment_approved = '1'";
-		$comment_dates       = $wpdb->get_col(
+		$comment_rows        = $wpdb->get_results(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- literal fragment chosen above.
-				"SELECT comment_date_gmt FROM {$wpdb->comments}
+				"SELECT comment_date_gmt, comment_post_ID FROM {$wpdb->comments}
 				 WHERE comment_date_gmt >= %s{$chart_comment_where}
 				 AND comment_type IN ( '', 'comment' )",
 				$since
 			)
 		);
+		$comment_dates = array();
+		$visible       = array();
+		foreach ( (array) $comment_rows as $row ) {
+			$pid = (int) $row->comment_post_ID;
+			if ( ! isset( $visible[ $pid ] ) ) {
+				$visible[ $pid ] = self::comment_row_visible( $pid );
+			}
+			if ( $visible[ $pid ] ) {
+				$comment_dates[] = $row->comment_date_gmt;
+			}
+		}
 		foreach ( array_merge( $post_dates, $comment_dates ) as $date ) {
 			$age = time() - strtotime( $date . ' UTC' );
 			$idx = $buckets - 1 - (int) floor( $age / ( $bucket_days * DAY_IN_SECONDS ) );
@@ -3673,52 +3698,61 @@ class Minn_Admin_REST {
 					)
 				);
 			}
-			$orders_n = self::wc_orders_total();
-			$add(
-				array(
-					'key'   => 'orders',
-					'group' => 'store',
-					'label' => __( 'All orders', 'minn-admin' ),
-					'value' => number_format_i18n( $orders_n ),
-					/* translators: %s: number of orders awaiting fulfillment. */
-					'delta' => sprintf( _n( '%s to fulfill', '%s to fulfill', (int) $store['processing'], 'minn-admin' ), number_format_i18n( (int) $store['processing'] ) ),
-					'up'    => (int) $store['processing'] > 0 ? 'warn' : null,
-					'goto'  => 'orders',
-				)
-			);
-			$add(
-				array(
-					'key'   => 'orders_pending',
-					'group' => 'store',
-					'label' => __( 'Awaiting payment', 'minn-admin' ),
-					'value' => number_format_i18n( (int) $store['pending'] ),
-					'delta' => __( 'pending orders', 'minn-admin' ),
-					'up'    => (int) $store['pending'] > 0 ? 'warn' : null,
-					'goto'  => 'orders:pending',
-				)
-			);
-			$add(
-				array(
-					'key'   => 'orders_processing',
-					'group' => 'store',
-					'label' => __( 'To fulfill', 'minn-admin' ),
-					'value' => number_format_i18n( (int) $store['processing'] ),
-					'delta' => __( 'processing', 'minn-admin' ),
-					'up'    => (int) $store['processing'] > 0 ? 'warn' : null,
-					'goto'  => 'orders:processing',
-				)
-			);
-			$add(
-				array(
-					'key'   => 'orders_hold',
-					'group' => 'store',
-					'label' => __( 'On hold', 'minn-admin' ),
-					'value' => number_format_i18n( (int) $store['onhold'] ),
-					'delta' => __( 'orders', 'minn-admin' ),
-					'up'    => (int) $store['onhold'] > 0 ? 'warn' : null,
-					'goto'  => 'orders:on-hold',
-				)
-			);
+			// The cards above defer to WooCommerce's own reports permission,
+			// so they stay. The four below are raw site-wide counts over
+			// every seller's orders, and that is the same split the Products
+			// card makes: stock WooCommerce hands edit_shop_orders and
+			// edit_others_shop_orders to the same roles, but a marketplace
+			// plugin grants a vendor the first alone, and the store's total
+			// order volume is not that vendor's to read.
+			if ( current_user_can( 'edit_others_shop_orders' ) ) {
+				$orders_n = self::wc_orders_total();
+				$add(
+					array(
+						'key'   => 'orders',
+						'group' => 'store',
+						'label' => __( 'All orders', 'minn-admin' ),
+						'value' => number_format_i18n( $orders_n ),
+						/* translators: %s: number of orders awaiting fulfillment. */
+						'delta' => sprintf( _n( '%s to fulfill', '%s to fulfill', (int) $store['processing'], 'minn-admin' ), number_format_i18n( (int) $store['processing'] ) ),
+						'up'    => (int) $store['processing'] > 0 ? 'warn' : null,
+						'goto'  => 'orders',
+					)
+				);
+				$add(
+					array(
+						'key'   => 'orders_pending',
+						'group' => 'store',
+						'label' => __( 'Awaiting payment', 'minn-admin' ),
+						'value' => number_format_i18n( (int) $store['pending'] ),
+						'delta' => __( 'pending orders', 'minn-admin' ),
+						'up'    => (int) $store['pending'] > 0 ? 'warn' : null,
+						'goto'  => 'orders:pending',
+					)
+				);
+				$add(
+					array(
+						'key'   => 'orders_processing',
+						'group' => 'store',
+						'label' => __( 'To fulfill', 'minn-admin' ),
+						'value' => number_format_i18n( (int) $store['processing'] ),
+						'delta' => __( 'processing', 'minn-admin' ),
+						'up'    => (int) $store['processing'] > 0 ? 'warn' : null,
+						'goto'  => 'orders:processing',
+					)
+				);
+				$add(
+					array(
+						'key'   => 'orders_hold',
+						'group' => 'store',
+						'label' => __( 'On hold', 'minn-admin' ),
+						'value' => number_format_i18n( (int) $store['onhold'] ),
+						'delta' => __( 'orders', 'minn-admin' ),
+						'up'    => (int) $store['onhold'] > 0 ? 'warn' : null,
+						'goto'  => 'orders:on-hold',
+					)
+				);
+			}
 		}
 		if ( class_exists( 'WooCommerce' ) && post_type_exists( 'product' ) && current_user_can( 'edit_products' ) ) {
 			$products = wp_count_posts( 'product' );
@@ -3743,7 +3777,11 @@ class Minn_Admin_REST {
 				)
 			);
 		}
-		if ( class_exists( 'WooCommerce' ) && (
+		// The size of the customer base is the same class of number as the
+		// Users card twenty lines up, which asks for list_users precisely so a
+		// lower principal does not learn it. Asking for less here than there,
+		// for the same kind of fact, was the inconsistency.
+		if ( class_exists( 'WooCommerce' ) && current_user_can( 'list_users' ) && (
 			current_user_can( 'manage_woocommerce' ) || current_user_can( 'edit_shop_orders' )
 		) ) {
 			$roles = count_users();
@@ -5941,7 +5979,11 @@ class Minn_Admin_REST {
 			if ( ! current_user_can( 'edit_user', $uid ) ) {
 				continue;
 			}
-			$tokens = maybe_unserialize( $row->meta_value );
+			// classify_session_tokens only ever inspects an array, and core
+			// only ever writes one here, so nothing is lost by decoding with
+			// class construction switched off — and the plugin's own rule is
+			// that no stored value is decoded into objects.
+			$tokens = minn_admin_meta_copy_value( $row->meta_value );
 			$class  = self::classify_session_tokens( $tokens );
 			if ( 'active' === $class ) {
 				$active[] = $uid;

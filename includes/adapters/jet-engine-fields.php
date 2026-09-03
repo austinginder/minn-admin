@@ -174,11 +174,96 @@ function minn_admin_jet_map_field( $field ) {
 /**
  * Meta box groups that apply to a post type (and, when given, a post):
  * every 'post' meta box whose allowed_post_type names it, honoring the
- * box's allowed / excluded post conditions, plus the fields the JetEngine
- * post type definition carries itself.
+ * box's allowed / excluded post and user-role conditions, plus the fields
+ * the JetEngine post type definition carries itself.
  *
  * @return array[] { group, fields: mapped[], locked }
  */
+/**
+ * REST-visible post types JetEngine stores fields for.
+ *
+ * Structural only: which types a meta box or a JetEngine post type definition
+ * targets, with no conditions applied. Conditions are per user and per post,
+ * and a route registration is neither.
+ *
+ * @return string[]
+ */
+function minn_admin_jet_field_post_types() {
+	$rest  = get_post_types( array( 'show_in_rest' => true ), 'names' );
+	$types = array();
+	try {
+		foreach ( (array) jet_engine()->meta_boxes->data->get_items() as $box ) {
+			$args = ( isset( $box['args'] ) && is_array( $box['args'] ) ) ? $box['args'] : array();
+			if ( 'post' !== ( $args['object_type'] ?? 'post' ) || empty( $box['meta_fields'] ) ) {
+				continue;
+			}
+			foreach ( (array) ( $args['allowed_post_type'] ?? array() ) as $t ) {
+				$types[ (string) $t ] = true;
+			}
+		}
+		if ( is_object( jet_engine()->cpt ) && is_object( jet_engine()->cpt->data ) ) {
+			foreach ( (array) jet_engine()->cpt->data->get_items() as $row ) {
+				$slug = (string) ( $row['slug'] ?? '' );
+				if ( '' === $slug || isset( $types[ $slug ] ) ) {
+					continue;
+				}
+				$edit = jet_engine()->cpt->data->get_item_for_edit( $row['id'] );
+				if ( is_array( $edit ) && ! empty( $edit['meta_fields'] ) ) {
+					$types[ $slug ] = true;
+				}
+			}
+		}
+	} catch ( \Throwable $e ) {
+		return array();
+	}
+	return array_values( array_intersect( array_keys( $types ), (array) $rest ) );
+}
+
+/**
+ * Does this user pass a meta box's user-role conditions?
+ *
+ * JetEngine ships include-user-roles and exclude-user-roles beside the post
+ * conditions Minn already mirrors, in the same $args array, and its
+ * conditions manager short-circuits the whole box when one fails. Excluding a
+ * role is how a site hides a box editorially, so a mirror that reads the post
+ * conditions and not these hands the excluded role both the fields and the
+ * write path.
+ *
+ * A non-empty list counts as active even when active_conditions does not name
+ * it, which is the legacy fallback their own data layer applies to the post
+ * conditions.
+ *
+ * check_conditions() itself is not reusable here: it short-circuits on
+ * ! is_admin(), so it always passes under REST.
+ *
+ * @param array $args   Meta box args.
+ * @param array $active Names from active_conditions.
+ * @return bool
+ */
+function minn_admin_jet_roles_allow( $args, $active ) {
+	$user = wp_get_current_user();
+	if ( ! $user || ! $user->exists() ) {
+		return false;
+	}
+	$roles = array_map( 'strval', (array) $user->roles );
+
+	$include = ( in_array( 'include_roles', $active, true ) || ! empty( $args['include_roles'] ) )
+		? array_map( 'strval', (array) ( $args['include_roles'] ?? array() ) )
+		: array();
+	if ( $include && ! array_intersect( $include, $roles ) ) {
+		return false;
+	}
+
+	$exclude = ( in_array( 'exclude_roles', $active, true ) || ! empty( $args['exclude_roles'] ) )
+		? array_map( 'strval', (array) ( $args['exclude_roles'] ?? array() ) )
+		: array();
+	if ( $exclude && array_intersect( $exclude, $roles ) ) {
+		return false;
+	}
+
+	return true;
+}
+
 function minn_admin_jet_groups_for( $post_type, $post_id = 0 ) {
 	$groups = array();
 	$push   = function ( $label, $raw_fields ) use ( &$groups ) {
@@ -216,6 +301,16 @@ function minn_admin_jet_groups_for( $post_type, $post_id = 0 ) {
 				continue;
 			}
 			$active = isset( $args['active_conditions'] ) ? (array) $args['active_conditions'] : array();
+			// The role conditions are not about the post, so they apply
+			// whether or not one was named. JetEngine's own screen returns
+			// before Cherry_X_Post_Meta is constructed when one fails, which
+			// removes the SAVE hook as well as the render — so honouring them
+			// here has to gate the write path too, and it does: the read
+			// callback, the write callback and the fieldsRoute all resolve
+			// their field set through this function.
+			if ( ! minn_admin_jet_roles_allow( $args, $active ) ) {
+				continue;
+			}
 			if ( $post_id ) {
 				$allowed  = ( in_array( 'allowed_posts', $active, true ) || ! empty( $args['allowed_posts'] ) ) ? array_map( 'intval', (array) ( $args['allowed_posts'] ?? array() ) ) : array();
 				$excluded = ( in_array( 'excluded_posts', $active, true ) || ! empty( $args['excluded_posts'] ) ) ? array_map( 'intval', (array) ( $args['excluded_posts'] ?? array() ) ) : array();
@@ -339,8 +434,23 @@ function minn_admin_jet_value_out( $f, $raw ) {
 }
 
 /**
- * Panel value → the exact stored shape, or null to clear (their save
- * writes false on an empty control; false stores as '').
+ * Panel value → the exact stored shape.
+ *
+ * Two different answers that used to look the same. `false` is a deliberate
+ * clear: the writer emptied the control, and their save writes false for that
+ * (which stores as ''). `null` is a REFUSAL: the submitted value was not one
+ * this field can hold, or not one this person may point it at, and the caller
+ * skips the key so a stored value nobody touched survives.
+ *
+ * Collapsing the two is the bug acf.php documents against. A whole-panel save
+ * submits every field, so a stored value that has drifted outside its field's
+ * current definition — a select whose options were later edited, a number a
+ * form submission wrote as '12 units', a picture since deleted — was wiped for
+ * everyone by someone who never touched it.
+ *
+ * @param array $f     Mapped field.
+ * @param mixed $value Incoming panel value.
+ * @return mixed Stored shape, false to clear, or null to refuse.
  */
 function minn_admin_jet_value_in( $f, $value ) {
 	$jt = $f['_jet'];
@@ -348,7 +458,10 @@ function minn_admin_jet_value_in( $f, $value ) {
 		case 'true_false':
 			return ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 'true' : 'false';
 		case 'number':
-			return ( '' === $value || null === $value ) ? null : ( is_numeric( $value ) ? (string) ( $value + 0 ) : null );
+			if ( '' === $value || null === $value ) {
+				return false;
+			}
+			return is_numeric( $value ) ? (string) ( $value + 0 ) : null;
 		case 'multicheck':
 			$on = array_values( array_intersect( array_map( 'strval', (array) $value ), array_keys( $f['choices'] ) ) );
 			if ( 'checkbox' === $jt['type'] && empty( $jt['is_array'] ) ) {
@@ -358,17 +471,20 @@ function minn_admin_jet_value_in( $f, $value ) {
 				}
 				return $map;
 			}
-			return $on ? $on : null;
+			return $on ? $on : false;
 		case 'select':
 		case 'radio':
 			$value = (string) $value;
-			return ( '' !== $value && isset( $f['choices'][ $value ] ) ) ? $value : null;
+			if ( '' === $value ) {
+				return false;
+			}
+			return isset( $f['choices'][ $value ] ) ? $value : null;
 		case 'date':
 		case 'datetime':
 		case 'time':
 			$value = trim( (string) $value );
 			if ( '' === $value ) {
-				return null;
+				return false;
 			}
 			if ( ! empty( $jt['timestamp'] ) ) {
 				$ts = strtotime( 'time' === $f['type'] ? '1970-01-01 ' . $value . ' UTC' : $value . ' UTC' );
@@ -376,27 +492,40 @@ function minn_admin_jet_value_in( $f, $value ) {
 			}
 			return sanitize_text_field( $value );
 		case 'image':
-			$id = is_array( $value ) ? (int) ( $value['id'] ?? 0 ) : (int) $value;
-			if ( $id <= 0 || 'attachment' !== get_post_type( $id ) ) {
+			$att = minn_admin_attachment_in( $value );
+			if ( null === $att ) {
 				return null;
+			}
+			if ( '' === $att ) {
+				return false;
 			}
 			if ( 'url' === $jt['format'] ) {
-				return (string) wp_get_attachment_url( $id );
+				return (string) wp_get_attachment_url( $att );
 			}
 			if ( 'both' === $jt['format'] ) {
-				return wp_json_encode( array( 'id' => $id, 'url' => wp_get_attachment_url( $id ) ) );
+				return wp_json_encode( array( 'id' => $att, 'url' => wp_get_attachment_url( $att ) ) );
 			}
-			return (string) $id;
+			return (string) $att;
 		case 'gallery':
-			$ids = array();
+			$items = array();
 			foreach ( (array) $value as $it ) {
-				$id = is_array( $it ) ? (int) ( $it['id'] ?? 0 ) : (int) $it;
-				if ( $id > 0 && 'attachment' === get_post_type( $id ) ) {
-					$ids[] = $id;
+				if ( null !== $it && '' !== $it ) {
+					$items[] = $it;
 				}
 			}
-			if ( ! $ids ) {
-				return null;
+			if ( ! $items ) {
+				return false;
+			}
+			$ids = array();
+			foreach ( $items as $it ) {
+				$att = minn_admin_attachment_in( $it );
+				// One picture this person may not attach refuses the whole
+				// write. Dropping it silently would edit the set on their
+				// behalf and lose a picture they never asked to remove.
+				if ( ! is_int( $att ) ) {
+					return null;
+				}
+				$ids[] = $att;
 			}
 			if ( 'both' === $jt['format'] ) {
 				return wp_json_encode( array_map( function ( $id ) {
@@ -406,16 +535,16 @@ function minn_admin_jet_value_in( $f, $value ) {
 			return implode( ',', $ids );
 		case 'wysiwyg':
 			$value = (string) $value;
-			return '' === trim( $value ) ? null : ( function_exists( 'jet_engine_sanitize_wysiwyg' ) ? jet_engine_sanitize_wysiwyg( $value ) : wp_kses_post( $value ) );
+			return '' === trim( $value ) ? false : ( function_exists( 'jet_engine_sanitize_wysiwyg' ) ? jet_engine_sanitize_wysiwyg( $value ) : wp_kses_post( $value ) );
 		case 'textarea':
 			$value = (string) $value;
-			return '' === trim( $value ) ? null : ( function_exists( 'jet_engine_sanitize_textarea' ) ? jet_engine_sanitize_textarea( $value ) : sanitize_textarea_field( $value ) );
+			return '' === trim( $value ) ? false : ( function_exists( 'jet_engine_sanitize_textarea' ) ? jet_engine_sanitize_textarea( $value ) : sanitize_textarea_field( $value ) );
 		case 'color_picker':
 			$value = trim( (string) $value );
-			return '' === $value ? null : sanitize_text_field( $value );
+			return '' === $value ? false : sanitize_text_field( $value );
 		default:
 			$value = (string) $value;
-			return '' === trim( $value ) ? null : wp_kses_post( $value );
+			return '' === trim( $value ) ? false : wp_kses_post( $value );
 	}
 }
 
@@ -438,11 +567,14 @@ function minn_admin_jet_write_values( $post_id, $values ) {
 		}
 		$stored = minn_admin_jet_value_in( $map[ $name ], $value );
 		if ( null === $stored ) {
+			continue; // refused: leave whatever is stored alone
+		}
+		if ( false === $stored ) {
 			// Their empty-control write: update_post_meta( id, key, false ).
 			update_post_meta( $post_id, $name, false );
-		} else {
-			update_post_meta( $post_id, $name, $stored );
+			continue;
 		}
+		update_post_meta( $post_id, $name, $stored );
 	}
 }
 
@@ -507,7 +639,13 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	foreach ( get_post_types( array( 'show_in_rest' => true ), 'names' ) as $type ) {
+	// Only the post types JetEngine actually stores fields for. Registering on
+	// every show_in_rest type put the whole field set on the wp/v2 response of
+	// types that have none, which widened what an Application Password issued
+	// to an integration reaches for no benefit. The role and post conditions
+	// are enforced per request inside the callbacks, not here — the current
+	// user is the wrong thing to shape a route registration around.
+	foreach ( minn_admin_jet_field_post_types() as $type ) {
 		register_rest_field( $type, 'minn_jet', array(
 			'get_callback'    => function ( $obj ) {
 				$id = isset( $obj['id'] ) ? (int) $obj['id'] : 0;

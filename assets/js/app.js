@@ -38866,9 +38866,18 @@
 	// root: the block root receiving the paste — the body, or a container
 	// slot (slots are mini-bodies; the bracket markers and list lift scan
 	// within the root so a slot paste can't touch its neighbors).
+	// The payload arrives from producers that are unescaped by design —
+	// islandHtml and editableSegmentHtml both hand back a block's stored
+	// markup verbatim, because the serializers read it back out of the DOM at
+	// save and neutralising it there would rewrite bytes the writer never
+	// touched. Parking is therefore the caller's job, and this is the sink
+	// rtNeutralizedHtml exists for. Doing it HERE rather than at each caller
+	// covers the two clipboard branches and pasteInsert's block path at once;
+	// rtParkName leaves an already-parked attribute alone, so a payload that
+	// was parked upstream is not double-prefixed.
 	function pasteBlocksInsert( root, blocksHtml ) {
 		const BKT = '<p data-minn-bkt="1"><br></p>';
-		document.execCommand( 'insertHTML', false, BKT + blocksHtml + BKT );
+		document.execCommand( 'insertHTML', false, BKT + rtNeutralizedHtml( blocksHtml ) + BKT );
 		const sel = window.getSelection();
 		$$( 'p[data-minn-bkt]', root ).forEach( ( p ) => {
 			p.removeAttribute( 'data-minn-bkt' );

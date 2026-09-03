@@ -39,6 +39,14 @@ if (
 	// start here on presence alone. It is put back below when the session turns
 	// out not to be a real one.
 	//
+	// So the entry condition is forgeable and cannot be made otherwise: every
+	// test available before pluggable.php loads reads bytes the client sent.
+	// What that buys an anonymous caller is bounded to their OWN request and
+	// to one thing: E_DEPRECATED raised while plugins load is not written to
+	// the log. plugins_loaded priority 0 is the first hook after pluggable.php
+	// exists, and the restore below runs there, so the window cannot be made
+	// smaller without giving up the workaround it exists for.
+	//
 	// LOGGED_IN_COOKIE is defined by wp_cookie_constants(), which wp-settings.php
 	// runs AFTER must-use and network-activated plugins are already included.
 	// This file is one of those whenever Minn is turned on network-wide, so the
@@ -47,7 +55,17 @@ if (
 	// name wp_cookie_constants() builds minus its COOKIEHASH suffix, which is
 	// all a presence test needs.
 	&& ! empty( $_COOKIE[ defined( 'LOGGED_IN_COOKIE' ) ? LOGGED_IN_COOKIE : 'wordpress_logged_in' ] )
-	&& defined( 'WP_PLUGIN_DIR' ) && file_exists( WP_PLUGIN_DIR . '/breakdance/plugin.php' )
+	// Breakdance has to be ACTIVE, not merely sitting in the plugins folder:
+	// a deactivated copy installs no exception handler, so there is nothing
+	// to work around and no reason to let the request shape reach this at
+	// all. Options are loaded before plugins are included, so this costs
+	// nothing beyond the alloptions cache. Both activation shapes count,
+	// since a network-activated Breakdance is exactly the case where this
+	// file is included before wp_cookie_constants() has run.
+	&& (
+		in_array( 'breakdance/plugin.php', (array) get_option( 'active_plugins', array() ), true )
+		|| ( is_multisite() && array_key_exists( 'breakdance/plugin.php', (array) get_site_option( 'active_sitewide_plugins', array() ) ) )
+	)
 ) {
 	$minn_admin_reporting_was = error_reporting();
 	error_reporting( $minn_admin_reporting_was & ~E_DEPRECATED & ~E_USER_DEPRECATED );
@@ -132,6 +150,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/jet-reviews.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/jet-theme-core.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/jet-search.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/jet-smart-filters.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/shared-media.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/shared-links.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/shared-meta.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/acf.php';

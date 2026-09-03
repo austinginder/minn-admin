@@ -68,7 +68,14 @@ class Minn_Admin_Updater {
 		// http_request_host_is_external => __return_true removed the
 		// internal-address protection wp_safe_remote_get() relies on, turning a
 		// blocked SSRF in any other plugin into a reachable one.
-		if ( defined( 'MINN_ADMIN_DEV_MODE' ) && MINN_ADMIN_DEV_MODE ) {
+		// And refuse it outright on a production site. The sha256 pin is only
+		// as strong as the TLS on the manifest that publishes it, so a
+		// constant left defined in a live wp-config.php is the one place in
+		// this chain where controlling the network yields code execution.
+		// A dev site is where this flag belongs, and the environment already
+		// says which one it is.
+		if ( defined( 'MINN_ADMIN_DEV_MODE' ) && MINN_ADMIN_DEV_MODE
+			&& 'production' !== wp_get_environment_type() ) {
 			add_filter( 'http_request_args', array( $this, 'dev_mode_request_args' ), 10, 2 );
 		}
 		$this->plugin_slug   = 'minn-admin';
@@ -87,14 +94,19 @@ class Minn_Admin_Updater {
 	}
 
 	/**
-	 * Relax TLS for THIS plugin's own requests only, under dev mode.
+	 * Relax TLS for THIS plugin's own MANIFEST request only, under dev mode.
+	 *
+	 * The package download keeps verification on even here. A dev site needs
+	 * to reach a manifest host whose certificate does not validate; it never
+	 * needs to install a zip nobody vouched for, and that is the leg that ends
+	 * in executable code under wp-content/plugins.
 	 *
 	 * @param array  $args Request args.
 	 * @param string $url  Request URL.
 	 * @return array
 	 */
 	public function dev_mode_request_args( $args, $url ) {
-		if ( self::MANIFEST_URL === $url || $this->is_our_package_url( $url ) ) {
+		if ( self::MANIFEST_URL === $url ) {
 			$args['sslverify'] = false;
 		}
 		return $args;
