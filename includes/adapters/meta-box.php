@@ -240,6 +240,16 @@ function minn_admin_meta_box_write_values( $post_id, $values ) {
 			// Meta Box checkbox/switch expect 1 or empty/0.
 			$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
 		}
+		if ( 'url' === $type && '' !== trim( (string) $value ) ) {
+			// The house rule every other URL writer applies: an address that
+			// runs code instead of going somewhere is refused, and refusing
+			// it leaves the stored address alone.
+			$clean = minn_admin_url_clean( $value );
+			if ( null === $clean ) {
+				continue;
+			}
+			$value = $clean;
+		}
 		// Empty string on a clearable select: delete the meta so the field is truly empty.
 		if ( ( '' === $value || null === $value ) && function_exists( 'rwmb_delete_meta' ) ) {
 			rwmb_delete_meta( $post_id, $key );

@@ -1829,6 +1829,22 @@ function minn_admin_seo_shows_for_type( $plugin, $post_type ) {
 			}
 			return true;
 		}
+		// SiteSEO is the SEOPress fork, and Minn already builds it through the
+		// same provider factory, so it carries the same switch under its own
+		// option name. It was the one provider here whose sibling shape was
+		// known and still unasked.
+		if ( 'SiteSEO' === $name ) {
+			$titles = get_option( 'siteseo_titles_option_name' );
+			$key    = 'siteseo_titles_single_titles';
+			if ( is_array( $titles ) && isset( $titles[ $key ][ $post_type ]['enable'] ) ) {
+				return (bool) $titles[ $key ][ $post_type ]['enable'];
+			}
+			return true;
+		}
+		// SureRank and Squirrly ship no per-post-type metabox switch, so there
+		// is nothing to mirror: their controls appear on every type that
+		// supports the editor. Recorded here so the next sweep does not read
+		// their absence as an oversight.
 	} catch ( \Throwable $e ) {
 		return true; // their internals moved; behave as before
 	}
@@ -1920,6 +1936,13 @@ add_action( 'rest_api_init', function () {
 				if ( ! $allowed ) {
 					return new stdClass();
 				}
+			}
+			// And the other half of the same question the write path asks:
+			// turning the SEO controls off for a content type hides them from
+			// wp-admin for everybody, so the values should not read back on
+			// that type either.
+			if ( ! minn_admin_seo_shows_for_type( $plugin, get_post_type( $id ) ) ) {
+				return new stdClass();
 			}
 			return call_user_func( $plugin['read'], $id );
 		},

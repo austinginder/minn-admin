@@ -355,6 +355,16 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 			$data[ $key ] = '';
 			continue;
 		}
+		if ( 'url' === $panel_type ) {
+			// The house rule every other URL writer applies: an address that
+			// runs code instead of going somewhere is refused, and refusing
+			// it leaves the stored address alone.
+			$clean = minn_admin_url_clean( $value );
+			if ( null === $clean ) {
+				continue;
+			}
+			$value = $clean;
+		}
 		$data[ $key ] = $value;
 	}
 	if ( ! $data ) {

@@ -362,11 +362,17 @@ add_action( 'rest_api_init', function () {
 			// created_at rides the DB session clock (UTC on managed hosts, local on
 			// dev): shift the window bound the same way the list shifts rows.
 			$chart = minn_admin_chart_days();
-			$chart_since = gmdate( 'Y-m-d H:i:s', strtotime( minn_admin_chart_utc_since() . ' UTC' ) + ( function_exists( 'minn_admin_db_utc_offset' ) ? minn_admin_db_utc_offset() : 0 ) );
-			$chart_rows  = $wpdb->get_results( $wpdb->prepare( "SELECT created_at FROM {$table} WHERE status <> 'trash' AND created_at >= %s", $chart_since ) ); // phpcs:ignore
+			$db_offset   = function_exists( 'minn_admin_db_utc_offset' ) ? (int) minn_admin_db_utc_offset() : 0;
+			$chart_since = gmdate( 'Y-m-d H:i:s', strtotime( minn_admin_chart_utc_since() . ' UTC' ) + $db_offset );
+			// Group onto the site's day in SQL rather than fetching a row per
+			// entry: this table is filled by unauthenticated submissions, so a
+			// per-row fetch has no bound. The column is on the DB session
+			// clock, so come back to UTC before applying the site's offset.
+			$site_offset = (int) round( (float) get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
+			$chart_day   = sprintf( 'DATE(created_at + INTERVAL %d SECOND)', $site_offset - $db_offset );
+			$chart_rows  = $wpdb->get_results( $wpdb->prepare( "SELECT {$chart_day} AS d, COUNT(*) AS c FROM {$table} WHERE status <> 'trash' AND created_at >= %s GROUP BY d", $chart_since ) ); // phpcs:ignore
 			foreach ( (array) $chart_rows as $cr ) {
-				$iso = function_exists( 'minn_admin_db_local_to_utc_iso' ) ? minn_admin_db_local_to_utc_iso( $cr->created_at ) : '';
-				minn_admin_chart_bump( $chart, $iso ? wp_date( 'Y-m-d', strtotime( $iso ) ) : '' );
+				minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
 			}
 			return rest_ensure_response( array(
 				'rows'    => array(

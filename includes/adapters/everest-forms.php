@@ -323,10 +323,11 @@ function minn_admin_everest_status_model() {
 	}
 	// date_created is UTC: bucket each row onto the site's day in PHP.
 	$chart = minn_admin_chart_days();
-	$chart_sql  = "SELECT date_created, status FROM {$table} WHERE status IN ('publish','spam') AND date_created >= %s{$clause}"; // phpcs:ignore
+	$chart_day  = minn_admin_chart_utc_day_sql( 'date_created' );
+	$chart_sql  = "SELECT {$chart_day} AS d, status, COUNT(*) AS c FROM {$table} WHERE status IN ('publish','spam') AND date_created >= %s{$clause} GROUP BY d, status"; // phpcs:ignore
 	$chart_rows = $wpdb->get_results( $wpdb->prepare( $chart_sql, array_merge( array( minn_admin_chart_utc_since() ), $params ) ) ); // phpcs:ignore
 	foreach ( (array) $chart_rows as $cr ) {
-		minn_admin_chart_bump( $chart, minn_admin_chart_utc_day( $cr->date_created ), 'spam' === (string) $cr->status );
+		minn_admin_chart_bump( $chart, (string) $cr->d, 'spam' === (string) $cr->status, (int) $cr->c );
 	}
 	return array(
 		'rows'    => array(

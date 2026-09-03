@@ -44,6 +44,27 @@ function minn_admin_chart_utc_since( $n = 14 ) {
 	}
 }
 
+/**
+ * SQL that maps a UTC datetime column onto the site's day, for GROUP BY.
+ *
+ * The PHP bucketer below is exact, but it needs one row per item, and these
+ * tables are filled by unauthenticated form submissions — a spam wave turned
+ * a status card into a memory-exhaustion 500. Grouping in SQL returns at most
+ * a row per day per status however large the table gets.
+ *
+ * It uses the site's CURRENT offset, so an entry inside the one-hour band a
+ * DST change moves can land on the neighbouring day. That is the same
+ * approximation the site-clock siblings already make by grouping on DATE(),
+ * and it is worth a bounded query.
+ *
+ * @param string $col Adapter-authored column name (never request input).
+ * @return string
+ */
+function minn_admin_chart_utc_day_sql( $col ) {
+	$offset = (int) round( (float) get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
+	return sprintf( 'DATE(%s + INTERVAL %d SECOND)', $col, $offset );
+}
+
 /** The site day (Y-m-d) a UTC MySQL datetime falls on; '' when unparsable. */
 function minn_admin_chart_utc_day( $mysql_utc ) {
 	$ts = strtotime( trim( (string) $mysql_utc ) . ' UTC' );

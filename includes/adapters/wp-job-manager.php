@@ -41,10 +41,39 @@ function minn_admin_wpjm_raw_fields() {
  *
  * @return array{fields: array, locked: int}
  */
-function minn_admin_wpjm_mapped_fields() {
+/**
+ * WPJM's own per-field VIEW authorization, asked once and the same way
+ * everywhere.
+ *
+ * Their schema attaches auth_view_callback beside auth_edit_callback, and a
+ * site using their view-capability setting hides an applicant's address and
+ * the salary behind it. Reading was taught to ask; the field LIST was not, so
+ * the panel still advertised the field with an empty value and an ordinary
+ * save wrote that empty value back over what it had just refused to show.
+ *
+ * @param array  $f       Field schema.
+ * @param string $key     Meta key.
+ * @param int    $post_id Listing id, 0 when asking about the type.
+ * @return bool
+ */
+function minn_admin_wpjm_can_view_field( $f, $key, $post_id = 0 ) {
+	if ( ! isset( $f['auth_view_callback'] ) || ! is_callable( $f['auth_view_callback'] ) ) {
+		return true;
+	}
+	try {
+		return (bool) call_user_func( $f['auth_view_callback'], false, $key, (int) $post_id, get_current_user_id() );
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
+function minn_admin_wpjm_mapped_fields( $post_id = 0 ) {
 	$fields = array();
 	$locked = 0;
 	foreach ( minn_admin_wpjm_raw_fields() as $key => $f ) {
+		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) ) {
+			continue;
+		}
 		$type  = isset( $f['auth_edit_field_type'] ) ? (string) $f['auth_edit_field_type'] : ( isset( $f['type'] ) ? (string) $f['type'] : 'text' );
 		$label = isset( $f['label'] ) ? wp_strip_all_tags( (string) $f['label'] ) : $key;
 		$out   = array( 'name' => $key, 'label' => $label );
@@ -92,16 +121,8 @@ function minn_admin_wpjm_read_values( $post_id ) {
 		// the other half, which decides whether a listing's applicant address
 		// and salary are readable on a site using their view-capability
 		// setting.
-		if ( isset( $f['auth_view_callback'] ) && is_callable( $f['auth_view_callback'] ) ) {
-			$viewable = false;
-			try {
-				$viewable = (bool) call_user_func( $f['auth_view_callback'], false, $key, $post_id, get_current_user_id() );
-			} catch ( \Throwable $e ) {
-				$viewable = false;
-			}
-			if ( ! $viewable ) {
-				continue;
-			}
+		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) ) {
+			continue;
 		}
 		$val = get_post_meta( $post_id, $key, true );
 		$out[ $key ] = 'checkbox' === $type ? ( (int) $val > 0 ) : ( is_scalar( $val ) ? (string) $val : '' );
@@ -119,7 +140,13 @@ function minn_admin_wpjm_write_values( $post_id, $values ) {
 		if ( ! isset( $schema[ $key ] ) ) {
 			continue;
 		}
-		$f    = $schema[ $key ];
+		$f = $schema[ $key ];
+		// A field withheld from this caller is never written by them: they
+		// were shown no value for it, so whatever they submitted is not an
+		// edit, it is the empty box the panel drew.
+		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) ) {
+			continue;
+		}
 		$type = isset( $f['auth_edit_field_type'] ) ? (string) $f['auth_edit_field_type'] : ( isset( $f['type'] ) ? (string) $f['type'] : 'text' );
 		switch ( $type ) {
 			case 'checkbox':
@@ -242,7 +269,7 @@ add_action( 'rest_api_init', function () {
 					return new WP_Error( 'rest_forbidden', __( 'You cannot edit listings.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 			}
-			$mapped = minn_admin_wpjm_mapped_fields();
+			$mapped = minn_admin_wpjm_mapped_fields( $post_id );
 			return rest_ensure_response( array(
 				'groups' => array(
 					array( 'group' => __( 'Listing details', 'minn-admin' ), 'fields' => $mapped['fields'], 'locked' => $mapped['locked'] ),

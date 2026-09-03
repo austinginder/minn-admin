@@ -245,14 +245,16 @@ function minn_admin_wpforms_status_model() {
 	if ( $spam ) {
 		$hint .= ', ' . number_format_i18n( $spam ) . ' spam';
 	}
-	// date is UTC: bucket each row onto the site's day in PHP.
+	// date is UTC: group onto the site's day in SQL. Entries arrive from
+	// unauthenticated submissions, so a per-row fetch is unbounded.
 	$chart = minn_admin_chart_days();
+	$chart_day  = minn_admin_chart_utc_day_sql( 'date' );
 	$chart_rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT date, status FROM {$table} WHERE status IN ('','spam') AND date >= %s{$scope}", // phpcs:ignore
+		"SELECT {$chart_day} AS d, status, COUNT(*) AS c FROM {$table} WHERE status IN ('','spam') AND date >= %s{$scope} GROUP BY d, status", // phpcs:ignore
 		minn_admin_chart_utc_since()
 	) );
 	foreach ( (array) $chart_rows as $cr ) {
-		minn_admin_chart_bump( $chart, minn_admin_chart_utc_day( $cr->date ), 'spam' === (string) $cr->status );
+		minn_admin_chart_bump( $chart, (string) $cr->d, 'spam' === (string) $cr->status, (int) $cr->c );
 	}
 	return array(
 		'rows'    => array(

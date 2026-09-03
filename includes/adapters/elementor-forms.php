@@ -154,12 +154,13 @@ function minn_admin_elementor_forms_status_model() {
 	// created_at_gmt is UTC: bucket each row onto the site's day in PHP.
 	$chart = minn_admin_chart_days();
 	if ( $has ) {
+		$chart_day  = minn_admin_chart_utc_day_sql( 'created_at_gmt' );
 		$chart_rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT created_at_gmt FROM `{$table}` WHERE status != 'trash' AND created_at_gmt >= %s", // phpcs:ignore
+			"SELECT {$chart_day} AS d, COUNT(*) AS c FROM `{$table}` WHERE status != 'trash' AND created_at_gmt >= %s GROUP BY d", // phpcs:ignore
 			minn_admin_chart_utc_since()
 		) );
 		foreach ( (array) $chart_rows as $cr ) {
-			minn_admin_chart_bump( $chart, minn_admin_chart_utc_day( $cr->created_at_gmt ) );
+			minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
 		}
 	}
 	return array(

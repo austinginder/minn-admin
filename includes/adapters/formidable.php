@@ -379,9 +379,10 @@ add_action( 'rest_api_init', function () {
 			$forms = count( minn_admin_formidable_titles() );
 			// created_at is UTC: bucket each row onto the site's day in PHP.
 			$chart = minn_admin_chart_days();
-			$chart_rows = $wpdb->get_results( $wpdb->prepare( "SELECT created_at FROM {$items_t} WHERE is_draft = 0 AND parent_item_id = 0 AND created_at >= %s", minn_admin_chart_utc_since() ) ); // phpcs:ignore
+			$chart_day  = minn_admin_chart_utc_day_sql( 'created_at' );
+			$chart_rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$chart_day} AS d, COUNT(*) AS c FROM {$items_t} WHERE is_draft = 0 AND parent_item_id = 0 AND created_at >= %s GROUP BY d", minn_admin_chart_utc_since() ) ); // phpcs:ignore
 			foreach ( (array) $chart_rows as $cr ) {
-				minn_admin_chart_bump( $chart, minn_admin_chart_utc_day( $cr->created_at ) );
+				minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
 			}
 			return rest_ensure_response( array(
 				'rows'    => array(
