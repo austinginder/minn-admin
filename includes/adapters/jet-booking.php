@@ -323,7 +323,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'commerce',
 		'sub'        => 'JetBooking',
 		'icon'       => 'calendar',
-		'cap'        => 'read',
+		// The routes gate on JetBooking's own capability; this is nav gating
+		// only, and it sits on a surface holding customer contact details, so
+		// it says the floor for reaching Minn at all rather than 'read'.
+		'cap'        => 'edit_posts',
 		'status'     => array( 'route' => 'minn-admin/v1/jet-booking/status' ),
 		'collection' => array(
 			'viewLabel' => __( 'Bookings', 'minn-admin' ),

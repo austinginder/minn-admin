@@ -39800,7 +39800,14 @@
 				const ins = ( B.blockForms[ name ] || {} ).insert;
 				if ( ! ins || ! ins.template ) return;
 				const ns = name.split( '/' )[ 0 ];
-				items.push( [ ins.icon || '❖', ins.label || name.split( '/' ).pop(), { block: name, template: String( ins.template ) }, overBudget( ns ), ns ] );
+				// Same rule as the editor-commands registry: a Lucide key becomes
+				// an icon, anything else is escaped rather than trusted as
+				// markup. Both slots land in innerHTML, and only one of them
+				// was checking.
+				const insGlyph = ( ins.icon && /^[a-z][a-z0-9-]*$/i.test( ins.icon ) )
+					? icon( ins.icon )
+					: ( ins.icon ? esc( String( ins.icon ) ) : '❖' );
+				items.push( [ insGlyph, ins.label || name.split( '/' ).pop(), { block: name, template: String( ins.template ) }, overBudget( ns ), ns ] );
 			} );
 			// Every other dynamic third-party block is insertable with no
 			// adapter — a self-closing comment is always valid saved markup

@@ -645,7 +645,13 @@ class Minn_Admin_REST {
 		$edit_user_gate = function ( WP_REST_Request $request ) {
 			$url = $request->get_url_params();
 			$uid = isset( $url['id'] ) ? (int) $url['id'] : 0;
-			return is_user_logged_in() && $uid > 0 && current_user_can( 'edit_user', $uid );
+			// edit_user short-circuits to true against your own id, so without
+			// the edit_posts floor these routes admitted a Subscriber writing
+			// to their own account, below the bar for using Minn at all. The
+			// /me twins of these same handlers require it.
+			return is_user_logged_in() && $uid > 0
+				&& current_user_can( 'edit_posts' )
+				&& current_user_can( 'edit_user', $uid );
 		};
 		register_rest_route(
 			self::NS,
@@ -6335,8 +6341,13 @@ Please click the following link to confirm the invite:
 	 * Destroy a single session by its verifier hash.
 	 */
 	public static function destroy_session( WP_REST_Request $request ) {
-		$uid      = self::target_user_id( $request );
-		$verifier = $request['verifier'];
+		$uid = self::target_user_id( $request );
+		// The URL segment, not the parameter chain: $request['verifier'] also
+		// resolves from the body and the query string, so a caller could aim
+		// the route's own regex at one value and this at another. Same rule as
+		// target_user_id() above.
+		$url      = $request->get_url_params();
+		$verifier = isset( $url['verifier'] ) ? (string) $url['verifier'] : '';
 		$tokens   = get_user_meta( $uid, 'session_tokens', true );
 		if ( ! is_array( $tokens ) || ! isset( $tokens[ $verifier ] ) ) {
 			return new WP_Error( 'not_found', __( 'Session not found', 'minn-admin' ), array( 'status' => 404 ) );

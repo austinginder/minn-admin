@@ -325,26 +325,35 @@ class Minn_Admin_Updater {
 			return $response;
 		}
 
+		// A short or hand-edited manifest should degrade, not warn its way
+		// through the plugin-details modal. update() and verify_package()
+		// already fail closed; this is the read that did not.
+		$field = function ( $key, $default = '' ) use ( $remote ) {
+			return isset( $remote->$key ) ? $remote->$key : $default;
+		};
+
 		$response                 = new \stdClass();
-		$response->name           = $remote->name;
-		$response->slug           = $remote->slug;
-		$response->version        = $remote->version;
-		$response->tested         = $remote->tested;
-		$response->requires       = $remote->requires;
-		$response->author         = $remote->author;
-		$response->author_profile = $remote->author_profile;
-		$response->homepage       = $remote->homepage;
+		$response->name           = $field( 'name' );
+		$response->slug           = $field( 'slug' );
+		$response->version        = $field( 'version' );
+		$response->tested         = $field( 'tested' );
+		$response->requires       = $field( 'requires' );
+		$response->author         = $field( 'author' );
+		$response->author_profile = $field( 'author_profile' );
+		$response->homepage       = $field( 'homepage' );
 		// The same host allowlist update() applies. This is the field core's
 		// installer downloads from, and a URL that fails the check would also
 		// slip past verify_package(), which declines anything it does not
 		// recognise as ours: the package hash would be skipped, not enforced.
-		if ( $this->is_our_package_url( $remote->download_url ) ) {
-			$response->download_link = $remote->download_url;
-			$response->trunk         = $remote->download_url;
+		if ( $this->is_our_package_url( $field( 'download_url' ) ) ) {
+			$response->download_link = $field( 'download_url' );
+			$response->trunk         = $field( 'download_url' );
 		}
-		$response->requires_php   = $remote->requires_php;
-		$response->last_updated   = $remote->last_updated;
-		$response->sections       = array( 'description' => $remote->sections->description );
+		$response->requires_php   = $field( 'requires_php' );
+		$response->last_updated   = $field( 'last_updated' );
+		$response->sections       = array(
+			'description' => isset( $remote->sections->description ) ? $remote->sections->description : '',
+		);
 
 		if ( ! empty( $remote->banners ) ) {
 			$response->banners = array(

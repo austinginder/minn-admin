@@ -96,8 +96,13 @@ function minn_admin_localize_images( $template, $url_re = null ) {
 				'fields'         => 'ids',
 				'meta_query'     => array(
 					array(
+						// The trailing segment, not any substring. WP_Meta_Query
+						// wraps a bare LIKE as %value%, so "hero.jpg" also
+						// matched "client-hero.jpg" and "hero.jpg.webp" anywhere
+						// in the library, and the design silently pointed at
+						// somebody else's picture.
 						'key'     => '_wp_attached_file',
-						'value'   => $basename,
+						'value'   => '/' . $basename,
 						'compare' => 'LIKE',
 					),
 				),

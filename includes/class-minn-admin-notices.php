@@ -494,7 +494,20 @@ class Minn_Admin_Notices {
 		$site = (string) ( wp_parse_url( home_url(), PHP_URL_HOST ) ?: '' );
 		// hrefs are absolutized against home_url()/admin_url() before this
 		// runs, so a genuine relative admin path already carries the site host.
-		return '' !== $host && '' !== $site && 0 === strcasecmp( $host, $site );
+		// Scheme and port count: this classification is what decides whether
+		// the client appends the capture nonce to a URL, and an http:// or
+		// off-port twin of this host is a different browser origin.
+		if ( '' === $host || '' === $site || 0 !== strcasecmp( $host, $site ) ) {
+			return false;
+		}
+		$scheme = strtolower( (string) ( wp_parse_url( $url, PHP_URL_SCHEME ) ?: '' ) );
+		$mine   = strtolower( (string) ( wp_parse_url( home_url(), PHP_URL_SCHEME ) ?: '' ) );
+		if ( '' !== $scheme && '' !== $mine && $scheme !== $mine ) {
+			return false;
+		}
+		$port     = wp_parse_url( $url, PHP_URL_PORT );
+		$own_port = wp_parse_url( home_url(), PHP_URL_PORT );
+		return (int) $port === (int) $own_port;
 	}
 
 	private static function is_admin_dismiss_url( $url, $label = '' ) {

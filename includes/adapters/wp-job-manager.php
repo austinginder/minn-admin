@@ -87,6 +87,22 @@ function minn_admin_wpjm_read_values( $post_id ) {
 		if ( ! in_array( $type, array( 'text', 'file', 'checkbox', 'select' ), true ) ) {
 			continue;
 		}
+		// WPJM attaches two callbacks per field and their own REST layer asks
+		// both. The write path below already asks auth_edit_callback; this is
+		// the other half, which decides whether a listing's applicant address
+		// and salary are readable on a site using their view-capability
+		// setting.
+		if ( isset( $f['auth_view_callback'] ) && is_callable( $f['auth_view_callback'] ) ) {
+			$viewable = false;
+			try {
+				$viewable = (bool) call_user_func( $f['auth_view_callback'], false, $key, $post_id, get_current_user_id() );
+			} catch ( \Throwable $e ) {
+				$viewable = false;
+			}
+			if ( ! $viewable ) {
+				continue;
+			}
+		}
 		$val = get_post_meta( $post_id, $key, true );
 		$out[ $key ] = 'checkbox' === $type ? ( (int) $val > 0 ) : ( is_scalar( $val ) ? (string) $val : '' );
 	}

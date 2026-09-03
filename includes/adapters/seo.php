@@ -1066,7 +1066,21 @@ function minn_admin_seo_squirrly_provider() {
 		return SQ_Classes_ObjController::getClass( 'SQ_Models_Api_Seo' );
 	};
 	return array(
-		'name'   => 'Squirrly SEO',
+		'name'    => 'Squirrly SEO',
+		// Their own snippet gate. Squirrly grants sq_manage_snippet to every
+		// role holding edit_posts, so on a stock install this agrees with the
+		// route anyway; it only speaks up on a site that stripped the cap,
+		// which is what the other six predicates are for.
+		'can_edit' => function () {
+			if ( ! class_exists( 'SQ_Classes_Helpers_Tools' ) || ! method_exists( 'SQ_Classes_Helpers_Tools', 'userCan' ) ) {
+				return true;
+			}
+			try {
+				return (bool) SQ_Classes_Helpers_Tools::userCan( 'sq_manage_snippet' );
+			} catch ( \Throwable $e ) {
+				return true;
+			}
+		},
 		'fields' => function () {
 			return array(
 				array(
@@ -1892,6 +1906,20 @@ add_action( 'rest_api_init', function () {
 			$id = isset( $post_arr['id'] ) ? (int) $post_arr['id'] : 0;
 			if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
 				return new stdClass();
+			}
+			// The same vendor predicate the write path asks. A role the SEO
+			// plugin hides its metabox from should not read the values back
+			// either, and reading was the half that never asked.
+			if ( isset( $plugin['can_edit'] ) && is_callable( $plugin['can_edit'] ) ) {
+				$allowed = false;
+				try {
+					$allowed = (bool) call_user_func( $plugin['can_edit'], $id );
+				} catch ( \Throwable $e ) {
+					$allowed = false;
+				}
+				if ( ! $allowed ) {
+					return new stdClass();
+				}
 			}
 			return call_user_func( $plugin['read'], $id );
 		},

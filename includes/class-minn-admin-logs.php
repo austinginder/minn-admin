@@ -167,7 +167,7 @@ class Minn_Admin_Logs {
 	 */
 	public static function read( $id ) {
 		$sources = self::sources();
-		if ( ! isset( $sources[ $id ] ) || ! is_callable( $sources[ $id ]['read'] ) ) {
+		if ( ! isset( $sources[ $id ]['read'] ) || ! is_callable( $sources[ $id ]['read'] ) ) {
 			return new WP_Error( 'unknown_log', __( 'Unknown log source.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		try {
