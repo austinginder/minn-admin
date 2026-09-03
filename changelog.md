@@ -2,22 +2,9 @@
 
 ## **v0.38.0** - September 3 2026
 
-The Crocoblock release. Seven Jet plugins that kept their daily work behind
-their own screens now have it in Minn: JetEngine's meta boxes, options pages and
-post types where Minn already puts that kind of thing, JetBooking and
-JetAppointments in the Bookings inbox, and Custom Content Types, JetReviews,
-JetThemeCore parts, JetSearch and JetSmartFilters each over the plugin's own
-tables and code. One membership key pasted on the Licenses tab covers the whole
-pack.
+The Crocoblock release. Seven Jet plugins that kept their daily work behind their own screens now have it in Minn: JetEngine's meta boxes, options pages and post types where Minn already puts that kind of thing, JetBooking and JetAppointments in the Bookings inbox, and Custom Content Types, JetReviews, JetThemeCore parts, JetSearch and JetSmartFilters each over the plugin's own tables and code. One membership key pasted on the Licenses tab covers the whole pack.
 
-Long jobs stopped holding the page. Backups and exports from five engines run in
-the background behind a progress pill in the top bar that survives a reload and
-has a Stop, and every backup row can now be downloaded through a door WordPress
-already has. Design's Styles tab grew from a row of swatches into the place a
-site's look is actually edited, with a specimen that follows what you type, a
-contrast check and a history of who changed what. And a security pass over
-v0.37.0 found one thing that was plainly broken and a set of gates that were not
-asking the right question; both are put right here.
+Long jobs stopped holding the page. Backups and exports from five engines run in the background behind a progress pill in the top bar that survives a reload and has a Stop, and every backup row can now be downloaded through a door WordPress already has. Design's Styles tab grew from a row of swatches into the place a site's look is actually edited, with a specimen that follows what you type, a contrast check and a history of who changed what. And a security pass over v0.37.0 found one thing that was plainly broken and a set of gates that were not asking the right question; both are put right here.
 
 ### Added
 
@@ -40,143 +27,39 @@ asking the right question; both are put right here.
 
 * **Row dialogs read like cards.** Opening a row that has no purpose-built detail (a backup archive, a filter, a suggestion) used to print the raw record: the encoded id as the title, field keys as labels, a URL spelled out across the dialog. The row's own name now leads with the surface underneath, labels read as words, links are links, timestamps show how long ago with the full date beside, and long values wrap instead of widening the dialog.
 * **The sidebar's Commerce and Tools groups have an order.** Commerce leads with the store's daily four (Orders, Products, Customers, Coupons) and lists the add-on kinds after them by name, so Bookings, Gift cards and Subscriptions read the same on every site whatever mix it runs. Tools reads in three bands: what shapes the site (Templates, Field Groups, Site Options, Snippets), what routes visitors and mail through it (Search, Redirects, Email), then what keeps it running (Activity Log, Backups, Migrate, Performance, Diagnostics); a surface Minn does not know lands between the second and third bands. Gift cards also stop sharing the Products icon.
-* **Error reporting is always put back after the Breakdance workaround.** A
-  fatal, or a request that legitimately used it, could leave deprecation
-  notices switched off for the rest of that request.
-* **Two more descriptor routes are checked** before the app is pointed at
-  them: a status card's route and a collection's import route.
-* **The updater is pickier about where an update may come from.** It now names
-  the published release rather than the repository, which is a meaningful
-  difference on GitHub.
-* **Copying a post no longer builds objects out of stored values.** Duplicating
-  a post decodes what plugins saved on it, and that decode no longer constructs
-  anything.
+* **Error reporting is always put back after the Breakdance workaround.** A fatal, or a request that legitimately used it, could leave deprecation notices switched off for the rest of that request.
+* **Two more descriptor routes are checked** before the app is pointed at them: a status card's route and a collection's import route.
+* **The updater is pickier about where an update may come from.** It now names the published release rather than the repository, which is a meaningful difference on GitHub.
+* **Copying a post no longer builds objects out of stored values.** Duplicating a post decodes what plugins saved on it, and that decode no longer constructs anything.
 
 ### Fixed
 
-* **JetEngine content type rows are read without building anything out of what
-  they hold.** A row in a custom content type can be created by a form on the
-  public side of the site, and Minn decoded the values stored in one in a way
-  that could construct whatever a stored value named. Opening the list now only
-  ever produces plain values, which is how JetEngine's own code reads the same
-  rows.
-* **Two Jet screens ask the Jet plugins who may open them.** Theme parts and
-  smart filters were open to anyone who can write a post, on the strength of a
-  check inside each plugin that only ever runs behind a stricter one. Both now
-  ask for what Crocoblock's own screens ask for, so an editor or a contributor
-  no longer reaches either. A smart filter carries the query a listing runs on,
-  so this is the difference between someone being able to stop the site's
-  filtering working and not.
-* **Bricks settings stay with the administrators.** Builder access is granted to
-  editors on plenty of sites, and it is a license to design pages rather than to
-  change what the theme does everywhere. These settings include maintenance
-  mode, which decides whether the public site is reachable at all, so they ask
-  for the same administrator Bricks itself asks for. Templates still go through
-  Bricks' own permissions, which is where those apply.
-* **WP Migrate backups download through Minn's own door.** They now stream
-  through the same nonce-checked door as every other backup provider, which asks
-  for the capability WP Migrate itself asks for, rather than linking out to the
-  plugin's own handler.
-* **Gift card messages stay with the administrators.** A message is written by
-  one customer to another, and WooCommerce Gift Cards shows it only to a site
-  administrator. Minn was showing it to any shop manager, having taken the same
-  care over the card codes beside it.
-* **Two ways of inserting a block now park what they insert.** Everything a
-  plugin or a pattern puts into the editor arrives inert and is woken up on
-  save, so nothing in stored markup can run while it is being placed. Most
-  paths already did this. Inserting from the slash menu or the block browser
-  did not.
-* **Reads now ask what writes were already asking.** WP Job Manager and the SEO
-  panel both check with the plugin whether you may change a field, and neither
-  asked whether you may see it. On a site that narrows who can view job
-  listings, an applicant's email address and the salary were readable by
-  someone the plugin's own API would have hidden them from. Squirrly was the
-  one SEO plugin of seven Minn never asked at all.
-* **A booking list is never shown unscoped.** LatePoint restricts what an agent
-  sees by location and service as well as by agent. If Minn could not get an
-  answer out of LatePoint, it showed everything; now it shows nothing, which is
-  what the other booking plugins already did.
-* **Your own appearance and language settings need an account that can use
-  Minn.** The routes that write them by user id accepted a subscriber writing to
-  their own account, which the same settings on your own profile did not.
-* **Smaller repairs.** BackWPup archives are checked against the real backup
-  folder before being sent, and its Download button only appears for people
-  allowed to use it. Redirects added through Minn are stored exactly as the
-  redirect plugin stores them, so a source with encoded characters matches.
-  Design library images stop matching an unrelated picture whose filename merely
-  contains the one being looked for. Gift card and spam provider settings only
-  accept the switches the provider offered. And the Weight column in Search
-  suggestions is finally a number.
-* **Maintenance mode holds back the admin's own back door.** The front end and
-  the REST API were covered; admin-ajax was not, so any plugin with a handler
-  that answers logged-out visitors kept serving the site's real content while
-  the holding page was up. That is the staging-before-launch case the feature
-  exists for.
-* **Two Overview numbers stop counting work their reader cannot see.** The
-  Products card showed the whole catalogue's draft count to marketplace
-  vendors, and the activity chart counted unapproved comments, spam and
-  WooCommerce order notes that the list behind it correctly hides.
-* **The SEO panel disappears from content types you switched it off for.**
-  Turning an SEO plugin's controls off for a content type hides them from
-  wp-admin for everybody; Minn kept offering the fields and accepting values.
-* **An update is no longer checked against a hash that cannot be right.** When
-  GitHub could not be reached the updater compared the download against the
-  manifest copy inside the plugin, which names a hash for the release it is
-  part of and therefore cannot be that release's own. A perfectly good package
-  was refused, blaming the download. It now says the check could not be made.
-* **The server's directory layout stays out of form entry rows.** A file-upload
-  answer carries the file's path on disk beside its address, and Everest Forms
-  and Ninja Forms printed both.
-* **Pasting a license key the site would ignore is refused.** Where a key is
-  pinned in wp-config it wins over anything stored, so activating a different
-  one spent a paid activation at the vendor for a key this site would never
-  use, and then reported success. This now covers every plugin Minn can
-  activate that reads such a constant, ACF PRO, Gravity Perks and Gravity
-  SMTP among them (Gravity SMTP honors two).
-* **Deleting a CleanTalk spam account acts on the account you confirmed**, not
-  one named in the request body.
-* **The Elementor submissions screen goes when the license does.** Elementor
-  builds that feature only under license; without one its own screen and
-  clean-up job disappear while the recorded entries stay in the database, and
-  Minn kept serving them.
-* **The editor panels are back.** Every panel disappeared in v0.37.0. ACF,
-  ACPT, Meta Box, Pods, SEO, The Events Calendar, WP Job Manager and Seriously
-  Simple Podcasting all left the editor sidebar at once, and nothing explained
-  why. A check added that release to stop a plugin pointing the app at another
-  site was reading a panel's address with the rules meant for a simpler kind of
-  address, and every panel failed it. Panels work again, and the check is now
-  stricter about the thing it was written to catch.
-* **The database pages describe this install and no other, on every kind of
-  site.** The rule that decides which tables belong here was rewritten in
-  v0.36.0, which fixed one kind of hosting and broke another. On hosting that
-  puts several sites in one database, a neighbour's tables could be listed and
-  read, their user accounts among them. The rule now covers both shapes, and
-  the System page's database card reads through the same one.
-* **A stored link is held to the same schemes as every other link in the app.**
-  An address typed into an ACPT link field was saved exactly as written, so an
-  address that runs code instead of going somewhere was stored and later
-  printed into the page. It is refused now, and refusing it leaves the address
-  that was already there alone.
-* **A picture no longer disappears when somebody else saves the post.** Fields
-  holding an image nobody but its owner may see were being emptied by an
-  ordinary save from someone else, because refusing an image and clearing one
-  were the same answer. Clearing a field still clears it; a refusal now leaves
-  the picture where it is.
-* **Reading a linked post or person back asks the same question as choosing
-  one.** The pickers that offer posts and accounts withhold other people's
-  unfinished work; reading a saved choice back did not, so a title and its
-  status could be recovered by writing an id in by hand. Both directions agree
-  now.
-* **Retyping or moving a code snippet is treated as writing code.** Changing
-  what a Header Footer Code Manager snippet is, or where it runs, could put
-  saved code somewhere the person changing it was not allowed to put code.
-* **Two routes now ask which thing, not just what kind of thing.** Sending a
-  password reset asked whether you may edit an account, which everyone may do
-  to their own, and regenerating thumbnails asked only whether you may use the
-  tool and not which picture.
-* **The setup route no longer answers questions about what is installed.** It
-  told an unknown plugin apart from one somebody may not configure, which let
-  any signed-in account learn which plugins are here and which are unconfigured.
+* **JetEngine content type rows are read without building anything out of what they hold.** A row in a custom content type can be created by a form on the public side of the site, and Minn decoded the values stored in one in a way that could construct whatever a stored value named. Opening the list now only ever produces plain values, which is how JetEngine's own code reads the same rows.
+* **Two Jet screens ask the Jet plugins who may open them.** Theme parts and smart filters were open to anyone who can write a post, on the strength of a check inside each plugin that only ever runs behind a stricter one. Both now ask for what Crocoblock's own screens ask for, so an editor or a contributor no longer reaches either. A smart filter carries the query a listing runs on, so this is the difference between someone being able to stop the site's filtering working and not.
+* **Bricks settings stay with the administrators.** Builder access is granted to editors on plenty of sites, and it is a license to design pages rather than to change what the theme does everywhere. These settings include maintenance mode, which decides whether the public site is reachable at all, so they ask for the same administrator Bricks itself asks for. Templates still go through Bricks' own permissions, which is where those apply.
+* **WP Migrate backups download through Minn's own door.** They now stream through the same nonce-checked door as every other backup provider, which asks for the capability WP Migrate itself asks for, rather than linking out to the plugin's own handler.
+* **Gift card messages stay with the administrators.** A message is written by one customer to another, and WooCommerce Gift Cards shows it only to a site administrator. Minn was showing it to any shop manager, having taken the same care over the card codes beside it.
+* **Two ways of inserting a block now park what they insert.** Everything a plugin or a pattern puts into the editor arrives inert and is woken up on save, so nothing in stored markup can run while it is being placed. Most paths already did this. Inserting from the slash menu or the block browser did not.
+* **Reads now ask what writes were already asking.** WP Job Manager and the SEO panel both check with the plugin whether you may change a field, and neither asked whether you may see it. On a site that narrows who can view job listings, an applicant's email address and the salary were readable by someone the plugin's own API would have hidden them from. Squirrly was the one SEO plugin of seven Minn never asked at all.
+* **A booking list is never shown unscoped.** LatePoint restricts what an agent sees by location and service as well as by agent. If Minn could not get an answer out of LatePoint, it showed everything; now it shows nothing, which is what the other booking plugins already did.
+* **Your own appearance and language settings need an account that can use Minn.** The routes that write them by user id accepted a subscriber writing to their own account, which the same settings on your own profile did not.
+* **Smaller repairs.** BackWPup archives are checked against the real backup folder before being sent, and its Download button only appears for people allowed to use it. Redirects added through Minn are stored exactly as the redirect plugin stores them, so a source with encoded characters matches. Design library images stop matching an unrelated picture whose filename merely contains the one being looked for. Gift card and spam provider settings only accept the switches the provider offered. And the Weight column in Search suggestions is finally a number.
+* **Maintenance mode holds back the admin's own back door.** The front end and the REST API were covered; admin-ajax was not, so any plugin with a handler that answers logged-out visitors kept serving the site's real content while the holding page was up. That is the staging-before-launch case the feature exists for.
+* **Two Overview numbers stop counting work their reader cannot see.** The Products card showed the whole catalogue's draft count to marketplace vendors, and the activity chart counted unapproved comments, spam and WooCommerce order notes that the list behind it correctly hides.
+* **The SEO panel disappears from content types you switched it off for.** Turning an SEO plugin's controls off for a content type hides them from wp-admin for everybody; Minn kept offering the fields and accepting values.
+* **An update is no longer checked against a hash that cannot be right.** When GitHub could not be reached the updater compared the download against the manifest copy inside the plugin, which names a hash for the release it is part of and therefore cannot be that release's own. A perfectly good package was refused, blaming the download. It now says the check could not be made.
+* **The server's directory layout stays out of form entry rows.** A file-upload answer carries the file's path on disk beside its address, and Everest Forms and Ninja Forms printed both.
+* **Pasting a license key the site would ignore is refused.** Where a key is pinned in wp-config it wins over anything stored, so activating a different one spent a paid activation at the vendor for a key this site would never use, and then reported success. This now covers every plugin Minn can activate that reads such a constant, ACF PRO, Gravity Perks and Gravity SMTP among them (Gravity SMTP honors two).
+* **Deleting a CleanTalk spam account acts on the account you confirmed**, not one named in the request body.
+* **The Elementor submissions screen goes when the license does.** Elementor builds that feature only under license; without one its own screen and clean-up job disappear while the recorded entries stay in the database, and Minn kept serving them.
+* **The editor panels are back.** Every panel disappeared in v0.37.0. ACF, ACPT, Meta Box, Pods, SEO, The Events Calendar, WP Job Manager and Seriously Simple Podcasting all left the editor sidebar at once, and nothing explained why. A check added that release to stop a plugin pointing the app at another site was reading a panel's address with the rules meant for a simpler kind of address, and every panel failed it. Panels work again, and the check is now stricter about the thing it was written to catch.
+* **The database pages describe this install and no other, on every kind of site.** The rule that decides which tables belong here was rewritten in v0.36.0, which fixed one kind of hosting and broke another. On hosting that puts several sites in one database, a neighbour's tables could be listed and read, their user accounts among them. The rule now covers both shapes, and the System page's database card reads through the same one.
+* **A stored link is held to the same schemes as every other link in the app.** An address typed into an ACPT link field was saved exactly as written, so an address that runs code instead of going somewhere was stored and later printed into the page. It is refused now, and refusing it leaves the address that was already there alone.
+* **A picture no longer disappears when somebody else saves the post.** Fields holding an image nobody but its owner may see were being emptied by an ordinary save from someone else, because refusing an image and clearing one were the same answer. Clearing a field still clears it; a refusal now leaves the picture where it is.
+* **Reading a linked post or person back asks the same question as choosing one.** The pickers that offer posts and accounts withhold other people's unfinished work; reading a saved choice back did not, so a title and its status could be recovered by writing an id in by hand. Both directions agree now.
+* **Retyping or moving a code snippet is treated as writing code.** Changing what a Header Footer Code Manager snippet is, or where it runs, could put saved code somewhere the person changing it was not allowed to put code.
+* **Two routes now ask which thing, not just what kind of thing.** Sending a password reset asked whether you may edit an account, which everyone may do to their own, and regenerating thumbnails asked only whether you may use the tool and not which picture.
+* **The setup route no longer answers questions about what is installed.** It told an unknown plugin apart from one somebody may not configure, which let any signed-in account learn which plugins are here and which are unconfigured.
 
 ## **v0.37.0** - September 1 2026
 
