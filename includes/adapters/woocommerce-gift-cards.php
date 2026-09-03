@@ -210,6 +210,34 @@ function minn_admin_wcgc_codes_visible() {
 	return ! ( function_exists( 'wc_gc_mask_codes' ) && wc_gc_mask_codes( 'admin' ) );
 }
 
+/**
+ * The gift card message, hidden where the vendor hides it.
+ *
+ * A gift card message is written by one customer to another, and their edit
+ * screen shows it only to a site administrator: a shop manager sees the
+ * privacy notice instead. Their wc_gc_mask_messages() cannot be called for
+ * this, because it unmasks whenever ! is_admin() and a REST request is never
+ * is_admin() — their own query ability carries a note saying exactly that and
+ * keeps a separate administrator check for the same reason. So this asks the
+ * question their screen asks.
+ *
+ * @param string $message Raw message.
+ * @return string Message, or the vendor's notice when it would be hidden.
+ */
+function minn_admin_wcgc_message( $message ) {
+	$message = (string) $message;
+	if ( '' === $message ) {
+		return $message;
+	}
+	$is_admin = function_exists( 'wc_gc_is_site_admin' )
+		? (bool) wc_gc_is_site_admin()
+		: in_array( 'administrator', (array) wp_get_current_user()->roles, true );
+	if ( $is_admin ) {
+		return $message;
+	}
+	return __( 'This message was hidden to protect the sender and recipient\'s privacy.', 'minn-admin' );
+}
+
 function minn_admin_wcgc_send_email( $card ) {
 	$hook = apply_filters( 'woocommerce_gc_force_send_gift_card_hook', 'woocommerce_gc_force_send_gift_card_to_customer', $card );
 	do_action( $hook, $card );
@@ -495,7 +523,7 @@ add_action( 'rest_api_init', function () {
 				$recipient[] = array( 'label' => __( 'Sender email', 'minn-admin' ), 'value' => $card->get_sender_email(), 'type' => 'email' );
 			}
 			if ( $card->get_message() ) {
-				$recipient[] = array( 'label' => __( 'Message', 'minn-admin' ), 'value' => $card->get_message() );
+				$recipient[] = array( 'label' => __( 'Message', 'minn-admin' ), 'value' => minn_admin_wcgc_message( $card->get_message() ) );
 			}
 
 			$origin = array();
