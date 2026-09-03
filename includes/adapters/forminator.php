@@ -131,7 +131,10 @@ function minn_admin_forminator_answers( $entry_id ) {
 			} elseif ( is_array( $v ) ) {
 				$flat = array();
 				array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
-					if ( '' !== trim( (string) $leaf ) ) {
+					// Same rule as the other flatteners: an absolute path
+					// on this server is the upload's location, not its
+					// answer, and printing it leaks the directory layout.
+					if ( '' !== trim( (string) $leaf ) && ! minn_admin_is_server_path( $leaf ) ) {
 						$flat[] = (string) $leaf;
 					}
 				} );

@@ -26,11 +26,12 @@ function minn_admin_jsf_active() {
  *
  * Their post type registers no capability_type and no capabilities map, so
  * cap->edit_posts is literally edit_posts and reading it says nothing about
- * who they let near these. Every screen they draw for this post type sits
- * behind manage_options, and the post type itself is not public and has no
- * wp-admin list of its own, so manage_options is the answer their own UI
- * gives. A filter carries the query var and data source a listing reads, so
- * trashing one silently stops front-end filtering working.
+ * who they let near these. It does register a wp-admin list for the post type,
+ * so "they draw no screen for it" was the wrong reason to give: the right one
+ * is that the two places they actually gate this work both ask manage_options
+ * — their REST base's permission callback, and the Listing Builder submenu the
+ * filters live under. A filter carries the query var and data source a listing
+ * reads, so trashing one silently stops front-end filtering working.
  */
 function minn_admin_jsf_can() {
 	return current_user_can( 'manage_options' );
@@ -168,7 +169,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'JetSmartFilters',
 		'icon'       => 'filter',
 		'group'      => 'tools',
-		'cap'        => 'edit_posts',
+		'cap'        => 'manage_options',
 		'status'     => array( 'route' => 'minn-admin/v1/jet-smart-filters/status' ),
 		'collection' => minn_admin_jsf_collection(),
 	);
@@ -179,7 +180,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 function minn_admin_jsf_collection() {
 	return array(
 			'viewLabel' => __( 'Filters', 'minn-admin' ),
-			'cap'       => 'edit_posts',
+			'cap'       => 'manage_options',
 			'route'     => 'minn-admin/v1/jet-smart-filters/filters',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',

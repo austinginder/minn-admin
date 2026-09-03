@@ -102,9 +102,23 @@ function minn_admin_duplicator_rows() {
 	return $items;
 }
 
-/** Their build capability (DUP_Util::hasCapability('export') on every build ajax handler). */
+/**
+ * Their build capability (DUP_Util::hasCapability('export') on every build
+ * ajax handler).
+ *
+ * Duplicator does not ask current_user_can('export') directly: it runs the
+ * name through a filter first, which is how WPFront User Role Editor narrows
+ * who may use it. Restating the literal here meant a site that had narrowed
+ * Duplicator still had it wide open through Minn. Ask the vendor's own
+ * question instead. (hasCapability() itself is not usable as a predicate: its
+ * default mode wp_die()s rather than returning false.)
+ */
+function minn_admin_duplicator_cap() {
+	return (string) apply_filters( 'wpfront_user_role_editor_duplicator_translate_capability', 'export' );
+}
+
 function minn_admin_duplicator_can_build() {
-	return minn_admin_duplicator_active() && class_exists( 'DUP_Package' ) && class_exists( 'DUP_Settings' ) && current_user_can( 'export' );
+	return minn_admin_duplicator_active() && class_exists( 'DUP_Package' ) && class_exists( 'DUP_Settings' ) && current_user_can( minn_admin_duplicator_cap() );
 }
 
 
@@ -283,7 +297,7 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-shared packages table (see minn_admin_duplicator_active).
-		return current_user_can( 'export' ) && Minn_Admin::network_owner();
+		return current_user_can( minn_admin_duplicator_cap() ) && Minn_Admin::network_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/duplicator/packages', array(

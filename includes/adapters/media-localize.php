@@ -89,27 +89,27 @@ function minn_admin_localize_images( $template, $url_re = null ) {
 			if ( '' === $basename ) {
 				continue;
 			}
-			$existing = get_posts( array(
-				'post_type'      => 'attachment',
-				'post_status'    => 'inherit',
-				'posts_per_page' => 1,
-				'fields'         => 'ids',
-				'meta_query'     => array(
-					array(
-						// The trailing segment, not any substring. WP_Meta_Query
-						// wraps a bare LIKE as %value%, so "hero.jpg" also
-						// matched "client-hero.jpg" and "hero.jpg.webp" anywhere
-						// in the library, and the design silently pointed at
-						// somebody else's picture.
-						'key'     => '_wp_attached_file',
-						'value'   => '/' . $basename,
-						'compare' => 'LIKE',
-					),
-				),
+			// The whole trailing segment, anchored at BOTH ends. WP_Meta_Query
+			// wraps a bare LIKE as %value%, and prefixing the '/' only fixed
+			// the front: "hero.jpg" still matched "hero.jpg.webp", so the
+			// design silently pointed at a different picture. There is no way
+			// to drop the trailing wildcard through meta_query, so ask
+			// directly. Uploads that are not organised into month folders have
+			// no '/' at all, hence the equality arm.
+			global $wpdb;
+			$existing = (int) $wpdb->get_var( $wpdb->prepare(
+				"SELECT pm.post_id FROM {$wpdb->postmeta} pm
+				 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+				 WHERE pm.meta_key = '_wp_attached_file'
+				   AND ( pm.meta_value LIKE %s OR pm.meta_value = %s )
+				   AND p.post_type = 'attachment'
+				 LIMIT 1",
+				'%/' . $wpdb->esc_like( $basename ),
+				$basename
 			) );
 
 			if ( $existing ) {
-				$media_id = $existing[0];
+				$media_id = $existing;
 			} else {
 				if ( ! minn_admin_localize_host_ok( $url ) ) {
 					continue;

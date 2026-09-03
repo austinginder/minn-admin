@@ -71,8 +71,17 @@ function minn_admin_aryo_source_ready() {
 	}
 	global $wpdb;
 	$table = $wpdb->prefix . 'aryo_activity_log';
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-	$col   = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM `{$table}` LIKE %s", 'request_source' ) );
+	// The same existence check the status model makes first. Asking SHOW
+	// COLUMNS of a table that is not there writes a database error into the
+	// surfaces payload under WP_DEBUG, which is how a subsite created after
+	// network activation reports a missing column.
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+		$ready = false;
+		return $ready;
+	}
+	$col = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM `{$table}` LIKE %s", 'request_source' ) );
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	$ready = ! empty( $col );
 	return $ready;
 }

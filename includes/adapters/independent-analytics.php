@@ -117,10 +117,26 @@ function minn_admin_iawp_has( $name ) {
 }
 
 /**
- * The plugin's own dashboard URL (respects the white-label menu slug the
- * capability manager exposes when present).
+ * The plugin's own dashboard URL, or '' when the site has white-labeled it.
+ *
+ * The docblock here used to claim it respected the white-label menu slug and
+ * then hardcoded the product one, which put the very name the site had chosen
+ * to hide into an href on the same card whose title had just been genericised.
+ * There is no public accessor for the renamed slug, so the honest answer when
+ * the UI is white-labeled is no link at all: callers omit adminUrl and the
+ * client renders none.
  */
 function minn_admin_iawp_admin_url() {
+	if ( class_exists( '\IAWP\Capability_Manager' )
+		&& method_exists( '\IAWP\Capability_Manager', 'show_white_labeled_ui' ) ) {
+		try {
+			if ( \IAWP\Capability_Manager::show_white_labeled_ui() ) {
+				return '';
+			}
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the product URL.
+		}
+	}
 	return admin_url( 'admin.php?page=independent-analytics' );
 }
 

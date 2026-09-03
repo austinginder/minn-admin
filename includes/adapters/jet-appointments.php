@@ -47,6 +47,21 @@ function minn_admin_jet_apb_can_read() {
 	return minn_admin_jet_apb_can( 'appointments-list' );
 }
 
+/**
+ * The detail view stands in for two of their endpoints, not one: reading an
+ * appointment and reading its meta. A site that separates those contexts
+ * through their capability filter asked for the separation, and gating the
+ * whole detail on the list context handed the customer's name, email, phone
+ * and comments to a role given list-only access.
+ */
+function minn_admin_jet_apb_can_detail() {
+	return minn_admin_jet_apb_can( 'get-appointment' );
+}
+
+function minn_admin_jet_apb_can_meta() {
+	return minn_admin_jet_apb_can( 'appointment-meta' );
+}
+
 function minn_admin_jet_apb_can_update() {
 	return minn_admin_jet_apb_can( 'update-appointment' );
 }
@@ -219,6 +234,44 @@ function minn_admin_jet_apb_meta( $id ) {
 	return $out;
 }
 
+/**
+ * The meta keys their own detail screen shows, key => label.
+ *
+ * JetAppointments decides this with an allowlist: the form fields it was told
+ * to display, extendable through their own filter. Minn used the inverse, a
+ * short blocklist, which is not the same rule — it printed whatever else had
+ * accumulated on the row, and what accumulates there is the plumbing
+ * (a Google Calendar id, a raw API error string, a Zoom meeting id, workflow
+ * schedule ids), none of which their screen shows.
+ *
+ * An empty array means "ask the vendor and it said nothing", and the caller
+ * shows no extra rows. Null means the accessor is not there to ask on this
+ * version, and the caller falls back to its own conservative list.
+ *
+ * @param int $id Appointment id.
+ * @return array<string,string>|null
+ */
+function minn_admin_jet_apb_display_fields() {
+	try {
+		$settings = \JET_APB\Plugin::instance()->settings;
+		if ( ! is_object( $settings ) || ! method_exists( $settings, 'get_appointment_fields' ) ) {
+			return null;
+		}
+		$out = array();
+		foreach ( (array) $settings->get_appointment_fields() as $key => $field ) {
+			$field = (array) $field;
+			$k     = (string) ( $field['name'] ?? $key );
+			if ( '' === $k ) {
+				continue;
+			}
+			$out[ $k ] = (string) ( $field['label'] ?? ucwords( str_replace( array( '_', '-' ), ' ', $k ) ) );
+		}
+		return $out;
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_jet_apb_active() || ! minn_admin_jet_apb_can_read() ) {
 		return $surfaces;
@@ -357,13 +410,16 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/jet-appointments/appointments/(?P<id>\d+)', array(
 		array(
 			'methods'             => 'GET',
-			'permission_callback' => $perm,
+			'permission_callback' => 'minn_admin_jet_apb_can_detail',
 			'callback'            => function ( WP_REST_Request $request ) {
 				$row = minn_admin_jet_apb_has_tables() ? minn_admin_jet_apb_row( (int) $request['id'] ) : null;
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				$meta  = minn_admin_jet_apb_meta( (int) $row->ID );
+				// The meta table is their second endpoint, with its own
+				// context. A site that granted the detail but not the meta
+				// gets the appointment without the form answers or the phone.
+				$meta  = minn_admin_jet_apb_can_meta() ? minn_admin_jet_apb_meta( (int) $row->ID ) : array();
 				$name  = trim( (string) $row->user_name );
 				$email = trim( (string) $row->user_email );
 				if ( ( '' === $name || '' === $email ) && ! empty( $row->user_id ) ) {
@@ -386,15 +442,31 @@ add_action( 'rest_api_init', function () {
 					array( 'label' => __( 'Phone', 'minn-admin' ), 'value' => '' !== $phone ? $phone : '—' ),
 				);
 				$notes = '';
+				// The keys their own screen displays, when it can tell us.
+				// Falling back to the blocklist keeps older versions working,
+				// with the operational plumbing named explicitly so it is not
+				// printed either way.
+				$allow  = minn_admin_jet_apb_display_fields();
+				$hidden = array( 'phone', 'user_phone', 'tel', 'telephone', 'user_timezone', 'user_local_time', 'user_local_date' );
 				foreach ( $meta as $k => $v ) {
-					if ( in_array( $k, array( 'phone', 'user_phone', 'tel', 'telephone', 'user_timezone', 'user_local_time', 'user_local_date' ), true ) ) {
+					if ( in_array( $k, $hidden, true ) ) {
+						continue;
+					}
+					if ( is_array( $allow ) ) {
+						if ( ! isset( $allow[ $k ] ) ) {
+							continue;
+						}
+					} elseif ( preg_match( '/^(gcal|zoom|_schedule_id)/', $k ) ) {
 						continue;
 					}
 					$v = trim( (string) $v );
 					if ( '' === $v ) {
 						continue;
 					}
-					$who[] = array( 'label' => ucwords( str_replace( array( '_', '-' ), ' ', $k ) ), 'value' => $v );
+					$label = is_array( $allow ) && '' !== (string) $allow[ $k ]
+						? (string) $allow[ $k ]
+						: ucwords( str_replace( array( '_', '-' ), ' ', $k ) );
+					$who[] = array( 'label' => $label, 'value' => $v );
 					if ( '' === $notes && in_array( $k, array( 'comments', 'comment', 'message', 'notes' ), true ) ) {
 						$notes = $v;
 					}

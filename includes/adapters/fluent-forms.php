@@ -150,7 +150,10 @@ function minn_admin_fluent_forms_response_map( $response ) {
 			// Name fields etc. flatten to "First Last".
 			$flat = array();
 			array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
-				if ( '' !== trim( (string) $leaf ) ) {
+				// Same rule as the other flatteners: an absolute path on this
+				// server is the upload's location, not its answer, and
+				// printing it leaks the directory layout.
+				if ( '' !== trim( (string) $leaf ) && ! minn_admin_is_server_path( $leaf ) ) {
 					$flat[] = (string) $leaf;
 				}
 			} );

@@ -57,16 +57,26 @@ function minn_admin_jet_booking_table() {
  * The vendor scope their own list applies: a booking vendor sees the
  * bookings whose booking_vendor is their user id, everyone else sees all.
  *
- * @return int 0 = everyone, else the vendor's user id.
+ * Not knowing the scope is not the same as there being none. Both failure
+ * paths used to answer 0, which is the "show everything" sentinel, so a
+ * vendors module that was missing or threw turned a scoped list into an
+ * unscoped one — the same shape LatePoint was corrected for, and the reason
+ * that comment says an empty list is a bug someone reports while an unscoped
+ * one is a leak nobody sees. -1 can never equal a booking_vendor, so it denies.
+ *
+ * @return int 0 = proven unrestricted, -1 = unknown (deny), else the vendor's user id.
  */
 function minn_admin_jet_booking_vendor_scope() {
 	$uid = get_current_user_id();
 	try {
-		if ( is_object( jet_abaf()->vendors ) && jet_abaf()->vendors->is_booking_vendor( $uid ) ) {
+		if ( ! is_object( jet_abaf()->vendors ) ) {
+			return -1;
+		}
+		if ( jet_abaf()->vendors->is_booking_vendor( $uid ) ) {
 			return $uid;
 		}
 	} catch ( \Throwable $e ) {
-		return 0;
+		return -1;
 	}
 	return 0;
 }

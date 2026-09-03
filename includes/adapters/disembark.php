@@ -115,14 +115,18 @@ function minn_admin_disembark_command() {
 
 /** Server-built model for the surface status card. */
 function minn_admin_disembark_status_model() {
-	global $wpdb;
 	$scan     = get_option( 'disembark_last_scan_stats', null );
 	$sessions = minn_admin_disembark_sessions();
 	list( $bytes ) = minn_admin_disembark_du( minn_admin_disembark_dir() );
-	$db = (int) $wpdb->get_var( $wpdb->prepare(
-		'SELECT SUM(data_length + index_length) FROM information_schema.TABLES WHERE table_schema = %s',
-		DB_NAME
-	) );
+	// This install's own tables, not the whole schema. Summing the schema
+	// reported a neighbour's bytes on shared-database hosting — the same
+	// mistake the database browser and the System card were both corrected
+	// for, and this was the third path. site_tables() already applies that
+	// rule and is memoised per request, so this costs no second query.
+	$db = 0;
+	foreach ( Minn_Admin_DB::site_tables() as $t ) {
+		$db += (int) ( $t->size ?? 0 );
+	}
 
 	$rows = array(
 		array(

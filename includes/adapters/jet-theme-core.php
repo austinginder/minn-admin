@@ -33,9 +33,13 @@ function minn_admin_jet_tc_active() {
  * door. Reading the post type's own remapped capability asks the question
  * their door asks, and keeps answering it correctly if they change it.
  */
-function minn_admin_jet_tc_can() {
+function minn_admin_jet_tc_cap() {
 	$pto = get_post_type_object( 'jet-theme-core' );
-	return $pto ? current_user_can( $pto->cap->edit_posts ) : current_user_can( 'manage_options' );
+	return $pto ? (string) $pto->cap->edit_posts : 'manage_options';
+}
+
+function minn_admin_jet_tc_can() {
+	return current_user_can( minn_admin_jet_tc_cap() );
 }
 
 /** id => label from their structures registry. */
@@ -121,7 +125,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'JetThemeCore',
 		'family'     => 'builder-templates',
 		'icon'       => 'columns',
-		'cap'        => 'edit_posts',
+		// Derived from the same place minn_admin_jet_tc_can() reads, so the
+		// descriptor and the gate cannot answer differently if JetThemeCore
+		// changes its capabilities map. It said edit_posts while every route
+		// resolved to manage_options.
+		'cap'        => minn_admin_jet_tc_cap(),
 		'status'     => array( 'route' => 'minn-admin/v1/jet-theme-core/templates/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/jet-theme-core/templates',
