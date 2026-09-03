@@ -23,8 +23,19 @@ function minn_admin_jet_tc_active() {
 	return function_exists( 'jet_theme_core' ) && is_object( jet_theme_core()->templates ) && is_object( jet_theme_core()->structures ) && post_type_exists( 'jet-theme-core' );
 }
 
+/**
+ * Whether the current user may manage theme-core templates.
+ *
+ * The edit_posts line inside their create_template() is not the gate: the
+ * jet-theme-core post type remaps every capability to manage_options, and
+ * their REST endpoints inherit a base permission_callback that asks for
+ * manage_options too, so that inner check only ever runs behind a locked
+ * door. Reading the post type's own remapped capability asks the question
+ * their door asks, and keeps answering it correctly if they change it.
+ */
 function minn_admin_jet_tc_can() {
-	return current_user_can( 'edit_posts' ); // their create_template() gate
+	$pto = get_post_type_object( 'jet-theme-core' );
+	return $pto ? current_user_can( $pto->cap->edit_posts ) : current_user_can( 'manage_options' );
 }
 
 /** id => label from their structures registry. */

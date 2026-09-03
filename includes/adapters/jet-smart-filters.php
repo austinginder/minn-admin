@@ -21,9 +21,19 @@ function minn_admin_jsf_active() {
 	return function_exists( 'jet_smart_filters' ) && post_type_exists( 'jet-smart-filters' );
 }
 
+/**
+ * Whether the current user may manage smart filters.
+ *
+ * Their post type registers no capability_type and no capabilities map, so
+ * cap->edit_posts is literally edit_posts and reading it says nothing about
+ * who they let near these. Every screen they draw for this post type sits
+ * behind manage_options, and the post type itself is not public and has no
+ * wp-admin list of its own, so manage_options is the answer their own UI
+ * gives. A filter carries the query var and data source a listing reads, so
+ * trashing one silently stops front-end filtering working.
+ */
 function minn_admin_jsf_can() {
-	$pto = get_post_type_object( 'jet-smart-filters' );
-	return $pto ? current_user_can( $pto->cap->edit_posts ) : current_user_can( 'edit_posts' );
+	return current_user_can( 'manage_options' );
 }
 
 function minn_admin_jsf_indexer_on() {
