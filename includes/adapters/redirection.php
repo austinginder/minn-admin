@@ -12,6 +12,33 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Redirection's database status and installer classes, whichever generation
+ * of the plugin is installed. 5.10 moved them into the autoloaded
+ * Redirection\Database namespace (Status, Database, Schema\Latest); earlier
+ * builds keep the Red_Database_Status / Red_Database globals in
+ * database/database.php, which nothing loads outside their admin screens.
+ * A path include of a file that no longer exists is what silently turned
+ * the setup gate off on 5.10.
+ *
+ * @return array{status:string,database:string}|null Class names, or null when neither shape is present.
+ */
+function minn_admin_redirection_db_classes() {
+	if ( class_exists( '\\Redirection\\Database\\Status' ) && class_exists( '\\Redirection\\Database\\Database' ) ) {
+		return array( 'status' => '\\Redirection\\Database\\Status', 'database' => '\\Redirection\\Database\\Database' );
+	}
+	if ( defined( 'REDIRECTION_FILE' ) ) {
+		$legacy = dirname( REDIRECTION_FILE ) . '/database/database.php';
+		if ( file_exists( $legacy ) ) {
+			include_once $legacy;
+		}
+		if ( class_exists( 'Red_Database_Status' ) && class_exists( 'Red_Database' ) ) {
+			return array( 'status' => 'Red_Database_Status', 'database' => 'Red_Database' );
+		}
+	}
+	return null;
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! defined( 'REDIRECTION_VERSION' ) ) {
 		return $surfaces;
@@ -32,14 +59,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// a privacy choice Minn must not make silently.
 		'setup'      => array(
 			'needed'  => function () {
-				if ( ! defined( 'REDIRECTION_FILE' ) ) {
+				$db = minn_admin_redirection_db_classes();
+				if ( ! $db ) {
 					return false;
 				}
-				include_once dirname( REDIRECTION_FILE ) . '/database/database.php';
-				if ( ! class_exists( 'Red_Database_Status' ) ) {
-					return false;
-				}
-				return ( new Red_Database_Status() )->needs_installing();
+				return (bool) ( new $db['status']() )->needs_installing();
 			},
 			'title'   => __( 'Redirection needs its one-time setup', 'minn-admin' ),
 			'note'    => __( 'Redirection stores redirects in its own database tables, which it creates on first setup. This runs the same install its own setup wizard performs; the choices below are the wizard\'s questions.', 'minn-admin' ),
@@ -61,12 +85,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 			'run'     => function ( $choices ) {
-				include_once dirname( REDIRECTION_FILE ) . '/database/database.php';
-				$result = Red_Database::get_latest_database()->install();
+				$db = minn_admin_redirection_db_classes();
+				if ( ! $db ) {
+					return new WP_Error( 'no_installer', __( 'Redirection\'s installer could not be found. Run its setup from the Redirection screen.', 'minn-admin' ) );
+				}
+				$result = call_user_func( array( $db['database'], 'get_latest_database' ) )->install();
 				if ( is_wp_error( $result ) ) {
 					return $result;
 				}
-				( new Red_Database_Status() )->finish();
+				( new $db['status']() )->finish();
 				// The wizard's own option values (from its setup submit):
 				// monitor targets the default group, unchecked logging is -1.
 				red_set_options( array(
