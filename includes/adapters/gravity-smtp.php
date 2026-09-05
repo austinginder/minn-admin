@@ -1515,14 +1515,17 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 }
 
 /**
- * Daily sent/failed counts for the status-card chart.
+ * Daily counts for the status-card chart: sent (solid bar) and failed, plus
+ * everything else the log holds that day (sandboxed, filtered) as extra tip
+ * rows that raise the soft total bar. The bar therefore agrees with the
+ * log's All tab for that day, and a site in test mode still sees activity.
  *
  * date_created is UTC MySQL (current_time( 'mysql', true )). Points cover a
  * contiguous window so empty days still render as zero-height bars. Returns
  * null when the events table is missing (fresh install before migration).
  *
  * @param int $days Number of UTC calendar days, inclusive of today. Capped 7–90.
- * @return array|null { title, primary, secondary, points:[{label,value,secondary}] }
+ * @return array|null { title, primary, secondary, points:[{label,value,secondary,extra?,from,to}] }
  */
 function minn_admin_gsmtp_send_chart( $days = 14 ) {
 	global $wpdb;
@@ -1552,20 +1555,32 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
 		ARRAY_A
 	);
 
+	// Every status the log can hold, each in its own bucket so "Failed"
+	// never means "held": sandboxed is test mode's outcome, partially-sent
+	// is a send with suppressed recipients stripped (their "Filtered" tab),
+	// and anything newer than this list still counts toward the day.
+	$extra_labels = array(
+		'sandboxed'      => __( 'Sandboxed', 'minn-admin' ),
+		'partially-sent' => __( 'Filtered', 'minn-admin' ),
+	);
 	$by = array();
 	foreach ( (array) $rows as $row ) {
 		$d = (string) $row['d'];
 		if ( ! isset( $by[ $d ] ) ) {
-			$by[ $d ] = array( 'sent' => 0, 'failed' => 0 );
+			$by[ $d ] = array( 'sent' => 0, 'failed' => 0, 'extra' => array() );
 		}
 		$status = (string) $row['status'];
 		$count  = (int) $row['c'];
-		// Only the two delivery outcomes; sandboxed/other stay out of the
-		// tip labels so "Failed" never means "held".
 		if ( 'sent' === $status ) {
 			$by[ $d ]['sent'] += $count;
 		} elseif ( 'failed' === $status ) {
 			$by[ $d ]['failed'] += $count;
+		} else {
+			$label = isset( $extra_labels[ $status ] ) ? $extra_labels[ $status ] : __( 'Other', 'minn-admin' );
+			if ( ! isset( $by[ $d ]['extra'][ $label ] ) ) {
+				$by[ $d ]['extra'][ $label ] = 0;
+			}
+			$by[ $d ]['extra'][ $label ] += $count;
 		}
 	}
 
@@ -1576,7 +1591,7 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
 		$key   = $day->format( 'Y-m-d' );
 		$sent  = isset( $by[ $key ] ) ? (int) $by[ $key ]['sent'] : 0;
 		$fail  = isset( $by[ $key ] ) ? (int) $by[ $key ]['failed'] : 0;
-		$points[] = array(
+		$point = array(
 			'label'     => $day->format( 'M j' ),
 			'value'     => $sent,
 			'secondary' => $fail,
@@ -1585,6 +1600,18 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
 			'from'      => $day->format( 'Y-m-d 00:00:00' ),
 			'to'        => $day->format( 'Y-m-d 23:59:59' ),
 		);
+		// Held / filtered / other outcomes: extra tip rows in a stable order
+		// (the known labels first), only when the day has any.
+		if ( ! empty( $by[ $key ]['extra'] ) ) {
+			$extra = array();
+			foreach ( array_merge( array_values( $extra_labels ), array( __( 'Other', 'minn-admin' ) ) ) as $label ) {
+				if ( ! empty( $by[ $key ]['extra'][ $label ] ) ) {
+					$extra[] = array( 'label' => $label, 'value' => (int) $by[ $key ]['extra'][ $label ] );
+				}
+			}
+			$point['extra'] = $extra;
+		}
+		$points[] = $point;
 	}
 
 	return array(

@@ -8,16 +8,48 @@
  * with the status tabs. Gravity SMTP is the reference (UTC bounds);
  * FluentSMTP is checked for the same affordance on site-local bounds.
  *
- * The chart counts only sent + failed, so the "All" list total for a day
- * is compared against the route's own windowed count, and the Failed tab
- * against the bar's secondary series.
+ * The chart's soft bar is everything logged that day (sent + failed +
+ * the point's extra rows: sandboxed, filtered), so a bar's total must equal
+ * the All tab's windowed count exactly, and the Failed tab the bar's
+ * secondary series. The suite seeds two sandboxed and one filtered row
+ * for today (UTC) under subject "minn-chart-fixture-held" (delete +
+ * reinsert each run, so they never accumulate) to prove the extra rows.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, WP } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'chart-day-filter' );
 	const { browser, page, errors } = await launch();
+
+	// Seed today's held rows through wp-cli (eval-file: an inline snippet
+	// would lose $wpdb to the shell). WP resolves the site under test.
+	let seed = '';
+	try {
+		const fs = require( 'fs' );
+		const file = require( 'path' ).join( require( 'os' ).tmpdir(), 'minn-chart-held-seed.php' );
+		fs.writeFileSync( file, [
+			'<?php',
+			'global $wpdb;',
+			'$table = $wpdb->prefix . "gravitysmtp_events";',
+			'$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE subject = %s", "minn-chart-fixture-held" ) );',
+			'$ts = gmdate( "Y-m-d 12:00:00" );',
+			'foreach ( array( "sandboxed", "sandboxed", "partially-sent" ) as $st ) {',
+			'  $wpdb->insert( $table, array( "date_created" => $ts, "date_updated" => $ts, "status" => $st, "service" => "smtp", "subject" => "minn-chart-fixture-held", "message" => "held fixture body", "extra" => "" ) );',
+			'}',
+			'echo "seeded";',
+		].join( '\n' ) );
+		seed = require( 'child_process' ).execSync(
+			`wp --path=${ JSON.stringify( WP ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`,
+			{ encoding: 'utf8', timeout: 60000 }
+		).trim();
+		fs.unlinkSync( file );
+	} catch ( e ) {
+		seed = 'failed: ' + e.message;
+	}
 	await login( page );
+	t.check( 'Held rows seeded for today', seed === 'seeded', seed );
+	const extraOf = ( p ) => ( Array.isArray( p.extra ) ? p.extra : [] ).reduce( ( n, x ) => n + ( Number( x.value ) || 0 ), 0 );
+	const totalOf = ( p ) => ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 ) + extraOf( p );
 
 	const api = ( path ) => page.evaluate( async ( p ) => {
 		const r = await fetch( window.MINN.restUrl + p, { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
@@ -38,14 +70,17 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	// --- REST: the window narrows, junk bounds are ignored --------------
 	const status = await api( 'minn-admin/v1/gravity-smtp/status' );
 	const points = ( status.body && status.body.chart && status.body.chart.points ) || [];
-	const withData = points.filter( ( p ) => ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 ) > 0 );
+	const withData = points.filter( ( p ) => totalOf( p ) > 0 );
 	t.check( 'Chart points carry from/to bounds', points.length > 0 && points.every( ( p ) => p.from && p.to ), JSON.stringify( points[ 0 ] ) );
 	t.check( 'A bar with sends exists to click', withData.length > 0, `nonzero=${ withData.length }` );
-	const bar = withData[ withData.length - 1 ];
-	const windowed = bar ? await api( `minn-admin/v1/gravity-smtp/events?after=${ encodeURIComponent( bar.from ) }&before=${ encodeURIComponent( bar.to ) }&per_page=100` ) : null;
-	const inWindow = windowed && windowed.body.items.every( ( it ) => it.date_created >= bar.from && it.date_created <= bar.to );
-	t.check( 'after/before narrow the events route to the bar', !! windowed && windowed.status === 200 && windowed.body.total >= bar.value + bar.secondary && inWindow,
-		JSON.stringify( { total: windowed && windowed.body.total, bar: bar && ( bar.value + bar.secondary ) } ) );
+	// Today (UTC) is the last point and carries the seeded held rows.
+	const bar = points[ points.length - 1 ];
+	const held = ( bar.extra || [] ).reduce( ( m, x ) => Object.assign( m, { [ x.label ]: x.value } ), {} );
+	t.check( 'Today\'s point lists sandboxed and filtered as extra rows', held.Sandboxed >= 2 && held.Filtered >= 1, JSON.stringify( bar ) );
+	const windowed = await api( `minn-admin/v1/gravity-smtp/events?after=${ encodeURIComponent( bar.from ) }&before=${ encodeURIComponent( bar.to ) }&per_page=100` );
+	const inWindow = windowed.body.items.every( ( it ) => it.date_created >= bar.from && it.date_created <= bar.to );
+	t.check( 'after/before narrow the events route to the bar', windowed.status === 200 && inWindow, JSON.stringify( { total: windowed.body.total } ) );
+	t.check( 'Bar total equals the day\'s All count exactly', windowed.body.total === totalOf( bar ), `route ${ windowed.body.total } vs bar ${ totalOf( bar ) }` );
 	const all = await api( 'minn-admin/v1/gravity-smtp/events?per_page=1' );
 	const junk = await api( 'minn-admin/v1/gravity-smtp/events?per_page=1&after=' + encodeURIComponent( "1' OR 1=1" ) + '&before=yesterday' );
 	t.check( 'Junk bounds are ignored, not guessed', junk.status === 200 && junk.body.total === all.body.total, `${ junk.body.total } vs ${ all.body.total }` );
@@ -62,10 +97,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const cols = Array.from( document.querySelectorAll( '[data-sstat-chart] .minn-chart-col' ) );
 		const picks = cols.filter( ( c ) => c.classList.contains( 'pick' ) );
 		const empties = cols.filter( ( c ) => ! c.classList.contains( 'pick' ) );
-		const last = picks[ picks.length - 1 ];
+		const last = cols[ cols.length - 1 ];
 		const r = last && last.getBoundingClientRect();
-		return { picks: picks.length, empties: empties.length, ci: last && last.dataset.ci, x: r && r.left + r.width / 2, y: r && r.bottom - 4 };
+		return { picks: picks.length, empties: empties.length, ci: last && last.dataset.ci, lastPick: !! last && last.classList.contains( 'pick' ), x: r && r.left + r.width / 2, y: r && r.bottom - 4 };
 	} );
+	t.check( 'Today\'s bar is pickable', pick.lastPick, JSON.stringify( pick ) );
+	// Hover first: the tip lists the held rows after Sent / Failed.
+	await page.mouse.move( pick.x, pick.y - 2 );
+	const tip = await page.waitForFunction( () => {
+		const el = document.querySelector( '#minn-chart-tip' );
+		return el && ! el.hidden && /Sandboxed/.test( el.textContent ) ? el.textContent.replace( /\s+/g, ' ' ).trim() : false;
+	}, null, { timeout: 5000 } ).then( ( h ) => h.jsonValue() ).catch( () => '' );
+	t.check( 'Tip lists Sandboxed and Filtered rows', /Sandboxed/.test( tip ) && /Filtered/.test( tip ) && /Sent/.test( tip ), tip );
 	t.check( 'Bars with sends take the pointer; empty days do not', pick.picks > 0 && pick.picks === withData.length, JSON.stringify( pick ) );
 	t.check( 'No chip before any click', ! ( await page.$( '[data-srange-clear]' ) ) );
 
@@ -87,6 +130,8 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	if ( failedTab ) {
 		await failedTab.click();
 		t.check( 'Failed tab keeps the day window', await waitCount( bar.secondary ), `want ${ bar.secondary }, got ${ await metaCount() }` );
+		await page.click( '[data-stab="sandboxed"]' );
+		t.check( 'Sandboxed tab matches the bar\'s Sandboxed row', await waitCount( held.Sandboxed ), `want ${ held.Sandboxed }, got ${ await metaCount() }` );
 		const allTab = await page.$( '[data-stab="_all"]' );
 		if ( allTab ) await allTab.click();
 		await waitCount( windowed.body.total );

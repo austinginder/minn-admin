@@ -15435,6 +15435,20 @@
 	// when `secondary` is present, single accent bars otherwise). Points are
 	// display-ready — the server formats labels. Optional primary/secondary
 	// strings name the tip rows (default "Count" / "Secondary").
+	// A point's extra rows: outcomes beyond the two named series (a mail
+	// log's sandboxed / filtered days) that count toward the soft total bar
+	// and list in the tip, so the bar agrees with the list's All tab. Only
+	// rows with something in them survive.
+	function chartExtra( p ) {
+		return ( Array.isArray( p.extra ) ? p.extra : [] )
+			.map( ( x ) => ( { label: String( x && x.label || '' ), value: Number( x && x.value ) || 0 } ) )
+			.filter( ( x ) => x.label && x.value > 0 );
+	}
+	function chartTotal( p ) {
+		return ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 )
+			+ chartExtra( p ).reduce( ( n, x ) => n + x.value, 0 );
+	}
+
 	// opts.pickable: the list can narrow to a bar's window (collection
 	// dateQuery), so bars whose point carries from/to and has anything in it
 	// take the pointer; opts.selected is the `from` of the bar in force.
@@ -15449,7 +15463,7 @@
 		// An all-zero window renders invisible bars — 88px of dead card. Say
 		// so in one quiet line instead (Gravity SMTP test mode:
 		// sandboxed sends never count as sent/failed).
-		if ( ! points.some( ( p ) => ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 ) > 0 ) ) {
+		if ( ! points.some( ( p ) => chartTotal( p ) > 0 ) ) {
 			const buckets = [ chart.primary, chart.secondary ].filter( Boolean ).map( chromeLabel ).join( ' / ' );
 			return `
 			<div class="minn-sstat-chart">
@@ -15459,10 +15473,8 @@
 					: __( 'No activity in this window yet.' ) ) }</div>
 			</div>`;
 		}
-		const dual = !! chart.secondary || points.some( ( p ) => p.secondary != null );
-		const max = Math.max( 1, ...points.map( ( p ) => dual
-			? Math.max( Number( p.value ) || 0, Number( p.secondary ) || 0, ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 ) )
-			: ( Number( p.value ) || 0 ) ) );
+		const dual = !! chart.secondary || points.some( ( p ) => p.secondary != null || chartExtra( p ).length );
+		const max = Math.max( 1, ...points.map( ( p ) => dual ? chartTotal( p ) : ( Number( p.value ) || 0 ) ) );
 		const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
 		return `
 			<div class="minn-sstat-chart">
@@ -15470,11 +15482,11 @@
 				<div class="minn-chart minn-sstat-chart-bars" data-sstat-chart>
 					${ points.map( ( p, i ) => {
 						const v = Number( p.value ) || 0;
-						const s = Number( p.secondary ) || 0;
 						if ( dual ) {
-							// Soft bar = total (value + secondary), solid = primary value.
-							// Same stacking idiom as Overview traffic (pageviews/visitors).
-							const total = v + s;
+							// Soft bar = total (value + secondary + extra), solid = primary
+							// value. Same stacking idiom as Overview traffic
+							// (pageviews/visitors).
+							const total = chartTotal( p );
 							return `<div class="${ colClass( p, total ) }" data-ci="${ i }">
 								<div class="minn-chart-views" style="height:${ pct( total ) }%"></div>
 								<div class="minn-chart-visitors" style="height:${ pct( v ) }%"></div>
@@ -15526,6 +15538,7 @@
 					<div class="minn-chart-tip-stats">
 						<div><b>${ v.toLocaleString( uiLocale() ) }</b><span>${ esc( primary ) }</span></div>
 						${ dual ? `<div><b>${ s.toLocaleString( uiLocale() ) }</b><span>${ esc( secondary || __( 'Other' ) ) }</span></div>` : '' }
+						${ chartExtra( p ).map( ( x ) => `<div><b>${ x.value.toLocaleString( uiLocale() ) }</b><span>${ esc( chromeLabel( x.label ) ) }</span></div>` ).join( '' ) }
 					</div>`;
 				$$( '.minn-chart-col.hover', el ).forEach( ( c ) => c.classList.remove( 'hover' ) );
 				col.classList.add( 'hover' );

@@ -417,6 +417,17 @@ on the chart (or on any point), bars become dual: a soft total bar
 omit `secondary` and render one accent bar per point. The bundled Gravity
 SMTP adapter is the reference (daily sent/failed from its events table).
 
+A point may also carry `extra`: further outcomes beyond the two named
+series, each `{ "label", "value" }`. They raise the soft total bar and list
+in the tip after the two series (rows with a zero value are dropped), so a
+day's bar can agree with the list's "All" count without inventing a third
+bar. Gravity SMTP sends its sandboxed and filtered counts this way, which
+is how a site in test mode still sees activity on the chart:
+
+```json
+{ "label": "Jul 1", "value": 5, "secondary": 1, "extra": [ { "label": "Sandboxed", "value": 12 } ] }
+```
+
 A bar can also narrow the list beneath it. Give each point the window it
 covers and declare `dateQuery` on the collection:
 
