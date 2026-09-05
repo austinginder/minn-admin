@@ -21431,9 +21431,14 @@
 			.map( ( [ id, label ] ) =>
 				`<button class="minn-tab${ state.extFilter === id ? ' active' : '' }" data-xfilter="${ id }">${ esc( label ) }${ counts[ id ] != null ? ` <span class="minn-tab-count">${ counts[ id ] }</span>` : '' }</button>` )
 			.join( '' );
+		// The search sits in a wrap so a clear button can overlay its end;
+		// the wrap takes the input's toolbar layout role (width + auto margin).
 		return `
 			<div class="minn-tabs minn-ext-filters">${ pills }</div>
-			<input class="minn-input minn-toolbar-search" id="minn-ext-search" placeholder="${ esc( placeholder ) }" value="${ esc( state.extSearch || '' ) }">`;
+			<span class="minn-search-wrap">
+				<input class="minn-input minn-toolbar-search" id="minn-ext-search" placeholder="${ esc( placeholder ) }" value="${ esc( state.extSearch || '' ) }">
+				<button type="button" class="minn-search-clear" id="minn-ext-search-clear" aria-label="${ esc( __( 'Clear search' ) ) }" title="${ esc( __( 'Clear search' ) ) }"${ state.extSearch ? '' : ' hidden' }>×</button>
+			</span>`;
 	}
 
 	function bindExtFilterBar( view ) {
@@ -21446,12 +21451,20 @@
 		);
 		const search = $( '#minn-ext-search', view );
 		if ( search ) {
-			search.addEventListener( 'input', () => {
-				state.extSearch = search.value;
+			// Re-render rebuilds the input, so the caret is restored after each
+			// keystroke; a clear (button or Escape) does the same with an empty box.
+			const apply = ( value ) => {
+				state.extSearch = value;
 				renderExtensions();
 				const s = $( '#minn-ext-search' );
-				if ( s ) { s.focus(); s.setSelectionRange( s.value.length, s.value.length ); }
+				if ( s ) { s.focus( { preventScroll: true } ); s.setSelectionRange( s.value.length, s.value.length ); }
+			};
+			search.addEventListener( 'input', () => apply( search.value ) );
+			search.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' && search.value ) { e.preventDefault(); e.stopPropagation(); apply( '' ); }
 			} );
+			const clear = $( '#minn-ext-search-clear', view );
+			if ( clear ) clear.addEventListener( 'click', () => apply( '' ) );
 		}
 	}
 

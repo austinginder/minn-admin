@@ -2465,6 +2465,13 @@ button.minn-chip.sel:hover { background: var(--accent); color: #fff; border-colo
 .minn-pager-gap { color: var(--text3); padding: 0 3px; font-size: 13px; }
 .minn-toolbar-search { width: 220px; margin-inline-start: auto; }
 .minn-toolbar-search + .minn-toolbar-meta { margin-inline-start: 0; }
+/* Search with a clear button: the wrap takes the input's toolbar role
+   (width + auto margin) so the button can sit inside the field's end. */
+.minn-search-wrap { position: relative; display: inline-flex; width: 220px; margin-inline-start: auto; }
+.minn-search-wrap .minn-toolbar-search { width: 100%; margin-inline-start: 0; padding-inline-end: 32px; }
+.minn-search-clear { position: absolute; inset-inline-end: 5px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 6px; background: transparent; color: var(--text3); font-size: 17px; line-height: 1; cursor: pointer; }
+.minn-search-clear:hover { background: var(--hover); color: var(--text); }
+.minn-search-clear[hidden] { display: none; }
 
 /* ===== Comments ===== */
 .minn-comment-row { display: flex; gap: 13px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
@@ -4669,7 +4676,7 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   .minn-tabscroll, .minn-toolbar > .minn-tabs { flex: 1 1 100%; }
   .minn-toolbar > .minn-tabs.minn-tabs-aux { flex: 0 0 auto; }
   .minn-toolbar-views .minn-type-select { flex: 1 1 auto; max-width: none; }
-  .minn-toolbar-search { flex: 1 1 140px; width: auto; margin-inline-start: 0; }
+  .minn-toolbar-search, .minn-search-wrap { flex: 1 1 140px; width: auto; margin-inline-start: 0; }
   .minn-toolbar-meta { display: none; }
   .minn-tax-select { flex: 1 1 40%; max-width: none; }
   .minn-bulkbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
