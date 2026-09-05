@@ -50,6 +50,26 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 			await tab.close();
 		}
 
+		// Ctrl-click does the same (GitHub issue 60: Windows readers reach
+		// for Ctrl, the key the help dialog names in place of ⌘). On macOS a
+		// real Control-click is the secondary click and never fires click,
+		// so the event is dispatched with the flag set: it exercises the
+		// handler's branch, and the popup proves the default was prevented
+		// in favor of the post's editor.
+		const popup2 = page.context().waitForEvent( 'page', { timeout: 45000 } ).catch( () => null );
+		await page.evaluate( () => document.querySelector( '#minn-wp-admin-link' ).dispatchEvent(
+			new MouseEvent( 'click', { bubbles: true, cancelable: true, ctrlKey: true } ) ) );
+		const tab2 = await popup2;
+		let url2 = tab2 ? tab2.url() : '';
+		for ( let i = 0; tab2 && i < 20 && ! /post\.php/.test( url2 ); i++ ) {
+			await page.waitForTimeout( 500 );
+			url2 = tab2.url();
+		}
+		t.check( 'Ctrl-click opens the same editor tab', !! tab2 && url2.indexOf( 'post.php' ) !== -1 && url2.indexOf( 'post=' + id ) !== -1, url2 );
+		if ( tab2 ) await tab2.close();
+		const title = await page.getAttribute( '#minn-wp-admin-link', 'title' );
+		t.check( 'button title names the modifier and closes its parenthesis', /click while editing/.test( title ) && ! /editor\)$/.test( title ), title );
+
 		// Plain click still goes to the profile route / dashboard link (the
 		// button keeps its href, so the modifier is the only new behavior).
 		const href = await page.getAttribute( '#minn-wp-admin-link', 'href' );

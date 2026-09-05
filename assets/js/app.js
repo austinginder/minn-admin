@@ -757,6 +757,10 @@
 
 	// Adapters send display labels as data. Translate only the finite Minn
 	// chrome vocabulary here; arbitrary plugin/site content must remain intact.
+	// The modifier glyphs in Minn's copy are macOS's; Windows and Linux
+	// readers get the key names their keyboards carry.
+	const IS_MAC = /Mac|iPhone|iPad|iPod/.test( ( navigator.platform || '' ) + ' ' + ( navigator.userAgent || '' ) );
+
 	function chromeLabel( value ) {
 		const raw = String( value == null ? '' : value );
 		const labels = {
@@ -3962,7 +3966,9 @@
 						<div class="minn-user-role">${ esc( B.user.role ) }</div>
 					</div>
 					<div class="minn-user-acts">
-						${ ENGINE ? '' : `<a class="minn-user-logout" id="minn-wp-admin-link" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="${ esc( __( 'WordPress admin (opens in a new tab) · ⌥-click while editing opens this post in the block editor)' ) ) }" aria-label="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }">${ icon( 'wp' ) }</a>` }
+						${ ENGINE ? '' : `<a class="minn-user-logout" id="minn-wp-admin-link" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="${ esc( __( 'WordPress admin (opens in a new tab)' ) + ' · ' + ( IS_MAC
+								? __( '⌥-click while editing opens this post in the block editor' )
+								: __( 'Alt-click or Ctrl-click while editing opens this post in the block editor' ) ) ) }" aria-label="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }">${ icon( 'wp' ) }</a>` }
 						<a class="minn-user-logout" href="${ esc( B.site.logout ) }" title="${ esc( __( 'Log out' ) ) }" aria-label="${ esc( __( 'Log out' ) ) }">${ icon( 'logout' ) }</a>
 					</div>
 				</div>
@@ -4023,8 +4029,13 @@
 			// post in wp-admin's block editor instead of the dashboard. The
 			// quiet escape hatch — no new chrome, and the ⌘K palette carries
 			// the same command for anyone who doesn't know the modifier.
+			// Ctrl-click counts too: the help dialog tells Windows and Linux
+			// readers to use Ctrl where Minn says ⌘, so that is the key they
+			// reach for, and the link already opens a new tab, so the native
+			// Ctrl-click gains nothing here. (On macOS Control-click is the
+			// secondary click and never arrives as a click.)
 			const wpLink = e.target.closest( '#minn-wp-admin-link' );
-			if ( wpLink && e.altKey && state.route === 'editor' && state.editor ) {
+			if ( wpLink && ( e.altKey || e.ctrlKey ) && state.route === 'editor' && state.editor ) {
 				e.preventDefault();
 				openInBlockEditor();
 				return;
@@ -42213,7 +42224,7 @@
 							<span class="minn-kbd">${ esc( __( 'Esc' ) ) }</span><span>${ esc( __( 'Close menus and dialogs' ) ) }</span>
 						</div>
 						<p class="minn-help-keys-note">${ esc( __( 'The word-count pill (bottom-right in the editor) shows total words, reading time, and words written this session. Click it to set or clear a word goal.' ) ) }</p>
-						<p class="minn-help-keys-note">${ sprintf( /* translators: 1: the Ctrl key, styled as a key. 2: the Command key, styled as a key. */ __( 'On Windows and Linux, use %1$s in place of %2$s.' ), `<span class="minn-kbd">${ esc( __( 'Ctrl' ) ) }</span>`, '<span class="minn-kbd">⌘</span>' ) }</p>
+						<p class="minn-help-keys-note">${ sprintf( /* translators: 1: the Ctrl key, styled as a key. 2: the Command key, styled as a key. */ __( 'On Windows and Linux, use %1$s in place of %2$s.' ), `<span class="minn-kbd">${ esc( __( 'Ctrl' ) ) }</span>`, '<span class="minn-kbd">⌘</span>' ) } ${ sprintf( /* translators: 1: the Alt key, styled as a key. 2: the Option key, styled as a key. */ __( '%1$s stands in for %2$s.' ), `<span class="minn-kbd">${ esc( __( 'Alt' ) ) }</span>`, '<span class="minn-kbd">⌥</span>' ) }</p>
 
 						<h4>${ esc( __( 'Deliberately minimal' ) ) }</h4>
 						<p>${ esc( __( 'Minn surfaces the settings people change day to day; the long tail stays in wp-admin on purpose. For plugin configuration Minn doesn\'t rebuild, open' ) ) } <b>${ esc( __( 'Your profile → AI Access' ) ) }</b>${ esc( __( ' and hand your AI agent a revocable credential to do the fiddly work over the REST API.' ) ) }</p>
