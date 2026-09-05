@@ -44723,19 +44723,25 @@
 	function changelogHtml( md ) {
 		const out = [];
 		let list = null;
-		const flushList = () => { if ( list ) { out.push( `<ul>${ list.join( '' ) }</ul>` ); list = null; } };
+		let para = null;
+		// Markdown paragraph semantics: consecutive plain lines are ONE
+		// paragraph and a plain line right after a bullet continues that
+		// bullet, so a hard-wrapped entry does not render as a stack of
+		// one-line paragraphs (the v0.38.0 entry shipped wrapped at 78 columns).
+		const flushPara = () => { if ( para ) { out.push( `<p>${ changelogInline( para.join( ' ' ) ) }</p>` ); para = null; } };
+		const flushList = () => { flushPara(); if ( list ) { out.push( `<ul>${ list.map( ( it ) => `<li>${ changelogInline( it.join( ' ' ) ) }</li>` ).join( '' ) }</ul>` ); list = null; } };
 		String( md ).split( /\r?\n/ ).forEach( ( line ) => {
 			const l = line.trim();
 			if ( /^# /.test( l ) ) { flushList(); return; } // the file's own "# Changelog" title — the modal has one
 			if ( /^## /.test( l ) ) { flushList(); out.push( `<h3>${ changelogInline( l.slice( 3 ) ) }</h3>` ); return; }
 			if ( /^### /.test( l ) ) { flushList(); out.push( `<h4>${ changelogInline( l.slice( 4 ) ) }</h4>` ); return; }
-			if ( /^[*-] /.test( l ) ) { ( list = list || [] ).push( `<li>${ changelogInline( l.slice( 2 ) ) }</li>` ); return; }
+			if ( /^[*-] /.test( l ) ) { flushPara(); ( list = list || [] ).push( [ l.slice( 2 ) ] ); return; }
 			// Screenshot lines render only on minnadmin.com's changelog — the
 			// app never loads remote images, so drop them here.
 			if ( /^!\[[^\]]*\]\([^)\s]+\)$/.test( l ) ) { flushList(); return; }
 			if ( ! l ) { flushList(); return; }
-			flushList();
-			out.push( `<p>${ changelogInline( l ) }</p>` );
+			if ( list ) { list[ list.length - 1 ].push( l ); return; }
+			( para = para || [] ).push( l );
 		} );
 		flushList();
 		return out.join( '' ) || `<div class="minn-empty">${ esc( __( 'No changelog found.' ) ) }</div>`;
