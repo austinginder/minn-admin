@@ -1520,11 +1520,12 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
  * rows that raise the soft total bar. The bar therefore agrees with the
  * log's All tab for that day, and a site in test mode still sees activity.
  *
- * date_created is UTC MySQL (current_time( 'mysql', true )). Points cover a
- * contiguous window so empty days still render as zero-height bars. Returns
- * null when the events table is missing (fresh install before migration).
+ * date_created is UTC MySQL (current_time( 'mysql', true )); days are
+ * bucketed in the site's timezone. Points cover a contiguous window so empty
+ * days still render as zero-height bars. Returns null when the events table
+ * is missing (fresh install before migration).
  *
- * @param int $days Number of UTC calendar days, inclusive of today. Capped 7–90.
+ * @param int $days Number of site-local days, inclusive of today. Capped 7–90.
  * @return array|null { title, primary, secondary, points:[{label,value,secondary,extra?,from,to}] }
  */
 function minn_admin_gsmtp_send_chart( $days = 14 ) {
@@ -1537,20 +1538,33 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
 		return null;
 	}
 
-	$tz    = new DateTimeZone( 'UTC' );
-	$today = new DateTime( 'now', $tz );
-	$today->setTime( 0, 0, 0 );
+	// Days are the SITE's days, so a bar lines up with the Date column (which
+	// renders these UTC stamps in site time) and an evening send does not
+	// land on tomorrow's bar. One fixed offset (the site's offset right now)
+	// shifts both the bucketing and the bounds, so a bar and the list it
+	// narrows to always agree; across a DST change inside the window the
+	// two are off by an hour together, rather than disagreeing.
+	$offset = wp_timezone()->getOffset( new DateTime( 'now', new DateTimeZone( 'UTC' ) ) );
+	$utc    = new DateTimeZone( 'UTC' );
+	$today  = new DateTime( '@' . ( time() + $offset ) );
+	$today->setTimezone( $utc );
+	$today->setTime( 0, 0, 0 ); // site-local midnight, held as a naive UTC clock
 	$start = clone $today;
 	$start->modify( '-' . ( $days - 1 ) . ' days' );
+	$utc_of = function ( DateTime $local ) use ( $offset ) {
+		return gmdate( 'Y-m-d H:i:s', $local->getTimestamp() - $offset );
+	};
 
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefix-scoped.
 	$rows = $wpdb->get_results(
 		$wpdb->prepare(
-			"SELECT DATE(date_created) AS d, status, COUNT(*) AS c
+			"SELECT DATE(DATE_ADD(date_created, INTERVAL %d SECOND)) AS d, status, COUNT(*) AS c
 			FROM {$table}
 			WHERE date_created >= %s
-			GROUP BY DATE(date_created), status",
-			$start->format( 'Y-m-d H:i:s' )
+			GROUP BY DATE(DATE_ADD(date_created, INTERVAL %d SECOND)), status",
+			$offset,
+			$utc_of( $start ),
+			$offset
 		),
 		ARRAY_A
 	);
@@ -1591,14 +1605,16 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
 		$key   = $day->format( 'Y-m-d' );
 		$sent  = isset( $by[ $key ] ) ? (int) $by[ $key ]['sent'] : 0;
 		$fail  = isset( $by[ $key ] ) ? (int) $by[ $key ]['failed'] : 0;
+		$day_end = clone $day;
+		$day_end->setTime( 23, 59, 59 );
 		$point = array(
 			'label'     => $day->format( 'M j' ),
 			'value'     => $sent,
 			'secondary' => $fail,
-			// The bar's day, in the same UTC shape date_created stores, so a
-			// click can hand the bounds straight back to the events route.
-			'from'      => $day->format( 'Y-m-d 00:00:00' ),
-			'to'        => $day->format( 'Y-m-d 23:59:59' ),
+			// The site-local day's bounds in the UTC shape date_created
+			// stores, so a click hands them straight back to the events route.
+			'from'      => $utc_of( $day ),
+			'to'        => $utc_of( $day_end ),
 		);
 		// Held / filtered / other outcomes: extra tip rows in a stable order
 		// (the known labels first), only when the day has any.

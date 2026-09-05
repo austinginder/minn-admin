@@ -12,7 +12,7 @@
  * the point's extra rows: sandboxed, filtered), so a bar's total must equal
  * the All tab's windowed count exactly, and the Failed tab the bar's
  * secondary series. The suite seeds two sandboxed and one filtered row
- * for today (UTC) under subject "minn-chart-fixture-held" (delete +
+ * for today under subject "minn-chart-fixture-held" (delete +
  * reinsert each run, so they never accumulate) to prove the extra rows.
  */
 const { launch, login, reporter, BASE, WP } = require( './helpers' );
@@ -32,7 +32,9 @@ const { launch, login, reporter, BASE, WP } = require( './helpers' );
 			'global $wpdb;',
 			'$table = $wpdb->prefix . "gravitysmtp_events";',
 			'$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE subject = %s", "minn-chart-fixture-held" ) );',
-			'$ts = gmdate( "Y-m-d 12:00:00" );',
+			// A minute ago in UTC: always inside the site\'s local today,
+			// which is the chart\'s last bar (days bucket in site time).
+			'$ts = gmdate( "Y-m-d H:i:s", time() - 60 );',
 			'foreach ( array( "sandboxed", "sandboxed", "partially-sent" ) as $st ) {',
 			'  $wpdb->insert( $table, array( "date_created" => $ts, "date_updated" => $ts, "status" => $st, "service" => "smtp", "subject" => "minn-chart-fixture-held", "message" => "held fixture body", "extra" => "" ) );',
 			'}',
@@ -73,7 +75,7 @@ const { launch, login, reporter, BASE, WP } = require( './helpers' );
 	const withData = points.filter( ( p ) => totalOf( p ) > 0 );
 	t.check( 'Chart points carry from/to bounds', points.length > 0 && points.every( ( p ) => p.from && p.to ), JSON.stringify( points[ 0 ] ) );
 	t.check( 'A bar with sends exists to click', withData.length > 0, `nonzero=${ withData.length }` );
-	// Today (UTC) is the last point and carries the seeded held rows.
+	// Today (site-local) is the last point and carries the seeded held rows.
 	const bar = points[ points.length - 1 ];
 	const held = ( bar.extra || [] ).reduce( ( m, x ) => Object.assign( m, { [ x.label ]: x.value } ), {} );
 	t.check( 'Today\'s point lists sandboxed and filtered as extra rows', held.Sandboxed >= 2 && held.Filtered >= 1, JSON.stringify( bar ) );

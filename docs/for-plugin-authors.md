@@ -449,6 +449,8 @@ with that point's `from` / `to`, a chip beside the tabs names the bar's
 opaque to Minn and come back exactly as you emitted them, so use the clock
 your log stores (Gravity SMTP's are UTC, FluentSMTP's are site-local) and
 read them in your list route as an inclusive window on that same column.
+Bucket the days in the site's timezone, whatever the column's clock, so a
+bar lines up with the Date column beside it (which renders in site time).
 Ignore a value that is not shaped like a datetime rather than guessing at
 it. The window combines with `tabs` and `search`, so it must AND with them.
 
