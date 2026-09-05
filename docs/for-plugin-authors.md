@@ -417,6 +417,30 @@ on the chart (or on any point), bars become dual: a soft total bar
 omit `secondary` and render one accent bar per point. The bundled Gravity
 SMTP adapter is the reference (daily sent/failed from its events table).
 
+A bar can also narrow the list beneath it. Give each point the window it
+covers and declare `dateQuery` on the collection:
+
+```json
+{ "label": "Jul 1", "value": 5, "secondary": 1, "from": "2026-07-01 00:00:00", "to": "2026-07-01 23:59:59" }
+```
+
+```php
+'collection' => array(
+    'route'     => 'your/v1/log',
+    'dateQuery' => 'after={from}&before={to}',
+    // …
+),
+```
+
+Bars with something in them take the pointer; a click appends the template
+with that point's `from` / `to`, a chip beside the tabs names the bar's
+`label` and clears it, and the same bar again clears it too. The bounds are
+opaque to Minn and come back exactly as you emitted them, so use the clock
+your log stores (Gravity SMTP's are UTC, FluentSMTP's are site-local) and
+read them in your list route as an inclusive window on that same column.
+Ignore a value that is not shaped like a datetime rather than guessing at
+it. The window combines with `tabs` and `search`, so it must AND with them.
+
 ### `settings` — a schema-driven settings view
 
 ![A settings view: schema tabs, text/number/select fields with help text, a toggle revealing a dependent field, and a locked count with the wp-admin escape](img/settings-view.png)
@@ -534,6 +558,7 @@ Rules of the road:
 | `actions` | Buttons in the detail modal **and** the list-row ⋯ / right-click menu: `{ label, method, route, body, confirm, danger, when, href, fields, settingsItem, list, download }` — each key detailed in [the `actions` section](#collectionactions--verbs-on-rows-and-in-the-detail-modal) below |
 | `sortQuery` | *(since v0.18.0)* A query-string template with `{by}` and `{dir}` (e.g. `orderby={by}&direction={dir}`). Columns carrying a `sort` token render clickable headers: first click sorts (numeric and `ago` columns start descending, everything else ascending), a repeat click flips direction, and the template is appended to the list request. Omit it and headers stay plain |
 | `search` | A query-string template with `{q}` (e.g. `filterBy[url]={q}` or `search={q}`). Adds a filter box to the toolbar; the term is debounced and appended to the list request. For APIs that take search criteria as a JSON string (Gravity Forms), use the object form: `array( 'param' => 'search', 'json' => <criteria array with '{q}' where the term goes> )` — the term is JSON-escaped and the criteria double-URL-encoded to match APIs that `urldecode()` the param themselves |
+| `dateQuery` *(v0.39)* | A query-string template with `{from}` and `{to}` (e.g. `after={from}&before={to}`). When the surface's status card carries a chart whose points declare `from` / `to`, each bar with something in it becomes a click: the list narrows to that bar's window, a chip beside the tabs names the day and clears it, and the same bar again widens the list back. The bounds are passed back verbatim and combine with `tabs` and `search`, so your list route reads the two parameters with the same clock the chart used. See the [status chart](#status--a-status-card-above-the-list) section |
 | `filter` *(v0.12)* | A second list dimension beside `tabs`, rendered as a segmented control — shapes and the json-merge rule in [the `filter` section](#collectionfilter--a-second-dimension-beside-tabs) below |
 | `filterBar` | Wear the **orders filter bar** instead of the pill strip: a status dropdown that holds more than one status at once, Add filter, chips beneath, and the whole narrowing in the URL. Replaces `tabs`, `filter` and the surface's own search box — see [the `filterBar` section](#collectionfilterbar--the-orders-filter-bar-on-your-surface) below |
 | `bulk` | Bulk actions: the same shape as `actions` minus `href` (a batch always needs a `route`). Declaring any adds a checkbox column (shift-range, Select page) and a selection bar. Each action runs **per selected item** (`{id}` replaced; one failure never aborts the rest), `when` is evaluated per item so a mixed selection skips ineligible rows, a button whose `when` matches nothing on the current page isn't offered at all, and the result toast reports done / skipped / failed |

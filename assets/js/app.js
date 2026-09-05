@@ -15412,7 +15412,7 @@
 
 	function surfaceState( id ) {
 		if ( ! state.surface[ id ] ) {
-			state.surface[ id ] = { tab: '_all', cache: null, tabs: null, labels: {}, q: '', view: 'main', status: null };
+			state.surface[ id ] = { tab: '_all', cache: null, tabs: null, labels: {}, q: '', view: 'main', status: null, range: null };
 		}
 		return state.surface[ id ];
 	}
@@ -15435,9 +15435,17 @@
 	// when `secondary` is present, single accent bars otherwise). Points are
 	// display-ready — the server formats labels. Optional primary/secondary
 	// strings name the tip rows (default "Count" / "Secondary").
-	function surfaceChartHtml( chart ) {
+	// opts.pickable: the list can narrow to a bar's window (collection
+	// dateQuery), so bars whose point carries from/to and has anything in it
+	// take the pointer; opts.selected is the `from` of the bar in force.
+	function surfaceChartHtml( chart, opts ) {
 		if ( ! chart || ! Array.isArray( chart.points ) || ! chart.points.length ) return '';
 		const points = chart.points;
+		const pickable = !! ( opts && opts.pickable );
+		const selected = opts && opts.selected ? String( opts.selected ) : '';
+		const colClass = ( p, n ) => 'minn-chart-col'
+			+ ( pickable && p.from && p.to && n > 0 ? ' pick' : '' )
+			+ ( selected && String( p.from ) === selected ? ' selected' : '' );
 		// An all-zero window renders invisible bars — 88px of dead card. Say
 		// so in one quiet line instead (Gravity SMTP test mode:
 		// sandboxed sends never count as sent/failed).
@@ -15467,12 +15475,12 @@
 							// Soft bar = total (value + secondary), solid = primary value.
 							// Same stacking idiom as Overview traffic (pageviews/visitors).
 							const total = v + s;
-							return `<div class="minn-chart-col" data-ci="${ i }">
+							return `<div class="${ colClass( p, total ) }" data-ci="${ i }">
 								<div class="minn-chart-views" style="height:${ pct( total ) }%"></div>
 								<div class="minn-chart-visitors" style="height:${ pct( v ) }%"></div>
 							</div>`;
 						}
-						return `<div class="minn-chart-col" data-ci="${ i }">
+						return `<div class="${ colClass( p, v ) }" data-ci="${ i }">
 							<div class="minn-chart-bar${ i === points.length - 1 ? ' last' : '' }" style="height:${ Math.max( v > 0 ? 3 : 0, pct( v ) ) }%"></div>
 						</div>`;
 					} ).join( '' ) }
@@ -15480,10 +15488,19 @@
 			</div>`;
 	}
 
-	function bindSurfaceChart( view, chart ) {
+	function bindSurfaceChart( view, chart, onPick ) {
 		if ( ! chart || ! chart.points || ! chart.points.length ) return;
 		const el = $( '[data-sstat-chart]', view );
 		if ( ! el ) return;
+		// Only bars the markup marked pickable (a window to hand back and
+		// something in it) answer a click; an empty day has nothing to show.
+		if ( typeof onPick === 'function' ) el.addEventListener( 'click', ( e ) => {
+			const col = e.target.closest( '.minn-chart-col.pick' );
+			if ( ! col || ! el.contains( col ) ) return;
+			const i = parseInt( col.dataset.ci, 10 );
+			const p = chart.points[ i ];
+			if ( p && p.from && p.to ) onPick( p, i );
+		} );
 		const primary = chromeLabel( chart.primary || 'Count' );
 		const secondary = chart.secondary ? chromeLabel( chart.secondary ) : '';
 		const dual = !! chart.secondary || chart.points.some( ( p ) => p.secondary != null );
@@ -15522,7 +15539,7 @@
 		el.addEventListener( 'mouseleave', hide );
 	}
 
-	function surfaceStatusHtml( st ) {
+	function surfaceStatusHtml( st, chartOpts ) {
 		if ( ! st ) return '';
 		const rows = ( st.rows || [] ).map( ( r ) => `
 			<div class="minn-sstat">
@@ -15530,7 +15547,7 @@
 				<div class="minn-sstat-value">${ esc( r.value ) }</div>
 				${ r.hint ? `<div class="minn-sstat-hint">${ esc( r.hint ) }</div>` : '' }
 			</div>` ).join( '' );
-		const chart = surfaceChartHtml( st.chart );
+		const chart = surfaceChartHtml( st.chart, chartOpts );
 		const cmd = st.command ? `
 			<div class="minn-sstat-cmd">
 				${ st.command.label ? `<div class="minn-sstat-label">${ esc( chromeLabel( st.command.label ) ) }</div>` : '' }
@@ -15840,11 +15857,11 @@
 		bindActionFields( rowEl, action, onCancel, run );
 	}
 
-	function bindSurfaceStatus( s, view ) {
+	function bindSurfaceStatus( s, view, onPick ) {
 		const ss = surfaceState( s.id );
 		const st = ss.status;
 		if ( ! st ) return;
-		bindSurfaceChart( view, st.chart );
+		bindSurfaceChart( view, st.chart, onPick );
 		const copy = $( '#minn-sstat-copy', view );
 		if ( copy && st.command ) copy.addEventListener( 'click', async () => {
 			try {
@@ -16174,6 +16191,15 @@
 			// Encoded twice: GF urldecodes the already-decoded param again.
 			parts.push( criteriaParam + '=' + encodeURIComponent( encodeURIComponent( JSON.stringify( criteria ) ) ) );
 		}
+		// A status-chart bar the reader clicked: the point's from/to ride the
+		// collection's dateQuery template verbatim. The bounds are opaque to
+		// Minn (UTC for one adapter, site-local for another); the adapter
+		// that minted them is the one that reads them back.
+		if ( col.dateQuery && ss.range ) {
+			parts.push( col.dateQuery
+				.split( '{from}' ).join( encodeURIComponent( ss.range.from ) )
+				.split( '{to}' ).join( encodeURIComponent( ss.range.to ) ) );
+		}
 		// Column sort (v0.18.0): sortQuery is a {by}/{dir} template, appended
 		// only when the user picked a sortable header — no pick keeps the
 		// route's natural order, exactly as before the primitive existed.
@@ -16219,7 +16245,8 @@
 			const bar = col.filterBar
 				? JSON.stringify( orderFilters( surfaceFilterSpec( s.id ) ) )
 				: '';
-			return ss.tab + '|' + ( ss.q || '' ) + '|' + surfaceFilterValue( col, ss ) + '|' + ( ss.sortBy || '' ) + ( ss.sortDir || '' ) + '|' + bar;
+			const range = ss.range ? ss.range.from + '..' + ss.range.to : '';
+			return ss.tab + '|' + ( ss.q || '' ) + '|' + surfaceFilterValue( col, ss ) + '|' + ( ss.sortBy || '' ) + ( ss.sortDir || '' ) + '|' + bar + '|' + range;
 		};
 		const ctx = ctxOf();
 		const res = await apiRes( surfaceRoute( s, ss, page ) );
@@ -16904,10 +16931,13 @@
 				${ coll.filter.options.map( ( [ v, label ] ) =>
 					`<button class="minn-tab${ surfaceFilterValue( coll, ss ) === String( v ) ? ' active' : '' }" data-sfilter="${ esc( String( v ) ) }">${ esc( chromeLabel( label ) ) }</button>` ).join( '' ) }
 			</div>` : '';
+		// The day a chart bar narrowed the list to, as a chip beside the tabs
+		// with its own clear. Only where the collection can honor it.
+		const rangeHtml = coll.dateQuery && ss.range ? `<button type="button" class="minn-chip sel minn-srange" data-srange-clear title="${ esc( __( 'Show every day' ) ) }" aria-label="${ esc( sprintf( /* translators: %s: the day the list is narrowed to. */ __( 'Showing %s only. Clear' ), ss.range.label ) ) }">${ esc( ss.range.label ) } <span aria-hidden="true">×</span></button>` : '';
 		const searchHtml = coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="${ esc( sprintf( /* translators: %s: the localized name of the items being searched. */ __( 'Search %s…' ), chromeLabel( coll.viewLabel || __( 'items' ) ) ) ) }" value="${ esc( ss.q || '' ) }">` : '';
 		const createHtml = coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( chromeLabel( coll.create.label || __( 'Add' ) ) ) }</button>` : '';
 		const importHtml = coll.import ? `<button class="minn-btn-soft" id="minn-surface-import">${ icon( 'upload' ) } ${ esc( chromeLabel( coll.import.label || __( 'Import' ) ) ) }</button>` : '';
-		const rowTwo = tabsHtml + filterHtml + searchHtml
+		const rowTwo = tabsHtml + filterHtml + rangeHtml + searchHtml
 			+ `<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>` + importHtml + createHtml;
 		// A surface can ask for the ORDERS bar instead of the pill strip:
 		// status as a multi-select, Add filter, chips beneath and the whole
@@ -16932,14 +16962,14 @@
 		// controls underneath. Simple surfaces keep the single row.
 		const toolbarHtml = bar
 			? ( switchHtml ? `<div class="minn-toolbar minn-toolbar-views">${ switchHtml }</div>` : '' ) + barHtml
-			: ( switchHtml && ( tabsHtml || filterHtml || searchHtml || createHtml || importHtml )
+			: ( switchHtml && ( tabsHtml || filterHtml || rangeHtml || searchHtml || createHtml || importHtml )
 				? `<div class="minn-toolbar minn-toolbar-views">${ switchHtml }</div>
 			   <div class="minn-toolbar">${ rowTwo }</div>`
 				: `<div class="minn-toolbar">${ switchHtml }${ rowTwo }</div>` );
 
 		closeOrderFilterPop();
 		view.innerHTML = `
-		${ ss.view === 'main' ? surfaceStatusHtml( ss.status ) : '' }
+		${ ss.view === 'main' ? surfaceStatusHtml( ss.status, { pickable: !! coll.dateQuery, selected: ss.range && ss.range.from } ) : '' }
 		${ toolbarHtml }
 		${ hasBulk ? '<div id="minn-sbulk-slot"></div>' : '' }
 		<div class="minn-card minn-table">
@@ -17150,7 +17180,27 @@
 				syncBulk();
 			} );
 		}
-		bindSurfaceStatus( s, view );
+		// A chart bar narrows the list to that bar's window; the same bar
+		// again, or the chip beside the tabs, widens it back. The reload
+		// repaints the whole surface, so the chip and the highlighted bar
+		// come out of the render; the instant class flip is only feedback.
+		const paintRange = () => {
+			$$( '[data-sstat-chart] .minn-chart-col.selected', view ).forEach( ( c ) => c.classList.remove( 'selected' ) );
+			if ( ! ss.range ) return;
+			const col = $$( '[data-sstat-chart] .minn-chart-col', view )
+				.find( ( c ) => ( ( ss.status && ss.status.chart && ss.status.chart.points[ parseInt( c.dataset.ci, 10 ) ] ) || {} ).from === ss.range.from );
+			if ( col ) col.classList.add( 'selected' );
+		};
+		bindSurfaceStatus( s, view, coll.dateQuery ? ( p ) => {
+			const same = ss.range && ss.range.from === p.from && ss.range.to === p.to;
+			ss.range = same ? null : { from: String( p.from ), to: String( p.to ), label: String( p.label || p.from ) };
+			surfaceListReload( paintRange );
+		} : null );
+		const rangeClear = $( '[data-srange-clear]', view );
+		if ( rangeClear ) rangeClear.addEventListener( 'click', () => {
+			ss.range = null;
+			surfaceListReload( paintRange );
+		} );
 		const search = $( '#minn-surface-search', view );
 		if ( search ) {
 			let t = null;

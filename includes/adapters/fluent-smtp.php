@@ -240,7 +240,15 @@ function minn_admin_fluent_smtp_status_model() {
 	$by_day = array();
 	for ( $i = 13; $i >= 0; $i-- ) {
 		$d            = date_i18n( 'Y-m-d', current_time( 'timestamp' ) - $i * DAY_IN_SECONDS );
-		$by_day[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+		// from/to ride in the same site-local shape created_at stores, so a
+		// bar click hands them straight back to the list route.
+		$by_day[ $d ] = array(
+			'label'     => $d,
+			'value'     => 0,
+			'secondary' => 0,
+			'from'      => $d . ' 00:00:00',
+			'to'        => $d . ' 23:59:59',
+		);
 	}
 	foreach ( (array) $days as $row ) {
 		$d = (string) $row->d;
@@ -336,6 +344,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route'     => 'minn-admin/v1/fluent-smtp/emails',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
+			// A status-chart bar narrows the log to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'tabs'      => array(
@@ -632,6 +643,17 @@ add_action( 'rest_api_init', function () {
 			if ( $status ) {
 				$where[]  = 'status = %s';
 				$params[] = $status;
+			}
+			// Day window from a status-chart bar click (collection dateQuery).
+			// created_at is site-local current_time and so are the chart's
+			// from/to: a plain string comparison, no zone shifting. A value
+			// not shaped like a datetime is ignored rather than guessed at.
+			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
+				$raw = trim( (string) $request->get_param( $param ) );
+				if ( preg_match( '/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?$/', $raw, $m ) ) {
+					$where[]  = "created_at {$op} %s";
+					$params[] = $m[1] . ' ' . ( isset( $m[2] ) ? $m[2] : '00:00:00' );
+				}
 			}
 			// Mirror Logger::$searchables: to / from / subject (to is serialized —
 			// LIKE still matches the address text inside the blob).

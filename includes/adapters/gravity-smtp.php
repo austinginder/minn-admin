@@ -335,6 +335,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'viewLabel' => __( 'Log', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/gravity-smtp/events',
 			'pageQuery' => 'per_page=25&page={page}',
+			// A status-chart bar narrows the log to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'tabs'      => array(
@@ -647,7 +650,21 @@ add_action( 'rest_api_init', function () {
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
 
-			$where  = $status ? $wpdb->prepare( 'WHERE status = %s', $status ) : '';
+			$clauses = array();
+			if ( $status ) {
+				$clauses[] = $wpdb->prepare( 'status = %s', $status );
+			}
+			// Day window from a status-chart bar click (collection dateQuery).
+			// date_created is UTC MySQL, and so are the chart's from/to, so
+			// the comparison is a plain string one; anything not shaped like
+			// a datetime is ignored rather than guessed at.
+			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
+				$bound = minn_admin_gsmtp_datetime_param( $request->get_param( $param ) );
+				if ( $bound ) {
+					$clauses[] = $wpdb->prepare( "date_created {$op} %s", $bound ); // phpcs:ignore
+				}
+			}
+			$where  = $clauses ? 'WHERE ' . implode( ' AND ', $clauses ) : '';
 			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} {$where}" ); // phpcs:ignore
 			$rows   = $wpdb->get_results( $wpdb->prepare(
 				"SELECT id, date_created, status, service, subject, extra FROM {$table} {$where} ORDER BY id DESC LIMIT %d OFFSET %d", // phpcs:ignore
@@ -1563,6 +1580,10 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
 			'label'     => $day->format( 'M j' ),
 			'value'     => $sent,
 			'secondary' => $fail,
+			// The bar's day, in the same UTC shape date_created stores, so a
+			// click can hand the bounds straight back to the events route.
+			'from'      => $day->format( 'Y-m-d 00:00:00' ),
+			'to'        => $day->format( 'Y-m-d 23:59:59' ),
 		);
 	}
 
@@ -1576,6 +1597,24 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
 		'secondary' => __( 'Failed', 'minn-admin' ),
 		'points'    => $points,
 	);
+}
+
+/**
+ * A datetime bound from a request param, or '' when it is not one.
+ *
+ * Accepts `Y-m-d` (a bare day) or `Y-m-d H:i:s`; the chart hands back exactly
+ * the latter. Anything else (words, ISO with a zone, a stray quote) is
+ * dropped: a window that cannot be read is no window, not a guess.
+ *
+ * @param mixed $raw Request param.
+ * @return string Normalized `Y-m-d H:i:s`, or ''.
+ */
+function minn_admin_gsmtp_datetime_param( $raw ) {
+	$raw = trim( (string) $raw );
+	if ( preg_match( '/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?$/', $raw, $m ) ) {
+		return $m[1] . ' ' . ( isset( $m[2] ) ? $m[2] : '00:00:00' );
+	}
+	return '';
 }
 
 /**

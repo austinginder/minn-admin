@@ -907,6 +907,14 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-chart-tip-stats span { font-size: 11.5px; color: var(--text3); }
 .minn-chart-tip-hint { padding: 0 13px 8px; font-size: 11px; color: var(--text3); text-align: center; }
 .minn-chart.clickable .minn-chart-col { cursor: pointer; }
+/* Status-card bars that narrow the list beneath (collection dateQuery). */
+.minn-sstat-chart-bars .minn-chart-col.pick { cursor: pointer; }
+.minn-chart-col.selected .minn-chart-views { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.minn-chart-col.selected .minn-chart-visitors, .minn-chart-col.selected .minn-chart-bar { opacity: 1; background: var(--accent2); }
+.minn-chart-col.selected::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px; border-radius: 2px; background: var(--accent2);
+}
+.minn-toolbar .minn-srange { white-space: nowrap; flex: none; }
 
 /* Traffic day drill-down (Overview chart bar click). */
 .minn-traf-day { padding: 4px 18px 16px; }
