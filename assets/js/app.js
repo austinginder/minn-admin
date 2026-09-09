@@ -1027,8 +1027,8 @@
 		// Settings views hold form edits — refreshing would discard them.
 		if ( ss.view === 'settings' || ss.settingsItem ) return null;
 		return {
-			clear: () => { ss.cache = null; ss.tabs = null; ss.status = null; },
-			load: () => Promise.all( [ loadSurfaceTabs( s ), loadSurfaceItems( s ), loadSurfaceStatus( s ) ] ),
+			clear: () => { ss.cache = null; ss.tabs = null; ss.filterOptions = null; ss.status = null; },
+			load: () => Promise.all( [ loadSurfaceTabs( s ), loadSurfaceFilters( s ), loadSurfaceItems( s ), loadSurfaceStatus( s ) ] ),
 			render: () => renderSurface( s ),
 		};
 	}
@@ -16155,11 +16155,21 @@
 		return s.collection;
 	}
 
+	// Options for collection.filter: a static list, or the list fetched
+	// via filter.route (loaded into ss.filterOptions). First option is
+	// the default; an empty value means "no narrowing".
+	function surfaceFilterOptions( col, ss ) {
+		if ( ! col || ! col.filter ) return [];
+		if ( ss && ss.filterOptions && ss.filterOptions.length ) return ss.filterOptions;
+		return col.filter.options || [];
+	}
+
 	// The active filter value (a second list dimension beside tabs — GF's
 	// Received / Spam / Trash). First option is the default.
 	function surfaceFilterValue( col, ss ) {
-		if ( ! col.filter || ! col.filter.options || ! col.filter.options.length ) return '';
-		return ss.filter != null ? ss.filter : String( col.filter.options[ 0 ][ 0 ] );
+		const opts = surfaceFilterOptions( col, ss );
+		if ( ! opts.length ) return '';
+		return ss.filter != null ? ss.filter : String( opts[ 0 ][ 0 ] );
 	}
 
 	function surfaceRoute( s, ss, page ) {
@@ -16259,6 +16269,32 @@
 			ss.tabs = all.concat( items.map( ( it ) => [ String( it[ tabs.valueKey ] ), stripTags( String( it[ tabs.labelKey ] || it[ tabs.valueKey ] ) ) ] ) );
 		} else {
 			ss.tabs = all;
+		}
+	}
+
+	async function loadSurfaceFilters( s ) {
+		const ss = surfaceState( s.id );
+		const f = ( surfaceColl( s, ss ) || {} ).filter;
+		if ( ! f ) return;
+		if ( ss.filterOptions ) return;
+		if ( f.options && f.options.length ) {
+			ss.filterOptions = f.options;
+			return;
+		}
+		if ( ! f.route ) return;
+		try {
+			const body = await api( f.route );
+			const items = Array.isArray( body ) ? body
+				: ( Array.isArray( body && body.items ) ? body.items : Object.values( body || {} ) );
+			const vk = f.valueKey || 'id';
+			const lk = f.labelKey || 'title';
+			const all = [ [ '', f.allLabel || __( 'All' ) ] ];
+			ss.filterOptions = all.concat( items.map( ( it ) => [
+				String( it[ vk ] ),
+				stripTags( String( it[ lk ] || it[ vk ] ) ),
+			] ) );
+		} catch ( e ) {
+			ss.filterOptions = [ [ '', f.allLabel || __( 'All' ) ] ];
 		}
 	}
 
@@ -16837,6 +16873,7 @@
 						ss.tab = '_all';
 						ss.q = '';
 						ss.filter = null;
+						ss.filterOptions = null;
 						ss.sortBy = null; // sort belongs to the view's own columns
 						ss.sortDir = null;
 						ss.status = null; // refresh status card for the active view
@@ -16847,6 +16884,7 @@
 					},
 					load: () => Promise.all( [
 						loadSurfaceTabs( s ),
+						loadSurfaceFilters( s ),
 						loadSurfaceItems( s ),
 						loadSurfaceStatus( s ),
 					] ),
@@ -16874,6 +16912,8 @@
 			ss.cache = null;
 			ss.tabs = null;
 			ss.tab = '_all';
+			ss.filter = null;
+			ss.filterOptions = null;
 			ss.sortBy = null;
 			ss.sortDir = null;
 		}
@@ -16883,7 +16923,7 @@
 			return;
 		}
 		const coll = surfaceColl( s, ss );
-		if ( ! ss.cache || ( coll.tabs && ! ss.tabs ) || ( s.status && ! ss.status ) ) {
+		if ( ! ss.cache || ( coll.tabs && ! ss.tabs ) || ( coll.filter && coll.filter.route && ! ss.filterOptions ) || ( s.status && ! ss.status ) ) {
 			if ( softLoadPending( s.id ) ) return; // a soft reload owns the view
 			// Soft path: filter/tab clicks leave the toolbar in place.
 			if ( view.querySelector( '.minn-toolbar, .minn-tabs, .minn-view-switch' ) ) {
@@ -16892,6 +16932,7 @@
 					view,
 					load: () => Promise.all( [
 						loadSurfaceTabs( s ),
+						loadSurfaceFilters( s ),
 						loadSurfaceItems( s ),
 						loadSurfaceStatus( s ),
 					] ),
@@ -16901,7 +16942,7 @@
 			}
 			closeOrderFilterPop();
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
-			Promise.all( [ loadSurfaceTabs( s ), loadSurfaceItems( s ), loadSurfaceStatus( s ) ] )
+			Promise.all( [ loadSurfaceTabs( s ), loadSurfaceFilters( s ), loadSurfaceItems( s ), loadSurfaceStatus( s ) ] )
 				.then( renderIfCurrent( s.id ) )
 				.catch( showErr );
 			return;
@@ -16949,12 +16990,22 @@
 			</div>` ) : '';
 		// The filter is the SECOND strip on its row, so it wears the quiet
 		// text style (one boxed pill strip per row — the Extensions rule:
-		// stacked bordered containers read as chrome soup).
-		const filterHtml = coll.filter && coll.filter.options ? `
+		// stacked bordered containers read as chrome soup). A long origin
+		// list (Gravity SMTP's sending plugins) becomes the same combobox
+		// the tab strip uses once it would overflow.
+		const filterOpts = surfaceFilterOptions( coll, ss );
+		const filterChars = filterOpts.reduce( ( n, t ) => n + String( t[ 1 ] || '' ).length, 0 );
+		const manyFilters = filterOpts.length > 6 || filterChars > 64;
+		const filterAll = filterOpts.length ? filterOpts[ 0 ] : null;
+		const filterHtml = filterOpts.length > 1 ? ( manyFilters ? `
+			<div class="minn-ac minn-tax-select" data-sfiltercombo>
+				<input class="minn-input minn-ac-input" placeholder="${ esc( chromeLabel( ( coll.filter && coll.filter.label ) || ( filterAll && filterAll[ 1 ] ) || __( 'All' ) ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<div class="minn-ac-panel" hidden></div>
+			</div>` : `
 			<div class="minn-tabs minn-quiet-tabs">
-				${ coll.filter.options.map( ( [ v, label ] ) =>
+				${ filterOpts.map( ( [ v, label ] ) =>
 					`<button class="minn-tab${ surfaceFilterValue( coll, ss ) === String( v ) ? ' active' : '' }" data-sfilter="${ esc( String( v ) ) }">${ esc( chromeLabel( label ) ) }</button>` ).join( '' ) }
-			</div>` : '';
+			</div>` ) : '';
 		// The day a chart bar narrowed the list to, as a chip beside the tabs
 		// with its own clear. Only where the collection can honor it.
 		const rangeHtml = coll.dateQuery && ss.range ? `<button type="button" class="minn-chip sel minn-srange" data-srange-clear title="${ esc( __( 'Show every day' ) ) }" aria-label="${ esc( sprintf( /* translators: %s: the day the list is narrowed to. */ __( 'Showing %s only. Clear' ), ss.range.label ) ) }">${ esc( ss.range.label ) } <span aria-hidden="true">×</span></button>` : '';
@@ -17093,6 +17144,18 @@
 				} );
 			} )
 		);
+		const filterCombo = view.querySelector( '[data-sfiltercombo]' );
+		if ( filterCombo ) bindAutocomplete( filterCombo,
+			filterOpts.map( ( [ id, label ] ) => ( { value: String( id ), label: chromeLabel( label ) } ) ), {
+				strict: true,
+				value: surfaceFilterValue( coll, ss ),
+				onPick: ( v ) => {
+					const next = v == null ? '' : String( v );
+					if ( surfaceFilterValue( coll, ss ) === next ) return;
+					ss.filter = next;
+					surfaceListReload();
+				},
+			} );
 		bindSurfaceViewSwitch( s, ss, view );
 		// Row click opens the detail; ⋯ / right-click open the action menu
 		// (content-list pattern generalized — verbs live on collection.actions).

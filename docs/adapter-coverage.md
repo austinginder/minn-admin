@@ -47,7 +47,7 @@ Reference depth: **Gravity SMTP**. Family doc: `mail-plugins.md`.
 
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| gravity-smtp | Y | Y | Y | Y | — | Y | Y | Y | Y | Y | 2026-07-15 | Settings, Suppressions, Debug log, Routing (toggle/delete), Filtered tab; **single + bulk log delete** via Event_Model; condition authoring = **L** |
+| gravity-smtp | Y | Y | Y | Y | — | Y | Y | Y | Y | Y | 2026-09-09 | Settings, Suppressions, Debug log, Routing (toggle/delete), Filtered tab; **search** (subject/extra/service/message) + **Source filter** (`filter.route`); Source/Service columns; **single + bulk log delete** via Event_Model; condition authoring = **L** |
 | fluent-smtp | Y | Y | Y | Y | — | Y | Y | Y | · | Y | 2026-08-06 | Status + chart + tabs; search + delete; **sections detail** (pill, sandboxed HTML body, provider-reply peek, **Resends trail**); **settings tab** (default/fallback connection, logging, retention, simulation via their Settings model; connection wizard = **L**); **2.3.0 catch-up**: resend via their `resendEmailFromLog` (trail + no duplicate row), "Resend to…" override action, ConnectionHealth status-card + System rows, caps via `fluent_mail/manage_capability` |
 | post-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-17 | Status + chart + tabs; resend; search + delete; **sections detail** (pill, HTML body, failure code row); transcript still not exposed |
 | wp-mail-smtp | Y | Y | · | Y | — | · | · | · | · | Y | 2026-07-14 | Free = debug events only; full log is Pro |

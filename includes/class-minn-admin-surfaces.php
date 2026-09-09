@@ -809,7 +809,7 @@ class Minn_Admin_Surfaces {
 	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href', 'cap' );
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
 	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter', 'filterBar', 'sortQuery', 'open', 'import', 'dateQuery' );
-	const FILTER_KEYS     = array( 'label', 'options', 'query', 'param', 'json' );
+	const FILTER_KEYS     = array( 'label', 'options', 'query', 'param', 'json', 'route', 'valueKey', 'labelKey', 'allLabel' );
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc', 'sort' );
 	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'entry-summary' );
@@ -1198,13 +1198,20 @@ class Minn_Admin_Surfaces {
 			}
 			if ( isset( $coll['filter'] ) ) {
 				$f = $coll['filter'];
-				if ( ! is_array( $f ) || empty( $f['options'] ) || ! is_array( $f['options'] ) ) {
-					$problems[] = "$ck: filter needs an options list";
+				if ( ! is_array( $f ) ) {
+					$problems[] = "$ck: filter must be an object";
 				} else {
-					foreach ( $f['options'] as $opt ) {
-						if ( ! is_array( $opt ) || 2 > count( $opt ) ) {
-							$problems[] = "$ck: filter option must be a [value, label] pair";
-							break;
+					$has_opts  = ! empty( $f['options'] ) && is_array( $f['options'] );
+					$has_route = ! empty( $f['route'] ) && is_string( $f['route'] );
+					if ( ! $has_opts && ! $has_route ) {
+						$problems[] = "$ck: filter needs an options list or a route";
+					}
+					if ( $has_opts ) {
+						foreach ( $f['options'] as $opt ) {
+							if ( ! is_array( $opt ) || 2 > count( $opt ) ) {
+								$problems[] = "$ck: filter option must be a [value, label] pair";
+								break;
+							}
 						}
 					}
 					if ( empty( $f['query'] ) && ( empty( $f['param'] ) || empty( $f['json'] ) ) ) {

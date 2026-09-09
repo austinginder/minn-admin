@@ -621,7 +621,8 @@ settingsItem, list, download }`:
 
 Rendered as a segmented control: `{ label, options, query }` or
 `{ label, options, param, json }`. `options` are `[value, label]` pairs and the FIRST is
-the default, always sent.
+the default, always sent. A long list (more than six, or labels that would
+overflow the strip) becomes the same themed combobox the tab strip uses.
 
 - The plain form appends `query` with `{v}` replaced (`status={v}`).
 - The json form merges into the SAME criteria object as an object-form `search` when
@@ -630,6 +631,12 @@ the default, always sent.
   each other.
 - Pair filters with `when`-gated actions so each filter view offers the verbs that make
   sense there (Received: Spam / Trash · Trash: Restore / Delete permanently).
+- **`route`** loads the options the way `tabs.route` does, for vocabularies that
+  grow at runtime (Gravity SMTP's sending-plugin origins live in the log, not in
+  a boot snapshot). `{ valueKey, labelKey, allLabel }` name the item fields and
+  the first "no narrowing" row (its value is empty, so the query is omitted).
+  Fetch happens when the list loads, not when the app boots. Static `options`
+  still work; declare one or the other.
 
 ### `collection.filterBar` — the orders filter bar on your surface
 

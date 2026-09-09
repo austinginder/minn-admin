@@ -20,6 +20,15 @@
  * surface-field vocabulary fit. The log also knows their 2.3.0
  * partially-sent status ("Filtered": suppressed recipients stripped).
  *
+ * The log list searches the same fields Gravity SMTP's own
+ * Event_Model::get_search_clause default does (subject, message, extra)
+ * plus the service column, so an address, a subject, a sending plugin
+ * (inside extra), a body phrase or a connector slug all hit. extra stays
+ * serialized; LIKE matches the text inside the blob. A Source filter
+ * loads origins on demand from their get_all_sending_sources (not at
+ * boot) and narrows with the same extra RLIKE their SQL_Filter_Parser
+ * uses for non-column keys.
+ *
  * Log delete (single + bulk) goes through Event_Model::delete() — the
  * same model their Delete_Email_Endpoint / Delete_Events_Endpoint use —
  * gated on DELETE_EMAIL_LOG. Permanent; no trash.
@@ -335,6 +344,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'viewLabel' => __( 'Log', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/gravity-smtp/events',
 			'pageQuery' => 'per_page=25&page={page}',
+			'search'    => 'search={q}',
 			// A status-chart bar narrows the log to that day (the chart's
 			// points carry from/to; the route reads after/before).
 			'dateQuery' => 'after={from}&before={to}',
@@ -351,10 +361,22 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				'allLabel' => 'All',
 			),
+			// Origins live in extra and grow as plugins send mail, so the
+			// list is fetched on demand (filter.route) rather than at boot.
+			'filter'    => array(
+				'label'     => __( 'Source', 'minn-admin' ),
+				'route'     => 'minn-admin/v1/gravity-smtp/sources',
+				'valueKey'  => 'id',
+				'labelKey'  => 'title',
+				'allLabel'  => __( 'All sources', 'minn-admin' ),
+				'query'     => 'source={v}',
+			),
 			'columns'   => array(
 				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'source', 'label' => __( 'Source', 'minn-admin' ), 'width' => '128px' ),
+				array( 'key' => 'service', 'label' => __( 'Service', 'minn-admin' ), 'width' => '120px' ),
 				// Event timestamps are UTC MySQL datetimes (no zone suffix).
 				array( 'key' => 'date_created', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
@@ -648,29 +670,19 @@ add_action( 'rest_api_init', function () {
 			$table    = $wpdb->prefix . 'gravitysmtp_events';
 			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
+			$q        = minn_admin_gsmtp_events_where( $request );
+			$where    = $q['sql'];
+			$params   = $q['params'];
 
-			$clauses = array();
-			if ( $status ) {
-				$clauses[] = $wpdb->prepare( 'status = %s', $status );
-			}
-			// Day window from a status-chart bar click (collection dateQuery).
-			// date_created is UTC MySQL, and so are the chart's from/to, so
-			// the comparison is a plain string one; anything not shaped like
-			// a datetime is ignored rather than guessed at.
-			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
-				$bound = minn_admin_gsmtp_datetime_param( $request->get_param( $param ) );
-				if ( $bound ) {
-					$clauses[] = $wpdb->prepare( "date_created {$op} %s", $bound ); // phpcs:ignore
-				}
-			}
-			$where  = $clauses ? 'WHERE ' . implode( ' AND ', $clauses ) : '';
-			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} {$where}" ); // phpcs:ignore
-			$rows   = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id, date_created, status, service, subject, extra FROM {$table} {$where} ORDER BY id DESC LIMIT %d OFFSET %d", // phpcs:ignore
-				$per_page,
-				( $page - 1 ) * $per_page
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			$total = (int) ( $params
+				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} {$where}", ...$params ) )
+				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} {$where}" ) );
+			$rows  = $wpdb->get_results( $wpdb->prepare(
+				"SELECT id, date_created, status, service, subject, extra FROM {$table} {$where} ORDER BY id DESC LIMIT %d OFFSET %d",
+				...array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
+			// phpcs:enable
 
 			// Resend eligibility from their own EVENT_MODEL, resolved once for
 			// the page. The Resend action's when-gate reads it off the LIST
@@ -694,12 +706,18 @@ add_action( 'rest_api_init', function () {
 				$resend_map = array();
 			}
 
-			$items = array_map( function ( $row ) use ( $resend_map ) {
+			$service_titles = array();
+			$items = array_map( function ( $row ) use ( $resend_map, &$service_titles ) {
+				$slug = (string) $row->service;
+				if ( ! isset( $service_titles[ $slug ] ) ) {
+					$service_titles[ $slug ] = minn_admin_gsmtp_connector_title( $slug );
+				}
 				return array(
 					'id'           => (int) $row->id,
 					'date_created' => $row->date_created,
 					'status'       => $row->status,
-					'service'      => $row->service,
+					'service'      => $service_titles[ $slug ],
+					'source'       => minn_admin_gravity_smtp_source( $row->extra ),
 					'subject'      => $row->subject,
 					'to'           => minn_admin_gravity_smtp_recipients( $row->extra ),
 					'can_resend'   => array_key_exists( (int) $row->id, $resend_map ) ? $resend_map[ (int) $row->id ] : true,
@@ -707,6 +725,14 @@ add_action( 'rest_api_init', function () {
 			}, $rows ? $rows : array() );
 
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/gravity-smtp/sources', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can( 'VIEW_EMAIL_LOG' ),
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_gsmtp_log_sources() );
 		},
 	) );
 
@@ -1656,6 +1682,125 @@ function minn_admin_gsmtp_datetime_param( $raw ) {
 	$raw = trim( (string) $raw );
 	if ( preg_match( '/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?$/', $raw, $m ) ) {
 		return $m[1] . ' ' . ( isset( $m[2] ) ? $m[2] : '00:00:00' );
+	}
+	return '';
+}
+
+/**
+ * WHERE fragments for the events list: status tab, chart day window, search,
+ * service slug, source (inside extra).
+ *
+ * Search matches Gravity SMTP's default get_search_clause (subject, message,
+ * extra) plus the service column. extra stays serialized; LIKE still matches
+ * the address and source text inside the blob.
+ *
+ * @param WP_REST_Request $request List request.
+ * @return array{ sql: string, params: array }
+ */
+function minn_admin_gsmtp_events_where( WP_REST_Request $request ) {
+	global $wpdb;
+	$where  = array( '1=1' );
+	$params = array();
+
+	$status = sanitize_key( (string) $request->get_param( 'status' ) );
+	if ( $status ) {
+		$where[]  = 'status = %s';
+		$params[] = $status;
+	}
+
+	foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
+		$bound = minn_admin_gsmtp_datetime_param( $request->get_param( $param ) );
+		if ( $bound ) {
+			$where[]  = "date_created {$op} %s";
+			$params[] = $bound;
+		}
+	}
+
+	$search = sanitize_text_field( (string) $request->get_param( 'search' ) );
+	if ( '' !== $search ) {
+		$like     = '%' . $wpdb->esc_like( $search ) . '%';
+		$where[]  = '( subject LIKE %s OR extra LIKE %s OR service LIKE %s OR message LIKE %s )';
+		array_push( $params, $like, $like, $like, $like );
+	}
+
+	$service = sanitize_text_field( (string) $request->get_param( 'service' ) );
+	if ( '' !== $service ) {
+		$where[]  = 'service = %s';
+		$params[] = $service;
+	}
+
+	$source = sanitize_text_field( (string) $request->get_param( 'source' ) );
+	if ( '' !== $source ) {
+		// Same extra-blob match Gravity SMTP's SQL_Filter_Parser uses for
+		// keys that are not real columns (serialized `"source";s:N:"Value"`
+		// and JSON `"source":"Value"` both satisfy this RLIKE).
+		$where[]  = 'extra RLIKE %s';
+		$params[] = sprintf( '"%s"[^"]+"%s"', preg_quote( 'source' ), preg_quote( $source ) );
+	}
+
+	return array(
+		'sql'    => 'WHERE ' . implode( ' AND ', $where ),
+		'params' => $params,
+	);
+}
+
+/**
+ * Sending-plugin origins for the Source filter, via Gravity SMTP's own
+ * get_all_sending_sources (first 5000 rows, their substring parse). Cached
+ * 15 minutes so a visit to Email is the only request that pays for it.
+ *
+ * @return array[] { id, title }
+ */
+function minn_admin_gsmtp_log_sources() {
+	$cached = get_transient( 'minn_admin_gsmtp_log_sources' );
+	if ( is_array( $cached ) ) {
+		return $cached;
+	}
+	$sources = array();
+	try {
+		if ( class_exists( 'Gravity_Forms\Gravity_SMTP\Gravity_SMTP' ) ) {
+			$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+			$events    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::EVENT_MODEL );
+			if ( $events && method_exists( $events, 'get_all_sending_sources' ) ) {
+				$sources = array_values( array_filter( array_map( 'strval', (array) $events->get_all_sending_sources() ) ) );
+			}
+		}
+	} catch ( \Throwable $e ) {
+		$sources = array();
+	}
+	$seen  = array();
+	$items = array();
+	foreach ( $sources as $src ) {
+		$src = trim( $src );
+		if ( '' === $src || isset( $seen[ strtolower( $src ) ] ) ) {
+			continue;
+		}
+		$seen[ strtolower( $src ) ] = true;
+		$items[] = array( 'id' => $src, 'title' => $src );
+	}
+	usort( $items, function ( $a, $b ) {
+		return strcasecmp( $a['title'], $b['title'] );
+	} );
+	set_transient( 'minn_admin_gsmtp_log_sources', $items, 15 * MINUTE_IN_SECONDS );
+	return $items;
+}
+
+/**
+ * The sending plugin name from `extra`, without unserializing it.
+ *
+ * @param string $extra Serialized `extra` column.
+ * @return string
+ */
+function minn_admin_gravity_smtp_source( $extra ) {
+	$extra = (string) $extra;
+	if ( '' === $extra ) {
+		return '';
+	}
+	if ( preg_match( '/s:6:"source";s:\d+:"([^"]*)"/', $extra, $m ) ) {
+		return $m[1];
+	}
+	if ( isset( $extra[0] ) && '{' === $extra[0] && preg_match( '/"source"\s*:\s*"([^"]*)"/', $extra, $m ) ) {
+		return $m[1];
 	}
 	return '';
 }
