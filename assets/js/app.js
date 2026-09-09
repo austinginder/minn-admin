@@ -17009,10 +17009,20 @@
 		// The day a chart bar narrowed the list to, as a chip beside the tabs
 		// with its own clear. Only where the collection can honor it.
 		const rangeHtml = coll.dateQuery && ss.range ? `<button type="button" class="minn-chip sel minn-srange" data-srange-clear title="${ esc( __( 'Show every day' ) ) }" aria-label="${ esc( sprintf( /* translators: %s: the day the list is narrowed to. */ __( 'Showing %s only. Clear' ), ss.range.label ) ) }">${ esc( ss.range.label ) } <span aria-hidden="true">×</span></button>` : '';
-		const searchHtml = coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="${ esc( sprintf( /* translators: %s: the localized name of the items being searched. */ __( 'Search %s…' ), chromeLabel( coll.viewLabel || __( 'items' ) ) ) ) }" value="${ esc( ss.q || '' ) }">` : '';
+		const searchHtml = coll.search ? `<span class="minn-search-wrap">
+				<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="${ esc( sprintf( /* translators: %s: the localized name of the items being searched. */ __( 'Search %s…' ), chromeLabel( coll.viewLabel || __( 'items' ) ) ) ) }" value="${ esc( ss.q || '' ) }">
+				<button type="button" class="minn-search-clear" id="minn-surface-search-clear" aria-label="${ esc( __( 'Clear search' ) ) }" title="${ esc( __( 'Clear search' ) ) }"${ ss.q ? '' : ' hidden' }>×</button>
+			</span>` : '';
+		const tabOn = !!( coll.tabs && ss.tab && ss.tab !== '_all' );
+		const filterOn = !!( filterOpts.length && ss.filter != null && String( ss.filter ) !== String( filterOpts[ 0 ][ 0 ] ) );
+		const liveBox = view.querySelector( '#minn-surface-search' );
+		if ( liveBox && document.activeElement === liveBox ) ss.q = liveBox.value.trim();
+		const canClear = !!( ss.q || ss.range || tabOn || filterOn );
+		const canHaveClear = !!( coll.search || ( ss.tabs && ss.tabs.length > 1 ) || filterOpts.length > 1 || coll.dateQuery );
+		const clearAllHtml = canHaveClear ? `<button type="button" class="minn-btn-soft minn-surface-clear" id="minn-surface-clear"${ canClear ? '' : ' hidden' }>${ esc( __( 'Clear' ) ) }</button>` : '';
 		const createHtml = coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( chromeLabel( coll.create.label || __( 'Add' ) ) ) }</button>` : '';
 		const importHtml = coll.import ? `<button class="minn-btn-soft" id="minn-surface-import">${ icon( 'upload' ) } ${ esc( chromeLabel( coll.import.label || __( 'Import' ) ) ) }</button>` : '';
-		const rowTwo = tabsHtml + filterHtml + rangeHtml + searchHtml
+		const rowTwo = tabsHtml + filterHtml + rangeHtml + searchHtml + clearAllHtml
 			+ `<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>` + importHtml + createHtml;
 		// A surface can ask for the ORDERS bar instead of the pill strip:
 		// status as a multi-select, Add filter, chips beneath and the whole
@@ -17043,6 +17053,18 @@
 				: `<div class="minn-toolbar">${ switchHtml }${ rowTwo }</div>` );
 
 		closeOrderFilterPop();
+		// Keep the live search field across this paint when the caret is in
+		// it. Rebuilding the toolbar is what made typing feel grabby: the
+		// node vanished for the length of this function, and letters landed
+		// on <body>.
+		const liveSearch = ( () => {
+			const box = view.querySelector( '#minn-surface-search' );
+			const wrap = box && box.closest( '.minn-search-wrap' );
+			if ( ! wrap || document.activeElement !== box ) return null;
+			ss.q = box.value.trim();
+			wrap.remove();
+			return wrap;
+		} )();
 		view.innerHTML = `
 		${ ss.view === 'main' ? surfaceStatusHtml( ss.status, { pickable: !! coll.dateQuery, selected: ss.range && ss.range.from } ) : '' }
 		${ toolbarHtml }
@@ -17075,6 +17097,19 @@
 				</div>` ).join( '' ) : `<div class="minn-empty">${ esc( __( 'Nothing here.' ) ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
+
+		if ( liveSearch ) {
+			const slot = view.querySelector( '#minn-surface-search' );
+			const dest = slot && slot.closest( '.minn-search-wrap' );
+			if ( dest ) dest.replaceWith( liveSearch );
+			const box = liveSearch.querySelector( '#minn-surface-search' );
+			const x = liveSearch.querySelector( '#minn-surface-search-clear' );
+			if ( x ) x.hidden = ! ( box && box.value );
+			if ( box ) {
+				ss.q = box.value.trim();
+				box.focus( { preventScroll: true } );
+			}
+		}
 
 		const surfaceListReload = ( paintChrome ) => softListReload( {
 			route: s.id,
@@ -17289,26 +17324,86 @@
 			surfaceListReload( paintRange );
 		} );
 		const search = $( '#minn-surface-search', view );
-		if ( search ) {
+		if ( search && ! search._minnBound ) {
+			search._minnBound = true;
 			let t = null;
+			const syncClear = () => {
+				const x = $( '#minn-surface-search-clear', view );
+				if ( x ) x.hidden = ! search.value;
+				const all = $( '#minn-surface-clear', view );
+				if ( all ) {
+					const opts = surfaceFilterOptions( coll, ss );
+					const filterOnNow = !!( opts.length && ss.filter != null && String( ss.filter ) !== String( opts[ 0 ][ 0 ] ) );
+					const tabOnNow = !!( coll.tabs && ss.tab && ss.tab !== '_all' );
+					all.hidden = ! ( search.value || ss.q || ss.range || tabOnNow || filterOnNow );
+				}
+			};
 			search.addEventListener( 'input', () => {
+				syncClear();
 				clearTimeout( t );
 				t = setTimeout( async () => {
-					ss.q = search.value.trim();
+					const box = $( '#minn-surface-search' );
+					if ( box ) ss.q = box.value.trim();
 					await softListReload( {
 						route: s.id,
 						view,
 						clear: () => { ss.cache = null; },
-						load: () => loadSurfaceItems( s ),
+						load: () => {
+							// A keystroke during the in-flight fetch belongs
+							// in the query, not only in the box.
+							const live = $( '#minn-surface-search' );
+							if ( live ) ss.q = live.value.trim();
+							return loadSurfaceItems( s );
+						},
 						render: () => {
+							const fetched = ss.q;
+							const box = $( '#minn-surface-search' );
+							if ( box ) ss.q = box.value.trim();
 							renderSurface( s );
+							// Extra letters typed while results loaded did
+							// not ride the fetch; fire input so the debounce
+							// searches them too. The box itself is reused
+							// (liveSearch above), so the caret never moves.
 							const again = $( '#minn-surface-search' );
-							if ( again ) { again.focus(); again.setSelectionRange( again.value.length, again.value.length ); }
+							if ( again && again.value.trim() !== fetched ) {
+								again.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+							}
 						},
 					} );
 				}, 350 );
 			} );
+			search.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' && search.value ) {
+					e.preventDefault();
+					e.stopPropagation();
+					clearTimeout( t );
+					ss.q = '';
+					search.value = '';
+					syncClear();
+					surfaceListReload();
+				}
+			} );
+			const x = $( '#minn-surface-search-clear', view );
+			if ( x ) x.addEventListener( 'click', () => {
+				clearTimeout( t );
+				ss.q = '';
+				search.value = '';
+				syncClear();
+				surfaceListReload();
+				search.focus( { preventScroll: true } );
+			} );
 		}
+		const clearAll = $( '#minn-surface-clear', view );
+		if ( clearAll ) clearAll.addEventListener( 'click', () => {
+			ss.q = '';
+			ss.filter = null;
+			ss.tab = '_all';
+			ss.range = null;
+			if ( search ) search.value = '';
+			const x = $( '#minn-surface-search-clear', view );
+			if ( x ) x.hidden = true;
+			surfaceListReload();
+		} );
 		const addBtn = $( '#minn-surface-add', view );
 		if ( addBtn ) addBtn.addEventListener( 'click', () => {
 			// Carry the ACTIVE collection — `create` can live on `manage`

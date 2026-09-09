@@ -202,6 +202,74 @@ const SUBJECT = 'Minn GSMTP search ' + TOKEN;
 		t.check( 'Source filter includes the fixture origin', false, JSON.stringify( filterUi ) );
 	}
 
+	const clears = await page.evaluate( () => ( {
+		x: !! ( document.querySelector( '#minn-surface-search-clear' ) && ! document.querySelector( '#minn-surface-search-clear' ).hidden ),
+		all: !! ( document.querySelector( '#minn-surface-clear' ) && ! document.querySelector( '#minn-surface-clear' ).hidden ),
+	} ) );
+	t.check( 'Search × and Clear appear once the list is narrowed', clears.x && clears.all, JSON.stringify( clears ) );
+
+	await page.click( '#minn-surface-search-clear' );
+	await page.waitForFunction( () => {
+		const box = document.querySelector( '#minn-surface-search' );
+		return box && box.value === '';
+	}, null, { timeout: 15000 } ).catch( () => null );
+	const afterX = await page.evaluate( () => ( {
+		q: ( document.querySelector( '#minn-surface-search' ) || {} ).value,
+		xHidden: ! document.querySelector( '#minn-surface-search-clear' ) || document.querySelector( '#minn-surface-search-clear' ).hidden,
+		clear: !! ( document.querySelector( '#minn-surface-clear' ) && ! document.querySelector( '#minn-surface-clear' ).hidden ),
+	} ) );
+	t.check( '× empties the search and leaves filters in place',
+		afterX.q === '' && afterX.xHidden && afterX.clear, JSON.stringify( afterX ) );
+
+	await page.click( '#minn-surface-clear' );
+	await page.waitForFunction( () => {
+		const b = document.querySelector( '#minn-surface-clear' );
+		const hidden = ! b || b.hidden;
+		const allTab = !! document.querySelector( '[data-stab="_all"].active' );
+		const combo = document.querySelector( '[data-sfiltercombo] .minn-ac-input' );
+		const active = document.querySelector( '[data-sfilter].active' );
+		const filterReset = combo
+			? ! combo.value || /all/i.test( combo.value )
+			: ! active || active.dataset.sfilter === '';
+		return hidden && allTab && filterReset;
+	}, null, { timeout: 15000 } ).catch( () => null );
+	const afterClear = await page.evaluate( () => ( {
+		q: ( document.querySelector( '#minn-surface-search' ) || {} ).value,
+		clear: !! ( document.querySelector( '#minn-surface-clear' ) && ! document.querySelector( '#minn-surface-clear' ).hidden ),
+		allTab: !! document.querySelector( '[data-stab="_all"].active' ),
+		filter: ( document.querySelector( '[data-sfiltercombo] .minn-ac-input' ) || {} ).value
+			|| ( ( document.querySelector( '[data-sfilter].active' ) || {} ).dataset || {} ).sfilter,
+		n: document.querySelectorAll( '.minn-table-row' ).length,
+	} ) );
+	t.check( 'Clear wipes search, source and the status tab',
+		afterClear.q === '' && ! afterClear.clear && afterClear.allTab
+			&& ( afterClear.filter === '' || /all/i.test( String( afterClear.filter || '' ) ) )
+			&& afterClear.n >= 1,
+		JSON.stringify( afterClear ) );
+
+	// Letters typed while a slow search is in flight must survive the
+	// toolbar rebuild (the box used to snap back to the committed query).
+	await page.route( '**/minn-admin/v1/gravity-smtp/events**', async ( route ) => {
+		await new Promise( ( r ) => setTimeout( r, 900 ) );
+		await route.continue().catch( () => {} );
+	} );
+	await page.click( '#minn-surface-search', { clickCount: 3 } );
+	await page.keyboard.type( 'hel', { delay: 40 } );
+	await page.waitForTimeout( 420 );
+	await page.keyboard.type( 'lo', { delay: 40 } );
+	await page.waitForFunction( () => {
+		const box = document.querySelector( '#minn-surface-search' );
+		return box && box.value === 'hello' && document.activeElement === box;
+	}, null, { timeout: 15000 } ).catch( () => null );
+	const kept = await page.evaluate( () => {
+		const box = document.querySelector( '#minn-surface-search' );
+		return { v: box && box.value, focused: document.activeElement === box };
+	} );
+	t.check( 'Typing during a search reload stays in the box',
+		kept.v === 'hello' && kept.focused, JSON.stringify( kept ) );
+	await page.unroute( '**/minn-admin/v1/gravity-smtp/events**' );
+	await page.click( '#minn-surface-search-clear' ).catch( () => {} );
+
 	if ( id ) {
 		const del = await api( { path: 'minn-admin/v1/gravity-smtp/events/' + id, opts: { method: 'DELETE' } } );
 		const gone = await api( 'minn-admin/v1/gravity-smtp/events/' + id );

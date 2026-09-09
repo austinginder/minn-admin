@@ -2469,6 +2469,10 @@ button.minn-chip.sel:hover { background: var(--accent); color: #fff; border-colo
    (width + auto margin) so the button can sit inside the field's end. */
 .minn-search-wrap { position: relative; display: inline-flex; width: 220px; margin-inline-start: auto; }
 .minn-search-wrap .minn-toolbar-search { width: 100%; margin-inline-start: 0; padding-inline-end: 32px; }
+.minn-search-wrap + .minn-toolbar-meta,
+.minn-search-wrap + .minn-surface-clear { margin-inline-start: 0; }
+.minn-surface-clear + .minn-toolbar-meta { margin-inline-start: 0; }
+.minn-surface-clear[hidden] { display: none; }
 .minn-search-clear { position: absolute; inset-inline-end: 5px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 6px; background: transparent; color: var(--text3); font-size: 17px; line-height: 1; cursor: pointer; }
 .minn-search-clear:hover { background: var(--hover); color: var(--text); }
 .minn-search-clear[hidden] { display: none; }
