@@ -256,14 +256,22 @@ Reference depth: **Gravity Forms**.
 
 ### Ranked backlog (2026-09-10, v0.39.0 release pre-flight sweep)
 
-Report-only. Axis A was a pass over all 119 adapters for the primitives in
-the current contract; Axis B was the update-all skim plus a route smoke and
-a suite re-run per updated fixture.
+Axis A was a pass over all 119 adapters for the primitives in the current
+contract; Axis B was the update-all skim plus a route smoke and a suite
+re-run per updated fixture. Reported first, then ranks 1 and 1b were shipped
+the same day on Austin's go-ahead; the rest stand as backlog.
+
+**Fixture note:** the `minn_test_seed_duplicator` seeder in
+`wp-content/mu-plugins/minn-dev-fixtures.php` was ported alongside (new
+table, `DupPackage::getType()` for the row type, no `owner`, and a gate that
+accepts either generation instead of `DUP_Package` alone, which had made it
+a silent no-op the moment 5.0 landed). That file lives on the dev site and
+is not in this repo, so the change is local.
 
 | Rank | Adapter | Axis | Gap | Effort | Why now |
 |---|---|---|---|---|---|
-| 1 | **duplicator** | B | Duplicator 5.0.0 dropped every `DUP_*` class and migrated `duplicator_packages` to `duplicator_backups` / `duplicator_entities` / `duplicator_activity_logs`. The adapter gates on the old table, so the provider vanishes from the Backups family with no message. Rewrite against the `Duplicator\` namespace (`DupPackage`, `PackageUtils`, `FullBackupStatus`), and check whether `Duplicator\Core\REST` makes the shim unnecessary | M–L | The only breaking delta in the sweep, and it is silent. Duplicator is a top-3 backups plugin, so every site that updates loses the surface without being told why |
-| 1b | **duplicator suite** | — | `tests/duplicator.test.js` reads `list.items.find(...)` on a 404 and dies with a TypeError. It should SKIP honestly when the provider is absent, the way the design-library suites do when their CDN is unreachable | S | Half an hour, and it stops a legitimate absence from reading as a broken suite in every future pre-flight |
+| ~~1~~ | ~~**duplicator**~~ | B | **SHIPPED 2026-09-10.** Ported to the `Duplicator\` namespace, branching so 1.5 keeps working. `Duplicator\Core\REST` does NOT help (scaffolding, one `Versions` endpoint, does not register) but `BackupRequestService` is a purpose-built public API for background backups and replaces the whole hand-rolled 1.5 build path with one call plus the plugin's own progress messages. Also carried: `CapMng` as the vendor's own gate (asking `export` would have left a narrowed site open), the moved storage default, UTC-always `created`, the 1.5-only delete id pin, and the dropped `owner` column | M–L | — |
+| ~~1b~~ | ~~**duplicator suite**~~ | — | **SHIPPED 2026-09-10.** Skips honestly when the provider is absent. One deliberate limit recorded in the suite: on 5.0 a hand-seeded row cannot be deleted, because delete goes through their `getById()` and they hydrate from a private JSON shape a shim is not allowed to hand-write. Every row a real site has came from their builder and hydrates; delete was verified end to end against a real 5.0 package | S | — |
 | 2 | **20 chart adapters** | A | `dateQuery` (click a chart bar to narrow the list to that day) shipped this cycle with two consumers. The other twenty draw a chart whose bars do nothing: amelia, bookly, jet-booking, jet-appointments, latepoint, cf7-flamingo, cfdb7, elementor-forms, everest-forms, fluent-forms, formidable, forminator, ninja-forms, sureforms, wpforms, post-smtp, site-mailer, suremails, wp-mail-logging, redirection | S each where the route already takes a date range, M where the SQL needs one | Family consistency, and it finishes a primitive this release introduced. The four mail siblings are the cheapest and sit next to the two that already have it |
 | 3 | **wp-mail-smtp** | A | Thinnest adapter in any family at 6.6KB: status + detail + tabs, no search, no bulk, no chart. Partly justified (WP Mail SMTP free stores no email log, so the surface lists debug events), but a debug-event list with no search is still below every mail sibling | S | Cheap, and it is the one row in the mail matrix that looks unfinished rather than deliberately thin |
 | 4 | **gravity-forms** | A | The only forms adapter with no `chart`, though it is the family's deepest in every other respect. Noted as the outstanding Rung-3 "GF form-results chart consumer" in full-ui-adapters.md | S | Closes the last named Rung-3 consumer gap |
