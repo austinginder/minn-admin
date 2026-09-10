@@ -25,8 +25,11 @@ is adapter depth (WPForms entries, forms status cards, FluentSMTP) and
 changes no core-gap status. Re-checked 2026-08-11 at v0.28.0 open:
 multisite moved from defensive degradation to daily network operations;
 the section below now records the shipped surface and its deliberate
-boundaries. Still open: block-theme surfaces, builder
-theme templates, bulk category/author edit. Minn's
+boundaries. Re-checked 2026-09-10 during the v0.39.0 cycle: template revisions
+shipped and the global-styles-history line was stale (it shipped in
+v0.38.0); both corrected below. Still open: builder
+theme templates for Divi and Beaver Builder, and bulk category/author
+edit. Minn's
 positioning grades these: daily work belongs in Minn, the long tail stays
 one click away in wp-admin. Each area below gets a status and a judgment on
 whether the gap blocks daily work.
@@ -189,10 +192,21 @@ verified empirically at v0.23.0:
    public), the same transform the write applies. Suite
    `tests/styles.test.js` (14; verifies the FRONT END changes and that
    Undo restores the stored config exactly).
-   STILL OPEN, ranked: template REVISIONS/history in the editor (route
-   exists; loadEditorRevisions guarded off for templates); global-styles
-   history (core keeps revisions of the user global-styles post — would
-   extend the Styles tab).
+   **TEMPLATE HISTORY SHIPPED** (v0.39.0 cycle): the editor's History
+   door now appears for a template the site has its own copy of, listing
+   its revisions, opening one as a diff against the live editor, and
+   restoring it. The find that made it work is core's shape: a template
+   revision reports its PARENT's string id as `id` and its own numeric
+   one as `wp_id` (`WP_REST_Template_Revisions_Controller` inherits the
+   templates schema), so reading `id` gave every row the same
+   unparseable value. `editorItemPath()` encodes the "theme//slug" id
+   into every revision path; `mapRevisionRows` prefers `wp_id`. Suite
+   `tests/template-revisions.test.js` (9). **GLOBAL-STYLES HISTORY
+   SHIPPED** in the v0.38.0 cycle (Design → Styles: every saved version,
+   who saved it, what changed, Restore with Undo); this line claiming it
+   open was stale.
+   STILL OPEN from this area: nothing ranked. The Site Editor canvas
+   stays a deliberate link-out.
    **SITE LOGO ON BLOCK THEMES FIXED**: the Settings field existed but
    gated on `current_theme_supports('custom-logo')`, which stock block
    themes never declare (TT5 included — its style.css "custom-logo" is a
