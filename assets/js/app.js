@@ -29333,6 +29333,11 @@
 	}
 
 	const isTemplateType = ( t ) => 'templates' === t || 'template-parts' === t;
+	// A template's id is a STRING with slashes in it ("theme//slug"), so every
+	// REST path that carries one has to encode it or the route never matches.
+	// A post id is a number and encoding it is a no-op, so this is safe for both.
+	const editorItemPath = ( type, id ) =>
+		`wp/v2/${ type }/${ isTemplateType( type ) ? encodeURIComponent( id ) : id }`;
 
 	/**
 	 * Block templates and template parts open in this same editor the way
@@ -29404,6 +29409,10 @@
 				}
 			}
 		} catch ( e ) {}
+		// A template that has never been saved here is still a theme file with
+		// no post row behind it: the route answers an empty list and the
+		// History door simply does not appear.
+		loadEditorRevisions( state.editor );
 	}
 
 	async function loadEditor() {
@@ -29833,10 +29842,9 @@
 				state.tplData.parts = null;
 				state.tplData.usage = null;
 			}
-			// Manual save/update/publish creates a WP revision — refresh the
-			// History card so it appears without a full page reload. Template
-			// history stays with the Site Editor for now.
-			if ( ed.id && ! isTemplateType( ed.type ) ) loadEditorRevisions( ed );
+			// Manual save/update/publish creates a WP revision: refresh the
+			// History card so it appears without a full page reload.
+			if ( ed.id ) loadEditorRevisions( ed );
 			// Publish clears PPP eligibility; re-fetch when still draft-like.
 			if ( pppEligible( ed ) ) loadEditorPpp( ed );
 			else ed.ppp = null;
@@ -29895,7 +29903,9 @@
 
 	function mapRevisionRows( revs, names ) {
 		return ( revs || [] ).map( ( r ) => ( {
-			id: r.id,
+			// A template revision reports its PARENT's string id as `id` and
+			// its own numeric one as `wp_id`; a post revision has no `wp_id`.
+			id: r.wp_id != null ? r.wp_id : r.id,
 			modified: r.modified,
 			author: names[ r.author ] || '',
 		} ) );
@@ -29914,7 +29924,7 @@
 		if ( ! ed || ! ed.id ) return Promise.resolve();
 		const type = ed.type;
 		const id = ed.id;
-		return apiPaged( `wp/v2/${ type }/${ id }/revisions?per_page=${ HISTORY_SIDE_LIMIT }&_fields=id,modified,author` )
+		return apiPaged( `${ editorItemPath( type, id ) }/revisions?per_page=${ HISTORY_SIDE_LIMIT }&_fields=id,wp_id,modified,author` )
 			.then( async ( r ) => {
 				const revs = Array.isArray( r.items ) ? r.items : [];
 				const names = await revisionAuthorNames( revs );
@@ -29939,7 +29949,7 @@
 		let totalPages = 1;
 		let raw = [];
 		do {
-			const r = await apiPaged( `wp/v2/${ type }/${ id }/revisions?per_page=${ HISTORY_PAGE }&page=${ page }&_fields=id,modified,author` );
+			const r = await apiPaged( `${ editorItemPath( type, id ) }/revisions?per_page=${ HISTORY_PAGE }&page=${ page }&_fields=id,wp_id,modified,author` );
 			raw = raw.concat( Array.isArray( r.items ) ? r.items : [] );
 			totalPages = r.totalPages || 1;
 			page++;
@@ -32201,6 +32211,7 @@
 			// thumbnail — its whole sidebar is what it IS and how to leave.
 			const stLabel = 'custom' !== ed.tplSource ? __( 'From theme' )
 				: ed.tplHasFile ? __( 'Customized' ) : __( 'Added here' );
+			const tplHistoryRows = historyRowsFor( ed );
 			el.innerHTML = `
 			<div class="minn-side-card">
 				<div class="minn-side-title">${ esc( editorNoun( ed ) ) }</div>
@@ -32211,6 +32222,9 @@
 				<button class="minn-btn-primary" id="minn-publish-btn">${ esc( 'custom' === ed.tplSource ? __( 'Update' ) : __( 'Save site copy' ) ) }</button>
 				${ ENGINE ? '' : `<a class="minn-side-viewlink" href="${ esc( ed.editUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Open in Site Editor ↗' ) ) }</a>` }
 			</div>
+			${ tplHistoryRows.length || ( ed.revisionsTotal && ed.revisionsTotal > 0 )
+				? `<div class="minn-side-doors">${ editorDoorHtml( { id: 'history', title: __( 'History' ), summary: editorHistorySummary( ed ) } ) }</div>`
+				: '' }
 			${ 'custom' === ed.tplSource && ed.tplHasFile ? `<button class="minn-trash-link" id="minn-tpl-reset">${ esc( __( 'Reset to theme' ) ) }</button>` : '' }
 			<div class="minn-side-card" id="minn-outline-card" hidden>
 				<div class="minn-side-title">${ esc( __( 'Outline' ) ) }</div>
@@ -32219,6 +32233,9 @@
 			$( '#minn-publish-btn', el ).addEventListener( 'click', () => {
 				saveEditor( { _explicit: true } ).then( () => { if ( state.editor === ed ) renderEditorSide(); } );
 			} );
+			// Only core doors here (no plugin panels), so no hide menu to bind.
+			$$( '[data-side-door]', el ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => openEditorSideDoor( btn.dataset.sideDoor ) ) );
 			const resetBtn = $( '#minn-tpl-reset', el );
 			if ( resetBtn ) resetBtn.addEventListener( 'click', async () => {
 				if ( ! await minnConfirm( {
@@ -44920,15 +44937,19 @@
 		// postmeta, but field plugins write their values onto the revision,
 		// so a revision that changed nothing but fields still has an answer.
 		// A provider-less site just gets an empty list.
-		api( `minn-admin/v1/revision-fields/${ ed.id }/${ revId }` )
-			.then( ( r ) => {
-				if ( state.modal && state.modal.type === 'revision' && state.modal.revId === revId ) {
-					state.modal.fields = r;
-					renderOverlays();
-				}
-			} )
-			.catch( () => {} );
-		api( `wp/v2/${ ed.type }/${ ed.id }/revisions/${ revId }?context=edit&_fields=id,modified,title,content` )
+		// Templates skip it: they carry no postmeta for a field plugin to write
+		// on, and their id would not survive this route's path anyway.
+		if ( ! isTemplateType( ed.type ) ) {
+			api( `minn-admin/v1/revision-fields/${ ed.id }/${ revId }` )
+				.then( ( r ) => {
+					if ( state.modal && state.modal.type === 'revision' && state.modal.revId === revId ) {
+						state.modal.fields = r;
+						renderOverlays();
+					}
+				} )
+				.catch( () => {} );
+		}
+		api( `${ editorItemPath( ed.type, ed.id ) }/revisions/${ revId }?context=edit&_fields=id,modified,title,content` )
 			.then( ( rev ) => {
 				if ( state.modal && state.modal.type === 'revision' && state.modal.revId === revId ) {
 					state.modal.rev = rev;
@@ -45477,7 +45498,7 @@
 				restore.disabled = true;
 				restore.textContent = __( 'Restoring…' );
 				try {
-					await api( `wp/v2/${ m.ed.type }/${ m.ed.id }`, {
+					await api( editorItemPath( m.ed.type, m.ed.id ), {
 						method: 'POST',
 						body: JSON.stringify( {
 							title: ( rev.title && ( rev.title.raw != null ? rev.title.raw : rev.title.rendered ) ) || '',
