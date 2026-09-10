@@ -861,6 +861,47 @@
 		);
 	}
 
+
+	// A toolbar search field with a × at its end, shown only while the box
+	// holds text. The wrap takes over the input's toolbar layout role (width,
+	// auto margin, the narrow-viewport flex rule) so the button can overlay
+	// the field without moving anything else.
+	function searchFieldHtml( id, placeholder, value, opts ) {
+		const o = opts || {};
+		const v = value || '';
+		return `<span class="minn-search-wrap">
+			<input class="minn-input minn-toolbar-search" id="${ id }" placeholder="${ esc( placeholder ) }" value="${ esc( v ) }"${ o.disabled ? ' disabled' : '' }>
+			${ o.disabled ? '' : `<button type="button" class="minn-search-clear" data-searchclear="${ id }" aria-label="${ esc( __( 'Clear search' ) ) }" title="${ esc( __( 'Clear search' ) ) }"${ v ? '' : ' hidden' }>×</button>` }
+		</span>`;
+	}
+
+	// Wire one search field's clear paths: the × and Escape in the box both
+	// run `clear`, which empties the field and reloads. The button tracks the
+	// box on every keystroke so it appears with the first letter rather than
+	// after the debounce. `clear` receives nothing and is expected to leave
+	// the caret in the (re-rendered) field, like the input path does.
+	function bindSearchClear( view, id, clear ) {
+		const box = $( '#' + id, view );
+		if ( ! box ) return null;
+		const btn = view.querySelector( `[data-searchclear="${ id }"]` );
+		const sync = () => { if ( btn ) btn.hidden = ! box.value; };
+		box.addEventListener( 'input', sync );
+		const run = () => {
+			if ( ! box.value ) return;
+			box.value = '';
+			sync();
+			clear();
+		};
+		if ( btn ) btn.addEventListener( 'click', run );
+		box.addEventListener( 'keydown', ( e ) => {
+			if ( e.key !== 'Escape' || ! box.value ) return;
+			e.preventDefault();
+			e.stopPropagation();
+			run();
+		} );
+		return box;
+	}
+
 	// Soft list reload: keep toolbar/tabs painted while the body dims and
 	// refetches (Media tabs pattern). First paint of a route still uses the
 	// full "Loading…" shell when there's no chrome yet.
@@ -5886,7 +5927,7 @@
 		const filtersHtml = `
 			${ showTax ? taxCombo( 'cat', __( 'All categories' ) ) : '' }
 			${ showTax ? taxCombo( 'tag', __( 'All tags' ) ) : '' }
-			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="${ esc( __( 'Search content…' ) ) }" value="${ esc( state.contentSearch || '' ) }">
+			${ searchFieldHtml( 'minn-content-search', __( 'Search content…' ), state.contentSearch ) }
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>`;
 		view.innerHTML = `
 		<div class="minn-toolbar minn-toolbar-views">
@@ -6004,26 +6045,34 @@
 			onPick: ( v ) => { state.contentTag = v || null; reloadContent(); },
 		} );
 		const search = $( '#minn-content-search', view );
+		const runContentSearch = () => softListReload( {
+			route: 'content',
+			view,
+			clear: () => {
+				sel.clear();
+				state.cache.content = null;
+				state.cache.cptContent = {};
+			},
+			load: () => ( currentCpt() ? loadCpt() : loadContent() ),
+			render: () => {
+				renderContent();
+				const s = $( '#minn-content-search' );
+				if ( s ) { s.focus( { preventScroll: true } ); s.setSelectionRange( s.value.length, s.value.length ); }
+			},
+		} );
 		search.addEventListener( 'input', () => {
 			clearTimeout( contentSearchTimer );
-			contentSearchTimer = setTimeout( async () => {
+			contentSearchTimer = setTimeout( () => {
 				state.contentSearch = search.value.trim();
-				await softListReload( {
-					route: 'content',
-					view,
-					clear: () => {
-						sel.clear();
-						state.cache.content = null;
-						state.cache.cptContent = {};
-					},
-					load: () => ( currentCpt() ? loadCpt() : loadContent() ),
-					render: () => {
-						renderContent();
-						const s = $( '#minn-content-search' );
-						if ( s ) { s.focus(); s.setSelectionRange( s.value.length, s.value.length ); }
-					},
-				} );
+				runContentSearch();
 			}, 350 );
+		} );
+		// The × and Escape skip the debounce: an emptied box has nothing to
+		// wait for, and a pending keystroke's timer would re-search after it.
+		bindSearchClear( view, 'minn-content-search', () => {
+			clearTimeout( contentSearchTimer );
+			state.contentSearch = '';
+			runContentSearch();
 		} );
 		// Row actions — right-click a row (or its hover ⋯) for quick moves
 		// without opening the editor: the bounce-audit's top friction item,
@@ -6679,7 +6728,7 @@
 			<div class="minn-toolbar minn-toolbar-filters">
 				${ mediaFolderComboHtml }
 				${ mediaMonthComboHtml }
-				<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="${ esc( __( 'Search files…' ) ) }" value="${ esc( state.mediaSearch || '' ) }" disabled>
+				${ searchFieldHtml( 'minn-media-search', __( 'Search files…' ), state.mediaSearch, { disabled: true } ) }
 				${ mediaViewTabsHtml }
 			</div>
 			<div class="minn-loading">${ esc( __( 'Loading media…' ) ) }</div>`;
@@ -6723,7 +6772,7 @@
 		<div class="minn-toolbar minn-toolbar-filters">
 			${ mediaFolderComboHtml }
 			${ mediaMonthComboHtml }
-			<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="${ esc( __( 'Search files…' ) ) }" value="${ esc( state.mediaSearch || '' ) }">
+			${ searchFieldHtml( 'minn-media-search', __( 'Search files…' ), state.mediaSearch ) }
 			<div class="minn-toolbar-meta">${ countLabel }</div>
 			${ mediaViewTabsHtml }
 			${ B.caps.upload ? `<button class="minn-btn-soft" id="minn-upload-btn">${ icon( 'upload' ) } ${ esc( __( 'Upload' ) ) }</button><input type="file" id="minn-upload-input" multiple hidden>` : '' }
@@ -6856,16 +6905,23 @@
 		const mediaSearch = $( '#minn-media-search', view );
 		if ( mediaSearch ) {
 			let t = null;
+			const runMediaSearch = async () => {
+				await mediaReload();
+				if ( state.route !== 'media' ) return;
+				const again = $( '#minn-media-search' );
+				if ( again ) { again.focus( { preventScroll: true } ); again.setSelectionRange( again.value.length, again.value.length ); }
+			};
 			mediaSearch.addEventListener( 'input', () => {
 				clearTimeout( t );
-				t = setTimeout( async () => {
+				t = setTimeout( () => {
 					state.mediaSearch = mediaSearch.value.trim();
-					await mediaReload();
-					if ( state.route === 'media' ) {
-						const again = $( '#minn-media-search' );
-						if ( again ) { again.focus(); again.setSelectionRange( again.value.length, again.value.length ); }
-					}
+					runMediaSearch();
 				}, 350 );
+			} );
+			bindSearchClear( view, 'minn-media-search', () => {
+				clearTimeout( t );
+				state.mediaSearch = '';
+				runMediaSearch();
 			} );
 		}
 		$$( '[data-media]', view ).forEach( ( el ) => {
@@ -13955,7 +14011,7 @@
 		}
 		view.innerHTML = `
 		<div class="minn-toolbar">
-			<input class="minn-input minn-toolbar-search" id="minn-customer-search" placeholder="${ esc( __( 'Search customers (name, email, ID…)' ) ) }" value="${ esc( state.customerSearch || '' ) }">
+			${ searchFieldHtml( 'minn-customer-search', __( 'Search customers (name, email, ID…)' ), state.customerSearch ) }
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'customer' ) }</div>
 		</div>
 		<div class="minn-card minn-table">
@@ -13982,31 +14038,24 @@
 		const customerSearch = $( '#minn-customer-search', view );
 		if ( customerSearch ) {
 			let customerSearchTimer = null;
+			const runCustomerSearch = () => softListReload( {
+				route: 'customers',
+				view,
+				clear: () => { state.cache.customers = null; },
+				load: () => loadCustomers( 1 ),
+				render: renderCustomers,
+			} );
 			customerSearch.addEventListener( 'input', () => {
 				clearTimeout( customerSearchTimer );
 				customerSearchTimer = setTimeout( () => {
 					state.customerSearch = customerSearch.value.trim();
-					softListReload( {
-						route: 'customers',
-						view,
-						clear: () => { state.cache.customers = null; },
-						load: () => loadCustomers( 1 ),
-						render: renderCustomers,
-					} );
+					runCustomerSearch();
 				}, 280 );
 			} );
-			customerSearch.addEventListener( 'keydown', ( e ) => {
-				if ( e.key === 'Escape' && customerSearch.value ) {
-					customerSearch.value = '';
-					state.customerSearch = '';
-					softListReload( {
-						route: 'customers',
-						view,
-						clear: () => { state.cache.customers = null; },
-						load: () => loadCustomers( 1 ),
-						render: renderCustomers,
-					} );
-				}
+			bindSearchClear( view, 'minn-customer-search', () => {
+				clearTimeout( customerSearchTimer );
+				state.customerSearch = '';
+				runCustomerSearch();
 			} );
 		}
 		$$( '[data-customer]', view ).forEach( ( row ) =>
@@ -14898,7 +14947,7 @@
 			view.innerHTML = `
 			${ usersTabsHtml() }
 			<div class="minn-toolbar minn-toolbar-views">
-				<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="${ esc( __( 'Search users…' ) ) }" value="${ esc( state.userSearch || '' ) }" disabled>
+				${ searchFieldHtml( 'minn-user-search', __( 'Search users…' ), state.userSearch, { disabled: true } ) }
 			</div>
 			<div class="minn-toolbar minn-toolbar-filters">
 				<div class="minn-tabs minn-ext-filters" role="group" aria-label="${ esc( __( 'Session filter' ) ) }">
@@ -14944,7 +14993,7 @@
 				<input class="minn-input minn-ac-input" placeholder="${ esc( __( 'All roles' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
 			</div>` : '' }
-			<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="${ esc( __( 'Search users…' ) ) }" value="${ esc( state.userSearch || '' ) }">
+			${ searchFieldHtml( 'minn-user-search', __( 'Search users…' ), state.userSearch ) }
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user' ) }</div>
 			${ userSession === 'spam' && B.spamUsers && B.spamUsers.checkUrl ? `<a class="minn-btn-soft" id="minn-ct-check-users" href="${ esc( B.spamUsers.checkUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Check for spam ↗' ) ) }</a>` : '' }
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } ${ esc( __( 'Add user' ) ) }</button>` : '' }
@@ -15043,27 +15092,37 @@
 				},
 			} );
 		const search = $( '#minn-user-search', view );
+		// A soft reload, so the toolbar (and the caret in this very box) survives
+		// the refetch. Nulling the cache and repainting the loading shell instead
+		// blanked the list and dropped focus mid-search, which on a slow site is
+		// most of the time the box is in use.
+		const runUserSearch = () => softListReload( {
+			route: 'users',
+			view,
+			clear: () => { state.cache.users = null; },
+			load: () => loadUsers(),
+			render: () => {
+				renderUsers();
+				// A session or role change can discard the in-flight load, and
+				// the roles tab renders no search box at all: never focus a
+				// field that is not there.
+				const el = $( '#minn-user-search' );
+				if ( ! el ) return;
+				el.focus( { preventScroll: true } );
+				el.setSelectionRange( el.value.length, el.value.length );
+			},
+		} );
 		search.addEventListener( 'input', () => {
 			clearTimeout( userSearchTimer );
-			userSearchTimer = setTimeout( async () => {
+			userSearchTimer = setTimeout( () => {
 				state.userSearch = search.value.trim();
-				state.cache.users = null;
-				await loadUsers().catch( showErr );
-				if ( state.route !== 'users' ) return;
-				// Cache may still be null if a session/role change discarded this
-				// in-flight load — re-render only when we have rows (or an empty
-				// result). Never focus a missing search input.
-				if ( ! state.cache.users ) {
-					renderUsers();
-					return;
-				}
-				renderUsers();
-				const el = $( '#minn-user-search' );
-				if ( el ) {
-					el.focus();
-					el.setSelectionRange( el.value.length, el.value.length );
-				}
+				runUserSearch();
 			}, 350 );
+		} );
+		bindSearchClear( view, 'minn-user-search', () => {
+			clearTimeout( userSearchTimer );
+			state.userSearch = '';
+			runUserSearch();
 		} );
 		const addBtn = $( '#minn-add-user', view );
 		if ( addBtn ) addBtn.addEventListener( 'click', () => openUserModal( null ) );
@@ -21593,10 +21652,7 @@
 		// the wrap takes the input's toolbar layout role (width + auto margin).
 		return `
 			<div class="minn-tabs minn-ext-filters">${ pills }</div>
-			<span class="minn-search-wrap">
-				<input class="minn-input minn-toolbar-search" id="minn-ext-search" placeholder="${ esc( placeholder ) }" value="${ esc( state.extSearch || '' ) }">
-				<button type="button" class="minn-search-clear" id="minn-ext-search-clear" aria-label="${ esc( __( 'Clear search' ) ) }" title="${ esc( __( 'Clear search' ) ) }"${ state.extSearch ? '' : ' hidden' }>×</button>
-			</span>`;
+			${ searchFieldHtml( 'minn-ext-search', placeholder, state.extSearch ) }`;
 	}
 
 	function bindExtFilterBar( view ) {
@@ -21617,12 +21673,8 @@
 				const s = $( '#minn-ext-search' );
 				if ( s ) { s.focus( { preventScroll: true } ); s.setSelectionRange( s.value.length, s.value.length ); }
 			};
+			bindSearchClear( view, 'minn-ext-search', () => apply( '' ) );
 			search.addEventListener( 'input', () => apply( search.value ) );
-			search.addEventListener( 'keydown', ( e ) => {
-				if ( e.key === 'Escape' && search.value ) { e.preventDefault(); e.stopPropagation(); apply( '' ); }
-			} );
-			const clear = $( '#minn-ext-search-clear', view );
-			if ( clear ) clear.addEventListener( 'click', () => apply( '' ) );
 		}
 	}
 
@@ -24512,7 +24564,7 @@
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			${ dbViewsHtml( ds ) }
-			<input class="minn-input minn-toolbar-search" id="minn-db-search" placeholder="${ esc( __( 'Search tables…' ) ) }" value="${ esc( ds.q || '' ) }">
+			${ searchFieldHtml( 'minn-db-search', __( 'Search tables…' ), ds.q ) }
 			<div class="minn-toolbar-meta">${ esc( sprintf(
 				/* translators: 1: number of database tables, 2: total size (e.g. "97.8 MB"). */
 				__( '%1$s tables · %2$s' ), String( c.tables.length ), c.total_size_human ) ) }</div>
@@ -24580,6 +24632,13 @@
 		$( '#minn-db-search' ).addEventListener( 'input', ( e ) => {
 			ds.q = e.target.value;
 			paintList();
+		} );
+		// The table list is filtered in place, so a clear only repaints it.
+		bindSearchClear( view, 'minn-db-search', () => {
+			ds.q = '';
+			paintList();
+			const box = $( '#minn-db-search' );
+			if ( box ) box.focus( { preventScroll: true } );
 		} );
 		const allBtn = $( '#minn-db-all' );
 		if ( allBtn ) {
