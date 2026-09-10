@@ -25,9 +25,41 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Duplicator 5.0 is a different plugin underneath. Every DUP_* class is gone
+ * in favour of a Duplicator\ namespace, and the storage moved:
+ * {prefix}duplicator_packages became duplicator_backups (plus _entities and
+ * _activity_logs). The migration is one-way, so a site is on one side or the
+ * other and this adapter carries both: 1.5.x is still widely installed.
+ *
+ * Their own duplicator/v1 REST namespace does NOT help. It is scaffolding
+ * with a single Versions endpoint that does not even register, so this stays
+ * a shim. What 5.0 does give us is better than what it took away:
+ * BackupRequestService is a purpose-built public API for requesting a
+ * background backup, with real WP_Error codes for "another one is running",
+ * "this server cannot background", and a missing default template.
+ */
+function minn_admin_duplicator_is_v5() {
+	return class_exists( '\\Duplicator\\Package\\DupPackage' )
+		&& class_exists( '\\Duplicator\\Package\\AbstractPackage' );
+}
+
+/** Their packages table, whichever generation is installed. */
+function minn_admin_duplicator_table() {
+	global $wpdb;
+	if ( minn_admin_duplicator_is_v5() && method_exists( '\\Duplicator\\Package\\DupPackage', 'getTableName' ) ) {
+		try {
+			return (string) \Duplicator\Package\DupPackage::getTableName();
+		} catch ( \Throwable $e ) {
+			// Fall through to the literal below.
+		}
+	}
+	return $wpdb->base_prefix . ( minn_admin_duplicator_is_v5() ? 'duplicator_backups' : 'duplicator_packages' );
+}
+
 function minn_admin_duplicator_active() {
 	global $wpdb;
-	if ( ! defined( 'DUPLICATOR_VERSION' ) && ! class_exists( 'DUP_Package' ) ) {
+	if ( ! defined( 'DUPLICATOR_VERSION' ) && ! class_exists( 'DUP_Package' ) && ! minn_admin_duplicator_is_v5() ) {
 		return false;
 	}
 	// Duplicator keeps ONE packages table on base_prefix and its archives
@@ -36,13 +68,19 @@ function minn_admin_duplicator_active() {
 	if ( ! Minn_Admin::network_owner() ) {
 		return false;
 	}
-	$table = $wpdb->base_prefix . 'duplicator_packages';
+	$table = minn_admin_duplicator_table();
 	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 	return $found && 0 === strcasecmp( (string) $found, $table );
 }
 
 /** Their created-column quirk: UTC exactly when the site offset is truthy. */
 function minn_admin_duplicator_dates_are_gmt() {
+	// 5.0 writes created with gmdate(), so it is UTC unconditionally. 1.5's
+	// quirk was that it passed the OFFSET as current_time()'s $gmt FLAG, which
+	// made the column UTC exactly when the site offset was truthy.
+	if ( minn_admin_duplicator_is_v5() ) {
+		return true;
+	}
 	return (bool) get_option( 'gmt_offset', 1 );
 }
 
@@ -52,10 +90,56 @@ function minn_admin_duplicator_ssdir() {
 		if ( class_exists( 'DUP_Settings' ) && method_exists( 'DUP_Settings', 'getSsdirPath' ) ) {
 			return (string) DUP_Settings::getSsdirPath();
 		}
+		// 5.0 has no settings-level accessor for this, but every package can
+		// name its own archive's full path, so take the directory from the
+		// newest one and fall back to the default below when there are none.
+		if ( minn_admin_duplicator_is_v5() ) {
+			$newest = minn_admin_duplicator_v5_newest();
+			if ( $newest && method_exists( $newest, 'getLocalPackageFilePath' ) ) {
+				$path = $newest->getLocalPackageFilePath( \Duplicator\Package\AbstractPackage::FILE_TYPE_ARCHIVE );
+				if ( $path ) {
+					return dirname( (string) $path );
+				}
+			}
+		}
 	} catch ( \Throwable $e ) {
 		// Fall through to the default location.
 	}
+	// The default moved with 5.0 (backups-dup-lite became duplicator-backups),
+	// and their mu-plugin publishes the new name. Returning 1.5's default on a
+	// 5.0 site would measure an empty legacy folder for "On disk" and look for
+	// downloads in the wrong place.
+	if ( minn_admin_duplicator_is_v5() ) {
+		$name = defined( 'DUPLICATOR_MU_SSDIR_NAME' ) ? (string) DUPLICATOR_MU_SSDIR_NAME : 'duplicator-backups';
+		return WP_CONTENT_DIR . '/' . $name;
+	}
 	return WP_CONTENT_DIR . '/backups-dup-lite';
+}
+
+/** Newest package object on 5.0, or null. Their own query layer, never raw SQL. */
+function minn_admin_duplicator_v5_newest() {
+	if ( ! minn_admin_duplicator_is_v5() ) {
+		return null;
+	}
+	try {
+		$found = \Duplicator\Package\DupPackage::dbSelect( '', 1, 0, '`id` DESC' );
+		return $found ? reset( $found ) : null;
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+}
+
+/** One package object by id on 5.0, or null. */
+function minn_admin_duplicator_v5_package( $id ) {
+	if ( ! minn_admin_duplicator_is_v5() ) {
+		return null;
+	}
+	try {
+		$p = \Duplicator\Package\DupPackage::getById( (int) $id );
+		return $p ? $p : null;
+	} catch ( \Throwable $e ) {
+		return null;
+	}
 }
 
 /** Archive size on disk for a package, matched by its name_hash file stem. */
@@ -74,9 +158,15 @@ function minn_admin_duplicator_archive_size( $name, $hash ) {
 /** Display rows for the packages table, newest first. */
 function minn_admin_duplicator_rows() {
 	global $wpdb;
-	$table = $wpdb->base_prefix . 'duplicator_packages';
-	$rows  = $wpdb->get_results( "SELECT id, name, hash, status, created, owner FROM {$table} ORDER BY id DESC" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$gmt   = minn_admin_duplicator_dates_are_gmt();
+	$table = minn_admin_duplicator_table();
+	// 5.0 dropped the owner column and added archive_name (which saves
+	// reconstructing the file stem) plus flags. Select per generation rather
+	// than asking for columns the installed one does not have.
+	$cols = minn_admin_duplicator_is_v5()
+		? 'id, name, hash, status, created, archive_name'
+		: 'id, name, hash, status, created, owner';
+	$rows = $wpdb->get_results( "SELECT {$cols} FROM {$table} ORDER BY id DESC" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$gmt  = minn_admin_duplicator_dates_are_gmt();
 	$items = array();
 	foreach ( (array) $rows as $r ) {
 		$status = 'building';
@@ -95,7 +185,10 @@ function minn_admin_duplicator_rows() {
 			'status'    => $status,
 			'installer' => $inst ? 'yes' : 'no',
 			'size'    => $size ? size_format( $size ) : '—',
-			'owner'   => (string) $r->owner,
+			// 5.0 keeps no owner: the column is gone and the package object
+			// carries no equivalent, so the column reads empty rather than
+			// inventing an attribution.
+			'owner'   => isset( $r->owner ) ? (string) $r->owner : '',
 			'created' => $gmt ? str_replace( ' ', 'T', (string) $r->created ) . 'Z' : (string) $r->created,
 		);
 	}
@@ -117,8 +210,32 @@ function minn_admin_duplicator_cap() {
 	return (string) apply_filters( 'wpfront_user_role_editor_duplicator_translate_capability', 'export' );
 }
 
+/**
+ * 5.0 replaced the filtered-capability-name dance with a real manager:
+ * CapMng::can( CAP_*, false ) answers without dying, and the plugin maps its
+ * own duplicator_* caps onto roles. Ask that, exactly as their own
+ * controllers do, rather than restating a capability name it may have
+ * narrowed.
+ */
+function minn_admin_duplicator_v5_can( $cap ) {
+	if ( ! class_exists( '\\Duplicator\\Core\\CapMng' ) ) {
+		return false;
+	}
+	try {
+		return (bool) \Duplicator\Core\CapMng::can( $cap, false );
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
 function minn_admin_duplicator_can_build() {
-	return minn_admin_duplicator_active() && class_exists( 'DUP_Package' ) && class_exists( 'DUP_Settings' ) && current_user_can( minn_admin_duplicator_cap() );
+	if ( ! minn_admin_duplicator_active() ) {
+		return false;
+	}
+	if ( minn_admin_duplicator_is_v5() ) {
+		return minn_admin_duplicator_v5_can( \Duplicator\Core\CapMng::CAP_CREATE );
+	}
+	return class_exists( 'DUP_Package' ) && class_exists( 'DUP_Settings' ) && current_user_can( minn_admin_duplicator_cap() );
 }
 
 
@@ -132,9 +249,13 @@ function minn_admin_duplicator_download_files( $id ) {
 		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	global $wpdb;
-	$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, name, hash FROM {$wpdb->base_prefix}duplicator_packages WHERE id = %d", (int) $id ), ARRAY_A ); // phpcs:ignore WordPress.DB
+	$table = minn_admin_duplicator_table();
+	$row   = $wpdb->get_row( $wpdb->prepare( "SELECT id, name, hash FROM {$table} WHERE id = %d", (int) $id ), ARRAY_A ); // phpcs:ignore WordPress.DB
 	if ( ! $row ) {
 		return new WP_Error( 'not_found', __( 'Package not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	if ( minn_admin_duplicator_is_v5() ) {
+		return minn_admin_duplicator_v5_download_files( (int) $id, $row );
 	}
 	$root    = DUP_Settings::getSsdirPath();
 	$package = DUP_Package::getByID( (int) $id );
@@ -164,6 +285,132 @@ function minn_admin_duplicator_download_files( $id ) {
 		$files[] = array( 'part' => 'installer', 'name' => $name, 'label' => __( 'Installer', 'minn-admin' ), 'path' => $inst, 'root' => $root );
 	}
 	return $files;
+}
+
+/**
+ * The 5.0 download door. Their package object names both files' full paths
+ * (getLocalPackageFilePath), so nothing has to reconstruct a stem here; the
+ * glob fallback stays for a package whose stored object no longer loads.
+ */
+function minn_admin_duplicator_v5_download_files( $id, $row ) {
+	$package = minn_admin_duplicator_v5_package( $id );
+	$root    = minn_admin_duplicator_ssdir();
+	$stem    = $row['name'] . '_' . $row['hash'];
+	$types   = array(
+		'archive'   => array( \Duplicator\Package\AbstractPackage::FILE_TYPE_ARCHIVE, __( 'Archive', 'minn-admin' ) ),
+		'installer' => array( \Duplicator\Package\AbstractPackage::FILE_TYPE_INSTALLER, __( 'Installer', 'minn-admin' ) ),
+	);
+	$files = array();
+	foreach ( $types as $part => $spec ) {
+		list( $type, $label ) = $spec;
+		$path = null;
+		if ( $package && method_exists( $package, 'getLocalPackageFilePath' ) ) {
+			try {
+				$path = $package->getLocalPackageFilePath( $type );
+			} catch ( \Throwable $e ) {
+				$path = null;
+			}
+		}
+		if ( ! $path || ! file_exists( $path ) ) {
+			$found = glob( $root . '/' . $stem . '_' . $part . '.*' );
+			$path  = $found ? $found[0] : null;
+		}
+		if ( ! $path ) {
+			continue;
+		}
+		// The installer sits on disk under a server-side extension
+		// (.php.bak) and must download under a plain one.
+		$name = basename( $path );
+		if ( 'installer' === $part ) {
+			$name = preg_replace( '/\.bak$/', '', $name );
+			if ( '' === $name || false === strpos( $name, 'installer' ) ) {
+				$name = $stem . '_installer.php';
+			}
+		}
+		$files[] = array( 'part' => $part, 'name' => $name, 'label' => $label, 'path' => $path, 'root' => $root );
+	}
+	return $files;
+}
+
+/**
+ * Start a 5.0 backup. Everything the 1.5 path does by hand (replay the
+ * wizard, scan, persist the file lists, then drive chunks) is one call here:
+ * BackupRequestService owns the default template, the process lock and the
+ * queue. Its WP_Error answers are better than anything this shim could
+ * phrase, so they are passed through rather than restated.
+ */
+function minn_admin_duplicator_v5_build( $name, $db_only ) {
+	if ( ! class_exists( '\\Duplicator\\Package\\BackupRequestService' ) ) {
+		return new WP_Error( 'unsupported', __( 'This version of Duplicator cannot start a backup from here.', 'minn-admin' ), array( 'status' => 501 ) );
+	}
+	try {
+		$service = new \Duplicator\Package\BackupRequestService();
+		$action  = $db_only
+			? \Duplicator\Package\Create\BuildComponents::COMP_ACTION_DB
+			: \Duplicator\Package\Create\BuildComponents::COMP_ACTION_ALL;
+		$result  = $service->request( 'Minn Admin', '' !== $name ? $name : __( 'Requested from Minn', 'minn-admin' ), $action );
+	} catch ( \Throwable $e ) {
+		return new WP_Error( 'build_failed', __( 'Duplicator could not start the backup: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
+	}
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	$package_id = (int) $result;
+	$token      = wp_generate_password( 12, false );
+	set_transient( 'minn_duplicator_job_' . $token, array( 'started' => time(), 'package_id' => $package_id ), 6 * HOUR_IN_SECONDS );
+	return rest_ensure_response( array(
+		'ok'  => true,
+		'job' => array(
+			'id'           => $token,
+			'label'        => __( 'Building package', 'minn-admin' ),
+			'message'      => __( 'Queued. Building…', 'minn-admin' ),
+			'statusRoute'  => 'minn-admin/v1/duplicator/build/' . $token,
+			'statusMethod' => 'POST',
+			'stopRoute'    => 'minn-admin/v1/duplicator/build/' . $token,
+			'stopMethod'   => 'DELETE',
+		),
+	) );
+}
+
+/**
+ * Where a 5.0 build stands. Duplicator drives its own runner, so a poll only
+ * reports: it never advances a chunk the way the 1.5 path has to.
+ */
+function minn_admin_duplicator_v5_progress( $package_id ) {
+	if ( ! $package_id || ! class_exists( '\\Duplicator\\Package\\BackupRequestService' ) ) {
+		return array( 'status' => 'error', 'message' => __( 'Unknown build.', 'minn-admin' ) );
+	}
+	try {
+		$service = new \Duplicator\Package\BackupRequestService();
+		$state   = $service->getStatus( (int) $package_id );
+	} catch ( \Throwable $e ) {
+		return array( 'status' => 'error', 'message' => __( 'Duplicator build failed: ', 'minn-admin' ) . $e->getMessage() );
+	}
+	if ( is_wp_error( $state ) ) {
+		return array( 'status' => 'error', 'message' => $state->get_error_message() );
+	}
+	$their   = isset( $state['status'] ) ? (string) $state['status'] : '';
+	$message = isset( $state['message'] ) && '' !== $state['message']
+		? (string) $state['message']
+		: __( 'Building…', 'minn-admin' );
+	if ( \Duplicator\Package\BackupRequestService::STATUS_COMPLETE === $their ) {
+		return array( 'status' => 'done', 'percent' => 100, 'message' => __( 'Package built.', 'minn-admin' ) );
+	}
+	if ( \Duplicator\Package\BackupRequestService::STATUS_CANCELLED === $their ) {
+		return array( 'status' => 'canceled', 'message' => __( 'Build stopped.', 'minn-admin' ) );
+	}
+	if ( \Duplicator\Package\BackupRequestService::STATUS_FAILED === $their
+		|| \Duplicator\Package\BackupRequestService::STATUS_MISSING === $their ) {
+		return array( 'status' => 'error', 'message' => $message );
+	}
+	// Queued, running or cancelling: their package status is the same 0-100
+	// scale the 1.5 path reported, so the bar reads the same either way.
+	$percent = 1;
+	$package = minn_admin_duplicator_v5_package( $package_id );
+	if ( $package && method_exists( $package, 'getStatus' ) ) {
+		$percent = max( 1, min( 99, (int) $package->getStatus() ) );
+	}
+	return array( 'status' => 'running', 'percent' => $percent, 'message' => $message );
 }
 
 /**
@@ -297,7 +544,19 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-shared packages table (see minn_admin_duplicator_active).
-		return current_user_can( minn_admin_duplicator_cap() ) && Minn_Admin::network_owner();
+		if ( ! Minn_Admin::network_owner() ) {
+			return false;
+		}
+		// 5.0 replaced the filtered capability NAME with a capability
+		// MANAGER, and maps its own duplicator_* caps onto roles. Asking
+		// current_user_can('export') there would leave a site that had
+		// narrowed Duplicator wide open through Minn, which is the whole
+		// reason the 1.5 branch goes through their filter rather than
+		// restating a literal.
+		if ( minn_admin_duplicator_is_v5() ) {
+			return minn_admin_duplicator_v5_can( \Duplicator\Core\CapMng::CAP_BASIC );
+		}
+		return current_user_can( minn_admin_duplicator_cap() );
 	};
 
 	register_rest_route( 'minn-admin/v1', '/duplicator/packages', array(
@@ -327,16 +586,24 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$id = (int) Minn_Admin::path_param( $request );
 			try {
-				$package = DUP_Package::getByID( $id );
+				$package = minn_admin_duplicator_is_v5()
+					? minn_admin_duplicator_v5_package( $id )
+					: DUP_Package::getByID( $id );
 				if ( ! $package ) {
 					return new WP_Error( 'not_found', __( 'Package not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				$package->ID = $id;
+				// 1.5's getByID did not copy the row id onto the object, so
+				// delete() could no-op against a drifted stored ID and had to
+				// be pinned. 5.0 hydrates the id itself and made the property
+				// protected, so pinning it there is both unnecessary and fatal.
+				if ( ! minn_admin_duplicator_is_v5() ) {
+					$package->ID = $id;
+				}
 				$package->delete();
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'delete_failed', __( 'Duplicator could not delete: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
-			$table = $wpdb->base_prefix . 'duplicator_packages';
+			$table = minn_admin_duplicator_table();
 			if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				return new WP_Error( 'delete_failed', __( 'Duplicator reported success but the package row is still there.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
@@ -350,6 +617,9 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$name    = sanitize_text_field( (string) $request->get_param( 'name' ) );
 			$db_only = filter_var( $request->get_param( 'db_only' ), FILTER_VALIDATE_BOOLEAN );
+			if ( minn_admin_duplicator_is_v5() ) {
+				return minn_admin_duplicator_v5_build( $name, $db_only );
+			}
 			try {
 				// Their wizard, step by step: save the active package from
 				// the form defaults, scan, remember the scan file. Every
@@ -415,6 +685,9 @@ add_action( 'rest_api_init', function () {
 				if ( ! empty( $rec['canceled'] ) ) {
 					return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Build stopped.', 'minn-admin' ) ) );
 				}
+				if ( minn_admin_duplicator_is_v5() ) {
+					return rest_ensure_response( minn_admin_duplicator_v5_progress( (int) $rec['package_id'] ) );
+				}
 				try {
 					$out = minn_admin_duplicator_build_step( $rec );
 				} catch ( \Throwable $e ) {
@@ -437,14 +710,23 @@ add_action( 'rest_api_init', function () {
 					return new WP_Error( 'not_found', __( 'Unknown build', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				try {
-					if ( ! empty( $rec['package_id'] ) ) {
-						$package = DUP_Package::getByID( (int) $rec['package_id'] );
-						if ( $package ) {
-							$package->setStatus( DUP_PackageStatus::ERROR ); // their stop: the package reads as failed and can be deleted
+					if ( minn_admin_duplicator_is_v5() ) {
+						// Their own cancellation: the runner sees it on its next
+						// step and unwinds, rather than a status we forced.
+						$package = minn_admin_duplicator_v5_package( (int) $rec['package_id'] );
+						if ( $package && method_exists( $package, 'setForCancel' ) ) {
+							$package->setForCancel();
 						}
+					} else {
+						if ( ! empty( $rec['package_id'] ) ) {
+							$package = DUP_Package::getByID( (int) $rec['package_id'] );
+							if ( $package ) {
+								$package->setStatus( DUP_PackageStatus::ERROR ); // their stop: the package reads as failed and can be deleted
+							}
+						}
+						DUP_Settings::Set( 'active_package_id', -1 );
+						DUP_Settings::Save();
 					}
-					DUP_Settings::Set( 'active_package_id', -1 );
-					DUP_Settings::Save();
 				} catch ( \Throwable $e ) {
 					// The token is what stops the next chunk either way.
 				}
