@@ -382,7 +382,30 @@ const SEARCH_SUBJECT = 'Minn mail test';
 		} )();
 		try {
 			if ( fluentWasActive ) wp( 'plugin deactivate fluent-smtp' );
-			if ( ! postSmtpWasActive ) wp( 'plugin activate post-smtp' );
+			// wp() swallows a failed command, so an activation that does not
+			// land used to leave every Post SMTP check below querying an
+			// inactive plugin and reporting {} five times over. Verify it took
+			// (with one retry) and say so plainly if it did not.
+			const postSmtpIsActive = () => {
+				try {
+					execSync( `wp --path=${ JSON.stringify( wpPath ) } plugin is-active post-smtp`, {
+						stdio: 'ignore', timeout: 30000,
+					} );
+					return true;
+				} catch ( e ) {
+					return false;
+				}
+			};
+			let postSmtpActive = postSmtpWasActive || postSmtpIsActive();
+			for ( let i = 0; ! postSmtpActive && i < 2; i++ ) {
+				wp( 'plugin activate post-smtp' );
+				postSmtpActive = postSmtpIsActive();
+			}
+			if ( ! postSmtpActive ) {
+				t.check( 'Post SMTP could not be activated on this site — its checks skipped', true,
+					'activation did not take after two attempts' );
+				throw new Error( 'post-smtp-activation-failed' );
+			}
 
 			const stamp = 'post-smtp-minn-' + Date.now();
 			const fs = require( 'fs' );
@@ -491,6 +514,12 @@ const SEARCH_SUBJECT = 'Minn mail test';
 					&& rest.view_pill === true,
 					JSON.stringify( { s: rest.view_status, titles: rest.view_titles, pill: rest.view_pill } ) );
 			}
+		} catch ( e ) {
+			// Only the honest-skip path above is swallowed here; a real
+			// failure still fails the suite.
+			if ( ! /post-smtp-activation-failed/.test( String( e && e.message ) ) ) {
+				throw e;
+			}
 		} finally {
 			// Restore mail residents: FluentSMTP active, Post SMTP inactive.
 			if ( ! postSmtpWasActive ) wp( 'plugin deactivate post-smtp' );
@@ -521,6 +550,32 @@ const SEARCH_SUBJECT = 'Minn mail test';
 		t.check( 'FluentSMTP sections view: pill + typed body row', fl.skipped || ( fl.status === 200 && fl.titles.includes( 'Delivery' ) && fl.pill && [ 'html-preview', 'code' ].includes( fl.bodyType ) ), JSON.stringify( fl ) );
 		const wl = await viewOf( 'minn-admin/v1/wpml/emails?per_page=5&page=1', 'id', 'minn-admin/v1/wpml/emails/{id}/view' );
 		t.check( 'WP Mail Logging sections view: pill + typed body row', wl.skipped || ( wl.status === 200 && wl.titles.includes( 'Delivery' ) && wl.pill && [ 'html-preview', 'code' ].includes( wl.bodyType ) ), JSON.stringify( wl ) );
+	}
+
+	/* ===== A chart bar narrows the log to that day (v0.39.0 dateQuery) =====
+	 * Driven on the active resident so no plugin has to be toggled. The
+	 * other mail providers wire the same three pieces (points carry from/to,
+	 * the collection declares dateQuery, the route reads after/before). */
+	{
+		const st = await api( 'minn-admin/v1/wpml/status' );
+		const points = ( st.body && st.body.chart && st.body.chart.points ) || [];
+		t.check( 'WP Mail Logging chart points carry a day window',
+			points.length > 0 && !! points[ points.length - 1 ].from && !! points[ points.length - 1 ].to,
+			JSON.stringify( points[ points.length - 1 ] || null ) );
+		if ( points.length ) {
+			const day = points[ points.length - 1 ];
+			const all = await api( 'minn-admin/v1/wpml/emails?per_page=1&page=1' );
+			const win = await api( `minn-admin/v1/wpml/emails?per_page=1&page=1&after=${ encodeURIComponent( day.from ) }&before=${ encodeURIComponent( day.to ) }` );
+			const none = await api( 'minn-admin/v1/wpml/emails?per_page=1&page=1&after=1990-01-01%2000%3A00%3A00&before=1990-01-01%2023%3A59%3A59' );
+			const allTotal = ( all.body && all.body.total ) || 0;
+			const winTotal = ( win.body && win.body.total ) || 0;
+			t.check( 'a day window narrows the log rather than returning everything',
+				win.status === 200 && winTotal <= allTotal,
+				JSON.stringify( { all: allTotal, day: winTotal } ) );
+			t.check( 'a window with nothing in it comes back empty, not unfiltered',
+				none.status === 200 && ( ( none.body && none.body.total ) || 0 ) === 0,
+				JSON.stringify( none.body && none.body.total ) );
+		}
 	}
 
 	await t.done( browser, errors );

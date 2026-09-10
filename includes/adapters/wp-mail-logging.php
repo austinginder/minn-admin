@@ -117,6 +117,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'status'     => array( 'route' => 'minn-admin/v1/wpml/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/wpml/emails',
+			// A status-chart bar narrows the log to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -195,7 +198,15 @@ function minn_admin_wpml_status_model() {
 	$by_day = array();
 	for ( $i = 13; $i >= 0; $i-- ) {
 		$d            = date_i18n( 'Y-m-d', current_time( 'timestamp' ) - $i * DAY_IN_SECONDS );
-		$by_day[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+		// The bounds a clicked bar sends back. `timestamp` is
+		// current_time('mysql'), i.e. SITE-LOCAL, so these compare directly.
+		$by_day[ $d ] = array(
+			'label'     => $d,
+			'value'     => 0,
+			'secondary' => 0,
+			'from'      => $d . ' 00:00:00',
+			'to'        => $d . ' 23:59:59',
+		);
 	}
 	foreach ( (array) $days as $row ) {
 		$d = (string) $row->d;
@@ -247,6 +258,16 @@ add_action( 'rest_api_init', function () {
 				$where = "(error IS NULL OR error = '')";
 			} elseif ( 'failed' === $status ) {
 				$where = "error IS NOT NULL AND error != ''";
+			}
+			// A status-chart bar narrows the list to that day. Both the bounds
+			// and the column are site-local, so this is a plain comparison.
+			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
+				$bound = (string) $request->get_param( $param );
+				if ( '' === $bound ) {
+					continue;
+				}
+				$where .= " AND timestamp {$op} %s";
+				$args[] = $bound;
 			}
 			if ( $request['search'] ) {
 				$like   = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';

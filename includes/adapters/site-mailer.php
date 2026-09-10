@@ -83,6 +83,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'status'     => array( 'route' => 'minn-admin/v1/site-mailer/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/site-mailer/emails',
+			// A status-chart bar narrows the log to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -166,6 +169,18 @@ add_action( 'rest_api_init', function () {
 				$like    = '%' . $wpdb->esc_like( $search ) . '%';
 				$where[] = '( subject LIKE %s OR `to` LIKE %s )';
 				array_push( $params, $like, $like );
+			}
+			// A status-chart bar narrows the list to that day. The bounds are
+			// minted in the DB's own clock (the same one the chart buckets in
+			// and the column is stored in), so this compares like for like and
+			// nothing has to convert.
+			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
+				$bound = (string) $request->get_param( $param );
+				if ( '' === $bound ) {
+					continue;
+				}
+				$where[]  = "created_at {$op} %s";
+				$params[] = $bound;
 			}
 			$where_sql = 'WHERE ' . implode( ' AND ', $where );
 			$count_sql = "SELECT COUNT(*) FROM {$table} {$where_sql}";
@@ -268,7 +283,14 @@ add_action( 'rest_api_init', function () {
 			$byday  = array();
 			for ( $i = 13; $i >= 0; $i-- ) {
 				$d           = gmdate( 'Y-m-d', $db_now - $i * DAY_IN_SECONDS );
-				$byday[ $d ] = array( 'label' => gmdate( 'M j', strtotime( $d ) ), 'value' => 0, 'secondary' => 0 );
+				// The bounds a clicked bar sends back, in the DB's clock.
+				$byday[ $d ] = array(
+					'label'     => gmdate( 'M j', strtotime( $d ) ),
+					'value'     => 0,
+					'secondary' => 0,
+					'from'      => $d . ' 00:00:00',
+					'to'        => $d . ' 23:59:59',
+				);
 			}
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$rows = $wpdb->get_results( $wpdb->prepare(

@@ -93,7 +93,16 @@ function minn_admin_post_smtp_status_model() {
 	$by_day = array();
 	for ( $i = 13; $i >= 0; $i-- ) {
 		$d            = date_i18n( 'Y-m-d', current_time( 'timestamp' ) - $i * DAY_IN_SECONDS );
-		$by_day[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+		// The bounds a clicked bar sends back. `time` is a WP-LOCAL epoch, so
+		// these are site-local datetimes and the route converts them the same
+		// way; Minn never interprets them.
+		$by_day[ $d ] = array(
+			'label'     => $d,
+			'value'     => 0,
+			'secondary' => 0,
+			'from'      => $d . ' 00:00:00',
+			'to'        => $d . ' 23:59:59',
+		);
 	}
 	foreach ( (array) $rows_raw as $row ) {
 		// date_i18n over a WP-local epoch matches how they stamped the row.
@@ -185,6 +194,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'status'     => array( 'route' => 'minn-admin/v1/post-smtp/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/post-smtp/emails',
+			// A status-chart bar narrows the log to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -266,6 +278,22 @@ add_action( 'rest_api_init', function () {
 				$where = $sent_sql;
 			} elseif ( 'failed' === $status ) {
 				$where = "NOT {$sent_sql}";
+			}
+			// A status-chart bar narrows the list to that day. The bounds are
+			// site-local datetimes (the chart minted them that way) and `time`
+			// is a WP-local epoch, so strtotime on the site's clock is the
+			// right conversion, not get_gmt_from_date.
+			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
+				$bound = (string) $request->get_param( $param );
+				if ( '' === $bound ) {
+					continue;
+				}
+				$stamp = strtotime( $bound );
+				if ( false === $stamp ) {
+					continue;
+				}
+				$where .= " AND time {$op} %d";
+				$args[] = $stamp;
 			}
 			if ( $request['search'] ) {
 				// Subject + recipient columns only (session_transcript can hold SMTP AUTH).
