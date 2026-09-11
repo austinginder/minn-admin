@@ -142,6 +142,23 @@ deleting accounts stays in Network Admin, because deleting a network account
 removes that person's posts from every site and WordPress's own flow offers
 to reassign them first.
 
+**If you run WP Freighter** (several sites out of one install, each with
+its own tables), Minn treats it much like a network. The sidebar group is
+called Tenants, and its Tenant sites page lists every tenant with its
+address, how many accounts it has, when it was made, and whether Minn Admin
+is turned on there. From a row you can open a tenant in Minn or in
+WordPress, visit it, turn Minn Admin on or off for it, clone it, or delete
+it; the card above names the main site, the files mode and domain mapping,
+and carries the WP-CLI prefix for working inside a tenant. New tenant asks
+for a title, a name for the list, a hostname when domain mapping is on, and
+the first administrator's details. The site switcher beside the site name
+lists the main site and every tenant, and so does the palette. One
+difference from a network: tenants do not share accounts, so opening one
+signs you in as an administrator of that tenant through WP Freighter's own
+one-time link, the same thing its Log in button does. Inside a tenant the
+same page offers Back to the main site. Minn never offers to delete the
+tenant you are working in.
+
 Network-wide plugin and theme controls stay in Extensions. A network
 administrator can activate or deactivate a plugin for the whole network and
 enable or disable a theme for every site. Per-site activation stays separate,

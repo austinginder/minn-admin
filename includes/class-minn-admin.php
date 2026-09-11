@@ -1108,6 +1108,21 @@ class Minn_Admin {
 	 * @return array{sites: array, total: int}
 	 */
 	public static function user_sites_payload() {
+		if ( ! is_multisite() ) {
+			// Off multisite the switcher has nothing of its own to list, but a
+			// plugin that hosts several sites in one install (WP Freighter's
+			// tenants) may supply the same shape. An entry carrying a `login`
+			// route instead of an `app` URL is one the client reaches by
+			// asking that route for a one-time link and following it.
+			$payload = apply_filters( 'minn_admin_sites', array( 'sites' => array(), 'total' => 0 ) );
+			if ( ! is_array( $payload ) || empty( $payload['sites'] ) || ! is_array( $payload['sites'] ) || count( $payload['sites'] ) < 2 ) {
+				return array( 'sites' => array(), 'total' => 0 );
+			}
+			return array(
+				'sites' => array_values( $payload['sites'] ),
+				'total' => max( (int) ( $payload['total'] ?? 0 ), count( $payload['sites'] ) ),
+			);
+		}
 		$ids = self::user_site_ids();
 		if ( count( $ids ) < 2 ) {
 			return array( 'sites' => array(), 'total' => 0 );
@@ -1604,6 +1619,9 @@ class Minn_Admin {
 			// remove-from-site, profile edits need network caps), plugins can
 			// be network-activated. Client views branch on this.
 			'multisite' => is_multisite(),
+			// Sidebar group names a plugin wants to override: { group => label }.
+			// Only `network` is honoured today (WP Freighter calls it Tenants).
+			'navGroupLabels' => (array) apply_filters( 'minn_admin_nav_group_labels', array() ),
 			// The sites this user can open Minn on: a CAPPED page for the
 			// switcher plus the membership total, so a network with thousands
 			// of sites costs a page load nothing and offers search instead of

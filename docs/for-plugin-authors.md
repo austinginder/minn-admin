@@ -584,7 +584,7 @@ Rules of the road:
 ### `collection.actions` — verbs on rows and in the detail modal
 
 Each action is `{ label, method, route, body, confirm, danger, when, href, fields,
-settingsItem, list, download }`:
+settingsItem, list, download, follow }`:
 
 - **`route`** — `{id}` is replaced with the item id; `method` defaults to POST (DELETE is
   fine; several bundled adapters use it for permanent removal); `body`
@@ -613,6 +613,13 @@ settingsItem, list, download }`:
   the browser is handed the content as a file. Nothing is assumed to have changed
   server-side, so the list isn't refreshed and an open detail modal stays put (the
   bundled ACF Field Groups surface exports a group's JSON this way).
+- **`follow: true`** *(v0.40)* makes the action a departure: the route runs as usual
+  (`method`, `body`) and must answer `{ "url": "…", "message"?: "…" }`; the browser then
+  goes to that URL in the same tab, showing `message` as a toast first when present. Use it
+  for a link that has to be minted per click, such as a one-time sign-in into another site,
+  which an `href` could never carry (the bundled WP Freighter surface opens a tenant this
+  way). Status-card actions accept `follow` the same way. Nothing is refreshed, since the
+  page is leaving.
 - Every non-parameterized action also appears on the list row's ⋯ / right-click menu
   (Open is always first); set **`list: false`** to keep a verb detail-only. For a
   parameterized action, **`list: true`** explicitly adds it to that menu.
@@ -895,6 +902,8 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_media_folders` | filter | Feed the Media view's folder filter from your folder plugin (since 0.18.0) |
 | `minn_admin_log_sources` | filter | Add a log to System's log viewer (since 0.19.0) |
 | `minn_admin_revision_fields` | filter | Report what a revision changed OUTSIDE the content, for the revision comparison (since 0.31.0) |
+| `minn_admin_sites` | filter | Off multisite only: feed the topbar site switcher and the ⌘K "Switch to…" commands. Return `{ sites: [ { id, name, url, app, login, current } ], total }`; an entry with a `login` REST route (instead of an `app` URL) is opened by POSTing to it and following the `url` it answers, for hosts whose sites share no session. Empty unless at least two entries (since 0.40.0) |
+| `minn_admin_nav_group_labels` | filter | Rename a sidebar group heading: `{ group => label }`. Only `network` is honoured today, so a plugin that hosts several sites in one install (WP Freighter) can call the group Tenants (since 0.40.0) |
 
 Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
 tooling that wants to render into the page attaches at `minn_admin_template_footer`; the

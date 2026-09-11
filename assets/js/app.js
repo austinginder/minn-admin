@@ -3559,6 +3559,33 @@
 		return ( B.sitesTotal || 0 ) > ( B.sites || [] ).length;
 	}
 
+	// Go to another site's Minn. A multisite entry carries the app URL and
+	// the session already works there. A tenant entry (WP Freighter) has no
+	// shared session, so it carries a `login` route instead: ask it for a
+	// one-time link and follow that. The route answers { url, message? }.
+	function openSite( site ) {
+		if ( ! site || site.current ) return;
+		if ( site.login ) {
+			api( site.login, { method: 'POST' } ).then( ( r ) => {
+				if ( r && r.url ) {
+					window.location.href = r.url;
+				} else {
+					toast( ( r && r.message ) || __( 'That site did not answer with a sign-in link.' ), true );
+				}
+			} ).catch( ( e ) => toast( e.message, true ) );
+			return;
+		}
+		if ( site.app ) window.location.href = site.app;
+	}
+
+	// A sidebar group's heading. Plugins may rename the one group whose
+	// meaning depends on what hosts the sites (multisite says Network, WP
+	// Freighter says Tenants); the boot payload carries the override.
+	function navGroupLabel( key, fallback ) {
+		const custom = ( B.navGroupLabels || {} )[ key ];
+		return typeof custom === 'string' && custom.trim() ? custom : fallback;
+	}
+
 	// Compact fuzzy scoring shared by the inline switcher and the full picker.
 	// Contiguous matches win, but punctuation-free and subsequence matches make
 	// "team1" find "Team 1" and "tm10" find "Team 10". Lower is better;
@@ -3661,7 +3688,7 @@
 			buttons.forEach( ( button ) => button.addEventListener( 'click', () => {
 				const site = matches.find( ( item ) => String( item.id ) === button.dataset.siteId );
 				hideMinnMenu();
-				if ( site && ! site.current ) window.location.href = site.app;
+				if ( site && ! site.current ) openSite( site );
 			} ) );
 			/* translators: %s: number of matching sites. */
 			status.textContent = sprintf( _n( '%s matching site', '%s matching sites', matches.length ), matches.length );
@@ -3933,7 +3960,7 @@
 			commerce: __( 'Commerce' ),
 			tools: __( 'Tools' ),
 			manage: __( 'Manage' ),
-			network: __( 'Network' ),
+			network: navGroupLabel( 'network', __( 'Network' ) ),
 		};
 		Object.keys( groupLabels ).forEach( ( key ) => {
 			const btn = document.querySelector( '[data-navgroup="' + key + '"]' );
@@ -4004,7 +4031,7 @@
 					${ navGroupHtml( 'commerce', __( 'Commerce' ), commerceNavItems(), true ) }
 					${ navGroupHtml( 'tools', __( 'Tools' ), toolsNavItems(), true ) }
 					${ navGroupHtml( 'manage', __( 'Manage' ), manageItems, true ) }
-					${ navGroupHtml( 'network', __( 'Network' ), networkNavItems(), true ) }
+					${ navGroupHtml( 'network', navGroupLabel( 'network', __( 'Network' ) ), networkNavItems(), true ) }
 				</nav>
 				${ B.switchBack ? `
 			<a class="minn-switchback" href="${ esc( B.switchBack.url ) }" title="${ esc( __( 'End this switched session' ) ) }">
@@ -15837,6 +15864,18 @@
 			}
 			await new Promise( ( resolve ) => setTimeout( resolve, 1200 ) );
 		}
+		// A `follow` action's whole outcome is somewhere else: the route
+		// answers { url } (a one-time sign-in link into another site, say)
+		// and the browser goes there. Nothing here to refresh.
+		if ( action.follow ) {
+			if ( r && r.url ) {
+				if ( r.message ) toast( r.message );
+				window.location.href = r.url;
+				return;
+			}
+			toast( ( r && r.message ) || __( 'That did not answer with a link to follow.' ), true );
+			return;
+		}
 		toast( actionToast( r, action ) );
 		const ss = surfaceState( s.id );
 		ss.cache = null;
@@ -15996,6 +16035,18 @@
 						// A long-running job: the chip and modal take it from
 						// here; the surface refreshes when the job ends.
 						startJob( r.job, { surface: s.id } );
+						btn.disabled = false;
+						return;
+					}
+					if ( a.follow ) {
+						// Same contract as a row action's `follow`: the route
+						// answers { url } and the browser goes there.
+						if ( r && r.url ) {
+							if ( r.message ) toast( r.message );
+							window.location.href = r.url;
+							return;
+						}
+						toast( ( r && r.message ) || __( 'That did not answer with a link to follow.' ), true );
 						btn.disabled = false;
 						return;
 					}
@@ -40972,7 +41023,7 @@
 					label: sprintf( __( 'Switch to %s' ), s.name || s.url ),
 					kind: 'nav',
 					icon: '⊞',
-					run: () => { window.location.href = s.app; },
+					run: () => openSite( s ),
 				} );
 			} );
 		}
@@ -42092,8 +42143,8 @@
 					<div class="minn-sp-list">
 						${ m.loading && ! m.items ? `<div class="minn-loading">${ esc( __( 'Loading sites…' ) ) }</div>` : '' }
 						${ m.items && ! items.length ? `<div class="minn-empty" style="padding:18px;">${ esc( __( 'No sites match that search.' ) ) }</div>` : '' }
-						${ items.map( ( s ) => `
-							<button class="minn-sp-row${ s.current ? ' is-on' : '' }" data-spgo="${ esc( s.app ) }" data-spfind="${ esc( ( ( s.name || '' ) + ' ' + ( s.url || '' ) ).toLowerCase() ) }"${ s.current ? ' disabled' : '' }>
+						${ items.map( ( s, i ) => `
+							<button class="minn-sp-row${ s.current ? ' is-on' : '' }" data-spgo="${ i }" data-spfind="${ esc( ( ( s.name || '' ) + ' ' + ( s.url || '' ) ).toLowerCase() ) }"${ s.current ? ' disabled' : '' }>
 								<span class="minn-sp-name">${ esc( s.name || s.url ) }</span>
 								<span class="minn-sp-url mono">${ esc( s.url ) }</span>
 								${ s.current ? `<span class="minn-sp-here">${ esc( __( 'You are here' ) ) }</span>` : '' }
@@ -43699,7 +43750,7 @@
 			}
 			filterSitePickerRows();
 			$$( '[data-spgo]' ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
-				window.location.href = btn.dataset.spgo;
+				openSite( ( m.items || [] )[ parseInt( btn.dataset.spgo, 10 ) ] );
 			} ) );
 		}
 

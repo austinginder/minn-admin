@@ -136,6 +136,11 @@ Expand only the part of Minn you want to explore.
   and safely deletes non-primary networks. Main/current-site, self-lockout, and last-admin
   guards protect destructive actions; account creation/deletion, network domain and path
   changes, the long settings tail, and very large network upgrades link to WordPress Network Admin
+- **Multi-tenant** — on a WP Freighter host, a **Tenants** group lists every tenant site
+  with its domain, accounts and whether Minn runs there; create, rename, clone, delete
+  and turn Minn on or off per tenant through WP Freighter's own API, edit its files mode
+  and domain mapping, and hop between the main site and any tenant from the site switcher
+  or the palette through WP Freighter's one-time sign-in
 - **In your language** — the whole interface follows the language you pick, per user, in
   **twenty-four languages** covering about half of WordPress installs. Right-to-left languages
   (Arabic, Hebrew, Persian and friends) get a genuinely mirrored layout, counts follow each
