@@ -25,6 +25,7 @@ MINN_TEST_PASS=<admin password> node subscription-page.test.js # /subscriptions/
 MINN_TEST_PASS=<admin password> node yith-gift-cards.test.js # gift cards (YITH): buys one for a fixture, issues one by hand (SKIPs without YITH)
 MINN_TEST_PASS=<admin password> node woocommerce-gift-cards.test.js # gift cards (official WC): issues one by hand (SKIPs without the plugin)
 MINN_TEST_PASS=<admin password> node pw-gift-cards.test.js # gift cards (PW): activates Pro if inactive, issues one by hand (SKIPs without PW)
+MINN_TEST_PASS=<admin password> node woocommerce-memberships.test.js # memberships (WooCommerce Memberships): grants one to a disposable customer, walks every verb (SKIPs without the plugin)
 
 # lab seeders (NOT suites: they leave what they create behind, so point them
 # at a throwaway site). seed-gateways enables cheque/bacs/cod so the payment

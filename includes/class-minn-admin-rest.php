@@ -9030,6 +9030,18 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'source'      => 'upload',
 				'homepage'    => 'https://woocommerce.com/products/woocommerce-subscriptions/',
 			),
+			'woocommerce-memberships' => array(
+				'slug'        => 'woocommerce-memberships',
+				'name'        => 'WooCommerce Memberships',
+				'author'      => 'SkyVerge',
+				'description' => __( 'Sell memberships that unlock restricted content, products and discounts. This paid extension is installed by uploading the .zip downloaded from WooCommerce.com.', 'minn-admin' ),
+				'installs'    => 0,
+				'version'     => '',
+				'rating'      => 0,
+				'icon'        => '',
+				'source'      => 'upload',
+				'homepage'    => 'https://woocommerce.com/products/woocommerce-memberships/',
+			),
 			'disembark' => array(
 				'slug'        => 'disembark',
 				'name'        => 'Disembark',
