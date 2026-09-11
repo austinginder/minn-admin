@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.38.0. This file ships inside the plugin, so the copy you
+*Current as of v0.39.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -394,6 +394,13 @@ explanation instead of numbers.
 installed, "Back up site now" is there too, and the System page reports
 how fresh your last backup is.
 
+Many plugin pages open with a card that charts the last fourteen days:
+mail providers draw sent and failed, forms providers draw entries, and
+bookings draw the fortnight ahead. Where the list beneath can honour it,
+clicking a bar narrows that list to the day you clicked, with a chip
+naming the day and clearing it again. It combines with the tabs and the
+search, so Failed plus a bar is that day's failures.
+
 Backups and exports start from the Backups page's status card and run in
 the background, so you can carry on working or close the tab. A pill in
 the top bar shows how far along the run is on whatever page you are on;
@@ -660,7 +667,12 @@ cards, all in the same operational group.
   of the theme's own templates creates this site's copy on save (the
   theme file is untouched), the sidebar flips to Customized, and Reset
   to theme is right there to undo it. Templates never autosave; saving
-  is a deliberate click. The Site Editor stays one click away for layout
+  is a deliberate click. Once this site has its own copy of a template,
+  the sidebar carries **History**, the same one posts and pages have:
+  every saved version, who saved it and when, any version readable
+  side by side against what is on screen, and one click to put it back.
+  A template still coming straight from the theme has no history to show
+  and says nothing. The Site Editor stays one click away for layout
   work, and a plugin's templates still open there.
   **Navigation** is your site's menus, with the question the
   Site Editor never answers: where each one actually renders. A menu used

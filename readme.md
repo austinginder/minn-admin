@@ -320,7 +320,9 @@ Expand only the part of Minn you want to explore.
   one screen. **Templates** sorts the ones this site changed to the top and says which is which
   (from the theme, customized here, added here, plugin-registered), counts **what actually uses
   each one**, resets a customized template to the theme's file, and opens any of them in Minn's
-  own editor with the byte-for-byte guarantee the rest of the editor makes. **Template parts**
+  own editor with the byte-for-byte guarantee the rest of the editor makes, **History**
+  included once the site has its own copy: every saved version, who saved it, a side-by-side
+  read against what is on screen, and one click to restore. **Template parts**
   get their own tab with the count of templates that include them. **Navigation** lists a block
   theme's menus with **where each one renders** and arranges the items in place: rename,
   re-point, drag to reorder, indent to build a dropdown, add a page or custom link, remove with

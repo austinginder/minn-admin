@@ -2,14 +2,14 @@
 # This file is distributed under the MIT.
 msgid ""
 msgstr ""
-"Project-Id-Version: Minn Admin 0.38.0\n"
+"Project-Id-Version: Minn Admin 0.39.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/minn-admin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-11T02:04:40+00:00\n"
+"POT-Creation-Date: 2026-09-11T03:40:12+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 
@@ -181,7 +181,7 @@ msgstr ""
 #: includes/adapters/code-snippets.php:117
 #: includes/adapters/custom-css-js.php:368
 #: includes/adapters/custom-css-js.php:394
-#: includes/adapters/duplicator.php:517
+#: includes/adapters/duplicator.php:523
 #: includes/adapters/elementor-forms.php:216
 #: includes/adapters/elementor-forms.php:228
 #: includes/adapters/eps-301-redirects.php:111
@@ -1355,7 +1355,7 @@ msgid "Newest export"
 msgstr ""
 
 #: includes/adapters/ai1wm.php:119
-#: includes/adapters/duplicator.php:776
+#: includes/adapters/duplicator.php:782
 #: includes/adapters/scrutoscope.php:421
 #: includes/adapters/wp-migrate.php:399
 #: assets/js/app.js:12737
@@ -1382,7 +1382,7 @@ msgstr ""
 
 #: includes/adapters/ai1wm.php:135
 #: includes/adapters/disembark.php:226
-#: includes/adapters/duplicator.php:785
+#: includes/adapters/duplicator.php:791
 #: includes/adapters/wp-migrate.php:403
 msgid "On disk"
 msgstr ""
@@ -1456,7 +1456,7 @@ msgstr ""
 
 #: includes/adapters/ai1wm.php:260
 #: includes/adapters/backwpup.php:312
-#: includes/adapters/duplicator.php:515
+#: includes/adapters/duplicator.php:519
 #: includes/adapters/transients-manager.php:317
 #: includes/adapters/transients-manager.php:439
 #: includes/adapters/updraftplus.php:300
@@ -1472,7 +1472,7 @@ msgstr ""
 
 #: includes/adapters/ai1wm.php:261
 #: includes/adapters/backwpup.php:314
-#: includes/adapters/duplicator.php:518
+#: includes/adapters/duplicator.php:524
 #: includes/adapters/gravity-forms.php:243
 #: includes/adapters/network.php:203
 #: includes/adapters/ninja-forms.php:289
@@ -1808,7 +1808,7 @@ msgstr ""
 #: includes/adapters/aryo-activity-log.php:196
 #: includes/adapters/backwpup.php:207
 #: includes/adapters/disembark.php:137
-#: includes/adapters/duplicator.php:770
+#: includes/adapters/duplicator.php:776
 #: includes/adapters/simple-history.php:185
 #: includes/adapters/stream.php:165
 #: includes/adapters/updraftplus.php:204
@@ -4560,7 +4560,7 @@ msgid "Duplicator could not start the backup: "
 msgstr ""
 
 #: includes/adapters/duplicator.php:365
-#: includes/adapters/duplicator.php:670
+#: includes/adapters/duplicator.php:676
 msgid "Building package"
 msgstr ""
 
@@ -4573,7 +4573,7 @@ msgid "Unknown build."
 msgstr ""
 
 #: includes/adapters/duplicator.php:387
-#: includes/adapters/duplicator.php:701
+#: includes/adapters/duplicator.php:707
 msgid "Duplicator build failed: "
 msgstr ""
 
@@ -4589,8 +4589,8 @@ msgid "Package built."
 msgstr ""
 
 #: includes/adapters/duplicator.php:400
-#: includes/adapters/duplicator.php:693
-#: includes/adapters/duplicator.php:742
+#: includes/adapters/duplicator.php:699
+#: includes/adapters/duplicator.php:748
 msgid "Build stopped."
 msgstr ""
 
@@ -4627,88 +4627,88 @@ msgstr ""
 msgid "Duplicator reported a build error. Check its log."
 msgstr ""
 
-#: includes/adapters/duplicator.php:514
+#: includes/adapters/duplicator.php:518
 msgid "Package"
 msgstr ""
 
-#: includes/adapters/duplicator.php:516
+#: includes/adapters/duplicator.php:522
 #: assets/js/app.js:798
 #: assets/js/app.js:22155
 msgid "By"
 msgstr ""
 
-#: includes/adapters/duplicator.php:526
+#: includes/adapters/duplicator.php:532
 msgid "Download archive"
 msgstr ""
 
-#: includes/adapters/duplicator.php:527
+#: includes/adapters/duplicator.php:533
 msgid "Download installer"
 msgstr ""
 
-#: includes/adapters/duplicator.php:535
+#: includes/adapters/duplicator.php:541
 msgid "Delete package"
 msgstr ""
 
-#: includes/adapters/duplicator.php:538
+#: includes/adapters/duplicator.php:544
 msgid "Delete this package and its archive files permanently?"
 msgstr ""
 
-#: includes/adapters/duplicator.php:600
+#: includes/adapters/duplicator.php:606
 msgid "Package not found"
 msgstr ""
 
-#: includes/adapters/duplicator.php:611
+#: includes/adapters/duplicator.php:617
 msgid "Duplicator could not delete: "
 msgstr ""
 
-#: includes/adapters/duplicator.php:615
+#: includes/adapters/duplicator.php:621
 msgid "Duplicator reported success but the package row is still there."
 msgstr ""
 
-#: includes/adapters/duplicator.php:662
+#: includes/adapters/duplicator.php:668
 msgid "Duplicator could not scan the site: "
 msgstr ""
 
-#: includes/adapters/duplicator.php:671
+#: includes/adapters/duplicator.php:677
 msgid "Site scanned. Building…"
 msgstr ""
 
-#: includes/adapters/duplicator.php:690
-#: includes/adapters/duplicator.php:717
+#: includes/adapters/duplicator.php:696
+#: includes/adapters/duplicator.php:723
 msgid "Unknown build"
 msgstr ""
 
-#: includes/adapters/duplicator.php:775
+#: includes/adapters/duplicator.php:781
 msgid "Newest package"
 msgstr ""
 
-#: includes/adapters/duplicator.php:780
+#: includes/adapters/duplicator.php:786
 msgid "Packages"
 msgstr ""
 
-#: includes/adapters/duplicator.php:782
+#: includes/adapters/duplicator.php:788
 msgid "Manual builds; Minn makes no freshness claims for Duplicator."
 msgstr ""
 
-#: includes/adapters/duplicator.php:792
+#: includes/adapters/duplicator.php:798
 msgid "Build a package"
 msgstr ""
 
-#: includes/adapters/duplicator.php:797
+#: includes/adapters/duplicator.php:803
 msgid "Package name"
 msgstr ""
 
-#: includes/adapters/duplicator.php:797
+#: includes/adapters/duplicator.php:803
 msgid "Today's date and the site name"
 msgstr ""
 
-#: includes/adapters/duplicator.php:798
+#: includes/adapters/duplicator.php:804
 #: includes/adapters/updraftplus.php:243
 #: includes/adapters/wpvivid.php:293
 msgid "Database only"
 msgstr ""
 
-#: includes/adapters/duplicator.php:801
+#: includes/adapters/duplicator.php:807
 msgid "Open Duplicator ↗"
 msgstr ""
 
