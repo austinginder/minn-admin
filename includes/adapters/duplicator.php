@@ -525,16 +525,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// their Packages screen offers; nothing until a build finished.
 				array( 'label' => __( 'Download archive', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'duplicator', '{id}', 'archive' ), 'when' => array( 'key' => 'status', 'equals' => 'completed' ) ),
 				array( 'label' => __( 'Download installer', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'duplicator', '{id}', 'installer' ), 'when' => array( 'key' => 'installer', 'equals' => 'yes' ) ),
-				array(
-					'label'   => __( 'Delete package', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/duplicator/packages/{id}',
-					'confirm' => __( 'Delete this package and its archive files permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
 			),
 		),
 	);
+	// Delete sits on their CAP_CREATE rung (their packageDelete ajax), so a
+	// Backup-Read-only user never sees a button the route would refuse.
+	if ( minn_admin_duplicator_can_build() ) {
+		$surfaces['duplicator']['collection']['actions'][] = array(
+			'label'   => __( 'Delete package', 'minn-admin' ),
+			'method'  => 'DELETE',
+			'route'   => 'minn-admin/v1/duplicator/packages/{id}',
+			'confirm' => __( 'Delete this package and its archive files permanently?', 'minn-admin' ),
+			'danger'  => true,
+		);
+	}
 	return $surfaces;
 } );
 
@@ -575,7 +579,10 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/duplicator/packages/(?P<id>\d+)', array(
 		'methods'             => 'DELETE',
-		'permission_callback' => $perm,
+		// Their packageDelete ajax asks CAP_CREATE, one rung above the
+		// CAP_BASIC the list reads at; the build gate already resolves to
+		// that rung on 5.0 and to their filtered cap on 1.5.
+		'permission_callback' => 'minn_admin_duplicator_can_build',
 		'callback'            => function ( WP_REST_Request $request ) {
 			// Duplicator's own loader + delete() — its file cleanup, not a
 			// re-guess. (Their getByID unserializes their own blob; this

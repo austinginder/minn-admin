@@ -253,6 +253,11 @@ function minn_admin_perfmatters_raw_output_fields() {
 		// nothing to the quote-stripping these fields get.
 		'cdn'       => array( 'cdn_url' ),
 		'fonts'     => array( 'cdn_url' ),
+		// threshold is concatenated into the inline window.lazyLoadOptions
+		// script on every front-end page (their validate attribute runs in
+		// the browser only); login_url_message is handed to wp_die verbatim.
+		'lazyload'  => array( 'threshold' ),
+		'login_url' => array( 'login_url_message' ),
 	);
 }
 

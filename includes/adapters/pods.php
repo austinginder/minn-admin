@@ -117,10 +117,44 @@ function minn_admin_pods_parse_pick_custom( $custom ) {
  * @param object|array $field Pods field.
  * @return array|null { name, label, type, choices?, min?, max? }
  */
+/**
+ * Does Pods let the current user see this field at all?
+ *
+ * A field (or its whole group) can be restricted to admins, to roles, to a
+ * capability or to logged-in users. Their metabox neither renders nor
+ * saves such a field for anyone who fails the check, and pods()->save()
+ * cannot backstop it: PodsAPI short-circuits the permission test when the
+ * save originates from code. So the check runs here, where the field map
+ * for the schema route, the read and the write all come from.
+ *
+ * @param object|array $field Pods field object or legacy array.
+ * @return bool
+ */
+function minn_admin_pods_may_see( $field ) {
+	if ( ! function_exists( 'pods_permission' ) ) {
+		return true;
+	}
+	try {
+		if ( ! pods_permission( $field ) ) {
+			return false;
+		}
+		$group = ( is_object( $field ) && method_exists( $field, 'get_group_object' ) ) ? $field->get_group_object() : null;
+		if ( $group && ! pods_permission( $group ) ) {
+			return false;
+		}
+	} catch ( Throwable $e ) {
+		return false;
+	}
+	return true;
+}
+
 function minn_admin_pods_map_field( $field ) {
 	$name = (string) minn_admin_pods_field_arg( $field, 'name', '' );
 	$type = (string) minn_admin_pods_field_arg( $field, 'type', '' );
 	if ( '' === $name || '' === $type ) {
+		return null;
+	}
+	if ( ! minn_admin_pods_may_see( $field ) ) {
 		return null;
 	}
 	// Chrome / layout-only.
@@ -227,6 +261,11 @@ function minn_admin_pods_fields_payload( $post_id, $post_type ) {
 			$type = (string) minn_admin_pods_field_arg( $field, 'type', '' );
 			// Heading/html are chrome, not locked data.
 			if ( in_array( $type, array( 'heading', 'html' ), true ) ) {
+				continue;
+			}
+			// A field Pods withholds from this user is not locked, it is
+			// absent, the way their metabox leaves it out.
+			if ( ! minn_admin_pods_may_see( $field ) ) {
 				continue;
 			}
 			$simple = minn_admin_pods_map_field( $field );

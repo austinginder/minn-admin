@@ -254,9 +254,15 @@ add_action( 'rest_api_init', function () {
 			$sections = array( array( 'title' => __( 'Request', 'minn-admin' ), 'rows' => $rows ) );
 
 			// Their payload is JSON; decode only, and show it as escaped code.
+			// A retried request is re-persisted WITH its outbound headers,
+			// and those carry the SaaS bearer token; their own screen unsets
+			// `headers` before rendering, so this one does too.
 			$raw = (string) ( $row['request_data'] ?? '' );
 			if ( '' !== trim( $raw ) ) {
 				$decoded = json_decode( $raw, true );
+				if ( is_array( $decoded ) ) {
+					unset( $decoded['headers'] );
+				}
 				$pretty  = ( null !== $decoded )
 					? (string) wp_json_encode( $decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
 					: $raw;

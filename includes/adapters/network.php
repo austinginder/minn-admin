@@ -1277,6 +1277,20 @@ function minn_admin_network_user_super( WP_REST_Request $request ) {
 	if ( ! $user ) {
 		return new WP_Error( 'no_such_user', __( 'That account does not exist.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
+	// Core's checkbox lives on user-edit.php, which asks edit_user on the
+	// target first and is never the caller's own profile page; the
+	// manage_network_options gate on the route is the checkbox's own
+	// condition, not a replacement for those two.
+	if ( ! current_user_can( 'edit_user', $id ) ) {
+		return new WP_Error( 'forbidden', __( 'You are not allowed to edit that account.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	if ( $on && $id === get_current_user_id() ) {
+		return new WP_Error(
+			'cannot_grant_self',
+			__( 'You cannot grant yourself network-administrator status. Ask a network administrator to do it.', 'minn-admin' ),
+			array( 'status' => 400 )
+		);
+	}
 	if ( minn_admin_network_super_admins_locked() ) {
 		return new WP_Error(
 			'locked',

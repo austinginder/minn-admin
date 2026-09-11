@@ -126,6 +126,27 @@ function minn_admin_license_edd_word( $word, $product ) {
  * @return array { state, note, type, key } — state is
  *   valid|invalid|expired|unknown|missing, type is the raw membership string.
  */
+/**
+ * Is the current user one the WPMU DEV Dashboard lets manage its connection?
+ *
+ * Their allow-list (Settings → Permissions, the WPMUDEV_LIMIT_TO_USER
+ * constant, or by default the admin who connected the site) gates every
+ * Dashboard handler on top of manage_options. Without the Dashboard loaded
+ * there is no list to consult and nothing to attach actions to anyway.
+ *
+ * @return bool
+ */
+function minn_admin_wpmudev_allowed_user() {
+	if ( ! class_exists( 'WPMUDEV_Dashboard' ) || ! isset( WPMUDEV_Dashboard::$site ) || ! method_exists( WPMUDEV_Dashboard::$site, 'allowed_user' ) ) {
+		return false;
+	}
+	try {
+		return (bool) WPMUDEV_Dashboard::$site->allowed_user();
+	} catch ( Throwable $e ) {
+		return false;
+	}
+}
+
 function minn_admin_wpmudev_membership() {
 	$key = ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY ) ? WPMUDEV_APIKEY : get_site_option( 'wpmudev_apikey' );
 	if ( ! $key ) {
@@ -4161,22 +4182,48 @@ function minn_admin_license_default_providers() {
 		};
 	}
 
-	// WPMU DEV: mirror their auth endpoint minus the redirect — set_key,
-	// then a FORCED hub_sync. The Hub answers an invalid or expired key
-	// with an empty membership (hub_sync itself logs the site out in that
-	// case). No paste field while the key is pinned in wp-config: set_key
-	// would be silently overridden on the next boot.
-	if ( class_exists( 'WPMUDEV_Dashboard' ) && ! ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY ) ) {
+	// WPMU DEV: mirror their auth endpoint minus the redirect — remember
+	// the working key, set_key, then a FORCED hub_sync, and put the old key
+	// back when the Hub says no (their handler restores $previous_key; a
+	// rejected paste must not disconnect a connected site). The Hub answers
+	// an invalid or expired key with an empty membership, and hub_sync
+	// itself clears the membership in that case. No paste field while the
+	// key is pinned in wp-config: set_key would be silently overridden on
+	// the next boot.
+	//
+	// The Dashboard also restricts WHICH administrators may touch the
+	// connection: by default the one who connected it, or the list under
+	// Settings → Permissions, or the WPMUDEV_LIMIT_TO_USER constant agencies
+	// pin on client sites. Every one of their handlers asks
+	// $site->allowed_user() on top of manage_options, so the actions only
+	// attach for a user that check admits; anyone else keeps the read-only
+	// row.
+	if ( class_exists( 'WPMUDEV_Dashboard' ) && ! ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY )
+		&& minn_admin_wpmudev_allowed_user() ) {
 		$providers['wpmudev']['secret_label'] = __( 'WPMU DEV API key', 'minn-admin' );
 		$providers['wpmudev']['key_constant'] = 'WPMUDEV_APIKEY';
-	$providers['wpmudev']['activate']     = function ( $secret ) {
+		$wpmudev_restore = function ( $prev_key, $prev_membership ) {
+			WPMUDEV_Dashboard::$api->set_key( $prev_key );
+			if ( isset( WPMUDEV_Dashboard::$settings ) && method_exists( WPMUDEV_Dashboard::$settings, 'set' ) ) {
+				WPMUDEV_Dashboard::$settings->set( 'membership_data', is_array( $prev_membership ) ? $prev_membership : array() );
+			}
+			if ( '' !== $prev_key ) {
+				// Their sequence: the stored membership must describe the key
+				// that is stored, so re-sync the restored one.
+				WPMUDEV_Dashboard::$api->hub_sync( false, true );
+			}
+		};
+		$providers['wpmudev']['activate'] = function ( $secret ) use ( $wpmudev_restore ) {
+			$prev_key        = WPMUDEV_Dashboard::$api->has_key() ? (string) WPMUDEV_Dashboard::$api->get_key() : '';
+			$prev_membership = WPMUDEV_Dashboard::$settings->get( 'membership_data' );
 			WPMUDEV_Dashboard::$api->set_key( $secret );
 			$res = WPMUDEV_Dashboard::$api->hub_sync( false, true );
 			if ( false === $res ) {
-				WPMUDEV_Dashboard::$api->set_key( '' ); // the rollback their own endpoint does
+				$wpmudev_restore( $prev_key, $prev_membership );
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach the WPMU DEV Hub', 'minn-admin' ) );
 			}
 			if ( empty( $res['membership'] ) ) {
+				$wpmudev_restore( $prev_key, $prev_membership );
 				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'The Hub did not recognize that API key', 'minn-admin' ) );
 			}
 			return array( 'ok' => true );

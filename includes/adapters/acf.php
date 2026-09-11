@@ -108,6 +108,24 @@ function minn_admin_acf_choices_out( $val ) {
 }
 
 /**
+ * May the current user store markup through ACF unfiltered?
+ *
+ * ACF runs wp_kses_post_deep over the WHOLE payload on both of its own write
+ * paths (the metabox save and its REST field) whenever this says no, on the
+ * post scope as much as the options scope. The predicate is theirs when it
+ * is loaded, so a site that filters acf/allow_unfiltered_html gets the same
+ * answer through Minn.
+ *
+ * @return bool
+ */
+function minn_admin_acf_trusts_markup() {
+	if ( function_exists( 'acf_allow_unfiltered_html' ) ) {
+		return (bool) acf_allow_unfiltered_html();
+	}
+	return current_user_can( 'unfiltered_html' );
+}
+
+/**
  * Incoming multi-choice value → deduped list of strings, whitelisted against
  * the field's choices (skipped for ACF checkbox `allow_custom` fields, whose
  * custom entries are legitimate values).
@@ -124,12 +142,12 @@ function minn_admin_acf_choices_in( $value, $field, $scope = 'post' ) {
 	// A declared choice list IS the allowlist: anything outside it is dropped
 	// below, so nothing arbitrary can survive. With ACF's "Allow Custom" set,
 	// or no choices declared at all, there is no list to lean on and the value
-	// is whatever was sent. On the options scope that lands in a site-global
-	// row a theme prints with the_field(), which does not escape, so the same
-	// markup-trust rule the plain string types get in minn_admin_acf_value_in
-	// has to reach the array types too. It cannot be applied there: that guard
-	// only sees strings, and this returns a list.
-	$trusted = $keys || 'options' !== $scope || current_user_can( 'unfiltered_html' );
+	// is whatever was sent, and ACF's own save runs wp_kses_post_deep over it
+	// for anyone without unfiltered_html on every scope. The same rule the
+	// plain string types get in minn_admin_acf_value_in has to reach the array
+	// types too; it cannot be applied there: that guard only sees strings, and
+	// this returns a list.
+	$trusted = $keys || minn_admin_acf_trusts_markup();
 	$out = array();
 	foreach ( (array) $value as $v ) {
 		if ( ! is_scalar( $v ) ) {
@@ -1154,7 +1172,7 @@ function minn_admin_acf_value_in( $f, $value, $scope = 'post' ) {
 			return minn_admin_acf_relation_in( $f['key'], $value );
 		case 'wysiwyg':
 			$value = is_scalar( $value ) ? (string) $value : '';
-			return current_user_can( 'unfiltered_html' ) ? $value : wp_kses_post( $value );
+			return minn_admin_acf_trusts_markup() ? $value : wp_kses_post( $value );
 		case 'url':
 			// A url field's whole purpose is to be printed into an href, and
 			// the link field next door already refuses these schemes.
@@ -1164,12 +1182,12 @@ function minn_admin_acf_value_in( $f, $value, $scope = 'post' ) {
 	if ( null === $value || false === $value ) {
 		return ''; // clearing stores '' — ACF's own form save does the same
 	}
-	if ( 'options' === $scope && is_string( $value ) && ! current_user_can( 'unfiltered_html' ) ) {
-		// An options value is site-global and the usual pattern is a theme
-		// printing it with the_field(), which does not escape. On the post
-		// scope this is ACF's own behaviour over one post the caller already
-		// owns; here the blast radius is every page, so the markup-trust rule
-		// that already covers wysiwyg covers the plain string types too.
+	if ( is_string( $value ) && ! minn_admin_acf_trusts_markup() ) {
+		// ACF's own metabox save and its REST field both run
+		// wp_kses_post_deep over the whole payload for anyone without
+		// unfiltered_html, on the post scope as much as the options scope:
+		// the_field() does not escape, and a text field lands on the page
+		// as markup wherever a theme prints it. Same rule here, every type.
 		return wp_kses_post( $value );
 	}
 	return is_scalar( $value ) ? $value : null;

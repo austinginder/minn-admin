@@ -1227,18 +1227,16 @@ class Minn_Admin {
 	 * is written for, a site being staged before launch, where the owner has
 	 * every reason to think the content is not being served yet.
 	 *
-	 * Minn's own namespace is exempt for the same reason the app shell is:
-	 * the people who can still use the site are the people running it.
+	 * Minn's own namespace gets no exemption: the people who can still use
+	 * the app already pass maintenance_holds_back(), so a route-keyed
+	 * exemption could only ever serve a caller that predicate held back
+	 * (the same shape as the ?action=minn_ hole in maintenance_admin_entry).
 	 *
 	 * @param mixed $result Result from a previous filter.
 	 * @return mixed
 	 */
 	public static function maintenance_rest( $result ) {
 		if ( ! empty( $result ) || ! self::maintenance_holds_back() ) {
-			return $result;
-		}
-		$route = $GLOBALS['wp']->query_vars['rest_route'] ?? '';
-		if ( is_string( $route ) && 0 === strpos( ltrim( $route, '/' ), Minn_Admin_Rest::NS ) ) {
 			return $result;
 		}
 		return new WP_Error(
@@ -1298,9 +1296,11 @@ class Minn_Admin {
 	 * is earlier than the admin_init this used to ride, and is the one hook
 	 * they share.
 	 *
-	 * Minn's own ajax handler is left alone, the way the REST guard leaves
-	 * Minn's own namespace alone, so the app keeps working for the people
-	 * allowed in.
+	 * There is deliberately no exemption for Minn's own ajax action here. The
+	 * people the app works for already pass maintenance_holds_back(), so an
+	 * exemption keyed on the request could only ever benefit a caller that
+	 * predicate had held back: appending ?action=minn_x to xmlrpc.php walked
+	 * straight past the holding page.
 	 */
 	public static function maintenance_admin_entry() {
 		$script = isset( $_SERVER['SCRIPT_NAME'] ) ? basename( (string) $_SERVER['SCRIPT_NAME'] ) : '';
@@ -1308,11 +1308,6 @@ class Minn_Admin {
 			return;
 		}
 		if ( ! self::maintenance_holds_back() ) {
-			return;
-		}
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading the action name only, to leave Minn's own handler alone.
-		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
-		if ( 0 === strpos( $action, 'minn_' ) ) {
 			return;
 		}
 		status_header( 503 );

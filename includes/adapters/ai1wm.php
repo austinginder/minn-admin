@@ -205,17 +205,20 @@ function minn_admin_ai1wm_job_status( $data ) {
 	}
 	$text = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( str_replace( array( '<em>', '<span>' ), ' ', $raw ) ) ) );
 	if ( 'download' === $type ) {
-		$href = '';
-		if ( preg_match( '/href="([^"]+)"/', $raw, $m ) ) {
-			$href = html_entity_decode( $m[1] );
-		}
-		$archive = (string) ( $data['archive'] ?? '' );
+		// Their 'download' entry links the archive directly under
+		// wp-content/ai1wm-backups, a URL that works for anyone holding it.
+		// The list's Download already goes through Minn's nonce-checked
+		// door; the finished-job link goes the same way, by file name.
+		$archive = basename( (string) ( $data['archive'] ?? '' ) );
 		$out['message'] = $archive
 			/* translators: %s: the export file name. */
 			? sprintf( __( 'Export finished: %s', 'minn-admin' ), $archive )
 			: __( 'Export finished.', 'minn-admin' );
-		if ( $href && 0 === strpos( $href, 'http' ) ) {
-			$out['result'] = array( 'label' => __( 'Download export', 'minn-admin' ), 'href' => $href );
+		if ( '' !== $archive && function_exists( 'minn_admin_backup_download_url' ) ) {
+			$out['result'] = array(
+				'label' => __( 'Download export', 'minn-admin' ),
+				'href'  => minn_admin_backup_download_url( 'ai1wm', minn_admin_ai1wm_id_encode( $archive ) ),
+			);
 		}
 	} elseif ( 'done' === $type ) {
 		$out['message'] = '' !== $text ? $text : __( 'Export finished.', 'minn-admin' );
