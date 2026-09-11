@@ -510,13 +510,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'pageQuery' => 'per_page=25&page={page}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
-			'columns'   => array(
+			// 5.0 dropped the owner column and keeps no equivalent, so on those
+			// sites the By column could never be filled. An always-empty column
+			// reads as a stray dash once the list stacks on a phone and the
+			// labels are gone, so it is not offered there at all.
+			'columns'   => array_values( array_filter( array(
 				array( 'key' => 'name', 'label' => __( 'Package', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'size', 'label' => __( 'Size', 'minn-admin' ), 'format' => 'text' ),
-				array( 'key' => 'owner', 'label' => __( 'By', 'minn-admin' ), 'format' => 'text' ),
+				minn_admin_duplicator_is_v5()
+					? null
+					: array( 'key' => 'owner', 'label' => __( 'By', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
 				array( 'key' => 'created', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago' ),
-			),
+			) ) ),
 			'detail'    => array(
 				'skip' => array( 'name', 'installer' ),
 			),
