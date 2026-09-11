@@ -60,5 +60,35 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'Fluent Forms surface renders the card',
 		/Unread entries/.test( cardText ) && /Open Fluent Forms/.test( cardText ), '' );
 
+	/* ===== A chart bar narrows the entries list to that day (v0.39.0) =====
+	 * Driven on an active resident. Every forms adapter wires the same three
+	 * pieces (the shared bucket helper mints from/to, the collection declares
+	 * dateQuery, the route converts the site-local bounds onto whatever clock
+	 * its own column is stored in). */
+	{
+		const st = await api( 'minn-admin/v1/fluent-forms/status' );
+		const points = ( st.chart && st.chart.points ) || ( st.body && st.body.chart && st.body.chart.points ) || [];
+		const last = points[ points.length - 1 ];
+		t.check( 'forms chart points carry a day window',
+			!! ( last && last.from && last.to ), JSON.stringify( last || null ) );
+		if ( last ) {
+			const totalOf = async ( q ) => {
+				const r = await api( 'minn-admin/v1/fluent-forms/entries?per_page=1&page=1' + q );
+				return ( r && r.total ) != null ? r.total : ( r.body && r.body.total );
+			};
+			const all = await totalOf( '' );
+			// A window nothing can fall in must come back empty rather than
+			// unfiltered: that is the failure an ignored parameter produces.
+			const none = await totalOf( '&after=1990-01-01%2000%3A00%3A00&before=1990-01-01%2023%3A59%3A59' );
+			t.check( 'a window with nothing in it comes back empty, not unfiltered',
+				none === 0, JSON.stringify( { all, none } ) );
+			// And the whole 14-day window returns no more than everything.
+			const first = points[ 0 ];
+			const span = await totalOf( `&after=${ encodeURIComponent( first.from ) }&before=${ encodeURIComponent( last.to ) }` );
+			t.check( 'a real window narrows rather than widening',
+				typeof span === 'number' && span <= all, JSON.stringify( { all, span } ) );
+		}
+	}
+
 	await t.done( browser, errors );
 } )();

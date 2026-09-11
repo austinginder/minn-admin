@@ -135,6 +135,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/formidable/entries',
+			// A status-chart bar narrows the list to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -245,6 +248,14 @@ add_action( 'rest_api_init', function () {
 				$where .= " AND EXISTS ( SELECT 1 FROM {$metas_t} m WHERE m.item_id = e.id AND m.meta_value LIKE %s )";
 				$args[] = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
 			}
+			// A status-chart bar narrows the list to that day. created_at is
+			// current_time('mysql', 1), i.e. UTC, so the site-local bounds are
+			// converted before they are compared.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'e.created_at', 'utc' );
+			foreach ( $range_sql as $clause ) {
+				$where .= ' AND ' . $clause;
+			}
+			$args = array_merge( $args, $range_args );
 			$total = (int) $wpdb->get_var( $args
 				? $wpdb->prepare( "SELECT COUNT(*) FROM {$items_t} e {$where}", ...$args ) // phpcs:ignore
 				: "SELECT COUNT(*) FROM {$items_t} e {$where}" ); // phpcs:ignore

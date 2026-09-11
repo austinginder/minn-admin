@@ -199,6 +199,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/ninja-forms/entries',
+			// A status-chart bar narrows the list to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -365,9 +368,27 @@ add_action( 'rest_api_init', function () {
 			if ( ! in_array( $status, array( 'publish', 'trash' ), true ) ) {
 				$status = 'publish';
 			}
+			// A status-chart bar narrows the list to that day. Submissions are
+			// nf_sub POSTS, so this is core's own date_query on post_date,
+			// which is the site's clock: the same clock the bounds arrive on
+			// and the same one the chart buckets in. inclusive keeps both
+			// edges of the day.
+			$date_query = array();
+			$after      = (string) $request->get_param( 'after' );
+			$before     = (string) $request->get_param( 'before' );
+			if ( '' !== $after || '' !== $before ) {
+				$date_query = array( array( 'inclusive' => true ) );
+				if ( '' !== $after ) {
+					$date_query[0]['after'] = $after;
+				}
+				if ( '' !== $before ) {
+					$date_query[0]['before'] = $before;
+				}
+			}
 			$q = new WP_Query( array(
 				'post_type'      => 'nf_sub',
 				'post_status'    => $status,
+				'date_query'     => $date_query,
 				'posts_per_page' => $per_page,
 				'paged'          => $page,
 				'orderby'        => 'ID',

@@ -135,6 +135,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'viewLabel' => __( 'Messages', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/cf7/messages',
+			// A status-chart bar narrows the list to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -303,12 +306,30 @@ add_action( 'rest_api_init', function () {
 				$bucket = 'inbox';
 			}
 
+			// A status-chart bar narrows the list to that day. Flamingo
+			// messages are POSTS and find() passes its args to WP_Query, so
+			// core's date_query serves both branches. post_date is the site's
+			// clock, the same one the bounds arrive on.
+			$date_query = array();
+			$after      = (string) $request->get_param( 'after' );
+			$before     = (string) $request->get_param( 'before' );
+			if ( '' !== $after || '' !== $before ) {
+				$date_query = array( array( 'inclusive' => true ) );
+				if ( '' !== $after ) {
+					$date_query[0]['after'] = $after;
+				}
+				if ( '' !== $before ) {
+					$date_query[0]['before'] = $before;
+				}
+			}
+
 			// flamingo-spam is exclude_from_search — name statuses explicitly.
 			// find() does not speak 'trash'; use WP_Query for that bucket.
 			if ( 'trash' === $bucket ) {
 				$q_args = array(
 					'post_type'      => Flamingo_Inbound_Message::post_type,
 					'post_status'    => 'trash',
+					'date_query'     => $date_query,
 					'posts_per_page' => $per_page,
 					'paged'          => $page,
 					'orderby'        => 'date',
@@ -336,6 +357,7 @@ add_action( 'rest_api_init', function () {
 				$args = array(
 					'posts_per_page' => $per_page,
 					'offset'         => ( $page - 1 ) * $per_page,
+					'date_query'     => $date_query,
 					'orderby'        => 'date',
 					'order'          => 'DESC',
 					'post_status'    => 'spam' === $bucket

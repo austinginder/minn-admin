@@ -197,6 +197,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/elementor/submissions',
+			// A status-chart bar narrows the list to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -353,6 +356,17 @@ add_action( 'rest_api_init', function () {
 			if ( $request['form'] ) {
 				// Elementor filter expects post_id_element_id.
 				$filters['form'] = array( 'value' => (string) $request['form'] );
+			}
+			// A status-chart bar narrows the list to that day, through their
+			// OWN date filter rather than a hand-built clause: it takes the
+			// day only (Y-m-d), appends the day's edges itself and converts to
+			// UTC with get_gmt_from_date, which is exactly the conversion the
+			// site-local bounds need.
+			foreach ( array( 'after', 'before' ) as $bound_key ) {
+				$bound = (string) $request->get_param( $bound_key );
+				if ( '' !== $bound ) {
+					$filters[ $bound_key ] = array( 'value' => substr( $bound, 0, 10 ) );
+				}
 			}
 
 			$result = $query->get_submissions( array(

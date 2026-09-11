@@ -435,6 +435,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/everest/entries',
+			// A status-chart bar narrows the list to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -653,6 +656,13 @@ add_action( 'rest_api_init', function () {
 				$args[] = $wpdb->esc_like( '_evf_' ) . '%';
 				$args[] = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
 			}
+			// A status-chart bar narrows the list to that day. date_created is
+			// stored UTC, so the site-local bounds convert before comparing.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'e.date_created', 'utc' );
+			foreach ( $range_sql as $clause ) {
+				$where .= ' AND ' . $clause;
+			}
+			$args = array_merge( $args, $range_args );
 			$total = (int) $wpdb->get_var( $wpdb->prepare(
 				"SELECT COUNT(*) FROM {$entry_t} e {$where}", // phpcs:ignore
 				...$args

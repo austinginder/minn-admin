@@ -284,6 +284,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/wpforms/entries',
+			// A status-chart bar narrows the list to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -477,6 +480,11 @@ add_action( 'rest_api_init', function () {
 				$where[]  = 'fields LIKE %s';
 				$params[] = '%' . $wpdb->esc_like( $search ) . '%';
 			}
+			// A status-chart bar narrows the list to that day. `date` is
+			// stored UTC, so the site-local bounds convert before comparing.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, '`date`', 'utc' );
+			$where  = array_merge( $where, $range_sql );
+			$params = array_merge( $params, $range_args );
 			$where_sql = 'WHERE ' . implode( ' AND ', $where );
 			$count_sql = "SELECT COUNT(*) FROM {$table} {$where_sql}";
 			$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );

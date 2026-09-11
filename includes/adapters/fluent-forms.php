@@ -264,6 +264,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/fluent-forms/entries',
+			// A status-chart bar narrows the list to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
@@ -532,6 +535,11 @@ add_action( 'rest_api_init', function () {
 				$where[] = 's.response LIKE %s';
 				$args[]  = $like;
 			}
+			// A status-chart bar narrows the list to that day. created_at is
+			// site-local current_time, the same clock the bounds arrive on.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 's.created_at', 'local' );
+			$where = array_merge( $where, $range_sql );
+			$args  = array_merge( $args, $range_args );
 			$where_sql = implode( ' AND ', $where );
 
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared

@@ -24,7 +24,17 @@ function minn_admin_chart_days( $n = 14 ) {
 	$days = array();
 	for ( $i = $n - 1; $i >= 0; $i-- ) {
 		$d          = wp_date( 'Y-m-d', time() - $i * DAY_IN_SECONDS );
-		$days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+		// from/to are the bounds a clicked bar sends back to the collection
+		// (the `dateQuery` contract). They are SITE-LOCAL, like the buckets
+		// themselves; a route whose column is on another clock converts them
+		// with minn_admin_chart_range_clause() rather than comparing raw.
+		$days[ $d ] = array(
+			'label'     => $d,
+			'value'     => 0,
+			'secondary' => 0,
+			'from'      => $d . ' 00:00:00',
+			'to'        => $d . ' 23:59:59',
+		);
 	}
 	return $days;
 }
@@ -69,6 +79,58 @@ function minn_admin_chart_utc_day_sql( $col ) {
 function minn_admin_chart_utc_day( $mysql_utc ) {
 	$ts = strtotime( trim( (string) $mysql_utc ) . ' UTC' );
 	return $ts ? wp_date( 'Y-m-d', $ts ) : '';
+}
+
+/**
+ * The WHERE fragments for a clicked chart bar's day, converted onto the
+ * clock the adapter's own column is stored in.
+ *
+ * The bounds arrive site-local (minn_admin_chart_days minted them that way,
+ * because the site's days are the only calendar the reader has). What differs
+ * per adapter is the column, so the caller names its clock and gets back
+ * clauses it can drop into its own WHERE:
+ *
+ *   local  A datetime already on the site's clock. Compared directly.
+ *   utc    A datetime stored in UTC (the common case for plugins that use
+ *          current_time('mysql', true) or gmdate).
+ *   epoch  A Unix timestamp column, always a real UTC instant.
+ *
+ * Returns array( array $sql_fragments, array $args ); both empty when the
+ * request carries no bar. The caller supplies $column itself, so it is never
+ * request input.
+ *
+ * @param WP_REST_Request $request Request carrying after/before.
+ * @param string          $column  Adapter-authored column name.
+ * @param string          $clock   'local' | 'utc' | 'epoch'.
+ * @return array{0:string[],1:array}
+ */
+function minn_admin_chart_range_clause( $request, $column, $clock = 'local' ) {
+	$sql  = array();
+	$args = array();
+	foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
+		$bound = (string) $request->get_param( $param );
+		if ( '' === $bound ) {
+			continue;
+		}
+		if ( 'epoch' === $clock ) {
+			// strtotime reads the bound on the SITE's clock (PHP's default
+			// zone is the site's), which is what these bounds are.
+			$stamp = strtotime( $bound );
+			if ( false === $stamp ) {
+				continue;
+			}
+			$sql[]  = "{$column} {$op} %d";
+			$args[] = $stamp;
+			continue;
+		}
+		$value = 'utc' === $clock ? get_gmt_from_date( $bound ) : $bound;
+		if ( '' === (string) $value ) {
+			continue;
+		}
+		$sql[]  = "{$column} {$op} %s";
+		$args[] = $value;
+	}
+	return array( $sql, $args );
 }
 
 /**
