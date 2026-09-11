@@ -350,8 +350,14 @@ function minn_admin_wcm_access_label( $method ) {
  * @return array
  */
 function minn_admin_wcm_plan_row( $plan ) {
-	$post      = get_post( $plan->get_id() );
-	$rules     = 0;
+	$post       = get_post( $plan->get_id() );
+	$rules      = 0;
+	$active_now = false;
+	try {
+		$active_now = (bool) $plan->has_active_memberships();
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
 	try {
 		$rules = count( (array) $plan->get_rules( 'all', false ) );
 	} catch ( \Throwable $e ) {
@@ -368,6 +374,7 @@ function minn_admin_wcm_plan_row( $plan ) {
 		'products' => count( (array) $plan->get_product_ids() ),
 		'rules'    => $rules,
 		'status'   => $post ? (string) $post->post_status : '',
+		'deletable' => ! $active_now,
 	);
 }
 
@@ -605,6 +612,440 @@ function minn_admin_wcm_page_model( $m ) {
 	);
 }
 
+/* ===== Plan page (membership-plans/{id}) ===== */
+
+/**
+ * The content types a rule of one type may target, as [value, label] pairs
+ * with value "post_type:name" | "taxonomy:name", from the plugin's own lists
+ * (the same class its meta box uses; it loads under REST by design).
+ *
+ * @param string $rule_type content_restriction | product_restriction | purchasing_discount.
+ * @return array<int,array{0:string,1:string}>
+ */
+function minn_admin_wcm_rule_targets( $rule_type ) {
+	$out = array();
+	if ( ! class_exists( 'WC_Memberships_Admin_Membership_Plan_Rules' ) ) {
+		return $out;
+	}
+	try {
+		if ( 'content_restriction' === $rule_type ) {
+			foreach ( (array) WC_Memberships_Admin_Membership_Plan_Rules::get_valid_post_types_for_content_restriction_rules() as $name => $pt ) {
+				$out[] = array( 'post_type:' . $name, $pt->labels->name );
+			}
+			foreach ( (array) WC_Memberships_Admin_Membership_Plan_Rules::get_valid_taxonomies_for_content_restriction_rules() as $name => $tx ) {
+				$out[] = array( 'taxonomy:' . $name, $tx->labels->name );
+			}
+		} else {
+			$product = get_post_type_object( 'product' );
+			$out[]   = array( 'post_type:product', $product ? $product->labels->name : __( 'Products', 'minn-admin' ) );
+			$taxes   = 'product_restriction' === $rule_type
+				? WC_Memberships_Admin_Membership_Plan_Rules::get_valid_taxonomies_for_product_restriction_rules()
+				: WC_Memberships_Admin_Membership_Plan_Rules::get_valid_taxonomies_for_purchasing_discounts_rules();
+			foreach ( (array) $taxes as $name => $tx ) {
+				$out[] = array( 'taxonomy:' . $name, $tx->labels->name );
+			}
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+	return $out;
+}
+
+/**
+ * Display labels for the objects a rule targets.
+ *
+ * @param string $content_type post_type | taxonomy.
+ * @param string $name         Post type or taxonomy name.
+ * @param int[]  $ids          Object ids.
+ * @return array<int,array{id:int,label:string}>
+ */
+function minn_admin_wcm_rule_objects( $content_type, $name, $ids ) {
+	$out = array();
+	foreach ( array_map( 'intval', (array) $ids ) as $id ) {
+		if ( $id <= 0 ) {
+			continue;
+		}
+		$label = '';
+		if ( 'taxonomy' === $content_type ) {
+			$term  = get_term( $id, $name );
+			$label = $term && ! is_wp_error( $term ) ? $term->name : '';
+		} else {
+			$post  = get_post( $id );
+			$label = $post ? get_the_title( $post ) : '';
+		}
+		$out[] = array( 'id' => $id, 'label' => '' !== $label ? $label : '#' . $id );
+	}
+	return $out;
+}
+
+/**
+ * One rule, in the shape the plugin's own JSON serializer emits plus labels.
+ *
+ * @param WC_Memberships_Membership_Plan_Rule $rule Rule.
+ * @return array
+ */
+function minn_admin_wcm_rule_model( $rule ) {
+	$data = class_exists( '\SkyVerge\WooCommerce\Memberships\Plans\Adapters\JsonSerializers\MembershipPlanRuleSerializer' )
+		? \SkyVerge\WooCommerce\Memberships\Plans\Adapters\JsonSerializers\MembershipPlanRuleSerializer::convert( $rule )
+		: array(
+			'id'                => $rule->get_id(),
+			'content_type'      => $rule->get_content_type(),
+			'content_type_name' => $rule->get_content_type_name(),
+			'object_ids'        => $rule->get_object_ids(),
+		);
+	$data['object_ids'] = array_map( 'intval', (array) $data['object_ids'] );
+	$data['objects']    = minn_admin_wcm_rule_objects( $data['content_type'], $data['content_type_name'], $data['object_ids'] );
+	$data['target']     = $data['content_type'] . ':' . $data['content_type_name'];
+	if ( isset( $data['discount_amount'] ) ) {
+		$data['discount_amount'] = (string) $data['discount_amount'];
+	}
+	return $data;
+}
+
+/**
+ * The plan page model. A null plan yields the blank model for /new.
+ *
+ * @param WC_Memberships_Membership_Plan|null $plan Plan.
+ * @return array
+ */
+function minn_admin_wcm_plan_model( $plan ) {
+	$sections = array();
+	if ( function_exists( 'wc_memberships_get_members_area_sections' ) ) {
+		foreach ( (array) wc_memberships_get_members_area_sections( $plan ? $plan->get_id() : '' ) as $key => $label ) {
+			$sections[] = array( (string) $key, (string) $label );
+		}
+	}
+	$vocab = array(
+		'targets'  => array(
+			'content_restriction' => minn_admin_wcm_rule_targets( 'content_restriction' ),
+			'product_restriction' => minn_admin_wcm_rule_targets( 'product_restriction' ),
+			'purchasing_discount' => minn_admin_wcm_rule_targets( 'purchasing_discount' ),
+		),
+		'periods'  => array(
+			array( 'days', __( 'days', 'minn-admin' ) ),
+			array( 'weeks', __( 'weeks', 'minn-admin' ) ),
+			array( 'months', __( 'months', 'minn-admin' ) ),
+			array( 'years', __( 'years', 'minn-admin' ) ),
+		),
+		'sections' => $sections,
+		'methods'  => array(
+			array( 'manual-only', minn_admin_wcm_access_label( 'manual-only' ) ),
+			array( 'signup', minn_admin_wcm_access_label( 'signup' ) ),
+			array( 'purchase', minn_admin_wcm_access_label( 'purchase' ) ),
+		),
+	);
+
+	if ( ! $plan ) {
+		return array(
+			'id'          => 0,
+			'name'        => '',
+			'slug'        => '',
+			'description' => '',
+			'status'      => 'publish',
+			'access'      => array( 'method' => 'manual-only', 'products' => array() ),
+			'length'      => array( 'type' => 'unlimited', 'amount' => 1, 'period' => 'months', 'start' => '', 'end' => '' ),
+			'sections'    => array(),
+			'rules'       => array( 'content_restriction' => array(), 'product_restriction' => array(), 'purchasing_discount' => array() ),
+			'vocab'       => $vocab,
+			'counts'      => array( 'active' => 0, 'total' => 0, 'byStatus' => array() ),
+			'deletable'   => false,
+			'can'         => array( 'edit' => minn_admin_wcm_can_plans(), 'delete' => false ),
+			'adminUrl'    => '',
+		);
+	}
+
+	$post  = get_post( $plan->get_id() );
+	$rules = array( 'content_restriction' => array(), 'product_restriction' => array(), 'purchasing_discount' => array() );
+	try {
+		foreach ( (array) $plan->get_rules( 'all', true ) as $rule ) {
+			if ( ! $rule instanceof WC_Memberships_Membership_Plan_Rule ) {
+				continue;
+			}
+			$type = (string) $rule->get_rule_type();
+			if ( isset( $rules[ $type ] ) ) {
+				$rules[ $type ][] = minn_admin_wcm_rule_model( $rule );
+			}
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+
+	$products = array();
+	foreach ( (array) $plan->get_product_ids() as $pid ) {
+		$pr         = function_exists( 'wc_get_product' ) ? wc_get_product( (int) $pid ) : null;
+		$products[] = array( 'id' => (int) $pid, 'label' => $pr ? (string) $pr->get_name() : '#' . (int) $pid );
+	}
+
+	$length_type = (string) $plan->get_access_length_type();
+	$length      = array(
+		'type'   => in_array( $length_type, array( 'unlimited', 'specific', 'fixed' ), true ) ? $length_type : 'unlimited',
+		'amount' => max( 1, (int) $plan->get_access_length_amount() ),
+		'period' => (string) $plan->get_access_length_period() ?: 'months',
+		'start'  => 'fixed' === $length_type ? minn_admin_wcm_local_day( $plan->get_access_start_date( 'mysql' ) ) : '',
+		'end'    => 'fixed' === $length_type ? minn_admin_wcm_local_day( $plan->get_access_end_date( 'mysql' ) ) : '',
+	);
+
+	$by_status = array();
+	foreach ( minn_admin_wcm_statuses() as $slug => $label ) {
+		$n = (int) $plan->get_memberships_count( $slug );
+		if ( $n > 0 ) {
+			$by_status[] = array( 'label' => $label, 'value' => $n, 'status' => $slug );
+		}
+	}
+	$has_active = false;
+	try {
+		$has_active = (bool) $plan->has_active_memberships();
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+
+	return array(
+		'id'          => (int) $plan->get_id(),
+		'name'        => (string) $plan->get_name(),
+		'slug'        => (string) $plan->get_slug(),
+		'description' => $post ? (string) $post->post_content : '',
+		'status'      => $post ? (string) $post->post_status : 'publish',
+		'access'      => array( 'method' => (string) $plan->get_access_method(), 'products' => $products ),
+		'length'      => $length,
+		'sections'    => array_values( array_map( 'strval', (array) $plan->get_members_area_sections() ) ),
+		'rules'       => $rules,
+		'vocab'       => $vocab,
+		'counts'      => array(
+			'active'   => (int) $plan->get_memberships_count( minn_admin_wcm_active_statuses() ),
+			'total'    => (int) $plan->get_memberships_count( 'any' ),
+			'byStatus' => $by_status,
+		),
+		'deletable'   => ! $has_active,
+		'can'         => array(
+			'edit'   => current_user_can( 'edit_post', $plan->get_id() ),
+			'delete' => current_user_can( 'delete_post', $plan->get_id() ),
+		),
+		'adminUrl'    => admin_url( 'post.php?post=' . (int) $plan->get_id() . '&action=edit' ),
+		'membersUrl'  => admin_url( 'edit.php?post_type=wc_user_membership&post_parent=' . (int) $plan->get_id() ),
+	);
+}
+
+/**
+ * Normalize the page's rule payload into the shape the plugin's SetPlanRules
+ * action accepts, validating targets against the plugin's own lists.
+ *
+ * @param array $rules_in { type => [ rule, ... ] } from the request.
+ * @return array|WP_Error
+ */
+function minn_admin_wcm_plan_rules_clean( $rules_in ) {
+	$out = array( 'content_restriction' => array(), 'product_restriction' => array(), 'purchasing_discount' => array() );
+	if ( ! is_array( $rules_in ) ) {
+		return $out;
+	}
+	$periods = array( 'days', 'weeks', 'months', 'years' );
+	foreach ( $out as $type => $_ ) {
+		$targets = array_map( function ( $t ) {
+			return $t[0];
+		}, minn_admin_wcm_rule_targets( $type ) );
+		foreach ( (array) ( isset( $rules_in[ $type ] ) ? $rules_in[ $type ] : array() ) as $i => $r ) {
+			if ( ! is_array( $r ) ) {
+				continue;
+			}
+			$target = (string) ( isset( $r['target'] ) ? $r['target'] : '' );
+			if ( '' === $target && isset( $r['content_type'], $r['content_type_name'] ) ) {
+				$target = $r['content_type'] . ':' . $r['content_type_name'];
+			}
+			if ( ! in_array( $target, $targets, true ) ) {
+				return new WP_Error( 'minn_wcm_rule', sprintf(
+					/* translators: %d: 1-based position of the rule in its list. */
+					__( 'Rule %d targets a content type this plan cannot restrict.', 'minn-admin' ),
+					(int) $i + 1
+				), array( 'status' => 400 ) );
+			}
+			list( $content_type, $name ) = explode( ':', $target, 2 );
+			$clean = array(
+				'content_type'      => $content_type,
+				'content_type_name' => $name,
+				'object_ids'        => array_values( array_filter( array_map( 'intval', (array) ( isset( $r['object_ids'] ) ? $r['object_ids'] : array() ) ) ) ),
+			);
+			if ( ! empty( $r['id'] ) && is_string( $r['id'] ) ) {
+				$clean['id'] = sanitize_key( $r['id'] );
+			}
+			if ( 'purchasing_discount' !== $type ) {
+				$sched = isset( $r['access_schedule'] ) && is_array( $r['access_schedule'] ) ? $r['access_schedule'] : array();
+				$stype = isset( $sched['type'] ) && 'delayed' === $sched['type'] ? 'delayed' : 'immediate';
+				$clean['access_schedule'] = array( 'type' => $stype );
+				if ( 'delayed' === $stype ) {
+					$amount = isset( $sched['amount'] ) ? (int) $sched['amount'] : 0;
+					$period = isset( $sched['period'] ) ? (string) $sched['period'] : '';
+					if ( $amount < 1 || ! in_array( $period, $periods, true ) ) {
+						return new WP_Error( 'minn_wcm_rule', __( 'A delayed rule needs a number of days, weeks, months or years.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					$clean['access_schedule']['amount'] = $amount;
+					$clean['access_schedule']['period'] = $period;
+				}
+			}
+			if ( 'product_restriction' === $type ) {
+				$clean['access_type'] = isset( $r['access_type'] ) && 'purchase' === $r['access_type'] ? 'purchase' : 'view';
+			}
+			if ( 'purchasing_discount' === $type ) {
+				$dtype  = isset( $r['discount_type'] ) && 'amount' === $r['discount_type'] ? 'amount' : 'percentage';
+				$amount = isset( $r['discount_amount'] ) ? $r['discount_amount'] : '';
+				if ( '' === (string) $amount || ! is_numeric( $amount ) || (float) $amount < 0 ) {
+					return new WP_Error( 'minn_wcm_rule', __( 'Each discount needs an amount.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$clean['discount_type']   = $dtype;
+				$clean['discount_amount'] = (float) $amount;
+				$clean['active']          = ! isset( $r['active'] ) || rest_sanitize_boolean( $r['active'] );
+			}
+			$out[ $type ][] = $clean;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Write the page's rules onto a plan through the plugin's own SetPlanRules
+ * configuration, keeping the id of every rule the page sent back so an
+ * unchanged rule stays the same rule, and deleting the ones it dropped.
+ *
+ * @param WC_Memberships_Membership_Plan $plan  Plan.
+ * @param array                          $rules Cleaned rules by type.
+ * @return true|WP_Error
+ */
+function minn_admin_wcm_plan_rules_apply( $plan, $rules ) {
+	if ( ! class_exists( '\SkyVerge\WooCommerce\Memberships\Plans\Actions\SetPlanRules' ) ) {
+		return new WP_Error( 'minn_wcm_rule', __( 'This version of WooCommerce Memberships cannot set rules from here.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	// configureRule() is protected; the subclass only exposes it, all the
+	// validation and field mapping is theirs.
+	$builder = new class() extends \SkyVerge\WooCommerce\Memberships\Plans\Actions\SetPlanRules {
+		public function build( $plan, $type, $data ) {
+			return $this->configureRule( $plan, $type, $data );
+		}
+	};
+	$existing = array();
+	foreach ( (array) $plan->get_rules( 'all', true ) as $rule ) {
+		if ( $rule instanceof WC_Memberships_Membership_Plan_Rule ) {
+			$existing[] = (string) $rule->get_id();
+		}
+	}
+	$keep      = array();
+	$collected = array();
+	try {
+		foreach ( $rules as $type => $list ) {
+			foreach ( $list as $data ) {
+				$rule = $builder->build( $plan, $type, $data );
+				if ( ! empty( $data['id'] ) && in_array( $data['id'], $existing, true ) ) {
+					$rule->set_id( $data['id'] );
+					$keep[] = $data['id'];
+				}
+				$collected[] = $rule;
+			}
+		}
+	} catch ( \Throwable $e ) {
+		return new WP_Error( 'minn_wcm_rule', $e->getMessage() ? $e->getMessage() : __( 'A rule could not be saved.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$remove = array_values( array_diff( $existing, $keep ) );
+	if ( $remove ) {
+		$plan->delete_rules( $remove );
+	}
+	if ( $collected ) {
+		$plan->set_rules( $collected );
+	}
+	return true;
+}
+
+/**
+ * Apply the page's General fields to a plan the way the plugin's meta box
+ * does: access method, then length reset and re-set, then products.
+ *
+ * @param WC_Memberships_Membership_Plan $plan Plan.
+ * @param array                          $in   Request body.
+ * @return true|WP_Error
+ */
+function minn_admin_wcm_plan_apply_general( $plan, $in ) {
+	$method = isset( $in['access_method'] ) ? (string) $in['access_method'] : (string) $plan->get_access_method();
+	if ( ! in_array( $method, array( 'manual-only', 'signup', 'purchase' ), true ) ) {
+		return new WP_Error( 'minn_wcm_plan', __( 'Pick how members get access.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	// A partial save inherits what it does not mention: the page always
+	// sends every field, the row actions send one.
+	$product_ids = array_values( array_filter( array_map( 'intval', (array) ( array_key_exists( 'product_ids', $in ) ? $in['product_ids'] : $plan->get_product_ids() ) ) ) );
+	if ( 'purchase' === $method ) {
+		if ( ! $product_ids ) {
+			return new WP_Error( 'minn_wcm_plan', __( 'Access on purchase needs at least one product.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		foreach ( $product_ids as $pid ) {
+			if ( ! function_exists( 'wc_get_product' ) || ! wc_get_product( $pid ) ) {
+				return new WP_Error( 'minn_wcm_plan', sprintf(
+					/* translators: %d: product id. */
+					__( 'Product #%d does not exist.', 'minn-admin' ),
+					$pid
+				), array( 'status' => 400 ) );
+			}
+		}
+	}
+
+	$ltype = isset( $in['length_type'] ) ? (string) $in['length_type'] : (string) $plan->get_access_length_type();
+	if ( ! in_array( $ltype, array( 'unlimited', 'specific', 'fixed' ), true ) ) {
+		return new WP_Error( 'minn_wcm_plan', __( 'Pick a membership length.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$amount = isset( $in['length_amount'] ) ? (int) $in['length_amount'] : (int) $plan->get_access_length_amount();
+	$period = isset( $in['length_period'] ) ? (string) $in['length_period'] : (string) $plan->get_access_length_period();
+	$start  = isset( $in['length_start'] ) ? trim( (string) $in['length_start'] ) : minn_admin_wcm_local_day( $plan->get_access_start_date( 'mysql' ) );
+	$end    = isset( $in['length_end'] ) ? trim( (string) $in['length_end'] ) : minn_admin_wcm_local_day( $plan->get_access_end_date( 'mysql' ) );
+	if ( 'specific' === $ltype && ( $amount < 1 || ! in_array( $period, array( 'days', 'weeks', 'months', 'years' ), true ) ) ) {
+		return new WP_Error( 'minn_wcm_plan', __( 'A specific length needs a number of days, weeks, months or years.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	if ( 'fixed' === $ltype ) {
+		$re = '/^\d{4}-\d{2}-\d{2}$/';
+		if ( ! preg_match( $re, $start ) || ! preg_match( $re, $end ) || ! strtotime( $start ) || ! strtotime( $end ) ) {
+			return new WP_Error( 'minn_wcm_plan', __( 'Fixed dates need a start and an end day.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( strtotime( $start ) >= strtotime( $end ) ) {
+			return new WP_Error( 'minn_wcm_plan', __( 'The access end date has to come after the start date.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+	}
+
+	$plan->set_access_method( $method );
+	// Their meta box starts every save from unlimited and re-applies.
+	$plan->delete_access_length();
+	$plan->delete_access_start_date();
+	$plan->delete_access_end_date();
+	if ( 'specific' === $ltype ) {
+		$plan->set_access_length( $amount . ' ' . $period );
+	} elseif ( 'fixed' === $ltype ) {
+		// Local midnight converted to UTC, as their save does.
+		$plan->set_access_start_date( get_gmt_from_date( $start . ' 00:00:00' ) );
+		$plan->set_access_end_date( get_gmt_from_date( $end . ' 00:00:00' ) );
+	}
+	if ( 'purchase' === $method ) {
+		$plan->set_product_ids( $product_ids );
+	} else {
+		$plan->delete_product_ids();
+	}
+
+	if ( array_key_exists( 'sections', $in ) ) {
+		$plan->set_members_area_sections( array_values( array_map( 'sanitize_key', (array) $in['sections'] ) ) );
+	}
+	return true;
+}
+
+/**
+ * Load a plan for the page routes, or a WP_Error.
+ *
+ * @param int    $id    Plan id.
+ * @param string $write '' | edit_post | delete_post.
+ * @return WC_Memberships_Membership_Plan|WP_Error
+ */
+function minn_admin_wcm_plan_load( $id, $write = '' ) {
+	$post = (int) $id ? get_post( (int) $id ) : null;
+	$plan = $post && 'wc_membership_plan' === $post->post_type ? wc_memberships_get_membership_plan( $post ) : false;
+	if ( ! $plan ) {
+		return new WP_Error( 'minn_wcm_not_found', __( 'Membership plan not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	if ( '' !== $write && ! current_user_can( $write, (int) $id ) ) {
+		return new WP_Error( 'minn_wcm_forbidden', __( 'You are not allowed to change this plan.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	return $plan;
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_wcm_active() ) {
 		return $surfaces;
@@ -809,10 +1250,42 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/wcm/plans/{id}/view',
 			),
+			// A plan earns a page too: rules, products and members are its
+			// sub-resources, and every field is form-shaped.
+			'open'      => array( 'route' => 'membership-plans/{id}' ),
+			'create'    => array(
+				'label'  => __( 'Add plan', 'minn-admin' ),
+				'route'  => 'minn-admin/v1/wcm/plans',
+				'fields' => array(
+					array( 'key' => 'name', 'label' => __( 'Plan name', 'minn-admin' ) ),
+					array(
+						'key'     => 'status',
+						'label'   => __( 'Status', 'minn-admin' ),
+						'type'    => 'select',
+						'value'   => 'draft',
+						'options' => array(
+							array( 'draft', __( 'Draft', 'minn-admin' ) ),
+							array( 'publish', __( 'Published', 'minn-admin' ) ),
+						),
+					),
+				),
+			),
 			'actions'   => array(
+				array(
+					'label' => __( 'Duplicate', 'minn-admin' ),
+					'route' => 'minn-admin/v1/wcm/plans/{id}/duplicate',
+				),
 				array(
 					'label' => __( 'Edit plan in WooCommerce', 'minn-admin' ),
 					'href'  => admin_url( 'post.php?post={id}&action=edit' ),
+				),
+				array(
+					'label'   => __( 'Delete', 'minn-admin' ),
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/wcm/plans/{id}',
+					'when'    => array( 'key' => 'deletable', 'equals' => true ),
+					'confirm' => __( 'Delete this plan permanently? Every membership on it, active or not, is deleted with it, along with its rules.', 'minn-admin' ),
+					'danger'  => true,
 				),
 			),
 		),
@@ -1423,6 +1896,264 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'minn_wcm_note', __( 'The note could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array( 'message' => __( 'Note deleted.', 'minn-admin' ), 'notes' => minn_admin_wcm_notes( $m ) ) );
+		},
+	) );
+
+	// ----- Plan page: model, create, update, duplicate, delete, lookup -----
+
+	register_rest_route( 'minn-admin/v1', '/wcm/plans/blank', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_wcm_can_plans',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_wcm_plan_model( null ) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wcm/plans/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_wcm_can_plans',
+		'callback'            => function ( $request ) {
+			$plan = minn_admin_wcm_plan_load( (int) $request['id'] );
+			if ( is_wp_error( $plan ) ) {
+				return $plan;
+			}
+			return rest_ensure_response( minn_admin_wcm_plan_model( $plan ) );
+		},
+	) );
+
+	// The page's fields, shared by create and update. Both run the plugin's
+	// own code: createPlan() inserts, the setters and SetPlanRules configure.
+	$apply_plan = function ( $plan, $request, $is_new ) {
+		$in = $request->get_json_params();
+		if ( ! is_array( $in ) ) {
+			$in = array();
+		}
+		$id = (int) $plan->get_id();
+		$post_update = array( 'ID' => $id );
+		if ( isset( $in['name'] ) ) {
+			$name = sanitize_text_field( (string) $in['name'] );
+			if ( '' === $name ) {
+				return new WP_Error( 'minn_wcm_plan', __( 'A plan needs a name.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$post_update['post_title'] = $name;
+		}
+		if ( isset( $in['slug'] ) && '' !== trim( (string) $in['slug'] ) ) {
+			$post_update['post_name'] = sanitize_title( (string) $in['slug'] );
+		}
+		if ( isset( $in['description'] ) ) {
+			$post_update['post_content'] = current_user_can( 'unfiltered_html' ) ? (string) $in['description'] : wp_kses_post( (string) $in['description'] );
+		}
+		if ( isset( $in['status'] ) ) {
+			if ( ! in_array( (string) $in['status'], array( 'publish', 'draft' ), true ) ) {
+				return new WP_Error( 'minn_wcm_plan', __( 'A plan is either published or a draft.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$post_update['post_status'] = (string) $in['status'];
+		}
+		if ( count( $post_update ) > 1 ) {
+			$r = wp_update_post( $post_update, true );
+			if ( is_wp_error( $r ) ) {
+				return new WP_Error( 'minn_wcm_plan', $r->get_error_message(), array( 'status' => 400 ) );
+			}
+		}
+		$ok = minn_admin_wcm_plan_apply_general( $plan, $in );
+		if ( is_wp_error( $ok ) ) {
+			return $ok;
+		}
+		if ( array_key_exists( 'rules', $in ) ) {
+			$rules = minn_admin_wcm_plan_rules_clean( $in['rules'] );
+			if ( is_wp_error( $rules ) ) {
+				return $rules;
+			}
+			$ok = minn_admin_wcm_plan_rules_apply( $plan, $rules );
+			if ( is_wp_error( $ok ) ) {
+				return $ok;
+			}
+		}
+		$fresh = wc_memberships_get_membership_plan( $id );
+		return rest_ensure_response( array(
+			'id'      => $id,
+			'message' => $is_new ? __( 'Plan created.', 'minn-admin' ) : __( 'Plan saved.', 'minn-admin' ),
+			'model'   => minn_admin_wcm_plan_model( $fresh ? $fresh : $plan ),
+		) );
+	};
+
+	register_rest_route( 'minn-admin/v1', '/wcm/plans', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return minn_admin_wcm_can_plans() && current_user_can( 'publish_membership_plans' );
+		},
+		'callback'            => function ( $request ) use ( $apply_plan ) {
+			$in   = $request->get_json_params();
+			$name = sanitize_text_field( (string) ( is_array( $in ) && isset( $in['name'] ) ? $in['name'] : $request->get_param( 'name' ) ) );
+			if ( '' === $name ) {
+				return new WP_Error( 'minn_wcm_plan', __( 'A plan needs a name.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$status = is_array( $in ) && isset( $in['status'] ) && 'draft' === $in['status'] ? 'draft' : ( 'draft' === (string) $request->get_param( 'status' ) ? 'draft' : 'publish' );
+			try {
+				// Their action inserts the post and configures a manual,
+				// unlimited plan; the page's fields are applied on top.
+				$plan = wc_memberships()->get_plans_instance()->createPlan( array( 'name' => $name, 'status' => $status ) );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'minn_wcm_plan', $e->getMessage() ? $e->getMessage() : __( 'The plan could not be created.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( ! is_array( $in ) || count( $in ) <= 2 ) {
+				// The list's quick create: name and status only.
+				return rest_ensure_response( array(
+					'id'      => (int) $plan->get_id(),
+					'message' => sprintf(
+						/* translators: %s: plan name. */
+						__( '%s created. Open it to set access, length and rules.', 'minn-admin' ),
+						$plan->get_name()
+					),
+				) );
+			}
+			$res = $apply_plan( $plan, $request, true );
+			if ( is_wp_error( $res ) ) {
+				// The page's fields were refused: keep nothing half-made.
+				wp_delete_post( (int) $plan->get_id(), true );
+			}
+			return $res;
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wcm/plans/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_wcm_can_plans',
+		'callback'            => function ( $request ) use ( $apply_plan ) {
+			$plan = minn_admin_wcm_plan_load( (int) $request['id'], 'edit_post' );
+			if ( is_wp_error( $plan ) ) {
+				return $plan;
+			}
+			return $apply_plan( $plan, $request, false );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wcm/plans/(?P<id>\d+)/duplicate', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return minn_admin_wcm_can_plans() && current_user_can( 'publish_membership_plans' );
+		},
+		'callback'            => function ( $request ) {
+			$source = minn_admin_wcm_plan_load( (int) $request['id'] );
+			if ( is_wp_error( $source ) ) {
+				return $source;
+			}
+			$model = minn_admin_wcm_plan_model( $source );
+			try {
+				$copy = wc_memberships()->get_plans_instance()->createPlan( array(
+					/* translators: %s: the name of the plan being copied. */
+					'name'        => sprintf( __( '%s (Copy)', 'minn-admin' ), $model['name'] ),
+					'status'      => 'draft',
+					'description' => $model['description'],
+				) );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'minn_wcm_plan', $e->getMessage() ? $e->getMessage() : __( 'The plan could not be copied.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$general = array(
+				'access_method' => $model['access']['method'],
+				'product_ids'   => array_map( function ( $p ) {
+					return $p['id'];
+				}, $model['access']['products'] ),
+				'length_type'   => $model['length']['type'],
+				'length_amount' => $model['length']['amount'],
+				'length_period' => $model['length']['period'],
+				'length_start'  => $model['length']['start'],
+				'length_end'    => $model['length']['end'],
+				'sections'      => $model['sections'],
+			);
+			$ok = minn_admin_wcm_plan_apply_general( $copy, $general );
+			if ( ! is_wp_error( $ok ) ) {
+				$rules = array();
+				foreach ( $model['rules'] as $type => $list ) {
+					$rules[ $type ] = array_map( function ( $r ) {
+						unset( $r['id'] ); // a copy gets its own rule ids
+						return $r;
+					}, $list );
+				}
+				$clean = minn_admin_wcm_plan_rules_clean( $rules );
+				if ( ! is_wp_error( $clean ) ) {
+					minn_admin_wcm_plan_rules_apply( $copy, $clean );
+				}
+			}
+			return rest_ensure_response( array(
+				'id'      => (int) $copy->get_id(),
+				'message' => sprintf(
+					/* translators: %s: the new plan's name. */
+					__( 'Copied as a draft: %s.', 'minn-admin' ),
+					$copy->get_name()
+				),
+			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wcm/plans/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'permission_callback' => 'minn_admin_wcm_can_plans',
+		'callback'            => function ( $request ) {
+			$plan = minn_admin_wcm_plan_load( (int) $request['id'], 'delete_post' );
+			if ( is_wp_error( $plan ) ) {
+				// Their user_has_cap filter withholds delete_post on a plan with
+				// active members, so say that rather than "not allowed".
+				$check = minn_admin_wcm_plan_load( (int) $request['id'] );
+				if ( ! is_wp_error( $check ) && $check->has_active_memberships() ) {
+					return new WP_Error( 'minn_wcm_plan_delete', __( 'This plan still has active members. Cancel or move their memberships first.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				return $plan;
+			}
+			$name = (string) $plan->get_name();
+			try {
+				// Their deleter refuses while active members exist, then
+				// force-deletes; its delete_post hook removes every
+				// membership on the plan and the plan's rules.
+				wc_memberships()->get_plans_instance()->deletePlan( (int) $plan->get_id() );
+			} catch ( \Throwable $e ) {
+				$msg = $e->getMessage();
+				if ( false !== stripos( get_class( $e ), 'NotDeletable' ) || '' === $msg ) {
+					$msg = __( 'This plan still has active members. Cancel or move their memberships first.', 'minn-admin' );
+				}
+				return new WP_Error( 'minn_wcm_plan_delete', $msg, array( 'status' => 400 ) );
+			}
+			return rest_ensure_response( array(
+				'message' => sprintf(
+					/* translators: %s: plan name. */
+					__( 'Deleted the %s plan.', 'minn-admin' ),
+					$name
+				),
+			) );
+		},
+	) );
+
+	// Object search for the rule pickers: posts of one type or terms of one
+	// taxonomy, validated against the same target lists the rules use.
+	register_rest_route( 'minn-admin/v1', '/wcm/lookup', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_wcm_can_plans',
+		'callback'            => function ( $request ) {
+			$target = (string) $request->get_param( 'target' );
+			$q      = trim( (string) $request->get_param( 'q' ) );
+			$known  = array();
+			foreach ( array( 'content_restriction', 'product_restriction', 'purchasing_discount' ) as $type ) {
+				foreach ( minn_admin_wcm_rule_targets( $type ) as $t ) {
+					$known[ $t[0] ] = true;
+				}
+			}
+			if ( ! isset( $known[ $target ] ) ) {
+				return new WP_Error( 'minn_wcm_lookup', __( 'Unknown content type.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			list( $kind, $name ) = explode( ':', $target, 2 );
+			$items = array();
+			if ( 'taxonomy' === $kind ) {
+				$terms = get_terms( array( 'taxonomy' => $name, 'hide_empty' => false, 'number' => 20, 'search' => $q ) );
+				foreach ( is_wp_error( $terms ) ? array() : (array) $terms as $term ) {
+					$items[] = array( 'id' => (int) $term->term_id, 'label' => (string) $term->name );
+				}
+			} else {
+				$posts = get_posts( array( 'post_type' => $name, 'post_status' => array( 'publish', 'private', 'draft', 'pending', 'future' ), 'numberposts' => 20, 's' => $q, 'orderby' => 'title', 'order' => 'ASC' ) );
+				foreach ( (array) $posts as $post ) {
+					$items[] = array( 'id' => (int) $post->ID, 'label' => (string) get_the_title( $post ) );
+				}
+			}
+			return rest_ensure_response( array( 'items' => $items ) );
 		},
 	) );
 

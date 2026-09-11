@@ -3381,6 +3381,15 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-wcm-transfer { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 /* An explicit display on the fields box would defeat [hidden]. */
 .minn-wcm-transfer[hidden] { display: none; }
+/* Plan page rule rows */
+.minn-wcm-rules { display: flex; flex-direction: column; gap: 10px; }
+.minn-wcm-rule { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: var(--panel2); }
+.minn-wcm-rule-head { display: flex; gap: 8px; align-items: flex-end; }
+.minn-wcm-rule-head > div { flex: 1; min-width: 0; }
+.minn-wcm-rule-del { margin-bottom: 4px; }
+.minn-wcm-rule-sched { align-items: flex-end; }
+.minn-wcm-rule-active { display: flex; align-items: center; padding-bottom: 6px; }
+.minn-wcm-rule-active .minn-toggle-row { margin: 0; }
 .minn-psavebar-note { font-size: 13px; color: var(--text2); margin-inline-end: auto; }
 /* The product Images card reuses the island tile grid, inline instead of in a
    modal: the page has the room, and it saves with the rest of the form. */

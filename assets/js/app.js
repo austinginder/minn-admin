@@ -1230,6 +1230,7 @@
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
 		membership: [ __( 'Membership' ), 'WooCommerce' ],
+		membershipplan: [ __( 'Membership plan' ), 'WooCommerce' ],
 		products: [ __( 'Products' ), 'WooCommerce' ],
 		product: [ __( 'Product' ), 'WooCommerce' ],
 		coupons: [ __( 'Coupons' ), 'WooCommerce' ],
@@ -3087,6 +3088,10 @@
 			// /subscriptions/42 — the subscription detail page.
 			state.subPageId = parseInt( parts[ 1 ], 10 );
 			state.route = 'subscription';
+		} else if ( route === 'membership-plans' && parts[ 1 ] && ( 'new' === parts[ 1 ] || /^\d+$/.test( parts[ 1 ] ) ) ) {
+			// /membership-plans/12 or /membership-plans/new — a plan's own page.
+			state.planPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
+			state.route = 'membershipplan';
 		} else if ( route === 'memberships' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /memberships/57 — a WooCommerce Memberships record on its own page.
 			state.memberPageId = parseInt( parts[ 1 ], 10 );
@@ -4284,7 +4289,7 @@
 				// And the subscription detail page and Subscriptions.
 				|| ( 'subscription' === state.route && 'subscriptions' === btn.dataset.nav )
 				// And the membership page and its Memberships surface.
-				|| ( 'membership' === state.route && ( 'woocommerce-memberships' === btn.dataset.nav || 'memberships' === btn.dataset.family ) )
+				|| ( ( 'membership' === state.route || 'membershipplan' === state.route ) && ( 'woocommerce-memberships' === btn.dataset.nav || 'memberships' === btn.dataset.family ) )
 				|| ( 'surfaceitem' === state.route && ( btn.dataset.nav === state.surfaceItemSid || ( activeFamily && btn.dataset.family === activeFamily ) ) )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
@@ -47748,6 +47753,7 @@
 		if ( state.route !== 'product' ) state.productPage = null;
 		if ( state.route !== 'subscription' ) state.subPage = null;
 		if ( state.route !== 'membership' ) state.memberPage = null;
+		if ( state.route !== 'membershipplan' ) state.planPage = null;
 		// User-edit page data too (same per-visit contract).
 		if ( state.route !== 'useredit' ) state.userEdit = null;
 		if ( state.route !== 'fieldgroup' ) state.fgb = null;
@@ -47763,6 +47769,7 @@
 			case 'subscriptions': renderSubscriptions(); break;
 			case 'subscription': renderSubscriptionPage(); break;
 			case 'membership': renderMembershipPage(); break;
+			case 'membershipplan': renderPlanPage(); break;
 			case 'products': renderProducts(); break;
 			case 'product': renderProductPage(); break;
 			case 'coupons': renderCoupons(); break;
@@ -48244,6 +48251,494 @@
 				}
 			} } );
 			if ( ! entries.length ) entries.push( { label: __( 'No actions available' ), run: () => {} } );
+			openMinnMenu( r.left, r.bottom + 4, entries );
+		} );
+	}
+
+	/* ===== WooCommerce Memberships: the plan page ===== */
+
+	// /membership-plans/{id} and /membership-plans/new: a plan on its own
+	// page. The form is a working copy of the page model (m.form); scalar
+	// fields write into it as they change, structural edits (a rule added or
+	// removed, a target or length type switched) write and repaint. Save
+	// sends the whole form; the adapter runs the plugin's own actions.
+	const WCM_RULE_TYPES = [
+		[ 'content_restriction', __( 'Restrict content' ), __( 'Members of this plan can see the content these rules name; everyone else sees the restricted message. No rules means nothing is restricted.' ) ],
+		[ 'product_restriction', __( 'Restrict products' ), __( 'Only members can view or buy the products these rules name.' ) ],
+		[ 'purchasing_discount', __( 'Purchasing discounts' ), __( 'Members pay less for the products these rules name.' ) ],
+	];
+
+	function wcmPlanFormFrom( d ) {
+		const rules = {};
+		WCM_RULE_TYPES.forEach( ( [ t ] ) => {
+			rules[ t ] = ( ( d.rules || {} )[ t ] || [] ).map( ( r ) => ( {
+				id: r.id || '',
+				target: r.target || ( r.content_type + ':' + r.content_type_name ),
+				objects: ( r.objects || [] ).map( ( o ) => ( { id: o.id, label: o.label } ) ),
+				schedule: Object.assign( { type: 'immediate', amount: 1, period: 'months' }, r.access_schedule || {} ),
+				access_type: r.access_type || 'view',
+				discount_type: r.discount_type || 'percentage',
+				discount_amount: r.discount_amount != null ? String( r.discount_amount ) : '',
+				active: r.active !== false,
+			} ) );
+		} );
+		return {
+			name: d.name || '',
+			slug: d.slug || '',
+			description: d.description || '',
+			status: d.status === 'draft' ? 'draft' : 'publish',
+			access_method: ( d.access || {} ).method || 'manual-only',
+			products: ( ( d.access || {} ).products || [] ).map( ( p ) => ( { id: p.id, label: p.label } ) ),
+			length: Object.assign( { type: 'unlimited', amount: 1, period: 'months', start: '', end: '' }, d.length || {} ),
+			sections: ( d.sections || [] ).slice(),
+			rules,
+		};
+	}
+
+	function wcmPlanPayload( f ) {
+		const rules = {};
+		WCM_RULE_TYPES.forEach( ( [ t ] ) => {
+			rules[ t ] = ( f.rules[ t ] || [] ).map( ( r ) => {
+				const out = { target: r.target, object_ids: r.objects.map( ( o ) => o.id ) };
+				if ( r.id ) out.id = r.id;
+				if ( t !== 'purchasing_discount' ) {
+					out.access_schedule = r.schedule.type === 'delayed'
+						? { type: 'delayed', amount: parseInt( r.schedule.amount, 10 ) || 0, period: r.schedule.period }
+						: { type: 'immediate' };
+				}
+				if ( t === 'product_restriction' ) out.access_type = r.access_type;
+				if ( t === 'purchasing_discount' ) {
+					out.discount_type = r.discount_type;
+					out.discount_amount = r.discount_amount;
+					out.active = !! r.active;
+				}
+				return out;
+			} );
+		} );
+		return {
+			name: f.name, slug: f.slug, description: f.description, status: f.status,
+			access_method: f.access_method,
+			product_ids: f.products.map( ( p ) => p.id ),
+			length_type: f.length.type,
+			length_amount: parseInt( f.length.amount, 10 ) || 0,
+			length_period: f.length.period,
+			length_start: f.length.start || '',
+			length_end: f.length.end || '',
+			sections: f.sections,
+			rules,
+		};
+	}
+
+	function loadPlanPage( m ) {
+		const route = m.id ? `minn-admin/v1/wcm/plans/${ m.id }` : 'minn-admin/v1/wcm/plans/blank';
+		api( route ).then( ( model ) => {
+			if ( state.planPage !== m ) return;
+			planPageAdopt( m, model );
+		} ).catch( ( e ) => {
+			if ( state.planPage !== m ) return;
+			m.loading = false;
+			m.loadError = e.message;
+			if ( state.route === 'membershipplan' ) renderPlanPage();
+		} );
+	}
+
+	function planPageAdopt( m, model ) {
+		m.full = model;
+		m.form = wcmPlanFormFrom( model );
+		m.clean = JSON.stringify( wcmPlanPayload( m.form ) );
+		m.loading = false;
+		if ( state.planPage === m && state.route === 'membershipplan' ) renderPlanPage();
+	}
+
+	function wcmComboHtml( id, label, value, options, extra = '' ) {
+		const cur = options.find( ( [ v ] ) => String( v ) === String( value ) );
+		return `<div${ extra }><div class="minn-field-label">${ esc( label ) }</div>
+										<div class="minn-ac">
+											<input class="minn-input minn-ac-input" id="${ esc( id ) }" value="${ esc( cur ? cur[ 1 ] : '' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( label ) }">
+											<div class="minn-ac-panel" hidden></div>
+										</div></div>`;
+	}
+
+	function wcmChipsHtml( list, attr, empty ) {
+		return list.length
+			? list.map( ( x ) => `<button type="button" class="minn-chip sel" ${ attr }="${ x.id }" title="${ esc( __( 'Remove' ) ) }">${ esc( x.label ) } ×</button>` ).join( '' )
+			: `<span class="minn-tag-empty">${ esc( empty ) }</span>`;
+	}
+
+	function wcmRuleRowHtml( f, d, type, r, i ) {
+		const targets = ( ( d.vocab || {} ).targets || {} )[ type ] || [];
+		const targetLabel = ( targets.find( ( [ v ] ) => v === r.target ) || [ '', r.target ] )[ 1 ];
+		const periods = ( d.vocab || {} ).periods || [];
+		const key = `${ type }-${ i }`;
+		const isTax = String( r.target ).indexOf( 'taxonomy:' ) === 0;
+		return `
+								<div class="minn-wcm-rule" data-wcmrule="${ esc( type ) }" data-wcmidx="${ i }">
+									<div class="minn-wcm-rule-head">
+										${ wcmComboHtml( `minn-wcmr-target-${ key }`, __( 'Applies to' ), r.target, targets ) }
+										${ type === 'product_restriction' ? wcmComboHtml( `minn-wcmr-access-${ key }`, __( 'Only members can' ), r.access_type, [ [ 'view', __( 'View' ) ], [ 'purchase', __( 'Purchase' ) ] ] ) : '' }
+										<button type="button" class="minn-pdl-x minn-wcm-rule-del" data-wcmruledel="${ key }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button>
+									</div>
+									<div>
+										<div class="minn-field-label">${ isTax ? esc( __( 'Terms' ) ) : esc( __( 'Items' ) ) }</div>
+										<div class="minn-chips" data-wcmchips="${ key }">${ wcmChipsHtml( r.objects, 'data-wcmchip', sprintf( /* translators: %s: content type name, e.g. Pages. */ __( 'All %s' ), targetLabel ) ) }</div>
+										<div class="minn-ac" data-wcmpick="${ key }">
+											<input class="minn-input minn-ac-input" placeholder="${ esc( sprintf( /* translators: %s: content type name. */ __( 'Search %s to narrow this rule…' ), targetLabel ) ) }" autocomplete="off" spellcheck="false" aria-label="${ esc( __( 'Search' ) ) }">
+											<div class="minn-ac-panel" hidden></div>
+										</div>
+									</div>
+									${ type !== 'purchasing_discount' ? `
+									<div class="minn-order-field-row minn-wcm-rule-sched">
+										${ wcmComboHtml( `minn-wcmr-sched-${ key }`, __( 'Access' ), r.schedule.type, [ [ 'immediate', __( 'Immediately' ) ], [ 'delayed', __( 'After a delay' ) ] ] ) }
+										${ r.schedule.type === 'delayed' ? `
+										<div><div class="minn-field-label">${ esc( __( 'Delay' ) ) }</div><input class="minn-input" type="number" min="1" step="1" data-wcmpf="rules.${ type }.${ i }.schedule.amount" value="${ esc( String( r.schedule.amount || 1 ) ) }"></div>
+										${ wcmComboHtml( `minn-wcmr-period-${ key }`, __( 'Period' ), r.schedule.period, periods ) }` : '' }
+									</div>` : `
+									<div class="minn-order-field-row minn-wcm-rule-sched">
+										${ wcmComboHtml( `minn-wcmr-dtype-${ key }`, __( 'Discount' ), r.discount_type, [ [ 'percentage', __( 'Percentage off' ) ], [ 'amount', __( 'Fixed amount off' ) ] ] ) }
+										<div><div class="minn-field-label">${ esc( __( 'Amount' ) ) }</div><input class="minn-input" type="text" inputmode="decimal" data-wcmpf="rules.${ type }.${ i }.discount_amount" value="${ esc( r.discount_amount ) }" placeholder="0"></div>
+										<div class="minn-wcm-rule-active">${ productToggleHtml( `minn-wcmr-active-${ key }`, __( 'Active' ), !! r.active ) }</div>
+									</div>` }
+								</div>`;
+	}
+
+	function planDetailInnerHtml( m ) {
+		const d = m.full;
+		const f = m.form;
+		const canEdit = !! ( d.can && d.can.edit );
+		const isNew = ! d.id;
+		const vocab = d.vocab || {};
+		const card = ( key, title, inner, head = '' ) => `
+							<div class="minn-order-sec" data-pcard="${ esc( key ) }">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( title ) }</div>${ head }</div>
+								${ inner }
+							</div>`;
+		const periods = vocab.periods || [];
+
+		const general = `
+								<div class="minn-order-fields">
+									<div><div class="minn-field-label">${ esc( __( 'Name' ) ) }</div><input class="minn-input" id="minn-wcmp-name" data-wcmpf="name" value="${ esc( f.name ) }" placeholder="${ esc( __( 'Gold membership' ) ) }"${ canEdit ? '' : ' readonly' }></div>
+									<div><div class="minn-field-label">${ esc( __( 'Slug' ) ) }</div>
+										<div class="minn-slug-field"><span class="minn-slug-prefix">/</span><input class="minn-input minn-slug-input" data-wcmpf="slug" value="${ esc( f.slug ) }" placeholder="${ esc( __( 'set-on-save' ) ) }" autocomplete="off" spellcheck="false"${ canEdit ? '' : ' readonly' }></div>
+									</div>
+									<div><div class="minn-field-label">${ esc( __( 'Description' ) ) }</div><textarea class="minn-input" data-wcmpf="description" rows="2" placeholder="${ esc( __( 'Shown to members in their account…' ) ) }"${ canEdit ? '' : ' readonly' }>${ esc( f.description ) }</textarea></div>
+									${ wcmComboHtml( 'minn-wcmp-method', __( 'Grant access upon' ), f.access_method, vocab.methods || [] ) }
+									${ f.access_method === 'purchase' ? `
+									<div>
+										<div class="minn-field-label">${ esc( __( 'Products that grant access' ) ) }</div>
+										<div class="minn-chips" data-wcmchips="products">${ wcmChipsHtml( f.products, 'data-wcmchip', __( 'None yet' ) ) }</div>
+										<div class="minn-ac" data-wcmpick="products">
+											<input class="minn-input minn-ac-input" placeholder="${ esc( __( 'Search products…' ) ) }" autocomplete="off" spellcheck="false" aria-label="${ esc( __( 'Search products' ) ) }">
+											<div class="minn-ac-panel" hidden></div>
+										</div>
+										<div class="minn-toggle-desc">${ esc( __( 'Buying any of these products grants the membership.' ) ) }</div>
+									</div>` : '' }
+									<div class="minn-order-field-row">
+										${ wcmComboHtml( 'minn-wcmp-ltype', __( 'Membership length' ), f.length.type, [ [ 'unlimited', __( 'Unlimited' ) ], [ 'specific', __( 'A specific length' ) ], [ 'fixed', __( 'Fixed dates' ) ] ] ) }
+										${ f.length.type === 'specific' ? `
+										<div><div class="minn-field-label">${ esc( __( 'Length' ) ) }</div><input class="minn-input" type="number" min="1" step="1" data-wcmpf="length.amount" value="${ esc( String( f.length.amount || 1 ) ) }"></div>
+										${ wcmComboHtml( 'minn-wcmp-lperiod', __( 'Period' ), f.length.period, periods ) }` : '' }
+										${ f.length.type === 'fixed' ? `
+										${ wcmDateFieldHtml( 'minn-wcmp-lstart', __( 'Access starts' ), f.length.start, __( 'Pick a date' ) ) }
+										${ wcmDateFieldHtml( 'minn-wcmp-lend', __( 'Access ends' ), f.length.end, __( 'Pick a date' ) ) }` : '' }
+									</div>
+									${ f.length.type === 'fixed' ? `<div class="minn-toggle-desc">${ esc( __( 'Every member gets access between these two days, whenever they join.' ) ) }</div>` : '' }
+								</div>`;
+
+		const ruleCards = WCM_RULE_TYPES.map( ( [ type, title, hint ] ) => card( type, title, `
+								<div class="minn-toggle-desc" style="margin-bottom:10px;">${ esc( hint ) }</div>
+								<div class="minn-wcm-rules">
+									${ ( f.rules[ type ] || [] ).map( ( r, i ) => wcmRuleRowHtml( f, d, type, r, i ) ).join( '' ) }
+								</div>
+								${ canEdit ? `<div class="minn-pimg-foot"><button type="button" class="minn-btn-soft" data-wcmruleadd="${ esc( type ) }">${ icon( 'plus' ) } ${ esc( type === 'purchasing_discount' ? __( 'Add discount' ) : __( 'Add rule' ) ) }</button></div>` : '' }` ) ).join( '' );
+
+		const sectionsCard = card( 'sections', __( 'Members area' ), `
+								<div class="minn-toggle-desc" style="margin-bottom:8px;">${ esc( __( "Which sections of the plan appear in a member's account page." ) ) }</div>
+								<div class="minn-order-fields">
+									${ ( vocab.sections || [] ).map( ( [ key, label ] ) => productToggleHtml( 'minn-wcmp-sec-' + key, label, f.sections.indexOf( key ) !== -1 ) ).join( '' ) }
+								</div>` );
+
+		const main = `${ card( 'general', __( 'General' ), general ) }${ ruleCards }${ sectionsCard }`;
+
+		const counts = d.counts || { active: 0, total: 0, byStatus: [] };
+		const side = `
+							${ card( 'status', __( 'Status' ), `
+								<div class="minn-order-fields">
+									${ wcmComboHtml( 'minn-wcmp-status', __( 'Status' ), f.status, [ [ 'publish', __( 'Published' ) ], [ 'draft', __( 'Draft' ) ] ] ) }
+									<div class="minn-toggle-desc">${ esc( __( 'A draft plan cannot be joined or assigned.' ) ) }</div>
+								</div>` ) }
+							${ isNew ? '' : card( 'members', __( 'Members' ), `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Active now' ) ) }</span><span>${ esc( String( counts.active ) ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'All time' ) ) }</span><span>${ esc( String( counts.total ) ) }</span></div>
+									${ ( counts.byStatus || [] ).map( ( r ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( r.label ) }</span><span>${ esc( String( r.value ) ) }</span></div>` ).join( '' ) }
+								</div>
+								${ d.membersUrl ? `<div class="minn-pimg-foot" style="margin-top:10px;"><a class="minn-btn-soft" href="${ esc( d.membersUrl ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'Members in WooCommerce' ) ) }</a></div>` : '' }` ) }`;
+
+		return `
+					<div class="minn-order-body">
+						<div class="minn-order-layout">
+							<div class="minn-order-main">${ main }</div>
+							<div class="minn-order-side">${ side }</div>
+						</div>
+						${ canEdit ? `
+						<div class="minn-psavebar" id="minn-wcmp-savebar" hidden>
+							<span class="minn-psavebar-note">${ esc( isNew ? __( 'Not saved yet' ) : __( 'Unsaved changes' ) ) }</span>
+							${ isNew ? '' : `<button class="minn-btn-soft" id="minn-wcmp-discard" type="button">${ esc( __( 'Discard' ) ) }</button>` }
+							<button class="minn-btn-primary" id="minn-wcmp-save" type="button">${ esc( isNew ? __( 'Create plan' ) : __( 'Save changes' ) ) }</button>
+						</div>` : '' }
+					</div>`;
+	}
+
+	function renderPlanPage() {
+		const view = $( '#minn-view' );
+		if ( ! wcmSurface() ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( "You don't have access to membership plans on this site." ) ) }</div>`;
+			return;
+		}
+		let m = state.planPage;
+		if ( ! m || m.id !== state.planPageId ) {
+			m = state.planPage = { id: state.planPageId, full: null, form: null, loading: true, loadError: '', clean: null };
+			loadPlanPage( m );
+		}
+		const d = m.full;
+		const loading = !! m.loading && ! d;
+		const isNew = ! state.planPageId;
+		const f = m.form || {};
+		const sub = d
+			? [ d.id ? '#' + d.id : __( 'New plan' ), d.id && d.counts ? sprintf( /* translators: %d: number of active members. */ _n( '%d active member', '%d active members', d.counts.active ), d.counts.active ) : '' ].filter( Boolean ).join( ' · ' )
+			: __( 'Loading…' );
+		view.innerHTML = `
+		<div class="minn-order-page minn-order-page-wide minn-wcm-page minn-wcmp-page">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-wcmp-back">← ${ esc( __( 'Plans' ) ) }</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-modal-title">${ esc( d ? ( f.name || ( isNew ? __( 'New membership plan' ) : d.name ) ) : __( 'Membership plan' ) ) }</div>
+					<div class="minn-modal-sub">${ esc( sub ) }</div>
+				</div>
+				${ d && ! isNew ? `<span class="minn-status ${ f.status === 'draft' ? 'draft' : 'publish' }">${ esc( statusLabel( f.status ) ) }</span>` : '' }
+				${ d && ! isNew ? `<div class="minn-order-head-actions">
+					<a class="minn-btn-soft" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'Open in WooCommerce' ) ) }</a>
+					<button class="minn-btn-soft" id="minn-wcmp-more" type="button" aria-haspopup="menu" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
+				</div>` : '' }
+			</div>
+			<div class="minn-order-page-body">
+				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading plan…' ) ) }</div></div>` : '' }
+				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+				${ ! loading && ! m.loadError ? planDetailInnerHtml( m ) : '' }
+			</div>
+		</div>`;
+		const back = $( '#minn-wcmp-back' );
+		if ( back ) back.addEventListener( 'click', () => {
+			// Land on the Plans view of the surface, not the members list.
+			const s = wcmSurface();
+			if ( s ) surfaceState( s.id ).view = 'manage';
+			go( 'woocommerce-memberships' );
+		} );
+		if ( ! loading && ! m.loadError ) bindPlanPage( m );
+	}
+
+	/** Write a value at a dotted path inside the working form. */
+	function wcmSetPath( obj, path, value ) {
+		const parts = String( path ).split( '.' );
+		let cur = obj;
+		for ( let i = 0; i < parts.length - 1; i++ ) {
+			const k = parts[ i ];
+			if ( cur[ k ] == null ) cur[ k ] = /^\d+$/.test( parts[ i + 1 ] ) ? [] : {};
+			cur = cur[ k ];
+		}
+		cur[ parts[ parts.length - 1 ] ] = value;
+	}
+
+	function bindPlanPage( m ) {
+		const d = m.full;
+		const f = m.form;
+		const canEdit = !! ( d.can && d.can.edit );
+		const isNew = ! d.id;
+		const isCur = () => state.planPage === m && state.route === 'membershipplan';
+		const on = ( id, fn ) => { const el = $( '#' + id ); if ( el ) el.addEventListener( 'click', fn ); };
+		const bar = $( '#minn-wcmp-savebar' );
+		const sync = () => { if ( bar ) bar.hidden = ! isNew && JSON.stringify( wcmPlanPayload( f ) ) === m.clean; };
+		const repaint = () => { if ( isCur() ) renderPlanPage(); };
+		const combo = ( id, options, onPick ) => {
+			const input = $( '#' + id );
+			const wrap = input && input.closest( '.minn-ac' );
+			if ( ! wrap ) return;
+			const cur = input.value;
+			const seed = ( options.find( ( [ , l ] ) => l === cur ) || [ '' ] )[ 0 ];
+			bindAutocomplete( wrap, options.map( ( [ value, label ] ) => ( { value, label } ) ), { strict: true, value: seed, onPick } );
+		};
+		if ( ! canEdit ) return;
+		sync();
+
+		// Scalar fields write straight into the form on every change.
+		$$( '[data-wcmpf]' ).forEach( ( el ) => el.addEventListener( 'input', () => {
+			wcmSetPath( f, el.dataset.wcmpf, el.value );
+			if ( el.dataset.wcmpf === 'name' ) {
+				const t = $( '.minn-order-page-head .minn-modal-title' );
+				if ( t ) t.textContent = el.value || ( isNew ? __( 'New membership plan' ) : d.name );
+			}
+			sync();
+		} ) );
+
+		combo( 'minn-wcmp-status', [ [ 'publish', __( 'Published' ) ], [ 'draft', __( 'Draft' ) ] ], ( v ) => { f.status = v; sync(); } );
+		combo( 'minn-wcmp-method', d.vocab.methods || [], ( v ) => { if ( v !== f.access_method ) { f.access_method = v; repaint(); } } );
+		combo( 'minn-wcmp-ltype', [ [ 'unlimited', '' ], [ 'specific', '' ], [ 'fixed', '' ] ].map( ( [ v ] ) => [ v, { unlimited: __( 'Unlimited' ), specific: __( 'A specific length' ), fixed: __( 'Fixed dates' ) }[ v ] ] ), ( v ) => { if ( v !== f.length.type ) { f.length.type = v; repaint(); } } );
+		combo( 'minn-wcmp-lperiod', d.vocab.periods || [], ( v ) => { f.length.period = v; sync(); } );
+		[ [ 'minn-wcmp-lstart', 'start' ], [ 'minn-wcmp-lend', 'end' ] ].forEach( ( [ id, key ] ) => {
+			const el = $( '#' + id );
+			if ( el ) bindDatePicker( el, ( machine ) => { f.length[ key ] = ( machine || '' ).slice( 0, 10 ); sync(); }, { dateOnly: true, marks: false } );
+		} );
+		( d.vocab.sections || [] ).forEach( ( [ key ] ) => on( 'minn-wcmp-sec-' + key, () => {
+			const btn = $( '#minn-wcmp-sec-' + key );
+			const onNow = ! btn.classList.contains( 'on' );
+			btn.classList.toggle( 'on', onNow );
+			btn.setAttribute( 'aria-checked', String( onNow ) );
+			f.sections = ( d.vocab.sections || [] ).map( ( [ k ] ) => k ).filter( ( k ) => k === key ? onNow : f.sections.indexOf( k ) !== -1 );
+			sync();
+		} ) );
+
+		// Chip pickers: the plan's products, and each rule's objects. One
+		// search route serves every target; picks and removals repaint the
+		// chip strip only.
+		const bindPicker = ( key, list, target, onChange ) => {
+			const wrap = $( `[data-wcmpick="${ key }"]` );
+			const chips = $( `[data-wcmchips="${ key }"]` );
+			if ( ! wrap || ! chips ) return;
+			const input = wrap.querySelector( '.minn-ac-input' );
+			const panel = wrap.querySelector( '.minn-ac-panel' );
+			const empty = chips.querySelector( '.minn-tag-empty' ) ? chips.querySelector( '.minn-tag-empty' ).textContent : __( 'None yet' );
+			const bindChips = () => $$( '[data-wcmchip]', chips ).forEach( ( ch ) => ch.addEventListener( 'click', () => {
+				const id = parseInt( ch.dataset.wcmchip, 10 );
+				const idx = list.findIndex( ( x ) => x.id === id );
+				if ( idx !== -1 ) list.splice( idx, 1 );
+				repaintChips();
+			} ) );
+			const repaintChips = () => { chips.innerHTML = wcmChipsHtml( list, 'data-wcmchip', empty ); bindChips(); onChange(); };
+			bindChips();
+			let timer = null;
+			let seq = 0;
+			input.addEventListener( 'input', () => {
+				clearTimeout( timer );
+				timer = setTimeout( async () => {
+					const q = input.value.trim();
+					if ( ! q ) { panel.hidden = true; wrap.classList.remove( 'is-loading' ); return; }
+					const mine = ++seq;
+					wrap.classList.add( 'is-loading' );
+					panel.innerHTML = `<div class="minn-ac-empty">${ esc( __( 'Searching…' ) ) }</div>`;
+					panel.hidden = false;
+					try {
+						const res = await api( `minn-admin/v1/wcm/lookup?target=${ encodeURIComponent( target() ) }&q=${ encodeURIComponent( q ) }` );
+						if ( mine !== seq ) return;
+						wrap.classList.remove( 'is-loading' );
+						const chosen = new Set( list.map( ( x ) => x.id ) );
+						const items = ( ( res && res.items ) || [] ).filter( ( r ) => ! chosen.has( r.id ) );
+						panel.innerHTML = items.length
+							? items.map( ( r ) => `<button type="button" class="minn-ac-item" data-wcmpickitem="${ r.id }" data-wcmlabel="${ esc( r.label || '' ) }">${ esc( r.label || '' ) }</button>` ).join( '' )
+							: `<div class="minn-ac-empty">${ esc( __( 'No matches' ) ) }</div>`;
+						panel.hidden = false;
+						$$( '[data-wcmpickitem]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
+							e.preventDefault();
+							const id = parseInt( b.dataset.wcmpickitem, 10 );
+							if ( ! list.some( ( x ) => x.id === id ) ) list.push( { id, label: b.dataset.wcmlabel } );
+							input.value = '';
+							panel.hidden = true;
+							repaintChips();
+						} ) );
+					} catch ( e ) {
+						if ( mine === seq ) { wrap.classList.remove( 'is-loading' ); panel.hidden = true; }
+					}
+				}, 250 );
+			} );
+			input.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) e.preventDefault(); } );
+			input.addEventListener( 'blur', () => setTimeout( () => { panel.hidden = true; }, 150 ) );
+		};
+		bindPicker( 'products', f.products, () => 'post_type:product', sync );
+
+		WCM_RULE_TYPES.forEach( ( [ type ] ) => {
+			( f.rules[ type ] || [] ).forEach( ( r, i ) => {
+				const key = `${ type }-${ i }`;
+				combo( `minn-wcmr-target-${ key }`, ( d.vocab.targets || {} )[ type ] || [], ( v ) => {
+					if ( v === r.target ) return;
+					r.target = v;
+					r.objects = []; // a different content type means different objects
+					repaint();
+				} );
+				bindPicker( key, r.objects, () => r.target, sync );
+				combo( `minn-wcmr-sched-${ key }`, [ [ 'immediate', __( 'Immediately' ) ], [ 'delayed', __( 'After a delay' ) ] ], ( v ) => { if ( v !== r.schedule.type ) { r.schedule.type = v; repaint(); } } );
+				combo( `minn-wcmr-period-${ key }`, d.vocab.periods || [], ( v ) => { r.schedule.period = v; sync(); } );
+				combo( `minn-wcmr-access-${ key }`, [ [ 'view', __( 'View' ) ], [ 'purchase', __( 'Purchase' ) ] ], ( v ) => { r.access_type = v; sync(); } );
+				combo( `minn-wcmr-dtype-${ key }`, [ [ 'percentage', __( 'Percentage off' ) ], [ 'amount', __( 'Fixed amount off' ) ] ], ( v ) => { r.discount_type = v; sync(); } );
+				on( `minn-wcmr-active-${ key }`, () => {
+					const btn = $( `#minn-wcmr-active-${ key }` );
+					r.active = ! btn.classList.contains( 'on' );
+					btn.classList.toggle( 'on', r.active );
+					btn.setAttribute( 'aria-checked', String( r.active ) );
+					sync();
+				} );
+			} );
+		} );
+		$$( '[data-wcmruledel]' ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
+			const [ type, idx ] = [ btn.dataset.wcmruledel.replace( /-\d+$/, '' ), parseInt( btn.dataset.wcmruledel.split( '-' ).pop(), 10 ) ];
+			f.rules[ type ].splice( idx, 1 );
+			repaint();
+		} ) );
+		$$( '[data-wcmruleadd]' ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
+			const type = btn.dataset.wcmruleadd;
+			const first = ( ( d.vocab.targets || {} )[ type ] || [] )[ 0 ];
+			f.rules[ type ].push( {
+				id: '', target: first ? first[ 0 ] : '', objects: [],
+				schedule: { type: 'immediate', amount: 1, period: 'months' },
+				access_type: 'view', discount_type: 'percentage', discount_amount: '', active: true,
+			} );
+			repaint();
+		} ) );
+
+		on( 'minn-wcmp-discard', () => planPageAdopt( m, m.full ) );
+		on( 'minn-wcmp-save', async () => {
+			const btn = $( '#minn-wcmp-save' );
+			const payload = wcmPlanPayload( f );
+			if ( ! payload.name.trim() ) { toast( __( 'A plan needs a name.' ), true ); return; }
+			if ( btn ) btn.disabled = true;
+			try {
+				const res = await api( isNew ? 'minn-admin/v1/wcm/plans' : `minn-admin/v1/wcm/plans/${ d.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				toast( ( res && res.message ) || __( 'Plan saved.' ) );
+				if ( isNew && res && res.id ) {
+					go( 'membership-plans/' + res.id );
+					return;
+				}
+				if ( isCur() && res && res.model ) planPageAdopt( m, res.model );
+			} catch ( e ) {
+				toast( e.message, true );
+				if ( btn ) btn.disabled = false;
+			}
+		} );
+
+		const more = $( '#minn-wcmp-more' );
+		if ( more ) more.addEventListener( 'click', () => {
+			const r = more.getBoundingClientRect();
+			const entries = [
+				{ label: __( 'Duplicate plan' ), run: async () => {
+					try {
+						const res = await api( `minn-admin/v1/wcm/plans/${ d.id }/duplicate`, { method: 'POST' } );
+						toast( ( res && res.message ) || __( 'Plan copied.' ) );
+						if ( res && res.id ) go( 'membership-plans/' + res.id );
+					} catch ( e ) {
+						toast( e.message, true );
+					}
+				} },
+			];
+			if ( d.can && d.can.delete && d.deletable ) entries.push( { label: __( 'Delete plan' ), danger: true, run: async () => {
+				if ( ! window.confirm( __( 'Delete this plan permanently? Every membership on it, active or not, is deleted with it, along with its rules.' ) ) ) return;
+				try {
+					const res = await api( `minn-admin/v1/wcm/plans/${ d.id }`, { method: 'DELETE' } );
+					toast( ( res && res.message ) || __( 'Plan deleted.' ) );
+					const s = wcmSurface();
+					if ( s ) surfaceState( s.id ).view = 'manage';
+					go( 'woocommerce-memberships' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} } );
 			openMinnMenu( r.left, r.bottom + 4, entries );
 		} );
 	}

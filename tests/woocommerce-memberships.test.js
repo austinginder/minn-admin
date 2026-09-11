@@ -226,6 +226,98 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			200 === model.status && Array.isArray( model.body.plans ) && model.body.plans.length >= 2 && Array.isArray( model.body.statuses ) && Array.isArray( model.body.memberships ),
 			JSON.stringify( Object.keys( model.body || {} ) ) );
 
+		// The plan page: create through the page with a content rule picked
+		// from the lookup, verify the plugin stored it, edit and drop a rule
+		// keeping the other's id, open from the Plans row, delete from the menu.
+		const pickCombo = async ( id, value ) => {
+			await page.click( '#' + id );
+			await page.waitForSelector( `.minn-ac-item[data-acv="${ value }"]`, { timeout: 5000 } );
+			await page.click( `.minn-ac-item[data-acv="${ value }"]` );
+			await page.waitForTimeout( 200 );
+		};
+		const pickFirst = async ( key, q ) => {
+			await page.type( `[data-wcmpick="${ key }"] .minn-ac-input`, q );
+			await page.waitForSelector( `[data-wcmpick="${ key }"] [data-wcmpickitem]`, { timeout: 8000 } );
+			await page.evaluate( ( k ) => document.querySelector( `[data-wcmpick="${ k }"] [data-wcmpickitem]` ).dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) ), key );
+			await page.waitForTimeout( 200 );
+		};
+		let planId = 0;
+		await page.goto( BASE + '/minn-admin/membership-plans/new', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-wcmp-page [data-pcard="general"]', { timeout: 20000 } );
+		t.check( 'the new-plan page paints with the save bar showing', ! ( await page.evaluate( () => document.querySelector( '#minn-wcmp-savebar' ).hidden ) ), '' );
+		await page.fill( '#minn-wcmp-name', 'Suite Plan ' + suffix );
+		await pickCombo( 'minn-wcmp-ltype', 'specific' );
+		await page.fill( '[data-wcmpf="length.amount"]', '3' );
+		await page.click( '[data-wcmruleadd="content_restriction"]' );
+		await page.waitForSelector( '[data-wcmrule="content_restriction"]', { timeout: 5000 } );
+		await pickCombo( 'minn-wcmr-target-content_restriction-0', 'post_type:page' );
+		await pickFirst( 'content_restriction-0', 'a' );
+		await pickCombo( 'minn-wcmr-sched-content_restriction-0', 'delayed' );
+		await page.fill( '[data-wcmpf="rules.content_restriction.0.schedule.amount"]', '2' );
+		await pickCombo( 'minn-wcmr-period-content_restriction-0', 'weeks' );
+		await page.click( '[data-wcmruleadd="purchasing_discount"]' );
+		await page.waitForSelector( '[data-wcmrule="purchasing_discount"]', { timeout: 5000 } );
+		await page.fill( '[data-wcmpf="rules.purchasing_discount.0.discount_amount"]', '10' );
+		await page.click( '#minn-wcmp-sec-my-membership-content' );
+		await page.click( '#minn-wcmp-save' );
+		await page.waitForFunction( () => /\/membership-plans\/\d+$/.test( location.pathname ), { timeout: 20000 } );
+		planId = parseInt( page.url().split( '/' ).pop(), 10 );
+		await page.waitForSelector( '.minn-wcmp-page [data-pcard="members"]', { timeout: 20000 } );
+		const pm = await api( `minn-admin/v1/wcm/plans/${ planId }` );
+		const cr = ( ( ( pm.body || {} ).rules || {} ).content_restriction || [] )[ 0 ] || {};
+		t.check( 'creating through the page stores length, section and both rules through the plugin',
+			200 === pm.status && pm.body.length.type === 'specific' && pm.body.length.amount === 3 && pm.body.sections.includes( 'my-membership-content' )
+				&& cr.content_type_name === 'page' && cr.object_ids.length === 1 && cr.access_schedule.type === 'delayed' && cr.access_schedule.amount === 2
+				&& pm.body.rules.purchasing_discount.length === 1 && String( pm.body.rules.purchasing_discount[ 0 ].discount_amount ) === '10',
+			JSON.stringify( { length: pm.body.length, sections: pm.body.sections, cr, disc: pm.body.rules.purchasing_discount } ) );
+		t.check( 'after the create the form is clean and the section switch reads on',
+			await page.evaluate( () => document.querySelector( '#minn-wcmp-savebar' ).hidden && document.querySelector( '#minn-wcmp-sec-my-membership-content' ).classList.contains( 'on' ) ), '' );
+
+		await page.click( '[data-wcmruledel="purchasing_discount-0"]' );
+		await page.waitForSelector( '[data-wcmrule="purchasing_discount"]', { state: 'detached', timeout: 5000 } );
+		await page.fill( '#minn-wcmp-name', 'Suite Plan ' + suffix + ' v2' );
+		await page.click( '#minn-wcmp-save' );
+		await page.waitForFunction( () => document.querySelector( '#minn-wcmp-savebar' ) && document.querySelector( '#minn-wcmp-savebar' ).hidden, { timeout: 15000 } );
+		const pm2 = await api( `minn-admin/v1/wcm/plans/${ planId }` );
+		t.check( 'editing drops the removed rule and keeps the other rule\'s id',
+			pm2.body.name === 'Suite Plan ' + suffix + ' v2' && pm2.body.rules.purchasing_discount.length === 0 && pm2.body.rules.content_restriction[ 0 ].id === cr.id,
+			JSON.stringify( [ pm2.body.name, pm2.body.rules.purchasing_discount.length ] ) );
+
+		const pdup = await post( `minn-admin/v1/wcm/plans/${ planId }/duplicate` );
+		const dupModel = pdup.body && pdup.body.id ? await api( `minn-admin/v1/wcm/plans/${ pdup.body.id }` ) : { body: {} };
+		t.check( 'duplicate makes a draft copy carrying the rules',
+			200 === pdup.status && dupModel.body.status === 'draft' && ( dupModel.body.rules || {} ).content_restriction && dupModel.body.rules.content_restriction.length === 1 && dupModel.body.rules.content_restriction[ 0 ].id !== cr.id,
+			JSON.stringify( pdup.body ) );
+		if ( pdup.body && pdup.body.id ) await api( `minn-admin/v1/wcm/plans/${ pdup.body.id }`, { method: "DELETE" } );
+
+		const badRule = await post( `minn-admin/v1/wcm/plans/${ planId }`, { rules: { content_restriction: [ { target: 'post_type:product' } ] } } );
+		t.check( 'a rule on a content type the plan cannot restrict is refused', 400 === badRule.status && /content type/i.test( JSON.stringify( badRule.body ) ), JSON.stringify( badRule.body ) );
+		const partial = await post( `minn-admin/v1/wcm/plans/${ planId }`, { description: 'partial save' } );
+		t.check( 'a partial save keeps the length and products it did not mention',
+			200 === partial.status && partial.body.model.length.type === 'specific' && partial.body.model.length.amount === 3 && partial.body.model.description === 'partial save',
+			JSON.stringify( partial.body && partial.body.model && partial.body.model.length ) );
+		const noProd = await post( `minn-admin/v1/wcm/plans/${ planId }`, { access_method: 'purchase', product_ids: [] } );
+		t.check( 'purchase access without a product is refused', 400 === noProd.status, JSON.stringify( noProd.body ) );
+		const guarded = await api( `minn-admin/v1/wcm/plans/${ gold ? gold.id : 0 }`, { method: 'DELETE' } );
+		t.check( 'a plan with active members cannot be deleted', 400 === guarded.status && /active members/i.test( JSON.stringify( guarded.body ) ), JSON.stringify( guarded.body ) );
+
+		await page.goto( BASE + '/minn-admin/woocommerce-memberships', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '[data-sview="manage"]', { timeout: 20000 } );
+		await page.click( '[data-sview="manage"]' );
+		await page.waitForFunction( ( s ) => Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Suite Plan ' + s ) ), suffix, { timeout: 15000 } );
+		await page.evaluate( ( s ) => Array.from( document.querySelectorAll( '.minn-table-row' ) ).find( ( r ) => r.textContent.includes( 'Suite Plan ' + s ) ).click(), suffix );
+		await page.waitForSelector( '.minn-wcmp-page [data-pcard="general"]', { timeout: 20000 } );
+		t.check( 'a Plans row opens the plan page', page.url().endsWith( '/membership-plans/' + planId ), page.url() );
+
+		await page.click( '#minn-wcmp-more' );
+		await page.waitForFunction( () => Array.from( document.querySelectorAll( '[data-mi], .minn-menu button' ) ).some( ( b ) => /Delete plan/.test( b.textContent ) ), { timeout: 5000 } );
+		await page.evaluate( () => Array.from( document.querySelectorAll( '[data-mi], .minn-menu button' ) ).find( ( x ) => /Delete plan/.test( x.textContent ) ).click() );
+		await page.waitForFunction( () => /woocommerce-memberships$/.test( location.pathname ), { timeout: 15000 } );
+		const goneP = await api( `minn-admin/v1/wcm/plans/${ planId }` );
+		t.check( 'the page menu deletes an empty plan and returns to the Plans view', 404 === goneP.status, String( goneP.status ) );
+		if ( 404 === goneP.status ) planId = 0;
+		if ( planId ) await api( `minn-admin/v1/wcm/plans/${ planId }`, { method: 'DELETE' } ).catch( () => {} );
+
 		const forbidden = await page.evaluate( async () => {
 			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/wcm/members' );
 			return r.status;
