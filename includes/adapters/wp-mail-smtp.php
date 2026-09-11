@@ -71,9 +71,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// is the real gate (the Solid Security / WP Mail Logging precedent).
 		'cap'        => 'read',
 		'family'     => 'mail',
+		'status'     => array( 'route' => 'minn-admin/v1/wp-mail-smtp/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/wp-mail-smtp/events',
 			'pageQuery' => 'per_page=25&page={page}',
+			// Their own EventsCollection does the searching, so this matches
+			// their Debug Events screen rather than approximating it.
+			'search'    => 'search={q}',
+			// A status-chart bar narrows the list to that day (the chart's
+			// points carry from/to; the route reads after/before).
+			'dateQuery' => 'after={from}&before={to}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'tabs'      => array(
@@ -122,17 +129,37 @@ add_action( 'rest_api_init', function () {
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 			$type     = sanitize_key( (string) $request->get_param( 'type' ) );
 
-			$where = '';
+			$search = sanitize_text_field( (string) $request->get_param( 'search' ) );
+
+			$clauses = array();
+			$args    = array();
 			if ( 'error' === $type ) {
-				$where = 'WHERE event_type = 0';
+				$clauses[] = 'event_type = 0';
 			} elseif ( 'debug' === $type ) {
-				$where = 'WHERE event_type != 0';
+				$clauses[] = 'event_type != 0';
 			}
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} {$where}" ); // phpcs:ignore
+			if ( '' !== $search ) {
+				// Their own EventsCollection searches content OR initiator;
+				// mirror that pair rather than narrowing to one column.
+				$like      = '%' . $wpdb->esc_like( $search ) . '%';
+				$clauses[] = '( content LIKE %s OR initiator LIKE %s )';
+				$args[]    = $like;
+				$args[]    = $like;
+			}
+			// A status-chart bar narrows the list to that day. created_at is
+			// the DB clock, UTC on the stacks this targets (the file header's
+			// verified note), so the site-local bounds convert first.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created_at', 'utc' );
+			$clauses = array_merge( $clauses, $range_sql );
+			$args    = array_merge( $args, $range_args );
+
+			$where = $clauses ? 'WHERE ' . implode( ' AND ', $clauses ) : '';
+			$total = (int) ( $args
+				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} {$where}", $args ) ) // phpcs:ignore
+				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} {$where}" ) ); // phpcs:ignore
 			$rows  = $wpdb->get_results( $wpdb->prepare(
 				"SELECT id, content, initiator, event_type, created_at FROM {$table} {$where} ORDER BY id DESC LIMIT %d OFFSET %d", // phpcs:ignore
-				$per_page,
-				( $page - 1 ) * $per_page
+				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
 
 			$items = array_map( function ( $row ) {
@@ -150,6 +177,107 @@ add_action( 'rest_api_init', function () {
 			}, $rows ? $rows : array() );
 
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wp-mail-smtp/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () use ( $table ) {
+			global $wpdb;
+			$rows  = array();
+			$debug = null;
+			$cls   = '\\WPMailSMTP\\Admin\\DebugEvents\\DebugEvents';
+
+			// Their own counter for the headline number, so the card agrees
+			// with their screen instead of counting differently.
+			$errors_30d = null;
+			if ( class_exists( $cls ) && method_exists( $cls, 'get_error_debug_events_count' ) ) {
+				try {
+					$errors_30d = (int) $cls::get_error_debug_events_count( '-30 days' );
+				} catch ( \Throwable $e ) {
+					$errors_30d = null;
+				}
+			}
+			$have = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table;
+			$total = $have ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ) : 0; // phpcs:ignore
+
+			$rows[] = array(
+				'label' => __( 'Errors (30 days)', 'minn-admin' ),
+				'value' => number_format_i18n( null === $errors_30d ? 0 : $errors_30d ),
+				'hint'  => $errors_30d
+					? __( 'Delivery problems this plugin recorded.', 'minn-admin' )
+					: __( 'No delivery errors recorded.', 'minn-admin' ),
+			);
+
+			// Which mailer is configured is the other half of "is my mail
+			// working", and it is the first thing their own setup screen shows.
+			$mailer = '';
+			if ( class_exists( '\\WPMailSMTP\\Options' ) ) {
+				try {
+					$opts   = new \WPMailSMTP\Options();
+					$mailer = (string) $opts->get( 'mail', 'mailer' );
+				} catch ( \Throwable $e ) {
+					$mailer = '';
+				}
+			}
+			$rows[] = array(
+				'label' => __( 'Mailer', 'minn-admin' ),
+				'value' => '' !== $mailer ? $mailer : __( 'Not set', 'minn-admin' ),
+				'hint'  => 'mail' === $mailer || '' === $mailer
+					? __( 'Sending through the web server, not an SMTP service.', 'minn-admin' )
+					: __( 'Configured in WP Mail SMTP.', 'minn-admin' ),
+			);
+
+			// Verbose debug logging is off by default, which is why the list
+			// can look empty on a site that sends fine. Say so rather than
+			// leaving the reader to wonder.
+			if ( class_exists( $cls ) && method_exists( $cls, 'is_debug_enabled' ) ) {
+				try {
+					$debug = (bool) $cls::is_debug_enabled();
+				} catch ( \Throwable $e ) {
+					$debug = null;
+				}
+			}
+			$rows[] = array(
+				'label' => __( 'Events logged', 'minn-admin' ),
+				'value' => number_format_i18n( $total ),
+				'hint'  => true === $debug
+					? __( 'Debug logging is on, so sends are recorded too.', 'minn-admin' )
+					: __( 'Errors only. Turn on debug logging to record sends.', 'minn-admin' ),
+			);
+
+			// Errors per day for the same fourteen days the mail siblings show.
+			$chart = null;
+			if ( $have ) {
+				$days  = minn_admin_chart_days();
+				$since = get_gmt_from_date( minn_admin_chart_local_since() );
+				$day_sql = minn_admin_chart_utc_day_sql( 'created_at' );
+				$counts  = $wpdb->get_results( $wpdb->prepare(
+					"SELECT {$day_sql} AS d, event_type, COUNT(*) AS c FROM {$table} WHERE created_at >= %s GROUP BY d, event_type", // phpcs:ignore
+					$since
+				) );
+				foreach ( (array) $counts as $r ) {
+					minn_admin_chart_bump( $days, (string) $r->d, 0 !== (int) $r->event_type, (int) $r->c );
+				}
+				$chart = minn_admin_chart_build( $days, __( 'Errors', 'minn-admin' ), __( 'Debug', 'minn-admin' ) );
+			}
+
+			$out = array(
+				'rows'    => $rows,
+				'actions' => array(
+					array(
+						'label' => __( 'Open WP Mail SMTP ↗', 'minn-admin' ),
+						'href'  => class_exists( $cls ) && method_exists( $cls, 'get_page_url' )
+							? $cls::get_page_url()
+							: admin_url( 'admin.php?page=wp-mail-smtp-tools&tab=debug-events' ),
+					),
+				),
+			);
+			if ( $chart ) {
+				$out['chart'] = $chart;
+			}
+			return rest_ensure_response( $out );
 		},
 	) );
 
