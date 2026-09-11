@@ -176,6 +176,56 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			planRows.some( ( r ) => /Minn Gold.*Unlimited/.test( r ) ) && planRows.some( ( r ) => /Minn Trial.*3 months/.test( r ) ),
 			JSON.stringify( planRows ).slice( 0, 200 ) );
 
+		// The record page: row click opens /memberships/{id}, the form saves
+		// through the plugin's status transition, notes add and delete in
+		// place, and the header menu resumes a paused membership.
+		await page.click( '[data-sview="main"]' );
+		await page.waitForFunction( () => Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => /dana-member@example.com/.test( r.textContent ) ), { timeout: 15000 } );
+		await page.evaluate( () => { const r = Array.from( document.querySelectorAll( '.minn-table-row' ) ).find( ( x ) => /dana-member@example.com/.test( x.textContent ) ); r.click(); } );
+		await page.waitForSelector( '.minn-wcm-page [data-mcard="membership"]', { timeout: 20000 } );
+		t.check( 'a row click opens the membership page', /\/minn-admin\/memberships\/\d+$/.test( page.url() ), page.url() );
+		const pageId = parseInt( page.url().split( '/' ).pop(), 10 );
+		const shell = await page.evaluate( () => ( {
+			cards: Array.from( document.querySelectorAll( '[data-mcard]' ) ).map( ( c ) => c.dataset.mcard ),
+			savebarHidden: document.querySelector( '#minn-wcm-savebar' ).hidden,
+			transferHidden: document.querySelector( '#minn-wcm-transfer' ).hidden,
+			title: ( document.querySelector( '.minn-order-page-head .minn-modal-title' ) || {} ).textContent,
+			navLit: ( document.querySelector( '.minn-nav-btn.active' ) || {} ).textContent || '',
+		} ) );
+		t.check( 'the page paints its cards with the save bar and transfer box hidden',
+			[ 'membership', 'billing', 'notes', 'member', 'plans' ].every( ( k ) => shell.cards.includes( k ) ) && shell.savebarHidden && shell.transferHidden && /Dana Member/.test( shell.title ) && /Memberships/.test( shell.navLit ),
+			JSON.stringify( shell ) );
+
+		await page.click( '#minn-wcm-status' );
+		await page.waitForSelector( '.minn-ac-item[data-acv="paused"]', { timeout: 5000 } );
+		await page.click( '.minn-ac-item[data-acv="paused"]' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-wcm-savebar' ).hidden, { timeout: 5000 } );
+		await page.click( '#minn-wcm-save' );
+		await page.waitForFunction( () => /Paused/.test( ( document.querySelector( '.minn-order-page-head .minn-status' ) || {} ).textContent || '' ), { timeout: 15000 } );
+		const savedRow = ( ( await api( `minn-admin/v1/wcm/members?per_page=100&customer=${ dana.user_id }` ) ).body.items || [] ).find( ( r ) => r.id === pageId ) || {};
+		t.check( 'saving the status on the page pauses the membership through the plugin', 'paused' === savedRow.status, JSON.stringify( savedRow.status ) );
+
+		await page.fill( '#minn-wcm-new-note', 'Page note ' + suffix );
+		await page.click( '#minn-wcm-note-add' );
+		await page.waitForFunction( ( s ) => /Page note/.test( document.body.textContent ) && document.body.textContent.includes( s ), suffix, { timeout: 15000 } );
+		const noteId = await page.evaluate( ( s ) => { const n = Array.from( document.querySelectorAll( '[data-wcmnote]' ) ).find( ( x ) => x.textContent.includes( s ) ); return n ? n.dataset.wcmnote : ''; }, suffix );
+		t.check( 'a note added on the page lands in the list with its id', !! noteId, String( noteId ) );
+		await page.evaluate( ( id ) => document.querySelector( `[data-wcmnotedel="${ id }"]` ).click(), noteId );
+		await page.waitForFunction( ( s ) => ! document.body.textContent.includes( 'Page note ' + s ), suffix, { timeout: 15000 } );
+		t.check( 'deleting the note removes it from the page', true, '' );
+
+		await page.click( '#minn-wcm-more' );
+		await page.waitForFunction( () => Array.from( document.querySelectorAll( '[data-mi], .minn-menu button' ) ).some( ( b ) => /Resume membership/.test( b.textContent ) ), { timeout: 5000 } );
+		await page.evaluate( () => { const b = Array.from( document.querySelectorAll( '[data-mi], .minn-menu button' ) ).find( ( x ) => /Resume membership/.test( x.textContent ) ); b.click(); } );
+		await page.waitForFunction( () => /Active/.test( ( document.querySelector( '.minn-order-page-head .minn-status' ) || {} ).textContent || '' ), { timeout: 15000 } );
+		const resumedRow = ( ( await api( `minn-admin/v1/wcm/members?per_page=100&customer=${ dana.user_id }` ) ).body.items || [] ).find( ( r ) => r.id === pageId ) || {};
+		t.check( 'the header menu resumes the membership', 'active' === resumedRow.status, JSON.stringify( resumedRow.status ) );
+
+		const model = await api( `minn-admin/v1/wcm/members/${ pageId }` );
+		t.check( 'the page model names plans, statuses and the member\'s other memberships',
+			200 === model.status && Array.isArray( model.body.plans ) && model.body.plans.length >= 2 && Array.isArray( model.body.statuses ) && Array.isArray( model.body.memberships ),
+			JSON.stringify( Object.keys( model.body || {} ) ) );
+
 		const forbidden = await page.evaluate( async () => {
 			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/wcm/members' );
 			return r.status;

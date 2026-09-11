@@ -371,6 +371,240 @@ function minn_admin_wcm_plan_row( $plan ) {
 	);
 }
 
+/**
+ * Local (site-timezone) day for a UTC MySQL datetime, or '' when empty.
+ *
+ * @param string $mysql UTC datetime.
+ * @return string Y-m-d
+ */
+function minn_admin_wcm_local_day( $mysql ) {
+	$mysql = trim( (string) $mysql );
+	if ( '' === $mysql || '0000-00-00 00:00:00' === $mysql ) {
+		return '';
+	}
+	$ts = strtotime( $mysql . ' UTC' );
+	return $ts ? wp_date( 'Y-m-d', $ts ) : '';
+}
+
+/**
+ * Notes for the page and the detail card, newest first.
+ *
+ * @param WC_Memberships_User_Membership $m Membership.
+ * @return array
+ */
+function minn_admin_wcm_notes( $m ) {
+	$out = array();
+	try {
+		$all = array_filter( (array) $m->get_notes( 'all' ), function ( $n ) {
+			return $n instanceof WP_Comment;
+		} );
+		// Their getter's order follows the comment query; pin newest first.
+		usort( $all, function ( $a, $b ) {
+			$cmp = strcmp( (string) $b->comment_date_gmt, (string) $a->comment_date_gmt );
+			return 0 !== $cmp ? $cmp : (int) $b->comment_ID - (int) $a->comment_ID;
+		} );
+		foreach ( $all as $note ) {
+			$out[] = array(
+				'id'       => (int) $note->comment_ID,
+				'date'     => minn_admin_wcm_iso( $note->comment_date_gmt ),
+				'when'     => minn_admin_wcm_local( $note->comment_date_gmt, true ),
+				'author'   => $note->comment_author ? (string) $note->comment_author : 'WooCommerce',
+				'text'     => wp_strip_all_tags( (string) $note->comment_content ),
+				'notified' => (bool) get_comment_meta( $note->comment_ID, 'notified', true ),
+			);
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+	return $out;
+}
+
+/**
+ * The membership page model: everything the /memberships/{id} page paints
+ * and every vocabulary its form needs, in one response.
+ *
+ * @param WC_Memberships_User_Membership $m Membership.
+ * @return array
+ */
+function minn_admin_wcm_page_model( $m ) {
+	$id      = (int) $m->get_id();
+	$post    = get_post( $id );
+	$user    = $m->get_user();
+	$user_id = (int) $m->get_user_id();
+	$plan    = $m->get_plan();
+	$status  = (string) $m->get_status();
+	$labels  = minn_admin_wcm_statuses();
+
+	$member = array(
+		'id'      => $user_id,
+		'name'    => minn_admin_wcm_member_name( $user, $user_id ),
+		'email'   => $user instanceof WP_User ? (string) $user->user_email : '',
+		'login'   => $user instanceof WP_User ? (string) $user->user_login : '',
+		'avatar'  => $user instanceof WP_User ? (string) get_avatar_url( $user_id, array( 'size' => 96 ) ) : '',
+		'since'   => '',
+		'address' => '',
+	);
+	try {
+		$um = wc_memberships()->get_user_memberships_instance();
+		if ( $user_id && $um && method_exists( $um, 'get_user_member_since_date' ) ) {
+			$member['since'] = minn_admin_wcm_local( (string) $um->get_user_member_since_date( $user_id, 'mysql' ) );
+		}
+		if ( $user_id && function_exists( 'wc_get_account_formatted_address' ) ) {
+			$address = (string) wc_get_account_formatted_address( 'billing', $user_id );
+			$member['address'] = trim( wp_strip_all_tags( str_replace( array( '<br/>', '<br />', '<br>' ), ', ', $address ) ) );
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+
+	$plans = array();
+	try {
+		$rows = (array) wc_memberships_get_membership_plans( array( 'post_status' => array( 'publish', 'draft', 'private' ) ) );
+		foreach ( $rows as $p ) {
+			if ( is_object( $p ) && method_exists( $p, 'get_id' ) ) {
+				$plans[] = array( 'id' => (int) $p->get_id(), 'name' => (string) $p->get_name() );
+			}
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+
+	$statuses = array();
+	foreach ( $labels as $slug => $label ) {
+		$statuses[] = array( $slug, $label );
+	}
+
+	$order    = null;
+	$order_id = (int) $m->get_order_id();
+	if ( $order_id > 0 && function_exists( 'wc_get_order' ) ) {
+		$o = wc_get_order( $order_id );
+		if ( $o ) {
+			$created = $o->get_date_created();
+			$order   = array(
+				'id'     => $order_id,
+				'number' => (string) $o->get_order_number(),
+				'status' => (string) $o->get_status(),
+				'total'  => html_entity_decode( wp_strip_all_tags( (string) $o->get_formatted_order_total() ), ENT_QUOTES, 'UTF-8' ),
+				'date'   => $created ? wp_date( get_option( 'date_format' ), $created->getTimestamp() ) : '',
+			);
+		} else {
+			$order = array( 'id' => $order_id, 'number' => (string) $order_id, 'status' => '', 'total' => '', 'date' => '' );
+		}
+	}
+
+	$product    = null;
+	$product_id = (int) $m->get_product_id();
+	if ( $product_id > 0 ) {
+		$pr      = function_exists( 'wc_get_product' ) ? wc_get_product( $product_id ) : null;
+		$product = array( 'id' => $product_id, 'name' => $pr ? (string) $pr->get_name() : '#' . $product_id );
+	}
+
+	// A WooCommerce Subscriptions link, read through the plugin's own
+	// integration when both are up; never a guess from order meta.
+	$subscription = null;
+	try {
+		if ( class_exists( 'WC_Subscriptions' ) && method_exists( wc_memberships(), 'get_integrations_instance' ) ) {
+			$integrations = wc_memberships()->get_integrations_instance();
+			$subs         = $integrations && method_exists( $integrations, 'get_subscriptions_instance' ) ? $integrations->get_subscriptions_instance() : null;
+			$sid          = 0;
+			if ( $subs && method_exists( $subs, 'get_user_membership_subscription_id' ) ) {
+				$sid = (int) $subs->get_user_membership_subscription_id( $id );
+			}
+			if ( $sid > 0 && function_exists( 'wcs_get_subscription' ) ) {
+				$sub          = wcs_get_subscription( $sid );
+				$subscription = array( 'id' => $sid, 'status' => $sub ? (string) $sub->get_status() : '' );
+			}
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+
+	$profile = array();
+	try {
+		foreach ( (array) $m->get_profile_fields() as $field ) {
+			if ( ! is_object( $field ) || ! method_exists( $field, 'get_definition' ) ) {
+				continue;
+			}
+			$def   = $field->get_definition();
+			$value = method_exists( $field, 'get_formatted_value' ) ? $field->get_formatted_value() : $field->get_value();
+			if ( is_array( $value ) ) {
+				$value = implode( ', ', array_map( 'strval', $value ) );
+			}
+			$profile[] = array(
+				'label' => $def && method_exists( $def, 'get_name' ) ? (string) $def->get_name() : (string) $field->get_slug(),
+				'value' => wp_strip_all_tags( (string) $value ),
+			);
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+
+	$memberships = array();
+	try {
+		foreach ( (array) wc_memberships_get_user_memberships( $user_id, array( 'status' => 'any' ) ) as $other ) {
+			if ( ! is_object( $other ) || ! method_exists( $other, 'get_id' ) ) {
+				continue;
+			}
+			$op            = $other->get_plan();
+			$memberships[] = array(
+				'id'      => (int) $other->get_id(),
+				'plan'    => $op ? (string) $op->get_name() : __( '(deleted plan)', 'minn-admin' ),
+				'plan_id' => (int) $other->get_plan_id(),
+				'status'  => (string) $other->get_status(),
+				'current' => (int) $other->get_id() === $id,
+			);
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+	$held = array_map( function ( $x ) {
+		return $x['plan_id'];
+	}, $memberships );
+
+	$active_seconds = 0;
+	try {
+		$active_seconds = (int) $m->get_total_active_time( 'timestamp' );
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+
+	$end = (string) $m->get_end_date( 'mysql' );
+
+	return array(
+		'id'             => $id,
+		'status'         => $status,
+		'statusLabel'    => isset( $labels[ $status ] ) ? $labels[ $status ] : ucfirst( $status ),
+		'member'         => $member,
+		'plan'           => array( 'id' => (int) $m->get_plan_id(), 'name' => $plan ? (string) $plan->get_name() : __( '(deleted plan)', 'minn-admin' ) ),
+		'plans'          => $plans,
+		'availablePlans' => array_values( array_filter( $plans, function ( $p ) use ( $held ) {
+			return ! in_array( $p['id'], $held, true );
+		} ) ),
+		'statuses'       => $statuses,
+		'start'          => minn_admin_wcm_local_day( $m->get_start_date( 'mysql' ) ),
+		'end'            => minn_admin_wcm_local_day( $end ),
+		'endsText'       => $end ? minn_admin_wcm_local( $end ) : '',
+		'pausedSince'    => $m->has_status( 'paused' ) ? minn_admin_wcm_local( $m->get_paused_date( 'mysql' ), true ) : '',
+		'cancelledAt'    => $m->has_status( 'cancelled' ) ? minn_admin_wcm_local( $m->get_cancelled_date( 'mysql' ), true ) : '',
+		'timeActive'     => $active_seconds > 0 ? human_time_diff( time() - $active_seconds, time() ) : '',
+		'created'        => $post ? minn_admin_wcm_local( $post->post_date_gmt, true ) : '',
+		'order'          => $order,
+		'product'        => $product,
+		'subscription'   => $subscription,
+		'profile'        => $profile,
+		'notes'          => minn_admin_wcm_notes( $m ),
+		'memberships'    => $memberships,
+		'pausable'       => ! $m->has_status( array( 'paused', 'cancelled' ) ),
+		'resumable'      => $m->has_status( 'paused' ),
+		'cancellable'    => ! $m->is_cancelled(),
+		'can'            => array(
+			'edit'   => current_user_can( 'edit_post', $id ),
+			'delete' => current_user_can( 'delete_post', $id ),
+		),
+		'adminUrl'       => admin_url( 'post.php?post=' . $id . '&action=edit' ),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_wcm_active() ) {
 		return $surfaces;
@@ -494,6 +728,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/wcm/members/{id}/view',
 			),
+			// A membership earns a page: it has notes, billing and the member's
+			// other plans as sub-resources, and a form-shaped edit.
+			'open'      => array( 'route' => 'memberships/{id}' ),
 			'actions'   => $member_actions,
 			'bulk'      => array(
 				array(
@@ -807,25 +1044,11 @@ add_action( 'rest_api_init', function () {
 			}
 
 			$notes = array();
-			try {
-				$all = array_filter( (array) $m->get_notes( 'all' ), function ( $n ) {
-					return $n instanceof WP_Comment;
-				} );
-				// Their getter's order follows the comment query; pin newest first.
-				usort( $all, function ( $a, $b ) {
-					$cmp = strcmp( (string) $b->comment_date_gmt, (string) $a->comment_date_gmt );
-					return 0 !== $cmp ? $cmp : (int) $b->comment_ID - (int) $a->comment_ID;
-				} );
-				foreach ( $all as $note ) {
-					$stamp = wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $note->comment_date_gmt . ' UTC' ) );
-					$who   = $note->comment_author ? $note->comment_author : 'WooCommerce';
-					$notes[] = array(
-						'label' => $stamp . ' · ' . $who,
-						'value' => wp_strip_all_tags( (string) $note->comment_content ),
-					);
-				}
-			} catch ( \Throwable $e ) {
-				unset( $e );
+			foreach ( minn_admin_wcm_notes( $m ) as $note ) {
+				$notes[] = array(
+					'label' => $note['when'] . ' · ' . $note['author'],
+					'value' => $note['text'],
+				);
 			}
 
 			$sections = array(
@@ -949,6 +1172,7 @@ add_action( 'rest_api_init', function () {
 			}
 			return rest_ensure_response( array(
 				'message' => $notify ? __( 'Note added and emailed to the member.', 'minn-admin' ) : __( 'Note added.', 'minn-admin' ),
+				'notes'   => minn_admin_wcm_notes( $m ),
 			) );
 		},
 	) );
@@ -1078,6 +1302,127 @@ add_action( 'rest_api_init', function () {
 					$plan->get_name()
 				),
 			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wcm/members/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'permission_callback' => $permission,
+		'callback'            => function ( $request ) {
+			$m = minn_admin_wcm_load( (int) $request['id'] );
+			if ( is_wp_error( $m ) ) {
+				return $m;
+			}
+			return rest_ensure_response( minn_admin_wcm_page_model( $m ) );
+		},
+	) );
+
+	// The page's Save: plan, status and the two dates, applied in the order
+	// the plugin's own edit screen applies them (status first, then the dates
+	// with their expire-in-the-past / revive-in-the-future rule). Only fields
+	// that arrived AND changed are written, so an untouched date never gets
+	// its time rounded to midnight.
+	register_rest_route( 'minn-admin/v1', '/wcm/members/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => $permission,
+		'callback'            => function ( $request ) {
+			$m = minn_admin_wcm_load( (int) $request['id'], 'edit_post' );
+			if ( is_wp_error( $m ) ) {
+				return $m;
+			}
+			$id      = (int) $m->get_id();
+			$changed = array();
+			$actor   = wp_get_current_user();
+			/* translators: %s: username of the person who made the change. */
+			$note = sprintf( __( 'Changed in Minn Admin by %s.', 'minn-admin' ), $actor && $actor->user_login ? $actor->user_login : __( 'a site administrator', 'minn-admin' ) );
+
+			$plan_id = $request->get_param( 'plan_id' );
+			if ( null !== $plan_id && (int) $plan_id > 0 && (int) $plan_id !== (int) $m->get_plan_id() ) {
+				$plan = wc_memberships_get_membership_plan( (int) $plan_id );
+				if ( ! $plan ) {
+					return new WP_Error( 'minn_wcm_plan', __( 'That membership plan no longer exists.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$other = wc_memberships_get_user_membership( $m->get_user_id(), (int) $plan_id );
+				if ( $other && (int) $other->get_id() !== $id ) {
+					return new WP_Error( 'minn_wcm_exists', sprintf(
+						/* translators: %s: plan name. */
+						__( 'This member already holds a %s membership, so this one cannot be moved onto that plan.', 'minn-admin' ),
+						$plan->get_name()
+					), array( 'status' => 400 ) );
+				}
+				// Their REST controller moves a membership between plans with
+				// exactly this write.
+				wp_update_post( array( 'ID' => $id, 'post_parent' => (int) $plan_id ) );
+				$changed[] = 'plan';
+			}
+
+			$status = $request->get_param( 'status' );
+			if ( null !== $status && '' !== (string) $status ) {
+				$status = preg_replace( '/^wcm-/', '', (string) $status );
+				if ( ! isset( minn_admin_wcm_statuses()[ $status ] ) ) {
+					return new WP_Error( 'minn_wcm_status', __( 'That is not a membership status.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				if ( $status !== (string) $m->get_status() ) {
+					try {
+						$m->update_status( $status, $note );
+					} catch ( \Throwable $e ) {
+						return new WP_Error( 'minn_wcm_status', $e->getMessage() ? $e->getMessage() : __( 'The status could not be changed.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					$changed[] = 'status';
+				}
+			}
+
+			$start = $request->get_param( 'start_date' );
+			if ( null !== $start && '' !== trim( (string) $start ) ) {
+				$start = trim( (string) $start );
+				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $start ) || ! strtotime( $start ) ) {
+					return new WP_Error( 'minn_wcm_date', __( 'Enter the start date as YYYY-MM-DD.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				if ( $start !== minn_admin_wcm_local_day( $m->get_start_date( 'mysql' ) ) ) {
+					$m->set_start_date( get_gmt_from_date( $start . ' 00:00:00' ) );
+					$changed[] = 'start';
+				}
+			}
+
+			$end = $request->get_param( 'end_date' );
+			if ( null !== $end ) {
+				$end = trim( (string) $end );
+				$cur = minn_admin_wcm_local_day( $m->get_end_date( 'mysql' ) );
+				if ( $end !== $cur ) {
+					$ok = minn_admin_wcm_apply_end_date( $m, $end );
+					if ( is_wp_error( $ok ) ) {
+						return $ok;
+					}
+					$changed[] = 'end';
+				}
+			}
+
+			$fresh = wc_memberships_get_user_membership( $id );
+			return rest_ensure_response( array(
+				'changed' => $changed,
+				'message' => $changed ? __( 'Membership saved.', 'minn-admin' ) : __( 'Nothing to save.', 'minn-admin' ),
+				'model'   => minn_admin_wcm_page_model( $fresh ? $fresh : $m ),
+			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wcm/members/(?P<id>\d+)/notes/(?P<note>\d+)', array(
+		'methods'             => 'DELETE',
+		'permission_callback' => $permission,
+		'callback'            => function ( $request ) {
+			$m = minn_admin_wcm_load( (int) $request['id'], 'edit_post' );
+			if ( is_wp_error( $m ) ) {
+				return $m;
+			}
+			$note = get_comment( (int) $request['note'] );
+			if ( ! $note || 'user_membership_note' !== $note->comment_type || (int) $note->comment_post_ID !== (int) $m->get_id() ) {
+				return new WP_Error( 'minn_wcm_note', __( 'Note not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			// Their own delete-note handler is wp_delete_comment, nothing more.
+			if ( ! wp_delete_comment( (int) $note->comment_ID, true ) ) {
+				return new WP_Error( 'minn_wcm_note', __( 'The note could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'message' => __( 'Note deleted.', 'minn-admin' ), 'notes' => minn_admin_wcm_notes( $m ) ) );
 		},
 	) );
 

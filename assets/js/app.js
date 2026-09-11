@@ -1229,6 +1229,7 @@
 		migrate: [ __( 'Migrate' ), 'WP Migrate' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
+		membership: [ __( 'Membership' ), 'WooCommerce' ],
 		products: [ __( 'Products' ), 'WooCommerce' ],
 		product: [ __( 'Product' ), 'WooCommerce' ],
 		coupons: [ __( 'Coupons' ), 'WooCommerce' ],
@@ -3086,6 +3087,10 @@
 			// /subscriptions/42 — the subscription detail page.
 			state.subPageId = parseInt( parts[ 1 ], 10 );
 			state.route = 'subscription';
+		} else if ( route === 'memberships' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
+			// /memberships/57 — a WooCommerce Memberships record on its own page.
+			state.memberPageId = parseInt( parts[ 1 ], 10 );
+			state.route = 'membership';
 		} else if ( route === 'products' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /products/482 — the product detail page.
 			state.productPageId = parseInt( parts[ 1 ], 10 );
@@ -4278,6 +4283,8 @@
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
 				|| ( 'subscription' === state.route && 'subscriptions' === btn.dataset.nav )
+				// And the membership page and its Memberships surface.
+				|| ( 'membership' === state.route && ( 'woocommerce-memberships' === btn.dataset.nav || 'memberships' === btn.dataset.family ) )
 				|| ( 'surfaceitem' === state.route && ( btn.dataset.nav === state.surfaceItemSid || ( activeFamily && btn.dataset.family === activeFamily ) ) )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
@@ -47740,6 +47747,7 @@
 		if ( state.route !== 'order' ) state.orderPage = null;
 		if ( state.route !== 'product' ) state.productPage = null;
 		if ( state.route !== 'subscription' ) state.subPage = null;
+		if ( state.route !== 'membership' ) state.memberPage = null;
 		// User-edit page data too (same per-visit contract).
 		if ( state.route !== 'useredit' ) state.userEdit = null;
 		if ( state.route !== 'fieldgroup' ) state.fgb = null;
@@ -47754,6 +47762,7 @@
 			case 'order': renderOrderPage(); break;
 			case 'subscriptions': renderSubscriptions(); break;
 			case 'subscription': renderSubscriptionPage(); break;
+			case 'membership': renderMembershipPage(); break;
 			case 'products': renderProducts(); break;
 			case 'product': renderProductPage(); break;
 			case 'coupons': renderCoupons(); break;
@@ -47783,6 +47792,460 @@
 				else renderOverview();
 		}
 		stripWpAdminLinks( $( '#minn-view' ) );
+	}
+
+	/* ===== WooCommerce Memberships: the membership page ===== */
+
+	// /memberships/{id} is the record page for a WooCommerce Memberships row,
+	// in the product page's shell: what the membership IS (plan, status, dates,
+	// billing, notes) in the main column, who HOLDS it (member, their other
+	// plans, profile answers) in the sidebar. Everything it paints and saves
+	// is the adapter's page model, one request each way.
+	const WCM_STATUS_STYLE = {
+		active: 'publish', complimentary: 'publish', free_trial: 'publish',
+		delayed: 'draft', pending: 'private', paused: 'private',
+		expired: 'trash-status', cancelled: 'trash-status',
+	};
+
+	function wcmSurface() {
+		return surfaceById( 'woocommerce-memberships' );
+	}
+
+	function loadMembershipPage( m ) {
+		api( `minn-admin/v1/wcm/members/${ m.id }` ).then( ( model ) => {
+			if ( state.memberPage !== m ) return;
+			m.full = model;
+			m.loaded = JSON.parse( JSON.stringify( model ) );
+			m.loading = false;
+			m.clean = null;
+			if ( state.route === 'membership' ) renderMembershipPage();
+		} ).catch( ( e ) => {
+			if ( state.memberPage !== m ) return;
+			m.loading = false;
+			m.loadError = e.message;
+			if ( state.route === 'membership' ) renderMembershipPage();
+		} );
+	}
+
+	/** Adopt a fresh model (after a save or a verb) and repaint. */
+	function membershipAdopt( m, model ) {
+		m.full = model;
+		m.loaded = JSON.parse( JSON.stringify( model ) );
+		m.clean = null;
+		if ( state.memberPage === m && state.route === 'membership' ) renderMembershipPage();
+	}
+
+	function wcmDateFieldHtml( id, label, value, placeholder ) {
+		return `<div><div class="minn-field-label">${ esc( label ) }</div><input class="minn-input" id="${ esc( id ) }" readonly placeholder="${ esc( placeholder ) }" data-dp="${ esc( value || '' ) }" value="${ esc( value ? dpPretty( value ) : '' ) }"></div>`;
+	}
+
+	function membershipComboSpecs( d ) {
+		const plans = ( d.plans || [] ).map( ( p ) => [ String( p.id ), p.name ] );
+		if ( d.plan && ! plans.some( ( [ v ] ) => v === String( d.plan.id ) ) ) plans.unshift( [ String( d.plan.id ), d.plan.name ] );
+		return [
+			{ id: 'minn-wcm-plan', label: __( 'Plan' ), value: String( d.plan ? d.plan.id : '' ), options: plans },
+			{ id: 'minn-wcm-status', label: __( 'Status' ), value: d.status || 'active', options: ( d.statuses || [] ).map( ( [ v, l ] ) => [ v, l ] ) },
+		];
+	}
+
+	function membershipFingerprint() {
+		const dp = ( id ) => { const el = $( '#' + id ); return el ? ( el.dataset.dp || '' ) : ''; };
+		return JSON.stringify( [ pcomboValue( 'minn-wcm-plan', '' ), pcomboValue( 'minn-wcm-status', '' ), dp( 'minn-wcm-start' ), dp( 'minn-wcm-end' ) ] );
+	}
+
+	function membershipDetailInnerHtml( m ) {
+		const d = m.full;
+		const canEdit = !! ( d.can && d.can.edit );
+		const combos = membershipComboSpecs( d );
+		const combo = ( id ) => productComboHtml( combos.find( ( c ) => c.id === id ) );
+		const card = ( key, title, inner, head = '' ) => `
+							<div class="minn-order-sec" data-mcard="${ esc( key ) }">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( title ) }</div>${ head }</div>
+								${ inner }
+							</div>`;
+		const facts = [];
+		if ( d.pausedSince ) facts.push( sprintf( /* translators: %s: date and time. */ __( 'Paused since %s.' ), d.pausedSince ) );
+		if ( d.cancelledAt ) facts.push( sprintf( /* translators: %s: date and time. */ __( 'Cancelled %s.' ), d.cancelledAt ) );
+		if ( d.timeActive ) facts.push( sprintf( /* translators: %s: a duration such as "3 months". */ __( 'Active for %s in total.' ), d.timeActive ) );
+		if ( d.created ) facts.push( sprintf( /* translators: %s: date and time. */ __( 'Created %s.' ), d.created ) );
+
+		const membership = canEdit ? `
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										${ combo( 'minn-wcm-plan' ) }
+										${ combo( 'minn-wcm-status' ) }
+									</div>
+									<div class="minn-order-field-row">
+										${ wcmDateFieldHtml( 'minn-wcm-start', __( 'Member since' ), d.start, __( 'Pick a date' ) ) }
+										${ wcmDateFieldHtml( 'minn-wcm-end', __( 'Expires' ), d.end, __( 'Never' ) ) }
+									</div>
+									<div class="minn-toggle-desc minn-wcm-date-note">
+										${ esc( __( 'An end date in the past expires the membership; a future date brings an expired one back.' ) ) }
+										<button type="button" class="minn-linkish" id="minn-wcm-noend">${ esc( __( 'Remove end date' ) ) }</button>
+									</div>
+									${ facts.length ? `<div class="minn-toggle-desc">${ esc( facts.join( ' ' ) ) }</div>` : '' }
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Plan' ) ) }</span><span>${ esc( d.plan ? d.plan.name : '' ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Member since' ) ) }</span><span>${ esc( d.start ? dpPretty( d.start ) : '' ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Expires' ) ) }</span><span>${ esc( d.endsText || __( 'Never' ) ) }</span></div>
+									${ facts.length ? `<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( facts.join( ' ' ) ) }</div>` : '' }
+								</div>`;
+
+		const o = d.order;
+		const billing = ! o && ! d.product && ! d.subscription ? `
+								<div class="minn-toggle-desc">${ esc( __( 'This membership was granted by hand, so there is no order or subscription behind it.' ) ) }</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									${ o ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Order' ) ) }</span><span><button type="button" class="minn-linkish" id="minn-wcm-open-order">#${ esc( o.number ) }</button>${ o.total ? ` · ${ esc( o.total ) }` : '' }${ o.status ? ` <span class="minn-status ${ esc( ORDER_STATUS_STYLE && ORDER_STATUS_STYLE[ o.status ] ? ORDER_STATUS_STYLE[ o.status ] : 'draft' ) }">${ esc( statusLabel( o.status ) ) }</span>` : '' }</span></div>` : '' }
+									${ d.product ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Product' ) ) }</span><span><button type="button" class="minn-linkish" id="minn-wcm-open-product">${ esc( d.product.name ) }</button></span></div>` : '' }
+									${ d.subscription ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Subscription' ) ) }</span><span><button type="button" class="minn-linkish" id="minn-wcm-open-sub">#${ esc( String( d.subscription.id ) ) }</button>${ d.subscription.status ? ` <span class="minn-status ${ esc( SUB_STATUS_STYLE[ d.subscription.status ] || 'draft' ) }">${ esc( subStatusLabel( d.subscription.status ) ) }</span>` : '' }</span></div>` : '' }
+									${ B.wcs && ! d.subscription && ( o || d.product ) ? `<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'Not linked to a subscription.' ) ) }</div>` : '' }
+								</div>`;
+
+		const notes = `
+								${ canEdit ? `
+								<div class="minn-order-fields" style="margin:0 0 12px;">
+									<div><textarea class="minn-input" id="minn-wcm-new-note" rows="2" placeholder="${ esc( __( 'Note about this membership…' ) ) }"></textarea></div>
+									<div class="minn-order-composer-foot">
+										<div class="minn-note-visibility">
+											<span>${ esc( __( 'Email this note to the member' ) ) }</span>
+											<button type="button" class="minn-switch" id="minn-wcm-note-notify" role="switch" aria-checked="false" aria-label="${ esc( __( 'Email this note to the member' ) ) }"><span class="minn-switch-knob"></span></button>
+										</div>
+										<button class="minn-btn-soft" id="minn-wcm-note-add" type="button">${ esc( __( 'Add note' ) ) }</button>
+									</div>
+								</div>` : '' }
+								<div class="minn-order-notes-list">
+									${ ( d.notes || [] ).length ? d.notes.map( ( n ) => `
+										<div class="minn-order-note${ n.notified ? ' customer' : '' }" data-wcmnote="${ n.id }">
+											<div class="minn-order-note-meta">
+												<span>${ esc( n.author ) }</span>
+												<span title="${ esc( n.when || '' ) }">${ esc( timeAgo( n.date, { utc: true } ) ) }</span>
+												${ n.notified ? `<span class="minn-status future">${ esc( __( 'Emailed' ) ) }</span>` : '' }
+												${ canEdit ? `<button type="button" class="minn-pdl-x minn-wcm-note-del" data-wcmnotedel="${ n.id }" title="${ esc( __( 'Delete note' ) ) }" aria-label="${ esc( __( 'Delete note' ) ) }">×</button>` : '' }
+											</div>
+											<div class="minn-order-note-body">${ esc( n.text || '' ) }</div>
+										</div>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No notes yet.' ) ) }</div>` }
+								</div>`;
+
+		const main = `
+							${ card( 'membership', __( 'Membership' ), membership ) }
+							${ card( 'billing', __( 'Billing' ), billing ) }
+							${ card( 'notes', __( 'Notes' ), notes ) }`;
+
+		const mem = d.member || {};
+		const memberCard = `
+								<div class="minn-wcm-member">
+									${ avatarTileHtml( mem.name, mem.avatar ) }
+									<div class="minn-wcm-member-text">
+										<div class="minn-wcm-member-name">${ esc( mem.name || '' ) }</div>
+										${ mem.email ? `<a class="minn-wcm-member-mail" href="mailto:${ esc( mem.email ) }">${ esc( mem.email ) }</a>` : '' }
+									</div>
+								</div>
+								<div class="minn-modal-meta" style="padding:0;">
+									${ mem.login ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Username' ) ) }</span><span>${ esc( mem.login ) }</span></div>` : '' }
+									${ mem.since ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Member since' ) ) }</span><span>${ esc( mem.since ) }</span></div>` : '' }
+									${ mem.address ? `<div class="minn-side-row multi"><span class="minn-side-key">${ esc( __( 'Billing address' ) ) }</span><span>${ esc( mem.address ) }</span></div>` : `<div class="minn-toggle-desc">${ esc( __( 'No billing address on file.' ) ) }</div>` }
+								</div>
+								<div class="minn-pimg-foot" style="margin-top:10px;">
+									${ B.wc && B.caps.customers && mem.id ? `<button type="button" class="minn-btn-soft" id="minn-wcm-open-customer">${ esc( __( 'View customer' ) ) }</button>` : '' }
+									${ canEdit ? `<button type="button" class="minn-btn-soft" id="minn-wcm-transfer-toggle">${ esc( __( 'Transfer…' ) ) }</button>` : '' }
+								</div>
+								${ canEdit ? `
+								<div class="minn-order-fields minn-wcm-transfer" id="minn-wcm-transfer" hidden>
+									<div><div class="minn-field-label">${ esc( __( 'Transfer to' ) ) }</div><input class="minn-input" id="minn-wcm-transfer-user" placeholder="${ esc( __( 'Email address or username' ) ) }" autocomplete="off"></div>
+									<div class="minn-pimg-foot">
+										<button type="button" class="minn-btn-primary" id="minn-wcm-transfer-go">${ esc( __( 'Transfer membership' ) ) }</button>
+										<span class="minn-toggle-desc">${ esc( __( 'The previous member is kept in the record.' ) ) }</span>
+									</div>
+								</div>` : '' }`;
+
+		const others = ( d.memberships || [] );
+		const avail = ( d.availablePlans || [] );
+		const plansCard = `
+								<div class="minn-wcm-plans">
+									${ others.map( ( x ) => `
+									<div class="minn-wcm-plan-row${ x.current ? ' current' : '' }">
+										${ x.current ? `<span class="minn-wcm-plan-name">${ esc( x.plan ) }</span>` : `<button type="button" class="minn-linkish minn-wcm-plan-name" data-wcmopen="${ x.id }">${ esc( x.plan ) }</button>` }
+										<span class="minn-status ${ esc( WCM_STATUS_STYLE[ x.status ] || 'draft' ) }">${ esc( statusLabel( x.status ) ) }</span>
+									</div>` ).join( '' ) }
+								</div>
+								${ canEdit && avail.length ? `
+								<div class="minn-order-fields" style="margin-top:10px;">
+									<div><div class="minn-field-label">${ esc( __( 'Add a plan' ) ) }</div>
+										<div class="minn-ac">
+											<input class="minn-input minn-ac-input" id="minn-wcm-addplan" value="${ esc( avail[ 0 ].name ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Add a plan' ) ) }">
+											<div class="minn-ac-panel" hidden></div>
+										</div></div>
+									<div><button type="button" class="minn-btn-soft" id="minn-wcm-addplan-go">${ esc( __( 'Grant membership' ) ) }</button></div>
+								</div>` : '' }`;
+
+		const profile = ( d.profile || [] );
+		const profileCard = profile.length ? card( 'profile', __( 'Profile fields' ), `
+								<div class="minn-modal-meta" style="padding:0;">
+									${ profile.map( ( r ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( r.label ) }</span><span>${ esc( r.value ) }</span></div>` ).join( '' ) }
+								</div>` ) : '';
+
+		const side = `
+							${ card( 'member', __( 'Member' ), memberCard ) }
+							${ card( 'plans', __( 'Plans' ), plansCard ) }
+							${ profileCard }`;
+
+		return `
+					<div class="minn-order-body">
+						<div class="minn-order-layout">
+							<div class="minn-order-main">${ main }</div>
+							<div class="minn-order-side">${ side }</div>
+						</div>
+						${ canEdit ? `
+						<div class="minn-psavebar" id="minn-wcm-savebar" hidden>
+							<span class="minn-psavebar-note">${ esc( __( 'Unsaved changes' ) ) }</span>
+							<button class="minn-btn-soft" id="minn-wcm-discard" type="button">${ esc( __( 'Discard' ) ) }</button>
+							<button class="minn-btn-primary" id="minn-wcm-save" type="button">${ esc( __( 'Save changes' ) ) }</button>
+						</div>` : '' }
+					</div>`;
+	}
+
+	function renderMembershipPage() {
+		const view = $( '#minn-view' );
+		if ( ! wcmSurface() ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( "You don't have access to memberships on this site." ) ) }</div>`;
+			return;
+		}
+		let m = state.memberPage;
+		if ( ! m || m.id !== state.memberPageId ) {
+			m = state.memberPage = { id: state.memberPageId, full: null, loaded: null, loading: true, loadError: '', clean: null };
+			loadMembershipPage( m );
+		}
+		const d = m.full;
+		const loading = !! m.loading && ! d;
+		const sub = d
+			? [ d.plan ? d.plan.name : '', '#' + d.id, d.member && d.member.since ? sprintf( /* translators: %s: date. */ __( 'member since %s' ), d.member.since ) : '' ].filter( Boolean ).join( ' · ' )
+			: __( 'Loading…' );
+		view.innerHTML = `
+		<div class="minn-order-page minn-order-page-wide minn-wcm-page">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-wcm-back">← ${ esc( __( 'Memberships' ) ) }</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-modal-title">${ esc( d && d.member ? d.member.name : __( 'Membership' ) ) }</div>
+					<div class="minn-modal-sub">${ esc( sub ) }</div>
+				</div>
+				${ d ? `<span class="minn-status ${ esc( WCM_STATUS_STYLE[ d.status ] || 'draft' ) }">${ esc( d.statusLabel || statusLabel( d.status ) ) }</span>` : '' }
+				${ d ? `<div class="minn-order-head-actions">
+					<a class="minn-btn-soft" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'Open in WooCommerce' ) ) }</a>
+					<button class="minn-btn-soft" id="minn-wcm-more" type="button" aria-haspopup="menu" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
+				</div>` : '' }
+			</div>
+			<div class="minn-order-page-body">
+				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading membership…' ) ) }</div></div>` : '' }
+				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+				${ ! loading && ! m.loadError ? membershipDetailInnerHtml( m ) : '' }
+			</div>
+		</div>`;
+		const back = $( '#minn-wcm-back' );
+		if ( back ) back.addEventListener( 'click', () => go( 'woocommerce-memberships' ) );
+		if ( ! loading && ! m.loadError ) bindMembershipPage( m );
+	}
+
+	function bindMembershipPage( m ) {
+		const d = m.full;
+		const canEdit = !! ( d.can && d.can.edit );
+		const isCur = () => state.memberPage === m && state.route === 'membership';
+		const on = ( id, fn ) => { const el = $( '#' + id ); if ( el ) el.addEventListener( 'click', fn ); };
+		const reload = () => api( `minn-admin/v1/wcm/members/${ m.id }` ).then( ( model ) => { if ( isCur() ) membershipAdopt( m, model ); } ).catch( ( e ) => toast( e.message, true ) );
+
+		if ( canEdit ) {
+			membershipComboSpecs( d ).forEach( ( spec ) => {
+				const input = $( '#' + spec.id );
+				const wrap = input && input.closest( '.minn-ac' );
+				if ( ! wrap ) return;
+				bindAutocomplete( wrap, spec.options.map( ( [ value, label ] ) => ( { value, label } ) ), { strict: true, value: spec.value, onPick: () => sync() } );
+			} );
+			[ 'minn-wcm-start', 'minn-wcm-end' ].forEach( ( id ) => {
+				const el = $( '#' + id );
+				if ( el ) bindDatePicker( el, () => sync(), { dateOnly: true, marks: false } );
+			} );
+			on( 'minn-wcm-noend', () => {
+				const el = $( '#minn-wcm-end' );
+				if ( ! el ) return;
+				el.dataset.dp = '';
+				el.value = '';
+				sync();
+			} );
+		}
+
+		// Dirty bar: the line is drawn at the first bind, when the form is
+		// exactly the model that arrived.
+		const bar = $( '#minn-wcm-savebar' );
+		if ( m.clean == null ) m.clean = membershipFingerprint();
+		const sync = () => { if ( bar ) bar.hidden = membershipFingerprint() === m.clean; };
+		sync();
+		const body = bar && bar.parentElement;
+		if ( body ) {
+			[ 'input', 'change' ].forEach( ( ev ) => body.addEventListener( ev, sync ) );
+			body.addEventListener( 'click', () => setTimeout( sync, 0 ) );
+		}
+		on( 'minn-wcm-discard', () => {
+			if ( ! m.loaded ) return;
+			m.full = JSON.parse( JSON.stringify( m.loaded ) );
+			m.clean = null;
+			renderMembershipPage();
+		} );
+		on( 'minn-wcm-save', async () => {
+			const btn = $( '#minn-wcm-save' );
+			const start = ( $( '#minn-wcm-start' ) || {} ).dataset ? ( $( '#minn-wcm-start' ).dataset.dp || '' ) : '';
+			const end = ( $( '#minn-wcm-end' ) || {} ).dataset ? ( $( '#minn-wcm-end' ).dataset.dp || '' ) : '';
+			const body = {
+				plan_id: parseInt( pcomboValue( 'minn-wcm-plan', String( d.plan ? d.plan.id : 0 ) ), 10 ) || 0,
+				status: pcomboValue( 'minn-wcm-status', d.status ),
+				start_date: start.slice( 0, 10 ),
+				end_date: end.slice( 0, 10 ),
+			};
+			if ( ! body.start_date ) {
+				toast( __( 'A membership needs a start date.' ), true );
+				return;
+			}
+			if ( btn ) btn.disabled = true;
+			try {
+				const res = await api( `minn-admin/v1/wcm/members/${ m.id }`, { method: 'POST', body: JSON.stringify( body ) } );
+				toast( ( res && res.message ) || __( 'Membership saved.' ) );
+				if ( isCur() && res && res.model ) membershipAdopt( m, res.model );
+			} catch ( e ) {
+				toast( e.message, true );
+				if ( btn ) btn.disabled = false;
+			}
+		} );
+
+		// Notes: the composer posts through the adapter's note route, which
+		// answers with the fresh list, so the card repaints without a refetch.
+		const notify = $( '#minn-wcm-note-notify' );
+		if ( notify ) notify.addEventListener( 'click', () => {
+			const onNow = notify.getAttribute( 'aria-checked' ) !== 'true';
+			notify.setAttribute( 'aria-checked', String( onNow ) );
+			notify.classList.toggle( 'on', onNow );
+		} );
+		on( 'minn-wcm-note-add', async () => {
+			const ta = $( '#minn-wcm-new-note' );
+			const note = ( ( ta && ta.value ) || '' ).trim();
+			if ( ! note ) { toast( __( 'Write a note first' ), true ); return; }
+			const add = $( '#minn-wcm-note-add' );
+			if ( add ) add.disabled = true;
+			try {
+				const res = await api( `minn-admin/v1/wcm/members/${ m.id }/notes`, { method: 'POST', body: JSON.stringify( { note, notify: !! ( notify && notify.getAttribute( 'aria-checked' ) === 'true' ) } ) } );
+				toast( ( res && res.message ) || __( 'Note added.' ) );
+				if ( isCur() && res && Array.isArray( res.notes ) ) {
+					m.full.notes = res.notes;
+					m.loaded.notes = JSON.parse( JSON.stringify( res.notes ) );
+					renderMembershipPage();
+				}
+			} catch ( e ) {
+				toast( e.message, true );
+				if ( add ) add.disabled = false;
+			}
+		} );
+		$$( '[data-wcmnotedel]' ).forEach( ( btn ) => btn.addEventListener( 'click', async () => {
+			const nid = btn.dataset.wcmnotedel;
+			btn.disabled = true;
+			try {
+				const res = await api( `minn-admin/v1/wcm/members/${ m.id }/notes/${ nid }`, { method: 'DELETE' } );
+				toast( ( res && res.message ) || __( 'Note deleted.' ) );
+				if ( isCur() && res && Array.isArray( res.notes ) ) {
+					m.full.notes = res.notes;
+					m.loaded.notes = JSON.parse( JSON.stringify( res.notes ) );
+					renderMembershipPage();
+				}
+			} catch ( e ) {
+				toast( e.message, true );
+				btn.disabled = false;
+			}
+		} ) );
+
+		// Sidebar: the member, their other plans, and links out to the records
+		// this membership came from.
+		on( 'minn-wcm-open-customer', () => {
+			const mem = d.member || {};
+			const parts = String( mem.name || '' ).split( ' ' );
+			openCustomerModal( { id: mem.id, email: mem.email || '', first_name: parts[ 0 ] || '', last_name: parts.slice( 1 ).join( ' ' ) } );
+		} );
+		on( 'minn-wcm-open-order', () => { if ( d.order ) { setPageReturn( 'memberships/' + m.id, __( 'Membership' ) ); go( 'orders/' + d.order.id ); } } );
+		on( 'minn-wcm-open-product', () => { if ( d.product ) { setPageReturn( 'memberships/' + m.id, __( 'Membership' ) ); go( 'products/' + d.product.id ); } } );
+		on( 'minn-wcm-open-sub', () => { if ( d.subscription ) { setPageReturn( 'memberships/' + m.id, __( 'Membership' ) ); go( 'subscriptions/' + d.subscription.id ); } } );
+		$$( '[data-wcmopen]' ).forEach( ( btn ) => btn.addEventListener( 'click', () => go( 'memberships/' + btn.dataset.wcmopen ) ) );
+
+		on( 'minn-wcm-transfer-toggle', () => {
+			const box = $( '#minn-wcm-transfer' );
+			if ( ! box ) return;
+			box.hidden = ! box.hidden;
+			if ( ! box.hidden ) { const inp = $( '#minn-wcm-transfer-user' ); if ( inp ) inp.focus( { preventScroll: true } ); }
+		} );
+		on( 'minn-wcm-transfer-go', async () => {
+			const inp = $( '#minn-wcm-transfer-user' );
+			const user = ( ( inp && inp.value ) || '' ).trim();
+			if ( ! user ) { toast( __( 'Type the new member\'s email address or username.' ), true ); return; }
+			const btn = $( '#minn-wcm-transfer-go' );
+			if ( btn ) btn.disabled = true;
+			try {
+				const res = await api( `minn-admin/v1/wcm/members/${ m.id }/transfer`, { method: 'POST', body: JSON.stringify( { user } ) } );
+				toast( ( res && res.message ) || __( 'Membership transferred.' ) );
+				await reload();
+			} catch ( e ) {
+				toast( e.message, true );
+				if ( btn ) btn.disabled = false;
+			}
+		} );
+
+		const addPlan = $( '#minn-wcm-addplan' );
+		if ( addPlan ) {
+			const avail = ( d.availablePlans || [] );
+			bindAutocomplete( addPlan.closest( '.minn-ac' ), avail.map( ( p ) => ( { value: String( p.id ), label: p.name } ) ), { strict: true, value: String( avail[ 0 ].id ) } );
+			on( 'minn-wcm-addplan-go', async () => {
+				const planId = parseInt( pcomboValue( 'minn-wcm-addplan', String( avail[ 0 ].id ) ), 10 );
+				const btn = $( '#minn-wcm-addplan-go' );
+				if ( btn ) btn.disabled = true;
+				try {
+					const res = await api( 'minn-admin/v1/wcm/members', { method: 'POST', body: JSON.stringify( { customer: d.member.login || d.member.email, plan_id: planId } ) } );
+					toast( ( res && res.message ) || __( 'Membership granted.' ) );
+					if ( res && res.id ) go( 'memberships/' + res.id );
+					else await reload();
+				} catch ( e ) {
+					toast( e.message, true );
+					if ( btn ) btn.disabled = false;
+				}
+			} );
+		}
+
+		// The ⋯ menu carries the verbs that change state in one click.
+		const more = $( '#minn-wcm-more' );
+		if ( more ) more.addEventListener( 'click', () => {
+			const r = more.getBoundingClientRect();
+			const verb = ( path, okMsg ) => async () => {
+				try {
+					const res = await api( `minn-admin/v1/wcm/members/${ m.id }/${ path }`, { method: 'POST' } );
+					toast( ( res && res.message ) || okMsg );
+					await reload();
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			};
+			const entries = [];
+			if ( canEdit && d.pausable ) entries.push( { label: __( 'Pause membership' ), run: verb( 'pause', __( 'Paused.' ) ) } );
+			if ( canEdit && d.resumable ) entries.push( { label: __( 'Resume membership' ), run: verb( 'resume', __( 'Resumed.' ) ) } );
+			if ( canEdit && d.cancellable ) entries.push( { label: __( 'Cancel membership' ), danger: true, run: () => {
+				if ( ! window.confirm( __( 'Cancel this membership? The member loses access now, and a cancelled membership can only be renewed, not resumed.' ) ) ) return;
+				verb( 'cancel', __( 'Cancelled.' ) )();
+			} } );
+			if ( d.can && d.can.delete ) entries.push( { label: __( 'Delete membership' ), danger: true, run: async () => {
+				if ( ! window.confirm( __( 'Delete this membership permanently? Its notes go with it. To end access but keep the record, cancel it instead.' ) ) ) return;
+				try {
+					const res = await api( `minn-admin/v1/wcm/members/${ m.id }`, { method: 'DELETE' } );
+					toast( ( res && res.message ) || __( 'Membership deleted.' ) );
+					go( 'woocommerce-memberships' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} } );
+			if ( ! entries.length ) entries.push( { label: __( 'No actions available' ), run: () => {} } );
+			openMinnMenu( r.left, r.bottom + 4, entries );
+		} );
 	}
 
 	/* ===== Boot ===== */

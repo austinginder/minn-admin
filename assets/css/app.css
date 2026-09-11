@@ -3363,6 +3363,24 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 }
 /* display:flex would beat the hidden attribute on its own. */
 .minn-psavebar[hidden] { display: none; }
+
+/* WooCommerce Memberships record page (/memberships/{id}) */
+.minn-wcm-page .minn-linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: none; }
+.minn-wcm-page .minn-linkish:hover { text-decoration: underline; }
+.minn-wcm-date-note { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.minn-wcm-member { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; min-width: 0; }
+.minn-wcm-member .minn-user-row-avatar { width: 52px; height: 52px; font-size: 20px; flex: none; }
+.minn-wcm-member-text { min-width: 0; }
+.minn-wcm-member-name { font-weight: 600; font-size: 15px; }
+.minn-wcm-member-mail { display: block; font-size: 13px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.minn-wcm-plans { display: flex; flex-direction: column; gap: 6px; }
+.minn-wcm-plan-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.minn-wcm-plan-row.current { background: var(--panel2); border-color: var(--border2); }
+.minn-wcm-plan-name { font-size: 13.5px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.minn-wcm-note-del { margin-inline-start: auto; width: 22px; height: 22px; font-size: 13px; }
+.minn-wcm-transfer { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+/* An explicit display on the fields box would defeat [hidden]. */
+.minn-wcm-transfer[hidden] { display: none; }
 .minn-psavebar-note { font-size: 13px; color: var(--text2); margin-inline-end: auto; }
 /* The product Images card reuses the island tile grid, inline instead of in a
    modal: the page has the room, and it saves with the rest of the form. */
