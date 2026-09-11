@@ -422,7 +422,7 @@
 	}
 
 	async function apiRes( path, opts = {} ) {
-		const url = /^https?:/.test( path ) ? path : B.restUrl + path.replace( /^\//, '' );
+		const url = restUrlFor( path );
 		// The REST nonce goes to this site and nowhere else. Routes reach here
 		// from descriptor registries that third-party code can populate, and
 		// fetch sends headers cross-origin regardless of credentials mode, so a
@@ -478,6 +478,18 @@
 
 	async function api( path, opts = {} ) {
 		return ( await apiRes( path, opts ) ).json();
+	}
+
+	// A REST route's full URL. With plain permalinks the base is
+	// index.php?rest_route=/ and already carries a query string, so the
+	// route's own "?" must continue it with "&": glued as-is, WordPress reads
+	// rest_route as "/wp/v2/posts?context=edit" and answers 404 to every
+	// request. Absolute URLs pass through untouched.
+	function restUrlFor( path ) {
+		if ( /^https?:/.test( path ) ) return path;
+		path = String( path ).replace( /^\//, '' );
+		if ( ( B.restUrl || '' ).includes( '?' ) ) path = path.replace( '?', '&' );
+		return B.restUrl + path;
 	}
 
 	// Plugin activate/deactivate rides admin-ajax, NOT wp/v2/plugins: an
@@ -23986,7 +23998,7 @@
 
 	const migRest = async ( route, body ) => {
 		const W = B.wpMigrate;
-		const r = await fetch( B.restUrl + W.restBase + '/' + route, {
+		const r = await fetch( restUrlFor( W.restBase + '/' + route ), {
 			method: 'POST', credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': B.nonce },
 			body: JSON.stringify( body || {} ),
@@ -46538,7 +46550,7 @@
 			const fd = new FormData();
 			fd.append( 'file', file );
 			const xhr = new XMLHttpRequest();
-			xhr.open( 'POST', B.restUrl + 'wp/v2/media' );
+			xhr.open( 'POST', restUrlFor( 'wp/v2/media' ) );
 			xhr.setRequestHeader( 'X-WP-Nonce', B.nonce );
 			xhr.withCredentials = true;
 			xhr.upload.addEventListener( 'progress', ( e ) => {
@@ -47880,7 +47892,7 @@
 			if ( localNetTimer ) localNetWrite();
 			const ed = state.editor;
 			if ( ed && ed.id && ed.lockState === 'held' && navigator.sendBeacon ) {
-				navigator.sendBeacon( `${ B.restUrl }minn-admin/v1/posts/${ ed.id }/unlock?_wpnonce=${ encodeURIComponent( B.nonce ) }`, '' );
+				navigator.sendBeacon( restUrlFor( `minn-admin/v1/posts/${ ed.id }/unlock?_wpnonce=${ encodeURIComponent( B.nonce ) }` ), '' );
 			}
 		} );
 
