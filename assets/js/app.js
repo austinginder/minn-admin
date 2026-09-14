@@ -7859,6 +7859,16 @@
 			param: 'type',
 			choices: () => PRODUCT_TYPE_CHOICES,
 		},
+		plan: {
+			label: __( 'Plan' ),
+			type: 'lookup',
+			param: 'plan',
+			placeholder: __( 'Search membership plans…' ),
+			search: ( q ) => api( `minn-admin/v1/wcm/plans?search=${ encodeURIComponent( q ) }&per_page=8` )
+				.then( ( r ) => ( ( r && r.items ) || [] ).map( ( row ) => ( { value: row.id, label: row.name } ) ) ),
+			resolve: ( id ) => api( `minn-admin/v1/wcm/plans/${ id }` )
+				.then( ( row ) => ( row && row.id ? String( row.name || '' ) : '' ) ),
+		},
 		featured: { label: __( 'Featured' ), type: 'choices', param: 'featured', choices: FILTER_YES_NO },
 		onsale: { label: __( 'On sale' ), type: 'choices', param: 'on_sale', choices: FILTER_YES_NO },
 	};
@@ -13980,9 +13990,26 @@
 			orders: null,
 			// Subscriptions strip only when WCS is active.
 			subscriptions: B.wcs ? null : [],
+			// Memberships strip only where the memberships surface is on.
+			memberships: surfaceById( 'woocommerce-memberships' ) ? null : [],
 			loading: true,
 		};
 		renderOverlays();
+		if ( surfaceById( 'woocommerce-memberships' ) ) {
+			api( `minn-admin/v1/wcm/members?customer=${ id }&per_page=10` )
+				.then( ( r ) => {
+					if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
+						state.modal.memberships = { items: ( r && r.items ) || [], total: ( r && r.total ) || 0 };
+						renderOverlays();
+					}
+				} )
+				.catch( () => {
+					if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
+						state.modal.memberships = { items: [], total: 0 };
+						renderOverlays();
+					}
+				} );
+		}
 		api( `wc/v3/customers/${ id }?_fields=${ CUSTOMER_LIST_FIELDS }` )
 			.then( ( full ) => {
 				if ( ! state.modal || state.modal.type !== 'customer' || state.modal.customer.id !== id ) return;
@@ -41746,6 +41773,16 @@
 									</button>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No orders for this customer.' ) ) }</div>`
 							) }
 						</div>
+						${ m.memberships && ! Array.isArray( m.memberships ) ? `
+						<div class="minn-media-edit">
+							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Memberships' ) ) }</div>
+							${ ( m.memberships.items || [] ).length ? ( m.memberships.items || [] ).map( ( mem ) => `
+								<button type="button" class="minn-sub-order-row" data-open-membership="${ mem.id }">
+									<span>${ esc( mem.plan || '' ) }</span>
+									${ surfacePill( mem.status ) }
+									<span>${ esc( mem.expires ? sprintf( /* translators: %s: relative time. */ __( 'Expires %s' ), timeAgo( mem.expires ) ) : __( 'No end date' ) ) }</span>
+								</button>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No memberships for this customer.' ) ) }</div>` }
+						</div>` : ( m.memberships == null ? `<div class="minn-media-edit"><div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Memberships' ) ) }</div><div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading memberships…' ) ) }</div></div>` : '' ) }
 						${ B.wcs ? `
 						<div class="minn-media-edit">
 							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Subscriptions' ) ) }</div>
@@ -42828,6 +42865,14 @@
 					if ( ! id ) return;
 					closeModal();
 					go( 'orders/' + id );
+				} )
+			);
+			$$( '[data-open-membership]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const id = parseInt( btn.dataset.openMembership, 10 );
+					if ( ! id ) return;
+					closeModal();
+					go( 'memberships/' + id );
 				} )
 			);
 			$$( '[data-open-sub]' ).forEach( ( btn ) =>
@@ -47900,13 +47945,27 @@
 								</div>`;
 
 		const o = d.order;
+		const subForm = B.wcs && d.can && d.can.edit ? `
+									<div id="minn-wcm-sub-form" hidden style="margin-top:10px;">
+										<div class="minn-field-label">${ esc( __( 'Subscription ID' ) ) }</div>
+										<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+											<input class="minn-input" id="minn-wcm-sub-id" inputmode="numeric" style="max-width:140px;" value="${ d.subscription ? esc( String( d.subscription.id ) ) : '' }">
+											<button type="button" class="minn-btn-primary" id="minn-wcm-sub-link">${ esc( d.subscription ? __( 'Move link' ) : __( 'Link' ) ) }</button>
+											${ d.subscription ? `<button type="button" class="minn-btn-soft danger" id="minn-wcm-sub-unlink">${ esc( __( 'Unlink' ) ) }</button>` : '' }
+											<button type="button" class="minn-btn-soft" id="minn-wcm-sub-cancel">${ esc( __( 'Cancel' ) ) }</button>
+										</div>
+										<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'The subscription decides whether this membership stays active and when it renews. Linking works the way the Edit Link control on the WooCommerce screen does, and the subscription does not have to belong to this member: a gifted subscription is the buyer\'s.' ) ) }</div>
+									</div>` : '';
 		const billing = ! o && ! d.product && ! d.subscription ? `
-								<div class="minn-toggle-desc">${ esc( __( 'This membership was granted by hand, so there is no order or subscription behind it.' ) ) }</div>` : `
+								<div class="minn-toggle-desc">${ esc( __( 'This membership was granted by hand, so there is no order or subscription behind it.' ) ) }${ B.wcs && d.can && d.can.edit ? ` <button type="button" class="minn-linkish" id="minn-wcm-sub-edit">${ esc( __( 'Link a subscription' ) ) }</button>` : '' }</div>${ subForm }` : `
 								<div class="minn-modal-meta" style="padding:0;">
 									${ o ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Order' ) ) }</span><span><button type="button" class="minn-linkish" id="minn-wcm-open-order">#${ esc( o.number ) }</button>${ o.total ? ` · ${ esc( o.total ) }` : '' }${ o.status ? ` <span class="minn-status ${ esc( ORDER_STATUS_STYLE && ORDER_STATUS_STYLE[ o.status ] ? ORDER_STATUS_STYLE[ o.status ] : 'draft' ) }">${ esc( statusLabel( o.status ) ) }</span>` : '' }</span></div>` : '' }
 									${ d.product ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Product' ) ) }</span><span><button type="button" class="minn-linkish" id="minn-wcm-open-product">${ esc( d.product.name ) }</button></span></div>` : '' }
-									${ d.subscription ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Subscription' ) ) }</span><span><button type="button" class="minn-linkish" id="minn-wcm-open-sub">#${ esc( String( d.subscription.id ) ) }</button>${ d.subscription.status ? ` <span class="minn-status ${ esc( SUB_STATUS_STYLE[ d.subscription.status ] || 'draft' ) }">${ esc( subStatusLabel( d.subscription.status ) ) }</span>` : '' }</span></div>` : '' }
-									${ B.wcs && ! d.subscription && ( o || d.product ) ? `<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'Not linked to a subscription.' ) ) }</div>` : '' }
+									${ d.subscription ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Subscription' ) ) }</span><span><button type="button" class="minn-linkish" id="minn-wcm-open-sub">#${ esc( String( d.subscription.id ) ) }</button>${ d.subscription.status ? ` <span class="minn-status ${ esc( SUB_STATUS_STYLE[ d.subscription.status ] || 'draft' ) }">${ esc( subStatusLabel( d.subscription.status ) ) }</span>` : '' }${ d.can && d.can.edit ? ` <button type="button" class="minn-linkish" id="minn-wcm-sub-edit" style="margin-left:6px;">${ esc( __( 'Change' ) ) }</button>` : '' }</span></div>` : '' }
+									${ d.subscription && d.subscription.next_payment ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Next payment' ) ) }</span><span>${ esc( dpPretty( d.subscription.next_payment.slice( 0, 10 ) ) ) }</span></div>` : '' }
+									${ d.subscription && d.subscription.last_renewal ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Last renewal' ) ) }</span><span><button type="button" class="minn-linkish" id="minn-wcm-open-renewal">#${ esc( d.subscription.last_renewal.number ) }</button>${ d.subscription.last_renewal.status ? ` <span class="minn-status ${ esc( ORDER_STATUS_STYLE && ORDER_STATUS_STYLE[ d.subscription.last_renewal.status ] ? ORDER_STATUS_STYLE[ d.subscription.last_renewal.status ] : 'draft' ) }">${ esc( statusLabel( d.subscription.last_renewal.status ) ) }</span>` : '' }${ d.subscription.last_renewal.date ? ` · ${ esc( timeAgo( d.subscription.last_renewal.date ) ) }` : '' }</span></div>` : '' }
+									${ B.wcs && ! d.subscription && ( o || d.product ) ? `<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'Not linked to a subscription.' ) ) }${ d.can && d.can.edit ? ` <button type="button" class="minn-linkish" id="minn-wcm-sub-edit">${ esc( __( 'Link one' ) ) }</button>` : '' }</div>` : '' }
+									${ subForm }
 								</div>`;
 
 		const notes = `
@@ -48176,6 +48235,38 @@
 		on( 'minn-wcm-open-order', () => { if ( d.order ) { setPageReturn( 'memberships/' + m.id, __( 'Membership' ) ); go( 'orders/' + d.order.id ); } } );
 		on( 'minn-wcm-open-product', () => { if ( d.product ) { setPageReturn( 'memberships/' + m.id, __( 'Membership' ) ); go( 'products/' + d.product.id ); } } );
 		on( 'minn-wcm-open-sub', () => { if ( d.subscription ) { setPageReturn( 'memberships/' + m.id, __( 'Membership' ) ); go( 'subscriptions/' + d.subscription.id ); } } );
+		on( 'minn-wcm-open-renewal', () => { const lr = d.subscription && d.subscription.last_renewal; if ( lr ) { setPageReturn( 'memberships/' + m.id, __( 'Membership' ) ); go( 'orders/' + lr.id ); } } );
+		on( 'minn-wcm-sub-edit', () => {
+			const box = $( '#minn-wcm-sub-form' );
+			if ( ! box ) return;
+			box.hidden = false;
+			const inp = $( '#minn-wcm-sub-id' );
+			if ( inp ) { inp.focus( { preventScroll: true } ); inp.select(); }
+		} );
+		on( 'minn-wcm-sub-cancel', () => { const box = $( '#minn-wcm-sub-form' ); if ( box ) box.hidden = true; } );
+		const relink = async ( subscriptionId ) => {
+			const btns = [ $( '#minn-wcm-sub-link' ), $( '#minn-wcm-sub-unlink' ) ].filter( Boolean );
+			btns.forEach( ( b ) => { b.disabled = true; } );
+			try {
+				const res = await api( `minn-admin/v1/wcm/members/${ m.id }/subscription`, { method: 'POST', body: JSON.stringify( { subscription_id: subscriptionId } ) } );
+				toast( subscriptionId ? __( 'Subscription linked.' ) : __( 'Subscription unlinked.' ) );
+				if ( res && res.id && isCur() ) membershipAdopt( m, res );
+				else await reload();
+			} catch ( e ) {
+				toast( e.message, true );
+				btns.forEach( ( b ) => { b.disabled = false; } );
+			}
+		};
+		on( 'minn-wcm-sub-link', () => {
+			const inp = $( '#minn-wcm-sub-id' );
+			const id = parseInt( ( ( inp && inp.value ) || '' ).trim(), 10 );
+			if ( ! ( id > 0 ) ) { toast( __( 'Type the subscription ID to link.' ), true ); if ( inp ) inp.focus( { preventScroll: true } ); return; }
+			relink( id );
+		} );
+		on( 'minn-wcm-sub-unlink', () => {
+			if ( ! window.confirm( __( 'Unlink this membership from its subscription? The membership keeps its status, but nothing will renew or expire it automatically any more.' ) ) ) return;
+			relink( 0 );
+		} );
 		$$( '[data-wcmopen]' ).forEach( ( btn ) => btn.addEventListener( 'click', () => go( 'memberships/' + btn.dataset.wcmopen ) ) );
 
 		on( 'minn-wcm-transfer-toggle', () => {
@@ -48493,7 +48584,10 @@
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'All time' ) ) }</span><span>${ esc( String( counts.total ) ) }</span></div>
 									${ ( counts.byStatus || [] ).map( ( r ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( r.label ) }</span><span>${ esc( String( r.value ) ) }</span></div>` ).join( '' ) }
 								</div>
-								${ d.membersUrl ? `<div class="minn-pimg-foot" style="margin-top:10px;"><a class="minn-btn-soft" href="${ esc( d.membersUrl ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'Members in WooCommerce' ) ) }</a></div>` : '' }` ) }`;
+								<div class="minn-pimg-foot" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+									<a class="minn-btn-primary" href="${ esc( PATH_MODE ? BASE + 'woocommerce-memberships?plan=' + d.id : location.pathname + '?plan=' + d.id + '#/woocommerce-memberships' ) }">${ esc( __( 'View members' ) ) }</a>
+									${ d.membersUrl ? `<a class="minn-btn-soft" href="${ esc( d.membersUrl ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'Members in WooCommerce' ) ) }</a>` : '' }
+								</div>` ) }`;
 
 		return `
 					<div class="minn-order-body">

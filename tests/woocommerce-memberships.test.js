@@ -226,6 +226,58 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			200 === model.status && Array.isArray( model.body.plans ) && model.body.plans.length >= 2 && Array.isArray( model.body.statuses ) && Array.isArray( model.body.memberships ),
 			JSON.stringify( Object.keys( model.body || {} ) ) );
 
+		// The member's card opens the customer modal, which lists every
+		// membership the person holds beside their orders and subscriptions.
+		await page.click( '#minn-wcm-open-customer' );
+		await page.waitForSelector( '[data-open-membership]', { timeout: 20000 } ).catch( () => null );
+		const custRows = await page.$$eval( '[data-open-membership]', ( els ) => els.map( ( e ) => e.textContent.replace( /\s+/g, ' ' ).trim() ) ).catch( () => [] );
+		t.check( 'the customer modal lists the member\'s memberships with plan and status', custRows.some( ( r ) => /Minn Gold/.test( r ) && /Active/.test( r ) ), JSON.stringify( custRows ) );
+		await page.click( '[data-open-membership]' );
+		await page.waitForFunction( ( id ) => location.pathname.endsWith( '/memberships/' + id ), pageId, { timeout: 10000 } ).catch( () => null );
+		t.check( 'a membership row in the customer modal opens the membership page', page.url().endsWith( '/memberships/' + pageId ), page.url() );
+
+		// The subscription link: the record page links, moves and unlinks a
+		// subscription the way the plugin's own Edit Link control does. Needs
+		// a real subscription on the site; skipped honestly without one.
+		const trial = ( ( plans.body || {} ).items || [] ).find( ( p ) => p.slug === 'minn-trial' );
+		const subsList = await api( 'wc/v3/subscriptions?per_page=1&status=active&_fields=id' ).catch( () => ( { body: [] } ) );
+		const subId = Array.isArray( subsList.body ) && subsList.body[ 0 ] ? subsList.body[ 0 ].id : 0;
+		if ( subId && created.body && created.body.id ) {
+			await page.goto( BASE + '/minn-admin/memberships/' + created.body.id, { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '#minn-wcm-sub-edit', { timeout: 20000 } );
+			await page.click( '#minn-wcm-sub-edit' );
+			await page.fill( '#minn-wcm-sub-id', String( subId ) );
+			await page.click( '#minn-wcm-sub-link' );
+			await page.waitForSelector( '#minn-wcm-open-sub', { timeout: 20000 } ).catch( () => null );
+			const linked = await api( `minn-admin/v1/wcm/members/${ created.body.id }` );
+			t.check( 'linking a subscription from the page stores the plugin\'s own link',
+				!! ( linked.body && linked.body.subscription && linked.body.subscription.id === subId ), JSON.stringify( linked.body && linked.body.subscription ) );
+			const bogus = await post( `minn-admin/v1/wcm/members/${ created.body.id }/subscription`, { subscription_id: 999999999 } );
+			t.check( 'linking to a subscription that does not exist is refused', 400 === bogus.status, String( bogus.status ) );
+			await page.click( '#minn-wcm-sub-edit' );
+			await page.click( '#minn-wcm-sub-unlink' );
+			await page.waitForFunction( () => ! document.querySelector( '#minn-wcm-open-sub' ), null, { timeout: 20000 } ).catch( () => null );
+			const unlinked = await api( `minn-admin/v1/wcm/members/${ created.body.id }` );
+			t.check( 'unlinking from the page removes the link', ! ( unlinked.body && unlinked.body.subscription ), JSON.stringify( unlinked.body && unlinked.body.subscription ) );
+		} else {
+			console.log( 'SKIP subscription link checks: no active subscription on this site.' );
+		}
+
+		// Plans carry a count per status and a way into their members.
+		const planList = await api( 'minn-admin/v1/wcm/plans' );
+		const goldRow = ( planList.body.items || [] ).find( ( p ) => p.slug === 'minn-gold' ) || {};
+		t.check( 'plan rows count members per status', [ 'total', 'members', 'free_trial', 'expired', 'cancelled', 'pending', 'paused' ].every( ( k ) => typeof goldRow[ k ] === 'number' ), JSON.stringify( goldRow ) );
+		const byPlan = await api( `minn-admin/v1/wcm/members?plan=${ trial ? trial.id : 0 }&per_page=50` );
+		t.check( 'the members list narrows to one plan', 200 === byPlan.status && ( byPlan.body.items || [] ).length >= 1 && ( byPlan.body.items || [] ).every( ( r ) => /Minn Trial/.test( r.plan ) ), JSON.stringify( ( byPlan.body.items || [] ).map( ( r ) => r.plan ) ) );
+		await page.goto( BASE + '/minn-admin/woocommerce-memberships?plan=' + ( trial ? trial.id : 0 ), { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => document.querySelectorAll( '.minn-table-row' ).length > 0 && /Minn Trial/.test( document.body.textContent ), null, { timeout: 20000 } ).catch( () => null );
+		const narrowed = await page.$$eval( '.minn-table-row', ( els ) => els.map( ( e ) => e.textContent.replace( /\s+/g, ' ' ) ) );
+		t.check( 'a plan in the URL narrows the list on load and names the plan in the filter', narrowed.length >= 1 && narrowed.every( ( r ) => /Minn Trial/.test( r ) ) && /Plan/.test( await page.evaluate( () => document.body.textContent ) ), JSON.stringify( narrowed ).slice( 0, 200 ) );
+		await page.goto( BASE + '/minn-admin/membership-plans/' + ( gold ? gold.id : 0 ), { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( 'a.minn-btn-primary' ) ].some( ( e ) => /View members/.test( e.textContent ) ), null, { timeout: 20000 } ).catch( () => null );
+		const viewHref = await page.$$eval( 'a.minn-btn-primary', ( els ) => { const a = els.find( ( e ) => /View members/.test( e.textContent ) ); return a ? a.getAttribute( 'href' ) : ''; } );
+		t.check( 'the plan page offers View members into the narrowed list', new RegExp( 'woocommerce-memberships\\?plan=' + ( gold ? gold.id : 0 ) ).test( viewHref ), viewHref );
+
 		// The plan page: create through the page with a content rule picked
 		// from the lookup, verify the plugin stored it, edit and drop a rule
 		// keeping the other's id, open from the Plans row, delete from the menu.

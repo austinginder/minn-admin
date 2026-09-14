@@ -374,6 +374,13 @@ function minn_admin_wcm_plan_row( $plan ) {
 		'length'   => (string) $plan->get_human_access_length(),
 		'members'  => (int) $plan->get_memberships_count( minn_admin_wcm_active_statuses() ),
 		'total'    => (int) $plan->get_memberships_count( 'any' ),
+		// One column per status the plugin's own Members screen filters by,
+		// so a plan reads as a row of its member counts, not one number.
+		'free_trial' => (int) $plan->get_memberships_count( 'free_trial' ),
+		'pending'    => (int) $plan->get_memberships_count( 'pending' ),
+		'paused'     => (int) $plan->get_memberships_count( 'paused' ),
+		'expired'    => (int) $plan->get_memberships_count( 'expired' ),
+		'cancelled'  => (int) $plan->get_memberships_count( 'cancelled' ),
 		'products' => count( (array) $plan->get_product_ids() ),
 		'rules'    => $rules,
 		'status'   => $post ? (string) $post->post_status : '',
@@ -523,6 +530,25 @@ function minn_admin_wcm_page_model( $m ) {
 			if ( $sid > 0 && function_exists( 'wcs_get_subscription' ) ) {
 				$sub          = wcs_get_subscription( $sid );
 				$subscription = array( 'id' => $sid, 'status' => $sub ? (string) $sub->get_status() : '' );
+				if ( $sub ) {
+					// The subscription is what decides whether this member
+					// stays a member, so the page shows what a shop manager
+					// checks first: when it bills next, and how the last
+					// renewal went. A failed renewal is the usual reason a
+					// membership quietly goes on hold.
+					$next = $sub->get_date( 'next_payment' );
+					$subscription['next_payment'] = $next && '0' !== (string) $next ? gmdate( 'c', strtotime( $next . ' UTC' ) ) : '';
+					$subscription['customer_id']  = (int) $sub->get_user_id();
+					$last = $sub->get_last_order( 'all', array( 'renewal' ) );
+					if ( $last instanceof WC_Order ) {
+						$subscription['last_renewal'] = array(
+							'id'     => (int) $last->get_id(),
+							'number' => (string) $last->get_order_number(),
+							'status' => (string) $last->get_status(),
+							'date'   => $last->get_date_created() ? $last->get_date_created()->date( 'c' ) : '',
+						);
+					}
+				}
 			}
 		}
 	} catch ( \Throwable $e ) {
@@ -1253,7 +1279,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'statuses'          => $statuses,
 				// customer narrows on the member; product on the product that
 				// granted the membership; date on when it was created.
-				'kinds'             => array( 'status', 'date', 'customer', 'product' ),
+				'kinds'             => array( 'status', 'date', 'customer', 'product', 'plan' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'member', 'label' => __( 'Member', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.3fr)' ),
@@ -1339,8 +1365,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'name', 'label' => __( 'Plan', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
 				array( 'key' => 'access', 'label' => __( 'Access', 'minn-admin' ), 'width' => 'minmax(0,1fr)' ),
 				array( 'key' => 'length', 'label' => __( 'Length', 'minn-admin' ), 'width' => 'minmax(0,1fr)' ),
-				array( 'key' => 'members', 'label' => __( 'Active members', 'minn-admin' ), 'format' => 'num', 'width' => '130px' ),
-				array( 'key' => 'total', 'label' => __( 'All time', 'minn-admin' ), 'format' => 'num', 'width' => '90px' ),
+				array( 'key' => 'total', 'label' => __( 'Members', 'minn-admin' ), 'format' => 'num', 'width' => '90px' ),
+				array( 'key' => 'members', 'label' => __( 'Active', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
+				array( 'key' => 'free_trial', 'label' => __( 'Free trial', 'minn-admin' ), 'format' => 'num', 'width' => '90px' ),
+				array( 'key' => 'expired', 'label' => __( 'Expired', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
+				array( 'key' => 'cancelled', 'label' => __( 'Cancelled', 'minn-admin' ), 'format' => 'num', 'width' => '90px' ),
+				array( 'key' => 'pending', 'label' => __( 'Pending', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
+				array( 'key' => 'paused', 'label' => __( 'Paused', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
 				array( 'key' => 'products', 'label' => __( 'Products', 'minn-admin' ), 'format' => 'num', 'width' => '90px' ),
 				array( 'key' => 'rules', 'label' => __( 'Rules', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
@@ -1369,6 +1400,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 			'actions'   => array(
+				// The members list, narrowed to this plan: the same page a
+				// count on the plugin's own summary would open.
+				array(
+					'label' => __( 'View members', 'minn-admin' ),
+					'href'  => home_url( '/minn-admin/woocommerce-memberships?plan={id}' ),
+				),
 				array(
 					'label' => __( 'Duplicate', 'minn-admin' ),
 					'route' => 'minn-admin/v1/wcm/plans/{id}/duplicate',
@@ -1653,7 +1690,7 @@ add_action( 'rest_api_init', function () {
 	// consistent. Every route records who did it in the transition note.
 	$transition = function ( $verb ) {
 		return function ( $request ) use ( $verb ) {
-			$m = minn_admin_wcm_load( (int) $request['id'], 'edit_post' );
+			$m = minn_admin_wcm_load( (int) Minn_Admin::path_param( $request ), 'edit_post' );
 			if ( is_wp_error( $m ) ) {
 				return $m;
 			}
@@ -1745,6 +1782,59 @@ add_action( 'rest_api_init', function () {
 				'message' => $notify ? __( 'Note added and emailed to the member.', 'minn-admin' ) : __( 'Note added.', 'minn-admin' ),
 				'notes'   => minn_admin_wcm_notes( $m ),
 			) );
+		},
+	) );
+
+	// Link the membership to a subscription, move it to another one, or
+	// unlink it: the plugin's own Edit Link control on its membership screen.
+	// Its handler is mirrored exactly, ownership included: it never checks that
+	// the subscription belongs to the member, because a gifted subscription is
+	// owned by the buyer while the membership belongs to the recipient.
+	register_rest_route( 'minn-admin/v1', '/wcm/members/(?P<id>\d+)/subscription', array(
+		'methods'             => 'POST',
+		'permission_callback' => $permission,
+		'callback'            => function ( WP_REST_Request $request ) {
+			$id = (int) Minn_Admin::path_param( $request, 'id' );
+			$m  = minn_admin_wcm_load( $id, 'edit_post' );
+			if ( is_wp_error( $m ) ) {
+				return $m;
+			}
+			if ( ! class_exists( 'WC_Subscriptions' ) || ! class_exists( 'WC_Memberships_Integration_Subscriptions_User_Membership' ) || ! function_exists( 'wcs_get_subscription' ) ) {
+				return new WP_Error( 'unsupported', __( 'WooCommerce Subscriptions is not active on this site.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$integration = wc_memberships()->get_integrations_instance()->get_subscriptions_instance();
+			$linked      = new WC_Memberships_Integration_Subscriptions_User_Membership( get_post( $id ) );
+			$old         = (int) $linked->get_subscription_id();
+			$new         = (int) $request->get_param( 'subscription_id' );
+			try {
+				if ( $new > 0 ) {
+					$sub = wcs_get_subscription( $new );
+					if ( ! $sub ) {
+						/* translators: %d: subscription id. */
+						return new WP_Error( 'not_found', sprintf( __( 'Subscription #%d was not found.', 'minn-admin' ), $new ), array( 'status' => 400 ) );
+					}
+					if ( $new !== $old ) {
+						if ( ! $linked->set_subscription_id( $new ) ) {
+							return new WP_Error( 'link_failed', __( 'The subscription could not be linked.', 'minn-admin' ), array( 'status' => 500 ) );
+						}
+						$trial_end = $integration && method_exists( $integration, 'get_subscription_event_date' ) ? $integration->get_subscription_event_date( $sub, 'trial_end' ) : null;
+						if ( $trial_end ) {
+							$linked->set_free_trial_end_date( $trial_end );
+						}
+					}
+				} elseif ( $old > 0 ) {
+					$integration->unlink_membership( $linked, $old );
+				} else {
+					return new WP_Error( 'not_linked', __( 'This membership is not linked to a subscription.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'link_failed', __( 'The subscription link could not be changed.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			if ( $integration && method_exists( $integration, 'prune_membership_link_cache' ) ) {
+				$integration->prune_membership_link_cache( $linked );
+			}
+			$fresh = wc_memberships_get_user_membership( $id );
+			return rest_ensure_response( $fresh ? minn_admin_wcm_page_model( $fresh ) : array( 'ok' => true ) );
 		},
 	) );
 
