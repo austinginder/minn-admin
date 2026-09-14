@@ -566,7 +566,7 @@ Rules of the road:
 | `itemsKey` / `totalKey` | Where items/total live in the response body. Omit both for standard WP collections (plain array + `X-WP-Total` header) |
 | `tabs` | Either `{ "route": "...", "valueKey": "id", "labelKey": "title" }` to build tabs from a REST call, or `{ "param": "status", "static": [["sent","Sent"],["failed","Failed"]] }` for fixed tabs sent as a query param. `allLabel` names the first tab |
 | `viewLabel` | Names this collection in the view switcher (with `manage`) and in the search placeholder |
-| `columns` | Array of `{ key, label, format, altKey, width, utc }`. `key` supports dot paths (`initiator_data.user_login`); `altKey` is a fallback key read when the primary is empty. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `num` (right-aligned numeric), `entry-summary` (for form-entry rows whose answers live under numeric field-id keys: renders the first few answer values as the row's summary — see any bundled forms adapter's list). `width` overrides the column's grid width; defaults are sized by format. For `ago`, bare datetimes parse as site-local: set `utc: true` for UTC-stored timestamps (or use a key ending in `_gmt`, or emit a trailing `Z`). Since v0.18.0 a column may also carry `sort`: the `{by}` token your route understands for that column (see `sortQuery` below). Columns without `sort` keep plain headers; without any sort pick, list order stays whatever your route returns, so declare your default in `query` (newest-first is the convention) |
+| `columns` | Array of `{ key, label, format, altKey, width, utc }`. `key` supports dot paths (`initiator_data.user_login`); `altKey` is a fallback key read when the primary is empty. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `num` (right-aligned numeric), `id` (`#123`, same cell as Users — not a count), `entry-summary` (for form-entry rows whose answers live under numeric field-id keys: renders the first few answer values as the row's summary — see any bundled forms adapter's list). `width` overrides the column's grid width; defaults are sized by format. For `ago`, bare datetimes parse as site-local: set `utc: true` for UTC-stored timestamps (or use a key ending in `_gmt`, or emit a trailing `Z`). Since v0.18.0 a column may also carry `sort`: the `{by}` token your route understands for that column (see `sortQuery` below). Columns without `sort` keep plain headers; without any sort pick, list order stays whatever your route returns, so declare your default in `query` (newest-first is the convention) |
 | `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `sectionsRoute` (server-built display model, an alternative to `detailRoute` + `labels`, below), `labels` (resolve numeric field-id keys to human labels — the per-form fields case: `{ "route": "your/v1/forms/{form_id}/fields", "valueKey": "id", "labelKey": "label", "itemsKey": "fields" }`. `{placeholders}` in the route fill from the item, Minn maps `valueKey` → `labelKey` over the response array — or over `itemsKey` inside it — and caches the map per route URL. Fixed-schema items skip `labels` entirely: snake_case response keys already render as words), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
 | `actions` | Buttons in the detail modal **and** the list-row ⋯ / right-click menu: `{ label, method, route, body, confirm, danger, when, href, fields, settingsItem, list, download }` — each key detailed in [the `actions` section](#collectionactions--verbs-on-rows-and-in-the-detail-modal) below |
 | `sortQuery` | *(since v0.18.0)* A query-string template with `{by}` and `{dir}` (e.g. `orderby={by}&direction={dir}`). Columns carrying a `sort` token render clickable headers: first click sorts (numeric and `ago` columns start descending, everything else ascending), a repeat click flips direction, and the template is appended to the list request. Omit it and headers stay plain |
@@ -827,6 +827,9 @@ Piece by piece:
   Coexistence with Gravity Forms (or anyone) is exactly that: your plugin becomes one of
   the providers behind the single **Forms** nav item, never a second sidebar row. The
   family also switches entry details to the contact-card layout (below) automatically.
+  Minn prepends an `id` column (`#123`, matching Users) on `collection` and `manage`
+  so you do not declare it yourself. A column you already mark `format: 'id'` is left
+  alone. Ninja's `seq` number is a different value and stays.
 - **Dynamic tabs** pair with `{tab}` in the route: the tabs route returns your forms
   (array, or any object whose values are the forms), `valueKey` fills `{tab}`,
   `labelKey` names the tab, and `allRoute` serves the All tab. (Static `param` tabs and
@@ -848,7 +851,8 @@ Piece by piece:
   titled with it, subtitled "Entry #id".
 - **`manage`** is the Forms companion view: the Entries/Forms switcher every forms
   plugin wants. Keep it a list (title, entry count, maybe an activate toggle via a
-  `when`-pair of actions); the form **builder** stays your own UI, linked honestly with
+  `when`-pair of actions); the ID column is prepended with the Entries list. The form
+  **builder** stays your own UI, linked honestly with
   an `href` action (`'label' => 'Edit form ↗'`). Minn will not reimplement it.
 - **Export** is an `href` action pointing at your own download endpoint, with
   `{field}` placeholders filled from the item (put a nonce or signed token in the item

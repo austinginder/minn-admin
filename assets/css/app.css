@@ -3737,7 +3737,7 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 /* ===== Users ===== */
 .minn-user-cols { grid-template-columns: 40px 52px 1.2fr 1.4fr 130px 110px 40px; }
 .minn-user-cols.has-cb { grid-template-columns: 34px 40px 52px 1.2fr 1.4fr 130px 110px 40px; }
-.minn-user-id { font-variant-numeric: tabular-nums; color: var(--text3); }
+.minn-user-id, .minn-row-id { font-variant-numeric: tabular-nums; color: var(--text3); }
 
 /* Users → Role defaults */
 .minn-users-tabs { margin-bottom: 14px; }

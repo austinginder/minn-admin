@@ -28,7 +28,8 @@ class Minn_Admin_Surfaces {
 	public static function all() {
 		if ( null === self::$all_cache ) {
 			$surfaces        = apply_filters( 'minn_admin_surfaces', array() );
-			self::$all_cache = is_array( $surfaces ) ? $surfaces : array();
+			$surfaces        = is_array( $surfaces ) ? $surfaces : array();
+			self::$all_cache = self::with_family_id_columns( $surfaces );
 		}
 		return self::$all_cache;
 	}
@@ -793,6 +794,52 @@ class Minn_Admin_Surfaces {
 		return $surface;
 	}
 
+	/**
+	 * Forms lists show the same dedicated ID column Users does.
+	 *
+	 * Every family:forms collection and manage view already carries `id` on
+	 * the row (routes bind {id} to it). Painting that as a column in each
+	 * adapter would be the same line copied across the family. Minn prepends
+	 * it here so a third-party forms surface gets it too. Adapters that
+	 * already declare format `id` are left alone. Ninja's `seq` column is a
+	 * different number and stays. Extra `views` (Gravity notifications) are
+	 * not Entries or Forms, so they are untouched.
+	 *
+	 * @param array $surfaces Registry keyed by id.
+	 * @return array
+	 */
+	private static function with_family_id_columns( $surfaces ) {
+		$col = array(
+			'key'    => 'id',
+			'label'  => __( 'ID', 'minn-admin' ),
+			'format' => 'id',
+			'width'  => '40px',
+		);
+		foreach ( $surfaces as $id => $s ) {
+			if ( ! is_array( $s ) || ( isset( $s['family'] ) ? $s['family'] : '' ) !== 'forms' ) {
+				continue;
+			}
+			foreach ( array( 'collection', 'manage' ) as $view ) {
+				if ( empty( $s[ $view ]['columns'] ) || ! is_array( $s[ $view ]['columns'] ) ) {
+					continue;
+				}
+				$has = false;
+				foreach ( $s[ $view ]['columns'] as $c ) {
+					if ( is_array( $c ) && isset( $c['format'] ) && 'id' === $c['format'] ) {
+						$has = true;
+						break;
+					}
+				}
+				if ( $has ) {
+					continue;
+				}
+				array_unshift( $s[ $view ]['columns'], $col );
+			}
+			$surfaces[ $id ] = $s;
+		}
+		return $surfaces;
+	}
+
 	/* ===== Integration diagnostics (System page) ==========================
 	 *
 	 * A live registry view of everything hooked into Minn, with each entry
@@ -812,7 +859,7 @@ class Minn_Admin_Surfaces {
 	const FILTER_KEYS     = array( 'label', 'options', 'query', 'param', 'json', 'route', 'valueKey', 'labelKey', 'allLabel' );
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc', 'sort' );
-	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'entry-summary' );
+	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'id', 'entry-summary' );
 	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href', 'fields', 'settingsItem', 'list', 'download' );
 	const CREATE_KEYS     = array( 'label', 'route', 'method', 'fields', 'defaults' );
 	const EDIT_KEYS       = array( 'route', 'method', 'preserve', 'fields' );
