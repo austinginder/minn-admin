@@ -821,6 +821,24 @@ function minn_admin_bsf_message_code( $message ) {
 }
 
 /**
+ * Whether the plugin (or theme) a BSF product ships as is active right now.
+ *
+ * @param string $component 'dir/file.php' or 'theme:slug'.
+ * @return bool
+ */
+function minn_admin_bsf_component_active( $component ) {
+	$component = (string) $component;
+	if ( 0 === strpos( $component, 'theme:' ) ) {
+		$slug = substr( $component, 6 );
+		return $slug === get_stylesheet() || $slug === get_template();
+	}
+	if ( ! function_exists( 'is_plugin_active' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+	return is_plugin_active( $component );
+}
+
+/**
  * Activate one BSF product through bsf-core's own activation flow.
  *
  * bsf_process_license_activation() is the complete vendor path: it calls
@@ -1942,7 +1960,10 @@ function minn_admin_license_default_providers() {
 				) ) );
 			},
 		);
-		if ( $bsf_actionable ) {
+		// The shared library can act on any registered product, but an inactive
+		// product's row draws Turn on alone, like every other inactive component,
+		// so its actions wait until the product itself is running.
+		if ( $bsf_actionable && minn_admin_bsf_component_active( $bsf_product['component'] ) ) {
 			$provider['activate'] = function ( $secret ) use ( $bsf_id ) {
 				return minn_admin_bsf_activate( $bsf_id, $secret );
 			};
