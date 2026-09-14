@@ -143,10 +143,28 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				cb.click();
 			}
 		}, needle );
-		await selectByText( 'gf workflow wf-one' );
-		await selectByText( 'gf workflow wf-two' );
-		await page.waitForSelector( '.minn-bulkbar', { timeout: 10000 } );
-		t.check( 'bulk bar counts the selection', await page.$eval( '.minn-bulk-count', ( el ) => el.textContent === '2 selected' ) );
+		// The list soft-reloads after an action; rows checked mid-reload are
+		// replaced and the selection evaporates. Wait for the table to settle
+		// (no busy marker, rows present) before each pass, and re-select if
+		// the count never reached what was asked for.
+		const listSettled = () => page.waitForFunction( () => {
+			const tbl = document.querySelector( '.minn-table' );
+			return !! tbl && ! tbl.classList.contains( 'minn-busy' ) && !! document.querySelector( '[data-scheck]' );
+		}, null, { timeout: 30000 } );
+		const selectRows = async ( ...needles ) => {
+			for ( let attempt = 0; attempt < 3; attempt++ ) {
+				await listSettled();
+				for ( const n of needles ) await selectByText( n );
+				const ok = await page.waitForFunction( ( want ) => {
+					const c = document.querySelector( '.minn-bulk-count' );
+					return !! c && c.textContent.trim() === want;
+				}, `${ needles.length } selected`, { timeout: 8000 } ).then( () => true ).catch( () => false );
+				if ( ok ) return true;
+				await page.evaluate( () => document.querySelectorAll( '[data-scheck]:checked' ).forEach( ( cb ) => cb.click() ) ).catch( () => {} );
+			}
+			return false;
+		};
+		t.check( 'bulk bar counts the selection', await selectRows( 'gf workflow wf-one', 'gf workflow wf-two' ) );
 		await page.evaluate( () => {
 			const btn = [ ...document.querySelectorAll( '[data-sbulk]' ) ].find( ( b ) => b.textContent.trim() === 'Star' );
 			btn.click();
@@ -160,10 +178,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'bulk star persisted on the eligible entry', String( e1.is_starred ) === '1' );
 
 		/* ===== Bulk trash ===== */
-		await page.waitForSelector( '[data-scheck]', { timeout: 20000 } );
-		await selectByText( 'gf workflow wf-two' );
-		await selectByText( 'gf workflow wf-three' );
-		await page.waitForSelector( '.minn-bulkbar', { timeout: 10000 } );
+		t.check( 'bulk bar counts the trash selection', await selectRows( 'gf workflow wf-two', 'gf workflow wf-three' ) );
 		page.once( 'dialog', ( d ) => d.accept() );
 		await page.evaluate( () => {
 			const btn = [ ...document.querySelectorAll( '[data-sbulk]' ) ].find( ( b ) => b.textContent.trim() === 'Trash' );
