@@ -40,7 +40,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		s.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 	} );
 	await page.waitForTimeout( 300 );
-	await page.click( '[data-xfilter="active"]' );
+	// Click a pill that is NOT already selected: the handler returns early on
+	// the current one (no re-render), and the shared login storage can carry a
+	// previous suite's filter, so a fixed pill sometimes proved nothing.
+	await page.click( '.minn-tabs [data-xfilter]:not(.active)' );
+	await page.waitForFunction( () => document.activeElement && document.activeElement.id !== 'minn-ext-search' || true, null, { timeout: 2000 } ).catch( () => null );
 	await page.waitForTimeout( 500 );
 	t.check( 'Filter-pill re-render does not re-steal focus', ( await focusedId() ) !== 'minn-ext-search' );
 

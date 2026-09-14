@@ -47034,6 +47034,15 @@
 	document.addEventListener( 'focusin', ( e ) => {
 		if ( e.target && e.target.matches && e.target.matches( '#minn-view .minn-toolbar-search' ) ) {
 			focusedSearchEl = e.target;
+		} else {
+			// Focus moved somewhere else on purpose (a filter pill, a row, a
+			// button). If that element is destroyed by the same re-render that
+			// rebuilds the search box, focus lands on <body> exactly as it does
+			// when the box itself was orphaned, and the restore below would put
+			// the caret back into a field the person had just left. Forget the
+			// box the moment they leave it, so only a caret that was IN the box
+			// when the view swapped is put back.
+			focusedSearchEl = null;
 		}
 	} );
 	function maybeFocusSearch() {
