@@ -48273,6 +48273,9 @@
 		WCM_RULE_TYPES.forEach( ( [ t ] ) => {
 			rules[ t ] = ( ( d.rules || {} )[ t ] || [] ).map( ( r ) => ( {
 				id: r.id || '',
+				locked: !! r.locked,
+				target_label: r.target_label || '',
+				exclude_trial: r.access_schedule_exclude_trial === true,
 				target: r.target || ( r.content_type + ':' + r.content_type_name ),
 				objects: ( r.objects || [] ).map( ( o ) => ( { id: o.id, label: o.label } ) ),
 				schedule: Object.assign( { type: 'immediate', amount: 1, period: 'months' }, r.access_schedule || {} ),
@@ -48299,6 +48302,9 @@
 		const rules = {};
 		WCM_RULE_TYPES.forEach( ( [ t ] ) => {
 			rules[ t ] = ( f.rules[ t ] || [] ).map( ( r ) => {
+				// A rule this user may not change goes back as its id only;
+				// the server keeps the stored rule.
+				if ( r.locked && r.id ) return { id: r.id };
 				const out = { target: r.target, object_ids: r.objects.map( ( o ) => o.id ) };
 				if ( r.id ) out.id = r.id;
 				if ( t !== 'purchasing_discount' ) {
@@ -48371,6 +48377,21 @@
 		const periods = ( d.vocab || {} ).periods || [];
 		const key = `${ type }-${ i }`;
 		const isTax = String( r.target ).indexOf( 'taxonomy:' ) === 0;
+		if ( r.locked ) {
+			// The plugin's own editor shows these read-only too: the rule's
+			// content type is one this user cannot edit.
+			return `
+								<div class="minn-wcm-rule minn-wcm-rule-locked" data-wcmrule="${ esc( type ) }" data-wcmidx="${ i }">
+									<div class="minn-wcm-rule-head">
+										<div><div class="minn-field-label">${ esc( __( 'Applies to' ) ) }</div><div>${ esc( r.target_label || targetLabel ) }</div></div>
+									</div>
+									<div>
+										<div class="minn-field-label">${ isTax ? esc( __( 'Terms' ) ) : esc( __( 'Items' ) ) }</div>
+										<div class="minn-chips">${ r.objects.length ? r.objects.map( ( o ) => `<span class="minn-chip">${ esc( o.label ) }</span>` ).join( '' ) : esc( sprintf( /* translators: %s: content type name, e.g. Pages. */ __( 'All %s' ), r.target_label || targetLabel ) ) }</div>
+									</div>
+									<p class="minn-form-hint">${ esc( __( 'Only someone who can edit this content type can change this rule.' ) ) }</p>
+								</div>`;
+		}
 		return `
 								<div class="minn-wcm-rule" data-wcmrule="${ esc( type ) }" data-wcmidx="${ i }">
 									<div class="minn-wcm-rule-head">

@@ -630,25 +630,66 @@ function minn_admin_wcm_rule_targets( $rule_type ) {
 	try {
 		if ( 'content_restriction' === $rule_type ) {
 			foreach ( (array) WC_Memberships_Admin_Membership_Plan_Rules::get_valid_post_types_for_content_restriction_rules() as $name => $pt ) {
-				$out[] = array( 'post_type:' . $name, $pt->labels->name );
+				if ( minn_admin_wcm_target_editable( 'post_type', $name ) ) {
+					$out[] = array( 'post_type:' . $name, $pt->labels->name );
+				}
 			}
 			foreach ( (array) WC_Memberships_Admin_Membership_Plan_Rules::get_valid_taxonomies_for_content_restriction_rules() as $name => $tx ) {
-				$out[] = array( 'taxonomy:' . $name, $tx->labels->name );
+				if ( minn_admin_wcm_target_editable( 'taxonomy', $name ) ) {
+					$out[] = array( 'taxonomy:' . $name, $tx->labels->name );
+				}
 			}
 		} else {
 			$product = get_post_type_object( 'product' );
-			$out[]   = array( 'post_type:product', $product ? $product->labels->name : __( 'Products', 'minn-admin' ) );
+			if ( minn_admin_wcm_target_editable( 'post_type', 'product' ) ) {
+				$out[] = array( 'post_type:product', $product ? $product->labels->name : __( 'Products', 'minn-admin' ) );
+			}
 			$taxes   = 'product_restriction' === $rule_type
 				? WC_Memberships_Admin_Membership_Plan_Rules::get_valid_taxonomies_for_product_restriction_rules()
 				: WC_Memberships_Admin_Membership_Plan_Rules::get_valid_taxonomies_for_purchasing_discounts_rules();
 			foreach ( (array) $taxes as $name => $tx ) {
-				$out[] = array( 'taxonomy:' . $name, $tx->labels->name );
+				if ( minn_admin_wcm_target_editable( 'taxonomy', $name ) ) {
+					$out[] = array( 'taxonomy:' . $name, $tx->labels->name );
+				}
 			}
 		}
 	} catch ( \Throwable $e ) {
 		unset( $e );
 	}
 	return $out;
+}
+
+/**
+ * Whether the current user may author rules for a content type: the test
+ * the plugin's own rule editor applies before it stores a new rule (post
+ * types need edit_posts plus edit_others_posts, taxonomies manage_terms plus
+ * edit_terms), and the one its wc_memberships_edit_rule meta cap applies
+ * to existing rules. A shop manager therefore cannot fence off, rewrite or
+ * republish an LMS course or a forum it could not edit itself.
+ *
+ * @param string $content_type post_type | taxonomy.
+ * @param string $name         Post type or taxonomy name.
+ * @return bool
+ */
+function minn_admin_wcm_target_editable( $content_type, $name ) {
+	if ( 'taxonomy' === $content_type ) {
+		$tx = get_taxonomy( $name );
+		return $tx && current_user_can( $tx->cap->manage_terms ) && current_user_can( $tx->cap->edit_terms );
+	}
+	$pt = get_post_type_object( $name );
+	return $pt && current_user_can( $pt->cap->edit_posts ) && current_user_can( $pt->cap->edit_others_posts );
+}
+
+/**
+ * Whether the current user may change or remove an existing rule (the
+ * plugin's wc_memberships_edit_rule meta cap; a rule whose content type no
+ * longer exists is locked the way the plugin locks it).
+ *
+ * @param WC_Memberships_Membership_Plan_Rule $rule Rule.
+ * @return bool
+ */
+function minn_admin_wcm_rule_editable( $rule ) {
+	return (bool) current_user_can( 'wc_memberships_edit_rule', $rule->get_id() );
 }
 
 /**
@@ -671,7 +712,9 @@ function minn_admin_wcm_rule_objects( $content_type, $name, $ids ) {
 			$label = $term && ! is_wp_error( $term ) ? $term->name : '';
 		} else {
 			$post  = get_post( $id );
-			$label = $post ? get_the_title( $post ) : '';
+			// Only name posts of the rule's own type the caller may read;
+			// anything else shows as a bare id rather than leaking a title.
+			$label = $post && $post->post_type === $name && current_user_can( 'read_post', $post->ID ) ? get_the_title( $post ) : '';
 		}
 		$out[] = array( 'id' => $id, 'label' => '' !== $label ? $label : '#' . $id );
 	}
@@ -696,6 +739,16 @@ function minn_admin_wcm_rule_model( $rule ) {
 	$data['object_ids'] = array_map( 'intval', (array) $data['object_ids'] );
 	$data['objects']    = minn_admin_wcm_rule_objects( $data['content_type'], $data['content_type_name'], $data['object_ids'] );
 	$data['target']     = $data['content_type'] . ':' . $data['content_type_name'];
+	// The serializer never carries the Subscriptions "exclude free trial"
+	// flag; without it a save would rebuild the rule with trial included.
+	if ( 'purchasing_discount' !== $rule->get_rule_type() && method_exists( $rule, 'is_access_schedule_excluding_trial' ) ) {
+		$data['access_schedule_exclude_trial'] = (bool) $rule->is_access_schedule_excluding_trial();
+	}
+	$data['locked'] = ! minn_admin_wcm_rule_editable( $rule );
+	// A locked rule's type is not in the vocabulary the page offers, so it
+	// carries its own label.
+	$obj = 'taxonomy' === $data['content_type'] ? get_taxonomy( $data['content_type_name'] ) : get_post_type_object( $data['content_type_name'] );
+	$data['target_label'] = $obj && isset( $obj->labels->name ) ? (string) $obj->labels->name : (string) $data['content_type_name'];
 	if ( isset( $data['discount_amount'] ) ) {
 		$data['discount_amount'] = (string) $data['discount_amount'];
 	}
@@ -832,10 +885,21 @@ function minn_admin_wcm_plan_model( $plan ) {
  * @param array $rules_in { type => [ rule, ... ] } from the request.
  * @return array|WP_Error
  */
-function minn_admin_wcm_plan_rules_clean( $rules_in ) {
+function minn_admin_wcm_plan_rules_clean( $rules_in, $plan = null ) {
 	$out = array( 'content_restriction' => array(), 'product_restriction' => array(), 'purchasing_discount' => array() );
 	if ( ! is_array( $rules_in ) ) {
 		return $out;
+	}
+	// Existing rules this user may not change (the plugin's own edit meta
+	// cap) ride through untouched: the page sends them back as it got them,
+	// and apply() keeps the stored rule instead of rebuilding it.
+	$locked = array();
+	if ( $plan ) {
+		foreach ( (array) $plan->get_rules( 'all', true ) as $rule ) {
+			if ( $rule instanceof WC_Memberships_Membership_Plan_Rule && ! minn_admin_wcm_rule_editable( $rule ) ) {
+				$locked[ (string) $rule->get_id() ] = true;
+			}
+		}
 	}
 	$periods = array( 'days', 'weeks', 'months', 'years' );
 	foreach ( $out as $type => $_ ) {
@@ -846,6 +910,10 @@ function minn_admin_wcm_plan_rules_clean( $rules_in ) {
 			if ( ! is_array( $r ) ) {
 				continue;
 			}
+			if ( ! empty( $r['id'] ) && is_string( $r['id'] ) && isset( $locked[ sanitize_key( $r['id'] ) ] ) ) {
+				$out[ $type ][] = array( 'id' => sanitize_key( $r['id'] ), 'locked' => true );
+				continue;
+			}
 			$target = (string) ( isset( $r['target'] ) ? $r['target'] : '' );
 			if ( '' === $target && isset( $r['content_type'], $r['content_type_name'] ) ) {
 				$target = $r['content_type'] . ':' . $r['content_type_name'];
@@ -853,7 +921,7 @@ function minn_admin_wcm_plan_rules_clean( $rules_in ) {
 			if ( ! in_array( $target, $targets, true ) ) {
 				return new WP_Error( 'minn_wcm_rule', sprintf(
 					/* translators: %d: 1-based position of the rule in its list. */
-					__( 'Rule %d targets a content type this plan cannot restrict.', 'minn-admin' ),
+					__( 'Rule %d targets a content type this plan cannot restrict, or one you cannot edit.', 'minn-admin' ),
 					(int) $i + 1
 				), array( 'status' => 400 ) );
 			}
@@ -878,6 +946,11 @@ function minn_admin_wcm_plan_rules_clean( $rules_in ) {
 					}
 					$clean['access_schedule']['amount'] = $amount;
 					$clean['access_schedule']['period'] = $period;
+				}
+				// Sent explicitly = set it; absent = keep what the stored
+				// rule has (apply() copies it from the existing rule).
+				if ( array_key_exists( 'access_schedule_exclude_trial', $r ) ) {
+					$clean['access_schedule_exclude_trial'] = rest_sanitize_boolean( $r['access_schedule_exclude_trial'] );
 				}
 			}
 			if ( 'product_restriction' === $type ) {
@@ -925,15 +998,37 @@ function minn_admin_wcm_plan_rules_apply( $plan, $rules ) {
 			$existing[] = (string) $rule->get_id();
 		}
 	}
-	$keep      = array();
+	$keep = array();
+	// Rules this user may not change stay exactly as stored, whether the page
+	// echoed them back (locked entries) or not.
+	foreach ( (array) $plan->get_rules( 'all', true ) as $rule ) {
+		if ( $rule instanceof WC_Memberships_Membership_Plan_Rule && ! minn_admin_wcm_rule_editable( $rule ) ) {
+			$keep[] = (string) $rule->get_id();
+		}
+	}
 	$collected = array();
 	try {
 		foreach ( $rules as $type => $list ) {
 			foreach ( $list as $data ) {
+				if ( ! empty( $data['locked'] ) ) {
+					continue;
+				}
 				$rule = $builder->build( $plan, $type, $data );
-				if ( ! empty( $data['id'] ) && in_array( $data['id'], $existing, true ) ) {
+				$prev = null;
+				if ( ! empty( $data['id'] ) && in_array( $data['id'], $existing, true ) && ! in_array( $data['id'], $keep, true ) ) {
 					$rule->set_id( $data['id'] );
 					$keep[] = $data['id'];
+					$prev   = $plan->get_rule( $data['id'] );
+				}
+				if ( 'purchasing_discount' !== $type && method_exists( $rule, 'set_access_schedule_exclude_trial' ) ) {
+					$exclude = array_key_exists( 'access_schedule_exclude_trial', $data )
+						? (bool) $data['access_schedule_exclude_trial']
+						: ( $prev && method_exists( $prev, 'is_access_schedule_excluding_trial' ) && $prev->is_access_schedule_excluding_trial() );
+					if ( $exclude ) {
+						$rule->set_access_schedule_exclude_trial();
+					} else {
+						$rule->set_access_schedule_include_trial();
+					}
 				}
 				$collected[] = $rule;
 			}
@@ -1947,7 +2042,20 @@ add_action( 'rest_api_init', function () {
 			if ( ! in_array( (string) $in['status'], array( 'publish', 'draft' ), true ) ) {
 				return new WP_Error( 'minn_wcm_plan', __( 'A plan is either published or a draft.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
+			// Publishing is its own capability on the plan post type.
+			if ( 'publish' === $in['status'] && 'publish' !== get_post_status( $id ) && ! current_user_can( 'publish_post', $id ) ) {
+				return new WP_Error( 'minn_wcm_plan', __( 'You are not allowed to publish this plan.', 'minn-admin' ), array( 'status' => 403 ) );
+			}
 			$post_update['post_status'] = (string) $in['status'];
+		}
+		// Validate the rules before anything is written, so a refused rule
+		// does not leave a renamed or republished plan behind.
+		$rules = null;
+		if ( array_key_exists( 'rules', $in ) ) {
+			$rules = minn_admin_wcm_plan_rules_clean( $in['rules'], $plan );
+			if ( is_wp_error( $rules ) ) {
+				return $rules;
+			}
 		}
 		if ( count( $post_update ) > 1 ) {
 			$r = wp_update_post( $post_update, true );
@@ -1959,11 +2067,7 @@ add_action( 'rest_api_init', function () {
 		if ( is_wp_error( $ok ) ) {
 			return $ok;
 		}
-		if ( array_key_exists( 'rules', $in ) ) {
-			$rules = minn_admin_wcm_plan_rules_clean( $in['rules'] );
-			if ( is_wp_error( $rules ) ) {
-				return $rules;
-			}
+		if ( null !== $rules ) {
 			$ok = minn_admin_wcm_plan_rules_apply( $plan, $rules );
 			if ( is_wp_error( $ok ) ) {
 				return $ok;
@@ -2065,10 +2169,14 @@ add_action( 'rest_api_init', function () {
 			if ( ! is_wp_error( $ok ) ) {
 				$rules = array();
 				foreach ( $model['rules'] as $type => $list ) {
-					$rules[ $type ] = array_map( function ( $r ) {
-						unset( $r['id'] ); // a copy gets its own rule ids
+					// A copy gets its own rule ids, and only the rules this
+					// user could author (the plugin skips the rest on save).
+					$rules[ $type ] = array_values( array_map( function ( $r ) {
+						unset( $r['id'] );
 						return $r;
-					}, $list );
+					}, array_filter( $list, function ( $r ) {
+						return empty( $r['locked'] );
+					} ) ) );
 				}
 				$clean = minn_admin_wcm_plan_rules_clean( $rules );
 				if ( ! is_wp_error( $clean ) ) {
@@ -2148,7 +2256,8 @@ add_action( 'rest_api_init', function () {
 					$items[] = array( 'id' => (int) $term->term_id, 'label' => (string) $term->name );
 				}
 			} else {
-				$posts = get_posts( array( 'post_type' => $name, 'post_status' => array( 'publish', 'private', 'draft', 'pending', 'future' ), 'numberposts' => 20, 's' => $q, 'orderby' => 'title', 'order' => 'ASC' ) );
+				// The plugin's own picker offers published content only.
+				$posts = get_posts( array( 'post_type' => $name, 'post_status' => 'publish', 'numberposts' => 20, 's' => $q, 'orderby' => 'title', 'order' => 'ASC' ) );
 				foreach ( (array) $posts as $post ) {
 					$items[] = array( 'id' => (int) $post->ID, 'label' => (string) get_the_title( $post ) );
 				}
