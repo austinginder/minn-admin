@@ -39,8 +39,12 @@ const { launch, login, reporter } = require( './helpers' );
 	// navigation several items at a time.
 	t.check( 'options pages register exactly one surface', surfaces.length === 1,
 		JSON.stringify( surfaces.map( ( s ) => s.id ) ) );
+	// Tabs carry their page's name ("Site Options · Header Bits") whenever
+	// another plugin's options page is merged into the same item, so match
+	// the child title at the end of the label rather than the whole label.
+	const hasTab = ( name ) => menu.tabs.some( ( l ) => l === name || l.endsWith( ' · ' + name ) );
 	t.check( 'a parent menu\'s children are tabs on it',
-		menu.tabs.includes( 'Header Bits' ) && menu.tabs.includes( 'Footer Bits' ), JSON.stringify( menu.tabs ) );
+		hasTab( 'Header Bits' ) && hasTab( 'Footer Bits' ), JSON.stringify( menu.tabs ) );
 	t.check( 'no page registers a surface of its own',
 		! surfaces.some( ( s ) => /Header Bits|Footer Bits/.test( s.label ) ), JSON.stringify( surfaces.map( ( s ) => s.label ) ) );
 
@@ -85,7 +89,7 @@ const { launch, login, reporter } = require( './helpers' );
 
 	// Resolve tab ids by LABEL: positions shift as a site registers more
 	// options pages into the shared strip.
-	const tabIdFor = ( label ) => ( menu.tabIds.find( ( x ) => x.label === label ) || {} ).id;
+	const tabIdFor = ( label ) => ( menu.tabIds.find( ( x ) => x.label === label || x.label.endsWith( ' · ' + label ) ) || {} ).id;
 	const h = await drive( tabIdFor( 'Header Bits' ), 'field_minn_oplab_h_title', 'Menu probe H' );
 	t.check( 'tab-0 write delegates to the first member page', h.got === 'Menu probe H' && h.restored, JSON.stringify( h ) );
 	const f = await drive( tabIdFor( 'Footer Bits' ), 'field_minn_oplab_f_note', 'Menu probe F' );
