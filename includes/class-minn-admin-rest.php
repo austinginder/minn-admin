@@ -768,6 +768,11 @@ class Minn_Admin_REST {
 							'type'     => 'string',
 							'required' => false,
 						),
+						'font'   => array(
+							'type'              => 'string',
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_key',
+						),
 					),
 				),
 			)
@@ -5916,6 +5921,9 @@ class Minn_Admin_REST {
 			'frontBar'     => array_key_exists( 'frontBar', $json )
 				? $json['frontBar']
 				: ( $request->has_param( 'frontBar' ) ? $request->get_param( 'frontBar' ) : $cur['frontBar'] ),
+			'font'         => array_key_exists( 'font', $json )
+				? $json['font']
+				: ( $request->has_param( 'font' ) ? $request->get_param( 'font' ) : $cur['font'] ),
 		);
 		// Legacy accent-only body (no scheme key).
 		if ( ! array_key_exists( 'scheme', $json ) && isset( $json['accent'] ) ) {
@@ -5923,6 +5931,7 @@ class Minn_Admin_REST {
 				array(
 					'defaultAdmin' => $cur['defaultAdmin'],
 					'frontBar'     => $cur['frontBar'],
+					'font'         => $cur['font'],
 				),
 				$json
 			);

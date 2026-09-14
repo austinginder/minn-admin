@@ -66,6 +66,147 @@
   --font-ui: 'Hanken Grotesk', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
+html[data-font="wordpress"] {
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  --font-mono: Consolas, Monaco, monospace;
+}
+
+/* Density skin — same switch as the typeface. wp-admin is 13px body, 40px
+   fields, 2px corners, no tracking, subpixel smoothing. Scheme colors stay;
+   light-mode help text uses core's description gray. */
+html[data-font="wordpress"] body {
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+html[data-font="wordpress"] .minn-page { padding: 20px 20px 48px; }
+html[data-font="wordpress"] .minn-topbar { height: 48px; padding: 0 16px; }
+html[data-font="wordpress"] .minn-topbar-title,
+html[data-font="wordpress"] .minn-logo-name,
+html[data-font="wordpress"] .minn-settings-title,
+html[data-font="wordpress"] .minn-panel-title,
+html[data-font="wordpress"] .minn-setup-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+html[data-font="wordpress"] .minn-logo-mark {
+  width: 24px; height: 24px; border-radius: 2px; font-size: 13px; letter-spacing: 0; font-weight: 600;
+}
+html[data-font="wordpress"] .minn-nav-label {
+  font-size: 11px; letter-spacing: 0; text-transform: none; font-weight: 600;
+}
+html[data-font="wordpress"] .minn-nav-btn {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.3;
+  min-height: 34px;
+  border-radius: 2px;
+  padding: 0 8px;
+}
+html[data-font="wordpress"] .minn-nav-btn svg { width: 20px; height: 20px; }
+html[data-font="wordpress"] .minn-nav-btn.active { font-weight: 400; }
+html[data-font="wordpress"] .minn-search-btn {
+  font-size: 13px; border-radius: 2px; padding: 6px 8px;
+}
+html[data-font="wordpress"] .minn-card { border-radius: 2px; }
+html[data-font="wordpress"] .minn-panel-pad { padding: 14px 16px; }
+html[data-font="wordpress"] .minn-input {
+  border-radius: 2px;
+  font-size: 14px;
+}
+html[data-font="wordpress"] input.minn-input {
+  padding: 0 12px;
+  min-height: 40px;
+  line-height: normal;
+}
+html[data-font="wordpress"] input.minn-input.minn-ac-input,
+html[data-font="wordpress"] select.minn-input {
+  padding: 0 12px;
+  padding-inline-end: 32px;
+  min-height: 40px;
+  line-height: 2.71428571; /* 38px inner, same as wp-admin select */
+}
+html[data-font="wordpress"] textarea.minn-input {
+  padding: 8px 12px;
+  min-height: 60px;
+  line-height: 1.42857143; /* 20px, same as wp-admin textarea */
+}
+/* wp-admin .form-wrap label: 13px, padding 2px 0, no extra margin — the
+   input sits against the label box (the ~4px you see is line-box, not gap). */
+html[data-font="wordpress"] .minn-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 0;
+  padding: 2px 0;
+  line-height: 1.4;
+}
+html[data-font="wordpress"] .minn-toggle-label { font-size: 13px; font-weight: 600; }
+html[data-font="wordpress"] .minn-side-toggles .minn-toggle-label { font-size: 13px; font-weight: 400; }
+html[data-font="wordpress"] .minn-toggle-desc,
+html[data-font="wordpress"] .minn-settings-sub,
+html[data-font="wordpress"] .minn-toggle-info .minn-toggle-desc {
+  font-size: 13px;
+}
+html[data-font="wordpress"][data-theme="light"] .minn-toggle-desc,
+html[data-font="wordpress"][data-theme="light"] .minn-settings-sub {
+  color: #646970;
+}
+html[data-font="wordpress"][data-theme="light"] .minn-field-label {
+  color: #1d2327;
+}
+html[data-font="wordpress"] .minn-btn-primary,
+html[data-font="wordpress"] .minn-btn-soft {
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 16px;
+  min-height: 40px;
+  line-height: 2.92307692; /* 38px inner, same as wp-admin .button */
+}
+html[data-font="wordpress"] .minn-comment-action {
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 12px;
+  min-height: 32px;
+  line-height: 2.30769231; /* wp-admin .button-compact */
+  display: inline-flex;
+  align-items: center;
+}
+html[data-font="wordpress"] .minn-pager-btn,
+html[data-font="wordpress"] .minn-copy-btn,
+html[data-font="wordpress"] .minn-find-btn,
+html[data-font="wordpress"] .minn-cted-setbtn,
+html[data-font="wordpress"] .minn-toast-btn,
+html[data-font="wordpress"] .minn-lic-actions button,
+html[data-font="wordpress"] .minn-load-more {
+  border-radius: 2px;
+}
+html[data-font="wordpress"] .minn-icon-btn,
+html[data-font="wordpress"] .minn-topbar-ver,
+html[data-font="wordpress"] .minn-settings-nav-item {
+  border-radius: 2px;
+}
+html[data-font="wordpress"] .minn-icon-btn { width: 30px; height: 30px; }
+html[data-font="wordpress"] .minn-topbar-sub { border-radius: 2px; font-size: 12px; }
+html[data-font="wordpress"] .minn-nav-count { border-radius: 2px; }
+html[data-font="wordpress"] .minn-kbd { border-radius: 2px; }
+html[data-font="wordpress"] .minn-new-menu,
+html[data-font="wordpress"] .minn-ac-panel {
+  border-radius: 2px;
+}
+html[data-font="wordpress"] .minn-new-menu button,
+html[data-font="wordpress"] .minn-site-switch,
+html[data-font="wordpress"] .minn-site-switch-search,
+html[data-font="wordpress"] .minn-sp-row,
+html[data-font="wordpress"] .minn-user-logout {
+  border-radius: 2px;
+}
+html[data-font="wordpress"] .minn-profile-fields { gap: 10px; }
+html[data-font="wordpress"] .minn-settings-body { gap: 18px; }
+html[data-font="wordpress"] .minn-toggle-rows { gap: 10px; }
+html[data-font="wordpress"] .minn-search-clear { border-radius: 2px; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }

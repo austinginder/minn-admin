@@ -671,7 +671,8 @@ class Minn_Admin {
 	 * Per-user Minn UI appearance. User meta key `minn_admin_appearance`.
 	 *
 	 * Shape:
-	 *   { scheme: 'minn'|…|'custom', custom: { dark: {slot: #hex…}, light: {…} } }
+	 *   { scheme: 'minn'|…|'custom', custom: { dark: {slot: #hex…}, light: {…} },
+	 *     font: 'minn'|'wordpress', defaultAdmin, frontBar }
 	 *
 	 * Scheme slots map to CSS variables (status colors stay fixed). Soft/ring
 	 * accents are derived client-side from accent.
@@ -751,6 +752,8 @@ class Minn_Admin {
 			// Front-end Minn admin bar (replaces the classic bar on the
 			// public site for this user). Opt-in only.
 			'frontBar'     => false,
+			// UI look: Minn type and density, or WordPress admin type, size, and corners.
+			'font'         => 'minn',
 		);
 	}
 
@@ -799,12 +802,17 @@ class Minn_Admin {
 	 * Normalize appearance meta / REST body. Migrates legacy {accent,custom:#hex}.
 	 *
 	 * @param mixed $raw User meta value or request params.
-	 * @return array{scheme:string,custom:array{dark:array,light:array}}
+	 * @return array{scheme:string,custom:array{dark:array,light:array},font:string,defaultAdmin:bool,frontBar:bool}
 	 */
 	public static function normalize_appearance( $raw ) {
 		$defaults = self::appearance_defaults();
 		if ( ! is_array( $raw ) ) {
 			return $defaults;
+		}
+
+		$font = isset( $raw['font'] ) ? sanitize_key( (string) $raw['font'] ) : 'minn';
+		if ( 'wordpress' !== $font ) {
+			$font = 'minn';
 		}
 
 		// Legacy v1: { accent: preset|custom, custom: '#hex' }.
@@ -831,6 +839,7 @@ class Minn_Admin {
 					'custom'       => $custom,
 					'defaultAdmin' => false,
 					'frontBar'     => false,
+					'font'         => $font,
 				);
 			}
 			if ( in_array( $accent, $ids, true ) ) {
@@ -839,6 +848,7 @@ class Minn_Admin {
 					'custom'       => $defaults['custom'],
 					'defaultAdmin' => false,
 					'frontBar'     => false,
+					'font'         => $font,
 				);
 			}
 			return $defaults;
@@ -876,6 +886,7 @@ class Minn_Admin {
 			'custom'       => $custom,
 			'defaultAdmin' => $default_admin,
 			'frontBar'     => $front_bar,
+			'font'         => $font,
 		);
 	}
 

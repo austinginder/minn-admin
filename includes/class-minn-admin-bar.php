@@ -520,11 +520,12 @@ class Minn_Admin_Bar {
 		// classic toolbar's full-width layout around this small overlay.
 		$appearance = Minn_Admin::get_user_appearance();
 		$scheme     = isset( $appearance['scheme'] ) ? $appearance['scheme'] : 'minn';
+		$font       = ( isset( $appearance['font'] ) && 'wordpress' === $appearance['font'] ) ? 'wordpress' : 'minn';
 		// The corner always ships ghosted so the mark never flashes before
 		// bar.js runs. A status chip still renders, but it waits inside the
 		// tucked bar: hover (or the corner-handoff peek) is how it appears.
 		echo '<div id="minn-cornerbar" class="minn-bar-ghost">';
-		echo '<div id="minn-bar-root" data-minn-theme="dark" data-minn-scheme="' . esc_attr( $scheme ) . '">';
+		echo '<div id="minn-bar-root" data-minn-theme="dark" data-minn-scheme="' . esc_attr( $scheme ) . '" data-minn-font="' . esc_attr( $font ) . '">';
 		if ( 'custom' === $scheme ) {
 			echo self::custom_scheme_style( $appearance );
 		}

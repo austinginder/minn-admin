@@ -10,7 +10,7 @@
 defined( 'ABSPATH' ) || exit;
 ?>
 <!DOCTYPE html>
-<html lang="<?php echo esc_attr( get_bloginfo( 'language' ) ); ?>" dir="<?php echo is_rtl() ? 'rtl' : 'ltr'; ?>" data-theme="dark">
+<html lang="<?php echo esc_attr( get_bloginfo( 'language' ) ); ?>" dir="<?php echo is_rtl() ? 'rtl' : 'ltr'; ?>" data-theme="dark" data-font="minn">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -73,6 +73,7 @@ window.MINN = <?php echo false === $minn_boot_json ? '{}' : $minn_boot_json; ?>;
 		// Legacy { accent } → scheme id.
 		var scheme = ap.scheme || ( ap.accent && ap.accent !== 'custom' ? ap.accent : ( ap.accent === 'custom' ? 'custom' : 'minn' ) );
 		root.setAttribute( 'data-scheme', scheme );
+		root.setAttribute( 'data-font', ap.font === 'wordpress' ? 'wordpress' : 'minn' );
 		root.removeAttribute( 'data-accent' );
 		var slots = ['bg','bg2','panel','panel2','hover','border','border2','text','text2','text3','accent','accent2','accentFg'];
 		var cssMap = { bg:'--bg', bg2:'--bg2', panel:'--panel', panel2:'--panel2', hover:'--hover', border:'--border', border2:'--border2', text:'--text', text2:'--text2', text3:'--text3', accent:'--accent', accent2:'--accent2', accentFg:'--accent-fg' };
