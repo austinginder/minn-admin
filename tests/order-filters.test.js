@@ -348,7 +348,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			const el = document.querySelector( '.minn-toolbar-meta' );
 			return el ? el.textContent.trim() : '';
 		} );
-		t.check( 'count label reflects the filtered total', new RegExp( '\\b' + shown + '\\b' ).test( meta ), `${ meta } vs ${ shown } rows` );
+		// The label carries the filtered TOTAL; a page shows at most 25 rows,
+		// so on a store past one page the number is allowed to exceed the rows.
+		const labelN = parseInt( ( meta.match( /\d+/ ) || [ '' ] )[ 0 ], 10 );
+		t.check( 'count label reflects the filtered total', labelN === shown || ( shown >= 25 && labelN >= shown ), `${ meta } vs ${ shown } rows` );
 	} finally {
 		for ( const id of Object.values( made ) ) {
 			if ( id ) await api( `wc/v3/orders/${ id }?force=true`, { method: 'DELETE' } ).catch( () => {} );
