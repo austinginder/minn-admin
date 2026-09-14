@@ -269,7 +269,7 @@ function minn_admin_acf_link_in( $value ) {
 	// A link's title is free text on the same site-global options path, and a
 	// link value returns before the options-scope filter downstream, so hold it
 	// to the same markup floor the plain text fields get.
-	if ( '' !== $title && ! current_user_can( 'unfiltered_html' ) ) {
+	if ( '' !== $title && ! minn_admin_acf_trusts_markup() ) {
 		$title = wp_kses_post( $title );
 	}
 	if ( '' === $url && '' === $title ) {

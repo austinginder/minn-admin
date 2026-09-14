@@ -289,6 +289,11 @@ function minn_admin_network_user_row( $user, $site_counts = array(), $super_coun
 	$super  = is_super_admin( $id );
 	$self   = $id === get_current_user_id();
 	$locked = minn_admin_network_super_admins_locked();
+	// The status routes ask edit_user on the target before anything else
+	// (core's checkbox lives on user-edit.php); the flags mirror that so a
+	// caller who holds manage_network_options without edit_user is not
+	// offered a button the route will refuse.
+	$edit   = current_user_can( 'edit_user', $id );
 	return array(
 		'id'         => $id,
 		'name'       => $user->display_name,
@@ -300,8 +305,8 @@ function minn_admin_network_user_row( $user, $site_counts = array(), $super_coun
 		// Gates (the routes re-derive all of these):
 		// never grant twice, never revoke your own status (that is a
 		// self-lockout) and never revoke the last network administrator.
-		'canGrant'   => ( ! $super && ! $locked ) ? '1' : '0',
-		'canRevoke'  => ( $super && ! $self && ! $locked && $super_count > 1 ) ? '1' : '0',
+		'canGrant'   => ( $edit && ! $super && ! $self && ! $locked ) ? '1' : '0',
+		'canRevoke'  => ( $edit && $super && ! $self && ! $locked && $super_count > 1 ) ? '1' : '0',
 	);
 }
 
