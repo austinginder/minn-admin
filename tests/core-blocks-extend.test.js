@@ -117,16 +117,18 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	} );
 	t.check( 'details edited in island fields', detailsEdited, 'dom' );
 
-	// Save via keyboard
+	// Save via keyboard, and wait for the save's own response rather than a
+	// flat pause: a first save on a loaded site takes several seconds, and a
+	// read-back that runs before it lands sees the fixture text.
+	const savedResp = page.waitForResponse( ( res ) => res.request().method() === 'POST'
+		&& new RegExp( '/wp/v2/posts/' + id + '(\\?|$)' ).test( res.url() ), { timeout: 30000 } );
 	await page.keyboard.down( 'Meta' );
 	await page.keyboard.press( 's' );
 	await page.keyboard.up( 'Meta' );
-	await page.waitForTimeout( 800 );
+	await savedResp.catch( () => null );
+	await page.waitForTimeout( 400 );
 	const saved = await page.evaluate( async ( pid ) => {
-		const btn = [ ...document.querySelectorAll( 'button' ) ].find( ( b ) => /Update|Save|Publish/.test( b.textContent || '' ) );
-		if ( btn ) btn.click();
-		await new Promise( ( r ) => setTimeout( r, 1500 ) );
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content', {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content&_cb=' + Math.random(), {
 			headers: { 'X-WP-Nonce': window.MINN.nonce },
 		} );
 		const j = await r.json();
