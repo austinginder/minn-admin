@@ -16910,8 +16910,16 @@
 		return formControlValue( el );
 	}
 
-	// `primary` marks the first data column — the mobile stacked-card CSS
-	// promotes it to the full-width title line (data-primary hook).
+	// `primary` marks the title/summary column — the mobile stacked-card CSS
+	// promotes it to the full-width title line (data-primary hook). An ID
+	// column can lead the row (Users-style) without stealing that slot.
+	function surfacePrimaryIndex( cols ) {
+		const title = cols.findIndex( ( c ) => c && ( c.format === 'title' || c.format === 'entry-summary' ) );
+		if ( title >= 0 ) return title;
+		const notId = cols.findIndex( ( c ) => ! c || c.format !== 'id' );
+		return notId >= 0 ? notId : 0;
+	}
+
 	function surfaceCell( item, colDef, primary ) {
 		const html = surfaceCellRender( item, colDef );
 		return primary ? html.replace( '<div', '<div data-primary=""' ) : html;
@@ -16937,6 +16945,10 @@
 			case 'title': return `<div class="minn-row-title minn-cell-clip">${ esc( stripTags( String( v || '—' ) ) ) }</div>`;
 			case 'entry-summary': return `<div class="minn-row-title minn-cell-clip">${ esc( entrySummary( item ) ) }</div>`;
 			case 'num': return `<div class="minn-row-meta minn-num">${ esc( String( v == null || v === '' ? '—' : v ) ) }</div>`;
+			case 'id': {
+				const n = v == null || v === '' ? '' : String( v );
+				return `<div class="minn-row-meta minn-row-id">${ n ? '#' + esc( n ) : '—' }</div>`;
+			}
 			case 'mono': return `<div class="minn-row-meta mono minn-cell-clip">${ esc( String( v || '—' ) ) }</div>`;
 			default: return `<div class="minn-row-meta minn-cell-clip">${ esc( stripTags( String( v == null || v === '' ? '—' : v ) ) ) }</div>`;
 		}
@@ -17135,11 +17147,12 @@
 		const bulk = coll.bulk || [];
 		const hasBulk = bulk.length > 0;
 		const hasRowMenu = collHasListActions( coll );
+		const primaryIdx = surfacePrimaryIndex( cols );
 		if ( hasBulk && ! ss.sel ) ss.sel = new Set();
 		// Column widths: an adapter's explicit `width` wins; otherwise size by
 		// role — flexible for the title/text columns, fixed and narrow for the
 		// short ones (codes, counts, dates, pills) so long values get the room.
-		const FIXED = { ago: '128px', pill: '110px', mono: '84px', num: '84px' };
+		const FIXED = { ago: '128px', pill: '110px', mono: '84px', num: '84px', id: '40px' };
 		// A descriptor's width lands in a style attribute, which is a CSS
 		// context: escaping would not help, so accept only real track values and
 		// fall through to the default for anything else. Every sibling column
@@ -17273,7 +17286,7 @@
 			${ c.items.length ? c.items.map( ( item, i ) => `
 				<div class="minn-table-row" style="grid-template-columns:${ gridCols };" data-sitem="${ i }">
 					${ hasBulk ? `<div><input type="checkbox" class="minn-cb" data-scheck="${ i }" aria-label="${ esc( __( 'Select row' ) ) }"${ ss.sel.has( item.id ) ? ' checked' : '' }></div>` : '' }
-					${ cols.map( ( col, ci ) => surfaceCell( item, col, ci === 0 ) ).join( '' ) }
+					${ cols.map( ( col, ci ) => surfaceCell( item, col, ci === primaryIdx ) ).join( '' ) }
 					${ hasRowMenu
 						? `<div class="minn-row-end"><button type="button" class="minn-row-more" title="${ esc( __( 'Actions' ) ) }" aria-label="${ esc( __( 'Actions' ) ) }">⋯</button></div>`
 						: `<div class="minn-row-arrow">›</div>` }

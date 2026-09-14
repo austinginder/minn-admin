@@ -96,6 +96,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	} ) );
 	t.check( 'form tabs render', await page.$$eval( '[data-stab]', ( els ) =>
 		els.some( ( e ) => /Contact Me/.test( e.textContent ) ) ) );
+	t.check( 'Entries table leads with an ID column', await page.evaluate( () => {
+		const s = ( window.MINN.surfaces || [] ).find( ( x ) => x.id === 'ninja-forms' );
+		const col = ( s && s.collection && s.collection.columns || [] )[ 0 ];
+		const cell = document.querySelector( '.minn-table-row .minn-row-id' );
+		return !! col && col.format === 'id' && col.key === 'id'
+			&& !! cell && /^#\d+$/.test( cell.textContent.trim() )
+			&& ! cell.hasAttribute( 'data-primary' );
+	} ) );
 
 	// Detail modal via the row.
 	await page.evaluate( () => {
@@ -115,6 +123,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		[ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => /Contact Me/.test( r.textContent ) ),
 	null, { timeout: 15000 } );
 	t.check( 'Forms manage view lists the form', true );
+	t.check( 'Forms table leads with an ID column', await page.evaluate( () => {
+		const s = ( window.MINN.surfaces || [] ).find( ( x ) => x.id === 'ninja-forms' );
+		const col = ( s && s.manage && s.manage.columns || [] )[ 0 ];
+		const cell = document.querySelector( '.minn-table-row .minn-row-id' );
+		return !! col && col.format === 'id' && col.key === 'id'
+			&& !! cell && /^#\d+$/.test( cell.textContent.trim() );
+	} ) );
 	await page.evaluate( () => {
 		[ ...document.querySelectorAll( '.minn-table-row' ) ]
 			.find( ( r ) => /Contact Me/.test( r.textContent ) ).click();
