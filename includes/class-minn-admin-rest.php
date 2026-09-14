@@ -2662,15 +2662,17 @@ class Minn_Admin_REST {
 		// that gives no real capability gets the floor for site configuration,
 		// and an adapter that wants a different one says so explicitly.
 		$setup = $surface['setup'];
-		$cap   = isset( $setup['cap'] ) && is_string( $setup['cap'] ) && '' !== $setup['cap']
+		// Running a vendor's installer (it creates database tables, writes
+		// options) is a site-configuration action, so the DEFAULT is
+		// manage_options — the surface's own list/read cap is not inherited
+		// here (a list surface may sit at edit_posts or read, neither of which
+		// answers "may this person install a plugin's storage"). An adapter
+		// that genuinely wants a vendor's own setup capability names it
+		// explicitly in setup['cap']; the documented 'read' placeholder is
+		// never accepted as one.
+		$cap = isset( $setup['cap'] ) && is_string( $setup['cap'] ) && '' !== $setup['cap'] && 'read' !== $setup['cap']
 			? $setup['cap']
-			: ( isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options' );
-		// Only the documented placeholder is overridden. An adapter that names a
-		// real capability has made a choice, and a site that narrowed a vendor's
-		// own role filter meant it.
-		if ( ! is_string( $cap ) || '' === $cap || 'read' === $cap ) {
-			$cap = 'manage_options';
-		}
+			: 'manage_options';
 		if ( ! current_user_can( $cap ) ) {
 			// Same answer as an unknown id. Telling the two apart lets anyone
 			// who can reach this route enumerate which adapters are registered,
