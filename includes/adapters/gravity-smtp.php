@@ -1471,6 +1471,10 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 		if ( is_array( $event ) && array_key_exists( 'can_resend', $event ) && ! $event['can_resend'] ) {
 			return new WP_Error( 'cannot_resend', __( 'Gravity SMTP reports this email cannot be resent (body or attachments were not stored).', 'minn-admin' ), array( 'status' => 422 ) );
 		}
+		// The one place an adapter names classes to unserialize: the resend
+		// mirrors Gravity SMTP's own endpoint, the row is written only by its
+		// mail pipeline (never by a visitor), and the allowlist is exactly
+		// theirs. Everything else goes through Minn_Admin::decode_serialized().
 		$extra = unserialize( // phpcs:ignore -- their own endpoint's exact allowlist on their own data.
 			(string) $row->extra,
 			array(

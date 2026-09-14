@@ -122,12 +122,11 @@ function minn_admin_ninja_forms_answers( $post_id ) {
 			continue;
 		}
 		// Submitter-authored: a visitor can type a serialized payload into a
-		// text field and Ninja Forms stores the string verbatim. Decode without
-		// class instantiation — arrays and scalars (all NF stores) round-trip.
+		// text field and Ninja Forms stores the string verbatim. The shared
+		// decoder instantiates nothing and refuses object payloads; arrays and
+		// scalars (all NF stores) round-trip.
 		$raw = $values[0];
-		$v   = is_serialized( $raw )
-			? @unserialize( $raw, array( 'allowed_classes' => false ) ) // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
-			: $raw;
+		$v   = is_serialized( $raw ) ? Minn_Admin::decode_serialized( $raw, $raw ) : $raw;
 		if ( is_array( $v ) ) {
 			$flat = array();
 			array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {

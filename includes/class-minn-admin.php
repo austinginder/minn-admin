@@ -925,6 +925,52 @@ class Minn_Admin {
 		return isset( $url[ $key ] ) ? (string) $url[ $key ] : '';
 	}
 
+	/**
+	 * Decode a PHP-serialized blob another plugin stored, as data only.
+	 *
+	 * This is the one sanctioned way for an adapter to read a serialized
+	 * third-party value: no class is ever instantiated (allowed_classes is
+	 * off, so an object payload comes back as __PHP_Incomplete_Class) and a
+	 * payload that carries an object anywhere inside it is refused whole,
+	 * because none of the stores adapters read hold objects and a visitor
+	 * who can type a serialized string into a form field must not be able
+	 * to hand one back to the site. Arrays and scalars round-trip; anything
+	 * else, or an undecodable blob, yields $default.
+	 *
+	 * @param mixed $value   Stored value (a non-string is returned as is).
+	 * @param mixed $default What an undecodable or object-bearing blob yields.
+	 * @return mixed
+	 */
+	public static function decode_serialized( $value, $default = null ) {
+		if ( ! is_string( $value ) ) {
+			return $value;
+		}
+		if ( ! is_serialized( $value ) ) {
+			return $default;
+		}
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+		$decoded = @unserialize( $value, array( 'allowed_classes' => false ) );
+		if ( false === $decoded && 'b:0;' !== $value ) {
+			return $default;
+		}
+		return self::holds_object( $decoded ) ? $default : $decoded;
+	}
+
+	/** Whether a decoded value contains an object anywhere inside it. */
+	private static function holds_object( $value, $depth = 0 ) {
+		if ( is_object( $value ) ) {
+			return true;
+		}
+		if ( is_array( $value ) && $depth < 32 ) {
+			foreach ( $value as $item ) {
+				if ( self::holds_object( $item, $depth + 1 ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	public static function code_edits_allowed() {
 		if ( defined( 'DISALLOW_FILE_EDIT' ) && DISALLOW_FILE_EDIT ) {
 			return false;
@@ -1115,12 +1161,34 @@ class Minn_Admin {
 			// route instead of an `app` URL is one the client reaches by
 			// asking that route for a one-time link and following it.
 			$payload = apply_filters( 'minn_admin_sites', array( 'sites' => array(), 'total' => 0 ) );
-			if ( ! is_array( $payload ) || empty( $payload['sites'] ) || ! is_array( $payload['sites'] ) || count( $payload['sites'] ) < 2 ) {
+			if ( ! is_array( $payload ) || empty( $payload['sites'] ) || ! is_array( $payload['sites'] ) ) {
+				return array( 'sites' => array(), 'total' => 0 );
+			}
+			// Same shape and the same rules the multisite branch produces:
+			// display strings as plain text, `app` an http(s) URL, `login` a
+			// REST route the client may ask (never a URL of its own).
+			$sites = array();
+			foreach ( $payload['sites'] as $site ) {
+				if ( ! is_array( $site ) ) {
+					continue;
+				}
+				$app   = isset( $site['app'] ) ? esc_url_raw( (string) $site['app'], array( 'http', 'https' ) ) : '';
+				$login = isset( $site['login'] ) ? self::rest_route_or_null( (string) $site['login'] ) : null;
+				$sites[] = array(
+					'id'      => isset( $site['id'] ) && is_scalar( $site['id'] ) ? $site['id'] : '',
+					'name'    => self::plain_text( isset( $site['name'] ) ? (string) $site['name'] : '' ),
+					'url'     => isset( $site['url'] ) ? esc_url_raw( (string) $site['url'], array( 'http', 'https' ) ) : '',
+					'app'     => $app,
+					'login'   => (string) $login,
+					'current' => ! empty( $site['current'] ),
+				);
+			}
+			if ( count( $sites ) < 2 ) {
 				return array( 'sites' => array(), 'total' => 0 );
 			}
 			return array(
-				'sites' => array_values( $payload['sites'] ),
-				'total' => max( (int) ( $payload['total'] ?? 0 ), count( $payload['sites'] ) ),
+				'sites' => $sites,
+				'total' => max( (int) ( $payload['total'] ?? 0 ), count( $sites ) ),
 			);
 		}
 		$ids = self::user_site_ids();

@@ -141,7 +141,7 @@ function minn_admin_ccj_get_options( $post_id ) {
 		return minn_admin_ccj_guard_options( array_merge( minn_admin_ccj_default_options( $raw['language'] ), $raw ) );
 	}
 	if ( is_string( $raw ) && $raw ) {
-		$decoded = @unserialize( $raw, array( 'allowed_classes' => false ) ); // phpcs:ignore — their own storage; array-only, no objects
+		$decoded = Minn_Admin::decode_serialized( $raw );
 		if ( is_array( $decoded ) && isset( $decoded['language'] ) ) {
 			return minn_admin_ccj_guard_options( array_merge( minn_admin_ccj_default_options( $decoded['language'] ), $decoded ) );
 		}

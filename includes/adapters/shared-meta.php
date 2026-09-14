@@ -29,42 +29,9 @@ function minn_admin_meta_copy_value( $value ) {
 	if ( ! is_string( $value ) || ! is_serialized( $value ) ) {
 		return $value;
 	}
-	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-	$decoded = @unserialize( $value, array( 'allowed_classes' => false ) );
-	if ( false === $decoded && 'b:0;' !== $value ) {
-		return $value; // undecodable: copy the stored string verbatim
-	}
-	// A serialized object comes back as __PHP_Incomplete_Class with classes
-	// off. Copying that would store something the origin never held, so keep
-	// the original string instead and let the plugin that wrote it decide.
-	if ( minn_admin_meta_has_incomplete_class( $decoded ) ) {
-		return $value;
-	}
-	return $decoded;
-}
-
-/**
- * Whether a decoded value contains an incomplete class anywhere inside it.
- *
- * @param mixed $value Decoded value.
- * @param int   $depth Recursion guard.
- * @return bool
- */
-function minn_admin_meta_has_incomplete_class( $value, $depth = 0 ) {
-	if ( $depth > 10 ) {
-		return true;
-	}
-	if ( is_object( $value ) ) {
-		return true;
-	}
-	if ( is_array( $value ) ) {
-		foreach ( $value as $item ) {
-			if ( minn_admin_meta_has_incomplete_class( $item, $depth + 1 ) ) {
-				return true;
-			}
-		}
-	}
-	return false;
+	// Undecodable, or carrying a serialized object: copy the stored string
+	// verbatim and let the plugin that wrote it decide what it means.
+	return Minn_Admin::decode_serialized( $value, $value );
 }
 
 /**

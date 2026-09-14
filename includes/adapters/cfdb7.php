@@ -47,12 +47,12 @@ function minn_admin_cfdb7_values( $blob ) {
 	// answer, the upload filename among them. Delete then found no file to
 	// remove and reported the entry permanently deleted anyway.
 	//
-	// allowed_classes => false instantiates nothing at all, so this is not the
-	// object-injection risk the scanner was written to avoid; it is what CFDB7
-	// itself uses on every one of its own read paths, and what
-	// minn_admin_cfdb7_set_status() below already relies on.
+	// The shared decoder instantiates nothing and refuses object payloads,
+	// so this is not the object-injection risk the scanner was written to
+	// avoid; it is what CFDB7 itself uses on every one of its own read paths,
+	// and what minn_admin_cfdb7_set_status() below already relies on.
 	if ( is_serialized( $blob ) ) {
-		$data = @unserialize( $blob, array( 'allowed_classes' => false ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+		$data = Minn_Admin::decode_serialized( $blob );
 		if ( is_array( $data ) ) {
 			foreach ( $data as $k => $v ) {
 				if ( is_array( $v ) ) {
@@ -227,7 +227,7 @@ function minn_admin_cfdb7_set_status( $blob, $status ) {
 	if ( ! is_serialized( $blob ) ) {
 		return null;
 	}
-	$data = @unserialize( $blob, array( 'allowed_classes' => false ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+	$data = Minn_Admin::decode_serialized( $blob );
 	if ( ! is_array( $data ) ) {
 		return null;
 	}
@@ -507,8 +507,8 @@ add_action( 'rest_api_init', function () {
 				// key carries the cfdb7_file marker are filenames under
 				// uploads/cfdb7_uploads. Dropping only the row would strand a
 				// resume or ID scan on disk at a guessable URL with nothing left
-				// pointing at it. Values come from the byte-length scanner rather
-				// than unserialize(), per this adapter's rule about their blob.
+				// pointing at it. Values come through minn_admin_cfdb7_values()
+				// (the shared data-only decoder, scanner fallback).
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$blob = (string) $wpdb->get_var( $wpdb->prepare( "SELECT form_value FROM {$table} WHERE form_id = %d", (int) Minn_Admin::path_param( $request ) ) );
 				$dir  = wp_upload_dir()['basedir'] . '/cfdb7_uploads/';

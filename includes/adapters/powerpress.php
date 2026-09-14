@@ -49,8 +49,9 @@ function minn_admin_powerpress_parse( $raw ) {
 	$out['size'] = isset( $parts[1] ) ? trim( $parts[1] ) : '';
 	$out['type'] = isset( $parts[2] ) ? trim( $parts[2] ) : '';
 	if ( isset( $parts[3] ) && '' !== $parts[3] ) {
-		// Their exact unserialize call — object injection off.
-		$extras = @unserialize( $parts[3], array( 'allowed_classes' => false ) );
+		// Their exact read, through the shared data-only decoder (a
+		// Contributor writes this blob through the enclosure field).
+		$extras = Minn_Admin::decode_serialized( $parts[3] );
 		if ( is_array( $extras ) ) {
 			$out['extras'] = $extras;
 		}

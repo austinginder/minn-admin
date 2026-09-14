@@ -127,8 +127,7 @@ function minn_admin_jet_cct_decode( $value ) {
 	if ( 0 !== strpos( $value, 'a:' ) ) {
 		return $value;
 	}
-	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-	$decoded = @unserialize( $value, array( 'allowed_classes' => false ) );
+	$decoded = Minn_Admin::decode_serialized( $value );
 	return is_array( $decoded ) ? $decoded : $value;
 }
 
