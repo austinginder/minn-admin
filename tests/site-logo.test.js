@@ -54,7 +54,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 		/* ===== The Settings field renders the saved logo ===== */
 		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '#minn-logo-drop', { timeout: 20000 } );
+		// Settings paints only after every one of its loaders settles, and two
+		// of them reach out of the site (connectors, the translations catalog),
+		// so the page can legitimately take most of a minute on a loaded box.
+		await page.waitForSelector( '#minn-logo-drop', { timeout: 60000 } );
 		const shown = await page.evaluate( () => {
 			const img = document.querySelector( '#minn-logo-img' );
 			return { hidden: img.hidden, src: img.src, removeShown: ! document.querySelector( '#minn-logo-remove' ).hidden };
