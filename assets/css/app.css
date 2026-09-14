@@ -62,10 +62,156 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+:root {
+  --font-ui: 'Hanken Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+html[data-font="wordpress"] {
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  --font-mono: Consolas, Monaco, monospace;
+}
+
+/* Density skin — same switch as the typeface. wp-admin is 13px body, 40px
+   fields, 2px corners, no tracking, subpixel smoothing. Scheme colors stay;
+   light-mode help text uses core's description gray. */
+html[data-font="wordpress"] body {
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+html[data-font="wordpress"] .minn-page { padding: 20px 20px 48px; }
+html[data-font="wordpress"] .minn-topbar { height: 48px; padding: 0 16px; }
+html[data-font="wordpress"] .minn-topbar-title,
+html[data-font="wordpress"] .minn-logo-name,
+html[data-font="wordpress"] .minn-settings-title,
+html[data-font="wordpress"] .minn-panel-title,
+html[data-font="wordpress"] .minn-setup-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+html[data-font="wordpress"] .minn-logo-mark {
+  width: 24px; height: 24px; border-radius: 2px; font-size: 13px; letter-spacing: 0; font-weight: 600;
+}
+html[data-font="wordpress"] .minn-nav-label {
+  font-size: 11px; letter-spacing: 0; text-transform: none; font-weight: 600;
+}
+html[data-font="wordpress"] .minn-nav-btn {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.3;
+  min-height: 34px;
+  border-radius: 2px;
+  padding: 0 8px;
+}
+html[data-font="wordpress"] .minn-nav-btn svg { width: 20px; height: 20px; }
+html[data-font="wordpress"] .minn-nav-btn.active { font-weight: 400; }
+html[data-font="wordpress"] .minn-search-btn {
+  font-size: 13px; border-radius: 2px; padding: 6px 8px;
+}
+html[data-font="wordpress"] .minn-card { border-radius: 2px; }
+html[data-font="wordpress"] .minn-panel-pad { padding: 14px 16px; }
+html[data-font="wordpress"] .minn-input {
+  border-radius: 2px;
+  font-size: 14px;
+}
+html[data-font="wordpress"] input.minn-input {
+  padding: 0 12px;
+  min-height: 40px;
+  line-height: normal;
+}
+html[data-font="wordpress"] input.minn-input.minn-ac-input,
+html[data-font="wordpress"] select.minn-input {
+  padding: 0 12px;
+  padding-inline-end: 32px;
+  min-height: 40px;
+  line-height: 2.71428571; /* 38px inner, same as wp-admin select */
+}
+html[data-font="wordpress"] textarea.minn-input {
+  padding: 8px 12px;
+  min-height: 60px;
+  line-height: 1.42857143; /* 20px, same as wp-admin textarea */
+}
+/* wp-admin .form-wrap label: 13px, padding 2px 0, no extra margin — the
+   input sits against the label box (the ~4px you see is line-box, not gap). */
+html[data-font="wordpress"] .minn-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 0;
+  padding: 2px 0;
+  line-height: 1.4;
+}
+html[data-font="wordpress"] .minn-toggle-label { font-size: 13px; font-weight: 600; }
+html[data-font="wordpress"] .minn-side-toggles .minn-toggle-label { font-size: 13px; font-weight: 400; }
+html[data-font="wordpress"] .minn-toggle-desc,
+html[data-font="wordpress"] .minn-settings-sub,
+html[data-font="wordpress"] .minn-toggle-info .minn-toggle-desc {
+  font-size: 13px;
+}
+html[data-font="wordpress"][data-theme="light"] .minn-toggle-desc,
+html[data-font="wordpress"][data-theme="light"] .minn-settings-sub {
+  color: #646970;
+}
+html[data-font="wordpress"][data-theme="light"] .minn-field-label {
+  color: #1d2327;
+}
+html[data-font="wordpress"] .minn-btn-primary,
+html[data-font="wordpress"] .minn-btn-soft {
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 16px;
+  min-height: 40px;
+  line-height: 2.92307692; /* 38px inner, same as wp-admin .button */
+}
+html[data-font="wordpress"] .minn-comment-action {
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 12px;
+  min-height: 32px;
+  line-height: 2.30769231; /* wp-admin .button-compact */
+  display: inline-flex;
+  align-items: center;
+}
+html[data-font="wordpress"] .minn-pager-btn,
+html[data-font="wordpress"] .minn-copy-btn,
+html[data-font="wordpress"] .minn-find-btn,
+html[data-font="wordpress"] .minn-cted-setbtn,
+html[data-font="wordpress"] .minn-toast-btn,
+html[data-font="wordpress"] .minn-lic-actions button,
+html[data-font="wordpress"] .minn-load-more {
+  border-radius: 2px;
+}
+html[data-font="wordpress"] .minn-icon-btn,
+html[data-font="wordpress"] .minn-topbar-ver,
+html[data-font="wordpress"] .minn-settings-nav-item {
+  border-radius: 2px;
+}
+html[data-font="wordpress"] .minn-icon-btn { width: 30px; height: 30px; }
+html[data-font="wordpress"] .minn-topbar-sub { border-radius: 2px; font-size: 12px; }
+html[data-font="wordpress"] .minn-nav-count { border-radius: 2px; }
+html[data-font="wordpress"] .minn-kbd { border-radius: 2px; }
+html[data-font="wordpress"] .minn-new-menu,
+html[data-font="wordpress"] .minn-ac-panel {
+  border-radius: 2px;
+}
+html[data-font="wordpress"] .minn-new-menu button,
+html[data-font="wordpress"] .minn-site-switch,
+html[data-font="wordpress"] .minn-site-switch-search,
+html[data-font="wordpress"] .minn-sp-row,
+html[data-font="wordpress"] .minn-user-logout {
+  border-radius: 2px;
+}
+html[data-font="wordpress"] .minn-profile-fields { gap: 10px; }
+html[data-font="wordpress"] .minn-settings-body { gap: 18px; }
+html[data-font="wordpress"] .minn-toggle-rows { gap: 10px; }
+html[data-font="wordpress"] .minn-search-clear { border-radius: 2px; }
+
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
-  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   font-size: 15px;
   background: var(--bg);
@@ -338,7 +484,7 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-cl-layout { display: grid; grid-template-columns: 172px minmax(0, 1fr); min-height: 0; }
 .minn-cl-rail { border-inline-end: 1px solid var(--border); max-height: 64vh; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
 .minn-cl-ver { text-align: start; background: none; border: 1px solid transparent; border-radius: 8px; padding: 7px 10px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
-.minn-cl-ver-v { display: block; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text); }
+.minn-cl-ver-v { display: block; font-family: var(--font-mono); font-size: 12.5px; color: var(--text); }
 .minn-cl-ver-d { display: block; font-size: 11.5px; color: var(--text3); margin-top: 1px; }
 .minn-cl-ver:hover { background: var(--hover); }
 .minn-cl-ver.sel { background: var(--accent-soft, rgba(110,98,245,0.14)); border-color: var(--accent); }
@@ -364,7 +510,7 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-changelog h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin: 14px 0 4px; }
 .minn-changelog ul { margin: 4px 0 10px; padding-inline-start: 20px; }
 .minn-changelog li { margin: 4px 0; }
-.minn-changelog code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+.minn-changelog code { font-family: var(--font-mono); font-size: 0.88em; background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 .minn-changelog a { color: var(--accent2); }
 .minn-changelog-foot { padding: 10px 18px 14px; border-top: 1px solid var(--border); font-size: 12.5px; }
 .minn-changelog-foot a { color: var(--accent2); text-decoration: none; }
@@ -376,7 +522,7 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .minn-search-btn:hover { border-color: var(--border2); color: var(--text2); }
 .minn-kbd {
-  margin-inline-start: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg);
+  margin-inline-start: auto; font-family: var(--font-mono); font-size: 12px; background: var(--bg);
   border: 1px solid var(--border); padding: 1px 6px; border-radius: 5px;
 }
 
@@ -457,7 +603,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-sstat-cmd { min-width: 0; }
 .minn-sstat-cmd-box {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: start;
-  font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text);
+  font-family: var(--font-mono); font-size: 12.5px; color: var(--text);
   background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
   padding: 9px 12px; cursor: pointer;
 }
@@ -932,7 +1078,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-traf-row.linked:hover { background: var(--panel2); }
 .minn-traf-main { min-width: 0; flex: 1; }
 .minn-traf-title { font-size: 14px; font-weight: 550; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.minn-traf-path { font-size: 12px; color: var(--text3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, ui-monospace, monospace); }
+.minn-traf-path { font-size: 12px; color: var(--text3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
 .minn-traf-nums { display: flex; gap: 12px; flex: none; font-size: 13px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 .minn-traf-nums em { font-style: normal; font-weight: 500; font-size: 11px; color: var(--text3); margin-inline-start: 2px; }
 .minn-traf-foot { padding: 12px 0 2px; }
@@ -1041,7 +1187,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-row-meta { font-size: 14px; color: var(--text2); }
 /* Surface table cells: single line, ellipsis — long URLs shouldn't wrap to three rows. */
 .minn-row-meta.minn-cell-clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.minn-row-meta.mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+.minn-row-meta.mono { font-family: var(--font-mono); font-size: 13px; }
 .minn-row-meta.minn-num { text-align: end; font-variant-numeric: tabular-nums; padding-inline-end: 8px; }
 .minn-table-head .minn-num { text-align: end; padding-inline-end: 8px; }
 .minn-row-arrow { color: var(--text3); text-align: center; }
@@ -1133,7 +1279,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-plugin.minn-plugin-queued { opacity: 0.55; }
 .minn-plugin-desc { font-size: 13.5px; color: var(--text2); margin-top: 4px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .minn-plugin-foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.minn-plugin-ver { font-size: 12.5px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+.minn-plugin-ver { font-size: 12.5px; color: var(--text3); font-family: var(--font-mono); }
 /* Auto-update pill: quiet at rest, accent-lit when on. */
 .minn-auto-toggle {
   display: flex; align-items: center; gap: 4px; background: transparent; border: 1px solid var(--border2);
@@ -1176,7 +1322,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-lang-row-main { min-width: 0; flex: 1; }
 .minn-lang-name { font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-lang-meta { margin-top: 2px; color: var(--text3); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.minn-lang-meta code { color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+.minn-lang-meta code { color: var(--text2); font-family: var(--font-mono); font-size: 11.5px; }
 .minn-lang-row .minn-btn-soft { flex-shrink: 0; }
 .minn-lang-lock { flex-shrink: 0; font-size: 11.5px; color: var(--text3); background: var(--hover); border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
 @media (max-width: 860px) { .minn-lang-list { grid-template-columns: minmax(0, 1fr); } .minn-lang-row:nth-child(odd) { border-inline-end: none; } .minn-lang-row:nth-last-child(2):nth-child(even) { border-bottom: none; } }
@@ -1192,7 +1338,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-translation-row-main { min-width: 0; flex: 1; }
 .minn-translation-name { font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-translation-meta { margin-top: 2px; color: var(--text3); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.minn-translation-meta code { color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+.minn-translation-meta code { color: var(--text2); font-family: var(--font-mono); font-size: 11.5px; }
 .minn-translation-preview { margin-top: 4px; color: var(--text2); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-translation-chevron { display: flex; color: var(--text3); transition: transform 0.15s ease; }
 .minn-translation-chevron svg { width: 15px; height: 15px; }
@@ -1200,7 +1346,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-translation-components { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 7px; padding-top: 12px; border-top: 1px solid var(--border); }
 .minn-translation-component { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel2); font-size: 12.5px; }
 .minn-translation-component > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.minn-translation-component code { margin-inline-start: auto; color: var(--text3); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+.minn-translation-component code { margin-inline-start: auto; color: var(--text3); font-family: var(--font-mono); font-size: 10.5px; }
 .minn-translation-kind { flex: none; color: var(--accent2); font-size: 10.5px; font-weight: 700; letter-spacing: 0.35px; text-transform: uppercase; }
 
 /* Busy state for cards while a background operation runs */
@@ -1688,7 +1834,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   color: var(--text3);
 }
 .minn-dp-time { display: flex; align-items: center; gap: 10px; margin: 10px 0 0; }
-.minn-dp-time .minn-input { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
+.minn-dp-time .minn-input { flex: 1; font-family: var(--font-mono); font-size: 12.5px; }
 .minn-dp-foot { display: flex; gap: 8px; margin-top: 10px; }
 .minn-dp-foot .minn-btn-soft { flex: 1; }
 
@@ -2009,7 +2155,7 @@ button.minn-spam-link { background: none; border: 0; padding: 0; cursor: pointer
 .minn-input:focus { outline: none; border-color: var(--accent); }
 textarea.minn-input { font-family: inherit; line-height: 1.5; resize: vertical; min-height: 38px; }
 .minn-input.mono {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   /* Pin, do not rely on inheritance: this is the class a website URL is typed
      into (Your profile, Edit user, menu links). `none` rather than the page's
@@ -2207,7 +2353,7 @@ button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; 
 .minn-editor-body p { margin: 0 0 16px; }
 .minn-editor-body h1, .minn-editor-body h2 { letter-spacing: -0.4px; }
 .minn-editor-body blockquote { border-inline-start: 3px solid var(--accent); margin: 0 0 16px; padding: 2px 0 2px 16px; color: var(--text2); }
-.minn-editor-body pre, .minn-editor-body code { font-family: 'JetBrains Mono', monospace; font-size: 14px; background: var(--panel2); border-radius: 5px; }
+.minn-editor-body pre, .minn-editor-body code { font-family: var(--font-mono); font-size: 14px; background: var(--panel2); border-radius: 5px; }
 .minn-editor-body pre { padding: 12px 14px; overflow-x: auto; }
 .minn-editor-body code { padding: 1px 6px; }
 .minn-editor-body:empty::before { content: 'Keep writing…'; color: var(--text3); }
@@ -2310,7 +2456,7 @@ button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; 
 /* Block row types (code / html-preview / kv-table): full-width content. */
 .minn-side-row.block > pre, .minn-side-row.block > iframe, .minn-side-row.block > table { width: 100%; }
 .minn-detail-code {
-  font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.55;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55;
   background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
   padding: 10px 12px; margin: 0; max-height: 260px; overflow: auto;
   white-space: pre-wrap; word-break: break-word; color-scheme: dark;
@@ -2408,7 +2554,7 @@ a.minn-entry-meta-chip:hover { color: var(--accent); text-decoration: underline;
 .minn-side-val.green { color: var(--green); }
 .minn-side-card .minn-btn-primary { width: 100%; margin-top: 14px; justify-content: center; }
 .minn-side-card .minn-save-draft { width: 100%; margin-top: 8px; justify-content: center; }
-.minn-permalink { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text3); margin-top: 3px; word-break: break-all; }
+.minn-permalink { font-family: var(--font-mono); font-size: 12.5px; color: var(--text3); margin-top: 3px; word-break: break-all; }
 /* Publish-card visibility + per-post discussion/slug controls. */
 .minn-mini-select {
   background: var(--panel2); color: var(--text); border: 1px solid var(--border);
@@ -2430,8 +2576,8 @@ input.minn-vis-extra { width: 100%; }
 .minn-check-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--text2); cursor: pointer; font-size: 13px; }
 .minn-check-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
 .minn-slug-field { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
-.minn-slug-prefix { color: var(--text3); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-.minn-slug-input { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; padding: 5px 8px; }
+.minn-slug-prefix { color: var(--text3); font-family: var(--font-mono); font-size: 13px; }
+.minn-slug-input { font-family: var(--font-mono); font-size: 12.5px; padding: 5px 8px; }
 .minn-slug-input:disabled { opacity: 0.5; cursor: default; }
 .minn-slug-note { color: var(--amber); font-size: 11.5px; margin-top: 4px; }
 .minn-chips { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
@@ -3199,7 +3345,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   padding: 12px 14px; margin-bottom: 10px;
 }
 .minn-app-reveal code {
-  display: block; font-family: 'JetBrains Mono', monospace; font-size: 14px; background: #101013;
+  display: block; font-family: var(--font-mono); font-size: 14px; background: #101013;
   color: #ececed; border: 1px solid #2a2a31; padding: 9px 12px; border-radius: 8px;
   user-select: all; overflow-wrap: anywhere;
 }
@@ -3636,7 +3782,7 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 
 /* Database viewer (read-only by design) */
 .minn-db-cols { grid-template-columns: minmax(0,1fr) 120px 100px 90px; }
-.minn-db-cols .mono, .minn-db-tname, .minn-dbd-col .mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+.minn-db-cols .mono, .minn-db-tname, .minn-dbd-col .mono { font-family: var(--font-mono); font-size: 13px; }
 .minn-db-cols .num { text-align: end; font-variant-numeric: tabular-nums; }
 .minn-db-cols.minn-table-row { cursor: pointer; }
 .minn-db-dim { color: var(--text3); }
@@ -3655,14 +3801,14 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 .minn-db-hc-table:hover { text-decoration: underline; }
 .minn-db-hc-detail { color: var(--text3); font-size: 13px; margin-top: 3px; }
 .minn-db-hc-cmd { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
-.minn-db-hc-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text2); }
+.minn-db-hc-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-family: var(--font-mono); font-size: 12.5px; color: var(--text2); }
 .minn-db-hc-cmd .minn-btn-soft { padding: 6px 11px; font-size: 12.5px; }
 .minn-db-hc-hint { color: var(--text3); font-size: 12px; margin-top: 5px; }
 .minn-db-sect { margin: 18px 0 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); }
 .minn-db-sect:first-of-type { margin-top: 4px; }
 .minn-db-struct-cols { grid-template-columns: minmax(0,1.2fr) minmax(0,1.3fr) 62px minmax(0,1fr) 130px; }
 .minn-db-idx-cols { grid-template-columns: minmax(0,1fr) minmax(0,1.6fr) 70px 90px 110px; }
-.minn-db-struct-cols .mono, .minn-db-idx-cols .mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+.minn-db-struct-cols .mono, .minn-db-idx-cols .mono { font-family: var(--font-mono); font-size: 13px; }
 .minn-db-struct-cols .num, .minn-db-idx-cols .num { text-align: end; font-variant-numeric: tabular-nums; }
 .minn-db-sort { cursor: pointer; user-select: none; white-space: nowrap; }
 .minn-db-sort:hover { color: var(--text); }
@@ -3670,14 +3816,14 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 .minn-db-ro { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text3); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 .minn-db-ro svg { width: 13px; height: 13px; }
 .minn-toolbar .minn-db-ro ~ .minn-toolbar-meta, .minn-toolbar .minn-toolbar-meta ~ .minn-db-ro { margin-inline-start: 14px; }
-.minn-db-fcol { width: auto; max-width: 220px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; flex-shrink: 0; }
+.minn-db-fcol { width: auto; max-width: 220px; font-family: var(--font-mono); font-size: 12.5px; flex-shrink: 0; }
 .minn-db-window { font-size: 12px; white-space: normal; }
 .minn-db-card { padding: 0; overflow: hidden; }
 .minn-db-scroll { overflow-x: auto; }
-.minn-db-grid { border-collapse: collapse; width: 100%; font-size: 12.5px; font-family: 'JetBrains Mono', monospace; }
+.minn-db-grid { border-collapse: collapse; width: 100%; font-size: 12.5px; font-family: var(--font-mono); }
 .minn-db-grid th {
 	text-align: start; padding: 9px 12px; color: var(--text3); font-size: 11px;
-	font-family: 'Hanken Grotesk', system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.06em;
+	font-family: var(--font-ui); text-transform: uppercase; letter-spacing: 0.06em;
 	border-bottom: 1px solid var(--border2); white-space: nowrap; cursor: pointer; user-select: none;
 	position: sticky; top: 0; background: var(--panel); z-index: 1;
 }
@@ -3691,7 +3837,7 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 .minn-db-grid tbody tr[data-dbrow]:hover td { background: var(--hover); color: var(--text); }
 .minn-db-grid tbody tr:last-child td { border-bottom: none; }
 .minn-db-grid td.null, .minn-db-grid td.bin { color: var(--text3); font-style: italic; }
-.minn-db-grid td.minn-db-empty { color: var(--text3); text-align: center; padding: 26px 12px; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 13.5px; }
+.minn-db-grid td.minn-db-empty { color: var(--text3); text-align: center; padding: 26px 12px; font-family: var(--font-ui); font-size: 13.5px; }
 .minn-dbd { padding: 10px 18px 16px; max-height: 70vh; overflow-y: auto; }
 .minn-dbd-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
 .minn-dbd-row:last-child { border-bottom: none; }
@@ -3699,7 +3845,7 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 .minn-dbd-type { color: var(--text3); font-size: 11.5px; }
 .minn-dbd-copy { margin-inline-start: auto; padding: 2px 9px; font-size: 11.5px; }
 .minn-dbd-val {
-	font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.55;
+	font-family: var(--font-mono); font-size: 12px; line-height: 1.55;
 	white-space: pre-wrap; word-break: break-word; color: var(--text);
 	background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
 	padding: 8px 10px; max-height: 320px; overflow-y: auto;
@@ -3917,7 +4063,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 }
 .minn-island-chip {
   position: absolute; top: -10px; inset-inline-end: 12px; font-size: 10.5px; font-weight: 600;
-  font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
+  font-family: var(--font-mono); color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
   touch-action: manipulation; user-select: none;
 }
@@ -3927,7 +4073,7 @@ button.minn-ac-item:hover { background: var(--hover); }
    competes with the chip; hidden while armed for delete (red state is louder). */
 .minn-island-hint {
   position: absolute; top: -10px; inset-inline-start: 12px; font-size: 10.5px; font-weight: 500;
-  font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
+  font-family: var(--font-mono); color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; line-height: 1.4;
   pointer-events: none; user-select: none; opacity: 0; transition: opacity 0.15s;
   max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -4060,7 +4206,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-shortcode-input {
   width: 100%;
   box-sizing: border-box;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--text);
@@ -4195,7 +4341,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   user-select: text;
 }
 .minn-btn-url {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px;
 }
 .minn-btn-label::placeholder,
@@ -4299,7 +4445,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 }
 .minn-insp-child { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; }
 .minn-insp-child-title {
-  font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 700; font-family: var(--font-mono);
   color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
@@ -4328,7 +4474,7 @@ button.minn-ac-item:hover { background: var(--hover); }
      anchor box, and absolute shrink-to-fit against it wraps "⚙ table"
      into two smashed lines without it. */
   position: absolute; white-space: nowrap; font-size: 10.5px; font-weight: 600;
-  font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
+  font-family: var(--font-mono); color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
   touch-action: manipulation;
 }
@@ -4451,7 +4597,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* Debug tools card — live wp-config toggles. */
 .minn-sys-debug { padding: 0; margin-top: 14px; margin-bottom: 14px; overflow: hidden; }
 .minn-sys-debug .minn-sys-card-head svg { color: var(--amber); }
-.minn-sys-debug-hint { margin-inline-start: auto; font-size: 11.5px; font-weight: 500; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+.minn-sys-debug-hint { margin-inline-start: auto; font-size: 11.5px; font-weight: 500; color: var(--text3); font-family: var(--font-mono); }
 .minn-sys-toggles { padding: 4px 17px 8px; }
 .minn-sys-toggle { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .minn-sys-toggle:last-child { border-bottom: none; }
@@ -4475,11 +4621,11 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-log-src .minn-ac-input { height: 31px; font-size: 13px; }
 #minn-log-collapse { font-variant-numeric: tabular-nums; }
 #minn-log-collapse.on { color: var(--accent); border-color: var(--accent); }
-.minn-log-meta { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 400; color: var(--text3); margin-inline-start: 8px; }
+.minn-log-meta { font-family: var(--font-mono); font-size: 11.5px; font-weight: 400; color: var(--text3); margin-inline-start: 8px; }
 .minn-log-actions { display: flex; align-items: center; gap: 7px; }
 .minn-log-actions .minn-btn-soft { padding: 6px 9px; }
-.minn-log-body { flex: 1; margin: 0; overflow: auto; padding: 14px 18px; background: var(--bg); font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: var(--text2); white-space: pre-wrap; word-break: break-word; border-end-start-radius: 14px; border-end-end-radius: 14px; }
-.minn-log-loading { color: var(--text3); font-family: 'Inter', sans-serif; }
+.minn-log-body { flex: 1; margin: 0; overflow: auto; padding: 14px 18px; background: var(--bg); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--text2); white-space: pre-wrap; word-break: break-word; border-end-start-radius: 14px; border-end-end-radius: 14px; }
+.minn-log-loading { color: var(--text3); font-family: var(--font-ui); }
 
 /* Extensions manifest — installed plugins / mu-plugins / themes with versions. */
 .minn-sys-ext { padding: 0; margin-top: 14px; overflow: hidden; }
@@ -4945,7 +5091,7 @@ body.minn-kb-open .minn-editor-stats .minn-stats-session { display: none; }
 .minn-mig-dir-t { font-size: 13px; font-weight: 600; color: var(--text); }
 .minn-mig-dir-d { font-size: 12px; color: var(--text2); }
 
-.minn-mig-conn-in { width: 100%; font-family: var(--mono, monospace); font-size: 12px; padding: 9px 11px;
+.minn-mig-conn-in { width: 100%; font-family: var(--font-mono); font-size: 12px; padding: 9px 11px;
 	border: 1px solid var(--border); border-radius: 8px; background: var(--bg2); color: var(--text); resize: vertical;
 	/* The UA paints a textarea's scrollbars from color-scheme, not our rules. */
 	color-scheme: dark; }
@@ -4962,11 +5108,11 @@ body.minn-kb-open .minn-editor-stats .minn-stats-session { display: none; }
 	max-height: 240px; overflow-y: auto; padding: 10px 12px; margin-bottom: 10px;
 	border: 1px solid var(--border); border-radius: 8px; background: var(--bg2); }
 .minn-mig-tables label { display: flex; align-items: center; gap: 7px; font-size: 12px;
-	font-family: var(--mono, monospace); color: var(--text2); }
+	font-family: var(--font-mono); color: var(--text2); }
 
 .minn-mig-pairs { display: flex; flex-direction: column; gap: 6px; }
 .minn-mig-pair { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: 12px; }
-.minn-mig-pair code { font-family: var(--mono, monospace); background: var(--bg2); border: 1px solid var(--border);
+.minn-mig-pair code { font-family: var(--font-mono); background: var(--bg2); border: 1px solid var(--border);
 	border-radius: 6px; padding: 3px 7px; color: var(--text2); word-break: break-all; }
 .minn-mig-pair span { color: var(--text3); }
 .minn-mig-none { color: var(--text3); }
@@ -5000,7 +5146,7 @@ body.minn-kb-open .minn-editor-stats .minn-stats-session { display: none; }
 
 /* Migrate — this site's own connection info */
 .minn-mig-self { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.minn-mig-self code { font-family: var(--mono, monospace); font-size: 12px; padding: 7px 10px;
+.minn-mig-self code { font-family: var(--font-mono); font-size: 12px; padding: 7px 10px;
 	border: 1px solid var(--border); border-radius: 7px; background: var(--bg2); color: var(--text2);
 	word-break: break-all; }
 .minn-mig-self-key { letter-spacing: .04em; flex: 1; min-width: 150px; }

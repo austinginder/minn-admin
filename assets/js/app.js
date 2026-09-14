@@ -4415,12 +4415,15 @@
 					dark: normalizeModeTokens( hex ? { accent: hex, accent2: hex } : {}, 'dark' ),
 					light: normalizeModeTokens( hex ? { accent: hex, accent2: hex } : {}, 'light' ),
 				};
-				return { scheme: hex ? 'custom' : 'minn', custom };
+				return { scheme: hex ? 'custom' : 'minn', custom, defaultAdmin: false, frontBar: false, font: 'minn' };
 			}
 			const id = SCHEME_PRESETS.some( ( p ) => p.id === a.accent ) ? a.accent : 'minn';
 			return {
 				scheme: id,
 				custom: { dark: normalizeModeTokens( {}, 'dark' ), light: normalizeModeTokens( {}, 'light' ) },
+				defaultAdmin: false,
+				frontBar: false,
+				font: 'minn',
 			};
 		}
 		const ids = SCHEME_PRESETS.map( ( p ) => p.id );
@@ -4432,7 +4435,8 @@
 		};
 		const defaultAdmin = a.defaultAdmin === true || a.defaultAdmin === 1 || a.defaultAdmin === '1' || a.defaultAdmin === 'true';
 		const frontBar = a.frontBar === true || a.frontBar === 1 || a.frontBar === '1' || a.frontBar === 'true';
-		return { scheme, custom, defaultAdmin, frontBar };
+		const font = a.font === 'wordpress' ? 'wordpress' : 'minn';
+		return { scheme, custom, defaultAdmin, frontBar, font };
 	}
 
 	function clearSchemeInlineVars( root ) {
@@ -4466,6 +4470,7 @@
 		const root = document.documentElement;
 		const mode = root.getAttribute( 'data-theme' ) || 'dark';
 		root.setAttribute( 'data-scheme', norm.scheme || 'minn' );
+		root.setAttribute( 'data-font', norm.font === 'wordpress' ? 'wordpress' : 'minn' );
 		// Drop legacy data-accent if present.
 		root.removeAttribute( 'data-accent' );
 		if ( norm.scheme === 'custom' ) {
@@ -4511,6 +4516,7 @@
 			custom: next.custom != null ? next.custom : prev.custom,
 			defaultAdmin: next.defaultAdmin != null ? next.defaultAdmin : prev.defaultAdmin,
 			frontBar: next.frontBar != null ? next.frontBar : prev.frontBar,
+			font: next.font != null ? next.font : prev.font,
 		};
 		const norm = appearanceOf( merged );
 		applyAppearance( norm );
@@ -4628,6 +4634,13 @@
 						<div class="minn-toggle-desc">${ esc( __( 'Replace the WordPress toolbar on the public site with Minn’s quiet bar. Applies only to you.' ) ) }</div>
 					</div>
 				</div>` }
+				<div class="minn-toggle-row">
+					<button type="button" class="minn-switch${ ap.font === 'wordpress' ? ' on' : '' }" id="minn-wp-fonts" role="switch" aria-checked="${ ap.font === 'wordpress' ? 'true' : 'false' }" aria-label="${ esc( __( 'Use wp-admin fonts & styles' ) ) }"><span class="minn-switch-knob"></span></button>
+					<div class="minn-toggle-info">
+						<div class="minn-toggle-label">${ esc( __( 'Use wp-admin fonts & styles' ) ) }</div>
+						<div class="minn-toggle-desc">${ esc( __( 'Match wp-admin type, size, and corners.' ) ) }</div>
+					</div>
+				</div>
 			</div>`;
 	}
 
@@ -4699,8 +4712,8 @@
 					dark: mode === 'dark' ? nextMode : prev.custom.dark,
 					light: mode === 'light' ? nextMode : prev.custom.light,
 				};
-				applyAppearance( { scheme: 'custom', custom } );
-				queueAppearanceSave( { scheme: 'custom', custom } );
+				applyAppearance( { ...prev, scheme: 'custom', custom } );
+				queueAppearanceSave( { ...prev, scheme: 'custom', custom } );
 			} );
 			input.addEventListener( 'change', flushSlots );
 		} );
@@ -4742,6 +4755,15 @@
 				barBtn.classList.toggle( 'on', on );
 				barBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
 				commitAppearance( { frontBar: on } );
+			} );
+		}
+		const fontBtn = $( '#minn-wp-fonts', wrap );
+		if ( fontBtn ) {
+			fontBtn.addEventListener( 'click', () => {
+				const on = ! fontBtn.classList.contains( 'on' );
+				fontBtn.classList.toggle( 'on', on );
+				fontBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				commitAppearance( { font: on ? 'wordpress' : 'minn' } );
 			} );
 		}
 	}
@@ -46004,6 +46026,13 @@
 									</div>
 								</div>
 								<div class="minn-toggle-row">
+									<button type="button" class="minn-switch${ ue.appearance.font === 'wordpress' ? ' on' : '' }" id="minn-ue-wp-fonts" role="switch" aria-checked="${ ue.appearance.font === 'wordpress' ? 'true' : 'false' }" aria-label="${ esc( __( 'Use wp-admin fonts & styles' ) ) }"><span class="minn-switch-knob"></span></button>
+									<div class="minn-toggle-info">
+										<div class="minn-toggle-label">${ esc( __( 'Use wp-admin fonts & styles' ) ) }</div>
+										<div class="minn-toggle-desc">${ esc( __( 'Match wp-admin type, size, and corners.' ) ) }</div>
+									</div>
+								</div>
+								<div class="minn-toggle-row">
 									<button type="button" class="minn-switch${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' ? ' on' : '' }" id="minn-ue-toolbar" role="switch" aria-checked="${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' }" aria-label="${ esc( __( 'Show toolbar when viewing the site' ) ) }"><span class="minn-switch-knob"></span></button>
 									<div class="minn-toggle-info">
 										<div class="minn-toggle-label">${ esc( __( 'Show toolbar when viewing the site' ) ) }</div>
@@ -46228,12 +46257,12 @@
 				const sw = input.closest( '.minn-scheme-slot' )?.querySelector( '.minn-scheme-slot-swatch' );
 				if ( sw && hex ) sw.style.background = hex;
 				ue.appearance = appearanceOf( {
+					...prev,
 					scheme: 'custom',
 					custom: {
 						dark: m === 'dark' ? nextMode : prev.custom.dark,
 						light: m === 'light' ? nextMode : prev.custom.light,
 					},
-					defaultAdmin: prev.defaultAdmin,
 				} );
 				clearTimeout( ueAppearanceSaveTimer );
 				ueAppearanceSaveTimer = setTimeout( () => save( ue.appearance, false ), 250 );
@@ -46245,6 +46274,14 @@
 			defBtn.classList.toggle( 'on', on );
 			defBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
 			ue.appearance = appearanceOf( { ...appearanceOf( ue.appearance ), defaultAdmin: on } );
+			save( ue.appearance, false );
+		} );
+		const fontBtn = $( '#minn-ue-wp-fonts', view );
+		if ( fontBtn ) fontBtn.addEventListener( 'click', () => {
+			const on = ! fontBtn.classList.contains( 'on' );
+			fontBtn.classList.toggle( 'on', on );
+			fontBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+			ue.appearance = appearanceOf( { ...appearanceOf( ue.appearance ), font: on ? 'wordpress' : 'minn' } );
 			save( ue.appearance, false );
 		} );
 	}

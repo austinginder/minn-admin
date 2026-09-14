@@ -1,6 +1,6 @@
 /**
  * Per-user color schemes (user meta minn_admin_appearance).
- * Shape: { scheme, custom: { dark: {slots}, light: {slots} } }.
+ * Shape: { scheme, custom: { dark: {slots}, light: {slots} }, font }.
  * Legacy { accent, custom: '#hex' } migrates on read/write.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
@@ -20,7 +20,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	// Reset.
 	await rest( 'minn-admin/v1/me/appearance', {
-		method: 'POST', body: JSON.stringify( { scheme: 'minn' } ),
+		method: 'POST', body: JSON.stringify( { scheme: 'minn', font: 'minn' } ),
 	} );
 
 	await page.goto( `${ BASE }/minn-admin/`, { waitUntil: 'domcontentloaded' } );
@@ -30,11 +30,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		appearance: window.MINN.user.appearance,
 		slots: window.MINN.appearanceSlots,
 		scheme: document.documentElement.getAttribute( 'data-scheme' ),
+		font: document.documentElement.getAttribute( 'data-font' ),
 	} ) );
 	t.check( 'boot carries appearance.scheme', !! boot.appearance && typeof boot.appearance.scheme === 'string', JSON.stringify( boot.appearance ) );
 	t.check( 'default scheme is minn', boot.appearance.scheme === 'minn', JSON.stringify( boot.appearance ) );
+	t.check( 'default font is minn', boot.appearance.font === 'minn', JSON.stringify( boot.appearance ) );
 	t.check( 'boot exposes appearanceSlots', Array.isArray( boot.slots ) && boot.slots.length >= 10, String( boot.slots && boot.slots.length ) );
 	t.check( 'data-scheme is minn', boot.scheme === 'minn', boot.scheme );
+	t.check( 'data-font is minn', boot.font === 'minn', boot.font );
 
 	const got = await rest( 'minn-admin/v1/me/appearance' );
 	t.check( 'GET me/appearance 200', got.status === 200, String( got.status ) );
@@ -43,11 +46,26 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		&& got.body.custom && got.body.custom.dark && got.body.custom.light
 		&& got.body.custom.dark.accent,
 		JSON.stringify( got.body ) );
+	t.check( 'GET has font minn', got.body && got.body.font === 'minn', JSON.stringify( got.body ) );
 
 	const ocean = await rest( 'minn-admin/v1/me/appearance', {
 		method: 'POST', body: JSON.stringify( { scheme: 'ocean' } ),
 	} );
 	t.check( 'POST ocean saves', ocean.body && ocean.body.scheme === 'ocean', JSON.stringify( ocean.body ) );
+
+	const wpFont = await rest( 'minn-admin/v1/me/appearance', {
+		method: 'POST', body: JSON.stringify( { font: 'wordpress' } ),
+	} );
+	t.check( 'POST font wordpress round-trips', wpFont.body && wpFont.body.font === 'wordpress', JSON.stringify( wpFont.body ) );
+	t.check( 'font POST keeps current scheme', wpFont.body && wpFont.body.scheme === 'ocean', JSON.stringify( wpFont.body ) );
+	const keepFont = await rest( 'minn-admin/v1/me/appearance', {
+		method: 'POST', body: JSON.stringify( { scheme: 'ocean' } ),
+	} );
+	t.check( 'scheme POST keeps wordpress font', keepFont.body && keepFont.body.font === 'wordpress', JSON.stringify( keepFont.body ) );
+	const badFont = await rest( 'minn-admin/v1/me/appearance', {
+		method: 'POST', body: JSON.stringify( { font: 'comic' } ),
+	} );
+	t.check( 'invalid font falls back to minn', badFont.body && badFont.body.font === 'minn', JSON.stringify( badFont.body ) );
 
 	// Legacy accent body still migrates.
 	const legacy = await rest( 'minn-admin/v1/me/appearance', {
@@ -83,6 +101,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		!! ( await page.$( '[data-theme-pref="system"]' ) )
 		&& !! ( await page.$( '[data-theme-pref="light"]' ) )
 		&& !! ( await page.$( '[data-theme-pref="dark"]' ) ) );
+	t.check( 'profile shows wp-admin fonts switch', !! ( await page.$( '#minn-wp-fonts' ) ) );
 
 	const beforeMode = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
 	await page.click( '[data-theme-pref="light"]' );
@@ -135,11 +154,40 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	} );
 	t.check( 'invalid scheme falls back to minn', bad.body && bad.body.scheme === 'minn', JSON.stringify( bad.body ) );
 
-	// Restore theme + scheme.
+	await page.goto( `${ BASE }/minn-admin/profile`, { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '#minn-wp-fonts', { timeout: 15000 } );
+	await page.click( '#minn-wp-fonts' );
+	t.check( 'fonts switch sets data-font wordpress immediately', await page.evaluate( () =>
+		document.documentElement.getAttribute( 'data-font' ) ) === 'wordpress' );
+	await page.waitForFunction( async () => {
+		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/me/appearance', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+		} );
+		const j = await r.json().catch( () => null );
+		return j && j.font === 'wordpress';
+	}, { timeout: 10000 } );
+
+	await page.goto( `${ BASE }/minn-admin/`, { waitUntil: 'domcontentloaded' } );
+	await page.waitForFunction( () => window.MINN && window.MINN.user, { timeout: 15000 } );
+	const afterFont = await page.evaluate( () => ( {
+		boot: window.MINN.user.appearance && window.MINN.user.appearance.font,
+		attr: document.documentElement.getAttribute( 'data-font' ),
+	} ) );
+	t.check( 'reload boot still wordpress font', afterFont.boot === 'wordpress', JSON.stringify( afterFont ) );
+	t.check( 'reload data-font still wordpress', afterFont.attr === 'wordpress', afterFont.attr );
+
+	await page.goto( `${ BASE }/minn-admin/profile`, { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '#minn-wp-fonts', { timeout: 15000 } );
+	await page.click( '#minn-wp-fonts' );
+	t.check( 'fonts switch flips back to minn', await page.evaluate( () =>
+		document.documentElement.getAttribute( 'data-font' ) ) === 'minn' );
+	await page.waitForTimeout( 400 );
+
+	// Restore theme + scheme + font.
 	const restore = beforeMode === 'light' || beforeMode === 'dark' || beforeMode === 'system' ? beforeMode : 'system';
 	await page.evaluate( ( m ) => localStorage.setItem( 'minn-theme', m ), restore );
 	await rest( 'minn-admin/v1/me/appearance', {
-		method: 'POST', body: JSON.stringify( { scheme: 'minn' } ),
+		method: 'POST', body: JSON.stringify( { scheme: 'minn', font: 'minn' } ),
 	} );
 
 	await t.done( browser, errors );

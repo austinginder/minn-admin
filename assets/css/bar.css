@@ -12,6 +12,8 @@
 }
 
 #minn-bar-root {
+  --font-ui: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --bg2: #101013;
   --panel: #151518;
   --panel2: #1b1b1f;
@@ -48,6 +50,24 @@
   --blue: #2b68af;
   --red: #ad4141;
   --shadow: 0 18px 50px rgba(30, 30, 50, 0.16);
+}
+#minn-bar-root[data-minn-font="wordpress"] {
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  --font-mono: Consolas, Monaco, monospace;
+}
+#minn-bar-root[data-minn-font="wordpress"] #minn-bar,
+#minn-bar-root[data-minn-font="wordpress"] .minn-bar-menu,
+#minn-bar-root[data-minn-font="wordpress"] .minn-bar-pal,
+#minn-bar-root[data-minn-font="wordpress"] #minn-bar-toast {
+  font-size: 13px;
+  -webkit-font-smoothing: subpixel-antialiased;
+  letter-spacing: 0;
+}
+#minn-bar-root[data-minn-font="wordpress"] #minn-bar { border-radius: 2px; }
+#minn-bar-root[data-minn-font="wordpress"] .minn-bar-menu,
+#minn-bar-root[data-minn-font="wordpress"] .minn-bar-pal,
+#minn-bar-root[data-minn-font="wordpress"] #minn-bar-toast {
+  border-radius: 2px;
 }
 
 /* —— Color schemes (user meta minn_admin_appearance) ——
@@ -215,7 +235,7 @@
   border: 1px solid var(--border2);
   border-radius: 14px;
   box-shadow: var(--shadow);
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.4;
   color: var(--text);
@@ -482,7 +502,7 @@
   border: 1px solid var(--border2);
   border-radius: 12px;
   box-shadow: var(--shadow);
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.4;
   color: var(--text);
@@ -562,7 +582,7 @@
   border-radius: 16px;
   background: var(--panel);
   box-shadow: var(--shadow);
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.4;
   color: var(--text);
@@ -665,7 +685,7 @@
   background: var(--panel);
   box-shadow: var(--shadow);
   color: var(--text);
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.45;
   opacity: 0;
