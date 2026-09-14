@@ -207,8 +207,13 @@ const pluginInstalled = ( slug ) => {
 					// narrows the list to the seeded row.
 					await page.evaluate( () => localStorage.setItem( 'minn-sf-activity-log', 'aryo-activity-log' ) );
 					await page.goto( BASE + '/minn-admin/aryo-activity-log', { waitUntil: 'domcontentloaded' } );
-					await page.waitForSelector( '[data-sfilter="rest"]', { timeout: 20000 } );
-					await page.click( '[data-sfilter="rest"]' );
+					// Eight sources overflow the chip strip, so the Source filter is
+					// the same strict combobox the tab strip becomes: open it and
+					// pick the REST entry rather than clicking a chip.
+					await page.waitForSelector( '[data-sfiltercombo] .minn-ac-input', { timeout: 20000 } );
+					await page.click( '[data-sfiltercombo] .minn-ac-input' );
+					await page.waitForSelector( '[data-sfiltercombo] .minn-ac-item[data-acv="rest"]', { timeout: 10000 } );
+					await page.click( '[data-sfiltercombo] .minn-ac-item[data-acv="rest"]' );
 					await page.waitForFunction( () => {
 						const rows = Array.from( document.querySelectorAll( '.minn-table-row' ) );
 						return rows.length > 0 && rows.every( ( r ) => /REST API/.test( r.textContent || '' ) );
