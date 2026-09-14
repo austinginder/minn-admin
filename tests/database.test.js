@@ -130,7 +130,9 @@ const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], {
 
 	// --- Back to the table list ------------------------------------------
 	await page.click( '#minn-db-back' );
-	await page.waitForSelector( '[data-dbtable]', { timeout: 15000 } );
+	// Wait for the row the check reads, not the first row to paint: a loaded
+	// site can show the top of the list before wp_options arrives.
+	await page.waitForSelector( '[data-dbtable="wp_options"]', { timeout: 30000 } ).catch( () => null );
 	t.check( 'Back returns to the table list', await page.$( '[data-dbtable="wp_options"]' ) !== null );
 
 	// --- Structure tab ----------------------------------------------------
