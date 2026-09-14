@@ -18,6 +18,25 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const { browser, page, errors } = await launch();
 	const t = reporter( 'bar-overlay' );
 	await login( page );
+	// The bar is an opt-in preference, and suites that run before this one
+	// (appearance restores the admin to defaults) leave it off. Arm it here
+	// and put the previous value back at the end rather than assuming.
+	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
+	await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 30000 } );
+	const prevFrontBar = await page.evaluate( async () => {
+		const h = { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce };
+		const cur = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/me/appearance', { headers: h, credentials: 'same-origin' } ) ).json().catch( () => ( {} ) );
+		await fetch( window.MINN.restUrl + 'minn-admin/v1/me/appearance', { method: 'POST', headers: h, credentials: 'same-origin', body: JSON.stringify( { frontBar: true } ) } );
+		return !! cur.frontBar;
+	} );
+	const restoreFrontBar = async () => {
+		await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } ).catch( () => null );
+		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 30000 } ).catch( () => null );
+		await page.evaluate( async ( v ) => {
+			const h = { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce };
+			await fetch( window.MINN.restUrl + 'minn-admin/v1/me/appearance', { method: 'POST', headers: h, credentials: 'same-origin', body: JSON.stringify( { frontBar: v } ) } );
+		}, prevFrontBar ).catch( () => null );
+	};
 
 	// The bar renders on the front end, not inside the app.
 	await page.goto( BASE + '/', { waitUntil: 'domcontentloaded' } );
@@ -25,7 +44,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		.then( () => true ).catch( () => false );
 	if ( ! hasBar ) {
 		t.check( 'Minn bar renders on the front end', false, 'skip — bar not shown for this user' );
-		await t.done( browser, errors );
+		await restoreFrontBar();
+	await t.done( browser, errors );
 		return;
 	}
 	t.check( 'Minn bar renders on the front end', true, '' );
@@ -100,6 +120,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		console.log( 'SKIP  image lightbox checks (no zoomable image on this page)' );
 	}
 
+	await restoreFrontBar();
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
 	console.error( e );
