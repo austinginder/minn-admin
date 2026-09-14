@@ -48,9 +48,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		return String( ( await r.json() ).connectors_ai_anthropic_api_key || '' );
 	} );
 
+	// Settings paints only after every loader settles, and a blocked or
+	// dropped connectors route makes the resilient loader wait for a REST
+	// liveness probe on each of its six attempts. Under a full-run load that
+	// probe alone takes seconds, so the page can legitimately need most of a
+	// minute before its nav appears.
 	const openConnectors = async () => {
 		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 20000 } );
+		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 60000 } );
 		await page.$$eval( '.minn-settings-nav-item', ( els ) => {
 			const tab = els.find( ( el ) => el.textContent.trim() === 'Connectors' );
 			if ( tab ) tab.click();
@@ -209,7 +214,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			await route.continue();
 		} );
 		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 20000 } );
+		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 60000 } );
 		await page.$$eval( '.minn-settings-nav-item', ( els ) => {
 			const tab = els.find( ( el ) => el.textContent.trim() === 'Connectors' );
 			if ( tab ) tab.click();
