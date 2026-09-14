@@ -32,6 +32,13 @@ $minn_asset_ver = function ( $rel ) {
 };
 ?>
 <link rel="stylesheet" href="<?php echo esc_url( MINN_ADMIN_URL . 'assets/css/app.css?ver=' . $minn_asset_ver( 'assets/css/app.css' ) ); ?>">
+<?php
+// The app script is 2 MB and sits at the end of the body, after the inline
+// boot payload, so without this hint its download waits for that script to
+// parse. A preload lets the fetch start with the stylesheet; the same
+// version query keeps it the exact URL the tag at the bottom asks for.
+?>
+<link rel="preload" href="<?php echo esc_url( MINN_ADMIN_URL . 'assets/js/app.js?ver=' . $minn_asset_ver( 'assets/js/app.js' ) ); ?>" as="script">
 <script>
 // Apply the theme before first paint to avoid a flash. Default is System
 // (follow the OS live). Explicit light/dark wins when the user locked one.
