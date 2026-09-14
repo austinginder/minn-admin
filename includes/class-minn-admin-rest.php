@@ -1770,9 +1770,7 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'system_info' ),
-				'permission_callback' => function () {
-					return current_user_can( 'manage_options' );
-				},
+				'permission_callback' => array( __CLASS__, 'can_read_system' ),
 			)
 		);
 
@@ -1791,7 +1789,7 @@ class Minn_Admin_REST {
 				// routinely grant manage_options to a site manager while
 				// withholding file editing.
 				'permission_callback' => function () {
-					return current_user_can( 'manage_options' ) && current_user_can( 'edit_files' );
+					return self::can_read_system() && current_user_can( 'edit_files' );
 				},
 				'args'                => array(
 					'constant' => array(
@@ -1813,9 +1811,7 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'autoload_detail' ),
-				'permission_callback' => function () {
-					return current_user_can( 'manage_options' );
-				},
+				'permission_callback' => array( __CLASS__, 'can_read_system' ),
 			)
 		);
 		register_rest_route(
@@ -1824,9 +1820,7 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'cron_detail' ),
-				'permission_callback' => function () {
-					return current_user_can( 'manage_options' );
-				},
+				'permission_callback' => array( __CLASS__, 'can_read_system' ),
 			)
 		);
 
@@ -5406,6 +5400,19 @@ class Minn_Admin_REST {
 	 * capability is not enough to read or truncate what lands there.
 	 */
 	public static function can_read_logs() {
+		return self::can_read_system();
+	}
+
+	/**
+	 * Who may read the System diagnostics (PHP ini, loaded extensions, the
+	 * security-posture checks, backup state, the hidden login URL) and the
+	 * autoload / cron / debug-log tools. On multisite this is server-wide
+	 * information a single subsite's administrator has no business reading,
+	 * so it takes a network administrator there; on a single site it is the
+	 * ordinary manage_options administrator. Core gates Site Health the same
+	 * way (view_site_health_checks resolves to the network on multisite).
+	 */
+	public static function can_read_system() {
 		return is_multisite()
 			? current_user_can( 'manage_network_options' )
 			: current_user_can( 'manage_options' );
