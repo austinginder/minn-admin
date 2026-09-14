@@ -254,7 +254,14 @@ function reporter( name ) {
 			// Close can hang on plugins with long-lived admin connections
 			// (Site Kit) — never let it eat a finished run's exit code.
 			await Promise.race( [ browser.close(), new Promise( ( r ) => setTimeout( r, 5000 ) ) ] );
-			process.exit( failed ? 1 : 0 );
+			// Exit on a timer, never synchronously: done() runs from finally
+			// blocks, and an immediate exit here swallows an exception still
+			// propagating out of the try body, so a suite that crashed halfway
+			// reported its partial tally as a pass. The suite's own catch runs
+			// first (a microtask) and exits 1; otherwise this timer ends the run,
+			// which still cannot be held open by a hung browser handle.
+			process.exitCode = failed ? 1 : 0;
+			setTimeout( () => process.exit( failed ? 1 : 0 ), 50 );
 		},
 	};
 }
