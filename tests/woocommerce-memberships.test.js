@@ -232,6 +232,17 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '[data-open-membership]', { timeout: 20000 } ).catch( () => null );
 		const custRows = await page.$$eval( '[data-open-membership]', ( els ) => els.map( ( e ) => e.textContent.replace( /\s+/g, ' ' ).trim() ) ).catch( () => [] );
 		t.check( 'the customer modal lists the member\'s memberships with plan and status', custRows.some( ( r ) => /Minn Gold/.test( r ) && /Active/.test( r ) ), JSON.stringify( custRows ) );
+		// Find in Users leaves the modal for the Users list searched for this
+		// person (the link used to carry a hash route and no handler).
+		await page.click( '#minn-cust-users' );
+		await page.waitForFunction( () => /\/users$/.test( location.pathname ) && !! document.querySelector( '#minn-user-search' ), null, { timeout: 15000 } ).catch( () => null );
+		await page.waitForFunction( () => /dana-member@example.com/.test( ( document.querySelector( '.minn-table' ) || {} ).textContent || '' ), null, { timeout: 15000 } ).catch( () => null );
+		t.check( 'Find in Users opens the Users list searched for the customer',
+			/\/users$/.test( page.url() ) && 'dana-member@example.com' === ( await page.$eval( '#minn-user-search', ( i ) => i.value ).catch( () => '' ) ), page.url() );
+		await page.goto( BASE + '/minn-admin/memberships/' + pageId, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-wcm-open-customer', { timeout: 20000 } );
+		await page.click( '#minn-wcm-open-customer' );
+		await page.waitForSelector( '[data-open-membership]', { timeout: 20000 } );
 		await page.click( '[data-open-membership]' );
 		await page.waitForFunction( ( id ) => location.pathname.endsWith( '/memberships/' + id ), pageId, { timeout: 10000 } ).catch( () => null );
 		t.check( 'a membership row in the customer modal opens the membership page', page.url().endsWith( '/memberships/' + pageId ), page.url() );

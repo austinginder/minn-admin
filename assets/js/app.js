@@ -41798,7 +41798,7 @@
 					</div>
 					<div class="minn-modal-actions">
 						${ B.wcs && B.caps.subscriptions ? `<button type="button" class="minn-btn-soft" id="minn-cust-subs-goto">${ esc( __( 'All subscriptions' ) ) }</button>` : '' }
-						${ B.caps.users ? `<a class="minn-btn-soft" href="#/users" id="minn-cust-users" data-goto-users="${ c.id }">↗ ${ esc( __( 'Users' ) ) }</a>` : '' }
+						${ B.caps.users ? `<a class="minn-btn-soft" href="${ esc( PATH_MODE ? BASE + 'users' : '#/users' ) }" id="minn-cust-users" data-goto-users="${ c.id }">${ esc( __( 'Find in Users' ) ) }</a>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }user-edit.php?user_id=${ c.id }" target="_blank" rel="noopener">↗ ${ esc( __( 'Edit in WordPress' ) ) }</a>
 						${ canDeleteCustomer( c ) ? `<button type="button" class="minn-btn-soft danger" id="minn-cust-delete">${ esc( __( 'Delete customer' ) ) }</button>` : '' }
 					</div>` : '' }
@@ -42867,6 +42867,18 @@
 					go( 'orders/' + id );
 				} )
 			);
+			// The Users list, searched for this person: the link used to carry
+			// the legacy hash route and no handler, so under path routing a
+			// click only appended "#/users" to the address and went nowhere.
+			const usersBtn = $( '#minn-cust-users' );
+			if ( usersBtn ) usersBtn.addEventListener( 'click', ( e ) => {
+				e.preventDefault();
+				const who = ( m.full && m.full.email ) || ( m.customer && m.customer.email ) || '';
+				closeModal();
+				state.userSearch = who;
+				state.userRole = '_all';
+				go( 'users' );
+			} );
 			$$( '[data-open-membership]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
 					const id = parseInt( btn.dataset.openMembership, 10 );
