@@ -815,6 +815,18 @@ class Minn_Admin {
 			$font = 'minn';
 		}
 
+		// The two preferences are read the same way whatever shape the rest of
+		// the record takes: a legacy-shaped save must not reset them, which is
+		// how a saved Minn bar or default-admin choice used to vanish.
+		$default_admin = array_key_exists( 'defaultAdmin', $raw )
+			&& ! empty( $raw['defaultAdmin'] )
+			&& '0' !== (string) $raw['defaultAdmin']
+			&& 'false' !== (string) $raw['defaultAdmin'];
+		$front_bar = array_key_exists( 'frontBar', $raw )
+			&& ! empty( $raw['frontBar'] )
+			&& '0' !== (string) $raw['frontBar']
+			&& 'false' !== (string) $raw['frontBar'];
+
 		// Legacy v1: { accent: preset|custom, custom: '#hex' }.
 		if ( ! isset( $raw['scheme'] ) && isset( $raw['accent'] ) ) {
 			$accent = sanitize_key( (string) $raw['accent'] );
@@ -837,8 +849,8 @@ class Minn_Admin {
 				return array(
 					'scheme'       => $hex ? 'custom' : 'minn',
 					'custom'       => $custom,
-					'defaultAdmin' => false,
-					'frontBar'     => false,
+					'defaultAdmin' => $default_admin,
+					'frontBar'     => $front_bar,
 					'font'         => $font,
 				);
 			}
@@ -846,8 +858,8 @@ class Minn_Admin {
 				return array(
 					'scheme'       => $accent,
 					'custom'       => $defaults['custom'],
-					'defaultAdmin' => false,
-					'frontBar'     => false,
+					'defaultAdmin' => $default_admin,
+					'frontBar'     => $front_bar,
 					'font'         => $font,
 				);
 			}
@@ -871,15 +883,7 @@ class Minn_Admin {
 		);
 
 		// Opt-in only: true only when the user explicitly saved defaultAdmin.
-		$default_admin = array_key_exists( 'defaultAdmin', $raw )
-			&& ! empty( $raw['defaultAdmin'] )
-			&& '0' !== (string) $raw['defaultAdmin']
-			&& 'false' !== (string) $raw['defaultAdmin'];
 
-		$front_bar = array_key_exists( 'frontBar', $raw )
-			&& ! empty( $raw['frontBar'] )
-			&& '0' !== (string) $raw['frontBar']
-			&& 'false' !== (string) $raw['frontBar'];
 
 		return array(
 			'scheme'       => $scheme,
