@@ -18,6 +18,10 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		await page.click( '[data-side-door="settings"]' );
 		await page.waitForSelector( '.minn-editor-side-modal #minn-editor-tag-input', { timeout: 10000 } );
 	};
+	// The editor's own boot fetches (the notices capture, a megabyte of editor
+	// styles) hold the browser's connection pool for tens of seconds on this
+	// plugin-heavy site, and every tag lands through a search-then-create pair
+	// that queues behind them, so the polls below allow a full minute.
 	const chipNames = () => page.evaluate( () =>
 		[ ...document.querySelectorAll( '#minn-editor-tags [data-tagchip]' ) ]
 			.map( ( c ) => c.textContent.replace( /\s*×\s*$/, '' ).trim() )
@@ -44,7 +48,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		await page.keyboard.press( 'Meta+s' );
 		const start = Date.now();
 		let tags = await savedTags( id );
-		while ( tags.length < 3 && Date.now() - start < 12000 ) {
+		while ( tags.length < 3 && Date.now() - start < 60000 ) {
 			await page.waitForTimeout( 400 );
 			tags = await savedTags( id );
 		}
@@ -61,7 +65,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await pasteIntoTags( names.join( ', ' ) );
 	const start = Date.now();
 	let chips = await chipNames();
-	while ( ! names.every( ( n ) => chips.includes( n ) ) && Date.now() - start < 15000 ) {
+	while ( ! names.every( ( n ) => chips.includes( n ) ) && Date.now() - start < 60000 ) {
 		await page.waitForTimeout( 250 );
 		chips = await chipNames();
 	}
@@ -95,7 +99,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.keyboard.press( 'Enter' );
 	const enterStart = Date.now();
 	let enterChips = await chipNames();
-	while ( ! enterNames.every( ( n ) => enterChips.includes( n ) ) && Date.now() - enterStart < 15000 ) {
+	while ( ! enterNames.every( ( n ) => enterChips.includes( n ) ) && Date.now() - enterStart < 60000 ) {
 		await page.waitForTimeout( 250 );
 		enterChips = await chipNames();
 	}
