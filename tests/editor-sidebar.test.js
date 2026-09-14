@@ -17,7 +17,14 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ a.id }?context=edit&_fields=${ a.fields }`, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
 		return r.json();
 	}, { id, fields } );
-	const save = async () => { await page.keyboard.press( 'Meta+s' ); await page.waitForTimeout( 2000 ); };
+	// ⌘S, then wait for the save's own response (a loaded site takes far
+	// longer than any flat pause) before the read-back polls.
+	const save = async () => {
+		const resp = page.waitForResponse( ( r ) => r.request().method() === 'POST' && /\/wp\/v2\/posts\/\d+/.test( r.url() ), { timeout: 45000 } );
+		await page.keyboard.press( 'Meta+s' );
+		await resp.catch( () => null );
+		await page.waitForTimeout( 400 );
+	};
 	// Saves ride a serialized promise chain and REST writes carry every
 	// active plugin's hooks, so a flat post-⌘S wait reads mid-save state
 	// (the shortcuts-suite lesson). Poll the SAVED post until it converges.
@@ -127,7 +134,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await pickVisibility( 'private' );
 	await page.waitForTimeout( 200 );
 	await save();
-	s = await saved( pid );
+	s = await savedWhen( pid, ( x ) => x.status === 'private' );
 	t.check( 'Private applies status=private', s.status === 'private', s.status );
 
 	/* ===== Autosave must NOT auto-publish a private-selected draft ===== */
