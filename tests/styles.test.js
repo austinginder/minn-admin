@@ -134,6 +134,11 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		// seconds, so the history dialog is inspected AFTER the Undo step.
 
 		/* ===== Undo restores the previous look ===== */
+		// The toast only exists once the Apply request has answered, which on a
+		// loaded box is later than the checks above take; wait for its button
+		// rather than clicking into thin air (the toast still self-dismisses,
+		// so click the moment it is there).
+		await page.waitForSelector( '.minn-toast button, [data-toast-action]', { timeout: 15000 } ).catch( () => null );
 		await page.evaluate( () => {
 			const b = document.querySelector( '.minn-toast button, [data-toast-action]' );
 			if ( b ) b.click();
