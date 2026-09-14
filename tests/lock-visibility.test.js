@@ -38,9 +38,13 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 	const editorName = await pageB.evaluate( () => window.MINN.user.name );
 
 	const rowInfo = ( page, id ) => page.evaluate( ( pid ) => {
+		// Since the row grew a lock DOT beside its status pill (the pill's
+		// tooltip names the holder), the chip is that dot plus that title.
 		const row = document.querySelector( `.minn-table-row[data-id="${ pid }"]` );
-		const el = row && row.querySelector( '.minn-status.editing' );
-		return { found: !! row, chip: el ? el.textContent.trim() : null };
+		const dot = row && row.querySelector( '.minn-row-locked' );
+		const pill = row && row.querySelector( '.minn-row-status .minn-status' );
+		const title = pill ? ( pill.getAttribute( 'title' ) || '' ) : '';
+		return { found: !! row, chip: dot ? ( title || 'locked' ) : null };
 	}, id );
 
 	let postId = null;
@@ -67,7 +71,7 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 		await pageA.goto( BASE + '/minn-admin/content', { waitUntil: 'domcontentloaded' } );
 		await pageA.waitForSelector( '.minn-table-row[data-id]', { timeout: 20000 } );
 		const locked = await rowInfo( pageA, postId );
-		t.check( 'row wears the is-editing chip naming the holder', locked.found && !! locked.chip && locked.chip.includes( editorName ), JSON.stringify( locked ) );
+		t.check( 'row wears the lock dot and its tooltip names the holder', locked.found && !! locked.chip && locked.chip.includes( editorName ), JSON.stringify( locked ) );
 
 		const field = await pageA.evaluate( async ( id ) => {
 			// minn_lock is edit-context only on purpose: the holder's id and
