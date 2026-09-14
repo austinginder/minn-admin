@@ -12,6 +12,8 @@
 }
 
 #minn-bar-root {
+  --font-ui: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --bg2: #101013;
   --panel: #151518;
   --panel2: #1b1b1f;
@@ -215,7 +217,7 @@
   border: 1px solid var(--border2);
   border-radius: 14px;
   box-shadow: var(--shadow);
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.4;
   color: var(--text);
@@ -482,7 +484,7 @@
   border: 1px solid var(--border2);
   border-radius: 12px;
   box-shadow: var(--shadow);
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.4;
   color: var(--text);
@@ -562,7 +564,7 @@
   border-radius: 16px;
   background: var(--panel);
   box-shadow: var(--shadow);
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.4;
   color: var(--text);
@@ -665,7 +667,7 @@
   background: var(--panel);
   box-shadow: var(--shadow);
   color: var(--text);
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.45;
   opacity: 0;

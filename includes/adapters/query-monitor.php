@@ -44,7 +44,7 @@ add_action( 'minn_admin_template_footer', function () {
 #wp-admin-bar-query-monitor { position: fixed; right: 12px; bottom: 12px; z-index: 50; }
 #wp-admin-bar-query-monitor:empty { display: none; }
 #wp-admin-bar-query-monitor > .ab-item {
-	display: block; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
+	display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 600;
 	color: var(--text2); background: var(--panel); border: 1px solid var(--border);
 	padding: 5px 10px; border-radius: 7px; text-decoration: none; box-shadow: var(--shadow-sm);
 	white-space: nowrap; cursor: pointer;
