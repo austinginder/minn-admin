@@ -75,7 +75,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'clear offered for the writable debug log', await page.evaluate( () => ! document.querySelector( '#minn-log-clear' ).hidden ), '' );
 	t.check( 'action row holds the full toolset', await page.evaluate( () => document.querySelectorAll( '.minn-log-actions button' ).length >= 5 ), '' );
 
-	// Collapse repeats: the three seeded lines differ only in digits.
+	// Collapse repeats: the three seeded lines differ only in digits. The
+	// overlay reads the last 256 KB, and a fixture on this site (the SkyVerge
+	// framework's PHP 8.5 deprecation) writes thousands of lines a minute, so
+	// the markers seeded at the start have usually scrolled out by now: seed
+	// them again right here and refresh, then look.
+	await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { minn_test_seed_logs: '1' } ) } ).catch( () => {} );
+	await page.evaluate( async () => { await fetch( window.MINN.restUrl + 'wp/v2/users/me?_fields=id&_seed=' + Date.now(), { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } ).catch( () => null ); } );
+	await page.click( '#minn-log-refresh' );
 	await page.waitForFunction( () => /Minn logs suite repeated marker/.test( document.querySelector( '#minn-log-body' ).textContent ), null, { timeout: 15000 } );
 	await page.click( '#minn-log-collapse' );
 	const collapsedOk = await page.evaluate( () => {
