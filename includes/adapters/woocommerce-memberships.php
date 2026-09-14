@@ -246,11 +246,14 @@ function minn_admin_wcm_find_user( $raw ) {
 	if ( is_email( $raw ) ) {
 		$user = get_user_by( 'email', $raw );
 	}
-	if ( ! $user && ctype_digit( $raw ) ) {
-		$user = get_user_by( 'id', (int) $raw );
-	}
+	// Login before id: a site can have numeric usernames, and the field asks
+	// for an email or username, never an id. Only fall back to an id lookup
+	// when nothing else matched, so "1234" the username wins over user 1234.
 	if ( ! $user ) {
 		$user = get_user_by( 'login', $raw );
+	}
+	if ( ! $user && ctype_digit( $raw ) ) {
+		$user = get_user_by( 'id', (int) $raw );
 	}
 	return $user instanceof WP_User ? $user : null;
 }

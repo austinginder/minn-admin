@@ -975,7 +975,7 @@ class Minn_Admin_REST {
 				// for an administrator resetting somebody else.
 				'permission_callback' => function ( WP_REST_Request $request ) {
 					$uid = self::target_user_id( $request );
-					return current_user_can( 'edit_user', $uid )
+					return is_user_logged_in() && $uid > 0 && current_user_can( 'edit_user', $uid )
 						&& ( get_current_user_id() !== $uid || current_user_can( 'list_users' ) );
 				},
 			)
@@ -1042,7 +1042,7 @@ class Minn_Admin_REST {
 				// real SPF/DKIM alignment, to an inbox they control.
 				'permission_callback' => function ( WP_REST_Request $request ) {
 					$uid = self::target_user_id( $request );
-					return current_user_can( 'edit_user', $uid )
+					return is_user_logged_in() && $uid > 0 && current_user_can( 'edit_user', $uid )
 						&& ( get_current_user_id() !== $uid || current_user_can( 'list_users' ) );
 				},
 				'args'                => array(
@@ -9885,6 +9885,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return $new_id;
 		}
 		foreach ( get_object_taxonomies( $post->post_type ) as $tax ) {
+			// Only copy a taxonomy's terms the caller could assign themselves;
+			// a Contributor duplicating a post must not gain terms in a
+			// taxonomy their role cannot touch.
+			$tax_obj = get_taxonomy( $tax );
+			if ( ! $tax_obj || ! current_user_can( $tax_obj->cap->assign_terms ) ) {
+				continue;
+			}
 			$terms = wp_get_object_terms( $post->ID, $tax, array( 'fields' => 'ids' ) );
 			if ( $terms && ! is_wp_error( $terms ) ) {
 				wp_set_object_terms( $new_id, $terms, $tax );
@@ -9893,6 +9900,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$skip_meta = array( '_edit_lock', '_edit_last', '_wp_old_slug', '_wp_old_date' );
 		foreach ( get_post_meta( $post->ID ) as $key => $values ) {
 			if ( in_array( $key, $skip_meta, true ) ) {
+				continue;
+			}
+			// Protected meta (a _-prefixed key: page template, builder data,
+			// SEO flags) copies only when the caller could set it on the new
+			// post themselves; core's own meta writes run the same check.
+			if ( is_protected_meta( $key, 'post' ) && ! current_user_can( 'edit_post_meta', $new_id, $key ) ) {
 				continue;
 			}
 			foreach ( $values as $value ) {
