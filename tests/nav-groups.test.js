@@ -37,16 +37,21 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				&& ! ws.some( ( x ) => x.includes( ':bookings' ) ), ws.join( ', ' ) );
 		const commerce = await groupNavs( 'commerce' );
 		const commerceIds = commerce.map( ( x ) => x.split( ':' )[ 0 ] );
-		const positions = [
-			commerceIds.indexOf( 'orders' ),
-			commerceIds.indexOf( 'subscriptions' ),
-			commerce.findIndex( ( x ) => x.includes( ':bookings' ) ),
-			commerceIds.indexOf( 'customers' ),
-			commerceIds.indexOf( 'products' ),
-			commerceIds.indexOf( 'coupons' ),
-		];
-		t.check( 'commerce follows the operational workflow order',
-			positions.every( ( p ) => p >= 0 ) && positions.every( ( p, i ) => i === 0 || p > positions[ i - 1 ] ), commerce.join( ', ' ) );
+		// The store's daily four first, in this order, then every add-on kind
+		// (subscriptions, bookings, gift cards, memberships…) by name, so the
+		// tail reads the same on every site whatever mix of extensions it runs.
+		const four = [ 'orders', 'products', 'customers', 'coupons' ].map( ( id ) => commerceIds.indexOf( id ) );
+		const tail = commerce.slice( Math.max( ...four ) + 1 );
+		const tailLabels = await page.evaluate( ( ids ) => ids.map( ( id ) => {
+			const btn = document.querySelector( `#minn-nav-commerce .minn-nav-btn[data-nav="${ id.split( ':' )[ 0 ] }"]` );
+			return btn ? btn.textContent.trim() : id;
+		} ), tail );
+		const sortedTail = tailLabels.slice().sort( ( a, b ) => a.localeCompare( b ) );
+		t.check( 'commerce leads with the daily four in order, then the add-ons by name',
+			four.every( ( p ) => p >= 0 ) && four.every( ( p, i ) => i === 0 || p > four[ i - 1 ] )
+				&& tail.some( ( x ) => x.includes( ':bookings' ) ) && commerceIds.includes( 'subscriptions' )
+				&& JSON.stringify( tailLabels ) === JSON.stringify( sortedTail ),
+			commerce.join( ', ' ) + ' | tail labels: ' + tailLabels.join( ', ' ) );
 		const tools = await groupNavs( 'tools' );
 		t.check( 'tools holds the plumbing families',
 			[ ':mail', ':activity-log', ':snippets', ':redirects', ':backups' ].every( ( f ) => tools.some( ( x ) => x.includes( f ) ) ),
