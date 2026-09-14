@@ -43,7 +43,11 @@ function minn_admin_matomo_request( $method, $params ) {
 	return \Piwik\Access::doAsSuperUser(
 		function () use ( $method, $params ) {
 			$params['format'] = 'original';
-			return \Piwik\API\Request::processRequest( $method, $params );
+			// Third arg empty: without it Matomo seeds the base request from
+			// $_GET + $_POST, so params on the Minn REST request would bleed
+			// into the reporting call. Only $params (what this adapter passes)
+			// should drive it.
+			return \Piwik\API\Request::processRequest( $method, $params, array() );
 		}
 	);
 }
