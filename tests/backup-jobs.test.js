@@ -74,8 +74,12 @@ const { evalPhp, apiFor } = require( './_jet-common' );
 			const end = await poll( ds.body.job, 240000 );
 			t.check( 'Duplicator reaches done', !! end && end.status === 'done', JSON.stringify( end ) );
 			const made = ( ( await api( 'minn-admin/v1/duplicator/packages' ) ).body.items || [] ).filter( ( i ) => ! dupBefore.includes( String( i.id ) ) );
-			// Their name sanitizer turns the dash into an underscore.
-			t.check( 'the build left a package named minn-suite', made.length >= 1 && made.some( ( i ) => /minn[-_]suite/.test( i.name || i.title || '' ) ), JSON.stringify( made.map( ( i ) => [ i.id, i.name ] ) ) );
+			// Duplicator 5.0 names requested packages itself (the field is a
+			// note there, and the card says so); 1.5 takes the name, with its
+			// sanitizer turning the dash into an underscore.
+			const noteOnly = ( dact.fields || [] ).some( ( f ) => f.key === 'name' && /note/i.test( f.label || '' ) );
+			t.check( noteOnly ? 'the build left a new package (Duplicator 5.0 names it)' : 'the build left a package named minn-suite',
+				made.length >= 1 && ( noteOnly || made.some( ( i ) => /minn[-_]suite/.test( i.name || i.title || '' ) ) ), JSON.stringify( made.map( ( i ) => [ i.id, i.name ] ) ) );
 			for ( const i of made ) {
 				const del = await api( `minn-admin/v1/duplicator/packages/${ i.id }`, { method: 'DELETE' } );
 				t.check( `package ${ i.id } deletes through Minn`, del.status === 200, String( del.status ) );

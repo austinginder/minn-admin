@@ -800,7 +800,13 @@ add_action( 'rest_api_init', function () {
 						'method' => 'POST',
 						'job'    => true,
 						'fields' => array(
-							array( 'key' => 'name', 'label' => __( 'Package name', 'minn-admin' ), 'value' => '', 'placeholder' => __( 'Today\'s date and the site name', 'minn-admin' ), 'required' => false ),
+							// Duplicator 5.0 names every requested package itself (its request
+							// service builds from the default template and takes only a
+							// requester and a reason), so on 5.0 this field is the reason
+							// stored with the request, not a name it could never honour.
+							minn_admin_duplicator_is_v5()
+								? array( 'key' => 'name', 'label' => __( 'Note', 'minn-admin' ), 'value' => '', 'placeholder' => __( 'Why this backup is being made', 'minn-admin' ), 'required' => false )
+								: array( 'key' => 'name', 'label' => __( 'Package name', 'minn-admin' ), 'value' => '', 'placeholder' => __( 'Today\'s date and the site name', 'minn-admin' ), 'required' => false ),
 							array( 'key' => 'db_only', 'label' => __( 'Database only', 'minn-admin' ), 'type' => 'toggle', 'value' => false, 'required' => false ),
 						),
 					) : null,
