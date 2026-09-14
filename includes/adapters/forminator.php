@@ -422,7 +422,7 @@ add_action( 'rest_api_init', function () {
 				global $wpdb;
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT entry_id, form_id, date_created FROM {$wpdb->prefix}frmt_form_entry WHERE entry_id = %d AND entry_type = 'custom-forms'", // phpcs:ignore
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -501,7 +501,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => 'minn_admin_forminator_can',
 			'callback'            => function ( WP_REST_Request $request ) use ( $is_spam, $status, $msg ) {
 				global $wpdb;
-				$id  = (int) $request['id'];
+				$id  = (int) Minn_Admin::path_param( $request );
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT entry_id, form_id FROM {$wpdb->prefix}frmt_form_entry WHERE entry_id = %d AND entry_type = 'custom-forms'", // phpcs:ignore
 					$id

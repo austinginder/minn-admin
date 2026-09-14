@@ -338,7 +338,7 @@ add_action( 'rest_api_init', function () {
 			$customers = minn_admin_bookly_table( 'customers' );
 			$services  = minn_admin_bookly_table( 'services' );
 			$staff     = minn_admin_bookly_table( 'staff' );
-			$id        = (int) $request['id'];
+			$id        = (int) Minn_Admin::path_param( $request );
 			$scope     = minn_admin_bookly_staff_scope();
 			$scope_sql = '';
 			$params    = array( $id );
@@ -419,7 +419,7 @@ add_action( 'rest_api_init', function () {
 			if ( ! in_array( $status, $ok, true ) ) {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			$id    = (int) $request['id'];
+			$id    = (int) Minn_Admin::path_param( $request );
 			$scope = minn_admin_bookly_staff_scope();
 			if ( $scope ) {
 				if ( array( -1 ) === $scope ) {

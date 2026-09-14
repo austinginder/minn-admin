@@ -98,7 +98,7 @@ add_action( 'rest_api_init', function () {
 			$req->set_query_params( array(
 				'library'      => 'section',
 				'key'          => 'section',
-				'pattern_id'   => (string) $request['id'],
+				'pattern_id'   => (string) Minn_Admin::path_param( $request ),
 				'pattern_type' => 'pattern',
 			) );
 			$res  = rest_do_request( $req );

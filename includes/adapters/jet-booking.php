@@ -432,7 +432,7 @@ add_action( 'rest_api_init', function () {
 				if ( ! minn_admin_jet_booking_has_tables() ) {
 					return new WP_Error( 'not_found', __( 'Booking not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				$row = minn_admin_jet_booking_row( (int) $request['id'], minn_admin_jet_booking_vendor_scope() );
+				$row = minn_admin_jet_booking_row( (int) Minn_Admin::path_param( $request ), minn_admin_jet_booking_vendor_scope() );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Booking not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -529,7 +529,7 @@ add_action( 'rest_api_init', function () {
 			if ( ! isset( $ok[ $status ] ) ) {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			$id  = (int) $request['id'];
+			$id  = (int) Minn_Admin::path_param( $request );
 			$row = minn_admin_jet_booking_row( $id, minn_admin_jet_booking_vendor_scope() );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Booking not found', 'minn-admin' ), array( 'status' => 404 ) );

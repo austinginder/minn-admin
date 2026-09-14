@@ -514,13 +514,13 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $view,
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$guard = minn_admin_wpforms_guard_entry( (int) $request['id'] );
+				$guard = minn_admin_wpforms_guard_entry( (int) Minn_Admin::path_param( $request ) );
 				if ( is_wp_error( $guard ) ) {
 					return $guard;
 				}
 				$table = minn_admin_wpforms_table();
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE entry_id = %d", (int) $request['id'] ) );
+				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE entry_id = %d", (int) Minn_Admin::path_param( $request ) ) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -603,7 +603,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $edit,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$guard = minn_admin_wpforms_guard_entry( (int) $request['id'], 'edit_entries_form_single' );
+			$guard = minn_admin_wpforms_guard_entry( (int) Minn_Admin::path_param( $request ), 'edit_entries_form_single' );
 			if ( is_wp_error( $guard ) ) {
 				return $guard;
 			}
@@ -612,7 +612,7 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			global $wpdb;
-			$id    = (int) $request['id'];
+			$id    = (int) Minn_Admin::path_param( $request );
 			$table = minn_admin_wpforms_table();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT entry_id FROM {$table} WHERE entry_id = %d", $id ) );
@@ -642,13 +642,13 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $edit,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$guard = minn_admin_wpforms_guard_entry( (int) $request['id'], 'edit_entries_form_single' );
+			$guard = minn_admin_wpforms_guard_entry( (int) Minn_Admin::path_param( $request ), 'edit_entries_form_single' );
 			if ( is_wp_error( $guard ) ) {
 				return $guard;
 			}
 			$on = (int) (bool) $request->get_param( 'on' );
 			try {
-				wpforms()->obj( 'entry' )->update( (int) $request['id'], array( 'starred' => $on ) );
+				wpforms()->obj( 'entry' )->update( (int) Minn_Admin::path_param( $request ), array( 'starred' => $on ) );
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'update_failed', $e->getMessage(), array( 'status' => 500 ) );
 			}

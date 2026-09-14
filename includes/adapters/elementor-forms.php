@@ -400,7 +400,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => 'minn_admin_elementor_forms_can_view',
 			'callback'            => function ( WP_REST_Request $request ) {
 				$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-				$raw   = $query->get_submission( (int) $request['id'] );
+				$raw   = $query->get_submission( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $raw || empty( $raw['data'] ) ) {
 					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -510,7 +510,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'minn_admin_elementor_forms_can_view',
 		'callback'            => function ( WP_REST_Request $request ) {
 			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-			$id    = (int) $request['id'];
+			$id    = (int) Minn_Admin::path_param( $request );
 			$raw   = $query->get_submission( $id );
 			if ( ! $raw || empty( $raw['data'] ) ) {
 				return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -528,7 +528,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'minn_admin_elementor_forms_can_view',
 		'callback'            => function ( WP_REST_Request $request ) {
 			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-			$id    = (int) $request['id'];
+			$id    = (int) Minn_Admin::path_param( $request );
 			$raw   = $query->get_submission( $id );
 			if ( ! $raw || empty( $raw['data'] ) ) {
 				return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -546,7 +546,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'minn_admin_elementor_forms_can_view',
 		'callback'            => function ( WP_REST_Request $request ) {
 			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-			$id    = (int) $request['id'];
+			$id    = (int) Minn_Admin::path_param( $request );
 			$raw   = $query->get_submission( $id );
 			if ( ! $raw || empty( $raw['data'] ) ) {
 				return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );

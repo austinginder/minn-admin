@@ -173,7 +173,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'PUT',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$old  = minn_admin_s301_decode_id( $request['id'] );
+				$old  = minn_admin_s301_decode_id( Minn_Admin::path_param( $request ) );
 				// sanitize_text_field on both sides, matching the vendor's own
 				// writer (Admin/Ajax.php) — without it the shared option ends
 				// up holding values the plugin itself would never store.

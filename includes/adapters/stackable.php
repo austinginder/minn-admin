@@ -131,7 +131,7 @@ add_action( 'rest_api_init', function () {
 		},
 		'callback'            => function ( $request ) {
 			$library = minn_admin_stackable_library();
-			$id      = $request['id'];
+			$id      = Minn_Admin::path_param( $request );
 			$design  = isset( $library[ $id ] ) && is_array( $library[ $id ] ) ? $library[ $id ] : null;
 			if ( ! $design || 'free' !== ( $design['plan'] ?? '' ) || empty( $design['template'] ) ) {
 				return new WP_Error( 'minn_design_not_found', __( 'Design not found.', 'minn-admin' ), array( 'status' => 404 ) );

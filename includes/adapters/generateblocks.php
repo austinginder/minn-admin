@@ -135,7 +135,7 @@ add_action( 'rest_api_init', function () {
 			return current_user_can( 'edit_posts' );
 		},
 		'callback'            => function ( $request ) {
-			$parts      = explode( '--', (string) $request['id'], 2 );
+			$parts      = explode( '--', (string) Minn_Admin::path_param( $request ), 2 );
 			$library_id = $parts[0];
 			$pattern_id = $parts[1] ?? '';
 			$template   = '';

@@ -587,7 +587,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => 'minn_admin_fluent_forms_can_view',
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$guard = minn_admin_fluent_forms_guard_entry( (int) $request['id'] );
+				$guard = minn_admin_fluent_forms_guard_entry( (int) Minn_Admin::path_param( $request ) );
 				if ( is_wp_error( $guard ) ) {
 					return $guard;
 				}
@@ -595,7 +595,7 @@ add_action( 'rest_api_init', function () {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT * FROM `{$subs_table}` WHERE id = %d",
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -754,7 +754,7 @@ add_action( 'rest_api_init', function () {
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
-			$id    = (int) $request['id'];
+			$id    = (int) Minn_Admin::path_param( $request );
 			$guard = minn_admin_fluent_forms_guard_entry( $id, 'fluentform_manage_entries' );
 			if ( is_wp_error( $guard ) ) {
 				return $guard;

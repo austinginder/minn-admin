@@ -335,7 +335,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$out = minn_admin_rri_detail( (string) $request['id'] );
+			$out = minn_admin_rri_detail( (string) Minn_Admin::path_param( $request ) );
 			return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
 		},
 	) );

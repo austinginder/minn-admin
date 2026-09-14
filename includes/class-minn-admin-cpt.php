@@ -487,7 +487,7 @@ class Minn_Admin_CPT {
 	}
 
 	public static function update_type( WP_REST_Request $request ) {
-		$slug   = sanitize_key( (string) $request['slug'] );
+		$slug   = sanitize_key( (string) Minn_Admin::path_param( $request, 'slug' ) );
 		$source = self::source_of( $slug );
 		if ( ! post_type_exists( $slug ) ) {
 			return new WP_Error( 'not_found', __( 'No such post type.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -518,7 +518,7 @@ class Minn_Admin_CPT {
 	}
 
 	public static function delete_type( WP_REST_Request $request ) {
-		$slug   = sanitize_key( (string) $request['slug'] );
+		$slug   = sanitize_key( (string) Minn_Admin::path_param( $request, 'slug' ) );
 		$source = self::source_of( $slug );
 		if ( 'minn' === $source ) {
 			$types = (array) get_option( self::OPTION, array() );
@@ -657,7 +657,7 @@ class Minn_Admin_CPT {
 	}
 
 	public static function update_taxonomy( WP_REST_Request $request ) {
-		$slug   = sanitize_key( (string) $request['slug'] );
+		$slug   = sanitize_key( (string) Minn_Admin::path_param( $request, 'slug' ) );
 		$source = self::tax_source_of( $slug );
 		if ( ! taxonomy_exists( $slug ) ) {
 			return new WP_Error( 'not_found', __( 'No such taxonomy.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -688,7 +688,7 @@ class Minn_Admin_CPT {
 	}
 
 	public static function delete_taxonomy( WP_REST_Request $request ) {
-		$slug   = sanitize_key( (string) $request['slug'] );
+		$slug   = sanitize_key( (string) Minn_Admin::path_param( $request, 'slug' ) );
 		$source = self::tax_source_of( $slug );
 		if ( 'minn' === $source ) {
 			$taxes = (array) get_option( self::OPTION_TAX, array() );

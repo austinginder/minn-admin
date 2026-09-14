@@ -447,14 +447,14 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$rec = get_transient( 'minn_updraft_job_' . $request['token'] );
+				$rec = get_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ) );
 				if ( ! is_array( $rec ) ) {
 					return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$out = minn_admin_updraft_job_status( $rec );
 				if ( ! empty( $out['_nonce'] ) && $out['_nonce'] !== $rec['nonce'] ) {
 					$rec['nonce'] = $out['_nonce'];
-					set_transient( 'minn_updraft_job_' . $request['token'], $rec, 6 * HOUR_IN_SECONDS );
+					set_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
 				}
 				unset( $out['_nonce'] );
 				return rest_ensure_response( $out );
@@ -464,7 +464,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$rec = get_transient( 'minn_updraft_job_' . $request['token'] );
+				$rec = get_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ) );
 				if ( ! is_array( $rec ) ) {
 					return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -484,7 +484,7 @@ add_action( 'rest_api_init', function () {
 					wp_unschedule_hook( $hook );
 				}
 				$rec['canceled'] = true;
-				set_transient( 'minn_updraft_job_' . $request['token'], $rec, 6 * HOUR_IN_SECONDS );
+				set_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
 				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
 			},
 		),

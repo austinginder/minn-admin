@@ -369,7 +369,7 @@ add_action( 'rest_api_init', function () {
 			$customers = minn_admin_latepoint_table( 'customers' );
 			$services  = minn_admin_latepoint_table( 'services' );
 			$agents    = minn_admin_latepoint_table( 'agents' );
-			$id        = (int) $request['id'];
+			$id        = (int) Minn_Admin::path_param( $request );
 			$scope     = minn_admin_latepoint_scope_sql( minn_admin_latepoint_scope() );
 			$scope_sql = '';
 			$params    = array( $id );
@@ -451,7 +451,7 @@ add_action( 'rest_api_init', function () {
 			if ( ! in_array( $status, $ok, true ) ) {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			$id    = (int) $request['id'];
+			$id    = (int) Minn_Admin::path_param( $request );
 			$scope = minn_admin_latepoint_scope_sql( minn_admin_latepoint_scope(), '' );
 			if ( $scope['deny'] ) {
 				return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );

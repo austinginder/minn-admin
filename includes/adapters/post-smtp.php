@@ -338,7 +338,7 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT id, original_subject, original_to, to_header, from_header, original_message, success, solution, transport_uri, time FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
+				(int) Minn_Admin::path_param( $request )
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -385,7 +385,7 @@ add_action( 'rest_api_init', function () {
 				global $wpdb;
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT id, original_subject, original_to, to_header, from_header, original_message, success, solution, transport_uri, time FROM {$table} WHERE id = %d", // phpcs:ignore
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -431,7 +431,7 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT id, original_subject, original_to, to_header, original_message FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
+				(int) Minn_Admin::path_param( $request )
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );

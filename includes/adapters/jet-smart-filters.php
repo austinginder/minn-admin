@@ -239,7 +239,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$p = get_post( (int) $request['id'] );
+				$p = get_post( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $p || 'jet-smart-filters' !== $p->post_type ) {
 					return new WP_Error( 'not_found', __( 'Filter not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -303,7 +303,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$token = (string) $request['token'];
+				$token = (string) Minn_Admin::path_param( $request, 'token' );
 				$rec   = minn_admin_jsf_job_read( $token );
 				if ( ! $rec ) {
 					return new WP_Error( 'not_found', __( 'Unknown reindex job', 'minn-admin' ), array( 'status' => 404 ) );
@@ -334,7 +334,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$token = (string) $request['token'];
+				$token = (string) Minn_Admin::path_param( $request, 'token' );
 				$rec   = minn_admin_jsf_job_read( $token );
 				if ( ! $rec ) {
 					return new WP_Error( 'not_found', __( 'Unknown reindex job', 'minn-admin' ), array( 'status' => 404 ) );

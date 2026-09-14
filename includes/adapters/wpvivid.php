@@ -478,7 +478,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$task_id = sanitize_key( (string) $request['task'] );
+				$task_id = sanitize_key( (string) Minn_Admin::path_param( $request, 'task' ) );
 				if ( ! class_exists( 'WPvivid_taskmanager' ) ) {
 					return new WP_Error( 'unavailable', __( 'WPvivid is not loaded.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
@@ -527,7 +527,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpvivid_plugin;
-				$task_id = sanitize_key( (string) $request['task'] );
+				$task_id = sanitize_key( (string) Minn_Admin::path_param( $request, 'task' ) );
 				try {
 					// Their cancel: touches the task's _cancel flag file the
 					// running backup checks between steps.

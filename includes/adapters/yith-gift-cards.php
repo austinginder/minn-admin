@@ -591,7 +591,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$id   = (int) $request['id'];
+			$id   = (int) Minn_Admin::path_param( $request );
 			$post = get_post( $id );
 			if ( ! $post || YWGC_CUSTOM_POST_TYPE_NAME !== $post->post_type ) {
 				return new WP_Error( 'minn_ywgc_not_found', __( 'Gift card not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -696,7 +696,7 @@ add_action( 'rest_api_init', function () {
 			if ( null === $request->get_param( 'enabled' ) ) {
 				return new WP_Error( 'minn_ywgc_enabled', __( 'Say whether the gift card should be enabled or disabled.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			$id = (int) $request['id'];
+			$id = (int) Minn_Admin::path_param( $request );
 			$gc = minn_admin_ywgc_load( $id );
 			if ( is_wp_error( $gc ) ) {
 				return $gc;
@@ -830,7 +830,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$id = (int) $request['id'];
+			$id = (int) Minn_Admin::path_param( $request );
 			$gc = minn_admin_ywgc_load( $id );
 			if ( is_wp_error( $gc ) ) {
 				return $gc;
@@ -859,7 +859,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$id = (int) $request['id'];
+			$id = (int) Minn_Admin::path_param( $request );
 			$gc = minn_admin_ywgc_load( $id );
 			if ( is_wp_error( $gc ) ) {
 				return $gc;

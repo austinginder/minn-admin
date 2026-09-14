@@ -718,13 +718,13 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$guard = minn_admin_everest_guard_entry( (int) $request['id'], 'view' );
+				$guard = minn_admin_everest_guard_entry( (int) Minn_Admin::path_param( $request ), 'view' );
 				if ( is_wp_error( $guard ) ) {
 					return $guard;
 				}
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT entry_id, form_id, status, date_created, user_ip_address, viewed FROM {$wpdb->prefix}evf_entries WHERE entry_id = %d", // phpcs:ignore
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -832,7 +832,7 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) use ( $op, $slug ) {
 				global $wpdb;
-				$id    = (int) $request['id'];
+				$id    = (int) Minn_Admin::path_param( $request );
 				$guard = minn_admin_everest_guard_entry( $id, 'delete' );
 				if ( is_wp_error( $guard ) ) {
 					return $guard;

@@ -288,7 +288,7 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT id, content, initiator, event_type, created_at FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
+				(int) Minn_Admin::path_param( $request )
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Event not found', 'minn-admin' ), array( 'status' => 404 ) );

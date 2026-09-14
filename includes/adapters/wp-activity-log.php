@@ -266,14 +266,14 @@ add_action( 'rest_api_init', function () {
 			// endpoint does not confirm out-of-scope ids exist.)
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT * FROM {$occ} WHERE id = %d AND {$scope}",
-				(int) $request['id'],
+				(int) Minn_Admin::path_param( $request ),
 				get_current_blog_id()
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Event not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$pairs = $wpdb->get_results( $wpdb->prepare(
-				"SELECT name, value FROM {$meta} WHERE occurrence_id = %d ORDER BY name", (int) $request['id']
+				"SELECT name, value FROM {$meta} WHERE occurrence_id = %d ORDER BY name", (int) Minn_Admin::path_param( $request )
 			) );
 			// phpcs:enable
 

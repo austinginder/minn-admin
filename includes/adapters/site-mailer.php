@@ -210,7 +210,7 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$table = minn_admin_site_mailer_table();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $request['id'] ) );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $request ) ) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}

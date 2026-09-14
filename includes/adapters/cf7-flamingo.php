@@ -413,7 +413,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => 'minn_admin_flamingo_can_view',
 			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) $request['id'] );
+				$post = get_post( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -518,7 +518,7 @@ add_action( 'rest_api_init', function () {
 				return current_user_can( "flamingo_{$op}_inbound_message" );
 			},
 			'callback'            => function ( WP_REST_Request $request ) use ( $op ) {
-				$post = get_post( (int) $request['id'] );
+				$post = get_post( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -526,7 +526,7 @@ add_action( 'rest_api_init', function () {
 				// Their own handlers (Akismet submit rides along like their UI).
 				$msg->$op();
 				return rest_ensure_response( array(
-					'id'      => (int) $request['id'],
+					'id'      => (int) Minn_Admin::path_param( $request ),
 					'ok'      => true,
 					'message' => __( 'spam', 'minn-admin' ) === $op ? 'Marked as spam.' : 'Marked not spam.',
 				) );
@@ -540,13 +540,13 @@ add_action( 'rest_api_init', function () {
 			return current_user_can( 'flamingo_delete_inbound_message' );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) $request['id'] );
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$msg = new Flamingo_Inbound_Message( $post );
 			$msg->trash();
-			return rest_ensure_response( array( 'id' => (int) $request['id'], 'ok' => true, 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
+			return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'ok' => true, 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
 		},
 	) );
 
@@ -557,7 +557,7 @@ add_action( 'rest_api_init', function () {
 				|| current_user_can( 'flamingo_edit_inbound_message' );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) $request['id'] );
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -566,7 +566,7 @@ add_action( 'rest_api_init', function () {
 			}
 			$msg = new Flamingo_Inbound_Message( $post );
 			$msg->untrash();
-			return rest_ensure_response( array( 'id' => (int) $request['id'], 'ok' => true, 'message' => __( 'Message restored.', 'minn-admin' ) ) );
+			return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'ok' => true, 'message' => __( 'Message restored.', 'minn-admin' ) ) );
 		},
 	) );
 

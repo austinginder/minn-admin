@@ -320,7 +320,7 @@ add_action( 'rest_api_init', function () {
 			list( $scope_sql, $scope_args ) = minn_admin_aios_site_scope();
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT * FROM {$table} WHERE id = %d{$scope_sql}",
-				array_merge( array( (int) $request['id'] ), $scope_args )
+				array_merge( array( (int) Minn_Admin::path_param( $request ) ), $scope_args )
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Event not found.', 'minn-admin' ), array( 'status' => 404 ) );

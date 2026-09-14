@@ -408,7 +408,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => 'minn_admin_jet_apb_can_detail',
 			'callback'            => function ( WP_REST_Request $request ) {
-				$row = minn_admin_jet_apb_has_tables() ? minn_admin_jet_apb_row( (int) $request['id'] ) : null;
+				$row = minn_admin_jet_apb_has_tables() ? minn_admin_jet_apb_row( (int) Minn_Admin::path_param( $request ) ) : null;
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -536,7 +536,7 @@ add_action( 'rest_api_init', function () {
 			if ( ! isset( $ok[ $status ] ) ) {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			$id = (int) $request['id'];
+			$id = (int) Minn_Admin::path_param( $request );
 			if ( ! minn_admin_jet_apb_row( $id ) ) {
 				return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}

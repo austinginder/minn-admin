@@ -681,7 +681,7 @@ add_action( 'rest_api_init', function () {
 				'methods'             => 'GET',
 				'permission_callback' => $can_edit,
 				'callback'            => function ( WP_REST_Request $request ) {
-					$snippet = new WPCode_Snippet( (int) $request['id'] );
+					$snippet = new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) );
 					if ( ! $snippet->get_id() ) {
 						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 					}
@@ -695,7 +695,7 @@ add_action( 'rest_api_init', function () {
 					// deliberately drew tiers.
 					$guard = minn_admin_wpcode_guard_type(
 						(string) $snippet->get_code_type(),
-						(int) $request['id'],
+						(int) Minn_Admin::path_param( $request ),
 						false,
 						(string) $snippet->get_location()
 					);
@@ -709,7 +709,7 @@ add_action( 'rest_api_init', function () {
 				'methods'             => 'PUT',
 				'permission_callback' => $can_edit,
 				'callback'            => function ( WP_REST_Request $request ) {
-					$snippet = new WPCode_Snippet( (int) $request['id'] );
+					$snippet = new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) );
 					if ( ! $snippet->get_id() ) {
 						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 					}
@@ -757,7 +757,7 @@ add_action( 'rest_api_init', function () {
 
 					$guard = minn_admin_wpcode_guard_type(
 						(string) $snippet->get_code_type(),
-						(int) $request['id'],
+						(int) Minn_Admin::path_param( $request ),
 						null !== $request['code'] || $activating || $promoting || $retargeting,
 						$stored_loc
 					);
@@ -774,7 +774,7 @@ add_action( 'rest_api_init', function () {
 					$new_type = $request['code_type'];
 					if ( null !== $new_type ) {
 						$new_type  = sanitize_key( (string) $new_type );
-						$guard_new = minn_admin_wpcode_guard_type( $new_type, (int) $request['id'], true, $want_loc );
+						$guard_new = minn_admin_wpcode_guard_type( $new_type, (int) Minn_Admin::path_param( $request ), true, $want_loc );
 						if ( is_wp_error( $guard_new ) ) {
 							return $guard_new;
 						}
@@ -862,14 +862,14 @@ add_action( 'rest_api_init', function () {
 					if ( ! $snippet->save() ) {
 						return new WP_Error( 'wpcode_save_failed', __( 'Could not save the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
-					return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) $request['id'] ) ) );
+					return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) ) ) );
 				},
 			),
 			array(
 				'methods'             => 'DELETE',
 				'permission_callback' => $can_edit,
 				'callback'            => function ( WP_REST_Request $request ) {
-					$id = (int) $request['id'];
+					$id = (int) Minn_Admin::path_param( $request );
 					$post = get_post( $id );
 					if ( ! $post || 'wpcode' !== $post->post_type ) {
 						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -903,7 +903,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'POST',
 			'permission_callback' => $can_act,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$snippet = new WPCode_Snippet( (int) $request['id'] );
+				$snippet = new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $snippet->get_id() ) {
 					return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -920,7 +920,7 @@ add_action( 'rest_api_init', function () {
 				// straight to the runner.
 				$guard = minn_admin_wpcode_guard_type(
 					(string) $snippet->get_code_type(),
-					(int) $request['id'],
+					(int) Minn_Admin::path_param( $request ),
 					! empty( $request['active'] ),
 					(string) $snippet->get_location()
 				);
@@ -932,7 +932,7 @@ add_action( 'rest_api_init', function () {
 				} else {
 					$snippet->deactivate();
 				}
-				return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) $request['id'] ) ) );
+				return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) ) ) );
 			},
 			'args'                => array(
 				'active' => array( 'type' => 'boolean', 'required' => true ),

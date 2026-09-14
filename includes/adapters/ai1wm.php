@@ -445,10 +445,10 @@ add_action( 'rest_api_init', function () {
 				// step then overwrites the status with a "could not open"
 				// error. The stop is what the person did, so it is what a
 				// later poll (a reload mid-job) reads.
-				if ( get_transient( 'minn_ai1wm_canceled_' . $request['job'] ) ) {
+				if ( get_transient( 'minn_ai1wm_canceled_' . Minn_Admin::path_param( $request, 'job' ) ) ) {
 					return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Export stopped.', 'minn-admin' ) ) );
 				}
-				$r = minn_admin_ai1wm_dispatch( 'GET', 'exports/' . $request['job'] );
+				$r = minn_admin_ai1wm_dispatch( 'GET', 'exports/' . Minn_Admin::path_param( $request, 'job' ) );
 				if ( is_wp_error( $r ) ) {
 					return $r;
 				}
@@ -461,11 +461,11 @@ add_action( 'rest_api_init', function () {
 				return minn_admin_ai1wm_rest_ready() && current_user_can( 'export' );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$r = minn_admin_ai1wm_dispatch( 'DELETE', 'exports/' . $request['job'] );
+				$r = minn_admin_ai1wm_dispatch( 'DELETE', 'exports/' . Minn_Admin::path_param( $request, 'job' ) );
 				if ( is_wp_error( $r ) ) {
 					return $r;
 				}
-				set_transient( 'minn_ai1wm_canceled_' . $request['job'], 1, 10 * MINUTE_IN_SECONDS );
+				set_transient( 'minn_ai1wm_canceled_' . Minn_Admin::path_param( $request, 'job' ), 1, 10 * MINUTE_IN_SECONDS );
 				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Export stopped.', 'minn-admin' ) ) );
 			},
 		),

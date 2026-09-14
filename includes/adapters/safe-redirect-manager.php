@@ -252,7 +252,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
 				$result = minn_admin_srm_update_redirect(
-					(int) $request['id'],
+					(int) Minn_Admin::path_param( $request ),
 					(string) $request['from'],
 					(string) $request['to'],
 					(int) ( $request['status_code'] ?: 301 )

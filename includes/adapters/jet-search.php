@@ -194,7 +194,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$r = minn_admin_jet_search_has_table() ? minn_admin_jet_search_row( (int) $request['id'] ) : null;
+				$r = minn_admin_jet_search_has_table() ? minn_admin_jet_search_row( (int) Minn_Admin::path_param( $request ) ) : null;
 				return $r ? rest_ensure_response( minn_admin_jet_search_item( $r ) ) : new WP_Error( 'not_found', __( 'Suggestion not found', 'minn-admin' ), array( 'status' => 404 ) );
 			},
 		),
@@ -204,7 +204,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
 				$t  = minn_admin_jet_search_table();
-				$id = (int) $request['id'];
+				$id = (int) Minn_Admin::path_param( $request );
 				$r  = minn_admin_jet_search_row( $id );
 				if ( ! $r ) {
 					return new WP_Error( 'not_found', __( 'Suggestion not found', 'minn-admin' ), array( 'status' => 404 ) );

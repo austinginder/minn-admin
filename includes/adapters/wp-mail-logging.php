@@ -311,7 +311,7 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT * FROM {$table} WHERE mail_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				(int) $request['id']
+				(int) Minn_Admin::path_param( $request )
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -368,7 +368,7 @@ add_action( 'rest_api_init', function () {
 				global $wpdb;
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT * FROM {$table} WHERE mail_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -421,7 +421,7 @@ add_action( 'rest_api_init', function () {
 			// DI container, so recipient splitting, header cleaning and
 			// attachment path resolution stay its code, not a re-guess.
 			try {
-				$mail = \No3x\WPML\Model\WPML_Mail::find_one( (int) $request['id'] );
+				$mail = \No3x\WPML\Model\WPML_Mail::find_one( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $mail ) {
 					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}

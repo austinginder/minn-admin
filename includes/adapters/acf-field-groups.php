@@ -463,7 +463,7 @@ add_action( 'rest_api_init', function () {
 			if ( is_wp_error( $group ) ) {
 				return $group;
 			}
-			$verb = (string) $request['verb'];
+			$verb = (string) Minn_Admin::path_param( $request, 'verb' );
 			if ( 'duplicate' === $verb ) {
 				if ( ! function_exists( 'acf_duplicate_field_group' ) ) {
 					return new WP_Error( 'unsupported', __( 'This ACF version cannot duplicate groups.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -495,7 +495,7 @@ add_action( 'rest_api_init', function () {
 			// renames post_name to key__trashed). Not exposed in the
 			// descriptor; suites use it to clean up what they create.
 			if ( $request['force'] && function_exists( 'acf_delete_field_group' ) ) {
-				$key   = (string) $request['key'];
+				$key   = (string) Minn_Admin::path_param( $request, 'key' );
 				$group = minn_admin_acf_schema_group( $key );
 				$pid   = $group && 'db' === $group['minn_source'] ? (int) $group['ID'] : 0;
 				if ( ! $pid ) {
@@ -582,7 +582,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $field_items ) {
-				$group = minn_admin_acf_schema_group( (string) $request['key'] );
+				$group = minn_admin_acf_schema_group( (string) Minn_Admin::path_param( $request, 'key' ) );
 				if ( ! $group ) {
 					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -594,7 +594,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'POST',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $create_field ) {
-				return $create_field( minn_admin_acf_schema_group( (string) $request['key'] ), $request );
+				return $create_field( minn_admin_acf_schema_group( (string) Minn_Admin::path_param( $request, 'key' ) ), $request );
 			},
 		),
 	) );
@@ -612,7 +612,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'PUT',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$found = minn_admin_acf_schema_editable_field( (string) $request['key'] );
+				$found = minn_admin_acf_schema_editable_field( (string) Minn_Admin::path_param( $request, 'key' ) );
 				if ( is_wp_error( $found ) ) {
 					return $found;
 				}
@@ -641,7 +641,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$found = minn_admin_acf_schema_editable_field( (string) $request['key'] );
+				$found = minn_admin_acf_schema_editable_field( (string) Minn_Admin::path_param( $request, 'key' ) );
 				if ( is_wp_error( $found ) ) {
 					return $found;
 				}
@@ -655,7 +655,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$found = minn_admin_acf_schema_editable_field( (string) $request['key'] );
+			$found = minn_admin_acf_schema_editable_field( (string) Minn_Admin::path_param( $request, 'key' ) );
 			if ( is_wp_error( $found ) ) {
 				return $found;
 			}
@@ -1293,7 +1293,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$group = minn_admin_acf_schema_group( (string) $request['key'] );
+			$group = minn_admin_acf_schema_group( (string) Minn_Admin::path_param( $request, 'key' ) );
 			if ( ! $group ) {
 				return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -1322,7 +1322,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$group = minn_admin_acf_schema_group( (string) $request['key'] );
+				$group = minn_admin_acf_schema_group( (string) Minn_Admin::path_param( $request, 'key' ) );
 				if ( ! $group ) {
 					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -1333,7 +1333,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'POST',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$group = minn_admin_acf_schema_group( (string) $request['key'] );
+				$group = minn_admin_acf_schema_group( (string) Minn_Admin::path_param( $request, 'key' ) );
 				if ( ! $group ) {
 					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}

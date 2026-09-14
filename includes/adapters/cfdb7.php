@@ -426,7 +426,7 @@ add_action( 'rest_api_init', function () {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT form_id, form_post_id, form_value, form_date FROM `{$table}` WHERE form_id = %d",
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -540,7 +540,7 @@ add_action( 'rest_api_init', function () {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT form_id, form_value FROM `{$table}` WHERE form_id = %d",
-				(int) $request['id']
+				(int) Minn_Admin::path_param( $request )
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );

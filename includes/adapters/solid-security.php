@@ -185,7 +185,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'minn_admin_solid_security_can',
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $itsec_lockout, $wpdb;
-			$id = (int) $request['id'];
+			$id = (int) Minn_Admin::path_param( $request );
 			if ( ! $itsec_lockout || ! method_exists( $itsec_lockout, 'release_lockout' ) ) {
 				return new WP_Error( 'no_api', __( 'Solid Security\'s lockout API is not available.', 'minn-admin' ), array( 'status' => 500 ) );
 			}

@@ -430,7 +430,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => 'minn_admin_ninja_forms_can',
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) $request['id'] );
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || 'nf_sub' !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -477,7 +477,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => 'minn_admin_ninja_forms_can',
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) $request['id'] );
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || 'nf_sub' !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -498,7 +498,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => 'minn_admin_ninja_forms_can',
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) $request['id'] );
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || 'nf_sub' !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}

@@ -360,7 +360,7 @@ add_action( 'rest_api_init', function () {
 			$bookings = minn_admin_amelia_table( 'customer_bookings' );
 			$users    = minn_admin_amelia_table( 'users' );
 			$services = minn_admin_amelia_table( 'services' );
-			$id       = (int) $request['id'];
+			$id       = (int) Minn_Admin::path_param( $request );
 			$scope    = minn_admin_amelia_provider_scope();
 			$scope_sql = '';
 			$params    = array( $id );
@@ -473,7 +473,7 @@ add_action( 'rest_api_init', function () {
 			if ( ! in_array( $status, array( 'approved', 'pending', 'canceled', 'rejected', 'no-show' ), true ) ) {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			$id    = (int) $request['id'];
+			$id    = (int) Minn_Admin::path_param( $request );
 			$scope = minn_admin_amelia_provider_scope( true );
 			if ( $scope < 0 ) {
 				return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );

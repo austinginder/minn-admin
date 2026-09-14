@@ -1541,7 +1541,7 @@ class Minn_Admin_REST {
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'duplicate_post' ),
 				'permission_callback' => function ( $request ) {
-					return current_user_can( 'edit_post', (int) $request['id'] );
+					return current_user_can( 'edit_post', (int) Minn_Admin::path_param( $request ) );
 				},
 			)
 		);
@@ -1556,7 +1556,7 @@ class Minn_Admin_REST {
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'revision_fields' ),
 				'permission_callback' => function ( $request ) {
-					return current_user_can( 'edit_post', (int) $request['id'] );
+					return current_user_can( 'edit_post', (int) Minn_Admin::path_param( $request ) );
 				},
 			)
 		);
@@ -1874,14 +1874,14 @@ class Minn_Admin_REST {
 				array(
 					'methods'             => 'GET',
 					'callback'            => function ( WP_REST_Request $request ) {
-						return rest_ensure_response( Minn_Admin_Logs::read( $request['id'] ) );
+						return rest_ensure_response( Minn_Admin_Logs::read( Minn_Admin::path_param( $request ) ) );
 					},
 					'permission_callback' => $logs_cap,
 				),
 				array(
 					'methods'             => 'DELETE',
 					'callback'            => function ( WP_REST_Request $request ) {
-						$result = Minn_Admin_Logs::clear( $request['id'] );
+						$result = Minn_Admin_Logs::clear( Minn_Admin::path_param( $request ) );
 						return is_wp_error( $result ) ? $result : rest_ensure_response( array( 'cleared' => true ) );
 					},
 					'permission_callback' => $logs_cap,
@@ -2201,7 +2201,7 @@ class Minn_Admin_REST {
 	 * identity of record; the IP stands in only when the comment has none.
 	 */
 	public static function comment_block( WP_REST_Request $request ) {
-		$comment = get_comment( (int) $request['id'] );
+		$comment = get_comment( (int) Minn_Admin::path_param( $request ) );
 		if ( ! $comment ) {
 			return new WP_Error( 'not_found', __( 'Comment not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
@@ -4272,7 +4272,7 @@ class Minn_Admin_REST {
 	 * wp_untrash_post lands on draft by default (core behavior since 5.6).
 	 */
 	public static function restore_post( WP_REST_Request $request ) {
-		$id   = (int) $request['id'];
+		$id   = (int) Minn_Admin::path_param( $request );
 		$post = get_post( $id );
 		if ( ! $post ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -4364,7 +4364,7 @@ class Minn_Admin_REST {
 	 * over is just setting the lock to us, same as wp-admin's takeover.
 	 */
 	public static function lock_post( WP_REST_Request $request ) {
-		$id   = (int) $request['id'];
+		$id   = (int) Minn_Admin::path_param( $request );
 		$post = get_post( $id );
 		if ( ! $post ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -4397,7 +4397,7 @@ class Minn_Admin_REST {
 	 * lock.
 	 */
 	public static function unlock_post( WP_REST_Request $request ) {
-		$id   = (int) $request['id'];
+		$id   = (int) Minn_Admin::path_param( $request );
 		$post = get_post( $id );
 		if ( ! $post ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -6384,7 +6384,7 @@ Please click the following link to confirm the invite:
 	 */
 	public static function destroy_session( WP_REST_Request $request ) {
 		$uid = self::target_user_id( $request );
-		// The URL segment, not the parameter chain: $request['verifier'] also
+		// The URL segment, not the parameter chain: Minn_Admin::path_param( $request, 'verifier' ) also
 		// resolves from the body and the query string, so a caller could aim
 		// the route's own regex at one value and this at another. Same rule as
 		// target_user_id() above.
@@ -9815,8 +9815,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function revision_fields( WP_REST_Request $request ) {
-		$post_id  = (int) $request['id'];
-		$revision = get_post( (int) $request['revision'] );
+		$post_id  = (int) Minn_Admin::path_param( $request );
+		$revision = get_post( (int) Minn_Admin::path_param( $request, 'revision' ) );
 		if ( ! $revision || 'revision' !== $revision->post_type || (int) $revision->post_parent !== $post_id ) {
 			return new WP_Error( 'minn_bad_revision', __( 'That revision belongs to another post.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
@@ -9857,7 +9857,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	public static function duplicate_post( WP_REST_Request $request ) {
-		$post = get_post( (int) $request['id'] );
+		$post = get_post( (int) Minn_Admin::path_param( $request ) );
 		if ( ! $post || 'trash' === $post->post_status ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}

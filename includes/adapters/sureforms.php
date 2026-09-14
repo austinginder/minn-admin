@@ -280,7 +280,7 @@ add_action( 'rest_api_init', function () {
 				global $wpdb;
 				$table = minn_admin_sureforms_table();
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE ID = %d", (int) $request['id'] ) );
+				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE ID = %d", (int) Minn_Admin::path_param( $request ) ) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -343,7 +343,7 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$table   = minn_admin_sureforms_table();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$updated = $wpdb->update( $table, array( 'status' => $status ), array( 'ID' => (int) $request['id'] ), array( '%s' ), array( '%d' ) );
+			$updated = $wpdb->update( $table, array( 'status' => $status ), array( 'ID' => (int) Minn_Admin::path_param( $request ) ), array( '%s' ), array( '%d' ) );
 			if ( false === $updated ) {
 				return new WP_Error( 'update_failed', __( 'Could not update the entry.', 'minn-admin' ), array( 'status' => 500 ) );
 			}

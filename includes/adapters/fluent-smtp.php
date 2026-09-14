@@ -708,7 +708,7 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT id, `to`, `from`, subject, body, status, response, source, retries, created_at FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
+				(int) Minn_Admin::path_param( $request )
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -757,7 +757,7 @@ add_action( 'rest_api_init', function () {
 			// never passes through our own hands raw.
 			if ( minn_admin_fluent_smtp_has_resend_tracking() ) {
 				try {
-					$full    = ( new \FluentMail\App\Models\Logger() )->find( (int) $request['id'] );
+					$full    = ( new \FluentMail\App\Models\Logger() )->find( (int) Minn_Admin::path_param( $request ) );
 					$count   = isset( $full['resent_count'] ) ? (int) $full['resent_count'] : 0;
 					$resends = ( ! empty( $full['extra']['resends'] ) && is_array( $full['extra']['resends'] ) )
 						? $full['extra']['resends'] : array();
@@ -801,7 +801,7 @@ add_action( 'rest_api_init', function () {
 				global $wpdb;
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT id, `to`, `from`, subject, body, status, response, source, retries, created_at FROM {$table} WHERE id = %d", // phpcs:ignore
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -861,7 +861,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
 			global $wpdb;
-			$id  = (int) $request['id'];
+			$id  = (int) Minn_Admin::path_param( $request );
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT id, `to`, subject, body FROM {$table} WHERE id = %d", // phpcs:ignore
 				$id

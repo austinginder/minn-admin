@@ -1790,7 +1790,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => 'minn_admin_acpt_can_manage',
 			'callback'            => function ( WP_REST_Request $request ) {
-				$group = minn_admin_acpt_builder_group( (string) $request['id'] );
+				$group = minn_admin_acpt_builder_group( (string) Minn_Admin::path_param( $request ) );
 				if ( ! $group ) {
 					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -1801,7 +1801,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'POST',
 			'permission_callback' => 'minn_admin_acpt_can_manage',
 			'callback'            => function ( WP_REST_Request $request ) {
-				$group = minn_admin_acpt_builder_group( (string) $request['id'] );
+				$group = minn_admin_acpt_builder_group( (string) Minn_Admin::path_param( $request ) );
 				if ( ! $group ) {
 					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -1809,7 +1809,7 @@ add_action( 'rest_api_init', function () {
 				if ( is_wp_error( $saved ) ) {
 					return $saved;
 				}
-				$fresh = minn_admin_acpt_builder_group( (string) $request['id'] );
+				$fresh = minn_admin_acpt_builder_group( (string) Minn_Admin::path_param( $request ) );
 				if ( ! $fresh ) {
 					return new WP_Error( 'minn_acpt_save', __( 'The group saved but could not be read back.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
@@ -2056,11 +2056,11 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => 'minn_admin_acpt_can_manage',
 		'callback'            => function ( WP_REST_Request $request ) {
-			if ( ! minn_admin_acpt_builder_group( (string) $request['id'] ) ) {
+			if ( ! minn_admin_acpt_builder_group( (string) Minn_Admin::path_param( $request ) ) ) {
 				return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			try {
-				( new \ACPT\Core\CQRS\Command\DuplicateMetaGroupCommand( (string) $request['id'] ) )->execute();
+				( new \ACPT\Core\CQRS\Command\DuplicateMetaGroupCommand( (string) Minn_Admin::path_param( $request ) ) )->execute();
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'minn_acpt_duplicate', wp_strip_all_tags( $e->getMessage() ), array( 'status' => 400 ) );
 			}
@@ -2086,7 +2086,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => 'minn_admin_acpt_can_manage',
 		'callback'            => function ( WP_REST_Request $request ) {
-			$group = minn_admin_acpt_builder_group( (string) $request['id'] );
+			$group = minn_admin_acpt_builder_group( (string) Minn_Admin::path_param( $request ) );
 			if ( ! $group ) {
 				return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}

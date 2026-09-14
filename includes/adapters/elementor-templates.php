@@ -546,10 +546,10 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'PUT',
 			'permission_callback' => function ( WP_REST_Request $request ) {
-				return minn_admin_elementor_can_edit_item( (int) $request['id'] );
+				return minn_admin_elementor_can_edit_item( (int) Minn_Admin::path_param( $request ) );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$post = minn_admin_elementor_template_post( (int) $request['id'] );
+				$post = minn_admin_elementor_template_post( (int) Minn_Admin::path_param( $request ) );
 				if ( is_wp_error( $post ) ) {
 					return $post;
 				}
@@ -592,10 +592,10 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/elementor/templates/(?P<id>\d+)/export', array(
 		'methods'             => 'GET',
 		'permission_callback' => function ( WP_REST_Request $request ) {
-			return minn_admin_elementor_can_edit_item( (int) $request['id'] );
+			return minn_admin_elementor_can_edit_item( (int) Minn_Admin::path_param( $request ) );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = minn_admin_elementor_template_post( (int) $request['id'] );
+			$post = minn_admin_elementor_template_post( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $post ) ) {
 				return $post;
 			}
@@ -630,18 +630,18 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/elementor/templates/(?P<id>\d+)/duplicate', array(
 		'methods'             => 'POST',
 		'permission_callback' => function ( WP_REST_Request $request ) {
-			if ( ! minn_admin_elementor_can_edit_item( (int) $request['id'] ) ) {
+			if ( ! minn_admin_elementor_can_edit_item( (int) Minn_Admin::path_param( $request ) ) ) {
 				return false;
 			}
 			// A copy is written into the same type as its source, so the
 			// capability is the source's too.
-			$src   = get_post( (int) $request['id'] );
+			$src   = get_post( (int) Minn_Admin::path_param( $request ) );
 			$float = minn_admin_elementor_floating_cpt();
 			$type  = ( $src && $float && $float === $src->post_type ) ? 'floating-buttons' : '';
 			return minn_admin_elementor_can_create( $type );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = minn_admin_elementor_template_post( (int) $request['id'] );
+			$post = minn_admin_elementor_template_post( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $post ) ) {
 				return $post;
 			}

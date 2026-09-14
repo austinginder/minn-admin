@@ -486,7 +486,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$card = minn_admin_wcgc_load( (int) $request['id'] );
+			$card = minn_admin_wcgc_load( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $card ) ) {
 				return $card;
 			}
@@ -578,7 +578,7 @@ add_action( 'rest_api_init', function () {
 			if ( null === $request->get_param( 'enabled' ) ) {
 				return new WP_Error( 'minn_wcgc_enabled', __( 'Say whether the gift card should be enabled or disabled.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			$card = minn_admin_wcgc_load( (int) $request['id'] );
+			$card = minn_admin_wcgc_load( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $card ) ) {
 				return $card;
 			}
@@ -699,7 +699,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$card = minn_admin_wcgc_load( (int) $request['id'] );
+			$card = minn_admin_wcgc_load( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $card ) ) {
 				return $card;
 			}
@@ -758,7 +758,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$card = minn_admin_wcgc_load( (int) $request['id'] );
+			$card = minn_admin_wcgc_load( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $card ) ) {
 				return $card;
 			}

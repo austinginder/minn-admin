@@ -995,10 +995,10 @@ add_action( 'rest_api_init', function () {
 				// so it can promote an arbitrary tree into the site header. A
 				// site that took template editing away in their permission
 				// matrix means that.
-				return minn_admin_bricks_can_view_templates() && current_user_can( 'edit_post', (int) $request['id'] );
+				return minn_admin_bricks_can_view_templates() && current_user_can( 'edit_post', (int) Minn_Admin::path_param( $request ) );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) $request['id'] );
+				$post = get_post( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -1101,10 +1101,10 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)/restore', array(
 		'methods'             => 'POST',
 		'permission_callback' => function ( WP_REST_Request $request ) {
-			return minn_admin_bricks_can_delete() && current_user_can( 'delete_post', (int) $request['id'] );
+			return minn_admin_bricks_can_delete() && current_user_can( 'delete_post', (int) Minn_Admin::path_param( $request ) );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) $request['id'] );
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -1125,10 +1125,10 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)/export', array(
 		'methods'             => 'GET',
 		'permission_callback' => function ( WP_REST_Request $request ) {
-			return minn_admin_bricks_can_export() && current_user_can( 'edit_post', (int) $request['id'] );
+			return minn_admin_bricks_can_export() && current_user_can( 'edit_post', (int) Minn_Admin::path_param( $request ) );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) $request['id'] );
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -1147,10 +1147,10 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)/duplicate', array(
 		'methods'             => 'POST',
 		'permission_callback' => function ( WP_REST_Request $request ) {
-			return minn_admin_bricks_can_create() && current_user_can( 'edit_post', (int) $request['id'] );
+			return minn_admin_bricks_can_create() && current_user_can( 'edit_post', (int) Minn_Admin::path_param( $request ) );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) $request['id'] );
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -1407,7 +1407,7 @@ add_action( 'rest_api_init', function () {
 				return minn_admin_bricks_can_manage_settings();
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				return rest_ensure_response( minn_admin_bricks_settings_payload( (string) $request['tab'] ) );
+				return rest_ensure_response( minn_admin_bricks_settings_payload( (string) Minn_Admin::path_param( $request, 'tab' ) ) );
 			},
 		),
 		array(
@@ -1416,7 +1416,7 @@ add_action( 'rest_api_init', function () {
 				return minn_admin_bricks_can_manage_settings();
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$tab    = (string) $request['tab'];
+				$tab    = (string) Minn_Admin::path_param( $request, 'tab' );
 				$groups = minn_admin_bricks_settings_fields( $tab );
 				if ( null === $groups ) {
 					return new WP_Error( 'not_found', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1812,7 +1812,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
 				global $wpdb;
 				// phpcs:ignore WordPress.DB.PreparedSQL -- table name is prefix-built
-				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $request['id'] ) );
+				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $request ) ) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}

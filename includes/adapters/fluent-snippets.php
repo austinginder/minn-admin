@@ -375,7 +375,7 @@ add_action( 'rest_api_init', function () {
 				'methods'             => 'GET',
 				'permission_callback' => $can_read,
 				'callback'            => function ( WP_REST_Request $request ) {
-					$file  = sanitize_file_name( $request['file'] );
+					$file  = sanitize_file_name( Minn_Admin::path_param( $request, 'file' ) );
 					$model = new \FluentSnippets\App\Model\Snippet();
 					$full  = $model->findByFileName( $file );
 					if ( is_wp_error( $full ) ) {
@@ -389,7 +389,7 @@ add_action( 'rest_api_init', function () {
 				'methods'             => 'PUT',
 				'permission_callback' => $can_write,
 				'callback'            => function ( WP_REST_Request $request ) {
-					$file  = sanitize_file_name( $request['file'] );
+					$file  = sanitize_file_name( Minn_Admin::path_param( $request, 'file' ) );
 					$model = new \FluentSnippets\App\Model\Snippet();
 					$full  = $model->findByFileName( $file );
 					if ( is_wp_error( $full ) ) {
@@ -455,7 +455,7 @@ add_action( 'rest_api_init', function () {
 				'methods'             => 'DELETE',
 				'permission_callback' => $can_write,
 				'callback'            => function ( WP_REST_Request $request ) {
-					$file  = sanitize_file_name( $request['file'] );
+					$file  = sanitize_file_name( Minn_Admin::path_param( $request, 'file' ) );
 					$model = new \FluentSnippets\App\Model\Snippet();
 					$full  = $model->findByFileName( $file );
 					if ( is_wp_error( $full ) ) {
@@ -475,7 +475,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'POST',
 			'permission_callback' => $can_write,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$file  = sanitize_file_name( $request['file'] );
+				$file  = sanitize_file_name( Minn_Admin::path_param( $request, 'file' ) );
 				$model = new \FluentSnippets\App\Model\Snippet();
 				$full  = $model->findByFileName( $file );
 				if ( is_wp_error( $full ) ) {

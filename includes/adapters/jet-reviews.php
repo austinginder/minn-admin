@@ -196,7 +196,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$r = minn_admin_jet_reviews_has_table() ? minn_admin_jet_reviews_row( (int) $request['id'] ) : null;
+				$r = minn_admin_jet_reviews_has_table() ? minn_admin_jet_reviews_row( (int) Minn_Admin::path_param( $request ) ) : null;
 				if ( ! $r ) {
 					return new WP_Error( 'not_found', __( 'Review not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -271,7 +271,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
-			$id = (int) $request['id'];
+			$id = (int) Minn_Admin::path_param( $request );
 			$r  = minn_admin_jet_reviews_row( $id );
 			if ( ! $r ) {
 				return new WP_Error( 'not_found', __( 'Review not found', 'minn-admin' ), array( 'status' => 404 ) );

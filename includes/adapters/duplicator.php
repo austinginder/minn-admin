@@ -691,7 +691,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'POST',
 			'permission_callback' => 'minn_admin_duplicator_can_build',
 			'callback'            => function ( WP_REST_Request $request ) {
-				$rec = get_transient( 'minn_duplicator_job_' . $request['token'] );
+				$rec = get_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ) );
 				if ( ! is_array( $rec ) ) {
 					return new WP_Error( 'not_found', __( 'Unknown build', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -708,7 +708,7 @@ add_action( 'rest_api_init', function () {
 				}
 				if ( ! empty( $out['_package_id'] ) && (int) $out['_package_id'] !== (int) $rec['package_id'] ) {
 					$rec['package_id'] = (int) $out['_package_id'];
-					set_transient( 'minn_duplicator_job_' . $request['token'], $rec, 6 * HOUR_IN_SECONDS );
+					set_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
 				}
 				unset( $out['_package_id'] );
 				return rest_ensure_response( $out );
@@ -718,7 +718,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => 'minn_admin_duplicator_can_build',
 			'callback'            => function ( WP_REST_Request $request ) {
-				$rec = get_transient( 'minn_duplicator_job_' . $request['token'] );
+				$rec = get_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ) );
 				if ( ! is_array( $rec ) ) {
 					return new WP_Error( 'not_found', __( 'Unknown build', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -744,7 +744,7 @@ add_action( 'rest_api_init', function () {
 					// The token is what stops the next chunk either way.
 				}
 				$rec['canceled'] = true;
-				set_transient( 'minn_duplicator_job_' . $request['token'], $rec, 6 * HOUR_IN_SECONDS );
+				set_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
 				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Build stopped.', 'minn-admin' ) ) );
 			},
 		),

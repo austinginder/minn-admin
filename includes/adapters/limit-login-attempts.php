@@ -253,7 +253,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => 'minn_admin_llar_can',
 		'callback'            => function ( WP_REST_Request $request ) {
-			$id  = (string) $request['id'];
+			$id  = (string) Minn_Admin::path_param( $request );
 			$log = \LLAR\Core\Config::get( 'logged' );
 			if ( ! is_array( $log ) ) {
 				return new WP_Error( 'minn_llar_missing', __( 'No lockout log.', 'minn-admin' ), array( 'status' => 404 ) );

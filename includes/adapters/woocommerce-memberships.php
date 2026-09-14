@@ -1417,7 +1417,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$m = minn_admin_wcm_load( (int) $request['id'] );
+			$m = minn_admin_wcm_load( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $m ) ) {
 				return $m;
 			}
@@ -1605,7 +1605,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$m = minn_admin_wcm_load( (int) $request['id'], 'edit_post' );
+			$m = minn_admin_wcm_load( (int) Minn_Admin::path_param( $request ), 'edit_post' );
 			if ( is_wp_error( $m ) ) {
 				return $m;
 			}
@@ -1630,7 +1630,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$m = minn_admin_wcm_load( (int) $request['id'], 'edit_post' );
+			$m = minn_admin_wcm_load( (int) Minn_Admin::path_param( $request ), 'edit_post' );
 			if ( is_wp_error( $m ) ) {
 				return $m;
 			}
@@ -1654,7 +1654,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$m = minn_admin_wcm_load( (int) $request['id'], 'edit_post' );
+			$m = minn_admin_wcm_load( (int) Minn_Admin::path_param( $request ), 'edit_post' );
 			if ( is_wp_error( $m ) ) {
 				return $m;
 			}
@@ -1683,7 +1683,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'DELETE',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$m = minn_admin_wcm_load( (int) $request['id'], 'delete_post' );
+			$m = minn_admin_wcm_load( (int) Minn_Admin::path_param( $request ), 'delete_post' );
 			if ( is_wp_error( $m ) ) {
 				return $m;
 			}
@@ -1697,7 +1697,7 @@ add_action( 'rest_api_init', function () {
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'minn_wcm_delete', $e->getMessage() ? $e->getMessage() : __( 'The membership could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
-			if ( get_post( (int) $request['id'] ) ) {
+			if ( get_post( (int) Minn_Admin::path_param( $request ) ) ) {
 				return new WP_Error( 'minn_wcm_delete', __( 'The membership could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array(
@@ -1782,7 +1782,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$m = minn_admin_wcm_load( (int) $request['id'] );
+			$m = minn_admin_wcm_load( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $m ) ) {
 				return $m;
 			}
@@ -1799,7 +1799,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$m = minn_admin_wcm_load( (int) $request['id'], 'edit_post' );
+			$m = minn_admin_wcm_load( (int) Minn_Admin::path_param( $request ), 'edit_post' );
 			if ( is_wp_error( $m ) ) {
 				return $m;
 			}
@@ -1883,11 +1883,11 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'DELETE',
 		'permission_callback' => $permission,
 		'callback'            => function ( $request ) {
-			$m = minn_admin_wcm_load( (int) $request['id'], 'edit_post' );
+			$m = minn_admin_wcm_load( (int) Minn_Admin::path_param( $request ), 'edit_post' );
 			if ( is_wp_error( $m ) ) {
 				return $m;
 			}
-			$note = get_comment( (int) $request['note'] );
+			$note = get_comment( (int) Minn_Admin::path_param( $request, 'note' ) );
 			if ( ! $note || 'user_membership_note' !== $note->comment_type || (int) $note->comment_post_ID !== (int) $m->get_id() ) {
 				return new WP_Error( 'minn_wcm_note', __( 'Note not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -1913,7 +1913,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => 'minn_admin_wcm_can_plans',
 		'callback'            => function ( $request ) {
-			$plan = minn_admin_wcm_plan_load( (int) $request['id'] );
+			$plan = minn_admin_wcm_plan_load( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $plan ) ) {
 				return $plan;
 			}
@@ -2020,7 +2020,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => 'minn_admin_wcm_can_plans',
 		'callback'            => function ( $request ) use ( $apply_plan ) {
-			$plan = minn_admin_wcm_plan_load( (int) $request['id'], 'edit_post' );
+			$plan = minn_admin_wcm_plan_load( (int) Minn_Admin::path_param( $request ), 'edit_post' );
 			if ( is_wp_error( $plan ) ) {
 				return $plan;
 			}
@@ -2034,7 +2034,7 @@ add_action( 'rest_api_init', function () {
 			return minn_admin_wcm_can_plans() && current_user_can( 'publish_membership_plans' );
 		},
 		'callback'            => function ( $request ) {
-			$source = minn_admin_wcm_plan_load( (int) $request['id'] );
+			$source = minn_admin_wcm_plan_load( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $source ) ) {
 				return $source;
 			}
@@ -2090,11 +2090,11 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'DELETE',
 		'permission_callback' => 'minn_admin_wcm_can_plans',
 		'callback'            => function ( $request ) {
-			$plan = minn_admin_wcm_plan_load( (int) $request['id'], 'delete_post' );
+			$plan = minn_admin_wcm_plan_load( (int) Minn_Admin::path_param( $request ), 'delete_post' );
 			if ( is_wp_error( $plan ) ) {
 				// Their user_has_cap filter withholds delete_post on a plan with
 				// active members, so say that rather than "not allowed".
-				$check = minn_admin_wcm_plan_load( (int) $request['id'] );
+				$check = minn_admin_wcm_plan_load( (int) Minn_Admin::path_param( $request ) );
 				if ( ! is_wp_error( $check ) && $check->has_active_memberships() ) {
 					return new WP_Error( 'minn_wcm_plan_delete', __( 'This plan still has active members. Cancel or move their memberships first.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
@@ -2192,7 +2192,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => 'minn_admin_wcm_can_plans',
 		'callback'            => function ( $request ) {
-			$post = get_post( (int) $request['id'] );
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			$plan = $post && 'wc_membership_plan' === $post->post_type ? wc_memberships_get_membership_plan( $post ) : false;
 			if ( ! $plan ) {
 				return new WP_Error( 'minn_wcm_not_found', __( 'Membership plan not found.', 'minn-admin' ), array( 'status' => 404 ) );

@@ -255,7 +255,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
 				global $wpdb;
-				$id  = (int) $request['id'];
+				$id  = (int) Minn_Admin::path_param( $request );
 				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $table() . ' WHERE id = %d', $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL
 				// Confirm the target is a redirect before rewriting it, the
 				// same test the delete route below makes. Status 404 rows are

@@ -589,7 +589,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$item = minn_admin_ccj_item( (int) $request['id'] );
+				$item = minn_admin_ccj_item( (int) Minn_Admin::path_param( $request ) );
 				if ( ! $item ) {
 					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -600,7 +600,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'PUT',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$id   = (int) $request['id'];
+				$id   = (int) Minn_Admin::path_param( $request );
 				$post = get_post( $id );
 				if ( ! $post || 'custom-css-js' !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -681,7 +681,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$id   = (int) $request['id'];
+			$id   = (int) Minn_Admin::path_param( $request );
 			$post = get_post( $id );
 			if ( ! $post || 'custom-css-js' !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );

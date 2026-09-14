@@ -745,7 +745,7 @@ add_action( 'rest_api_init', function () {
 				$table = $wpdb->prefix . 'gravitysmtp_events';
 				$row   = $wpdb->get_row( $wpdb->prepare(
 					"SELECT id, date_created, status, service, subject, message, extra FROM {$table} WHERE id = %d", // phpcs:ignore
-					(int) $request['id']
+					(int) Minn_Admin::path_param( $request )
 				) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Event not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -830,7 +830,7 @@ add_action( 'rest_api_init', function () {
 			$table = $wpdb->prefix . 'gravitysmtp_events';
 			$row   = $wpdb->get_row( $wpdb->prepare(
 				"SELECT id, date_created, status, service, subject, message, extra FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
+				(int) Minn_Admin::path_param( $request )
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Event not found', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1030,7 +1030,7 @@ add_action( 'rest_api_init', function () {
 			// (prefix-scoped read — the shim convention).
 			$email = $wpdb->get_var( $wpdb->prepare(
 				"SELECT email FROM {$wpdb->prefix}gravitysmtp_suppressed_emails WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
+				(int) Minn_Admin::path_param( $request )
 			) );
 			if ( ! $email ) {
 				return new WP_Error( 'not_found', __( 'Suppressed address not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1151,7 +1151,7 @@ add_action( 'rest_api_init', function () {
 				'permission_callback' => $can( 'EDIT_ROUTING' ),
 				'callback'            => function ( WP_REST_Request $request ) use ( $on, $verb ) {
 					$recipes = minn_admin_gsmtp_routing_recipes();
-					$id      = (int) $request['id'];
+					$id      = (int) Minn_Admin::path_param( $request );
 					if ( ! isset( $recipes[ $id ] ) || ! is_array( $recipes[ $id ] ) ) {
 						return new WP_Error( 'not_found', __( 'Routing rule not found.', 'minn-admin' ), array( 'status' => 404 ) );
 					}
@@ -1244,18 +1244,18 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => function ( $request ) {
 				return current_user_can( minn_admin_gsmtp_cap(
-					'sending' === $request['tab'] ? 'VIEW_INTEGRATIONS' : 'VIEW_GENERAL_SETTINGS'
+					'sending' === Minn_Admin::path_param( $request, 'tab' ) ? 'VIEW_INTEGRATIONS' : 'VIEW_GENERAL_SETTINGS'
 				) );
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				return rest_ensure_response( minn_admin_gsmtp_settings_shape( (string) $request['tab'] ) );
+				return rest_ensure_response( minn_admin_gsmtp_settings_shape( (string) Minn_Admin::path_param( $request, 'tab' ) ) );
 			},
 		),
 		array(
 			'methods'             => 'POST',
 			'permission_callback' => function ( $request ) {
 				return current_user_can( minn_admin_gsmtp_cap(
-					'sending' === $request['tab'] ? 'EDIT_INTEGRATIONS' : 'EDIT_GENERAL_SETTINGS'
+					'sending' === Minn_Admin::path_param( $request, 'tab' ) ? 'EDIT_INTEGRATIONS' : 'EDIT_GENERAL_SETTINGS'
 				) );
 			},
 			'callback'            => 'minn_admin_gsmtp_settings_save',
@@ -1395,7 +1395,7 @@ function minn_admin_gsmtp_settings_shape( $tab ) {
 
 /** POST: write one tab's changed values through their own stores. */
 function minn_admin_gsmtp_settings_save( WP_REST_Request $request ) {
-	$tab  = (string) $request['tab'];
+	$tab  = (string) Minn_Admin::path_param( $request, 'tab' );
 	$body = $request->get_json_params();
 	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
 	if ( 'sending' === $tab ) {
@@ -1455,7 +1455,7 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 	$table = $wpdb->prefix . 'gravitysmtp_events';
 	$row   = $wpdb->get_row( $wpdb->prepare(
 		"SELECT id, subject, message, extra FROM {$table} WHERE id = %d", // phpcs:ignore
-		(int) $request['id']
+		(int) Minn_Admin::path_param( $request )
 	) );
 	if ( ! $row ) {
 		return new WP_Error( 'not_found', __( 'Event not found', 'minn-admin' ), array( 'status' => 404 ) );

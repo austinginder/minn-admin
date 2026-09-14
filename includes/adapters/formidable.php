@@ -297,7 +297,7 @@ add_action( 'rest_api_init', function () {
 				return minn_admin_formidable_can();
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$entry = FrmEntry::getOne( (int) $request['id'], true );
+				$entry = FrmEntry::getOne( (int) Minn_Admin::path_param( $request ), true );
 				// Confirm the target is a submitted, top-level entry, the same
 				// test the list and the per-form count make. Their table also
 				// holds drafts and repeater child rows, which belong to
