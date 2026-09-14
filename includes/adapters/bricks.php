@@ -1228,7 +1228,7 @@ add_filter( 'minn_admin_cache_purgers', function ( $purgers ) {
 	if ( class_exists( '\Bricks\Assets_Files' ) && method_exists( '\Bricks\Assets_Files', 'regenerate_css_files' ) ) {
 		$purgers[] = array(
 			'id'    => 'bricks-css',
-			'name'  => 'Bricks CSS files',
+			'name'  => __( 'Bricks CSS files', 'minn-admin' ),
 			// Synchronous is their own precedent: their post-update admin
 			// notice runs the same call in-request.
 			'purge' => function () {

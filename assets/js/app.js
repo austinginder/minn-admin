@@ -5399,7 +5399,7 @@
 		// only, so a %% in the format string would render literally.
 		/* translators: 1: up or down arrow, 2: percentage change including the % sign, 3: number of days. */
 		const deltaBit = t.delta !== null && t.delta !== undefined
-			? sprintf( __( '%1$s %2$s vs prior %3$sd' ), t.delta >= 0 ? '↑' : '↓', Math.abs( t.delta ) + '%', days )
+			? /* translators: %1$s: up or down arrow, %2$s: percent change, %3$s: number of days. */ sprintf( __( '%1$s %2$s vs prior %3$sd' ), t.delta >= 0 ? '↑' : '↓', Math.abs( t.delta ) + '%', days )
 			: __( 'no prior period to compare' );
 		const max = Math.max( 1, ...d.chart.map( ( x ) => x.views || x.value ) );
 		const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
@@ -19744,7 +19744,7 @@
 			<div class="minn-toolbar-meta">${ esc( changed
 				/* translators: %1$s: how many templates this site changed, %2$s: how many exist. */
 				? sprintf( __( '%1$s changed of %2$s' ), String( changed ), String( all.length ) )
-				: sprintf( _n( '%s template', '%s templates', all.length ), String( all.length ) ) ) }</div>
+				: /* translators: %s: number of templates. */ sprintf( _n( '%s template', '%s templates', all.length ), String( all.length ) ) ) }</div>
 		</div>
 		<div class="minn-toolbar">
 			<div class="minn-tabs minn-quiet-tabs">
@@ -24184,7 +24184,7 @@
 			<div class="minn-card minn-mig-card">
 				<div class="minn-mig-head">
 					<h3>${ esc( __( 'Direction' ) ) }</h3>
-					<span class="minn-mig-sub">${ esc( sprintf( __( 'WP Migrate %s' ), W.version || '' ) ) }</span>
+					<span class="minn-mig-sub">${ esc( /* translators: %s: WP Migrate version. */ sprintf( __( 'WP Migrate %s' ), W.version || '' ) ) }</span>
 				</div>
 				<div class="minn-mig-dirs">
 					<button class="minn-mig-dir${ m.intent === 'push' ? ' on' : '' }" data-migintent="push"${ m.running ? ' disabled' : '' }>
@@ -24271,8 +24271,8 @@
 				<div class="minn-mig-runbar">
 					<div>
 						<div class="minn-mig-runtitle">${ esc( m.intent === 'push'
-							? sprintf( __( 'Push %1$s tables to %2$s' ), String( chosen.length ), m.remote.url || m.remote.site_url || '' )
-							: sprintf( __( 'Pull %1$s tables from %2$s' ), String( chosen.length ), m.remote.url || m.remote.site_url || '' ) ) }</div>
+							? /* translators: %1$s: number of tables, %2$s: remote site URL. */ sprintf( __( 'Push %1$s tables to %2$s' ), String( chosen.length ), m.remote.url || m.remote.site_url || '' )
+							: /* translators: %1$s: number of tables, %2$s: remote site URL. */ sprintf( __( 'Pull %1$s tables from %2$s' ), String( chosen.length ), m.remote.url || m.remote.site_url || '' ) ) }</div>
 						<div class="minn-mig-runsub">${ esc( m.intent === 'push'
 							? __( 'The other site’s database is replaced. This one is untouched.' )
 							: __( 'This site’s database is replaced. The other one is untouched.' ) ) }</div>
@@ -24296,10 +24296,10 @@
 			<div class="minn-mig-phase">${ esc(
 				m.result
 					? ( m.result.ok
-						? sprintf( __( 'Finished. %s tables moved.' ), String( done ) )
-						: sprintf( __( 'Stopped: %s' ), m.result.message || '' ) )
+						? /* translators: %s: number of tables. */ sprintf( __( 'Finished. %s tables moved.' ), String( done ) )
+						: /* translators: %s: the error message. */ sprintf( __( 'Stopped: %s' ), m.result.message || '' ) )
 					: ( m.activeTable
-						? sprintf( __( '%1$s — %2$s of %3$s' ), m.activeTable, String( done + 1 ), String( chosen.length ) )
+						? /* translators: %1$s: table name, %2$s: tables done, %3$s: tables in total. */ sprintf( __( '%1$s — %2$s of %3$s' ), m.activeTable, String( done + 1 ), String( chosen.length ) )
 						: m.phase ) ) }</div>
 		</div>`;
 	}
@@ -24439,7 +24439,7 @@
 		if ( ! chosen.length ) return;
 		// A pull replaces THIS site, so it gets the confirm wp-admin would give.
 		if ( m.intent === 'pull' && ! window.confirm( sprintf(
-			__( 'Replace this site’s database with %s? This cannot be undone from here.' ), m.remote.url || m.remote.site_url || '' ) ) ) return;
+			/* translators: %s: remote site URL. */ __( 'Replace this site’s database with %s? This cannot be undone from here.' ), m.remote.url || m.remote.site_url || '' ) ) ) return;
 
 		m.running = true; m.cancel = false; m.result = null; m.doneTables = []; m.activeTable = '';
 		m.phase = __( 'Getting ready…' );
@@ -24519,7 +24519,7 @@
 					const r = await fetch( W.ajax, { method: 'POST', credentials: 'same-origin', body } );
 					const j = await r.json().catch( () => null );
 					if ( ! j || ! j.success ) {
-						throw new Error( ( j && typeof j.data === 'string' ) ? j.data : sprintf( __( 'WP Migrate stopped on %s.' ), table ) );
+						throw new Error( ( j && typeof j.data === 'string' ) ? j.data : /* translators: %s: table name. */ sprintf( __( 'WP Migrate stopped on %s.' ), table ) );
 					}
 					currentRow = j.data.current_row;
 					primaryKeys = j.data.primary_keys || '';
@@ -24540,8 +24540,8 @@
 				await migRest( 'finalize-migration', { tables: chosen.join( ',' ), prefix: ( dst && dst.prefix ) || 'wp_' } );
 				m.result = { ok: true };
 				toast( m.intent === 'push'
-					? sprintf( __( 'Pushed %s tables.' ), String( m.doneTables.length ) )
-					: sprintf( __( 'Pulled %s tables.' ), String( m.doneTables.length ) ) );
+					? /* translators: %s: number of tables. */ sprintf( __( 'Pushed %s tables.' ), String( m.doneTables.length ) )
+					: /* translators: %s: number of tables. */ sprintf( __( 'Pulled %s tables.' ), String( m.doneTables.length ) ) );
 			}
 		} catch ( e ) {
 			m.result = { ok: false, message: e.message };
@@ -43932,7 +43932,7 @@
 				}
 				/* translators: %s: the user's name. */
 				const confirmBody = __( 'The account is removed for good, and their content moves to the user you picked. There is no undo for this.' );
-				if ( ! await minnConfirm( { title: m.user.name ? sprintf( __( 'Permanently delete %s?' ), m.user.name ) : __( 'Permanently delete this user?' ), body: m.note ? confirmBody + ' ' + m.note : confirmBody, danger: true, confirmLabel: __( 'Delete user' ) } ) ) return;
+				if ( ! await minnConfirm( { title: m.user.name ? /* translators: %s: the user's display name. */ sprintf( __( 'Permanently delete %s?' ), m.user.name ) : __( 'Permanently delete this user?' ), body: m.note ? confirmBody + ' ' + m.note : confirmBody, danger: true, confirmLabel: __( 'Delete user' ) } ) ) return;
 				confirmBtn.disabled = true;
 				try {
 					await api( `wp/v2/users/${ m.user.id }?force=true&reassign=${ encodeURIComponent( reassign ) }`, { method: 'DELETE' } );

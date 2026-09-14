@@ -88,6 +88,7 @@ const ATTR_ALLOW = new Set( [
 const TEXT_ALLOW = new Set( [
 	'.zip', '/minn-admin/', 'Aa', 'esc', 'm', '\\n', '×N',
 	'⌘K', '⌘S', '⌘⇧D', '⌘⇧F', '⌘⇧O', '⌥click', '⇧⌥click', '\\u00d7',
+	'⌥F10', '⌘⇧⌥T', '⌘⇧⌥Y',
 ] );
 {
 	const bad = [];
@@ -292,6 +293,16 @@ const PHP_PROSE_ALLOW = new Set( [
 	'activation limit',
 	'another site',
 	'in use',
+	'already active', 'activation left', 'timed out',   // ACPT's activation replies
+	'tm public api',                                    // a vendor API's own error text
+	'extra RLIKE %s',                                   // SQL fragment (Gravity SMTP log search)
+	'%%title%% %%sep%% %%sitename%%', '%title% %sep% %sitename%',   // SEO title templates: plugin tokens, not prose
+	'has-more',                                         // a CSS class
+	"Content-Security-Policy: frame-ancestors 'self'",  // an HTTP header
+	// Integrations-card diagnostics are developer text composed in English by
+	// design, like the REST cheat sheet; this is the one line long enough to
+	// read as prose.
+	'" is not a capability any role grants, so this surface is hidden from everyone',
 ] );
 {
 	const SQL = new Set( [ 'SELECT', 'FROM', 'WHERE', 'AND', 'ORDER', 'BY', 'LIMIT', 'DESC', 'ASC', 'JOIN', 'COUNT', 'DISTINCT', 'NOT', 'NULL', 'IN', 'AS', 'SET', 'UPDATE', 'DELETE', 'INSERT', 'INTO', 'SHOW', 'TABLES', 'LIKE', 'ON', 'IF', 'EXISTS', 'CREATE', 'TABLE', 'KEY', 'INT', 'VARCHAR' ] );
@@ -370,6 +381,8 @@ const JS_PROSE_ALLOW = new Set( [
 	// One line of the REST cheat sheet: a developer document composed in
 	// English by design (its sibling lines are template text, also English).
 	'- (nothing beyond core detected)',
+	'Refused a cross-origin API route: ',   // a thrown developer error, never shown
+	'horizontal rule',                       // slash-menu MATCH keyword (data), like 'add column'
 ] );
 {
 	const CONNECT = new Set( [ 'and', 'of', 'for', 'the', 'to', 'in', 'with', 'on', 'by', 'a', 'at' ] );

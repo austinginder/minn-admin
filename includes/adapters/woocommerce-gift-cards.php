@@ -732,6 +732,7 @@ add_action( 'rest_api_init', function () {
 						'amount'     => abs( $delta ),
 						/* translators: 1: the user who made the change, 2: formatted new balance. */
 						'note'       => sprintf(
+							/* translators: %1$s: the user who adjusted the balance, %2$s: the new balance. */
 							__( 'Balance adjusted to %2$s in Minn Admin by %1$s.', 'minn-admin' ),
 							$actor ? $actor->user_login : __( 'a site administrator', 'minn-admin' ),
 							html_entity_decode( wp_strip_all_tags( minn_admin_wcgc_money( $balance, minn_admin_wcgc_currency( $card ) ) ) )
