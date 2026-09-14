@@ -134,7 +134,7 @@ function minn_admin_freighter_app_url_for( $prefix, $base_url ) {
 /** Whether Minn Admin is in a tenant's active_plugins (its own option row, read raw). */
 function minn_admin_freighter_tenant_has_minn( $id ) {
 	$raw    = minn_admin_freighter_raw_option( 'stacked_' . (int) $id . '_', 'active_plugins' );
-	$active = $raw ? maybe_unserialize( $raw ) : array();
+	$active = $raw ? Minn_Admin::decode_serialized( $raw, array() ) : array();
 	return is_array( $active ) && in_array( plugin_basename( MINN_ADMIN_FILE ), $active, true );
 }
 
@@ -204,6 +204,8 @@ function minn_admin_freighter_row( $site, $configs = null ) {
 	$exists  = minn_admin_freighter_tenant_exists( $id );
 	$minn    = $exists && minn_admin_freighter_tenant_has_minn( $id );
 	$runnable = minn_admin_freighter_tenant_can_run_minn( $id, $configs );
+	// A row naming the main site's own prefix offers no actions (see target()).
+	$primary  = minn_admin_freighter_is_primary_id( $id );
 
 	switch ( $configs->files ) {
 		case 'dedicated':
@@ -229,24 +231,37 @@ function minn_admin_freighter_row( $site, $configs = null ) {
 		'content'    => $content,
 		'created'    => gmdate( 'Y-m-d\TH:i:s\Z', (int) $site['created_at'] ),
 		'minn'       => $minn ? 'active' : 'inactive',
-		'status'     => $current ? __( 'current', 'minn-admin' ) : ( $exists ? __( 'ready', 'minn-admin' ) : __( 'missing', 'minn-admin' ) ),
+		'status'     => $primary ? __( 'main site', 'minn-admin' ) : ( $current ? __( 'current', 'minn-admin' ) : ( $exists ? __( 'ready', 'minn-admin' ) : __( 'missing', 'minn-admin' ) ) ),
 		// UI gates (see the docblock): what this row may OFFER.
-		'canOpen'    => ( ! $current && $exists ) ? '1' : '0',
-		'canOpenMinn' => ( ! $current && $exists && $minn ) ? '1' : '0',
-		'canEnableMinn' => ( $exists && ! $minn && $runnable ) ? '1' : '0',
-		'canDisableMinn' => ( ! $current && $exists && $minn ) ? '1' : '0',
-		'canDelete'  => $current ? '0' : '1',
+		'canOpen'    => ( ! $current && ! $primary && $exists ) ? '1' : '0',
+		'canOpenMinn' => ( ! $current && ! $primary && $exists && $minn ) ? '1' : '0',
+		'canEnableMinn' => ( ! $primary && $exists && ! $minn && $runnable ) ? '1' : '0',
+		'canDisableMinn' => ( ! $current && ! $primary && $exists && $minn ) ? '1' : '0',
+		'canDelete'  => ( $current || $primary ) ? '0' : '1',
 	);
 }
 
 /** The registry entry for a tenant id, or a 404 error. */
 function minn_admin_freighter_target( $id ) {
-	$id   = (int) $id;
+	$id = (int) $id;
+	// A row whose id spells the main site's own prefix (a host whose main
+	// site sits on stacked_N_) names the main database: delete would drop
+	// it, clone would copy it, the Minn toggle would rewrite its plugins.
+	// WP Freighter's id allocator no longer hands such an id out, but a row
+	// inherited from before it did is refused here, ahead of the lookup.
+	if ( minn_admin_freighter_is_primary_id( $id ) ) {
+		return new WP_Error( 'primary_tenant', __( 'That entry points at the main site itself, not a tenant.', 'minn-admin' ), array( 'status' => 409 ) );
+	}
 	$site = $id ? \WPFreighter\Site::get( $id ) : null;
 	if ( ! $site || ! is_array( $site ) ) {
 		return new WP_Error( 'no_such_tenant', __( 'That tenant does not exist.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	return $site;
+}
+
+/** Whether a tenant id's table prefix is the main site's own prefix. */
+function minn_admin_freighter_is_primary_id( $id ) {
+	return 'stacked_' . (int) $id . '_' === minn_admin_freighter_primary_prefix();
 }
 
 /** Hostname validation for a mapped domain: lowercase labels, dots, hyphens; nothing else. */
@@ -745,6 +760,9 @@ function minn_admin_freighter_site_login( WP_REST_Request $request ) {
 	$configs = minn_admin_freighter_configs();
 
 	if ( 'main' === $id ) {
+		if ( 0 === minn_admin_freighter_current_id() ) {
+			return new WP_Error( 'current_tenant', __( 'You are already working on the main site.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
 		$base   = minn_admin_freighter_main_url();
 		$prefix = minn_admin_freighter_primary_prefix();
 		$has_minn = true; // Minn answered this request from the same install's plugins folder.
@@ -752,7 +770,7 @@ function minn_admin_freighter_site_login( WP_REST_Request $request ) {
 			// Standing in a dedicated tenant, "this file" is the tenant's copy;
 			// ask the main site's own option row.
 			$raw      = minn_admin_freighter_raw_option( $prefix, 'active_plugins' );
-			$active   = $raw ? maybe_unserialize( $raw ) : array();
+			$active   = $raw ? Minn_Admin::decode_serialized( $raw, array() ) : array();
 			$has_minn = is_array( $active ) && in_array( plugin_basename( MINN_ADMIN_FILE ), $active, true );
 		}
 		// Leaving a cookie-mode tenant: without this the bootstrap keeps
@@ -789,6 +807,21 @@ function minn_admin_freighter_site_login( WP_REST_Request $request ) {
 	$link = \WPFreighter\Site::login( $target, $redirect );
 	if ( is_wp_error( $link ) ) {
 		return new WP_Error( 'login_failed', wp_strip_all_tags( $link->get_error_message() ), array( 'status' => 500 ) );
+	}
+	// WP Freighter builds the link on the target's own siteurl row, which
+	// that tenant's administrator controls. The browser is about to follow
+	// it carrying a one-time token, so it must land on the host this
+	// install knows the tenant by (its mapped domain, or the main host),
+	// never wherever siteurl was pointed.
+	$link_host = strtolower( (string) wp_parse_url( $link, PHP_URL_HOST ) );
+	$want_host = strtolower( (string) wp_parse_url( $base, PHP_URL_HOST ) );
+	if ( '' === $link_host || $link_host !== $want_host || ! in_array( strtolower( (string) wp_parse_url( $link, PHP_URL_SCHEME ) ), array( 'http', 'https' ), true ) ) {
+		return new WP_Error( 'login_host_mismatch', sprintf(
+			/* translators: 1: the address the tenant answers on, 2: the address its settings name. */
+			__( 'That site’s address (%2$s) does not match where this host expects it (%1$s), so the sign-in link was not followed. Check its Site Address setting.', 'minn-admin' ),
+			$want_host,
+			$link_host
+		), array( 'status' => 409 ) );
 	}
 	return rest_ensure_response(
 		array(
@@ -923,7 +956,7 @@ function minn_admin_freighter_site_minn( WP_REST_Request $request ) {
 	$table  = 'stacked_' . $id . '_options';
 	$file   = plugin_basename( MINN_ADMIN_FILE );
 	$raw    = minn_admin_freighter_raw_option( 'stacked_' . $id . '_', 'active_plugins' );
-	$active = $raw ? maybe_unserialize( $raw ) : array();
+	$active = $raw ? Minn_Admin::decode_serialized( $raw, array() ) : array();
 	if ( ! is_array( $active ) ) {
 		$active = array();
 	}

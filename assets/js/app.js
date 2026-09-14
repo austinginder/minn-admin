@@ -3577,15 +3577,15 @@
 		if ( ! site || site.current ) return;
 		if ( site.login ) {
 			api( site.login, { method: 'POST' } ).then( ( r ) => {
-				if ( r && r.url ) {
-					window.location.href = r.url;
+				if ( r && safeHref( r.url ) ) {
+					window.location.href = safeHref( r.url );
 				} else {
 					toast( ( r && r.message ) || __( 'That site did not answer with a sign-in link.' ), true );
 				}
 			} ).catch( ( e ) => toast( e.message, true ) );
 			return;
 		}
-		if ( site.app ) window.location.href = site.app;
+		if ( safeHref( site.app ) ) window.location.href = safeHref( site.app );
 	}
 
 	// A sidebar group's heading. Plugins may rename the one group whose
@@ -15880,9 +15880,9 @@
 		// answers { url } (a one-time sign-in link into another site, say)
 		// and the browser goes there. Nothing here to refresh.
 		if ( action.follow ) {
-			if ( r && r.url ) {
+			if ( r && safeHref( r.url ) ) {
 				if ( r.message ) toast( r.message );
-				window.location.href = r.url;
+				window.location.href = safeHref( r.url );
 				return;
 			}
 			toast( ( r && r.message ) || __( 'That did not answer with a link to follow.' ), true );
@@ -16053,9 +16053,9 @@
 					if ( a.follow ) {
 						// Same contract as a row action's `follow`: the route
 						// answers { url } and the browser goes there.
-						if ( r && r.url ) {
+						if ( r && safeHref( r.url ) ) {
 							if ( r.message ) toast( r.message );
-							window.location.href = r.url;
+							window.location.href = safeHref( r.url );
 							return;
 						}
 						toast( ( r && r.message ) || __( 'That did not answer with a link to follow.' ), true );
@@ -48561,6 +48561,9 @@
 	/** Write a value at a dotted path inside the working form. */
 	function wcmSetPath( obj, path, value ) {
 		const parts = String( path ).split( '.' );
+		// Paths are app-authored, but a setter that walks names into an
+		// object must still never reach the prototype chain.
+		if ( parts.some( ( k ) => k === '__proto__' || k === 'constructor' || k === 'prototype' ) ) return;
 		let cur = obj;
 		for ( let i = 0; i < parts.length - 1; i++ ) {
 			const k = parts[ i ];
