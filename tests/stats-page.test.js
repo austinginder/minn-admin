@@ -57,9 +57,8 @@ const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 			const d = await r.json();
 			return { status: r.status, source: d.source, ids: ( d.sections || [] ).map( ( s ) => s.id ) };
 		} );
-		t.check( 'report endpoint answers a 90-day window through the fallback',
-			report.status === 200 && report.source === 'Koko Analytics' && report.ids.includes( 'pages' ),
-			JSON.stringify( report ) );
+		t.check( 'report endpoint answers a 90-day window (a provider that keeps history, else the traffic-day fallback)',
+			report.status === 200 && !! report.source && report.ids.includes( 'pages' ) && report.ids.includes( 'referrers' ), JSON.stringify( report ) );
 
 		/* ===== Range switch refetches with the new days ===== */
 		const res365 = page.waitForResponse( ( r ) => r.url().includes( 'minn-admin/v1/stats' ) && r.url().includes( 'days=365' ) );
