@@ -42877,6 +42877,10 @@
 				closeModal();
 				state.userSearch = who;
 				state.userRole = '_all';
+				// The view paints whatever list is cached before it consults the
+				// search state, so a list loaded earlier would show every user
+				// beneath a prefilled box.
+				state.cache.users = null;
 				go( 'users' );
 			} );
 			$$( '[data-open-membership]' ).forEach( ( btn ) =>

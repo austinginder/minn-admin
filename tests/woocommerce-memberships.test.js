@@ -236,9 +236,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// person (the link used to carry a hash route and no handler).
 		await page.click( '#minn-cust-users' );
 		await page.waitForFunction( () => /\/users$/.test( location.pathname ) && !! document.querySelector( '#minn-user-search' ), null, { timeout: 15000 } ).catch( () => null );
-		await page.waitForFunction( () => /dana-member@example.com/.test( ( document.querySelector( '.minn-table' ) || {} ).textContent || '' ), null, { timeout: 15000 } ).catch( () => null );
-		t.check( 'Find in Users opens the Users list searched for the customer',
-			/\/users$/.test( page.url() ) && 'dana-member@example.com' === ( await page.$eval( '#minn-user-search', ( i ) => i.value ).catch( () => '' ) ), page.url() );
+		await page.waitForFunction( () => { const rows = document.querySelectorAll( '.minn-table-row' ); return rows.length === 1 && /dana-member@example.com/.test( rows[ 0 ].textContent ); }, null, { timeout: 15000 } ).catch( () => null );
+		const userRows = await page.$$eval( '.minn-table-row', ( els ) => els.map( ( e ) => e.textContent.replace( /\s+/g, ' ' ).trim().slice( 0, 60 ) ) );
+		t.check( 'Find in Users opens the Users list searched down to the customer',
+			/\/users$/.test( page.url() ) && 'dana-member@example.com' === ( await page.$eval( '#minn-user-search', ( i ) => i.value ).catch( () => '' ) ) && userRows.length === 1 && /Dana Member/.test( userRows[ 0 ] ), JSON.stringify( userRows ) );
 		await page.goto( BASE + '/minn-admin/memberships/' + pageId, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-wcm-open-customer', { timeout: 20000 } );
 		await page.click( '#minn-wcm-open-customer' );
