@@ -85,6 +85,31 @@ function minn_admin_wcm_statuses() {
 }
 
 /**
+ * The statuses a membership's edit screen offers, unprefixed. The plugin
+ * lets a site hide options per membership through
+ * `wc_memberships_edit_user_membership_screen_status_options` (keyed by
+ * the prefixed status); the page offers and the save accepts that same set.
+ *
+ * @param int $membership_id User membership id.
+ * @return array status => label
+ */
+function minn_admin_wcm_status_options( $membership_id ) {
+	$prefixed = array();
+	foreach ( minn_admin_wcm_statuses() as $slug => $label ) {
+		$prefixed[ minn_admin_wcm_prefix( $slug ) ] = $label;
+	}
+	$filtered = apply_filters( 'wc_memberships_edit_user_membership_screen_status_options', $prefixed, (int) $membership_id );
+	$out      = array();
+	foreach ( (array) $filtered as $slug => $label ) {
+		$slug = preg_replace( '/^wcm-/', '', (string) $slug );
+		if ( isset( minn_admin_wcm_statuses()[ $slug ] ) ) {
+			$out[ $slug ] = (string) $label;
+		}
+	}
+	return $out;
+}
+
+/**
  * Statuses that grant access right now, unprefixed.
  *
  * @return string[]
@@ -487,7 +512,7 @@ function minn_admin_wcm_page_model( $m ) {
 	}
 
 	$statuses = array();
-	foreach ( $labels as $slug => $label ) {
+	foreach ( minn_admin_wcm_status_options( $id ) as $slug => $label ) {
 		$statuses[] = array( $slug, $label );
 	}
 
@@ -756,6 +781,24 @@ function minn_admin_wcm_rule_objects( $content_type, $name, $ids ) {
  * @param WC_Memberships_Membership_Plan_Rule $rule Rule.
  * @return array
  */
+/**
+ * Rule meta as scalars keyed by a sane key; anything else is dropped.
+ *
+ * @param mixed $meta Stored or submitted meta map.
+ * @return array
+ */
+function minn_admin_wcm_rule_meta_clean( $meta ) {
+	$out = array();
+	foreach ( (array) $meta as $key => $value ) {
+		$key = sanitize_key( (string) $key );
+		if ( '' === $key || ( ! is_scalar( $value ) && null !== $value ) ) {
+			continue;
+		}
+		$out[ $key ] = is_string( $value ) ? sanitize_text_field( $value ) : $value;
+	}
+	return $out;
+}
+
 function minn_admin_wcm_rule_model( $rule ) {
 	$data = class_exists( '\SkyVerge\WooCommerce\Memberships\Plans\Adapters\JsonSerializers\MembershipPlanRuleSerializer' )
 		? \SkyVerge\WooCommerce\Memberships\Plans\Adapters\JsonSerializers\MembershipPlanRuleSerializer::convert( $rule )
@@ -773,6 +816,9 @@ function minn_admin_wcm_rule_model( $rule ) {
 	if ( 'purchasing_discount' !== $rule->get_rule_type() && method_exists( $rule, 'is_access_schedule_excluding_trial' ) ) {
 		$data['access_schedule_exclude_trial'] = (bool) $rule->is_access_schedule_excluding_trial();
 	}
+	// Integration flags (Courseware's auto-enrol) live in the rule's meta;
+	// the serializer drops them, so they ride the model to survive a save.
+	$data['meta_data'] = method_exists( $rule, 'get_meta_data' ) ? minn_admin_wcm_rule_meta_clean( $rule->get_meta_data() ) : array();
 	$data['locked'] = ! minn_admin_wcm_rule_editable( $rule );
 	// A locked rule's type is not in the vocabulary the page offers, so it
 	// carries its own label.
@@ -963,6 +1009,9 @@ function minn_admin_wcm_plan_rules_clean( $rules_in, $plan = null ) {
 			if ( ! empty( $r['id'] ) && is_string( $r['id'] ) ) {
 				$clean['id'] = sanitize_key( $r['id'] );
 			}
+			if ( array_key_exists( 'meta_data', $r ) ) {
+				$clean['meta_data'] = minn_admin_wcm_rule_meta_clean( $r['meta_data'] );
+			}
 			if ( 'purchasing_discount' !== $type ) {
 				$sched = isset( $r['access_schedule'] ) && is_array( $r['access_schedule'] ) ? $r['access_schedule'] : array();
 				$stype = isset( $sched['type'] ) && 'delayed' === $sched['type'] ? 'delayed' : 'immediate';
@@ -1049,6 +1098,17 @@ function minn_admin_wcm_plan_rules_apply( $plan, $rules ) {
 					$keep[] = $data['id'];
 					$prev   = $plan->get_rule( $data['id'] );
 				}
+				// Their builder never carries rule meta, so a save would drop a
+				// Courseware auto-enrol flag; re-apply what was sent, else what
+				// the stored rule holds.
+				if ( method_exists( $rule, 'set_meta' ) ) {
+					$meta = array_key_exists( 'meta_data', $data )
+						? (array) $data['meta_data']
+						: ( $prev && method_exists( $prev, 'get_meta_data' ) ? minn_admin_wcm_rule_meta_clean( $prev->get_meta_data() ) : array() );
+					foreach ( $meta as $mk => $mv ) {
+						$rule->set_meta( (string) $mk, $mv );
+					}
+				}
 				if ( 'purchasing_discount' !== $type && method_exists( $rule, 'set_access_schedule_exclude_trial' ) ) {
 					$exclude = array_key_exists( 'access_schedule_exclude_trial', $data )
 						? (bool) $data['access_schedule_exclude_trial']
@@ -1076,14 +1136,15 @@ function minn_admin_wcm_plan_rules_apply( $plan, $rules ) {
 }
 
 /**
- * Apply the page's General fields to a plan the way the plugin's meta box
- * does: access method, then length reset and re-set, then products.
+ * Validate the page's General fields against the plan the way the
+ * plugin's meta box does, without writing anything. A partial save
+ * inherits what it does not mention.
  *
  * @param WC_Memberships_Membership_Plan $plan Plan.
  * @param array                          $in   Request body.
- * @return true|WP_Error
+ * @return array|WP_Error Cleaned fields, or the first refusal.
  */
-function minn_admin_wcm_plan_apply_general( $plan, $in ) {
+function minn_admin_wcm_plan_general_clean( $plan, $in ) {
 	$method = isset( $in['access_method'] ) ? (string) $in['access_method'] : (string) $plan->get_access_method();
 	if ( ! in_array( $method, array( 'manual-only', 'signup', 'purchase' ), true ) ) {
 		return new WP_Error( 'minn_wcm_plan', __( 'Pick how members get access.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -1126,6 +1187,35 @@ function minn_admin_wcm_plan_apply_general( $plan, $in ) {
 			return new WP_Error( 'minn_wcm_plan', __( 'The access end date has to come after the start date.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 	}
+	return compact( 'method', 'product_ids', 'ltype', 'amount', 'period', 'start', 'end' );
+}
+
+/**
+ * Write the general fields (access method, length, products, sections).
+ *
+ * Validation lives in minn_admin_wcm_plan_general_clean() so a route can
+ * refuse the whole request before any post row is touched; pass its
+ * result as $clean to skip re-validating, or omit it to validate here.
+ *
+ * @param WC_Memberships_Membership_Plan $plan  Plan.
+ * @param array                          $in    Request body.
+ * @param array|null                     $clean Output of the clean step.
+ * @return true|WP_Error
+ */
+function minn_admin_wcm_plan_apply_general( $plan, $in, $clean = null ) {
+	if ( null === $clean ) {
+		$clean = minn_admin_wcm_plan_general_clean( $plan, $in );
+	}
+	if ( is_wp_error( $clean ) ) {
+		return $clean;
+	}
+	$method      = $clean['method'];
+	$product_ids = $clean['product_ids'];
+	$ltype       = $clean['ltype'];
+	$amount      = $clean['amount'];
+	$period      = $clean['period'];
+	$start       = $clean['start'];
+	$end         = $clean['end'];
 
 	$plan->set_access_method( $method );
 	// Their meta box starts every save from unlimited and re-applies.
@@ -2024,7 +2114,7 @@ add_action( 'rest_api_init', function () {
 			$status = $request->get_param( 'status' );
 			if ( null !== $status && '' !== (string) $status ) {
 				$status = preg_replace( '/^wcm-/', '', (string) $status );
-				if ( ! isset( minn_admin_wcm_statuses()[ $status ] ) ) {
+				if ( ! isset( minn_admin_wcm_status_options( $id )[ $status ] ) ) {
 					return new WP_Error( 'minn_wcm_status', __( 'That is not a membership status.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				if ( $status !== (string) $m->get_status() ) {
@@ -2154,13 +2244,17 @@ add_action( 'rest_api_init', function () {
 				return $rules;
 			}
 		}
+		$general = minn_admin_wcm_plan_general_clean( $plan, $in );
+		if ( is_wp_error( $general ) ) {
+			return $general;
+		}
 		if ( count( $post_update ) > 1 ) {
 			$r = wp_update_post( $post_update, true );
 			if ( is_wp_error( $r ) ) {
 				return new WP_Error( 'minn_wcm_plan', $r->get_error_message(), array( 'status' => 400 ) );
 			}
 		}
-		$ok = minn_admin_wcm_plan_apply_general( $plan, $in );
+		$ok = minn_admin_wcm_plan_apply_general( $plan, $in, $general );
 		if ( is_wp_error( $ok ) ) {
 			return $ok;
 		}
