@@ -17152,7 +17152,18 @@
 		// Column widths: an adapter's explicit `width` wins; otherwise size by
 		// role — flexible for the title/text columns, fixed and narrow for the
 		// short ones (codes, counts, dates, pills) so long values get the room.
-		const FIXED = { ago: '128px', pill: '110px', mono: '84px', num: '84px', id: '40px' };
+		const FIXED = { ago: '128px', pill: '110px', mono: '84px', num: '84px' };
+		// An id track is sized from the page's longest id, never a fixed
+		// width: Users' 40px fits three digits, and a Gravity Forms site in
+		// its fifth digit ran the number straight into the Entry cell. Every
+		// row shares the one template, so the longest id sizes them all.
+		const idTrack = ( col ) => {
+			const longest = ( c.items || [] ).reduce( ( n, it ) => {
+				const v = surfaceValue( it, col.key );
+				return Math.max( n, v == null ? 0 : String( v ).length );
+			}, 0 );
+			return Math.max( 40, 12 + ( longest + 1 ) * 8 ) + 'px';
+		};
 		// A descriptor's width lands in a style attribute, which is a CSS
 		// context: escaping would not help, so accept only real track values and
 		// fall through to the default for anything else. Every sibling column
@@ -17160,7 +17171,7 @@
 		const TRACK = /^(?:\d+(?:\.\d+)?(?:px|em|rem|%|fr|ch|vw)|minmax\(\s*[\w.%()]+\s*,\s*[\w.%()]+\s*\)|auto|max-content|min-content)$/;
 		const track = ( w ) => ( TRACK.test( String( w == null ? '' : w ).trim() ) ? String( w ).trim() : '' );
 		const gridCols = ( hasBulk ? '30px ' : '' ) + cols.map( ( col, i ) =>
-			track( col.width ) || FIXED[ col.format ] || ( i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)' )
+			track( col.width ) || ( col.format === 'id' ? idTrack( col ) : FIXED[ col.format ] ) || ( i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)' )
 		).join( ' ' ) + ' 30px';
 
 		// A long tab list (a site with a dozen forms) turns the pill strip

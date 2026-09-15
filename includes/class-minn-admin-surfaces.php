@@ -809,11 +809,13 @@ class Minn_Admin_Surfaces {
 	 * @return array
 	 */
 	private static function with_family_id_columns( $surfaces ) {
+		// No width: the client sizes an id track from the page's longest id,
+		// so a five-digit Gravity entry number gets the room a three-digit
+		// Users id never needed.
 		$col = array(
 			'key'    => 'id',
 			'label'  => __( 'ID', 'minn-admin' ),
 			'format' => 'id',
-			'width'  => '40px',
 		);
 		foreach ( $surfaces as $id => $s ) {
 			if ( ! is_array( $s ) || ( isset( $s['family'] ) ? $s['family'] : '' ) !== 'forms' ) {
