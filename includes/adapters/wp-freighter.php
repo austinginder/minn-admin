@@ -745,6 +745,51 @@ function minn_admin_freighter_sites_create( WP_REST_Request $request ) {
 }
 
 /**
+ * Whether a sign-in link (or the siteurl it will be built from) lands on
+ * the exact origin this install knows the tenant by.
+ *
+ * Compares scheme, host and port, and refuses anything a browser and PHP
+ * could read differently: userinfo, a backslash in the authority, or a
+ * scheme that is not http(s). The one-time token rides this URL.
+ *
+ * @param string $url  The stored siteurl or the minted link.
+ * @param string $base The origin the tenant answers on.
+ * @return true|WP_Error
+ */
+function minn_admin_freighter_login_origin_check( $url, $base ) {
+	$url  = trim( (string) $url );
+	$want = wp_parse_url( $base );
+	$got  = wp_parse_url( $url );
+	$want_scheme = isset( $want['scheme'] ) ? strtolower( (string) $want['scheme'] ) : 'https';
+	$want_host   = isset( $want['host'] ) ? strtolower( (string) $want['host'] ) : '';
+	$want_port   = isset( $want['port'] ) ? (int) $want['port'] : 0;
+	$got_scheme  = is_array( $got ) && isset( $got['scheme'] ) ? strtolower( (string) $got['scheme'] ) : '';
+	$got_host    = is_array( $got ) && isset( $got['host'] ) ? strtolower( (string) $got['host'] ) : '';
+	$got_port    = is_array( $got ) && isset( $got['port'] ) ? (int) $got['port'] : 0;
+	$authority   = (string) preg_replace( '#^[a-z][a-z0-9+.-]*://#i', '', $url );
+	$authority   = (string) preg_replace( '#[/?\#].*$#s', '', $authority );
+	$ok = is_array( $got )
+		&& '' !== $got_host
+		&& in_array( $got_scheme, array( 'http', 'https' ), true )
+		&& $got_scheme === $want_scheme
+		&& $got_host === $want_host
+		&& $got_port === $want_port
+		&& ! isset( $got['user'] ) && ! isset( $got['pass'] )
+		&& false === strpos( $authority, '@' )
+		&& false === strpos( $authority, '\\' )
+		&& false === strpos( $url, '\\' );
+	if ( $ok ) {
+		return true;
+	}
+	return new WP_Error( 'login_host_mismatch', sprintf(
+		/* translators: 1: the address the tenant answers on, 2: the address its settings name. */
+		__( 'That site’s address (%2$s) does not match where this host expects it (%1$s), so the sign-in link was not followed. Check its Site Address setting.', 'minn-admin' ),
+		$want_host . ( $want_port ? ':' . $want_port : '' ),
+		'' !== $got_host ? $got_host . ( $got_port ? ':' . $got_port : '' ) : $url
+	), array( 'status' => 409 ) );
+}
+
+/**
  * POST /freighter/sites/{id}/login — a one-time link into a site, the way
  * WP Freighter's own Log in button works, aimed at Minn or at wp-admin.
  *
@@ -804,24 +849,26 @@ function minn_admin_freighter_site_login( WP_REST_Request $request ) {
 		? minn_admin_freighter_app_url_for( $prefix, $base )
 		: $base . '/wp-admin/';
 
+	// WP Freighter builds the link on the target's own siteurl row, which
+	// that tenant's administrator controls. The browser is about to follow
+	// it carrying a one-time token, so it must land on the origin this
+	// install knows the tenant by (its mapped domain, or the main host),
+	// never wherever siteurl was pointed. Checked on the stored row BEFORE
+	// a token is minted, so a refused sign-in leaves nothing live behind.
+	$origin = minn_admin_freighter_login_origin_check( (string) minn_admin_freighter_raw_option( $prefix, 'siteurl' ), $base );
+	if ( is_wp_error( $origin ) ) {
+		return $origin;
+	}
+
 	$link = \WPFreighter\Site::login( $target, $redirect );
 	if ( is_wp_error( $link ) ) {
 		return new WP_Error( 'login_failed', wp_strip_all_tags( $link->get_error_message() ), array( 'status' => 500 ) );
 	}
-	// WP Freighter builds the link on the target's own siteurl row, which
-	// that tenant's administrator controls. The browser is about to follow
-	// it carrying a one-time token, so it must land on the host this
-	// install knows the tenant by (its mapped domain, or the main host),
-	// never wherever siteurl was pointed.
-	$link_host = strtolower( (string) wp_parse_url( $link, PHP_URL_HOST ) );
-	$want_host = strtolower( (string) wp_parse_url( $base, PHP_URL_HOST ) );
-	if ( '' === $link_host || $link_host !== $want_host || ! in_array( strtolower( (string) wp_parse_url( $link, PHP_URL_SCHEME ) ), array( 'http', 'https' ), true ) ) {
-		return new WP_Error( 'login_host_mismatch', sprintf(
-			/* translators: 1: the address the tenant answers on, 2: the address its settings name. */
-			__( 'That site’s address (%2$s) does not match where this host expects it (%1$s), so the sign-in link was not followed. Check its Site Address setting.', 'minn-admin' ),
-			$want_host,
-			$link_host
-		), array( 'status' => 409 ) );
+	// The minted link should be siteurl plus a path; hold it to the same
+	// origin in case the plugin composes it differently than the row reads.
+	$origin = minn_admin_freighter_login_origin_check( $link, $base );
+	if ( is_wp_error( $origin ) ) {
+		return $origin;
 	}
 	return rest_ensure_response(
 		array(
