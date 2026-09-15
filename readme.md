@@ -105,7 +105,10 @@ Expand only the part of Minn you want to explore.
   opens its summary. **Coupons**, **Customers**, and **Subscriptions** when WooCommerce
   Subscriptions is active: a subscription opens on its own page in the order page's shape, with
   editable items and schedule, coupons, a notes timeline, a quick view of related orders, and
-  the same filter bar with its own status vocabulary.
+  the same filter bar with its own status vocabulary. **Memberships** when WooCommerce
+  Memberships is active: members with the same filter bar, a status card and fourteen-day chart,
+  pause, resume, cancel, end dates, notes, transfers and Add member, each membership and each
+  plan on a page of its own (plan rules and discounts as plain lists), and a subscription link.
   Products and coupons wear that same orders filter bar (status as the dropdown; stock,
   category, tag, type, featured and on sale on products; a date window on coupons).
   **Gift cards** when YITH, official WooCommerce Gift Cards, or PW Gift Cards is active:
