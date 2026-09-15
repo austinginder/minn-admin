@@ -38,20 +38,25 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 			return v === '0px' || /^\d+px$/.test( v );
 		} ) );
 
-		// Simulated keyboard: 300px inset lifts the stats pill.
-		const lift = await page.evaluate( () => {
+		// On a phone the word count is IN FLOW under the text, not a fixed
+		// pill: a fixed pill covered the last lines being written and caught
+		// the thumb on every scroll. It must sit below the body, never over it.
+		const pill = await page.evaluate( () => {
 			const el = document.getElementById( 'minn-editor-stats' );
-			if ( ! el ) return null;
-			const before = el.getBoundingClientRect().bottom;
+			const body = document.getElementById( 'minn-editor-body' );
+			if ( ! el || ! body ) return null;
+			const cs = getComputedStyle( el );
+			const r = el.getBoundingClientRect();
+			const b = body.getBoundingClientRect();
+			return { position: cs.position, belowBody: r.top >= b.bottom - 1, visible: r.width > 0 && r.height > 0 };
+		} );
+		t.check( 'stats pill sits in flow under the text on a phone',
+			!! pill && pill.position === 'static' && pill.belowBody && pill.visible, JSON.stringify( pill ) );
+		// Simulated keyboard (inset + class) for the checks that still ride it.
+		await page.evaluate( () => {
 			document.documentElement.style.setProperty( '--minn-kb-inset', '300px' );
 			document.body.classList.add( 'minn-kb-open' );
-			// Force layout.
-			void el.offsetHeight;
-			const after = el.getBoundingClientRect().bottom;
-			return { before, after, movedUp: after < before - 100 };
 		} );
-		t.check( 'stats pill rises when --minn-kb-inset grows',
-			!! ( lift && lift.movedUp ), JSON.stringify( lift ) );
 
 		t.check( 'minn-kb-open hides session delta on the pill', await page.evaluate( () => {
 			const sess = document.querySelector( '#minn-editor-stats .minn-stats-session' );
@@ -75,12 +80,19 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		t.check( 'toolbar tools are finger-sized on phone viewport',
 			!! tool && tool.w >= 36 && tool.h >= 36, JSON.stringify( tool ) );
 
-		// Body bottom padding so the last line clears the pill.
-		const pad = await page.evaluate( () => {
-			const body = document.getElementById( 'minn-editor-body' );
-			return body ? parseFloat( getComputedStyle( body ).paddingBottom ) : 0;
+		// One scrolling row of tools, not three stacked: with the keyboard up
+		// a phone has ~350px left and a wrapped toolbar spent half of it.
+		const bar = await page.evaluate( () => {
+			const el = document.querySelector( '.minn-editor-toolbar' );
+			if ( ! el ) return null;
+			const tools = [ ...el.querySelectorAll( '.minn-tool' ) ];
+			const tops = new Set( tools.map( ( b ) => Math.round( b.getBoundingClientRect().top ) ) );
+			return { rows: tops.size, height: el.getBoundingClientRect().height, scrolls: el.scrollWidth > el.clientWidth + 4, overflowX: getComputedStyle( el ).overflowX };
 		} );
-		t.check( 'editor body has bottom padding under the stats pill', pad >= 60, String( pad ) );
+		t.check( 'toolbar is a single row that scrolls sideways',
+			!! bar && bar.rows === 1 && bar.height < 70 && bar.scrolls, JSON.stringify( bar ) );
+		const pageFits = await page.evaluate( () => document.documentElement.scrollWidth <= window.innerWidth );
+		t.check( 'the scrolling toolbar does not widen the page', pageFits );
 
 		// Find bar: open and check 16px inputs + phone width.
 		await page.keyboard.press( 'Meta+Shift+f' );

@@ -4968,20 +4968,35 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   /* Summary card rows that set their column count inline (orders) go 2-up. */
   .minn-stats[style] { grid-template-columns: repeat(2, 1fr) !important; }
   .minn-editor-title { font-size: 26px; }
-  .minn-editor-toolbar { flex-wrap: wrap; gap: 4px; padding-bottom: 10px; }
+  /* One row that scrolls sideways instead of three stacked rows: with the
+     keyboard up, a phone has ~350px of height left, and a wrapped toolbar
+     spent half of it on buttons. The fade at the trailing edge says there
+     is more; the scrollbar is hidden (the row is a strip, not a pane).
+     translateZ keeps the sticky strip on the compositor now that it also
+     scrolls (a sticky element with overflow otherwise lags scroll by a
+     frame). */
+  .minn-editor-toolbar {
+    flex-wrap: nowrap; gap: 4px; padding-bottom: 8px; overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; transform: translateZ(0);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  }
+  .minn-editor-toolbar::-webkit-scrollbar { display: none; }
   .minn-tool-hint { display: none; }
   /* ~44px hit targets: desktop tools are compact; fingers need more. */
-  .minn-tool { min-width: 40px; min-height: 40px; padding: 9px; }
+  .minn-tool { min-width: 40px; min-height: 40px; padding: 9px; flex-shrink: 0; }
   .minn-code-chip, .minn-island-chip {
     font-size: 12px; padding: 8px 12px; min-height: 36px;
     display: inline-flex; align-items: center;
   }
-  /* Room under the last block so the stats pill doesn't cover typing. */
-  .minn-editor-body { padding-bottom: 72px; }
+  /* The word count leaves the viewport corner and sits in the flow under
+     the text: a fixed pill on a phone covers the last lines being written
+     and catches the thumb on every scroll. In flow it scrolls away with the
+     content and still opens the goal popover. */
+  .minn-editor-body { padding-bottom: 12px; }
   .minn-editor-stats {
-    inset-inline-end: calc(12px + env(safe-area-inset-right, 0px));
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px) + var(--minn-kb-inset, 0px));
-    font-size: 12.5px; padding: 9px 14px;
+    position: static; margin: 4px 0 18px; box-shadow: none;
+    font-size: 12.5px; padding: 7px 13px;
   }
   /* Find bar is fixed and wide — fit the phone and keep 16px inputs (no zoom). */
   .minn-find-bar { width: min(340px, calc(100vw - 20px)); max-width: calc(100vw - 20px); }
@@ -5014,6 +5029,7 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
 /* Keyboard open: keep the typing surface clear of fixed chrome; the stats
    pill still tracks --minn-kb-inset above the keyboard. */
 body.minn-kb-open .minn-editor-body { padding-bottom: 96px; }
+@media (max-width: 640px) { body.minn-kb-open .minn-editor-body { padding-bottom: 12px; } }
 body.minn-kb-open .minn-editor-stats .minn-stats-session { display: none; }
 
 /* ===== Accessibility (chrome pass) ===== */
