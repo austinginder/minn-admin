@@ -4,13 +4,14 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.39.0. This file ships inside the plugin, so the copy you
+*Current as of v0.40.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
 
 Minn Admin is a second front door to your WordPress site. It lives at
-`yoursite.com/minn-admin/` and covers the daily work: content, media,
+`yoursite.com/minn-admin/` (or `yoursite.com/?minn_admin=1` on a site that
+still uses plain permalinks) and covers the daily work: content, media,
 comments, orders, users, plugins, updates and settings, in a calm interface
 with none of the banners and upsells that crowd a typical dashboard.
 
@@ -491,9 +492,10 @@ language the moment it is selected again.
 
 With WooCommerce active, the sidebar gains a Commerce group for Orders,
 Customers, Products and Coupons. WooCommerce Subscriptions adds Subscriptions,
-a supported appointment plugin adds Bookings, and a supported gift card
-plugin (YITH, official WooCommerce Gift Cards, or PW Gift Cards) adds Gift
-cards, all in the same operational group.
+WooCommerce Memberships adds Memberships, a supported appointment plugin
+adds Bookings, and a supported gift card plugin (YITH, official WooCommerce
+Gift Cards, or PW Gift Cards) adds Gift cards, all in the same operational
+group.
 
 - **Orders** open as their own page, at their own address, so an order can
   be linked to or kept in a second tab. The main column holds the work:
@@ -519,6 +521,38 @@ cards, all in the same operational group.
   with editable items and schedule, coupons, a notes timeline and a quick
   view of related orders. The subscriptions list wears the same filter
   bar with its own status vocabulary.
+- **Memberships** (WooCommerce Memberships) is the list of people who
+  hold a plan. It wears the Orders filter bar with the plugin's own
+  statuses (any mix of them at once), a date window, a customer, a plan
+  and the product that granted access, and search by name, email or
+  username. A status card counts active members, the paused and
+  pending-cancellation ones, new this month and those ending within
+  thirty days, and its fourteen-day chart of new and cancelled
+  memberships narrows the list to a day. Clicking a row opens the
+  membership on a page of its own in the product page's shape: plan and
+  status, member since and expiry with a save bar that appears once
+  something changed, the order, product and subscription behind it (with
+  the next payment and last renewal, and a control to link, move or
+  unlink the subscription), notes newest first with a switch to email a
+  note to the member, the member's card with a transfer form, every plan
+  that person holds with an Add a plan control for the ones they do not,
+  and their profile answers. Pause, resume, cancel, set an end date (a
+  past date expires the membership, a future date brings an expired one
+  back, blank means no end) and delete are in the menu, and the same
+  verbs run across a selection from the list. Add member grants a plan to
+  an existing customer by hand.
+
+  The Plans view lists every plan with how access is granted, how long it
+  lasts and its members by status, and a View members link narrows the
+  members list to that plan. A plan opens on its own page: name, slug,
+  description, how access is granted (by hand, at registration, or by
+  buying chosen products), how long it lasts, the content and product
+  restriction rules and purchasing discounts as plain lists, and the
+  sections shown in a member's account. Duplicate makes a draft copy; a
+  plan with active members cannot be deleted. A customer's memberships
+  also appear on their card from Orders and Customers. CSV import and
+  export, the members directory and the plugin's emails stay in
+  WooCommerce, one click from the status card.
 - **Gift cards** (YITH WooCommerce Gift Cards, official WooCommerce Gift
   Cards, or PW WooCommerce Gift Cards) is the list of cards the store
   has issued and still owes. When more than one of those plugins is
@@ -749,8 +783,10 @@ cards, all in the same operational group.
 ## Your profile
 
 Your account page covers your name and avatar, password and sessions,
-interface language (each user can pick their own), appearance, everything
-you have hidden, and **AI Access**: application passwords for connecting
+interface language (each user can pick their own), appearance (theme
+mode, color scheme, and a switch that dresses Minn in wp-admin's fonts
+and styles for people who live in both), everything you have hidden, and
+**AI Access**: application passwords for connecting
 an AI assistant or other tool to your site over the standard WordPress
 API, created and revoked per tool. When a role default is in force for
 your role, the matching switch is replaced by a short locked note that
