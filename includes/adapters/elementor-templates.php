@@ -690,12 +690,24 @@ add_action( 'rest_api_init', function () {
 					// template an administrator had authored would carry the
 					// administrator's unfiltered markup onto a post of their
 					// own. Ask the vendor's own filter, not a local guess.
-					if ( '_elementor_data' === $key
-						&& ! current_user_can( 'unfiltered_html' )
+					// Their save() runs kses over the whole decoded save payload
+					// (elements AND settings), so the element tree is decoded
+					// first: kses over the encoded JSON string re-quotes
+					// attributes inside it and corrupts the copy.
+					if ( ! current_user_can( 'unfiltered_html' )
 						&& class_exists( '\Elementor\Utils' )
 						&& method_exists( '\Elementor\Utils', 'kses_post_deep' ) ) {
 						try {
-							$value = \Elementor\Utils::kses_post_deep( $value );
+							if ( '_elementor_data' === $key && is_string( $value ) ) {
+								$tree = json_decode( $value, true );
+								if ( is_array( $tree ) ) {
+									$value = wp_json_encode( \Elementor\Utils::kses_post_deep( $tree ) );
+								} else {
+									$value = wp_kses_post( $value );
+								}
+							} else {
+								$value = \Elementor\Utils::kses_post_deep( $value );
+							}
 						} catch ( \Throwable $e ) { /* fall through with the stored value */ }
 					}
 					// get_post_meta() has already turned these back into real
