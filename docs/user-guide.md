@@ -543,8 +543,9 @@ group.
   an existing customer by hand.
 
   The Plans view lists every plan with how access is granted, how long it
-  lasts and its members by status, and a View members link narrows the
-  members list to that plan. A plan opens on its own page: name, slug,
+  lasts, its member, active and expired counts, and a View members link
+  narrows the members list to that plan; the plan's own page breaks the
+  members down by every status. A plan opens on its own page: name, slug,
   description, how access is granted (by hand, at registration, or by
   buying chosen products), how long it lasts, the content and product
   restriction rules and purchasing discounts as plain lists, and the

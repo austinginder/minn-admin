@@ -1154,7 +1154,9 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 /* Quiet in-place loading: keep the toolbar, dim only the table while data refreshes. */
 .minn-busy { opacity: 0.45; pointer-events: none; transition: opacity 0.12s ease; }
 
-.minn-table { overflow: hidden; }
+/* A grid whose column floors outgrow a narrow window scrolls sideways
+   rather than clipping its last columns (a plans list on a laptop). */
+.minn-table { overflow: hidden; overflow-x: auto; }
 .minn-table-head, .minn-table-row {
   display: grid; grid-template-columns: 40px 1fr 110px 130px 110px 40px; gap: 8px; padding: 11px 16px;
   border-bottom: 1px solid var(--border); align-items: center;

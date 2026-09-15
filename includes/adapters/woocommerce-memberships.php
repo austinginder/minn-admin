@@ -1361,19 +1361,23 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'draft', __( 'Draft', 'minn-admin' ) ),
 				),
 			),
+			// Thirteen columns once rode here, ten of them fixed-width counts
+			// that added up to a thousand pixels before Plan, Access and Length
+			// got anything: on a laptop the plan names truncated to three
+			// letters. The list keeps the counts a reader scans plans by
+			// (members, active, expired) and floors the name column; the
+			// full per-status breakdown lives on the plan's own page, and
+			// View members narrows the list by plan and status. The rows still
+			// carry every count for the detail and the suite.
 			'columns'   => array(
-				array( 'key' => 'name', 'label' => __( 'Plan', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
-				array( 'key' => 'access', 'label' => __( 'Access', 'minn-admin' ), 'width' => 'minmax(0,1fr)' ),
-				array( 'key' => 'length', 'label' => __( 'Length', 'minn-admin' ), 'width' => 'minmax(0,1fr)' ),
-				array( 'key' => 'total', 'label' => __( 'Members', 'minn-admin' ), 'format' => 'num', 'width' => '90px' ),
-				array( 'key' => 'members', 'label' => __( 'Active', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
-				array( 'key' => 'free_trial', 'label' => __( 'Free trial', 'minn-admin' ), 'format' => 'num', 'width' => '90px' ),
-				array( 'key' => 'expired', 'label' => __( 'Expired', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
-				array( 'key' => 'cancelled', 'label' => __( 'Cancelled', 'minn-admin' ), 'format' => 'num', 'width' => '90px' ),
-				array( 'key' => 'pending', 'label' => __( 'Pending', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
-				array( 'key' => 'paused', 'label' => __( 'Paused', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
-				array( 'key' => 'products', 'label' => __( 'Products', 'minn-admin' ), 'format' => 'num', 'width' => '90px' ),
-				array( 'key' => 'rules', 'label' => __( 'Rules', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
+				array( 'key' => 'name', 'label' => __( 'Plan', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(150px,1.6fr)' ),
+				array( 'key' => 'access', 'label' => __( 'Access', 'minn-admin' ), 'width' => 'minmax(100px,1fr)' ),
+				array( 'key' => 'length', 'label' => __( 'Length', 'minn-admin' ), 'width' => 'minmax(100px,1fr)' ),
+				array( 'key' => 'total', 'label' => __( 'Members', 'minn-admin' ), 'format' => 'num', 'width' => '76px' ),
+				array( 'key' => 'members', 'label' => __( 'Active', 'minn-admin' ), 'format' => 'num', 'width' => '72px' ),
+				array( 'key' => 'expired', 'label' => __( 'Expired', 'minn-admin' ), 'format' => 'num', 'width' => '72px' ),
+				array( 'key' => 'products', 'label' => __( 'Products', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
+				array( 'key' => 'rules', 'label' => __( 'Rules', 'minn-admin' ), 'format' => 'num', 'width' => '64px' ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
 			),
 			'detail'    => array(
