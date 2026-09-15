@@ -497,6 +497,16 @@ a { color: var(--accent2); text-decoration: none; }
   .minn-cl-ver-d { display: none; }
   .minn-changelog { max-height: 56vh; }
 }
+.minn-cl-meta { padding: 0 18px 10px; font-size: 12.5px; color: var(--text3); }
+.minn-cl-notice { color: var(--amber-text); }
+.minn-cl-empty { padding: 10px 18px 22px; font-size: 13.5px; color: var(--text2); }
+.minn-cl-empty p { margin: 6px 0; }
+/* A vendor changelog arrives as reduced HTML: versions are h4s (their
+   readme convention), so inside the plugin modal they read as body text
+   headings rather than the tiny caps Minn's own Added/Fixed labels use. */
+.minn-changelog p { margin: 6px 0 10px; }
+.minn-plugin-whatsnew { background: none; border: 0; font: inherit; font-size: 11.5px; color: var(--text3); padding: 0; white-space: nowrap; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.minn-plugin-whatsnew:hover { color: var(--accent2); }
 .minn-changelog h3 { font-size: 15px; color: var(--text); margin: 18px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
 .minn-changelog h3:first-child { margin-top: 6px; padding-top: 0; border-top: 0; }
 /* The user-guide modal shares the changelog reader shell, plus the guide's

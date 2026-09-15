@@ -22314,6 +22314,7 @@
 							${ offered || isUpdating ? ( B.caps.update
 								? `<button class="minn-badge-update as-btn" data-update="${ esc( p.plugin ) }" data-minn-offered="${ esc( offered ) }" ${ isUpdating ? 'disabled' : '' } title="${ esc( badgeTitle ) }">${ esc( badgeLabel ) }</button>`
 								: `<span class="minn-badge-update">${ esc( __( 'Update' ) ) }</span>` ) : '' }
+							${ offered ? `<button type="button" class="minn-linkish minn-plugin-whatsnew" data-whatsnew="${ esc( p.plugin ) }" title="${ esc( sprintf( /* translators: %s: the version on offer. */ __( 'What changed in %s' ), offered ) ) }">${ esc( __( 'What\'s new' ) ) }</button>` : '' }
 						</div>
 						<div class="minn-plugin-desc">${ esc( stripTags( ( ( p.description && p.description.rendered ) || '' ).replace( /<cite>[\s\S]*?<\/cite>/, '' ) ) ) }</div>
 						${ p.author ? `<div class="minn-plugin-author">${ esc( __( 'By' ) ) } ${ p.author_uri
@@ -22487,6 +22488,13 @@
 					run: () => queuePluginUpdate( file, name ),
 				} );
 			}
+			if ( offered ) {
+				entries.push( {
+					/* translators: %s: the version on offer. */
+					label: sprintf( __( 'What\'s new in %s' ), offered ),
+					run: () => openPluginChangelog( file, name ),
+				} );
+			}
 			if ( ! on && ! net && B.caps.delete ) {
 				entries.push( {
 					label: __( 'Delete plugin' ),
@@ -22536,6 +22544,13 @@
 
 		$$( '[data-del]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => deletePluginByFile( btn.dataset.del ) )
+		);
+
+		$$( '[data-whatsnew]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const plugin = plugins.find( ( p ) => p.plugin === btn.dataset.whatsnew );
+				if ( plugin ) openPluginChangelog( plugin.plugin, pluginDisplayName( plugin.name ) );
+			} )
 		);
 
 		// Right-click (or long-press) on a plugin card → same verbs as the
@@ -42408,17 +42423,32 @@
 		if ( m.type === 'changelog' ) {
 			// One release at a time with a clickable version rail (chips on
 			// small screens) — the minnadmin.com sectioned-changelog pattern.
+			// The same modal shows another plugin's changelog ahead of its
+			// update (m.plugin): sections then carry server-reduced HTML
+			// instead of markdown, and the footer points at the vendor.
 			const secs = m.sections || [];
 			const cur = secs[ m.sec ] || null;
+			const pl = m.plugin || null;
+			const plMeta = pl && pl.installed ? `<div class="minn-cl-meta">${ esc( sprintf(
+				/* translators: %1$s: installed version, %2$s: version on offer. */
+				__( 'Installed %1$s · update to %2$s' ), 'v' + pl.installed, 'v' + pl.offered ) ) }${ pl.notice ? ` · <span class="minn-cl-notice">${ esc( pl.notice ) }</span>` : '' }</div>` : '';
+			const plEmpty = pl && m.md !== null && ! secs.length ? `
+					<div class="minn-cl-empty">
+						<p>${ esc( m.error || __( 'This plugin does not publish a changelog WordPress can read.' ) ) }</p>
+						${ pl.url && safeHref( pl.url ) ? `<p><a href="${ esc( safeHref( pl.url ) ) }" target="_blank" rel="noopener">${ esc( __( 'Open the plugin\'s own release notes' ) ) } ↗</a></p>` : '' }
+					</div>` : '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide minn-cl-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: the Minn Admin version. */ __( 'What\'s new · v%s' ) ), esc( B.version ) ) }</div>
+						<div class="minn-modal-title">${ pl
+							? sprintf( esc( /* translators: %s: the plugin's name. */ __( 'What\'s new · %s' ) ), esc( pl.name ) )
+							: sprintf( esc( /* translators: %s: the Minn Admin version. */ __( 'What\'s new · v%s' ) ), esc( B.version ) ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
+					${ plMeta }
 					${ m.md === null ? `<div class="minn-loading">${ esc( __( 'Loading changelog…' ) ) }</div>`
-						: `<div class="minn-cl-layout">
+						: plEmpty || `<div class="minn-cl-layout">
 						<nav class="minn-cl-rail" id="minn-cl-rail" aria-label="${ esc( __( 'Versions' ) ) }">
 							${ secs.map( ( s, i ) => `
 							<button type="button" class="minn-cl-ver${ i === m.sec ? ' sel' : '' }" data-clver="${ i }" aria-current="${ i === m.sec ? 'true' : 'false' }">
@@ -42426,9 +42456,11 @@
 								${ s.date ? `<span class="minn-cl-ver-d">${ esc( s.date ) }</span>` : '' }
 							</button>` ).join( '' ) }
 						</nav>
-						<div class="minn-changelog" id="minn-cl-body">${ cur ? changelogHtml( cur.md ) : changelogHtml( m.md ) }</div>
+						<div class="minn-changelog" id="minn-cl-body">${ pl ? ( cur ? cur.html : '' ) : ( cur ? changelogHtml( cur.md ) : changelogHtml( m.md ) ) }</div>
 					</div>
-					<div class="minn-changelog-foot"><a href="https://minnadmin.com/docs/changelog/" target="_blank" rel="noopener">${ esc( __( 'View the full changelog with screenshots on minnadmin.com' ) ) } ↗</a></div>` }
+					${ pl
+						? ( pl.url && safeHref( pl.url ) ? `<div class="minn-changelog-foot"><a href="${ esc( safeHref( pl.url ) ) }" target="_blank" rel="noopener">${ esc( 'wporg' === pl.source ? __( 'View on WordPress.org' ) : __( 'Plugin page' ) ) } ↗</a></div>` : '' )
+						: `<div class="minn-changelog-foot"><a href="https://minnadmin.com/docs/changelog/" target="_blank" rel="noopener">${ esc( __( 'View the full changelog with screenshots on minnadmin.com' ) ) } ↗</a></div>` }` }
 				</div>
 			</div>`;
 		}
@@ -45236,6 +45268,33 @@
 				}
 			} )
 			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
+	}
+
+	// Another plugin's changelog, read through minn-admin/v1/plugin-changelog
+	// (plugins_api sections, reduced server-side). `file` is the app's
+	// "dir/plugin" id; the transient keys on the .php file.
+	function openPluginChangelog( file, name ) {
+		const offered = ( state.cache.pluginUpdates || {} )[ file + '.php' ] || '';
+		state.modal = { type: 'changelog', plugin: { file, name, offered, installed: '', url: '', source: '', notice: '' }, md: null, sections: null, sec: 0 };
+		renderOverlays();
+		const mine = () => state.modal && state.modal.type === 'changelog' && state.modal.plugin && state.modal.plugin.file === file;
+		api( 'minn-admin/v1/plugin-changelog?plugin=' + encodeURIComponent( file + '.php' ) )
+			.then( ( r ) => {
+				if ( ! mine() ) return;
+				const m = state.modal;
+				m.plugin = Object.assign( m.plugin, r, { name: m.plugin.name || r.name } );
+				m.sections = Array.isArray( r.sections ) ? r.sections : [];
+				m.md = '';
+				m.sec = 0;
+				renderOverlays();
+			} )
+			.catch( ( e ) => {
+				if ( ! mine() ) return;
+				state.modal.md = '';
+				state.modal.sections = [];
+				state.modal.error = e.message;
+				renderOverlays();
+			} );
 	}
 
 	/* ===== User guide modal ===== */

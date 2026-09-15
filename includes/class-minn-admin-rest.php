@@ -96,6 +96,21 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/plugin-changelog',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'activate_plugins' );
+				},
+				'args'                => array(
+					'plugin' => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+				),
+				'callback'            => array( __CLASS__, 'plugin_changelog' ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/changelog',
 			array(
 				'methods'             => 'GET',
@@ -8896,6 +8911,194 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'total'   => isset( $info['results'] ) ? (int) $info['results'] : count( $items ),
 			)
 		);
+	}
+
+	/**
+	 * What changed in the update a plugin is offering.
+	 *
+	 * Reads the offer from the update_plugins transient, then asks
+	 * plugins_api( 'plugin_information' ) for the plugin's sections. That is
+	 * the same call wp-admin's "View version X details" makes, so a
+	 * self-hosted updater that answers it (EDD-SL, Freemius, Minn's own)
+	 * gets its changelog shown too; a vendor that never wired one up gets
+	 * an honest empty answer plus whatever details URL it put in the offer.
+	 *
+	 * The HTML is a vendor document. It is reduced to plain text markup
+	 * (headings, lists, emphasis, links) before it leaves the server, and
+	 * split on the wp.org convention of one h4 per version so the modal can
+	 * offer a version rail.
+	 */
+	public static function plugin_changelog( WP_REST_Request $request ) {
+		$file = (string) $request['plugin'];
+		if ( ! $file || false !== strpos( $file, '..' ) ) {
+			return new WP_Error( 'bad_plugin', __( 'Plugin file is required.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$tr    = get_site_transient( 'update_plugins' );
+		$offer = isset( $tr->response[ $file ] ) ? (object) $tr->response[ $file ] : null;
+		if ( ! $offer ) {
+			return new WP_Error( 'no_offer', __( 'No update is on offer for that plugin.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$all       = get_plugins();
+		$installed = isset( $all[ $file ] ) ? $all[ $file ] : null;
+		if ( ! $installed ) {
+			return new WP_Error( 'not_installed', __( 'That plugin is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		$slug    = isset( $offer->slug ) && $offer->slug ? sanitize_title( (string) $offer->slug ) : dirname( $file );
+		$offered = isset( $offer->new_version ) ? (string) $offer->new_version : '';
+		$host_is = function ( $url, $host ) {
+			$h = wp_parse_url( (string) $url, PHP_URL_HOST );
+			return $h && ( $h === $host || substr( $h, -strlen( '.' . $host ) ) === '.' . $host );
+		};
+		// wp.org offers carry id "w.org/plugins/<slug>"; older shapes only
+		// the directory URL or the downloads host. Anything else is a
+		// vendor's own update server.
+		$wporg = ( isset( $offer->id ) && 0 === strpos( (string) $offer->id, 'w.org/plugins/' ) )
+			|| $host_is( isset( $offer->url ) ? $offer->url : '', 'wordpress.org' )
+			|| $host_is( isset( $offer->package ) ? $offer->package : '', 'downloads.wordpress.org' );
+		$details = isset( $offer->url ) && $offer->url ? esc_url_raw( (string) $offer->url ) : '';
+		if ( $wporg ) {
+			$details = 'https://wordpress.org/plugins/' . $slug . '/#developers';
+		}
+		$notice = isset( $offer->upgrade_notice ) && is_string( $offer->upgrade_notice )
+			? trim( html_entity_decode( wp_strip_all_tags( $offer->upgrade_notice ), ENT_QUOTES ) )
+			: '';
+
+		$payload = array(
+			'file'      => $file,
+			'slug'      => $slug,
+			'name'      => html_entity_decode( wp_strip_all_tags( $installed['Name'] ), ENT_QUOTES ),
+			'installed' => (string) $installed['Version'],
+			'offered'   => $offered,
+			'source'    => $wporg ? 'wporg' : 'vendor',
+			'url'       => $details,
+			'notice'    => $notice,
+			'sections'  => array(),
+		);
+
+		$cache_key = 'minn_plugin_cl_' . md5( $file . '|' . $offered );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			$payload['sections'] = $cached;
+			return rest_ensure_response( $payload );
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+		$res = plugins_api(
+			'plugin_information',
+			array(
+				'slug'   => $slug,
+				'fields' => array(
+					'sections'          => true,
+					'short_description' => false,
+					'description'       => false,
+					'icons'             => false,
+					'banners'           => false,
+					'reviews'           => false,
+					'ratings'           => false,
+					'downloaded'        => false,
+					'active_installs'   => false,
+					'tags'              => false,
+					'contributors'      => false,
+					'compatibility'     => false,
+					'versions'          => false,
+				),
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			// Nothing to read is an answer, not a failure: the modal says so
+			// and offers the vendor's details link instead.
+			return rest_ensure_response( $payload );
+		}
+		$res = (object) $res;
+		// A vendor offer whose slug happens to match a directory plugin
+		// gets wp.org's answer for the STRANGER when no vendor hook replied.
+		// wp.org's own responses point their download at its host; a
+		// vendor's hook points at the vendor's.
+		if ( ! $wporg && $host_is( isset( $res->download_link ) ? $res->download_link : '', 'downloads.wordpress.org' ) ) {
+			return rest_ensure_response( $payload );
+		}
+		$sections = isset( $res->sections ) ? (array) $res->sections : array();
+		$html     = isset( $sections['changelog'] ) ? (string) $sections['changelog'] : '';
+		$payload['sections'] = self::changelog_sections_from_html( $html, $offered );
+		set_transient( $cache_key, $payload['sections'], 12 * HOUR_IN_SECONDS );
+		return rest_ensure_response( $payload );
+	}
+
+	/**
+	 * Vendor changelog HTML → [ { version, html } ], reduced to text markup.
+	 * Splits on the wp.org readme convention (one h4 per version); a body
+	 * with no headings becomes one section named for the offered version.
+	 */
+	public static function changelog_sections_from_html( $html, $fallback_version = '' ) {
+		$html = trim( (string) $html );
+		if ( '' === $html ) {
+			return array();
+		}
+		$allowed = array(
+			'h3'     => array(),
+			'h4'     => array(),
+			'h5'     => array(),
+			'p'      => array(),
+			'ul'     => array(),
+			'ol'     => array(),
+			'li'     => array(),
+			'strong' => array(),
+			'b'      => array(),
+			'em'     => array(),
+			'i'      => array(),
+			'code'   => array(),
+			'br'     => array(),
+			'a'      => array( 'href' => true ),
+		);
+		// kses drops the tags but keeps their text, so script and style
+		// bodies go first, whole.
+		$html = preg_replace( '#<(script|style)\b[^>]*>.*?</\1>#is', '', $html );
+		$html = wp_kses( $html, $allowed );
+		// Vendor links leave the app in a new tab; kses has already checked
+		// the protocol.
+		$html = preg_replace( '/<a href=/i', '<a target="_blank" rel="noopener" href=', $html );
+		// Readmes use h4 for versions AND for the sub-headings under them
+		// ("Bugfixes", "Enhancements"), so only a heading that reads as a
+		// version opens a release; the rest stay in the body as headings.
+		$out   = array();
+		$cur   = null;
+		$parts = preg_split( '/(?=<h4>)/i', $html, -1, PREG_SPLIT_NO_EMPTY );
+		foreach ( $parts as $part ) {
+			$part = trim( $part );
+			if ( '' === $part ) {
+				continue;
+			}
+			$heading = '';
+			if ( preg_match( '/^<h4>(.*?)<\/h4>(.*)$/is', $part, $m ) ) {
+				$heading = trim( html_entity_decode( wp_strip_all_tags( $m[1] ), ENT_QUOTES ) );
+			}
+			$is_version = $heading && preg_match( '/^(v(ersion)?\s*)?\d+(\.\d+)*\b/i', $heading );
+			if ( $is_version ) {
+				if ( $cur && '' !== trim( wp_strip_all_tags( $cur['html'] ) ) ) {
+					$out[] = $cur;
+				}
+				if ( count( $out ) >= 40 ) {
+					$cur = null;
+					break;
+				}
+				$cur = array( 'version' => mb_substr( $heading, 0, 48 ), 'html' => trim( $m[2] ) );
+				continue;
+			}
+			if ( ! $cur ) {
+				$cur = array( 'version' => '', 'html' => '' );
+			}
+			$cur['html'] .= $part;
+		}
+		if ( $cur && '' !== trim( wp_strip_all_tags( $cur['html'] ) ) ) {
+			$out[] = $cur;
+		}
+		foreach ( $out as $i => $sec ) {
+			if ( '' === $sec['version'] ) {
+				$out[ $i ]['version'] = $i ? __( 'Notes', 'minn-admin' ) : ( $fallback_version ? $fallback_version : __( 'Changes', 'minn-admin' ) );
+			}
+		}
+		return array_values( $out );
 	}
 
 	/**

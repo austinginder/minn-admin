@@ -636,7 +636,9 @@ group.
   something already installed shows what is installed against what you
   uploaded and offers to replace it, files swapped, settings and content
   untouched. Toggle, update and
-  delete with plain confirmations. Every plugin and theme card carries an
+  delete with plain confirmations. A plugin with an update waiting shows a
+  "What's new" link that opens the plugin's own release notes, one version
+  at a time, so you can read what changes before you run it. Every plugin and theme card carries an
   Auto pill for WordPress automatic updates, the same setting wp-admin
   manages, and inactive themes offer a Live preview so you can walk the
   site in a candidate theme before switching. The Licenses tab

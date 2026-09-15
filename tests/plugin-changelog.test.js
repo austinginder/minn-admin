@@ -1,0 +1,125 @@
+/**
+ * Extensions → "What's new" on a plugin with a pending update opens the
+ * plugin's own changelog in the changelog modal (minn-admin/v1/plugin-changelog).
+ *
+ * Two offers are armed through the dev-fixtures mu-plugin: a VENDOR-hosted
+ * one (plugins_api answered by a hook, with a script tag and inline handlers
+ * that must not survive the server-side reduction) and a wp.org one, which
+ * needs the network and reports honestly either way. Both are cleared, and
+ * the update_plugins transient deleted, in finally.
+ */
+const { execSync } = require( 'child_process' );
+const fs = require( 'fs' );
+const os = require( 'os' );
+const path = require( 'path' );
+const { BASE, WP, launch, login, reporter } = require( './helpers' );
+
+( async () => {
+	const t = reporter( 'plugin-changelog' );
+	const { browser, page, errors } = await launch();
+	await login( page );
+
+	const rest = ( path, opts = {} ) => page.evaluate( async ( a ) => {
+		const r = await fetch( window.MINN.restUrl + a.path, {
+			method: a.method || 'GET',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+			credentials: 'same-origin',
+			...( a.body ? { body: JSON.stringify( a.body ) } : {} ),
+		} );
+		return { status: r.status, body: await r.json().catch( () => null ) };
+	}, { path, method: opts.method, body: opts.body } );
+	const setOpts = ( vendor, wporg ) => rest( 'wp/v2/settings', { method: 'POST', body: { minn_test_plugin_update_vendor: vendor, minn_test_plugin_update: wporg } } );
+
+	const VENDOR = 'akismet/akismet';
+	const WPORG = 'duplicator/duplicator';
+
+	try {
+		// The route caches reduced sections for 12h per file+version; a
+		// fixture edit must not be masked by a prior run's cache.
+		const purge = path.join( os.tmpdir(), 'minn-plugin-cl-purge.php' );
+		fs.writeFileSync( purge, "<?php global $wpdb; $wpdb->query( \"DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient%minn_plugin_cl_%'\" );" );
+		try {
+			execSync( `wp --path=${ JSON.stringify( WP ) } eval-file ${ JSON.stringify( purge ) } 2>/dev/null`, { timeout: 120000 } );
+		} catch ( e ) { /* best effort */ }
+		await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 15000 } );
+		const armed = await setOpts( VENDOR + '.php', WPORG + '.php' );
+		t.check( 'fixture offers armed', armed.status === 200, `status ${ armed.status }` );
+
+		/* ===== Route ===== */
+		const v = await rest( 'minn-admin/v1/plugin-changelog?plugin=' + encodeURIComponent( VENDOR + '.php' ) );
+		t.check( 'vendor offer answers with sections', v.status === 200 && v.body.source === 'vendor' && v.body.sections.length === 2,
+			JSON.stringify( v.body && { source: v.body.source, n: v.body.sections && v.body.sections.length } ) );
+		const html = v.status === 200 ? v.body.sections.map( ( s ) => s.html ).join( '' ) : '';
+		t.check( 'script bodies, inline styles and handlers are gone',
+			html.includes( '<strong>bold</strong>' ) && ! /minnFixtureXss|onclick|style=|<script/i.test( html ), html.slice( 0, 200 ) );
+		t.check( 'versions come from the h4 headings', v.status === 200 && v.body.sections[ 0 ].version === '9.9.9' && /^9\.9\.8/.test( v.body.sections[ 1 ].version ),
+			JSON.stringify( v.body && v.body.sections.map( ( s ) => s.version ) ) );
+		t.check( 'the upgrade notice rides along as text', v.status === 200 && v.body.notice === 'Fixture notice: back up first.', JSON.stringify( v.body && v.body.notice ) );
+		const none = await rest( 'minn-admin/v1/plugin-changelog?plugin=hello-dolly%2Fhello.php' );
+		t.check( 'a plugin with no offer answers 404', none.status === 404, `status ${ none.status }` );
+		const w = await rest( 'minn-admin/v1/plugin-changelog?plugin=' + encodeURIComponent( WPORG + '.php' ) );
+		t.check( 'wp.org offer reports its source and directory link', w.status === 200 && w.body.source === 'wporg' && /wordpress\.org\/plugins\/duplicator\/#developers$/.test( w.body.url ),
+			JSON.stringify( w.body && { source: w.body.source, url: w.body.url } ) );
+		if ( w.status === 200 && w.body.sections.length ) {
+			t.check( 'wp.org changelog sections were read', true, `${ w.body.sections.length } sections` );
+		} else {
+			t.check( 'wp.org changelog sections were read', true, 'skipped: wordpress.org unreachable or empty' );
+		}
+
+		/* ===== UI ===== */
+		await page.goto( BASE + '/minn-admin/extensions', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `.minn-plugin[data-plugin="${ VENDOR }"] [data-whatsnew]`, { timeout: 20000 } );
+		const updatesTab = await page.$( '[data-xfilter="updates"]' );
+		if ( updatesTab ) {
+			await updatesTab.click();
+			await page.waitForTimeout( 400 );
+		}
+		t.check( 'the update filter still shows the card with its What\'s new link',
+			!! await page.$( `.minn-plugin[data-plugin="${ VENDOR }"] [data-whatsnew]` ) );
+		await page.click( `.minn-plugin[data-plugin="${ VENDOR }"] [data-whatsnew]` );
+		await page.waitForSelector( '.minn-cl-modal [data-clver]', { timeout: 15000 } );
+		const modal = await page.evaluate( () => ( {
+			title: document.querySelector( '.minn-cl-modal .minn-modal-title' ).textContent.trim(),
+			meta: ( document.querySelector( '.minn-cl-meta' ) || {} ).textContent || '',
+			chips: [ ...document.querySelectorAll( '.minn-cl-modal [data-clver]' ) ].map( ( b ) => b.textContent.trim() ),
+			body: document.getElementById( 'minn-cl-body' ).innerHTML,
+			foot: ( document.querySelector( '.minn-cl-modal .minn-changelog-foot a' ) || {} ).href || '',
+			xss: window.minnFixtureXss,
+		} ) );
+		t.check( 'modal names the plugin', /Akismet/.test( modal.title ), modal.title );
+		t.check( 'modal states installed and offered versions', /Installed v5.*update to v5/.test( modal.meta ), modal.meta );
+		t.check( 'version rail lists both releases', modal.chips.length === 2 && modal.chips[ 0 ] === '9.9.9', JSON.stringify( modal.chips ) );
+		t.check( 'first release renders and nothing ran', /Fixture <strong>bold<\/strong>/.test( modal.body ) && ! modal.xss && ! /onclick/.test( modal.body ), modal.body.slice( 0, 160 ) );
+		t.check( 'footer links to the vendor page', /example\.com\/minn-fixture-vendor/.test( modal.foot ), modal.foot );
+		await page.click( '.minn-cl-modal [data-clver="1"]' );
+		await page.waitForTimeout( 200 );
+		const second = await page.evaluate( () => document.getElementById( 'minn-cl-body' ).innerHTML );
+		t.check( 'picking another release swaps the body', /Older <em>notes<\/em>/.test( second ), second.slice( 0, 120 ) );
+		await page.click( '#minn-modal-close' );
+		await page.waitForTimeout( 200 );
+
+		// Context menu carries the same doorway.
+		await page.evaluate( ( f ) => {
+			const card = document.querySelector( `.minn-plugin[data-plugin="${ f }"]` );
+			const r = card.getBoundingClientRect();
+			card.dispatchEvent( new MouseEvent( 'contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 40, clientY: r.top + 20 } ) );
+		}, VENDOR );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+		const entries = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].map( ( b ) => b.textContent.trim() ) );
+		t.check( 'card context menu offers What\'s new', entries.some( ( e ) => /What.s new in/.test( e ) ), JSON.stringify( entries ) );
+		await page.keyboard.press( 'Escape' );
+	} catch ( e ) {
+		t.check( 'suite ran without throwing', false, e.message );
+	} finally {
+		await setOpts( '', '' ).catch( () => {} );
+		// A lingering fake offer feeds the nightly auto-updater: drop the
+		// transient (delete_site_transient, the fixture makes the CLI's
+		// `transient delete` read it as absent) and let core refetch.
+		try {
+			execSync( `wp --path=${ JSON.stringify( WP ) } eval 'delete_site_transient( "update_plugins" ); wp_update_plugins();' 2>/dev/null`, { timeout: 120000 } );
+		} catch ( e ) { /* best effort */ }
+	}
+
+	await t.done( browser, errors );
+} )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
