@@ -1722,9 +1722,18 @@ function minn_admin_gsmtp_events_where( WP_REST_Request $request ) {
 
 	$search = sanitize_text_field( (string) $request->get_param( 'search' ) );
 	if ( '' !== $search ) {
-		$like     = '%' . $wpdb->esc_like( $search ) . '%';
-		$where[]  = '( subject LIKE %s OR extra LIKE %s OR service LIKE %s OR message LIKE %s )';
-		array_push( $params, $like, $like, $like, $like );
+		$like    = '%' . $wpdb->esc_like( $search ) . '%';
+		$cols    = array( 'subject', 'extra', 'service' );
+		// Matching the message body would let a caller who may not open a
+		// message probe its contents (a reset link, a code) one substring at
+		// a time; only a preview-capable caller searches bodies.
+		if ( minn_admin_gsmtp_can_preview() ) {
+			$cols[] = 'message';
+		}
+		$where[] = '( ' . implode( ' OR ', array_map( function ( $col ) {
+			return $col . ' LIKE %s';
+		}, $cols ) ) . ' )';
+		array_push( $params, ...array_fill( 0, count( $cols ), $like ) );
 	}
 
 	$service = sanitize_text_field( (string) $request->get_param( 'service' ) );
