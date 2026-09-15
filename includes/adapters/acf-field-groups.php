@@ -445,7 +445,7 @@ add_action( 'rest_api_init', function () {
 	// Group verbs. Every mutation resolves the group fresh and refuses
 	// code-registered ones — the descriptor's `when` gate is cosmetic only.
 	$db_group = function ( WP_REST_Request $request ) {
-		$group = minn_admin_acf_schema_group( (string) $request['key'] );
+		$group = minn_admin_acf_schema_group( Minn_Admin::path_param( $request, 'key' ) );
 		if ( ! $group ) {
 			return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}

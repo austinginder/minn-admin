@@ -2647,7 +2647,7 @@ class Minn_Admin_REST {
 	 * @param WP_REST_Request $req { id, choices? }.
 	 */
 	public static function surface_setup( WP_REST_Request $req ) {
-		$id       = sanitize_key( $req['id'] );
+		$id       = sanitize_key( Minn_Admin::path_param( $req ) );
 		$surfaces = Minn_Admin_Surfaces::all();
 		$surface  = null;
 		foreach ( $surfaces as $sid => $s ) {

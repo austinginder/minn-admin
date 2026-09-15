@@ -181,7 +181,7 @@ add_action( 'rest_api_init', function () {
 				global $wpdb;
 				$p = minn_admin_media_folders_provider();
 				try {
-					$ids = call_user_func( $p['ids'], (int) $req['id'] );
+					$ids = call_user_func( $p['ids'], (int) Minn_Admin::path_param( $req ) );
 				} catch ( \Throwable $e ) {
 					return new WP_Error( 'minn_folder_ids_failed', $e->getMessage(), array( 'status' => 500 ) );
 				}

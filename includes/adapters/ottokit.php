@@ -231,7 +231,7 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$table = minn_admin_ottokit_table();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-fixed.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $req['id'] ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $req ) ), ARRAY_A );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'That request is gone.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -280,7 +280,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $can,
 		'callback'            => function ( WP_REST_Request $req ) {
 			global $wpdb;
-			$id    = (int) $req['id'];
+			$id    = (int) Minn_Admin::path_param( $req );
 			$table = minn_admin_ottokit_table();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-fixed.
 			$before = $wpdb->get_row( $wpdb->prepare( "SELECT id, status, retry_attempts FROM {$table} WHERE id = %d", $id ), ARRAY_A );

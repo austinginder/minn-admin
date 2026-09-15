@@ -49,7 +49,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'POST',
 			'permission_callback' => function ( $req ) {
 				return minn_admin_emr_available()
-					&& emr()->checkImagePermission( get_post( (int) $req['id'] ) );
+					&& emr()->checkImagePermission( get_post( (int) Minn_Admin::path_param( $req ) ) );
 			},
 			'callback'            => 'minn_admin_emr_replace',
 		)
@@ -57,7 +57,7 @@ add_action( 'rest_api_init', function () {
 } );
 
 function minn_admin_emr_replace( $req ) {
-	$post_id = (int) $req['id'];
+	$post_id = (int) Minn_Admin::path_param( $req );
 	$post    = get_post( $post_id );
 	if ( ! $post || 'attachment' !== $post->post_type ) {
 		return new WP_Error( 'minn_emr_not_attachment', __( 'Not a media item.', 'minn-admin' ), array( 'status' => 404 ) );

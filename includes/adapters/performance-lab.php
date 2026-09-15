@@ -324,11 +324,11 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $can_install,
 		'callback'            => function ( $req ) {
-			$r = minn_admin_performance_lab_activate( $req['id'] );
+			$r = minn_admin_performance_lab_activate( Minn_Admin::path_param( $req ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
 			}
-			return rest_ensure_response( array( 'ok' => true, 'item' => minn_admin_performance_lab_item( $req['id'], (array) ( perflab_get_standalone_plugin_data()[ $req['id'] ] ?? array() ) ) ) );
+			return rest_ensure_response( array( 'ok' => true, 'item' => minn_admin_performance_lab_item( Minn_Admin::path_param( $req ), (array) ( perflab_get_standalone_plugin_data()[ Minn_Admin::path_param( $req ) ] ?? array() ) ) ) );
 		},
 	) );
 
@@ -336,11 +336,11 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $can,
 		'callback'            => function ( $req ) {
-			$r = minn_admin_performance_lab_deactivate( $req['id'] );
+			$r = minn_admin_performance_lab_deactivate( Minn_Admin::path_param( $req ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
 			}
-			return rest_ensure_response( array( 'ok' => true, 'item' => minn_admin_performance_lab_item( $req['id'], (array) ( perflab_get_standalone_plugin_data()[ $req['id'] ] ?? array() ) ) ) );
+			return rest_ensure_response( array( 'ok' => true, 'item' => minn_admin_performance_lab_item( Minn_Admin::path_param( $req ), (array) ( perflab_get_standalone_plugin_data()[ Minn_Admin::path_param( $req ) ] ?? array() ) ) ) );
 		},
 	) );
 } );

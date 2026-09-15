@@ -59,13 +59,13 @@ add_action( 'rest_api_init', function () {
 			// a site has lowered the plugin's capability to delegate its Tools
 			// screen, which is what that property is for.
 			'permission_callback' => function ( $req ) {
-				$id = (int) $req['id'];
+				$id = (int) Minn_Admin::path_param( $req );
 				return minn_admin_regen_thumbs_available()
 					&& 'attachment' === get_post_type( $id )
 					&& current_user_can( 'edit_post', $id );
 			},
 			'callback'            => function ( $req ) {
-				$regenerator = RegenerateThumbnails_Regenerator::get_instance( (int) $req['id'] );
+				$regenerator = RegenerateThumbnails_Regenerator::get_instance( (int) Minn_Admin::path_param( $req ) );
 				if ( is_wp_error( $regenerator ) ) {
 					$regenerator->add_data( array( 'status' => 400 ) );
 					return $regenerator;

@@ -264,7 +264,7 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	$type_of = function ( WP_REST_Request $request ) {
-		return minn_admin_jet_cct_type( sanitize_key( rawurldecode( (string) $request['slug'] ) ) );
+		return minn_admin_jet_cct_type( sanitize_key( rawurldecode( Minn_Admin::path_param( $request, 'slug' ) ) ) );
 	};
 	$perm = function ( WP_REST_Request $request ) use ( $type_of ) {
 		return (bool) $type_of( $request ); // the type's own user_has_access()
@@ -279,7 +279,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
 				global $wpdb;
 				$factory  = $type_of( $request );
-				$slug     = sanitize_key( $request['slug'] );
+				$slug     = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
 				$t        = minn_admin_jet_cct_table( $slug );
 				$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 				$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
@@ -335,7 +335,7 @@ add_action( 'rest_api_init', function () {
 				} catch ( \Throwable $e ) {
 					return new WP_Error( 'insert_failed', __( 'JetEngine could not save that item.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
-				$row = $id ? minn_admin_jet_cct_row( sanitize_key( $request['slug'] ), $id ) : null;
+				$row = $id ? minn_admin_jet_cct_row( sanitize_key( Minn_Admin::path_param( $request, 'slug' ) ), $id ) : null;
 				if ( ! $row ) {
 					return new WP_Error( 'insert_failed', __( 'JetEngine could not save that item.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
@@ -350,7 +350,7 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
 				$factory = $type_of( $request );
-				$row     = minn_admin_jet_cct_row( sanitize_key( $request['slug'] ), (int) $request['id'] );
+				$row     = minn_admin_jet_cct_row( sanitize_key( Minn_Admin::path_param( $request, 'slug' ) ), (int) Minn_Admin::path_param( $request ) );
 				return $row ? rest_ensure_response( minn_admin_jet_cct_item( $factory, $row ) ) : new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
 			},
 		),
@@ -359,8 +359,8 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
 				$factory = $type_of( $request );
-				$slug    = sanitize_key( $request['slug'] );
-				$id      = (int) $request['id'];
+				$slug    = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
+				$id      = (int) Minn_Admin::path_param( $request );
 				if ( ! minn_admin_jet_cct_row( $slug, $id ) ) {
 					return new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -384,8 +384,8 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
 				$factory = $type_of( $request );
-				$slug    = sanitize_key( $request['slug'] );
-				$id      = (int) $request['id'];
+				$slug    = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
+				$id      = (int) Minn_Admin::path_param( $request );
 				if ( ! minn_admin_jet_cct_row( $slug, $id ) ) {
 					return new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -407,8 +407,8 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
 			$factory = $type_of( $request );
-			$slug    = sanitize_key( $request['slug'] );
-			$id      = (int) $request['id'];
+			$slug    = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
+			$id      = (int) Minn_Admin::path_param( $request );
 			$status  = sanitize_key( (string) $request->get_param( 'status' ) );
 			if ( ! isset( $factory->get_statuses()[ $status ] ) ) {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );

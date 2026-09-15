@@ -153,7 +153,7 @@ add_action( 'rest_api_init', function () {
 	}
 
 	$can = function ( WP_REST_Request $request ) {
-		$id = (int) $request['id'];
+		$id = (int) Minn_Admin::path_param( $request );
 		return $id > 0 && current_user_can( 'edit_post', $id );
 	};
 
