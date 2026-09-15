@@ -48144,7 +48144,7 @@
 											<input class="minn-input minn-ac-input" id="minn-wcm-addplan" value="${ esc( avail[ 0 ].name ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Add a plan' ) ) }">
 											<div class="minn-ac-panel" hidden></div>
 										</div></div>
-									<div><button type="button" class="minn-btn-soft" id="minn-wcm-addplan-go">${ esc( __( 'Grant membership' ) ) }</button></div>
+									<div><button type="button" class="minn-btn-soft" id="minn-wcm-addplan-go">${ esc( __( 'Add plan' ) ) }</button></div>
 								</div>` : '' }`;
 
 		const profile = ( d.profile || [] );
@@ -48403,7 +48403,7 @@
 				if ( btn ) btn.disabled = true;
 				try {
 					const res = await api( 'minn-admin/v1/wcm/members', { method: 'POST', body: JSON.stringify( { customer: d.member.login || d.member.email, plan_id: planId } ) } );
-					toast( ( res && res.message ) || __( 'Membership granted.' ) );
+					toast( ( res && res.message ) || __( 'Plan added.' ) );
 					if ( res && res.id ) go( 'memberships/' + res.id );
 					else await reload();
 				} catch ( e ) {
