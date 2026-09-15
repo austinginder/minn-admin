@@ -3250,8 +3250,7 @@ class Minn_Admin_REST {
 				'group' => 'content',
 				'label' => __( 'Media files', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $media->inherit ),
-				/* translators: %s: disk space used by uploads, already formatted. */
-				'delta' => sprintf( __( '%s used', 'minn-admin' ), size_format( self::uploads_size(), 1 ) ),
+				'delta' => self::uploads_size_label(),
 				'up'    => null,
 				'goto'  => 'media',
 			),
@@ -3625,8 +3624,7 @@ class Minn_Admin_REST {
 				'group' => 'content',
 				'label' => __( 'Media files', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $media->inherit ),
-				/* translators: %s: disk space used by uploads, already formatted. */
-				'delta' => sprintf( __( '%s used', 'minn-admin' ), size_format( self::uploads_size(), 1 ) ),
+				'delta' => self::uploads_size_label(),
 				'up'    => null,
 				'goto'  => 'media',
 			)
@@ -4427,24 +4425,76 @@ class Minn_Admin_REST {
 
 	/**
 	 * Total size of the uploads directory, cached for 12 hours.
+	 *
+	 * The walk is a full pass over the media library, seconds on a large
+	 * one, and the dashboard that asks for it is open to every Contributor.
+	 * So a cold cache is only ever filled by an administrator's request,
+	 * one walk runs at a time, and a walk that outlives its budget stops
+	 * and records what it counted so far as a floor. Everyone else reads
+	 * the cache or gets nothing to show.
+	 *
+	 * @return array|null { bytes, partial } or null when nothing is known.
 	 */
 	private static function uploads_size() {
-		$size = get_transient( 'minn_admin_uploads_size' );
-		if ( false !== $size ) {
-			return (int) $size;
+		$cached = get_transient( 'minn_admin_uploads_size' );
+		if ( is_array( $cached ) && isset( $cached['bytes'] ) ) {
+			return $cached;
+		}
+		if ( false !== $cached ) {
+			// The pre-budget shape: a bare byte count.
+			return array( 'bytes' => (int) $cached, 'partial' => false );
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return null;
+		}
+		$lock = 'minn_admin_uploads_size_lock';
+		if ( ! add_option( $lock, time(), '', false ) ) {
+			if ( (int) get_option( $lock ) > time() - 2 * MINUTE_IN_SECONDS ) {
+				return null; // another request is walking
+			}
+			update_option( $lock, time(), false );
 		}
 		$uploads = wp_get_upload_dir();
 		$size    = 0;
+		$partial = false;
+		$budget  = microtime( true ) + (float) apply_filters( 'minn_admin_uploads_size_budget', 4.0 );
 		if ( is_dir( $uploads['basedir'] ) ) {
-			$iterator = new RecursiveIteratorIterator(
-				new RecursiveDirectoryIterator( $uploads['basedir'], FilesystemIterator::SKIP_DOTS )
-			);
-			foreach ( $iterator as $file ) {
-				$size += $file->getSize();
+			try {
+				$iterator = new RecursiveIteratorIterator(
+					new RecursiveDirectoryIterator( $uploads['basedir'], FilesystemIterator::SKIP_DOTS ),
+					RecursiveIteratorIterator::LEAVES_ONLY,
+					RecursiveIteratorIterator::CATCH_GET_CHILD
+				);
+				$n = 0;
+				foreach ( $iterator as $file ) {
+					$size += (int) $file->getSize();
+					if ( 0 === ( ++$n % 200 ) && microtime( true ) > $budget ) {
+						$partial = true;
+						break;
+					}
+				}
+			} catch ( \Throwable $e ) {
+				$partial = true;
 			}
 		}
-		set_transient( 'minn_admin_uploads_size', $size, 12 * HOUR_IN_SECONDS );
-		return $size;
+		$out = array( 'bytes' => $size, 'partial' => $partial );
+		set_transient( 'minn_admin_uploads_size', $out, ( $partial ? 1 : 12 ) * HOUR_IN_SECONDS );
+		delete_option( $lock );
+		return $out;
+	}
+
+	/** The "N used" line for the Media stat card, or '' when the size is not known. */
+	private static function uploads_size_label() {
+		$size = self::uploads_size();
+		if ( null === $size ) {
+			return '';
+		}
+		$formatted = size_format( $size['bytes'], 1 );
+		return $size['partial']
+			/* translators: %s: disk space used by uploads, already formatted. */
+			? sprintf( __( 'over %s used', 'minn-admin' ), $formatted )
+			/* translators: %s: disk space used by uploads, already formatted. */
+			: sprintf( __( '%s used', 'minn-admin' ), $formatted );
 	}
 
 	/**
