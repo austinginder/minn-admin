@@ -2,14 +2,14 @@
 # This file is distributed under the MIT.
 msgid ""
 msgstr ""
-"Project-Id-Version: Minn Admin 0.39.0\n"
+"Project-Id-Version: Minn Admin 0.40.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/minn-admin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-14T22:12:54+00:00\n"
+"POT-Creation-Date: 2026-09-15T02:02:32+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 
@@ -1381,7 +1381,7 @@ msgstr ""
 #: includes/adapters/ai1wm.php:119
 #: includes/adapters/duplicator.php:782
 #: includes/adapters/scrutoscope.php:421
-#: includes/adapters/wp-migrate.php:399
+#: includes/adapters/wp-migrate.php:427
 #: assets/js/app.js:12820
 #: assets/js/app.js:48615
 #: assets/js/app.js:48802
@@ -1409,7 +1409,7 @@ msgstr ""
 #: includes/adapters/ai1wm.php:135
 #: includes/adapters/disembark.php:226
 #: includes/adapters/duplicator.php:791
-#: includes/adapters/wp-migrate.php:403
+#: includes/adapters/wp-migrate.php:431
 msgid "On disk"
 msgstr ""
 
@@ -1470,7 +1470,7 @@ msgstr ""
 #: includes/adapters/disembark.php:211
 #: includes/adapters/duplicator.php:502
 #: includes/adapters/updraftplus.php:285
-#: includes/adapters/wp-migrate.php:325
+#: includes/adapters/wp-migrate.php:353
 #: includes/adapters/wpvivid.php:324
 #: includes/class-minn-admin-rest.php:10447
 msgid "Backups"
@@ -1486,7 +1486,7 @@ msgstr ""
 #: includes/adapters/transients-manager.php:317
 #: includes/adapters/transients-manager.php:439
 #: includes/adapters/updraftplus.php:300
-#: includes/adapters/wp-migrate.php:340
+#: includes/adapters/wp-migrate.php:368
 #: includes/adapters/wpvivid.php:337
 #: includes/class-minn-admin-rest.php:10205
 #: assets/js/app.js:809
@@ -1508,7 +1508,7 @@ msgstr ""
 #: includes/adapters/woocommerce-gift-cards.php:538
 #: includes/adapters/woocommerce-memberships.php:1628
 #: includes/adapters/wp-freighter.php:357
-#: includes/adapters/wp-migrate.php:341
+#: includes/adapters/wp-migrate.php:369
 #: includes/adapters/yith-gift-cards.php:382
 #: includes/adapters/yith-gift-cards.php:654
 #: assets/js/app.js:810
@@ -1518,7 +1518,7 @@ msgstr ""
 #: includes/adapters/ai1wm.php:267
 #: includes/adapters/backwpup.php:324
 #: includes/adapters/updraftplus.php:308
-#: includes/adapters/wp-migrate.php:345
+#: includes/adapters/wp-migrate.php:373
 #: includes/adapters/wpvivid.php:349
 msgid "Download"
 msgstr ""
@@ -1535,14 +1535,14 @@ msgstr ""
 #: includes/adapters/backwpup.php:61
 #: includes/adapters/duplicator.php:249
 #: includes/adapters/updraftplus.php:332
-#: includes/adapters/wp-migrate.php:294
+#: includes/adapters/wp-migrate.php:322
 #: includes/adapters/wpvivid.php:368
 #: includes/backup-download.php:77
 msgid "You are not allowed to download backups."
 msgstr ""
 
 #: includes/adapters/ai1wm.php:296
-#: includes/adapters/wp-migrate.php:298
+#: includes/adapters/wp-migrate.php:326
 msgid "The backup folder could not be found."
 msgstr ""
 
@@ -10916,8 +10916,8 @@ msgid "Open UpdraftPlus ↗"
 msgstr ""
 
 #: includes/adapters/updraftplus.php:299
-#: includes/adapters/wp-migrate.php:258
-#: includes/adapters/wp-migrate.php:338
+#: includes/adapters/wp-migrate.php:286
+#: includes/adapters/wp-migrate.php:366
 #: includes/adapters/wpvivid.php:336
 #: assets/js/app.js:44325
 msgid "Backup"
@@ -12306,7 +12306,7 @@ msgstr ""
 
 #: includes/adapters/wp-freighter.php:627
 #: includes/adapters/wp-freighter.php:1016
-#: includes/adapters/wp-migrate.php:401
+#: includes/adapters/wp-migrate.php:429
 msgid "Files"
 msgstr ""
 
@@ -12573,54 +12573,54 @@ msgstr ""
 msgid "Open WP Mail SMTP ↗"
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:164
+#: includes/adapters/wp-migrate.php:192
 msgid "WP Migrate has not created a secret key for this site yet. Open its settings once to generate one."
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:257
+#: includes/adapters/wp-migrate.php:285
 msgid "Before a migration"
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:315
+#: includes/adapters/wp-migrate.php:343
 #: includes/adapters/wpvivid.php:372
 msgid "Backup not found."
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:339
+#: includes/adapters/wp-migrate.php:367
 msgid "Kind"
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:349
+#: includes/adapters/wp-migrate.php:377
 #: includes/adapters/wpvivid.php:351
 msgid "Delete backup"
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:352
+#: includes/adapters/wp-migrate.php:380
 msgid "Delete this backup file? It cannot be recovered."
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:398
+#: includes/adapters/wp-migrate.php:426
 msgid "Newest backup"
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:399
+#: includes/adapters/wp-migrate.php:427
 msgid "ago"
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:405
+#: includes/adapters/wp-migrate.php:433
 msgid "These are database files only. WP Migrate does not back up uploads, themes or plugins."
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:411
+#: includes/adapters/wp-migrate.php:439
 msgid "Back up in WP Migrate ↗"
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:432
-#: includes/adapters/wp-migrate.php:448
+#: includes/adapters/wp-migrate.php:460
+#: includes/adapters/wp-migrate.php:476
 msgid "That backup is not there any more."
 msgstr ""
 
-#: includes/adapters/wp-migrate.php:457
+#: includes/adapters/wp-migrate.php:485
 msgid "WP Migrate could not delete that backup."
 msgstr ""
 
