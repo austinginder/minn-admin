@@ -1564,6 +1564,15 @@ class Minn_Admin {
 			'wcLowStock'      => class_exists( 'WooCommerce' )
 				? max( 0, (int) get_option( 'woocommerce_notify_low_stock_amount', 2 ) )
 				: 0,
+			// The store currency, so a total the client adds up itself (a
+			// customer's recent orders) and any order the REST list serves
+			// without a symbol print the shop's money, never a guessed dollar.
+			'wcCurrency'      => function_exists( 'get_woocommerce_currency_symbol' )
+				? array(
+					'code'   => get_woocommerce_currency(),
+					'symbol' => html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ),
+				)
+				: null,
 			'comments'        => self::comments_enabled(),
 			'wpMigrate'       => function_exists( 'minn_admin_wp_migrate_boot' ) ? minn_admin_wp_migrate_boot() : null,
 			'wcpdf'           => function_exists( 'minn_admin_wcpdf_boot' ) ? minn_admin_wcpdf_boot() : null,
@@ -1723,6 +1732,8 @@ class Minn_Admin {
 			// Used by the Products "Low stock" filter fallback when Analytics
 			// lookup tables lag a fresh write.
 			'wcLowStock' => $features['wcLowStock'],
+			// Store currency { code, symbol }; null without WooCommerce.
+			'wcCurrency' => $features['wcCurrency'],
 			// False when Disable Comments (etc.) has removed the feature —
 			// Comments nav/palette/badge hide even if the user can moderate.
 			'comments'  => $features['comments'],

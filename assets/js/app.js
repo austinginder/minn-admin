@@ -10176,8 +10176,14 @@
 		if ( ! loading && ! m.loadError ) bindOrderDetail( m );
 	}
 
+	// The store's currency symbol from the boot payload. The fallback only
+	// matters without WooCommerce, where no money is ever printed.
+	function storeSym() {
+		return ( B.wcCurrency && B.wcCurrency.symbol ) || '$';
+	}
+
 	function orderMoney( o, amount ) {
-		const sym = ( o && o.currency_symbol ) || '$';
+		const sym = ( o && o.currency_symbol ) || storeSym();
 		const n = parseFloat( amount );
 		if ( Number.isNaN( n ) ) return sym + ( amount || '0' );
 		return sym + n.toFixed( 2 );
@@ -10305,7 +10311,7 @@
 			];
 			// Always paint chrome (Orders|Analytics + range tabs + card shells)
 			// so changing 7d/30d/… does not blank the headers while WC Analytics loads.
-			const money = ( n ) => '$' + Number( n || 0 ).toLocaleString( uiLocale(), { maximumFractionDigits: 2 } );
+			const money = ( n ) => storeSym() + Number( n || 0 ).toLocaleString( uiLocale(), { maximumFractionDigits: 2 } );
 			const tot = ( ! loading && a && a.totals ) || {};
 			const chartData = ( ! loading && a && a.chart ) || [];
 			const topProducts = ( ! loading && a && a.topProducts ) || [];
@@ -10414,7 +10420,7 @@
 			return;
 		}
 		const s = state.cache.orderSummary || {};
-		const sym = ( c.items[ 0 ] && c.items[ 0 ].currency_symbol ) || '$';
+		const sym = ( c.items[ 0 ] && c.items[ 0 ].currency_symbol ) || storeSym();
 		const summaryCards = [];
 		if ( s.month ) {
 			summaryCards.push( [ __( 'Orders this month' ), s.month.total_orders ?? '—', '' ] );
@@ -10589,9 +10595,14 @@
 
 	function subMoney( s, amount ) {
 		const n = parseFloat( amount );
-		const code = ( s && s.currency ) || 'USD';
 		const num = Number.isNaN( n ) ? ( amount || '0' ) : n.toFixed( 2 );
-		// REST list often omits currency_symbol; keep a compact $ when USD.
+		// The subscriptions REST list carries a currency code, no symbol. A
+		// subscription in the store's currency prints its symbol; one in
+		// another currency (a migrated store) keeps the code so it reads
+		// honestly.
+		const store = B.wcCurrency || {};
+		const code = ( s && s.currency ) || store.code || 'USD';
+		if ( code === store.code && store.symbol ) return store.symbol + num;
 		if ( code === 'USD' ) return '$' + num;
 		return code + ' ' + num;
 	}
@@ -13752,7 +13763,7 @@
 	function couponAmountLabel( c ) {
 		const amt = c.amount != null ? String( c.amount ) : '0';
 		if ( c.discount_type === 'percent' ) return amt.replace( /\.00$/, '' ) + '%';
-		return '$' + amt;
+		return storeSym() + amt;
 	}
 
 	function couponTypeLabel( type ) {
@@ -18097,8 +18108,10 @@
 			dur,
 			b.employee,
 		].filter( Boolean );
+		// A bare number gets the store's symbol when WooCommerce names one;
+		// a booking plugin's own formatted price passes through untouched.
 		const priceLbl = b.price && /^\d+(\.\d+)?$/.test( String( b.price ).trim() )
-			? '$' + String( b.price ).trim()
+			? ( B.wcCurrency ? storeSym() : '' ) + String( b.price ).trim()
 			: ( b.price || '' );
 		const extras = ( sec.sections || [] ).filter( ( g ) => {
 			const t = ( g.title || '' ).toLowerCase();
@@ -41770,6 +41783,9 @@
 			const spent = ords && ords.items
 				? ords.items.reduce( ( s, o ) => s + ( parseFloat( o.total ) || 0 ), 0 )
 				: null;
+			// The orders' own symbol (a GBP store printed this total in
+			// dollars once); the store's when the list is empty or unsymboled.
+			const spentSym = ( ords && ords.items && ords.items.find( ( o ) => o.currency_symbol ) || {} ).currency_symbol || storeSym();
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
@@ -41792,7 +41808,7 @@
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Role' ) ) }</span><span>${ esc( c.role || '—' ) }</span></div>
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Registered' ) ) }</span><span>${ esc( c.date_created ? timeAgo( c.date_created ) : '—' ) }</span></div>
 									${ ords ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Orders' ) ) }</span><span>${ esc( String( ords.total ) ) }</span></div>` : '' }
-									${ spent != null ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Recent total' ) ) }</span><span>$${ spent.toFixed( 2 ) }</span></div>` : '' }
+									${ spent != null ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Recent total' ) ) }</span><span>${ esc( spentSym ) }${ spent.toFixed( 2 ) }</span></div>` : '' }
 								</div>
 							</div>
 							<div class="minn-order-panel">
@@ -41815,7 +41831,7 @@
 											<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>
 											<span>${ esc( timeAgo( o.date_created ) ) }</span>
 										</div>
-										<div class="minn-order-note-body">${ esc( ( o.currency_symbol || '$' ) + o.total ) }</div>
+										<div class="minn-order-note-body">${ esc( ( o.currency_symbol || storeSym() ) + o.total ) }</div>
 									</button>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No orders for this customer.' ) ) }</div>`
 							) }
 						</div>
