@@ -52,12 +52,40 @@ function minn_admin_wp_migrate_licensed() {
 	if ( ! minn_admin_wp_migrate_active() ) {
 		return false;
 	}
-	try {
-		$license = \DeliciousBrains\WPMDB\WPMDBDI::getInstance()->get( \DeliciousBrains\WPMDB\Pro\License::class );
-		return (bool) $license->is_valid_licence();
-	} catch ( \Throwable $e ) {
+	// Options only, never their is_valid_licence(): that method skips its
+	// cache whenever the per-user add-ons transient is empty and phones the
+	// licensing service, and this runs on every Minn page boot, so a page
+	// load could hit their API and rewrite the cached answer. Read what they
+	// cached and apply their own rule: no key means no; the service being
+	// down means yes; an expired subscription alone means yes (migrations
+	// keep working); any other error means no; no errors means yes. A stored
+	// key with no answer yet also passes: their connection gate re-checks
+	// the moment a migration is attempted.
+	$uid = get_current_user_id();
+	$key = defined( 'WPMDB_LICENCE' ) ? (string) WPMDB_LICENCE : (string) get_user_meta( $uid, 'wpmdb_licence_key', true );
+	if ( '' === $key ) {
+		$settings = get_site_option( 'wpmdb_settings' );
+		$key      = is_array( $settings ) && ! empty( $settings['licence'] ) ? (string) $settings['licence'] : '';
+	}
+	if ( '' === $key ) {
 		return false;
 	}
+	$raw = get_site_transient( 'wpmdb_licence_response_' . $uid );
+	if ( false === $raw ) {
+		$raw = get_site_transient( 'wpmdb_licence_response' );
+	}
+	$data = is_string( $raw ) ? json_decode( $raw, true ) : ( is_array( $raw ) ? $raw : null );
+	if ( ! is_array( $data ) ) {
+		return true;
+	}
+	if ( ! empty( $data['dbrains_api_down'] ) ) {
+		return true;
+	}
+	$errors = ( isset( $data['errors'] ) && is_array( $data['errors'] ) ) ? array_keys( $data['errors'] ) : array();
+	if ( empty( $errors ) ) {
+		return true;
+	}
+	return array( 'subscription_expired' ) === $errors;
 }
 
 /**
