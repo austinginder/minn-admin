@@ -974,6 +974,14 @@ class Minn_Admin_Surfaces {
 				$problems[] = "$where: field without a key";
 				continue;
 			}
+			// The client walks dotted keys into the request body; a segment
+			// that names the prototype chain is never a field.
+			foreach ( explode( '.', (string) $f['key'] ) as $seg ) {
+				if ( in_array( $seg, array( '__proto__', 'constructor', 'prototype' ), true ) ) {
+					$problems[] = "$where: field key \"{$f['key']}\" names the prototype chain";
+					break;
+				}
+			}
 			if ( isset( $f['type'] ) && ! in_array( $f['type'], self::FIELD_TYPES, true ) ) {
 				$problems[] = "$where: field \"{$f['key']}\" has unknown type \"{$f['type']}\"";
 			}

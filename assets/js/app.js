@@ -16901,6 +16901,9 @@
 	// Dot-path assignment ("action_data.url" → { action_data: { url } }).
 	function setDeepPath( obj, key, val ) {
 		const parts = key.split( '.' );
+		// Keys are descriptor-authored, but a setter that walks names into an
+		// object must still never reach the prototype chain.
+		if ( parts.some( ( k ) => k === '__proto__' || k === 'constructor' || k === 'prototype' ) ) return;
 		let o = obj;
 		for ( let i = 0; i < parts.length - 1; i++ ) {
 			if ( ! o[ parts[ i ] ] || typeof o[ parts[ i ] ] !== 'object' ) o[ parts[ i ] ] = {};
