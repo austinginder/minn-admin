@@ -971,12 +971,21 @@ class Minn_Admin {
 		return self::holds_object( $decoded ) ? $default : $decoded;
 	}
 
-	/** Whether a decoded value contains an object anywhere inside it. */
+	/**
+	 * Whether a decoded value contains an object anywhere inside it.
+	 *
+	 * Refuses what it cannot see: an array nested deeper than the walk
+	 * goes counts as holding an object, so a payload can never hide one
+	 * under enough wrapping to slip past the refusal.
+	 */
 	private static function holds_object( $value, $depth = 0 ) {
 		if ( is_object( $value ) ) {
 			return true;
 		}
-		if ( is_array( $value ) && $depth < 32 ) {
+		if ( is_array( $value ) ) {
+			if ( $depth >= 32 ) {
+				return true;
+			}
 			foreach ( $value as $item ) {
 				if ( self::holds_object( $item, $depth + 1 ) ) {
 					return true;
