@@ -204,6 +204,26 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		t.check( 'a hierarchy template makes no usage claim at all',
 			hierarchyRow && ! /Not used|Used by/.test( hierarchyRow.meta ), JSON.stringify( hierarchyRow ) );
 
+		// The name and a paragraph-long description share one flex line; flex
+		// used to shrink both in proportion to their natural width, so the
+		// archive template's 200-character description clipped "All Archives"
+		// to "All Arc…" at desktop width and to one letter on a phone. Measure
+		// the painted name against its own text at both widths.
+		const clippedNames = () => page.evaluate( () => [ ...document.querySelectorAll( '[data-tpl] .minn-row-title' ) ]
+			.filter( ( el ) => el.scrollWidth > el.clientWidth + 1 ).map( ( el ) => el.textContent.trim() ) );
+		const longDesc = ( await rows() ).filter( ( r ) => r.meta.length > 150 ).length;
+		t.check( 'a template with a long description still shows its whole name',
+			longDesc > 0 && ( await clippedNames() ).length === 0, `${ longDesc } long rows, clipped: ${ JSON.stringify( await clippedNames() ) }` );
+		const prevViewport = page.viewportSize();
+		await page.setViewportSize( { width: 390, height: 844 } );
+		await page.waitForTimeout( 300 );
+		const phoneClipped = await clippedNames();
+		const phoneScroll = await page.evaluate( () => document.documentElement.scrollWidth <= window.innerWidth );
+		await page.setViewportSize( prevViewport );
+		await page.waitForTimeout( 300 );
+		t.check( 'at phone width the name keeps its full text and the page does not scroll sideways',
+			phoneClipped.length === 0 && phoneScroll, `clipped: ${ JSON.stringify( phoneClipped ) }, fits: ${ phoneScroll }` );
+
 		/* ===== Parts count the templates that pull them in ===== */
 		await page.click( '[data-tplkind="wp_template_part"]' );
 		await page.waitForTimeout( 500 );

@@ -907,6 +907,24 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-menu-row.editing { cursor: default; }
 .minn-menu-row.editing:hover { background: none; }
 .minn-menu-info { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
+/* The name, the kind chip and the description share one flex line. Flex
+   shrinks items in proportion to their natural width, so a paragraph-long
+   template description (core's archive template runs 200 characters) took a
+   slice out of the short name beside it and "All Archives" clipped to
+   "All Arc…" while the description wrapped happily. The description now
+   starts from a zero basis and only grows into what the name leaves; the
+   name keeps its full width up to most of the row, where its ellipsis
+   finally applies. */
+.minn-menu-info > .minn-row-title { flex: 0 0 auto; max-width: 70%; }
+.minn-menu-info > .minn-row-slug { flex: 1 1 0; }
+/* At phone width there is no room beside the name for a paragraph, and a
+   description squeezed into a two-word column reads as broken. The
+   description drops to its own line under the name and chip. */
+@media (max-width: 640px) {
+  .minn-menu-info { flex-wrap: wrap; row-gap: 2px; }
+  .minn-menu-info > .minn-row-title { max-width: 100%; }
+  .minn-menu-info > .minn-row-slug { flex-basis: 100%; }
+}
 .minn-menu-kind {
   font-size: 11px; font-weight: 600; color: var(--text3); background: var(--panel2);
   border: 1px solid var(--border); padding: 1px 7px; border-radius: 5px; flex-shrink: 0;
