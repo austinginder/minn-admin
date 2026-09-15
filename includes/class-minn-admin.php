@@ -26,8 +26,13 @@ class Minn_Admin {
 		add_action( 'init', array( __CLASS__, 'register_route' ) );
 		add_action( 'wp_loaded', array( __CLASS__, 'maybe_heal_rewrites' ), 20 );
 		add_filter( 'query_vars', array( __CLASS__, 'query_vars' ) );
-		add_action( 'template_redirect', array( __CLASS__, 'maybe_render_app' ), 0 );
-		add_action( 'template_redirect', array( __CLASS__, 'maybe_maintenance_mode' ), 1 );
+		// Both run ahead of everything else on template_redirect: WooCommerce
+		// answers its ?wc-ajax= dispatcher there at priority 0, and a holding
+		// page that came after it kept the cart and checkout answering while
+		// the site was closed. The app renders first so an operator who is
+		// logged out lands on the login screen, not the holding page.
+		add_action( 'template_redirect', array( __CLASS__, 'maybe_render_app' ), -20 );
+		add_action( 'template_redirect', array( __CLASS__, 'maybe_maintenance_mode' ), -10 );
 		add_filter( 'rest_authentication_errors', array( __CLASS__, 'maintenance_rest' ), 20 );
 		// admin-ajax.php and admin-post.php never reach template_redirect and are
 		// not REST, so neither guard above covers them. admin_init runs on both
@@ -1381,8 +1386,11 @@ class Minn_Admin {
 	 *
 	 * Deliberately absent, and documented in security.md so the next reader
 	 * knows this list is finished rather than unfinished: wp-login.php (you
-	 * have to be able to log in to a site you are staging) and wp-cron.php
-	 * (scheduled work should keep running behind the holding page).
+	 * have to be able to log in to a site you are staging; only its register
+	 * action is held, see maintenance_admin_entry), wp-cron.php (scheduled
+	 * work should keep running behind the holding page) and WooCommerce's
+	 * ?wc-api= webhook endpoint (a payment provider's callback about an
+	 * order that already exists must not be lost to a holding page).
 	 */
 	const MAINTENANCE_ENTRY_SCRIPTS = array(
 		'admin-ajax.php',
@@ -1411,7 +1419,12 @@ class Minn_Admin {
 	 */
 	public static function maintenance_admin_entry() {
 		$script = isset( $_SERVER['SCRIPT_NAME'] ) ? basename( (string) $_SERVER['SCRIPT_NAME'] ) : '';
-		if ( ! in_array( $script, self::MAINTENANCE_ENTRY_SCRIPTS, true ) ) {
+		// wp-login.php stays open so a site being staged can still be signed
+		// into, but its registration form creates accounts on that site; hold
+		// that one action the way wp-signup.php is held.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$register = 'wp-login.php' === $script && isset( $_REQUEST['action'] ) && 'register' === $_REQUEST['action'];
+		if ( ! $register && ! in_array( $script, self::MAINTENANCE_ENTRY_SCRIPTS, true ) ) {
 			return;
 		}
 		if ( ! self::maintenance_holds_back() ) {
