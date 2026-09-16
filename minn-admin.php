@@ -198,6 +198,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/rewrite-rules-inspector.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cache-purge.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/updraftplus.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/disembark.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/novamira.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/duplicator.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wpvivid.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/backwpup.php';
