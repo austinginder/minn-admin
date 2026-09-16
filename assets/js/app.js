@@ -25431,7 +25431,6 @@
 			<div class="minn-settings-body">
 				<div>
 					<div class="minn-settings-title">${ esc( storeSectionTitle( sec ) ) }</div>
-					<div class="minn-settings-sub">${ esc( __( 'Saved through WooCommerce’s own settings pipeline, so every extension that listens for a save still hears it.' ) ) }</div>
 				</div>
 				${ isEmails ? '<div id="minn-store-emails"></div>' : '' }
 				${ isShipping ? '<div id="minn-store-shipping"></div>' : '' }
