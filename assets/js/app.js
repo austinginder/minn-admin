@@ -42373,7 +42373,15 @@
 		if ( B.wcs && B.caps.subscriptions ) cmds.push( { label: __( 'View Subscriptions' ), kind: 'nav', icon: '↻', run: () => go( 'subscriptions' ) } );
 		if ( B.wc && B.caps.products ) cmds.push( { label: __( 'View Products' ), kind: 'nav', icon: '🏷', run: () => go( 'products' ) } );
 		if ( B.wc && B.caps.coupons ) cmds.push( { label: __( 'View Coupons' ), kind: 'nav', icon: '🔑', run: () => go( 'coupons' ) } );
-		if ( B.wc && B.caps.storeSettings ) cmds.push( { label: __( 'Open Store settings' ), kind: 'nav', icon: '⚙', run: () => go( 'store-settings' ) } );
+		if ( B.wc && B.caps.storeSettings ) {
+			cmds.push(
+				{ label: __( 'Open Store settings' ), kind: 'nav', icon: '⚙', run: () => go( 'store-settings' ) },
+				{ label: __( 'Open Payment methods' ), kind: 'nav', icon: '⚙', run: () => go( 'store-settings/checkout' ) },
+				{ label: __( 'Open Shipping zones' ), kind: 'nav', icon: '⚙', run: () => go( 'store-settings/shipping' ) },
+				{ label: __( 'Open Tax rates' ), kind: 'nav', icon: '⚙', run: () => go( 'store-settings/tax' ) },
+				{ label: __( 'Open Store emails' ), kind: 'nav', icon: '⚙', run: () => go( 'store-settings/email' ) }
+			);
+		}
 		if ( B.wc && B.caps.customers ) cmds.push( { label: __( 'View Customers' ), kind: 'nav', icon: '◉', run: () => go( 'customers' ) } );
 		if ( B.caps.users ) cmds.push( { label: __( 'Browse Users' ), kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
 		if ( B.spamUsers && B.caps.users ) cmds.push( {
