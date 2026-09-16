@@ -67,6 +67,14 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 			JSON.stringify( none.body && { status: none.status, installed: none.body.installed, offered: none.body.offered, source: none.body.source } ) );
 		const missing = await rest( 'minn-admin/v1/plugin-changelog?plugin=not-a-plugin%2Fnope.php' );
 		t.check( 'a plugin that is not installed answers 404', missing.status === 404, `status ${ missing.status }` );
+		// Themes: wp.org publishes no changelog for them, so the route reads
+		// the one the theme ships (Twenty Twenty-Five's readme.txt).
+		const th = await rest( 'minn-admin/v1/theme-changelog?theme=twentytwentyfive' );
+		t.check( 'theme route reads the bundled readme changelog',
+			th.status === 200 && th.body.kind === 'theme' && th.body.source === 'wporg' && th.body.sections.length > 2 && /^\d+\.\d+$/.test( th.body.sections[ 0 ].version ) && !! th.body.sections[ 0 ].date,
+			JSON.stringify( th.body && { status: th.status, n: th.body.sections && th.body.sections.length, first: th.body.sections && th.body.sections[ 0 ] && [ th.body.sections[ 0 ].version, th.body.sections[ 0 ].date ] } ) );
+		const thMissing = await rest( 'minn-admin/v1/theme-changelog?theme=not-a-theme' );
+		t.check( 'a theme that is not installed answers 404', thMissing.status === 404, `status ${ thMissing.status }` );
 		const w = await rest( 'minn-admin/v1/plugin-changelog?plugin=' + encodeURIComponent( WPORG + '.php' ) );
 		t.check( 'wp.org offer reports its source and directory link', w.status === 200 && w.body.source === 'wporg' && /wordpress\.org\/plugins\/duplicator\/#developers$/.test( w.body.url ),
 			JSON.stringify( w.body && { source: w.body.source, url: w.body.url } ) );
@@ -152,6 +160,24 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		const plainEntries = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].map( ( b ) => b.textContent.trim() ) );
 		t.check( 'context menu of a current plugin offers Changelog', plainEntries.includes( 'Changelog' ), JSON.stringify( plainEntries ) );
 		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 200 );
+
+		// Themes tab: the version on a theme card is the same doorway.
+		await page.click( '[data-xtab="themes"]' );
+		await page.waitForSelector( '.minn-theme[data-stylesheet="twentytwentyfive"] [data-tchangelog]', { timeout: 20000 } );
+		await page.click( '.minn-theme[data-stylesheet="twentytwentyfive"] [data-tchangelog]' );
+		await page.waitForSelector( '.minn-cl-modal [data-clver]', { timeout: 15000 } );
+		const theme = await page.evaluate( () => ( {
+			title: document.querySelector( '.minn-cl-modal .minn-modal-title' ).textContent.trim(),
+			meta: ( document.querySelector( '.minn-cl-meta' ) || {} ).textContent || '',
+			chip: document.querySelector( '.minn-cl-modal [data-clver] .minn-cl-ver-v' ).textContent.trim(),
+			sub: ( document.querySelector( '.minn-cl-modal [data-clver] .minn-cl-ver-d' ) || {} ).textContent || '',
+			foot: ( document.querySelector( '.minn-cl-modal .minn-changelog-foot a' ) || {} ).href || '',
+		} ) );
+		t.check( 'theme version opens its changelog', /^Changelog · Twenty Twenty-Five/.test( theme.title ) && /^Installed v/.test( theme.meta ), JSON.stringify( theme ) );
+		t.check( 'theme chip is the bare version with the date beneath', /^\d+\.\d+$/.test( theme.chip ) && /\d{4}/.test( theme.sub ), JSON.stringify( [ theme.chip, theme.sub ] ) );
+		t.check( 'theme footer links to wordpress.org', /wordpress\.org\/themes\/twentytwentyfive/.test( theme.foot ), theme.foot );
+		await page.click( '#minn-modal-close' );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {

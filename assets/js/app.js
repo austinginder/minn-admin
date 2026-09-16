@@ -22769,7 +22769,7 @@
 					${ shot }
 					<div class="minn-theme-info">
 						<div class="minn-row-title">${ esc( t.name ) }</div>
-						<div class="minn-pi-meta">v${ esc( t.version ) }${ t.author
+						<div class="minn-pi-meta">${ t.version ? `<button type="button" class="minn-theme-ver" data-tchangelog="${ esc( t.stylesheet ) }" title="${ esc( sprintf( /* translators: %s: the theme's name. */ __( 'Changelog for %s' ), t.name ) ) }">v${ esc( t.version ) }</button>` : `<button type="button" class="minn-theme-ver" data-tchangelog="${ esc( t.stylesheet ) }">${ esc( __( 'Changelog' ) ) }</button>` }${ t.author
 							? ( t.author_uri
 								? ` · <a class="minn-theme-author" href="${ esc( t.author_uri ) }" target="_blank" rel="noopener">${ esc( t.author ) }</a>`
 								: ' · ' + esc( t.author ) )
@@ -22876,6 +22876,13 @@
 			state.cache.themes = null;
 			if ( state.route === 'extensions' ) renderExtensions();
 		};
+
+		$$( '[data-tchangelog]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const t = themes.find( ( x ) => x.stylesheet === btn.dataset.tchangelog );
+				if ( t ) openThemeChangelog( t.stylesheet, t.name );
+			} )
+		);
 
 		$$( '[data-tact]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
@@ -43750,18 +43757,22 @@
 			const secs = m.sections || [];
 			const cur = secs[ m.sec ] || null;
 			const pl = m.plugin || null;
+			// Notes read from the installed copy (a theme's changelog.txt)
+			// stop at the installed release; say so when an update is on
+			// offer instead of letting the reader hunt for its entry.
+			const plBehind = pl && pl.offered && pl.from === 'local' && secs.length && ! secs.some( ( s ) => s.version === pl.offered || s.version.replace( /^v/i, '' ) === pl.offered );
 			const plMeta = pl && pl.installed ? `<div class="minn-cl-meta">${ esc( pl.offered ? sprintf(
 				/* translators: %1$s: installed version, %2$s: version on offer. */
 				__( 'Installed %1$s · update to %2$s' ), 'v' + pl.installed, 'v' + pl.offered )
 				/* translators: %s: installed version. */
-				: sprintf( __( 'Installed %s' ), 'v' + pl.installed ) ) }${ pl.notice ? ` · <span class="minn-cl-notice">${ esc( pl.notice ) }</span>` : '' }</div>` : '';
+				: sprintf( __( 'Installed %s' ), 'v' + pl.installed ) ) }${ plBehind ? ` · ${ esc( sprintf( /* translators: %s: the version on offer. */ __( 'notes for %s arrive with the update' ), 'v' + pl.offered ) ) }` : '' }${ pl.notice ? ` · <span class="minn-cl-notice">${ esc( pl.notice ) }</span>` : '' }</div>` : '';
 			// The rail marks the release that is running so the reader can
 			// see at a glance which entries are behind them.
 			const plRunning = ( s ) => !! ( pl && pl.installed && ( s.version === pl.installed || s.version.replace( /^v(ersion)?\s*/i, '' ).split( /\s/ )[ 0 ] === pl.installed ) );
 			const plEmpty = pl && m.md !== null && ! secs.length ? `
 					<div class="minn-cl-empty">
-						<p>${ esc( m.error || __( 'This plugin does not publish a changelog WordPress can read.' ) ) }</p>
-						${ pl.url && safeHref( pl.url ) ? `<p><a href="${ esc( safeHref( pl.url ) ) }" target="_blank" rel="noopener">${ esc( __( 'Open the plugin\'s own release notes' ) ) } ↗</a></p>` : '' }
+						<p>${ esc( m.error || ( pl.kind === 'theme' ? __( 'This theme does not publish a changelog WordPress can read.' ) : __( 'This plugin does not publish a changelog WordPress can read.' ) ) ) }</p>
+						${ pl.url && safeHref( pl.url ) ? `<p><a href="${ esc( safeHref( pl.url ) ) }" target="_blank" rel="noopener">${ esc( pl.kind === 'theme' ? __( 'Open the theme\'s own page' ) : __( 'Open the plugin\'s own release notes' ) ) } ↗</a></p>` : '' }
 					</div>` : '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
@@ -43787,7 +43798,7 @@
 						<div class="minn-changelog" id="minn-cl-body">${ pl ? ( cur ? cur.html : '' ) : ( cur ? changelogHtml( cur.md ) : changelogHtml( m.md ) ) }</div>
 					</div>
 					${ pl
-						? ( pl.url && safeHref( pl.url ) ? `<div class="minn-changelog-foot"><a href="${ esc( safeHref( pl.url ) ) }" target="_blank" rel="noopener">${ esc( 'wporg' === pl.source ? __( 'View on WordPress.org' ) : __( 'Plugin page' ) ) } ↗</a></div>` : '' )
+						? ( pl.url && safeHref( pl.url ) ? `<div class="minn-changelog-foot"><a href="${ esc( safeHref( pl.url ) ) }" target="_blank" rel="noopener">${ esc( 'wporg' === pl.source ? __( 'View on WordPress.org' ) : ( pl.kind === 'theme' ? __( 'Theme page' ) : __( 'Plugin page' ) ) ) } ↗</a></div>` : '' )
 						: `<div class="minn-changelog-foot"><a href="https://minnadmin.com/docs/changelog/" target="_blank" rel="noopener">${ esc( __( 'View the full changelog with screenshots on minnadmin.com' ) ) } ↗</a></div>` }` }
 				</div>
 			</div>`;
@@ -46619,10 +46630,22 @@
 	// is one, else just the installed version.
 	function openPluginChangelog( file, name ) {
 		const offered = ( state.cache.pluginUpdates || {} )[ file + '.php' ] || '';
-		state.modal = { type: 'changelog', plugin: { file, name, offered, installed: '', url: '', source: '', notice: '' }, md: null, sections: null, sec: 0 };
+		openExtensionChangelog( 'minn-admin/v1/plugin-changelog?plugin=' + encodeURIComponent( file + '.php' ), { file, name, offered, kind: 'plugin' } );
+	}
+
+	// A theme's changelog (minn-admin/v1/theme-changelog): wp.org publishes
+	// none for themes, so this is mostly the changelog.txt the theme ships.
+	function openThemeChangelog( stylesheet, name ) {
+		const offered = ( state.cache.themeUpdates || {} )[ stylesheet ] || '';
+		openExtensionChangelog( 'minn-admin/v1/theme-changelog?theme=' + encodeURIComponent( stylesheet ), { file: stylesheet, name, offered, kind: 'theme' } );
+	}
+
+	function openExtensionChangelog( route, seed ) {
+		const file = seed.file;
+		state.modal = { type: 'changelog', plugin: Object.assign( { installed: '', url: '', source: '', notice: '' }, seed ), md: null, sections: null, sec: 0 };
 		renderOverlays();
 		const mine = () => state.modal && state.modal.type === 'changelog' && state.modal.plugin && state.modal.plugin.file === file;
-		api( 'minn-admin/v1/plugin-changelog?plugin=' + encodeURIComponent( file + '.php' ) )
+		api( route )
 			.then( ( r ) => {
 				if ( ! mine() ) return;
 				const m = state.modal;

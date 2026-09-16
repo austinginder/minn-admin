@@ -111,6 +111,21 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/theme-changelog',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'switch_themes' );
+				},
+				'args'                => array(
+					'theme' => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+				),
+				'callback'            => array( __CLASS__, 'theme_changelog' ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/changelog',
 			array(
 				'methods'             => 'GET',
@@ -8948,11 +8963,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $known ) {
 			// Every plugin toggle empties the transient (the letter-tile
 			// effect on the cards); a plugin the transient has no record of
-			// gets one primed check before it counts as unknown, on the
-			// same 5-minute lock the icon reader uses.
-			$have = count( (array) ( $tr->response ?? array() ) ) + count( (array) ( $tr->no_update ?? array() ) );
-			if ( $have < 5 && ! get_transient( 'minn_plugin_meta_primed' ) ) {
-				set_transient( 'minn_plugin_meta_primed', 1, 5 * MINUTE_IN_SECONDS );
+			// gets one fresh check before it counts as unknown, at most
+			// once per five minutes per plugin.
+			$lock = 'minn_cl_primed_' . md5( $file );
+			if ( ! get_transient( $lock ) ) {
+				set_transient( $lock, 1, 5 * MINUTE_IN_SECONDS );
 				wp_update_plugins();
 				$tr    = get_site_transient( 'update_plugins' );
 				$offer = isset( $tr->response[ $file ] ) ? (object) $tr->response[ $file ] : null;
@@ -8995,12 +9010,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'url'       => $details,
 			'notice'    => $notice,
 			'sections'  => array(),
+			'from'      => 'api',
 		);
 
 		$cache_key = 'minn_plugin_cl_' . md5( $file . '|' . $installed['Version'] . '|' . $offered );
 		$cached    = get_transient( $cache_key );
-		if ( is_array( $cached ) ) {
-			$payload['sections'] = $cached;
+		if ( is_array( $cached ) && isset( $cached['sections'] ) ) {
+			$payload['sections'] = $cached['sections'];
+			$payload['from']     = isset( $cached['from'] ) ? $cached['from'] : 'api';
 			return rest_ensure_response( $payload );
 		}
 
@@ -9026,24 +9043,314 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				),
 			)
 		);
-		if ( is_wp_error( $res ) ) {
-			// Nothing to read is an answer, not a failure: the modal says so
-			// and offers the vendor's details link instead.
-			return rest_ensure_response( $payload );
+		$fallback = $offered ? $offered : (string) $installed['Version'];
+		$html     = '';
+		if ( ! is_wp_error( $res ) ) {
+			$res = (object) $res;
+			// A vendor offer whose slug happens to match a directory plugin
+			// gets wp.org's answer for the STRANGER when no vendor hook
+			// replied. wp.org's own responses point their download at its
+			// host; a vendor's hook points at the vendor's.
+			if ( $wporg || ! $host_is( isset( $res->download_link ) ? $res->download_link : '', 'downloads.wordpress.org' ) ) {
+				$sections = isset( $res->sections ) ? (array) $res->sections : array();
+				$html     = isset( $sections['changelog'] ) ? (string) $sections['changelog'] : '';
+			}
 		}
-		$res = (object) $res;
-		// A vendor offer whose slug happens to match a directory plugin
-		// gets wp.org's answer for the STRANGER when no vendor hook replied.
-		// wp.org's own responses point their download at its host; a
-		// vendor's hook points at the vendor's.
-		if ( ! $wporg && $host_is( isset( $res->download_link ) ? $res->download_link : '', 'downloads.wordpress.org' ) ) {
-			return rest_ensure_response( $payload );
+		$payload['sections'] = self::changelog_sections_from_html( $html, $fallback );
+		// No published notes: the plugin's own folder often carries them
+		// (changelog.txt, or the readme's changelog section).
+		if ( ! $payload['sections'] && '.' !== dirname( $file ) ) {
+			$payload['sections'] = self::changelog_sections_from_dir( WP_PLUGIN_DIR . '/' . dirname( $file ), $fallback );
+			$payload['from']     = $payload['sections'] ? 'local' : '';
 		}
-		$sections = isset( $res->sections ) ? (array) $res->sections : array();
-		$html     = isset( $sections['changelog'] ) ? (string) $sections['changelog'] : '';
-		$payload['sections'] = self::changelog_sections_from_html( $html, $offered ? $offered : (string) $installed['Version'] );
-		set_transient( $cache_key, $payload['sections'], 12 * HOUR_IN_SECONDS );
+		set_transient( $cache_key, array( 'sections' => $payload['sections'], 'from' => $payload['from'] ), 12 * HOUR_IN_SECONDS );
 		return rest_ensure_response( $payload );
+	}
+
+	/**
+	 * A theme's changelog. wordpress.org publishes none for themes (its
+	 * theme_information answer carries only a description), so this is
+	 * mostly the local file the theme ships (changelog.txt, readme.txt's
+	 * changelog section); a vendor's own themes_api hook is tried first.
+	 */
+	public static function theme_changelog( WP_REST_Request $request ) {
+		$stylesheet = (string) $request['theme'];
+		if ( ! $stylesheet || false !== strpos( $stylesheet, '..' ) ) {
+			return new WP_Error( 'bad_theme', __( 'Theme is required.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$theme = wp_get_theme( $stylesheet );
+		if ( ! $theme->exists() ) {
+			return new WP_Error( 'not_installed', __( 'That theme is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		$tr    = get_site_transient( 'update_themes' );
+		$offer = isset( $tr->response[ $stylesheet ] ) ? (object) $tr->response[ $stylesheet ] : null;
+		$known = $offer ? $offer : ( isset( $tr->no_update[ $stylesheet ] ) ? (object) $tr->no_update[ $stylesheet ] : null );
+		if ( ! $known ) {
+			// Same as plugins: a theme switch empties the transient.
+			$lock = 'minn_cl_primed_theme_' . md5( $stylesheet );
+			if ( ! get_transient( $lock ) ) {
+				set_transient( $lock, 1, 5 * MINUTE_IN_SECONDS );
+				wp_update_themes();
+				$tr    = get_site_transient( 'update_themes' );
+				$offer = isset( $tr->response[ $stylesheet ] ) ? (object) $tr->response[ $stylesheet ] : null;
+				$known = $offer ? $offer : ( isset( $tr->no_update[ $stylesheet ] ) ? (object) $tr->no_update[ $stylesheet ] : null );
+			}
+		}
+		$offered = $offer && isset( $offer->new_version ) ? (string) $offer->new_version : '';
+		$host_is = function ( $url, $host ) {
+			$h = wp_parse_url( (string) $url, PHP_URL_HOST );
+			return $h && ( $h === $host || substr( $h, -strlen( '.' . $host ) ) === '.' . $host );
+		};
+		$wporg = $known && (
+			$host_is( isset( $known->url ) ? $known->url : '', 'wordpress.org' )
+			|| $host_is( isset( $known->package ) ? $known->package : '', 'downloads.wordpress.org' )
+		);
+		$details = $known && isset( $known->url ) && $known->url ? esc_url_raw( (string) $known->url ) : '';
+		if ( $wporg ) {
+			$details = 'https://wordpress.org/themes/' . sanitize_title( $stylesheet ) . '/';
+		}
+		if ( ! $details && $theme->get( 'ThemeURI' ) ) {
+			$details = esc_url_raw( (string) $theme->get( 'ThemeURI' ) );
+		}
+		$installed = (string) $theme->get( 'Version' );
+		$payload   = array(
+			'file'      => $stylesheet,
+			'slug'      => $stylesheet,
+			'kind'      => 'theme',
+			'name'      => html_entity_decode( wp_strip_all_tags( (string) $theme->get( 'Name' ) ), ENT_QUOTES ),
+			'installed' => $installed,
+			'offered'   => $offered,
+			'source'    => $wporg ? 'wporg' : 'vendor',
+			'url'       => $details,
+			'notice'    => '',
+			'sections'  => array(),
+			'from'      => 'api',
+		);
+		$cache_key = 'minn_theme_cl_' . md5( $stylesheet . '|' . $installed . '|' . $offered );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) && isset( $cached['sections'] ) ) {
+			$payload['sections'] = $cached['sections'];
+			$payload['from']     = isset( $cached['from'] ) ? $cached['from'] : 'api';
+			return rest_ensure_response( $payload );
+		}
+		$fallback = $offered ? $offered : $installed;
+		$html     = '';
+		// Only a vendor hook can answer with a changelog; wp.org's own
+		// reply never carries one, so the network call is skipped there.
+		if ( ! $wporg ) {
+			require_once ABSPATH . 'wp-admin/includes/theme.php';
+			$res = themes_api( 'theme_information', array( 'slug' => $stylesheet, 'fields' => array( 'sections' => true ) ) );
+			if ( ! is_wp_error( $res ) ) {
+				$res = (object) $res;
+				if ( ! $host_is( isset( $res->download_link ) ? $res->download_link : '', 'downloads.wordpress.org' ) ) {
+					$sections = isset( $res->sections ) ? (array) $res->sections : array();
+					$html     = isset( $sections['changelog'] ) ? (string) $sections['changelog'] : '';
+				}
+			}
+		}
+		$payload['sections'] = self::changelog_sections_from_html( $html, $fallback );
+		if ( ! $payload['sections'] ) {
+			$payload['sections'] = self::changelog_sections_from_dir( $theme->get_stylesheet_directory(), $fallback );
+			$payload['from']     = $payload['sections'] ? 'local' : '';
+		}
+		set_transient( $cache_key, array( 'sections' => $payload['sections'], 'from' => $payload['from'] ), 12 * HOUR_IN_SECONDS );
+		return rest_ensure_response( $payload );
+	}
+
+	/**
+	 * The date and version in a release heading, or null when the line is
+	 * not one. Accepts the shapes readmes and changelog files actually use:
+	 * "1.2.3", "v1.2.3", "Version 1.2.3", "= 1.2.3 =", "## [1.2.3]",
+	 * "1.2.3 - 2026-01-01", "1.2.3 (Date: Jan 5, 2026)", "1.2.3 | 5th
+	 * January 2026", "1.2.3: 02.09.2026", and date-first "2026-01-01 1.2.3"
+	 * or "2026-01-01 - version 1.2.3". The version is the first token; a
+	 * date anywhere beside it is kept; any other tail is dropped ("1.2.3 -
+	 * Hotfix" reads 1.2.3) unless $strict, where a tail longer than a word
+	 * or two means the line is prose, not a heading.
+	 */
+	public static function release_heading( $text, $strict = false ) {
+		$t = html_entity_decode( wp_strip_all_tags( (string) $text ), ENT_QUOTES );
+		// Markdown / readme decoration and the words around a date.
+		$t = preg_replace( '/^[\s=#*\-–—|>]+|[\s=#*]+$/u', '', $t );
+		$t = preg_replace( '/[\[\]()*_`]/u', ' ', $t );
+		$t = preg_replace( '/\b(released?|release date|date|on)\s*:?\s*/iu', ' ', $t );
+		$t = trim( preg_replace( '/\s+/u', ' ', $t ) );
+		if ( '' === $t ) {
+			return null;
+		}
+		$mon  = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?';
+		$ord  = '(?:st|nd|rd|th)?';
+		$date = '(?:\d{4}-\d{2}-\d{2}|\d{4}[.\/]\d{1,2}[.\/]\d{1,2}|\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}|' . $mon . ' \d{1,2}' . $ord . ',? \d{4}|\d{1,2}' . $ord . ' ' . $mon . ',? \d{4}|' . $mon . ' \d{4})';
+		$ver  = $strict ? '\d+(?:\.\d+)+' : '\d+(?:\.\d+)*';
+		$sep  = '\s*[-–—:|,]?\s*';
+		$word = '(?:version|ver|v|release)?\.?\s*';
+		// Version-first is tried before date-first: "2.1.53: 2026-08-13"
+		// would otherwise read 2.1.53 as a d.m.yy date. A parse whose tail
+		// starts with a digit took the wrong split and is discarded.
+		$forms = array(
+			'/^' . $word . '(?<v>' . $ver . ')(?:' . $sep . '(?<d>' . $date . '))?' . $sep . '(?<tail>.*)$/iu',
+			'/^(?<d>' . $date . ')' . $sep . $word . '(?<v>' . $ver . ')' . $sep . '(?<tail>.*)$/iu',
+		);
+		foreach ( $forms as $re ) {
+			if ( ! preg_match( $re, $t, $m ) ) {
+				continue;
+			}
+			$tail = trim( $m['tail'] );
+			if ( preg_match( '/^\d/', $tail ) ) {
+				continue;
+			}
+			if ( $strict && str_word_count( $tail ) > 2 ) {
+				return null;
+			}
+			return array( 'version' => $m['v'], 'date' => trim( $m['d'] ) );
+		}
+		return null;
+	}
+
+	/**
+	 * The changelog a plugin or theme ships in its own folder, as sections.
+	 * Tries changelog.txt / changelog.md first, then the changelog section
+	 * of readme.txt / readme.md. Read once per request; files over 512KB
+	 * are truncated (the newest releases lead in every convention).
+	 */
+	public static function changelog_sections_from_dir( $dir, $fallback_version = '' ) {
+		$dir = rtrim( (string) $dir, '/' );
+		if ( ! $dir || ! is_dir( $dir ) ) {
+			return array();
+		}
+		$want  = array( 'changelog.txt', 'changelog.md', 'changes.md', 'readme.txt', 'readme.md' );
+		$found = array();
+		foreach ( (array) scandir( $dir ) as $entry ) {
+			$lower = strtolower( $entry );
+			if ( in_array( $lower, $want, true ) && ! isset( $found[ $lower ] ) && is_file( $dir . '/' . $entry ) ) {
+				$found[ $lower ] = $dir . '/' . $entry;
+			}
+		}
+		foreach ( $want as $name ) {
+			if ( ! isset( $found[ $name ] ) ) {
+				continue;
+			}
+			$text = file_get_contents( $found[ $name ], false, null, 0, 512 * 1024 ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			if ( false === $text || '' === trim( $text ) ) {
+				continue;
+			}
+			$text = str_replace( array( "\r\n", "\r" ), "\n", $text );
+			if ( 0 === strpos( $name, 'readme' ) ) {
+				// Only the changelog section of a readme; the rest is the
+				// listing (description, installation, FAQ).
+				if ( ! preg_match( '/^\s*(?:==\s*changelog\s*==|#{1,3}\s*changelog\s*#*)\s*$(.*?)(?=^\s*(?:==\s*[^=\n]+\s*==|#{1,3}\s+[^\n]+)\s*$|\z)/imsu', $text, $m ) ) {
+					continue;
+				}
+				$text = $m[1];
+			}
+			$sections = self::changelog_sections_from_html( self::changelog_text_to_html( $text ), $fallback_version );
+			if ( $sections ) {
+				return $sections;
+			}
+		}
+		return array();
+	}
+
+	/**
+	 * Plain-text / markdown changelog → the HTML shape the section splitter
+	 * reads: one h4 per release heading, bullets as lists, other lines as
+	 * paragraphs, sub-headings ("Fixed", "Bugfixes") as bold lines.
+	 * Everything is escaped; the splitter's kses pass runs after.
+	 */
+	public static function changelog_text_to_html( $text ) {
+		$out    = array();
+		$list   = array();
+		$para   = array();
+		$heads  = 0;
+		$flush_list = function () use ( &$out, &$list ) {
+			if ( $list ) {
+				$out[] = '<ul>' . implode( '', $list ) . '</ul>';
+				$list  = array();
+			}
+		};
+		$flush_para = function () use ( &$out, &$para ) {
+			if ( $para ) {
+				$out[] = '<p>' . implode( ' ', $para ) . '</p>';
+				$para  = array();
+			}
+		};
+		$inline = function ( $s ) {
+			$s = esc_html( trim( $s ) );
+			$s = preg_replace( '/\*\*([^*]+)\*\*|__([^_]+)__/u', '<strong>$1$2</strong>', $s );
+			$s = preg_replace( '/`([^`]+)`/u', '<code>$1</code>', $s );
+			// Markdown links become their text plus the URL, kses-safe.
+			$s = preg_replace( '/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/u', '<a href="$2">$1</a>', $s );
+			return $s;
+		};
+		$pending = null; // the last heading, until its first body line
+		$emit_head = function ( $head ) use ( &$out ) {
+			$out[] = '<h4>' . esc_html( $head['version'] . ( $head['date'] ? ' - ' . $head['date'] : '' ) ) . '</h4>';
+		};
+		foreach ( explode( "\n", (string) $text ) as $line ) {
+			$raw = rtrim( $line );
+			$l   = trim( $raw );
+			if ( '' === $l ) {
+				$flush_list();
+				$flush_para();
+				continue;
+			}
+			// A date on its own line right under the heading ("Release
+			// Date: October 14th, 2022", "* Released: May 20, 2026") is
+			// the release's date, not an entry.
+			if ( $pending ) {
+				$head = $pending;
+				$pending = null;
+				if ( ! $head['date'] && preg_match( '/^[-*+•]?\s*(?:release date|released|date)\s*:?\s*(.+?)\s*$/iu', $l, $dm ) && ( $dh = self::release_heading( '0.0 ' . $dm[1] ) ) && $dh['date'] ) {
+					$head['date'] = $dh['date'];
+					$emit_head( $head );
+					continue;
+				}
+				$emit_head( $head );
+			}
+			if ( preg_match( '/^[-=_*]{3,}$/', $l ) ) {
+				continue; // rules and underlines
+			}
+			$bullet = preg_match( '/^[-*+•]\s+(.*)$/u', $l, $bm ) ? $bm[1] : null;
+			$body   = null === $bullet ? $l : $bullet;
+			$head   = self::release_heading( $body, true );
+			// A bullet is an entry unless the whole line is a bare release
+			// heading (some files bullet their versions).
+			if ( $head && ( null === $bullet || $head['version'] === preg_replace( '/^v/i', '', $body ) ) ) {
+				$flush_list();
+				$flush_para();
+				if ( ++$heads > 40 ) {
+					break;
+				}
+				$pending = $head;
+				continue;
+			}
+			if ( null !== $bullet ) {
+				$flush_para();
+				$list[] = '<li>' . $inline( $bullet ) . '</li>';
+				continue;
+			}
+			// Markdown / readme sub-headings inside a release.
+			if ( preg_match( '/^(?:#{1,6}\s+|=+\s*)(.+?)\s*=*$/u', $l, $hm ) && strlen( $hm[1] ) < 60 ) {
+				$flush_list();
+				$flush_para();
+				$out[] = '<p><strong>' . esc_html( trim( $hm[1], " =*" ) ) . '</strong></p>';
+				continue;
+			}
+			// A continuation line of the last bullet (indented) rides along.
+			if ( $list && preg_match( '/^\s{2,}/', $raw ) ) {
+				$last = array_pop( $list );
+				$list[] = substr( $last, 0, -5 ) . ' ' . $inline( $l ) . '</li>';
+				continue;
+			}
+			$flush_list();
+			$para[] = $inline( $l );
+		}
+		if ( $pending ) {
+			$emit_head( $pending );
+		}
+		$flush_list();
+		$flush_para();
+		return implode( '', $out );
 	}
 
 	/**
@@ -9096,22 +9403,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$heading = trim( html_entity_decode( wp_strip_all_tags( $m[2] ), ENT_QUOTES ) );
 				$m[2]    = $m[3];
 			}
-			// Readmes name a release "1.2.3", "v1.2.3", "1.2.3 - 2026-01-01",
-			// "1.2.3 (January 1, 2026)" or date-first "2026-01-01 1.2.3";
-			// the version becomes the chip, a date beside it the chip's
-			// sub-line, anything else stays in the chip text.
-			$date = '';
-			$ver  = '';
-			$dre  = '(\d{4}-\d{2}-\d{2}|\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}|[A-Za-z]{3,9}\.? \d{1,2},? \d{4}|\d{1,2} [A-Za-z]{3,9}\.? \d{4})';
-			if ( $heading && preg_match( '/^' . $dre . '\s*[-–—:]?\s*(v(ersion)?\s*)?(\d+(\.\d+)*)\s*$/i', $heading, $hm ) ) {
-				$date = $hm[1];
-				$ver  = $hm[4];
-			} elseif ( $heading && preg_match( '/^(v(ersion)?\s*)?(\d+(\.\d+)*)\s*(?:[-–—:(]\s*' . $dre . '\s*\)?)?\s*$/i', $heading, $hm ) ) {
-				$ver  = $hm[3];
-				$date = isset( $hm[5] ) ? $hm[5] : '';
-			} elseif ( $heading && preg_match( '/^(v(ersion)?\s*)?\d+(\.\d+)*\b/i', $heading ) ) {
-				$ver = mb_substr( $heading, 0, 48 );
-			}
+			// The version becomes the chip, a date beside it the chip's
+			// sub-line, and anything else in the heading is dropped so
+			// every vendor's rail reads the same way.
+			$head = $heading ? self::release_heading( $heading ) : null;
+			$ver  = $head ? $head['version'] : '';
+			$date = $head ? $head['date'] : '';
 			if ( $ver ) {
 				if ( $cur && '' !== trim( wp_strip_all_tags( $cur['html'] ) ) ) {
 					$out[] = $cur;
