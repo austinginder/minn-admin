@@ -25268,7 +25268,8 @@
 		} ).join( '' );
 		const isPayments = sec.kind === 'payments';
 		const isShipping = sec.kind === 'shipping-zones' || sec.kind === 'shipping-classes';
-		const bespoke = isPayments || isShipping;
+		const isTax = sec.kind === 'tax-rates';
+		const bespoke = isPayments || isShipping || isTax;
 		const data = bespoke ? { groups: [] } : c.data[ sec.id ];
 		const form = data && ! bespoke ? settingsFormHtml( data ) : null;
 		const isEmails = sec.page === 'email' && ! sec.section;
@@ -25282,6 +25283,7 @@
 				</div>
 				${ isEmails ? '<div id="minn-store-emails"></div>' : '' }
 				${ isShipping ? '<div id="minn-store-shipping"></div>' : '' }
+				${ isTax ? '<div id="minn-store-tax"></div>' : '' }
 				${ isPayments ? '<div id="minn-store-payments"></div>' : `<div id="minn-store-form">${ form ? form.html : `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` }</div>` }
 			</div>
 		</div>`;
@@ -25296,6 +25298,11 @@
 		if ( isEmails ) renderStoreEmails( $( '#minn-store-emails', view ) );
 		if ( isPayments ) {
 			renderStorePayments( $( '#minn-store-payments', view ) );
+			return;
+		}
+		if ( isTax ) {
+			$( '#minn-store-form', view ).innerHTML = '';
+			renderStoreTaxRates( $( '#minn-store-tax', view ), sec );
 			return;
 		}
 		if ( isShipping ) {
@@ -25327,6 +25334,14 @@
 				toast( __( 'Settings saved' ) );
 			}
 			storeSettingsAfterSave( payload );
+			// Tax options carry the "Additional tax classes" list: a save there
+			// can add or drop a rates section, so the section list refetches.
+			if ( sec.page === 'tax' ) {
+				try {
+					const fresh = await api( 'minn-admin/v1/wc/settings' );
+					c.sections = fresh.sections || c.sections;
+				} catch ( e ) { /* the current list stands */ }
+			}
 			if ( state.route === 'store-settings' && storeSection() === sec ) renderStoreSettings();
 		} );
 	}
@@ -25995,6 +26010,198 @@
 				}
 			} )
 		);
+	}
+
+	/* --- Tax rates: one table per tax class over wc/v3/taxes --- */
+
+	let taxCountryOptions = null;
+	async function loadTaxCountryOptions() {
+		if ( taxCountryOptions ) return taxCountryOptions;
+		const rows = await api( 'minn-admin/v1/wc/lookup?catalog=countries&all=1' ).catch( () => [] );
+		taxCountryOptions = [ [ '', __( 'Any country (*)' ) ] ].concat( rows.map( ( r ) => [ r.value, `${ r.label } (${ r.value })` ] ) );
+		return taxCountryOptions;
+	}
+
+	const taxRateForm = ( rate, countries ) => ( {
+		groups: [ {
+			title: __( 'Where it applies' ),
+			fields: [
+				{ key: 'country', label: __( 'Country' ), type: 'combobox', options: countries },
+				{ key: 'state', label: __( 'State code' ), mono: true, placeholder: '*', help: __( 'A two-letter state code, or * for any.' ) },
+				{ key: 'postcodes', label: __( 'Postcodes / ZIPs' ), type: 'textarea', rows: 2, mono: true, placeholder: '*', help: __( 'One per line. Wildcards (90*) and ranges (90210…90220) work the way WooCommerce documents them; blank means any.' ) },
+				{ key: 'cities', label: __( 'Cities' ), type: 'textarea', rows: 2, placeholder: '*', help: __( 'One per line; blank means any.' ) },
+			],
+		}, {
+			title: __( 'The rate' ),
+			fields: [
+				{ key: 'rate', label: __( 'Rate %' ), mono: true, placeholder: '0.0000' },
+				{ key: 'name', label: __( 'Tax name' ), placeholder: __( 'e.g. VAT' ) },
+				{ key: 'priority', label: __( 'Priority' ), type: 'number', min: 1, help: __( 'Only one matching rate per priority is used. Give a second rate for the same area a higher priority to stack them.' ) },
+				{ key: 'compound', label: __( 'Compound' ), type: 'toggle', help: __( 'Applied on top of other taxes.' ) },
+				{ key: 'shipping', label: __( 'Shipping' ), type: 'toggle', help: __( 'Also applies to shipping.' ) },
+			],
+		} ],
+		values: {
+			country: rate ? rate.country : '',
+			state: rate ? rate.state : '',
+			postcodes: rate ? ( rate.postcodes || [] ).join( '\n' ) : '',
+			cities: rate ? ( rate.cities || [] ).join( '\n' ) : '',
+			rate: rate ? rate.rate : '',
+			name: rate ? rate.name : '',
+			priority: rate ? rate.priority : 1,
+			compound: rate ? !! rate.compound : false,
+			shipping: rate ? !! rate.shipping : true,
+		},
+	} );
+
+	const taxLines = ( v ) => String( v == null ? '' : v ).split( /[\n;,]/ ).map( ( x ) => x.trim() ).filter( Boolean );
+
+	async function renderStoreTaxRates( host, sec ) {
+		if ( ! host ) return;
+		const c = state.cache.store;
+		const cls = sec.section;
+		c.tax = c.tax || {};
+		if ( ! c.tax[ cls ] ) {
+			host.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading tax rates…' ) ) }</div>`;
+			try {
+				c.tax[ cls ] = await api( `wc/v3/taxes?class=${ encodeURIComponent( cls ) }&per_page=100&orderby=order&order=asc&_fields=id,country,state,postcodes,cities,rate,name,priority,compound,shipping,order,class` );
+			} catch ( e ) {
+				host.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`;
+				return;
+			}
+			if ( ! host.isConnected ) return;
+		}
+		const rows = c.tax[ cls ];
+		const any = ( v ) => v ? esc( v ) : '<span class="minn-store-tax-any">*</span>';
+		const list = ( a ) => a && a.length ? esc( a.length > 3 ? a.slice( 0, 3 ).join( ', ' ) + ' +' + ( a.length - 3 ) : a.join( ', ' ) ) : '<span class="minn-store-tax-any">*</span>';
+		host.innerHTML = `
+			<div class="minn-fields-sub">${ esc( sec.label ) }</div>
+			<div class="minn-fields-note">${ esc( __( 'Matched top to bottom against the customer’s address: drag to change the order. A blank field (*) matches anything.' ) ) }</div>
+			<div class="minn-store-emails minn-store-taxes">
+				<div class="minn-store-tax-head">
+					<span>${ esc( __( 'Country' ) ) }</span><span>${ esc( __( 'State' ) ) }</span><span>${ esc( __( 'Postcode' ) ) }</span><span>${ esc( __( 'City' ) ) }</span><span>${ esc( __( 'Rate' ) ) }</span><span>${ esc( __( 'Name' ) ) }</span><span>${ esc( __( 'Prio' ) ) }</span><span></span>
+				</div>
+				${ rows.map( ( r ) => `
+				<div class="minn-store-tax" data-rate="${ r.id }" draggable="true">
+					<span class="mono">${ any( r.country ) }</span>
+					<span class="mono">${ any( r.state ) }</span>
+					<span class="mono">${ list( r.postcodes ) }</span>
+					<span>${ list( r.cities ) }</span>
+					<span class="mono">${ esc( String( r.rate || '0' ) ) }%</span>
+					<span>${ esc( r.name || '' ) }${ r.compound ? ` <span class="minn-lic-cat">${ esc( __( 'Compound' ) ) }</span>` : '' }${ r.shipping ? '' : ` <span class="minn-lic-cat">${ esc( __( 'No shipping' ) ) }</span>` }</span>
+					<span class="mono">${ esc( String( r.priority ) ) }</span>
+					<span class="minn-store-tax-actions"><button type="button" class="minn-btn-soft" data-rateedit="${ r.id }">${ esc( __( 'Edit' ) ) }</button><button type="button" class="minn-x-btn" data-ratedel="${ r.id }" title="${ esc( __( 'Delete rate' ) ) }" aria-label="${ esc( __( 'Delete rate' ) ) }">×</button></span>
+				</div>` ).join( '' ) }
+				${ rows.length ? '' : `<div class="minn-empty">${ esc( __( 'No rates in this class yet.' ) ) }</div>` }
+			</div>
+			<div class="minn-store-zone-actions">
+				<button type="button" class="minn-btn-soft" id="minn-rate-add">${ icon( 'plus' ) } ${ esc( __( 'Add rate' ) ) }</button>
+				${ rows.length ? `<button type="button" class="minn-btn-soft" id="minn-rate-export">${ esc( __( 'Export CSV' ) ) }</button>` : '' }
+				${ B.site && B.site.adminUrl ? `<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }import.php?import=woocommerce_tax_rate_csv" target="_blank" rel="noopener">${ esc( __( 'Import CSV ↗' ) ) }</a>` : '' }
+			</div>`;
+		const refresh = async () => {
+			delete c.tax[ cls ];
+			if ( state.route === 'store-settings' && storeSection() === sec ) renderStoreSettings();
+		};
+		const openRate = async ( rate ) => {
+			const countries = await loadTaxCountryOptions();
+			openStoreFormModal( {
+				title: rate ? ( rate.name || __( 'Tax rate' ) ) : __( 'New tax rate' ),
+				sub: sec.label,
+				data: taxRateForm( rate, countries ),
+				save: async ( payload ) => {
+					const body = {};
+					if ( 'country' in payload ) body.country = payload.country || '';
+					if ( 'state' in payload ) body.state = ( payload.state || '' ).trim() === '*' ? '' : ( payload.state || '' ).trim();
+					if ( 'postcodes' in payload ) body.postcodes = taxLines( payload.postcodes ).filter( ( x ) => x !== '*' );
+					if ( 'cities' in payload ) body.cities = taxLines( payload.cities ).filter( ( x ) => x !== '*' );
+					if ( 'rate' in payload ) body.rate = String( payload.rate == null ? '' : payload.rate ).trim();
+					if ( 'name' in payload ) body.name = payload.name || '';
+					if ( 'priority' in payload ) body.priority = payload.priority == null ? 1 : payload.priority;
+					if ( 'compound' in payload ) body.compound = !! payload.compound;
+					if ( 'shipping' in payload ) body.shipping = !! payload.shipping;
+					if ( rate ) return api( `wc/v3/taxes/${ rate.id }`, { method: 'PUT', body: JSON.stringify( body ) } );
+					body.class = cls;
+					if ( ! ( 'shipping' in body ) ) body.shipping = true;
+					return api( 'wc/v3/taxes', { method: 'POST', body: JSON.stringify( body ) } );
+				},
+				onSaved: () => {
+					toast( rate ? __( 'Tax rate saved' ) : __( 'Tax rate added' ) );
+					refresh();
+				},
+			} );
+		};
+		$( '#minn-rate-add', host ).addEventListener( 'click', () => openRate( null ) );
+		$$( '[data-rateedit]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => openRate( rows.find( ( r ) => String( r.id ) === btn.dataset.rateedit ) ) )
+		);
+		$$( '[data-ratedel]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				if ( ! window.confirm( __( 'Delete this tax rate?' ) ) ) return;
+				try {
+					await api( `wc/v3/taxes/${ btn.dataset.ratedel }?force=true`, { method: 'DELETE' } );
+					toast( __( 'Tax rate deleted' ) );
+					refresh();
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} )
+		);
+		const exportBtn = $( '#minn-rate-export', host );
+		if ( exportBtn ) exportBtn.addEventListener( 'click', () => {
+			// WooCommerce's own CSV column set, so the file imports back.
+			const q = ( v ) => '"' + String( v == null ? '' : v ).replace( /"/g, '""' ) + '"';
+			const lines = [ 'Country code,State code,Postcode / ZIP,City,Rate %,Tax name,Priority,Compound,Shipping,Tax class' ];
+			rows.forEach( ( r ) => lines.push( [ r.country, r.state, ( r.postcodes || [] ).join( '; ' ), ( r.cities || [] ).join( '; ' ), r.rate, r.name, r.priority, r.compound ? 1 : 0, r.shipping ? 1 : 0, cls === 'standard' ? '' : cls ].map( q ).join( ',' ) ) );
+			const blob = new Blob( [ lines.join( '\n' ) ], { type: 'text/csv' } );
+			const a = document.createElement( 'a' );
+			a.href = URL.createObjectURL( blob );
+			a.download = `tax-rates-${ cls }.csv`;
+			document.body.appendChild( a );
+			a.click();
+			a.remove();
+			setTimeout( () => URL.revokeObjectURL( a.href ), 1000 );
+		} );
+		// Drag to reorder: one batch write of every rate's order.
+		let dragId = null;
+		$$( '.minn-store-tax', host ).forEach( ( row ) => {
+			row.addEventListener( 'dragstart', ( e ) => {
+				dragId = row.dataset.rate;
+				e.dataTransfer.effectAllowed = 'move';
+				try { e.dataTransfer.setData( 'text/plain', dragId ); } catch ( err ) {}
+				row.classList.add( 'dragging' );
+			} );
+			row.addEventListener( 'dragend', () => row.classList.remove( 'dragging' ) );
+			row.addEventListener( 'dragover', ( e ) => {
+				if ( ! dragId ) return;
+				e.preventDefault();
+				const r = row.getBoundingClientRect();
+				row.classList.toggle( 'drop-before', e.clientY < r.top + r.height / 2 );
+				row.classList.toggle( 'drop-after', e.clientY >= r.top + r.height / 2 );
+			} );
+			row.addEventListener( 'dragleave', () => row.classList.remove( 'drop-before', 'drop-after' ) );
+			row.addEventListener( 'drop', async ( e ) => {
+				e.preventDefault();
+				e.stopPropagation();
+				row.classList.remove( 'drop-before', 'drop-after' );
+				if ( ! dragId || dragId === row.dataset.rate ) { dragId = null; return; }
+				const ids = rows.map( ( r ) => String( r.id ) );
+				const from = ids.indexOf( dragId );
+				const r = row.getBoundingClientRect();
+				let to = ids.indexOf( row.dataset.rate ) + ( e.clientY >= r.top + r.height / 2 ? 1 : 0 );
+				const [ moved ] = ids.splice( from, 1 );
+				if ( to > from ) to--;
+				ids.splice( to, 0, moved );
+				dragId = null;
+				try {
+					await api( 'wc/v3/taxes/batch', { method: 'POST', body: JSON.stringify( { update: ids.map( ( id, i ) => ( { id: Number( id ), order: i } ) ) } ) } );
+					toast( __( 'Rate order saved' ) );
+					refresh();
+				} catch ( err ) {
+					toast( err.message, true );
+				}
+			} );
+		} );
 	}
 
 	/* ===== Settings ===== */

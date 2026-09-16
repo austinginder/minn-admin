@@ -284,6 +284,37 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 			t.check( 'shipping class deleted', ! ( await rest( 'wc/v3/products/shipping_classes?per_page=100' ) ).body.some( ( x ) => x.id === cls.id ) );
 		}
 
+		/* ===== Tax rates: add, edit, delete over wc/v3/taxes ===== */
+		await page.click( '[data-storesec="tax:standard"]' );
+		await page.waitForSelector( '#minn-rate-add', { timeout: 20000 } );
+		await page.click( '#minn-rate-add' );
+		await page.waitForSelector( '#minn-store-form-modal [data-sset="rate"]', { timeout: 20000 } );
+		await pickCombo( page, '#minn-store-form-modal [data-sset="country"] .minn-ac-input', 'US' );
+		await page.fill( '#minn-store-form-modal [data-sset="state"]', 'PA' );
+		await page.fill( '#minn-store-form-modal [data-sset="postcodes"]', '17601\n17602' );
+		await page.fill( '#minn-store-form-modal [data-sset="rate"]', '6.0000' );
+		await page.fill( '#minn-store-form-modal [data-sset="name"]', 'Minn PA tax' );
+		await page.click( '#minn-store-form-modal #minn-sset-save' );
+		await page.waitForSelector( '#minn-modal-overlay', { state: 'detached', timeout: 15000 } );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-store-tax' ) ].some( ( e ) => /Minn PA tax/.test( e.textContent ) ), null, { timeout: 15000 } );
+		const rate = ( await rest( 'wc/v3/taxes?class=standard&per_page=100' ) ).body.find( ( r ) => r.name === 'Minn PA tax' );
+		t.check( 'tax rate created via wc/v3 with postcodes split', !! rate && rate.country === 'US' && rate.state === 'PA' && rate.postcodes.join() === '17601,17602' && rate.rate === '6.0000', JSON.stringify( rate && [ rate.country, rate.state, rate.postcodes, rate.rate ] ) );
+		if ( rate ) {
+			await page.click( `[data-rateedit="${ rate.id }"]` );
+			await page.waitForSelector( '#minn-store-form-modal [data-sset="rate"]', { timeout: 20000 } );
+			await page.fill( '#minn-store-form-modal [data-sset="rate"]', '7.2500' );
+			await page.click( '#minn-store-form-modal [data-sset="compound"]' );
+			await page.click( '#minn-store-form-modal #minn-sset-save' );
+			await page.waitForSelector( '#minn-modal-overlay', { state: 'detached', timeout: 15000 } );
+			await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-store-tax' ) ].some( ( e ) => /7\.2500/.test( e.textContent ) ), null, { timeout: 15000 } );
+			const after = ( await rest( `wc/v3/taxes/${ rate.id }` ) ).body;
+			t.check( 'tax rate edit round-trips (rate + compound)', after.rate === '7.2500' && after.compound === true );
+			page.once( 'dialog', ( dlg ) => dlg.accept() );
+			await page.click( `[data-ratedel="${ rate.id }"]` );
+			await page.waitForFunction( ( id ) => ! document.querySelector( `[data-ratedel="${ id }"]` ), rate.id, { timeout: 15000 } );
+			t.check( 'tax rate deleted', ( await rest( `wc/v3/taxes/${ rate.id }` ) ).status === 404 );
+		}
+
 		/* ===== An editor is refused ===== */
 		const ed = await loginAs( browser, 'minn-editor', 'minn-editor-pass-1' );
 		await ed.page.goto( `${ BASE }/minn-admin/`, { waitUntil: 'domcontentloaded' } );
@@ -293,7 +324,11 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 		t.check( 'editor: sections route 403', edStatus === 403, String( edStatus ) );
 		await ed.ctx.close();
 	} finally {
-		// Shipping leftovers from a crashed run: the test zone and class.
+		// Leftovers from a crashed run: the test zone, class and tax rate.
+		try {
+			const rs = ( await rest( 'wc/v3/taxes?per_page=100' ) ).body || [];
+			for ( const r of rs ) if ( r.name === 'Minn PA tax' ) await rest( `wc/v3/taxes/${ r.id }?force=true`, { method: 'DELETE' } );
+		} catch ( e ) { /* best effort */ }
 		try {
 			const zs = ( await rest( 'wc/v3/shipping/zones' ) ).body || [];
 			for ( const z of zs ) if ( /^Minn test zone/.test( z.name ) ) await rest( `wc/v3/shipping/zones/${ z.id }?force=true`, { method: 'DELETE' } );

@@ -523,6 +523,21 @@ function minn_admin_wc_settings_sections() {
 		}
 		foreach ( $sections as $sid => $slabel ) {
 			$sid = (string) $sid;
+			// Tax rates are one table per class (the sections WooCommerce
+			// registers beside its options), drawn by Minn over wc/v3/taxes.
+			if ( 'tax' === $page_id && '' !== $sid ) {
+				$out[] = array(
+					'id'        => 'tax:' . $sid,
+					'page'      => 'tax',
+					'section'   => $sid,
+					'kind'      => 'tax-rates',
+					'label'     => minn_admin_wc_settings_text( is_string( $slabel ) ? $slabel : $sid ),
+					'pageLabel' => $page_label,
+					'count'     => 0,
+					'locked'    => 0,
+				);
+				continue;
+			}
 			// Shipping zones and classes are tables, not field arrays: Minn
 			// draws them itself, at the positions WooCommerce gives them.
 			if ( 'shipping' === $page_id && in_array( $sid, array( '', 'classes' ), true ) ) {
@@ -1228,7 +1243,7 @@ function minn_admin_wc_shipping_regions_lookup( $q ) {
  * @param string $q       Query.
  * @return array [ { value, label } ]
  */
-function minn_admin_wc_settings_lookup( $catalog, $q ) {
+function minn_admin_wc_settings_lookup( $catalog, $q, $all = false ) {
 	$q   = mb_strtolower( trim( (string) $q ) );
 	$out = array();
 	if ( 'regions' === $catalog && function_exists( 'WC' ) && WC()->countries ) {
@@ -1241,7 +1256,7 @@ function minn_admin_wc_settings_lookup( $catalog, $q ) {
 				continue;
 			}
 			$out[] = array( 'value' => (string) $cc, 'label' => $name );
-			if ( count( $out ) >= 30 ) {
+			if ( ! $all && count( $out ) >= 30 ) {
 				break;
 			}
 		}
@@ -1780,7 +1795,7 @@ add_action(
 				'methods'             => 'GET',
 				'permission_callback' => $can,
 				'callback'            => static function ( $req ) {
-					return minn_admin_wc_settings_lookup( sanitize_key( $req['catalog'] ), (string) $req['q'] );
+					return minn_admin_wc_settings_lookup( sanitize_key( $req['catalog'] ), (string) $req['q'], ! empty( $req['all'] ) );
 				},
 			)
 		);
