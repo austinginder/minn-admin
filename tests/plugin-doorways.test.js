@@ -77,8 +77,38 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			card.dispatchEvent( new MouseEvent( 'contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 40, clientY: r.top + 20 } ) );
 		} );
 		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
-		const entries = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].map( ( b ) => b.textContent.trim() ) );
+		const entries = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button, .minn-ctx-menu a' ) ].map( ( b ) => b.textContent.trim() ) );
 		t.check( 'context menu offers Open Forms in Minn and the plugin\'s own screens', entries.includes( 'Open Forms in Minn' ) && entries.some( ( e ) => /↗$/.test( e ) ), JSON.stringify( entries ) );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 200 );
+
+		// A plugin with no declared action link still gets its admin-menu page.
+		const nf = await page.evaluate( () => {
+			const c = document.querySelector( '.minn-plugin[data-plugin="ninja-forms/ninja-forms"]' );
+			const a = c && c.querySelector( '.minn-plugin-door.is-wp' );
+			return a ? a.textContent.trim() + ' ' + a.href : '';
+		} );
+		t.check( 'menu-page doorway fills in where no Settings link is declared', /admin\.php\?page=ninja-forms/.test( nf ), nf );
+
+		// Reverse doorway: the surface's topbar chip opens the plugin menu.
+		await page.goto( BASE + '/minn-admin/gravity-forms', { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => document.querySelector( '#minn-sub' ) && document.querySelector( '#minn-sub' ).title, null, { timeout: 60000 } );
+		const sub = await page.$( '#minn-sub' );
+		const box = await sub.boundingBox();
+		if ( await page.$( '#minn-surface-switch' ) ) await page.mouse.click( box.x + 10, box.y + box.height / 2, { button: 'right' } );
+		else await page.mouse.click( box.x + 10, box.y + box.height / 2 );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 30000 } );
+		const rev = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button, .minn-ctx-menu a' ) ].map( ( b ) => b.textContent.trim() ) );
+		t.check( 'topbar chip menu links back to the plugin', rev.includes( 'Changelog' ) && rev.includes( 'Open plugin card' ) && rev.some( ( e ) => /Settings|Forms/.test( e ) ), JSON.stringify( rev ) );
+		await page.keyboard.press( 'Escape' );
+
+		// ⌘K knows the plugin's own screens.
+		await page.keyboard.press( process.platform === 'darwin' ? 'Meta+k' : 'Control+k' );
+		await page.waitForSelector( '#minn-palette-input', { timeout: 5000 } );
+		await page.type( '#minn-palette-input', 'antispam bee' );
+		await page.waitForTimeout( 500 );
+		const pal = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-palette-item .minn-palette-label' ) ].map( ( n ) => n.textContent.trim() ) );
+		t.check( 'palette lists the plugin\'s settings screen', pal.some( ( l ) => /Antispam Bee: Settings ↗/.test( l ) ), JSON.stringify( pal ) );
 		await page.keyboard.press( 'Escape' );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );

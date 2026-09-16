@@ -2941,8 +2941,10 @@
 		// vendor action callables only attach while the vendor code loads).
 		state.cache.licenses = null;
 		// A plugin's doorways (its surfaces, its declared settings link)
-		// exist only while it is active.
-		state.cache.pluginLinks = null;
+		// exist only while it is active. Refreshed in the background rather
+		// than dropped: nulling the cache repainted every card above the
+		// toggle without its row and the scroller jumped by the difference.
+		refreshPluginLinks();
 		// The Stats page's series comes from whichever traffic provider is
 		// active — a plugin toggle can change the answering source.
 		state.cache.stats = null;
@@ -4289,6 +4291,18 @@
 			} );
 		} else {
 			subEl.textContent = sub;
+		}
+		if ( surface && surface.plugin ) {
+			const single = ! subEl.querySelector( '#minn-surface-switch' );
+			subEl.title = single ? __( 'Plugin links' ) : __( 'Switch provider · right-click for plugin links' );
+			subEl.classList.toggle( 'minn-topbar-sub-menu', single );
+			subEl.oncontextmenu = ( e ) => { e.preventDefault(); surfacePluginMenu( surface, e.clientX, e.clientY ); };
+			subEl.onclick = single ? ( e ) => { const r = subEl.getBoundingClientRect(); surfacePluginMenu( surface, r.left, r.bottom + 4 ); } : null;
+		} else {
+			subEl.title = '';
+			subEl.classList.remove( 'minn-topbar-sub-menu' );
+			subEl.oncontextmenu = null;
+			subEl.onclick = null;
 		}
 		// Family members all light the same sidebar item.
 		const activeFamily = surface && surface.family ? surface.family : '';
@@ -21048,11 +21062,29 @@
 				await fetch( r.capture, { credentials: 'same-origin' } ).catch( () => {} );
 				r = await api( 'minn-admin/v1/plugin-links' ).catch( () => r );
 			}
-			state.cache.pluginLinks = { links: ( r && r.links ) || {}, minn: ( r && r.minn ) || {} };
+			state.cache.pluginLinks = { links: ( r && r.links ) || {}, minn: ( r && r.minn ) || {}, names: ( r && r.names ) || {} };
 			return state.cache.pluginLinks;
 		} )().finally( () => { pluginLinksPromise = null; } );
 		return pluginLinksPromise;
 	}
+
+	function refreshPluginLinks() {
+		if ( ! B.caps.plugins ) return;
+		// The old rows keep painting until the fresh answer lands.
+		const job = ( async () => {
+			let r = await api( 'minn-admin/v1/plugin-links' ).catch( () => null );
+			if ( r && r.stale && r.capture ) {
+				await fetch( r.capture, { credentials: 'same-origin' } ).catch( () => {} );
+				r = await api( 'minn-admin/v1/plugin-links' ).catch( () => r );
+			}
+			if ( ! r ) return state.cache.pluginLinks;
+			state.cache.pluginLinks = { links: r.links || {}, minn: r.minn || {}, names: r.names || {} };
+			if ( state.route === 'extensions' && state.extTab === 'plugins' ) renderExtensions();
+			return state.cache.pluginLinks;
+		} )();
+		return job;
+	}
+
 
 	// The doorways for one plugin card: Minn views first, then the plugin's
 	// own wp-admin screens (settings before anything else it listed).
@@ -21061,8 +21093,15 @@
 		if ( ! pl ) return { minn: [], wp: [] };
 		const dir = file.includes( '/' ) ? file.split( '/' )[ 0 ] : file;
 		const minn = ( pl.minn[ dir ] || [] ).slice();
-		const wp = ( pl.links[ dir ] || [] ).slice().sort( ( a, b ) => ( a.kind === 'settings' ? 0 : 1 ) - ( b.kind === 'settings' ? 0 : 1 ) );
+		const rank = { settings: 0, menu: 1, admin: 2, external: 3 };
+		const wp = ( pl.links[ dir ] || [] ).slice().sort( ( a, b ) => ( rank[ a.kind ] ?? 9 ) - ( rank[ b.kind ] ?? 9 ) );
 		return { minn, wp };
+	}
+
+	// The one wp-admin link a card shows: the declared Settings link, else
+	// the plugin's first admin-menu page.
+	function pluginCardWpLink( d ) {
+		return d.wp.find( ( l ) => l.kind === 'settings' ) || d.wp.find( ( l ) => l.kind === 'menu' ) || null;
 	}
 
 	// One quiet row under the author: up to three Minn chips and the
@@ -21072,9 +21111,36 @@
 		if ( ! active ) return '';
 		const d = pluginDoorways( file );
 		const minn = d.minn.slice( 0, 3 ).map( ( l, i ) => `<button type="button" class="minn-plugin-door" data-mdoor="${ esc( file ) }:${ i }">${ esc( l.label ) }</button>` );
-		const wp = d.wp.filter( ( l ) => l.kind === 'settings' ).slice( 0, 1 ).map( ( l ) => `<a class="minn-plugin-door is-wp" href="${ esc( l.href ) }" target="_blank" rel="noopener">${ esc( l.label ) } ↗</a>` );
+		const first = pluginCardWpLink( d );
+		const wp = first ? [ `<a class="minn-plugin-door is-wp" href="${ esc( first.href ) }" target="_blank" rel="noopener">${ esc( first.label ) } ↗</a>` ] : [];
 		if ( ! minn.length && ! wp.length ) return '';
 		return `<div class="minn-plugin-doors">${ minn.length ? `<span class="minn-plugin-doors-in">${ esc( __( 'In Minn' ) ) }</span>` : '' }${ minn.join( '' ) }${ wp.join( '' ) }</div>`;
+	}
+
+	// The reverse doorway: from a surface back to the plugin behind it. The
+	// topbar provider chip opens this menu (click on the plain chip,
+	// right-click on the switcher variant). Entries come from the same
+	// plugin-links cache the cards use; a surface without a `plugin` key
+	// has no menu.
+	function surfacePluginMenu( surface, x, y ) {
+		const slugs = ( Array.isArray( surface.plugin ) ? surface.plugin : [ surface.plugin ] ).filter( ( p ) => p && ! String( p ).startsWith( 'theme:' ) );
+		if ( ! slugs.length ) return;
+		loadPluginLinks().then( ( pl ) => {
+			const entries = [];
+			slugs.forEach( ( slug ) => {
+				const p = pl.names[ slug ];
+				if ( ! p ) return; // not installed, or not active
+				const d = pluginDoorways( p.file );
+				if ( slugs.length > 1 ) entries.push( { heading: p.name } );
+				d.wp.filter( ( l ) => l.kind !== 'external' ).slice( 0, 6 ).forEach( ( l ) => entries.push( { label: l.label + ' ↗', href: l.href } ) );
+				entries.push( { label: __( 'Changelog' ), run: () => openPluginChangelogFor( p.file, p.name ) } );
+				entries.push( {
+					label: __( 'Open plugin card' ),
+					run: () => { state.extTab = 'plugins'; state.extFilter = 'all'; state.extSearch = p.name; go( 'extensions' ); },
+				} );
+			} );
+			if ( entries.length ) openMinnMenu( x, y, entries );
+		} ).catch( () => {} );
 	}
 
 	function goMinnLink( l ) {
@@ -22609,10 +22675,7 @@
 					label: sprintf( __( 'Open %s in Minn' ), l.label ),
 					run: () => goMinnLink( l ),
 				} ) );
-				d.wp.slice( 0, 4 ).forEach( ( l ) => entries.push( {
-					label: l.label + ' ↗',
-					run: () => window.open( l.href, '_blank', 'noopener' ),
-				} ) );
+				d.wp.filter( ( l ) => l.kind !== 'external' ).slice( 0, 6 ).forEach( ( l ) => entries.push( { label: l.label + ' ↗', href: l.href } ) );
 			}
 			if ( ! on && ! net && B.caps.delete ) {
 				entries.push( {
@@ -42501,6 +42564,21 @@
 				run: () => go( preferredSurfaceId( s.family ) || s.id ),
 			} );
 		} );
+		// Every plugin's own screens, from the harvested links (cards' data;
+		// warmed at boot). Declared settings links first, then menu pages.
+		if ( state.cache.pluginLinks ) {
+			const names = state.cache.pluginLinks.names || {};
+			Object.entries( state.cache.pluginLinks.links ).forEach( ( [ dir, links ] ) => {
+				if ( ! names[ dir ] ) return;
+				links.filter( ( l ) => l.kind === 'settings' || l.kind === 'menu' ).slice( 0, 3 ).forEach( ( l ) => cmds.push( {
+					/* translators: 1: the plugin's name, 2: the screen's name, e.g. Settings. */
+					label: sprintf( __( '%1$s: %2$s ↗' ), names[ dir ].name, l.label ),
+					kind: 'action',
+					icon: '↗',
+					run: () => window.open( l.href, '_blank', 'noopener' ),
+				} ) );
+			} );
+		}
 		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
 			cmds.push( { label: __( 'Edit Menus' ), kind: 'nav', icon: '☰', run: () => go( 'menus' ) } );
 			if ( B.site.hasSidebars ) cmds.push( { label: __( 'Manage Widgets' ), kind: 'nav', icon: '▥', run: () => go( 'widgets' ) } );
@@ -50810,6 +50888,12 @@
 		// Admin-notice digest: when the last capture is stale, trigger a
 		// hidden wp-admin pageload that Minn short-circuits into structured
 		// notice data (never third-party HTML), then refresh notifications.
+		// Plugin doorways (cards, ⌘K, the surface chip menu): warm the cache
+		// once the page is idle; a stale record runs the hidden plugins.php
+		// capture in the background.
+		if ( B.caps.plugins ) {
+			( window.requestIdleCallback || ( ( f ) => setTimeout( f, 2500 ) ) )( () => { loadPluginLinks().catch( () => {} ); } );
+		}
 		if ( B.notices && B.notices.stale ) {
 			fetch( B.notices.url, { credentials: 'same-origin' } )
 				.then( ( r ) => ( r.ok ? r.json() : null ) )

@@ -59,12 +59,142 @@ class Minn_Admin_Plugin_Links {
 			ob_end_clean();
 		}
 		$links = self::capture();
+		// Admin-menu pages fill in what a plugin never declared as an
+		// action link; a plugin's own screen is the doorway either way.
+		foreach ( self::capture_menu_pages() as $dir => $pages ) {
+			$have = array();
+			foreach ( $links[ $dir ] ?? array() as $l ) {
+				$have[ $l['href'] ] = true;
+			}
+			foreach ( $pages as $page ) {
+				if ( isset( $have[ $page['href'] ] ) || count( $links[ $dir ] ?? array() ) >= 8 ) {
+					continue;
+				}
+				$links[ $dir ][]        = $page;
+				$have[ $page['href'] ] = true;
+			}
+		}
+		$census = self::capture_settings_api();
 		set_transient(
 			self::store_key(),
-			array( 'captured' => time(), 'hash' => self::plugin_set_hash(), 'links' => $links ),
+			array( 'captured' => time(), 'hash' => self::plugin_set_hash(), 'links' => $links, 'settings_api' => $census ),
 			2 * DAY_IN_SECONDS
 		);
 		wp_send_json( array( 'ok' => true, 'count' => count( $links ), 'captured' => time() ) );
+	}
+
+	/**
+	 * Admin-menu pages attributed to plugins. After admin_menu has run, every
+	 * top-level and submenu page is in $GLOBALS['menu'] / ['submenu']; a page
+	 * with a render callback is attributed by that callback's file
+	 * (Minn_Admin_Notices::owner_of, Reflection), the same way notices are.
+	 * Pages without a callback (post-type lists, core files) are skipped:
+	 * they belong to no plugin screen.
+	 *
+	 * @return array dir-slug => [ { label, href, kind: 'menu' } ]
+	 */
+	public static function capture_menu_pages() {
+		global $menu, $submenu, $wp_filter;
+		$out   = array();
+		$label = function ( $title ) {
+			// Menu titles carry update-count bubbles and "new" badges.
+			$t = preg_replace( '/<span\b[^>]*>.*?<\/span>/is', '', (string) $title );
+			$t = trim( preg_replace( '/\s+/u', ' ', html_entity_decode( wp_strip_all_tags( $t ), ENT_QUOTES ) ) );
+			return mb_substr( $t, 0, 40 );
+		};
+		$owner_dir = function ( $hook ) use ( $wp_filter ) {
+			if ( ! $hook || empty( $wp_filter[ $hook ] ) ) {
+				return '';
+			}
+			foreach ( $wp_filter[ $hook ]->callbacks as $prio => $cbs ) {
+				foreach ( $cbs as $cb ) {
+					$o = Minn_Admin_Notices::owner_of( $cb['function'] );
+					if ( 'plugin' === $o['type'] && $o['slug'] ) {
+						return $o['slug'];
+					}
+				}
+			}
+			return '';
+		};
+		$consider = function ( $item, $parent ) use ( &$out, $label, $owner_dir ) {
+			if ( ! is_array( $item ) || empty( $item[2] ) ) {
+				return;
+			}
+			$slug = (string) $item[2];
+			$cap  = isset( $item[1] ) ? (string) $item[1] : 'manage_options';
+			if ( ! current_user_can( $cap ) ) {
+				return; // gating, not a doorway this user has
+			}
+			$hook = get_plugin_page_hookname( $slug, $parent );
+			$dir  = $owner_dir( $hook );
+			if ( ! $dir ) {
+				return;
+			}
+			$href = menu_page_url( $slug, false );
+			if ( ! $href ) {
+				return;
+			}
+			$text = $label( $item[0] ?? '' );
+			if ( '' === $text ) {
+				return;
+			}
+			$out[ $dir ][] = array( 'label' => $text, 'href' => esc_url_raw( $href ), 'kind' => 'menu' );
+		};
+		foreach ( (array) $menu as $item ) {
+			$consider( $item, '' );
+		}
+		foreach ( (array) $submenu as $parent => $items ) {
+			foreach ( (array) $items as $item ) {
+				$consider( $item, (string) $parent );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Which plugins build their screens on the core Settings API, and how
+	 * big those screens are: every add_settings_field callback attributed
+	 * to its plugin by file. admin_init has run by in_admin_header, so the
+	 * registries are complete. This is the census behind a generic
+	 * settings surface: a plugin here can be read and written without a
+	 * bespoke adapter; a plugin absent here has its own UI.
+	 *
+	 * @return array dir-slug => { pages: [option_page], sections, fields, options }
+	 */
+	public static function capture_settings_api() {
+		global $wp_settings_fields, $wp_settings_sections, $wp_registered_settings;
+		$out = array();
+		foreach ( (array) $wp_settings_fields as $page => $sections ) {
+			foreach ( (array) $sections as $section => $fields ) {
+				foreach ( (array) $fields as $field ) {
+					if ( empty( $field['callback'] ) ) {
+						continue;
+					}
+					$o = Minn_Admin_Notices::owner_of( $field['callback'] );
+					if ( 'plugin' !== $o['type'] || ! $o['slug'] ) {
+						continue;
+					}
+					$d = $o['slug'];
+					if ( ! isset( $out[ $d ] ) ) {
+						$out[ $d ] = array( 'pages' => array(), 'sections' => array(), 'fields' => 0, 'options' => 0 );
+					}
+					$out[ $d ]['pages'][ (string) $page ]                                = true;
+					$out[ $d ]['sections'][ (string) $page . '/' . (string) $section ] = true;
+					$out[ $d ]['fields']++;
+				}
+			}
+		}
+		foreach ( $out as $d => $row ) {
+			$pages = array_keys( $row['pages'] );
+			$n     = 0;
+			foreach ( (array) $wp_registered_settings as $opt => $args ) {
+				if ( isset( $args['group'] ) && in_array( (string) $args['group'], $pages, true ) ) {
+					$n++;
+				}
+			}
+			$out[ $d ] = array( 'pages' => $pages, 'sections' => count( $row['sections'] ), 'fields' => $row['fields'], 'options' => $n );
+		}
+		return $out;
 	}
 
 	/**
@@ -150,6 +280,23 @@ class Minn_Admin_Plugin_Links {
 		return '.' === $dir ? preg_replace( '/\.php$/', '', $file ) : $dir;
 	}
 
+	/** Active plugins as dir-slug => { name, file }, so readers of the links need no plugin list. */
+	public static function active_names() {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$out = array();
+		foreach ( get_plugins() as $file => $data ) {
+			if ( is_plugin_active( $file ) || ( is_multisite() && is_plugin_active_for_network( $file ) ) ) {
+				$out[ self::dir_of( $file ) ] = array(
+					'name' => html_entity_decode( wp_strip_all_tags( (string) $data['Name'] ), ENT_QUOTES ),
+					'file' => preg_replace( '/\.php$/', '', $file ),
+				);
+			}
+		}
+		return $out;
+	}
+
 	private static function plugin_set_hash() {
 		if ( ! function_exists( 'get_plugins' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -162,12 +309,13 @@ class Minn_Admin_Plugin_Links {
 	}
 
 	private static function store_key() {
-		return 'minn_admin_plugin_links_v1_' . get_current_user_id();
+		// v2: menu pages + the Settings-API census join the stored shape.
+		return 'minn_admin_plugin_links_v2_' . get_current_user_id();
 	}
 
 	public static function stored() {
 		$data = get_transient( self::store_key() );
-		return is_array( $data ) ? $data : array( 'captured' => 0, 'hash' => '', 'links' => array() );
+		return is_array( $data ) ? $data + array( 'settings_api' => array() ) : array( 'captured' => 0, 'hash' => '', 'links' => array(), 'settings_api' => array() );
 	}
 
 	/** Stale after a day, or as soon as the installed set (or a version) changes. */

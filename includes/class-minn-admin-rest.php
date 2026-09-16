@@ -124,11 +124,13 @@ class Minn_Admin_REST {
 					$stored = Minn_Admin_Plugin_Links::stored();
 					return rest_ensure_response(
 						array(
+							'names'    => (object) Minn_Admin_Plugin_Links::active_names(),
 							'captured' => (int) $stored['captured'],
 							'stale'    => Minn_Admin_Plugin_Links::is_stale(),
 							'capture'  => Minn_Admin_Plugin_Links::capture_url(),
 							'links'    => (object) $stored['links'],
 							'minn'     => (object) Minn_Admin_Plugin_Links::minn_links(),
+							'settingsApi' => (object) $stored['settings_api'],
 						)
 					);
 				},
