@@ -9022,27 +9022,35 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
-		$res = plugins_api(
-			'plugin_information',
-			array(
-				'slug'   => $slug,
-				'fields' => array(
-					'sections'          => true,
-					'short_description' => false,
-					'description'       => false,
-					'icons'             => false,
-					'banners'           => false,
-					'reviews'           => false,
-					'ratings'           => false,
-					'downloaded'        => false,
-					'active_installs'   => false,
-					'tags'              => false,
-					'contributors'      => false,
-					'compatibility'     => false,
-					'versions'          => false,
-				),
-			)
-		);
+		// Vendor plugins_api hooks run here, and one whose own update
+		// server is unreachable can throw (an EDD updater assigning onto a
+		// false response). wp-admin's "View details" white-screens on that;
+		// this route treats it as no answer and reads the bundled file.
+		try {
+			$res = plugins_api(
+				'plugin_information',
+				array(
+					'slug'   => $slug,
+					'fields' => array(
+						'sections'          => true,
+						'short_description' => false,
+						'description'       => false,
+						'icons'             => false,
+						'banners'           => false,
+						'reviews'           => false,
+						'ratings'           => false,
+						'downloaded'        => false,
+						'active_installs'   => false,
+						'tags'              => false,
+						'contributors'      => false,
+						'compatibility'     => false,
+						'versions'          => false,
+					),
+				)
+			);
+		} catch ( \Throwable $e ) {
+			$res = new WP_Error( 'vendor_hook_failed', $e->getMessage() );
+		}
 		$fallback = $offered ? $offered : (string) $installed['Version'];
 		$html     = '';
 		if ( ! is_wp_error( $res ) ) {
@@ -9139,7 +9147,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// reply never carries one, so the network call is skipped there.
 		if ( ! $wporg ) {
 			require_once ABSPATH . 'wp-admin/includes/theme.php';
-			$res = themes_api( 'theme_information', array( 'slug' => $stylesheet, 'fields' => array( 'sections' => true ) ) );
+			try {
+				$res = themes_api( 'theme_information', array( 'slug' => $stylesheet, 'fields' => array( 'sections' => true ) ) );
+			} catch ( \Throwable $e ) {
+				$res = new WP_Error( 'vendor_hook_failed', $e->getMessage() );
+			}
 			if ( ! is_wp_error( $res ) ) {
 				$res = (object) $res;
 				if ( ! $host_is( isset( $res->download_link ) ? $res->download_link : '', 'downloads.wordpress.org' ) ) {
@@ -9180,17 +9192,33 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 		$mon  = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?';
 		$ord  = '(?:st|nd|rd|th)?';
-		$date = '(?:\d{4}-\d{2}-\d{2}|\d{4}[.\/]\d{1,2}[.\/]\d{1,2}|\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}|' . $mon . ' \d{1,2}' . $ord . ',? \d{4}|\d{1,2}' . $ord . ' ' . $mon . ',? \d{4}|' . $mon . ' \d{4})';
-		$ver  = $strict ? '\d+(?:\.\d+)+' : '\d+(?:\.\d+)*';
+		// Numeric dates need a four-digit year: "1.24.12" is a version, and
+		// a two-digit-year form would happily read it as a date.
+		$ymd  = '\d{4}[.\/-]\d{1,2}[.\/-]\d{1,2}';
+		$date = '(?:' . $ymd . '|\d{1,2}[.\/-]\d{1,2}[.\/-]\d{4}|\d{1,2}[\/-]' . $mon . '[\/-]\d{2,4}|' . $mon . ' \d{1,2}' . $ord . ',? \d{4}|\d{1,2}' . $ord . ' ' . $mon . ',? \d{4}|' . $mon . ' \d{4})';
+		// A pre-release suffix rides with the version ("1.0.0-beta6",
+		// "4.0.0-alpha-5"); it must start with a letter so a dashed date
+		// after the version is never swallowed.
+		$ver  = ( $strict ? '\d+(?:\.\d+)+' : '\d+(?:\.\d+)*' ) . '(?:-[A-Za-z][0-9A-Za-z.\-]*)?';
 		$sep  = '\s*[-–—:|,]?\s*';
 		$word = '(?:version|ver|v|release)?\.?\s*';
+		// A product name may lead a heading ("CMP 4.1.19"); one short word,
+		// and only for real headings, since in a text file "Requires
+		// WordPress 6.5" must stay prose.
+		$lead = $strict ? '' : '(?:[A-Za-z][A-Za-z0-9]{0,11}\s+)?';
 		// Version-first is tried before date-first: "2.1.53: 2026-08-13"
-		// would otherwise read 2.1.53 as a d.m.yy date. A parse whose tail
-		// starts with a digit took the wrong split and is discarded.
+		// would otherwise read 2.1.53 as a d.m.yy date. The exception is a
+		// heading that opens with a full year-first date ("2026.09.02 -
+		// version 2.7.7"), which the version pattern would swallow. A parse
+		// whose tail starts with a digit took the wrong split and is
+		// discarded.
 		$forms = array(
-			'/^' . $word . '(?<v>' . $ver . ')(?:' . $sep . '(?<d>' . $date . '))?' . $sep . '(?<tail>.*)$/iu',
-			'/^(?<d>' . $date . ')' . $sep . $word . '(?<v>' . $ver . ')' . $sep . '(?<tail>.*)$/iu',
+			'/^' . $lead . $word . '(?<v>' . $ver . ')(?:' . $sep . '(?<d>' . $date . '))?' . $sep . '(?<tail>.*)$/iu',
+			'/^(?<d>' . $date . ')' . $sep . $lead . $word . '(?<v>' . $ver . ')' . $sep . '(?<tail>.*)$/iu',
 		);
+		if ( preg_match( '/^' . $ymd . '\b/', $t ) ) {
+			$forms = array_reverse( $forms );
+		}
 		foreach ( $forms as $re ) {
 			if ( ! preg_match( $re, $t, $m ) ) {
 				continue;
@@ -9218,7 +9246,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $dir || ! is_dir( $dir ) ) {
 			return array();
 		}
-		$want  = array( 'changelog.txt', 'changelog.md', 'changes.md', 'readme.txt', 'readme.md' );
+		$want  = array( 'changelog.txt', 'changelog.md', 'change_log.txt', 'changes.md', 'changes.txt', 'changelog.html', 'release_log.html', 'readme.txt', 'readme.md' );
 		$found = array();
 		foreach ( (array) scandir( $dir ) as $entry ) {
 			$lower = strtolower( $entry );
@@ -9237,13 +9265,21 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$text = str_replace( array( "\r\n", "\r" ), "\n", $text );
 			if ( 0 === strpos( $name, 'readme' ) ) {
 				// Only the changelog section of a readme; the rest is the
-				// listing (description, installation, FAQ).
-				if ( ! preg_match( '/^\s*(?:==\s*changelog\s*==|#{1,3}\s*changelog\s*#*)\s*$(.*?)(?=^\s*(?:==\s*[^=\n]+\s*==|#{1,3}\s+[^\n]+)\s*$|\z)/imsu', $text, $m ) ) {
+				// listing (description, installation, FAQ). The section
+				// ends at the next heading of the same or a higher level:
+				// a markdown "# Changelog" owns every "## 1.2.3" under it.
+				if ( ! preg_match( '/^[ \t]*(?:(?<eq>==)\s*changelog\s*==|(?<md>#{1,3})\s*changelog\s*#*)[ \t]*$/imu', $text, $hm, PREG_OFFSET_CAPTURE ) ) {
 					continue;
 				}
-				$text = $m[1];
+				$start = $hm[0][1] + strlen( $hm[0][0] );
+				$rest  = substr( $text, $start );
+				$end   = ! empty( $hm['md'][0] )
+					? '/^[ \t]*#{1,' . strlen( $hm['md'][0] ) . '}[ \t]+\S/mu'
+					: '/^[ \t]*==\s*[^=\n]+\s*==[ \t]*$/mu';
+				$text  = preg_match( $end, $rest, $em, PREG_OFFSET_CAPTURE ) ? substr( $rest, 0, $em[0][1] ) : $rest;
 			}
-			$sections = self::changelog_sections_from_html( self::changelog_text_to_html( $text ), $fallback_version );
+			$html     = substr( $name, -5 ) === '.html' ? $text : self::changelog_text_to_html( $text );
+			$sections = self::changelog_sections_from_html( $html, $fallback_version );
 			if ( $sections ) {
 				return $sections;
 			}
@@ -9428,12 +9464,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( $cur && '' !== trim( wp_strip_all_tags( $cur['html'] ) ) ) {
 			$out[] = $cur;
 		}
-		// A heading-less lead-in (links to a Pro changelog, a note) only
-		// borrows the version when it is the whole changelog; beside real
-		// releases it is "Notes" and follows them.
+		// A heading-less lead-in (a file title, "IMPORTANT" boilerplate,
+		// links to a Pro changelog) only counts when it is the whole
+		// changelog; beside real releases it is dropped so the rail is
+		// versions only.
 		if ( count( $out ) > 1 && '' === $out[0]['version'] ) {
-			$lead = array_shift( $out );
-			$out[] = $lead;
+			array_shift( $out );
 		}
 		foreach ( $out as $i => $sec ) {
 			if ( '' === $sec['version'] ) {

@@ -43760,7 +43760,7 @@
 			// Notes read from the installed copy (a theme's changelog.txt)
 			// stop at the installed release; say so when an update is on
 			// offer instead of letting the reader hunt for its entry.
-			const plBehind = pl && pl.offered && pl.from === 'local' && secs.length && ! secs.some( ( s ) => s.version === pl.offered || s.version.replace( /^v/i, '' ) === pl.offered );
+			const plBehind = pl && pl.offered && pl.from === 'local' && secs.length && ! secs.some( ( s ) => verKey( s.version ) === verKey( pl.offered ) );
 			const plMeta = pl && pl.installed ? `<div class="minn-cl-meta">${ esc( pl.offered ? sprintf(
 				/* translators: %1$s: installed version, %2$s: version on offer. */
 				__( 'Installed %1$s · update to %2$s' ), 'v' + pl.installed, 'v' + pl.offered )
@@ -43768,7 +43768,9 @@
 				: sprintf( __( 'Installed %s' ), 'v' + pl.installed ) ) }${ plBehind ? ` · ${ esc( sprintf( /* translators: %s: the version on offer. */ __( 'notes for %s arrive with the update' ), 'v' + pl.offered ) ) }` : '' }${ pl.notice ? ` · <span class="minn-cl-notice">${ esc( pl.notice ) }</span>` : '' }</div>` : '';
 			// The rail marks the release that is running so the reader can
 			// see at a glance which entries are behind them.
-			const plRunning = ( s ) => !! ( pl && pl.installed && ( s.version === pl.installed || s.version.replace( /^v(ersion)?\s*/i, '' ).split( /\s/ )[ 0 ] === pl.installed ) );
+			// "1.0" in the file and "1.0.0" in the header are the same release.
+			const verKey = ( v ) => String( v || '' ).replace( /^v(ersion)?\s*/i, '' ).split( /\s/ )[ 0 ].replace( /(\.0)+$/, '' );
+			const plRunning = ( s ) => !! ( pl && pl.installed && verKey( s.version ) === verKey( pl.installed ) );
 			const plEmpty = pl && m.md !== null && ! secs.length ? `
 					<div class="minn-cl-empty">
 						<p>${ esc( m.error || ( pl.kind === 'theme' ? __( 'This theme does not publish a changelog WordPress can read.' ) : __( 'This plugin does not publish a changelog WordPress can read.' ) ) ) }</p>
