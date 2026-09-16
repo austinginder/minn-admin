@@ -1543,6 +1543,9 @@ class Minn_Admin {
 			'subscriptions' => class_exists( 'WooCommerce' )
 				&& class_exists( 'WC_Subscriptions' )
 				&& current_user_can( 'edit_shop_orders' ),
+			// Store settings (Commerce): WooCommerce's own gate for its
+			// Settings screens and every wc/v3 configuration route.
+			'storeSettings' => class_exists( 'WooCommerce' ) && current_user_can( 'manage_woocommerce' ),
 			'themeOptions' => current_user_can( 'edit_theme_options' ),
 			'core'         => current_user_can( 'update_core' ),
 			// Multisite-only: "Remove from this site" (per-site

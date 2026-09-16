@@ -230,6 +230,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/yith-gift-cards.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/woocommerce-gift-cards.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/pw-gift-cards.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/woocommerce-memberships.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/woocommerce-settings.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wp-migrate.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/licenses.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/perfmatters.php';

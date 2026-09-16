@@ -1185,6 +1185,7 @@
 		saving: false,
 		editor: null,
 		settingsSection: 'Site',
+		storeSection: '',
 		cache: {
 			overview: null,
 			content: null,
@@ -1234,6 +1235,7 @@
 		products: [ __( 'Products' ), 'WooCommerce' ],
 		product: [ __( 'Product' ), 'WooCommerce' ],
 		coupons: [ __( 'Coupons' ), 'WooCommerce' ],
+		'store-settings': [ __( 'Store settings' ), 'WooCommerce' ],
 		customers: [ __( 'Customers' ), 'WooCommerce' ],
 		users: [ __( 'Users' ), __( 'People' ) ],
 		useredit: [ __( 'Edit user' ), __( 'People' ) ],
@@ -3096,6 +3098,11 @@
 			// /memberships/57 — a WooCommerce Memberships record on its own page.
 			state.memberPageId = parseInt( parts[ 1 ], 10 );
 			state.route = 'membership';
+		} else if ( route === 'store-settings' ) {
+			// /store-settings/products:inventory — one WooCommerce settings
+			// section; the bare route lands on the first one.
+			state.storeSection = parts[ 1 ] ? decodeURIComponent( parts[ 1 ] ) : '';
+			state.route = 'store-settings';
 		} else if ( route === 'products' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /products/482 — the product detail page.
 			state.productPageId = parseInt( parts[ 1 ], 10 );
@@ -3329,6 +3336,11 @@
 			extras.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
 		);
 		extras.sort( ( x, y ) => x.label.localeCompare( y.label ) );
+		// Store settings closes the group on every site (the Extensions-in-
+		// Manage convention): configuration reads last, after operations.
+		if ( B.wc && B.caps.storeSettings ) {
+			extras.push( { id: 'store-settings', label: __( 'Store settings' ), icon: 'gear' } );
+		}
 		return filterHiddenNavItems( navItems.concat( extras ) );
 	}
 
@@ -4240,6 +4252,9 @@
 			}
 		} else if ( state.route === 'settings' ) {
 			subEl.textContent = chromeLabel( state.settingsSection || '' );
+		} else if ( state.route === 'store-settings' ) {
+			const sec = storeSection();
+			subEl.textContent = sec ? storeSectionTitle( sec ) : 'WooCommerce';
 		} else if ( state.route === 'content' ) {
 			subEl.textContent = contentTopbarSub();
 		} else if ( state.route === 'users' ) {
@@ -13884,8 +13899,12 @@
 		if ( ! B.wc || ! B.caps.coupons ) {
 			view.innerHTML = `<div class="minn-card minn-empty">
 				${ esc( __( 'Coupons are turned off in WooCommerce (Settings → General → Enable coupons), or you do not have permission to manage them.' ) ) }
-				${ B.site && B.site.adminUrl ? ` <a href="${ esc( B.site.adminUrl ) }admin.php?page=wc-settings" target="_blank" rel="noopener">${ esc( __( 'Open WooCommerce settings ↗' ) ) }</a>` : '' }
+				${ B.caps.storeSettings
+					? ` <button type="button" class="minn-link-btn" id="minn-coupons-store">${ esc( __( 'Open Store settings' ) ) }</button>`
+					: ( B.site && B.site.adminUrl ? ` <a href="${ esc( B.site.adminUrl ) }admin.php?page=wc-settings" target="_blank" rel="noopener">${ esc( __( 'Open WooCommerce settings ↗' ) ) }</a>` : '' ) }
 			</div>`;
+			const storeBtn = $( '#minn-coupons-store', view );
+			if ( storeBtn ) storeBtn.addEventListener( 'click', () => go( 'store-settings/general' ) );
 			return;
 		}
 		const c = state.cache.coupons;
@@ -17686,63 +17705,15 @@
 	 * keys ride the save — that is what keeps vendor masked-secret
 	 * sentinels honest (an untouched masked value never travels back), and
 	 * a refused save keeps the form as typed (the Custom CSS lesson). */
-	function renderSurfaceSettings( s, view ) {
-		const ss = surfaceState( s.id );
-		const cfg = s.settings;
-		// Item-scoped settings only render FOR an item; a stale entry (deep
-		// link, descriptor change) falls back to the item's home list.
-		const itemScoped = settingsItemScoped( s );
-		if ( itemScoped && ! ss.settingsItem ) {
-			ss.view = s.manage ? 'manage' : 'main';
-			renderSurface( s );
-			return;
-		}
-		// A tab may carry its OWN route, which is what lets one settings
-		// surface host tabs belonging to several sources (Site Options holds
-		// every options page on the site). Without one it uses the surface's.
-		const routeFor = ( t ) => {
-			const own = ( cfg.tabs || [] ).find( ( x ) => x.id === t );
-			return ( own && own.route ? own.route : cfg.route ).replace( '{tab}', t )
-				.replace( '{id}', itemScoped ? encodeURIComponent( ss.settingsItem.id ) : '' );
-		};
-		if ( ! ss.settingsTab || ! cfg.tabs.some( ( t ) => t.id === ss.settingsTab ) ) ss.settingsTab = cfg.tabs[ 0 ].id;
-		ss.settingsCache = ss.settingsCache || {};
-		const tab = ss.settingsTab;
-		const cacheKey = itemScoped ? ss.settingsItem.id + ':' + tab : tab;
-		const data = ss.settingsCache[ cacheKey ];
-		const setSwitch = surfaceViewSwitchHtml( s, ss );
-		// Second pill row under the view switcher goes quiet (list-renderer rule).
-		const setTabsHtml = cfg.tabs.length > 1 ? `
-			<div class="minn-tabs${ setSwitch ? ' minn-quiet-tabs' : '' }">
-				${ cfg.tabs.map( ( t ) => `<button class="minn-tab${ tab === t.id ? ' active' : '' }" data-ssettab="${ esc( t.id ) }">${ esc( t.label ) }</button>` ).join( '' ) }
-			</div>` : '';
-		const setMetaHtml = itemScoped ? `<div class="minn-toolbar-meta">${ esc( ss.settingsItem.label || '' ) } · ${ esc( cfg.label || 'Settings' ) }</div>` : '';
-		// Same two-row split as the list renderer: views on top, this view's
-		// own tabs (and the item label) underneath.
-		const head = setSwitch && ( setTabsHtml || setMetaHtml )
-			? `<div class="minn-toolbar minn-toolbar-views">${ setSwitch }</div>
-			   <div class="minn-toolbar">${ setTabsHtml }${ setMetaHtml }</div>`
-			: `<div class="minn-toolbar">${ setSwitch }${ setTabsHtml }${ setMetaHtml }</div>`;
-		const bindChrome = () => {
-			bindSurfaceViewSwitch( s, ss, view );
-			$$( '[data-ssettab]', view ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					ss.settingsTab = btn.dataset.ssettab;
-					renderSurface( s );
-				} )
-			);
-		};
-		if ( ! data ) {
-			view.innerHTML = head + `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
-			bindChrome();
-			api( routeFor( tab ) )
-				.then( ( r ) => {
-					ss.settingsCache[ cacheKey ] = r || { groups: [] };
-					if ( state.route === s.id ) renderSurface( s );
-				} )
-				.catch( showErr );
-			return;
-		}
+	/* ===== Settings form engine =====
+	 * One renderer + binder behind every schema-driven settings view: surface
+	 * settings tabs, Site Options pages, the Store settings page and any
+	 * modal-hosted form. `data` is the settings contract ({ groups, values,
+	 * adminUrl }); the host owns its chrome (tabs, titles) and the save
+	 * request, the engine owns the fields, dirty tracking, dependent rows and
+	 * the only-edited-keys payload. */
+
+	function settingsFormHtml( data ) {
 		const values = data.values || {};
 		const fields = [];
 		const groupHtml = ( data.groups || [] ).map( ( g ) => {
@@ -17765,18 +17736,26 @@
 					${ nf.help ? `<div class="minn-toggle-desc">${ esc( nf.help ) }</div>` : '' }
 				</div>`;
 			} ).join( '' );
+			// A group may carry a description (WooCommerce's section intros);
+			// it reads under the title, above the fields.
 			return `${ g.title ? `<div class="minn-fields-sub">${ esc( g.title ) }</div>` : '' }
+				${ g.desc ? `<div class="minn-fields-note">${ esc( g.desc ) }</div>` : '' }
 				<div class="minn-fields">${ rows }</div>
 				${ g.locked ? `<div class="minn-panel-locked">${ sprintf( /* translators: %s: how many settings are hidden here. */ _n( '%s advanced setting', '%s advanced settings', g.locked ), g.locked ) }${ ( g.lockedLabels || [] ).length ? ` (${ g.lockedLabels.map( esc ).join( ', ' ) })` : '' } — ${ data.adminUrl ? `<a href="${ esc( data.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'edit in wp-admin ↗' ) ) }</a>` : esc( __( 'edit in wp-admin' ) ) }</div>` : '' }`;
 		} ).join( '<div class="minn-divider"></div>' );
-
-		view.innerHTML = head + `
-		<div class="minn-card minn-surface-settings">
+		const html = `
 			${ groupHtml || `<div class="minn-empty">${ esc( __( 'Nothing to configure here.' ) ) }</div>` }
-			${ ( data.groups || [] ).length ? `<div><button class="minn-btn-primary" id="minn-sset-save">${ esc( __( 'Save changes' ) ) }</button></div>` : '' }
-		</div>`;
-		bindChrome();
+			${ ( data.groups || [] ).length ? `<div><button class="minn-btn-primary" id="minn-sset-save">${ esc( __( 'Save changes' ) ) }</button></div>` : '' }`;
+		return { html, fields };
+	}
 
+	/**
+	 * Arm a rendered settings form. `save( payload )` receives only the
+	 * edited keys and is expected to repaint on success; a thrown error
+	 * toasts and re-enables the button so the typed values survive.
+	 */
+	function bindSettingsForm( host, data, fields, save ) {
+		const values = data.values || {};
 		const dirty = {};
 		// Row visibility follows the controlling fields LIVE, reading current
 		// control values, not saved ones. Two dialects: showWhen ({ key,
@@ -17786,10 +17765,10 @@
 			const hasWhen = f.showWhen && f.showWhen.key;
 			const hasCond = Array.isArray( f.cond ) && f.cond.length;
 			if ( ! hasWhen && ! hasCond ) return;
-			const row = view.querySelector( `[data-srow="${ f.key }"]` );
+			const row = host.querySelector( `[data-srow="${ f.key }"]` );
 			if ( ! row ) return;
 			const depVal = ( key ) => {
-				const dep = view.querySelector( `[data-sset="${ key }"]` );
+				const dep = host.querySelector( `[data-sset="${ key }"]` );
 				return dep ? formControlValue( dep ) : values[ key ];
 			};
 			let show = true;
@@ -17801,11 +17780,11 @@
 		// Combobox fields (declared, or selects upgraded by comboUpgrade)
 		// bind after render through the shared arm-er; real picks feed the
 		// same dirty tracking via the dataset.acValue observer.
-		bindFormComboboxes( view, 'data-sset', fields, ( key ) => {
+		bindFormComboboxes( host, 'data-sset', fields, ( key ) => {
 			dirty[ key ] = true;
 			applyDeps();
 		} );
-		$$( '[data-sset]', view ).forEach( ( input ) => {
+		$$( '[data-sset]', host ).forEach( ( input ) => {
 			const mark = () => {
 				dirty[ input.dataset.sset ] = true;
 				applyDeps();
@@ -17890,10 +17869,10 @@
 				input.addEventListener( 'input', mark );
 			}
 		} );
-		const saveBtn = $( '#minn-sset-save', view );
+		const saveBtn = $( '#minn-sset-save', host );
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 			const payload = {};
-			$$( '[data-sset]', view ).forEach( ( input ) => {
+			$$( '[data-sset]', host ).forEach( ( input ) => {
 				if ( dirty[ input.dataset.sset ] ) payload[ input.dataset.sset ] = formControlValue( input );
 			} );
 			if ( ! Object.keys( payload ).length ) {
@@ -17902,14 +17881,81 @@
 			}
 			saveBtn.disabled = true;
 			try {
-				const r = await api( routeFor( tab ), { method: 'POST', body: JSON.stringify( { values: payload } ) } );
-				ss.settingsCache[ cacheKey ] = r || { groups: [] };
-				toast( __( 'Settings saved' ) );
-				renderSurface( s );
+				await save( payload );
 			} catch ( e ) {
 				toast( e.message, true );
 				saveBtn.disabled = false;
 			}
+		} );
+		return { isDirty: () => Object.keys( dirty ).length > 0 };
+	}
+
+	function renderSurfaceSettings( s, view ) {
+		const ss = surfaceState( s.id );
+		const cfg = s.settings;
+		// Item-scoped settings only render FOR an item; a stale entry (deep
+		// link, descriptor change) falls back to the item's home list.
+		const itemScoped = settingsItemScoped( s );
+		if ( itemScoped && ! ss.settingsItem ) {
+			ss.view = s.manage ? 'manage' : 'main';
+			renderSurface( s );
+			return;
+		}
+		// A tab may carry its OWN route, which is what lets one settings
+		// surface host tabs belonging to several sources (Site Options holds
+		// every options page on the site). Without one it uses the surface's.
+		const routeFor = ( t ) => {
+			const own = ( cfg.tabs || [] ).find( ( x ) => x.id === t );
+			return ( own && own.route ? own.route : cfg.route ).replace( '{tab}', t )
+				.replace( '{id}', itemScoped ? encodeURIComponent( ss.settingsItem.id ) : '' );
+		};
+		if ( ! ss.settingsTab || ! cfg.tabs.some( ( t ) => t.id === ss.settingsTab ) ) ss.settingsTab = cfg.tabs[ 0 ].id;
+		ss.settingsCache = ss.settingsCache || {};
+		const tab = ss.settingsTab;
+		const cacheKey = itemScoped ? ss.settingsItem.id + ':' + tab : tab;
+		const data = ss.settingsCache[ cacheKey ];
+		const setSwitch = surfaceViewSwitchHtml( s, ss );
+		// Second pill row under the view switcher goes quiet (list-renderer rule).
+		const setTabsHtml = cfg.tabs.length > 1 ? `
+			<div class="minn-tabs${ setSwitch ? ' minn-quiet-tabs' : '' }">
+				${ cfg.tabs.map( ( t ) => `<button class="minn-tab${ tab === t.id ? ' active' : '' }" data-ssettab="${ esc( t.id ) }">${ esc( t.label ) }</button>` ).join( '' ) }
+			</div>` : '';
+		const setMetaHtml = itemScoped ? `<div class="minn-toolbar-meta">${ esc( ss.settingsItem.label || '' ) } · ${ esc( cfg.label || 'Settings' ) }</div>` : '';
+		// Same two-row split as the list renderer: views on top, this view's
+		// own tabs (and the item label) underneath.
+		const head = setSwitch && ( setTabsHtml || setMetaHtml )
+			? `<div class="minn-toolbar minn-toolbar-views">${ setSwitch }</div>
+			   <div class="minn-toolbar">${ setTabsHtml }${ setMetaHtml }</div>`
+			: `<div class="minn-toolbar">${ setSwitch }${ setTabsHtml }${ setMetaHtml }</div>`;
+		const bindChrome = () => {
+			bindSurfaceViewSwitch( s, ss, view );
+			$$( '[data-ssettab]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					ss.settingsTab = btn.dataset.ssettab;
+					renderSurface( s );
+				} )
+			);
+		};
+		if ( ! data ) {
+			view.innerHTML = head + `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+			bindChrome();
+			api( routeFor( tab ) )
+				.then( ( r ) => {
+					ss.settingsCache[ cacheKey ] = r || { groups: [] };
+					if ( state.route === s.id ) renderSurface( s );
+				} )
+				.catch( showErr );
+			return;
+		}
+		const form = settingsFormHtml( data );
+		view.innerHTML = head + `
+		<div class="minn-card minn-surface-settings">${ form.html }</div>`;
+		bindChrome();
+		bindSettingsForm( view, data, form.fields, async ( payload ) => {
+			const r = await api( routeFor( tab ), { method: 'POST', body: JSON.stringify( { values: payload } ) } );
+			ss.settingsCache[ cacheKey ] = r || { groups: [] };
+			toast( __( 'Settings saved' ) );
+			renderSurface( s );
 		} );
 	}
 
@@ -25145,6 +25191,244 @@
 				</div>
 			</div>
 		</div>`;
+	}
+
+	/* ===== Store settings (WooCommerce) ===== */
+	// Every WooCommerce → Settings page, drawn from WooCommerce's own registry
+	// (minn-admin/v1/wc/settings) through the shared settings form engine,
+	// plus the email notifications list. Payments, shipping zones and tax
+	// rates arrive as their own sections in later phases; until then the
+	// locked counts link to their wp-admin screens.
+
+	async function loadStoreSettings() {
+		const r = await api( 'minn-admin/v1/wc/settings' );
+		state.cache.store = { sections: r.sections || [], adminUrl: r.adminUrl || '', data: {}, emails: null };
+	}
+
+	// The active section, or the first one when the URL names none (or one
+	// the registry no longer has).
+	function storeSection() {
+		const c = state.cache.store;
+		if ( ! c ) return null;
+		return c.sections.find( ( x ) => x.id === state.storeSection ) || c.sections[ 0 ] || null;
+	}
+
+	// "Products · Inventory" for a page with several sections, the page's
+	// own name otherwise.
+	function storeSectionTitle( sec ) {
+		const c = state.cache.store;
+		const siblings = c ? c.sections.filter( ( x ) => x.page === sec.page ) : [];
+		return siblings.length > 1 && sec.label !== sec.pageLabel ? `${ sec.pageLabel } · ${ sec.label }` : sec.pageLabel;
+	}
+
+	function storeSectionRoute( sec ) {
+		return `minn-admin/v1/wc/settings/${ encodeURIComponent( sec.page ) }/${ encodeURIComponent( sec.section || 'default' ) }`;
+	}
+
+	function renderStoreSettings() {
+		const view = $( '#minn-view' );
+		if ( ! B.wc || ! B.caps.storeSettings ) {
+			view.innerHTML = `<div class="minn-card minn-empty">${ esc( __( 'Store settings need WooCommerce and permission to manage it.' ) ) }</div>`;
+			return;
+		}
+		const c = state.cache.store;
+		if ( ! c ) {
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading store settings…' ) ) }</div>`;
+			loadStoreSettings().then( renderIfCurrent( 'store-settings' ) ).catch( showErr );
+			return;
+		}
+		const sec = storeSection();
+		if ( ! sec ) {
+			view.innerHTML = `<div class="minn-card minn-empty">${ esc( __( 'WooCommerce registered no settings pages.' ) ) }</div>`;
+			return;
+		}
+		if ( state.storeSection !== sec.id ) {
+			state.storeSection = sec.id;
+			setPath( 'store-settings/' + encodeURIComponent( sec.id ), true );
+			renderTopbar();
+		}
+		// Sidebar: one item per page; a page with several sections gets a
+		// heading and one item per section, in WooCommerce's own order.
+		const pages = [];
+		c.sections.forEach( ( x ) => {
+			let pg = pages.find( ( p ) => p.page === x.page );
+			if ( ! pg ) {
+				pg = { page: x.page, label: x.pageLabel, items: [] };
+				pages.push( pg );
+			}
+			pg.items.push( x );
+		} );
+		const navHtml = pages.map( ( pg ) => {
+			if ( pg.items.length === 1 ) {
+				const x = pg.items[ 0 ];
+				return `<button class="minn-settings-nav-item${ x.id === sec.id ? ' active' : '' }" data-storesec="${ esc( x.id ) }">${ esc( pg.label ) }</button>`;
+			}
+			return `<div class="minn-settings-nav-group">${ esc( pg.label ) }</div>` + pg.items.map( ( x ) =>
+				`<button class="minn-settings-nav-item minn-settings-nav-sub${ x.id === sec.id ? ' active' : '' }" data-storesec="${ esc( x.id ) }" data-pg="${ esc( pg.label ) }">${ esc( x.label ) }</button>` ).join( '' );
+		} ).join( '' );
+		const data = c.data[ sec.id ];
+		const form = data ? settingsFormHtml( data ) : null;
+		const isEmails = sec.page === 'email' && ! sec.section;
+		view.innerHTML = `
+		<div class="minn-settings minn-store-settings">
+			<div class="minn-settings-nav">${ navHtml }</div>
+			<div class="minn-settings-body">
+				<div>
+					<div class="minn-settings-title">${ esc( storeSectionTitle( sec ) ) }</div>
+					<div class="minn-settings-sub">${ esc( __( 'Saved through WooCommerce’s own settings pipeline, so every extension that listens for a save still hears it.' ) ) }</div>
+				</div>
+				${ isEmails ? '<div id="minn-store-emails"></div>' : '' }
+				<div id="minn-store-form">${ form ? form.html : `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` }</div>
+			</div>
+		</div>`;
+		$$( '[data-storesec]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.storeSection = btn.dataset.storesec;
+				setPath( 'store-settings/' + encodeURIComponent( state.storeSection ) );
+				renderTopbar();
+				renderStoreSettings();
+			} )
+		);
+		if ( isEmails ) renderStoreEmails( $( '#minn-store-emails', view ) );
+		if ( ! data ) {
+			api( storeSectionRoute( sec ) )
+				.then( ( r ) => {
+					c.data[ sec.id ] = r || { groups: [] };
+					if ( state.route === 'store-settings' && storeSection() === sec ) renderStoreSettings();
+				} )
+				.catch( showErr );
+			return;
+		}
+		bindSettingsForm( $( '#minn-store-form', view ), data, form.fields, async ( payload ) => {
+			const r = await api( storeSectionRoute( sec ), { method: 'POST', body: JSON.stringify( { values: payload } ) } );
+			c.data[ sec.id ] = r || { groups: [] };
+			// A page's save can touch other sections (Advanced's page-collision
+			// rule clears a sibling pick), so siblings refetch on next open.
+			Object.keys( c.data ).forEach( ( k ) => { if ( k !== sec.id ) delete c.data[ k ]; } );
+			if ( r && Array.isArray( r.errors ) && r.errors.length ) {
+				toast( r.errors.join( ' ' ), true );
+			} else {
+				toast( __( 'Settings saved' ) );
+			}
+			storeSettingsAfterSave( payload );
+			if ( state.route === 'store-settings' && storeSection() === sec ) renderStoreSettings();
+		} );
+	}
+
+	// Settings the shell paints from the boot payload: the coupons switch
+	// shows or hides a Commerce item, the currency prints on every total.
+	function storeSettingsAfterSave( payload ) {
+		let navChanged = false;
+		if ( Object.prototype.hasOwnProperty.call( payload, 'woocommerce_enable_coupons' ) ) {
+			B.caps.coupons = !! payload.woocommerce_enable_coupons;
+			state.cache.coupons = null;
+			navChanged = true;
+		}
+		if ( navChanged ) renderNavWorkspace();
+	}
+
+	/* --- Emails: one row per WC_Email, switch in place, Edit → its fields --- */
+
+	async function renderStoreEmails( host ) {
+		if ( ! host ) return;
+		const c = state.cache.store;
+		if ( ! c.emails ) {
+			host.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading emails…' ) ) }</div>`;
+			try {
+				c.emails = ( await api( 'minn-admin/v1/wc/emails' ) ).emails || [];
+			} catch ( e ) {
+				host.innerHTML = '';
+				return;
+			}
+			if ( ! host.isConnected ) return;
+		}
+		const rows = c.emails;
+		host.innerHTML = `
+			<div class="minn-fields-sub">${ esc( __( 'Email notifications' ) ) }</div>
+			<div class="minn-fields-note">${ esc( __( 'Which emails WooCommerce sends, and to whom. Open one to change its subject, heading, recipient or content.' ) ) }</div>
+			<div class="minn-store-emails">
+				${ rows.map( ( r ) => `
+				<div class="minn-store-email${ r.enabled || r.manual ? '' : ' off' }" data-email="${ esc( r.id ) }">
+					<div class="minn-store-email-main">
+						<div class="minn-store-email-title">${ esc( r.title ) }${ r.manual ? ` <span class="minn-lic-cat">${ esc( __( 'Manual' ) ) }</span>` : '' }</div>
+						${ r.description ? `<div class="minn-toggle-desc">${ esc( r.description ) }</div>` : '' }
+					</div>
+					<div class="minn-store-email-to">${ esc( r.recipient || '' ) }</div>
+					${ r.manual ? '<span class="minn-store-email-gap"></span>' : `<button type="button" class="minn-switch${ r.enabled ? ' on' : '' }" role="switch" aria-checked="${ r.enabled ? 'true' : 'false' }" data-emailtog="${ esc( r.id ) }" aria-label="${ esc( r.title ) }"><span class="minn-switch-knob"></span></button>` }
+					<button type="button" class="minn-btn-soft" data-emailedit="${ esc( r.id ) }">${ esc( __( 'Edit' ) ) }</button>
+				</div>` ).join( '' ) }
+			</div>
+			<div class="minn-divider"></div>`;
+		$$( '[data-emailtog]', host ).forEach( ( sw ) =>
+			sw.addEventListener( 'click', async () => {
+				const on = ! sw.classList.contains( 'on' );
+				sw.classList.toggle( 'on', on );
+				sw.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				sw.disabled = true;
+				try {
+					await api( `minn-admin/v1/wc/emails/${ encodeURIComponent( sw.dataset.emailtog ) }`, { method: 'POST', body: JSON.stringify( { values: { enabled: on } } ) } );
+					const row = rows.find( ( x ) => x.id === sw.dataset.emailtog );
+					if ( row ) row.enabled = on;
+					sw.closest( '.minn-store-email' ).classList.toggle( 'off', ! on );
+					toast( on ? __( 'Email turned on' ) : __( 'Email turned off' ) );
+				} catch ( e ) {
+					sw.classList.toggle( 'on', ! on );
+					sw.setAttribute( 'aria-checked', on ? 'false' : 'true' );
+					toast( e.message, true );
+				}
+				sw.disabled = false;
+			} )
+		);
+		$$( '[data-emailedit]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => openStoreEmailModal( btn.dataset.emailedit ) )
+		);
+	}
+
+	function openStoreEmailModal( id ) {
+		const row = ( ( state.cache.store && state.cache.store.emails ) || [] ).find( ( x ) => x.id === id );
+		state.modal = { type: 'store-email', id, title: row ? row.title : id, data: null, form: null };
+		renderOverlays();
+		api( `minn-admin/v1/wc/emails/${ encodeURIComponent( id ) }` )
+			.then( ( r ) => {
+				const m = state.modal;
+				if ( ! m || m.type !== 'store-email' || m.id !== id ) return;
+				m.data = r || { groups: [] };
+				renderOverlays();
+			} )
+			.catch( ( e ) => {
+				toast( e.message, true );
+				closeModal();
+			} );
+	}
+
+	function renderStoreEmailModal( m ) {
+		m.form = m.data ? settingsFormHtml( m.data ) : null;
+		return `
+		<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal wide minn-store-email-modal">
+				<div class="minn-modal-head">
+					<div class="minn-modal-title">${ esc( m.title ) } <span class="minn-panel-sub">${ esc( __( 'Email' ) ) }</span></div>
+					<button class="minn-x-btn" id="minn-modal-close" type="button">×</button>
+				</div>
+				<div class="minn-modal-scroll minn-surface-settings" id="minn-store-email-form">
+					${ m.form ? m.form.html : `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` }
+				</div>
+			</div>
+		</div>`;
+	}
+
+	function bindStoreEmailModal( m ) {
+		const host = $( '#minn-store-email-form' );
+		if ( ! host || ! m.data || ! m.form ) return;
+		bindSettingsForm( host, m.data, m.form.fields, async ( payload ) => {
+			const r = await api( `minn-admin/v1/wc/emails/${ encodeURIComponent( m.id ) }`, { method: 'POST', body: JSON.stringify( { values: payload } ) } );
+			m.data = r || m.data;
+			toast( __( 'Email saved' ) );
+			// The list row may have changed (enabled, recipient): refetch it.
+			if ( state.cache.store ) state.cache.store.emails = null;
+			closeModal();
+			if ( state.route === 'store-settings' ) renderStoreSettings();
+		} );
 	}
 
 	/* ===== Settings ===== */
@@ -41067,6 +41351,7 @@
 		if ( B.wcs && B.caps.subscriptions ) cmds.push( { label: __( 'View Subscriptions' ), kind: 'nav', icon: '↻', run: () => go( 'subscriptions' ) } );
 		if ( B.wc && B.caps.products ) cmds.push( { label: __( 'View Products' ), kind: 'nav', icon: '🏷', run: () => go( 'products' ) } );
 		if ( B.wc && B.caps.coupons ) cmds.push( { label: __( 'View Coupons' ), kind: 'nav', icon: '🔑', run: () => go( 'coupons' ) } );
+		if ( B.wc && B.caps.storeSettings ) cmds.push( { label: __( 'Open Store settings' ), kind: 'nav', icon: '⚙', run: () => go( 'store-settings' ) } );
 		if ( B.wc && B.caps.customers ) cmds.push( { label: __( 'View Customers' ), kind: 'nav', icon: '◉', run: () => go( 'customers' ) } );
 		if ( B.caps.users ) cmds.push( { label: __( 'Browse Users' ), kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
 		if ( B.spamUsers && B.caps.users ) cmds.push( {
@@ -42364,6 +42649,9 @@
 		}
 		if ( m.type === 'styles-paste' ) {
 			return renderStylesPasteModal( m );
+		}
+		if ( m.type === 'store-email' ) {
+			return renderStoreEmailModal( m );
 		}
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
@@ -44024,6 +44312,9 @@
 			$$( '[data-gsrestore]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => restoreStylesRevision( m, parseInt( btn.dataset.gsrestore, 10 ) ) )
 			);
+		}
+		if ( m.type === 'store-email' ) {
+			bindStoreEmailModal( m );
 		}
 		if ( m.type === 'styles-paste' ) {
 			const apply = $( '#minn-paste-look-apply' );
@@ -47995,6 +48286,7 @@
 			case 'extensions': renderExtensions(); break;
 			case 'posttypes': renderStructure(); break;
 			case 'settings': renderSettings(); break;
+			case 'store-settings': renderStoreSettings(); break;
 			case 'stats': renderStats(); break;
 			case 'system': renderSystem(); break;
 			case 'database': renderDatabase(); break;
