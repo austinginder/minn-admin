@@ -522,7 +522,22 @@ function minn_admin_wc_settings_sections() {
 			continue;
 		}
 		foreach ( $sections as $sid => $slabel ) {
-			$sid    = (string) $sid;
+			$sid = (string) $sid;
+			// Shipping zones and classes are tables, not field arrays: Minn
+			// draws them itself, at the positions WooCommerce gives them.
+			if ( 'shipping' === $page_id && in_array( $sid, array( '', 'classes' ), true ) ) {
+				$out[] = array(
+					'id'        => 'shipping' . ( '' !== $sid ? ':' . $sid : '' ),
+					'page'      => 'shipping',
+					'section'   => $sid,
+					'kind'      => '' === $sid ? 'shipping-zones' : 'shipping-classes',
+					'label'     => minn_admin_wc_settings_text( is_string( $slabel ) ? $slabel : $page_label ),
+					'pageLabel' => $page_label,
+					'count'     => 0,
+					'locked'    => 0,
+				);
+				continue;
+			}
 			$schema = minn_admin_wc_settings_schema( $page, $sid );
 			$count  = 0;
 			$locked = 0;
@@ -864,7 +879,9 @@ function minn_admin_wc_settings_gateway( $id ) {
  * @param string          $adminUrl Escape link.
  * @return array { groups, values, adminUrl }
  */
-function minn_admin_wc_settings_api_schema( $obj, $admin_url ) {
+function minn_admin_wc_settings_api_schema( $obj, $admin_url, $fields = null, $read = null ) {
+	$fields = null === $fields ? (array) $obj->get_form_fields() : (array) $fields;
+	$read   = null === $read ? array( $obj, 'get_option' ) : $read;
 	$values = array();
 	$groups = array();
 	$group  = array( 'title' => '', 'fields' => array(), 'locked' => 0, 'lockedLabels' => array() );
@@ -877,7 +894,7 @@ function minn_admin_wc_settings_api_schema( $obj, $admin_url ) {
 		}
 		$group = array( 'title' => '', 'fields' => array(), 'locked' => 0, 'lockedLabels' => array() );
 	};
-	foreach ( (array) $obj->get_form_fields() as $key => $f ) {
+	foreach ( $fields as $key => $f ) {
 		if ( ! is_array( $f ) ) {
 			continue;
 		}
@@ -898,7 +915,7 @@ function minn_admin_wc_settings_api_schema( $obj, $admin_url ) {
 		if ( ! isset( $wf['desc_tip'] ) ) {
 			$wf['desc_tip'] = true;
 		}
-		$wf['value'] = $obj->get_option( $key, isset( $f['default'] ) ? $f['default'] : '' );
+		$wf['value'] = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
 		unset( $wf['is_option'] );
 		$mapped = minn_admin_wc_settings_map_field( $wf, $values );
 		if ( null === $mapped ) {
@@ -929,9 +946,11 @@ function minn_admin_wc_settings_api_schema( $obj, $admin_url ) {
  * @param array           $edited Edited values keyed by field key.
  * @return array Slashed post data.
  */
-function minn_admin_wc_settings_api_post_data( $obj, $edited ) {
-	$post = array();
-	foreach ( (array) $obj->get_form_fields() as $key => $f ) {
+function minn_admin_wc_settings_api_post_data( $obj, $edited, $fields = null, $read = null ) {
+	$fields = null === $fields ? (array) $obj->get_form_fields() : (array) $fields;
+	$read   = null === $read ? array( $obj, 'get_option' ) : $read;
+	$post   = array();
+	foreach ( $fields as $key => $f ) {
 		if ( ! is_array( $f ) ) {
 			continue;
 		}
@@ -942,13 +961,264 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited ) {
 		$wf          = $f;
 		$wf['id']    = (string) $key;
 		$wf['type']  = $type;
-		$wf['value'] = $obj->get_option( $key, isset( $f['default'] ) ? $f['default'] : '' );
+		$wf['value'] = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
 		$one         = minn_admin_wc_settings_post_data( array( $wf ), $edited );
 		foreach ( $one as $k => $v ) {
 			$post[ $obj->get_field_key( $k ) ] = $v;
 		}
 	}
 	return wp_slash( $post );
+}
+
+/* ===== Shipping zones, methods and classes ===== */
+
+/**
+ * A zone location as the client shows it: type, code and a human label
+ * (the same catalogs WooCommerce's own zone screen resolves through).
+ *
+ * @param string $type Location type.
+ * @param string $code Code (state codes are CC:ST).
+ * @return array { type, code, label }
+ */
+function minn_admin_wc_shipping_location_label( $type, $code ) {
+	$countries = WC()->countries;
+	$label     = (string) $code;
+	if ( 'continent' === $type ) {
+		$c     = $countries->get_continents();
+		$label = isset( $c[ $code ]['name'] ) ? $c[ $code ]['name'] : $code;
+	} elseif ( 'country' === $type ) {
+		$c     = $countries->get_countries();
+		$label = isset( $c[ $code ] ) ? $c[ $code ] : $code;
+	} elseif ( 'state' === $type ) {
+		$parts = explode( ':', (string) $code );
+		$c     = $countries->get_countries();
+		$st    = count( $parts ) === 2 ? $countries->get_states( $parts[0] ) : array();
+		$label = ( isset( $st[ $parts[1] ] ) ? $st[ $parts[1] ] : $code ) . ', ' . ( isset( $c[ $parts[0] ] ) ? $c[ $parts[0] ] : $parts[0] );
+	}
+	return array(
+		'type'  => $type,
+		'code'  => (string) $code,
+		'label' => html_entity_decode( $label, ENT_QUOTES, 'UTF-8' ),
+	);
+}
+
+/**
+ * One shipping method instance as a row.
+ *
+ * @param WC_Shipping_Method $method Instance-bound method.
+ * @return array
+ */
+function minn_admin_wc_shipping_method_row( $method ) {
+	$editable = 0;
+	try {
+		foreach ( (array) $method->get_instance_form_fields() as $f ) {
+			if ( is_array( $f ) && 'title' !== ( isset( $f['type'] ) ? $f['type'] : 'text' ) ) {
+				$editable++;
+			}
+		}
+	} catch ( Throwable $e ) {
+		$editable = 0;
+	}
+	return array(
+		'instance'    => (int) $method->get_instance_id(),
+		'method'      => (string) $method->id,
+		'title'       => minn_admin_wc_settings_text( $method->get_title() ),
+		'methodTitle' => minn_admin_wc_settings_text( $method->get_method_title() ),
+		'enabled'     => (bool) $method->is_enabled(),
+		'order'       => isset( $method->method_order ) ? (int) $method->method_order : 0,
+		'fields'      => $editable,
+	);
+}
+
+/**
+ * One zone as a row: name, regions (as pickable items + a postcode list),
+ * methods in order.
+ *
+ * @param WC_Shipping_Zone $zone Zone.
+ * @return array
+ */
+function minn_admin_wc_shipping_zone_row( $zone ) {
+	$regions   = array();
+	$postcodes = array();
+	foreach ( (array) $zone->get_zone_locations( 'edit' ) as $loc ) {
+		if ( 'postcode' === $loc->type ) {
+			$postcodes[] = (string) $loc->code;
+			continue;
+		}
+		$l         = minn_admin_wc_shipping_location_label( $loc->type, $loc->code );
+		$regions[] = array(
+			'value' => $l['type'] . ':' . $l['code'],
+			'label' => $l['label'],
+		);
+	}
+	$methods = array();
+	foreach ( (array) $zone->get_shipping_methods( false, 'admin' ) as $m ) {
+		$methods[] = minn_admin_wc_shipping_method_row( $m );
+	}
+	usort(
+		$methods,
+		static function ( $a, $b ) {
+			return $a['order'] <=> $b['order'] ?: $a['instance'] <=> $b['instance'];
+		}
+	);
+	return array(
+		'id'        => (int) $zone->get_id(),
+		'name'      => minn_admin_wc_settings_text( $zone->get_zone_name( 'edit' ) ),
+		'order'     => (int) $zone->get_zone_order( 'edit' ),
+		'summary'   => minn_admin_wc_settings_text( $zone->get_formatted_location( 6, 'edit' ) ),
+		'regions'   => $regions,
+		'postcodes' => implode( "\n", $postcodes ),
+		'methods'   => $methods,
+	);
+}
+
+/**
+ * The whole shipping picture: zones in match order, the "everywhere else"
+ * zone, the methods a zone can add, and the classes.
+ *
+ * @return array
+ */
+function minn_admin_wc_shipping_payload() {
+	$zones = array();
+	foreach ( WC_Shipping_Zones::get_shipping_zones() as $zone ) {
+		$zones[] = minn_admin_wc_shipping_zone_row( $zone );
+	}
+	usort(
+		$zones,
+		static function ( $a, $b ) {
+			return $a['order'] <=> $b['order'] ?: $a['id'] <=> $b['id'];
+		}
+	);
+	$available = array();
+	foreach ( (array) WC()->shipping()->get_shipping_methods() as $m ) {
+		if ( ! $m->supports( 'shipping-zones' ) ) {
+			continue;
+		}
+		$available[] = array(
+			'id'          => (string) $m->id,
+			'title'       => minn_admin_wc_settings_text( $m->get_method_title() ),
+			'description' => minn_admin_wc_settings_text( $m->get_method_description() ),
+		);
+	}
+	$classes = array();
+	foreach ( (array) WC()->shipping()->get_shipping_classes() as $term ) {
+		$classes[] = array(
+			'id'          => (int) $term->term_id,
+			'name'        => (string) $term->name,
+			'slug'        => (string) $term->slug,
+			'description' => (string) $term->description,
+			'count'       => (int) $term->count,
+		);
+	}
+	return array(
+		'zones'     => $zones,
+		'rest'      => minn_admin_wc_shipping_zone_row( new WC_Shipping_Zone( 0 ) ),
+		'available' => $available,
+		'classes'   => $classes,
+		'adminUrl'  => admin_url( 'admin.php?page=wc-settings&tab=shipping' ),
+	);
+}
+
+/**
+ * Apply name / regions / postcodes to a zone the way the zones screen's
+ * ajax save does (wc_clean, then clear + add per type), and save.
+ *
+ * @param WC_Shipping_Zone $zone Zone.
+ * @param array            $body Request body.
+ * @return true|WP_Error
+ */
+function minn_admin_wc_shipping_zone_apply( $zone, $body ) {
+	if ( $zone->get_id() && array_key_exists( 'name', $body ) ) {
+		$name = wc_clean( (string) $body['name'] );
+		if ( '' === trim( $name ) ) {
+			return new WP_Error( 'minn_wc_zone_name', __( 'A zone needs a name.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		do_action( 'woocommerce_update_non_option_setting', array( 'id' => 'zone_name' ) );
+		$zone->set_zone_name( $name );
+	}
+	if ( $zone->get_id() && array_key_exists( 'regions', $body ) ) {
+		do_action( 'woocommerce_update_non_option_setting', array( 'id' => 'zone_locations' ) );
+		$zone->clear_locations( array( 'state', 'country', 'continent' ) );
+		foreach ( (array) $body['regions'] as $r ) {
+			$v     = is_array( $r ) && isset( $r['value'] ) ? $r['value'] : $r;
+			$parts = explode( ':', wc_clean( (string) $v ), 2 );
+			if ( 2 !== count( $parts ) || ! $zone->is_valid_location_type( $parts[0] ) ) {
+				continue;
+			}
+			$zone->add_location( $parts[1], $parts[0] );
+		}
+	}
+	if ( $zone->get_id() && array_key_exists( 'postcodes', $body ) ) {
+		do_action( 'woocommerce_update_non_option_setting', array( 'id' => 'zone_postcodes' ) );
+		$zone->clear_locations( 'postcode' );
+		$codes = array_filter( array_map( 'strtoupper', array_map( 'wc_clean', explode( "\n", str_replace( ',', "\n", (string) $body['postcodes'] ) ) ) ) );
+		foreach ( $codes as $code ) {
+			$zone->add_location( $code, 'postcode' );
+		}
+	}
+	$zone->save();
+	WC_Cache_Helper::get_transient_version( 'shipping', true );
+	return true;
+}
+
+/**
+ * Method instance form: schema over the instance fields, values through
+ * get_instance_option.
+ *
+ * @param WC_Shipping_Method $method Instance-bound method.
+ * @return array
+ */
+function minn_admin_wc_shipping_method_schema( $method ) {
+	return array(
+		'instance' => (int) $method->get_instance_id(),
+		'title'    => minn_admin_wc_settings_text( $method->get_method_title() ),
+	) + minn_admin_wc_settings_api_schema(
+		$method,
+		admin_url( 'admin.php?page=wc-settings&tab=shipping&instance_id=' . (int) $method->get_instance_id() ),
+		$method->get_instance_form_fields(),
+		array( $method, 'get_instance_option' )
+	);
+}
+
+/**
+ * Regions a zone can cover (continents, the countries the store ships to,
+ * their states), for the picker.
+ *
+ * @param string $q Query.
+ * @return array
+ */
+function minn_admin_wc_shipping_regions_lookup( $q ) {
+	$q   = mb_strtolower( trim( (string) $q ) );
+	$out = array();
+	$hit = static function ( $label ) use ( $q ) {
+		return '' === $q || false !== mb_strpos( mb_strtolower( $label ), $q );
+	};
+	$countries = WC()->countries;
+	foreach ( (array) $countries->get_continents() as $code => $c ) {
+		$label = html_entity_decode( $c['name'], ENT_QUOTES, 'UTF-8' );
+		if ( $hit( $label ) ) {
+			$out[] = array( 'value' => 'continent:' . $code, 'label' => $label );
+		}
+	}
+	foreach ( (array) $countries->get_shipping_countries() as $code => $name ) {
+		$name = html_entity_decode( $name, ENT_QUOTES, 'UTF-8' );
+		if ( $hit( $name . ' ' . $code ) ) {
+			$out[] = array( 'value' => 'country:' . $code, 'label' => $name . ' (' . $code . ')' );
+		}
+		if ( '' === $q ) {
+			continue; // states only surface for a query; a blank list stays short
+		}
+		foreach ( (array) $countries->get_states( $code ) as $sc => $sname ) {
+			$sname = html_entity_decode( $sname, ENT_QUOTES, 'UTF-8' );
+			if ( $hit( $sname ) ) {
+				$out[] = array( 'value' => 'state:' . $code . ':' . $sc, 'label' => $sname . ', ' . $name );
+			}
+		}
+		if ( count( $out ) > 200 ) {
+			break;
+		}
+	}
+	return array_slice( $out, 0, 40 );
 }
 
 /**
@@ -961,6 +1231,9 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited ) {
 function minn_admin_wc_settings_lookup( $catalog, $q ) {
 	$q   = mb_strtolower( trim( (string) $q ) );
 	$out = array();
+	if ( 'regions' === $catalog && function_exists( 'WC' ) && WC()->countries ) {
+		return minn_admin_wc_shipping_regions_lookup( $q );
+	}
 	if ( 'countries' === $catalog && function_exists( 'WC' ) && WC()->countries ) {
 		foreach ( WC()->countries->get_countries() as $cc => $name ) {
 			$name = html_entity_decode( $name, ENT_QUOTES, 'UTF-8' );
@@ -1225,6 +1498,276 @@ add_action(
 							'title'   => minn_admin_wc_settings_text( $gateway->get_method_title() ),
 							'errors'  => minn_admin_wc_settings_queued_errors(),
 						) + minn_admin_wc_settings_api_schema( $fresh ? $fresh : $gateway, minn_admin_wc_settings_gateway_url( $gateway ) );
+					},
+				),
+			)
+		);
+
+		$zone_of = static function ( $req ) {
+			$id = absint( $req['zone'] );
+			if ( $id && ! WC_Shipping_Zones::get_zone( $id ) ) {
+				return new WP_Error( 'minn_wc_no_zone', __( 'That shipping zone no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return $id ? WC_Shipping_Zones::get_zone( $id ) : new WC_Shipping_Zone( 0 );
+		};
+		$method_of = static function ( $req, $zone ) {
+			$instance = absint( $req['instance'] );
+			$method   = $instance ? WC_Shipping_Zones::get_shipping_method( $instance ) : false;
+			if ( ! $method ) {
+				return new WP_Error( 'minn_wc_no_method', __( 'That shipping method no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$owner = WC_Shipping_Zones::get_zone_by( 'instance_id', $instance );
+			if ( ! $owner || (int) $owner->get_id() !== (int) $zone->get_id() ) {
+				return new WP_Error( 'minn_wc_no_method', __( 'That shipping method is not in this zone.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return $method;
+		};
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/shipping',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => $can,
+				'callback'            => static function () {
+					return minn_admin_wc_shipping_payload();
+				},
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/shipping/zones',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => $can,
+				'callback'            => static function ( $req ) {
+					$body = (array) $req->get_json_params();
+					$name = isset( $body['name'] ) ? wc_clean( (string) $body['name'] ) : '';
+					if ( '' === trim( $name ) ) {
+						return new WP_Error( 'minn_wc_zone_name', __( 'A zone needs a name.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					$zone = new WC_Shipping_Zone( null );
+					$zone->set_zone_name( $name );
+					$zone->set_zone_order( count( WC_Shipping_Zones::get_zones() ) + 1 );
+					$zone->save();
+					$r = minn_admin_wc_shipping_zone_apply( $zone, $body );
+					if ( is_wp_error( $r ) ) {
+						return $r;
+					}
+					return array( 'zone' => (int) $zone->get_id() ) + minn_admin_wc_shipping_payload();
+				},
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/shipping/zones/order',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => $can,
+				'callback'            => static function ( $req ) {
+					$body = (array) $req->get_json_params();
+					$ids  = isset( $body['ids'] ) && is_array( $body['ids'] ) ? array_map( 'absint', $body['ids'] ) : array();
+					$i    = 0;
+					foreach ( $ids as $id ) {
+						$zone = $id ? WC_Shipping_Zones::get_zone( $id ) : false;
+						if ( ! $zone ) {
+							continue;
+						}
+						do_action( 'woocommerce_update_non_option_setting', array( 'id' => 'zone_order' ) );
+						$zone->set_zone_order( $i++ );
+						$zone->save();
+					}
+					WC_Cache_Helper::get_transient_version( 'shipping', true );
+					return minn_admin_wc_shipping_payload();
+				},
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/shipping/zones/(?P<zone>\d+)',
+			array(
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) use ( $zone_of ) {
+						$zone = $zone_of( $req );
+						if ( is_wp_error( $zone ) ) {
+							return $zone;
+						}
+						$r = minn_admin_wc_shipping_zone_apply( $zone, (array) $req->get_json_params() );
+						if ( is_wp_error( $r ) ) {
+							return $r;
+						}
+						return minn_admin_wc_shipping_payload();
+					},
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) use ( $zone_of ) {
+						$zone = $zone_of( $req );
+						if ( is_wp_error( $zone ) ) {
+							return $zone;
+						}
+						if ( ! $zone->get_id() ) {
+							return new WP_Error( 'minn_wc_zone_rest', __( 'The everywhere-else zone cannot be deleted.', 'minn-admin' ), array( 'status' => 400 ) );
+						}
+						WC_Shipping_Zones::delete_zone( $zone->get_id() );
+						return minn_admin_wc_shipping_payload();
+					},
+				),
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/shipping/zones/(?P<zone>\d+)/methods',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => $can,
+				'callback'            => static function ( $req ) use ( $zone_of ) {
+					$zone = $zone_of( $req );
+					if ( is_wp_error( $zone ) ) {
+						return $zone;
+					}
+					$body = (array) $req->get_json_params();
+					$type = isset( $body['method'] ) ? sanitize_key( $body['method'] ) : '';
+					$instance = $type ? (int) $zone->add_shipping_method( $type ) : 0;
+					if ( ! $instance ) {
+						return new WP_Error( 'minn_wc_method_add', __( 'That shipping method cannot be added to a zone.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					return array( 'instance' => $instance ) + minn_admin_wc_shipping_payload();
+				},
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/shipping/zones/(?P<zone>\d+)/methods/order',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => $can,
+				'callback'            => static function ( $req ) use ( $zone_of ) {
+					global $wpdb;
+					$zone = $zone_of( $req );
+					if ( is_wp_error( $zone ) ) {
+						return $zone;
+					}
+					$body = (array) $req->get_json_params();
+					$ids  = isset( $body['instances'] ) && is_array( $body['instances'] ) ? array_map( 'absint', $body['instances'] ) : array();
+					$own  = array_map( 'intval', array_keys( (array) $zone->get_shipping_methods( false, 'admin' ) ) );
+					$i    = 1;
+					foreach ( $ids as $instance ) {
+						if ( ! in_array( $instance, $own, true ) ) {
+							continue;
+						}
+						// The zones screen's own write for method_order.
+						do_action( 'woocommerce_update_non_option_setting', array( 'id' => 'zone_methods_order' ) );
+						$wpdb->update( "{$wpdb->prefix}woocommerce_shipping_zone_methods", array( 'method_order' => $i++ ), array( 'instance_id' => $instance ) );
+					}
+					WC_Cache_Helper::get_transient_version( 'shipping', true );
+					return minn_admin_wc_shipping_payload();
+				},
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/shipping/zones/(?P<zone>\d+)/methods/(?P<instance>\d+)',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) use ( $zone_of, $method_of ) {
+						$zone = $zone_of( $req );
+						if ( is_wp_error( $zone ) ) {
+							return $zone;
+						}
+						$method = $method_of( $req, $zone );
+						if ( is_wp_error( $method ) ) {
+							return $method;
+						}
+						return minn_admin_wc_shipping_method_schema( $method );
+					},
+				),
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) use ( $zone_of, $method_of ) {
+						global $wpdb;
+						$zone = $zone_of( $req );
+						if ( is_wp_error( $zone ) ) {
+							return $zone;
+						}
+						$method = $method_of( $req, $zone );
+						if ( is_wp_error( $method ) ) {
+							return $method;
+						}
+						$body     = (array) $req->get_json_params();
+						$instance = (int) $method->get_instance_id();
+						if ( array_key_exists( 'enabled', $body ) ) {
+							// The zones screen's own toggle write + its action.
+							do_action( 'woocommerce_update_non_option_setting', array( 'id' => 'zone_methods_enabled' ) );
+							$on = ! empty( $body['enabled'] ) ? 1 : 0;
+							if ( $wpdb->update( "{$wpdb->prefix}woocommerce_shipping_zone_methods", array( 'is_enabled' => $on ), array( 'instance_id' => $instance ) ) ) {
+								do_action( 'woocommerce_shipping_zone_method_status_toggled', $instance, $method->id, $zone->get_id(), $on );
+							}
+							WC_Cache_Helper::get_transient_version( 'shipping', true );
+							return minn_admin_wc_shipping_payload();
+						}
+						$edited = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+						if ( ! $edited ) {
+							return new WP_Error( 'minn_wc_nothing', __( 'Nothing to save.', 'minn-admin' ), array( 'status' => 400 ) );
+						}
+						try {
+							// The method-settings ajax save, byte for byte: prepared
+							// post data, the instance id the method checks for, the
+							// options action, then its own process_admin_options.
+							$method->set_post_data( minn_admin_wc_settings_api_post_data( $method, $edited, $method->get_instance_form_fields(), array( $method, 'get_instance_option' ) ) );
+							$prev_instance             = isset( $_REQUEST['instance_id'] ) ? $_REQUEST['instance_id'] : null;
+							$_REQUEST['instance_id']   = $instance;
+							global $current_tab;
+							$prev_tab    = $current_tab;
+							$current_tab = 'shipping';
+							do_action( 'woocommerce_update_non_option_setting', array( 'id' => 'zone_method_settings' ) );
+							do_action( 'woocommerce_update_options' );
+							$method->process_admin_options();
+							$current_tab = $prev_tab;
+							if ( null === $prev_instance ) {
+								unset( $_REQUEST['instance_id'] );
+							} else {
+								$_REQUEST['instance_id'] = $prev_instance;
+							}
+							$method->set_post_data( array() );
+							WC_Cache_Helper::get_transient_version( 'shipping', true );
+						} catch ( Throwable $e ) {
+							return new WP_Error( 'minn_wc_save_failed', $e->getMessage(), array( 'status' => 500 ) );
+						}
+						$fresh  = WC_Shipping_Zones::get_shipping_method( $instance );
+						$errors = array_values( array_filter( array_map( 'minn_admin_wc_settings_text', (array) $method->get_errors() ) ) );
+						return array( 'errors' => $errors ) + minn_admin_wc_shipping_method_schema( $fresh ? $fresh : $method );
+					},
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) use ( $zone_of, $method_of ) {
+						$zone = $zone_of( $req );
+						if ( is_wp_error( $zone ) ) {
+							return $zone;
+						}
+						$method = $method_of( $req, $zone );
+						if ( is_wp_error( $method ) ) {
+							return $method;
+						}
+						$key = $method->get_instance_option_key();
+						$zone->delete_shipping_method( (int) $method->get_instance_id() );
+						// The zones screen deletes the instance's option row too.
+						delete_option( $key );
+						return minn_admin_wc_shipping_payload();
 					},
 				),
 			)

@@ -25202,7 +25202,7 @@
 
 	async function loadStoreSettings() {
 		const r = await api( 'minn-admin/v1/wc/settings' );
-		state.cache.store = { sections: r.sections || [], adminUrl: r.adminUrl || '', data: {}, emails: null, gateways: null };
+		state.cache.store = { sections: r.sections || [], adminUrl: r.adminUrl || '', data: {}, emails: null, gateways: null, shipping: null, zoneOpen: null };
 	}
 
 	// The active section, or the first one when the URL names none (or one
@@ -25267,8 +25267,10 @@
 				`<button class="minn-settings-nav-item minn-settings-nav-sub${ x.id === sec.id ? ' active' : '' }" data-storesec="${ esc( x.id ) }" data-pg="${ esc( pg.label ) }">${ esc( x.label ) }</button>` ).join( '' );
 		} ).join( '' );
 		const isPayments = sec.kind === 'payments';
-		const data = isPayments ? { groups: [] } : c.data[ sec.id ];
-		const form = data && ! isPayments ? settingsFormHtml( data ) : null;
+		const isShipping = sec.kind === 'shipping-zones' || sec.kind === 'shipping-classes';
+		const bespoke = isPayments || isShipping;
+		const data = bespoke ? { groups: [] } : c.data[ sec.id ];
+		const form = data && ! bespoke ? settingsFormHtml( data ) : null;
 		const isEmails = sec.page === 'email' && ! sec.section;
 		view.innerHTML = `
 		<div class="minn-settings minn-store-settings">
@@ -25279,6 +25281,7 @@
 					<div class="minn-settings-sub">${ esc( __( 'Saved through WooCommerce’s own settings pipeline, so every extension that listens for a save still hears it.' ) ) }</div>
 				</div>
 				${ isEmails ? '<div id="minn-store-emails"></div>' : '' }
+				${ isShipping ? '<div id="minn-store-shipping"></div>' : '' }
 				${ isPayments ? '<div id="minn-store-payments"></div>' : `<div id="minn-store-form">${ form ? form.html : `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` }</div>` }
 			</div>
 		</div>`;
@@ -25293,6 +25296,14 @@
 		if ( isEmails ) renderStoreEmails( $( '#minn-store-emails', view ) );
 		if ( isPayments ) {
 			renderStorePayments( $( '#minn-store-payments', view ) );
+			return;
+		}
+		if ( isShipping ) {
+			// Both shipping kinds paint inside the same host; the form slot
+			// stays empty so no stray Save button renders under a table.
+			$( '#minn-store-form', view ).innerHTML = '';
+			if ( sec.kind === 'shipping-zones' ) renderStoreShipping( $( '#minn-store-shipping', view ) );
+			else renderStoreShippingClasses( $( '#minn-store-shipping', view ) );
 			return;
 		}
 		if ( ! data ) {
@@ -25391,9 +25402,10 @@
 
 	// A WC_Settings_API form (one email, one payment gateway) in a modal:
 	// the same engine as the page, the route owns the schema and the save.
-	function openStoreFormModal( { route, title, sub, onSaved } ) {
-		state.modal = { type: 'store-form', route, title, sub, onSaved, data: null, form: null };
+	function openStoreFormModal( { route, title, sub, onSaved, data, save } ) {
+		state.modal = { type: 'store-form', route, title, sub, onSaved, save, data: data || null, form: null };
 		renderOverlays();
+		if ( data ) return; // a client-built form (shipping classes): nothing to fetch
 		api( route )
 			.then( ( r ) => {
 				const m = state.modal;
@@ -25442,7 +25454,9 @@
 		const host = $( '#minn-store-form-modal' );
 		if ( ! host || ! m.data || ! m.form ) return;
 		bindSettingsForm( host, m.data, m.form.fields, async ( payload ) => {
-			const r = await api( m.route, { method: 'POST', body: JSON.stringify( { values: payload } ) } );
+			const r = m.save
+				? await m.save( payload )
+				: await api( m.route, { method: 'POST', body: JSON.stringify( { values: payload } ) } );
 			m.data = r || m.data;
 			if ( r && Array.isArray( r.errors ) && r.errors.length ) {
 				// WooCommerce refused part of it: stay open on the re-read values.
@@ -25566,6 +25580,421 @@
 				}
 			} );
 		} );
+	}
+
+	/* --- Shipping: zones in match order, a zone editor, methods per zone, classes --- */
+
+	async function loadStoreShipping() {
+		const c = state.cache.store;
+		c.shipping = await api( 'minn-admin/v1/wc/shipping' );
+		return c.shipping;
+	}
+
+	// Every write answers with the whole shipping picture, so one setter
+	// keeps the cache honest and repaints whatever is on screen.
+	function adoptStoreShipping( r ) {
+		const c = state.cache.store;
+		if ( r && Array.isArray( r.zones ) ) c.shipping = r;
+		if ( state.route === 'store-settings' ) renderStoreSettings();
+	}
+
+	async function renderStoreShipping( host ) {
+		if ( ! host ) return;
+		const c = state.cache.store;
+		if ( ! c.shipping ) {
+			host.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading shipping zones…' ) ) }</div>`;
+			try {
+				await loadStoreShipping();
+			} catch ( e ) {
+				host.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`;
+				return;
+			}
+			if ( ! host.isConnected ) return;
+		}
+		if ( c.zoneOpen !== null ) {
+			renderStoreZoneEditor( host );
+			return;
+		}
+		const d = c.shipping;
+		const methodsHtml = ( z ) => z.methods.length
+			? z.methods.map( ( m ) => `<span class="minn-lic-cat${ m.enabled ? '' : ' off' }">${ esc( m.title ) }</span>` ).join( ' ' )
+			: `<span class="minn-toggle-desc">${ esc( __( 'No shipping methods' ) ) }</span>`;
+		host.innerHTML = `
+			<div class="minn-fields-sub">${ esc( __( 'Shipping zones' ) ) }</div>
+			<div class="minn-fields-note">${ esc( __( 'A zone is a set of regions and the shipping methods offered there. Shoppers get the first zone that matches their address, so drag to change the order they are tried in.' ) ) }</div>
+			<div class="minn-store-emails minn-store-zones">
+				${ d.zones.map( ( z ) => `
+				<div class="minn-store-email minn-store-zone" data-zone="${ z.id }" draggable="true">
+					<span class="minn-menu-grip minn-store-grip" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>
+					<div class="minn-store-email-main">
+						<div class="minn-store-email-title">${ esc( z.name ) }</div>
+						<div class="minn-toggle-desc">${ esc( z.summary || __( 'No regions yet' ) ) }</div>
+						<div class="minn-store-zone-methods">${ methodsHtml( z ) }</div>
+					</div>
+					<button type="button" class="minn-btn-soft" data-zoneopen="${ z.id }">${ esc( __( 'Edit' ) ) }</button>
+				</div>` ).join( '' ) }
+				<div class="minn-store-email minn-store-zone-rest" data-zone="0">
+					<span class="minn-store-grip minn-store-grip-blank"></span>
+					<div class="minn-store-email-main">
+						<div class="minn-store-email-title">${ esc( __( 'Everywhere else' ) ) }</div>
+						<div class="minn-toggle-desc">${ esc( __( 'Locations not covered by your other zones.' ) ) }</div>
+						<div class="minn-store-zone-methods">${ methodsHtml( d.rest ) }</div>
+					</div>
+					<button type="button" class="minn-btn-soft" data-zoneopen="0">${ esc( __( 'Edit' ) ) }</button>
+				</div>
+			</div>
+			<div><button type="button" class="minn-btn-soft" id="minn-zone-add">${ icon( 'plus' ) } ${ esc( __( 'Add zone' ) ) }</button></div>
+			<div class="minn-toggle-desc">${ esc( __( 'Local pickup for block checkout has its own screen in WooCommerce.' ) ) } ${ d.adminUrl ? `<a href="${ esc( d.adminUrl ) }&section=pickup_location" target="_blank" rel="noopener">${ esc( __( 'Open Local pickup ↗' ) ) }</a>` : '' }</div>`;
+		$$( '[data-zoneopen]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				c.zoneOpen = parseInt( btn.dataset.zoneopen, 10 );
+				renderStoreShipping( host );
+			} )
+		);
+		$( '#minn-zone-add', host ).addEventListener( 'click', () => {
+			c.zoneOpen = 'new';
+			renderStoreShipping( host );
+		} );
+		// Drag to reorder zones (match order). Everywhere-else is fixed last.
+		let dragId = null;
+		$$( '.minn-store-zone', host ).forEach( ( row ) => {
+			row.addEventListener( 'dragstart', ( e ) => {
+				dragId = row.dataset.zone;
+				e.dataTransfer.effectAllowed = 'move';
+				try { e.dataTransfer.setData( 'text/plain', dragId ); } catch ( err ) {}
+				row.classList.add( 'dragging' );
+			} );
+			row.addEventListener( 'dragend', () => row.classList.remove( 'dragging' ) );
+			row.addEventListener( 'dragover', ( e ) => {
+				if ( ! dragId ) return;
+				e.preventDefault();
+				const r = row.getBoundingClientRect();
+				row.classList.toggle( 'drop-before', e.clientY < r.top + r.height / 2 );
+				row.classList.toggle( 'drop-after', e.clientY >= r.top + r.height / 2 );
+			} );
+			row.addEventListener( 'dragleave', () => row.classList.remove( 'drop-before', 'drop-after' ) );
+			row.addEventListener( 'drop', async ( e ) => {
+				e.preventDefault();
+				e.stopPropagation();
+				row.classList.remove( 'drop-before', 'drop-after' );
+				if ( ! dragId || dragId === row.dataset.zone ) { dragId = null; return; }
+				const ids = d.zones.map( ( z ) => String( z.id ) );
+				const from = ids.indexOf( dragId );
+				const r = row.getBoundingClientRect();
+				let to = ids.indexOf( row.dataset.zone ) + ( e.clientY >= r.top + r.height / 2 ? 1 : 0 );
+				const [ moved ] = ids.splice( from, 1 );
+				if ( to > from ) to--;
+				ids.splice( to, 0, moved );
+				dragId = null;
+				try {
+					adoptStoreShipping( await api( 'minn-admin/v1/wc/shipping/zones/order', { method: 'POST', body: JSON.stringify( { ids } ) } ) );
+					toast( __( 'Zone order saved' ) );
+				} catch ( err ) {
+					toast( err.message, true );
+				}
+			} );
+		} );
+	}
+
+	function renderStoreZoneEditor( host ) {
+		const c = state.cache.store;
+		const d = c.shipping;
+		const isNew = c.zoneOpen === 'new';
+		const zone = isNew
+			? { id: 0, name: '', regions: [], postcodes: '', methods: [], isNew: true }
+			: ( c.zoneOpen === 0 ? d.rest : d.zones.find( ( z ) => z.id === c.zoneOpen ) );
+		if ( ! zone ) {
+			c.zoneOpen = null;
+			renderStoreShipping( host );
+			return;
+		}
+		const isRest = ! isNew && zone.id === 0;
+		const regionsField = { key: 'regions', type: 'relation', route: 'minn-admin/v1/wc/lookup?catalog=regions', placeholder: __( 'Search continents, countries, states…' ) };
+		host.innerHTML = `
+			<div class="minn-store-zone-head">
+				<button type="button" class="minn-btn-soft" id="minn-zone-back">← ${ esc( __( 'All zones' ) ) }</button>
+				<div class="minn-fields-sub">${ esc( isNew ? __( 'New zone' ) : ( isRest ? __( 'Everywhere else' ) : zone.name ) ) }</div>
+			</div>
+			${ isRest ? `<div class="minn-fields-note">${ esc( __( 'Shipping methods offered to addresses no other zone covers.' ) ) }</div>` : `
+			<div class="minn-fields">
+				<div>
+					<div class="minn-field-label">${ esc( __( 'Zone name' ) ) }</div>
+					<input class="minn-input" id="minn-zone-name" value="${ esc( zone.name ) }" placeholder="${ esc( __( 'e.g. Domestic' ) ) }">
+				</div>
+				<div>
+					<div class="minn-field-label">${ esc( __( 'Regions' ) ) }</div>
+					${ formControlHtml( regionsField, zone.regions, 'data-zonefield', 'regions' ) }
+					<div class="minn-toggle-desc">${ esc( __( 'Continents, countries or states this zone covers. Leave empty and use postcodes alone to match by postcode only.' ) ) }</div>
+				</div>
+				<div>
+					<div class="minn-field-label">${ esc( __( 'Postcodes' ) ) }</div>
+					<textarea class="minn-input mono" id="minn-zone-postcodes" rows="3" placeholder="${ esc( __( 'One per line: 90210, 90210…90220, CB23*' ) ) }">${ esc( zone.postcodes || '' ) }</textarea>
+					<div class="minn-toggle-desc">${ esc( __( 'Optional. Ranges (12345…12350) and wildcards (CB23*) work the way WooCommerce documents them.' ) ) }</div>
+				</div>
+				<div class="minn-store-zone-actions">
+					<button type="button" class="minn-btn-primary" id="minn-zone-save">${ esc( isNew ? __( 'Create zone' ) : __( 'Save zone' ) ) }</button>
+					${ isNew ? '' : `<button type="button" class="minn-btn-soft minn-btn-danger" id="minn-zone-delete">${ esc( __( 'Delete zone' ) ) }</button>` }
+				</div>
+			</div>` }
+			${ isNew ? `<div class="minn-toggle-desc">${ esc( __( 'Create the zone first, then add its shipping methods.' ) ) }</div>` : `
+			<div class="minn-divider"></div>
+			<div class="minn-fields-sub">${ esc( __( 'Shipping methods' ) ) }</div>
+			<div class="minn-fields-note">${ esc( __( 'Offered in this order at checkout. Turn one off to keep it without offering it; open one to set its title, cost and rules.' ) ) }</div>
+			<div class="minn-store-emails minn-store-methods">
+				${ zone.methods.map( ( m ) => `
+				<div class="minn-store-email minn-store-method${ m.enabled ? '' : ' off' }" data-instance="${ m.instance }" draggable="true">
+					<span class="minn-menu-grip minn-store-grip" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>
+					<div class="minn-store-email-main">
+						<div class="minn-store-email-title">${ esc( m.title ) }${ m.methodTitle && m.methodTitle !== m.title ? ` <span class="minn-store-gateway-label">${ esc( m.methodTitle ) }</span>` : '' }</div>
+					</div>
+					<button type="button" class="minn-switch${ m.enabled ? ' on' : '' }" role="switch" aria-checked="${ m.enabled ? 'true' : 'false' }" data-methodtog="${ m.instance }" aria-label="${ esc( m.title ) }"><span class="minn-switch-knob"></span></button>
+					${ m.fields ? `<button type="button" class="minn-btn-soft" data-methodedit="${ m.instance }">${ esc( __( 'Edit' ) ) }</button>` : '' }
+					<button type="button" class="minn-x-btn" data-methoddel="${ m.instance }" title="${ esc( __( 'Remove from zone' ) ) }" aria-label="${ esc( __( 'Remove from zone' ) ) }">×</button>
+				</div>` ).join( '' ) }
+				${ zone.methods.length ? '' : `<div class="minn-empty">${ esc( __( 'No shipping methods in this zone yet.' ) ) }</div>` }
+			</div>
+			<div class="minn-store-zone-add">
+				${ formControlHtml( { key: 'method', type: 'combobox', options: d.available.map( ( a ) => [ a.id, a.title ] ), placeholder: __( 'Choose a method…' ) }, d.available.length ? d.available[ 0 ].id : '', 'data-zonefield', 'method' ) }
+				<button type="button" class="minn-btn-soft" id="minn-method-add">${ icon( 'plus' ) } ${ esc( __( 'Add method' ) ) }</button>
+			</div>` }`;
+
+		$( '#minn-zone-back', host ).addEventListener( 'click', () => {
+			c.zoneOpen = null;
+			renderStoreShipping( host );
+		} );
+		const regionsEl = $( '[data-zonefield="regions"]', host );
+		if ( regionsEl ) bindRelationField( regionsEl, () => {} );
+		const methodPick = $( '[data-zonefield="method"]', host );
+		if ( methodPick ) bindFormComboboxes( host, 'data-zonefield', [ { key: 'method', type: 'combobox', options: d.available.map( ( a ) => [ a.id, a.title ] ) } ], () => {} );
+
+		const saveBtn = $( '#minn-zone-save', host );
+		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+			const body = {
+				name: $( '#minn-zone-name', host ).value.trim(),
+				regions: formControlValue( regionsEl ).map( ( x ) => x.value ),
+				postcodes: $( '#minn-zone-postcodes', host ).value,
+			};
+			if ( ! body.name ) { toast( __( 'A zone needs a name.' ), true ); return; }
+			saveBtn.disabled = true;
+			try {
+				const r = isNew
+					? await api( 'minn-admin/v1/wc/shipping/zones', { method: 'POST', body: JSON.stringify( body ) } )
+					: await api( `minn-admin/v1/wc/shipping/zones/${ zone.id }`, { method: 'POST', body: JSON.stringify( body ) } );
+				if ( isNew && r.zone ) c.zoneOpen = r.zone;
+				toast( isNew ? __( 'Zone created. Now add its shipping methods.' ) : __( 'Zone saved' ) );
+				adoptStoreShipping( r );
+			} catch ( e ) {
+				toast( e.message, true );
+				saveBtn.disabled = false;
+			}
+		} );
+		const delBtn = $( '#minn-zone-delete', host );
+		if ( delBtn ) delBtn.addEventListener( 'click', async () => {
+			/* translators: %s: shipping zone name. */
+			if ( ! window.confirm( sprintf( __( 'Delete the zone “%s” and its shipping methods? Addresses it covered fall through to the next matching zone.' ), zone.name ) ) ) return;
+			try {
+				const r = await api( `minn-admin/v1/wc/shipping/zones/${ zone.id }`, { method: 'DELETE' } );
+				c.zoneOpen = null;
+				toast( __( 'Zone deleted' ) );
+				adoptStoreShipping( r );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
+		const methodRoute = ( instance ) => `minn-admin/v1/wc/shipping/zones/${ zone.id }/methods/${ instance }`;
+		$$( '[data-methodtog]', host ).forEach( ( sw ) =>
+			sw.addEventListener( 'click', async () => {
+				const on = ! sw.classList.contains( 'on' );
+				sw.classList.toggle( 'on', on );
+				sw.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				sw.disabled = true;
+				try {
+					const r = await api( methodRoute( sw.dataset.methodtog ), { method: 'POST', body: JSON.stringify( { enabled: on } ) } );
+					toast( on ? __( 'Shipping method turned on' ) : __( 'Shipping method turned off' ) );
+					adoptStoreShipping( r );
+				} catch ( e ) {
+					sw.classList.toggle( 'on', ! on );
+					sw.setAttribute( 'aria-checked', on ? 'false' : 'true' );
+					sw.disabled = false;
+					toast( e.message, true );
+				}
+			} )
+		);
+		$$( '[data-methodedit]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const m = zone.methods.find( ( x ) => String( x.instance ) === btn.dataset.methodedit );
+				openStoreFormModal( {
+					route: methodRoute( btn.dataset.methodedit ),
+					title: m ? m.title : '',
+					sub: m ? m.methodTitle : __( 'Shipping method' ),
+					onSaved: async () => {
+						toast( __( 'Shipping method saved' ) );
+						try { adoptStoreShipping( await loadStoreShipping() ); } catch ( e ) { /* the list shows what it has */ }
+					},
+				} );
+			} )
+		);
+		$$( '[data-methoddel]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const m = zone.methods.find( ( x ) => String( x.instance ) === btn.dataset.methoddel );
+				/* translators: %s: shipping method title. */
+				if ( ! window.confirm( sprintf( __( 'Remove “%s” from this zone? Its settings are deleted with it.' ), m ? m.title : '' ) ) ) return;
+				try {
+					const r = await api( methodRoute( btn.dataset.methoddel ), { method: 'DELETE' } );
+					toast( __( 'Shipping method removed' ) );
+					adoptStoreShipping( r );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} )
+		);
+		const addBtn = $( '#minn-method-add', host );
+		if ( addBtn ) addBtn.addEventListener( 'click', async () => {
+			const method = formControlValue( methodPick );
+			if ( ! method ) return;
+			addBtn.disabled = true;
+			try {
+				const r = await api( `minn-admin/v1/wc/shipping/zones/${ zone.id }/methods`, { method: 'POST', body: JSON.stringify( { method } ) } );
+				toast( __( 'Shipping method added' ) );
+				adoptStoreShipping( r );
+				// Straight into its settings: a flat rate without a cost is not done.
+				const fresh = ( c.shipping.zones.find( ( z ) => z.id === zone.id ) || c.shipping.rest ).methods.find( ( x ) => x.instance === r.instance );
+				if ( fresh && fresh.fields ) {
+					openStoreFormModal( {
+						route: methodRoute( r.instance ),
+						title: fresh.title,
+						sub: fresh.methodTitle,
+						onSaved: async () => {
+							toast( __( 'Shipping method saved' ) );
+							try { adoptStoreShipping( await loadStoreShipping() ); } catch ( e ) { /* the list shows what it has */ }
+						},
+					} );
+				}
+			} catch ( e ) {
+				toast( e.message, true );
+				addBtn.disabled = false;
+			}
+		} );
+		// Drag to reorder methods within the zone.
+		let dragId = null;
+		$$( '.minn-store-method', host ).forEach( ( row ) => {
+			row.addEventListener( 'dragstart', ( e ) => {
+				dragId = row.dataset.instance;
+				e.dataTransfer.effectAllowed = 'move';
+				try { e.dataTransfer.setData( 'text/plain', dragId ); } catch ( err ) {}
+				row.classList.add( 'dragging' );
+			} );
+			row.addEventListener( 'dragend', () => row.classList.remove( 'dragging' ) );
+			row.addEventListener( 'dragover', ( e ) => {
+				if ( ! dragId ) return;
+				e.preventDefault();
+				const r = row.getBoundingClientRect();
+				row.classList.toggle( 'drop-before', e.clientY < r.top + r.height / 2 );
+				row.classList.toggle( 'drop-after', e.clientY >= r.top + r.height / 2 );
+			} );
+			row.addEventListener( 'dragleave', () => row.classList.remove( 'drop-before', 'drop-after' ) );
+			row.addEventListener( 'drop', async ( e ) => {
+				e.preventDefault();
+				e.stopPropagation();
+				row.classList.remove( 'drop-before', 'drop-after' );
+				if ( ! dragId || dragId === row.dataset.instance ) { dragId = null; return; }
+				const ids = zone.methods.map( ( m ) => String( m.instance ) );
+				const from = ids.indexOf( dragId );
+				const r = row.getBoundingClientRect();
+				let to = ids.indexOf( row.dataset.instance ) + ( e.clientY >= r.top + r.height / 2 ? 1 : 0 );
+				const [ moved ] = ids.splice( from, 1 );
+				if ( to > from ) to--;
+				ids.splice( to, 0, moved );
+				dragId = null;
+				try {
+					adoptStoreShipping( await api( `minn-admin/v1/wc/shipping/zones/${ zone.id }/methods/order`, { method: 'POST', body: JSON.stringify( { instances: ids.map( Number ) } ) } ) );
+					toast( __( 'Method order saved' ) );
+				} catch ( err ) {
+					toast( err.message, true );
+				}
+			} );
+		} );
+	}
+
+	// Shipping classes ride WooCommerce's own wc/v3/products/shipping_classes
+	// (a product taxonomy: name, slug, description).
+	const shippingClassForm = ( cls ) => ( {
+		groups: [ { title: '', fields: [
+			{ key: 'name', label: __( 'Class name' ), placeholder: __( 'e.g. Bulky' ) },
+			{ key: 'slug', label: __( 'Slug' ), mono: true, help: __( 'Leave blank to make one from the name.' ) },
+			{ key: 'description', label: __( 'Description' ), type: 'textarea', rows: 2, help: __( 'For your own reference; shoppers never see it.' ) },
+		] } ],
+		values: { name: cls ? cls.name : '', slug: cls ? cls.slug : '', description: cls ? cls.description : '' },
+	} );
+
+	async function renderStoreShippingClasses( host ) {
+		if ( ! host ) return;
+		const c = state.cache.store;
+		if ( ! c.shipping ) {
+			host.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading shipping classes…' ) ) }</div>`;
+			try {
+				await loadStoreShipping();
+			} catch ( e ) {
+				host.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`;
+				return;
+			}
+			if ( ! host.isConnected ) return;
+		}
+		const rows = c.shipping.classes;
+		host.innerHTML = `
+			<div class="minn-fields-sub">${ esc( __( 'Shipping classes' ) ) }</div>
+			<div class="minn-fields-note">${ esc( __( 'Group products that ship differently (bulky, fragile). A flat-rate method can then charge per class.' ) ) }</div>
+			<div class="minn-store-emails minn-store-classes">
+				${ rows.map( ( r ) => `
+				<div class="minn-store-email" data-class="${ r.id }">
+					<div class="minn-store-email-main">
+						<div class="minn-store-email-title">${ esc( r.name ) } <span class="minn-store-gateway-label mono">${ esc( r.slug ) }</span></div>
+						${ r.description ? `<div class="minn-toggle-desc">${ esc( r.description ) }</div>` : '' }
+					</div>
+					<div class="minn-store-email-to">${ sprintf( /* translators: %d: how many products use the shipping class. */ _n( '%d product', '%d products', r.count ), r.count ) }</div>
+					<button type="button" class="minn-btn-soft" data-classedit="${ r.id }">${ esc( __( 'Edit' ) ) }</button>
+					<button type="button" class="minn-x-btn" data-classdel="${ r.id }" title="${ esc( __( 'Delete class' ) ) }" aria-label="${ esc( __( 'Delete class' ) ) }">×</button>
+				</div>` ).join( '' ) }
+				${ rows.length ? '' : `<div class="minn-empty">${ esc( __( 'No shipping classes yet.' ) ) }</div>` }
+			</div>
+			<div><button type="button" class="minn-btn-soft" id="minn-class-add">${ icon( 'plus' ) } ${ esc( __( 'Add class' ) ) }</button></div>`;
+		const afterWrite = async () => {
+			try { adoptStoreShipping( await loadStoreShipping() ); } catch ( e ) { /* the list shows what it has */ }
+		};
+		const openClass = ( cls ) => openStoreFormModal( {
+			title: cls ? cls.name : __( 'New shipping class' ),
+			sub: __( 'Shipping class' ),
+			data: shippingClassForm( cls ),
+			save: async ( payload ) => {
+				const body = {};
+				[ 'name', 'slug', 'description' ].forEach( ( k ) => { if ( k in payload ) body[ k ] = payload[ k ] == null ? '' : payload[ k ]; } );
+				if ( cls ) return api( `wc/v3/products/shipping_classes/${ cls.id }`, { method: 'PUT', body: JSON.stringify( body ) } );
+				if ( ! body.name ) throw new Error( __( 'A class needs a name.' ) );
+				return api( 'wc/v3/products/shipping_classes', { method: 'POST', body: JSON.stringify( body ) } );
+			},
+			onSaved: () => {
+				toast( cls ? __( 'Shipping class saved' ) : __( 'Shipping class added' ) );
+				afterWrite();
+			},
+		} );
+		$( '#minn-class-add', host ).addEventListener( 'click', () => openClass( null ) );
+		$$( '[data-classedit]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => openClass( rows.find( ( r ) => String( r.id ) === btn.dataset.classedit ) ) )
+		);
+		$$( '[data-classdel]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const r = rows.find( ( x ) => String( x.id ) === btn.dataset.classdel );
+				/* translators: %s: shipping class name. */
+				if ( ! window.confirm( sprintf( __( 'Delete the shipping class “%s”? Products using it keep shipping without a class.' ), r ? r.name : '' ) ) ) return;
+				try {
+					await api( `wc/v3/products/shipping_classes/${ btn.dataset.classdel }?force=true`, { method: 'DELETE' } );
+					toast( __( 'Shipping class deleted' ) );
+					afterWrite();
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} )
+		);
 	}
 
 	/* ===== Settings ===== */

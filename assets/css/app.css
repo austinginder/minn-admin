@@ -2128,7 +2128,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-settings-nav-sub { padding-inline-start: 18px; }
 /* Store settings: a WooCommerce section intro under its group title. */
 .minn-fields-note { font-size: 13px; color: var(--text2); margin: 8px 0 -2px; line-height: 1.5; }
-#minn-store-form { display: flex; flex-direction: column; gap: 16px; }
+#minn-store-form, #minn-store-shipping, #minn-store-payments { display: flex; flex-direction: column; gap: 16px; }
 .minn-store-emails { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .minn-store-email { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg2); }
 .minn-store-email:last-child { border-bottom: 0; }
@@ -2147,6 +2147,22 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-store-grip svg { width: 15px; height: 15px; }
 .minn-store-gateway-label { font-weight: 400; color: var(--text3); font-size: 12.5px; }
 .minn-store-email a.minn-btn-soft { text-decoration: none; }
+.minn-store-zone, .minn-store-method { cursor: grab; }
+.minn-store-zone.dragging, .minn-store-method.dragging { opacity: 0.5; }
+.minn-store-zone.drop-before, .minn-store-method.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.minn-store-zone.drop-after, .minn-store-method.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.minn-store-grip-blank { width: 15px; }
+.minn-store-zone-methods { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.minn-store-zone-methods .minn-lic-cat { margin-inline-start: 0; text-transform: none; letter-spacing: 0; font-size: 11px; }
+.minn-store-zone-methods .minn-lic-cat.off { opacity: 0.55; text-decoration: line-through; }
+.minn-store-zone-head { display: flex; align-items: center; gap: 12px; }
+.minn-store-zone-head .minn-fields-sub { margin: 0; }
+.minn-store-zone-actions { display: flex; gap: 8px; align-items: center; }
+.minn-store-zone-add { display: flex; gap: 8px; align-items: center; }
+.minn-store-zone-add .minn-ac { flex: 1; }
+.minn-store-email .minn-x-btn { flex-shrink: 0; }
+.minn-store-gateway-label.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; }
+.minn-btn-soft.minn-btn-danger { color: var(--red); }
 .minn-fields { display: flex; flex-direction: column; gap: 16px; }
 .minn-field-label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
 

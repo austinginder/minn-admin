@@ -220,6 +220,70 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 		await rest( 'minn-admin/v1/wc/payment_gateways/order', { method: 'POST', body: JSON.stringify( { ids: gwRows } ) } );
 		t.check( 'gateway order restores', ( await rest( 'wc/v3/payment_gateways' ) ).body.map( ( g ) => g.id ).join() === gwRows.join() );
 
+		/* ===== Shipping: zone create/edit/delete, methods, classes ===== */
+		await page.click( '[data-storesec="shipping"]' );
+		await page.waitForSelector( '#minn-zone-add', { timeout: 20000 } );
+		t.check( 'zones list carries the everywhere-else row', !! ( await page.$( '.minn-store-zone-rest [data-zoneopen="0"]' ) ) );
+		await page.click( '#minn-zone-add' );
+		await page.waitForSelector( '#minn-zone-save', { timeout: 10000 } );
+		await page.fill( '#minn-zone-name', 'Minn test zone' );
+		await page.fill( '[data-zonefield="regions"] .minn-ac-input', 'Norw' );
+		await page.waitForSelector( '[data-zonefield="regions"] .minn-ac-item[data-acv="country:NO"]', { timeout: 10000 } );
+		await page.click( '[data-zonefield="regions"] .minn-ac-item[data-acv="country:NO"]' );
+		await page.fill( '#minn-zone-postcodes', '0150\n0151' );
+		await page.click( '#minn-zone-save' );
+		await page.waitForSelector( '#minn-method-add', { timeout: 20000 } );
+		const zones = ( await rest( 'wc/v3/shipping/zones' ) ).body;
+		const zone = zones.find( ( z ) => z.name === 'Minn test zone' );
+		t.check( 'zone created (wc/v3 sees it)', !! zone );
+		if ( ! zone ) throw new Error( 'zone missing' );
+		const locs = ( await rest( `wc/v3/shipping/zones/${ zone.id }/locations` ) ).body;
+		t.check( 'zone regions + postcodes land as locations', JSON.stringify( locs.map( ( l ) => l.type + ':' + l.code ).sort() ) === JSON.stringify( [ 'country:NO', 'postcode:0150', 'postcode:0151' ] ), JSON.stringify( locs ) );
+
+		await page.click( '#minn-method-add' );
+		await page.waitForSelector( '#minn-store-form-modal [data-sset="cost"]', { timeout: 20000 } );
+		t.check( 'added method opens its own instance form (flat rate: title, tax status, cost)', await page.$$eval( '#minn-store-form-modal [data-sset]', ( els ) => els.map( ( e ) => e.dataset.sset ) ).then( ( k ) => k.includes( 'title' ) && k.includes( 'cost' ) ) );
+		await page.fill( '#minn-store-form-modal [data-sset="cost"]', '12.50' );
+		await page.fill( '#minn-store-form-modal [data-sset="title"]', 'Minn flat' );
+		const mwait = page.waitForResponse( ( res ) => res.request().method() === 'POST' && /shipping\/zones\/\d+\/methods\/\d+/.test( res.url() ), { timeout: 30000 } );
+		await page.click( '#minn-store-form-modal #minn-sset-save' );
+		t.check( 'method settings save 200', ( await mwait ).status() === 200 );
+		await page.waitForSelector( '#minn-modal-overlay', { state: 'detached', timeout: 15000 } );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-store-method .minn-store-email-title' ) ].some( ( e ) => /Minn flat/.test( e.textContent ) ), null, { timeout: 15000 } );
+		const methods = ( await rest( `wc/v3/shipping/zones/${ zone.id }/methods` ) ).body;
+		t.check( 'method instance settings round-trip via wc/v3', methods.length === 1 && methods[ 0 ].settings.cost.value === '12.50' && methods[ 0 ].settings.title.value === 'Minn flat', JSON.stringify( methods.map( ( m ) => m.settings.cost && m.settings.cost.value ) ) );
+		const inst = methods[ 0 ].instance_id;
+		await page.click( `[data-methodtog="${ inst }"]` );
+		await page.waitForFunction( ( id ) => { const sw = document.querySelector( `[data-methodtog="${ id }"]` ); return sw && ! sw.disabled && ! sw.classList.contains( 'on' ); }, inst, { timeout: 15000 } );
+		t.check( 'method switch off lands in is_enabled', ( await rest( `wc/v3/shipping/zones/${ zone.id }/methods/${ inst }` ) ).body.enabled === false );
+
+		await page.fill( '#minn-zone-name', 'Minn test zone 2' );
+		await page.click( '#minn-zone-save' );
+		await page.waitForFunction( () => /Minn test zone 2/.test( ( document.querySelector( '.minn-store-zone-head .minn-fields-sub' ) || {} ).textContent || '' ), null, { timeout: 15000 } );
+		t.check( 'zone rename round-trips', ( await rest( `wc/v3/shipping/zones/${ zone.id }` ) ).body.name === 'Minn test zone 2' );
+		page.once( 'dialog', ( dlg ) => dlg.accept() );
+		await page.click( '#minn-zone-delete' );
+		await page.waitForSelector( '#minn-zone-add', { timeout: 15000 } );
+		t.check( 'zone delete removes it', ( await rest( `wc/v3/shipping/zones/${ zone.id }` ) ).status === 404 );
+
+		await page.click( '[data-storesec="shipping:classes"]' );
+		await page.waitForSelector( '#minn-class-add', { timeout: 20000 } );
+		await page.click( '#minn-class-add' );
+		await page.waitForSelector( '#minn-store-form-modal [data-sset="name"]', { timeout: 10000 } );
+		await page.fill( '#minn-store-form-modal [data-sset="name"]', 'Minn bulky' );
+		await page.fill( '#minn-store-form-modal [data-sset="description"]', 'Big things' );
+		await page.click( '#minn-store-form-modal #minn-sset-save' );
+		await page.waitForSelector( '#minn-modal-overlay', { state: 'detached', timeout: 15000 } );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-store-classes .minn-store-email-title' ) ].some( ( e ) => /Minn bulky/.test( e.textContent ) ), null, { timeout: 15000 } );
+		const cls = ( await rest( 'wc/v3/products/shipping_classes?per_page=100' ) ).body.find( ( x ) => x.name === 'Minn bulky' );
+		t.check( 'shipping class created via wc/v3', !! cls && cls.description === 'Big things' );
+		if ( cls ) {
+			page.once( 'dialog', ( dlg ) => dlg.accept() );
+			await page.click( `[data-classdel="${ cls.id }"]` );
+			await page.waitForFunction( ( id ) => ! document.querySelector( `[data-classdel="${ id }"]` ), cls.id, { timeout: 15000 } );
+			t.check( 'shipping class deleted', ! ( await rest( 'wc/v3/products/shipping_classes?per_page=100' ) ).body.some( ( x ) => x.id === cls.id ) );
+		}
+
 		/* ===== An editor is refused ===== */
 		const ed = await loginAs( browser, 'minn-editor', 'minn-editor-pass-1' );
 		await ed.page.goto( `${ BASE }/minn-admin/`, { waitUntil: 'domcontentloaded' } );
@@ -229,6 +293,13 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 		t.check( 'editor: sections route 403', edStatus === 403, String( edStatus ) );
 		await ed.ctx.close();
 	} finally {
+		// Shipping leftovers from a crashed run: the test zone and class.
+		try {
+			const zs = ( await rest( 'wc/v3/shipping/zones' ) ).body || [];
+			for ( const z of zs ) if ( /^Minn test zone/.test( z.name ) ) await rest( `wc/v3/shipping/zones/${ z.id }?force=true`, { method: 'DELETE' } );
+			const cs = ( await rest( 'wc/v3/products/shipping_classes?per_page=100' ) ).body || [];
+			for ( const x of cs ) if ( x.name === 'Minn bulky' ) await rest( `wc/v3/products/shipping_classes/${ x.id }?force=true`, { method: 'DELETE' } );
+		} catch ( e ) { /* best effort */ }
 		// Restore through WooCommerce's own batch route so a broken Minn save
 		// can never leave the fixture mutated.
 		const byGroup = {};
