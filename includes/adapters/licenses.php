@@ -1792,6 +1792,44 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// Novamira Pro: a WooCommerce Software License client (woo_sl_action
+	// requests to license.dynamic.ooo). Four plain options under the nvp_
+	// prefix: license_key (lowercased), license_status ('active' or ''),
+	// license_error (the server's last message, cleared on success) and
+	// license_domain (where it last validated). Their cron re-checks
+	// twice a day and auto-repairs an expired-but-renewed key.
+	$providers['novamira-pro'] = array(
+		'name'      => 'Novamira Pro',
+		'component' => 'novamira-pro/novamira-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'novamira-pro/novamira-pro.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$key = (string) get_option( 'nvp_license_key', '' );
+			if ( '' === $key ) {
+				return array( $item( array( 'name' => 'Novamira Pro', 'state' => 'missing' ) ) );
+			}
+			$status = (string) get_option( 'nvp_license_status', '' );
+			$error  = trim( (string) get_option( 'nvp_license_error', '' ) );
+			$domain = (string) get_option( 'nvp_license_domain', '' );
+			$here   = str_replace( array( 'https://', 'http://' ), '', get_bloginfo( 'wpurl' ) );
+			if ( 'active' === $status ) {
+				$note = $domain && $domain !== $here
+					/* translators: %s: the domain the license was activated for. */
+					? sprintf( __( 'activated for %s, this site is %s', 'minn-admin' ), $domain, $here )
+					: '';
+				return array( $item( array( 'name' => 'Novamira Pro', 'state' => 'valid', 'key' => true, 'note' => $note ) ) );
+			}
+			$state = 'unknown';
+			if ( preg_match( '/expired/i', $error ) ) {
+				$state = 'expired';
+			} elseif ( '' !== $error ) {
+				$state = 'invalid';
+			}
+			return array( $item( array( 'name' => 'Novamira Pro', 'state' => $state, 'key' => true, 'note' => $error ? $error : __( 'Key stored; no recorded status', 'minn-admin' ) ) ) );
+		},
+	);
+
 	// AnalyticsWP: site option {key, last_check, is_expired?, is_on_free_trial,
 	// free_trial_end} via its bundled WooSoftwareLicense toolkit.
 	$providers['analyticswp'] = array(
@@ -4031,6 +4069,53 @@ function minn_admin_license_default_providers() {
 			\Bricks\License::$license_key = $key;
 			$status = \Bricks\License::activate_license();
 			return array( 'ok' => 'active' === $status, 'code' => 'active' === $status ? '' : 'invalid', 'message' => __( 'active', 'minn-admin' ) === $status ? '' : (string) $status );
+		};
+	}
+
+	// Novamira Pro: its own activate/deactivate return [ ok, message ]
+	// after a live status check; the stored key is overwritten BEFORE the
+	// check in their flow, so a rejected key is restored to the previous
+	// one here instead of replacing a working key with a typo. The
+	// server's messages classify: "expired" is expired, a domain message
+	// (their s203/e204) is a seat on another site, anything else invalid.
+	if ( function_exists( '\\Novamira\\Pro\\activate_new_license_key' ) ) {
+		$nvp_code = function ( $message ) {
+			if ( preg_match( '/expired/i', $message ) ) {
+				return 'expired';
+			}
+			if ( preg_match( '/domain|another site|already activ/i', $message ) ) {
+				return 'site_limit';
+			}
+			return 'invalid';
+		};
+		$providers['novamira-pro']['secret_label'] = __( 'Novamira Pro license key', 'minn-admin' );
+		$providers['novamira-pro']['activate']     = function ( $secret ) use ( $nvp_code ) {
+			$prev = array(
+				'nvp_license_key'    => get_option( 'nvp_license_key', '' ),
+				'nvp_license_status' => get_option( 'nvp_license_status', '' ),
+				'nvp_license_error'  => get_option( 'nvp_license_error', '' ),
+				'nvp_license_domain' => get_option( 'nvp_license_domain', '' ),
+			);
+			list( $ok, $message ) = \Novamira\Pro\activate_new_license_key( (string) $secret );
+			if ( $ok ) {
+				return array( 'ok' => true, 'message' => (string) $message );
+			}
+			foreach ( $prev as $opt => $val ) {
+				update_option( $opt, $val );
+			}
+			return array( 'ok' => false, 'code' => $nvp_code( (string) $message ), 'message' => (string) $message );
+		};
+		$providers['novamira-pro']['deactivate'] = function () {
+			list( $ok, $message ) = \Novamira\Pro\deactivate_license();
+			return array( 'ok' => (bool) $ok, 'message' => (string) $message );
+		};
+		$providers['novamira-pro']['verify'] = function () use ( $nvp_code ) {
+			\Novamira\Pro\refresh_license_status();
+			if ( \Novamira\Pro\is_license_active() ) {
+				return array( 'ok' => true );
+			}
+			$error = (string) get_option( 'nvp_license_error', '' );
+			return array( 'ok' => false, 'code' => $nvp_code( $error ), 'message' => $error );
 		};
 	}
 

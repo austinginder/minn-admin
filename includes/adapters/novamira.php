@@ -184,6 +184,10 @@ function minn_admin_novamira_status_model() {
 		'value' => sprintf( __( '%1$d of %2$d', 'minn-admin' ), count( $abilities ) - $disabled, count( $abilities ) ),
 		'hint'  => $disabled ? sprintf( /* translators: %d: switched-off abilities. */ _n( '%d switched off in Settings', '%d switched off in Settings', $disabled, 'minn-admin' ), $disabled ) : __( 'everything registered is callable', 'minn-admin' ),
 	);
+	$pro = minn_admin_novamira_pro_row();
+	if ( $pro ) {
+		$rows[] = $pro;
+	}
 	if ( $last ) {
 		$rows[] = array(
 			'label' => __( 'Last agent request', 'minn-admin' ),
@@ -222,6 +226,52 @@ function minn_admin_novamira_status_model() {
 }
 
 /**
+ * Novamira Pro on the card: its license state, and how many of its
+ * specializations (the page-builder, theme, field and SEO ability packs)
+ * apply to this site. Each manifest entry gates on the target plugin and a
+ * version floor; the packs only load while the license is active, so the
+ * count is what a licence would unlock, not what is registered.
+ */
+function minn_admin_novamira_pro_row() {
+	if ( ! defined( 'NOVAMIRA_PRO_VERSION' ) ) {
+		return null;
+	}
+	$active = function_exists( '\\Novamira\\Pro\\is_license_active' ) && \Novamira\Pro\is_license_active();
+	$key    = (string) get_option( 'nvp_license_key', '' );
+	$error  = trim( (string) get_option( 'nvp_license_error', '' ) );
+	$apply  = array();
+	$total  = 0;
+	if ( function_exists( '\\Novamira\\Pro\\specialization_manifest' ) ) {
+		foreach ( (array) \Novamira\Pro\specialization_manifest() as $entry ) {
+			$total++;
+			try {
+				if ( isset( $entry['gate'] ) && is_callable( $entry['gate'] ) && $entry['gate']() ) {
+					$apply[] = (string) ( $entry['category_label'] ?? $entry['slug'] );
+				}
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+		}
+	}
+	if ( $active ) {
+		$value = __( 'Licensed', 'minn-admin' );
+	} elseif ( '' === $key ) {
+		$value = __( 'No license', 'minn-admin' );
+	} else {
+		$value = preg_match( '/expired/i', $error ) ? __( 'License expired', 'minn-admin' ) : __( 'License not active', 'minn-admin' );
+	}
+	/* translators: 1: specializations that apply to this site, 2: specializations in the release. */
+	$hint = sprintf( __( '%1$d of %2$d specializations apply here', 'minn-admin' ), count( $apply ), $total );
+	if ( $apply ) {
+		$hint .= ': ' . implode( ', ', array_slice( $apply, 0, 6 ) ) . ( count( $apply ) > 6 ? '…' : '' );
+	}
+	if ( ! $active ) {
+		$hint .= '. ' . __( 'They load once the license is active (Extensions → Licenses).', 'minn-admin' );
+	}
+	return array( 'label' => 'Novamira Pro ' . NOVAMIRA_PRO_VERSION, 'value' => $value, 'hint' => $hint );
+}
+
+/**
  * Every registered ability with Novamira's rule applied: [ { name, label,
  * description, provider, disabled, off } ]. `off` marks an ability whose
  * Novamira feature is switched off (Design, Skills, Chat): the rule cannot
@@ -253,6 +303,7 @@ function minn_admin_novamira_abilities( $fresh = false ) {
 				'label'       => (string) $ability->get_label(),
 				'description' => (string) $ability->get_description(),
 				'provider'    => (string) strstr( $name, '/', true ),
+				'category'    => $category,
 				'disabled'    => ! empty( $rules[ $name ]['disabled'] ),
 				'off'         => $off,
 			);
@@ -271,6 +322,7 @@ function minn_admin_novamira_abilities( $fresh = false ) {
 			'label'       => ucwords( str_replace( '-', ' ', (string) substr( strrchr( $name, '/' ), 1 ) ) ),
 			'description' => '',
 			'provider'    => (string) strstr( $name, '/', true ),
+			'category'    => '',
 			'disabled'    => true,
 			'off'         => false,
 		);
@@ -279,20 +331,43 @@ function minn_admin_novamira_abilities( $fresh = false ) {
 	return $out;
 }
 
-/** Provider namespaces as settings tabs; Novamira's own first, then by size. */
+/**
+ * The group an ability is listed under: its registered category (what the
+ * Abilities Hub groups by, and what Novamira Pro names its specializations
+ * with: "Elementor", "ACF", "Yoast SEO"), else its provider namespace.
+ */
+function minn_admin_novamira_ability_group( $a ) {
+	return '' !== $a['category'] ? 'c-' . $a['category'] : 'p-' . $a['provider'];
+}
+
+function minn_admin_novamira_group_label( $group ) {
+	if ( 0 === strpos( $group, 'c-' ) ) {
+		$slug = substr( $group, 2 );
+		$cat  = function_exists( 'wp_get_ability_category' ) ? wp_get_ability_category( $slug ) : null;
+		return $cat && method_exists( $cat, 'get_label' ) ? (string) $cat->get_label() : ucwords( str_replace( '-', ' ', $slug ) );
+	}
+	return minn_admin_novamira_provider_label( substr( $group, 2 ) );
+}
+
+/** Settings tabs: Context first, then ability groups (Novamira's own first, then by size). */
 function minn_admin_novamira_ability_tabs() {
 	$by = array();
 	foreach ( minn_admin_novamira_abilities() as $a ) {
-		$by[ $a['provider'] ][] = $a;
+		$by[ minn_admin_novamira_ability_group( $a ) ][] = $a;
 	}
-	uksort( $by, function ( $x, $y ) use ( $by ) {
-		if ( 'novamira' === $x ) return -1;
-		if ( 'novamira' === $y ) return 1;
+	$own = function ( $g ) {
+		return 0 === strpos( $g, 'p-novamira' ) || in_array( $g, array( 'c-novamira', 'c-skill', 'c-design-system', 'c-memory', 'c-files', 'c-php', 'c-wp-cli', 'c-gutenberg' ), true );
+	};
+	uksort( $by, function ( $x, $y ) use ( $by, $own ) {
+		if ( $own( $x ) !== $own( $y ) ) return $own( $x ) ? -1 : 1;
 		return count( $by[ $y ] ) - count( $by[ $x ] );
 	} );
 	$tabs = array();
-	foreach ( $by as $provider => $list ) {
-		$tabs[] = array( 'id' => sanitize_key( $provider ), 'label' => minn_admin_novamira_provider_label( $provider ) );
+	if ( function_exists( '\\Novamira\\Context\\instructions_get_content' ) ) {
+		$tabs[] = array( 'id' => 'context', 'label' => __( 'Context', 'minn-admin' ) );
+	}
+	foreach ( $by as $group => $list ) {
+		$tabs[] = array( 'id' => sanitize_key( $group ), 'label' => minn_admin_novamira_group_label( $group ) );
 	}
 	return $tabs;
 }
@@ -337,12 +412,15 @@ function minn_admin_novamira_provider_label( $provider ) {
 }
 
 function minn_admin_novamira_tab_shape( $tab ) {
-	$tab    = sanitize_key( $tab );
+	$tab = sanitize_key( $tab );
+	if ( 'context' === $tab ) {
+		return minn_admin_novamira_context_shape();
+	}
 	$fields = array();
 	$values = array();
 	$locked = 0;
 	foreach ( minn_admin_novamira_abilities() as $a ) {
-		if ( sanitize_key( $a['provider'] ) !== $tab ) {
+		if ( sanitize_key( minn_admin_novamira_ability_group( $a ) ) !== $tab ) {
 			continue;
 		}
 		if ( $a['off'] ) {
@@ -365,9 +443,9 @@ function minn_admin_novamira_tab_shape( $tab ) {
 		'groups'   => array(
 			array(
 				'title'  => __( 'Abilities an agent may call', 'minn-admin' ),
-				'desc'   => $locked
+				'desc'   => ( minn_admin_novamira_enabled() ? '' : __( 'AI abilities are off: Novamira registers its own PHP, WP-CLI and file abilities only while they are on, so this list is what other plugins provide. ', 'minn-admin' ) ) . ( $locked
 					? sprintf( /* translators: %d: abilities of a switched-off Novamira feature. */ _n( '%d ability belongs to a Novamira feature that is switched off; turn the feature on in Novamira to offer it.', '%d abilities belong to Novamira features that are switched off; turn the feature on in Novamira to offer them.', $locked, 'minn-admin' ), $locked )
-					: '',
+					: '' ),
 				'fields' => $fields,
 				'locked' => $locked,
 			),
@@ -377,8 +455,36 @@ function minn_admin_novamira_tab_shape( $tab ) {
 	);
 }
 
+/**
+ * The site instructions every agent session reads (Novamira's Context
+ * screen). Stored by their own writer; whether the instructions are
+ * injected at all is a Novamira feature switch left on their screen.
+ */
+function minn_admin_novamira_context_shape() {
+	$enabled = function_exists( '\\Novamira\\Context\\instructions_is_enabled' ) ? \Novamira\Context\instructions_is_enabled() : true;
+	return array(
+		'groups'   => array(
+			array(
+				'title'  => __( 'Site instructions for agents', 'minn-admin' ),
+				'desc'   => $enabled
+					? __( 'Every agent session receives this text as context about the site.', 'minn-admin' )
+					: __( 'Saved, but Novamira\'s user-context feature is switched off, so agents are not receiving it; turn it on from the Novamira screen.', 'minn-admin' ),
+				'fields' => array(
+					array( 'key' => 'context', 'label' => __( 'Instructions', 'minn-admin' ), 'type' => 'textarea', 'rows' => 14, 'mono' => true ),
+				),
+				'locked' => 0,
+			),
+		),
+		'values'   => array( 'context' => \Novamira\Context\instructions_get_content() ),
+		'adminUrl' => admin_url( 'admin.php?page=novamira-context' ),
+	);
+}
+
 /** Write toggles into Novamira's rules through its own helper (it keeps only disabled entries). */
 function minn_admin_novamira_save( array $values ) {
+	if ( array_key_exists( 'context', $values ) && function_exists( '\\Novamira\\Context\\instructions_update_content' ) ) {
+		\Novamira\Context\instructions_update_content( (string) $values['context'] );
+	}
 	$rules = novamira_get_ability_rules();
 	foreach ( $values as $key => $on ) {
 		if ( 0 !== strpos( (string) $key, 'ability:' ) ) {
@@ -394,6 +500,114 @@ function minn_admin_novamira_save( array $values ) {
 	minn_admin_novamira_abilities( true );
 }
 
+/* ===== Memory (Novamira Pro): what agents remember between sessions =====
+ *
+ * A novamira_memory post per memory: title = name, excerpt = description,
+ * content = the note (plain text), meta _novamira_memory_type in
+ * user|feedback|project|reference. The abilities that write these load
+ * only under an active license, but the posts outlive it, so the view
+ * shows whenever the post type exists. Reads and writes are plain post
+ * calls, the same ones Pro's own Memory screen makes. */
+
+function minn_admin_novamira_memory_ready() {
+	return post_type_exists( 'novamira_memory' );
+}
+
+function minn_admin_novamira_memory_types() {
+	$types = defined( '\\Novamira\\Pro\\Abilities\\Memory\\NOVAMIRA_MEMORY_TYPES' ) ? (array) constant( '\\Novamira\\Pro\\Abilities\\Memory\\NOVAMIRA_MEMORY_TYPES' ) : array( 'user', 'feedback', 'project', 'reference' );
+	$labels = array(
+		'user'      => __( 'User', 'minn-admin' ),
+		'feedback'  => __( 'Feedback', 'minn-admin' ),
+		'project'   => __( 'Project', 'minn-admin' ),
+		'reference' => __( 'Reference', 'minn-admin' ),
+	);
+	$out = array();
+	foreach ( $types as $t ) {
+		$out[ $t ] = isset( $labels[ $t ] ) ? $labels[ $t ] : ucfirst( $t );
+	}
+	return $out;
+}
+
+function minn_admin_novamira_memory_item( WP_Post $p ) {
+	$types = minn_admin_novamira_memory_types();
+	$type  = (string) get_post_meta( $p->ID, '_novamira_memory_type', true );
+	return array(
+		'id'          => $p->ID,
+		'name'        => $p->post_title,
+		'description' => $p->post_excerpt,
+		'type'        => $type,
+		'typeText'    => isset( $types[ $type ] ) ? $types[ $type ] : ( $type ? ucfirst( $type ) : '' ),
+		'content'     => $p->post_content,
+		'updated'     => get_gmt_from_date( $p->post_modified ) ? gmdate( 'c', strtotime( $p->post_modified_gmt . ' UTC' ) ) : '',
+	);
+}
+
+function minn_admin_novamira_memories( $q = '', $type = '' ) {
+	$args = array(
+		'post_type'      => 'novamira_memory',
+		'post_status'    => 'publish',
+		'posts_per_page' => 200,
+		'orderby'        => 'modified',
+		'order'          => 'DESC',
+	);
+	if ( '' !== $q ) {
+		$args['s'] = $q;
+	}
+	if ( '' !== $type ) {
+		$args['meta_key']   = '_novamira_memory_type'; // phpcs:ignore WordPress.DB.SlowDBQuery
+		$args['meta_value'] = $type; // phpcs:ignore WordPress.DB.SlowDBQuery
+	}
+	return array_map( 'minn_admin_novamira_memory_item', get_posts( $args ) );
+}
+
+function minn_admin_novamira_memory_view() {
+	$type_tabs = array();
+	foreach ( minn_admin_novamira_memory_types() as $slug => $label ) {
+		$type_tabs[] = array( $slug, $label );
+	}
+	$type_options = array();
+	foreach ( minn_admin_novamira_memory_types() as $slug => $label ) {
+		$type_options[] = array( $slug, $label );
+	}
+	return array(
+		'viewLabel' => __( 'Memory', 'minn-admin' ),
+		'cap'       => novamira_manage_capability(),
+		'route'     => 'minn-admin/v1/novamira/memories',
+		'itemsKey'  => 'items',
+		'totalKey'  => 'total',
+		'search'    => 'search={q}',
+		'tabs'      => array( 'param' => 'type', 'static' => $type_tabs ),
+		'columns'   => array(
+			array( 'key' => 'name', 'label' => __( 'Memory', 'minn-admin' ), 'format' => 'title' ),
+			array( 'key' => 'typeText', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'pill' ),
+			array( 'key' => 'description', 'label' => __( 'About', 'minn-admin' ), 'format' => 'text' ),
+			array( 'key' => 'updated', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
+		),
+		'detail'    => array(
+			'skip' => array( 'id', 'type', 'typeText', 'updated' ),
+			'edit' => array(
+				'route'  => 'minn-admin/v1/novamira/memories/{id}',
+				'method' => 'POST',
+				'fields' => array(
+					array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ) ),
+					array( 'key' => 'description', 'label' => __( 'Description', 'minn-admin' ) ),
+					array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options ),
+					array( 'key' => 'content', 'label' => __( 'Content', 'minn-admin' ), 'type' => 'textarea', 'rows' => 10, 'mono' => true ),
+				),
+			),
+		),
+		'actions'   => array(
+			array(
+				'label'   => __( 'Delete memory', 'minn-admin' ),
+				'method'  => 'DELETE',
+				'route'   => 'minn-admin/v1/novamira/memories/{id}',
+				'confirm' => __( 'Delete this memory? Agents will no longer recall it.', 'minn-admin' ),
+				'danger'  => true,
+			),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_novamira_active() ) {
 		return $surfaces;
@@ -401,7 +615,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['novamira'] = array(
 		'label'      => __( 'Agent Access', 'minn-admin' ),
 		'sub'        => 'Novamira',
-		'plugin'     => 'novamira',
+		'plugin'     => array( 'novamira', 'novamira-pro' ),
 		'icon'       => 'plug',
 		'cap'        => novamira_manage_capability(),
 		'group'      => 'tools',
@@ -435,6 +649,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route' => 'minn-admin/v1/novamira/abilities/{tab}',
 		),
 	);
+	if ( minn_admin_novamira_memory_ready() ) {
+		$surfaces['novamira']['views'] = array( minn_admin_novamira_memory_view() );
+	}
 	return $surfaces;
 } );
 
@@ -488,6 +705,60 @@ add_action( 'rest_api_init', function () {
 			return is_wp_error( $r ) ? $r : rest_ensure_response( array( 'ok' => true ) );
 		},
 	) );
+	if ( minn_admin_novamira_memory_ready() ) {
+		register_rest_route( 'minn-admin/v1', '/novamira/memories', array(
+			'methods'             => 'GET',
+			'permission_callback' => $perm,
+			'callback'            => function ( $req ) {
+				$items = minn_admin_novamira_memories( sanitize_text_field( (string) $req->get_param( 'search' ) ), sanitize_key( (string) $req->get_param( 'type' ) ) );
+				return rest_ensure_response( array( 'items' => $items, 'total' => count( $items ) ) );
+			},
+		) );
+		register_rest_route( 'minn-admin/v1', '/novamira/memories/(?P<id>\d+)', array(
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => $perm,
+				'callback'            => function ( $req ) {
+					$post = get_post( (int) $req['id'] );
+					if ( ! $post || 'novamira_memory' !== $post->post_type ) {
+						return new WP_Error( 'not_found', __( 'No such memory.', 'minn-admin' ), array( 'status' => 404 ) );
+					}
+					$b     = (array) $req->get_json_params();
+					$types = minn_admin_novamira_memory_types();
+					$upd   = array( 'ID' => $post->ID );
+					if ( isset( $b['name'] ) ) {
+						$upd['post_title'] = sanitize_text_field( (string) $b['name'] );
+					}
+					if ( isset( $b['description'] ) ) {
+						$upd['post_excerpt'] = sanitize_text_field( (string) $b['description'] );
+					}
+					if ( isset( $b['content'] ) ) {
+						$upd['post_content'] = wp_strip_all_tags( (string) $b['content'] );
+					}
+					$r = wp_update_post( wp_slash( $upd ), true );
+					if ( is_wp_error( $r ) ) {
+						return $r;
+					}
+					if ( isset( $b['type'] ) && isset( $types[ (string) $b['type'] ] ) ) {
+						update_post_meta( $post->ID, '_novamira_memory_type', (string) $b['type'] );
+					}
+					return rest_ensure_response( minn_admin_novamira_memory_item( get_post( $post->ID ) ) );
+				},
+			),
+			array(
+				'methods'             => 'DELETE',
+				'permission_callback' => $perm,
+				'callback'            => function ( $req ) {
+					$post = get_post( (int) $req['id'] );
+					if ( ! $post || 'novamira_memory' !== $post->post_type ) {
+						return new WP_Error( 'not_found', __( 'No such memory.', 'minn-admin' ), array( 'status' => 404 ) );
+					}
+					wp_trash_post( $post->ID );
+					return rest_ensure_response( array( 'ok' => true ) );
+				},
+			),
+		) );
+	}
 	register_rest_route( 'minn-admin/v1', '/novamira/abilities/(?P<tab>[a-z0-9_\-]+)', array(
 		array(
 			'methods'             => 'GET',

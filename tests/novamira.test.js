@@ -26,11 +26,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	let pwUuid = '';
 	let enabledBefore = null;
+	let tabId = '';
 	try {
 		await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
 		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 60000 } );
 		const surf = await page.evaluate( () => ( window.MINN.surfaces || [] ).find( ( s ) => s.id === 'novamira' ) || null );
-		t.check( 'Agent Access surface in the boot payload with its plugin key', !! surf && surf.plugin === 'novamira' && surf.settings && surf.settings.tabs.length > 1, JSON.stringify( surf && { plugin: surf.plugin, tabs: surf.settings && surf.settings.tabs.length } ) );
+		t.check( 'Agent Access surface in the boot payload with its plugin key', !! surf && ( Array.isArray( surf.plugin ) ? surf.plugin.includes( 'novamira' ) : surf.plugin === 'novamira' ) && surf.settings && surf.settings.tabs.length > 1, JSON.stringify( surf && { plugin: surf.plugin, tabs: surf.settings && surf.settings.tabs.length } ) );
 		if ( ! surf ) throw new Error( 'Novamira surface missing; is the plugin active?' );
 
 		/* ===== Status + enable switch ===== */
@@ -63,15 +64,34 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'revoking an unknown connection is a clean no-op, not an error', bad.status === 200 || bad.status === 404, `status ${ bad.status }` );
 
 		/* ===== Abilities settings ===== */
-		let tab = await rest( 'minn-admin/v1/novamira/abilities/novamira' );
+		// Tabs group by ability category. Novamira registers its own PHP,
+		// WP-CLI and file abilities only while abilities are on, so the tab
+		// list is read from a fresh boot after the switch above.
+		await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 60000 } );
+		const tabs = await page.evaluate( () => ( ( window.MINN.surfaces || [] ).find( ( s ) => s.id === 'novamira' ) || { settings: { tabs: [] } } ).settings.tabs.map( ( x ) => x.id ) );
+		t.check( 'settings tabs lead with Context then ability categories', tabs[ 0 ] === 'context' && tabs.length > 3, JSON.stringify( tabs ) );
 		const key = 'ability:novamira/execute-php';
-		t.check( 'Novamira tab lists its abilities as toggles with descriptions', tab.status === 200 && tab.body.groups[ 0 ].fields.some( ( f ) => f.key === key && f.type === 'toggle' && f.help ), JSON.stringify( tab.body && tab.body.groups[ 0 ].fields.length ) );
+		let tab = null;
+		for ( const id of tabs.filter( ( x ) => x !== 'context' ) ) {
+			const r2 = await rest( 'minn-admin/v1/novamira/abilities/' + id );
+			if ( r2.status === 200 && r2.body.groups[ 0 ].fields.some( ( f ) => f.key === key ) ) { tabId = id; tab = r2; break; }
+		}
+		t.check( 'a category tab lists execute-php as a toggle with its description', !! tab && tab.body.groups[ 0 ].fields.some( ( f ) => f.key === key && f.type === 'toggle' && f.help ), tabId || 'not found' );
+		if ( ! tab ) throw new Error( 'execute-php tab not found' );
 		const wasOn = tab.body.values[ key ];
-		const saved = await rest( 'minn-admin/v1/novamira/abilities/novamira', { method: 'POST', body: { values: { [ key ]: false } } } );
+		const saved = await rest( 'minn-admin/v1/novamira/abilities/' + tabId, { method: 'POST', body: { values: { [ key ]: false } } } );
 		t.check( 'switching an ability off writes Novamira\'s rule', saved.status === 200 && saved.body.values[ key ] === false, JSON.stringify( saved.body && saved.body.values[ key ] ) );
 		st = await rest( 'minn-admin/v1/novamira/status' );
 		t.check( 'status counts the switched-off ability', /1 switched off/.test( st.body.rows[ 2 ].hint ), st.body.rows[ 2 ].hint );
-		const back = await rest( 'minn-admin/v1/novamira/abilities/novamira', { method: 'POST', body: { values: { [ key ]: wasOn } } } );
+		const back = await rest( 'minn-admin/v1/novamira/abilities/' + tabId, { method: 'POST', body: { values: { [ key ]: wasOn } } } );
+		// Context tab: the site instructions round-trip through Novamira's writer.
+		const ctx = await rest( 'minn-admin/v1/novamira/abilities/context' );
+		const ctxBefore = ctx.body.values.context;
+		const ctxSaved = await rest( 'minn-admin/v1/novamira/abilities/context', { method: 'POST', body: { values: { context: 'Minn suite note ' + Date.now() } } } );
+		t.check( 'Context tab saves site instructions', ctx.status === 200 && ctxSaved.status === 200 && /Minn suite note/.test( ctxSaved.body.values.context ), JSON.stringify( ctxSaved.body && ctxSaved.body.values ) );
+		await rest( 'minn-admin/v1/novamira/abilities/context', { method: 'POST', body: { values: { context: ctxBefore } } } );
+		t.check( 'status card carries a Novamira Pro row when Pro is installed', st.body.rows.some( ( r ) => /^Novamira Pro/.test( r.label ) && /specializations apply/.test( r.hint ) ), JSON.stringify( st.body.rows.map( ( r ) => r.label ) ) );
 		t.check( 'switching it back clears the rule', back.status === 200 && back.body.values[ key ] === wasOn );
 
 		/* ===== UI ===== */
@@ -84,9 +104,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		} ) );
 		t.check( 'surface renders the status card and both views', ui.title === 'Agent Access' && ui.views.includes( 'Connections' ) && ui.views.includes( 'Abilities' ), JSON.stringify( ui ) );
 		await page.click( '[data-sview="settings"]' );
+		await page.waitForSelector( '[data-ssettab="context"]', { timeout: 60000 } );
+		await page.waitForSelector( 'textarea', { timeout: 60000 } );
+		t.check( 'Abilities view opens on the Context tab with its instructions field', !! await page.$( 'textarea' ) );
+		await page.click( '[data-ssettab="' + tabId + '"]' );
 		await page.waitForSelector( '.minn-toggle-row', { timeout: 60000 } );
 		const rows = await page.evaluate( () => document.querySelectorAll( '.minn-toggle-row' ).length );
-		t.check( 'Abilities view renders one switch per ability', rows > 5, String( rows ) );
+		t.check( 'a category tab renders one switch per ability', rows > 0, String( rows ) );
 
 		// The card doorway: Extensions → Novamira card links to the surface.
 		await page.goto( BASE + '/minn-admin/extensions', { waitUntil: 'domcontentloaded' } );
@@ -98,7 +122,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {
 		if ( pwUuid ) await rest( 'minn-admin/v1/novamira/connections/pw:' + pwUuid + '/revoke', { method: 'POST' } ).catch( () => {} );
-		await rest( 'minn-admin/v1/novamira/abilities/novamira', { method: 'POST', body: { values: { 'ability:novamira/execute-php': true } } } ).catch( () => {} );
+		if ( tabId ) await rest( 'minn-admin/v1/novamira/abilities/' + tabId, { method: 'POST', body: { values: { 'ability:novamira/execute-php': true } } } ).catch( () => {} );
 		if ( enabledBefore === false ) await rest( 'minn-admin/v1/novamira/enabled/off', { method: 'POST' } ).catch( () => {} );
 	}
 

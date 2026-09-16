@@ -372,8 +372,13 @@ class Minn_Admin_Plugin_Links {
 			$add( 'woocommerce', array( 'label' => __( 'Store settings', 'minn-admin' ), 'go' => 'store-settings/general' ) );
 		}
 		if ( function_exists( 'minn_admin_licenses_can_manage' ) && minn_admin_licenses_can_manage() && function_exists( 'minn_admin_licenses' ) ) {
-			foreach ( (array) minn_admin_licenses() as $row ) {
-				$c = isset( $row['component'] ) ? (string) $row['component'] : '';
+			// Rows name their provider (`source`); the provider registry
+			// names the component. Off rows also carry it as `turnOn`.
+			$providers = function_exists( 'minn_admin_license_default_providers' ) ? apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() ) : array();
+			$lic       = minn_admin_licenses();
+			foreach ( (array) ( $lic['items'] ?? array() ) as $row ) {
+				$src = isset( $row['source'] ) ? (string) $row['source'] : '';
+				$c   = isset( $providers[ $src ]['component'] ) ? (string) $providers[ $src ]['component'] : ( isset( $row['turnOn'] ) ? (string) $row['turnOn'] : '' );
 				if ( '' === $c || 0 === strpos( $c, 'theme:' ) ) {
 					continue;
 				}
