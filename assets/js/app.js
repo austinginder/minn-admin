@@ -25202,7 +25202,7 @@
 
 	async function loadStoreSettings() {
 		const r = await api( 'minn-admin/v1/wc/settings' );
-		state.cache.store = { sections: r.sections || [], adminUrl: r.adminUrl || '', data: {}, emails: null, gateways: null, shipping: null, zoneOpen: null };
+		state.cache.store = { sections: r.sections || [], adminUrl: r.adminUrl || '', data: {}, emails: null, gateways: null, shipping: null, zoneOpen: null, webhooks: null, apiKeys: null };
 	}
 
 	// The active section, or the first one when the URL names none (or one
@@ -25269,7 +25269,8 @@
 		const isPayments = sec.kind === 'payments';
 		const isShipping = sec.kind === 'shipping-zones' || sec.kind === 'shipping-classes';
 		const isTax = sec.kind === 'tax-rates';
-		const bespoke = isPayments || isShipping || isTax;
+		const isAdvanced = sec.kind === 'webhooks' || sec.kind === 'api-keys';
+		const bespoke = isPayments || isShipping || isTax || isAdvanced;
 		const data = bespoke ? { groups: [] } : c.data[ sec.id ];
 		const form = data && ! bespoke ? settingsFormHtml( data ) : null;
 		const isEmails = sec.page === 'email' && ! sec.section;
@@ -25284,6 +25285,7 @@
 				${ isEmails ? '<div id="minn-store-emails"></div>' : '' }
 				${ isShipping ? '<div id="minn-store-shipping"></div>' : '' }
 				${ isTax ? '<div id="minn-store-tax"></div>' : '' }
+				${ isAdvanced ? '<div id="minn-store-advanced"></div>' : '' }
 				${ isPayments ? '<div id="minn-store-payments"></div>' : `<div id="minn-store-form">${ form ? form.html : `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` }</div>` }
 			</div>
 		</div>`;
@@ -25303,6 +25305,12 @@
 		if ( isTax ) {
 			$( '#minn-store-form', view ).innerHTML = '';
 			renderStoreTaxRates( $( '#minn-store-tax', view ), sec );
+			return;
+		}
+		if ( isAdvanced ) {
+			$( '#minn-store-form', view ).innerHTML = '';
+			if ( sec.kind === 'webhooks' ) renderStoreWebhooks( $( '#minn-store-advanced', view ), sec );
+			else renderStoreApiKeys( $( '#minn-store-advanced', view ), sec );
 			return;
 		}
 		if ( isShipping ) {
@@ -26202,6 +26210,247 @@
 				}
 			} );
 		} );
+	}
+
+	/* --- Webhooks (wc/v3/webhooks) and REST API keys (Minn shim over WooCommerce's key table) --- */
+
+	let webhookCatalog = null;
+	async function loadWebhookCatalog() {
+		if ( ! webhookCatalog ) webhookCatalog = await api( 'minn-admin/v1/wc/webhook-topics' );
+		return webhookCatalog;
+	}
+
+	const webhookForm = ( hook, cat ) => {
+		const isAction = hook && /^action\./.test( hook.topic || '' );
+		return {
+			groups: [ { title: '', fields: [
+				{ key: 'name', label: __( 'Name' ), placeholder: __( 'e.g. Sync orders to the warehouse' ) },
+				{ key: 'status', label: __( 'Status' ), type: 'select', options: [ [ 'active', __( 'Active' ) ], [ 'paused', __( 'Paused' ) ], [ 'disabled', __( 'Disabled' ) ] ] },
+				{ key: 'topic', label: __( 'Topic' ), type: 'combobox', options: cat.topics },
+				{ key: 'action_event', label: __( 'Action event' ), mono: true, placeholder: 'woocommerce_add_to_cart', help: __( 'The WordPress action that fires the webhook. WooCommerce accepts names starting with woocommerce_ or wc_.' ), showWhen: { key: 'topic', equals: 'action' } },
+				{ key: 'delivery_url', label: __( 'Delivery URL' ), type: 'url', mono: true, placeholder: 'https://' },
+				{ key: 'secret', label: __( 'Secret' ), mono: true, help: __( 'Signs each delivery (X-WC-Webhook-Signature). Leave blank to keep the current one; a new webhook without one gets a generated secret.' ) },
+				{ key: 'api_version', label: __( 'API version' ), type: 'select', options: cat.versions.map( ( v ) => [ v, v ] ) },
+			] } ],
+			values: {
+				name: hook ? hook.name : '',
+				status: hook ? hook.status : 'active',
+				topic: hook ? ( isAction ? 'action' : hook.topic ) : '',
+				action_event: isAction ? hook.topic.slice( 7 ) : '',
+				delivery_url: hook ? hook.delivery_url : '',
+				secret: '',
+				api_version: hook ? hook.api_version : ( cat.versions[ cat.versions.length - 1 ] || 'wp_api_v3' ),
+			},
+		};
+	};
+
+	async function renderStoreWebhooks( host, sec ) {
+		if ( ! host ) return;
+		const c = state.cache.store;
+		if ( ! c.webhooks ) {
+			host.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading webhooks…' ) ) }</div>`;
+			try {
+				c.webhooks = await api( 'wc/v3/webhooks?per_page=100&_fields=id,name,status,topic,delivery_url,api_version,date_created' );
+			} catch ( e ) {
+				host.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`;
+				return;
+			}
+			if ( ! host.isConnected ) return;
+		}
+		const rows = c.webhooks;
+		const statusLabel = { active: __( 'Active' ), paused: __( 'Paused' ), disabled: __( 'Disabled' ) };
+		host.innerHTML = `
+			<div class="minn-fields-sub">${ esc( __( 'Webhooks' ) ) }</div>
+			<div class="minn-fields-note">${ esc( __( 'WooCommerce posts a JSON payload to the delivery URL whenever the topic fires. Deliveries and their logs stay in WooCommerce.' ) ) }</div>
+			<div class="minn-store-emails">
+				${ rows.map( ( w ) => `
+				<div class="minn-store-email${ w.status === 'active' ? '' : ' off' }" data-webhook="${ w.id }">
+					<div class="minn-store-email-main">
+						<div class="minn-store-email-title">${ esc( w.name ) } <span class="minn-lic-cat">${ esc( statusLabel[ w.status ] || w.status ) }</span></div>
+						<div class="minn-toggle-desc"><span class="mono">${ esc( w.topic ) }</span> → <span class="mono">${ esc( w.delivery_url ) }</span></div>
+					</div>
+					<button type="button" class="minn-btn-soft" data-hookedit="${ w.id }">${ esc( __( 'Edit' ) ) }</button>
+					<button type="button" class="minn-x-btn" data-hookdel="${ w.id }" title="${ esc( __( 'Delete webhook' ) ) }" aria-label="${ esc( __( 'Delete webhook' ) ) }">×</button>
+				</div>` ).join( '' ) }
+				${ rows.length ? '' : `<div class="minn-empty">${ esc( __( 'No webhooks yet.' ) ) }</div>` }
+			</div>
+			<div><button type="button" class="minn-btn-soft" id="minn-hook-add">${ icon( 'plus' ) } ${ esc( __( 'Add webhook' ) ) }</button></div>`;
+		const refresh = () => {
+			c.webhooks = null;
+			if ( state.route === 'store-settings' && storeSection() === sec ) renderStoreSettings();
+		};
+		const openHook = async ( hook ) => {
+			const cat = await loadWebhookCatalog();
+			openStoreFormModal( {
+				title: hook ? hook.name : __( 'New webhook' ),
+				sub: __( 'Webhook' ),
+				data: webhookForm( hook, cat ),
+				save: async ( payload ) => {
+					const body = {};
+					[ 'name', 'status', 'delivery_url', 'api_version' ].forEach( ( k ) => { if ( k in payload ) body[ k ] = payload[ k ] || ''; } );
+					if ( 'secret' in payload && payload.secret ) body.secret = payload.secret;
+					const topic = 'topic' in payload ? payload.topic : ( hook ? ( /^action\./.test( hook.topic ) ? 'action' : hook.topic ) : '' );
+					const event = 'action_event' in payload ? payload.action_event : ( hook && /^action\./.test( hook.topic ) ? hook.topic.slice( 7 ) : '' );
+					if ( 'topic' in payload || 'action_event' in payload ) {
+						body.topic = topic === 'action' ? 'action.' + ( event || '' ).trim() : topic;
+						if ( body.topic === 'action.' ) throw new Error( __( 'Name the action event.' ) );
+					}
+					if ( ! hook ) {
+						if ( ! body.name ) throw new Error( __( 'A webhook needs a name.' ) );
+						if ( ! body.topic ) throw new Error( __( 'Pick a topic.' ) );
+						if ( ! body.delivery_url ) throw new Error( __( 'A webhook needs a delivery URL.' ) );
+						return api( 'wc/v3/webhooks', { method: 'POST', body: JSON.stringify( body ) } );
+					}
+					return api( `wc/v3/webhooks/${ hook.id }`, { method: 'PUT', body: JSON.stringify( body ) } );
+				},
+				onSaved: () => {
+					toast( hook ? __( 'Webhook saved' ) : __( 'Webhook added' ) );
+					refresh();
+				},
+			} );
+		};
+		$( '#minn-hook-add', host ).addEventListener( 'click', () => openHook( null ) );
+		$$( '[data-hookedit]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => openHook( rows.find( ( w ) => String( w.id ) === btn.dataset.hookedit ) ) )
+		);
+		$$( '[data-hookdel]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const w = rows.find( ( x ) => String( x.id ) === btn.dataset.hookdel );
+				/* translators: %s: webhook name. */
+				if ( ! window.confirm( sprintf( __( 'Delete the webhook “%s”?' ), w ? w.name : '' ) ) ) return;
+				try {
+					await api( `wc/v3/webhooks/${ btn.dataset.hookdel }?force=true`, { method: 'DELETE' } );
+					toast( __( 'Webhook deleted' ) );
+					refresh();
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} )
+		);
+	}
+
+	const apiKeyForm = ( key ) => ( {
+		groups: [ { title: '', fields: [
+			{ key: 'description', label: __( 'Description' ), placeholder: __( 'e.g. Zapier' ) },
+			{ key: 'user', label: __( 'User' ), type: 'suggest', route: 'minn-admin/v1/wc/lookup?catalog=key-users', placeholder: __( 'Search users…' ), help: __( 'Requests with this key act as that user.' ) },
+			{ key: 'permissions', label: __( 'Permissions' ), type: 'select', options: [ [ 'read', __( 'Read' ) ], [ 'write', __( 'Write' ) ], [ 'read_write', __( 'Read / Write' ) ] ] },
+		] } ],
+		values: {
+			description: key ? key.description : '',
+			user: key ? { value: String( key.user ), label: key.userName + ( key.userLogin ? ` (${ key.userLogin })` : '' ) } : { value: String( B.user.id ), label: B.user.name || B.user.login || '' },
+			permissions: key ? key.permissions : 'read',
+		},
+	} );
+
+	async function renderStoreApiKeys( host, sec ) {
+		if ( ! host ) return;
+		const c = state.cache.store;
+		if ( ! c.apiKeys ) {
+			host.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading API keys…' ) ) }</div>`;
+			try {
+				c.apiKeys = ( await api( 'minn-admin/v1/wc/api-keys' ) ).keys || [];
+			} catch ( e ) {
+				host.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`;
+				return;
+			}
+			if ( ! host.isConnected ) return;
+		}
+		const rows = c.apiKeys;
+		const permLabel = { read: __( 'Read' ), write: __( 'Write' ), read_write: __( 'Read / Write' ) };
+		host.innerHTML = `
+			<div class="minn-fields-sub">${ esc( __( 'REST API keys' ) ) }</div>
+			<div class="minn-fields-note">${ esc( __( 'Keys let outside apps call the WooCommerce REST API as a user. The secret is shown once, when the key is made; revoking a key cuts the app off at once.' ) ) }</div>
+			<div class="minn-store-emails">
+				${ rows.map( ( k ) => `
+				<div class="minn-store-email" data-apikey="${ k.id }">
+					<div class="minn-store-email-main">
+						<div class="minn-store-email-title">${ esc( k.description ) } <span class="minn-lic-cat">${ esc( permLabel[ k.permissions ] || k.permissions ) }</span></div>
+						<div class="minn-toggle-desc">${ esc( k.userName ) } · <span class="mono">…${ esc( k.truncated ) }</span>${ k.lastAccess ? ` · ${ esc( sprintf( /* translators: %s: relative time. */ __( 'last used %s' ), timeAgo( k.lastAccess ) ) ) }` : ` · ${ esc( __( 'never used' ) ) }` }</div>
+					</div>
+					<button type="button" class="minn-btn-soft" data-keyedit="${ k.id }">${ esc( __( 'Edit' ) ) }</button>
+					<button type="button" class="minn-x-btn" data-keydel="${ k.id }" title="${ esc( __( 'Revoke key' ) ) }" aria-label="${ esc( __( 'Revoke key' ) ) }">×</button>
+				</div>` ).join( '' ) }
+				${ rows.length ? '' : `<div class="minn-empty">${ esc( __( 'No API keys yet.' ) ) }</div>` }
+			</div>
+			<div><button type="button" class="minn-btn-soft" id="minn-key-add">${ icon( 'plus' ) } ${ esc( __( 'Add key' ) ) }</button></div>`;
+		const adopt = ( r ) => {
+			if ( r && Array.isArray( r.keys ) ) c.apiKeys = r.keys;
+			else c.apiKeys = null;
+			if ( state.route === 'store-settings' && storeSection() === sec ) renderStoreSettings();
+		};
+		const openKey = ( key ) => openStoreFormModal( {
+			title: key ? key.description : __( 'New API key' ),
+			sub: __( 'REST API key' ),
+			data: apiKeyForm( key ),
+			save: async ( payload ) => {
+				const body = {};
+				if ( 'description' in payload ) body.description = payload.description || '';
+				if ( 'permissions' in payload ) body.permissions = payload.permissions;
+				if ( 'user' in payload ) body.user = payload.user && payload.user.value ? Number( payload.user.value ) : 0;
+				if ( key ) return api( `minn-admin/v1/wc/api-keys/${ key.id }`, { method: 'POST', body: JSON.stringify( body ) } );
+				if ( ! ( 'user' in body ) ) body.user = B.user.id;
+				if ( ! ( 'permissions' in body ) ) body.permissions = 'read';
+				return api( 'minn-admin/v1/wc/api-keys', { method: 'POST', body: JSON.stringify( body ) } );
+			},
+			onSaved: ( r ) => {
+				if ( r && r.consumerKey ) {
+					// Shown once, never stored by Minn: the modal is the only copy.
+					state.modal = { type: 'store-secret', ck: r.consumerKey, cs: r.consumerSecret };
+					renderOverlays();
+				} else {
+					toast( __( 'API key saved' ) );
+				}
+				adopt( r );
+			},
+		} );
+		$( '#minn-key-add', host ).addEventListener( 'click', () => openKey( null ) );
+		$$( '[data-keyedit]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => openKey( rows.find( ( k ) => String( k.id ) === btn.dataset.keyedit ) ) )
+		);
+		$$( '[data-keydel]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const k = rows.find( ( x ) => String( x.id ) === btn.dataset.keydel );
+				/* translators: %s: API key description. */
+				if ( ! window.confirm( sprintf( __( 'Revoke the API key “%s”? Any app using it stops working immediately.' ), k ? k.description : '' ) ) ) return;
+				try {
+					adopt( await api( `minn-admin/v1/wc/api-keys/${ btn.dataset.keydel }`, { method: 'DELETE' } ) );
+					toast( __( 'API key revoked' ) );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} )
+		);
+	}
+
+	function renderStoreSecretModal( m ) {
+		return `
+		<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal">
+				<div class="minn-modal-head">
+					<div class="minn-modal-title">${ esc( __( 'Copy your new key now' ) ) }</div>
+					<button class="minn-x-btn" id="minn-modal-close" type="button">×</button>
+				</div>
+				<div class="minn-modal-scroll minn-store-secret">
+					<p class="minn-toggle-desc">${ esc( __( 'WooCommerce keeps only a hash of the key and shows the secret this once. Paste both into the app that needs them before closing this.' ) ) }</p>
+					<div class="minn-field-label">${ esc( __( 'Consumer key' ) ) }</div>
+					<div class="minn-store-secret-row"><input class="minn-input mono" readonly value="${ esc( m.ck ) }" id="minn-secret-ck"><button type="button" class="minn-btn-soft" data-copysecret="ck">${ esc( __( 'Copy' ) ) }</button></div>
+					<div class="minn-field-label">${ esc( __( 'Consumer secret' ) ) }</div>
+					<div class="minn-store-secret-row"><input class="minn-input mono" readonly value="${ esc( m.cs ) }" id="minn-secret-cs"><button type="button" class="minn-btn-soft" data-copysecret="cs">${ esc( __( 'Copy' ) ) }</button></div>
+					<div><button type="button" class="minn-btn-primary" id="minn-secret-done">${ esc( __( 'I have copied them' ) ) }</button></div>
+				</div>
+			</div>
+		</div>`;
+	}
+
+	function bindStoreSecretModal( m ) {
+		$$( '[data-copysecret]' ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const v = btn.dataset.copysecret === 'ck' ? m.ck : m.cs;
+				try { await navigator.clipboard.writeText( v ); toast( __( 'Copied' ) ); } catch ( e ) { toast( __( 'Copy failed; select the text and copy it yourself.' ), true ); }
+			} )
+		);
+		const done = $( '#minn-secret-done' );
+		if ( done ) done.addEventListener( 'click', closeModal );
 	}
 
 	/* ===== Settings ===== */
@@ -43426,6 +43675,9 @@
 		if ( m.type === 'store-form' ) {
 			return renderStoreFormModal( m );
 		}
+		if ( m.type === 'store-secret' ) {
+			return renderStoreSecretModal( m );
+		}
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
 		}
@@ -45088,6 +45340,9 @@
 		}
 		if ( m.type === 'store-form' ) {
 			bindStoreFormModal( m );
+		}
+		if ( m.type === 'store-secret' ) {
+			bindStoreSecretModal( m );
 		}
 		if ( m.type === 'styles-paste' ) {
 			const apply = $( '#minn-paste-look-apply' );

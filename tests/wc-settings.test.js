@@ -24,14 +24,25 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 	const { browser, page, errors } = await launch();
 	await login( page );
 
+	// A settings save can recycle the PHP worker (rewrite flush, cache
+	// version bumps), which drops the NEXT request's socket on this stack;
+	// a dropped fetch retries a few times rather than failing the run.
 	const rest = ( path, opts ) => page.evaluate( async ( a ) => {
-		const r = await fetch( window.MINN.restUrl + a.path + ( a.path.indexOf( '?' ) === -1 ? '?' : '&' ) + '_cb=' + Math.random(), Object.assign( {
-			credentials: 'same-origin',
-			headers: Object.assign( { 'X-WP-Nonce': window.MINN.nonce }, a.opts && a.opts.body ? { 'Content-Type': 'application/json' } : {} ),
-		}, a.opts || {} ) );
-		let body = null;
-		try { body = await r.json(); } catch ( e ) {}
-		return { status: r.status, body };
+		const sleep = ( ms ) => new Promise( ( r ) => setTimeout( r, ms ) );
+		for ( let attempt = 0; ; attempt++ ) {
+			try {
+				const r = await fetch( window.MINN.restUrl + a.path + ( a.path.indexOf( '?' ) === -1 ? '?' : '&' ) + '_cb=' + Math.random(), Object.assign( {
+					credentials: 'same-origin',
+					headers: Object.assign( { 'X-WP-Nonce': window.MINN.nonce }, a.opts && a.opts.body ? { 'Content-Type': 'application/json' } : {} ),
+				}, a.opts || {} ) );
+				let body = null;
+				try { body = await r.json(); } catch ( e ) {}
+				return { status: r.status, body };
+			} catch ( e ) {
+				if ( attempt >= 8 ) throw e;
+				await sleep( 3000 );
+			}
+		}
 	}, { path, opts } );
 	const wcGet = async ( group, id ) => ( await rest( `wc/v3/settings/${ group }/${ id }` ) ).body;
 	const minnGet = ( page_, section ) => rest( `minn-admin/v1/wc/settings/${ page_ }/${ section || 'default' }` );
@@ -315,6 +326,66 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 			t.check( 'tax rate deleted', ( await rest( `wc/v3/taxes/${ rate.id }` ) ).status === 404 );
 		}
 
+		/* ===== Webhooks over wc/v3, API keys through the shim ===== */
+		await page.click( '[data-storesec="advanced:webhooks"]' );
+		await page.waitForSelector( '#minn-hook-add', { timeout: 20000 } );
+		await page.click( '#minn-hook-add' );
+		await page.waitForSelector( '#minn-store-form-modal [data-sset="name"]', { timeout: 20000 } );
+		await page.fill( '#minn-store-form-modal [data-sset="name"]', 'Minn hook' );
+		await pickCombo( page, '#minn-store-form-modal [data-sset="topic"] .minn-ac-input', 'action' );
+		t.check( 'action topic reveals the event field', await page.$eval( '#minn-store-form-modal [data-srow="action_event"]', ( el ) => ! el.hidden ) );
+		await page.fill( '#minn-store-form-modal [data-sset="action_event"]', 'woocommerce_minn_test' );
+		await page.fill( '#minn-store-form-modal [data-sset="delivery_url"]', 'https://example.com/minn-hook' );
+		await page.click( '#minn-store-form-modal #minn-sset-save' );
+		await page.waitForSelector( '#minn-modal-overlay', { state: 'detached', timeout: 15000 } );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '[data-webhook] .minn-store-email-title' ) ].some( ( e ) => /Minn hook/.test( e.textContent ) ), null, { timeout: 15000 } );
+		const hook = ( await rest( 'wc/v3/webhooks?per_page=100' ) ).body.find( ( w ) => w.name === 'Minn hook' );
+		t.check( 'webhook created via wc/v3 with action.{event} topic', !! hook && hook.topic === 'action.woocommerce_minn_test' && hook.delivery_url === 'https://example.com/minn-hook', JSON.stringify( hook && [ hook.topic, hook.status ] ) );
+		if ( hook ) {
+			await page.click( `[data-hookedit="${ hook.id }"]` );
+			await page.waitForSelector( '#minn-store-form-modal [data-sset="status"]', { timeout: 20000 } );
+			await pickCombo( page, '#minn-store-form-modal [data-sset="status"] .minn-ac-input', 'paused' );
+			await page.click( '#minn-store-form-modal #minn-sset-save' );
+			await page.waitForSelector( '#minn-modal-overlay', { state: 'detached', timeout: 15000 } );
+			await page.waitForFunction( ( id ) => { const r = document.querySelector( `[data-webhook="${ id }"]` ); return r && /Paused/.test( r.textContent ); }, hook.id, { timeout: 15000 } );
+			t.check( 'webhook status edit round-trips', ( await rest( `wc/v3/webhooks/${ hook.id }` ) ).body.status === 'paused' );
+			page.once( 'dialog', ( dlg ) => dlg.accept() );
+			await page.click( `[data-hookdel="${ hook.id }"]` );
+			await page.waitForFunction( ( id ) => ! document.querySelector( `[data-hookdel="${ id }"]` ), hook.id, { timeout: 15000 } );
+			t.check( 'webhook deleted', ( await rest( `wc/v3/webhooks/${ hook.id }` ) ).status === 404 );
+		}
+
+		await page.click( '[data-storesec="advanced:keys"]' );
+		await page.waitForSelector( '#minn-key-add', { timeout: 20000 } );
+		await page.click( '#minn-key-add' );
+		await page.waitForSelector( '#minn-store-form-modal [data-sset="description"]', { timeout: 20000 } );
+		await page.fill( '#minn-store-form-modal [data-sset="description"]', 'Minn key' );
+		await pickCombo( page, '#minn-store-form-modal [data-sset="permissions"] .minn-ac-input', 'read_write' );
+		await page.click( '#minn-store-form-modal #minn-sset-save' );
+		await page.waitForSelector( '#minn-secret-ck', { timeout: 20000 } );
+		const secret = await page.evaluate( () => ( { ck: document.querySelector( '#minn-secret-ck' ).value, cs: document.querySelector( '#minn-secret-cs' ).value } ) );
+		t.check( 'new key shows consumer key + secret once', /^ck_[0-9a-f]{40}$/.test( secret.ck ) && /^cs_[0-9a-f]{40}$/.test( secret.cs ) );
+		await page.click( '#minn-secret-done' );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '[data-apikey] .minn-store-email-title' ) ].some( ( e ) => /Minn key/.test( e.textContent ) ), null, { timeout: 15000 } );
+		const keyRow = ( await rest( 'minn-admin/v1/wc/api-keys' ) ).body.keys.find( ( k ) => k.description === 'Minn key' );
+		t.check( 'key row lists the truncated key, never the secret', !! keyRow && keyRow.truncated === secret.ck.slice( -7 ) && keyRow.permissions === 'read_write' && ! JSON.stringify( keyRow ).includes( secret.cs ) );
+		// The key works against WooCommerce's own REST as the owning user (basic auth over HTTPS).
+		const probe = await page.evaluate( async ( sec2 ) => {
+			const r = await fetch( window.MINN.restUrl + 'wc/v3/system_status/tools?_cb=' + Math.random(), { headers: { Authorization: 'Basic ' + btoa( sec2.ck + ':' + sec2.cs ) }, credentials: 'omit' } );
+			return r.status;
+		}, secret );
+		t.check( 'the new key authenticates against wc/v3', probe === 200, String( probe ) );
+		if ( keyRow ) {
+			page.once( 'dialog', ( dlg ) => dlg.accept() );
+			await page.click( `[data-keydel="${ keyRow.id }"]` );
+			await page.waitForFunction( ( id ) => ! document.querySelector( `[data-keydel="${ id }"]` ), keyRow.id, { timeout: 15000 } );
+			const gone = await page.evaluate( async ( sec2 ) => {
+				const r = await fetch( window.MINN.restUrl + 'wc/v3/system_status/tools?_cb=' + Math.random(), { headers: { Authorization: 'Basic ' + btoa( sec2.ck + ':' + sec2.cs ) }, credentials: 'omit' } );
+				return r.status;
+			}, secret );
+			t.check( 'revoked key no longer authenticates', gone === 401, String( gone ) );
+		}
+
 		/* ===== An editor is refused ===== */
 		const ed = await loginAs( browser, 'minn-editor', 'minn-editor-pass-1' );
 		await ed.page.goto( `${ BASE }/minn-admin/`, { waitUntil: 'domcontentloaded' } );
@@ -324,7 +395,13 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 		t.check( 'editor: sections route 403', edStatus === 403, String( edStatus ) );
 		await ed.ctx.close();
 	} finally {
-		// Leftovers from a crashed run: the test zone, class and tax rate.
+		// Leftovers from a crashed run: webhook + key, then zone, class, rate.
+		try {
+			const ws = ( await rest( 'wc/v3/webhooks?per_page=100' ) ).body || [];
+			for ( const w of ws ) if ( w.name === 'Minn hook' ) await rest( `wc/v3/webhooks/${ w.id }?force=true`, { method: 'DELETE' } );
+			const ks = ( ( await rest( 'minn-admin/v1/wc/api-keys' ) ).body || {} ).keys || [];
+			for ( const k of ks ) if ( k.description === 'Minn key' ) await rest( `minn-admin/v1/wc/api-keys/${ k.id }`, { method: 'DELETE' } );
+		} catch ( e ) { /* best effort */ }
 		try {
 			const rs = ( await rest( 'wc/v3/taxes?per_page=100' ) ).body || [];
 			for ( const r of rs ) if ( r.name === 'Minn PA tax' ) await rest( `wc/v3/taxes/${ r.id }?force=true`, { method: 'DELETE' } );

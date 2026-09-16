@@ -523,6 +523,20 @@ function minn_admin_wc_settings_sections() {
 		}
 		foreach ( $sections as $sid => $slabel ) {
 			$sid = (string) $sid;
+			// Webhooks and REST API keys are tables under Advanced.
+			if ( 'advanced' === $page_id && in_array( $sid, array( 'keys', 'webhooks' ), true ) ) {
+				$out[] = array(
+					'id'        => 'advanced:' . $sid,
+					'page'      => 'advanced',
+					'section'   => $sid,
+					'kind'      => 'keys' === $sid ? 'api-keys' : 'webhooks',
+					'label'     => minn_admin_wc_settings_text( is_string( $slabel ) ? $slabel : $sid ),
+					'pageLabel' => $page_label,
+					'count'     => 0,
+					'locked'    => 0,
+				);
+				continue;
+			}
 			// Tax rates are one table per class (the sections WooCommerce
 			// registers beside its options), drawn by Minn over wc/v3/taxes.
 			if ( 'tax' === $page_id && '' !== $sid ) {
@@ -1236,6 +1250,161 @@ function minn_admin_wc_shipping_regions_lookup( $q ) {
 	return array_slice( $out, 0, 40 );
 }
 
+/* ===== REST API keys (no WooCommerce REST of their own) ===== */
+
+/**
+ * API key rows the way the Keys screen lists them: never the hash, never
+ * the secret, the truncated key WooCommerce keeps for display.
+ *
+ * @return array
+ */
+function minn_admin_wc_api_keys() {
+	global $wpdb;
+	$rows = $wpdb->get_results( "SELECT key_id, user_id, description, permissions, truncated_key, last_access FROM {$wpdb->prefix}woocommerce_api_keys ORDER BY key_id DESC" );
+	$out  = array();
+	foreach ( (array) $rows as $r ) {
+		$user  = get_user_by( 'id', (int) $r->user_id );
+		$out[] = array(
+			'id'          => (int) $r->key_id,
+			'description' => (string) $r->description,
+			'user'        => (int) $r->user_id,
+			'userName'    => $user ? $user->display_name : __( '(deleted user)', 'minn-admin' ),
+			'userLogin'   => $user ? $user->user_login : '',
+			'permissions' => (string) $r->permissions,
+			'truncated'   => (string) $r->truncated_key,
+			'lastAccess'  => $r->last_access ? get_gmt_from_date( (string) $r->last_access ) . 'Z' : '',
+		);
+	}
+	return $out;
+}
+
+/**
+ * The users an API key can belong to: WooCommerce offers anyone with
+ * manage_woocommerce, plus the current user.
+ *
+ * @param string $q Query.
+ * @return array
+ */
+function minn_admin_wc_api_key_users( $q ) {
+	$q     = trim( (string) $q );
+	$users = get_users(
+		array(
+			'number'     => 30,
+			'search'     => '' !== $q ? '*' . $q . '*' : '',
+			'orderby'    => 'display_name',
+			'capability' => 'manage_woocommerce',
+		)
+	);
+	$out   = array();
+	foreach ( (array) $users as $u ) {
+		$out[] = array(
+			'value' => (string) $u->ID,
+			'label' => $u->display_name . ' (' . $u->user_login . ')',
+		);
+	}
+	return $out;
+}
+
+/**
+ * Create or update a key the way WC_AJAX::update_api_key does: the same
+ * hash, the same truncated key, the same ownership rule. The consumer key
+ * and secret are returned once on create and never stored by Minn.
+ *
+ * @param int   $key_id 0 to create.
+ * @param array $body   { description, user, permissions }.
+ * @return array|WP_Error
+ */
+function minn_admin_wc_api_key_save( $key_id, $body ) {
+	global $wpdb;
+	$description = isset( $body['description'] ) ? sanitize_text_field( (string) $body['description'] ) : '';
+	$permissions = isset( $body['permissions'] ) && in_array( $body['permissions'], array( 'read', 'write', 'read_write' ), true ) ? $body['permissions'] : 'read';
+	$user_id     = isset( $body['user'] ) ? absint( $body['user'] ) : get_current_user_id();
+	if ( '' === $description ) {
+		return new WP_Error( 'minn_wc_key_desc', __( 'Give the key a description.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	if ( ! $user_id || ! get_user_by( 'id', $user_id ) ) {
+		return new WP_Error( 'minn_wc_key_user', __( 'Pick the user the key acts as.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	if ( ! current_user_can( 'edit_user', $user_id ) && get_current_user_id() !== $user_id ) {
+		return new WP_Error( 'minn_wc_key_user', __( 'You do not have permission to assign API keys to that user.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	if ( $key_id ) {
+		$wpdb->update(
+			$wpdb->prefix . 'woocommerce_api_keys',
+			array(
+				'user_id'     => $user_id,
+				'description' => $description,
+				'permissions' => $permissions,
+			),
+			array( 'key_id' => $key_id ),
+			array( '%d', '%s', '%s' ),
+			array( '%d' )
+		);
+		return array( 'id' => $key_id );
+	}
+	$consumer_key    = 'ck_' . wc_rand_hash();
+	$consumer_secret = 'cs_' . wc_rand_hash();
+	$ok              = $wpdb->insert(
+		$wpdb->prefix . 'woocommerce_api_keys',
+		array(
+			'user_id'         => $user_id,
+			'description'     => $description,
+			'permissions'     => $permissions,
+			'consumer_key'    => wc_api_hash( $consumer_key ),
+			'consumer_secret' => $consumer_secret,
+			'truncated_key'   => substr( $consumer_key, -7 ),
+		),
+		array( '%d', '%s', '%s', '%s', '%s', '%s' )
+	);
+	if ( ! $ok || ! $wpdb->insert_id ) {
+		return new WP_Error( 'minn_wc_key_insert', __( 'WooCommerce could not store the key.', 'minn-admin' ), array( 'status' => 500 ) );
+	}
+	return array(
+		'id'             => (int) $wpdb->insert_id,
+		'consumerKey'    => $consumer_key,
+		'consumerSecret' => $consumer_secret,
+	);
+}
+
+/**
+ * Webhook topics as the webhook editor offers them (their filter included),
+ * with the custom "action" entry that takes an event name.
+ *
+ * @return array [ value, label ] pairs.
+ */
+function minn_admin_wc_webhook_topics() {
+	$topics = apply_filters(
+		'woocommerce_webhook_topics',
+		array(
+			'coupon.created'    => __( 'Coupon created', 'woocommerce' ),
+			'coupon.updated'    => __( 'Coupon updated', 'woocommerce' ),
+			'coupon.deleted'    => __( 'Coupon deleted', 'woocommerce' ),
+			'coupon.restored'   => __( 'Coupon restored', 'woocommerce' ),
+			'customer.created'  => __( 'Customer created', 'woocommerce' ),
+			'customer.updated'  => __( 'Customer updated', 'woocommerce' ),
+			'customer.deleted'  => __( 'Customer deleted', 'woocommerce' ),
+			'order.created'     => __( 'Order created', 'woocommerce' ),
+			'order.updated'     => __( 'Order updated', 'woocommerce' ),
+			'order.deleted'     => __( 'Order deleted', 'woocommerce' ),
+			'order.restored'    => __( 'Order restored', 'woocommerce' ),
+			'product.created'   => __( 'Product created', 'woocommerce' ),
+			'product.updated'   => __( 'Product updated', 'woocommerce' ),
+			'product.deleted'   => __( 'Product deleted', 'woocommerce' ),
+			'product.restored'  => __( 'Product restored', 'woocommerce' ),
+			'product.published' => __( 'Product published', 'woocommerce' ),
+			'action'            => __( 'Action', 'woocommerce' ),
+		)
+	);
+	$out = array();
+	foreach ( (array) $topics as $v => $l ) {
+		if ( '' === (string) $v ) {
+			continue;
+		}
+		$out[] = array( (string) $v, minn_admin_wc_settings_text( (string) $l ) );
+	}
+	return $out;
+}
+
 /**
  * Lookup catalogs behind relation fields.
  *
@@ -1248,6 +1417,9 @@ function minn_admin_wc_settings_lookup( $catalog, $q, $all = false ) {
 	$out = array();
 	if ( 'regions' === $catalog && function_exists( 'WC' ) && WC()->countries ) {
 		return minn_admin_wc_shipping_regions_lookup( $q );
+	}
+	if ( 'key-users' === $catalog ) {
+		return minn_admin_wc_api_key_users( $q );
 	}
 	if ( 'countries' === $catalog && function_exists( 'WC' ) && WC()->countries ) {
 		foreach ( WC()->countries->get_countries() as $cc => $name ) {
@@ -1785,6 +1957,81 @@ add_action(
 						return minn_admin_wc_shipping_payload();
 					},
 				),
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/api-keys',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => $can,
+					'callback'            => static function () {
+						return array( 'keys' => minn_admin_wc_api_keys() );
+					},
+				),
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) {
+						$r = minn_admin_wc_api_key_save( 0, (array) $req->get_json_params() );
+						if ( is_wp_error( $r ) ) {
+							return $r;
+						}
+						return $r + array( 'keys' => minn_admin_wc_api_keys() );
+					},
+				),
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/api-keys/(?P<id>\d+)',
+			array(
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) {
+						global $wpdb;
+						$id = absint( $req['id'] );
+						if ( ! $wpdb->get_var( $wpdb->prepare( "SELECT key_id FROM {$wpdb->prefix}woocommerce_api_keys WHERE key_id = %d", $id ) ) ) {
+							return new WP_Error( 'minn_wc_no_key', __( 'That API key no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
+						}
+						$r = minn_admin_wc_api_key_save( $id, (array) $req->get_json_params() );
+						if ( is_wp_error( $r ) ) {
+							return $r;
+						}
+						return $r + array( 'keys' => minn_admin_wc_api_keys() );
+					},
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) {
+						global $wpdb;
+						// Revoke = the Keys screen's remove_key: the row goes, the
+						// hash with it, and any client holding the key is out.
+						$wpdb->delete( $wpdb->prefix . 'woocommerce_api_keys', array( 'key_id' => absint( $req['id'] ) ), array( '%d' ) );
+						return array( 'keys' => minn_admin_wc_api_keys() );
+					},
+				),
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/webhook-topics',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => $can,
+				'callback'            => static function () {
+					$versions = function_exists( 'wc_get_webhook_rest_api_versions' ) ? wc_get_webhook_rest_api_versions() : array( 'wp_api_v3' );
+					return array(
+						'topics'   => minn_admin_wc_webhook_topics(),
+						'versions' => array_values( array_map( 'strval', (array) $versions ) ),
+					);
+				},
 			)
 		);
 
