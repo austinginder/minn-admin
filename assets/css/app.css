@@ -1314,6 +1314,12 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
    underline as "What's new" so the two read as one affordance. */
 button.minn-plugin-ver { background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 button.minn-plugin-ver:hover { color: var(--accent2); }
+/* Doorways: where the plugin lives in Minn, then its own wp-admin settings. */
+.minn-plugin-doors { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; font-size: 11.5px; }
+.minn-plugin-doors-in { color: var(--text3); margin-right: 2px; }
+.minn-plugin-door { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text2); font: inherit; font-size: 11.5px; line-height: 1; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.minn-plugin-door:hover { color: var(--accent2); border-color: var(--accent2); }
+.minn-plugin-door.is-wp { color: var(--text3); }
 .minn-theme-ver { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .minn-theme-ver:hover { color: var(--accent2); }
 /* Auto-update pill: quiet at rest, accent-lit when on. */

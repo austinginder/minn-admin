@@ -135,6 +135,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Limit Login Attempts',
+		'plugin'     => 'limit-login-attempts-reloaded',
 		'icon'       => 'shield',
 		// llar_admin holders lack manage_options; the filter above is the
 		// real gate (the Gravity Forms cap-model precedent).

@@ -338,6 +338,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['asset-cleanup'] = array(
 		'label'    => __( 'Performance', 'minn-admin' ),
 		'sub'      => 'Asset CleanUp',
+		'plugin'     => array( 'wp-asset-clean-up', 'wp-asset-clean-up-pro' ),
 		'family'   => 'performance',
 		'icon'     => 'gear',
 		// Their answer is a resolver (a super admin, the administrator role, or

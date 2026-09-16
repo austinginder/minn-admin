@@ -284,6 +284,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['updraftplus'] = array(
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'UpdraftPlus',
+		'plugin'     => 'updraftplus',
 		'icon'       => 'database',
 		// Their answer is a resolver, not a capability name; the filter above
 		// is the real gate (the Solid Security / WP Mail Logging precedent).

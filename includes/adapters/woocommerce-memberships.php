@@ -1352,6 +1352,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Memberships', 'minn-admin' ),
 		'family'     => 'memberships',
 		'sub'        => 'WooCommerce',
+		'plugin'     => 'woocommerce-memberships',
 		'icon'       => 'key',
 		'cap'        => 'manage_woocommerce_user_memberships',
 		'group'      => 'commerce',

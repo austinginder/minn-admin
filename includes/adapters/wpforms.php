@@ -278,6 +278,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'WPForms',
+		'plugin'     => array( 'wpforms-lite', 'wpforms' ),
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gate is minn_admin_wpforms_can().
 		'status'     => array( 'route' => 'minn-admin/v1/wpforms/status' ),

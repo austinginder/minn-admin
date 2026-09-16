@@ -332,6 +332,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'bookings',
 		'group'      => 'commerce',
 		'sub'        => 'JetBooking',
+		'plugin'     => 'jet-booking',
 		'icon'       => 'calendar',
 		// The routes gate on JetBooking's own capability; this is nav gating
 		// only, and it sits on a surface holding customer contact details, so

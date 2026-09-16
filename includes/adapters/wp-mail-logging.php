@@ -109,6 +109,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['wp-mail-logging'] = array(
 		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'WP Mail Logging',
+		'plugin'     => 'wp-mail-logging',
 		'icon'       => 'send',
 		'family'     => 'mail',
 		// Their lesser-viewer cap is a setting; the filter above is the

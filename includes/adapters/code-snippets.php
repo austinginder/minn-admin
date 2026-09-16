@@ -89,6 +89,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// sub badge becomes a provider switcher when more than one is active.
 		'family'     => 'snippets',
 		'sub'        => 'Code Snippets',
+		'plugin'     => array( 'code-snippets', 'code-snippets-pro' ),
 		'icon'       => 'code',
 		'cap'        => $cap,
 		// Status card (v0.18.0): what's running at a glance. First card in

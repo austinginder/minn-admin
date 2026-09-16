@@ -42,6 +42,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// claims the Workspace nav group (everything else defaults to Tools).
 		'group'      => 'workspace',
 		'sub'        => 'Gravity Forms',
+		'plugin'     => 'gravityforms',
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'collection' => array(

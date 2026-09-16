@@ -328,6 +328,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['fluent-smtp'] = array(
 		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'FluentSMTP',
+		'plugin'     => 'fluent-smtp',
 		'icon'       => 'send',
 		'cap'        => minn_admin_fluent_smtp_cap(),
 		'family'     => 'mail',

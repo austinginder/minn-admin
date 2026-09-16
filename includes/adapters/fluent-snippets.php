@@ -118,6 +118,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Snippets', 'minn-admin' ),
 		'family'     => 'snippets',
 		'sub'        => 'FluentSnippets',
+		'plugin'     => 'easy-code-manager',
 		'icon'       => 'code',
 		// install_plugins is Fluent's own gate; unfiltered_html is needed to write code.
 		'cap'        => 'install_plugins',

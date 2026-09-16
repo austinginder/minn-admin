@@ -114,6 +114,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['wp-multi-network'] = array(
 		'label'      => __( 'Networks', 'minn-admin' ),
 		'sub'        => 'WP Multi Network',
+		'plugin'     => 'wp-multi-network',
 		'group'      => 'network',
 		'icon'       => 'grid',
 		'cap'        => 'list_networks',

@@ -273,6 +273,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Gift cards', 'minn-admin' ),
 		'family'     => 'gift-cards',
 		'sub'        => $pro ? 'PW Pro' : 'PW',
+		'plugin'     => array( 'pw-woocommerce-gift-cards', 'pw-gift-cards' ),
 		'icon'       => 'gift',
 		'cap'        => minn_admin_pwgc_cap(),
 		'group'      => 'commerce',

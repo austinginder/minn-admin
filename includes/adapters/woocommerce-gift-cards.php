@@ -252,6 +252,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Gift cards', 'minn-admin' ),
 		'family'     => 'gift-cards',
 		'sub'        => 'WooCommerce',
+		'plugin'     => 'woocommerce-gift-cards',
 		'icon'       => 'gift',
 		'cap'        => 'manage_woocommerce',
 		'group'      => 'commerce',

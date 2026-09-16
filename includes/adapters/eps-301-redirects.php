@@ -96,6 +96,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Redirects', 'minn-admin' ),
 		'family'     => 'redirects',
 		'sub'        => '301 Redirects',
+		'plugin'     => 'eps-301-redirects',
 		'icon'       => 'shuffle',
 		'cap'        => minn_admin_eps301_cap(),
 		// Status card (v0.18.0): family parity with Redirection.

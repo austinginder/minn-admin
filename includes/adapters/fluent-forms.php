@@ -259,6 +259,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'status'     => array( 'route' => 'minn-admin/v1/fluent-forms/status' ),
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Fluent Forms',
+		'plugin'     => array( 'fluentform', 'fluentformpro' ),
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'collection' => array(

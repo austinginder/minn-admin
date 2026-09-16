@@ -118,6 +118,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['ottokit'] = array(
 		'label'      => __( 'Automation', 'minn-admin' ),
 		'sub'        => 'OttoKit',
+		'plugin'     => 'suretriggers',
 		'icon'       => 'activity',
 		'cap'        => minn_admin_ottokit_cap(),
 		'family'     => 'automation',

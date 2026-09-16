@@ -339,6 +339,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Gift cards', 'minn-admin' ),
 		'family'     => 'gift-cards',
 		'sub'        => 'YITH',
+		'plugin'     => array( 'yith-woocommerce-gift-cards', 'yith-woocommerce-gift-cards-premium' ),
 		'icon'       => 'gift',
 		'cap'        => 'manage_woocommerce',
 		'group'      => 'commerce',

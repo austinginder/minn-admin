@@ -39,6 +39,7 @@ function minn_admin_spam_providers() {
 	if ( class_exists( 'Akismet' ) ) {
 		$providers[] = array(
 			'id'     => 'akismet',
+			'plugin' => 'akismet',
 			'name'   => 'Akismet',
 			'status' => function () {
 				$key = '';
@@ -89,6 +90,7 @@ function minn_admin_spam_providers() {
 		};
 		$providers[] = array(
 			'id'     => 'antispam-bee',
+			'plugin' => 'antispam-bee',
 			'name'   => 'Antispam Bee',
 			'status' => function () use ( $asb_read ) {
 				$o = $asb_read();
@@ -128,6 +130,7 @@ function minn_admin_spam_providers() {
 	if ( defined( 'APBCT_VERSION' ) ) {
 		$providers[] = array(
 			'id'     => 'cleantalk',
+			'plugin' => 'cleantalk-spam-protect',
 			'name'   => 'CleanTalk Anti-Spam',
 			'status' => function () {
 				$settings = get_option( 'cleantalk_settings' );
@@ -172,6 +175,7 @@ function minn_admin_spam_providers() {
 	if ( function_exists( 'wpa_save_stats' ) ) {
 		$providers[] = array(
 			'id'     => 'wp-armour',
+			'plugin' => 'honeypot',
 			'name'   => 'WP Armour',
 			'status' => function () {
 				$stats = json_decode( (string) get_option( 'wpa_stats' ), true );
@@ -199,6 +203,7 @@ function minn_admin_spam_providers() {
 	if ( class_exists( 'Disable_Comments' ) && method_exists( 'Disable_Comments', 'get_instance' ) && method_exists( 'Disable_Comments', 'get_blocked_stats' ) ) {
 		$providers[] = array(
 			'id'     => 'disable-comments',
+			'plugin' => 'disable-comments',
 			'name'   => 'Disable Comments',
 			'status' => function () {
 				$stats = array( 'since' => 0, 'counts' => array(), 'total' => 0 );

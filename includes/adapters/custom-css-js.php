@@ -354,6 +354,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Snippets', 'minn-admin' ),
 		'family'     => 'snippets',
 		'sub'        => 'Simple Custom CSS and JS',
+		'plugin'     => 'custom-css-js',
 		'icon'       => 'code',
 		'cap'        => 'read',
 		// Status card (v0.18.0): family parity with Code Snippets.

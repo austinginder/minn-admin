@@ -90,6 +90,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Redirects', 'minn-admin' ),
 		'family'     => 'redirects',
 		'sub'        => 'Safe Redirect Manager',
+		'plugin'     => 'safe-redirect-manager',
 		'icon'       => 'shuffle',
 		// Same cap the routes use, so the nav and the routes cannot drift.
 		'cap'        => minn_admin_srm_cap(),

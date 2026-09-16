@@ -111,6 +111,32 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/plugin-links',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'activate_plugins' );
+				},
+				'callback'            => function () {
+					// Harvested wp-admin links (class-minn-admin-plugin-links.php)
+					// plus where each plugin lives inside Minn. `stale` asks the
+					// client to run the hidden plugins.php capture and re-read.
+					$stored = Minn_Admin_Plugin_Links::stored();
+					return rest_ensure_response(
+						array(
+							'captured' => (int) $stored['captured'],
+							'stale'    => Minn_Admin_Plugin_Links::is_stale(),
+							'capture'  => Minn_Admin_Plugin_Links::capture_url(),
+							'links'    => (object) $stored['links'],
+							'minn'     => (object) Minn_Admin_Plugin_Links::minn_links(),
+						)
+					);
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/theme-changelog',
 			array(
 				'methods'             => 'GET',

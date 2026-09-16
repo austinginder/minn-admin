@@ -800,6 +800,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['bricks-templates'] = array(
 		'label'      => __( 'Templates', 'minn-admin' ),
 		'sub'        => 'Bricks',
+		'plugin'     => 'theme:bricks',
 		'family'     => 'builder-templates',
 		'icon'       => 'columns',
 		// Their answer is a resolver, not a capability name; the guard above
@@ -1678,6 +1679,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'forms',
 		'group'      => 'workspace',
 		'sub'        => 'Bricks',
+		'plugin'     => 'theme:bricks',
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'status'     => array( 'route' => 'minn-admin/v1/bricks/forms-status' ),

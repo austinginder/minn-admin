@@ -220,6 +220,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'bookings',
 		'group'      => 'commerce',
 		'sub'        => 'LatePoint',
+		'plugin'     => 'latepoint',
 		'icon'       => 'calendar',
 		'cap'        => 'read',
 		'status'     => array( 'route' => 'minn-admin/v1/latepoint/status' ),

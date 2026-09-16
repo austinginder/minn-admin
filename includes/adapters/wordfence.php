@@ -83,6 +83,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Wordfence',
+		'plugin'     => 'wordfence',
 		'icon'       => 'shield',
 		// Their answer is a resolver, not a capability name; the guard
 		// above is the real gate (the UpdraftPlus precedent).

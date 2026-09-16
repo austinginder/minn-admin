@@ -129,6 +129,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Formidable',
+		'plugin'     => array( 'formidable', 'formidable-pro' ),
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gate is the filter above (their cap model)
 		'status'     => array( 'route' => 'minn-admin/v1/formidable/status' ),

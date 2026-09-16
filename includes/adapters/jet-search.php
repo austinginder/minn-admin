@@ -65,6 +65,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['jet-search'] = array(
 		'label'      => __( 'Search', 'minn-admin' ),
 		'sub'        => 'JetSearch',
+		'plugin'     => 'jet-search',
 		'icon'       => 'search',
 		'group'      => 'tools',
 		'cap'        => 'manage_options',

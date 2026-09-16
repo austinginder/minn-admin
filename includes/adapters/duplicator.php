@@ -501,6 +501,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['duplicator'] = array(
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'Duplicator',
+		'plugin'     => array( 'duplicator', 'duplicator-pro' ),
 		'icon'       => 'database',
 		'cap'        => 'export',
 		'family'     => 'backups',

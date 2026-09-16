@@ -297,6 +297,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['backwpup'] = array(
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'BackWPup',
+		'plugin'     => array( 'backwpup', 'backwpup-pro' ),
 		'icon'       => 'database',
 		// Cap is loose; routes re-check BackWPup's own caps.
 		'cap'        => 'read',

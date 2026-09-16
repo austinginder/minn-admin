@@ -188,6 +188,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['post-smtp'] = array(
 		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'Post SMTP',
+		'plugin'     => 'post-smtp',
 		'icon'       => 'send',
 		'cap'        => minn_admin_post_smtp_cap(),
 		'family'     => 'mail',

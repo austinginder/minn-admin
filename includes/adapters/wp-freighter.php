@@ -360,6 +360,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['freighter-sites'] = array(
 		'label'      => __( 'Tenant sites', 'minn-admin' ),
 		'sub'        => __( 'WP Freighter', 'minn-admin' ),
+		'plugin'     => 'wp-freighter',
 		'group'      => 'network',
 		'icon'       => 'grid',
 		'cap'        => 'manage_options',

@@ -205,6 +205,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'bookings',
 		'group'      => 'commerce',
 		'sub'        => 'Amelia',
+		'plugin'     => 'ameliabooking',
 		'icon'       => 'calendar',
 		'cap'        => 'read',
 		'status'     => array( 'route' => 'minn-admin/v1/amelia/status' ),

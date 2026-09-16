@@ -48,6 +48,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Redirects', 'minn-admin' ),
 		'family'     => 'redirects',
 		'sub'        => 'Redirection',
+		'plugin'     => 'redirection',
 		'icon'       => 'shuffle',
 		'cap'        => apply_filters( 'redirection_role', 'manage_options' ),
 		// Fresh installs have no tables or default group until Redirection's

@@ -352,6 +352,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['wpmigrate-backups'] = array(
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'WP Migrate',
+		'plugin'     => array( 'wp-migrate-db-pro', 'wp-migrate-db' ),
 		'icon'       => 'database',
 		'family'     => 'backups',
 		'group'      => 'tools',

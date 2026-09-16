@@ -74,6 +74,7 @@ function minn_admin_field_group_sources() {
 			'id'         => (string) $source['id'],
 			'label'      => $label,
 			'cap'        => $cap,
+			'plugin'     => (array) ( $source['plugin'] ?? array() ),
 			'collection' => $collection,
 			'views'      => $extra,
 		);
@@ -89,6 +90,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// Whose groups these are is a question about PLUGINS, not about how many
 	// lists they brought: ACF alone still ships two views.
 	$providers = count( $sources );
+	$plugins   = array();
+	foreach ( $sources as $source ) {
+		$plugins = array_merge( $plugins, $source['plugin'] );
+	}
 	$first     = array_shift( $sources );
 	// The first provider's own extra views stay directly behind its list, so
 	// its two lists remain neighbours however many other plugins are here.
@@ -110,6 +115,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// One plugin's groups say whose they are on the item itself; several
 		// and the views say it instead.
 		'sub'        => $providers > 1 ? '' : $first['label'],
+		'plugin'     => array_values( array_unique( $plugins ) ),
 		'icon'       => 'grid',
 		'cap'        => $first['cap'],
 		'collection' => $first['collection'],

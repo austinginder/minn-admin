@@ -288,6 +288,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['autoptimize'] = array(
 		'label'    => __( 'Performance', 'minn-admin' ),
 		'sub'      => 'Autoptimize',
+		'plugin'     => 'autoptimize',
 		'family'   => 'performance',
 		'icon'     => 'gear',
 		// Their answer is a resolver, not a capability name; the guard above

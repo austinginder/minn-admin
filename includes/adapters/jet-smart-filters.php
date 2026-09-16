@@ -167,6 +167,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['jet-smart-filters'] = array(
 		'label'      => __( 'Filters', 'minn-admin' ),
 		'sub'        => 'JetSmartFilters',
+		'plugin'     => 'jet-smart-filters',
 		'icon'       => 'filter',
 		'group'      => 'tools',
 		'cap'        => 'manage_options',

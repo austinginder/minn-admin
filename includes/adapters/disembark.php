@@ -210,6 +210,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['disembark'] = array(
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'Disembark',
+		'plugin'     => 'disembark',
 		'icon'       => 'database',
 		'cap'        => 'manage_options',
 		'family'     => 'backups',

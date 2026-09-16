@@ -184,6 +184,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'bookings',
 		'group'      => 'commerce',
 		'sub'        => 'Bookly',
+		'plugin'     => 'bookly-responsive-appointment-booking-tool',
 		'icon'       => 'calendar',
 		'cap'        => 'read',
 		'status'     => array( 'route' => 'minn-admin/v1/bookly/status' ),

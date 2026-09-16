@@ -457,6 +457,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Snippets', 'minn-admin' ),
 		'family'     => 'snippets',
 		'sub'        => 'WPCode',
+		'plugin'     => array( 'insert-headers-and-footers', 'wpcode-premium' ),
 		'icon'       => 'code',
 		'cap'        => 'wpcode_edit_snippets',
 		// Status card (v0.18.0): family parity with Code Snippets.

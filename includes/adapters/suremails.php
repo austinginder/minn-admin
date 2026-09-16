@@ -105,6 +105,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Email', 'minn-admin' ),
 		'family'     => 'mail',
 		'sub'        => 'SureMails',
+		'plugin'     => 'suremails',
 		'icon'       => 'send',
 		'cap'        => 'manage_options',
 		'status'     => array( 'route' => 'minn-admin/v1/suremails/status' ),

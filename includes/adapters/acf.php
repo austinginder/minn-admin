@@ -2831,6 +2831,7 @@ add_filter( 'minn_admin_option_pages', function ( $pages ) {
 		'id'     => 'acf:options',
 		'label'  => $label,
 		'source' => 'ACF',
+		'plugin' => array( 'advanced-custom-fields-pro', 'advanced-custom-fields', 'secure-custom-fields' ),
 		// Every page here already passed pages_allowed for this user, and each
 		// tab's data is capability-filtered again at request time.
 		'cap'    => ! empty( $first['capability'] ) ? $first['capability'] : 'edit_posts',

@@ -69,6 +69,7 @@ function minn_admin_option_pages() {
 			'id'     => (string) $page['id'],
 			'label'  => (string) ( $page['label'] ?? $page['id'] ),
 			'source' => (string) ( $page['source'] ?? '' ),
+			'plugin' => (array) ( $page['plugin'] ?? array() ),
 			'cap'    => $cap,
 			'tabs'   => $tabs,
 			'route'  => (string) $page['route'],
@@ -171,6 +172,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces[ MINN_ADMIN_OPTIONS_SURFACE ] = array(
 		'label'    => $label,
 		'sub'      => 1 === count( $sources ) ? (string) key( $sources ) : '',
+		'plugin'   => array_values( array_unique( array_merge( ...array_map( function ( $p ) { return $p['plugin']; }, $pages ) ) ) ),
 		'icon'     => 'gear',
 		'group'    => 'tools',
 		'cap'      => $pages[0]['cap'], // every page re-checks its own on request

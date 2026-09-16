@@ -212,6 +212,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Stream',
+		'plugin'     => 'stream',
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating above + in the shim.
 		'status'     => array( 'route' => 'minn-admin/v1/stream/status' ),

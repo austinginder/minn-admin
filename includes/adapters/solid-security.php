@@ -95,6 +95,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Solid Security',
+		'plugin'     => array( 'better-wp-security', 'ithemes-security-pro' ),
 		'icon'       => 'shield',
 		// itsec_manage is dynamically granted; the filter above is the
 		// real gate (the LLA-R / Gravity Forms cap-model precedent).

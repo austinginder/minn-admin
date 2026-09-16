@@ -337,6 +337,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['gravity-smtp'] = array(
 		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'Gravity SMTP',
+		'plugin'     => 'gravitysmtp',
 		'icon'       => 'send',
 		'cap'        => minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG' ),
 		'family'     => 'mail',

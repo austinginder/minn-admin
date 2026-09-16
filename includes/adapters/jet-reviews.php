@@ -101,6 +101,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['jet-reviews'] = array(
 		'label'      => __( 'Reviews', 'minn-admin' ),
 		'sub'        => 'JetReviews',
+		'plugin'     => 'jet-reviews',
 		'family'     => 'reviews',
 		'group'      => 'workspace',
 		'icon'       => 'star',

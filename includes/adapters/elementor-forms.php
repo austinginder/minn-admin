@@ -191,6 +191,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Elementor',
+		'plugin'     => array( 'elementor-pro', 'elementor' ),
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gating above + in the shim.
 		'status'     => array( 'route' => 'minn-admin/v1/elementor/status' ),

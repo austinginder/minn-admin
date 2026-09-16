@@ -247,6 +247,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'forms',
 		'group'      => 'workspace',
 		'sub'        => 'CFDB7',
+		'plugin'     => 'contact-form-cfdb7',
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'status'     => array( 'route' => 'minn-admin/v1/cfdb7/status' ),

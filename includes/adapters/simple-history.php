@@ -238,6 +238,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Simple History',
+		'plugin'     => 'simple-history',
 		'icon'       => 'clock',
 		'cap'        => minn_admin_simple_history_view_cap(),
 		'status'     => array( 'route' => 'minn-admin/v1/simple-history/status' ),

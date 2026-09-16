@@ -323,6 +323,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['wpvivid'] = array(
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'WPvivid',
+		'plugin'     => array( 'wpvivid-backuprestore', 'wpvivid-backup-pro' ),
 		'icon'       => 'database',
 		'cap'        => 'administrator',
 		'family'     => 'backups',

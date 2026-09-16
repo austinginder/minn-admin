@@ -215,6 +215,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'All-In-One Security',
+		'plugin'     => 'all-in-one-wp-security-and-firewall',
 		'icon'       => 'shield',
 		'cap'        => 'read', // real gate is adapter-side minn_admin_aios_can().
 		'status'     => array( 'route' => 'minn-admin/v1/aios/status' ),

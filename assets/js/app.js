@@ -1204,6 +1204,7 @@
 			users: null,
 			categories: null,
 			plugins: null,
+			pluginLinks: null,
 			pluginUpdates: {},
 			themeUpdates: {},
 			translationUpdates: 0,
@@ -2939,6 +2940,9 @@
 		// License rows change with the active-component set (off/turnOn, and
 		// vendor action callables only attach while the vendor code loads).
 		state.cache.licenses = null;
+		// A plugin's doorways (its surfaces, its declared settings link)
+		// exist only while it is active.
+		state.cache.pluginLinks = null;
 		// The Stats page's series comes from whichever traffic provider is
 		// active — a plugin toggle can change the answering source.
 		state.cache.stats = null;
@@ -21028,6 +21032,57 @@
 		return pluginsPromise;
 	}
 
+	// Where each plugin's settings live: inside Minn (its surfaces, a settings
+	// section it provides, its license row) and the "Settings" link it
+	// declares to wp-admin. The wp-admin half is HARVESTED by a hidden
+	// plugins.php pageload (the notice-capture technique), so a stale answer
+	// triggers that capture and reads again. Tolerant: cards render without
+	// it. Deduped like loadPlugins; a plugin toggle nulls the cache.
+	let pluginLinksPromise = null;
+	function loadPluginLinks() {
+		if ( state.cache.pluginLinks ) return Promise.resolve( state.cache.pluginLinks );
+		if ( pluginLinksPromise ) return pluginLinksPromise;
+		pluginLinksPromise = ( async () => {
+			let r = await api( 'minn-admin/v1/plugin-links' ).catch( () => null );
+			if ( r && r.stale && r.capture ) {
+				await fetch( r.capture, { credentials: 'same-origin' } ).catch( () => {} );
+				r = await api( 'minn-admin/v1/plugin-links' ).catch( () => r );
+			}
+			state.cache.pluginLinks = { links: ( r && r.links ) || {}, minn: ( r && r.minn ) || {} };
+			return state.cache.pluginLinks;
+		} )().finally( () => { pluginLinksPromise = null; } );
+		return pluginLinksPromise;
+	}
+
+	// The doorways for one plugin card: Minn views first, then the plugin's
+	// own wp-admin screens (settings before anything else it listed).
+	function pluginDoorways( file ) {
+		const pl = state.cache.pluginLinks;
+		if ( ! pl ) return { minn: [], wp: [] };
+		const dir = file.includes( '/' ) ? file.split( '/' )[ 0 ] : file;
+		const minn = ( pl.minn[ dir ] || [] ).slice();
+		const wp = ( pl.links[ dir ] || [] ).slice().sort( ( a, b ) => ( a.kind === 'settings' ? 0 : 1 ) - ( b.kind === 'settings' ? 0 : 1 ) );
+		return { minn, wp };
+	}
+
+	// One quiet row under the author: up to three Minn chips and the
+	// plugin's own Settings link. Inactive plugins have no live screens, so
+	// they show nothing (activating repaints the row).
+	function pluginDoorwaysHtml( file, active ) {
+		if ( ! active ) return '';
+		const d = pluginDoorways( file );
+		const minn = d.minn.slice( 0, 3 ).map( ( l, i ) => `<button type="button" class="minn-plugin-door" data-mdoor="${ esc( file ) }:${ i }">${ esc( l.label ) }</button>` );
+		const wp = d.wp.filter( ( l ) => l.kind === 'settings' ).slice( 0, 1 ).map( ( l ) => `<a class="minn-plugin-door is-wp" href="${ esc( l.href ) }" target="_blank" rel="noopener">${ esc( l.label ) } ↗</a>` );
+		if ( ! minn.length && ! wp.length ) return '';
+		return `<div class="minn-plugin-doors">${ minn.length ? `<span class="minn-plugin-doors-in">${ esc( __( 'In Minn' ) ) }</span>` : '' }${ minn.join( '' ) }${ wp.join( '' ) }</div>`;
+	}
+
+	function goMinnLink( l ) {
+		if ( l.section ) state.settingsSection = l.section;
+		if ( l.tab ) state.extTab = l.tab;
+		go( l.go );
+	}
+
 	// After a plugin upgrade the PHP worker often recycles (OPcache /
 	// FrankenPHP), so the NEXT fetch fails instantly with TypeError
 	// "Failed to fetch" / ERR_CONNECTION_REFUSED. Retry a few times rather
@@ -22257,6 +22312,11 @@
 			loadPlugins().then( renderIfCurrent( 'extensions' ) ).catch( showErr );
 			return;
 		}
+		// Doorway rows arrive after the list paints (the first read may run
+		// the hidden plugins.php capture); one repaint when they land.
+		if ( ! state.cache.pluginLinks && state.extTab === 'plugins' ) {
+			loadPluginLinks().then( () => { if ( state.route === 'extensions' && state.extTab === 'plugins' ) renderExtensions(); } );
+		}
 		if ( B.caps.core && ! state.cache.core ) {
 			loadCoreStatus().then( () => { if ( state.route === 'extensions' && state.cache.core && state.cache.core.update ) renderExtensions(); } );
 		}
@@ -22366,6 +22426,7 @@
 						${ p.author ? `<div class="minn-plugin-author">${ esc( __( 'By' ) ) } ${ p.author_uri
 							? `<a href="${ esc( p.author_uri ) }" target="_blank" rel="noopener">${ esc( decodeEntities( stripTags( p.author ) ) ) }</a>`
 							: esc( decodeEntities( stripTags( p.author ) ) ) }</div>` : '' }
+						${ pluginDoorwaysHtml( p.plugin, on || net ) }
 						<div class="minn-plugin-foot">
 							<button type="button" class="minn-plugin-ver as-btn" data-changelog="${ esc( p.plugin ) }" title="${ esc( sprintf( /* translators: %s: the plugin's name. */ __( 'Changelog for %s' ), name ) ) }">v${ esc( p.version || '?' ) }</button>
 							${ B.caps.update && state.cache.autoAllowed ? autoToggleHtml( 'plugin', p.plugin + '.php', ( state.cache.autoPlugins || [] ).includes( p.plugin + '.php' ), name ) : '' }
@@ -22541,6 +22602,18 @@
 					: __( 'Changelog' ),
 				run: () => openPluginChangelogFor( file, name ),
 			} );
+			if ( on || net ) {
+				const d = pluginDoorways( file );
+				d.minn.forEach( ( l ) => entries.push( {
+					/* translators: %s: a Minn view's name, e.g. Forms. */
+					label: sprintf( __( 'Open %s in Minn' ), l.label ),
+					run: () => goMinnLink( l ),
+				} ) );
+				d.wp.slice( 0, 4 ).forEach( ( l ) => entries.push( {
+					label: l.label + ' ↗',
+					run: () => window.open( l.href, '_blank', 'noopener' ),
+				} ) );
+			}
 			if ( ! on && ! net && B.caps.delete ) {
 				entries.push( {
 					label: __( 'Delete plugin' ),
@@ -22590,6 +22663,14 @@
 
 		$$( '[data-del]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => deletePluginByFile( btn.dataset.del ) )
+		);
+
+		$$( '[data-mdoor]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const [ file, i ] = [ btn.dataset.mdoor.slice( 0, btn.dataset.mdoor.lastIndexOf( ':' ) ), btn.dataset.mdoor.slice( btn.dataset.mdoor.lastIndexOf( ':' ) + 1 ) ];
+				const l = pluginDoorways( file ).minn[ Number( i ) ];
+				if ( l ) goMinnLink( l );
+			} )
 		);
 
 		$$( '[data-whatsnew], [data-changelog]', view ).forEach( ( btn ) =>

@@ -214,6 +214,7 @@ arrived in that release; unmarked keys have been stable since the API shipped.
 |---|---|
 | `label` | Sidebar label and page title |
 | `sub` | Subtitle badge (usually your plugin name) |
+| `plugin` | The plugin folder this surface belongs to, as its directory slug (`'gravityforms'`), or a list when one surface serves a free and a Pro build (`array( 'wpforms-lite', 'wpforms' )`); a theme is `'theme:slug'`. Optional, and worth declaring: with it, the plugin's card on Extensions carries a chip straight to this surface, beside the Settings link the plugin declares to wp-admin |
 | `icon` | Icon name from Minn's set — the full list is under [Icons](#icons) below. An unknown name renders an empty icon, so copy from the list |
 | `cap` | Capability required. Checked server-side; the surface is absent from the app for users without it. Plugins with their own access model gate inside the shim instead — see [Capability patterns](#capability-patterns) |
 | `collection` | The list definition (below). Optional when the surface declares `settings`: a settings-only surface renders its settings view as the whole page (right for settings-shaped plugins with no list to show; the bundled Perfmatters adapter is the example) |
@@ -789,6 +790,7 @@ $surfaces['driftwood'] = array(
     'cap'        => 'read',            // adapter-side gating: your routes check your own access model
     'family'     => 'forms',           // join the Forms provider switcher
     'group'      => 'workspace',       // entries are inbox-shaped
+    'plugin'     => 'my-plugin',       // the card on Extensions links here
     'collection' => array(
         'viewLabel' => 'Entries',
         // Dynamic per-form tabs: {tab} in the route + an All route.

@@ -189,6 +189,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Snippets', 'minn-admin' ),
 		'family'     => 'snippets',
 		'sub'        => 'Header Footer Code Manager',
+		'plugin'     => 'header-footer-code-manager',
 		'icon'       => 'code',
 		'cap'        => 'manage_options',
 		// Status card (v0.18.0): family parity with Code Snippets.

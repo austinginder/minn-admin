@@ -123,6 +123,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['jet-theme-core'] = array(
 		'label'      => __( 'Templates', 'minn-admin' ),
 		'sub'        => 'JetThemeCore',
+		'plugin'     => 'jet-theme-core',
 		'family'     => 'builder-templates',
 		'icon'       => 'columns',
 		// Derived from the same place minn_admin_jet_tc_can() reads, so the

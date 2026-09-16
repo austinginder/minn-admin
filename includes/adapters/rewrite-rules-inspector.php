@@ -273,6 +273,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['rewrite-rules-inspector'] = array(
 		'label'      => __( 'Diagnostics', 'minn-admin' ),
 		'sub'        => 'Rewrites',
+		'plugin'     => 'rewrite-rules-inspector',
 		'family'     => 'diagnostics',
 		'icon'       => 'activity',
 		'cap'        => 'manage_options',

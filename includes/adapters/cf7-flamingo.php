@@ -129,6 +129,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => $cf7 ? 'Contact Form 7' : 'Flamingo',
+		'plugin'     => array( 'contact-form-7', 'flamingo' ),
 		'status'     => array( 'route' => 'minn-admin/v1/cf7/status' ),
 		'icon'       => 'inbox',
 		'cap'        => 'read',

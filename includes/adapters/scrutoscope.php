@@ -739,6 +739,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// Tools nav item so Dev tools don't each claim a top-level slot.
 		'label'      => __( 'Diagnostics', 'minn-admin' ),
 		'sub'        => 'Scrutoscope',
+		'plugin'     => 'scrutoscope',
 		'family'     => 'diagnostics',
 		'icon'       => 'activity',
 		'cap'        => 'manage_options',

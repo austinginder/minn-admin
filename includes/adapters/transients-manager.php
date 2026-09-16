@@ -409,6 +409,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['transients-manager'] = array(
 		'label'      => __( 'Diagnostics', 'minn-admin' ),
 		'sub'        => 'Transients',
+		'plugin'     => 'transients-manager',
 		'family'     => 'diagnostics',
 		'icon'       => 'activity',
 		'cap'        => 'manage_options',

@@ -192,6 +192,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Ninja Forms',
+		'plugin'     => 'ninja-forms',
 		'icon'       => 'inbox',
 		'status'     => array( 'route' => 'minn-admin/v1/ninja-forms/status' ),
 		'cap'        => 'read', // real gate is the filter above (their cap filter)

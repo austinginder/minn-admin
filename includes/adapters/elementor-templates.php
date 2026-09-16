@@ -324,6 +324,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['elementor-templates'] = array(
 		'label'      => __( 'Templates', 'minn-admin' ),
 		'sub'        => 'Elementor',
+		'plugin'     => 'elementor',
 		'family'     => 'builder-templates',
 		'icon'       => 'columns',
 		'cap'        => 'edit_posts',

@@ -246,6 +246,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['ai1wm'] = array(
 		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'All-in-One WP Migration',
+		'plugin'     => 'all-in-one-wp-migration',
 		'icon'       => 'database',
 		'cap'        => 'read', // the real gate is on the routes, checked above
 		'family'     => 'backups',

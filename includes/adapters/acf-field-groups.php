@@ -233,6 +233,7 @@ add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
 	$sources[] = array(
 		'id'         => 'acf',
 		'label'      => 'ACF',
+		'plugin'     => array( 'advanced-custom-fields-pro', 'advanced-custom-fields', 'secure-custom-fields' ),
 		'cap'        => minn_admin_acf_schema_cap(),
 		'collection' => array(
 			'viewLabel' => 'ACF',

@@ -854,7 +854,7 @@ class Minn_Admin_Surfaces {
 	// The documented descriptor vocabulary. Undocumented keys are internal
 	// (see the Compatibility section of for-plugin-authors.md), so anything
 	// outside these lists is flagged as unknown rather than silently ignored.
-	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'views', 'status', 'setup', 'settings' );
+	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'plugin', 'collection', 'manage', 'views', 'status', 'setup', 'settings' );
 	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href', 'cap' );
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
 	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter', 'filterBar', 'sortQuery', 'open', 'import', 'dateQuery' );

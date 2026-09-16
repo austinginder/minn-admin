@@ -240,6 +240,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['performance-lab'] = array(
 		'label'      => __( 'Performance', 'minn-admin' ),
 		'sub'        => 'Performance Lab',
+		'plugin'     => 'performance-lab',
 		'family'     => 'performance',
 		'icon'       => 'gear',
 		'cap'        => 'manage_options',

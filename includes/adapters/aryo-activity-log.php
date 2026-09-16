@@ -247,6 +247,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// Plugin product name is just "Activity Log"; use Aryo so the
 		// family switcher can tell it apart from Simple History / Stream.
 		'sub'        => 'Aryo',
+		'plugin'     => 'aryo-activity-log',
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating above + in the shim.
 		'status'     => array( 'route' => 'minn-admin/v1/aryo/status' ),

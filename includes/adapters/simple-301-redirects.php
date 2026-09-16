@@ -35,6 +35,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Redirects', 'minn-admin' ),
 		'family'     => 'redirects',
 		'sub'        => 'Simple 301 Redirects',
+		'plugin'     => 'simple-301-redirects',
 		'icon'       => 'shuffle',
 		'cap'        => 'manage_options',
 		// Status card (v0.18.0): family parity with Redirection.

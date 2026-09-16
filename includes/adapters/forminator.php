@@ -198,6 +198,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Forminator',
+		'plugin'     => array( 'forminator', 'forminator-pro' ),
 		'icon'       => 'inbox',
 		'status'     => array( 'route' => 'minn-admin/v1/forminator/status' ),
 		'cap'        => 'read', // real gate is the filter above (their permission model)

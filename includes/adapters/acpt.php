@@ -907,6 +907,7 @@ add_filter( 'minn_admin_option_pages', function ( $pages ) {
 			'id'     => 'acpt:' . $slug,
 			'label'  => method_exists( $page, 'getMenuTitle' ) ? $page->getMenuTitle() : $slug,
 			'source' => 'ACPT',
+			'plugin' => 'advanced-custom-post-type',
 			'cap'    => method_exists( $page, 'getCapability' ) ? (string) $page->getCapability() : 'manage_options',
 			'tabs'   => $tab_list,
 			'route'  => 'minn-admin/v1/acpt/options/' . rawurlencode( $slug ) . '/{tab}',
@@ -1061,6 +1062,7 @@ add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
 	$sources[] = array(
 		'id'         => 'acpt',
 		'label'      => 'ACPT',
+		'plugin'     => 'advanced-custom-post-type',
 		'cap'        => 'manage_options',
 		'collection' => array(
 			'viewLabel' => 'ACPT',

@@ -250,6 +250,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['jet-cct'] = array(
 		'label'      => $views ? __( 'Content types', 'minn-admin' ) : $first['viewLabel'],
 		'sub'        => 'JetEngine',
+		'plugin'     => 'jet-engine',
 		'icon'       => 'database',
 		'group'      => 'workspace',
 		'cap'        => 'read', // each type's own capability gates its routes

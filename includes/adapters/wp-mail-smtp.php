@@ -66,6 +66,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['wp-mail-smtp'] = array(
 		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'WP Mail SMTP',
+		'plugin'     => array( 'wp-mail-smtp', 'wp-mail-smtp-pro' ),
 		'icon'       => 'send',
 		// Their answer is a resolver, not a capability name; the filter above
 		// is the real gate (the Solid Security / WP Mail Logging precedent).

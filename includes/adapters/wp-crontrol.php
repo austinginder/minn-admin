@@ -379,6 +379,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['wp-crontrol'] = array(
 		'label'      => __( 'Diagnostics', 'minn-admin' ),
 		'sub'        => 'WP Crontrol',
+		'plugin'     => 'wp-crontrol',
 		'family'     => 'diagnostics',
 		'icon'       => 'activity',
 		'cap'        => 'manage_options',

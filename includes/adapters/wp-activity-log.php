@@ -135,6 +135,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'WP Activity Log',
+		'plugin'     => array( 'wp-security-audit-log', 'wp-security-audit-log-premium' ),
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating happens above + in the shim.
 		'status'     => array( 'route' => 'minn-admin/v1/wsal/status' ),
