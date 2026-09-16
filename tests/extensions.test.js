@@ -16,7 +16,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return { status: r.status, body: await r.json() };
 	} );
 	const entries = Object.values( meta.body || {} );
-	t.check( 'plugin-meta serves icons + urls from the transient', meta.status === 200 && entries.length > 5 && entries.every( ( e ) => e.slug && e.url ), String( entries.length ) );
+	// A self-hosted updater's entry may have no URL at all (a GitHub-fed one
+	// leaves url and package empty); the tile then has no link rather than
+	// a wordpress.org page that does not exist.
+	t.check( 'plugin-meta serves icons + urls from the transient', meta.status === 200 && entries.length > 5 && entries.every( ( e ) => e.slug && ( e.url === '' || /^https?:\/\//.test( e.url ) ) ) && entries.some( ( e ) => /wordpress\.org\/plugins\//.test( e.url ) ), String( entries.length ) );
 
 	/* ===== Baseline: the inactive toggle fixture. The confirm-modal suite
 	 * uses hello-dolly as ITS disposable delete fixture, so seed it here
