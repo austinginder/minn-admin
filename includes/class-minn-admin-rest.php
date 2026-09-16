@@ -67,6 +67,12 @@ class Minn_Admin_REST {
 						$tr = get_site_transient( 'update_plugins' );
 					}
 					$out = array();
+					require_once ABSPATH . 'wp-admin/includes/plugin.php';
+					$headers = get_plugins();
+					$host_is = function ( $url, $host ) {
+						$h = wp_parse_url( (string) $url, PHP_URL_HOST );
+						return $h && ( $h === $host || substr( $h, -strlen( '.' . $host ) ) === '.' . $host );
+					};
 					foreach ( array( 'response', 'no_update' ) as $bucket ) {
 						if ( empty( $tr->$bucket ) || ! is_array( $tr->$bucket ) ) {
 							continue;
@@ -75,17 +81,26 @@ class Minn_Admin_REST {
 							$data  = (object) $data;
 							$icons = isset( $data->icons ) ? (array) $data->icons : array();
 							$slug  = isset( $data->slug ) && $data->slug ? $data->slug : dirname( $file );
+							// A self-hosted updater (EDD-SL, Freemius, Kernl, a
+							// GitHub-fed one) fills the same buckets, so being in
+							// the transient is not being on wp.org: only a
+							// wp.org-shaped entry gets the directory link, the
+							// rest their own URL, else the plugin header's.
+							$wporg = ( isset( $data->id ) && 0 === strpos( (string) $data->id, 'w.org/plugins/' ) )
+								|| $host_is( isset( $data->url ) ? $data->url : '', 'wordpress.org' )
+								|| $host_is( isset( $data->package ) ? $data->package : '', 'downloads.wordpress.org' );
+							$url = isset( $data->url ) && $data->url ? esc_url_raw( (string) $data->url ) : '';
+							if ( $wporg ) {
+								$url = 'https://wordpress.org/plugins/' . $slug . '/';
+							} elseif ( ! $url && ! empty( $headers[ $file ]['PluginURI'] ) ) {
+								$url = esc_url_raw( (string) $headers[ $file ]['PluginURI'] );
+							}
 							$out[ $file ] = array(
 								'slug' => $slug,
 								'icon' => isset( $icons['svg'] ) ? $icons['svg']
 									: ( isset( $icons['2x'] ) ? $icons['2x']
 									: ( isset( $icons['1x'] ) ? $icons['1x'] : '' ) ),
-								// Whatever the plugin's own update server answered
-								// with. A self-hosted updater (EDD-SL, Freemius,
-								// Kernl) puts a vendor-controlled string here,
-								// so it is neither trusted nor a URL until it
-								// has been through esc_url_raw.
-								'url'  => isset( $data->url ) && $data->url ? esc_url_raw( (string) $data->url ) : 'https://wordpress.org/plugins/' . $slug . '/',
+								'url'  => $url,
 							);
 						}
 					}
@@ -9426,6 +9441,17 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$html = trim( (string) $html );
 		if ( '' === $html ) {
 			return array();
+		}
+		// A vendor that pastes its changelog.txt into the section as text
+		// with <br> line breaks has no headings to split on; read it as the
+		// text file it is when that finds releases.
+		if ( ! preg_match( '/<h[2-5]\b/i', $html ) && preg_match( '/<br\s*\/?>|<\/p>/i', $html ) ) {
+			$text = preg_replace( '/<br\s*\/?>|<\/p>|<\/li>|<\/div>/i', "\n", $html );
+			$text = html_entity_decode( wp_strip_all_tags( $text ), ENT_QUOTES );
+			$text_html = self::changelog_text_to_html( $text );
+			if ( false !== strpos( $text_html, '<h4>' ) ) {
+				$html = $text_html;
+			}
 		}
 		$allowed = array(
 			'h3'     => array(),
