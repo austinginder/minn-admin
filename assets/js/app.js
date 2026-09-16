@@ -8512,7 +8512,7 @@
 	function loadWcGateways() {
 		if ( state.cache.wcGateways ) return Promise.resolve( state.cache.wcGateways );
 		if ( ! wcGatewaysPromise ) {
-			wcGatewaysPromise = api( 'minn-admin/v1/wc/gateways' )
+			wcGatewaysPromise = api( 'minn-admin/v1/wc/payment_gateways' )
 				.then( ( r ) => {
 					state.cache.wcGateways = ( r && Array.isArray( r.gateways ) ) ? r.gateways : [];
 					return state.cache.wcGateways;
@@ -25202,7 +25202,7 @@
 
 	async function loadStoreSettings() {
 		const r = await api( 'minn-admin/v1/wc/settings' );
-		state.cache.store = { sections: r.sections || [], adminUrl: r.adminUrl || '', data: {}, emails: null };
+		state.cache.store = { sections: r.sections || [], adminUrl: r.adminUrl || '', data: {}, emails: null, gateways: null };
 	}
 
 	// The active section, or the first one when the URL names none (or one
@@ -25266,8 +25266,9 @@
 			return `<div class="minn-settings-nav-group">${ esc( pg.label ) }</div>` + pg.items.map( ( x ) =>
 				`<button class="minn-settings-nav-item minn-settings-nav-sub${ x.id === sec.id ? ' active' : '' }" data-storesec="${ esc( x.id ) }" data-pg="${ esc( pg.label ) }">${ esc( x.label ) }</button>` ).join( '' );
 		} ).join( '' );
-		const data = c.data[ sec.id ];
-		const form = data ? settingsFormHtml( data ) : null;
+		const isPayments = sec.kind === 'payments';
+		const data = isPayments ? { groups: [] } : c.data[ sec.id ];
+		const form = data && ! isPayments ? settingsFormHtml( data ) : null;
 		const isEmails = sec.page === 'email' && ! sec.section;
 		view.innerHTML = `
 		<div class="minn-settings minn-store-settings">
@@ -25278,7 +25279,7 @@
 					<div class="minn-settings-sub">${ esc( __( 'Saved through WooCommerce’s own settings pipeline, so every extension that listens for a save still hears it.' ) ) }</div>
 				</div>
 				${ isEmails ? '<div id="minn-store-emails"></div>' : '' }
-				<div id="minn-store-form">${ form ? form.html : `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` }</div>
+				${ isPayments ? '<div id="minn-store-payments"></div>' : `<div id="minn-store-form">${ form ? form.html : `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` }</div>` }
 			</div>
 		</div>`;
 		$$( '[data-storesec]', view ).forEach( ( btn ) =>
@@ -25290,6 +25291,10 @@
 			} )
 		);
 		if ( isEmails ) renderStoreEmails( $( '#minn-store-emails', view ) );
+		if ( isPayments ) {
+			renderStorePayments( $( '#minn-store-payments', view ) );
+			return;
+		}
 		if ( ! data ) {
 			api( storeSectionRoute( sec ) )
 				.then( ( r ) => {
@@ -25384,14 +25389,15 @@
 		);
 	}
 
-	function openStoreEmailModal( id ) {
-		const row = ( ( state.cache.store && state.cache.store.emails ) || [] ).find( ( x ) => x.id === id );
-		state.modal = { type: 'store-email', id, title: row ? row.title : id, data: null, form: null };
+	// A WC_Settings_API form (one email, one payment gateway) in a modal:
+	// the same engine as the page, the route owns the schema and the save.
+	function openStoreFormModal( { route, title, sub, onSaved } ) {
+		state.modal = { type: 'store-form', route, title, sub, onSaved, data: null, form: null };
 		renderOverlays();
-		api( `minn-admin/v1/wc/emails/${ encodeURIComponent( id ) }` )
+		api( route )
 			.then( ( r ) => {
 				const m = state.modal;
-				if ( ! m || m.type !== 'store-email' || m.id !== id ) return;
+				if ( ! m || m.type !== 'store-form' || m.route !== route ) return;
 				m.data = r || { groups: [] };
 				renderOverlays();
 			} )
@@ -25401,33 +25407,164 @@
 			} );
 	}
 
-	function renderStoreEmailModal( m ) {
+	function openStoreEmailModal( id ) {
+		const row = ( ( state.cache.store && state.cache.store.emails ) || [] ).find( ( x ) => x.id === id );
+		openStoreFormModal( {
+			route: `minn-admin/v1/wc/emails/${ encodeURIComponent( id ) }`,
+			title: row ? row.title : id,
+			sub: __( 'Email' ),
+			onSaved: () => {
+				toast( __( 'Email saved' ) );
+				// The list row may have changed (enabled, recipient): refetch it.
+				if ( state.cache.store ) state.cache.store.emails = null;
+				if ( state.route === 'store-settings' ) renderStoreSettings();
+			},
+		} );
+	}
+
+	function renderStoreFormModal( m ) {
 		m.form = m.data ? settingsFormHtml( m.data ) : null;
 		return `
 		<div class="minn-modal-overlay" id="minn-modal-overlay">
-			<div class="minn-modal wide minn-store-email-modal">
+			<div class="minn-modal wide minn-store-form-modal">
 				<div class="minn-modal-head">
-					<div class="minn-modal-title">${ esc( m.title ) } <span class="minn-panel-sub">${ esc( __( 'Email' ) ) }</span></div>
+					<div class="minn-modal-title">${ esc( m.title ) }${ m.sub ? ` <span class="minn-panel-sub">${ esc( m.sub ) }</span>` : '' }</div>
 					<button class="minn-x-btn" id="minn-modal-close" type="button">×</button>
 				</div>
-				<div class="minn-modal-scroll minn-surface-settings" id="minn-store-email-form">
+				<div class="minn-modal-scroll minn-surface-settings" id="minn-store-form-modal">
 					${ m.form ? m.form.html : `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` }
 				</div>
 			</div>
 		</div>`;
 	}
 
-	function bindStoreEmailModal( m ) {
-		const host = $( '#minn-store-email-form' );
+	function bindStoreFormModal( m ) {
+		const host = $( '#minn-store-form-modal' );
 		if ( ! host || ! m.data || ! m.form ) return;
 		bindSettingsForm( host, m.data, m.form.fields, async ( payload ) => {
-			const r = await api( `minn-admin/v1/wc/emails/${ encodeURIComponent( m.id ) }`, { method: 'POST', body: JSON.stringify( { values: payload } ) } );
+			const r = await api( m.route, { method: 'POST', body: JSON.stringify( { values: payload } ) } );
 			m.data = r || m.data;
-			toast( __( 'Email saved' ) );
-			// The list row may have changed (enabled, recipient): refetch it.
-			if ( state.cache.store ) state.cache.store.emails = null;
+			if ( r && Array.isArray( r.errors ) && r.errors.length ) {
+				// WooCommerce refused part of it: stay open on the re-read values.
+				toast( r.errors.join( ' ' ), true );
+				renderOverlays();
+				return;
+			}
 			closeModal();
-			if ( state.route === 'store-settings' ) renderStoreSettings();
+			if ( m.onSaved ) m.onSaved( r );
+		} );
+	}
+
+	/* --- Payments: gateways in display order, switch in place, drag to reorder --- */
+
+	async function renderStorePayments( host ) {
+		if ( ! host ) return;
+		const c = state.cache.store;
+		if ( ! c.gateways ) {
+			host.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading payment methods…' ) ) }</div>`;
+			try {
+				c.gateways = ( await api( 'minn-admin/v1/wc/payment_gateways' ) ).gateways || [];
+			} catch ( e ) {
+				host.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`;
+				return;
+			}
+			if ( ! host.isConnected ) return;
+		}
+		const rows = c.gateways;
+		host.innerHTML = `
+			<div class="minn-fields-sub">${ esc( __( 'Payment methods' ) ) }</div>
+			<div class="minn-fields-note">${ esc( __( 'In the order shoppers see them at checkout: drag a row to move it. Turn a method on or off here; open one to set its title, instructions and the rest of its settings.' ) ) }</div>
+			<div class="minn-store-emails minn-store-gateways">
+				${ rows.map( ( g ) => `
+				<div class="minn-store-email minn-store-gateway${ g.enabled ? '' : ' off' }" data-gateway="${ esc( g.id ) }" draggable="true">
+					<span class="minn-menu-grip minn-store-grip" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>
+					<div class="minn-store-email-main">
+						<div class="minn-store-email-title">${ esc( g.title ) }${ g.label && g.label !== g.title ? ` <span class="minn-store-gateway-label">${ esc( g.label ) }</span>` : '' }${ g.needsSetup ? ` <span class="minn-lic-cat">${ esc( __( 'Needs setup' ) ) }</span>` : '' }</div>
+						${ g.description ? `<div class="minn-toggle-desc">${ esc( g.description ) }</div>` : '' }
+					</div>
+					<button type="button" class="minn-switch${ g.enabled ? ' on' : '' }" role="switch" aria-checked="${ g.enabled ? 'true' : 'false' }" data-gwtog="${ esc( g.id ) }" aria-label="${ esc( g.title ) }"><span class="minn-switch-knob"></span></button>
+					${ g.fields ? `<button type="button" class="minn-btn-soft" data-gwedit="${ esc( g.id ) }">${ esc( __( 'Edit' ) ) }</button>` : `<a class="minn-btn-soft" href="${ esc( g.settingsUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Set up ↗' ) ) }</a>` }
+				</div>` ).join( '' ) }
+				${ rows.length ? '' : `<div class="minn-empty">${ esc( __( 'No payment methods are installed.' ) ) }</div>` }
+			</div>
+			<div class="minn-toggle-desc">${ esc( __( 'Adding a new provider, WooPayments onboarding and gateways with their own settings screens stay in WooCommerce.' ) ) } ${ c.adminUrl ? `<a href="${ esc( c.adminUrl ) }&tab=checkout" target="_blank" rel="noopener">${ esc( __( 'Open Payments in WooCommerce ↗' ) ) }</a>` : '' }</div>`;
+		$$( '[data-gwtog]', host ).forEach( ( sw ) =>
+			sw.addEventListener( 'click', async () => {
+				const on = ! sw.classList.contains( 'on' );
+				sw.classList.toggle( 'on', on );
+				sw.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				sw.disabled = true;
+				try {
+					const r = await api( `minn-admin/v1/wc/payment_gateways/${ encodeURIComponent( sw.dataset.gwtog ) }`, { method: 'POST', body: JSON.stringify( { values: { enabled: on } } ) } );
+					if ( r && Array.isArray( r.errors ) && r.errors.length ) throw new Error( r.errors.join( ' ' ) );
+					const row = rows.find( ( x ) => x.id === sw.dataset.gwtog );
+					if ( row ) row.enabled = on;
+					sw.closest( '.minn-store-gateway' ).classList.toggle( 'off', ! on );
+					toast( on ? __( 'Payment method turned on' ) : __( 'Payment method turned off' ) );
+				} catch ( e ) {
+					sw.classList.toggle( 'on', ! on );
+					sw.setAttribute( 'aria-checked', on ? 'false' : 'true' );
+					toast( e.message, true );
+				}
+				sw.disabled = false;
+			} )
+		);
+		$$( '[data-gwedit]', host ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const g = rows.find( ( x ) => x.id === btn.dataset.gwedit );
+				openStoreFormModal( {
+					route: `minn-admin/v1/wc/payment_gateways/${ encodeURIComponent( btn.dataset.gwedit ) }`,
+					title: g ? g.title : btn.dataset.gwedit,
+					sub: __( 'Payment method' ),
+					onSaved: () => {
+						toast( __( 'Payment method saved' ) );
+						c.gateways = null;
+						if ( state.route === 'store-settings' ) renderStoreSettings();
+					},
+				} );
+			} )
+		);
+		// Drag to reorder (the menus grip pattern): drop above or below the
+		// target's midpoint, then one request writes the whole order.
+		let dragId = null;
+		$$( '.minn-store-gateway', host ).forEach( ( row ) => {
+			row.addEventListener( 'dragstart', ( e ) => {
+				dragId = row.dataset.gateway;
+				e.dataTransfer.effectAllowed = 'move';
+				try { e.dataTransfer.setData( 'text/plain', dragId ); } catch ( err ) {}
+				row.classList.add( 'dragging' );
+			} );
+			row.addEventListener( 'dragend', () => row.classList.remove( 'dragging' ) );
+			row.addEventListener( 'dragover', ( e ) => {
+				if ( ! dragId ) return;
+				e.preventDefault();
+				const r = row.getBoundingClientRect();
+				row.classList.toggle( 'drop-before', e.clientY < r.top + r.height / 2 );
+				row.classList.toggle( 'drop-after', e.clientY >= r.top + r.height / 2 );
+			} );
+			row.addEventListener( 'dragleave', () => row.classList.remove( 'drop-before', 'drop-after' ) );
+			row.addEventListener( 'drop', async ( e ) => {
+				e.preventDefault();
+				e.stopPropagation(); // the app-wide drop handler must not see this
+				row.classList.remove( 'drop-before', 'drop-after' );
+				if ( ! dragId || dragId === row.dataset.gateway ) { dragId = null; return; }
+				const ids = rows.map( ( x ) => x.id );
+				const from = ids.indexOf( dragId );
+				const r = row.getBoundingClientRect();
+				let to = ids.indexOf( row.dataset.gateway ) + ( e.clientY >= r.top + r.height / 2 ? 1 : 0 );
+				const [ moved ] = ids.splice( from, 1 );
+				if ( to > from ) to--;
+				ids.splice( to, 0, moved );
+				dragId = null;
+				try {
+					const res = await api( 'minn-admin/v1/wc/payment_gateways/order', { method: 'POST', body: JSON.stringify( { ids } ) } );
+					c.gateways = res.gateways || null;
+					toast( __( 'Payment order saved' ) );
+					if ( state.route === 'store-settings' ) renderStoreSettings();
+				} catch ( err ) {
+					toast( err.message, true );
+				}
+			} );
 		} );
 	}
 
@@ -42650,8 +42787,8 @@
 		if ( m.type === 'styles-paste' ) {
 			return renderStylesPasteModal( m );
 		}
-		if ( m.type === 'store-email' ) {
-			return renderStoreEmailModal( m );
+		if ( m.type === 'store-form' ) {
+			return renderStoreFormModal( m );
 		}
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
@@ -44313,8 +44450,8 @@
 				btn.addEventListener( 'click', () => restoreStylesRevision( m, parseInt( btn.dataset.gsrestore, 10 ) ) )
 			);
 		}
-		if ( m.type === 'store-email' ) {
-			bindStoreEmailModal( m );
+		if ( m.type === 'store-form' ) {
+			bindStoreFormModal( m );
 		}
 		if ( m.type === 'styles-paste' ) {
 			const apply = $( '#minn-paste-look-apply' );

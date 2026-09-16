@@ -165,16 +165,60 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 
 		const subjBefore = ( await wcGet( 'email_new_order', 'subject' ) ).value;
 		await page.click( '[data-emailedit="new_order"]' );
-		await page.waitForSelector( '#minn-store-email-form [data-sset="subject"]', { timeout: 20000 } );
-		t.check( 'email modal renders the email\'s own form fields', await page.$$eval( '#minn-store-email-form [data-sset]', ( els ) => els.map( ( e ) => e.dataset.sset ) ).then( ( keys ) => [ 'enabled', 'recipient', 'subject', 'heading' ].every( ( k ) => keys.includes( k ) ) ) );
-		await page.fill( '#minn-store-email-form [data-sset="subject"]', 'Minn test subject {order_number}' );
+		await page.waitForSelector( '#minn-store-form-modal [data-sset="subject"]', { timeout: 20000 } );
+		t.check( 'email modal renders the email\'s own form fields', await page.$$eval( '#minn-store-form-modal [data-sset]', ( els ) => els.map( ( e ) => e.dataset.sset ) ).then( ( keys ) => [ 'enabled', 'recipient', 'subject', 'heading' ].every( ( k ) => keys.includes( k ) ) ) );
+		await page.fill( '#minn-store-form-modal [data-sset="subject"]', 'Minn test subject {order_number}' );
 		const wait = page.waitForResponse( ( res ) => res.request().method() === 'POST' && /wc\/emails\/new_order/.test( res.url() ), { timeout: 30000 } );
-		await page.click( '#minn-store-email-form #minn-sset-save' );
+		await page.click( '#minn-store-form-modal #minn-sset-save' );
 		t.check( 'email save 200', ( await wait ).status() === 200 );
 		await page.waitForSelector( '#minn-modal-overlay', { state: 'detached', timeout: 15000 } );
 		t.check( 'email subject round-trips via wc/v3', ( await wcGet( 'email_new_order', 'subject' ) ).value === 'Minn test subject {order_number}' );
 		await rest( 'minn-admin/v1/wc/emails/new_order', { method: 'POST', body: JSON.stringify( { values: { subject: subjBefore || '' } } ) } );
 		t.check( 'email subject restores', ( await wcGet( 'email_new_order', 'subject' ) ).value === ( subjBefore || '' ) );
+
+		/* ===== Payments: gateways in order, switch, form, drag order ===== */
+		await page.click( '[data-storesec="checkout"]' );
+		await page.waitForSelector( '.minn-store-gateway', { timeout: 20000 } );
+		const gwRows = await page.$$eval( '.minn-store-gateway', ( els ) => els.map( ( e ) => e.dataset.gateway ) );
+		const gwWc = ( await rest( 'wc/v3/payment_gateways' ) ).body.map( ( g ) => g.id );
+		t.check( 'gateways list in WooCommerce\'s display order', gwRows.join() === gwWc.join(), gwRows.join() + ' vs ' + gwWc.join() );
+		t.check( 'the three core gateways are there', [ 'bacs', 'cheque', 'cod' ].every( ( id ) => gwRows.includes( id ) ) );
+		const bacsBefore = ( await rest( 'wc/v3/payment_gateways/bacs' ) ).body.enabled;
+		const gsw = '[data-gwtog="bacs"]';
+		await page.click( gsw );
+		await page.waitForFunction( ( sel ) => ! document.querySelector( sel ).disabled, gsw, { timeout: 15000 } );
+		t.check( 'gateway switch saves in place', ( await rest( 'wc/v3/payment_gateways/bacs' ) ).body.enabled === ! bacsBefore );
+		await page.click( gsw );
+		await page.waitForFunction( ( sel ) => ! document.querySelector( sel ).disabled, gsw, { timeout: 15000 } );
+		t.check( 'gateway switch restores', ( await rest( 'wc/v3/payment_gateways/bacs' ) ).body.enabled === bacsBefore );
+
+		const codTitle = ( await rest( 'wc/v3/payment_gateways/cod' ) ).body.title;
+		await page.click( '[data-gwedit="cod"]' );
+		await page.waitForSelector( '#minn-store-form-modal [data-sset="title"]', { timeout: 20000 } );
+		t.check( 'COD\'s shipping-method choices load (route name passes its settings gate)', await page.$$eval( '#minn-store-form-modal [data-sset="enable_for_methods"] [data-mcv]', ( els ) => els.length > 0 ) );
+		await page.fill( '#minn-store-form-modal [data-sset="title"]', 'Cash via Minn' );
+		const gwait = page.waitForResponse( ( res ) => res.request().method() === 'POST' && /wc\/payment_gateways\/cod/.test( res.url() ), { timeout: 30000 } );
+		await page.click( '#minn-store-form-modal #minn-sset-save' );
+		t.check( 'gateway save 200', ( await gwait ).status() === 200 );
+		await page.waitForSelector( '#minn-modal-overlay', { state: 'detached', timeout: 15000 } );
+		t.check( 'gateway title round-trips via wc/v3', ( await rest( 'wc/v3/payment_gateways/cod' ) ).body.title === 'Cash via Minn' );
+		await rest( 'minn-admin/v1/wc/payment_gateways/cod', { method: 'POST', body: JSON.stringify( { values: { title: codTitle } } ) } );
+		t.check( 'gateway title restores', ( await rest( 'wc/v3/payment_gateways/cod' ) ).body.title === codTitle );
+
+		// Drag the first row below the last one (real mouse drag over HTML5 dnd).
+		await page.waitForSelector( '.minn-store-gateway', { timeout: 20000 } );
+		const first = gwRows[ 0 ];
+		const last = gwRows[ gwRows.length - 1 ];
+		const lastBox = await page.$eval( `.minn-store-gateway[data-gateway="${ last }"]`, ( el ) => { const r = el.getBoundingClientRect(); return { w: r.width, h: r.height }; } );
+		const owait = page.waitForResponse( ( res ) => res.request().method() === 'POST' && /wc\/payment_gateways\/order/.test( res.url() ), { timeout: 30000 } );
+		await page.dragAndDrop( `.minn-store-gateway[data-gateway="${ first }"]`, `.minn-store-gateway[data-gateway="${ last }"]`, { targetPosition: { x: Math.round( lastBox.w / 2 ), y: Math.round( lastBox.h - 3 ) } } );
+		t.check( 'order save 200', ( await owait ).status() === 200 );
+		await page.waitForFunction( ( id ) => { const r = document.querySelectorAll( '.minn-store-gateway' ); return r.length && r[ r.length - 1 ].dataset.gateway === id; }, first, { timeout: 15000 } );
+		const expected = gwRows.slice( 1 ).concat( [ first ] );
+		const gwAfter = ( await rest( 'wc/v3/payment_gateways' ) ).body.map( ( g ) => g.id );
+		t.check( 'drag order lands in woocommerce_gateway_order', gwAfter.join() === expected.join(), gwAfter.join() );
+		await rest( 'minn-admin/v1/wc/payment_gateways/order', { method: 'POST', body: JSON.stringify( { ids: gwRows } ) } );
+		t.check( 'gateway order restores', ( await rest( 'wc/v3/payment_gateways' ) ).body.map( ( g ) => g.id ).join() === gwRows.join() );
 
 		/* ===== An editor is refused ===== */
 		const ed = await loginAs( browser, 'minn-editor', 'minn-editor-pass-1' );

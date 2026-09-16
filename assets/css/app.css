@@ -2138,7 +2138,15 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-store-email-to { font-size: 12px; color: var(--text3); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .minn-store-email-gap { width: 40px; flex-shrink: 0; }
 .minn-store-email .minn-switch { flex-shrink: 0; }
-.minn-store-email-modal .minn-surface-settings { display: flex; flex-direction: column; gap: 18px; }
+.minn-store-form-modal .minn-surface-settings { display: flex; flex-direction: column; gap: 18px; }
+.minn-store-gateway { cursor: grab; }
+.minn-store-gateway.dragging { opacity: 0.5; }
+.minn-store-gateway.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.minn-store-gateway.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.minn-store-grip { color: var(--text3); display: inline-flex; flex-shrink: 0; }
+.minn-store-grip svg { width: 15px; height: 15px; }
+.minn-store-gateway-label { font-weight: 400; color: var(--text3); font-size: 12.5px; }
+.minn-store-email a.minn-btn-soft { text-decoration: none; }
 .minn-fields { display: flex; flex-direction: column; gap: 16px; }
 .minn-field-label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
 

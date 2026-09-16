@@ -211,6 +211,14 @@ function minn_admin_wc_settings_relative_units() {
 function minn_admin_wc_settings_options( $options ) {
 	$out = array();
 	foreach ( (array) $options as $v => $l ) {
+		// One level of optgroups (Cash on delivery's shipping methods are
+		// grouped by method): the group name prefixes each choice.
+		if ( is_array( $l ) ) {
+			foreach ( $l as $gv => $gl ) {
+				$out[] = array( (string) $gv, minn_admin_wc_settings_text( (string) $v ) . ' · ' . minn_admin_wc_settings_text( is_string( $gl ) ? $gl : (string) $gv ) );
+			}
+			continue;
+		}
 		$out[] = array( (string) $v, minn_admin_wc_settings_text( is_string( $l ) ? $l : (string) $v ) );
 	}
 	return $out;
@@ -498,6 +506,21 @@ function minn_admin_wc_settings_sections() {
 		if ( ! $sections ) {
 			$sections = array( '' => $page_label );
 		}
+		// The Payments page is a React screen with no field array; Minn draws
+		// it as a gateway list from the registry instead (kind 'payments').
+		if ( 'checkout' === $page_id ) {
+			$out[] = array(
+				'id'        => 'checkout',
+				'page'      => 'checkout',
+				'section'   => '',
+				'kind'      => 'payments',
+				'label'     => $page_label,
+				'pageLabel' => $page_label,
+				'count'     => count( minn_admin_wc_settings_gateways() ),
+				'locked'    => 0,
+			);
+			continue;
+		}
 		foreach ( $sections as $sid => $slabel ) {
 			$sid    = (string) $sid;
 			$schema = minn_admin_wc_settings_schema( $page, $sid );
@@ -718,14 +741,130 @@ function minn_admin_wc_settings_email( $id ) {
 }
 
 /**
- * One email's settings form from its WC_Settings_API form fields. Same
- * vocabulary as the pages, slightly different keys (`description` for the
- * help line, values read through `$email->get_option`).
+ * One email's settings form (WC_Settings_API).
  *
  * @param WC_Email $email Email.
- * @return array { groups, values, adminUrl, email }
+ * @return array { email, title, groups, values, adminUrl }
  */
 function minn_admin_wc_settings_email_schema( $email ) {
+	return array(
+		'email' => $email->id,
+		'title' => minn_admin_wc_settings_text( $email->get_title() ),
+	) + minn_admin_wc_settings_api_schema( $email, admin_url( 'admin.php?page=wc-settings&tab=email&section=' . rawurlencode( sanitize_title( $email->id ) ) ) );
+}
+
+/**
+ * Save one email's settings: the email's own update-options action runs its
+ * process_admin_options over the prepared post data.
+ *
+ * @param WC_Email $email  Email.
+ * @param array    $edited Edited values keyed by field key.
+ */
+function minn_admin_wc_settings_email_save( $email, $edited ) {
+	$email->set_post_data( minn_admin_wc_settings_api_post_data( $email, $edited ) );
+	do_action( 'woocommerce_update_options_email_' . $email->id );
+	$email->set_post_data( array() );
+	do_action( 'woocommerce_settings_saved' );
+}
+
+/**
+ * Payment gateways in the store's own display order (WC_Payment_Gateways
+ * sorts by the woocommerce_gateway_order option), with what the Payments
+ * screen shows per row and where its full settings live. A gateway whose
+ * settings screen is React-only (WooPayments, Stripe) still lists, with its
+ * own settings URL as the way in; its WC_Settings_API fields, when it has
+ * them, edit here too.
+ *
+ * @return array
+ */
+function minn_admin_wc_settings_gateways() {
+	$rows = array();
+	if ( ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
+		return $rows;
+	}
+	foreach ( WC()->payment_gateways()->payment_gateways() as $gateway ) {
+		if ( ! $gateway instanceof WC_Payment_Gateway ) {
+			continue;
+		}
+		$fields = array();
+		try {
+			$fields = (array) $gateway->get_form_fields();
+		} catch ( Throwable $e ) {
+			$fields = array();
+		}
+		$editable = 0;
+		foreach ( $fields as $k => $f ) {
+			if ( is_array( $f ) && 'title' !== ( isset( $f['type'] ) ? $f['type'] : 'text' ) ) {
+				$editable++;
+			}
+		}
+		$rows[] = array(
+			'id'          => $gateway->id,
+			'title'       => minn_admin_wc_settings_text( $gateway->get_method_title() ),
+			'label'       => minn_admin_wc_settings_text( $gateway->get_title() ),
+			'description' => minn_admin_wc_settings_text( $gateway->get_method_description() ),
+			'enabled'     => 'yes' === $gateway->enabled,
+			'needsSetup'  => (bool) $gateway->needs_setup(),
+			'fields'      => $editable,
+			'settingsUrl' => minn_admin_wc_settings_gateway_url( $gateway ),
+		);
+	}
+	return $rows;
+}
+
+/**
+ * Where WooCommerce itself sends a shop owner for this gateway's settings:
+ * the gateway's own URL when it names one (React screens do), else its
+ * section on the Payments tab.
+ *
+ * @param WC_Payment_Gateway $gateway Gateway.
+ * @return string
+ */
+function minn_admin_wc_settings_gateway_url( $gateway ) {
+	$url = '';
+	try {
+		if ( method_exists( $gateway, 'get_settings_url' ) && is_callable( array( $gateway, 'get_settings_url' ) ) ) {
+			$url = trim( (string) $gateway->get_settings_url() );
+			if ( '' !== $url && 0 === strpos( $url, 'admin.php' ) ) {
+				$url = admin_url( $url );
+			}
+		}
+	} catch ( Throwable $e ) {
+		$url = '';
+	}
+	if ( '' === $url || ! wc_is_valid_url( $url ) ) {
+		$url = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=' . rawurlencode( strtolower( $gateway->id ) ) );
+	}
+	return $url;
+}
+
+/**
+ * Find one gateway by id.
+ *
+ * @param string $id Gateway id.
+ * @return WC_Payment_Gateway|null
+ */
+function minn_admin_wc_settings_gateway( $id ) {
+	if ( ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
+		return null;
+	}
+	foreach ( WC()->payment_gateways()->payment_gateways() as $gateway ) {
+		if ( $gateway instanceof WC_Payment_Gateway && $gateway->id === $id ) {
+			return $gateway;
+		}
+	}
+	return null;
+}
+
+/**
+ * One WC_Settings_API object's form (gateways and emails share the API):
+ * the schema from its `form_fields`, values through `get_option`.
+ *
+ * @param WC_Settings_API $obj      Gateway or email.
+ * @param string          $adminUrl Escape link.
+ * @return array { groups, values, adminUrl }
+ */
+function minn_admin_wc_settings_api_schema( $obj, $admin_url ) {
 	$values = array();
 	$groups = array();
 	$group  = array( 'title' => '', 'fields' => array(), 'locked' => 0, 'lockedLabels' => array() );
@@ -738,7 +877,7 @@ function minn_admin_wc_settings_email_schema( $email ) {
 		}
 		$group = array( 'title' => '', 'fields' => array(), 'locked' => 0, 'lockedLabels' => array() );
 	};
-	foreach ( (array) $email->get_form_fields() as $key => $f ) {
+	foreach ( (array) $obj->get_form_fields() as $key => $f ) {
 		if ( ! is_array( $f ) ) {
 			continue;
 		}
@@ -750,7 +889,7 @@ function minn_admin_wc_settings_email_schema( $email ) {
 		}
 		// WC_Settings_API spells the help line `description`; the page mapper
 		// reads `desc`, so translate the field before handing it over.
-		$wf = $f;
+		$wf         = $f;
 		$wf['id']   = (string) $key;
 		$wf['type'] = $type;
 		if ( isset( $f['description'] ) && ! isset( $wf['desc'] ) ) {
@@ -759,7 +898,7 @@ function minn_admin_wc_settings_email_schema( $email ) {
 		if ( ! isset( $wf['desc_tip'] ) ) {
 			$wf['desc_tip'] = true;
 		}
-		$wf['value'] = $email->get_option( $key, isset( $f['default'] ) ? $f['default'] : '' );
+		$wf['value'] = $obj->get_option( $key, isset( $f['default'] ) ? $f['default'] : '' );
 		unset( $wf['is_option'] );
 		$mapped = minn_admin_wc_settings_map_field( $wf, $values );
 		if ( null === $mapped ) {
@@ -776,26 +915,23 @@ function minn_admin_wc_settings_email_schema( $email ) {
 	}
 	$flush();
 	return array(
-		'email'    => $email->id,
-		'title'    => minn_admin_wc_settings_text( $email->get_title() ),
 		'groups'   => $groups,
 		'values'   => $values,
-		'adminUrl' => admin_url( 'admin.php?page=wc-settings&tab=email&section=' . rawurlencode( sanitize_title( $email->id ) ) ),
+		'adminUrl' => $admin_url,
 	);
 }
 
 /**
- * Save one email's settings through WC_Settings_API: the post data is the
- * current values overlaid with the edits (keys prefixed the way the email's
- * own form posts them), and the email's own update-options action does the
- * validation and the write.
+ * Post data for a WC_Settings_API object: current values overlaid with the
+ * edits, keys prefixed the way its own form posts them.
  *
- * @param WC_Email $email  Email.
- * @param array    $edited Edited values keyed by field key.
+ * @param WC_Settings_API $obj    Gateway or email.
+ * @param array           $edited Edited values keyed by field key.
+ * @return array Slashed post data.
  */
-function minn_admin_wc_settings_email_save( $email, $edited ) {
+function minn_admin_wc_settings_api_post_data( $obj, $edited ) {
 	$post = array();
-	foreach ( (array) $email->get_form_fields() as $key => $f ) {
+	foreach ( (array) $obj->get_form_fields() as $key => $f ) {
 		if ( ! is_array( $f ) ) {
 			continue;
 		}
@@ -806,16 +942,13 @@ function minn_admin_wc_settings_email_save( $email, $edited ) {
 		$wf          = $f;
 		$wf['id']    = (string) $key;
 		$wf['type']  = $type;
-		$wf['value'] = $email->get_option( $key, isset( $f['default'] ) ? $f['default'] : '' );
+		$wf['value'] = $obj->get_option( $key, isset( $f['default'] ) ? $f['default'] : '' );
 		$one         = minn_admin_wc_settings_post_data( array( $wf ), $edited );
 		foreach ( $one as $k => $v ) {
-			$post[ $email->get_field_key( $k ) ] = $v;
+			$post[ $obj->get_field_key( $k ) ] = $v;
 		}
 	}
-	$email->set_post_data( wp_slash( $post ) );
-	do_action( 'woocommerce_update_options_email_' . $email->id );
-	$email->set_post_data( array() );
-	do_action( 'woocommerce_settings_saved' );
+	return wp_slash( $post );
 }
 
 /**
@@ -981,6 +1114,117 @@ add_action(
 						// settings array at construction.
 						$email->init_settings();
 						return minn_admin_wc_settings_email_schema( $email );
+					},
+				),
+			)
+		);
+
+		// The route path deliberately contains "payment_gateways": Cash on
+		// delivery only builds its shipping-method options when the request
+		// is wp-admin's Payments screen or a REST route named that way
+		// (WC_Gateway_COD::is_accessing_settings), and other gateways copy
+		// the gate.
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/payment_gateways',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => $can,
+				'callback'            => static function () {
+					return array( 'gateways' => minn_admin_wc_settings_gateways() );
+				},
+			)
+		);
+
+		// Display order: the same option WC_Payment_Gateways::process_admin_options
+		// writes from the Payments screen's drag order.
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/payment_gateways/order',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => $can,
+				'callback'            => static function ( $req ) {
+					$body = $req->get_json_params();
+					$ids  = isset( $body['ids'] ) && is_array( $body['ids'] ) ? array_map( 'sanitize_text_field', $body['ids'] ) : array();
+					$known = array_map(
+						static function ( $g ) {
+							return $g['id'];
+						},
+						minn_admin_wc_settings_gateways()
+					);
+					$order = array();
+					$i     = 0;
+					foreach ( $ids as $id ) {
+						if ( in_array( $id, $known, true ) && ! isset( $order[ $id ] ) ) {
+							$order[ $id ] = $i++;
+						}
+					}
+					foreach ( $known as $id ) {
+						if ( ! isset( $order[ $id ] ) ) {
+							$order[ $id ] = $i++;
+						}
+					}
+					update_option( 'woocommerce_gateway_order', $order );
+					WC()->payment_gateways()->init();
+					return array( 'gateways' => minn_admin_wc_settings_gateways() );
+				},
+			)
+		);
+
+		register_rest_route(
+			'minn-admin/v1',
+			'/wc/payment_gateways/(?P<id>(?!order$)[\w-]+)',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) {
+						$gateway = minn_admin_wc_settings_gateway( (string) $req['id'] );
+						if ( ! $gateway ) {
+							return new WP_Error( 'minn_wc_no_gateway', __( 'That payment method is not registered.', 'minn-admin' ), array( 'status' => 404 ) );
+						}
+						return array(
+							'gateway' => $gateway->id,
+							'title'   => minn_admin_wc_settings_text( $gateway->get_method_title() ),
+						) + minn_admin_wc_settings_api_schema( $gateway, minn_admin_wc_settings_gateway_url( $gateway ) );
+					},
+				),
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => $can,
+					'callback'            => static function ( $req ) {
+						$gateway = minn_admin_wc_settings_gateway( (string) $req['id'] );
+						if ( ! $gateway ) {
+							return new WP_Error( 'minn_wc_no_gateway', __( 'That payment method is not registered.', 'minn-admin' ), array( 'status' => 404 ) );
+						}
+						$body   = $req->get_json_params();
+						$edited = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+						if ( ! $edited ) {
+							return new WP_Error( 'minn_wc_nothing', __( 'Nothing to save.', 'minn-admin' ), array( 'status' => 400 ) );
+						}
+						try {
+							// The Payments screen's own sequence for one gateway's
+							// section: its update action (process_admin_options is
+							// hooked there by every gateway), then a registry init.
+							$gateway->set_post_data( minn_admin_wc_settings_api_post_data( $gateway, $edited ) );
+							do_action( 'woocommerce_update_options_payment_gateways_' . $gateway->id );
+							$gateway->set_post_data( array() );
+							WC()->payment_gateways()->init();
+							do_action( 'woocommerce_update_options_checkout' );
+							do_action( 'woocommerce_settings_saved' );
+						} catch ( Throwable $e ) {
+							return new WP_Error( 'minn_wc_save_failed', $e->getMessage(), array( 'status' => 500 ) );
+						}
+						$fresh = minn_admin_wc_settings_gateway( $gateway->id );
+						if ( $fresh ) {
+							$fresh->init_settings();
+						}
+						return array(
+							'gateway' => $gateway->id,
+							'title'   => minn_admin_wc_settings_text( $gateway->get_method_title() ),
+							'errors'  => minn_admin_wc_settings_queued_errors(),
+						) + minn_admin_wc_settings_api_schema( $fresh ? $fresh : $gateway, minn_admin_wc_settings_gateway_url( $gateway ) );
 					},
 				),
 			)
