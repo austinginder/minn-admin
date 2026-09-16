@@ -22367,7 +22367,7 @@
 							? `<a href="${ esc( p.author_uri ) }" target="_blank" rel="noopener">${ esc( decodeEntities( stripTags( p.author ) ) ) }</a>`
 							: esc( decodeEntities( stripTags( p.author ) ) ) }</div>` : '' }
 						<div class="minn-plugin-foot">
-							<div class="minn-plugin-ver">v${ esc( p.version || '?' ) }</div>
+							<button type="button" class="minn-plugin-ver as-btn" data-changelog="${ esc( p.plugin ) }" title="${ esc( sprintf( /* translators: %s: the plugin's name. */ __( 'Changelog for %s' ), name ) ) }">v${ esc( p.version || '?' ) }</button>
 							${ B.caps.update && state.cache.autoAllowed ? autoToggleHtml( 'plugin', p.plugin + '.php', ( state.cache.autoPlugins || [] ).includes( p.plugin + '.php' ), name ) : '' }
 							${ net ? '' : `<button class="minn-switch${ on ? ' on' : '' }" data-toggle="${ esc( p.plugin ) }" role="switch" aria-checked="${ on }" aria-label="${ esc( name ) }"><span class="minn-switch-knob"></span></button>` }
 							<span class="minn-state-label${ on ? ' on' : '' }"${ net ? ` title="${ esc( __( 'Activated for the whole network in Network Admin' ) ) }"` : '' }>${ net ? __( 'Network active' ) : on ? __( 'Active' ) : __( 'Inactive' ) }</span>
@@ -22534,13 +22534,13 @@
 					run: () => queuePluginUpdate( file, name ),
 				} );
 			}
-			if ( offered ) {
-				entries.push( {
+			entries.push( {
+				label: offered
 					/* translators: %s: the version on offer. */
-					label: sprintf( __( 'What\'s new in %s' ), offered ),
-					run: () => openPluginChangelog( file, name ),
-				} );
-			}
+					? sprintf( __( 'What\'s new in %s' ), offered )
+					: __( 'Changelog' ),
+				run: () => openPluginChangelogFor( file, name ),
+			} );
 			if ( ! on && ! net && B.caps.delete ) {
 				entries.push( {
 					label: __( 'Delete plugin' ),
@@ -22592,10 +22592,10 @@
 			btn.addEventListener( 'click', () => deletePluginByFile( btn.dataset.del ) )
 		);
 
-		$$( '[data-whatsnew]', view ).forEach( ( btn ) =>
+		$$( '[data-whatsnew], [data-changelog]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				const plugin = plugins.find( ( p ) => p.plugin === btn.dataset.whatsnew );
-				if ( plugin ) openPluginChangelog( plugin.plugin, pluginDisplayName( plugin.name ) );
+				const plugin = plugins.find( ( p ) => p.plugin === ( btn.dataset.whatsnew || btn.dataset.changelog ) );
+				if ( plugin ) openPluginChangelogFor( plugin.plugin, pluginDisplayName( plugin.name ) );
 			} )
 		);
 
@@ -43750,9 +43750,14 @@
 			const secs = m.sections || [];
 			const cur = secs[ m.sec ] || null;
 			const pl = m.plugin || null;
-			const plMeta = pl && pl.installed ? `<div class="minn-cl-meta">${ esc( sprintf(
+			const plMeta = pl && pl.installed ? `<div class="minn-cl-meta">${ esc( pl.offered ? sprintf(
 				/* translators: %1$s: installed version, %2$s: version on offer. */
-				__( 'Installed %1$s · update to %2$s' ), 'v' + pl.installed, 'v' + pl.offered ) ) }${ pl.notice ? ` · <span class="minn-cl-notice">${ esc( pl.notice ) }</span>` : '' }</div>` : '';
+				__( 'Installed %1$s · update to %2$s' ), 'v' + pl.installed, 'v' + pl.offered )
+				/* translators: %s: installed version. */
+				: sprintf( __( 'Installed %s' ), 'v' + pl.installed ) ) }${ pl.notice ? ` · <span class="minn-cl-notice">${ esc( pl.notice ) }</span>` : '' }</div>` : '';
+			// The rail marks the release that is running so the reader can
+			// see at a glance which entries are behind them.
+			const plRunning = ( s ) => !! ( pl && pl.installed && ( s.version === pl.installed || s.version.replace( /^v(ersion)?\s*/i, '' ).split( /\s/ )[ 0 ] === pl.installed ) );
 			const plEmpty = pl && m.md !== null && ! secs.length ? `
 					<div class="minn-cl-empty">
 						<p>${ esc( m.error || __( 'This plugin does not publish a changelog WordPress can read.' ) ) }</p>
@@ -43763,7 +43768,9 @@
 				<div class="minn-modal wide minn-cl-modal">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ pl
-							? sprintf( esc( /* translators: %s: the plugin's name. */ __( 'What\'s new · %s' ) ), esc( pl.name ) )
+							? ( pl.offered
+								? sprintf( esc( /* translators: %s: the plugin's name. */ __( 'What\'s new · %s' ) ), esc( pl.name ) )
+								: sprintf( esc( /* translators: %s: the plugin's name. */ __( 'Changelog · %s' ) ), esc( pl.name ) ) )
 							: sprintf( esc( /* translators: %s: the Minn Admin version. */ __( 'What\'s new · v%s' ) ), esc( B.version ) ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -43774,7 +43781,7 @@
 							${ secs.map( ( s, i ) => `
 							<button type="button" class="minn-cl-ver${ i === m.sec ? ' sel' : '' }" data-clver="${ i }" aria-current="${ i === m.sec ? 'true' : 'false' }">
 								<span class="minn-cl-ver-v">${ esc( s.version ) }</span>
-								${ s.date ? `<span class="minn-cl-ver-d">${ esc( s.date ) }</span>` : '' }
+								${ s.date || plRunning( s ) ? `<span class="minn-cl-ver-d">${ esc( [ s.date, plRunning( s ) ? __( 'installed' ) : '' ].filter( Boolean ).join( ' · ' ) ) }</span>` : '' }
 							</button>` ).join( '' ) }
 						</nav>
 						<div class="minn-changelog" id="minn-cl-body">${ pl ? ( cur ? cur.html : '' ) : ( cur ? changelogHtml( cur.md ) : changelogHtml( m.md ) ) }</div>
@@ -46597,9 +46604,19 @@
 			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
 	}
 
+	// The Extensions doorway: Minn's own card reads the bundled changelog
+	// (its updater answers plugins_api with a description only), every
+	// other plugin goes through the plugin-changelog route.
+	function openPluginChangelogFor( file, name ) {
+		if ( file === 'minn-admin/minn-admin' ) openChangelog();
+		else openPluginChangelog( file, name );
+	}
+
 	// Another plugin's changelog, read through minn-admin/v1/plugin-changelog
 	// (plugins_api sections, reduced server-side). `file` is the app's
-	// "dir/plugin" id; the transient keys on the .php file.
+	// "dir/plugin" id; the transient keys on the .php file. Works with or
+	// without a pending update: the meta line names the offer when there
+	// is one, else just the installed version.
 	function openPluginChangelog( file, name ) {
 		const offered = ( state.cache.pluginUpdates || {} )[ file + '.php' ] || '';
 		state.modal = { type: 'changelog', plugin: { file, name, offered, installed: '', url: '', source: '', notice: '' }, md: null, sections: null, sec: 0 };

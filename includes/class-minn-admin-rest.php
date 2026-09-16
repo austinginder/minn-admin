@@ -8914,14 +8914,17 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	/**
-	 * What changed in the update a plugin is offering.
+	 * A plugin's changelog: what its pending update changes, or, with no
+	 * update on offer, the release notes behind the version it runs.
 	 *
-	 * Reads the offer from the update_plugins transient, then asks
-	 * plugins_api( 'plugin_information' ) for the plugin's sections. That is
-	 * the same call wp-admin's "View version X details" makes, so a
-	 * self-hosted updater that answers it (EDD-SL, Freemius, Minn's own)
-	 * gets its changelog shown too; a vendor that never wired one up gets
-	 * an honest empty answer plus whatever details URL it put in the offer.
+	 * Reads the plugin's entry from the update_plugins transient (the offer
+	 * in `response`, else the current-version record in `no_update`, which
+	 * is how the transient names a wp.org plugin that is up to date), then
+	 * asks plugins_api( 'plugin_information' ) for the plugin's sections.
+	 * That is the same call wp-admin's "View version X details" makes, so a
+	 * self-hosted updater that answers it (EDD-SL, Freemius) gets its
+	 * changelog shown too; a vendor that never wired one up gets an honest
+	 * empty answer plus whatever details URL it put in the transient.
 	 *
 	 * The HTML is a vendor document. It is reduced to plain text markup
 	 * (headings, lists, emphasis, links) before it leaves the server, and
@@ -8933,34 +8936,52 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $file || false !== strpos( $file, '..' ) ) {
 			return new WP_Error( 'bad_plugin', __( 'Plugin file is required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		$tr    = get_site_transient( 'update_plugins' );
-		$offer = isset( $tr->response[ $file ] ) ? (object) $tr->response[ $file ] : null;
-		if ( ! $offer ) {
-			return new WP_Error( 'no_offer', __( 'No update is on offer for that plugin.', 'minn-admin' ), array( 'status' => 404 ) );
-		}
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		$all       = get_plugins();
 		$installed = isset( $all[ $file ] ) ? $all[ $file ] : null;
 		if ( ! $installed ) {
 			return new WP_Error( 'not_installed', __( 'That plugin is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
-		$slug    = isset( $offer->slug ) && $offer->slug ? sanitize_title( (string) $offer->slug ) : dirname( $file );
-		$offered = isset( $offer->new_version ) ? (string) $offer->new_version : '';
+		$tr    = get_site_transient( 'update_plugins' );
+		$offer = isset( $tr->response[ $file ] ) ? (object) $tr->response[ $file ] : null;
+		$known = $offer ? $offer : ( isset( $tr->no_update[ $file ] ) ? (object) $tr->no_update[ $file ] : null );
+		if ( ! $known ) {
+			// Every plugin toggle empties the transient (the letter-tile
+			// effect on the cards); a plugin the transient has no record of
+			// gets one primed check before it counts as unknown, on the
+			// same 5-minute lock the icon reader uses.
+			$have = count( (array) ( $tr->response ?? array() ) ) + count( (array) ( $tr->no_update ?? array() ) );
+			if ( $have < 5 && ! get_transient( 'minn_plugin_meta_primed' ) ) {
+				set_transient( 'minn_plugin_meta_primed', 1, 5 * MINUTE_IN_SECONDS );
+				wp_update_plugins();
+				$tr    = get_site_transient( 'update_plugins' );
+				$offer = isset( $tr->response[ $file ] ) ? (object) $tr->response[ $file ] : null;
+				$known = $offer ? $offer : ( isset( $tr->no_update[ $file ] ) ? (object) $tr->no_update[ $file ] : null );
+			}
+		}
+		$slug    = $known && isset( $known->slug ) && $known->slug ? sanitize_title( (string) $known->slug ) : dirname( $file );
+		$offered = $offer && isset( $offer->new_version ) ? (string) $offer->new_version : '';
 		$host_is = function ( $url, $host ) {
 			$h = wp_parse_url( (string) $url, PHP_URL_HOST );
 			return $h && ( $h === $host || substr( $h, -strlen( '.' . $host ) ) === '.' . $host );
 		};
-		// wp.org offers carry id "w.org/plugins/<slug>"; older shapes only
+		// wp.org entries carry id "w.org/plugins/<slug>"; older shapes only
 		// the directory URL or the downloads host. Anything else is a
-		// vendor's own update server.
-		$wporg = ( isset( $offer->id ) && 0 === strpos( (string) $offer->id, 'w.org/plugins/' ) )
-			|| $host_is( isset( $offer->url ) ? $offer->url : '', 'wordpress.org' )
-			|| $host_is( isset( $offer->package ) ? $offer->package : '', 'downloads.wordpress.org' );
-		$details = isset( $offer->url ) && $offer->url ? esc_url_raw( (string) $offer->url ) : '';
+		// vendor's own update server, and a plugin with no entry at all is
+		// one wp.org does not list (an Update URI elsewhere, or nowhere).
+		$wporg = $known && (
+			( isset( $known->id ) && 0 === strpos( (string) $known->id, 'w.org/plugins/' ) )
+			|| $host_is( isset( $known->url ) ? $known->url : '', 'wordpress.org' )
+			|| $host_is( isset( $known->package ) ? $known->package : '', 'downloads.wordpress.org' )
+		);
+		$details = $known && isset( $known->url ) && $known->url ? esc_url_raw( (string) $known->url ) : '';
 		if ( $wporg ) {
 			$details = 'https://wordpress.org/plugins/' . $slug . '/#developers';
 		}
-		$notice = isset( $offer->upgrade_notice ) && is_string( $offer->upgrade_notice )
+		if ( ! $details && ! empty( $installed['PluginURI'] ) ) {
+			$details = esc_url_raw( (string) $installed['PluginURI'] );
+		}
+		$notice = $offer && isset( $offer->upgrade_notice ) && is_string( $offer->upgrade_notice )
 			? trim( html_entity_decode( wp_strip_all_tags( $offer->upgrade_notice ), ENT_QUOTES ) )
 			: '';
 
@@ -8976,7 +8997,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'sections'  => array(),
 		);
 
-		$cache_key = 'minn_plugin_cl_' . md5( $file . '|' . $offered );
+		$cache_key = 'minn_plugin_cl_' . md5( $file . '|' . $installed['Version'] . '|' . $offered );
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) ) {
 			$payload['sections'] = $cached;
@@ -9020,7 +9041,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 		$sections = isset( $res->sections ) ? (array) $res->sections : array();
 		$html     = isset( $sections['changelog'] ) ? (string) $sections['changelog'] : '';
-		$payload['sections'] = self::changelog_sections_from_html( $html, $offered );
+		$payload['sections'] = self::changelog_sections_from_html( $html, $offered ? $offered : (string) $installed['Version'] );
 		set_transient( $cache_key, $payload['sections'], 12 * HOUR_IN_SECONDS );
 		return rest_ensure_response( $payload );
 	}
@@ -9058,23 +9079,40 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// Vendor links leave the app in a new tab; kses has already checked
 		// the protocol.
 		$html = preg_replace( '/<a href=/i', '<a target="_blank" rel="noopener" href=', $html );
-		// Readmes use h4 for versions AND for the sub-headings under them
-		// ("Bugfixes", "Enhancements"), so only a heading that reads as a
-		// version opens a release; the rest stay in the body as headings.
+		// Readmes use h4 ("= 1.2.3 =") or h3 (markdown "###") for versions
+		// AND for the sub-headings under them ("Bugfixes", "Enhancements"),
+		// so only a heading that reads as a version opens a release; the
+		// rest stay in the body as headings.
 		$out   = array();
 		$cur   = null;
-		$parts = preg_split( '/(?=<h4>)/i', $html, -1, PREG_SPLIT_NO_EMPTY );
+		$parts = preg_split( '/(?=<h[34]>)/i', $html, -1, PREG_SPLIT_NO_EMPTY );
 		foreach ( $parts as $part ) {
 			$part = trim( $part );
 			if ( '' === $part ) {
 				continue;
 			}
 			$heading = '';
-			if ( preg_match( '/^<h4>(.*?)<\/h4>(.*)$/is', $part, $m ) ) {
-				$heading = trim( html_entity_decode( wp_strip_all_tags( $m[1] ), ENT_QUOTES ) );
+			if ( preg_match( '/^<h([34])>(.*?)<\/h\1>(.*)$/is', $part, $m ) ) {
+				$heading = trim( html_entity_decode( wp_strip_all_tags( $m[2] ), ENT_QUOTES ) );
+				$m[2]    = $m[3];
 			}
-			$is_version = $heading && preg_match( '/^(v(ersion)?\s*)?\d+(\.\d+)*\b/i', $heading );
-			if ( $is_version ) {
+			// Readmes name a release "1.2.3", "v1.2.3", "1.2.3 - 2026-01-01",
+			// "1.2.3 (January 1, 2026)" or date-first "2026-01-01 1.2.3";
+			// the version becomes the chip, a date beside it the chip's
+			// sub-line, anything else stays in the chip text.
+			$date = '';
+			$ver  = '';
+			$dre  = '(\d{4}-\d{2}-\d{2}|\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}|[A-Za-z]{3,9}\.? \d{1,2},? \d{4}|\d{1,2} [A-Za-z]{3,9}\.? \d{4})';
+			if ( $heading && preg_match( '/^' . $dre . '\s*[-–—:]?\s*(v(ersion)?\s*)?(\d+(\.\d+)*)\s*$/i', $heading, $hm ) ) {
+				$date = $hm[1];
+				$ver  = $hm[4];
+			} elseif ( $heading && preg_match( '/^(v(ersion)?\s*)?(\d+(\.\d+)*)\s*(?:[-–—:(]\s*' . $dre . '\s*\)?)?\s*$/i', $heading, $hm ) ) {
+				$ver  = $hm[3];
+				$date = isset( $hm[5] ) ? $hm[5] : '';
+			} elseif ( $heading && preg_match( '/^(v(ersion)?\s*)?\d+(\.\d+)*\b/i', $heading ) ) {
+				$ver = mb_substr( $heading, 0, 48 );
+			}
+			if ( $ver ) {
 				if ( $cur && '' !== trim( wp_strip_all_tags( $cur['html'] ) ) ) {
 					$out[] = $cur;
 				}
@@ -9082,16 +9120,23 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 					$cur = null;
 					break;
 				}
-				$cur = array( 'version' => mb_substr( $heading, 0, 48 ), 'html' => trim( $m[2] ) );
+				$cur = array( 'version' => $ver, 'date' => $date, 'html' => trim( $m[2] ) );
 				continue;
 			}
 			if ( ! $cur ) {
-				$cur = array( 'version' => '', 'html' => '' );
+				$cur = array( 'version' => '', 'date' => '', 'html' => '' );
 			}
 			$cur['html'] .= $part;
 		}
 		if ( $cur && '' !== trim( wp_strip_all_tags( $cur['html'] ) ) ) {
 			$out[] = $cur;
+		}
+		// A heading-less lead-in (links to a Pro changelog, a note) only
+		// borrows the version when it is the whole changelog; beside real
+		// releases it is "Notes" and follows them.
+		if ( count( $out ) > 1 && '' === $out[0]['version'] ) {
+			$lead = array_shift( $out );
+			$out[] = $lead;
 		}
 		foreach ( $out as $i => $sec ) {
 			if ( '' === $sec['version'] ) {

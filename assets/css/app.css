@@ -1310,6 +1310,10 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-plugin-desc { font-size: 13.5px; color: var(--text2); margin-top: 4px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .minn-plugin-foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .minn-plugin-ver { font-size: 12.5px; color: var(--text3); font-family: var(--font-mono); }
+/* The version is the card's changelog doorway; it wears the same dotted
+   underline as "What's new" so the two read as one affordance. */
+button.minn-plugin-ver { background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+button.minn-plugin-ver:hover { color: var(--accent2); }
 /* Auto-update pill: quiet at rest, accent-lit when on. */
 .minn-auto-toggle {
   display: flex; align-items: center; gap: 4px; background: transparent; border: 1px solid var(--border2);

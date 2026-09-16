@@ -1,6 +1,7 @@
 /**
- * Extensions → "What's new" on a plugin with a pending update opens the
- * plugin's own changelog in the changelog modal (minn-admin/v1/plugin-changelog).
+ * Extensions → "What's new" on a plugin with a pending update, and the
+ * version number on every plugin card, open the plugin's own changelog in
+ * the changelog modal (minn-admin/v1/plugin-changelog).
  *
  * Two offers are armed through the dev-fixtures mu-plugin: a VENDOR-hosted
  * one (plugins_api answered by a hook, with a script tag and inline handlers
@@ -56,8 +57,16 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		t.check( 'versions come from the h4 headings', v.status === 200 && v.body.sections[ 0 ].version === '9.9.9' && /^9\.9\.8/.test( v.body.sections[ 1 ].version ),
 			JSON.stringify( v.body && v.body.sections.map( ( s ) => s.version ) ) );
 		t.check( 'the upgrade notice rides along as text', v.status === 200 && v.body.notice === 'Fixture notice: back up first.', JSON.stringify( v.body && v.body.notice ) );
+		// No offer is no longer a 404: the route answers the installed
+		// version's notes (wp.org via the transient's no_update record,
+		// vendors via their own plugins_api hook) so every card has a
+		// changelog doorway, not just the ones with a pending update.
 		const none = await rest( 'minn-admin/v1/plugin-changelog?plugin=hello-dolly%2Fhello.php' );
-		t.check( 'a plugin with no offer answers 404', none.status === 404, `status ${ none.status }` );
+		t.check( 'a plugin with no offer answers with its installed version and no offer',
+			none.status === 200 && none.body.offered === '' && /^\d/.test( none.body.installed ) && none.body.source === 'wporg',
+			JSON.stringify( none.body && { status: none.status, installed: none.body.installed, offered: none.body.offered, source: none.body.source } ) );
+		const missing = await rest( 'minn-admin/v1/plugin-changelog?plugin=not-a-plugin%2Fnope.php' );
+		t.check( 'a plugin that is not installed answers 404', missing.status === 404, `status ${ missing.status }` );
 		const w = await rest( 'minn-admin/v1/plugin-changelog?plugin=' + encodeURIComponent( WPORG + '.php' ) );
 		t.check( 'wp.org offer reports its source and directory link', w.status === 200 && w.body.source === 'wporg' && /wordpress\.org\/plugins\/duplicator\/#developers$/.test( w.body.url ),
 			JSON.stringify( w.body && { source: w.body.source, url: w.body.url } ) );
@@ -108,6 +117,40 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
 		const entries = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].map( ( b ) => b.textContent.trim() ) );
 		t.check( 'card context menu offers What\'s new', entries.some( ( e ) => /What.s new in/.test( e ) ), JSON.stringify( entries ) );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 200 );
+
+		// A card WITHOUT an offer: the version number is the doorway.
+		const allTab = await page.$( '[data-xfilter="all"]' );
+		if ( allTab ) {
+			await allTab.click();
+			await page.waitForTimeout( 400 );
+		}
+		const NOOFFER = 'hello-dolly/hello';
+		await page.waitForSelector( `.minn-plugin[data-plugin="${ NOOFFER }"] [data-changelog]`, { timeout: 20000 } );
+		t.check( 'a card with no pending update has no What\'s new link but a version button',
+			! await page.$( `.minn-plugin[data-plugin="${ NOOFFER }"] [data-whatsnew]` ) && !! await page.$( `.minn-plugin[data-plugin="${ NOOFFER }"] button.minn-plugin-ver` ) );
+		await page.click( `.minn-plugin[data-plugin="${ NOOFFER }"] [data-changelog]` );
+		await page.waitForFunction( () => document.querySelector( '.minn-cl-modal' ) && ! document.querySelector( '.minn-cl-modal .minn-loading' ), null, { timeout: 15000 } );
+		const plain = await page.evaluate( () => ( {
+			title: document.querySelector( '.minn-cl-modal .minn-modal-title' ).textContent.trim(),
+			meta: ( document.querySelector( '.minn-cl-meta' ) || {} ).textContent || '',
+			empty: !! document.querySelector( '.minn-cl-modal .minn-cl-empty' ),
+			chips: document.querySelectorAll( '.minn-cl-modal [data-clver]' ).length,
+		} ) );
+		t.check( 'version button opens the changelog window titled Changelog', /^Changelog · Hello Dolly/.test( plain.title ), plain.title );
+		t.check( 'meta names the installed version only', /^Installed v\d/.test( plain.meta ) && ! /update to/.test( plain.meta ), plain.meta );
+		t.check( 'no offer renders notes or an honest empty state', plain.empty || plain.chips > 0, JSON.stringify( plain ) );
+		await page.click( '#minn-modal-close' );
+		await page.waitForTimeout( 200 );
+		await page.evaluate( ( f ) => {
+			const card = document.querySelector( `.minn-plugin[data-plugin="${ f }"]` );
+			const r = card.getBoundingClientRect();
+			card.dispatchEvent( new MouseEvent( 'contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 40, clientY: r.top + 20 } ) );
+		}, NOOFFER );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+		const plainEntries = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].map( ( b ) => b.textContent.trim() ) );
+		t.check( 'context menu of a current plugin offers Changelog', plainEntries.includes( 'Changelog' ), JSON.stringify( plainEntries ) );
 		await page.keyboard.press( 'Escape' );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
