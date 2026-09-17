@@ -101,7 +101,11 @@ const prewarmMatomo = () => {
 		} ) );
 	};
 
-	let kokoWas = null;
+	// Every other traffic provider rests for the run: the first adapter
+	// with data answers, and Independent Analytics (resident, licensed)
+	// gathers real views from the suites' own front-end visits.
+	const OTHERS = [ 'koko-analytics/koko-analytics', 'independent-analytics-pro/iawp', 'independent-analytics/iawp', 'analyticswp/analyticswp' ];
+	let paused = [];
 	let matomoWas = null;
 	try {
 		const plugins = await page.evaluate( async () => {
@@ -110,14 +114,13 @@ const prewarmMatomo = () => {
 			} );
 			return await r.json();
 		} );
-		const koko = plugins.find( ( p ) => p.plugin === 'koko-analytics/koko-analytics' );
 		const matomo = plugins.find( ( p ) => p.plugin === 'matomo/matomo' );
 		t.check( 'Matomo installed', !! matomo, matomo && matomo.status );
 		if ( ! matomo ) throw new Error( 'matomo not installed on this site' );
-		kokoWas = koko && koko.status;
 		matomoWas = matomo.status;
 
-		if ( kokoWas === 'active' ) await setStatus( koko.plugin, 'inactive' );
+		paused = plugins.filter( ( p ) => OTHERS.includes( p.plugin ) && p.status === 'active' ).map( ( p ) => p.plugin );
+		for ( const file of paused ) await setStatus( file, 'inactive' );
 		if ( matomoWas !== 'active' ) await setStatus( matomo.plugin, 'active' );
 
 		// Seed real visits through Matomo's tracker (same-origin fetch; the
@@ -196,7 +199,7 @@ const prewarmMatomo = () => {
 	} finally {
 		await setOpt( 'minn_test_matomo_archive', '' ).catch( () => {} );
 		if ( matomoWas && matomoWas !== 'active' ) await setStatus( 'matomo/matomo', 'inactive' ).catch( () => {} );
-		if ( kokoWas === 'active' ) await setStatus( 'koko-analytics/koko-analytics', 'active' ).catch( () => {} );
+		for ( const file of paused ) await setStatus( file, 'active' ).catch( () => {} );
 	}
 
 	await t.done( browser, errors );
