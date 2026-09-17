@@ -6037,9 +6037,15 @@
 		// Trash is a quiet text control (one boxed pill strip per row),
 		// anchored to the row's right edge with its icon so it reads as a
 		// destination, not a stray word.
+		// The Modified filter answers only for callers who may edit others'
+		// posts (the server drops the query for everyone else, since the set
+		// spans every author). Own-only writers would get an unfiltered list
+		// under an active chip, so they do not get the chip.
+		const ownOnly     = B.ownOnly || {};
+		const modifiedOff = ( state.filter || 'all' ) === 'all' ? !! ( ownOnly.posts || ownOnly.pages ) : !! ownOnly[ state.filter ];
 		const trashHtml = `
 			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
-				${ ! state.contentTrash ? `<button class="minn-tab${ state.contentModified ? ' active' : '' }" id="minn-content-modified" title="${ esc( __( 'Only live content carrying unsaved edits' ) ) }">${ esc( __( 'Modified' ) ) }</button>` : '' }
+				${ ! state.contentTrash && ! modifiedOff ? `<button class="minn-tab${ state.contentModified ? ' active' : '' }" id="minn-content-modified" title="${ esc( __( 'Only live content carrying unsaved edits' ) ) }">${ esc( __( 'Modified' ) ) }</button>` : '' }
 				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ esc( state.contentTrash ? __( 'Back to content' ) : __( 'View trash' ) ) }">${ icon( 'trash' ) } ${ esc( __( 'Trash' ) ) }</button>
 			</div>`;
 		const filtersHtml = `

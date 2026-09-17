@@ -2020,9 +2020,13 @@ class Minn_Admin_REST {
 					// rest_{type}_query runs for unauthenticated collection
 					// reads too, so without the same gate a logged-out visitor
 					// could enumerate exactly the set the field withholds.
-					// Ask for the edit context AND the type's own edit cap.
+					// Ask for the edit context AND the type's edit-others cap:
+					// the per-post field answers only for posts the caller may
+					// edit, and the set this filter selects spans every author,
+					// so a contributor would otherwise read the editorial
+					// state of published posts that are not theirs.
 					$type_obj = get_post_type_object( $modified_type );
-					$can_edit = $type_obj && current_user_can( $type_obj->cap->edit_posts );
+					$can_edit = $type_obj && current_user_can( $type_obj->cap->edit_others_posts );
 					if ( 'edit' !== $request['context'] || ! $can_edit ) {
 						return $args;
 					}
@@ -6517,8 +6521,16 @@ Please click the following link to confirm the invite:
 		// WordPress has not garbage-collected yet (GC is probabilistic);
 		// core's WP_Session_Tokens::get_all() filters them via is_still_valid,
 		// so list them the same way rather than showing dead sessions.
-		$now   = time();
-		$items = array();
+		// Where a session came from (IP, browser, sign-in time) is the
+		// account holder's own business and an administrator's when
+		// reviewing an account; core shows it to nobody else, not even a
+		// role that may edit the user (WooCommerce hands shop managers
+		// edit_user over every customer). Everyone else still gets the
+		// session count and the sign-out verbs.
+		$detail = get_current_user_id() === $uid
+			|| current_user_can( is_multisite() ? 'manage_network_users' : 'manage_options' );
+		$now    = time();
+		$items  = array();
 		foreach ( $tokens as $verifier => $session ) {
 			$expiration = isset( $session['expiration'] ) ? (int) $session['expiration'] : 0;
 			if ( $expiration && $expiration < $now ) {
@@ -6526,9 +6538,9 @@ Please click the following link to confirm the invite:
 			}
 			$items[] = array(
 				'verifier'   => $verifier,
-				'ip'         => isset( $session['ip'] ) ? $session['ip'] : '',
-				'ua'         => isset( $session['ua'] ) ? $session['ua'] : '',
-				'login'      => isset( $session['login'] ) ? (int) $session['login'] : 0,
+				'ip'         => $detail && isset( $session['ip'] ) ? $session['ip'] : '',
+				'ua'         => $detail && isset( $session['ua'] ) ? $session['ua'] : '',
+				'login'      => $detail && isset( $session['login'] ) ? (int) $session['login'] : 0,
 				'expiration' => $expiration,
 				'current'    => $verifier === $current,
 			);
@@ -10906,9 +10918,21 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$requests = array();
 		$paths    = array();
 		$file_of  = array();
+		// The fetch goes through Requests directly (one pool, progress per
+		// byte), so the three safeguards WP_Http::request would apply on
+		// the way are applied here by hand: the site's egress policy
+		// (WP_HTTP_BLOCK_EXTERNAL / WP_ACCESSIBLE_HOSTS), its proxy, and
+		// re-validation of every redirect hop against wp_http_validate_url
+		// so a package host cannot bounce the download to a private address.
+		$http  = function_exists( '_wp_http_get_object' ) ? _wp_http_get_object() : null;
+		$proxy = class_exists( 'WP_HTTP_Proxy' ) ? new WP_HTTP_Proxy() : null;
 		foreach ( $pending as $file => $data ) {
 			$url = isset( $data->package ) ? (string) $data->package : '';
 			if ( '' === $url || ! wp_http_validate_url( $url ) ) {
+				$note( $file, 'vendor' );
+				continue;
+			}
+			if ( $http && method_exists( $http, 'block_request' ) && $http->block_request( $url ) ) {
 				$note( $file, 'vendor' );
 				continue;
 			}
@@ -10956,11 +10980,23 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$hooks->register( 'request.progress', function ( $data, $bytes ) use ( $note, $file ) {
 				$note( $file, 'fetching', $bytes );
 			} );
+			if ( function_exists( 'wp_kses_bad_protocol' ) ) {
+				$hooks->register( 'requests.before_redirect', array( 'WP_Http', 'validate_redirects' ) );
+			}
+			$options = array( 'filename' => $tmp, 'timeout' => 120, 'connect_timeout' => 15, 'hooks' => $hooks, 'follow_redirects' => true );
+			if ( $proxy && $proxy->is_enabled() && $proxy->send_through_proxy( $url ) ) {
+				$options['proxy'] = new \WpOrg\Requests\Proxy\Http( $proxy->host() . ':' . $proxy->port() );
+				if ( $proxy->use_authentication() ) {
+					$options['proxy']->use_authentication = true;
+					$options['proxy']->user               = $proxy->username();
+					$options['proxy']->pass               = $proxy->password();
+				}
+			}
 			$requests[ $url ] = array(
 				'url'     => $url,
 				'type'    => 'GET',
 				'headers' => $headers,
-				'options' => array( 'filename' => $tmp, 'timeout' => 120, 'connect_timeout' => 15, 'hooks' => $hooks, 'follow_redirects' => true ),
+				'options' => $options,
 			);
 			$note( $file, 'queued' );
 		}
