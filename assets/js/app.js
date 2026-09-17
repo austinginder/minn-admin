@@ -4184,6 +4184,12 @@
 		// Bulk-update progress chip → the notification panel's Updates tab,
 		// where the full phase label and the results land.
 		$( '#minn-upd-chip' ).addEventListener( 'click', () => {
+			// A running batch reopens its panel (Hide keeps it running).
+			if ( state.bulk && state.bulk.phase !== 'done' ) {
+				state.modal = { type: 'bulk-update' };
+				renderOverlays();
+				return;
+			}
 			if ( state.updatingTranslations ) {
 				state.extTab = 'translations';
 				go( 'extensions' );
@@ -22042,7 +22048,22 @@
 			/* translators: %d is a number of translation packages currently updating. */
 			? sprintf( _n( 'Updating %d translation…', 'Updating %d translations…', total ), total )
 			: '';
-		const label = state.updatingAll || translations;
+		let bulk = '';
+		if ( state.bulk && state.bulk.phase !== 'done' ) {
+			const it = state.bulk.items || {};
+			const n = state.bulk.files.length;
+			const done = state.bulk.files.filter( ( f ) => [ 'done', 'failed' ].includes( ( it[ f + '.php' ] || {} ).state ) ).length;
+			const fetched = state.bulk.files.filter( ( f ) => [ 'fetched', 'unpacking', 'installing', 'done', 'failed', 'vendor' ].includes( ( it[ f + '.php' ] || {} ).state ) ).length;
+			bulk = state.bulk.phase === 'install'
+				/* translators: 1: plugins installed so far, 2: plugins in the batch. */
+				? sprintf( __( 'Installing %1$s/%2$s…' ), done, n )
+				: state.bulk.phase === 'fetch'
+					/* translators: 1: packages fetched so far, 2: packages in the batch. */
+					? sprintf( __( 'Fetching %1$s/%2$s…' ), fetched, n )
+					/* translators: %s: number of plugins. */
+					: sprintf( __( 'Updating %s plugins…' ), n );
+		}
+		const label = bulk || state.updatingAll || translations;
 		chip.hidden = ! label;
 		if ( label ) {
 			$( '#minn-upd-chip-text' ).textContent = label.replace( /…\s*$/, '' );
@@ -23120,6 +23141,11 @@
 			}
 			return;
 		}
+		if ( state.bulk && state.bulk.phase !== 'done' ) {
+			state.modal = { type: 'bulk-update' };
+			renderOverlays();
+			return;
+		}
 		if ( pluginUpdatePending.size ) {
 			toast( __( 'An update is already running — wait for it to finish, then update everything.' ), true );
 			return;
@@ -23169,7 +23195,9 @@
 	// socket (the upgrader can recycle the PHP worker mid-batch on some
 	// stacks) by polling on until the record says finished or goes quiet.
 	async function runBulkPluginUpdate( files, onProgress ) {
-		const token = 'b' + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 8 );
+		// 40 hex chars: the key to the batch's record, in the transient and
+		// in the file progress.php serves.
+		const token = Array.from( crypto.getRandomValues( new Uint8Array( 20 ) ), ( b ) => b.toString( 16 ).padStart( 2, '0' ) ).join( '' );
 		const offers = Object.assign( {}, state.cache.pluginUpdates || {} );
 		bulkDone.clear();
 		let failed = [];
@@ -23184,8 +23212,8 @@
 		state.bulk.from = installedNow;
 		files.forEach( ( f ) => { state.bulk.items[ f + '.php' ] = { state: 'queued', bytes: 0, version: offers[ f + '.php' ] || '' }; } );
 		state.modal = { type: 'bulk-update' };
-		renderOverlays();
-		const paintPanel = () => { if ( state.modal && state.modal.type === 'bulk-update' ) renderOverlays(); };
+		const paintPanel = () => { updateUpdChip(); if ( state.modal && state.modal.type === 'bulk-update' ) renderOverlays(); };
+		paintPanel();
 		const apply = ( p ) => {
 			if ( ! p || ! p.known ) return;
 			if ( p.items ) Object.assign( state.bulk.items, p.items );
@@ -23217,18 +23245,45 @@
 		// for up to ten minutes after if the process died before lifting it.
 		let maintenance = false;
 		let maintenanceSince = 0;
+		// The record is read from progress.php first: it does not load
+		// WordPress, so it keeps answering while the batch holds the site
+		// in maintenance mode (every REST request 503s then, for as long as
+		// an active plugin is being replaced). REST is the fallback for a
+		// site whose layout keeps the file from being written.
+		let fileReads = !! B.progressUrl;
 		const readProgress = async () => {
+			if ( fileReads ) {
+				try {
+					const r = await fetch( B.progressUrl + '?t=' + token, { credentials: 'same-origin', cache: 'no-store' } );
+					if ( r.ok ) {
+						const p = await r.json();
+						if ( p && p.known ) {
+							if ( p.maintenance !== maintenance ) {
+								maintenance = !! p.maintenance;
+								if ( maintenance ) maintenanceSince = Date.now();
+								state.bulk.maintenance = maintenance;
+							}
+							return p;
+						}
+						// Not written yet (or this layout never writes it):
+						// fall through to REST for this read.
+					} else if ( r.status === 404 ) {
+						fileReads = false;
+					}
+				} catch ( e ) { /* REST below */ }
+			}
 			try {
 				const r = await fetch( restUrlFor( 'minn-admin/v1/plugins/update-progress?token=' + token ), { credentials: 'same-origin', headers: { 'X-WP-Nonce': B.nonce } } );
 				if ( r.status === 503 ) {
 					if ( ! maintenance ) {
 						maintenance = true;
 						maintenanceSince = Date.now();
-						toast( __( 'The site is in maintenance mode while plugins are replaced. It lifts on its own when the batch finishes, or after ten minutes at most.' ) );
+						state.bulk.maintenance = true;
+						paintPanel();
 					}
 					return null;
 				}
-				maintenance = false;
+				if ( maintenance ) { maintenance = false; state.bulk.maintenance = false; }
 				return r.ok ? await r.json() : null;
 			} catch ( e ) {
 				return null;
@@ -44142,6 +44197,7 @@
 			} else if ( b.phase === 'install' ) {
 				/* translators: 1: plugins installed so far, 2: plugins in the batch. */
 				phase = sprintf( __( 'Installing… %1$s of %2$s' ), done + failed, total );
+				if ( b.maintenance ) phase += ' · ' + __( 'the site shows a maintenance page until this finishes (an active plugin is being replaced)' );
 			} else if ( b.dropped ) {
 				phase = __( 'Following the batch on the server…' );
 			} else {

@@ -1629,6 +1629,9 @@ class Minn_Admin {
 
 		$boot = array(
 			'restUrl'  => esc_url_raw( rest_url() ),
+			// progress.php reads a bulk update's record without loading
+			// WordPress, so the panel keeps moving through maintenance mode.
+			'progressUrl' => esc_url_raw( MINN_ADMIN_URL . 'progress.php' ),
 			'nonce'    => wp_create_nonce( 'wp_rest' ),
 			'appUrl'   => self::app_url(),
 			'version'  => MINN_ADMIN_VERSION,

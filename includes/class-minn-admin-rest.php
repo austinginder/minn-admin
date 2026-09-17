@@ -10679,7 +10679,30 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$t0         = microtime( true );
 		$progress   = array( 'known' => true, 'started' => time(), 'phase' => 'check', 'current' => '', 'done' => array(), 'failed' => array(), 'finished' => false, 'queue' => array(), 'items' => array(), 'timing' => array() );
 		$last_write = 0.0;
-		$write      = function ( $force = true ) use ( &$progress, $token, &$last_write ) {
+		// The record is written twice: a transient for the REST reader, and a
+		// file for progress.php, which answers while WordPress is in
+		// maintenance mode (every REST request 503s then, for as long as an
+		// active plugin is being replaced). The file needs the standard
+		// layout (plugin under <wp-content>/plugins); otherwise only the
+		// transient is written and the client polls REST alone.
+		$file_path = '';
+		if ( preg_match( '/^[a-f0-9]{40}$/', $token ) && wp_normalize_path( dirname( WP_PLUGIN_DIR ) ) === wp_normalize_path( WP_CONTENT_DIR ) ) {
+			$dir = WP_CONTENT_DIR . '/minn-admin-progress';
+			if ( wp_mkdir_p( $dir ) ) {
+				if ( ! file_exists( $dir . '/index.php' ) ) {
+					file_put_contents( $dir . '/index.php', "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				}
+				// Records older than an hour are leftovers from batches
+				// whose client never came back for the final read.
+				foreach ( (array) glob( $dir . '/*.json' ) as $old ) {
+					if ( filemtime( $old ) < time() - HOUR_IN_SECONDS ) {
+						wp_delete_file( $old );
+					}
+				}
+				$file_path = $dir . '/' . $token . '.json';
+			}
+		}
+		$write = function ( $force = true ) use ( &$progress, $token, &$last_write, $file_path ) {
 			if ( '' === $token ) {
 				return;
 			}
@@ -10690,7 +10713,17 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 			$last_write = microtime( true );
 			set_transient( 'minn_bulk_update_' . $token, $progress, 15 * MINUTE_IN_SECONDS );
+			if ( $file_path ) {
+				// Atomic rename so a reader never sees a half-written record.
+				$tmp = $file_path . '.tmp';
+				if ( false !== file_put_contents( $tmp, wp_json_encode( $progress ) ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+					rename( $tmp, $file_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				}
+			}
 		};
+		if ( $file_path ) {
+			$progress['fileUrl'] = plugins_url( 'progress.php', MINN_ADMIN_DIR . 'minn-admin.php' ) . '?t=' . $token;
+		}
 
 		wp_update_plugins();
 		// real_plugin_updates: even freshly refreshed, never reinstall a
@@ -10815,13 +10848,25 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		);
 	}
 
+	/** A zip starts with "PK": a vendor's "license invalid" page with a 200 status does not. */
+	private static function looks_like_zip( $path ) {
+		$h = fopen( $path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		if ( ! $h ) {
+			return false;
+		}
+		$magic = fread( $h, 2 ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		fclose( $h ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		return 'PK' === $magic;
+	}
+
 	/**
-	 * Download the batch's wordpress.org packages side by side, into temp
-	 * files the upgrader then installs from. Only the directory's own host
-	 * is prefetched: a vendor package keeps the upgrader's normal path (its
-	 * updater may sign or expire the URL per request). Every URL still
-	 * passes the same validation download_url() applies, and a file that
-	 * arrives empty or short is dropped so the upgrader downloads it itself.
+	 * Download the batch's packages side by side, into temp
+	 * files the upgrader then installs from: wordpress.org packages and
+	 * vendor packages alike, the latter with the request arguments their
+	 * updater sets through http_request_args (license headers, tokens).
+	 * Every URL still passes the same validation download_url() applies,
+	 * and a file that arrives empty, short or not a zip is dropped so the
+	 * upgrader downloads it itself.
 	 *
 	 * @return array package URL => local path
 	 */
@@ -10843,15 +10888,42 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$note( $file, 'vendor' );
 				continue;
 			}
-			$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
-			if ( 'downloads.wordpress.org' !== $host ) {
-				$note( $file, 'vendor' );
-				continue;
-			}
-			$tmp = wp_tempnam( basename( wp_parse_url( $url, PHP_URL_PATH ) ) );
+			$tmp = wp_tempnam( basename( (string) wp_parse_url( $url, PHP_URL_PATH ) ) ?: 'package.zip' );
 			if ( ! $tmp ) {
 				$note( $file, 'vendor' );
 				continue;
+			}
+			// A vendor package is fetched the way download_url() would fetch
+			// it: the same request arguments, after the http_request_args
+			// filter, which is where vendor updaters attach license headers
+			// or tokens. Only the pieces Requests understands ride along;
+			// a package the vendor guards some other way fails here and the
+			// upgrader downloads it itself in the install phase.
+			$args = apply_filters( 'http_request_args', array(
+				'timeout'            => 120,
+				'stream'             => true,
+				'filename'           => $tmp,
+				'reject_unsafe_urls' => true,
+				'headers'            => array(),
+				'cookies'            => array(),
+				'user-agent'         => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
+			), $url );
+			$headers = array( 'User-Agent' => (string) ( $args['user-agent'] ?? '' ) );
+			foreach ( (array) ( $args['headers'] ?? array() ) as $k => $v ) {
+				if ( is_string( $k ) && is_scalar( $v ) ) {
+					$headers[ $k ] = (string) $v;
+				}
+			}
+			$cookie_pairs = array();
+			foreach ( (array) ( $args['cookies'] ?? array() ) as $ck => $cv ) {
+				if ( $cv instanceof WP_Http_Cookie ) {
+					$cookie_pairs[] = $cv->name . '=' . $cv->value;
+				} elseif ( is_string( $ck ) && is_scalar( $cv ) ) {
+					$cookie_pairs[] = $ck . '=' . $cv;
+				}
+			}
+			if ( $cookie_pairs ) {
+				$headers['Cookie'] = implode( '; ', $cookie_pairs );
 			}
 			$paths[ $url ]   = $tmp;
 			$file_of[ $url ] = $file;
@@ -10863,8 +10935,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$requests[ $url ] = array(
 				'url'     => $url,
 				'type'    => 'GET',
-				'headers' => array( 'User-Agent' => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ) ),
-				'options' => array( 'filename' => $tmp, 'timeout' => 120, 'connect_timeout' => 15, 'hooks' => $hooks ),
+				'headers' => $headers,
+				'options' => array( 'filename' => $tmp, 'timeout' => 120, 'connect_timeout' => 15, 'hooks' => $hooks, 'follow_redirects' => true ),
 			);
 			$note( $file, 'queued' );
 		}
@@ -10886,7 +10958,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			foreach ( $chunk as $url => $req ) {
 				$res  = isset( $responses[ $url ] ) ? $responses[ $url ] : null;
 				$path = $paths[ $url ];
-				$ok   = $res instanceof \WpOrg\Requests\Response && $res->success && is_file( $path ) && filesize( $path ) > 1024;
+				$ok   = $res instanceof \WpOrg\Requests\Response && $res->success && is_file( $path ) && filesize( $path ) > 1024 && self::looks_like_zip( $path );
 				if ( $ok ) {
 					$out[ $url ] = $path;
 					$note( $file_of[ $url ], 'fetched', filesize( $path ) );

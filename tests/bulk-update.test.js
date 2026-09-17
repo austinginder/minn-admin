@@ -48,9 +48,29 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		let bulkBody = null;
 		page.on( 'request', ( r ) => { if ( /plugins\/update(-all|-progress)?(\?|$)/.test( r.url() ) && r.method() !== 'OPTIONS' ) calls.push( r.method() + ' ' + r.url().replace( /^.*minn-admin\/v1\//, '' ).replace( /token=\w+/, 'token=…' ) ); } );
 		page.on( 'response', async ( r ) => { if ( /plugins\/update-all/.test( r.url() ) ) bulkBody = await r.json().catch( () => null ); } );
+		// The record is read through progress.php (no WordPress bootstrap)
+		// so the panel keeps painting while maintenance mode 503s REST.
+		const fileReads = [];
+		page.on( 'response', async ( r ) => { if ( /minn-admin\/progress\.php\?t=/.test( r.url() ) ) fileReads.push( { status: r.status(), body: await r.json().catch( () => null ) } ); } );
 		// Toasts expire on their own; collect them as they appear.
 		await page.evaluate( () => { window.__toasts = []; new MutationObserver( () => document.querySelectorAll( '.minn-toast' ).forEach( ( x ) => { if ( ! window.__toasts.includes( x.textContent.trim() ) ) window.__toasts.push( x.textContent.trim() ); } ) ).observe( document.body, { childList: true, subtree: true } ); } );
 		await page.click( '#minn-update-all' );
+		// Closing the panel mid-batch leaves the topbar chip as the way back
+		// in. Two fixture plugins finish fast, so this only asserts when the
+		// batch is still running at the moment of the close.
+		await page.waitForTimeout( 1200 );
+		const reopen = await page.evaluate( () => {
+			if ( ! document.querySelector( '.minn-bulk-modal' ) ) return { skipped: 'no panel' };
+			document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
+			const closed = ! document.querySelector( '.minn-bulk-modal' );
+			const chip = document.querySelector( '#minn-upd-chip' );
+			if ( ! chip || chip.hidden ) return { skipped: 'batch already settled', closed };
+			const chipText = chip.textContent.trim();
+			chip.click();
+			return { closed, chipText, reopened: !! document.querySelector( '.minn-bulk-modal' ) };
+		} );
+		if ( reopen.skipped ) console.log( `  (panel reopen not exercised: ${ reopen.skipped })` );
+		else t.check( 'closing the panel mid-batch leaves a topbar chip that reopens it', reopen.closed && reopen.reopened && /Installing|Fetching|Updating/.test( reopen.chipText ), JSON.stringify( reopen ) );
 		// The wp.org card shows Updating… or is cleared quickly; wait for the
 		// batch to settle (no busy cards).
 		await page.waitForFunction( () => document.querySelectorAll( '.minn-plugin.minn-busy' ).length > 0, null, { timeout: 15000 } ).catch( () => {} );
@@ -63,7 +83,8 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		const singles = calls.filter( ( c ) => c.startsWith( 'POST plugins/update' ) && ! c.includes( 'update-all' ) );
 		const polls = calls.filter( ( c ) => c.includes( 'update-progress' ) );
 		t.check( 'one bulk request carried the whole batch, no per-plugin requests', posts.length === 1 && singles.length === 0, JSON.stringify( { posts, singles } ) );
-		t.check( 'progress was polled while it ran', polls.length >= 1, `${ polls.length } polls` );
+		t.check( 'progress was polled while it ran', polls.length + fileReads.length >= 1, `${ polls.length } REST polls, ${ fileReads.length } file reads` );
+		t.check( 'the progress file answered without WordPress (maintenance-proof reads)', fileReads.some( ( r ) => r.status === 200 && r.body && r.body.known === true && typeof r.body.maintenance === 'boolean' ), JSON.stringify( fileReads.slice( -1 ).map( ( r ) => ( { status: r.status, known: r.body && r.body.known, phase: r.body && r.body.phase } ) ) ) );
 		const after = await page.evaluate( ( a ) => ( {
 			wporgBadge: !! document.querySelector( `.minn-plugin[data-plugin="${ a.w }"] [data-update]` ),
 			vendorBadge: !! document.querySelector( `.minn-plugin[data-plugin="${ a.v }"] [data-update]` ),
