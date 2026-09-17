@@ -659,7 +659,8 @@ button.minn-nav-label:hover { color: var(--text2); }
   padding: 6px 12px; border-radius: 9px; cursor: pointer; white-space: nowrap;
 }
 .minn-core-chip:hover { border-color: var(--amber); }
-.minn-core-chip svg { width: 14px; height: 14px; }
+.minn-core-chip svg { width: 14px; height: 14px; flex: none; }
+.minn-core-chip.is-busy svg { animation: minn-upd-rot 1.1s linear infinite; }
 /* Bulk-update progress chip — accent sibling of the core/vis pills, visible
    on every route while "Update everything" (or a core update) runs; the
    spinning icon is the ambient signal once the notification panel closes. */

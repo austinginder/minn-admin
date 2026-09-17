@@ -22031,8 +22031,14 @@
 		const chip = $( '#minn-core-chip' );
 		if ( ! chip ) return;
 		const u = state.cache.core && state.cache.core.update;
-		chip.hidden = ! u;
-		if ( u ) $( '#minn-core-chip-text' ).textContent = `WordPress ${ u.version }`;
+		// While the update runs the chip stays up with its icon turning, the
+		// same motion the plugin chip carries, so the header says something
+		// is happening even when the banner that started it has scrolled off.
+		const busy = state.updatingCore || '';
+		chip.hidden = ! u && ! busy;
+		chip.classList.toggle( 'is-busy', !! busy );
+		chip.title = busy ? __( 'WordPress is updating' ) : __( 'A WordPress update is available' );
+		if ( u || busy ) $( '#minn-core-chip-text' ).textContent = `WordPress ${ busy || u.version }`;
 	}
 
 	// Bulk-update progress chip: the ambient "updates are running" signal once
@@ -22307,16 +22313,22 @@
 		return new Promise( ( resolve, reject ) => {
 			const started = Date.now();
 			let settled = false;
+			state.updatingCore = offered || '';
+			updateCoreChip();
 			const finish = ( version ) => {
 				if ( settled ) return;
 				settled = true;
 				clearInterval( poll );
+				state.updatingCore = '';
+				updateCoreChip();
 				resolve( version );
 			};
 			const fail = ( msg ) => {
 				if ( settled ) return;
 				settled = true;
 				clearInterval( poll );
+				state.updatingCore = '';
+				updateCoreChip();
 				reject( new Error( msg ) );
 			};
 			api( 'minn-admin/v1/core/update', { method: 'POST', body: '{}' } )

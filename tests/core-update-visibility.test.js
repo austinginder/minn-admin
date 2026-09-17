@@ -93,6 +93,29 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Cancel leaves the button idle', stillIdle );
 		await page.keyboard.press( 'Escape' ); // close the panel
 
+		// --- The chip turns while the update runs -----------------------------
+		// The server call is intercepted (nothing real is updated): a slow
+		// reply holds the client in its updating state long enough to look.
+		await page.route( '**/minn-admin/v1/core/update', async ( route ) => {
+			await new Promise( ( res ) => setTimeout( res, 2500 ) );
+			await route.fulfill( { status: 200, contentType: 'application/json', body: JSON.stringify( { version: current } ) } );
+		} );
+		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-core-update', { timeout: 15000 } );
+		await page.click( '#minn-core-update' );
+		await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 8000 } );
+		await page.click( '.minn-confirm-modal [data-ok]' );
+		await page.waitForTimeout( 600 );
+		const busy = await page.evaluate( () => {
+			const c = document.querySelector( '#minn-core-chip' );
+			return { hidden: c.hidden, busy: c.classList.contains( 'is-busy' ), anim: getComputedStyle( c.querySelector( 'svg' ) ).animationName, text: c.textContent.trim(), title: c.title };
+		} );
+		t.check( 'Topbar chip spins while WordPress updates', ! busy.hidden && busy.busy && busy.anim === 'minn-upd-rot' && busy.text.includes( `WordPress ${ current }` ), JSON.stringify( busy ) );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-core-chip' ).classList.contains( 'is-busy' ), null, { timeout: 15000 } );
+		const idle = await page.evaluate( () => getComputedStyle( document.querySelector( '#minn-core-chip svg' ) ).animationName );
+		t.check( 'The chip stops turning once the update settles', idle === 'none', idle );
+		await page.unroute( '**/minn-admin/v1/core/update' );
+
 		// --- System health check ---------------------------------------------
 		const checks = await page.evaluate( async () => {
 			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/system', {
