@@ -80,7 +80,10 @@ const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { enco
 		$p = wp_get_translation_updates();
 		echo count( array_filter( $p, function ( $u ) { return '${ victim }' === $u->language; } ) );
 	` ] );
-	t.check( 'a pending pack is waiting for that language', seeded === '1', seeded );
+	// At least one: plugin and theme packs for the same language may be
+	// genuinely pending on the dev site (they are, after a plugin update
+	// batch), and they count too.
+	t.check( 'a pending pack is waiting for that language', Number( seeded ) >= 1, seeded );
 
 	const removal = await page.evaluate( async ( loc ) => {
 		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/translations/remove', {
