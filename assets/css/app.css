@@ -2131,7 +2131,14 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 /* The section nav sticks so it stays visible while scrolling a long tab
    (Site, Comments). align-self:start keeps it from stretching the grid row;
    the list is short + non-scrollable, so no sticky-compositor wiggle. */
-.minn-settings-nav { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 8px; align-self: start; }
+/* The nav pins while the body scrolls, and a store with many extension
+   pages makes it taller than the window: the LIST scrolls inside the
+   pinned frame (sticky + overflow on one element drops off the compositor
+   and lags a frame), so the last entries are reachable from anywhere. */
+.minn-settings-nav { display: flex; flex-direction: column; position: sticky; top: 8px; align-self: start; max-height: calc(100vh - 88px); transform: translateZ(0); }
+.minn-settings-nav-list { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-inline-end: 4px; }
+.minn-settings-nav-list::-webkit-scrollbar { width: 5px; }
+.minn-settings-nav-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 .minn-settings-nav-item { padding: 7px 11px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500; color: var(--text2); background: transparent; border: none; text-align: start; }
 .minn-settings-nav-item.active { background: var(--panel2); color: var(--text); font-weight: 600; }
 .minn-settings-body { max-width: 560px; display: flex; flex-direction: column; gap: 26px; }
@@ -5093,9 +5100,10 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   .minn-modal-overlay { padding: 3vh 10px; }
   .minn-email-frame { width: calc(100% - 24px); margin: 0 12px 12px; height: 56vh; }
   .minn-surface-message { margin: 0 12px 12px; }
-  .minn-settings-nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; scrollbar-width: thin; }
-  .minn-settings-nav::-webkit-scrollbar { height: 5px; }
-  .minn-settings-nav::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  .minn-settings-nav { max-height: none; }
+  .minn-settings-nav-list { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: 4px; padding: 0 0 4px; scrollbar-width: thin; }
+  .minn-settings-nav-list::-webkit-scrollbar { height: 5px; width: auto; }
+  .minn-settings-nav-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
   .minn-settings-nav-item { white-space: nowrap; flex-shrink: 0; }
   /* The horizontal strip has no room for group headings: the section
      items carry their page name instead. */

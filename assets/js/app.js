@@ -25376,6 +25376,18 @@
 		return `minn-admin/v1/wc/settings/${ encodeURIComponent( sec.page ) }/${ encodeURIComponent( sec.section || 'default' ) }`;
 	}
 
+	// Keep the active entry of a settings nav in view inside its own scroll
+	// list (a deep link to a section near the end would otherwise open with
+	// the highlight hidden). scrollTop math only: scrollIntoView propagates
+	// to every scroll ancestor and yanks the page.
+	function revealSettingsNavActive( view ) {
+		const list = $( '.minn-settings-nav-list', view );
+		const act = list && list.querySelector( '.minn-settings-nav-item.active' );
+		if ( ! list || ! act || list.scrollHeight <= list.clientHeight ) return;
+		const d = act.getBoundingClientRect().top - list.getBoundingClientRect().top;
+		if ( d < 0 || d + act.offsetHeight > list.clientHeight ) list.scrollTop += d - list.clientHeight / 2 + act.offsetHeight / 2;
+	}
+
 	function renderStoreSettings() {
 		const view = $( '#minn-view' );
 		if ( ! B.wc || ! B.caps.storeSettings ) {
@@ -25427,7 +25439,7 @@
 		const isEmails = sec.page === 'email' && ! sec.section;
 		view.innerHTML = `
 		<div class="minn-settings minn-store-settings">
-			<div class="minn-settings-nav">${ navHtml }</div>
+			<div class="minn-settings-nav"><div class="minn-settings-nav-list">${ navHtml }</div></div>
 			<div class="minn-settings-body">
 				<div>
 					<div class="minn-settings-title">${ esc( storeSectionTitle( sec ) ) }</div>
@@ -25439,6 +25451,7 @@
 				${ isPayments ? '<div id="minn-store-payments"></div>' : `<div id="minn-store-form">${ form ? form.html : `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` }</div>` }
 			</div>
 		</div>`;
+		revealSettingsNavActive( view );
 		$$( '[data-storesec]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				state.storeSection = btn.dataset.storesec;
@@ -27294,10 +27307,10 @@
 
 		view.innerHTML = `
 		<div class="minn-settings">
-			<div class="minn-settings-nav">
+			<div class="minn-settings-nav"><div class="minn-settings-nav-list">
 				${ settingsSections().map( ( label ) =>
 					`<button class="minn-settings-nav-item${ label === state.settingsSection ? ' active' : '' }" data-section="${ label }">${ esc( chromeLabel( label ) ) }</button>` ).join( '' ) }
-			</div>
+			</div></div>
 			<div class="minn-settings-body">
 				<div>
 					<div class="minn-settings-title">${ esc( chromeLabel( state.settingsSection ) ) }</div>
@@ -27311,6 +27324,7 @@
 			</div>
 		</div>`;
 
+		revealSettingsNavActive( view );
 		$$( '.minn-settings-nav-item', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				state.settingsSection = btn.dataset.section;
