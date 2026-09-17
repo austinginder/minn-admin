@@ -11,7 +11,8 @@
  * Also pins the .minn-modal.mail width: an HTML email body preview renders
  * in the extra-wide modal instead of clipping real message layouts at 720px.
  */
-const { BASE, launch, login, createPost, deletePost, reporter } = require( './helpers' );
+const { BASE, WP, launch, login, createPost, deletePost, reporter } = require( './helpers' );
+const { execFileSync } = require( 'child_process' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -82,6 +83,11 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		t.check( 'Type filter survives the refresh', filterKept, '' );
 
 		// --- Surface family item: re-click refreshes the CURRENT provider ------
+		// The wide-preview check below opens the newest log row, so send an
+		// HTML mail first: other suites leave plain-text test mails on top.
+		execFileSync( 'wp', [ `--path=${ WP }`, 'eval',
+			'add_filter( "wp_mail_content_type", function () { return "text/html"; } ); wp_mail( "nav-refresh@example.com", "nav-refresh HTML preview", "<p><strong>HTML</strong> body for the wide preview check.</p>" );' ],
+		{ stdio: 'ignore', timeout: 60000 } );
 		await page.goto( BASE + '/minn-admin/fluent-smtp', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
 		let listFetches = 0;
