@@ -41,7 +41,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		// (subscriptions, bookings, gift cards, memberships…) by name, so the
 		// tail reads the same on every site whatever mix of extensions it runs.
 		const four = [ 'orders', 'products', 'customers', 'coupons' ].map( ( id ) => commerceIds.indexOf( id ) );
-		const tail = commerce.slice( Math.max( ...four ) + 1 );
+		// Store settings closes the group on every site (configuration after
+		// operations), so it sits outside the by-name tail.
+		const closesGroup = commerceIds[ commerceIds.length - 1 ] === 'store-settings';
+		const tail = commerce.slice( Math.max( ...four ) + 1, closesGroup ? -1 : undefined );
 		const tailLabels = await page.evaluate( ( ids ) => ids.map( ( id ) => {
 			const btn = document.querySelector( `#minn-nav-commerce .minn-nav-btn[data-nav="${ id.split( ':' )[ 0 ] }"]` );
 			return btn ? btn.textContent.trim() : id;
@@ -52,6 +55,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				&& tail.some( ( x ) => x.includes( ':bookings' ) ) && commerceIds.includes( 'subscriptions' )
 				&& JSON.stringify( tailLabels ) === JSON.stringify( sortedTail ),
 			commerce.join( ', ' ) + ' | tail labels: ' + tailLabels.join( ', ' ) );
+		t.check( 'Store settings closes the commerce group', closesGroup, commerceIds.join( ', ' ) );
 		const tools = await groupNavs( 'tools' );
 		t.check( 'tools holds the plumbing families',
 			[ ':mail', ':activity-log', ':snippets', ':redirects', ':backups' ].every( ( f ) => tools.some( ( x ) => x.includes( f ) ) ),
