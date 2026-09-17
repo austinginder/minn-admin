@@ -2135,7 +2135,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
    pages makes it taller than the window: the LIST scrolls inside the
    pinned frame (sticky + overflow on one element drops off the compositor
    and lags a frame), so the last entries are reachable from anywhere. */
-.minn-settings-nav { display: flex; flex-direction: column; position: sticky; top: 8px; align-self: start; max-height: calc(100vh - 88px); transform: translateZ(0); }
+.minn-settings-nav { display: flex; flex-direction: column; position: sticky; top: 8px; align-self: start; max-height: calc(100vh - 88px); min-width: 0; transform: translateZ(0); }
 .minn-settings-nav-list { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-inline-end: 4px; }
 .minn-settings-nav-list::-webkit-scrollbar { width: 5px; }
 .minn-settings-nav-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
@@ -5100,7 +5100,9 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   .minn-modal-overlay { padding: 3vh 10px; }
   .minn-email-frame { width: calc(100% - 24px); margin: 0 12px 12px; height: 56vh; }
   .minn-surface-message { margin: 0 12px 12px; }
-  .minn-settings-nav { max-height: none; }
+  /* A grid item sizes to its content by default; the nowrap strip inside
+     must scroll within the column, not widen the page. */
+  .minn-settings-nav { max-height: none; overflow: hidden; max-width: 100%; }
   .minn-settings-nav-list { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: 4px; padding: 0 0 4px; scrollbar-width: thin; }
   .minn-settings-nav-list::-webkit-scrollbar { height: 5px; width: auto; }
   .minn-settings-nav-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
