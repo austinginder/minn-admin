@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-09-17 15:24+0000\n"
+"PO-Revision-Date: 2026-09-17 16:26+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Swedish\n"
 "MIME-Version: 1.0\n"
@@ -162,7 +162,7 @@ msgstr "Användarroll"
 
 #: includes/adapters/acf-field-groups.php:84
 #: includes/adapters/bricks.php:831
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 #: includes/adapters/elementor-templates.php:344
 #: includes/adapters/jet-theme-core.php:143
 #: assets/js/app.js:4231
@@ -911,8 +911,8 @@ msgid_plural "%d entries left to ACF’s own tools"
 msgstr[0] "%d objekt lämnat till ACF:s egna verktyg"
 msgstr[1] "%d objekt lämnade till ACF:s egna verktyg"
 
-#: includes/adapters/acf.php:1718
-#: includes/adapters/acf.php:1783
+#: includes/adapters/acf.php:1780
+#: includes/adapters/acf.php:1845
 #: assets/js/app.js:24532
 #: assets/js/app.js:47526
 #: assets/js/app.js:47534
@@ -920,8 +920,8 @@ msgid "empty"
 msgstr "tom"
 
 #. translators: %d: number of repeater rows.
-#: includes/adapters/acf.php:1723
-#: includes/adapters/acf.php:1790
+#: includes/adapters/acf.php:1785
+#: includes/adapters/acf.php:1852
 msgid "%d row"
 msgid_plural "%d rows"
 msgstr[0] "%d rad"
@@ -929,7 +929,7 @@ msgstr[1] "%d rader"
 
 #. translators: %d: number of images in a gallery field.
 #. translators: %d: number of images in the gallery field.
-#: includes/adapters/acf.php:1735
+#: includes/adapters/acf.php:1797
 #: assets/js/app.js:37688
 msgid "%d image"
 msgid_plural "%d images"
@@ -938,7 +938,7 @@ msgstr[1] "%d bilder"
 
 #. translators: %s: number of index rows
 #. translators: %s: the environment type (e.g. "staging").
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/jet-smart-filters.php:85
 #: includes/adapters/novamira.php:183
@@ -951,7 +951,7 @@ msgstr[1] "%d bilder"
 msgid "Off"
 msgstr "Av"
 
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/code-snippets.php:300
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/novamira.php:183
@@ -964,16 +964,16 @@ msgid "On"
 msgstr "På"
 
 #. translators: %d: number of flexible-content sections.
-#: includes/adapters/acf.php:1787
+#: includes/adapters/acf.php:1849
 msgid "%d section"
 msgid_plural "%d sections"
 msgstr[0] "%d sektion"
 msgstr[1] "%d sektioner"
 
-#: includes/adapters/acf.php:1800
-#: includes/adapters/acf.php:1855
+#: includes/adapters/acf.php:1862
+#: includes/adapters/acf.php:1917
 #: includes/adapters/acpt.php:492
-#: includes/adapters/jet-engine-fields.php:597
+#: includes/adapters/jet-engine-fields.php:623
 #: includes/adapters/meta-box.php:267
 #: includes/adapters/pods.php:437
 #: assets/js/app.js:23733
@@ -983,19 +983,19 @@ msgid "Custom fields"
 msgstr "Anpassade fält"
 
 #. translators: %d: how many rows or sections were edited.
-#: includes/adapters/acf.php:1834
+#: includes/adapters/acf.php:1896
 msgid "%d edited"
 msgid_plural "%d edited"
 msgstr[0] "%d redigerad"
 msgstr[1] "%d redigerade"
 
-#: includes/adapters/acf.php:1837
+#: includes/adapters/acf.php:1899
 msgid "changed"
 msgstr "ändrad"
 
-#: includes/adapters/acf.php:1906
+#: includes/adapters/acf.php:1968
 #: includes/adapters/acpt.php:532
-#: includes/adapters/jet-engine-fields.php:626
+#: includes/adapters/jet-engine-fields.php:652
 #: includes/adapters/meta-box.php:299
 #: includes/adapters/pods.php:469
 #: includes/adapters/powerpress.php:232
@@ -1010,9 +1010,9 @@ msgstr "ändrad"
 msgid "Post not found."
 msgstr "Inlägget hittades inte."
 
-#: includes/adapters/acf.php:1909
+#: includes/adapters/acf.php:1971
 #: includes/adapters/acpt.php:535
-#: includes/adapters/jet-engine-fields.php:629
+#: includes/adapters/jet-engine-fields.php:655
 #: includes/adapters/meta-box.php:302
 #: includes/adapters/pods.php:472
 #: includes/adapters/powerpress.php:235
@@ -1020,32 +1020,32 @@ msgstr "Inlägget hittades inte."
 msgid "You cannot edit this post."
 msgstr "Du kan inte redigera det här inlägget."
 
-#: includes/adapters/acf.php:1915
+#: includes/adapters/acf.php:1977
 #: includes/adapters/acpt.php:541
-#: includes/adapters/jet-engine-fields.php:635
+#: includes/adapters/jet-engine-fields.php:661
 #: includes/adapters/meta-box.php:312
 #: includes/adapters/pods.php:482
 msgid "You cannot edit that post type."
 msgstr "Du kan inte redigera den inläggstypen."
 
-#: includes/adapters/acf.php:1952
+#: includes/adapters/acf.php:2014
 msgid "This picker is no longer available. Reload the screen and try again."
 msgstr "Den här väljaren är inte längre tillgänglig. Ladda om skärmen och försök igen."
 
-#: includes/adapters/acf.php:1959
+#: includes/adapters/acf.php:2021
 msgid "Unknown relational field."
 msgstr "Okänt relationsfält."
 
-#: includes/adapters/acf.php:2126
+#: includes/adapters/acf.php:2188
 msgid "ACF simple field values for Minn Admin."
 msgstr "ACF:s enkla fältvärden för Minn Admin."
 
-#: includes/adapters/acf.php:2414
+#: includes/adapters/acf.php:2476
 #: includes/adapters/acpt.php:831
 #: includes/adapters/asset-cleanup.php:232
 #: includes/adapters/autoptimize.php:188
-#: includes/adapters/bricks.php:1361
-#: includes/adapters/bricks.php:1423
+#: includes/adapters/bricks.php:1392
+#: includes/adapters/bricks.php:1454
 #: includes/adapters/novamira.php:456
 #: includes/adapters/option-pages.php:198
 #: includes/adapters/option-pages.php:213
@@ -1053,7 +1053,7 @@ msgstr "ACF:s enkla fältvärden för Minn Admin."
 msgid "Unknown settings tab."
 msgstr "Okänd inställningsflik."
 
-#: includes/adapters/acf.php:2823
+#: includes/adapters/acf.php:2886
 #: includes/adapters/option-pages.php:160
 #: includes/class-minn-admin-surfaces.php:169
 msgid "Site Options"
@@ -1153,7 +1153,7 @@ msgid "Edit in ACPT"
 msgstr "Redigera i ACPT"
 
 #: includes/adapters/acpt.php:1111
-#: includes/adapters/bricks.php:1670
+#: includes/adapters/bricks.php:1701
 #: includes/adapters/cfdb7.php:311
 #: includes/adapters/code-snippets.php:189
 #: includes/adapters/custom-css-js.php:456
@@ -1634,7 +1634,7 @@ msgstr "Nivå"
 #: includes/adapters/aryo-activity-log.php:272
 #: includes/adapters/bookly.php:211
 #: includes/adapters/bookly.php:225
-#: includes/adapters/bricks.php:1703
+#: includes/adapters/bricks.php:1734
 #: includes/adapters/cf7-flamingo.php:168
 #: includes/adapters/cfdb7.php:285
 #: includes/adapters/elementor-forms.php:230
@@ -1670,7 +1670,7 @@ msgid "Event not found."
 msgstr "Händelsen hittades inte."
 
 #: includes/adapters/all-in-one-security.php:334
-#: includes/adapters/bricks.php:1855
+#: includes/adapters/bricks.php:1886
 #: includes/adapters/elementor-forms.php:462
 #: includes/adapters/gravity-forms.php:517
 #: includes/adapters/novamira.php:535
@@ -2272,7 +2272,7 @@ msgstr "Alla källor"
 
 #: includes/adapters/aryo-activity-log.php:151
 #: includes/adapters/aryo-activity-log.php:401
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:47682
 msgid "Browser"
 msgstr "Webbläsare"
@@ -2473,7 +2473,7 @@ msgstr "Prestanda"
 
 #: includes/adapters/asset-cleanup.php:350
 #: includes/adapters/autoptimize.php:298
-#: includes/adapters/jet-engine-fields.php:324
+#: includes/adapters/jet-engine-fields.php:331
 #: includes/adapters/option-pages.php:180
 #: includes/adapters/perfmatters.php:369
 #: includes/adapters/redirection.php:207
@@ -3088,7 +3088,7 @@ msgstr "Ta bort den här mallen permanent? Det går inte att ångra."
 
 #: includes/adapters/bricks.php:801
 #: includes/adapters/bricks.php:813
-#: includes/adapters/bricks.php:1300
+#: includes/adapters/bricks.php:1331
 #: includes/adapters/elementor-templates.php:325
 #: includes/adapters/elementor-templates.php:404
 #: includes/adapters/jet-theme-core.php:124
@@ -3232,137 +3232,137 @@ msgstr "%s (kopia)"
 msgid "Bricks declined to duplicate this template. Duplication may be turned off in its settings."
 msgstr "Bricks vägrade att duplicera denna Mall. Duplicering kan vara avstängd i dess Inställningar."
 
-#: includes/adapters/bricks.php:1232
+#: includes/adapters/bricks.php:1263
 msgid "Bricks CSS files"
 msgstr "Bricks CSS-filer"
 
-#: includes/adapters/bricks.php:1280
+#: includes/adapters/bricks.php:1311
 msgid "Editing"
 msgstr "Redigering"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Post types"
 msgstr "Inläggstyper"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Which post types can be edited with Bricks."
 msgstr "Vilka inläggstyper som kan redigeras med Bricks."
 
-#: includes/adapters/bricks.php:1287
+#: includes/adapters/bricks.php:1318
 msgid "Features"
 msgstr "Funktioner"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Save form submissions"
 msgstr "Spara formulärinskickningar"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Store Bricks form submissions in the database. Turning this on adds a Forms surface to Minn."
 msgstr "Spara Bricks formulärinskickningar i databasen. Om du slår på detta läggs en Formulär-yta till i Minn."
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Disable Bricks SEO controls"
 msgstr "Inaktivera SEO-kontroller i Bricks"
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Right when a dedicated SEO plugin owns titles and metas."
 msgstr "Använd när ett särskilt SEO-tillägg hanterar titlar och metabeskrivningar."
 
-#: includes/adapters/bricks.php:1291
+#: includes/adapters/bricks.php:1322
 msgid "Disable Bricks Open Graph tags"
 msgstr "Inaktivera Open Graph-etiketter i Bricks"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Disable default templates"
 msgstr "Inaktivera standardmallar"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Without conditions, published header and footer templates apply everywhere. Turn on to require explicit conditions."
 msgstr "Utan villkor gäller publicerade sidhuvuds- och sidfotsmallar överallt. Slå på för att kräva uttryckliga villkor."
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Public templates"
 msgstr "Offentliga mallar"
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Whether template pages are viewable by anyone, or only logged-in users."
 msgstr "Om mallsidor kan ses av vem som helst, eller bara inloggade användare."
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Remote template access"
 msgstr "Fjärråtkomst till mallar"
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Allow other sites to browse and insert this site's templates. Anyone who knows the address can ask, so set a password or list the allowed sites in Bricks first."
 msgstr "Tillåt andra Webbplatser att Bläddra och Infoga denna Webbplats Mallar. Alla som känner till Adress kan fråga, så ange ett lösenord eller en lista över tillåtna Webbplatser i Bricks först."
 
-#: includes/adapters/bricks.php:1313
+#: includes/adapters/bricks.php:1344
 msgid "Autosave"
 msgstr "Spara automatiskt"
 
-#: includes/adapters/bricks.php:1315
+#: includes/adapters/bricks.php:1346
 msgid "Disable autosave"
 msgstr "Inaktivera automatisk sparning"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Autosave interval (seconds)"
 msgstr "Intervall för automatisk sparning (sekunder)"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Default 60, minimum 15."
 msgstr "Standard 60, minst 15."
 
-#: includes/adapters/bricks.php:1320
+#: includes/adapters/bricks.php:1351
 #: assets/js/app.js:48009
 #: assets/js/app.js:48435
 msgid "Appearance"
 msgstr "Utseende"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Builder mode"
 msgstr "Byggarläge"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4649
 #: assets/js/app.js:4831
 msgid "Dark"
 msgstr "Mörk"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4648
 #: assets/js/app.js:4830
 msgid "Light"
 msgstr "Ljust"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4636
 #: assets/js/app.js:5413
 msgid "Custom"
 msgstr "Anpassad"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Custom mode's CSS is edited on the Bricks settings screen."
 msgstr "CSS för anpassat läge redigeras på inställningsskärmen i Bricks."
 
-#: includes/adapters/bricks.php:1329
+#: includes/adapters/bricks.php:1360
 #: assets/js/app.js:18895
 #: assets/js/app.js:25504
 msgid "Default"
 msgstr "Standard"
 
-#: includes/adapters/bricks.php:1343
+#: includes/adapters/bricks.php:1374
 #: assets/js/app.js:22154
 #: assets/js/app.js:27339
 msgid "Maintenance mode"
 msgstr "Underhållsläge"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Mode"
 msgstr "Läge"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/adapters/pw-gift-cards.php:290
 #: includes/adapters/woocommerce-gift-cards.php:271
 #: includes/adapters/yith-gift-cards.php:360
@@ -3372,68 +3372,68 @@ msgstr "Läge"
 msgid "Disabled"
 msgstr "Inaktiverat"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/class-minn-admin-bar.php:192
 msgid "Coming soon"
 msgstr "Kommer snart"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Maintenance (503)"
 msgstr "Underhåll (503)"
 
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 msgid "A Single-type Bricks template to show; Default is Bricks' built-in holding page."
 msgstr "En Bricks-mall av typen Enskild att visa; standard är Bricks inbyggda väntesida."
 
-#: includes/adapters/bricks.php:1347
+#: includes/adapters/bricks.php:1378
 msgid "Render header"
 msgstr "Visa sidhuvud"
 
-#: includes/adapters/bricks.php:1348
+#: includes/adapters/bricks.php:1379
 msgid "Render footer"
 msgstr "Visa sidfot"
 
-#: includes/adapters/bricks.php:1460
+#: includes/adapters/bricks.php:1491
 msgid "Set a remote templates password, or list the sites allowed to ask, in Bricks first. Without one of those this opens every template on this site to anyone."
 msgstr "Ange ett lösenord för fjärr-Mallar, eller en lista över de Webbplatser som får fråga, i Bricks först. Utan något av det öppnar detta varje Mall på denna Webbplats för vem som helst."
 
-#: includes/adapters/bricks.php:1483
+#: includes/adapters/bricks.php:1514
 msgid "That is not one of the offered choices."
 msgstr "Det är inte ett av de erbjudna valen."
 
 #. translators: %d: the smallest allowed value.
-#: includes/adapters/bricks.php:1499
+#: includes/adapters/bricks.php:1530
 msgid "The smallest allowed value is %d."
 msgstr "Det minsta tillåtna värdet är %d."
 
-#: includes/adapters/bricks.php:1511
+#: includes/adapters/bricks.php:1542
 msgid "Pick a Single-type Bricks template."
 msgstr "Välj en Bricks-mall av typen Enskild."
 
-#: includes/adapters/bricks.php:1643
+#: includes/adapters/bricks.php:1674
 #: includes/adapters/elementor-forms.php:111
 msgid "(empty submission)"
 msgstr "(tom inlämning)"
 
-#: includes/adapters/bricks.php:1656
+#: includes/adapters/bricks.php:1687
 msgid "Open in Bricks ↗"
 msgstr "Öppna i Bricks ↗"
 
-#: includes/adapters/bricks.php:1663
+#: includes/adapters/bricks.php:1694
 #: includes/adapters/cfdb7.php:298
 msgid "Delete entry"
 msgstr "Ta bort post"
 
-#: includes/adapters/bricks.php:1666
+#: includes/adapters/bricks.php:1697
 msgid "Delete this submission permanently? Bricks keeps no trash for them."
 msgstr "Ta bort den här inskickningen permanent? Bricks har ingen papperskorg för dem."
 
-#: includes/adapters/bricks.php:1673
+#: includes/adapters/bricks.php:1704
 msgid "Delete the selected submissions permanently? Bricks keeps no trash for them."
 msgstr "Ta bort de valda inskickningarna permanent? Bricks har ingen papperskorg för dem."
 
-#: includes/adapters/bricks.php:1678
-#: includes/adapters/bricks.php:1758
+#: includes/adapters/bricks.php:1709
+#: includes/adapters/bricks.php:1789
 #: includes/adapters/cf7-flamingo.php:112
 #: includes/adapters/cf7-flamingo.php:128
 #: includes/adapters/cf7-flamingo.php:256
@@ -3470,20 +3470,20 @@ msgstr "Ta bort de valda inskickningarna permanent? Bricks har ingen papperskorg
 msgid "Forms"
 msgstr "Formulär"
 
-#: includes/adapters/bricks.php:1687
-#: includes/adapters/bricks.php:1757
+#: includes/adapters/bricks.php:1718
+#: includes/adapters/bricks.php:1788
 #: includes/adapters/elementor-forms.php:171
 #: includes/adapters/ninja-forms.php:169
 #: includes/adapters/ninja-forms.php:178
 msgid "Submissions"
 msgstr "Inlämningar"
 
-#: includes/adapters/bricks.php:1698
+#: includes/adapters/bricks.php:1729
 msgid "All submissions"
 msgstr "Alla inskickningar"
 
-#: includes/adapters/bricks.php:1701
-#: includes/adapters/bricks.php:1861
+#: includes/adapters/bricks.php:1732
+#: includes/adapters/bricks.php:1892
 #: includes/adapters/cf7-flamingo.php:486
 #: includes/adapters/cfdb7.php:486
 #: includes/adapters/elementor-forms.php:480
@@ -3498,8 +3498,8 @@ msgstr "Alla inskickningar"
 msgid "Submission"
 msgstr "Inlämning"
 
-#: includes/adapters/bricks.php:1702
-#: includes/adapters/bricks.php:1844
+#: includes/adapters/bricks.php:1733
+#: includes/adapters/bricks.php:1875
 #: includes/adapters/cf7-flamingo.php:166
 #: includes/adapters/cf7-flamingo.php:261
 #: includes/adapters/cf7-flamingo.php:455
@@ -3532,16 +3532,16 @@ msgstr "Inlämning"
 msgid "Form"
 msgstr "Formulär"
 
-#: includes/adapters/bricks.php:1762
+#: includes/adapters/bricks.php:1793
 msgid "Last submission"
 msgstr "Senaste inskickning"
 
-#: includes/adapters/bricks.php:1770
+#: includes/adapters/bricks.php:1801
 msgid "Open Bricks form submissions ↗"
 msgstr "Öppna Bricks formulärinskickningar ↗"
 
-#: includes/adapters/bricks.php:1819
-#: includes/adapters/bricks.php:1880
+#: includes/adapters/bricks.php:1850
+#: includes/adapters/bricks.php:1911
 #: includes/adapters/elementor-forms.php:406
 #: includes/adapters/elementor-forms.php:494
 #: includes/adapters/elementor-forms.php:517
@@ -3550,7 +3550,7 @@ msgstr "Öppna Bricks formulärinskickningar ↗"
 msgid "Submission not found."
 msgstr "Inlämningen hittades inte."
 
-#: includes/adapters/bricks.php:1841
+#: includes/adapters/bricks.php:1872
 #: includes/adapters/core-blocks.php:107
 #: includes/adapters/fluent-smtp.php:365
 #: includes/adapters/fluent-smtp.php:728
@@ -3578,7 +3578,7 @@ msgstr "Inlämningen hittades inte."
 msgid "Date"
 msgstr "Datum"
 
-#: includes/adapters/bricks.php:1846
+#: includes/adapters/bricks.php:1877
 #: includes/adapters/elementor-forms.php:451
 #: includes/class-minn-admin-bar.php:652
 #: assets/js/app.js:3002
@@ -3587,7 +3587,7 @@ msgstr "Datum"
 msgid "Page"
 msgstr "Sida"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/class-minn-admin-surfaces.php:348
 #: assets/js/app.js:1260
 #: assets/js/app.js:3424
@@ -3600,23 +3600,23 @@ msgstr "Sida"
 msgid "System"
 msgstr "System"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/adapters/wpforms.php:556
 msgid "IP address"
 msgstr "IP-adress"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:8631
 msgid "Referrer"
 msgstr "Hänvisare"
 
-#: includes/adapters/bricks.php:1860
+#: includes/adapters/bricks.php:1891
 #: includes/adapters/fluent-smtp.php:753
 #: includes/adapters/suremails.php:274
 msgid "Response"
 msgstr "Svar"
 
-#: includes/adapters/bricks.php:1884
+#: includes/adapters/bricks.php:1915
 msgid "The submission could not be deleted."
 msgstr "Inskickningen kunde inte tas bort."
 
@@ -4017,20 +4017,20 @@ msgstr "CleanTalk-inställningsmaskineriet är inte tillgängligt."
 
 #: includes/adapters/cleantalk.php:133
 #: includes/adapters/cleantalk.php:174
-#: includes/adapters/licenses.php:4066
-#: includes/adapters/licenses.php:4285
-#: includes/adapters/licenses.php:4343
-#: includes/adapters/licenses.php:4370
-#: includes/adapters/licenses.php:4419
-#: includes/adapters/licenses.php:4431
-#: includes/adapters/licenses.php:4493
-#: includes/adapters/licenses.php:4506
-#: includes/adapters/licenses.php:5046
+#: includes/adapters/licenses.php:4069
+#: includes/adapters/licenses.php:4288
+#: includes/adapters/licenses.php:4346
+#: includes/adapters/licenses.php:4373
+#: includes/adapters/licenses.php:4422
+#: includes/adapters/licenses.php:4434
+#: includes/adapters/licenses.php:4496
+#: includes/adapters/licenses.php:4509
+#: includes/adapters/licenses.php:5049
 msgid "No key stored"
 msgstr "Ingen nyckel sparad"
 
 #: includes/adapters/cleantalk.php:136
-#: includes/adapters/licenses.php:4501
+#: includes/adapters/licenses.php:4504
 msgid "Key removed from this site."
 msgstr "Nyckeln togs bort från den här webbplatsen."
 
@@ -4076,7 +4076,7 @@ msgid "Could not delete this account."
 msgstr "Kunde inte ta bort det här kontot."
 
 #: includes/adapters/cleantalk.php:483
-#: includes/adapters/licenses.php:6262
+#: includes/adapters/licenses.php:6269
 msgid "Unknown action."
 msgstr "Okänd åtgärd."
 
@@ -5529,7 +5529,7 @@ msgid "\"%s\" is not a valid email address."
 msgstr "\"%s\" är inte en giltig e-postadress."
 
 #: includes/adapters/fluent-smtp.php:894
-#: includes/adapters/gravity-smtp.php:1520
+#: includes/adapters/gravity-smtp.php:1548
 #: includes/adapters/post-smtp.php:442
 msgid "No recipient address on record for this email."
 msgstr "Ingen mottagaradress finns registrerad för det här e-postmeddelandet."
@@ -6201,49 +6201,49 @@ msgstr "Behåll en felsökningslogg"
 msgid "Gravity SMTP reports this email cannot be resent (body or attachments were not stored)."
 msgstr "Gravity SMTP rapporterar att det här e-postmeddelandet inte kan skickas igen (innehåll eller bilagor sparades inte)."
 
-#: includes/adapters/gravity-smtp.php:1537
+#: includes/adapters/gravity-smtp.php:1565
 msgid "The mailer reported the message could not be sent."
 msgstr "E-posttjänsten rapporterade att meddelandet inte kunde skickas."
 
-#: includes/adapters/gravity-smtp.php:1543
+#: includes/adapters/gravity-smtp.php:1571
 msgid "Resent to the original recipients."
 msgstr "Skickat igen till de ursprungliga mottagarna."
 
-#: includes/adapters/gravity-smtp.php:1544
+#: includes/adapters/gravity-smtp.php:1572
 msgid "Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "Skickat igen, men ett annat aktivt e-posttillägg bar det, så det nya utskicket visas i det tilläggets logg, inte Gravity SMTPs."
 
-#: includes/adapters/gravity-smtp.php:1608
+#: includes/adapters/gravity-smtp.php:1636
 #: assets/js/app.js:785
 msgid "Sandboxed"
 msgstr "Sandlåda"
 
-#: includes/adapters/gravity-smtp.php:1609
+#: includes/adapters/gravity-smtp.php:1637
 #: assets/js/app.js:785
 msgid "Filtered"
 msgstr "Filtrerad"
 
-#: includes/adapters/gravity-smtp.php:1624
-#: includes/adapters/gravity-smtp.php:1654
+#: includes/adapters/gravity-smtp.php:1652
+#: includes/adapters/gravity-smtp.php:1682
 #: assets/js/app.js:15776
 msgid "Other"
 msgstr "Annat"
 
 #. translators: %d: number of days represented by the chart.
-#: includes/adapters/gravity-smtp.php:1667
+#: includes/adapters/gravity-smtp.php:1695
 msgid "Last %d day"
 msgid_plural "Last %d days"
 msgstr[0] "Senaste %d dagarna"
 msgstr[1] "Senaste %d dagarna"
 
-#: includes/adapters/gravity-smtp.php:1670
+#: includes/adapters/gravity-smtp.php:1698
 #: includes/adapters/ottokit.php:146
 #: includes/adapters/ottokit.php:244
 #: assets/js/app.js:784
 msgid "Sent"
 msgstr "Skickat"
 
-#: includes/adapters/gravity-smtp.php:1671
+#: includes/adapters/gravity-smtp.php:1699
 #: includes/adapters/ottokit.php:332
 #: assets/js/app.js:782
 #: assets/js/app.js:16351
@@ -6591,11 +6591,11 @@ msgid "Item marked %s."
 msgstr "Objektet markerades som %s."
 
 #. translators: %s: post type name.
-#: includes/adapters/jet-engine-fields.php:335
+#: includes/adapters/jet-engine-fields.php:342
 msgid "%s fields"
 msgstr "%s-fält"
 
-#: includes/adapters/jet-engine-fields.php:669
+#: includes/adapters/jet-engine-fields.php:695
 msgid "JetEngine field values for Minn Admin."
 msgstr "JetEngine-fältvärden för Minn Admin."
 
@@ -7016,1259 +7016,1259 @@ msgid "Open LatePoint ↗"
 msgstr "Öppna LatePoint ↗"
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:105
+#: includes/adapters/licenses.php:108
 msgid "That isn’t a valid %s license key."
 msgstr "Det är inte en giltig %s-licensnyckel."
 
-#: includes/adapters/licenses.php:108
+#: includes/adapters/licenses.php:111
 msgid "The license is not active for this site’s URL."
 msgstr "Licensen är inte aktiv för den här webbplatsens URL."
 
-#: includes/adapters/licenses.php:111
+#: includes/adapters/licenses.php:114
 msgid "That license key has been disabled."
 msgstr "Den licensnyckeln har inaktiverats."
 
-#: includes/adapters/licenses.php:113
+#: includes/adapters/licenses.php:116
 msgid "That license key has expired."
 msgstr "Den licensnyckeln har gått ut."
 
-#: includes/adapters/licenses.php:115
+#: includes/adapters/licenses.php:118
 msgid "That license key has reached its activation limit."
 msgstr "Den licensnyckeln har nått sin aktiveringsgräns."
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:118
+#: includes/adapters/licenses.php:121
 msgid "%s did not accept that key."
 msgstr "%s godkände inte den nyckeln."
 
-#: includes/adapters/licenses.php:161
+#: includes/adapters/licenses.php:164
 msgid "full membership"
 msgstr "fullt medlemskap"
 
-#: includes/adapters/licenses.php:162
+#: includes/adapters/licenses.php:165
 msgid "per-plugin membership"
 msgstr "medlemskap per tillägg"
 
-#: includes/adapters/licenses.php:163
+#: includes/adapters/licenses.php:166
 msgid "single-project membership"
 msgstr "medlemskap för ett projekt"
 
-#: includes/adapters/licenses.php:164
+#: includes/adapters/licenses.php:167
 msgid "free Hub membership"
 msgstr "gratis Hub-medlemskap"
 
-#: includes/adapters/licenses.php:165
+#: includes/adapters/licenses.php:168
 msgid "membership paused"
 msgstr "medlemskap pausat"
 
-#: includes/adapters/licenses.php:639
+#: includes/adapters/licenses.php:642
 msgid "Could not reach smashballoon.com"
 msgstr "Kunde inte nå smashballoon.com"
 
-#: includes/adapters/licenses.php:647
+#: includes/adapters/licenses.php:650
 msgid "You have reached the maximum number of sites for this Smash Balloon license"
 msgstr "Du har nått maxantalet webbplatser för den här Smash Balloon-licensen"
 
 #. translators: 1: number of sites the license is active on. 2: maximum number of sites the license allows.
-#: includes/adapters/licenses.php:650
+#: includes/adapters/licenses.php:653
 msgid "You have reached the maximum number of sites for this Smash Balloon license (%1$d/%2$d)"
 msgstr "Du har nått maxantalet webbplatser för den här Smash Balloon-licensen (%1$d/%2$d)"
 
-#: includes/adapters/licenses.php:655
+#: includes/adapters/licenses.php:658
 msgid "This Smash Balloon license has expired"
 msgstr "Den här Smash Balloon-licensen har gått ut"
 
-#: includes/adapters/licenses.php:661
+#: includes/adapters/licenses.php:664
 msgid "Smash Balloon did not accept that key"
 msgstr "Smash Balloon accepterade inte den nyckeln"
 
-#: includes/adapters/licenses.php:853
-#: includes/adapters/licenses.php:888
-#: includes/adapters/licenses.php:912
+#: includes/adapters/licenses.php:856
+#: includes/adapters/licenses.php:891
+#: includes/adapters/licenses.php:915
 msgid "Brainstorm Force licensing is not loaded on this site."
 msgstr "Brainstorm Force-licensiering är inte inläst på den här webbplatsen."
 
-#: includes/adapters/licenses.php:876
+#: includes/adapters/licenses.php:879
 msgid "Brainstorm Force did not accept that key."
 msgstr "Brainstorm Force accepterade inte den nyckeln."
 
-#: includes/adapters/licenses.php:897
+#: includes/adapters/licenses.php:900
 msgid "Brainstorm Force did not release that activation."
 msgstr "Brainstorm Force släppte inte den aktiveringen."
 
-#: includes/adapters/licenses.php:917
+#: includes/adapters/licenses.php:920
 msgid "No license key is stored for this product."
 msgstr "Ingen licensnyckel är sparad för den här produkten."
 
-#: includes/adapters/licenses.php:922
+#: includes/adapters/licenses.php:925
 msgid "Brainstorm Force confirmed this license is active."
 msgstr "Brainstorm Force bekräftade att den här licensen är aktiv."
 
-#: includes/adapters/licenses.php:930
+#: includes/adapters/licenses.php:933
 msgid "This license expired on "
 msgstr "Den här licensen gick ut den "
 
-#: includes/adapters/licenses.php:932
+#: includes/adapters/licenses.php:935
 msgid "Brainstorm Force reports this license is not active on this site."
 msgstr "Brainstorm Force rapporterar att den här licensen inte är aktiv på den här webbplatsen."
 
-#: includes/adapters/licenses.php:1189
+#: includes/adapters/licenses.php:1192
 msgid "Crocoblock refused the key"
 msgstr "Crocoblock avvisade nyckeln"
 
-#: includes/adapters/licenses.php:1214
+#: includes/adapters/licenses.php:1217
 msgid "The Jet Dashboard code is not loaded; activate a Jet plugin first."
 msgstr "Koden för Jet Dashboard är inte inläst; aktivera ett Jet-tillägg först."
 
-#: includes/adapters/licenses.php:1222
+#: includes/adapters/licenses.php:1225
 msgid "Could not reach the Crocoblock licensing service."
 msgstr "Kunde inte nå Crocoblocks licenstjänst."
 
-#: includes/adapters/licenses.php:1312
+#: includes/adapters/licenses.php:1315
 msgid "Key stored; Breakdance is not activated for this site"
 msgstr "Nyckel lagrad; Breakdance är inte aktiverat för denna sida"
 
-#: includes/adapters/licenses.php:1348
+#: includes/adapters/licenses.php:1351
 msgid "Key stored; Elementor has not recorded a status yet"
 msgstr "Nyckel sparad; Elementor har inte registrerat någon status ännu"
 
-#: includes/adapters/licenses.php:1448
+#: includes/adapters/licenses.php:1451
 msgid "flagged unlicensed"
 msgstr "flaggad som olicensierad"
 
-#: includes/adapters/licenses.php:1475
+#: includes/adapters/licenses.php:1478
 msgid "Key set in wp-config"
 msgstr "Nyckel angiven i wp-config"
 
-#: includes/adapters/licenses.php:1501
+#: includes/adapters/licenses.php:1504
 msgid "Key belongs to another user on this site"
 msgstr "Nyckeln tillhör en annan användare på den här webbplatsen"
 
-#: includes/adapters/licenses.php:1525
+#: includes/adapters/licenses.php:1528
 msgid "Key stored; no check recorded yet"
 msgstr "Nyckel lagrad; ingen kontroll registrerad ännu"
 
-#: includes/adapters/licenses.php:1528
+#: includes/adapters/licenses.php:1531
 msgid "Could not reach the licensing service at the last check"
 msgstr "Kunde inte nå licenstjänsten vid senaste kontrollen"
 
-#: includes/adapters/licenses.php:1539
+#: includes/adapters/licenses.php:1542
 msgid "Subscription expired; migrations still run, updates and support stop"
 msgstr "Prenumerationen har gått ut; migreringar körs fortfarande, uppdateringar och support slutar"
 
-#: includes/adapters/licenses.php:1540
+#: includes/adapters/licenses.php:1543
 msgid "Subscription cancelled"
 msgstr "Prenumerationen avbröts"
 
-#: includes/adapters/licenses.php:1541
+#: includes/adapters/licenses.php:1544
 msgid "The licensing service does not recognise this key"
 msgstr "Licenstjänsten känner inte igen den här nyckeln"
 
-#: includes/adapters/licenses.php:1542
+#: includes/adapters/licenses.php:1545
 msgid "This site's activation was turned off; activating again re-enables it"
 msgstr "Den här webbplatsens aktivering stängdes av; att aktivera igen slår på den"
 
-#: includes/adapters/licenses.php:1543
+#: includes/adapters/licenses.php:1546
 msgid "Every activation on this license is in use"
 msgstr "Alla aktiveringar på den här licensen används"
 
-#: includes/adapters/licenses.php:1625
+#: includes/adapters/licenses.php:1628
 msgid "Key stored; Breakdance has not recorded a check yet"
 msgstr "Nyckel lagrad; Breakdance har inte registrerat en check än"
 
-#: includes/adapters/licenses.php:1663
+#: includes/adapters/licenses.php:1666
 msgid "Bricks could not reach its license server"
 msgstr "Bricks kunde inte nå sin licensserver"
 
 #. translators: %s: the domain the license was activated for.
-#: includes/adapters/licenses.php:1819
+#: includes/adapters/licenses.php:1822
 msgid "activated for %s, this site is %s"
 msgstr "aktiverat för %s, den här webbplatsen är %s"
 
-#: includes/adapters/licenses.php:1829
-#: includes/adapters/licenses.php:1943
+#: includes/adapters/licenses.php:1832
+#: includes/adapters/licenses.php:1946
 msgid "Key stored; no recorded status"
 msgstr "Nyckel sparad; ingen registrerad status"
 
-#: includes/adapters/licenses.php:1852
+#: includes/adapters/licenses.php:1855
 msgid "free trial"
 msgstr "gratis provperiod"
 
-#: includes/adapters/licenses.php:1879
+#: includes/adapters/licenses.php:1882
 msgid "Pro build installed; no license attached, so it runs as the free version"
 msgstr "Pro-bygge installerat; ingen licens kopplad, så det körs som gratisversionen"
 
-#: includes/adapters/licenses.php:1884
-#: includes/adapters/licenses.php:5421
+#: includes/adapters/licenses.php:1887
+#: includes/adapters/licenses.php:5424
 msgid "License attached but not readable locally"
 msgstr "Licens kopplad men inte läsbar lokalt"
 
-#: includes/adapters/licenses.php:1892
+#: includes/adapters/licenses.php:1895
 msgid "cancelled"
 msgstr "avbruten"
 
 #. translators: 1: activations used, 2: activations allowed.
-#: includes/adapters/licenses.php:1899
+#: includes/adapters/licenses.php:1902
 msgid "%1$d of %2$d activations used"
 msgstr "%1$d av %2$d aktiveringar använda"
 
-#: includes/adapters/licenses.php:1903
+#: includes/adapters/licenses.php:1906
 msgid "(localhost activations are not counted)"
 msgstr "(localhost-aktiveringar räknas inte)"
 
-#: includes/adapters/licenses.php:2036
-#: includes/adapters/licenses.php:2038
+#: includes/adapters/licenses.php:2039
+#: includes/adapters/licenses.php:2041
 msgid "WPMU DEV membership"
 msgstr "WPMU DEV-medlemskap"
 
-#: includes/adapters/licenses.php:2054
+#: includes/adapters/licenses.php:2057
 msgid "licensed through the WPMU DEV Dashboard key"
 msgstr "licensierad via WPMU DEV Dashboard-nyckeln"
 
-#: includes/adapters/licenses.php:2068
+#: includes/adapters/licenses.php:2071
 msgid "covered by the WPMU DEV membership"
 msgstr "täckt av WPMU DEV-medlemskapet"
 
-#: includes/adapters/licenses.php:2071
+#: includes/adapters/licenses.php:2074
 msgid "the WPMU DEV membership has expired"
 msgstr "WPMU DEV-medlemskapet har gått ut"
 
-#: includes/adapters/licenses.php:2074
+#: includes/adapters/licenses.php:2077
 msgid "the WPMU DEV membership is paused"
 msgstr "WPMU DEV-medlemskapet är pausat"
 
-#: includes/adapters/licenses.php:2076
+#: includes/adapters/licenses.php:2079
 msgid "Dashboard key present; Smush has not validated it yet"
 msgstr "Dashboard-nyckel finns; Smush har inte validerat den ännu"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2117
+#: includes/adapters/licenses.php:2120
 msgid "%d Jet plugin installed; one Crocoblock key covers it"
 msgid_plural "%d Jet plugins installed; one Crocoblock key covers them all"
 msgstr[0] "%d Jet-tillägg installerat; en Crocoblock-nyckel täcker det"
 msgstr[1] "%d Jet-tillägg installerade; en Crocoblock-nyckel täcker dem alla"
 
-#: includes/adapters/licenses.php:2125
+#: includes/adapters/licenses.php:2128
 msgid "lifetime membership"
 msgstr "livstidsmedlemskap"
 
-#: includes/adapters/licenses.php:2126
+#: includes/adapters/licenses.php:2129
 msgid "all-inclusive membership"
 msgstr "all-inclusive-medlemskap"
 
-#: includes/adapters/licenses.php:2127
+#: includes/adapters/licenses.php:2130
 msgid "plugin set"
 msgstr "tilläggspaket"
 
-#: includes/adapters/licenses.php:2128
+#: includes/adapters/licenses.php:2131
 msgid "theme + plugin bundle"
 msgstr "tema- och tilläggspaket"
 
-#: includes/adapters/licenses.php:2129
+#: includes/adapters/licenses.php:2132
 msgid "single plugin"
 msgstr "enskilt tillägg"
 
-#: includes/adapters/licenses.php:2138
+#: includes/adapters/licenses.php:2141
 msgid "TemplateMonster key"
 msgstr "TemplateMonster-nyckel"
 
-#: includes/adapters/licenses.php:2140
+#: includes/adapters/licenses.php:2143
 msgid "Envato key"
 msgstr "Envato-nyckel"
 
-#: includes/adapters/licenses.php:2143
+#: includes/adapters/licenses.php:2146
 msgid "sublicense"
 msgstr "underlicens"
 
 #. translators: %s: the site address the license was activated for.
-#: includes/adapters/licenses.php:2152
+#: includes/adapters/licenses.php:2155
 msgid "activated for %s, not this site; deactivate and activate again"
 msgstr "aktiverad för %s, inte den här webbplatsen; inaktivera och aktivera igen"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2164
+#: includes/adapters/licenses.php:2167
 msgid "covers the %d installed Jet plugin"
 msgid_plural "covers all %d installed Jet plugins"
 msgstr[0] "täcker det %d installerade Jet-tillägget"
 msgstr[1] "täcker alla %d installerade Jet-tillägg"
 
 #. translators: 1: covered count, 2: installed count, 3: names of the plugins the license does not cover.
-#: includes/adapters/licenses.php:2167
+#: includes/adapters/licenses.php:2170
 msgid "covers %1$d of %2$d installed Jet plugins; not covered: %3$s"
 msgstr "täcker %1$d av %2$d installerade Jet-tillägg; täcks inte: %3$s"
 
 #. translators: %d: number of sites the license may be activated on.
-#: includes/adapters/licenses.php:2173
+#: includes/adapters/licenses.php:2176
 msgid "%d site allowed"
 msgid_plural "%d sites allowed"
 msgstr[0] "%d webbplats tillåten"
 msgstr[1] "%d webbplatser tillåtna"
 
-#: includes/adapters/licenses.php:2230
+#: includes/adapters/licenses.php:2233
 msgid "no license store yet; the plugin has not run"
 msgstr "ingen licenslagring ännu; tillägget har inte körts"
 
-#: includes/adapters/licenses.php:2276
+#: includes/adapters/licenses.php:2279
 msgid "key rejected at the last check"
 msgstr "nyckeln avvisades vid senaste kontrollen"
 
-#: includes/adapters/licenses.php:2279
+#: includes/adapters/licenses.php:2282
 msgid "key disabled by the vendor"
 msgstr "nyckeln inaktiverad av leverantören"
 
-#: includes/adapters/licenses.php:2282
+#: includes/adapters/licenses.php:2285
 msgid "site limit reached"
 msgstr "webbplatsgränsen nådd"
 
-#: includes/adapters/licenses.php:2328
+#: includes/adapters/licenses.php:2331
 msgid "service key (free tier exists)"
 msgstr "tjänstnyckel (gratisnivå finns)"
 
-#: includes/adapters/licenses.php:2334
+#: includes/adapters/licenses.php:2337
 #: assets/js/app.js:21610
 msgid "service key"
 msgstr "tjänstnyckel"
 
 #. translators: %d: Akismet alert code number.
-#: includes/adapters/licenses.php:2337
+#: includes/adapters/licenses.php:2340
 msgid "Akismet reported a problem with this key (alert %d)"
 msgstr "Akismet rapporterade ett problem med den här nyckeln (varning %d)"
 
-#: includes/adapters/licenses.php:2371
+#: includes/adapters/licenses.php:2374
 msgid "cloud access key (free trial, then paid)"
 msgstr "molnåtkomstnyckel (gratis testperiod, sedan betald)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key (trial)"
 msgstr "molnåtkomstnyckel (testperiod)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key"
 msgstr "molnåtkomstnyckel"
 
-#: includes/adapters/licenses.php:2380
+#: includes/adapters/licenses.php:2383
 msgid "CleanTalk did not accept this access key"
 msgstr "CleanTalk godkände inte den här åtkomstnyckeln"
 
-#: includes/adapters/licenses.php:2413
+#: includes/adapters/licenses.php:2416
 msgid "not connected; official extension subscriptions and updates ride this link"
 msgstr "inte ansluten; officiella tilläggsprenumerationer och uppdateringar går via den här länken"
 
 #. translators: %d: number of WooCommerce.com extension subscriptions.
-#: includes/adapters/licenses.php:2420
+#: includes/adapters/licenses.php:2423
 msgid "%d extension subscription"
 msgid_plural "%d extension subscriptions"
 msgstr[0] "%d tilläggsprenumeration"
 msgstr[1] "%d tilläggsprenumerationer"
 
-#: includes/adapters/licenses.php:2448
+#: includes/adapters/licenses.php:2451
 msgid "store not connected; orders, customers and products all live in SureCart"
 msgstr "butik inte ansluten; ordrar, kunder och produkter ligger alla i SureCart"
 
-#: includes/adapters/licenses.php:2455
+#: includes/adapters/licenses.php:2458
 msgid "store connected"
 msgstr "butik ansluten"
 
-#: includes/adapters/licenses.php:2476
+#: includes/adapters/licenses.php:2479
 msgid "not set up; connect on the Site Kit screen"
 msgstr "inte konfigurerad; anslut på Site Kit-skärmen"
 
-#: includes/adapters/licenses.php:2479
+#: includes/adapters/licenses.php:2482
 msgid "site credentials stored; no admin has finished connecting a Google account"
 msgstr "webbplatsuppgifter sparade; ingen administratör har slutfört anslutningen av ett Google-konto"
 
-#: includes/adapters/licenses.php:2481
+#: includes/adapters/licenses.php:2484
 msgid "Google account connected"
 msgstr "Google-konto anslutet"
 
-#: includes/adapters/licenses.php:2504
+#: includes/adapters/licenses.php:2507
 msgid "not connected to WordPress.com"
 msgstr "inte ansluten till WordPress.com"
 
 #. translators: %d: WordPress.com site ID.
-#: includes/adapters/licenses.php:2507
+#: includes/adapters/licenses.php:2510
 msgid "connected to WordPress.com (site ID %d)"
 msgstr "ansluten till WordPress.com (webbplats-ID %d)"
 
 #. translators: %s: WordPress.com user login name.
-#: includes/adapters/licenses.php:2512
+#: includes/adapters/licenses.php:2515
 msgid "connected to WordPress.com as %s"
 msgstr "ansluten till WordPress.com som %s"
 
-#: includes/adapters/licenses.php:2547
+#: includes/adapters/licenses.php:2550
 msgid "key stored; no subscription details recorded yet"
 msgstr "nyckel sparad; inga prenumerationsuppgifter registrerade ännu"
 
-#: includes/adapters/licenses.php:2590
+#: includes/adapters/licenses.php:2593
 msgid "Gravity Perks re-checks every 12 hours; no cached status"
 msgstr "Gravity Perks kontrollerar igen var 12:e timme; ingen cachad status"
 
-#: includes/adapters/licenses.php:2618
+#: includes/adapters/licenses.php:2621
 msgid "connects through a rankmath.com account"
 msgstr "ansluter via ett rankmath.com-konto"
 
-#: includes/adapters/licenses.php:2621
+#: includes/adapters/licenses.php:2624
 msgid "connected; plan: "
 msgstr "ansluten; plan: "
 
-#: includes/adapters/licenses.php:2641
+#: includes/adapters/licenses.php:2644
 msgid "requires free Yoast SEO (wordpress-seo)"
 msgstr "kräver gratis Yoast SEO (wordpress-seo)"
 
-#: includes/adapters/licenses.php:2649
+#: includes/adapters/licenses.php:2652
 msgid "activate free Yoast SEO to read MyYoast subscription state"
 msgstr "aktivera gratis Yoast SEO för att läsa MyYoast-prenumerationsstatus"
 
-#: includes/adapters/licenses.php:2660
+#: includes/adapters/licenses.php:2663
 msgid "activate the subscription on MyYoast"
 msgstr "aktivera prenumerationen på MyYoast"
 
-#: includes/adapters/licenses.php:2674
+#: includes/adapters/licenses.php:2677
 msgid "MyYoast subscription"
 msgstr "MyYoast-prenumeration"
 
-#: includes/adapters/licenses.php:2683
+#: includes/adapters/licenses.php:2686
 msgid "MyYoast subscription inactive or expired"
 msgstr "MyYoast-prenumeration inaktiv eller utgången"
 
-#: includes/adapters/licenses.php:2689
+#: includes/adapters/licenses.php:2692
 msgid "could not read MyYoast subscription state"
 msgstr "kunde inte läsa MyYoast-prenumerationsstatus"
 
-#: includes/adapters/licenses.php:2805
+#: includes/adapters/licenses.php:2808
 msgid "key defined in wp-config.php"
 msgstr "nyckel definierad i wp-config.php"
 
-#: includes/adapters/licenses.php:2849
+#: includes/adapters/licenses.php:2852
 msgid "code stored but not registered"
 msgstr "kod sparad men inte registrerad"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "activation was canceled remotely"
 msgstr "aktiveringen avbröts på distans"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "code stored but the site is not authorized"
 msgstr "kod sparad men webbplatsen är inte auktoriserad"
 
-#: includes/adapters/licenses.php:2895
+#: includes/adapters/licenses.php:2898
 msgid "no account token or item tokens stored"
 msgstr "ingen kontotoken eller artikel-token sparad"
 
-#: includes/adapters/licenses.php:2905
+#: includes/adapters/licenses.php:2908
 msgid "Envato keeps no local validity record"
 msgstr "Envato sparar ingen lokal giltighetspost"
 
-#: includes/adapters/licenses.php:2906
+#: includes/adapters/licenses.php:2909
 msgid "Envato Market account token"
 msgstr "Envato Market-kontotoken"
 
-#: includes/adapters/licenses.php:2914
+#: includes/adapters/licenses.php:2917
 msgid "Envato single-item token"
 msgstr "Envato-token för en artikel"
 
-#: includes/adapters/licenses.php:2937
+#: includes/adapters/licenses.php:2940
 msgid "covers the bundled Avada plugins"
 msgstr "täcker de medföljande Avada-tilläggen"
 
-#: includes/adapters/licenses.php:3010
+#: includes/adapters/licenses.php:3013
 msgid "key ships inside the plugin build"
 msgstr "nyckeln följer med i tilläggsbygget"
 
-#: includes/adapters/licenses.php:3055
+#: includes/adapters/licenses.php:3058
 msgid "key stored but not activated on this site"
 msgstr "nyckel sparad men inte aktiverad på den här webbplatsen"
 
-#: includes/adapters/licenses.php:3161
+#: includes/adapters/licenses.php:3164
 msgid "Purchase code"
 msgstr "Inköpskod"
 
-#: includes/adapters/licenses.php:3165
-#: includes/adapters/licenses.php:3182
-#: includes/adapters/licenses.php:3196
+#: includes/adapters/licenses.php:3168
+#: includes/adapters/licenses.php:3185
+#: includes/adapters/licenses.php:3199
 msgid "Slider Revolution's license class could not be loaded."
 msgstr "Slider Revolutions licensklass kunde inte läsas in."
 
-#: includes/adapters/licenses.php:3172
+#: includes/adapters/licenses.php:3175
 msgid "This purchase code is already registered to another site. Deregister it there (or in your ThemePunch account) first."
 msgstr "Den här inköpskoden är redan registrerad på en annan webbplats. Avregistrera den där (eller i ditt ThemePunch-konto) först."
 
-#: includes/adapters/licenses.php:3175
+#: includes/adapters/licenses.php:3178
 msgid "ThemePunch reports this purchase code as banned."
 msgstr "ThemePunch rapporterar den här inköpskoden som blockerad."
 
-#: includes/adapters/licenses.php:3177
+#: includes/adapters/licenses.php:3180
 msgid "ThemePunch did not accept this purchase code."
 msgstr "ThemePunch accepterade inte den här inköpskoden."
 
-#: includes/adapters/licenses.php:3186
+#: includes/adapters/licenses.php:3189
 msgid "The purchase code was deregistered with ThemePunch and the seat freed."
 msgstr "Inköpskoden avregistrerades hos ThemePunch och platsen frigjordes."
 
-#: includes/adapters/licenses.php:3187
+#: includes/adapters/licenses.php:3190
 msgid "ThemePunch did not confirm the deregistration."
 msgstr "ThemePunch bekräftade inte avregistreringen."
 
-#: includes/adapters/licenses.php:3192
+#: includes/adapters/licenses.php:3195
 msgid "No purchase code is stored."
 msgstr "Ingen inköpskod är sparad."
 
-#: includes/adapters/licenses.php:3204
+#: includes/adapters/licenses.php:3207
 msgid "exist"
 msgstr "finns"
 
-#: includes/adapters/licenses.php:3225
+#: includes/adapters/licenses.php:3228
 msgid "HappyFiles recorded no response; the activation request may not have reached happyfiles.io. The key has been kept, because happyfiles.io may already have counted the activation."
 msgstr "HappyFiles registrerade inget svar; aktiveringsbegäran kanske inte nådde happyfiles.io. Nyckeln har behållits eftersom happyfiles.io kanske redan har räknat aktiveringen."
 
-#: includes/adapters/licenses.php:3229
+#: includes/adapters/licenses.php:3232
 msgid "happyfiles.io did not accept this license key."
 msgstr "happyfiles.io godkände inte den här licensnyckeln."
 
-#: includes/adapters/licenses.php:3255
+#: includes/adapters/licenses.php:3258
 msgid "HappyFiles license key"
 msgstr "Licensnyckel för HappyFiles"
 
-#: includes/adapters/licenses.php:3281
-#: includes/adapters/licenses.php:3293
-#: includes/adapters/licenses.php:4609
-#: includes/adapters/licenses.php:4704
+#: includes/adapters/licenses.php:3284
+#: includes/adapters/licenses.php:3296
+#: includes/adapters/licenses.php:4612
+#: includes/adapters/licenses.php:4707
 msgid "No license key is stored."
 msgstr "Ingen licensnyckel är sparad."
 
-#: includes/adapters/licenses.php:3288
+#: includes/adapters/licenses.php:3291
 msgid "The license key was removed and the site deregistered with happyfiles.io."
 msgstr "Licensnyckeln togs bort och webbplatsen avregistrerades hos happyfiles.io."
 
-#: includes/adapters/licenses.php:3321
+#: includes/adapters/licenses.php:3324
 msgid "The key validation service did not answer."
 msgstr "Tjänsten för nyckelvalidering svarade inte."
 
-#: includes/adapters/licenses.php:3331
+#: includes/adapters/licenses.php:3334
 #: assets/js/app.js:27673
 msgid "The key was not accepted."
 msgstr "Nyckeln accepterades inte."
 
 #. translators: %s: name of the licensed product.
-#: includes/adapters/licenses.php:3338
-#: includes/adapters/licenses.php:5209
+#: includes/adapters/licenses.php:3341
+#: includes/adapters/licenses.php:5212
 msgid "%s license key"
 msgstr "%s licensnyckel"
 
-#: includes/adapters/licenses.php:3385
+#: includes/adapters/licenses.php:3388
 msgid "The stored key was cleared, but this plugin build ships with the key embedded and will re-register it. Manage licensed domains on theeventscalendar.com."
 msgstr "Den sparade nyckeln rensades, men det här tilläggsbygget har nyckeln inbäddad och registrerar den igen. Hantera licensierade domäner på theeventscalendar.com."
 
-#: includes/adapters/licenses.php:3386
+#: includes/adapters/licenses.php:3389
 msgid "The key was removed from this site. Manage its licensed domains on theeventscalendar.com."
 msgstr "Nyckeln togs bort från den här webbplatsen. Hantera dess licensierade domäner på theeventscalendar.com."
 
-#: includes/adapters/licenses.php:3393
+#: includes/adapters/licenses.php:3396
 msgid "No key is stored for this product."
 msgstr "Ingen nyckel är sparad för den här produkten."
 
-#: includes/adapters/licenses.php:3429
+#: includes/adapters/licenses.php:3432
 msgid "The Kadence licensing service did not answer."
 msgstr "Kadence licensieringstjänst svarade inte."
 
-#: includes/adapters/licenses.php:3436
+#: includes/adapters/licenses.php:3439
 msgid "unreachable"
 msgstr "otillgänglig"
 
-#: includes/adapters/licenses.php:3438
+#: includes/adapters/licenses.php:3441
 msgid "Kadence license key"
 msgstr "Kadence licensnyckel"
 
-#: includes/adapters/licenses.php:3473
+#: includes/adapters/licenses.php:3476
 msgid "The stored key was cleared. A key baked into the plugin build remains as the fallback."
 msgstr "Den sparade nyckeln rensades. En nyckel inbakad i tilläggsbygget finns kvar som reserv."
 
-#: includes/adapters/licenses.php:3474
+#: includes/adapters/licenses.php:3477
 msgid "The stored key was cleared from this site."
 msgstr "Den sparade nyckeln rensades från den här webbplatsen."
 
-#: includes/adapters/licenses.php:3491
+#: includes/adapters/licenses.php:3494
 msgid "Elementor Pro license key"
 msgstr "Elementor Pro licensnyckel"
 
-#: includes/adapters/licenses.php:3501
-#: includes/adapters/licenses.php:3502
+#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3505
 msgid "Elementor does not recognize that key"
 msgstr "Elementor känner inte igen den nyckeln"
 
-#: includes/adapters/licenses.php:3503
+#: includes/adapters/licenses.php:3506
 msgid "That Elementor Pro license has expired"
 msgstr "Den Elementor Pro-licensen har gått ut"
 
-#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3507
 msgid "That license was disabled"
 msgstr "Den licensen inaktiverades"
 
-#: includes/adapters/licenses.php:3505
+#: includes/adapters/licenses.php:3508
 msgid "That subscription was cancelled"
 msgstr "Den prenumerationen avbröts"
 
-#: includes/adapters/licenses.php:3506
+#: includes/adapters/licenses.php:3509
 msgid "That license was revoked"
 msgstr "Den licensen återkallades"
 
-#: includes/adapters/licenses.php:3507
+#: includes/adapters/licenses.php:3510
 msgid "That key is registered to a different domain"
 msgstr "Den nyckeln är registrerad på en annan domän"
 
-#: includes/adapters/licenses.php:3530
+#: includes/adapters/licenses.php:3533
 msgid "Elementor did not confirm the license"
 msgstr "Elementor bekräftade inte licensen"
 
-#: includes/adapters/licenses.php:3577
+#: includes/adapters/licenses.php:3580
 msgid "Essential Addons license key"
 msgstr "Licensnyckel för Essential Addons"
 
-#: includes/adapters/licenses.php:3581
-#: includes/adapters/licenses.php:3602
-#: includes/adapters/licenses.php:3613
+#: includes/adapters/licenses.php:3584
+#: includes/adapters/licenses.php:3605
+#: includes/adapters/licenses.php:3616
 msgid "Essential Addons Pro is not loaded."
 msgstr "Essential Addons Pro är inte inläst."
 
-#: includes/adapters/licenses.php:3593
+#: includes/adapters/licenses.php:3596
 msgid "Essential Addons sent a confirmation code to the license email. Finish activation on its settings screen."
 msgstr "Essential Addons skickade en bekräftelsekod till licensens e-postadress. Slutför aktiveringen på dess inställningsskärm."
 
-#: includes/adapters/licenses.php:3636
+#: includes/adapters/licenses.php:3639
 msgid "ACF PRO license key"
 msgstr "ACF PRO licensnyckel"
 
-#: includes/adapters/licenses.php:3674
+#: includes/adapters/licenses.php:3677
 msgid "Independent Analytics license key"
 msgstr "Licensnyckel för Independent Analytics"
 
 #. translators: %s: the current administrator's email address.
-#: includes/adapters/licenses.php:3692
+#: includes/adapters/licenses.php:3695
 msgid "This site has not been connected yet, so activating registers it with freemius.com and sends your name, %s and the site address."
 msgstr "Den här webbplatsen har inte anslutits ännu, så aktiveringen registrerar den hos freemius.com och skickar ditt namn, %s och webbplatsens adress."
 
-#: includes/adapters/licenses.php:3693
+#: includes/adapters/licenses.php:3696
 msgid "your email address"
 msgstr "Din e-postadress"
 
-#: includes/adapters/licenses.php:3728
+#: includes/adapters/licenses.php:3731
 msgid "Crocoblock license key"
 msgstr "Crocoblock-licensnyckel"
 
-#: includes/adapters/licenses.php:3732
+#: includes/adapters/licenses.php:3735
 msgid "Paste the license key from your Crocoblock account."
 msgstr "Klistra in licensnyckeln från ditt Crocoblock-konto."
 
-#: includes/adapters/licenses.php:3739
+#: includes/adapters/licenses.php:3742
 msgid "Crocoblock accepted the key but sent no license details to store."
 msgstr "Crocoblock godkände nyckeln men skickade inga licensuppgifter att lagra."
 
-#: includes/adapters/licenses.php:3748
-#: includes/adapters/licenses.php:3764
+#: includes/adapters/licenses.php:3751
+#: includes/adapters/licenses.php:3767
 msgid "No Crocoblock key is stored."
 msgstr "Ingen Crocoblock-nyckel är lagrad."
 
-#: includes/adapters/licenses.php:3759
+#: includes/adapters/licenses.php:3762
 msgid "This site was removed from the license."
 msgstr "Den här webbplatsen togs bort från licensen."
 
-#: includes/adapters/licenses.php:3773
+#: includes/adapters/licenses.php:3776
 msgid "Crocoblock confirmed the license for this site."
 msgstr "Crocoblock bekräftade licensen för den här webbplatsen."
 
-#: includes/adapters/licenses.php:3803
+#: includes/adapters/licenses.php:3806
 msgid "The licensing service returned nothing readable"
 msgstr "Licenstjänsten returnerade inget läsbart"
 
-#: includes/adapters/licenses.php:3806
+#: includes/adapters/licenses.php:3809
 msgid "Could not reach the licensing service"
 msgstr "Kunde inte nå licenstjänsten"
 
-#: includes/adapters/licenses.php:3814
+#: includes/adapters/licenses.php:3817
 msgid "That subscription has expired. Migrations still run; updates and support stop."
 msgstr "Den prenumerationen har gått ut. Migreringar körs fortfarande; uppdateringar och support slutar."
 
-#: includes/adapters/licenses.php:3815
+#: includes/adapters/licenses.php:3818
 msgid "That subscription was cancelled."
 msgstr "Den prenumerationen avbröts."
 
-#: includes/adapters/licenses.php:3816
+#: includes/adapters/licenses.php:3819
 msgid "WP Migrate does not recognise that key."
 msgstr "WP Migrate känner inte igen den nyckeln."
 
-#: includes/adapters/licenses.php:3817
+#: includes/adapters/licenses.php:3820
 msgid "Every activation on that license is in use."
 msgstr "Alla aktiveringar på den licensen används."
 
-#: includes/adapters/licenses.php:3818
+#: includes/adapters/licenses.php:3821
 msgid "This site's activation was turned off for that license."
 msgstr "Den här webbplatsens aktivering stängdes av för den licensen."
 
-#: includes/adapters/licenses.php:3819
+#: includes/adapters/licenses.php:3822
 msgid "No license key was sent."
 msgstr "Ingen licensnyckel skickades."
 
-#: includes/adapters/licenses.php:3827
+#: includes/adapters/licenses.php:3830
 msgid "WP Migrate license key"
 msgstr "WP Migrate-licensnyckel"
 
-#: includes/adapters/licenses.php:3832
+#: includes/adapters/licenses.php:3835
 msgid "Enter a license key."
 msgstr "Ange en licensnyckel."
 
-#: includes/adapters/licenses.php:3835
+#: includes/adapters/licenses.php:3838
 msgid "This site sets its key in wp-config, which always wins. Change it there."
 msgstr "Den här webbplatsen anger nyckeln i wp-config, som alltid vinner. Ändra den där."
 
-#: includes/adapters/licenses.php:3866
+#: includes/adapters/licenses.php:3869
 msgid "This site sets its key in wp-config. Remove it there."
 msgstr "Den här webbplatsen anger nyckeln i wp-config. Ta bort den där."
 
-#: includes/adapters/licenses.php:3882
+#: includes/adapters/licenses.php:3885
 msgid "The key was removed from this site. WP Migrate has no way to release the activation remotely, so free the seat in your account if you need it elsewhere."
 msgstr "Nyckeln togs bort från den här webbplatsen. WP Migrate kan inte släppa aktiveringen på distans, så frigör platsen i ditt konto om du behöver den någon annanstans."
 
-#: includes/adapters/licenses.php:3890
+#: includes/adapters/licenses.php:3893
 msgid "No license key is stored on this site."
 msgstr "Ingen licensnyckel är lagrad på den här webbplatsen."
 
-#: includes/adapters/licenses.php:3921
+#: includes/adapters/licenses.php:3924
 msgid "Beaver Builder license key"
 msgstr "Beaver Builder licensnyckel"
 
-#: includes/adapters/licenses.php:3935
+#: includes/adapters/licenses.php:3938
 msgid "Beaver Builder reports the subscription as not active for this domain"
 msgstr "Beaver Builder rapporterar att prenumerationen inte är aktiv för den här domänen"
 
-#: includes/adapters/licenses.php:3943
+#: includes/adapters/licenses.php:3946
 msgid "Brizy Pro license key"
 msgstr "Brizy Pro licensnyckel"
 
-#: includes/adapters/licenses.php:3963
-#: includes/adapters/licenses.php:3978
+#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3981
 msgid "Breakdance did not recognize that key."
 msgstr "Breakdance kände inte igen den nyckeln."
 
-#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3969
 msgid "That key does not include Breakdance Pro."
 msgstr "Den nyckeln inkluderar inte Breakdance Pro."
 
-#: includes/adapters/licenses.php:3973
+#: includes/adapters/licenses.php:3976
 msgid "That Breakdance Pro license has expired."
 msgstr "Den Breakdance Pro-licens har löpt ut."
 
-#: includes/adapters/licenses.php:3976
+#: includes/adapters/licenses.php:3979
 msgid "Breakdance did not activate this site. Check the license site limit in your Breakdance account."
 msgstr "Breakdance aktiverade inte denna sida. Kontrollera gränsen för licenswebbplatsen i ditt Breakdance-konto."
 
-#: includes/adapters/licenses.php:3986
+#: includes/adapters/licenses.php:3989
 msgid "Breakdance Pro license key"
 msgstr "Licensnyckel för Breakdance Pro"
 
-#: includes/adapters/licenses.php:4014
+#: includes/adapters/licenses.php:4017
 msgid "No Breakdance Pro key is stored."
 msgstr "Ingen Breakdance Pro-nyckel är lagrad."
 
-#: includes/adapters/licenses.php:4022
+#: includes/adapters/licenses.php:4025
 msgid "Breakdance could not deactivate this license. Use its License screen to review the current status."
 msgstr "Breakdance kunde inte avaktivera denna licens. Använd dess licensskärm för att granska den aktuella statusen."
 
-#: includes/adapters/licenses.php:4027
+#: includes/adapters/licenses.php:4030
 msgid "Breakdance still reports this site as active, so the key was kept."
 msgstr "Breakdance rapporterar fortfarande denna sida som aktiv, så nyckeln behölls."
 
-#: includes/adapters/licenses.php:4036
+#: includes/adapters/licenses.php:4039
 msgid "The seat was freed, but the key could not be cleared here. Remove it on the Breakdance License screen."
 msgstr "Platsen frigjordes, men nyckeln kunde inte rensas här. Ta bort den på skärmen Breakdance License."
 
-#: includes/adapters/licenses.php:4039
+#: includes/adapters/licenses.php:4042
 msgid "The Breakdance Pro license was deactivated and its seat freed."
 msgstr "Licensen för Breakdance Pro avaktiverades och dess plats frigjordes."
 
-#: includes/adapters/licenses.php:4050
+#: includes/adapters/licenses.php:4053
 msgid "Bricks license key"
 msgstr "Bricks licensnyckel"
 
-#: includes/adapters/licenses.php:4058
+#: includes/adapters/licenses.php:4061
 msgid "The Bricks license server is temporarily unavailable"
 msgstr "Bricks licensserver är tillfälligt otillgänglig"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks returned status: %s"
 msgstr "Bricks returnerade status: %s"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks did not recognize that key"
 msgstr "Bricks kände inte igen den nyckeln"
 
-#: includes/adapters/licenses.php:4071
+#: includes/adapters/licenses.php:4074
 #: includes/class-minn-admin-rest.php:7978
 #: assets/js/app.js:24127
 msgid "active"
 msgstr "Aktivt"
 
-#: includes/adapters/licenses.php:4091
+#: includes/adapters/licenses.php:4094
 msgid "Novamira Pro license key"
 msgstr "Licensnyckel för Novamira Pro"
 
-#: includes/adapters/licenses.php:4125
+#: includes/adapters/licenses.php:4128
 msgid "Etch license key"
 msgstr "Etch licensnyckel"
 
-#: includes/adapters/licenses.php:4152
+#: includes/adapters/licenses.php:4155
 msgid "Elegant Themes reports the subscription as expired"
 msgstr "Elegant Themes rapporterar att prenumerationen har gått ut"
 
-#: includes/adapters/licenses.php:4153
+#: includes/adapters/licenses.php:4156
 msgid "Elegant Themes does not recognize that username"
 msgstr "Elegant Themes känner inte igen det användarnamnet"
 
-#: includes/adapters/licenses.php:4154
+#: includes/adapters/licenses.php:4157
 msgid "Elegant Themes did not confirm the account"
 msgstr "Elegant Themes bekräftade inte kontot"
 
-#: includes/adapters/licenses.php:4159
+#: includes/adapters/licenses.php:4162
 msgid "Elegant Themes username"
 msgstr "Elegant Themes-användarnamn"
 
-#: includes/adapters/licenses.php:4160
+#: includes/adapters/licenses.php:4163
 msgid "API key"
 msgstr "API-nyckel"
 
-#: includes/adapters/licenses.php:4190
+#: includes/adapters/licenses.php:4193
 msgid "Credentials removed; Elegant Themes has no per-site seats to release"
 msgstr "Uppgifterna togs bort; Elegant Themes har inga platser per webbplats att frigöra"
 
-#: includes/adapters/licenses.php:4208
+#: includes/adapters/licenses.php:4211
 msgid "Gravity Forms did not validate the key"
 msgstr "Gravity Forms validerade inte nyckeln"
 
-#: includes/adapters/licenses.php:4210
+#: includes/adapters/licenses.php:4213
 msgid "Gravity Forms license key"
 msgstr "Gravity Forms licensnyckel"
 
-#: includes/adapters/licenses.php:4217
+#: includes/adapters/licenses.php:4220
 msgid "Gravity Forms did not accept that key"
 msgstr "Gravity Forms accepterade inte den nyckeln"
 
-#: includes/adapters/licenses.php:4237
+#: includes/adapters/licenses.php:4240
 msgid "Site unlinked from the license"
 msgstr "Webbplatsen frånkopplad från licensen"
 
-#: includes/adapters/licenses.php:4259
+#: includes/adapters/licenses.php:4262
 msgid "Gravity did not recognize that key"
 msgstr "Gravity kände inte igen den nyckeln"
 
-#: includes/adapters/licenses.php:4269
+#: includes/adapters/licenses.php:4272
 msgid "Gravity SMTP license key"
 msgstr "Gravity SMTP licensnyckel"
 
-#: includes/adapters/licenses.php:4309
+#: includes/adapters/licenses.php:4312
 msgid "WPMU DEV API key"
 msgstr "WPMU DEV API-nyckel"
 
-#: includes/adapters/licenses.php:4329
+#: includes/adapters/licenses.php:4332
 msgid "Could not reach the WPMU DEV Hub"
 msgstr "Kunde inte nå WPMU DEV Hub"
 
-#: includes/adapters/licenses.php:4333
+#: includes/adapters/licenses.php:4336
 msgid "The Hub did not recognize that API key"
 msgstr "Hubben kände inte igen den API-nyckeln"
 
-#: includes/adapters/licenses.php:4347
+#: includes/adapters/licenses.php:4350
 msgid "The Hub reports no active membership for this key"
 msgstr "Hubben rapporterar inget aktivt medlemskap för den här nyckeln"
 
-#: includes/adapters/licenses.php:4355
+#: includes/adapters/licenses.php:4358
 msgid "SearchWP license key"
 msgstr "SearchWP licensnyckel"
 
-#: includes/adapters/licenses.php:4364
+#: includes/adapters/licenses.php:4367
 msgid "SearchWP did not accept that key"
 msgstr "SearchWP accepterade inte den nyckeln"
 
-#: includes/adapters/licenses.php:4381
+#: includes/adapters/licenses.php:4384
 msgid "SearchWP did not confirm the license"
 msgstr "SearchWP bekräftade inte licensen"
 
-#: includes/adapters/licenses.php:4402
+#: includes/adapters/licenses.php:4405
 msgid "WPForms license key"
 msgstr "WPForms licensnyckel"
 
-#: includes/adapters/licenses.php:4409
+#: includes/adapters/licenses.php:4412
 msgid "WPForms did not accept that key"
 msgstr "WPForms accepterade inte den nyckeln"
 
-#: includes/adapters/licenses.php:4415
+#: includes/adapters/licenses.php:4418
 msgid "The key is defined in wp-config (WPFORMS_LICENSE_KEY); remove the constant to deactivate."
 msgstr "Nyckeln är definierad i wp-config (WPFORMS_LICENSE_KEY); ta bort konstanten för att inaktivera."
 
-#: includes/adapters/licenses.php:4435
+#: includes/adapters/licenses.php:4438
 msgid "Could not reach the WPForms license API"
 msgstr "Kunde inte nå WPForms licens-API"
 
 #. translators: %s: status word returned by the WPForms license API.
-#: includes/adapters/licenses.php:4440
+#: includes/adapters/licenses.php:4443
 msgid "License check returned: %s"
 msgstr "Licenskontrollen returnerade: %s"
 
-#: includes/adapters/licenses.php:4462
+#: includes/adapters/licenses.php:4465
 msgid "Akismet API key"
 msgstr "Akismet API-nyckel"
 
-#: includes/adapters/licenses.php:4465
+#: includes/adapters/licenses.php:4468
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); it cannot be changed here."
 msgstr "Nyckeln anges i kod (WPCOM_API_KEY eller ett filter); den kan inte ändras här."
 
-#: includes/adapters/licenses.php:4469
+#: includes/adapters/licenses.php:4472
 msgid "That does not look like an Akismet key (12 characters, letters a-f and digits)."
 msgstr "Det ser inte ut som en Akismet-nyckel (12 tecken, bokstäverna a-f och siffror)."
 
-#: includes/adapters/licenses.php:4472
+#: includes/adapters/licenses.php:4475
 msgid "Akismet admin machinery unavailable."
 msgstr "Akismets adminmaskineri är inte tillgängligt."
 
-#: includes/adapters/licenses.php:4480
+#: includes/adapters/licenses.php:4483
 msgid "The key is real but its Akismet plan is not active (missing, cancelled or suspended subscription)."
 msgstr "Nyckeln är äkta men dess Akismet-plan är inte aktiv (saknad, avbruten eller pausad prenumeration)."
 
-#: includes/adapters/licenses.php:4483
+#: includes/adapters/licenses.php:4486
 msgid "Akismet did not recognize that key."
 msgstr "Akismet kände inte igen den nyckeln."
 
-#: includes/adapters/licenses.php:4485
+#: includes/adapters/licenses.php:4488
 msgid "Could not reach the Akismet API. Please try again."
 msgstr "Kunde inte nå Akismet API. Försök igen."
 
-#: includes/adapters/licenses.php:4489
+#: includes/adapters/licenses.php:4492
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); remove it there."
 msgstr "Nyckeln anges i kod (WPCOM_API_KEY eller ett filter); ta bort den där."
 
-#: includes/adapters/licenses.php:4513
+#: includes/adapters/licenses.php:4516
 msgid "Akismet reports this key as invalid."
 msgstr "Akismet rapporterar den här nyckeln som ogiltig."
 
-#: includes/adapters/licenses.php:4515
+#: includes/adapters/licenses.php:4518
 msgid "Could not reach the Akismet API."
 msgstr "Kunde inte nå Akismet API."
 
-#: includes/adapters/licenses.php:4523
+#: includes/adapters/licenses.php:4526
 msgid "CleanTalk access key"
 msgstr "CleanTalk-åtkomstnyckel"
 
-#: includes/adapters/licenses.php:4553
+#: includes/adapters/licenses.php:4556
 msgid "This license has reached its activation limit. Free a seat on searchandfilter.com first."
 msgstr "Den här licensen har nått sin aktiveringsgräns. Frigör en plats på searchandfilter.com först."
 
-#: includes/adapters/licenses.php:4556
+#: includes/adapters/licenses.php:4559
 msgid "This Search & Filter license has expired."
 msgstr "Den här Search & Filter-licensen har gått ut."
 
-#: includes/adapters/licenses.php:4562
+#: includes/adapters/licenses.php:4565
 msgid "searchandfilter.com does not recognize that key."
 msgstr "searchandfilter.com känner inte igen den nyckeln."
 
-#: includes/adapters/licenses.php:4564
+#: includes/adapters/licenses.php:4567
 msgid "searchandfilter.com did not accept that key."
 msgstr "searchandfilter.com accepterade inte den nyckeln."
 
-#: includes/adapters/licenses.php:4566
+#: includes/adapters/licenses.php:4569
 msgid "Search & Filter license key"
 msgstr "Search & Filter licensnyckel"
 
-#: includes/adapters/licenses.php:4601
+#: includes/adapters/licenses.php:4604
 msgid "The license was disconnected and the seat freed."
 msgstr "Licensen kopplades från och platsen frigjordes."
 
-#: includes/adapters/licenses.php:4603
+#: includes/adapters/licenses.php:4606
 msgid "Search & Filter could not disconnect the license."
 msgstr "Search & Filter kunde inte koppla från licensen."
 
-#: includes/adapters/licenses.php:4633
+#: includes/adapters/licenses.php:4636
 msgid "This license has reached its activation limit."
 msgstr "Den här licensen har nått sin aktiveringsgräns."
 
-#: includes/adapters/licenses.php:4636
+#: includes/adapters/licenses.php:4639
 msgid "This Admin Columns license has expired."
 msgstr "Den här Admin Columns-licensen har gått ut."
 
-#: includes/adapters/licenses.php:4638
+#: includes/adapters/licenses.php:4641
 msgid "admincolumns.com did not accept that key."
 msgstr "admincolumns.com accepterade inte den nyckeln."
 
-#: includes/adapters/licenses.php:4640
+#: includes/adapters/licenses.php:4643
 msgid "Admin Columns Pro license key"
 msgstr "Admin Columns Pro licensnyckel"
 
-#: includes/adapters/licenses.php:4646
+#: includes/adapters/licenses.php:4649
 msgid "That does not look like an Admin Columns key (they are long and contain a dash)."
 msgstr "Det ser inte ut som en Admin Columns-nyckel (de är långa och innehåller ett bindestreck)."
 
-#: includes/adapters/licenses.php:4662
+#: includes/adapters/licenses.php:4665
 msgid "admincolumns.com accepted the key but returned an invalid activation token."
 msgstr "admincolumns.com accepterade nyckeln men returnerade en ogiltig aktiveringstoken."
 
-#: includes/adapters/licenses.php:4681
+#: includes/adapters/licenses.php:4684
 msgid "No activation was stored; local license state cleared."
 msgstr "Ingen aktivering var sparad; lokal licensstatus rensades."
 
 #. translators: %s: error message reported by admincolumns.com.
-#: includes/adapters/licenses.php:4693
+#: includes/adapters/licenses.php:4696
 msgid "Local license state was cleared, but admincolumns.com reported: %s"
 msgstr "Lokal licensstatus rensades, men admincolumns.com rapporterade: %s"
 
-#: includes/adapters/licenses.php:4699
+#: includes/adapters/licenses.php:4702
 msgid "The license was deactivated and the seat freed."
 msgstr "Licensen inaktiverades och platsen frigjordes."
 
-#: includes/adapters/licenses.php:4730
+#: includes/adapters/licenses.php:4733
 msgid "Gravity Perks license key"
 msgstr "Gravity Perks licensnyckel"
 
-#: includes/adapters/licenses.php:4746
+#: includes/adapters/licenses.php:4749
 msgid "That key has reached its site limit"
 msgstr "Den nyckeln har nått sin webbplatsgräns"
 
-#: includes/adapters/licenses.php:4748
+#: includes/adapters/licenses.php:4751
 msgid "Gravity Wiz did not validate that key"
 msgstr "Gravity Wiz validerade inte den nyckeln"
 
-#: includes/adapters/licenses.php:4759
+#: includes/adapters/licenses.php:4762
 msgid "Gravity Wiz reports the license as not valid for this site"
 msgstr "Gravity Wiz rapporterar licensen som inte giltig för den här webbplatsen"
 
-#: includes/adapters/licenses.php:4773
+#: includes/adapters/licenses.php:4776
 msgid "Perfmatters license key"
 msgstr "Perfmatters licensnyckel"
 
-#: includes/adapters/licenses.php:4790
+#: includes/adapters/licenses.php:4793
 msgid "Perfmatters did not accept that key"
 msgstr "Perfmatters accepterade inte den nyckeln"
 
-#: includes/adapters/licenses.php:4801
+#: includes/adapters/licenses.php:4804
 msgid "Perfmatters could not release this site"
 msgstr "Perfmatters kunde inte släppa den här webbplatsen"
 
-#: includes/adapters/licenses.php:4807
+#: includes/adapters/licenses.php:4810
 msgid "No response from the Perfmatters server"
 msgstr "Inget svar från Perfmatters-servern"
 
-#: includes/adapters/licenses.php:4842
+#: includes/adapters/licenses.php:4845
 msgid "Automatic.css license key"
 msgstr "Automatic.css-licensnyckel"
 
-#: includes/adapters/licenses.php:4848
+#: includes/adapters/licenses.php:4851
 msgid "That looks like the masked key from Automatic.css’s screen — paste the full license key."
 msgstr "Det ser ut som den maskerade nyckeln från Automatic.css:s skärm — klistra in den fullständiga licensnyckeln."
 
-#: includes/adapters/licenses.php:4852
-#: includes/adapters/licenses.php:4887
+#: includes/adapters/licenses.php:4855
+#: includes/adapters/licenses.php:4890
 msgid "No response from the Automatic.css server."
 msgstr "Inget svar från Automatic.css-servern."
 
-#: includes/adapters/licenses.php:4876
+#: includes/adapters/licenses.php:4879
 msgid "Automatic.css deactivated; the seat was released."
 msgstr "Automatic.css inaktiverades; platsen släpptes."
 
-#: includes/adapters/licenses.php:4877
+#: includes/adapters/licenses.php:4880
 msgid "Key removed from this site. Automatic.css did not confirm releasing the seat — check the account if the activation count matters."
 msgstr "Nyckeln togs bort från den här webbplatsen. Automatic.css bekräftade inte att platsen släpptes — kontrollera kontot om aktiveringsantalet spelar roll."
 
-#: includes/adapters/licenses.php:4883
+#: includes/adapters/licenses.php:4886
 msgid "No Automatic.css key is stored."
 msgstr "Ingen Automatic.css-nyckel är lagrad."
 
-#: includes/adapters/licenses.php:4937
+#: includes/adapters/licenses.php:4940
 msgid "SEOPress PRO license key"
 msgstr "SEOPress PRO-licensnyckel"
 
-#: includes/adapters/licenses.php:4941
+#: includes/adapters/licenses.php:4944
 msgid "The key is defined in wp-config.php (SEOPRESS_LICENSE_KEY) — change it there."
 msgstr "Nyckeln är definierad i wp-config.php (SEOPRESS_LICENSE_KEY) — ändra den där."
 
-#: includes/adapters/licenses.php:4946
-#: includes/adapters/licenses.php:4997
+#: includes/adapters/licenses.php:4949
+#: includes/adapters/licenses.php:5000
 msgid "No response from the SEOPress server."
 msgstr "Inget svar från SEOPress-servern."
 
-#: includes/adapters/licenses.php:4965
-#: includes/adapters/licenses.php:4993
+#: includes/adapters/licenses.php:4968
+#: includes/adapters/licenses.php:4996
 msgid "No SEOPress PRO key is stored."
 msgstr "Ingen SEOPress PRO-nyckel är lagrad."
 
-#: includes/adapters/licenses.php:4972
+#: includes/adapters/licenses.php:4975
 msgid "SEOPress did not confirm the deactivation — nothing was changed."
 msgstr "SEOPress bekräftade inte inaktiveringen — ingenting ändrades."
 
-#: includes/adapters/licenses.php:4986
+#: includes/adapters/licenses.php:4989
 msgid "Seat released. The key itself is defined in wp-config.php and stays there."
 msgstr "Platsen släpptes. Själva nyckeln är definierad i wp-config.php och stannar där."
 
-#: includes/adapters/licenses.php:5037
+#: includes/adapters/licenses.php:5040
 msgid "GP Premium license key"
 msgstr "GP Premium licensnyckel"
 
-#: includes/adapters/licenses.php:5062
+#: includes/adapters/licenses.php:5065
 msgid "wpallimport.com did not confirm the license"
 msgstr "wpallimport.com bekräftade inte licensen"
 
-#: includes/adapters/licenses.php:5064
+#: includes/adapters/licenses.php:5067
 msgid "WP All Export license key"
 msgstr "WP All Export licensnyckel"
 
-#: includes/adapters/licenses.php:5085
+#: includes/adapters/licenses.php:5088
 msgid "Could not reach wpallimport.com (or no key is stored)"
 msgstr "Kunde inte nå wpallimport.com (eller ingen nyckel är sparad)"
 
-#: includes/adapters/licenses.php:5099
-#: includes/adapters/licenses.php:5146
+#: includes/adapters/licenses.php:5102
+#: includes/adapters/licenses.php:5149
 msgid "The key was removed from this site. Soflyy licenses have no per-site seats to free."
 msgstr "Nyckeln togs bort från den här webbplatsen. Soflyy-licenser har inga platser per webbplats att frigöra."
 
-#: includes/adapters/licenses.php:5113
+#: includes/adapters/licenses.php:5116
 msgid "wpallimport.com did not answer"
 msgstr "wpallimport.com svarade inte"
 
-#: includes/adapters/licenses.php:5115
+#: includes/adapters/licenses.php:5118
 msgid "WP All Import license key"
 msgstr "WP All Import licensnyckel"
 
-#: includes/adapters/licenses.php:5156
+#: includes/adapters/licenses.php:5159
 msgid "No key is stored."
 msgstr "Ingen nyckel är sparad."
 
-#: includes/adapters/licenses.php:5181
+#: includes/adapters/licenses.php:5184
 msgid "Kreatura did not accept that license key"
 msgstr "Kreatura accepterade inte den licensnyckeln"
 
-#: includes/adapters/licenses.php:5185
+#: includes/adapters/licenses.php:5188
 msgid "LayerSlider license key"
 msgstr "LayerSlider licensnyckel"
 
-#: includes/adapters/licenses.php:5190
+#: includes/adapters/licenses.php:5193
 msgid "No license key stored"
 msgstr "Ingen licensnyckel sparad"
 
-#: includes/adapters/licenses.php:5214
+#: includes/adapters/licenses.php:5217
 msgid "Missing license key or product name"
 msgstr "Saknad licensnyckel eller produktnamn"
 
-#: includes/adapters/licenses.php:5260
+#: includes/adapters/licenses.php:5263
 msgid "No active Smash Balloon license on this product"
 msgstr "Ingen aktiv Smash Balloon-licens på den här produkten"
 
-#: includes/adapters/licenses.php:5264
+#: includes/adapters/licenses.php:5267
 msgid "License deactivated for "
 msgstr "Licens inaktiverad för "
 
-#: includes/adapters/licenses.php:5270
+#: includes/adapters/licenses.php:5273
 msgid "No key is stored"
 msgstr "Ingen nyckel är sparad"
 
-#: includes/adapters/licenses.php:5330
+#: includes/adapters/licenses.php:5333
 msgid "MyYoast reports a valid Premium subscription"
 msgstr "MyYoast rapporterar en giltig Premium-prenumeration"
 
-#: includes/adapters/licenses.php:5334
+#: includes/adapters/licenses.php:5337
 msgid "No Premium subscription linked to this site on MyYoast"
 msgstr "Ingen Premium-prenumeration kopplad till den här webbplatsen på MyYoast"
 
-#: includes/adapters/licenses.php:5336
+#: includes/adapters/licenses.php:5339
 msgid "MyYoast reports the Premium subscription is inactive or expired"
 msgstr "MyYoast rapporterar att Premium-prenumerationen är inaktiv eller utgången"
 
-#: includes/adapters/licenses.php:5338
+#: includes/adapters/licenses.php:5341
 msgid "Could not refresh MyYoast subscription state"
 msgstr "Kunde inte uppdatera MyYoast-prenumerationsstatus"
 
-#: includes/adapters/licenses.php:5374
+#: includes/adapters/licenses.php:5377
 msgid "Freemius-powered; no account state recorded yet"
 msgstr "Freemius-driven; ingen kontostatus registrerad ännu"
 
-#: includes/adapters/licenses.php:5409
+#: includes/adapters/licenses.php:5412
 msgid "Premium install with no license attached"
 msgstr "Premium-installation utan kopplad licens"
 
-#: includes/adapters/licenses.php:5531
-#: includes/adapters/licenses.php:5589
-#: includes/adapters/licenses.php:5623
+#: includes/adapters/licenses.php:5534
+#: includes/adapters/licenses.php:5592
+#: includes/adapters/licenses.php:5626
 msgid "The plugin is not loaded."
 msgstr "Tillägget är inte inläst."
 
-#: includes/adapters/licenses.php:5535
-#: includes/adapters/licenses.php:6286
+#: includes/adapters/licenses.php:5538
+#: includes/adapters/licenses.php:6293
 msgid "Paste a key first."
 msgstr "Klistra in en nyckel först."
 
-#: includes/adapters/licenses.php:5544
-#: includes/adapters/licenses.php:5552
+#: includes/adapters/licenses.php:5547
+#: includes/adapters/licenses.php:5555
 msgid "Freemius refused the key."
 msgstr "Freemius avvisade nyckeln."
 
-#: includes/adapters/licenses.php:5572
+#: includes/adapters/licenses.php:5575
 msgid "Freemius accepted the request but no active license is attached to this site."
 msgstr "Freemius godkände begäran men ingen aktiv licens är kopplad till den här webbplatsen."
 
-#: includes/adapters/licenses.php:5593
-#: includes/adapters/licenses.php:5639
+#: includes/adapters/licenses.php:5596
+#: includes/adapters/licenses.php:5642
 msgid "No license is attached to this site."
 msgstr "Ingen licens är kopplad till den här webbplatsen."
 
-#: includes/adapters/licenses.php:5611
+#: includes/adapters/licenses.php:5614
 msgid "Freemius did not release the license. Its Account screen shows the reason."
 msgstr "Freemius släppte inte licensen. Dess kontoskärm visar orsaken."
 
-#: includes/adapters/licenses.php:5626
+#: includes/adapters/licenses.php:5629
 msgid "This site is not connected to Freemius yet. Activate a key first."
 msgstr "Den här webbplatsen är inte ansluten till Freemius ännu. Aktivera en nyckel först."
 
-#: includes/adapters/licenses.php:5765
+#: includes/adapters/licenses.php:5768
 msgid "Activation stored; SureCart keeps no local expiry"
 msgstr "Aktivering lagrad; SureCart har inget lokalt utgångsdatum"
 
-#: includes/adapters/licenses.php:5766
+#: includes/adapters/licenses.php:5769
 msgid "Key stored without an activation record"
 msgstr "Nyckel lagrad utan aktiveringspost"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5877
+#: includes/adapters/licenses.php:5880
 msgid "verified %s ago from Minn"
 msgstr "verifierad för %s sedan från Minn"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5881
+#: includes/adapters/licenses.php:5884
 msgid "failed a check %s ago from Minn"
 msgstr "misslyckades med en kontroll för %s sedan från Minn"
 
-#: includes/adapters/licenses.php:5886
+#: includes/adapters/licenses.php:5889
 #: assets/js/app.js:21597
 msgid "License key"
 msgstr "Licensnyckel"
 
-#: includes/adapters/licenses.php:6008
+#: includes/adapters/licenses.php:6011
 msgid "core connector"
 msgstr "kärnans anslutare"
 
-#: includes/adapters/licenses.php:6267
+#: includes/adapters/licenses.php:6274
 msgid "No such action for this provider."
 msgstr "Ingen sådan åtgärd för den här leverantören."
 
-#: includes/adapters/licenses.php:6281
+#: includes/adapters/licenses.php:6288
 msgid "Fill in every field first."
 msgstr "Fyll i alla fält först."
 
 #. translators: %s: PHP constant name defined in wp-config.php.
-#: includes/adapters/licenses.php:6320
+#: includes/adapters/licenses.php:6327
 msgid "This key is defined in wp-config (%s), which takes precedence. Change it there."
 msgstr "Den här nyckeln är definierad i wp-config (%s), vilket har företräde. Ändra den där."
 
-#: includes/adapters/licenses.php:6333
+#: includes/adapters/licenses.php:6340
 msgid "The plugin reported an error during the request."
 msgstr "Tillägget rapporterade ett fel under begäran."
 
-#: includes/adapters/licenses.php:6403
+#: includes/adapters/licenses.php:6410
 msgid "Could not check for updates."
 msgstr "Kunde inte söka efter uppdateringar."
 
@@ -13698,82 +13698,88 @@ msgstr "Lägg till ny %s"
 msgid "No %s found."
 msgstr "Inga %s hittades."
 
-#: includes/class-minn-admin-cpt.php:461
+#: includes/class-minn-admin-cpt.php:491
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 20 characters max."
 msgstr "Slug krävs: gemener, siffror, bindestreck eller understreck, högst 20 tecken."
 
-#: includes/class-minn-admin-cpt.php:470
-#: includes/class-minn-admin-cpt.php:500
-#: includes/class-minn-admin-cpt.php:638
+#. translators: %s: the slug
+#: includes/class-minn-admin-cpt.php:497
 #: includes/class-minn-admin-cpt.php:670
+msgid "“%s” is a name WordPress reserves; pick another slug."
+msgstr "“%s” är ett namn som WordPress reserverar; välj en annan slug."
+
+#: includes/class-minn-admin-cpt.php:503
+#: includes/class-minn-admin-cpt.php:533
+#: includes/class-minn-admin-cpt.php:674
+#: includes/class-minn-admin-cpt.php:706
 msgid "Singular and plural labels are required."
 msgstr "Singular- och pluraletiketter krävs."
 
-#: includes/class-minn-admin-cpt.php:493
+#: includes/class-minn-admin-cpt.php:526
 msgid "No such post type."
 msgstr "Ingen sådan inläggstyp."
 
-#: includes/class-minn-admin-cpt.php:496
+#: includes/class-minn-admin-cpt.php:529
 msgid "This post type is registered in code and can only be changed there."
 msgstr "Den här inläggstypen är registrerad i kod och kan bara ändras där."
 
-#: includes/class-minn-admin-cpt.php:530
-#: includes/class-minn-admin-cpt.php:700
+#: includes/class-minn-admin-cpt.php:563
+#: includes/class-minn-admin-cpt.php:736
 msgid "ACF definition not found."
 msgstr "ACF-definitionen hittades inte."
 
-#: includes/class-minn-admin-cpt.php:543
+#: includes/class-minn-admin-cpt.php:576
 msgid "This post type is registered in code and can only be removed there."
 msgstr "Den här inläggstypen är registrerad i kod och kan bara tas bort där."
 
-#: includes/class-minn-admin-cpt.php:546
+#: includes/class-minn-admin-cpt.php:579
 msgid "Definition removed; existing content stays in the database."
 msgstr "Definitionen togs bort; befintligt innehåll stannar i databasen."
 
-#: includes/class-minn-admin-cpt.php:631
+#: includes/class-minn-admin-cpt.php:664
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 32 characters max."
 msgstr "Slug krävs: gemener, siffror, bindestreck eller understreck, högst 32 tecken."
 
-#: includes/class-minn-admin-cpt.php:663
+#: includes/class-minn-admin-cpt.php:699
 msgid "No such taxonomy."
 msgstr "Ingen sådan taxonomi."
 
-#: includes/class-minn-admin-cpt.php:666
+#: includes/class-minn-admin-cpt.php:702
 msgid "This taxonomy is registered in code and can only be changed there."
 msgstr "Den här taxonomin är registrerad i kod och kan bara ändras där."
 
-#: includes/class-minn-admin-cpt.php:713
+#: includes/class-minn-admin-cpt.php:749
 msgid "This taxonomy is registered in code and can only be removed there."
 msgstr "Den här taxonomin är registrerad i kod och kan bara tas bort där."
 
-#: includes/class-minn-admin-cpt.php:716
+#: includes/class-minn-admin-cpt.php:752
 msgid "Definition removed; existing terms stay in the database."
 msgstr "Definitionen togs bort; befintliga termer stannar i databasen."
 
-#: includes/class-minn-admin-cpt.php:753
+#: includes/class-minn-admin-cpt.php:789
 msgid "ACF could not save the taxonomy."
 msgstr "ACF kunde inte spara taxonomin."
 
-#: includes/class-minn-admin-cpt.php:823
+#: includes/class-minn-admin-cpt.php:859
 msgid "ACF could not save the post type."
 msgstr "ACF kunde inte spara inläggstypen."
 
-#: includes/class-minn-admin-cpt.php:890
-#: includes/class-minn-admin-cpt.php:893
+#: includes/class-minn-admin-cpt.php:926
+#: includes/class-minn-admin-cpt.php:929
 msgid "JetEngine could not save the post type."
 msgstr "JetEngine kunde inte spara inläggstypen."
 
-#: includes/class-minn-admin-cpt.php:938
-#: includes/class-minn-admin-cpt.php:941
+#: includes/class-minn-admin-cpt.php:974
+#: includes/class-minn-admin-cpt.php:977
 msgid "JetEngine could not save the taxonomy."
 msgstr "JetEngine kunde inte spara taxonomin."
 
-#: includes/class-minn-admin-cpt.php:949
+#: includes/class-minn-admin-cpt.php:985
 msgid "JetEngine definition not found."
 msgstr "JetEngine-definitionen hittades inte."
 
-#: includes/class-minn-admin-cpt.php:956
-#: includes/class-minn-admin-cpt.php:958
+#: includes/class-minn-admin-cpt.php:992
+#: includes/class-minn-admin-cpt.php:994
 msgid "JetEngine could not remove the definition."
 msgstr "JetEngine kunde inte ta bort definitionen."
 

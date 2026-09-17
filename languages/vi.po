@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-09-17 15:24+0000\n"
+"PO-Revision-Date: 2026-09-17 16:26+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Vietnamese\n"
 "MIME-Version: 1.0\n"
@@ -162,7 +162,7 @@ msgstr "Vai trò người dùng"
 
 #: includes/adapters/acf-field-groups.php:84
 #: includes/adapters/bricks.php:831
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 #: includes/adapters/elementor-templates.php:344
 #: includes/adapters/jet-theme-core.php:143
 #: assets/js/app.js:4231
@@ -908,8 +908,8 @@ msgid "%d entry left to ACF’s own tools"
 msgid_plural "%d entries left to ACF’s own tools"
 msgstr[0] "%d mục để lại cho công cụ riêng của ACF"
 
-#: includes/adapters/acf.php:1718
-#: includes/adapters/acf.php:1783
+#: includes/adapters/acf.php:1780
+#: includes/adapters/acf.php:1845
 #: assets/js/app.js:24532
 #: assets/js/app.js:47526
 #: assets/js/app.js:47534
@@ -917,15 +917,15 @@ msgid "empty"
 msgstr "trống"
 
 #. translators: %d: number of repeater rows.
-#: includes/adapters/acf.php:1723
-#: includes/adapters/acf.php:1790
+#: includes/adapters/acf.php:1785
+#: includes/adapters/acf.php:1852
 msgid "%d row"
 msgid_plural "%d rows"
 msgstr[0] "%d hàng"
 
 #. translators: %d: number of images in a gallery field.
 #. translators: %d: number of images in the gallery field.
-#: includes/adapters/acf.php:1735
+#: includes/adapters/acf.php:1797
 #: assets/js/app.js:37688
 msgid "%d image"
 msgid_plural "%d images"
@@ -933,7 +933,7 @@ msgstr[0] "%d ảnh"
 
 #. translators: %s: number of index rows
 #. translators: %s: the environment type (e.g. "staging").
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/jet-smart-filters.php:85
 #: includes/adapters/novamira.php:183
@@ -946,7 +946,7 @@ msgstr[0] "%d ảnh"
 msgid "Off"
 msgstr "Tắt"
 
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/code-snippets.php:300
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/novamira.php:183
@@ -959,15 +959,15 @@ msgid "On"
 msgstr "Bật"
 
 #. translators: %d: number of flexible-content sections.
-#: includes/adapters/acf.php:1787
+#: includes/adapters/acf.php:1849
 msgid "%d section"
 msgid_plural "%d sections"
 msgstr[0] "%d phần"
 
-#: includes/adapters/acf.php:1800
-#: includes/adapters/acf.php:1855
+#: includes/adapters/acf.php:1862
+#: includes/adapters/acf.php:1917
 #: includes/adapters/acpt.php:492
-#: includes/adapters/jet-engine-fields.php:597
+#: includes/adapters/jet-engine-fields.php:623
 #: includes/adapters/meta-box.php:267
 #: includes/adapters/pods.php:437
 #: assets/js/app.js:23733
@@ -977,18 +977,18 @@ msgid "Custom fields"
 msgstr "Trường tùy chỉnh"
 
 #. translators: %d: how many rows or sections were edited.
-#: includes/adapters/acf.php:1834
+#: includes/adapters/acf.php:1896
 msgid "%d edited"
 msgid_plural "%d edited"
 msgstr[0] "Đã sửa %d"
 
-#: includes/adapters/acf.php:1837
+#: includes/adapters/acf.php:1899
 msgid "changed"
 msgstr "đã đổi"
 
-#: includes/adapters/acf.php:1906
+#: includes/adapters/acf.php:1968
 #: includes/adapters/acpt.php:532
-#: includes/adapters/jet-engine-fields.php:626
+#: includes/adapters/jet-engine-fields.php:652
 #: includes/adapters/meta-box.php:299
 #: includes/adapters/pods.php:469
 #: includes/adapters/powerpress.php:232
@@ -1003,9 +1003,9 @@ msgstr "đã đổi"
 msgid "Post not found."
 msgstr "Không tìm thấy bài viết."
 
-#: includes/adapters/acf.php:1909
+#: includes/adapters/acf.php:1971
 #: includes/adapters/acpt.php:535
-#: includes/adapters/jet-engine-fields.php:629
+#: includes/adapters/jet-engine-fields.php:655
 #: includes/adapters/meta-box.php:302
 #: includes/adapters/pods.php:472
 #: includes/adapters/powerpress.php:235
@@ -1013,32 +1013,32 @@ msgstr "Không tìm thấy bài viết."
 msgid "You cannot edit this post."
 msgstr "Bạn không thể sửa bài viết này."
 
-#: includes/adapters/acf.php:1915
+#: includes/adapters/acf.php:1977
 #: includes/adapters/acpt.php:541
-#: includes/adapters/jet-engine-fields.php:635
+#: includes/adapters/jet-engine-fields.php:661
 #: includes/adapters/meta-box.php:312
 #: includes/adapters/pods.php:482
 msgid "You cannot edit that post type."
 msgstr "Bạn không thể sửa loại bài viết đó."
 
-#: includes/adapters/acf.php:1952
+#: includes/adapters/acf.php:2014
 msgid "This picker is no longer available. Reload the screen and try again."
 msgstr "Bộ chọn này không còn dùng được. Tải lại màn hình và thử lại."
 
-#: includes/adapters/acf.php:1959
+#: includes/adapters/acf.php:2021
 msgid "Unknown relational field."
 msgstr "Trường quan hệ không rõ."
 
-#: includes/adapters/acf.php:2126
+#: includes/adapters/acf.php:2188
 msgid "ACF simple field values for Minn Admin."
 msgstr "Giá trị trường ACF đơn giản cho Minn Admin."
 
-#: includes/adapters/acf.php:2414
+#: includes/adapters/acf.php:2476
 #: includes/adapters/acpt.php:831
 #: includes/adapters/asset-cleanup.php:232
 #: includes/adapters/autoptimize.php:188
-#: includes/adapters/bricks.php:1361
-#: includes/adapters/bricks.php:1423
+#: includes/adapters/bricks.php:1392
+#: includes/adapters/bricks.php:1454
 #: includes/adapters/novamira.php:456
 #: includes/adapters/option-pages.php:198
 #: includes/adapters/option-pages.php:213
@@ -1046,7 +1046,7 @@ msgstr "Giá trị trường ACF đơn giản cho Minn Admin."
 msgid "Unknown settings tab."
 msgstr "Tab thiết lập không rõ."
 
-#: includes/adapters/acf.php:2823
+#: includes/adapters/acf.php:2886
 #: includes/adapters/option-pages.php:160
 #: includes/class-minn-admin-surfaces.php:169
 msgid "Site Options"
@@ -1146,7 +1146,7 @@ msgid "Edit in ACPT"
 msgstr "Sửa trong ACPT"
 
 #: includes/adapters/acpt.php:1111
-#: includes/adapters/bricks.php:1670
+#: includes/adapters/bricks.php:1701
 #: includes/adapters/cfdb7.php:311
 #: includes/adapters/code-snippets.php:189
 #: includes/adapters/custom-css-js.php:456
@@ -1618,7 +1618,7 @@ msgstr "Mức"
 #: includes/adapters/aryo-activity-log.php:272
 #: includes/adapters/bookly.php:211
 #: includes/adapters/bookly.php:225
-#: includes/adapters/bricks.php:1703
+#: includes/adapters/bricks.php:1734
 #: includes/adapters/cf7-flamingo.php:168
 #: includes/adapters/cfdb7.php:285
 #: includes/adapters/elementor-forms.php:230
@@ -1654,7 +1654,7 @@ msgid "Event not found."
 msgstr "Không tìm thấy sự kiện."
 
 #: includes/adapters/all-in-one-security.php:334
-#: includes/adapters/bricks.php:1855
+#: includes/adapters/bricks.php:1886
 #: includes/adapters/elementor-forms.php:462
 #: includes/adapters/gravity-forms.php:517
 #: includes/adapters/novamira.php:535
@@ -2256,7 +2256,7 @@ msgstr "Tất cả nguồn"
 
 #: includes/adapters/aryo-activity-log.php:151
 #: includes/adapters/aryo-activity-log.php:401
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:47682
 msgid "Browser"
 msgstr "Trình duyệt"
@@ -2457,7 +2457,7 @@ msgstr "Hiệu suất"
 
 #: includes/adapters/asset-cleanup.php:350
 #: includes/adapters/autoptimize.php:298
-#: includes/adapters/jet-engine-fields.php:324
+#: includes/adapters/jet-engine-fields.php:331
 #: includes/adapters/option-pages.php:180
 #: includes/adapters/perfmatters.php:369
 #: includes/adapters/redirection.php:207
@@ -3071,7 +3071,7 @@ msgstr "Xóa vĩnh viễn mẫu trang này? Không thể hoàn tác."
 
 #: includes/adapters/bricks.php:801
 #: includes/adapters/bricks.php:813
-#: includes/adapters/bricks.php:1300
+#: includes/adapters/bricks.php:1331
 #: includes/adapters/elementor-templates.php:325
 #: includes/adapters/elementor-templates.php:404
 #: includes/adapters/jet-theme-core.php:124
@@ -3215,137 +3215,137 @@ msgstr "%s (bản sao)"
 msgid "Bricks declined to duplicate this template. Duplication may be turned off in its settings."
 msgstr "Bricks đã từ chối nhân bản Mẫu trang này. Việc nhân bản có thể đang tắt trong Thiết lập của nó."
 
-#: includes/adapters/bricks.php:1232
+#: includes/adapters/bricks.php:1263
 msgid "Bricks CSS files"
 msgstr "Tệp CSS Bricks"
 
-#: includes/adapters/bricks.php:1280
+#: includes/adapters/bricks.php:1311
 msgid "Editing"
 msgstr "Đang sửa"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Post types"
 msgstr "Định dạng bài viết"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Which post types can be edited with Bricks."
 msgstr "Các định dạng bài viết có thể sửa bằng Bricks."
 
-#: includes/adapters/bricks.php:1287
+#: includes/adapters/bricks.php:1318
 msgid "Features"
 msgstr "Tính năng"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Save form submissions"
 msgstr "Lưu dữ liệu gửi biểu mẫu"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Store Bricks form submissions in the database. Turning this on adds a Forms surface to Minn."
 msgstr "Lưu dữ liệu gửi biểu mẫu Bricks vào cơ sở dữ liệu. Bật tùy chọn này sẽ thêm khu vực Biểu mẫu vào Minn."
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Disable Bricks SEO controls"
 msgstr "Tắt điều khiển SEO của Bricks"
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Right when a dedicated SEO plugin owns titles and metas."
 msgstr "Dùng khi một plugin SEO chuyên trách quản lý tiêu đề và thẻ meta."
 
-#: includes/adapters/bricks.php:1291
+#: includes/adapters/bricks.php:1322
 msgid "Disable Bricks Open Graph tags"
 msgstr "Tắt thẻ Open Graph của Bricks"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Disable default templates"
 msgstr "Tắt mẫu trang mặc định"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Without conditions, published header and footer templates apply everywhere. Turn on to require explicit conditions."
 msgstr "Nếu không có điều kiện, các mẫu đầu trang và cuối trang đã xuất bản được áp dụng mọi nơi. Bật để yêu cầu điều kiện rõ ràng."
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Public templates"
 msgstr "Mẫu trang công khai"
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Whether template pages are viewable by anyone, or only logged-in users."
 msgstr "Trang mẫu có thể xem bởi bất kỳ ai, hay chỉ tài khoản đã đăng nhập."
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Remote template access"
 msgstr "Truy cập mẫu trang từ xa"
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Allow other sites to browse and insert this site's templates. Anyone who knows the address can ask, so set a password or list the allowed sites in Bricks first."
 msgstr "Cho phép các Trang web khác Xem lại và Chèn Mẫu trang của Trang này. Bất kỳ ai biết Địa chỉ đều có thể yêu cầu, vì vậy hãy đặt mật khẩu hoặc danh sách các Trang web được phép trong Bricks trước."
 
-#: includes/adapters/bricks.php:1313
+#: includes/adapters/bricks.php:1344
 msgid "Autosave"
 msgstr "Tự động lưu"
 
-#: includes/adapters/bricks.php:1315
+#: includes/adapters/bricks.php:1346
 msgid "Disable autosave"
 msgstr "Tắt tự động lưu"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Autosave interval (seconds)"
 msgstr "Khoảng tự động lưu (giây)"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Default 60, minimum 15."
 msgstr "Mặc định 60, tối thiểu 15."
 
-#: includes/adapters/bricks.php:1320
+#: includes/adapters/bricks.php:1351
 #: assets/js/app.js:48009
 #: assets/js/app.js:48435
 msgid "Appearance"
 msgstr "Giao diện"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Builder mode"
 msgstr "Chế độ trình dựng"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4649
 #: assets/js/app.js:4831
 msgid "Dark"
 msgstr "Tối"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4648
 #: assets/js/app.js:4830
 msgid "Light"
 msgstr "Sáng"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4636
 #: assets/js/app.js:5413
 msgid "Custom"
 msgstr "Tùy chỉnh"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Custom mode's CSS is edited on the Bricks settings screen."
 msgstr "CSS của chế độ tùy chỉnh được sửa trên màn hình thiết lập Bricks."
 
-#: includes/adapters/bricks.php:1329
+#: includes/adapters/bricks.php:1360
 #: assets/js/app.js:18895
 #: assets/js/app.js:25504
 msgid "Default"
 msgstr "Mặc định"
 
-#: includes/adapters/bricks.php:1343
+#: includes/adapters/bricks.php:1374
 #: assets/js/app.js:22154
 #: assets/js/app.js:27339
 msgid "Maintenance mode"
 msgstr "Chế độ bảo dưỡng"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Mode"
 msgstr "Chế độ"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/adapters/pw-gift-cards.php:290
 #: includes/adapters/woocommerce-gift-cards.php:271
 #: includes/adapters/yith-gift-cards.php:360
@@ -3355,68 +3355,68 @@ msgstr "Chế độ"
 msgid "Disabled"
 msgstr "Tắt"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/class-minn-admin-bar.php:192
 msgid "Coming soon"
 msgstr "Sắp ra mắt"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Maintenance (503)"
 msgstr "Bảo dưỡng (503)"
 
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 msgid "A Single-type Bricks template to show; Default is Bricks' built-in holding page."
 msgstr "Mẫu trang Bricks loại Đơn lẻ để hiện; Mặc định là trang chờ có sẵn của Bricks."
 
-#: includes/adapters/bricks.php:1347
+#: includes/adapters/bricks.php:1378
 msgid "Render header"
 msgstr "Hiện đầu trang"
 
-#: includes/adapters/bricks.php:1348
+#: includes/adapters/bricks.php:1379
 msgid "Render footer"
 msgstr "Hiện cuối trang"
 
-#: includes/adapters/bricks.php:1460
+#: includes/adapters/bricks.php:1491
 msgid "Set a remote templates password, or list the sites allowed to ask, in Bricks first. Without one of those this opens every template on this site to anyone."
 msgstr "Đặt mật khẩu Mẫu trang từ xa, hoặc danh sách các Trang web được phép yêu cầu, trong Bricks trước. Nếu không có một trong những điều đó, thao tác này sẽ mở mọi Mẫu trang trên Trang này cho bất kỳ ai."
 
-#: includes/adapters/bricks.php:1483
+#: includes/adapters/bricks.php:1514
 msgid "That is not one of the offered choices."
 msgstr "Đó không phải một trong các lựa chọn được đề nghị."
 
 #. translators: %d: the smallest allowed value.
-#: includes/adapters/bricks.php:1499
+#: includes/adapters/bricks.php:1530
 msgid "The smallest allowed value is %d."
 msgstr "Giá trị nhỏ nhất được phép là %d."
 
-#: includes/adapters/bricks.php:1511
+#: includes/adapters/bricks.php:1542
 msgid "Pick a Single-type Bricks template."
 msgstr "Chọn một mẫu trang Bricks loại Đơn lẻ."
 
-#: includes/adapters/bricks.php:1643
+#: includes/adapters/bricks.php:1674
 #: includes/adapters/elementor-forms.php:111
 msgid "(empty submission)"
 msgstr "(bài gửi trống)"
 
-#: includes/adapters/bricks.php:1656
+#: includes/adapters/bricks.php:1687
 msgid "Open in Bricks ↗"
 msgstr "Mở trong Bricks ↗"
 
-#: includes/adapters/bricks.php:1663
+#: includes/adapters/bricks.php:1694
 #: includes/adapters/cfdb7.php:298
 msgid "Delete entry"
 msgstr "Xóa mục"
 
-#: includes/adapters/bricks.php:1666
+#: includes/adapters/bricks.php:1697
 msgid "Delete this submission permanently? Bricks keeps no trash for them."
 msgstr "Xóa vĩnh viễn mục gửi này? Bricks không giữ thùng rác cho chúng."
 
-#: includes/adapters/bricks.php:1673
+#: includes/adapters/bricks.php:1704
 msgid "Delete the selected submissions permanently? Bricks keeps no trash for them."
 msgstr "Xóa vĩnh viễn các mục gửi đã chọn? Bricks không giữ thùng rác cho chúng."
 
-#: includes/adapters/bricks.php:1678
-#: includes/adapters/bricks.php:1758
+#: includes/adapters/bricks.php:1709
+#: includes/adapters/bricks.php:1789
 #: includes/adapters/cf7-flamingo.php:112
 #: includes/adapters/cf7-flamingo.php:128
 #: includes/adapters/cf7-flamingo.php:256
@@ -3453,20 +3453,20 @@ msgstr "Xóa vĩnh viễn các mục gửi đã chọn? Bricks không giữ thù
 msgid "Forms"
 msgstr "Biểu mẫu"
 
-#: includes/adapters/bricks.php:1687
-#: includes/adapters/bricks.php:1757
+#: includes/adapters/bricks.php:1718
+#: includes/adapters/bricks.php:1788
 #: includes/adapters/elementor-forms.php:171
 #: includes/adapters/ninja-forms.php:169
 #: includes/adapters/ninja-forms.php:178
 msgid "Submissions"
 msgstr "Bài gửi"
 
-#: includes/adapters/bricks.php:1698
+#: includes/adapters/bricks.php:1729
 msgid "All submissions"
 msgstr "Tất cả mục gửi"
 
-#: includes/adapters/bricks.php:1701
-#: includes/adapters/bricks.php:1861
+#: includes/adapters/bricks.php:1732
+#: includes/adapters/bricks.php:1892
 #: includes/adapters/cf7-flamingo.php:486
 #: includes/adapters/cfdb7.php:486
 #: includes/adapters/elementor-forms.php:480
@@ -3481,8 +3481,8 @@ msgstr "Tất cả mục gửi"
 msgid "Submission"
 msgstr "Bài gửi"
 
-#: includes/adapters/bricks.php:1702
-#: includes/adapters/bricks.php:1844
+#: includes/adapters/bricks.php:1733
+#: includes/adapters/bricks.php:1875
 #: includes/adapters/cf7-flamingo.php:166
 #: includes/adapters/cf7-flamingo.php:261
 #: includes/adapters/cf7-flamingo.php:455
@@ -3515,16 +3515,16 @@ msgstr "Bài gửi"
 msgid "Form"
 msgstr "Biểu mẫu"
 
-#: includes/adapters/bricks.php:1762
+#: includes/adapters/bricks.php:1793
 msgid "Last submission"
 msgstr "Mục gửi gần nhất"
 
-#: includes/adapters/bricks.php:1770
+#: includes/adapters/bricks.php:1801
 msgid "Open Bricks form submissions ↗"
 msgstr "Mở dữ liệu gửi biểu mẫu Bricks ↗"
 
-#: includes/adapters/bricks.php:1819
-#: includes/adapters/bricks.php:1880
+#: includes/adapters/bricks.php:1850
+#: includes/adapters/bricks.php:1911
 #: includes/adapters/elementor-forms.php:406
 #: includes/adapters/elementor-forms.php:494
 #: includes/adapters/elementor-forms.php:517
@@ -3533,7 +3533,7 @@ msgstr "Mở dữ liệu gửi biểu mẫu Bricks ↗"
 msgid "Submission not found."
 msgstr "Không tìm thấy bài gửi."
 
-#: includes/adapters/bricks.php:1841
+#: includes/adapters/bricks.php:1872
 #: includes/adapters/core-blocks.php:107
 #: includes/adapters/fluent-smtp.php:365
 #: includes/adapters/fluent-smtp.php:728
@@ -3561,7 +3561,7 @@ msgstr "Không tìm thấy bài gửi."
 msgid "Date"
 msgstr "Ngày"
 
-#: includes/adapters/bricks.php:1846
+#: includes/adapters/bricks.php:1877
 #: includes/adapters/elementor-forms.php:451
 #: includes/class-minn-admin-bar.php:652
 #: assets/js/app.js:3002
@@ -3570,7 +3570,7 @@ msgstr "Ngày"
 msgid "Page"
 msgstr "Trang"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/class-minn-admin-surfaces.php:348
 #: assets/js/app.js:1260
 #: assets/js/app.js:3424
@@ -3583,23 +3583,23 @@ msgstr "Trang"
 msgid "System"
 msgstr "Hệ thống"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/adapters/wpforms.php:556
 msgid "IP address"
 msgstr "Địa chỉ IP"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:8631
 msgid "Referrer"
 msgstr "Nguồn giới thiệu"
 
-#: includes/adapters/bricks.php:1860
+#: includes/adapters/bricks.php:1891
 #: includes/adapters/fluent-smtp.php:753
 #: includes/adapters/suremails.php:274
 msgid "Response"
 msgstr "Phản hồi"
 
-#: includes/adapters/bricks.php:1884
+#: includes/adapters/bricks.php:1915
 msgid "The submission could not be deleted."
 msgstr "Không thể xóa mục gửi."
 
@@ -3999,20 +3999,20 @@ msgstr "Cơ chế thiết lập CleanTalk không khả dụng."
 
 #: includes/adapters/cleantalk.php:133
 #: includes/adapters/cleantalk.php:174
-#: includes/adapters/licenses.php:4066
-#: includes/adapters/licenses.php:4285
-#: includes/adapters/licenses.php:4343
-#: includes/adapters/licenses.php:4370
-#: includes/adapters/licenses.php:4419
-#: includes/adapters/licenses.php:4431
-#: includes/adapters/licenses.php:4493
-#: includes/adapters/licenses.php:4506
-#: includes/adapters/licenses.php:5046
+#: includes/adapters/licenses.php:4069
+#: includes/adapters/licenses.php:4288
+#: includes/adapters/licenses.php:4346
+#: includes/adapters/licenses.php:4373
+#: includes/adapters/licenses.php:4422
+#: includes/adapters/licenses.php:4434
+#: includes/adapters/licenses.php:4496
+#: includes/adapters/licenses.php:4509
+#: includes/adapters/licenses.php:5049
 msgid "No key stored"
 msgstr "Không có khóa nào được lưu"
 
 #: includes/adapters/cleantalk.php:136
-#: includes/adapters/licenses.php:4501
+#: includes/adapters/licenses.php:4504
 msgid "Key removed from this site."
 msgstr "Đã xóa khóa khỏi trang này."
 
@@ -4058,7 +4058,7 @@ msgid "Could not delete this account."
 msgstr "Không thể xóa tài khoản này."
 
 #: includes/adapters/cleantalk.php:483
-#: includes/adapters/licenses.php:6262
+#: includes/adapters/licenses.php:6269
 msgid "Unknown action."
 msgstr "Hành động không xác định"
 
@@ -5508,7 +5508,7 @@ msgid "\"%s\" is not a valid email address."
 msgstr "\"%s\" không phải là địa chỉ email hợp lệ."
 
 #: includes/adapters/fluent-smtp.php:894
-#: includes/adapters/gravity-smtp.php:1520
+#: includes/adapters/gravity-smtp.php:1548
 #: includes/adapters/post-smtp.php:442
 msgid "No recipient address on record for this email."
 msgstr "Không có địa chỉ người nhận nào được ghi lại cho email này."
@@ -6178,48 +6178,48 @@ msgstr "Giữ nhật ký gỡ lỗi"
 msgid "Gravity SMTP reports this email cannot be resent (body or attachments were not stored)."
 msgstr "Gravity SMTP báo rằng email này không thể gửi lại (phần thân hoặc tập tin đính kèm chưa được lưu)."
 
-#: includes/adapters/gravity-smtp.php:1537
+#: includes/adapters/gravity-smtp.php:1565
 msgid "The mailer reported the message could not be sent."
 msgstr "Trình gửi thư báo rằng không thể gửi thư."
 
-#: includes/adapters/gravity-smtp.php:1543
+#: includes/adapters/gravity-smtp.php:1571
 msgid "Resent to the original recipients."
 msgstr "Đã gửi lại tới những người nhận ban đầu."
 
-#: includes/adapters/gravity-smtp.php:1544
+#: includes/adapters/gravity-smtp.php:1572
 msgid "Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "Đã gửi lại, nhưng một plugin gửi thư khác đang kích hoạt đã đảm nhận việc gửi, nên lần gửi mới xuất hiện trong nhật ký của plugin đó, không phải của Gravity SMTP."
 
-#: includes/adapters/gravity-smtp.php:1608
+#: includes/adapters/gravity-smtp.php:1636
 #: assets/js/app.js:785
 msgid "Sandboxed"
 msgstr "Hộp cát"
 
-#: includes/adapters/gravity-smtp.php:1609
+#: includes/adapters/gravity-smtp.php:1637
 #: assets/js/app.js:785
 msgid "Filtered"
 msgstr "Đã lọc"
 
-#: includes/adapters/gravity-smtp.php:1624
-#: includes/adapters/gravity-smtp.php:1654
+#: includes/adapters/gravity-smtp.php:1652
+#: includes/adapters/gravity-smtp.php:1682
 #: assets/js/app.js:15776
 msgid "Other"
 msgstr "Khác"
 
 #. translators: %d: number of days represented by the chart.
-#: includes/adapters/gravity-smtp.php:1667
+#: includes/adapters/gravity-smtp.php:1695
 msgid "Last %d day"
 msgid_plural "Last %d days"
 msgstr[0] "%d ngày qua"
 
-#: includes/adapters/gravity-smtp.php:1670
+#: includes/adapters/gravity-smtp.php:1698
 #: includes/adapters/ottokit.php:146
 #: includes/adapters/ottokit.php:244
 #: assets/js/app.js:784
 msgid "Sent"
 msgstr "Đã gửi"
 
-#: includes/adapters/gravity-smtp.php:1671
+#: includes/adapters/gravity-smtp.php:1699
 #: includes/adapters/ottokit.php:332
 #: assets/js/app.js:782
 #: assets/js/app.js:16351
@@ -6565,11 +6565,11 @@ msgid "Item marked %s."
 msgstr "Đã đánh dấu mục %s."
 
 #. translators: %s: post type name.
-#: includes/adapters/jet-engine-fields.php:335
+#: includes/adapters/jet-engine-fields.php:342
 msgid "%s fields"
 msgstr "Các trường %s"
 
-#: includes/adapters/jet-engine-fields.php:669
+#: includes/adapters/jet-engine-fields.php:695
 msgid "JetEngine field values for Minn Admin."
 msgstr "Giá trị trường JetEngine cho Minn Admin."
 
@@ -6988,1255 +6988,1255 @@ msgid "Open LatePoint ↗"
 msgstr "Mở LatePoint↗"
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:105
+#: includes/adapters/licenses.php:108
 msgid "That isn’t a valid %s license key."
 msgstr "Đó không phải khóa giấy phép %s hợp lệ."
 
-#: includes/adapters/licenses.php:108
+#: includes/adapters/licenses.php:111
 msgid "The license is not active for this site’s URL."
 msgstr "Giấy phép không kích hoạt cho URL của trang này."
 
-#: includes/adapters/licenses.php:111
+#: includes/adapters/licenses.php:114
 msgid "That license key has been disabled."
 msgstr "Khóa giấy phép đó đã bị tắt."
 
-#: includes/adapters/licenses.php:113
+#: includes/adapters/licenses.php:116
 msgid "That license key has expired."
 msgstr "Khóa giấy phép đó đã hết hạn."
 
-#: includes/adapters/licenses.php:115
+#: includes/adapters/licenses.php:118
 msgid "That license key has reached its activation limit."
 msgstr "Khóa giấy phép đó đã đạt giới hạn kích hoạt."
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:118
+#: includes/adapters/licenses.php:121
 msgid "%s did not accept that key."
 msgstr "%s không chấp nhận khóa đó."
 
-#: includes/adapters/licenses.php:161
+#: includes/adapters/licenses.php:164
 msgid "full membership"
 msgstr "tư cách thành viên đầy đủ"
 
-#: includes/adapters/licenses.php:162
+#: includes/adapters/licenses.php:165
 msgid "per-plugin membership"
 msgstr "tư cách thành viên theo từng plugin"
 
-#: includes/adapters/licenses.php:163
+#: includes/adapters/licenses.php:166
 msgid "single-project membership"
 msgstr "tư cách thành viên một dự án"
 
-#: includes/adapters/licenses.php:164
+#: includes/adapters/licenses.php:167
 msgid "free Hub membership"
 msgstr "tư cách thành viên Hub miễn phí"
 
-#: includes/adapters/licenses.php:165
+#: includes/adapters/licenses.php:168
 msgid "membership paused"
 msgstr "tư cách thành viên đã tạm dừng"
 
-#: includes/adapters/licenses.php:639
+#: includes/adapters/licenses.php:642
 msgid "Could not reach smashballoon.com"
 msgstr "Không thể kết nối tới smashballoon.com"
 
-#: includes/adapters/licenses.php:647
+#: includes/adapters/licenses.php:650
 msgid "You have reached the maximum number of sites for this Smash Balloon license"
 msgstr "Bạn đã đạt số lượng trang tối đa cho giấy phép Smash Balloon này"
 
 #. translators: 1: number of sites the license is active on. 2: maximum number of sites the license allows.
-#: includes/adapters/licenses.php:650
+#: includes/adapters/licenses.php:653
 msgid "You have reached the maximum number of sites for this Smash Balloon license (%1$d/%2$d)"
 msgstr "Bạn đã đạt số lượng trang tối đa cho giấy phép Smash Balloon này (%1$d/%2$d)"
 
-#: includes/adapters/licenses.php:655
+#: includes/adapters/licenses.php:658
 msgid "This Smash Balloon license has expired"
 msgstr "Giấy phép Smash Balloon này đã hết hạn"
 
-#: includes/adapters/licenses.php:661
+#: includes/adapters/licenses.php:664
 msgid "Smash Balloon did not accept that key"
 msgstr "Smash Balloon không chấp nhận khóa đó"
 
-#: includes/adapters/licenses.php:853
-#: includes/adapters/licenses.php:888
-#: includes/adapters/licenses.php:912
+#: includes/adapters/licenses.php:856
+#: includes/adapters/licenses.php:891
+#: includes/adapters/licenses.php:915
 msgid "Brainstorm Force licensing is not loaded on this site."
 msgstr "Chức năng cấp phép của Brainstorm Force chưa được tải trên trang này."
 
-#: includes/adapters/licenses.php:876
+#: includes/adapters/licenses.php:879
 msgid "Brainstorm Force did not accept that key."
 msgstr "Brainstorm Force không chấp nhận khóa đó."
 
-#: includes/adapters/licenses.php:897
+#: includes/adapters/licenses.php:900
 msgid "Brainstorm Force did not release that activation."
 msgstr "Brainstorm Force không giải phóng lượt kích hoạt đó."
 
-#: includes/adapters/licenses.php:917
+#: includes/adapters/licenses.php:920
 msgid "No license key is stored for this product."
 msgstr "Không có khóa giấy phép nào được lưu cho sản phẩm này."
 
-#: includes/adapters/licenses.php:922
+#: includes/adapters/licenses.php:925
 msgid "Brainstorm Force confirmed this license is active."
 msgstr "Brainstorm Force xác nhận giấy phép này đang kích hoạt."
 
-#: includes/adapters/licenses.php:930
+#: includes/adapters/licenses.php:933
 msgid "This license expired on "
 msgstr "Giấy phép này đã hết hạn vào "
 
-#: includes/adapters/licenses.php:932
+#: includes/adapters/licenses.php:935
 msgid "Brainstorm Force reports this license is not active on this site."
 msgstr "Brainstorm Force báo rằng giấy phép này không kích hoạt trên trang này."
 
-#: includes/adapters/licenses.php:1189
+#: includes/adapters/licenses.php:1192
 msgid "Crocoblock refused the key"
 msgstr "Crocoblock từ chối khóa"
 
-#: includes/adapters/licenses.php:1214
+#: includes/adapters/licenses.php:1217
 msgid "The Jet Dashboard code is not loaded; activate a Jet plugin first."
 msgstr "Mã code Jet Dashboard chưa được tải; hãy kích hoạt một plugin Jet trước."
 
-#: includes/adapters/licenses.php:1222
+#: includes/adapters/licenses.php:1225
 msgid "Could not reach the Crocoblock licensing service."
 msgstr "Không thể kết nối dịch vụ cấp phép Crocoblock."
 
-#: includes/adapters/licenses.php:1312
+#: includes/adapters/licenses.php:1315
 msgid "Key stored; Breakdance is not activated for this site"
 msgstr "Khóa được lưu trữ;Breakdance chưa được kích hoạt cho trang này"
 
-#: includes/adapters/licenses.php:1348
+#: includes/adapters/licenses.php:1351
 msgid "Key stored; Elementor has not recorded a status yet"
 msgstr "Đã lưu khóa; Elementor chưa ghi nhận trạng thái nào"
 
-#: includes/adapters/licenses.php:1448
+#: includes/adapters/licenses.php:1451
 msgid "flagged unlicensed"
 msgstr "bị gắn cờ không có giấy phép"
 
-#: includes/adapters/licenses.php:1475
+#: includes/adapters/licenses.php:1478
 msgid "Key set in wp-config"
 msgstr "Khóa đặt trong wp-config"
 
-#: includes/adapters/licenses.php:1501
+#: includes/adapters/licenses.php:1504
 msgid "Key belongs to another user on this site"
 msgstr "Khóa thuộc về người dùng khác trên trang này"
 
-#: includes/adapters/licenses.php:1525
+#: includes/adapters/licenses.php:1528
 msgid "Key stored; no check recorded yet"
 msgstr "Khóa đã lưu; chưa ghi nhận kiểm tra"
 
-#: includes/adapters/licenses.php:1528
+#: includes/adapters/licenses.php:1531
 msgid "Could not reach the licensing service at the last check"
 msgstr "Không thể kết nối dịch vụ giấy phép ở lần kiểm tra cuối"
 
-#: includes/adapters/licenses.php:1539
+#: includes/adapters/licenses.php:1542
 msgid "Subscription expired; migrations still run, updates and support stop"
 msgstr "Gói đăng ký hết hạn; di chuyển vẫn chạy, cập nhật và hỗ trợ dừng"
 
-#: includes/adapters/licenses.php:1540
+#: includes/adapters/licenses.php:1543
 msgid "Subscription cancelled"
 msgstr "Gói đăng ký đã hủy"
 
-#: includes/adapters/licenses.php:1541
+#: includes/adapters/licenses.php:1544
 msgid "The licensing service does not recognise this key"
 msgstr "Dịch vụ giấy phép không nhận khóa này"
 
-#: includes/adapters/licenses.php:1542
+#: includes/adapters/licenses.php:1545
 msgid "This site's activation was turned off; activating again re-enables it"
 msgstr "Kích hoạt của trang này đã tắt; kích hoạt lại sẽ bật lại"
 
-#: includes/adapters/licenses.php:1543
+#: includes/adapters/licenses.php:1546
 msgid "Every activation on this license is in use"
 msgstr "Mọi kích hoạt trên giấy phép này đang được dùng"
 
-#: includes/adapters/licenses.php:1625
+#: includes/adapters/licenses.php:1628
 msgid "Key stored; Breakdance has not recorded a check yet"
 msgstr "Khóa được lưu trữ;Breakdance chưa ghi séc"
 
-#: includes/adapters/licenses.php:1663
+#: includes/adapters/licenses.php:1666
 msgid "Bricks could not reach its license server"
 msgstr "Bricks không thể kết nối tới máy chủ giấy phép của nó"
 
 #. translators: %s: the domain the license was activated for.
-#: includes/adapters/licenses.php:1819
+#: includes/adapters/licenses.php:1822
 msgid "activated for %s, this site is %s"
 msgstr "đã kích hoạt cho %s, trang này là %s"
 
-#: includes/adapters/licenses.php:1829
-#: includes/adapters/licenses.php:1943
+#: includes/adapters/licenses.php:1832
+#: includes/adapters/licenses.php:1946
 msgid "Key stored; no recorded status"
 msgstr "Đã lưu khóa; không có trạng thái ghi nhận"
 
-#: includes/adapters/licenses.php:1852
+#: includes/adapters/licenses.php:1855
 msgid "free trial"
 msgstr "dùng thử miễn phí"
 
-#: includes/adapters/licenses.php:1879
+#: includes/adapters/licenses.php:1882
 msgid "Pro build installed; no license attached, so it runs as the free version"
 msgstr "Bản Pro đã cài đặt; không gắn giấy phép, nên chạy như phiên bản miễn phí"
 
-#: includes/adapters/licenses.php:1884
-#: includes/adapters/licenses.php:5421
+#: includes/adapters/licenses.php:1887
+#: includes/adapters/licenses.php:5424
 msgid "License attached but not readable locally"
 msgstr "Giấy phép đã gắn kèm nhưng không đọc được cục bộ"
 
-#: includes/adapters/licenses.php:1892
+#: includes/adapters/licenses.php:1895
 msgid "cancelled"
 msgstr "đã hủy"
 
 #. translators: 1: activations used, 2: activations allowed.
-#: includes/adapters/licenses.php:1899
+#: includes/adapters/licenses.php:1902
 msgid "%1$d of %2$d activations used"
 msgstr "Đã dùng %1$d / %2$d lượt kích hoạt"
 
-#: includes/adapters/licenses.php:1903
+#: includes/adapters/licenses.php:1906
 msgid "(localhost activations are not counted)"
 msgstr "(các lượt kích hoạt localhost không được tính)"
 
-#: includes/adapters/licenses.php:2036
-#: includes/adapters/licenses.php:2038
+#: includes/adapters/licenses.php:2039
+#: includes/adapters/licenses.php:2041
 msgid "WPMU DEV membership"
 msgstr "Tư cách thành viên WPMU DEV"
 
-#: includes/adapters/licenses.php:2054
+#: includes/adapters/licenses.php:2057
 msgid "licensed through the WPMU DEV Dashboard key"
 msgstr "được cấp phép qua khóa WPMU DEV Dashboard"
 
-#: includes/adapters/licenses.php:2068
+#: includes/adapters/licenses.php:2071
 msgid "covered by the WPMU DEV membership"
 msgstr "được bao gồm trong tư cách thành viên WPMU DEV"
 
-#: includes/adapters/licenses.php:2071
+#: includes/adapters/licenses.php:2074
 msgid "the WPMU DEV membership has expired"
 msgstr "tư cách thành viên WPMU DEV đã hết hạn"
 
-#: includes/adapters/licenses.php:2074
+#: includes/adapters/licenses.php:2077
 msgid "the WPMU DEV membership is paused"
 msgstr "tư cách thành viên WPMU DEV đang tạm dừng"
 
-#: includes/adapters/licenses.php:2076
+#: includes/adapters/licenses.php:2079
 msgid "Dashboard key present; Smush has not validated it yet"
 msgstr "Đã có khóa Dashboard; Smush chưa xác thực nó"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2117
+#: includes/adapters/licenses.php:2120
 msgid "%d Jet plugin installed; one Crocoblock key covers it"
 msgid_plural "%d Jet plugins installed; one Crocoblock key covers them all"
 msgstr[0] "%d plugin Jet đã cài đặt; một khóa Crocoblock bao gồm tất cả"
 
-#: includes/adapters/licenses.php:2125
+#: includes/adapters/licenses.php:2128
 msgid "lifetime membership"
 msgstr "tư cách thành viên trọn đời"
 
-#: includes/adapters/licenses.php:2126
+#: includes/adapters/licenses.php:2129
 msgid "all-inclusive membership"
 msgstr "tư cách thành viên trọn gói"
 
-#: includes/adapters/licenses.php:2127
+#: includes/adapters/licenses.php:2130
 msgid "plugin set"
 msgstr "bộ plugin"
 
-#: includes/adapters/licenses.php:2128
+#: includes/adapters/licenses.php:2131
 msgid "theme + plugin bundle"
 msgstr "gói giao diện + plugin"
 
-#: includes/adapters/licenses.php:2129
+#: includes/adapters/licenses.php:2132
 msgid "single plugin"
 msgstr "plugin đơn"
 
-#: includes/adapters/licenses.php:2138
+#: includes/adapters/licenses.php:2141
 msgid "TemplateMonster key"
 msgstr "Khóa TemplateMonster"
 
-#: includes/adapters/licenses.php:2140
+#: includes/adapters/licenses.php:2143
 msgid "Envato key"
 msgstr "Khóa Envato"
 
-#: includes/adapters/licenses.php:2143
+#: includes/adapters/licenses.php:2146
 msgid "sublicense"
 msgstr "giấy phép phụ"
 
 #. translators: %s: the site address the license was activated for.
-#: includes/adapters/licenses.php:2152
+#: includes/adapters/licenses.php:2155
 msgid "activated for %s, not this site; deactivate and activate again"
 msgstr "đã kích hoạt cho %s, không phải trang này; ngừng kích hoạt rồi kích hoạt lại"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2164
+#: includes/adapters/licenses.php:2167
 msgid "covers the %d installed Jet plugin"
 msgid_plural "covers all %d installed Jet plugins"
 msgstr[0] "bao gồm tất cả %d plugin Jet đã cài đặt"
 
 #. translators: 1: covered count, 2: installed count, 3: names of the plugins the license does not cover.
-#: includes/adapters/licenses.php:2167
+#: includes/adapters/licenses.php:2170
 msgid "covers %1$d of %2$d installed Jet plugins; not covered: %3$s"
 msgstr "bao gồm %1$d / %2$d plugin Jet đã cài đặt; không bao gồm: %3$s"
 
 #. translators: %d: number of sites the license may be activated on.
-#: includes/adapters/licenses.php:2173
+#: includes/adapters/licenses.php:2176
 msgid "%d site allowed"
 msgid_plural "%d sites allowed"
 msgstr[0] "cho phép %d trang"
 
-#: includes/adapters/licenses.php:2230
+#: includes/adapters/licenses.php:2233
 msgid "no license store yet; the plugin has not run"
 msgstr "chưa có kho lưu giấy phép; plugin chưa chạy"
 
-#: includes/adapters/licenses.php:2276
+#: includes/adapters/licenses.php:2279
 msgid "key rejected at the last check"
 msgstr "khóa bị từ chối ở lần kiểm tra gần nhất"
 
-#: includes/adapters/licenses.php:2279
+#: includes/adapters/licenses.php:2282
 msgid "key disabled by the vendor"
 msgstr "khóa bị nhà cung cấp vô hiệu hóa"
 
-#: includes/adapters/licenses.php:2282
+#: includes/adapters/licenses.php:2285
 msgid "site limit reached"
 msgstr "đã đạt giới hạn số trang"
 
-#: includes/adapters/licenses.php:2328
+#: includes/adapters/licenses.php:2331
 msgid "service key (free tier exists)"
 msgstr "khóa dịch vụ (có gói miễn phí)"
 
-#: includes/adapters/licenses.php:2334
+#: includes/adapters/licenses.php:2337
 #: assets/js/app.js:21610
 msgid "service key"
 msgstr "khóa dịch vụ"
 
 #. translators: %d: Akismet alert code number.
-#: includes/adapters/licenses.php:2337
+#: includes/adapters/licenses.php:2340
 msgid "Akismet reported a problem with this key (alert %d)"
 msgstr "Akismet báo có sự cố với khóa này (cảnh báo %d)"
 
-#: includes/adapters/licenses.php:2371
+#: includes/adapters/licenses.php:2374
 msgid "cloud access key (free trial, then paid)"
 msgstr "khóa truy cập đám mây (dùng thử miễn phí, sau đó trả phí)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key (trial)"
 msgstr "khóa truy cập đám mây (dùng thử)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key"
 msgstr "khóa truy cập đám mây"
 
-#: includes/adapters/licenses.php:2380
+#: includes/adapters/licenses.php:2383
 msgid "CleanTalk did not accept this access key"
 msgstr "CleanTalk không chấp nhận khóa truy cập này"
 
-#: includes/adapters/licenses.php:2413
+#: includes/adapters/licenses.php:2416
 msgid "not connected; official extension subscriptions and updates ride this link"
 msgstr "chưa kết nối; các gói đăng ký và bản cập nhật của tiện ích mở rộng chính thức đi qua liên kết này"
 
 #. translators: %d: number of WooCommerce.com extension subscriptions.
-#: includes/adapters/licenses.php:2420
+#: includes/adapters/licenses.php:2423
 msgid "%d extension subscription"
 msgid_plural "%d extension subscriptions"
 msgstr[0] "%d gói đăng ký tiện ích mở rộng"
 
-#: includes/adapters/licenses.php:2448
+#: includes/adapters/licenses.php:2451
 msgid "store not connected; orders, customers and products all live in SureCart"
 msgstr "cửa hàng chưa kết nối; đơn hàng, khách hàng và sản phẩm đều nằm trong SureCart"
 
-#: includes/adapters/licenses.php:2455
+#: includes/adapters/licenses.php:2458
 msgid "store connected"
 msgstr "cửa hàng đã kết nối"
 
-#: includes/adapters/licenses.php:2476
+#: includes/adapters/licenses.php:2479
 msgid "not set up; connect on the Site Kit screen"
 msgstr "chưa thiết lập; kết nối trên màn hình Site Kit"
 
-#: includes/adapters/licenses.php:2479
+#: includes/adapters/licenses.php:2482
 msgid "site credentials stored; no admin has finished connecting a Google account"
 msgstr "đã lưu thông tin xác thực của trang; chưa có quản trị viên nào hoàn tất kết nối tài khoản Google"
 
-#: includes/adapters/licenses.php:2481
+#: includes/adapters/licenses.php:2484
 msgid "Google account connected"
 msgstr "đã kết nối tài khoản Google"
 
-#: includes/adapters/licenses.php:2504
+#: includes/adapters/licenses.php:2507
 msgid "not connected to WordPress.com"
 msgstr "chưa kết nối tới WordPress.com"
 
 #. translators: %d: WordPress.com site ID.
-#: includes/adapters/licenses.php:2507
+#: includes/adapters/licenses.php:2510
 msgid "connected to WordPress.com (site ID %d)"
 msgstr "đã kết nối tới WordPress.com (ID trang %d)"
 
 #. translators: %s: WordPress.com user login name.
-#: includes/adapters/licenses.php:2512
+#: includes/adapters/licenses.php:2515
 msgid "connected to WordPress.com as %s"
 msgstr "đã kết nối tới WordPress.com với tên %s"
 
-#: includes/adapters/licenses.php:2547
+#: includes/adapters/licenses.php:2550
 msgid "key stored; no subscription details recorded yet"
 msgstr "đã lưu khóa; chưa ghi nhận chi tiết gói đăng ký nào"
 
-#: includes/adapters/licenses.php:2590
+#: includes/adapters/licenses.php:2593
 msgid "Gravity Perks re-checks every 12 hours; no cached status"
 msgstr "Gravity Perks kiểm tra lại mỗi 12 giờ; không có trạng thái lưu tạm"
 
-#: includes/adapters/licenses.php:2618
+#: includes/adapters/licenses.php:2621
 msgid "connects through a rankmath.com account"
 msgstr "kết nối qua tài khoản rankmath.com"
 
-#: includes/adapters/licenses.php:2621
+#: includes/adapters/licenses.php:2624
 msgid "connected; plan: "
 msgstr "đã kết nối; gói: "
 
-#: includes/adapters/licenses.php:2641
+#: includes/adapters/licenses.php:2644
 msgid "requires free Yoast SEO (wordpress-seo)"
 msgstr "cần bản Yoast SEO miễn phí (wordpress-seo)"
 
-#: includes/adapters/licenses.php:2649
+#: includes/adapters/licenses.php:2652
 msgid "activate free Yoast SEO to read MyYoast subscription state"
 msgstr "kích hoạt bản Yoast SEO miễn phí để đọc trạng thái gói đăng ký MyYoast"
 
-#: includes/adapters/licenses.php:2660
+#: includes/adapters/licenses.php:2663
 msgid "activate the subscription on MyYoast"
 msgstr "kích hoạt gói đăng ký trên MyYoast"
 
-#: includes/adapters/licenses.php:2674
+#: includes/adapters/licenses.php:2677
 msgid "MyYoast subscription"
 msgstr "Gói đăng ký MyYoast"
 
-#: includes/adapters/licenses.php:2683
+#: includes/adapters/licenses.php:2686
 msgid "MyYoast subscription inactive or expired"
 msgstr "Gói đăng ký MyYoast không kích hoạt hoặc đã hết hạn"
 
-#: includes/adapters/licenses.php:2689
+#: includes/adapters/licenses.php:2692
 msgid "could not read MyYoast subscription state"
 msgstr "không thể đọc trạng thái gói đăng ký MyYoast"
 
-#: includes/adapters/licenses.php:2805
+#: includes/adapters/licenses.php:2808
 msgid "key defined in wp-config.php"
 msgstr "khóa được định nghĩa trong wp-config.php"
 
-#: includes/adapters/licenses.php:2849
+#: includes/adapters/licenses.php:2852
 msgid "code stored but not registered"
 msgstr "đã lưu mã nhưng chưa đăng ký"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "activation was canceled remotely"
 msgstr "lượt kích hoạt đã bị hủy từ xa"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "code stored but the site is not authorized"
 msgstr "đã lưu mã nhưng trang chưa được ủy quyền"
 
-#: includes/adapters/licenses.php:2895
+#: includes/adapters/licenses.php:2898
 msgid "no account token or item tokens stored"
 msgstr "chưa lưu token tài khoản hay token sản phẩm nào"
 
-#: includes/adapters/licenses.php:2905
+#: includes/adapters/licenses.php:2908
 msgid "Envato keeps no local validity record"
 msgstr "Envato không giữ bản ghi hiệu lực cục bộ nào"
 
-#: includes/adapters/licenses.php:2906
+#: includes/adapters/licenses.php:2909
 msgid "Envato Market account token"
 msgstr "Token tài khoản Envato Market"
 
-#: includes/adapters/licenses.php:2914
+#: includes/adapters/licenses.php:2917
 msgid "Envato single-item token"
 msgstr "Token một sản phẩm của Envato"
 
-#: includes/adapters/licenses.php:2937
+#: includes/adapters/licenses.php:2940
 msgid "covers the bundled Avada plugins"
 msgstr "bao gồm các plugin đi kèm Avada"
 
-#: includes/adapters/licenses.php:3010
+#: includes/adapters/licenses.php:3013
 msgid "key ships inside the plugin build"
 msgstr "khóa được đóng gói sẵn trong bản dựng plugin"
 
-#: includes/adapters/licenses.php:3055
+#: includes/adapters/licenses.php:3058
 msgid "key stored but not activated on this site"
 msgstr "đã lưu khóa nhưng chưa kích hoạt trên trang này"
 
-#: includes/adapters/licenses.php:3161
+#: includes/adapters/licenses.php:3164
 msgid "Purchase code"
 msgstr "Mã mua hàng"
 
-#: includes/adapters/licenses.php:3165
-#: includes/adapters/licenses.php:3182
-#: includes/adapters/licenses.php:3196
+#: includes/adapters/licenses.php:3168
+#: includes/adapters/licenses.php:3185
+#: includes/adapters/licenses.php:3199
 msgid "Slider Revolution's license class could not be loaded."
 msgstr "Không thể tải class giấy phép của Slider Revolution."
 
-#: includes/adapters/licenses.php:3172
+#: includes/adapters/licenses.php:3175
 msgid "This purchase code is already registered to another site. Deregister it there (or in your ThemePunch account) first."
 msgstr "Mã mua hàng này đã được đăng ký cho một trang khác. Hãy hủy đăng ký ở đó (hoặc trong tài khoản ThemePunch của bạn) trước."
 
-#: includes/adapters/licenses.php:3175
+#: includes/adapters/licenses.php:3178
 msgid "ThemePunch reports this purchase code as banned."
 msgstr "ThemePunch báo rằng mã mua hàng này đã bị cấm."
 
-#: includes/adapters/licenses.php:3177
+#: includes/adapters/licenses.php:3180
 msgid "ThemePunch did not accept this purchase code."
 msgstr "ThemePunch không chấp nhận mã mua hàng này."
 
-#: includes/adapters/licenses.php:3186
+#: includes/adapters/licenses.php:3189
 msgid "The purchase code was deregistered with ThemePunch and the seat freed."
 msgstr "Mã mua hàng đã được hủy đăng ký với ThemePunch và suất kích hoạt đã được giải phóng."
 
-#: includes/adapters/licenses.php:3187
+#: includes/adapters/licenses.php:3190
 msgid "ThemePunch did not confirm the deregistration."
 msgstr "ThemePunch không xác nhận việc hủy đăng ký."
 
-#: includes/adapters/licenses.php:3192
+#: includes/adapters/licenses.php:3195
 msgid "No purchase code is stored."
 msgstr "Không có mã mua hàng nào được lưu."
 
-#: includes/adapters/licenses.php:3204
+#: includes/adapters/licenses.php:3207
 msgid "exist"
 msgstr "tồn tại"
 
-#: includes/adapters/licenses.php:3225
+#: includes/adapters/licenses.php:3228
 msgid "HappyFiles recorded no response; the activation request may not have reached happyfiles.io. The key has been kept, because happyfiles.io may already have counted the activation."
 msgstr "HappyFiles không ghi nhận phản hồi nào; yêu cầu kích hoạt có thể chưa đến được happyfiles.io. Khóa đã được giữ lại vì happyfiles.io có thể đã tính lần kích hoạt này."
 
-#: includes/adapters/licenses.php:3229
+#: includes/adapters/licenses.php:3232
 msgid "happyfiles.io did not accept this license key."
 msgstr "happyfiles.io không chấp nhận khóa giấy phép này."
 
-#: includes/adapters/licenses.php:3255
+#: includes/adapters/licenses.php:3258
 msgid "HappyFiles license key"
 msgstr "Khóa giấy phép HappyFiles"
 
-#: includes/adapters/licenses.php:3281
-#: includes/adapters/licenses.php:3293
-#: includes/adapters/licenses.php:4609
-#: includes/adapters/licenses.php:4704
+#: includes/adapters/licenses.php:3284
+#: includes/adapters/licenses.php:3296
+#: includes/adapters/licenses.php:4612
+#: includes/adapters/licenses.php:4707
 msgid "No license key is stored."
 msgstr "Không có khóa giấy phép nào được lưu."
 
-#: includes/adapters/licenses.php:3288
+#: includes/adapters/licenses.php:3291
 msgid "The license key was removed and the site deregistered with happyfiles.io."
 msgstr "Khóa giấy phép đã bị xóa và trang đã hủy đăng ký với happyfiles.io."
 
-#: includes/adapters/licenses.php:3321
+#: includes/adapters/licenses.php:3324
 msgid "The key validation service did not answer."
 msgstr "Dịch vụ xác thực khóa không phản hồi."
 
-#: includes/adapters/licenses.php:3331
+#: includes/adapters/licenses.php:3334
 #: assets/js/app.js:27673
 msgid "The key was not accepted."
 msgstr "Khóa không được chấp nhận."
 
 #. translators: %s: name of the licensed product.
-#: includes/adapters/licenses.php:3338
-#: includes/adapters/licenses.php:5209
+#: includes/adapters/licenses.php:3341
+#: includes/adapters/licenses.php:5212
 msgid "%s license key"
 msgstr "Khóa giấy phép %s"
 
-#: includes/adapters/licenses.php:3385
+#: includes/adapters/licenses.php:3388
 msgid "The stored key was cleared, but this plugin build ships with the key embedded and will re-register it. Manage licensed domains on theeventscalendar.com."
 msgstr "Khóa đã lưu đã được xóa, nhưng bản dựng plugin này đi kèm khóa nhúng sẵn và sẽ tự đăng ký lại. Quản lý các tên miền được cấp phép trên theeventscalendar.com."
 
-#: includes/adapters/licenses.php:3386
+#: includes/adapters/licenses.php:3389
 msgid "The key was removed from this site. Manage its licensed domains on theeventscalendar.com."
 msgstr "Khóa đã được xóa khỏi trang này. Quản lý các tên miền được cấp phép của nó trên theeventscalendar.com."
 
-#: includes/adapters/licenses.php:3393
+#: includes/adapters/licenses.php:3396
 msgid "No key is stored for this product."
 msgstr "Không có khóa nào được lưu cho sản phẩm này."
 
-#: includes/adapters/licenses.php:3429
+#: includes/adapters/licenses.php:3432
 msgid "The Kadence licensing service did not answer."
 msgstr "Dịch vụ cấp phép Kadence không phản hồi."
 
-#: includes/adapters/licenses.php:3436
+#: includes/adapters/licenses.php:3439
 msgid "unreachable"
 msgstr "không thể kết nối"
 
-#: includes/adapters/licenses.php:3438
+#: includes/adapters/licenses.php:3441
 msgid "Kadence license key"
 msgstr "Khóa giấy phép Kadence"
 
-#: includes/adapters/licenses.php:3473
+#: includes/adapters/licenses.php:3476
 msgid "The stored key was cleared. A key baked into the plugin build remains as the fallback."
 msgstr "Khóa đã lưu đã được xóa. Một khóa tích hợp sẵn trong bản dựng plugin vẫn còn làm phương án dự phòng."
 
-#: includes/adapters/licenses.php:3474
+#: includes/adapters/licenses.php:3477
 msgid "The stored key was cleared from this site."
 msgstr "Khóa đã lưu đã được xóa khỏi trang này."
 
-#: includes/adapters/licenses.php:3491
+#: includes/adapters/licenses.php:3494
 msgid "Elementor Pro license key"
 msgstr "Khóa giấy phép Elementor Pro"
 
-#: includes/adapters/licenses.php:3501
-#: includes/adapters/licenses.php:3502
+#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3505
 msgid "Elementor does not recognize that key"
 msgstr "Elementor không nhận ra khóa đó"
 
-#: includes/adapters/licenses.php:3503
+#: includes/adapters/licenses.php:3506
 msgid "That Elementor Pro license has expired"
 msgstr "Giấy phép Elementor Pro đó đã hết hạn"
 
-#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3507
 msgid "That license was disabled"
 msgstr "Giấy phép đó đã bị vô hiệu hóa"
 
-#: includes/adapters/licenses.php:3505
+#: includes/adapters/licenses.php:3508
 msgid "That subscription was cancelled"
 msgstr "Gói đăng ký đó đã bị hủy"
 
-#: includes/adapters/licenses.php:3506
+#: includes/adapters/licenses.php:3509
 msgid "That license was revoked"
 msgstr "Giấy phép đó đã bị thu hồi"
 
-#: includes/adapters/licenses.php:3507
+#: includes/adapters/licenses.php:3510
 msgid "That key is registered to a different domain"
 msgstr "Khóa đó được đăng ký cho một tên miền khác"
 
-#: includes/adapters/licenses.php:3530
+#: includes/adapters/licenses.php:3533
 msgid "Elementor did not confirm the license"
 msgstr "Elementor không xác nhận giấy phép"
 
-#: includes/adapters/licenses.php:3577
+#: includes/adapters/licenses.php:3580
 msgid "Essential Addons license key"
 msgstr "Khóa giấy phép Essential Addons"
 
-#: includes/adapters/licenses.php:3581
-#: includes/adapters/licenses.php:3602
-#: includes/adapters/licenses.php:3613
+#: includes/adapters/licenses.php:3584
+#: includes/adapters/licenses.php:3605
+#: includes/adapters/licenses.php:3616
 msgid "Essential Addons Pro is not loaded."
 msgstr "Essential Addons Pro chưa được tải."
 
-#: includes/adapters/licenses.php:3593
+#: includes/adapters/licenses.php:3596
 msgid "Essential Addons sent a confirmation code to the license email. Finish activation on its settings screen."
 msgstr "Essential Addons đã gửi mã xác nhận tới email giấy phép. Kết thúc kích hoạt trên màn hình thiết lập của nó."
 
-#: includes/adapters/licenses.php:3636
+#: includes/adapters/licenses.php:3639
 msgid "ACF PRO license key"
 msgstr "Khóa giấy phép ACF PRO"
 
-#: includes/adapters/licenses.php:3674
+#: includes/adapters/licenses.php:3677
 msgid "Independent Analytics license key"
 msgstr "Khóa giấy phép Independent Analytics"
 
 #. translators: %s: the current administrator's email address.
-#: includes/adapters/licenses.php:3692
+#: includes/adapters/licenses.php:3695
 msgid "This site has not been connected yet, so activating registers it with freemius.com and sends your name, %s and the site address."
 msgstr "Trang này chưa được kết nối, nên việc kích hoạt sẽ đăng ký trang với freemius.com và gửi tên của bạn, %s và địa chỉ trang."
 
-#: includes/adapters/licenses.php:3693
+#: includes/adapters/licenses.php:3696
 msgid "your email address"
 msgstr "Địa chỉ email của bạn"
 
-#: includes/adapters/licenses.php:3728
+#: includes/adapters/licenses.php:3731
 msgid "Crocoblock license key"
 msgstr "Khóa giấy phép Crocoblock"
 
-#: includes/adapters/licenses.php:3732
+#: includes/adapters/licenses.php:3735
 msgid "Paste the license key from your Crocoblock account."
 msgstr "Dán khóa giấy phép từ tài khoản Crocoblock của bạn."
 
-#: includes/adapters/licenses.php:3739
+#: includes/adapters/licenses.php:3742
 msgid "Crocoblock accepted the key but sent no license details to store."
 msgstr "Crocoblock đã chấp nhận khóa nhưng không gửi chi tiết giấy phép để lưu."
 
-#: includes/adapters/licenses.php:3748
-#: includes/adapters/licenses.php:3764
+#: includes/adapters/licenses.php:3751
+#: includes/adapters/licenses.php:3767
 msgid "No Crocoblock key is stored."
 msgstr "Không có khóa Crocoblock nào được lưu."
 
-#: includes/adapters/licenses.php:3759
+#: includes/adapters/licenses.php:3762
 msgid "This site was removed from the license."
 msgstr "Trang này đã bị xóa khỏi giấy phép."
 
-#: includes/adapters/licenses.php:3773
+#: includes/adapters/licenses.php:3776
 msgid "Crocoblock confirmed the license for this site."
 msgstr "Crocoblock đã xác nhận giấy phép cho trang này."
 
-#: includes/adapters/licenses.php:3803
+#: includes/adapters/licenses.php:3806
 msgid "The licensing service returned nothing readable"
 msgstr "Dịch vụ giấy phép không trả về gì đọc được"
 
-#: includes/adapters/licenses.php:3806
+#: includes/adapters/licenses.php:3809
 msgid "Could not reach the licensing service"
 msgstr "Không thể kết nối dịch vụ giấy phép"
 
-#: includes/adapters/licenses.php:3814
+#: includes/adapters/licenses.php:3817
 msgid "That subscription has expired. Migrations still run; updates and support stop."
 msgstr "Gói đăng ký đó đã hết hạn. Di chuyển vẫn chạy; cập nhật và hỗ trợ dừng."
 
-#: includes/adapters/licenses.php:3815
+#: includes/adapters/licenses.php:3818
 msgid "That subscription was cancelled."
 msgstr "Gói đăng ký đó đã bị hủy."
 
-#: includes/adapters/licenses.php:3816
+#: includes/adapters/licenses.php:3819
 msgid "WP Migrate does not recognise that key."
 msgstr "WP Migrate không nhận khóa đó."
 
-#: includes/adapters/licenses.php:3817
+#: includes/adapters/licenses.php:3820
 msgid "Every activation on that license is in use."
 msgstr "Mọi kích hoạt trên giấy phép đó đang được dùng."
 
-#: includes/adapters/licenses.php:3818
+#: includes/adapters/licenses.php:3821
 msgid "This site's activation was turned off for that license."
 msgstr "Kích hoạt của trang này đã tắt cho giấy phép đó."
 
-#: includes/adapters/licenses.php:3819
+#: includes/adapters/licenses.php:3822
 msgid "No license key was sent."
 msgstr "Không có khóa giấy phép nào được gửi."
 
-#: includes/adapters/licenses.php:3827
+#: includes/adapters/licenses.php:3830
 msgid "WP Migrate license key"
 msgstr "Khóa giấy phép WP Migrate"
 
-#: includes/adapters/licenses.php:3832
+#: includes/adapters/licenses.php:3835
 msgid "Enter a license key."
 msgstr "Nhập khóa giấy phép."
 
-#: includes/adapters/licenses.php:3835
+#: includes/adapters/licenses.php:3838
 msgid "This site sets its key in wp-config, which always wins. Change it there."
 msgstr "Trang này đặt khóa trong wp-config, luôn được ưu tiên. Hãy thay đổi ở đó."
 
-#: includes/adapters/licenses.php:3866
+#: includes/adapters/licenses.php:3869
 msgid "This site sets its key in wp-config. Remove it there."
 msgstr "Trang này đặt khóa trong wp-config. Hãy xóa bỏ ở đó."
 
-#: includes/adapters/licenses.php:3882
+#: includes/adapters/licenses.php:3885
 msgid "The key was removed from this site. WP Migrate has no way to release the activation remotely, so free the seat in your account if you need it elsewhere."
 msgstr "Khóa đã bị xóa khỏi trang này. WP Migrate không thể giải phóng kích hoạt từ xa, nên hãy giải phóng chỗ trong tài khoản nếu bạn cần dùng nơi khác."
 
-#: includes/adapters/licenses.php:3890
+#: includes/adapters/licenses.php:3893
 msgid "No license key is stored on this site."
 msgstr "Không có khóa giấy phép nào được lưu trên trang này."
 
-#: includes/adapters/licenses.php:3921
+#: includes/adapters/licenses.php:3924
 msgid "Beaver Builder license key"
 msgstr "Khóa giấy phép Beaver Builder"
 
-#: includes/adapters/licenses.php:3935
+#: includes/adapters/licenses.php:3938
 msgid "Beaver Builder reports the subscription as not active for this domain"
 msgstr "Beaver Builder báo rằng gói đăng ký không kích hoạt cho tên miền này"
 
-#: includes/adapters/licenses.php:3943
+#: includes/adapters/licenses.php:3946
 msgid "Brizy Pro license key"
 msgstr "Khóa giấy phép Brizy Pro"
 
-#: includes/adapters/licenses.php:3963
-#: includes/adapters/licenses.php:3978
+#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3981
 msgid "Breakdance did not recognize that key."
 msgstr "Breakdance không nhận ra khóa đó."
 
-#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3969
 msgid "That key does not include Breakdance Pro."
 msgstr "Key đó không bao gồm Breakdance Pro."
 
-#: includes/adapters/licenses.php:3973
+#: includes/adapters/licenses.php:3976
 msgid "That Breakdance Pro license has expired."
 msgstr "Giấy phép Breakdance Pro đó đã hết hạn."
 
-#: includes/adapters/licenses.php:3976
+#: includes/adapters/licenses.php:3979
 msgid "Breakdance did not activate this site. Check the license site limit in your Breakdance account."
 msgstr "Breakdance chưa kích hoạt trang web này. Kiểm tra giới hạn trang web cấp phép trong tài khoản Breakdance của bạn."
 
-#: includes/adapters/licenses.php:3986
+#: includes/adapters/licenses.php:3989
 msgid "Breakdance Pro license key"
 msgstr "Breakdance Mã bản quyền chuyên nghiệp"
 
-#: includes/adapters/licenses.php:4014
+#: includes/adapters/licenses.php:4017
 msgid "No Breakdance Pro key is stored."
 msgstr "Không có khóa Breakdance Pro nào được lưu trữ."
 
-#: includes/adapters/licenses.php:4022
+#: includes/adapters/licenses.php:4025
 msgid "Breakdance could not deactivate this license. Use its License screen to review the current status."
 msgstr "Breakdance không thể hủy kích hoạt giấy phép này. Sử dụng màn hình Giấy phép của nó để xem lại trạng thái hiện tại."
 
-#: includes/adapters/licenses.php:4027
+#: includes/adapters/licenses.php:4030
 msgid "Breakdance still reports this site as active, so the key was kept."
 msgstr "Breakdance vẫn báo cáo trang này đang hoạt động nên khóa vẫn được giữ."
 
-#: includes/adapters/licenses.php:4036
+#: includes/adapters/licenses.php:4039
 msgid "The seat was freed, but the key could not be cleared here. Remove it on the Breakdance License screen."
 msgstr "Chỗ đã được giải phóng, nhưng không thể xóa khóa tại đây. Hãy xóa bỏ trên màn hình Giấy phép Breakdance."
 
-#: includes/adapters/licenses.php:4039
+#: includes/adapters/licenses.php:4042
 msgid "The Breakdance Pro license was deactivated and its seat freed."
 msgstr "Giấy phép Breakdance Pro đã bị vô hiệu hóa và chỗ trống của nó đã được giải phóng."
 
-#: includes/adapters/licenses.php:4050
+#: includes/adapters/licenses.php:4053
 msgid "Bricks license key"
 msgstr "Khóa giấy phép Bricks"
 
-#: includes/adapters/licenses.php:4058
+#: includes/adapters/licenses.php:4061
 msgid "The Bricks license server is temporarily unavailable"
 msgstr "Máy chủ giấy phép Bricks tạm thời không khả dụng"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks returned status: %s"
 msgstr "Bricks trả về trạng thái: %s"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks did not recognize that key"
 msgstr "Bricks không nhận ra khóa đó"
 
-#: includes/adapters/licenses.php:4071
+#: includes/adapters/licenses.php:4074
 #: includes/class-minn-admin-rest.php:7978
 #: assets/js/app.js:24127
 msgid "active"
 msgstr "kích hoạt"
 
-#: includes/adapters/licenses.php:4091
+#: includes/adapters/licenses.php:4094
 msgid "Novamira Pro license key"
 msgstr "Khóa giấy phép Novamira Pro"
 
-#: includes/adapters/licenses.php:4125
+#: includes/adapters/licenses.php:4128
 msgid "Etch license key"
 msgstr "Khóa giấy phép Etch"
 
-#: includes/adapters/licenses.php:4152
+#: includes/adapters/licenses.php:4155
 msgid "Elegant Themes reports the subscription as expired"
 msgstr "Elegant Themes báo rằng gói đăng ký đã hết hạn"
 
-#: includes/adapters/licenses.php:4153
+#: includes/adapters/licenses.php:4156
 msgid "Elegant Themes does not recognize that username"
 msgstr "Elegant Themes không nhận ra tên người dùng đó"
 
-#: includes/adapters/licenses.php:4154
+#: includes/adapters/licenses.php:4157
 msgid "Elegant Themes did not confirm the account"
 msgstr "Elegant Themes không xác nhận tài khoản"
 
-#: includes/adapters/licenses.php:4159
+#: includes/adapters/licenses.php:4162
 msgid "Elegant Themes username"
 msgstr "Tên người dùng Elegant Themes"
 
-#: includes/adapters/licenses.php:4160
+#: includes/adapters/licenses.php:4163
 msgid "API key"
 msgstr "Khóa API"
 
-#: includes/adapters/licenses.php:4190
+#: includes/adapters/licenses.php:4193
 msgid "Credentials removed; Elegant Themes has no per-site seats to release"
 msgstr "Đã xóa thông tin xác thực; Elegant Themes không có suất theo trang nào để giải phóng"
 
-#: includes/adapters/licenses.php:4208
+#: includes/adapters/licenses.php:4211
 msgid "Gravity Forms did not validate the key"
 msgstr "Gravity Forms không xác thực khóa"
 
-#: includes/adapters/licenses.php:4210
+#: includes/adapters/licenses.php:4213
 msgid "Gravity Forms license key"
 msgstr "Khóa giấy phép Gravity Forms"
 
-#: includes/adapters/licenses.php:4217
+#: includes/adapters/licenses.php:4220
 msgid "Gravity Forms did not accept that key"
 msgstr "Gravity Forms không chấp nhận khóa đó"
 
-#: includes/adapters/licenses.php:4237
+#: includes/adapters/licenses.php:4240
 msgid "Site unlinked from the license"
 msgstr "Đã gỡ liên kết trang khỏi giấy phép"
 
-#: includes/adapters/licenses.php:4259
+#: includes/adapters/licenses.php:4262
 msgid "Gravity did not recognize that key"
 msgstr "Gravity không nhận ra khóa đó"
 
-#: includes/adapters/licenses.php:4269
+#: includes/adapters/licenses.php:4272
 msgid "Gravity SMTP license key"
 msgstr "Khóa giấy phép Gravity SMTP"
 
-#: includes/adapters/licenses.php:4309
+#: includes/adapters/licenses.php:4312
 msgid "WPMU DEV API key"
 msgstr "Khóa API WPMU DEV"
 
-#: includes/adapters/licenses.php:4329
+#: includes/adapters/licenses.php:4332
 msgid "Could not reach the WPMU DEV Hub"
 msgstr "Không thể kết nối tới WPMU DEV Hub"
 
-#: includes/adapters/licenses.php:4333
+#: includes/adapters/licenses.php:4336
 msgid "The Hub did not recognize that API key"
 msgstr "Hub không nhận ra khóa API đó"
 
-#: includes/adapters/licenses.php:4347
+#: includes/adapters/licenses.php:4350
 msgid "The Hub reports no active membership for this key"
 msgstr "Hub báo rằng không có tư cách thành viên đang kích hoạt nào cho khóa này"
 
-#: includes/adapters/licenses.php:4355
+#: includes/adapters/licenses.php:4358
 msgid "SearchWP license key"
 msgstr "Khóa giấy phép SearchWP"
 
-#: includes/adapters/licenses.php:4364
+#: includes/adapters/licenses.php:4367
 msgid "SearchWP did not accept that key"
 msgstr "SearchWP không chấp nhận khóa đó"
 
-#: includes/adapters/licenses.php:4381
+#: includes/adapters/licenses.php:4384
 msgid "SearchWP did not confirm the license"
 msgstr "SearchWP không xác nhận giấy phép"
 
-#: includes/adapters/licenses.php:4402
+#: includes/adapters/licenses.php:4405
 msgid "WPForms license key"
 msgstr "Khóa giấy phép WPForms"
 
-#: includes/adapters/licenses.php:4409
+#: includes/adapters/licenses.php:4412
 msgid "WPForms did not accept that key"
 msgstr "WPForms không chấp nhận khóa đó"
 
-#: includes/adapters/licenses.php:4415
+#: includes/adapters/licenses.php:4418
 msgid "The key is defined in wp-config (WPFORMS_LICENSE_KEY); remove the constant to deactivate."
 msgstr "Khóa được định nghĩa trong wp-config (WPFORMS_LICENSE_KEY); hãy xóa hằng số đó để ngừng kích hoạt."
 
-#: includes/adapters/licenses.php:4435
+#: includes/adapters/licenses.php:4438
 msgid "Could not reach the WPForms license API"
 msgstr "Không thể kết nối tới API giấy phép của WPForms"
 
 #. translators: %s: status word returned by the WPForms license API.
-#: includes/adapters/licenses.php:4440
+#: includes/adapters/licenses.php:4443
 msgid "License check returned: %s"
 msgstr "Kiểm tra giấy phép trả về: %s"
 
-#: includes/adapters/licenses.php:4462
+#: includes/adapters/licenses.php:4465
 msgid "Akismet API key"
 msgstr "Khóa API Akismet"
 
-#: includes/adapters/licenses.php:4465
+#: includes/adapters/licenses.php:4468
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); it cannot be changed here."
 msgstr "Khóa được cung cấp trong mã (WPCOM_API_KEY hoặc một filter); không thể thay đổi tại đây."
 
-#: includes/adapters/licenses.php:4469
+#: includes/adapters/licenses.php:4472
 msgid "That does not look like an Akismet key (12 characters, letters a-f and digits)."
 msgstr "Chuỗi này trông không giống khóa Akismet (12 ký tự, gồm chữ cái a-f và chữ số)."
 
-#: includes/adapters/licenses.php:4472
+#: includes/adapters/licenses.php:4475
 msgid "Akismet admin machinery unavailable."
 msgstr "Bộ phận quản trị của Akismet không khả dụng."
 
-#: includes/adapters/licenses.php:4480
+#: includes/adapters/licenses.php:4483
 msgid "The key is real but its Akismet plan is not active (missing, cancelled or suspended subscription)."
 msgstr "Khóa là thật nhưng gói Akismet của nó không kích hoạt (gói đăng ký bị thiếu, bị hủy hoặc bị tạm ngưng)."
 
-#: includes/adapters/licenses.php:4483
+#: includes/adapters/licenses.php:4486
 msgid "Akismet did not recognize that key."
 msgstr "Akismet không nhận ra khóa đó."
 
-#: includes/adapters/licenses.php:4485
+#: includes/adapters/licenses.php:4488
 msgid "Could not reach the Akismet API. Please try again."
 msgstr "Không thể kết nối tới API Akismet. Vui lòng thử lại."
 
-#: includes/adapters/licenses.php:4489
+#: includes/adapters/licenses.php:4492
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); remove it there."
 msgstr "Khóa được cung cấp trong mã (WPCOM_API_KEY hoặc một filter); hãy xóa nó ở đó."
 
-#: includes/adapters/licenses.php:4513
+#: includes/adapters/licenses.php:4516
 msgid "Akismet reports this key as invalid."
 msgstr "Akismet báo rằng khóa này không hợp lệ."
 
-#: includes/adapters/licenses.php:4515
+#: includes/adapters/licenses.php:4518
 msgid "Could not reach the Akismet API."
 msgstr "Không thể kết nối tới API Akismet."
 
-#: includes/adapters/licenses.php:4523
+#: includes/adapters/licenses.php:4526
 msgid "CleanTalk access key"
 msgstr "Khóa truy cập CleanTalk"
 
-#: includes/adapters/licenses.php:4553
+#: includes/adapters/licenses.php:4556
 msgid "This license has reached its activation limit. Free a seat on searchandfilter.com first."
 msgstr "Giấy phép này đã đạt giới hạn kích hoạt. Hãy giải phóng một suất trên searchandfilter.com trước."
 
-#: includes/adapters/licenses.php:4556
+#: includes/adapters/licenses.php:4559
 msgid "This Search & Filter license has expired."
 msgstr "Giấy phép Search & Filter này đã hết hạn."
 
-#: includes/adapters/licenses.php:4562
+#: includes/adapters/licenses.php:4565
 msgid "searchandfilter.com does not recognize that key."
 msgstr "searchandfilter.com không nhận ra khóa đó."
 
-#: includes/adapters/licenses.php:4564
+#: includes/adapters/licenses.php:4567
 msgid "searchandfilter.com did not accept that key."
 msgstr "searchandfilter.com không chấp nhận khóa đó."
 
-#: includes/adapters/licenses.php:4566
+#: includes/adapters/licenses.php:4569
 msgid "Search & Filter license key"
 msgstr "Khóa giấy phép Search & Filter"
 
-#: includes/adapters/licenses.php:4601
+#: includes/adapters/licenses.php:4604
 msgid "The license was disconnected and the seat freed."
 msgstr "Giấy phép đã được ngắt kết nối và suất kích hoạt đã được giải phóng."
 
-#: includes/adapters/licenses.php:4603
+#: includes/adapters/licenses.php:4606
 msgid "Search & Filter could not disconnect the license."
 msgstr "Search & Filter không thể ngắt kết nối giấy phép."
 
-#: includes/adapters/licenses.php:4633
+#: includes/adapters/licenses.php:4636
 msgid "This license has reached its activation limit."
 msgstr "Giấy phép này đã đạt giới hạn kích hoạt."
 
-#: includes/adapters/licenses.php:4636
+#: includes/adapters/licenses.php:4639
 msgid "This Admin Columns license has expired."
 msgstr "Giấy phép Admin Columns này đã hết hạn."
 
-#: includes/adapters/licenses.php:4638
+#: includes/adapters/licenses.php:4641
 msgid "admincolumns.com did not accept that key."
 msgstr "admincolumns.com không chấp nhận khóa đó."
 
-#: includes/adapters/licenses.php:4640
+#: includes/adapters/licenses.php:4643
 msgid "Admin Columns Pro license key"
 msgstr "Khóa giấy phép Admin Columns Pro"
 
-#: includes/adapters/licenses.php:4646
+#: includes/adapters/licenses.php:4649
 msgid "That does not look like an Admin Columns key (they are long and contain a dash)."
 msgstr "Chuỗi này trông không giống khóa Admin Columns (chúng dài và có chứa dấu gạch ngang)."
 
-#: includes/adapters/licenses.php:4662
+#: includes/adapters/licenses.php:4665
 msgid "admincolumns.com accepted the key but returned an invalid activation token."
 msgstr "admincolumns.com đã chấp nhận khóa nhưng trả về token kích hoạt không hợp lệ."
 
-#: includes/adapters/licenses.php:4681
+#: includes/adapters/licenses.php:4684
 msgid "No activation was stored; local license state cleared."
 msgstr "Không có lượt kích hoạt nào được lưu; đã xóa trạng thái giấy phép cục bộ."
 
 #. translators: %s: error message reported by admincolumns.com.
-#: includes/adapters/licenses.php:4693
+#: includes/adapters/licenses.php:4696
 msgid "Local license state was cleared, but admincolumns.com reported: %s"
 msgstr "Đã xóa trạng thái giấy phép cục bộ, nhưng admincolumns.com báo: %s"
 
-#: includes/adapters/licenses.php:4699
+#: includes/adapters/licenses.php:4702
 msgid "The license was deactivated and the seat freed."
 msgstr "Giấy phép đã được ngừng kích hoạt và suất kích hoạt đã được giải phóng."
 
-#: includes/adapters/licenses.php:4730
+#: includes/adapters/licenses.php:4733
 msgid "Gravity Perks license key"
 msgstr "Khóa giấy phép Gravity Perks"
 
-#: includes/adapters/licenses.php:4746
+#: includes/adapters/licenses.php:4749
 msgid "That key has reached its site limit"
 msgstr "Khóa đó đã đạt giới hạn số trang"
 
-#: includes/adapters/licenses.php:4748
+#: includes/adapters/licenses.php:4751
 msgid "Gravity Wiz did not validate that key"
 msgstr "Gravity Wiz không xác thực khóa đó"
 
-#: includes/adapters/licenses.php:4759
+#: includes/adapters/licenses.php:4762
 msgid "Gravity Wiz reports the license as not valid for this site"
 msgstr "Gravity Wiz báo rằng giấy phép không hợp lệ cho trang này"
 
-#: includes/adapters/licenses.php:4773
+#: includes/adapters/licenses.php:4776
 msgid "Perfmatters license key"
 msgstr "Khóa giấy phép Perfmatters"
 
-#: includes/adapters/licenses.php:4790
+#: includes/adapters/licenses.php:4793
 msgid "Perfmatters did not accept that key"
 msgstr "Perfmatters không chấp nhận khóa đó"
 
-#: includes/adapters/licenses.php:4801
+#: includes/adapters/licenses.php:4804
 msgid "Perfmatters could not release this site"
 msgstr "Perfmatters không thể giải phóng trang này"
 
-#: includes/adapters/licenses.php:4807
+#: includes/adapters/licenses.php:4810
 msgid "No response from the Perfmatters server"
 msgstr "Không có phản hồi từ máy chủ Perfmatters"
 
-#: includes/adapters/licenses.php:4842
+#: includes/adapters/licenses.php:4845
 msgid "Automatic.css license key"
 msgstr "Khóa giấy phép Automatic.css"
 
-#: includes/adapters/licenses.php:4848
+#: includes/adapters/licenses.php:4851
 msgid "That looks like the masked key from Automatic.css’s screen — paste the full license key."
 msgstr "Đó giống khóa đã che từ màn hình Automatic.css — hãy dán khóa giấy phép đầy đủ."
 
-#: includes/adapters/licenses.php:4852
-#: includes/adapters/licenses.php:4887
+#: includes/adapters/licenses.php:4855
+#: includes/adapters/licenses.php:4890
 msgid "No response from the Automatic.css server."
 msgstr "Không có phản hồi từ máy chủ Automatic.css."
 
-#: includes/adapters/licenses.php:4876
+#: includes/adapters/licenses.php:4879
 msgid "Automatic.css deactivated; the seat was released."
 msgstr "Automatic.css đã ngừng kích hoạt; chỗ đã được giải phóng."
 
-#: includes/adapters/licenses.php:4877
+#: includes/adapters/licenses.php:4880
 msgid "Key removed from this site. Automatic.css did not confirm releasing the seat — check the account if the activation count matters."
 msgstr "Khóa đã xóa khỏi trang này. Automatic.css không xác nhận giải phóng chỗ — kiểm tra tài khoản nếu số lần kích hoạt quan trọng."
 
-#: includes/adapters/licenses.php:4883
+#: includes/adapters/licenses.php:4886
 msgid "No Automatic.css key is stored."
 msgstr "Không có khóa Automatic.css nào được lưu."
 
-#: includes/adapters/licenses.php:4937
+#: includes/adapters/licenses.php:4940
 msgid "SEOPress PRO license key"
 msgstr "Khóa giấy phép SEOPress PRO"
 
-#: includes/adapters/licenses.php:4941
+#: includes/adapters/licenses.php:4944
 msgid "The key is defined in wp-config.php (SEOPRESS_LICENSE_KEY) — change it there."
 msgstr "Khóa được định nghĩa trong wp-config.php (SEOPRESS_LICENSE_KEY) — hãy thay đổi ở đó."
 
-#: includes/adapters/licenses.php:4946
-#: includes/adapters/licenses.php:4997
+#: includes/adapters/licenses.php:4949
+#: includes/adapters/licenses.php:5000
 msgid "No response from the SEOPress server."
 msgstr "Không có phản hồi từ máy chủ SEOPress."
 
-#: includes/adapters/licenses.php:4965
-#: includes/adapters/licenses.php:4993
+#: includes/adapters/licenses.php:4968
+#: includes/adapters/licenses.php:4996
 msgid "No SEOPress PRO key is stored."
 msgstr "Không có khóa SEOPress PRO nào được lưu."
 
-#: includes/adapters/licenses.php:4972
+#: includes/adapters/licenses.php:4975
 msgid "SEOPress did not confirm the deactivation — nothing was changed."
 msgstr "SEOPress không xác nhận việc ngừng kích hoạt — không có gì thay đổi."
 
-#: includes/adapters/licenses.php:4986
+#: includes/adapters/licenses.php:4989
 msgid "Seat released. The key itself is defined in wp-config.php and stays there."
 msgstr "Chỗ đã giải phóng. Bản thân khóa được định nghĩa trong wp-config.php và vẫn ở đó."
 
-#: includes/adapters/licenses.php:5037
+#: includes/adapters/licenses.php:5040
 msgid "GP Premium license key"
 msgstr "Khóa giấy phép GP Premium"
 
-#: includes/adapters/licenses.php:5062
+#: includes/adapters/licenses.php:5065
 msgid "wpallimport.com did not confirm the license"
 msgstr "wpallimport.com không xác nhận giấy phép"
 
-#: includes/adapters/licenses.php:5064
+#: includes/adapters/licenses.php:5067
 msgid "WP All Export license key"
 msgstr "Khóa giấy phép WP All Export"
 
-#: includes/adapters/licenses.php:5085
+#: includes/adapters/licenses.php:5088
 msgid "Could not reach wpallimport.com (or no key is stored)"
 msgstr "Không thể kết nối tới wpallimport.com (hoặc không có khóa nào được lưu)"
 
-#: includes/adapters/licenses.php:5099
-#: includes/adapters/licenses.php:5146
+#: includes/adapters/licenses.php:5102
+#: includes/adapters/licenses.php:5149
 msgid "The key was removed from this site. Soflyy licenses have no per-site seats to free."
 msgstr "Khóa đã được xóa khỏi trang này. Giấy phép Soflyy không có suất theo trang nào để giải phóng."
 
-#: includes/adapters/licenses.php:5113
+#: includes/adapters/licenses.php:5116
 msgid "wpallimport.com did not answer"
 msgstr "wpallimport.com không phản hồi"
 
-#: includes/adapters/licenses.php:5115
+#: includes/adapters/licenses.php:5118
 msgid "WP All Import license key"
 msgstr "Khóa giấy phép WP All Import"
 
-#: includes/adapters/licenses.php:5156
+#: includes/adapters/licenses.php:5159
 msgid "No key is stored."
 msgstr "Không có khóa nào được lưu."
 
-#: includes/adapters/licenses.php:5181
+#: includes/adapters/licenses.php:5184
 msgid "Kreatura did not accept that license key"
 msgstr "Kreatura không chấp nhận khóa giấy phép đó"
 
-#: includes/adapters/licenses.php:5185
+#: includes/adapters/licenses.php:5188
 msgid "LayerSlider license key"
 msgstr "Khóa giấy phép LayerSlider"
 
-#: includes/adapters/licenses.php:5190
+#: includes/adapters/licenses.php:5193
 msgid "No license key stored"
 msgstr "Không có khóa giấy phép nào được lưu"
 
-#: includes/adapters/licenses.php:5214
+#: includes/adapters/licenses.php:5217
 msgid "Missing license key or product name"
 msgstr "Thiếu khóa giấy phép hoặc tên sản phẩm"
 
-#: includes/adapters/licenses.php:5260
+#: includes/adapters/licenses.php:5263
 msgid "No active Smash Balloon license on this product"
 msgstr "Không có giấy phép Smash Balloon đang kích hoạt nào cho sản phẩm này"
 
-#: includes/adapters/licenses.php:5264
+#: includes/adapters/licenses.php:5267
 msgid "License deactivated for "
 msgstr "Đã ngừng kích hoạt giấy phép cho "
 
-#: includes/adapters/licenses.php:5270
+#: includes/adapters/licenses.php:5273
 msgid "No key is stored"
 msgstr "Không có khóa nào được lưu"
 
-#: includes/adapters/licenses.php:5330
+#: includes/adapters/licenses.php:5333
 msgid "MyYoast reports a valid Premium subscription"
 msgstr "MyYoast báo có gói đăng ký Premium hợp lệ"
 
-#: includes/adapters/licenses.php:5334
+#: includes/adapters/licenses.php:5337
 msgid "No Premium subscription linked to this site on MyYoast"
 msgstr "Không có gói đăng ký Premium nào liên kết với trang này trên MyYoast"
 
-#: includes/adapters/licenses.php:5336
+#: includes/adapters/licenses.php:5339
 msgid "MyYoast reports the Premium subscription is inactive or expired"
 msgstr "MyYoast báo rằng gói đăng ký Premium không kích hoạt hoặc đã hết hạn"
 
-#: includes/adapters/licenses.php:5338
+#: includes/adapters/licenses.php:5341
 msgid "Could not refresh MyYoast subscription state"
 msgstr "Không thể làm mới trạng thái gói đăng ký MyYoast"
 
-#: includes/adapters/licenses.php:5374
+#: includes/adapters/licenses.php:5377
 msgid "Freemius-powered; no account state recorded yet"
 msgstr "Chạy trên Freemius; chưa ghi nhận trạng thái tài khoản nào"
 
-#: includes/adapters/licenses.php:5409
+#: includes/adapters/licenses.php:5412
 msgid "Premium install with no license attached"
 msgstr "Bản cài Premium không có giấy phép nào gắn kèm"
 
-#: includes/adapters/licenses.php:5531
-#: includes/adapters/licenses.php:5589
-#: includes/adapters/licenses.php:5623
+#: includes/adapters/licenses.php:5534
+#: includes/adapters/licenses.php:5592
+#: includes/adapters/licenses.php:5626
 msgid "The plugin is not loaded."
 msgstr "Plugin chưa được tải."
 
-#: includes/adapters/licenses.php:5535
-#: includes/adapters/licenses.php:6286
+#: includes/adapters/licenses.php:5538
+#: includes/adapters/licenses.php:6293
 msgid "Paste a key first."
 msgstr "Dán một khóa trước."
 
-#: includes/adapters/licenses.php:5544
-#: includes/adapters/licenses.php:5552
+#: includes/adapters/licenses.php:5547
+#: includes/adapters/licenses.php:5555
 msgid "Freemius refused the key."
 msgstr "Freemius từ chối khóa."
 
-#: includes/adapters/licenses.php:5572
+#: includes/adapters/licenses.php:5575
 msgid "Freemius accepted the request but no active license is attached to this site."
 msgstr "Freemius đã chấp nhận yêu cầu nhưng không có giấy phép kích hoạt nào gắn với trang này."
 
-#: includes/adapters/licenses.php:5593
-#: includes/adapters/licenses.php:5639
+#: includes/adapters/licenses.php:5596
+#: includes/adapters/licenses.php:5642
 msgid "No license is attached to this site."
 msgstr "Không có giấy phép nào gắn với trang này."
 
-#: includes/adapters/licenses.php:5611
+#: includes/adapters/licenses.php:5614
 msgid "Freemius did not release the license. Its Account screen shows the reason."
 msgstr "Freemius không giải phóng giấy phép. Màn hình Tài khoản của nó cho biết lý do."
 
-#: includes/adapters/licenses.php:5626
+#: includes/adapters/licenses.php:5629
 msgid "This site is not connected to Freemius yet. Activate a key first."
 msgstr "Trang này chưa kết nối với Freemius. Hãy kích hoạt một khóa trước."
 
-#: includes/adapters/licenses.php:5765
+#: includes/adapters/licenses.php:5768
 msgid "Activation stored; SureCart keeps no local expiry"
 msgstr "Đã lưu kích hoạt; SureCart không giữ hạn cục bộ"
 
-#: includes/adapters/licenses.php:5766
+#: includes/adapters/licenses.php:5769
 msgid "Key stored without an activation record"
 msgstr "Khóa đã lưu mà không có bản ghi kích hoạt"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5877
+#: includes/adapters/licenses.php:5880
 msgid "verified %s ago from Minn"
 msgstr "đã xác thực %s trước từ Minn"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5881
+#: includes/adapters/licenses.php:5884
 msgid "failed a check %s ago from Minn"
 msgstr "kiểm tra không thành công %s trước từ Minn"
 
-#: includes/adapters/licenses.php:5886
+#: includes/adapters/licenses.php:5889
 #: assets/js/app.js:21597
 msgid "License key"
 msgstr "Khóa giấy phép"
 
-#: includes/adapters/licenses.php:6008
+#: includes/adapters/licenses.php:6011
 msgid "core connector"
 msgstr "trình kết nối lõi"
 
-#: includes/adapters/licenses.php:6267
+#: includes/adapters/licenses.php:6274
 msgid "No such action for this provider."
 msgstr "Không có tác vụ như vậy cho nhà cung cấp này."
 
-#: includes/adapters/licenses.php:6281
+#: includes/adapters/licenses.php:6288
 msgid "Fill in every field first."
 msgstr "Điền đầy đủ mọi trường trước."
 
 #. translators: %s: PHP constant name defined in wp-config.php.
-#: includes/adapters/licenses.php:6320
+#: includes/adapters/licenses.php:6327
 msgid "This key is defined in wp-config (%s), which takes precedence. Change it there."
 msgstr "Khóa này được định nghĩa trong wp-config (%s), vốn được ưu tiên. Hãy thay đổi tại đó."
 
-#: includes/adapters/licenses.php:6333
+#: includes/adapters/licenses.php:6340
 msgid "The plugin reported an error during the request."
 msgstr "Plugin báo lỗi trong quá trình yêu cầu."
 
-#: includes/adapters/licenses.php:6403
+#: includes/adapters/licenses.php:6410
 msgid "Could not check for updates."
 msgstr "Không thể kiểm tra bản cập nhật."
 
@@ -13660,82 +13660,88 @@ msgstr "Thêm mới %s"
 msgid "No %s found."
 msgstr "Không tìm thấy %s nào."
 
-#: includes/class-minn-admin-cpt.php:461
+#: includes/class-minn-admin-cpt.php:491
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 20 characters max."
 msgstr "Slug là bắt buộc: chữ thường, số, dấu gạch ngang hoặc gạch dưới, tối đa 20 ký tự."
 
-#: includes/class-minn-admin-cpt.php:470
-#: includes/class-minn-admin-cpt.php:500
-#: includes/class-minn-admin-cpt.php:638
+#. translators: %s: the slug
+#: includes/class-minn-admin-cpt.php:497
 #: includes/class-minn-admin-cpt.php:670
+msgid "“%s” is a name WordPress reserves; pick another slug."
+msgstr "“%s” là một tên mà WordPress dành riêng; hãy chọn một đường dẫn khác."
+
+#: includes/class-minn-admin-cpt.php:503
+#: includes/class-minn-admin-cpt.php:533
+#: includes/class-minn-admin-cpt.php:674
+#: includes/class-minn-admin-cpt.php:706
 msgid "Singular and plural labels are required."
 msgstr "Nhãn số ít và số nhiều là bắt buộc."
 
-#: includes/class-minn-admin-cpt.php:493
+#: includes/class-minn-admin-cpt.php:526
 msgid "No such post type."
 msgstr "Không có loại bài viết đó."
 
-#: includes/class-minn-admin-cpt.php:496
+#: includes/class-minn-admin-cpt.php:529
 msgid "This post type is registered in code and can only be changed there."
 msgstr "Loại bài viết này được đăng ký trong mã và chỉ có thể thay đổi ở đó."
 
-#: includes/class-minn-admin-cpt.php:530
-#: includes/class-minn-admin-cpt.php:700
+#: includes/class-minn-admin-cpt.php:563
+#: includes/class-minn-admin-cpt.php:736
 msgid "ACF definition not found."
 msgstr "Không tìm thấy định nghĩa ACF."
 
-#: includes/class-minn-admin-cpt.php:543
+#: includes/class-minn-admin-cpt.php:576
 msgid "This post type is registered in code and can only be removed there."
 msgstr "Loại bài viết này được đăng ký trong mã và chỉ có thể xóa bỏ ở đó."
 
-#: includes/class-minn-admin-cpt.php:546
+#: includes/class-minn-admin-cpt.php:579
 msgid "Definition removed; existing content stays in the database."
 msgstr "Đã xóa bỏ định nghĩa; nội dung hiện có vẫn được giữ trong cơ sở dữ liệu."
 
-#: includes/class-minn-admin-cpt.php:631
+#: includes/class-minn-admin-cpt.php:664
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 32 characters max."
 msgstr "Slug là bắt buộc: chữ thường, số, dấu gạch ngang hoặc gạch dưới, tối đa 32 ký tự."
 
-#: includes/class-minn-admin-cpt.php:663
+#: includes/class-minn-admin-cpt.php:699
 msgid "No such taxonomy."
 msgstr "Không có phân loại đó."
 
-#: includes/class-minn-admin-cpt.php:666
+#: includes/class-minn-admin-cpt.php:702
 msgid "This taxonomy is registered in code and can only be changed there."
 msgstr "Phân loại này được đăng ký trong mã và chỉ có thể thay đổi ở đó."
 
-#: includes/class-minn-admin-cpt.php:713
+#: includes/class-minn-admin-cpt.php:749
 msgid "This taxonomy is registered in code and can only be removed there."
 msgstr "Phân loại này được đăng ký trong mã và chỉ có thể xóa bỏ ở đó."
 
-#: includes/class-minn-admin-cpt.php:716
+#: includes/class-minn-admin-cpt.php:752
 msgid "Definition removed; existing terms stay in the database."
 msgstr "Đã xóa bỏ định nghĩa; các thuật ngữ hiện có vẫn được giữ trong cơ sở dữ liệu."
 
-#: includes/class-minn-admin-cpt.php:753
+#: includes/class-minn-admin-cpt.php:789
 msgid "ACF could not save the taxonomy."
 msgstr "ACF không thể lưu phân loại."
 
-#: includes/class-minn-admin-cpt.php:823
+#: includes/class-minn-admin-cpt.php:859
 msgid "ACF could not save the post type."
 msgstr "ACF không thể lưu loại bài viết."
 
-#: includes/class-minn-admin-cpt.php:890
-#: includes/class-minn-admin-cpt.php:893
+#: includes/class-minn-admin-cpt.php:926
+#: includes/class-minn-admin-cpt.php:929
 msgid "JetEngine could not save the post type."
 msgstr "JetEngine không thể lưu loại bài viết."
 
-#: includes/class-minn-admin-cpt.php:938
-#: includes/class-minn-admin-cpt.php:941
+#: includes/class-minn-admin-cpt.php:974
+#: includes/class-minn-admin-cpt.php:977
 msgid "JetEngine could not save the taxonomy."
 msgstr "JetEngine không thể lưu phân loại."
 
-#: includes/class-minn-admin-cpt.php:949
+#: includes/class-minn-admin-cpt.php:985
 msgid "JetEngine definition not found."
 msgstr "Không tìm thấy định nghĩa JetEngine."
 
-#: includes/class-minn-admin-cpt.php:956
-#: includes/class-minn-admin-cpt.php:958
+#: includes/class-minn-admin-cpt.php:992
+#: includes/class-minn-admin-cpt.php:994
 msgid "JetEngine could not remove the definition."
 msgstr "JetEngine không thể xóa bỏ định nghĩa."
 

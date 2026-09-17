@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-09-17 15:24+0000\n"
+"PO-Revision-Date: 2026-09-17 16:26+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Turkish\n"
 "MIME-Version: 1.0\n"
@@ -162,7 +162,7 @@ msgstr "Kullanıcı rolü"
 
 #: includes/adapters/acf-field-groups.php:84
 #: includes/adapters/bricks.php:831
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 #: includes/adapters/elementor-templates.php:344
 #: includes/adapters/jet-theme-core.php:143
 #: assets/js/app.js:4231
@@ -911,8 +911,8 @@ msgid_plural "%d entries left to ACF’s own tools"
 msgstr[0] "%d kayıt ACF'nin kendi araçlarına bırakıldı"
 msgstr[1] "%d kayıt ACF'nin kendi araçlarına bırakıldı"
 
-#: includes/adapters/acf.php:1718
-#: includes/adapters/acf.php:1783
+#: includes/adapters/acf.php:1780
+#: includes/adapters/acf.php:1845
 #: assets/js/app.js:24532
 #: assets/js/app.js:47526
 #: assets/js/app.js:47534
@@ -920,8 +920,8 @@ msgid "empty"
 msgstr "boş"
 
 #. translators: %d: number of repeater rows.
-#: includes/adapters/acf.php:1723
-#: includes/adapters/acf.php:1790
+#: includes/adapters/acf.php:1785
+#: includes/adapters/acf.php:1852
 msgid "%d row"
 msgid_plural "%d rows"
 msgstr[0] "%d satır"
@@ -929,7 +929,7 @@ msgstr[1] "%d satır"
 
 #. translators: %d: number of images in a gallery field.
 #. translators: %d: number of images in the gallery field.
-#: includes/adapters/acf.php:1735
+#: includes/adapters/acf.php:1797
 #: assets/js/app.js:37688
 msgid "%d image"
 msgid_plural "%d images"
@@ -938,7 +938,7 @@ msgstr[1] "%d görsel"
 
 #. translators: %s: number of index rows
 #. translators: %s: the environment type (e.g. "staging").
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/jet-smart-filters.php:85
 #: includes/adapters/novamira.php:183
@@ -951,7 +951,7 @@ msgstr[1] "%d görsel"
 msgid "Off"
 msgstr "Kapalı"
 
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/code-snippets.php:300
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/novamira.php:183
@@ -964,16 +964,16 @@ msgid "On"
 msgstr "Açık"
 
 #. translators: %d: number of flexible-content sections.
-#: includes/adapters/acf.php:1787
+#: includes/adapters/acf.php:1849
 msgid "%d section"
 msgid_plural "%d sections"
 msgstr[0] "%d bölüm"
 msgstr[1] "%d bölüm"
 
-#: includes/adapters/acf.php:1800
-#: includes/adapters/acf.php:1855
+#: includes/adapters/acf.php:1862
+#: includes/adapters/acf.php:1917
 #: includes/adapters/acpt.php:492
-#: includes/adapters/jet-engine-fields.php:597
+#: includes/adapters/jet-engine-fields.php:623
 #: includes/adapters/meta-box.php:267
 #: includes/adapters/pods.php:437
 #: assets/js/app.js:23733
@@ -983,19 +983,19 @@ msgid "Custom fields"
 msgstr "Özel alanlar"
 
 #. translators: %d: how many rows or sections were edited.
-#: includes/adapters/acf.php:1834
+#: includes/adapters/acf.php:1896
 msgid "%d edited"
 msgid_plural "%d edited"
 msgstr[0] "%d düzenlendi"
 msgstr[1] "%d düzenlendi"
 
-#: includes/adapters/acf.php:1837
+#: includes/adapters/acf.php:1899
 msgid "changed"
 msgstr "değişti"
 
-#: includes/adapters/acf.php:1906
+#: includes/adapters/acf.php:1968
 #: includes/adapters/acpt.php:532
-#: includes/adapters/jet-engine-fields.php:626
+#: includes/adapters/jet-engine-fields.php:652
 #: includes/adapters/meta-box.php:299
 #: includes/adapters/pods.php:469
 #: includes/adapters/powerpress.php:232
@@ -1010,9 +1010,9 @@ msgstr "değişti"
 msgid "Post not found."
 msgstr "Yazı bulunamadı."
 
-#: includes/adapters/acf.php:1909
+#: includes/adapters/acf.php:1971
 #: includes/adapters/acpt.php:535
-#: includes/adapters/jet-engine-fields.php:629
+#: includes/adapters/jet-engine-fields.php:655
 #: includes/adapters/meta-box.php:302
 #: includes/adapters/pods.php:472
 #: includes/adapters/powerpress.php:235
@@ -1020,32 +1020,32 @@ msgstr "Yazı bulunamadı."
 msgid "You cannot edit this post."
 msgstr "Bu yazıyı düzenleyemezsiniz."
 
-#: includes/adapters/acf.php:1915
+#: includes/adapters/acf.php:1977
 #: includes/adapters/acpt.php:541
-#: includes/adapters/jet-engine-fields.php:635
+#: includes/adapters/jet-engine-fields.php:661
 #: includes/adapters/meta-box.php:312
 #: includes/adapters/pods.php:482
 msgid "You cannot edit that post type."
 msgstr "Bu yazı türünü düzenleyemezsiniz."
 
-#: includes/adapters/acf.php:1952
+#: includes/adapters/acf.php:2014
 msgid "This picker is no longer available. Reload the screen and try again."
 msgstr "Bu seçici artık kullanılamıyor. Ekranı yenileyip yeniden deneyin."
 
-#: includes/adapters/acf.php:1959
+#: includes/adapters/acf.php:2021
 msgid "Unknown relational field."
 msgstr "Bilinmeyen ilişkisel alan."
 
-#: includes/adapters/acf.php:2126
+#: includes/adapters/acf.php:2188
 msgid "ACF simple field values for Minn Admin."
 msgstr "Minn Admin için ACF basit alan değerleri."
 
-#: includes/adapters/acf.php:2414
+#: includes/adapters/acf.php:2476
 #: includes/adapters/acpt.php:831
 #: includes/adapters/asset-cleanup.php:232
 #: includes/adapters/autoptimize.php:188
-#: includes/adapters/bricks.php:1361
-#: includes/adapters/bricks.php:1423
+#: includes/adapters/bricks.php:1392
+#: includes/adapters/bricks.php:1454
 #: includes/adapters/novamira.php:456
 #: includes/adapters/option-pages.php:198
 #: includes/adapters/option-pages.php:213
@@ -1053,7 +1053,7 @@ msgstr "Minn Admin için ACF basit alan değerleri."
 msgid "Unknown settings tab."
 msgstr "Bilinmeyen ayar sekmesi."
 
-#: includes/adapters/acf.php:2823
+#: includes/adapters/acf.php:2886
 #: includes/adapters/option-pages.php:160
 #: includes/class-minn-admin-surfaces.php:169
 msgid "Site Options"
@@ -1153,7 +1153,7 @@ msgid "Edit in ACPT"
 msgstr "ACPT’de düzenle"
 
 #: includes/adapters/acpt.php:1111
-#: includes/adapters/bricks.php:1670
+#: includes/adapters/bricks.php:1701
 #: includes/adapters/cfdb7.php:311
 #: includes/adapters/code-snippets.php:189
 #: includes/adapters/custom-css-js.php:456
@@ -1634,7 +1634,7 @@ msgstr "Düzey"
 #: includes/adapters/aryo-activity-log.php:272
 #: includes/adapters/bookly.php:211
 #: includes/adapters/bookly.php:225
-#: includes/adapters/bricks.php:1703
+#: includes/adapters/bricks.php:1734
 #: includes/adapters/cf7-flamingo.php:168
 #: includes/adapters/cfdb7.php:285
 #: includes/adapters/elementor-forms.php:230
@@ -1670,7 +1670,7 @@ msgid "Event not found."
 msgstr "Olay bulunamadı."
 
 #: includes/adapters/all-in-one-security.php:334
-#: includes/adapters/bricks.php:1855
+#: includes/adapters/bricks.php:1886
 #: includes/adapters/elementor-forms.php:462
 #: includes/adapters/gravity-forms.php:517
 #: includes/adapters/novamira.php:535
@@ -2272,7 +2272,7 @@ msgstr "Tüm kaynaklar"
 
 #: includes/adapters/aryo-activity-log.php:151
 #: includes/adapters/aryo-activity-log.php:401
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:47682
 msgid "Browser"
 msgstr "Tarayıcı"
@@ -2473,7 +2473,7 @@ msgstr "Performans"
 
 #: includes/adapters/asset-cleanup.php:350
 #: includes/adapters/autoptimize.php:298
-#: includes/adapters/jet-engine-fields.php:324
+#: includes/adapters/jet-engine-fields.php:331
 #: includes/adapters/option-pages.php:180
 #: includes/adapters/perfmatters.php:369
 #: includes/adapters/redirection.php:207
@@ -3088,7 +3088,7 @@ msgstr "Bu şablon kalıcı olarak silinsin mi? Geri alma yok."
 
 #: includes/adapters/bricks.php:801
 #: includes/adapters/bricks.php:813
-#: includes/adapters/bricks.php:1300
+#: includes/adapters/bricks.php:1331
 #: includes/adapters/elementor-templates.php:325
 #: includes/adapters/elementor-templates.php:404
 #: includes/adapters/jet-theme-core.php:124
@@ -3232,137 +3232,137 @@ msgstr "%s (kopya)"
 msgid "Bricks declined to duplicate this template. Duplication may be turned off in its settings."
 msgstr "Bricks bu şablonu çoğaltmayı reddetti. Çoğaltma ayarlarında kapatılmış olabilir."
 
-#: includes/adapters/bricks.php:1232
+#: includes/adapters/bricks.php:1263
 msgid "Bricks CSS files"
 msgstr "Bricks CSS dosyaları"
 
-#: includes/adapters/bricks.php:1280
+#: includes/adapters/bricks.php:1311
 msgid "Editing"
 msgstr "Düzenleme"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Post types"
 msgstr "Yazı türleri"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Which post types can be edited with Bricks."
 msgstr "Hangi yazı türlerinin Bricks ile düzenlenebileceği."
 
-#: includes/adapters/bricks.php:1287
+#: includes/adapters/bricks.php:1318
 msgid "Features"
 msgstr "Özellikler"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Save form submissions"
 msgstr "Form gönderimlerini kaydet"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Store Bricks form submissions in the database. Turning this on adds a Forms surface to Minn."
 msgstr "Bricks form gönderimlerini veritabanında sakla. Bunu açmak Minn'e bir Formlar yüzeyi ekler."
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Disable Bricks SEO controls"
 msgstr "Bricks SEO denetimlerini devre dışı bırak"
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Right when a dedicated SEO plugin owns titles and metas."
 msgstr "Başlıkları ve metaları özel bir SEO eklentisi yönettiğinde kullanın."
 
-#: includes/adapters/bricks.php:1291
+#: includes/adapters/bricks.php:1322
 msgid "Disable Bricks Open Graph tags"
 msgstr "Bricks Open Graph etiketlerini devre dışı bırak"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Disable default templates"
 msgstr "Varsayılan şablonları devre dışı bırak"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Without conditions, published header and footer templates apply everywhere. Turn on to require explicit conditions."
 msgstr "Koşul olmadan, yayımlanmış üst bilgi ve alt bilgi şablonları her yerde uygulanır. Açık koşullar gerektirmek için bunu açın."
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Public templates"
 msgstr "Herkese açık şablonlar"
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Whether template pages are viewable by anyone, or only logged-in users."
 msgstr "Şablon sayfalarının herkes tarafından mı yoksa yalnızca oturum açmış kullanıcılar tarafından mı görüntülenebileceği."
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Remote template access"
 msgstr "Uzaktan şablon erişimi"
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Allow other sites to browse and insert this site's templates. Anyone who knows the address can ask, so set a password or list the allowed sites in Bricks first."
 msgstr "Diğer sitelerin bu sitenin şablonlarına göz atmasına ve bunları eklemesine izin verin. Adresi bilen herkes istekte bulunabilir, bu yüzden önce Bricks içinde bir parola belirleyin veya izin verilen siteleri listeleyin."
 
-#: includes/adapters/bricks.php:1313
+#: includes/adapters/bricks.php:1344
 msgid "Autosave"
 msgstr "Otomatik kaydet"
 
-#: includes/adapters/bricks.php:1315
+#: includes/adapters/bricks.php:1346
 msgid "Disable autosave"
 msgstr "Otomatik kaydetmeyi devre dışı bırak"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Autosave interval (seconds)"
 msgstr "Otomatik kaydetme aralığı (saniye)"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Default 60, minimum 15."
 msgstr "Varsayılan 60, en az 15."
 
-#: includes/adapters/bricks.php:1320
+#: includes/adapters/bricks.php:1351
 #: assets/js/app.js:48009
 #: assets/js/app.js:48435
 msgid "Appearance"
 msgstr "Görünüm"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Builder mode"
 msgstr "Oluşturucu modu"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4649
 #: assets/js/app.js:4831
 msgid "Dark"
 msgstr "Koyu"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4648
 #: assets/js/app.js:4830
 msgid "Light"
 msgstr "Açık"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4636
 #: assets/js/app.js:5413
 msgid "Custom"
 msgstr "Özel"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Custom mode's CSS is edited on the Bricks settings screen."
 msgstr "Özel modun CSS'i Bricks ayarlar ekranında düzenlenir."
 
-#: includes/adapters/bricks.php:1329
+#: includes/adapters/bricks.php:1360
 #: assets/js/app.js:18895
 #: assets/js/app.js:25504
 msgid "Default"
 msgstr "Varsayılan"
 
-#: includes/adapters/bricks.php:1343
+#: includes/adapters/bricks.php:1374
 #: assets/js/app.js:22154
 #: assets/js/app.js:27339
 msgid "Maintenance mode"
 msgstr "Bakım kipi"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Mode"
 msgstr "Mod"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/adapters/pw-gift-cards.php:290
 #: includes/adapters/woocommerce-gift-cards.php:271
 #: includes/adapters/yith-gift-cards.php:360
@@ -3372,68 +3372,68 @@ msgstr "Mod"
 msgid "Disabled"
 msgstr "Etkisizleştirildi"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/class-minn-admin-bar.php:192
 msgid "Coming soon"
 msgstr "Çok yakında"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Maintenance (503)"
 msgstr "Bakım (503)"
 
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 msgid "A Single-type Bricks template to show; Default is Bricks' built-in holding page."
 msgstr "Gösterilecek Single türünde bir Bricks şablonu; Varsayılan, Bricks'in yerleşik bekleme sayfasıdır."
 
-#: includes/adapters/bricks.php:1347
+#: includes/adapters/bricks.php:1378
 msgid "Render header"
 msgstr "Üst bilgiyi işle"
 
-#: includes/adapters/bricks.php:1348
+#: includes/adapters/bricks.php:1379
 msgid "Render footer"
 msgstr "Alt bilgiyi işle"
 
-#: includes/adapters/bricks.php:1460
+#: includes/adapters/bricks.php:1491
 msgid "Set a remote templates password, or list the sites allowed to ask, in Bricks first. Without one of those this opens every template on this site to anyone."
 msgstr "Önce Bricks içinde uzak şablonlar parolası belirleyin veya istekte bulunmasına izin verilen siteleri listeleyin. Bunlardan biri olmadan bu, bu sitedeki her şablonu herkese açar."
 
-#: includes/adapters/bricks.php:1483
+#: includes/adapters/bricks.php:1514
 msgid "That is not one of the offered choices."
 msgstr "Bu, sunulan seçeneklerden biri değil."
 
 #. translators: %d: the smallest allowed value.
-#: includes/adapters/bricks.php:1499
+#: includes/adapters/bricks.php:1530
 msgid "The smallest allowed value is %d."
 msgstr "İzin verilen en küçük değer %d."
 
-#: includes/adapters/bricks.php:1511
+#: includes/adapters/bricks.php:1542
 msgid "Pick a Single-type Bricks template."
 msgstr "Single türünde bir Bricks şablonu seçin."
 
-#: includes/adapters/bricks.php:1643
+#: includes/adapters/bricks.php:1674
 #: includes/adapters/elementor-forms.php:111
 msgid "(empty submission)"
 msgstr "(boş gönderim)"
 
-#: includes/adapters/bricks.php:1656
+#: includes/adapters/bricks.php:1687
 msgid "Open in Bricks ↗"
 msgstr "Bricks'te aç ↗"
 
-#: includes/adapters/bricks.php:1663
+#: includes/adapters/bricks.php:1694
 #: includes/adapters/cfdb7.php:298
 msgid "Delete entry"
 msgstr "Kaydı sil"
 
-#: includes/adapters/bricks.php:1666
+#: includes/adapters/bricks.php:1697
 msgid "Delete this submission permanently? Bricks keeps no trash for them."
 msgstr "Bu gönderim kalıcı olarak silinsin mi? Bricks bunlar için çöp tutmaz."
 
-#: includes/adapters/bricks.php:1673
+#: includes/adapters/bricks.php:1704
 msgid "Delete the selected submissions permanently? Bricks keeps no trash for them."
 msgstr "Seçilen gönderimler kalıcı olarak silinsin mi? Bricks bunlar için çöp tutmaz."
 
-#: includes/adapters/bricks.php:1678
-#: includes/adapters/bricks.php:1758
+#: includes/adapters/bricks.php:1709
+#: includes/adapters/bricks.php:1789
 #: includes/adapters/cf7-flamingo.php:112
 #: includes/adapters/cf7-flamingo.php:128
 #: includes/adapters/cf7-flamingo.php:256
@@ -3470,20 +3470,20 @@ msgstr "Seçilen gönderimler kalıcı olarak silinsin mi? Bricks bunlar için �
 msgid "Forms"
 msgstr "Formlar"
 
-#: includes/adapters/bricks.php:1687
-#: includes/adapters/bricks.php:1757
+#: includes/adapters/bricks.php:1718
+#: includes/adapters/bricks.php:1788
 #: includes/adapters/elementor-forms.php:171
 #: includes/adapters/ninja-forms.php:169
 #: includes/adapters/ninja-forms.php:178
 msgid "Submissions"
 msgstr "Gönderimler"
 
-#: includes/adapters/bricks.php:1698
+#: includes/adapters/bricks.php:1729
 msgid "All submissions"
 msgstr "Tüm gönderimler"
 
-#: includes/adapters/bricks.php:1701
-#: includes/adapters/bricks.php:1861
+#: includes/adapters/bricks.php:1732
+#: includes/adapters/bricks.php:1892
 #: includes/adapters/cf7-flamingo.php:486
 #: includes/adapters/cfdb7.php:486
 #: includes/adapters/elementor-forms.php:480
@@ -3498,8 +3498,8 @@ msgstr "Tüm gönderimler"
 msgid "Submission"
 msgstr "Gönderim"
 
-#: includes/adapters/bricks.php:1702
-#: includes/adapters/bricks.php:1844
+#: includes/adapters/bricks.php:1733
+#: includes/adapters/bricks.php:1875
 #: includes/adapters/cf7-flamingo.php:166
 #: includes/adapters/cf7-flamingo.php:261
 #: includes/adapters/cf7-flamingo.php:455
@@ -3532,16 +3532,16 @@ msgstr "Gönderim"
 msgid "Form"
 msgstr "Form"
 
-#: includes/adapters/bricks.php:1762
+#: includes/adapters/bricks.php:1793
 msgid "Last submission"
 msgstr "Son gönderim"
 
-#: includes/adapters/bricks.php:1770
+#: includes/adapters/bricks.php:1801
 msgid "Open Bricks form submissions ↗"
 msgstr "Bricks form gönderimlerini aç ↗"
 
-#: includes/adapters/bricks.php:1819
-#: includes/adapters/bricks.php:1880
+#: includes/adapters/bricks.php:1850
+#: includes/adapters/bricks.php:1911
 #: includes/adapters/elementor-forms.php:406
 #: includes/adapters/elementor-forms.php:494
 #: includes/adapters/elementor-forms.php:517
@@ -3550,7 +3550,7 @@ msgstr "Bricks form gönderimlerini aç ↗"
 msgid "Submission not found."
 msgstr "Gönderim bulunamadı."
 
-#: includes/adapters/bricks.php:1841
+#: includes/adapters/bricks.php:1872
 #: includes/adapters/core-blocks.php:107
 #: includes/adapters/fluent-smtp.php:365
 #: includes/adapters/fluent-smtp.php:728
@@ -3578,7 +3578,7 @@ msgstr "Gönderim bulunamadı."
 msgid "Date"
 msgstr "Tarih"
 
-#: includes/adapters/bricks.php:1846
+#: includes/adapters/bricks.php:1877
 #: includes/adapters/elementor-forms.php:451
 #: includes/class-minn-admin-bar.php:652
 #: assets/js/app.js:3002
@@ -3587,7 +3587,7 @@ msgstr "Tarih"
 msgid "Page"
 msgstr "Sayfa"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/class-minn-admin-surfaces.php:348
 #: assets/js/app.js:1260
 #: assets/js/app.js:3424
@@ -3600,23 +3600,23 @@ msgstr "Sayfa"
 msgid "System"
 msgstr "Sistem"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/adapters/wpforms.php:556
 msgid "IP address"
 msgstr "IP adresi"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:8631
 msgid "Referrer"
 msgstr "Yönlendiren"
 
-#: includes/adapters/bricks.php:1860
+#: includes/adapters/bricks.php:1891
 #: includes/adapters/fluent-smtp.php:753
 #: includes/adapters/suremails.php:274
 msgid "Response"
 msgstr "Yanıt"
 
-#: includes/adapters/bricks.php:1884
+#: includes/adapters/bricks.php:1915
 msgid "The submission could not be deleted."
 msgstr "Gönderim silinemedi."
 
@@ -4017,20 +4017,20 @@ msgstr "CleanTalk ayarları altyapısı kullanılamıyor."
 
 #: includes/adapters/cleantalk.php:133
 #: includes/adapters/cleantalk.php:174
-#: includes/adapters/licenses.php:4066
-#: includes/adapters/licenses.php:4285
-#: includes/adapters/licenses.php:4343
-#: includes/adapters/licenses.php:4370
-#: includes/adapters/licenses.php:4419
-#: includes/adapters/licenses.php:4431
-#: includes/adapters/licenses.php:4493
-#: includes/adapters/licenses.php:4506
-#: includes/adapters/licenses.php:5046
+#: includes/adapters/licenses.php:4069
+#: includes/adapters/licenses.php:4288
+#: includes/adapters/licenses.php:4346
+#: includes/adapters/licenses.php:4373
+#: includes/adapters/licenses.php:4422
+#: includes/adapters/licenses.php:4434
+#: includes/adapters/licenses.php:4496
+#: includes/adapters/licenses.php:4509
+#: includes/adapters/licenses.php:5049
 msgid "No key stored"
 msgstr "Saklanan anahtar yok"
 
 #: includes/adapters/cleantalk.php:136
-#: includes/adapters/licenses.php:4501
+#: includes/adapters/licenses.php:4504
 msgid "Key removed from this site."
 msgstr "Anahtar bu siteden kaldırıldı."
 
@@ -4076,7 +4076,7 @@ msgid "Could not delete this account."
 msgstr "Bu hesap silinemedi."
 
 #: includes/adapters/cleantalk.php:483
-#: includes/adapters/licenses.php:6262
+#: includes/adapters/licenses.php:6269
 msgid "Unknown action."
 msgstr "İşlem bilinmiyor."
 
@@ -5529,7 +5529,7 @@ msgid "\"%s\" is not a valid email address."
 msgstr "\"%s\" geçerli bir e-posta adresi değil."
 
 #: includes/adapters/fluent-smtp.php:894
-#: includes/adapters/gravity-smtp.php:1520
+#: includes/adapters/gravity-smtp.php:1548
 #: includes/adapters/post-smtp.php:442
 msgid "No recipient address on record for this email."
 msgstr "Bu e-posta için kayıtlı alıcı adresi yok."
@@ -6201,49 +6201,49 @@ msgstr "Hata ayıklama günlüğü tut"
 msgid "Gravity SMTP reports this email cannot be resent (body or attachments were not stored)."
 msgstr "Gravity SMTP bu e-postanın yeniden gönderilemeyeceğini bildiriyor (gövde ya da ekler saklanmamış)."
 
-#: includes/adapters/gravity-smtp.php:1537
+#: includes/adapters/gravity-smtp.php:1565
 msgid "The mailer reported the message could not be sent."
 msgstr "Posta gönderici iletinin gönderilemediğini bildirdi."
 
-#: includes/adapters/gravity-smtp.php:1543
+#: includes/adapters/gravity-smtp.php:1571
 msgid "Resent to the original recipients."
 msgstr "Özgün alıcılara yeniden gönderildi."
 
-#: includes/adapters/gravity-smtp.php:1544
+#: includes/adapters/gravity-smtp.php:1572
 msgid "Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "Yeniden gönderildi ama başka bir etkin e-posta eklentisi taşıdı, bu yüzden yeni gönderim Gravity SMTP günlüğünde değil o eklentinin günlüğünde görünür."
 
-#: includes/adapters/gravity-smtp.php:1608
+#: includes/adapters/gravity-smtp.php:1636
 #: assets/js/app.js:785
 msgid "Sandboxed"
 msgstr "Korumalı alan"
 
-#: includes/adapters/gravity-smtp.php:1609
+#: includes/adapters/gravity-smtp.php:1637
 #: assets/js/app.js:785
 msgid "Filtered"
 msgstr "Filtrelendi"
 
-#: includes/adapters/gravity-smtp.php:1624
-#: includes/adapters/gravity-smtp.php:1654
+#: includes/adapters/gravity-smtp.php:1652
+#: includes/adapters/gravity-smtp.php:1682
 #: assets/js/app.js:15776
 msgid "Other"
 msgstr "Diğer"
 
 #. translators: %d: number of days represented by the chart.
-#: includes/adapters/gravity-smtp.php:1667
+#: includes/adapters/gravity-smtp.php:1695
 msgid "Last %d day"
 msgid_plural "Last %d days"
 msgstr[0] "Son %d gün"
 msgstr[1] "Son %d gün"
 
-#: includes/adapters/gravity-smtp.php:1670
+#: includes/adapters/gravity-smtp.php:1698
 #: includes/adapters/ottokit.php:146
 #: includes/adapters/ottokit.php:244
 #: assets/js/app.js:784
 msgid "Sent"
 msgstr "Gönderildi"
 
-#: includes/adapters/gravity-smtp.php:1671
+#: includes/adapters/gravity-smtp.php:1699
 #: includes/adapters/ottokit.php:332
 #: assets/js/app.js:782
 #: assets/js/app.js:16351
@@ -6591,11 +6591,11 @@ msgid "Item marked %s."
 msgstr "Öge %s olarak işaretlendi."
 
 #. translators: %s: post type name.
-#: includes/adapters/jet-engine-fields.php:335
+#: includes/adapters/jet-engine-fields.php:342
 msgid "%s fields"
 msgstr "%s alanları"
 
-#: includes/adapters/jet-engine-fields.php:669
+#: includes/adapters/jet-engine-fields.php:695
 msgid "JetEngine field values for Minn Admin."
 msgstr "Minn Admin için JetEngine alan değerleri."
 
@@ -7016,1259 +7016,1259 @@ msgid "Open LatePoint ↗"
 msgstr "LatePoint’i aç ↗"
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:105
+#: includes/adapters/licenses.php:108
 msgid "That isn’t a valid %s license key."
 msgstr "Bu geçerli bir %s lisans anahtarı değil."
 
-#: includes/adapters/licenses.php:108
+#: includes/adapters/licenses.php:111
 msgid "The license is not active for this site’s URL."
 msgstr "Lisans bu sitenin URL’si için etkin değil."
 
-#: includes/adapters/licenses.php:111
+#: includes/adapters/licenses.php:114
 msgid "That license key has been disabled."
 msgstr "Bu lisans anahtarı devre dışı bırakıldı."
 
-#: includes/adapters/licenses.php:113
+#: includes/adapters/licenses.php:116
 msgid "That license key has expired."
 msgstr "Bu lisans anahtarının süresi doldu."
 
-#: includes/adapters/licenses.php:115
+#: includes/adapters/licenses.php:118
 msgid "That license key has reached its activation limit."
 msgstr "Bu lisans anahtarı etkinleştirme sınırına ulaştı."
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:118
+#: includes/adapters/licenses.php:121
 msgid "%s did not accept that key."
 msgstr "%s bu anahtarı kabul etmedi."
 
-#: includes/adapters/licenses.php:161
+#: includes/adapters/licenses.php:164
 msgid "full membership"
 msgstr "tam üyelik"
 
-#: includes/adapters/licenses.php:162
+#: includes/adapters/licenses.php:165
 msgid "per-plugin membership"
 msgstr "eklenti başına üyelik"
 
-#: includes/adapters/licenses.php:163
+#: includes/adapters/licenses.php:166
 msgid "single-project membership"
 msgstr "tek proje üyeliği"
 
-#: includes/adapters/licenses.php:164
+#: includes/adapters/licenses.php:167
 msgid "free Hub membership"
 msgstr "ücretsiz Hub üyeliği"
 
-#: includes/adapters/licenses.php:165
+#: includes/adapters/licenses.php:168
 msgid "membership paused"
 msgstr "üyelik duraklatılmış"
 
-#: includes/adapters/licenses.php:639
+#: includes/adapters/licenses.php:642
 msgid "Could not reach smashballoon.com"
 msgstr "smashballoon.com adresine ulaşılamadı"
 
-#: includes/adapters/licenses.php:647
+#: includes/adapters/licenses.php:650
 msgid "You have reached the maximum number of sites for this Smash Balloon license"
 msgstr "Bu Smash Balloon lisansı için en fazla site sayısına ulaştınız"
 
 #. translators: 1: number of sites the license is active on. 2: maximum number of sites the license allows.
-#: includes/adapters/licenses.php:650
+#: includes/adapters/licenses.php:653
 msgid "You have reached the maximum number of sites for this Smash Balloon license (%1$d/%2$d)"
 msgstr "Bu Smash Balloon lisansı için en fazla site sayısına ulaştınız (%1$d/%2$d)"
 
-#: includes/adapters/licenses.php:655
+#: includes/adapters/licenses.php:658
 msgid "This Smash Balloon license has expired"
 msgstr "Bu Smash Balloon lisansının süresi dolmuş"
 
-#: includes/adapters/licenses.php:661
+#: includes/adapters/licenses.php:664
 msgid "Smash Balloon did not accept that key"
 msgstr "Smash Balloon bu anahtarı kabul etmedi"
 
-#: includes/adapters/licenses.php:853
-#: includes/adapters/licenses.php:888
-#: includes/adapters/licenses.php:912
+#: includes/adapters/licenses.php:856
+#: includes/adapters/licenses.php:891
+#: includes/adapters/licenses.php:915
 msgid "Brainstorm Force licensing is not loaded on this site."
 msgstr "Brainstorm Force lisanslaması bu sitede yüklü değil."
 
-#: includes/adapters/licenses.php:876
+#: includes/adapters/licenses.php:879
 msgid "Brainstorm Force did not accept that key."
 msgstr "Brainstorm Force bu anahtarı kabul etmedi."
 
-#: includes/adapters/licenses.php:897
+#: includes/adapters/licenses.php:900
 msgid "Brainstorm Force did not release that activation."
 msgstr "Brainstorm Force bu etkinleştirmeyi serbest bırakmadı."
 
-#: includes/adapters/licenses.php:917
+#: includes/adapters/licenses.php:920
 msgid "No license key is stored for this product."
 msgstr "Bu ürün için saklanan bir lisans anahtarı yok."
 
-#: includes/adapters/licenses.php:922
+#: includes/adapters/licenses.php:925
 msgid "Brainstorm Force confirmed this license is active."
 msgstr "Brainstorm Force bu lisansın etkin olduğunu doğruladı."
 
-#: includes/adapters/licenses.php:930
+#: includes/adapters/licenses.php:933
 msgid "This license expired on "
 msgstr "Bu lisansın süresi doldu: "
 
-#: includes/adapters/licenses.php:932
+#: includes/adapters/licenses.php:935
 msgid "Brainstorm Force reports this license is not active on this site."
 msgstr "Brainstorm Force bu lisansın bu sitede etkin olmadığını bildiriyor."
 
-#: includes/adapters/licenses.php:1189
+#: includes/adapters/licenses.php:1192
 msgid "Crocoblock refused the key"
 msgstr "Crocoblock bu anahtarı reddetti"
 
-#: includes/adapters/licenses.php:1214
+#: includes/adapters/licenses.php:1217
 msgid "The Jet Dashboard code is not loaded; activate a Jet plugin first."
 msgstr "Jet Dashboard kodu yüklenmedi; önce bir Jet eklentisini etkinleştirin."
 
-#: includes/adapters/licenses.php:1222
+#: includes/adapters/licenses.php:1225
 msgid "Could not reach the Crocoblock licensing service."
 msgstr "Crocoblock lisans hizmetine ulaşılamadı."
 
-#: includes/adapters/licenses.php:1312
+#: includes/adapters/licenses.php:1315
 msgid "Key stored; Breakdance is not activated for this site"
 msgstr "Anahtar kaydedildi; Breakdance bu site için etkinleştirilmedi"
 
-#: includes/adapters/licenses.php:1348
+#: includes/adapters/licenses.php:1351
 msgid "Key stored; Elementor has not recorded a status yet"
 msgstr "Anahtar saklandı; Elementor henüz bir durum kaydetmedi"
 
-#: includes/adapters/licenses.php:1448
+#: includes/adapters/licenses.php:1451
 msgid "flagged unlicensed"
 msgstr "lisanssız olarak işaretlendi"
 
-#: includes/adapters/licenses.php:1475
+#: includes/adapters/licenses.php:1478
 msgid "Key set in wp-config"
 msgstr "Anahtar wp-config içinde ayarlı"
 
-#: includes/adapters/licenses.php:1501
+#: includes/adapters/licenses.php:1504
 msgid "Key belongs to another user on this site"
 msgstr "Anahtar bu sitedeki başka bir kullanıcıya ait"
 
-#: includes/adapters/licenses.php:1525
+#: includes/adapters/licenses.php:1528
 msgid "Key stored; no check recorded yet"
 msgstr "Anahtar saklandı; henüz kontrol kaydı yok"
 
-#: includes/adapters/licenses.php:1528
+#: includes/adapters/licenses.php:1531
 msgid "Could not reach the licensing service at the last check"
 msgstr "Son kontrolde lisans hizmetine ulaşılamadı"
 
-#: includes/adapters/licenses.php:1539
+#: includes/adapters/licenses.php:1542
 msgid "Subscription expired; migrations still run, updates and support stop"
 msgstr "Abonelik süresi doldu; taşımalar çalışmaya devam eder, güncellemeler ve destek durur"
 
-#: includes/adapters/licenses.php:1540
+#: includes/adapters/licenses.php:1543
 msgid "Subscription cancelled"
 msgstr "Abonelik iptal edildi"
 
-#: includes/adapters/licenses.php:1541
+#: includes/adapters/licenses.php:1544
 msgid "The licensing service does not recognise this key"
 msgstr "Lisans hizmeti bu anahtarı tanımıyor"
 
-#: includes/adapters/licenses.php:1542
+#: includes/adapters/licenses.php:1545
 msgid "This site's activation was turned off; activating again re-enables it"
 msgstr "Bu sitenin etkinleştirmesi kapatıldı; yeniden etkinleştirmek tekrar açar"
 
-#: includes/adapters/licenses.php:1543
+#: includes/adapters/licenses.php:1546
 msgid "Every activation on this license is in use"
 msgstr "Bu lisanstaki tüm etkinleştirmeler kullanımda"
 
-#: includes/adapters/licenses.php:1625
+#: includes/adapters/licenses.php:1628
 msgid "Key stored; Breakdance has not recorded a check yet"
 msgstr "Anahtar kaydedildi; Breakdance henüz bir denetim kaydetmedi"
 
-#: includes/adapters/licenses.php:1663
+#: includes/adapters/licenses.php:1666
 msgid "Bricks could not reach its license server"
 msgstr "Bricks lisans sunucusuna ulaşamadı"
 
 #. translators: %s: the domain the license was activated for.
-#: includes/adapters/licenses.php:1819
+#: includes/adapters/licenses.php:1822
 msgid "activated for %s, this site is %s"
 msgstr "%s için etkinleştirildi, bu site %s"
 
-#: includes/adapters/licenses.php:1829
-#: includes/adapters/licenses.php:1943
+#: includes/adapters/licenses.php:1832
+#: includes/adapters/licenses.php:1946
 msgid "Key stored; no recorded status"
 msgstr "Anahtar saklandı; kayıtlı durum yok"
 
-#: includes/adapters/licenses.php:1852
+#: includes/adapters/licenses.php:1855
 msgid "free trial"
 msgstr "ücretsiz deneme"
 
-#: includes/adapters/licenses.php:1879
+#: includes/adapters/licenses.php:1882
 msgid "Pro build installed; no license attached, so it runs as the free version"
 msgstr "Pro derlemesi kurulu; lisans bağlı değil, bu yüzden ücretsiz sürüm olarak çalışır"
 
-#: includes/adapters/licenses.php:1884
-#: includes/adapters/licenses.php:5421
+#: includes/adapters/licenses.php:1887
+#: includes/adapters/licenses.php:5424
 msgid "License attached but not readable locally"
 msgstr "Lisans bağlı ama yerelde okunamıyor"
 
-#: includes/adapters/licenses.php:1892
+#: includes/adapters/licenses.php:1895
 msgid "cancelled"
 msgstr "iptal edildi"
 
 #. translators: 1: activations used, 2: activations allowed.
-#: includes/adapters/licenses.php:1899
+#: includes/adapters/licenses.php:1902
 msgid "%1$d of %2$d activations used"
 msgstr "%1$d / %2$d etkinleştirme kullanıldı"
 
-#: includes/adapters/licenses.php:1903
+#: includes/adapters/licenses.php:1906
 msgid "(localhost activations are not counted)"
 msgstr "(localhost etkinleştirmeleri sayılmaz)"
 
-#: includes/adapters/licenses.php:2036
-#: includes/adapters/licenses.php:2038
+#: includes/adapters/licenses.php:2039
+#: includes/adapters/licenses.php:2041
 msgid "WPMU DEV membership"
 msgstr "WPMU DEV üyeliği"
 
-#: includes/adapters/licenses.php:2054
+#: includes/adapters/licenses.php:2057
 msgid "licensed through the WPMU DEV Dashboard key"
 msgstr "WPMU DEV Dashboard anahtarıyla lisanslı"
 
-#: includes/adapters/licenses.php:2068
+#: includes/adapters/licenses.php:2071
 msgid "covered by the WPMU DEV membership"
 msgstr "WPMU DEV üyeliği kapsamında"
 
-#: includes/adapters/licenses.php:2071
+#: includes/adapters/licenses.php:2074
 msgid "the WPMU DEV membership has expired"
 msgstr "WPMU DEV üyeliğinin süresi dolmuş"
 
-#: includes/adapters/licenses.php:2074
+#: includes/adapters/licenses.php:2077
 msgid "the WPMU DEV membership is paused"
 msgstr "WPMU DEV üyeliği duraklatılmış"
 
-#: includes/adapters/licenses.php:2076
+#: includes/adapters/licenses.php:2079
 msgid "Dashboard key present; Smush has not validated it yet"
 msgstr "Dashboard anahtarı var; Smush henüz doğrulamadı"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2117
+#: includes/adapters/licenses.php:2120
 msgid "%d Jet plugin installed; one Crocoblock key covers it"
 msgid_plural "%d Jet plugins installed; one Crocoblock key covers them all"
 msgstr[0] "%d Jet eklentisi kurulu; bir Crocoblock anahtarı onu kapsar"
 msgstr[1] "%d Jet eklentisi kurulu; bir Crocoblock anahtarı hepsini kapsar"
 
-#: includes/adapters/licenses.php:2125
+#: includes/adapters/licenses.php:2128
 msgid "lifetime membership"
 msgstr "ömür boyu üyelik"
 
-#: includes/adapters/licenses.php:2126
+#: includes/adapters/licenses.php:2129
 msgid "all-inclusive membership"
 msgstr "her şey dahil üyelik"
 
-#: includes/adapters/licenses.php:2127
+#: includes/adapters/licenses.php:2130
 msgid "plugin set"
 msgstr "eklenti seti"
 
-#: includes/adapters/licenses.php:2128
+#: includes/adapters/licenses.php:2131
 msgid "theme + plugin bundle"
 msgstr "tema + eklenti paketi"
 
-#: includes/adapters/licenses.php:2129
+#: includes/adapters/licenses.php:2132
 msgid "single plugin"
 msgstr "tek eklenti"
 
-#: includes/adapters/licenses.php:2138
+#: includes/adapters/licenses.php:2141
 msgid "TemplateMonster key"
 msgstr "TemplateMonster anahtarı"
 
-#: includes/adapters/licenses.php:2140
+#: includes/adapters/licenses.php:2143
 msgid "Envato key"
 msgstr "Envato anahtarı"
 
-#: includes/adapters/licenses.php:2143
+#: includes/adapters/licenses.php:2146
 msgid "sublicense"
 msgstr "alt lisans"
 
 #. translators: %s: the site address the license was activated for.
-#: includes/adapters/licenses.php:2152
+#: includes/adapters/licenses.php:2155
 msgid "activated for %s, not this site; deactivate and activate again"
 msgstr "%s için etkinleştirilmiş, bu site için değil; etkisizleştirip yeniden etkinleştirin"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2164
+#: includes/adapters/licenses.php:2167
 msgid "covers the %d installed Jet plugin"
 msgid_plural "covers all %d installed Jet plugins"
 msgstr[0] "kurulu %d Jet eklentisini kapsar"
 msgstr[1] "kurulu %d Jet eklentisinin tümünü kapsar"
 
 #. translators: 1: covered count, 2: installed count, 3: names of the plugins the license does not cover.
-#: includes/adapters/licenses.php:2167
+#: includes/adapters/licenses.php:2170
 msgid "covers %1$d of %2$d installed Jet plugins; not covered: %3$s"
 msgstr "%1$d / %2$d kurulu Jet eklentisini kapsar; kapsam dışı: %3$s"
 
 #. translators: %d: number of sites the license may be activated on.
-#: includes/adapters/licenses.php:2173
+#: includes/adapters/licenses.php:2176
 msgid "%d site allowed"
 msgid_plural "%d sites allowed"
 msgstr[0] "%d siteye izin verildi"
 msgstr[1] "%d siteye izin verildi"
 
-#: includes/adapters/licenses.php:2230
+#: includes/adapters/licenses.php:2233
 msgid "no license store yet; the plugin has not run"
 msgstr "henüz lisans deposu yok; eklenti çalışmamış"
 
-#: includes/adapters/licenses.php:2276
+#: includes/adapters/licenses.php:2279
 msgid "key rejected at the last check"
 msgstr "anahtar son denetimde reddedildi"
 
-#: includes/adapters/licenses.php:2279
+#: includes/adapters/licenses.php:2282
 msgid "key disabled by the vendor"
 msgstr "anahtar sağlayıcı tarafından etkisizleştirildi"
 
-#: includes/adapters/licenses.php:2282
+#: includes/adapters/licenses.php:2285
 msgid "site limit reached"
 msgstr "site sınırına ulaşıldı"
 
-#: includes/adapters/licenses.php:2328
+#: includes/adapters/licenses.php:2331
 msgid "service key (free tier exists)"
 msgstr "hizmet anahtarı (ücretsiz katman var)"
 
-#: includes/adapters/licenses.php:2334
+#: includes/adapters/licenses.php:2337
 #: assets/js/app.js:21610
 msgid "service key"
 msgstr "hizmet anahtarı"
 
 #. translators: %d: Akismet alert code number.
-#: includes/adapters/licenses.php:2337
+#: includes/adapters/licenses.php:2340
 msgid "Akismet reported a problem with this key (alert %d)"
 msgstr "Akismet bu anahtarla ilgili bir sorun bildirdi (uyarı %d)"
 
-#: includes/adapters/licenses.php:2371
+#: includes/adapters/licenses.php:2374
 msgid "cloud access key (free trial, then paid)"
 msgstr "bulut erişim anahtarı (ücretsiz deneme, sonra ücretli)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key (trial)"
 msgstr "bulut erişim anahtarı (deneme)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key"
 msgstr "bulut erişim anahtarı"
 
-#: includes/adapters/licenses.php:2380
+#: includes/adapters/licenses.php:2383
 msgid "CleanTalk did not accept this access key"
 msgstr "CleanTalk bu erişim anahtarını kabul etmedi"
 
-#: includes/adapters/licenses.php:2413
+#: includes/adapters/licenses.php:2416
 msgid "not connected; official extension subscriptions and updates ride this link"
 msgstr "bağlı değil; resmî eklenti abonelikleri ve güncellemeleri bu bağlantıdan gelir"
 
 #. translators: %d: number of WooCommerce.com extension subscriptions.
-#: includes/adapters/licenses.php:2420
+#: includes/adapters/licenses.php:2423
 msgid "%d extension subscription"
 msgid_plural "%d extension subscriptions"
 msgstr[0] "%d eklenti aboneliği"
 msgstr[1] "%d eklenti aboneliği"
 
-#: includes/adapters/licenses.php:2448
+#: includes/adapters/licenses.php:2451
 msgid "store not connected; orders, customers and products all live in SureCart"
 msgstr "mağaza bağlı değil; siparişler, müşteriler ve ürünlerin tümü SureCart'ta tutulur"
 
-#: includes/adapters/licenses.php:2455
+#: includes/adapters/licenses.php:2458
 msgid "store connected"
 msgstr "mağaza bağlı"
 
-#: includes/adapters/licenses.php:2476
+#: includes/adapters/licenses.php:2479
 msgid "not set up; connect on the Site Kit screen"
 msgstr "kurulmamış; Site Kit ekranından bağlanın"
 
-#: includes/adapters/licenses.php:2479
+#: includes/adapters/licenses.php:2482
 msgid "site credentials stored; no admin has finished connecting a Google account"
 msgstr "site kimlik bilgileri saklandı; hiçbir yönetici Google hesabı bağlamayı tamamlamadı"
 
-#: includes/adapters/licenses.php:2481
+#: includes/adapters/licenses.php:2484
 msgid "Google account connected"
 msgstr "Google hesabı bağlı"
 
-#: includes/adapters/licenses.php:2504
+#: includes/adapters/licenses.php:2507
 msgid "not connected to WordPress.com"
 msgstr "WordPress.com'a bağlı değil"
 
 #. translators: %d: WordPress.com site ID.
-#: includes/adapters/licenses.php:2507
+#: includes/adapters/licenses.php:2510
 msgid "connected to WordPress.com (site ID %d)"
 msgstr "WordPress.com'a bağlı (site kimliği %d)"
 
 #. translators: %s: WordPress.com user login name.
-#: includes/adapters/licenses.php:2512
+#: includes/adapters/licenses.php:2515
 msgid "connected to WordPress.com as %s"
 msgstr "WordPress.com'a %s olarak bağlı"
 
-#: includes/adapters/licenses.php:2547
+#: includes/adapters/licenses.php:2550
 msgid "key stored; no subscription details recorded yet"
 msgstr "anahtar saklandı; henüz abonelik ayrıntısı kaydedilmedi"
 
-#: includes/adapters/licenses.php:2590
+#: includes/adapters/licenses.php:2593
 msgid "Gravity Perks re-checks every 12 hours; no cached status"
 msgstr "Gravity Perks 12 saatte bir yeniden denetler; önbellekte durum yok"
 
-#: includes/adapters/licenses.php:2618
+#: includes/adapters/licenses.php:2621
 msgid "connects through a rankmath.com account"
 msgstr "bir rankmath.com hesabı üzerinden bağlanır"
 
-#: includes/adapters/licenses.php:2621
+#: includes/adapters/licenses.php:2624
 msgid "connected; plan: "
 msgstr "bağlı; plan: "
 
-#: includes/adapters/licenses.php:2641
+#: includes/adapters/licenses.php:2644
 msgid "requires free Yoast SEO (wordpress-seo)"
 msgstr "ücretsiz Yoast SEO (wordpress-seo) gerekir"
 
-#: includes/adapters/licenses.php:2649
+#: includes/adapters/licenses.php:2652
 msgid "activate free Yoast SEO to read MyYoast subscription state"
 msgstr "MyYoast abonelik durumunu okumak için ücretsiz Yoast SEO'yu etkinleştirin"
 
-#: includes/adapters/licenses.php:2660
+#: includes/adapters/licenses.php:2663
 msgid "activate the subscription on MyYoast"
 msgstr "aboneliği MyYoast'ta etkinleştirin"
 
-#: includes/adapters/licenses.php:2674
+#: includes/adapters/licenses.php:2677
 msgid "MyYoast subscription"
 msgstr "MyYoast aboneliği"
 
-#: includes/adapters/licenses.php:2683
+#: includes/adapters/licenses.php:2686
 msgid "MyYoast subscription inactive or expired"
 msgstr "MyYoast aboneliği etkin değil ya da süresi dolmuş"
 
-#: includes/adapters/licenses.php:2689
+#: includes/adapters/licenses.php:2692
 msgid "could not read MyYoast subscription state"
 msgstr "MyYoast abonelik durumu okunamadı"
 
-#: includes/adapters/licenses.php:2805
+#: includes/adapters/licenses.php:2808
 msgid "key defined in wp-config.php"
 msgstr "anahtar wp-config.php içinde tanımlı"
 
-#: includes/adapters/licenses.php:2849
+#: includes/adapters/licenses.php:2852
 msgid "code stored but not registered"
 msgstr "kod saklandı ama kayıtlı değil"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "activation was canceled remotely"
 msgstr "etkinleştirme uzaktan iptal edildi"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "code stored but the site is not authorized"
 msgstr "kod saklandı ama site yetkili değil"
 
-#: includes/adapters/licenses.php:2895
+#: includes/adapters/licenses.php:2898
 msgid "no account token or item tokens stored"
 msgstr "saklanan hesap jetonu ya da öge jetonu yok"
 
-#: includes/adapters/licenses.php:2905
+#: includes/adapters/licenses.php:2908
 msgid "Envato keeps no local validity record"
 msgstr "Envato yerel geçerlilik kaydı tutmaz"
 
-#: includes/adapters/licenses.php:2906
+#: includes/adapters/licenses.php:2909
 msgid "Envato Market account token"
 msgstr "Envato Market hesap jetonu"
 
-#: includes/adapters/licenses.php:2914
+#: includes/adapters/licenses.php:2917
 msgid "Envato single-item token"
 msgstr "Envato tek öge jetonu"
 
-#: includes/adapters/licenses.php:2937
+#: includes/adapters/licenses.php:2940
 msgid "covers the bundled Avada plugins"
 msgstr "birlikte gelen Avada eklentilerini kapsar"
 
-#: includes/adapters/licenses.php:3010
+#: includes/adapters/licenses.php:3013
 msgid "key ships inside the plugin build"
 msgstr "anahtar eklenti derlemesinin içinde gelir"
 
-#: includes/adapters/licenses.php:3055
+#: includes/adapters/licenses.php:3058
 msgid "key stored but not activated on this site"
 msgstr "anahtar saklandı ama bu sitede etkinleştirilmedi"
 
-#: includes/adapters/licenses.php:3161
+#: includes/adapters/licenses.php:3164
 msgid "Purchase code"
 msgstr "Satın alma kodu"
 
-#: includes/adapters/licenses.php:3165
-#: includes/adapters/licenses.php:3182
-#: includes/adapters/licenses.php:3196
+#: includes/adapters/licenses.php:3168
+#: includes/adapters/licenses.php:3185
+#: includes/adapters/licenses.php:3199
 msgid "Slider Revolution's license class could not be loaded."
 msgstr "Slider Revolution lisans sınıfı yüklenemedi."
 
-#: includes/adapters/licenses.php:3172
+#: includes/adapters/licenses.php:3175
 msgid "This purchase code is already registered to another site. Deregister it there (or in your ThemePunch account) first."
 msgstr "Bu satın alma kodu başka bir siteye kayıtlı. Önce orada (ya da ThemePunch hesabınızda) kaydını kaldırın."
 
-#: includes/adapters/licenses.php:3175
+#: includes/adapters/licenses.php:3178
 msgid "ThemePunch reports this purchase code as banned."
 msgstr "ThemePunch bu satın alma kodunu yasaklı olarak bildiriyor."
 
-#: includes/adapters/licenses.php:3177
+#: includes/adapters/licenses.php:3180
 msgid "ThemePunch did not accept this purchase code."
 msgstr "ThemePunch bu satın alma kodunu kabul etmedi."
 
-#: includes/adapters/licenses.php:3186
+#: includes/adapters/licenses.php:3189
 msgid "The purchase code was deregistered with ThemePunch and the seat freed."
 msgstr "Satın alma kodunun ThemePunch kaydı kaldırıldı ve koltuk boşaltıldı."
 
-#: includes/adapters/licenses.php:3187
+#: includes/adapters/licenses.php:3190
 msgid "ThemePunch did not confirm the deregistration."
 msgstr "ThemePunch kayıt kaldırmayı doğrulamadı."
 
-#: includes/adapters/licenses.php:3192
+#: includes/adapters/licenses.php:3195
 msgid "No purchase code is stored."
 msgstr "Saklanan bir satın alma kodu yok."
 
-#: includes/adapters/licenses.php:3204
+#: includes/adapters/licenses.php:3207
 msgid "exist"
 msgstr "var"
 
-#: includes/adapters/licenses.php:3225
+#: includes/adapters/licenses.php:3228
 msgid "HappyFiles recorded no response; the activation request may not have reached happyfiles.io. The key has been kept, because happyfiles.io may already have counted the activation."
 msgstr "HappyFiles hiçbir yanıt kaydetmedi; etkinleştirme isteği happyfiles.io'ya ulaşmamış olabilir. happyfiles.io etkinleştirmeyi zaten saymış olabileceğinden anahtar korundu."
 
-#: includes/adapters/licenses.php:3229
+#: includes/adapters/licenses.php:3232
 msgid "happyfiles.io did not accept this license key."
 msgstr "happyfiles.io bu lisans anahtarını kabul etmedi."
 
-#: includes/adapters/licenses.php:3255
+#: includes/adapters/licenses.php:3258
 msgid "HappyFiles license key"
 msgstr "HappyFiles lisans anahtarı"
 
-#: includes/adapters/licenses.php:3281
-#: includes/adapters/licenses.php:3293
-#: includes/adapters/licenses.php:4609
-#: includes/adapters/licenses.php:4704
+#: includes/adapters/licenses.php:3284
+#: includes/adapters/licenses.php:3296
+#: includes/adapters/licenses.php:4612
+#: includes/adapters/licenses.php:4707
 msgid "No license key is stored."
 msgstr "Saklanan bir lisans anahtarı yok."
 
-#: includes/adapters/licenses.php:3288
+#: includes/adapters/licenses.php:3291
 msgid "The license key was removed and the site deregistered with happyfiles.io."
 msgstr "Lisans anahtarı kaldırıldı ve site happyfiles.io kaydından çıkarıldı."
 
-#: includes/adapters/licenses.php:3321
+#: includes/adapters/licenses.php:3324
 msgid "The key validation service did not answer."
 msgstr "Anahtar doğrulama hizmeti yanıt vermedi."
 
-#: includes/adapters/licenses.php:3331
+#: includes/adapters/licenses.php:3334
 #: assets/js/app.js:27673
 msgid "The key was not accepted."
 msgstr "Anahtar kabul edilmedi."
 
 #. translators: %s: name of the licensed product.
-#: includes/adapters/licenses.php:3338
-#: includes/adapters/licenses.php:5209
+#: includes/adapters/licenses.php:3341
+#: includes/adapters/licenses.php:5212
 msgid "%s license key"
 msgstr "%s lisans anahtarı"
 
-#: includes/adapters/licenses.php:3385
+#: includes/adapters/licenses.php:3388
 msgid "The stored key was cleared, but this plugin build ships with the key embedded and will re-register it. Manage licensed domains on theeventscalendar.com."
 msgstr "Saklanan anahtar temizlendi ama bu eklenti derlemesi anahtarı gömülü olarak gelir ve yeniden kaydeder. Lisanslı etki alanlarını theeventscalendar.com üzerinde yönetin."
 
-#: includes/adapters/licenses.php:3386
+#: includes/adapters/licenses.php:3389
 msgid "The key was removed from this site. Manage its licensed domains on theeventscalendar.com."
 msgstr "Anahtar bu siteden kaldırıldı. Lisanslı etki alanlarını theeventscalendar.com üzerinde yönetin."
 
-#: includes/adapters/licenses.php:3393
+#: includes/adapters/licenses.php:3396
 msgid "No key is stored for this product."
 msgstr "Bu ürün için saklanan bir anahtar yok."
 
-#: includes/adapters/licenses.php:3429
+#: includes/adapters/licenses.php:3432
 msgid "The Kadence licensing service did not answer."
 msgstr "Kadence lisanslama hizmeti yanıt vermedi."
 
-#: includes/adapters/licenses.php:3436
+#: includes/adapters/licenses.php:3439
 msgid "unreachable"
 msgstr "erişilemiyor"
 
-#: includes/adapters/licenses.php:3438
+#: includes/adapters/licenses.php:3441
 msgid "Kadence license key"
 msgstr "Kadence lisans anahtarı"
 
-#: includes/adapters/licenses.php:3473
+#: includes/adapters/licenses.php:3476
 msgid "The stored key was cleared. A key baked into the plugin build remains as the fallback."
 msgstr "Saklanan anahtar temizlendi. Eklenti derlemesine gömülü bir anahtar yedek olarak kalır."
 
-#: includes/adapters/licenses.php:3474
+#: includes/adapters/licenses.php:3477
 msgid "The stored key was cleared from this site."
 msgstr "Saklanan anahtar bu siteden temizlendi."
 
-#: includes/adapters/licenses.php:3491
+#: includes/adapters/licenses.php:3494
 msgid "Elementor Pro license key"
 msgstr "Elementor Pro lisans anahtarı"
 
-#: includes/adapters/licenses.php:3501
-#: includes/adapters/licenses.php:3502
+#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3505
 msgid "Elementor does not recognize that key"
 msgstr "Elementor bu anahtarı tanımıyor"
 
-#: includes/adapters/licenses.php:3503
+#: includes/adapters/licenses.php:3506
 msgid "That Elementor Pro license has expired"
 msgstr "Bu Elementor Pro lisansının süresi dolmuş"
 
-#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3507
 msgid "That license was disabled"
 msgstr "Bu lisans etkisizleştirildi"
 
-#: includes/adapters/licenses.php:3505
+#: includes/adapters/licenses.php:3508
 msgid "That subscription was cancelled"
 msgstr "Bu abonelik iptal edildi"
 
-#: includes/adapters/licenses.php:3506
+#: includes/adapters/licenses.php:3509
 msgid "That license was revoked"
 msgstr "Bu lisans geri alındı"
 
-#: includes/adapters/licenses.php:3507
+#: includes/adapters/licenses.php:3510
 msgid "That key is registered to a different domain"
 msgstr "Bu anahtar başka bir etki alanına kayıtlı"
 
-#: includes/adapters/licenses.php:3530
+#: includes/adapters/licenses.php:3533
 msgid "Elementor did not confirm the license"
 msgstr "Elementor lisansı doğrulamadı"
 
-#: includes/adapters/licenses.php:3577
+#: includes/adapters/licenses.php:3580
 msgid "Essential Addons license key"
 msgstr "Essential Addons lisans anahtarı"
 
-#: includes/adapters/licenses.php:3581
-#: includes/adapters/licenses.php:3602
-#: includes/adapters/licenses.php:3613
+#: includes/adapters/licenses.php:3584
+#: includes/adapters/licenses.php:3605
+#: includes/adapters/licenses.php:3616
 msgid "Essential Addons Pro is not loaded."
 msgstr "Essential Addons Pro yüklenmedi."
 
-#: includes/adapters/licenses.php:3593
+#: includes/adapters/licenses.php:3596
 msgid "Essential Addons sent a confirmation code to the license email. Finish activation on its settings screen."
 msgstr "Essential Addons lisans e-postasına bir onay kodu gönderdi. Etkinleştirmeyi ayarlar ekranında tamamlayın."
 
-#: includes/adapters/licenses.php:3636
+#: includes/adapters/licenses.php:3639
 msgid "ACF PRO license key"
 msgstr "ACF PRO lisans anahtarı"
 
-#: includes/adapters/licenses.php:3674
+#: includes/adapters/licenses.php:3677
 msgid "Independent Analytics license key"
 msgstr "Independent Analytics lisans anahtarı"
 
 #. translators: %s: the current administrator's email address.
-#: includes/adapters/licenses.php:3692
+#: includes/adapters/licenses.php:3695
 msgid "This site has not been connected yet, so activating registers it with freemius.com and sends your name, %s and the site address."
 msgstr "Bu site henüz bağlanmadı; bu nedenle etkinleştirme, siteyi freemius.com'a kaydeder ve adınızı, %s ve site adresini gönderir."
 
-#: includes/adapters/licenses.php:3693
+#: includes/adapters/licenses.php:3696
 msgid "your email address"
 msgstr "e-posta adresinizi"
 
-#: includes/adapters/licenses.php:3728
+#: includes/adapters/licenses.php:3731
 msgid "Crocoblock license key"
 msgstr "Crocoblock lisans anahtarı"
 
-#: includes/adapters/licenses.php:3732
+#: includes/adapters/licenses.php:3735
 msgid "Paste the license key from your Crocoblock account."
 msgstr "Crocoblock hesabınızdaki lisans anahtarını yapıştırın."
 
-#: includes/adapters/licenses.php:3739
+#: includes/adapters/licenses.php:3742
 msgid "Crocoblock accepted the key but sent no license details to store."
 msgstr "Crocoblock anahtarı kabul etti ama saklanacak lisans ayrıntısı göndermedi."
 
-#: includes/adapters/licenses.php:3748
-#: includes/adapters/licenses.php:3764
+#: includes/adapters/licenses.php:3751
+#: includes/adapters/licenses.php:3767
 msgid "No Crocoblock key is stored."
 msgstr "Saklanan Crocoblock anahtarı yok."
 
-#: includes/adapters/licenses.php:3759
+#: includes/adapters/licenses.php:3762
 msgid "This site was removed from the license."
 msgstr "Bu site lisanstan kaldırıldı."
 
-#: includes/adapters/licenses.php:3773
+#: includes/adapters/licenses.php:3776
 msgid "Crocoblock confirmed the license for this site."
 msgstr "Crocoblock bu site için lisansı doğruladı."
 
-#: includes/adapters/licenses.php:3803
+#: includes/adapters/licenses.php:3806
 msgid "The licensing service returned nothing readable"
 msgstr "Lisans hizmeti okunabilir bir şey döndürmedi"
 
-#: includes/adapters/licenses.php:3806
+#: includes/adapters/licenses.php:3809
 msgid "Could not reach the licensing service"
 msgstr "Lisans hizmetine ulaşılamadı"
 
-#: includes/adapters/licenses.php:3814
+#: includes/adapters/licenses.php:3817
 msgid "That subscription has expired. Migrations still run; updates and support stop."
 msgstr "Bu aboneliğin süresi doldu. Taşımalar çalışmaya devam eder; güncellemeler ve destek durur."
 
-#: includes/adapters/licenses.php:3815
+#: includes/adapters/licenses.php:3818
 msgid "That subscription was cancelled."
 msgstr "Bu abonelik iptal edildi."
 
-#: includes/adapters/licenses.php:3816
+#: includes/adapters/licenses.php:3819
 msgid "WP Migrate does not recognise that key."
 msgstr "WP Migrate bu anahtarı tanımıyor."
 
-#: includes/adapters/licenses.php:3817
+#: includes/adapters/licenses.php:3820
 msgid "Every activation on that license is in use."
 msgstr "O lisanstaki tüm etkinleştirmeler kullanımda."
 
-#: includes/adapters/licenses.php:3818
+#: includes/adapters/licenses.php:3821
 msgid "This site's activation was turned off for that license."
 msgstr "Bu sitenin etkinleştirmesi o lisans için kapatıldı."
 
-#: includes/adapters/licenses.php:3819
+#: includes/adapters/licenses.php:3822
 msgid "No license key was sent."
 msgstr "Lisans anahtarı gönderilmedi."
 
-#: includes/adapters/licenses.php:3827
+#: includes/adapters/licenses.php:3830
 msgid "WP Migrate license key"
 msgstr "WP Migrate lisans anahtarı"
 
-#: includes/adapters/licenses.php:3832
+#: includes/adapters/licenses.php:3835
 msgid "Enter a license key."
 msgstr "Bir lisans anahtarı girin."
 
-#: includes/adapters/licenses.php:3835
+#: includes/adapters/licenses.php:3838
 msgid "This site sets its key in wp-config, which always wins. Change it there."
 msgstr "Bu site anahtarını wp-config içinde ayarlar, o her zaman üstün gelir. Orada değiştirin."
 
-#: includes/adapters/licenses.php:3866
+#: includes/adapters/licenses.php:3869
 msgid "This site sets its key in wp-config. Remove it there."
 msgstr "Bu site anahtarını wp-config içinde ayarlar. Orada kaldırın."
 
-#: includes/adapters/licenses.php:3882
+#: includes/adapters/licenses.php:3885
 msgid "The key was removed from this site. WP Migrate has no way to release the activation remotely, so free the seat in your account if you need it elsewhere."
 msgstr "Anahtar bu siteden kaldırıldı. WP Migrate etkinleştirmeyi uzaktan serbest bırakamaz, bu yüzden başka yerde gerekiyorsa hesabınızdaki koltuğu boşaltın."
 
-#: includes/adapters/licenses.php:3890
+#: includes/adapters/licenses.php:3893
 msgid "No license key is stored on this site."
 msgstr "Bu sitede lisans anahtarı saklanmıyor."
 
-#: includes/adapters/licenses.php:3921
+#: includes/adapters/licenses.php:3924
 msgid "Beaver Builder license key"
 msgstr "Beaver Builder lisans anahtarı"
 
-#: includes/adapters/licenses.php:3935
+#: includes/adapters/licenses.php:3938
 msgid "Beaver Builder reports the subscription as not active for this domain"
 msgstr "Beaver Builder aboneliğin bu etki alanı için etkin olmadığını bildiriyor"
 
-#: includes/adapters/licenses.php:3943
+#: includes/adapters/licenses.php:3946
 msgid "Brizy Pro license key"
 msgstr "Brizy Pro lisans anahtarı"
 
-#: includes/adapters/licenses.php:3963
-#: includes/adapters/licenses.php:3978
+#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3981
 msgid "Breakdance did not recognize that key."
 msgstr "Breakdance bu anahtarı tanımadı."
 
-#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3969
 msgid "That key does not include Breakdance Pro."
 msgstr "Bu anahtar Breakdance Pro’yu içermiyor."
 
-#: includes/adapters/licenses.php:3973
+#: includes/adapters/licenses.php:3976
 msgid "That Breakdance Pro license has expired."
 msgstr "Bu Breakdance Pro lisansının süresi doldu."
 
-#: includes/adapters/licenses.php:3976
+#: includes/adapters/licenses.php:3979
 msgid "Breakdance did not activate this site. Check the license site limit in your Breakdance account."
 msgstr "Breakdance bu siteyi etkinleştirmedi. Breakdance hesabınızdaki lisans site sınırını kontrol edin."
 
-#: includes/adapters/licenses.php:3986
+#: includes/adapters/licenses.php:3989
 msgid "Breakdance Pro license key"
 msgstr "Breakdance Pro lisans anahtarı"
 
-#: includes/adapters/licenses.php:4014
+#: includes/adapters/licenses.php:4017
 msgid "No Breakdance Pro key is stored."
 msgstr "Kayıtlı bir Breakdance Pro anahtarı yok."
 
-#: includes/adapters/licenses.php:4022
+#: includes/adapters/licenses.php:4025
 msgid "Breakdance could not deactivate this license. Use its License screen to review the current status."
 msgstr "Breakdance bu lisansı devre dışı bırakamadı. Geçerli durumu incelemek için Lisans ekranını kullanın."
 
-#: includes/adapters/licenses.php:4027
+#: includes/adapters/licenses.php:4030
 msgid "Breakdance still reports this site as active, so the key was kept."
 msgstr "Breakdance bu siteyi hâlâ etkin olarak bildiriyor, bu nedenle anahtar korundu."
 
-#: includes/adapters/licenses.php:4036
+#: includes/adapters/licenses.php:4039
 msgid "The seat was freed, but the key could not be cleared here. Remove it on the Breakdance License screen."
 msgstr "Koltuk boşaltıldı ancak anahtar burada temizlenemedi. Breakdance License ekranından kaldırın."
 
-#: includes/adapters/licenses.php:4039
+#: includes/adapters/licenses.php:4042
 msgid "The Breakdance Pro license was deactivated and its seat freed."
 msgstr "Breakdance Pro lisansı devre dışı bırakıldı ve lisans yeri boşaltıldı."
 
-#: includes/adapters/licenses.php:4050
+#: includes/adapters/licenses.php:4053
 msgid "Bricks license key"
 msgstr "Bricks lisans anahtarı"
 
-#: includes/adapters/licenses.php:4058
+#: includes/adapters/licenses.php:4061
 msgid "The Bricks license server is temporarily unavailable"
 msgstr "Bricks lisans sunucusu geçici olarak kullanılamıyor"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks returned status: %s"
 msgstr "Bricks şu durumu döndürdü: %s"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks did not recognize that key"
 msgstr "Bricks bu anahtarı tanımadı"
 
-#: includes/adapters/licenses.php:4071
+#: includes/adapters/licenses.php:4074
 #: includes/class-minn-admin-rest.php:7978
 #: assets/js/app.js:24127
 msgid "active"
 msgstr "etkin"
 
-#: includes/adapters/licenses.php:4091
+#: includes/adapters/licenses.php:4094
 msgid "Novamira Pro license key"
 msgstr "Novamira Pro lisans anahtarı"
 
-#: includes/adapters/licenses.php:4125
+#: includes/adapters/licenses.php:4128
 msgid "Etch license key"
 msgstr "Etch lisans anahtarı"
 
-#: includes/adapters/licenses.php:4152
+#: includes/adapters/licenses.php:4155
 msgid "Elegant Themes reports the subscription as expired"
 msgstr "Elegant Themes aboneliğin süresinin dolduğunu bildiriyor"
 
-#: includes/adapters/licenses.php:4153
+#: includes/adapters/licenses.php:4156
 msgid "Elegant Themes does not recognize that username"
 msgstr "Elegant Themes bu kullanıcı adını tanımıyor"
 
-#: includes/adapters/licenses.php:4154
+#: includes/adapters/licenses.php:4157
 msgid "Elegant Themes did not confirm the account"
 msgstr "Elegant Themes hesabı doğrulamadı"
 
-#: includes/adapters/licenses.php:4159
+#: includes/adapters/licenses.php:4162
 msgid "Elegant Themes username"
 msgstr "Elegant Themes kullanıcı adı"
 
-#: includes/adapters/licenses.php:4160
+#: includes/adapters/licenses.php:4163
 msgid "API key"
 msgstr "API anahtarı"
 
-#: includes/adapters/licenses.php:4190
+#: includes/adapters/licenses.php:4193
 msgid "Credentials removed; Elegant Themes has no per-site seats to release"
 msgstr "Kimlik bilgileri kaldırıldı; Elegant Themes'te boşaltılacak site başına koltuk yok"
 
-#: includes/adapters/licenses.php:4208
+#: includes/adapters/licenses.php:4211
 msgid "Gravity Forms did not validate the key"
 msgstr "Gravity Forms anahtarı doğrulamadı"
 
-#: includes/adapters/licenses.php:4210
+#: includes/adapters/licenses.php:4213
 msgid "Gravity Forms license key"
 msgstr "Gravity Forms lisans anahtarı"
 
-#: includes/adapters/licenses.php:4217
+#: includes/adapters/licenses.php:4220
 msgid "Gravity Forms did not accept that key"
 msgstr "Gravity Forms bu anahtarı kabul etmedi"
 
-#: includes/adapters/licenses.php:4237
+#: includes/adapters/licenses.php:4240
 msgid "Site unlinked from the license"
 msgstr "Site lisanstan ayrıldı"
 
-#: includes/adapters/licenses.php:4259
+#: includes/adapters/licenses.php:4262
 msgid "Gravity did not recognize that key"
 msgstr "Gravity bu anahtarı tanımadı"
 
-#: includes/adapters/licenses.php:4269
+#: includes/adapters/licenses.php:4272
 msgid "Gravity SMTP license key"
 msgstr "Gravity SMTP lisans anahtarı"
 
-#: includes/adapters/licenses.php:4309
+#: includes/adapters/licenses.php:4312
 msgid "WPMU DEV API key"
 msgstr "WPMU DEV API anahtarı"
 
-#: includes/adapters/licenses.php:4329
+#: includes/adapters/licenses.php:4332
 msgid "Could not reach the WPMU DEV Hub"
 msgstr "WPMU DEV Hub'a ulaşılamadı"
 
-#: includes/adapters/licenses.php:4333
+#: includes/adapters/licenses.php:4336
 msgid "The Hub did not recognize that API key"
 msgstr "Hub bu API anahtarını tanımadı"
 
-#: includes/adapters/licenses.php:4347
+#: includes/adapters/licenses.php:4350
 msgid "The Hub reports no active membership for this key"
 msgstr "Hub bu anahtar için etkin üyelik bildirmiyor"
 
-#: includes/adapters/licenses.php:4355
+#: includes/adapters/licenses.php:4358
 msgid "SearchWP license key"
 msgstr "SearchWP lisans anahtarı"
 
-#: includes/adapters/licenses.php:4364
+#: includes/adapters/licenses.php:4367
 msgid "SearchWP did not accept that key"
 msgstr "SearchWP bu anahtarı kabul etmedi"
 
-#: includes/adapters/licenses.php:4381
+#: includes/adapters/licenses.php:4384
 msgid "SearchWP did not confirm the license"
 msgstr "SearchWP lisansı doğrulamadı"
 
-#: includes/adapters/licenses.php:4402
+#: includes/adapters/licenses.php:4405
 msgid "WPForms license key"
 msgstr "WPForms lisans anahtarı"
 
-#: includes/adapters/licenses.php:4409
+#: includes/adapters/licenses.php:4412
 msgid "WPForms did not accept that key"
 msgstr "WPForms bu anahtarı kabul etmedi"
 
-#: includes/adapters/licenses.php:4415
+#: includes/adapters/licenses.php:4418
 msgid "The key is defined in wp-config (WPFORMS_LICENSE_KEY); remove the constant to deactivate."
 msgstr "Anahtar wp-config içinde tanımlı (WPFORMS_LICENSE_KEY); etkisizleştirmek için sabiti kaldırın."
 
-#: includes/adapters/licenses.php:4435
+#: includes/adapters/licenses.php:4438
 msgid "Could not reach the WPForms license API"
 msgstr "WPForms lisans API'sine ulaşılamadı"
 
 #. translators: %s: status word returned by the WPForms license API.
-#: includes/adapters/licenses.php:4440
+#: includes/adapters/licenses.php:4443
 msgid "License check returned: %s"
 msgstr "Lisans denetimi şunu döndürdü: %s"
 
-#: includes/adapters/licenses.php:4462
+#: includes/adapters/licenses.php:4465
 msgid "Akismet API key"
 msgstr "Akismet API anahtarı"
 
-#: includes/adapters/licenses.php:4465
+#: includes/adapters/licenses.php:4468
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); it cannot be changed here."
 msgstr "Anahtar kod içinde veriliyor (WPCOM_API_KEY ya da bir süzgeç); burada değiştirilemez."
 
-#: includes/adapters/licenses.php:4469
+#: includes/adapters/licenses.php:4472
 msgid "That does not look like an Akismet key (12 characters, letters a-f and digits)."
 msgstr "Bu bir Akismet anahtarına benzemiyor (12 karakter, a-f harfleri ve rakamlar)."
 
-#: includes/adapters/licenses.php:4472
+#: includes/adapters/licenses.php:4475
 msgid "Akismet admin machinery unavailable."
 msgstr "Akismet yönetim düzeneği kullanılamıyor."
 
-#: includes/adapters/licenses.php:4480
+#: includes/adapters/licenses.php:4483
 msgid "The key is real but its Akismet plan is not active (missing, cancelled or suspended subscription)."
 msgstr "Anahtar gerçek ama Akismet planı etkin değil (abonelik yok, iptal edilmiş ya da askıya alınmış)."
 
-#: includes/adapters/licenses.php:4483
+#: includes/adapters/licenses.php:4486
 msgid "Akismet did not recognize that key."
 msgstr "Akismet bu anahtarı tanımadı."
 
-#: includes/adapters/licenses.php:4485
+#: includes/adapters/licenses.php:4488
 msgid "Could not reach the Akismet API. Please try again."
 msgstr "Akismet API'sine ulaşılamadı. Lütfen yeniden deneyin."
 
-#: includes/adapters/licenses.php:4489
+#: includes/adapters/licenses.php:4492
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); remove it there."
 msgstr "Anahtar kod içinde veriliyor (WPCOM_API_KEY ya da bir süzgeç); oradan kaldırın."
 
-#: includes/adapters/licenses.php:4513
+#: includes/adapters/licenses.php:4516
 msgid "Akismet reports this key as invalid."
 msgstr "Akismet bu anahtarı geçersiz olarak bildiriyor."
 
-#: includes/adapters/licenses.php:4515
+#: includes/adapters/licenses.php:4518
 msgid "Could not reach the Akismet API."
 msgstr "Akismet API'sine ulaşılamadı."
 
-#: includes/adapters/licenses.php:4523
+#: includes/adapters/licenses.php:4526
 msgid "CleanTalk access key"
 msgstr "CleanTalk erişim anahtarı"
 
-#: includes/adapters/licenses.php:4553
+#: includes/adapters/licenses.php:4556
 msgid "This license has reached its activation limit. Free a seat on searchandfilter.com first."
 msgstr "Bu lisans etkinleştirme sınırına ulaştı. Önce searchandfilter.com üzerinde bir koltuk boşaltın."
 
-#: includes/adapters/licenses.php:4556
+#: includes/adapters/licenses.php:4559
 msgid "This Search & Filter license has expired."
 msgstr "Bu Search & Filter lisansının süresi dolmuş."
 
-#: includes/adapters/licenses.php:4562
+#: includes/adapters/licenses.php:4565
 msgid "searchandfilter.com does not recognize that key."
 msgstr "searchandfilter.com bu anahtarı tanımıyor."
 
-#: includes/adapters/licenses.php:4564
+#: includes/adapters/licenses.php:4567
 msgid "searchandfilter.com did not accept that key."
 msgstr "searchandfilter.com bu anahtarı kabul etmedi."
 
-#: includes/adapters/licenses.php:4566
+#: includes/adapters/licenses.php:4569
 msgid "Search & Filter license key"
 msgstr "Search & Filter lisans anahtarı"
 
-#: includes/adapters/licenses.php:4601
+#: includes/adapters/licenses.php:4604
 msgid "The license was disconnected and the seat freed."
 msgstr "Lisans bağlantısı kesildi ve koltuk boşaltıldı."
 
-#: includes/adapters/licenses.php:4603
+#: includes/adapters/licenses.php:4606
 msgid "Search & Filter could not disconnect the license."
 msgstr "Search & Filter lisansın bağlantısını kesemedi."
 
-#: includes/adapters/licenses.php:4633
+#: includes/adapters/licenses.php:4636
 msgid "This license has reached its activation limit."
 msgstr "Bu lisans etkinleştirme sınırına ulaştı."
 
-#: includes/adapters/licenses.php:4636
+#: includes/adapters/licenses.php:4639
 msgid "This Admin Columns license has expired."
 msgstr "Bu Admin Columns lisansının süresi dolmuş."
 
-#: includes/adapters/licenses.php:4638
+#: includes/adapters/licenses.php:4641
 msgid "admincolumns.com did not accept that key."
 msgstr "admincolumns.com bu anahtarı kabul etmedi."
 
-#: includes/adapters/licenses.php:4640
+#: includes/adapters/licenses.php:4643
 msgid "Admin Columns Pro license key"
 msgstr "Admin Columns Pro lisans anahtarı"
 
-#: includes/adapters/licenses.php:4646
+#: includes/adapters/licenses.php:4649
 msgid "That does not look like an Admin Columns key (they are long and contain a dash)."
 msgstr "Bu bir Admin Columns anahtarına benzemiyor (uzundurlar ve tire içerirler)."
 
-#: includes/adapters/licenses.php:4662
+#: includes/adapters/licenses.php:4665
 msgid "admincolumns.com accepted the key but returned an invalid activation token."
 msgstr "admincolumns.com anahtarı kabul etti ama geçersiz bir etkinleştirme jetonu döndürdü."
 
-#: includes/adapters/licenses.php:4681
+#: includes/adapters/licenses.php:4684
 msgid "No activation was stored; local license state cleared."
 msgstr "Saklanan etkinleştirme yok; yerel lisans durumu temizlendi."
 
 #. translators: %s: error message reported by admincolumns.com.
-#: includes/adapters/licenses.php:4693
+#: includes/adapters/licenses.php:4696
 msgid "Local license state was cleared, but admincolumns.com reported: %s"
 msgstr "Yerel lisans durumu temizlendi ama admincolumns.com şunu bildirdi: %s"
 
-#: includes/adapters/licenses.php:4699
+#: includes/adapters/licenses.php:4702
 msgid "The license was deactivated and the seat freed."
 msgstr "Lisans etkisizleştirildi ve koltuk boşaltıldı."
 
-#: includes/adapters/licenses.php:4730
+#: includes/adapters/licenses.php:4733
 msgid "Gravity Perks license key"
 msgstr "Gravity Perks lisans anahtarı"
 
-#: includes/adapters/licenses.php:4746
+#: includes/adapters/licenses.php:4749
 msgid "That key has reached its site limit"
 msgstr "Bu anahtar site sınırına ulaştı"
 
-#: includes/adapters/licenses.php:4748
+#: includes/adapters/licenses.php:4751
 msgid "Gravity Wiz did not validate that key"
 msgstr "Gravity Wiz bu anahtarı doğrulamadı"
 
-#: includes/adapters/licenses.php:4759
+#: includes/adapters/licenses.php:4762
 msgid "Gravity Wiz reports the license as not valid for this site"
 msgstr "Gravity Wiz lisansın bu site için geçerli olmadığını bildiriyor"
 
-#: includes/adapters/licenses.php:4773
+#: includes/adapters/licenses.php:4776
 msgid "Perfmatters license key"
 msgstr "Perfmatters lisans anahtarı"
 
-#: includes/adapters/licenses.php:4790
+#: includes/adapters/licenses.php:4793
 msgid "Perfmatters did not accept that key"
 msgstr "Perfmatters bu anahtarı kabul etmedi"
 
-#: includes/adapters/licenses.php:4801
+#: includes/adapters/licenses.php:4804
 msgid "Perfmatters could not release this site"
 msgstr "Perfmatters bu siteyi serbest bırakamadı"
 
-#: includes/adapters/licenses.php:4807
+#: includes/adapters/licenses.php:4810
 msgid "No response from the Perfmatters server"
 msgstr "Perfmatters sunucusundan yanıt yok"
 
-#: includes/adapters/licenses.php:4842
+#: includes/adapters/licenses.php:4845
 msgid "Automatic.css license key"
 msgstr "Automatic.css lisans anahtarı"
 
-#: includes/adapters/licenses.php:4848
+#: includes/adapters/licenses.php:4851
 msgid "That looks like the masked key from Automatic.css’s screen — paste the full license key."
 msgstr "Bu, Automatic.css ekranındaki maskelenmiş anahtara benziyor — tam lisans anahtarını yapıştırın."
 
-#: includes/adapters/licenses.php:4852
-#: includes/adapters/licenses.php:4887
+#: includes/adapters/licenses.php:4855
+#: includes/adapters/licenses.php:4890
 msgid "No response from the Automatic.css server."
 msgstr "Automatic.css sunucusundan yanıt yok."
 
-#: includes/adapters/licenses.php:4876
+#: includes/adapters/licenses.php:4879
 msgid "Automatic.css deactivated; the seat was released."
 msgstr "Automatic.css etkisizleştirildi; koltuk serbest bırakıldı."
 
-#: includes/adapters/licenses.php:4877
+#: includes/adapters/licenses.php:4880
 msgid "Key removed from this site. Automatic.css did not confirm releasing the seat — check the account if the activation count matters."
 msgstr "Anahtar bu siteden kaldırıldı. Automatic.css koltuğun serbest bırakıldığını onaylamadı — etkinleştirme sayısı önemliyse hesabı kontrol edin."
 
-#: includes/adapters/licenses.php:4883
+#: includes/adapters/licenses.php:4886
 msgid "No Automatic.css key is stored."
 msgstr "Automatic.css anahtarı saklanmıyor."
 
-#: includes/adapters/licenses.php:4937
+#: includes/adapters/licenses.php:4940
 msgid "SEOPress PRO license key"
 msgstr "SEOPress PRO lisans anahtarı"
 
-#: includes/adapters/licenses.php:4941
+#: includes/adapters/licenses.php:4944
 msgid "The key is defined in wp-config.php (SEOPRESS_LICENSE_KEY) — change it there."
 msgstr "Anahtar wp-config.php içinde tanımlı (SEOPRESS_LICENSE_KEY) — orada değiştirin."
 
-#: includes/adapters/licenses.php:4946
-#: includes/adapters/licenses.php:4997
+#: includes/adapters/licenses.php:4949
+#: includes/adapters/licenses.php:5000
 msgid "No response from the SEOPress server."
 msgstr "SEOPress sunucusundan yanıt yok."
 
-#: includes/adapters/licenses.php:4965
-#: includes/adapters/licenses.php:4993
+#: includes/adapters/licenses.php:4968
+#: includes/adapters/licenses.php:4996
 msgid "No SEOPress PRO key is stored."
 msgstr "SEOPress PRO anahtarı saklanmıyor."
 
-#: includes/adapters/licenses.php:4972
+#: includes/adapters/licenses.php:4975
 msgid "SEOPress did not confirm the deactivation — nothing was changed."
 msgstr "SEOPress etkisizleştirmeyi onaylamadı — hiçbir şey değişmedi."
 
-#: includes/adapters/licenses.php:4986
+#: includes/adapters/licenses.php:4989
 msgid "Seat released. The key itself is defined in wp-config.php and stays there."
 msgstr "Koltuk serbest bırakıldı. Anahtarın kendisi wp-config.php içinde tanımlı ve orada kalır."
 
-#: includes/adapters/licenses.php:5037
+#: includes/adapters/licenses.php:5040
 msgid "GP Premium license key"
 msgstr "GP Premium lisans anahtarı"
 
-#: includes/adapters/licenses.php:5062
+#: includes/adapters/licenses.php:5065
 msgid "wpallimport.com did not confirm the license"
 msgstr "wpallimport.com lisansı doğrulamadı"
 
-#: includes/adapters/licenses.php:5064
+#: includes/adapters/licenses.php:5067
 msgid "WP All Export license key"
 msgstr "WP All Export lisans anahtarı"
 
-#: includes/adapters/licenses.php:5085
+#: includes/adapters/licenses.php:5088
 msgid "Could not reach wpallimport.com (or no key is stored)"
 msgstr "wpallimport.com adresine ulaşılamadı (ya da saklanan anahtar yok)"
 
-#: includes/adapters/licenses.php:5099
-#: includes/adapters/licenses.php:5146
+#: includes/adapters/licenses.php:5102
+#: includes/adapters/licenses.php:5149
 msgid "The key was removed from this site. Soflyy licenses have no per-site seats to free."
 msgstr "Anahtar bu siteden kaldırıldı. Soflyy lisanslarında boşaltılacak site başına koltuk yok."
 
-#: includes/adapters/licenses.php:5113
+#: includes/adapters/licenses.php:5116
 msgid "wpallimport.com did not answer"
 msgstr "wpallimport.com yanıt vermedi"
 
-#: includes/adapters/licenses.php:5115
+#: includes/adapters/licenses.php:5118
 msgid "WP All Import license key"
 msgstr "WP All Import lisans anahtarı"
 
-#: includes/adapters/licenses.php:5156
+#: includes/adapters/licenses.php:5159
 msgid "No key is stored."
 msgstr "Saklanan bir anahtar yok."
 
-#: includes/adapters/licenses.php:5181
+#: includes/adapters/licenses.php:5184
 msgid "Kreatura did not accept that license key"
 msgstr "Kreatura bu lisans anahtarını kabul etmedi"
 
-#: includes/adapters/licenses.php:5185
+#: includes/adapters/licenses.php:5188
 msgid "LayerSlider license key"
 msgstr "LayerSlider lisans anahtarı"
 
-#: includes/adapters/licenses.php:5190
+#: includes/adapters/licenses.php:5193
 msgid "No license key stored"
 msgstr "Saklanan lisans anahtarı yok"
 
-#: includes/adapters/licenses.php:5214
+#: includes/adapters/licenses.php:5217
 msgid "Missing license key or product name"
 msgstr "Lisans anahtarı ya da ürün adı eksik"
 
-#: includes/adapters/licenses.php:5260
+#: includes/adapters/licenses.php:5263
 msgid "No active Smash Balloon license on this product"
 msgstr "Bu üründe etkin Smash Balloon lisansı yok"
 
-#: includes/adapters/licenses.php:5264
+#: includes/adapters/licenses.php:5267
 msgid "License deactivated for "
 msgstr "Lisans etkisizleştirildi: "
 
-#: includes/adapters/licenses.php:5270
+#: includes/adapters/licenses.php:5273
 msgid "No key is stored"
 msgstr "Saklanan anahtar yok"
 
-#: includes/adapters/licenses.php:5330
+#: includes/adapters/licenses.php:5333
 msgid "MyYoast reports a valid Premium subscription"
 msgstr "MyYoast geçerli bir Premium aboneliği bildiriyor"
 
-#: includes/adapters/licenses.php:5334
+#: includes/adapters/licenses.php:5337
 msgid "No Premium subscription linked to this site on MyYoast"
 msgstr "MyYoast'ta bu siteye bağlı Premium aboneliği yok"
 
-#: includes/adapters/licenses.php:5336
+#: includes/adapters/licenses.php:5339
 msgid "MyYoast reports the Premium subscription is inactive or expired"
 msgstr "MyYoast, Premium aboneliğinin etkin olmadığını ya da süresinin dolduğunu bildiriyor"
 
-#: includes/adapters/licenses.php:5338
+#: includes/adapters/licenses.php:5341
 msgid "Could not refresh MyYoast subscription state"
 msgstr "MyYoast abonelik durumu yenilenemedi"
 
-#: includes/adapters/licenses.php:5374
+#: includes/adapters/licenses.php:5377
 msgid "Freemius-powered; no account state recorded yet"
 msgstr "Freemius ile çalışır; henüz hesap durumu kaydedilmedi"
 
-#: includes/adapters/licenses.php:5409
+#: includes/adapters/licenses.php:5412
 msgid "Premium install with no license attached"
 msgstr "Lisans bağlı olmayan Premium kurulum"
 
-#: includes/adapters/licenses.php:5531
-#: includes/adapters/licenses.php:5589
-#: includes/adapters/licenses.php:5623
+#: includes/adapters/licenses.php:5534
+#: includes/adapters/licenses.php:5592
+#: includes/adapters/licenses.php:5626
 msgid "The plugin is not loaded."
 msgstr "Eklenti yüklenmedi."
 
-#: includes/adapters/licenses.php:5535
-#: includes/adapters/licenses.php:6286
+#: includes/adapters/licenses.php:5538
+#: includes/adapters/licenses.php:6293
 msgid "Paste a key first."
 msgstr "Önce bir anahtar yapıştırın."
 
-#: includes/adapters/licenses.php:5544
-#: includes/adapters/licenses.php:5552
+#: includes/adapters/licenses.php:5547
+#: includes/adapters/licenses.php:5555
 msgid "Freemius refused the key."
 msgstr "Freemius bu anahtarı reddetti."
 
-#: includes/adapters/licenses.php:5572
+#: includes/adapters/licenses.php:5575
 msgid "Freemius accepted the request but no active license is attached to this site."
 msgstr "Freemius isteği kabul etti ama bu siteye bağlı etkin lisans yok."
 
-#: includes/adapters/licenses.php:5593
-#: includes/adapters/licenses.php:5639
+#: includes/adapters/licenses.php:5596
+#: includes/adapters/licenses.php:5642
 msgid "No license is attached to this site."
 msgstr "Bu siteye bağlı lisans yok."
 
-#: includes/adapters/licenses.php:5611
+#: includes/adapters/licenses.php:5614
 msgid "Freemius did not release the license. Its Account screen shows the reason."
 msgstr "Freemius lisansı serbest bırakmadı. Nedeni Hesap ekranında görünür."
 
-#: includes/adapters/licenses.php:5626
+#: includes/adapters/licenses.php:5629
 msgid "This site is not connected to Freemius yet. Activate a key first."
 msgstr "Bu site henüz Freemius'a bağlı değil. Önce bir anahtar etkinleştirin."
 
-#: includes/adapters/licenses.php:5765
+#: includes/adapters/licenses.php:5768
 msgid "Activation stored; SureCart keeps no local expiry"
 msgstr "Etkinleştirme saklandı; SureCart yerel bir son tarih tutmaz"
 
-#: includes/adapters/licenses.php:5766
+#: includes/adapters/licenses.php:5769
 msgid "Key stored without an activation record"
 msgstr "Anahtar etkinleştirme kaydı olmadan saklandı"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5877
+#: includes/adapters/licenses.php:5880
 msgid "verified %s ago from Minn"
 msgstr "Minn'den %s önce doğrulandı"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5881
+#: includes/adapters/licenses.php:5884
 msgid "failed a check %s ago from Minn"
 msgstr "Minn'den %s önce denetim başarısız oldu"
 
-#: includes/adapters/licenses.php:5886
+#: includes/adapters/licenses.php:5889
 #: assets/js/app.js:21597
 msgid "License key"
 msgstr "Lisans anahtarı"
 
-#: includes/adapters/licenses.php:6008
+#: includes/adapters/licenses.php:6011
 msgid "core connector"
 msgstr "çekirdek bağlayıcı"
 
-#: includes/adapters/licenses.php:6267
+#: includes/adapters/licenses.php:6274
 msgid "No such action for this provider."
 msgstr "Bu sağlayıcıda böyle bir işlem yok."
 
-#: includes/adapters/licenses.php:6281
+#: includes/adapters/licenses.php:6288
 msgid "Fill in every field first."
 msgstr "Önce tüm alanları doldurun."
 
 #. translators: %s: PHP constant name defined in wp-config.php.
-#: includes/adapters/licenses.php:6320
+#: includes/adapters/licenses.php:6327
 msgid "This key is defined in wp-config (%s), which takes precedence. Change it there."
 msgstr "Bu anahtar wp-config içinde tanımlı (%s); o önceliklidir. Orada değiştirin."
 
-#: includes/adapters/licenses.php:6333
+#: includes/adapters/licenses.php:6340
 msgid "The plugin reported an error during the request."
 msgstr "Eklenti istek sırasında bir hata bildirdi."
 
-#: includes/adapters/licenses.php:6403
+#: includes/adapters/licenses.php:6410
 msgid "Could not check for updates."
 msgstr "Güncellemeler denetlenemedi."
 
@@ -13698,82 +13698,88 @@ msgstr "Yeni %s ekle"
 msgid "No %s found."
 msgstr "%s bulunamadı."
 
-#: includes/class-minn-admin-cpt.php:461
+#: includes/class-minn-admin-cpt.php:491
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 20 characters max."
 msgstr "Adres son eki gereklidir: küçük harf, rakam, tire ya da alt çizgi, en çok 20 karakter."
 
-#: includes/class-minn-admin-cpt.php:470
-#: includes/class-minn-admin-cpt.php:500
-#: includes/class-minn-admin-cpt.php:638
+#. translators: %s: the slug
+#: includes/class-minn-admin-cpt.php:497
 #: includes/class-minn-admin-cpt.php:670
+msgid "“%s” is a name WordPress reserves; pick another slug."
+msgstr "“%s”, WordPress tarafından ayrılmış bir ad; başka bir kısa ad seçin."
+
+#: includes/class-minn-admin-cpt.php:503
+#: includes/class-minn-admin-cpt.php:533
+#: includes/class-minn-admin-cpt.php:674
+#: includes/class-minn-admin-cpt.php:706
 msgid "Singular and plural labels are required."
 msgstr "Tekil ve çoğul etiketler gereklidir."
 
-#: includes/class-minn-admin-cpt.php:493
+#: includes/class-minn-admin-cpt.php:526
 msgid "No such post type."
 msgstr "Böyle bir yazı türü yok."
 
-#: includes/class-minn-admin-cpt.php:496
+#: includes/class-minn-admin-cpt.php:529
 msgid "This post type is registered in code and can only be changed there."
 msgstr "Bu yazı türü kod içinde kayıtlı ve yalnızca orada değiştirilebilir."
 
-#: includes/class-minn-admin-cpt.php:530
-#: includes/class-minn-admin-cpt.php:700
+#: includes/class-minn-admin-cpt.php:563
+#: includes/class-minn-admin-cpt.php:736
 msgid "ACF definition not found."
 msgstr "ACF tanımı bulunamadı."
 
-#: includes/class-minn-admin-cpt.php:543
+#: includes/class-minn-admin-cpt.php:576
 msgid "This post type is registered in code and can only be removed there."
 msgstr "Bu yazı türü kod içinde kayıtlı ve yalnızca orada kaldırılabilir."
 
-#: includes/class-minn-admin-cpt.php:546
+#: includes/class-minn-admin-cpt.php:579
 msgid "Definition removed; existing content stays in the database."
 msgstr "Tanım kaldırıldı; var olan içerik veri tabanında kalır."
 
-#: includes/class-minn-admin-cpt.php:631
+#: includes/class-minn-admin-cpt.php:664
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 32 characters max."
 msgstr "Adres son eki gereklidir: küçük harf, rakam, tire ya da alt çizgi, en çok 32 karakter."
 
-#: includes/class-minn-admin-cpt.php:663
+#: includes/class-minn-admin-cpt.php:699
 msgid "No such taxonomy."
 msgstr "Böyle bir sınıflandırma yok."
 
-#: includes/class-minn-admin-cpt.php:666
+#: includes/class-minn-admin-cpt.php:702
 msgid "This taxonomy is registered in code and can only be changed there."
 msgstr "Bu sınıflandırma kod içinde kayıtlı ve yalnızca orada değiştirilebilir."
 
-#: includes/class-minn-admin-cpt.php:713
+#: includes/class-minn-admin-cpt.php:749
 msgid "This taxonomy is registered in code and can only be removed there."
 msgstr "Bu sınıflandırma kod içinde kayıtlı ve yalnızca orada kaldırılabilir."
 
-#: includes/class-minn-admin-cpt.php:716
+#: includes/class-minn-admin-cpt.php:752
 msgid "Definition removed; existing terms stay in the database."
 msgstr "Tanım kaldırıldı; var olan terimler veri tabanında kalır."
 
-#: includes/class-minn-admin-cpt.php:753
+#: includes/class-minn-admin-cpt.php:789
 msgid "ACF could not save the taxonomy."
 msgstr "ACF sınıflandırmayı kaydedemedi."
 
-#: includes/class-minn-admin-cpt.php:823
+#: includes/class-minn-admin-cpt.php:859
 msgid "ACF could not save the post type."
 msgstr "ACF yazı türünü kaydedemedi."
 
-#: includes/class-minn-admin-cpt.php:890
-#: includes/class-minn-admin-cpt.php:893
+#: includes/class-minn-admin-cpt.php:926
+#: includes/class-minn-admin-cpt.php:929
 msgid "JetEngine could not save the post type."
 msgstr "JetEngine yazı türünü kaydedemedi."
 
-#: includes/class-minn-admin-cpt.php:938
-#: includes/class-minn-admin-cpt.php:941
+#: includes/class-minn-admin-cpt.php:974
+#: includes/class-minn-admin-cpt.php:977
 msgid "JetEngine could not save the taxonomy."
 msgstr "JetEngine sınıflandırmayı kaydedemedi."
 
-#: includes/class-minn-admin-cpt.php:949
+#: includes/class-minn-admin-cpt.php:985
 msgid "JetEngine definition not found."
 msgstr "JetEngine tanımı bulunamadı."
 
-#: includes/class-minn-admin-cpt.php:956
-#: includes/class-minn-admin-cpt.php:958
+#: includes/class-minn-admin-cpt.php:992
+#: includes/class-minn-admin-cpt.php:994
 msgid "JetEngine could not remove the definition."
 msgstr "JetEngine tanımı kaldıramadı."
 

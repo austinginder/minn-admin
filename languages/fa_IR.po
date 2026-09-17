@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-09-17 15:24+0000\n"
+"PO-Revision-Date: 2026-09-17 16:26+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Persian\n"
 "MIME-Version: 1.0\n"
@@ -162,7 +162,7 @@ msgstr "نقش کاربر"
 
 #: includes/adapters/acf-field-groups.php:84
 #: includes/adapters/bricks.php:831
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 #: includes/adapters/elementor-templates.php:344
 #: includes/adapters/jet-theme-core.php:143
 #: assets/js/app.js:4231
@@ -911,8 +911,8 @@ msgid_plural "%d entries left to ACF’s own tools"
 msgstr[0] "%d ورودی به ابزارهای خود ACF واگذار شد"
 msgstr[1] "%d ورودی به ابزارهای خود ACF واگذار شد"
 
-#: includes/adapters/acf.php:1718
-#: includes/adapters/acf.php:1783
+#: includes/adapters/acf.php:1780
+#: includes/adapters/acf.php:1845
 #: assets/js/app.js:24532
 #: assets/js/app.js:47526
 #: assets/js/app.js:47534
@@ -920,8 +920,8 @@ msgid "empty"
 msgstr "خالی"
 
 #. translators: %d: number of repeater rows.
-#: includes/adapters/acf.php:1723
-#: includes/adapters/acf.php:1790
+#: includes/adapters/acf.php:1785
+#: includes/adapters/acf.php:1852
 msgid "%d row"
 msgid_plural "%d rows"
 msgstr[0] "%d ردیف"
@@ -929,7 +929,7 @@ msgstr[1] "%d ردیف"
 
 #. translators: %d: number of images in a gallery field.
 #. translators: %d: number of images in the gallery field.
-#: includes/adapters/acf.php:1735
+#: includes/adapters/acf.php:1797
 #: assets/js/app.js:37688
 msgid "%d image"
 msgid_plural "%d images"
@@ -938,7 +938,7 @@ msgstr[1] "%d تصویر"
 
 #. translators: %s: number of index rows
 #. translators: %s: the environment type (e.g. "staging").
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/jet-smart-filters.php:85
 #: includes/adapters/novamira.php:183
@@ -951,7 +951,7 @@ msgstr[1] "%d تصویر"
 msgid "Off"
 msgstr "خاموش"
 
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/code-snippets.php:300
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/novamira.php:183
@@ -964,16 +964,16 @@ msgid "On"
 msgstr "روشن"
 
 #. translators: %d: number of flexible-content sections.
-#: includes/adapters/acf.php:1787
+#: includes/adapters/acf.php:1849
 msgid "%d section"
 msgid_plural "%d sections"
 msgstr[0] "%d بخش"
 msgstr[1] "%d بخش"
 
-#: includes/adapters/acf.php:1800
-#: includes/adapters/acf.php:1855
+#: includes/adapters/acf.php:1862
+#: includes/adapters/acf.php:1917
 #: includes/adapters/acpt.php:492
-#: includes/adapters/jet-engine-fields.php:597
+#: includes/adapters/jet-engine-fields.php:623
 #: includes/adapters/meta-box.php:267
 #: includes/adapters/pods.php:437
 #: assets/js/app.js:23733
@@ -983,19 +983,19 @@ msgid "Custom fields"
 msgstr "زمینه‌های دل‌خواه"
 
 #. translators: %d: how many rows or sections were edited.
-#: includes/adapters/acf.php:1834
+#: includes/adapters/acf.php:1896
 msgid "%d edited"
 msgid_plural "%d edited"
 msgstr[0] "%d ویرایش‌شده"
 msgstr[1] "%d ویرایش‌شده"
 
-#: includes/adapters/acf.php:1837
+#: includes/adapters/acf.php:1899
 msgid "changed"
 msgstr "تغییر کرد"
 
-#: includes/adapters/acf.php:1906
+#: includes/adapters/acf.php:1968
 #: includes/adapters/acpt.php:532
-#: includes/adapters/jet-engine-fields.php:626
+#: includes/adapters/jet-engine-fields.php:652
 #: includes/adapters/meta-box.php:299
 #: includes/adapters/pods.php:469
 #: includes/adapters/powerpress.php:232
@@ -1010,9 +1010,9 @@ msgstr "تغییر کرد"
 msgid "Post not found."
 msgstr "نوشته پیدا نشد."
 
-#: includes/adapters/acf.php:1909
+#: includes/adapters/acf.php:1971
 #: includes/adapters/acpt.php:535
-#: includes/adapters/jet-engine-fields.php:629
+#: includes/adapters/jet-engine-fields.php:655
 #: includes/adapters/meta-box.php:302
 #: includes/adapters/pods.php:472
 #: includes/adapters/powerpress.php:235
@@ -1020,32 +1020,32 @@ msgstr "نوشته پیدا نشد."
 msgid "You cannot edit this post."
 msgstr "شما نمی‌توانید این نوشته را ویرایش کنید."
 
-#: includes/adapters/acf.php:1915
+#: includes/adapters/acf.php:1977
 #: includes/adapters/acpt.php:541
-#: includes/adapters/jet-engine-fields.php:635
+#: includes/adapters/jet-engine-fields.php:661
 #: includes/adapters/meta-box.php:312
 #: includes/adapters/pods.php:482
 msgid "You cannot edit that post type."
 msgstr "شما نمی‌توانید این گونه نوشته را ویرایش کنید."
 
-#: includes/adapters/acf.php:1952
+#: includes/adapters/acf.php:2014
 msgid "This picker is no longer available. Reload the screen and try again."
 msgstr "این گزینشگر دیگر دردسترس نیست. صفحه را دوباره بارگذاری کنید و دوباره تلاش کنید."
 
-#: includes/adapters/acf.php:1959
+#: includes/adapters/acf.php:2021
 msgid "Unknown relational field."
 msgstr "فیلد رابطه‌ای ناشناخته."
 
-#: includes/adapters/acf.php:2126
+#: includes/adapters/acf.php:2188
 msgid "ACF simple field values for Minn Admin."
 msgstr "مقادیر زمینه ساده ACF برای Minn Admin."
 
-#: includes/adapters/acf.php:2414
+#: includes/adapters/acf.php:2476
 #: includes/adapters/acpt.php:831
 #: includes/adapters/asset-cleanup.php:232
 #: includes/adapters/autoptimize.php:188
-#: includes/adapters/bricks.php:1361
-#: includes/adapters/bricks.php:1423
+#: includes/adapters/bricks.php:1392
+#: includes/adapters/bricks.php:1454
 #: includes/adapters/novamira.php:456
 #: includes/adapters/option-pages.php:198
 #: includes/adapters/option-pages.php:213
@@ -1053,7 +1053,7 @@ msgstr "مقادیر زمینه ساده ACF برای Minn Admin."
 msgid "Unknown settings tab."
 msgstr "زبانه تنظیمات ناشناخته."
 
-#: includes/adapters/acf.php:2823
+#: includes/adapters/acf.php:2886
 #: includes/adapters/option-pages.php:160
 #: includes/class-minn-admin-surfaces.php:169
 msgid "Site Options"
@@ -1153,7 +1153,7 @@ msgid "Edit in ACPT"
 msgstr "ویرایش در ACPT"
 
 #: includes/adapters/acpt.php:1111
-#: includes/adapters/bricks.php:1670
+#: includes/adapters/bricks.php:1701
 #: includes/adapters/cfdb7.php:311
 #: includes/adapters/code-snippets.php:189
 #: includes/adapters/custom-css-js.php:456
@@ -1634,7 +1634,7 @@ msgstr "سطح"
 #: includes/adapters/aryo-activity-log.php:272
 #: includes/adapters/bookly.php:211
 #: includes/adapters/bookly.php:225
-#: includes/adapters/bricks.php:1703
+#: includes/adapters/bricks.php:1734
 #: includes/adapters/cf7-flamingo.php:168
 #: includes/adapters/cfdb7.php:285
 #: includes/adapters/elementor-forms.php:230
@@ -1670,7 +1670,7 @@ msgid "Event not found."
 msgstr "رویداد پیدا نشد."
 
 #: includes/adapters/all-in-one-security.php:334
-#: includes/adapters/bricks.php:1855
+#: includes/adapters/bricks.php:1886
 #: includes/adapters/elementor-forms.php:462
 #: includes/adapters/gravity-forms.php:517
 #: includes/adapters/novamira.php:535
@@ -2272,7 +2272,7 @@ msgstr "همه منابع"
 
 #: includes/adapters/aryo-activity-log.php:151
 #: includes/adapters/aryo-activity-log.php:401
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:47682
 msgid "Browser"
 msgstr "مرورگر"
@@ -2473,7 +2473,7 @@ msgstr "کارایی"
 
 #: includes/adapters/asset-cleanup.php:350
 #: includes/adapters/autoptimize.php:298
-#: includes/adapters/jet-engine-fields.php:324
+#: includes/adapters/jet-engine-fields.php:331
 #: includes/adapters/option-pages.php:180
 #: includes/adapters/perfmatters.php:369
 #: includes/adapters/redirection.php:207
@@ -3088,7 +3088,7 @@ msgstr "این قالب برای همیشه حذف شود؟ بازگردانی �
 
 #: includes/adapters/bricks.php:801
 #: includes/adapters/bricks.php:813
-#: includes/adapters/bricks.php:1300
+#: includes/adapters/bricks.php:1331
 #: includes/adapters/elementor-templates.php:325
 #: includes/adapters/elementor-templates.php:404
 #: includes/adapters/jet-theme-core.php:124
@@ -3232,137 +3232,137 @@ msgstr "%s (کپی)"
 msgid "Bricks declined to duplicate this template. Duplication may be turned off in its settings."
 msgstr "Bricks از تکثیر این قالب خودداری کرد. تکثیر ممکن است در تنظیمات آن خاموش باشد."
 
-#: includes/adapters/bricks.php:1232
+#: includes/adapters/bricks.php:1263
 msgid "Bricks CSS files"
 msgstr "فایل‌های CSS Bricks"
 
-#: includes/adapters/bricks.php:1280
+#: includes/adapters/bricks.php:1311
 msgid "Editing"
 msgstr "در حال ویرایش"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Post types"
 msgstr "انواع نوشته"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Which post types can be edited with Bricks."
 msgstr "کدام انواع نوشته را می‌توان با Bricks ویرایش کرد."
 
-#: includes/adapters/bricks.php:1287
+#: includes/adapters/bricks.php:1318
 msgid "Features"
 msgstr "ویژگی‌ها"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Save form submissions"
 msgstr "ذخیره ارسال‌های فرم"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Store Bricks form submissions in the database. Turning this on adds a Forms surface to Minn."
 msgstr "ارسال‌های فرم Bricks را در پایگاه‌داده ذخیره کنید. روشن کردن این گزینه یک بخش فرم‌ها به Minn اضافه می‌کند."
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Disable Bricks SEO controls"
 msgstr "غیرفعال کردن کنترل‌های SEO در Bricks"
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Right when a dedicated SEO plugin owns titles and metas."
 msgstr "وقتی یک افزونه SEO اختصاصی عنوان‌ها و متاها را مدیریت می‌کند."
 
-#: includes/adapters/bricks.php:1291
+#: includes/adapters/bricks.php:1322
 msgid "Disable Bricks Open Graph tags"
 msgstr "غیرفعال کردن برچسب‌های Open Graph در Bricks"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Disable default templates"
 msgstr "غیرفعال کردن قالب‌های پیش‌فرض"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Without conditions, published header and footer templates apply everywhere. Turn on to require explicit conditions."
 msgstr "بدون شرایط، قالب‌های سربرگ و پابرگ منتشرشده همه‌جا اعمال می‌شوند. برای الزام به شرایط صریح روشن کنید."
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Public templates"
 msgstr "قالب‌های عمومی"
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Whether template pages are viewable by anyone, or only logged-in users."
 msgstr "اینکه برگه‌های قالب برای همه قابل مشاهده باشند یا فقط برای کاربران واردشده."
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Remote template access"
 msgstr "دسترسی از راه دور به قالب"
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Allow other sites to browse and insert this site's templates. Anyone who knows the address can ask, so set a password or list the allowed sites in Bricks first."
 msgstr "اجازه دادن به سایت‌ها دیگر برای مرور و گذاشتن قالب ها این سایت. هر کس نشانی را بداند می‌تواند درخواست کند، پس ابتدا یک رمز تنظیم کنید یا فهرست‌ سایت‌ها مجاز در Bricks."
 
-#: includes/adapters/bricks.php:1313
+#: includes/adapters/bricks.php:1344
 msgid "Autosave"
 msgstr "ذخیره خودکار"
 
-#: includes/adapters/bricks.php:1315
+#: includes/adapters/bricks.php:1346
 msgid "Disable autosave"
 msgstr "غیرفعال کردن ذخیره خودکار"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Autosave interval (seconds)"
 msgstr "فاصله ذخیره خودکار (ثانیه)"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Default 60, minimum 15."
 msgstr "پیش‌فرض 60، حداقل 15."
 
-#: includes/adapters/bricks.php:1320
+#: includes/adapters/bricks.php:1351
 #: assets/js/app.js:48009
 #: assets/js/app.js:48435
 msgid "Appearance"
 msgstr "نمایش"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Builder mode"
 msgstr "حالت سازنده"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4649
 #: assets/js/app.js:4831
 msgid "Dark"
 msgstr "تاریک"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4648
 #: assets/js/app.js:4830
 msgid "Light"
 msgstr "روشن"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4636
 #: assets/js/app.js:5413
 msgid "Custom"
 msgstr "سفارشی"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Custom mode's CSS is edited on the Bricks settings screen."
 msgstr "CSS حالت سفارشی در صفحه تنظیمات Bricks ویرایش می‌شود."
 
-#: includes/adapters/bricks.php:1329
+#: includes/adapters/bricks.php:1360
 #: assets/js/app.js:18895
 #: assets/js/app.js:25504
 msgid "Default"
 msgstr "پیش‌فرض"
 
-#: includes/adapters/bricks.php:1343
+#: includes/adapters/bricks.php:1374
 #: assets/js/app.js:22154
 #: assets/js/app.js:27339
 msgid "Maintenance mode"
 msgstr "حالت تعمیر"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Mode"
 msgstr "حالت"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/adapters/pw-gift-cards.php:290
 #: includes/adapters/woocommerce-gift-cards.php:271
 #: includes/adapters/yith-gift-cards.php:360
@@ -3372,68 +3372,68 @@ msgstr "حالت"
 msgid "Disabled"
 msgstr "غیرفعال‌ شده"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/class-minn-admin-bar.php:192
 msgid "Coming soon"
 msgstr "به زودی"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Maintenance (503)"
 msgstr "در دست تعمیر (503)"
 
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 msgid "A Single-type Bricks template to show; Default is Bricks' built-in holding page."
 msgstr "یک قالب Bricks از نوع Single برای نمایش؛ پیش‌فرض صفحه انتظار داخلی Bricks است."
 
-#: includes/adapters/bricks.php:1347
+#: includes/adapters/bricks.php:1378
 msgid "Render header"
 msgstr "نمایش سربرگ"
 
-#: includes/adapters/bricks.php:1348
+#: includes/adapters/bricks.php:1379
 msgid "Render footer"
 msgstr "نمایش پابرگ"
 
-#: includes/adapters/bricks.php:1460
+#: includes/adapters/bricks.php:1491
 msgid "Set a remote templates password, or list the sites allowed to ask, in Bricks first. Without one of those this opens every template on this site to anyone."
 msgstr "یک رمز برای قالب های راه دور تنظیم کنید، یا فهرست‌ سایت‌ها مجاز به درخواست را در Bricks ابتدا قرار دهید. بدون یکی از این‌ها، این هر قالب در این سایت را برای همه باز می‌کند."
 
-#: includes/adapters/bricks.php:1483
+#: includes/adapters/bricks.php:1514
 msgid "That is not one of the offered choices."
 msgstr "این یکی از گزینه‌های پیشنهادی نیست."
 
 #. translators: %d: the smallest allowed value.
-#: includes/adapters/bricks.php:1499
+#: includes/adapters/bricks.php:1530
 msgid "The smallest allowed value is %d."
 msgstr "کوچک‌ترین مقدار مجاز %d است."
 
-#: includes/adapters/bricks.php:1511
+#: includes/adapters/bricks.php:1542
 msgid "Pick a Single-type Bricks template."
 msgstr "یک قالب Bricks از نوع Single انتخاب کنید."
 
-#: includes/adapters/bricks.php:1643
+#: includes/adapters/bricks.php:1674
 #: includes/adapters/elementor-forms.php:111
 msgid "(empty submission)"
 msgstr "(ارسال خالی)"
 
-#: includes/adapters/bricks.php:1656
+#: includes/adapters/bricks.php:1687
 msgid "Open in Bricks ↗"
 msgstr "باز کردن در Bricks ↗"
 
-#: includes/adapters/bricks.php:1663
+#: includes/adapters/bricks.php:1694
 #: includes/adapters/cfdb7.php:298
 msgid "Delete entry"
 msgstr "حذف ورودی"
 
-#: includes/adapters/bricks.php:1666
+#: includes/adapters/bricks.php:1697
 msgid "Delete this submission permanently? Bricks keeps no trash for them."
 msgstr "این ارسال برای همیشه حذف شود؟ Bricks برای آن‌ها زباله‌دان ندارد."
 
-#: includes/adapters/bricks.php:1673
+#: includes/adapters/bricks.php:1704
 msgid "Delete the selected submissions permanently? Bricks keeps no trash for them."
 msgstr "ارسال‌های انتخاب‌شده برای همیشه حذف شوند؟ Bricks برای آن‌ها زباله‌دان ندارد."
 
-#: includes/adapters/bricks.php:1678
-#: includes/adapters/bricks.php:1758
+#: includes/adapters/bricks.php:1709
+#: includes/adapters/bricks.php:1789
 #: includes/adapters/cf7-flamingo.php:112
 #: includes/adapters/cf7-flamingo.php:128
 #: includes/adapters/cf7-flamingo.php:256
@@ -3470,20 +3470,20 @@ msgstr "ارسال‌های انتخاب‌شده برای همیشه حذف ش�
 msgid "Forms"
 msgstr "فرم‌ها"
 
-#: includes/adapters/bricks.php:1687
-#: includes/adapters/bricks.php:1757
+#: includes/adapters/bricks.php:1718
+#: includes/adapters/bricks.php:1788
 #: includes/adapters/elementor-forms.php:171
 #: includes/adapters/ninja-forms.php:169
 #: includes/adapters/ninja-forms.php:178
 msgid "Submissions"
 msgstr "ارسالی‌ها"
 
-#: includes/adapters/bricks.php:1698
+#: includes/adapters/bricks.php:1729
 msgid "All submissions"
 msgstr "همه ارسال‌ها"
 
-#: includes/adapters/bricks.php:1701
-#: includes/adapters/bricks.php:1861
+#: includes/adapters/bricks.php:1732
+#: includes/adapters/bricks.php:1892
 #: includes/adapters/cf7-flamingo.php:486
 #: includes/adapters/cfdb7.php:486
 #: includes/adapters/elementor-forms.php:480
@@ -3498,8 +3498,8 @@ msgstr "همه ارسال‌ها"
 msgid "Submission"
 msgstr "ارسالی"
 
-#: includes/adapters/bricks.php:1702
-#: includes/adapters/bricks.php:1844
+#: includes/adapters/bricks.php:1733
+#: includes/adapters/bricks.php:1875
 #: includes/adapters/cf7-flamingo.php:166
 #: includes/adapters/cf7-flamingo.php:261
 #: includes/adapters/cf7-flamingo.php:455
@@ -3532,16 +3532,16 @@ msgstr "ارسالی"
 msgid "Form"
 msgstr "فرم"
 
-#: includes/adapters/bricks.php:1762
+#: includes/adapters/bricks.php:1793
 msgid "Last submission"
 msgstr "آخرین ارسال"
 
-#: includes/adapters/bricks.php:1770
+#: includes/adapters/bricks.php:1801
 msgid "Open Bricks form submissions ↗"
 msgstr "باز کردن ارسال‌های فرم Bricks ↗"
 
-#: includes/adapters/bricks.php:1819
-#: includes/adapters/bricks.php:1880
+#: includes/adapters/bricks.php:1850
+#: includes/adapters/bricks.php:1911
 #: includes/adapters/elementor-forms.php:406
 #: includes/adapters/elementor-forms.php:494
 #: includes/adapters/elementor-forms.php:517
@@ -3550,7 +3550,7 @@ msgstr "باز کردن ارسال‌های فرم Bricks ↗"
 msgid "Submission not found."
 msgstr "ارسال پیدا نشد."
 
-#: includes/adapters/bricks.php:1841
+#: includes/adapters/bricks.php:1872
 #: includes/adapters/core-blocks.php:107
 #: includes/adapters/fluent-smtp.php:365
 #: includes/adapters/fluent-smtp.php:728
@@ -3578,7 +3578,7 @@ msgstr "ارسال پیدا نشد."
 msgid "Date"
 msgstr "تاریخ"
 
-#: includes/adapters/bricks.php:1846
+#: includes/adapters/bricks.php:1877
 #: includes/adapters/elementor-forms.php:451
 #: includes/class-minn-admin-bar.php:652
 #: assets/js/app.js:3002
@@ -3587,7 +3587,7 @@ msgstr "تاریخ"
 msgid "Page"
 msgstr "برگه"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/class-minn-admin-surfaces.php:348
 #: assets/js/app.js:1260
 #: assets/js/app.js:3424
@@ -3600,23 +3600,23 @@ msgstr "برگه"
 msgid "System"
 msgstr "سامانه"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/adapters/wpforms.php:556
 msgid "IP address"
 msgstr "نشانی IP"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:8631
 msgid "Referrer"
 msgstr "ارجاع‌دهنده"
 
-#: includes/adapters/bricks.php:1860
+#: includes/adapters/bricks.php:1891
 #: includes/adapters/fluent-smtp.php:753
 #: includes/adapters/suremails.php:274
 msgid "Response"
 msgstr "پاسخ"
 
-#: includes/adapters/bricks.php:1884
+#: includes/adapters/bricks.php:1915
 msgid "The submission could not be deleted."
 msgstr "ارسال حذف نشد."
 
@@ -4017,20 +4017,20 @@ msgstr "سازوکار تنظیمات CleanTalk دردسترس نیست."
 
 #: includes/adapters/cleantalk.php:133
 #: includes/adapters/cleantalk.php:174
-#: includes/adapters/licenses.php:4066
-#: includes/adapters/licenses.php:4285
-#: includes/adapters/licenses.php:4343
-#: includes/adapters/licenses.php:4370
-#: includes/adapters/licenses.php:4419
-#: includes/adapters/licenses.php:4431
-#: includes/adapters/licenses.php:4493
-#: includes/adapters/licenses.php:4506
-#: includes/adapters/licenses.php:5046
+#: includes/adapters/licenses.php:4069
+#: includes/adapters/licenses.php:4288
+#: includes/adapters/licenses.php:4346
+#: includes/adapters/licenses.php:4373
+#: includes/adapters/licenses.php:4422
+#: includes/adapters/licenses.php:4434
+#: includes/adapters/licenses.php:4496
+#: includes/adapters/licenses.php:4509
+#: includes/adapters/licenses.php:5049
 msgid "No key stored"
 msgstr "هیچ کلیدی ذخیره نشده"
 
 #: includes/adapters/cleantalk.php:136
-#: includes/adapters/licenses.php:4501
+#: includes/adapters/licenses.php:4504
 msgid "Key removed from this site."
 msgstr "کلید از این سایت حذف شد."
 
@@ -4076,7 +4076,7 @@ msgid "Could not delete this account."
 msgstr "این حساب حذف نشد."
 
 #: includes/adapters/cleantalk.php:483
-#: includes/adapters/licenses.php:6262
+#: includes/adapters/licenses.php:6269
 msgid "Unknown action."
 msgstr "عمل نامشخص."
 
@@ -5529,7 +5529,7 @@ msgid "\"%s\" is not a valid email address."
 msgstr "\"%s\" یک نشانی ایمیل معتبر نیست."
 
 #: includes/adapters/fluent-smtp.php:894
-#: includes/adapters/gravity-smtp.php:1520
+#: includes/adapters/gravity-smtp.php:1548
 #: includes/adapters/post-smtp.php:442
 msgid "No recipient address on record for this email."
 msgstr "نشانی گیرنده‌ای برای این ایمیل ثبت نشده است."
@@ -6201,49 +6201,49 @@ msgstr "نگه داشتن گزارش اشکال‌زدایی"
 msgid "Gravity SMTP reports this email cannot be resent (body or attachments were not stored)."
 msgstr "Gravity SMTP گزارش می‌دهد این ایمیل را نمی‌توان دوباره فرستاد (بدنه یا پیوست‌ها ذخیره نشده‌اند)."
 
-#: includes/adapters/gravity-smtp.php:1537
+#: includes/adapters/gravity-smtp.php:1565
 msgid "The mailer reported the message could not be sent."
 msgstr "فرستنده ایمیل گزارش داد که پیام فرستاده نشد."
 
-#: includes/adapters/gravity-smtp.php:1543
+#: includes/adapters/gravity-smtp.php:1571
 msgid "Resent to the original recipients."
 msgstr "دوباره برای گیرندگان اصلی فرستاده شد."
 
-#: includes/adapters/gravity-smtp.php:1544
+#: includes/adapters/gravity-smtp.php:1572
 msgid "Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "دوباره فرستاده شد، اما افزونه ایمیل فعال دیگری آن را برد، بنابراین ارسال تازه در گزارش آن افزونه دیده می‌شود، نه Gravity SMTP."
 
-#: includes/adapters/gravity-smtp.php:1608
+#: includes/adapters/gravity-smtp.php:1636
 #: assets/js/app.js:785
 msgid "Sandboxed"
 msgstr "آزمایشی"
 
-#: includes/adapters/gravity-smtp.php:1609
+#: includes/adapters/gravity-smtp.php:1637
 #: assets/js/app.js:785
 msgid "Filtered"
 msgstr "فیلترشده"
 
-#: includes/adapters/gravity-smtp.php:1624
-#: includes/adapters/gravity-smtp.php:1654
+#: includes/adapters/gravity-smtp.php:1652
+#: includes/adapters/gravity-smtp.php:1682
 #: assets/js/app.js:15776
 msgid "Other"
 msgstr "سایر"
 
 #. translators: %d: number of days represented by the chart.
-#: includes/adapters/gravity-smtp.php:1667
+#: includes/adapters/gravity-smtp.php:1695
 msgid "Last %d day"
 msgid_plural "Last %d days"
 msgstr[0] "%d روز گذشته"
 msgstr[1] "%d روز گذشته"
 
-#: includes/adapters/gravity-smtp.php:1670
+#: includes/adapters/gravity-smtp.php:1698
 #: includes/adapters/ottokit.php:146
 #: includes/adapters/ottokit.php:244
 #: assets/js/app.js:784
 msgid "Sent"
 msgstr "ارسال شد"
 
-#: includes/adapters/gravity-smtp.php:1671
+#: includes/adapters/gravity-smtp.php:1699
 #: includes/adapters/ottokit.php:332
 #: assets/js/app.js:782
 #: assets/js/app.js:16351
@@ -6591,11 +6591,11 @@ msgid "Item marked %s."
 msgstr "مورد به‌عنوان %s علامت‌گذاری شد."
 
 #. translators: %s: post type name.
-#: includes/adapters/jet-engine-fields.php:335
+#: includes/adapters/jet-engine-fields.php:342
 msgid "%s fields"
 msgstr "فیلدهای %s"
 
-#: includes/adapters/jet-engine-fields.php:669
+#: includes/adapters/jet-engine-fields.php:695
 msgid "JetEngine field values for Minn Admin."
 msgstr "مقادیر فیلد JetEngine برای Minn Admin."
 
@@ -7016,1259 +7016,1259 @@ msgid "Open LatePoint ↗"
 msgstr "LatePoint↗ را باز کنید"
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:105
+#: includes/adapters/licenses.php:108
 msgid "That isn’t a valid %s license key."
 msgstr "این کلید پروانه %s معتبر نیست."
 
-#: includes/adapters/licenses.php:108
+#: includes/adapters/licenses.php:111
 msgid "The license is not active for this site’s URL."
 msgstr "این پروانه برای نشانی اینترنتی این سایت فعال نیست."
 
-#: includes/adapters/licenses.php:111
+#: includes/adapters/licenses.php:114
 msgid "That license key has been disabled."
 msgstr "این کلید پروانه غیرفعال شده است."
 
-#: includes/adapters/licenses.php:113
+#: includes/adapters/licenses.php:116
 msgid "That license key has expired."
 msgstr "این کلید پروانه منقضی شده است."
 
-#: includes/adapters/licenses.php:115
+#: includes/adapters/licenses.php:118
 msgid "That license key has reached its activation limit."
 msgstr "این کلید پروانه به سقف فعال‌سازی رسیده است."
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:118
+#: includes/adapters/licenses.php:121
 msgid "%s did not accept that key."
 msgstr "%s این کلید را نپذیرفت."
 
-#: includes/adapters/licenses.php:161
+#: includes/adapters/licenses.php:164
 msgid "full membership"
 msgstr "عضویت کامل"
 
-#: includes/adapters/licenses.php:162
+#: includes/adapters/licenses.php:165
 msgid "per-plugin membership"
 msgstr "عضویت به‌ازای افزونه"
 
-#: includes/adapters/licenses.php:163
+#: includes/adapters/licenses.php:166
 msgid "single-project membership"
 msgstr "عضویت تک‌پروژه"
 
-#: includes/adapters/licenses.php:164
+#: includes/adapters/licenses.php:167
 msgid "free Hub membership"
 msgstr "عضویت رایگان Hub"
 
-#: includes/adapters/licenses.php:165
+#: includes/adapters/licenses.php:168
 msgid "membership paused"
 msgstr "عضویت متوقف شده"
 
-#: includes/adapters/licenses.php:639
+#: includes/adapters/licenses.php:642
 msgid "Could not reach smashballoon.com"
 msgstr "دسترسی به smashballoon.com ممکن نشد"
 
-#: includes/adapters/licenses.php:647
+#: includes/adapters/licenses.php:650
 msgid "You have reached the maximum number of sites for this Smash Balloon license"
 msgstr "به سقف تعداد سایت برای این پروانه Smash Balloon رسیده‌اید"
 
 #. translators: 1: number of sites the license is active on. 2: maximum number of sites the license allows.
-#: includes/adapters/licenses.php:650
+#: includes/adapters/licenses.php:653
 msgid "You have reached the maximum number of sites for this Smash Balloon license (%1$d/%2$d)"
 msgstr "به سقف تعداد سایت برای این پروانه Smash Balloon رسیده‌اید (%1$d/%2$d)"
 
-#: includes/adapters/licenses.php:655
+#: includes/adapters/licenses.php:658
 msgid "This Smash Balloon license has expired"
 msgstr "این پروانه Smash Balloon منقضی شده است"
 
-#: includes/adapters/licenses.php:661
+#: includes/adapters/licenses.php:664
 msgid "Smash Balloon did not accept that key"
 msgstr "Smash Balloon این کلید را نپذیرفت"
 
-#: includes/adapters/licenses.php:853
-#: includes/adapters/licenses.php:888
-#: includes/adapters/licenses.php:912
+#: includes/adapters/licenses.php:856
+#: includes/adapters/licenses.php:891
+#: includes/adapters/licenses.php:915
 msgid "Brainstorm Force licensing is not loaded on this site."
 msgstr "سامانه پروانه Brainstorm Force در این سایت بارگذاری نشده است."
 
-#: includes/adapters/licenses.php:876
+#: includes/adapters/licenses.php:879
 msgid "Brainstorm Force did not accept that key."
 msgstr "Brainstorm Force این کلید را نپذیرفت."
 
-#: includes/adapters/licenses.php:897
+#: includes/adapters/licenses.php:900
 msgid "Brainstorm Force did not release that activation."
 msgstr "Brainstorm Force آن فعال‌سازی را آزاد نکرد."
 
-#: includes/adapters/licenses.php:917
+#: includes/adapters/licenses.php:920
 msgid "No license key is stored for this product."
 msgstr "هیچ کلید پروانه‌ای برای این محصول ذخیره نشده است."
 
-#: includes/adapters/licenses.php:922
+#: includes/adapters/licenses.php:925
 msgid "Brainstorm Force confirmed this license is active."
 msgstr "Brainstorm Force تأیید کرد که این پروانه فعال است."
 
-#: includes/adapters/licenses.php:930
+#: includes/adapters/licenses.php:933
 msgid "This license expired on "
 msgstr "این پروانه منقضی شد در "
 
-#: includes/adapters/licenses.php:932
+#: includes/adapters/licenses.php:935
 msgid "Brainstorm Force reports this license is not active on this site."
 msgstr "Brainstorm Force گزارش می‌دهد این پروانه در این سایت فعال نیست."
 
-#: includes/adapters/licenses.php:1189
+#: includes/adapters/licenses.php:1192
 msgid "Crocoblock refused the key"
 msgstr "Crocoblock کلید را نپذیرفت"
 
-#: includes/adapters/licenses.php:1214
+#: includes/adapters/licenses.php:1217
 msgid "The Jet Dashboard code is not loaded; activate a Jet plugin first."
 msgstr "کد پیشخوان Jet بارگذاری نشده است؛ نخست یک افزونه Jet را فعال کنید."
 
-#: includes/adapters/licenses.php:1222
+#: includes/adapters/licenses.php:1225
 msgid "Could not reach the Crocoblock licensing service."
 msgstr "به سرویس مجوز Crocoblock دسترسی پیدا نشد."
 
-#: includes/adapters/licenses.php:1312
+#: includes/adapters/licenses.php:1315
 msgid "Key stored; Breakdance is not activated for this site"
 msgstr "کلید ذخیره شده؛Breakdance برای این سایت فعال نشده است"
 
-#: includes/adapters/licenses.php:1348
+#: includes/adapters/licenses.php:1351
 msgid "Key stored; Elementor has not recorded a status yet"
 msgstr "کلید ذخیره شد؛ Elementor هنوز وضعیتی ثبت نکرده است"
 
-#: includes/adapters/licenses.php:1448
+#: includes/adapters/licenses.php:1451
 msgid "flagged unlicensed"
 msgstr "بدون پروانه علامت خورده"
 
-#: includes/adapters/licenses.php:1475
+#: includes/adapters/licenses.php:1478
 msgid "Key set in wp-config"
 msgstr "کلید در wp-config تنظیم شده"
 
-#: includes/adapters/licenses.php:1501
+#: includes/adapters/licenses.php:1504
 msgid "Key belongs to another user on this site"
 msgstr "کلید متعلق به کاربر دیگری در این سایت است"
 
-#: includes/adapters/licenses.php:1525
+#: includes/adapters/licenses.php:1528
 msgid "Key stored; no check recorded yet"
 msgstr "کلید ذخیره شد؛ هنوز بررسی ثبت نشده"
 
-#: includes/adapters/licenses.php:1528
+#: includes/adapters/licenses.php:1531
 msgid "Could not reach the licensing service at the last check"
 msgstr "در آخرین بررسی دسترسی به خدمت پروانه ممکن نشد"
 
-#: includes/adapters/licenses.php:1539
+#: includes/adapters/licenses.php:1542
 msgid "Subscription expired; migrations still run, updates and support stop"
 msgstr "اشتراک منقضی شد؛ مهاجرت‌ها همچنان اجرا می‌شوند، به‌روزرسانی‌ها و پشتیبانی می‌ایستند"
 
-#: includes/adapters/licenses.php:1540
+#: includes/adapters/licenses.php:1543
 msgid "Subscription cancelled"
 msgstr "اشتراک لغو شد"
 
-#: includes/adapters/licenses.php:1541
+#: includes/adapters/licenses.php:1544
 msgid "The licensing service does not recognise this key"
 msgstr "خدمت پروانه این کلید را نمی‌شناسد"
 
-#: includes/adapters/licenses.php:1542
+#: includes/adapters/licenses.php:1545
 msgid "This site's activation was turned off; activating again re-enables it"
 msgstr "فعال‌سازی این سایت خاموش شد؛ فعال کردن دوباره آن را روشن می‌کند"
 
-#: includes/adapters/licenses.php:1543
+#: includes/adapters/licenses.php:1546
 msgid "Every activation on this license is in use"
 msgstr "همه فعال‌سازی‌های این پروانه در حال استفاده است"
 
-#: includes/adapters/licenses.php:1625
+#: includes/adapters/licenses.php:1628
 msgid "Key stored; Breakdance has not recorded a check yet"
 msgstr "کلید ذخیره شده؛Breakdance هنوز چکی ثبت نکرده است"
 
-#: includes/adapters/licenses.php:1663
+#: includes/adapters/licenses.php:1666
 msgid "Bricks could not reach its license server"
 msgstr "Bricks نتوانست به سرور پروانه خود برسد"
 
 #. translators: %s: the domain the license was activated for.
-#: includes/adapters/licenses.php:1819
+#: includes/adapters/licenses.php:1822
 msgid "activated for %s, this site is %s"
 msgstr "فعال شده برای %s، این سایت %s است"
 
-#: includes/adapters/licenses.php:1829
-#: includes/adapters/licenses.php:1943
+#: includes/adapters/licenses.php:1832
+#: includes/adapters/licenses.php:1946
 msgid "Key stored; no recorded status"
 msgstr "کلید ذخیره شد؛ وضعیتی ثبت نشده"
 
-#: includes/adapters/licenses.php:1852
+#: includes/adapters/licenses.php:1855
 msgid "free trial"
 msgstr "آزمایش رایگان"
 
-#: includes/adapters/licenses.php:1879
+#: includes/adapters/licenses.php:1882
 msgid "Pro build installed; no license attached, so it runs as the free version"
 msgstr "ساخت Pro نصب شده؛ پروانه‌ای پیوست نشده، پس به‌صورت نسخه رایگان اجرا می‌شود"
 
-#: includes/adapters/licenses.php:1884
-#: includes/adapters/licenses.php:5421
+#: includes/adapters/licenses.php:1887
+#: includes/adapters/licenses.php:5424
 msgid "License attached but not readable locally"
 msgstr "پروانه پیوست شده اما به‌صورت محلی خوانده نمی‌شود"
 
-#: includes/adapters/licenses.php:1892
+#: includes/adapters/licenses.php:1895
 msgid "cancelled"
 msgstr "لغو شده"
 
 #. translators: 1: activations used, 2: activations allowed.
-#: includes/adapters/licenses.php:1899
+#: includes/adapters/licenses.php:1902
 msgid "%1$d of %2$d activations used"
 msgstr "%1$d از %2$d فعال‌سازی استفاده‌شده"
 
-#: includes/adapters/licenses.php:1903
+#: includes/adapters/licenses.php:1906
 msgid "(localhost activations are not counted)"
 msgstr "(فعال‌سازی‌های localhost شمرده نمی‌شوند)"
 
-#: includes/adapters/licenses.php:2036
-#: includes/adapters/licenses.php:2038
+#: includes/adapters/licenses.php:2039
+#: includes/adapters/licenses.php:2041
 msgid "WPMU DEV membership"
 msgstr "عضویت WPMU DEV"
 
-#: includes/adapters/licenses.php:2054
+#: includes/adapters/licenses.php:2057
 msgid "licensed through the WPMU DEV Dashboard key"
 msgstr "دارای پروانه از راه کلید پیشخوان WPMU DEV"
 
-#: includes/adapters/licenses.php:2068
+#: includes/adapters/licenses.php:2071
 msgid "covered by the WPMU DEV membership"
 msgstr "زیر پوشش عضویت WPMU DEV"
 
-#: includes/adapters/licenses.php:2071
+#: includes/adapters/licenses.php:2074
 msgid "the WPMU DEV membership has expired"
 msgstr "عضویت WPMU DEV منقضی شده است"
 
-#: includes/adapters/licenses.php:2074
+#: includes/adapters/licenses.php:2077
 msgid "the WPMU DEV membership is paused"
 msgstr "عضویت WPMU DEV متوقف شده است"
 
-#: includes/adapters/licenses.php:2076
+#: includes/adapters/licenses.php:2079
 msgid "Dashboard key present; Smush has not validated it yet"
 msgstr "کلید پیشخوان موجود است؛ Smush هنوز آن را بررسی نکرده است"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2117
+#: includes/adapters/licenses.php:2120
 msgid "%d Jet plugin installed; one Crocoblock key covers it"
 msgid_plural "%d Jet plugins installed; one Crocoblock key covers them all"
 msgstr[0] "%d افزونه Jet نصب شده؛ یک کلید Crocoblock آن را پوشش می‌دهد"
 msgstr[1] "%d افزونه Jet نصب شده؛ یک کلید Crocoblock همه را پوشش می‌دهد"
 
-#: includes/adapters/licenses.php:2125
+#: includes/adapters/licenses.php:2128
 msgid "lifetime membership"
 msgstr "عضویت مادام‌العمر"
 
-#: includes/adapters/licenses.php:2126
+#: includes/adapters/licenses.php:2129
 msgid "all-inclusive membership"
 msgstr "عضویت همه‌چیزشمول"
 
-#: includes/adapters/licenses.php:2127
+#: includes/adapters/licenses.php:2130
 msgid "plugin set"
 msgstr "مجموعه افزونه"
 
-#: includes/adapters/licenses.php:2128
+#: includes/adapters/licenses.php:2131
 msgid "theme + plugin bundle"
 msgstr "بسته پوسته + افزونه"
 
-#: includes/adapters/licenses.php:2129
+#: includes/adapters/licenses.php:2132
 msgid "single plugin"
 msgstr "افزونه تکی"
 
-#: includes/adapters/licenses.php:2138
+#: includes/adapters/licenses.php:2141
 msgid "TemplateMonster key"
 msgstr "کلید TemplateMonster"
 
-#: includes/adapters/licenses.php:2140
+#: includes/adapters/licenses.php:2143
 msgid "Envato key"
 msgstr "کلید Envato"
 
-#: includes/adapters/licenses.php:2143
+#: includes/adapters/licenses.php:2146
 msgid "sublicense"
 msgstr "پروانه فرعی"
 
 #. translators: %s: the site address the license was activated for.
-#: includes/adapters/licenses.php:2152
+#: includes/adapters/licenses.php:2155
 msgid "activated for %s, not this site; deactivate and activate again"
 msgstr "برای %s فعال شده، نه این سایت؛ غیر فعال کنید و دوباره فعال کنید"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2164
+#: includes/adapters/licenses.php:2167
 msgid "covers the %d installed Jet plugin"
 msgid_plural "covers all %d installed Jet plugins"
 msgstr[0] "افزونه Jet نصب‌شده %d را پوشش می‌دهد"
 msgstr[1] "همه %d افزونه Jet نصب‌شده را پوشش می‌دهد"
 
 #. translators: 1: covered count, 2: installed count, 3: names of the plugins the license does not cover.
-#: includes/adapters/licenses.php:2167
+#: includes/adapters/licenses.php:2170
 msgid "covers %1$d of %2$d installed Jet plugins; not covered: %3$s"
 msgstr "%1$d از %2$d افزونه Jet نصب‌شده را پوشش می‌دهد؛ پوشش‌داده‌نشده: %3$s"
 
 #. translators: %d: number of sites the license may be activated on.
-#: includes/adapters/licenses.php:2173
+#: includes/adapters/licenses.php:2176
 msgid "%d site allowed"
 msgid_plural "%d sites allowed"
 msgstr[0] "%d سایت مجاز"
 msgstr[1] "%d سایت مجاز"
 
-#: includes/adapters/licenses.php:2230
+#: includes/adapters/licenses.php:2233
 msgid "no license store yet; the plugin has not run"
 msgstr "هنوز پروانه‌ای ذخیره نشده؛ افزونه اجرا نشده است"
 
-#: includes/adapters/licenses.php:2276
+#: includes/adapters/licenses.php:2279
 msgid "key rejected at the last check"
 msgstr "کلید در آخرین بررسی رد شد"
 
-#: includes/adapters/licenses.php:2279
+#: includes/adapters/licenses.php:2282
 msgid "key disabled by the vendor"
 msgstr "کلید توسط فروشنده غیرفعال شده"
 
-#: includes/adapters/licenses.php:2282
+#: includes/adapters/licenses.php:2285
 msgid "site limit reached"
 msgstr "سقف سایت رسیده"
 
-#: includes/adapters/licenses.php:2328
+#: includes/adapters/licenses.php:2331
 msgid "service key (free tier exists)"
 msgstr "کلید خدمت (طرح رایگان وجود دارد)"
 
-#: includes/adapters/licenses.php:2334
+#: includes/adapters/licenses.php:2337
 #: assets/js/app.js:21610
 msgid "service key"
 msgstr "کلید خدمت"
 
 #. translators: %d: Akismet alert code number.
-#: includes/adapters/licenses.php:2337
+#: includes/adapters/licenses.php:2340
 msgid "Akismet reported a problem with this key (alert %d)"
 msgstr "Akismet مشکلی با این کلید گزارش کرد (هشدار %d)"
 
-#: includes/adapters/licenses.php:2371
+#: includes/adapters/licenses.php:2374
 msgid "cloud access key (free trial, then paid)"
 msgstr "کلید دسترسی ابری (آزمایش رایگان، سپس پولی)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key (trial)"
 msgstr "کلید دسترسی ابری (آزمایشی)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key"
 msgstr "کلید دسترسی ابری"
 
-#: includes/adapters/licenses.php:2380
+#: includes/adapters/licenses.php:2383
 msgid "CleanTalk did not accept this access key"
 msgstr "CleanTalk این کلید دسترسی را نپذیرفت"
 
-#: includes/adapters/licenses.php:2413
+#: includes/adapters/licenses.php:2416
 msgid "not connected; official extension subscriptions and updates ride this link"
 msgstr "متصل نیست؛ اشتراک‌ها و به‌روزرسانی‌های افزودنی‌های رسمی از این پیوند می‌آیند"
 
 #. translators: %d: number of WooCommerce.com extension subscriptions.
-#: includes/adapters/licenses.php:2420
+#: includes/adapters/licenses.php:2423
 msgid "%d extension subscription"
 msgid_plural "%d extension subscriptions"
 msgstr[0] "%d اشتراک افزودنی"
 msgstr[1] "%d اشتراک افزودنی"
 
-#: includes/adapters/licenses.php:2448
+#: includes/adapters/licenses.php:2451
 msgid "store not connected; orders, customers and products all live in SureCart"
 msgstr "فروشگاه متصل نیست؛ سفارش‌ها، مشتریان و محصولات همگی در SureCart هستند"
 
-#: includes/adapters/licenses.php:2455
+#: includes/adapters/licenses.php:2458
 msgid "store connected"
 msgstr "فروشگاه متصل است"
 
-#: includes/adapters/licenses.php:2476
+#: includes/adapters/licenses.php:2479
 msgid "not set up; connect on the Site Kit screen"
 msgstr "راه‌اندازی نشده؛ از صفحه Site Kit متصل شوید"
 
-#: includes/adapters/licenses.php:2479
+#: includes/adapters/licenses.php:2482
 msgid "site credentials stored; no admin has finished connecting a Google account"
 msgstr "گواهی‌های سایت ذخیره شد؛ هیچ مدیری اتصال حساب گوگل را کامل نکرده است"
 
-#: includes/adapters/licenses.php:2481
+#: includes/adapters/licenses.php:2484
 msgid "Google account connected"
 msgstr "حساب گوگل متصل است"
 
-#: includes/adapters/licenses.php:2504
+#: includes/adapters/licenses.php:2507
 msgid "not connected to WordPress.com"
 msgstr "به WordPress.com متصل نیست"
 
 #. translators: %d: WordPress.com site ID.
-#: includes/adapters/licenses.php:2507
+#: includes/adapters/licenses.php:2510
 msgid "connected to WordPress.com (site ID %d)"
 msgstr "متصل به WordPress.com (شناسه سایت %d)"
 
 #. translators: %s: WordPress.com user login name.
-#: includes/adapters/licenses.php:2512
+#: includes/adapters/licenses.php:2515
 msgid "connected to WordPress.com as %s"
 msgstr "متصل به WordPress.com به‌عنوان %s"
 
-#: includes/adapters/licenses.php:2547
+#: includes/adapters/licenses.php:2550
 msgid "key stored; no subscription details recorded yet"
 msgstr "کلید ذخیره شد؛ هنوز جزئیات اشتراکی ثبت نشده است"
 
-#: includes/adapters/licenses.php:2590
+#: includes/adapters/licenses.php:2593
 msgid "Gravity Perks re-checks every 12 hours; no cached status"
 msgstr "Gravity Perks هر ۱۲ ساعت دوباره بررسی می‌کند؛ وضعیتی در حافظه پنهان نیست"
 
-#: includes/adapters/licenses.php:2618
+#: includes/adapters/licenses.php:2621
 msgid "connects through a rankmath.com account"
 msgstr "از راه یک حساب rankmath.com متصل می‌شود"
 
-#: includes/adapters/licenses.php:2621
+#: includes/adapters/licenses.php:2624
 msgid "connected; plan: "
 msgstr "متصل است؛ طرح: "
 
-#: includes/adapters/licenses.php:2641
+#: includes/adapters/licenses.php:2644
 msgid "requires free Yoast SEO (wordpress-seo)"
 msgstr "به Yoast SEO رایگان (wordpress-seo) نیاز دارد"
 
-#: includes/adapters/licenses.php:2649
+#: includes/adapters/licenses.php:2652
 msgid "activate free Yoast SEO to read MyYoast subscription state"
 msgstr "برای خواندن وضعیت اشتراک MyYoast، Yoast SEO رایگان را فعال کنید"
 
-#: includes/adapters/licenses.php:2660
+#: includes/adapters/licenses.php:2663
 msgid "activate the subscription on MyYoast"
 msgstr "اشتراک را در MyYoast فعال کنید"
 
-#: includes/adapters/licenses.php:2674
+#: includes/adapters/licenses.php:2677
 msgid "MyYoast subscription"
 msgstr "اشتراک MyYoast"
 
-#: includes/adapters/licenses.php:2683
+#: includes/adapters/licenses.php:2686
 msgid "MyYoast subscription inactive or expired"
 msgstr "اشتراک MyYoast غیرفعال یا منقضی است"
 
-#: includes/adapters/licenses.php:2689
+#: includes/adapters/licenses.php:2692
 msgid "could not read MyYoast subscription state"
 msgstr "وضعیت اشتراک MyYoast خوانده نشد"
 
-#: includes/adapters/licenses.php:2805
+#: includes/adapters/licenses.php:2808
 msgid "key defined in wp-config.php"
 msgstr "کلید در wp-config.php تعریف شده"
 
-#: includes/adapters/licenses.php:2849
+#: includes/adapters/licenses.php:2852
 msgid "code stored but not registered"
 msgstr "کد ذخیره شده اما نام‌نویسی نشده"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "activation was canceled remotely"
 msgstr "فعال‌سازی از راه دور لغو شد"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "code stored but the site is not authorized"
 msgstr "کد ذخیره شده اما سایت مجاز نیست"
 
-#: includes/adapters/licenses.php:2895
+#: includes/adapters/licenses.php:2898
 msgid "no account token or item tokens stored"
 msgstr "هیچ توکن حساب یا توکن موردی ذخیره نشده است"
 
-#: includes/adapters/licenses.php:2905
+#: includes/adapters/licenses.php:2908
 msgid "Envato keeps no local validity record"
 msgstr "Envato سابقه اعتبار محلی نگه نمی‌دارد"
 
-#: includes/adapters/licenses.php:2906
+#: includes/adapters/licenses.php:2909
 msgid "Envato Market account token"
 msgstr "توکن حساب Envato Market"
 
-#: includes/adapters/licenses.php:2914
+#: includes/adapters/licenses.php:2917
 msgid "Envato single-item token"
 msgstr "توکن تک‌موردی Envato"
 
-#: includes/adapters/licenses.php:2937
+#: includes/adapters/licenses.php:2940
 msgid "covers the bundled Avada plugins"
 msgstr "افزونه‌های همراه Avada را پوشش می‌دهد"
 
-#: includes/adapters/licenses.php:3010
+#: includes/adapters/licenses.php:3013
 msgid "key ships inside the plugin build"
 msgstr "کلید داخل بسته افزونه آمده"
 
-#: includes/adapters/licenses.php:3055
+#: includes/adapters/licenses.php:3058
 msgid "key stored but not activated on this site"
 msgstr "کلید ذخیره شده اما در این سایت فعال نشده"
 
-#: includes/adapters/licenses.php:3161
+#: includes/adapters/licenses.php:3164
 msgid "Purchase code"
 msgstr "کد خرید"
 
-#: includes/adapters/licenses.php:3165
-#: includes/adapters/licenses.php:3182
-#: includes/adapters/licenses.php:3196
+#: includes/adapters/licenses.php:3168
+#: includes/adapters/licenses.php:3185
+#: includes/adapters/licenses.php:3199
 msgid "Slider Revolution's license class could not be loaded."
 msgstr "کلاس پروانه Slider Revolution بارگذاری نشد."
 
-#: includes/adapters/licenses.php:3172
+#: includes/adapters/licenses.php:3175
 msgid "This purchase code is already registered to another site. Deregister it there (or in your ThemePunch account) first."
 msgstr "این کد خرید پیش‌تر برای سایت دیگری نام‌نویسی شده است. نخست آن را در همان سایت (یا در حساب ThemePunch خود) لغو نام‌نویسی کنید."
 
-#: includes/adapters/licenses.php:3175
+#: includes/adapters/licenses.php:3178
 msgid "ThemePunch reports this purchase code as banned."
 msgstr "ThemePunch این کد خرید را ممنوع اعلام کرده است."
 
-#: includes/adapters/licenses.php:3177
+#: includes/adapters/licenses.php:3180
 msgid "ThemePunch did not accept this purchase code."
 msgstr "ThemePunch این کد خرید را نپذیرفت."
 
-#: includes/adapters/licenses.php:3186
+#: includes/adapters/licenses.php:3189
 msgid "The purchase code was deregistered with ThemePunch and the seat freed."
 msgstr "کد خرید در ThemePunch لغو نام‌نویسی شد و جایگاه آزاد گشت."
 
-#: includes/adapters/licenses.php:3187
+#: includes/adapters/licenses.php:3190
 msgid "ThemePunch did not confirm the deregistration."
 msgstr "ThemePunch لغو نام‌نویسی را تأیید نکرد."
 
-#: includes/adapters/licenses.php:3192
+#: includes/adapters/licenses.php:3195
 msgid "No purchase code is stored."
 msgstr "هیچ کد خریدی ذخیره نشده است."
 
-#: includes/adapters/licenses.php:3204
+#: includes/adapters/licenses.php:3207
 msgid "exist"
 msgstr "وجود دارد"
 
-#: includes/adapters/licenses.php:3225
+#: includes/adapters/licenses.php:3228
 msgid "HappyFiles recorded no response; the activation request may not have reached happyfiles.io. The key has been kept, because happyfiles.io may already have counted the activation."
 msgstr "HappyFiles هیچ پاسخی ثبت نکرد؛ ممکن است درخواست فعال‌سازی به happyfiles.io نرسیده باشد. کلید نگه داشته شده است، چون ممکن است happyfiles.io فعال‌سازی را از قبل شمرده باشد."
 
-#: includes/adapters/licenses.php:3229
+#: includes/adapters/licenses.php:3232
 msgid "happyfiles.io did not accept this license key."
 msgstr "happyfiles.io این کلید مجوز را نپذیرفت."
 
-#: includes/adapters/licenses.php:3255
+#: includes/adapters/licenses.php:3258
 msgid "HappyFiles license key"
 msgstr "کلید مجوز HappyFiles"
 
-#: includes/adapters/licenses.php:3281
-#: includes/adapters/licenses.php:3293
-#: includes/adapters/licenses.php:4609
-#: includes/adapters/licenses.php:4704
+#: includes/adapters/licenses.php:3284
+#: includes/adapters/licenses.php:3296
+#: includes/adapters/licenses.php:4612
+#: includes/adapters/licenses.php:4707
 msgid "No license key is stored."
 msgstr "هیچ کلید پروانه‌ای ذخیره نشده است."
 
-#: includes/adapters/licenses.php:3288
+#: includes/adapters/licenses.php:3291
 msgid "The license key was removed and the site deregistered with happyfiles.io."
 msgstr "کلید مجوز پاک شد و سایت از ثبت در happyfiles.io خارج شد."
 
-#: includes/adapters/licenses.php:3321
+#: includes/adapters/licenses.php:3324
 msgid "The key validation service did not answer."
 msgstr "خدمت بررسی کلید پاسخی نداد."
 
-#: includes/adapters/licenses.php:3331
+#: includes/adapters/licenses.php:3334
 #: assets/js/app.js:27673
 msgid "The key was not accepted."
 msgstr "کلید پذیرفته نشد."
 
 #. translators: %s: name of the licensed product.
-#: includes/adapters/licenses.php:3338
-#: includes/adapters/licenses.php:5209
+#: includes/adapters/licenses.php:3341
+#: includes/adapters/licenses.php:5212
 msgid "%s license key"
 msgstr "کلید پروانه %s"
 
-#: includes/adapters/licenses.php:3385
+#: includes/adapters/licenses.php:3388
 msgid "The stored key was cleared, but this plugin build ships with the key embedded and will re-register it. Manage licensed domains on theeventscalendar.com."
 msgstr "کلید ذخیره‌شده پاکسازی شد، اما این بسته افزونه کلید را توکار دارد و دوباره نام‌نویسی می‌کند. دامنه‌های دارای پروانه را در theeventscalendar.com مدیریت کنید."
 
-#: includes/adapters/licenses.php:3386
+#: includes/adapters/licenses.php:3389
 msgid "The key was removed from this site. Manage its licensed domains on theeventscalendar.com."
 msgstr "کلید از این سایت پاک شد. دامنه‌های دارای پروانه را در theeventscalendar.com مدیریت کنید."
 
-#: includes/adapters/licenses.php:3393
+#: includes/adapters/licenses.php:3396
 msgid "No key is stored for this product."
 msgstr "هیچ کلیدی برای این محصول ذخیره نشده است."
 
-#: includes/adapters/licenses.php:3429
+#: includes/adapters/licenses.php:3432
 msgid "The Kadence licensing service did not answer."
 msgstr "خدمت پروانه Kadence پاسخی نداد."
 
-#: includes/adapters/licenses.php:3436
+#: includes/adapters/licenses.php:3439
 msgid "unreachable"
 msgstr "در دسترس نیست"
 
-#: includes/adapters/licenses.php:3438
+#: includes/adapters/licenses.php:3441
 msgid "Kadence license key"
 msgstr "کلید پروانه Kadence"
 
-#: includes/adapters/licenses.php:3473
+#: includes/adapters/licenses.php:3476
 msgid "The stored key was cleared. A key baked into the plugin build remains as the fallback."
 msgstr "کلید ذخیره‌شده پاکسازی شد. کلیدی که در بسته افزونه پخته شده به‌عنوان پشتیبان می‌ماند."
 
-#: includes/adapters/licenses.php:3474
+#: includes/adapters/licenses.php:3477
 msgid "The stored key was cleared from this site."
 msgstr "کلید ذخیره‌شده از این سایت پاکسازی شد."
 
-#: includes/adapters/licenses.php:3491
+#: includes/adapters/licenses.php:3494
 msgid "Elementor Pro license key"
 msgstr "کلید پروانه Elementor Pro"
 
-#: includes/adapters/licenses.php:3501
-#: includes/adapters/licenses.php:3502
+#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3505
 msgid "Elementor does not recognize that key"
 msgstr "Elementor این کلید را نمی‌شناسد"
 
-#: includes/adapters/licenses.php:3503
+#: includes/adapters/licenses.php:3506
 msgid "That Elementor Pro license has expired"
 msgstr "این پروانه Elementor Pro منقضی شده است"
 
-#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3507
 msgid "That license was disabled"
 msgstr "این پروانه غیرفعال شده بود"
 
-#: includes/adapters/licenses.php:3505
+#: includes/adapters/licenses.php:3508
 msgid "That subscription was cancelled"
 msgstr "این اشتراک لغو شد"
 
-#: includes/adapters/licenses.php:3506
+#: includes/adapters/licenses.php:3509
 msgid "That license was revoked"
 msgstr "این پروانه باطل شد"
 
-#: includes/adapters/licenses.php:3507
+#: includes/adapters/licenses.php:3510
 msgid "That key is registered to a different domain"
 msgstr "این کلید برای دامنه دیگری نام‌نویسی شده است"
 
-#: includes/adapters/licenses.php:3530
+#: includes/adapters/licenses.php:3533
 msgid "Elementor did not confirm the license"
 msgstr "Elementor پروانه را تأیید نکرد"
 
-#: includes/adapters/licenses.php:3577
+#: includes/adapters/licenses.php:3580
 msgid "Essential Addons license key"
 msgstr "کلید مجوز Essential Addons"
 
-#: includes/adapters/licenses.php:3581
-#: includes/adapters/licenses.php:3602
-#: includes/adapters/licenses.php:3613
+#: includes/adapters/licenses.php:3584
+#: includes/adapters/licenses.php:3605
+#: includes/adapters/licenses.php:3616
 msgid "Essential Addons Pro is not loaded."
 msgstr "Essential Addons Pro بارگذاری نشده است."
 
-#: includes/adapters/licenses.php:3593
+#: includes/adapters/licenses.php:3596
 msgid "Essential Addons sent a confirmation code to the license email. Finish activation on its settings screen."
 msgstr "Essential Addons یک کد تأیید به ایمیل مجوز فرستاد. فعال‌سازی را در صفحه تنظیمات آن به پایان برسانید."
 
-#: includes/adapters/licenses.php:3636
+#: includes/adapters/licenses.php:3639
 msgid "ACF PRO license key"
 msgstr "کلید پروانه ACF PRO"
 
-#: includes/adapters/licenses.php:3674
+#: includes/adapters/licenses.php:3677
 msgid "Independent Analytics license key"
 msgstr "کلید پروانه Independent Analytics"
 
 #. translators: %s: the current administrator's email address.
-#: includes/adapters/licenses.php:3692
+#: includes/adapters/licenses.php:3695
 msgid "This site has not been connected yet, so activating registers it with freemius.com and sends your name, %s and the site address."
 msgstr "این سایت هنوز متصل نشده است، بنابراین فعال‌سازی آن را در freemius.com ثبت می‌کند و نام شما، %s و نشانی سایت را می‌فرستد."
 
-#: includes/adapters/licenses.php:3693
+#: includes/adapters/licenses.php:3696
 msgid "your email address"
 msgstr "نشانی ایمیل شما"
 
-#: includes/adapters/licenses.php:3728
+#: includes/adapters/licenses.php:3731
 msgid "Crocoblock license key"
 msgstr "کلید پروانه Crocoblock"
 
-#: includes/adapters/licenses.php:3732
+#: includes/adapters/licenses.php:3735
 msgid "Paste the license key from your Crocoblock account."
 msgstr "کلید پروانه را از حساب Crocoblock خود بچسبانید."
 
-#: includes/adapters/licenses.php:3739
+#: includes/adapters/licenses.php:3742
 msgid "Crocoblock accepted the key but sent no license details to store."
 msgstr "Crocoblock کلید را پذیرفت اما جزئیات پروانه‌ای برای ذخیره نفرستاد."
 
-#: includes/adapters/licenses.php:3748
-#: includes/adapters/licenses.php:3764
+#: includes/adapters/licenses.php:3751
+#: includes/adapters/licenses.php:3767
 msgid "No Crocoblock key is stored."
 msgstr "هیچ کلید Crocoblock ذخیره نشده است."
 
-#: includes/adapters/licenses.php:3759
+#: includes/adapters/licenses.php:3762
 msgid "This site was removed from the license."
 msgstr "این سایت از پروانه پاک شد."
 
-#: includes/adapters/licenses.php:3773
+#: includes/adapters/licenses.php:3776
 msgid "Crocoblock confirmed the license for this site."
 msgstr "Crocoblock پروانه این سایت را تأیید کرد."
 
-#: includes/adapters/licenses.php:3803
+#: includes/adapters/licenses.php:3806
 msgid "The licensing service returned nothing readable"
 msgstr "خدمت پروانه چیز خوانایی برنگرداند"
 
-#: includes/adapters/licenses.php:3806
+#: includes/adapters/licenses.php:3809
 msgid "Could not reach the licensing service"
 msgstr "دسترسی به خدمت پروانه ممکن نشد"
 
-#: includes/adapters/licenses.php:3814
+#: includes/adapters/licenses.php:3817
 msgid "That subscription has expired. Migrations still run; updates and support stop."
 msgstr "این اشتراک منقضی شده است. مهاجرت‌ها همچنان اجرا می‌شوند؛ به‌روزرسانی‌ها و پشتیبانی می‌ایستند."
 
-#: includes/adapters/licenses.php:3815
+#: includes/adapters/licenses.php:3818
 msgid "That subscription was cancelled."
 msgstr "این اشتراک لغو شد."
 
-#: includes/adapters/licenses.php:3816
+#: includes/adapters/licenses.php:3819
 msgid "WP Migrate does not recognise that key."
 msgstr "WP Migrate این کلید را نمی‌شناسد."
 
-#: includes/adapters/licenses.php:3817
+#: includes/adapters/licenses.php:3820
 msgid "Every activation on that license is in use."
 msgstr "همه فعال‌سازی‌های این پروانه در حال استفاده است."
 
-#: includes/adapters/licenses.php:3818
+#: includes/adapters/licenses.php:3821
 msgid "This site's activation was turned off for that license."
 msgstr "فعال‌سازی این سایت برای آن پروانه خاموش شد."
 
-#: includes/adapters/licenses.php:3819
+#: includes/adapters/licenses.php:3822
 msgid "No license key was sent."
 msgstr "کلید پروانه‌ای فرستاده نشد."
 
-#: includes/adapters/licenses.php:3827
+#: includes/adapters/licenses.php:3830
 msgid "WP Migrate license key"
 msgstr "کلید پروانه WP Migrate"
 
-#: includes/adapters/licenses.php:3832
+#: includes/adapters/licenses.php:3835
 msgid "Enter a license key."
 msgstr "یک کلید پروانه وارد کنید."
 
-#: includes/adapters/licenses.php:3835
+#: includes/adapters/licenses.php:3838
 msgid "This site sets its key in wp-config, which always wins. Change it there."
 msgstr "این سایت کلیدش را در wp-config می‌گذارد و آن همیشه غالب است. آنجا تغییرش دهید."
 
-#: includes/adapters/licenses.php:3866
+#: includes/adapters/licenses.php:3869
 msgid "This site sets its key in wp-config. Remove it there."
 msgstr "این سایت کلیدش را در wp-config می‌گذارد. آنجا حذفش کنید."
 
-#: includes/adapters/licenses.php:3882
+#: includes/adapters/licenses.php:3885
 msgid "The key was removed from this site. WP Migrate has no way to release the activation remotely, so free the seat in your account if you need it elsewhere."
 msgstr "کلید از این سایت حذف شد. WP Migrate راهی برای آزاد کردن فعال‌سازی از راه دور ندارد، پس اگر جایی دیگر لازم دارید جایگاه را در حسابتان آزاد کنید."
 
-#: includes/adapters/licenses.php:3890
+#: includes/adapters/licenses.php:3893
 msgid "No license key is stored on this site."
 msgstr "هیچ کلید پروانه‌ای در این سایت ذخیره نشده است."
 
-#: includes/adapters/licenses.php:3921
+#: includes/adapters/licenses.php:3924
 msgid "Beaver Builder license key"
 msgstr "کلید پروانه Beaver Builder"
 
-#: includes/adapters/licenses.php:3935
+#: includes/adapters/licenses.php:3938
 msgid "Beaver Builder reports the subscription as not active for this domain"
 msgstr "Beaver Builder اشتراک را برای این دامنه غیرفعال گزارش می‌دهد"
 
-#: includes/adapters/licenses.php:3943
+#: includes/adapters/licenses.php:3946
 msgid "Brizy Pro license key"
 msgstr "کلید پروانه Brizy Pro"
 
-#: includes/adapters/licenses.php:3963
-#: includes/adapters/licenses.php:3978
+#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3981
 msgid "Breakdance did not recognize that key."
 msgstr "Breakdance آن کلید را تشخیص نداد."
 
-#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3969
 msgid "That key does not include Breakdance Pro."
 msgstr "این کلید شامل Breakdance Pro نیست."
 
-#: includes/adapters/licenses.php:3973
+#: includes/adapters/licenses.php:3976
 msgid "That Breakdance Pro license has expired."
 msgstr "مجوز Breakdance Pro منقضی شده است."
 
-#: includes/adapters/licenses.php:3976
+#: includes/adapters/licenses.php:3979
 msgid "Breakdance did not activate this site. Check the license site limit in your Breakdance account."
 msgstr "Breakdance این سایت را فعال نکرد. محدودیت سایت مجوز را در حساب Breakdance خود بررسی کنید."
 
-#: includes/adapters/licenses.php:3986
+#: includes/adapters/licenses.php:3989
 msgid "Breakdance Pro license key"
 msgstr "کلید مجوز Breakdance Pro"
 
-#: includes/adapters/licenses.php:4014
+#: includes/adapters/licenses.php:4017
 msgid "No Breakdance Pro key is stored."
 msgstr "هیچ کلید Breakdance Pro ذخیره نشده است."
 
-#: includes/adapters/licenses.php:4022
+#: includes/adapters/licenses.php:4025
 msgid "Breakdance could not deactivate this license. Use its License screen to review the current status."
 msgstr "Breakdance نتوانست این مجوز را غیرفعال کند. از صفحه مجوز آن برای بررسی وضعیت فعلی استفاده کنید."
 
-#: includes/adapters/licenses.php:4027
+#: includes/adapters/licenses.php:4030
 msgid "Breakdance still reports this site as active, so the key was kept."
 msgstr "Breakdance همچنان این سایت را فعال گزارش می‌کند، بنابراین کلید حفظ شد."
 
-#: includes/adapters/licenses.php:4036
+#: includes/adapters/licenses.php:4039
 msgid "The seat was freed, but the key could not be cleared here. Remove it on the Breakdance License screen."
 msgstr "صندلی آزاد شد، اما کلید اینجا پاک نشد. آن را در صفحه Breakdance License حذف کنید."
 
-#: includes/adapters/licenses.php:4039
+#: includes/adapters/licenses.php:4042
 msgid "The Breakdance Pro license was deactivated and its seat freed."
 msgstr "مجوز Breakdance Pro غیرفعال شد و صندلی آن آزاد شد."
 
-#: includes/adapters/licenses.php:4050
+#: includes/adapters/licenses.php:4053
 msgid "Bricks license key"
 msgstr "کلید پروانه Bricks"
 
-#: includes/adapters/licenses.php:4058
+#: includes/adapters/licenses.php:4061
 msgid "The Bricks license server is temporarily unavailable"
 msgstr "سرور پروانه Bricks موقتاً دردسترس نیست"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks returned status: %s"
 msgstr "Bricks وضعیت برگرداند: %s"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks did not recognize that key"
 msgstr "Bricks این کلید را نشناخت"
 
-#: includes/adapters/licenses.php:4071
+#: includes/adapters/licenses.php:4074
 #: includes/class-minn-admin-rest.php:7978
 #: assets/js/app.js:24127
 msgid "active"
 msgstr "فعال"
 
-#: includes/adapters/licenses.php:4091
+#: includes/adapters/licenses.php:4094
 msgid "Novamira Pro license key"
 msgstr "کلید مجوز Novamira Pro"
 
-#: includes/adapters/licenses.php:4125
+#: includes/adapters/licenses.php:4128
 msgid "Etch license key"
 msgstr "کلید پروانه Etch"
 
-#: includes/adapters/licenses.php:4152
+#: includes/adapters/licenses.php:4155
 msgid "Elegant Themes reports the subscription as expired"
 msgstr "Elegant Themes اشتراک را منقضی گزارش می‌دهد"
 
-#: includes/adapters/licenses.php:4153
+#: includes/adapters/licenses.php:4156
 msgid "Elegant Themes does not recognize that username"
 msgstr "Elegant Themes این نام‌کاربری را نمی‌شناسد"
 
-#: includes/adapters/licenses.php:4154
+#: includes/adapters/licenses.php:4157
 msgid "Elegant Themes did not confirm the account"
 msgstr "Elegant Themes حساب را تأیید نکرد"
 
-#: includes/adapters/licenses.php:4159
+#: includes/adapters/licenses.php:4162
 msgid "Elegant Themes username"
 msgstr "نام‌کاربری Elegant Themes"
 
-#: includes/adapters/licenses.php:4160
+#: includes/adapters/licenses.php:4163
 msgid "API key"
 msgstr "کلید API"
 
-#: includes/adapters/licenses.php:4190
+#: includes/adapters/licenses.php:4193
 msgid "Credentials removed; Elegant Themes has no per-site seats to release"
 msgstr "گواهی‌ها حذف شدند؛ Elegant Themes جایگاه سایتی برای آزادسازی ندارد"
 
-#: includes/adapters/licenses.php:4208
+#: includes/adapters/licenses.php:4211
 msgid "Gravity Forms did not validate the key"
 msgstr "Gravity Forms کلید را تأیید نکرد"
 
-#: includes/adapters/licenses.php:4210
+#: includes/adapters/licenses.php:4213
 msgid "Gravity Forms license key"
 msgstr "کلید پروانه Gravity Forms"
 
-#: includes/adapters/licenses.php:4217
+#: includes/adapters/licenses.php:4220
 msgid "Gravity Forms did not accept that key"
 msgstr "Gravity Forms این کلید را نپذیرفت"
 
-#: includes/adapters/licenses.php:4237
+#: includes/adapters/licenses.php:4240
 msgid "Site unlinked from the license"
 msgstr "پیوند سایت با پروانه برداشته شد"
 
-#: includes/adapters/licenses.php:4259
+#: includes/adapters/licenses.php:4262
 msgid "Gravity did not recognize that key"
 msgstr "Gravity این کلید را نشناخت"
 
-#: includes/adapters/licenses.php:4269
+#: includes/adapters/licenses.php:4272
 msgid "Gravity SMTP license key"
 msgstr "کلید پروانه Gravity SMTP"
 
-#: includes/adapters/licenses.php:4309
+#: includes/adapters/licenses.php:4312
 msgid "WPMU DEV API key"
 msgstr "کلید API WPMU DEV"
 
-#: includes/adapters/licenses.php:4329
+#: includes/adapters/licenses.php:4332
 msgid "Could not reach the WPMU DEV Hub"
 msgstr "دسترسی به WPMU DEV Hub ممکن نشد"
 
-#: includes/adapters/licenses.php:4333
+#: includes/adapters/licenses.php:4336
 msgid "The Hub did not recognize that API key"
 msgstr "Hub این کلید API را نشناخت"
 
-#: includes/adapters/licenses.php:4347
+#: includes/adapters/licenses.php:4350
 msgid "The Hub reports no active membership for this key"
 msgstr "Hub عضویت فعالی برای این کلید گزارش نمی‌دهد"
 
-#: includes/adapters/licenses.php:4355
+#: includes/adapters/licenses.php:4358
 msgid "SearchWP license key"
 msgstr "کلید پروانه SearchWP"
 
-#: includes/adapters/licenses.php:4364
+#: includes/adapters/licenses.php:4367
 msgid "SearchWP did not accept that key"
 msgstr "SearchWP این کلید را نپذیرفت"
 
-#: includes/adapters/licenses.php:4381
+#: includes/adapters/licenses.php:4384
 msgid "SearchWP did not confirm the license"
 msgstr "SearchWP پروانه را تأیید نکرد"
 
-#: includes/adapters/licenses.php:4402
+#: includes/adapters/licenses.php:4405
 msgid "WPForms license key"
 msgstr "کلید پروانه WPForms"
 
-#: includes/adapters/licenses.php:4409
+#: includes/adapters/licenses.php:4412
 msgid "WPForms did not accept that key"
 msgstr "WPForms این کلید را نپذیرفت"
 
-#: includes/adapters/licenses.php:4415
+#: includes/adapters/licenses.php:4418
 msgid "The key is defined in wp-config (WPFORMS_LICENSE_KEY); remove the constant to deactivate."
 msgstr "کلید در wp-config تعریف شده است (WPFORMS_LICENSE_KEY)؛ برای غیرفعال کردن، ثابت را حذف کنید."
 
-#: includes/adapters/licenses.php:4435
+#: includes/adapters/licenses.php:4438
 msgid "Could not reach the WPForms license API"
 msgstr "دسترسی به API پروانه WPForms ممکن نشد"
 
 #. translators: %s: status word returned by the WPForms license API.
-#: includes/adapters/licenses.php:4440
+#: includes/adapters/licenses.php:4443
 msgid "License check returned: %s"
 msgstr "بررسی پروانه برگرداند: %s"
 
-#: includes/adapters/licenses.php:4462
+#: includes/adapters/licenses.php:4465
 msgid "Akismet API key"
 msgstr "کلید API Akismet"
 
-#: includes/adapters/licenses.php:4465
+#: includes/adapters/licenses.php:4468
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); it cannot be changed here."
 msgstr "کلید در کد تعیین شده است (WPCOM_API_KEY یا یک صافی)؛ اینجا قابل تغییر نیست."
 
-#: includes/adapters/licenses.php:4469
+#: includes/adapters/licenses.php:4472
 msgid "That does not look like an Akismet key (12 characters, letters a-f and digits)."
 msgstr "این شبیه یک کلید Akismet نیست (۱۲ نویسه، حروف a-f و رقم‌ها)."
 
-#: includes/adapters/licenses.php:4472
+#: includes/adapters/licenses.php:4475
 msgid "Akismet admin machinery unavailable."
 msgstr "سازوکار مدیریت Akismet دردسترس نیست."
 
-#: includes/adapters/licenses.php:4480
+#: includes/adapters/licenses.php:4483
 msgid "The key is real but its Akismet plan is not active (missing, cancelled or suspended subscription)."
 msgstr "کلید معتبر است اما طرح Akismet آن فعال نیست (اشتراک وجود ندارد، لغو یا معلق شده است)."
 
-#: includes/adapters/licenses.php:4483
+#: includes/adapters/licenses.php:4486
 msgid "Akismet did not recognize that key."
 msgstr "Akismet این کلید را نشناخت."
 
-#: includes/adapters/licenses.php:4485
+#: includes/adapters/licenses.php:4488
 msgid "Could not reach the Akismet API. Please try again."
 msgstr "دسترسی به API Akismet ممکن نشد. لطفاً دوباره تلاش کنید."
 
-#: includes/adapters/licenses.php:4489
+#: includes/adapters/licenses.php:4492
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); remove it there."
 msgstr "کلید در کد تعیین شده است (WPCOM_API_KEY یا یک صافی)؛ آن را همان‌جا حذف کنید."
 
-#: includes/adapters/licenses.php:4513
+#: includes/adapters/licenses.php:4516
 msgid "Akismet reports this key as invalid."
 msgstr "Akismet این کلید را غیرمعتبر اعلام کرد."
 
-#: includes/adapters/licenses.php:4515
+#: includes/adapters/licenses.php:4518
 msgid "Could not reach the Akismet API."
 msgstr "دسترسی به API Akismet ممکن نشد."
 
-#: includes/adapters/licenses.php:4523
+#: includes/adapters/licenses.php:4526
 msgid "CleanTalk access key"
 msgstr "کلید دسترسی CleanTalk"
 
-#: includes/adapters/licenses.php:4553
+#: includes/adapters/licenses.php:4556
 msgid "This license has reached its activation limit. Free a seat on searchandfilter.com first."
 msgstr "این پروانه به سقف فعال‌سازی رسیده است. نخست یک جایگاه را در searchandfilter.com آزاد کنید."
 
-#: includes/adapters/licenses.php:4556
+#: includes/adapters/licenses.php:4559
 msgid "This Search & Filter license has expired."
 msgstr "این پروانه Search & Filter منقضی شده است."
 
-#: includes/adapters/licenses.php:4562
+#: includes/adapters/licenses.php:4565
 msgid "searchandfilter.com does not recognize that key."
 msgstr "searchandfilter.com این کلید را نمی‌شناسد."
 
-#: includes/adapters/licenses.php:4564
+#: includes/adapters/licenses.php:4567
 msgid "searchandfilter.com did not accept that key."
 msgstr "searchandfilter.com این کلید را نپذیرفت."
 
-#: includes/adapters/licenses.php:4566
+#: includes/adapters/licenses.php:4569
 msgid "Search & Filter license key"
 msgstr "کلید پروانه Search & Filter"
 
-#: includes/adapters/licenses.php:4601
+#: includes/adapters/licenses.php:4604
 msgid "The license was disconnected and the seat freed."
 msgstr "پروانه قطع شد و جایگاه آزاد گشت."
 
-#: includes/adapters/licenses.php:4603
+#: includes/adapters/licenses.php:4606
 msgid "Search & Filter could not disconnect the license."
 msgstr "Search & Filter نتوانست پروانه را قطع کند."
 
-#: includes/adapters/licenses.php:4633
+#: includes/adapters/licenses.php:4636
 msgid "This license has reached its activation limit."
 msgstr "این پروانه به سقف فعال‌سازی رسیده است."
 
-#: includes/adapters/licenses.php:4636
+#: includes/adapters/licenses.php:4639
 msgid "This Admin Columns license has expired."
 msgstr "این پروانه Admin Columns منقضی شده است."
 
-#: includes/adapters/licenses.php:4638
+#: includes/adapters/licenses.php:4641
 msgid "admincolumns.com did not accept that key."
 msgstr "admincolumns.com این کلید را نپذیرفت."
 
-#: includes/adapters/licenses.php:4640
+#: includes/adapters/licenses.php:4643
 msgid "Admin Columns Pro license key"
 msgstr "کلید پروانه Admin Columns Pro"
 
-#: includes/adapters/licenses.php:4646
+#: includes/adapters/licenses.php:4649
 msgid "That does not look like an Admin Columns key (they are long and contain a dash)."
 msgstr "این شبیه یک کلید Admin Columns نیست (کلیدها بلند هستند و خط تیره دارند)."
 
-#: includes/adapters/licenses.php:4662
+#: includes/adapters/licenses.php:4665
 msgid "admincolumns.com accepted the key but returned an invalid activation token."
 msgstr "admincolumns.com کلید را پذیرفت اما توکن فعال‌سازی غیرمعتبری برگرداند."
 
-#: includes/adapters/licenses.php:4681
+#: includes/adapters/licenses.php:4684
 msgid "No activation was stored; local license state cleared."
 msgstr "هیچ فعال‌سازی ذخیره نشده بود؛ وضعیت پروانه محلی پاکسازی شد."
 
 #. translators: %s: error message reported by admincolumns.com.
-#: includes/adapters/licenses.php:4693
+#: includes/adapters/licenses.php:4696
 msgid "Local license state was cleared, but admincolumns.com reported: %s"
 msgstr "وضعیت پروانه محلی پاکسازی شد، اما admincolumns.com گزارش کرد: %s"
 
-#: includes/adapters/licenses.php:4699
+#: includes/adapters/licenses.php:4702
 msgid "The license was deactivated and the seat freed."
 msgstr "پروانه غیرفعال شد و جایگاه آزاد گشت."
 
-#: includes/adapters/licenses.php:4730
+#: includes/adapters/licenses.php:4733
 msgid "Gravity Perks license key"
 msgstr "کلید پروانه Gravity Perks"
 
-#: includes/adapters/licenses.php:4746
+#: includes/adapters/licenses.php:4749
 msgid "That key has reached its site limit"
 msgstr "این کلید به سقف تعداد سایت رسیده است"
 
-#: includes/adapters/licenses.php:4748
+#: includes/adapters/licenses.php:4751
 msgid "Gravity Wiz did not validate that key"
 msgstr "Gravity Wiz این کلید را تأیید نکرد"
 
-#: includes/adapters/licenses.php:4759
+#: includes/adapters/licenses.php:4762
 msgid "Gravity Wiz reports the license as not valid for this site"
 msgstr "Gravity Wiz پروانه را برای این سایت نامعتبر گزارش می‌دهد"
 
-#: includes/adapters/licenses.php:4773
+#: includes/adapters/licenses.php:4776
 msgid "Perfmatters license key"
 msgstr "کلید پروانه Perfmatters"
 
-#: includes/adapters/licenses.php:4790
+#: includes/adapters/licenses.php:4793
 msgid "Perfmatters did not accept that key"
 msgstr "Perfmatters این کلید را نپذیرفت"
 
-#: includes/adapters/licenses.php:4801
+#: includes/adapters/licenses.php:4804
 msgid "Perfmatters could not release this site"
 msgstr "Perfmatters نتوانست این سایت را آزاد کند"
 
-#: includes/adapters/licenses.php:4807
+#: includes/adapters/licenses.php:4810
 msgid "No response from the Perfmatters server"
 msgstr "پاسخی از سرور Perfmatters نیامد"
 
-#: includes/adapters/licenses.php:4842
+#: includes/adapters/licenses.php:4845
 msgid "Automatic.css license key"
 msgstr "کلید پروانه Automatic.css"
 
-#: includes/adapters/licenses.php:4848
+#: includes/adapters/licenses.php:4851
 msgid "That looks like the masked key from Automatic.css’s screen — paste the full license key."
 msgstr "این شبیه کلید پوشیده صفحه Automatic.css است — کلید کامل پروانه را بچسبانید."
 
-#: includes/adapters/licenses.php:4852
-#: includes/adapters/licenses.php:4887
+#: includes/adapters/licenses.php:4855
+#: includes/adapters/licenses.php:4890
 msgid "No response from the Automatic.css server."
 msgstr "پاسخی از سرور Automatic.css نیامد."
 
-#: includes/adapters/licenses.php:4876
+#: includes/adapters/licenses.php:4879
 msgid "Automatic.css deactivated; the seat was released."
 msgstr "Automatic.css غیرفعال شد؛ جایگاه آزاد شد."
 
-#: includes/adapters/licenses.php:4877
+#: includes/adapters/licenses.php:4880
 msgid "Key removed from this site. Automatic.css did not confirm releasing the seat — check the account if the activation count matters."
 msgstr "کلید از این سایت حذف شد. Automatic.css آزاد شدن جایگاه را تأیید نکرد — اگر شمار فعال‌سازی مهم است حساب را بررسی کنید."
 
-#: includes/adapters/licenses.php:4883
+#: includes/adapters/licenses.php:4886
 msgid "No Automatic.css key is stored."
 msgstr "هیچ کلید Automatic.css ذخیره نشده است."
 
-#: includes/adapters/licenses.php:4937
+#: includes/adapters/licenses.php:4940
 msgid "SEOPress PRO license key"
 msgstr "کلید پروانه SEOPress PRO"
 
-#: includes/adapters/licenses.php:4941
+#: includes/adapters/licenses.php:4944
 msgid "The key is defined in wp-config.php (SEOPRESS_LICENSE_KEY) — change it there."
 msgstr "کلید در wp-config.php تعریف شده است (SEOPRESS_LICENSE_KEY) — آنجا تغییرش دهید."
 
-#: includes/adapters/licenses.php:4946
-#: includes/adapters/licenses.php:4997
+#: includes/adapters/licenses.php:4949
+#: includes/adapters/licenses.php:5000
 msgid "No response from the SEOPress server."
 msgstr "پاسخی از سرور SEOPress نیامد."
 
-#: includes/adapters/licenses.php:4965
-#: includes/adapters/licenses.php:4993
+#: includes/adapters/licenses.php:4968
+#: includes/adapters/licenses.php:4996
 msgid "No SEOPress PRO key is stored."
 msgstr "هیچ کلید SEOPress PRO ذخیره نشده است."
 
-#: includes/adapters/licenses.php:4972
+#: includes/adapters/licenses.php:4975
 msgid "SEOPress did not confirm the deactivation — nothing was changed."
 msgstr "SEOPress غیرفعال‌سازی را تأیید نکرد — چیزی تغییر نکرد."
 
-#: includes/adapters/licenses.php:4986
+#: includes/adapters/licenses.php:4989
 msgid "Seat released. The key itself is defined in wp-config.php and stays there."
 msgstr "جایگاه آزاد شد. خود کلید در wp-config.php تعریف شده و همان‌جا می‌ماند."
 
-#: includes/adapters/licenses.php:5037
+#: includes/adapters/licenses.php:5040
 msgid "GP Premium license key"
 msgstr "کلید پروانه GP Premium"
 
-#: includes/adapters/licenses.php:5062
+#: includes/adapters/licenses.php:5065
 msgid "wpallimport.com did not confirm the license"
 msgstr "wpallimport.com پروانه را تأیید نکرد"
 
-#: includes/adapters/licenses.php:5064
+#: includes/adapters/licenses.php:5067
 msgid "WP All Export license key"
 msgstr "کلید پروانه WP All Export"
 
-#: includes/adapters/licenses.php:5085
+#: includes/adapters/licenses.php:5088
 msgid "Could not reach wpallimport.com (or no key is stored)"
 msgstr "دسترسی به wpallimport.com ممکن نشد (یا کلیدی ذخیره نشده است)"
 
-#: includes/adapters/licenses.php:5099
-#: includes/adapters/licenses.php:5146
+#: includes/adapters/licenses.php:5102
+#: includes/adapters/licenses.php:5149
 msgid "The key was removed from this site. Soflyy licenses have no per-site seats to free."
 msgstr "کلید از این سایت حذف شد. پروانه‌های Soflyy جایگاه سایتی برای آزادسازی ندارند."
 
-#: includes/adapters/licenses.php:5113
+#: includes/adapters/licenses.php:5116
 msgid "wpallimport.com did not answer"
 msgstr "wpallimport.com پاسخی نداد"
 
-#: includes/adapters/licenses.php:5115
+#: includes/adapters/licenses.php:5118
 msgid "WP All Import license key"
 msgstr "کلید پروانه WP All Import"
 
-#: includes/adapters/licenses.php:5156
+#: includes/adapters/licenses.php:5159
 msgid "No key is stored."
 msgstr "هیچ کلیدی ذخیره نشده است."
 
-#: includes/adapters/licenses.php:5181
+#: includes/adapters/licenses.php:5184
 msgid "Kreatura did not accept that license key"
 msgstr "Kreatura این کلید پروانه را نپذیرفت"
 
-#: includes/adapters/licenses.php:5185
+#: includes/adapters/licenses.php:5188
 msgid "LayerSlider license key"
 msgstr "کلید پروانه LayerSlider"
 
-#: includes/adapters/licenses.php:5190
+#: includes/adapters/licenses.php:5193
 msgid "No license key stored"
 msgstr "هیچ کلید پروانه‌ای ذخیره نشده"
 
-#: includes/adapters/licenses.php:5214
+#: includes/adapters/licenses.php:5217
 msgid "Missing license key or product name"
 msgstr "کلید پروانه یا نام محصول موجود نیست"
 
-#: includes/adapters/licenses.php:5260
+#: includes/adapters/licenses.php:5263
 msgid "No active Smash Balloon license on this product"
 msgstr "پروانه فعال Smash Balloon روی این محصول نیست"
 
-#: includes/adapters/licenses.php:5264
+#: includes/adapters/licenses.php:5267
 msgid "License deactivated for "
 msgstr "پروانه غیرفعال شد برای "
 
-#: includes/adapters/licenses.php:5270
+#: includes/adapters/licenses.php:5273
 msgid "No key is stored"
 msgstr "هیچ کلیدی ذخیره نشده"
 
-#: includes/adapters/licenses.php:5330
+#: includes/adapters/licenses.php:5333
 msgid "MyYoast reports a valid Premium subscription"
 msgstr "MyYoast اشتراک Premium معتبری گزارش می‌دهد"
 
-#: includes/adapters/licenses.php:5334
+#: includes/adapters/licenses.php:5337
 msgid "No Premium subscription linked to this site on MyYoast"
 msgstr "هیچ اشتراک Premium در MyYoast به این سایت پیوند نخورده است"
 
-#: includes/adapters/licenses.php:5336
+#: includes/adapters/licenses.php:5339
 msgid "MyYoast reports the Premium subscription is inactive or expired"
 msgstr "MyYoast گزارش می‌دهد اشتراک Premium غیرفعال یا منقضی است"
 
-#: includes/adapters/licenses.php:5338
+#: includes/adapters/licenses.php:5341
 msgid "Could not refresh MyYoast subscription state"
 msgstr "وضعیت اشتراک MyYoast تازه‌سازی نشد"
 
-#: includes/adapters/licenses.php:5374
+#: includes/adapters/licenses.php:5377
 msgid "Freemius-powered; no account state recorded yet"
 msgstr "مبتنی بر Freemius؛ هنوز وضعیت حسابی ثبت نشده است"
 
-#: includes/adapters/licenses.php:5409
+#: includes/adapters/licenses.php:5412
 msgid "Premium install with no license attached"
 msgstr "نصب Premium بدون پروانه پیوست‌شده"
 
-#: includes/adapters/licenses.php:5531
-#: includes/adapters/licenses.php:5589
-#: includes/adapters/licenses.php:5623
+#: includes/adapters/licenses.php:5534
+#: includes/adapters/licenses.php:5592
+#: includes/adapters/licenses.php:5626
 msgid "The plugin is not loaded."
 msgstr "افزونه بارگذاری نشده است."
 
-#: includes/adapters/licenses.php:5535
-#: includes/adapters/licenses.php:6286
+#: includes/adapters/licenses.php:5538
+#: includes/adapters/licenses.php:6293
 msgid "Paste a key first."
 msgstr "نخست یک کلید بچسبانید."
 
-#: includes/adapters/licenses.php:5544
-#: includes/adapters/licenses.php:5552
+#: includes/adapters/licenses.php:5547
+#: includes/adapters/licenses.php:5555
 msgid "Freemius refused the key."
 msgstr "Freemius کلید را نپذیرفت."
 
-#: includes/adapters/licenses.php:5572
+#: includes/adapters/licenses.php:5575
 msgid "Freemius accepted the request but no active license is attached to this site."
 msgstr "Freemius درخواست را پذیرفت اما هیچ پروانه فعالی به این سایت پیوست نشده است."
 
-#: includes/adapters/licenses.php:5593
-#: includes/adapters/licenses.php:5639
+#: includes/adapters/licenses.php:5596
+#: includes/adapters/licenses.php:5642
 msgid "No license is attached to this site."
 msgstr "هیچ پروانه‌ای به این سایت پیوست نشده است."
 
-#: includes/adapters/licenses.php:5611
+#: includes/adapters/licenses.php:5614
 msgid "Freemius did not release the license. Its Account screen shows the reason."
 msgstr "Freemius پروانه را آزاد نکرد. صفحه حسابش دلیل را نشان می‌دهد."
 
-#: includes/adapters/licenses.php:5626
+#: includes/adapters/licenses.php:5629
 msgid "This site is not connected to Freemius yet. Activate a key first."
 msgstr "این سایت هنوز به Freemius وصل نشده است. نخست یک کلید را فعال کنید."
 
-#: includes/adapters/licenses.php:5765
+#: includes/adapters/licenses.php:5768
 msgid "Activation stored; SureCart keeps no local expiry"
 msgstr "فعال‌سازی ذخیره شد؛ SureCart انقضای محلی نگه نمی‌دارد"
 
-#: includes/adapters/licenses.php:5766
+#: includes/adapters/licenses.php:5769
 msgid "Key stored without an activation record"
 msgstr "کلید بدون سابقه فعال‌سازی ذخیره شد"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5877
+#: includes/adapters/licenses.php:5880
 msgid "verified %s ago from Minn"
 msgstr "%s پیش از سوی Minn تأیید شد"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5881
+#: includes/adapters/licenses.php:5884
 msgid "failed a check %s ago from Minn"
 msgstr "%s پیش در بررسی از سوی Minn خطا داد"
 
-#: includes/adapters/licenses.php:5886
+#: includes/adapters/licenses.php:5889
 #: assets/js/app.js:21597
 msgid "License key"
 msgstr "کلید پروانه"
 
-#: includes/adapters/licenses.php:6008
+#: includes/adapters/licenses.php:6011
 msgid "core connector"
 msgstr "اتصال‌دهنده هسته"
 
-#: includes/adapters/licenses.php:6267
+#: includes/adapters/licenses.php:6274
 msgid "No such action for this provider."
 msgstr "چنین عملی برای این ارائه‌دهنده وجود ندارد."
 
-#: includes/adapters/licenses.php:6281
+#: includes/adapters/licenses.php:6288
 msgid "Fill in every field first."
 msgstr "نخست همه فیلدها را پر کنید."
 
 #. translators: %s: PHP constant name defined in wp-config.php.
-#: includes/adapters/licenses.php:6320
+#: includes/adapters/licenses.php:6327
 msgid "This key is defined in wp-config (%s), which takes precedence. Change it there."
 msgstr "این کلید در wp-config (%s) تعریف شده که اولویت دارد. آنجا تغییرش دهید."
 
-#: includes/adapters/licenses.php:6333
+#: includes/adapters/licenses.php:6340
 msgid "The plugin reported an error during the request."
 msgstr "افزونه هنگام درخواست خطایی گزارش کرد."
 
-#: includes/adapters/licenses.php:6403
+#: includes/adapters/licenses.php:6410
 msgid "Could not check for updates."
 msgstr "بررسی به‌روزرسانی‌ها ممکن نشد."
 
@@ -13698,82 +13698,88 @@ msgstr "افزودن %s تازه"
 msgid "No %s found."
 msgstr "هیچ %s پیدا نشد."
 
-#: includes/class-minn-admin-cpt.php:461
+#: includes/class-minn-admin-cpt.php:491
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 20 characters max."
 msgstr "نامک الزامی است: حروف کوچک، عدد، خط تیره یا زیرخط، حداکثر ۲۰ نویسه."
 
-#: includes/class-minn-admin-cpt.php:470
-#: includes/class-minn-admin-cpt.php:500
-#: includes/class-minn-admin-cpt.php:638
+#. translators: %s: the slug
+#: includes/class-minn-admin-cpt.php:497
 #: includes/class-minn-admin-cpt.php:670
+msgid "“%s” is a name WordPress reserves; pick another slug."
+msgstr "“%s” نامی است که WordPress رزرو کرده است؛ نامک دیگری انتخاب کنید."
+
+#: includes/class-minn-admin-cpt.php:503
+#: includes/class-minn-admin-cpt.php:533
+#: includes/class-minn-admin-cpt.php:674
+#: includes/class-minn-admin-cpt.php:706
 msgid "Singular and plural labels are required."
 msgstr "برچسب‌های مفرد و جمع الزامی هستند."
 
-#: includes/class-minn-admin-cpt.php:493
+#: includes/class-minn-admin-cpt.php:526
 msgid "No such post type."
 msgstr "چنین گونه نوشته‌ای وجود ندارد."
 
-#: includes/class-minn-admin-cpt.php:496
+#: includes/class-minn-admin-cpt.php:529
 msgid "This post type is registered in code and can only be changed there."
 msgstr "این گونه نوشته در کد ثبت شده و تنها همان‌جا قابل تغییر است."
 
-#: includes/class-minn-admin-cpt.php:530
-#: includes/class-minn-admin-cpt.php:700
+#: includes/class-minn-admin-cpt.php:563
+#: includes/class-minn-admin-cpt.php:736
 msgid "ACF definition not found."
 msgstr "تعریف ACF پیدا نشد."
 
-#: includes/class-minn-admin-cpt.php:543
+#: includes/class-minn-admin-cpt.php:576
 msgid "This post type is registered in code and can only be removed there."
 msgstr "این گونه نوشته در کد ثبت شده و تنها همان‌جا قابل حذف است."
 
-#: includes/class-minn-admin-cpt.php:546
+#: includes/class-minn-admin-cpt.php:579
 msgid "Definition removed; existing content stays in the database."
 msgstr "تعریف حذف شد؛ محتوای موجود در پایگاه‌داده می‌ماند."
 
-#: includes/class-minn-admin-cpt.php:631
+#: includes/class-minn-admin-cpt.php:664
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 32 characters max."
 msgstr "نامک الزامی است: حروف کوچک، عدد، خط تیره یا زیرخط، حداکثر ۳۲ نویسه."
 
-#: includes/class-minn-admin-cpt.php:663
+#: includes/class-minn-admin-cpt.php:699
 msgid "No such taxonomy."
 msgstr "چنین طبقه‌بندی وجود ندارد."
 
-#: includes/class-minn-admin-cpt.php:666
+#: includes/class-minn-admin-cpt.php:702
 msgid "This taxonomy is registered in code and can only be changed there."
 msgstr "این طبقه‌بندی در کد ثبت شده و تنها همان‌جا قابل تغییر است."
 
-#: includes/class-minn-admin-cpt.php:713
+#: includes/class-minn-admin-cpt.php:749
 msgid "This taxonomy is registered in code and can only be removed there."
 msgstr "این طبقه‌بندی در کد ثبت شده و تنها همان‌جا قابل حذف است."
 
-#: includes/class-minn-admin-cpt.php:716
+#: includes/class-minn-admin-cpt.php:752
 msgid "Definition removed; existing terms stay in the database."
 msgstr "تعریف حذف شد؛ عبارت‌های موجود در پایگاه‌داده می‌مانند."
 
-#: includes/class-minn-admin-cpt.php:753
+#: includes/class-minn-admin-cpt.php:789
 msgid "ACF could not save the taxonomy."
 msgstr "ACF نتوانست طبقه‌بندی را ذخیره کند."
 
-#: includes/class-minn-admin-cpt.php:823
+#: includes/class-minn-admin-cpt.php:859
 msgid "ACF could not save the post type."
 msgstr "ACF نتوانست گونه نوشته را ذخیره کند."
 
-#: includes/class-minn-admin-cpt.php:890
-#: includes/class-minn-admin-cpt.php:893
+#: includes/class-minn-admin-cpt.php:926
+#: includes/class-minn-admin-cpt.php:929
 msgid "JetEngine could not save the post type."
 msgstr "JetEngine نتوانست گونه نوشته را ذخیره کند."
 
-#: includes/class-minn-admin-cpt.php:938
-#: includes/class-minn-admin-cpt.php:941
+#: includes/class-minn-admin-cpt.php:974
+#: includes/class-minn-admin-cpt.php:977
 msgid "JetEngine could not save the taxonomy."
 msgstr "JetEngine نتوانست طبقه‌بندی را ذخیره کند."
 
-#: includes/class-minn-admin-cpt.php:949
+#: includes/class-minn-admin-cpt.php:985
 msgid "JetEngine definition not found."
 msgstr "تعریف JetEngine پیدا نشد."
 
-#: includes/class-minn-admin-cpt.php:956
-#: includes/class-minn-admin-cpt.php:958
+#: includes/class-minn-admin-cpt.php:992
+#: includes/class-minn-admin-cpt.php:994
 msgid "JetEngine could not remove the definition."
 msgstr "JetEngine نتوانست تعریف را حذف کند."
 

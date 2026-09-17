@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-09-17 15:24+0000\n"
+"PO-Revision-Date: 2026-09-17 16:26+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Italian\n"
 "MIME-Version: 1.0\n"
@@ -162,7 +162,7 @@ msgstr "Ruolo utente"
 
 #: includes/adapters/acf-field-groups.php:84
 #: includes/adapters/bricks.php:831
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 #: includes/adapters/elementor-templates.php:344
 #: includes/adapters/jet-theme-core.php:143
 #: assets/js/app.js:4231
@@ -911,8 +911,8 @@ msgid_plural "%d entries left to ACF’s own tools"
 msgstr[0] "%d voce lasciata agli strumenti di ACF"
 msgstr[1] "%d voci lasciate agli strumenti di ACF"
 
-#: includes/adapters/acf.php:1718
-#: includes/adapters/acf.php:1783
+#: includes/adapters/acf.php:1780
+#: includes/adapters/acf.php:1845
 #: assets/js/app.js:24532
 #: assets/js/app.js:47526
 #: assets/js/app.js:47534
@@ -920,8 +920,8 @@ msgid "empty"
 msgstr "vuoto"
 
 #. translators: %d: number of repeater rows.
-#: includes/adapters/acf.php:1723
-#: includes/adapters/acf.php:1790
+#: includes/adapters/acf.php:1785
+#: includes/adapters/acf.php:1852
 msgid "%d row"
 msgid_plural "%d rows"
 msgstr[0] "%d riga"
@@ -929,7 +929,7 @@ msgstr[1] "%d righe"
 
 #. translators: %d: number of images in a gallery field.
 #. translators: %d: number of images in the gallery field.
-#: includes/adapters/acf.php:1735
+#: includes/adapters/acf.php:1797
 #: assets/js/app.js:37688
 msgid "%d image"
 msgid_plural "%d images"
@@ -938,7 +938,7 @@ msgstr[1] "%d immagini"
 
 #. translators: %s: number of index rows
 #. translators: %s: the environment type (e.g. "staging").
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/jet-smart-filters.php:85
 #: includes/adapters/novamira.php:183
@@ -951,7 +951,7 @@ msgstr[1] "%d immagini"
 msgid "Off"
 msgstr "Disattivato"
 
-#: includes/adapters/acf.php:1737
+#: includes/adapters/acf.php:1799
 #: includes/adapters/code-snippets.php:300
 #: includes/adapters/gravity-smtp.php:1068
 #: includes/adapters/novamira.php:183
@@ -964,16 +964,16 @@ msgid "On"
 msgstr "Attivo"
 
 #. translators: %d: number of flexible-content sections.
-#: includes/adapters/acf.php:1787
+#: includes/adapters/acf.php:1849
 msgid "%d section"
 msgid_plural "%d sections"
 msgstr[0] "%d sezione"
 msgstr[1] "%d sezioni"
 
-#: includes/adapters/acf.php:1800
-#: includes/adapters/acf.php:1855
+#: includes/adapters/acf.php:1862
+#: includes/adapters/acf.php:1917
 #: includes/adapters/acpt.php:492
-#: includes/adapters/jet-engine-fields.php:597
+#: includes/adapters/jet-engine-fields.php:623
 #: includes/adapters/meta-box.php:267
 #: includes/adapters/pods.php:437
 #: assets/js/app.js:23733
@@ -983,19 +983,19 @@ msgid "Custom fields"
 msgstr "Campi personalizzati"
 
 #. translators: %d: how many rows or sections were edited.
-#: includes/adapters/acf.php:1834
+#: includes/adapters/acf.php:1896
 msgid "%d edited"
 msgid_plural "%d edited"
 msgstr[0] "%d modificato"
 msgstr[1] "%d modificati"
 
-#: includes/adapters/acf.php:1837
+#: includes/adapters/acf.php:1899
 msgid "changed"
 msgstr "modificato"
 
-#: includes/adapters/acf.php:1906
+#: includes/adapters/acf.php:1968
 #: includes/adapters/acpt.php:532
-#: includes/adapters/jet-engine-fields.php:626
+#: includes/adapters/jet-engine-fields.php:652
 #: includes/adapters/meta-box.php:299
 #: includes/adapters/pods.php:469
 #: includes/adapters/powerpress.php:232
@@ -1010,9 +1010,9 @@ msgstr "modificato"
 msgid "Post not found."
 msgstr "Articolo non trovato."
 
-#: includes/adapters/acf.php:1909
+#: includes/adapters/acf.php:1971
 #: includes/adapters/acpt.php:535
-#: includes/adapters/jet-engine-fields.php:629
+#: includes/adapters/jet-engine-fields.php:655
 #: includes/adapters/meta-box.php:302
 #: includes/adapters/pods.php:472
 #: includes/adapters/powerpress.php:235
@@ -1020,32 +1020,32 @@ msgstr "Articolo non trovato."
 msgid "You cannot edit this post."
 msgstr "Non è possibile modificare questo articolo."
 
-#: includes/adapters/acf.php:1915
+#: includes/adapters/acf.php:1977
 #: includes/adapters/acpt.php:541
-#: includes/adapters/jet-engine-fields.php:635
+#: includes/adapters/jet-engine-fields.php:661
 #: includes/adapters/meta-box.php:312
 #: includes/adapters/pods.php:482
 msgid "You cannot edit that post type."
 msgstr "Non è possibile modificare quel tipo di contenuto."
 
-#: includes/adapters/acf.php:1952
+#: includes/adapters/acf.php:2014
 msgid "This picker is no longer available. Reload the screen and try again."
 msgstr "Questo selettore non è più disponibile. Ricarica la schermata e riprova."
 
-#: includes/adapters/acf.php:1959
+#: includes/adapters/acf.php:2021
 msgid "Unknown relational field."
 msgstr "Campo relazionale sconosciuto."
 
-#: includes/adapters/acf.php:2126
+#: includes/adapters/acf.php:2188
 msgid "ACF simple field values for Minn Admin."
 msgstr "Valori semplici dei campi ACF per Minn Admin."
 
-#: includes/adapters/acf.php:2414
+#: includes/adapters/acf.php:2476
 #: includes/adapters/acpt.php:831
 #: includes/adapters/asset-cleanup.php:232
 #: includes/adapters/autoptimize.php:188
-#: includes/adapters/bricks.php:1361
-#: includes/adapters/bricks.php:1423
+#: includes/adapters/bricks.php:1392
+#: includes/adapters/bricks.php:1454
 #: includes/adapters/novamira.php:456
 #: includes/adapters/option-pages.php:198
 #: includes/adapters/option-pages.php:213
@@ -1053,7 +1053,7 @@ msgstr "Valori semplici dei campi ACF per Minn Admin."
 msgid "Unknown settings tab."
 msgstr "Scheda impostazioni sconosciuta."
 
-#: includes/adapters/acf.php:2823
+#: includes/adapters/acf.php:2886
 #: includes/adapters/option-pages.php:160
 #: includes/class-minn-admin-surfaces.php:169
 msgid "Site Options"
@@ -1153,7 +1153,7 @@ msgid "Edit in ACPT"
 msgstr "Modifica in ACPT"
 
 #: includes/adapters/acpt.php:1111
-#: includes/adapters/bricks.php:1670
+#: includes/adapters/bricks.php:1701
 #: includes/adapters/cfdb7.php:311
 #: includes/adapters/code-snippets.php:189
 #: includes/adapters/custom-css-js.php:456
@@ -1634,7 +1634,7 @@ msgstr "Livello"
 #: includes/adapters/aryo-activity-log.php:272
 #: includes/adapters/bookly.php:211
 #: includes/adapters/bookly.php:225
-#: includes/adapters/bricks.php:1703
+#: includes/adapters/bricks.php:1734
 #: includes/adapters/cf7-flamingo.php:168
 #: includes/adapters/cfdb7.php:285
 #: includes/adapters/elementor-forms.php:230
@@ -1670,7 +1670,7 @@ msgid "Event not found."
 msgstr "Evento non trovato."
 
 #: includes/adapters/all-in-one-security.php:334
-#: includes/adapters/bricks.php:1855
+#: includes/adapters/bricks.php:1886
 #: includes/adapters/elementor-forms.php:462
 #: includes/adapters/gravity-forms.php:517
 #: includes/adapters/novamira.php:535
@@ -2272,7 +2272,7 @@ msgstr "Tutte le sorgenti"
 
 #: includes/adapters/aryo-activity-log.php:151
 #: includes/adapters/aryo-activity-log.php:401
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:47682
 msgid "Browser"
 msgstr "Browser"
@@ -2473,7 +2473,7 @@ msgstr "Prestazioni"
 
 #: includes/adapters/asset-cleanup.php:350
 #: includes/adapters/autoptimize.php:298
-#: includes/adapters/jet-engine-fields.php:324
+#: includes/adapters/jet-engine-fields.php:331
 #: includes/adapters/option-pages.php:180
 #: includes/adapters/perfmatters.php:369
 #: includes/adapters/redirection.php:207
@@ -3088,7 +3088,7 @@ msgstr "Eliminare questo template in modo permanente? Non è possibile annullare
 
 #: includes/adapters/bricks.php:801
 #: includes/adapters/bricks.php:813
-#: includes/adapters/bricks.php:1300
+#: includes/adapters/bricks.php:1331
 #: includes/adapters/elementor-templates.php:325
 #: includes/adapters/elementor-templates.php:404
 #: includes/adapters/jet-theme-core.php:124
@@ -3232,137 +3232,137 @@ msgstr "%s (copia)"
 msgid "Bricks declined to duplicate this template. Duplication may be turned off in its settings."
 msgstr "Bricks ha rifiutato di duplicare questo Template. La duplicazione potrebbe essere disattivata nelle Impostazioni."
 
-#: includes/adapters/bricks.php:1232
+#: includes/adapters/bricks.php:1263
 msgid "Bricks CSS files"
 msgstr "File CSS di Bricks"
 
-#: includes/adapters/bricks.php:1280
+#: includes/adapters/bricks.php:1311
 msgid "Editing"
 msgstr "Modifica"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Post types"
 msgstr "Tipi di contenuto"
 
-#: includes/adapters/bricks.php:1282
+#: includes/adapters/bricks.php:1313
 msgid "Which post types can be edited with Bricks."
 msgstr "Quali tipi di contenuto si possono modificare con Bricks."
 
-#: includes/adapters/bricks.php:1287
+#: includes/adapters/bricks.php:1318
 msgid "Features"
 msgstr "Funzionalità"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Save form submissions"
 msgstr "Salva gli invii dei moduli"
 
-#: includes/adapters/bricks.php:1289
+#: includes/adapters/bricks.php:1320
 msgid "Store Bricks form submissions in the database. Turning this on adds a Forms surface to Minn."
 msgstr "Memorizza gli invii dei moduli Bricks nel database. Attivandolo, viene aggiunta una sezione Moduli a Minn."
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Disable Bricks SEO controls"
 msgstr "Disabilita i controlli SEO di Bricks"
 
-#: includes/adapters/bricks.php:1290
+#: includes/adapters/bricks.php:1321
 msgid "Right when a dedicated SEO plugin owns titles and metas."
 msgstr "Utile quando un plugin SEO dedicato gestisce titoli e meta."
 
-#: includes/adapters/bricks.php:1291
+#: includes/adapters/bricks.php:1322
 msgid "Disable Bricks Open Graph tags"
 msgstr "Disabilita i tag Open Graph di Bricks"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Disable default templates"
 msgstr "Disabilita i template predefiniti"
 
-#: includes/adapters/bricks.php:1302
+#: includes/adapters/bricks.php:1333
 msgid "Without conditions, published header and footer templates apply everywhere. Turn on to require explicit conditions."
 msgstr "Senza condizioni, i template header e footer pubblicati si applicano ovunque. Attiva per richiedere condizioni esplicite."
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Public templates"
 msgstr "Template pubblici"
 
-#: includes/adapters/bricks.php:1303
+#: includes/adapters/bricks.php:1334
 msgid "Whether template pages are viewable by anyone, or only logged-in users."
 msgstr "Se le pagine dei template sono visibili a chiunque, o solo agli utenti connessi."
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Remote template access"
 msgstr "Accesso remoto ai template"
 
-#: includes/adapters/bricks.php:1304
+#: includes/adapters/bricks.php:1335
 msgid "Allow other sites to browse and insert this site's templates. Anyone who knows the address can ask, so set a password or list the allowed sites in Bricks first."
 msgstr "Consenti ad altri Siti di Sfogliare e Inserisci i Template di questo Sito. Chiunque conosca l'Indirizzo può chiedere, quindi imposta una password o una lista dei Siti consentiti in Bricks prima."
 
-#: includes/adapters/bricks.php:1313
+#: includes/adapters/bricks.php:1344
 msgid "Autosave"
 msgstr "Salvataggio automatico"
 
-#: includes/adapters/bricks.php:1315
+#: includes/adapters/bricks.php:1346
 msgid "Disable autosave"
 msgstr "Disabilita il salvataggio automatico"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Autosave interval (seconds)"
 msgstr "Intervallo di salvataggio automatico (secondi)"
 
-#: includes/adapters/bricks.php:1316
+#: includes/adapters/bricks.php:1347
 msgid "Default 60, minimum 15."
 msgstr "Predefinito 60, minimo 15."
 
-#: includes/adapters/bricks.php:1320
+#: includes/adapters/bricks.php:1351
 #: assets/js/app.js:48009
 #: assets/js/app.js:48435
 msgid "Appearance"
 msgstr "Aspetto"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Builder mode"
 msgstr "Modalità costruttore"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4649
 #: assets/js/app.js:4831
 msgid "Dark"
 msgstr "Scuro"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4354
 #: assets/js/app.js:4648
 #: assets/js/app.js:4830
 msgid "Light"
 msgstr "Chiaro"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 #: assets/js/app.js:4636
 #: assets/js/app.js:5413
 msgid "Custom"
 msgstr "Personalizzato"
 
-#: includes/adapters/bricks.php:1322
+#: includes/adapters/bricks.php:1353
 msgid "Custom mode's CSS is edited on the Bricks settings screen."
 msgstr "Il CSS della modalità personalizzata si modifica nella schermata Impostazioni di Bricks."
 
-#: includes/adapters/bricks.php:1329
+#: includes/adapters/bricks.php:1360
 #: assets/js/app.js:18895
 #: assets/js/app.js:25504
 msgid "Default"
 msgstr "Predefinito"
 
-#: includes/adapters/bricks.php:1343
+#: includes/adapters/bricks.php:1374
 #: assets/js/app.js:22154
 #: assets/js/app.js:27339
 msgid "Maintenance mode"
 msgstr "Modalità manutenzione"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Mode"
 msgstr "Modalità"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/adapters/pw-gift-cards.php:290
 #: includes/adapters/woocommerce-gift-cards.php:271
 #: includes/adapters/yith-gift-cards.php:360
@@ -3372,68 +3372,68 @@ msgstr "Modalità"
 msgid "Disabled"
 msgstr "Disabilitato"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 #: includes/class-minn-admin-bar.php:192
 msgid "Coming soon"
 msgstr "Prossimamente"
 
-#: includes/adapters/bricks.php:1345
+#: includes/adapters/bricks.php:1376
 msgid "Maintenance (503)"
 msgstr "In manutenzione (503)"
 
-#: includes/adapters/bricks.php:1346
+#: includes/adapters/bricks.php:1377
 msgid "A Single-type Bricks template to show; Default is Bricks' built-in holding page."
 msgstr "Un template Bricks di tipo Single da visualizzare; Predefinito è la pagina di attesa integrata di Bricks."
 
-#: includes/adapters/bricks.php:1347
+#: includes/adapters/bricks.php:1378
 msgid "Render header"
 msgstr "Visualizza header"
 
-#: includes/adapters/bricks.php:1348
+#: includes/adapters/bricks.php:1379
 msgid "Render footer"
 msgstr "Visualizza footer"
 
-#: includes/adapters/bricks.php:1460
+#: includes/adapters/bricks.php:1491
 msgid "Set a remote templates password, or list the sites allowed to ask, in Bricks first. Without one of those this opens every template on this site to anyone."
 msgstr "Imposta una password per i Template remoti, o una lista dei Siti a cui è consentito chiedere, in Bricks prima. Senza una di queste opzioni, questo apre ogni Template su questo Sito a chiunque."
 
-#: includes/adapters/bricks.php:1483
+#: includes/adapters/bricks.php:1514
 msgid "That is not one of the offered choices."
 msgstr "Questa non è una delle scelte proposte."
 
 #. translators: %d: the smallest allowed value.
-#: includes/adapters/bricks.php:1499
+#: includes/adapters/bricks.php:1530
 msgid "The smallest allowed value is %d."
 msgstr "Il valore minimo consentito è %d."
 
-#: includes/adapters/bricks.php:1511
+#: includes/adapters/bricks.php:1542
 msgid "Pick a Single-type Bricks template."
 msgstr "Scegli un template Bricks di tipo Single."
 
-#: includes/adapters/bricks.php:1643
+#: includes/adapters/bricks.php:1674
 #: includes/adapters/elementor-forms.php:111
 msgid "(empty submission)"
 msgstr "(invio vuoto)"
 
-#: includes/adapters/bricks.php:1656
+#: includes/adapters/bricks.php:1687
 msgid "Open in Bricks ↗"
 msgstr "Apri in Bricks ↗"
 
-#: includes/adapters/bricks.php:1663
+#: includes/adapters/bricks.php:1694
 #: includes/adapters/cfdb7.php:298
 msgid "Delete entry"
 msgstr "Elimina la voce"
 
-#: includes/adapters/bricks.php:1666
+#: includes/adapters/bricks.php:1697
 msgid "Delete this submission permanently? Bricks keeps no trash for them."
 msgstr "Eliminare definitivamente questo invio? Bricks non tiene un cestino per questi."
 
-#: includes/adapters/bricks.php:1673
+#: includes/adapters/bricks.php:1704
 msgid "Delete the selected submissions permanently? Bricks keeps no trash for them."
 msgstr "Eliminare definitivamente gli invii selezionati? Bricks non tiene un cestino per questi."
 
-#: includes/adapters/bricks.php:1678
-#: includes/adapters/bricks.php:1758
+#: includes/adapters/bricks.php:1709
+#: includes/adapters/bricks.php:1789
 #: includes/adapters/cf7-flamingo.php:112
 #: includes/adapters/cf7-flamingo.php:128
 #: includes/adapters/cf7-flamingo.php:256
@@ -3470,20 +3470,20 @@ msgstr "Eliminare definitivamente gli invii selezionati? Bricks non tiene un ces
 msgid "Forms"
 msgstr "Moduli"
 
-#: includes/adapters/bricks.php:1687
-#: includes/adapters/bricks.php:1757
+#: includes/adapters/bricks.php:1718
+#: includes/adapters/bricks.php:1788
 #: includes/adapters/elementor-forms.php:171
 #: includes/adapters/ninja-forms.php:169
 #: includes/adapters/ninja-forms.php:178
 msgid "Submissions"
 msgstr "Invii"
 
-#: includes/adapters/bricks.php:1698
+#: includes/adapters/bricks.php:1729
 msgid "All submissions"
 msgstr "Tutti gli invii"
 
-#: includes/adapters/bricks.php:1701
-#: includes/adapters/bricks.php:1861
+#: includes/adapters/bricks.php:1732
+#: includes/adapters/bricks.php:1892
 #: includes/adapters/cf7-flamingo.php:486
 #: includes/adapters/cfdb7.php:486
 #: includes/adapters/elementor-forms.php:480
@@ -3498,8 +3498,8 @@ msgstr "Tutti gli invii"
 msgid "Submission"
 msgstr "Invio"
 
-#: includes/adapters/bricks.php:1702
-#: includes/adapters/bricks.php:1844
+#: includes/adapters/bricks.php:1733
+#: includes/adapters/bricks.php:1875
 #: includes/adapters/cf7-flamingo.php:166
 #: includes/adapters/cf7-flamingo.php:261
 #: includes/adapters/cf7-flamingo.php:455
@@ -3532,16 +3532,16 @@ msgstr "Invio"
 msgid "Form"
 msgstr "Modulo"
 
-#: includes/adapters/bricks.php:1762
+#: includes/adapters/bricks.php:1793
 msgid "Last submission"
 msgstr "Ultimo invio"
 
-#: includes/adapters/bricks.php:1770
+#: includes/adapters/bricks.php:1801
 msgid "Open Bricks form submissions ↗"
 msgstr "Apri gli invii dei moduli Bricks ↗"
 
-#: includes/adapters/bricks.php:1819
-#: includes/adapters/bricks.php:1880
+#: includes/adapters/bricks.php:1850
+#: includes/adapters/bricks.php:1911
 #: includes/adapters/elementor-forms.php:406
 #: includes/adapters/elementor-forms.php:494
 #: includes/adapters/elementor-forms.php:517
@@ -3550,7 +3550,7 @@ msgstr "Apri gli invii dei moduli Bricks ↗"
 msgid "Submission not found."
 msgstr "Invio non trovato."
 
-#: includes/adapters/bricks.php:1841
+#: includes/adapters/bricks.php:1872
 #: includes/adapters/core-blocks.php:107
 #: includes/adapters/fluent-smtp.php:365
 #: includes/adapters/fluent-smtp.php:728
@@ -3578,7 +3578,7 @@ msgstr "Invio non trovato."
 msgid "Date"
 msgstr "Data"
 
-#: includes/adapters/bricks.php:1846
+#: includes/adapters/bricks.php:1877
 #: includes/adapters/elementor-forms.php:451
 #: includes/class-minn-admin-bar.php:652
 #: assets/js/app.js:3002
@@ -3587,7 +3587,7 @@ msgstr "Data"
 msgid "Page"
 msgstr "Pagina"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/class-minn-admin-surfaces.php:348
 #: assets/js/app.js:1260
 #: assets/js/app.js:3424
@@ -3600,23 +3600,23 @@ msgstr "Pagina"
 msgid "System"
 msgstr "Sistema"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: includes/adapters/wpforms.php:556
 msgid "IP address"
 msgstr "Indirizzo IP"
 
-#: includes/adapters/bricks.php:1848
+#: includes/adapters/bricks.php:1879
 #: assets/js/app.js:8631
 msgid "Referrer"
 msgstr "Referrer"
 
-#: includes/adapters/bricks.php:1860
+#: includes/adapters/bricks.php:1891
 #: includes/adapters/fluent-smtp.php:753
 #: includes/adapters/suremails.php:274
 msgid "Response"
 msgstr "Risposta"
 
-#: includes/adapters/bricks.php:1884
+#: includes/adapters/bricks.php:1915
 msgid "The submission could not be deleted."
 msgstr "Impossibile eliminare l'invio."
 
@@ -4017,20 +4017,20 @@ msgstr "Il meccanismo delle impostazioni CleanTalk non è disponibile."
 
 #: includes/adapters/cleantalk.php:133
 #: includes/adapters/cleantalk.php:174
-#: includes/adapters/licenses.php:4066
-#: includes/adapters/licenses.php:4285
-#: includes/adapters/licenses.php:4343
-#: includes/adapters/licenses.php:4370
-#: includes/adapters/licenses.php:4419
-#: includes/adapters/licenses.php:4431
-#: includes/adapters/licenses.php:4493
-#: includes/adapters/licenses.php:4506
-#: includes/adapters/licenses.php:5046
+#: includes/adapters/licenses.php:4069
+#: includes/adapters/licenses.php:4288
+#: includes/adapters/licenses.php:4346
+#: includes/adapters/licenses.php:4373
+#: includes/adapters/licenses.php:4422
+#: includes/adapters/licenses.php:4434
+#: includes/adapters/licenses.php:4496
+#: includes/adapters/licenses.php:4509
+#: includes/adapters/licenses.php:5049
 msgid "No key stored"
 msgstr "Nessuna chiave memorizzata"
 
 #: includes/adapters/cleantalk.php:136
-#: includes/adapters/licenses.php:4501
+#: includes/adapters/licenses.php:4504
 msgid "Key removed from this site."
 msgstr "Chiave rimossa da questo sito."
 
@@ -4076,7 +4076,7 @@ msgid "Could not delete this account."
 msgstr "Impossibile eliminare questo account."
 
 #: includes/adapters/cleantalk.php:483
-#: includes/adapters/licenses.php:6262
+#: includes/adapters/licenses.php:6269
 msgid "Unknown action."
 msgstr "Azione sconosciuta."
 
@@ -5529,7 +5529,7 @@ msgid "\"%s\" is not a valid email address."
 msgstr "\"%s\" non è un indirizzo email valido."
 
 #: includes/adapters/fluent-smtp.php:894
-#: includes/adapters/gravity-smtp.php:1520
+#: includes/adapters/gravity-smtp.php:1548
 #: includes/adapters/post-smtp.php:442
 msgid "No recipient address on record for this email."
 msgstr "Nessun indirizzo destinatario registrato per questa email."
@@ -6201,49 +6201,49 @@ msgstr "Mantieni un log di debug"
 msgid "Gravity SMTP reports this email cannot be resent (body or attachments were not stored)."
 msgstr "Gravity SMTP segnala che questa email non può essere inviata di nuovo (corpo o allegati non memorizzati)."
 
-#: includes/adapters/gravity-smtp.php:1537
+#: includes/adapters/gravity-smtp.php:1565
 msgid "The mailer reported the message could not be sent."
 msgstr "Il mailer ha segnalato che il messaggio non è stato inviato."
 
-#: includes/adapters/gravity-smtp.php:1543
+#: includes/adapters/gravity-smtp.php:1571
 msgid "Resent to the original recipients."
 msgstr "Reinviata ai destinatari originali."
 
-#: includes/adapters/gravity-smtp.php:1544
+#: includes/adapters/gravity-smtp.php:1572
 msgid "Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "Reinviata, ma un altro plugin di posta attivo l’ha recapitata, quindi il nuovo invio compare nel registro di quel plugin, non in quello di Gravity SMTP."
 
-#: includes/adapters/gravity-smtp.php:1608
+#: includes/adapters/gravity-smtp.php:1636
 #: assets/js/app.js:785
 msgid "Sandboxed"
 msgstr "In sandbox"
 
-#: includes/adapters/gravity-smtp.php:1609
+#: includes/adapters/gravity-smtp.php:1637
 #: assets/js/app.js:785
 msgid "Filtered"
 msgstr "Filtrato"
 
-#: includes/adapters/gravity-smtp.php:1624
-#: includes/adapters/gravity-smtp.php:1654
+#: includes/adapters/gravity-smtp.php:1652
+#: includes/adapters/gravity-smtp.php:1682
 #: assets/js/app.js:15776
 msgid "Other"
 msgstr "Altro"
 
 #. translators: %d: number of days represented by the chart.
-#: includes/adapters/gravity-smtp.php:1667
+#: includes/adapters/gravity-smtp.php:1695
 msgid "Last %d day"
 msgid_plural "Last %d days"
 msgstr[0] "Ultimi %d giorni"
 msgstr[1] "Ultimi %d giorni"
 
-#: includes/adapters/gravity-smtp.php:1670
+#: includes/adapters/gravity-smtp.php:1698
 #: includes/adapters/ottokit.php:146
 #: includes/adapters/ottokit.php:244
 #: assets/js/app.js:784
 msgid "Sent"
 msgstr "Inviato"
 
-#: includes/adapters/gravity-smtp.php:1671
+#: includes/adapters/gravity-smtp.php:1699
 #: includes/adapters/ottokit.php:332
 #: assets/js/app.js:782
 #: assets/js/app.js:16351
@@ -6591,11 +6591,11 @@ msgid "Item marked %s."
 msgstr "Elemento contrassegnato come %s."
 
 #. translators: %s: post type name.
-#: includes/adapters/jet-engine-fields.php:335
+#: includes/adapters/jet-engine-fields.php:342
 msgid "%s fields"
 msgstr "%s campi"
 
-#: includes/adapters/jet-engine-fields.php:669
+#: includes/adapters/jet-engine-fields.php:695
 msgid "JetEngine field values for Minn Admin."
 msgstr "Valori dei campi JetEngine per Minn Admin."
 
@@ -7016,1259 +7016,1259 @@ msgid "Open LatePoint ↗"
 msgstr "Apri LatePoint ↗"
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:105
+#: includes/adapters/licenses.php:108
 msgid "That isn’t a valid %s license key."
 msgstr "Questa non è una chiave di licenza %s valida."
 
-#: includes/adapters/licenses.php:108
+#: includes/adapters/licenses.php:111
 msgid "The license is not active for this site’s URL."
 msgstr "La licenza non è attiva per l’URL di questo sito."
 
-#: includes/adapters/licenses.php:111
+#: includes/adapters/licenses.php:114
 msgid "That license key has been disabled."
 msgstr "Quella chiave di licenza è stata disabilitata."
 
-#: includes/adapters/licenses.php:113
+#: includes/adapters/licenses.php:116
 msgid "That license key has expired."
 msgstr "Quella chiave di licenza è scaduta."
 
-#: includes/adapters/licenses.php:115
+#: includes/adapters/licenses.php:118
 msgid "That license key has reached its activation limit."
 msgstr "Quella chiave di licenza ha raggiunto il limite di attivazioni."
 
 #. translators: %s: product name.
-#: includes/adapters/licenses.php:118
+#: includes/adapters/licenses.php:121
 msgid "%s did not accept that key."
 msgstr "%s non ha accettato quella chiave."
 
-#: includes/adapters/licenses.php:161
+#: includes/adapters/licenses.php:164
 msgid "full membership"
 msgstr "iscrizione completa"
 
-#: includes/adapters/licenses.php:162
+#: includes/adapters/licenses.php:165
 msgid "per-plugin membership"
 msgstr "iscrizione per plugin"
 
-#: includes/adapters/licenses.php:163
+#: includes/adapters/licenses.php:166
 msgid "single-project membership"
 msgstr "iscrizione per singolo progetto"
 
-#: includes/adapters/licenses.php:164
+#: includes/adapters/licenses.php:167
 msgid "free Hub membership"
 msgstr "iscrizione Hub gratuita"
 
-#: includes/adapters/licenses.php:165
+#: includes/adapters/licenses.php:168
 msgid "membership paused"
 msgstr "iscrizione sospesa"
 
-#: includes/adapters/licenses.php:639
+#: includes/adapters/licenses.php:642
 msgid "Could not reach smashballoon.com"
 msgstr "Impossibile raggiungere smashballoon.com"
 
-#: includes/adapters/licenses.php:647
+#: includes/adapters/licenses.php:650
 msgid "You have reached the maximum number of sites for this Smash Balloon license"
 msgstr "Hai raggiunto il numero massimo di siti per questa licenza Smash Balloon"
 
 #. translators: 1: number of sites the license is active on. 2: maximum number of sites the license allows.
-#: includes/adapters/licenses.php:650
+#: includes/adapters/licenses.php:653
 msgid "You have reached the maximum number of sites for this Smash Balloon license (%1$d/%2$d)"
 msgstr "Hai raggiunto il numero massimo di siti per questa licenza Smash Balloon (%1$d/%2$d)"
 
-#: includes/adapters/licenses.php:655
+#: includes/adapters/licenses.php:658
 msgid "This Smash Balloon license has expired"
 msgstr "Questa licenza Smash Balloon è scaduta"
 
-#: includes/adapters/licenses.php:661
+#: includes/adapters/licenses.php:664
 msgid "Smash Balloon did not accept that key"
 msgstr "Smash Balloon non ha accettato quella chiave"
 
-#: includes/adapters/licenses.php:853
-#: includes/adapters/licenses.php:888
-#: includes/adapters/licenses.php:912
+#: includes/adapters/licenses.php:856
+#: includes/adapters/licenses.php:891
+#: includes/adapters/licenses.php:915
 msgid "Brainstorm Force licensing is not loaded on this site."
 msgstr "Il sistema di licenze Brainstorm Force non è caricato su questo sito."
 
-#: includes/adapters/licenses.php:876
+#: includes/adapters/licenses.php:879
 msgid "Brainstorm Force did not accept that key."
 msgstr "Brainstorm Force non ha accettato quella chiave."
 
-#: includes/adapters/licenses.php:897
+#: includes/adapters/licenses.php:900
 msgid "Brainstorm Force did not release that activation."
 msgstr "Brainstorm Force non ha rilasciato quella attivazione."
 
-#: includes/adapters/licenses.php:917
+#: includes/adapters/licenses.php:920
 msgid "No license key is stored for this product."
 msgstr "Nessuna chiave di licenza memorizzata per questo prodotto."
 
-#: includes/adapters/licenses.php:922
+#: includes/adapters/licenses.php:925
 msgid "Brainstorm Force confirmed this license is active."
 msgstr "Brainstorm Force ha confermato che questa licenza è attiva."
 
-#: includes/adapters/licenses.php:930
+#: includes/adapters/licenses.php:933
 msgid "This license expired on "
 msgstr "Questa licenza è scaduta il "
 
-#: includes/adapters/licenses.php:932
+#: includes/adapters/licenses.php:935
 msgid "Brainstorm Force reports this license is not active on this site."
 msgstr "Brainstorm Force segnala che questa licenza non è attiva su questo sito."
 
-#: includes/adapters/licenses.php:1189
+#: includes/adapters/licenses.php:1192
 msgid "Crocoblock refused the key"
 msgstr "Crocoblock ha rifiutato la chiave"
 
-#: includes/adapters/licenses.php:1214
+#: includes/adapters/licenses.php:1217
 msgid "The Jet Dashboard code is not loaded; activate a Jet plugin first."
 msgstr "Il codice di Jet Dashboard non è caricato; attiva prima un plugin Jet."
 
-#: includes/adapters/licenses.php:1222
+#: includes/adapters/licenses.php:1225
 msgid "Could not reach the Crocoblock licensing service."
 msgstr "Impossibile raggiungere il servizio licenze Crocoblock."
 
-#: includes/adapters/licenses.php:1312
+#: includes/adapters/licenses.php:1315
 msgid "Key stored; Breakdance is not activated for this site"
 msgstr "Chiave memorizzata; Breakdance non è attivato per questo sito"
 
-#: includes/adapters/licenses.php:1348
+#: includes/adapters/licenses.php:1351
 msgid "Key stored; Elementor has not recorded a status yet"
 msgstr "Chiave memorizzata; Elementor non ha ancora registrato uno stato"
 
-#: includes/adapters/licenses.php:1448
+#: includes/adapters/licenses.php:1451
 msgid "flagged unlicensed"
 msgstr "segnalato senza licenza"
 
-#: includes/adapters/licenses.php:1475
+#: includes/adapters/licenses.php:1478
 msgid "Key set in wp-config"
 msgstr "Chiave impostata in wp-config"
 
-#: includes/adapters/licenses.php:1501
+#: includes/adapters/licenses.php:1504
 msgid "Key belongs to another user on this site"
 msgstr "La chiave appartiene a un altro utente di questo sito"
 
-#: includes/adapters/licenses.php:1525
+#: includes/adapters/licenses.php:1528
 msgid "Key stored; no check recorded yet"
 msgstr "Chiave memorizzata; nessun controllo registrato"
 
-#: includes/adapters/licenses.php:1528
+#: includes/adapters/licenses.php:1531
 msgid "Could not reach the licensing service at the last check"
 msgstr "Impossibile raggiungere il servizio di licenze all’ultimo controllo"
 
-#: includes/adapters/licenses.php:1539
+#: includes/adapters/licenses.php:1542
 msgid "Subscription expired; migrations still run, updates and support stop"
 msgstr "Abbonamento scaduto; le migrazioni continuano, aggiornamenti e supporto si interrompono"
 
-#: includes/adapters/licenses.php:1540
+#: includes/adapters/licenses.php:1543
 msgid "Subscription cancelled"
 msgstr "Abbonamento annullato"
 
-#: includes/adapters/licenses.php:1541
+#: includes/adapters/licenses.php:1544
 msgid "The licensing service does not recognise this key"
 msgstr "Il servizio di licenze non riconosce questa chiave"
 
-#: includes/adapters/licenses.php:1542
+#: includes/adapters/licenses.php:1545
 msgid "This site's activation was turned off; activating again re-enables it"
 msgstr "L’attivazione di questo sito è stata disattivata; attivando di nuovo la si riabilita"
 
-#: includes/adapters/licenses.php:1543
+#: includes/adapters/licenses.php:1546
 msgid "Every activation on this license is in use"
 msgstr "Tutte le attivazioni di questa licenza sono in uso"
 
-#: includes/adapters/licenses.php:1625
+#: includes/adapters/licenses.php:1628
 msgid "Key stored; Breakdance has not recorded a check yet"
 msgstr "Chiave memorizzata; Breakdance non ha ancora registrato un controllo"
 
-#: includes/adapters/licenses.php:1663
+#: includes/adapters/licenses.php:1666
 msgid "Bricks could not reach its license server"
 msgstr "Bricks non è riuscito a raggiungere il suo server delle licenze"
 
 #. translators: %s: the domain the license was activated for.
-#: includes/adapters/licenses.php:1819
+#: includes/adapters/licenses.php:1822
 msgid "activated for %s, this site is %s"
 msgstr "attivata per %s, questo sito è %s"
 
-#: includes/adapters/licenses.php:1829
-#: includes/adapters/licenses.php:1943
+#: includes/adapters/licenses.php:1832
+#: includes/adapters/licenses.php:1946
 msgid "Key stored; no recorded status"
 msgstr "Chiave memorizzata; nessuno stato registrato"
 
-#: includes/adapters/licenses.php:1852
+#: includes/adapters/licenses.php:1855
 msgid "free trial"
 msgstr "prova gratuita"
 
-#: includes/adapters/licenses.php:1879
+#: includes/adapters/licenses.php:1882
 msgid "Pro build installed; no license attached, so it runs as the free version"
 msgstr "Build Pro installata; nessuna licenza associata, quindi funziona come versione gratuita"
 
-#: includes/adapters/licenses.php:1884
-#: includes/adapters/licenses.php:5421
+#: includes/adapters/licenses.php:1887
+#: includes/adapters/licenses.php:5424
 msgid "License attached but not readable locally"
 msgstr "Licenza collegata ma non leggibile in locale"
 
-#: includes/adapters/licenses.php:1892
+#: includes/adapters/licenses.php:1895
 msgid "cancelled"
 msgstr "annullato"
 
 #. translators: 1: activations used, 2: activations allowed.
-#: includes/adapters/licenses.php:1899
+#: includes/adapters/licenses.php:1902
 msgid "%1$d of %2$d activations used"
 msgstr "%1$d di %2$d attivazioni usate"
 
-#: includes/adapters/licenses.php:1903
+#: includes/adapters/licenses.php:1906
 msgid "(localhost activations are not counted)"
 msgstr "(le attivazioni localhost non vengono conteggiate)"
 
-#: includes/adapters/licenses.php:2036
-#: includes/adapters/licenses.php:2038
+#: includes/adapters/licenses.php:2039
+#: includes/adapters/licenses.php:2041
 msgid "WPMU DEV membership"
 msgstr "iscrizione WPMU DEV"
 
-#: includes/adapters/licenses.php:2054
+#: includes/adapters/licenses.php:2057
 msgid "licensed through the WPMU DEV Dashboard key"
 msgstr "con licenza tramite la chiave WPMU DEV Dashboard"
 
-#: includes/adapters/licenses.php:2068
+#: includes/adapters/licenses.php:2071
 msgid "covered by the WPMU DEV membership"
 msgstr "coperto dall’iscrizione WPMU DEV"
 
-#: includes/adapters/licenses.php:2071
+#: includes/adapters/licenses.php:2074
 msgid "the WPMU DEV membership has expired"
 msgstr "l’iscrizione WPMU DEV è scaduta"
 
-#: includes/adapters/licenses.php:2074
+#: includes/adapters/licenses.php:2077
 msgid "the WPMU DEV membership is paused"
 msgstr "l’iscrizione WPMU DEV è sospesa"
 
-#: includes/adapters/licenses.php:2076
+#: includes/adapters/licenses.php:2079
 msgid "Dashboard key present; Smush has not validated it yet"
 msgstr "Chiave Dashboard presente; Smush non l’ha ancora convalidata"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2117
+#: includes/adapters/licenses.php:2120
 msgid "%d Jet plugin installed; one Crocoblock key covers it"
 msgid_plural "%d Jet plugins installed; one Crocoblock key covers them all"
 msgstr[0] "%d plugin Jet installato; una chiave Crocoblock lo copre"
 msgstr[1] "%d plugin Jet installati; una chiave Crocoblock li copre tutti"
 
-#: includes/adapters/licenses.php:2125
+#: includes/adapters/licenses.php:2128
 msgid "lifetime membership"
 msgstr "iscrizione a vita"
 
-#: includes/adapters/licenses.php:2126
+#: includes/adapters/licenses.php:2129
 msgid "all-inclusive membership"
 msgstr "iscrizione all-inclusive"
 
-#: includes/adapters/licenses.php:2127
+#: includes/adapters/licenses.php:2130
 msgid "plugin set"
 msgstr "set di plugin"
 
-#: includes/adapters/licenses.php:2128
+#: includes/adapters/licenses.php:2131
 msgid "theme + plugin bundle"
 msgstr "bundle tema + plugin"
 
-#: includes/adapters/licenses.php:2129
+#: includes/adapters/licenses.php:2132
 msgid "single plugin"
 msgstr "singolo plugin"
 
-#: includes/adapters/licenses.php:2138
+#: includes/adapters/licenses.php:2141
 msgid "TemplateMonster key"
 msgstr "chiave TemplateMonster"
 
-#: includes/adapters/licenses.php:2140
+#: includes/adapters/licenses.php:2143
 msgid "Envato key"
 msgstr "chiave Envato"
 
-#: includes/adapters/licenses.php:2143
+#: includes/adapters/licenses.php:2146
 msgid "sublicense"
 msgstr "sublicenza"
 
 #. translators: %s: the site address the license was activated for.
-#: includes/adapters/licenses.php:2152
+#: includes/adapters/licenses.php:2155
 msgid "activated for %s, not this site; deactivate and activate again"
 msgstr "attivata per %s, non per questo sito; disattiva e attiva di nuovo"
 
 #. translators: %d: number of installed Jet plugins.
-#: includes/adapters/licenses.php:2164
+#: includes/adapters/licenses.php:2167
 msgid "covers the %d installed Jet plugin"
 msgid_plural "covers all %d installed Jet plugins"
 msgstr[0] "copre il %d plugin Jet installato"
 msgstr[1] "copre tutti i %d plugin Jet installati"
 
 #. translators: 1: covered count, 2: installed count, 3: names of the plugins the license does not cover.
-#: includes/adapters/licenses.php:2167
+#: includes/adapters/licenses.php:2170
 msgid "covers %1$d of %2$d installed Jet plugins; not covered: %3$s"
 msgstr "copre %1$d di %2$d plugin Jet installati; non coperti: %3$s"
 
 #. translators: %d: number of sites the license may be activated on.
-#: includes/adapters/licenses.php:2173
+#: includes/adapters/licenses.php:2176
 msgid "%d site allowed"
 msgid_plural "%d sites allowed"
 msgstr[0] "%d sito consentito"
 msgstr[1] "%d siti consentiti"
 
-#: includes/adapters/licenses.php:2230
+#: includes/adapters/licenses.php:2233
 msgid "no license store yet; the plugin has not run"
 msgstr "nessun archivio licenze; il plugin non è ancora stato eseguito"
 
-#: includes/adapters/licenses.php:2276
+#: includes/adapters/licenses.php:2279
 msgid "key rejected at the last check"
 msgstr "chiave rifiutata all’ultimo controllo"
 
-#: includes/adapters/licenses.php:2279
+#: includes/adapters/licenses.php:2282
 msgid "key disabled by the vendor"
 msgstr "chiave disabilitata dal fornitore"
 
-#: includes/adapters/licenses.php:2282
+#: includes/adapters/licenses.php:2285
 msgid "site limit reached"
 msgstr "limite di siti raggiunto"
 
-#: includes/adapters/licenses.php:2328
+#: includes/adapters/licenses.php:2331
 msgid "service key (free tier exists)"
 msgstr "chiave di servizio (esiste un piano gratuito)"
 
-#: includes/adapters/licenses.php:2334
+#: includes/adapters/licenses.php:2337
 #: assets/js/app.js:21610
 msgid "service key"
 msgstr "chiave di servizio"
 
 #. translators: %d: Akismet alert code number.
-#: includes/adapters/licenses.php:2337
+#: includes/adapters/licenses.php:2340
 msgid "Akismet reported a problem with this key (alert %d)"
 msgstr "Akismet ha segnalato un problema con questa chiave (avviso %d)"
 
-#: includes/adapters/licenses.php:2371
+#: includes/adapters/licenses.php:2374
 msgid "cloud access key (free trial, then paid)"
 msgstr "chiave di accesso cloud (prova gratuita, poi a pagamento)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key (trial)"
 msgstr "chiave di accesso cloud (prova)"
 
-#: includes/adapters/licenses.php:2379
+#: includes/adapters/licenses.php:2382
 msgid "cloud access key"
 msgstr "chiave di accesso cloud"
 
-#: includes/adapters/licenses.php:2380
+#: includes/adapters/licenses.php:2383
 msgid "CleanTalk did not accept this access key"
 msgstr "CleanTalk non ha accettato questa chiave di accesso"
 
-#: includes/adapters/licenses.php:2413
+#: includes/adapters/licenses.php:2416
 msgid "not connected; official extension subscriptions and updates ride this link"
 msgstr "non connesso; abbonamenti e aggiornamenti delle estensioni ufficiali passano da questo collegamento"
 
 #. translators: %d: number of WooCommerce.com extension subscriptions.
-#: includes/adapters/licenses.php:2420
+#: includes/adapters/licenses.php:2423
 msgid "%d extension subscription"
 msgid_plural "%d extension subscriptions"
 msgstr[0] "%d abbonamento estensione"
 msgstr[1] "%d abbonamenti estensione"
 
-#: includes/adapters/licenses.php:2448
+#: includes/adapters/licenses.php:2451
 msgid "store not connected; orders, customers and products all live in SureCart"
 msgstr "negozio non connesso; ordini, clienti e prodotti risiedono tutti in SureCart"
 
-#: includes/adapters/licenses.php:2455
+#: includes/adapters/licenses.php:2458
 msgid "store connected"
 msgstr "negozio connesso"
 
-#: includes/adapters/licenses.php:2476
+#: includes/adapters/licenses.php:2479
 msgid "not set up; connect on the Site Kit screen"
 msgstr "non configurato; connetti dalla schermata di Site Kit"
 
-#: includes/adapters/licenses.php:2479
+#: includes/adapters/licenses.php:2482
 msgid "site credentials stored; no admin has finished connecting a Google account"
 msgstr "credenziali del sito memorizzate; nessun amministratore ha completato la connessione di un account Google"
 
-#: includes/adapters/licenses.php:2481
+#: includes/adapters/licenses.php:2484
 msgid "Google account connected"
 msgstr "account Google connesso"
 
-#: includes/adapters/licenses.php:2504
+#: includes/adapters/licenses.php:2507
 msgid "not connected to WordPress.com"
 msgstr "non connesso a WordPress.com"
 
 #. translators: %d: WordPress.com site ID.
-#: includes/adapters/licenses.php:2507
+#: includes/adapters/licenses.php:2510
 msgid "connected to WordPress.com (site ID %d)"
 msgstr "connesso a WordPress.com (ID sito %d)"
 
 #. translators: %s: WordPress.com user login name.
-#: includes/adapters/licenses.php:2512
+#: includes/adapters/licenses.php:2515
 msgid "connected to WordPress.com as %s"
 msgstr "connesso a WordPress.com come %s"
 
-#: includes/adapters/licenses.php:2547
+#: includes/adapters/licenses.php:2550
 msgid "key stored; no subscription details recorded yet"
 msgstr "chiave memorizzata; nessun dettaglio dell’abbonamento registrato"
 
-#: includes/adapters/licenses.php:2590
+#: includes/adapters/licenses.php:2593
 msgid "Gravity Perks re-checks every 12 hours; no cached status"
 msgstr "Gravity Perks ricontrolla ogni 12 ore; nessuno stato in cache"
 
-#: includes/adapters/licenses.php:2618
+#: includes/adapters/licenses.php:2621
 msgid "connects through a rankmath.com account"
 msgstr "si connette tramite un account rankmath.com"
 
-#: includes/adapters/licenses.php:2621
+#: includes/adapters/licenses.php:2624
 msgid "connected; plan: "
 msgstr "connesso; piano: "
 
-#: includes/adapters/licenses.php:2641
+#: includes/adapters/licenses.php:2644
 msgid "requires free Yoast SEO (wordpress-seo)"
 msgstr "richiede Yoast SEO gratuito (wordpress-seo)"
 
-#: includes/adapters/licenses.php:2649
+#: includes/adapters/licenses.php:2652
 msgid "activate free Yoast SEO to read MyYoast subscription state"
 msgstr "attiva Yoast SEO gratuito per leggere lo stato dell’abbonamento MyYoast"
 
-#: includes/adapters/licenses.php:2660
+#: includes/adapters/licenses.php:2663
 msgid "activate the subscription on MyYoast"
 msgstr "attiva l’abbonamento su MyYoast"
 
-#: includes/adapters/licenses.php:2674
+#: includes/adapters/licenses.php:2677
 msgid "MyYoast subscription"
 msgstr "abbonamento MyYoast"
 
-#: includes/adapters/licenses.php:2683
+#: includes/adapters/licenses.php:2686
 msgid "MyYoast subscription inactive or expired"
 msgstr "abbonamento MyYoast inattivo o scaduto"
 
-#: includes/adapters/licenses.php:2689
+#: includes/adapters/licenses.php:2692
 msgid "could not read MyYoast subscription state"
 msgstr "impossibile leggere lo stato dell’abbonamento MyYoast"
 
-#: includes/adapters/licenses.php:2805
+#: includes/adapters/licenses.php:2808
 msgid "key defined in wp-config.php"
 msgstr "chiave definita in wp-config.php"
 
-#: includes/adapters/licenses.php:2849
+#: includes/adapters/licenses.php:2852
 msgid "code stored but not registered"
 msgstr "codice memorizzato ma non registrato"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "activation was canceled remotely"
 msgstr "l’attivazione è stata annullata da remoto"
 
-#: includes/adapters/licenses.php:2871
+#: includes/adapters/licenses.php:2874
 msgid "code stored but the site is not authorized"
 msgstr "codice memorizzato ma il sito non è autorizzato"
 
-#: includes/adapters/licenses.php:2895
+#: includes/adapters/licenses.php:2898
 msgid "no account token or item tokens stored"
 msgstr "nessun token account o token elemento memorizzato"
 
-#: includes/adapters/licenses.php:2905
+#: includes/adapters/licenses.php:2908
 msgid "Envato keeps no local validity record"
 msgstr "Envato non tiene un record locale di validità"
 
-#: includes/adapters/licenses.php:2906
+#: includes/adapters/licenses.php:2909
 msgid "Envato Market account token"
 msgstr "token account Envato Market"
 
-#: includes/adapters/licenses.php:2914
+#: includes/adapters/licenses.php:2917
 msgid "Envato single-item token"
 msgstr "token Envato per singolo elemento"
 
-#: includes/adapters/licenses.php:2937
+#: includes/adapters/licenses.php:2940
 msgid "covers the bundled Avada plugins"
 msgstr "copre i plugin Avada inclusi"
 
-#: includes/adapters/licenses.php:3010
+#: includes/adapters/licenses.php:3013
 msgid "key ships inside the plugin build"
 msgstr "la chiave è inclusa nella build del plugin"
 
-#: includes/adapters/licenses.php:3055
+#: includes/adapters/licenses.php:3058
 msgid "key stored but not activated on this site"
 msgstr "chiave memorizzata ma non attivata su questo sito"
 
-#: includes/adapters/licenses.php:3161
+#: includes/adapters/licenses.php:3164
 msgid "Purchase code"
 msgstr "Codice d’acquisto"
 
-#: includes/adapters/licenses.php:3165
-#: includes/adapters/licenses.php:3182
-#: includes/adapters/licenses.php:3196
+#: includes/adapters/licenses.php:3168
+#: includes/adapters/licenses.php:3185
+#: includes/adapters/licenses.php:3199
 msgid "Slider Revolution's license class could not be loaded."
 msgstr "Impossibile caricare la classe di licenza di Slider Revolution."
 
-#: includes/adapters/licenses.php:3172
+#: includes/adapters/licenses.php:3175
 msgid "This purchase code is already registered to another site. Deregister it there (or in your ThemePunch account) first."
 msgstr "Questo codice d’acquisto è già registrato su un altro sito. Rimuovi prima la registrazione lì (o nel tuo account ThemePunch)."
 
-#: includes/adapters/licenses.php:3175
+#: includes/adapters/licenses.php:3178
 msgid "ThemePunch reports this purchase code as banned."
 msgstr "ThemePunch segnala questo codice d’acquisto come bandito."
 
-#: includes/adapters/licenses.php:3177
+#: includes/adapters/licenses.php:3180
 msgid "ThemePunch did not accept this purchase code."
 msgstr "ThemePunch non ha accettato questo codice d’acquisto."
 
-#: includes/adapters/licenses.php:3186
+#: includes/adapters/licenses.php:3189
 msgid "The purchase code was deregistered with ThemePunch and the seat freed."
 msgstr "Il codice d’acquisto è stato rimosso da ThemePunch e la licenza liberata."
 
-#: includes/adapters/licenses.php:3187
+#: includes/adapters/licenses.php:3190
 msgid "ThemePunch did not confirm the deregistration."
 msgstr "ThemePunch non ha confermato la rimozione della registrazione."
 
-#: includes/adapters/licenses.php:3192
+#: includes/adapters/licenses.php:3195
 msgid "No purchase code is stored."
 msgstr "Nessun codice d’acquisto memorizzato."
 
-#: includes/adapters/licenses.php:3204
+#: includes/adapters/licenses.php:3207
 msgid "exist"
 msgstr "esiste"
 
-#: includes/adapters/licenses.php:3225
+#: includes/adapters/licenses.php:3228
 msgid "HappyFiles recorded no response; the activation request may not have reached happyfiles.io. The key has been kept, because happyfiles.io may already have counted the activation."
 msgstr "HappyFiles non ha registrato alcuna risposta; la richiesta di attivazione potrebbe non aver raggiunto happyfiles.io. La chiave è stata conservata, perché happyfiles.io potrebbe aver già conteggiato l'attivazione."
 
-#: includes/adapters/licenses.php:3229
+#: includes/adapters/licenses.php:3232
 msgid "happyfiles.io did not accept this license key."
 msgstr "happyfiles.io non ha accettato questa chiave di licenza."
 
-#: includes/adapters/licenses.php:3255
+#: includes/adapters/licenses.php:3258
 msgid "HappyFiles license key"
 msgstr "Chiave di licenza HappyFiles"
 
-#: includes/adapters/licenses.php:3281
-#: includes/adapters/licenses.php:3293
-#: includes/adapters/licenses.php:4609
-#: includes/adapters/licenses.php:4704
+#: includes/adapters/licenses.php:3284
+#: includes/adapters/licenses.php:3296
+#: includes/adapters/licenses.php:4612
+#: includes/adapters/licenses.php:4707
 msgid "No license key is stored."
 msgstr "Nessuna chiave di licenza memorizzata."
 
-#: includes/adapters/licenses.php:3288
+#: includes/adapters/licenses.php:3291
 msgid "The license key was removed and the site deregistered with happyfiles.io."
 msgstr "La chiave di licenza è stata rimossa e il sito è stato deregistrato da happyfiles.io."
 
-#: includes/adapters/licenses.php:3321
+#: includes/adapters/licenses.php:3324
 msgid "The key validation service did not answer."
 msgstr "Il servizio di convalida della chiave non ha risposto."
 
-#: includes/adapters/licenses.php:3331
+#: includes/adapters/licenses.php:3334
 #: assets/js/app.js:27673
 msgid "The key was not accepted."
 msgstr "La chiave non è stata accettata."
 
 #. translators: %s: name of the licensed product.
-#: includes/adapters/licenses.php:3338
-#: includes/adapters/licenses.php:5209
+#: includes/adapters/licenses.php:3341
+#: includes/adapters/licenses.php:5212
 msgid "%s license key"
 msgstr "Chiave di licenza %s"
 
-#: includes/adapters/licenses.php:3385
+#: includes/adapters/licenses.php:3388
 msgid "The stored key was cleared, but this plugin build ships with the key embedded and will re-register it. Manage licensed domains on theeventscalendar.com."
 msgstr "La chiave memorizzata è stata cancellata, ma questa build del plugin la include e la registrerà di nuovo. Gestisci i domini con licenza su theeventscalendar.com."
 
-#: includes/adapters/licenses.php:3386
+#: includes/adapters/licenses.php:3389
 msgid "The key was removed from this site. Manage its licensed domains on theeventscalendar.com."
 msgstr "La chiave è stata rimossa da questo sito. Gestisci i suoi domini con licenza su theeventscalendar.com."
 
-#: includes/adapters/licenses.php:3393
+#: includes/adapters/licenses.php:3396
 msgid "No key is stored for this product."
 msgstr "Nessuna chiave memorizzata per questo prodotto."
 
-#: includes/adapters/licenses.php:3429
+#: includes/adapters/licenses.php:3432
 msgid "The Kadence licensing service did not answer."
 msgstr "Il servizio di licenze Kadence non ha risposto."
 
-#: includes/adapters/licenses.php:3436
+#: includes/adapters/licenses.php:3439
 msgid "unreachable"
 msgstr "irraggiungibile"
 
-#: includes/adapters/licenses.php:3438
+#: includes/adapters/licenses.php:3441
 msgid "Kadence license key"
 msgstr "Chiave di licenza Kadence"
 
-#: includes/adapters/licenses.php:3473
+#: includes/adapters/licenses.php:3476
 msgid "The stored key was cleared. A key baked into the plugin build remains as the fallback."
 msgstr "La chiave memorizzata è stata cancellata. Resta come riserva una chiave incorporata nella build del plugin."
 
-#: includes/adapters/licenses.php:3474
+#: includes/adapters/licenses.php:3477
 msgid "The stored key was cleared from this site."
 msgstr "La chiave memorizzata è stata cancellata da questo sito."
 
-#: includes/adapters/licenses.php:3491
+#: includes/adapters/licenses.php:3494
 msgid "Elementor Pro license key"
 msgstr "Chiave di licenza Elementor Pro"
 
-#: includes/adapters/licenses.php:3501
-#: includes/adapters/licenses.php:3502
+#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3505
 msgid "Elementor does not recognize that key"
 msgstr "Elementor non riconosce quella chiave"
 
-#: includes/adapters/licenses.php:3503
+#: includes/adapters/licenses.php:3506
 msgid "That Elementor Pro license has expired"
 msgstr "Quella licenza Elementor Pro è scaduta"
 
-#: includes/adapters/licenses.php:3504
+#: includes/adapters/licenses.php:3507
 msgid "That license was disabled"
 msgstr "Quella licenza è stata disabilitata"
 
-#: includes/adapters/licenses.php:3505
+#: includes/adapters/licenses.php:3508
 msgid "That subscription was cancelled"
 msgstr "Quell’abbonamento è stato annullato"
 
-#: includes/adapters/licenses.php:3506
+#: includes/adapters/licenses.php:3509
 msgid "That license was revoked"
 msgstr "Quella licenza è stata revocata"
 
-#: includes/adapters/licenses.php:3507
+#: includes/adapters/licenses.php:3510
 msgid "That key is registered to a different domain"
 msgstr "Quella chiave è registrata su un dominio diverso"
 
-#: includes/adapters/licenses.php:3530
+#: includes/adapters/licenses.php:3533
 msgid "Elementor did not confirm the license"
 msgstr "Elementor non ha confermato la licenza"
 
-#: includes/adapters/licenses.php:3577
+#: includes/adapters/licenses.php:3580
 msgid "Essential Addons license key"
 msgstr "Chiave di licenza Essential Addons"
 
-#: includes/adapters/licenses.php:3581
-#: includes/adapters/licenses.php:3602
-#: includes/adapters/licenses.php:3613
+#: includes/adapters/licenses.php:3584
+#: includes/adapters/licenses.php:3605
+#: includes/adapters/licenses.php:3616
 msgid "Essential Addons Pro is not loaded."
 msgstr "Essential Addons Pro non è caricato."
 
-#: includes/adapters/licenses.php:3593
+#: includes/adapters/licenses.php:3596
 msgid "Essential Addons sent a confirmation code to the license email. Finish activation on its settings screen."
 msgstr "Essential Addons ha inviato un codice di conferma all'email della licenza. Completa l'attivazione nella schermata Impostazioni."
 
-#: includes/adapters/licenses.php:3636
+#: includes/adapters/licenses.php:3639
 msgid "ACF PRO license key"
 msgstr "Chiave di licenza ACF PRO"
 
-#: includes/adapters/licenses.php:3674
+#: includes/adapters/licenses.php:3677
 msgid "Independent Analytics license key"
 msgstr "Chiave di licenza Independent Analytics"
 
 #. translators: %s: the current administrator's email address.
-#: includes/adapters/licenses.php:3692
+#: includes/adapters/licenses.php:3695
 msgid "This site has not been connected yet, so activating registers it with freemius.com and sends your name, %s and the site address."
 msgstr "Questo sito non è ancora stato collegato, quindi l'attivazione lo registra su freemius.com e invia il tuo nome, %s e l'indirizzo del sito."
 
-#: includes/adapters/licenses.php:3693
+#: includes/adapters/licenses.php:3696
 msgid "your email address"
 msgstr "Il tuo indirizzo email"
 
-#: includes/adapters/licenses.php:3728
+#: includes/adapters/licenses.php:3731
 msgid "Crocoblock license key"
 msgstr "Chiave di licenza Crocoblock"
 
-#: includes/adapters/licenses.php:3732
+#: includes/adapters/licenses.php:3735
 msgid "Paste the license key from your Crocoblock account."
 msgstr "Incolla la chiave di licenza dal tuo account Crocoblock."
 
-#: includes/adapters/licenses.php:3739
+#: includes/adapters/licenses.php:3742
 msgid "Crocoblock accepted the key but sent no license details to store."
 msgstr "Crocoblock ha accettato la chiave ma non ha inviato dettagli della licenza da memorizzare."
 
-#: includes/adapters/licenses.php:3748
-#: includes/adapters/licenses.php:3764
+#: includes/adapters/licenses.php:3751
+#: includes/adapters/licenses.php:3767
 msgid "No Crocoblock key is stored."
 msgstr "Nessuna chiave Crocoblock è memorizzata."
 
-#: includes/adapters/licenses.php:3759
+#: includes/adapters/licenses.php:3762
 msgid "This site was removed from the license."
 msgstr "Questo sito è stato rimosso dalla licenza."
 
-#: includes/adapters/licenses.php:3773
+#: includes/adapters/licenses.php:3776
 msgid "Crocoblock confirmed the license for this site."
 msgstr "Crocoblock ha confermato la licenza per questo sito."
 
-#: includes/adapters/licenses.php:3803
+#: includes/adapters/licenses.php:3806
 msgid "The licensing service returned nothing readable"
 msgstr "Il servizio di licenze non ha restituito nulla di leggibile"
 
-#: includes/adapters/licenses.php:3806
+#: includes/adapters/licenses.php:3809
 msgid "Could not reach the licensing service"
 msgstr "Impossibile raggiungere il servizio di licenze"
 
-#: includes/adapters/licenses.php:3814
+#: includes/adapters/licenses.php:3817
 msgid "That subscription has expired. Migrations still run; updates and support stop."
 msgstr "Quell’abbonamento è scaduto. Le migrazioni continuano; aggiornamenti e supporto si interrompono."
 
-#: includes/adapters/licenses.php:3815
+#: includes/adapters/licenses.php:3818
 msgid "That subscription was cancelled."
 msgstr "Quell’abbonamento è stato annullato."
 
-#: includes/adapters/licenses.php:3816
+#: includes/adapters/licenses.php:3819
 msgid "WP Migrate does not recognise that key."
 msgstr "WP Migrate non riconosce quella chiave."
 
-#: includes/adapters/licenses.php:3817
+#: includes/adapters/licenses.php:3820
 msgid "Every activation on that license is in use."
 msgstr "Tutte le attivazioni di quella licenza sono in uso."
 
-#: includes/adapters/licenses.php:3818
+#: includes/adapters/licenses.php:3821
 msgid "This site's activation was turned off for that license."
 msgstr "L’attivazione di questo sito è stata disattivata per quella licenza."
 
-#: includes/adapters/licenses.php:3819
+#: includes/adapters/licenses.php:3822
 msgid "No license key was sent."
 msgstr "Nessuna chiave di licenza è stata inviata."
 
-#: includes/adapters/licenses.php:3827
+#: includes/adapters/licenses.php:3830
 msgid "WP Migrate license key"
 msgstr "Chiave di licenza WP Migrate"
 
-#: includes/adapters/licenses.php:3832
+#: includes/adapters/licenses.php:3835
 msgid "Enter a license key."
 msgstr "Inserisci una chiave di licenza."
 
-#: includes/adapters/licenses.php:3835
+#: includes/adapters/licenses.php:3838
 msgid "This site sets its key in wp-config, which always wins. Change it there."
 msgstr "Questo sito imposta la chiave in wp-config, che ha sempre la precedenza. Cambiala lì."
 
-#: includes/adapters/licenses.php:3866
+#: includes/adapters/licenses.php:3869
 msgid "This site sets its key in wp-config. Remove it there."
 msgstr "Questo sito imposta la chiave in wp-config. Rimuovila lì."
 
-#: includes/adapters/licenses.php:3882
+#: includes/adapters/licenses.php:3885
 msgid "The key was removed from this site. WP Migrate has no way to release the activation remotely, so free the seat in your account if you need it elsewhere."
 msgstr "La chiave è stata rimossa da questo sito. WP Migrate non può rilasciare l’attivazione da remoto, quindi libera il posto nel tuo account se ti serve altrove."
 
-#: includes/adapters/licenses.php:3890
+#: includes/adapters/licenses.php:3893
 msgid "No license key is stored on this site."
 msgstr "Nessuna chiave di licenza è memorizzata su questo sito."
 
-#: includes/adapters/licenses.php:3921
+#: includes/adapters/licenses.php:3924
 msgid "Beaver Builder license key"
 msgstr "Chiave di licenza Beaver Builder"
 
-#: includes/adapters/licenses.php:3935
+#: includes/adapters/licenses.php:3938
 msgid "Beaver Builder reports the subscription as not active for this domain"
 msgstr "Beaver Builder segnala che l’abbonamento non è attivo per questo dominio"
 
-#: includes/adapters/licenses.php:3943
+#: includes/adapters/licenses.php:3946
 msgid "Brizy Pro license key"
 msgstr "Chiave di licenza Brizy Pro"
 
-#: includes/adapters/licenses.php:3963
-#: includes/adapters/licenses.php:3978
+#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3981
 msgid "Breakdance did not recognize that key."
 msgstr "Breakdance non ha riconosciuto quella chiave."
 
-#: includes/adapters/licenses.php:3966
+#: includes/adapters/licenses.php:3969
 msgid "That key does not include Breakdance Pro."
 msgstr "Quella chiave non include Breakdance Pro."
 
-#: includes/adapters/licenses.php:3973
+#: includes/adapters/licenses.php:3976
 msgid "That Breakdance Pro license has expired."
 msgstr "La licenza di Breakdance Pro è scaduta."
 
-#: includes/adapters/licenses.php:3976
+#: includes/adapters/licenses.php:3979
 msgid "Breakdance did not activate this site. Check the license site limit in your Breakdance account."
 msgstr "Breakdance non ha attivato questo sito. Controlla il limite di siti della licenza nel tuo account Breakdance."
 
-#: includes/adapters/licenses.php:3986
+#: includes/adapters/licenses.php:3989
 msgid "Breakdance Pro license key"
 msgstr "Chiave di licenza Breakdance Pro"
 
-#: includes/adapters/licenses.php:4014
+#: includes/adapters/licenses.php:4017
 msgid "No Breakdance Pro key is stored."
 msgstr "Non è memorizzata alcuna chiave di Breakdance Pro."
 
-#: includes/adapters/licenses.php:4022
+#: includes/adapters/licenses.php:4025
 msgid "Breakdance could not deactivate this license. Use its License screen to review the current status."
 msgstr "Breakdance non ha potuto disattivare questa licenza. Usa la schermata Licenza per verificare lo stato attuale."
 
-#: includes/adapters/licenses.php:4027
+#: includes/adapters/licenses.php:4030
 msgid "Breakdance still reports this site as active, so the key was kept."
 msgstr "Breakdance segnala ancora questo sito come attivo, quindi la chiave è stata conservata."
 
-#: includes/adapters/licenses.php:4036
+#: includes/adapters/licenses.php:4039
 msgid "The seat was freed, but the key could not be cleared here. Remove it on the Breakdance License screen."
 msgstr "Il posto è stato liberato, ma la chiave non ha potuto essere pulita qui. La rimuova nella schermata Licenza di Breakdance."
 
-#: includes/adapters/licenses.php:4039
+#: includes/adapters/licenses.php:4042
 msgid "The Breakdance Pro license was deactivated and its seat freed."
 msgstr "La licenza di Breakdance Pro è stata disattivata e il suo posto è stato liberato."
 
-#: includes/adapters/licenses.php:4050
+#: includes/adapters/licenses.php:4053
 msgid "Bricks license key"
 msgstr "Chiave di licenza Bricks"
 
-#: includes/adapters/licenses.php:4058
+#: includes/adapters/licenses.php:4061
 msgid "The Bricks license server is temporarily unavailable"
 msgstr "Il server delle licenze Bricks è temporaneamente non disponibile"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks returned status: %s"
 msgstr "Bricks ha restituito lo stato: %s"
 
 #. translators: %s: status word returned by the Bricks license server.
-#: includes/adapters/licenses.php:4061
+#: includes/adapters/licenses.php:4064
 msgid "Bricks did not recognize that key"
 msgstr "Bricks non ha riconosciuto quella chiave"
 
-#: includes/adapters/licenses.php:4071
+#: includes/adapters/licenses.php:4074
 #: includes/class-minn-admin-rest.php:7978
 #: assets/js/app.js:24127
 msgid "active"
 msgstr "Attivo"
 
-#: includes/adapters/licenses.php:4091
+#: includes/adapters/licenses.php:4094
 msgid "Novamira Pro license key"
 msgstr "Chiave di licenza Novamira Pro"
 
-#: includes/adapters/licenses.php:4125
+#: includes/adapters/licenses.php:4128
 msgid "Etch license key"
 msgstr "Chiave di licenza Etch"
 
-#: includes/adapters/licenses.php:4152
+#: includes/adapters/licenses.php:4155
 msgid "Elegant Themes reports the subscription as expired"
 msgstr "Elegant Themes segnala che l’abbonamento è scaduto"
 
-#: includes/adapters/licenses.php:4153
+#: includes/adapters/licenses.php:4156
 msgid "Elegant Themes does not recognize that username"
 msgstr "Elegant Themes non riconosce quel nome utente"
 
-#: includes/adapters/licenses.php:4154
+#: includes/adapters/licenses.php:4157
 msgid "Elegant Themes did not confirm the account"
 msgstr "Elegant Themes non ha confermato l’account"
 
-#: includes/adapters/licenses.php:4159
+#: includes/adapters/licenses.php:4162
 msgid "Elegant Themes username"
 msgstr "Nome utente Elegant Themes"
 
-#: includes/adapters/licenses.php:4160
+#: includes/adapters/licenses.php:4163
 msgid "API key"
 msgstr "Chiave API"
 
-#: includes/adapters/licenses.php:4190
+#: includes/adapters/licenses.php:4193
 msgid "Credentials removed; Elegant Themes has no per-site seats to release"
 msgstr "Credenziali rimosse; Elegant Themes non ha licenze per sito da liberare"
 
-#: includes/adapters/licenses.php:4208
+#: includes/adapters/licenses.php:4211
 msgid "Gravity Forms did not validate the key"
 msgstr "Gravity Forms non ha convalidato la chiave"
 
-#: includes/adapters/licenses.php:4210
+#: includes/adapters/licenses.php:4213
 msgid "Gravity Forms license key"
 msgstr "Chiave di licenza Gravity Forms"
 
-#: includes/adapters/licenses.php:4217
+#: includes/adapters/licenses.php:4220
 msgid "Gravity Forms did not accept that key"
 msgstr "Gravity Forms non ha accettato quella chiave"
 
-#: includes/adapters/licenses.php:4237
+#: includes/adapters/licenses.php:4240
 msgid "Site unlinked from the license"
 msgstr "Sito scollegato dalla licenza"
 
-#: includes/adapters/licenses.php:4259
+#: includes/adapters/licenses.php:4262
 msgid "Gravity did not recognize that key"
 msgstr "Gravity non ha riconosciuto quella chiave"
 
-#: includes/adapters/licenses.php:4269
+#: includes/adapters/licenses.php:4272
 msgid "Gravity SMTP license key"
 msgstr "Chiave di licenza Gravity SMTP"
 
-#: includes/adapters/licenses.php:4309
+#: includes/adapters/licenses.php:4312
 msgid "WPMU DEV API key"
 msgstr "Chiave API WPMU DEV"
 
-#: includes/adapters/licenses.php:4329
+#: includes/adapters/licenses.php:4332
 msgid "Could not reach the WPMU DEV Hub"
 msgstr "Impossibile raggiungere l’Hub WPMU DEV"
 
-#: includes/adapters/licenses.php:4333
+#: includes/adapters/licenses.php:4336
 msgid "The Hub did not recognize that API key"
 msgstr "L’Hub non ha riconosciuto quella chiave API"
 
-#: includes/adapters/licenses.php:4347
+#: includes/adapters/licenses.php:4350
 msgid "The Hub reports no active membership for this key"
 msgstr "L’Hub segnala nessuna iscrizione attiva per questa chiave"
 
-#: includes/adapters/licenses.php:4355
+#: includes/adapters/licenses.php:4358
 msgid "SearchWP license key"
 msgstr "Chiave di licenza SearchWP"
 
-#: includes/adapters/licenses.php:4364
+#: includes/adapters/licenses.php:4367
 msgid "SearchWP did not accept that key"
 msgstr "SearchWP non ha accettato quella chiave"
 
-#: includes/adapters/licenses.php:4381
+#: includes/adapters/licenses.php:4384
 msgid "SearchWP did not confirm the license"
 msgstr "SearchWP non ha confermato la licenza"
 
-#: includes/adapters/licenses.php:4402
+#: includes/adapters/licenses.php:4405
 msgid "WPForms license key"
 msgstr "Chiave di licenza WPForms"
 
-#: includes/adapters/licenses.php:4409
+#: includes/adapters/licenses.php:4412
 msgid "WPForms did not accept that key"
 msgstr "WPForms non ha accettato quella chiave"
 
-#: includes/adapters/licenses.php:4415
+#: includes/adapters/licenses.php:4418
 msgid "The key is defined in wp-config (WPFORMS_LICENSE_KEY); remove the constant to deactivate."
 msgstr "La chiave è definita in wp-config (WPFORMS_LICENSE_KEY); rimuovi la costante per disattivarla."
 
-#: includes/adapters/licenses.php:4435
+#: includes/adapters/licenses.php:4438
 msgid "Could not reach the WPForms license API"
 msgstr "Impossibile raggiungere l’API delle licenze di WPForms"
 
 #. translators: %s: status word returned by the WPForms license API.
-#: includes/adapters/licenses.php:4440
+#: includes/adapters/licenses.php:4443
 msgid "License check returned: %s"
 msgstr "Il controllo della licenza ha restituito: %s"
 
-#: includes/adapters/licenses.php:4462
+#: includes/adapters/licenses.php:4465
 msgid "Akismet API key"
 msgstr "Chiave API Akismet"
 
-#: includes/adapters/licenses.php:4465
+#: includes/adapters/licenses.php:4468
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); it cannot be changed here."
 msgstr "La chiave è fornita via codice (WPCOM_API_KEY o un filtro); non può essere modificata qui."
 
-#: includes/adapters/licenses.php:4469
+#: includes/adapters/licenses.php:4472
 msgid "That does not look like an Akismet key (12 characters, letters a-f and digits)."
 msgstr "Non sembra una chiave Akismet (12 caratteri, lettere a-f e cifre)."
 
-#: includes/adapters/licenses.php:4472
+#: includes/adapters/licenses.php:4475
 msgid "Akismet admin machinery unavailable."
 msgstr "Le funzioni di amministrazione di Akismet non sono disponibili."
 
-#: includes/adapters/licenses.php:4480
+#: includes/adapters/licenses.php:4483
 msgid "The key is real but its Akismet plan is not active (missing, cancelled or suspended subscription)."
 msgstr "La chiave è reale ma il suo piano Akismet non è attivo (abbonamento mancante, annullato o sospeso)."
 
-#: includes/adapters/licenses.php:4483
+#: includes/adapters/licenses.php:4486
 msgid "Akismet did not recognize that key."
 msgstr "Akismet non ha riconosciuto quella chiave."
 
-#: includes/adapters/licenses.php:4485
+#: includes/adapters/licenses.php:4488
 msgid "Could not reach the Akismet API. Please try again."
 msgstr "Impossibile raggiungere l’API di Akismet. Riprova."
 
-#: includes/adapters/licenses.php:4489
+#: includes/adapters/licenses.php:4492
 msgid "The key is supplied in code (WPCOM_API_KEY or a filter); remove it there."
 msgstr "La chiave è fornita via codice (WPCOM_API_KEY o un filtro); rimuovila lì."
 
-#: includes/adapters/licenses.php:4513
+#: includes/adapters/licenses.php:4516
 msgid "Akismet reports this key as invalid."
 msgstr "Akismet segnala questa chiave come non valida."
 
-#: includes/adapters/licenses.php:4515
+#: includes/adapters/licenses.php:4518
 msgid "Could not reach the Akismet API."
 msgstr "Impossibile raggiungere l’API di Akismet."
 
-#: includes/adapters/licenses.php:4523
+#: includes/adapters/licenses.php:4526
 msgid "CleanTalk access key"
 msgstr "Chiave di accesso CleanTalk"
 
-#: includes/adapters/licenses.php:4553
+#: includes/adapters/licenses.php:4556
 msgid "This license has reached its activation limit. Free a seat on searchandfilter.com first."
 msgstr "Questa licenza ha raggiunto il limite di attivazioni. Libera prima un posto su searchandfilter.com."
 
-#: includes/adapters/licenses.php:4556
+#: includes/adapters/licenses.php:4559
 msgid "This Search & Filter license has expired."
 msgstr "Questa licenza Search & Filter è scaduta."
 
-#: includes/adapters/licenses.php:4562
+#: includes/adapters/licenses.php:4565
 msgid "searchandfilter.com does not recognize that key."
 msgstr "searchandfilter.com non riconosce quella chiave."
 
-#: includes/adapters/licenses.php:4564
+#: includes/adapters/licenses.php:4567
 msgid "searchandfilter.com did not accept that key."
 msgstr "searchandfilter.com non ha accettato quella chiave."
 
-#: includes/adapters/licenses.php:4566
+#: includes/adapters/licenses.php:4569
 msgid "Search & Filter license key"
 msgstr "Chiave di licenza Search & Filter"
 
-#: includes/adapters/licenses.php:4601
+#: includes/adapters/licenses.php:4604
 msgid "The license was disconnected and the seat freed."
 msgstr "La licenza è stata scollegata e il posto liberato."
 
-#: includes/adapters/licenses.php:4603
+#: includes/adapters/licenses.php:4606
 msgid "Search & Filter could not disconnect the license."
 msgstr "Search & Filter non è riuscito a scollegare la licenza."
 
-#: includes/adapters/licenses.php:4633
+#: includes/adapters/licenses.php:4636
 msgid "This license has reached its activation limit."
 msgstr "Questa licenza ha raggiunto il limite di attivazioni."
 
-#: includes/adapters/licenses.php:4636
+#: includes/adapters/licenses.php:4639
 msgid "This Admin Columns license has expired."
 msgstr "Questa licenza Admin Columns è scaduta."
 
-#: includes/adapters/licenses.php:4638
+#: includes/adapters/licenses.php:4641
 msgid "admincolumns.com did not accept that key."
 msgstr "admincolumns.com non ha accettato quella chiave."
 
-#: includes/adapters/licenses.php:4640
+#: includes/adapters/licenses.php:4643
 msgid "Admin Columns Pro license key"
 msgstr "Chiave di licenza Admin Columns Pro"
 
-#: includes/adapters/licenses.php:4646
+#: includes/adapters/licenses.php:4649
 msgid "That does not look like an Admin Columns key (they are long and contain a dash)."
 msgstr "Non sembra una chiave Admin Columns (sono lunghe e contengono un trattino)."
 
-#: includes/adapters/licenses.php:4662
+#: includes/adapters/licenses.php:4665
 msgid "admincolumns.com accepted the key but returned an invalid activation token."
 msgstr "admincolumns.com ha accettato la chiave ma ha restituito un token di attivazione non valido."
 
-#: includes/adapters/licenses.php:4681
+#: includes/adapters/licenses.php:4684
 msgid "No activation was stored; local license state cleared."
 msgstr "Nessuna attivazione memorizzata; stato locale della licenza azzerato."
 
 #. translators: %s: error message reported by admincolumns.com.
-#: includes/adapters/licenses.php:4693
+#: includes/adapters/licenses.php:4696
 msgid "Local license state was cleared, but admincolumns.com reported: %s"
 msgstr "Lo stato locale della licenza è stato azzerato, ma admincolumns.com ha segnalato: %s"
 
-#: includes/adapters/licenses.php:4699
+#: includes/adapters/licenses.php:4702
 msgid "The license was deactivated and the seat freed."
 msgstr "La licenza è stata disattivata e il posto liberato."
 
-#: includes/adapters/licenses.php:4730
+#: includes/adapters/licenses.php:4733
 msgid "Gravity Perks license key"
 msgstr "Chiave di licenza Gravity Perks"
 
-#: includes/adapters/licenses.php:4746
+#: includes/adapters/licenses.php:4749
 msgid "That key has reached its site limit"
 msgstr "Quella chiave ha raggiunto il limite di siti"
 
-#: includes/adapters/licenses.php:4748
+#: includes/adapters/licenses.php:4751
 msgid "Gravity Wiz did not validate that key"
 msgstr "Gravity Wiz non ha convalidato quella chiave"
 
-#: includes/adapters/licenses.php:4759
+#: includes/adapters/licenses.php:4762
 msgid "Gravity Wiz reports the license as not valid for this site"
 msgstr "Gravity Wiz segnala che la licenza non è valida per questo sito"
 
-#: includes/adapters/licenses.php:4773
+#: includes/adapters/licenses.php:4776
 msgid "Perfmatters license key"
 msgstr "Chiave di licenza Perfmatters"
 
-#: includes/adapters/licenses.php:4790
+#: includes/adapters/licenses.php:4793
 msgid "Perfmatters did not accept that key"
 msgstr "Perfmatters non ha accettato quella chiave"
 
-#: includes/adapters/licenses.php:4801
+#: includes/adapters/licenses.php:4804
 msgid "Perfmatters could not release this site"
 msgstr "Perfmatters non è riuscito a liberare questo sito"
 
-#: includes/adapters/licenses.php:4807
+#: includes/adapters/licenses.php:4810
 msgid "No response from the Perfmatters server"
 msgstr "Nessuna risposta dal server di Perfmatters"
 
-#: includes/adapters/licenses.php:4842
+#: includes/adapters/licenses.php:4845
 msgid "Automatic.css license key"
 msgstr "Chiave di licenza Automatic.css"
 
-#: includes/adapters/licenses.php:4848
+#: includes/adapters/licenses.php:4851
 msgid "That looks like the masked key from Automatic.css’s screen — paste the full license key."
 msgstr "Sembra la chiave mascherata della schermata di Automatic.css — incolla la chiave di licenza completa."
 
-#: includes/adapters/licenses.php:4852
-#: includes/adapters/licenses.php:4887
+#: includes/adapters/licenses.php:4855
+#: includes/adapters/licenses.php:4890
 msgid "No response from the Automatic.css server."
 msgstr "Nessuna risposta dal server di Automatic.css."
 
-#: includes/adapters/licenses.php:4876
+#: includes/adapters/licenses.php:4879
 msgid "Automatic.css deactivated; the seat was released."
 msgstr "Automatic.css disattivato; il posto è stato rilasciato."
 
-#: includes/adapters/licenses.php:4877
+#: includes/adapters/licenses.php:4880
 msgid "Key removed from this site. Automatic.css did not confirm releasing the seat — check the account if the activation count matters."
 msgstr "Chiave rimossa da questo sito. Automatic.css non ha confermato il rilascio del posto — controlla l’account se il conteggio delle attivazioni è importante."
 
-#: includes/adapters/licenses.php:4883
+#: includes/adapters/licenses.php:4886
 msgid "No Automatic.css key is stored."
 msgstr "Nessuna chiave Automatic.css è memorizzata."
 
-#: includes/adapters/licenses.php:4937
+#: includes/adapters/licenses.php:4940
 msgid "SEOPress PRO license key"
 msgstr "Chiave di licenza SEOPress PRO"
 
-#: includes/adapters/licenses.php:4941
+#: includes/adapters/licenses.php:4944
 msgid "The key is defined in wp-config.php (SEOPRESS_LICENSE_KEY) — change it there."
 msgstr "La chiave è definita in wp-config.php (SEOPRESS_LICENSE_KEY) — cambiala lì."
 
-#: includes/adapters/licenses.php:4946
-#: includes/adapters/licenses.php:4997
+#: includes/adapters/licenses.php:4949
+#: includes/adapters/licenses.php:5000
 msgid "No response from the SEOPress server."
 msgstr "Nessuna risposta dal server di SEOPress."
 
-#: includes/adapters/licenses.php:4965
-#: includes/adapters/licenses.php:4993
+#: includes/adapters/licenses.php:4968
+#: includes/adapters/licenses.php:4996
 msgid "No SEOPress PRO key is stored."
 msgstr "Nessuna chiave SEOPress PRO è memorizzata."
 
-#: includes/adapters/licenses.php:4972
+#: includes/adapters/licenses.php:4975
 msgid "SEOPress did not confirm the deactivation — nothing was changed."
 msgstr "SEOPress non ha confermato la disattivazione — non è stato cambiato nulla."
 
-#: includes/adapters/licenses.php:4986
+#: includes/adapters/licenses.php:4989
 msgid "Seat released. The key itself is defined in wp-config.php and stays there."
 msgstr "Posto rilasciato. La chiave è definita in wp-config.php e resta lì."
 
-#: includes/adapters/licenses.php:5037
+#: includes/adapters/licenses.php:5040
 msgid "GP Premium license key"
 msgstr "Chiave di licenza GP Premium"
 
-#: includes/adapters/licenses.php:5062
+#: includes/adapters/licenses.php:5065
 msgid "wpallimport.com did not confirm the license"
 msgstr "wpallimport.com non ha confermato la licenza"
 
-#: includes/adapters/licenses.php:5064
+#: includes/adapters/licenses.php:5067
 msgid "WP All Export license key"
 msgstr "Chiave di licenza WP All Export"
 
-#: includes/adapters/licenses.php:5085
+#: includes/adapters/licenses.php:5088
 msgid "Could not reach wpallimport.com (or no key is stored)"
 msgstr "Impossibile raggiungere wpallimport.com (o nessuna chiave memorizzata)"
 
-#: includes/adapters/licenses.php:5099
-#: includes/adapters/licenses.php:5146
+#: includes/adapters/licenses.php:5102
+#: includes/adapters/licenses.php:5149
 msgid "The key was removed from this site. Soflyy licenses have no per-site seats to free."
 msgstr "La chiave è stata rimossa da questo sito. Le licenze Soflyy non hanno posti per sito da liberare."
 
-#: includes/adapters/licenses.php:5113
+#: includes/adapters/licenses.php:5116
 msgid "wpallimport.com did not answer"
 msgstr "wpallimport.com non ha risposto"
 
-#: includes/adapters/licenses.php:5115
+#: includes/adapters/licenses.php:5118
 msgid "WP All Import license key"
 msgstr "Chiave di licenza WP All Import"
 
-#: includes/adapters/licenses.php:5156
+#: includes/adapters/licenses.php:5159
 msgid "No key is stored."
 msgstr "Nessuna chiave memorizzata."
 
-#: includes/adapters/licenses.php:5181
+#: includes/adapters/licenses.php:5184
 msgid "Kreatura did not accept that license key"
 msgstr "Kreatura non ha accettato quella chiave di licenza"
 
-#: includes/adapters/licenses.php:5185
+#: includes/adapters/licenses.php:5188
 msgid "LayerSlider license key"
 msgstr "Chiave di licenza LayerSlider"
 
-#: includes/adapters/licenses.php:5190
+#: includes/adapters/licenses.php:5193
 msgid "No license key stored"
 msgstr "Nessuna chiave di licenza memorizzata"
 
-#: includes/adapters/licenses.php:5214
+#: includes/adapters/licenses.php:5217
 msgid "Missing license key or product name"
 msgstr "Chiave di licenza o nome del prodotto mancante"
 
-#: includes/adapters/licenses.php:5260
+#: includes/adapters/licenses.php:5263
 msgid "No active Smash Balloon license on this product"
 msgstr "Nessuna licenza Smash Balloon attiva su questo prodotto"
 
-#: includes/adapters/licenses.php:5264
+#: includes/adapters/licenses.php:5267
 msgid "License deactivated for "
 msgstr "Licenza disattivata per "
 
-#: includes/adapters/licenses.php:5270
+#: includes/adapters/licenses.php:5273
 msgid "No key is stored"
 msgstr "Nessuna chiave memorizzata"
 
-#: includes/adapters/licenses.php:5330
+#: includes/adapters/licenses.php:5333
 msgid "MyYoast reports a valid Premium subscription"
 msgstr "MyYoast segnala un abbonamento Premium valido"
 
-#: includes/adapters/licenses.php:5334
+#: includes/adapters/licenses.php:5337
 msgid "No Premium subscription linked to this site on MyYoast"
 msgstr "Nessun abbonamento Premium collegato a questo sito su MyYoast"
 
-#: includes/adapters/licenses.php:5336
+#: includes/adapters/licenses.php:5339
 msgid "MyYoast reports the Premium subscription is inactive or expired"
 msgstr "MyYoast segnala che l’abbonamento Premium è inattivo o scaduto"
 
-#: includes/adapters/licenses.php:5338
+#: includes/adapters/licenses.php:5341
 msgid "Could not refresh MyYoast subscription state"
 msgstr "Impossibile aggiornare lo stato dell’abbonamento MyYoast"
 
-#: includes/adapters/licenses.php:5374
+#: includes/adapters/licenses.php:5377
 msgid "Freemius-powered; no account state recorded yet"
 msgstr "Basato su Freemius; nessuno stato dell’account registrato"
 
-#: includes/adapters/licenses.php:5409
+#: includes/adapters/licenses.php:5412
 msgid "Premium install with no license attached"
 msgstr "Installazione Premium senza licenza collegata"
 
-#: includes/adapters/licenses.php:5531
-#: includes/adapters/licenses.php:5589
-#: includes/adapters/licenses.php:5623
+#: includes/adapters/licenses.php:5534
+#: includes/adapters/licenses.php:5592
+#: includes/adapters/licenses.php:5626
 msgid "The plugin is not loaded."
 msgstr "Il plugin non è caricato."
 
-#: includes/adapters/licenses.php:5535
-#: includes/adapters/licenses.php:6286
+#: includes/adapters/licenses.php:5538
+#: includes/adapters/licenses.php:6293
 msgid "Paste a key first."
 msgstr "Incolla prima una chiave."
 
-#: includes/adapters/licenses.php:5544
-#: includes/adapters/licenses.php:5552
+#: includes/adapters/licenses.php:5547
+#: includes/adapters/licenses.php:5555
 msgid "Freemius refused the key."
 msgstr "Freemius ha rifiutato la chiave."
 
-#: includes/adapters/licenses.php:5572
+#: includes/adapters/licenses.php:5575
 msgid "Freemius accepted the request but no active license is attached to this site."
 msgstr "Freemius ha accettato la richiesta ma nessuna licenza attiva è associata a questo sito."
 
-#: includes/adapters/licenses.php:5593
-#: includes/adapters/licenses.php:5639
+#: includes/adapters/licenses.php:5596
+#: includes/adapters/licenses.php:5642
 msgid "No license is attached to this site."
 msgstr "Nessuna licenza è associata a questo sito."
 
-#: includes/adapters/licenses.php:5611
+#: includes/adapters/licenses.php:5614
 msgid "Freemius did not release the license. Its Account screen shows the reason."
 msgstr "Freemius non ha rilasciato la licenza. La schermata Account mostra il motivo."
 
-#: includes/adapters/licenses.php:5626
+#: includes/adapters/licenses.php:5629
 msgid "This site is not connected to Freemius yet. Activate a key first."
 msgstr "Questo sito non è ancora connesso a Freemius. Attiva prima una chiave."
 
-#: includes/adapters/licenses.php:5765
+#: includes/adapters/licenses.php:5768
 msgid "Activation stored; SureCart keeps no local expiry"
 msgstr "Attivazione memorizzata; SureCart non tiene una scadenza locale"
 
-#: includes/adapters/licenses.php:5766
+#: includes/adapters/licenses.php:5769
 msgid "Key stored without an activation record"
 msgstr "Chiave memorizzata senza un record di attivazione"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5877
+#: includes/adapters/licenses.php:5880
 msgid "verified %s ago from Minn"
 msgstr "verificata %s fa da Minn"
 
 #. translators: %s: human-readable time difference, such as "2 hours".
-#: includes/adapters/licenses.php:5881
+#: includes/adapters/licenses.php:5884
 msgid "failed a check %s ago from Minn"
 msgstr "controllo non superato %s fa da Minn"
 
-#: includes/adapters/licenses.php:5886
+#: includes/adapters/licenses.php:5889
 #: assets/js/app.js:21597
 msgid "License key"
 msgstr "Chiave di licenza"
 
-#: includes/adapters/licenses.php:6008
+#: includes/adapters/licenses.php:6011
 msgid "core connector"
 msgstr "connettore core"
 
-#: includes/adapters/licenses.php:6267
+#: includes/adapters/licenses.php:6274
 msgid "No such action for this provider."
 msgstr "Azione inesistente per questo provider."
 
-#: includes/adapters/licenses.php:6281
+#: includes/adapters/licenses.php:6288
 msgid "Fill in every field first."
 msgstr "Compila prima tutti i campi."
 
 #. translators: %s: PHP constant name defined in wp-config.php.
-#: includes/adapters/licenses.php:6320
+#: includes/adapters/licenses.php:6327
 msgid "This key is defined in wp-config (%s), which takes precedence. Change it there."
 msgstr "Questa chiave è definita in wp-config (%s), che ha la precedenza. Cambiala lì."
 
-#: includes/adapters/licenses.php:6333
+#: includes/adapters/licenses.php:6340
 msgid "The plugin reported an error during the request."
 msgstr "Il plugin ha segnalato un errore durante la richiesta."
 
-#: includes/adapters/licenses.php:6403
+#: includes/adapters/licenses.php:6410
 msgid "Could not check for updates."
 msgstr "Impossibile verificare gli aggiornamenti."
 
@@ -13698,82 +13698,88 @@ msgstr "Aggiungi %s"
 msgid "No %s found."
 msgstr "Nessun %s trovato."
 
-#: includes/class-minn-admin-cpt.php:461
+#: includes/class-minn-admin-cpt.php:491
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 20 characters max."
 msgstr "Lo slug è obbligatorio: lettere minuscole, numeri, trattini o underscore, massimo 20 caratteri."
 
-#: includes/class-minn-admin-cpt.php:470
-#: includes/class-minn-admin-cpt.php:500
-#: includes/class-minn-admin-cpt.php:638
+#. translators: %s: the slug
+#: includes/class-minn-admin-cpt.php:497
 #: includes/class-minn-admin-cpt.php:670
+msgid "“%s” is a name WordPress reserves; pick another slug."
+msgstr "“%s” è un nome riservato da WordPress; scegli un altro slug."
+
+#: includes/class-minn-admin-cpt.php:503
+#: includes/class-minn-admin-cpt.php:533
+#: includes/class-minn-admin-cpt.php:674
+#: includes/class-minn-admin-cpt.php:706
 msgid "Singular and plural labels are required."
 msgstr "Le etichette singolare e plurale sono obbligatorie."
 
-#: includes/class-minn-admin-cpt.php:493
+#: includes/class-minn-admin-cpt.php:526
 msgid "No such post type."
 msgstr "Tipo di contenuto inesistente."
 
-#: includes/class-minn-admin-cpt.php:496
+#: includes/class-minn-admin-cpt.php:529
 msgid "This post type is registered in code and can only be changed there."
 msgstr "Questo tipo di contenuto è registrato via codice e può essere modificato solo lì."
 
-#: includes/class-minn-admin-cpt.php:530
-#: includes/class-minn-admin-cpt.php:700
+#: includes/class-minn-admin-cpt.php:563
+#: includes/class-minn-admin-cpt.php:736
 msgid "ACF definition not found."
 msgstr "Definizione ACF non trovata."
 
-#: includes/class-minn-admin-cpt.php:543
+#: includes/class-minn-admin-cpt.php:576
 msgid "This post type is registered in code and can only be removed there."
 msgstr "Questo tipo di contenuto è registrato via codice e può essere rimosso solo lì."
 
-#: includes/class-minn-admin-cpt.php:546
+#: includes/class-minn-admin-cpt.php:579
 msgid "Definition removed; existing content stays in the database."
 msgstr "Definizione rimossa; i contenuti esistenti restano nel database."
 
-#: includes/class-minn-admin-cpt.php:631
+#: includes/class-minn-admin-cpt.php:664
 msgid "Slug is required: lowercase letters, numbers, dashes or underscores, 32 characters max."
 msgstr "Lo slug è obbligatorio: lettere minuscole, numeri, trattini o underscore, massimo 32 caratteri."
 
-#: includes/class-minn-admin-cpt.php:663
+#: includes/class-minn-admin-cpt.php:699
 msgid "No such taxonomy."
 msgstr "Tassonomia inesistente."
 
-#: includes/class-minn-admin-cpt.php:666
+#: includes/class-minn-admin-cpt.php:702
 msgid "This taxonomy is registered in code and can only be changed there."
 msgstr "Questa tassonomia è registrata via codice e può essere modificata solo lì."
 
-#: includes/class-minn-admin-cpt.php:713
+#: includes/class-minn-admin-cpt.php:749
 msgid "This taxonomy is registered in code and can only be removed there."
 msgstr "Questa tassonomia è registrata via codice e può essere rimossa solo lì."
 
-#: includes/class-minn-admin-cpt.php:716
+#: includes/class-minn-admin-cpt.php:752
 msgid "Definition removed; existing terms stay in the database."
 msgstr "Definizione rimossa; i termini esistenti restano nel database."
 
-#: includes/class-minn-admin-cpt.php:753
+#: includes/class-minn-admin-cpt.php:789
 msgid "ACF could not save the taxonomy."
 msgstr "ACF non è riuscito a salvare la tassonomia."
 
-#: includes/class-minn-admin-cpt.php:823
+#: includes/class-minn-admin-cpt.php:859
 msgid "ACF could not save the post type."
 msgstr "ACF non è riuscito a salvare il tipo di contenuto."
 
-#: includes/class-minn-admin-cpt.php:890
-#: includes/class-minn-admin-cpt.php:893
+#: includes/class-minn-admin-cpt.php:926
+#: includes/class-minn-admin-cpt.php:929
 msgid "JetEngine could not save the post type."
 msgstr "JetEngine non è riuscito a salvare il tipo di contenuto."
 
-#: includes/class-minn-admin-cpt.php:938
-#: includes/class-minn-admin-cpt.php:941
+#: includes/class-minn-admin-cpt.php:974
+#: includes/class-minn-admin-cpt.php:977
 msgid "JetEngine could not save the taxonomy."
 msgstr "JetEngine non è riuscito a salvare la tassonomia."
 
-#: includes/class-minn-admin-cpt.php:949
+#: includes/class-minn-admin-cpt.php:985
 msgid "JetEngine definition not found."
 msgstr "Definizione JetEngine non trovata."
 
-#: includes/class-minn-admin-cpt.php:956
-#: includes/class-minn-admin-cpt.php:958
+#: includes/class-minn-admin-cpt.php:992
+#: includes/class-minn-admin-cpt.php:994
 msgid "JetEngine could not remove the definition."
 msgstr "JetEngine non è riuscito a rimuovere la definizione."
 
