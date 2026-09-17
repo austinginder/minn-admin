@@ -239,6 +239,25 @@ async function autoConfirm( page ) {
 	await page.evaluate( arm ).catch( () => {} );
 }
 
+// Close the browser only once nothing is in flight. Killing Chrome while
+// the app still has requests open (the post-batch plugin-links refresh,
+// notifications) aborts them mid-response, and FrankenPHP 1.12.7 can die on
+// the PHP side's next flush (a nil-writer panic in go_sapi_flush,
+// php/frankenphp#2650). The ~2s respawn then hits the next suite's first
+// requests. Bounded: a page that never goes quiet still closes.
+async function closeBrowser( browser ) {
+	try {
+		const pages = browser.contexts().flatMap( ( c ) => c.pages() );
+		await Promise.race( [
+			Promise.all( pages.map( ( p ) => p.waitForLoadState( 'networkidle', { timeout: 4000 } ).catch( () => {} ) ) ),
+			new Promise( ( r ) => setTimeout( r, 4500 ) ),
+		] );
+	} catch ( e ) { /* closing anyway */ }
+	// Close can hang on plugins with long-lived admin connections
+	// (Site Kit) — never let it eat a finished run's exit code.
+	await Promise.race( [ browser.close().catch( () => {} ), new Promise( ( r ) => setTimeout( r, 5000 ) ) ] );
+}
+
 // Minimal reporter: PASS/FAIL lines, non-zero exit when anything failed.
 function reporter( name ) {
 	const results = [];
@@ -251,9 +270,7 @@ function reporter( name ) {
 			this.check( 'No console/page errors', errors.length === 0, errors.join( ' | ' ) );
 			const failed = results.filter( ( r ) => ! r ).length;
 			console.log( `\n${ name }: ${ results.length - failed }/${ results.length } passed` );
-			// Close can hang on plugins with long-lived admin connections
-			// (Site Kit) — never let it eat a finished run's exit code.
-			await Promise.race( [ browser.close(), new Promise( ( r ) => setTimeout( r, 5000 ) ) ] );
+			await closeBrowser( browser );
 			// Exit on a timer, never synchronously: done() runs from finally
 			// blocks, and an immediate exit here swallows an exception still
 			// propagating out of the try body, so a suite that crashed halfway
@@ -340,4 +357,4 @@ async function activateClassicTheme( page ) {
 	} );
 }
 
-module.exports = { BASE, WP, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, activateClassicTheme, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath };
+module.exports = { BASE, WP, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, closeBrowser, activateClassicTheme, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath };
