@@ -1551,6 +1551,67 @@ function minn_admin_acf_read_values( $post_id ) {
 }
 
 /**
+ * Keep the relational ids a caller was never shown.
+ *
+ * The read path withholds posts the caller may not read and accounts they
+ * may not list; the client then sends the whole panel back on any edit, and
+ * a withheld id would arrive as a clear (single) or as an absence (list).
+ * That is not a decision the caller made, so a withheld stored id stays:
+ * for a list it keeps its stored position among the ids that came back,
+ * for a single value an empty submission over a withheld id changes nothing.
+ * An id the caller COULD see and left out is a real removal and goes.
+ *
+ * @param array        $field  Mapped field (type suggest or relation).
+ * @param mixed        $value  Parsed incoming value from minn_admin_acf_value_in.
+ * @param mixed        $stored Raw stored value for this field on this object.
+ * @return mixed The value to write, or null to leave the stored value alone.
+ */
+function minn_admin_acf_relation_preserve( $field, $value, $stored ) {
+	if ( null === $value || ! in_array( $field['type'], array( 'suggest', 'relation' ), true ) ) {
+		return $value;
+	}
+	$acf  = acf_get_field( $field['key'] );
+	$kind = $acf ? minn_admin_acf_relation_kind( $acf ) : '';
+	if ( '' === $kind ) {
+		return $value;
+	}
+	$withheld = function ( $id ) use ( $kind ) {
+		if ( ! is_scalar( $id ) || '' === (string) $id || ! is_numeric( $id ) ) {
+			return false;
+		}
+		if ( 'post' === $kind ) {
+			$p = get_post( (int) $id );
+			if ( ! $p || in_array( $p->post_status, array( 'trash', 'auto-draft' ), true ) ) {
+				return false; // gone, not withheld
+			}
+		}
+		if ( 'user' === $kind && ! get_userdata( (int) $id ) ) {
+			return false;
+		}
+		return null === minn_admin_acf_relation_entry( $kind, $id );
+	};
+	if ( 'suggest' === $field['type'] ) {
+		if ( '' === $value && $withheld( is_array( $stored ) ? reset( $stored ) : $stored ) ) {
+			return null;
+		}
+		return $value;
+	}
+	$stored = array_values( array_filter( array_map( 'strval', (array) $stored ), 'strlen' ) );
+	$value  = array_values( array_map( 'strval', (array) $value ) );
+	foreach ( $stored as $pos => $id ) {
+		if ( in_array( $id, $value, true ) || ! $withheld( $id ) ) {
+			continue;
+		}
+		array_splice( $value, min( $pos, count( $value ) ), 0, array( $id ) );
+	}
+	// ACF's taxonomy field stores ints; the parser already emits them.
+	if ( 'term' === $kind ) {
+		$value = array_map( 'intval', $value );
+	}
+	return $value;
+}
+
+/**
  * Write simple field values through ACF's own setter, by field key.
  *
  * Writing by key (not name) is what makes ACF store the `_name` key
@@ -1575,6 +1636,7 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 			$value = minn_admin_acf_flex_in( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
 		} else {
 			$value = minn_admin_acf_value_in( $field, $value );
+			$value = minn_admin_acf_relation_preserve( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
 		}
 		if ( null === $value ) {
 			continue; // invalid input never clobbers a stored value
@@ -2544,6 +2606,7 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$v = minn_admin_acf_flex_in( $f, $v, $stored_at( $f ), 'options' );
 		} else {
 			$v = minn_admin_acf_value_in( $f, $v, 'options' );
+			$v = minn_admin_acf_relation_preserve( $f, $v, $stored_at( $f ) );
 		}
 		if ( null === $v ) {
 			continue; // invalid input never clobbers a stored value
