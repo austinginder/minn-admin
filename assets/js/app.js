@@ -904,7 +904,13 @@
 			sync();
 			clear();
 		};
-		if ( btn ) btn.addEventListener( 'click', run );
+		if ( btn ) {
+			// The × must not take the caret: focus stays in the box across the
+			// click, so the reload's repaint finds it there and puts it back
+			// (the orphaned-caret restore keys off the box being focused).
+			btn.addEventListener( 'mousedown', ( e ) => e.preventDefault() );
+			btn.addEventListener( 'click', run );
+		}
 		box.addEventListener( 'keydown', ( e ) => {
 			if ( e.key !== 'Escape' || ! box.value ) return;
 			e.preventDefault();
