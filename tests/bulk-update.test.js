@@ -74,7 +74,8 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 			// reinstalled card wears its badge again after the post-batch
 			// refresh; the batch response below is the proof of the reinstall.
 			t.check( 'the plugin whose package could not be fetched keeps its offer', after.vendorBadge === true, JSON.stringify( after ) );
-			t.check( 'toast reports the mixed result', after.toasts.some( ( x ) => /Updated 1 plugin;/.test( x ) && /1 failed/.test( x ) ), JSON.stringify( after.toasts ) );
+			// Other real offers may ride along (a license-gated vendor plugin fails too), so only the fixture's names are asserted.
+			t.check( 'toast reports the mixed result', after.toasts.some( ( x ) => /^Updated \d+ plugins?;/.test( x ) && /failed:.*Akismet/.test( x ) ), JSON.stringify( after.toasts ) );
 			// The fixture re-synthesizes its offers on every transient read, so
 			// the server's verdict is the batch response itself.
 			t.check( 'the batch response names the reinstall and the failure', ( bulkBody.updated || [] ).includes( WPORG + '.php' ) && ( bulkBody.failed || [] ).includes( VENDOR + '.php' ), JSON.stringify( { updated: bulkBody.updated, failed: bulkBody.failed } ) );
