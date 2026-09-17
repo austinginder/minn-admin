@@ -455,6 +455,36 @@ class Minn_Admin_CPT {
 		);
 	}
 
+	/**
+	 * Names WordPress already owns as query variables or built-in types: a
+	 * post type or taxonomy registered under one of these breaks the site's
+	 * own queries (?order=, ?author=, ?s=) the moment it exists. CPT UI and
+	 * ACF each refuse them on their own screens; every backend here writes
+	 * into a vendor store the vendor then registers without re-checking, so
+	 * the same refusal has to happen before the write. The vendor's own list
+	 * is used when its function is loaded, core's query-var lists otherwise.
+	 *
+	 * @param string $slug Candidate slug.
+	 * @param string $kind 'type' or 'taxonomy'.
+	 * @return bool
+	 */
+	private static function is_reserved( $slug, $kind ) {
+		$reserved = array();
+		if ( 'type' === $kind && function_exists( 'cptui_reserved_post_types' ) ) {
+			$reserved = (array) cptui_reserved_post_types();
+		} elseif ( 'taxonomy' === $kind && function_exists( 'cptui_reserved_taxonomies' ) ) {
+			$reserved = (array) cptui_reserved_taxonomies();
+		}
+		if ( function_exists( 'acf_get_wp_reserved_terms' ) ) {
+			$reserved = array_merge( $reserved, (array) acf_get_wp_reserved_terms() );
+		}
+		if ( isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof WP ) {
+			$reserved = array_merge( $reserved, (array) $GLOBALS['wp']->public_query_vars, (array) $GLOBALS['wp']->private_query_vars );
+		}
+		$reserved = array_merge( $reserved, array( 'action', 'author', 'order', 'orderby', 'type', 'theme', 'themes', 'fields', 'post_type', 'taxonomy', 'term', 'terms', 'status', 'title', 'link', 'custom', 'nonce', 'debug', 'preview', 'search', 's', 'p', 'page', 'post', 'attachment', 'revision' ) );
+		return in_array( $slug, array_map( 'strval', $reserved ), true );
+	}
+
 	public static function create_type( WP_REST_Request $request ) {
 		$slug = sanitize_key( (string) $request['slug'] );
 		if ( ! $slug || strlen( $slug ) > 20 ) {
@@ -462,6 +492,9 @@ class Minn_Admin_CPT {
 		}
 		if ( post_type_exists( $slug ) ) {
 			return new WP_Error( 'exists', "A “{$slug}” post type already exists.", array( 'status' => 409 ) );
+		}
+		if ( self::is_reserved( $slug, 'type' ) ) {
+			return new WP_Error( 'reserved_slug', sprintf( /* translators: %s: the slug */ __( '“%s” is a name WordPress reserves; pick another slug.', 'minn-admin' ), $slug ), array( 'status' => 400 ) );
 		}
 		$def      = self::def_from_request( $request );
 		$backends = self::writable_backends();
@@ -632,6 +665,9 @@ class Minn_Admin_CPT {
 		}
 		if ( taxonomy_exists( $slug ) ) {
 			return new WP_Error( 'exists', "A “{$slug}” taxonomy already exists.", array( 'status' => 409 ) );
+		}
+		if ( self::is_reserved( $slug, 'taxonomy' ) ) {
+			return new WP_Error( 'reserved_slug', sprintf( /* translators: %s: the slug */ __( '“%s” is a name WordPress reserves; pick another slug.', 'minn-admin' ), $slug ), array( 'status' => 400 ) );
 		}
 		$def = self::tax_def_from_request( $request );
 		if ( ! $def['singular'] || ! $def['plural'] ) {

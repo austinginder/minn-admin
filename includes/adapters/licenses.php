@@ -4,10 +4,13 @@
  *
  * Enumerates every license-wanting plugin and theme on the site and
  * classifies each as valid / expired / invalid / missing / unknown from
- * LOCALLY STORED state only. Classification is strictly read-only: no
- * network calls, no vendor code execution, no writes, so it can never
- * burn an activation seat. Stored status is last-verified truth, not
- * live truth; rows carry a stale flag when the vendor's own cache lapsed.
+ * LOCALLY STORED state. Classification never activates or deactivates, so
+ * it can never burn a seat; a few readers do call into vendor code to read
+ * (Admin Columns Pro's container, Kadence and Akismet key accessors, the
+ * BSF products sync, and Yoast's subscription cache, which can refresh
+ * itself over the network when it has lapsed). Stored status is
+ * last-verified truth, not live truth; rows carry a stale flag when the
+ * vendor's own cache lapsed.
  *
  * Phase 1 adds OPT-IN actions per provider: `activate( $secret )`,
  * `deactivate()` and `verify()` callables that route through the VENDOR'S
@@ -4096,7 +4099,7 @@ function minn_admin_license_default_providers() {
 				'nvp_license_error'  => get_option( 'nvp_license_error', '' ),
 				'nvp_license_domain' => get_option( 'nvp_license_domain', '' ),
 			);
-			list( $ok, $message ) = \Novamira\Pro\activate_new_license_key( (string) $secret );
+			list( $ok, $message ) = \Novamira\Pro\activate_new_license_key( sanitize_text_field( trim( (string) $secret ) ) );
 			if ( $ok ) {
 				return array( 'ok' => true, 'message' => (string) $message );
 			}
@@ -6256,8 +6259,12 @@ add_action( 'rest_api_init', function () {
 				$provider_id = sanitize_key( (string) $req->get_param( 'provider' ) );
 				$action      = (string) $req->get_param( 'action' );
 				// The secret is used for this one call and never stored,
-				// logged or echoed back.
-				$secret = trim( (string) $req->get_param( 'secret' ) );
+				// logged or echoed back. It is read from the request body
+				// only: get_param() would also accept it from the query
+				// string, where it would land in the web server's access log.
+				$body   = $req->get_json_params();
+				$body   = is_array( $body ) && $body ? $body : (array) $req->get_body_params();
+				$secret = isset( $body['secret'] ) ? trim( (string) $body['secret'] ) : '';
 				if ( ! in_array( $action, array( 'activate', 'deactivate', 'verify' ), true ) ) {
 					return new WP_Error( 'bad_action', __( 'Unknown action.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
@@ -6272,7 +6279,7 @@ add_action( 'rest_api_init', function () {
 				// stored, logged or echoed back either way.
 				$payload = $secret;
 				if ( 'activate' === $action && ! empty( $p['secret_fields'] ) && is_array( $p['secret_fields'] ) ) {
-					$secrets = $req->get_param( 'secrets' );
+					$secrets = isset( $body['secrets'] ) ? $body['secrets'] : null;
 					$payload = array();
 					foreach ( $p['secret_fields'] as $f ) {
 						$fid = sanitize_key( $f['id'] );

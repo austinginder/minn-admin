@@ -89,6 +89,13 @@ function minn_admin_jet_map_field( $field ) {
 			break;
 		case 'textarea':
 			$mapped['type'] = 'textarea';
+			// The vendor sanitizes a textarea by its configured value format
+			// (plain text / safe HTML / raw) and max length; carry both so
+			// the write applies the same rule as JetEngine's own meta box.
+			$mapped['_jet']['value_format'] = isset( $field['value_format'] ) ? (string) $field['value_format'] : 'raw';
+			if ( ! empty( $field['max_length'] ) ) {
+				$mapped['_jet']['max_length'] = (int) $field['max_length'];
+			}
 			break;
 		case 'wysiwyg':
 			$mapped['type'] = 'wysiwyg';
@@ -538,10 +545,29 @@ function minn_admin_jet_value_in( $f, $value ) {
 			return '' === trim( $value ) ? false : ( function_exists( 'jet_engine_sanitize_wysiwyg' ) ? jet_engine_sanitize_wysiwyg( $value ) : wp_kses_post( $value ) );
 		case 'textarea':
 			$value = (string) $value;
-			return '' === trim( $value ) ? false : ( function_exists( 'jet_engine_sanitize_textarea' ) ? jet_engine_sanitize_textarea( $value ) : sanitize_textarea_field( $value ) );
+			if ( '' === trim( $value ) ) {
+				return false;
+			}
+			// jet_engine_sanitize_textarea reads value_format off the field
+			// it is handed; without it every textarea stores raw, whatever
+			// the site configured. Max length is JetEngine's own field
+			// setting, applied before the format like its meta box.
+			if ( ! empty( $jt['max_length'] ) && mb_strlen( $value ) > (int) $jt['max_length'] ) {
+				$value = mb_substr( $value, 0, (int) $jt['max_length'] );
+			}
+			$field = array( 'value_format' => isset( $jt['value_format'] ) ? $jt['value_format'] : 'raw' );
+			if ( function_exists( 'jet_engine_sanitize_textarea' ) ) {
+				return jet_engine_sanitize_textarea( $value, $f['name'], $field );
+			}
+			return 'safe_html' === $field['value_format'] ? wp_kses_post( $value ) : sanitize_textarea_field( $value );
 		case 'color_picker':
 			$value = trim( (string) $value );
 			return '' === $value ? false : sanitize_text_field( $value );
+		case 'text':
+			// JetEngine's default sanitizer for a plain text field strips
+			// every tag (sanitize_text_field); kses would keep links and images.
+			$value = (string) $value;
+			return '' === trim( $value ) ? false : sanitize_text_field( $value );
 		default:
 			$value = (string) $value;
 			return '' === trim( $value ) ? false : wp_kses_post( $value );
