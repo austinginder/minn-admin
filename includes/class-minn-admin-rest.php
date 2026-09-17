@@ -5004,6 +5004,19 @@ class Minn_Admin_REST {
 		}
 
 		$pending = (array) wp_get_translation_updates();
+		// Only packs for languages this site still has. The update transients
+		// are rewritten by whichever check finishes last, and a cron-spawned
+		// check that began before a language was removed lands its packs
+		// after the removal, so the removed language would show up again as
+		// waiting for updates until the next check. WordPress itself asks the
+		// directory for exactly these locales, so nothing real is dropped.
+		$wanted = array_values( get_available_languages() );
+		$wanted = array_merge( $wanted, (array) apply_filters( 'plugins_update_check_locales', $wanted ), (array) apply_filters( 'themes_update_check_locales', $wanted ), array( get_locale() ) );
+		$wanted = array_fill_keys( array_filter( array_map( 'strval', $wanted ) ), true );
+		$pending = array_filter( $pending, function ( $update ) use ( $wanted ) {
+			$update = (object) $update;
+			return isset( $update->language ) && isset( $wanted[ (string) $update->language ] );
+		} );
 		$labels  = array();
 		foreach ( Minn_Admin::available_languages() as $language ) {
 			if ( ! empty( $language[0] ) ) {
