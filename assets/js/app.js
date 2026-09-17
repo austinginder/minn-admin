@@ -42830,21 +42830,6 @@
 				run: () => go( preferredSurfaceId( s.family ) || s.id ),
 			} );
 		} );
-		// Every plugin's own screens, from the harvested links (cards' data;
-		// warmed at boot). Declared settings links first, then menu pages.
-		if ( state.cache.pluginLinks ) {
-			const names = state.cache.pluginLinks.names || {};
-			Object.entries( state.cache.pluginLinks.links ).forEach( ( [ dir, links ] ) => {
-				if ( ! names[ dir ] ) return;
-				links.filter( ( l ) => l.kind === 'settings' || l.kind === 'menu' ).slice( 0, 3 ).forEach( ( l ) => cmds.push( {
-					/* translators: 1: the plugin's name, 2: the screen's name, e.g. Settings. */
-					label: sprintf( __( '%1$s: %2$s ↗' ), names[ dir ].name, l.label ),
-					kind: 'action',
-					icon: '↗',
-					run: () => window.open( l.href, '_blank', 'noopener' ),
-				} ) );
-			} );
-		}
 		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
 			cmds.push( { label: __( 'Edit Menus' ), kind: 'nav', icon: '☰', run: () => go( 'menus' ) } );
 			if ( B.site.hasSidebars ) cmds.push( { label: __( 'Manage Widgets' ), kind: 'nav', icon: '▥', run: () => go( 'widgets' ) } );
@@ -42943,6 +42928,25 @@
 			...( ENGINE ? [] : [ { label: __( 'Classic wp-admin' ), kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank', 'noopener' ) } ] ),
 			{ label: __( 'Log out' ), kind: 'link', icon: '⎋', run: () => { window.location.href = B.site.logout; } },
 		);
+		// Every plugin's own screens, from the harvested links (cards' data;
+		// warmed at boot). Declared settings links first, then menu pages.
+		// Last on purpose: the list ranks by insertion, and a wp-admin
+		// doorway must never outrank what Minn does natively for the same
+		// plugin (typing "disembark" + Enter copies the backup command; it
+		// does not open a wp-admin tab).
+		if ( state.cache.pluginLinks ) {
+			const names = state.cache.pluginLinks.names || {};
+			Object.entries( state.cache.pluginLinks.links ).forEach( ( [ dir, links ] ) => {
+				if ( ! names[ dir ] ) return;
+				links.filter( ( l ) => l.kind === 'settings' || l.kind === 'menu' ).slice( 0, 3 ).forEach( ( l ) => cmds.push( {
+					/* translators: 1: the plugin's name, 2: the screen's name, e.g. Settings. */
+					label: sprintf( __( '%1$s: %2$s ↗' ), names[ dir ].name, l.label ),
+					kind: 'action',
+					icon: '↗',
+					run: () => window.open( l.href, '_blank', 'noopener' ),
+				} ) );
+			} );
+		}
 		return cmds;
 	}
 

@@ -109,6 +109,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForTimeout( 500 );
 		const pal = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-palette-item .minn-palette-label' ) ].map( ( n ) => n.textContent.trim() ) );
 		t.check( 'palette lists the plugin\'s settings screen', pal.some( ( l ) => /Antispam Bee: Settings ↗/.test( l ) ), JSON.stringify( pal ) );
+		// A doorway never outranks what Minn does natively for the same
+		// plugin: "disembark" + Enter must still copy the backup command
+		// (disembark.test.js relies on it), not open a wp-admin tab.
+		await page.fill( '#minn-palette-input', '' );
+		await page.type( '#minn-palette-input', 'disembark' );
+		await page.waitForTimeout( 500 );
+		const rank = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-palette-item .minn-palette-label' ) ].map( ( n ) => n.textContent.trim() ) );
+		t.check( 'a native command outranks the plugin\'s wp-admin doorway', rank.length >= 2 && /Copy Disembark backup command/.test( rank[ 0 ] ) && rank.some( ( l ) => /Disembark: .*↗/.test( l ) ), JSON.stringify( rank ) );
 		await page.keyboard.press( 'Escape' );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
