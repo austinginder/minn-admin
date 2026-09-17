@@ -23100,9 +23100,15 @@
 		} );
 	}
 
+	// Every pending plugin in ONE request (plugins/update-all: one update
+	// check, one bulk upgrader run, wp.org packages fetched in parallel), the
+	// path `wp plugin update --all` takes. Per-card progress comes from the
+	// batch's progress record, polled while the request runs, instead of
+	// splitting the work into one request per plugin, which re-ran the
+	// update check against wp.org and every vendor updater for each one.
+	// A single plugin still goes through queuePluginUpdate.
 	async function updateAllPlugins( btn ) {
 		const updates = state.cache.pluginUpdates || {};
-		// Only queue plugins that are not already in flight.
 		const files = Object.keys( updates )
 			.map( ( k ) => k.replace( /\.php$/, '' ) )
 			.filter( ( file ) => ! pluginUpdatePending.has( file ) );
@@ -23114,28 +23120,173 @@
 			}
 			return;
 		}
+		if ( pluginUpdatePending.size ) {
+			toast( __( 'An update is already running — wait for it to finish, then update everything.' ), true );
+			return;
+		}
 		const plugins = state.cache.plugins || [];
-		// One toast for the batch; per-plugin toasts stay quiet until each finishes.
-		toast( files.length === 1
-			? `Updating ${ pluginDisplayName( ( plugins.find( ( p ) => p.plugin === files[ 0 ] ) || {} ).name || files[ 0 ] ) }…`
-			: `Updating ${ files.length } plugins — one at a time…` );
+		const nameOf = ( file ) => pluginDisplayName( ( plugins.find( ( p ) => p.plugin === file ) || {} ).name || file );
+		if ( files.length === 1 ) {
+			queuePluginUpdate( files[ 0 ], nameOf( files[ 0 ] ) );
+			return;
+		}
+		/* translators: %s: number of plugins. */
+		toast( sprintf( __( 'Updating %s plugins…' ), files.length ) );
 		if ( btn ) {
 			btn.disabled = true;
-			btn.innerHTML = `${ icon( 'refresh' ) } Updating… (${ files.length + pluginUpdatePending.size })`;
+			btn.innerHTML = `${ icon( 'refresh' ) } ${ esc( __( 'Updating…' ) ) } (${ files.length })`;
 		}
-		// Queue every pending offer through the serial path so each card
-		// shows Queued… then Updating… (bulk REST had no per-card progress).
-		for ( const file of files ) {
-			const plugin = plugins.find( ( p ) => p.plugin === file );
-			const name = plugin ? pluginDisplayName( plugin.name ) : file;
-			queuePluginUpdate( file, name, { quiet: true } );
+		files.forEach( ( f ) => pluginUpdatePending.add( f ) );
+		if ( state.route === 'extensions' && state.extTab === 'plugins' ) renderExtensions();
+		else paintPluginUpdateQueue();
+		const r = await runBulkPluginUpdate( files, () => {
+			/* translators: 1: plugins done so far, 2: plugins in the batch. */
+			if ( btn && btn.isConnected ) btn.innerHTML = `${ icon( 'refresh' ) } ${ esc( sprintf( __( 'Updating… (%1$s/%2$s)' ), bulkDone.size, files.length ) ) }`;
+		} );
+		if ( r.minnUpdated ) {
+			reloadAfterMinnSelfUpdate( r.minnVersion );
+			return;
 		}
-		// Paint all cards immediately (queue marks them pending).
-		if ( state.route === 'extensions' && state.extTab === 'plugins' ) {
-			renderExtensions();
+		const n = r.done.length;
+		if ( r.failed.length ) {
+			/* translators: 1: plugins updated, 2: plugins that failed, 3: their names. */
+			toast( sprintf( _n( 'Updated %1$s plugin; %2$s failed: %3$s', 'Updated %1$s plugins; %2$s failed: %3$s', n ), n, r.failed.length, r.failed.map( nameOf ).join( ', ' ) ), true );
+		} else if ( r.dropped ) {
+			/* translators: %s: plugins updated. */
+			toast( sprintf( __( 'Updated %s plugins. The connection dropped mid-batch, so the list was re-read from the server.' ), n ) );
 		} else {
+			/* translators: %s: plugins updated. */
+			toast( sprintf( _n( 'Updated %s plugin.', 'Updated %s plugins.', n ), n ) );
+		}
+	}
+	const bulkDone = new Set(); // files the running batch has already finished (cards cleared)
+
+	// The shared bulk runner: POST the batch under a token, poll its
+	// progress record, paint cards as plugins finish, and survive a dropped
+	// socket (the upgrader can recycle the PHP worker mid-batch on some
+	// stacks) by polling on until the record says finished or goes quiet.
+	async function runBulkPluginUpdate( files, onProgress ) {
+		const token = 'b' + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 8 );
+		const offers = Object.assign( {}, state.cache.pluginUpdates || {} );
+		bulkDone.clear();
+		let failed = [];
+		let finished = false;
+		let lastChange = Date.now();
+		let lastSig = '';
+		const apply = ( p ) => {
+			if ( ! p || ! p.known ) return;
+			const cur = p.current ? p.current.replace( /\.php$/, '' ) : null;
+			if ( cur !== pluginUpdateCurrent ) {
+				pluginUpdateCurrent = cur;
+				paintPluginUpdateQueue();
+			}
+			( p.done || [] ).forEach( ( f ) => {
+				const file = f.replace( /\.php$/, '' );
+				if ( bulkDone.has( file ) ) return;
+				bulkDone.add( file );
+				pluginUpdatePending.delete( file );
+				applyPluginUpdateOptimistic( file, offers[ f ] || '' );
+				clearPluginCardUpdateUi( file );
+				if ( onProgress ) onProgress( file );
+			} );
+			failed = ( p.failed || [] ).map( ( f ) => f.replace( /\.php$/, '' ) );
+			failed.forEach( ( file ) => { pluginUpdatePending.delete( file ); markPluginCardBusy( file, false ); } );
+			const sig = JSON.stringify( [ p.current, ( p.done || [] ).length, failed.length ] );
+			if ( sig !== lastSig ) { lastSig = sig; lastChange = Date.now(); }
+			if ( p.finished ) finished = true;
+		};
+		// A raw fetch, so a 503 is visible: WordPress answers every request
+		// with one while the batch holds the site in maintenance mode, and
+		// for up to ten minutes after if the process died before lifting it.
+		let maintenance = false;
+		let maintenanceSince = 0;
+		const readProgress = async () => {
+			try {
+				const r = await fetch( restUrlFor( 'minn-admin/v1/plugins/update-progress?token=' + token ), { credentials: 'same-origin', headers: { 'X-WP-Nonce': B.nonce } } );
+				if ( r.status === 503 ) {
+					if ( ! maintenance ) {
+						maintenance = true;
+						maintenanceSince = Date.now();
+						toast( __( 'The site is in maintenance mode while plugins are replaced. It lifts on its own when the batch finishes, or after ten minutes at most.' ) );
+					}
+					return null;
+				}
+				maintenance = false;
+				return r.ok ? await r.json() : null;
+			} catch ( e ) {
+				return null;
+			}
+		};
+		const poll = setInterval( async () => { if ( ! finished ) apply( await readProgress() ); }, 900 );
+		let dropped = false;
+		let minnUpdated = false;
+		let minnVersion = '';
+		try {
+			const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: JSON.stringify( { token } ) } );
+			apply( { known: true, current: '', done: r.updated || [], failed: r.failed || [], finished: true } );
+			if ( ( r.updated || [] ).some( isMinnAdminPluginFile ) ) {
+				minnUpdated = true;
+				minnVersion = offers[ 'minn-admin/minn-admin.php' ] || '';
+			}
+		} catch ( e ) {
+			// The batch usually keeps running server-side after a dropped
+			// reply; follow it through its record. Quiet for 90s means the
+			// worker died with it: re-read the offers and settle from those.
+			dropped = true;
+			await waitForRestAlive( 20000 );
+			// Quiet means no progress for 90s; maintenance-mode 503s do not
+			// count as quiet (the record cannot be read through them), up to
+			// the ten minutes WordPress itself honors the flag for.
+			while ( ! finished ) {
+				const quiet = Date.now() - lastChange;
+				if ( maintenance ? Date.now() - maintenanceSince > 10 * 60000 : quiet > 90000 ) break;
+				await new Promise( ( res ) => setTimeout( res, maintenance ? 3000 : 1200 ) );
+				apply( await readProgress() );
+				if ( ! maintenance ) lastChange = Math.max( lastChange, maintenanceSince );
+			}
+			if ( ! finished ) {
+				try {
+					const upd = await api( 'minn-admin/v1/plugin-updates' );
+					const map = ( upd && upd.updates ) || {};
+					state.cache.pluginUpdates = map;
+					files.forEach( ( file ) => {
+						if ( bulkDone.has( file ) ) return;
+						if ( ! map[ file + '.php' ] ) {
+							bulkDone.add( file );
+							applyPluginUpdateOptimistic( file, offers[ file + '.php' ] || '' );
+							clearPluginCardUpdateUi( file );
+						} else if ( ! failed.includes( file ) ) {
+							failed.push( file );
+						}
+					} );
+				} catch ( e2 ) { /* the refresh below reports what it can */ }
+			}
+			if ( bulkDone.has( 'minn-admin/minn-admin' ) ) {
+				minnUpdated = true;
+				minnVersion = offers[ 'minn-admin/minn-admin.php' ] || '';
+			}
+		} finally {
+			clearInterval( poll );
+			files.forEach( ( file ) => { pluginUpdatePending.delete( file ); if ( ! bulkDone.has( file ) ) markPluginCardBusy( file, false ); } );
+			pluginUpdateCurrent = null;
 			paintPluginUpdateQueue();
 		}
+		// One list refresh for the batch, never showErr.
+		const prev = state.cache.plugins;
+		const prevUpd = state.cache.pluginUpdates;
+		try {
+			state.cache.plugins = null;
+			await loadPluginsResilient();
+			state.cache.notifications = null;
+			await loadNotifications().catch( () => {} );
+		} catch ( e ) {
+			if ( prev ) state.cache.plugins = prev;
+			if ( prevUpd ) state.cache.pluginUpdates = prevUpd;
+		}
+		refreshPluginLinks();
+		if ( state.route === 'extensions' && state.extTab === 'plugins' ) renderExtensions();
+		if ( state.notifOpen ) renderOverlays();
+		return { done: [ ...bulkDone ], failed, dropped, minnUpdated, minnVersion };
 	}
 
 	async function loadTranslationUpdates() {
@@ -42165,18 +42316,20 @@
 			const np = ( parts.find( ( p ) => p.kind === 'plugins' ) || {} ).n || 0;
 			/* translators: %s: number of plugins. */
 			setPhase( sprintf( _n( 'Updating %s plugin…', 'Updating %s plugins…', np ), np ) );
-			try {
-				const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
-				const updated = r.updated || [];
-				const n = updated.length;
-				doneBits.push( `${ n } plugin${ n === 1 ? '' : 's' }` );
-				// Same hard-reload need as Extensions bulk and single-plugin
-				// Update: new app.js / CSS / boot payload stay stale until a
-				// full navigation.
-				if ( updated.some( isMinnAdminPluginFile ) ) minnSelfUpdated = true;
-			} catch ( e ) {
-				failures.push( 'plugins: ' + e.message );
-			}
+			const files = Object.keys( state.cache.pluginUpdates || {} ).map( ( k ) => k.replace( /\.php$/, '' ) );
+			files.forEach( ( f ) => pluginUpdatePending.add( f ) );
+			let doneCount = 0;
+			const r = await runBulkPluginUpdate( files, () => {
+				doneCount++;
+				/* translators: 1: plugins done so far, 2: plugins in the batch. */
+				setPhase( sprintf( __( 'Updating plugins… (%1$s/%2$s)' ), doneCount, files.length ) );
+			} );
+			const n = r.done.length;
+			doneBits.push( `${ n } plugin${ n === 1 ? '' : 's' }` );
+			r.failed.forEach( ( f ) => failures.push( f ) );
+			// Same hard-reload need as single-plugin Update: new app.js / CSS
+			// / boot payload stay stale until a full navigation.
+			if ( r.minnUpdated ) minnSelfUpdated = true;
 		}
 		const themeMap = state.cache.themeUpdates || {};
 		if ( parts.some( ( p ) => p.kind === 'themes' ) ) {

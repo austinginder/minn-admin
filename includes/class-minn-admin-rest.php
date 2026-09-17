@@ -111,6 +111,24 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/plugins/update-progress',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'update_plugins' );
+				},
+				'args'                => array(
+					'token' => array( 'required' => true, 'sanitize_callback' => 'sanitize_key' ),
+				),
+				'callback'            => function ( $req ) {
+					$p = get_transient( 'minn_bulk_update_' . $req['token'] );
+					return rest_ensure_response( is_array( $p ) ? $p : array( 'known' => false ) );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/plugin-changelog',
 			array(
 				'methods'             => 'GET',
@@ -1585,6 +1603,10 @@ class Minn_Admin_REST {
 				'permission_callback' => function () {
 					return current_user_can( 'update_plugins' );
 				},
+				'args'                => array(
+					// A client-minted id the batch reports progress under.
+					'token' => array( 'sanitize_callback' => 'sanitize_key' ),
+				),
 			)
 		);
 
@@ -10629,23 +10651,84 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	/**
 	 * Run all pending plugin updates.
 	 */
-	public static function update_all_plugins() {
+	/**
+	 * Every pending plugin in one batch: one update check, one bulk upgrader
+	 * run (what wp-admin's bulk action and `wp plugin update --all` do),
+	 * plus two things neither does. The wp.org packages are fetched in
+	 * PARALLEL before the batch and handed to the upgrader as local files,
+	 * since sequential downloads are most of a bulk run's wall time. And
+	 * the batch reports progress under a client token as it goes (the
+	 * upgrader's per-plugin hooks write a transient), so the cards can show
+	 * which plugin is installing without splitting the work into one
+	 * request per plugin, which is what made the old Extensions button slow:
+	 * every request re-ran wp_update_plugins() against wp.org and every
+	 * vendor updater, because the previous install had changed the set.
+	 */
+	public static function update_all_plugins( WP_REST_Request $request = null ) {
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
+
+		$token = $request ? (string) $request->get_param( 'token' ) : '';
+		$progress = array( 'known' => true, 'started' => time(), 'current' => '', 'done' => array(), 'failed' => array(), 'finished' => false, 'queue' => array() );
+		$write = function () use ( &$progress, $token ) {
+			if ( '' !== $token ) {
+				set_transient( 'minn_bulk_update_' . $token, $progress, 15 * MINUTE_IN_SECONDS );
+			}
+		};
 
 		wp_update_plugins();
 		// real_plugin_updates: even freshly refreshed, never reinstall a
 		// plugin whose installed version already satisfies the offer.
 		$pending_before = self::real_plugin_updates();
 		if ( ! $pending_before ) {
+			$progress['finished'] = true;
+			$write();
 			return rest_ensure_response( array( 'updated' => array() ) );
 		}
-		$files = array_keys( $pending_before );
+		$files             = array_keys( $pending_before );
+		$progress['queue'] = $files;
+		$write();
+
+		$local = self::prefetch_packages( $pending_before );
+		// Download is the first step of each plugin's run, so this is where
+		// "current" moves; a prefetched package is handed over as the file.
+		add_filter( 'upgrader_pre_download', function ( $reply, $package, $upgrader, $hook_extra ) use ( $local, &$progress, $write ) {
+			if ( ! empty( $hook_extra['plugin'] ) ) {
+				$progress['current'] = (string) $hook_extra['plugin'];
+				$write();
+			}
+			return isset( $local[ $package ] ) && is_file( $local[ $package ] ) && filesize( $local[ $package ] ) > 0 ? $local[ $package ] : $reply;
+		}, 10, 4 );
+		add_filter( 'upgrader_pre_install', function ( $return, $hook_extra ) use ( &$progress, $write ) {
+			if ( ! empty( $hook_extra['plugin'] ) ) {
+				$progress['current'] = (string) $hook_extra['plugin'];
+				$write();
+			}
+			return $return;
+		}, 10, 2 );
+		add_filter( 'upgrader_post_install', function ( $return, $hook_extra ) use ( &$progress, $write ) {
+			if ( ! empty( $hook_extra['plugin'] ) ) {
+				$ok = $return && ! is_wp_error( $return );
+				$progress[ $ok ? 'done' : 'failed' ][] = (string) $hook_extra['plugin'];
+				$progress['current']                   = '';
+				$write();
+			}
+			return $return;
+		}, 10, 2 );
+
 		$skin           = new WP_Ajax_Upgrader_Skin();
 		$upgrader       = new Plugin_Upgrader( $skin );
 		$results        = $upgrader->bulk_upgrade( $files );
+
+		// Prefetched files the upgrader never consumed (a failure before
+		// download) would otherwise sit in the temp dir.
+		foreach ( (array) $local as $path ) {
+			if ( is_file( $path ) ) {
+				wp_delete_file( $path );
+			}
+		}
 
 		$updated = array();
 		$failed  = array();
@@ -10660,6 +10743,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// Restore offers for anything that failed (or was not in the result set).
 		self::restore_plugin_update_offers( $pending_before, $updated );
 
+		$progress['done']     = $updated;
+		$progress['failed']   = $failed;
+		$progress['current']  = '';
+		$progress['finished'] = true;
+		$progress['errors']   = $skin->get_error_messages();
+		$write();
+
 		return rest_ensure_response(
 			array(
 				'updated' => $updated,
@@ -10667,6 +10757,69 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'errors'  => $skin->get_error_messages(),
 			)
 		);
+	}
+
+	/**
+	 * Download the batch's wordpress.org packages side by side, into temp
+	 * files the upgrader then installs from. Only the directory's own host
+	 * is prefetched: a vendor package keeps the upgrader's normal path (its
+	 * updater may sign or expire the URL per request). Every URL still
+	 * passes the same validation download_url() applies, and a file that
+	 * arrives empty or short is dropped so the upgrader downloads it itself.
+	 *
+	 * @return array package URL => local path
+	 */
+	public static function prefetch_packages( array $pending ) {
+		if ( ! class_exists( '\WpOrg\Requests\Requests' ) ) {
+			return array();
+		}
+		$requests = array();
+		$paths    = array();
+		foreach ( $pending as $file => $data ) {
+			$url = isset( $data->package ) ? (string) $data->package : '';
+			if ( '' === $url || ! wp_http_validate_url( $url ) ) {
+				continue;
+			}
+			$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+			if ( 'downloads.wordpress.org' !== $host ) {
+				continue;
+			}
+			$tmp = wp_tempnam( basename( wp_parse_url( $url, PHP_URL_PATH ) ) );
+			if ( ! $tmp ) {
+				continue;
+			}
+			$paths[ $url ]    = $tmp;
+			$requests[ $url ] = array(
+				'url'     => $url,
+				'type'    => 'GET',
+				'headers' => array( 'User-Agent' => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ) ),
+				'options' => array( 'filename' => $tmp, 'timeout' => 120, 'connect_timeout' => 15 ),
+			);
+		}
+		if ( ! $requests ) {
+			return array();
+		}
+		$out = array();
+		// Six at a time: enough to hide latency, gentle on the host's
+		// outbound capacity and the directory's edge.
+		foreach ( array_chunk( $requests, 6, true ) as $chunk ) {
+			try {
+				$responses = \WpOrg\Requests\Requests::request_multiple( $chunk, array( 'timeout' => 120, 'connect_timeout' => 15 ) );
+			} catch ( \Throwable $e ) {
+				$responses = array();
+			}
+			foreach ( $chunk as $url => $req ) {
+				$res  = isset( $responses[ $url ] ) ? $responses[ $url ] : null;
+				$path = $paths[ $url ];
+				$ok   = $res instanceof \WpOrg\Requests\Response && $res->success && is_file( $path ) && filesize( $path ) > 1024;
+				if ( $ok ) {
+					$out[ $url ] = $path;
+				} elseif ( is_file( $path ) ) {
+					wp_delete_file( $path );
+				}
+			}
+		}
+		return $out;
 	}
 
 	/**
