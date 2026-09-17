@@ -113,6 +113,43 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 			t.check( 'toast reports the run', after.toasts.some( ( x ) => /Updated|failed/.test( x ) ), JSON.stringify( after.toasts ) );
 			t.check( 'the batch response names the reinstall and the failure', true, 'skipped: no reply (worker recycled)' );
 		}
+
+		/* ===== An earlier pre_download answer is honored ===== */
+		// Minn's own updater answers upgrader_pre_download with the download
+		// it hash-verified against the release manifest, or a WP_Error
+		// refusing the package. The batch's prefetch filter sits at the same
+		// priority and must never override that answer with its unverified
+		// copy. A priority-9 refusal stands in for the verifier here, and the
+		// batch runs server-side against the wp.org fixture offer.
+		const fs = require( 'fs' );
+		const os = require( 'os' );
+		const path = require( 'path' );
+		const probe = path.join( os.tmpdir(), `minn-bulk-verify-${ process.pid }.php` );
+		fs.writeFileSync( probe, `<?php
+update_option( 'minn_test_plugin_update', ${ JSON.stringify( WPORG + '.php' ) } );
+update_option( 'minn_test_plugin_update_vendor', '' );
+delete_site_transient( 'update_plugins' );
+add_filter( 'upgrader_pre_download', function ( $reply, $package ) {
+	return false !== strpos( (string) $package, ${ JSON.stringify( WPORG.split( '/' )[ 0 ] ) } ) ? new WP_Error( 'probe_refused', 'verifier refused this package' ) : $reply;
+}, 9, 2 );
+$req = new WP_REST_Request( 'POST', '/minn-admin/v1/plugins/update-all' );
+$req->set_param( 'token', str_repeat( 'b', 40 ) );
+$d = rest_do_request( $req )->get_data();
+update_option( 'minn_test_plugin_update', '' );
+delete_site_transient( 'update_plugins' );
+echo wp_json_encode( array( 'updated' => $d['updated'] ?? null, 'failed' => $d['failed'] ?? null, 'errors' => $d['errors'] ?? '' ) );
+` );
+		let verdict = '';
+		try {
+			verdict = execSync( `wp --path=${ JSON.stringify( WP ) } eval-file ${ JSON.stringify( probe ) } --user=admin 2>/dev/null`, { encoding: 'utf8', timeout: 300000 } ).trim().split( '\n' ).pop();
+		} catch ( e ) {
+			verdict = ( e.stdout || '' ).trim().split( '\n' ).pop();
+		} finally {
+			try { fs.unlinkSync( probe ); } catch ( e ) { /* ignore */ }
+		}
+		let v = null;
+		try { v = JSON.parse( verdict ); } catch ( e ) { /* reported below */ }
+		t.check( 'a refused package is not installed from the prefetched copy', !! v && ! ( v.updated || [] ).includes( WPORG + '.php' ) && ( v.failed || [] ).includes( WPORG + '.php' ) && /refused/.test( v.errors ), verdict.slice( -300 ) );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {

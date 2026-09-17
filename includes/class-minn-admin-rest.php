@@ -10776,6 +10776,17 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// "current" moves; a prefetched package is handed over as the file.
 		add_filter( 'upgrader_pre_download', function ( $reply, $package, $upgrader, $hook_extra ) use ( $local, $mark ) {
 			$file = ! empty( $hook_extra['plugin'] ) ? (string) $hook_extra['plugin'] : '';
+			// A filter ahead of this one that already answered wins: Minn's
+			// own updater returns the download it hash-verified against the
+			// release manifest, or a WP_Error refusing the package. Handing
+			// the prefetched copy over here would install bytes that check
+			// never saw, or ones it refused.
+			if ( false !== $reply ) {
+				if ( $file ) {
+					$mark( $file, is_wp_error( $reply ) ? 'failed' : 'unpacking' );
+				}
+				return $reply;
+			}
 			$have = isset( $local[ $package ] ) && is_file( $local[ $package ] ) && filesize( $local[ $package ] ) > 0;
 			if ( $file ) {
 				$mark( $file, $have ? 'unpacking' : 'fetching' );
