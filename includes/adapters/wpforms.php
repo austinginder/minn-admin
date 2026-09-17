@@ -602,15 +602,21 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/wpforms/entries/(?P<id>\d+)/status', array(
 		'methods'             => 'POST',
-		'permission_callback' => $edit,
+		'permission_callback' => function () {
+			return minn_admin_wpforms_can( 'edit_entries' ) || minn_admin_wpforms_can( 'delete_entries' );
+		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$guard = minn_admin_wpforms_guard_entry( (int) Minn_Admin::path_param( $request ), 'edit_entries_form_single' );
-			if ( is_wp_error( $guard ) ) {
-				return $guard;
-			}
 			$op = sanitize_key( (string) $request->get_param( 'status' ) );
 			if ( ! in_array( $op, array( 'read', 'unread', 'spam', 'trash', 'restore' ), true ) ) {
 				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			// WPForms offers trash, spam and restore only under the delete
+			// capability ("Trash can share the same capabilities as
+			// deleting", its entries ListTable); read/unread ride edit.
+			$need  = in_array( $op, array( 'spam', 'trash', 'restore' ), true ) ? 'delete_entries_form_single' : 'edit_entries_form_single';
+			$guard = minn_admin_wpforms_guard_entry( (int) Minn_Admin::path_param( $request ), $need );
+			if ( is_wp_error( $guard ) ) {
+				return $guard;
 			}
 			global $wpdb;
 			$id    = (int) Minn_Admin::path_param( $request );

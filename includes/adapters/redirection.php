@@ -236,6 +236,17 @@ add_action( 'rest_api_init', function () {
 		}
 		return $perm();
 	};
+	// Their settings API reads options behind the same option cap it writes
+	// them with, and the redirect list behind the redirect-manage cap; a
+	// site that hands editors redirect access but nothing else means the
+	// options page (and its counts) to stay out of reach.
+	$perm_settings_read = $perm_settings_write;
+	$perm_redirects     = function () use ( $perm ) {
+		if ( class_exists( 'Redirection_Capabilities' ) && defined( 'Redirection_Capabilities::CAP_REDIRECT_MANAGE' ) ) {
+			return Redirection_Capabilities::has_access( Redirection_Capabilities::CAP_REDIRECT_MANAGE );
+		}
+		return $perm();
+	};
 
 	// Status card. Counts from Redirection's own tables (SHOW TABLES-gated:
 	// a pre-setup install has none). Log timestamps are current_time('mysql')
@@ -244,7 +255,7 @@ add_action( 'rest_api_init', function () {
 	// "served" numbers honestly say what the log still holds.
 	register_rest_route( 'minn-admin/v1', '/redirection/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
+		'permission_callback' => $perm_redirects,
 		'callback'            => function () {
 			global $wpdb;
 			$has = function ( $suffix ) use ( $wpdb ) {
@@ -366,7 +377,7 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/redirection/settings/(?P<tab>[a-z0-9_-]+)', array(
 		array(
 			'methods'             => 'GET',
-			'permission_callback' => $perm,
+			'permission_callback' => $perm_settings_read,
 			'callback'            => function () {
 				$opts = red_get_options();
 				// monitor_post is a group id when on; 0 is off.

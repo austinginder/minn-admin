@@ -553,9 +553,11 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/cf7/messages/(?P<id>\d+)/restore', array(
 		'methods'             => 'POST',
+		// Flamingo's own untrash action requires the delete meta cap
+		// (admin/admin.php, the untrash bulk action); stock maps both caps to
+		// edit_users, a site that splits them means it.
 		'permission_callback' => function () {
-			return current_user_can( 'flamingo_delete_inbound_message' )
-				|| current_user_can( 'flamingo_edit_inbound_message' );
+			return current_user_can( 'flamingo_delete_inbound_message' );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) Minn_Admin::path_param( $request ) );

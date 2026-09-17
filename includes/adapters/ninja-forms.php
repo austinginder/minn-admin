@@ -506,7 +506,19 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'not_trashed', __( 'Only trashed entries can be restored.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			// Ninja has no restore helper — wp_untrash_post matches core trash.
+			// Core restores to draft since 5.6 unless told otherwise; a draft
+			// submission shows in neither Minn's list nor Ninja's, so restore
+			// to the status the entry held when it was trashed, publish by
+			// default, the way Ninja's own submissions screen expects.
+			$to_status = function ( $new_status, $post_id, $previous_status ) use ( $post ) {
+				if ( (int) $post_id !== (int) $post->ID ) {
+					return $new_status;
+				}
+				return in_array( $previous_status, array( 'publish', 'draft', 'pending', 'private' ), true ) ? $previous_status : 'publish';
+			};
+			add_filter( 'wp_untrash_post_status', $to_status, 10, 3 );
 			$result = wp_untrash_post( $post->ID );
+			remove_filter( 'wp_untrash_post_status', $to_status, 10 );
 			if ( ! $result ) {
 				return new WP_Error( 'restore_failed', __( 'Could not restore the entry.', 'minn-admin' ), array( 'status' => 500 ) );
 			}

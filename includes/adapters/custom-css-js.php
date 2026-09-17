@@ -21,6 +21,33 @@ function minn_admin_ccj_active() {
 		|| defined( 'CCJ_VERSION' );
 }
 
+/**
+ * wp_update_post for a snippet whose CODE this request is not changing.
+ *
+ * wp_update_post merges the stored post_content back in and runs it through
+ * content_save_pre, where a caller without unfiltered_html gets the kses
+ * filters: a rename or a switch-off by a designer would rewrite a JS body
+ * (`a<b && c>d`, a literal <script> wrapper) and rebuild_tree() would then
+ * write the mangled bytes to the live file. The body is not this caller's
+ * to change, so it must not be filtered either: lift kses for the one call
+ * the way core's own kses_init() would decide it, then put it back.
+ *
+ * @param array $update Post fields; must not carry post_content.
+ * @return int|WP_Error
+ */
+function minn_admin_ccj_update_post_meta_only( $update ) {
+	unset( $update['post_content'] );
+	$lifted = ! current_user_can( 'unfiltered_html' );
+	if ( $lifted ) {
+		kses_remove_filters();
+	}
+	$result = wp_update_post( $update );
+	if ( $lifted ) {
+		kses_init();
+	}
+	return $result;
+}
+
 function minn_admin_ccj_can() {
 	return current_user_can( 'manage_options' ) || current_user_can( 'edit_custom_csss' );
 }
@@ -642,7 +669,11 @@ add_action( 'rest_api_init', function () {
 					$update['post_status'] = $body['active'] ? 'publish' : 'draft';
 					update_post_meta( $id, '_active', $body['active'] ? 'yes' : 'no' );
 				}
-				wp_update_post( $update );
+				if ( array_key_exists( 'post_content', $update ) ) {
+					wp_update_post( $update );
+				} else {
+					minn_admin_ccj_update_post_meta_only( $update );
+				}
 				update_post_meta( $id, 'options', $opts );
 				// Changing a snippet's language writes it under a new name, so
 				// clear all three first and let the rebuild put back the one
@@ -693,7 +724,7 @@ add_action( 'rest_api_init', function () {
 			if ( $active && ! minn_admin_ccj_can_activate( $id ) ) {
 				return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
 			}
-			wp_update_post( array(
+			minn_admin_ccj_update_post_meta_only( array(
 				'ID'          => $id,
 				'post_status' => $active ? 'publish' : 'draft',
 			) );

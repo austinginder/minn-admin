@@ -426,6 +426,37 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
  * needs is_active + entry counts, and the list/workflow shims below keep
  * gf/v2's wire contract so the descriptor reads like their API.
  */
+/**
+ * The add-on's own form-settings capability for a feed, checked the way its
+ * feed list checks toggle and delete (GFFeedAddOn::current_user_can_any of
+ * get_form_settings_capabilities). GF's gf/v2 gates feed writes at
+ * gravityforms_edit_forms alone, but the screen an operator actually uses
+ * needs the add-on's cap too, so both hold here. An unregistered add-on
+ * (feed left by a deactivated plugin) falls back to the edit-forms floor.
+ *
+ * @param array $feed Feed row from GFAPI::get_feeds.
+ * @return bool
+ */
+function minn_admin_gf_can_manage_feed( $feed ) {
+	$slug = is_array( $feed ) && isset( $feed['addon_slug'] ) ? (string) $feed['addon_slug'] : '';
+	if ( '' === $slug || ! class_exists( 'GFAddOn' ) || ! method_exists( 'GFAddOn', 'get_registered_addons' ) ) {
+		return true;
+	}
+	try {
+		$addons = GFAddOn::get_registered_addons( true, true );
+	} catch ( \Throwable $e ) {
+		return true;
+	}
+	if ( ! isset( $addons[ $slug ] ) || ! is_object( $addons[ $slug ] ) || ! method_exists( $addons[ $slug ], 'get_form_settings_capabilities' ) ) {
+		return true;
+	}
+	$caps = $addons[ $slug ]->get_form_settings_capabilities();
+	if ( empty( $caps ) ) {
+		return true;
+	}
+	return (bool) $addons[ $slug ]->current_user_can_any( $caps );
+}
+
 add_action( 'rest_api_init', function () {
 	if ( ! class_exists( 'GFAPI' ) ) {
 		return;
@@ -1091,6 +1122,9 @@ add_action( 'rest_api_init', function () {
 			if ( is_wp_error( $feeds ) || empty( $feeds ) ) {
 				return new WP_Error( 'not_found', __( 'Feed not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
+			if ( ! minn_admin_gf_can_manage_feed( reset( $feeds ) ) ) {
+				return new WP_Error( 'forbidden', __( 'You cannot manage this add-on\'s feeds.', 'minn-admin' ), array( 'status' => 403 ) );
+			}
 			// GF's own property write (their model, their column).
 			$ok = GFFormsModel::update_feed_property( $id, 'is_active', $request['active'] ? 1 : 0 );
 			if ( ! $ok ) {
@@ -1107,6 +1141,9 @@ add_action( 'rest_api_init', function () {
 			$feeds = GFAPI::get_feeds( array( $id ), null, null, null );
 			if ( is_wp_error( $feeds ) || empty( $feeds ) ) {
 				return new WP_Error( 'not_found', __( 'Feed not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( ! minn_admin_gf_can_manage_feed( reset( $feeds ) ) ) {
+				return new WP_Error( 'forbidden', __( 'You cannot manage this add-on\'s feeds.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			$deleted = GFAPI::delete_feed( $id );
 			if ( is_wp_error( $deleted ) ) {

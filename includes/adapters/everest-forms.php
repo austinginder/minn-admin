@@ -42,6 +42,10 @@ function minn_admin_everest_can( $cap = 'view' ) {
 	if ( 'delete' === $cap ) {
 		return current_user_can( 'everest_forms_delete_entries' );
 	}
+	if ( 'edit' === $cap ) {
+		return current_user_can( 'everest_forms_edit_entries' )
+			|| current_user_can( 'everest_forms_edit_others_entries' );
+	}
 	return current_user_can( 'everest_forms_view_entries' )
 		|| current_user_can( 'everest_forms_view_others_entries' );
 }
@@ -826,15 +830,19 @@ add_action( 'rest_api_init', function () {
 		'spam'    => 'spam',
 		'unspam'  => 'unspam',
 	) as $slug => $op ) {
+		// Everest's own screen restores from trash under the edit meta cap
+		// and trashes/deletes under the delete one (class-evf-admin-entries.php
+		// untrash_entry vs trash_entry).
+		$need = 'restore' === $slug ? 'edit' : 'delete';
 		register_rest_route( 'minn-admin/v1', '/everest/entries/(?P<id>\d+)/' . $slug, array(
 			'methods'             => 'POST',
-			'permission_callback' => function () {
-				return minn_admin_everest_can( 'delete' );
+			'permission_callback' => function () use ( $need ) {
+				return minn_admin_everest_can( $need );
 			},
-			'callback'            => function ( WP_REST_Request $request ) use ( $op, $slug ) {
+			'callback'            => function ( WP_REST_Request $request ) use ( $op, $slug, $need ) {
 				global $wpdb;
 				$id    = (int) Minn_Admin::path_param( $request );
-				$guard = minn_admin_everest_guard_entry( $id, 'delete' );
+				$guard = minn_admin_everest_guard_entry( $id, $need );
 				if ( is_wp_error( $guard ) ) {
 					return $guard;
 				}

@@ -26,6 +26,12 @@ function minn_admin_bookly_active() {
 }
 
 function minn_admin_bookly_can_read() {
+	// Bookly's staff lookup matches wp_user_id against the current user id
+	// with no logged-in check of its own; a staff row that ever stored 0
+	// instead of NULL would match an anonymous caller.
+	if ( ! is_user_logged_in() ) {
+		return false;
+	}
 	if ( class_exists( '\Bookly\Lib\Utils\Common' ) ) {
 		if ( \Bookly\Lib\Utils\Common::isCurrentUserSupervisor() ) {
 			return true;
@@ -38,6 +44,9 @@ function minn_admin_bookly_can_read() {
 }
 
 function minn_admin_bookly_can_write() {
+	if ( ! is_user_logged_in() ) {
+		return false;
+	}
 	if ( class_exists( '\Bookly\Lib\Utils\Common' ) ) {
 		if ( \Bookly\Lib\Utils\Common::isCurrentUserSupervisor() ) {
 			return true;
@@ -66,6 +75,9 @@ function minn_admin_bookly_has_tables() {
  * @return int[] Empty = all; [-1] = none.
  */
 function minn_admin_bookly_staff_scope() {
+	if ( ! is_user_logged_in() ) {
+		return array( -1 );
+	}
 	if ( class_exists( '\Bookly\Lib\Utils\Common' ) && \Bookly\Lib\Utils\Common::isCurrentUserSupervisor() ) {
 		return array();
 	}

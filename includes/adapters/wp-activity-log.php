@@ -21,15 +21,28 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * WSAL restricts log viewing via its own settings (only_me / only_admins /
- * extra users+roles) — defer to its resolver when present, manage_options
- * otherwise. Used by both the descriptor gate and the shim permissions.
+ * extra users+roles): defer to its resolver, the 4.6+ helper or the legacy
+ * settings object. Without either the answer is no, never manage_options:
+ * an owner who set only_me would otherwise be overruled by every other
+ * administrator on a build Minn does not recognize. Used by both the
+ * descriptor gate and the shim permissions.
  */
 function minn_admin_wsal_can_view() {
 	if ( class_exists( '\WSAL\Helpers\Settings_Helper' )
 		&& method_exists( '\WSAL\Helpers\Settings_Helper', 'current_user_can' ) ) {
 		return (bool) \WSAL\Helpers\Settings_Helper::current_user_can( 'view' );
 	}
-	return current_user_can( 'manage_options' );
+	if ( class_exists( 'WpSecurityAuditLog' ) && method_exists( 'WpSecurityAuditLog', 'settings' ) ) {
+		try {
+			$settings = WpSecurityAuditLog::settings();
+			if ( is_object( $settings ) && method_exists( $settings, 'current_user_can' ) ) {
+				return (bool) $settings->current_user_can( 'view' );
+			}
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+	return false;
 }
 
 function minn_admin_wsal_admin_url() {

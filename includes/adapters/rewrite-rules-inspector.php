@@ -353,10 +353,14 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $perm,
 		'callback'            => function () {
-			// Honor their flushing_enabled filter/flag when the plugin object is up.
+			// Honor their flushing_enabled flag. The vendor applies its
+			// rri_flushing_enabled filter only inside is_admin(), so under REST
+			// the property still holds its default; apply the filter here the
+			// way its init does, or a site's opt-out would be ignored.
 			global $rewrite_rules_inspector;
-			if ( is_object( $rewrite_rules_inspector ) && isset( $rewrite_rules_inspector->flushing_enabled )
-				&& ! $rewrite_rules_inspector->flushing_enabled ) {
+			$enabled = is_object( $rewrite_rules_inspector ) && isset( $rewrite_rules_inspector->flushing_enabled )
+				? (bool) $rewrite_rules_inspector->flushing_enabled : true;
+			if ( ! apply_filters( 'rri_flushing_enabled', $enabled ) ) {
 				return new WP_Error( 'forbidden', __( 'Rewrite rule flushing is disabled.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			minn_admin_rri_flush();
