@@ -117,7 +117,12 @@ Expand only the part of Minn you want to explore.
   Orders, products and customers carry **right-click menus** for
   the common moves (status changes, stock and publish toggles, email, jump to a customer's orders).
   Invoice / packing-slip downloads when PDF Invoices & Packing Slips is active. Product, coupon and
-  subscription CPTs are fenced out of Content.
+  subscription CPTs are fenced out of Content. **Store settings**: every settings page WooCommerce
+  registers (General, Products, Tax, Shipping, Accounts & Privacy, Emails, Page setup, Features,
+  and any extension's page) read from WooCommerce's own settings registry and saved through its own
+  save pipeline, plus **Payments** (checkout order, on/off, each method's settings), **Shipping
+  zones and classes**, **Tax rates** per class with CSV export, **Webhooks** and **REST API keys**
+  (secret shown once, WooCommerce's owner rule on edit and revoke).
 - **Users** — directory with search, a role filter, create/edit users, roles, passwords,
   **bulk role change**, **per-user login sessions with one-click sign-out**, **Switch to
   this user** when the User Switching plugin is active (a switched session shows a **Switch
@@ -173,7 +178,11 @@ Expand only the part of Minn you want to explore.
   themes), **right-click menus** on plugin and theme cards
   (Activate, Update, Delete, Open on WordPress.org or GitHub, Copy file), a **Translations**
   tab that lists every installed language and can remove one nothing uses, and a
-  **Licenses** tab (below)
+  **Licenses** tab (below). Every plugin and theme card's version number opens its
+  **changelog** (WordPress.org, a vendor update server, or the changelog the plugin ships), an
+  active plugin's card carries **doorways** to every Minn view built on it and to its own
+  wp-admin screen, and the provider name on a plugin-backed view opens the same menu the
+  other way
 - **Structure** — post types, taxonomies and terms on one page. See every registered post type
   and taxonomy and manage definitions through whoever owns them (ACF, Custom Post Type UI, or
   Minn's own store when neither is active; code-registered ones shown read-only), and a full
@@ -393,6 +402,13 @@ Expand only the part of Minn you want to explore.
   and percent on every route, a modal offers Stop through the plugin's own abort, and the job
   survives a reload. Every finished row carries **Download**, streamed from the plugin's own
   backup folder through a nonce-checked `admin-post` door, so nothing has to be web-readable
+- **Agent Access** — with **Novamira** (the MCP server that lets Claude, Codex, Cursor and other
+  agents work inside WordPress): a status card (abilities on/off, connections, abilities exposed,
+  the endpoint to copy), every credential that can reach the site (OAuth apps, client ids,
+  application passwords) with Revoke through the plugin's own revocation, and one switch per
+  registered ability grouped by category, saved into Novamira's own rules; tokens never appear.
+  With **Novamira Pro**: license state and activation from the Licenses tab, and a **Memory**
+  view of what agents remember between sessions
 
 </details>
 
@@ -405,8 +421,11 @@ Expand only the part of Minn you want to explore.
   No Thanks** and ThemeIsle-style dismiss links run in the background (not a new wp-admin tab),
   and any notice can be hidden with Undo. Each update offer has its own **Update → version**
   button; the Updates tab also pins **Update everything** (plugins, themes and core in one
-  click, poll-verified core). A pending WordPress update also shows as an amber topbar chip and
-  Overview banner
+  click, poll-verified core). Plugins run as **one batch** the way `wp plugin update --all`
+  does, with packages prefetched side by side and a panel that reports every plugin's
+  download, extract and install like a package manager, keeps moving through WordPress's
+  maintenance-mode window, and installs nothing Minn's own checksum check refused. A pending
+  WordPress update also shows as an amber topbar chip and Overview banner
 - **Command palette** — ⌘K / Ctrl-K everywhere, and it **finds your content**: type anything to
   see your posts, pages and CPTs (drafts and scheduled included) under the command matches, and
   Enter opens the Minn editor. Site-care actions built in: **Clear site cache** purges every

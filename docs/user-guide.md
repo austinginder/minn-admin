@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.40.0. This file ships inside the plugin, so the copy you
+*Current as of v0.41.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -260,7 +260,9 @@ away:
   only updates when you press Update. A crash net keeps a local copy of
   unsaved work in your browser and offers to restore it. A live post
   holding edits you never published wears a small amber dot on its status
-  in the content list, and the Modified filter there shows only those.
+  in the content list, and the Modified filter there shows only those
+  (the filter spans every author, so it is offered to people who may edit
+  others' posts).
 - **History** shows revisions with side-by-side comparisons, and a
   revision also reports what changed in the custom fields, so a page
   whose edits all live in ACF fields no longer claims to be identical.
@@ -378,7 +380,15 @@ Minn's interface.
 **Updates**: the Updates tab shows everything pending, and **Update
 everything** runs plugins, then themes, then any waiting translations, then
 WordPress core, telling you exactly what will change and what is untouched
-before it starts. Translations are worth calling out because WordPress keeps
+before it starts. Plugins run as one batch, the way the command line does
+it, and a panel reports it the way a package manager would: every plugin on
+its own line with its old and new version, packages fetched several at a
+time before anything installs, then Extracting, Installing and a tick moving
+down the list, and a closing line with the totals. Hide the panel and the
+batch keeps running; a chip in the top bar counts it down and reopens it.
+While WordPress holds the site in maintenance mode for a plugin swap, the
+panel keeps moving and says so rather than going blank, and a package is
+only ever installed after Minn's own checksum check has accepted it. Translations are worth calling out because WordPress keeps
 language packs apart from everything else: a site can be current on plugins,
 themes and core and still owe translations, so they are counted here rather
 than left for the WordPress updates screen to mention. While a
@@ -411,6 +421,22 @@ explanation instead of numbers.
 "Clear site cache" purges all of them at once. If a backup plugin is
 installed, "Back up site now" is there too, and the System page reports
 how fresh your last backup is.
+
+**Agent Access**: on a site running Novamira (the MCP server that lets
+Claude, Codex, Cursor and other agents work inside WordPress), Tools gains
+an Agent Access view. Its card says whether AI abilities are on, how many
+connections exist, how many abilities an agent may call, and the endpoint
+to copy, with a switch to turn abilities on or off. Connections lists every
+credential that can reach the site (OAuth apps, client ids, Novamira
+application passwords) with when it was made, last used and expires, and
+Revoke on each, run through the plugin's own revocation. Abilities opens on
+the Context tab holding the instructions every agent session reads, then
+one switch per ability grouped by category, saved into Novamira's own
+rules, and an agent cannot switch a disabled ability back on for itself.
+Tokens and passwords never appear. With Novamira Pro, the card reports the
+license (activated from Extensions → Licenses) and a Memory view lists what
+agents remember between sessions, with edit and delete. Connecting a
+client, Chat, Design and Skills stay on Novamira's screens.
 
 Many plugin pages open with a card that charts the last fourteen days:
 mail providers draw sent and failed, forms providers draw entries, and
@@ -624,6 +650,32 @@ group.
   Two jobs stay in WooCommerce on purpose: creating a brand new store-wide
   attribute, which belongs to the whole shop rather than to one product,
   and the children of a grouped product.
+- **Store settings** is the last item in the Commerce group, for anyone
+  who can manage WooCommerce. It carries a section for each page
+  WooCommerce registers (General, Products, Tax, Shipping, Accounts &
+  Privacy, Emails, Page setup, Features, and any extension's own page,
+  Subscriptions included), read from WooCommerce's settings registry, so a
+  new extension's settings appear without waiting for Minn. Countries pick
+  from a searchable list, the store location is one country-and-state
+  box, pages are pickers, and saves run through WooCommerce's own save
+  pipeline, so its rules and every extension listening for a save still
+  apply; a switch you did not touch is never flipped. **Emails** lists
+  every email the store sends with an on/off switch and an Edit for its
+  recipient, subject, heading and format. **Payments** lists the methods
+  in checkout order: drag to reorder, switch on or off in place, open one
+  for its title, instructions and settings; adding a provider and
+  WooPayments onboarding link to WooCommerce. **Shipping** shows the zones
+  in the order they are tried, with a zone editor for regions, postcodes
+  and the zone's methods, and shipping classes beside them. **Tax rates**
+  get a section per tax class, with add, edit, reorder, delete and a CSV
+  export in WooCommerce's own layout. Under Advanced, **Webhooks** and
+  **REST API keys** are managed in place; a new key's consumer key and
+  secret are shown once, the way WooCommerce shows them, and never kept
+  by Minn. Editing or revoking a key follows WooCommerce's own rule: you
+  must be able to edit the person the key acts as, or it must be yours.
+  The few controls that are WooCommerce's own React app (email preview,
+  Blueprint, local pickup for block checkout, webhook deliveries) count
+  as locked and link across.
 
 ## Managing the site
 
@@ -636,9 +688,17 @@ group.
   something already installed shows what is installed against what you
   uploaded and offers to replace it, files swapped, settings and content
   untouched. Toggle, update and
-  delete with plain confirmations. A plugin with an update waiting shows a
-  "What's new" link that opens the plugin's own release notes, one version
-  at a time, so you can read what changes before you run it. Every plugin and theme card carries an
+  delete with plain confirmations. The version number on every plugin and
+  theme card opens its changelog, one release per chip with the one you
+  are running marked, whether or not an update is pending; a card with an
+  update waiting also shows a "What's new" link with the installed and
+  offered versions named above the notes, so you can read what changes
+  before you run it. An active plugin's card carries a row of doorways:
+  chips for every Minn view built on it (Forms for Gravity Forms, Store
+  settings for WooCommerce, its Licenses row) and its own screen in
+  wp-admin for whatever Minn does not cover yet; the right-click menu
+  lists every screen the plugin has, and the provider name in the top bar
+  of a plugin-backed view opens the same menu the other way. Every plugin and theme card carries an
   Auto pill for WordPress automatic updates, the same setting wp-admin
   manages, and inactive themes offer a Live preview so you can walk the
   site in a candidate theme before switching. The Licenses tab
@@ -651,7 +711,10 @@ group.
   rather than licenses.
 - **Users** — create, edit, change roles in bulk, reset passwords, sign
   out sessions, and (with the User Switching plugin) switch into an
-  account to see what they see. Opening a user is a full page: identity,
+  account to see what they see. Where each session came from (its address,
+  browser and sign-in time) is shown to administrators and to the account
+  holder; a role that may merely edit the user sees the count and the
+  sign-out buttons. Opening a user is a full page: identity,
   public profile, language, password and sessions, plus their Minn
   appearance. An administrator can set another user's color scheme and
   defaults there, so a client's Minn looks right before their first
@@ -759,7 +822,10 @@ group.
   to that type's content, start a new item, manage a taxonomy's terms, or
   remove an editable definition. Entries only appear where they can
   actually work. Removing a definition asks first, and spells out that
-  existing content and terms stay in the database.
+  existing content and terms stay in the database. A new type or taxonomy
+  cannot take a name WordPress already uses for itself (order, author,
+  type and the other query words), because a definition under one of those
+  breaks the site's own queries the moment it exists.
 - **Database** — a window into where your site actually stores things.
   Most sites never need it, so it is not in the sidebar: you reach it from
   the System page's Database card, the command palette ("Browse database"),
@@ -775,7 +841,11 @@ group.
 
   Two things are true of all of it. It is **read-only**: Minn will never
   change or delete anything in the database, because doing so behind a
-  plugin's back is how sites break in ways nobody can trace. And where a
+  plugin's back is how sites break in ways nobody can trace. Credentials
+  are described rather than shown: password hashes, pending reset keys,
+  sign-in session tokens, application-password hashes and WooCommerce API
+  secrets appear as a placeholder with their size, in the list and in the
+  row detail. And where a
   Health check finds something worth cleaning up, Minn gives you the exact
   command to run rather than a button that runs it: copy it, back up, and
   run it yourself or hand it to whoever looks after the site. If you need
