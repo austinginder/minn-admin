@@ -47169,7 +47169,6 @@
 			} )
 			.catch( ( e ) => {
 				if ( ! mine() ) return;
-				console.error( 'changelog render failed', e );
 				state.modal.md = '';
 				state.modal.sections = [];
 				state.modal.error = e.message;
