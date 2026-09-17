@@ -44195,6 +44195,8 @@
 			// Notes read from the installed copy (a theme's changelog.txt)
 			// stop at the installed release; say so when an update is on
 			// offer instead of letting the reader hunt for its entry.
+			// "1.0" in the file and "1.0.0" in the header are the same release.
+			const verKey = ( v ) => String( v || '' ).replace( /^v(ersion)?\s*/i, '' ).split( /\s/ )[ 0 ].replace( /(\.0)+$/, '' );
 			const plBehind = pl && pl.offered && pl.from === 'local' && secs.length && ! secs.some( ( s ) => verKey( s.version ) === verKey( pl.offered ) );
 			const plMeta = pl && pl.installed ? `<div class="minn-cl-meta">${ esc( pl.offered ? sprintf(
 				/* translators: %1$s: installed version, %2$s: version on offer. */
@@ -44203,8 +44205,6 @@
 				: sprintf( __( 'Installed %s' ), 'v' + pl.installed ) ) }${ plBehind ? ` · ${ esc( sprintf( /* translators: %s: the version on offer. */ __( 'notes for %s arrive with the update' ), 'v' + pl.offered ) ) }` : '' }${ pl.notice ? ` · <span class="minn-cl-notice">${ esc( pl.notice ) }</span>` : '' }</div>` : '';
 			// The rail marks the release that is running so the reader can
 			// see at a glance which entries are behind them.
-			// "1.0" in the file and "1.0.0" in the header are the same release.
-			const verKey = ( v ) => String( v || '' ).replace( /^v(ersion)?\s*/i, '' ).split( /\s/ )[ 0 ].replace( /(\.0)+$/, '' );
 			const plRunning = ( s ) => !! ( pl && pl.installed && verKey( s.version ) === verKey( pl.installed ) );
 			const plEmpty = pl && m.md !== null && ! secs.length ? `
 					<div class="minn-cl-empty">
@@ -47081,12 +47081,15 @@
 		const file = seed.file;
 		state.modal = { type: 'changelog', plugin: Object.assign( { installed: '', url: '', source: '', notice: '' }, seed ), md: null, sections: null, sec: 0 };
 		renderOverlays();
-		const mine = () => state.modal && state.modal.type === 'changelog' && state.modal.plugin && state.modal.plugin.file === file;
+		// The server answers with the ".php" form of the file; compare on
+		// the app's id so a merged payload never changes what "mine" means.
+		const sameFile = ( a, b ) => String( a || '' ).replace( /\.php$/, '' ) === String( b || '' ).replace( /\.php$/, '' );
+		const mine = () => state.modal && state.modal.type === 'changelog' && state.modal.plugin && sameFile( state.modal.plugin.file, file );
 		api( route )
 			.then( ( r ) => {
 				if ( ! mine() ) return;
 				const m = state.modal;
-				m.plugin = Object.assign( m.plugin, r, { name: m.plugin.name || r.name } );
+				m.plugin = Object.assign( m.plugin, r, { name: m.plugin.name || r.name, file } );
 				m.sections = Array.isArray( r.sections ) ? r.sections : [];
 				m.md = '';
 				m.sec = 0;
@@ -47094,6 +47097,7 @@
 			} )
 			.catch( ( e ) => {
 				if ( ! mine() ) return;
+				console.error( 'changelog render failed', e );
 				state.modal.md = '';
 				state.modal.sections = [];
 				state.modal.error = e.message;

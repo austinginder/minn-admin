@@ -162,6 +162,23 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		await page.keyboard.press( 'Escape' );
 		await page.waitForTimeout( 200 );
 
+		// A pending update whose notes come from the bundled file (the
+		// vendor's API answers nothing): the modal must still render, with
+		// the note that the offered release's notes arrive with the update.
+		// Admin Columns Pro is not on wp.org (its lookup fails) but ships a
+		// changelog.txt; the fixture offer makes it look pending, which is
+		// the shape that once left the modal on "Loading changelog…".
+		const LOCAL = 'admin-columns-pro/admin-columns-pro';
+		await setOpts( LOCAL + '.php', '' );
+		await page.goto( BASE + '/minn-admin/extensions', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `.minn-plugin[data-plugin="${ LOCAL }"] [data-changelog]`, { timeout: 60000 } );
+		await page.click( `.minn-plugin[data-plugin="${ LOCAL }"] [data-changelog]` );
+		await page.waitForFunction( () => document.querySelector( '.minn-cl-modal' ) && ! document.querySelector( '.minn-cl-modal .minn-loading' ), null, { timeout: 30000 } );
+		const pending = await page.evaluate( () => ( { chips: document.querySelectorAll( '.minn-cl-modal [data-clver]' ).length, meta: ( document.querySelector( '.minn-cl-meta' ) || {} ).textContent || '', empty: !! document.querySelector( '.minn-cl-empty' ) } ) );
+		t.check( 'a pending update with notes from the bundled file renders (no stuck loading state)', pending.chips > 0 && ! pending.empty, JSON.stringify( pending ) );
+		await page.click( '#minn-modal-close' );
+		await page.waitForTimeout( 200 );
+
 		// Themes tab: the version on a theme card is the same doorway.
 		await page.click( '[data-xtab="themes"]' );
 		await page.waitForSelector( '.minn-theme[data-stylesheet="twentytwentyfive"] [data-tchangelog]', { timeout: 20000 } );
