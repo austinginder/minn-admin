@@ -46,6 +46,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForSelector( '.minn-modal .minn-ac-input', { timeout: 5000 } );
 		await page.click( '.minn-modal .minn-ac-input' );
 		await page.waitForSelector( '.minn-modal .minn-ac-panel:not([hidden])', { timeout: 5000 } );
+		// The modal's entrance animation transforms it, which makes it the
+		// containing block for the fixed panel until the animation ends; the
+		// app re-places the panel on animationend, so measure after that (on a
+		// loaded machine the click lands mid-animation).
+		await page.waitForFunction( () => getComputedStyle( document.querySelector( '.minn-modal' ) ).transform === 'none', null, { timeout: 5000 } ).catch( () => {} );
+		await page.waitForTimeout( 100 );
 		const roleGeo = await page.evaluate( () => {
 			const modal = document.querySelector( '.minn-modal' );
 			const panel = document.querySelector( '.minn-modal .minn-ac-panel' );
