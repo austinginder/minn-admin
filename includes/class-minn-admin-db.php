@@ -393,6 +393,46 @@ class Minn_Admin_DB {
 	}
 
 	/**
+	 * Columns whose value is a credential rather than data: password hashes,
+	 * pending reset keys, login session tokens, application-password hashes
+	 * and REST consumer secrets. The browser is read-only and admin-only, but
+	 * a page of these is still an offline-cracking export nobody needs on
+	 * screen. Emits { redacted, bytes } so the cell says what it is holding.
+	 *
+	 * @param string   $table Table name as resolved (prefix included).
+	 * @param string   $col   Column name.
+	 * @param string[] $row   The row keyed by column name (for meta_key).
+	 * @return bool
+	 */
+	private static function is_secret_cell( $table, $col, $row ) {
+		global $wpdb;
+		$base = $table;
+		foreach ( array_unique( array( $wpdb->prefix, $wpdb->base_prefix ) ) as $prefix ) {
+			if ( '' !== $prefix && 0 === strpos( $base, $prefix ) ) {
+				$base = substr( $base, strlen( $prefix ) );
+				break;
+			}
+		}
+		// A multisite blog prefix (wp_3_) leaves the numeric part behind.
+		$base = preg_replace( '/^\d+_/', '', $base );
+		if ( 'users' === $base ) {
+			return in_array( $col, array( 'user_pass', 'user_activation_key' ), true );
+		}
+		if ( 'usermeta' === $base && 'meta_value' === $col ) {
+			$key = isset( $row['meta_key'] ) ? (string) $row['meta_key'] : '';
+			return in_array( $key, array( 'session_tokens', '_application_passwords' ), true );
+		}
+		if ( 'woocommerce_api_keys' === $base ) {
+			return in_array( $col, array( 'consumer_key', 'consumer_secret' ), true );
+		}
+		return false;
+	}
+
+	private static function redacted_cell( $value ) {
+		return array( 'redacted' => true, 'bytes' => strlen( (string) $value ) );
+	}
+
+	/**
 	 * Reduce a raw cell value to a JSON-safe payload. Serialized blobs stay
 	 * RAW text by design (the standing shim rule: never unserialize protects
 	 * even a viewer). Binary/invalid-UTF-8 values become a hex preview so
@@ -579,8 +619,10 @@ class Minn_Admin_DB {
 		$rows = array();
 		foreach ( (array) $raw as $r ) {
 			$cells = array();
-			foreach ( $r as $v ) {
-				$cells[] = self::cell( $v, self::CELL_CAP_LIST );
+			$assoc = array_combine( $names, array_slice( array_values( $r ), 0, count( $names ) ) ) ?: array();
+			foreach ( $r as $i => $v ) {
+				$col     = isset( $names[ $i ] ) ? $names[ $i ] : '';
+				$cells[] = null !== $v && '' !== (string) $v && self::is_secret_cell( $meta->name, $col, $assoc ) ? self::redacted_cell( $v ) : self::cell( $v, self::CELL_CAP_LIST );
 			}
 			$rows[] = $cells;
 		}
@@ -633,7 +675,8 @@ class Minn_Admin_DB {
 		}
 		$cells = array();
 		foreach ( $columns as $c ) {
-			$cells[] = self::cell( array_key_exists( $c['name'], $raw ) ? $raw[ $c['name'] ] : null, self::CELL_CAP_DETAIL );
+			$v       = array_key_exists( $c['name'], $raw ) ? $raw[ $c['name'] ] : null;
+			$cells[] = null !== $v && '' !== (string) $v && self::is_secret_cell( $meta->name, $c['name'], $raw ) ? self::redacted_cell( $v ) : self::cell( $v, self::CELL_CAP_DETAIL );
 		}
 		return rest_ensure_response(
 			array(

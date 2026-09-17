@@ -205,6 +205,27 @@ const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], {
 	t.check( 'Author route shows the permission message', authorView.includes( 'administrator permissions' ) );
 	await actx.close();
 
+	// Credential columns are described, never shown: the users table's
+	// password hash and the session-token meta come back as a redacted
+	// placeholder carrying only the byte count, in the list and the detail.
+	const secret = await page.evaluate( async () => {
+		const h = { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' };
+		const u = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/db/rows?table=wp_users&per_page=1', h ) ).json();
+		const names = ( u.columns || [] ).map( ( c ) => c.name );
+		const pass = ( u.rows && u.rows[ 0 ] ) ? u.rows[ 0 ][ names.indexOf( 'user_pass' ) ] : null;
+		const id = ( u.rows && u.rows[ 0 ] ) ? u.rows[ 0 ][ names.indexOf( 'ID' ) ] : null;
+		const d = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/db/row?table=wp_users&pk=' + encodeURIComponent( JSON.stringify( { ID: id } ) ), h ) ).json();
+		const dnames = ( d.columns || [] ).map( ( c ) => c.name );
+		const dpass = d.cells ? d.cells[ dnames.indexOf( 'user_pass' ) ] : null;
+		const m = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/db/rows?table=wp_usermeta&per_page=1&fcol=meta_key&fq=session_tokens', h ) ).json();
+		const mnames = ( m.columns || [] ).map( ( c ) => c.name );
+		const tok = ( m.rows && m.rows[ 0 ] ) ? m.rows[ 0 ][ mnames.indexOf( 'meta_value' ) ] : null;
+		return { pass, dpass, tok };
+	} );
+	const redacted = ( c ) => !! c && c.redacted === true && c.bytes > 0 && ! c.v && ! c.hex;
+	t.check( 'users.user_pass is redacted in the list and the row detail', redacted( secret.pass ) && redacted( secret.dpass ), JSON.stringify( [ secret.pass, secret.dpass ] ) );
+	t.check( 'usermeta session_tokens value is redacted', redacted( secret.tok ), JSON.stringify( secret.tok ) );
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
 	console.error( e );

@@ -25124,6 +25124,10 @@
 	function dbCellInfo( cell ) {
 		if ( cell === null ) return { text: 'NULL', cls: 'null' };
 		if ( typeof cell === 'string' ) return { text: cell, cls: '' };
+		if ( cell.redacted ) {
+			/* translators: %s: human-readable byte size of a credential the database browser does not display. */
+			return { text: sprintf( __( '(credential, %s, not shown)' ), dbBytes( cell.bytes ) ), cls: 'null' };
+		}
 		if ( cell.hex ) {
 			/* translators: %s: human-readable byte size of a binary database value. */
 			return { text: '0x' + cell.hex.slice( 0, 24 ) + '… ' + sprintf( __( '(%s binary)' ), dbBytes( cell.bin ) ), cls: 'bin' };

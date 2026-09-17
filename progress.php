@@ -35,7 +35,10 @@ if ( ! preg_match( '/^[a-f0-9]{40}$/', $token ) ) {
 $script  = isset( $_SERVER['SCRIPT_FILENAME'] ) ? (string) $_SERVER['SCRIPT_FILENAME'] : '';
 $content = dirname( ( '' !== $script && is_file( $script ) ) ? $script : __FILE__, 3 );
 $file    = $content . '/minn-admin-progress/' . $token . '.json';
-$raw     = is_file( $file ) ? file_get_contents( $file ) : false; // phpcs:ignore WordPress.WP.AlternativeFunctions
+// A record outlives its batch by an hour at most: the token rides a GET
+// query string, so it lands in browser history and access logs, and a
+// stale record would otherwise stay readable to any later holder.
+$raw     = is_file( $file ) && filemtime( $file ) > time() - 3600 ? file_get_contents( $file ) : false; // phpcs:ignore WordPress.WP.AlternativeFunctions
 if ( false === $raw || '' === $raw ) {
 	echo '{"known":false}';
 	exit;

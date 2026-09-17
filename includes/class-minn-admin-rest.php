@@ -10717,6 +10717,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				if ( ! file_exists( $dir . '/index.php' ) ) {
 					file_put_contents( $dir . '/index.php', "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 				}
+				// progress.php is the one reader (it enforces the token shape
+				// and the record's age); the records themselves are not for
+				// the web server to hand out as static files. Apache honors
+				// this; nginx sites need the matching location rule.
+				if ( ! file_exists( $dir . '/.htaccess' ) ) {
+					file_put_contents( $dir . '/.htaccess', "<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nOrder deny,allow\nDeny from all\n</IfModule>\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				}
 				// Records older than an hour are leftovers from batches
 				// whose client never came back for the final read.
 				foreach ( (array) glob( $dir . '/*.json' ) as $old ) {
