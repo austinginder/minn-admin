@@ -36,6 +36,22 @@ function minn_admin_novamira_can() {
 	return minn_admin_novamira_active() && current_user_can( novamira_manage_capability() );
 }
 
+/**
+ * Whether the current REST request targets one of this adapter's own routes.
+ * Reads the route core resolved for the request (pretty and plain permalinks
+ * both land in the rest_route query var by the time rest_api_init fires) and
+ * requires it to START with the adapter's namespace path, so no other route
+ * can claim the Hub exemption by naming the path elsewhere in the URL.
+ */
+function minn_admin_novamira_lifts_policy() {
+	$route = isset( $GLOBALS['wp']->query_vars['rest_route'] ) ? (string) $GLOBALS['wp']->query_vars['rest_route'] : '';
+	if ( '' === $route ) {
+		return false;
+	}
+	$route = '/' . ltrim( $route, '/' );
+	return 0 === strpos( $route, '/minn-admin/v1/novamira/' );
+}
+
 function minn_admin_novamira_oauth_ready() {
 	return false !== get_option( 'novamira_oauth_schema_version', false );
 }
@@ -663,12 +679,16 @@ add_action( 'rest_api_init', function () {
 	// listing here would lose the switched-off rows and their labels. The Hub
 	// exempts itself by screen; these routes are that screen's equivalent, so
 	// the policy is lifted for them alone, before the Abilities API first
-	// initializes in this request.
-	$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-	if ( false !== strpos( $uri, 'minn-admin/v1/novamira/' ) && function_exists( 'novamira_apply_ability_policy' ) ) {
+	// initializes in this request. The match is the RESOLVED route with a
+	// strict prefix, never REQUEST_URI: that string carries the query, so a
+	// request to the MCP server or an ability's own run route could name this
+	// path in a query arg and lift the owner's kill-switch for itself. The
+	// lift also needs the vendor's manage capability, the same gate every
+	// route below carries.
+	$perm = 'minn_admin_novamira_can';
+	if ( minn_admin_novamira_lifts_policy() && function_exists( 'novamira_apply_ability_policy' ) && $perm() ) {
 		remove_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy', PHP_INT_MAX );
 	}
-	$perm = 'minn_admin_novamira_can';
 
 	register_rest_route( 'minn-admin/v1', '/novamira/status', array(
 		'methods'             => 'GET',

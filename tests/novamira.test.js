@@ -8,7 +8,30 @@
  * creates and revokes one application password, flips one ability rule and
  * restores it, and turns abilities on then back off.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { execSync } = require( 'child_process' );
+const fs = require( 'fs' );
+const os = require( 'os' );
+const path = require( 'path' );
+const { BASE, WP, launch, login, reporter } = require( './helpers' );
+
+// Runs PHP inside WordPress as the admin; retries the dropped-socket class.
+const evalPhp = ( php ) => {
+	const file = path.join( os.tmpdir(), `minn-novamira-${ process.pid }.php` );
+	fs.writeFileSync( file, '<?php ' + php );
+	try {
+		for ( let attempt = 1; attempt <= 4; attempt++ ) {
+			try {
+				return execSync( `wp --path=${ JSON.stringify( WP ) } eval-file ${ JSON.stringify( file ) } --user=admin 2>/dev/null`, { encoding: 'utf8', timeout: 60000 } ).trim();
+			} catch ( e ) {
+				if ( attempt === 4 ) return ( e.stdout || '' ).trim();
+				execSync( 'sleep 3' );
+			}
+		}
+	} finally {
+		try { fs.unlinkSync( file ); } catch ( e ) { /* ignore */ }
+	}
+	return '';
+};
 
 ( async () => {
 	const t = reporter( 'novamira' );
@@ -118,6 +141,30 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '.minn-plugin[data-plugin="novamira/novamira"] [data-mdoor]', { timeout: 60000 } );
 		const chips = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-plugin[data-plugin="novamira/novamira"] [data-mdoor]' ) ].map( ( b ) => b.textContent.trim() ) );
 		t.check( 'plugin card carries the Agent Access chip', chips.includes( 'Agent Access' ), JSON.stringify( chips ) );
+
+		// The Hub exemption lifts Novamira's ability policy for this adapter's
+		// own routes only. A request to the MCP server (or an ability's run
+		// route) that merely names the path in its query string must leave
+		// the owner's kill-switch enforced.
+		const lift = evalPhp( `
+			$out = array();
+			foreach ( array(
+				'mcp'     => array( '/wp-json/mcp/novamira?x=minn-admin/v1/novamira/', 'mcp/novamira' ),
+				'run'     => array( '/wp-json/wp-abilities/v1/novamira/execute-php/run?minn-admin/v1/novamira/', 'wp-abilities/v1/novamira/execute-php/run' ),
+				'genuine' => array( '/wp-json/minn-admin/v1/novamira/status', 'minn-admin/v1/novamira/status' ),
+			) as $k => $c ) {
+				$_SERVER['REQUEST_URI'] = $c[0];
+				$GLOBALS['wp']->query_vars['rest_route'] = '/' . $c[1];
+				add_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy', PHP_INT_MAX );
+				do_action( 'rest_api_init', rest_get_server() );
+				$out[ $k ] = false !== has_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy' );
+			}
+			echo wp_json_encode( $out );
+		` );
+		let liftState = null;
+		try { liftState = JSON.parse( lift.split( '\n' ).pop() ); } catch ( e ) { /* reported below */ }
+		t.check( 'ability policy stays enforced for a poisoned MCP or run request', !! liftState && liftState.mcp === true && liftState.run === true, lift.slice( -200 ) );
+		t.check( 'ability policy lifts for the adapter\'s own route as an admin', !! liftState && liftState.genuine === false, lift.slice( -200 ) );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {
