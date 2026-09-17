@@ -215,6 +215,18 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 		t.check( 'gateway title round-trips via wc/v3', ( await rest( 'wc/v3/payment_gateways/cod' ) ).body.title === 'Cash via Minn' );
 		await rest( 'minn-admin/v1/wc/payment_gateways/cod', { method: 'POST', body: JSON.stringify( { values: { title: codTitle } } ) } );
 		t.check( 'gateway title restores', ( await rest( 'wc/v3/payment_gateways/cod' ) ).body.title === codTitle );
+		// A one-field save must carry the gateway's OWN stored values for every
+		// untouched field. The object keeps them on itself, not in wp_options
+		// under the bare key, so a reader that fell through to get_option()
+		// would post defaults back: the gateway switched off and its
+		// credentials blanked by a title edit.
+		const codBefore = ( await rest( 'wc/v3/payment_gateways/cod' ) ).body;
+		const codInstr = codBefore.settings.instructions.value;
+		await rest( 'wc/v3/payment_gateways/cod', { method: 'POST', body: JSON.stringify( { enabled: true, settings: { instructions: 'Minn custom instructions' } } ) } );
+		await rest( 'minn-admin/v1/wc/payment_gateways/cod', { method: 'POST', body: JSON.stringify( { values: { title: codTitle } } ) } );
+		const codAfter = ( await rest( 'wc/v3/payment_gateways/cod' ) ).body;
+		t.check( 'one-field gateway save keeps the untouched enabled flag and instructions', codAfter.enabled === true && codAfter.settings.instructions.value === 'Minn custom instructions', JSON.stringify( [ codAfter.enabled, codAfter.settings.instructions.value ] ) );
+		await rest( 'wc/v3/payment_gateways/cod', { method: 'POST', body: JSON.stringify( { enabled: codBefore.enabled, settings: { instructions: codInstr } } ) } );
 
 		// Drag the first row below the last one (real mouse drag over HTML5 dnd).
 		await page.waitForSelector( '.minn-store-gateway', { timeout: 20000 } );
@@ -375,6 +387,28 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 			return r.status;
 		}, secret );
 		t.check( 'the new key authenticates against wc/v3', probe === 200, String( probe ) );
+		// WooCommerce's Keys screen lets a caller edit or revoke a key only
+		// when they can edit its owner or it is their own. A shop manager
+		// holds manage_woocommerce but not edit_user on an administrator, so
+		// the admin's key must be out of reach while their own is not.
+		if ( keyRow ) {
+			const mgr = await loginAs( browser, 'minn-shopmgr', 'minn-shopmgr-pass-1' );
+			await mgr.page.goto( `${ BASE }/minn-admin/`, { waitUntil: 'domcontentloaded' } );
+			await mgr.page.waitForSelector( '#minn-nav-workspace', { state: 'attached', timeout: 20000 } );
+			const mrest = ( path, opts ) => mgr.page.evaluate( async ( a ) => {
+				const r = await fetch( window.MINN.restUrl + a.path, Object.assign( { credentials: 'same-origin', headers: Object.assign( { 'X-WP-Nonce': window.MINN.nonce }, a.opts && a.opts.body ? { 'Content-Type': 'application/json' } : {} ) }, a.opts || {} ) );
+				let body = null; try { body = await r.json(); } catch ( e ) {}
+				return { status: r.status, body };
+			}, { path, opts } );
+			const steal = await mrest( `minn-admin/v1/wc/api-keys/${ keyRow.id }`, { method: 'POST', body: JSON.stringify( { description: 'Minn key', user: await mgr.page.evaluate( () => window.MINN.user.id ), permissions: 'read_write' } ) } );
+			const kill = await mrest( `minn-admin/v1/wc/api-keys/${ keyRow.id }`, { method: 'DELETE' } );
+			const still = ( await rest( 'minn-admin/v1/wc/api-keys' ) ).body.keys.find( ( k ) => k.id === keyRow.id );
+			t.check( 'shop manager cannot reassign or revoke an administrator\'s key', steal.status === 403 && kill.status === 403 && !! still && still.user === keyRow.user, JSON.stringify( [ steal.status, kill.status, still && still.user, keyRow.user ] ) );
+			const own = await mrest( 'minn-admin/v1/wc/api-keys', { method: 'POST', body: JSON.stringify( { description: 'Minn key', permissions: 'read' } ) } );
+			const ownDel = own.status === 200 && own.body && own.body.id ? await mrest( `minn-admin/v1/wc/api-keys/${ own.body.id }`, { method: 'DELETE' } ) : { status: 0 };
+			t.check( 'shop manager creates and revokes their own key', own.status === 200 && ownDel.status === 200, JSON.stringify( [ own.status, ownDel.status ] ) );
+			await mgr.ctx.close();
+		}
 		if ( keyRow ) {
 			page.once( 'dialog', ( dlg ) => dlg.accept() );
 			await page.click( `[data-keydel="${ keyRow.id }"]` );

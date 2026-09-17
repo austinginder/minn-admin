@@ -236,7 +236,11 @@ function minn_admin_wc_settings_current( $f ) {
 	if ( isset( $f['is_option'] ) && false === $f['is_option'] ) {
 		return isset( $f['value'] ) ? $f['value'] : '';
 	}
-	if ( isset( $f['value'] ) && ! isset( $f['id'] ) ) {
+	if ( isset( $f['value'] ) && ( ! isset( $f['id'] ) || ! empty( $f['minn_object'] ) ) ) {
+		// A WC_Settings_API field (email, gateway, shipping instance) keeps
+		// its value on the object, never in wp_options under the bare key;
+		// the builders read it through the object and mark the field so it
+		// is never resolved against a global option of the same name.
 		return $f['value'];
 	}
 	$default = isset( $f['default'] ) ? $f['default'] : '';
@@ -944,7 +948,8 @@ function minn_admin_wc_settings_api_schema( $obj, $admin_url, $fields = null, $r
 		if ( ! isset( $wf['desc_tip'] ) ) {
 			$wf['desc_tip'] = true;
 		}
-		$wf['value'] = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
+		$wf['value']       = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
+		$wf['minn_object'] = true;
 		unset( $wf['is_option'] );
 		$mapped = minn_admin_wc_settings_map_field( $wf, $values );
 		if ( null === $mapped ) {
@@ -990,8 +995,10 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited, $fields = null, $r
 		$wf          = $f;
 		$wf['id']    = (string) $key;
 		$wf['type']  = $type;
-		$wf['value'] = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
-		$one         = minn_admin_wc_settings_post_data( array( $wf ), $edited );
+		$wf['value']       = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
+		$wf['minn_object'] = true;
+		unset( $wf['is_option'] );
+		$one               = minn_admin_wc_settings_post_data( array( $wf ), $edited );
 		foreach ( $one as $k => $v ) {
 			$post[ $obj->get_field_key( $k ) ] = $v;
 		}
@@ -1306,6 +1313,22 @@ function minn_admin_wc_api_key_users( $q ) {
 }
 
 /**
+ * The Keys screen's ownership rule for an EXISTING key: the caller may edit
+ * or revoke it only when they can edit its owner, or it is their own. The
+ * screen applies this on edit-key and revoke-key, so a shop manager (who
+ * holds manage_woocommerce but not edit_user on an administrator) cannot
+ * take over or kill an administrator's integration key.
+ *
+ * @param int $key_id Key row id.
+ * @return bool
+ */
+function minn_admin_wc_api_key_owned( $key_id ) {
+	global $wpdb;
+	$owner = (int) $wpdb->get_var( $wpdb->prepare( "SELECT user_id FROM {$wpdb->prefix}woocommerce_api_keys WHERE key_id = %d", absint( $key_id ) ) );
+	return $owner > 0 && ( current_user_can( 'edit_user', $owner ) || get_current_user_id() === $owner );
+}
+
+/**
  * Create or update a key the way WC_AJAX::update_api_key does: the same
  * hash, the same truncated key, the same ownership rule. The consumer key
  * and secret are returned once on create and never stored by Minn.
@@ -1327,6 +1350,9 @@ function minn_admin_wc_api_key_save( $key_id, $body ) {
 	}
 	if ( ! current_user_can( 'edit_user', $user_id ) && get_current_user_id() !== $user_id ) {
 		return new WP_Error( 'minn_wc_key_user', __( 'You do not have permission to assign API keys to that user.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+	if ( $key_id && ! minn_admin_wc_api_key_owned( $key_id ) ) {
+		return new WP_Error( 'minn_wc_key_user', __( 'You do not have permission to edit this API key.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	if ( $key_id ) {
 		$wpdb->update(
@@ -2010,8 +2036,12 @@ add_action(
 					'permission_callback' => $can,
 					'callback'            => static function ( $req ) {
 						global $wpdb;
-						// Revoke = the Keys screen's remove_key: the row goes, the
-						// hash with it, and any client holding the key is out.
+						// Revoke = the Keys screen's revoke_key: the same owner rule,
+						// then the row goes, the hash with it, and any client holding
+						// the key is out.
+						if ( ! minn_admin_wc_api_key_owned( absint( $req['id'] ) ) ) {
+							return new WP_Error( 'minn_wc_key_user', __( 'You do not have permission to revoke this API key.', 'minn-admin' ), array( 'status' => 403 ) );
+						}
 						$wpdb->delete( $wpdb->prefix . 'woocommerce_api_keys', array( 'key_id' => absint( $req['id'] ) ), array( '%d' ) );
 						return array( 'keys' => minn_admin_wc_api_keys() );
 					},
