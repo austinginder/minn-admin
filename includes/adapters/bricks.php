@@ -1210,6 +1210,37 @@ add_action( 'rest_api_init', function () {
 				unset( $settings['templateConditions'] );
 				update_post_meta( $new_id, BRICKS_DB_TEMPLATE_SETTINGS, wp_slash( $settings ) );
 			}
+			// The copy is a write by THIS caller. Someone without
+			// unfiltered_html must not end up owning a draft carrying the
+			// original author's raw scripts or signed Code elements, so the
+			// copy gets the same strip the import path applies: script keys
+			// off the page and template settings, and the vendor's own
+			// element security check over every tree.
+			if ( ! current_user_can( 'unfiltered_html' ) ) {
+				foreach ( array( BRICKS_DB_PAGE_SETTINGS, BRICKS_DB_TEMPLATE_SETTINGS ) as $skey ) {
+					$sv = get_post_meta( $new_id, $skey, true );
+					if ( is_array( $sv ) ) {
+						update_post_meta( $new_id, $skey, wp_slash( minn_admin_bricks_strip_unfiltered_html( $sv ) ) );
+					}
+				}
+				if ( class_exists( '\Bricks\Helpers' ) && method_exists( '\Bricks\Helpers', 'security_check_elements_before_save' ) ) {
+					foreach ( array(
+						'content' => defined( 'BRICKS_DB_PAGE_CONTENT' ) ? BRICKS_DB_PAGE_CONTENT : '_bricks_page_content_2',
+						'header'  => defined( 'BRICKS_DB_PAGE_HEADER' ) ? BRICKS_DB_PAGE_HEADER : '_bricks_page_header_2',
+						'footer'  => defined( 'BRICKS_DB_PAGE_FOOTER' ) ? BRICKS_DB_PAGE_FOOTER : '_bricks_page_footer_2',
+					) as $area => $tkey ) {
+						$tree = get_post_meta( $new_id, $tkey, true );
+						if ( is_array( $tree ) && $tree ) {
+							try {
+								$tree = \Bricks\Helpers::security_check_elements_before_save( $tree, $new_id, $area );
+								update_post_meta( $new_id, $tkey, wp_slash( $tree ) );
+							} catch ( \Throwable $e ) {
+								delete_post_meta( $new_id, $tkey );
+							}
+						}
+					}
+				}
+			}
 			foreach ( array( BRICKS_DB_TEMPLATE_TAX_TAG, BRICKS_DB_TEMPLATE_TAX_BUNDLE ) as $tax ) {
 				$terms = wp_get_object_terms( $post->ID, $tax, array( 'fields' => 'ids' ) );
 				if ( $terms && ! is_wp_error( $terms ) ) {

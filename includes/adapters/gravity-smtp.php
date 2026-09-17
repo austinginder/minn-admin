@@ -1487,10 +1487,19 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 		);
 		if ( is_array( $extra ) ) {
 			if ( isset( $extra['to'] ) && is_object( $extra['to'] ) ) {
-				$to = $extra['to'];
+				// Hand wp_mail the mailbox string, not the collection object:
+				// their pipeline reads either, but another mail plugin's
+				// wp_mail filter (WP Mail Logging's extractor) expects the
+				// string form and fatals on the object.
+				$to = method_exists( $extra['to'], 'as_string' ) ? $extra['to']->as_string( true ) : $extra['to'];
 			}
 			if ( isset( $extra['headers'] ) && is_array( $extra['headers'] ) ) {
 				$headers = $extra['headers'];
+				// Their resend drops the original cc and bcc unless the
+				// operator supplies new ones; Minn's confirm offers no such
+				// field, so a resend goes to the addressee alone rather than
+				// rebroadcasting to every copied party.
+				unset( $headers['cc'], $headers['bcc'] );
 				// Their endpoint flattens Recipient_Collections in headers
 				// to comma-joined address strings before sending.
 				foreach ( $headers as $hk => $hv ) {
@@ -1504,9 +1513,28 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 			if ( isset( $extra['source'] ) && is_string( $extra['source'] ) ) {
 				$headers['source'] = $extra['source'];
 			}
+			// Their resend attaches the copy their pipeline archived under
+			// uploads/gravitysmtp/attachments/{id}/, never the original path:
+			// a temp file at that path may since have been reused by another
+			// send. Same resolver, same fallback to nothing.
+			$saver = null;
+			try {
+				// The provider constant lives in the Gravity_Tools namespace
+				// (like the license connector), the saver itself under
+				// Gravity_SMTP.
+				if ( class_exists( 'Gravity_Forms\Gravity_Tools\Utils\Utils_Service_Provider' ) && defined( 'Gravity_Forms\Gravity_Tools\Utils\Utils_Service_Provider::ATTACHMENTS_SAVER' ) ) {
+					$saver = $container->get( Gravity_Forms\Gravity_Tools\Utils\Utils_Service_Provider::ATTACHMENTS_SAVER );
+				}
+			} catch ( \Throwable $e ) {
+				$saver = null;
+			}
 			foreach ( (array) ( isset( $extra['attachments'] ) ? $extra['attachments'] : array() ) as $path ) {
-				if ( is_string( $path ) && file_exists( $path ) ) {
-					$attachments[] = $path;
+				if ( ! is_string( $path ) || '' === $path ) {
+					continue;
+				}
+				$saved = $saver && method_exists( $saver, 'get_saved_attachment' ) ? (string) $saver->get_saved_attachment( (int) $row->id, $path ) : '';
+				if ( '' !== $saved && file_exists( $saved ) ) {
+					$attachments[] = $saved;
 				}
 			}
 		}
