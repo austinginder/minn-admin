@@ -10671,11 +10671,25 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 
 		$token = $request ? (string) $request->get_param( 'token' ) : '';
-		$progress = array( 'known' => true, 'started' => time(), 'current' => '', 'done' => array(), 'failed' => array(), 'finished' => false, 'queue' => array() );
-		$write = function () use ( &$progress, $token ) {
-			if ( '' !== $token ) {
-				set_transient( 'minn_bulk_update_' . $token, $progress, 15 * MINUTE_IN_SECONDS );
+		// The record the client paints from: a phase (check → fetch →
+		// install → done), the queue, per-plugin items {state, bytes, version,
+		// error}, and timings. States: queued, fetching, fetched, vendor (its
+		// own server downloads it during install), unpacking, installing,
+		// done, failed.
+		$t0         = microtime( true );
+		$progress   = array( 'known' => true, 'started' => time(), 'phase' => 'check', 'current' => '', 'done' => array(), 'failed' => array(), 'finished' => false, 'queue' => array(), 'items' => array(), 'timing' => array() );
+		$last_write = 0.0;
+		$write      = function ( $force = true ) use ( &$progress, $token, &$last_write ) {
+			if ( '' === $token ) {
+				return;
 			}
+			// Download progress ticks many times a second; the record only
+			// needs to move a few times a second.
+			if ( ! $force && microtime( true ) - $last_write < 0.25 ) {
+				return;
+			}
+			$last_write = microtime( true );
+			set_transient( 'minn_bulk_update_' . $token, $progress, 15 * MINUTE_IN_SECONDS );
 		};
 
 		wp_update_plugins();
@@ -10683,44 +10697,71 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// plugin whose installed version already satisfies the offer.
 		$pending_before = self::real_plugin_updates();
 		if ( ! $pending_before ) {
+			$progress['phase']    = 'done';
 			$progress['finished'] = true;
 			$write();
 			return rest_ensure_response( array( 'updated' => array() ) );
 		}
 		$files             = array_keys( $pending_before );
 		$progress['queue'] = $files;
+		foreach ( $pending_before as $file => $data ) {
+			$progress['items'][ $file ] = array( 'state' => 'queued', 'bytes' => 0, 'version' => isset( $data->new_version ) ? (string) $data->new_version : '' );
+		}
+		$progress['timing']['check_ms'] = (int) round( ( microtime( true ) - $t0 ) * 1000 );
+		$progress['phase']              = 'fetch';
 		$write();
 
-		$local = self::prefetch_packages( $pending_before );
+		$t1    = microtime( true );
+		$local = self::prefetch_packages( $pending_before, function ( $file, $state, $bytes ) use ( &$progress, $write ) {
+			$progress['items'][ $file ]['state'] = $state;
+			$progress['items'][ $file ]['bytes'] = (int) $bytes;
+			$write( 'fetching' !== $state );
+		} );
+		$progress['timing']['fetch_ms'] = (int) round( ( microtime( true ) - $t1 ) * 1000 );
+		$progress['phase']              = 'install';
+		$write();
+
+		$mark = function ( $file, $state ) use ( &$progress, $write ) {
+			$progress['items'][ $file ]['state'] = $state;
+			$progress['current']                 = $file;
+			$write();
+		};
 		// Download is the first step of each plugin's run, so this is where
 		// "current" moves; a prefetched package is handed over as the file.
-		add_filter( 'upgrader_pre_download', function ( $reply, $package, $upgrader, $hook_extra ) use ( $local, &$progress, $write ) {
-			if ( ! empty( $hook_extra['plugin'] ) ) {
-				$progress['current'] = (string) $hook_extra['plugin'];
-				$write();
+		add_filter( 'upgrader_pre_download', function ( $reply, $package, $upgrader, $hook_extra ) use ( $local, $mark ) {
+			$file = ! empty( $hook_extra['plugin'] ) ? (string) $hook_extra['plugin'] : '';
+			$have = isset( $local[ $package ] ) && is_file( $local[ $package ] ) && filesize( $local[ $package ] ) > 0;
+			if ( $file ) {
+				$mark( $file, $have ? 'unpacking' : 'fetching' );
 			}
-			return isset( $local[ $package ] ) && is_file( $local[ $package ] ) && filesize( $local[ $package ] ) > 0 ? $local[ $package ] : $reply;
+			return $have ? $local[ $package ] : $reply;
 		}, 10, 4 );
-		add_filter( 'upgrader_pre_install', function ( $return, $hook_extra ) use ( &$progress, $write ) {
+		add_filter( 'upgrader_pre_install', function ( $return, $hook_extra ) use ( $mark ) {
 			if ( ! empty( $hook_extra['plugin'] ) ) {
-				$progress['current'] = (string) $hook_extra['plugin'];
-				$write();
+				$mark( (string) $hook_extra['plugin'], 'installing' );
 			}
 			return $return;
 		}, 10, 2 );
 		add_filter( 'upgrader_post_install', function ( $return, $hook_extra ) use ( &$progress, $write ) {
 			if ( ! empty( $hook_extra['plugin'] ) ) {
-				$ok = $return && ! is_wp_error( $return );
-				$progress[ $ok ? 'done' : 'failed' ][] = (string) $hook_extra['plugin'];
-				$progress['current']                   = '';
+				$file = (string) $hook_extra['plugin'];
+				$ok   = $return && ! is_wp_error( $return );
+				$progress[ $ok ? 'done' : 'failed' ][] = $file;
+				$progress['items'][ $file ]['state']   = $ok ? 'done' : 'failed';
+				if ( ! $ok && is_wp_error( $return ) ) {
+					$progress['items'][ $file ]['error'] = $return->get_error_message();
+				}
+				$progress['current'] = '';
 				$write();
 			}
 			return $return;
 		}, 10, 2 );
 
+		$t2             = microtime( true );
 		$skin           = new WP_Ajax_Upgrader_Skin();
 		$upgrader       = new Plugin_Upgrader( $skin );
 		$results        = $upgrader->bulk_upgrade( $files );
+		$progress['timing']['install_ms'] = (int) round( ( microtime( true ) - $t2 ) * 1000 );
 
 		// Prefetched files the upgrader never consumed (a failure before
 		// download) would otherwise sit in the temp dir.
@@ -10746,8 +10787,23 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$progress['done']     = $updated;
 		$progress['failed']   = $failed;
 		$progress['current']  = '';
+		$progress['phase']    = 'done';
 		$progress['finished'] = true;
 		$progress['errors']   = $skin->get_error_messages();
+		// A plugin that failed before its install hooks ran (no package to
+		// download) never got a state from them.
+		$msgs = $skin->get_error_messages();
+		foreach ( $failed as $f ) {
+			if ( 'failed' !== ( $progress['items'][ $f ]['state'] ?? '' ) ) {
+				$progress['items'][ $f ]['state'] = 'failed';
+				$r = isset( $results[ $f ] ) ? $results[ $f ] : null;
+				$progress['items'][ $f ]['error'] = is_wp_error( $r ) ? $r->get_error_message() : ( $msgs ? (string) end( $msgs ) : '' );
+			}
+		}
+		foreach ( $updated as $f ) {
+			$progress['items'][ $f ]['state'] = 'done';
+		}
+		$progress['timing']['total_ms'] = (int) round( ( microtime( true ) - $t0 ) * 1000 );
 		$write();
 
 		return rest_ensure_response(
@@ -10769,32 +10825,48 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 *
 	 * @return array package URL => local path
 	 */
-	public static function prefetch_packages( array $pending ) {
+	public static function prefetch_packages( array $pending, $on_progress = null ) {
 		if ( ! class_exists( '\WpOrg\Requests\Requests' ) ) {
 			return array();
 		}
+		$note = function ( $file, $state, $bytes = 0 ) use ( $on_progress ) {
+			if ( is_callable( $on_progress ) ) {
+				$on_progress( $file, $state, $bytes );
+			}
+		};
 		$requests = array();
 		$paths    = array();
+		$file_of  = array();
 		foreach ( $pending as $file => $data ) {
 			$url = isset( $data->package ) ? (string) $data->package : '';
 			if ( '' === $url || ! wp_http_validate_url( $url ) ) {
+				$note( $file, 'vendor' );
 				continue;
 			}
 			$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
 			if ( 'downloads.wordpress.org' !== $host ) {
+				$note( $file, 'vendor' );
 				continue;
 			}
 			$tmp = wp_tempnam( basename( wp_parse_url( $url, PHP_URL_PATH ) ) );
 			if ( ! $tmp ) {
+				$note( $file, 'vendor' );
 				continue;
 			}
-			$paths[ $url ]    = $tmp;
+			$paths[ $url ]   = $tmp;
+			$file_of[ $url ] = $file;
+			// Bytes as they land, so the record can show each download moving.
+			$hooks = new \WpOrg\Requests\Hooks();
+			$hooks->register( 'request.progress', function ( $data, $bytes ) use ( $note, $file ) {
+				$note( $file, 'fetching', $bytes );
+			} );
 			$requests[ $url ] = array(
 				'url'     => $url,
 				'type'    => 'GET',
 				'headers' => array( 'User-Agent' => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ) ),
-				'options' => array( 'filename' => $tmp, 'timeout' => 120, 'connect_timeout' => 15 ),
+				'options' => array( 'filename' => $tmp, 'timeout' => 120, 'connect_timeout' => 15, 'hooks' => $hooks ),
 			);
+			$note( $file, 'queued' );
 		}
 		if ( ! $requests ) {
 			return array();
@@ -10803,6 +10875,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// Six at a time: enough to hide latency, gentle on the host's
 		// outbound capacity and the directory's edge.
 		foreach ( array_chunk( $requests, 6, true ) as $chunk ) {
+			foreach ( $chunk as $url => $req ) {
+				$note( $file_of[ $url ], 'fetching', 0 );
+			}
 			try {
 				$responses = \WpOrg\Requests\Requests::request_multiple( $chunk, array( 'timeout' => 120, 'connect_timeout' => 15 ) );
 			} catch ( \Throwable $e ) {
@@ -10814,13 +10889,19 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$ok   = $res instanceof \WpOrg\Requests\Response && $res->success && is_file( $path ) && filesize( $path ) > 1024;
 				if ( $ok ) {
 					$out[ $url ] = $path;
-				} elseif ( is_file( $path ) ) {
-					wp_delete_file( $path );
+					$note( $file_of[ $url ], 'fetched', filesize( $path ) );
+				} else {
+					if ( is_file( $path ) ) {
+						wp_delete_file( $path );
+					}
+					// The upgrader downloads it itself during install.
+					$note( $file_of[ $url ], 'vendor', 0 );
 				}
 			}
 		}
 		return $out;
 	}
+
 
 	/**
 	 * System diagnostics: WordPress, PHP, database, server and directory facts

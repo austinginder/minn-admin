@@ -23144,6 +23144,9 @@
 			if ( btn && btn.isConnected ) btn.innerHTML = `${ icon( 'refresh' ) } ${ esc( sprintf( __( 'Updating… (%1$s/%2$s)' ), bulkDone.size, files.length ) ) }`;
 		} );
 		if ( r.minnUpdated ) {
+			// The page is about to be replaced; the panel would only cover
+			// the reload notice.
+			if ( state.modal && state.modal.type === 'bulk-update' ) closeModal();
 			reloadAfterMinnSelfUpdate( r.minnVersion );
 			return;
 		}
@@ -23173,8 +23176,21 @@
 		let finished = false;
 		let lastChange = Date.now();
 		let lastSig = '';
+		// The live panel. Rows seed as queued so the list is complete from
+		// the first frame; each poll repaints it from the record.
+		state.bulk = { token, files, items: {}, phase: 'check', timing: {}, startedAt: Date.now(), dropped: false };
+		const installedNow = {};
+		( state.cache.plugins || [] ).forEach( ( p ) => { installedNow[ p.plugin ] = p.version || ''; } );
+		state.bulk.from = installedNow;
+		files.forEach( ( f ) => { state.bulk.items[ f + '.php' ] = { state: 'queued', bytes: 0, version: offers[ f + '.php' ] || '' }; } );
+		state.modal = { type: 'bulk-update' };
+		renderOverlays();
+		const paintPanel = () => { if ( state.modal && state.modal.type === 'bulk-update' ) renderOverlays(); };
 		const apply = ( p ) => {
 			if ( ! p || ! p.known ) return;
+			if ( p.items ) Object.assign( state.bulk.items, p.items );
+			if ( p.phase ) state.bulk.phase = p.phase;
+			if ( p.timing ) state.bulk.timing = p.timing;
 			const cur = p.current ? p.current.replace( /\.php$/, '' ) : null;
 			if ( cur !== pluginUpdateCurrent ) {
 				pluginUpdateCurrent = cur;
@@ -23191,9 +23207,10 @@
 			} );
 			failed = ( p.failed || [] ).map( ( f ) => f.replace( /\.php$/, '' ) );
 			failed.forEach( ( file ) => { pluginUpdatePending.delete( file ); markPluginCardBusy( file, false ); } );
-			const sig = JSON.stringify( [ p.current, ( p.done || [] ).length, failed.length ] );
+			const sig = JSON.stringify( [ p.current, ( p.done || [] ).length, failed.length, p.phase, Object.values( p.items || {} ).map( ( i ) => i.state + i.bytes ).join() ] );
 			if ( sig !== lastSig ) { lastSig = sig; lastChange = Date.now(); }
 			if ( p.finished ) finished = true;
+			paintPanel();
 		};
 		// A raw fetch, so a 503 is visible: WordPress answers every request
 		// with one while the batch holds the site in maintenance mode, and
@@ -23217,13 +23234,15 @@
 				return null;
 			}
 		};
-		const poll = setInterval( async () => { if ( ! finished ) apply( await readProgress() ); }, 900 );
+		const poll = setInterval( async () => { if ( ! finished ) apply( await readProgress() ); }, 500 );
 		let dropped = false;
 		let minnUpdated = false;
 		let minnVersion = '';
 		try {
 			const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: JSON.stringify( { token } ) } );
-			apply( { known: true, current: '', done: r.updated || [], failed: r.failed || [], finished: true } );
+			apply( { known: true, current: '', done: r.updated || [], failed: r.failed || [], finished: true, phase: 'done' } );
+			// The record's final write carries per-item states and timings.
+			apply( await readProgress() );
 			if ( ( r.updated || [] ).some( isMinnAdminPluginFile ) ) {
 				minnUpdated = true;
 				minnVersion = offers[ 'minn-admin/minn-admin.php' ] || '';
@@ -23233,6 +23252,8 @@
 			// reply; follow it through its record. Quiet for 90s means the
 			// worker died with it: re-read the offers and settle from those.
 			dropped = true;
+			state.bulk.dropped = true;
+			paintPanel();
 			await waitForRestAlive( 20000 );
 			// Quiet means no progress for 90s; maintenance-mode 503s do not
 			// count as quiet (the record cannot be read through them), up to
@@ -23270,6 +23291,15 @@
 			files.forEach( ( file ) => { pluginUpdatePending.delete( file ); if ( ! bulkDone.has( file ) ) markPluginCardBusy( file, false ); } );
 			pluginUpdateCurrent = null;
 			paintPluginUpdateQueue();
+			// Settle the panel whatever path got here: done rows stay done,
+			// anything else the server never confirmed reads as failed.
+			state.bulk.phase = 'done';
+			files.forEach( ( f ) => {
+				const it = state.bulk.items[ f + '.php' ];
+				if ( bulkDone.has( f ) ) it.state = 'done';
+				else if ( it.state !== 'failed' ) { it.state = 'failed'; it.error = it.error || __( 'not confirmed' ); }
+			} );
+			paintPanel();
 		}
 		// One list refresh for the batch, never showErr.
 		const prev = state.cache.plugins;
@@ -42329,7 +42359,10 @@
 			r.failed.forEach( ( f ) => failures.push( f ) );
 			// Same hard-reload need as single-plugin Update: new app.js / CSS
 			// / boot payload stay stale until a full navigation.
-			if ( r.minnUpdated ) minnSelfUpdated = true;
+			if ( r.minnUpdated ) {
+				minnSelfUpdated = true;
+				if ( state.modal && state.modal.type === 'bulk-update' ) closeModal();
+			}
 		}
 		const themeMap = state.cache.themeUpdates || {};
 		if ( parts.some( ( p ) => p.kind === 'themes' ) ) {
@@ -44069,6 +44102,83 @@
 						<button class="minn-btn-soft danger" id="minn-off-confirm">${ esc( ENGINE ? __( 'Deactivate' ) : __( 'Deactivate and go to wp-admin' ) ) }</button>
 						<button class="minn-btn-primary" id="minn-off-cancel">${ esc( __( 'Keep Minn' ) ) }</button>
 					</div>` }
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'bulk-update' ) {
+			// The batch as brew shows an upgrade: every plugin on its own
+			// line, the download column filling in as packages land side by
+			// side, then the install column ticking down the list. Fed by
+			// the batch's progress record (state.bulk), repainted per poll.
+			const b = state.bulk || { files: [], items: {}, phase: 'check', timing: {} };
+			const plugins = state.cache.plugins || [];
+			const nameOf = ( file ) => pluginDisplayName( ( plugins.find( ( p ) => p.plugin === file ) || {} ).name || file.split( '/' )[ 0 ] );
+			// Versions as they were when the batch started; the plugin list
+			// refreshes to the new ones before the panel is closed.
+			const verOf = ( file ) => ( b.from || {} )[ file ] || ( plugins.find( ( p ) => p.plugin === file ) || {} ).version || '';
+			const items = b.items || {};
+			const total = b.files.length;
+			const fetched = b.files.filter( ( f ) => [ 'fetched', 'unpacking', 'installing', 'done' ].includes( ( items[ f + '.php' ] || {} ).state ) ).length;
+			const bytes = b.files.reduce( ( n, f ) => n + ( ( items[ f + '.php' ] || {} ).bytes || 0 ), 0 );
+			const done = b.files.filter( ( f ) => ( items[ f + '.php' ] || {} ).state === 'done' ).length;
+			const failed = b.files.filter( ( f ) => ( items[ f + '.php' ] || {} ).state === 'failed' ).length;
+			const secs = ( ms ) => ( ms / 1000 ).toFixed( 1 ) + 's';
+			let phase;
+			if ( b.phase === 'done' ) {
+				const t = b.timing || {};
+				phase = failed
+					/* translators: 1: plugins updated, 2: plugins that failed, 3: seconds. */
+					? sprintf( __( 'Updated %1$s, %2$s failed, in %3$s' ), done, failed, secs( t.total_ms || ( Date.now() - b.startedAt ) ) )
+					/* translators: 1: plugins updated, 2: seconds. */
+					: sprintf( _n( 'Updated %1$s plugin in %2$s', 'Updated %1$s plugins in %2$s', done ), done, secs( t.total_ms || ( Date.now() - b.startedAt ) ) );
+				if ( t.fetch_ms != null ) {
+					/* translators: 1: data fetched, 2: seconds fetching, 3: seconds installing. */
+					phase += ' · ' + sprintf( __( 'fetched %1$s in %2$s, installed in %3$s' ), fmtBytes( bytes ), secs( t.fetch_ms ), secs( t.install_ms || 0 ) );
+				}
+			} else if ( b.phase === 'fetch' ) {
+				/* translators: 1: packages fetched so far, 2: packages in the batch, 3: data fetched so far. */
+				phase = sprintf( __( 'Fetching packages… %1$s of %2$s, %3$s' ), fetched, total, fmtBytes( bytes ) );
+			} else if ( b.phase === 'install' ) {
+				/* translators: 1: plugins installed so far, 2: plugins in the batch. */
+				phase = sprintf( __( 'Installing… %1$s of %2$s' ), done + failed, total );
+			} else if ( b.dropped ) {
+				phase = __( 'Following the batch on the server…' );
+			} else {
+				phase = __( 'Checking for updates…' );
+			}
+			const STATE = {
+				queued:     ( it ) => `<span class="minn-bulk-st is-dim">${ esc( __( 'Queued' ) ) }</span>`,
+				fetching:   ( it ) => `<span class="minn-bulk-st is-live">${ icon( 'refresh' ) } ${ esc( it.bytes ? fmtBytes( it.bytes ) : __( 'Fetching…' ) ) }</span>`,
+				fetched:    ( it ) => `<span class="minn-bulk-st is-ok">✔ ${ esc( fmtBytes( it.bytes || 0 ) ) }</span>`,
+				vendor:     ( it ) => `<span class="minn-bulk-st is-dim">${ esc( __( 'Fetched by its own updater' ) ) }</span>`,
+				unpacking:  ( it ) => `<span class="minn-bulk-st is-live">${ icon( 'refresh' ) } ${ esc( __( 'Extracting…' ) ) }</span>`,
+				installing: ( it ) => `<span class="minn-bulk-st is-live">${ icon( 'refresh' ) } ${ esc( __( 'Installing…' ) ) }</span>`,
+				done:       ( it ) => `<span class="minn-bulk-st is-ok">✔ ${ esc( __( 'Updated' ) ) }</span>`,
+				failed:     ( it ) => `<span class="minn-bulk-st is-bad" title="${ esc( it.error || '' ) }">✖ ${ esc( it.error ? it.error.slice( 0, 60 ) : __( 'Failed' ) ) }</span>`,
+			};
+			const rows = b.files.map( ( f ) => {
+				const it = items[ f + '.php' ] || { state: 'queued' };
+				const from = verOf( f );
+				return `<div class="minn-bulk-row is-${ esc( it.state ) }">
+					<span class="minn-bulk-name">${ esc( nameOf( f ) ) }</span>
+					<span class="minn-bulk-ver">${ from ? esc( from ) + ' → ' : '' }${ esc( it.version || '' ) }</span>
+					${ ( STATE[ it.state ] || STATE.queued )( it ) }
+				</div>`;
+			} ).join( '' );
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide minn-bulk-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ b.phase === 'done'
+							? esc( __( 'Update everything' ) )
+							/* translators: %s: number of plugins. */
+							: esc( sprintf( _n( 'Updating %s plugin', 'Updating %s plugins', total ), total ) ) }</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-bulk-phase${ b.phase === 'done' ? ( failed ? ' is-bad' : ' is-ok' ) : '' }">${ esc( phase ) }</div>
+					<div class="minn-bulk-list">${ rows }</div>
+					<div class="minn-modal-actions"><button class="minn-btn-soft" id="minn-modal-close2">${ esc( b.phase === 'done' ? __( 'Close' ) : __( 'Hide (keeps running)' ) ) }</button></div>
 				</div>
 			</div>`;
 		}

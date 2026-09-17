@@ -160,10 +160,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.click( '.minn-confirm-modal [data-ok]' );
 		// "Minn Admin updated" also contains "updated" — match the normal
 		// completion toast specifically ("Updated N plugins. Everything is current.").
+		// The summary toast follows the batch's list refresh (hundreds of
+		// plugins on the dev site), so give it room.
 		await page.waitForFunction(
 			() => ( window.__minnReloadMsgs || [] ).some( ( m ) => /^Updated\b/i.test( m ) && /Everything is current/i.test( m ) ),
 			null,
-			{ timeout: 8000 }
+			{ timeout: 40000 }
 		);
 		const control = await page.evaluate( () => ( {
 			scheduled: window.__minnReloadScheduled,
