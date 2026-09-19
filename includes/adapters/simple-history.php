@@ -8,7 +8,7 @@
  * surface matches Solid / LLA-R / Wordfence daily-ops depth. Visibility
  * follows Simple History's own view capability.
  *
- * last-sweep: 2026-07-15
+ * last-sweep: 2026-09-19
  *
  * @package minn-admin
  */
@@ -174,7 +174,28 @@ function minn_admin_simple_history_status_model() {
 		$since_7d
 	) );
 	$last    = $wpdb->get_var( "SELECT date FROM {$table} WHERE 1=1{$readable} ORDER BY id DESC LIMIT 1" );
+	// Fourteen site-local days of events, errors split out. `date` is UTC, so
+	// the day it lands on is computed in SQL with the site's offset (the
+	// shared bucketer), grouped there so a busy log never streams every row.
+	// Bars count EVENTS, the number their own counters report. Their list
+	// route folds repeats of one event into a single row with an occasions
+	// count (three plugin activations in a row are one row, "+2 more"), so
+	// a bar's total can exceed the rows a click narrows the list to. That is
+	// their screen's own arithmetic, not a windowing error.
+	$days   = minn_admin_chart_days();
+	$day_ex = minn_admin_chart_utc_day_sql( 'date' );
+	$series = $wpdb->get_results( $wpdb->prepare(
+		"SELECT {$day_ex} AS d, COUNT(*) AS c,
+			SUM(CASE WHEN level IN ('emergency','alert','critical','error') THEN 1 ELSE 0 END) AS e
+		 FROM {$table} WHERE date >= %s{$readable} GROUP BY d",
+		minn_admin_chart_utc_since()
+	) );
 	// phpcs:enable
+	foreach ( (array) $series as $row ) {
+		// The soft bar is value + secondary, so the two series stay disjoint.
+		minn_admin_chart_bump( $days, (string) $row->d, false, (int) $row->c - (int) $row->e );
+		minn_admin_chart_bump( $days, (string) $row->d, true, (int) $row->e );
+	}
 
 	$last_label = '—';
 	if ( $last ) {
@@ -219,6 +240,7 @@ function minn_admin_simple_history_status_model() {
 				'value' => $mix ? implode( ' · ', $mix ) : __( 'No errors or warnings', 'minn-admin' ),
 			),
 		),
+		'chart'   => minn_admin_chart_build( $days, __( 'Events', 'minn-admin' ), __( 'Errors', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ),
 		),
@@ -246,6 +268,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route'     => 'simple-history/v1/events',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
+			// Their events route takes date_from/date_to as timestamps OR as
+			// datetime strings, which it parses in the site's zone; the bounds
+			// a bar sends are site-local, so they ride through verbatim.
+			'dateQuery' => 'date_from={from}&date_to={to}',
 			'tabs'      => array(
 				'param'    => 'loglevels',
 				'static'   => array(
