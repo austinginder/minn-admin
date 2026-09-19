@@ -82,6 +82,68 @@ function minn_admin_chart_utc_day( $mysql_utc ) {
 }
 
 /**
+ * A site-local bound ("Y-m-d H:i:s", the shape minn_admin_chart_days mints)
+ * as the number an epoch column would hold for that instant.
+ *
+ * WordPress runs PHP with UTC as the default zone, so a bare strtotime() on a
+ * site-local string is NOT the site's instant: it is that wall-clock time in
+ * UTC, off by the site's offset. A real epoch column needs the bound moved
+ * onto UTC first (get_gmt_from_date, which honors the site's zone and DST).
+ * A local-epoch column stores exactly the wall-clock-as-UTC number, so for
+ * it the bare reading is the right one.
+ *
+ * @param string $bound Site-local datetime.
+ * @param string $clock 'epoch' | 'local-epoch'.
+ * @return int|null Null when the bound does not parse.
+ */
+function minn_admin_chart_bound_epoch( $bound, $clock = 'epoch' ) {
+	$bound = trim( (string) $bound );
+	if ( '' === $bound ) {
+		return null;
+	}
+	$utc   = 'local-epoch' === $clock ? $bound : (string) get_gmt_from_date( $bound );
+	$stamp = '' !== $utc ? strtotime( $utc . ' UTC' ) : false;
+	return false === $stamp ? null : (int) $stamp;
+}
+
+/**
+ * The chart window's opening instant for an epoch column: site-local
+ * midnight $n-1 days ago, as the number that column would hold.
+ *
+ * @param int    $n     Days.
+ * @param string $clock 'epoch' | 'local-epoch'.
+ * @return int
+ */
+function minn_admin_chart_epoch_since( $n = 14, $clock = 'epoch' ) {
+	$stamp = minn_admin_chart_bound_epoch( minn_admin_chart_local_since( $n ), $clock );
+	return null === $stamp ? time() - $n * DAY_IN_SECONDS : $stamp;
+}
+
+/**
+ * SQL that maps an epoch column onto a site-day number, for GROUP BY.
+ *
+ * FROM_UNIXTIME() would be the obvious spelling, but it renders through the
+ * DB session's zone, which is UTC on managed hosts and the machine's zone on
+ * a laptop. Integer arithmetic has no zone: shift a real epoch by the site's
+ * current offset (a local-epoch value already carries it), divide by a day,
+ * and minn_admin_chart_epoch_bucket_day() names the day again. Same
+ * DST-band approximation as minn_admin_chart_utc_day_sql().
+ *
+ * @param string $col   Adapter-authored column name (never request input).
+ * @param string $clock 'epoch' | 'local-epoch'.
+ * @return string
+ */
+function minn_admin_chart_epoch_day_sql( $col, $clock = 'epoch' ) {
+	$offset = 'local-epoch' === $clock ? 0 : (int) round( (float) get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
+	return sprintf( 'FLOOR((%s + %d) / %d)', $col, $offset, DAY_IN_SECONDS );
+}
+
+/** The Y-m-d a minn_admin_chart_epoch_day_sql() bucket stands for. */
+function minn_admin_chart_epoch_bucket_day( $bucket ) {
+	return gmdate( 'Y-m-d', (int) $bucket * DAY_IN_SECONDS );
+}
+
+/**
  * The WHERE fragments for a clicked chart bar's day, converted onto the
  * clock the adapter's own column is stored in.
  *
@@ -90,10 +152,13 @@ function minn_admin_chart_utc_day( $mysql_utc ) {
  * per adapter is the column, so the caller names its clock and gets back
  * clauses it can drop into its own WHERE:
  *
- *   local  A datetime already on the site's clock. Compared directly.
- *   utc    A datetime stored in UTC (the common case for plugins that use
- *          current_time('mysql', true) or gmdate).
- *   epoch  A Unix timestamp column, always a real UTC instant.
+ *   local        A datetime already on the site's clock. Compared directly.
+ *   utc          A datetime stored in UTC (the common case for plugins that
+ *                use current_time('mysql', true) or gmdate).
+ *   epoch        A Unix timestamp column holding a real UTC instant (time()).
+ *   local-epoch  A "timestamp" written by current_time('timestamp'): the
+ *                site's wall clock read as if it were UTC, so it is offset
+ *                from a real epoch by the site's UTC offset (Aryo, Post SMTP).
  *
  * Returns array( array $sql_fragments, array $args ); both empty when the
  * request carries no bar. The caller supplies $column itself, so it is never
@@ -112,11 +177,9 @@ function minn_admin_chart_range_clause( $request, $column, $clock = 'local' ) {
 		if ( '' === $bound ) {
 			continue;
 		}
-		if ( 'epoch' === $clock ) {
-			// strtotime reads the bound on the SITE's clock (PHP's default
-			// zone is the site's), which is what these bounds are.
-			$stamp = strtotime( $bound );
-			if ( false === $stamp ) {
+		if ( 'epoch' === $clock || 'local-epoch' === $clock ) {
+			$stamp = minn_admin_chart_bound_epoch( $bound, $clock );
+			if ( null === $stamp ) {
 				continue;
 			}
 			$sql[]  = "{$column} {$op} %d";
