@@ -5528,6 +5528,18 @@ class Minn_Admin_REST {
 			$write();
 			return rest_ensure_response( array( 'updated' => 0, 'failed' => 0, 'remaining' => 0, 'groups' => $summary['groups'] ) );
 		}
+		// Install in the order the panel lists: by language, then component,
+		// so the ticks walk down the list instead of landing wherever the
+		// update transient happened to put each pack. The record's queue
+		// carries this order and the panel adopts it.
+		uksort( $pending, function ( $a, $b ) use ( $labels ) {
+			$c = strcasecmp( $labels[ $a ]['language'], $labels[ $b ]['language'] );
+			if ( 0 !== $c ) {
+				return $c;
+			}
+			$c = strcasecmp( $labels[ $a ]['component'], $labels[ $b ]['component'] );
+			return 0 !== $c ? $c : strcmp( $a, $b );
+		} );
 		$progress['queue'] = array_keys( $pending );
 		foreach ( $pending as $key => $update ) {
 			$progress['items'][ $key ] = array(

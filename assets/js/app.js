@@ -23616,8 +23616,11 @@
 		const groups = state.cache.translationGroups || [];
 		const keys = [];
 		const items = {};
-		groups.forEach( ( g ) => {
-			( Array.isArray( g.components ) ? g.components : [] ).forEach( ( c ) => {
+		// Listed by language, then component: the order the server installs
+		// in (its record's queue is adopted below in case the two ever differ).
+		const byName = ( a, b ) => String( a || '' ).localeCompare( String( b || '' ), undefined, { sensitivity: 'base' } );
+		groups.slice().sort( ( a, b ) => byName( a.name || a.locale, b.name || b.locale ) ).forEach( ( g ) => {
+			( Array.isArray( g.components ) ? g.components : [] ).slice().sort( ( a, b ) => byName( a.name || a.slug, b.name || b.slug ) ).forEach( ( c ) => {
 				const k = `${ c.type || '' }|${ c.slug || '' }|${ g.locale }`;
 				if ( items[ k ] ) return;
 				keys.push( k );
@@ -23643,6 +23646,8 @@
 			if ( p.items ) Object.assign( state.bulk.items, p.items );
 			if ( p.phase ) state.bulk.phase = p.phase;
 			if ( p.timing ) state.bulk.timing = p.timing;
+			// The server's install order is the list order.
+			if ( Array.isArray( p.queue ) && p.queue.length === keys.length ) state.bulk.files = p.queue;
 			const sig = JSON.stringify( [ p.current, ( p.done || [] ).length, ( p.failed || [] ).length, p.phase, Object.values( p.items || {} ).map( ( i ) => i.state + i.bytes ).join() ] );
 			if ( sig !== lastSig ) { lastSig = sig; lastChange = Date.now(); }
 			if ( p.finished ) finished = true;
