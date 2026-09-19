@@ -22073,17 +22073,22 @@
 		let bulk = '';
 		if ( state.bulk && state.bulk.phase !== 'done' ) {
 			const it = state.bulk.items || {};
+			const lang = state.bulk.kind === 'translations';
+			const keyOf = ( f ) => lang ? f : f + '.php';
 			const n = state.bulk.files.length;
-			const done = state.bulk.files.filter( ( f ) => [ 'done', 'failed' ].includes( ( it[ f + '.php' ] || {} ).state ) ).length;
-			const fetched = state.bulk.files.filter( ( f ) => [ 'fetched', 'unpacking', 'installing', 'done', 'failed', 'vendor' ].includes( ( it[ f + '.php' ] || {} ).state ) ).length;
+			const done = state.bulk.files.filter( ( f ) => [ 'done', 'failed' ].includes( ( it[ keyOf( f ) ] || {} ).state ) ).length;
+			const fetched = state.bulk.files.filter( ( f ) => [ 'fetched', 'unpacking', 'installing', 'done', 'failed', 'vendor' ].includes( ( it[ keyOf( f ) ] || {} ).state ) ).length;
 			bulk = state.bulk.phase === 'install'
 				/* translators: 1: plugins installed so far, 2: plugins in the batch. */
 				? sprintf( __( 'Installing %1$s/%2$s…' ), done, n )
 				: state.bulk.phase === 'fetch'
 					/* translators: 1: packages fetched so far, 2: packages in the batch. */
 					? sprintf( __( 'Fetching %1$s/%2$s…' ), fetched, n )
-					/* translators: %s: number of plugins. */
-					: sprintf( __( 'Updating %s plugins…' ), n );
+					: ( lang
+						/* translators: %s: number of language packs. */
+						? sprintf( __( 'Updating %s language packs…' ), n )
+						/* translators: %s: number of plugins. */
+						: sprintf( __( 'Updating %s plugins…' ), n ) );
 		}
 		const label = bulk || state.updatingAll || translations;
 		chip.hidden = ! label;
@@ -23222,10 +23227,64 @@
 	// progress record, paint cards as plugins finish, and survive a dropped
 	// socket (the upgrader can recycle the PHP worker mid-batch on some
 	// stacks) by polling on until the record says finished or goes quiet.
+	// 40 hex chars: the key to a batch's record, in the transient and in the
+	// file progress.php serves.
+	const mintBulkToken = () => Array.from( crypto.getRandomValues( new Uint8Array( 20 ) ), ( b ) => b.toString( 16 ).padStart( 2, '0' ) ).join( '' );
+
+	// A reader of a batch's progress record, shared by the bulk runners. The
+	// record is read from progress.php first: it does not load WordPress, so
+	// it keeps answering while the batch holds the site in maintenance mode
+	// (every REST request 503s then). REST is the fallback for a site whose
+	// layout keeps the file from being written. Tracks maintenance so a run
+	// can tell "quiet" from "unreadable".
+	function makeProgressReader( token, restPath, onMaintenanceChange ) {
+		let fileReads = !! B.progressUrl;
+		const st = { maintenance: false, maintenanceSince: 0 };
+		const setMaint = ( on ) => {
+			if ( on === st.maintenance ) return;
+			st.maintenance = on;
+			if ( on ) st.maintenanceSince = Date.now();
+			if ( state.bulk ) state.bulk.maintenance = on;
+			if ( onMaintenanceChange ) onMaintenanceChange( on );
+		};
+		st.read = async () => {
+			if ( fileReads ) {
+				try {
+					const r = await fetch( B.progressUrl + '?t=' + token, { credentials: 'same-origin', cache: 'no-store' } );
+					if ( r.ok ) {
+						const p = await r.json();
+						if ( p && p.known ) {
+							setMaint( !! p.maintenance );
+							return p;
+						}
+						// Not written yet (or this layout never writes it):
+						// fall through to REST for this read.
+					} else if ( r.status === 404 ) {
+						fileReads = false;
+					}
+				} catch ( e ) { /* REST below */ }
+			}
+			// A raw fetch, so a 503 is visible: WordPress answers every
+			// request with one while the batch holds the site in maintenance
+			// mode, and for up to ten minutes after if the process died
+			// before lifting it.
+			try {
+				const r = await fetch( restUrlFor( restPath + '?token=' + token ), { credentials: 'same-origin', headers: { 'X-WP-Nonce': B.nonce } } );
+				if ( r.status === 503 ) {
+					setMaint( true );
+					return null;
+				}
+				setMaint( false );
+				return r.ok ? await r.json() : null;
+			} catch ( e ) {
+				return null;
+			}
+		};
+		return st;
+	}
+
 	async function runBulkPluginUpdate( files, onProgress ) {
-		// 40 hex chars: the key to the batch's record, in the transient and
-		// in the file progress.php serves.
-		const token = Array.from( crypto.getRandomValues( new Uint8Array( 20 ) ), ( b ) => b.toString( 16 ).padStart( 2, '0' ) ).join( '' );
+		const token = mintBulkToken();
 		const offers = Object.assign( {}, state.cache.pluginUpdates || {} );
 		bulkDone.clear();
 		let failed = [];
@@ -23268,55 +23327,8 @@
 			if ( p.finished ) finished = true;
 			paintPanel();
 		};
-		// A raw fetch, so a 503 is visible: WordPress answers every request
-		// with one while the batch holds the site in maintenance mode, and
-		// for up to ten minutes after if the process died before lifting it.
-		let maintenance = false;
-		let maintenanceSince = 0;
-		// The record is read from progress.php first: it does not load
-		// WordPress, so it keeps answering while the batch holds the site
-		// in maintenance mode (every REST request 503s then, for as long as
-		// an active plugin is being replaced). REST is the fallback for a
-		// site whose layout keeps the file from being written.
-		let fileReads = !! B.progressUrl;
-		const readProgress = async () => {
-			if ( fileReads ) {
-				try {
-					const r = await fetch( B.progressUrl + '?t=' + token, { credentials: 'same-origin', cache: 'no-store' } );
-					if ( r.ok ) {
-						const p = await r.json();
-						if ( p && p.known ) {
-							if ( p.maintenance !== maintenance ) {
-								maintenance = !! p.maintenance;
-								if ( maintenance ) maintenanceSince = Date.now();
-								state.bulk.maintenance = maintenance;
-							}
-							return p;
-						}
-						// Not written yet (or this layout never writes it):
-						// fall through to REST for this read.
-					} else if ( r.status === 404 ) {
-						fileReads = false;
-					}
-				} catch ( e ) { /* REST below */ }
-			}
-			try {
-				const r = await fetch( restUrlFor( 'minn-admin/v1/plugins/update-progress?token=' + token ), { credentials: 'same-origin', headers: { 'X-WP-Nonce': B.nonce } } );
-				if ( r.status === 503 ) {
-					if ( ! maintenance ) {
-						maintenance = true;
-						maintenanceSince = Date.now();
-						state.bulk.maintenance = true;
-						paintPanel();
-					}
-					return null;
-				}
-				if ( maintenance ) { maintenance = false; state.bulk.maintenance = false; }
-				return r.ok ? await r.json() : null;
-			} catch ( e ) {
-				return null;
-			}
-		};
+		const reader = makeProgressReader( token, 'minn-admin/v1/plugins/update-progress', () => paintPanel() );
+		const readProgress = reader.read;
 		const poll = setInterval( async () => { if ( ! finished ) apply( await readProgress() ); }, 500 );
 		let dropped = false;
 		let minnUpdated = false;
@@ -23343,10 +23355,10 @@
 			// the ten minutes WordPress itself honors the flag for.
 			while ( ! finished ) {
 				const quiet = Date.now() - lastChange;
-				if ( maintenance ? Date.now() - maintenanceSince > 10 * 60000 : quiet > 90000 ) break;
-				await new Promise( ( res ) => setTimeout( res, maintenance ? 3000 : 1200 ) );
+				if ( reader.maintenance ? Date.now() - reader.maintenanceSince > 10 * 60000 : quiet > 90000 ) break;
+				await new Promise( ( res ) => setTimeout( res, reader.maintenance ? 3000 : 1200 ) );
 				apply( await readProgress() );
-				if ( ! maintenance ) lastChange = Math.max( lastChange, maintenanceSince );
+				if ( ! reader.maintenance ) lastChange = Math.max( lastChange, reader.maintenanceSince );
 			}
 			if ( ! finished ) {
 				try {
@@ -23590,34 +23602,118 @@
 		return sprintf( __( '%1$s and %2$d more' ), preview, remaining );
 	}
 
+	// Every pending language pack in ONE request (translations/update: one
+	// bulk upgrader run, packages fetched side by side first), painted by the
+	// same panel the plugin batch uses. Items are keyed "type|slug|locale"
+	// and carry their own label, so the panel needs no lookup.
 	async function performTranslationUpdates() {
 		if ( state.updatingTranslations ) return null;
+		if ( state.bulk && state.bulk.phase !== 'done' ) {
+			state.modal = { type: 'bulk-update' };
+			renderOverlays();
+			return null;
+		}
+		const groups = state.cache.translationGroups || [];
+		const keys = [];
+		const items = {};
+		groups.forEach( ( g ) => {
+			( Array.isArray( g.components ) ? g.components : [] ).forEach( ( c ) => {
+				const k = `${ c.type || '' }|${ c.slug || '' }|${ g.locale }`;
+				if ( items[ k ] ) return;
+				keys.push( k );
+				// The same label the record will carry: component · the server's
+				// language name, so the first paint and the polled rows agree.
+				items[ k ] = { state: 'queued', bytes: 0, version: c.version || '', label: `${ c.name || c.slug } · ${ g.name || g.locale }` };
+			} );
+		} );
 		state.updatingTranslations = true;
 		updateUpdChip();
 		if ( state.route === 'extensions' && state.extTab === 'translations' ) renderTranslations();
 		if ( state.notifOpen ) renderOverlays();
+		const token = mintBulkToken();
+		state.bulk = { kind: 'translations', token, files: keys, items, phase: 'check', timing: {}, startedAt: Date.now(), dropped: false };
+		state.modal = { type: 'bulk-update' };
+		const paintPanel = () => { updateUpdChip(); if ( state.modal && state.modal.type === 'bulk-update' ) renderOverlays(); };
+		paintPanel();
+		let finished = false;
+		let lastChange = Date.now();
+		let lastSig = '';
+		const apply = ( p ) => {
+			if ( ! p || ! p.known ) return;
+			if ( p.items ) Object.assign( state.bulk.items, p.items );
+			if ( p.phase ) state.bulk.phase = p.phase;
+			if ( p.timing ) state.bulk.timing = p.timing;
+			const sig = JSON.stringify( [ p.current, ( p.done || [] ).length, ( p.failed || [] ).length, p.phase, Object.values( p.items || {} ).map( ( i ) => i.state + i.bytes ).join() ] );
+			if ( sig !== lastSig ) { lastSig = sig; lastChange = Date.now(); }
+			if ( p.finished ) finished = true;
+			paintPanel();
+		};
+		const reader = makeProgressReader( token, 'minn-admin/v1/translations/update-progress', () => paintPanel() );
+		const poll = setInterval( async () => { if ( ! finished ) apply( await reader.read() ); }, 500 );
+		let result = null;
 		try {
-			const result = await api( 'minn-admin/v1/translations/update', { method: 'POST' } );
+			result = await api( 'minn-admin/v1/translations/update', { method: 'POST', body: JSON.stringify( { token } ) } );
+			finished = true;
+			// The record's final write carries per-item states and timings.
+			apply( await reader.read() );
 			state.cache.translationUpdates = ( result && result.remaining ) || 0;
 			state.cache.translationGroups = ( result && Array.isArray( result.groups ) ) ? result.groups : [];
-			state.cache.notifications = null;
-			await loadNotifications();
-			const done = ( result && result.updated ) || 0;
-			const remaining = state.cache.translationUpdates;
-			if ( remaining ) {
-				/* translators: 1: translation packages updated. 2: translation packages still waiting. */
-				toast( sprintf( _n( 'Updated %1$d translation package. %2$d still need attention.', 'Updated %1$d translation packages. %2$d still need attention.', done ), done, remaining ), true );
-			} else {
-				/* translators: %d is a number of translation packages. */
-				toast( sprintf( _n( '%d translation updated', '%d translations updated', done ), done ) );
+		} catch ( e ) {
+			// The batch usually keeps running server-side after a dropped
+			// reply; follow it through its record. Quiet for 90s means the
+			// worker died with it: re-read what is still pending.
+			state.bulk.dropped = true;
+			paintPanel();
+			await waitForRestAlive( 20000 );
+			while ( ! finished ) {
+				const quiet = Date.now() - lastChange;
+				if ( reader.maintenance ? Date.now() - reader.maintenanceSince > 10 * 60000 : quiet > 90000 ) break;
+				await new Promise( ( res ) => setTimeout( res, reader.maintenance ? 3000 : 1200 ) );
+				apply( await reader.read() );
+				if ( ! reader.maintenance ) lastChange = Math.max( lastChange, reader.maintenanceSince );
 			}
-			return result;
+			try {
+				await loadTranslationUpdates();
+				const left = new Set();
+				( state.cache.translationGroups || [] ).forEach( ( g ) => ( g.components || [] ).forEach( ( c ) => left.add( `${ c.type || '' }|${ c.slug || '' }|${ g.locale }` ) ) );
+				keys.forEach( ( k ) => {
+					const it = state.bulk.items[ k ];
+					if ( ! left.has( k ) ) it.state = 'done';
+				} );
+				result = { updated: keys.filter( ( k ) => state.bulk.items[ k ].state === 'done' ).length, remaining: state.cache.translationUpdates, groups: state.cache.translationGroups, dropped: true };
+			} catch ( e2 ) {
+				result = { updated: 0, remaining: state.cache.translationUpdates || 0, groups: state.cache.translationGroups || [], dropped: true, error: e.message };
+			}
 		} finally {
+			clearInterval( poll );
+			// Settle the panel whatever path got here: done rows stay done,
+			// anything else the server never confirmed reads as failed.
+			state.bulk.phase = 'done';
+			keys.forEach( ( k ) => {
+				const it = state.bulk.items[ k ];
+				if ( it.state !== 'done' && it.state !== 'failed' ) { it.state = 'failed'; it.error = it.error || __( 'not confirmed' ); }
+			} );
+			paintPanel();
 			state.updatingTranslations = false;
 			updateUpdChip();
 			if ( state.route === 'extensions' && state.extTab === 'translations' ) renderTranslations();
 			if ( state.notifOpen ) renderOverlays();
 		}
+		state.cache.notifications = null;
+		await loadNotifications().catch( () => {} );
+		if ( state.notifOpen ) renderOverlays();
+		const done = ( result && result.updated ) || 0;
+		const remaining = state.cache.translationUpdates || 0;
+		if ( result && result.error && ! done ) {
+			toast( result.error, true );
+		} else if ( remaining ) {
+			/* translators: 1: translation packages updated. 2: translation packages still waiting. */
+			toast( sprintf( _n( 'Updated %1$d translation package. %2$d still need attention.', 'Updated %1$d translation packages. %2$d still need attention.', done ), done, remaining ), true );
+		} else {
+			/* translators: %d is a number of translation packages. */
+			toast( sprintf( _n( '%d translation updated', '%d translations updated', done ), done ) );
+		}
+		return result;
 	}
 
 	function renderTranslations() {
@@ -44203,17 +44299,24 @@
 			// side, then the install column ticking down the list. Fed by
 			// the batch's progress record (state.bulk), repainted per poll.
 			const b = state.bulk || { files: [], items: {}, phase: 'check', timing: {} };
+			// Two kinds ride this panel: plugins (items keyed by plugin file,
+			// named from the plugin list) and language packs (items keyed
+			// "type|slug|locale", each carrying its own label).
+			const lang = b.kind === 'translations';
+			const keyOf = ( f ) => lang ? f : f + '.php';
 			const plugins = state.cache.plugins || [];
-			const nameOf = ( file ) => pluginDisplayName( ( plugins.find( ( p ) => p.plugin === file ) || {} ).name || file.split( '/' )[ 0 ] );
+			const items = b.items || {};
+			const nameOf = ( file ) => lang
+				? ( ( items[ file ] || {} ).label || file )
+				: pluginDisplayName( ( plugins.find( ( p ) => p.plugin === file ) || {} ).name || file.split( '/' )[ 0 ] );
 			// Versions as they were when the batch started; the plugin list
 			// refreshes to the new ones before the panel is closed.
-			const verOf = ( file ) => ( b.from || {} )[ file ] || ( plugins.find( ( p ) => p.plugin === file ) || {} ).version || '';
-			const items = b.items || {};
+			const verOf = ( file ) => lang ? '' : ( ( b.from || {} )[ file ] || ( plugins.find( ( p ) => p.plugin === file ) || {} ).version || '' );
 			const total = b.files.length;
-			const fetched = b.files.filter( ( f ) => [ 'fetched', 'unpacking', 'installing', 'done' ].includes( ( items[ f + '.php' ] || {} ).state ) ).length;
-			const bytes = b.files.reduce( ( n, f ) => n + ( ( items[ f + '.php' ] || {} ).bytes || 0 ), 0 );
-			const done = b.files.filter( ( f ) => ( items[ f + '.php' ] || {} ).state === 'done' ).length;
-			const failed = b.files.filter( ( f ) => ( items[ f + '.php' ] || {} ).state === 'failed' ).length;
+			const fetched = b.files.filter( ( f ) => [ 'fetched', 'unpacking', 'installing', 'done' ].includes( ( items[ keyOf( f ) ] || {} ).state ) ).length;
+			const bytes = b.files.reduce( ( n, f ) => n + ( ( items[ keyOf( f ) ] || {} ).bytes || 0 ), 0 );
+			const done = b.files.filter( ( f ) => ( items[ keyOf( f ) ] || {} ).state === 'done' ).length;
+			const failed = b.files.filter( ( f ) => ( items[ keyOf( f ) ] || {} ).state === 'failed' ).length;
 			const secs = ( ms ) => ( ms / 1000 ).toFixed( 1 ) + 's';
 			let phase;
 			if ( b.phase === 'done' ) {
@@ -44221,8 +44324,11 @@
 				phase = failed
 					/* translators: 1: plugins updated, 2: plugins that failed, 3: seconds. */
 					? sprintf( __( 'Updated %1$s, %2$s failed, in %3$s' ), done, failed, secs( t.total_ms || ( Date.now() - b.startedAt ) ) )
-					/* translators: 1: plugins updated, 2: seconds. */
-					: sprintf( _n( 'Updated %1$s plugin in %2$s', 'Updated %1$s plugins in %2$s', done ), done, secs( t.total_ms || ( Date.now() - b.startedAt ) ) );
+					: ( lang
+						/* translators: 1: language packs updated, 2: seconds. */
+						? sprintf( _n( 'Updated %1$s language pack in %2$s', 'Updated %1$s language packs in %2$s', done ), done, secs( t.total_ms || ( Date.now() - b.startedAt ) ) )
+						/* translators: 1: plugins updated, 2: seconds. */
+						: sprintf( _n( 'Updated %1$s plugin in %2$s', 'Updated %1$s plugins in %2$s', done ), done, secs( t.total_ms || ( Date.now() - b.startedAt ) ) ) );
 				if ( t.fetch_ms != null ) {
 					/* translators: 1: data fetched, 2: seconds fetching, 3: seconds installing. */
 					phase += ' · ' + sprintf( __( 'fetched %1$s in %2$s, installed in %3$s' ), fmtBytes( bytes ), secs( t.fetch_ms ), secs( t.install_ms || 0 ) );
@@ -44233,7 +44339,7 @@
 			} else if ( b.phase === 'install' ) {
 				/* translators: 1: plugins installed so far, 2: plugins in the batch. */
 				phase = sprintf( __( 'Installing… %1$s of %2$s' ), done + failed, total );
-				if ( b.maintenance ) phase += ' · ' + __( 'the site shows a maintenance page until this finishes (an active plugin is being replaced)' );
+				if ( b.maintenance && ! lang ) phase += ' · ' + __( 'the site shows a maintenance page until this finishes (an active plugin is being replaced)' );
 			} else if ( b.dropped ) {
 				phase = __( 'Following the batch on the server…' );
 			} else {
@@ -44250,7 +44356,7 @@
 				failed:     ( it ) => `<span class="minn-bulk-st is-bad" title="${ esc( it.error || '' ) }">✖ ${ esc( it.error ? it.error.slice( 0, 60 ) : __( 'Failed' ) ) }</span>`,
 			};
 			const rows = b.files.map( ( f ) => {
-				const it = items[ f + '.php' ] || { state: 'queued' };
+				const it = items[ keyOf( f ) ] || { state: 'queued' };
 				const from = verOf( f );
 				return `<div class="minn-bulk-row is-${ esc( it.state ) }">
 					<span class="minn-bulk-name">${ esc( nameOf( f ) ) }</span>
@@ -44263,9 +44369,12 @@
 				<div class="minn-modal wide minn-bulk-modal">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ b.phase === 'done'
-							? esc( __( 'Update everything' ) )
-							/* translators: %s: number of plugins. */
-							: esc( sprintf( _n( 'Updating %s plugin', 'Updating %s plugins', total ), total ) ) }</div>
+							? esc( lang ? __( 'Update translations' ) : __( 'Update everything' ) )
+							: esc( lang
+								/* translators: %s: number of language packs. */
+								? sprintf( _n( 'Updating %s language pack', 'Updating %s language packs', total ), total )
+								/* translators: %s: number of plugins. */
+								: sprintf( _n( 'Updating %s plugin', 'Updating %s plugins', total ), total ) ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-bulk-phase${ b.phase === 'done' ? ( failed ? ' is-bad' : ' is-ok' ) : '' }">${ esc( phase ) }</div>
