@@ -174,6 +174,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/matomo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/connect-matomo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/site-kit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/jetpack-stats.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/monsterinsights.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/simple-history.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wp-activity-log.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/aryo-activity-log.php';

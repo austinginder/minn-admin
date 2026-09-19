@@ -21074,10 +21074,14 @@
 	function loadPluginLinks() {
 		if ( state.cache.pluginLinks ) return Promise.resolve( state.cache.pluginLinks );
 		if ( pluginLinksPromise ) return pluginLinksPromise;
+		// Background captures never follow redirects: a plugin's activation
+		// redirect (an onboarding wizard on the vendor's own domain) would be
+		// followed cross-origin and logged as a CORS failure; the capture simply
+		// stays stale until that one-time redirect is spent. Same for notices.
 		pluginLinksPromise = ( async () => {
 			let r = await api( 'minn-admin/v1/plugin-links' ).catch( () => null );
 			if ( r && r.stale && r.capture ) {
-				await fetch( r.capture, { credentials: 'same-origin' } ).catch( () => {} );
+				await fetch( r.capture, { credentials: 'same-origin', redirect: 'manual' } ).catch( () => {} );
 				r = await api( 'minn-admin/v1/plugin-links' ).catch( () => r );
 			}
 			state.cache.pluginLinks = { links: ( r && r.links ) || {}, minn: ( r && r.minn ) || {}, names: ( r && r.names ) || {} };
@@ -21092,7 +21096,7 @@
 		const job = ( async () => {
 			let r = await api( 'minn-admin/v1/plugin-links' ).catch( () => null );
 			if ( r && r.stale && r.capture ) {
-				await fetch( r.capture, { credentials: 'same-origin' } ).catch( () => {} );
+				await fetch( r.capture, { credentials: 'same-origin', redirect: 'manual' } ).catch( () => {} );
 				r = await api( 'minn-admin/v1/plugin-links' ).catch( () => r );
 			}
 			if ( ! r ) return state.cache.pluginLinks;
@@ -42346,7 +42350,7 @@
 						notice_id: noticeId,
 					} ),
 				} );
-				await fetch( B.notices.url, { credentials: 'same-origin' } ).catch( () => {} );
+				await fetch( B.notices.url, { credentials: 'same-origin', redirect: 'manual' } ).catch( () => {} );
 			} else if ( link.url ) {
 				const u = new URL( link.url );
 				u.searchParams.set( 'minn_notices', '1' );
@@ -42359,7 +42363,7 @@
 					captured = ( await r.json() ).ok === true;
 				} catch ( e ) { /* the handler redirected before our capture ran */ }
 				if ( ! captured ) {
-					await fetch( B.notices.url, { credentials: 'same-origin' } ).catch( () => {} );
+					await fetch( B.notices.url, { credentials: 'same-origin', redirect: 'manual' } ).catch( () => {} );
 				}
 			} else if ( link.button && noticeId ) {
 				// Hash CTA with no mapped ajax — hide from Minn's digest only.
@@ -51262,7 +51266,7 @@
 			( window.requestIdleCallback || ( ( f ) => setTimeout( f, 2500 ) ) )( () => { loadPluginLinks().catch( () => {} ); } );
 		}
 		if ( B.notices && B.notices.stale ) {
-			fetch( B.notices.url, { credentials: 'same-origin' } )
+			fetch( B.notices.url, { credentials: 'same-origin', redirect: 'manual' } )
 				.then( ( r ) => ( r.ok ? r.json() : null ) )
 				.then( ( d ) => {
 					if ( ! d || ! d.ok ) return;
