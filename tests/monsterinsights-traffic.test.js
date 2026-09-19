@@ -10,9 +10,12 @@
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
+// `name` is the source label the adapter emits; `label` names the leg. The
+// Pro build shares Lite's prefix and label, and cannot run alongside Lite.
 const FAMILY = [
-	{ id: 'google-analytics-for-wordpress/googleanalytics', name: 'MonsterInsights' },
-	{ id: 'google-analytics-dashboard-for-wp/gadwp', name: 'ExactMetrics' },
+	{ id: 'google-analytics-for-wordpress/googleanalytics', name: 'MonsterInsights', label: 'MonsterInsights' },
+	{ id: 'google-analytics-dashboard-for-wp/gadwp', name: 'ExactMetrics', label: 'ExactMetrics' },
+	{ id: 'google-analytics-premium/googleanalytics-premium', name: 'MonsterInsights', label: 'MonsterInsights Pro', optional: true },
 ];
 
 ( async () => {
@@ -95,22 +98,25 @@ const FAMILY = [
 			} );
 			return await r.json();
 		} );
+		const present = [];
 		for ( const f of FAMILY ) {
 			const p = plugins.find( ( x ) => x.plugin === f.id );
-			t.check( `${ f.name } installed`, !! p, p && p.status );
+			if ( ! p && f.optional ) continue; // the Pro build is a fleet pull, not on every dev site
+			t.check( `${ f.label } installed`, !! p, p && p.status );
 			if ( ! p ) throw new Error( `${ f.id } not installed on this site` );
 			was[ f.id ] = p.status;
-			// The two share one codebase and must not run together.
+			present.push( f );
+			// They share one codebase and must not run together.
 			if ( p.status === 'active' ) await setStatus( f.id, 'inactive' );
 		}
 
-		for ( const f of FAMILY ) {
+		for ( const f of present ) {
 			await setStatus( f.id, 'active' );
-			t.check( `${ f.name }: fixture on (write verified)`, await setOpt( '1' ) );
+			t.check( `${ f.label }: fixture on (write verified)`, await setOpt( '1' ) );
 
 			const on = await chartState();
-			t.check( `${ f.name }: chart source reads ${ f.name }`, on.sub.includes( f.name ), on.sub );
-			t.check( `${ f.name }: traffic bars render`, on.cols > 0, `cols=${ on.cols }` );
+			t.check( `${ f.label }: chart source reads ${ f.name }`, on.sub.includes( f.name ), on.sub );
+			t.check( `${ f.label }: traffic bars render`, on.cols > 0, `cols=${ on.cols }` );
 
 			// Click the last bar WITH data (the chart's buckets are UTC-anchored,
 			// so in the site's evening the final bar is tomorrow-UTC and empty —
@@ -124,7 +130,7 @@ const FAMILY = [
 				}
 				return null;
 			} );
-			t.check( `${ f.name }: chart has a data bar`, dataCi !== null, `ci=${ dataCi }` );
+			t.check( `${ f.label }: chart has a data bar`, dataCi !== null, `ci=${ dataCi }` );
 			await page.click( `.minn-chart-col[data-ci="${ dataCi }"]` );
 			await page.waitForSelector( '.minn-traf-day, .minn-empty', { timeout: 20000 } );
 			const day = await page.evaluate( () => {
@@ -137,10 +143,10 @@ const FAMILY = [
 					pageHasVisitors: !! ( firstPage && firstPage.querySelector( '[title="Visitors"]' ) ),
 				};
 			} );
-			t.check( `${ f.name }: drill-down lists top pages`, day.text.includes( 'Hello world!' ) && day.text.includes( 'Sample Page' ) );
-			t.check( `${ f.name }: referrers listed`, day.text.includes( 'google' ) && day.text.includes( 't.co' ) );
-			t.check( `${ f.name }: page rows show visitors and views`, day.pageHasViews && day.pageHasVisitors );
-			t.check( `${ f.name}: Open ${ f.name } escape hatch offered`, day.text.includes( `Open ${ f.name }` ) );
+			t.check( `${ f.label }: drill-down lists top pages`, day.text.includes( 'Hello world!' ) && day.text.includes( 'Sample Page' ) );
+			t.check( `${ f.label }: referrers listed`, day.text.includes( 'google' ) && day.text.includes( 't.co' ) );
+			t.check( `${ f.label }: page rows show visitors and views`, day.pageHasViews && day.pageHasVisitors );
+			t.check( `${ f.label }: Open ${ f.name } escape hatch offered`, day.text.includes( `Open ${ f.name }` ) );
 			await page.keyboard.press( 'Escape' );
 
 			const to = new Date().toISOString().slice( 0, 10 );
@@ -148,16 +154,16 @@ const FAMILY = [
 			const rep = await restGet( `minn-admin/v1/stats/report?from=${ fromD }&to=${ to }` );
 			const secs = ( rep.body && rep.body.sections ) || [];
 			const ids = secs.map( ( s ) => s.id );
-			t.check( `${ f.name }: stats report answers 200`, rep.status === 200 && rep.body && rep.body.source === f.name, `status=${ rep.status } source=${ rep.body && rep.body.source }` );
-			t.check( `${ f.name }: report carries pages, referrers, countries, devices`, [ 'pages', 'referrers', 'countries', 'devices' ].every( ( id ) => ids.includes( id ) ), ids.join( ',' ) );
+			t.check( `${ f.label }: stats report answers 200`, rep.status === 200 && rep.body && rep.body.source === f.name, `status=${ rep.status } source=${ rep.body && rep.body.source }` );
+			t.check( `${ f.label }: report carries pages, referrers, countries, devices`, [ 'pages', 'referrers', 'countries', 'devices' ].every( ( id ) => ids.includes( id ) ), ids.join( ',' ) );
 			const countries = secs.find( ( s ) => s.id === 'countries' );
-			t.check( `${ f.name }: country codes resolved to names`, !! countries && countries.rows.some( ( r ) => r.label === 'United States' ) && countries.rows.some( ( r ) => r.label === 'Germany' ), countries && countries.rows.map( ( r ) => r.label ).join( ',' ) );
+			t.check( `${ f.label }: country codes resolved to names`, !! countries && countries.rows.some( ( r ) => r.label === 'United States' ) && countries.rows.some( ( r ) => r.label === 'Germany' ), countries && countries.rows.map( ( r ) => r.label ).join( ',' ) );
 			const devices = secs.find( ( s ) => s.id === 'devices' );
-			t.check( `${ f.name }: device percentages became session counts`, !! devices && devices.rows.length === 3 && devices.rows.every( ( r ) => r.visitors > 0 ) );
+			t.check( `${ f.label }: device percentages became session counts`, !! devices && devices.rows.length === 3 && devices.rows.every( ( r ) => r.visitors > 0 ) );
 
-			t.check( `${ f.name }: fixture off (write verified)`, await setOpt( '' ) );
+			t.check( `${ f.label }: fixture off (write verified)`, await setOpt( '' ) );
 			const off = await chartState();
-			t.check( `${ f.name }: falls back to the resident provider`, ! off.sub.includes( f.name ) && off.sub.length > 0, off.sub );
+			t.check( `${ f.label }: falls back to the resident provider`, ! off.sub.includes( f.name ) && off.sub.length > 0, off.sub );
 			await setStatus( f.id, 'inactive' );
 		}
 	} finally {

@@ -2250,6 +2250,68 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// MonsterInsights Pro + ExactMetrics Pro: Awesome Motive's TGM-updater
+	// shape, the same family as WPForms: option {prefix}_license {key, type,
+	// is_expired, is_disabled, is_invalid, is_agency, expiry_date (epoch or
+	// '')}; a network-licensed multisite keeps {prefix}_network_license as a
+	// site option instead. Flags are only written by their validation, so a
+	// key with no flags reads valid. Lite ships under
+	// google-analytics-for-wordpress / google-analytics-dashboard-for-wp with
+	// no license at all; the -premium directories are the Pro builds.
+	// ExactMetrics is the same codebase under another prefix (verified for
+	// MonsterInsights Pro 11.3.0; no ExactMetrics Pro build was available).
+	foreach ( array(
+		'monsterinsights-pro' => array( 'name' => 'MonsterInsights Pro', 'prefix' => 'monsterinsights', 'component' => 'google-analytics-premium/googleanalytics-premium.php' ),
+		'exactmetrics-pro'    => array( 'name' => 'ExactMetrics Pro', 'prefix' => 'exactmetrics', 'component' => 'exactmetrics-premium/exactmetrics-premium.php' ),
+	) as $am_id => $am ) {
+		$providers[ $am_id ] = array(
+			'name'      => $am['name'],
+			'component' => $am['component'],
+			'detect'    => function () use ( $has, $am ) {
+				return $has( $am['component'] );
+			},
+			'read'      => function () use ( $item, $am ) {
+				$lic     = get_option( $am['prefix'] . '_license' );
+				$lic     = is_array( $lic ) ? $lic : array();
+				$key     = (string) ( $lic['key'] ?? '' );
+				$network = false;
+				if ( '' === $key && is_multisite() ) {
+					$n = get_site_option( $am['prefix'] . '_network_license' );
+					if ( is_array( $n ) && ! empty( $n['key'] ) ) {
+						$lic     = $n;
+						$key     = (string) $n['key'];
+						$network = true;
+					}
+				}
+				if ( '' === $key ) {
+					return array( $item( array( 'name' => $am['name'], 'state' => 'missing' ) ) );
+				}
+				$type    = (string) ( $lic['type'] ?? '' );
+				$expires = minn_admin_license_expiry( $lic['expiry_date'] ?? '' );
+				$state   = 'unknown';
+				$note    = __( 'key stored; not yet validated', 'minn-admin' );
+				if ( ! empty( $lic['is_invalid'] ) ) {
+					$state = 'invalid';
+					$note  = __( 'key rejected at the last check', 'minn-admin' );
+				} elseif ( ! empty( $lic['is_disabled'] ) ) {
+					$state = 'invalid';
+					$note  = __( 'key disabled by the vendor', 'minn-admin' );
+				} elseif ( ! empty( $lic['is_expired'] ) || minn_admin_license_expired( $expires ) ) {
+					$state = 'expired';
+					$note  = '';
+				} elseif ( '' !== $type ) {
+					$state = 'valid';
+					$note  = 'plan: ' . $type . ( ! empty( $lic['is_agency'] ) ? ' (agency)' : '' );
+				}
+				if ( $network ) {
+					$note = trim( ( $note ? $note . '; ' : '' ) . __( 'network license', 'minn-admin' ) );
+				}
+				return array( $item( array( 'name' => $am['name'], 'state' => $state, 'key' => true, 'expires' => $expires, 'note' => $note ) ) );
+			},
+		);
+	}
+	unset( $am_id, $am );
+
 	// WPForms Pro: option wpforms_license {key, type, is_expired, is_disabled,
 	// is_invalid, is_limit_reached, is_flagged}. Their deactivate resets the
 	// option to '' (a STRING, not an array). WPFORMS_LICENSE_KEY constant wins
@@ -4443,6 +4505,155 @@ function minn_admin_license_default_providers() {
 			return array( 'ok' => $ok, 'code' => $code, 'message' => $ok ? '' : sprintf( __( 'License check returned: %s', 'minn-admin' ), str_replace( '_', ' ', (string) $status ) ) );
 		};
 	}
+
+	// MonsterInsights Pro / ExactMetrics Pro: their own
+	// {Prefix}_License_Actions class end to end. verify_key($key) runs the
+	// complete activation (their license API, then the option write and the
+	// addons refresh), validate_key(true) is their forced revalidation and
+	// deactivate_key() frees the seat remotely and deletes the option.
+	// Everything on that path (the license store, the actions class, the
+	// addons helper it calls after a success) loads only under is_admin()/
+	// cron, so REST actions require the files manually (the WPForms class of
+	// gate). Constructing the actions class only registers admin hooks, inert
+	// here. Non-ajax calls never wp_send_json; errors land in ->errors.
+	// deactivate_key() reads the key from $_POST, so the stored key is seeded
+	// there for the call and the superglobal restored after (the Soflyy
+	// class of documented exception; the request is otherwise theirs).
+	foreach ( array(
+		'monsterinsights-pro' => array( 'fn' => 'MonsterInsights', 'dir' => 'MONSTERINSIGHTS_PLUGIN_DIR', 'prefix' => 'monsterinsights', 'class' => 'MonsterInsights_License_Actions', 'store' => 'MonsterInsights_License', 'label' => __( 'MonsterInsights license key', 'minn-admin' ), 'vendor' => 'MonsterInsights' ),
+		'exactmetrics-pro'    => array( 'fn' => 'ExactMetrics', 'dir' => 'EXACTMETRICS_PLUGIN_DIR', 'prefix' => 'exactmetrics', 'class' => 'ExactMetrics_License_Actions', 'store' => 'ExactMetrics_License', 'label' => __( 'ExactMetrics license key', 'minn-admin' ), 'vendor' => 'ExactMetrics' ),
+	) as $am_id => $am ) {
+		if ( ! isset( $providers[ $am_id ] ) || ! function_exists( $am['fn'] ) || ! defined( $am['dir'] )
+			|| ! file_exists( constant( $am['dir'] ) . 'pro/includes/admin/licensing/license-actions.php' ) ) {
+			continue;
+		}
+		$am_actions = function () use ( $am ) {
+			$dir = constant( $am['dir'] );
+			if ( ! class_exists( $am['store'] ) && file_exists( $dir . 'pro/includes/license.php' ) ) {
+				require_once $dir . 'pro/includes/license.php';
+			}
+			if ( ! function_exists( $am['prefix'] . '_get_addons_data' ) && file_exists( $dir . 'includes/admin/pages/addons.php' ) ) {
+				require_once $dir . 'includes/admin/pages/addons.php';
+			}
+			if ( ! class_exists( $am['class'] ) ) {
+				require_once $dir . 'pro/includes/admin/licensing/license-actions.php';
+			}
+			return class_exists( $am['class'] ) ? new $am['class']() : null;
+		};
+		$am_classify = function ( $errors, $fallback ) use ( $am ) {
+			$msg  = ! empty( $errors ) ? wp_strip_all_tags( implode( ' ', (array) $errors ) ) : $fallback;
+			$code = 'invalid';
+			if ( false !== stripos( $msg, 'limit' ) || false !== stripos( $msg, 'activations' ) ) {
+				$code = 'site_limit';
+			} elseif ( false !== stripos( $msg, 'expired' ) ) {
+				$code = 'expired';
+			} elseif ( false !== stripos( $msg, 'error connecting' ) ) {
+				$code = 'error';
+			}
+			return array( 'ok' => false, 'code' => $code, 'message' => $msg );
+		};
+		$am_stored = function () use ( $am ) {
+			$lic = get_option( $am['prefix'] . '_license' );
+			return is_array( $lic ) ? trim( (string) ( $lic['key'] ?? '' ) ) : '';
+		};
+		// A subsite covered only by the NETWORK license: their methods branch
+		// on is_network_admin(), which is never true under REST, so acting
+		// here would write a site license instead. Say so rather than "no key".
+		$am_network_only = function () use ( $am, $am_stored ) {
+			if ( '' !== $am_stored() || ! is_multisite() ) {
+				return false;
+			}
+			$n = get_site_option( $am['prefix'] . '_network_license' );
+			return is_array( $n ) && ! empty( $n['key'] );
+		};
+		$am_network_msg = __( 'This site is covered by the network license; manage it from the network admin.', 'minn-admin' );
+		// Their settings-changed listener (which drops the cached API bearer
+		// token that encodes the key) only loads in wp-admin, so after a
+		// successful action the token is invalidated here the way their own
+		// ajax handlers end up doing it.
+		$am_token_reset = function () use ( $am ) {
+			$dir   = constant( $am['dir'] );
+			$class = $am['vendor'] . '_API_Token';
+			if ( ! class_exists( $class ) && file_exists( $dir . 'includes/api/class-' . strtolower( $am['vendor'] ) . '-api-token.php' ) ) {
+				require_once $dir . 'includes/api/class-' . strtolower( $am['vendor'] ) . '-api-token.php';
+			}
+			if ( class_exists( $class ) && method_exists( $class, 'invalidate' ) ) {
+				try {
+					$class::invalidate( false );
+				} catch ( \Throwable $e ) { /* a stale token only shortens its own life */ }
+			}
+		};
+
+		$providers[ $am_id ]['secret_label'] = $am['label'];
+		$providers[ $am_id ]['activate']     = function ( $secret ) use ( $am, $am_actions, $am_classify, $am_token_reset ) {
+			$secret = trim( (string) $secret );
+			if ( '' === $secret ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Enter a license key.', 'minn-admin' ) );
+			}
+			$a = $am_actions();
+			if ( ! $a ) {
+				/* translators: %s: plugin name. */
+				return array( 'ok' => false, 'code' => 'error', 'message' => sprintf( __( '%s\'s license class could not be loaded.', 'minn-admin' ), $am['vendor'] ) );
+			}
+			$a->verify_key( $secret );
+			if ( ! empty( $a->errors ) ) {
+				/* translators: %s: plugin name. */
+				return $am_classify( $a->errors, sprintf( __( '%s did not accept that key.', 'minn-admin' ), $am['vendor'] ) );
+			}
+			$am_token_reset();
+			return array( 'ok' => true, 'code' => '', 'message' => '' );
+		};
+		$providers[ $am_id ]['deactivate']   = function () use ( $am, $am_actions, $am_stored, $am_network_only, $am_network_msg, $am_token_reset ) {
+			$key = $am_stored();
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => $am_network_only() ? $am_network_msg : __( 'No key stored', 'minn-admin' ) );
+			}
+			$a = $am_actions();
+			if ( ! $a ) {
+				/* translators: %s: plugin name. */
+				return array( 'ok' => false, 'code' => 'error', 'message' => sprintf( __( '%s\'s license class could not be loaded.', 'minn-admin' ), $am['vendor'] ) );
+			}
+			$field = $am['prefix'] . '-license-key';
+			$had   = array_key_exists( $field, $_POST );
+			$prev  = $had ? $_POST[ $field ] : null;
+			$_POST[ $field ] = $key;
+			try {
+				$a->deactivate_key();
+			} finally {
+				if ( $had ) {
+					$_POST[ $field ] = $prev;
+				} else {
+					unset( $_POST[ $field ] );
+				}
+			}
+			if ( ! empty( $a->errors ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => wp_strip_all_tags( implode( ' ', $a->errors ) ) );
+			}
+			$am_token_reset();
+			/* translators: %s: plugin name. */
+			return array( 'ok' => true, 'code' => '', 'message' => sprintf( __( 'The key was deactivated with %s and the seat freed.', 'minn-admin' ), $am['vendor'] ) );
+		};
+		$providers[ $am_id ]['verify']       = function () use ( $am, $am_actions, $am_classify, $am_stored, $am_network_only, $am_network_msg, $am_token_reset ) {
+			$key = $am_stored();
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => $am_network_only() ? 'error' : 'invalid', 'message' => $am_network_only() ? $am_network_msg : __( 'No key stored', 'minn-admin' ) );
+			}
+			$a = $am_actions();
+			if ( ! $a ) {
+				/* translators: %s: plugin name. */
+				return array( 'ok' => false, 'code' => 'error', 'message' => sprintf( __( '%s\'s license class could not be loaded.', 'minn-admin' ), $am['vendor'] ) );
+			}
+			$a->key = $key;
+			$a->validate_key( true, false );
+			if ( ! empty( $a->errors ) ) {
+				/* translators: %s: plugin name. */
+				return $am_classify( $a->errors, sprintf( __( '%s did not confirm the key.', 'minn-admin' ), $am['vendor'] ) );
+			}
+			$am_token_reset();
+			return array( 'ok' => true, 'code' => '', 'message' => '' );
+		};
+	}
+	unset( $am_id, $am );
 
 	// Akismet: their own machinery end to end. Akismet_Admin::save_key() is
 	// the COMPLETE activation flow (verify_key → subscription check via
