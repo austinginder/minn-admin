@@ -94,6 +94,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route'     => 'minn-admin/v1/wordfence/logins',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
+			'dateQuery' => 'after={from}&before={to}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'tabs'      => array(
@@ -132,7 +133,22 @@ function minn_admin_wordfence_status_model() {
 		"SELECT COUNT(*) FROM {$table} WHERE fail = 0 AND ctime >= %d",
 		time() - DAY_IN_SECONDS
 	) );
+	// Fourteen site-local days of logins, failures split out. ctime is a UTC
+	// float epoch: bucketed by integer arithmetic and grouped in SQL.
+	$days   = minn_admin_chart_days();
+	$day_ex = minn_admin_chart_epoch_day_sql( 'ctime' );
+	$series = $wpdb->get_results( $wpdb->prepare(
+		"SELECT {$day_ex} AS d, COUNT(*) AS c, SUM(CASE WHEN fail = 1 THEN 1 ELSE 0 END) AS f
+		 FROM {$table} WHERE ctime >= %d GROUP BY d",
+		minn_admin_chart_epoch_since()
+	) );
 	// phpcs:enable
+	foreach ( (array) $series as $row ) {
+		$d = minn_admin_chart_epoch_bucket_day( $row->d );
+		// The soft bar is value + secondary, so the two series stay disjoint.
+		minn_admin_chart_bump( $days, $d, false, (int) $row->c - (int) $row->f );
+		minn_admin_chart_bump( $days, $d, true, (int) $row->f );
+	}
 
 	$rows = array(
 		array(
@@ -164,6 +180,7 @@ function minn_admin_wordfence_status_model() {
 
 	return array(
 		'rows'    => $rows,
+		'chart'   => minn_admin_chart_build( $days, __( 'Successful', 'minn-admin' ), __( 'Failed', 'minn-admin' ) ),
 		'actions' => $actions,
 	);
 }
@@ -197,6 +214,12 @@ add_action( 'rest_api_init', function () {
 				$like   = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
 				$where .= ' AND username LIKE %s';
 				$args[] = $like;
+			}
+			// A clicked chart bar: site-local bounds onto the UTC epoch column.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'ctime', 'epoch' );
+			if ( $range_sql ) {
+				$where .= ' AND ' . implode( ' AND ', $range_sql );
+				$args   = array_merge( $args, $range_args );
 			}
 
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table prefix-derived; WHERE placeholder-built.

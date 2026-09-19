@@ -145,6 +145,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route'     => 'minn-admin/v1/llar/log',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
+			'dateQuery' => 'after={from}&before={to}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'tabs'      => array(
@@ -199,6 +200,17 @@ add_action( 'rest_api_init', function () {
 					return false !== strpos( strtolower( $r['who'] ), $q ) || false !== strpos( strtolower( $r['ip'] ), $q );
 				} ) );
 			}
+			// A clicked chart bar. The log lives in an option, so the window is
+			// applied in PHP against each row's last-attempt instant (a UTC
+			// epoch the row already carries as an ISO Z string).
+			$from = minn_admin_chart_bound_epoch( (string) $request['after'] );
+			$to   = minn_admin_chart_bound_epoch( (string) $request['before'] );
+			if ( null !== $from || null !== $to ) {
+				$rows = array_values( array_filter( $rows, function ( $r ) use ( $from, $to ) {
+					$ts = $r['date'] ? strtotime( $r['date'] ) : false;
+					return false !== $ts && ( null === $from || $ts >= $from ) && ( null === $to || $ts <= $to );
+				} ) );
+			}
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
 			return rest_ensure_response( array(
@@ -222,6 +234,18 @@ add_action( 'rest_api_init', function () {
 			$retries  = (int) \LLAR\Core\Config::get( 'allowed_retries' );
 			$duration = (int) \LLAR\Core\Config::get( 'lockout_duration' );
 			$total    = (int) \LLAR\Core\Config::get( 'lockouts_total' );
+			// Fourteen site-local days of lockouts: the same rows the list
+			// shows, counted on the day of their last attempt, so a bar's
+			// total is exactly what clicking it narrows the list to. Their
+			// retries_stats counter would draw attempts, which the list
+			// cannot narrow to (it holds lockouts, not attempts).
+			$days = minn_admin_chart_days();
+			foreach ( minn_admin_llar_rows() as $r ) {
+				$ts = $r['date'] ? strtotime( $r['date'] ) : false;
+				if ( false !== $ts ) {
+					minn_admin_chart_bump( $days, wp_date( 'Y-m-d', $ts ) );
+				}
+			}
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
@@ -243,6 +267,7 @@ add_action( 'rest_api_init', function () {
 						'value' => $retries ? sprintf( __( '%1$d retries, then a %2$s lockout', 'minn-admin' ), $retries, human_time_diff( 0, max( 60, $duration ) ) ) : '—',
 					),
 				),
+				'chart'   => minn_admin_chart_build( $days, __( 'Lockouts', 'minn-admin' ) ),
 				'actions' => array(
 					array( 'label' => __( 'Open Limit Login Attempts ↗', 'minn-admin' ), 'href' => minn_admin_llar_admin_url() ),
 				),

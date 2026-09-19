@@ -12,7 +12,7 @@
  * Status card (v0.16 Axis A): 24h / 7d / all-time counts + high+ severity
  * mix, prefix-scoped COUNTs only.
  *
- * last-sweep: 2026-07-15
+ * last-sweep: 2026-09-19
  *
  * @package minn-admin
  */
@@ -98,7 +98,24 @@ function minn_admin_wsal_status_model() {
 		$blog
 	) );
 	$last = $wpdb->get_var( $wpdb->prepare( "SELECT created_on FROM {$table} WHERE {$scope} ORDER BY id DESC LIMIT 1", $blog ) );
+	// Fourteen site-local days, high + critical split out. created_on is a
+	// UTC epoch, so the day is bucketed by integer arithmetic (the shared
+	// helper) and grouped in SQL so a busy log never streams every row.
+	$days   = minn_admin_chart_days();
+	$day_ex = minn_admin_chart_epoch_day_sql( 'created_on' );
+	$series = $wpdb->get_results( $wpdb->prepare(
+		"SELECT {$day_ex} AS d, COUNT(*) AS c, SUM(CASE WHEN severity IN (500, 400) THEN 1 ELSE 0 END) AS hot
+		 FROM {$table} WHERE created_on >= %d AND {$scope} GROUP BY d",
+		minn_admin_chart_epoch_since(),
+		$blog
+	) );
 	// phpcs:enable
+	foreach ( (array) $series as $row ) {
+		$d = minn_admin_chart_epoch_bucket_day( $row->d );
+		// The soft bar is value + secondary, so the two series stay disjoint.
+		minn_admin_chart_bump( $days, $d, false, (int) $row->c - (int) $row->hot );
+		minn_admin_chart_bump( $days, $d, true, (int) $row->hot );
+	}
 
 	$last_label = '—';
 	if ( $last ) {
@@ -130,6 +147,7 @@ function minn_admin_wsal_status_model() {
 				'value' => number_format_i18n( $hot ),
 			),
 		),
+		'chart'   => minn_admin_chart_build( $days, __( 'Events', 'minn-admin' ), __( 'High + critical', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open WP Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_wsal_admin_url() ),
 		),
@@ -156,6 +174,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route'     => 'minn-admin/v1/wsal/events',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
+			'dateQuery' => 'after={from}&before={to}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'tabs'      => array(
@@ -226,6 +245,10 @@ add_action( 'rest_api_init', function () {
 				$where[] = '(username LIKE %s OR object LIKE %s OR event_type LIKE %s)';
 				array_push( $args, $like, $like, $like );
 			}
+			// A clicked chart bar: site-local bounds onto the UTC epoch column.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created_on', 'epoch' );
+			$where = array_merge( $where, $range_sql );
+			$args  = array_merge( $args, $range_args );
 
 			$where_sql = implode( ' AND ', $where );
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-derived, WHERE is placeholder-built above.

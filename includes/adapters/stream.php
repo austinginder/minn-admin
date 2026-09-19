@@ -10,7 +10,7 @@
  * Status card (v0.16 Axis A): 24h / 7d / all-time + top connector, scoped
  * to the current blog_id.
  *
- * last-sweep: 2026-07-15
+ * last-sweep: 2026-09-19
  *
  * @package minn-admin
  */
@@ -154,7 +154,19 @@ function minn_admin_stream_status_model() {
 		$blog,
 		$since_7d
 	) );
+	// Fourteen site-local days of records. `created` is GMT, so the day it
+	// lands on is computed in SQL with the site's offset and grouped there.
+	$days   = minn_admin_chart_days();
+	$day_ex = minn_admin_chart_utc_day_sql( 'created' );
+	$series = $wpdb->get_results( $wpdb->prepare(
+		"SELECT {$day_ex} AS d, COUNT(*) AS c FROM {$table} WHERE blog_id = %d AND created >= %s GROUP BY d",
+		$blog,
+		minn_admin_chart_utc_since()
+	) );
 	// phpcs:enable
+	foreach ( (array) $series as $row ) {
+		minn_admin_chart_bump( $days, (string) $row->d, false, (int) $row->c );
+	}
 
 	$last_label = '—';
 	if ( $last ) {
@@ -194,6 +206,7 @@ function minn_admin_stream_status_model() {
 				'value' => $top_label,
 			),
 		),
+		'chart'   => minn_admin_chart_build( $days, __( 'Events', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Stream ↗', 'minn-admin' ), 'href' => minn_admin_stream_admin_url() ),
 		),
@@ -220,6 +233,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route'     => 'minn-admin/v1/stream/records',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
+			'dateQuery' => 'after={from}&before={to}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			// Connector is Stream's first-class source dimension (posts/users/…).
@@ -299,6 +313,10 @@ add_action( 'rest_api_init', function () {
 				$where[] = '(summary LIKE %s OR connector LIKE %s OR context LIKE %s)';
 				array_push( $args, $like, $like, $like );
 			}
+			// A clicked chart bar: site-local bounds onto the GMT column.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created', 'utc' );
+			$where = array_merge( $where, $range_sql );
+			$args  = array_merge( $args, $range_args );
 
 			$where_sql = implode( ' AND ', $where );
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-derived; WHERE is placeholder-built.

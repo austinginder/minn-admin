@@ -225,6 +225,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'search'    => 'search={q}',
+			'dateQuery' => 'after={from}&before={to}',
 			'tabs'      => array(
 				'param'    => 'level',
 				'static'   => array(
@@ -282,6 +283,10 @@ add_action( 'rest_api_init', function () {
 				$where[] = '(username LIKE %s OR event_type LIKE %s OR ip LIKE %s)';
 				array_push( $args, $like, $like, $like );
 			}
+			// A clicked chart bar: site-local bounds onto the UTC epoch column.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created', 'epoch' );
+			$where = array_merge( $where, $range_sql );
+			$args  = array_merge( $args, $range_args );
 			$where_sql = implode( ' AND ', $where );
 			$count_sql = "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}";
 			$total     = (int) ( $args ? $wpdb->get_var( $wpdb->prepare( $count_sql, $args ) ) : $wpdb->get_var( $count_sql ) );
@@ -411,7 +416,24 @@ add_action( 'rest_api_init', function () {
 			$warn  = $scoped( " AND created >= %d AND level IN ('warning','error','fatal')", array( $now - 7 * DAY_IN_SECONDS ) );
 			$last_sql  = "SELECT created FROM {$table} WHERE 1=1{$scope_sql} ORDER BY id DESC LIMIT 1";
 			$last  = $scope_args ? $wpdb->get_var( $wpdb->prepare( $last_sql, $scope_args ) ) : $wpdb->get_var( $last_sql );
+			// Fourteen site-local days, warnings split out. `created` is a UTC
+			// epoch: bucketed by integer arithmetic, grouped in SQL, scoped
+			// to this site exactly like every count above.
+			$days   = minn_admin_chart_days();
+			$day_ex = minn_admin_chart_epoch_day_sql( 'created' );
+			$series = $wpdb->get_results( $wpdb->prepare(
+				"SELECT {$day_ex} AS d, COUNT(*) AS c,
+					SUM(CASE WHEN level IN ('warning','error','fatal') THEN 1 ELSE 0 END) AS w
+				 FROM {$table} WHERE created >= %d{$scope_sql} GROUP BY d",
+				array_merge( array( minn_admin_chart_epoch_since() ), $scope_args )
+			) );
 			// phpcs:enable
+			foreach ( (array) $series as $row ) {
+				$d = minn_admin_chart_epoch_bucket_day( $row->d );
+				// The soft bar is value + secondary, so the two series stay disjoint.
+				minn_admin_chart_bump( $days, $d, false, (int) $row->c - (int) $row->w );
+				minn_admin_chart_bump( $days, $d, true, (int) $row->w );
+			}
 			$posture = minn_admin_aios_login_posture();
 			$rows    = array(
 				array(
@@ -466,6 +488,7 @@ add_action( 'rest_api_init', function () {
 			}
 			return rest_ensure_response( array(
 				'rows'    => $rows,
+				'chart'   => minn_admin_chart_build( $days, __( 'Events', 'minn-admin' ), __( 'Warnings', 'minn-admin' ) ),
 				'actions' => $actions,
 			) );
 		},

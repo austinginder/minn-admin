@@ -105,6 +105,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route'     => 'minn-admin/v1/solid-security/lockouts',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
+			'dateQuery' => 'after={from}&before={to}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'tabs'      => array(
@@ -163,6 +164,12 @@ add_action( 'rest_api_init', function () {
 				$args[] = $like;
 				$args[] = $like;
 			}
+			// A clicked chart bar: site-local bounds onto the GMT column.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'lockout_start_gmt', 'utc' );
+			if ( $range_sql ) {
+				$where .= ' AND ' . implode( ' AND ', $range_sql );
+				$args   = array_merge( $args, $range_args );
+			}
 
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table prefix-derived; WHERE placeholder-built.
 			$total = (int) ( $args
@@ -216,7 +223,19 @@ add_action( 'rest_api_init', function () {
 			) );
 			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
 			$bans  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->base_prefix}itsec_bans" );
+			// Fourteen site-local days of lockouts. lockout_start_gmt is UTC,
+			// so the day it lands on is computed in SQL with the site's
+			// offset and grouped there.
+			$days   = minn_admin_chart_days();
+			$day_ex = minn_admin_chart_utc_day_sql( 'lockout_start_gmt' );
+			$series = $wpdb->get_results( $wpdb->prepare(
+				"SELECT {$day_ex} AS d, COUNT(*) AS c FROM {$table} WHERE lockout_start_gmt >= %s GROUP BY d",
+				minn_admin_chart_utc_since()
+			) );
 			// phpcs:enable
+			foreach ( (array) $series as $row ) {
+				minn_admin_chart_bump( $days, (string) $row->d, false, (int) $row->c );
+			}
 			$modules = array();
 			try {
 				$modules = (array) ITSEC_Modules::get_active_modules();
@@ -257,6 +276,7 @@ add_action( 'rest_api_init', function () {
 						'value' => $on ? implode( ' · ', $on ) : __( 'No protection modules active', 'minn-admin' ),
 					),
 				),
+				'chart'   => minn_admin_chart_build( $days, __( 'Lockouts', 'minn-admin' ) ),
 				'actions' => array(
 					array( 'label' => __( 'Open Solid Security ↗', 'minn-admin' ), 'href' => minn_admin_solid_security_admin_url() ),
 				),

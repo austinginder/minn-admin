@@ -19,7 +19,7 @@
  * read here gates on the column actually existing rather than on the plugin
  * version; the labels and the filter matching are the plugin's own.
  *
- * last-sweep: 2026-09-02
+ * last-sweep: 2026-09-19
  *
  * @package minn-admin
  */
@@ -186,7 +186,19 @@ function minn_admin_aryo_status_model() {
 		 GROUP BY action ORDER BY c DESC LIMIT 1",
 		$since_w
 	) );
+	// Fourteen site-local days of events. hist_time is the site's wall
+	// clock read as an epoch (current_time('timestamp')), so it buckets by
+	// plain day arithmetic with no offset (the local-epoch clock).
+	$days   = minn_admin_chart_days();
+	$day_ex = minn_admin_chart_epoch_day_sql( 'hist_time', 'local-epoch' );
+	$series = $wpdb->get_results( $wpdb->prepare(
+		"SELECT {$day_ex} AS d, COUNT(*) AS c FROM {$table} WHERE hist_time >= %d GROUP BY d",
+		minn_admin_chart_epoch_since( 14, 'local-epoch' )
+	) );
 	// phpcs:enable
+	foreach ( (array) $series as $row ) {
+		minn_admin_chart_bump( $days, minn_admin_chart_epoch_bucket_day( $row->d ), false, (int) $row->c );
+	}
 
 	$last_label = '—';
 	if ( $last ) {
@@ -227,6 +239,7 @@ function minn_admin_aryo_status_model() {
 				'value' => $top_label,
 			),
 		),
+		'chart'   => minn_admin_chart_build( $days, __( 'Events', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_aryo_admin_url() ),
 		),
@@ -255,6 +268,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'route'     => 'minn-admin/v1/aryo/events',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
+			'dateQuery' => 'after={from}&before={to}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			// Action is Aryo's first-class verb (logged_in / updated / installed…).
@@ -360,6 +374,10 @@ add_action( 'rest_api_init', function () {
 				$where[] = '(object_name LIKE %s OR action LIKE %s OR object_type LIKE %s)';
 				array_push( $args, $like, $like, $like );
 			}
+			// A clicked chart bar: site-local bounds onto the local-epoch column.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'hist_time', 'local-epoch' );
+			$where = array_merge( $where, $range_sql );
+			$args  = array_merge( $args, $range_args );
 			$where_sql = implode( ' AND ', $where );
 
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-derived; WHERE is placeholder-built.

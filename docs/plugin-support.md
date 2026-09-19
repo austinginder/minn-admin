@@ -321,8 +321,11 @@ From `docs/adapter-coverage.md` and `docs/full-ui-adapters.md` (2026-07-15):
   Forms, Forminator, Flamingo and Everest Forms all match the SureForms
   shape; every number comes from the plugin's own storage). Gravity Forms
   deliberately skips the card: its depth lives in the entry workflow.
-- Status/chart parity on the remaining thin adapters outside the forms
-  family, when a family sweep is scheduled (`/dev-minn-admin sweep`).
+- ~~Status/chart parity on the remaining thin adapters outside the forms
+  family~~ ✅ shipped 2026-09-19 for the activity-log family (all eight
+  providers chart fourteen days and narrow their list by bar; see
+  `docs/adapter-coverage.md`). The remaining cards without charts (gift
+  cards, reviews, Ottokit) are deliberate: fleet counts under five each.
 
 Parked as structural: **multilingual** (WPML / Polylang / TranslatePress)
 needs a language dimension in content lists. Also parked, with scope and
