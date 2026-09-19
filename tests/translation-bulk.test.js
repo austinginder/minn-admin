@@ -87,7 +87,10 @@ const serve = () => new Promise( ( resolve ) => {
 
 		await page.waitForSelector( '.minn-bulk-modal', { timeout: 15000 } );
 		const opened = await panel();
-		t.check( 'the batch panel opens with one row per pending pack', opened && opened.rows === pending, JSON.stringify( opened && { rows: opened.rows, pending, title: opened.title } ) );
+		// Real packs can land between the count above and the click (the
+		// site's own update check runs on cron), so the row count is bounded
+		// from below, not matched exactly.
+		t.check( 'the batch panel opens with a row per pending pack', opened && opened.rows >= pending && opened.rows >= 3, JSON.stringify( opened && { rows: opened.rows, pending, title: opened.title } ) );
 		t.check( 'panel title counts language packs, not plugins', /language pack/i.test( opened.title ), opened.title );
 		t.check( 'the fixture row carries its own label (component · language)', !! opened.mine, JSON.stringify( opened.mine ) );
 
@@ -133,8 +136,10 @@ const serve = () => new Promise( ( resolve ) => {
 		const installed = await rest( 'GET', 'minn-admin/v1/translations/installed' );
 		const has = LOCALES.every( ( l ) => ( installed.json && installed.json.languages || [] ).some( ( x ) => x.locale === l ) );
 		t.check( 'fixture locales show in the installed languages list', has );
-		const chip = await page.evaluate( () => document.querySelector( '#minn-upd-chip' ).hidden );
-		t.check( 'top-bar chip clears when the batch is done', chip === true, String( chip ) );
+		// The runner refreshes the plugin list (hundreds of plugins here)
+		// before the translations flag clears, so the chip lingers a moment.
+		const chipCleared = await page.waitForFunction( () => document.querySelector( '#minn-upd-chip' ).hidden === true, null, { timeout: 60000 } ).then( () => true ).catch( () => false );
+		t.check( 'top-bar chip clears when the batch is done', chipCleared );
 	} finally {
 		for ( const l of LOCALES ) await rest( 'POST', 'minn-admin/v1/translations/remove', { locale: l } ).catch( () => {} );
 		await setOpt( '' ).catch( () => {} );

@@ -22074,7 +22074,7 @@
 		if ( state.bulk && state.bulk.phase !== 'done' ) {
 			const it = state.bulk.items || {};
 			const lang = state.bulk.kind === 'translations';
-			const keyOf = ( f ) => lang ? f : f + '.php';
+			const keyOf = ( f ) => f;
 			const n = state.bulk.files.length;
 			const done = state.bulk.files.filter( ( f ) => [ 'done', 'failed' ].includes( ( it[ keyOf( f ) ] || {} ).state ) ).length;
 			const fetched = state.bulk.files.filter( ( f ) => [ 'fetched', 'unpacking', 'installing', 'done', 'failed', 'vendor' ].includes( ( it[ keyOf( f ) ] || {} ).state ) ).length;
@@ -22087,8 +22087,11 @@
 					: ( lang
 						/* translators: %s: number of language packs. */
 						? sprintf( __( 'Updating %s language packs…' ), n )
-						/* translators: %s: number of plugins. */
-						: sprintf( __( 'Updating %s plugins…' ), n ) );
+						: state.bulk.kind === 'plugins'
+							/* translators: %s: number of plugins. */
+							? sprintf( __( 'Updating %s plugins…' ), n )
+							/* translators: %s: number of pending updates. */
+							: sprintf( __( 'Updating %s updates…' ), n ) );
 		}
 		const label = bulk || state.updatingAll || translations;
 		chip.hidden = ! label;
@@ -22448,6 +22451,8 @@
 		const updateCount = Object.keys( updates ).length;
 		const queueCount = pluginUpdatePending.size;
 		const bulkBusy = queueCount > 0;
+		// The button covers every kind with a pending offer, not just plugins.
+		const everyCount = updateCount + ( B.caps.updateThemes ? Object.keys( state.cache.themeUpdates || {} ).length : 0 ) + ( B.caps.updateLanguages ? ( state.cache.translationUpdates || 0 ) : 0 );
 		// On multisite, network-activated plugins report a third status.
 		// They are running (count as active) but per-site toggles can't
 		// touch them — that's Network Admin's call.
@@ -22498,11 +22503,11 @@
 			${ B.caps.update ? `
 				<span style="margin-inline-start:auto;display:flex;gap:8px;align-items:center;">
 					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }"${ bulkBusy ? ' disabled' : '' }>${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>
-					${ updateCount || bulkBusy ? `
-					<button class="minn-btn-soft" id="minn-update-all"${ bulkBusy ? ' disabled' : '' } title="${ esc( bulkBusy ? __( 'Updates run one at a time' ) : __( 'Update every plugin with a pending offer' ) ) }">
+					${ everyCount || bulkBusy ? `
+					<button class="minn-btn-soft" id="minn-update-all"${ bulkBusy ? ' disabled' : '' } title="${ esc( bulkBusy ? __( 'Updates run one at a time' ) : __( 'Update every plugin, theme and language pack with a pending offer' ) ) }">
 						${ icon( 'refresh' ) } ${ bulkBusy
 							? esc( sprintf( /* translators: %s: number of plugins. */ _n( 'Updating %s plugin…', 'Updating %s plugins…', queueCount ), queueCount ) )
-							: `${ esc( __( 'Update everything' ) ) } <span aria-hidden="true">(${ updateCount })</span>` }
+							: `${ esc( __( 'Update everything' ) ) } <span aria-hidden="true">(${ everyCount })</span>` }
 					</button>` : '' }
 				</span>` : '' }
 		</div>
@@ -22924,7 +22929,11 @@
 		<div class="minn-toolbar minn-toolbar-views">
 			${ extTabsHtml() }
 			${ B.caps.updateThemes ? `
-				<button class="minn-btn-soft" id="minn-check-updates" style="margin-inline-start:auto;" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }">${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>` : '' }
+				<span style="margin-inline-start:auto;display:flex;gap:8px;align-items:center;">
+					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }">${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>
+					${ ( () => { const n = updateCount + ( B.caps.update ? Object.keys( state.cache.pluginUpdates || {} ).length : 0 ) + ( B.caps.updateLanguages ? ( state.cache.translationUpdates || 0 ) : 0 ); return n ? `
+					<button class="minn-btn-soft" id="minn-update-all" title="${ esc( __( 'Update every plugin, theme and language pack with a pending offer' ) ) }">${ icon( 'refresh' ) } ${ esc( __( 'Update everything' ) ) } <span aria-hidden="true">(${ n })</span></button>` : ''; } )() }
+				</span>` : '' }
 		</div>
 		<div class="minn-toolbar">
 			${ extFilterBarHtml( filterDefs, counts, __( 'Search themes…' ) ) }
@@ -22996,6 +23005,10 @@
 		const checkThemesUpd = $( '#minn-check-updates', view );
 		if ( checkThemesUpd ) {
 			checkThemesUpd.addEventListener( 'click', () => checkForUpdates( checkThemesUpd ) );
+		}
+		const updateAllThemes = $( '#minn-update-all', view );
+		if ( updateAllThemes ) {
+			updateAllThemes.addEventListener( 'click', () => updateAllPlugins( updateAllThemes ) );
 		}
 		const addTheme = $( '#minn-add-theme', view );
 		if ( addTheme ) {
@@ -23161,12 +23174,17 @@
 	// splitting the work into one request per plugin, which re-ran the
 	// update check against wp.org and every vendor updater for each one.
 	// A single plugin still goes through queuePluginUpdate.
+	// Update everything with a pending offer (plugins, themes, language packs)
+	// as ONE batch behind one panel. WordPress core stays its own run (the
+	// notification panel's Update everything adds it last).
 	async function updateAllPlugins( btn ) {
-		const updates = state.cache.pluginUpdates || {};
-		const files = Object.keys( updates )
+		const files = B.caps.update ? Object.keys( state.cache.pluginUpdates || {} )
 			.map( ( k ) => k.replace( /\.php$/, '' ) )
-			.filter( ( file ) => ! pluginUpdatePending.has( file ) );
-		if ( ! files.length ) {
+			.filter( ( file ) => ! pluginUpdatePending.has( file ) ) : [];
+		const sheets = B.caps.updateThemes ? Object.keys( state.cache.themeUpdates || {} ) : [];
+		const packs = B.caps.updateLanguages ? translationPackRows() : [];
+		const total = files.length + sheets.length + packs.length;
+		if ( ! total ) {
 			if ( pluginUpdatePending.size ) {
 				toast( __( 'Updates are already running — watch the cards for progress.' ), true );
 			} else {
@@ -23185,22 +23203,24 @@
 		}
 		const plugins = state.cache.plugins || [];
 		const nameOf = ( file ) => pluginDisplayName( ( plugins.find( ( p ) => p.plugin === file ) || {} ).name || file );
-		if ( files.length === 1 ) {
+		if ( total === 1 && files.length === 1 ) {
 			queuePluginUpdate( files[ 0 ], nameOf( files[ 0 ] ) );
 			return;
 		}
-		/* translators: %s: number of plugins. */
-		toast( sprintf( __( 'Updating %s plugins…' ), files.length ) );
+		/* translators: %s: number of pending updates. */
+		toast( sprintf( _n( 'Updating %s update…', 'Updating %s updates…', total ), total ) );
 		if ( btn ) {
 			btn.disabled = true;
-			btn.innerHTML = `${ icon( 'refresh' ) } ${ esc( __( 'Updating…' ) ) } (${ files.length })`;
+			btn.innerHTML = `${ icon( 'refresh' ) } ${ esc( __( 'Updating…' ) ) } (${ total })`;
 		}
 		files.forEach( ( f ) => pluginUpdatePending.add( f ) );
 		if ( state.route === 'extensions' && state.extTab === 'plugins' ) renderExtensions();
 		else paintPluginUpdateQueue();
-		const r = await runBulkPluginUpdate( files, () => {
-			/* translators: 1: plugins done so far, 2: plugins in the batch. */
-			if ( btn && btn.isConnected ) btn.innerHTML = `${ icon( 'refresh' ) } ${ esc( sprintf( __( 'Updating… (%1$s/%2$s)' ), bulkDone.size, files.length ) ) }`;
+		let doneCount = 0;
+		const r = await runBulkUpdate( { plugins: files, themes: sheets, translations: packs }, () => {
+			doneCount++;
+			/* translators: 1: updates done so far, 2: updates in the batch. */
+			if ( btn && btn.isConnected ) btn.innerHTML = `${ icon( 'refresh' ) } ${ esc( sprintf( __( 'Updating… (%1$s/%2$s)' ), doneCount, total ) ) }`;
 		} );
 		if ( r.minnUpdated ) {
 			// The page is about to be replaced; the panel would only cover
@@ -23209,16 +23229,23 @@
 			reloadAfterMinnSelfUpdate( r.minnVersion );
 			return;
 		}
-		const n = r.done.length;
-		if ( r.failed.length ) {
-			/* translators: 1: plugins updated, 2: plugins that failed, 3: their names. */
-			toast( sprintf( _n( 'Updated %1$s plugin; %2$s failed: %3$s', 'Updated %1$s plugins; %2$s failed: %3$s', n ), n, r.failed.length, r.failed.map( nameOf ).join( ', ' ) ), true );
+		const n = r.done.length + r.themes.done.length + ( r.translations ? ( r.translations.updated || 0 ) : 0 );
+		const failures = [
+			...r.failed.map( nameOf ),
+			...r.themes.failed.map( ( sh ) => ( ( state.cache.themes || [] ).find( ( t ) => t.stylesheet === sh ) || {} ).name || sh ),
+		];
+		const packFails = r.translations ? ( r.translations.failed || 0 ) : 0;
+		/* translators: %d is a number of language packs. */
+		if ( packFails ) failures.push( sprintf( _n( '%d language pack', '%d language packs', packFails ), packFails ) );
+		if ( failures.length ) {
+			/* translators: 1: updates applied, 2: updates that failed, 3: their names. */
+			toast( sprintf( _n( 'Applied %1$s update; %2$s failed: %3$s', 'Applied %1$s updates; %2$s failed: %3$s', n ), n, failures.length, failures.join( ', ' ) ), true );
 		} else if ( r.dropped ) {
-			/* translators: %s: plugins updated. */
-			toast( sprintf( __( 'Updated %s plugins. The connection dropped mid-batch, so the list was re-read from the server.' ), n ) );
+			/* translators: %s: updates applied. */
+			toast( sprintf( __( 'Applied %s updates. The connection dropped mid-batch, so the list was re-read from the server.' ), n ) );
 		} else {
-			/* translators: %s: plugins updated. */
-			toast( sprintf( _n( 'Updated %s plugin.', 'Updated %s plugins.', n ), n ) );
+			/* translators: %s: updates applied. */
+			toast( sprintf( _n( 'Applied %s update.', 'Applied %s updates.', n ), n ) );
 		}
 	}
 	const bulkDone = new Set(); // files the running batch has already finished (cards cleared)
@@ -23283,21 +23310,69 @@
 		return st;
 	}
 
-	async function runBulkPluginUpdate( files, onProgress ) {
+	// Pending language packs as panel rows, listed by language then component
+	// (the order the server installs in).
+	function translationPackRows() {
+		const rows = [];
+		const seen = new Set();
+		const byName = ( a, b ) => String( a || '' ).localeCompare( String( b || '' ), undefined, { sensitivity: 'base' } );
+		( state.cache.translationGroups || [] ).slice().sort( ( a, b ) => byName( a.name || a.locale, b.name || b.locale ) ).forEach( ( g ) => {
+			( Array.isArray( g.components ) ? g.components : [] ).slice().sort( ( a, b ) => byName( a.name || a.slug, b.name || b.slug ) ).forEach( ( c ) => {
+				const key = `${ c.type || '' }|${ c.slug || '' }|${ g.locale }`;
+				if ( seen.has( key ) ) return;
+				seen.add( key );
+				rows.push( { key, version: c.version || '', label: `${ c.name || c.slug } · ${ g.name || g.locale }` } );
+			} );
+		} );
+		return rows;
+	}
+
+	// The shared bulk runner: plugins, themes and language packs in ONE
+	// request (updates/all, the path `wp plugin update --all` and friends
+	// take), reported through one token-keyed record the panel paints from.
+	// Rows are keyed as the record keys them: plugin files (the cards paint
+	// from those), "theme:<stylesheet>", and "type|slug|locale". Survives a
+	// dropped socket (the upgrader can recycle the PHP worker mid-batch on
+	// some stacks) by polling on until the record says finished or goes quiet.
+	// kinds = { plugins: files[] (sans .php), themes: stylesheets[],
+	// translations: rows from translationPackRows() }.
+	async function runBulkUpdate( kinds, onProgress ) {
+		const files = kinds.plugins || [];
+		const sheets = kinds.themes || [];
+		const packs = kinds.translations || [];
 		const token = mintBulkToken();
 		const offers = Object.assign( {}, state.cache.pluginUpdates || {} );
+		const themeOffers = Object.assign( {}, state.cache.themeUpdates || {} );
 		bulkDone.clear();
 		let failed = [];
+		let themeDone = [];
+		let themeFailed = [];
 		let finished = false;
 		let lastChange = Date.now();
 		let lastSig = '';
+		const doneKeys = new Set();
+		const isPlugin = ( k ) => k.endsWith( '.php' ) && ! k.startsWith( 'theme:' );
+		const isTheme = ( k ) => k.startsWith( 'theme:' );
+		const sections = ( files.length ? 1 : 0 ) + ( sheets.length ? 1 : 0 ) + ( packs.length ? 1 : 0 );
+		const kind = sections > 1 ? 'mixed' : ( files.length ? 'plugins' : ( sheets.length ? 'themes' : 'translations' ) );
 		// The live panel. Rows seed as queued so the list is complete from
-		// the first frame; each poll repaints it from the record.
-		state.bulk = { token, files, items: {}, phase: 'check', timing: {}, startedAt: Date.now(), dropped: false };
-		const installedNow = {};
-		( state.cache.plugins || [] ).forEach( ( p ) => { installedNow[ p.plugin ] = p.version || ''; } );
-		state.bulk.from = installedNow;
-		files.forEach( ( f ) => { state.bulk.items[ f + '.php' ] = { state: 'queued', bytes: 0, version: offers[ f + '.php' ] || '' }; } );
+		// the first frame, in the record's order; each poll repaints it.
+		state.bulk = { kind, token, files: [], items: {}, phase: 'check', timing: {}, startedAt: Date.now(), dropped: false };
+		const plugins = state.cache.plugins || [];
+		files.forEach( ( f ) => {
+			const p = plugins.find( ( x ) => x.plugin === f ) || {};
+			state.bulk.files.push( f + '.php' );
+			state.bulk.items[ f + '.php' ] = { kind: 'plugin', state: 'queued', bytes: 0, version: offers[ f + '.php' ] || '', from: p.version || '', label: pluginDisplayName( p.name || f.split( '/' )[ 0 ] ) };
+		} );
+		sheets.forEach( ( sh ) => {
+			const t = ( state.cache.themes || [] ).find( ( x ) => x.stylesheet === sh ) || {};
+			state.bulk.files.push( 'theme:' + sh );
+			state.bulk.items[ 'theme:' + sh ] = { kind: 'theme', state: 'queued', bytes: 0, version: themeOffers[ sh ] || '', from: t.version || '', label: t.name || sh };
+		} );
+		packs.forEach( ( row ) => {
+			state.bulk.files.push( row.key );
+			state.bulk.items[ row.key ] = { kind: 'translation', state: 'queued', bytes: 0, version: row.version || '', label: row.label };
+		} );
 		state.modal = { type: 'bulk-update' };
 		const paintPanel = () => { updateUpdChip(); if ( state.modal && state.modal.type === 'bulk-update' ) renderOverlays(); };
 		paintPanel();
@@ -23306,23 +23381,37 @@
 			if ( p.items ) Object.assign( state.bulk.items, p.items );
 			if ( p.phase ) state.bulk.phase = p.phase;
 			if ( p.timing ) state.bulk.timing = p.timing;
-			const cur = p.current ? p.current.replace( /\.php$/, '' ) : null;
+			// The record's queue is the install order and the list order. It
+			// grows section by section (plugins, then themes, then packs), so
+			// rows the client seeded for later sections stay listed after it.
+			if ( Array.isArray( p.queue ) && p.queue.length ) {
+				const order = p.queue.slice();
+				state.bulk.files.forEach( ( k ) => { if ( ! order.includes( k ) ) order.push( k ); } );
+				state.bulk.files = order;
+			}
+			const cur = p.current && isPlugin( p.current ) ? p.current.replace( /\.php$/, '' ) : null;
 			if ( cur !== pluginUpdateCurrent ) {
 				pluginUpdateCurrent = cur;
 				paintPluginUpdateQueue();
 			}
-			( p.done || [] ).forEach( ( f ) => {
-				const file = f.replace( /\.php$/, '' );
-				if ( bulkDone.has( file ) ) return;
-				bulkDone.add( file );
-				pluginUpdatePending.delete( file );
-				applyPluginUpdateOptimistic( file, offers[ f ] || '' );
-				clearPluginCardUpdateUi( file );
-				if ( onProgress ) onProgress( file );
+			( p.done || [] ).forEach( ( k ) => {
+				if ( doneKeys.has( k ) ) return;
+				doneKeys.add( k );
+				if ( isPlugin( k ) ) {
+					const file = k.replace( /\.php$/, '' );
+					bulkDone.add( file );
+					pluginUpdatePending.delete( file );
+					applyPluginUpdateOptimistic( file, offers[ k ] || '' );
+					clearPluginCardUpdateUi( file );
+				} else if ( isTheme( k ) ) {
+					themeDone.push( k.slice( 6 ) );
+				}
+				if ( onProgress ) onProgress( k );
 			} );
-			failed = ( p.failed || [] ).map( ( f ) => f.replace( /\.php$/, '' ) );
+			failed = ( p.failed || [] ).filter( isPlugin ).map( ( f ) => f.replace( /\.php$/, '' ) );
 			failed.forEach( ( file ) => { pluginUpdatePending.delete( file ); markPluginCardBusy( file, false ); } );
-			const sig = JSON.stringify( [ p.current, ( p.done || [] ).length, failed.length, p.phase, Object.values( p.items || {} ).map( ( i ) => i.state + i.bytes ).join() ] );
+			themeFailed = ( p.failed || [] ).filter( isTheme ).map( ( k ) => k.slice( 6 ) );
+			const sig = JSON.stringify( [ p.current, ( p.done || [] ).length, ( p.failed || [] ).length, p.phase, Object.values( p.items || {} ).map( ( i ) => i.state + i.bytes ).join() ] );
 			if ( sig !== lastSig ) { lastSig = sig; lastChange = Date.now(); }
 			if ( p.finished ) finished = true;
 			paintPanel();
@@ -23333,12 +23422,26 @@
 		let dropped = false;
 		let minnUpdated = false;
 		let minnVersion = '';
+		let translations = null;
 		try {
-			const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: JSON.stringify( { token } ) } );
-			apply( { known: true, current: '', done: r.updated || [], failed: r.failed || [], finished: true, phase: 'done' } );
-			// The record's final write carries per-item states and timings.
+			const r = await api( 'minn-admin/v1/updates/all', { method: 'POST', body: JSON.stringify( { token, plugins: !! files.length, themes: !! sheets.length, translations: !! packs.length } ) } );
+			const pl = r.plugins || { updated: [], failed: [] };
+			const th = r.themes || { updated: [], failed: [] };
+			translations = r.translations || null;
+			apply( {
+				known: true, current: '',
+				done: [ ...( pl.updated || [] ), ...( th.updated || [] ).map( ( sh ) => 'theme:' + sh ) ],
+				failed: [ ...( pl.failed || [] ), ...( th.failed || [] ).map( ( sh ) => 'theme:' + sh ) ],
+				finished: true, phase: 'done',
+			} );
+			// The record's final write carries per-item states (language
+			// packs report only through it) and timings.
 			apply( await readProgress() );
-			if ( ( r.updated || [] ).some( isMinnAdminPluginFile ) ) {
+			if ( translations ) {
+				state.cache.translationUpdates = translations.remaining || 0;
+				state.cache.translationGroups = Array.isArray( translations.groups ) ? translations.groups : [];
+			}
+			if ( ( pl.updated || [] ).some( isMinnAdminPluginFile ) ) {
 				minnUpdated = true;
 				minnVersion = offers[ 'minn-admin/minn-admin.php' ] || '';
 			}
@@ -23364,7 +23467,9 @@
 				try {
 					const upd = await api( 'minn-admin/v1/plugin-updates' );
 					const map = ( upd && upd.updates ) || {};
+					const tmap = ( upd && upd.themes ) || {};
 					state.cache.pluginUpdates = map;
+					state.cache.themeUpdates = tmap;
 					files.forEach( ( file ) => {
 						if ( bulkDone.has( file ) ) return;
 						if ( ! map[ file + '.php' ] ) {
@@ -23375,6 +23480,18 @@
 							failed.push( file );
 						}
 					} );
+					sheets.forEach( ( sh ) => {
+						if ( themeDone.includes( sh ) ) return;
+						if ( ! tmap[ sh ] ) { themeDone.push( sh ); state.bulk.items[ 'theme:' + sh ].state = 'done'; }
+						else if ( ! themeFailed.includes( sh ) ) themeFailed.push( sh );
+					} );
+					if ( packs.length && upd ) {
+						state.cache.translationUpdates = upd.translations || 0;
+						state.cache.translationGroups = Array.isArray( upd.translationGroups ) ? upd.translationGroups : [];
+						const left = new Set( translationPackRows().map( ( row ) => row.key ) );
+						packs.forEach( ( row ) => { if ( ! left.has( row.key ) ) state.bulk.items[ row.key ].state = 'done'; } );
+						translations = { updated: packs.filter( ( row ) => state.bulk.items[ row.key ].state === 'done' ).length, failed: 0, remaining: state.cache.translationUpdates, groups: state.cache.translationGroups };
+					}
 				} catch ( e2 ) { /* the refresh below reports what it can */ }
 			}
 			if ( bulkDone.has( 'minn-admin/minn-admin' ) ) {
@@ -23389,14 +23506,16 @@
 			// Settle the panel whatever path got here: done rows stay done,
 			// anything else the server never confirmed reads as failed.
 			state.bulk.phase = 'done';
-			files.forEach( ( f ) => {
-				const it = state.bulk.items[ f + '.php' ];
-				if ( bulkDone.has( f ) ) it.state = 'done';
-				else if ( it.state !== 'failed' ) { it.state = 'failed'; it.error = it.error || __( 'not confirmed' ); }
+			state.bulk.files.forEach( ( k ) => {
+				const it = state.bulk.items[ k ];
+				if ( ! it ) return;
+				if ( isPlugin( k ) && bulkDone.has( k.replace( /\.php$/, '' ) ) ) it.state = 'done';
+				else if ( it.state !== 'done' && it.state !== 'failed' ) { it.state = 'failed'; it.error = it.error || __( 'not confirmed' ); }
 			} );
 			paintPanel();
 		}
-		// One list refresh for the batch, never showErr.
+		// One list refresh for the batch (plugins + every update map), never
+		// showErr; themes reload on their next paint.
 		const prev = state.cache.plugins;
 		const prevUpd = state.cache.pluginUpdates;
 		try {
@@ -23408,11 +23527,13 @@
 			if ( prev ) state.cache.plugins = prev;
 			if ( prevUpd ) state.cache.pluginUpdates = prevUpd;
 		}
+		if ( sheets.length ) state.cache.themes = null;
 		refreshPluginLinks();
-		if ( state.route === 'extensions' && state.extTab === 'plugins' ) renderExtensions();
+		if ( state.route === 'extensions' ) renderExtensions();
 		if ( state.notifOpen ) renderOverlays();
-		return { done: [ ...bulkDone ], failed, dropped, minnUpdated, minnVersion };
+		return { done: [ ...bulkDone ], failed, themes: { done: themeDone, failed: themeFailed }, translations, dropped, minnUpdated, minnVersion };
 	}
+	const runBulkPluginUpdate = ( files, onProgress ) => runBulkUpdate( { plugins: files }, onProgress );
 
 	async function loadTranslationUpdates() {
 		const summary = await api( 'minn-admin/v1/translations' );
@@ -23602,10 +23723,8 @@
 		return sprintf( __( '%1$s and %2$d more' ), preview, remaining );
 	}
 
-	// Every pending language pack in ONE request (translations/update: one
-	// bulk upgrader run, packages fetched side by side first), painted by the
-	// same panel the plugin batch uses. Items are keyed "type|slug|locale"
-	// and carry their own label, so the panel needs no lookup.
+	// Every pending language pack as ONE batch through the shared runner,
+	// with the same panel the plugin batch uses.
 	async function performTranslationUpdates() {
 		if ( state.updatingTranslations ) return null;
 		if ( state.bulk && state.bulk.phase !== 'done' ) {
@@ -23613,105 +23732,28 @@
 			renderOverlays();
 			return null;
 		}
-		const groups = state.cache.translationGroups || [];
-		const keys = [];
-		const items = {};
-		// Listed by language, then component: the order the server installs
-		// in (its record's queue is adopted below in case the two ever differ).
-		const byName = ( a, b ) => String( a || '' ).localeCompare( String( b || '' ), undefined, { sensitivity: 'base' } );
-		groups.slice().sort( ( a, b ) => byName( a.name || a.locale, b.name || b.locale ) ).forEach( ( g ) => {
-			( Array.isArray( g.components ) ? g.components : [] ).slice().sort( ( a, b ) => byName( a.name || a.slug, b.name || b.slug ) ).forEach( ( c ) => {
-				const k = `${ c.type || '' }|${ c.slug || '' }|${ g.locale }`;
-				if ( items[ k ] ) return;
-				keys.push( k );
-				// The same label the record will carry: component · the server's
-				// language name, so the first paint and the polled rows agree.
-				items[ k ] = { state: 'queued', bytes: 0, version: c.version || '', label: `${ c.name || c.slug } · ${ g.name || g.locale }` };
-			} );
-		} );
+		const packs = translationPackRows();
+		if ( ! packs.length ) {
+			toast( __( 'Translations are up to date.' ) );
+			return null;
+		}
 		state.updatingTranslations = true;
 		updateUpdChip();
 		if ( state.route === 'extensions' && state.extTab === 'translations' ) renderTranslations();
 		if ( state.notifOpen ) renderOverlays();
-		const token = mintBulkToken();
-		state.bulk = { kind: 'translations', token, files: keys, items, phase: 'check', timing: {}, startedAt: Date.now(), dropped: false };
-		state.modal = { type: 'bulk-update' };
-		const paintPanel = () => { updateUpdChip(); if ( state.modal && state.modal.type === 'bulk-update' ) renderOverlays(); };
-		paintPanel();
-		let finished = false;
-		let lastChange = Date.now();
-		let lastSig = '';
-		const apply = ( p ) => {
-			if ( ! p || ! p.known ) return;
-			if ( p.items ) Object.assign( state.bulk.items, p.items );
-			if ( p.phase ) state.bulk.phase = p.phase;
-			if ( p.timing ) state.bulk.timing = p.timing;
-			// The server's install order is the list order.
-			if ( Array.isArray( p.queue ) && p.queue.length === keys.length ) state.bulk.files = p.queue;
-			const sig = JSON.stringify( [ p.current, ( p.done || [] ).length, ( p.failed || [] ).length, p.phase, Object.values( p.items || {} ).map( ( i ) => i.state + i.bytes ).join() ] );
-			if ( sig !== lastSig ) { lastSig = sig; lastChange = Date.now(); }
-			if ( p.finished ) finished = true;
-			paintPanel();
-		};
-		const reader = makeProgressReader( token, 'minn-admin/v1/translations/update-progress', () => paintPanel() );
-		const poll = setInterval( async () => { if ( ! finished ) apply( await reader.read() ); }, 500 );
-		let result = null;
+		let r = null;
 		try {
-			result = await api( 'minn-admin/v1/translations/update', { method: 'POST', body: JSON.stringify( { token } ) } );
-			finished = true;
-			// The record's final write carries per-item states and timings.
-			apply( await reader.read() );
-			state.cache.translationUpdates = ( result && result.remaining ) || 0;
-			state.cache.translationGroups = ( result && Array.isArray( result.groups ) ) ? result.groups : [];
-		} catch ( e ) {
-			// The batch usually keeps running server-side after a dropped
-			// reply; follow it through its record. Quiet for 90s means the
-			// worker died with it: re-read what is still pending.
-			state.bulk.dropped = true;
-			paintPanel();
-			await waitForRestAlive( 20000 );
-			while ( ! finished ) {
-				const quiet = Date.now() - lastChange;
-				if ( reader.maintenance ? Date.now() - reader.maintenanceSince > 10 * 60000 : quiet > 90000 ) break;
-				await new Promise( ( res ) => setTimeout( res, reader.maintenance ? 3000 : 1200 ) );
-				apply( await reader.read() );
-				if ( ! reader.maintenance ) lastChange = Math.max( lastChange, reader.maintenanceSince );
-			}
-			try {
-				await loadTranslationUpdates();
-				const left = new Set();
-				( state.cache.translationGroups || [] ).forEach( ( g ) => ( g.components || [] ).forEach( ( c ) => left.add( `${ c.type || '' }|${ c.slug || '' }|${ g.locale }` ) ) );
-				keys.forEach( ( k ) => {
-					const it = state.bulk.items[ k ];
-					if ( ! left.has( k ) ) it.state = 'done';
-				} );
-				result = { updated: keys.filter( ( k ) => state.bulk.items[ k ].state === 'done' ).length, remaining: state.cache.translationUpdates, groups: state.cache.translationGroups, dropped: true };
-			} catch ( e2 ) {
-				result = { updated: 0, remaining: state.cache.translationUpdates || 0, groups: state.cache.translationGroups || [], dropped: true, error: e.message };
-			}
+			r = await runBulkUpdate( { translations: packs } );
 		} finally {
-			clearInterval( poll );
-			// Settle the panel whatever path got here: done rows stay done,
-			// anything else the server never confirmed reads as failed.
-			state.bulk.phase = 'done';
-			keys.forEach( ( k ) => {
-				const it = state.bulk.items[ k ];
-				if ( it.state !== 'done' && it.state !== 'failed' ) { it.state = 'failed'; it.error = it.error || __( 'not confirmed' ); }
-			} );
-			paintPanel();
 			state.updatingTranslations = false;
 			updateUpdChip();
 			if ( state.route === 'extensions' && state.extTab === 'translations' ) renderTranslations();
 			if ( state.notifOpen ) renderOverlays();
 		}
-		state.cache.notifications = null;
-		await loadNotifications().catch( () => {} );
-		if ( state.notifOpen ) renderOverlays();
-		const done = ( result && result.updated ) || 0;
+		const result = ( r && r.translations ) || { updated: 0, remaining: state.cache.translationUpdates || 0 };
+		const done = result.updated || 0;
 		const remaining = state.cache.translationUpdates || 0;
-		if ( result && result.error && ! done ) {
-			toast( result.error, true );
-		} else if ( remaining ) {
+		if ( remaining ) {
 			/* translators: 1: translation packages updated. 2: translation packages still waiting. */
 			toast( sprintf( _n( 'Updated %1$d translation package. %2$d still need attention.', 'Updated %1$d translation packages. %2$d still need attention.', done ), done, remaining ), true );
 		} else {
@@ -42528,65 +42570,37 @@
 		const minnOfferKey = Object.keys( state.cache.pluginUpdates || {} ).find( isMinnAdminPluginFile );
 		const minnOfferVersion = minnOfferKey ? state.cache.pluginUpdates[ minnOfferKey ] : '';
 		let minnSelfUpdated = false;
-		if ( parts.some( ( p ) => p.kind === 'plugins' ) ) {
-			// One bulk request by design (fastest path: never slow
-			// updates down for per-item progress); the chip shows the count.
-			const np = ( parts.find( ( p ) => p.kind === 'plugins' ) || {} ).n || 0;
-			/* translators: %s: number of plugins. */
-			setPhase( sprintf( _n( 'Updating %s plugin…', 'Updating %s plugins…', np ), np ) );
-			const files = Object.keys( state.cache.pluginUpdates || {} ).map( ( k ) => k.replace( /\.php$/, '' ) );
+		// Plugins, themes and language packs ride ONE batch (one request, one
+		// panel); core last still owns the maintenance window.
+		const files = parts.some( ( p ) => p.kind === 'plugins' ) ? Object.keys( state.cache.pluginUpdates || {} ).map( ( k ) => k.replace( /\.php$/, '' ) ) : [];
+		const sheets = parts.some( ( p ) => p.kind === 'themes' ) ? Object.keys( state.cache.themeUpdates || {} ) : [];
+		const packs = parts.some( ( p ) => p.kind === 'translations' ) ? translationPackRows() : [];
+		const total = files.length + sheets.length + packs.length;
+		if ( total ) {
+			/* translators: %s: number of pending updates. */
+			setPhase( sprintf( _n( 'Updating %s update…', 'Updating %s updates…', total ), total ) );
 			files.forEach( ( f ) => pluginUpdatePending.add( f ) );
 			let doneCount = 0;
-			const r = await runBulkPluginUpdate( files, () => {
+			const r = await runBulkUpdate( { plugins: files, themes: sheets, translations: packs }, () => {
 				doneCount++;
-				/* translators: 1: plugins done so far, 2: plugins in the batch. */
-				setPhase( sprintf( __( 'Updating plugins… (%1$s/%2$s)' ), doneCount, files.length ) );
+				/* translators: 1: updates done so far, 2: updates in the batch. */
+				setPhase( sprintf( __( 'Updating… (%1$s/%2$s)' ), doneCount, total ) );
 			} );
 			const n = r.done.length;
-			doneBits.push( `${ n } plugin${ n === 1 ? '' : 's' }` );
+			if ( files.length ) doneBits.push( `${ n } plugin${ n === 1 ? '' : 's' }` );
 			r.failed.forEach( ( f ) => failures.push( f ) );
+			const nt = r.themes.done.length;
+			if ( nt ) doneBits.push( `${ nt } theme${ nt === 1 ? '' : 's' }` );
+			r.themes.failed.forEach( ( sh ) => failures.push( `${ ( ( state.cache.themes || [] ).find( ( x ) => x.stylesheet === sh ) || {} ).name || sh }` ) );
+			const did = r.translations ? ( r.translations.updated || 0 ) : 0;
+			/* translators: %d is a number of translations. */
+			if ( did ) doneBits.push( sprintf( _n( '%d translation', '%d translations', did ), did ) );
+			if ( r.translations && r.translations.failed ) failures.push( 'translations: ' + r.translations.failed );
 			// Same hard-reload need as single-plugin Update: new app.js / CSS
 			// / boot payload stay stale until a full navigation.
 			if ( r.minnUpdated ) {
 				minnSelfUpdated = true;
 				if ( state.modal && state.modal.type === 'bulk-update' ) closeModal();
-			}
-		}
-		const themeMap = state.cache.themeUpdates || {};
-		if ( parts.some( ( p ) => p.kind === 'themes' ) ) {
-			let ok = 0;
-			const sheets = Object.keys( themeMap );
-			for ( const stylesheet of sheets ) {
-				const t = ( state.cache.themes || [] ).find( ( x ) => x.stylesheet === stylesheet );
-				const nth = sheets.indexOf( stylesheet ) + 1;
-				const counter = sheets.length > 1 ? ` (${ nth }/${ sheets.length })` : '';
-				setPhase( `Updating ${ t ? t.name : stylesheet }…${ counter }` );
-				try {
-					await api( 'minn-admin/v1/themes/update', { method: 'POST', body: JSON.stringify( { stylesheet } ) } );
-					ok++;
-				} catch ( e ) {
-					failures.push( `${ t ? t.name : stylesheet }: ${ e.message }` );
-				}
-			}
-			if ( ok ) doneBits.push( `${ ok } theme${ ok === 1 ? '' : 's' }` );
-		}
-		// Language packs go before core: they are one quick bulk call, and
-		// core last still owns the maintenance window.
-		if ( parts.some( ( p ) => p.kind === 'translations' ) ) {
-			const nl = parts.find( ( p ) => p.kind === 'translations' ).n;
-			/* translators: %d is a number of translations. */
-			setPhase( sprintf( _n( 'Updating %d translation…', 'Updating %d translations…', nl ), nl ) );
-			try {
-				const r = await api( 'minn-admin/v1/translations/update', { method: 'POST' } );
-				const did = ( r && r.updated ) || 0;
-				state.cache.translationUpdates = ( r && r.remaining ) || 0;
-				state.cache.translationGroups = ( r && Array.isArray( r.groups ) ) ? r.groups : [];
-				if ( did ) {
-					/* translators: %d is a number of translations. */
-					doneBits.push( sprintf( _n( '%d translation', '%d translations', did ), did ) );
-				}
-			} catch ( e ) {
-				failures.push( 'translations: ' + e.message );
 			}
 		}
 		if ( hasCore ) {
@@ -43039,7 +43053,7 @@
 			cmds.push( { label: __( 'Check for updates' ), kind: 'action', icon: '⟳', run: () => checkForUpdates( null ) } );
 		}
 		if ( B.caps.update && Object.keys( state.cache.pluginUpdates || {} ).length ) {
-			cmds.push( { label: __( 'Update all plugins' ), kind: 'action', icon: '⟳', run: () => updateAllPlugins( null ) } );
+			cmds.push( { label: __( 'Update everything' ), kind: 'action', icon: '⟳', run: () => updateAllPlugins( null ) } );
 		}
 		cmds.push(
 			{ label: __( 'Your profile — name, email, password' ), kind: 'link', icon: '@', run: () => go( 'profile' ) },
@@ -44307,16 +44321,15 @@
 			// Two kinds ride this panel: plugins (items keyed by plugin file,
 			// named from the plugin list) and language packs (items keyed
 			// "type|slug|locale", each carrying its own label).
+			// Rows are keyed as the record keys them (plugin file, theme:sheet,
+			// type|slug|locale); every row carries its label and old version.
 			const lang = b.kind === 'translations';
-			const keyOf = ( f ) => lang ? f : f + '.php';
+			const keyOf = ( f ) => f;
 			const plugins = state.cache.plugins || [];
 			const items = b.items || {};
-			const nameOf = ( file ) => lang
-				? ( ( items[ file ] || {} ).label || file )
-				: pluginDisplayName( ( plugins.find( ( p ) => p.plugin === file ) || {} ).name || file.split( '/' )[ 0 ] );
-			// Versions as they were when the batch started; the plugin list
-			// refreshes to the new ones before the panel is closed.
-			const verOf = ( file ) => lang ? '' : ( ( b.from || {} )[ file ] || ( plugins.find( ( p ) => p.plugin === file ) || {} ).version || '' );
+			const nameOf = ( k ) => ( items[ k ] || {} ).label
+				|| ( k.endsWith( '.php' ) ? pluginDisplayName( ( plugins.find( ( p ) => p.plugin === k.replace( /\.php$/, '' ) ) || {} ).name || k.split( '/' )[ 0 ] ) : k );
+			const verOf = ( k ) => ( items[ k ] || {} ).from || '';
 			const total = b.files.length;
 			const fetched = b.files.filter( ( f ) => [ 'fetched', 'unpacking', 'installing', 'done' ].includes( ( items[ keyOf( f ) ] || {} ).state ) ).length;
 			const bytes = b.files.reduce( ( n, f ) => n + ( ( items[ keyOf( f ) ] || {} ).bytes || 0 ), 0 );
@@ -44332,8 +44345,14 @@
 					: ( lang
 						/* translators: 1: language packs updated, 2: seconds. */
 						? sprintf( _n( 'Updated %1$s language pack in %2$s', 'Updated %1$s language packs in %2$s', done ), done, secs( t.total_ms || ( Date.now() - b.startedAt ) ) )
-						/* translators: 1: plugins updated, 2: seconds. */
-						: sprintf( _n( 'Updated %1$s plugin in %2$s', 'Updated %1$s plugins in %2$s', done ), done, secs( t.total_ms || ( Date.now() - b.startedAt ) ) ) );
+						: b.kind === 'themes'
+							/* translators: 1: themes updated, 2: seconds. */
+							? sprintf( _n( 'Updated %1$s theme in %2$s', 'Updated %1$s themes in %2$s', done ), done, secs( t.total_ms || ( Date.now() - b.startedAt ) ) )
+							: b.kind === 'mixed'
+								/* translators: 1: updates applied, 2: updates in the batch, 3: seconds. */
+								? sprintf( __( 'Applied %1$s of %2$s updates in %3$s' ), done, total, secs( t.total_ms || ( Date.now() - b.startedAt ) ) )
+								/* translators: 1: plugins updated, 2: seconds. */
+								: sprintf( _n( 'Updated %1$s plugin in %2$s', 'Updated %1$s plugins in %2$s', done ), done, secs( t.total_ms || ( Date.now() - b.startedAt ) ) ) );
 				if ( t.fetch_ms != null ) {
 					/* translators: 1: data fetched, 2: seconds fetching, 3: seconds installing. */
 					phase += ' · ' + sprintf( __( 'fetched %1$s in %2$s, installed in %3$s' ), fmtBytes( bytes ), secs( t.fetch_ms ), secs( t.install_ms || 0 ) );
@@ -44344,7 +44363,7 @@
 			} else if ( b.phase === 'install' ) {
 				/* translators: 1: plugins installed so far, 2: plugins in the batch. */
 				phase = sprintf( __( 'Installing… %1$s of %2$s' ), done + failed, total );
-				if ( b.maintenance && ! lang ) phase += ' · ' + __( 'the site shows a maintenance page until this finishes (an active plugin is being replaced)' );
+				if ( b.maintenance && ! lang ) phase += ' · ' + __( 'the site shows a maintenance page until this finishes (an active plugin or theme is being replaced)' );
 			} else if ( b.dropped ) {
 				phase = __( 'Following the batch on the server…' );
 			} else {
@@ -44378,8 +44397,14 @@
 							: esc( lang
 								/* translators: %s: number of language packs. */
 								? sprintf( _n( 'Updating %s language pack', 'Updating %s language packs', total ), total )
-								/* translators: %s: number of plugins. */
-								: sprintf( _n( 'Updating %s plugin', 'Updating %s plugins', total ), total ) ) }</div>
+								: b.kind === 'themes'
+									/* translators: %s: number of themes. */
+									? sprintf( _n( 'Updating %s theme', 'Updating %s themes', total ), total )
+									: b.kind === 'mixed'
+										/* translators: %s: number of pending updates. */
+										? sprintf( _n( 'Updating %s update', 'Updating %s updates', total ), total )
+										/* translators: %s: number of plugins. */
+										: sprintf( _n( 'Updating %s plugin', 'Updating %s plugins', total ), total ) ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-bulk-phase${ b.phase === 'done' ? ( failed ? ' is-bad' : ' is-ok' ) : '' }">${ esc( phase ) }</div>
@@ -47895,6 +47920,7 @@
 			'- `overview` — stats, activity chart and recent activity',
 			'- `users/{id}/sessions` — active login sessions (DELETE to sign out)',
 			'- `plugins/update` / `plugins/update-all` — run plugin updates',
+			'- `updates/all` — plugins, themes and language packs as one batch (token-keyed progress record)',
 			'',
 			`_Generated by Minn Admin v${ B.version }. Site: ${ B.site.url }_`
 		);

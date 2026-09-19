@@ -115,7 +115,7 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'GET',
 				'permission_callback' => function () {
-					return current_user_can( 'update_plugins' );
+					return current_user_can( 'update_plugins' ) || current_user_can( 'update_themes' ) || current_user_can( 'update_languages' );
 				},
 				'args'                => array(
 					'token' => array( 'required' => true, 'sanitize_callback' => 'sanitize_key' ),
@@ -1613,6 +1613,24 @@ class Minn_Admin_REST {
 				'permission_callback' => function () {
 					return is_multisite() && current_user_can( 'upgrade_network' );
 				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/updates/all',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'update_all' ),
+				'permission_callback' => function () {
+					return current_user_can( 'update_plugins' ) || current_user_can( 'update_themes' ) || current_user_can( 'update_languages' );
+				},
+				'args'                => array(
+					'token'        => array( 'sanitize_callback' => 'sanitize_key' ),
+					'plugins'      => array( 'type' => 'boolean' ),
+					'themes'       => array( 'type' => 'boolean' ),
+					'translations' => array( 'type' => 'boolean' ),
+				),
 			)
 		);
 
@@ -4966,7 +4984,7 @@ class Minn_Admin_REST {
 	 * is exactly the part that goes stale — and drop satisfied offers plus
 	 * rows for plugins that no longer exist.
 	 */
-	private static function real_plugin_updates() {
+	public static function real_plugin_updates() {
 		$updates = get_site_transient( 'update_plugins' );
 		$out     = array();
 		if ( ! $updates || empty( $updates->response ) ) {
@@ -4988,7 +5006,7 @@ class Minn_Admin_REST {
 	}
 
 	/** Same staleness gate for themes, against the live stylesheet headers. */
-	private static function real_theme_updates() {
+	public static function real_theme_updates() {
 		$updates = get_site_transient( 'update_themes' );
 		$out     = array();
 		if ( ! $updates || empty( $updates->response ) ) {
@@ -5461,212 +5479,23 @@ class Minn_Admin_REST {
 	 * button does. Language packs are small and independent, so this is one
 	 * bulk call rather than the per-item loop themes need.
 	 */
-	/**
-	 * Every pending language pack in ONE request, the way the plugin batch
-	 * runs: one bulk upgrader run, packages fetched side by side first, and
-	 * a progress record (token-keyed, same reader as the plugin batch) the
-	 * panel paints from. Items are keyed "type|slug|locale" and carry a label
-	 * the panel can print without a lookup (component name · language).
-	 *
-	 * Language_Pack_Upgrader::bulk_upgrade() removes every upgrader_pre_install
-	 * / post_install filter before it runs (core #29425), so per-pack install
-	 * states come from the skin instead: run() feeds it unpack_package,
-	 * installing_package and process_success/failed for each pack, with the
-	 * pack itself on $skin->language_update.
-	 */
+	/** Every pending language pack as one batch (Minn_Admin_Batch::run_translations). */
 	public static function update_translations( WP_REST_Request $request = null ) {
-		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-		require_once ABSPATH . 'wp-admin/includes/misc.php';
-
-		$token      = $request ? (string) $request->get_param( 'token' ) : '';
-		$t0         = microtime( true );
-		$progress   = array( 'known' => true, 'kind' => 'translations', 'started' => time(), 'phase' => 'check', 'current' => '', 'done' => array(), 'failed' => array(), 'finished' => false, 'queue' => array(), 'items' => array(), 'timing' => array() );
-		$last_write = 0.0;
-		$file_path  = self::progress_file_path( $token );
-		$write      = function ( $force = true ) use ( &$progress, $token, &$last_write, $file_path ) {
-			if ( '' === $token ) {
-				return;
+		$batch = self::batch( $request ? (string) $request->get_param( 'token' ) : '' );
+		$r     = $batch->run_translations();
+		$batch->finish( $r['errors'] );
+		if ( ! $r['updated'] && $r['failed'] ) {
+			$result = $r['result'] ?? null;
+			if ( is_wp_error( $result ) ) {
+				return $result;
 			}
-			if ( ! $force && microtime( true ) - $last_write < 0.25 ) {
-				return;
-			}
-			$last_write = microtime( true );
-			self::progress_write( $token, $file_path, $progress );
-		};
-		if ( $file_path ) {
-			$progress['fileUrl'] = plugins_url( 'progress.php', MINN_ADMIN_DIR . 'minn-admin.php' ) . '?t=' . $token;
-		}
-
-		// The same pending set the summary counts (packs for languages this
-		// site still has), keyed and labeled for the record.
-		$summary = self::translation_update_summary();
-		$labels  = array();
-		foreach ( $summary['groups'] as $group ) {
-			foreach ( (array) ( $group['components'] ?? array() ) as $c ) {
-				$labels[ $c['type'] . '|' . $c['slug'] . '|' . $group['locale'] ] = array( 'component' => $c['name'], 'language' => $group['name'], 'version' => $c['version'] );
-			}
-		}
-		$pending = array();
-		foreach ( (array) wp_get_translation_updates() as $update ) {
-			$update = (object) $update;
-			$type   = isset( $update->type ) ? (string) $update->type : '';
-			$slug   = isset( $update->slug ) ? sanitize_key( (string) $update->slug ) : '';
-			if ( 'core' === $type && '' === $slug ) {
-				$slug = 'wordpress';
-			}
-			$locale = isset( $update->language ) ? preg_replace( '/[^A-Za-z0-9_@.-]/', '', (string) $update->language ) : '';
-			$key    = $type . '|' . $slug . '|' . $locale;
-			if ( ! isset( $labels[ $key ] ) ) {
-				continue; // a language this site no longer has
-			}
-			$pending[ $key ] = $update;
-		}
-		if ( ! $pending ) {
-			$progress['phase']    = 'done';
-			$progress['finished'] = true;
-			$write();
-			return rest_ensure_response( array( 'updated' => 0, 'failed' => 0, 'remaining' => 0, 'groups' => $summary['groups'] ) );
-		}
-		// Install in the order the panel lists: by language, then component,
-		// so the ticks walk down the list instead of landing wherever the
-		// update transient happened to put each pack. The record's queue
-		// carries this order and the panel adopts it.
-		uksort( $pending, function ( $a, $b ) use ( $labels ) {
-			$c = strcasecmp( $labels[ $a ]['language'], $labels[ $b ]['language'] );
-			if ( 0 !== $c ) {
-				return $c;
-			}
-			$c = strcasecmp( $labels[ $a ]['component'], $labels[ $b ]['component'] );
-			return 0 !== $c ? $c : strcmp( $a, $b );
-		} );
-		$progress['queue'] = array_keys( $pending );
-		foreach ( $pending as $key => $update ) {
-			$progress['items'][ $key ] = array(
-				'state'   => 'queued',
-				'bytes'   => 0,
-				'version' => $labels[ $key ]['version'],
-				'label'   => $labels[ $key ]['component'] . ' · ' . $labels[ $key ]['language'],
-			);
-		}
-		$progress['timing']['check_ms'] = (int) round( ( microtime( true ) - $t0 ) * 1000 );
-		$progress['phase']              = 'fetch';
-		$write();
-
-		$t1    = microtime( true );
-		$local = self::prefetch_packages( $pending, function ( $key, $state, $bytes ) use ( &$progress, $write ) {
-			$progress['items'][ $key ]['state'] = $state;
-			$progress['items'][ $key ]['bytes'] = (int) $bytes;
-			$write( 'fetching' !== $state );
-		} );
-		$progress['timing']['fetch_ms'] = (int) round( ( microtime( true ) - $t1 ) * 1000 );
-		$progress['phase']              = 'install';
-		$write();
-
-		$key_of = function ( $update ) {
-			$update = (object) $update;
-			$type   = isset( $update->type ) ? (string) $update->type : '';
-			$slug   = isset( $update->slug ) ? sanitize_key( (string) $update->slug ) : '';
-			if ( 'core' === $type && '' === $slug ) {
-				$slug = 'wordpress';
-			}
-			$locale = isset( $update->language ) ? preg_replace( '/[^A-Za-z0-9_@.-]/', '', (string) $update->language ) : '';
-			return $type . '|' . $slug . '|' . $locale;
-		};
-		$mark = function ( $key, $state, $error = '' ) use ( &$progress, $write ) {
-			if ( ! isset( $progress['items'][ $key ] ) ) {
-				return;
-			}
-			$progress['items'][ $key ]['state'] = $state;
-			if ( '' !== $error ) {
-				$progress['items'][ $key ]['error'] = $error;
-			}
-			if ( 'done' === $state || 'failed' === $state ) {
-				$progress[ $state ][] = $key;
-				$progress['current']  = '';
-			} else {
-				$progress['current'] = $key;
-			}
-			$write();
-		};
-		// Download is the first step of each pack's run; a prefetched
-		// package is handed over as the file. This filter survives the
-		// upgrader's remove_all_filters sweep (it only clears install ones).
-		add_filter( 'upgrader_pre_download', function ( $reply, $package, $upgrader, $hook_extra ) use ( $local, $mark, $key_of ) {
-			if ( empty( $hook_extra['language_update'] ) ) {
-				return $reply;
-			}
-			$key = $key_of( $hook_extra['language_update'] );
-			if ( false !== $reply ) {
-				$mark( $key, is_wp_error( $reply ) ? 'failed' : 'unpacking', is_wp_error( $reply ) ? $reply->get_error_message() : '' );
-				return $reply;
-			}
-			$have = isset( $local[ $package ] ) && is_file( $local[ $package ] ) && filesize( $local[ $package ] ) > 0;
-			$mark( $key, $have ? 'unpacking' : 'fetching' );
-			return $have ? $local[ $package ] : $reply;
-		}, 10, 4 );
-
-		if ( ! class_exists( 'Minn_Admin_Translation_Skin' ) ) {
-			require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-translation-skin.php';
-		}
-		$skin = new Minn_Admin_Translation_Skin();
-		$skin->on_state = function ( $update, $state, $error = '' ) use ( $mark, $key_of ) {
-			$mark( $key_of( $update ), $state, $error );
-		};
-		$t2       = microtime( true );
-		$upgrader = new Language_Pack_Upgrader( $skin );
-		$result   = $upgrader->bulk_upgrade( array_values( $pending ), array( 'clear_update_cache' => true ) );
-		$progress['timing']['install_ms'] = (int) round( ( microtime( true ) - $t2 ) * 1000 );
-
-		foreach ( (array) $local as $path ) {
-			if ( is_file( $path ) ) {
-				wp_delete_file( $path );
-			}
-		}
-
-		// Packs the skin never settled (a filesystem refusal before the
-		// first run, or a break after a failure) read as failed with the
-		// upgrader's own message.
-		$msgs = $skin->get_error_messages();
-		foreach ( $pending as $key => $update ) {
-			$state = $progress['items'][ $key ]['state'];
-			if ( 'done' !== $state && 'failed' !== $state ) {
-				$progress['items'][ $key ]['state'] = 'failed';
-				$progress['items'][ $key ]['error'] = $msgs ? (string) end( $msgs ) : ( is_wp_error( $result ) ? $result->get_error_message() : __( 'not confirmed', 'minn-admin' ) );
-				$progress['failed'][]               = $key;
-			}
-		}
-		$done   = count( $progress['done'] );
-		$failed = count( $progress['failed'] );
-		$progress['current']  = '';
-		$progress['phase']    = 'done';
-		$progress['finished'] = true;
-		$progress['errors']   = $msgs;
-		$progress['timing']['total_ms'] = (int) round( ( microtime( true ) - $t0 ) * 1000 );
-		$write();
-
-		if ( is_wp_error( $result ) && ! $done ) {
-			return $result;
-		}
-		if ( false === $result && ! $done ) {
 			return new WP_Error(
 				'translations_failed',
-				$msgs ? implode( ' ', (array) $msgs ) : __( 'Translation update failed.', 'minn-admin' ),
+				$r['errors'] ? implode( ' ', (array) $r['errors'] ) : __( 'Translation update failed.', 'minn-admin' ),
 				array( 'status' => 500 )
 			);
 		}
-
-		// Re-read rather than subtract: a pack that failed is still pending,
-		// and the client decides what to say from what is actually left.
-		$after = self::translation_update_summary();
-		return rest_ensure_response(
-			array(
-				'updated'   => $done,
-				'failed'    => $failed,
-				'remaining' => $after['count'],
-				'groups'    => $after['groups'],
-			)
-		);
+		return rest_ensure_response( array( 'updated' => $r['updated'], 'failed' => $r['failed'], 'remaining' => $r['remaining'], 'groups' => $r['groups'] ) );
 	}
 
 	/**
@@ -10882,7 +10711,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * the plugin is not under <wp-content>/plugins (then only the transient
 	 * is written and the client polls REST alone).
 	 */
-	private static function progress_file_path( $token ) {
+	public static function progress_file_path( $token ) {
 		if ( ! preg_match( '/^[a-f0-9]{40}$/', $token ) || wp_normalize_path( dirname( WP_PLUGIN_DIR ) ) !== wp_normalize_path( WP_CONTENT_DIR ) ) {
 			return '';
 		}
@@ -10914,7 +10743,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * Write a batch's progress record twice: a transient for the REST
 	 * reader, and (when the layout allows) the file progress.php serves.
 	 */
-	private static function progress_write( $token, $file_path, array $progress ) {
+	public static function progress_write( $token, $file_path, array $progress ) {
 		set_transient( 'minn_bulk_update_' . $token, $progress, 15 * MINUTE_IN_SECONDS );
 		if ( $file_path ) {
 			// Atomic rename so a reader never sees a half-written record.
@@ -10925,176 +10754,54 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 	}
 
+	/** Every pending plugin as one batch (Minn_Admin_Batch::run_plugins). */
 	public static function update_all_plugins( WP_REST_Request $request = null ) {
-		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		$batch = self::batch( $request ? (string) $request->get_param( 'token' ) : '' );
+		$r     = $batch->run_plugins();
+		$batch->finish( $r['errors'] );
+		return rest_ensure_response( array( 'updated' => $r['updated'], 'failed' => $r['failed'], 'errors' => $r['errors'] ) );
+	}
 
-		$token = $request ? (string) $request->get_param( 'token' ) : '';
-		// The record the client paints from: a phase (check → fetch →
-		// install → done), the queue, per-plugin items {state, bytes, version,
-		// error}, and timings. States: queued, fetching, fetched, vendor (its
-		// own server downloads it during install), unpacking, installing,
-		// done, failed.
-		$t0         = microtime( true );
-		$progress   = array( 'known' => true, 'started' => time(), 'phase' => 'check', 'current' => '', 'done' => array(), 'failed' => array(), 'finished' => false, 'queue' => array(), 'items' => array(), 'timing' => array() );
-		$last_write = 0.0;
-		// The record is written twice: a transient for the REST reader, and a
-		// file for progress.php, which answers while WordPress is in
-		// maintenance mode (every REST request 503s then, for as long as an
-		// active plugin is being replaced). The file needs the standard
-		// layout (plugin under <wp-content>/plugins); otherwise only the
-		// transient is written and the client polls REST alone.
-		$file_path = self::progress_file_path( $token );
-		$write     = function ( $force = true ) use ( &$progress, $token, &$last_write, $file_path ) {
-			if ( '' === $token ) {
-				return;
-			}
-			// Download progress ticks many times a second; the record only
-			// needs to move a few times a second.
-			if ( ! $force && microtime( true ) - $last_write < 0.25 ) {
-				return;
-			}
-			$last_write = microtime( true );
-			self::progress_write( $token, $file_path, $progress );
+	/** The batch runner, loaded on demand (its file also pulls the upgrader). */
+	private static function batch( $token ) {
+		if ( ! class_exists( 'Minn_Admin_Batch' ) ) {
+			require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-batch.php';
+		}
+		return new Minn_Admin_Batch( $token );
+	}
+
+	/**
+	 * Plugins, themes and language packs in ONE request and one progress
+	 * record, in that order, each section only when asked for and allowed.
+	 * WordPress core stays its own run (it owns the maintenance window and
+	 * has its own dropped-reply recovery on the client).
+	 */
+	public static function update_all( WP_REST_Request $request ) {
+		$want  = function ( $key, $cap ) use ( $request ) {
+			$v = $request->get_param( $key );
+			return ( null === $v || rest_sanitize_boolean( $v ) ) && current_user_can( $cap );
 		};
-		if ( $file_path ) {
-			$progress['fileUrl'] = plugins_url( 'progress.php', MINN_ADMIN_DIR . 'minn-admin.php' ) . '?t=' . $token;
+		$batch = self::batch( (string) $request->get_param( 'token' ) );
+		$out   = array( 'plugins' => null, 'themes' => null, 'translations' => null );
+		$errs  = array();
+		if ( $want( 'plugins', 'update_plugins' ) ) {
+			$r = $batch->run_plugins();
+			$out['plugins'] = array( 'updated' => $r['updated'], 'failed' => $r['failed'] );
+			$errs = array_merge( $errs, $r['errors'] );
 		}
-
-		wp_update_plugins();
-		// real_plugin_updates: even freshly refreshed, never reinstall a
-		// plugin whose installed version already satisfies the offer.
-		$pending_before = self::real_plugin_updates();
-		if ( ! $pending_before ) {
-			$progress['phase']    = 'done';
-			$progress['finished'] = true;
-			$write();
-			return rest_ensure_response( array( 'updated' => array() ) );
+		if ( $want( 'themes', 'update_themes' ) ) {
+			$r = $batch->run_themes();
+			$out['themes'] = array( 'updated' => $r['updated'], 'failed' => $r['failed'] );
+			$errs = array_merge( $errs, $r['errors'] );
 		}
-		$files             = array_keys( $pending_before );
-		$progress['queue'] = $files;
-		foreach ( $pending_before as $file => $data ) {
-			$progress['items'][ $file ] = array( 'state' => 'queued', 'bytes' => 0, 'version' => isset( $data->new_version ) ? (string) $data->new_version : '' );
+		if ( $want( 'translations', 'update_languages' ) ) {
+			$r = $batch->run_translations();
+			$out['translations'] = array( 'updated' => $r['updated'], 'failed' => $r['failed'], 'remaining' => $r['remaining'], 'groups' => $r['groups'] );
+			$errs = array_merge( $errs, $r['errors'] );
 		}
-		$progress['timing']['check_ms'] = (int) round( ( microtime( true ) - $t0 ) * 1000 );
-		$progress['phase']              = 'fetch';
-		$write();
-
-		$t1    = microtime( true );
-		$local = self::prefetch_packages( $pending_before, function ( $file, $state, $bytes ) use ( &$progress, $write ) {
-			$progress['items'][ $file ]['state'] = $state;
-			$progress['items'][ $file ]['bytes'] = (int) $bytes;
-			$write( 'fetching' !== $state );
-		} );
-		$progress['timing']['fetch_ms'] = (int) round( ( microtime( true ) - $t1 ) * 1000 );
-		$progress['phase']              = 'install';
-		$write();
-
-		$mark = function ( $file, $state ) use ( &$progress, $write ) {
-			$progress['items'][ $file ]['state'] = $state;
-			$progress['current']                 = $file;
-			$write();
-		};
-		// Download is the first step of each plugin's run, so this is where
-		// "current" moves; a prefetched package is handed over as the file.
-		add_filter( 'upgrader_pre_download', function ( $reply, $package, $upgrader, $hook_extra ) use ( $local, $mark ) {
-			$file = ! empty( $hook_extra['plugin'] ) ? (string) $hook_extra['plugin'] : '';
-			// A filter ahead of this one that already answered wins: Minn's
-			// own updater returns the download it hash-verified against the
-			// release manifest, or a WP_Error refusing the package. Handing
-			// the prefetched copy over here would install bytes that check
-			// never saw, or ones it refused.
-			if ( false !== $reply ) {
-				if ( $file ) {
-					$mark( $file, is_wp_error( $reply ) ? 'failed' : 'unpacking' );
-				}
-				return $reply;
-			}
-			$have = isset( $local[ $package ] ) && is_file( $local[ $package ] ) && filesize( $local[ $package ] ) > 0;
-			if ( $file ) {
-				$mark( $file, $have ? 'unpacking' : 'fetching' );
-			}
-			return $have ? $local[ $package ] : $reply;
-		}, 10, 4 );
-		add_filter( 'upgrader_pre_install', function ( $return, $hook_extra ) use ( $mark ) {
-			if ( ! empty( $hook_extra['plugin'] ) ) {
-				$mark( (string) $hook_extra['plugin'], 'installing' );
-			}
-			return $return;
-		}, 10, 2 );
-		add_filter( 'upgrader_post_install', function ( $return, $hook_extra ) use ( &$progress, $write ) {
-			if ( ! empty( $hook_extra['plugin'] ) ) {
-				$file = (string) $hook_extra['plugin'];
-				$ok   = $return && ! is_wp_error( $return );
-				$progress[ $ok ? 'done' : 'failed' ][] = $file;
-				$progress['items'][ $file ]['state']   = $ok ? 'done' : 'failed';
-				if ( ! $ok && is_wp_error( $return ) ) {
-					$progress['items'][ $file ]['error'] = $return->get_error_message();
-				}
-				$progress['current'] = '';
-				$write();
-			}
-			return $return;
-		}, 10, 2 );
-
-		$t2             = microtime( true );
-		$skin           = new WP_Ajax_Upgrader_Skin();
-		$upgrader       = new Plugin_Upgrader( $skin );
-		$results        = $upgrader->bulk_upgrade( $files );
-		$progress['timing']['install_ms'] = (int) round( ( microtime( true ) - $t2 ) * 1000 );
-
-		// Prefetched files the upgrader never consumed (a failure before
-		// download) would otherwise sit in the temp dir.
-		foreach ( (array) $local as $path ) {
-			if ( is_file( $path ) ) {
-				wp_delete_file( $path );
-			}
-		}
-
-		$updated = array();
-		$failed  = array();
-		foreach ( (array) $results as $file => $result ) {
-			if ( $result && ! is_wp_error( $result ) ) {
-				$updated[] = $file;
-			} else {
-				$failed[] = $file;
-			}
-		}
-
-		// Restore offers for anything that failed (or was not in the result set).
-		self::restore_plugin_update_offers( $pending_before, $updated );
-
-		$progress['done']     = $updated;
-		$progress['failed']   = $failed;
-		$progress['current']  = '';
-		$progress['phase']    = 'done';
-		$progress['finished'] = true;
-		$progress['errors']   = $skin->get_error_messages();
-		// A plugin that failed before its install hooks ran (no package to
-		// download) never got a state from them.
-		$msgs = $skin->get_error_messages();
-		foreach ( $failed as $f ) {
-			if ( 'failed' !== ( $progress['items'][ $f ]['state'] ?? '' ) ) {
-				$progress['items'][ $f ]['state'] = 'failed';
-				$r = isset( $results[ $f ] ) ? $results[ $f ] : null;
-				$progress['items'][ $f ]['error'] = is_wp_error( $r ) ? $r->get_error_message() : ( $msgs ? (string) end( $msgs ) : '' );
-			}
-		}
-		foreach ( $updated as $f ) {
-			$progress['items'][ $f ]['state'] = 'done';
-		}
-		$progress['timing']['total_ms'] = (int) round( ( microtime( true ) - $t0 ) * 1000 );
-		$write();
-
-		return rest_ensure_response(
-			array(
-				'updated' => $updated,
-				'failed'  => $failed,
-				'errors'  => $skin->get_error_messages(),
-			)
-		);
+		$batch->finish( $errs );
+		$out['errors'] = array_values( array_unique( $errs ) );
+		return rest_ensure_response( $out );
 	}
 
 	/** A zip starts with "PK": a vendor's "license invalid" page with a 200 status does not. */

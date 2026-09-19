@@ -26,7 +26,10 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		} );
 		return { status: r.status, body: await r.json().catch( () => null ) };
 	}, { path, method: opts.method, body: opts.body } );
-	const setOpts = ( wporg, vendor ) => rest( 'wp/v2/settings', { method: 'POST', body: { minn_test_plugin_update: wporg, minn_test_plugin_update_vendor: vendor } } );
+	// A theme offer rides along (same-version reinstall of a bundled wp.org
+	// theme) so the batch proves all three kinds walk one panel.
+	const THEME = 'twentytwentyfive';
+	const setOpts = ( wporg, vendor, theme = '' ) => rest( 'wp/v2/settings', { method: 'POST', body: { minn_test_plugin_update: wporg, minn_test_plugin_update_vendor: vendor, minn_test_theme_update: theme } } );
 
 	const WPORG = 'duplicator/duplicator';
 	const VENDOR = 'akismet/akismet';
@@ -34,7 +37,7 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 	try {
 		await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
 		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 60000 } );
-		const armed = await setOpts( WPORG + '.php', VENDOR + '.php' );
+		const armed = await setOpts( WPORG + '.php', VENDOR + '.php', THEME );
 		t.check( 'fixture offers armed', armed.status === 200, `status ${ armed.status }` );
 
 		/* ===== Progress route ===== */
@@ -46,8 +49,8 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( `.minn-plugin[data-plugin="${ WPORG }"] [data-update]`, { timeout: 60000 } );
 		const calls = [];
 		let bulkBody = null;
-		page.on( 'request', ( r ) => { if ( /plugins\/update(-all|-progress)?(\?|$)/.test( r.url() ) && r.method() !== 'OPTIONS' ) calls.push( r.method() + ' ' + r.url().replace( /^.*minn-admin\/v1\//, '' ).replace( /token=\w+/, 'token=…' ) ); } );
-		page.on( 'response', async ( r ) => { if ( /plugins\/update-all/.test( r.url() ) ) bulkBody = await r.json().catch( () => null ); } );
+		page.on( 'request', ( r ) => { if ( /(plugins\/update(-all|-progress)?|updates\/all)(\?|$)/.test( r.url() ) && r.method() !== 'OPTIONS' ) calls.push( r.method() + ' ' + r.url().replace( /^.*minn-admin\/v1\//, '' ).replace( /token=\w+/, 'token=…' ) ); } );
+		page.on( 'response', async ( r ) => { if ( /updates\/all/.test( r.url() ) ) bulkBody = await r.json().catch( () => null ); } );
 		// The record is read through progress.php (no WordPress bootstrap)
 		// so the panel keeps painting while maintenance mode 503s REST.
 		const fileReads = [];
@@ -79,10 +82,16 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		// the dev site), so wait for it rather than a flat delay.
 		await page.waitForFunction( () => ( window.__toasts || [] ).some( ( x ) => /^Updated|failed/.test( x ) ), null, { timeout: 120000 } ).catch( () => {} );
 		await page.waitForTimeout( 300 );
-		const posts = calls.filter( ( c ) => c.startsWith( 'POST plugins/update-all' ) );
+		const posts = calls.filter( ( c ) => c.startsWith( 'POST updates/all' ) );
 		const singles = calls.filter( ( c ) => c.startsWith( 'POST plugins/update' ) && ! c.includes( 'update-all' ) );
 		const polls = calls.filter( ( c ) => c.includes( 'update-progress' ) );
 		t.check( 'one bulk request carried the whole batch, no per-plugin requests', posts.length === 1 && singles.length === 0, JSON.stringify( { posts, singles } ) );
+		const themeRow = await page.evaluate( () => {
+			const m = document.querySelector( '.minn-bulk-modal' );
+			const row = m && [ ...m.querySelectorAll( '.minn-bulk-row' ) ].find( ( r ) => /Twenty Twenty-Five/.test( r.textContent ) );
+			return row ? { cls: row.className, text: row.textContent.replace( /\s+/g, ' ' ).trim() } : null;
+		} );
+		t.check( 'the theme rode the same panel and ended Updated', !! themeRow && /is-done/.test( themeRow.cls ), JSON.stringify( themeRow ) );
 		t.check( 'progress was polled while it ran', polls.length + fileReads.length >= 1, `${ polls.length } REST polls, ${ fileReads.length } file reads` );
 		t.check( 'the progress file answered without WordPress (maintenance-proof reads)', fileReads.some( ( r ) => r.status === 200 && r.body && r.body.known === true && typeof r.body.maintenance === 'boolean' ), JSON.stringify( fileReads.slice( -1 ).map( ( r ) => ( { status: r.status, known: r.body && r.body.known, phase: r.body && r.body.phase } ) ) ) );
 		const after = await page.evaluate( ( a ) => ( {
@@ -96,10 +105,10 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 			// refresh; the batch response below is the proof of the reinstall.
 			t.check( 'the plugin whose package could not be fetched keeps its offer', after.vendorBadge === true, JSON.stringify( after ) );
 			// Other real offers may ride along (a license-gated vendor plugin fails too), so only the fixture's names are asserted.
-			t.check( 'toast reports the mixed result', after.toasts.some( ( x ) => /^Updated \d+ plugins?;/.test( x ) && /failed:.*Akismet/.test( x ) ), JSON.stringify( after.toasts ) );
+			t.check( 'toast reports the mixed result', after.toasts.some( ( x ) => /^Applied \d+ updates?;/.test( x ) && /failed:.*Akismet/.test( x ) ), JSON.stringify( after.toasts ) );
 			// The fixture re-synthesizes its offers on every transient read, so
 			// the server's verdict is the batch response itself.
-			t.check( 'the batch response names the reinstall and the failure', ( bulkBody.updated || [] ).includes( WPORG + '.php' ) && ( bulkBody.failed || [] ).includes( VENDOR + '.php' ), JSON.stringify( { updated: bulkBody.updated, failed: bulkBody.failed } ) );
+			t.check( 'the batch response names the reinstall and the failure', ( ( bulkBody.plugins || {} ).updated || [] ).includes( WPORG + '.php' ) && ( ( bulkBody.plugins || {} ).failed || [] ).includes( VENDOR + '.php' ) && ( ( bulkBody.themes || {} ).updated || [] ).includes( THEME ), JSON.stringify( { plugins: bulkBody.plugins, themes: bulkBody.themes } ) ); // eslint-disable-line
 		} else {
 			// On the dev stack the upgrader can recycle the PHP worker mid-batch
 			// and the reply never arrives (the install itself usually lands).
@@ -155,7 +164,7 @@ echo wp_json_encode( array( 'updated' => $d['updated'] ?? null, 'failed' => $d['
 	} finally {
 		await setOpts( '', '' ).catch( () => {} );
 		try {
-			execSync( `wp --path=${ JSON.stringify( WP ) } eval 'delete_site_transient( "update_plugins" ); wp_update_plugins();' 2>/dev/null`, { timeout: 120000 } );
+			execSync( `wp --path=${ JSON.stringify( WP ) } eval 'delete_site_transient( "update_plugins" ); delete_site_transient( "update_themes" ); wp_update_plugins(); wp_update_themes();' 2>/dev/null`, { timeout: 120000 } );
 		} catch ( e ) { /* best effort */ }
 	}
 
