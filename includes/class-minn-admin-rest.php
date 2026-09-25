@@ -11463,6 +11463,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 
+		// WPS Hide Login (adapters/wps-hide-login.php): where the login page
+		// lives, and a warning while it still answers on the default slug.
+		if ( function_exists( 'minn_admin_wps_hide_login_checks' ) ) {
+			foreach ( minn_admin_wps_hide_login_checks() as $whl_check ) {
+				$checks[] = $whl_check;
+			}
+		}
+
 		// All-In-One Security posture (adapters/all-in-one-security.php):
 		// failed logins, active lockdowns, permanent blocks.
 		if ( function_exists( 'minn_admin_aios_checks' ) ) {
