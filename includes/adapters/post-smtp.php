@@ -5,8 +5,9 @@
  * Post SMTP 2.x logs to {prefix}post_smtp_logs (all-longtext columns plus a
  * BIGINT `time` that is current_time('timestamp') — a WP-LOCAL epoch, the
  * same trap as Aryo Activity Log, so it's shifted by gmt_offset before the
- * ISO string is emitted). `success` holds '' / '1' for delivered mail and
- * the error text otherwise. Recipient columns can hold serialized arrays —
+ * ISO string is emitted). `success` holds '' / '1' for delivered mail,
+ * 'Sent ( ** Fallback ** )' when their backup mailer delivered it, and the
+ * error text otherwise. Recipient columns can hold serialized arrays —
  * addresses are pulled with a regex, never unserialized. Resend uses wp_mail
  * with the stored subject/body (same pattern as FluentSMTP); original headers
  * stay out of the path so nothing is unserialized. Search + single/bulk
@@ -63,8 +64,30 @@ function minn_admin_post_smtp_iso( $local_epoch ) {
 	return gmdate( 'Y-m-d\TH:i:s\Z', (int) $local_epoch - (int) $offset );
 }
 
+/**
+ * Post SMTP's marker for a message its backup mailer delivered. Their own log
+ * screen and dashboard widget count it as sent; since 4.0.2 each fallback
+ * attempt is its own row, so reading it as failed double-counts one rescued
+ * email as two failures.
+ */
+const MINN_ADMIN_POST_SMTP_FALLBACK_SENT = 'Sent ( ** Fallback ** )';
+
+function minn_admin_post_smtp_is_fallback_sent( $success ) {
+	return 0 === strpos( (string) $success, MINN_ADMIN_POST_SMTP_FALLBACK_SENT );
+}
+
 function minn_admin_post_smtp_status( $success ) {
-	return ( '' === (string) $success || '1' === (string) $success ) ? 'sent' : 'failed';
+	$success = (string) $success;
+	return ( '' === $success || '1' === $success || minn_admin_post_smtp_is_fallback_sent( $success ) ) ? 'sent' : 'failed';
+}
+
+/** SQL twin of minn_admin_post_smtp_status()'s sent test. */
+function minn_admin_post_smtp_sent_sql() {
+	global $wpdb;
+	return $wpdb->prepare(
+		"(success IS NULL OR success = '' OR success = '1' OR success LIKE %s)",
+		$wpdb->esc_like( MINN_ADMIN_POST_SMTP_FALLBACK_SENT ) . '%'
+	);
 }
 
 /** Server-built model for the surface status card. */
@@ -80,7 +103,7 @@ function minn_admin_post_smtp_status_model() {
 			),
 		);
 	}
-	$sent_sql = "(success IS NULL OR success = '' OR success = '1')";
+	$sent_sql = minn_admin_post_smtp_sent_sql();
 	$total    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
 	$failed   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE NOT {$sent_sql}" );
 	// `time` is a WP-local epoch (Aryo trap) — compare and bucket the same way.
@@ -272,7 +295,7 @@ add_action( 'rest_api_init', function () {
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
 
-			$sent_sql = "(success IS NULL OR success = '' OR success = '1')";
+			$sent_sql = minn_admin_post_smtp_sent_sql();
 			$where    = '1=1';
 			$args     = array();
 			if ( 'sent' === $status ) {
@@ -352,6 +375,9 @@ add_action( 'rest_api_init', function () {
 			);
 			if ( '' !== (string) $row->transport_uri ) {
 				$delivery[] = array( 'label' => __( 'Transport', 'minn-admin' ), 'value' => (string) $row->transport_uri );
+			}
+			if ( minn_admin_post_smtp_is_fallback_sent( $row->success ) ) {
+				$delivery[] = array( 'label' => __( 'Delivered by', 'minn-admin' ), 'value' => __( 'Backup mailer (the primary connection failed)', 'minn-admin' ) );
 			}
 			$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => minn_admin_post_smtp_iso( $row->time ) );
 			$body     = (string) $row->original_message;
