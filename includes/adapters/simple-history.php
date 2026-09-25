@@ -267,6 +267,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'route'     => 'simple-history/v1/events',
 			'pageQuery' => 'per_page=25&page={page}',
+			// Their events route sorts by date|id|level|logger|message (5.34+;
+			// older builds ignore the unregistered params and keep newest
+			// first). Any order but date returns events ungrouped, since
+			// occasion grouping depends on date order.
+			'sortQuery' => 'orderby={by}&order={dir}',
 			'search'    => 'search={q}',
 			// Their events route takes date_from/date_to as timestamps OR as
 			// datetime strings, which it parses in the site's zone; the bounds
@@ -283,12 +288,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title', 'sort' => 'message' ),
 				array( 'key' => 'initiator_data.user_login', 'altKey' => 'initiator', 'label' => __( 'Who', 'minn-admin' ) ),
-				array( 'key' => 'loglevel', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'loglevel', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill', 'sort' => 'level' ),
 				// date_local is site-local (matches parseWpDate). date_gmt
 				// without a zone suffix used to render "in 4h" on EDT.
-				array( 'key' => 'date_local', 'altKey' => 'date_gmt', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
+				array( 'key' => 'date_local', 'altKey' => 'date_gmt', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'sort' => 'date' ),
 			),
 			'detail'    => array(
 				'skip' => array(
