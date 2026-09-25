@@ -34977,6 +34977,13 @@
 		: `Built with <b>${ esc( ed.builder.name ) }</b> — its blocks are preserved exactly; the text around them is editable here.` }</span>
 					<span class="minn-btn-primary minn-builder-open">${ builderInactive ? esc( __( 'Open Extensions' ) ) + ' →' : `Edit in ${ esc( ed.builder.name ) } ↗` }</span>
 				</a>` : '' }
+				${ ed.builder && ! builderHref && ! builderInactive && ed.builder.edit_blocked ? `
+				<div class="minn-editor-locked-note minn-builder-note">
+					<span>${ ed.builder.owns_content
+		? /* translators: %s: the page builder's name. */ sprintf( esc( __( 'This page’s canvas belongs to %s, so the body below is a read-only preview. Title, status, URL and the side panel still save from here.' ) ), `<b>${ esc( ed.builder.name ) }</b>` )
+		: /* translators: %s: the page builder's name. */ sprintf( esc( __( 'Built with %s. Its blocks are preserved exactly; the text around them is editable here.' ) ), `<b>${ esc( ed.builder.name ) }</b>` ) }
+					${ esc( ed.builder.edit_blocked ) }</span>
+				</div>` : '' }
 				${ locked && ! ( ed.builder && ed.builder.owns_content ) ? `
 				<div class="minn-editor-locked-note">
 					Minn couldn't safely parse this ${ ed.type === 'pages' ? 'page' : 'post' }'s block structure,

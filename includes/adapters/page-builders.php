@@ -35,7 +35,11 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Builder detector descriptors. Each entry:
  * { name, detect(WP_Post):bool, edit_url(WP_Post):string, owns_content:bool,
- *   active?:bool }
+ *   active?:bool, edit_blocked?(WP_Post):string }
+ *
+ * edit_blocked returns a reason when the builder itself refuses to open this
+ * post (the edit link would dead-end), or '' when it can. The editor then
+ * shows the reason instead of an "Edit in X" button.
  *
  * Detection deliberately checks the POST, not just the plugin — a site can
  * run a builder for landing pages while writing everything else in Minn.
@@ -61,6 +65,25 @@ function minn_admin_page_builders() {
 			// zero wp-admin chrome (verified).
 			'edit_url'     => function ( $post ) {
 				return admin_url( 'post.php?post=' . $post->ID . '&action=elementor' );
+			},
+			// Elementor refuses its editor on the posts page and (4.3+) the
+			// WooCommerce Shop page, where WordPress shows a listing instead of
+			// the page's content; action=elementor then falls back to the plain
+			// edit screen. Their own gate is the source of truth.
+			'edit_blocked' => function ( $post ) {
+				if ( ! class_exists( '\Elementor\User' ) || ! method_exists( '\Elementor\User', 'is_current_user_can_edit' ) ) {
+					return '';
+				}
+				if ( \Elementor\User::is_current_user_can_edit( $post->ID ) ) {
+					return '';
+				}
+				if ( (int) get_option( 'page_for_posts' ) === (int) $post->ID ) {
+					return __( 'Elementor does not edit this page because it is the site’s posts page, which shows the latest posts instead of its own content.', 'minn-admin' );
+				}
+				if ( function_exists( 'wc_get_page_id' ) && (int) wc_get_page_id( 'shop' ) === (int) $post->ID ) {
+					return __( 'Elementor does not edit this page because it is the WooCommerce Shop page, which shows the product listing instead of its own content.', 'minn-admin' );
+				}
+				return __( 'Elementor does not allow editing this page with your account.', 'minn-admin' );
 			},
 			// Same seeding Elementor's own new-post flow performs.
 			'prepare'      => function ( $post_id, $type ) {
@@ -274,13 +297,21 @@ function minn_admin_builder_for_post( $post ) {
 		// edit_url comes from the minn_admin_page_builders filter, so a third
 		// party supplies it. Sanitize once here and every consumer inherits the
 		// scheme allowlist instead of re-deriving it at each sink.
-		return array(
+		$active  = ! isset( $b['active'] ) || (bool) $b['active'];
+		$blocked = ( $active && isset( $b['edit_blocked'] ) && is_callable( $b['edit_blocked'] ) )
+			? (string) call_user_func( $b['edit_blocked'], $post )
+			: '';
+		$out     = array(
 			'id'           => $id,
 			'name'         => $b['name'],
-			'edit_url'     => esc_url_raw( (string) call_user_func( $b['edit_url'], $post ) ),
+			'edit_url'     => '' === $blocked ? esc_url_raw( (string) call_user_func( $b['edit_url'], $post ) ) : '',
 			'owns_content' => $owns,
-			'active'       => ! isset( $b['active'] ) || (bool) $b['active'],
+			'active'       => $active,
 		);
+		if ( '' !== $blocked ) {
+			$out['edit_blocked'] = wp_strip_all_tags( $blocked );
+		}
+		return $out;
 	}
 	return null;
 }

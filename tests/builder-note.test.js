@@ -69,5 +69,42 @@ const { execSync } = require( 'child_process' );
 		await deletePost( page, id ).catch( () => {} );
 	}
 
+	// A page the builder itself refuses to open: Elementor's editor skips the
+	// WooCommerce Shop page (the listing replaces its content), so an "Edit
+	// in Elementor" link there dead-ends on the plain edit screen. The note
+	// names the reason and offers no button.
+	let shop = 0;
+	let hadMeta = '';
+	try {
+		shop = parseInt( execSync( `wp --path=${ WP } eval 'echo function_exists( "wc_get_page_id" ) ? (int) wc_get_page_id( "shop" ) : 0;' 2>/dev/null` ).toString().trim().split( '\n' ).pop(), 10 ) || 0;
+	} catch ( e ) {}
+	if ( shop > 0 ) {
+		hadMeta = execSync( `wp --path=${ WP } post meta get ${ shop } _elementor_edit_mode 2>/dev/null || true` ).toString().trim();
+		execSync( `wp --path=${ WP } post meta update ${ shop } _elementor_edit_mode builder`, { stdio: 'ignore' } );
+		try {
+			await page.goto( `${ BASE }/minn-admin/editor/pages/${ shop }`, { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '.minn-builder-note', { timeout: 20000 } );
+			const blocked = await page.evaluate( () => {
+				const n = document.querySelector( '.minn-builder-note' );
+				return {
+					tag: n.tagName,
+					button: !! n.querySelector( '.minn-builder-open' ),
+					text: n.textContent.replace( /\s+/g, ' ' ).trim(),
+				};
+			} );
+			t.check( 'Shop page: note names why Elementor cannot edit it and offers no dead link',
+				'DIV' === blocked.tag && ! blocked.button && /WooCommerce Shop page/.test( blocked.text ),
+				JSON.stringify( blocked ) );
+		} finally {
+			if ( hadMeta ) {
+				execSync( `wp --path=${ WP } post meta update ${ shop } _elementor_edit_mode ${ JSON.stringify( hadMeta ) }`, { stdio: 'ignore' } );
+			} else {
+				execSync( `wp --path=${ WP } post meta delete ${ shop } _elementor_edit_mode`, { stdio: 'ignore' } );
+			}
+		}
+	} else {
+		console.log( 'SKIP  Shop-page refusal (WooCommerce inactive)' );
+	}
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
