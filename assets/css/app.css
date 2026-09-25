@@ -3265,6 +3265,17 @@ a.minn-btn-soft { text-decoration: none; }
   display: block; width: calc(100% - 36px); margin: 0 18px 14px; height: 62vh;
   background: #fff; border: 1px solid var(--border); border-radius: 10px;
 }
+/* Remote content blocked in an HTML preview: a quiet bar above the frame. */
+.minn-email-remote {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  margin: 0 18px 8px; padding: 7px 8px 7px 12px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--bg2); color: var(--text2); font-size: 12.5px;
+}
+.minn-email-remote .minn-btn-soft { padding: 4px 10px; font-size: 12px; flex-shrink: 0; }
+.minn-side-row .minn-email-remote { margin: 0 0 8px; align-self: stretch; }
+/* Detail-row previews sit flush in the row. .minn-email-frame's modal margins
+   come later in this file at equal specificity, so they need the pairing. */
+.minn-email-frame.minn-detail-frame { margin: 0; width: 100%; }
 /* Larger media overlay + inline edit. */
 .minn-modal.media.wide { width: 900px; }
 .minn-modal-preview.media-lg { min-height: 300px; max-height: 66vh; }

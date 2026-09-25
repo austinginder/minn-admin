@@ -16599,6 +16599,42 @@
 		return `<span class="minn-status ${ cls }">${ esc( v ? statusLabel( v ) : '—' ) }</span>`;
 	}
 
+	// Sandboxed HTML previews (logged emails, form notifications) block remote
+	// content by default: opening a logged email must not fire its tracking
+	// pixels or tell the sender it was read. The policy rides a CSP <meta> in
+	// the srcdoc (after any doctype, which must stay first or the message
+	// renders in quirks mode); a policy can only be tightened by the message's
+	// own CSP, never loosened. "Load images" swaps in the permissive policy for
+	// that one preview.
+	const PREVIEW_CSP_BLOCK = "default-src 'none'; img-src data: cid: blob:; style-src 'unsafe-inline'; font-src data:; media-src data:";
+	const PREVIEW_CSP_ALLOW = "default-src 'none'; img-src * data: cid: blob:; style-src 'unsafe-inline' *; font-src * data:; media-src * data:";
+	const PREVIEW_REMOTE_RE = /<(?:img|source|video|audio|input)\b[^>]*\b(?:src|srcset|poster)\s*=\s*["']?\s*(?:https?:)?\/\/|\bbackground\s*=\s*["']?\s*(?:https?:)?\/\/|url\(\s*["']?\s*(?:https?:)?\/\/|<link\b[^>]*\bhref\s*=\s*["']?\s*(?:https?:)?\/\/|@import\s+(?:url\()?\s*["']?\s*(?:https?:)?\/\//i;
+	function previewSrcdoc( html, allowRemote ) {
+		const meta = `<meta http-equiv="Content-Security-Policy" content="${ allowRemote ? PREVIEW_CSP_ALLOW : PREVIEW_CSP_BLOCK }">`;
+		const str = String( html == null ? '' : html );
+		const dt = str.match( /^\s*<!doctype[^>]*>/i );
+		return dt ? dt[ 0 ] + meta + str.slice( dt[ 0 ].length ) : meta + str;
+	}
+	// The iframe plus, when the HTML references remote content and the caller
+	// did not already allow it, a bar offering to load it.
+	function previewFrameHtml( html, { cls, id, title, allowRemote } ) {
+		const blocked = ! allowRemote && PREVIEW_REMOTE_RE.test( String( html == null ? '' : html ) );
+		const bar = blocked ? `<div class="minn-email-remote" data-remote-bar>
+			<span>${ esc( __( 'Remote images are blocked so opening this does not tell the sender it was read.' ) ) }</span>
+			<button type="button" class="minn-btn-soft" data-load-remote>${ esc( __( 'Load images' ) ) }</button>
+		</div>` : '';
+		return `${ bar }<iframe class="${ cls }"${ id ? ` id="${ id }"` : '' } sandbox="" title="${ esc( title ) }" srcdoc="${ esc( previewSrcdoc( html, !! allowRemote ) ) }"></iframe>`;
+	}
+	document.addEventListener( 'click', ( e ) => {
+		const btn = e.target.closest && e.target.closest( '[data-load-remote]' );
+		if ( ! btn ) return;
+		const bar = btn.closest( '[data-remote-bar]' );
+		const frame = bar && bar.nextElementSibling;
+		if ( ! frame || frame.tagName !== 'IFRAME' ) return;
+		frame.srcdoc = frame.srcdoc.replace( PREVIEW_CSP_BLOCK, PREVIEW_CSP_ALLOW );
+		bar.remove();
+	} );
+
 	// One sectionsRoute detail row. `type` picks the rendering: url/email
 	// (links), pill, code (escaped mono block), html-preview (SANDBOXED
 	// iframe — the plugin's HTML never touches Minn's DOM, matching the
@@ -16614,7 +16650,7 @@
 			return `<div class="minn-side-row multi block">${ key }<div class="minn-detail-code-wrap"><pre class="minn-detail-code">${ esc( text ) }</pre>${ text ? `<button type="button" class="minn-copy-btn" data-scopy title="${ esc( __( 'Copy' ) ) }" aria-label="${ esc( __( 'Copy code' ) ) }">${ icon( 'copy' ) }</button>` : '' }</div></div>`;
 		}
 		if ( r.type === 'html-preview' ) {
-			return `<div class="minn-side-row multi block">${ key }<iframe class="minn-email-frame minn-detail-frame" sandbox="" title="${ esc( r.label || 'Preview' ) }" srcdoc="${ esc( String( r.value == null ? '' : r.value ) ) }"></iframe></div>`;
+			return `<div class="minn-side-row multi block">${ key }${ previewFrameHtml( r.value, { cls: 'minn-email-frame minn-detail-frame', title: r.label || 'Preview', allowRemote: r.remote === true } ) }</div>`;
 		}
 		if ( r.type === 'kv-table' ) {
 			const pairs = Array.isArray( r.value )
@@ -44017,7 +44053,7 @@
 						</div>` : '' }
 					</div>
 					${ message ? ( isHtml
-						? `<iframe class="minn-email-frame" id="minn-email-frame" sandbox="" title="${ esc( __( 'Email preview' ) ) }" srcdoc="${ esc( String( message ) ) }"></iframe>`
+						? previewFrameHtml( message, { cls: 'minn-email-frame', id: 'minn-email-frame', title: __( 'Email preview' ) } )
 						: `<pre class="minn-surface-message">${ esc( stripTags( String( message ) ) ) }</pre>` ) : '' }` }
 					${ ( message || edit || visibleActions.length || ( sec && sec.adminUrl ) || activityAdmin || activityLinks.length ) ? `
 					<div class="minn-modal-actions">

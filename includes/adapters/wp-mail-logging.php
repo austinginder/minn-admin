@@ -339,7 +339,9 @@ add_action( 'rest_api_init', function () {
 					'rows'  => array(
 						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
 						preg_match( '/<\/?[a-z][^>]*>/i', $body )
-							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
+							// Remote images stay blocked unless their own "Always
+							// Load Remote Images" setting (1.17+) says otherwise.
+							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview', 'remote' => minn_admin_wpml_displays( 'load-remote-images' ) )
 							: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
 					),
 				),

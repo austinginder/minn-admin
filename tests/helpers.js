@@ -87,7 +87,10 @@ async function launch( opts = {} ) {
 	page.on( 'pageerror', ( e ) => errors.push( 'pageerror: ' + e.message ) );
 	page.on( 'console', ( m ) => {
 		// Resource 404s (test fixtures reference throwaway images) aren't app errors.
-		if ( m.type() === 'error' && ! /Failed to load resource/.test( m.text() ) ) {
+		// Nor is the HTML-preview remote-content block doing its job: Chrome
+		// logs each blocked load against the preview's own CSP directives.
+		if ( m.type() === 'error' && ! /Failed to load resource/.test( m.text() )
+			&& ! /violates the following Content Security Policy directive: "(?:img-src data: cid: blob:|style-src 'unsafe-inline'|font-src data:|media-src data:|default-src 'none')"/.test( m.text() ) ) {
 			errors.push( 'console: ' + m.text() );
 		}
 	} );
