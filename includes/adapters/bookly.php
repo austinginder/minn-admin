@@ -81,17 +81,24 @@ function minn_admin_bookly_staff_scope() {
 	if ( class_exists( '\Bookly\Lib\Utils\Common' ) && \Bookly\Lib\Utils\Common::isCurrentUserSupervisor() ) {
 		return array();
 	}
-	global $wpdb;
-	$staff = minn_admin_bookly_table( 'staff' );
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $staff ) ) !== $staff ) {
-		return array( -1 );
+	// A WP user can be linked to more than one staff row; Bookly scopes to all
+	// of them. Their own resolver (28.3+) is the source of truth when present.
+	if ( class_exists( '\Bookly\Lib\Utils\Common' ) && method_exists( '\Bookly\Lib\Utils\Common', 'getCurrentUserStaffIds' ) ) {
+		$ids = \Bookly\Lib\Utils\Common::getCurrentUserStaffIds();
+		if ( null === $ids ) {
+			return array();
+		}
+	} else {
+		global $wpdb;
+		$staff = minn_admin_bookly_table( 'staff' );
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $staff ) ) !== $staff ) {
+			return array( -1 );
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$staff} WHERE wp_user_id = %d", get_current_user_id() ) );
 	}
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$id = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT id FROM {$staff} WHERE wp_user_id = %d LIMIT 1",
-		get_current_user_id()
-	) );
-	return $id > 0 ? array( $id ) : array( -1 );
+	$ids = array_values( array_filter( array_map( 'intval', (array) $ids ) ) );
+	return $ids ? $ids : array( -1 );
 }
 
 /** WP-local MySQL datetime → ISO-8601 with a trailing Z. */
