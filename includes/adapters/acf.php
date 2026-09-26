@@ -2383,7 +2383,9 @@ function minn_admin_acf_options_tabs( $page ) {
 				$open( $group['title'] );
 			}
 			if ( '' !== $gate ) {
-				$lock( $f['label'] ?? '' );
+				// A hidden field is counted but never named: the site chose
+				// to keep it from this user, label included.
+				$lock( 'hide' === $gate ? '' : ( $f['label'] ?? '' ) );
 				continue;
 			}
 			$cond = ! empty( $f['conditional_logic'] ) && is_array( $f['conditional_logic'] ) ? $f['conditional_logic'] : null;
@@ -2400,8 +2402,9 @@ function minn_admin_acf_options_tabs( $page ) {
 						if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 							continue;
 						}
-						if ( '' !== minn_admin_acf_gate( $sub ) ) {
-							$lock( $sub['label'] ?? '' );
+						$sgate = minn_admin_acf_gate( $sub );
+						if ( '' !== $sgate ) {
+							$lock( 'hide' === $sgate ? '' : ( $sub['label'] ?? '' ) );
 							continue;
 						}
 						$scond = $and_conds( $inherited, ! empty( $sub['conditional_logic'] ) && is_array( $sub['conditional_logic'] ) ? $sub['conditional_logic'] : null );

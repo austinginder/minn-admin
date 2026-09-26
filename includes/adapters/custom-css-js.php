@@ -359,9 +359,10 @@ function minn_admin_ccj_rows( $args = array() ) {
 			continue;
 		}
 		// Search runs over post_content too; a row whose code this caller
-		// is not served only matches on its name, or the result set would
+		// is not served only matches on its stored title (not the "Untitled
+		// CSS" display fallback), or the result set would
 		// spell the hidden code out one query at a time.
-		if ( ! empty( $args['s'] ) && '' === $item['code'] && '' !== (string) get_post_field( 'post_content', $post ) && false === stripos( (string) $item['name'], (string) $args['s'] ) ) {
+		if ( ! empty( $args['s'] ) && '' === $item['code'] && '' !== (string) get_post_field( 'post_content', $post ) && false === stripos( (string) $post->post_title, (string) $args['s'] ) ) {
 			continue;
 		}
 		if ( isset( $args['active'] ) ) {
