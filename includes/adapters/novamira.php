@@ -630,6 +630,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 	$surfaces['novamira'] = array(
 		'label'      => __( 'Agent Access', 'minn-admin' ),
+		// Shares one sidebar entry with other agent-access providers
+		// (Elementor MCP) through the provider switcher.
+		'family'     => 'agent-access',
 		'sub'        => 'Novamira',
 		'plugin'     => array( 'novamira', 'novamira-pro' ),
 		'icon'       => 'plug',
