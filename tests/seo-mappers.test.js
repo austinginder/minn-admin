@@ -338,6 +338,28 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		await setStatus( IDS.yoast, 'active' ).catch( () => {} );
 	}
 
+	// SEOPress's blocked-role rule without their 10.1.1 helper (older builds):
+	// read from their stored option instead of treating nobody as blocked.
+	{
+		const { execSync } = require( 'child_process' );
+		const WPP = process.env.MINN_TEST_WP || require( 'path' ).resolve( __dirname, '../../../..' );
+		const out = execSync( `wp --path=${ JSON.stringify( WPP ) } eval-file - 2>/dev/null`, { input: `<?php
+			if ( function_exists( 'seopress_metabox_role_is_blocked' ) ) { echo 'skip'; return; }
+			$before = get_option( 'seopress_advanced_option_name', null );
+			$o = is_array( $before ) ? $before : array();
+			$o['seopress_advanced_security_metaboxe_role'] = array( 'author' => '1' );
+			update_option( 'seopress_advanced_option_name', $o );
+			$res = array();
+			foreach ( array( 'minn-author', 'minn-editor' ) as $l ) { wp_set_current_user( get_user_by( 'login', $l )->ID ); $res[ $l ] = minn_admin_seopress_role_blocked( 'GLOBAL' ); }
+			if ( null === $before ) { delete_option( 'seopress_advanced_option_name' ); } else { update_option( 'seopress_advanced_option_name', $before ); }
+			echo wp_json_encode( $res );
+		` } ).toString().trim().split( '\n' ).pop();
+		if ( 'skip' !== out ) {
+			const r = JSON.parse( out );
+			t.check( 'SEOPress blocked roles hold without their 10.1.1 helper (Author blocked, Editor not)', true === r[ 'minn-author' ] && false === r[ 'minn-editor' ], out );
+		}
+	}
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
 	console.error( e );

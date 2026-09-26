@@ -1616,6 +1616,37 @@ function minn_admin_seo_press_family_provider( $name, $mp, $with_archive, $can_e
  *
  * @return array|null
  */
+/**
+ * SEOPress's "block the SEO metabox for these roles" rule (Advanced →
+ * Security), for its two areas: GLOBAL (titles, meta, robots, social) and
+ * CONTENT_ANALYSIS (the target keyword). Their seopress_metabox_role_is_blocked()
+ * answers it from 10.1.1; on older builds the same lists live in
+ * seopress_advanced_option_name and their metabox checks them itself, so the
+ * rule is read from there rather than treated as "nobody is blocked".
+ * Super admins are never blocked, as in theirs.
+ *
+ * @param string $type 'GLOBAL' or 'CONTENT_ANALYSIS'.
+ * @return bool
+ */
+function minn_admin_seopress_role_blocked( $type ) {
+	if ( function_exists( 'seopress_metabox_role_is_blocked' ) ) {
+		return (bool) seopress_metabox_role_is_blocked( $type );
+	}
+	if ( is_super_admin() ) {
+		return false;
+	}
+	$opts = get_option( 'seopress_advanced_option_name', array() );
+	$key  = 'CONTENT_ANALYSIS' === $type ? 'seopress_advanced_security_metaboxe_role_content_analysis' : 'seopress_advanced_security_metaboxe_role';
+	$list = is_array( $opts ) && isset( $opts[ $key ] ) && is_array( $opts[ $key ] ) ? $opts[ $key ] : array();
+	$user = wp_get_current_user();
+	foreach ( (array) ( $user ? $user->roles : array() ) as $role ) {
+		if ( ! empty( $list[ $role ] ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
 function minn_admin_seo_plugin() {
 	if ( defined( 'WPSEO_VERSION' ) ) {
 		return minn_admin_seo_yoast_provider();
@@ -1635,9 +1666,8 @@ function minn_admin_seo_plugin() {
 			// one -- their own meta_auth callback switches on exactly that
 			// key. Ask about both, so a role blocked from content analysis
 			// cannot write the keyword through here.
-			return ! function_exists( 'seopress_metabox_role_is_blocked' )
-				|| ( ! seopress_metabox_role_is_blocked( 'GLOBAL' )
-					&& ! seopress_metabox_role_is_blocked( 'CONTENT_ANALYSIS' ) );
+			return ! minn_admin_seopress_role_blocked( 'GLOBAL' )
+				&& ! minn_admin_seopress_role_blocked( 'CONTENT_ANALYSIS' );
 		} );
 	}
 	if ( defined( 'SURERANK_VERSION' )
@@ -1651,8 +1681,19 @@ function minn_admin_seo_plugin() {
 		return minn_admin_seo_press_family_provider( 'SiteSEO', '_siteseo_', true, function () {
 			// SiteSEO's own metabox-permission check (roles in its advanced
 			// settings); it also covers the logged-in test.
-			return ! function_exists( 'siteseo_user_can_metabox' )
-				|| siteseo_user_can_metabox();
+			// Without the helper (an older build) the same rule is read
+			// from their option rather than opening to every role: a role
+			// listed under security_metaboxe_role is blocked, as theirs does.
+			if ( function_exists( 'siteseo_user_can_metabox' ) ) {
+				return (bool) siteseo_user_can_metabox();
+			}
+			if ( ! is_user_logged_in() ) {
+				return false;
+			}
+			$adv   = get_option( 'siteseo_advanced_option_name', array() );
+			$roles = is_array( $adv ) && ! empty( $adv['security_metaboxe_role'] ) && is_array( $adv['security_metaboxe_role'] ) ? $adv['security_metaboxe_role'] : array();
+			$user  = wp_get_current_user();
+			return ! array_key_exists( (string) current( (array) $user->roles ), $roles );
 		} );
 	}
 	// Squirrly last: own {prefix}qss table, reached only through their API.
