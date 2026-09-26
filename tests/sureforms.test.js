@@ -111,6 +111,34 @@ const evalPhp = ( php ) => {
 			!! ch && ch.title === 'Last 14 days' && Array.isArray( ch.points ) && ch.points.length === 14 && ch.points.some( ( pt ) => pt.value > 0 ),
 			JSON.stringify( ch ) );
 
+		// Activity: their entry log (2.12.8 also records notification emails),
+		// written through their own Entries::update().
+		evalPhp( `\\SRFM\\Inc\\Database\\Tables\\Entries::update( ${ entryId }, array( 'logs' => array( array( 'title' => 'Minn suite email notification', 'messages' => array( 'Sent to dana-suite@example.com' ), 'timestamp' => current_time( 'mysql' ) ) ) ) ); echo 1;` );
+		const act = await api( `minn-admin/v1/sureforms/entries/${ entryId }` );
+		const actSec = ( ( act.body && act.body.sections ) || [] ).find( ( s ) => s.title === 'Activity' );
+		t.check( 'entry card lists their activity log',
+			!! actSec && actSec.rows.some( ( r ) => /Minn suite email notification/.test( r.label ) && /dana-suite@example\.com/.test( r.value ) ),
+			JSON.stringify( actSec ) );
+
+		// Forms view: Views + Conversion from their own calculation, "—" while
+		// their tracking setting is off. Their option + tracking stamp restored.
+		const trackingBefore = evalPhp( `echo wp_json_encode( array( get_option( 'srfm_general_settings_options', null ), get_option( 'srfm_form_views_tracking_started_at', null ) ) );` );
+		try {
+			evalPhp( `$o = get_option( 'srfm_general_settings_options', array() ); if ( ! is_array( $o ) ) { $o = array(); } $o['srfm_form_views_tracking'] = false; update_option( 'srfm_general_settings_options', $o ); echo 1;` );
+			let forms = await api( 'minn-admin/v1/sureforms/forms?manage=1' );
+			let row = ( forms.body || [] ).find( ( f ) => Number( f.id ) === formId ) || {};
+			t.check( 'Forms view: views and conversion read "—" while tracking is off', '—' === row.views && '—' === row.conversion && row.entries >= 1, JSON.stringify( row ) );
+			evalPhp( `$o = get_option( 'srfm_general_settings_options', array() ); if ( ! is_array( $o ) ) { $o = array(); } $o['srfm_form_views_tracking'] = true; update_option( 'srfm_general_settings_options', $o ); update_option( 'srfm_form_views_tracking_started_at', time() - DAY_IN_SECONDS, false ); update_post_meta( ${ formId }, '_srfm_form_views', 10 ); echo 1;` );
+			forms = await api( 'minn-admin/v1/sureforms/forms?manage=1' );
+			row = ( forms.body || [] ).find( ( f ) => Number( f.id ) === formId ) || {};
+			t.check( 'Forms view: their tracked views and a conversion rate once tracking is on', '10' === String( row.views ) && /^\d+(\.\d)?%$/.test( row.conversion || '' ), JSON.stringify( row ) );
+		} finally {
+			evalPhp( `$b = json_decode( base64_decode( '${ Buffer.from( trackingBefore.match( /\[.*\]/ ) ? trackingBefore.match( /\[.*\]/ )[ 0 ] : '[null,null]' ).toString( 'base64' ) }' ), true );
+				if ( null === $b[0] ) { delete_option( 'srfm_general_settings_options' ); } else { update_option( 'srfm_general_settings_options', $b[0] ); }
+				if ( null === $b[1] ) { delete_option( 'srfm_form_views_tracking_started_at' ); } else { update_option( 'srfm_form_views_tracking_started_at', $b[1], false ); }
+				echo 1;` );
+		}
+
 		const del = await api( `minn-admin/v1/sureforms/entries/${ entryId }`, { method: 'DELETE' } );
 		const gone = await api( `minn-admin/v1/sureforms/entries/${ entryId }` );
 		t.check( 'delete removes the entry', del.status === 200 && del.body && del.body.deleted && gone.status === 404, JSON.stringify( { del: del.status, gone: gone.status } ) );

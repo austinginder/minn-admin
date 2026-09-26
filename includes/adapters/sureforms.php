@@ -184,9 +184,73 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		),
+		// Forms with SureForms' own Views and Conversion rate (2.12.6+). Both
+		// read "—" until their Form views tracking setting is on, exactly as
+		// their Forms list hides the columns.
+		'manage'     => array(
+			'viewLabel' => __( 'Forms', 'minn-admin' ),
+			'route'     => 'minn-admin/v1/sureforms/forms?manage=1',
+			'columns'   => array(
+				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num', 'width' => '84px' ),
+				array( 'key' => 'views', 'label' => __( 'Views', 'minn-admin' ), 'width' => '84px' ),
+				array( 'key' => 'conversion', 'label' => __( 'Conversion', 'minn-admin' ), 'width' => '104px' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+			),
+			'detail'    => array(),
+			'actions'   => array(
+				array(
+					'label' => __( 'Edit in SureForms ↗', 'minn-admin' ),
+					'href'  => admin_url( 'post.php?post={id}&action=edit' ),
+				),
+			),
+		),
 	);
 	return $surfaces;
 } );
+
+/**
+ * One form's Views + Conversion rate from SureForms' own calculation.
+ *
+ * Their Forms_Data::calculate_form_metrics() is private and reachable only
+ * through their forms-list route, which also saves a per-page preference
+ * whenever a page size is passed. Reflection runs the same method without
+ * that write (a documented exception to never-reimplement: the rate depends
+ * on their tracking window and on excluding editors' own test submissions,
+ * which must not be re-derived here).
+ *
+ * @return array { views: int|null, conversion: float|null } nulls = not tracked.
+ */
+function minn_admin_sureforms_metrics( $form_id ) {
+	static $method = false;
+	if ( false === $method ) {
+		$method = null;
+		if ( class_exists( '\\SRFM\\Inc\\Forms_Data' ) && method_exists( '\\SRFM\\Inc\\Forms_Data', 'get_instance' ) ) {
+			try {
+				$m = new ReflectionMethod( '\\SRFM\\Inc\\Forms_Data', 'calculate_form_metrics' );
+				$m->setAccessible( true );
+				$method = $m;
+			} catch ( \Throwable $e ) {
+				$method = null;
+			}
+		}
+	}
+	if ( ! class_exists( '\\SRFM\\Inc\\Form_Views' ) || ! \SRFM\Inc\Form_Views::get_instance()->is_tracking_enabled() ) {
+		return array( 'views' => null, 'conversion' => null );
+	}
+	if ( $method ) {
+		try {
+			$r = $method->invoke( \SRFM\Inc\Forms_Data::get_instance(), (int) $form_id );
+			return array(
+				'views'      => (int) ( $r['views'] ?? 0 ),
+				'conversion' => isset( $r['conversion_rate'] ) ? (float) $r['conversion_rate'] : null,
+			);
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Fall through to the raw count.
+		}
+	}
+	return array( 'views' => (int) \SRFM\Inc\Form_Views::get_instance()->get_views( (int) $form_id ), 'conversion' => null );
+}
 
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_sureforms_active() ) {
@@ -203,10 +267,26 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/sureforms/forms', array(
 		'methods'             => 'GET',
 		'permission_callback' => $perm,
-		'callback'            => function () {
-			$out = array();
+		'callback'            => function ( WP_REST_Request $request ) {
+			$out    = array();
+			$manage = ! empty( $request['manage'] );
 			foreach ( minn_admin_sureforms_form_titles() as $id => $title ) {
-				$out[] = array( 'id' => $id, 'title' => $title );
+				if ( ! $manage ) {
+					$out[] = array( 'id' => $id, 'title' => $title );
+					continue;
+				}
+				$m       = minn_admin_sureforms_metrics( $id );
+				$entries = class_exists( '\\SRFM\\Inc\\Database\\Tables\\Entries' )
+					? (int) \SRFM\Inc\Database\Tables\Entries::get_total_entries_by_status( 'all', (int) $id )
+					: 0;
+				$out[]   = array(
+					'id'         => $id,
+					'title'      => $title,
+					'status'     => (string) get_post_status( $id ),
+					'entries'    => $entries,
+					'views'      => null === $m['views'] ? '—' : number_format_i18n( $m['views'] ),
+					'conversion' => null === $m['conversion'] ? '—' : number_format_i18n( $m['conversion'], 1 ) . '%',
+				);
 			}
 			return rest_ensure_response( $out );
 		},
@@ -307,12 +387,33 @@ add_action( 'rest_api_init', function () {
 				if ( '' !== $iso ) {
 					$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => $iso );
 				}
+				// Their entry activity log (2.12.8+ also records the
+				// notification emails): newest first, { title, messages[],
+				// timestamp } with site-local timestamps.
+				$activity = array();
+				$logs     = json_decode( (string) ( $row->logs ?? '' ), true );
+				foreach ( is_array( $logs ) ? array_slice( $logs, 0, 20 ) : array() as $log ) {
+					if ( ! is_array( $log ) || empty( $log['title'] ) ) {
+						continue;
+					}
+					// Site-local already, so the site's own date format applies as-is.
+					$when       = ! empty( $log['timestamp'] ) ? (string) mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (string) $log['timestamp'] ) : '';
+					$messages   = array_filter( array_map( 'wp_strip_all_tags', array_map( 'strval', (array) ( $log['messages'] ?? array() ) ) ) );
+					$activity[] = array(
+						'label' => (string) $log['title'] . ( '' !== $when ? ' · ' . $when : '' ),
+						'value' => $messages ? implode( "\n", $messages ) : '—',
+					);
+				}
+				$sections = array(
+					array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $answers ),
+					array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
+				);
+				if ( $activity ) {
+					$sections[] = array( 'title' => __( 'Activity', 'minn-admin' ), 'rows' => $activity );
+				}
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
-					'sections' => array(
-						array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $answers ),
-						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-					),
+					'sections' => $sections,
 					'adminUrl' => admin_url( 'admin.php?page=sureforms_entries&entry_id=' . (int) $row->ID ),
 				) );
 			},
