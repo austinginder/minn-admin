@@ -1370,17 +1370,17 @@ class Minn_Admin {
 		}
 		$held = self::maintenance_holds_back();
 		// This runs before core's cookie check (priority 100), which demotes
-		// a cookie request without a valid REST nonce to anonymous. Until
-		// then the cookie still reads as the signed-in editor, so such a
-		// request is judged the way core is about to judge it: held.
-		if ( ! $held && get_option( 'minn_admin_maintenance' ) && ! empty( $GLOBALS['wp_rest_auth_cookie'] ) ) {
-			$nonce = '';
-			if ( isset( $_REQUEST['_wpnonce'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
-				$nonce = sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
-			} elseif ( isset( $_SERVER['HTTP_X_WP_NONCE'] ) ) {
-				$nonce = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_WP_NONCE'] ) );
-			}
-			$held = '' === $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' );
+		// a cookie request carrying NO REST nonce to anonymous. Until then the
+		// cookie still reads as the signed-in editor, so such a request is
+		// judged the way core is about to judge it: held. Only a request that
+		// core itself authenticated by cookie counts (core stores the string
+		// 'malformed' when there is no cookie, so application passwords and
+		// other header auth are untouched), and a PRESENT but stale nonce is
+		// left to core's rest_cookie_invalid_nonce answer, which is what Minn
+		// and the block editor refresh their nonce on.
+		if ( ! $held && get_option( 'minn_admin_maintenance' ) && true === ( $GLOBALS['wp_rest_auth_cookie'] ?? null ) ) {
+			$has_nonce = isset( $_REQUEST['_wpnonce'] ) || isset( $_SERVER['HTTP_X_WP_NONCE'] ); // phpcs:ignore WordPress.Security.NonceVerification
+			$held      = ! $has_nonce;
 		}
 		if ( ! $held ) {
 			return $result;
