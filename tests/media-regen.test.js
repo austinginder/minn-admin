@@ -128,8 +128,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				} ).catch( () => {} );
 			}, frtMedia ).catch( () => {} );
 		}
-		await plug( 'force-regenerate-thumbnails/force-regenerate-thumbnails', 'inactive' ).catch( () => {} );
-		await plug( 'regenerate-thumbnails/regenerate-thumbnails', 'active' ).catch( () => {} );
+		// Restore the resident fixture through wp-cli, not REST: a plugin
+		// toggle can recycle the worker and drop the request, and a swallowed
+		// failure here left Regenerate Thumbnails off for every later suite.
+		const { execSync } = require( 'child_process' );
+		const WPP = process.env.MINN_TEST_WP || require( 'path' ).resolve( __dirname, '../../../..' );
+		for ( const [ cmd, slug ] of [ [ 'deactivate', 'force-regenerate-thumbnails' ], [ 'activate', 'regenerate-thumbnails' ] ] ) {
+			try { execSync( `wp --path=${ JSON.stringify( WPP ) } plugin ${ cmd } ${ slug } --quiet 2>/dev/null`, { timeout: 120000 } ); } catch ( e ) { /* already in that state */ }
+		}
 	}
 
 	await t.done( browser, errors );
