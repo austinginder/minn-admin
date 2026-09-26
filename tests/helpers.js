@@ -172,14 +172,25 @@ async function loginAs( browser, user, pass ) {
 // Create a post through the app's own REST credentials. Returns the post ID.
 async function createPost( page, { title, content, status = 'draft', ...extra } ) {
 	return page.evaluate( async ( args ) => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
-			body: JSON.stringify( args ),
-		} );
-		const j = await r.json();
-		if ( ! r.ok ) throw new Error( j.message || 'createPost failed' );
-		return j.id;
+		// A dropped socket ("Failed to fetch") is the local stack restarting,
+		// not an answer: Cove's FrankenPHP panics in go_sapi_flush when an
+		// earlier request was abandoned mid-flush and respawns in seconds.
+		// Retry that case only; a real error response still throws.
+		for ( let attempt = 0; ; attempt++ ) {
+			try {
+				const r = await fetch( window.MINN.restUrl + 'wp/v2/posts', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+					body: JSON.stringify( args ),
+				} );
+				const j = await r.json();
+				if ( ! r.ok ) throw new Error( j.message || 'createPost failed' );
+				return j.id;
+			} catch ( e ) {
+				if ( ! ( e instanceof TypeError ) || attempt >= 5 ) throw e;
+				await new Promise( ( res ) => setTimeout( res, 3000 ) );
+			}
+		}
 	}, { title, content, status, ...extra } );
 }
 
