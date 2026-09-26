@@ -387,6 +387,73 @@ function minn_admin_scrutoscope_storage_stats() {
 	return $out;
 }
 
+/**
+ * Status-card rows for the Action Scheduler queue, or [] when their collector
+ * is missing (pre-1.6) or the site has no Action Scheduler table.
+ *
+ * @return array[]
+ */
+function minn_admin_scrutoscope_queue_rows() {
+	if ( ! class_exists( '\\Scrutoscope\\Diagnostics\\ActionScheduler' ) || ! method_exists( '\\Scrutoscope\\Diagnostics\\ActionScheduler', 'collect' ) ) {
+		return array();
+	}
+	try {
+		$as = \Scrutoscope\Diagnostics\ActionScheduler::collect();
+	} catch ( \Throwable $e ) {
+		return array();
+	}
+	if ( empty( $as['available'] ) || ! is_array( $as['counts'] ?? null ) ) {
+		return array();
+	}
+	$c       = $as['counts'];
+	$pending = (int) ( $c['pending'] ?? 0 );
+	$running = (int) ( $c['in_progress'] ?? 0 );
+	$failed  = (int) ( $c['failed'] ?? 0 );
+
+	/* translators: %s: number of background jobs waiting to run. */
+	$value = sprintf( __( '%s pending', 'minn-admin' ), number_format_i18n( $pending ) );
+	if ( $running ) {
+		/* translators: %s: number of background jobs running right now. */
+		$value .= ' · ' . sprintf( __( '%s running', 'minn-admin' ), number_format_i18n( $running ) );
+	}
+	$oldest = is_array( $as['oldest_pending'] ?? null ) ? $as['oldest_pending'] : null;
+	$age    = $oldest ? (int) ( $oldest['age_seconds'] ?? 0 ) : 0;
+	// A few minutes late is ordinary WP-Cron jitter; past that the queue is
+	// not keeping up.
+	if ( $age > 5 * MINUTE_IN_SECONDS ) {
+		/* translators: 1: how long the job is overdue, like "3 hours". 2: the job's hook name. */
+		$hint = sprintf( __( 'Oldest is overdue by %1$s (%2$s)', 'minn-admin' ), human_time_diff( time() - $age ), (string) ( $oldest['hook'] ?? '' ) );
+	} else {
+		$hint = $pending ? __( 'Nothing overdue', 'minn-admin' ) : __( 'Queue is empty', 'minn-admin' );
+	}
+	$rows = array(
+		array(
+			'label' => __( 'Background jobs', 'minn-admin' ),
+			'value' => $value,
+			'hint'  => $hint,
+		),
+	);
+
+	if ( $failed ) {
+		$last      = is_array( $as['recent_failed'] ?? null ) ? $as['recent_failed'] : null;
+		$last_hint = '';
+		if ( $last && ! empty( $last['hook'] ) ) {
+			$ts        = ! empty( $last['last_attempt_gmt'] ) ? strtotime( $last['last_attempt_gmt'] . ' UTC' ) : false;
+			$last_hint = $ts && $ts > 0 && $ts <= time()
+				/* translators: 1: the hook of the most recently failed job. 2: how long ago, like "2 days". */
+				? sprintf( __( 'Latest: %1$s, %2$s ago', 'minn-admin' ), (string) $last['hook'], human_time_diff( $ts ) )
+				/* translators: %s: the hook of the most recently failed job. */
+				: sprintf( __( 'Latest: %s', 'minn-admin' ), (string) $last['hook'] );
+		}
+		$rows[] = array(
+			'label' => __( 'Failed jobs', 'minn-admin' ),
+			'value' => number_format_i18n( $failed ),
+			'hint'  => $last_hint,
+		);
+	}
+	return $rows;
+}
+
 /** Status card model (capture posture + counts). */
 function minn_admin_scrutoscope_status_model() {
 	$stats = minn_admin_scrutoscope_storage_stats();
@@ -455,6 +522,17 @@ function minn_admin_scrutoscope_status_model() {
 				),
 			)
 		);
+	}
+
+	// Background queue health from their Action Scheduler collector (1.6+),
+	// kept together just above Version. Minn's database view already counts
+	// pending and failed jobs; what this adds is whether the queue is
+	// DRAINING (how overdue the oldest pending job is) and which hook failed
+	// last. Ages are formatted with human_time_diff(): their age_human is an
+	// untranslated short form.
+	$queue = minn_admin_scrutoscope_queue_rows();
+	if ( $queue ) {
+		array_splice( $rows, count( $rows ) - 1, 0, $queue );
 	}
 
 	return array(

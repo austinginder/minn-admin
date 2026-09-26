@@ -7,7 +7,8 @@
  * minn_scruto_profile_noop for the profile action. Scrutoscope must be active
  * (GitHub install on minnadmin).
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { execSync } = require( 'child_process' );
+const { BASE, WP, launch, login, reporter } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -111,6 +112,31 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		st.status === 200 && ( st.body.rows || [] ).length >= 3
 		&& ( st.body.actions || [] ).some( ( a ) => /Scrutoscope/.test( a.label ) && a.href ),
 		JSON.stringify( st.body && { rows: ( st.body.rows || [] ).length, actions: st.body.actions } ) );
+	// Background queue (their Diagnostics\ActionScheduler, 1.6+): an overdue
+	// pending job must name itself. Scheduled, read and removed inside ONE
+	// wp-cli process: a past-due job is exactly what Action Scheduler's
+	// runner claims on the next web request, so a REST read in between
+	// raced it (the job had already run).
+	const queue = JSON.parse( execSync( `wp --path=${ JSON.stringify( WP ) } eval-file - --user=admin 2>/dev/null`, { input: `<?php
+		if ( ! class_exists( '\\Scrutoscope\\Diagnostics\\ActionScheduler' ) || ! function_exists( 'as_schedule_single_action' ) ) { echo 'null'; return; }
+		$hook = 'minn_suite_overdue_probe';
+		as_unschedule_all_actions( $hook );
+		as_schedule_single_action( time() - 7200 - YEAR_IN_SECONDS, $hook, array(), 'minn-suite' );
+		$rows = minn_admin_scrutoscope_queue_rows();
+		as_unschedule_all_actions( $hook );
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}actionscheduler_actions WHERE hook = %s", $hook ) );
+		echo wp_json_encode( $rows );
+	` } ).toString().trim().split( '\n' ).pop() );
+	if ( queue ) {
+		const jobs = queue.find( ( r ) => r.label === 'Background jobs' );
+		t.check( 'status card names an overdue background job', !! jobs && /overdue/.test( jobs.hint || '' ) && jobs.hint.includes( 'minn_suite_overdue_probe' ), JSON.stringify( jobs ) );
+	}
+	t.check( 'background queue rows sit together on the card', ( () => {
+		const labels = ( st.body.rows || [] ).map( ( r ) => r.label );
+		const i = labels.indexOf( 'Background jobs' );
+		return -1 === i || ( labels.indexOf( 'Failed jobs' ) === -1 || labels.indexOf( 'Failed jobs' ) === i + 1 );
+	} )(), JSON.stringify( ( st.body.rows || [] ).map( ( r ) => r.label ) ) );
 	t.check( 'status reports profiles stored',
 		( st.body.rows || [] ).some( ( r ) => r.label === 'Profiles stored' && parseInt( String( r.value ).replace( /\D/g, '' ), 10 ) >= 2 ),
 		JSON.stringify( st.body.rows ) );
