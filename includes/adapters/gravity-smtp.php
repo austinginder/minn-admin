@@ -778,7 +778,7 @@ add_action( 'rest_api_init', function () {
 					$details = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::LOG_DETAILS_MODEL );
 					$full    = $details ? $details->full_details( (int) $row->id ) : array();
 					if ( is_array( $full ) && $full ) {
-						foreach ( array( 'from', 'cc', 'bcc', 'source' ) as $k ) {
+						foreach ( array( 'from', 'reply_to', 'cc', 'bcc', 'source' ) as $k ) {
 							if ( ! empty( $full[ $k ] ) && is_string( $full[ $k ] ) ) {
 								// "Name <addr>" → "Name (addr)": the client
 								// strip-tags every raw detail value, which would
@@ -848,7 +848,9 @@ add_action( 'rest_api_init', function () {
 				$details   = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::LOG_DETAILS_MODEL );
 				$full      = $details ? $details->full_details( (int) $row->id ) : array();
 				if ( is_array( $full ) ) {
-					foreach ( array( 'from' => 'From', 'cc' => 'Cc', 'bcc' => 'Bcc', 'source' => 'Source' ) as $k => $label ) {
+					// reply_to is stored per event since 2.3.4 (parsed by their
+					// own log-details model); older rows simply lack it.
+					foreach ( array( 'from' => 'From', 'reply_to' => 'Reply-To', 'cc' => 'Cc', 'bcc' => 'Bcc', 'source' => 'Source' ) as $k => $label ) {
 						if ( ! empty( $full[ $k ] ) && is_string( $full[ $k ] ) ) {
 							$delivery[] = array( 'label' => $label, 'value' => trim( str_replace( array( '<', '>' ), array( '(', ')' ), $full[ $k ] ) ) );
 						}

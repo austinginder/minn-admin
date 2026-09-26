@@ -578,6 +578,36 @@ const SEARCH_SUBJECT = 'Minn mail test';
 		}
 	}
 
+	// Gravity SMTP 2.3.4 stores the Reply-To per event; both detail shapes
+	// show it. Seeded as a copy of a real event with a reply-to header added,
+	// read in-process, then removed.
+	{
+		const { execSync: ex } = require( 'child_process' );
+		const out = ex( `wp --path=${ JSON.stringify( process.env.MINN_TEST_WP || WP_PATH ) } eval-file - --user=admin 2>/dev/null`, { input: `<?php
+			global $wpdb; $t = $wpdb->prefix . 'gravitysmtp_events';
+			if ( ! defined( 'GF_GRAVITY_SMTP_VERSION' ) || $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) !== $t ) { echo 'null'; return; }
+			$row = $wpdb->get_row( "SELECT * FROM {$t} WHERE extra <> '' ORDER BY id DESC LIMIT 1", ARRAY_A );
+			if ( ! $row ) { echo 'null'; return; }
+			$extra = unserialize( $row['extra'] );
+			if ( ! is_array( $extra ) ) { echo 'null'; return; }
+			$extra['headers']['reply-to'] = 'Support Desk <support@example.com>';
+			unset( $row['id'] ); $row['subject'] = 'Minn suite reply-to probe'; $row['extra'] = serialize( $extra );
+			$wpdb->insert( $t, $row ); $id = $wpdb->insert_id; $got = array();
+			foreach ( array( "/minn-admin/v1/gravity-smtp/events/$id", "/minn-admin/v1/gravity-smtp/events/$id/view" ) as $r ) {
+				$x = rest_do_request( new WP_REST_Request( 'GET', $r ) )->get_data(); $v = isset( $x['reply_to'] ) ? $x['reply_to'] : null;
+				foreach ( (array) ( is_array( $x ) && isset( $x['sections'] ) ? $x['sections'] : array() ) as $sec ) { foreach ( (array) $sec['rows'] as $rr ) { if ( 'Reply-To' === $rr['label'] ) { $v = $rr['value']; } } }
+				$got[] = $v;
+			}
+			$wpdb->delete( $t, array( 'id' => $id ) );
+			echo wp_json_encode( $got );
+		` } ).toString().trim().split( '\n' ).pop();
+		if ( 'null' !== out ) {
+			const got = JSON.parse( out );
+			t.check( 'Gravity SMTP detail shows the stored Reply-To (list detail + sections view)',
+				got.length === 2 && got.every( ( v ) => /support@example\.com/.test( v || '' ) ), out );
+		}
+	}
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
 	console.error( e );
