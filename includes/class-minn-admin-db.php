@@ -405,22 +405,14 @@ class Minn_Admin_DB {
 	 * @return bool
 	 */
 	private static function is_secret_cell( $table, $col, $row ) {
-		global $wpdb;
-		$base = $table;
-		foreach ( array_unique( array( $wpdb->prefix, $wpdb->base_prefix ) ) as $prefix ) {
-			if ( '' !== $prefix && 0 === strpos( $base, $prefix ) ) {
-				$base = substr( $base, strlen( $prefix ) );
-				break;
-			}
-		}
-		// A multisite blog prefix (wp_3_) leaves the numeric part behind.
-		$base = preg_replace( '/^\d+_/', '', $base );
+		$base = self::secret_base( $table );
 		if ( 'users' === $base ) {
 			return in_array( $col, array( 'user_pass', 'user_activation_key' ), true );
 		}
-		if ( 'usermeta' === $base && 'meta_value' === $col ) {
-			$key = isset( $row['meta_key'] ) ? (string) $row['meta_key'] : '';
-			return in_array( $key, self::SECRET_USERMETA_KEYS, true );
+		$keyed = self::keyed_secret( $table, $col );
+		if ( $keyed ) {
+			$key = isset( $row[ $keyed[0] ] ) ? (string) $row[ $keyed[0] ] : '';
+			return in_array( $key, $keyed[1], true );
 		}
 		if ( 'woocommerce_api_keys' === $base ) {
 			return in_array( $col, array( 'consumer_key', 'consumer_secret' ), true );
@@ -440,12 +432,71 @@ class Minn_Admin_DB {
 		return false;
 	}
 
-	/** usermeta keys whose value is a credential (sessions, app passwords, TOTP seeds). */
-	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key' );
-
-	private static function is_usermeta_value( $table, $col ) {
-		return 'meta_value' === $col && self::is_secret_cell( $table, $col, array( 'meta_key' => 'session_tokens' ) );
+	/**
+	 * A table's name without its site prefix, lowercased (case-folding MySQL
+	 * setups report wp_wfconfig for Wordfence's wfConfig). The user tables
+	 * answer 'users' / 'usermeta' whatever CUSTOM_USER_TABLE named them.
+	 */
+	private static function secret_base( $table ) {
+		global $wpdb;
+		if ( 0 === strcasecmp( $table, $wpdb->users ) ) {
+			return 'users';
+		}
+		if ( 0 === strcasecmp( $table, $wpdb->usermeta ) ) {
+			return 'usermeta';
+		}
+		$base = $table;
+		foreach ( array_unique( array( $wpdb->prefix, $wpdb->base_prefix ) ) as $prefix ) {
+			if ( '' !== $prefix && 0 === strpos( $base, $prefix ) ) {
+				$base = substr( $base, strlen( $prefix ) );
+				break;
+			}
+		}
+		// A multisite blog prefix (wp_3_) leaves the numeric part behind.
+		return strtolower( preg_replace( '/^\d+_/', '', $base ) );
 	}
+
+	/**
+	 * Key/value tables where only SOME rows hold a credential: base =>
+	 * { value column, key column, secret keys }.
+	 */
+	const KEYED_SECRETS = array(
+		'usermeta'      => array( 'meta_value', 'meta_key', self::SECRET_USERMETA_KEYS ),
+		// Core's keys and salts when they live in the database, not wp-config.
+		'options'       => array( 'option_value', 'option_name', self::SALT_KEYS ),
+		// wp_salt() reads network options on multisite.
+		'sitemeta'      => array( 'meta_value', 'meta_key', self::SALT_KEYS ),
+		// Wordfence Login Security: remembered-device cookie keys (whoever
+		// holds them can mark any user as past 2FA) and the reCAPTCHA secret.
+		'wfls_settings' => array( 'value', 'name', array( 'shared-hash-secret', 'shared-symmetric-secret', 'recaptcha-secret' ) ),
+		// Wordfence: the Central connection's keys and tokens, and the key
+		// its encrypted settings are sealed with.
+		'wfconfig'      => array( 'val', 'name', array( 'apiKey', 'longEncKey', 'wordfenceCentralSecretKey', 'wordfenceCentralAccessToken', 'wordfenceCentralUserSiteAccessToken', 'wordfenceCentralJWT', 'wordfenceCentralPK', 'wordfenceCentralUserSiteAuthGrant', 'encKey', 'currentCronKey' ) ),
+	);
+
+	/**
+	 * For a keyed-secret table's value column: [ key column, secret keys ].
+	 *
+	 * @return array|null
+	 */
+	private static function keyed_secret( $table, $col ) {
+		$base = self::secret_base( $table );
+		if ( ! isset( self::KEYED_SECRETS[ $base ] ) || 0 !== strcasecmp( $col, self::KEYED_SECRETS[ $base ][0] ) ) {
+			return null;
+		}
+		return array( self::KEYED_SECRETS[ $base ][1], self::KEYED_SECRETS[ $base ][2] );
+	}
+
+	/**
+	 * usermeta keys whose value is a credential: sessions, app passwords,
+	 * TOTP seeds and emergency codes (core Two Factor, Sucuri, All In One
+	 * Security), and the plaintext one-time sign-in tokens the One Time
+	 * Login and WP Freighter routes mint (each signs in as that user).
+	 */
+	/** Core's keys and salts, when stored in the database. */
+	const SALT_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key' );
+
+	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
@@ -460,10 +511,7 @@ class Minn_Admin_DB {
 	 * @return bool
 	 */
 	private static function is_secret_column( $table, $col ) {
-		if ( self::is_secret_cell( $table, $col, array( 'meta_key' => 'session_tokens' ) ) ) {
-			return true;
-		}
-		return false;
+		return null !== self::keyed_secret( $table, $col ) || self::is_secret_cell( $table, $col, array() );
 	}
 
 	private static function redacted_cell( $value ) {
@@ -612,9 +660,11 @@ class Minn_Admin_DB {
 		$fcol  = (string) $request->get_param( 'fcol' );
 		$fq    = (string) $request->get_param( 'fq' );
 		$where = '';
-		// usermeta.meta_value is ordinary data on almost every row; it stays
+		// usermeta.meta_value (like the other key/value tables in
+		// KEYED_SECRETS) is ordinary data on almost every row; it stays
 		// searchable, with the credential rows left out of the match (below).
-		if ( '' !== $fq && in_array( $fcol, $names, true ) && self::is_secret_column( $meta->name, $fcol ) && ! self::is_usermeta_value( $meta->name, $fcol ) ) {
+		$keyed = in_array( $fcol, $names, true ) ? self::keyed_secret( $meta->name, $fcol ) : null;
+		if ( '' !== $fq && in_array( $fcol, $names, true ) && self::is_secret_column( $meta->name, $fcol ) && ! $keyed ) {
 			return new WP_Error( 'minn_db_secret_filter', __( 'That column holds passwords or tokens, so it cannot be searched.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		if ( '' !== $fq && in_array( $fcol, $names, true ) ) {
@@ -623,9 +673,9 @@ class Minn_Admin_DB {
 				' WHERE ' . self::quote_ident( $fcol ) . ' LIKE %s',
 				'%' . $wpdb->esc_like( $fq ) . '%'
 			);
-			if ( self::is_usermeta_value( $meta->name, $fcol ) ) {
-				$keys   = self::SECRET_USERMETA_KEYS;
-				$where .= $wpdb->prepare( ' AND `meta_key` NOT IN (' . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')', $keys ); // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( $keyed ) {
+				$keys   = $keyed[1];
+				$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $keyed[0] ) . ' NOT IN (' . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')', $keys ); // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			}
 		} else {
 			$fcol = '';
