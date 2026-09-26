@@ -25,7 +25,7 @@ defined( 'ABSPATH' ) || exit;
  * is whatever the remote pattern payload contains. That is blind SSRF reach to
  * cloud metadata (169.254.169.254) and localhost services. Exploitation needs
  * the vendor library or an admin-added connection to misbehave, so this is
- * defence in depth rather than a live hole — but it costs one check.
+ * defence in depth rather than a live hole, but it costs one check.
  *
  * @param string $url Candidate image URL.
  * @return bool
@@ -42,15 +42,25 @@ function minn_admin_localize_host_ok( $url ) {
 	if ( in_array( $host, array( 'localhost', '127.0.0.1', '::1', '0.0.0.0' ), true ) ) {
 		return false;
 	}
-	// Only judge literal IPs here; a hostname is left to WordPress' own
-	// safe-request layer rather than resolved (a DNS lookup per image would be
-	// its own problem, and re-resolution makes the check racy anyway).
-	if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
-		return (bool) filter_var(
-			$host,
-			FILTER_VALIDATE_IP,
-			FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
-		);
+	$public = function ( $ip ) {
+		return (bool) filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
+	};
+	$bare = trim( $host, '[]' );
+	if ( filter_var( $bare, FILTER_VALIDATE_IP ) ) {
+		return $public( $bare );
+	}
+	// A hostname is resolved and every address judged. WordPress' own
+	// safe-request check (download_url uses it) refuses private ranges but
+	// not link-local 169.254.x.x, where cloud metadata answers. Only runs for
+	// the few images a design insert actually downloads (capped at 12).
+	$ips = gethostbynamel( $host );
+	if ( ! $ips ) {
+		return false;
+	}
+	foreach ( $ips as $ip ) {
+		if ( ! $public( $ip ) ) {
+			return false;
+		}
 	}
 	return true;
 }
