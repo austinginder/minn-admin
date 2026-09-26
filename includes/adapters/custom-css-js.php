@@ -114,6 +114,29 @@ function minn_admin_ccj_can_write_code( $opts ) {
  * context this caller may not write to. Checked against the snippet's stored
  * options rather than anything in the request.
  */
+/**
+ * The per-object checks their post.php screen makes on top of the list cap:
+ * edit_post / delete_post on this snippet (core maps them to their
+ * edit_custom_css / delete_custom_css) and the type's publish cap to switch
+ * one on. Their Web Designer role holds all of them; a role provisioned with
+ * only edit_custom_csss does not.
+ *
+ * @param string $verb    'edit', 'delete' or 'publish'.
+ * @param int    $post_id Snippet id (0 for a new one).
+ * @return bool
+ */
+function minn_admin_ccj_obj_can( $verb, $post_id = 0 ) {
+	if ( 'publish' === $verb ) {
+		$pto = get_post_type_object( 'custom-css-js' );
+		return $pto && current_user_can( $pto->cap->publish_posts );
+	}
+	return current_user_can( 'delete' === $verb ? 'delete_post' : 'edit_post', (int) $post_id );
+}
+
+function minn_admin_ccj_obj_error() {
+	return new WP_Error( 'minn_ccj_forbidden', __( 'You do not have permission to change this snippet.', 'minn-admin' ), array( 'status' => 403 ) );
+}
+
 function minn_admin_ccj_can_activate( $post_id ) {
 	return minn_admin_ccj_can_write_code( minn_admin_ccj_get_options( (int) $post_id ) );
 }
@@ -594,6 +617,9 @@ add_action( 'rest_api_init', function () {
 				if ( ! minn_admin_ccj_can_write_code( $opts ) ) {
 					return minn_admin_ccj_code_error( $opts );
 				}
+				if ( ! empty( $body['active'] ) && ! minn_admin_ccj_obj_can( 'publish' ) ) {
+					return minn_admin_ccj_obj_error();
+				}
 				$id   = wp_insert_post( array(
 					'post_type'    => 'custom-css-js',
 					'post_title'   => $name,
@@ -633,9 +659,15 @@ add_action( 'rest_api_init', function () {
 				if ( ! $post || 'custom-css-js' !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
+				if ( ! minn_admin_ccj_obj_can( 'edit', $id ) ) {
+					return minn_admin_ccj_obj_error();
+				}
 				$body = $request->get_json_params();
 				if ( ! is_array( $body ) ) {
 					$body = array();
+				}
+				if ( ! empty( $body['active'] ) && 'publish' !== $post->post_status && ! minn_admin_ccj_obj_can( 'publish' ) ) {
+					return minn_admin_ccj_obj_error();
 				}
 				$stored = minn_admin_ccj_get_options( $id );
 				$opts   = minn_admin_ccj_normalize_options( $body, $stored );
@@ -693,6 +725,9 @@ add_action( 'rest_api_init', function () {
 				if ( ! $post || 'custom-css-js' !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
+				if ( ! minn_admin_ccj_obj_can( 'delete', $id ) ) {
+					return minn_admin_ccj_obj_error();
+				}
 				// Deleting is a write to the same store.
 				if ( ! minn_admin_ccj_can_activate( $id ) ) {
 					return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
@@ -718,8 +753,14 @@ add_action( 'rest_api_init', function () {
 			if ( ! $post || 'custom-css-js' !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
+			if ( ! minn_admin_ccj_obj_can( 'edit', $id ) ) {
+				return minn_admin_ccj_obj_error();
+			}
 			$body   = $request->get_json_params();
 			$active = is_array( $body ) ? ! empty( $body['active'] ) : true;
+			if ( $active && 'publish' !== $post->post_status && ! minn_admin_ccj_obj_can( 'publish' ) ) {
+				return minn_admin_ccj_obj_error();
+			}
 			// Turning a snippet ON runs it. Turning it OFF is always allowed.
 			if ( $active && ! minn_admin_ccj_can_activate( $id ) ) {
 				return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );

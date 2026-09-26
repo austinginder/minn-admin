@@ -148,5 +148,28 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'administrator may still promote to internal', admin.promoted === true, JSON.stringify( admin ) );
 	t.check( 'administrator promotion actually lands', admin.linking === 'internal', JSON.stringify( admin ) );
 
+	/* ===== Per-object caps: a role holding only edit_custom_csss ===== */
+	// Their post.php screen also asks edit_post / delete_post on the snippet
+	// and the publish cap to switch one on; a hand-made role with only the list
+	// cap must not unpublish or delete someone else's snippet through Minn.
+	{
+		const { execSync } = require( 'child_process' );
+		const WPP = process.env.MINN_TEST_WP || require( 'path' ).resolve( __dirname, '../../../..' );
+		const php = ( code, user ) => execSync( `wp --path=${ JSON.stringify( WPP ) } eval-file -${ user ? ' --user=' + user : '' } 2>/dev/null`, { input: '<?php ' + code } ).toString().trim().split( '\n' ).pop();
+		const id = php( `add_role( 'minn_ccj_probe', 'Minn CCJ probe', array( 'read' => true, 'edit_posts' => true, 'edit_custom_csss' => true ) );
+			if ( ! get_user_by( 'login', 'minn-ccj-probe' ) ) { wp_insert_user( array( 'user_login' => 'minn-ccj-probe', 'user_pass' => wp_generate_password(), 'role' => 'minn_ccj_probe' ) ); }
+			$id = wp_insert_post( array( 'post_type' => 'custom-css-js', 'post_title' => 'Minn CCJ caps probe', 'post_content' => 'body{color:red}', 'post_status' => 'publish' ) );
+			update_post_meta( $id, 'options', array( 'type' => 'header', 'linking' => 'external', 'side' => 'frontend', 'priority' => 5, 'language' => 'css', 'minify' => false ) );
+			update_post_meta( $id, '_active', 'yes' ); echo $id;` );
+		try {
+			const out = php( `$req = function ( $m, $route, $body = null ) { $r = new WP_REST_Request( $m, $route ); if ( $body ) { $r->set_header( 'Content-Type', 'application/json' ); $r->set_body( wp_json_encode( $body ) ); } return rest_do_request( $r )->get_status(); };
+				echo wp_json_encode( array( 'off' => $req( 'POST', '/minn-admin/v1/ccj/snippets/${ id }/active', array( 'active' => false ) ), 'del' => $req( 'DELETE', '/minn-admin/v1/ccj/snippets/${ id }' ), 'status' => get_post_status( ${ id } ) ) );`, 'minn-ccj-probe' );
+			const r = JSON.parse( out );
+			t.check( 'list cap alone cannot unpublish or delete a snippet (their per-object caps)', 403 === r.off && 403 === r.del && 'publish' === r.status, out );
+		} finally {
+			php( `wp_delete_post( ${ parseInt( id, 10 ) || 0 }, true ); require_once ABSPATH . 'wp-admin/includes/user.php'; $u = get_user_by( 'login', 'minn-ccj-probe' ); if ( $u ) { wp_delete_user( $u->ID ); } remove_role( 'minn_ccj_probe' ); echo 1;` );
+		}
+	}
+
 	await t.done( browser, errors );
 } )();
