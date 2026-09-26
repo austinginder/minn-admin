@@ -163,6 +163,126 @@ function minn_admin_latepoint_display_name( $first, $last ) {
 	return '' !== $name ? $name : __( '(no name)', 'minn-admin' );
 }
 
+/**
+ * Event registrations (LatePoint 5.7+ events). Registrations are created on a
+ * paid order already `confirmed`; `checked_in` is parked upstream (their
+ * controller and button are commented out), so the only mutation is Cancel,
+ * which mirrors their controller exactly. Every route needs their events
+ * setting on, like their own controller.
+ */
+function minn_admin_latepoint_events_ready() {
+	if ( ! class_exists( 'OsEventRegistrationModel' ) || ! class_exists( 'OsSettingsHelper' ) || ! OsSettingsHelper::is_on( 'enable_events_functionality' ) ) {
+		return false;
+	}
+	global $wpdb;
+	$t = minn_admin_latepoint_table( 'event_registrations' );
+	return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t;
+}
+
+function minn_admin_latepoint_can_view_regs() {
+	return is_user_logged_in() && minn_admin_latepoint_events_ready() && class_exists( 'OsRolesHelper' ) && (bool) OsRolesHelper::can_user( 'event_registration__view' );
+}
+
+function minn_admin_latepoint_can_edit_regs() {
+	return is_user_logged_in() && minn_admin_latepoint_events_ready() && class_exists( 'OsRolesHelper' ) && (bool) OsRolesHelper::can_user( 'event_registration__edit' );
+}
+
+/**
+ * Scope for registrations, via their event's agent and location. Their own
+ * registrations screen applies no scoping; Minn applies the viewer's agent and
+ * location restrictions anyway so it can never show more than LatePoint. The
+ * service dimension does not apply to events.
+ */
+function minn_admin_latepoint_reg_scope_sql() {
+	$scope = minn_admin_latepoint_scope();
+	unset( $scope['service'] );
+	return minn_admin_latepoint_scope_sql( $scope, 'e' );
+}
+
+function minn_admin_latepoint_regs_admin_url() {
+	if ( class_exists( 'OsRouterHelper' ) && method_exists( 'OsRouterHelper', 'build_link' ) ) {
+		try {
+			return OsRouterHelper::build_link( array( 'event_registrations', 'index' ) );
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+		}
+	}
+	return admin_url( 'admin.php?page=latepoint&route_name=event_registrations__index' );
+}
+
+/**
+ * The registrations list view (views[] on the LatePoint surface), or null.
+ */
+function minn_admin_latepoint_regs_view() {
+	if ( ! minn_admin_latepoint_can_view_regs() ) {
+		return null;
+	}
+	$actions = array(
+		array(
+			'label' => __( 'Open in LatePoint ↗', 'minn-admin' ),
+			'href'  => minn_admin_latepoint_regs_admin_url(),
+		),
+	);
+	if ( minn_admin_latepoint_can_edit_regs() ) {
+		$actions[] = array(
+			'label'   => __( 'Cancel registration', 'minn-admin' ),
+			'method'  => 'POST',
+			'route'   => 'minn-admin/v1/latepoint/event-registrations/{id}/cancel',
+			'confirm' => __( 'Cancel this registration? The seats are released and LatePoint sends its cancellation notice. The order is not refunded.', 'minn-admin' ),
+			'danger'  => true,
+			'when'    => array( 'key' => 'status', 'equals' => 'confirmed' ),
+		);
+	}
+	return array(
+		'viewLabel' => __( 'Event registrations', 'minn-admin' ),
+		'route'     => 'minn-admin/v1/latepoint/event-registrations',
+		'pageQuery' => 'per_page=25&page={page}',
+		'search'    => 'search={q}',
+		'itemsKey'  => 'items',
+		'totalKey'  => 'total',
+		'filter'    => array(
+			'label'   => __( 'When', 'minn-admin' ),
+			'options' => array(
+				array( 'upcoming', __( 'Upcoming', 'minn-admin' ) ),
+				array( 'cancelled', __( 'Cancelled', 'minn-admin' ) ),
+				array( 'all', __( 'All', 'minn-admin' ) ),
+			),
+			'query'   => 'range={v}',
+		),
+		'columns'   => array(
+			array( 'key' => 'customer', 'label' => __( 'Customer', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.5fr)' ),
+			array( 'key' => 'event', 'label' => __( 'Event', 'minn-admin' ), 'width' => 'minmax(0,1.3fr)' ),
+			array( 'key' => 'quantity', 'label' => __( 'Seats', 'minn-admin' ), 'format' => 'num', 'width' => '64px' ),
+			array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
+			array( 'key' => 'starts', 'label' => __( 'Starts', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
+		),
+		'detail'    => array(
+			'sectionsRoute' => 'minn-admin/v1/latepoint/event-registrations/{id}',
+		),
+		'actions'   => $actions,
+	);
+}
+
+/**
+ * One registration joined to its event and customer, within the viewer's
+ * scope (the same scope the list applies), or null.
+ */
+function minn_admin_latepoint_reg_row( $id ) {
+	global $wpdb;
+	$scope = minn_admin_latepoint_reg_scope_sql();
+	if ( $scope['deny'] ) {
+		return null;
+	}
+	$r     = minn_admin_latepoint_table( 'event_registrations' );
+	$e     = minn_admin_latepoint_table( 'events' );
+	$c     = minn_admin_latepoint_table( 'customers' );
+	$where = array_merge( array( 'r.id = %d' ), $scope['sql'] );
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders
+	return $wpdb->get_row( $wpdb->prepare(
+		"SELECT r.*, e.name AS event_name, e.start_datetime_utc, e.end_datetime_utc, c.first_name, c.last_name, c.email, c.phone FROM {$r} r LEFT JOIN {$e} e ON e.id = r.event_id LEFT JOIN {$c} c ON c.id = r.customer_id WHERE " . implode( ' AND ', $where ),
+		array_merge( array( (int) $id ), $scope['params'] )
+	) );
+}
+
 function minn_admin_latepoint_admin_url() {
 	if ( class_exists( 'OsRouterHelper' ) && method_exists( 'OsRouterHelper', 'build_link' ) ) {
 		try {
@@ -279,6 +399,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'bulk'      => $bulk,
 		),
 	);
+	$regs = minn_admin_latepoint_regs_view();
+	if ( $regs ) {
+		$surfaces['latepoint']['views'] = array( $regs );
+	}
 	return $surfaces;
 } );
 
@@ -521,6 +645,132 @@ add_action( 'rest_api_init', function () {
 					str_replace( '_', ' ', $status )
 				),
 			) );
+		},
+	) );
+
+	// Event registrations (5.7+). Registration created_at is UTC (their model
+	// save forces it); event start/end are *_utc columns.
+	register_rest_route( 'minn-admin/v1', '/latepoint/event-registrations', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_latepoint_can_view_regs',
+		'callback'            => function ( WP_REST_Request $request ) {
+			global $wpdb;
+			$r     = minn_admin_latepoint_table( 'event_registrations' );
+			$e     = minn_admin_latepoint_table( 'events' );
+			$c     = minn_admin_latepoint_table( 'customers' );
+			$scope = minn_admin_latepoint_reg_scope_sql();
+			if ( $scope['deny'] ) {
+				return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
+			}
+			$where  = $scope['sql'];
+			$params = $scope['params'];
+			$range  = sanitize_key( (string) ( $request->get_param( 'range' ) ?: 'upcoming' ) );
+			if ( 'upcoming' === $range ) {
+				$where[] = "e.end_datetime_utc >= UTC_TIMESTAMP() AND r.status <> 'cancelled'";
+			} elseif ( 'cancelled' === $range ) {
+				$where[] = "r.status = 'cancelled'";
+			}
+			$q = trim( (string) $request->get_param( 'search' ) );
+			if ( '' !== $q ) {
+				$like    = '%' . $wpdb->esc_like( $q ) . '%';
+				$where[] = '(c.first_name LIKE %s OR c.last_name LIKE %s OR c.email LIKE %s OR e.name LIKE %s OR r.registration_code LIKE %s)';
+				$params  = array_merge( $params, array( $like, $like, $like, $like, $like ) );
+			}
+			$sql_where = $where ? 'WHERE ' . implode( ' AND ', $where ) : '';
+			$per_page  = min( 100, max( 1, (int) ( $request->get_param( 'per_page' ) ?: 25 ) ) );
+			$page      = max( 1, (int) $request->get_param( 'page' ) );
+			$order     = 'upcoming' === $range ? 'ASC' : 'DESC';
+			$from      = "FROM {$r} r LEFT JOIN {$e} e ON e.id = r.event_id LEFT JOIN {$c} c ON c.id = r.customer_id {$sql_where}";
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders
+			$total = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) {$from}", $params ) ) : $wpdb->get_var( "SELECT COUNT(*) {$from}" ) );
+			$rows  = $wpdb->get_results( $wpdb->prepare(
+				"SELECT r.id, r.quantity, r.status, e.name AS event_name, e.start_datetime_utc, c.first_name, c.last_name, c.email {$from} ORDER BY e.start_datetime_utc {$order}, r.id DESC LIMIT %d OFFSET %d",
+				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
+			) );
+			// phpcs:enable
+			$items = array();
+			foreach ( (array) $rows as $row ) {
+				$items[] = array(
+					'id'       => (int) $row->id,
+					'customer' => minn_admin_latepoint_display_name( $row->first_name, $row->last_name ) . ( $row->email ? ' · ' . $row->email : '' ),
+					'event'    => (string) $row->event_name,
+					'quantity' => (int) $row->quantity,
+					'status'   => (string) $row->status,
+					'starts'   => minn_admin_latepoint_utc_iso( $row->start_datetime_utc ),
+				);
+			}
+			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/latepoint/event-registrations/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_latepoint_can_view_regs',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$row = minn_admin_latepoint_reg_row( (int) $request['id'] );
+			if ( ! $row ) {
+				return new WP_Error( 'not_found', __( 'Registration not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$registered = minn_admin_latepoint_utc_iso( $row->created_at );
+			return rest_ensure_response( array(
+				'sections' => array(
+					array(
+						'title' => __( 'Registration', 'minn-admin' ),
+						'rows'  => array_values( array_filter( array(
+							array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) $row->registration_code, 'type' => 'code' ),
+							array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status, 'type' => 'pill' ),
+							array( 'label' => __( 'Seats', 'minn-admin' ), 'value' => (string) (int) $row->quantity ),
+							'' !== (string) $row->payment_status ? array( 'label' => __( 'Payment', 'minn-admin' ), 'value' => (string) $row->payment_status, 'type' => 'pill' ) : null,
+							'' !== $registered ? array( 'label' => __( 'Registered', 'minn-admin' ), 'value' => $registered ) : null,
+							'' !== trim( (string) $row->notes ) ? array( 'label' => __( 'Notes', 'minn-admin' ), 'value' => (string) $row->notes ) : null,
+						) ) ),
+					),
+					array(
+						'title' => __( 'Customer', 'minn-admin' ),
+						'rows'  => array_values( array_filter( array(
+							array( 'label' => __( 'Name', 'minn-admin' ), 'value' => minn_admin_latepoint_display_name( $row->first_name, $row->last_name ) ),
+							$row->email ? array( 'label' => __( 'Email', 'minn-admin' ), 'value' => (string) $row->email, 'type' => 'email' ) : null,
+							$row->phone ? array( 'label' => __( 'Phone', 'minn-admin' ), 'value' => (string) $row->phone ) : null,
+						) ) ),
+					),
+					array(
+						'title' => __( 'Event', 'minn-admin' ),
+						'rows'  => array_values( array_filter( array(
+							array( 'label' => __( 'Event', 'minn-admin' ), 'value' => (string) $row->event_name ),
+							minn_admin_latepoint_utc_iso( $row->start_datetime_utc ) ? array( 'label' => __( 'Starts', 'minn-admin' ), 'value' => minn_admin_latepoint_utc_iso( $row->start_datetime_utc ) ) : null,
+							minn_admin_latepoint_utc_iso( $row->end_datetime_utc ) ? array( 'label' => __( 'Ends', 'minn-admin' ), 'value' => minn_admin_latepoint_utc_iso( $row->end_datetime_utc ) ) : null,
+						) ) ),
+					),
+				),
+				'adminUrl' => minn_admin_latepoint_regs_admin_url(),
+			) );
+		},
+	) );
+
+	// Cancel mirrors their OsEventRegistrationsController::cancel(): events
+	// setting on (the permission check), already-cancelled is a no-op so the
+	// cancellation notice is not queued twice, then status + save() + the same
+	// latepoint_event_registration_cancelled action with the old status (their
+	// notification and e-ticket listeners ride it). The order is untouched.
+	register_rest_route( 'minn-admin/v1', '/latepoint/event-registrations/(?P<id>\d+)/cancel', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_latepoint_can_edit_regs',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$id = (int) $request['id'];
+			if ( ! minn_admin_latepoint_reg_row( $id ) ) {
+				return new WP_Error( 'not_found', __( 'Registration not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$reg = new OsEventRegistrationModel( $id );
+			if ( $reg->is_cancelled() ) {
+				return rest_ensure_response( array( 'status' => 'cancelled', 'message' => __( 'Registration was already cancelled.', 'minn-admin' ) ) );
+			}
+			$old         = $reg->status;
+			$reg->status = defined( 'LATEPOINT_EVENT_REGISTRATION_STATUS_CANCELLED' ) ? LATEPOINT_EVENT_REGISTRATION_STATUS_CANCELLED : 'cancelled';
+			if ( ! $reg->save() ) {
+				return new WP_Error( 'minn_lp_cancel', __( 'LatePoint could not cancel that registration.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			do_action( 'latepoint_event_registration_cancelled', $reg, $old );
+			return rest_ensure_response( array( 'status' => 'cancelled', 'message' => __( 'Registration cancelled.', 'minn-admin' ) ) );
 		},
 	) );
 

@@ -16042,7 +16042,10 @@
 					go( coll.open.route.replace( '{id}', encodeURIComponent( item.id ) ) );
 					return;
 				}
-				if ( s.family === 'bookings' ) {
+				// The booking page is for the main appointments list only; an
+				// extra view (LatePoint's event registrations) keeps its modal,
+				// since its ids are not booking ids.
+				if ( s.family === 'bookings' && coll === s.collection ) {
 					go( s.id + '/' + item.id );
 					return;
 				}
@@ -17522,7 +17525,7 @@
 					go( coll.open.route.replace( '{id}', encodeURIComponent( item.id ) ) );
 					return;
 				}
-				if ( s.family === 'bookings' ) {
+				if ( s.family === 'bookings' && coll === s.collection ) {
 					go( s.id + '/' + item.id );
 					return;
 				}
