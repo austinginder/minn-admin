@@ -75,6 +75,20 @@ const PLUGINS = [
 			t.check( `${ pl.slug }: card renders above the list`, await page.evaluate( ( label ) =>
 				document.querySelector( '.minn-surface-status' ).textContent.includes( label ), pl.firstRow ) );
 
+			// SRM 2.3+ export: the card links their own signed download, and
+			// following it as this admin returns a real CSV.
+			if ( 'safe-redirect-manager' === pl.slug ) {
+				const exp = ( ( st.body && st.body.actions ) || [] ).find( ( a ) => /Export CSV/.test( a.label ) );
+				t.check( 'safe-redirect-manager: card offers their signed CSV export', !! exp && /action=srm_export/.test( exp.href ) && /_wpnonce=/.test( exp.href ), JSON.stringify( exp ) );
+				if ( exp ) {
+					const dl = await page.evaluate( async ( href ) => {
+						const r = await fetch( href, { credentials: 'same-origin' } );
+						return { status: r.status, type: r.headers.get( 'content-type' ) || '', head: ( await r.text() ).slice( 0, 80 ) };
+					}, exp.href );
+					t.check( 'safe-redirect-manager: following it downloads their CSV', 200 === dl.status && /csv/.test( dl.type ), JSON.stringify( dl ) );
+				}
+			}
+
 			if ( ! wasActive ) {
 				wp( `plugin deactivate ${ pl.slug }` );
 				activated.splice( activated.indexOf( pl.slug ), 1 );

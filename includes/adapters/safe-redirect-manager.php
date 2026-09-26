@@ -197,7 +197,26 @@ add_action( 'rest_api_init', function () {
 			if ( $regex ) {
 				$rows[] = array( 'label' => __( 'Regex rules', 'minn-admin' ), 'value' => (string) $regex );
 			}
-			return rest_ensure_response( array( 'rows' => $rows ) );
+			// Export (SRM 2.3+): their own signed admin-ajax download, minted
+			// per status load for the viewer, so their nonce and their
+			// srm_manage_redirects check stay the gate.
+			$actions = array();
+			if ( class_exists( 'SRM_Export' ) && current_user_can( minn_admin_srm_cap() ) ) {
+				foreach ( array( 'csv' => __( 'Export CSV ↗', 'minn-admin' ), 'json' => __( 'Export JSON ↗', 'minn-admin' ) ) as $format => $label ) {
+					$actions[] = array(
+						'label' => $label,
+						'href'  => add_query_arg(
+							array(
+								'action'        => 'srm_export',
+								'export_format' => $format,
+								'_wpnonce'      => wp_create_nonce( 'srm_export' ),
+							),
+							admin_url( 'admin-ajax.php' )
+						),
+					);
+				}
+			}
+			return rest_ensure_response( array( 'rows' => $rows, 'actions' => $actions ) );
 		},
 	) );
 
