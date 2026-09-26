@@ -143,9 +143,10 @@ class Minn_Admin_Batch {
 		// "current" moves; a prefetched package is handed over as the file.
 		$pre_download = function ( $reply, $package, $upgrader, $hook_extra ) use ( $local ) {
 			$file = ! empty( $hook_extra['plugin'] ) ? (string) $hook_extra['plugin'] : '';
-			// A filter ahead of this one that already answered wins: Minn's
-			// own updater returns the download it hash-verified against the
-			// release manifest, or a WP_Error refusing the package. Handing
+			// This runs last, so any filter that already answered wins:
+			// Minn's own updater returns the download it hash-verified
+			// against the release manifest, or a WP_Error refusing the
+			// package, and a vendor may fetch its own package its own way. Handing
 			// the prefetched copy over here would install bytes that check
 			// never saw, or ones it refused.
 			if ( false !== $reply ) {
@@ -173,7 +174,7 @@ class Minn_Admin_Batch {
 			}
 			return $return;
 		};
-		add_filter( 'upgrader_pre_download', $pre_download, 10, 4 );
+		add_filter( 'upgrader_pre_download', $pre_download, PHP_INT_MAX, 4 );
 		add_filter( 'upgrader_pre_install', $pre_install, 10, 2 );
 		add_filter( 'upgrader_post_install', $post_install, 10, 2 );
 
@@ -183,7 +184,7 @@ class Minn_Admin_Batch {
 		$results  = $upgrader->bulk_upgrade( $files );
 		$this->add_timing( 'install_ms', $t2 );
 
-		remove_filter( 'upgrader_pre_download', $pre_download, 10 );
+		remove_filter( 'upgrader_pre_download', $pre_download, PHP_INT_MAX );
 		remove_filter( 'upgrader_pre_install', $pre_install, 10 );
 		remove_filter( 'upgrader_post_install', $post_install, 10 );
 
@@ -300,7 +301,7 @@ class Minn_Admin_Batch {
 			}
 			return $return;
 		};
-		add_filter( 'upgrader_pre_download', $pre_download, 10, 4 );
+		add_filter( 'upgrader_pre_download', $pre_download, PHP_INT_MAX, 4 );
 		add_filter( 'upgrader_pre_install', $pre_install, 10, 2 );
 		add_filter( 'upgrader_post_install', $post_install, 10, 2 );
 
@@ -310,7 +311,7 @@ class Minn_Admin_Batch {
 		$results  = $upgrader->bulk_upgrade( $sheets );
 		$this->add_timing( 'install_ms', $t2 );
 
-		remove_filter( 'upgrader_pre_download', $pre_download, 10 );
+		remove_filter( 'upgrader_pre_download', $pre_download, PHP_INT_MAX );
 		remove_filter( 'upgrader_pre_install', $pre_install, 10 );
 		remove_filter( 'upgrader_post_install', $post_install, 10 );
 
@@ -442,7 +443,7 @@ class Minn_Admin_Batch {
 			$this->mark( $key, $have ? 'unpacking' : 'fetching' );
 			return $have ? $local[ $package ] : $reply;
 		};
-		add_filter( 'upgrader_pre_download', $pre_download, 10, 4 );
+		add_filter( 'upgrader_pre_download', $pre_download, PHP_INT_MAX, 4 );
 
 		if ( ! class_exists( 'Minn_Admin_Translation_Skin' ) ) {
 			require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-translation-skin.php';
@@ -455,7 +456,7 @@ class Minn_Admin_Batch {
 		$upgrader = new Language_Pack_Upgrader( $skin );
 		$result   = $upgrader->bulk_upgrade( array_values( $pending ), array( 'clear_update_cache' => true ) );
 		$this->add_timing( 'install_ms', $t2 );
-		remove_filter( 'upgrader_pre_download', $pre_download, 10 );
+		remove_filter( 'upgrader_pre_download', $pre_download, PHP_INT_MAX );
 
 		foreach ( (array) $local as $path ) {
 			if ( is_file( $path ) ) {

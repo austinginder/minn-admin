@@ -10822,7 +10822,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * updater sets through http_request_args (license headers, tokens).
 	 * Every URL still passes the same validation download_url() applies,
 	 * and a file that arrives empty, short or not a zip is dropped so the
-	 * upgrader downloads it itself.
+	 * upgrader downloads it itself. The only thing that differs from
+	 * WP_Http::request is that the downloads overlap: the filters and
+	 * actions it runs around a request run here too, per package.
 	 *
 	 * @return array package URL => local path
 	 */
@@ -10838,12 +10840,15 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$requests = array();
 		$paths    = array();
 		$file_of  = array();
+		$args_of  = array();
 		// The fetch goes through Requests directly (one pool, progress per
-		// byte), so the three safeguards WP_Http::request would apply on
-		// the way are applied here by hand: the site's egress policy
-		// (WP_HTTP_BLOCK_EXTERNAL / WP_ACCESSIBLE_HOSTS), its proxy, and
-		// re-validation of every redirect hop against wp_http_validate_url
-		// so a package host cannot bounce the download to a private address.
+		// byte), so what WP_Http::request would do on the way is done here
+		// by hand: the site's egress policy (WP_HTTP_BLOCK_EXTERNAL /
+		// WP_ACCESSIBLE_HOSTS), pre_http_request, its proxy, its TLS
+		// settings, http_api_curl and the requests-* actions, http_response,
+		// http_api_debug, and re-validation of every redirect hop against
+		// wp_http_validate_url so a package host cannot bounce the download
+		// to a private address.
 		$http  = function_exists( '_wp_http_get_object' ) ? _wp_http_get_object() : null;
 		$proxy = class_exists( 'WP_HTTP_Proxy' ) ? new WP_HTTP_Proxy() : null;
 		foreach ( $pending as $file => $data ) {
@@ -10867,15 +10872,37 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			// or tokens. Only the pieces Requests understands ride along;
 			// a package the vendor guards some other way fails here and the
 			// upgrader downloads it itself in the install phase.
+			// The defaults mirror what download_url() hands WP_Http, so a
+			// filter reading any of them sees the shape it expects.
 			$args = apply_filters( 'http_request_args', array(
-				'timeout'            => 120,
-				'stream'             => true,
-				'filename'           => $tmp,
-				'reject_unsafe_urls' => true,
-				'headers'            => array(),
-				'cookies'            => array(),
-				'user-agent'         => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
+				'method'              => 'GET',
+				'timeout'             => 120,
+				'redirection'         => apply_filters( 'http_request_redirection_count', 5, $url ),
+				'httpversion'         => apply_filters( 'http_request_version', '1.0', $url ),
+				'user-agent'          => apply_filters( 'http_headers_useragent', 'WordPress/' . get_bloginfo( 'version' ) . '; ' . get_bloginfo( 'url' ), $url ),
+				'reject_unsafe_urls'  => true,
+				'blocking'            => true,
+				'headers'             => array(),
+				'cookies'             => array(),
+				'body'                => null,
+				'compress'            => false,
+				'decompress'          => true,
+				'sslverify'           => true,
+				'sslcertificates'     => ABSPATH . WPINC . '/certificates/ca-bundle.crt',
+				'stream'              => true,
+				'filename'            => $tmp,
+				'limit_response_size' => null,
 			), $url );
+			// A filter that answers the request itself (an offline or
+			// staging guard, a mock, a vendor serving the package another
+			// way) means the site does not want this URL fetched directly.
+			// Leave the package to the upgrader, whose download_url() runs
+			// the same filter and gets the same answer.
+			if ( false !== apply_filters( 'pre_http_request', false, $args, $url ) ) {
+				wp_delete_file( $tmp );
+				$note( $file, 'vendor' );
+				continue;
+			}
 			$headers = array( 'User-Agent' => (string) ( $args['user-agent'] ?? '' ) );
 			foreach ( (array) ( $args['headers'] ?? array() ) as $k => $v ) {
 				if ( is_string( $k ) && is_scalar( $v ) ) {
@@ -10895,15 +10922,63 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 			$paths[ $url ]   = $tmp;
 			$file_of[ $url ] = $file;
+			$args_of[ $url ] = $args;
+			// TLS the way WP_Http sets it: sslverify off disables checks,
+			// otherwise the certificate bundle (a site's own CA included),
+			// then https_ssl_verify has the last word.
+			if ( empty( $args['sslverify'] ) ) {
+				$verify = false;
+			} else {
+				$verify = $args['sslcertificates'];
+			}
+			$verify = apply_filters( 'https_ssl_verify', $verify, $url );
+			// Core's hooks class fires the requests-* actions, and
+			// http_api_curl on curl.before_send. A parallel transfer fires
+			// curl.before_multi_add for its handle instead, and Requests
+			// skips its verify option on that path, so both are applied to
+			// the handle here: the TLS setting first, then http_api_curl, so
+			// curl options sites set there (IPv4 only, pinned DNS, client
+			// certificates) land on these downloads too and win.
+			$hooks = class_exists( 'WP_HTTP_Requests_Hooks' ) ? new WP_HTTP_Requests_Hooks( $url, $args ) : new \WpOrg\Requests\Hooks();
+			$hooks->register( 'curl.before_multi_add', function ( &$handle ) use ( $args, $url, $verify ) {
+				if ( false === $verify ) {
+					curl_setopt( $handle, CURLOPT_SSL_VERIFYHOST, 0 ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+					curl_setopt( $handle, CURLOPT_SSL_VERIFYPEER, 0 ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				} elseif ( is_string( $verify ) && '' !== $verify ) {
+					curl_setopt( $handle, CURLOPT_CAINFO, $verify ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				}
+				do_action_ref_array( 'http_api_curl', array( &$handle, $args, $url ) );
+			} );
 			// Bytes as they land, so the record can show each download moving.
-			$hooks = new \WpOrg\Requests\Hooks();
 			$hooks->register( 'request.progress', function ( $data, $bytes ) use ( $note, $file ) {
 				$note( $file, 'fetching', $bytes );
 			} );
-			if ( function_exists( 'wp_kses_bad_protocol' ) ) {
+			$hooks->register( 'requests.before_redirect', array( 'WP_Http', 'browser_redirect_compatibility' ) );
+			if ( function_exists( 'wp_kses_bad_protocol' ) && ! empty( $args['reject_unsafe_urls'] ) ) {
 				$hooks->register( 'requests.before_redirect', array( 'WP_Http', 'validate_redirects' ) );
 			}
-			$options = array( 'filename' => $tmp, 'timeout' => 120, 'connect_timeout' => 15, 'hooks' => $hooks, 'follow_redirects' => true );
+			$options = array(
+				'filename'        => $tmp,
+				'timeout'         => (float) $args['timeout'],
+				'connect_timeout' => 15,
+				'useragent'       => (string) $args['user-agent'],
+				'hooks'           => $hooks,
+			);
+			if ( empty( $args['redirection'] ) ) {
+				$options['follow_redirects'] = false;
+			} else {
+				$options['follow_redirects'] = true;
+				$options['redirects']        = (int) $args['redirection'];
+			}
+			if ( isset( $args['limit_response_size'] ) ) {
+				$options['max_bytes'] = $args['limit_response_size'];
+			}
+			// The non-curl transport runs these one by one through its own
+			// request(), which does read the verify options.
+			$options['verify'] = $verify;
+			if ( false === $verify ) {
+				$options['verifyname'] = false;
+			}
 			if ( $proxy && $proxy->is_enabled() && $proxy->send_through_proxy( $url ) ) {
 				$options['proxy'] = new \WpOrg\Requests\Proxy\Http( $proxy->host() . ':' . $proxy->port() );
 				if ( $proxy->use_authentication() ) {
@@ -10938,7 +11013,22 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			foreach ( $chunk as $url => $req ) {
 				$res  = isset( $responses[ $url ] ) ? $responses[ $url ] : null;
 				$path = $paths[ $url ];
-				$ok   = $res instanceof \WpOrg\Requests\Response && $res->success && is_file( $path ) && filesize( $path ) > 1024 && self::looks_like_zip( $path );
+				$args = $args_of[ $url ];
+				// The same response shape, actions and filter WP_Http hands
+				// back, so logging and monitoring plugins see these
+				// downloads and an http_response filter can still veto one.
+				if ( $res instanceof \WpOrg\Requests\Response && class_exists( 'WP_HTTP_Requests_Response' ) ) {
+					$wrapped                   = new WP_HTTP_Requests_Response( $res, $path );
+					$response                  = $wrapped->to_array();
+					$response['http_response'] = $wrapped;
+				} else {
+					$response = new WP_Error( 'http_request_failed', $res instanceof \Throwable ? $res->getMessage() : __( 'The package could not be downloaded.', 'minn-admin' ) );
+				}
+				do_action( 'http_api_debug', $response, 'response', 'WpOrg\Requests\Requests', $args, $url );
+				if ( ! is_wp_error( $response ) ) {
+					$response = apply_filters( 'http_response', $response, $args, $url );
+				}
+				$ok = ! is_wp_error( $response ) && 200 === (int) wp_remote_retrieve_response_code( $response ) && is_file( $path ) && filesize( $path ) > 1024 && self::looks_like_zip( $path );
 				if ( $ok ) {
 					$out[ $url ] = $path;
 					$note( $file_of[ $url ], 'fetched', filesize( $path ) );

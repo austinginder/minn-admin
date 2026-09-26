@@ -126,9 +126,8 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		/* ===== An earlier pre_download answer is honored ===== */
 		// Minn's own updater answers upgrader_pre_download with the download
 		// it hash-verified against the release manifest, or a WP_Error
-		// refusing the package. The batch's prefetch filter sits at the same
-		// priority and must never override that answer with its unverified
-		// copy. A priority-9 refusal stands in for the verifier here, and the
+		// refusing the package. The batch's prefetch filter runs last and
+		// must never override that answer with its unverified copy. A priority-9 refusal stands in for the verifier here, and the
 		// batch runs server-side against the wp.org fixture offer.
 		const fs = require( 'fs' );
 		const os = require( 'os' );
@@ -159,6 +158,82 @@ echo wp_json_encode( array( 'updated' => $d['updated'] ?? null, 'failed' => $d['
 		let v = null;
 		try { v = JSON.parse( verdict ); } catch ( e ) { /* reported below */ }
 		t.check( 'a refused package is not installed from the prefetched copy', !! v && ! ( v.updated || [] ).includes( WPORG + '.php' ) && ( v.failed || [] ).includes( WPORG + '.php' ) && /refused/.test( v.errors ), verdict.slice( -300 ) );
+
+		/* ===== The parallel downloads honor the WordPress HTTP API ===== */
+		// The prefetch goes through Requests directly, so everything
+		// WP_Http::request would run around a download is run by hand.
+		// Each probe runs the batch server-side against the wp.org fixture.
+		const slug = JSON.stringify( WPORG.split( '/' )[ 0 ] );
+		const runBatch = ( setup, token ) => {
+			const file = path.join( os.tmpdir(), `minn-bulk-http-${ process.pid }-${ token }.php` );
+			fs.writeFileSync( file, `<?php
+update_option( 'minn_test_plugin_update', ${ JSON.stringify( WPORG + '.php' ) } );
+update_option( 'minn_test_plugin_update_vendor', '' );
+delete_site_transient( 'update_plugins' );
+$GLOBALS['minn_probe'] = array();
+$mine = function ( $url ) { return false !== strpos( (string) $url, ${ slug } ); };
+${ setup }
+$req = new WP_REST_Request( 'POST', '/minn-admin/v1/plugins/update-all' );
+$req->set_param( 'token', str_repeat( '${ token }', 40 ) );
+$d = rest_do_request( $req )->get_data();
+update_option( 'minn_test_plugin_update', '' );
+delete_site_transient( 'update_plugins' );
+echo wp_json_encode( array( 'updated' => $d['updated'] ?? null, 'failed' => $d['failed'] ?? null, 'errors' => $d['errors'] ?? '', 'probe' => $GLOBALS['minn_probe'] ) );
+` );
+			let out = '';
+			try {
+				out = execSync( `wp --path=${ JSON.stringify( WP ) } eval-file ${ JSON.stringify( file ) } --user=admin 2>/dev/null`, { encoding: 'utf8', timeout: 300000 } ).trim().split( '\n' ).pop();
+			} catch ( e ) {
+				out = ( e.stdout || '' ).trim().split( '\n' ).pop();
+			} finally {
+				try { fs.unlinkSync( file ); } catch ( e ) { /* ignore */ }
+			}
+			try { return { raw: out, v: JSON.parse( out ) }; } catch ( e ) { return { raw: out, v: null }; }
+		};
+
+		// A site that answers the request itself (an offline guard here)
+		// must not have the package fetched behind its back; the upgrader
+		// then gets the same answer and the update fails honestly.
+		const blocked = runBatch( `add_filter( 'pre_http_request', function ( $pre, $args, $url ) use ( $mine ) {
+	if ( $mine( $url ) ) {
+		$GLOBALS['minn_probe']['blocked'] = ( $GLOBALS['minn_probe']['blocked'] ?? 0 ) + 1;
+		return new WP_Error( 'probe_offline', 'offline guard blocked this download' );
+	}
+	return $pre;
+}, 10, 3 );`, 'c' );
+		const bv = blocked.v;
+		t.check( 'a download pre_http_request blocks is not fetched in parallel', !! bv && ! ( bv.updated || [] ).includes( WPORG + '.php' ) && ( bv.failed || [] ).includes( WPORG + '.php' ) && /offline guard/.test( bv.errors ), blocked.raw.slice( -300 ) );
+
+		// A normal run fires the hooks logging, TLS and curl plugins rely
+		// on, exactly once for the one download (a second would mean the
+		// upgrader fetched it again), and a later upgrader_pre_download
+		// filter gets its turn before the prefetched copy is handed over.
+		const observed = runBatch( `foreach ( array( 'http_api_curl' => 3, 'http_api_debug' => 5 ) as $hook => $n ) {
+	add_action( $hook, function () use ( $hook, $mine ) {
+		$a = func_get_args();
+		if ( $mine( end( $a ) ) ) {
+			$GLOBALS['minn_probe'][ $hook ] = ( $GLOBALS['minn_probe'][ $hook ] ?? 0 ) + 1;
+		}
+	}, 10, $n );
+}
+add_filter( 'https_ssl_verify', function ( $v, $url ) use ( $mine ) {
+	if ( $mine( $url ) ) { $GLOBALS['minn_probe']['ssl'] = true; }
+	return $v;
+}, 10, 2 );
+add_filter( 'http_response', function ( $r, $args, $url ) use ( $mine ) {
+	if ( $mine( $url ) ) { $GLOBALS['minn_probe']['http_response'] = ( $GLOBALS['minn_probe']['http_response'] ?? 0 ) + 1; }
+	return $r;
+}, 10, 3 );
+add_filter( 'upgrader_pre_download', function ( $reply, $package ) use ( $mine ) {
+	if ( $mine( $package ) ) { $GLOBALS['minn_probe']['p11'] = $reply; }
+	return $reply;
+}, 11, 2 );`, 'd' );
+		const ov = observed.v;
+		const pr = ( ov && ov.probe ) || {};
+		t.check( 'the batch still installs the prefetched package', !! ov && ( ov.updated || [] ).includes( WPORG + '.php' ), observed.raw.slice( -300 ) );
+		t.check( 'http_api_curl and http_api_debug fire once for the parallel download', pr.http_api_curl === 1 && pr.http_api_debug === 1, JSON.stringify( pr ) );
+		t.check( 'https_ssl_verify and http_response run for the parallel download', pr.ssl === true && pr.http_response === 1, JSON.stringify( pr ) );
+		t.check( 'a later upgrader_pre_download filter answers before the prefetched copy', pr.p11 === false, JSON.stringify( pr ) );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {
