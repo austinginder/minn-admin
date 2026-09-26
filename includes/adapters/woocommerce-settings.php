@@ -973,6 +973,37 @@ function minn_admin_wc_settings_api_schema( $obj, $admin_url, $fields = null, $r
 }
 
 /**
+ * Whether a WC_Settings_API field can be handed an array back, following
+ * the order get_field_value() resolves it in: a sanitize_callback, then a
+ * validate_{key}_field method, then validate_{type}_field. The base class's
+ * own type validators (text, price, textarea, select…) are scalar-only and
+ * throw on an array, so only multiselect or a validator an extension
+ * declared itself qualifies there. Anything else is left unposted, which is
+ * how a locked array field saved before.
+ */
+function minn_admin_wc_settings_api_takes_array( $obj, $key, $type, $field ) {
+	if ( isset( $field['sanitize_callback'] ) && is_callable( $field['sanitize_callback'] ) ) {
+		return true;
+	}
+	if ( method_exists( $obj, 'validate_' . $key . '_field' ) ) {
+		return true;
+	}
+	if ( 'multiselect' === $type ) {
+		return true;
+	}
+	$method = 'validate_' . $type . '_field';
+	if ( ! method_exists( $obj, $method ) ) {
+		return false;
+	}
+	try {
+		$ref = new ReflectionMethod( $obj, $method );
+		return 'WC_Settings_API' !== $ref->getDeclaringClass()->getName();
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
+/**
  * Post data for a WC_Settings_API object: current values overlaid with the
  * edits, keys prefixed the way its own form posts them.
  *
@@ -1019,9 +1050,7 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited, $fields = null, $r
 					}
 				} elseif ( is_scalar( $stored ) ) {
 					$post[ $obj->get_field_key( $key ) ] = $stored;
-				} elseif ( is_array( $stored ) && method_exists( $obj, 'validate_' . $type . '_field' ) ) {
-					// An array only where the object has a validator for its
-					// type; their text fallback would fatal on it.
+				} elseif ( is_array( $stored ) && minn_admin_wc_settings_api_takes_array( $obj, $key, $type, $f ) ) {
 					$post[ $obj->get_field_key( $key ) ] = $stored;
 				}
 			}

@@ -425,13 +425,14 @@ class Minn_Admin_DB {
 		if ( 'woocommerce_api_keys' === $base ) {
 			return in_array( $col, array( 'consumer_key', 'consumer_secret' ), true );
 		}
-		// Webhook signing secrets, Wordfence 2FA seeds and multisite signup
+		// Webhook signing secrets, Wordfence 2FA seeds/recovery codes and multisite signup
 		// activation keys are credentials the same way.
 		if ( 'wc_webhooks' === $base ) {
 			return 'secret' === $col;
 		}
+		// The TOTP seed and the raw recovery codes (each bypasses 2FA once).
 		if ( 'wfls_2fa_secrets' === $base ) {
-			return 'secret' === $col;
+			return in_array( $col, array( 'secret', 'recovery' ), true );
 		}
 		if ( 'signups' === $base ) {
 			return 'activation_key' === $col;
