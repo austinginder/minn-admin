@@ -87,9 +87,27 @@ function minn_admin_wpml_can() {
 	return false;
 }
 
+/**
+ * Display form of a stored subject. Some senders store RFC 2047 encoded
+ * words (=?utf-8?B?…?=); their own SubjectColumn decodes the UTF-8 forms for
+ * display, and so does this (any charset, several encoded words). Search
+ * still matches the stored value.
+ */
+function minn_admin_wpml_subject( $subject ) {
+	$subject = (string) $subject;
+	if ( false === strpos( $subject, '=?' ) ) {
+		return $subject;
+	}
+	$decoded = function_exists( 'mb_decode_mimeheader' ) ? mb_decode_mimeheader( $subject )
+		: ( function_exists( 'iconv_mime_decode' ) ? iconv_mime_decode( $subject, ICONV_MIME_DECODE_CONTINUE_ON_ERROR, 'UTF-8' ) : $subject );
+	return ( is_string( $decoded ) && '' !== $decoded ) ? $decoded : $subject;
+}
+
 /** Compact display form of the receiver column (may hold several addresses). */
 function minn_admin_wpml_receivers( $receiver ) {
-	$parts = preg_split( '/[,\n\r]+/', (string) $receiver );
+	// Real separators, plus the literal two-character "\n" / "\r\n" some
+	// senders store (their ReceiverColumn::normalize collapses those too).
+	$parts = preg_split( '/(?:[,\n\r]|\\\\r\\\\n|\\\\n)+/', (string) $receiver );
 	$parts = array_values( array_filter( array_map( 'trim', (array) $parts ) ) );
 	if ( ! $parts ) {
 		return '—';
@@ -290,7 +308,7 @@ add_action( 'rest_api_init', function () {
 			$items = array_map( function ( $row ) {
 				return array(
 					'id'        => (int) $row->mail_id,
-					'subject'   => $row->subject ? $row->subject : __( '(no subject)', 'minn-admin' ),
+					'subject'   => $row->subject ? minn_admin_wpml_subject( $row->subject ) : __( '(no subject)', 'minn-admin' ),
 					'to'        => minn_admin_wpml_receivers( $row->receiver ),
 					'status'    => ( null === $row->error || '' === $row->error ) ? 'sent' : 'failed',
 					'timestamp' => $row->timestamp,
@@ -337,7 +355,7 @@ add_action( 'rest_api_init', function () {
 				array(
 					'title' => __( 'Message', 'minn-admin' ),
 					'rows'  => array(
-						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
+						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => minn_admin_wpml_subject( $row->subject ) ),
 						preg_match( '/<\/?[a-z][^>]*>/i', $body )
 							// Remote images stay blocked unless their own "Always
 							// Load Remote Images" setting (1.17+) says otherwise.
@@ -378,7 +396,7 @@ add_action( 'rest_api_init', function () {
 				}
 				return rest_ensure_response( array(
 					'id'          => (int) $row->mail_id,
-					'subject'     => $row->subject,
+					'subject'     => minn_admin_wpml_subject( $row->subject ),
 					'to'          => minn_admin_wpml_receivers( $row->receiver ),
 					'status'      => ( null === $row->error || '' === $row->error ) ? 'sent' : 'failed',
 					'error'       => (string) $row->error,

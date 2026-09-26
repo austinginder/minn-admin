@@ -148,5 +148,26 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	}
 	t.check( 'delete is permanent in their table', gone );
 
+	// Display decoding: an RFC 2047 subject reads as text (their own
+	// SubjectColumn decodes it too) and a receiver stored with a literal
+	// two-character "\\n" splits into addresses. Seeded, read, removed.
+	{
+		const { execSync } = require( 'child_process' );
+		const WP = process.env.MINN_TEST_WP || require( 'path' ).resolve( __dirname, '../../../..' );
+		const out = execSync( `wp --path=${ JSON.stringify( WP ) } eval-file - --user=admin 2>/dev/null`, { input: `<?php
+			global $wpdb; $t = $wpdb->prefix . 'wpml_mails';
+			$wpdb->insert( $t, array( 'timestamp' => current_time( 'mysql' ), 'host' => 'x', 'receiver' => 'a@example.com' . chr( 92 ) . 'nb@example.com', 'subject' => '=?utf-8?B?' . base64_encode( 'Minn suite café ✓' ) . '?=', 'message' => 'x', 'headers' => '', 'attachments' => '', 'error' => '', 'plugin_version' => 't' ) );
+			$id = $wpdb->insert_id;
+			$r = new WP_REST_Request( 'GET', '/minn-admin/v1/wpml/emails' ); $r->set_param( 'per_page', 5 );
+			$items = rest_do_request( $r )->get_data()['items'];
+			$row = null; foreach ( $items as $i ) { if ( (int) $i['id'] === $id ) { $row = $i; } }
+			$wpdb->delete( $t, array( 'mail_id' => $id ) );
+			echo wp_json_encode( $row );
+		` } ).toString().trim().split( '\n' ).pop();
+		const row = JSON.parse( out ) || {};
+		t.check( 'an encoded subject reads as plain text', 'Minn suite café ✓' === row.subject, out );
+		t.check( 'a literal \\n in the receiver splits into addresses', /^a@example\.com, b@example\.com$/.test( row.to || row.receiver || '' ), out );
+	}
+
 	await t.done( browser, errors );
 } )();
