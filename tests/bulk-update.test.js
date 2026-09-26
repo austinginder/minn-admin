@@ -234,6 +234,47 @@ add_filter( 'upgrader_pre_download', function ( $reply, $package ) use ( $mine )
 		t.check( 'http_api_curl and http_api_debug fire once for the parallel download', pr.http_api_curl === 1 && pr.http_api_debug === 1, JSON.stringify( pr ) );
 		t.check( 'https_ssl_verify and http_response run for the parallel download', pr.ssl === true && pr.http_response === 1, JSON.stringify( pr ) );
 		t.check( 'a later upgrader_pre_download filter answers before the prefetched copy', pr.p11 === false, JSON.stringify( pr ) );
+
+		/* ===== Language packs still install after a plugin section ===== */
+		// The plugins section replaces the update data wordpress.org packs
+		// are listed in, so the translations section used to find only
+		// vendor packs and every wordpress.org pack was left behind. A
+		// removed Danish Akismet pack makes one wordpress.org pack pending.
+		const packProbe = path.join( os.tmpdir(), `minn-bulk-packs-${ process.pid }.php` );
+		fs.writeFileSync( packProbe, `<?php
+if ( ! in_array( 'da_DK', get_available_languages(), true ) ) { echo wp_json_encode( array( 'skip' => 'da_DK not installed' ) ); return; }
+foreach ( glob( WP_LANG_DIR . '/plugins/akismet-da_DK*' ) as $f ) { unlink( $f ); }
+delete_site_transient( 'update_plugins' );
+wp_update_plugins();
+update_option( 'minn_test_plugin_update', ${ JSON.stringify( WPORG + '.php' ) } );
+update_option( 'minn_test_plugin_update_vendor', '' );
+delete_site_transient( 'update_plugins' );
+wp_update_plugins();
+$pending = in_array( 'akismet|da_DK', array_map( function ( $u ) { return $u->slug . '|' . $u->language; }, wp_get_translation_updates() ), true );
+$req = new WP_REST_Request( 'POST', '/minn-admin/v1/updates/all' );
+$req->set_param( 'token', str_repeat( 'a', 40 ) );
+$req->set_param( 'plugins', true );
+$req->set_param( 'translations', true );
+$d = rest_do_request( $req )->get_data();
+update_option( 'minn_test_plugin_update', '' );
+delete_site_transient( 'update_plugins' );
+echo wp_json_encode( array( 'pending' => $pending, 'plugins' => $d['plugins']['updated'] ?? null, 'installed' => file_exists( WP_LANG_DIR . '/plugins/akismet-da_DK.mo' ) ) );
+` );
+		let packOut = '';
+		try {
+			packOut = execSync( `wp --path=${ JSON.stringify( WP ) } eval-file ${ JSON.stringify( packProbe ) } --user=admin 2>/dev/null`, { encoding: 'utf8', timeout: 300000 } ).trim().split( '\n' ).pop();
+		} catch ( e ) {
+			packOut = ( e.stdout || '' ).trim().split( '\n' ).pop();
+		} finally {
+			try { fs.unlinkSync( packProbe ); } catch ( e ) { /* ignore */ }
+		}
+		let pk = null;
+		try { pk = JSON.parse( packOut ); } catch ( e ) { /* reported below */ }
+		if ( pk && pk.skip ) {
+			t.check( 'a wordpress.org language pack installs in the same batch as a plugin update', true, 'skipped: ' + pk.skip );
+		} else {
+			t.check( 'a wordpress.org language pack installs in the same batch as a plugin update', !! pk && pk.pending === true && ( pk.plugins || [] ).includes( WPORG + '.php' ) && pk.installed === true, packOut.slice( -300 ) );
+		}
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {

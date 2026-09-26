@@ -362,6 +362,16 @@ class Minn_Admin_Batch {
 	 */
 	public function run_translations() {
 		$t0 = microtime( true );
+		// wordpress.org language packs are listed inside the plugin and theme
+		// update data, and the plugins and themes sections before this one
+		// replace that data when they finish: the upgraders clear it and the
+		// re-seeded offers carry no pack list. Read then, every wordpress.org
+		// pack would look up to date and only vendor packs (added through a
+		// filter on every read) would install. Both checks skip the network
+		// unless something changed since the last one, which after an update
+		// section it has.
+		wp_update_plugins();
+		wp_update_themes();
 		// The same pending set the summary counts (packs for languages this
 		// site still has), keyed and labeled for the record.
 		$summary = Minn_Admin_REST::translation_update_summary();
