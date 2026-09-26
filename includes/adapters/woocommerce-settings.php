@@ -1002,6 +1002,49 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited, $fields = null, $r
 		foreach ( $one as $k => $v ) {
 			$post[ $obj->get_field_key( $k ) ] = $v;
 		}
+		// A field Minn cannot draw (locked) still has to be posted: unlike a
+		// settings page, WC_Settings_API::process_admin_options() re-validates
+		// EVERY form field and saves an absent one as empty ('' or 'no'), so a
+		// save that touched only Enabled blanked the rest. WooCommerce's own
+		// form always posts every field; post the stored value unchanged.
+		// Checkboxes are the exception: absent already means "no", and a
+		// stored "yes" is carried as the form would ('1').
+		if ( ! $one ) {
+			$probe = array();
+			if ( null === minn_admin_wc_settings_map_field( $wf, $probe ) ) {
+				$stored = $wf['value'];
+				if ( 'checkbox' === $type ) {
+					if ( 'yes' === $stored || true === $stored || '1' === $stored ) {
+						$post[ $obj->get_field_key( $key ) ] = '1';
+					}
+				} elseif ( is_scalar( $stored ) || is_array( $stored ) ) {
+					$post[ $obj->get_field_key( $key ) ] = $stored;
+				}
+			}
+		}
+	}
+	// BACS keeps its bank accounts outside its settings: save_account_details()
+	// rides the same update action and rebuilds woocommerce_bacs_accounts from
+	// $_POST['bacs_account_*'], writing an EMPTY list when they are absent. Minn
+	// does not edit accounts, so post the stored ones back exactly.
+	if ( isset( $obj->id ) && 'bacs' === $obj->id ) {
+		$accounts = get_option( 'woocommerce_bacs_accounts', array() );
+		$cols     = array(
+			'bacs_account_name'   => 'account_name',
+			'bacs_account_number' => 'account_number',
+			'bacs_bank_name'      => 'bank_name',
+			'bacs_sort_code'      => 'sort_code',
+			'bacs_iban'           => 'iban',
+			'bacs_bic'            => 'bic',
+		);
+		foreach ( $cols as $post_key => $col ) {
+			$post[ $post_key ] = array();
+		}
+		foreach ( is_array( $accounts ) ? array_values( $accounts ) : array() as $i => $acct ) {
+			foreach ( $cols as $post_key => $col ) {
+				$post[ $post_key ][ $i ] = is_array( $acct ) && isset( $acct[ $col ] ) ? (string) $acct[ $col ] : '';
+			}
+		}
 	}
 	return wp_slash( $post );
 }
@@ -1339,9 +1382,32 @@ function minn_admin_wc_api_key_owned( $key_id ) {
  */
 function minn_admin_wc_api_key_save( $key_id, $body ) {
 	global $wpdb;
-	$description = isset( $body['description'] ) ? sanitize_text_field( (string) $body['description'] ) : '';
-	$permissions = isset( $body['permissions'] ) && in_array( $body['permissions'], array( 'read', 'write', 'read_write' ), true ) ? $body['permissions'] : 'read';
-	$user_id     = isset( $body['user'] ) ? absint( $body['user'] ) : get_current_user_id();
+	// On an update, a field the request leaves out keeps its stored value.
+	// Minn's edit form sends only what changed, so defaulting an absent owner
+	// to the caller (or permissions to read) silently moved a live key's
+	// identity to whoever edited its description and downgraded it; WooCommerce's
+	// own form always posts both.
+	$stored = null;
+	if ( $key_id ) {
+		if ( ! minn_admin_wc_api_key_owned( $key_id ) ) {
+			return new WP_Error( 'minn_wc_key_user', __( 'You do not have permission to edit this API key.', 'minn-admin' ), array( 'status' => 403 ) );
+		}
+		$stored = $wpdb->get_row( $wpdb->prepare( "SELECT user_id, description, permissions FROM {$wpdb->prefix}woocommerce_api_keys WHERE key_id = %d", $key_id ) );
+		if ( ! $stored ) {
+			return new WP_Error( 'not_found', __( 'API key not found.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+	}
+	$valid_perms = array( 'read', 'write', 'read_write' );
+	$description = isset( $body['description'] ) ? sanitize_text_field( (string) $body['description'] ) : ( $stored ? (string) $stored->description : '' );
+	if ( isset( $body['permissions'] ) ) {
+		$permissions = in_array( $body['permissions'], $valid_perms, true ) ? $body['permissions'] : '';
+		if ( '' === $permissions ) {
+			return new WP_Error( 'minn_wc_key_perms', __( 'Pick read, write or read/write.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+	} else {
+		$permissions = $stored ? (string) $stored->permissions : 'read';
+	}
+	$user_id = isset( $body['user'] ) ? absint( $body['user'] ) : ( $stored ? (int) $stored->user_id : get_current_user_id() );
 	if ( '' === $description ) {
 		return new WP_Error( 'minn_wc_key_desc', __( 'Give the key a description.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
@@ -1350,9 +1416,6 @@ function minn_admin_wc_api_key_save( $key_id, $body ) {
 	}
 	if ( ! current_user_can( 'edit_user', $user_id ) && get_current_user_id() !== $user_id ) {
 		return new WP_Error( 'minn_wc_key_user', __( 'You do not have permission to assign API keys to that user.', 'minn-admin' ), array( 'status' => 403 ) );
-	}
-	if ( $key_id && ! minn_admin_wc_api_key_owned( $key_id ) ) {
-		return new WP_Error( 'minn_wc_key_user', __( 'You do not have permission to edit this API key.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	if ( $key_id ) {
 		$wpdb->update(
@@ -1530,10 +1593,29 @@ add_action(
 						if ( ! $edited ) {
 							return new WP_Error( 'minn_wc_nothing', __( 'Nothing to save.', 'minn-admin' ), array( 'status' => 400 ) );
 						}
+						// Only a field section Minn itself lists and draws. Any other
+						// registered section (a gateway under Payments, an
+						// integration) saves through WC_Settings_API, which blanks
+						// every field it is not sent, so an arbitrary pair here
+						// could disable a gateway and wipe its credentials.
+						$page_id = sanitize_key( $req['page'] );
+						$listed  = false;
+						foreach ( minn_admin_wc_settings_sections() as $sec ) {
+							if ( ! isset( $sec['kind'] ) && $sec['page'] === $page_id && (string) $sec['section'] === (string) $section ) {
+								$listed = true;
+								break;
+							}
+						}
+						if ( ! $listed ) {
+							return new WP_Error( 'minn_wc_not_editable', __( 'That settings section is not editable here.', 'minn-admin' ), array( 'status' => 400 ) );
+						}
 						$fields = minn_admin_wc_settings_raw_fields( $page, $section );
 						$post   = minn_admin_wc_settings_post_data( $fields, $edited );
 						if ( is_wp_error( $post ) ) {
 							return $post;
+						}
+						if ( ! $post ) {
+							return new WP_Error( 'minn_wc_nothing', __( 'Nothing to save.', 'minn-admin' ), array( 'status' => 400 ) );
 						}
 						try {
 							minn_admin_wc_settings_run_save( $page, $section, $post );
@@ -1693,8 +1775,19 @@ add_action(
 							// The Payments screen's own sequence for one gateway's
 							// section: its update action (process_admin_options is
 							// hooked there by every gateway), then a registry init.
-							$gateway->set_post_data( minn_admin_wc_settings_api_post_data( $gateway, $edited ) );
-							do_action( 'woocommerce_update_options_payment_gateways_' . $gateway->id );
+							$gw_post = minn_admin_wc_settings_api_post_data( $gateway, $edited );
+							$gateway->set_post_data( $gw_post );
+							// Listeners on the same action read $_POST itself (BACS's
+							// save_account_details() among them), exactly as they do on
+							// wp-admin's form request, so it carries the same data for
+							// the save and is restored after.
+							$prev_post = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+							$_POST     = $gw_post + $prev_post; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+							try {
+								do_action( 'woocommerce_update_options_payment_gateways_' . $gateway->id );
+							} finally {
+								$_POST = $prev_post;
+							}
 							$gateway->set_post_data( array() );
 							WC()->payment_gateways()->init();
 							do_action( 'woocommerce_update_options_checkout' );

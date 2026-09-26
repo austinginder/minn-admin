@@ -405,6 +405,15 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 			const still = ( await rest( 'minn-admin/v1/wc/api-keys' ) ).body.keys.find( ( k ) => k.id === keyRow.id );
 			t.check( 'shop manager cannot reassign or revoke an administrator\'s key', steal.status === 403 && kill.status === 403 && !! still && still.user === keyRow.user, JSON.stringify( [ steal.status, kill.status, still && still.user, keyRow.user ] ) );
 			const own = await mrest( 'minn-admin/v1/wc/api-keys', { method: 'POST', body: JSON.stringify( { description: 'Minn key', permissions: 'read' } ) } );
+			// Editing only the description (the edit form sends what changed)
+			// must keep a key's owner and permissions: it used to hand the key
+			// to whoever edited it and drop it to read.
+			if ( own.status === 200 && own.body && own.body.id ) {
+				const mgrId = await mgr.page.evaluate( () => window.MINN.user.id );
+				const rename = await rest( `minn-admin/v1/wc/api-keys/${ own.body.id }`, { method: 'POST', body: JSON.stringify( { description: 'Minn key renamed' } ) } );
+				const after = ( ( await rest( 'minn-admin/v1/wc/api-keys' ) ).body.keys || [] ).find( ( k ) => k.id === own.body.id ) || {};
+				t.check( 'a description-only edit keeps the key\'s owner and permissions', rename.status === 200 && Number( after.user ) === Number( mgrId ) && after.permissions === 'read' && after.description === 'Minn key renamed', JSON.stringify( { status: rename.status, after, mgrId } ) );
+			}
 			const ownDel = own.status === 200 && own.body && own.body.id ? await mrest( `minn-admin/v1/wc/api-keys/${ own.body.id }`, { method: 'DELETE' } ) : { status: 0 };
 			t.check( 'shop manager creates and revokes their own key', own.status === 200 && ownDel.status === 200, JSON.stringify( [ own.status, ownDel.status ] ) );
 			await mgr.ctx.close();
@@ -418,6 +427,26 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 				return r.status;
 			}, secret );
 			t.check( 'revoked key no longer authenticates', gone === 401, String( gone ) );
+		}
+
+		/* ===== Saves never blank what they were not sent ===== */
+		// BACS rebuilds its bank accounts from the form's account rows on every
+		// save; a title-only save from Minn used to erase them all.
+		{
+			const { execSync } = require( 'child_process' );
+			const WPP = process.env.MINN_TEST_WP || require( 'path' ).resolve( __dirname, '../../../..' );
+			const php = ( code ) => execSync( `wp --path=${ JSON.stringify( WPP ) } eval-file - --user=admin 2>/dev/null`, { input: '<?php ' + code } ).toString().trim().split( '\n' ).pop();
+			const snap = php( `echo wp_json_encode( array( get_option( 'woocommerce_bacs_accounts', array() ), get_option( 'woocommerce_bacs_settings', array() ) ) );` );
+			try {
+				php( `update_option( 'woocommerce_bacs_accounts', array( array( 'account_name' => 'Minn Suite', 'account_number' => '12345678', 'bank_name' => 'Minn Bank', 'sort_code' => '00-11-22', 'iban' => 'GB00MINNSUITE', 'bic' => 'MINNGB2L' ) ) ); echo 1;` );
+				const bacs = await rest( 'minn-admin/v1/wc/payment_gateways/bacs', { method: 'POST', body: JSON.stringify( { values: { title: 'Bank transfer (Minn suite)' } } ) } );
+				const kept = php( `$a = get_option( 'woocommerce_bacs_accounts' ); echo is_array( $a ) && isset( $a[0]['iban'] ) ? $a[0]['iban'] : 'none';` );
+				t.check( 'a BACS title save keeps the bank accounts', bacs.status === 200 && 'GB00MINNSUITE' === kept, JSON.stringify( { status: bacs.status, kept } ) );
+			} finally {
+				php( `$b = json_decode( base64_decode( '${ Buffer.from( snap ).toString( 'base64' ) }' ), true ); update_option( 'woocommerce_bacs_accounts', $b[0] ); update_option( 'woocommerce_bacs_settings', $b[1] ); echo 1;` );
+			}
+			const unlisted = await rest( 'minn-admin/v1/wc/settings/checkout/default', { method: 'POST', body: JSON.stringify( { values: { x: 1 } } ) } );
+			t.check( 'a section Minn does not draw (Payments default) refuses a save', unlisted.status === 400 && unlisted.body && 'minn_wc_not_editable' === unlisted.body.code, JSON.stringify( unlisted ) );
 		}
 
 		/* ===== An editor is refused ===== */
