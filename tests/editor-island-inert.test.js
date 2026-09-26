@@ -24,7 +24,8 @@ const RAW = '<!-- wp:acme/probe -->\n<div class="acme-probe"><img src="x" onerro
 const liveHandlers = ( page ) => page.evaluate( () =>
 	[ ...document.querySelectorAll( '#minn-editor-body [onerror], #minn-editor-body [onload], #minn-editor-body [onmouseover], #minn-editor-body [onclick], #minn-editor-body [onfocus]' ) ].length );
 const parkedHandlers = ( page ) => page.evaluate( () =>
-	[ ...document.querySelectorAll( '#minn-editor-body [data-minn-inert-onerror]' ) ].length );
+	// Parked name = data-minn-inert-<per-page token>-onerror.
+	[ ...document.querySelectorAll( '#minn-editor-body *' ) ].filter( ( el ) => el.getAttributeNames().some( ( n ) => /^data-minn-inert-p[0-9a-z]+-onerror$/.test( n ) ) ).length );
 
 ( async () => {
 	const t = reporter( 'editor-island-inert' );

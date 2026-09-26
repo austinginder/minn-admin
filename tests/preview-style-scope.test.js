@@ -14,7 +14,7 @@
  * style element that targets body, Minn's topbar and its own paragraph, and
  * a stylesheet link.
  */
-const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
+const { BASE, launch, login, createPost, deletePost, openEditor, freshParagraph, reporter } = require( './helpers' );
 
 const STYLE = '<style>body{outline:7px solid rgb(1, 2, 3)}.minn-topbar{background:rgb(1, 2, 3) !important}.acme-styled p{color:rgb(4, 5, 6)}</style>';
 const LINK = '<link rel="stylesheet" href="' + BASE + '/wp-content/plugins/minn-admin/tests/does-not-exist.css">';
@@ -126,6 +126,75 @@ const CLASSIC = CLASSIC_STYLE + '\n<p class="acme-classic">Classic paragraph.</p
 		t.check( 'classic save carries no parked markup', craw.indexOf( 'data-minn-inert-' ) === -1 && craw.indexOf( 'minn-island-preview' ) === -1 );
 	} finally {
 		await deletePost( page, cid );
+	}
+
+	/* ===== Hostile markup: each shape once got past the scoping. ===== */
+	const SVG = '<!-- wp:acme/svg -->\n<div class="acme-svg"><svg width="10" height="10"><style>.minn-topbar{outline:5px solid rgb(5, 5, 5)}</style></svg></div>\n<!-- /wp:acme/svg -->';
+	const PRESET = '<!-- wp:acme/preset -->\n<div class="acme-preset"><style data-minn-inert-css="">.minn-topbar{border-left:9px solid rgb(9, 8, 7)}</style>preset</div>\n<!-- /wp:acme/preset -->';
+	const SIB = '<!-- wp:acme/sib -->\n<div class="acme-sib"><style>body ~ * {box-shadow:0 0 0 3px rgb(3, 3, 3)} body + * {box-shadow:0 0 0 3px rgb(3, 3, 3)}</style>sib</div>\n<!-- /wp:acme/sib -->';
+	const STORED_ATTR = 'data-minn-inert-onerror="window.__pwnStored=1"';
+	const STORED = '<!-- wp:paragraph -->\n<p>Stored <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" ' + STORED_ATTR + ' alt=""></p>\n<!-- /wp:paragraph -->';
+	let hid = 0;
+	try {
+		hid = await createPost( page, { title: 'Hostile style probe', content: SVG + '\n\n' + PRESET + '\n\n' + SIB + '\n\n' + STORED + '\n\n<!-- wp:paragraph -->\n<p>Last.</p>\n<!-- /wp:paragraph -->' } );
+		await openEditor( page, hid );
+		await page.waitForSelector( '.minn-island-preview .acme-sib', { timeout: 20000 } );
+		await page.waitForTimeout( 800 );
+		const h = await page.evaluate( () => {
+			const bar = getComputedStyle( document.querySelector( '.minn-topbar' ) );
+			const body = document.getElementById( 'minn-editor-body' );
+			const sibs = Array.from( body.parentNode.children ).filter( ( x ) => x !== body );
+			return {
+				outline: bar.outlineWidth + ' ' + bar.outlineColor,
+				border: bar.borderLeftWidth + ' ' + bar.borderLeftColor,
+				sibShadow: sibs.map( ( x ) => getComputedStyle( x ).boxShadow ).filter( ( v ) => v.indexOf( 'rgb(3, 3, 3)' ) !== -1 ).length,
+				liveOnerror: document.querySelectorAll( '#minn-editor-body img[onerror]' ).length,
+			};
+		} );
+		t.check( 'SVG <style> in a preview does not restyle Minn', h.outline.indexOf( 'rgb(5, 5, 5)' ) === -1, h.outline );
+		t.check( 'a stored data-minn-inert-css does not skip the scoping', h.border.indexOf( 'rgb(9, 8, 7)' ) === -1, h.border );
+		t.check( 'body ~ * / body + * cannot reach the editor body\'s siblings', 0 === h.sibShadow, String( h.sibShadow ) );
+		t.check( 'a stored parked-looking handler stays inert in the editor', 0 === h.liveOnerror, String( h.liveOnerror ) );
+
+		// An escaped "</style>" inside a CSS string must not survive the
+		// re-scope as a literal close tag: pasting block markup (plain text,
+		// from any page) runs it back through an HTML sink.
+		await page.evaluate( () => { window.__pwn = 0; } );
+		await freshParagraph( page );
+		await page.evaluate( ( md ) => {
+			const dt = new DataTransfer();
+			dt.setData( 'text/plain', md );
+			document.querySelector( '#minn-editor-body' ).dispatchEvent( new ClipboardEvent( 'paste', { bubbles: true, cancelable: true, clipboardData: dt } ) );
+		}, '<!-- wp:acme/evil -->\n<div class="acme-evil"><style>.acme-evil::after{content:"\\3c/style\\3e\\3cimg src=x onerror=window.__pwn=1\\3e"}</style>evil</div>\n<!-- /wp:acme/evil -->' );
+		await page.waitForTimeout( 1500 );
+		const px = await page.evaluate( () => ( { pwn: window.__pwn, imgs: document.querySelectorAll( 'img[onerror]' ).length } ) );
+		t.check( 'escaped </style> in pasted block markup does not run', 0 === px.pwn && 0 === px.imgs, JSON.stringify( px ) );
+
+		// Save: the stored attribute comes back exactly as written, never live.
+		await page.evaluate( () => {
+			const ps = Array.from( document.querySelectorAll( '#minn-editor-body > p' ) );
+			const p = ps.find( ( x ) => /Last\./.test( x.textContent ) );
+			document.getElementById( 'minn-editor-body' ).focus( { preventScroll: true } );
+			const r = document.createRange();
+			r.selectNodeContents( p );
+			r.collapse( false );
+			getSelection().removeAllRanges();
+			getSelection().addRange( r );
+		} );
+		await page.keyboard.type( ' Saved.' );
+		const hsaved = page.waitForResponse( ( r ) => r.request().method() === 'POST' && new RegExp( '/wp/v2/posts/' + hid + '(\\?|$)' ).test( r.url() ), { timeout: 30000 } );
+		await page.keyboard.press( 'Meta+s' );
+		await hsaved;
+		const hraw = await page.evaluate( async ( pid ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_cb=' + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
+			return ( ( await r.json() ).content || {} ).raw || '';
+		}, hid );
+		t.check( 'hostile save landed', hraw.indexOf( 'Saved.' ) !== -1 );
+		const storedImg = ( hraw.match( /<img[^>]*>/ ) || [ '' ] )[ 0 ];
+		t.check( 'stored parked-looking attribute saved byte-for-byte, not unparked', storedImg.indexOf( STORED_ATTR ) !== -1 && ! /\sonerror=/.test( storedImg ), storedImg );
+		t.check( 'stored data-minn-inert-css saved as written', hraw.indexOf( PRESET.split( '\n' )[ 1 ] ) !== -1 );
+	} finally {
+		await deletePost( page, hid );
 	}
 
 	/* ===== A preview font named like Minn's own UI font is aliased, not

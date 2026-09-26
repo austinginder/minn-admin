@@ -91,7 +91,8 @@ const PAYLOADS = [
 			return {
 				fired: !! window[ probe ],
 				present: !! img,
-				parked: img ? img.hasAttribute( 'data-minn-inert-onerror' ) : false,
+				// Parked name = data-minn-inert-<per-page token>-onerror.
+				parked: img ? img.getAttributeNames().some( ( n ) => /^data-minn-inert-p[0-9a-z]+-onerror$/.test( n ) ) : false,
 				live: img ? img.hasAttribute( 'onerror' ) : false,
 			};
 		}, p.probe );

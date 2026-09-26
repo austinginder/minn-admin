@@ -2074,7 +2074,19 @@
 	// the writer never touched. Instead PARK what executes under a data-
 	// prefix, which the parser treats as inert, and let the serializers put it
 	// back byte-identically on their clone.
-	const RT_PARK_PREFIX = 'data-minn-inert-';
+	//
+	// The prefix carries a per-page random token. Stored markup can hold
+	// attributes that merely LOOK parked (kses keeps data-*), and with a fixed
+	// prefix the serializer's unpark turned a Contributor's
+	// data-minn-inert-onerror into a live onerror the moment an administrator
+	// saved the post. Only what THIS page parked carries the token, so only
+	// that is ever restored; anything else is an ordinary data attribute and
+	// round-trips as written.
+	const RT_PARK_PREFIX = 'data-minn-inert-' + ( () => {
+		const a = new Uint32Array( 2 );
+		( window.crypto || window.msCrypto ).getRandomValues( a );
+		return 'p' + a[ 0 ].toString( 36 ) + a[ 1 ].toString( 36 );
+	} )() + '-';
 
 	// Attribute renames are applied by rebuilding the whole set IN ORDER.
 	// Removing one and appending its parked twin would move it to the end, and
@@ -2136,14 +2148,21 @@
 	// ride in the editor DOM itself, and stops at Minn's chrome. The writer's
 	// text is parked on the element for rtUnpark to put back.
 	const RT_PARK_CSS = RT_PARK_PREFIX + 'css';
+	// HTML and SVG both: an SVG <style> (lower-case tagName) is just as global.
+	const rtIsStyle = ( el ) => 'style' === String( el.localName || '' ).toLowerCase();
 	function rtParkStyle( el ) {
-		if ( 'STYLE' !== el.tagName || el.hasAttribute( RT_PARK_CSS ) ) return;
+		if ( ! rtIsStyle( el ) || el.hasAttribute( RT_PARK_CSS ) ) return;
 		const css = el.textContent;
 		el.setAttribute( RT_PARK_CSS, css );
-		el.textContent = css ? scopeCssToPreviews( css, '.minn-editor-body' ) : '';
+		// The CSSOM decodes escapes when it re-serializes (a string written as
+		// "\3c/style\3e" comes back as a literal "</style>"), and this text
+		// can be turned back into markup by an insertHTML or innerHTML sink.
+		// Every "<" goes back out as a CSS escape, which means the same thing
+		// inside a CSS string and can never close the element.
+		el.textContent = css ? scopeCssToPreviews( css, '.minn-editor-body' ).replace( /</g, '\\3c ' ) : '';
 	}
 	function rtUnparkStyle( el ) {
-		if ( 'STYLE' !== el.tagName || ! el.hasAttribute( RT_PARK_CSS ) ) return;
+		if ( ! rtIsStyle( el ) || ! el.hasAttribute( RT_PARK_CSS ) ) return;
 		el.textContent = el.getAttribute( RT_PARK_CSS );
 		el.removeAttribute( RT_PARK_CSS );
 	}
@@ -30809,8 +30828,8 @@
 			let v = val;
 			g.fams.forEach( ( fam ) => {
 				if ( [ 'system-ui', 'sans-serif', 'serif', 'monospace', 'ui-monospace', '-apple-system', 'blinkmacsystemfont' ].includes( fam ) ) return;
-				const re = new RegExp( '(["\']?)' + fam.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) + '\\1(?=\\s*(?:,|!|$))', 'gi' );
-				v = v.replace( re, ( hit ) => '"' + previewFontAlias( fam ) + '", ' + hit );
+				const re = new RegExp( '(^|[\\s,:])(["\']?)' + fam.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) + '\\2(?=\\s*(?:,|!|$))', 'gi' );
+				v = v.replace( re, ( hit, lead ) => lead + '"' + previewFontAlias( fam ) + '", ' + hit.slice( lead.length ) );
 			} );
 			return lead + prop + v;
 		} );
@@ -30837,7 +30856,9 @@
 			return '';
 		}
 		const SCOPE = scope || '.minn-island-preview';
-		const shellRe = new RegExp( '^' + SCOPE.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) + '(?::[\\w-]+(?:\\([^)]*\\))?)*$' );
+		const scopeRe = SCOPE.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
+		const shellRe = new RegExp( '^' + scopeRe + '(?::[\\w-]+(?:\\([^)]*\\))?)*$' );
+		const siblingOut = new RegExp( scopeRe + '(?::[\\w-]+(?:\\([^)]*\\))?)*\\s*[~+]' );
 		const scopeSelector = ( selectorText ) => selectorText.split( ',' ).map( ( sel ) => {
 			let s = sel.trim();
 			if ( ! s ) return s;
@@ -30851,8 +30872,11 @@
 			s = s.replace( /^(\[data-(?:root-)?theme[^\]]*\])/i, '&$1' );
 			s = s.replace( /^&(\s*&)*/, SCOPE ); // ":root body …" chains collapse
 			s = s.replace( /&/g, SCOPE );
-			return s.startsWith( SCOPE ) ? s : SCOPE + ' ' + s;
-		} ).join( ', ' );
+			s = s.startsWith( SCOPE ) ? s : SCOPE + ' ' + s;
+			// "body ~ x" / "body + x" would reach the scope's SIBLINGS (Minn's
+			// own chrome beside the editor body or a preview): dropped.
+			return siblingOut.test( s ) ? '' : s;
+		} ).filter( Boolean ).join( ', ' );
 		// True when every comma-branch of the scoped selector is the preview
 		// shell itself (body / html / :root alone, not "body .card").
 		const isPreviewShell = ( scoped ) => scoped.split( ',' ).every( ( s ) => {
@@ -30882,6 +30906,7 @@
 					// scoping the parent selector scopes them too.
 					let body = previewAliasFamilies( rule.cssText.slice( rule.cssText.indexOf( '{' ) ) );
 					const scoped = scopeSelector( rule.selectorText );
+					if ( ! scoped ) return;
 					if ( isPreviewShell( scoped ) ) body = stripShellCanvas( body );
 					out += scoped + ' ' + body + '\n';
 				} else if ( rule instanceof CSSMediaRule ) {

@@ -58,9 +58,10 @@ const fired = ( page ) => page.evaluate( () => ( {
 			return {
 				imgFound: !! img,
 				onerror: img ? img.getAttribute( 'onerror' ) : 'NO IMG',
-				parkedErr: img ? img.getAttribute( 'data-minn-inert-onerror' ) : null,
+				// Parked name = data-minn-inert-<per-page token>-<attr>.
+				parkedErr: img ? ( img.getAttributeNames().filter( ( n ) => /^data-minn-inert-p[0-9a-z]+-onerror$/.test( n ) ).map( ( n ) => img.getAttribute( n ) )[ 0 ] || null ) : null,
 				onclick: btn ? btn.getAttribute( 'onclick' ) : 'NO BUTTON',
-				parkedClick: btn ? btn.getAttribute( 'data-minn-inert-onclick' ) : null,
+				parkedClick: btn ? ( btn.getAttributeNames().filter( ( n ) => /^data-minn-inert-p[0-9a-z]+-onclick$/.test( n ) ).map( ( n ) => btn.getAttribute( n ) )[ 0 ] || null ) : null,
 				href: a ? a.getAttribute( 'href' ) : 'NO ANCHOR',
 			};
 		} );
