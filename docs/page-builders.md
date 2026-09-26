@@ -32,6 +32,9 @@ exercised on the primary dev site on 2026-08-17 with its real Pro status.
 | **Etch** | `post_content` | `<!-- wp:etch/* -->` block markup | `home_url?etch=magic&post_id=N` — front-end app at the **site root** (Etch's `AppRenderer` gates on `is_front_page()`; a permalink URL yields a blank page), admin bar stripped by Etch | `wp:etch/` in content |
 | **Bricks** | `_bricks_page_content_2` postmeta (element tree) | untouched | `permalink?bricks=run` — pure front end | `_bricks_editor_mode = bricks` (or the content meta present) |
 | **Breakdance** | `_breakdance_data` postmeta (element tree) | rendered or empty copy | `home_url?breakdance=builder&id=N` — full-screen builder at the site root | `_breakdance_data` present |
+| **SiteOrigin Page Builder** | `panels_data` postmeta (layout array) | rendered HTML mirror their save writes (search + plugin fallback) | `post.php?post=N&action=edit&so_live_editor=1` — their Live Editor (the admin-bar link's URL). Their **SiteOrigin Layout block** is block-native and needs no fencing | non-empty `panels_data` (their `is_panel()` test) |
+| **Oxygen 4 (classic)** | `_ct_builder_json` postmeta (older pages `_ct_builder_shortcodes`, pre-prefix-migration `ct_builder_shortcodes`) | untouched | `permalink?ct_builder=true` via their `oxy_get_builder_url()` (adds `ct_inner` for inner-content templates) — pure front end | any of the three metas; plugin folder `oxygen/`, main file `functions.php`, `CT_VERSION` |
+| **Oxygen 6** | `_oxygen_data` postmeta (Breakdance engine, `_oxygen_` meta prefix) | rendered or empty copy | `home_url?oxygen=builder&id=N` (the engine's `get_builder_loader_url()`) | `_oxygen_data` present; same folder `oxygen/` but main file `plugin.php`, `BREAKDANCE_MODE === 'oxygen'` (cannot coexist with Breakdance: shared namespace). Verified from source only; no live Oxygen 6 pass yet |
 | **WPBakery** | `post_content` as `[vc_row…]` shortcodes | the shortcode soup | `post.php?vc_action=vc_inline&post_id=N` — wp-admin URL rendering the front-end inline editor | `_wpb_vc_js_status = true` (or `[vc_row` in content) |
 
 Two classes fall out:
@@ -64,7 +67,7 @@ Breakdance also stores its canonical element tree in postmeta. Minn detects
 If Breakdance is installed but inactive, the fence stays in place and points
 to Extensions so the plugin can be turned on before opening its builder.
 
-### Meta-storage builders (Elementor, Beaver Builder, Brizy, Bricks, Breakdance) + shortcode Divi 4 / WPBakery — must be fenced
+### Meta-storage builders (Elementor, Beaver Builder, Brizy, Bricks, Breakdance, SiteOrigin, Oxygen) + shortcode Divi 4 / WPBakery — must be fenced
 
 Canonical content lives *outside* `post_content` (or, for Divi 4, inside it as shortcode
 soup the Visual Builder owns). What `post_content` holds is a stale or compiled copy.

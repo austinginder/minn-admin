@@ -238,6 +238,97 @@ function minn_admin_page_builders() {
 		);
 	}
 
+	// SiteOrigin Page Builder: the canonical layout is the panels_data
+	// postmeta array; post_content is a rendered HTML mirror their save
+	// writes for search and plugin fallbacks, so a Minn edit there would be
+	// overwritten on their next save. (Their "SiteOrigin Layout" BLOCK is
+	// block-native and needs nothing here: islands keep it verbatim.)
+	$siteorigin_active = defined( 'SITEORIGIN_PANELS_VERSION' );
+	if ( $siteorigin_active || file_exists( WP_PLUGIN_DIR . '/siteorigin-panels/siteorigin-panels.php' ) ) {
+		$builders['siteorigin'] = array(
+			'name'         => 'SiteOrigin Page Builder',
+			'active'       => $siteorigin_active,
+			'owns_content' => true,
+			'detect'       => function ( $post ) {
+				// Their own is_panel() test: a non-empty panels_data.
+				return (bool) get_post_meta( $post->ID, 'panels_data', true );
+			},
+			// Their Live Editor: the edit screen with so_live_editor=1, the URL
+			// their admin-bar "Live Editor" link builds (raw, not &amp;-escaped).
+			'edit_url'     => function ( $post ) {
+				return add_query_arg(
+					array(
+						'post'           => $post->ID,
+						'action'         => 'edit',
+						'so_live_editor' => 1,
+					),
+					admin_url( 'post.php' )
+				);
+			},
+		);
+	}
+
+	// Oxygen. Two unrelated products share the plugin folder `oxygen/`:
+	// Oxygen 4 (classic, CT_VERSION, main file functions.php) keeps its tree
+	// in _ct_builder_json (older pages: _ct_builder_shortcodes, and before
+	// their meta-prefix migration the unprefixed ct_builder_shortcodes);
+	// Oxygen 6 is built on the Breakdance engine (BREAKDANCE_MODE 'oxygen',
+	// main file plugin.php) and keeps its tree in _oxygen_data. Either way
+	// post_content is not what renders.
+	$oxygen4_active = defined( 'CT_VERSION' ) && function_exists( 'ct_get_post_builder_link' );
+	if ( $oxygen4_active || file_exists( WP_PLUGIN_DIR . '/oxygen/functions.php' ) ) {
+		$builders['oxygen'] = array(
+			'name'         => 'Oxygen',
+			'active'       => $oxygen4_active,
+			'owns_content' => true,
+			'detect'       => function ( $post ) {
+				foreach ( array( '_ct_builder_json', '_ct_builder_shortcodes', 'ct_builder_shortcodes' ) as $key ) {
+					if ( '' !== (string) get_post_meta( $post->ID, $key, true ) ) {
+						return true;
+					}
+				}
+				return false;
+			},
+			// Their own URL builder adds ct_inner for inner-content templates;
+			// the fallback is their base form (permalink + ct_builder=true).
+			'edit_url'     => function ( $post ) use ( $oxygen4_active ) {
+				if ( $oxygen4_active && function_exists( 'oxy_get_builder_url' ) ) {
+					return oxy_get_builder_url( $post->ID );
+				}
+				return add_query_arg( 'ct_builder', 'true', get_permalink( $post ) );
+			},
+		);
+	} else {
+		$oxygen6_active = defined( '__BREAKDANCE_VERSION' )
+			&& defined( 'BREAKDANCE_MODE' )
+			&& 'oxygen' === BREAKDANCE_MODE
+			&& function_exists( '\Breakdance\Admin\get_builder_loader_url' );
+		if ( $oxygen6_active || file_exists( WP_PLUGIN_DIR . '/oxygen/plugin.php' ) ) {
+			$builders['oxygen'] = array(
+				'name'         => 'Oxygen',
+				'active'       => $oxygen6_active,
+				'owns_content' => true,
+				'detect'       => function ( $post ) {
+					return (bool) get_post_meta( $post->ID, '_oxygen_data', true );
+				},
+				// The Breakdance engine's loader URL, which in Oxygen mode is
+				// home_url( '?oxygen=builder&id=N' ).
+				'edit_url'     => function ( $post ) use ( $oxygen6_active ) {
+					if ( $oxygen6_active ) {
+						return \Breakdance\Admin\get_builder_loader_url( (string) $post->ID );
+					}
+					return add_query_arg(
+						array(
+							'oxygen' => 'builder',
+							'id'     => $post->ID,
+						),
+						home_url( '/' )
+					);
+				},
+			);
+		}
+	}
+
 	if ( defined( 'ETCH_PLUGIN_FILE' ) ) {
 		$builders['etch'] = array(
 			'name'         => 'Etch',
