@@ -25,7 +25,28 @@ function minn_admin_latepoint_active() {
 	return defined( 'LATEPOINT_VERSION' ) && class_exists( 'OsBookingModel' );
 }
 
+/*
+ * LatePoint caches its own copy of the current user the first time anything
+ * asks (OsAuthHelper::$current_user). A REST request carrying the login cookie
+ * but no X-WP-Nonce is dropped to user 0 by core's cookie check AFTER that
+ * cache can already be filled, and LatePoint never refreshes it (only its
+ * Abilities module, off by default, hooks the reset). Without this, can_user()
+ * kept answering for the admin on a nonce-less cross-site request. Reset the
+ * cache whenever WordPress changes the current user, exactly as their own
+ * Abilities module does.
+ */
+add_action( 'set_current_user', function () {
+	if ( class_exists( 'OsAuthHelper' ) && method_exists( 'OsAuthHelper', 'reset_current_user' ) ) {
+		OsAuthHelper::reset_current_user();
+	}
+}, 1 );
+
 function minn_admin_latepoint_can_read() {
+	// Logged out (including a nonce-less cookie request core demoted to 0)
+	// never reaches LatePoint's check at all.
+	if ( ! is_user_logged_in() ) {
+		return false;
+	}
 	if ( class_exists( 'OsRolesHelper' ) && method_exists( 'OsRolesHelper', 'can_user' ) ) {
 		return (bool) OsRolesHelper::can_user( 'booking__view' );
 	}
@@ -33,6 +54,9 @@ function minn_admin_latepoint_can_read() {
 }
 
 function minn_admin_latepoint_can_write() {
+	if ( ! is_user_logged_in() ) {
+		return false;
+	}
 	if ( class_exists( 'OsRolesHelper' ) && method_exists( 'OsRolesHelper', 'can_user' ) ) {
 		return (bool) OsRolesHelper::can_user( 'booking__edit' );
 	}
