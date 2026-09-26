@@ -50,6 +50,21 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			} ),
 		} );
 	} );
+	// Update everything runs plugins, themes and language packs as one batch
+	// through updates/all (the notif panel's path); plugins/update-all stays
+	// stubbed for the Extensions-only path.
+	const batchStub = ( updated ) => async ( route ) => {
+		if ( route.request().method() !== 'POST' ) return route.continue();
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( {
+				plugins: { updated, failed: [] },
+				themes: { updated: [], failed: [] },
+			} ),
+		} );
+	};
+	await page.route( '**/minn-admin/v1/updates/all**', batchStub( [ 'minn-admin/minn-admin.php' ] ) );
 
 	page.on( 'dialog', ( d ) => d.accept().catch( () => {} ) );
 
@@ -106,7 +121,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			() => ( window.__minnReloadScheduled > 0 )
 				|| ( window.__minnReloadMsgs || [] ).some( ( m ) => /Minn Admin updated/i.test( m ) ),
 			null,
-			{ timeout: 8000 }
+			// The batch runner reloads the plugin list and notifications for
+			// real before it reports, so the reload lands seconds after the
+			// stubbed update-all answers.
+			{ timeout: 30000 }
 		);
 
 		const result = await page.evaluate( () => ( {
@@ -135,6 +153,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			window.__minnReloadScheduled = 0;
 			window.__minnReloadMsgs = [];
 		} );
+		await page.unroute( '**/minn-admin/v1/updates/all**' );
+		await page.route( '**/minn-admin/v1/updates/all**', batchStub( [ 'akismet/akismet.php' ] ) );
 		await page.unroute( '**/minn-admin/v1/plugins/update-all**' );
 		await page.route( '**/minn-admin/v1/plugins/update-all**', async ( route ) => {
 			if ( route.request().method() !== 'POST' ) return route.continue();
