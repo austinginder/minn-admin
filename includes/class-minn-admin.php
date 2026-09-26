@@ -1365,7 +1365,24 @@ class Minn_Admin {
 	 * @return mixed
 	 */
 	public static function maintenance_rest( $result ) {
-		if ( ! empty( $result ) || ! self::maintenance_holds_back() ) {
+		if ( ! empty( $result ) ) {
+			return $result;
+		}
+		$held = self::maintenance_holds_back();
+		// This runs before core's cookie check (priority 100), which demotes
+		// a cookie request without a valid REST nonce to anonymous. Until
+		// then the cookie still reads as the signed-in editor, so such a
+		// request is judged the way core is about to judge it: held.
+		if ( ! $held && get_option( 'minn_admin_maintenance' ) && ! empty( $GLOBALS['wp_rest_auth_cookie'] ) ) {
+			$nonce = '';
+			if ( isset( $_REQUEST['_wpnonce'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+				$nonce = sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
+			} elseif ( isset( $_SERVER['HTTP_X_WP_NONCE'] ) ) {
+				$nonce = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_WP_NONCE'] ) );
+			}
+			$held = '' === $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' );
+		}
+		if ( ! $held ) {
 			return $result;
 		}
 		return new WP_Error(
