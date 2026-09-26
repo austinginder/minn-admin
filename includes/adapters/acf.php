@@ -66,7 +66,9 @@ function minn_admin_acf_image_out( $val ) {
 function minn_admin_acf_gallery_out( $val ) {
 	$items = array();
 	foreach ( (array) $val as $gid ) {
-		if ( is_numeric( $gid ) && (int) $gid > 0 ) {
+		// A deleted attachment is not an image the panel can show (or send
+		// back); ACF's own gallery skips it the same way.
+		if ( is_numeric( $gid ) && (int) $gid > 0 && 'attachment' === get_post_type( (int) $gid ) ) {
 			$items[] = array(
 				'id'  => (int) $gid,
 				'url' => (string) wp_get_attachment_image_url( (int) $gid, 'thumbnail' ),
@@ -387,14 +389,26 @@ function minn_admin_acf_time_in( $value ) {
  * attachment-id list. An empty list clears (ACF stores an empty array).
  *
  * @param mixed $value Incoming value.
- * @return int[]
+ * @return int[]|null Null when an entry is refused (keep the stored value).
  */
 function minn_admin_acf_gallery_in( $value ) {
 	$ids = array();
 	foreach ( (array) $value as $entry ) {
+		$raw = is_array( $entry ) || is_object( $entry ) ? ( ( (array) $entry )['id'] ?? 0 ) : $entry;
+		// A deleted attachment is dropped, not refused: it is gone either way.
+		if ( is_numeric( $raw ) && (int) $raw > 0 && 'attachment' !== get_post_type( (int) $raw ) ) {
+			continue;
+		}
 		$id = minn_admin_acf_image_in( $entry );
-		// '' is an empty slot and null is a refused one; neither is an image.
-		if ( '' !== $id && null !== $id ) {
+		// A refused entry keeps the stored gallery whole (null = skip the
+		// write): the panel sends every field back on any edit, and dropping
+		// the images this caller may not attach would silently shrink a
+		// gallery someone else built.
+		if ( null === $id ) {
+			return null;
+		}
+		// '' is an empty slot, not an image.
+		if ( '' !== $id ) {
 			$ids[] = $id;
 		}
 	}
@@ -452,6 +466,54 @@ function minn_admin_acf_plain_choices( $choices ) {
 		$out[ $value ] = '' !== $plain ? $plain : (string) $value;
 	}
 	return $out;
+}
+
+/**
+ * ACF's own per-field display gate: the acf/prepare_field filter, which is
+ * the documented way to hide a field from some users (return false) or make
+ * it read-only. ACF only runs it when rendering its screens, so every field
+ * list Minn builds asks it too: 'hide' leaves the field out entirely (not
+ * listed, read or written), 'lock' counts it as living in wp-admin, '' is
+ * an ordinary field.
+ *
+ * A hidden field is still COUNTED where a list shows "N fields live in
+ * wp-admin": a site filter keyed on is_admin() hides on anything that is not
+ * wp-admin, Minn included, and the count is the hint that points there.
+ *
+ * @param array    $f         ACF field array.
+ * @param int|null $object_id Post id or 'options' to load the value from.
+ * @return string
+ */
+function minn_admin_acf_gate( $f, $object_id = null ) {
+	if ( ! is_array( $f ) || ! function_exists( 'acf_prepare_field' ) ) {
+		return '';
+	}
+	// ACF hands its filter a loaded field; a rule that locks a field once it
+	// holds a value needs to see that value.
+	// (acf_validate_field() always sets 'value' => null, so null means
+	// "not loaded"; ACF's value store makes the repeat load cheap.)
+	if ( null !== $object_id && ! isset( $f['value'] ) && function_exists( 'acf_get_value' ) ) {
+		try {
+			$f['value'] = acf_get_value( $object_id, $f );
+		} catch ( \Throwable $e ) {
+			$f['value'] = null;
+		}
+	}
+	// Site filters are written for ACF's screen; one that assumes wp-admin
+	// (get_current_screen() and friends) must not take Minn down with it.
+	// A filter that cannot answer keeps the field in wp-admin.
+	try {
+		$p = acf_prepare_field( $f );
+	} catch ( \Throwable $e ) {
+		return 'lock';
+	}
+	if ( ! $p ) {
+		return 'hide';
+	}
+	if ( ! empty( $p['readonly'] ) || ! empty( $p['disabled'] ) ) {
+		return 'lock';
+	}
+	return '';
 }
 
 function minn_admin_acf_map_field( $f ) {
@@ -835,6 +897,10 @@ function minn_admin_acf_flatten_subs( $sub_fields ) {
 	$keys( $sub_fields );
 	$push = function ( $sub, $label_prefix, $name_prefix, $gpath ) use ( &$push, &$subs, &$locked, &$own ) {
 		if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
+			return;
+		}
+		if ( '' !== minn_admin_acf_gate( $sub ) ) {
+			$locked++;
 			return;
 		}
 		$cond = ! empty( $sub['conditional_logic'] ) && is_array( $sub['conditional_logic'] ) ? $sub['conditional_logic'] : null;
@@ -1395,6 +1461,10 @@ function minn_admin_acf_fields_payload( $post_id, $post_type ) {
 			if ( in_array( $f['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 				continue;
 			}
+			if ( '' !== minn_admin_acf_gate( $f, $post_id ? $post_id : null ) ) {
+				$locked++;
+				continue;
+			}
 			$cond = ! empty( $f['conditional_logic'] ) && is_array( $f['conditional_logic'] ) ? $f['conditional_logic'] : null;
 			// Repeaters (Pro) ride the `rows` control when any sub is simple.
 			// Panel-only: options pages and block dataForms keep them locked
@@ -1502,6 +1572,11 @@ function minn_admin_acf_simple_fields_for_post( $post_id ) {
 	$out = array();
 	foreach ( minn_admin_acf_groups_for( $post_id, $post->post_type ) as $group ) {
 		foreach ( (array) acf_get_fields( $group ) as $f ) {
+			// Hidden or read-only for this user on ACF's screen: neither
+			// read into minn_acf nor accepted back from it.
+			if ( '' !== minn_admin_acf_gate( $f, (int) $post_id ) ) {
+				continue;
+			}
 			if ( 'repeater' === ( $f['type'] ?? '' ) ) {
 				$rep = minn_admin_acf_map_repeater( $f );
 				if ( $rep ) {
@@ -1669,7 +1744,7 @@ function minn_admin_acf_block_forms() {
 			if ( in_array( $f['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 				continue;
 			}
-			$simple = minn_admin_acf_map_field( $f );
+			$simple = '' !== minn_admin_acf_gate( $f ) ? null : minn_admin_acf_map_field( $f );
 			if ( ! $simple ) {
 				$locked++;
 				continue;
@@ -2303,8 +2378,13 @@ function minn_admin_acf_options_tabs( $page ) {
 			if ( in_array( $type, MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 				continue;
 			}
+			$gate = minn_admin_acf_gate( $f, ! empty( $page['post_id'] ) ? $page['post_id'] : 'options' );
 			if ( $current < 0 ) {
 				$open( $group['title'] );
+			}
+			if ( '' !== $gate ) {
+				$lock( $f['label'] ?? '' );
+				continue;
 			}
 			$cond = ! empty( $f['conditional_logic'] ) && is_array( $f['conditional_logic'] ) ? $f['conditional_logic'] : null;
 			if ( 'group' === $type ) {
@@ -2318,6 +2398,10 @@ function minn_admin_acf_options_tabs( $page ) {
 				$flatten = function ( $sub_fields, $path, $prefix, $inherited ) use ( &$flatten, &$tabs, &$current, $and_conds, $lock, $f, $section ) {
 					foreach ( (array) $sub_fields as $sub ) {
 						if ( in_array( $sub['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
+							continue;
+						}
+						if ( '' !== minn_admin_acf_gate( $sub ) ) {
+							$lock( $sub['label'] ?? '' );
 							continue;
 						}
 						$scond = $and_conds( $inherited, ! empty( $sub['conditional_logic'] ) && is_array( $sub['conditional_logic'] ) ? $sub['conditional_logic'] : null );
