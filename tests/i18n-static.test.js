@@ -295,6 +295,9 @@ const PHP_PROSE_ALLOW = new Set( [
 	'in use',
 	'already active', 'activation left', 'timed out',   // ACPT's activation replies
 	'tm public api',                                    // a vendor API's own error text
+	'error connecting',                                 // MonsterInsights license API's reply, matched by stripos
+	'Elementor MCP -',                                  // the name prefix Elementor's own setup gives its app passwords
+	'Save changes',                                     // POST sentinel mirroring wp-admin's Save button (never shown)
 	'extra RLIKE %s',                                   // SQL fragment (Gravity SMTP log search)
 	'%%title%% %%sep%% %%sitename%%', '%title% %sep% %sitename%',   // SEO title templates: plugin tokens, not prose
 	'has-more',                                         // a CSS class
