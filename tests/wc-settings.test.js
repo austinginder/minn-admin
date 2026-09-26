@@ -84,7 +84,10 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 		await page.waitForSelector( '#minn-store-form [data-sset]', { timeout: 20000 } );
 		const secs = await page.$$eval( '[data-storesec]', ( els ) => els.map( ( e ) => e.dataset.storesec ) );
 		t.check( 'registry sections: general, products×4, tax, shipping, account, email, advanced×3', [ 'general', 'products', 'products:inventory', 'products:downloadable', 'products:advanced', 'tax', 'shipping:options', 'account', 'email', 'advanced', 'advanced:features' ].every( ( id ) => secs.includes( id ) ), secs.join( '|' ) );
-		t.check( 'an extension page rides along (Subscriptions)', secs.includes( 'subscriptions' ) );
+		t.check( 'an extension page rides along (JetWooBuilder)', secs.includes( 'jet-woo-builder-settings' ), secs.join( '|' ) );
+		// Subscriptions' real save refuses anything but its own nonce'd form
+		// while nonce-less listeners still reset values, so it stays in wp-admin.
+		t.check( 'Subscriptions is not offered (its save needs its own form)', ! secs.includes( 'subscriptions' ) );
 		t.check( 'the URL names the first section', /store-settings\/general$/.test( page.url() ) );
 		t.check( 'disabled fields count as locked with the wp-admin escape', await page.$$eval( '.minn-panel-locked a', ( els ) => els.some( ( a ) => /page=wc-settings/.test( a.href ) ) ) );
 

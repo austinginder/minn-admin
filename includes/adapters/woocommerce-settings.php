@@ -236,11 +236,16 @@ function minn_admin_wc_settings_current( $f ) {
 	if ( isset( $f['is_option'] ) && false === $f['is_option'] ) {
 		return isset( $f['value'] ) ? $f['value'] : '';
 	}
-	if ( isset( $f['value'] ) && ( ! isset( $f['id'] ) || ! empty( $f['minn_object'] ) ) ) {
-		// A WC_Settings_API field (email, gateway, shipping instance) keeps
-		// its value on the object, never in wp_options under the bare key;
-		// the builders read it through the object and mark the field so it
-		// is never resolved against a global option of the same name.
+	// WooCommerce's own output_fields(): fixed_value wins, then a value the
+	// field carries, and only then the stored option. A WC_Settings_API
+	// field (email, gateway, shipping instance) keeps its value on the
+	// object; a settings page may also hand over a transformed value (Gift
+	// Cards stores its cart toggle inverted and flips it back on save), so
+	// reading the option instead would show and re-save the wrong state.
+	if ( isset( $f['fixed_value'] ) ) {
+		return $f['fixed_value'];
+	}
+	if ( isset( $f['value'] ) ) {
 		return $f['value'];
 	}
 	$default = isset( $f['default'] ) ? $f['default'] : '';
@@ -509,6 +514,13 @@ function minn_admin_wc_settings_sections() {
 		}
 		if ( ! $sections ) {
 			$sections = array( '' => $page_label );
+		}
+		// Pages whose real save refuses anything but their own form (a nonce
+		// field in the posted data) would take Minn's replay as a no-op while
+		// their nonce-less listeners still reset values. Their screen owns
+		// them, so they stay in wp-admin.
+		if ( in_array( $page_id, array( 'subscriptions' ), true ) ) {
+			continue;
 		}
 		// The Payments page is a React screen with no field array; Minn draws
 		// it as a gateway list from the registry instead (kind 'payments').
