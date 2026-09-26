@@ -29,6 +29,19 @@ add_filter( 'minn_admin_render_styles', function ( $styles, $blocks, $post_id ) 
 		if ( preg_match_all( '/"desktop":"((?:\\\\.|[^"\\\\])*)"/', $markup, $m ) ) {
 			foreach ( $m[1] as $encoded ) {
 				$css = json_decode( '"' . $encoded . '"' );
+				// This CSS comes from the post's own markup (a Contributor's
+				// draft included), and font and import rules reach past the
+				// preview: they are global and fetch remote files the moment
+				// an editor opens the post. EB's generator writes neither
+				// (its fonts load separately), so they are dropped.
+				// Comments go first (they can split an at-rule name from its
+				// body), then every at-rule but the ones a block's layout
+				// CSS uses; an escaped name (@\66ont-face) is not on the
+				// list, so it goes too.
+				if ( is_string( $css ) ) {
+					$css = preg_replace( '~/\*.*?\*/~s', '', $css );
+					$css = preg_replace( '/@(?!(?:media|supports|keyframes|-webkit-keyframes)\b)[^{;]*(?:\{[^}]*\}|;)/i', '', $css );
+				}
 				if ( is_string( $css ) && '' !== trim( $css ) ) {
 					$styles['inline'] .= "\n" . $css;
 				}

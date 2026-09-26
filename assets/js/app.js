@@ -4154,7 +4154,11 @@
 				openInBlockEditor();
 				return;
 			}
-			if ( e.target.closest( 'a' ) ) return; // logout link
+			const a = e.target.closest( 'a' );
+			if ( a ) { // logout link
+				if ( a.getAttribute( 'href' ) === B.site.logout ) localNetPurgeMine();
+				return;
+			}
 			go( 'profile' );
 		} );
 		$( '#minn-theme-btn' ).addEventListener( 'click', toggleTheme );
@@ -30740,6 +30744,35 @@
 	// light page background becomes a white plate behind every island in
 	// dark mode. @font-face and @keyframes pass through globally. Anything
 	// unrecognized is dropped rather than leaked unscoped.
+	// Names Minn's own chrome depends on, read once from the live page.
+	let previewGuard = null;
+	function previewGlobalClashes( rule ) {
+		if ( ! previewGuard ) {
+			const cs = getComputedStyle( document.documentElement );
+			const fams = new Set( [ 'hanken grotesk', 'jetbrains mono' ] );
+			[ '--font-ui', '--font-mono' ].forEach( ( v ) => {
+				cs.getPropertyValue( v ).split( ',' ).forEach( ( f ) => {
+					f = f.trim().replace( /^['"]|['"]$/g, '' ).toLowerCase();
+					if ( f ) fams.add( f );
+				} );
+			} );
+			const props = new Set();
+			for ( let i = 0; i < cs.length; i++ ) {
+				if ( cs[ i ].indexOf( '--' ) === 0 ) props.add( cs[ i ] );
+			}
+			previewGuard = { fams, props };
+		}
+		if ( rule instanceof CSSFontFaceRule ) {
+			const fam = ( rule.style.getPropertyValue( 'font-family' ) || '' ).trim().replace( /^['"]|['"]$/g, '' ).toLowerCase();
+			return previewGuard.fams.has( fam );
+		}
+		if ( window.CSSKeyframesRule && rule instanceof CSSKeyframesRule ) {
+			return /^minn/i.test( rule.name || '' );
+		}
+		const name = rule.name || '';
+		return /^--minn/i.test( name ) || previewGuard.props.has( name );
+	}
+
 	function scopeCssToPreviews( cssText ) {
 		let sheet;
 		try {
@@ -30811,8 +30844,13 @@
 					|| ( window.CSSKeyframesRule && rule instanceof CSSKeyframesRule )
 					|| ( window.CSSPropertyRule && rule instanceof CSSPropertyRule )
 				) {
-					// Resource definitions, not element styles — pass through.
-					out += rule.cssText + '\n';
+					// Resource definitions, not element styles, so they pass
+					// through unscoped. They are global, though: preview CSS can
+					// come from a post's own markup (a Contributor's), so a name
+					// Minn's chrome uses (its UI font stacks, its minn*
+					// animations, its custom properties) is refused rather than
+					// allowed to restyle the admin around the preview.
+					if ( ! previewGlobalClashes( rule ) ) out += rule.cssText + '\n';
 				}
 			} );
 			return out;
@@ -34848,7 +34886,25 @@
 	const LOCAL_NET_MAX = 12;
 	let localNetTimer = null;
 
-	const localNetKey = ( ed ) => 'minn-net-' + ( ed.id ? `${ ed.type }-${ ed.id }` : 'new-' + ed.type );
+	// Scoped to this site and this account: localStorage is per ORIGIN, so a
+	// bare post id would offer one user's unsaved draft to the next account
+	// on a shared browser, or one subdirectory site's draft to another's.
+	const localNetScope = ( () => {
+		const site = String( ( B.site && B.site.url ) || B.restUrl || '' );
+		let h = 0;
+		for ( let i = 0; i < site.length; i++ ) h = ( ( h << 5 ) - h + site.charCodeAt( i ) ) | 0;
+		return 'u' + ( ( B.user && B.user.id ) || 0 ) + '.' + ( h >>> 0 ).toString( 36 );
+	} )();
+	const localNetKey = ( ed ) => 'minn-net-' + localNetScope + '-' + ( ed.id ? `${ ed.type }-${ ed.id }` : 'new-' + ed.type );
+
+	// Logging out drops this account's snapshots on this site (core clears
+	// its own sessionStorage backups the same way on wp-login's logout).
+	function localNetPurgeMine() {
+		try {
+			const mine = 'minn-net-' + localNetScope + '-';
+			Object.keys( localStorage ).filter( ( k ) => k.indexOf( mine ) === 0 ).forEach( ( k ) => localStorage.removeItem( k ) );
+		} catch ( e ) { /* storage blocked: nothing stored either */ }
+	}
 
 	function localNetSchedule() {
 		clearTimeout( localNetTimer );
@@ -43111,7 +43167,7 @@
 			{ label: __( 'About Minn — help & shortcuts' ), kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
 			{ label: __( 'Visit site' ), kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank', 'noopener' ) },
 			...( ENGINE ? [] : [ { label: __( 'Classic wp-admin' ), kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank', 'noopener' ) } ] ),
-			{ label: __( 'Log out' ), kind: 'link', icon: '⎋', run: () => { window.location.href = B.site.logout; } },
+			{ label: __( 'Log out' ), kind: 'link', icon: '⎋', run: () => { localNetPurgeMine(); window.location.href = B.site.logout; } },
 		);
 		// Every plugin's own screens, from the harvested links (cards' data;
 		// warmed at boot). Declared settings links first, then menu pages.

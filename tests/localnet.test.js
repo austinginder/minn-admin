@@ -16,7 +16,9 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		title: 'Net test post',
 		content: '<!-- wp:paragraph -->\n<p>Original text.</p>\n<!-- /wp:paragraph -->',
 	} );
-	const netKey = `minn-net-posts-${ postId }`;
+	// The key is scoped to site + user (minn-net-<scope>-posts-<id>), so it is
+	// looked up by its suffix in the page.
+	const netKey = `-posts-${ postId }`;
 
 	/* ===== Edit → snapshot lands ===== */
 	await openEditor( page, postId );
@@ -24,7 +26,7 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 	await page.keyboard.press( 'End' );
 	await page.keyboard.type( ' Unsaved recovery text.' );
 	await page.waitForTimeout( 2000 ); // > LOCAL_NET_DELAY
-	const snap = await page.evaluate( ( k ) => localStorage.getItem( k ), netKey );
+	const snap = await page.evaluate( ( sfx ) => { const k = Object.keys( localStorage ).find( ( x ) => x.indexOf( 'minn-net-' ) === 0 && x.endsWith( sfx ) ); return k ? localStorage.getItem( k ) : null; }, netKey );
 	t.check( 'snapshot written within the throttle window', !! snap && /Unsaved recovery text/.test( snap ), String( snap ).slice( 0, 120 ) );
 
 	/* ===== "Crash": hard-leave before any autosave (15s idle not reached) ===== */
@@ -68,7 +70,7 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 	// window rather than reading straight after the server confirms.
 	let snapAfterSave = null;
 	for ( let i = 0; i < 20; i++ ) {
-		snapAfterSave = await page.evaluate( ( k ) => localStorage.getItem( k ), netKey );
+		snapAfterSave = await page.evaluate( ( sfx ) => { const k = Object.keys( localStorage ).find( ( x ) => x.indexOf( 'minn-net-' ) === 0 && x.endsWith( sfx ) ); return k ? localStorage.getItem( k ) : null; }, netKey );
 		if ( ! snapAfterSave ) break;
 		await page.waitForTimeout( 500 );
 	}
