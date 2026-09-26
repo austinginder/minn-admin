@@ -115,7 +115,7 @@ const LANG = 'de_DE';
 		// --- the real install ------------------------------------------------
 		// A live download from wordpress.org. de_DE for the current core
 		// version is a real package, and installing it twice is harmless.
-		const response = page.waitForResponse( ( res ) => res.url().includes( '/minn-admin/v1/translations/update' ) && res.request().method() === 'POST', { timeout: 180000 } );
+		const response = page.waitForResponse( ( res ) => res.url().includes( '/minn-admin/v1/updates/all' ) && res.request().method() === 'POST', { timeout: 180000 } );
 		await page.click( '#minn-update-translations' );
 		await page.waitForFunction( () => {
 			const chip = document.querySelector( '#minn-upd-chip' );
@@ -128,7 +128,10 @@ const LANG = 'de_DE';
 		t.check( 'updating translations is visible in the top bar', /Updating.*translation/i.test( busyFeedback.chip ), JSON.stringify( busyFeedback ) );
 		t.check( 'the page explains that a large update can take time', /few minutes/i.test( busyFeedback.heading ), busyFeedback.heading );
 		const liveResponse = await response;
-		const ran = { status: liveResponse.status(), body: await liveResponse.json() };
+		// The button runs the shared updates/all batch; its translations
+		// slice carries the pack counts.
+		const raw = await liveResponse.json();
+		const ran = { status: liveResponse.status(), body: ( raw && raw.translations ) || raw };
 		t.check( 'the update route answers', 200 === ran.status, JSON.stringify( ran.body ).slice( 0, 140 ) );
 		t.check( 'it reports at least one pack installed', ran.body && ran.body.updated >= 1, JSON.stringify( ran.body ) );
 
