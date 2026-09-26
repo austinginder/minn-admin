@@ -212,7 +212,12 @@ add_action( 'rest_api_init', function () {
 				$values = array(
 					'start'   => minn_admin_tec_panel_datetime( get_post_meta( $id, '_EventStartDate', true ) ),
 					'end'     => minn_admin_tec_panel_datetime( get_post_meta( $id, '_EventEndDate', true ) ),
-					'all_day' => 'yes' === get_post_meta( $id, '_EventAllDay', true ),
+					// Their own reader: TEC now stores the flag as '1' (older
+					// events carry 'yes'), so a string compare misread every
+					// all-day event as timed.
+					'all_day' => function_exists( 'tribe_event_is_all_day' )
+						? (bool) tribe_event_is_all_day( $id )
+						: in_array( (string) get_post_meta( $id, '_EventAllDay', true ), array( 'yes', '1', 'true' ), true ),
 					'venue'   => minn_admin_tec_linked_pick( get_post_meta( $id, '_EventVenueID', true ) ),
 					'cost'    => (string) get_post_meta( $id, '_EventCost', true ),
 					'website' => (string) get_post_meta( $id, '_EventURL', true ),
