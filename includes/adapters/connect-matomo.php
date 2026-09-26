@@ -246,6 +246,15 @@ function minn_admin_connect_matomo_pages_refs( $base, $fresh = false ) {
 		// The JSON renderer flattens row metadata (the full page URL) into
 		// the row itself.
 		$url = isset( $row['url'] ) && is_string( $row['url'] ) ? esc_url_raw( $row['url'] ) : '';
+		// Tracking data carries whatever URL a hit reported; only this
+		// site's own host becomes a link (the MonsterInsights rule).
+		if ( '' !== $url ) {
+			$own   = strtolower( preg_replace( '/^www\./', '', (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) );
+			$their = strtolower( preg_replace( '/^www\./', '', (string) wp_parse_url( $url, PHP_URL_HOST ) ) );
+			if ( '' === $own || $own !== $their ) {
+				$url = '';
+			}
+		}
 		if ( '' !== $path && '/' !== $path[0] ) {
 			$path = '/' . $path;
 		}

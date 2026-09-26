@@ -16,6 +16,8 @@ class Minn_Admin_REST {
 
 	const LANG_PACK_HOOK = 'minn_admin_install_lang_packs';
 
+	const PROGRESS_EXPIRE_HOOK = 'minn_admin_progress_expire';
+
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
 		// Plugin and theme translation packs install in the BACKGROUND (see
@@ -23,6 +25,11 @@ class Minn_Admin_REST {
 		// wordpress.org for every installed component and must not sit in
 		// front of the language switch the user is waiting to see.
 		add_action( self::LANG_PACK_HOOK, array( __CLASS__, 'run_lang_pack_install' ) );
+		// A finished batch's progress file is deleted a few minutes after the
+		// batch closes (see Minn_Admin_Batch::finish): on servers that ignore
+		// the directory's .htaccess the web server would otherwise hand it out
+		// as a static file, past progress.php's one-hour limit.
+		add_action( self::PROGRESS_EXPIRE_HOOK, array( __CLASS__, 'progress_expire' ) );
 		// Minn's in-place content saves carry the post id in an
 		// X-Minn-Expect-Lock header — verified against _edit_lock inside the
 		// save request itself, so a session that lost a lock takeover can't
@@ -9192,7 +9199,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'bad_theme', __( 'Theme is required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$theme = wp_get_theme( $stylesheet );
-		if ( ! $theme->exists() ) {
+		// On multisite a subsite admin only sees themes the network allows
+		// for their site (core's themes.php, list_themes, theme_activate);
+		// anything else answers exactly like a theme that is not there.
+		if ( ! $theme->exists() || ( ! Minn_Admin::network_owner() && ! $theme->is_allowed() ) ) {
 			return new WP_Error( 'not_installed', __( 'That theme is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$tr    = get_site_transient( 'update_themes' );
@@ -10746,11 +10756,45 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	public static function progress_write( $token, $file_path, array $progress ) {
 		set_transient( 'minn_bulk_update_' . $token, $progress, 15 * MINUTE_IN_SECONDS );
 		if ( $file_path ) {
+			// The file is read without a login (progress.php, or the web
+			// server directly where .htaccess is ignored), so upgrader
+			// messages lose the site's absolute paths there; the transient
+			// behind the REST reader keeps them for the admin.
+			$public = self::progress_strip_paths( $progress );
 			// Atomic rename so a reader never sees a half-written record.
 			$tmp = $file_path . '.tmp';
-			if ( false !== file_put_contents( $tmp, wp_json_encode( $progress ) ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+			if ( false !== file_put_contents( $tmp, wp_json_encode( $public ) ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
 				rename( $tmp, $file_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 			}
+		}
+	}
+
+	/** Absolute server paths out of every string in a progress record. */
+	private static function progress_strip_paths( $value ) {
+		if ( is_array( $value ) ) {
+			return array_map( array( __CLASS__, 'progress_strip_paths' ), $value );
+		}
+		if ( ! is_string( $value ) || '' === $value ) {
+			return $value;
+		}
+		$roots = array_unique( array( WP_CONTENT_DIR . '/', wp_normalize_path( WP_CONTENT_DIR ) . '/', ABSPATH, wp_normalize_path( ABSPATH ) ) );
+		foreach ( $roots as $root ) {
+			if ( strlen( $root ) > 1 ) { // a site rooted at '/' has nothing to strip
+				$value = str_replace( $root, '', $value );
+			}
+		}
+		return $value;
+	}
+
+	/** Delete one finished batch's progress file (scheduled by finish()). */
+	public static function progress_expire( $token ) {
+		$token = (string) $token;
+		if ( ! preg_match( '/^[a-f0-9]{40}$/', $token ) ) {
+			return;
+		}
+		$file = WP_CONTENT_DIR . '/minn-admin-progress/' . $token . '.json';
+		if ( is_file( $file ) ) {
+			wp_delete_file( $file );
 		}
 	}
 

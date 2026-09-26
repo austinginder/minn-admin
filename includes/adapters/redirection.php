@@ -309,7 +309,7 @@ add_action( 'rest_api_init', function () {
 				try {
 					return (bool) Redirection_Capabilities::has_access( constant( 'Redirection_Capabilities::' . $const ) );
 				} catch ( \Throwable $e ) {
-					return true;
+					return false; // an unanswerable gate is not an open one
 				}
 			};
 			$can_log = $can_cap( 'CAP_LOG_MANAGE' );

@@ -159,6 +159,13 @@ function minn_admin_matomo_pages_refs( $base ) {
 	foreach ( $table->getRows() as $row ) {
 		$path = (string) $row->getColumn( 'label' );
 		$url  = (string) $row->getMetadata( 'url' );
+		// Tracking data carries whatever URL a hit reported; only this
+		// site's own host becomes a link (the MonsterInsights rule).
+		if ( '' !== $url ) {
+			$own   = strtolower( preg_replace( '/^www\./', '', (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) );
+			$their = strtolower( preg_replace( '/^www\./', '', (string) wp_parse_url( $url, PHP_URL_HOST ) ) );
+			$url   = ( '' !== $own && $own === $their ) ? esc_url_raw( $url ) : '';
+		}
 		if ( '' !== $path && '/' !== $path[0] ) {
 			$path = '/' . $path;
 		}

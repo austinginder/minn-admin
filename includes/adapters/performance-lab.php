@@ -225,7 +225,7 @@ function minn_admin_performance_lab_deactivate( $slug ) {
 	}
 	// The per-object meta cap alone lets a subsite administrator network-
 	// deactivate a network-active feature; see Minn_Admin::plugin_toggle_denied().
-	$denied = Minn_Admin::plugin_toggle_denied( $file );
+	$denied = Minn_Admin::plugin_toggle_denied( $file, false );
 	if ( $denied ) {
 		return new WP_Error( 'minn_cannot_deactivate', $denied->get_error_message(), array( 'status' => 403 ) );
 	}

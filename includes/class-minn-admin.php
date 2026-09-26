@@ -24,6 +24,12 @@ class Minn_Admin {
 		add_filter( 'plugin_locale', array( __CLASS__, 'plugin_locale' ), 10, 2 );
 		add_action( 'init', array( __CLASS__, 'load_textdomain' ) );
 		add_action( 'init', array( __CLASS__, 'register_route' ) );
+		// The editor's crash net keeps unsaved drafts in localStorage; a
+		// sign-out that lands on wp-login's loggedout=true screen (the default
+		// for every Minn and wp-admin logout link) takes them with it, the way
+		// core clears its own sessionStorage backups. Session expiry keeps
+		// them on purpose: that is the crash the net exists for.
+		add_action( 'login_footer', array( __CLASS__, 'clear_local_drafts_on_logout' ) );
 		add_action( 'wp_loaded', array( __CLASS__, 'maybe_heal_rewrites' ), 20 );
 		add_filter( 'query_vars', array( __CLASS__, 'query_vars' ) );
 		// Both run ahead of everything else on template_redirect: WooCommerce
@@ -83,7 +89,7 @@ class Minn_Admin {
 		if ( ! isset( $all[ $file ] ) ) {
 			wp_send_json_error( array( 'message' => __( 'Plugin not found.', 'minn-admin' ) ), 404 );
 		}
-		$denied = self::plugin_toggle_denied( $file );
+		$denied = self::plugin_toggle_denied( $file, 'active' === $status );
 		if ( $denied ) {
 			wp_send_json_error( array( 'message' => $denied->get_error_message() ), 403 );
 		}
@@ -96,6 +102,14 @@ class Minn_Admin {
 			deactivate_plugins( $file, false, self::plugin_toggle_is_network( $file, false ) );
 		}
 		wp_send_json_success( array( 'plugin' => $id, 'status' => $status ) );
+	}
+
+	/** On wp-login.php?loggedout=true: drop the editor's localStorage drafts. */
+	public static function clear_local_drafts_on_logout() {
+		if ( empty( $_GET['loggedout'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return;
+		}
+		echo "<script>try{Object.keys(localStorage).forEach(function(k){if(k.indexOf('minn-net-')===0)localStorage.removeItem(k);});}catch(e){}</script>\n";
 	}
 
 	/**
@@ -113,13 +127,16 @@ class Minn_Admin {
 	 * site on the network, or force a network-only plugin on to all of them.
 	 *
 	 * @param string $file Plugin file relative to the plugins directory.
+	 * @param bool   $on   True to activate, false to deactivate.
 	 * @return WP_Error|null Error to answer with, or null when the change is allowed.
 	 */
-	public static function plugin_toggle_denied( $file ) {
+	public static function plugin_toggle_denied( $file, $on = true ) {
 		if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
-		if ( ! current_user_can( 'activate_plugin', $file ) ) {
+		// Core's Plugins screen asks the meta cap for the direction: a host
+		// that pins a plugin on filters deactivate_plugin, not activate_plugin.
+		if ( ! current_user_can( $on ? 'activate_plugin' : 'deactivate_plugin', $file ) ) {
 			return new WP_Error( 'forbidden', __( 'Sorry, you are not allowed to manage this plugin.', 'minn-admin' ) );
 		}
 		if ( ! is_multisite() || current_user_can( 'manage_network_plugins' ) ) {

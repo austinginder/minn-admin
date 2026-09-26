@@ -1072,13 +1072,15 @@ function minn_admin_seo_squirrly_provider() {
 		// route anyway; it only speaks up on a site that stripped the cap,
 		// which is what the other six predicates are for.
 		'can_edit' => function () {
+			// Refuse when their helper is missing or throws, like the other
+			// six providers: an unanswerable gate is not an open one.
 			if ( ! class_exists( 'SQ_Classes_Helpers_Tools' ) || ! method_exists( 'SQ_Classes_Helpers_Tools', 'userCan' ) ) {
-				return true;
+				return false;
 			}
 			try {
 				return (bool) SQ_Classes_Helpers_Tools::userCan( 'sq_manage_snippet' );
 			} catch ( \Throwable $e ) {
-				return true;
+				return false;
 			}
 		},
 		'fields' => function () {

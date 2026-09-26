@@ -47,6 +47,11 @@ class Minn_Admin_Batch {
 		$this->file_path = Minn_Admin_REST::progress_file_path( $this->token );
 		if ( $this->file_path ) {
 			$this->progress['fileUrl'] = plugins_url( 'progress.php', MINN_ADMIN_DIR . 'minn-admin.php' ) . '?t=' . $this->token;
+			// A batch that dies before finish() still loses its file: this
+			// backstop outlives any batch, finish() moves it much sooner.
+			if ( ! wp_next_scheduled( Minn_Admin_REST::PROGRESS_EXPIRE_HOOK, array( $this->token ) ) ) {
+				wp_schedule_single_event( time() + HOUR_IN_SECONDS + 5 * MINUTE_IN_SECONDS, Minn_Admin_REST::PROGRESS_EXPIRE_HOOK, array( $this->token ) );
+			}
 		}
 	}
 
@@ -94,6 +99,13 @@ class Minn_Admin_Batch {
 		$this->progress['errors']           = array_values( array_unique( array_merge( (array) ( $this->progress['errors'] ?? array() ), (array) $errors ) ) );
 		$this->progress['timing']['total_ms'] = (int) round( ( microtime( true ) - $this->t0 ) * 1000 );
 		$this->write();
+		// The file only matters while maintenance mode blocks REST; once the
+		// batch closes the client reads the transient, so the file goes
+		// after a short grace period instead of lingering as a static file.
+		if ( $this->file_path ) {
+			wp_clear_scheduled_hook( Minn_Admin_REST::PROGRESS_EXPIRE_HOOK, array( $this->token ) );
+			wp_schedule_single_event( time() + 5 * MINUTE_IN_SECONDS, Minn_Admin_REST::PROGRESS_EXPIRE_HOOK, array( $this->token ) );
+		}
 	}
 
 	/**

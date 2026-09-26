@@ -68,6 +68,11 @@ function minn_admin_meta_box_map_field( $field ) {
 	if ( ! empty( $field['clone'] ) || ! empty( $field['multiple'] ) ) {
 		return null;
 	}
+	// save_field => false: display-only or code-managed. Meta Box's own save
+	// skips it, so Minn neither offers it nor clears its stored value.
+	if ( isset( $field['save_field'] ) && ! $field['save_field'] ) {
+		return null;
+	}
 	$type = $field['type'];
 	if ( ! isset( MINN_ADMIN_META_BOX_SIMPLE[ $type ] ) ) {
 		return null;

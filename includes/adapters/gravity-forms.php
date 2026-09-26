@@ -445,7 +445,7 @@ function minn_admin_gf_can_manage_feed( $feed ) {
 	try {
 		$addons = GFAddOn::get_registered_addons( true, true );
 	} catch ( \Throwable $e ) {
-		return true;
+		return false; // an unanswerable gate is not an open one
 	}
 	if ( ! isset( $addons[ $slug ] ) || ! is_object( $addons[ $slug ] ) || ! method_exists( $addons[ $slug ], 'get_form_settings_capabilities' ) ) {
 		return true;

@@ -1409,6 +1409,11 @@ function minn_admin_gsmtp_settings_save( WP_REST_Request $request ) {
 		if ( isset( $vals['primary_connector'] ) ) {
 			$next = sanitize_key( (string) $vals['primary_connector'] );
 			unset( $vals['primary_connector'] );
+			// Only a registered connector: the name keys their per-connector
+			// option stores, and 'config' is the plugin-level store itself.
+			if ( $next && $next !== $current && ! in_array( $next, array_column( minn_admin_gsmtp_connector_options(), 0 ), true ) ) {
+				return new WP_Error( 'minn_gsmtp_bad_connector', __( 'Unknown sending service.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
 			if ( $next && $next !== $current ) {
 				// Mirror their Save_Connector_Settings_Endpoint semantics:
 				// the config maps hold ONE truthy primary/enabled entry and

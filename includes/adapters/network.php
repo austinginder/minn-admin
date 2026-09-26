@@ -1108,6 +1108,11 @@ function minn_admin_network_plugin_activate( WP_REST_Request $request ) {
 	if ( validate_file( $file ) || ! array_key_exists( $file, get_plugins() ) ) {
 		return new WP_Error( 'no_such_plugin', __( 'That plugin is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
+	// Core's network Plugins screen also asks the per-plugin meta cap, which
+	// is where a host pins a plugin it must never lose.
+	if ( ! current_user_can( $on ? 'activate_plugin' : 'deactivate_plugin', $file ) ) {
+		return new WP_Error( 'rest_forbidden', __( 'You are not allowed to change this plugin.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
 	if ( ! $on && plugin_basename( MINN_ADMIN_FILE ) === $file ) {
 		return new WP_Error(
 			'self',
