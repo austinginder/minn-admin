@@ -30,6 +30,26 @@ defined( 'ABSPATH' ) || exit;
  * @param string $url Candidate image URL.
  * @return bool
  */
+/**
+ * A routable public address: not private, reserved, loopback or link-local
+ * (PHP's filter flags), and not the 100.64.0.0/10 shared range some clouds
+ * put metadata services on, which the flags do not cover.
+ */
+function minn_admin_localize_ip_public( $ip ) {
+	if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+		return false;
+	}
+	if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+		$n = ip2long( $ip );
+		if ( ( $n & 0xFFC00000 ) === ( ip2long( '100.64.0.0' ) & 0xFFC00000 ) ) {
+			return false;
+		}
+	} elseif ( preg_match( '/^(fe80|fc|fd)/i', $ip ) ) {
+		return false; // link-local and unique-local IPv6
+	}
+	return true;
+}
+
 function minn_admin_localize_host_ok( $url ) {
 	$parts = wp_parse_url( $url );
 	if ( empty( $parts['host'] ) || empty( $parts['scheme'] ) ) {
@@ -42,9 +62,7 @@ function minn_admin_localize_host_ok( $url ) {
 	if ( in_array( $host, array( 'localhost', '127.0.0.1', '::1', '0.0.0.0' ), true ) ) {
 		return false;
 	}
-	$public = function ( $ip ) {
-		return (bool) filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
-	};
+	$public = 'minn_admin_localize_ip_public';
 	$bare = trim( $host, '[]' );
 	if ( filter_var( $bare, FILTER_VALIDATE_IP ) ) {
 		return $public( $bare );
@@ -53,7 +71,15 @@ function minn_admin_localize_host_ok( $url ) {
 	// safe-request check (download_url uses it) refuses private ranges but
 	// not link-local 169.254.x.x, where cloud metadata answers. Only runs for
 	// the few images a design insert actually downloads (capped at 12).
-	$ips = gethostbynamel( $host );
+	$ips = (array) gethostbynamel( $host );
+	if ( function_exists( 'dns_get_record' ) ) {
+		foreach ( (array) @dns_get_record( $host, DNS_AAAA ) as $rec ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			if ( ! empty( $rec['ipv6'] ) ) {
+				$ips[] = $rec['ipv6'];
+			}
+		}
+	}
+	$ips = array_filter( $ips );
 	if ( ! $ips ) {
 		return false;
 	}
@@ -124,7 +150,22 @@ function minn_admin_localize_images( $template, $url_re = null ) {
 				if ( ! minn_admin_localize_host_ok( $url ) ) {
 					continue;
 				}
-				$tmp = download_url( $url );
+				// Every redirect hop is judged the same way: core's own
+				// redirect check does not refuse link-local before WP 7.1.
+				$hop = function ( $location ) {
+					if ( ! minn_admin_localize_host_ok( (string) $location ) ) {
+						// Requests 2 (WP 6.2+) or Requests 1: either way WP_Http
+						// turns it into a WP_Error for download_url().
+						$cls = class_exists( '\\WpOrg\\Requests\\Exception' ) ? '\\WpOrg\\Requests\\Exception' : 'Requests_Exception';
+						throw new $cls( 'Redirect to a non-public address refused.', 'minn_unsafe_redirect' );
+					}
+				};
+				add_action( 'requests-requests.before_redirect', $hop );
+				try {
+					$tmp = download_url( $url );
+				} finally {
+					remove_action( 'requests-requests.before_redirect', $hop );
+				}
 				if ( is_wp_error( $tmp ) ) {
 					continue;
 				}
