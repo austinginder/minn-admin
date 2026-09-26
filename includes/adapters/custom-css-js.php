@@ -223,7 +223,10 @@ function minn_admin_ccj_item( $post ) {
 	return array(
 		'id'       => (int) $post->ID,
 		'name'     => $post->post_title ? $post->post_title : ( 'Untitled ' . strtoupper( $language ) ),
-		'code'     => (string) $post->post_content,
+		// The body only for callers the vendor's edit screen would open
+		// (edit_post on this snippet); a role holding the list cap alone
+		// sees the row, not a draft's code.
+		'code'     => minn_admin_ccj_obj_can( 'edit', $post->ID ) ? (string) $post->post_content : '',
 		'language' => $language,
 		'type'     => $type,
 		'side'     => $side,
@@ -353,6 +356,12 @@ function minn_admin_ccj_rows( $args = array() ) {
 	foreach ( get_posts( $q ) as $post ) {
 		$item = minn_admin_ccj_item( $post );
 		if ( ! $item ) {
+			continue;
+		}
+		// Search runs over post_content too; a row whose code this caller
+		// is not served only matches on its name, or the result set would
+		// spell the hidden code out one query at a time.
+		if ( ! empty( $args['s'] ) && '' === $item['code'] && '' !== (string) get_post_field( 'post_content', $post ) && false === stripos( (string) $item['name'], (string) $args['s'] ) ) {
 			continue;
 		}
 		if ( isset( $args['active'] ) ) {
