@@ -37,6 +37,18 @@ function minn_admin_novamira_can() {
 }
 
 /**
+ * Writes also need a wp_rest nonce in X-WP-Nonce. Novamira changes its
+ * switch, ability rules, connections and memories only from wp-admin forms
+ * behind check_admin_referer, which an Application Password cannot reach;
+ * without the nonce an agent holding the password its own connect flow
+ * issued could re-enable an ability the owner turned off.
+ */
+function minn_admin_novamira_can_write( WP_REST_Request $request ) {
+	$nonce = (string) $request->get_header( 'X-WP-Nonce' );
+	return minn_admin_novamira_can() && '' !== $nonce && (bool) wp_verify_nonce( $nonce, 'wp_rest' );
+}
+
+/**
  * Whether the current REST request targets one of this adapter's own routes.
  * Reads the route core resolved for the request (pretty and plain permalinks
  * both land in the rest_route query var by the time rest_api_init fires) and
@@ -702,7 +714,7 @@ add_action( 'rest_api_init', function () {
 	) );
 	register_rest_route( 'minn-admin/v1', '/novamira/enabled/(?P<state>on|off)', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
+		'permission_callback' => 'minn_admin_novamira_can_write',
 		'callback'            => function ( $req ) {
 			$on = 'on' === $req['state'];
 			$ok   = $on ? novamira_enable_ai_abilities() : novamira_disable_ai_abilities();
@@ -722,7 +734,7 @@ add_action( 'rest_api_init', function () {
 	) );
 	register_rest_route( 'minn-admin/v1', '/novamira/connections/(?P<id>[a-z]+:[A-Za-z0-9_\-]+)/revoke', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
+		'permission_callback' => 'minn_admin_novamira_can_write',
 		'callback'            => function ( $req ) {
 			$r = minn_admin_novamira_revoke( (string) $req['id'] );
 			return is_wp_error( $r ) ? $r : rest_ensure_response( array( 'ok' => true ) );
@@ -740,7 +752,7 @@ add_action( 'rest_api_init', function () {
 		register_rest_route( 'minn-admin/v1', '/novamira/memories/(?P<id>\d+)', array(
 			array(
 				'methods'             => 'POST',
-				'permission_callback' => $perm,
+				'permission_callback' => 'minn_admin_novamira_can_write',
 				'callback'            => function ( $req ) {
 					$post = get_post( (int) $req['id'] );
 					if ( ! $post || 'novamira_memory' !== $post->post_type ) {
@@ -770,7 +782,7 @@ add_action( 'rest_api_init', function () {
 			),
 			array(
 				'methods'             => 'DELETE',
-				'permission_callback' => $perm,
+				'permission_callback' => 'minn_admin_novamira_can_write',
 				'callback'            => function ( $req ) {
 					$post = get_post( (int) $req['id'] );
 					if ( ! $post || 'novamira_memory' !== $post->post_type ) {
@@ -792,7 +804,7 @@ add_action( 'rest_api_init', function () {
 		),
 		array(
 			'methods'             => 'POST',
-			'permission_callback' => $perm,
+			'permission_callback' => 'minn_admin_novamira_can_write',
 			'callback'            => function ( $req ) {
 				$body   = $req->get_json_params();
 				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
