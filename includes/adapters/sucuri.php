@@ -27,7 +27,10 @@ function minn_admin_sucuri_active() {
 }
 
 function minn_admin_sucuri_can() {
-	return minn_admin_sucuri_active() && current_user_can( 'manage_options' );
+	// Sucuri keeps ONE audit queue for the whole network (uploads/sucuri)
+	// and moves its whole admin into Network Admin on multisite, so there
+	// the log is the network owner's data, not a subsite admin's.
+	return minn_admin_sucuri_active() && current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
 }
 
 /** Whether their API service ships the queue off-site (so it only holds unsent events). */
