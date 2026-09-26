@@ -258,13 +258,20 @@ const { BASE, launch, login, reporter, setSwitch } = require( './helpers' );
 
 		// Categories: type, pick from the suggest panel.
 		await page.fill( '[data-ptac="categories"] .minn-ac-input', 'Minn Outerwear' );
-		await page.waitForSelector( '[data-ptac="categories"] [data-ptpick]', { timeout: 15000 } );
-		const picked = await page.evaluate( () => {
-			const b = document.querySelector( '[data-ptac="categories"] [data-ptpick]' );
+		// Wait for the answer to THIS query: the panel can briefly show the
+		// unfiltered list first, and any other category (a leftover from
+		// another suite) then sorts ahead of the one typed.
+		// Match THIS run's category exactly: an earlier crashed run can leave a
+		// "Minn Outerwear <other suffix>" behind that also matches the query.
+		await page.waitForFunction( ( n ) => Array.from( document.querySelectorAll( '[data-ptac="categories"] [data-ptpick]' ) )
+			.some( ( b ) => ( b.dataset.ptname || '' ) === n ), catName, { timeout: 15000 } );
+		const picked = await page.evaluate( ( n ) => {
+			const b = Array.from( document.querySelectorAll( '[data-ptac="categories"] [data-ptpick]' ) )
+				.find( ( x ) => ( x.dataset.ptname || '' ) === n );
 			const ev = new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } );
 			b.dispatchEvent( ev );
 			return b.dataset.ptname;
-		} );
+		}, catName );
 		t.check( 'suggest panel offers the category', /Minn Outerwear/.test( picked || '' ), String( picked ) );
 		await page.waitForTimeout( 200 );
 		const catChips = await page.evaluate( () => Array.from(
