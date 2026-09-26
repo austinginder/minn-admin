@@ -3363,7 +3363,7 @@
 	// redirects, email), then what keeps it running (log, backups, migrate,
 	// performance, diagnostics). Anything Minn does not know lands between
 	// the second and third bands in name order, so the ops tail stays last.
-	const TOOLS_NAV_RANK = [ 'builder-templates', 'field-groups', 'site-options', 'snippets', 'jet-search', 'redirects', 'mail', null, 'activity-log', 'backups', 'migrate', 'performance', 'diagnostics' ];
+	const TOOLS_NAV_RANK = [ 'builder-templates', 'field-groups', 'site-options', 'snippets', 'jet-search', 'redirects', 'link-health', 'mail', null, 'activity-log', 'backups', 'migrate', 'performance', 'diagnostics' ];
 	function toolsNavItems() {
 		const items = surfaceNavItems().filter( ( s ) => s.group !== 'workspace' && s.group !== 'commerce' && s.group !== 'network' )
 			.map( ( s ) => ( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } ) );
