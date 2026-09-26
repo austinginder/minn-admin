@@ -226,6 +226,21 @@ const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], {
 	t.check( 'users.user_pass is redacted in the list and the row detail', redacted( secret.pass ) && redacted( secret.dpass ), JSON.stringify( [ secret.pass, secret.dpass ] ) );
 	t.check( 'usermeta session_tokens value is redacted', redacted( secret.tok ), JSON.stringify( secret.tok ) );
 
+	// Redaction must not leak through the query: filtering a credential
+	// column (a LIKE oracle) is refused and sorting by one is ignored, while
+	// ordinary columns still filter.
+	const oracle = await page.evaluate( async () => {
+		const h = { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' };
+		const get = async ( q ) => { const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/db/rows?table=wp_users&per_page=1&' + q, h ); return { status: r.status, body: await r.json() }; };
+		const f = await get( 'fcol=user_pass&fq=%24' );
+		const meta = await fetch( window.MINN.restUrl + 'minn-admin/v1/db/rows?table=wp_usermeta&per_page=1&fcol=meta_value&fq=a', h );
+		const s = await get( 'orderby=user_pass&order=asc' );
+		const ok = await get( 'fcol=user_login&fq=a' );
+		return { filter: f.status, metaFilter: meta.status, sortedBy: s.body.orderby, normal: ok.status };
+	} );
+	t.check( 'credential columns cannot be filtered or sorted (no LIKE / ORDER BY oracle)',
+		400 === oracle.filter && 400 === oracle.metaFilter && 'user_pass' !== oracle.sortedBy && 200 === oracle.normal, JSON.stringify( oracle ) );
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
 	console.error( e );

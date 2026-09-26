@@ -428,6 +428,25 @@ class Minn_Admin_DB {
 		return false;
 	}
 
+	/**
+	 * Whether a whole COLUMN can hold a credential on some row, so it must
+	 * never be filtered or sorted on: a LIKE filter or an ORDER BY over the raw
+	 * value answers "does this substring occur" / "which is larger" about a
+	 * cell the viewer redacts, which recovers a hash or token a character at
+	 * a time. usermeta.meta_value counts whole, since which rows are secret
+	 * depends on meta_key.
+	 *
+	 * @param string $table Table name as resolved (prefix included).
+	 * @param string $col   Column name.
+	 * @return bool
+	 */
+	private static function is_secret_column( $table, $col ) {
+		if ( self::is_secret_cell( $table, $col, array( 'meta_key' => 'session_tokens' ) ) ) {
+			return true;
+		}
+		return false;
+	}
+
 	private static function redacted_cell( $value ) {
 		return array( 'redacted' => true, 'bytes' => strlen( (string) $value ) );
 	}
@@ -559,7 +578,8 @@ class Minn_Admin_DB {
 		// rows first on log-shaped tables); no PK means natural order.
 		$orderby = (string) $request->get_param( 'orderby' );
 		$order   = 'asc' === strtolower( (string) $request->get_param( 'order' ) ) ? 'ASC' : 'DESC';
-		if ( ! in_array( $orderby, $names, true ) ) {
+		// A credential column is never a sort key (ordering leaks its value).
+		if ( ! in_array( $orderby, $names, true ) || self::is_secret_column( $meta->name, $orderby ) ) {
 			$orderby = '';
 		}
 		$sorted_default = false;
@@ -573,6 +593,9 @@ class Minn_Admin_DB {
 		$fcol  = (string) $request->get_param( 'fcol' );
 		$fq    = (string) $request->get_param( 'fq' );
 		$where = '';
+		if ( '' !== $fq && in_array( $fcol, $names, true ) && self::is_secret_column( $meta->name, $fcol ) ) {
+			return new WP_Error( 'minn_db_secret_filter', __( 'That column holds passwords or tokens, so it cannot be searched.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
 		if ( '' !== $fq && in_array( $fcol, $names, true ) ) {
 			$where = $wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifier whitelisted + backtick-quoted above.
