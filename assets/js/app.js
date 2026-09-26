@@ -2122,9 +2122,31 @@
 		// <base href> rewrites every relative URL on the page, so it is not
 		// safe even when the URL itself is: judge the tag, not the scheme.
 		if ( 'href' === lower && el && 'BASE' === el.tagName ) return RT_PARK_PREFIX + name;
+		// A stylesheet <link> applies to the whole document (and fetches the
+		// moment it lands), not to the markup around it.
+		if ( 'href' === lower && el && 'LINK' === el.tagName ) return RT_PARK_PREFIX + name;
 		if ( RT_URL_ATTRS.includes( lower ) && ! rtSafeUrl( value ) ) return RT_PARK_PREFIX + name;
 		return name;
 	};
+
+	// A <style> element is global wherever it lands, so rendered markup could
+	// repaint or hide Minn's own chrome. Its rules are scoped to the editor
+	// body (the same scoper the bundled front-end CSS goes through): that
+	// covers island previews AND slot islands, whose vendor column styles
+	// ride in the editor DOM itself, and stops at Minn's chrome. The writer's
+	// text is parked on the element for rtUnpark to put back.
+	const RT_PARK_CSS = RT_PARK_PREFIX + 'css';
+	function rtParkStyle( el ) {
+		if ( 'STYLE' !== el.tagName || el.hasAttribute( RT_PARK_CSS ) ) return;
+		const css = el.textContent;
+		el.setAttribute( RT_PARK_CSS, css );
+		el.textContent = css ? scopeCssToPreviews( css, '.minn-editor-body' ) : '';
+	}
+	function rtUnparkStyle( el ) {
+		if ( 'STYLE' !== el.tagName || ! el.hasAttribute( RT_PARK_CSS ) ) return;
+		el.textContent = el.getAttribute( RT_PARK_CSS );
+		el.removeAttribute( RT_PARK_CSS );
+	}
 
 	// Keeps every TAG. Dropping tags is what rtScrub does for field values, and
 	// doing it here would delete core/embed output and raw-HTML blocks. An
@@ -2132,6 +2154,7 @@
 	// srcdoc has its srcdoc parked, which is what actually stops it.
 	function rtNeutralize( root ) {
 		$$( '*', root ).forEach( ( el ) => {
+			rtParkStyle( el );
 			rtRenameAttrs( el, rtParkName );
 			if ( el.content && el.content.nodeType === 11 ) rtNeutralize( el.content );
 		} );
@@ -2142,7 +2165,13 @@
 	// the live DOM: the document keeps the inert copy, the database gets the
 	// writer's bytes.
 	function rtUnpark( root ) {
-		$$( '*', root ).forEach( ( el ) => {
+		// The root too: the block serializer hands over each top-level block
+		// element, and a descendant query alone left THAT element's parked
+		// attributes (or a top-level <style>'s parked text) in the output.
+		const all = $$( '*', root );
+		if ( root && 1 === root.nodeType ) all.unshift( root );
+		all.forEach( ( el ) => {
+			rtUnparkStyle( el );
 			rtRenameAttrs( el, ( name ) => (
 				0 === name.toLowerCase().indexOf( RT_PARK_PREFIX )
 					? name.slice( RT_PARK_PREFIX.length )
@@ -4520,6 +4549,8 @@
 		const mode = root.getAttribute( 'data-theme' ) || 'dark';
 		root.setAttribute( 'data-scheme', norm.scheme || 'minn' );
 		root.setAttribute( 'data-font', norm.font === 'wordpress' ? 'wordpress' : 'minn' );
+		// The preview font guard read the old UI stack; read it again.
+		previewGuard = null;
 		// Drop legacy data-accent if present.
 		root.removeAttribute( 'data-accent' );
 		if ( norm.scheme === 'custom' ) {
@@ -30745,8 +30776,10 @@
 	// dark mode. @font-face and @keyframes pass through globally. Anything
 	// unrecognized is dropped rather than leaked unscoped.
 	// Names Minn's own chrome depends on, read once from the live page.
-	let previewGuard = null;
-	function previewGlobalClashes( rule ) {
+	// var, not let: applyAppearance resets it and can run at boot, before
+	// this line (a let would still be in its dead zone there).
+	var previewGuard = null; // eslint-disable-line no-var
+	function previewGuardInit() {
 		if ( ! previewGuard ) {
 			const cs = getComputedStyle( document.documentElement );
 			const fams = new Set( [ 'hanken grotesk', 'jetbrains mono' ] );
@@ -30762,6 +30795,28 @@
 			}
 			previewGuard = { fams, props };
 		}
+		return previewGuard;
+	}
+	// A preview font whose family Minn's UI also names (a theme's own Roboto
+	// on the WordPress font setting) is not dropped: it is renamed to a
+	// private alias, and every preview rule naming that family asks for the
+	// alias first. The preview keeps the theme's font; Minn's chrome never
+	// sees it.
+	const previewFontAlias = ( fam ) => 'minn-pv-' + fam.toLowerCase().replace( /[^a-z0-9]+/g, '-' );
+	function previewAliasFamilies( body ) {
+		const g = previewGuardInit();
+		return body.replace( /(^|[;{\s])(font(?:-family)?\s*:)([^;}]*)/gi, ( m, lead, prop, val ) => {
+			let v = val;
+			g.fams.forEach( ( fam ) => {
+				if ( [ 'system-ui', 'sans-serif', 'serif', 'monospace', 'ui-monospace', '-apple-system', 'blinkmacsystemfont' ].includes( fam ) ) return;
+				const re = new RegExp( '(["\']?)' + fam.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) + '\\1(?=\\s*(?:,|!|$))', 'gi' );
+				v = v.replace( re, ( hit ) => '"' + previewFontAlias( fam ) + '", ' + hit );
+			} );
+			return lead + prop + v;
+		} );
+	}
+	function previewGlobalClashes( rule ) {
+		previewGuardInit();
 		if ( rule instanceof CSSFontFaceRule ) {
 			const fam = ( rule.style.getPropertyValue( 'font-family' ) || '' ).trim().replace( /^['"]|['"]$/g, '' ).toLowerCase();
 			return previewGuard.fams.has( fam );
@@ -30773,7 +30828,7 @@
 		return /^--minn/i.test( name ) || previewGuard.props.has( name );
 	}
 
-	function scopeCssToPreviews( cssText ) {
+	function scopeCssToPreviews( cssText, scope ) {
 		let sheet;
 		try {
 			sheet = new CSSStyleSheet();
@@ -30781,7 +30836,8 @@
 		} catch ( e ) {
 			return '';
 		}
-		const SCOPE = '.minn-island-preview';
+		const SCOPE = scope || '.minn-island-preview';
+		const shellRe = new RegExp( '^' + SCOPE.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) + '(?::[\\w-]+(?:\\([^)]*\\))?)*$' );
 		const scopeSelector = ( selectorText ) => selectorText.split( ',' ).map( ( sel ) => {
 			let s = sel.trim();
 			if ( ! s ) return s;
@@ -30801,7 +30857,7 @@
 		// shell itself (body / html / :root alone, not "body .card").
 		const isPreviewShell = ( scoped ) => scoped.split( ',' ).every( ( s ) => {
 			const t = s.trim().replace( /\s+/g, ' ' );
-			return t === SCOPE || /^\.minn-island-preview(?::[\w-]+(?:\([^)]*\))?)*$/.test( t );
+			return t === SCOPE || shellRe.test( t );
 		} );
 		const stripShellCanvas = ( declBlock ) => declBlock
 			// background / background-color / background-image … (not -clip etc. alone)
@@ -30824,7 +30880,7 @@
 					// Emit the FULL rule body (not just declarations) so CSS
 					// nesting survives — nested selectors are &-relative, so
 					// scoping the parent selector scopes them too.
-					let body = rule.cssText.slice( rule.cssText.indexOf( '{' ) );
+					let body = previewAliasFamilies( rule.cssText.slice( rule.cssText.indexOf( '{' ) ) );
 					const scoped = scopeSelector( rule.selectorText );
 					if ( isPreviewShell( scoped ) ) body = stripShellCanvas( body );
 					out += scoped + ' ' + body + '\n';
@@ -30850,7 +30906,16 @@
 					// Minn's chrome uses (its UI font stacks, its minn*
 					// animations, its custom properties) is refused rather than
 					// allowed to restyle the admin around the preview.
-					if ( ! previewGlobalClashes( rule ) ) out += rule.cssText + '\n';
+					if ( ! previewGlobalClashes( rule ) ) {
+						out += rule.cssText + '\n';
+					} else if ( rule instanceof CSSFontFaceRule ) {
+						const fam = ( rule.style.getPropertyValue( 'font-family' ) || '' ).trim().replace( /^['"]|['"]$/g, '' );
+						// Hanken Grotesk / JetBrains Mono are Minn's own files;
+						// only a family Minn borrows from the system is aliased.
+						if ( ! [ 'hanken grotesk', 'jetbrains mono' ].includes( fam.toLowerCase() ) ) {
+							out += rule.cssText.replace( /font-family\s*:[^;}]+/i, 'font-family: "' + previewFontAlias( fam ) + '"' ) + '\n';
+						}
+					}
 				}
 			} );
 			return out;
@@ -34896,6 +34961,15 @@
 		return 'u' + ( ( B.user && B.user.id ) || 0 ) + '.' + ( h >>> 0 ).toString( 36 );
 	} )();
 	const localNetKey = ( ed ) => 'minn-net-' + localNetScope + '-' + ( ed.id ? `${ ed.type }-${ ed.id }` : 'new-' + ed.type );
+
+	// Snapshots from before the key carried site + user cannot be told apart
+	// by owner, so they are never offered; they are removed rather than left
+	// sitting in the browser.
+	try {
+		Object.keys( localStorage ).forEach( ( k ) => {
+			if ( 0 === k.indexOf( 'minn-net-' ) && ! /^minn-net-u\d+\./.test( k ) ) localStorage.removeItem( k );
+		} );
+	} catch ( e ) { /* storage blocked: nothing stored either */ }
 
 	// Logging out drops this account's snapshots on this site (core clears
 	// its own sessionStorage backups the same way on wp-login's logout).
