@@ -4630,6 +4630,13 @@ function minn_admin_license_default_providers() {
 				return array( 'ok' => false, 'code' => 'error', 'message' => wp_strip_all_tags( implode( ' ', $a->errors ) ) );
 			}
 			$am_token_reset();
+			// In their debug mode deactivate_key() ignores a remote error and
+			// removes the local license anyway, so a freed seat is not known.
+			$debug_fn = $am['prefix'] . '_is_debug_mode';
+			if ( function_exists( $debug_fn ) && $debug_fn() ) {
+				/* translators: %s: plugin name. */
+				return array( 'ok' => true, 'code' => '', 'message' => sprintf( __( 'The key was removed from this site. %s is in debug mode, which does not confirm the seat was freed; check your account.', 'minn-admin' ), $am['vendor'] ) );
+			}
 			/* translators: %s: plugin name. */
 			return array( 'ok' => true, 'code' => '', 'message' => sprintf( __( 'The key was deactivated with %s and the seat freed.', 'minn-admin' ), $am['vendor'] ) );
 		};

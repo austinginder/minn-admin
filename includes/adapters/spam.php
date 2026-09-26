@@ -157,7 +157,9 @@ function minn_admin_spam_providers() {
 					// Existing-account cleanup: the Users Spam tab lists
 					// whatever their scan already marked. The scan itself
 					// stays on their screen (date range, cloud, cooldown).
-					'userCleanup' => current_user_can( 'list_users' ) ? array(
+					// Their Find spam users screen is activate_plugins; the
+					// count of flagged accounts belongs to the same people.
+					'userCleanup' => current_user_can( 'list_users' ) && current_user_can( 'activate_plugins' ) ? array(
 						'count'    => $spam_n,
 						'checkUrl' => admin_url( 'users.php?page=ct_check_users' ),
 					) : null,

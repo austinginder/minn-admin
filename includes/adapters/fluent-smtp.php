@@ -887,6 +887,13 @@ add_action( 'rest_api_init', function () {
 					}
 					$override[] = $addr;
 				}
+				// Their own resend screen's limit (LoggerController): a list
+				// this long is a pasted address book, caught before sending.
+				$max = (int) apply_filters( 'fluentsmtp_max_resend_recipients', 25 );
+				if ( count( $override ) > $max ) {
+					/* translators: %d: maximum number of recipients. */
+					return new WP_Error( 'too_many_recipients', sprintf( __( 'Please enter no more than %d email addresses.', 'minn-admin' ), $max ), array( 'status' => 422 ) );
+				}
 			}
 
 			$original = array_filter( minn_admin_fluent_smtp_recipients( $row->to, true ), 'is_email' );
