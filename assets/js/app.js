@@ -16157,7 +16157,11 @@
 				if ( a.confirm && ! confirm( a.confirm ) ) return;
 				btn.disabled = true;
 				try {
-					const r = await api( a.route, { method: a.method || 'POST' } );
+					// `body` merges into the request here too, as it does for
+					// row, detail and bulk actions (a status-card "Database
+					// only" backup used to lose its { what: 'db' } and run a
+					// full backup).
+					const r = await api( a.route, { method: a.method || 'POST', ...( a.body ? { body: JSON.stringify( a.body ) } : {} ) } );
 					if ( a.job && r && r.job ) {
 						// A long-running job: the chip and modal take it from
 						// here; the surface refreshes when the job ends.
