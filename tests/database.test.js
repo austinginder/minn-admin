@@ -233,13 +233,18 @@ const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], {
 		const h = { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' };
 		const get = async ( q ) => { const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/db/rows?table=wp_users&per_page=1&' + q, h ); return { status: r.status, body: await r.json() }; };
 		const f = await get( 'fcol=user_pass&fq=%24' );
-		const meta = await fetch( window.MINN.restUrl + 'minn-admin/v1/db/rows?table=wp_usermeta&per_page=1&fcol=meta_value&fq=a', h );
+		const metaR = await fetch( window.MINN.restUrl + 'minn-admin/v1/db/rows?table=wp_usermeta&per_page=100&fcol=meta_value&fq=' + encodeURIComponent( 'expiration' ), h );
+		const metaB = await metaR.json();
+		const mk = ( metaB.columns || [] ).map( ( c ) => c.name ).indexOf( 'meta_key' );
+		const meta = { status: metaR.status, secretRows: ( metaB.rows || [] ).filter( ( r ) => r[ mk ] && [ 'session_tokens', '_application_passwords' ].includes( r[ mk ].v || r[ mk ] ) ).length };
 		const s = await get( 'orderby=user_pass&order=asc' );
 		const ok = await get( 'fcol=user_login&fq=a' );
-		return { filter: f.status, metaFilter: meta.status, sortedBy: s.body.orderby, normal: ok.status };
+		return { filter: f.status, meta, sortedBy: s.body.orderby, normal: ok.status };
 	} );
 	t.check( 'credential columns cannot be filtered or sorted (no LIKE / ORDER BY oracle)',
-		400 === oracle.filter && 400 === oracle.metaFilter && 'user_pass' !== oracle.sortedBy && 200 === oracle.normal, JSON.stringify( oracle ) );
+		400 === oracle.filter && 'user_pass' !== oracle.sortedBy && 200 === oracle.normal, JSON.stringify( oracle ) );
+	t.check( 'usermeta values stay searchable, with credential rows left out of the match',
+		200 === oracle.meta.status && 0 === oracle.meta.secretRows, JSON.stringify( oracle.meta ) );
 
 	await t.done( browser, errors );
 } )().catch( ( e ) => {

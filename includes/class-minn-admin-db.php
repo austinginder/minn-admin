@@ -420,12 +420,30 @@ class Minn_Admin_DB {
 		}
 		if ( 'usermeta' === $base && 'meta_value' === $col ) {
 			$key = isset( $row['meta_key'] ) ? (string) $row['meta_key'] : '';
-			return in_array( $key, array( 'session_tokens', '_application_passwords' ), true );
+			return in_array( $key, self::SECRET_USERMETA_KEYS, true );
 		}
 		if ( 'woocommerce_api_keys' === $base ) {
 			return in_array( $col, array( 'consumer_key', 'consumer_secret' ), true );
 		}
+		// Webhook signing secrets, Wordfence 2FA seeds and multisite signup
+		// activation keys are credentials the same way.
+		if ( 'wc_webhooks' === $base ) {
+			return 'secret' === $col;
+		}
+		if ( 'wfls_2fa_secrets' === $base ) {
+			return 'secret' === $col;
+		}
+		if ( 'signups' === $base ) {
+			return 'activation_key' === $col;
+		}
 		return false;
+	}
+
+	/** usermeta keys whose value is a credential (sessions, app passwords, TOTP seeds). */
+	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key' );
+
+	private static function is_usermeta_value( $table, $col ) {
+		return 'meta_value' === $col && self::is_secret_cell( $table, $col, array( 'meta_key' => 'session_tokens' ) );
 	}
 
 	/**
@@ -593,7 +611,9 @@ class Minn_Admin_DB {
 		$fcol  = (string) $request->get_param( 'fcol' );
 		$fq    = (string) $request->get_param( 'fq' );
 		$where = '';
-		if ( '' !== $fq && in_array( $fcol, $names, true ) && self::is_secret_column( $meta->name, $fcol ) ) {
+		// usermeta.meta_value is ordinary data on almost every row; it stays
+		// searchable, with the credential rows left out of the match (below).
+		if ( '' !== $fq && in_array( $fcol, $names, true ) && self::is_secret_column( $meta->name, $fcol ) && ! self::is_usermeta_value( $meta->name, $fcol ) ) {
 			return new WP_Error( 'minn_db_secret_filter', __( 'That column holds passwords or tokens, so it cannot be searched.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		if ( '' !== $fq && in_array( $fcol, $names, true ) ) {
@@ -602,6 +622,10 @@ class Minn_Admin_DB {
 				' WHERE ' . self::quote_ident( $fcol ) . ' LIKE %s',
 				'%' . $wpdb->esc_like( $fq ) . '%'
 			);
+			if ( self::is_usermeta_value( $meta->name, $fcol ) ) {
+				$keys   = self::SECRET_USERMETA_KEYS;
+				$where .= $wpdb->prepare( ' AND `meta_key` NOT IN (' . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')', $keys ); // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
 		} else {
 			$fcol = '';
 			$fq   = '';

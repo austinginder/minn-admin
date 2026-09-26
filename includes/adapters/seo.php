@@ -1636,7 +1636,7 @@ function minn_admin_seopress_role_blocked( $type ) {
 		return false;
 	}
 	$opts = get_option( 'seopress_advanced_option_name', array() );
-	$key  = 'CONTENT_ANALYSIS' === $type ? 'seopress_advanced_security_metaboxe_role_content_analysis' : 'seopress_advanced_security_metaboxe_role';
+	$key  = 'CONTENT_ANALYSIS' === $type ? 'seopress_advanced_security_metaboxe_ca_role' : 'seopress_advanced_security_metaboxe_role';
 	$list = is_array( $opts ) && isset( $opts[ $key ] ) && is_array( $opts[ $key ] ) ? $opts[ $key ] : array();
 	$user = wp_get_current_user();
 	foreach ( (array) ( $user ? $user->roles : array() ) as $role ) {

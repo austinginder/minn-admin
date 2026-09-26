@@ -445,6 +445,18 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 			} finally {
 				php( `$b = json_decode( base64_decode( '${ Buffer.from( snap ).toString( 'base64' ) }' ), true ); update_option( 'woocommerce_bacs_accounts', $b[0] ); update_option( 'woocommerce_bacs_settings', $b[1] ); echo 1;` );
 			}
+			// Unticking every box in a checkbox-only section posts nothing
+			// (unchecked boxes are absent); it must still save, as wp-admin's
+			// form does by carrying its Save button.
+			const boxSnap = php( `echo wp_json_encode( array( get_option( 'woocommerce_allow_tracking', null ), get_option( 'woocommerce_show_marketplace_suggestions', null ) ) );` );
+			try {
+				php( `update_option( 'woocommerce_allow_tracking', 'yes' ); update_option( 'woocommerce_show_marketplace_suggestions', 'yes' ); echo 1;` );
+				const boxes = await rest( 'minn-admin/v1/wc/settings/advanced/woocommerce_com', { method: 'POST', body: JSON.stringify( { values: { woocommerce_allow_tracking: false, woocommerce_show_marketplace_suggestions: false } } ) } );
+				const after = php( `echo get_option( 'woocommerce_allow_tracking' ) . ',' . get_option( 'woocommerce_show_marketplace_suggestions' );` );
+				t.check( 'unticking the last boxes of a checkbox-only section saves', boxes.status === 200 && 'no,no' === after, JSON.stringify( { status: boxes.status, after } ) );
+			} finally {
+				php( `$b = json_decode( base64_decode( '${ Buffer.from( boxSnap ).toString( 'base64' ) }' ), true ); foreach ( array( 'woocommerce_allow_tracking', 'woocommerce_show_marketplace_suggestions' ) as $i => $k ) { if ( null === $b[ $i ] ) { delete_option( $k ); } else { update_option( $k, $b[ $i ] ); } } echo 1;` );
+			}
 			const unlisted = await rest( 'minn-admin/v1/wc/settings/checkout/default', { method: 'POST', body: JSON.stringify( { values: { x: 1 } } ) } );
 			t.check( 'a section Minn does not draw (Payments default) refuses a save', unlisted.status === 400 && unlisted.body && 'minn_wc_not_editable' === unlisted.body.code, JSON.stringify( unlisted ) );
 		}

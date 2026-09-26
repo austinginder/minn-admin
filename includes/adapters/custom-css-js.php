@@ -107,14 +107,6 @@ function minn_admin_ccj_can_write_code( $opts ) {
 }
 
 /**
- * Whether this caller may make an EXISTING snippet run.
- *
- * Publishing is the same privilege as authoring: the stored bytes are written
- * to CCJ_UPLOAD_DIR and, for a js snippet or an admin-side one, execute in a
- * context this caller may not write to. Checked against the snippet's stored
- * options rather than anything in the request.
- */
-/**
  * The per-object checks their post.php screen makes on top of the list cap:
  * edit_post / delete_post on this snippet (core maps them to their
  * edit_custom_css / delete_custom_css) and the type's publish cap to switch
@@ -126,6 +118,13 @@ function minn_admin_ccj_can_write_code( $opts ) {
  * @return bool
  */
 function minn_admin_ccj_obj_can( $verb, $post_id = 0 ) {
+	// Administrators are in, as minn_admin_ccj_can() already lets them: their
+	// installer grants admins the snippet caps only when an admin activates
+	// the plugin in wp-admin, so a WP-CLI, network or file-copy install leaves
+	// admins listing snippets they could then not edit.
+	if ( current_user_can( 'manage_options' ) ) {
+		return true;
+	}
 	if ( 'publish' === $verb ) {
 		$pto = get_post_type_object( 'custom-css-js' );
 		return $pto && current_user_can( $pto->cap->publish_posts );
@@ -137,6 +136,14 @@ function minn_admin_ccj_obj_error() {
 	return new WP_Error( 'minn_ccj_forbidden', __( 'You do not have permission to change this snippet.', 'minn-admin' ), array( 'status' => 403 ) );
 }
 
+/**
+ * Whether this caller may make an EXISTING snippet run.
+ *
+ * Publishing is the same privilege as authoring: the stored bytes are written
+ * to CCJ_UPLOAD_DIR and, for a js snippet or an admin-side one, execute in a
+ * context this caller may not write to. Checked against the snippet's stored
+ * options rather than anything in the request.
+ */
 function minn_admin_ccj_can_activate( $post_id ) {
 	return minn_admin_ccj_can_write_code( minn_admin_ccj_get_options( (int) $post_id ) );
 }

@@ -1017,7 +1017,11 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited, $fields = null, $r
 					if ( 'yes' === $stored || true === $stored || '1' === $stored ) {
 						$post[ $obj->get_field_key( $key ) ] = '1';
 					}
-				} elseif ( is_scalar( $stored ) || is_array( $stored ) ) {
+				} elseif ( is_scalar( $stored ) ) {
+					$post[ $obj->get_field_key( $key ) ] = $stored;
+				} elseif ( is_array( $stored ) && method_exists( $obj, 'validate_' . $type . '_field' ) ) {
+					// An array only where the object has a validator for its
+					// type; their text fallback would fatal on it.
 					$post[ $obj->get_field_key( $key ) ] = $stored;
 				}
 			}
@@ -1028,7 +1032,9 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited, $fields = null, $r
 	// $_POST['bacs_account_*'], writing an EMPTY list when they are absent. Minn
 	// does not edit accounts, so post the stored ones back exactly.
 	if ( isset( $obj->id ) && 'bacs' === $obj->id ) {
-		$accounts = get_option( 'woocommerce_bacs_accounts', array() );
+		// The accounts the gateway itself loaded (their get_option with the
+		// legacy single-account fallback for stores that never saved the list).
+		$accounts = isset( $obj->account_details ) && is_array( $obj->account_details ) ? $obj->account_details : get_option( 'woocommerce_bacs_accounts', array() );
 		$cols     = array(
 			'bacs_account_name'   => 'account_name',
 			'bacs_account_number' => 'account_number',
@@ -1614,8 +1620,12 @@ add_action(
 						if ( is_wp_error( $post ) ) {
 							return $post;
 						}
+						// Unticking the last box of a checkbox-only section leaves
+						// nothing to post (unchecked boxes are simply absent), and
+						// WooCommerce's save ignores an empty form. Its own form
+						// always carries the Save button, so send that too.
 						if ( ! $post ) {
-							return new WP_Error( 'minn_wc_nothing', __( 'Nothing to save.', 'minn-admin' ), array( 'status' => 400 ) );
+							$post = array( 'save' => 'Save changes' );
 						}
 						try {
 							minn_admin_wc_settings_run_save( $page, $section, $post );
