@@ -58,7 +58,8 @@ Expand only the part of Minn you want to explore.
 
 - **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
   is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP,
-  **Plausible Analytics**, **Matomo**, Google Analytics through **Site Kit**, or **Jetpack Stats**), **click a bar for
+  **Plausible Analytics**, **Matomo** (in WordPress, self-hosted or Cloud via **Connect Matomo**), Google Analytics through
+  **Site Kit**, **MonsterInsights** or **ExactMetrics**, or **Jetpack Stats**), **click a bar for
   that day's top pages and referrers** (Koko, WP Statistics, Burst, Independent Analytics,
   Plausible Analytics, Matomo and Jetpack Stats today; others join via `minn_admin_traffic_day`) and step through
   days with the arrow keys, plus a recent-activity feed. **Open stats** (also a palette command)
@@ -376,9 +377,11 @@ Expand only the part of Minn you want to explore.
   retargets a message, and its daily connection check surfaces on the status card and
   System health);
   **Activity Log** (Simple History, WP Activity Log, Aryo, Stream, All-In-One Security,
-  Wordfence login security, plus **Limit Login Attempts Reloaded** and **Solid Security**
-  lockouts with unlock/release actions) reads like an audit feed; **Redirects** (Redirection,
-  Safe Redirect Manager, Simple 301 Redirects, 301 Redirects) lists, searches, creates and
+  Wordfence login security, **Sucuri**, plus **Limit Login Attempts Reloaded** and **Solid Security**
+  lockouts with unlock/release actions) reads like an audit feed with a fourteen-day chart;
+  **Broken links** (Broken Link Checker) rechecks, edits, unlinks and dismisses in place;
+  **Redirects** (Redirection, Rank Math, Safe Redirect Manager, Simple 301 Redirects, 301 Redirects)
+  lists, searches, creates and
   edits, with **sortable columns** on Redirection; **Snippets** (Code
   Snippets, WPCode, FluentSnippets, Simple Custom CSS and JS, Header Footer Code Manager) lists,
   toggles, creates and bulk-edits; **Performance** (Perfmatters, Autoptimize, Asset CleanUp,
@@ -407,6 +410,7 @@ Expand only the part of Minn you want to explore.
   the endpoint to copy), every credential that can reach the site (OAuth apps, client ids,
   application passwords) with Revoke through the plugin's own revocation, and one switch per
   registered ability grouped by category, saved into Novamira's own rules; tokens never appear.
+  **Elementor MCP** (Elementor 4.3+) shows alongside: its switch and its connections with Revoke.
   With **Novamira Pro**: license state and activation from the Licenses tab, and a **Memory**
   view of what agents remember between sessions
 
@@ -420,9 +424,9 @@ Expand only the part of Minn you want to explore.
   extracted as structured data (never their HTML or JavaScript) into a Notices tab; **Allow /
   No Thanks** and ThemeIsle-style dismiss links run in the background (not a new wp-admin tab),
   and any notice can be hidden with Undo. Each update offer has its own **Update → version**
-  button; the Updates tab also pins **Update everything** (plugins, themes and core in one
-  click, poll-verified core). Plugins run as **one batch** the way `wp plugin update --all`
-  does, with packages prefetched side by side and a panel that reports every plugin's
+  button; the Updates tab also pins **Update everything** (plugins, themes, language packs and core in
+  one click, poll-verified core). Plugins, themes and language packs run as **one batch** the way
+  `wp plugin update --all` does, with packages prefetched side by side and a panel that reports every item's
   download, extract and install like a package manager, keeps moving through WordPress's
   maintenance-mode window, and installs nothing Minn's own checksum check refused. A pending
   WordPress update also shows as an amber topbar chip and Overview banner

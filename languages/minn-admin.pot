@@ -2,7 +2,7 @@
 # This file is distributed under the MIT.
 msgid ""
 msgstr ""
-"Project-Id-Version: Minn Admin 0.41.0\n"
+"Project-Id-Version: Minn Admin 0.42.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/minn-admin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"

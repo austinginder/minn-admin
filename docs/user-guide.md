@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.41.0. This file ships inside the plugin, so the copy you
+*Current as of v0.42.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -41,7 +41,7 @@ without a store still has the shorter navigation it needs:
   laid out like an order: the service and time on one side, the customer on
   the other.
 - **Tools** — site plumbing contributed by your plugins: mail
-  logs, activity logs, redirects, backups, snippets. Plugins whose Minn
+  logs, activity logs, redirects, broken links, backups, snippets. Plugins whose Minn
   presence is purely a settings screen, and a theme's options pages,
   gather under a single **Site Options** entry here rather than each
   claiming its own sidebar spot.
@@ -258,7 +258,9 @@ away:
 - **Saving is status-aware.** Drafts autosave as you write. Published
   posts never change under you: edits back up silently, and the live post
   only updates when you press Update. A crash net keeps a local copy of
-  unsaved work in your browser and offers to restore it. A live post
+  unsaved work in your browser and offers to restore it. That copy
+  belongs to your account on this site, and signing out clears it, so a
+  shared browser never offers your draft to the next person. A live post
   holding edits you never published wears a small amber dot on its status
   in the content list, and the Modified filter there shows only those
   (the filter spans every author, so it is offered to people who may edit
@@ -380,9 +382,10 @@ Minn's interface.
 **Updates**: the Updates tab shows everything pending, and **Update
 everything** runs plugins, then themes, then any waiting translations, then
 WordPress core, telling you exactly what will change and what is untouched
-before it starts. Plugins run as one batch, the way the command line does
-it, and a panel reports it the way a package manager would: every plugin on
-its own line with its old and new version, packages fetched several at a
+before it starts. Plugins, themes and language packs run as one batch, the
+way the command line does it, and a panel reports it the way a package
+manager would: every plugin, theme and pack on its own line down one list
+with its old and new version, packages fetched several at a
 time before anything installs, then Extracting, Installing and a tick moving
 down the list, and a closing line with the totals. Hide the panel and the
 batch keeps running; a chip in the top bar counts it down and reopens it.
@@ -402,7 +405,9 @@ runs the required database upgrade across the network's sites. Very large
 networks are sent to WordPress's own Upgrade Network screen instead.
 
 **Traffic**: with a supported analytics plugin active (Koko Analytics,
-Plausible Analytics, Matomo, Independent Analytics, Jetpack Stats, Site Kit and others), the
+Plausible Analytics, Matomo, Independent Analytics, MonsterInsights,
+ExactMetrics, Jetpack Stats, Site Kit and others, plus a self-hosted Matomo
+or Matomo Cloud connected through Connect Matomo), the
 Overview chart shows the recent pulse: daily visitors and pageviews from
 that plugin's own numbers. Click a day for its top pages and referrers,
 and step through days with the arrow keys without closing the dialog.
@@ -432,18 +437,26 @@ application passwords) with when it was made, last used and expires, and
 Revoke on each, run through the plugin's own revocation. Abilities opens on
 the Context tab holding the instructions every agent session reads, then
 one switch per ability grouped by category, saved into Novamira's own
-rules, and an agent cannot switch a disabled ability back on for itself.
+rules, and an agent cannot switch a disabled ability back on for itself:
+changes to the switch, the rules, connections and memories need your
+signed-in browser session, not an agent's application password.
 Tokens and passwords never appear. With Novamira Pro, the card reports the
 license (activated from Extensions → Licenses) and a Memory view lists what
 agents remember between sessions, with edit and delete. Connecting a
-client, Chat, Design and Skills stay on Novamira's screens.
+client, Chat, Design and Skills stay on Novamira's screens. Elementor's own
+MCP server (Elementor 4.3 and later) appears there too: whether it is on,
+the same switch Elementor uses, and its connections with Revoke.
 
 Many plugin pages open with a card that charts the last fourteen days:
-mail providers draw sent and failed, forms providers draw entries, and
-bookings draw the fortnight ahead. Where the list beneath can honour it,
+mail providers draw sent and failed, forms providers draw entries,
+activity logs draw events per day by severity, and bookings draw the
+fortnight ahead. Where the list beneath can honour it,
 clicking a bar narrows that list to the day you clicked, with a chip
 naming the day and clearing it again. It combines with the tabs and the
-search, so Failed plus a bar is that day's failures.
+search, so Failed plus a bar is that day's failures. Opening a logged
+email shows it without loading its remote images, styles or fonts, so
+reading it never fires a sender's tracking pixel; a bar above the message
+loads them for that one email when you ask.
 
 Backups and exports start from the Backups page's status card and run in
 the background, so you can carry on working or close the tab. A pill in
@@ -504,7 +517,8 @@ update system as everything else. Open **Extensions → Translations** to see
 every language whose files are on this site, not only the ones with an
 update waiting. Each language names how many WordPress, plugin and theme
 translations it carries, and how many are waiting to update. **Update
-translations** runs that queue on its own, while **Check for updates**
+translations** runs that queue on its own as one batch, in the same panel
+Update everything uses, while **Check for updates**
 refreshes it alongside plugin and theme updates. Large batches keep their
 progress visible in the top bar, so you can continue working while they
 finish. Languages nothing uses get a Remove action that deletes their
@@ -653,9 +667,10 @@ group.
 - **Store settings** is the last item in the Commerce group, for anyone
   who can manage WooCommerce. It carries a section for each page
   WooCommerce registers (General, Products, Tax, Shipping, Accounts &
-  Privacy, Emails, Page setup, Features, and any extension's own page,
-  Subscriptions included), read from WooCommerce's settings registry, so a
-  new extension's settings appear without waiting for Minn. Countries pick
+  Privacy, Emails, Page setup, Features, and any extension's own page),
+  read from WooCommerce's settings registry, so a new extension's settings
+  appear without waiting for Minn. WooCommerce Subscriptions' settings stay
+  on WooCommerce's screen, because its save only accepts its own form. Countries pick
   from a searchable list, the store location is one country-and-state
   box, pages are pickers, and saves run through WooCommerce's own save
   pipeline, so its rules and every extension listening for a save still
@@ -898,6 +913,10 @@ On Windows and Linux, use Ctrl wherever ⌘ appears.
   to. Plugins describe their screens to Minn as plain data; their own
   code never draws inside the app, so a broken or pushy plugin cannot
   take the interface down with it or plaster it with banners.
+- **Can a post's own markup reach Minn?** No. Scripts, event handlers and
+  stylesheets inside content stay switched off while you edit, block
+  styles apply only inside the editor, and the post is saved exactly as
+  it was written.
 - **Who can open `/minn-admin/`?** Only logged-in users your site already
   trusts to edit content, and each person sees only what their role
   allows. Everything is re-checked on the server on every action.
