@@ -2148,20 +2148,37 @@
 	// ride in the editor DOM itself, and stops at Minn's chrome. The writer's
 	// text is parked on the element for rtUnpark to put back.
 	const RT_PARK_CSS = RT_PARK_PREFIX + 'css';
+	const RT_PARK_MEDIA = RT_PARK_PREFIX + 'media';
 	// HTML and SVG both: an SVG <style> (lower-case tagName) is just as global.
 	const rtIsStyle = ( el ) => 'style' === String( el.localName || '' ).toLowerCase();
 	function rtParkStyle( el ) {
-		if ( ! rtIsStyle( el ) || el.hasAttribute( RT_PARK_CSS ) ) return;
+		if ( ! rtIsStyle( el ) || el.hasAttribute( RT_PARK_CSS ) || el.hasAttribute( RT_PARK_MEDIA ) ) return;
+		// An SVG <style> can hold element children; rewriting its text would
+		// flatten them away on save. It is switched off instead (media "not
+		// all"), with its own media value parked for the serializer.
+		if ( el.children && el.children.length ) {
+			el.setAttribute( RT_PARK_MEDIA, el.hasAttribute( 'media' ) ? '1' + el.getAttribute( 'media' ) : '0' );
+			el.setAttribute( 'media', 'not all' );
+			return;
+		}
 		const css = el.textContent;
 		el.setAttribute( RT_PARK_CSS, css );
 		// The CSSOM decodes escapes when it re-serializes (a string written as
 		// "\3c/style\3e" comes back as a literal "</style>"), and this text
 		// can be turned back into markup by an insertHTML or innerHTML sink.
-		// Every "<" goes back out as a CSS escape, which means the same thing
-		// inside a CSS string and can never close the element.
-		el.textContent = css ? scopeCssToPreviews( css, '.minn-editor-body' ).replace( /</g, '\\3c ' ) : '';
+		// Only "</" can end a raw-text <style>, so that pair goes back out as
+		// a CSS escape (identical inside a string); a bare "<" is left alone
+		// because it is real syntax elsewhere (@media (width < 600px)).
+		el.textContent = css ? scopeCssToPreviews( css, '.minn-editor-body' ).replace( /<\//g, '\\3c /' ) : '';
 	}
 	function rtUnparkStyle( el ) {
+		if ( rtIsStyle( el ) && el.hasAttribute( RT_PARK_MEDIA ) ) {
+			const m = el.getAttribute( RT_PARK_MEDIA );
+			el.removeAttribute( RT_PARK_MEDIA );
+			if ( '1' === m.charAt( 0 ) ) el.setAttribute( 'media', m.slice( 1 ) );
+			else el.removeAttribute( 'media' );
+			return;
+		}
 		if ( ! rtIsStyle( el ) || ! el.hasAttribute( RT_PARK_CSS ) ) return;
 		el.textContent = el.getAttribute( RT_PARK_CSS );
 		el.removeAttribute( RT_PARK_CSS );
@@ -2199,6 +2216,21 @@
 			if ( el.content && el.content.nodeType === 11 ) rtUnpark( el.content );
 		} );
 		return root;
+	}
+
+	// Markup copied out of the editor for OTHER apps: this page's parked
+	// attributes are dropped (never restored, so nothing live and no page
+	// token leaves in the clipboard), and a parked <style> gets the writer's
+	// own text back in place of the editor-scoped copy.
+	function rtClipboardHtml( html ) {
+		const holder = inertParse( String( html || '' ) );
+		$$( '*', holder ).forEach( ( el ) => {
+			rtUnparkStyle( el );
+			Array.from( el.attributes || [] ).forEach( ( a ) => {
+				if ( 0 === a.name.toLowerCase().indexOf( RT_PARK_PREFIX ) ) el.removeAttribute( a.name );
+			} );
+		} );
+		return holder.innerHTML;
 	}
 
 	// The string form of rtNeutralizeInto, for the one sink that cannot take
@@ -29441,7 +29473,7 @@
 		if ( ! plain && ! html && ! blockMarkup ) return;
 		e.preventDefault();
 		if ( plain ) cd.setData( 'text/plain', plain );
-		if ( html ) cd.setData( 'text/html', html );
+		if ( html ) cd.setData( 'text/html', rtClipboardHtml( html ) );
 		if ( blockMarkup ) cd.setData( 'text/x-minn-blocks', blockMarkup );
 
 		if ( ! isCut ) return;
@@ -30858,8 +30890,73 @@
 		const SCOPE = scope || '.minn-island-preview';
 		const scopeRe = SCOPE.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
 		const shellRe = new RegExp( '^' + scopeRe + '(?::[\\w-]+(?:\\([^)]*\\))?)*$' );
-		const siblingOut = new RegExp( scopeRe + '(?::[\\w-]+(?:\\([^)]*\\))?)*\\s*[~+]' );
-		const scopeSelector = ( selectorText ) => selectorText.split( ',' ).map( ( sel ) => {
+		// Split a selector list on TOP-LEVEL commas only (":is(a, b)" stays
+		// one branch), skipping brackets, parentheses and quoted strings.
+		const splitList = ( text ) => {
+			const parts = [];
+			let depth = 0;
+			let quote = '';
+			let cur = '';
+			for ( let i = 0; i < text.length; i++ ) {
+				const ch = text[ i ];
+				if ( quote ) {
+					cur += ch;
+					if ( '\\' === ch && i + 1 < text.length ) cur += text[ ++i ];
+					else if ( ch === quote ) quote = '';
+					continue;
+				}
+				if ( '"' === ch || "'" === ch ) quote = ch;
+				else if ( '(' === ch || '[' === ch ) depth++;
+				else if ( ')' === ch || ']' === ch ) depth = Math.max( 0, depth - 1 );
+				else if ( ',' === ch && ! depth ) {
+					parts.push( cur );
+					cur = '';
+					continue;
+				}
+				cur += ch;
+			}
+			parts.push( cur );
+			return parts.map( ( x ) => x.trim() ).filter( Boolean );
+		};
+		// Past the scope's own compound ("SCOPE", "SCOPE[class]:hover"), a
+		// sibling combinator reaches Minn's chrome beside the editor body or
+		// a preview. Parsed, not pattern-matched: attribute selectors, ids
+		// and nested parentheses all sit inside the compound.
+		const reachesSiblings = ( sel ) => {
+			if ( ! sel.startsWith( SCOPE ) ) return false;
+			let depth = 0;
+			let quote = '';
+			for ( let i = SCOPE.length; i < sel.length; i++ ) {
+				const ch = sel[ i ];
+				if ( quote ) {
+					if ( '\\' === ch ) i++;
+					else if ( ch === quote ) quote = '';
+					continue;
+				}
+				if ( '"' === ch || "'" === ch ) quote = ch;
+				else if ( '(' === ch || '[' === ch ) depth++;
+				else if ( ')' === ch || ']' === ch ) depth = Math.max( 0, depth - 1 );
+				else if ( ! depth && /[\s>~+]/.test( ch ) ) {
+					const rest = sel.slice( i ).trimStart();
+					return '~' === rest[ 0 ] || '+' === rest[ 0 ];
+				}
+			}
+			return false;
+		};
+		// A nested rule's selector, made absolute against its parent's. A
+		// leading & under a one-branch parent is plain text substitution
+		// (".card { &:hover }" becomes ".card:hover"); anything else wraps
+		// the parent in :is(), and the result is scoped like any top-level
+		// rule, so ":not(&)" can never select outside the scope.
+		const resolveNested = ( selectorText, parent ) => {
+			const one = 1 === splitList( parent ).length;
+			return splitList( selectorText ).map( ( sel ) => {
+				if ( one && 0 === sel.indexOf( '&' ) && -1 === sel.indexOf( '&', 1 ) ) return parent + sel.slice( 1 );
+				if ( -1 !== sel.indexOf( '&' ) ) return sel.replace( /&/g, ':is(' + parent + ')' );
+				return ( one ? parent : ':is(' + parent + ')' ) + ' ' + sel;
+			} ).join( ', ' );
+		};
+		const scopeSelector = ( selectorText ) => splitList( selectorText ).map( ( sel ) => {
 			let s = sel.trim();
 			if ( ! s ) return s;
 			s = s.replace( /(^|[\s>+~])(:root|html|body)(?![\w-])/gi, ( m0, pre ) => pre + '&' );
@@ -30873,13 +30970,11 @@
 			s = s.replace( /^&(\s*&)*/, SCOPE ); // ":root body …" chains collapse
 			s = s.replace( /&/g, SCOPE );
 			s = s.startsWith( SCOPE ) ? s : SCOPE + ' ' + s;
-			// "body ~ x" / "body + x" would reach the scope's SIBLINGS (Minn's
-			// own chrome beside the editor body or a preview): dropped.
-			return siblingOut.test( s ) ? '' : s;
+			return reachesSiblings( s ) ? '' : s;
 		} ).filter( Boolean ).join( ', ' );
 		// True when every comma-branch of the scoped selector is the preview
 		// shell itself (body / html / :root alone, not "body .card").
-		const isPreviewShell = ( scoped ) => scoped.split( ',' ).every( ( s ) => {
+		const isPreviewShell = ( scoped ) => splitList( scoped ).every( ( s ) => {
 			const t = s.trim().replace( /\s+/g, ' ' );
 			return t === SCOPE || shellRe.test( t );
 		} );
@@ -30897,27 +30992,34 @@
 				const lead = m.match( /^[;{\s]/ );
 				return lead ? lead[ 0 ] : '';
 			} );
-		const walk = ( rules ) => {
+		const emit = ( selectorText, decl ) => {
+			const scoped = scopeSelector( selectorText );
+			if ( ! scoped || ! decl ) return '';
+			let body = previewAliasFamilies( '{ ' + decl + ' }' );
+			if ( isPreviewShell( scoped ) ) body = stripShellCanvas( body );
+			return scoped + ' ' + body + '\n';
+		};
+		// Nested rules are flattened: each nested selector is made absolute
+		// against its parent and scoped on its own. Copying the nested body
+		// through verbatim let ":not(&)" or "& ~ *" select outside the scope.
+		const walk = ( rules, parent ) => {
 			let out = '';
 			Array.from( rules ).forEach( ( rule ) => {
 				if ( rule instanceof CSSStyleRule ) {
-					// Emit the FULL rule body (not just declarations) so CSS
-					// nesting survives — nested selectors are &-relative, so
-					// scoping the parent selector scopes them too.
-					let body = previewAliasFamilies( rule.cssText.slice( rule.cssText.indexOf( '{' ) ) );
-					const scoped = scopeSelector( rule.selectorText );
-					if ( ! scoped ) return;
-					if ( isPreviewShell( scoped ) ) body = stripShellCanvas( body );
-					out += scoped + ' ' + body + '\n';
+					const own = parent ? resolveNested( rule.selectorText, parent ) : rule.selectorText;
+					out += emit( own, rule.style.cssText );
+					if ( rule.cssRules && rule.cssRules.length ) out += walk( rule.cssRules, own );
+				} else if ( window.CSSNestedDeclarations && rule instanceof CSSNestedDeclarations ) {
+					if ( parent ) out += emit( parent, rule.style.cssText );
 				} else if ( rule instanceof CSSMediaRule ) {
-					out += '@media ' + rule.conditionText + ' {\n' + walk( rule.cssRules ) + '}\n';
+					out += '@media ' + rule.conditionText + ' {\n' + walk( rule.cssRules, parent ) + '}\n';
 				} else if ( rule instanceof CSSSupportsRule ) {
-					out += '@supports ' + rule.conditionText + ' {\n' + walk( rule.cssRules ) + '}\n';
+					out += '@supports ' + rule.conditionText + ' {\n' + walk( rule.cssRules, parent ) + '}\n';
 				} else if ( window.CSSLayerBlockRule && rule instanceof CSSLayerBlockRule ) {
 					// Compiled Tailwind (atomic-wind et al) wraps everything in
 					// @layer — unwrap and scope the contents. Losing the layer
 					// raises specificity, which is what a preview wants anyway.
-					out += walk( rule.cssRules );
+					out += walk( rule.cssRules, parent );
 				} else if ( window.CSSLayerStatementRule && rule instanceof CSSLayerStatementRule ) {
 					// @layer ordering statement — nothing to scope.
 				} else if (
@@ -30945,7 +31047,7 @@
 			} );
 			return out;
 		};
-		return walk( sheet.cssRules );
+		return walk( sheet.cssRules, '' );
 	}
 
 	// Minimal wpautop for editing classic content.

@@ -132,11 +132,19 @@ const CLASSIC = CLASSIC_STYLE + '\n<p class="acme-classic">Classic paragraph.</p
 	const SVG = '<!-- wp:acme/svg -->\n<div class="acme-svg"><svg width="10" height="10"><style>.minn-topbar{outline:5px solid rgb(5, 5, 5)}</style></svg></div>\n<!-- /wp:acme/svg -->';
 	const PRESET = '<!-- wp:acme/preset -->\n<div class="acme-preset"><style data-minn-inert-css="">.minn-topbar{border-left:9px solid rgb(9, 8, 7)}</style>preset</div>\n<!-- /wp:acme/preset -->';
 	const SIB = '<!-- wp:acme/sib -->\n<div class="acme-sib"><style>body ~ * {box-shadow:0 0 0 3px rgb(3, 3, 3)} body + * {box-shadow:0 0 0 3px rgb(3, 3, 3)}</style>sib</div>\n<!-- /wp:acme/sib -->';
+	// Nested rules and selector shapes that once escaped the scope, plus a
+	// "<" comparison that must keep working inside the preview.
+	const NEST = '<!-- wp:acme/nest -->\n<div class="acme-nest"><style>.acme-nest .x{:not(&){outline:3px solid rgb(4, 4, 4)} & ~ *{border-top:3px solid rgb(4, 4, 5)}} :root:has(.acme-nest) .minn-topbar{border-bottom:3px solid rgb(4, 5, 4)} body[class] ~ *{box-shadow:0 0 0 2px rgb(5, 4, 4)} @media (width < 99999px){.acme-nest p{color:rgb(2, 4, 6)}}</style><p>nested</p><span class="x">x</span></div>\n<!-- /wp:acme/nest -->';
+	// An SVG <style> with an element child: switched off, never flattened.
+	const SVGKID = '<!-- wp:acme/svgkid -->\n<div class="acme-svgkid"><svg width="10" height="10"><style>.minn-topbar{outline:6px solid rgb(6, 6, 6)}<a>kid</a></style></svg></div>\n<!-- /wp:acme/svgkid -->';
+	// The same SVG inside editable prose, which is serialized from the DOM.
+	const SVGP_INNER = '<svg width="10" height="10"><style>.acme-svgp{fill:red}<a>kid</a></style></svg> svg in prose';
+	const SVGP = '<!-- wp:paragraph -->\n<p>' + SVGP_INNER + '</p>\n<!-- /wp:paragraph -->';
 	const STORED_ATTR = 'data-minn-inert-onerror="window.__pwnStored=1"';
 	const STORED = '<!-- wp:paragraph -->\n<p>Stored <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" ' + STORED_ATTR + ' alt=""></p>\n<!-- /wp:paragraph -->';
 	let hid = 0;
 	try {
-		hid = await createPost( page, { title: 'Hostile style probe', content: SVG + '\n\n' + PRESET + '\n\n' + SIB + '\n\n' + STORED + '\n\n<!-- wp:paragraph -->\n<p>Last.</p>\n<!-- /wp:paragraph -->' } );
+		hid = await createPost( page, { title: 'Hostile style probe', content: SVG + '\n\n' + PRESET + '\n\n' + SIB + '\n\n' + NEST + '\n\n' + SVGKID + '\n\n' + SVGP + '\n\n' + STORED + '\n\n<!-- wp:paragraph -->\n<p>Last.</p>\n<!-- /wp:paragraph -->' } );
 		await openEditor( page, hid );
 		await page.waitForSelector( '.minn-island-preview .acme-sib', { timeout: 20000 } );
 		await page.waitForTimeout( 800 );
@@ -149,8 +157,15 @@ const CLASSIC = CLASSIC_STYLE + '\n<p class="acme-classic">Classic paragraph.</p
 				border: bar.borderLeftWidth + ' ' + bar.borderLeftColor,
 				sibShadow: sibs.map( ( x ) => getComputedStyle( x ).boxShadow ).filter( ( v ) => v.indexOf( 'rgb(3, 3, 3)' ) !== -1 ).length,
 				liveOnerror: document.querySelectorAll( '#minn-editor-body img[onerror]' ).length,
+				chromeHits: [ document.querySelector( '.minn-topbar' ) ].concat( sibs, Array.from( document.querySelectorAll( '.minn-editor-side, .minn-editor-toolbar' ) ) ).filter( Boolean ).map( ( el ) => {
+					const c = getComputedStyle( el );
+					return [ c.outlineColor, c.borderTopColor, c.borderBottomColor, c.boxShadow ].join( ' ' );
+				} ).filter( ( v ) => /rgb\(4, 4, 4\)|rgb\(4, 4, 5\)|rgb\(4, 5, 4\)|rgb\(5, 4, 4\)|rgb\(6, 6, 6\)/.test( v ) ).length,
+				mediaLt: ( () => { const p = document.querySelector( '.minn-island-preview .acme-nest p' ); return p ? getComputedStyle( p ).color : ''; } )(),
 			};
 		} );
+		t.check( 'nested :not(&), & ~ *, :root:has(), body[class] ~ * and SVG-with-children styles stay off Minn\'s chrome', 0 === h.chromeHits, String( h.chromeHits ) );
+		t.check( 'a "<" media range still applies inside the preview', 'rgb(2, 4, 6)' === h.mediaLt, h.mediaLt );
 		t.check( 'SVG <style> in a preview does not restyle Minn', h.outline.indexOf( 'rgb(5, 5, 5)' ) === -1, h.outline );
 		t.check( 'a stored data-minn-inert-css does not skip the scoping', h.border.indexOf( 'rgb(9, 8, 7)' ) === -1, h.border );
 		t.check( 'body ~ * / body + * cannot reach the editor body\'s siblings', 0 === h.sibShadow, String( h.sibShadow ) );
@@ -193,6 +208,9 @@ const CLASSIC = CLASSIC_STYLE + '\n<p class="acme-classic">Classic paragraph.</p
 		const storedImg = ( hraw.match( /<img[^>]*>/ ) || [ '' ] )[ 0 ];
 		t.check( 'stored parked-looking attribute saved byte-for-byte, not unparked', storedImg.indexOf( STORED_ATTR ) !== -1 && ! /\sonerror=/.test( storedImg ), storedImg );
 		t.check( 'stored data-minn-inert-css saved as written', hraw.indexOf( PRESET.split( '\n' )[ 1 ] ) !== -1 );
+		t.check( 'nested style saved byte-for-byte', hraw.indexOf( NEST.split( '\n' )[ 1 ] ) !== -1 );
+		t.check( 'SVG <style> with an element child saved byte-for-byte', hraw.indexOf( SVGKID.split( '\n' )[ 1 ] ) !== -1, ( hraw.match( /<svg[\s\S]*?<\/svg>/g ) || [] ).join( ' | ' ) );
+		t.check( 'SVG <style> with an element child in editable prose saved byte-for-byte', hraw.indexOf( SVGP_INNER ) !== -1, ( hraw.match( /<svg[\s\S]*?<\/svg>/g ) || [] ).join( ' | ' ) );
 	} finally {
 		await deletePost( page, hid );
 	}
