@@ -8620,7 +8620,7 @@
 		return ( ( b.first_name || '' ) + ' ' + ( b.last_name || '' ) ).trim() || b.email || 'Guest';
 	}
 
-	const ORDER_DETAIL_FIELDS = 'id,number,status,total,total_tax,discount_total,shipping_total,currency,currency_symbol,date_created,date_paid,billing,shipping,line_items,coupon_lines,refunds,payment_url,needs_payment,payment_method,payment_method_title,transaction_id,customer_note,customer_id,is_editable,meta_data';
+	const ORDER_DETAIL_FIELDS = 'id,number,status,total,total_tax,discount_total,shipping_total,currency,currency_symbol,date_created,date_paid,billing,shipping,line_items,coupon_lines,refunds,payment_url,needs_payment,payment_method,payment_method_title,transaction_id,minn_transaction,customer_note,customer_id,is_editable,meta_data';
 
 	const ORDER_RELATED_FIELDS = 'id,number,status,total,currency,currency_symbol,date_created';
 
@@ -9395,6 +9395,14 @@
 		const emails = m.emails;
 		const curMethod = o.payment_method || '';
 		const payLoading = canEdit && m.gateways == null;
+		// The provider's own page for this payment (the link wp-admin puts
+		// on the transaction ID). It describes the SAVED method and ID, so
+		// the bind hides it while either is edited.
+		const txn = o.minn_transaction && /^https?:\/\//i.test( o.minn_transaction.url || '' ) ? o.minn_transaction : null;
+		const txnLink = txn ? `<a class="minn-order-txn-link" id="minn-o-txn-link" href="${ esc( txn.url ) }" target="_blank" rel="noopener noreferrer" title="${ esc( txn.url ) }">${ esc( txn.provider
+			/* translators: %s: payment provider name, e.g. "Stripe". */
+			? sprintf( __( 'View in %s' ), txn.provider )
+			: __( 'View payment' ) ) } ↗</a>` : '';
 		// Read-first sidebar: cards show text; each pencil opens an edit
 		// dialog (openOrderSubModal) whose Save rides the one save flow.
 		// With no inline forms in the DOM, the save path falls back to the
@@ -9478,13 +9486,13 @@
 								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Payment' ) ) }</div>${ paidChip }</div>
 								${ payLoading ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading payment methods…' ) ) }</div>` : `
 								<div class="minn-order-field-row">
-									<div style="flex:1;">
+									<div>
 										<div class="minn-field-label">${ esc( __( 'Payment method' ) ) }</div>
 										${ orderCombo( 'paymethod', __( 'Payment method' ) ) }
 									</div>
-									<div style="flex:1;">
-										<div class="minn-field-label">${ esc( __( 'Transaction ID' ) ) }</div>
-										<input class="minn-input" id="minn-o-txn" value="${ esc( o.transaction_id || '' ) }" placeholder="${ esc( __( 'Check number, reference…' ) ) }">
+									<div>
+										<div class="minn-order-txn-label"><div class="minn-field-label">${ esc( __( 'Transaction ID' ) ) }</div>${ txnLink }</div>
+										<input class="minn-input" id="minn-o-txn" spellcheck="false" value="${ esc( o.transaction_id || '' ) }" placeholder="${ esc( __( 'Check number, reference…' ) ) }">
 									</div>
 								</div>
 								<div id="minn-o-paytitle-wrap" style="margin-top:8px;${ curMethod === 'other' ? '' : ' display:none;' }">
@@ -9777,6 +9785,16 @@
 				return inp ? ( inp.dataset.acValue != null ? inp.dataset.acValue : inp.value ) : null;
 			};
 			const ocSeed = ( key, fallback ) => ( m.edits[ 'oc:' + key ] != null ? m.edits[ 'oc:' + key ] : fallback );
+			// The transaction link points at the saved payment; an edited
+			// method or ID would make it open the wrong one until saved.
+			function syncTxnLink() {
+				const a = $( '#minn-o-txn-link' );
+				if ( ! a ) return;
+				const txnEl = $( '#minn-o-txn' );
+				const method = ocValue( 'paymethod' );
+				a.hidden = ( txnEl && txnEl.value.trim() !== ( o.transaction_id || '' ) )
+					|| ( method != null && method !== ( o.payment_method || '' ) );
+			}
 			const statusWrap = ocWrap( 'status' );
 			if ( statusWrap ) bindAutocomplete( statusWrap,
 				Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => ( { value: st, label: orderStatusLabel( st ) } ) ),
@@ -9793,6 +9811,7 @@
 						m.edits[ 'oc:paymethod' ] = v;
 						const w = $( '#minn-o-paytitle-wrap' );
 						if ( w ) w.style.display = v === 'other' ? '' : 'none';
+						syncTxnLink();
 					},
 				} );
 			const mailWrap = ocWrap( 'wcemail' );
@@ -9808,6 +9827,9 @@
 			} );
 			const payWrapVis = $( '#minn-o-paytitle-wrap' );
 			if ( payWrapVis ) payWrapVis.style.display = ocSeed( 'paymethod', o.payment_method || '' ) === 'other' ? '' : 'none';
+			syncTxnLink();
+			const txnIn = $( '#minn-o-txn' );
+			if ( txnIn ) txnIn.addEventListener( 'input', syncTxnLink );
 			if ( m.edits.__focus && ( ! document.activeElement || document.activeElement === document.body ) ) {
 				const el = document.getElementById( m.edits.__focus );
 				if ( el && el.focus ) {

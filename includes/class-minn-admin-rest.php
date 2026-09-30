@@ -1277,6 +1277,28 @@ class Minn_Admin_REST {
 					),
 				)
 			);
+			// The gateway's own "view this payment" link, the one wp-admin
+			// wraps around the transaction ID (Stripe's dashboard, for one).
+			// Rides wc/v3 so the order detail's save-then-refetch keeps it in
+			// step with an edited transaction ID; computed only when a
+			// request names it in _fields.
+			register_rest_field(
+				'shop_order',
+				'minn_transaction',
+				array(
+					'get_callback' => array( __CLASS__, 'wc_order_transaction_link' ),
+					'schema'       => array(
+						'type'        => array( 'object', 'null' ),
+						'context'     => array( 'view', 'edit' ),
+						'readonly'    => true,
+						'description' => __( 'Link to the payment in the payment provider\'s dashboard, as the order screen shows it.', 'minn-admin' ),
+						'properties'  => array(
+							'url'      => array( 'type' => 'string' ),
+							'provider' => array( 'type' => 'string' ),
+						),
+					),
+				)
+			);
 		}
 
 		register_rest_route(
@@ -6809,6 +6831,51 @@ Please click the following link to confirm the invite:
 			);
 		}
 		return empty( $out ) ? new \stdClass() : $out;
+	}
+
+	/**
+	 * The order's transaction link, resolved the way WooCommerce's order data
+	 * meta box does it: the gateway registered under the order's payment
+	 * method (never "other"), asked through its own get_transaction_url(),
+	 * which is where Stripe picks its live or test dashboard. Null when the
+	 * order has no transaction ID or the gateway offers no link.
+	 *
+	 * @param array $data Prepared wc/v3 order response.
+	 * @return array|null { url, provider }
+	 */
+	public static function wc_order_transaction_link( $data ) {
+		$id    = isset( $data['id'] ) ? absint( $data['id'] ) : 0;
+		$order = ( $id && function_exists( 'wc_get_order' ) ) ? wc_get_order( $id ) : false;
+		if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
+			return null;
+		}
+		$method = (string) $order->get_payment_method();
+		if ( '' === $method || 'other' === $method || '' === (string) $order->get_transaction_id() ) {
+			return null;
+		}
+		try {
+			$gateways = WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : array();
+			if ( empty( $gateways[ $method ] ) ) {
+				return null;
+			}
+			$gateway = $gateways[ $method ];
+			$url     = (string) $gateway->get_transaction_url( $order );
+			// The admin-facing name ("Stripe"), not the checkout title the
+			// customer saw ("Credit / Debit Card").
+			$provider = (string) $gateway->get_method_title();
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		// The URL passes through the woocommerce_get_transaction_url filter,
+		// so only a web link survives into an href.
+		$url = esc_url_raw( $url, array( 'http', 'https' ) );
+		if ( '' === $url ) {
+			return null;
+		}
+		return array(
+			'url'      => $url,
+			'provider' => wp_strip_all_tags( $provider ),
+		);
 	}
 
 	public static function wc_order_refund_state( WP_REST_Request $request ) {
