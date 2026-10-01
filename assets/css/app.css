@@ -3773,6 +3773,10 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* Method and ID stack once the card is too narrow for both plus the link. */
 .minn-order-payment .minn-order-field-row { flex-wrap: wrap; }
 .minn-order-payment .minn-order-field-row > * { flex: 1 1 220px; }
+/* A trashed order's notice: the quick view's body has no padding of its own. */
+.minn-order-trashnote { margin: 0 0 14px; flex-wrap: wrap; }
+.minn-order-trashnote span { min-width: min(240px, 100%); }
+.minn-modal .minn-order-trashnote { margin: 14px 18px 0; }
 .minn-order-items { padding: 10px 18px 14px; border-bottom: 1px solid var(--border); }
 /* Status / Refund / WC-email blocks: same side padding as order panels.
    .minn-media-edit only adds top padding + border (media modal lives inside

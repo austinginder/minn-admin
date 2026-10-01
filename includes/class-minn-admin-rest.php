@@ -1249,6 +1249,25 @@ class Minn_Admin_REST {
 					'permission_callback' => $order_cap,
 				)
 			);
+			// Restore a trashed order. WooCommerce's REST API trashes and
+			// deletes (DELETE wc/v3/orders/{id}) but has no way back, so this
+			// is the one piece Minn adds. Gated exactly like that DELETE: the
+			// right to trash an order is the right to un-trash it.
+			register_rest_route(
+				self::NS,
+				'/wc/orders/(?P<id>\d+)/restore',
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'wc_order_restore' ),
+					'permission_callback' => function ( WP_REST_Request $request ) {
+						$id = self::target_order_id( $request );
+						return $id > 0
+							&& current_user_can( 'edit_shop_orders' )
+							&& function_exists( 'wc_rest_check_post_permissions' )
+							&& wc_rest_check_post_permissions( 'shop_order', 'delete', $id );
+					},
+				)
+			);
 			register_rest_route(
 				self::NS,
 				'/wc/orders/(?P<id>\d+)/refund-state',
@@ -1280,8 +1299,10 @@ class Minn_Admin_REST {
 			// The gateway's own "view this payment" link, the one wp-admin
 			// wraps around the transaction ID (Stripe's dashboard, for one).
 			// Rides wc/v3 so the order detail's save-then-refetch keeps it in
-			// step with an edited transaction ID; computed only when a
-			// request names it in _fields.
+			// step with an edited transaction ID. WordPress includes an extra
+			// field in every response that has no _fields (list pages, webhook
+			// payloads, wc-analytics), so the callback answers null unless the
+			// request names it.
 			register_rest_field(
 				'shop_order',
 				'minn_transaction',
@@ -6886,6 +6907,41 @@ Please click the following link to confirm the invite:
 		return array(
 			'url'      => $url,
 			'provider' => wp_strip_all_tags( $provider ),
+		);
+	}
+
+	/**
+	 * POST minn-admin/v1/wc/orders/{id}/restore — take an order back out of
+	 * the Trash. WC_Order::untrash() runs through whichever data store the
+	 * site uses (posts or HPOS tables) and puts back the status the order
+	 * had when it was trashed, the same path wp-admin's Restore takes.
+	 */
+	public static function wc_order_restore( WP_REST_Request $request ) {
+		$order = function_exists( 'wc_get_order' ) ? wc_get_order( self::target_order_id( $request ) ) : false;
+		// Orders only: a subscription's trash runs through WooCommerce
+		// Subscriptions' own restore rules, and a refund is never trashed.
+		if ( ! $order || ! is_a( $order, 'WC_Order' ) || 'shop_order' !== $order->get_type() ) {
+			return new WP_Error( 'not_found', __( 'Order not found.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		if ( 'trash' !== $order->get_status() ) {
+			return new WP_Error( 'not_trashed', __( 'This order is not in the Trash.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		// The return value is not the verdict: when the old status no longer
+		// exists, HPOS restores the order as pending and then reports failure
+		// (it compares "wc-pending" with "pending"). Whether the order left
+		// the Trash is what counts.
+		try {
+			$order->untrash();
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+		$order = wc_get_order( $order->get_id() );
+		if ( ! $order || 'trash' === $order->get_status() ) {
+			return new WP_Error( 'restore_failed', __( 'The order could not be restored.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		return array(
+			'id'     => $order->get_id(),
+			'status' => $order->get_status(),
 		);
 	}
 

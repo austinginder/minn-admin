@@ -1620,6 +1620,10 @@ class Minn_Admin {
 			'wc'              => class_exists( 'WooCommerce' ),
 			'wcs'             => class_exists( 'WooCommerce' ) && class_exists( 'WC_Subscriptions' ),
 			'wcOrderStatuses' => $wc_statuses,
+			// Whether a deleted order goes to the Trash first. WooCommerce's
+			// REST delete only trashes while EMPTY_TRASH_DAYS is above zero;
+			// at zero the only delete is a permanent one.
+			'wcTrash'         => class_exists( 'WooCommerce' ) && EMPTY_TRASH_DAYS > 0,
 			'wcLowStock'      => class_exists( 'WooCommerce' )
 				? max( 0, (int) get_option( 'woocommerce_notify_low_stock_amount', 2 ) )
 				: 0,
@@ -1790,6 +1794,8 @@ class Minn_Admin {
 			// plugins register their own statuses into it — badges and the
 			// status picker read it instead of humanizing the slug.
 			'wcOrderStatuses' => $features['wcOrderStatuses'],
+			// True when deleting an order trashes it (EMPTY_TRASH_DAYS > 0).
+			'wcTrash' => $features['wcTrash'],
 			// WooCommerce low-stock threshold (Settings → Products → Inventory).
 			// Used by the Products "Low stock" filter fallback when Analytics
 			// lookup tables lag a fresh write.

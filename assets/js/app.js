@@ -7723,7 +7723,8 @@
 	// WooCommerce's own label for a status slug ("pending" → "Pending payment"),
 	// including statuses registered by other plugins. Falls through to the
 	// humanized slug when WC is absent or the status is unknown to it.
-	const orderStatusLabel = ( slug ) => ( B.wcOrderStatuses || {} )[ slug ] || ( slug || '' ).replace( /-/g, ' ' );
+	const orderStatusLabel = ( slug ) => ( B.wcOrderStatuses || {} )[ slug ]
+		|| ( slug === 'trash' ? __( 'Trash' ) : ( slug || '' ).replace( /-/g, ' ' ) );
 
 	// Slugs only: the labels come from WooCommerce at render time
 	// (orderStatusLabel), so a translated site reads its own vocabulary.
@@ -7734,6 +7735,9 @@
 		processing: 'future', completed: 'publish', 'on-hold': 'private', pending: 'private',
 		cancelled: 'trash-status', refunded: 'draft', failed: 'trash-status',
 	};
+	// Trash is a place, not a status anyone picks, so it stays out of the map
+	// the status picker is built from and only gets a badge style here.
+	const orderStatusStyle = ( st ) => ( st === 'trash' ? 'trash-status' : ( ORDER_STATUS_STYLE[ st ] || 'draft' ) );
 
 	/* A list's filters. One object drives the status dropdown, the chips, the
 	   query and the cache key, so there is a single answer to "what is the
@@ -7853,10 +7857,13 @@
 			statusMulti: true,
 			statuses: () => {
 				const known = Object.keys( B.wcOrderStatuses || {} );
-				return known.length ? known : ORDER_TAB_SLUGS.filter( ( s ) => s !== 'any' );
+				const list = known.length ? known : ORDER_TAB_SLUGS.filter( ( s ) => s !== 'any' );
+				// "All" (status=any) leaves trashed orders out, as wp-admin
+				// does; the Trash has to be asked for by name.
+				return B.wcTrash ? list.concat( [ 'trash' ] ) : list;
 			},
 			statusLabel: ( slug ) => orderStatusLabel( slug ),
-			presets: () => ORDER_TABS,
+			presets: () => ( B.wcTrash ? ORDER_TABS.concat( [ [ 'trash', __( 'Trash' ) ] ] ) : ORDER_TABS ),
 			kinds: [ 'status', 'date', 'customer', 'product' ],
 			load: ( page ) => loadOrders( page ),
 			render: () => renderOrders(),
@@ -8620,6 +8627,98 @@
 		return ( ( b.first_name || '' ) + ' ' + ( b.last_name || '' ) ).trim() || b.email || 'Guest';
 	}
 
+	/* ===== Order trash =====
+	 * WooCommerce's REST delete trashes an order (or, with force, deletes it
+	 * for good); Minn's restore route is the way back, which WooCommerce's
+	 * REST API does not offer. Trashing is reversible, so it asks nothing
+	 * and offers Undo; deleting permanently asks first. Each returns whether
+	 * it happened, so a host can close or navigate only on success. */
+	function orderTrashChanged() {
+		state.cache.orders = null;
+		state.cache.orderSummary = null;
+		if ( state.route === 'orders' ) renderOrders();
+	}
+
+	async function restoreOrder( o ) {
+		const num = o.number || o.id;
+		let r;
+		try {
+			r = await api( `minn-admin/v1/wc/orders/${ o.id }/restore`, { method: 'POST' } );
+		} catch ( e ) {
+			toast( e.message, true );
+			return false;
+		}
+		orderTrashChanged();
+		/* translators: %s: the order number. */
+		toast( sprintf( __( 'Order #%s restored' ), num ) );
+		// The status it went back to (whatever it had before the Trash).
+		return ( r && r.status ) || true;
+	}
+
+	/* The subscriptions an order STARTED. WooCommerce Subscriptions cancels
+	 * and trashes them with a parent order (and deletes them with it), which
+	 * sends the cancellation and stops the gateway's billing: restoring the
+	 * order brings them back cancelled, so Undo cannot cover that part.
+	 * Renewal orders cascade nothing. Null when there are none. */
+	async function orderStartedSubscription( o ) {
+		if ( ! B.wcs ) return null;
+		try {
+			const r = await api( `minn-admin/v1/wc/orders/subscription-relations?ids=${ o.id }` );
+			const rel = r && r[ String( o.id ) ];
+			return rel && rel.kind === 'parent' ? ( rel.subscription || {} ) : null;
+		} catch ( e ) {
+			return null;
+		}
+	}
+
+	async function trashOrder( o ) {
+		const num = o.number || o.id;
+		const sub = await orderStartedSubscription( o );
+		if ( sub && ! await minnConfirm( {
+			/* translators: %s: the order number. */
+			title: sprintf( __( 'Move order #%s to the Trash?' ), num ),
+			/* translators: %s: the subscription number. */
+			body: sprintf( __( 'This order started subscription #%s. WooCommerce Subscriptions cancels it and moves it to the Trash too, which emails the customer and stops its payments. Restoring the order brings the subscription back cancelled, not active.' ), sub.number || sub.id ),
+			danger: true,
+			confirmLabel: __( 'Move to Trash' ),
+		} ) ) return false;
+		try {
+			await api( `wc/v3/orders/${ o.id }`, { method: 'DELETE' } );
+		} catch ( e ) {
+			toast( e.message, true );
+			return false;
+		}
+		orderTrashChanged();
+		/* translators: %s: the order number. */
+		toastAction( sprintf( __( 'Order #%s moved to the Trash' ), num ), __( 'Undo' ), () => restoreOrder( o ) );
+		return true;
+	}
+
+	async function deleteOrderForever( o ) {
+		const num = o.number || o.id;
+		const sub = await orderStartedSubscription( o );
+		if ( ! await minnConfirm( {
+			/* translators: %s: the order number. */
+			title: sprintf( __( 'Delete order #%s permanently?' ), num ),
+			body: sub
+				/* translators: %s: the subscription number. */
+				? sprintf( __( 'The order, its notes and its refund records are removed for good, and WooCommerce Subscriptions deletes subscription #%s, which this order started, with it. There is no undo for this.' ), sub.number || sub.id )
+				: __( 'The order, its notes and its refund records are removed for good. There is no undo for this.' ),
+			danger: true,
+			confirmLabel: __( 'Delete permanently' ),
+		} ) ) return false;
+		try {
+			await api( `wc/v3/orders/${ o.id }?force=true`, { method: 'DELETE' } );
+		} catch ( e ) {
+			toast( e.message, true );
+			return false;
+		}
+		orderTrashChanged();
+		/* translators: %s: the order number. */
+		toast( sprintf( __( 'Order #%s deleted permanently' ), num ) );
+		return true;
+	}
+
 	const ORDER_DETAIL_FIELDS = 'id,number,status,total,total_tax,discount_total,shipping_total,currency,currency_symbol,date_created,date_paid,billing,shipping,line_items,coupon_lines,refunds,payment_url,needs_payment,payment_method,payment_method_title,transaction_id,minn_transaction,customer_note,customer_id,is_editable,meta_data';
 
 	const ORDER_RELATED_FIELDS = 'id,number,status,total,currency,currency_symbol,date_created';
@@ -8931,16 +9030,24 @@
 		const b = o.billing || {};
 		const payUrl = o.payment_url || '';
 		const refundable = orderRefundableTotal( o );
+		// A trashed order is read-only (Restore and Delete permanently sit in
+		// its notice), so it keeps only the documents behind ⋯.
+		const trashed = o.status === 'trash';
+		const live = B.caps.orders && ! trashed;
+		const pdfs = ( B.wcpdf && B.wcpdf.docs ) || [];
 		return `
-					${ B.caps.orders && refundable > 0.001 ? `<button class="minn-btn-soft" id="minn-o-refund-open" type="button">${ __( 'Refund…' ) }</button>` : '' }
+					${ live && refundable > 0.001 ? `<button class="minn-btn-soft" id="minn-o-refund-open" type="button">${ __( 'Refund…' ) }</button>` : '' }
 					<span class="minn-order-more-src" hidden>
-					${ B.caps.orders && b.email ? `<button class="minn-btn-soft" id="minn-o-email" type="button">${ icon( 'send' ) } ${ esc( __( 'Send email…' ) ) }</button>` : '' }
-					${ payUrl ? `<button class="minn-btn-soft" id="minn-o-copy-pay2" type="button">${ icon( 'copy' ) } ${ esc( __( 'Copy payment URL' ) ) }</button>` : '' }
-					${ ( ( B.wcpdf && B.wcpdf.docs ) || [] ).map( ( d ) =>
+					${ live && b.email ? `<button class="minn-btn-soft" id="minn-o-email" type="button">${ icon( 'send' ) } ${ esc( __( 'Send email…' ) ) }</button>` : '' }
+					${ payUrl && ! trashed ? `<button class="minn-btn-soft" id="minn-o-copy-pay2" type="button">${ icon( 'copy' ) } ${ esc( __( 'Copy payment URL' ) ) }</button>` : '' }
+					${ pdfs.map( ( d ) =>
 						`<a class="minn-btn-soft" href="${ esc( `${ B.wcpdf.ajax }?action=generate_wpo_wcpdf&document_type=${ encodeURIComponent( d.type ) }&order_ids=${ o.id }&access_key=${ encodeURIComponent( B.wcpdf.nonce ) }` ) }" target="_blank" rel="noopener" title="${ esc( __( 'Generated by PDF Invoices & Packing slips' ) ) }">${ esc( d.title ) } (PDF)</a>` ).join( '' ) }
-					<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ o.id }&action=edit" target="_blank" rel="noopener">${ esc( __( 'Edit in WooCommerce' ) ) }</a>
+					${ trashed ? '' : `<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ o.id }&action=edit" target="_blank" rel="noopener">${ esc( __( 'Edit in WooCommerce' ) ) }</a>` }
+					${ live ? ( B.wcTrash
+						? `<button class="minn-btn-soft danger" id="minn-o-trash" type="button" data-danger>${ icon( 'trash' ) } ${ esc( __( 'Move to Trash' ) ) }</button>`
+						: `<button class="minn-btn-soft danger" id="minn-o-delete" type="button" data-danger>${ icon( 'trash' ) } ${ esc( __( 'Delete permanently…' ) ) }</button>` ) : '' }
 					</span>
-					<button class="minn-btn-soft" id="minn-o-more" type="button" aria-haspopup="menu" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>`;
+					${ trashed && ! pdfs.length ? '' : `<button class="minn-btn-soft" id="minn-o-more" type="button" aria-haspopup="menu" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>` }`;
 	}
 
 	/** The sidebar edit dialogs' bodies — same field ids the save flow reads. */
@@ -9391,7 +9498,9 @@
 		const b = o.billing || {};
 		const s = o.shipping || {};
 		const payUrl = o.payment_url || '';
-		const canEdit = B.caps.orders;
+		// wp-admin will not edit a trashed order either: restore it first.
+		const trashed = o.status === 'trash';
+		const canEdit = B.caps.orders && ! trashed;
 		const emails = m.emails;
 		const curMethod = o.payment_method || '';
 		const payLoading = canEdit && m.gateways == null;
@@ -9435,6 +9544,13 @@
 		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ key }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
 		return `
 					<div class="minn-order-body">
+						${ trashed ? `
+						<div class="minn-backup-note minn-order-trashnote">
+							<span>${ esc( __( 'This order is in the Trash. Restore it to make changes.' ) ) }</span>
+							${ B.caps.orders ? `
+							<button class="minn-btn-soft" id="minn-o-restore" type="button">${ esc( __( 'Restore' ) ) }</button>
+							<button class="minn-btn-soft danger" id="minn-o-delete" type="button">${ esc( __( 'Delete permanently…' ) ) }</button>` : '' }
+						</div>` : '' }
 						<div class="minn-order-layout">
 						<div class="minn-order-main">
 							<div class="minn-order-sec minn-order-itemscard">
@@ -9567,7 +9683,7 @@
 									: m.otherOrders.map( ( oo ) => `
 									<button type="button" class="minn-sub-order-row" data-relorder="${ oo.id }" data-relnum="${ esc( oo.number || oo.id ) }">
 										<span>#${ esc( oo.number || oo.id ) }</span>
-										<span class="minn-status ${ ORDER_STATUS_STYLE[ oo.status ] || 'draft' }">${ esc( orderStatusLabel( oo.status ) ) }</span>
+										<span class="minn-status ${ orderStatusStyle( oo.status ) }">${ esc( orderStatusLabel( oo.status ) ) }</span>
 										<span>${ esc( orderMoney( oo, oo.total ) ) }</span>
 										<span style="color:var(--text3); font-size:12.5px;">${ esc( timeAgo( oo.date_created ) ) }</span>
 									</button>` ).join( '' ) }
@@ -9595,7 +9711,7 @@
 							<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: the order number. */ __( 'Order #%s' ) ), esc( o.number || listO.number || o.id ) ) }</div>
 							<div class="minn-modal-sub">${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }</div>
 						</div>
-						<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>
+						<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading order…' ) ) }</div>` : '' }
@@ -9771,10 +9887,48 @@
 				const entries = $$( 'button, a', host ).map( ( el ) =>
 					el.matches( 'a' )
 						? { label: el.textContent.trim(), href: el.href }
-						: { label: el.textContent.trim(), run: () => el.click() } );
+						: { label: el.textContent.trim(), run: () => el.click(), danger: el.hasAttribute( 'data-danger' ) } );
 				if ( ! entries.length ) return;
 				const r = moreBtn.getBoundingClientRect();
 				openMinnMenu( r.left - 180, r.bottom + 6, entries );
+			} );
+			// Trash, restore, delete. Trashing or deleting takes the order off
+			// this screen, so the host steps away: the page goes back where it
+			// came from, the quick view closes.
+			const leaveHost = () => {
+				if ( ! m.page ) { closeModal(); return; }
+				const back = m.back || { route: 'orders' };
+				state.orderPage = null;
+				go( back.route );
+			};
+			const trashBtn = $( '#minn-o-trash' );
+			if ( trashBtn ) trashBtn.addEventListener( 'click', async () => {
+				trashBtn.disabled = true;
+				if ( await trashOrder( o ) ) leaveHost();
+				else trashBtn.disabled = false;
+			} );
+			const deleteBtn = $( '#minn-o-delete' );
+			if ( deleteBtn ) deleteBtn.addEventListener( 'click', async () => {
+				if ( await deleteOrderForever( o ) ) leaveHost();
+			} );
+			const restoreBtn = $( '#minn-o-restore' );
+			if ( restoreBtn ) restoreBtn.addEventListener( 'click', async () => {
+				restoreBtn.disabled = true;
+				const back = await restoreOrder( o );
+				if ( ! back ) {
+					restoreBtn.disabled = false;
+					return;
+				}
+				// Editable again: refetch so the status, the payment card and
+				// the actions all come back from the store.
+				try {
+					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
+					m.full = full;
+					m.order = Object.assign( {}, m.order, { status: full.status } );
+				} catch ( e ) {
+					if ( typeof back === 'string' ) m.full = Object.assign( {}, m.full || m.order, { status: back } );
+				}
+				rerender();
 			} );
 			// Themed comboboxes (status, payment method, email type) — the
 			// order modal's native selects were the last OS-drawn ones here.
@@ -10317,7 +10471,7 @@
 				<div class="minn-modal-title-block">
 					<div class="minn-order-head-row">
 						<span class="minn-modal-title">${ sprintf( esc( /* translators: %s: the order number. */ __( 'Order #%s' ) ), esc( o.number || o.id ) ) }</span>
-						${ o.status ? `<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>` : '' }
+						${ o.status ? `<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>` : '' }
 						${ o.date_paid ? `<span class="minn-status publish">${ __( 'Paid' ) }</span>` : '' }
 					</div>
 					<div class="minn-modal-sub">${ loading ? esc( __( 'Loading…' ) ) : `${ esc( dateStr ) } · ${ esc( orderMoney( o, o.total ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }` }</div>
@@ -10611,12 +10765,12 @@
 						<div class="minn-row-slug">${ timeAgo( o.date_created ) }</div>
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( o ) ) }</div>
-					<div><span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span></div>
+					<div><span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span></div>
 					${ itemsCellHtml( o.line_items ) }
 					<div class="minn-row-meta minn-cell-clip" title="${ esc( o.payment_method_title || '' ) }">${ o.payment_method_title ? esc( o.payment_method_title ) : '—' }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-qv="${ o.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.orderSearch ? __( 'No orders match “' ) + esc( state.orderSearch ) + '”.' : __( 'No orders here.' ) }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.orderSearch ? __( 'No orders match “' ) + esc( state.orderSearch ) + '”.' : ( orderPresetActive() === 'trash' ? __( 'The Trash is empty.' ) : __( 'No orders here.' ) ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'order' ) }`;
 
@@ -10674,7 +10828,10 @@
 				const o = c.items.find( ( x ) => x.id === parseInt( row.dataset.order, 10 ) );
 				if ( ! o ) return;
 				e.preventDefault();
-				const moves = [
+				const trashed = o.status === 'trash';
+				// A trashed order takes no status moves: it comes back with
+				// the status it had, through Restore.
+				const moves = trashed ? [] : [
 					/* translators: %s: the order number. */
 					[ 'processing', __( 'Mark processing' ), sprintf( __( 'Order #%s marked processing' ), o.number ) ],
 					/* translators: %s: the order number. */
@@ -10682,9 +10839,21 @@
 					/* translators: %s: the order number. */
 					[ 'on-hold', __( 'Put on hold' ), sprintf( __( 'Order #%s put on hold' ), o.number ) ],
 				].filter( ( [ st ] ) => st !== o.status );
+				let removal = [];
+				if ( trashed ) {
+					removal = [
+						{ label: __( 'Restore' ), run: () => restoreOrder( o ) },
+						{ label: __( 'Delete permanently…' ), danger: true, run: () => deleteOrderForever( o ) },
+					];
+				} else if ( B.wcTrash ) {
+					removal = [ { label: __( 'Move to Trash' ), danger: true, run: () => trashOrder( o ) } ];
+				} else {
+					removal = [ { label: __( 'Delete permanently…' ), danger: true, run: () => deleteOrderForever( o ) } ];
+				}
 				openMinnMenu( e.clientX, e.clientY, [
 					{ label: __( 'Quick view' ), run: () => openOrderModal( o ) },
 					...moves.map( ( [ st, label, done ] ) => ( { label, run: () => quickOrderStatus( o, st, done ) } ) ),
+					...removal,
 				] );
 			} )
 		);
@@ -10944,7 +11113,7 @@
 									: ! ( relatedOnly && relatedOnly.length ) ? `<div class="minn-toggle-desc">${ __( 'No renewal orders yet.' ) }</div>`
 									: relatedOnly.map( ( o ) => orderRow( o.id, `
 											<span>#${ esc( o.number || o.id ) }</span>
-											<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>
+											<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>
 											<span>${ esc( subMoney( s, o.total ) ) }</span>` ) ).join( '' ) }
 							</div>
 							${ notesTimelineHtml( m.notes, canEdit, 'minn-s', 'minn-sub-notes' ) }
@@ -44061,7 +44230,7 @@
 									<button type="button" class="minn-order-note" data-open-order="${ o.id }" style="width:100%; text-align:left; cursor:pointer; background:var(--surface2,var(--panel)); border:1px solid var(--border); margin-bottom:8px;">
 										<div class="minn-order-note-meta">
 											<span>#${ esc( o.number || o.id ) }</span>
-											<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>
+											<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>
 											<span>${ esc( timeAgo( o.date_created ) ) }</span>
 										</div>
 										<div class="minn-order-note-body">${ esc( ( o.currency_symbol || storeSym() ) + o.total ) }</div>
@@ -51558,8 +51727,12 @@
 
 		// Capture phase so structural toast-Undo wins over contenteditable's
 		// native undo (island delete never entered the browser undo stack).
+		// Form fields keep their own undo: ⌘Z while typing in a search box
+		// must undo the typing, not restore whatever the last toast removed.
 		window.addEventListener( 'keydown', ( e ) => {
 			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'z' ) {
+				const tag = e.target && e.target.tagName;
+				if ( tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ) return;
 				if ( runPendingToastUndo() ) {
 					e.preventDefault();
 					e.stopPropagation();

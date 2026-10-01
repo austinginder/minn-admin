@@ -545,9 +545,20 @@ group.
   text until its pencil opens the form. You can take a payment by hand,
   refund whole lines or an arbitrary amount, apply or remove a coupon,
   resend an email and read the order's notes without leaving Minn, and
-  the Back button returns you to wherever the visit started. Refund stays
-  in the header; sending an email, copying the payment URL, the PDF
-  documents and the WooCommerce link live behind a More menu.
+  the Back button returns you to wherever the visit started. When the
+  payment gateway links its transactions (Stripe's dashboard, for one),
+  the transaction ID carries a "View in" link to that payment. Refund
+  stays in the header; sending an email, copying the payment URL, the PDF
+  documents, the WooCommerce link and Move to Trash live behind a More
+  menu.
+- **Trashing an order is undoable.** Move to Trash (from the More menu or
+  by right-clicking a row) offers Undo, and the list's Trash view holds
+  what was trashed. A trashed order opens read-only, as in wp-admin, with
+  Restore (which puts back the status it had) and Delete permanently,
+  which asks first because it cannot be taken back. An order that
+  started a subscription also asks before it goes to the Trash:
+  WooCommerce Subscriptions cancels the subscription with it, and
+  restoring the order brings the subscription back cancelled.
 - **The orders list filters like a storefront back office.** One row
   holds a status view, the search box and Add filter; active filters sit
   beneath as removable chips. Status accepts more than one at a time, and
