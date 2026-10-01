@@ -6843,7 +6843,18 @@ Please click the following link to confirm the invite:
 	 * @param array $data Prepared wc/v3 order response.
 	 * @return array|null { url, provider }
 	 */
-	public static function wc_order_transaction_link( $data ) {
+	public static function wc_order_transaction_link( $data, $field_name = '', $request = null ) {
+		$asked = ( $request instanceof WP_REST_Request ) ? wp_parse_list( $request['_fields'] ) : array();
+		$named = false;
+		foreach ( $asked as $f ) {
+			if ( 'minn_transaction' === $f || 0 === strpos( $f, 'minn_transaction.' ) ) {
+				$named = true;
+				break;
+			}
+		}
+		if ( ! $named ) {
+			return null;
+		}
 		$id    = isset( $data['id'] ) ? absint( $data['id'] ) : 0;
 		$order = ( $id && function_exists( 'wc_get_order' ) ) ? wc_get_order( $id ) : false;
 		if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {

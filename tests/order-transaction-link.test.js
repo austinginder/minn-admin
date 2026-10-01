@@ -73,6 +73,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'an Other payment gets no link (as wp-admin)', oth.body && oth.body.minn_transaction === null, JSON.stringify( oth.body ) );
 		const lean = await api( `wc/v3/orders/${ linked }?_fields=id,transaction_id` );
 		t.check( 'field is only computed when asked for', lean.body && ! ( 'minn_transaction' in lean.body ), JSON.stringify( lean.body ) );
+		// WordPress includes extra fields in every response without _fields
+		// (list pages, webhook payloads); the link is not worked out there.
+		const bare = await api( `wc/v3/orders/${ linked }` );
+		t.check( 'a response without _fields carries no computed link', bare.body && bare.body.minn_transaction == null, JSON.stringify( bare.body && bare.body.minn_transaction ) );
 
 		// ---- Payment card ----
 		const pageReady = async () => {
