@@ -650,4 +650,20 @@ if ( class_exists( 'Minn_Admin_Updater' ) ) {
 	$skip( 'Minn_Admin_Updater not loaded' );
 }
 
+// --- #5 Memberships lookups stay on this site (multisite) ------------------
+if ( is_multisite() && function_exists( 'minn_admin_wcm_find_user' ) ) {
+	if ( ! function_exists( 'wp_delete_user' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+	}
+	$ms_other = wpmu_create_user( 'minnv042other' . wp_rand( 100, 999 ), wp_generate_password(), 'minn-v042-other-' . wp_rand() . '@example.com' );
+	remove_user_from_blog( $ms_other, get_current_blog_id() );
+	$ms_admin = wpmu_create_user( 'minnv042siteadmin' . wp_rand( 100, 999 ), wp_generate_password(), 'minn-v042-sa-' . wp_rand() . '@example.com' );
+	add_user_to_blog( get_current_blog_id(), $ms_admin, 'administrator' );
+	wp_set_current_user( $ms_admin );
+	$check( 'Memberships (multisite): a site administrator cannot resolve another site\'s account', null === minn_admin_wcm_find_user( get_userdata( $ms_other )->user_email ) );
+	wp_set_current_user( $admin );
+	wpmu_delete_user( $ms_other );
+	wpmu_delete_user( $ms_admin );
+}
+
 $summary();

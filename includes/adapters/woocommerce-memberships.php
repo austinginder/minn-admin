@@ -280,7 +280,18 @@ function minn_admin_wcm_find_user( $raw ) {
 	if ( ! $user && ctype_digit( $raw ) ) {
 		$user = get_user_by( 'id', (int) $raw );
 	}
-	return $user instanceof WP_User ? $user : null;
+	if ( ! $user instanceof WP_User ) {
+		return null;
+	}
+	// wp_users is shared by the whole network, so these lookups resolve any
+	// account on it, and the routes answer with its email address. Below a
+	// network administrator, only people who belong to THIS site count, the
+	// same boundary core's Add Existing User draws.
+	if ( is_multisite() && ! current_user_can( 'manage_network_users' )
+		&& ! is_user_member_of_blog( $user->ID, get_current_blog_id() ) ) {
+		return null;
+	}
+	return $user;
 }
 
 /**
