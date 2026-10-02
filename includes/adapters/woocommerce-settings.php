@@ -634,6 +634,12 @@ function minn_admin_wc_settings_post_data( $fields, $edited ) {
 			continue; // tax classes: their save runs only on an explicit change
 		}
 		$cur = minn_admin_wc_settings_current( $f );
+		// The key WooCommerce reads the posted value from: field_name when the
+		// field carries one, and an id like name[key] is a nested array
+		// (save_fields parse_str()s it and reads $_POST[name][key]). Posting
+		// it as a flat key meant every option-array checkbox read as absent,
+		// so one save turned all of them off.
+		$name = isset( $f['field_name'] ) && '' !== (string) $f['field_name'] ? (string) $f['field_name'] : $id;
 		switch ( $type ) {
 			case 'checkbox':
 			case 'hidden':
@@ -643,7 +649,7 @@ function minn_admin_wc_settings_post_data( $fields, $edited ) {
 				$on = $touched ? ! empty( $edited[ $id ] ) : ( 'yes' === $cur || true === $cur || '1' === $cur );
 				// wp-admin sends only checked boxes; an absent key saves as "no".
 				if ( $on ) {
-					$post[ $id ] = '1';
+					minn_admin_wc_post_set( $post, $name, '1' );
 				}
 				break;
 			case 'multiselect':
@@ -653,41 +659,65 @@ function minn_admin_wc_settings_post_data( $fields, $edited ) {
 				foreach ( $vals as $v ) {
 					$flat[] = is_array( $v ) && isset( $v['value'] ) ? (string) $v['value'] : (string) $v;
 				}
-				$post[ $id ] = array_values( array_filter( $flat, 'strlen' ) );
+				minn_admin_wc_post_set( $post, $name, array_values( array_filter( $flat, 'strlen' ) ) );
 				break;
 			case 'relative_date_selector':
 				$cur = is_array( $cur ) ? $cur : array();
 				$num = array_key_exists( $id, $edited ) ? $edited[ $id ] : ( isset( $cur['number'] ) ? $cur['number'] : '' );
-				$post[ $id ] = array(
+				minn_admin_wc_post_set( $post, $name, array(
 					'number' => null === $num ? '' : (string) $num,
 					'unit'   => array_key_exists( $id . '__unit', $edited ) ? (string) $edited[ $id . '__unit' ] : ( isset( $cur['unit'] ) ? (string) $cur['unit'] : 'months' ),
-				);
+				) );
 				break;
 			case 'email_image_url':
 				if ( $touched ) {
 					$v           = $edited[ $id ];
-					$post[ $id ] = is_array( $v ) ? ( isset( $v['url'] ) ? (string) $v['url'] : '' ) : ( null === $v ? '' : (string) $v );
+					minn_admin_wc_post_set( $post, $name, is_array( $v ) ? ( isset( $v['url'] ) ? (string) $v['url'] : '' ) : ( null === $v ? '' : (string) $v ) );
 				} else {
-					$post[ $id ] = is_scalar( $cur ) ? (string) $cur : '';
+					minn_admin_wc_post_set( $post, $name, is_scalar( $cur ) ? (string) $cur : '' );
 				}
 				break;
 			case 'password':
 				if ( $touched && '****************' !== (string) $edited[ $id ] ) {
-					$post[ $id ] = (string) $edited[ $id ];
+					minn_admin_wc_post_set( $post, $name, (string) $edited[ $id ] );
 				} else {
-					$post[ $id ] = is_scalar( $cur ) ? (string) $cur : '';
+					minn_admin_wc_post_set( $post, $name, is_scalar( $cur ) ? (string) $cur : '' );
 				}
 				break;
 			case 'number':
 				$v           = $touched ? $edited[ $id ] : $cur;
-				$post[ $id ] = null === $v ? '' : (string) $v;
+				minn_admin_wc_post_set( $post, $name, null === $v ? '' : (string) $v );
 				break;
 			default:
 				$v           = $touched ? $edited[ $id ] : $cur;
-				$post[ $id ] = is_scalar( $v ) ? (string) $v : ( null === $v ? '' : $v );
+				minn_admin_wc_post_set( $post, $name, is_scalar( $v ) ? (string) $v : ( null === $v ? '' : $v ) );
 		}
 	}
 	return $post;
+}
+
+/**
+ * Put a value into post data at the key WooCommerce will read it from:
+ * name[key] becomes $post['name']['key'], a plain name stays flat.
+ *
+ * @param array  $post  Post data (by reference).
+ * @param string $name  field_name or id.
+ * @param mixed  $value Value.
+ */
+function minn_admin_wc_post_set( &$post, $name, $value ) {
+	if ( false !== strpos( $name, '[' ) ) {
+		parse_str( $name . '=', $parsed );
+		$base = (string) key( $parsed );
+		$sub  = is_array( $parsed[ $base ] ?? null ) ? (string) key( $parsed[ $base ] ) : '';
+		if ( '' !== $base && '' !== $sub ) {
+			if ( ! isset( $post[ $base ] ) || ! is_array( $post[ $base ] ) ) {
+				$post[ $base ] = array();
+			}
+			$post[ $base ][ $sub ] = $value;
+			return;
+		}
+	}
+	$post[ $name ] = $value;
 }
 
 /**
@@ -962,7 +992,9 @@ function minn_admin_wc_settings_api_schema( $obj, $admin_url, $fields = null, $r
 		}
 		$wf['value']       = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
 		$wf['minn_object'] = true;
-		unset( $wf['is_option'] );
+		// WC_Settings_API keys by get_field_key( id ); a field_name would
+		// re-key the result away from the id this loop maps back.
+		unset( $wf['is_option'], $wf['field_name'] );
 		$mapped = minn_admin_wc_settings_map_field( $wf, $values );
 		if ( null === $mapped ) {
 			$group['locked']++;
@@ -1040,7 +1072,9 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited, $fields = null, $r
 		$wf['type']  = $type;
 		$wf['value']       = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
 		$wf['minn_object'] = true;
-		unset( $wf['is_option'] );
+		// WC_Settings_API keys by get_field_key( id ); a field_name would
+		// re-key the result away from the id this loop maps back.
+		unset( $wf['is_option'], $wf['field_name'] );
 		$one               = minn_admin_wc_settings_post_data( array( $wf ), $edited );
 		foreach ( $one as $k => $v ) {
 			$post[ $obj->get_field_key( $k ) ] = $v;

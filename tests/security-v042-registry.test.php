@@ -552,4 +552,21 @@ if ( function_exists( 'minn_admin_asset_cleanup_save' ) && function_exists( 'min
 	$skip( 'Asset CleanUp inactive' );
 }
 
+// --- #22 Store settings post option-array ids nested -----------------------
+if ( function_exists( 'minn_admin_wc_settings_post_data' ) && class_exists( 'WC_Admin_Settings' ) ) {
+	update_option( 'minn_v042_arr', array( 'one' => 'yes', 'two' => 'yes', 'three' => 'no' ) );
+	$wc_fields = array(
+		array( 'id' => 'minn_v042_arr[one]', 'type' => 'checkbox', 'default' => 'no' ),
+		array( 'id' => 'minn_v042_arr[two]', 'type' => 'checkbox', 'default' => 'no' ),
+		array( 'id' => 'minn_v042_arr[three]', 'type' => 'checkbox', 'default' => 'no' ),
+	);
+	$wc_post = minn_admin_wc_settings_post_data( $wc_fields, array( 'minn_v042_arr[three]' => true ) );
+	WC_Admin_Settings::save_fields( $wc_fields, $wc_post );
+	$wc_now = get_option( 'minn_v042_arr' );
+	$check( 'Store settings: turning one option-array switch on keeps the others on', array( 'one' => 'yes', 'two' => 'yes', 'three' => 'yes' ) === (array) $wc_now, wp_json_encode( $wc_now ) );
+	delete_option( 'minn_v042_arr' );
+} else {
+	$skip( 'WooCommerce settings not loaded' );
+}
+
 $summary();
