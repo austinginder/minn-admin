@@ -400,7 +400,7 @@ function minn_admin_bricks_import_one( $data ) {
 	if ( $tax ) {
 		$insert['tax_input'] = $tax;
 	}
-	$id = wp_insert_post( $insert, true );
+	$id = wp_insert_post( wp_slash( $insert ), true );
 	if ( is_wp_error( $id ) ) {
 		return $id;
 	}
@@ -969,11 +969,11 @@ add_action( 'rest_api_init', function () {
 				}
 				// Mirrors Bricks' own create_template: publish for publishers,
 				// pending otherwise, type stored as postmeta after insert.
-				$id = wp_insert_post( array(
+				$id = wp_insert_post( wp_slash( array(
 					'post_status' => current_user_can( 'publish_posts' ) ? 'publish' : 'pending',
 					'post_title'  => esc_html( $title ),
 					'post_type'   => BRICKS_DB_TEMPLATE_SLUG,
-				), true );
+				) ), true );
 				if ( is_wp_error( $id ) ) {
 					return $id;
 				}
@@ -1005,7 +1005,7 @@ add_action( 'rest_api_init', function () {
 				}
 				$title = trim( (string) $request['title'] );
 				if ( '' !== $title && $title !== $post->post_title ) {
-					$result = wp_update_post( array( 'ID' => $post->ID, 'post_title' => esc_html( $title ) ), true );
+					$result = wp_update_post( wp_slash( array( 'ID' => $post->ID, 'post_title' => esc_html( $title ) ) ), true );
 					if ( is_wp_error( $result ) ) {
 						return $result;
 					}
@@ -1177,16 +1177,16 @@ add_action( 'rest_api_init', function () {
 						array( 'status' => 403 )
 					);
 				}
-				wp_update_post( array( 'ID' => $new_id, 'post_title' => $copy_title ) );
+				wp_update_post( wp_slash( array( 'ID' => $new_id, 'post_title' => $copy_title ) ) );
 				return rest_ensure_response( minn_admin_bricks_template_item( get_post( $new_id ) ) );
 			}
 			// A build without their cloner: a DRAFT copy, never a published
 			// one, and the placement rules stay behind.
-			$new_id = wp_insert_post( array(
+			$new_id = wp_insert_post( wp_slash( array(
 				'post_status' => 'draft',
 				'post_title'  => $copy_title,
 				'post_type'   => BRICKS_DB_TEMPLATE_SLUG,
-			), true );
+			) ), true );
 			if ( is_wp_error( $new_id ) ) {
 				return $new_id;
 			}

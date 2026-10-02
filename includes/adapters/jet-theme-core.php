@@ -283,7 +283,7 @@ add_action( 'rest_api_init', function () {
 				if ( '' === $title ) {
 					return new WP_Error( 'missing_title', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				$r = wp_update_post( array( 'ID' => $p->ID, 'post_title' => $title ), true );
+				$r = wp_update_post( wp_slash( array( 'ID' => $p->ID, 'post_title' => $title ) ), true );
 				if ( is_wp_error( $r ) ) {
 					return $r;
 				}

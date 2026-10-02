@@ -41,7 +41,8 @@ function minn_admin_ccj_update_post_meta_only( $update ) {
 	if ( $lifted ) {
 		kses_remove_filters();
 	}
-	$result = wp_update_post( $update );
+	// Slashed: wp_update_post unslashes what it is given.
+	$result = wp_update_post( wp_slash( $update ) );
 	if ( $lifted ) {
 		kses_init();
 	}
@@ -643,12 +644,15 @@ add_action( 'rest_api_init', function () {
 				if ( ! empty( $body['active'] ) && ! minn_admin_ccj_obj_can( 'publish' ) ) {
 					return minn_admin_ccj_obj_error();
 				}
-				$id   = wp_insert_post( array(
+				// Slashed: wp_insert_post unslashes its input, and a CSS or JS
+				// body loses every backslash otherwise ("\f101" icon codes,
+				// regex escapes) before rebuild_tree writes it to the file.
+				$id   = wp_insert_post( wp_slash( array(
 					'post_type'    => 'custom-css-js',
 					'post_title'   => $name,
 					'post_content' => $code,
 					'post_status'  => ! empty( $body['active'] ) ? 'publish' : 'draft',
-				), true );
+				) ), true );
 				if ( is_wp_error( $id ) ) {
 					return $id;
 				}
@@ -725,7 +729,7 @@ add_action( 'rest_api_init', function () {
 					update_post_meta( $id, '_active', $body['active'] ? 'yes' : 'no' );
 				}
 				if ( array_key_exists( 'post_content', $update ) ) {
-					wp_update_post( $update );
+					wp_update_post( wp_slash( $update ) );
 				} else {
 					minn_admin_ccj_update_post_meta_only( $update );
 				}

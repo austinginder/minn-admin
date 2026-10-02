@@ -483,12 +483,12 @@ add_action(
 						$title = __( 'Untitled' );
 					}
 					$post_id = wp_insert_post(
-						array(
+						wp_slash( array(
 							'post_type'    => $type,
 							'post_status'  => 'draft',
 							'post_title'   => $title,
 							'post_content' => '',
-						),
+						) ),
 						true
 					);
 					if ( is_wp_error( $post_id ) ) {

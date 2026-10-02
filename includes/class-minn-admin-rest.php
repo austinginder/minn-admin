@@ -10774,8 +10774,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $type || ! current_user_can( $type->cap->create_posts ) ) {
 			return new WP_Error( 'forbidden', __( 'You are not allowed to create this type of content.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
+		// wp_insert_post() unslashes its input, so stored values go in
+		// slashed or every backslash in the copy is lost (block-attribute
+		// \u escapes, code samples, Windows paths).
 		$new_id = wp_insert_post(
-			array(
+			wp_slash( array(
 				'post_title'     => $post->post_title ? $post->post_title : 'Untitled',
 				'post_content'   => $post->post_content,
 				'post_excerpt'   => $post->post_excerpt,
@@ -10787,7 +10790,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'ping_status'    => $post->ping_status,
 				'post_password'  => $post->post_password,
 				'post_author'    => get_current_user_id(),
-			),
+			) ),
 			true
 		);
 		if ( is_wp_error( $new_id ) ) {

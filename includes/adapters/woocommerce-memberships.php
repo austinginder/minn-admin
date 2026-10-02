@@ -2250,7 +2250,7 @@ add_action( 'rest_api_init', function () {
 			return $general;
 		}
 		if ( count( $post_update ) > 1 ) {
-			$r = wp_update_post( $post_update, true );
+			$r = wp_update_post( wp_slash( $post_update ), true );
 			if ( is_wp_error( $r ) ) {
 				return new WP_Error( 'minn_wcm_plan', $r->get_error_message(), array( 'status' => 400 ) );
 			}

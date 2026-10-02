@@ -558,10 +558,10 @@ add_action( 'rest_api_init', function () {
 				if ( '' === $title ) {
 					return new WP_Error( 'invalid', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				$updated = wp_update_post( array(
+				$updated = wp_update_post( wp_slash( array(
 					'ID'         => $post->ID,
 					'post_title' => $title,
-				), true );
+				) ), true );
 				if ( is_wp_error( $updated ) ) {
 					return $updated;
 				}

@@ -168,4 +168,33 @@ if ( function_exists( 'acf_update_field_group' ) && function_exists( 'acf_get_st
 	$skip( 'ACF inactive' );
 }
 
+// --- #25 Duplicate keeps backslashes; #29 CCJ code keeps backslashes ------
+$bs_content = '<!-- wp:paragraph {"note":"a\u003cb"} --><p>C:\\Users\\minn and a regex \\d+</p><!-- /wp:paragraph -->';
+$src        = wp_insert_post( wp_slash( array( 'post_title' => 'Minn v042 slash \\ probe', 'post_content' => $bs_content, 'post_status' => 'draft' ) ) );
+$check( 'Duplicate seed stored its backslashes', get_post( $src )->post_content === $bs_content );
+list( $st, $dup ) = $call( 'POST', '/minn-admin/v1/posts/' . $src . '/duplicate' );
+$copy             = ! empty( $dup['id'] ) ? get_post( (int) $dup['id'] ) : null;
+$check( 'Duplicate copies content byte for byte, backslashes included', $copy && $copy->post_content === $bs_content, $copy ? substr( $copy->post_content, 0, 90 ) : 'status ' . $st );
+$check( 'Duplicate copies a title with a backslash', $copy && false !== strpos( $copy->post_title, '\\' ), $copy ? $copy->post_title : '' );
+if ( $copy ) {
+	wp_delete_post( $copy->ID, true );
+}
+wp_delete_post( $src, true );
+
+if ( function_exists( 'minn_admin_ccj_active' ) && minn_admin_ccj_active() && post_type_exists( 'custom-css-js' ) ) {
+	$css = ".icon:before { content: \"\\f101\"; }\n";
+	list( $st, $made ) = $call( 'POST', '/minn-admin/v1/ccj/snippets', array( 'name' => 'Minn v042 slash', 'code' => $css, 'language' => 'css', 'type' => 'header', 'side' => 'frontend', 'linking' => 'internal', 'priority' => 5, 'active' => false ) );
+	$cid               = (int) ( $made['id'] ?? 0 );
+	$check( 'CCJ create keeps backslashes in the code', $cid && get_post( $cid )->post_content === $css, $cid ? get_post( $cid )->post_content : 'status ' . $st );
+	if ( $cid ) {
+		$css2 = ".icon:after { content: \"\\f102\"; }\n";
+		$call( 'PUT', '/minn-admin/v1/ccj/snippets/' . $cid, array( 'code' => $css2, 'name' => 'Minn v042 slash \\ renamed' ) );
+		clean_post_cache( $cid );
+		$check( 'CCJ update keeps backslashes in the code', get_post( $cid )->post_content === $css2, get_post( $cid )->post_content );
+		$call( 'DELETE', '/minn-admin/v1/ccj/snippets/' . $cid );
+	}
+} else {
+	$skip( 'Custom CSS & JS inactive' );
+}
+
 $summary();
