@@ -656,10 +656,14 @@ add_action( 'rest_api_init', function () {
 					}
 					// load_from_array (via the array constructor) can set private
 					// fields like priority/note that are not assignable from outside.
+					// Title and code go in SLASHED: WPCode_Snippet::save() hands them
+					// to wp_insert_post(), which unslashes, and WPCode's own form
+					// feeds it slashed $_POST (its activation check unslashes the
+					// code to match). Unslashed, every backslash in code was lost.
 					$snippet = new WPCode_Snippet(
 						array(
-							'title'       => sanitize_text_field( (string) $request['name'] ),
-							'code'        => minn_admin_wpcode_clean_code( $create_type, (string) ( $request['code'] ?? '' ) ),
+							'title'       => wp_slash( sanitize_text_field( (string) $request['name'] ) ),
+							'code'        => wp_slash( minn_admin_wpcode_clean_code( $create_type, (string) ( $request['code'] ?? '' ) ) ),
 							'code_type'   => $create_type,
 							'location'    => $create_location,
 							'priority'    => (int) ( $request['priority'] ?? 10 ),
@@ -869,6 +873,23 @@ add_action( 'rest_api_init', function () {
 						$patch['active'] = (bool) $request['active'];
 					}
 					$snippet->load_from_array( $patch );
+					// Slash what save() hands wp_update_post(): the code and title
+					// are now in the model whether this request changed them or
+					// they were hydrated from the database above, and unslashed
+					// they lose every backslash, so even a priority-only edit
+					// rewrote live code ('/\d+/' became '/d+/').
+					$snippet->load_from_array(
+						array(
+							'code'  => wp_slash( (string) $snippet->get_code() ),
+							'title' => wp_slash( (string) $snippet->get_title() ),
+						)
+					);
+					// save() deletes the compress-output flag unless the property is
+					// set; carry it when it is on, as WPCode's own handler does (a
+					// false value would read as set and switch it on).
+					if ( get_post_meta( $snippet->get_id(), '_wpcode_compress_output', true ) ) {
+						$snippet->compress_output = true;
+					}
 					if ( ! $snippet->save() ) {
 						return new WP_Error( 'wpcode_save_failed', __( 'Could not save the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
@@ -936,6 +957,11 @@ add_action( 'rest_api_init', function () {
 				);
 				if ( is_wp_error( $guard ) ) {
 					return $guard;
+				}
+				// activate()/deactivate() save the model, and save() drops the
+				// compress-output flag unless the property is set.
+				if ( get_post_meta( $snippet->get_id(), '_wpcode_compress_output', true ) ) {
+					$snippet->compress_output = true;
 				}
 				if ( ! empty( $request['active'] ) ) {
 					$snippet->activate();

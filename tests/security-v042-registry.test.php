@@ -709,4 +709,22 @@ if ( class_exists( 'Tribe__Events__Pro__Main' ) && class_exists( 'Tribe__Events_
 	$skip( 'Events Calendar Pro inactive' );
 }
 
+// --- OS-2 / OS-9 WPCode keeps backslashes and the compress-output flag -----
+if ( class_exists( 'WPCode_Snippet' ) && function_exists( 'minn_admin_wpcode_guard_type' ) ) {
+	$wc_code = "\$x = preg_replace( '/\\d+/', '#', 'a1' ); // \"\\\\\" stays\n";
+	list( $st, $made ) = $call( 'POST', '/minn-admin/v1/wpcode/snippets', array( 'name' => 'Minn v042 slash', 'code' => $wc_code, 'code_type' => 'php', 'location' => 'on_demand', 'auto_insert' => true, 'priority' => 10, 'active' => false, 'tags' => array(), 'desc' => '' ) );
+	$wc_id             = (int) ( $made['id'] ?? 0 );
+	$check( 'WPCode: create keeps the code\'s backslashes', $wc_id && get_post( $wc_id )->post_content === $wc_code, $wc_id ? get_post( $wc_id )->post_content : 'status ' . $st );
+	if ( $wc_id ) {
+		update_post_meta( $wc_id, '_wpcode_compress_output', true );
+		$call( 'PUT', '/minn-admin/v1/wpcode/snippets/' . $wc_id, array( 'priority' => 11 ) );
+		clean_post_cache( $wc_id );
+		$check( 'WPCode: a priority-only edit leaves the stored code byte for byte', get_post( $wc_id )->post_content === $wc_code, get_post( $wc_id )->post_content );
+		$check( 'WPCode: an edit keeps the compress-output flag', (bool) get_post_meta( $wc_id, '_wpcode_compress_output', true ) );
+		wp_delete_post( $wc_id, true );
+	}
+} else {
+	$skip( 'WPCode inactive' );
+}
+
 $summary();
