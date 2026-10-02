@@ -6880,12 +6880,25 @@ Please click the following link to confirm the invite:
 				continue;
 			}
 			$found = null;
+			$all   = array();
 			foreach ( array( 'parent', 'renewal', 'resubscribe', 'switch' ) as $kind ) {
-				$subs = wcs_get_subscriptions_for_order( $id, array( 'order_type' => $kind ) );
+				$args = array( 'order_type' => $kind );
+				// A permanent delete of a (trashed) parent order also deletes
+				// trashed subscriptions (WCS maybe_delete_subscription looks
+				// them up with any + trash), so the warning must see them.
+				if ( 'parent' === $kind && $request->get_param( 'include_trash' ) ) {
+					$args['subscription_status'] = array( 'any', 'trash' );
+				}
+				$subs = wcs_get_subscriptions_for_order( $id, $args );
 				if ( empty( $subs ) ) {
 					continue;
 				}
 				$found = array( $kind, reset( $subs ) );
+				// One checkout can start a subscription per billing schedule;
+				// WCS cancels or deletes every one, so name every one.
+				foreach ( $subs as $one ) {
+					$all[] = (string) $one->get_order_number();
+				}
 				break;
 			}
 			if ( ! $found ) {
@@ -6895,6 +6908,7 @@ Please click the following link to confirm the invite:
 			$status = $sub->get_status();
 			$out[ (string) $id ] = array(
 				'kind'         => $kind,
+				'numbers'      => $all,
 				'subscription' => array(
 					'id'                     => $sub->get_id(),
 					'number'                 => (string) $sub->get_order_number(),
@@ -6926,7 +6940,14 @@ Please click the following link to confirm the invite:
 	 * @return array|null { url, provider }
 	 */
 	public static function wc_order_transaction_link( $data, $field_name = '', $request = null ) {
-		$asked = ( $request instanceof WP_REST_Request ) ? wp_parse_list( $request['_fields'] ) : array();
+		// Absent _fields (every ordinary order response, webhooks included)
+		// means nobody asked; wp_parse_list( null ) would also raise a PHP 8.1
+		// deprecation per order.
+		$raw_fields = ( $request instanceof WP_REST_Request ) ? $request->get_param( '_fields' ) : null;
+		if ( empty( $raw_fields ) ) {
+			return null;
+		}
+		$asked = wp_parse_list( $raw_fields );
 		$named = false;
 		foreach ( $asked as $f ) {
 			if ( 'minn_transaction' === $f || 0 === strpos( $f, 'minn_transaction.' ) ) {
@@ -6991,8 +7012,20 @@ Please click the following link to confirm the invite:
 		// exists, HPOS restores the order as pending and then reports failure
 		// (it compares "wc-pending" with "pending"). Whether the order left
 		// the Trash is what counts.
+		// HPOS: WooCommerce's own Restore is the order's untrash() (it sets
+		// the old status and saves). Posts storage: wp-admin's Restore is
+		// wp_untrash_post() alone, with WooCommerce's wp_untrash_post_status
+		// filter putting the old status back; untrash() there runs a full
+		// status transition (trash -> failed restored a renewal's failure and
+		// put its subscription on hold), so do what post.php does.
+		$hpos = class_exists( '\\Automattic\\WooCommerce\\Utilities\\OrderUtil' )
+			&& \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
 		try {
-			$order->untrash();
+			if ( $hpos ) {
+				$order->untrash();
+			} else {
+				wp_untrash_post( $order->get_id() );
+			}
 		} catch ( \Throwable $e ) {
 			unset( $e );
 		}

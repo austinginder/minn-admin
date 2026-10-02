@@ -8681,15 +8681,27 @@
 	 * sends the cancellation and stops the gateway's billing: restoring the
 	 * order brings them back cancelled, so Undo cannot cover that part.
 	 * Renewal orders cascade nothing. Null when there are none. */
-	async function orderStartedSubscription( o ) {
+	async function orderStartedSubscription( o, includeTrash ) {
 		if ( ! B.wcs ) return null;
 		try {
-			const r = await api( `minn-admin/v1/wc/orders/subscription-relations?ids=${ o.id }` );
+			const r = await api( `minn-admin/v1/wc/orders/subscription-relations?ids=${ o.id }${ includeTrash ? '&include_trash=1' : '' }` );
 			const rel = r && r[ String( o.id ) ];
-			return rel && rel.kind === 'parent' ? ( rel.subscription || {} ) : null;
+			if ( ! rel || rel.kind !== 'parent' ) return null;
+			const sub = rel.subscription || {};
+			const numbers = ( Array.isArray( rel.numbers ) && rel.numbers.length ) ? rel.numbers : [ String( sub.number || sub.id ) ];
+			return { numbers };
 		} catch ( e ) {
-			return null;
+			// Fail closed: when the lookup cannot answer, the warning still
+			// shows (WCS cancels whatever the order started either way).
+			return { unknown: true };
 		}
+	}
+
+	// "#12" / "#12 and #13" / "#12, #13 and #14".
+	function subscriptionList( numbers ) {
+		const tags = numbers.map( ( n ) => '#' + n );
+		/* translators: 1: a comma-separated list of subscription numbers, 2: the last one. */
+		return tags.length > 1 ? sprintf( __( '%1$s and %2$s' ), tags.slice( 0, -1 ).join( ', ' ), tags[ tags.length - 1 ] ) : tags[ 0 ];
 	}
 
 	async function trashOrder( o ) {
@@ -8698,8 +8710,10 @@
 		if ( sub && ! await minnConfirm( {
 			/* translators: %s: the order number. */
 			title: sprintf( __( 'Move order #%s to the Trash?' ), num ),
-			/* translators: %s: the subscription number. */
-			body: sprintf( __( 'This order started subscription #%s. WooCommerce Subscriptions cancels it and moves it to the Trash too, which emails the customer and stops its payments. Restoring the order brings the subscription back cancelled, not active.' ), sub.number || sub.id ),
+			body: sub.unknown
+				? __( 'If this order started a subscription, WooCommerce Subscriptions cancels it and moves it to the Trash too, which emails the customer and stops its payments. Restoring the order brings the subscription back cancelled, not active.' )
+				/* translators: %s: one or more subscription numbers, like "#12 and #13". */
+				: sprintf( __( 'This order started subscription %s. WooCommerce Subscriptions cancels it and moves it to the Trash too, which emails the customer and stops its payments. Restoring the order brings the subscription back cancelled, not active.' ), subscriptionList( sub.numbers ) ),
 			danger: true,
 			confirmLabel: __( 'Move to Trash' ),
 		} ) ) return false;
@@ -8717,14 +8731,17 @@
 
 	async function deleteOrderForever( o ) {
 		const num = o.number || o.id;
-		const sub = await orderStartedSubscription( o );
+		// Trashed subscriptions included: a permanent delete takes those too.
+		const sub = await orderStartedSubscription( o, true );
 		if ( ! await minnConfirm( {
 			/* translators: %s: the order number. */
 			title: sprintf( __( 'Delete order #%s permanently?' ), num ),
-			body: sub
-				/* translators: %s: the subscription number. */
-				? sprintf( __( 'The order, its notes and its refund records are removed for good, and WooCommerce Subscriptions deletes subscription #%s, which this order started, with it. There is no undo for this.' ), sub.number || sub.id )
-				: __( 'The order, its notes and its refund records are removed for good. There is no undo for this.' ),
+			body: sub && sub.unknown
+				? __( 'The order, its notes and its refund records are removed for good, and if it started a subscription, WooCommerce Subscriptions deletes that too. There is no undo for this.' )
+				: sub
+					/* translators: %s: one or more subscription numbers, like "#12 and #13". */
+					? sprintf( __( 'The order, its notes and its refund records are removed for good, and WooCommerce Subscriptions deletes subscription %s, which this order started, with it. There is no undo for this.' ), subscriptionList( sub.numbers ) )
+					: __( 'The order, its notes and its refund records are removed for good. There is no undo for this.' ),
 			danger: true,
 			confirmLabel: __( 'Delete permanently' ),
 		} ) ) return false;
