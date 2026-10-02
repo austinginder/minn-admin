@@ -410,8 +410,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 
+	// Every type WPCode Lite offers. The Pro-only ones (scss, blocks) are not
+	// listed for new snippets; a stored one still round-trips unchanged because
+	// the form keeps a stored value its list does not know.
 	$type_options = array(
 		array( 'php', 'PHP' ),
+		array( 'universal', __( 'Universal (HTML and PHP)', 'minn-admin' ) ),
 		array( 'js', 'JavaScript' ),
 		array( 'css', 'CSS' ),
 		array( 'html', 'HTML' ),
@@ -420,11 +424,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// Two tiers, and they are not interchangeable: the first five are the buckets
 	// WPCode executes as PHP, the rest emit markup. The server refuses a pairing it
 	// did not offer (minn_admin_wpcode_location_in), so this list is the honest
-	// vocabulary rather than the only guard.
+	// vocabulary rather than the only guard. It must list EVERY executing bucket:
+	// the edit form sends location on every save, so a stored location missing
+	// here used to be replaced by the first entry, and a note edit moved a
+	// conditional or on-demand PHP snippet to run everywhere.
 	$location_options = array(
 		array( 'everywhere', __( 'Everywhere (runs code)', 'minn-admin' ) ),
 		array( 'frontend_only', __( 'Front-end only (runs code)', 'minn-admin' ) ),
 		array( 'admin_only', __( 'Admin only (runs code)', 'minn-admin' ) ),
+		array( 'frontend_cl', __( 'Front-end, conditional logic (runs code)', 'minn-admin' ) ),
+		array( 'on_demand', __( 'On demand (runs code)', 'minn-admin' ) ),
 		array( 'site_wide_header', __( 'Site-wide header', 'minn-admin' ) ),
 		array( 'site_wide_body', __( 'Site-wide body', 'minn-admin' ) ),
 		array( 'site_wide_footer', __( 'Site-wide footer', 'minn-admin' ) ),

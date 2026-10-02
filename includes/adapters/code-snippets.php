@@ -48,8 +48,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// plugin's own admin stay in lockstep.
 	$cap = minn_admin_code_snippets_cap();
 
-	// Free-tier scopes from Snippet::get_all_scopes(). Pro CSS/JS scopes still
-	// round-trip via preserve if present; the select covers the common set.
+	// The PHP and HTML scopes from Snippet::get_all_scopes(). The scope decides
+	// the snippet's TYPE (Snippet::get_type), and the edit form sends it on every
+	// save, so a stored scope this list does not offer (Pro's CSS, JS and
+	// condition scopes) is kept by the form as its own choice rather than
+	// replaced by the first entry, which turned a CSS snippet into global PHP.
 	$scope_options = array(
 		array( 'global', __( 'Global (everywhere)', 'minn-admin' ) ),
 		array( 'admin', __( 'Admin only', 'minn-admin' ) ),
@@ -57,6 +60,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'single-use', __( 'Single use', 'minn-admin' ) ),
 		array( 'content', __( 'Content (shortcode)', 'minn-admin' ) ),
 		array( 'head-content', __( 'Site head', 'minn-admin' ) ),
+		array( 'body-content', __( 'Site body', 'minn-admin' ) ),
 		array( 'footer-content', __( 'Site footer', 'minn-admin' ) ),
 	);
 

@@ -390,14 +390,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'header', 'Header' ),
 		array( 'footer', 'Footer' ),
 	);
+	// The edit form sends every field, and CCJ stores side as a comma list
+	// ("frontend,admin", "frontend,block") that this single-choice list cannot
+	// name. The form keeps a stored value its list does not know as its own
+	// choice, so a rename never narrows where a snippet loads.
 	$side_options = array(
 		array( 'frontend', 'Front-end' ),
 		array( 'admin', 'Admin' ),
 		array( 'login', 'Login' ),
 	);
+	// 'both' is CCJ's default for HTML snippets.
 	$link_options = array(
 		array( 'internal', __( 'Internal', 'minn-admin' ) ),
 		array( 'external', __( 'External file', 'minn-admin' ) ),
+		array( 'both', __( 'Both', 'minn-admin' ) ),
 	);
 
 	$edit_fields = array(

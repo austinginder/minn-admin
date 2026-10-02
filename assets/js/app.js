@@ -1481,6 +1481,20 @@
 		return Object.assign( {}, f, { key: f.key || f.name, type, options } );
 	}
 
+	// A stored value the option list does not know (a vendor location or
+	// scope Minn never listed, a Pro-only choice) joins the list as its own
+	// option, so an untouched control saves what is stored instead of
+	// silently switching to the first choice. Empty values keep the
+	// first-option default a fresh form wants; booleans and objects are not
+	// choice keys and pass through unchanged.
+	function withStoredOption( options, v ) {
+		const list = Array.isArray( options ) ? options : [];
+		if ( ! list.length || ( typeof v !== 'string' && typeof v !== 'number' ) ) return list;
+		const s = String( v );
+		if ( s === '' || list.some( ( o ) => String( o[ 0 ] ) === s ) ) return list;
+		return [ ...list, [ s, s ] ];
+	}
+
 	function formControlHtml( f, val, attr, idKey ) {
 		const id = idKey != null ? idKey : f.key;
 		const v = val == null ? '' : val;
@@ -1494,7 +1508,7 @@
 			return `<textarea class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="textarea" rows="${ rows }" placeholder="${ esc( f.placeholder || '' ) }">${ esc( String( v ) ) }</textarea>`;
 		}
 		if ( t === 'select' ) {
-			let options = f.options || [];
+			let options = withStoredOption( f.options || [], v );
 			if ( f.clearable && ! options.some( ( o ) => String( o[ 0 ] ) === '' ) ) options = [ [ '', '—' ], ...options ];
 			const opts = options.map( ( [ ov, ol ] ) => `<option value="${ esc( String( ov ) ) }"${ String( ov ) === String( v ) ? ' selected' : '' }>${ esc( String( ol ) ) }</option>` ).join( '' );
 			return `<select class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="select">${ opts }</select>`;
@@ -1510,7 +1524,7 @@
 			// match the field list (panel `pid:name`, row `i:name`) still
 			// binds from the markup.
 			const acopts = ( f.options && f.options.length )
-				? ` data-acopts="${ esc( JSON.stringify( f.options ) ) }"` : '';
+				? ` data-acopts="${ esc( JSON.stringify( withStoredOption( f.options, v ) ) ) }"` : '';
 			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="combobox" data-acseed="${ esc( String( v ) ) }"${ acopts }>
 				<input class="minn-input minn-ac-input" placeholder="${ esc( f.placeholder || '' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
@@ -2805,9 +2819,9 @@
 
 	// Arm every rendered combobox in `scope` from its data-acseed + the
 	// field's options (or the wrap's data-acopts stamp). Strict mode
-	// seeds dataset.acValue (falling back to the first option when the
-	// seed isn't in the vocabulary, exactly like a native select
-	// renders), so an untouched control collects the same value an
+	// seeds dataset.acValue: a stored value outside the vocabulary joins
+	// it (withStoredOption) and only an empty seed falls back to the
+	// first option, so an untouched control collects the same value an
 	// untouched select would.
 	function bindFormComboboxes( scope, attr, fields, onEdit ) {
 		if ( ! scope ) return;
@@ -2824,6 +2838,7 @@
 				options = [ [ '', '—' ], ...options ];
 			}
 			let seed = wrap.dataset.acseed || '';
+			options = withStoredOption( options, seed );
 			if ( ! options.some( ( o ) => String( o[ 0 ] ) === seed ) ) seed = String( options[ 0 ][ 0 ] );
 			bindAutocomplete( wrap, options.map( ( [ value, label ] ) => ( { value, label } ) ), { strict: true, value: seed } );
 			if ( onEdit ) {
