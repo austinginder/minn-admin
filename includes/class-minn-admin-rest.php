@@ -5643,13 +5643,15 @@ class Minn_Admin_REST {
 	 * autoload / cron / debug-log tools. On multisite this is server-wide
 	 * information a single subsite's administrator has no business reading,
 	 * so it takes a network administrator there; on a single site it is the
-	 * ordinary manage_options administrator. Core gates Site Health the same
-	 * way (view_site_health_checks resolves to the network on multisite).
+	 * manage_options administrator who may also open core's Site Health
+	 * (view_site_health_checks, which core maps to install_plugins, so a site
+	 * that locks file changes away from its administrators keeps this page
+	 * from them too, exactly as it does Site Health).
 	 */
 	public static function can_read_system() {
 		return is_multisite()
 			? current_user_can( 'manage_network_options' )
-			: current_user_can( 'manage_options' );
+			: current_user_can( 'manage_options' ) && current_user_can( 'view_site_health_checks' );
 	}
 
 	/**

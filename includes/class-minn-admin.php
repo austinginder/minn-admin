@@ -1570,6 +1570,9 @@ class Minn_Admin {
 			'updateLanguages' => current_user_can( 'update_languages' ),
 			'installThemes' => current_user_can( 'install_themes' ),
 			'settings'     => current_user_can( 'manage_options' ),
+			// The System page (and the database viewer it opens) sits behind
+			// core's Site Health floor; don't offer a page that would 403.
+			'system'       => Minn_Admin_REST::can_read_system(),
 			// Licences are network-scoped on multisite (see
 			// minn_admin_licenses_can_manage): the Licenses tab would 403
 			// for a subsite administrator, so don't offer it to them.

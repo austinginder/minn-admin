@@ -3516,7 +3516,7 @@
 			manageItems.push( { id: 'terms', label: __( 'Terms' ), icon: 'tag' } );
 		}
 		if ( B.caps.settings ) {
-			manageItems.push( { id: 'system', label: __( 'System' ), icon: 'activity' } );
+			if ( B.caps.system !== false ) manageItems.push( { id: 'system', label: __( 'System' ), icon: 'activity' } );
 			manageItems.push( { id: 'settings', label: __( 'Settings' ), icon: 'gear' } );
 		}
 		return filterHiddenNavItems( manageItems );

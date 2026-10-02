@@ -51,10 +51,12 @@ class Minn_Admin_DB {
 		// A subsite administrator reading them would cross a real boundary —
 		// they cannot install plugins or edit files here either, which is why
 		// the wp-config routes already gate on is_super_admin(). Match that.
+		// Same floor as the System page it opens from, which is core's Site
+		// Health floor on a single site (view_site_health_checks).
 		$manage = function () {
 			return is_multisite()
 				? current_user_can( 'manage_network_options' )
-				: current_user_can( 'manage_options' );
+				: current_user_can( 'manage_options' ) && current_user_can( 'view_site_health_checks' );
 		};
 		register_rest_route(
 			self::NS,

@@ -217,4 +217,25 @@ if ( ! is_wp_error( $t_def ) && ! is_wp_error( $t_into ) && ! is_wp_error( $t_ot
 	$skip( 'term merge seed failed' );
 }
 
+// --- #31 System diagnostics and the database viewer sit behind Site Health --
+if ( ! is_multisite() ) {
+	if ( ! function_exists( 'wp_delete_user' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+	}
+	remove_role( 'minn_v042_optmgr' );
+	add_role( 'minn_v042_optmgr', 'Minn v042 options manager', array( 'read' => true, 'edit_posts' => true, 'manage_options' => true ) );
+	$optmgr = wp_insert_user( array( 'user_login' => 'minn_v042_optmgr_' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'minn_v042_optmgr' ) );
+	wp_set_current_user( $optmgr );
+	list( $st_sys ) = $call( 'GET', '/minn-admin/v1/system' );
+	list( $st_db )  = $call( 'GET', '/minn-admin/v1/db/tables' );
+	$check( 'System diagnostics refuse manage_options without Site Health access', 403 === $st_sys, 'status ' . $st_sys );
+	$check( 'Database viewer refuses manage_options without Site Health access', 403 === $st_db, 'status ' . $st_db );
+	wp_set_current_user( $admin );
+	list( $st_sys ) = $call( 'GET', '/minn-admin/v1/system' );
+	list( $st_db )  = $call( 'GET', '/minn-admin/v1/db/tables' );
+	$check( 'An administrator still reads System and the database viewer (control)', 200 === $st_sys && 200 === $st_db, "system {$st_sys} db {$st_db}" );
+	wp_delete_user( $optmgr );
+	remove_role( 'minn_v042_optmgr' );
+}
+
 $summary();
