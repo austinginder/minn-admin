@@ -34,6 +34,16 @@ function minn_admin_powerpress_active() {
 }
 
 /**
+ * PowerPress's own episode gate. With "Roles and Capabilities" on
+ * (powerpress_general['use_caps']) its episode box only loads for
+ * edit_podcast (powerpress_admin_menu); otherwise every post editor gets it.
+ */
+function minn_admin_powerpress_can_podcast() {
+	$general = get_option( 'powerpress_general', array() );
+	return empty( $general['use_caps'] ) || current_user_can( 'edit_podcast' );
+}
+
+/**
  * Parse the enclosure blob into [ url, size, type, extras[] ].
  *
  * @param string $raw Stored meta value.
@@ -191,7 +201,7 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 }
 
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
-	if ( ! minn_admin_powerpress_active() ) {
+	if ( ! minn_admin_powerpress_active() || ! minn_admin_powerpress_can_podcast() ) {
 		return $panels;
 	}
 	$panels['powerpress'] = array(
@@ -213,7 +223,7 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/powerpress/fields', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
-			return current_user_can( 'edit_posts' );
+			return current_user_can( 'edit_posts' ) && minn_admin_powerpress_can_podcast();
 		},
 		'args'                => array(
 			'post_id'   => array( 'type' => 'integer', 'default' => 0 ),
@@ -278,7 +288,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'get_callback'    => function ( $obj ) {
 				$id = isset( $obj['id'] ) ? (int) $obj['id'] : 0;
-				if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
+				if ( ! $id || ! current_user_can( 'edit_post', $id ) || ! minn_admin_powerpress_can_podcast() ) {
 					return new stdClass();
 				}
 				return (object) minn_admin_powerpress_read_values( $id );
@@ -286,6 +296,9 @@ add_action( 'rest_api_init', function () {
 			'update_callback' => function ( $value, $post ) {
 				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
 					return;
+				}
+				if ( ! minn_admin_powerpress_can_podcast() ) {
+					return new WP_Error( 'rest_forbidden', __( 'PowerPress limits podcast episodes to podcast editors on this site.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 				if ( is_object( $value ) ) {
 					$value = (array) $value;

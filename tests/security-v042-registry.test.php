@@ -264,4 +264,34 @@ if ( function_exists( 'minn_admin_duplicator_is_v5' ) && minn_admin_duplicator_a
 	$skip( 'Duplicator 5 inactive' );
 }
 
+// --- #20 PowerPress "Roles and Capabilities" gates the episode panel -------
+if ( function_exists( 'minn_admin_powerpress_active' ) && minn_admin_powerpress_active() ) {
+	$editor = get_user_by( 'login', 'minn-author' ); // the Author role carries no edit_podcast here
+	if ( $editor ) {
+		$general_was = get_option( 'powerpress_general', array() );
+		$pp_post     = wp_insert_post( array( 'post_title' => 'Minn v042 podcast probe', 'post_status' => 'draft', 'post_author' => $editor->ID ) );
+		$pp_write    = function () use ( $call, $pp_post ) {
+			return $call( 'POST', '/wp/v2/posts/' . $pp_post, array( 'minn_powerpress' => array( 'url' => 'https://example.com/minn-v042.mp3', 'size' => '1234', 'duration' => '00:01:00' ) ) );
+		};
+		update_option( 'powerpress_general', array_merge( (array) $general_was, array( 'use_caps' => 1 ) ) );
+		wp_set_current_user( $editor->ID );
+		$pp_write();
+		list( , $pp_read ) = $call( 'GET', '/wp/v2/posts/' . $pp_post, null, array( 'context' => 'edit' ) );
+		wp_set_current_user( $admin );
+		$check( 'PowerPress (roles on): an author without edit_podcast cannot attach an episode', '' === (string) get_post_meta( $pp_post, 'enclosure', true ), (string) get_post_meta( $pp_post, 'enclosure', true ) );
+		$check( 'PowerPress (roles on): an author without edit_podcast reads no episode fields', empty( (array) ( $pp_read['minn_powerpress'] ?? array() ) ), wp_json_encode( $pp_read['minn_powerpress'] ?? null ) );
+		update_option( 'powerpress_general', array_merge( (array) $general_was, array( 'use_caps' => 0 ) ) );
+		wp_set_current_user( $editor->ID );
+		$pp_write();
+		wp_set_current_user( $admin );
+		$check( 'PowerPress (roles off): the author attaches the episode (control)', false !== strpos( (string) get_post_meta( $pp_post, 'enclosure', true ), 'minn-v042.mp3' ) );
+		update_option( 'powerpress_general', $general_was );
+		wp_delete_post( $pp_post, true );
+	} else {
+		$skip( 'no minn-author fixture user' );
+	}
+} else {
+	$skip( 'PowerPress inactive' );
+}
+
 $summary();
