@@ -534,4 +534,22 @@ if ( function_exists( 'wpforms' ) && function_exists( 'minn_admin_wpforms_table'
 	$skip( 'WPForms inactive' );
 }
 
+// --- #10 Asset CleanUp saves start from the stored settings ----------------
+if ( function_exists( 'minn_admin_asset_cleanup_save' ) && function_exists( 'minn_admin_asset_cleanup_option_key' ) ) {
+	$acu_key = minn_admin_asset_cleanup_option_key();
+	$acu_was = get_option( $acu_key, '' );
+	$acu_arr = is_string( $acu_was ) && '' !== $acu_was ? (array) json_decode( $acu_was, true ) : array();
+	$acu_arr = array_merge( $acu_arr, array( 'google_fonts_remove' => '1', 'google_fonts_display' => 'swap', 'google_fonts_preconnect' => '1', 'google_fonts_local' => '1' ) );
+	update_option( $acu_key, wp_json_encode( $acu_arr ) );
+	wp_cache_delete( $acu_key, 'options' );
+	minn_admin_asset_cleanup_save( array( 'disable_emojis' => true ) );
+	wp_cache_delete( $acu_key, 'options' );
+	$acu_now = (array) json_decode( (string) get_option( $acu_key, '' ), true );
+	$check( 'Asset CleanUp: an unrelated toggle keeps the stored Google Fonts preferences', 'swap' === ( $acu_now['google_fonts_display'] ?? '' ) && '1' === (string) ( $acu_now['google_fonts_preconnect'] ?? '' ) && '1' === (string) ( $acu_now['google_fonts_local'] ?? '' ), wp_json_encode( array_intersect_key( $acu_now, array_flip( array( 'google_fonts_display', 'google_fonts_preconnect', 'google_fonts_local' ) ) ) ) );
+	$check( 'Asset CleanUp: the toggled setting itself is written (control)', '1' === (string) ( $acu_now['disable_emojis'] ?? '' ) );
+	update_option( $acu_key, $acu_was );
+} else {
+	$skip( 'Asset CleanUp inactive' );
+}
+
 $summary();

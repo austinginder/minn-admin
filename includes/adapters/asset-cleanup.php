@@ -177,6 +177,22 @@ function minn_admin_asset_cleanup_fields_by_key() {
 }
 
 /**
+ * The settings as stored: the raw JSON option, before Asset CleanUp's
+ * runtime filtering. What a write must start from.
+ *
+ * @return array
+ */
+function minn_admin_asset_cleanup_stored_settings() {
+	wp_cache_delete( minn_admin_asset_cleanup_option_key(), 'options' );
+	$raw = get_option( minn_admin_asset_cleanup_option_key(), '' );
+	if ( is_string( $raw ) && '' !== $raw ) {
+		$decoded = json_decode( $raw, true );
+		return is_array( $decoded ) ? $decoded : array();
+	}
+	return is_array( $raw ) ? $raw : array();
+}
+
+/**
  * Live settings from the JSON option (works when their classes no-load on REST).
  *
  * @return array
@@ -273,8 +289,14 @@ function minn_admin_asset_cleanup_tab_shape( $tab_id ) {
  * @return true|WP_Error
  */
 function minn_admin_asset_cleanup_save( $values ) {
-	$by_key   = minn_admin_asset_cleanup_fields_by_key();
-	$settings = minn_admin_asset_cleanup_settings();
+	$by_key = minn_admin_asset_cleanup_fields_by_key();
+	// Start from what is STORED, never from getAll(): that is the stored
+	// array run through filterSettings(), which nulls the Google Fonts
+	// delivery keys while removal is on, blanks combine_loaded_js under WP
+	// Rocket's delay-JS and applies ?wpacu_test_mode overrides for this one
+	// request. Their own Settings class warns that any complete-array writer
+	// must start from the stored copy, and their updateOption() does.
+	$settings = minn_admin_asset_cleanup_stored_settings();
 	$changed  = false;
 	foreach ( (array) $values as $key => $v ) {
 		if ( ! isset( $by_key[ $key ] ) ) {
