@@ -112,6 +112,37 @@ function minn_admin_wpcode_location_has_runner( $location ) {
 }
 
 /**
+ * Save a WPCode snippet whose title and code were slashed for storage.
+ *
+ * WPCode_Snippet::save() hands the code to wp_insert_post(), which unslashes,
+ * so the model must hold it slashed. When the snippet is active, save() also
+ * test-runs the code, and WPCode's PHP and universal runners unslash it for
+ * that test only when its own form field is in $_POST
+ * (WPCode_Snippet_Execute_PHP::prepare_snippet_output). Without it the test
+ * ran the slashed code, hit a parse error and saved the snippet switched off.
+ * Set exactly what WPCode's form would post for the length of the save.
+ *
+ * @param WPCode_Snippet $snippet Snippet holding slashed code.
+ * @return int|false Snippet id, or false.
+ */
+function minn_admin_wpcode_save_slashed( $snippet ) {
+	// phpcs:disable WordPress.Security.NonceVerification.Missing
+	$had = array_key_exists( 'wpcode_snippet_code', $_POST );
+	$was = $had ? $_POST['wpcode_snippet_code'] : null;
+	$_POST['wpcode_snippet_code'] = (string) $snippet->get_code();
+	try {
+		return $snippet->save();
+	} finally {
+		if ( $had ) {
+			$_POST['wpcode_snippet_code'] = $was;
+		} else {
+			unset( $_POST['wpcode_snippet_code'] );
+		}
+	}
+	// phpcs:enable WordPress.Security.NonceVerification.Missing
+}
+
+/**
  * The locations Minn offers for a given code type.
  *
  * WPCode's own form filters the location list by type in JavaScript; the REST
@@ -695,7 +726,7 @@ add_action( 'rest_api_init', function () {
 							'active'      => ! empty( $request['active'] ),
 						)
 					);
-					$id = $snippet->save();
+					$id = minn_admin_wpcode_save_slashed( $snippet );
 					if ( ! $id ) {
 						return new WP_Error( 'wpcode_save_failed', __( 'Could not create the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
@@ -908,7 +939,7 @@ add_action( 'rest_api_init', function () {
 					if ( get_post_meta( $snippet->get_id(), '_wpcode_compress_output', true ) ) {
 						$snippet->compress_output = true;
 					}
-					if ( ! $snippet->save() ) {
+					if ( ! minn_admin_wpcode_save_slashed( $snippet ) ) {
 						return new WP_Error( 'wpcode_save_failed', __( 'Could not save the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
 					return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) ) ) );

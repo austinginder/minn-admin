@@ -739,6 +739,24 @@ if ( class_exists( 'WPCode_Snippet' ) && function_exists( 'minn_admin_wpcode_gua
 		$check( 'WPCode: an edit keeps the compress-output flag', (bool) get_post_meta( $wc_id, '_wpcode_compress_output', true ) );
 		wp_delete_post( $wc_id, true );
 	}
+	// An ACTIVE snippet with quotes: WPCode test-runs it on save and must see
+	// the code unslashed (round-2 review R2-1), and still refuse broken code.
+	$q_code = '$minn_v042_q = "ok"; // it\'s preg_match( \'/\d+/\', "1" );';
+	list( , $qa ) = $call( 'POST', '/minn-admin/v1/wpcode/snippets', array( 'name' => 'Minn v042 active quotes', 'code' => $q_code, 'code_type' => 'php', 'location' => 'on_demand', 'auto_insert' => true, 'priority' => 10, 'active' => true, 'tags' => array(), 'desc' => '' ) );
+	$q_id         = (int) ( $qa['id'] ?? 0 );
+	$check( 'WPCode: an active snippet with quotes is created active', $q_id && 'publish' === get_post_status( $q_id ), $q_id ? get_post_status( $q_id ) : 'no id' );
+	if ( $q_id ) {
+		$call( 'PUT', '/minn-admin/v1/wpcode/snippets/' . $q_id, array( 'priority' => 12 ) );
+		clean_post_cache( $q_id );
+		$check( 'WPCode: a priority edit keeps an active quoted snippet active and byte for byte', 'publish' === get_post_status( $q_id ) && get_post( $q_id )->post_content === $q_code, get_post_status( $q_id ) );
+		wp_delete_post( $q_id, true );
+	}
+	list( , $qb ) = $call( 'POST', '/minn-admin/v1/wpcode/snippets', array( 'name' => 'Minn v042 broken', 'code' => '$minn_v042_broken = ;', 'code_type' => 'php', 'location' => 'on_demand', 'auto_insert' => true, 'priority' => 10, 'active' => true, 'tags' => array(), 'desc' => '' ) );
+	$b_id         = (int) ( $qb['id'] ?? 0 );
+	$check( 'WPCode: broken code is still refused activation (control)', ! $b_id || 'publish' !== get_post_status( $b_id ), $b_id ? get_post_status( $b_id ) : 'refused' );
+	if ( $b_id ) {
+		wp_delete_post( $b_id, true );
+	}
 } else {
 	$skip( 'WPCode inactive' );
 }

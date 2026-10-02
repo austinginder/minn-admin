@@ -24,14 +24,19 @@ function minn_admin_rri_ready() {
 }
 
 function minn_admin_rri_can() {
-	// The plugin keeps its own viewing capability (Plugin::$view_cap, a public
-	// property a site can raise); manage_options is only its default.
-	$cap = 'manage_options';
+	// manage_options AND the plugin's own viewing capability (Plugin::$view_cap,
+	// a public property a site can raise). RRI hands the property to its
+	// services when it loads and ignores later changes, so a lowered value must
+	// never make Minn looser than RRI's own screen; a raised one makes it
+	// stricter, as it should.
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return false;
+	}
 	if ( isset( $GLOBALS['rewrite_rules_inspector'] ) && is_object( $GLOBALS['rewrite_rules_inspector'] )
 		&& isset( $GLOBALS['rewrite_rules_inspector']->view_cap ) && '' !== (string) $GLOBALS['rewrite_rules_inspector']->view_cap ) {
-		$cap = (string) $GLOBALS['rewrite_rules_inspector']->view_cap;
+		return current_user_can( (string) $GLOBALS['rewrite_rules_inspector']->view_cap );
 	}
-	return current_user_can( $cap );
+	return true;
 }
 
 function minn_admin_rri_admin_url() {

@@ -512,7 +512,19 @@ class Minn_Admin_DB {
 	 * @return string[]
 	 */
 	private static function gateway_option_names() {
-		$names = array();
+		// The common gateways' rows whether or not WooCommerce loads them right
+		// now (PayPal Standard only loads when used; a deactivated gateway
+		// plugin leaves its row and keys behind).
+		$names = array(
+			'woocommerce_paypal_settings',
+			'woocommerce_ppcp-gateway_settings',
+			'woocommerce_stripe_settings',
+			'woocommerce_woocommerce_payments_settings',
+			'woocommerce_square_credit_card_settings',
+			'woocommerce_braintree_credit_card_settings',
+			'woocommerce_braintree_paypal_settings',
+			'woocommerce_authorize_net_cim_credit_card_settings',
+		);
 		if ( ! function_exists( 'WC' ) ) {
 			return $names;
 		}
