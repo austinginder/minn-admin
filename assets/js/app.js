@@ -45759,28 +45759,67 @@
 			// which start empty, so this is the first real value.
 			const capEl = $( '#minn-media-caption' );
 			const descEl = $( '#minn-media-description' );
+			const titleEl = $( '#minn-media-title' );
+			const altEl = $( '#minn-media-alt' );
+			// Save sends only what changed. What each field held when the modal
+			// opened is the baseline; caption and description are only known
+			// once the edit fetch lands (the list never carries them), and the
+			// title input starts from the RENDERED title (texturized), so an
+			// untouched one must not be written back.
+			const seed = { title: titleEl ? titleEl.value.trim() : '', alt: altEl ? altEl.value : '' };
+			let known = it._metaLoaded ? { caption: it.caption || '', description: it.description || '' } : null;
+			let metaPromise = null;
 			if ( capEl && ! it._metaLoaded ) {
-				it._metaLoaded = true;
-				api( `wp/v2/media/${ it.id }?context=edit&_fields=caption,description` ).then( ( full ) => {
+				metaPromise = api( `wp/v2/media/${ it.id }?context=edit&_fields=caption,description,title` ).then( ( full ) => {
+					it._metaLoaded = true; // only on success, so a failed fetch retries next open
 					it.caption = ( full.caption && full.caption.raw ) || '';
 					it.description = ( full.description && full.description.raw ) || '';
+					known = { caption: it.caption, description: it.description };
 					// Only overwrite if the user hasn't started typing.
 					const c = $( '#minn-media-caption' );
 					const d = $( '#minn-media-description' );
 					if ( c && document.activeElement !== c && ! c.value ) c.value = it.caption;
 					if ( d && document.activeElement !== d && ! d.value ) d.value = it.description;
-				} ).catch( () => {} );
+					// Swap the rendered title for the stored one while untouched.
+					const t = $( '#minn-media-title' );
+					const raw = full.title && typeof full.title.raw === 'string' ? full.title.raw : null;
+					if ( t && raw !== null && document.activeElement !== t && t.value.trim() === seed.title ) {
+						t.value = raw;
+						seed.title = raw.trim();
+					}
+					return known;
+				} ).catch( () => null );
 			}
 			const saveBtn = $( '#minn-media-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const title = $( '#minn-media-title' ).value.trim();
-				const alt = $( '#minn-media-alt' ).value;
-				const caption = capEl ? capEl.value : '';
-				const description = descEl ? descEl.value : '';
 				saveBtn.disabled = true;
 				saveBtn.textContent = __( 'Saving…' );
+				// Settle the lazy fetch FIRST, then read the fields: when it lands
+				// it fills the empty caption fields and swaps the title baseline,
+				// so values read before it would compare as edits.
+				if ( metaPromise && ! known ) await metaPromise;
+				const title = titleEl ? titleEl.value.trim() : '';
+				const alt = altEl ? altEl.value : '';
+				const caption = capEl ? capEl.value : '';
+				const description = descEl ? descEl.value : '';
+				const body = {};
+				if ( title !== seed.title ) body.title = title;
+				if ( alt !== seed.alt ) body.alt_text = alt;
+				if ( capEl ) {
+					if ( known ) {
+						if ( caption !== known.caption ) body.caption = caption;
+						if ( description !== known.description ) body.description = description;
+					} else {
+						// The stored values never arrived: write only what the
+						// writer actually typed, never a blank over a real one.
+						if ( caption ) body.caption = caption;
+						if ( description ) body.description = description;
+					}
+				}
 				try {
-					await api( `wp/v2/media/${ it.id }`, { method: 'POST', body: JSON.stringify( { title, alt_text: alt, caption, description } ) } );
+					if ( Object.keys( body ).length ) {
+						await api( `wp/v2/media/${ it.id }`, { method: 'POST', body: JSON.stringify( body ) } );
+					}
 					it.name = title || it.name;
 					it.alt = alt;
 					it.caption = caption;

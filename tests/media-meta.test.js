@@ -74,6 +74,35 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'caption saved to the server', after.body && after.body.caption.raw === 'Edited caption via Minn', after.body && after.body.caption.raw );
 		t.check( 'description saved to the server', after.body && after.body.description.raw === 'Edited description via Minn', after.body && after.body.description.raw );
 
+		/* ===== An unrelated save writes only what changed ===== */
+		// The modal used to POST title, alt, caption and description on every
+		// save. Caption and description arrive by a lazy fetch, so a Save
+		// before it landed blanked them, and the title input starts from the
+		// RENDERED title, so "Don't" came back as "Don’t". Delay the fetch,
+		// change only the alt text, save at once.
+		await rest( `wp/v2/media/${ mediaId }`, { method: 'POST', body: JSON.stringify( { title: "Don't stop", caption: 'Kept caption', description: 'Kept description' } ) } );
+		await page.route( ( url ) => url.href.includes( `wp/v2/media/${ mediaId }?context=edit` ), async ( route ) => {
+			await new Promise( ( r ) => setTimeout( r, 2500 ) );
+			await route.continue();
+		} );
+		await page.goto( BASE + '/minn-admin/media', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `[data-media="${ mediaId }"]`, { timeout: 20000 } );
+		await page.click( `[data-media="${ mediaId }"]` );
+		await page.waitForSelector( '#minn-media-alt', { timeout: 10000 } );
+		await page.fill( '#minn-media-alt', 'Alt only' );
+		const posted = page.waitForRequest( ( r ) => r.method() === 'POST' && r.url().includes( `wp/v2/media/${ mediaId }` ), { timeout: 20000 } );
+		await page.click( '#minn-media-save' );
+		const sent = JSON.parse( ( await posted ).postData() || '{}' );
+		await page.waitForTimeout( 800 );
+		await page.unroute( () => true ).catch( () => {} );
+		t.check( 'an alt-only save sends only alt_text', JSON.stringify( Object.keys( sent ) ) === '["alt_text"]', JSON.stringify( sent ) );
+		const kept = await rest( `wp/v2/media/${ mediaId }?context=edit&_fields=title,caption,description,alt_text` );
+		t.check( 'caption and description survive a save made before they loaded',
+			kept.body && kept.body.caption.raw === 'Kept caption' && kept.body.description.raw === 'Kept description',
+			JSON.stringify( kept.body && { c: kept.body.caption.raw, d: kept.body.description.raw } ) );
+		t.check( 'an untouched title keeps its straight apostrophe', kept.body && kept.body.title.raw === "Don't stop", kept.body && kept.body.title.raw );
+		t.check( 'the alt text itself is saved', kept.body && kept.body.alt_text === 'Alt only', kept.body && kept.body.alt_text );
+
 	} finally {
 		if ( mediaId ) await rest( `wp/v2/media/${ mediaId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 	}
