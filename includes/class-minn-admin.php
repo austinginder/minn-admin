@@ -1491,6 +1491,21 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Whether something rewrites the login address away from stock wp-login.php.
+	 *
+	 * Compares the filtered wp_login_url() against the address WordPress builds
+	 * with no plugin involved. Any difference (a renamed slug, a token in the
+	 * query string, a custom login page) counts: the caller then avoids
+	 * publishing that address to an anonymous visitor.
+	 *
+	 * @return bool
+	 */
+	public static function login_url_is_rewritten() {
+		$stock = set_url_scheme( untrailingslashit( (string) get_option( 'siteurl' ) ) . '/wp-login.php', 'login' );
+		return wp_login_url() !== $stock;
+	}
+
+	/**
 	 * Serve the Minn Admin app at /minn-admin/.
 	 */
 	public static function maybe_render_app() {
@@ -1498,6 +1513,19 @@ class Minn_Admin {
 			return;
 		}
 		if ( ! is_user_logged_in() ) {
+			// auth_redirect() sends the visitor to wp_login_url(), and a login
+			// hider (WPS Hide Login's secret slug, Solid Security's
+			// itsec-hb-token) rewrites exactly that URL. Those plugins guard
+			// wp-admin, never a front-end route, so redirecting from here
+			// would print the hidden address in the Location header for
+			// anyone who asks. When the login address is not the stock one,
+			// hand the visitor to wp-admin instead and let the hider answer
+			// the way it answers any anonymous wp-admin request.
+			if ( self::login_url_is_rewritten() ) {
+				nocache_headers();
+				wp_safe_redirect( admin_url() );
+				exit;
+			}
 			auth_redirect();
 		}
 		if ( ! current_user_can( 'edit_posts' ) ) {
