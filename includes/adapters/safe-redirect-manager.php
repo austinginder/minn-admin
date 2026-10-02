@@ -253,6 +253,20 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'POST',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
+				// srm_create_redirect() is an upsert: for a source that already
+				// has a rule it rewrites that rule in place (republished,
+				// de-regexed, notes wiped). Adding is adding, so a source that
+				// is already taken is refused rather than silently replaced.
+				if ( function_exists( 'srm_sanitize_redirect_from' ) ) {
+					global $wpdb;
+					$from = srm_sanitize_redirect_from( (string) $request['from'] );
+					if ( '' !== (string) $from && $wpdb->get_var( $wpdb->prepare(
+						"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_redirect_rule_from' AND meta_value = %s LIMIT 1",
+						$from
+					) ) ) {
+						return new WP_Error( 'srm_exists', __( 'A redirect from that address already exists. Edit it instead.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+				}
 				$id = srm_create_redirect(
 					(string) $request['from'],
 					(string) $request['to'],

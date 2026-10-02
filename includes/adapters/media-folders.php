@@ -254,7 +254,9 @@ add_action( 'rest_api_init', function () {
 					return new WP_Error( 'minn_move_no_ids', __( 'Nothing to move.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				try {
-					$result = call_user_func( $p['move'], (int) $req['folder'], $ids );
+					// The folder the items are being moved OUT of (the folder being
+					// viewed), for providers whose own move removes only that one.
+					$result = call_user_func( $p['move'], (int) $req['folder'], $ids, max( 0, (int) $req->get_param( 'from' ) ) );
 				} catch ( \Throwable $e ) {
 					return new WP_Error( 'minn_move_failed', $e->getMessage(), array( 'status' => 500 ) );
 				}
@@ -435,14 +437,23 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 				) ),
 			) );
 		},
-		'move'    => function ( $folder_id, array $ids ) {
+		'move'    => function ( $folder_id, array $ids, $from = 0 ) {
 			if ( $folder_id && ! term_exists( (int) $folder_id, 'media_folder' ) ) {
 				return new WP_Error( 'minn_folder_missing', __( 'That folder no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
-			// Plain taxonomy assignment, exactly what their drag-drop does;
-			// an empty term list is their "Unassigned".
+			// Their move (folders.class.php, the multi-move handler) removes
+			// only the folder the items are being moved out of and ADDS the
+			// target, so an item filed in two folders keeps the other one. An
+			// empty term list is still their "Unassigned".
 			foreach ( $ids as $id ) {
-				$r = wp_set_object_terms( $id, $folder_id ? array( (int) $folder_id ) : array(), 'media_folder', false );
+				if ( ! $folder_id ) {
+					$r = wp_set_object_terms( $id, array(), 'media_folder', false );
+				} else {
+					if ( $from && (int) $from !== (int) $folder_id ) {
+						wp_remove_object_terms( $id, (int) $from, 'media_folder' );
+					}
+					$r = wp_set_object_terms( $id, array( (int) $folder_id ), 'media_folder', true );
+				}
 				if ( is_wp_error( $r ) ) {
 					return $r;
 				}

@@ -7225,7 +7225,9 @@
 							try {
 								const r = await api( 'minn-admin/v1/media/folders/move', {
 									method: 'POST',
-									body: JSON.stringify( { folder: parseInt( moveTarget, 10 ), ids } ),
+									// from: the folder being viewed, which a provider whose own
+									// move removes only the source folder needs to know.
+									body: JSON.stringify( { folder: parseInt( moveTarget, 10 ), ids, from: parseInt( state.mediaFolder, 10 ) > 0 ? parseInt( state.mediaFolder, 10 ) : 0 } ),
 								} );
 								msel.clear();
 								state.mediaLastIdx = null;
