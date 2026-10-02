@@ -238,4 +238,30 @@ if ( ! is_multisite() ) {
 	remove_role( 'minn_v042_optmgr' );
 }
 
+// --- #15 Duplicator 5 downloads sit on its export rung ---------------------
+if ( function_exists( 'minn_admin_duplicator_is_v5' ) && minn_admin_duplicator_active() && minn_admin_duplicator_is_v5() ) {
+	global $wpdb;
+	$prow = $wpdb->get_row( 'SELECT id, name, hash FROM ' . minn_admin_duplicator_table() . ' ORDER BY id DESC LIMIT 1', ARRAY_A );
+	if ( $prow ) {
+		$fake = minn_admin_duplicator_ssdir() . '/' . $prow['name'] . '_' . $prow['hash'] . '_archive.zip';
+		$made = ! file_exists( $fake ) && file_put_contents( $fake, 'probe' );
+		$ok0  = minn_admin_duplicator_download_files( (int) $prow['id'] );
+		$check( 'Duplicator: export rung downloads a package (control)', ! is_wp_error( $ok0 ) && count( $ok0 ) >= 1 );
+		$deny = function ( $on, $cap ) {
+			return \Duplicator\Core\CapMng::CAP_EXPORT === $cap ? false : $on;
+		};
+		add_filter( 'duplicator_cap_enabled', $deny, 10, 2 );
+		$r = minn_admin_duplicator_download_files( (int) $prow['id'] );
+		$check( 'Duplicator: no download without CAP_EXPORT, even with CAP_CREATE', is_wp_error( $r ) && minn_admin_duplicator_can_build(), is_wp_error( $r ) ? $r->get_error_code() : count( $r ) . ' file(s)' );
+		remove_filter( 'duplicator_cap_enabled', $deny, 10 );
+		if ( $made ) {
+			unlink( $fake );
+		}
+	} else {
+		$skip( 'Duplicator has no package to probe' );
+	}
+} else {
+	$skip( 'Duplicator 5 inactive' );
+}
+
 $summary();

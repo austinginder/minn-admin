@@ -240,12 +240,28 @@ function minn_admin_duplicator_can_build() {
 
 
 /**
+ * Who may download a package. Duplicator 5 gates its download links on
+ * CAP_EXPORT, a rung of its own (CapMng applies the role mapping and the
+ * DUPLICATOR_DISABLE_CAP_EXPORT hard switch), not on the CAP_CREATE rung
+ * that builds and deletes. Lite has no separate export rung.
+ */
+function minn_admin_duplicator_can_download() {
+	if ( ! minn_admin_duplicator_active() ) {
+		return false;
+	}
+	if ( minn_admin_duplicator_is_v5() ) {
+		return minn_admin_duplicator_v5_can( \Duplicator\Core\CapMng::CAP_EXPORT );
+	}
+	return minn_admin_duplicator_can_build();
+}
+
+/**
  * A package's archive and installer, for the download door. The installer
  * sits on disk under their server-side extension (.php.bak) and downloads
  * under the name their screen gives it.
  */
 function minn_admin_duplicator_download_files( $id ) {
-	if ( ! minn_admin_duplicator_can_build() ) {
+	if ( ! minn_admin_duplicator_can_download() ) {
 		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	global $wpdb;
@@ -527,12 +543,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'skip' => array( 'name', 'installer' ),
 			),
-			'actions'   => array(
-				// The archive and the installer that goes with it, the pair
-				// their Packages screen offers; nothing until a build finished.
+			// The archive and the installer that goes with it, the pair their
+			// Packages screen offers; nothing until a build finished, and only
+			// for callers on their export rung.
+			'actions'   => minn_admin_duplicator_can_download() ? array(
 				array( 'label' => __( 'Download archive', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'duplicator', '{id}', 'archive' ), 'when' => array( 'key' => 'status', 'equals' => 'completed' ) ),
 				array( 'label' => __( 'Download installer', 'minn-admin' ), 'href' => minn_admin_backup_download_url( 'duplicator', '{id}', 'installer' ), 'when' => array( 'key' => 'installer', 'equals' => 'yes' ) ),
-			),
+			) : array(),
 		),
 	);
 	// Delete sits on their CAP_CREATE rung (their packageDelete ajax), so a
