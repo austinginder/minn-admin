@@ -111,9 +111,51 @@ const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 			await page.waitForTimeout( 500 );
 		}
 		t.check( 'all-day flip snaps to TEC day bounds', !! allday && allday.all_day === true && /00:00$/.test( allday.start ), JSON.stringify( allday && { a: allday.all_day, s: allday.start } ) );
+
+		// A panel save is a partial payload into TEC's FULL-form save, which reads
+		// absent keys as "off". Seed an Author's event an Editor dressed up
+		// (featured, hidden from listings, sticky, map on, its own timezone, a
+		// venue the Author may not read) and save only Cost as the Author.
+		const authorId = await page.evaluate( async () => ( await ( await fetch( window.MINN.restUrl + 'wp/v2/users?search=minn-author&context=edit&_fields=id,username', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce } } ) ).json() ).find( ( u ) => u.username === 'minn-author' )?.id );
+		const dressed = await page.evaluate( async ( [ venue, author ] ) => {
+			const r = await fetch( window.MINN.restUrl + 'tribe/events/v1/events', {
+				method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				body: JSON.stringify( { title: 'Minn Suite Dressed Event', status: 'draft', author,
+					start_date: '2026-11-10 19:00:00', end_date: '2026-11-10 21:00:00', timezone: 'Europe/London',
+					featured: true, hide_from_listings: true, sticky: true, show_map: true, show_map_link: true, venue, cost: '10' } ),
+			} );
+			return r.json();
+		}, [ fx.hiddenVenue, authorId ] );
+		fx.dressed = dressed && dressed.id;
+		const readDressed = () => page.evaluate( async ( id ) => {
+			const j = await ( await fetch( window.MINN.restUrl + `tribe/events/v1/events/${ id }?status=draft&_cb=` + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } ) ).json();
+			return { featured: j.featured, hidden: j.hide_from_listings, sticky: j.sticky, map: j.show_map, link: j.show_map_link,
+				tz: j.timezone, utc: j.utc_start_date, venue: j.venue && j.venue.id, cost: j.cost };
+		}, fx.dressed );
+		const dressedBefore = fx.dressed ? await readDressed() : null;
+		t.check( 'dressed event seeded (featured, hidden, sticky, map, London, venue)', !! dressedBefore && dressedBefore.featured && dressedBefore.hidden
+			&& dressedBefore.map && dressedBefore.tz === 'Europe/London' && String( dressedBefore.venue ) === String( fx.hiddenVenue ), JSON.stringify( dressedBefore ) );
+		if ( fx.dressed ) {
+			const { ctx: author2Ctx, page: author2Page } = await loginAs( browser, 'minn-author', 'minn-author-pass-1' );
+			const saved = await author2Page.evaluate( async ( id ) => {
+				const h = { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce };
+				const cur = ( await ( await fetch( window.MINN.restUrl + `wp/v2/tribe_events/${ id }?context=edit&_fields=minn_tec`, { headers: h } ) ).json() ).minn_tec;
+				const r = await fetch( window.MINN.restUrl + `wp/v2/tribe_events/${ id }`, { method: 'POST', headers: h,
+					body: JSON.stringify( { minn_tec: Object.assign( {}, cur, { cost: '30' } ) } ) } );
+				return { status: r.status, venueSeen: cur && cur.venue };
+			}, fx.dressed );
+			await author2Ctx.close().catch( () => {} );
+			t.check( 'Author sees the private venue withheld', saved.venueSeen === '', JSON.stringify( saved ) );
+			const after = await readDressed();
+			t.check( 'cost-only save keeps featured, hidden, sticky, map flags, timezone and UTC start', saved.status === 200 && after.featured === dressedBefore.featured
+				&& after.hidden === dressedBefore.hidden && after.sticky === dressedBefore.sticky && after.map === dressedBefore.map && after.link === dressedBefore.link
+				&& after.tz === 'Europe/London' && after.utc === dressedBefore.utc, JSON.stringify( { before: dressedBefore, after } ) );
+			t.check( 'cost-only save keeps the withheld venue linked and writes the cost', String( after.venue ) === String( fx.hiddenVenue ) && /30/.test( String( after.cost ) ), JSON.stringify( after ) );
+		}
 	} finally {
 		await page.evaluate( async ( fx2 ) => {
-			for ( const [ type, id ] of [ [ 'tribe_events', fx2.event ], [ 'tribe_venue', fx2.venue ], [ 'tribe_venue', fx2.hiddenVenue ], [ 'tribe_organizer', fx2.organizer ] ] ) {
+			for ( const [ type, id ] of [ [ 'tribe_events', fx2.event ], [ 'tribe_events', fx2.dressed ], [ 'tribe_venue', fx2.venue ], [ 'tribe_venue', fx2.hiddenVenue ], [ 'tribe_organizer', fx2.organizer ] ] ) {
 				await fetch( window.MINN.restUrl + `wp/v2/${ type }/${ id }?force=true`, {
 					method: 'DELETE', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
 				} ).catch( () => {} );

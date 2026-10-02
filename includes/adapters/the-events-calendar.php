@@ -285,10 +285,91 @@ add_action( 'rest_api_init', function () {
 				if ( ! $data ) {
 					return null;
 				}
+
+				// TEC treats a linked type MISSING from the submission as "keep the
+				// existing links" only when the submission names the event
+				// (Linked_Posts::get_linked_post_type_data reads $submission['ID']);
+				// without it a missing venue or organizer reads as "link none" and
+				// the stored one is dropped. Its own REST endpoint sends the id too.
+				$data['ID'] = $post->ID;
+
+				// A linked venue or organizer the caller may not read comes back
+				// from the read as '' (minn_admin_tec_linked_pick withholds it),
+				// and sending that '' would unlink it. Keep the stored link by
+				// leaving the key out, the way the ACF relation preserve does.
+				$withheld = function ( $meta_key ) use ( $post ) {
+					foreach ( (array) get_post_meta( $post->ID, $meta_key ) as $stored ) {
+						$stored = (int) $stored;
+						if ( $stored && get_post( $stored ) && ! current_user_can( 'read_post', $stored ) ) {
+							return true;
+						}
+					}
+					return false;
+				};
+				if ( isset( $data['venue'] ) && ! $data['venue']['VenueID'] && $withheld( '_EventVenueID' ) ) {
+					unset( $data['venue'] );
+				}
+				if ( isset( $data['organizer'] ) && ! $data['organizer']['OrganizerID'] && $withheld( '_EventOrganizerID' ) ) {
+					unset( $data['organizer'] );
+				}
+
+				// saveEventMeta() is TEC's FULL-form save: a key its form always
+				// posts reads as "off" when absent. The panel draws none of these,
+				// so carry the stored state or an ordinary save unfeatures the
+				// event, un-hides it from listings, unpins it from the month view,
+				// switches its map off and moves it to the site timezone (shifting
+				// its UTC instant).
+				$hide = get_post_meta( $post->ID, '_EventHideFromUpcoming', true );
+				if ( ! empty( $hide ) ) {
+					$data['EventHideFromUpcoming'] = $hide;
+				}
+				$tz = (string) get_post_meta( $post->ID, '_EventTimezone', true );
+				if ( '' !== $tz ) {
+					$data['EventTimezone'] = $tz;
+				}
+				if ( '-1' === (string) $post->menu_order ) {
+					$data['EventShowInCalendar'] = 'yes';
+				}
 				try {
-					$ok = Tribe__Events__API::saveEventMeta( $post->ID, $data );
+					if ( tribe( 'tec.featured_events' )->is_featured( $post->ID ) ) {
+						$data['feature_event'] = 'yes';
+					}
+				} catch ( \Throwable $e ) {
+					// No featured-events service: nothing to carry.
+					unset( $e );
+				}
+				// The map flags ride inside the venue submission, and a venue
+				// submission without an id makes TEC create a new venue. Carry
+				// them only alongside a real VenueID; otherwise put the stored
+				// values back after TEC has reset them.
+				$map_keys = array( 'EventShowMap' => '_EventShowMap', 'EventShowMapLink' => '_EventShowMapLink' );
+				$map_was  = array();
+				foreach ( $map_keys as $field => $meta_key ) {
+					if ( metadata_exists( 'post', $post->ID, $meta_key ) ) {
+						$map_was[ $meta_key ] = get_post_meta( $post->ID, $meta_key, true );
+					}
+				}
+				$venue_sent = ! empty( $data['venue']['VenueID'] );
+				if ( $venue_sent ) {
+					foreach ( $map_keys as $field => $meta_key ) {
+						$v = isset( $map_was[ $meta_key ] ) ? $map_was[ $meta_key ] : '';
+						if ( ! empty( $v ) && 'false' !== (string) $v ) {
+							$data['venue'][ $field ] = '1';
+						}
+					}
+				}
+
+				try {
+					// Pass the post: TEC's own save and its listeners (Community
+					// Events types the third argument) expect it.
+					$ok = Tribe__Events__API::saveEventMeta( $post->ID, $data, $post );
 				} catch ( \Throwable $e ) {
 					return new WP_Error( 'minn_tec_save_failed', $e->getMessage(), array( 'status' => 500 ) );
+				}
+				if ( ! $venue_sent ) {
+					foreach ( $map_was as $meta_key => $v ) {
+						update_post_meta( $post->ID, $meta_key, $v );
+					}
 				}
 				if ( false === $ok ) {
 					// Their invalid-meta path (e.g. end before start).
