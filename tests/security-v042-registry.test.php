@@ -346,4 +346,18 @@ if ( function_exists( 'minn_admin_perfmatters_save' ) && function_exists( 'perfm
 	$skip( 'Perfmatters inactive' );
 }
 
+// --- #13 Bricks' latched answers never outlive a demotion to user 0 --------
+if ( class_exists( '\Bricks\Capabilities' ) && function_exists( 'minn_admin_bricks_forms_can_view' ) ) {
+	wp_set_current_user( $admin );
+	\Bricks\Capabilities::$capabilities_set       = true;
+	\Bricks\Capabilities::$form_submission_access = true;
+	wp_set_current_user( 0 ); // core's nonce-less cookie demotion
+	\Bricks\Capabilities::$capabilities_set = true;
+	$check( 'Bricks: a signed-out request never reads form submissions, whatever Bricks latched', ! minn_admin_bricks_forms_can_view() && ! minn_admin_bricks_fallback_access() );
+	wp_set_current_user( $admin );
+	\Bricks\Capabilities::$capabilities_set = false;
+} else {
+	$skip( 'Bricks not loaded' );
+}
+
 $summary();

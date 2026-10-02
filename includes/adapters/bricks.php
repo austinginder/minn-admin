@@ -122,6 +122,12 @@ function minn_admin_bricks_strip_unfiltered_html( $settings, $post_id = 0 ) {
  * strict as the thing it stands in for.
  */
 function minn_admin_bricks_fallback_access() {
+	// Bricks caches its answers in statics computed for whoever was signed in
+	// at init, and its recompute returns early for a signed-out user, so the
+	// cached yes outlives core demoting a nonce-less cookie request to user 0.
+	if ( ! is_user_logged_in() ) {
+		return false;
+	}
 	if ( class_exists( '\Bricks\Capabilities' ) && method_exists( '\Bricks\Capabilities', 'current_user_has_full_access' ) ) {
 		try {
 			return (bool) \Bricks\Capabilities::current_user_has_full_access();
@@ -650,7 +656,7 @@ function minn_admin_bricks_bar_template_edits( $edits ) {
 			continue;
 		}
 		try {
-			if ( ! \Bricks\Capabilities::current_user_can_use_builder( $id ) ) {
+			if ( ! is_user_logged_in() || ! \Bricks\Capabilities::current_user_can_use_builder( $id ) ) {
 				continue;
 			}
 			$url = \Bricks\Helpers::get_builder_edit_link( $id );
@@ -696,7 +702,7 @@ function minn_admin_bricks_bar_template_edits( $edits ) {
 				continue;
 			}
 			try {
-				if ( ! \Bricks\Capabilities::current_user_can_use_builder( $tid ) ) {
+				if ( ! is_user_logged_in() || ! \Bricks\Capabilities::current_user_can_use_builder( $tid ) ) {
 					continue;
 				}
 				$url = \Bricks\Helpers::get_builder_edit_link( $tid );
@@ -752,7 +758,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$actions = array();
 	// Builder access is Bricks' own gate, not a WP capability — a user who can
 	// manage the list without builder access just doesn't get the edit link.
-	if ( class_exists( '\Bricks\Capabilities' ) && \Bricks\Capabilities::current_user_can_use_builder() ) {
+	if ( is_user_logged_in() && class_exists( '\Bricks\Capabilities' ) && \Bricks\Capabilities::current_user_can_use_builder() ) {
 		$actions[] = array(
 			'label' => __( 'Edit in Bricks', 'minn-admin' ),
 			'href'  => '{editUrl}',
@@ -1588,6 +1594,11 @@ function minn_admin_bricks_forms_ready() {
 }
 
 function minn_admin_bricks_forms_can_view() {
+	// See minn_admin_bricks_fallback_access(): a signed-out request never
+	// reads submissions, whatever Bricks cached for the cookie user.
+	if ( ! is_user_logged_in() ) {
+		return false;
+	}
 	// Their accessor resolves the answer on demand; the raw property is only
 	// filled in by their own start-up, so reading it directly bets on load
 	// order for an authorization answer. Its default is false, so a cold read
@@ -1918,4 +1929,16 @@ add_action( 'rest_api_init', function () {
 			},
 		),
 	) );
+} );
+
+/*
+ * Bricks latches its capability answers (Capabilities::$capabilities_set) for
+ * the user present at init. When the current user changes mid-request (core
+ * demoting a nonce-less cookie REST request, a user switch), drop the latch so
+ * the next resolver call recomputes for the user actually present.
+ */
+add_action( 'set_current_user', function () {
+	if ( class_exists( '\Bricks\Capabilities' ) && property_exists( '\Bricks\Capabilities', 'capabilities_set' ) ) {
+		\Bricks\Capabilities::$capabilities_set = false;
+	}
 } );
