@@ -622,6 +622,22 @@ if ( class_exists( 'Minn_Admin_DB' ) ) {
 	if ( null === $opt_had ) {
 		delete_option( 'wp_mail_smtp_mail_key' );
 	}
+	// Prefix and gateway rows (fix-delta review OS-7).
+	$gs_secret = 'minnv042gs' . wp_rand( 1000, 9999 );
+	update_option( 'gravitysmtp_minnprobe', wp_json_encode( array( 'api_key' => $gs_secret ) ), false );
+	list( , $r4 ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'fcol' => 'option_name', 'fq' => 'gravitysmtp_minnprobe' ) );
+	$check( 'DB browser: a Gravity SMTP connector row renders redacted', false === strpos( wp_json_encode( $r4['rows'] ?? array() ), $gs_secret ), substr( wp_json_encode( $r4['rows'] ?? array() ), 0, 120 ) );
+	list( , $r5 ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'fcol' => 'option_value', 'fq' => $gs_secret ) );
+	$check( 'DB browser: a value search cannot find a Gravity SMTP key', 0 === (int) ( $r5['total'] ?? -1 ), wp_json_encode( $r5['total'] ?? null ) );
+	delete_option( 'gravitysmtp_minnprobe' );
+	if ( function_exists( 'WC' ) ) {
+		$bacs_was = get_option( 'woocommerce_bacs_settings', null );
+		$gw_mark  = 'minnv042gw' . wp_rand( 1000, 9999 );
+		update_option( 'woocommerce_bacs_settings', array_merge( (array) $bacs_was, array( 'minn_probe' => $gw_mark ) ) );
+		list( , $r6 ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'fcol' => 'option_name', 'fq' => 'woocommerce_bacs_settings' ) );
+		$check( 'DB browser: a payment gateway settings row renders redacted', false === strpos( wp_json_encode( $r6['rows'] ?? array() ), $gw_mark ), substr( wp_json_encode( $r6['rows'] ?? array() ), 0, 120 ) );
+		null === $bacs_was ? delete_option( 'woocommerce_bacs_settings' ) : update_option( 'woocommerce_bacs_settings', $bacs_was );
+	}
 } else {
 	$skip( 'DB browser not loaded' );
 }
@@ -725,6 +741,48 @@ if ( class_exists( 'WPCode_Snippet' ) && function_exists( 'minn_admin_wpcode_gua
 	}
 } else {
 	$skip( 'WPCode inactive' );
+}
+
+// --- Round-2 siblings: TEC link check, ACPT colon choices, GF subject, WPForms spam
+if ( class_exists( 'Tribe__Events__API' ) && function_exists( 'minn_admin_tec_active' ) && minn_admin_tec_active() ) {
+	$page_priv = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'private', 'post_title' => 'Minn v042 private page' ) );
+	$ev        = Tribe__Events__API::createEvent( array( 'post_title' => 'Minn v042 link check', 'post_status' => 'draft', 'EventStartDate' => '2026-11-10', 'EventStartTime' => '19:00:00', 'EventEndDate' => '2026-11-10', 'EventEndTime' => '21:00:00' ) );
+	list( $st ) = $call( 'POST', '/wp/v2/tribe_events/' . $ev, array( 'minn_tec' => array( 'venue' => array( 'value' => (string) $page_priv, 'label' => 'x' ) ) ) );
+	$check( 'The Events Calendar: a page id is refused as a venue', 400 === $st && ! get_post_meta( $ev, '_EventVenueID', true ), 'status ' . $st );
+	wp_delete_post( $ev, true );
+	wp_delete_post( $page_priv, true );
+}
+if ( function_exists( 'minn_admin_acpt_builder_choices_in' ) ) {
+	$acpt_c = minn_admin_acpt_builder_choices_in( "16:9 : Widescreen\n4:3 : Standard", array() );
+	$check( 'ACPT builder: a choice value holding a colon is not split', '16:9' === ( $acpt_c[0]['value'] ?? '' ) && 'Widescreen' === ( $acpt_c[0]['label'] ?? '' ), wp_json_encode( $acpt_c[0] ?? null ) );
+}
+if ( class_exists( 'GFAPI' ) ) {
+	$gf2 = GFAPI::get_form( 1 );
+	if ( $gf2 && ! empty( $gf2['notifications']['minnfixuser00002'] ) ) {
+		$gf2_was = $gf2['notifications']['minnfixuser00002'];
+		$gf2['notifications']['minnfixuser00002']['subject'] = 'Save 50%AB today';
+		GFAPI::update_form( $gf2 );
+		$call( 'POST', '/minn-admin/v1/gf/notifications/1:minnfixuser00002', array( 'name' => $gf2_was['name'], 'to_email' => '', 'subject' => 'Save 50%AB today', 'message' => (string) ( $gf2_was['message'] ?? '' ) ) );
+		$check( 'Gravity Forms: an untouched subject keeps its %AB', 'Save 50%AB today' === GFAPI::get_form( 1 )['notifications']['minnfixuser00002']['subject'] );
+		$r = GFAPI::get_form( 1 );
+		$r['notifications']['minnfixuser00002'] = $gf2_was;
+		GFAPI::update_form( $r );
+	}
+}
+if ( function_exists( 'wpforms' ) && function_exists( 'minn_admin_wpforms_table' ) ) {
+	global $wpdb;
+	$wt  = minn_admin_wpforms_table();
+	$wr  = $wpdb->get_row( "SELECT entry_id, status FROM {$wt} ORDER BY entry_id DESC LIMIT 1" );
+	if ( $wr ) {
+		$wid = (int) $wr->entry_id;
+		$wpdb->update( $wt, array( 'status' => '' ), array( 'entry_id' => $wid ) );
+		$call( 'POST', '/minn-admin/v1/wpforms/entries/' . $wid . '/status', array( 'status' => 'spam' ) );
+		$reason = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpforms_entry_meta WHERE entry_id=%d AND type='spam'", $wid ) );
+		$call( 'POST', '/minn-admin/v1/wpforms/entries/' . $wid . '/status', array( 'status' => 'restore' ) );
+		$check( 'WPForms: spam and not-spam go through WPForms\' own bookkeeping', $reason >= 1 && '' === (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$wt} WHERE entry_id=%d", $wid ) ), (string) $reason );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}wpforms_entry_meta WHERE entry_id=%d AND type IN ('spam','log')", $wid ) );
+		$wpdb->update( $wt, array( 'status' => (string) $wr->status ), array( 'entry_id' => $wid ) );
+	}
 }
 
 $summary();

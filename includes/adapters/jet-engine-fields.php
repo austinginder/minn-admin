@@ -600,7 +600,9 @@ function minn_admin_jet_write_values( $post_id, $values ) {
 			update_post_meta( $post_id, $name, false );
 			continue;
 		}
-		update_post_meta( $post_id, $name, $stored );
+		// Slashed: update_post_meta() unslashes, and JetEngine's own form
+		// writes the slashed $_POST, so a backslash in a value survives.
+		update_post_meta( $post_id, $name, wp_slash( $stored ) );
 	}
 }
 

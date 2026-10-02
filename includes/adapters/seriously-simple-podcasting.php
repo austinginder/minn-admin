@@ -142,7 +142,7 @@ function minn_admin_ssp_write_values( $post_id, $values ) {
 			default:
 				$value = sanitize_text_field( (string) $value );
 		}
-		update_post_meta( $post_id, $key, $value );
+		update_post_meta( $post_id, $key, wp_slash( $value ) ); // update_post_meta() unslashes
 	}
 }
 

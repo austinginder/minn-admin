@@ -1058,7 +1058,9 @@ add_action( 'rest_api_init', function () {
 					$tags = array_values( array_filter( array_map( function ( $tag ) {
 						return sanitize_text_field( (string) $tag );
 					}, $request['tags'] ) ) );
-					$set  = wp_set_object_terms( $post->ID, $tags, BRICKS_DB_TEMPLATE_TAX_TAG );
+					// Slashed: a new tag is created through wp_insert_term(), which
+					// unslashes the name (term_exists() unslashes to match).
+					$set  = wp_set_object_terms( $post->ID, wp_slash( $tags ), BRICKS_DB_TEMPLATE_TAX_TAG );
 					if ( is_wp_error( $set ) ) {
 						return $set;
 					}

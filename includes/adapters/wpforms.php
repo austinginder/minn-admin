@@ -632,6 +632,42 @@ add_action( 'rest_api_init', function () {
 			// trash records it, restore puts it back and deletes the row
 			// (Pro\Admin\Entries\ListTable). Skipping that brought a partial
 			// entry back as a completed one, here and in WPForms' screen.
+			// Spam and not-spam go through WPForms' own SpamEntry, as its
+			// list's bulk actions do: the spam reason row, the "Marked as not
+			// spam" log line and the hooks (Akismet reporting among them) come
+			// with it. Its update runs at edit_entry_single, so that is checked
+			// first; a refused call would still leave its meta row behind.
+			$spam_obj = null;
+			try {
+				$spam_obj = wpforms()->obj( 'spam_entry' );
+			} catch ( \Throwable $e ) {
+				$spam_obj = null;
+			}
+			$current = wpforms()->obj( 'entry' )->get( $id );
+			$via_spam = $spam_obj && $current && (
+				( 'spam' === $op && method_exists( $spam_obj, 'set_as_spam' ) )
+				|| ( 'restore' === $op && 'spam' === (string) $current->status && method_exists( $spam_obj, 'set_as_not_spam' ) )
+			);
+			if ( $via_spam ) {
+				if ( function_exists( 'wpforms_current_user_can' ) && ! wpforms_current_user_can( 'edit_entry_single', $id ) ) {
+					return new WP_Error( 'update_refused', __( 'WPForms did not allow that change to this entry.', 'minn-admin' ), array( 'status' => 403 ) );
+				}
+				try {
+					if ( 'spam' === $op ) {
+						$spam_obj->set_as_spam( $id, (int) $current->form_id, wp_get_current_user()->display_name );
+					} else {
+						$spam_obj->set_as_not_spam( $current );
+					}
+				} catch ( \Throwable $e ) {
+					return new WP_Error( 'update_failed', $e->getMessage(), array( 'status' => 500 ) );
+				}
+				$after = wpforms()->obj( 'entry' )->get( $id );
+				$now   = $after ? (string) $after->status : '';
+				if ( ( 'spam' === $op ) !== ( 'spam' === $now ) ) {
+					return new WP_Error( 'update_refused', __( 'WPForms did not allow that change to this entry.', 'minn-admin' ), array( 'status' => 403 ) );
+				}
+				return rest_ensure_response( array( 'ok' => true, 'status' => $op ) );
+			}
 			$prev_status = null;
 			$prev_meta   = null;
 			if ( 'read' === $op ) {

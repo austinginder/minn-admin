@@ -960,8 +960,19 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 			$n['name']    = $name;
-			$n['subject'] = sanitize_text_field( (string) ( isset( $body['subject'] ) ? $body['subject'] : '' ) );
-			if ( '' === $n['subject'] ) {
+			// Gravity Forms' own text field refuses a value sanitizing would
+			// change rather than altering it (Settings\Fields\Text). An
+			// unchanged subject is left exactly as stored (the form sends it
+			// on every save); a changed one is refused the same way, so a
+			// "%AB" in it is never silently deleted.
+			$sent_subject = (string) ( isset( $body['subject'] ) ? $body['subject'] : '' );
+			if ( ! isset( $n['subject'] ) || $sent_subject !== (string) $n['subject'] ) {
+				if ( sanitize_text_field( $sent_subject ) !== $sent_subject ) {
+					return new WP_Error( 'bad_subject', __( 'The subject has characters Gravity Forms does not allow.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$n['subject'] = $sent_subject;
+			}
+			if ( '' === trim( (string) $n['subject'] ) ) {
 				return new WP_Error( 'empty_subject', __( 'Give the notification a subject.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			// Message is email-body HTML, filtered the way Gravity Forms filters

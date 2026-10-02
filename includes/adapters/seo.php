@@ -54,7 +54,7 @@ function minn_admin_seo_meta_provider( $name, $keys, $can_edit = null ) {
 			if ( '' === $clean ) {
 				delete_post_meta( $post_id, $keys[ $field ] );
 			} else {
-				update_post_meta( $post_id, $keys[ $field ], $clean );
+				update_post_meta( $post_id, $keys[ $field ], wp_slash( $clean ) ); // update_post_meta() unslashes
 			}
 		},
 	);

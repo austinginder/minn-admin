@@ -294,11 +294,31 @@ add_action( 'rest_api_init', function () {
 				if ( array_key_exists( 'all_day', $value ) ) {
 					$data['EventAllDay'] = ( ! empty( $value['all_day'] ) && 'false' !== (string) $value['all_day'] ) ? 'yes' : 'no';
 				}
+				// A linked record is a venue or organizer the caller may read (TEC's
+				// REST validates the type the same way); an id the event already
+				// links is unchanged and passes. Anything else is refused, so a
+				// private page's title can never be linked in as a venue.
+				$linkable = function ( $id, $type, $meta_key ) use ( $post ) {
+					if ( ! $id ) {
+						return true;
+					}
+					if ( in_array( (string) $id, array_map( 'strval', (array) get_post_meta( $post->ID, $meta_key ) ), true ) ) {
+						return true;
+					}
+					return $type === get_post_type( $id ) && current_user_can( 'read_post', $id );
+				};
 				if ( array_key_exists( 'venue', $value ) ) {
-					$data['venue'] = array( 'VenueID' => $linked_id( $value['venue'] ) );
+					$vid = $linked_id( $value['venue'] );
+					if ( ! $linkable( $vid, 'tribe_venue', '_EventVenueID' ) ) {
+						return new WP_Error( 'minn_tec_bad_venue', __( 'Pick a venue from the list.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					$data['venue'] = array( 'VenueID' => $vid );
 				}
 				if ( array_key_exists( 'organizer', $value ) && ! minn_admin_tec_multi_organizer( $post->ID ) ) {
 					$oid = $linked_id( $value['organizer'] );
+					if ( ! $linkable( $oid, 'tribe_organizer', '_EventOrganizerID' ) ) {
+						return new WP_Error( 'minn_tec_bad_organizer', __( 'Pick an organizer from the list.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
 					$data['organizer'] = array( 'OrganizerID' => $oid ? array( $oid ) : array() );
 				}
 				if ( array_key_exists( 'cost', $value ) ) {

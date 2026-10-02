@@ -1199,7 +1199,9 @@ function minn_admin_acpt_builder_choices_in( $lines, $stored ) {
 		if ( '' === $line ) {
 			continue;
 		}
-		$parts = preg_split( '/\s*:\s*/', $line, 2 );
+		// "value : Label", spaces required, the shape the encoder writes:
+		// a value that itself holds a colon (16:9, 10:30) is not split.
+		$parts = preg_split( '/\s+:\s+/', $line, 2 );
 		$value = $parts[0];
 		$label = isset( $parts[1] ) && '' !== $parts[1] ? $parts[1] : $value;
 		$row   = array( 'label' => $label, 'value' => $value, 'isDefault' => false );

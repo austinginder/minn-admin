@@ -126,6 +126,8 @@ function minn_admin_wpcode_location_has_runner( $location ) {
  */
 function minn_admin_wpcode_locations_for_type( $code_type ) {
 	$exec = array( 'everywhere', 'admin_only', 'frontend_only', 'frontend_cl', 'on_demand' );
+	// Every markup location WPCode Lite registers (its auto-insert classes).
+	// A stored snippet at one this list missed could not be edited at all.
 	$markup = array(
 		'site_wide_header',
 		'site_wide_body',
@@ -134,7 +136,15 @@ function minn_admin_wpcode_locations_for_type( $code_type ) {
 		'after_post',
 		'before_content',
 		'after_content',
+		'before_paragraph',
 		'after_paragraph',
+		'archive_before_post',
+		'archive_after_post',
+		'before_excerpt',
+		'after_excerpt',
+		'between_posts',
+		'admin_head',
+		'admin_footer',
 	);
 	return minn_admin_wpcode_type_executes( $code_type ) ? $exec : $markup;
 }
@@ -441,7 +451,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'after_post', __( 'After post', 'minn-admin' ) ),
 		array( 'before_content', __( 'Before content', 'minn-admin' ) ),
 		array( 'after_content', __( 'After content', 'minn-admin' ) ),
+		array( 'before_paragraph', __( 'Before paragraph', 'minn-admin' ) ),
 		array( 'after_paragraph', __( 'After paragraph', 'minn-admin' ) ),
+		array( 'archive_before_post', __( 'Archive: before post', 'minn-admin' ) ),
+		array( 'archive_after_post', __( 'Archive: after post', 'minn-admin' ) ),
+		array( 'before_excerpt', __( 'Before excerpt', 'minn-admin' ) ),
+		array( 'after_excerpt', __( 'After excerpt', 'minn-admin' ) ),
+		array( 'between_posts', __( 'Between posts', 'minn-admin' ) ),
+		array( 'admin_head', __( 'Admin header', 'minn-admin' ) ),
+		array( 'admin_footer', __( 'Admin footer', 'minn-admin' ) ),
 	);
 
 	$edit_fields = array(

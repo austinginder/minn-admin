@@ -200,7 +200,7 @@ function minn_admin_wpjm_write_values( $post_id, $values ) {
 		} elseif ( 'text' === $type ) {
 			$value = sanitize_text_field( $value );
 		}
-		update_post_meta( $post_id, $key, $value );
+		update_post_meta( $post_id, $key, wp_slash( $value ) ); // update_post_meta() unslashes
 	}
 }
 

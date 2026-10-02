@@ -520,7 +520,7 @@ add_action( 'rest_api_init', function () {
 					$document = \Elementor\Plugin::$instance->documents->create(
 						$doc_type,
 						array(
-							'post_title'  => $title,
+							'post_title'  => wp_slash( $title ), // created through wp_insert_post, which unslashes
 							'post_status' => current_user_can( 'publish_posts' ) ? 'publish' : 'pending',
 							'post_type'   => $post_type,
 						)
@@ -658,7 +658,7 @@ add_action( 'rest_api_init', function () {
 				$document = \Elementor\Plugin::$instance->documents->create(
 					$doc_type,
 					array(
-						'post_title'  => $copy_title,
+						'post_title'  => wp_slash( $copy_title ), // created through wp_insert_post, which unslashes
 						'post_status' => current_user_can( 'publish_posts' ) ? 'publish' : 'pending',
 						'post_type'   => $post_type,
 					)

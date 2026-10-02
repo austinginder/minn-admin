@@ -160,6 +160,14 @@ function minn_admin_pods_map_field( $field ) {
 	if ( ! minn_admin_pods_may_see( $field ) ) {
 		return null;
 	}
+	// Pods' own read-only and hidden options: its form renders the first
+	// locked and skips the second, so neither is offered as editable here.
+	foreach ( array( 'read_only', 'hidden' ) as $flag ) {
+		$on = minn_admin_pods_field_arg( $field, $flag, 0 );
+		if ( ! empty( $on ) && '0' !== (string) $on ) {
+			return null;
+		}
+	}
 	// Chrome / layout-only.
 	if ( in_array( $type, array( 'heading', 'html' ), true ) ) {
 		return null;
@@ -427,7 +435,7 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 		if ( '' === $value || null === $value ) {
 			delete_post_meta( $post_id, $key );
 		} else {
-			update_post_meta( $post_id, $key, $value );
+			update_post_meta( $post_id, $key, wp_slash( $value ) ); // update_post_meta() unslashes
 		}
 	}
 }

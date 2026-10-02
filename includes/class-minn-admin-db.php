@@ -414,7 +414,7 @@ class Minn_Admin_DB {
 		$keyed = self::keyed_secret( $table, $col );
 		if ( $keyed ) {
 			$key = isset( $row[ $keyed[0] ] ) ? (string) $row[ $keyed[0] ] : '';
-			return in_array( $key, $keyed[1], true );
+			return self::keyed_match( $key, $keyed );
 		}
 		if ( 'woocommerce_api_keys' === $base ) {
 			return in_array( $col, array( 'consumer_key', 'consumer_secret' ), true );
@@ -487,7 +487,59 @@ class Minn_Admin_DB {
 		if ( ! isset( self::KEYED_SECRETS[ $base ] ) || 0 !== strcasecmp( $col, self::KEYED_SECRETS[ $base ][0] ) ) {
 			return null;
 		}
-		return array( self::KEYED_SECRETS[ $base ][1], self::KEYED_SECRETS[ $base ][2] );
+		$keys     = self::KEYED_SECRETS[ $base ][2];
+		$prefixes = array();
+		if ( 'options' === $base ) {
+			$keys     = array_merge( $keys, self::gateway_option_names() );
+			$prefixes = self::SECRET_OPTION_PREFIXES;
+		}
+		return array( self::KEYED_SECRETS[ $base ][1], $keys, $prefixes );
+	}
+
+	/**
+	 * Option rows redacted by name prefix: Gravity SMTP keeps each mail
+	 * connector's API key in its own gravitysmtp_<connector> row (and its
+	 * licence in gravitysmtp_config); Minn's own adapter masks them.
+	 */
+	const SECRET_OPTION_PREFIXES = array( 'gravitysmtp_' );
+
+	/**
+	 * Every registered WooCommerce payment gateway's settings row
+	 * (woocommerce_stripe_settings and the like): live and test secret keys
+	 * sit in them, which Store settings masks. Asked from WooCommerce so the
+	 * shipping and email settings rows stay readable.
+	 *
+	 * @return string[]
+	 */
+	private static function gateway_option_names() {
+		$names = array();
+		if ( ! function_exists( 'WC' ) ) {
+			return $names;
+		}
+		try {
+			$gateways = WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : array();
+			foreach ( (array) $gateways as $gw ) {
+				if ( is_object( $gw ) && method_exists( $gw, 'get_option_key' ) ) {
+					$names[] = (string) $gw->get_option_key();
+				}
+			}
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+		return $names;
+	}
+
+	/** Whether a keyed-secret row's key is one of the listed names or prefixes. */
+	private static function keyed_match( $key, $keyed ) {
+		if ( in_array( $key, $keyed[1], true ) ) {
+			return true;
+		}
+		foreach ( isset( $keyed[2] ) ? (array) $keyed[2] : array() as $prefix ) {
+			if ( 0 === strpos( $key, $prefix ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -510,7 +562,7 @@ class Minn_Admin_DB {
 	 * provider keys and the key that seals its SMTP password, and All In One
 	 * Security's captcha secrets (the peer of Wordfence's redacted one).
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', 'aio_wp_security_configs' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', 'aio_wp_security_configs', 'postman_options', 'fs_accounts' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
@@ -690,6 +742,9 @@ class Minn_Admin_DB {
 			if ( $keyed ) {
 				$keys   = $keyed[1];
 				$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $keyed[0] ) . ' NOT IN (' . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')', $keys ); // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				foreach ( isset( $keyed[2] ) ? (array) $keyed[2] : array() as $prefix ) {
+					$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $keyed[0] ) . ' NOT LIKE %s', $wpdb->esc_like( $prefix ) . '%' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				}
 			}
 		} else {
 			$fcol = '';
