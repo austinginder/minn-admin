@@ -382,4 +382,31 @@ if ( function_exists( 'minn_admin_gravity_smtp_recipients' ) ) {
 	$skip( 'Gravity SMTP adapter not loaded' );
 }
 
+// --- #32 Jetpack Stats top pages link only to this site --------------------
+if ( function_exists( 'minn_admin_jetpack_stats_pages_refs' ) ) {
+	$own_url = home_url( '/minn-v042-own/' );
+	$stub    = new class( $own_url ) {
+		private $own;
+		public function __construct( $own ) {
+			$this->own = $own;
+		}
+		public function get_top_posts( $args ) {
+			return array( 'summary' => array( 'postviews' => array(
+				array( 'href' => $this->own, 'title' => 'Own', 'views' => 3 ),
+				array( 'href' => 'https://evil.example/phish', 'title' => 'Off-site', 'views' => 2 ),
+				array( 'href' => 'javascript:alert(1)', 'title' => 'Script', 'views' => 1 ),
+			) ) );
+		}
+		public function get_referrers( $args ) {
+			return array();
+		}
+	};
+	$jp    = minn_admin_jetpack_stats_pages_refs( $stub, gmdate( 'Y-m-d' ), gmdate( 'Y-m-d' ) );
+	$urls  = wp_list_pluck( (array) ( $jp['pages'] ?? array() ), 'url', 'title' );
+	$check( 'Jetpack Stats: an own-site page keeps its link (control)', ( $urls['Own'] ?? '' ) === $own_url, wp_json_encode( $urls ) );
+	$check( 'Jetpack Stats: off-site and script URLs render unlinked', '' === ( $urls['Off-site'] ?? 'missing' ) && '' === ( $urls['Script'] ?? 'missing' ), wp_json_encode( $urls ) );
+} else {
+	$skip( 'Jetpack Stats adapter not loaded' );
+}
+
 $summary();

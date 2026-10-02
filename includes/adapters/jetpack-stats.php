@@ -133,6 +133,16 @@ function minn_admin_jetpack_stats_pages_refs( $wpcom, $from, $to ) {
 		}
 		$href = isset( $row['href'] ) ? (string) $row['href'] : '';
 		$path = $href ? ( wp_parse_url( $href, PHP_URL_PATH ) ?: '/' ) : '';
+		// Only this site's own pages become links, the same binding as the
+		// Matomo family: a stats row is data from off-site, and a link to
+		// another host would open wherever it pointed (www-insensitive).
+		if ( '' !== $href ) {
+			$own   = strtolower( preg_replace( '/^www\./', '', (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) );
+			$their = strtolower( preg_replace( '/^www\./', '', (string) wp_parse_url( $href, PHP_URL_HOST ) ) );
+			if ( '' === $their || $their !== $own ) {
+				$href = '';
+			}
+		}
 		$pages[] = array(
 			'title'     => isset( $row['title'] ) ? (string) $row['title'] : $path,
 			'path'      => $path,
