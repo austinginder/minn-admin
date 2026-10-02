@@ -267,12 +267,17 @@ function minn_admin_acpt_value_out( $field, $value ) {
 		return array( 'id' => $att, 'url' => $url ? $url : wp_get_attachment_url( $att ) );
 	}
 	if ( 'Repeater' === $type ) {
-		// ACPT hands back rows already in row order, keyed by sub name.
-		$rows = array();
+		// ACPT hands back rows already in row order, keyed by sub name. Each
+		// row is projected onto the subs the panel maps: a sub the caller may
+		// not read (ACPT's per-field permissions) or Minn cannot edit never
+		// leaves the server, and the write path's __idx merge keeps it stored.
+		$map   = minn_admin_acpt_map_repeater( $field );
+		$names = $map ? array_flip( wp_list_pluck( $map['subs'], 'name' ) ) : array();
+		$rows  = array();
 		foreach ( array_values( is_array( $value ) ? $value : array() ) as $i => $row ) {
 			$rows[] = array(
 				'__idx'  => $i,
-				'values' => (object) ( is_array( $row ) ? $row : array() ),
+				'values' => (object) array_intersect_key( is_array( $row ) ? $row : array(), $names ),
 			);
 		}
 		return $rows;

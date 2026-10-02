@@ -409,4 +409,57 @@ if ( function_exists( 'minn_admin_jetpack_stats_pages_refs' ) ) {
 	$skip( 'Jetpack Stats adapter not loaded' );
 }
 
+// --- #14 ACPT repeater rows carry only the subs the caller may read --------
+if ( function_exists( 'minn_admin_acpt_value_out' ) && defined( 'MINN_ADMIN_ACPT_SIMPLE' ) ) {
+	$acpt_child = function ( $name, $read ) {
+		return new class( $name, $read ) {
+			private $n;
+			private $r;
+			public function __construct( $n, $r ) {
+				$this->n = $n;
+				$this->r = $r;
+			}
+			public function getType() {
+				return 'Text';
+			}
+			public function getName() {
+				return $this->n;
+			}
+			public function getLabelOrName() {
+				return $this->n;
+			}
+			public function getOptions() {
+				return array();
+			}
+			public function userPermissions() {
+				return array( 'read' => $this->r, 'edit' => $this->r );
+			}
+		};
+	};
+	$acpt_rep   = new class( array( $acpt_child( 'title', true ), $acpt_child( 'salary', false ) ) ) {
+		private $c;
+		public function __construct( $c ) {
+			$this->c = $c;
+		}
+		public function getType() {
+			return 'Repeater';
+		}
+		public function getChildren() {
+			return $this->c;
+		}
+		public function getId() {
+			return 'minn_v042_rep';
+		}
+		public function getLabelOrName() {
+			return 'Team';
+		}
+	};
+	$acpt_rows = minn_admin_acpt_value_out( $acpt_rep, array( array( 'title' => 'Lead', 'salary' => '90000' ) ) );
+	$acpt_vals = (array) ( $acpt_rows[0]['values'] ?? array() );
+	$check( 'ACPT: a repeater row omits a sub-field the caller may not read', ! array_key_exists( 'salary', $acpt_vals ), wp_json_encode( $acpt_vals ) );
+	$check( 'ACPT: a readable sub-field is still returned (control)', 'Lead' === ( $acpt_vals['title'] ?? null ), wp_json_encode( $acpt_vals ) );
+} else {
+	$skip( 'ACPT adapter not loaded' );
+}
+
 $summary();
