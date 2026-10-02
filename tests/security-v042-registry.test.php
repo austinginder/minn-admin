@@ -462,4 +462,35 @@ if ( function_exists( 'minn_admin_acpt_value_out' ) && defined( 'MINN_ADMIN_ACPT
 	$skip( 'ACPT adapter not loaded' );
 }
 
+// --- #17 Gravity Forms notification edits keep an untouched HTML message ---
+if ( class_exists( 'GFAPI' ) ) {
+	$gf_form = GFAPI::get_form( 1 );
+	if ( $gf_form && ! empty( $gf_form['notifications']['minnfixuser00002'] ) ) {
+		$gf_nid  = 'minnfixuser00002';
+		$gf_was  = $gf_form['notifications'][ $gf_nid ];
+		$gf_html = '<html><head><style>td{padding:8px}</style></head><body><table><tr><td>{all_fields}</td></tr></table></body></html>';
+		$gf_form['notifications'][ $gf_nid ]['message'] = $gf_html;
+		GFAPI::update_form( $gf_form );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/gf/notifications/1:' . $gf_nid, array( 'name' => 'User confirmation (renamed)', 'to_email' => ( 'email' === ( $gf_was['toType'] ?? 'email' ) ? ( $gf_was['to'] ?? '' ) : '' ), 'subject' => $gf_was['subject'] ?? 'Thanks', 'message' => $gf_html ) );
+		$gf_now = GFAPI::get_form( 1 )['notifications'][ $gf_nid ];
+		$check( 'Gravity Forms: renaming a notification keeps its HTML message byte for byte', 200 === $st && $gf_html === $gf_now['message'], 'status ' . $st . ' ' . substr( (string) $gf_now['message'], 0, 80 ) );
+		$restore = GFAPI::get_form( 1 );
+		$restore['notifications'][ $gf_nid ] = $gf_was;
+		GFAPI::update_form( $restore );
+	} else {
+		$skip( 'Gravity Forms fixture notification missing' );
+	}
+	// A caller without unfiltered_html still gets kses (control).
+	if ( ! function_exists( 'wp_delete_user' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+	}
+	$gf_ed = wp_insert_user( array( 'user_login' => 'minn_v042_gf_' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'author' ) );
+	wp_set_current_user( $gf_ed );
+	$check( 'Gravity Forms: a caller without unfiltered_html still gets kses (control)', function_exists( 'minn_admin_gf_kses' ) && false === strpos( minn_admin_gf_kses( '<p>x</p><script>alert(1)</script>' ), '<script' ) );
+	wp_set_current_user( $admin );
+	wp_delete_user( $gf_ed );
+} else {
+	$skip( 'Gravity Forms inactive' );
+}
+
 $summary();

@@ -964,9 +964,15 @@ add_action( 'rest_api_init', function () {
 			if ( '' === $n['subject'] ) {
 				return new WP_Error( 'empty_subject', __( 'Give the notification a subject.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			// Message is email-body HTML; kses keeps normal markup and GF
-			// merge tags ({all_fields}) are plain text that passes untouched.
-			$n['message'] = wp_kses_post( (string) ( isset( $body['message'] ) ? $body['message'] : '' ) );
+			// Message is email-body HTML, filtered the way Gravity Forms filters
+			// it (minn_admin_gf_kses: raw for unfiltered_html, kses otherwise).
+			// An unchanged message is left exactly as stored: the form sends it
+			// on every save, and re-filtering an untouched HTML template stripped
+			// its <style>/<head> blocks and left their CSS in the body.
+			$sent_message = (string) ( isset( $body['message'] ) ? $body['message'] : '' );
+			if ( ! isset( $n['message'] ) || $sent_message !== (string) $n['message'] ) {
+				$n['message'] = minn_admin_gf_kses( $sent_message );
+			}
 
 			$to_type = isset( $n['toType'] ) && '' !== $n['toType'] ? $n['toType'] : 'email';
 			$to      = trim( (string) ( isset( $body['to_email'] ) ? $body['to_email'] : '' ) );
@@ -1471,7 +1477,7 @@ function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
 				$value = (string) $value;
 				break;
 			case 'textarea':
-				$value = ! empty( $s['allow_html'] ) ? wp_kses_post( (string) $value ) : sanitize_textarea_field( (string) $value );
+				$value = ! empty( $s['allow_html'] ) ? minn_admin_gf_kses( (string) $value ) : sanitize_textarea_field( (string) $value );
 				break;
 			default:
 				$value = sanitize_text_field( (string) $value );
@@ -1506,4 +1512,18 @@ function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
 		return $result;
 	}
 	return rest_ensure_response( minn_admin_gf_form_settings_shape( GFAPI::get_form( (int) $form['id'] ) ) );
+}
+
+/**
+ * HTML the way Gravity Forms stores it: GFCommon::maybe_wp_kses keeps it raw
+ * for a caller with unfiltered_html and runs wp_kses 'post' otherwise.
+ *
+ * @param string $html Submitted HTML.
+ * @return string
+ */
+function minn_admin_gf_kses( $html ) {
+	if ( class_exists( 'GFCommon' ) && method_exists( 'GFCommon', 'maybe_wp_kses' ) ) {
+		return (string) GFCommon::maybe_wp_kses( (string) $html );
+	}
+	return current_user_can( 'unfiltered_html' ) ? (string) $html : wp_kses_post( (string) $html );
 }
