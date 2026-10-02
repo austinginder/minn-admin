@@ -547,6 +547,19 @@ if ( function_exists( 'minn_admin_asset_cleanup_save' ) && function_exists( 'min
 	$acu_now = (array) json_decode( (string) get_option( $acu_key, '' ), true );
 	$check( 'Asset CleanUp: an unrelated toggle keeps the stored Google Fonts preferences', 'swap' === ( $acu_now['google_fonts_display'] ?? '' ) && '1' === (string) ( $acu_now['google_fonts_preconnect'] ?? '' ) && '1' === (string) ( $acu_now['google_fonts_local'] ?? '' ), wp_json_encode( array_intersect_key( $acu_now, array_flip( array( 'google_fonts_display', 'google_fonts_preconnect', 'google_fonts_local' ) ) ) ) );
 	$check( 'Asset CleanUp: the toggled setting itself is written (control)', '1' === (string) ( $acu_now['disable_emojis'] ?? '' ) );
+	// A row never saved (common: not written on activation) must start from
+	// Asset CleanUp's defaults, never from nothing.
+	delete_option( $acu_key );
+	wp_cache_delete( $acu_key, 'options' );
+	$acu_res = minn_admin_asset_cleanup_save( array( 'disable_emojis' => true ) );
+	wp_cache_delete( $acu_key, 'options' );
+	$acu_new = (array) json_decode( (string) get_option( $acu_key, '' ), true );
+	if ( class_exists( '\\WpAssetCleanUp\\Settings' ) ) {
+		$acu_def = ( new \WpAssetCleanUp\Settings() )->defaultSettings;
+		$check( 'Asset CleanUp: a save over a never-saved row keeps the defaults', ! is_wp_error( $acu_res ) && '1' === (string) ( $acu_new['disable_emojis'] ?? '' ) && (string) ( $acu_def['dashboard_show'] ?? '' ) === (string) ( $acu_new['dashboard_show'] ?? 'missing' ), wp_json_encode( array( 'dashboard_show' => $acu_new['dashboard_show'] ?? null, 'keys' => count( $acu_new ) ) ) );
+	} else {
+		$check( 'Asset CleanUp: a save over a never-saved row is refused when defaults are unknown', is_wp_error( $acu_res ) );
+	}
 	update_option( $acu_key, $acu_was );
 } else {
 	$skip( 'Asset CleanUp inactive' );

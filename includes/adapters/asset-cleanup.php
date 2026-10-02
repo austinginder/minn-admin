@@ -177,19 +177,35 @@ function minn_admin_asset_cleanup_fields_by_key() {
 }
 
 /**
- * The settings as stored: the raw JSON option, before Asset CleanUp's
- * runtime filtering. What a write must start from.
+ * The settings as stored, before Asset CleanUp's runtime filtering: what a
+ * write must start from. Their own getAllStored() when the class loads (it
+ * also supplies the defaults when the row was never saved, which is common:
+ * the row is not written on activation and is deleted when a save equals
+ * the defaults); otherwise the raw JSON row. Null when neither can answer,
+ * because a write that starts from nothing would switch every default-on
+ * setting off.
  *
- * @return array
+ * @return array|null
  */
 function minn_admin_asset_cleanup_stored_settings() {
 	wp_cache_delete( minn_admin_asset_cleanup_option_key(), 'options' );
+	if ( class_exists( '\\WpAssetCleanUp\\Settings' ) ) {
+		try {
+			$s      = new \WpAssetCleanUp\Settings();
+			$stored = $s->getAllStored( true );
+			if ( is_array( $stored ) && $stored ) {
+				return $stored;
+			}
+		} catch ( \Throwable $e ) {
+			unset( $e ); // fall back to the row
+		}
+	}
 	$raw = get_option( minn_admin_asset_cleanup_option_key(), '' );
 	if ( is_string( $raw ) && '' !== $raw ) {
 		$decoded = json_decode( $raw, true );
-		return is_array( $decoded ) ? $decoded : array();
+		return is_array( $decoded ) && $decoded ? $decoded : null;
 	}
-	return is_array( $raw ) ? $raw : array();
+	return is_array( $raw ) && $raw ? $raw : null;
 }
 
 /**
@@ -297,6 +313,9 @@ function minn_admin_asset_cleanup_save( $values ) {
 	// request. Their own Settings class warns that any complete-array writer
 	// must start from the stored copy, and their updateOption() does.
 	$settings = minn_admin_asset_cleanup_stored_settings();
+	if ( null === $settings ) {
+		return new WP_Error( 'minn_acu_unknown', __( 'Asset CleanUp has not saved its settings yet, so Minn cannot tell its defaults from your choices. Save its Settings page once, then try again.', 'minn-admin' ), array( 'status' => 409 ) );
+	}
 	$changed  = false;
 	foreach ( (array) $values as $key => $v ) {
 		if ( ! isset( $by_key[ $key ] ) ) {
