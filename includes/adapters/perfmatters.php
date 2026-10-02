@@ -257,7 +257,11 @@ function minn_admin_perfmatters_raw_output_fields() {
 		// script on every front-end page (their validate attribute runs in
 		// the browser only); login_url_message is handed to wp_die verbatim.
 		'lazyload'  => array( 'threshold' ),
-		'login_url' => array( 'login_url_message' ),
+		// Keyed by STORAGE location (the field's args.section), not by the
+		// settings-screen section it is drawn in: login_url_message carries no
+		// args.section, so it lives at the top level of perfmatters_options and
+		// a 'login_url' key here never matched it.
+		''          => array( 'login_url_message' ),
 	);
 }
 

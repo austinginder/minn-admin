@@ -322,4 +322,28 @@ if ( function_exists( 'rwmb_get_registry' ) && function_exists( 'minn_admin_meta
 	$skip( 'Meta Box inactive' );
 }
 
+// --- #12 Perfmatters login_url_message needs the raw-output rule -----------
+if ( function_exists( 'minn_admin_perfmatters_save' ) && function_exists( 'perfmatters_settings' ) ) {
+	if ( ! function_exists( 'wp_delete_user' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+	}
+	$pm_was  = get_option( 'perfmatters_options', array() );
+	remove_role( 'minn_v042_pm' );
+	add_role( 'minn_v042_pm', 'Minn v042 settings manager', array( 'read' => true, 'manage_options' => true ) );
+	$pm_user = wp_insert_user( array( 'user_login' => 'minn_v042_pm_' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'minn_v042_pm' ) );
+	wp_set_current_user( $pm_user );
+	minn_admin_perfmatters_save( array( 'perfmatters_options::login_url_message' => 'Gone fishing <b>now</b>' ) );
+	$pm_now = get_option( 'perfmatters_options', array() );
+	$check( 'Perfmatters: login_url_message is not written without unfiltered_html', ( $pm_was['login_url_message'] ?? null ) === ( $pm_now['login_url_message'] ?? null ), wp_json_encode( $pm_now['login_url_message'] ?? null ) );
+	wp_set_current_user( $admin );
+	minn_admin_perfmatters_save( array( 'perfmatters_options::login_url_message' => 'Gone fishing' ) );
+	$pm_now = get_option( 'perfmatters_options', array() );
+	$check( 'Perfmatters: an administrator still sets login_url_message (control)', 'Gone fishing' === ( $pm_now['login_url_message'] ?? null ), wp_json_encode( $pm_now['login_url_message'] ?? null ) );
+	update_option( 'perfmatters_options', $pm_was );
+	wp_delete_user( $pm_user );
+	remove_role( 'minn_v042_pm' );
+} else {
+	$skip( 'Perfmatters inactive' );
+}
+
 $summary();
