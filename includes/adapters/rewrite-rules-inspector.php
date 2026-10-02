@@ -24,7 +24,14 @@ function minn_admin_rri_ready() {
 }
 
 function minn_admin_rri_can() {
-	return current_user_can( 'manage_options' );
+	// The plugin keeps its own viewing capability (Plugin::$view_cap, a public
+	// property a site can raise); manage_options is only its default.
+	$cap = 'manage_options';
+	if ( isset( $GLOBALS['rewrite_rules_inspector'] ) && is_object( $GLOBALS['rewrite_rules_inspector'] )
+		&& isset( $GLOBALS['rewrite_rules_inspector']->view_cap ) && '' !== (string) $GLOBALS['rewrite_rules_inspector']->view_cap ) {
+		$cap = (string) $GLOBALS['rewrite_rules_inspector']->view_cap;
+	}
+	return current_user_can( $cap );
 }
 
 function minn_admin_rri_admin_url() {

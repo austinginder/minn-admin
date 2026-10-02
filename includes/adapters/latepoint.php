@@ -707,7 +707,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => 'minn_admin_latepoint_can_view_regs',
 		'callback'            => function ( WP_REST_Request $request ) {
-			$row = minn_admin_latepoint_reg_row( (int) $request['id'] );
+			$row = minn_admin_latepoint_reg_row( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Registration not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -756,7 +756,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => 'minn_admin_latepoint_can_edit_regs',
 		'callback'            => function ( WP_REST_Request $request ) {
-			$id = (int) $request['id'];
+			$id = (int) Minn_Admin::path_param( $request );
 			if ( ! minn_admin_latepoint_reg_row( $id ) ) {
 				return new WP_Error( 'not_found', __( 'Registration not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}

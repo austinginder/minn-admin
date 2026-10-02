@@ -131,8 +131,11 @@ function minn_admin_pods_parse_pick_custom( $custom ) {
  * @return bool
  */
 function minn_admin_pods_may_see( $field ) {
+	// Fail closed, like every other vendor gate here: without Pods' own
+	// permission helper there is no way to know a restricted field from an
+	// open one, so none is offered.
 	if ( ! function_exists( 'pods_permission' ) ) {
-		return true;
+		return false;
 	}
 	try {
 		if ( ! pods_permission( $field ) ) {

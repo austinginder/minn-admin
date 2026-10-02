@@ -152,7 +152,8 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	$resolve = function ( $req ) {
-		$slug  = rawurldecode( (string) $req['page'] );
+		// The URL segment only (path_param), never the body or query string.
+		$slug  = rawurldecode( Minn_Admin::path_param( $req, 'page' ) );
 		$pages = minn_admin_jet_options_pages_allowed(); // the page's own capability decides
 		return isset( $pages[ $slug ] ) ? $slug : null;
 	};

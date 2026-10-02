@@ -28,6 +28,12 @@ defined( 'ABSPATH' ) || exit;
  * descriptor gate and the shim permissions.
  */
 function minn_admin_wsal_can_view() {
+	// WSAL's resolver works from a user object it caches; a request core
+	// demotes to signed-out after that cache filled must not inherit the
+	// cookie user's answer (the Bricks and LatePoint class).
+	if ( ! is_user_logged_in() ) {
+		return false;
+	}
 	if ( class_exists( '\WSAL\Helpers\Settings_Helper' )
 		&& method_exists( '\WSAL\Helpers\Settings_Helper', 'current_user_can' ) ) {
 		return (bool) \WSAL\Helpers\Settings_Helper::current_user_can( 'view' );
