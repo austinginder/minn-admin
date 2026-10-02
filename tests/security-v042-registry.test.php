@@ -197,4 +197,24 @@ if ( function_exists( 'minn_admin_ccj_active' ) && minn_admin_ccj_active() && po
 	$skip( 'Custom CSS & JS inactive' );
 }
 
+// --- #26 Term merge honours the per-term caps and the default term --------
+$merge_tax = taxonomy_exists( 'product_cat' ) ? 'product_cat' : 'category';
+$t_def     = wp_insert_term( 'Minn v042 default ' . wp_rand(), $merge_tax );
+$t_into    = wp_insert_term( 'Minn v042 into ' . wp_rand(), $merge_tax );
+$t_other   = wp_insert_term( 'Minn v042 other ' . wp_rand(), $merge_tax );
+if ( ! is_wp_error( $t_def ) && ! is_wp_error( $t_into ) && ! is_wp_error( $t_other ) ) {
+	$was_default = get_option( 'default_' . $merge_tax );
+	update_option( 'default_' . $merge_tax, $t_def['term_id'] );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/terms/merge', array( 'taxonomy' => $merge_tax, 'from' => $t_def['term_id'], 'into' => $t_into['term_id'] ) );
+	$check( "Term merge refuses to merge away the {$merge_tax} default term", 400 === $st && term_exists( (int) $t_def['term_id'], $merge_tax ), 'status ' . $st );
+	update_option( 'default_' . $merge_tax, $was_default );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/terms/merge', array( 'taxonomy' => $merge_tax, 'from' => $t_other['term_id'], 'into' => $t_into['term_id'] ) );
+	$check( 'Term merge still merges an ordinary term (control)', 200 === $st && ! term_exists( (int) $t_other['term_id'], $merge_tax ), 'status ' . $st );
+	foreach ( array( $t_def, $t_into, $t_other ) as $t ) {
+		wp_delete_term( (int) $t['term_id'], $merge_tax );
+	}
+} else {
+	$skip( 'term merge seed failed' );
+}
+
 $summary();

@@ -7480,6 +7480,18 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $from || is_wp_error( $from ) || ! $into || is_wp_error( $into ) ) {
 			return new WP_Error( 'bad_term', __( 'Both terms must exist in this taxonomy.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
+		// The per-term meta caps, not only the taxonomy's primitive ones: core
+		// maps delete_term to do_not_allow for a taxonomy's default term
+		// (default_category, WooCommerce's default_product_cat), and plugins
+		// filter both per term. A merge deletes `from` and assigns its posts to
+		// `into`, so it needs exactly what wp-admin would ask for each.
+		$default_id = (int) get_option( 'default_' . $taxonomy );
+		if ( $default_id && $default_id === $from_id ) {
+			return new WP_Error( 'default_term', __( 'This is the default term for its taxonomy, so it cannot be merged away. Merge other terms into it instead.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( ! current_user_can( 'delete_term', $from_id ) || ! current_user_can( 'assign_term', $into_id ) ) {
+			return new WP_Error( 'forbidden', __( 'You cannot merge these terms.', 'minn-admin' ), array( 'status' => 403 ) );
+		}
 
 		// Term counts only include published posts; count real assignments.
 		$objects = get_objects_in_term( $from_id, $taxonomy );
