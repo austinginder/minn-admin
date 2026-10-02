@@ -616,4 +616,38 @@ foreach ( $rb_seed as $rb_id ) {
 	wp_delete_post( $rb_id, true );
 }
 
+// --- #30 The self-updater only installs its own pinned package -------------
+if ( class_exists( 'Minn_Admin_Updater' ) ) {
+	if ( ! function_exists( 'get_plugin_data' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+	$hdr = get_plugin_data( MINN_ADMIN_DIR . 'minn-admin.php', false, false );
+	$check( 'Updater: the plugin header names its Update URI, so wordpress.org is never asked', 'https://github.com/austinginder/minn-admin' === ( $hdr['UpdateURI'] ?? '' ), (string) ( $hdr['UpdateURI'] ?? '' ) );
+	$upd = null;
+	foreach ( (array) ( $GLOBALS['wp_filter']['upgrader_pre_download']->callbacks ?? array() ) as $cbs ) {
+		foreach ( $cbs as $cb ) {
+			if ( is_array( $cb['function'] ) && $cb['function'][0] instanceof Minn_Admin_Updater ) {
+				$upd = $cb['function'][0];
+			}
+		}
+	}
+	if ( $upd ) {
+		$foreign = 'https://downloads.wordpress.org/plugin/minn-admin.9.9.9.zip';
+		$r       = $upd->verify_package( false, $foreign, null, array( 'plugin' => 'minn-admin/minn-admin.php' ) );
+		$check( 'Updater: a foreign package offered for Minn itself is refused before download', is_wp_error( $r ), is_wp_error( $r ) ? $r->get_error_code() : var_export( $r, true ) );
+		$r2 = $upd->verify_package( false, $foreign, null, array( 'plugin' => 'akismet/akismet.php' ) );
+		$check( 'Updater: other plugins\' downloads pass through untouched (control)', false === $r2, var_export( $r2, true ) );
+		$t           = new stdClass();
+		$t->checked  = array( 'minn-admin/minn-admin.php' => MINN_ADMIN_VERSION );
+		$t->response = array( 'minn-admin/minn-admin.php' => (object) array( 'slug' => 'minn-admin', 'new_version' => '9.9.9', 'package' => $foreign ) );
+		$t           = $upd->update( $t );
+		$left        = $t->response['minn-admin/minn-admin.php'] ?? null;
+		$check( 'Updater: a foreign offer for Minn is dropped from the update transient', ! $left || false !== strpos( (string) ( $left->package ?? '' ), 'github.com/austinginder/minn-admin' ), $left ? (string) $left->package : 'removed' );
+	} else {
+		$skip( 'updater instance not found' );
+	}
+} else {
+	$skip( 'Minn_Admin_Updater not loaded' );
+}
+
 $summary();

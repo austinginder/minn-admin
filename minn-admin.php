@@ -11,6 +11,7 @@
  * License:           MIT
  * License URI:       https://opensource.org/licenses/MIT
  * Text Domain:       minn-admin
+ * Update URI:        https://github.com/austinginder/minn-admin
  */
 
 defined( 'ABSPATH' ) || exit;

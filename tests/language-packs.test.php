@@ -41,7 +41,7 @@ $manifest = (object) array(
 class Minn_Admin_Updater_Manifest_Drift_Test extends Minn_Admin_Updater {
 	public $mock_manifest;
 
-	public function request() {
+	public function request( $remote_only = false ) {
 		return $this->mock_manifest;
 	}
 }

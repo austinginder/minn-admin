@@ -214,6 +214,17 @@ class Minn_Admin_Updater {
 		if ( false !== $reply || ! is_string( $package ) ) {
 			return $reply;
 		}
+		// An update OF THIS PLUGIN must come from this repo's release, the
+		// only package the sha256 pin covers. Anything else offered for
+		// minn-admin/minn-admin.php (a same-slug wordpress.org entry, a stale
+		// transient) would install unverified, so it is refused outright.
+		$updating = is_array( $hook_extra ) && isset( $hook_extra['plugin'] ) ? (string) $hook_extra['plugin'] : '';
+		if ( "{$this->plugin_slug}/{$this->plugin_slug}.php" === $updating && ! $this->is_our_package_url( $package ) ) {
+			return new WP_Error(
+				'minn_admin_foreign_package',
+				__( 'Minn Admin update rejected: the package does not come from Minn Admin\'s own release, so it cannot be verified.', 'minn-admin' )
+			);
+		}
 		// Cheap check BEFORE the network call: this filter fires for every
 		// plugin, theme and core download on the site, and request() used to
 		// block each one on a GitHub fetch just to discover it wasn't ours.
@@ -379,6 +390,19 @@ class Minn_Admin_Updater {
 	public function update( $transient ) {
 		if ( empty( $transient->checked ) ) {
 			return $transient;
+		}
+		// Whatever else filled the transient (wordpress.org before the Update
+		// URI header shipped, another updater) must not offer this plugin a
+		// package the sha256 pin does not cover.
+		$file = "{$this->plugin_slug}/{$this->plugin_slug}.php";
+		foreach ( array( 'response', 'no_update' ) as $bucket ) {
+			if ( isset( $transient->{$bucket}[ $file ] ) ) {
+				$entry   = $transient->{$bucket}[ $file ];
+				$package = is_object( $entry ) ? ( $entry->package ?? '' ) : ( is_array( $entry ) ? ( $entry['package'] ?? '' ) : '' );
+				if ( '' !== (string) $package && ! $this->is_our_package_url( (string) $package ) ) {
+					unset( $transient->{$bucket}[ $file ] );
+				}
+			}
 		}
 
 		$remote = $this->request();
