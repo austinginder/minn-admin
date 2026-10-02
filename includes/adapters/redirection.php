@@ -145,11 +145,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'skip' => array( 'match_data', 'match_type', 'match_url', 'position', 'group_id' ),
 				// Basic in-place edit — Redirection's own update endpoint (POST /redirect/{id}).
-				// `preserve` keeps the untouched fields so the sanitizer doesn't reset them.
+				// That endpoint rebuilds the WHOLE row from the payload, so `preserve`
+				// carries everything the form does not edit: source flags and options
+				// (match_data), precedence (position) and the matcher's own targets
+				// (action_data — a login, role or IP rule keeps its two URLs; the form's
+				// Target URL writes into a copy of it).
 				'edit' => array(
 					'route'    => 'redirection/v1/redirect/{id}',
 					'method'   => 'POST',
-					'preserve' => array( 'match_type', 'action_type', 'group_id', 'title', 'regex' ),
+					'preserve' => array( 'match_type', 'action_type', 'group_id', 'title', 'regex', 'match_data', 'position', 'action_data' ),
 					'fields'   => array(
 						array( 'key' => 'url', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true ),
 						array( 'key' => 'action_data.url', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
@@ -382,8 +386,6 @@ add_action( 'rest_api_init', function () {
 				$opts = red_get_options();
 				// monitor_post is a group id when on; 0 is off.
 				$monitor_on = ! empty( $opts['monitor_post'] );
-				$log_days   = isset( $opts['expire_redirect'] ) ? (int) $opts['expire_redirect'] : 7;
-				$log_on     = $log_days >= 0;
 				$ip_on      = ! empty( $opts['ip_logging'] );
 				return rest_ensure_response( array(
 					'groups' => array(
@@ -401,35 +403,36 @@ add_action( 'rest_api_init', function () {
 						array(
 							'title'  => __( 'Logging', 'minn-admin' ),
 							'fields' => array(
+								// Two retentions, kept apart exactly as Redirection
+								// stores them (expire_redirect / expire_404): a
+								// site can keep redirect hits while the 404 log,
+								// which records visitor addresses, stays off.
 								array(
-									'key'   => 'log',
-									'label' => __( 'Keep a log of redirects and 404s', 'minn-admin' ),
+									'key'     => 'expire_redirect',
+									'label'   => __( 'Redirect log', 'minn-admin' ),
+									'type'    => 'select',
+									'options' => minn_admin_redirection_retention_options(),
+								),
+								array(
+									'key'     => 'expire_404',
+									'label'   => __( '404 log', 'minn-admin' ),
+									'type'    => 'select',
+									'options' => minn_admin_redirection_retention_options(),
+								),
+								array(
+									'key'   => 'ip_logging',
+									'label' => __( 'Store IP addresses with logs', 'minn-admin' ),
 									'type'  => 'toggle',
-									'help'  => __( 'When on, logs are kept for the number of days below.', 'minn-admin' ),
-								),
-								array(
-									'key'      => 'expire_days',
-									'label'    => __( 'Keep logs for (days)', 'minn-admin' ),
-									'type'     => 'number',
-									'min'      => 1,
-									'max'      => 60,
-									'showWhen' => array( 'key' => 'log', 'equals' => true ),
-								),
-								array(
-									'key'      => 'ip_logging',
-									'label'    => __( 'Store IP addresses with logs', 'minn-admin' ),
-									'type'     => 'toggle',
-									'help'     => __( 'A privacy choice — off by default on fresh installs.', 'minn-admin' ),
-									'showWhen' => array( 'key' => 'log', 'equals' => true ),
+									'help'  => __( 'A privacy choice — off by default on fresh installs.', 'minn-admin' ),
 								),
 							),
 						),
 					),
 					'values'   => array(
-						'monitor'     => $monitor_on,
-						'log'         => $log_on,
-						'expire_days' => $log_on ? max( 1, $log_days ) : 7,
-						'ip_logging'  => $ip_on,
+						'monitor'         => $monitor_on,
+						'expire_redirect' => (string) ( isset( $opts['expire_redirect'] ) ? (int) $opts['expire_redirect'] : 7 ),
+						'expire_404'      => (string) ( isset( $opts['expire_404'] ) ? (int) $opts['expire_404'] : 7 ),
+						'ip_logging'      => $ip_on,
 					),
 					'adminUrl' => admin_url( 'tools.php?page=redirection.php' ),
 				) );
@@ -452,16 +455,18 @@ add_action( 'rest_api_init', function () {
 					$payload['monitor_post']  = $on ? ( ! empty( $opts['monitor_post'] ) ? (int) $opts['monitor_post'] : 1 ) : 0;
 					$payload['monitor_types'] = $on ? array( 'post', 'page' ) : array();
 				}
-				if ( array_key_exists( 'log', $vals ) || array_key_exists( 'expire_days', $vals ) ) {
-					$log_on = array_key_exists( 'log', $vals )
-						? ! empty( $vals['log'] )
-						: ( isset( $opts['expire_redirect'] ) && (int) $opts['expire_redirect'] >= 0 );
-					$days   = array_key_exists( 'expire_days', $vals )
-						? max( 1, min( 60, (int) $vals['expire_days'] ) )
-						: ( isset( $opts['expire_redirect'] ) && (int) $opts['expire_redirect'] > 0 ? (int) $opts['expire_redirect'] : 7 );
-					// -1 disables logging (their convention).
-					$payload['expire_redirect'] = $log_on ? $days : -1;
-					$payload['expire_404']      = $log_on ? $days : -1;
+				// Each retention is written only when it was sent: -1 is
+				// Redirection's "no logs", 0 its "forever", any other value
+				// days. A value outside that range is refused, not clamped.
+				foreach ( array( 'expire_redirect', 'expire_404' ) as $key ) {
+					if ( ! array_key_exists( $key, $vals ) ) {
+						continue;
+					}
+					$days = filter_var( $vals[ $key ], FILTER_VALIDATE_INT );
+					if ( false === $days || $days < -1 || $days > 3650 ) {
+						return new WP_Error( 'minn_redirection_retention', __( 'Choose how long to keep the log.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					$payload[ $key ] = $days;
 				}
 				if ( array_key_exists( 'ip_logging', $vals ) ) {
 					$payload['ip_logging'] = ! empty( $vals['ip_logging'] ) ? 1 : 0;
@@ -478,3 +483,20 @@ add_action( 'rest_api_init', function () {
 		),
 	) );
 } );
+
+/**
+ * Redirection's own log-retention choices (its settings screen offers
+ * exactly these for both logs): -1 no logs, 0 forever, else days.
+ *
+ * @return array<int, array{0:string,1:string}>
+ */
+function minn_admin_redirection_retention_options() {
+	return array(
+		array( '-1', __( 'No logs', 'minn-admin' ) ),
+		array( '1', __( 'A day', 'minn-admin' ) ),
+		array( '7', __( 'A week', 'minn-admin' ) ),
+		array( '30', __( 'A month', 'minn-admin' ) ),
+		array( '60', __( 'Two months', 'minn-admin' ) ),
+		array( '0', __( 'Forever', 'minn-admin' ) ),
+	);
+}

@@ -46332,7 +46332,12 @@
 				if ( ! edit ) return;
 				const body = {};
 				// Carry the untouched fields so the plugin's sanitizer doesn't reset them.
-				( edit.preserve || [] ).forEach( ( k ) => { const v = surfaceValue( m.item, k ); if ( v !== undefined ) body[ k ] = v; } );
+				// Objects are copied: an edit field below may write into one
+				// (action_data.url), and the cached item must stay as loaded.
+				( edit.preserve || [] ).forEach( ( k ) => {
+					const v = surfaceValue( m.item, k );
+					if ( v !== undefined ) body[ k ] = ( v && typeof v === 'object' ) ? JSON.parse( JSON.stringify( v ) ) : v;
+				} );
 				$$( '[data-editfield]' ).forEach( ( input ) => {
 					setDeepPath( body, input.dataset.editfield, surfaceFieldValue( input ) );
 				} );
