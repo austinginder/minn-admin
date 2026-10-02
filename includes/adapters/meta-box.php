@@ -73,6 +73,15 @@ function minn_admin_meta_box_map_field( $field ) {
 	if ( isset( $field['save_field'] ) && ! $field['save_field'] ) {
 		return null;
 	}
+	// Readonly or disabled (on the field or in its HTML attributes): Meta Box
+	// renders the input locked, so its own screen never lets the value change.
+	// Offering it here as editable would. Locked, like ACF's readonly fields.
+	$attrs = isset( $field['attributes'] ) && is_array( $field['attributes'] ) ? $field['attributes'] : array();
+	foreach ( array( 'readonly', 'disabled' ) as $flag ) {
+		if ( ! empty( $field[ $flag ] ) || ! empty( $attrs[ $flag ] ) ) {
+			return null;
+		}
+	}
 	$type = $field['type'];
 	if ( ! isset( MINN_ADMIN_META_BOX_SIMPLE[ $type ] ) ) {
 		return null;
