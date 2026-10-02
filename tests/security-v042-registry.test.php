@@ -163,6 +163,20 @@ if ( function_exists( 'acf_update_field_group' ) && function_exists( 'acf_get_st
 	$sel = acf_get_field( $sel_f['key'] );
 	$check( 'ACF builder: an unchanged save keeps choice values that contain a colon', 200 === $st && array( '16:9' => 'Widescreen', '4:3' => 'Standard' ) === $sel['choices'], wp_json_encode( $sel['choices'] ) );
 	$check( 'ACF builder: an unchanged save keeps a multiple-select default', array( '16:9', '4:3' ) === array_values( (array) $sel['default_value'] ), wp_json_encode( $sel['default_value'] ) );
+	// A checkbox default rides one value per line through the Fields view.
+	$cb_f = acf_update_field( array( 'key' => 'field_' . strtolower( wp_generate_password( 8, false ) ), 'label' => 'Colours', 'name' => 'minn_v042_cb', 'type' => 'checkbox', 'choices' => array( 'red' => 'Red', 'blue' => 'Blue' ), 'default_value' => array( 'red', 'blue' ), 'parent' => $group['ID'] ) );
+	acf_get_store( 'fields' )->reset();
+	list( , $list2 ) = $call( 'GET', '/minn-admin/v1/acf/schema/groups/' . $gkey . '/fields' );
+	$cb_item         = null;
+	foreach ( (array) ( $list2['items'] ?? array() ) as $it ) {
+		if ( $it['id'] === $cb_f['key'] ) {
+			$cb_item = $it;
+		}
+	}
+	$call( 'PUT', '/minn-admin/v1/acf/schema/fields/' . $cb_f['key'], array( 'label' => 'Colours (relabelled)', 'default_value' => $cb_item['default_value'] ?? '', 'choices' => $cb_item['choices'] ?? '', 'required' => $cb_item['required'] ?? 'No' ) );
+	acf_get_store( 'fields' )->reset();
+	$cb_now = acf_get_field( $cb_f['key'] );
+	$check( 'ACF: a relabel keeps a checkbox field\'s two defaults', array( 'red', 'blue' ) === array_values( (array) $cb_now['default_value'] ), wp_json_encode( $cb_now['default_value'] ) );
 	acf_delete_field_group( $group['ID'] );
 } else {
 	$skip( 'ACF inactive' );
@@ -339,6 +353,10 @@ if ( function_exists( 'minn_admin_perfmatters_save' ) && function_exists( 'perfm
 	minn_admin_perfmatters_save( array( 'perfmatters_options::login_url_message' => 'Gone fishing' ) );
 	$pm_now = get_option( 'perfmatters_options', array() );
 	$check( 'Perfmatters: an administrator still sets login_url_message (control)', 'Gone fishing' === ( $pm_now['login_url_message'] ?? null ), wp_json_encode( $pm_now['login_url_message'] ?? null ) );
+	$pm_msg = 'We\'re sorry, <a href="/contact">contact us</a>';
+	minn_admin_perfmatters_save( array( 'perfmatters_options::login_url_message' => $pm_msg ) );
+	$pm_now = get_option( 'perfmatters_options', array() );
+	$check( 'Perfmatters: the login message keeps its quotes and link for an administrator', $pm_msg === ( $pm_now['login_url_message'] ?? null ), wp_json_encode( $pm_now['login_url_message'] ?? null ) );
 	update_option( 'perfmatters_options', $pm_was );
 	wp_delete_user( $pm_user );
 	remove_role( 'minn_v042_pm' );

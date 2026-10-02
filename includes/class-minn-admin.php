@@ -1501,7 +1501,9 @@ class Minn_Admin {
 	 * @return bool
 	 */
 	public static function login_url_is_rewritten() {
-		$stock = set_url_scheme( untrailingslashit( (string) get_option( 'siteurl' ) ) . '/wp-login.php', 'login' );
+		// Built exactly as get_site_url() builds it before its filter, so a
+		// siteurl saved with a trailing slash is still "stock".
+		$stock = set_url_scheme( (string) get_option( 'siteurl' ), 'login' ) . '/wp-login.php';
 		return wp_login_url() !== $stock;
 	}
 

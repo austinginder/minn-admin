@@ -365,10 +365,13 @@ add_action( 'rest_api_init', function () {
 					$ok = Tribe__Events__API::saveEventMeta( $post->ID, $data, $post );
 				} catch ( \Throwable $e ) {
 					return new WP_Error( 'minn_tec_save_failed', $e->getMessage(), array( 'status' => 500 ) );
-				}
-				if ( ! $venue_sent ) {
-					foreach ( $map_was as $meta_key => $v ) {
-						update_post_meta( $post->ID, $meta_key, $v );
+				} finally {
+					// TEC resets the map flags early in the save, so put them
+					// back even when a later listener throws.
+					if ( ! $venue_sent ) {
+						foreach ( $map_was as $meta_key => $v ) {
+							update_post_meta( $post->ID, $meta_key, $v );
+						}
 					}
 				}
 				if ( false === $ok ) {

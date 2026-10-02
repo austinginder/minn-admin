@@ -334,8 +334,12 @@ function minn_admin_perfmatters_save( $values ) {
 			// open a tag. Hostnames, protocol-relative and absolute URLs are all
 			// unaffected, so this costs a legitimate value nothing even when the
 			// caller does hold unfiltered_html.
+			// login_url_message is prose wp_die() prints, not a value
+			// interpolated into an attribute, so it keeps its quotes and tags
+			// (the raw-output rule above already limits who may set it).
 			if ( minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) )
-				&& ! in_array( (string) $args['id'], minn_admin_perfmatters_code_fields(), true ) ) {
+				&& ! in_array( (string) $args['id'], minn_admin_perfmatters_code_fields(), true )
+				&& 'login_url_message' !== (string) $args['id'] ) {
 				$val = str_replace( array( '"', "'", '<', '>' ), '', $val );
 			}
 			$slot[ $args['id'] ] = $val;

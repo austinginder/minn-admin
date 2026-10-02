@@ -662,7 +662,20 @@ add_action( 'rest_api_init', function () {
 				$data = array( 'status' => $op );
 			}
 			try {
-				wpforms()->obj( 'entry' )->update( $id, $data );
+				// Their screen passes the delete cap for trash, spam and restore
+				// ("Trash can share the same capabilities as deleting"); without
+				// it WPForms checks edit_entry_single and silently refuses a
+				// delete-only role. A refused update touches nothing else.
+				$ok = wpforms()->obj( 'entry' )->update(
+					$id,
+					$data,
+					'',
+					'',
+					in_array( $op, array( 'spam', 'trash', 'restore' ), true ) ? array( 'cap' => 'delete_entry_single' ) : array()
+				);
+				if ( ! $ok ) {
+					return new WP_Error( 'update_refused', __( 'WPForms did not allow that change to this entry.', 'minn-admin' ), array( 'status' => 403 ) );
+				}
 				if ( 'trash' === $op && '' !== (string) $prev_status && 'trash' !== $prev_status ) {
 					$entry_row = wpforms()->obj( 'entry' )->get( $id );
 					wpforms()->obj( 'entry_meta' )->add(

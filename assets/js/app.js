@@ -1525,7 +1525,11 @@
 			// binds from the markup.
 			const acopts = ( f.options && f.options.length )
 				? ` data-acopts="${ esc( JSON.stringify( withStoredOption( f.options, v ) ) ) }"` : '';
-			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="combobox" data-acseed="${ esc( String( v ) ) }"${ acopts }>
+			// data-acstored marks a seed that is a real choice key (string or
+			// number); a boolean or array stringified into data-acseed is not
+			// one and must never be appended as an option.
+			const stored = ( typeof v === 'string' || typeof v === 'number' ) && String( v ) !== '' ? ' data-acstored="1"' : '';
+			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="combobox" data-acseed="${ esc( String( v ) ) }"${ acopts }${ stored }>
 				<input class="minn-input minn-ac-input" placeholder="${ esc( f.placeholder || '' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
 			</div>`;
@@ -2838,7 +2842,7 @@
 				options = [ [ '', '—' ], ...options ];
 			}
 			let seed = wrap.dataset.acseed || '';
-			options = withStoredOption( options, seed );
+			if ( wrap.dataset.acstored ) options = withStoredOption( options, seed );
 			if ( ! options.some( ( o ) => String( o[ 0 ] ) === seed ) ) seed = String( options[ 0 ][ 0 ] );
 			bindAutocomplete( wrap, options.map( ( [ value, label ] ) => ( { value, label } ) ), { strict: true, value: seed } );
 			if ( onEdit ) {
@@ -45769,6 +45773,13 @@
 			// title input starts from the RENDERED title (texturized), so an
 			// untouched one must not be written back.
 			const seed = { title: titleEl ? titleEl.value.trim() : '', alt: altEl ? altEl.value : '' };
+			// What the writer actually typed in. Only a touched field is ever
+			// sent, so a field the lazy fetch could not fill (it had focus, or
+			// the fetch failed) can never go out blank over a stored value.
+			const touched = {};
+			[ [ 'title', titleEl ], [ 'alt', altEl ], [ 'caption', capEl ], [ 'description', descEl ] ].forEach( ( [ key, el ] ) => {
+				if ( el ) el.addEventListener( 'input', () => { touched[ key ] = true; } );
+			} );
 			let known = it._metaLoaded ? { caption: it.caption || '', description: it.description || '' } : null;
 			let metaPromise = null;
 			if ( capEl && ! it._metaLoaded ) {
@@ -45805,18 +45816,11 @@
 				const caption = capEl ? capEl.value : '';
 				const description = descEl ? descEl.value : '';
 				const body = {};
-				if ( title !== seed.title ) body.title = title;
-				if ( alt !== seed.alt ) body.alt_text = alt;
+				if ( touched.title && title !== seed.title ) body.title = title;
+				if ( touched.alt && alt !== seed.alt ) body.alt_text = alt;
 				if ( capEl ) {
-					if ( known ) {
-						if ( caption !== known.caption ) body.caption = caption;
-						if ( description !== known.description ) body.description = description;
-					} else {
-						// The stored values never arrived: write only what the
-						// writer actually typed, never a blank over a real one.
-						if ( caption ) body.caption = caption;
-						if ( description ) body.description = description;
-					}
+					if ( touched.caption && ( ! known || caption !== known.caption ) ) body.caption = caption;
+					if ( touched.description && ( ! known || description !== known.description ) ) body.description = description;
 				}
 				try {
 					if ( Object.keys( body ).length ) {
@@ -50128,7 +50132,11 @@
 			<div class="minn-fgb-set minn-fgb-set-inline">
 				<div class="minn-field-label">${ esc( __( 'Default on' ) ) }</div>
 				<button type="button" class="minn-switch${ f.default_value && '0' !== String( f.default_value ) ? ' on' : '' }" data-fgbdef="${ tok }" role="switch" aria-checked="${ !! ( f.default_value && '0' !== String( f.default_value ) ) }"${ roAttr }><span class="minn-switch-knob"></span></button>
-			</div>` : input( 'default_value', __( 'Default value' ) ) ) }
+			</div>` : input( 'default_value', __( 'Default value' ),
+				// A multi-value default rides one value per line; a single-line
+				// input would strip the breaks and the builder sends every row.
+				( [ 'checkbox', 'select', 'textarea' ].includes( f.type ) || String( f.default_value == null ? '' : f.default_value ).includes( '\n' ) )
+					? { area: true, rows: 2 } : {} ) ) }
 			${ extras.includes( 'placeholder' ) ? input( 'placeholder', __( 'Placeholder' ) ) : '' }
 			${ extras.includes( 'min' ) ? `<div class="minn-fgb-minmax">${ input( 'min', __( 'Min' ) ) }${ input( 'max', __( 'Max' ) ) }${ input( 'step', __( 'Step' ) ) }</div>` : '' }
 			${ extras.includes( 'rows' ) ? input( 'rows', __( 'Rows' ) ) : '' }

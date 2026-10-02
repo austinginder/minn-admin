@@ -94,7 +94,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.click( '#minn-media-save' );
 		const sent = JSON.parse( ( await posted ).postData() || '{}' );
 		await page.waitForTimeout( 800 );
-		await page.unroute( () => true ).catch( () => {} );
+		await page.unrouteAll( { behavior: 'ignoreErrors' } ).catch( () => {} );
 		t.check( 'an alt-only save sends only alt_text', JSON.stringify( Object.keys( sent ) ) === '["alt_text"]', JSON.stringify( sent ) );
 		const kept = await rest( `wp/v2/media/${ mediaId }?context=edit&_fields=title,caption,description,alt_text` );
 		t.check( 'caption and description survive a save made before they loaded',
@@ -102,6 +102,34 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			JSON.stringify( kept.body && { c: kept.body.caption.raw, d: kept.body.description.raw } ) );
 		t.check( 'an untouched title keeps its straight apostrophe', kept.body && kept.body.title.raw === "Don't stop", kept.body && kept.body.title.raw );
 		t.check( 'the alt text itself is saved', kept.body && kept.body.alt_text === 'Alt only', kept.body && kept.body.alt_text );
+
+		/* ===== Focus race: the fetch lands while Caption has focus ===== */
+		await page.route( ( url ) => url.href.includes( `wp/v2/media/${ mediaId }?context=edit` ), async ( route ) => {
+			await new Promise( ( r ) => setTimeout( r, 2000 ) );
+			await route.continue();
+		} );
+		await page.goto( BASE + '/minn-admin/media', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `[data-media="${ mediaId }"]`, { timeout: 20000 } );
+		await page.click( `[data-media="${ mediaId }"]` );
+		await page.waitForSelector( '#minn-media-caption', { timeout: 10000 } );
+		const landed = page.waitForResponse( ( r ) => r.url().includes( `wp/v2/media/${ mediaId }?context=edit` ), { timeout: 20000 } );
+		// Hold focus in Caption until the fetch lands (the modal may move focus
+		// after it renders, so keep putting it back).
+		const holder = setInterval( () => page.focus( '#minn-media-caption' ).catch( () => {} ), 100 );
+		await landed;
+		await page.waitForTimeout( 300 );
+		clearInterval( holder );
+		const focusedAtLanding = await page.evaluate( () => document.activeElement && document.activeElement.id );
+		t.check( 'the race is real: Caption had focus when the fetch landed', focusedAtLanding === 'minn-media-caption', String( focusedAtLanding ) );
+		await page.fill( '#minn-media-alt', 'Alt after focus' );
+		const posted2 = page.waitForRequest( ( r ) => r.method() === 'POST' && r.url().includes( `wp/v2/media/${ mediaId }` ), { timeout: 20000 } );
+		await page.click( '#minn-media-save' );
+		const sent2 = JSON.parse( ( await posted2 ).postData() || '{}' );
+		await page.waitForTimeout( 800 );
+		await page.unrouteAll( { behavior: 'ignoreErrors' } ).catch( () => {} );
+		const kept2 = await rest( `wp/v2/media/${ mediaId }?context=edit&_fields=caption,description` );
+		t.check( 'a focused but untouched caption is never sent', ! ( 'caption' in sent2 ) && ! ( 'description' in sent2 ), JSON.stringify( sent2 ) );
+		t.check( 'the caption survives the focus race', kept2.body && kept2.body.caption.raw === 'Kept caption', kept2.body && kept2.body.caption.raw );
 
 	} finally {
 		if ( mediaId ) await rest( `wp/v2/media/${ mediaId }?force=true`, { method: 'DELETE' } ).catch( () => {} );

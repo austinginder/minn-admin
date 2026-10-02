@@ -358,7 +358,9 @@ add_filter( 'minn_admin_field_group_sources', function ( $sources ) {
 						'method' => 'PUT',
 						'fields' => array(
 							array( 'key' => 'label', 'label' => __( 'Label', 'minn-admin' ) ),
-							array( 'key' => 'default_value', 'label' => __( 'Default value', 'minn-admin' ), 'required' => false ),
+							// A textarea: checkbox and multiple-select defaults ride one
+							// value per line, which a single-line input would collapse.
+							array( 'key' => 'default_value', 'label' => __( 'Default value', 'minn-admin' ), 'type' => 'textarea', 'rows' => 2, 'required' => false ),
 							array( 'key' => 'choices', 'label' => __( 'Choices (select and radio; one per line, "value : Label")', 'minn-admin' ), 'type' => 'textarea', 'rows' => 4, 'required' => false, 'mono' => true ),
 							array( 'key' => 'required', 'label' => __( 'Required', 'minn-admin' ), 'type' => 'select', 'options' => array( array( 'No', __( 'No', 'minn-admin' ) ), array( 'Yes', __( 'Yes', 'minn-admin' ) ) ) ),
 						),

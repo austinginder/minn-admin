@@ -2675,8 +2675,15 @@ class Minn_Admin_REST {
 			if ( ! $query instanceof WP_Query ) {
 				return;
 			}
-			$ppp = (int) $query->get( 'posts_per_page' );
-			if ( $query->get( 'nopaging' ) || $ppp < 1 || $ppp > 50 ) {
+			// A classic menu's items ride one nopaging query; a preview of the
+			// menu needs all of them. And a query that never set a page size
+			// takes the site's own default, not this cap.
+			if ( in_array( 'nav_menu_item', (array) $query->get( 'post_type' ), true ) ) {
+				return;
+			}
+			$raw = $query->get( 'posts_per_page' );
+			$ppp = (int) $raw;
+			if ( $query->get( 'nopaging' ) || ( '' !== $raw && null !== $raw && ( $ppp < 1 || $ppp > 50 ) ) ) {
 				$query->set( 'nopaging', false );
 				$query->set( 'posts_per_page', 20 );
 			}

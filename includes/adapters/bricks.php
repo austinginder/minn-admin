@@ -1009,19 +1009,25 @@ add_action( 'rest_api_init', function () {
 				if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 					return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				$title = trim( (string) $request['title'] );
+				$title    = trim( (string) $request['title'] );
+				$type     = sanitize_key( (string) $request['type'] );
+				$previous = (string) get_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, true );
+				// The form sends the stored type back on every save, and a type
+				// Bricks no longer offers (a WooCommerce type with Woo off) still
+				// round-trips: an unchanged type is no change. A NEW type is
+				// validated before anything is written, so a refusal never
+				// leaves a half-applied rename behind.
+				$retype = '' !== $type && $type !== $previous;
+				if ( $retype && ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
+					return new WP_Error( 'invalid', __( 'Unknown template type.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
 				if ( '' !== $title && $title !== $post->post_title ) {
 					$result = wp_update_post( wp_slash( array( 'ID' => $post->ID, 'post_title' => esc_html( $title ) ) ), true );
 					if ( is_wp_error( $result ) ) {
 						return $result;
 					}
 				}
-				$type = sanitize_key( (string) $request['type'] );
-				if ( '' !== $type ) {
-					if ( ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
-						return new WP_Error( 'invalid', __( 'Unknown template type.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$previous = (string) get_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, true );
+				if ( $retype ) {
 					update_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, $type );
 					// A template's design is stored under one of three keys
 					// chosen by its type, so changing the type without moving
@@ -1933,9 +1939,12 @@ add_action( 'rest_api_init', function () {
 
 /*
  * Bricks latches its capability answers (Capabilities::$capabilities_set) for
- * the user present at init. When the current user changes mid-request (core
- * demoting a nonce-less cookie REST request, a user switch), drop the latch so
- * the next resolver call recomputes for the user actually present.
+ * the user present at init. When the current user changes mid-request, drop
+ * the latch so the next resolver call recomputes. This is NOT the signed-out
+ * guard: Bricks' recompute returns early for user 0 and leaves the old grants
+ * in place, and between two signed-in users it only adds grants. The
+ * is_user_logged_in() checks at each call site are what keep a demoted
+ * request out; never rely on this reset alone.
  */
 add_action( 'set_current_user', function () {
 	if ( class_exists( '\Bricks\Capabilities' ) && property_exists( '\Bricks\Capabilities', 'capabilities_set' ) ) {
