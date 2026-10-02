@@ -697,4 +697,16 @@ if ( is_multisite() && function_exists( 'minn_admin_wcm_find_user' ) ) {
 	wpmu_delete_user( $ms_admin );
 }
 
+// --- OS-1 Event details never collapses an Events Calendar Pro series ------
+if ( class_exists( 'Tribe__Events__Pro__Main' ) && class_exists( 'Tribe__Events__API' ) ) {
+	$rec_e = Tribe__Events__API::createEvent( array( 'post_title' => 'Minn v042 recurring', 'post_status' => 'draft', 'EventStartDate' => '2026-11-10', 'EventStartTime' => '19:00:00', 'EventEndDate' => '2026-11-10', 'EventEndTime' => '21:00:00' ) );
+	update_post_meta( $rec_e, '_EventRecurrence', array( 'rules' => array( array( 'type' => 'Every Week', 'custom' => array( 'interval' => 1, 'same-time' => 'yes', 'week' => array( 'day' => array( 2 ) ) ), 'end-type' => 'After', 'end-count' => 4 ) ), 'exclusions' => array(), 'description' => '' ) );
+	list( $st ) = $call( 'POST', '/wp/v2/tribe_events/' . $rec_e, array( 'minn_tec' => array( 'cost' => '15', 'start' => '2026-11-10 19:00', 'end' => '2026-11-10 21:00' ) ) );
+	$rec_after  = get_post_meta( $rec_e, '_EventRecurrence', true );
+	$check( 'Events Calendar Pro: a panel save never deletes a series\' recurrence rules', 200 === $st && is_array( $rec_after ) && ! empty( $rec_after['rules'] ), 'status ' . $st );
+	wp_delete_post( $rec_e, true );
+} else {
+	$skip( 'Events Calendar Pro inactive' );
+}
+
 $summary();

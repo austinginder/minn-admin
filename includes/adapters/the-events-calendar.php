@@ -63,6 +63,23 @@ function minn_admin_tec_linked_pick( $id ) {
 	);
 }
 
+/**
+ * Whether Events Calendar Pro treats this as a recurring event. Its custom
+ * tables save hook (Updates\Events::save_recurrence_meta) deletes the
+ * recurrence rules whenever saveEventMeta() runs without them, so a panel
+ * save would collapse the series; recurring events are edited in TEC.
+ */
+function minn_admin_tec_is_recurring( $post_id ) {
+	if ( ! class_exists( 'Tribe__Events__Pro__Main' ) ) {
+		return false;
+	}
+	$rules = get_post_meta( (int) $post_id, '_EventRecurrence', true );
+	if ( is_array( $rules ) && ! empty( $rules['rules'] ) ) {
+		return true;
+	}
+	return function_exists( 'tribe_is_recurring_event' ) && (bool) tribe_is_recurring_event( (int) $post_id );
+}
+
 /** Whether this event carries more than one organizer (locks the field). */
 function minn_admin_tec_multi_organizer( $post_id ) {
 	return count( (array) get_post_meta( (int) $post_id, '_EventOrganizerID' ) ) > 1;
@@ -127,6 +144,14 @@ add_action( 'rest_api_init', function () {
 				array( 'name' => 'all_day', 'label' => __( 'All-day event', 'minn-admin' ), 'type' => 'true_false' ),
 				array( 'name' => 'venue', 'label' => __( 'Venue', 'minn-admin' ), 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=venue', 'placeholder' => __( 'Search venues…', 'minn-admin' ) ),
 			);
+			if ( $post_id && minn_admin_tec_is_recurring( $post_id ) ) {
+				// Every field is TEC's on a recurring event (see the helper).
+				return rest_ensure_response( array(
+					'groups' => array(
+						array( 'group' => __( 'Event details', 'minn-admin' ), 'fields' => array(), 'locked' => 8 ),
+					),
+				) );
+			}
 			$locked = 0;
 			if ( $post_id && minn_admin_tec_multi_organizer( $post_id ) ) {
 				// Several organizers: single-pick would silently drop the rest.
@@ -206,7 +231,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'get_callback'    => function ( $obj ) {
 				$id = isset( $obj['id'] ) ? (int) $obj['id'] : 0;
-				if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
+				if ( ! $id || ! current_user_can( 'edit_post', $id ) || minn_admin_tec_is_recurring( $id ) ) {
 					return new stdClass();
 				}
 				$values = array(
@@ -283,6 +308,12 @@ add_action( 'rest_api_init', function () {
 					$data['EventURL'] = esc_url_raw( (string) $value['website'] );
 				}
 				if ( ! $data ) {
+					return null;
+				}
+				// The panel is locked on a recurring event (the fields route
+				// offers nothing); values that still arrive are ignored rather
+				// than failing the post's own save.
+				if ( minn_admin_tec_is_recurring( $post->ID ) ) {
 					return null;
 				}
 
