@@ -627,17 +627,59 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$data = array();
+			// WPForms' own trash and restore keep an entry's typed status
+			// (partial, abandoned, a payment state) in a status_prev meta row:
+			// trash records it, restore puts it back and deletes the row
+			// (Pro\Admin\Entries\ListTable). Skipping that brought a partial
+			// entry back as a completed one, here and in WPForms' screen.
+			$prev_status = null;
+			$prev_meta   = null;
 			if ( 'read' === $op ) {
 				$data = array( 'viewed' => 1 );
 			} elseif ( 'unread' === $op ) {
 				$data = array( 'viewed' => 0 );
 			} elseif ( 'restore' === $op ) {
-				$data = array( 'status' => '' );
+				$restore_to = '';
+				try {
+					$meta = wpforms()->obj( 'entry_meta' )->get_meta( array( 'entry_id' => $id, 'type' => 'status_prev' ) );
+					if ( $meta && isset( $meta[0]->status ) ) {
+						$restore_to = (string) $meta[0]->status;
+						$prev_meta  = $meta[0];
+					}
+				} catch ( \Throwable $e ) {
+					unset( $e ); // No meta store: restore to plain, as before.
+				}
+				$data = array( 'status' => $restore_to );
 			} else {
+				if ( 'trash' === $op ) {
+					try {
+						$entry = wpforms()->obj( 'entry' )->get( $id );
+						$prev_status = $entry && isset( $entry->status ) ? (string) $entry->status : '';
+					} catch ( \Throwable $e ) {
+						$prev_status = '';
+					}
+				}
 				$data = array( 'status' => $op );
 			}
 			try {
 				wpforms()->obj( 'entry' )->update( $id, $data );
+				if ( 'trash' === $op && '' !== (string) $prev_status && 'trash' !== $prev_status ) {
+					$entry_row = wpforms()->obj( 'entry' )->get( $id );
+					wpforms()->obj( 'entry_meta' )->add(
+						array(
+							'entry_id' => $id,
+							'form_id'  => $entry_row && isset( $entry_row->form_id ) ? (int) $entry_row->form_id : 0,
+							'user_id'  => get_current_user_id(),
+							'type'     => 'status_prev',
+							'data'     => '',
+							'status'   => $prev_status,
+						),
+						'entry_meta'
+					);
+				}
+				if ( $prev_meta && isset( $prev_meta->id ) ) {
+					wpforms()->obj( 'entry_meta' )->delete_by( 'id', $prev_meta->id );
+				}
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'update_failed', $e->getMessage(), array( 'status' => 500 ) );
 			}

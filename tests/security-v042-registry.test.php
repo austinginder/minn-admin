@@ -512,4 +512,26 @@ if ( defined( 'WPSEO_VERSION' ) ) {
 	$skip( 'Yoast inactive' );
 }
 
+// --- #24 WPForms trash and restore keep an entry's typed status ------------
+if ( function_exists( 'wpforms' ) && function_exists( 'minn_admin_wpforms_table' ) ) {
+	global $wpdb;
+	$wpf_entry = $wpdb->get_row( 'SELECT entry_id, status FROM ' . minn_admin_wpforms_table() . ' ORDER BY entry_id DESC LIMIT 1' );
+	if ( $wpf_entry ) {
+		$wpf_id  = (int) $wpf_entry->entry_id;
+		$wpf_was = (string) $wpf_entry->status;
+		$wpdb->update( minn_admin_wpforms_table(), array( 'status' => 'partial' ), array( 'entry_id' => $wpf_id ) );
+		list( $st1 ) = $call( 'POST', '/minn-admin/v1/wpforms/entries/' . $wpf_id . '/status', array( 'status' => 'trash' ) );
+		list( $st2 ) = $call( 'POST', '/minn-admin/v1/wpforms/entries/' . $wpf_id . '/status', array( 'status' => 'restore' ) );
+		$wpf_now     = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM ' . minn_admin_wpforms_table() . ' WHERE entry_id = %d', $wpf_id ) );
+		$wpf_left    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpforms_entry_meta WHERE entry_id = %d AND type = 'status_prev'", $wpf_id ) );
+		$check( 'WPForms: a partial entry trashed and restored comes back partial', 200 === $st1 && 200 === $st2 && 'partial' === $wpf_now, "{$st1}/{$st2} status=" . var_export( $wpf_now, true ) );
+		$check( 'WPForms: restore consumes the status_prev record', 0 === $wpf_left, (string) $wpf_left );
+		$wpdb->update( minn_admin_wpforms_table(), array( 'status' => $wpf_was ), array( 'entry_id' => $wpf_id ) );
+	} else {
+		$skip( 'WPForms has no entry to probe' );
+	}
+} else {
+	$skip( 'WPForms inactive' );
+}
+
 $summary();
