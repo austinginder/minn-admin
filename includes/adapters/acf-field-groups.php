@@ -155,8 +155,12 @@ function minn_admin_acf_schema_field_item( $f, $group ) {
 		'name'          => (string) $f['name'],
 		'type'          => (string) $f['type'],
 		'group'         => (string) $group['title'],
-		'required'      => empty( $f['required'] ) ? __( 'No', 'minn-admin' ) : __( 'Yes', 'minn-admin' ),
-		'default_value' => is_scalar( $f['default_value'] ?? '' ) ? (string) ( $f['default_value'] ?? '' ) : '',
+		// The option VALUE, never its label: the edit select offers the
+		// literal 'Yes'/'No' (labels translated) and the PUT compares against
+		// 'Yes'. A translated seed ('Ja') matched no option, so on a non-English
+		// site every edit cleared the required flag.
+		'required'      => empty( $f['required'] ) ? 'No' : 'Yes',
+		'default_value' => minn_admin_acf_schema_default_text( $f ),
 		'choices'       => $choices,
 		'source'        => $group['minn_source'],
 	);
@@ -175,14 +179,36 @@ function minn_admin_acf_schema_parse_choices( $text ) {
 		if ( '' === $line ) {
 			continue;
 		}
-		if ( false !== strpos( $line, ':' ) ) {
-			list( $value, $label ) = array_map( 'trim', explode( ':', $line, 2 ) );
-			$out[ $value ]         = '' !== $label ? $label : $value;
+		// Split on ' : ' (spaces included) exactly as acf_decode_choices does,
+		// so a value that itself carries a colon (16:9, 10:30, a URL) survives
+		// the round trip instead of being cut at its first ':'.
+		if ( false !== strpos( $line, ' : ' ) ) {
+			$parts         = explode( ' : ', $line );
+			$value         = trim( $parts[0] );
+			$label         = trim( $parts[1] );
+			$out[ $value ] = '' !== $label ? $label : $value;
 		} else {
 			$out[ $line ] = $line;
 		}
 	}
 	return $out;
+}
+
+/**
+ * A field's default value as edit-form text. Checkbox and multiple-select
+ * defaults are arrays; they ride one per line, the shape ACF's own setting
+ * takes and its update_field decodes back into an array, instead of going
+ * out as '' and clearing the default on the next save.
+ *
+ * @param array $f ACF field array.
+ * @return string
+ */
+function minn_admin_acf_schema_default_text( $f ) {
+	$d = $f['default_value'] ?? '';
+	if ( is_array( $d ) ) {
+		return implode( "\n", array_map( 'strval', array_filter( $d, 'is_scalar' ) ) );
+	}
+	return is_scalar( $d ) ? (string) $d : '';
 }
 
 /** A field plus its owning DB group, or WP_Error (unknown / code-registered). */
@@ -758,7 +784,7 @@ function minn_admin_acf_builder_field( $f, $depth = 0 ) {
 		'editable'      => $edit,
 		'required'      => ! empty( $f['required'] ),
 		'instructions'  => (string) ( $f['instructions'] ?? '' ),
-		'default_value' => is_scalar( $f['default_value'] ?? '' ) ? (string) ( $f['default_value'] ?? '' ) : '',
+		'default_value' => minn_admin_acf_schema_default_text( $f ),
 		'placeholder'   => (string) ( $f['placeholder'] ?? '' ),
 		'choices'       => $choices,
 		'min'           => isset( $f['min'] ) && '' !== $f['min'] ? (string) $f['min'] : '',
