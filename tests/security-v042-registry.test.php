@@ -493,4 +493,23 @@ if ( class_exists( 'GFAPI' ) ) {
 	$skip( 'Gravity Forms inactive' );
 }
 
+// --- #18 SEO panel keeps snippet variables -------------------------------
+if ( defined( 'WPSEO_VERSION' ) ) {
+	$seo_post = wp_insert_post( array( 'post_title' => 'Minn v042 seo probe', 'post_status' => 'draft' ) );
+	update_post_meta( $seo_post, '_yoast_wpseo_title', '%%title%% %%sep%% %%category%%' );
+	update_post_meta( $seo_post, '_yoast_wpseo_metadesc', '%%excerpt%% filed under %%category%%' );
+	list( , $seo_read ) = $call( 'GET', '/wp/v2/posts/' . $seo_post, null, array( 'context' => 'edit' ) );
+	$seo_vals           = (array) ( $seo_read['minn_seo'] ?? array() );
+	$seo_vals['focus_keyword'] = 'minn probe';
+	$call( 'POST', '/wp/v2/posts/' . $seo_post, array( 'minn_seo' => $seo_vals ) );
+	$check( 'SEO (Yoast): an untouched title keeps its snippet variables', '%%title%% %%sep%% %%category%%' === get_post_meta( $seo_post, '_yoast_wpseo_title', true ), get_post_meta( $seo_post, '_yoast_wpseo_title', true ) );
+	$check( 'SEO (Yoast): an untouched description keeps its snippet variables', '%%excerpt%% filed under %%category%%' === get_post_meta( $seo_post, '_yoast_wpseo_metadesc', true ), get_post_meta( $seo_post, '_yoast_wpseo_metadesc', true ) );
+	$seo_vals['title'] = '%%category%% news <b>today</b>';
+	$call( 'POST', '/wp/v2/posts/' . $seo_post, array( 'minn_seo' => $seo_vals ) );
+	$check( 'SEO (Yoast): a typed title keeps its variable and loses its markup', '%%category%% news today' === get_post_meta( $seo_post, '_yoast_wpseo_title', true ), get_post_meta( $seo_post, '_yoast_wpseo_title', true ) );
+	wp_delete_post( $seo_post, true );
+} else {
+	$skip( 'Yoast inactive' );
+}
+
 $summary();

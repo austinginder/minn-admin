@@ -2008,12 +2008,20 @@ add_action( 'rest_api_init', function () {
 			if ( ! minn_admin_seo_shows_for_type( $plugin, (string) $post->post_type ) ) {
 				return new WP_Error( 'rest_forbidden', __( 'SEO fields are switched off for this content type.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
+			// The panel sends every field it shows. A field whose value is what
+			// the provider already holds is left alone, so an untouched title
+			// never goes back through a sanitizer and comes out different.
+			$stored = isset( $plugin['read'] ) && is_callable( $plugin['read'] ) ? (array) call_user_func( $plugin['read'], $post->ID ) : array();
 			foreach ( minn_admin_seo_field_map( $plugin, $post->ID ) as $field => $def ) {
 				if ( ! array_key_exists( $field, $value ) ) {
 					continue;
 				}
 				$type = isset( $def['type'] ) ? $def['type'] : 'text';
 				$raw  = $value[ $field ];
+				if ( is_scalar( $raw ) && array_key_exists( $field, $stored ) && is_scalar( $stored[ $field ] )
+					&& in_array( $type, array( 'text', 'textarea' ), true ) && (string) $raw === (string) $stored[ $field ] ) {
+					continue;
+				}
 
 				// Notes are read-only rows; nothing to write.
 				if ( 'note' === $type ) {
@@ -2076,9 +2084,7 @@ add_action( 'rest_api_init', function () {
 					continue;
 				}
 
-				$clean = 'textarea' === $type
-					? sanitize_textarea_field( (string) $raw )
-					: sanitize_text_field( (string) $raw );
+				$clean = minn_admin_seo_clean_text( $raw, 'textarea' === $type );
 				if ( isset( $def['sanitize'] ) && 'url' === $def['sanitize'] ) {
 					$clean = esc_url_raw( trim( (string) $raw ) );
 				}
@@ -2109,3 +2115,25 @@ add_action( 'rest_api_init', function () {
 		),
 	) );
 } );
+
+/**
+ * Plain text for an SEO title or description.
+ *
+ * sanitize_text_field() with one step left out: it deletes anything shaped
+ * like a percent-encoded octet, and every SEO plugin's snippet variables are
+ * percent-delimited (%category%, %%sitename%%), so "%category%" lost "%ca".
+ * Everything else is core's own sequence: invalid UTF-8 dropped, tags
+ * stripped, and for a single-line field the whitespace collapsed.
+ *
+ * @param mixed $raw      Submitted value.
+ * @param bool  $textarea Keep line breaks.
+ * @return string
+ */
+function minn_admin_seo_clean_text( $raw, $textarea = false ) {
+	$text = wp_check_invalid_utf8( is_scalar( $raw ) ? (string) $raw : '' );
+	$text = wp_strip_all_tags( wp_pre_kses_less_than( $text ), ! $textarea );
+	if ( ! $textarea ) {
+		$text = preg_replace( '/[\r\n\t ]+/', ' ', $text );
+	}
+	return trim( $text );
+}
