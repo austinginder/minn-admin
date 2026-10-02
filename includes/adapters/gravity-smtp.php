@@ -1939,6 +1939,13 @@ function minn_admin_gravity_smtp_display_addresses( $extra ) {
 	if ( $scoped ) {
 		return $scoped;
 	}
+	// The blanket scan reaches cc and bcc too. The list is open to Gravity
+	// SMTP's list-only role, which its own screen never shows a message's
+	// recipients beyond To, so the fallback is for callers who may open the
+	// full log entry (VIEW_EMAIL_LOG_DETAILS) anyway.
+	if ( ! current_user_can( minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG_DETAILS' ) ) ) {
+		return array();
+	}
 	if ( $extra && preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', (string) $extra, $m ) ) {
 		return array_values( array_unique( array_filter( $m[1], 'is_email' ) ) );
 	}

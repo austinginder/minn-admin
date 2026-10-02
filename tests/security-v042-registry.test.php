@@ -360,4 +360,26 @@ if ( class_exists( '\Bricks\Capabilities' ) && function_exists( 'minn_admin_bric
 	$skip( 'Bricks not loaded' );
 }
 
+// --- #16 Gravity SMTP list never falls back to cc/bcc for a list-only role --
+if ( function_exists( 'minn_admin_gravity_smtp_recipients' ) ) {
+	if ( ! function_exists( 'wp_delete_user' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+	}
+	// A blob whose `to` scope cannot be resolved but whose bcc can.
+	$blob = serialize( array( 'bcc' => array( array( 'email' => 'hidden-bcc@example.com', 'name' => '' ) ), 'subject' => 'x' ) );
+	remove_role( 'minn_v042_gsmtp' );
+	add_role( 'minn_v042_gsmtp', 'Minn v042 mail log list', array( 'read' => true, minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG' ) => true ) );
+	$gs_user = wp_insert_user( array( 'user_login' => 'minn_v042_gsmtp_' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'minn_v042_gsmtp' ) );
+	wp_set_current_user( $gs_user );
+	$shown = minn_admin_gravity_smtp_recipients( $blob );
+	$check( 'Gravity SMTP: a list-only role never sees bcc recipients in the To column', false === strpos( $shown, 'hidden-bcc' ), $shown );
+	wp_set_current_user( $admin );
+	$shown = minn_admin_gravity_smtp_recipients( $blob );
+	$check( 'Gravity SMTP: a details-level caller still gets the best-effort column (control)', false !== strpos( $shown, 'hidden-bcc' ), $shown );
+	wp_delete_user( $gs_user );
+	remove_role( 'minn_v042_gsmtp' );
+} else {
+	$skip( 'Gravity SMTP adapter not loaded' );
+}
+
 $summary();
