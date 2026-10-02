@@ -595,4 +595,25 @@ if ( class_exists( 'Minn_Admin_DB' ) ) {
 	$skip( 'DB browser not loaded' );
 }
 
+// --- #27 render-blocks previews clamp Latest Posts and every post query ----
+$rb_seed = array();
+remove_action( 'publish_post', '_publish_post_hook', 5 );
+for ( $i = 0; $i < 22; $i++ ) {
+	$rb_seed[] = wp_insert_post( array( 'post_title' => 'Minn v042 clamp ' . $i, 'post_status' => 'publish' ) );
+}
+wp_cache_flush();
+$published = (int) wp_count_posts( 'post' )->publish;
+if ( $published > 20 ) {
+	list( $st, $rb ) = $call( 'POST', '/minn-admin/v1/render-blocks', array( 'blocks' => array( '<!-- wp:latest-posts {"postsToShow":-1,"displayPostContent":false} /-->' ) ) );
+	$items           = substr_count( (string) ( $rb['rendered'][0] ?? '' ), '<li' );
+	$check( 'render-blocks: a Latest Posts preview set to all renders at most 20 items', 200 === $st && $items > 0 && $items <= 20, "{$items} of {$published}" );
+	$after_q = new WP_Query( array( 'posts_per_page' => -1, 'fields' => 'ids', 'post_type' => 'post' ) );
+	$check( 'render-blocks: the query cap ends with the render (control)', count( $after_q->posts ) === $published, count( $after_q->posts ) . " of {$published}" );
+} else {
+	$skip( 'fewer than 21 published posts to prove the Latest Posts clamp' );
+}
+foreach ( $rb_seed as $rb_id ) {
+	wp_delete_post( $rb_id, true );
+}
+
 $summary();

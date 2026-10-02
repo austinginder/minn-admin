@@ -2627,7 +2627,26 @@ class Minn_Admin_REST {
 		// queries. Hold the previewed loop to a readable page; what gets saved
 		// is untouched and the real page still shows the writer's own number.
 		$clamp_preview_query = static function ( $parsed ) {
-			if ( ! is_array( $parsed ) || 'core/query' !== ( $parsed['blockName'] ?? '' )
+			if ( ! is_array( $parsed ) ) {
+				return $parsed;
+			}
+			// Latest Posts takes -1 as "all" (get_posts numberposts), with
+			// full content per item; Latest Comments takes any count. Same
+			// readable page as the loop below.
+			$counted = array(
+				'core/latest-posts'    => 'postsToShow',
+				'core/latest-comments' => 'commentsToShow',
+			);
+			$name = (string) ( $parsed['blockName'] ?? '' );
+			if ( isset( $counted[ $name ] ) ) {
+				$attr = $counted[ $name ];
+				if ( isset( $parsed['attrs'][ $attr ] ) && is_numeric( $parsed['attrs'][ $attr ] ) ) {
+					$n                         = (int) $parsed['attrs'][ $attr ];
+					$parsed['attrs'][ $attr ] = ( $n < 1 ) ? 20 : min( 20, $n );
+				}
+				return $parsed;
+			}
+			if ( 'core/query' !== $name
 				|| empty( $parsed['attrs']['query'] ) || ! is_array( $parsed['attrs']['query'] ) ) {
 				return $parsed;
 			}
@@ -2641,6 +2660,20 @@ class Minn_Admin_REST {
 			return $parsed;
 		};
 		add_filter( 'render_block_data', $clamp_preview_query );
+		// And a floor under every post query the render runs, for blocks the
+		// clamp above cannot name (a plugin's own posts grid): "all" or a
+		// huge page becomes a readable one, for this loop only.
+		$cap_preview_posts = static function ( $query ) {
+			if ( ! $query instanceof WP_Query ) {
+				return;
+			}
+			$ppp = (int) $query->get( 'posts_per_page' );
+			if ( $query->get( 'nopaging' ) || $ppp < 1 || $ppp > 50 ) {
+				$query->set( 'nopaging', false );
+				$query->set( 'posts_per_page', 20 );
+			}
+		};
+		add_action( 'pre_get_posts', $cap_preview_posts, PHP_INT_MAX );
 
 		$queue_before = wp_styles()->queue;
 		$rendered     = array();
@@ -2665,6 +2698,7 @@ class Minn_Admin_REST {
 			$rendered[] = $html;
 		}
 		remove_filter( 'render_block_data', $clamp_preview_query );
+		remove_action( 'pre_get_posts', $cap_preview_posts, PHP_INT_MAX );
 		$out         = array( 'rendered' => $rendered );
 		$new_handles = array_values( array_diff( wp_styles()->queue, $queue_before ) );
 		$styles      = $new_handles ? self::collect_style_urls( $new_handles ) : array(
