@@ -464,8 +464,9 @@ class Minn_Admin_DB {
 	 */
 	const KEYED_SECRETS = array(
 		'usermeta'      => array( 'meta_value', 'meta_key', self::SECRET_USERMETA_KEYS ),
-		// Core's keys and salts when they live in the database, not wp-config.
-		'options'       => array( 'option_value', 'option_name', self::SALT_KEYS ),
+		// Core's keys and salts when they live in the database, not wp-config,
+		// and the option rows that hold another vendor's credentials.
+		'options'       => array( 'option_value', 'option_name', self::SECRET_OPTION_KEYS ),
 		// wp_salt() reads network options on multisite.
 		'sitemeta'      => array( 'meta_value', 'meta_key', self::SALT_KEYS ),
 		// Wordfence Login Security: remembered-device cookie keys (whoever
@@ -498,7 +499,18 @@ class Minn_Admin_DB {
 	/** Core's keys and salts, when stored in the database. */
 	const SALT_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key' );
 
-	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64' );
+	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key' );
+
+	/**
+	 * wp_options rows redacted whole: core's salts, plus rows that hold
+	 * another vendor's live credentials, which their own screens mask and
+	 * Minn's adapters read for presence only. Jetpack's blog and per-user
+	 * tokens (a user token signs REST requests as that user and outlives a
+	 * password change), the WooCommerce.com account link, WP Mail SMTP's
+	 * provider keys and the key that seals its SMTP password, and All In One
+	 * Security's captcha secrets (the peer of Wordfence's redacted one).
+	 */
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', 'aio_wp_security_configs' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must

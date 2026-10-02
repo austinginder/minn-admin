@@ -569,4 +569,30 @@ if ( function_exists( 'minn_admin_wc_settings_post_data' ) && class_exists( 'WC_
 	$skip( 'WooCommerce settings not loaded' );
 }
 
+// --- #11 DB browser redacts more vendor credentials ------------------------
+if ( class_exists( 'Minn_Admin_DB' ) ) {
+	global $wpdb;
+	$sec_opt   = 'minnv042secretopt' . wp_rand( 1000, 9999 );
+	$opt_had   = get_option( 'wp_mail_smtp_mail_key', null );
+	if ( null === $opt_had ) {
+		add_option( 'wp_mail_smtp_mail_key', $sec_opt, '', false );
+	}
+	$opt_value = (string) get_option( 'wp_mail_smtp_mail_key' );
+	$sec_meta  = 'minnv042trust' . wp_rand( 1000, 9999 );
+	update_user_meta( $admin, 'tfa_trusted_devices', array( array( 'token' => $sec_meta ) ) );
+	list( , $r1 ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'fcol' => 'option_name', 'fq' => 'wp_mail_smtp_mail_key' ) );
+	list( , $r2 ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->usermeta, 'fcol' => 'meta_key', 'fq' => 'tfa_trusted_devices' ) );
+	list( , $r3 ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->usermeta, 'fcol' => 'meta_value', 'fq' => $sec_meta ) );
+	$check( 'DB browser: the WP Mail SMTP sealing key renders redacted', false === strpos( wp_json_encode( $r1 ), $opt_value ), substr( wp_json_encode( $r1 ), 0, 160 ) );
+	$check( 'DB browser: a Simba TFA trusted-device token renders redacted', false === strpos( wp_json_encode( $r2 ), $sec_meta ), substr( wp_json_encode( $r2 ), 0, 160 ) );
+	// The response echoes fq back, so judge the rows, not the whole body.
+	$check( 'DB browser: a value search cannot find the trusted-device token', array() === (array) ( $r3['rows'] ?? array( 'missing' ) ) && 0 === (int) ( $r3['total'] ?? -1 ), wp_json_encode( array( $r3['total'] ?? null, count( (array) ( $r3['rows'] ?? array() ) ) ) ) );
+	delete_user_meta( $admin, 'tfa_trusted_devices' );
+	if ( null === $opt_had ) {
+		delete_option( 'wp_mail_smtp_mail_key' );
+	}
+} else {
+	$skip( 'DB browser not loaded' );
+}
+
 $summary();
