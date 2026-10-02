@@ -2338,6 +2338,14 @@ class Minn_Admin_REST {
 	 */
 	private static function user_count() {
 		global $wpdb;
+		// wp_users holds the whole network. A site's people are the accounts
+		// carrying its capabilities key, which is still one cheap COUNT.
+		if ( is_multisite() ) {
+			return (int) $wpdb->get_var( $wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE meta_key = %s",
+				$wpdb->get_blog_prefix( get_current_blog_id() ) . 'capabilities'
+			) );
+		}
 		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->users}" );
 	}
 
@@ -4681,10 +4689,20 @@ class Minn_Admin_REST {
 		$size    = 0;
 		$partial = false;
 		$budget  = microtime( true ) + (float) apply_filters( 'minn_admin_uploads_size_budget', 4.0 );
+		// On a network the main site's uploads folder also holds every
+		// subsite's files under sites/; core's get_dirsize() leaves them out
+		// of the main site's figure, and so does this.
+		$exclude = is_multisite() && is_main_site() ? wp_normalize_path( untrailingslashit( $uploads['basedir'] ) . '/sites' ) : '';
 		if ( is_dir( $uploads['basedir'] ) ) {
 			try {
+				$dir = new RecursiveDirectoryIterator( $uploads['basedir'], FilesystemIterator::SKIP_DOTS );
+				if ( '' !== $exclude ) {
+					$dir = new RecursiveCallbackFilterIterator( $dir, function ( $file ) use ( $exclude ) {
+						return wp_normalize_path( $file->getPathname() ) !== $exclude;
+					} );
+				}
 				$iterator = new RecursiveIteratorIterator(
-					new RecursiveDirectoryIterator( $uploads['basedir'], FilesystemIterator::SKIP_DOTS ),
+					$dir,
 					RecursiveIteratorIterator::LEAVES_ONLY,
 					RecursiveIteratorIterator::CATCH_GET_CHILD
 				);
