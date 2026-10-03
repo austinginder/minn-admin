@@ -1133,9 +1133,11 @@ follow.
    typed over in place and the edit lands in that field alone. Gate your markers on
    `$is_preview` (ACF 6.8 prints them on the front end too) and leave fields that render
    through a shortcode or a computed fallback unmarked, or a typed edit would replace the
-   source with its output. A block that marks nothing still gets its text and textarea
-   fields edited in place where the preview shows the stored value once and nothing else
-   reads the same.
+   source with its output. Minn handles those itself: text around a shortcode is editable
+   with the shortcode's output locked, and a textarea printed as a list or paragraphs is
+   editable line by line. A block that marks nothing still gets its text and textarea
+   fields edited in place where the template read the field (through `get_field()`), the
+   preview shows the stored words once, and nothing else reads the same.
 
 What Minn already does for free (no adapter):
 

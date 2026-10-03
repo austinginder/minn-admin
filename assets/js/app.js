@@ -30216,12 +30216,13 @@
 				splice = spliceTextRuns;
 			} else if ( acf.length ) {
 				// ACF block copy. A field is typed over in place only when the
-				// preview shows its stored value verbatim, so an edit can never
+				// preview shows its stored words verbatim, so an edit can never
 				// replace a shortcode or a computed fallback with its rendered
 				// result.
 				runs = [];
 				spans = [];
 				const used = new Set();
+				const claimed = new Set();
 				// The node's whitespace padding rides the run's pre/post, which
 				// commitIslandRuns strips before the JSON splice.
 				const pair = ( n, r ) => {
@@ -30231,48 +30232,130 @@
 					if ( t.slice( lead.length, lead.length + r.text.length ) !== r.text || /\S/.test( tail ) ) return false;
 					r.pre = lead;
 					r.post = tail;
+					claimed.add( n );
 					spans.push( wrapRun( n, runs.length ) );
 					runs.push( r );
 					return true;
 				};
+				// Text with shortcodes ("[fact key="years"] years of work") or
+				// spread over lines (a list, paragraphs) never matches one node
+				// whole. Each line is one node (a paragraph, a list item) that
+				// must read the line's words in order with only shortcode output
+				// between them; each stretch of words becomes a run addressing
+				// its slice INSIDE the quoted JSON value, so shortcodes stay as
+				// stored and their output is never typed over.
+				const rawIndex = ( r ) => {
+					const at = [];
+					let i = r.start + 1;
+					while ( i < r.end - 1 ) {
+						at.push( i );
+						i += base[ i ] !== '\\' ? 1 : ( base[ i + 1 ] === 'u' ? 6 : 2 );
+					}
+					at.push( r.end - 1 );
+					return at;
+				};
+				// null: the node does not read this line. false: it does, but
+				// two readings of where a shortcode's output ends disagree.
+				const fitLine = ( n, parts ) => {
+					const t = n.textContent;
+					const lead = t.match( /^\s*/ )[ 0 ].length;
+					const core = t.slice( lead, t.length - t.match( /\s*$/ )[ 0 ].length );
+					const re = ( gap ) => new RegExp( '^' + parts.map( ( p ) => escRegex( p.text ) ).join( gap ) + '$' );
+					const m = core.match( re( '([\\s\\S]*?)' ) );
+					if ( ! m ) return null;
+					const g = core.match( re( '([\\s\\S]*)' ) );
+					if ( ! g || g.some( ( x, i ) => x !== m[ i ] ) ) return false;
+					const cuts = [];
+					let pos = lead;
+					parts.forEach( ( p, i ) => {
+						// Words only: a bare " · " joining two shortcodes is a
+						// one-character target with nothing to say.
+						if ( /[\p{L}\p{N}]/u.test( p.text ) ) cuts.push( { p, a: pos, b: pos + p.text.length } );
+						pos += p.text.length + ( i + 1 < parts.length ? m[ i + 1 ].length : 0 );
+					} );
+					return cuts;
+				};
+				const readEl = preview.querySelector( '[data-minn-acf-read]' );
+				const read = new Set( readEl ? readEl.getAttribute( 'data-minn-acf-read' ).split( /\s+/ ) : [] );
+				const df = dataFormFor( island.dataset.block || '' );
+				const textual = ( key ) => {
+					if ( ! df || df.attr !== 'data' ) return false;
+					const f = df.fields.find( ( x ) => x.name === key );
+					return !! f && ( ! f.control || f.control === 'text' || f.control === 'textarea' );
+				};
+				// Value matching, like ACF's autoInlineEditing, but only for
+				// text and textarea fields the template read (the server lists
+				// them in data-minn-acf-read), only when the value appears
+				// exactly once among the fields, and only where exactly one
+				// preview node reads it. A breadcrumb that happens to read the
+				// same as a tag field, or static copy that matches a hidden
+				// field, must never be the thing that edits it.
+				const cands = [];
+				const consider = ( r ) => {
+					if ( ! read.has( r.key ) || ! textual( r.key ) ) return;
+					const want = r.text.trim();
+					if ( acf.filter( ( x ) => x.text.trim() === want ).length !== 1 ) return;
+					if ( ! r.lines ) {
+						const hits = nodes.filter( ( n ) => ! claimed.has( n ) && n.textContent.trim() === want );
+						if ( hits.length === 1 ) cands.push( { n: hits[ 0 ], r } );
+						return;
+					}
+					const at = rawIndex( r );
+					if ( at.length !== r.raw.length + 1 ) return;
+					r.lines.forEach( ( parts ) => {
+						let hit = null;
+						let fits = 0;
+						nodes.forEach( ( n ) => {
+							if ( claimed.has( n ) ) return;
+							const cuts = fitLine( n, parts );
+							if ( cuts === null ) return;
+							fits++;
+							if ( cuts && cuts.length ) hit = { n, r, cuts, at };
+						} );
+						if ( fits === 1 && hit ) cands.push( hit );
+					} );
+				};
 				const markers = $$( '[data-acf-inline-contenteditable-field-slug]', preview );
-				if ( markers.length ) {
-					// The template author's contract (ACF's own
-					// acf_inline_text_editing_attrs / autoInlineEditing): pair
-					// each marked element with the field it names. A block that
-					// marks fields means the rest are sidebar fields.
-					markers.forEach( ( el ) => {
-						const r = acf.find( ( x ) => x.key === el.dataset.acfInlineContenteditableFieldSlug && ! used.has( x ) );
-						if ( ! r ) return;
-						const inner = nodes.filter( ( n ) => el.contains( n ) );
-						if ( inner.length !== 1 ) return;
-						if ( pair( inner[ 0 ], r ) ) used.add( r );
+				const marked = new Set();
+				// The template author's contract (ACF's own
+				// acf_inline_text_editing_attrs / autoInlineEditing): pair each
+				// marked element with the field it names.
+				markers.forEach( ( el ) => {
+					const slug = el.dataset.acfInlineContenteditableFieldSlug;
+					marked.add( slug );
+					const r = acf.find( ( x ) => x.key === slug && ! used.has( x ) );
+					if ( ! r || r.lines ) return;
+					const inner = nodes.filter( ( n ) => el.contains( n ) );
+					if ( inner.length !== 1 ) return;
+					if ( pair( inner[ 0 ], r ) ) used.add( r );
+				} );
+				// A block that marks fields means the rest are sidebar fields,
+				// except text ACF's markers cannot carry: shortcodes (its editor
+				// would store their output) and lines spread over elements.
+				acf.forEach( ( r ) => {
+					if ( used.has( r ) ) return;
+					if ( markers.length && ( marked.has( r.key ) || ! r.lines ) ) return;
+					consider( r );
+				} );
+				// A node two fields could both claim goes to neither.
+				const claims = new Map();
+				cands.forEach( ( c ) => claims.set( c.n, ( claims.get( c.n ) || 0 ) + 1 ) );
+				cands.forEach( ( c ) => {
+					if ( claims.get( c.n ) !== 1 ) return;
+					if ( ! c.cuts ) {
+						pair( c.n, c.r );
+						return;
+					}
+					// Split from the end so earlier offsets hold.
+					c.cuts.slice().reverse().forEach( ( k ) => {
+						c.n.splitText( k.b );
+						k.span = wrapRun( c.n.splitText( k.a ), 0 );
 					} );
-				} else {
-					// No markers: match by value, like ACF's autoInlineEditing,
-					// but only for text and textarea fields the template read
-					// (the server lists them in data-minn-acf-read), and only
-					// when the value appears exactly once among the fields AND
-					// once in the preview. A breadcrumb that happens to read the
-					// same as a tag field, or static copy that matches a hidden
-					// field, must never be the thing that edits it.
-					const readEl = preview.querySelector( '[data-minn-acf-read]' );
-					const read = new Set( readEl ? readEl.getAttribute( 'data-minn-acf-read' ).split( /\s+/ ) : [] );
-					const df = dataFormFor( island.dataset.block || '' );
-					const textual = ( key ) => {
-						if ( ! df || df.attr !== 'data' ) return false;
-						const f = df.fields.find( ( x ) => x.name === key );
-						return !! f && ( ! f.control || f.control === 'text' || f.control === 'textarea' );
-					};
-					acf.forEach( ( r ) => {
-						if ( ! read.has( r.key ) || ! textual( r.key ) ) return;
-						const want = r.text.trim();
-						if ( acf.filter( ( x ) => x.text.trim() === want ).length !== 1 ) return;
-						const hits = nodes.filter( ( n ) => n.textContent.trim() === want );
-						if ( hits.length !== 1 ) return;
-						pair( hits[ 0 ], r );
+					c.cuts.forEach( ( k ) => {
+						spans.push( k.span );
+						runs.push( { start: c.at[ k.p.from ], end: c.at[ k.p.to ], pre: '', post: '', text: k.p.text, value: k.p.text, key: c.r.key, slice: true } );
 					} );
-				}
+				} );
 				if ( ! runs.length ) return;
 				// Splicing walks last-to-first by offset.
 				const order = runs.map( ( r, i ) => i ).sort( ( a, b ) => runs[ a ].start - runs[ b ].start );
@@ -37141,7 +37224,10 @@
 		for ( let i = runs.length - 1; i >= 0; i-- ) {
 			const r = runs[ i ];
 			if ( r.value === r.text ) continue;
-			str = str.slice( 0, r.start ) + etchEncodeJsonString( r.value ) + str.slice( r.end );
+			const enc = etchEncodeJsonString( r.value );
+			// A slice run sits inside a quoted value (ACF text around a
+			// shortcode), so it takes the encoded text without its quotes.
+			str = str.slice( 0, r.start ) + ( r.slice ? enc.slice( 1, -1 ) : enc ) + str.slice( r.end );
 		}
 		return str;
 	}
@@ -37181,6 +37267,20 @@
 				// real tags keeps its raw form and so never pairs.
 				if ( ! /</.test( v ) && /&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i.test( v ) ) {
 					run.text = run.value = decodeEntities( v );
+				} else if ( /\[[^\[\]\s][^\[\]]*\]|\n/.test( v ) ) {
+					// Shortcodes or lines: keep the words between them, line
+					// by line, each with its place in the stored value
+					// (armIslandTextRuns pairs them with preview nodes).
+					run.raw = v;
+					run.lines = [ [] ];
+					let last = 0;
+					v.replace( /\[[^\[\]\s][^\[\]]*\]|\s*\n\s*/g, ( tok, at ) => {
+						run.lines[ run.lines.length - 1 ].push( { text: v.slice( last, at ), from: last, to: at } );
+						if ( tok.charAt( 0 ) !== '[' ) run.lines.push( [] );
+						last = at + tok.length;
+						return tok;
+					} );
+					run.lines[ run.lines.length - 1 ].push( { text: v.slice( last ), from: last, to: v.length } );
 				}
 				runs.push( run );
 			}

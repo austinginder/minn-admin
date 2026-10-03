@@ -9,8 +9,12 @@
  * the editor arms preview text as in-place runs that splice the quoted JSON
  * value. Marked blocks arm exactly their marked fields; unmarked blocks arm
  * text and textarea fields whose value appears once. A value shown through a
- * shortcode, one that reads the same as other text, or one the template never
- * reads (static copy that happens to match it) stays sidebar-only.
+ * shortcode keeps the shortcode's output locked while its own words are typed
+ * over (the shortcode survives the save). A value that reads the same as other
+ * text, or one the template never reads (static copy that happens to match
+ * it), stays sidebar-only. A textarea shown one line per list item arms each
+ * line on its own. A run inside a link takes the click instead of following
+ * the link.
  * A value ACF's own inline editing stored entity-encoded ("&amp;") pairs on
  * the text it shows and stays byte-identical until typed over.
  *
@@ -21,7 +25,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 const block = ( data ) => {
 	const d = {};
-	const keys = { kicker: 'field_minn_acfi_kicker', headline: 'field_minn_acfi_headline', body: 'field_minn_acfi_body', since: 'field_minn_acfi_since', note: 'field_minn_acfi_note', cta: 'field_minn_acfi_cta', markers: 'field_minn_acfi_markers' };
+	const keys = { kicker: 'field_minn_acfi_kicker', headline: 'field_minn_acfi_headline', body: 'field_minn_acfi_body', since: 'field_minn_acfi_since', note: 'field_minn_acfi_note', cta: 'field_minn_acfi_cta', button: 'field_minn_acfi_button', points: 'field_minn_acfi_points', markers: 'field_minn_acfi_markers' };
 	Object.keys( data ).forEach( ( k ) => {
 		d[ k ] = data[ k ];
 		d[ '_' + k ] = keys[ k ];
@@ -46,8 +50,8 @@ const block = ( data ) => {
 		process.exit( 0 );
 	}
 
-	const marked = block( { kicker: 'Work', headline: 'Alpha &amp; headline', body: 'Body copy alpha', since: 'Since [minn_fixture_year]', note: 'Read more', markers: '1' } );
-	const plain = block( { kicker: 'Work', headline: 'Bravo headline', body: 'Body copy bravo', since: 'Since [minn_fixture_year]', note: 'Read more', cta: 'Learn more', markers: '0' } );
+	const marked = block( { kicker: 'Work', headline: 'Alpha &amp; headline', body: 'Body copy alpha', since: 'Since [minn_fixture_year]', note: 'Read more', button: 'Book a call', markers: '1' } );
+	const plain = block( { kicker: 'Work', headline: 'Bravo headline', body: 'Body copy bravo', since: 'Since [minn_fixture_year]', note: 'Read more', cta: 'Learn more', points: 'First point\nSecond point', markers: '0' } );
 
 	// Server half: the render route previews ACF v3 blocks through ACF.
 	const rendered = await page.evaluate( async ( blocks ) => {
@@ -113,15 +117,16 @@ const block = ( data ) => {
 		}, null, { timeout: 20000 } ).catch( () => {} );
 
 		const a = await runTexts( 0 );
-		t.check( 'marked block arms exactly its marked fields', a.length === 2 && a.includes( 'Work' ) && a.includes( 'Alpha & headline' ), JSON.stringify( a ) );
+		t.check( 'marked block arms its marked fields and shortcode words only', a.length === 4 && [ 'Work', 'Alpha & headline', 'Book a call', 'Since' ].every( ( x ) => a.includes( x ) ), JSON.stringify( a ) );
 		t.check( 'marked block leaves the static crumb alone',
 			await page.$eval( '.minn-block-island[data-block="acf/minn-inline"] .acfi-crumb', ( el ) => ! el.querySelector( '.minn-island-run' ) && ! el.closest( '.minn-island-run' ) ) );
 
 		const b = await runTexts( 1 );
 		t.check( 'unmarked block arms unique text and textarea values', b.includes( 'Bravo headline' ) && b.includes( 'Body copy bravo' ), JSON.stringify( b ) );
 		t.check( 'a value that reads like other text stays sidebar-only', ! b.includes( 'Work' ) && ! b.includes( 'Read more' ) );
-		t.check( 'a shortcode-rendered value stays sidebar-only', ! b.some( ( s ) => s.includes( 'Since' ) ) );
+		t.check( 'shortcode text arms its own words, not the output', b.includes( 'Since' ) && ! b.some( ( s ) => s.includes( '2026' ) ) );
 		t.check( 'a field the template never reads stays sidebar-only', ! b.includes( 'Learn more' ) );
+		t.check( 'each line of a listed textarea arms on its own', b.includes( 'First point' ) && b.includes( 'Second point' ) );
 
 		const before = await rawContent();
 		const plainBefore = ( before.match( /<!-- wp:acf\/minn-inline [\s\S]*? \/-->/g ) || [] )[ 1 ];
@@ -133,6 +138,24 @@ const block = ( data ) => {
 		t.check( 'field key reference kept', d1._kicker === 'field_minn_acfi_kicker' );
 		t.check( 'other fields untouched, entity form kept', d1.headline === 'Alpha &amp; headline' && d1.since === 'Since [minn_fixture_year]' && d1.body === 'Body copy alpha' );
 		t.check( 'untouched block stays byte-identical', ( raw1.match( /<!-- wp:acf\/minn-inline [\s\S]*? \/-->/g ) || [] )[ 1 ] === plainBefore );
+
+		// A label inside a link: the click seats the caret, the link stays put.
+		const urlBefore = page.url();
+		await typeInto( 0, 'Book a call', 'Book a visit' );
+		await page.waitForTimeout( 800 );
+		t.check( 'clicking a run inside a link does not follow it', page.url() === urlBefore, page.url() );
+		const raw1b = await save( ( r ) => ( dataOf( r, 0 ) || {} ).button === 'Book a visit' );
+		t.check( 'linked label saved', ( dataOf( raw1b, 0 ) || {} ).button === 'Book a visit' );
+
+		// Shortcode text: the words change, the shortcode stays.
+		await typeInto( 1, 'Since', 'From ' );
+		const raw1c = await save( ( r ) => ( dataOf( r, 1 ) || {} ).since === 'From [minn_fixture_year]' );
+		t.check( 'shortcode survives an edit to its words', ( dataOf( raw1c, 1 ) || {} ).since === 'From [minn_fixture_year]', ( dataOf( raw1c, 1 ) || {} ).since );
+
+		// One line of a list: the other line and the line break stay.
+		await typeInto( 1, 'Second point', 'Second edited' );
+		const raw1d = await save( ( r ) => ( dataOf( r, 1 ) || {} ).points === 'First point\nSecond edited' );
+		t.check( 'a list line saves alone', ( dataOf( raw1d, 1 ) || {} ).points === 'First point\nSecond edited', JSON.stringify( ( dataOf( raw1d, 1 ) || {} ).points ) );
 
 		await typeInto( 1, 'Body copy bravo', 'Fresh body & more' );
 		const raw2 = await save( ( r ) => ( dataOf( r, 1 ) || {} ).body === 'Fresh body & more' );
