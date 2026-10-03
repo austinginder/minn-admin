@@ -895,6 +895,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
+| `minn_admin_acf_preview_render` | filter | `( bool, block name )`: return false to keep an ACF v3 block's island preview on the front-end render instead of ACF's preview render (since 0.43.0) |
 | `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
 | `minn_admin_option_pages` | filter | Add a page of site-wide fields to the shared Site options item |
 | `minn_admin_field_group_sources` | filter | Add your field groups as a view on the shared Field Groups item |
@@ -1125,6 +1126,16 @@ follow.
 6. **Put text and image URLs in saved HTML (or attrs that mirror that HTML).** Minn can
    already edit generic text runs and swap images inside islands without per-block code
    when the content lives in the markup.
+7. **ACF Pro blocks: mark the fields you print verbatim.** Minn previews ACF v3 blocks
+   through ACF's own preview render (`$is_preview` is true, as in the block editor), so
+   ACF's inline-editing contract carries over unchanged: an element marked with
+   `acf_inline_text_editing_attrs( 'field' )`, or a block with `autoInlineEditing`, is
+   typed over in place and the edit lands in that field alone. Gate your markers on
+   `$is_preview` (ACF 6.8 prints them on the front end too) and leave fields that render
+   through a shortcode or a computed fallback unmarked, or a typed edit would replace the
+   source with its output. A block that marks nothing still gets its text and textarea
+   fields edited in place where the preview shows the stored value once and nothing else
+   reads the same.
 
 What Minn already does for free (no adapter):
 
@@ -1136,6 +1147,7 @@ What Minn already does for free (no adapter):
 | Styles enqueued during render | Style-queue diff after `do_blocks` |
 | Site + block library CSS | `editor-styles` + client scoper on `.minn-island-preview` |
 | Text / image edit in islands | Generic text runs + image URL swap |
+| ACF block copy edited in place | ACF's inline-editing markers in the preview render, else unique value match |
 | Design libraries / patterns | Registered block patterns are automatic; libraries via `minn_admin_design_sources` (below) |
 | Writing shortcuts / boilerplate | Free-form slash commands via `minn_admin_editor_commands` (below) |
 

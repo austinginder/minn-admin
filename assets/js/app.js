@@ -30181,7 +30181,8 @@
 			const base = String( ed.islands[ idx ] );
 			const generic = textRunsOf( base );
 			const etch = generic.length ? [] : etchTextRunsOf( base );
-			if ( ! generic.length && ! etch.length ) return;
+			const acf = generic.length || etch.length ? [] : acfTextRunsOf( base );
+			if ( ! generic.length && ! etch.length && ! acf.length ) return;
 			const walker = document.createTreeWalker( preview, NodeFilter.SHOW_TEXT, {
 				acceptNode( n ) {
 					if ( ! n.textContent.trim() ) return NodeFilter.FILTER_REJECT;
@@ -30213,6 +30214,72 @@
 				runs = generic;
 				spans = nodes.map( wrapRun );
 				splice = spliceTextRuns;
+			} else if ( acf.length ) {
+				// ACF block copy. A field is typed over in place only when the
+				// preview shows its stored value verbatim, so an edit can never
+				// replace a shortcode or a computed fallback with its rendered
+				// result.
+				runs = [];
+				spans = [];
+				const used = new Set();
+				// The node's whitespace padding rides the run's pre/post, which
+				// commitIslandRuns strips before the JSON splice.
+				const pair = ( n, r ) => {
+					const t = n.textContent;
+					const lead = t.match( /^\s*/ )[ 0 ];
+					const tail = t.slice( lead.length + r.text.length );
+					if ( t.slice( lead.length, lead.length + r.text.length ) !== r.text || /\S/.test( tail ) ) return false;
+					r.pre = lead;
+					r.post = tail;
+					spans.push( wrapRun( n, runs.length ) );
+					runs.push( r );
+					return true;
+				};
+				const markers = $$( '[data-acf-inline-contenteditable-field-slug]', preview );
+				if ( markers.length ) {
+					// The template author's contract (ACF's own
+					// acf_inline_text_editing_attrs / autoInlineEditing): pair
+					// each marked element with the field it names. A block that
+					// marks fields means the rest are sidebar fields.
+					markers.forEach( ( el ) => {
+						const r = acf.find( ( x ) => x.key === el.dataset.acfInlineContenteditableFieldSlug && ! used.has( x ) );
+						if ( ! r ) return;
+						const inner = nodes.filter( ( n ) => el.contains( n ) );
+						if ( inner.length !== 1 ) return;
+						if ( pair( inner[ 0 ], r ) ) used.add( r );
+					} );
+				} else {
+					// No markers: match by value, like ACF's autoInlineEditing,
+					// but only for text and textarea fields the template read
+					// (the server lists them in data-minn-acf-read), and only
+					// when the value appears exactly once among the fields AND
+					// once in the preview. A breadcrumb that happens to read the
+					// same as a tag field, or static copy that matches a hidden
+					// field, must never be the thing that edits it.
+					const readEl = preview.querySelector( '[data-minn-acf-read]' );
+					const read = new Set( readEl ? readEl.getAttribute( 'data-minn-acf-read' ).split( /\s+/ ) : [] );
+					const df = dataFormFor( island.dataset.block || '' );
+					const textual = ( key ) => {
+						if ( ! df || df.attr !== 'data' ) return false;
+						const f = df.fields.find( ( x ) => x.name === key );
+						return !! f && ( ! f.control || f.control === 'text' || f.control === 'textarea' );
+					};
+					acf.forEach( ( r ) => {
+						if ( ! read.has( r.key ) || ! textual( r.key ) ) return;
+						const want = r.text.trim();
+						if ( acf.filter( ( x ) => x.text.trim() === want ).length !== 1 ) return;
+						const hits = nodes.filter( ( n ) => n.textContent.trim() === want );
+						if ( hits.length !== 1 ) return;
+						pair( hits[ 0 ], r );
+					} );
+				}
+				if ( ! runs.length ) return;
+				// Splicing walks last-to-first by offset.
+				const order = runs.map( ( r, i ) => i ).sort( ( a, b ) => runs[ a ].start - runs[ b ].start );
+				runs = order.map( ( i ) => runs[ i ] );
+				spans = order.map( ( i ) => spans[ i ] );
+				spans.forEach( ( sp, i ) => { sp.dataset.run = String( i ); } );
+				splice = spliceEtchTextRuns;
 			} else {
 				// Etch copy is a named list of strings, not a 1:1 map of every
 				// preview text node (dynamic `{this.title}` renders as the
@@ -37072,6 +37139,49 @@
 			str = str.slice( 0, r.start ) + etchEncodeJsonString( r.value ) + str.slice( r.end );
 		}
 		return str;
+	}
+
+	/* ACF Pro blocks keep their copy in the comment's `data` object
+	 * ({ field: value, _field: field_key }), the same quoted-JSON shape as
+	 * Etch, so the same offset runs and splice apply. Each run carries its
+	 * field name so the preview can pair it with ACF's own inline-editing
+	 * marker (data-acf-inline-contenteditable-field-slug), which the server
+	 * emits because render-blocks previews ACF v3 blocks through ACF's
+	 * preview path (adapters/acf.php). Only string values are offered;
+	 * which of them may be typed over is decided where the preview is
+	 * paired (armIslandTextRuns). */
+	function acfTextRunsOf( str ) {
+		const runs = [];
+		if ( ! str ) return runs;
+		const m = str.match( /^\s*<!--\s*wp:([a-z][a-z0-9_-]*\/[a-z][a-z0-9_-]*)\s+((?:(?!-->)[\s\S])*?)\s*(\/)?\s*-->/ );
+		if ( ! m ) return runs;
+		let attrs;
+		try { attrs = JSON.parse( m[ 2 ].trim() || '{}' ); } catch ( e ) { return runs; }
+		const data = attrs && attrs.data;
+		if ( ! data || typeof data !== 'object' || Array.isArray( data ) ) return runs;
+		const comment = m[ 0 ];
+		const from = comment.indexOf( '"data"' );
+		if ( from < 0 ) return runs;
+		Object.keys( data ).forEach( ( key ) => {
+			if ( key.charAt( 0 ) === '_' ) return; // _field → field_key references
+			const v = data[ key ];
+			if ( typeof v !== 'string' || ! v.trim() ) return;
+			const run = etchRunForKey( comment, 0, key, v, from );
+			if ( run ) {
+				run.key = key;
+				// ACF's own inline editing stores the element's HTML, so a
+				// value typed in the block editor reads "Design &amp; Build"
+				// while the preview shows "Design & Build". Pair on the shown
+				// text; an untouched run still never rewrites. A value with
+				// real tags keeps its raw form and so never pairs.
+				if ( ! /</.test( v ) && /&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i.test( v ) ) {
+					run.text = run.value = decodeEntities( v );
+				}
+				runs.push( run );
+			}
+		} );
+		runs.sort( ( a, b ) => a.start - b.start );
+		return runs;
 	}
 
 	/* Island image swaps — the sibling of text runs for pictures. Static

@@ -1838,6 +1838,97 @@ add_filter( 'minn_admin_block_forms', function ( $forms ) {
 	return $forms;
 } );
 
+/*
+ * Island previews of ACF blocks render the way the block editor previews them.
+ *
+ * ACF Pro's v3 blocks define an inline-editing contract: a template marks an
+ * element with acf_inline_text_editing_attrs( 'field' ) and ACF emits
+ * data-acf-inline-contenteditable + the field name, or the block opts into
+ * autoInlineEditing and ACF marks matching values itself. autoInlineEditing
+ * runs only when $is_preview is true, and templates that print their own
+ * markers gate them on $is_preview too (ACF 6.8 prints them on every v3
+ * render, front end included). Minn's render-blocks route goes through
+ * do_blocks(), the front-end path, where $is_preview is false, so the
+ * markers never reached the editor and the copy stayed sidebar-only. During
+ * that one request, ACF v3 blocks render through ACF's own preview path
+ * instead: the same acf_render_block( …, $is_preview = true ) the block
+ * editor's preview runs, minus the sidebar form it also builds (wp_editor
+ * enqueues have no place in a preview). Templates that branch on
+ * $is_preview (placeholder copy, a first-slide-only carousel) now match what
+ * the block editor shows. Blocks with InnerBlocks keep the front-end path,
+ * because ACF leaves the <InnerBlocks /> placeholder unreplaced in previews,
+ * and so do blocks registered with render_preview false, which the block
+ * editor never renders.
+ *
+ * Filter minn_admin_acf_preview_render ( bool, block name ) opts a block out.
+ */
+add_action( 'minn_admin_before_render_blocks', function ( $blocks, $post_id ) {
+	if ( ! function_exists( 'acf_render_block' ) || ! function_exists( 'acf_has_block_type' ) || ! function_exists( 'acf_get_block_id' ) ) {
+		return; // ACF free has no blocks
+	}
+	add_filter( 'pre_render_block', function ( $pre, $parsed ) use ( $post_id ) {
+		if ( null !== $pre || ! is_array( $parsed ) || empty( $parsed['blockName'] ) || ! empty( $parsed['innerBlocks'] ) ) {
+			return $pre;
+		}
+		$name = (string) $parsed['blockName'];
+		if ( ! acf_has_block_type( $name ) ) {
+			return $pre;
+		}
+		$type = WP_Block_Type_Registry::get_instance()->get_registered( $name );
+		if ( ! $type || empty( $type->acf_block_version ) || (int) $type->acf_block_version < 3 ) {
+			return $pre; // the inline contract is v3-only
+		}
+		$settings = function_exists( 'acf_get_block_type' ) ? acf_get_block_type( $name ) : array();
+		if ( is_array( $settings ) && isset( $settings['render_preview'] ) && false === $settings['render_preview'] ) {
+			return $pre;
+		}
+		if ( ! apply_filters( 'minn_admin_acf_preview_render', true, $name ) ) {
+			return $pre;
+		}
+		$attributes         = $type->prepare_attributes_for_render( is_array( $parsed['attrs'] ?? null ) ? $parsed['attrs'] : array() );
+		$attributes['name'] = $name;
+		$attributes['id']   = acf_get_block_id( $attributes );
+		$was                = function_exists( 'acf_get_data' ) ? acf_get_data( 'acf_doing_block_preview' ) : false;
+		// Which of this block's fields the template read. The editor pairs an
+		// unmarked block's text with a field only when the field is listed,
+		// the same rule ACF's autoInlineEditing applies, so a hidden field
+		// whose value happens to match static copy never takes the edit.
+		$read   = array();
+		$ids    = array( (string) $attributes['id'], function_exists( 'acf_ensure_block_id_prefix' ) ? (string) acf_ensure_block_id_prefix( (string) $attributes['id'] ) : '' );
+		$record = static function ( $value, $pid, $field ) use ( &$read, $ids ) {
+			if ( is_string( $value ) && ! empty( $field['name'] ) && empty( $field['parent_repeater'] ) && in_array( (string) $pid, $ids, true ) ) {
+				$read[ (string) $field['name'] ] = true;
+			}
+			return $value;
+		};
+		add_filter( 'acf/format_value', $record, 1, 3 );
+		acf_set_data( 'acf_doing_block_preview', true );
+		ob_start();
+		try {
+			acf_render_block( $attributes, '', true, $post_id ? $post_id : get_the_ID() );
+		} catch ( Throwable $e ) {
+			ob_end_clean();
+			remove_filter( 'acf/format_value', $record, 1 );
+			acf_set_data( 'acf_doing_block_preview', $was );
+			return $pre; // a template that throws in preview falls back to the front-end render
+		}
+		$html = ob_get_clean();
+		remove_filter( 'acf/format_value', $record, 1 );
+		acf_set_data( 'acf_doing_block_preview', $was );
+		if ( ! is_string( $html ) ) {
+			return $pre;
+		}
+		if ( $read && class_exists( 'WP_HTML_Tag_Processor' ) ) {
+			$tags = new WP_HTML_Tag_Processor( $html );
+			if ( $tags->next_tag() ) {
+				$tags->set_attribute( 'data-minn-acf-read', implode( ' ', array_keys( $read ) ) );
+				$html = $tags->get_updated_html();
+			}
+		}
+		return $html;
+	}, 10, 2 );
+}, 10, 2 );
+
 /**
  * One field value as a short display string for the revision comparison.
  *
