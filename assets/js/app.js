@@ -38812,9 +38812,23 @@
 			const id = `${ prefix }:${ key }`;
 			const label = fd.label || humanizeAttrKey( key );
 			// Descriptor options are [value, label] pairs; schema enums are bare values.
-			const options = Array.isArray( fd.options ) && fd.options.length
+			let options = Array.isArray( fd.options ) && fd.options.length
 				? fd.options.map( ( o ) => ( Array.isArray( o ) ? o : [ o, o ] ) )
 				: ( Array.isArray( def.enum ) && def.enum.length ? def.enum.map( ( v ) => [ v, v ] ) : null );
+			// `align` is a free string in the schema; the choices live in the
+			// block's supports. A block that turns alignment off (ACF adds the
+			// attribute to every block) has nothing to offer here.
+			if ( 'align' === key && ! fd.options ) {
+				const type = ( state.cache.blockTypes || {} )[ fullBlockName( blockName || '' ) ];
+				const sup = type && type.supports ? type.supports.align : undefined;
+				if ( false === sup ) return;
+				if ( true === sup || Array.isArray( sup ) ) {
+					const names = { left: __( 'Left' ), center: __( 'Center' ), right: __( 'Right' ), wide: __( 'Wide width' ), full: __( 'Full width' ) };
+					// "None" first: an untouched select must read as no alignment,
+					// not quietly apply the first one listed.
+					options = [ [ '', __( 'None' ) ], ...( true === sup ? [ 'left', 'center', 'right', 'wide', 'full' ] : sup ).map( ( v ) => [ v, names[ v ] || v ] ) ];
+				}
+			}
 			const control = fd.control || ( options ? 'select'
 				: ( type === 'boolean' ? 'toggle'
 				: ( type === 'number' || type === 'integer' ? 'number'
