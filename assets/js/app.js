@@ -30173,7 +30173,7 @@
 			// A re-render that adopted the live DOM (rule-18 path) can carry
 			// stale run spans whose arm state is gone — unwrap before walking
 			// so re-arming never nests spans inside old spans.
-			$$( '.minn-island-run', preview ).forEach( ( s ) => {
+			$$( '.minn-island-run, .minn-sc-token', preview ).forEach( ( s ) => {
 				while ( s.firstChild ) s.parentNode.insertBefore( s.firstChild, s );
 				s.remove();
 			} );
@@ -30232,6 +30232,7 @@
 					if ( t.slice( lead.length, lead.length + r.text.length ) !== r.text || /\S/.test( tail ) ) return false;
 					r.pre = lead;
 					r.post = tail;
+					r.src = true;
 					claimed.add( n );
 					spans.push( wrapRun( n, runs.length ) );
 					runs.push( r );
@@ -30241,9 +30242,11 @@
 				// spread over lines (a list, paragraphs) never matches one node
 				// whole. Each line is one node (a paragraph, a list item) that
 				// must read the line's words in order with only shortcode output
-				// between them; each stretch of words becomes a run addressing
-				// its slice INSIDE the quoted JSON value, so shortcodes stay as
-				// stored and their output is never typed over.
+				// between them. The line becomes ONE run addressing its slice
+				// INSIDE the quoted JSON value, and each shortcode's output
+				// becomes a token in it: an atomic chip that carries the
+				// shortcode's source, so the run serializes back to the stored
+				// shortcode and the output is never typed over.
 				const rawIndex = ( r ) => {
 					const at = [];
 					let i = r.start + 1;
@@ -30256,24 +30259,16 @@
 				};
 				// null: the node does not read this line. false: it does, but
 				// two readings of where a shortcode's output ends disagree.
-				const fitLine = ( n, parts ) => {
+				const fitLine = ( n, line ) => {
 					const t = n.textContent;
 					const lead = t.match( /^\s*/ )[ 0 ].length;
 					const core = t.slice( lead, t.length - t.match( /\s*$/ )[ 0 ].length );
-					const re = ( gap ) => new RegExp( '^' + parts.map( ( p ) => escRegex( p.text ) ).join( gap ) + '$' );
+					const re = ( gap ) => new RegExp( '^' + line.parts.map( ( p ) => escRegex( p.text ) ).join( gap ) + '$' );
 					const m = core.match( re( '([\\s\\S]*?)' ) );
 					if ( ! m ) return null;
 					const g = core.match( re( '([\\s\\S]*)' ) );
 					if ( ! g || g.some( ( x, i ) => x !== m[ i ] ) ) return false;
-					const cuts = [];
-					let pos = lead;
-					parts.forEach( ( p, i ) => {
-						// Words only: a bare " · " joining two shortcodes is a
-						// one-character target with nothing to say.
-						if ( /[\p{L}\p{N}]/u.test( p.text ) ) cuts.push( { p, a: pos, b: pos + p.text.length } );
-						pos += p.text.length + ( i + 1 < parts.length ? m[ i + 1 ].length : 0 );
-					} );
-					return cuts;
+					return { lead, core, gaps: m.slice( 1 ) };
 				};
 				const readEl = preview.querySelector( '[data-minn-acf-read]' );
 				const read = new Set( readEl ? readEl.getAttribute( 'data-minn-acf-read' ).split( /\s+/ ) : [] );
@@ -30302,15 +30297,18 @@
 					}
 					const at = rawIndex( r );
 					if ( at.length !== r.raw.length + 1 ) return;
-					r.lines.forEach( ( parts ) => {
+					r.lines.forEach( ( line ) => {
+						// A line of bare punctuation with nothing to edit
+						// is not worth a caret target.
+						if ( ! line.tags.length && ! /[\p{L}\p{N}]/u.test( r.raw.slice( line.from, line.to ) ) ) return;
 						let hit = null;
 						let fits = 0;
 						nodes.forEach( ( n ) => {
 							if ( claimed.has( n ) ) return;
-							const cuts = fitLine( n, parts );
-							if ( cuts === null ) return;
+							const fit = fitLine( n, line );
+							if ( fit === null ) return;
 							fits++;
-							if ( cuts && cuts.length ) hit = { n, r, cuts, at };
+							if ( fit ) hit = { n, r, line, fit, at };
 						} );
 						if ( fits === 1 && hit ) cands.push( hit );
 					} );
@@ -30342,20 +30340,40 @@
 				cands.forEach( ( c ) => claims.set( c.n, ( claims.get( c.n ) || 0 ) + 1 ) );
 				cands.forEach( ( c ) => {
 					if ( claims.get( c.n ) !== 1 ) return;
-					if ( ! c.cuts ) {
+					if ( ! c.line ) {
 						pair( c.n, c.r );
 						return;
 					}
-					// Split from the end so earlier offsets hold.
-					c.cuts.slice().reverse().forEach( ( k ) => {
-						c.n.splitText( k.b );
-						k.span = wrapRun( c.n.splitText( k.a ), 0 );
+					// The run wraps the line's text without its padding; the
+					// shortcode output inside it becomes tokens, split from the
+					// end so earlier offsets hold.
+					const { lead, core, gaps } = c.fit;
+					if ( lead + core.length < c.n.textContent.length ) c.n.splitText( lead + core.length );
+					const text = lead ? c.n.splitText( lead ) : c.n;
+					claimed.add( c.n );
+					const span = wrapRun( text, 0 );
+					const spots = [];
+					let pos = 0;
+					c.line.parts.forEach( ( p, i ) => {
+						pos += p.text.length;
+						if ( i >= c.line.tags.length ) return;
+						spots.push( { a: pos, b: pos + gaps[ i ].length, src: c.line.tags[ i ] } );
+						pos += gaps[ i ].length;
 					} );
-					c.cuts.forEach( ( k ) => {
-						spans.push( k.span );
-						runs.push( { start: c.at[ k.p.from ], end: c.at[ k.p.to ], pre: '', post: '', text: k.p.text, value: k.p.text, key: c.r.key, slice: true } );
+					spots.reverse().forEach( ( k ) => {
+						const after = text.splitText( k.b );
+						const out = text.splitText( k.a );
+						const tok = makeScToken( k.src );
+						span.insertBefore( tok, after );
+						if ( out.nodeValue ) tok.appendChild( out );
+						else out.remove();
 					} );
+					const src = c.r.raw.slice( c.line.from, c.line.to );
+					spans.push( span );
+					runs.push( { start: c.at[ c.line.from ], end: c.at[ c.line.to ], pre: '', post: '', text: src, value: src, key: c.r.key, slice: true, src: true } );
 				} );
+				// Token sources and the [ picker read the shortcode hints.
+				if ( runs.length ) loadScHints();
 				if ( ! runs.length ) return;
 				// Splicing walks last-to-first by offset.
 				const order = runs.map( ( r, i ) => i ).sort( ( a, b ) => runs[ a ].start - runs[ b ].start );
@@ -30439,7 +30457,9 @@
 		arm.spans.forEach( ( span, i ) => {
 			if ( ! span || ! span.isConnected ) return;
 			const r = arm.runs[ i ];
-			let v = span.textContent;
+			// ACF runs read back their source: a shortcode token writes the
+			// shortcode it stands for, not the output it shows.
+			let v = r.src ? runSourceText( span ) : span.textContent;
 			// Chrome inserts nbsp when typing spaces at editable edges; convert
 			// them back — but only when the ORIGINAL text had none, so a run
 			// that legitimately carries nbsp never rewrites untouched.
@@ -35901,6 +35921,12 @@
 		} );
 		body.addEventListener( 'click', ( e ) => {
 			if ( ! e.target.closest ) return;
+			const tok = e.target.closest( '.minn-island-run .minn-sc-token' );
+			if ( tok ) {
+				e.preventDefault();
+				loadScHints().then( () => { if ( tok.isConnected ) openScTokenPop( tok ); } );
+				return;
+			}
 			const prev = e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview, .minn-block-island[data-cted] > .minn-island-preview' );
 			if ( prev && e.target.closest( 'a' ) ) e.preventDefault(); // a linked photo must not navigate
 			// Text typed over in place can sit inside a link (a button's
@@ -36007,6 +36033,20 @@
 					// wraps fired inside runs (found in verification). This
 					// delegation is registered first, so immediate stops them.
 					if ( ! ( e.metaKey || e.ctrlKey ) ) e.stopImmediatePropagation();
+					// [ in ACF copy offers the shortcodes a theme or plugin
+					// describes (openScPicker); plain runs type it as usual.
+					if ( e.key === '[' && ! appShortcut && ! e.altKey && scHints && Object.keys( scHints.hints || {} ).length ) {
+						const island = runEl.closest( '.minn-block-island' );
+						const arm = island && island._minnRuns;
+						const r = arm ? arm.runs[ arm.spans.indexOf( runEl ) ] : null;
+						const sel = window.getSelection();
+						if ( r && r.src && sel.rangeCount && runEl.contains( sel.getRangeAt( 0 ).startContainer ) ) {
+							e.preventDefault();
+							e.stopPropagation();
+							openScPicker( runEl, sel.getRangeAt( 0 ).cloneRange() );
+							return;
+						}
+					}
 					// Enter would insert <br><br> inside the run (probed) — and
 					// splitting into new blocks is out of scope by design.
 					if ( e.key === 'Enter' && ! appShortcut ) {
@@ -37272,21 +37312,294 @@
 					// by line, each with its place in the stored value
 					// (armIslandTextRuns pairs them with preview nodes).
 					run.raw = v;
-					run.lines = [ [] ];
+					run.lines = [];
+					let line = { parts: [], tags: [], from: 0, to: 0 };
 					let last = 0;
 					v.replace( /\[[^\[\]\s][^\[\]]*\]|\s*\n\s*/g, ( tok, at ) => {
-						run.lines[ run.lines.length - 1 ].push( { text: v.slice( last, at ), from: last, to: at } );
-						if ( tok.charAt( 0 ) !== '[' ) run.lines.push( [] );
+						line.parts.push( { text: v.slice( last, at ) } );
+						if ( tok.charAt( 0 ) === '[' ) {
+							line.tags.push( tok );
+						} else {
+							line.to = at;
+							run.lines.push( line );
+							line = { parts: [], tags: [], from: at + tok.length, to: 0 };
+						}
 						last = at + tok.length;
 						return tok;
 					} );
-					run.lines[ run.lines.length - 1 ].push( { text: v.slice( last ), from: last, to: v.length } );
+					line.parts.push( { text: v.slice( last ) } );
+					line.to = v.length;
+					run.lines.push( line );
 				}
 				runs.push( run );
 			}
 		} );
 		runs.sort( ( a, b ) => a.start - b.start );
 		return runs;
+	}
+
+	/* Shortcode tokens in ACF text runs. A shortcode inside in-place text
+	 * renders as its output, so the run shows that output as an atomic chip
+	 * carrying the shortcode's source: typing flows around it, Backspace
+	 * removes it whole, a click opens its source (attribute choices when a
+	 * theme or plugin describes the shortcode through
+	 * minn_admin_shortcode_hints), and typing [ offers the described ones.
+	 * runSourceText() reads a run back as text plus each token's source. */
+	function makeScToken( src ) {
+		const el = document.createElement( 'span' );
+		el.className = 'minn-sc-token';
+		el.setAttribute( 'contenteditable', 'false' );
+		el.dataset.sc = src;
+		el.dataset.tag = ( String( src ).match( /^\[\/?([\w-]+)/ ) || [] )[ 1 ] || '';
+		el.title = src;
+		return el;
+	}
+	function runSourceText( el ) {
+		let out = '';
+		el.childNodes.forEach( ( n ) => {
+			if ( n.nodeType === 3 ) out += n.nodeValue;
+			else if ( n.nodeType === 1 && n.classList.contains( 'minn-sc-token' ) ) out += n.dataset.sc || '';
+			else if ( n.nodeType === 1 ) out += runSourceText( n );
+		} );
+		// The caret anchor placed after a token at the end of a run.
+		return out.replace( /\u200b/g, '' );
+	}
+	let scHints = null;
+	let scHintsReq = null;
+	function loadScHints() {
+		if ( ! scHintsReq ) {
+			scHintsReq = api( 'minn-admin/v1/shortcodes' )
+				.then( ( r ) => { scHints = r && typeof r === 'object' ? r : { tags: [], hints: {} }; return scHints; } )
+				.catch( () => { scHints = { tags: [], hints: {} }; return scHints; } );
+		}
+		return scHintsReq;
+	}
+	const scHintFor = ( tag ) => ( scHints && scHints.hints && Object.prototype.hasOwnProperty.call( scHints.hints, tag ) ) ? scHints.hints[ tag ] : null;
+	const scAttr = ( src, name ) => {
+		const m = String( src ).match( new RegExp( '\\s' + escRegex( name ) + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s\\]]+))' ) );
+		return m ? ( m[ 1 ] ?? m[ 2 ] ?? m[ 3 ] ?? '' ) : '';
+	};
+	// Set one attribute, keeping every other part of the source as typed.
+	const scSetAttr = ( src, name, value ) => {
+		const re = new RegExp( '(\\s' + escRegex( name ) + '\\s*=\\s*)(?:"[^"]*"|\'[^\']*\'|[^\\s\\]]+)' );
+		const q = '"' + String( value ).replace( /["\[\]]/g, '' ) + '"';
+		return re.test( src ) ? src.replace( re, ( m, pre ) => pre + q ) : src.replace( /\]$/, ' ' + name + '=' + q + ']' );
+	};
+	// What a token would show for this source, when its hint says.
+	const scPreview = ( src ) => {
+		const tag = ( String( src ).match( /^\[([\w-]+)/ ) || [] )[ 1 ];
+		const hint = tag && scHintFor( tag );
+		if ( ! hint || hint.fields.length !== 1 ) return '';
+		const opt = ( hint.fields[ 0 ].options || [] ).find( ( o ) => o[ 0 ] === scAttr( src, hint.fields[ 0 ].name ) );
+		return opt ? opt[ 2 ] || '' : '';
+	};
+	const SC_SOURCE = /^\[[\w-]+(?:\s[^\[\]]*)?\]$/;
+
+	let scPop = null;
+	function scPopAway( e ) {
+		if ( scPop && ! scPop.contains( e.target ) ) hideScPop();
+	}
+	function hideScPop() {
+		if ( scPop && scPop._minnA11yEsc ) document.removeEventListener( 'keydown', scPop._minnA11yEsc, true );
+		if ( scPop ) scPop.remove();
+		scPop = null;
+		document.removeEventListener( 'mousedown', scPopAway, true );
+	}
+	function placeScPop( rect ) {
+		const w = scPop.offsetWidth || 320;
+		scPop.style.left = panelLeftFor( rect, w ) + 'px';
+		scPop.style.top = Math.max( 10, Math.min( rect.bottom + 8, window.innerHeight - scPop.offsetHeight - 10 ) ) + 'px';
+		document.addEventListener( 'mousedown', scPopAway, true );
+	}
+	// The token's island re-renders so it shows the shortcode's real output.
+	function scRerender( island ) {
+		const ed = state.editor;
+		const idx = parseInt( island && island.dataset.island, 10 );
+		if ( ! ed || ! ed.islands || ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+		replaceIsland( idx, island, ed.islands[ idx ] );
+	}
+
+	function openScTokenPop( tok ) {
+		hideScPop();
+		const run = tok.closest( '.minn-island-run' );
+		const island = run && run.closest( '.minn-block-island' );
+		if ( ! island || ! island._minnRuns ) return;
+		const src = tok.dataset.sc || '';
+		const hint = scHintFor( tok.dataset.tag || '' );
+		const fields = hint ? hint.fields.filter( ( f ) => f.options && f.options.length ) : [];
+		scPop = document.createElement( 'div' );
+		scPop.className = 'minn-inspector minn-link-pop minn-sc-pop';
+		scPop.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">${ esc( hint ? hint.label : __( 'Shortcode' ) ) }</span>
+				<button class="minn-x-btn" data-close type="button">\u00d7</button>
+			</div>
+			<div class="minn-insp-body">
+				${ fields.map( ( f, i ) => {
+					const cur = scAttr( src, f.name );
+					return `<div class="minn-field-label">${ esc( f.label ) }</div>
+						<select class="minn-input" data-sc-field="${ i }">
+							${ f.options.some( ( o ) => o[ 0 ] === cur ) ? '' : `<option value="${ esc( cur ) }" selected>${ esc( cur || '—' ) }</option>` }
+							${ f.options.map( ( o ) => `<option value="${ esc( o[ 0 ] ) }"${ o[ 0 ] === cur ? ' selected' : '' }>${ esc( o[ 1 ] + ( o[ 2 ] ? ' · ' + o[ 2 ] : '' ) ) }</option>` ).join( '' ) }
+						</select>`;
+				} ).join( '' ) }
+				<div class="minn-field-label"${ fields.length ? ' style="margin-top:10px;"' : '' }>${ esc( __( 'Shortcode' ) ) }</div>
+				<input class="minn-input minn-sc-src" data-sc-src value="${ esc( src ) }" spellcheck="false" autocomplete="off">
+				<div class="minn-sc-err" data-sc-err hidden>${ esc( __( 'Use one shortcode, like [name key="value"].' ) ) }</div>
+			</div>
+			<div class="minn-insp-actions">
+				<button class="minn-btn-primary" data-sc-apply type="button">${ esc( __( 'Apply' ) ) }</button>
+				<button class="minn-btn-soft danger" data-sc-remove type="button">${ esc( __( 'Remove' ) ) }</button>
+			</div>`;
+		document.body.appendChild( scPop );
+		placeScPop( tok.getBoundingClientRect() );
+		armBlockPopA11y( scPop, { label: __( 'Shortcode' ), onClose: hideScPop, focus: fields.length ? '[data-sc-field="0"]' : '[data-sc-src]' } );
+		const input = scPop.querySelector( '[data-sc-src]' );
+		$$( '[data-sc-field]', scPop ).forEach( ( sel ) => {
+			sel.addEventListener( 'change', () => {
+				input.value = scSetAttr( input.value, fields[ parseInt( sel.dataset.scField, 10 ) ].name, sel.value );
+			} );
+		} );
+		const apply = () => {
+			const next = input.value.trim();
+			if ( ! SC_SOURCE.test( next ) ) {
+				scPop.querySelector( '[data-sc-err]' ).hidden = false;
+				input.focus();
+				return;
+			}
+			hideScPop();
+			if ( next === src || ! tok.isConnected ) return;
+			tok.dataset.sc = next;
+			tok.dataset.tag = ( next.match( /^\[([\w-]+)/ ) || [] )[ 1 ] || '';
+			tok.title = next;
+			tok.textContent = scPreview( next );
+			commitIslandRuns( island );
+			scRerender( island );
+		};
+		scPop.querySelector( '[data-close]' ).addEventListener( 'click', hideScPop );
+		scPop.querySelector( '[data-sc-apply]' ).addEventListener( 'click', apply );
+		input.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Enter' ) { e.preventDefault(); apply(); }
+		} );
+		scPop.querySelector( '[data-sc-remove]' ).addEventListener( 'click', () => {
+			hideScPop();
+			if ( ! tok.isConnected ) return;
+			tok.remove();
+			commitIslandRuns( island );
+		} );
+	}
+
+	// Typing [ in an ACF run offers the shortcodes a theme or plugin
+	// describes. Escape types the bracket after all.
+	function openScPicker( run, range ) {
+		hideScPop();
+		const island = run.closest( '.minn-block-island' );
+		if ( ! island ) return;
+		const items = [];
+		Object.keys( ( scHints && scHints.hints ) || {} ).forEach( ( tag ) => {
+			const hint = scHints.hints[ tag ];
+			const f = hint.fields[ 0 ];
+			if ( f && f.options && f.options.length ) {
+				f.options.forEach( ( o ) => items.push( { label: hint.label + ' · ' + o[ 1 ], detail: o[ 2 ], src: '[' + tag + ' ' + f.name + '="' + o[ 0 ] + '"]', preview: o[ 2 ] } ) );
+			} else {
+				items.push( { label: hint.label, detail: '[' + tag + ']', src: '[' + tag + ']', preview: '' } );
+			}
+		} );
+		scPop = document.createElement( 'div' );
+		scPop.className = 'minn-inspector minn-link-pop minn-sc-pop';
+		scPop.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">${ esc( __( 'Insert shortcode' ) ) }</span>
+				<button class="minn-x-btn" data-close type="button">\u00d7</button>
+			</div>
+			<div class="minn-insp-body">
+				<input class="minn-input" data-sc-q placeholder="${ esc( __( 'Search, or type a shortcode' ) ) }" spellcheck="false" autocomplete="off">
+				<div class="minn-link-results" data-sc-results></div>
+				<div class="minn-sc-note">${ esc( __( 'Esc types a plain [' ) ) }</div>
+			</div>`;
+		document.body.appendChild( scPop );
+		const rects = range.getClientRects();
+		placeScPop( rects.length ? rects[ 0 ] : run.getBoundingClientRect() );
+		const typeBracket = () => {
+			hideScPop();
+			if ( ! range.startContainer.isConnected ) return;
+			run.focus( { preventScroll: true } );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+			document.execCommand( 'insertText', false, '[' );
+		};
+		armBlockPopA11y( scPop, { label: __( 'Insert shortcode' ), onClose: typeBracket, focus: '[data-sc-q]' } );
+		const q = scPop.querySelector( '[data-sc-q]' );
+		const list = scPop.querySelector( '[data-sc-results]' );
+		let shown = [];
+		let active = 0;
+		const render = () => {
+			const term = q.value.trim().toLowerCase();
+			shown = items.filter( ( it ) => ! term || ( it.label + ' ' + it.detail + ' ' + it.src ).toLowerCase().includes( term ) );
+			// A typed shortcode for a registered tag inserts as written.
+			const typed = term ? ( q.value.trim().charAt( 0 ) === '[' ? q.value.trim() : '[' + q.value.trim() + ']' ) : '';
+			const tag = ( typed.match( /^\[([\w-]+)/ ) || [] )[ 1 ];
+			if ( typed && SC_SOURCE.test( typed ) && scHints && ( scHints.tags || [] ).includes( tag ) && ! shown.some( ( it ) => it.src === typed ) ) {
+				shown.push( { label: sprintf( __( 'Insert %s' ), typed ), detail: '', src: typed, preview: scPreview( typed ) } );
+			}
+			active = 0;
+			list.hidden = ! shown.length;
+			list.innerHTML = shown.slice( 0, 40 ).map( ( it, i ) =>
+				`<button type="button" class="minn-link-result${ i === active ? ' active' : '' }" data-sc-i="${ i }">
+					<span class="minn-link-result-title">${ esc( it.label ) }</span>
+					<span class="minn-link-result-type">${ esc( it.detail ) }</span>
+				</button>` ).join( '' );
+		};
+		const choose = ( it ) => {
+			hideScPop();
+			if ( ! it || ! range.startContainer.isConnected || ! run.contains( range.startContainer ) ) return;
+			const tok = makeScToken( it.src );
+			tok.textContent = it.preview || '';
+			range.deleteContents();
+			range.insertNode( tok );
+			// Somewhere for the caret after the token, even at the end of
+			// the run (runSourceText drops the zero-width space).
+			let after = tok.nextSibling;
+			if ( ! after || after.nodeType !== 3 ) {
+				after = document.createTextNode( '\u200b' );
+				tok.parentNode.insertBefore( after, tok.nextSibling );
+			}
+			run.focus( { preventScroll: true } );
+			const r = document.createRange();
+			// Before the anchor, so Backspace reaches the token first.
+			r.setStart( after, 0 );
+			r.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( r );
+			commitIslandRuns( island );
+			// Without a known output the token shows its tag until the
+			// preview renders the real thing.
+			if ( ! it.preview ) scRerender( island );
+		};
+		q.addEventListener( 'input', render );
+		q.addEventListener( 'keydown', ( e ) => {
+			const rows = $$( '.minn-link-result', list );
+			if ( e.key === 'ArrowDown' || e.key === 'ArrowUp' ) {
+				e.preventDefault();
+				if ( ! rows.length ) return;
+				active = e.key === 'ArrowDown' ? Math.min( active + 1, rows.length - 1 ) : Math.max( active - 1, 0 );
+				rows.forEach( ( el, i ) => el.classList.toggle( 'active', i === active ) );
+			} else if ( e.key === 'Enter' ) {
+				e.preventDefault();
+				choose( shown[ active ] );
+			}
+		} );
+		// mousedown keeps focus (and the saved caret) where it was.
+		list.addEventListener( 'mousedown', ( e ) => {
+			const row = e.target.closest( '[data-sc-i]' );
+			if ( ! row ) return;
+			e.preventDefault();
+			choose( shown[ parseInt( row.dataset.scI, 10 ) ] );
+		} );
+		scPop.querySelector( '[data-close]' ).addEventListener( 'click', hideScPop );
+		render();
 	}
 
 	/* Island image swaps — the sibling of text runs for pictures. Static

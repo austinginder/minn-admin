@@ -4301,6 +4301,24 @@ button.minn-ac-item:hover { background: var(--hover); }
 }
 /* An emptied run keeps a caret target instead of collapsing to zero width. */
 .minn-island-run:empty { display: inline-block; min-width: 10px; min-height: 1em; vertical-align: baseline; }
+/* A shortcode's output inside an ACF run: an atomic chip (contenteditable
+   false) that carries the shortcode. inline-block keeps the run's dotted
+   underline off it, since text decoration never reaches into one. Empty
+   output still shows which shortcode sits there. */
+.minn-island-preview .minn-sc-token {
+  display: inline-block; vertical-align: baseline; line-height: inherit;
+  pointer-events: auto; cursor: pointer; user-select: none;
+  padding: 0 0.15em; margin: 0 0.04em; border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.minn-island-preview .minn-sc-token:hover { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+.minn-island-preview .minn-sc-token:empty::before {
+  content: "[" attr(data-tag) "]"; font-family: var(--font-mono); font-size: 0.75em; opacity: 0.8;
+}
+.minn-sc-pop .minn-sc-src { font-family: var(--font-mono); font-size: 12.5px; }
+.minn-sc-err { margin-top: 6px; font-size: 12.5px; color: var(--red); }
+.minn-sc-note { margin-top: 8px; font-size: 12px; color: var(--text3); }
 /* Container slots (phase 3): a group renders as a shell with its children
    directly editable inside. Full-strength text — an editable interior must
    not look dimmed like a preview — and the island frame stays as the

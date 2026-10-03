@@ -895,6 +895,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
+| `minn_admin_shortcode_hints` | filter | Describe your shortcodes for the editor's shortcode tokens: a label and attribute choices with the output each prints (since 0.43.0) |
 | `minn_admin_acf_preview_render` | filter | `( bool, block name )`: return false to keep an ACF v3 block's island preview on the front-end render instead of ACF's preview render (since 0.43.0) |
 | `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
 | `minn_admin_option_pages` | filter | Add a page of site-wide fields to the shared Site options item |
@@ -1133,9 +1134,10 @@ follow.
    typed over in place and the edit lands in that field alone. Gate your markers on
    `$is_preview` (ACF 6.8 prints them on the front end too) and leave fields that render
    through a shortcode or a computed fallback unmarked, or a typed edit would replace the
-   source with its output. Minn handles those itself: text around a shortcode is editable
-   with the shortcode's output locked, and a textarea printed as a list or paragraphs is
-   editable line by line. A block that marks nothing still gets its text and textarea
+   source with its output. Minn handles those itself: a shortcode shows as a token inside
+   the editable text (click it to edit or remove the shortcode, type `[` to add one, see
+   [Shortcode hints](#shortcode-hints--minn_admin_shortcode_hints) below), and a textarea
+   printed as a list or paragraphs is editable line by line. A block that marks nothing still gets its text and textarea
    fields edited in place where the template read the field (through `get_field()`), the
    preview shows the stored words once, and nothing else reads the same.
 
@@ -1152,6 +1154,34 @@ What Minn already does for free (no adapter):
 | ACF block copy edited in place | ACF's inline-editing markers in the preview render, else unique value match |
 | Design libraries / patterns | Registered block patterns are automatic; libraries via `minn_admin_design_sources` (below) |
 | Writing shortcuts / boilerplate | Free-form slash commands via `minn_admin_editor_commands` (below) |
+
+### Shortcode hints — `minn_admin_shortcode_hints`
+
+Inside in-place block text, a shortcode shows as a token: an atomic chip with the
+shortcode's output, which a click opens to edit its source or remove it. Typing `[` in that
+text offers the shortcodes a theme or plugin describes. Describe yours so the token offers
+real choices instead of raw attributes:
+
+```php
+add_filter( 'minn_admin_shortcode_hints', function ( $hints ) {
+	$hints['fact'] = array(
+		'label'  => 'Business fact',
+		'fields' => array(
+			array(
+				'name'    => 'key',
+				'label'   => 'Fact',
+				// value, label, what it prints now (shown in the picker and on the token)
+				'options' => array( array( 'years', 'Years in business', '15+' ), array( 'sites', 'Websites built', '200+' ) ),
+			),
+		),
+	);
+	return $hints;
+} );
+```
+
+Only registered shortcodes are kept, option values lose `"`, `[` and `]`, and the list is
+served to users who can edit posts (`GET minn-admin/v1/shortcodes`). A shortcode with no
+hint still shows as a token whose source can be edited by hand.
 
 ### When the free path fails: diagnosis → drop-in adapter
 

@@ -1781,6 +1781,21 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Shortcodes the editor can offer as tokens inside in-place text: the
+		// registered tag names, plus what themes and plugins describe through
+		// minn_admin_shortcode_hints (label, attribute choices, current output).
+		register_rest_route(
+			self::NS,
+			'/shortcodes',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'shortcode_hints' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/render-blocks',
@@ -2600,6 +2615,59 @@ class Minn_Admin_REST {
 			return new WP_Error( 'minn_image_block_failed', __( 'That block could not be rebuilt for those images.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		return array( 'markup' => $markup );
+	}
+
+	/**
+	 * Shortcode tags plus author-described hints for the editor's token picker.
+	 *
+	 * Filter minn_admin_shortcode_hints: array( tag => array(
+	 *   'label'  => 'Business fact',
+	 *   'fields' => array( array( 'name' => 'key', 'label' => 'Fact',
+	 *     'options' => array( array( value, label, current output ), … ) ) ),
+	 * ) ). Only registered tags are kept, and option values lose the quote and
+	 * bracket characters that would end the attribute or the shortcode.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public static function shortcode_hints() {
+		global $shortcode_tags;
+		$tags  = array_values( array_map( 'strval', array_keys( (array) $shortcode_tags ) ) );
+		$hints = array();
+		foreach ( (array) apply_filters( 'minn_admin_shortcode_hints', array() ) as $tag => $hint ) {
+			$tag = (string) $tag;
+			if ( ! is_array( $hint ) || ! preg_match( '/^[\w-]+$/', $tag ) || ! shortcode_exists( $tag ) ) {
+				continue;
+			}
+			$fields = array();
+			foreach ( array_slice( (array) ( $hint['fields'] ?? array() ), 0, 5 ) as $field ) {
+				if ( ! is_array( $field ) || empty( $field['name'] ) || ! preg_match( '/^[\w-]+$/', (string) $field['name'] ) ) {
+					continue;
+				}
+				$options = array();
+				foreach ( array_slice( (array) ( $field['options'] ?? array() ), 0, 200 ) as $option ) {
+					$option = array_values( (array) $option );
+					if ( ! isset( $option[0] ) || ! is_scalar( $option[0] ) ) {
+						continue;
+					}
+					$value     = str_replace( array( '"', '[', ']' ), '', (string) $option[0] );
+					$options[] = array(
+						$value,
+						isset( $option[1] ) && is_scalar( $option[1] ) ? (string) $option[1] : $value,
+						isset( $option[2] ) && is_scalar( $option[2] ) ? (string) $option[2] : '',
+					);
+				}
+				$fields[] = array(
+					'name'    => (string) $field['name'],
+					'label'   => isset( $field['label'] ) && is_scalar( $field['label'] ) ? (string) $field['label'] : (string) $field['name'],
+					'options' => $options,
+				);
+			}
+			$hints[ $tag ] = array(
+				'label'  => isset( $hint['label'] ) && is_scalar( $hint['label'] ) ? (string) $hint['label'] : $tag,
+				'fields' => $fields,
+			);
+		}
+		return rest_ensure_response( array( 'tags' => $tags, 'hints' => (object) $hints ) );
 	}
 
 	public static function render_blocks( WP_REST_Request $request ) {
