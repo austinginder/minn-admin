@@ -39976,17 +39976,27 @@
 			if ( bodyEl ) rtNeutralizeInto( bodyEl, parts.bodyHtml && parts.bodyHtml.trim() ? parts.bodyHtml : '<p><br></p>' );
 		}
 		const previewEl = document.querySelector( `.minn-island-preview[data-preview="${ insp.idx }"]` );
+		// The armed text runs describe the old markup and the preview is
+		// about to be replaced: drop them, then arm the new render, or the
+		// block's text stays read-only until something else re-renders.
+		if ( islandEl ) islandEl._minnRuns = null;
+		const rearm = () => {
+			const body = islandEl && islandEl.closest( '.minn-editor-body' );
+			if ( body ) armIslandTextRuns( body, ed );
+		};
 		try {
 			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ], post: ( state.editor && state.editor.id ) || 0 } ) } );
 			injectPreviewStyles( r && r.styles );
 			const html = r && r.rendered && r.rendered[ 0 ];
 			if ( previewEl && html && html.trim() ) rtNeutralizeInto( previewEl, html );
+			rearm();
 			updateEditorStats();
 		} catch ( e ) {
 			if ( previewEl ) {
 				const inner2 = stripBlockComments( newRaw ).trim();
 				if ( inner2 ) rtNeutralizeInto( previewEl, inner2 );
 			}
+			rearm();
 		}
 		toast( __( 'Block updated' ) );
 		closeInspector();
