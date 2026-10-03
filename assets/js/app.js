@@ -35817,8 +35817,13 @@
 			} );
 		} );
 		body.addEventListener( 'click', ( e ) => {
-			const prev = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview, .minn-block-island[data-cted] > .minn-island-preview' );
+			if ( ! e.target.closest ) return;
+			const prev = e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview, .minn-block-island[data-cted] > .minn-island-preview' );
 			if ( prev && e.target.closest( 'a' ) ) e.preventDefault(); // a linked photo must not navigate
+			// Text typed over in place can sit inside a link (a button's
+			// label). The run is the editing host and the link is not, so the
+			// browser would follow it on the click that seats the caret.
+			if ( e.target.closest( '.minn-island-run' ) && e.target.closest( '.minn-island-preview a[href]' ) ) e.preventDefault();
 		} );
 		// Hovering a ⚙ chip outlines the island it configures — with nested
 		// chips fanned side by side, the outline says which card each pill
