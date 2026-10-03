@@ -951,7 +951,7 @@ add_filter( 'minn_admin_block_forms', function ( $forms ) {
 } );
 ```
 
-Per attribute: `label`, `control` (`text` · `textarea` · `select` · `number` · `checkbox`),
+Per attribute: `label`, `control` (`text` · `textarea` · `select` · `number` · `checkbox`, shown as a switch),
 `options` (`[value, label]` pairs, implies `select`), `hide`. Without a descriptor the
 inspector falls back to schema-derived controls, so this is refinement, not requirement.
 Attributes with a `source` (stored in saved HTML) are never form-edited.

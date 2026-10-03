@@ -38827,13 +38827,15 @@
 			// current-value case: without the empty choice the select would
 			// force its first option and Apply would inject an attr the block
 			// never had.
+			// A declared checkbox shows as a switch, like every other on/off
+			// choice in the inspector; both read back the same boolean.
+			const shown = control === 'checkbox' ? 'toggle' : control;
 			const controlHtml = formControlHtml( {
-				key, label, type: control, options,
+				key, label, type: shown, options,
 				clearable: cur == null && def.default === undefined,
 				klass: control === 'textarea' ? 'minn-insp-textarea' : '',
 			}, cur, 'data-insp', id );
-			rows.push( { key, label, priority, html: control === 'checkbox' ? controlHtml
-				: control === 'toggle' ? inspToggleRowHtml( label, controlHtml )
+			rows.push( { key, label, priority, html: shown === 'toggle' ? inspToggleRowHtml( label, controlHtml )
 				: `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }` } );
 		} );
 		// SCALING: design suites register huge schemas (Spectra's post-grid:
@@ -38916,15 +38918,15 @@
 			if ( f.control === 'checkbox' || f.control === 'toggle' || f.control === 'true_false' ) v = ! ( v == null || v === '' || v === '0' || v === 0 || v === false );
 			const nf = formNormField( {
 				key: f.name, label,
-				type: f.control || ( options ? 'select' : 'text' ), options,
+				// ACF true_false (and any declared checkbox) shows as a switch.
+				type: f.control === 'checkbox' ? 'toggle' : ( f.control || ( options ? 'select' : 'text' ) ), options,
 				clearable: true,
 				klass: f.control === 'textarea' ? 'minn-insp-textarea' : '',
 			} );
 			if ( nf.type === 'select' ) nf.clearable = true;
 			const controlHtml = formControlHtml( comboUpgrade( nf ), v == null ? '' : v, 'data-inspdf', `${ prefix }:${ f.name }` );
 			if ( nf.type === 'toggle' ) return inspToggleRowHtml( label, controlHtml );
-			return f.control === 'checkbox' ? controlHtml
-				: `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }`;
+			return `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }`;
 		} ).join( '' );
 		const locked = lockedCount
 			? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of fields only editable in the block editor. */ _n( '%d advanced field lives in the block editor.', '%d advanced fields live in the block editor.', lockedCount ) ), lockedCount ) }</div>`
