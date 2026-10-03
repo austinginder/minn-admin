@@ -35927,6 +35927,12 @@
 				loadScHints().then( () => { if ( tok.isConnected ) openScTokenPop( tok ); } );
 				return;
 			}
+			const tb = e.target.closest( '.minn-island-preview [data-acf-inline-fields]' );
+			if ( tb && ! e.target.closest( '.minn-island-run' ) ) {
+				e.preventDefault();
+				openAcfToolbarPop( tb );
+				return;
+			}
 			const prev = e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview, .minn-block-island[data-cted] > .minn-island-preview' );
 			if ( prev && e.target.closest( 'a' ) ) e.preventDefault(); // a linked photo must not navigate
 			// Text typed over in place can sit inside a link (a button's
@@ -35934,6 +35940,7 @@
 			// browser would follow it on the click that seats the caret.
 			if ( e.target.closest( '.minn-island-run' ) && e.target.closest( '.minn-island-preview a[href]' ) ) e.preventDefault();
 		} );
+		bindAcfToolbarChips( body );
 		// Hovering a ⚙ chip outlines the island it configures — with nested
 		// chips fanned side by side, the outline says which card each pill
 		// belongs to before the click commits. Event-set class, never :has()
@@ -36258,6 +36265,14 @@
 			const idx = parseInt( island.dataset.island, 10 );
 			const raw = ed2.islands[ idx ];
 			if ( raw == null ) return;
+			// An ACF toolbar element names the fields behind it.
+			const tbEl = e.target.closest( '[data-acf-inline-fields]' );
+			if ( tbEl && preview.contains( tbEl ) ) {
+				e.preventDefault();
+				e.stopPropagation();
+				openMinnMenu( e.clientX, e.clientY, [ { label: acfToolbarTitle( tbEl ) === __( 'Link' ) ? __( 'Edit link…' ) : sprintf( __( 'Edit %s…' ), acfToolbarTitle( tbEl ) ), run: () => openAcfToolbarPop( tbEl ) } ] );
+				return;
+			}
 			const anchor = e.target.closest( 'a' );
 			const href = anchor ? ( anchor.getAttribute( 'href' ) || '' ) : '';
 			const urls = islandLinkRows( raw );
@@ -37602,6 +37617,202 @@
 		render();
 	}
 
+	/* ACF inline toolbars. acf_inline_toolbar_editing_attrs() marks an element
+	 * with the fields behind it (a button's URL, the request it opens) as
+	 * data-acf-inline-fields JSON, which ACF's block editor turns into a
+	 * toolbar. In Minn the element itself opens a popover with just those
+	 * fields, a chip on hover says where a link goes, and the edit lands in
+	 * the block's data like an inspector Apply. */
+	const acfToolbarFields = ( el ) => {
+		let list = [];
+		try { list = JSON.parse( el.getAttribute( 'data-acf-inline-fields' ) || '[]' ); } catch ( e ) { list = []; }
+		return ( Array.isArray( list ) ? list : [] ).filter( ( f ) => f && typeof f.fieldName === 'string' );
+	};
+	const acfToolbarTitle = ( el ) => {
+		const t = el.getAttribute( 'data-acf-toolbar-title' );
+		if ( t ) return t;
+		const first = acfToolbarFields( el )[ 0 ];
+		return ( first && ( first.fieldLabel || first.fieldName ) ) || __( 'Settings' );
+	};
+	// Where a marked link goes, shortened to the site path when it is local.
+	const acfToolbarDest = ( el ) => {
+		const a = el.closest( 'a[href]' ) || el.querySelector( 'a[href]' );
+		const href = a ? a.getAttribute( 'href' ) || '' : '';
+		if ( ! href ) return '';
+		try {
+			const u = new URL( href, location.href );
+			const home = new URL( ( B.site && B.site.url ) || location.origin );
+			return u.host === home.host ? ( u.pathname + u.search + u.hash ) || '/' : u.host + u.pathname;
+		} catch ( e ) { return href; }
+	};
+
+	let tbChip = null;
+	let tbChipFor = null;
+	let tbChipTimer = 0;
+	function hideTbChip() {
+		clearTimeout( tbChipTimer );
+		if ( tbChip ) tbChip.hidden = true;
+		tbChipFor = null;
+	}
+	function showTbChip( el ) {
+		clearTimeout( tbChipTimer );
+		if ( ! tbChip ) {
+			tbChip = document.createElement( 'button' );
+			tbChip.type = 'button';
+			tbChip.id = 'minn-acf-tb-chip';
+			tbChip.hidden = true;
+			document.body.appendChild( tbChip );
+			tbChip.addEventListener( 'mousedown', ( e ) => e.preventDefault() );
+			tbChip.addEventListener( 'click', () => { if ( tbChipFor && tbChipFor.isConnected ) openAcfToolbarPop( tbChipFor ); } );
+			tbChip.addEventListener( 'mouseleave', () => { tbChipTimer = setTimeout( hideTbChip, 250 ); } );
+			tbChip.addEventListener( 'mouseenter', () => clearTimeout( tbChipTimer ) );
+			const scroller = document.querySelector( '.minn-scroll' );
+			if ( scroller ) scroller.addEventListener( 'scroll', hideTbChip, { passive: true } );
+		}
+		tbChipFor = el;
+		const dest = acfToolbarDest( el );
+		tbChip.innerHTML = `<span class="minn-acf-tb-chip-icon" aria-hidden="true">↗</span><span>${ esc( dest || acfToolbarTitle( el ) ) }</span>`;
+		tbChip.setAttribute( 'aria-label', dest ? sprintf( __( 'Edit link: %s' ), dest ) : acfToolbarTitle( el ) );
+		tbChip.hidden = false;
+		const r = el.getBoundingClientRect();
+		const w = tbChip.offsetWidth;
+		tbChip.style.left = Math.max( 8, Math.min( r.right - w, window.innerWidth - w - 8 ) ) + 'px';
+		tbChip.style.top = Math.max( 8, r.top - tbChip.offsetHeight - 6 ) + 'px';
+	}
+	function bindAcfToolbarChips( body ) {
+		if ( ! body || body._minnTbChips ) return;
+		body._minnTbChips = true;
+		const markedIn = ( t ) => t && t.closest && t.closest( '.minn-island-preview [data-acf-inline-fields]' );
+		body.addEventListener( 'mouseover', ( e ) => {
+			const el = markedIn( e.target );
+			if ( el ) showTbChip( el );
+		} );
+		body.addEventListener( 'mouseout', ( e ) => {
+			const el = markedIn( e.target );
+			if ( ! el || ( e.relatedTarget && ( el.contains( e.relatedTarget ) || ( tbChip && tbChip.contains( e.relatedTarget ) ) ) ) ) return;
+			tbChipTimer = setTimeout( hideTbChip, 250 );
+		} );
+		// Typing in a button's label keeps its link a click away.
+		body.addEventListener( 'focusin', ( e ) => {
+			const el = markedIn( e.target );
+			if ( el ) showTbChip( el );
+		} );
+		body.addEventListener( 'focusout', ( e ) => {
+			if ( markedIn( e.target ) && ! ( tbChip && tbChip.matches( ':hover' ) ) ) tbChipTimer = setTimeout( hideTbChip, 250 );
+		} );
+	}
+
+	let tbPop = null;
+	function tbPopAway( e ) {
+		if ( tbPop && ! tbPop.contains( e.target ) && ! e.target.closest( '.minn-ac-panel' ) ) hideTbPop();
+	}
+	function hideTbPop() {
+		if ( tbPop && tbPop._minnA11yEsc ) document.removeEventListener( 'keydown', tbPop._minnA11yEsc, true );
+		if ( tbPop ) tbPop.remove();
+		tbPop = null;
+		document.removeEventListener( 'mousedown', tbPopAway, true );
+	}
+	async function openAcfToolbarPop( el ) {
+		hideTbPop();
+		hideTbChip();
+		const island = el.closest( '.minn-block-island' );
+		const ed = state.editor;
+		const idx = parseInt( island && island.dataset.island, 10 );
+		if ( ! island || ! ed || ! ed.islands || ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
+		// Text typed into the block lands first, so the rebuild keeps it.
+		if ( island._minnRuns ) commitIslandRuns( island, { silent: true } );
+		const raw = ed.islands[ idx ];
+		const parts = blockParts( raw );
+		if ( ! parts ) return;
+		const names = acfToolbarFields( el ).map( ( f ) => f.fieldName );
+		const rows = dataFormRows( parts.name, parts.attrs, 'tb', { only: names, media: false } );
+		const dest = acfToolbarDest( el );
+		tbPop = document.createElement( 'div' );
+		tbPop.className = 'minn-inspector minn-link-pop minn-tb-pop';
+		tbPop.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">${ esc( acfToolbarTitle( el ) ) }</span>
+				<button class="minn-x-btn" data-close type="button">×</button>
+			</div>
+			<div class="minn-insp-body">
+				${ dest ? `<div class="minn-tb-dest">${ esc( sprintf( __( 'Goes to %s' ), dest ) ) }</div>` : '' }
+				${ rows || `<div class="minn-insp-note">${ esc( __( 'These fields are edited in the block settings.' ) ) }</div>` }
+			</div>
+			<div class="minn-insp-actions">
+				${ rows ? `<button class="minn-btn-primary" data-tb-apply type="button">${ esc( __( 'Apply' ) ) }</button>` : '' }
+				<button class="minn-btn-soft" data-tb-all type="button">${ esc( __( 'All settings' ) ) }</button>
+			</div>`;
+		document.body.appendChild( tbPop );
+		const rect = el.getBoundingClientRect();
+		const w = tbPop.offsetWidth || 320;
+		tbPop.style.left = panelLeftFor( rect, w ) + 'px';
+		tbPop.style.top = Math.max( 10, Math.min( rect.bottom + 8, window.innerHeight - tbPop.offsetHeight - 10 ) ) + 'px';
+		document.addEventListener( 'mousedown', tbPopAway, true );
+		// Focus a typed field, not a dropdown: a focused combobox opens its
+		// list over the rest of the popover.
+		( tbPop.querySelector( 'input[data-inspdf]:not(.minn-ac-input), textarea[data-inspdf]' ) || tbPop.querySelector( '[data-close]' ) ).setAttribute( 'data-tb-focus', '' );
+		armBlockPopA11y( tbPop, { label: acfToolbarTitle( el ), onClose: hideTbPop, focus: '[data-tb-focus]' } );
+		bindFormComboboxes( tbPop, 'data-inspdf', [] );
+		tbPop.addEventListener( 'click', ( e ) => {
+			const sw = e.target.closest( '[data-ftype="toggle"]' );
+			if ( ! sw ) return;
+			sw.classList.toggle( 'on' );
+			sw.setAttribute( 'aria-checked', sw.classList.contains( 'on' ) );
+		} );
+		// A link field searches your own content, like the link popover.
+		const urlish = ( v ) => /^(https?:|mailto:|tel:|#|\/|\?)/i.test( v ) || /^[\w-]+(\.[a-z]{2,})+(\/|$)/i.test( v );
+		$$( 'input[data-inspdf]', tbPop ).forEach( ( input ) => {
+			const name = input.dataset.inspdf.slice( input.dataset.inspdf.indexOf( ':' ) + 1 );
+			if ( ! /(^|_)(url|link|href)$/i.test( name ) ) return;
+			const results = document.createElement( 'div' );
+			results.className = 'minn-link-results';
+			results.hidden = true;
+			input.insertAdjacentElement( 'afterend', results );
+			input.placeholder = input.placeholder || __( 'https://… or search your content' );
+			let timer = 0;
+			input.addEventListener( 'input', () => {
+				clearTimeout( timer );
+				const q = input.value.trim();
+				if ( q.length < 2 || urlish( q ) ) { results.hidden = true; return; }
+				timer = setTimeout( () => {
+					api( 'wp/v2/search?per_page=6&_fields=id,title,url,type,subtype&search=' + encodeURIComponent( q ) )
+						.then( ( items ) => {
+							if ( ! tbPop || input.value.trim() !== q ) return;
+							results.hidden = ! items.length;
+							results.innerHTML = items.map( ( r ) => `<button type="button" class="minn-link-result" data-url="${ esc( r.url ) }">
+								<span class="minn-link-result-title">${ esc( decodeEntities( r.title || '(no title)' ) ) }</span>
+								<span class="minn-link-result-type">${ esc( r.subtype || r.type || '' ) }</span>
+							</button>` ).join( '' );
+						} )
+						.catch( () => { results.hidden = true; } );
+				}, 250 );
+			} );
+			results.addEventListener( 'mousedown', ( e ) => {
+				const row = e.target.closest( '.minn-link-result' );
+				if ( ! row ) return;
+				e.preventDefault();
+				input.value = row.dataset.url;
+				results.hidden = true;
+			} );
+		} );
+		const apply = () => {
+			const attrs = JSON.parse( JSON.stringify( parts.attrs || {} ) );
+			collectDataForm( tbPop, parts.name, attrs, 'tb' );
+			hideTbPop();
+			if ( JSON.stringify( attrs ) === JSON.stringify( parts.attrs || {} ) ) return;
+			const open = buildOpenComment( parts.name, attrs, parts.selfClosing );
+			replaceIsland( idx, island, parts.selfClosing ? open : open + parts.inner + parts.close );
+		};
+		const applyBtn = tbPop.querySelector( '[data-tb-apply]' );
+		if ( applyBtn ) applyBtn.addEventListener( 'click', apply );
+		tbPop.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Enter' && e.target.matches( 'input[data-inspdf]' ) && applyBtn ) { e.preventDefault(); apply(); }
+		} );
+		tbPop.querySelector( '[data-close]' ).addEventListener( 'click', hideTbPop );
+		tbPop.querySelector( '[data-tb-all]' ).addEventListener( 'click', () => { hideTbPop(); openInspector( island ); } );
+	}
+
 	/* Island image swaps — the sibling of text runs for pictures. Static
 	 * blocks mirror an image's URL between comment JSON (imageUrl /
 	 * blockBackgroundMediaUrl) and saved HTML (img src, background-image
@@ -38895,7 +39106,9 @@
 		const media = ! opts || opts.media !== false;
 		const cur = ( attrs && typeof attrs[ df.attr ] === 'object' && attrs[ df.attr ] ) || {};
 		let lockedCount = df.locked || 0;
+		const only = opts && Array.isArray( opts.only ) ? opts.only : null;
 		const rows = df.fields.map( ( f ) => {
+			if ( only && ! only.includes( f.name ) ) return '';
 			let v = cur[ f.name ];
 			const label = f.label || humanizeAttrKey( f.name );
 			if ( f.control === 'richtext' ) {
@@ -38942,7 +39155,7 @@
 			if ( nf.type === 'toggle' ) return inspToggleRowHtml( label, controlHtml );
 			return `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }`;
 		} ).join( '' );
-		const locked = lockedCount
+		const locked = lockedCount && ! only
 			? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of fields only editable in the block editor. */ _n( '%d advanced field lives in the block editor.', '%d advanced fields live in the block editor.', lockedCount ) ), lockedCount ) }</div>`
 			: '';
 		return rows + locked;

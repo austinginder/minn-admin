@@ -1137,7 +1137,11 @@ follow.
    source with its output. Minn handles those itself: a shortcode shows as a token inside
    the editable text (click it to edit or remove the shortcode, type `[` to add one, see
    [Shortcode hints](#shortcode-hints--minn_admin_shortcode_hints) below), and a textarea
-   printed as a list or paragraphs is editable line by line. A block that marks nothing still gets its text and textarea
+   printed as a list or paragraphs is editable line by line. For fields that are not text (a
+   button's URL, a select), mark the element with `acf_inline_toolbar_editing_attrs( array(
+   'url', 'style' ) )`: in Minn the element itself opens a popover with just those fields
+   (a URL field searches your content), and a chip on hover shows where a link goes. A
+   block that marks nothing still gets its text and textarea
    fields edited in place where the template read the field (through `get_field()`), the
    preview shows the stored words once, and nothing else reads the same.
 

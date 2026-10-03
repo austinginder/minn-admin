@@ -13,7 +13,11 @@
  * words are typed around it, a click on the token edits its source (with the
  * choices minn_admin_shortcode_hints describes) or removes it, Backspace
  * removes it whole, and typing [ offers the described shortcodes (Escape
- * types a plain bracket). Every save writes the shortcode back as stored. A value that reads the same as other
+ * types a plain bracket). Every save writes the shortcode back as stored.
+ * An element marked with ACF's toolbar contract (acf_inline_toolbar_editing_
+ * attrs) opens a popover with just its fields and shows where its link goes;
+ * the block settings offer only the alignments the block supports and show
+ * true/false fields as switches. A value that reads the same as other
  * text, or one the template never reads (static copy that happens to match
  * it), stays sidebar-only. A textarea shown one line per list item arms each
  * line on its own. A run inside a link takes the click instead of following
@@ -28,7 +32,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 const block = ( data ) => {
 	const d = {};
-	const keys = { kicker: 'field_minn_acfi_kicker', headline: 'field_minn_acfi_headline', body: 'field_minn_acfi_body', since: 'field_minn_acfi_since', note: 'field_minn_acfi_note', cta: 'field_minn_acfi_cta', button: 'field_minn_acfi_button', points: 'field_minn_acfi_points', stats: 'field_minn_acfi_stats', markers: 'field_minn_acfi_markers' };
+	const keys = { kicker: 'field_minn_acfi_kicker', headline: 'field_minn_acfi_headline', body: 'field_minn_acfi_body', since: 'field_minn_acfi_since', note: 'field_minn_acfi_note', cta: 'field_minn_acfi_cta', button: 'field_minn_acfi_button', points: 'field_minn_acfi_points', stats: 'field_minn_acfi_stats', link: 'field_minn_acfi_link', style: 'field_minn_acfi_style', markers: 'field_minn_acfi_markers' };
 	Object.keys( data ).forEach( ( k ) => {
 		d[ k ] = data[ k ];
 		d[ '_' + k ] = keys[ k ];
@@ -72,6 +76,7 @@ const block = ( data ) => {
 	t.check( 'an unmarked template carries no markers', ! ( rendered[ 1 ] || '' ).includes( 'data-acf-inline' ) );
 	t.check( 'an entity-encoded value renders once-escaped', ( rendered[ 0 ] || '' ).includes( '>Alpha &amp; headline<' ) );
 	t.check( 'the shortcode field renders its result', ( rendered[ 0 ] || '' ).includes( 'Since 2026' ) );
+	t.check( 'the toolbar marker reaches the preview', ( rendered[ 0 ] || '' ).includes( 'data-acf-inline-fields=' ) && ( rendered[ 0 ] || '' ).includes( '&quot;fieldName&quot;:&quot;link&quot;' ) );
 	const readList = ( ( rendered[ 1 ] || '' ).match( /data-minn-acf-read="([^"]*)"/ ) || [] )[ 1 ] || '';
 	t.check( 'the preview lists the fields the template read', readList.split( ' ' ).includes( 'headline' ) && ! readList.split( ' ' ).includes( 'cta' ), readList );
 
@@ -137,6 +142,27 @@ const block = ( data ) => {
 		t.check( 'marked block leaves the static crumb alone',
 			await page.$eval( '.minn-block-island[data-block="acf/minn-inline"] .acfi-crumb', ( el ) => ! el.querySelector( '.minn-island-run' ) && ! el.closest( '.minn-island-run' ) ) );
 
+		// Block settings: alignment from supports, true/false as switches.
+		await clickAt( island( 0 ).locator( '.minn-island-chip' ).first() );
+		await page.waitForSelector( '.minn-inspector [data-insp="own:align"]', { timeout: 15000 } ).catch( () => {} );
+		const insp = await page.evaluate( () => {
+			const al = document.querySelector( '.minn-inspector [data-insp="own:align"]' );
+			const opts = al && al.options ? [ ...al.options ].map( ( o ) => o.value ) : [];
+			return {
+				alignType: al && al.dataset.ftype, opts, alignValue: al ? al.value : null,
+				native: document.querySelectorAll( '.minn-inspector input[type=checkbox]' ).length,
+				markers: [ ...document.querySelectorAll( '.minn-inspector .minn-insp-toggle' ) ].some( ( r ) => r.textContent.includes( 'Markers' ) ),
+			};
+		} );
+		t.check( 'align offers only the alignments the block supports', insp.alignType === 'select' && insp.opts.includes( 'wide' ) && insp.opts.includes( 'full' ) && ! insp.opts.includes( 'left' ), JSON.stringify( insp ) );
+		t.check( 'true/false fields show as switches', insp.native === 0 && insp.markers );
+		t.check( 'an unset alignment reads as None', insp.opts[ 0 ] === '' && insp.alignValue === '', JSON.stringify( insp ) );
+		// Apply with nothing touched leaves the block as stored.
+		const beforeApply = await rawContent();
+		await clickAt( page.locator( '#minn-insp-apply' ) );
+		const afterApply = await save( ( r ) => r !== beforeApply );
+		t.check( 'an untouched Apply adds no alignment', ! /"align":/.test( ( afterApply.match( /<!-- wp:acf\/minn-inline [\s\S]*? \/-->/g ) || [] )[ 0 ] || '' ) && /"align":/.test( beforeApply ) === false );
+
 		const b = await runTexts( 1 );
 		t.check( 'unmarked block arms unique text and textarea values', b.includes( 'Bravo headline' ) && b.includes( 'Body copy bravo' ), JSON.stringify( b ) );
 		t.check( 'a value that reads like other text stays sidebar-only', ! b.includes( 'Work' ) && ! b.includes( 'Read more' ) );
@@ -165,6 +191,34 @@ const block = ( data ) => {
 		t.check( 'clicking a run inside a link does not follow it', page.url() === urlBefore, page.url() );
 		const raw1b = await save( ( r ) => ( dataOf( r, 0 ) || {} ).button === 'Book a visit' );
 		t.check( 'linked label saved', ( dataOf( raw1b, 0 ) || {} ).button === 'Book a visit' );
+
+		// ACF toolbar: the button opens the fields behind it.
+		const arrow = island( 0 ).locator( '.acfi-arrow' );
+		await arrow.scrollIntoViewIfNeeded();
+		const ab = await arrow.boundingBox();
+		await page.mouse.move( ab.x + ab.width / 2, ab.y + ab.height / 2 );
+		await page.waitForTimeout( 400 );
+		const chip = await page.evaluate( () => { const c = document.getElementById( 'minn-acf-tb-chip' ); return c && ! c.hidden ? c.textContent : null; } );
+		t.check( 'hovering a toolbar link shows where it goes', !! chip && chip.includes( 'example.com/minn-acfi-target/' ), chip );
+		const urlBefore2 = page.url();
+		await page.mouse.click( ab.x + ab.width / 2, ab.y + ab.height / 2 );
+		await page.waitForSelector( '.minn-tb-pop', { timeout: 5000 } ).catch( () => {} );
+		const tbFields = await page.$$eval( '.minn-tb-pop [data-inspdf]', ( els ) => els.map( ( el ) => el.getAttribute( 'data-inspdf' ) ) );
+		t.check( 'the toolbar popover shows only its fields', tbFields.join( ',' ) === 'tb:link,tb:style', JSON.stringify( tbFields ) );
+		t.check( 'clicking the link opens it instead of following it', page.url() === urlBefore2, page.url() );
+		await clickAt( page.locator( '.minn-tb-pop input[data-inspdf="tb:link"]' ) );
+		await page.keyboard.press( 'Meta+a' );
+		await page.keyboard.type( 'https://example.com/next-step/' );
+		await clickAt( page.locator( '.minn-tb-pop [data-tb-apply]' ) );
+		const raw1t = await save( ( r ) => ( dataOf( r, 0 ) || {} ).link === 'https://example.com/next-step/' );
+		const dt = dataOf( raw1t, 0 ) || {};
+		t.check( 'the toolbar edit saves to the block data', dt.link === 'https://example.com/next-step/' && dt._link === 'field_minn_acfi_link' && dt.style === undefined, JSON.stringify( { link: dt.link, _link: dt._link, style: dt.style } ) );
+		t.check( 'the toolbar edit keeps the typed label', dt.button === 'Book a visit' );
+		await page.waitForFunction( () => {
+			const a = document.querySelector( '.minn-block-island[data-block="acf/minn-inline"] .acfi-btn' );
+			return a && a.getAttribute( 'href' ) === 'https://example.com/next-step/';
+		}, null, { timeout: 30000 } ).catch( () => {} );
+		t.check( 'the preview re-renders with the new link', ( await page.$eval( '.minn-block-island[data-block="acf/minn-inline"] .acfi-btn', ( a ) => a.getAttribute( 'href' ) ) ) === 'https://example.com/next-step/' );
 
 		// Shortcode text: the words change, the shortcode stays. Double-click
 		// selects the word itself (Meta+a would take the token too).
