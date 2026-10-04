@@ -1238,6 +1238,7 @@
 		gfnotification: [ __( 'Notification' ), 'Gravity Forms' ],
 		gfconfirmation: [ __( 'Confirmation' ), 'Gravity Forms' ],
 		cf7form: [ __( 'Email and messages' ), 'Contact Form 7' ],
+		ffemails: [ __( 'Emails and confirmation' ), 'Fluent Forms' ],
 		migrate: [ __( 'Migrate' ), 'WP Migrate' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
@@ -3261,6 +3262,10 @@
 			// /gravity-forms/notification/12:5f0c… (or 12:new) — one notification.
 			state.gfnId = decodeURIComponent( parts[ 2 ] );
 			state.route = 'gfnotification';
+		} else if ( route === 'fluent-forms' && 'form' === parts[ 1 ] && parts[ 2 ] && /^\d+$/.test( parts[ 2 ] ) ) {
+			// /fluent-forms/form/3 — one Fluent form's emails and confirmation.
+			state.ffeId = parseInt( parts[ 2 ], 10 );
+			state.route = 'ffemails';
 		} else if ( route === 'cf7' && 'form' === parts[ 1 ] && parts[ 2 ] && /^\d+$/.test( parts[ 2 ] ) ) {
 			// /cf7/form/12 — one Contact Form 7 form's emails and messages.
 			state.c7Id = parseInt( parts[ 2 ], 10 );
@@ -3373,6 +3378,7 @@
 		if ( 'gfnotification' === r ) return !! ( state.gfn && state.gfn.dirty );
 		if ( 'gfconfirmation' === r ) return !! ( state.gfc && state.gfc.dirty );
 		if ( 'cf7form' === r ) return !! ( state.c7 && state.c7.dirty );
+		if ( 'ffemails' === r ) return !! ( state.ffe && state.ffe.dirty );
 		if ( 'entrypage' === r && entryEditDirty( state.entryPage ) ) return true;
 		// Pages that show a save bar, or arm their Save, only once something
 		// changed say so on screen.
@@ -3430,7 +3436,7 @@
 	// page's. An explicit list, so it never reaches a Publish, a Send or a
 	// destructive verb; the post editor keeps its own ⌘S.
 	const SAVE_SHORTCUT_IDS = [
-		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-c7m-save', 'minn-ep-save', 'minn-sset-save', 'minn-product-save',
+		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-c7m-save', 'minn-ffe-save', 'minn-ep-save', 'minn-sset-save', 'minn-product-save',
 		'minn-wcm-save', 'minn-wcmp-save', 'minn-order-save', 'minn-look-save', 'minn-save-settings',
 		'minn-save-site-appearance', 'minn-rd-save', 'minn-tax-save', 'minn-cpt-save', 'minn-zone-save',
 		'minn-widget-save', 'minn-pf-save', 'minn-surface-save', 'minn-uf-save', 'minn-coupon-save',
@@ -3487,7 +3493,7 @@
 
 	// The builder page on screen (its state carries .hist once rendered).
 	const builderPage = () => {
-		const b = { fieldgroup: state.fgb, gfbuilder: state.gfb, gfnotification: state.gfn, gfconfirmation: state.gfc, cf7form: state.c7 }[ state.route ];
+		const b = { fieldgroup: state.fgb, gfbuilder: state.gfb, gfnotification: state.gfn, gfconfirmation: state.gfc, cf7form: state.c7, ffemails: state.ffe }[ state.route ];
 		return b && b.hist && ! b.loading ? b : null;
 	};
 
@@ -4670,6 +4676,7 @@
 				// The form builder keeps Gravity Forms' item (or its family's) lit.
 				|| ( [ 'gfbuilder', 'gfnotification', 'gfconfirmation' ].indexOf( state.route ) !== -1 && ( 'gravity-forms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
 				|| ( 'cf7form' === state.route && ( 'cf7' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
+				|| ( 'ffemails' === state.route && ( 'fluent-forms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
 				// Same for the product detail page and Products.
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
@@ -53350,7 +53357,7 @@
 
 	// The Gravity Forms page on screen (notification or confirmation): the
 	// field, rule and merge tag helpers below serve both.
-	const gfnCur = () => ( { gfconfirmation: state.gfc, cf7form: state.c7 }[ state.route ] || state.gfn );
+	const gfnCur = () => ( { gfconfirmation: state.gfc, cf7form: state.c7, ffemails: state.ffe }[ state.route ] || state.gfn );
 
 	function gfnAdopt( r ) {
 		const keep = state.gfn && state.gfn.id === r.id ? state.gfn.preview : null;
@@ -54669,6 +54676,327 @@
 		} );
 	}
 
+	/* ===== Fluent Forms: a form's email notifications and confirmation ===== */
+	/**
+	 * /fluent-forms/form/{id}: the form's notifications and the confirmation a
+	 * visitor sees, saved through Fluent's own settings service with its
+	 * validators (adapters/fluent-forms-emails.php). Only what Fluent offers in
+	 * the edition installed: without Pro there is no adding notifications, no
+	 * routing and no conditions, and any already stored are kept as they are.
+	 * Fields, the tag picker, undo, ⌘S and the leave guard are the
+	 * notification page's; the preview renders the chosen notification with
+	 * the form's latest entry.
+	 */
+	let ffePreviewTimer = null;
+	let ffePreviewSeq = 0;
+
+	function ffeAdopt( r ) {
+		const keep = state.ffe && state.ffe.id === r.id ? state.ffe.which : null;
+		const n = { confirmation: JSON.parse( JSON.stringify( r.confirmation ) ) };
+		r.notifications.forEach( ( x ) => { n[ 'n' + x.metaId ] = JSON.parse( JSON.stringify( x ) ); } );
+		const ids = r.notifications.map( ( x ) => 'n' + x.metaId );
+		state.ffe = { id: r.id, data: r, n, dirty: false, loading: false, err: null, preview: null, which: keep && ids.includes( keep ) ? keep : ( ids[ 0 ] || null ) };
+	}
+
+	function renderFluentEmailsPage() {
+		const view = $( '#minn-view' );
+		if ( ! state.ffe || state.ffe.id !== state.ffeId ) {
+			state.ffe = { id: state.ffeId, loading: true };
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+			api( `minn-admin/v1/fluent-forms/forms/${ state.ffeId }/emails` )
+				.then( ( r ) => {
+					if ( state.route !== 'ffemails' || state.ffeId !== r.id ) return;
+					ffeAdopt( r );
+					renderFluentEmailsPage();
+					ffeRefreshPreview( true );
+				} )
+				.catch( ( e ) => { view.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`; } );
+			return;
+		}
+		const c = state.ffe;
+		if ( c.loading ) return;
+		if ( ! c.hist ) {
+			c.hist = makeHistory( () => JSON.stringify( c.n ), ( snap ) => {
+				c.n = JSON.parse( snap );
+				c.err = null;
+				c.dirty = ! c.hist.isClean();
+				renderFluentEmailsPage();
+				ffeRefreshPreview( true );
+			} );
+		}
+		const d = c.data;
+		const n = c.n;
+		const keys = d.notifications.map( ( x ) => 'n' + x.metaId );
+		const tabs = ( attr, cur, list ) => `<div class="minn-tabs minn-gfn-totype" role="group">${ list.map( ( [ v, l ] ) => `<button type="button" class="minn-tab${ cur === v ? ' active' : '' }" ${ attr }="${ esc( v ) }" aria-pressed="${ cur === v }">${ esc( l ) }</button>` ).join( '' ) }</div>`;
+		const err = ( key ) => ( c.err && c.err.field === key ? `<span class="minn-gfn-errmsg">${ esc( c.err.message ) }</span>` : '' );
+		const notice = ( k ) => {
+			const x = n[ k ];
+			const to = x.hasRouting && ! d.hasPro
+				? `<div class="minn-insp-note">${ esc( __( 'Sent by routing rules set up in Fluent Forms Pro. They are kept as they are.' ) ) }</div>`
+				: `${ tabs( `data-ffeto="${ k }" data-v`, x.toType, [ [ 'email', __( 'Email address' ) ], [ 'field', __( 'Form field' ) ] ] ) }
+					${ 'field' === x.toType
+						? ( d.emailFields.length
+							? `<div class="minn-gfn-set${ c.err && c.err.field === k + '.toField' ? ' minn-gfn-err' : '' }" data-gfnset="${ k }.toField"><span class="minn-field-label">${ esc( __( 'Send to the address in' ) ) }</span>${ gfnCombo( `data-ffefield="${ k }"`, gfnPairLabel( d.emailFields, x.toField ) || __( 'Choose the email field' ) ) }${ err( k + '.toField' ) }</div>`
+							: `<div class="minn-insp-note">${ esc( __( 'This form has no Email field.' ) ) }</div>` )
+						: gfnInput( k + '.toEmail', __( 'Email addresses' ), x.toEmail, { mono: true, tags: true, help: __( 'Separate several with commas. Smart tags work too.' ) } ) }`;
+			return `<div class="minn-gfn-sec" data-ffesec="${ k }">
+				<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( x.name || __( 'Email notification' ) ) }</div></div>
+				<div class="minn-gfn-pair">
+					${ gfnInput( k + '.name', __( 'Name' ), x.name ) }
+					<div class="minn-gfn-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Send this email' ) ) }</span>
+						<button type="button" class="minn-switch${ x.enabled ? ' on' : '' }" data-ffeon="${ k }" role="switch" aria-checked="${ !! x.enabled }" aria-label="${ esc( __( 'Send this email' ) ) }"><span class="minn-switch-knob"></span></button></div>
+				</div>
+				<div class="minn-gfn-set"><span class="minn-field-label">${ esc( __( 'Send to' ) ) }</span>${ to }</div>
+				<div class="minn-gfn-pair">
+					${ gfnInput( k + '.fromName', __( 'From name' ), x.fromName, { tags: true } ) }
+					${ gfnInput( k + '.fromEmail', __( 'From email' ), x.fromEmail, { mono: true, tags: true, ph: '{wp.admin_email}' } ) }
+				</div>
+				<div class="minn-gfn-pair">
+					${ gfnInput( k + '.replyTo', __( 'Reply to' ), x.replyTo, { mono: true, tags: true } ) }
+					${ gfnInput( k + '.bcc', 'BCC', x.bcc, { mono: true, tags: true } ) }
+				</div>
+				${ gfnInput( k + '.subject', __( 'Subject' ), x.subject, { tags: true } ) }
+				${ gfnInput( k + '.message', __( 'Message' ), x.message, { area: true, rows: 10, tags: true, help: d.canHtml ? __( 'HTML is allowed. {all_data} lists every answer.' ) : __( 'HTML is filtered to what your role may publish. {all_data} lists every answer.' ) } ) }
+				${ x.hasLogic && ! d.hasPro ? `<div class="minn-insp-note">${ esc( __( 'Sends only when conditions set up in Fluent Forms Pro match. They are kept as they are.' ) ) }</div>` : '' }
+			</div>`;
+		};
+		const cf = n.confirmation;
+		const confBody = 'customPage' === cf.redirectTo
+			? `<div class="minn-gfn-set${ c.err && c.err.field === 'confirmation.customPage' ? ' minn-gfn-err' : '' }" data-gfnset="confirmation.customPage"><span class="minn-field-label">${ esc( __( 'Send visitors to' ) ) }</span>${ gfnCombo( 'data-ffepage', cf.customPage ? gfnPairLabel( d.pages, cf.customPage ) : '' ) }${ err( 'confirmation.customPage' ) }</div>`
+			: 'customUrl' === cf.redirectTo
+				? gfnInput( 'confirmation.customUrl', __( 'Redirect to' ), cf.customUrl, { mono: true, tags: true, ph: 'https://' } )
+				: `${ gfnInput( 'confirmation.messageToShow', __( 'Message' ), cf.messageToShow, { area: true, rows: 5, tags: true } ) }
+					<div class="minn-gfn-set"><span class="minn-field-label">${ esc( __( 'Then' ) ) }</span>${ tabs( 'data-ffebehave', cf.samePageFormBehavior, [ [ 'hide_form', __( 'Hide the form' ) ], [ 'reset_form', __( 'Clear the form' ) ] ] ) }</div>`;
+		const scroll = view.scrollTop;
+		view.innerHTML = `
+		<div class="minn-card minn-gfn minn-ffe">
+			<div class="minn-fgb-top">
+				<button type="button" class="minn-btn-soft" id="minn-ffe-back">‹ ${ esc( __( 'Forms' ) ) }</button>
+				<span class="minn-gfn-titleset minn-gfc-fixed"><span class="minn-gfc-name">${ esc( d.title ) }</span></span>
+				<span class="minn-gfb-spring"></span>
+				${ undoButtonsHtml( c.hist ) }
+				${ c.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
+				<a class="minn-btn-soft" href="${ esc( safeHref( d.adminUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in Fluent Forms ↗' ) ) }</a>
+				<button type="button" class="minn-btn-primary" id="minn-ffe-save">${ esc( __( 'Save' ) ) }</button>
+			</div>
+			<div class="minn-fgb-meta"><span>${ esc( d.hasPro ? __( 'The emails this form sends, and what visitors see after submitting.' ) : __( 'The emails this form sends, and what visitors see after submitting. Adding emails, routing and conditions come with Fluent Forms Pro.' ) ) }</span></div>
+			<div class="minn-gfn-main">
+				<div class="minn-gfn-edit">
+					${ keys.length ? keys.map( notice ).join( '' ) : `<div class="minn-gfn-sec"><div class="minn-toggle-desc">${ esc( __( 'This form sends no emails.' ) ) }</div></div>` }
+					<div class="minn-gfn-sec" data-ffesec="confirmation">
+						<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( __( 'After submitting, visitors see' ) ) }</div></div>
+						${ tabs( 'data-ffeconf', cf.redirectTo, [ [ 'samePage', __( 'A message' ) ], [ 'customPage', __( 'A page' ) ], [ 'customUrl', __( 'An address' ) ] ] ) }
+						${ confBody }
+					</div>
+				</div>
+				<aside class="minn-gfn-side">
+					<div class="minn-gfn-sec minn-gfn-preview">
+						<div class="minn-gfn-sec-head">
+							<div class="minn-side-title">${ esc( __( 'Preview' ) ) }</div>
+							<span class="minn-gfn-preview-note" id="minn-ffe-note"></span>
+							<button type="button" class="minn-btn-soft minn-gfn-mini" id="minn-ffe-refresh">${ esc( __( 'Refresh' ) ) }</button>
+						</div>
+						${ keys.length > 1 ? tabs( 'data-ffewhich', c.which, keys.map( ( k ) => [ k, n[ k ].name || __( 'Email' ) ] ) ) : '' }
+						<div id="minn-ffe-preview"></div>
+					</div>
+				</aside>
+			</div>
+		</div>`;
+		view.scrollTop = scroll;
+		ffePaintPreview();
+		bindFluentEmailsPage( $( '.minn-ffe', view ) );
+	}
+
+	function ffePaintPreview() {
+		const body = $( '#minn-ffe-preview' );
+		const note = $( '#minn-ffe-note' );
+		const c = state.ffe;
+		if ( ! body ) return;
+		if ( ! c.which ) {
+			body.innerHTML = `<div class="minn-toggle-desc">${ esc( __( 'No email to preview.' ) ) }</div>`;
+			return;
+		}
+		const pv = c.preview;
+		if ( ! pv ) {
+			body.innerHTML = `<div class="minn-loading" style="padding:18px;">${ esc( __( 'Building the preview…' ) ) }</div>`;
+			return;
+		}
+		/* translators: %s: an entry number. */
+		if ( note ) note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entries yet: tags show as typed' );
+		body.innerHTML = `<div class="minn-gfn-subj"><span>${ esc( __( 'Subject' ) ) }</span>${ esc( pv.subject || '' ) }</div>
+			${ previewFrameHtml( pv.html || '', { cls: 'minn-gfn-frame', title: __( 'Email preview' ) } ) }`;
+	}
+
+	function ffeRefreshPreview( now ) {
+		clearTimeout( ffePreviewTimer );
+		const run = async () => {
+			const c = state.ffe;
+			if ( ! c || ! c.data || ! c.which ) return;
+			const seq = ++ffePreviewSeq;
+			const x = c.n[ c.which ];
+			try {
+				const r = await api( `minn-admin/v1/fluent-forms/forms/${ c.id }/emails/preview`, { method: 'POST', body: JSON.stringify( { subject: x.subject, message: x.message } ) } );
+				if ( seq !== ffePreviewSeq || state.ffe !== c ) return;
+				c.preview = r;
+				ffePaintPreview();
+			} catch ( e ) {
+				if ( seq === ffePreviewSeq && state.ffe === c ) {
+					const body = $( '#minn-ffe-preview' );
+					if ( body ) body.innerHTML = `<div class="minn-empty" style="padding:14px;">${ esc( e.message ) }</div>`;
+				}
+			}
+		};
+		if ( now ) run();
+		else ffePreviewTimer = setTimeout( run, 700 );
+	}
+
+	function bindFluentEmailsPage( root ) {
+		const c = state.ffe;
+		const d = c.data;
+		const n = c.n;
+		const markDirty = ( key ) => {
+			c.hist.note( key );
+			syncUndoButtons();
+			if ( c.dirty ) return;
+			c.dirty = true;
+			const top = $( '.minn-fgb-top', root );
+			const link = $( '.minn-fgb-top a.minn-btn-soft', root );
+			if ( top && link && ! top.querySelector( '.minn-fgb-dirty' ) ) {
+				const pill = document.createElement( 'span' );
+				pill.className = 'minn-fgb-dirty';
+				pill.textContent = __( 'Unsaved changes' );
+				top.insertBefore( pill, link );
+			}
+		};
+		const rerender = () => renderFluentEmailsPage();
+		const at = ( path ) => {
+			const i = path.indexOf( '.' );
+			return [ n[ path.slice( 0, i ) ], path.slice( i + 1 ) ];
+		};
+		$$( '[data-ffefield]', root ).forEach( ( wrap ) => {
+			const x = n[ wrap.dataset.ffefield ];
+			bindAutocomplete( wrap, d.emailFields.map( ( p ) => ( { value: p[ 0 ], label: p[ 1 ] } ) ), { strict: true, value: String( x.toField || '' ), onPick: ( v ) => { x.toField = v; markDirty(); } } );
+		} );
+		const pagePick = $( '[data-ffepage]', root );
+		if ( pagePick ) {
+			bindAutocomplete( pagePick, d.pages.map( ( p ) => ( { value: p[ 0 ], label: p[ 1 ] } ) ), { strict: true, value: String( n.confirmation.customPage || '' ), onPick: ( v ) => { n.confirmation.customPage = v; markDirty(); } } );
+			if ( ! n.confirmation.customPage ) $( '.minn-ac-input', pagePick ).value = '';
+			$( '.minn-ac-input', pagePick ).placeholder = __( 'Choose a page' );
+		}
+		root.addEventListener( 'input', ( e ) => {
+			const t = e.target;
+			if ( ! t.dataset.gfn ) return;
+			const [ obj, key ] = at( t.dataset.gfn );
+			if ( ! obj ) return;
+			obj[ key ] = t.value;
+			const set = t.closest( '.minn-gfn-err' );
+			if ( set ) {
+				set.classList.remove( 'minn-gfn-err' );
+				$$( '.minn-gfn-errmsg', set ).forEach( ( m ) => m.remove() );
+				c.err = null;
+			}
+			markDirty( t );
+			if ( t.dataset.gfn.startsWith( c.which + '.' ) ) ffeRefreshPreview();
+		} );
+		root.addEventListener( 'click', async ( e ) => {
+			const t = e.target;
+			if ( t.closest( '#minn-ffe-back' ) ) {
+				if ( c.dirty && ! await minnConfirm( { title: __( 'Leave without saving?' ), body: __( 'Changes to this form’s emails haven’t been saved.' ), confirmLabel: __( 'Leave' ), danger: true } ) ) return;
+				c.dirty = false;
+				const ss = surfaceState( 'fluent-forms' );
+				if ( ss ) ss.view = 'manage';
+				go( 'fluent-forms' );
+				return;
+			}
+			const on = t.closest( '[data-ffeon]' );
+			if ( on ) {
+				const x = n[ on.dataset.ffeon ];
+				x.enabled = ! x.enabled;
+				on.classList.toggle( 'on', x.enabled );
+				on.setAttribute( 'aria-checked', x.enabled );
+				markDirty();
+				return;
+			}
+			const to = t.closest( '[data-ffeto]' );
+			if ( to ) {
+				n[ to.dataset.ffeto ].toType = to.dataset.v;
+				markDirty();
+				rerender();
+				return;
+			}
+			const conf = t.closest( '[data-ffeconf]' );
+			if ( conf ) {
+				n.confirmation.redirectTo = conf.dataset.ffeconf;
+				if ( c.err && c.err.field.startsWith( 'confirmation.' ) ) c.err = null;
+				markDirty();
+				rerender();
+				return;
+			}
+			const beh = t.closest( '[data-ffebehave]' );
+			if ( beh ) {
+				n.confirmation.samePageFormBehavior = beh.dataset.ffebehave;
+				markDirty();
+				rerender();
+				return;
+			}
+			const wh = t.closest( '[data-ffewhich]' );
+			if ( wh ) {
+				c.which = wh.dataset.ffewhich;
+				c.preview = null;
+				rerender();
+				ffeRefreshPreview( true );
+				return;
+			}
+			const tagBtn = t.closest( '[data-gfntags]' );
+			if ( tagBtn ) {
+				const key = tagBtn.dataset.gfntags;
+				const target = $( `[data-gfn="${ key }"]`, root );
+				if ( target ) gfnOpenTags( tagBtn, target, /\.message$|messageToShow$/.test( key ), d.mergeTags );
+				return;
+			}
+			if ( t.closest( '#minn-ffe-refresh' ) ) {
+				c.preview = null;
+				ffePaintPreview();
+				ffeRefreshPreview( true );
+				return;
+			}
+			if ( t.closest( '#minn-ffe-save' ) ) {
+				const b = t.closest( '#minn-ffe-save' );
+				b.disabled = true;
+				b.textContent = __( 'Saving…' );
+				try {
+					const r = await api( `minn-admin/v1/fluent-forms/forms/${ c.id }/emails`, {
+						method: 'POST',
+						// Only what changed: an untouched notification is not re-validated.
+						body: JSON.stringify( {
+							notifications: d.notifications.map( ( x ) => n[ 'n' + x.metaId ] ).filter( ( x ) => JSON.stringify( x ) !== JSON.stringify( d.notifications.find( ( o ) => o.metaId === x.metaId ) ) ),
+							...( JSON.stringify( n.confirmation ) !== JSON.stringify( d.confirmation ) ? { confirmation: n.confirmation } : {} ),
+						} ),
+					} );
+					ffeAdopt( r );
+					toast( __( 'Form saved' ) );
+					renderFluentEmailsPage();
+					ffeRefreshPreview( true );
+				} catch ( err ) {
+					toast( err.message, true );
+					c.err = err.data && err.data.field ? { field: String( err.data.field ), message: err.message } : null;
+					if ( c.err ) {
+						rerender();
+						const set = $( `[data-gfnset="${ c.err.field }"]` );
+						if ( set ) {
+							set.scrollIntoView( { block: 'center', behavior: 'smooth' } );
+							const input = $( 'input, textarea', set );
+							if ( input ) input.focus( { preventScroll: true } );
+						}
+					} else {
+						b.disabled = false;
+						b.textContent = __( 'Save' );
+					}
+				}
+			}
+		} );
+	}
+
 	function renderView() {
 		renderTopbar();
 		announceRoute();
@@ -54709,7 +55037,8 @@
 		if ( state.route !== 'gfnotification' ) state.gfn = null;
 		if ( state.route !== 'gfconfirmation' ) state.gfc = null;
 		if ( state.route !== 'cf7form' ) state.c7 = null;
-		if ( ! [ 'gfnotification', 'gfconfirmation', 'gfbuilder', 'cf7form' ].includes( state.route ) ) $$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
+		if ( state.route !== 'ffemails' ) state.ffe = null;
+		if ( ! [ 'gfnotification', 'gfconfirmation', 'gfbuilder', 'cf7form', 'ffemails' ].includes( state.route ) ) $$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
 		// A finished or abandoned migration should not reappear on return.
 		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
@@ -54751,6 +55080,7 @@
 			case 'gfnotification': renderNotificationPage(); break;
 			case 'gfconfirmation': renderConfirmationPage(); break;
 			case 'cf7form': renderCf7Page(); break;
+			case 'ffemails': renderFluentEmailsPage(); break;
 			case 'profile': renderProfile(); break;
 			case 'surfaceitem': renderSurfaceItem(); break;
 			case 'entrypage': renderEntryPage(); break;

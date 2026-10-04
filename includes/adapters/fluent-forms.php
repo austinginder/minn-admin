@@ -406,6 +406,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'date', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(),
+			// A row opens the form's emails and confirmation page
+			// (fluent-forms-emails.php), for the people who manage forms.
+			'open'      => array( 'route' => 'fluent-forms/form/{id}' ),
 			'actions'   => array(
 				array(
 					'label' => __( 'Edit in Fluent Forms ↗', 'minn-admin' ),

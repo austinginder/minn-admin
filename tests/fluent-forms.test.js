@@ -196,9 +196,10 @@ const { launch, login, reporter, BASE, openEntry, entryAction, entryText, leaveE
 				|| rows.find( ( r ) => /Contact Form Demo/.test( r.textContent ) );
 			if ( row ) row.click();
 		} );
-		await page.waitForSelector( '.minn-modal a[href]', { timeout: 15000 } );
-		t.check( 'form row links into Fluent\'s editor', await page.$$eval( '.minn-modal a[href]', ( els ) =>
-			els.some( ( a ) => /page=fluent_forms.*form_id=\d+|route=editor/.test( a.href ) ) ) );
+		// A form row opens the form's emails page, which links into Fluent.
+		await page.waitForSelector( '.minn-ffe .minn-fgb-top a[href]', { timeout: 30000 } );
+		t.check( 'form row opens its emails page, linked into Fluent', /\/fluent-forms\/form\/\d+$/.test( page.url() ) && await page.$$eval( '.minn-ffe .minn-fgb-top a[href]', ( els ) =>
+			els.some( ( a ) => /page=fluent_forms.*form_id=\d+/.test( a.href ) ) ) );
 	} finally {
 		// Restore the deleted Priya row for the next run.
 		await setOpt( 'minn_test_seed_fluent_forms', '1' ).catch( () => {} );
