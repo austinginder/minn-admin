@@ -65,7 +65,8 @@ const evalPhp = ( php ) => {
 		// Create a form + two entries through SureForms' own model.
 		const seedOut = evalPhp(
 			`$fid = wp_insert_post( array( 'post_type' => 'sureforms_form', 'post_title' => 'minn-sf-suite', 'post_status' => 'publish' ) );
-			 $a = \\SRFM\\Inc\\Database\\Tables\\Entries::add( array( 'form_id' => $fid, 'user_id' => 0, 'form_data' => array( 'Name' => 'Dana Suite', 'Email' => 'dana-suite@example.com', 'Message' => 'unread one' ), 'status' => 'unread', 'created_at' => current_time('mysql') ) );
+			 $k = function ( $block, $label, $slug ) { return 'srfm-' . $slug . '-' . $block . '-lbl-' . \\SRFM\\Inc\\Helper::encode( $label ) . '-' . $slug; };
+			 $a = \\SRFM\\Inc\\Database\\Tables\\Entries::add( array( 'form_id' => $fid, 'user_id' => 0, 'form_data' => array( $k( 'a1b2c3d4', 'Name', 'input' ) => 'Dana Suite', $k( 'e5f6a7b8', 'Email', 'email' ) => 'dana-suite@example.com', $k( 'c9d0e1f2', 'Message', 'textarea' ) => 'unread one', 'form-id' => (string) $fid, 'srfm-honeypot-field' => '' ), 'status' => 'unread', 'created_at' => current_time('mysql') ) );
 			 $b = \\SRFM\\Inc\\Database\\Tables\\Entries::add( array( 'form_id' => $fid, 'user_id' => 0, 'form_data' => array( 'Name' => 'Sam Suite', 'Email' => 'sam@example.com', 'Message' => 'read one' ), 'status' => 'read', 'created_at' => current_time('mysql') ) );
 			 echo wp_json_encode( array( 'form' => $fid, 'a' => $a, 'b' => $b ) );`
 		);
@@ -99,6 +100,8 @@ const evalPhp = ( php ) => {
 			view.status === 200 && view.body.kind === 'entry'
 			&& ( view.body.sections || [] ).some( ( s ) => s.title === 'Answers' && s.rows.some( ( r ) => r.label === 'Email' && /@/.test( r.value ) ) ),
 			JSON.stringify( ( view.body.sections || [] ).map( ( s ) => s.title ) ) );
+		const labelsSeen = ( ( view.body.sections || [] ).find( ( s ) => s.title === 'Answers' ) || { rows: [] } ).rows.map( ( r ) => r.label );
+		t.check( 'labels are read out of SureForms’ field keys, its own keys left out', JSON.stringify( labelsSeen ) === JSON.stringify( [ 'Name', 'Email', 'Message' ] ), JSON.stringify( labelsSeen ) );
 
 		const mark = await api( `minn-admin/v1/sureforms/entries/${ entryId }/status`, { method: 'POST', body: { status: 'read' } } );
 		const afterMark = await api( `minn-admin/v1/sureforms/entries?form_id=${ formId }&status=unread` );

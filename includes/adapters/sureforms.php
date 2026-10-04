@@ -4,8 +4,8 @@
  *
  * SureForms stores every submission in its own {prefix}srfm_entries table
  * (free feature; opt-out is a per-form do_not_store_entries flag). `form_data`
- * is clean JSON keyed by the human field label, so entries render as contact
- * cards with zero label resolution. Read/unread/trash status, per-form tabs
+ * is JSON keyed per block with the label encoded in the key
+ * (minn_admin_sureforms_answers() reads it back the way SureForms does). Read/unread/trash status, per-form tabs
  * from the sureforms_form CPT, search, delete, and a status card. Prefix-scoped
  * SELECTs; json_decode only, never unserialize. `created_at` is a DB timestamp
  * (session zone) normalized to UTC via the shared helper.
@@ -49,6 +49,38 @@ function minn_admin_sureforms_form_titles() {
 		$titles[ (int) $id ] = get_the_title( $id ) ?: ( 'Form #' . $id );
 	}
 	return $titles;
+}
+
+/**
+ * A submission's answers as [label => value]. SureForms keys each answer by
+ * its block ("srfm-input-<block>-lbl-<encoded label>-<slug>") and reads the
+ * label back out of the key (Helper::get_field_label_from_key, as its own
+ * entries export does); keys it excludes (form id, honeypot…) are dropped.
+ * Older or hand-made rows keyed by a plain label pass through. The label
+ * comes from the submitted key, so it is escaped where it is shown.
+ */
+function minn_admin_sureforms_answers( array $data ) {
+	$helper   = '\SRFM\Inc\Helper';
+	$excluded = class_exists( $helper ) && method_exists( $helper, 'get_excluded_fields' ) ? (array) $helper::get_excluded_fields() : array();
+	$out      = array();
+	foreach ( $data as $key => $value ) {
+		$key = (string) $key;
+		if ( in_array( $key, $excluded, true ) ) {
+			continue;
+		}
+		$label = $key;
+		if ( false !== strpos( $key, '-lbl-' ) && class_exists( $helper ) && method_exists( $helper, 'get_field_label_from_key' ) ) {
+			$decoded = trim( wp_strip_all_tags( (string) $helper::get_field_label_from_key( $key ) ) );
+			$label   = '' !== $decoded ? $decoded : $key;
+		}
+		// Two fields can share a label; keep both answers.
+		$base = $label;
+		for ( $n = 2; array_key_exists( $label, $out ); $n++ ) {
+			$label = $base . ' (' . $n . ')';
+		}
+		$out[ $label ] = $value;
+	}
+	return $out;
 }
 
 /**
@@ -343,7 +375,7 @@ add_action( 'rest_api_init', function () {
 				$data = is_array( $data ) ? $data : array();
 				return array(
 					'id'         => (int) $r->ID,
-					'summary'    => minn_admin_sureforms_summary( $data ),
+					'summary'    => minn_admin_sureforms_summary( minn_admin_sureforms_answers( $data ) ),
 					'form_title' => isset( $titles[ (int) $r->form_id ] ) ? $titles[ (int) $r->form_id ] : ( 'Form #' . (int) $r->form_id ),
 					'status'     => (string) $r->status,
 					'date'       => minn_admin_db_local_to_utc_iso( $r->created_at ),
@@ -366,7 +398,7 @@ add_action( 'rest_api_init', function () {
 					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$data   = json_decode( (string) $row->form_data, true );
-				$data   = is_array( $data ) ? $data : array();
+				$data   = is_array( $data ) ? minn_admin_sureforms_answers( $data ) : array();
 				$answers = array();
 				foreach ( $data as $label => $value ) {
 					if ( is_array( $value ) ) {
