@@ -128,6 +128,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/gravity-forms-confirmations.php
 require_once MINN_ADMIN_DIR . 'includes/adapters/gravity-forms-entry-edit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/fluent-forms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/ninja-forms.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/ninja-forms-entry-edit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/forminator.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/formidable.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/everest-forms.php';

@@ -108,6 +108,14 @@ function minn_admin_ninja_forms_titles() {
 	return $titles;
 }
 
+/** A stored answer as Ninja Forms reads it back (their decode_submission_value). */
+function minn_admin_ninja_forms_decode( $value ) {
+	if ( class_exists( 'WPN_Helper' ) && method_exists( 'WPN_Helper', 'decode_submission_value' ) ) {
+		return WPN_Helper::decode_submission_value( $value );
+	}
+	return $value;
+}
+
 /**
  * Answers for one nf_sub post as [field_id => flat string], from its own
  * postmeta (plain core meta; checkbox arrays flatten to comma lists).
@@ -127,6 +135,10 @@ function minn_admin_ninja_forms_answers( $post_id ) {
 		// scalars (all NF stores) round-trip.
 		$raw = $values[0];
 		$v   = is_serialized( $raw ) ? Minn_Admin::decode_serialized( $raw, $raw ) : $raw;
+		// Ninja Forms encodes answers as it stores them (& as &amp;, an
+		// apostrophe as &#039;) and decodes them wherever it reads one back;
+		// Minn escapes on output, so read them decoded too.
+		$v = minn_admin_ninja_forms_decode( $v );
 		if ( is_array( $v ) ) {
 			$flat = array();
 			array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
@@ -469,6 +481,8 @@ add_action( 'rest_api_init', function () {
 					array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 				),
 				'adminUrl' => admin_url( 'admin.php?page=nf-submissions&form_id=' . $form_id ),
+				// Editable answers (adapters/ninja-forms-entry-edit.php).
+				'edit'     => function_exists( 'minn_admin_ninja_forms_edit_block' ) ? minn_admin_ninja_forms_edit_block( $post, $form_id ) : null,
 			) );
 		},
 	) );
