@@ -5968,8 +5968,10 @@ class Minn_Admin_REST {
 
 	/**
 	 * POST minn-admin/v1/role-defaults { policies } — replace the stored role
-	 * policies. Unknown roles, unknown values and "person chooses" entries are
-	 * refused or dropped so the option only ever holds real enforcement.
+	 * policies. '*' is every role, including roles added later; a role's
+	 * 'choice' is its explicit "person chooses", kept only when '*' enforces
+	 * that setting (otherwise it says nothing an absent key does not).
+	 * Unknown roles and unknown values are refused.
 	 * Minn-dependent values ('minn') are refused for roles without edit_posts:
 	 * the UI never offers them, so arriving here means a stale or hand-built
 	 * request, and an honest 400 beats silently storing a no-op.
@@ -5982,9 +5984,10 @@ class Minn_Admin_REST {
 		}
 		$all   = wp_roles()->role_objects;
 		$clean = array();
+		$every = isset( $policies['*'] ) && is_array( $policies['*'] ) ? $policies['*'] : array();
 		foreach ( $policies as $role => $p ) {
 			$role = (string) $role;
-			if ( ! isset( $all[ $role ] ) ) {
+			if ( '*' !== $role && ! isset( $all[ $role ] ) ) {
 				return new WP_Error( 'minn_admin_bad_role', __( 'Unknown role.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			if ( ! is_array( $p ) ) {
@@ -5994,17 +5997,27 @@ class Minn_Admin_REST {
 			$signin = isset( $p['signin'] ) ? (string) $p['signin'] : '';
 			if ( 'minn' === $signin ) {
 				$entry['signin'] = 'minn';
-			} elseif ( '' !== $signin && 'choice' !== $signin ) {
+			} elseif ( 'choice' === $signin ) {
+				if ( '*' !== $role && isset( $every['signin'] ) && 'minn' === $every['signin'] ) {
+					$entry['signin'] = 'choice';
+				}
+			} elseif ( '' !== $signin ) {
 				return new WP_Error( 'minn_admin_bad_policy_value', __( 'Unknown sign-in policy.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			$toolbar = isset( $p['toolbar'] ) ? (string) $p['toolbar'] : '';
 			if ( in_array( $toolbar, array( 'minn', 'wp', 'off' ), true ) ) {
 				$entry['toolbar'] = $toolbar;
-			} elseif ( '' !== $toolbar && 'choice' !== $toolbar ) {
+			} elseif ( 'choice' === $toolbar ) {
+				if ( '*' !== $role && isset( $every['toolbar'] ) && in_array( $every['toolbar'], array( 'minn', 'wp', 'off' ), true ) ) {
+					$entry['toolbar'] = 'choice';
+				}
+			} elseif ( '' !== $toolbar ) {
 				return new WP_Error( 'minn_admin_bad_policy_value', __( 'Unknown toolbar policy.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			$needs_minn = isset( $entry['signin'] ) || ( isset( $entry['toolbar'] ) && 'minn' === $entry['toolbar'] );
-			if ( $needs_minn && ! $all[ $role ]->has_cap( 'edit_posts' ) ) {
+			// Every role may name Minn: a role without Minn access simply
+			// keeps its choice when the policy resolves (policy_for_user).
+			$needs_minn = isset( $entry['signin'] ) && 'minn' === $entry['signin'] || ( isset( $entry['toolbar'] ) && 'minn' === $entry['toolbar'] );
+			if ( '*' !== $role && $needs_minn && ! $all[ $role ]->has_cap( 'edit_posts' ) ) {
 				return new WP_Error( 'minn_admin_role_no_minn', __( 'That role cannot use Minn, so a Minn policy cannot apply to it.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			if ( $entry ) {

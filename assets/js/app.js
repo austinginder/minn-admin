@@ -15295,11 +15295,16 @@
 		);
 	}
 
+	// '*' is every role, including roles added later. A role's own value
+	// wins; 'inherit' (no stored value) follows '*'.
 	function roleDefaultsDirty( c ) {
+		const every = c.policies[ '*' ] || {};
+		const e0 = c.edits[ '*' ] || {};
+		if ( e0.signin !== ( every.signin || 'choice' ) || e0.toolbar !== ( every.toolbar || 'choice' ) ) return true;
 		return c.roles.some( ( r ) => {
 			const p = c.policies[ r.id ] || {};
 			const e = c.edits[ r.id ] || {};
-			return e.signin !== ( p.signin || 'choice' ) || e.toolbar !== ( p.toolbar || 'choice' );
+			return e.signin !== ( p.signin || 'inherit' ) || e.toolbar !== ( p.toolbar || 'inherit' );
 		} );
 	}
 
@@ -15319,12 +15324,15 @@
 		}
 		if ( ! c.edits ) {
 			c.edits = {};
+			const every = c.policies[ '*' ] || {};
+			c.edits[ '*' ] = { signin: every.signin || 'choice', toolbar: every.toolbar || 'choice' };
 			c.roles.forEach( ( r ) => {
 				const p = c.policies[ r.id ] || {};
-				c.edits[ r.id ] = { signin: p.signin || 'choice', toolbar: p.toolbar || 'choice' };
+				c.edits[ r.id ] = { signin: p.signin || 'inherit', toolbar: p.toolbar || 'inherit' };
 			} );
 		}
 		const dirty = roleDefaultsDirty( c );
+		const everyRow = { id: '*', minn: true };
 		const selHtml = ( r, kind ) => {
 			if ( kind === 'signin' && ! r.minn ) {
 				// Sign-in enforcement lands people in Minn; a role that
@@ -15332,7 +15340,15 @@
 				return `<div class="minn-role-na" title="${ esc( __( 'This role cannot use Minn, so there is nothing to enforce.' ) ) }">${ esc( __( 'Not available' ) ) }</div>`;
 			}
 			const all = kind === 'signin' ? ROLE_SIGNIN_OPTS() : ROLE_TOOLBAR_OPTS();
-			const opts = r.minn ? all : all.filter( ( [ v ] ) => v !== 'minn' );
+			let opts = r.minn ? all : all.filter( ( [ v ] ) => v !== 'minn' );
+			if ( r.id !== '*' ) {
+				// Following every role, named with what that resolves to
+				// here: a Minn policy means nothing to a role without Minn.
+				let inherited = c.edits[ '*' ][ kind ];
+				if ( ! r.minn && inherited === 'minn' ) inherited = 'choice';
+				const shown = ( all.find( ( [ v ] ) => v === inherited ) || all[ 0 ] )[ 1 ];
+				opts = [ [ 'inherit', sprintf( /* translators: %s: the every-role setting, e.g. "Minn bar". */ __( 'Same as every role (%s)' ), shown ) ], ...opts ];
+			}
 			const cur = c.edits[ r.id ][ kind ];
 			// The themed strict combobox (rule for every form-engine select).
 			// kind carries no colon, so the key splits back on the LAST one
@@ -15352,6 +15368,14 @@
 				<div>${ esc( __( 'After sign-in' ) ) }</div>
 				<div>${ esc( __( 'Toolbar on the site' ) ) }</div>
 			</div>
+			<div class="minn-table-row minn-role-cols minn-role-every" data-rdrow="*">
+				<div>
+					<div class="minn-row-title">${ esc( __( 'Every role' ) ) }</div>
+					<div class="minn-row-meta">${ esc( __( 'Including roles added later' ) ) }</div>
+				</div>
+				<div>${ selHtml( everyRow, 'signin' ) }</div>
+				<div>${ selHtml( everyRow, 'toolbar' ) }</div>
+			</div>
 			${ c.roles.map( ( r ) => `
 			<div class="minn-table-row minn-role-cols" data-rdrow="${ esc( r.id ) }">
 				<div>
@@ -15362,7 +15386,7 @@
 				<div>${ selHtml( r, 'toolbar' ) }</div>
 			</div>` ).join( '' ) }
 		</div>
-		<div class="minn-role-note">${ esc( __( 'Changing a policy does not erase anyone’s saved preference. If a role returns to “Person chooses”, each person gets their previous choice back.' ) ) }</div>`;
+		<div class="minn-role-note">${ esc( __( 'A role set to “Same as every role” follows the first row, so roles added later are covered too. Changing a policy does not erase anyone’s saved preference. If a role returns to “Person chooses”, each person gets their previous choice back.' ) ) }</div>`;
 		bindUsersTabs( view );
 		const syncButtons = () => {
 			const d = roleDefaultsDirty( c );
@@ -15374,7 +15398,13 @@
 			if ( ! wrap ) return;
 			const input = $( '.minn-ac-input', wrap );
 			const i = key.lastIndexOf( ':' );
-			c.edits[ key.slice( 0, i ) ][ key.slice( i + 1 ) ] = ( input && input.dataset.acValue ) || 'choice';
+			const role = key.slice( 0, i );
+			c.edits[ role ][ key.slice( i + 1 ) ] = ( input && input.dataset.acValue ) || ( role === '*' ? 'choice' : 'inherit' );
+			// The every-role row names itself in each role's first choice.
+			if ( role === '*' ) {
+				renderRoleDefaults();
+				return;
+			}
 			syncButtons();
 		} );
 		// The old selects carried per-control aria labels; the combobox
@@ -15392,11 +15422,17 @@
 			const saveBtn = $( '#minn-rd-save', view );
 			saveBtn.disabled = true;
 			const policies = {};
+			const every = {};
+			if ( c.edits[ '*' ].signin !== 'choice' ) every.signin = c.edits[ '*' ].signin;
+			if ( c.edits[ '*' ].toolbar !== 'choice' ) every.toolbar = c.edits[ '*' ].toolbar;
+			if ( Object.keys( every ).length ) policies[ '*' ] = every;
 			c.roles.forEach( ( r ) => {
 				const e = c.edits[ r.id ];
 				const entry = {};
-				if ( e.signin && e.signin !== 'choice' && r.minn ) entry.signin = e.signin;
-				if ( e.toolbar && e.toolbar !== 'choice' ) entry.toolbar = e.toolbar;
+				// 'choice' rides along: the server keeps it only where
+				// every role enforces that setting.
+				if ( e.signin && e.signin !== 'inherit' && r.minn ) entry.signin = e.signin;
+				if ( e.toolbar && e.toolbar !== 'inherit' ) entry.toolbar = e.toolbar;
 				if ( Object.keys( entry ).length ) policies[ r.id ] = entry;
 			} );
 			try {

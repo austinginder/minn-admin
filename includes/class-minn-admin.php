@@ -275,10 +275,13 @@ class Minn_Admin {
 	/**
 	 * Site-wide role policies for the admin experience (option
 	 * minn_admin_role_defaults). Shape: role => array(
-	 *   'signin'  => 'minn',                // always land in Minn after sign-in
-	 *   'toolbar' => 'minn' | 'wp' | 'off', // which toolbar the role gets on the site
-	 * ). An absent key means the person chooses; only enforced values are
-	 * stored, so an empty option leaves every profile switch behaving as before.
+	 *   'signin'  => 'minn' | 'choice',              // always land in Minn after sign-in
+	 *   'toolbar' => 'minn' | 'wp' | 'off' | 'choice', // which toolbar the role gets on the site
+	 * ). The '*' entry is every role, including roles added later: a role
+	 * without its own value for a setting follows it. 'choice' is a role's
+	 * explicit "person chooses", which only matters when '*' enforces
+	 * something. With no '*' entry an absent key means the person chooses,
+	 * so an empty option leaves every profile switch behaving as before.
 	 * Enforcement is an overlay resolved at read time: nobody's saved
 	 * preference is written over, and a role returned to "person chooses"
 	 * hands each account its previous choice back.
@@ -294,10 +297,10 @@ class Minn_Admin {
 				continue;
 			}
 			$entry = array();
-			if ( isset( $p['signin'] ) && 'minn' === $p['signin'] ) {
-				$entry['signin'] = 'minn';
+			if ( isset( $p['signin'] ) && in_array( $p['signin'], array( 'minn', 'choice' ), true ) ) {
+				$entry['signin'] = $p['signin'];
 			}
-			if ( isset( $p['toolbar'] ) && in_array( $p['toolbar'], array( 'minn', 'wp', 'off' ), true ) ) {
+			if ( isset( $p['toolbar'] ) && in_array( $p['toolbar'], array( 'minn', 'wp', 'off', 'choice' ), true ) ) {
 				$entry['toolbar'] = $p['toolbar'];
 			}
 			if ( $entry ) {
@@ -338,16 +341,17 @@ class Minn_Admin {
 			'wp'   => 2,
 			'off'  => 1,
 		);
+		// A role's own value wins; without one it follows every role ('*').
+		$every = isset( $defaults['*'] ) ? $defaults['*'] : array();
 		foreach ( (array) $user->roles as $role ) {
-			if ( empty( $defaults[ $role ] ) ) {
-				continue;
-			}
-			$p = $defaults[ $role ];
-			if ( isset( $p['signin'] ) ) {
+			$p       = isset( $defaults[ $role ] ) ? $defaults[ $role ] : array();
+			$signin  = isset( $p['signin'] ) ? $p['signin'] : ( isset( $every['signin'] ) ? $every['signin'] : '' );
+			$toolbar = isset( $p['toolbar'] ) ? $p['toolbar'] : ( isset( $every['toolbar'] ) ? $every['toolbar'] : '' );
+			if ( 'minn' === $signin ) {
 				$out['signin'] = 'minn';
 			}
-			if ( isset( $p['toolbar'] ) && ( '' === $out['toolbar'] || $rank[ $p['toolbar'] ] > $rank[ $out['toolbar'] ] ) ) {
-				$out['toolbar'] = $p['toolbar'];
+			if ( isset( $rank[ $toolbar ] ) && ( '' === $out['toolbar'] || $rank[ $toolbar ] > $rank[ $out['toolbar'] ] ) ) {
+				$out['toolbar'] = $toolbar;
 			}
 		}
 		if ( 'minn' === $out['signin'] && ! user_can( $user, 'edit_posts' ) ) {

@@ -4,7 +4,9 @@
  * the author's profile switches become locked notes, the Minn bar renders on
  * the public site, and a plain sign-in lands the author in Minn. Clearing the
  * policy hands each person's own saved preference back — enforcement is an
- * overlay, never a write.
+ * overlay, never a write. The Every role row ('*') covers every role without
+ * its own setting, a role added later included; a role's explicit "Person
+ * chooses" overrides it.
  */
 const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helpers' );
 
@@ -23,6 +25,7 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 	}, { method, path, body } );
 
 	let authorCtx = null;
+	let smId = 0;
 	try {
 		// Baseline: no stored policies.
 		await rest( 'POST', 'minn-admin/v1/role-defaults', { policies: {} } );
@@ -127,8 +130,48 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 		} ) );
 		t.check( 'switches return with the saved preference intact (enforcement never wrote it)',
 			restored.pills === 0 && restored.barOn === false, JSON.stringify( restored ) );
+
+		/* ===== Every role: covers roles with no setting of their own ===== */
+		await page.goto( BASE + '/minn-admin/users', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '[data-utab="roles"]', { timeout: 15000 } );
+		await page.click( '[data-utab="roles"]' );
+		await page.waitForSelector( '[data-rdpol="*:toolbar"] .minn-ac-input', { timeout: 15000 } );
+		const shape = await page.evaluate( () => {
+			const first = document.querySelector( '.minn-table-row[data-rdrow]' );
+			const opts = ( sel ) => { try { return JSON.parse( document.querySelector( sel ).dataset.acopts ).map( ( o ) => o[ 0 ] ); } catch ( e ) { return []; } };
+			return { first: first && first.dataset.rdrow, every: opts( '[data-rdpol="*:toolbar"]' ), author: opts( '[data-rdpol="author:toolbar"]' ) };
+		} );
+		t.check( 'Every role leads the table; roles start from it',
+			shape.first === '*' && ! shape.every.includes( 'inherit' ) && shape.author[ 0 ] === 'inherit', JSON.stringify( shape ) );
+		await pickCombo( page, '[data-rdpol="*:toolbar"] .minn-ac-input', 'wp' );
+		await page.waitForSelector( '[data-rdpol="author:toolbar"] .minn-ac-input', { timeout: 10000 } );
+		await pickCombo( page, '[data-rdpol="author:toolbar"] .minn-ac-input', 'choice' );
+		const saveEvery = page.waitForResponse( ( r ) => r.url().includes( 'minn-admin/v1/role-defaults' ) && r.request().method() === 'POST' );
+		await page.click( '#minn-rd-save' );
+		await saveEvery;
+		const everyStored = ( await rest( 'GET', 'minn-admin/v1/role-defaults' ) ).data;
+		t.check( 'every role and an explicit Person chooses are stored',
+			everyStored && everyStored.policies[ '*' ] && everyStored.policies[ '*' ].toolbar === 'wp'
+			&& everyStored.policies.author && everyStored.policies.author.toolbar === 'choice',
+			JSON.stringify( everyStored && everyStored.policies ) );
+		const smLogin = 'minn-rd-sm-' + Date.now();
+		const smPass = 'minn-rd-sm-pass-' + Math.random().toString( 36 ).slice( 2 );
+		const sm = await rest( 'POST', 'wp/v2/users', { username: smLogin, email: smLogin + '@example.org', password: smPass, roles: [ 'shop_manager' ] } );
+		smId = sm.data && sm.data.id;
+		const smCtx = await loginAs( browser, smLogin, smPass );
+		const smPolicy = await smCtx.page.evaluate( () => window.MINN.user.policy );
+		await smCtx.ctx.close();
+		t.check( 'a role with no setting of its own follows every role', smPolicy && smPolicy.toolbar === 'wp', JSON.stringify( smPolicy ) );
+		await ap.goto( BASE + '/minn-admin/profile', { waitUntil: 'domcontentloaded' } );
+		await ap.waitForFunction( () => window.MINN && window.MINN.user, null, { timeout: 20000 } );
+		const authorPolicy = await ap.evaluate( () => window.MINN.user.policy );
+		t.check( 'a role’s own Person chooses overrides every role', authorPolicy && authorPolicy.toolbar === '', JSON.stringify( authorPolicy ) );
+		const relaxed = await rest( 'POST', 'minn-admin/v1/role-defaults', { policies: { author: { toolbar: 'choice' } } } );
+		t.check( 'Person chooses is dropped where every role enforces nothing',
+			relaxed.ok && ! ( relaxed.data.policies.author ) && ! relaxed.data.policies[ '*' ], JSON.stringify( relaxed.data && relaxed.data.policies ) );
 	} finally {
 		await rest( 'POST', 'minn-admin/v1/role-defaults', { policies: {} } ).catch( () => {} );
+		if ( smId ) await rest( 'DELETE', `wp/v2/users/${ smId }?force=true&reassign=1` ).catch( () => {} );
 		if ( authorCtx ) await authorCtx.ctx.close().catch( () => {} );
 	}
 

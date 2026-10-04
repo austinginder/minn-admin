@@ -4087,6 +4087,8 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 .minn-role-toolbar { align-items: center; }
 .minn-role-lede { flex: 1 1 320px; min-width: 0; font-size: 13px; color: var(--text2); }
 .minn-role-cols { grid-template-columns: minmax(160px, 1.2fr) 1fr 1fr; align-items: center; }
+/* Every role (including roles added later) leads the table. */
+.minn-role-every { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .minn-role-cols select.minn-input { width: 100%; max-width: 260px; }
 .minn-role-na { font-size: 13px; color: var(--text3); }
 .minn-role-note { margin-top: 12px; font-size: 12.5px; color: var(--text3); }
