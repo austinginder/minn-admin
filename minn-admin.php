@@ -137,6 +137,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/wpforms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cf7-flamingo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cfdb7.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/elementor-forms.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/elementor-forms-entry-edit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/gravity-smtp.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/fluent-smtp.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wp-mail-smtp.php';

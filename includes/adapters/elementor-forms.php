@@ -480,6 +480,8 @@ add_action( 'rest_api_init', function () {
 						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url( 'admin.php?page=e-form-submissions#/form-submissions/' . (int) $sub['id'] ),
+					// Editable answers (adapters/elementor-forms-entry-edit.php).
+					'edit'     => function_exists( 'minn_admin_elementor_edit_block' ) ? minn_admin_elementor_edit_block( $sub ) : null,
 				) );
 			},
 		),
