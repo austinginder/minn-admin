@@ -160,6 +160,46 @@ const { launch, login, deletePost, openEditor, reporter, BASE, pickCombo } = req
 				JSON.stringify( rows[ 0 ] && rows[ 0 ].values[ galSub ] ) );
 		}
 
+		// Drag to reorder: row 2's grip dropped on row 1's top half swaps
+		// them, then back again so the steps below start from the same order.
+		// A real stepped mouse drag: locator.dragTo's single jump never starts
+		// a native drag inside the panel dialog (it does on a page), while a
+		// person's hand always moves in steps.
+		await openEditor( page, id );
+		await openPanel();
+		const dragRow = async ( from, onto, topHalf ) => {
+			const wrapSel = `[data-pf$=":${ F }"]`;
+			// Both ends on screen inside the dialog's scroll area: the target
+			// card's top at the top, the grip below it.
+			await page.locator( `${ wrapSel } > .minn-rows-card` ).nth( onto ).evaluate( ( el ) => el.scrollIntoView( { block: 'start' } ) );
+			await page.waitForTimeout( 150 );
+			const grip = page.locator( `${ wrapSel } [data-rgrip="${ from }"]` );
+			const g = await grip.boundingBox();
+			const box = await page.locator( `${ wrapSel } > .minn-rows-card` ).nth( onto ).boundingBox();
+			const sx = g.x + g.width / 2, sy = g.y + g.height / 2;
+			const tx = box.x + 60, ty = topHalf ? box.y + 6 : box.y + box.height - 6;
+			await page.mouse.move( sx, sy );
+			await page.mouse.down();
+			for ( let k = 1; k <= 12; k++ ) {
+				await page.mouse.move( sx + ( tx - sx ) * k / 12, sy + ( ty - sy ) * k / 12 );
+				await page.waitForTimeout( 25 );
+			}
+			await page.mouse.up();
+			await page.waitForTimeout( 300 );
+		};
+		t.check( 'each row card carries a drag grip', ( await page.$$( `[data-pf$=":${ F }"] [data-rgrip]` ) ).length === 2 );
+		await dragRow( 1, 0, true );
+		t.check( 'dragging row 2 above row 1 reorders the cards', await page.$eval( `[data-rowsub="0:${ textSub }"]`, ( el ) => el.value ) === 'Row two' );
+		await save();
+		rows = await readRows();
+		t.check( 'dragged order persisted', rows.length === 2 && rows[ 0 ].values[ textSub ] === 'Row two' && rows[ 1 ].values[ textSub ] === 'Row one edited', JSON.stringify( rows.map( ( r ) => r.values[ textSub ] ) ) );
+		await openEditor( page, id );
+		await openPanel();
+		await dragRow( 1, 0, true );
+		await save();
+		rows = await readRows();
+		t.check( 'a second drag puts the order back', rows[ 0 ].values[ textSub ] === 'Row one edited' && rows[ 1 ].values[ textSub ] === 'Row two', JSON.stringify( rows.map( ( r ) => r.values[ textSub ] ) ) );
+
 		// Fresh anchors from the server, then move row 2 up and delete the old
 		// row 1 — the merge must follow the referenced rows, not positions.
 		await openEditor( page, id );

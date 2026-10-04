@@ -2486,13 +2486,17 @@
 			</div>`;
 		} ).join( '' );
 		const rowHtml = ( r, i ) => {
+			// The grip drags the whole card; ↑/↓ stay as the keyboard path.
+			const grip = rows.length > 1
+				? `<span class="minn-menu-grip minn-rows-grip" draggable="true" data-rgrip="${ i }" title="${ esc( __( 'Drag to reorder' ) ) }" aria-hidden="true">${ icon( 'grip' ) }</span>`
+				: '';
 			const chrome = `<span class="minn-rows-spring"></span>
 				<button type="button" data-rmv="${ i }:-1" title="${ esc( __( 'Move up' ) ) }"${ i === 0 ? ' disabled' : '' }>↑</button>
 				<button type="button" data-rmv="${ i }:1" title="${ esc( __( 'Move down' ) ) }"${ i === rows.length - 1 ? ' disabled' : '' }>↓</button>
 				<button type="button" data-rdel="${ i }" title="${ esc( flex ? __( 'Remove section' ) : __( 'Remove row' ) ) }">×</button>`;
 			if ( ! flex ) {
-				return `<div class="minn-rows-card">
-					<div class="minn-rows-head"><span class="minn-rows-n">${ i + 1 }</span>${ chrome }</div>
+				return `<div class="minn-rows-card" data-rcard="${ i }">
+					<div class="minn-rows-head">${ grip }<span class="minn-rows-n">${ i + 1 }</span>${ chrome }</div>
 					${ rowFieldsHtml( r, i ) }
 				</div>`;
 			}
@@ -2504,8 +2508,9 @@
 					? `<div class="minn-insp-note">${ sprintf( esc( /* translators: %d: number of this section's fields only editable in wp-admin. */ _n( '%d more field in this section lives in wp-admin.', '%d more fields in this section live in wp-admin.', sublock ) ), sublock ) }</div>`
 					: '' )
 				: `<div class="minn-insp-note">${ esc( __( 'This section is kept exactly as it is. Its layout is no longer part of the field.' ) ) }</div>`;
-			return `<div class="minn-rows-card flex${ open ? ' open' : '' }">
+			return `<div class="minn-rows-card flex${ open ? ' open' : '' }" data-rcard="${ i }">
 				<div class="minn-rows-head">
+					${ grip }
 					<button type="button" class="minn-rows-toggle" data-rtoggle="${ i }" aria-expanded="${ open ? 'true' : 'false' }" title="${ esc( open ? __( 'Collapse section' ) : __( 'Expand section' ) ) }">${ icon( 'chevron-right' ) }</button>
 					<span class="minn-rows-n" data-rtoggle="${ i }">${ esc( lay ? lay.label : ( r.__layout || __( 'Section' ) ) ) }</span>
 					<span class="minn-rows-preview" data-rtoggle="${ i }">${ esc( previewOf( r ) ) }</span>
@@ -2556,6 +2561,65 @@
 			} );
 		};
 		render();
+		// Drag to reorder: the grip carries the card, and dropping on another
+		// card lands above or below its midpoint (the menus and widgets
+		// rule). Only this control's own cards take part, and only drags
+		// that started on one of its grips, so dragging text inside a field
+		// never moves a row.
+		let dragFrom = null;
+		const cardOf = ( el ) => {
+			const card = el && el.closest && el.closest( '.minn-rows-card' );
+			return card && card.parentElement === wrap ? card : null;
+		};
+		const clearMarks = () => $$( ':scope > .minn-rows-card', wrap ).forEach( ( c ) => c.classList.remove( 'dragging', 'drop-above', 'drop-below' ) );
+		wrap.addEventListener( 'dragstart', ( e ) => {
+			const grip = e.target.closest && e.target.closest( '[data-rgrip]' );
+			const card = cardOf( grip );
+			if ( ! grip || ! card ) return;
+			dragFrom = parseInt( grip.dataset.rgrip, 10 );
+			card.classList.add( 'dragging' );
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData( 'text/plain', String( dragFrom ) );
+			// The card follows the pointer, not just the small grip.
+			try { e.dataTransfer.setDragImage( card, 24, 16 ); } catch ( err ) { /* older engines */ }
+		} );
+		wrap.addEventListener( 'dragend', () => {
+			dragFrom = null;
+			clearMarks();
+		} );
+		wrap.addEventListener( 'dragover', ( e ) => {
+			if ( dragFrom === null ) return;
+			const card = cardOf( e.target );
+			if ( ! card ) return;
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'move';
+			const r = card.getBoundingClientRect();
+			const below = e.clientY > r.top + r.height / 2;
+			$$( ':scope > .minn-rows-card', wrap ).forEach( ( c ) => {
+				c.classList.toggle( 'drop-below', c === card && below );
+				c.classList.toggle( 'drop-above', c === card && ! below );
+			} );
+		} );
+		wrap.addEventListener( 'drop', ( e ) => {
+			if ( dragFrom === null ) return;
+			const card = cardOf( e.target );
+			if ( ! card ) return;
+			e.preventDefault();
+			const below = card.classList.contains( 'drop-below' );
+			const from = dragFrom;
+			const target = parseInt( card.dataset.rcard, 10 );
+			dragFrom = null;
+			clearMarks();
+			if ( ! Number.isFinite( from ) || ! Number.isFinite( target ) || from === target ) return;
+			const [ moved ] = rows.splice( from, 1 );
+			// The target shifted up by one when the dragged row sat above it.
+			let to = target - ( from < target ? 1 : 0 );
+			if ( below ) to += 1;
+			rows.splice( to, 0, moved );
+			if ( to === from ) return;
+			render();
+			commit();
+		} );
 		wrap.addEventListener( 'input', ( e ) => {
 			const el = e.target.closest( '[data-rowsub]' );
 			if ( ! el ) return;

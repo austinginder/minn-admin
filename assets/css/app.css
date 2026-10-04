@@ -1744,6 +1744,13 @@ button.minn-plugin-ver:hover { color: var(--accent2); }
 .minn-rows-head button:hover:not(:disabled) { color: var(--text); border-color: var(--border2); }
 .minn-rows-head button:disabled { opacity: 0.35; cursor: default; }
 .minn-rows-head [data-rdel]:hover { color: var(--red, #e5484d); border-color: currentColor; }
+/* Drag to reorder (the menus and widgets grip). The drop line sits outside
+   the card's border so it reads between cards, not inside one. */
+.minn-rows-grip { margin: 0 2px 0 -4px; }
+.minn-rows-card:hover .minn-rows-grip { opacity: 1; }
+.minn-rows-card.dragging { opacity: 0.35; }
+.minn-rows-card.drop-above { box-shadow: 0 -3px 0 -1px var(--accent); }
+.minn-rows-card.drop-below { box-shadow: 0 3px 0 -1px var(--accent); }
 .minn-field-rows > [data-radd] { align-self: flex-start; }
 /* Flex control (ACF flexible content): sections collapse by default, so a
    page of them reads as a list of what it holds rather than a wall of forms.
