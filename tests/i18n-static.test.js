@@ -88,7 +88,7 @@ const ATTR_ALLOW = new Set( [
 const TEXT_ALLOW = new Set( [
 	'.zip', '/minn-admin/', 'Aa', 'esc', 'm', '\\n', '×N',
 	'⌘K', '⌘S', '⌘⇧D', '⌘⇧F', '⌘⇧O', '⌥click', '⇧⌥click', '\\u00d7',
-	'⌥F10', '⌘⇧⌥T', '⌘⇧⌥Y',
+	'⌥F10', '⌘⇧⌥T', '⌘⇧⌥Y', '⌘Z ⇧⌘Z',
 ] );
 {
 	const bad = [];

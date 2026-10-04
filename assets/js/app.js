@@ -3437,6 +3437,63 @@
 		return [ ...scope.querySelectorAll( sel ) ].find( ( b ) => ! b.disabled && b.offsetParent !== null ) || null;
 	}
 
+	/* ===== Undo / redo on the builder pages ===== */
+	/**
+	 * The form and field group builders and the notification and confirmation
+	 * pages hold their edits in a model until Save. Every change (each page's
+	 * markDirty) records a snapshot of that model; typing into one box is one
+	 * step until focus leaves it. ⌘Z / ⇧⌘Z (Ctrl+Y) and the toolbar arrows
+	 * step through the snapshots, and stepping back to what was saved clears
+	 * "Unsaved changes". In a box you are typing in, ⌘Z is the box's own undo
+	 * until its typing is all undone. History starts over on save: a save gives
+	 * new fields their ids, and an older snapshot would bring one back as new.
+	 */
+	function makeHistory( read, write ) {
+		const h = { undo: [], redo: [], key: null };
+		h.cur = h.clean = read();
+		h.note = ( key ) => {
+			const now = read();
+			if ( now === h.cur ) return;
+			if ( ! key || key !== h.key ) {
+				h.undo.push( h.cur );
+				if ( h.undo.length > 100 ) h.undo.shift();
+			}
+			h.redo = [];
+			h.cur = now;
+			h.key = key || null;
+		};
+		h.can = ( back ) => ( back ? h.undo : h.redo ).some( ( x ) => x !== h.cur );
+		h.step = ( back ) => {
+			const from = back ? h.undo : h.redo;
+			while ( from.length && from[ from.length - 1 ] === h.cur ) from.pop();
+			if ( ! from.length ) return false;
+			( back ? h.redo : h.undo ).push( h.cur );
+			h.cur = from.pop();
+			h.key = null;
+			write( h.cur );
+			syncUndoButtons();
+			return true;
+		};
+		h.isClean = () => h.cur === h.clean;
+		return h;
+	}
+
+	// The builder page on screen (its state carries .hist once rendered).
+	const builderPage = () => {
+		const b = { fieldgroup: state.fgb, gfbuilder: state.gfb, gfnotification: state.gfn, gfconfirmation: state.gfc }[ state.route ];
+		return b && b.hist && ! b.loading ? b : null;
+	};
+
+	const undoButtonsHtml = ( h ) => `<span class="minn-undo-set" role="group" aria-label="${ esc( __( 'Undo and redo' ) ) }">
+		<button type="button" class="minn-btn-soft minn-undo-btn" data-minnundo="back" title="${ esc( __( 'Undo' ) + ( IS_MAC ? ' (⌘Z)' : ' (Ctrl+Z)' ) ) }" aria-label="${ esc( __( 'Undo' ) ) }"${ h && h.can( true ) ? '' : ' disabled' }>${ icon( 'undo' ) }</button>
+		<button type="button" class="minn-btn-soft minn-undo-btn" data-minnundo="fwd" title="${ esc( __( 'Redo' ) + ( IS_MAC ? ' (⇧⌘Z)' : ' (Ctrl+Y)' ) ) }" aria-label="${ esc( __( 'Redo' ) ) }"${ h && h.can( false ) ? '' : ' disabled' }>${ icon( 'redo' ) }</button>
+	</span>`;
+
+	function syncUndoButtons() {
+		const b = builderPage();
+		$$( '#minn-view [data-minnundo]' ).forEach( ( btn ) => { btn.disabled = ! ( b && b.hist.can( 'back' === btn.dataset.minnundo ) ); } );
+	}
+
 	/* Where a detail page's Back should land. Reached from its own list, a page
 	 * has nothing to say here and keeps its list. Reached from another record —
 	 * an order opened from the subscription that renews into it — the trail is
@@ -3467,6 +3524,7 @@
 			'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
 			'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
 			undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11"/>',
+			redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5 5.5 5.5 0 0 0 9.5 20H13"/>',
 			gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
 			search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
 			bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
@@ -46633,6 +46691,7 @@
 						<div class="minn-help-keys">
 							<span class="minn-kbd">⌘K</span><span>${ esc( __( 'Command palette · with text selected in the editor: link' ) ) }</span>
 							<span class="minn-kbd">⌘S</span><span>${ esc( __( 'Save, keeping the current status. On a page or dialog with a Save button, presses it' ) ) }</span>
+							<span class="minn-kbd">⌘Z ⇧⌘Z</span><span>${ esc( __( 'On the builders and the notification and confirmation pages: undo and redo your changes' ) ) }</span>
 							<span class="minn-kbd">⌘⏎</span><span>${ esc( __( 'Publish, Update or Schedule' ) ) }</span>
 							<span class="minn-kbd">⌘/</span><span>${ esc( __( 'Block library: browse every block, design and pattern' ) ) }</span>
 							<span class="minn-kbd">⌘⇧F</span><span>${ esc( __( 'Find & replace in the post' ) ) }</span>
@@ -51461,6 +51520,20 @@
 		}
 		const fgb = state.fgb;
 		if ( fgb.loading ) return;
+		if ( ! fgb.hist ) {
+			fgb.hist = makeHistory(
+				() => JSON.stringify( { title: fgb.group.title, active: fgb.group.active, fields: fgb.fields, location: fgb.location } ),
+				( snap ) => {
+					const o = JSON.parse( snap );
+					fgb.group.title = o.title;
+					fgb.group.active = o.active;
+					fgb.fields = o.fields;
+					fgb.location = o.location;
+					fgb.dirty = ! fgb.hist.isClean();
+					renderFieldGroupBuilder();
+				}
+			);
+		}
 		if ( ! fgbUnloadBound ) {
 			fgbUnloadBound = true;
 			window.addEventListener( 'beforeunload', ( e ) => {
@@ -51480,6 +51553,7 @@
 					<button type="button" class="minn-switch${ fgb.group.active ? ' on' : '' }" id="minn-fgb-active" role="switch" aria-checked="${ !! fgb.group.active }"${ dis }><span class="minn-switch-knob"></span></button>
 				</label>` }
 				<span style="flex:1"></span>
+				${ ro ? '' : undoButtonsHtml( fgb.hist ) }
 				${ fgb.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
 				${ ro ? `<span class="minn-fgb-dirty">${ esc( __( 'Registered in code — read only' ) ) }</span>` : `<button type="button" class="minn-btn-primary" id="minn-fgb-save">${ esc( __( 'Save group' ) ) }</button>` }
 			</div>
@@ -51692,7 +51766,9 @@
 	function bindFieldGroupBuilder( view ) {
 		const fgb = state.fgb;
 		const ro = fgb.group.source !== 'db';
-		const markDirty = () => {
+		const markDirty = ( key ) => {
+			fgb.hist.note( key );
+			syncUndoButtons();
 			if ( fgb.dirty ) return;
 			fgb.dirty = true;
 			// Light header repaint would lose input focus — flip the pill in
@@ -51755,7 +51831,7 @@
 			go( 'field-groups' );
 		} );
 		const titleEl = $( '#minn-fgb-title', view );
-		if ( titleEl ) titleEl.addEventListener( 'input', () => { fgb.group.title = titleEl.value; markDirty(); } );
+		if ( titleEl ) titleEl.addEventListener( 'input', () => { fgb.group.title = titleEl.value; markDirty( titleEl ); } );
 		const activeEl = $( '#minn-fgb-active', view );
 		if ( activeEl ) activeEl.addEventListener( 'click', () => {
 			activeEl.classList.toggle( 'on' );
@@ -51786,7 +51862,7 @@
 				const head = view.querySelector( `.minn-fgb-row[data-fi="${ tok }"] > .minn-fgb-head .minn-fgb-label` );
 				if ( head ) head.textContent = el.value || __( '(no label)' );
 			}
-			markDirty();
+			markDirty( el );
 		} );
 		// The builder's selects are the themed strict combobox (the adapter
 		// dialects upgrade via comboUpgrade; this bespoke page binds its own
@@ -52149,6 +52225,21 @@
 		}
 		const g = state.gfb;
 		if ( g.loading ) return;
+		if ( ! g.hist ) {
+			g.hist = makeHistory(
+				() => JSON.stringify( { form: g.form, fields: g.fields } ),
+				( snap ) => {
+					const o = JSON.parse( snap );
+					g.form = o.form;
+					g.fields = o.fields;
+					const has = ( k ) => g.fields.some( ( f ) => f._k === k );
+					if ( g.sel && 'submit' !== g.sel && ! has( g.sel ) ) g.sel = null;
+					if ( g.addAfter && ! has( g.addAfter ) ) g.addAfter = null;
+					g.dirty = ! g.hist.isClean();
+					renderFormBuilder();
+				}
+			);
+		}
 		if ( ! gfbUnloadBound ) {
 			gfbUnloadBound = true;
 			window.addEventListener( 'beforeunload', ( e ) => {
@@ -52165,6 +52256,7 @@
 					<button type="button" class="minn-switch${ g.form.active ? ' on' : '' }" id="minn-gfb-active" role="switch" aria-checked="${ !! g.form.active }"><span class="minn-switch-knob"></span></button>
 				</label>
 				<span class="minn-gfb-spring"></span>
+				${ undoButtonsHtml( g.hist ) }
 				${ g.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
 				<a class="minn-btn-soft" href="${ esc( safeHref( g.form.previewUrl ) ) }" target="_blank" rel="noopener" title="${ esc( __( 'Opens the saved version of the form' ) ) }">${ esc( __( 'Preview' ) ) } ↗</a>
 				<button type="button" class="minn-btn-primary" id="minn-gfb-save">${ esc( __( 'Save form' ) ) }</button>
@@ -52490,7 +52582,9 @@
 		const canvas = $( '#minn-gfb-canvas', root );
 		const grid = $( '#minn-gfb-grid', root );
 		const panel = $( '#minn-gfb-panel', root );
-		const markDirty = () => {
+		const markDirty = ( key ) => {
+			g.hist.note( key );
+			syncUndoButtons();
 			if ( g.dirty ) return;
 			g.dirty = true;
 			const top = $( '.minn-fgb-top', root );
@@ -52617,14 +52711,15 @@
 				const opts = ( g.enums[ key ] || [] ).map( ( p ) => ( { value: p[ 0 ], label: p[ 1 ] } ) );
 				bindAutocomplete( wrap, opts, { strict: true, value: String( f[ key ] ), onPick: ( v ) => {
 					f[ key ] = v;
-					markDirty();
 					// Input type and confirmation reshape the field's parts.
 					if ( 'dateType' === key ) {
 						const n = f.id || 0;
 						f.inputs = 'datepicker' === v ? null : [ __( 'Month' ), __( 'Day' ), __( 'Year' ) ].map( ( l, i ) => ( { id: `${ n }.${ i + 1 }`, label: l, customLabel: '', placeholder: 'datedropdown' === v ? l : '', isHidden: false } ) );
+						markDirty();
 						rerender();
 						return;
 					}
+					markDirty();
 					patch( f );
 				} } );
 			} );
@@ -52667,13 +52762,13 @@
 
 		root.addEventListener( 'input', ( e ) => {
 			const t = e.target;
-			if ( t.id === 'minn-gfb-title' ) { g.form.title = t.value; markDirty(); return; }
-			if ( t.id === 'minn-gfb-desc' ) { g.form.description = t.value; gfbFitDesc( t ); markDirty(); return; }
+			if ( t.id === 'minn-gfb-title' ) { g.form.title = t.value; markDirty( t ); return; }
+			if ( t.id === 'minn-gfb-desc' ) { g.form.description = t.value; gfbFitDesc( t ); markDirty( t ); return; }
 			if ( t.dataset.gform === 'buttonText' ) {
 				g.form.buttonText = t.value;
 				const b = $( '.minn-gfb-submit', root );
 				if ( b ) b.textContent = t.value || __( 'Submit' );
-				markDirty();
+				markDirty( t );
 				return;
 			}
 			const cur = g.sel ? gfbAt( g.sel ) : null;
@@ -52704,7 +52799,7 @@
 			} else {
 				return;
 			}
-			markDirty();
+			markDirty( t );
 			patch( cur );
 		} );
 		root.addEventListener( 'toggle', ( e ) => {
@@ -53044,6 +53139,15 @@
 		}
 		const g = state.gfn;
 		if ( g.loading ) return;
+		if ( ! g.hist ) {
+			g.hist = makeHistory( () => JSON.stringify( g.n ), ( snap ) => {
+				g.n = JSON.parse( snap );
+				g.err = null;
+				g.dirty = ! g.hist.isClean();
+				renderNotificationPage();
+				gfnRefreshPreview( true );
+			} );
+		}
 		if ( ! gfnUnloadBound ) {
 			gfnUnloadBound = true;
 			window.addEventListener( 'beforeunload', ( e ) => {
@@ -53065,6 +53169,7 @@
 					<button type="button" class="minn-switch${ n.isActive ? ' on' : '' }" id="minn-gfn-active" role="switch" aria-checked="${ !! n.isActive }"><span class="minn-switch-knob"></span></button>
 				</label>
 				<span class="minn-gfb-spring"></span>
+				${ undoButtonsHtml( g.hist ) }
 				${ g.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
 				<button type="button" class="minn-btn-soft" id="minn-gfn-test" title="${ esc( __( 'Sends this message, built from the latest entry, only to you' ) ) }">${ icon( 'send' ) } ${ esc( __( 'Send test' ) ) }</button>
 				<button type="button" class="minn-btn-soft minn-gfn-more" id="minn-gfn-more" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
@@ -53394,7 +53499,9 @@
 		const d = g.data;
 		const n = g.n;
 		const rerender = () => renderNotificationPage();
-		const markDirty = () => {
+		const markDirty = ( key ) => {
+			g.hist.note( key );
+			syncUndoButtons();
 			if ( g.dirty ) return;
 			g.dirty = true;
 			const top = $( '.minn-fgb-top', root );
@@ -53466,7 +53573,7 @@
 				if ( m ) m.remove();
 				g.err = null;
 			}
-			markDirty();
+			markDirty( t );
 		} );
 
 		root.addEventListener( 'click', async ( e ) => {
@@ -53705,6 +53812,16 @@
 		}
 		const g = state.gfc;
 		if ( g.loading ) return;
+		if ( ! g.hist ) {
+			g.hist = makeHistory( () => JSON.stringify( g.n ), ( snap ) => {
+				g.n = JSON.parse( snap );
+				g.err = null;
+				g.preview = null;
+				g.dirty = ! g.hist.isClean();
+				renderConfirmationPage();
+				gfcRefreshPreview( true );
+			} );
+		}
 		const d = g.data;
 		const n = g.n;
 		const scroll = view.scrollTop;
@@ -53723,6 +53840,7 @@
 						<button type="button" class="minn-switch${ n.isActive ? ' on' : '' }" id="minn-gfc-active" role="switch" aria-checked="${ !! n.isActive }"><span class="minn-switch-knob"></span></button>
 					</label>` }
 				<span class="minn-gfb-spring"></span>
+				${ undoButtonsHtml( g.hist ) }
 				${ g.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
 				<button type="button" class="minn-btn-soft minn-gfn-more" id="minn-gfc-more" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
 				<button type="button" class="minn-btn-primary" id="minn-gfc-save">${ esc( g.isNew ? __( 'Create confirmation' ) : __( 'Save confirmation' ) ) }</button>
@@ -53869,7 +53987,9 @@
 		const d = g.data;
 		const n = g.n;
 		const rerender = () => renderConfirmationPage();
-		const markDirty = () => {
+		const markDirty = ( key ) => {
+			g.hist.note( key );
+			syncUndoButtons();
 			if ( g.dirty ) return;
 			g.dirty = true;
 			const top = $( '.minn-fgb-top', root );
@@ -53937,7 +54057,7 @@
 				return;
 			}
 			clearErr( t );
-			markDirty();
+			markDirty( t );
 		} );
 
 		root.addEventListener( 'click', async ( e ) => {
@@ -55372,6 +55492,33 @@
 				navigator.sendBeacon( restUrlFor( `minn-admin/v1/posts/${ ed.id }/unlock?_wpnonce=${ encodeURIComponent( B.nonce ) }` ), '' );
 			}
 		} );
+
+		// Builder undo / redo (makeHistory). Capture phase, ahead of the toast
+		// Undo below. A text box keeps its own undo while you are typing in it.
+		window.addEventListener( 'keydown', ( e ) => {
+			if ( ! ( e.metaKey || e.ctrlKey ) || e.altKey ) return;
+			const k = e.key.toLowerCase();
+			const redo = ( 'z' === k && e.shiftKey ) || ( 'y' === k && e.ctrlKey && ! e.metaKey && ! e.shiftKey );
+			if ( ! redo && ! ( 'z' === k && ! e.shiftKey ) ) return;
+			const b = builderPage();
+			if ( ! b || $( '.minn-modal-overlay, .minn-confirm-modal' ) ) return;
+			const t = e.target;
+			const box = t && t.closest && ( t.closest( 'textarea, [contenteditable="true"], [contenteditable=""]' ) || ( 'INPUT' === t.tagName && ! t.classList.contains( 'minn-ac-input' ) ? t : null ) );
+			if ( box && b.hist.key === box && b.hist.undo[ b.hist.undo.length - 1 ] !== b.hist.cur ) return;
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			b.hist.step( ! redo );
+		}, true );
+		document.addEventListener( 'click', ( e ) => {
+			const btn = e.target.closest && e.target.closest( '[data-minnundo]' );
+			const b = btn && builderPage();
+			if ( b ) b.hist.step( 'back' === btn.dataset.minnundo );
+		} );
+		// Leaving a box ends its typing step.
+		document.addEventListener( 'focusout', () => {
+			const b = builderPage();
+			if ( b ) b.hist.key = null;
+		}, true );
 
 		// Capture phase so structural toast-Undo wins over contenteditable's
 		// native undo (island delete never entered the browser undo stack).

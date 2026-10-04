@@ -900,6 +900,7 @@ Pages that keep your edits until you press Save (the builders, a notification or
 |---|---|
 | **⌘K** | Command palette (with text selected in the editor: link) |
 | **⌘S** | Save, keeping the current status. On any page or dialog with a Save button (the form and field group builders, a notification or confirmation, settings forms, products, memberships…), presses it |
+| **⌘Z / ⇧⌘Z** | On the form and field group builders and the notification and confirmation pages: undo and redo your last changes (the arrows beside Save do the same). In a box you're typing in, ⌘Z undoes the typing first. History starts over when you save |
 | **⌘⏎** | Publish, Update or Schedule |
 | **⌘/** | Block library |
 | **⌘⇧F** | Find and replace in the post |
