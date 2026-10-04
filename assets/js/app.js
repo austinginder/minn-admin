@@ -1239,6 +1239,7 @@
 		gfconfirmation: [ __( 'Confirmation' ), 'Gravity Forms' ],
 		cf7form: [ __( 'Email and messages' ), 'Contact Form 7' ],
 		ffemails: [ __( 'Emails and confirmation' ), 'Fluent Forms' ],
+		wpfemails: [ __( 'Notifications and confirmations' ), 'WPForms' ],
 		migrate: [ __( 'Migrate' ), 'WP Migrate' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
@@ -3262,6 +3263,10 @@
 			// /gravity-forms/notification/12:5f0c… (or 12:new) — one notification.
 			state.gfnId = decodeURIComponent( parts[ 2 ] );
 			state.route = 'gfnotification';
+		} else if ( route === 'wpforms' && 'form' === parts[ 1 ] && parts[ 2 ] && /^\d+$/.test( parts[ 2 ] ) ) {
+			// /wpforms/form/5363 — one WPForms form's notifications and confirmations.
+			state.wpfeId = parseInt( parts[ 2 ], 10 );
+			state.route = 'wpfemails';
 		} else if ( route === 'fluent-forms' && 'form' === parts[ 1 ] && parts[ 2 ] && /^\d+$/.test( parts[ 2 ] ) ) {
 			// /fluent-forms/form/3 — one Fluent form's emails and confirmation.
 			state.ffeId = parseInt( parts[ 2 ], 10 );
@@ -3379,6 +3384,7 @@
 		if ( 'gfconfirmation' === r ) return !! ( state.gfc && state.gfc.dirty );
 		if ( 'cf7form' === r ) return !! ( state.c7 && state.c7.dirty );
 		if ( 'ffemails' === r ) return !! ( state.ffe && state.ffe.dirty );
+		if ( 'wpfemails' === r ) return !! ( state.wpfe && state.wpfe.dirty );
 		if ( 'entrypage' === r && entryEditDirty( state.entryPage ) ) return true;
 		// Pages that show a save bar, or arm their Save, only once something
 		// changed say so on screen.
@@ -3436,7 +3442,7 @@
 	// page's. An explicit list, so it never reaches a Publish, a Send or a
 	// destructive verb; the post editor keeps its own ⌘S.
 	const SAVE_SHORTCUT_IDS = [
-		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-c7m-save', 'minn-ffe-save', 'minn-ep-save', 'minn-sset-save', 'minn-product-save',
+		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-c7m-save', 'minn-ffe-save', 'minn-wpfe-save', 'minn-ep-save', 'minn-sset-save', 'minn-product-save',
 		'minn-wcm-save', 'minn-wcmp-save', 'minn-order-save', 'minn-look-save', 'minn-save-settings',
 		'minn-save-site-appearance', 'minn-rd-save', 'minn-tax-save', 'minn-cpt-save', 'minn-zone-save',
 		'minn-widget-save', 'minn-pf-save', 'minn-surface-save', 'minn-uf-save', 'minn-coupon-save',
@@ -3493,7 +3499,7 @@
 
 	// The builder page on screen (its state carries .hist once rendered).
 	const builderPage = () => {
-		const b = { fieldgroup: state.fgb, gfbuilder: state.gfb, gfnotification: state.gfn, gfconfirmation: state.gfc, cf7form: state.c7, ffemails: state.ffe }[ state.route ];
+		const b = { fieldgroup: state.fgb, gfbuilder: state.gfb, gfnotification: state.gfn, gfconfirmation: state.gfc, cf7form: state.c7, ffemails: state.ffe, wpfemails: state.wpfe }[ state.route ];
 		return b && b.hist && ! b.loading ? b : null;
 	};
 
@@ -4677,6 +4683,7 @@
 				|| ( [ 'gfbuilder', 'gfnotification', 'gfconfirmation' ].indexOf( state.route ) !== -1 && ( 'gravity-forms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
 				|| ( 'cf7form' === state.route && ( 'cf7' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
 				|| ( 'ffemails' === state.route && ( 'fluent-forms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
+				|| ( 'wpfemails' === state.route && ( 'wpforms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
 				// Same for the product detail page and Products.
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
@@ -53357,7 +53364,7 @@
 
 	// The Gravity Forms page on screen (notification or confirmation): the
 	// field, rule and merge tag helpers below serve both.
-	const gfnCur = () => ( { gfconfirmation: state.gfc, cf7form: state.c7, ffemails: state.ffe }[ state.route ] || state.gfn );
+	const gfnCur = () => ( { gfconfirmation: state.gfc, cf7form: state.c7, ffemails: state.ffe, wpfemails: state.wpfe }[ state.route ] || state.gfn );
 
 	function gfnAdopt( r ) {
 		const keep = state.gfn && state.gfn.id === r.id ? state.gfn.preview : null;
@@ -54997,6 +55004,299 @@
 		} );
 	}
 
+	/* ===== WPForms: a form's notifications and confirmations ===== */
+	/**
+	 * /wpforms/form/{id}: whether the form emails at all, each notification's
+	 * recipients, sender, subject and message, and each confirmation's
+	 * message, page or redirect, saved through WPForms' own form update
+	 * (adapters/wpforms-emails.php). Adding them and their conditional logic
+	 * stay in the WPForms builder. Fields, the smart-tag picker, undo, ⌘S and
+	 * the leave guard are the notification page's; the preview runs WPForms'
+	 * own notification email over the latest entry.
+	 */
+	let wpfePreviewTimer = null;
+	let wpfePreviewSeq = 0;
+
+	function wpfeAdopt( r ) {
+		const keep = state.wpfe && state.wpfe.id === r.id ? state.wpfe.which : null;
+		const n = { enabled: !! r.enabled };
+		r.notifications.forEach( ( x ) => { n[ 'n' + x.key ] = JSON.parse( JSON.stringify( x ) ); } );
+		r.confirmations.forEach( ( x ) => { n[ 'c' + x.key ] = JSON.parse( JSON.stringify( x ) ); } );
+		const ids = r.notifications.map( ( x ) => 'n' + x.key );
+		state.wpfe = { id: r.id, data: r, n, dirty: false, loading: false, err: null, preview: null, which: keep && ids.includes( keep ) ? keep : ( ids[ 0 ] || null ) };
+	}
+
+	function renderWpformsEmailsPage() {
+		const view = $( '#minn-view' );
+		if ( ! state.wpfe || state.wpfe.id !== state.wpfeId ) {
+			state.wpfe = { id: state.wpfeId, loading: true };
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+			api( `minn-admin/v1/wpforms/forms/${ state.wpfeId }/emails` )
+				.then( ( r ) => {
+					if ( state.route !== 'wpfemails' || state.wpfeId !== r.id ) return;
+					wpfeAdopt( r );
+					renderWpformsEmailsPage();
+					wpfeRefreshPreview( true );
+				} )
+				.catch( ( e ) => { view.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`; } );
+			return;
+		}
+		const c = state.wpfe;
+		if ( c.loading ) return;
+		if ( ! c.hist ) {
+			c.hist = makeHistory( () => JSON.stringify( c.n ), ( snap ) => {
+				c.n = JSON.parse( snap );
+				c.err = null;
+				c.dirty = ! c.hist.isClean();
+				renderWpformsEmailsPage();
+				wpfeRefreshPreview( true );
+			} );
+		}
+		const d = c.data;
+		const n = c.n;
+		const nkeys = d.notifications.map( ( x ) => 'n' + x.key );
+		const ckeys = d.confirmations.map( ( x ) => 'c' + x.key );
+		const tabs = ( attr, cur, list ) => `<div class="minn-tabs minn-gfn-totype" role="group">${ list.map( ( [ v, l ] ) => `<button type="button" class="minn-tab${ cur === v ? ' active' : '' }" ${ attr }="${ esc( v ) }" aria-pressed="${ cur === v }">${ esc( l ) }</button>` ).join( '' ) }</div>`;
+		const err = ( key ) => ( c.err && c.err.field === key ? `<span class="minn-gfn-errmsg">${ esc( c.err.message ) }</span>` : '' );
+		const notice = ( k, i ) => {
+			const x = n[ k ];
+			return `<div class="minn-gfn-sec" data-wpfesec="${ k }">
+				<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( x.name || ( nkeys.length > 1 ? sprintf( /* translators: %s: the notification's number. */ __( 'Notification %s' ), i + 1 ) : __( 'Notification' ) ) ) }</div></div>
+				${ gfnInput( k + '.name', __( 'Name' ), x.name, { ph: __( 'Default Notification' ) } ) }
+				${ gfnInput( k + '.email', __( 'Send to' ), x.email, { mono: true, tags: true, help: __( 'Separate several with commas. Smart tags work too.' ) } ) }
+				${ d.ccEnabled ? gfnInput( k + '.carboncopy', 'CC', x.carboncopy, { mono: true, tags: true } ) : '' }
+				${ gfnInput( k + '.subject', __( 'Subject' ), x.subject, { tags: true, ph: d.defaultSubject } ) }
+				<div class="minn-gfn-pair">
+					${ gfnInput( k + '.sender_name', __( 'From name' ), x.sender_name, { tags: true, ph: B.site && B.site.name ? B.site.name : '' } ) }
+					${ gfnInput( k + '.sender_address', __( 'From email' ), x.sender_address, { mono: true, tags: true, ph: '{admin_email}' } ) }
+				</div>
+				${ gfnInput( k + '.replyto', __( 'Reply to' ), x.replyto, { mono: true, tags: true } ) }
+				${ gfnInput( k + '.message', __( 'Message' ), x.message, { area: true, rows: 10, tags: true, ph: '{all_fields}', help: __( '{all_fields} lists every answer.' ) } ) }
+				${ x.hasLogic ? `<div class="minn-insp-note">${ esc( __( 'Sends only when its conditions in the WPForms builder match. They are kept as they are.' ) ) }</div>` : '' }
+			</div>`;
+		};
+		const conf = ( k, i ) => {
+			const x = n[ k ];
+			const body = 'page' === x.type
+				? `<div class="minn-gfn-set${ c.err && c.err.field === k + '.page' ? ' minn-gfn-err' : '' }" data-gfnset="${ k }.page"><span class="minn-field-label">${ esc( __( 'Send visitors to' ) ) }</span>${ gfnCombo( `data-wpfepage="${ k }"`, x.page ? gfnPairLabel( d.pages, x.page ) : '' ) }${ err( k + '.page' ) }</div>`
+				: 'redirect' === x.type
+					? gfnInput( k + '.redirect', __( 'Redirect to' ), x.redirect, { mono: true, ph: 'https://' } )
+					: gfnInput( k + '.message', __( 'Message' ), x.message, { area: true, rows: 5, tags: true } );
+			return `<div class="minn-gfn-sec" data-wpfesec="${ k }">
+				<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( x.name || ( ckeys.length > 1 ? sprintf( /* translators: %s: the confirmation's number. */ __( 'Confirmation %s' ), i + 1 ) : __( 'After submitting, visitors see' ) ) ) }</div></div>
+				${ ckeys.length > 1 ? gfnInput( k + '.name', __( 'Name' ), x.name ) : '' }
+				${ tabs( `data-wpfetype="${ k }" data-v`, x.type, [ [ 'message', __( 'A message' ) ], [ 'page', __( 'A page' ) ], [ 'redirect', __( 'An address' ) ] ] ) }
+				${ body }
+				${ x.hasLogic ? `<div class="minn-insp-note">${ esc( __( 'Used only when its conditions in the WPForms builder match. They are kept as they are.' ) ) }</div>` : '' }
+			</div>`;
+		};
+		const scroll = view.scrollTop;
+		view.innerHTML = `
+		<div class="minn-card minn-gfn minn-wpfe">
+			<div class="minn-fgb-top">
+				<button type="button" class="minn-btn-soft" id="minn-wpfe-back">‹ ${ esc( __( 'Forms' ) ) }</button>
+				<span class="minn-gfn-titleset minn-gfc-fixed"><span class="minn-gfc-name">${ esc( d.title ) }</span></span>
+				<span class="minn-gfb-spring"></span>
+				${ undoButtonsHtml( c.hist ) }
+				${ c.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
+				<a class="minn-btn-soft" href="${ esc( safeHref( d.adminUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in WPForms ↗' ) ) }</a>
+				<button type="button" class="minn-btn-primary" id="minn-wpfe-save">${ esc( __( 'Save' ) ) }</button>
+			</div>
+			<div class="minn-fgb-meta"><span>${ esc( __( 'The emails this form sends, and what visitors see after submitting. Adding them and their conditions stay in the WPForms builder.' ) ) }</span></div>
+			<div class="minn-gfn-main">
+				<div class="minn-gfn-edit">
+					<div class="minn-gfn-sec">
+						<div class="minn-gfn-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Send email notifications' ) ) }</span>
+							<button type="button" class="minn-switch${ n.enabled ? ' on' : '' }" id="minn-wpfe-enabled" role="switch" aria-checked="${ !! n.enabled }" aria-label="${ esc( __( 'Send email notifications' ) ) }"><span class="minn-switch-knob"></span></button></div>
+					</div>
+					${ n.enabled ? nkeys.map( notice ).join( '' ) : '' }
+					${ ckeys.map( conf ).join( '' ) }
+				</div>
+				<aside class="minn-gfn-side">
+					<div class="minn-gfn-sec minn-gfn-preview">
+						<div class="minn-gfn-sec-head">
+							<div class="minn-side-title">${ esc( __( 'Preview' ) ) }</div>
+							<span class="minn-gfn-preview-note" id="minn-wpfe-note"></span>
+							<button type="button" class="minn-btn-soft minn-gfn-mini" id="minn-wpfe-refresh">${ esc( __( 'Refresh' ) ) }</button>
+						</div>
+						${ nkeys.length > 1 ? tabs( 'data-wpfewhich', c.which, nkeys.map( ( k, i ) => [ k, n[ k ].name || sprintf( /* translators: %s: the notification's number. */ __( 'Notification %s' ), i + 1 ) ] ) ) : '' }
+						<div id="minn-wpfe-preview"></div>
+					</div>
+				</aside>
+			</div>
+		</div>`;
+		view.scrollTop = scroll;
+		wpfePaintPreview();
+		bindWpformsEmailsPage( $( '.minn-wpfe', view ) );
+	}
+
+	function wpfePaintPreview() {
+		const body = $( '#minn-wpfe-preview' );
+		const note = $( '#minn-wpfe-note' );
+		const c = state.wpfe;
+		if ( ! body ) return;
+		if ( ! c.which ) {
+			body.innerHTML = `<div class="minn-toggle-desc">${ esc( __( 'No email to preview.' ) ) }</div>`;
+			return;
+		}
+		const pv = c.preview;
+		if ( ! pv ) {
+			body.innerHTML = `<div class="minn-loading" style="padding:18px;">${ esc( __( 'Building the preview…' ) ) }</div>`;
+			return;
+		}
+		/* translators: %s: an entry number. */
+		if ( note ) note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entries yet: tags show as typed' );
+		body.innerHTML = `<div class="minn-gfn-subj"><span>${ esc( __( 'Subject' ) ) }</span>${ esc( pv.subject || '' ) }</div>
+			${ previewFrameHtml( pv.html || '', { cls: 'minn-gfn-frame', title: __( 'Email preview' ) } ) }`;
+	}
+
+	function wpfeRefreshPreview( now ) {
+		clearTimeout( wpfePreviewTimer );
+		const run = async () => {
+			const c = state.wpfe;
+			if ( ! c || ! c.data || ! c.which ) return;
+			const seq = ++wpfePreviewSeq;
+			const x = c.n[ c.which ];
+			try {
+				const r = await api( `minn-admin/v1/wpforms/forms/${ c.id }/emails/preview`, { method: 'POST', body: JSON.stringify( { key: x.key, subject: x.subject, message: x.message } ) } );
+				if ( seq !== wpfePreviewSeq || state.wpfe !== c ) return;
+				c.preview = r;
+				wpfePaintPreview();
+			} catch ( e ) {
+				if ( seq === wpfePreviewSeq && state.wpfe === c ) {
+					const body = $( '#minn-wpfe-preview' );
+					if ( body ) body.innerHTML = `<div class="minn-empty" style="padding:14px;">${ esc( e.message ) }</div>`;
+				}
+			}
+		};
+		if ( now ) run();
+		else wpfePreviewTimer = setTimeout( run, 700 );
+	}
+
+	function bindWpformsEmailsPage( root ) {
+		const c = state.wpfe;
+		const d = c.data;
+		const n = c.n;
+		const markDirty = ( key ) => {
+			c.hist.note( key );
+			syncUndoButtons();
+			if ( c.dirty ) return;
+			c.dirty = true;
+			const top = $( '.minn-fgb-top', root );
+			const link = $( '.minn-fgb-top a.minn-btn-soft', root );
+			if ( top && link && ! top.querySelector( '.minn-fgb-dirty' ) ) {
+				const pill = document.createElement( 'span' );
+				pill.className = 'minn-fgb-dirty';
+				pill.textContent = __( 'Unsaved changes' );
+				top.insertBefore( pill, link );
+			}
+		};
+		const rerender = () => renderWpformsEmailsPage();
+		$$( '[data-wpfepage]', root ).forEach( ( wrap ) => {
+			const x = n[ wrap.dataset.wpfepage ];
+			bindAutocomplete( wrap, d.pages.map( ( p ) => ( { value: p[ 0 ], label: p[ 1 ] } ) ), { strict: true, value: String( x.page || '' ), onPick: ( v ) => { x.page = v; markDirty(); } } );
+			if ( ! x.page ) $( '.minn-ac-input', wrap ).value = '';
+			$( '.minn-ac-input', wrap ).placeholder = __( 'Choose a page' );
+		} );
+		root.addEventListener( 'input', ( e ) => {
+			const t = e.target;
+			if ( ! t.dataset.gfn ) return;
+			const i = t.dataset.gfn.indexOf( '.' );
+			const obj = n[ t.dataset.gfn.slice( 0, i ) ];
+			if ( ! obj ) return;
+			obj[ t.dataset.gfn.slice( i + 1 ) ] = t.value;
+			const set = t.closest( '.minn-gfn-err' );
+			if ( set ) {
+				set.classList.remove( 'minn-gfn-err' );
+				$$( '.minn-gfn-errmsg', set ).forEach( ( m ) => m.remove() );
+				c.err = null;
+			}
+			markDirty( t );
+			if ( t.dataset.gfn.startsWith( c.which + '.' ) ) wpfeRefreshPreview();
+		} );
+		root.addEventListener( 'click', async ( e ) => {
+			const t = e.target;
+			if ( t.closest( '#minn-wpfe-back' ) ) {
+				if ( c.dirty && ! await minnConfirm( { title: __( 'Leave without saving?' ), body: __( 'Changes to this form’s emails haven’t been saved.' ), confirmLabel: __( 'Leave' ), danger: true } ) ) return;
+				c.dirty = false;
+				const ss = surfaceState( 'wpforms' );
+				if ( ss ) ss.view = 'manage';
+				go( 'wpforms' );
+				return;
+			}
+			if ( t.closest( '#minn-wpfe-enabled' ) ) {
+				n.enabled = ! n.enabled;
+				markDirty();
+				rerender();
+				return;
+			}
+			const ty = t.closest( '[data-wpfetype]' );
+			if ( ty ) {
+				n[ ty.dataset.wpfetype ].type = ty.dataset.v;
+				if ( c.err && c.err.field.startsWith( ty.dataset.wpfetype + '.' ) ) c.err = null;
+				markDirty();
+				rerender();
+				return;
+			}
+			const wh = t.closest( '[data-wpfewhich]' );
+			if ( wh ) {
+				c.which = wh.dataset.wpfewhich;
+				c.preview = null;
+				rerender();
+				wpfeRefreshPreview( true );
+				return;
+			}
+			const tagBtn = t.closest( '[data-gfntags]' );
+			if ( tagBtn ) {
+				const key = tagBtn.dataset.gfntags;
+				const target = $( `[data-gfn="${ key }"]`, root );
+				if ( target ) gfnOpenTags( tagBtn, target, /\.message$/.test( key ), d.mergeTags );
+				return;
+			}
+			if ( t.closest( '#minn-wpfe-refresh' ) ) {
+				c.preview = null;
+				wpfePaintPreview();
+				wpfeRefreshPreview( true );
+				return;
+			}
+			if ( t.closest( '#minn-wpfe-save' ) ) {
+				const b = t.closest( '#minn-wpfe-save' );
+				b.disabled = true;
+				b.textContent = __( 'Saving…' );
+				try {
+					const changed = ( list, p ) => list.map( ( x ) => n[ p + x.key ] ).filter( ( x ) => JSON.stringify( x ) !== JSON.stringify( list.find( ( o ) => o.key === x.key ) ) );
+					const r = await api( `minn-admin/v1/wpforms/forms/${ c.id }/emails`, {
+						method: 'POST',
+						body: JSON.stringify( {
+							...( n.enabled !== !! d.enabled ? { enabled: n.enabled } : {} ),
+							notifications: changed( d.notifications, 'n' ),
+							confirmations: changed( d.confirmations, 'c' ),
+						} ),
+					} );
+					wpfeAdopt( r );
+					toast( __( 'Form saved' ) );
+					renderWpformsEmailsPage();
+					wpfeRefreshPreview( true );
+				} catch ( err ) {
+					toast( err.message, true );
+					c.err = err.data && err.data.field ? { field: String( err.data.field ), message: err.message } : null;
+					if ( c.err ) {
+						rerender();
+						const set = $( `[data-gfnset="${ c.err.field }"]` );
+						if ( set ) {
+							set.scrollIntoView( { block: 'center', behavior: 'smooth' } );
+							const input = $( 'input, textarea', set );
+							if ( input ) input.focus( { preventScroll: true } );
+						}
+					} else {
+						b.disabled = false;
+						b.textContent = __( 'Save' );
+					}
+				}
+			}
+		} );
+	}
+
 	function renderView() {
 		renderTopbar();
 		announceRoute();
@@ -55038,7 +55338,8 @@
 		if ( state.route !== 'gfconfirmation' ) state.gfc = null;
 		if ( state.route !== 'cf7form' ) state.c7 = null;
 		if ( state.route !== 'ffemails' ) state.ffe = null;
-		if ( ! [ 'gfnotification', 'gfconfirmation', 'gfbuilder', 'cf7form', 'ffemails' ].includes( state.route ) ) $$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
+		if ( state.route !== 'wpfemails' ) state.wpfe = null;
+		if ( ! [ 'gfnotification', 'gfconfirmation', 'gfbuilder', 'cf7form', 'ffemails', 'wpfemails' ].includes( state.route ) ) $$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
 		// A finished or abandoned migration should not reappear on return.
 		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
@@ -55081,6 +55382,7 @@
 			case 'gfconfirmation': renderConfirmationPage(); break;
 			case 'cf7form': renderCf7Page(); break;
 			case 'ffemails': renderFluentEmailsPage(); break;
+			case 'wpfemails': renderWpformsEmailsPage(); break;
 			case 'profile': renderProfile(); break;
 			case 'surfaceitem': renderSurfaceItem(); break;
 			case 'entrypage': renderEntryPage(); break;

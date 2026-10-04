@@ -136,6 +136,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/everest-forms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/sureforms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wpforms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wpforms-entry-edit.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/wpforms-emails.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cf7-flamingo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cf7-mail.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cfdb7.php';

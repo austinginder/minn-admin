@@ -402,6 +402,27 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		),
+		// The forms themselves: each opens its notifications and confirmations
+		// page (wpforms-emails.php); building forms stays in WPForms.
+		'manage'     => array(
+			'viewLabel' => __( 'Forms', 'minn-admin' ),
+			'route'     => 'minn-admin/v1/wpforms/forms?manage=1',
+			'itemsKey'  => 'items',
+			'totalKey'  => 'total',
+			'columns'   => array(
+				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
+				array( 'key' => 'date', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago' ),
+			),
+			'detail'    => array(),
+			'open'      => array( 'route' => 'wpforms/form/{id}' ),
+			'actions'   => array(
+				array(
+					'label' => __( 'Edit in WPForms ↗', 'minn-admin' ),
+					'href'  => admin_url( 'admin.php?page=wpforms-builder&view=fields&form_id={id}' ),
+				),
+			),
+		),
 	);
 	return $surfaces;
 } );
@@ -421,8 +442,27 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/wpforms/forms', array(
 		'methods'             => 'GET',
 		'permission_callback' => $view,
-		'callback'            => function () {
+		'callback'            => function ( WP_REST_Request $request ) {
 			$out = array();
+			if ( $request->get_param( 'manage' ) ) {
+				// The Forms view: entry counts and when each form last changed.
+				global $wpdb;
+				$table  = minn_admin_wpforms_table();
+				$counts = array();
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+				foreach ( (array) $wpdb->get_results( "SELECT form_id, COUNT(*) AS n FROM {$table} GROUP BY form_id" ) as $r ) {
+					$counts[ (int) $r->form_id ] = (int) $r->n;
+				}
+				foreach ( minn_admin_wpforms_visible_form_titles() as $id => $title ) {
+					$out[] = array(
+						'id'      => $id,
+						'title'   => $title,
+						'entries' => $counts[ $id ] ?? 0,
+						'date'    => str_replace( ' ', 'T', (string) get_post_field( 'post_modified_gmt', $id ) ) . 'Z',
+					);
+				}
+				return rest_ensure_response( array( 'items' => $out, 'total' => count( $out ) ) );
+			}
 			foreach ( minn_admin_wpforms_visible_form_titles() as $id => $title ) {
 				$out[] = array( 'id' => $id, 'title' => $title );
 			}
