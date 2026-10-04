@@ -55,6 +55,8 @@ browser), where the "document" is the site itself.
 > settings come from GF's own `get_form_editor_field_settings()`, mapped where
 > the builder can store them, so an add-on's type still lists, moves, resizes
 > and relabels. Saves go through GF's own editor save (`GF_Form_CRUD_Handler`).
+> Notifications got the same treatment: a notification page with routing
+> rules, conditional logic and a live preview (`gravity-forms-notifications.php`).
 > Concurrency: the save overlays only the settings that changed onto the form
 > as stored now. Edits to other properties made elsewhere survive, and a field
 > added or removed elsewhere since the page loaded refuses the save. The text

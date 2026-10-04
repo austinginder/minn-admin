@@ -111,8 +111,10 @@ still `docs/for-plugin-authors.md` and the validator constants in
 - Item-scoped settings: `settings.route` containing `{id}`, entered only via
   a row action with `settingsItem: true`. Gravity Forms per-form settings is
   the reference.
-- **Notifications** as a `views` list (composite row id `form:nid`; toggle +
-  daily-field edit through GF's own store). Confirmations editing and
+- **Notifications** as a `views` list (composite row id `form:nid`; toggle
+  from the row menu); each row opens the notification page (v0.43 cycle,
+  `gravity-forms-notifications.php`) that edits the whole notification
+  through GF's own notification save. Confirmations editing and
   plugin-wide GF settings (currency, logging) deliberately unbuilt:
   form-build-time / set-once work; license key already lives in the license
   manager.
@@ -258,7 +260,7 @@ form *building* stays a deep link (Rung 4).
 | Entries: search, bulk, star/read, spam/trash | ✅ | `gf/v2` + status `filter` + bulk; detail shim for labeled answers |
 | Entry detail: notes, resend | ✅ | notes REST; resend as parameterized action; edit field *values* still open (form-engine over field-type inputs) |
 | Form settings | ✅ (v0.13.0) | Item-scoped settings; Settings-framework schema at request time; `GFAPI::update_form` |
-| Notifications (list + toggle + daily fields) | ✅ (v0.13.0) | `views[]` list; `save_form_notifications` read-modify-write |
+| Notifications (list + toggle; the notification page) | ✅ (v0.13.0; page v0.43) | `views[]` list; the page mirrors GF's notification save callback into `save_form_notifications` |
 | Confirmations editing | deliberately unbuilt | Form-build-time; GF screen is the deep link |
 | Plugin settings (reCAPTCHA, currency, logging) | unbuilt | Set-once; license already in the license manager |
 | Forms list trash/duplicate | partial | REST covers trash; `GFAPI::duplicate_form` has no REST route (one-line shim if demand) |

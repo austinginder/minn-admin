@@ -1235,6 +1235,7 @@
 		surfaceitem: [ __( 'Booking' ), '' ],
 		fieldgroup: [ __( 'Field group' ), ( FGB_SOURCES[ state.fgbSrc ] || FGB_SOURCES.acf ).vendor ],
 		gfbuilder: [ __( 'Form' ), 'Gravity Forms' ],
+		gfnotification: [ __( 'Notification' ), 'Gravity Forms' ],
 		migrate: [ __( 'Migrate' ), 'WP Migrate' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
@@ -3254,6 +3255,10 @@
 			state.fgbSrc = 'acf';
 			state.fgbKey = decodeURIComponent( parts[ 1 ] );
 			state.route = 'fieldgroup';
+		} else if ( route === 'gravity-forms' && 'notification' === parts[ 1 ] && parts[ 2 ] ) {
+			// /gravity-forms/notification/12:5f0c… (or 12:new) — one notification.
+			state.gfnId = decodeURIComponent( parts[ 2 ] );
+			state.route = 'gfnotification';
 		} else if ( route === 'gravity-forms' && 'form' === parts[ 1 ] && parts[ 2 ] && /^\d+$/.test( parts[ 2 ] ) ) {
 			// /gravity-forms/form/12 — one form's builder page.
 			state.gfbFormId = parseInt( parts[ 2 ], 10 );
@@ -4508,7 +4513,7 @@
 				// The order detail page keeps the Orders item lit.
 				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
 				// The form builder keeps Gravity Forms' item (or its family's) lit.
-				|| ( 'gfbuilder' === state.route && ( 'gravity-forms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
+				|| ( ( 'gfbuilder' === state.route || 'gfnotification' === state.route ) && ( 'gravity-forms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
 				// Same for the product detail page and Products.
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
@@ -52888,6 +52893,656 @@
 		} );
 	}
 
+	/* ===== Gravity Forms: the notification page =====
+	 * /gravity-forms/notification/{form}:{id} ({form}:new starts one that
+	 * exists only once saved). One notification, whole: who it goes to (an
+	 * address, the form's email field, or routing rules), who it is from, the
+	 * subject and message with a merge tag picker, when it sends (event and
+	 * conditional logic). A live preview renders the message with the form's
+	 * latest entry; Send test mails it to you. The save is Gravity Forms' own
+	 * notification save (adapters/gravity-forms-notifications.php).
+	 */
+	let gfnUnloadBound = false;
+	let gfnPreviewTimer = null;
+	let gfnPreviewSeq = 0;
+	const GFN_OPS = () => [
+		[ 'is', __( 'is' ) ], [ 'isnot', __( 'is not' ) ], [ '>', __( 'greater than' ) ], [ '<', __( 'less than' ) ],
+		[ 'contains', __( 'contains' ) ], [ 'starts_with', __( 'starts with' ) ], [ 'ends_with', __( 'ends with' ) ],
+	];
+
+	function gfnAdopt( r ) {
+		const keep = state.gfn && state.gfn.id === r.id ? state.gfn.preview : null;
+		state.gfn = {
+			id: r.id,
+			isNew: !! r.isNew,
+			data: r,
+			n: JSON.parse( JSON.stringify( r.notification ) ),
+			dirty: false,
+			loading: false,
+			err: null,
+			preview: keep,
+		};
+		if ( ! Array.isArray( state.gfn.n.routing ) ) state.gfn.n.routing = [];
+	}
+
+	function renderNotificationPage() {
+		const view = $( '#minn-view' );
+		if ( ! state.gfn || state.gfn.id !== state.gfnId ) {
+			state.gfn = { id: state.gfnId, loading: true };
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+			api( `minn-admin/v1/gf/notifications/${ state.gfnId }/full` )
+				.then( ( r ) => {
+					if ( state.route !== 'gfnotification' || state.gfnId !== r.id ) return;
+					gfnAdopt( r );
+					renderNotificationPage();
+					gfnRefreshPreview( true );
+				} )
+				.catch( ( e ) => { view.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`; } );
+			return;
+		}
+		const g = state.gfn;
+		if ( g.loading ) return;
+		if ( ! gfnUnloadBound ) {
+			gfnUnloadBound = true;
+			window.addEventListener( 'beforeunload', ( e ) => {
+				if ( state.route === 'gfnotification' && state.gfn && state.gfn.dirty ) e.preventDefault();
+			} );
+		}
+		const d = g.data;
+		const n = g.n;
+		const scroll = $( '#minn-view' ).scrollTop;
+		view.innerHTML = `
+		<div class="minn-card minn-gfn">
+			<div class="minn-fgb-top">
+				<button type="button" class="minn-btn-soft" id="minn-gfn-back">‹ ${ esc( __( 'Notifications' ) ) }</button>
+				<span class="minn-gfn-titleset${ g.err && 'name' === g.err.field ? ' minn-gfn-err' : '' }" data-gfnset="name">
+					<input class="minn-input minn-fgb-title" data-gfn="name" value="${ esc( n.name ) }" placeholder="${ esc( __( 'Notification name' ) ) }" aria-label="${ esc( __( 'Notification name' ) ) }">
+					${ g.err && 'name' === g.err.field ? `<span class="minn-gfn-errmsg">${ esc( g.err.message ) }</span>` : '' }
+				</span>
+				<label class="minn-fgb-active">${ esc( __( 'Active' ) ) }
+					<button type="button" class="minn-switch${ n.isActive ? ' on' : '' }" id="minn-gfn-active" role="switch" aria-checked="${ !! n.isActive }"><span class="minn-switch-knob"></span></button>
+				</label>
+				<span class="minn-gfb-spring"></span>
+				${ g.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
+				<button type="button" class="minn-btn-soft" id="minn-gfn-test" title="${ esc( __( 'Sends this message, built from the latest entry, only to you' ) ) }">${ icon( 'send' ) } ${ esc( __( 'Send test' ) ) }</button>
+				<button type="button" class="minn-btn-soft minn-gfn-more" id="minn-gfn-more" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
+				<button type="button" class="minn-btn-primary" id="minn-gfn-save">${ esc( g.isNew ? __( 'Create notification' ) : __( 'Save notification' ) ) }</button>
+			</div>
+			<div class="minn-fgb-meta">
+				<span>${ esc( __( 'Form' ) ) }: ${ d.form.builderRoute
+					? `<button type="button" data-gfngo="${ esc( d.form.builderRoute ) }">${ esc( d.form.title ) }</button>`
+					: esc( d.form.title ) }</span>
+				${ g.isNew ? `<span class="minn-gfn-newnote">${ esc( __( 'Not saved yet. It sends nothing until you create it.' ) ) }</span>` : '' }
+			</div>
+			<div class="minn-gfn-main">
+				<div class="minn-gfn-edit">
+					${ gfnToHtml( g ) }
+					${ gfnFromHtml( g ) }
+					${ gfnMessageHtml( g ) }
+					${ gfnWhenHtml( g ) }
+				</div>
+				<aside class="minn-gfn-side">
+					<div class="minn-gfn-sec minn-gfn-preview">
+						<div class="minn-gfn-sec-head">
+							<div class="minn-side-title">${ esc( __( 'Preview' ) ) }</div>
+							<span class="minn-gfn-preview-note" id="minn-gfn-preview-note"></span>
+							<button type="button" class="minn-btn-soft minn-gfn-mini" id="minn-gfn-refresh">${ esc( __( 'Refresh' ) ) }</button>
+						</div>
+						<div id="minn-gfn-preview-body"></div>
+					</div>
+				</aside>
+			</div>
+		</div>`;
+		$( '#minn-view' ).scrollTop = scroll;
+		gfnPaintPreview();
+		bindNotificationPage( $( '.minn-gfn', view ) );
+	}
+
+	// One labeled input with an optional merge tag button.
+	function gfnInput( key, label, val, o = {} ) {
+		const g = state.gfn;
+		const err = g.err && g.err.field === key ? g.err.message : '';
+		const control = o.area
+			? `<textarea class="minn-input${ o.mono ? ' mono' : '' }" rows="${ o.rows || 8 }" data-gfn="${ key }" placeholder="${ esc( o.ph || '' ) }">${ esc( val ) }</textarea>`
+			: `<input class="minn-input${ o.mono ? ' mono' : '' }" data-gfn="${ key }" value="${ esc( val ) }" placeholder="${ esc( o.ph || '' ) }">`;
+		return `<label class="minn-gfn-set${ err ? ' minn-gfn-err' : '' }" data-gfnset="${ key }">
+			<span class="minn-field-label">${ esc( label ) }</span>
+			<span class="minn-gfn-field${ o.tags ? ' has-tags' : '' }${ o.area ? ' is-area' : '' }">${ control }${ o.tags ? `<button type="button" class="minn-gfn-tagbtn" data-gfntags="${ key }" title="${ esc( __( 'Insert a merge tag' ) ) }" aria-label="${ esc( __( 'Insert a merge tag' ) ) }">{ }</button>` : '' }</span>
+			${ err ? `<span class="minn-gfn-errmsg">${ esc( err ) }</span>` : '' }
+			${ o.help ? `<span class="minn-toggle-desc">${ esc( o.help ) }</span>` : '' }
+			${ o.after || '' }
+		</label>`;
+	}
+
+	const gfnCombo = ( attr, display, cls = '' ) => `<div class="minn-ac${ cls }" ${ attr }><input class="minn-input minn-ac-input" value="${ esc( display ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false"><div class="minn-ac-panel" hidden></div></div>`;
+	const gfnPairLabel = ( list, v ) => ( ( list || [] ).find( ( p ) => String( p[ 0 ] ) === String( v ) ) || [ '', String( v || '' ) ] )[ 1 ];
+	const gfnField = ( id ) => ( state.gfn.data.fields || [] ).find( ( f ) => String( f.id ) === String( id ).split( '.' )[ 0 ] || String( f.id ) === String( id ) ) || null;
+
+	// A rule row (routing or logic): field, operator, value. The value is a
+	// choice when the field has choices and the test is is / is not.
+	function gfnRuleHtml( kind, r, i, sources ) {
+		const f = gfnField( r.fieldId );
+		const pick = f && ( f.choices || [] ).length && ( 'is' === r.operator || 'isnot' === r.operator );
+		const choice = pick ? f.choices.find( ( c ) => String( c.value ) === String( r.value ) ) : null;
+		const known = sources.some( ( s ) => String( s.id ) === String( r.fieldId ) );
+		return `${ gfnCombo( `data-gfnrf="${ kind }:${ i }"`, f ? f.label : ( known ? '' : String( r.fieldId || __( 'Choose a field' ) ) ) ) }
+			${ gfnCombo( `data-gfnro="${ kind }:${ i }"`, gfnPairLabel( GFN_OPS(), r.operator ), ' minn-gfn-op' ) }
+			${ pick
+				? gfnCombo( `data-gfnrv="${ kind }:${ i }"`, choice ? choice.text : String( r.value ) )
+				: `<input class="minn-input" data-gfnrvt="${ kind }:${ i }" value="${ esc( r.value ) }" placeholder="${ esc( __( 'Value' ) ) }" aria-label="${ esc( __( 'Value' ) ) }">` }`;
+	}
+
+	function gfnToHtml( g ) {
+		const n = g.n;
+		const d = g.data;
+		const err = ( k ) => ( g.err && g.err.field === k ? `<span class="minn-gfn-errmsg">${ esc( g.err.message ) }</span>` : '' );
+		const types = [ [ 'email', __( 'Email address' ) ], [ 'field', __( 'Form field' ) ], [ 'routing', __( 'Routing' ) ] ];
+		const sources = ( d.fields || [] ).filter( ( f ) => f.routing );
+		let body = '';
+		if ( 'hidden' === n.toType ) {
+			body = `<div class="minn-insp-note">${ esc( __( 'Code sets this notification’s recipients. Change them where the notification is defined.' ) ) }</div>`;
+		} else if ( 'field' === n.toType ) {
+			body = ( d.emailFields || [] ).length
+				? `<div class="minn-gfn-set${ g.err && 'toField' === g.err.field ? ' minn-gfn-err' : '' }" data-gfnset="toField"><span class="minn-field-label">${ esc( __( 'Send to the address in' ) ) }</span>
+					${ gfnCombo( 'data-gfncombo="toField"', gfnPairLabel( d.emailFields, n.toField ) || __( 'Choose the email field' ) ) }${ err( 'toField' ) }</div>`
+				: `<div class="minn-insp-note">${ esc( __( 'This form has no Email field. Add one in the form builder first.' ) ) }</div>`;
+		} else if ( 'routing' === n.toType ) {
+			body = `<div class="minn-gfn-set${ g.err && 'routing' === g.err.field ? ' minn-gfn-err' : '' }" data-gfnset="routing">
+				<span class="minn-field-label">${ esc( __( 'Send to the address of the first rule that matches' ) ) }</span>
+				<div class="minn-gfn-rules">${ n.routing.map( ( r, i ) => `
+					<div class="minn-gfn-rule minn-gfn-route">
+						<span class="minn-gfn-field has-tags"><input class="minn-input mono" data-gfnremail="${ i }" value="${ esc( r.email ) }" placeholder="team@example.com" aria-label="${ esc( __( 'Send to' ) ) }"><button type="button" class="minn-gfn-tagbtn" data-gfntags="route:${ i }" title="${ esc( __( 'Insert a merge tag' ) ) }" aria-label="${ esc( __( 'Insert a merge tag' ) ) }">{ }</button></span>
+						<span class="minn-gfn-if">${ esc( __( 'if' ) ) }</span>
+						${ gfnRuleHtml( 'route', r, i, sources ) }
+						<button type="button" class="minn-gfb-chx" data-gfnrx="route:${ i }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button>
+					</div>` ).join( '' ) || `<div class="minn-toggle-desc">${ esc( __( 'No rules yet.' ) ) }</div>` }</div>
+				${ sources.length ? `<button type="button" class="minn-btn-soft minn-gfn-mini" data-gfnradd="route">+ ${ esc( __( 'Add rule' ) ) }</button>` : `<div class="minn-toggle-desc">${ esc( __( 'Routing tests a field’s answer; this form has none that routing can read.' ) ) }</div>` }
+				${ err( 'routing' ) }
+			</div>`;
+		} else {
+			body = gfnInput( 'toEmail', __( 'Email addresses' ), n.toEmail, { mono: true, tags: true, ph: '{admin_email}', help: __( 'Separate several with commas. Merge tags work too.' ) } );
+		}
+		return `<div class="minn-gfn-sec" data-gfnsec="to">
+			<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( __( 'Send to' ) ) }</div></div>
+			${ 'hidden' === n.toType ? '' : `<div class="minn-tabs minn-gfn-totype" role="group" aria-label="${ esc( __( 'Send to' ) ) }">
+				${ types.map( ( [ v, l ] ) => `<button type="button" class="minn-tab${ n.toType === v ? ' active' : '' }" data-gfntotype="${ v }" aria-pressed="${ n.toType === v }">${ esc( l ) }</button>` ).join( '' ) }
+			</div>` }
+			${ body }
+			<div class="minn-gfn-pair">
+				${ d.ccEnabled ? gfnInput( 'cc', 'CC', n.cc, { mono: true, tags: true } ) : '' }
+				${ gfnInput( 'bcc', 'BCC', n.bcc, { mono: true, tags: true } ) }
+			</div>
+		</div>`;
+	}
+
+	// The From Email warning their page shows: a third-party domain in From
+	// often fails delivery. {admin_email} resolves to the site's own setting.
+	function gfnFromWarns() {
+		const d = state.gfn.data;
+		if ( d.fromWarningOff || 'wordpress' !== ( state.gfn.n.service || 'wordpress' ) ) return false;
+		let from = String( state.gfn.n.from || '' ).trim();
+		if ( ! from ) return false;
+		from = from.replace( '{admin_email}', d.adminEmail || '' );
+		if ( /\{[^}]+\}/.test( from ) ) return false;
+		const m = /@([^@\s>]+)\s*$/.exec( from.split( ',' )[ 0 ] );
+		if ( ! m ) return false;
+		const host = String( d.siteHost || '' ).toLowerCase().replace( /^www\./, '' );
+		const dom = m[ 1 ].toLowerCase();
+		return !! host && dom !== host && ! host.endsWith( '.' + dom ) && ! dom.endsWith( '.' + host );
+	}
+
+	function gfnFromHtml( g ) {
+		const n = g.n;
+		return `<div class="minn-gfn-sec" data-gfnsec="from">
+			<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( __( 'From' ) ) }</div></div>
+			<div class="minn-gfn-pair">
+				${ gfnInput( 'fromName', __( 'From name' ), n.fromName, { tags: true, ph: B.site && B.site.name ? B.site.name : '' } ) }
+				${ gfnInput( 'from', __( 'From email' ), n.from, { mono: true, tags: true, ph: '{admin_email}', after: `<span class="minn-gfn-warn" id="minn-gfn-fromwarn"${ gfnFromWarns() ? '' : ' hidden' }>${ esc( __( 'An address on another domain often lands in spam or never arrives. Use one on this site’s domain.' ) ) }</span>` } ) }
+			</div>
+			${ gfnInput( 'replyTo', __( 'Reply to' ), n.replyTo, { mono: true, tags: true, help: __( 'Where replies go. Use the person’s email field so you can answer them directly.' ) } ) }
+		</div>`;
+	}
+
+	function gfnMessageHtml( g ) {
+		const n = g.n;
+		const d = g.data;
+		return `<div class="minn-gfn-sec" data-gfnsec="message">
+			<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( __( 'Message' ) ) }</div></div>
+			${ gfnInput( 'subject', __( 'Subject' ), n.subject, { tags: true } ) }
+			${ gfnInput( 'message', __( 'Message' ), n.message, { area: true, rows: 12, tags: true, help: d.canHtml ? __( 'HTML is allowed. {all_fields} lists every answer.' ) : __( 'HTML is filtered to what your role may publish. {all_fields} lists every answer.' ) } ) }
+			<div class="minn-gfn-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Auto-format line breaks' ) ) }</span>
+				<button type="button" class="minn-switch${ n.disableAutoformat ? '' : ' on' }" data-gfnsw="autoformat" role="switch" aria-checked="${ ! n.disableAutoformat }" aria-label="${ esc( __( 'Auto-format line breaks' ) ) }"><span class="minn-switch-knob"></span></button></div>
+			${ d.attachmentsAvailable ? `<div class="minn-gfn-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Attach uploaded files' ) ) }</span>
+				<button type="button" class="minn-switch${ n.enableAttachments ? ' on' : '' }" data-gfnsw="enableAttachments" role="switch" aria-checked="${ !! n.enableAttachments }" aria-label="${ esc( __( 'Attach uploaded files' ) ) }"><span class="minn-switch-knob"></span></button></div>` : '' }
+		</div>`;
+	}
+
+	function gfnWhenHtml( g ) {
+		const n = g.n;
+		const d = g.data;
+		const cl = n.conditionalLogic;
+		const sources = ( d.fields || [] ).filter( ( f ) => f.logic );
+		return `<div class="minn-gfn-sec" data-gfnsec="when">
+			<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( __( 'When it sends' ) ) }</div></div>
+			<div class="minn-gfn-pair">
+				<div class="minn-gfn-set${ g.err && 'event' === g.err.field ? ' minn-gfn-err' : '' }" data-gfnset="event"><span class="minn-field-label">${ esc( __( 'Event' ) ) }</span>${ gfnCombo( 'data-gfncombo="event"', gfnPairLabel( d.events, n.event ) ) }</div>
+				${ ( d.services || [] ).length > 1 ? `<div class="minn-gfn-set"><span class="minn-field-label">${ esc( __( 'Email service' ) ) }</span>${ gfnCombo( 'data-gfncombo="service"', gfnPairLabel( d.services, n.service ) ) }</div>` : '' }
+			</div>
+			<div class="minn-gfn-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Only send when answers match' ) ) }</span>
+				<button type="button" class="minn-switch${ cl ? ' on' : '' }" data-gfnsw="logic" role="switch" aria-checked="${ !! cl }" aria-label="${ esc( __( 'Only send when answers match' ) ) }"${ ! cl && ! sources.length ? ' disabled' : '' }><span class="minn-switch-knob"></span></button></div>
+			${ cl ? `<div class="minn-gfb-logic">
+				<div class="minn-gfb-logic-line">
+					${ gfnCombo( 'data-gfnlact', 'hide' === cl.actionType ? __( 'Don’t send' ) : __( 'Send' ), ' minn-gfn-act' ) }
+					<span>${ esc( /* translators: conditional logic sentence: "Send if all of these match". */ __( 'if' ) ) }</span>
+					${ gfnCombo( 'data-gfnltype', 'any' === cl.logicType ? __( 'any' ) : __( 'all' ) ) }
+					<span>${ esc( __( 'of these match' ) ) }</span>
+				</div>
+				${ cl.rules.map( ( r, i ) => `<div class="minn-gfn-rule">${ gfnRuleHtml( 'logic', r, i, sources ) }
+					<button type="button" class="minn-gfb-chx" data-gfnrx="logic:${ i }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button></div>` ).join( '' ) }
+				<button type="button" class="minn-btn-soft minn-gfn-mini" data-gfnradd="logic">+ ${ esc( __( 'Add rule' ) ) }</button>
+			</div>` : '' }
+		</div>`;
+	}
+
+	// The preview card's body, from state (no re-render of the editor).
+	function gfnPaintPreview() {
+		const body = $( '#minn-gfn-preview-body' );
+		const note = $( '#minn-gfn-preview-note' );
+		const pv = state.gfn && state.gfn.preview;
+		if ( ! body ) return;
+		if ( ! pv ) {
+			body.innerHTML = `<div class="minn-loading" style="padding:18px;">${ esc( __( 'Building the preview…' ) ) }</div>`;
+			return;
+		}
+		if ( note ) {
+			/* translators: %s: an entry number. */
+			note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entries yet: tags show as typed' );
+		}
+		body.innerHTML = `<div class="minn-gfn-subj"><span>${ esc( __( 'Subject' ) ) }</span>${ esc( pv.subject || '' ) }</div>
+			${ previewFrameHtml( pv.html || '', { cls: 'minn-gfn-frame', title: __( 'Email preview' ) } ) }`;
+	}
+
+	function gfnRefreshPreview( now ) {
+		clearTimeout( gfnPreviewTimer );
+		const run = async () => {
+			const g = state.gfn;
+			if ( ! g || ! g.data ) return;
+			const seq = ++gfnPreviewSeq;
+			try {
+				const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/preview`, {
+					method: 'POST',
+					body: JSON.stringify( { subject: g.n.subject, message: g.n.message, disableAutoformat: !! g.n.disableAutoformat, name: g.n.name } ),
+				} );
+				if ( seq !== gfnPreviewSeq || state.gfn !== g ) return;
+				g.preview = r;
+				gfnPaintPreview();
+			} catch ( e ) {
+				if ( seq === gfnPreviewSeq && state.gfn === g ) {
+					const body = $( '#minn-gfn-preview-body' );
+					if ( body ) body.innerHTML = `<div class="minn-empty" style="padding:14px;">${ esc( e.message ) }</div>`;
+				}
+			}
+		};
+		if ( now ) run();
+		else gfnPreviewTimer = setTimeout( run, 700 );
+	}
+
+	// The merge tag picker: the form's tags by group, filtered as you type,
+	// inserted at the cursor of the field it was opened from. Address fields
+	// leave out {all_fields} (their picker does the same).
+	function gfnOpenTags( btn, target, isMessage ) {
+		$$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
+		const groups = ( state.gfn.data.mergeTags || [] ).map( ( g ) => ( {
+			label: g.label,
+			tags: g.tags.filter( ( t ) => isMessage || '{all_fields}' !== t.tag ),
+		} ) ).filter( ( g ) => g.tags.length );
+		const pop = document.createElement( 'div' );
+		pop.className = 'minn-gfn-tagpop';
+		pop.setAttribute( 'role', 'dialog' );
+		pop.setAttribute( 'aria-label', __( 'Merge tags' ) );
+		pop.innerHTML = `<input class="minn-input" placeholder="${ esc( __( 'Search tags…' ) ) }" aria-label="${ esc( __( 'Search tags' ) ) }">
+			<div class="minn-gfn-taglist">${ groups.map( ( g ) => `
+				${ g.label ? `<div class="minn-gfn-taggroup">${ esc( g.label ) }</div>` : '' }
+				${ g.tags.map( ( t ) => `<button type="button" data-tag="${ esc( t.tag ) }"><span>${ esc( t.label || t.tag ) }</span><code>${ esc( t.tag ) }</code></button>` ).join( '' ) }` ).join( '' ) }</div>`;
+		document.body.appendChild( pop );
+		const r = btn.getBoundingClientRect();
+		const w = Math.min( 340, window.innerWidth - 16 );
+		pop.style.width = w + 'px';
+		pop.style.left = Math.max( 8, Math.min( r.right - w, window.innerWidth - w - 8 ) ) + 'px';
+		const below = window.innerHeight - r.bottom > 300;
+		pop.style.top = ( below ? r.bottom + 6 : Math.max( 8, r.top - 6 - Math.min( 340, pop.offsetHeight ) ) ) + 'px';
+		const search = $( 'input', pop );
+		search.focus();
+		search.addEventListener( 'input', () => {
+			const q = search.value.trim().toLowerCase();
+			$$( '[data-tag]', pop ).forEach( ( b ) => { b.hidden = !! q && ! b.textContent.toLowerCase().includes( q ); } );
+		} );
+		const close = () => {
+			pop.remove();
+			document.removeEventListener( 'mousedown', outside, true );
+			document.removeEventListener( 'keydown', onKey, true );
+		};
+		const outside = ( e ) => { if ( ! pop.contains( e.target ) && e.target !== btn ) close(); };
+		const onKey = ( e ) => {
+			if ( 'Escape' === e.key ) { e.stopPropagation(); close(); target.focus(); }
+			if ( 'Enter' === e.key && document.activeElement === search ) {
+				const first = $$( '[data-tag]', pop ).find( ( b ) => ! b.hidden );
+				if ( first ) { e.preventDefault(); first.click(); }
+			}
+		};
+		document.addEventListener( 'mousedown', outside, true );
+		document.addEventListener( 'keydown', onKey, true );
+		pop.addEventListener( 'click', ( e ) => {
+			const b = e.target.closest( '[data-tag]' );
+			if ( ! b ) return;
+			const tag = b.dataset.tag;
+			const s = target.selectionStart == null ? target.value.length : target.selectionStart;
+			const t = target.selectionEnd == null ? s : target.selectionEnd;
+			target.value = target.value.slice( 0, s ) + tag + target.value.slice( t );
+			target.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+			close();
+			target.focus();
+			target.setSelectionRange( s + tag.length, s + tag.length );
+		} );
+	}
+
+	function bindNotificationPage( root ) {
+		const g = state.gfn;
+		const d = g.data;
+		const n = g.n;
+		const rerender = () => renderNotificationPage();
+		const markDirty = () => {
+			if ( g.dirty ) return;
+			g.dirty = true;
+			const top = $( '.minn-fgb-top', root );
+			const test = $( '#minn-gfn-test', root );
+			if ( top && test && ! top.querySelector( '.minn-fgb-dirty' ) ) {
+				const pill = document.createElement( 'span' );
+				pill.className = 'minn-fgb-dirty';
+				pill.textContent = __( 'Unsaved changes' );
+				top.insertBefore( pill, test );
+			}
+		};
+		const listCache = () => {
+			const ss = surfaceState( 'gravity-forms' );
+			if ( ss ) { ss.cache = null; ss.tabsCache = null; }
+		};
+		const leave = async () => ! g.dirty || minnConfirm( { title: __( 'Leave without saving?' ), body: __( 'Changes to this notification haven’t been saved.' ), confirmLabel: __( 'Leave' ), danger: true } );
+		const toList = () => {
+			const ss = surfaceState( 'gravity-forms' );
+			if ( ss ) ss.view = 'x0';
+			go( 'gravity-forms' );
+		};
+		const rules = ( kind ) => ( 'route' === kind ? n.routing : ( n.conditionalLogic ? n.conditionalLogic.rules : [] ) );
+		const sourcesOf = ( kind ) => ( d.fields || [] ).filter( ( f ) => ( 'route' === kind ? f.routing : f.logic ) );
+		const firstRule = ( kind ) => {
+			const f = sourcesOf( kind )[ 0 ];
+			return f ? { fieldId: f.id, operator: 'is', value: ( f.choices || [] ).length ? String( f.choices[ 0 ].value ) : '' } : null;
+		};
+
+		// Comboboxes: To field, event, service, logic sentence, rule parts.
+		const bind = ( wrap, options, value, onPick ) => bindAutocomplete( wrap, options, { strict: true, value: String( value == null ? '' : value ), onPick } );
+		const pairs = ( list ) => ( list || [] ).map( ( p ) => ( { value: String( p[ 0 ] ), label: p[ 1 ] } ) );
+		$$( '[data-gfncombo]', root ).forEach( ( wrap ) => {
+			const key = wrap.dataset.gfncombo;
+			const list = 'toField' === key ? d.emailFields : 'event' === key ? d.events : d.services;
+			bind( wrap, pairs( list ), n[ key ], ( v ) => {
+				n[ key ] = v;
+				markDirty();
+				if ( 'service' === key ) {
+					const w = $( '#minn-gfn-fromwarn' );
+					if ( w ) w.hidden = ! gfnFromWarns();
+				}
+			} );
+		} );
+		const act = $( '[data-gfnlact]', root );
+		if ( act && n.conditionalLogic ) bind( act, [ { value: 'show', label: __( 'Send' ) }, { value: 'hide', label: __( 'Don’t send' ) } ], n.conditionalLogic.actionType, ( v ) => { n.conditionalLogic.actionType = v; markDirty(); } );
+		const typ = $( '[data-gfnltype]', root );
+		if ( typ && n.conditionalLogic ) bind( typ, [ { value: 'all', label: __( 'all' ) }, { value: 'any', label: __( 'any' ) } ], n.conditionalLogic.logicType, ( v ) => { n.conditionalLogic.logicType = v; markDirty(); } );
+		const split = ( s ) => { const i = s.indexOf( ':' ); return [ s.slice( 0, i ), Number( s.slice( i + 1 ) ) ]; };
+		$$( '[data-gfnrf]', root ).forEach( ( wrap ) => {
+			const [ kind, i ] = split( wrap.dataset.gfnrf );
+			const r = rules( kind )[ i ];
+			const opts = sourcesOf( kind ).map( ( f ) => ( { value: String( f.id ), label: f.label } ) );
+			if ( r.fieldId && ! opts.some( ( o ) => o.value === String( r.fieldId ) ) ) opts.push( { value: String( r.fieldId ), label: wrap.querySelector( 'input' ).value || String( r.fieldId ) } );
+			bind( wrap, opts, r.fieldId, ( v ) => {
+				r.fieldId = v;
+				const f = gfnField( v );
+				r.value = f && ( f.choices || [] ).length ? String( f.choices[ 0 ].value ) : '';
+				markDirty();
+				rerender();
+			} );
+		} );
+		$$( '[data-gfnro]', root ).forEach( ( wrap ) => {
+			const [ kind, i ] = split( wrap.dataset.gfnro );
+			const r = rules( kind )[ i ];
+			bind( wrap, pairs( GFN_OPS() ), r.operator, ( v ) => { r.operator = v; markDirty(); rerender(); } );
+		} );
+		$$( '[data-gfnrv]', root ).forEach( ( wrap ) => {
+			const [ kind, i ] = split( wrap.dataset.gfnrv );
+			const r = rules( kind )[ i ];
+			const f = gfnField( r.fieldId );
+			const opts = ( f && f.choices ? f.choices : [] ).map( ( c ) => ( { value: String( c.value ), label: c.text } ) );
+			if ( ! opts.some( ( o ) => o.value === String( r.value ) ) ) opts.push( { value: String( r.value ), label: String( r.value ) } );
+			bind( wrap, opts, r.value, ( v ) => { r.value = v; markDirty(); } );
+		} );
+
+		root.addEventListener( 'input', ( e ) => {
+			const t = e.target;
+			if ( t.dataset.gfn ) {
+				n[ t.dataset.gfn ] = t.value;
+				if ( 'from' === t.dataset.gfn ) {
+					const w = $( '#minn-gfn-fromwarn' );
+					if ( w ) w.hidden = ! gfnFromWarns();
+				}
+				if ( 'subject' === t.dataset.gfn || 'message' === t.dataset.gfn ) gfnRefreshPreview();
+			} else if ( t.dataset.gfnremail != null ) {
+				n.routing[ Number( t.dataset.gfnremail ) ].email = t.value;
+			} else if ( t.dataset.gfnrvt != null ) {
+				const [ kind, i ] = split( t.dataset.gfnrvt );
+				rules( kind )[ i ].value = t.value;
+			} else {
+				return;
+			}
+			// A field the save named clears its mark once it is edited.
+			const set = t.closest( '.minn-gfn-err' );
+			if ( set ) {
+				set.classList.remove( 'minn-gfn-err' );
+				const m = $( '.minn-gfn-errmsg', set );
+				if ( m ) m.remove();
+				g.err = null;
+			}
+			markDirty();
+		} );
+
+		root.addEventListener( 'click', async ( e ) => {
+			const t = e.target;
+			if ( t.closest( '#minn-gfn-back' ) ) {
+				if ( ! await leave() ) return;
+				g.dirty = false;
+				toList();
+				return;
+			}
+			const goBtn = t.closest( '[data-gfngo]' );
+			if ( goBtn ) {
+				if ( ! await leave() ) return;
+				g.dirty = false;
+				go( goBtn.dataset.gfngo );
+				return;
+			}
+			if ( t.closest( '#minn-gfn-active' ) ) {
+				n.isActive = ! n.isActive;
+				const b = t.closest( '#minn-gfn-active' );
+				b.classList.toggle( 'on', n.isActive );
+				b.setAttribute( 'aria-checked', n.isActive );
+				markDirty();
+				return;
+			}
+			const tt = t.closest( '[data-gfntotype]' );
+			if ( tt ) {
+				n.toType = tt.dataset.gfntotype;
+				if ( 'routing' === n.toType && ! n.routing.length ) {
+					const first = firstRule( 'route' );
+					if ( first ) n.routing.push( { email: '', ...first } );
+				}
+				markDirty();
+				rerender();
+				return;
+			}
+			const sw = t.closest( '[data-gfnsw]' );
+			if ( sw && ! sw.disabled ) {
+				const k = sw.dataset.gfnsw;
+				if ( 'autoformat' === k ) {
+					n.disableAutoformat = ! n.disableAutoformat;
+					gfnRefreshPreview( true );
+				} else if ( 'enableAttachments' === k ) {
+					n.enableAttachments = ! n.enableAttachments;
+				} else if ( 'logic' === k ) {
+					if ( n.conditionalLogic ) {
+						n.conditionalLogic = null;
+					} else {
+						const first = firstRule( 'logic' );
+						if ( ! first ) return;
+						n.conditionalLogic = { actionType: 'show', logicType: 'all', rules: [ first ] };
+					}
+					markDirty();
+					rerender();
+					return;
+				}
+				const on = 'autoformat' === k ? ! n.disableAutoformat : !! n[ k ];
+				sw.classList.toggle( 'on', on );
+				sw.setAttribute( 'aria-checked', on );
+				markDirty();
+				return;
+			}
+			const radd = t.closest( '[data-gfnradd]' );
+			if ( radd ) {
+				const kind = radd.dataset.gfnradd;
+				const first = firstRule( kind );
+				if ( ! first ) return;
+				if ( 'route' === kind ) n.routing.push( { email: '', ...first } );
+				else n.conditionalLogic.rules.push( first );
+				markDirty();
+				rerender();
+				return;
+			}
+			const rx = t.closest( '[data-gfnrx]' );
+			if ( rx ) {
+				const [ kind, i ] = split( rx.dataset.gfnrx );
+				rules( kind ).splice( i, 1 );
+				if ( 'logic' === kind && ! n.conditionalLogic.rules.length ) n.conditionalLogic = null;
+				markDirty();
+				rerender();
+				return;
+			}
+			const tagBtn = t.closest( '[data-gfntags]' );
+			if ( tagBtn ) {
+				const key = tagBtn.dataset.gfntags;
+				const target = key.startsWith( 'route:' )
+					? $( `[data-gfnremail="${ key.slice( 6 ) }"]`, root )
+					: $( `[data-gfn="${ key }"]`, root );
+				if ( target ) gfnOpenTags( tagBtn, target, 'message' === key || 'subject' === key );
+				return;
+			}
+			if ( t.closest( '#minn-gfn-refresh' ) ) {
+				g.preview = null;
+				gfnPaintPreview();
+				gfnRefreshPreview( true );
+				return;
+			}
+			if ( t.closest( '#minn-gfn-more' ) ) {
+				const r = t.closest( '#minn-gfn-more' ).getBoundingClientRect();
+				openMinnMenu( r.right - 200, r.bottom + 6, [
+					...( g.isNew ? [] : [ {
+						label: __( 'Duplicate' ),
+						run: async () => {
+							if ( ! await leave() ) return;
+							try {
+								const res = await api( `minn-admin/v1/gf/notifications/${ g.id }/duplicate`, { method: 'POST' } );
+								g.dirty = false;
+								listCache();
+								toast( ( res && res.message ) || __( 'Notification duplicated' ) );
+								go( 'gravity-forms/notification/' + encodeURIComponent( res.id ) );
+							} catch ( err ) { toast( err.message, true ); }
+						},
+					} ] ),
+					...( d.adminUrl ? [ { label: __( 'Edit in Gravity Forms ↗' ), href: d.adminUrl } ] : [] ),
+					...( g.isNew ? [] : [ {
+						label: __( 'Delete' ),
+						danger: true,
+						run: async () => {
+							if ( ! await minnConfirm( {
+								title: __( 'Delete this notification?' ),
+								/* translators: %s: the notification's name. */
+								body: sprintf( __( '“%s” stops sending and is removed from the form. There is no undo.' ), n.name ),
+								confirmLabel: __( 'Delete' ),
+								danger: true,
+							} ) ) return;
+							try {
+								await api( `minn-admin/v1/gf/notifications/${ g.id }`, { method: 'DELETE' } );
+								g.dirty = false;
+								listCache();
+								toast( __( 'Notification deleted' ) );
+								toList();
+							} catch ( err ) { toast( err.message, true ); }
+						},
+					} ] ),
+				] );
+				return;
+			}
+			if ( t.closest( '#minn-gfn-test' ) ) {
+				const b = t.closest( '#minn-gfn-test' );
+				b.disabled = true;
+				try {
+					const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/test`, {
+						method: 'POST',
+						body: JSON.stringify( { name: n.name, subject: n.subject, message: n.message, from: n.from, fromName: n.fromName, replyTo: n.replyTo, disableAutoformat: !! n.disableAutoformat } ),
+					} );
+					/* translators: 1: an email address, 2: an entry number. */
+					toast( sprintf( __( 'Test sent to %1$s (built from entry #%2$s)' ), r.email, r.entry ) );
+				} catch ( err ) {
+					toast( err.message, true );
+				}
+				b.disabled = false;
+				return;
+			}
+			if ( t.closest( '#minn-gfn-save' ) ) {
+				const b = t.closest( '#minn-gfn-save' );
+				b.disabled = true;
+				b.textContent = __( 'Saving…' );
+				try {
+					const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/full`, { method: 'POST', body: JSON.stringify( n ) } );
+					const wasNew = g.isNew;
+					gfnAdopt( r );
+					listCache();
+					toast( wasNew ? __( 'Notification created' ) : __( 'Notification saved' ) );
+					if ( wasNew ) {
+						state.gfnId = r.id;
+						go( 'gravity-forms/notification/' + encodeURIComponent( r.id ) );
+					} else {
+						renderNotificationPage();
+					}
+					if ( ! state.gfn.preview ) gfnRefreshPreview( true );
+				} catch ( err ) {
+					toast( err.message, true );
+					g.err = err.data && err.data.field ? { field: err.data.field, message: err.message } : null;
+					if ( g.err ) {
+						rerender();
+						const set = $( `[data-gfnset="${ g.err.field }"]` );
+						if ( set ) {
+							set.scrollIntoView( { block: 'center', behavior: 'smooth' } );
+							const input = $( 'input, textarea', set );
+							if ( input ) input.focus( { preventScroll: true } );
+						}
+					} else {
+						b.disabled = false;
+						b.textContent = g.isNew ? __( 'Create notification' ) : __( 'Save notification' );
+					}
+				}
+			}
+		} );
+	}
+
 	function renderView() {
 		renderTopbar();
 		announceRoute();
@@ -52925,6 +53580,10 @@
 		if ( state.route !== 'useredit' ) state.userEdit = null;
 		if ( state.route !== 'fieldgroup' ) state.fgb = null;
 		if ( state.route !== 'gfbuilder' ) state.gfb = null;
+		if ( state.route !== 'gfnotification' ) {
+			state.gfn = null;
+			$$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
+		}
 		// A finished or abandoned migration should not reappear on return.
 		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
@@ -52963,6 +53622,7 @@
 			case 'migrate': renderMigrate(); break;
 			case 'fieldgroup': renderFieldGroupBuilder(); break;
 			case 'gfbuilder': renderFormBuilder(); break;
+			case 'gfnotification': renderNotificationPage(); break;
 			case 'profile': renderProfile(); break;
 			case 'surfaceitem': renderSurfaceItem(); break;
 			case 'entrypage': renderEntryPage(); break;

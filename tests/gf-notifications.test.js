@@ -3,13 +3,15 @@
  * and the first slice of the GF settings-estate work: every notification
  * across forms (per-form tabs), type-aware To display (email address /
  * Field: label / routing rule count), activate-deactivate through GF's own
- * toggle, and daily-field editing (name, send-to, subject, message) with
- * server-side refusals (bad address, duplicate name, routing-type send-to).
+ * toggle from the row menu, and rows opening the notification page, where
+ * edits save through GF's own notification save with server refusals shown
+ * on the field (bad address, duplicate name). gf-notification-page covers
+ * the page itself.
  *
  * Fixtures: minn_test_seed_gf_notifications RESETS form 1's notifications
  * to a canonical trio through GF's own save path on every arm.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, listSettled } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'gf-notifications' );
@@ -42,6 +44,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		return ( await r.json() ).items;
 	} );
 
+	// A row opens the notification page.
 	const openRowByText = async ( text ) => {
 		await page.waitForFunction( ( txt ) =>
 			[ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => r.textContent.includes( txt ) ), text, { timeout: 20000 } );
@@ -49,7 +52,22 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			const row = [ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( txt ) );
 			row.click();
 		}, text );
-		await page.waitForSelector( '.minn-modal', { timeout: 15000 } );
+		await page.waitForSelector( '.minn-gfn [data-gfn="name"]', { timeout: 30000 } );
+	};
+	const rowMenu = async ( text ) => {
+		await page.evaluate( ( txt ) => {
+			const row = [ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( txt ) );
+			row.dispatchEvent( new MouseEvent( 'contextmenu', { bubbles: true, clientX: 300, clientY: 300 } ) );
+		}, text );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 10000 } );
+		return page.$$eval( '.minn-ctx-menu button, .minn-ctx-menu a', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
+	};
+	const backToList = async () => {
+		await page.click( '#minn-gfn-back' );
+		const ask = await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 1500 } ).catch( () => null );
+		if ( ask ) await page.click( '.minn-confirm-modal [data-ok]' );
+		await page.waitForFunction( () => ! /\/notification\//.test( location.pathname ), null, { timeout: 20000 } );
+		await listSettled( page );
 	};
 
 	try {
@@ -88,47 +106,54 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'the per-form tab filters to that form', true );
 		await page.evaluate( () => document.querySelector( '[data-stab="_all"]' ).click() );
 
-		/* ===== Toggle through GF's own API ===== */
-		await openRowByText( 'User confirmation' );
-		let btns = await page.$$eval( '.minn-modal [data-saction]', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
+		/* ===== Toggle through GF's own API (row menu) ===== */
+		await listSettled( page );
+		let btns = await rowMenu( 'User confirmation' );
 		t.check( 'inactive row offers Activate (not Deactivate)', btns.includes( 'Activate' ) && ! btns.includes( 'Deactivate' ), btns.join( ',' ) );
-		await page.evaluate( () => [ ...document.querySelectorAll( '.minn-modal [data-saction]' ) ].find( ( b ) => b.textContent.trim() === 'Activate' ).click() );
-		await page.waitForFunction( () => ! document.querySelector( '.minn-modal' ), { timeout: 15000 } );
-		let items = await listItems();
+		await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( b ) => b.textContent.trim() === 'Activate' ).click() );
+		let items = [];
+		for ( let i = 0; i < 20; i++ ) {
+			await page.waitForTimeout( 500 );
+			items = await listItems();
+			if ( items.find( ( x ) => x.name === 'User confirmation' ).status === 'active' ) break;
+		}
 		t.check( 'toggle persisted through GF', items.find( ( i ) => i.name === 'User confirmation' ).status === 'active' );
 
-		/* ===== Edit the daily fields ===== */
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		/* ===== Edit on the notification page ===== */
+		await listSettled( page );
 		await openRowByText( 'Admin Notification' );
-		const fieldKeys = await page.$$eval( '.minn-modal [data-editfield]', ( els ) => els.map( ( e ) => e.dataset.editfield ) );
-		t.check( 'edit fields render (name, send-to, subject, message)',
-			JSON.stringify( fieldKeys ) === JSON.stringify( [ 'name', 'to_email', 'subject', 'message' ] ), fieldKeys.join( ',' ) );
-		await page.fill( '.minn-modal [data-editfield="subject"]', 'Edited: {form_title} enquiry' );
-		await page.fill( '.minn-modal [data-editfield="to_email"]', 'team@example.com, {admin_email}' );
-		await page.click( '#minn-surface-save' );
-		await page.waitForFunction( () => ! document.querySelector( '.minn-modal' ), { timeout: 15000 } );
+		t.check( 'a row opens the notification page', /\/gravity-forms\/notification\/1(%3A|:)minnfixadmin0001$/.test( page.url() ) );
+		await page.fill( '[data-gfn="subject"]', 'Edited: {form_title} enquiry' );
+		await page.fill( '[data-gfn="toEmail"]', 'team@example.com, {admin_email}' );
+		await page.click( '#minn-gfn-save' );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-toast' ) ].some( ( x ) => /Notification saved/.test( x.textContent ) ), null, { timeout: 30000 } );
 		items = await listItems();
 		const admin = items.find( ( i ) => i.nid === 'minnfixadmin0001' );
 		t.check( 'subject and send-to persisted', admin.subject === 'Edited: {form_title} enquiry' && admin.to === 'team@example.com, {admin_email}', JSON.stringify( admin ) );
 
-		/* ===== Server refusals keep the modal open ===== */
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
-		await openRowByText( 'Admin Notification' );
-		await page.fill( '.minn-modal [data-editfield="to_email"]', 'not-an-address' );
-		await page.click( '#minn-surface-save' );
-		await page.waitForFunction( () => {
-			const el = document.querySelector( '.minn-toast-msg' );
-			return !! el && /not an email address/.test( el.textContent );
-		}, { timeout: 15000 } );
-		t.check( 'bad address refused with the server message', true );
-		t.check( 'modal stays open after a refusal', !! ( await page.$( '.minn-modal' ) ) );
-		await page.keyboard.press( 'Escape' );
+		/* ===== Server refusals show on the field ===== */
+		await page.fill( '[data-gfn="toEmail"]', 'not-an-address' );
+		await page.click( '#minn-gfn-save' );
+		await page.waitForSelector( '[data-gfnset="toEmail"].minn-gfn-err', { timeout: 30000 } );
+		t.check( 'bad address refused on its field', /valid email/.test( await page.$eval( '[data-gfnset="toEmail"] .minn-gfn-errmsg', ( el ) => el.textContent ) ) );
+		await page.fill( '[data-gfn="toEmail"]', '{admin_email}' );
+		await page.fill( '[data-gfn="name"]', 'Sales routing' );
+		await page.click( '#minn-gfn-save' );
+		await page.waitForSelector( '[data-gfnset="name"].minn-gfn-err', { timeout: 30000 } );
+		t.check( 'a duplicate name is refused on its field', /already uses that name/.test( await page.$eval( '[data-gfnset="name"] .minn-gfn-errmsg', ( el ) => el.textContent ) ) );
+		items = await listItems();
+		t.check( 'refused saves changed nothing', items.find( ( i ) => i.nid === 'minnfixadmin0001' ).name === 'Admin Notification' );
+		await backToList();
 
-		/* ===== Routing rows carry the GF escape ===== */
+		/* ===== Routing rules and the GF escape on the page ===== */
 		await openRowByText( 'Sales routing' );
-		const hrefs = await page.$$eval( '.minn-modal a[href]', ( els ) => els.map( ( e ) => e.href ) );
+		t.check( 'routing rules render as rows', ( await page.$$( '.minn-gfn-route' ) ).length === 2 );
+		await page.click( '#minn-gfn-more' );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+		const hrefs = await page.$$eval( '.minn-ctx-menu a[href]', ( els ) => els.map( ( e ) => e.href ) );
 		t.check( 'Edit in Gravity Forms deep-links the notification', hrefs.some( ( h ) => /subview=notification/.test( h ) && /nid=minnfixroute0003/.test( h ) ), hrefs.join( ' ' ) );
 		await page.keyboard.press( 'Escape' );
+		await backToList();
 
 		/* ===== Entries view unaffected ===== */
 		await page.click( '[data-sview="main"]' );

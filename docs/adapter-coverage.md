@@ -193,7 +193,6 @@ Reference depth: **Gravity Forms**.
 - Form / page / condition **builders** and OAuth handshakes
 - Backup **restores** (surgery, not daily ops)
 - GSMTP **routing condition tree** authoring (list/toggle/delete is wired)
-- GF **notification** events / conditional logic / routing rules (daily fields are wired)
 - Pro-only stores without fixtures (WP Mail SMTP Pro full log)
 
 ## Sweep log

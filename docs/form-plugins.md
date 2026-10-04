@@ -18,7 +18,7 @@ The builder's scope and boundaries live in `docs/native-editors.md`.
 
 | Plugin | Adapter | What Minn surfaces |
 |---|---|---|
-| **Gravity Forms** | `gravity-forms.php` | Entries with Received/Spam/Trash, star/read, notes, resend, bulk; each entry opens on its own **entry page** (contact card with Reply, message, answers, notes timeline with composer, actions + submission side cards, prev/next); **Forms** manage view (activate/deactivate, New form; rows open the **form builder**: fields on GF's 12-column grid, add/remove/duplicate/drag, per-field settings from GF's own editor settings, choices, Name/Address parts, widths, conditional logic, saved through GF's editor save); **Notifications** view (toggle + daily-field edit); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
+| **Gravity Forms** | `gravity-forms.php` | Entries with Received/Spam/Trash, star/read, notes, resend, bulk; each entry opens on its own **entry page** (contact card with Reply, message, answers, notes timeline with composer, actions + submission side cards, prev/next); **Forms** manage view (activate/deactivate, New form; rows open the **form builder**: fields on GF's 12-column grid, add/remove/duplicate/drag, per-field settings from GF's own editor settings, choices, Name/Address parts, widths, conditional logic, saved through GF's editor save); **Notifications** view (toggle; rows open the **notification page**: recipients incl. routing rules, sender, message with merge tags, event + conditional logic, live preview, Send test, duplicate/delete); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
 | **Fluent Forms** | `fluent-forms.php` | Entries list + labeled detail; Received/Spam/Trash filters; search; open marks read; trash/permanent delete; forms manage view. Suite `fluent-forms` (24). Normalized over `fluentform_submissions` (+ form field labels). |
 | **Everest Forms** | `everest-forms.php` | Entries with Received/Spam/Trash through EVF_Admin_Entries; form tabs; search; forms manage. Suite `everest-forms`. |
 | **Elementor Pro Forms** | `elementor-forms.php` | Submissions via Elementor's own Query class; soft-trash through `move_to_trash_submission`. Free Elementor has no submissions store. |
@@ -109,8 +109,14 @@ Sidebar: one **Forms** item. Topbar autocomplete when
   field, as in their editor); only changed settings overlay; `known` ids
   refuse a save after the form changed elsewhere.
 - Notifications view: composite row id `form:nid`; toggle via
-  `GFFormsModel::update_notification_active`; edits via
-  `save_form_notifications`.
+  `GFFormsModel::update_notification_active`. The notification page
+  (`gravity-forms-notifications.php`, `/gf/notifications/{form}:{nid}/full`)
+  mirrors GFNotification's settings save callback (their validation,
+  `sanitize_conditional_logic` for logic and routing,
+  `gform_pre_notification_save`, `save_form_notifications`); duplicate and
+  delete are GFNotification's own; preview renders with the latest entry
+  via `GFCommon::replace_variables` (shortcodes left as typed); the test
+  send goes through `GFCommon::send_notification` to the editor only.
 - Form settings: item-scoped settings from
   `GFFormSettings::form_settings_fields()` at request time; save through
   `GFAPI::update_form` with GF's own helpers for composites.

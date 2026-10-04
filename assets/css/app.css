@@ -1728,6 +1728,90 @@ button.minn-plugin-ver:hover { color: var(--accent2); }
 }
 .minn-fgb-loc-rule [data-lgx]:hover:not(:disabled) { color: var(--red-text); border-color: currentColor; }
 .minn-fgb-loc-and { align-self: flex-start; padding: 3px 10px !important; font-size: 12px !important; }
+/* Gravity Forms notification page: the editor beside a sticky preview. */
+.minn-gfn { padding: 18px 20px 20px; }
+.minn-gfn .minn-fgb-meta { flex-wrap: wrap; row-gap: 4px; }
+.minn-gfn-newnote { color: var(--amber-text, #c98a1b); }
+.minn-gfn-titleset { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 4px; }
+.minn-gfn-titleset .minn-fgb-title { width: 100%; min-width: 0; }
+.minn-gfn-more { padding-left: 12px; padding-right: 12px; font-size: 16px; line-height: 1; }
+.minn-gfn-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr); gap: 20px; align-items: start; }
+.minn-gfn-edit { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.minn-gfn-sec {
+  display: flex; flex-direction: column; gap: 12px; min-width: 0;
+  padding: 14px 16px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg2);
+}
+.minn-gfn-sec-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.minn-gfn-sec-head .minn-side-title { margin: 0; }
+.minn-gfn-set { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.minn-gfn-set > .minn-field-label { margin: 0; }
+.minn-gfn-set.minn-fgb-set-inline { flex-direction: row; align-items: center; justify-content: space-between; }
+.minn-gfn-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.minn-gfn-field { position: relative; display: block; min-width: 0; }
+.minn-gfn-field > .minn-input { width: 100%; }
+.minn-gfn-field.has-tags > input.minn-input { padding-inline-end: 40px; }
+.minn-gfn-field.has-tags.is-area > textarea.minn-input { padding-inline-end: 44px; }
+.minn-gfn-tagbtn {
+  position: absolute; top: 50%; inset-inline-end: 6px; transform: translateY(-50%);
+  height: 24px; min-width: 28px; padding: 0 6px; cursor: pointer;
+  font: 600 12px/1 var(--font-mono); color: var(--text3);
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+}
+.minn-gfn-field.is-area .minn-gfn-tagbtn { top: 6px; transform: none; }
+.minn-gfn-tagbtn:hover, .minn-gfn-tagbtn:focus-visible { color: var(--accent2); border-color: var(--accent); }
+.minn-gfn-totype { width: 100%; }
+.minn-gfn-totype .minn-tab { flex: 1 1 0; min-width: 0; white-space: normal; }
+.minn-gfn-rules { display: flex; flex-direction: column; gap: 8px; }
+.minn-gfn-rule {
+  display: grid; grid-template-columns: minmax(0, 1.2fr) 120px minmax(0, 1fr) 24px; gap: 6px; align-items: center;
+}
+.minn-gfn-rule .minn-ac, .minn-gfn-rule .minn-input { min-width: 0; }
+.minn-gfn-route {
+  grid-template-columns: auto minmax(0, 1.2fr) 110px minmax(0, 1fr) 24px;
+  padding-bottom: 8px; border-bottom: 1px dashed var(--border);
+}
+/* The address on its own line, the test it answers to beneath. */
+.minn-gfn-route > .minn-gfn-field { grid-column: 1 / 5; }
+.minn-gfn-route > .minn-gfb-chx { grid-column: 5; grid-row: 1; }
+.minn-gfn-if { font-size: 12.5px; color: var(--text3); }
+.minn-gfn-mini { align-self: flex-start; padding: 4px 10px !important; font-size: 12.5px !important; }
+.minn-gfn-act { width: 108px !important; }
+.minn-gfn-err .minn-input { border-color: var(--red-text); }
+.minn-gfn-err .minn-ac-input { border-color: var(--red-text); }
+.minn-gfn-errmsg { font-size: 12.5px; color: var(--red-text); }
+.minn-gfn-warn { font-size: 12.5px; line-height: 1.45; color: var(--amber-text, #c98a1b); }
+.minn-gfn-side { position: sticky; top: 12px; min-width: 0; }
+.minn-gfn-preview { gap: 10px; }
+.minn-gfn-preview-note { font-size: 12px; color: var(--text3); }
+.minn-gfn-preview .minn-gfn-sec-head .minn-btn-soft { margin-inline-start: auto; }
+.minn-gfn-subj {
+  font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+}
+.minn-gfn-subj > span { display: block; font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+.minn-gfn-frame { display: block; width: 100%; height: min(62vh, 640px); border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.minn-gfn-tagpop {
+  position: fixed; z-index: 400; display: flex; flex-direction: column; gap: 8px; padding: 10px;
+  max-height: 340px; background: var(--panel); border: 1px solid var(--border2); border-radius: 10px; box-shadow: var(--shadow);
+}
+.minn-gfn-taglist { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; min-height: 0; }
+.minn-gfn-taggroup { margin: 6px 4px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text3); }
+.minn-gfn-taglist button {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; text-align: start;
+  padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+}
+.minn-gfn-taglist button:hover, .minn-gfn-taglist button:focus-visible { background: var(--hover); }
+.minn-gfn-taglist button code { font: 11.5px var(--font-mono); color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; }
+@media (max-width: 1100px) {
+  .minn-gfn-main { grid-template-columns: minmax(0, 1fr); }
+  .minn-gfn-side { position: static; }
+}
+@media (max-width: 640px) {
+  .minn-gfn { padding: 14px 12px 16px; }
+  .minn-gfn-route, .minn-gfn-rule { grid-template-columns: minmax(0, 1fr) 24px; }
+  .minn-gfn-route > *:not(.minn-gfb-chx), .minn-gfn-rule > *:not(.minn-gfb-chx) { grid-column: 1 !important; }
+  .minn-gfn-route > .minn-gfb-chx, .minn-gfn-rule > .minn-gfb-chx { grid-column: 2; grid-row: 1; }
+}
 /* Gravity Forms form builder: the form on Gravity Forms' 12-column grid,
    a sticky settings panel beside it. */
 .minn-gfb { padding: 18px 20px 20px; }

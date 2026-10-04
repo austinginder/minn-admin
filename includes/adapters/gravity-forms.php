@@ -313,6 +313,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			$surfaces['gravity-forms']['manage']['actions'],
 			array( 'label' => __( 'Form settings', 'minn-admin' ), 'settingsItem' => true )
 		);
+		$gf_form_options = array();
+		foreach ( GFFormsModel::get_forms( null, 'title' ) as $f ) {
+			$gf_form_options[] = array( (string) $f->id, (string) $f->title );
+		}
 		$surfaces['gravity-forms']['views'] = array(
 			array(
 				'viewLabel' => __( 'Notifications', 'minn-admin' ),
@@ -336,14 +340,18 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				'detail'    => array(
 					'skip' => array( 'form_id', 'nid' ),
-					'edit' => array(
-						'route'  => 'minn-admin/v1/gf/notifications/{id}',
-						'fields' => array(
-							array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ) ),
-							array( 'key' => 'to_email', 'label' => __( 'Send to', 'minn-admin' ), 'required' => false, 'placeholder' => __( 'address@example.com, {admin_email} — email-type notifications only', 'minn-admin' ) ),
-							array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ) ),
-							array( 'key' => 'message', 'label' => __( 'Message', 'minn-admin' ), 'type' => 'textarea', 'rows' => 8 ),
-						),
+				),
+				// A row opens the notification page (adapters/gravity-forms-
+				// notifications.php): recipients, sender, message, when it
+				// sends, with a preview and a test send.
+				'open'      => array( 'route' => 'gravity-forms/notification/{id}' ),
+				'create'    => array(
+					'label'  => __( 'New notification', 'minn-admin' ),
+					'route'  => 'minn-admin/v1/gf/notifications/new',
+					'method' => 'POST',
+					'open'   => true,
+					'fields' => array(
+						array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ), 'type' => 'select', 'options' => $gf_form_options ),
 					),
 				),
 				'actions'   => array(
@@ -891,10 +899,6 @@ add_action( 'rest_api_init', function () {
 			'form'     => (string) $form['title'],
 			'event'    => isset( $events[ $event ] ) ? $events[ $event ] : ucfirst( str_replace( '_', ' ', $event ) ),
 			'to'       => $to,
-			// The edit form's send-to field: only an email-type notification
-			// has an editable address (field/routing recipients are GF's
-			// editor); the save route refuses writes for other types.
-			'to_email' => 'email' === $to_type ? (string) ( isset( $n['to'] ) ? $n['to'] : '' ) : '',
 			'subject'  => (string) ( isset( $n['subject'] ) ? $n['subject'] : '' ),
 			'message'  => (string) ( isset( $n['message'] ) ? $n['message'] : '' ),
 			'status'   => ( ! isset( $n['isActive'] ) || false !== $n['isActive'] ) ? 'active' : 'inactive',
@@ -962,84 +966,6 @@ add_action( 'rest_api_init', function () {
 			}
 			GFFormsModel::flush_current_forms();
 			return rest_ensure_response( array( 'id' => Minn_Admin::path_param( $request, 'form' ) . ':' . Minn_Admin::path_param( $request, 'nid' ), 'active' => (bool) $request['active'] ) );
-		},
-	) );
-
-	// Edit the daily fields (name, send-to, subject, message) — a
-	// read-modify-write on the form's own notifications array through
-	// GFFormsModel::save_form_notifications, GF's dedicated write path.
-	register_rest_route( 'minn-admin/v1', '/gf/notifications/(?P<form>\d+):(?P<nid>[a-zA-Z0-9_.-]+)', array(
-		'methods'             => 'POST',
-		'permission_callback' => $can_edit_forms,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$form_id = (int) Minn_Admin::path_param( $request, 'form' );
-			$nid     = (string) Minn_Admin::path_param( $request, 'nid' );
-			$form    = GFFormsModel::get_form_meta( $form_id );
-			if ( ! $form || ! isset( $form['notifications'][ $nid ] ) ) {
-				return new WP_Error( 'not_found', __( 'Notification not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$body = $request->get_json_params();
-			$n    = $form['notifications'][ $nid ];
-
-			$name = sanitize_text_field( (string) ( isset( $body['name'] ) ? $body['name'] : '' ) );
-			if ( '' === $name ) {
-				return new WP_Error( 'empty_name', __( 'Give the notification a name.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			// GF enforces unique names per form (its is_unique_name check).
-			foreach ( $form['notifications'] as $other_id => $other ) {
-				if ( $other_id !== $nid && isset( $other['name'] ) && strtolower( $other['name'] ) === strtolower( $name ) ) {
-					return new WP_Error( 'dup_name', __( 'Another notification on this form already uses that name.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-			}
-			$n['name']    = $name;
-			// Gravity Forms' own text field refuses a value sanitizing would
-			// change rather than altering it (Settings\Fields\Text). An
-			// unchanged subject is left exactly as stored (the form sends it
-			// on every save); a changed one is refused the same way, so a
-			// "%AB" in it is never silently deleted.
-			$sent_subject = (string) ( isset( $body['subject'] ) ? $body['subject'] : '' );
-			if ( ! isset( $n['subject'] ) || $sent_subject !== (string) $n['subject'] ) {
-				if ( sanitize_text_field( $sent_subject ) !== $sent_subject ) {
-					return new WP_Error( 'bad_subject', __( 'The subject has characters Gravity Forms does not allow.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$n['subject'] = $sent_subject;
-			}
-			if ( '' === trim( (string) $n['subject'] ) ) {
-				return new WP_Error( 'empty_subject', __( 'Give the notification a subject.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			// Message is email-body HTML, filtered the way Gravity Forms filters
-			// it (minn_admin_gf_kses: raw for unfiltered_html, kses otherwise).
-			// An unchanged message is left exactly as stored: the form sends it
-			// on every save, and re-filtering an untouched HTML template stripped
-			// its <style>/<head> blocks and left their CSS in the body.
-			$sent_message = (string) ( isset( $body['message'] ) ? $body['message'] : '' );
-			if ( ! isset( $n['message'] ) || $sent_message !== (string) $n['message'] ) {
-				$n['message'] = minn_admin_gf_kses( $sent_message );
-			}
-
-			$to_type = isset( $n['toType'] ) && '' !== $n['toType'] ? $n['toType'] : 'email';
-			$to      = trim( (string) ( isset( $body['to_email'] ) ? $body['to_email'] : '' ) );
-			if ( '' !== $to ) {
-				if ( 'email' !== $to_type ) {
-					return new WP_Error( 'not_email_type', __( 'This notification routes by ', 'minn-admin' ) . $to_type . '; edit its recipients in Gravity Forms.', array( 'status' => 400 ) );
-				}
-				// GF accepts comma-separated addresses and merge tags
-				// ({admin_email}, {Email:2}) in the To field.
-				foreach ( array_map( 'trim', explode( ',', $to ) ) as $piece ) {
-					if ( ! is_email( $piece ) && ! preg_match( '/^\{[^{}]+\}$/', $piece ) ) {
-						/* translators: %s: the rejected send-to entry. */
-						return new WP_Error( 'bad_to', sprintf( __( '"%s" is not an email address or merge tag.', 'minn-admin' ), $piece ), array( 'status' => 400 ) );
-					}
-				}
-				$n['to'] = $to;
-			}
-			// An empty send-to never clears the stored address (the field
-			// also rides along empty for field/routing notifications).
-
-			$form['notifications'][ $nid ] = $n;
-			GFFormsModel::flush_current_forms();
-			GFFormsModel::save_form_notifications( $form_id, $form['notifications'] );
-			return rest_ensure_response( array( 'id' => $form_id . ':' . $nid ) );
 		},
 	) );
 
