@@ -878,6 +878,25 @@ Piece by piece:
   route the form's name links to, such as the Gravity Forms builder). A sent reply is
   logged through the notes composer action when you have one. Gravity Forms is the
   reference.
+- **Editing answers on the entry page.** Add an `edit` block to the `sectionsRoute`
+  response, only for people your plugin lets edit entries, and the page gains
+  **Edit answers**: `{ route, fields, locked }`. `route` is where the save posts
+  (`{id}` is filled in). `fields` lists what may be edited, in form order and with
+  empty answers included: `{ id, label, kind, inputs: [ { id, label?, value,
+  choice? } ], choices?, other? }`. Kinds: `text`, `email`, `url`, `tel`, `number`,
+  `date` (the value is `Y-m-d`), `textarea`, `choice` (one of `choices`, given as
+  `[ value, label ]` pairs, or any text when `other` is true), `multi` (an array of
+  choice values), `checks` (one input per choice, each carrying its `choice` value; the
+  page sends true or false) and `parts` (a name or address: one input each).
+  `locked` names the answers that stay in your own screen (files, payments…); the page
+  says so. The save posts `{ values: { inputId: value }, original: { inputId: value
+  } }` with only the inputs that changed, and `original` holding what the page loaded.
+  Refuse with 409 when the stored value no longer matches `original` (someone edited
+  it meanwhile), and with 400 plus `data.field` set to the input id to mark a field.
+  Write through your plugin's own save so its formatting and hooks run. If that save
+  replaces the whole entry (fields left out are blanked or deleted), merge the changed
+  inputs into the stored entry first and save all of it. Gravity Forms' version
+  (`gravity-forms-entry-edit.php`) is the reference.
 - **`manage`** is the Forms companion view: the Entries/Forms switcher every forms
   plugin wants. Keep it a list (title, entry count, maybe an activate toggle via a
   `when`-pair of actions); the ID column is prepended with the Entries list. The form

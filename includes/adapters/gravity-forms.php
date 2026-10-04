@@ -672,6 +672,9 @@ add_action( 'rest_api_init', function () {
 					'is_starred' => empty( $entry['is_starred'] ) ? '0' : '1',
 					'is_read'    => empty( $entry['is_read'] ) ? '0' : '1',
 				),
+				// Editable answers (adapters/gravity-forms-entry-edit.php), for
+				// the people who may edit entries.
+				'edit'      => function_exists( 'minn_admin_gf_entry_edit_block' ) ? minn_admin_gf_entry_edit_block( $form, $entry ) : null,
 				// The form's builder page, for the people who may edit forms.
 				'formRoute' => function_exists( 'minn_admin_gfb_available' ) && minn_admin_gfb_available()
 					&& GFCommon::current_user_can_any( array( 'gravityforms_edit_forms', 'gform_full_access' ) )

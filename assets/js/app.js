@@ -3367,6 +3367,7 @@
 		if ( 'gfbuilder' === r ) return !! ( state.gfb && state.gfb.dirty );
 		if ( 'gfnotification' === r ) return !! ( state.gfn && state.gfn.dirty );
 		if ( 'gfconfirmation' === r ) return !! ( state.gfc && state.gfc.dirty );
+		if ( 'entrypage' === r && entryEditDirty( state.entryPage ) ) return true;
 		// Pages that show a save bar, or arm their Save, only once something
 		// changed say so on screen.
 		const view = $( '#minn-view' );
@@ -3423,7 +3424,7 @@
 	// page's. An explicit list, so it never reaches a Publish, a Send or a
 	// destructive verb; the post editor keeps its own ⌘S.
 	const SAVE_SHORTCUT_IDS = [
-		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-sset-save', 'minn-product-save',
+		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-ep-save', 'minn-sset-save', 'minn-product-save',
 		'minn-wcm-save', 'minn-wcmp-save', 'minn-order-save', 'minn-look-save', 'minn-save-settings',
 		'minn-save-site-appearance', 'minn-rd-save', 'minn-tax-save', 'minn-cpt-save', 'minn-zone-save',
 		'minn-widget-save', 'minn-pf-save', 'minn-surface-save', 'minn-uf-save', 'minn-coupon-save',
@@ -18915,6 +18916,68 @@
 		return `<span class="minn-ep-pre">${ esc( raw ) }</span>`;
 	}
 
+	/**
+	 * Editing answers on the entry page. A provider's entry route opts in with
+	 * an `edit` block: { route, fields: [ { id, label, kind, inputs: [ { id,
+	 * label?, value, choice? } ], choices?, other? } ], locked: [ labels ] }.
+	 * Kinds: text, email, url, tel, number, date (Y-m-d), textarea, choice
+	 * (one of `choices`, or free text when `other`), multi (an array of
+	 * choices), checks (one input per choice, checked or not) and parts (a
+	 * name or address, one input each). The save posts the changed inputs and
+	 * the values they had when the page loaded:
+	 * { values: { input: value }, original: { input: value } }.
+	 */
+	function entryEditStart( p ) {
+		const values = {};
+		( ( p.sections && p.sections.edit && p.sections.edit.fields ) || [] ).forEach( ( f ) => f.inputs.forEach( ( i ) => {
+			values[ i.id ] = 'checks' === f.kind ? '' !== String( i.value ) : JSON.parse( JSON.stringify( i.value ) );
+		} ) );
+		p.editing = { values, original: JSON.parse( JSON.stringify( values ) ), err: null };
+	}
+	const entryEditDirty = ( p ) => !! ( p && p.editing && JSON.stringify( p.editing.values ) !== JSON.stringify( p.editing.original ) );
+
+	function entryEditHtml( p ) {
+		const ed = p.sections.edit;
+		const v = p.editing.values;
+		const err = p.editing.err;
+		const mark = ( id ) => ( err && err.field === id ? `<span class="minn-gfn-errmsg">${ esc( err.message ) }</span>` : '' );
+		const types = { email: 'email', url: 'url', tel: 'tel', date: 'date' };
+		const control = ( f, i, label ) => {
+			const cur = v[ i.id ];
+			const aria = esc( label || f.label );
+			if ( 'textarea' === f.kind ) return `<textarea class="minn-input" rows="4" data-epf="${ esc( i.id ) }" aria-label="${ aria }">${ esc( cur ) }</textarea>`;
+			if ( 'choice' === f.kind ) {
+				return `<div class="minn-ac" data-epchoice="${ esc( i.id ) }"><input class="minn-input minn-ac-input" value="" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ aria }"><div class="minn-ac-panel" hidden></div></div>`;
+			}
+			return `<input class="minn-input" type="${ types[ f.kind ] || 'text' }"${ 'number' === f.kind ? ' inputmode="decimal"' : '' } data-epf="${ esc( i.id ) }" value="${ esc( cur ) }" aria-label="${ aria }">`;
+		};
+		const row = ( f ) => {
+			let body = '';
+			if ( 'parts' === f.kind ) {
+				body = `<div class="minn-ep-edit-parts">${ f.inputs.map( ( i ) => `<label class="minn-ep-edit-part" data-epin="${ esc( i.id ) }"><span class="minn-ep-edit-sub">${ esc( i.label || '' ) }</span>${ control( f, i, f.label + ' ' + ( i.label || '' ) ) }${ mark( i.id ) }</label>` ).join( '' ) }</div>`;
+			} else if ( 'checks' === f.kind ) {
+				body = `<div class="minn-ep-edit-checks">${ f.inputs.map( ( i ) => `<label class="minn-check-row"><input type="checkbox" data-epc="${ esc( i.id ) }"${ v[ i.id ] ? ' checked' : '' }> ${ esc( i.label || i.choice ) }</label>` ).join( '' ) }</div>`;
+			} else if ( 'multi' === f.kind ) {
+				const i = f.inputs[ 0 ];
+				const picked = ( v[ i.id ] || [] ).map( String );
+				body = `<div class="minn-ep-edit-checks">${ ( f.choices || [] ).map( ( [ val, lab ] ) => `<label class="minn-check-row"><input type="checkbox" data-epm="${ esc( i.id ) }" value="${ esc( val ) }"${ picked.includes( String( val ) ) ? ' checked' : '' }> ${ esc( lab ) }</label>` ).join( '' ) }</div>${ mark( i.id ) }`;
+			} else {
+				const i = f.inputs[ 0 ];
+				body = `<div data-epin="${ esc( i.id ) }">${ control( f, i ) }${ mark( i.id ) }</div>`;
+			}
+			const bad = err && f.inputs.some( ( i ) => i.id === err.field );
+			return `<div class="minn-ep-edit-row${ bad ? ' minn-gfn-err' : '' }" data-epset="${ esc( f.id ) }"><div class="minn-field-label">${ esc( f.label ) }</div>${ body }</div>`;
+		};
+		const locked = ( ed.locked || [] ).length
+			/* translators: %s: comma-separated field labels. */
+			? `<div class="minn-toggle-desc minn-ep-edit-locked">${ esc( sprintf( __( 'Edit %s in the form plugin.' ), ed.locked.join( ', ' ) ) ) }</div>` : '';
+		return `<div class="minn-order-sec minn-ep-edit">
+			<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Edit answers' ) ) }</div></div>
+			<div class="minn-ep-edit-rows">${ ed.fields.map( row ).join( '' ) }</div>
+			${ locked }
+		</div>`;
+	}
+
 	function renderEntryPage() {
 		const s = surfaceById( state.entrySid );
 		const view = $( '#minn-view' );
@@ -19017,6 +19080,12 @@
 			return `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, href ) ) }</a>`;
 		} ).join( '' ) }</div>` ) : '';
 		const metaHtml = parts.meta.length ? card( __( 'Submission' ), dl( parts.meta ), ' minn-ep-side-meta' ) : '';
+		const canEdit = ! loading && ! p.loadError && sec.edit && ( sec.edit.fields || [] ).length;
+		if ( p.editing && ! canEdit ) p.editing = null;
+		const editButtons = ! canEdit ? '' : p.editing
+			? `<button type="button" class="minn-btn-soft" id="minn-ep-cancel">${ esc( __( 'Cancel' ) ) }</button>
+				<button type="button" class="minn-btn-primary" id="minn-ep-save">${ esc( __( 'Save answers' ) ) }</button>`
+			: `<button type="button" class="minn-btn-soft" id="minn-ep-edit">${ icon( 'pencil' ) } ${ esc( __( 'Edit answers' ) ) }</button>`;
 
 		view.innerHTML = `
 		<div class="minn-order-page minn-order-page-wide minn-entry-page">
@@ -19039,7 +19108,8 @@
 					${ nav ? `<span class="minn-modal-count">${ nav.idx + 1 } / ${ nav.ids.length }</span>
 					<button type="button" class="minn-modal-step" id="minn-ep-prev" title="${ esc( __( 'Previous (←)' ) ) }" aria-label="${ esc( __( 'Previous entry' ) ) }"${ nav.idx <= 0 ? ' disabled' : '' }>‹</button>
 					<button type="button" class="minn-modal-step" id="minn-ep-next" title="${ esc( __( 'Next (→)' ) ) }" aria-label="${ esc( __( 'Next entry' ) ) }"${ nav.idx >= nav.ids.length - 1 ? ' disabled' : '' }>›</button>` : '' }
-					${ ! loading && sec.adminUrl ? `<a class="minn-btn-soft" href="${ esc( safeHref( sec.adminUrl ) ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
+					${ editButtons }
+					${ ! loading && sec.adminUrl && ! p.editing ? `<a class="minn-btn-soft" href="${ esc( safeHref( sec.adminUrl ) ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
 				</div>
 			</div>
 			<div class="minn-order-page-body">
@@ -19048,7 +19118,7 @@
 				${ ! loading && ! p.loadError ? `
 				<div class="minn-order-body">
 					<div class="minn-order-layout">
-						<div class="minn-order-main">${ contactHtml }${ bodiesHtml }${ answersHtml }${ emptyHtml }${ notesHtml }${ extrasHtml }</div>
+						<div class="minn-order-main">${ p.editing ? entryEditHtml( p ) : contactHtml + bodiesHtml + answersHtml + emptyHtml }${ notesHtml }${ extrasHtml }</div>
 						<div class="minn-order-side">${ actionsHtml }${ metaHtml }</div>
 					</div>
 				</div>` : '' }
@@ -19090,6 +19160,7 @@
 			};
 			renderOverlays();
 		} );
+		bindEntryEdit( s, p, view );
 		const stepTo = ( id ) => {
 			if ( coll.open && coll.open.route ) go( coll.open.route.replace( '{id}', encodeURIComponent( id ) ) );
 		};
@@ -19157,6 +19228,109 @@
 				if ( btn && ! btn.disabled ) { e.preventDefault(); btn.click(); }
 			} );
 		}
+	}
+
+	function bindEntryEdit( s, p, view ) {
+		const editBtn = $( '#minn-ep-edit', view );
+		if ( editBtn ) editBtn.addEventListener( 'click', () => {
+			entryEditStart( p );
+			renderEntryPage();
+			const first = $( '.minn-ep-edit input:not([type="checkbox"]), .minn-ep-edit textarea', $( '#minn-view' ) );
+			if ( first ) first.focus();
+		} );
+		if ( ! p.editing ) return;
+		const ed = p.sections.edit;
+		const vals = p.editing.values;
+		const clearErr = ( el ) => {
+			const set = el && el.closest( '.minn-gfn-err' );
+			if ( ! set ) return;
+			set.classList.remove( 'minn-gfn-err' );
+			$$( '.minn-gfn-errmsg', set ).forEach( ( m ) => m.remove() );
+			p.editing.err = null;
+		};
+		const cancel = $( '#minn-ep-cancel', view );
+		if ( cancel ) cancel.addEventListener( 'click', async () => {
+			if ( entryEditDirty( p ) && ! await minnConfirm( { title: __( 'Discard your changes?' ), body: __( 'The answers you changed go back to what was saved.' ), confirmLabel: __( 'Discard' ), danger: true } ) ) return;
+			p.editing = null;
+			renderEntryPage();
+		} );
+		// Choices: the themed strict combobox, or free text where the field
+		// takes its own "other" answer.
+		ed.fields.filter( ( f ) => 'choice' === f.kind ).forEach( ( f ) => {
+			const i = f.inputs[ 0 ];
+			const wrap = $( `[data-epchoice="${ CSS.escape( i.id ) }"]`, view );
+			if ( ! wrap ) return;
+			const opts = [ { value: '', label: __( '(none)' ) }, ...( f.choices || [] ).map( ( [ val, lab ] ) => ( { value: String( val ), label: lab } ) ) ];
+			if ( vals[ i.id ] && ! opts.some( ( o ) => o.value === String( vals[ i.id ] ) ) ) opts.push( { value: String( vals[ i.id ] ), label: String( vals[ i.id ] ) } );
+			if ( f.other ) {
+				const input = $( '.minn-ac-input', wrap );
+				const cur = ( f.choices || [] ).find( ( c ) => String( c[ 0 ] ) === String( vals[ i.id ] ) );
+				input.value = cur ? cur[ 1 ] : String( vals[ i.id ] || '' );
+				bindAutocomplete( wrap, ( f.choices || [] ).map( ( c ) => ( { value: c[ 1 ], label: c[ 1 ] } ) ), {} );
+				const sync = () => {
+					const pick = ( f.choices || [] ).find( ( c ) => c[ 1 ] === input.value );
+					vals[ i.id ] = pick ? String( pick[ 0 ] ) : input.value;
+				};
+				input.addEventListener( 'input', sync );
+				input.addEventListener( 'change', sync );
+				input.addEventListener( 'blur', sync );
+				return;
+			}
+			bindAutocomplete( wrap, opts, { strict: true, value: String( vals[ i.id ] || '' ), onPick: ( v ) => { vals[ i.id ] = v; clearErr( wrap ); } } );
+		} );
+		const form = $( '.minn-ep-edit', view );
+		if ( form ) {
+			form.addEventListener( 'input', ( e ) => {
+				const t = e.target;
+				if ( t.dataset.epf != null ) { vals[ t.dataset.epf ] = t.value; clearErr( t ); }
+			} );
+			form.addEventListener( 'change', ( e ) => {
+				const t = e.target;
+				if ( t.dataset.epc != null ) vals[ t.dataset.epc ] = t.checked;
+				if ( t.dataset.epm != null ) {
+					vals[ t.dataset.epm ] = $$( `[data-epm="${ CSS.escape( t.dataset.epm ) }"]`, form ).filter( ( x ) => x.checked ).map( ( x ) => x.value );
+				}
+			} );
+		}
+		const save = $( '#minn-ep-save', view );
+		if ( save ) save.addEventListener( 'click', async () => {
+			const changed = {};
+			const original = {};
+			Object.keys( vals ).forEach( ( k ) => {
+				if ( JSON.stringify( vals[ k ] ) === JSON.stringify( p.editing.original[ k ] ) ) return;
+				changed[ k ] = vals[ k ];
+				// The stored value as loaded (a checkbox's is its choice or '').
+				const f = ed.fields.find( ( x ) => x.inputs.some( ( i ) => i.id === k ) );
+				const inp = f && f.inputs.find( ( i ) => i.id === k );
+				original[ k ] = inp ? inp.value : p.editing.original[ k ];
+			} );
+			if ( ! Object.keys( changed ).length ) {
+				p.editing = null;
+				renderEntryPage();
+				return;
+			}
+			save.disabled = true;
+			save.textContent = __( 'Saving…' );
+			try {
+				const r = await api( ed.route.replace( '{id}', encodeURIComponent( p.id ) ), { method: 'POST', body: JSON.stringify( { values: changed, original } ) } );
+				p.editing = null;
+				const ss = surfaceState( s.id );
+				if ( ss ) ss.cache = null; // the list's names and emails may have changed
+				toast( ( r && r.message ) || __( 'Answers saved' ) );
+				refreshEntryPage( s );
+			} catch ( e ) {
+				toast( e.message, true );
+				p.editing.err = e.data && e.data.field ? { field: String( e.data.field ), message: e.message } : null;
+				if ( p.editing.err ) {
+					renderEntryPage();
+					const at = $( `[data-epin="${ CSS.escape( p.editing.err.field ) }"] input, [data-epin="${ CSS.escape( p.editing.err.field ) }"] textarea` );
+					if ( at ) at.focus();
+				} else {
+					save.disabled = false;
+					save.textContent = __( 'Save answers' );
+				}
+			}
+		} );
 	}
 
 	async function loadSurfaceItem( p, s ) {

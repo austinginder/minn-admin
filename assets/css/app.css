@@ -4264,6 +4264,15 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
 .minn-ep-side-meta .minn-ep-answer dd { font-size: 13.5px; color: var(--text2); }
 .minn-ep-actlist { display: flex; flex-direction: column; gap: 8px; }
 .minn-ep-actlist .minn-btn-soft { width: 100%; justify-content: center; text-align: center; }
+.minn-ep-edit-rows { display: flex; flex-direction: column; gap: 14px; }
+.minn-ep-edit-row { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.minn-ep-edit-row textarea { resize: vertical; }
+.minn-ep-edit-parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.minn-ep-edit-part { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.minn-ep-edit-sub { font-size: 12px; color: var(--text3); }
+.minn-ep-edit-checks { display: flex; flex-direction: column; gap: 2px; }
+.minn-ep-edit-checks .minn-check-row { margin-top: 2px; }
+.minn-ep-edit-locked { margin-top: 14px; }
 .minn-ep-star {
   display: inline-grid; place-items: center; width: 30px; height: 28px; padding: 0; cursor: pointer;
   background: none; border: 1px solid var(--border); border-radius: 8px; color: var(--text3);

@@ -18,7 +18,7 @@ The builder's scope and boundaries live in `docs/native-editors.md`.
 
 | Plugin | Adapter | What Minn surfaces |
 |---|---|---|
-| **Gravity Forms** | `gravity-forms.php` | Entries with Received/Spam/Trash, star/read, notes, resend, bulk; each entry opens on its own **entry page** (contact card with Reply, message, answers, notes timeline with composer, actions + submission side cards, prev/next); **Forms** manage view (activate/deactivate, New form; rows open the **form builder**: fields on GF's 12-column grid, add/remove/duplicate/drag, per-field settings from GF's own editor settings, choices, Name/Address parts, widths, conditional logic, saved through GF's editor save); **Notifications** view (toggle; rows open the **notification page**: recipients incl. routing rules, sender, message with merge tags, event + conditional logic, live preview, Send test, duplicate/delete); **Confirmations** view (toggle; rows open the **confirmation page**: a message with merge tags, a page, or a redirect, answers passed in the query string, conditional logic, live preview of the message or the address visitors land on, duplicate/delete; the default confirmation stays always on); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
+| **Gravity Forms** | `gravity-forms.php` | Entries with Received/Spam/Trash, star/read, notes, resend, bulk; each entry opens on its own **entry page** (contact card with Reply, message, answers, notes timeline with composer, actions + submission side cards, prev/next, **Edit answers** through GF's own field formatting); **Forms** manage view (activate/deactivate, New form; rows open the **form builder**: fields on GF's 12-column grid, add/remove/duplicate/drag, per-field settings from GF's own editor settings, choices, Name/Address parts, widths, conditional logic, saved through GF's editor save); **Notifications** view (toggle; rows open the **notification page**: recipients incl. routing rules, sender, message with merge tags, event + conditional logic, live preview, Send test, duplicate/delete); **Confirmations** view (toggle; rows open the **confirmation page**: a message with merge tags, a page, or a redirect, answers passed in the query string, conditional logic, live preview of the message or the address visitors land on, duplicate/delete; the default confirmation stays always on); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
 | **Fluent Forms** | `fluent-forms.php` | Entries list + labeled detail; Received/Spam/Trash filters; search; open marks read; trash/permanent delete; forms manage view. Suite `fluent-forms` (24). Normalized over `fluentform_submissions` (+ form field labels). |
 | **Everest Forms** | `everest-forms.php` | Entries with Received/Spam/Trash through EVF_Admin_Entries; form tabs; search; forms manage. Suite `everest-forms`. |
 | **Elementor Pro Forms** | `elementor-forms.php` | Submissions via Elementor's own Query class; soft-trash through `move_to_trash_submission`. Free Elementor has no submissions store. |
@@ -100,6 +100,17 @@ Sidebar: one **Forms** item. Topbar autocomplete when
   `GFCommon::current_user_can_any(…)` (never a raw granular cap).
 - Entries: `gf/v2` + status filters + bulk + notes + resend; detail shim
   `minn-admin/v1/gf/entries/{id}` for labeled answers.
+- Entry answers: the entry route's `edit` block and
+  `POST minn-admin/v1/gf/entries/{id}/answers` (`gravity-forms-entry-edit.php`). Each
+  input goes through the form's trim setting and the field's own
+  `get_value_save_input`, is written with `GFAPI::update_entry_field` (their
+  `gform_save_field_value` filters), then `gform_after_update_entry` fires with the
+  entry as it was and a note records which answers changed. Text, paragraph, email,
+  website, number, phone (not international), date, drop-down, radio (with Other),
+  multi-select, checkboxes, name and address; files, pricing, post fields,
+  calculations, times, lists and add-on types stay in GF, as on their own screen.
+  Gated on `gravityforms_edit_entries`; a value changed since the page loaded
+  refuses the save.
 - Forms manage: `minn-admin/v1/gf/forms` activate/deactivate + deep link;
   POST creates through GF's editor save (default notification + confirmation
   included) and the new form opens in the builder.
