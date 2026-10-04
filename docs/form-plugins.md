@@ -18,7 +18,7 @@ The builder's scope and boundaries live in `docs/native-editors.md`.
 
 | Plugin | Adapter | What Minn surfaces |
 |---|---|---|
-| **Gravity Forms** | `gravity-forms.php` | Entries with Received/Spam/Trash, star/read, notes, resend, bulk; each entry opens on its own **entry page** (contact card with Reply, message, answers, notes timeline with composer, actions + submission side cards, prev/next); **Forms** manage view (activate/deactivate, New form; rows open the **form builder**: fields on GF's 12-column grid, add/remove/duplicate/drag, per-field settings from GF's own editor settings, choices, Name/Address parts, widths, conditional logic, saved through GF's editor save); **Notifications** view (toggle; rows open the **notification page**: recipients incl. routing rules, sender, message with merge tags, event + conditional logic, live preview, Send test, duplicate/delete); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
+| **Gravity Forms** | `gravity-forms.php` | Entries with Received/Spam/Trash, star/read, notes, resend, bulk; each entry opens on its own **entry page** (contact card with Reply, message, answers, notes timeline with composer, actions + submission side cards, prev/next); **Forms** manage view (activate/deactivate, New form; rows open the **form builder**: fields on GF's 12-column grid, add/remove/duplicate/drag, per-field settings from GF's own editor settings, choices, Name/Address parts, widths, conditional logic, saved through GF's editor save); **Notifications** view (toggle; rows open the **notification page**: recipients incl. routing rules, sender, message with merge tags, event + conditional logic, live preview, Send test, duplicate/delete); **Confirmations** view (toggle; rows open the **confirmation page**: a message with merge tags, a page, or a redirect, answers passed in the query string, conditional logic, live preview of the message or the address visitors land on, duplicate/delete; the default confirmation stays always on); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
 | **Fluent Forms** | `fluent-forms.php` | Entries list + labeled detail; Received/Spam/Trash filters; search; open marks read; trash/permanent delete; forms manage view. Suite `fluent-forms` (24). Normalized over `fluentform_submissions` (+ form field labels). |
 | **Everest Forms** | `everest-forms.php` | Entries with Received/Spam/Trash through EVF_Admin_Entries; form tabs; search; forms manage. Suite `everest-forms`. |
 | **Elementor Pro Forms** | `elementor-forms.php` | Submissions via Elementor's own Query class; soft-trash through `move_to_trash_submission`. Free Elementor has no submissions store. |
@@ -89,7 +89,8 @@ Sidebar: one **Forms** item. Topbar autocomplete when
 - Form builders for providers other than Gravity Forms, payment feeds, spam
   settings UIs that belong to the form plugin's own product.
 - In the Gravity Forms builder: pricing and product fields, calculations,
-  input masks, feeds and confirmations (deep-linked; `docs/native-editors.md`).
+  input masks and feeds (deep-linked; `docs/native-editors.md`). Notifications
+  and confirmations have pages of their own.
 - Unifying entries across plugins into one merged inbox (the family
   switcher is enough).
 
@@ -117,8 +118,20 @@ Sidebar: one **Forms** item. Topbar autocomplete when
   delete are GFNotification's own; preview renders with the latest entry
   via `GFCommon::replace_variables` (shortcodes left as typed); the test
   send goes through `GFCommon::send_notification` to the editor only.
+- Confirmations view: composite row id `form:cid`; toggle via
+  `GFFormsModel::update_confirmation_active` (never on the default). The
+  confirmation page (`gravity-forms-confirmations.php`,
+  `/gf/confirmations/{form}:{cid}/full`) mirrors GF_Confirmation's settings
+  save callback (type whitelist, their message filter that empties merge
+  tags used as attribute values for people without `unfiltered_html`, the
+  redirect URL check, `sanitize_conditional_logic` except on the default,
+  `gform_pre_confirmation_save`, `save_form_confirmations`); delete is
+  `GFFormsModel::delete_form_confirmation`; duplicate names copies
+  "Name (N)" as their screen does; the preview renders through
+  `GFCommon::replace_variables` and `GFFormDisplay::get_confirmation_url`
+  with the latest entry.
 - Form settings: item-scoped settings from
   `GFFormSettings::form_settings_fields()` at request time; save through
   `GFAPI::update_form` with GF's own helpers for composites.
-- Confirmations editing and plugin-wide settings (currency, logging) stay
-  deep-linked: set-once / form-build-time work, not daily.
+- Plugin-wide settings (currency, logging) stay deep-linked: set-once work,
+  not daily.

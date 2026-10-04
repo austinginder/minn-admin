@@ -56,7 +56,9 @@ browser), where the "document" is the site itself.
 > the builder can store them, so an add-on's type still lists, moves, resizes
 > and relabels. Saves go through GF's own editor save (`GF_Form_CRUD_Handler`).
 > Notifications got the same treatment: a notification page with routing
-> rules, conditional logic and a live preview (`gravity-forms-notifications.php`).
+> rules, conditional logic and a live preview (`gravity-forms-notifications.php`),
+> and so did confirmations: a confirmation page for the message, page or
+> redirect, with conditional logic and a preview (`gravity-forms-confirmations.php`).
 > Concurrency: the save overlays only the settings that changed onto the form
 > as stored now. Edits to other properties made elsewhere survive, and a field
 > added or removed elsewhere since the page loaded refuses the save. The text
@@ -100,9 +102,9 @@ that already exist:
 - **Form settings, notifications, confirmations** — the Phase-2 GF Settings
   mapper ✅ shipped (v0.13.0 cycle, 2026-07-12): per-form settings via the
   item-scoped settings view, notifications as a list view with daily-field
-  editing; confirmations editing was deliberately skipped (form-build-time
-  work, not daily). The 80% editor composes with them rather than
-  containing them.
+  editing; confirmations editing was skipped at the time (form-build-time
+  work) and arrived in the v0.43 cycle as the confirmation page. The 80%
+  editor composes with them rather than containing them.
 - **Conditional logic, read-first**: render existing rules as sentences
   ("Show when Budget is greater than 500"). Editing rules is a v2 decision;
   the rule JSON is trivial but the UX of building rules well is not.

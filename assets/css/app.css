@@ -1790,6 +1790,16 @@ button.minn-plugin-ver:hover { color: var(--accent2); }
 }
 .minn-gfn-subj > span { display: block; font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
 .minn-gfn-frame { display: block; width: 100%; height: min(62vh, 640px); border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+/* The confirmation page (shares the notification page's layout). */
+.minn-gfc-fixed { flex-direction: row; align-items: center; gap: 10px; }
+.minn-gfc-name { font-size: 16px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.minn-gfc-default { font-size: 11.5px; font-weight: 600; color: var(--accent2); background: var(--hover); padding: 2px 8px; border-radius: 5px; white-space: nowrap; }
+.minn-gfc-frame { height: min(40vh, 360px); }
+.minn-gfc-goes { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.minn-gfc-url {
+  display: block; width: 100%; box-sizing: border-box; font: 12.5px/1.5 var(--font-mono); color: var(--text); overflow-wrap: anywhere;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+}
 .minn-gfn-tagpop {
   position: fixed; z-index: 400; display: flex; flex-direction: column; gap: 8px; padding: 10px;
   max-height: 340px; background: var(--panel); border: 1px solid var(--border2); border-radius: 10px; box-shadow: var(--shadow);

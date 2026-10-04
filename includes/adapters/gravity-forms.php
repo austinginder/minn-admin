@@ -376,6 +376,67 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		);
+		if ( method_exists( 'GFFormsModel', 'save_form_confirmations' ) ) {
+			// What a visitor sees after submitting. A row opens the
+			// confirmation page (adapters/gravity-forms-confirmations.php).
+			$surfaces['gravity-forms']['views'][] = array(
+				'viewLabel' => __( 'Confirmations', 'minn-admin' ),
+				'route'     => 'minn-admin/v1/gf/forms/{tab}/confirmations',
+				'allRoute'  => 'minn-admin/v1/gf/confirmations',
+				'pageQuery' => 'per_page=25&page={page}',
+				'itemsKey'  => 'items',
+				'totalKey'  => 'total',
+				'tabs'      => array(
+					'route'    => 'minn-admin/v1/gf/forms?active=1',
+					'valueKey' => 'id',
+					'labelKey' => 'title',
+					'allLabel' => __( 'All confirmations', 'minn-admin' ),
+				),
+				'columns'   => array(
+					array( 'key' => 'name', 'label' => __( 'Confirmation', 'minn-admin' ), 'format' => 'title' ),
+					array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ) ),
+					array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ) ),
+					array( 'key' => 'shows', 'label' => __( 'Shows', 'minn-admin' ) ),
+					array( 'key' => 'when', 'label' => __( 'When', 'minn-admin' ) ),
+					array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				),
+				'detail'    => array(
+					'skip' => array( 'form_id', 'cid', 'default', 'toggle' ),
+				),
+				'open'      => array( 'route' => 'gravity-forms/confirmation/{id}' ),
+				'create'    => array(
+					'label'  => __( 'New confirmation', 'minn-admin' ),
+					'route'  => 'minn-admin/v1/gf/confirmations/new',
+					'method' => 'POST',
+					'open'   => true,
+					'fields' => array(
+						array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ), 'type' => 'select', 'options' => $gf_form_options ),
+					),
+				),
+				// The default confirmation is always on (it shows whenever no
+				// other applies), so it offers neither switch.
+				'actions'   => array(
+					array(
+						'label'  => __( 'Deactivate', 'minn-admin' ),
+						'method' => 'POST',
+						'route'  => 'minn-admin/v1/gf/confirmations/{id}/active',
+						'body'   => array( 'active' => false ),
+						'when'   => array( 'key' => 'toggle', 'equals' => 'deactivate' ),
+					),
+					array(
+						'label'  => __( 'Activate', 'minn-admin' ),
+						'method' => 'POST',
+						'route'  => 'minn-admin/v1/gf/confirmations/{id}/active',
+						'body'   => array( 'active' => true ),
+						'when'   => array( 'key' => 'toggle', 'equals' => 'activate' ),
+					),
+					array(
+						'label' => __( 'Edit in Gravity Forms ↗', 'minn-admin' ),
+						'href'  => admin_url( 'admin.php?page=gf_edit_forms&view=settings&subview=confirmation&id={form_id}&cid={cid}' ),
+					),
+				),
+			);
+		}
 
 		// The Feeds view: every add-on integration (Twilio, Mailchimp, Zapier,
 		// webhooks…) across forms, with activate/deactivate and delete through

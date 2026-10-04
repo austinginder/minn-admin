@@ -114,9 +114,11 @@ still `docs/for-plugin-authors.md` and the validator constants in
 - **Notifications** as a `views` list (composite row id `form:nid`; toggle
   from the row menu); each row opens the notification page (v0.43 cycle,
   `gravity-forms-notifications.php`) that edits the whole notification
-  through GF's own notification save. Confirmations editing and
-  plugin-wide GF settings (currency, logging) deliberately unbuilt:
-  form-build-time / set-once work; license key already lives in the license
+  through GF's own notification save. **Confirmations** the same way (v0.43
+  cycle, `gravity-forms-confirmations.php`): a views list with the toggle,
+  each row opening the confirmation page saved through GF's own
+  confirmation save. Plugin-wide GF settings (currency, logging) stay
+  unbuilt: set-once work; the license key already lives in the license
   manager.
 
 Historical note: at v0.10.0 none of Rungs 1–2 existed (Spam settings was a
@@ -261,7 +263,7 @@ form *building* stays a deep link (Rung 4).
 | Entry detail: notes, resend | ✅ | notes REST; resend as parameterized action; edit field *values* still open (form-engine over field-type inputs) |
 | Form settings | ✅ (v0.13.0) | Item-scoped settings; Settings-framework schema at request time; `GFAPI::update_form` |
 | Notifications (list + toggle; the notification page) | ✅ (v0.13.0; page v0.43) | `views[]` list; the page mirrors GF's notification save callback into `save_form_notifications` |
-| Confirmations editing | deliberately unbuilt | Form-build-time; GF screen is the deep link |
+| Confirmations (list + toggle; the confirmation page) | ✅ (v0.43) | `views[]` list; the page mirrors GF_Confirmation's save callback into `save_form_confirmations`; the default stays on and undeletable |
 | Plugin settings (reCAPTCHA, currency, logging) | unbuilt | Set-once; license already in the license manager |
 | Forms list trash/duplicate | partial | REST covers trash; `GFAPI::duplicate_form` has no REST route (one-line shim if demand) |
 | Add-on feeds (list, toggle, delete) | ✅ (v0.18.0) | Feeds `views[]` entry: every GFFeedAddOn integration across forms, per-form tabs, activate/deactivate via `GFFormsModel::update_feed_property`, delete via `GFAPI::delete_feed`, deep link to the add-on's feed screen. GOTCHA: `GFAPI::get_feeds` defaults to ACTIVE-ONLY; pass `$is_active = null` or deactivated feeds vanish |
@@ -301,7 +303,7 @@ component-tree response shapes.
 | Phase | Plan | Status |
 |---|---|---|
 | **1 — keystone** | Unified form engine; port panels; upgrade create/edit | ✅ shipped v0.12.0 |
-| **2 — multiplier** | `settings` surface + Gravity SMTP mapper, then GF form settings + notifications | ✅ shipped v0.12.0–v0.13.0 (confirmations + GF plugin settings deliberately skipped) |
+| **2 — multiplier** | `settings` surface + Gravity SMTP mapper, then GF form settings + notifications | ✅ shipped v0.12.0–v0.13.0 (GF plugin settings deliberately skipped; confirmations arrived v0.43) |
 | **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards + chart, list row-actions | ✅ (sectionsRoute row types + sortable columns landed v0.18.0; charts on seven adapters through v0.18.0); remaining polish: per-item stat tiles, the GF form-results chart consumer |
 | **4 — declare victory** | Document mapper pattern for third parties; GF form editor stays deep link | docs live in `for-plugin-authors.md`; 80% editor parked in `native-editors.md` |
 

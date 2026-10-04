@@ -894,12 +894,12 @@ returned to Person chooses.
 
 ## Keyboard shortcuts
 
-Pages that keep your edits until you press Save (the builders, a notification, settings forms, products, memberships, Styles) ask before you leave them with unsaved changes, whichever way you leave: the sidebar, ⌘K, a link, or the browser's Back and Forward.
+Pages that keep your edits until you press Save (the builders, a notification or confirmation, settings forms, products, memberships, Styles) ask before you leave them with unsaved changes, whichever way you leave: the sidebar, ⌘K, a link, or the browser's Back and Forward.
 
 | Keys | Does |
 |---|---|
 | **⌘K** | Command palette (with text selected in the editor: link) |
-| **⌘S** | Save, keeping the current status. On any page or dialog with a Save button (the form and field group builders, a notification, settings forms, products, memberships…), presses it |
+| **⌘S** | Save, keeping the current status. On any page or dialog with a Save button (the form and field group builders, a notification or confirmation, settings forms, products, memberships…), presses it |
 | **⌘⏎** | Publish, Update or Schedule |
 | **⌘/** | Block library |
 | **⌘⇧F** | Find and replace in the post |
