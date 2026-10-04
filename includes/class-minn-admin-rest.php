@@ -856,6 +856,29 @@ class Minn_Admin_REST {
 		);
 
 		// Current user's Minn UI appearance (color scheme). Self only.
+		// The site's default appearance (Settings → Appearance). Site-wide, so
+		// manage_options like every other site setting.
+		register_rest_route(
+			self::NS,
+			'/site-appearance',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'get_site_appearance' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'update_site_appearance' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/me/appearance',
@@ -5813,6 +5836,70 @@ class Minn_Admin_REST {
 	private static function target_order_id( WP_REST_Request $request ) {
 		$url = $request->get_url_params();
 		return isset( $url['id'] ) ? (int) $url['id'] : 0;
+	}
+
+	/**
+	 * Accounts that picked their own palette instead of the site default:
+	 * the ids of every saved appearance whose scheme is not 'site'.
+	 *
+	 * @return int[]
+	 */
+	private static function own_palette_user_ids() {
+		$ids = get_users(
+			array(
+				'meta_key' => Minn_Admin::APPEARANCE_META, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'fields'   => 'ID',
+				'number'   => 5000,
+			)
+		);
+		$out = array();
+		foreach ( $ids as $id ) {
+			$ap = Minn_Admin::get_user_appearance( (int) $id );
+			if ( 'site' !== $ap['scheme'] ) {
+				$out[] = (int) $id;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * GET minn-admin/v1/site-appearance — the site default plus how many
+	 * accounts picked their own palette.
+	 */
+	public static function get_site_appearance( WP_REST_Request $request ) {
+		return rest_ensure_response(
+			array(
+				'appearance' => Minn_Admin::site_appearance(),
+				'ownPalette' => count( self::own_palette_user_ids() ),
+			)
+		);
+	}
+
+	/**
+	 * POST minn-admin/v1/site-appearance { scheme, custom, mode, resetUsers }.
+	 * resetUsers moves every account that picked its own palette back to the
+	 * site default; their other preferences (default admin, Minn bar, font)
+	 * stay as they are.
+	 */
+	public static function update_site_appearance( WP_REST_Request $request ) {
+		$json = $request->get_json_params();
+		$json = is_array( $json ) ? $json : array();
+		$cur  = Minn_Admin::site_appearance();
+		Minn_Admin::save_site_appearance(
+			array(
+				'scheme' => array_key_exists( 'scheme', $json ) ? $json['scheme'] : $cur['scheme'],
+				'custom' => array_key_exists( 'custom', $json ) ? $json['custom'] : $cur['custom'],
+				'mode'   => array_key_exists( 'mode', $json ) ? $json['mode'] : $cur['mode'],
+			)
+		);
+		if ( ! empty( $json['resetUsers'] ) ) {
+			foreach ( self::own_palette_user_ids() as $uid ) {
+				$ap           = Minn_Admin::get_user_appearance( $uid );
+				$ap['scheme'] = 'site';
+				Minn_Admin::save_user_appearance( $uid, $ap );
+			}
+		}
+		return self::get_site_appearance( $request );
 	}
 
 	/**

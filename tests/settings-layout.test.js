@@ -32,10 +32,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 20000 } );
 
-		/* ===== Intent tabs (Design + Connectors are capability-gated) ===== */
+		/* ===== Intent tabs (Design, Appearance + Connectors are capability-gated) ===== */
 		const tabs = await page.$$eval( '.minn-settings-nav-item', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
 		const always = [ 'Site', 'Visibility', 'Homepage', 'Content', 'Comments' ];
-		const known = [ ...always, 'Design', 'Connectors' ];
+		const known = [ ...always, 'Design', 'Appearance', 'Connectors' ];
 		t.check( 'the always-present intent tabs are all there', always.every( ( x ) => tabs.includes( x ) ), JSON.stringify( tabs ) );
 		t.check( 'every tab is a known intent tab (no raw WP screens)', tabs.every( ( x ) => known.includes( x ) ), JSON.stringify( tabs ) );
 		t.check( 'no WordPress tabs remain', ! tabs.some( ( x ) => [ 'General', 'Reading', 'Writing', 'Discussion', 'Permalinks' ].includes( x ) ) );

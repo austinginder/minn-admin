@@ -40,21 +40,21 @@ $minn_asset_ver = function ( $rel ) {
 ?>
 <link rel="preload" href="<?php echo esc_url( MINN_ADMIN_URL . 'assets/js/app.js?ver=' . $minn_asset_ver( 'assets/js/app.js' ) ); ?>" as="script">
 <script>
-// Apply the theme before first paint to avoid a flash. Default is System
-// (follow the OS live). Explicit light/dark wins when the user locked one.
+// Apply the theme before first paint to avoid a flash. A device with no saved
+// choice starts in the site's default mode (Settings → Appearance), which is
+// System (follow the OS live) unless the site picked one. Nothing is saved
+// until the person picks, so a later site default still reaches the device.
+// Explicit light/dark wins when the user locked one.
 try {
-	var stored = localStorage.getItem( 'minn-theme' );
-	// First visit: persist System so the default is an explicit preference.
-	if ( ! stored ) {
-		localStorage.setItem( 'minn-theme', 'system' );
-		stored = 'system';
-	}
-	var follow = stored === 'system';
+	var siteMode = <?php echo wp_json_encode( isset( $boot['siteAppearance']['mode'] ) ? (string) $boot['siteAppearance']['mode'] : 'system' ); ?>;
+	var stored = localStorage.getItem( 'minn-theme' ) || siteMode;
+	var follow = stored !== 'light' && stored !== 'dark';
 	if ( follow && window.matchMedia ) {
 		var mq = window.matchMedia( '(prefers-color-scheme: light)' );
 		document.documentElement.setAttribute( 'data-theme', mq.matches ? 'light' : 'dark' );
 		mq.addEventListener( 'change', function ( e ) {
-			if ( localStorage.getItem( 'minn-theme' ) === 'system' ) {
+			var pref = localStorage.getItem( 'minn-theme' ) || siteMode;
+			if ( pref !== 'light' && pref !== 'dark' ) {
 				document.documentElement.setAttribute( 'data-theme', e.matches ? 'light' : 'dark' );
 				document.dispatchEvent( new CustomEvent( 'minn-theme-change' ) );
 			}
@@ -75,7 +75,12 @@ window.MINN = <?php echo false === $minn_boot_json ? '{}' : $minn_boot_json; ?>;
 // Color scheme from user meta (boot.user.appearance) — apply before paint.
 (function () {
 	try {
-		var ap = ( window.MINN && window.MINN.user && window.MINN.user.appearance ) || { scheme: 'minn' };
+		var ap = ( window.MINN && window.MINN.user && window.MINN.user.appearance ) || { scheme: 'site' };
+		// 'site' follows the site default's palette.
+		if ( ap.scheme === 'site' ) {
+			var site = ( window.MINN && window.MINN.siteAppearance ) || {};
+			ap = { scheme: site.scheme || 'minn', custom: site.custom, font: ap.font };
+		}
 		var root = document.documentElement;
 		// Legacy { accent } → scheme id.
 		var scheme = ap.scheme || ( ap.accent && ap.accent !== 'custom' ? ap.accent : ( ap.accent === 'custom' ? 'custom' : 'minn' ) );

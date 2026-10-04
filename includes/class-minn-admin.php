@@ -693,8 +693,12 @@ class Minn_Admin {
 	 * Per-user Minn UI appearance. User meta key `minn_admin_appearance`.
 	 *
 	 * Shape:
-	 *   { scheme: 'minn'|…|'custom', custom: { dark: {slot: #hex…}, light: {…} },
+	 *   { scheme: 'site'|'minn'|…|'custom', custom: { dark: {slot: #hex…}, light: {…} },
 	 *     font: 'minn'|'wordpress', defaultAdmin, frontBar }
+	 *
+	 * 'site' (the default for anyone who never picked) follows the site's
+	 * default appearance, set in Settings → Appearance (option
+	 * minn_admin_site_appearance); effective_appearance() resolves it.
 	 *
 	 * Scheme slots map to CSS variables (status colors stay fixed). Soft/ring
 	 * accents are derived client-side from accent.
@@ -767,7 +771,8 @@ class Minn_Admin {
 
 	public static function appearance_defaults() {
 		return array(
-			'scheme'       => 'minn',
+			// Follow the site's default palette until the person picks one.
+			'scheme'       => 'site',
 			'custom'       => self::scheme_base_tokens(),
 			// Opt-in only — never seed from the old site option.
 			'defaultAdmin' => false,
@@ -889,8 +894,8 @@ class Minn_Admin {
 		}
 
 		$ids    = self::scheme_ids();
-		$scheme = isset( $raw['scheme'] ) ? sanitize_key( (string) $raw['scheme'] ) : 'minn';
-		if ( 'custom' !== $scheme && ! in_array( $scheme, $ids, true ) ) {
+		$scheme = isset( $raw['scheme'] ) ? sanitize_key( (string) $raw['scheme'] ) : 'site';
+		if ( 'custom' !== $scheme && 'site' !== $scheme && ! in_array( $scheme, $ids, true ) ) {
 			$scheme = 'minn';
 		}
 
@@ -929,6 +934,53 @@ class Minn_Admin {
 		$norm = self::normalize_appearance( $raw );
 		update_user_meta( $uid, self::APPEARANCE_META, $norm );
 		return $norm;
+	}
+
+	const SITE_APPEARANCE_OPTION = 'minn_admin_site_appearance';
+
+	/**
+	 * The site's default appearance: the palette everyone whose scheme is
+	 * 'site' sees, and the light/dark mode a device starts in until its
+	 * person picks one ('system' follows the device).
+	 *
+	 * @return array{scheme:string,custom:array{dark:array,light:array},mode:string}
+	 */
+	public static function site_appearance() {
+		$raw  = get_option( self::SITE_APPEARANCE_OPTION, array() );
+		$raw  = is_array( $raw ) ? $raw : array();
+		$norm = self::normalize_appearance( array_merge( array( 'scheme' => 'minn' ), $raw ) );
+		$mode = isset( $raw['mode'] ) && in_array( $raw['mode'], array( 'dark', 'light' ), true ) ? $raw['mode'] : 'system';
+		return array(
+			'scheme' => 'site' === $norm['scheme'] ? 'minn' : $norm['scheme'],
+			'custom' => $norm['custom'],
+			'mode'   => $mode,
+		);
+	}
+
+	public static function save_site_appearance( $raw ) {
+		$raw  = is_array( $raw ) ? $raw : array();
+		$norm = self::normalize_appearance( array_merge( array( 'scheme' => 'minn' ), $raw ) );
+		$out  = array(
+			'scheme' => 'site' === $norm['scheme'] ? 'minn' : $norm['scheme'],
+			'custom' => $norm['custom'],
+			'mode'   => isset( $raw['mode'] ) && in_array( $raw['mode'], array( 'dark', 'light' ), true ) ? $raw['mode'] : 'system',
+		);
+		update_option( self::SITE_APPEARANCE_OPTION, $out );
+		return self::site_appearance();
+	}
+
+	/**
+	 * What a user actually sees: their own record, with a 'site' scheme
+	 * swapped for the site default's palette.
+	 */
+	public static function effective_appearance( $user_id = 0 ) {
+		$ap = self::get_user_appearance( $user_id );
+		if ( 'site' === $ap['scheme'] ) {
+			$site         = self::site_appearance();
+			$ap['scheme'] = $site['scheme'];
+			$ap['custom'] = $site['custom'];
+		}
+		return $ap;
 	}
 
 	/**
@@ -1717,12 +1769,17 @@ class Minn_Admin {
 				'name'       => $user->display_name,
 				'role'       => translate_user_role( $role ),
 				'avatar'     => get_avatar_url( $user->ID, array( 'size' => 64 ) ),
-				// Per-user color scheme (user meta minn_admin_appearance).
+				// Per-user color scheme (user meta minn_admin_appearance);
+				// scheme 'site' follows siteAppearance below.
 				'appearance' => self::get_user_appearance( $user->ID ),
 				// Role-enforced admin-experience policy ('' = person chooses).
 				// The profile page swaps enforced switches for a locked note.
 				'policy'     => self::policy_for_user( $user->ID ),
 			),
+			// The site's default palette and starting mode (Settings →
+			// Appearance): what a 'site' scheme paints and where a device
+			// with no saved light/dark choice starts.
+			'siteAppearance'  => self::site_appearance(),
 			// Scheme slot metadata for the profile custom editor (key + CSS var + label).
 			'appearanceSlots' => array_map(
 				function ( $css, $key ) {

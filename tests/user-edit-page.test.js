@@ -53,7 +53,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			topTitle: document.querySelector( '#minn-title' ).textContent,
 		} ) );
 		t.check( 'account card populated', cards.name === origName, cards.name );
-		t.check( 'scheme swatches render (9 presets + custom)', cards.swatches === 10, String( cards.swatches ) );
+		t.check( 'scheme swatches render (site default + 9 presets + custom)', cards.swatches === 11, String( cards.swatches ) );
 		t.check( 'sessions card renders', cards.sessions );
 		t.check( 'danger zone renders', cards.danger );
 		t.check( 'topbar says Edit user', /Edit user/.test( cards.topTitle ), cards.topTitle );

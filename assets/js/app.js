@@ -4464,9 +4464,11 @@
 	function themePref() {
 		try {
 			const t = localStorage.getItem( 'minn-theme' );
-			if ( t === 'light' || t === 'dark' ) return t;
+			if ( t === 'light' || t === 'dark' || t === 'system' ) return t;
 		} catch ( e ) { /* private mode */ }
-		return 'system';
+		// Nothing picked on this device: the site's starting mode.
+		const site = B.siteAppearance && B.siteAppearance.mode;
+		return site === 'light' || site === 'dark' ? site : 'system';
 	}
 
 	function osTheme() {
@@ -4575,7 +4577,9 @@
 			};
 		}
 		const ids = SCHEME_PRESETS.map( ( p ) => p.id );
-		let scheme = a.scheme === 'custom' || ids.includes( a.scheme ) ? a.scheme : 'minn';
+		// 'site' follows the site default (Settings → Appearance); a record
+		// that never picked a scheme follows it too.
+		let scheme = a.scheme === 'custom' || a.scheme === 'site' || ids.includes( a.scheme ) ? a.scheme : ( a.scheme ? 'minn' : 'site' );
 		const customIn = a.custom && typeof a.custom === 'object' && ! Array.isArray( a.custom ) ? a.custom : {};
 		const custom = {
 			dark: normalizeModeTokens( customIn.dark, 'dark' ),
@@ -4585,6 +4589,22 @@
 		const frontBar = a.frontBar === true || a.frontBar === 1 || a.frontBar === '1' || a.frontBar === 'true';
 		const font = a.font === 'wordpress' ? 'wordpress' : 'minn';
 		return { scheme, custom, defaultAdmin, frontBar, font };
+	}
+
+	// The site default: a palette (never 'site' itself) and a starting mode.
+	function siteAppearanceOf( sa ) {
+		const a = sa && typeof sa === 'object' ? sa : {};
+		const norm = appearanceOf( { scheme: a.scheme && a.scheme !== 'site' ? a.scheme : 'minn', custom: a.custom } );
+		return { scheme: norm.scheme, custom: norm.custom, mode: a.mode === 'light' || a.mode === 'dark' ? a.mode : 'system' };
+	}
+
+	// What a person sees: their record, with 'site' swapped for the site
+	// default's palette.
+	function resolvedAppearance( ap ) {
+		const a = appearanceOf( ap );
+		if ( a.scheme !== 'site' ) return a;
+		const site = siteAppearanceOf( B.siteAppearance );
+		return { ...a, scheme: site.scheme, custom: site.custom };
 	}
 
 	function clearSchemeInlineVars( root ) {
@@ -4615,16 +4635,17 @@
 	function applyAppearance( ap ) {
 		const norm = appearanceOf( ap || ( B.user && B.user.appearance ) );
 		if ( B.user ) B.user.appearance = norm;
+		const shown = resolvedAppearance( norm );
 		const root = document.documentElement;
 		const mode = root.getAttribute( 'data-theme' ) || 'dark';
-		root.setAttribute( 'data-scheme', norm.scheme || 'minn' );
+		root.setAttribute( 'data-scheme', shown.scheme || 'minn' );
 		root.setAttribute( 'data-font', norm.font === 'wordpress' ? 'wordpress' : 'minn' );
 		// The preview font guard read the old UI stack; read it again.
 		previewGuard = null;
 		// Drop legacy data-accent if present.
 		root.removeAttribute( 'data-accent' );
-		if ( norm.scheme === 'custom' ) {
-			const tokens = normalizeModeTokens( norm.custom && norm.custom[ mode ], mode );
+		if ( shown.scheme === 'custom' ) {
+			const tokens = normalizeModeTokens( shown.custom && shown.custom[ mode ], mode );
 			applySchemeTokens( tokens, mode );
 			return;
 		}
@@ -4706,6 +4727,21 @@
 		).join( '' );
 		const customOn = cur.scheme === 'custom';
 		const mode = ( document.documentElement.getAttribute( 'data-theme' ) || 'dark' );
+		// A person's own picker (opts.site) offers the site default first;
+		// the site default's own editor does not offer itself.
+		let siteBtn = '';
+		if ( opts.site ) {
+			const site = siteAppearanceOf( B.siteAppearance );
+			const preset = SCHEME_PRESETS.find( ( p ) => p.id === site.scheme );
+			const face = preset ? preset.panel : site.custom.dark.panel;
+			const dot = preset ? preset.accent : site.custom.dark.accent;
+			const on = cur.scheme === 'site';
+			siteBtn = `<button type="button" class="minn-scheme-swatch minn-scheme-site${ on ? ' sel' : '' }" data-scheme="site" title="${ esc( __( 'Site default' ) ) }" aria-label="${ esc( __( 'Site default' ) ) }" aria-pressed="${ on ? 'true' : 'false' }">
+					<span class="minn-scheme-swatch-face" style="background:${ esc( face ) }"></span>
+					<span class="minn-scheme-site-tag" aria-hidden="true">${ esc( __( 'Site' ) ) }</span>
+					<span class="minn-scheme-swatch-dot" style="background:${ esc( dot ) }"></span>
+				</button><span class="minn-scheme-sep" aria-hidden="true"></span>`;
+		}
 		const slotMeta = schemeSlotsMeta();
 		const labelOf = ( key ) => {
 			const hit = slotMeta.find( ( s ) => s.key === key );
@@ -4737,12 +4773,14 @@
 			</div>` ).join( '' ) : '';
 		return `
 			<div class="minn-scheme-row" role="group" aria-label="${ esc( __( 'Color scheme' ) ) }">
-				${ dots }
+				${ siteBtn }${ dots }
 				<button type="button" class="minn-scheme-swatch minn-scheme-custom-btn${ customOn ? ' sel' : '' }" data-scheme="custom" title="${ esc( __( 'Custom' ) ) }" aria-label="${ esc( __( 'Custom scheme' ) ) }" aria-pressed="${ customOn ? 'true' : 'false' }">
 					<span class="minn-scheme-swatch-face minn-scheme-custom-face">+</span>
 				</button>
 			</div>
-			<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'A full palette for panels, type and brand. Status greens/ambers stay the same.' ) ) }</div>
+			<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( opts.site && cur.scheme === 'site'
+				? __( 'Following the site default. Pick a scheme to use your own.' )
+				: __( 'A full palette for panels, type and brand. Status greens/ambers stay the same.' ) ) }</div>
 			${ customEditors }`;
 	}
 
@@ -4822,7 +4860,7 @@
 				// Paint first; meta save is background. Only rebuild when the
 				// custom slot editors need to appear/disappear.
 				commitAppearance(
-					{ scheme: id, custom: prev.custom },
+					{ scheme: id, custom: willCustom && prev.scheme === 'site' ? resolvedAppearance( prev ).custom : prev.custom },
 					{ rebuild: wasCustom !== willCustom }
 				);
 				if ( wasCustom === willCustom ) markSchemeSwatchSelected( wrap, id );
@@ -27391,13 +27429,16 @@
 	// identity/locale (Site), who-can-see-and-join (Visibility), the front
 	// page (Homepage), content defaults + URLs (Content), and everything
 	// about comments incl. spam (Comments).
-	const SETTINGS_SECTIONS = [ 'Site', 'Visibility', 'Homepage', 'Design', 'Content', 'Comments', 'Connectors' ];
+	const SETTINGS_SECTIONS = [ 'Site', 'Visibility', 'Homepage', 'Design', 'Appearance', 'Content', 'Comments', 'Connectors' ];
 	// Design (Additional CSS) needs core's edit_css — hidden, not disabled,
 	// for everyone else (matching how the Customizer hides the panel).
 	// Connectors needs the WP 7.0 registry (and manage_options, folded into
 	// the boot flag).
+	// Appearance (Minn's own default look) is a site setting, absent from
+	// the engine, which serves no PHP routes.
 	const settingsSections = () => SETTINGS_SECTIONS.filter( ( s ) =>
-		( s !== 'Design' || B.caps.editCss ) && ( s !== 'Connectors' || B.connectors ) );
+		( s !== 'Design' || B.caps.editCss ) && ( s !== 'Connectors' || B.connectors )
+		&& ( s !== 'Appearance' || ( B.caps.settings && ! ENGINE ) ) );
 	const POST_FORMATS = [ 'standard', 'aside', 'chat', 'gallery', 'link', 'image', 'quote', 'status', 'video', 'audio' ];
 	// WordPress permalink structure tags. Kept OUT of the translatable string
 	// that lists them: they are literal syntax that must survive every locale
@@ -27414,7 +27455,8 @@
 	];
 
 	async function loadSettings() {
-		const [ values, categories, pages, permalinks, spam, customCss, connectors, languages ] = await Promise.all( [
+		state.siteAppearanceDraft = null;
+		const [ values, categories, pages, permalinks, spam, customCss, connectors, languages, siteAppearance ] = await Promise.all( [
 			api( 'wp/v2/settings' ),
 			api( 'wp/v2/categories?per_page=100&_fields=id,name' ).catch( () => [] ),
 			api( 'wp/v2/pages?per_page=100&status=publish&orderby=title&order=asc&_fields=id,title' ).catch( () => [] ),
@@ -27423,6 +27465,7 @@
 			B.caps.editCss ? api( 'minn-admin/v1/custom-css' ).catch( () => null ) : Promise.resolve( null ),
 			B.connectors ? loadConnectorsResilient().catch( () => null ) : Promise.resolve( null ),
 			api( 'minn-admin/v1/languages' ).catch( () => null ),
+			B.caps.settings && ! ENGINE ? api( 'minn-admin/v1/site-appearance' ).catch( () => null ) : Promise.resolve( null ),
 		] );
 		const siteLogo = B.caps.themeOptions ? await api( 'minn-admin/v1/site-logo' ).catch( () => null ) : null;
 		const siteIcon = values.site_icon
@@ -27430,7 +27473,7 @@
 				.then( ( m ) => ( { url: ( m.media_details && m.media_details.sizes && m.media_details.sizes.thumbnail && m.media_details.sizes.thumbnail.source_url ) || m.source_url } ) )
 				.catch( () => null )
 			: null;
-		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon, customCss, connectors, languages, siteLogo };
+		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon, customCss, connectors, languages, siteLogo, siteAppearance };
 	}
 
 	/**
@@ -27989,6 +28032,52 @@
 					after: spamHtml,
 				};
 			}
+			case 'Appearance': {
+				// Minn's own look for everyone on this site: the palette each
+				// person follows until they pick their own (Your profile →
+				// Appearance), and the light/dark mode a device starts in.
+				const sa = cache.siteAppearance;
+				if ( ! sa ) {
+					return {
+						sub: __( 'How Minn looks for everyone on this site until they pick their own.' ),
+						fields: `<div class="minn-editor-locked-note">${ esc( __( 'The default appearance couldn’t be loaded.' ) ) }</div>`,
+						noSave: true,
+					};
+				}
+				const draft = state.siteAppearanceDraft || ( state.siteAppearanceDraft = siteAppearanceOf( sa.appearance ) );
+				const modes = [
+					{ id: 'system', label: __( 'System' ), desc: __( 'Match the device setting' ) },
+					{ id: 'light', label: __( 'Light' ), desc: __( 'Start in light mode' ) },
+					{ id: 'dark', label: __( 'Dark' ), desc: __( 'Start in dark mode' ) },
+				];
+				return {
+					sub: __( 'How Minn looks for everyone on this site until they pick their own.' ),
+					fields: `
+						<div id="minn-site-appearance" class="minn-site-appearance">
+							<div class="minn-field-label">${ esc( __( 'Color scheme' ) ) }</div>
+							${ appearanceSwatchesHtml( draft, { modes: [ 'dark', 'light' ] } ) }
+							<div class="minn-field-label" style="margin-top:20px;">${ esc( __( 'Starting mode' ) ) }</div>
+							<div class="minn-toggle-rows minn-side-toggles minn-theme-mode-toggles" role="radiogroup" aria-label="${ esc( __( 'Starting mode' ) ) }">
+								${ modes.map( ( o ) => `
+								<div class="minn-toggle-row">
+									<button type="button" class="minn-switch${ draft.mode === o.id ? ' on' : '' }" data-site-mode="${ esc( o.id ) }" role="radio" aria-checked="${ draft.mode === o.id ? 'true' : 'false' }" aria-label="${ esc( o.label ) }"><span class="minn-switch-knob"></span></button>
+									<div class="minn-toggle-info">
+										<div class="minn-toggle-label">${ esc( o.label ) }</div>
+										<div class="minn-toggle-desc">${ esc( o.desc ) }</div>
+									</div>
+								</div>` ).join( '' ) }
+							</div>
+							<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'Where a device starts until its person picks light or dark on Your profile.' ) ) }</div>
+							${ sa.ownPalette ? `
+							<div class="minn-site-ap-own">
+								<span>${ esc( sprintf( _n( '%d person picked their own colors and doesn’t see this.', '%d people picked their own colors and don’t see this.', sa.ownPalette ), sa.ownPalette ) ) }</span>
+								<button type="button" class="minn-btn-soft" data-site-ap-reset>${ esc( __( 'Move them to the site default' ) ) }</button>
+							</div>` : '' }
+							<div style="margin-top:20px;"><button class="minn-btn-primary" id="minn-save-site-appearance" type="button">${ esc( __( 'Save changes' ) ) }</button></div>
+						</div>`,
+					noSave: true,
+				};
+			}
 			case 'Connectors': {
 				// WP 7.0's connector registry (Settings → Connectors in
 				// wp-admin) as Minn cards. Keys save through core's OWN
@@ -28101,6 +28190,7 @@
 				renderSettings();
 			} )
 		);
+		if ( state.settingsSection === 'Appearance' ) bindSiteAppearanceSettings( view );
 
 		const pending = {};
 		const OPEN_CLOSED = [ 'default_comment_status', 'default_ping_status' ];
@@ -49502,7 +49592,7 @@
 					<div class="minn-profile-fields">
 						<div id="minn-ue-appearance">
 							<div class="minn-field-label">${ esc( __( 'Color scheme' ) ) }</div>
-							${ appearanceSwatchesHtml( ue.appearance, { modes: [ 'dark', 'light' ] } ) }
+							${ appearanceSwatchesHtml( ue.appearance, { modes: [ 'dark', 'light' ], site: true } ) }
 						</div>
 						<div>
 							<div class="minn-toggle-rows minn-side-toggles">${ ENGINE ? '' : `
@@ -49702,6 +49792,90 @@
 
 		const del = $( '#minn-ue-delete', view );
 		if ( del ) del.addEventListener( 'click', () => openUserDeleteModal( u ) );
+	}
+
+	// Settings → Appearance: the site default palette and starting mode.
+	// Edits stay a draft (nothing repaints: this admin may use their own
+	// palette) until Save; a save repaints this session when it follows the
+	// site default.
+	function bindSiteAppearanceSettings( view ) {
+		const wrap = $( '#minn-site-appearance', view );
+		if ( ! wrap ) return;
+		const draft = () => siteAppearanceOf( state.siteAppearanceDraft );
+		$$( '.minn-scheme-swatch', wrap ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => {
+				const id = btn.dataset.scheme;
+				if ( ! id ) return;
+				const prev = draft();
+				if ( prev.scheme === id && id !== 'custom' ) return;
+				const flips = ( prev.scheme === 'custom' ) !== ( id === 'custom' );
+				state.siteAppearanceDraft = { ...prev, scheme: id };
+				if ( flips ) renderSettings();
+				else markSchemeSwatchSelected( wrap, id );
+			} );
+		} );
+		$$( '[data-scheme-slot]', wrap ).forEach( ( input ) => {
+			input.addEventListener( 'input', () => {
+				const prev = draft();
+				const m = input.dataset.mode === 'light' ? 'light' : 'dark';
+				const nextMode = { ...normalizeModeTokens( prev.custom[ m ], m ) };
+				const hex = sanitizeHex( input.value );
+				if ( input.dataset.schemeSlot && hex ) nextMode[ input.dataset.schemeSlot ] = hex;
+				const sw = input.closest( '.minn-scheme-slot' )?.querySelector( '.minn-scheme-slot-swatch' );
+				if ( sw && hex ) sw.style.background = hex;
+				state.siteAppearanceDraft = { ...prev, scheme: 'custom', custom: { ...prev.custom, [ m ]: nextMode } };
+			} );
+		} );
+		$$( '[data-site-mode]', wrap ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => {
+				state.siteAppearanceDraft = { ...draft(), mode: btn.dataset.siteMode };
+				$$( '[data-site-mode]', wrap ).forEach( ( el ) => {
+					const on = el === btn;
+					el.classList.toggle( 'on', on );
+					el.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				} );
+			} );
+		} );
+		const save = async ( resetUsers ) => {
+			try {
+				const r = await api( 'minn-admin/v1/site-appearance', {
+					method: 'POST',
+					body: JSON.stringify( { ...draft(), resetUsers: !! resetUsers } ),
+				} );
+				if ( state.cache.settings ) state.cache.settings.siteAppearance = r;
+				B.siteAppearance = r.appearance;
+				state.siteAppearanceDraft = siteAppearanceOf( r.appearance );
+				// The reset moved this account too when it had its own palette.
+				if ( resetUsers && B.user ) B.user.appearance = appearanceOf( { ...appearanceOf( B.user.appearance ), scheme: 'site' } );
+				applyAppearance( B.user && B.user.appearance );
+				// A device with no light/dark pick starts in the site's mode.
+				let picked = null;
+				try { picked = localStorage.getItem( 'minn-theme' ); } catch ( e ) { /* private mode */ }
+				if ( ! picked ) {
+					const pref = themePref();
+					document.documentElement.setAttribute( 'data-theme', pref === 'system' ? osTheme() : pref );
+					applyAppearance( B.user && B.user.appearance );
+					renderThemeBtn();
+				}
+				toast( resetUsers ? __( 'Everyone now uses the site default' ) : __( 'Default appearance saved' ) );
+				if ( state.route === 'settings' ) renderSettings();
+			} catch ( e ) {
+				toast( e.message || __( 'Could not save the default appearance' ), true );
+			}
+		};
+		$( '#minn-save-site-appearance', wrap ).addEventListener( 'click', () => save( false ) );
+		const reset = $( '[data-site-ap-reset]', wrap );
+		if ( reset ) {
+			reset.addEventListener( 'click', async () => {
+				const ok = await minnConfirm( {
+					title: __( 'Move everyone to the site default?' ),
+					body: __( 'People who picked their own colors will see the site default instead. They can pick their own again on Your profile.' ),
+					keeps: [ __( 'Light or dark mode on each device' ), __( 'Each person’s other Appearance settings' ) ],
+					confirmLabel: __( 'Move everyone' ),
+				} );
+				if ( ok ) save( true );
+			} );
+		}
 	}
 
 	// Appearance edits for ANOTHER user: update the target's meta over the
@@ -49927,7 +50101,7 @@
 					<div class="minn-profile-fields">
 						<div>
 							<div class="minn-field-label">${ esc( __( 'Color scheme' ) ) }</div>
-							${ appearanceSwatchesHtml( B.user.appearance ) }
+							${ appearanceSwatchesHtml( B.user.appearance, { site: true } ) }
 						</div>
 						<div>
 							<div class="minn-field-label">${ esc( __( 'Theme' ) ) }</div>

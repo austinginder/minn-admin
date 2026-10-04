@@ -518,7 +518,9 @@ class Minn_Admin_Bar {
 
 		// Corner Reveal stays in its own shell so themes do not reserve the
 		// classic toolbar's full-width layout around this small overlay.
-		$appearance = Minn_Admin::get_user_appearance();
+		// What this person sees: a 'site' scheme takes the site default.
+		$appearance = Minn_Admin::effective_appearance();
+		$site_mode  = Minn_Admin::site_appearance()['mode'];
 		$scheme     = isset( $appearance['scheme'] ) ? $appearance['scheme'] : 'minn';
 		$font       = ( isset( $appearance['font'] ) && 'wordpress' === $appearance['font'] ) ? 'wordpress' : 'minn';
 		// The corner always ships ghosted so the mark never flashes before
@@ -531,8 +533,9 @@ class Minn_Admin_Bar {
 		}
 
 		// Pre-paint the saved Minn theme before first paint of the bar (the
-		// SPA's localStorage key; system preference when unset).
-		echo '<script>(function(){try{var t=localStorage.getItem("minn-theme");if(t!=="dark"&&t!=="light"){t=window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.getElementById("minn-bar-root").setAttribute("data-minn-theme",t);}catch(e){}})();</script>';
+		// SPA's localStorage key). Unset starts in the site's default mode;
+		// 'system', or no site default, follows the device.
+		echo '<script>(function(){try{var t=localStorage.getItem("minn-theme");if(!t){t=' . wp_json_encode( $site_mode ) . ';}if(t!=="dark"&&t!=="light"){t=window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.getElementById("minn-bar-root").setAttribute("data-minn-theme",t);}catch(e){}})();</script>';
 
 		// Pre-paint the corner handoff: a fresh flag means the last
 		// navigation started from this same corner (the bar mark, or the

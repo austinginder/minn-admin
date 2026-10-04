@@ -2085,6 +2085,17 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-scheme-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px;
 }
+/* The site default sits first in a person's own picker, set off from the
+   named schemes by a hairline. */
+.minn-scheme-sep { width: 1px; height: 26px; background: var(--border2); margin: 0 2px; }
+.minn-scheme-site-tag {
+  position: absolute; top: 4px; inset-inline-start: 5px; font-size: 8.5px; font-weight: 700; line-height: 1;
+  letter-spacing: 0.02em; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55); pointer-events: none;
+}
+.minn-site-ap-own {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 13.5px; color: var(--text2);
+}
 .minn-scheme-swatch {
   position: relative; width: 34px; height: 34px; border-radius: 10px; border: 2px solid transparent;
   padding: 0; cursor: pointer; background: transparent;
