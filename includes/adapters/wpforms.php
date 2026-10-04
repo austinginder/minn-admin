@@ -565,6 +565,8 @@ add_action( 'rest_api_init', function () {
 						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url( 'admin.php?page=wpforms-entries&view=details&entry_id=' . (int) $row->entry_id ),
+					// Editable answers (adapters/wpforms-entry-edit.php).
+					'edit'     => function_exists( 'minn_admin_wpforms_edit_block' ) ? minn_admin_wpforms_edit_block( $row ) : null,
 				) );
 			},
 		),
