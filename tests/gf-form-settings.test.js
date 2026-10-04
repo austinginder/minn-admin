@@ -94,7 +94,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'form keeps the typed title after refusal', await page.$eval( '[data-sset="title"]', ( el ) => el.value === 'Old Newsletter' ) );
 
 		/* ===== Leaving settings returns to the list ===== */
+		// The refused title is still typed in, unsaved: leaving asks first.
 		await page.click( '[data-sview="manage"]' );
+		const asked = await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 6000 } ).then( () => true ).catch( () => false );
+		t.check( 'leaving with the unsaved title asks first', asked );
+		if ( asked ) await page.click( '.minn-confirm-modal [data-ok]' );
 		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
 		t.check( 'Forms list returns from item settings', true );
 	} finally {

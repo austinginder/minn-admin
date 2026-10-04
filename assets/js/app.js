@@ -3315,6 +3315,7 @@
 	}
 
 	function onRouteChange() {
+		shownPath = currentPath();
 		const prevRoute = state.route;
 		const prevId = state.editorId;
 		const prevType = state.editorType;
@@ -3342,9 +3343,92 @@
 		}
 	}
 
-	function go( route ) {
+	/* ===== Leaving a page with unsaved edits =====
+	 * Pages that hold edits until Save (the field group, form and
+	 * notification builders, the product and membership pages, settings
+	 * forms, Styles, role defaults) used to ask only from their own Back
+	 * button and when the tab closed. The sidebar, ⌘K, the top bar, links
+	 * and the browser's Back went straight through and the edits were gone.
+	 * Every in-app navigation now asks first. (The post editor autosaves on
+	 * the way out instead.)
+	 */
+	let leaveApproved = false;
+	let shownPath = null; // the path on screen, to stay on after a refused Back
+	let activeSettingsForm = null; // { route, host, isDirty } from bindSettingsForm
+
+	function pageHasUnsaved() {
+		const r = state.route;
+		if ( 'fieldgroup' === r ) return !! ( state.fgb && state.fgb.dirty );
+		if ( 'gfbuilder' === r ) return !! ( state.gfb && state.gfb.dirty );
+		if ( 'gfnotification' === r ) return !! ( state.gfn && state.gfn.dirty );
+		// Pages that show a save bar, or arm their Save, only once something
+		// changed say so on screen.
+		const view = $( '#minn-view' );
+		if ( view && $( '#minn-p-savebar:not([hidden]), #minn-wcm-savebar:not([hidden]), #minn-wcmp-savebar:not([hidden]), #minn-look-save:not([disabled]), #minn-rd-save:not([disabled])', view ) ) return true;
+		const f = activeSettingsForm;
+		return !! ( f && f.route === r && f.host && f.host.isConnected && f.isDirty() );
+	}
+
+	// True when a navigation has to wait for the person's answer; `proceed`
+	// runs it if they choose to leave.
+	function holdForUnsaved( proceed ) {
+		if ( leaveApproved || ! pageHasUnsaved() ) return false;
+		minnConfirm( {
+			title: __( 'Leave without saving?' ),
+			body: __( 'This page has changes that haven’t been saved. Leaving discards them.' ),
+			confirmLabel: __( 'Leave' ),
+			danger: true,
+		} ).then( ( ok ) => {
+			if ( ! ok ) return;
+			leaveApproved = true;
+			try {
+				proceed();
+			} finally {
+				leaveApproved = false;
+			}
+		} );
+		return true;
+	}
+
+	// `force`: the page's own edits are already saved or gone (a save that
+	// opens the new record, a delete), so there is nothing to ask about.
+	function go( route, opts ) {
+		if ( ! ( opts && opts.force ) && holdForUnsaved( () => go( route ) ) ) return;
 		setPath( route );
 		onRouteChange();
+	}
+
+	// The browser's Back / Forward has already moved the address when this
+	// runs: put the page's own address back while the person decides.
+	function onHistoryNav() {
+		if ( ! leaveApproved && shownPath !== null && pageHasUnsaved() ) {
+			const target = currentPath();
+			setPath( shownPath );
+			holdForUnsaved( () => {
+				setPath( target );
+				onRouteChange();
+			} );
+			return;
+		}
+		onRouteChange();
+	}
+
+	// ⌘S presses the Save in front of the person: an open dialog's, else the
+	// page's. An explicit list, so it never reaches a Publish, a Send or a
+	// destructive verb; the post editor keeps its own ⌘S.
+	const SAVE_SHORTCUT_IDS = [
+		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-sset-save', 'minn-product-save',
+		'minn-wcm-save', 'minn-wcmp-save', 'minn-order-save', 'minn-look-save', 'minn-save-settings',
+		'minn-save-site-appearance', 'minn-rd-save', 'minn-tax-save', 'minn-cpt-save', 'minn-zone-save',
+		'minn-widget-save', 'minn-pf-save', 'minn-surface-save', 'minn-uf-save', 'minn-coupon-save',
+		'minn-cedit-save', 'minn-media-save', 'minn-metric-save',
+	];
+	function pageSaveButton() {
+		const dialogs = $$( '.minn-modal-overlay' );
+		const scope = dialogs.length ? dialogs[ dialogs.length - 1 ] : $( '#minn-view' );
+		if ( ! scope ) return null;
+		const sel = SAVE_SHORTCUT_IDS.map( ( id ) => '#' + id ).join( ', ' );
+		return [ ...scope.querySelectorAll( sel ) ].find( ( b ) => ! b.disabled && b.offsetParent !== null ) || null;
 	}
 
 	/* Where a detail page's Back should land. Reached from its own list, a page
@@ -17646,6 +17730,8 @@
 			btn.addEventListener( 'click', () => {
 				const next = btn.dataset.sview;
 				if ( ss.view === next && ! ss.settingsItem ) return;
+				// Leaving a settings view with unsaved edits asks first.
+				if ( holdForUnsaved( () => btn.click() ) ) return;
 				ss.view = next;
 				if ( ss.view === 'settings' ) {
 					// Settings is a different shell — full re-render is fine.
@@ -18451,7 +18537,9 @@
 				saveBtn.disabled = false;
 			}
 		} );
-		return { isDirty: () => Object.keys( dirty ).length > 0 };
+		const isDirty = () => Object.keys( dirty ).length > 0;
+		activeSettingsForm = { route: state.route, host, isDirty };
+		return { isDirty };
 	}
 
 	function renderSurfaceSettings( s, view ) {
@@ -26732,10 +26820,14 @@
 		revealSettingsNavActive( view );
 		$$( '[data-storesec]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				state.storeSection = btn.dataset.storesec;
-				setPath( 'store-settings/' + encodeURIComponent( state.storeSection ) );
-				renderTopbar();
-				renderStoreSettings();
+				const open = () => {
+					state.storeSection = btn.dataset.storesec;
+					setPath( 'store-settings/' + encodeURIComponent( state.storeSection ) );
+					renderTopbar();
+					renderStoreSettings();
+				};
+				// A section switch repaints the form: unsaved edits would go.
+				if ( ! holdForUnsaved( open ) ) open();
 			} )
 		);
 		if ( isEmails ) renderStoreEmails( $( '#minn-store-emails', view ) );
@@ -46534,7 +46626,7 @@
 						<h4>${ esc( __( 'Keyboard shortcuts' ) ) }</h4>
 						<div class="minn-help-keys">
 							<span class="minn-kbd">⌘K</span><span>${ esc( __( 'Command palette · with text selected in the editor: link' ) ) }</span>
-							<span class="minn-kbd">⌘S</span><span>${ esc( __( 'Save, keeping the current status' ) ) }</span>
+							<span class="minn-kbd">⌘S</span><span>${ esc( __( 'Save, keeping the current status. On a page or dialog with a Save button, presses it' ) ) }</span>
 							<span class="minn-kbd">⌘⏎</span><span>${ esc( __( 'Publish, Update or Schedule' ) ) }</span>
 							<span class="minn-kbd">⌘/</span><span>${ esc( __( 'Block library: browse every block, design and pattern' ) ) }</span>
 							<span class="minn-kbd">⌘⇧F</span><span>${ esc( __( 'Find & replace in the post' ) ) }</span>
@@ -54123,7 +54215,7 @@
 				try {
 					const res = await api( `minn-admin/v1/wcm/members/${ m.id }`, { method: 'DELETE' } );
 					toast( ( res && res.message ) || __( 'Membership deleted.' ) );
-					go( 'woocommerce-memberships' );
+					go( 'woocommerce-memberships', { force: true } );
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -54608,7 +54700,7 @@
 				const res = await api( isNew ? 'minn-admin/v1/wcm/plans' : `minn-admin/v1/wcm/plans/${ d.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
 				toast( ( res && res.message ) || __( 'Plan saved.' ) );
 				if ( isNew && res && res.id ) {
-					go( 'membership-plans/' + res.id );
+					go( 'membership-plans/' + res.id, { force: true } );
 					return;
 				}
 				if ( isCur() && res && res.model ) planPageAdopt( m, res.model );
@@ -54639,7 +54731,7 @@
 					toast( ( res && res.message ) || __( 'Plan deleted.' ) );
 					const s = wcmSurface();
 					if ( s ) surfaceState( s.id ).view = 'manage';
-					go( 'woocommerce-memberships' );
+					go( 'woocommerce-memberships', { force: true } );
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -54787,11 +54879,15 @@
 			maybeFocusSearch();
 		}
 
-		window.addEventListener( 'popstate', onRouteChange );
-		if ( ! PATH_MODE ) window.addEventListener( 'hashchange', onRouteChange );
+		window.addEventListener( 'popstate', onHistoryNav );
+		if ( ! PATH_MODE ) window.addEventListener( 'hashchange', onHistoryNav );
 
 		// Closing the tab with unsaved editor changes gets the standard warning.
 		window.addEventListener( 'beforeunload', ( e ) => {
+			if ( pageHasUnsaved() ) {
+				e.preventDefault();
+				return;
+			}
 			if ( state.route === 'editor' && state.editor && state.editor.dirty ) {
 				e.preventDefault();
 				e.returnValue = '';
@@ -54831,6 +54927,15 @@
 		// "Save Page As…" win. Capture runs before the target, so save always
 		// reaches us and preventDefault kills the browser dialog.
 		window.addEventListener( 'keydown', ( e ) => {
+			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key.toLowerCase() === 's' && state.route !== 'editor' ) {
+				const btn = pageSaveButton();
+				if ( btn ) {
+					e.preventDefault();
+					e.stopPropagation();
+					btn.click();
+				}
+				return;
+			}
 			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key.toLowerCase() === 's' && state.route === 'editor' && state.editor ) {
 				e.preventDefault();
 				e.stopPropagation();
