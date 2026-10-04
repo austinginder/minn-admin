@@ -1208,6 +1208,48 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Reply to a form entry by email. The recipient is an address the
+		// entry itself holds, read through its provider's own detail route
+		// (so that route's view permission decides), never one the client
+		// names freely: without that check this would be a mail relay From
+		// the site's admin address to any inbox.
+		register_rest_route(
+			self::NS,
+			'/entries/reply',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'entry_reply' ),
+				'permission_callback' => function () {
+					return is_user_logged_in() && current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'surface' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_key',
+					),
+					'id'      => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+					'to'      => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_email',
+					),
+					'subject' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'message' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_textarea_field',
+					),
+				),
+			)
+		);
+
 		// WooCommerce order helpers (email + resend WC transactional emails).
 		// Order CRUD/refunds ride wc/v3; these cover what core WC REST leaves out.
 		if ( class_exists( 'WooCommerce' ) ) {
@@ -6930,6 +6972,111 @@ Please click the following link to confirm the invite:
 		return rest_ensure_response( array(
 			'ok'    => true,
 			'email' => $user->user_email,
+		) );
+	}
+
+	/**
+	 * Reply to a Forms family entry with a styled HTML email.
+	 *
+	 * The entry is read through its surface's own detail route
+	 * (collection.detail.sectionsRoute) as the current user, so the plugin's
+	 * view permission applies, and the reply goes only to an email address
+	 * among the entry's answers.
+	 *
+	 * @param WP_REST_Request $request { surface, id, to?, subject, message }.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function entry_reply( WP_REST_Request $request ) {
+		$unavailable = new WP_Error( 'not_found', __( 'That form entry is not available.', 'minn-admin' ), array( 'status' => 404 ) );
+		$sid         = (string) $request['surface'];
+		$all         = Minn_Admin_Surfaces::all();
+		$surface     = isset( $all[ $sid ] ) && is_array( $all[ $sid ] ) ? $all[ $sid ] : null;
+		if ( ! $surface || 'forms' !== ( $surface['family'] ?? '' ) || empty( $surface['collection']['detail']['sectionsRoute'] ) ) {
+			return $unavailable;
+		}
+		if ( ! current_user_can( isset( $surface['cap'] ) ? (string) $surface['cap'] : 'manage_options' ) ) {
+			return $unavailable;
+		}
+		$route = str_replace( '{id}', rawurlencode( (string) $request['id'] ), (string) $surface['collection']['detail']['sectionsRoute'] );
+		$parts = wp_parse_url( '/' . ltrim( $route, '/' ) );
+		$inner = new WP_REST_Request( 'GET', isset( $parts['path'] ) ? $parts['path'] : '' );
+		if ( ! empty( $parts['query'] ) ) {
+			wp_parse_str( $parts['query'], $query );
+			$inner->set_query_params( $query );
+		}
+		$res = rest_do_request( $inner );
+		if ( $res->is_error() || 200 !== $res->get_status() ) {
+			$err = $res->as_error();
+			return is_wp_error( $err ) ? $err : $unavailable;
+		}
+		$data   = (array) $res->get_data();
+		$groups = isset( $data['sections'] ) && is_array( $data['sections'] ) ? array_values( $data['sections'] ) : array();
+		// The answers: the group titled like "Response", else the first (the
+		// same reading the entry page and card apply).
+		$answers = array();
+		foreach ( $groups as $g ) {
+			if ( is_array( $g ) && preg_match( '/response/i', (string) ( $g['title'] ?? '' ) ) ) {
+				$answers = (array) ( $g['rows'] ?? array() );
+				break;
+			}
+		}
+		if ( ! $answers && isset( $groups[0]['rows'] ) ) {
+			$answers = (array) $groups[0]['rows'];
+		}
+		$addresses = array();
+		$name      = '';
+		foreach ( $answers as $row ) {
+			if ( ! is_array( $row ) || ! is_scalar( $row['value'] ?? null ) ) {
+				continue;
+			}
+			$value = trim( (string) $row['value'] );
+			$type  = (string) ( $row['type'] ?? '' );
+			if ( is_email( $value ) ) {
+				// Typed email answers first.
+				if ( 'email' === $type ) {
+					array_unshift( $addresses, $value );
+				} else {
+					$addresses[] = $value;
+				}
+			} elseif ( '' === $name && ( 'name' === $type || preg_match( '/^(full\s*)?name$|your name|first name/i', (string) ( $row['label'] ?? '' ) ) ) ) {
+				$name = $value;
+			}
+		}
+		$addresses = array_values( array_unique( $addresses ) );
+		$to        = (string) $request['to'];
+		if ( '' !== $to ) {
+			$match = '';
+			foreach ( $addresses as $a ) {
+				if ( strtolower( $a ) === strtolower( $to ) ) {
+					$match = $a;
+					break;
+				}
+			}
+			if ( '' === $match ) {
+				return new WP_Error( 'invalid_email', __( 'That address is not on this entry.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$to = $match;
+		} else {
+			$to = $addresses ? $addresses[0] : '';
+		}
+		if ( ! is_email( $to ) ) {
+			return new WP_Error( 'invalid_email', __( 'This entry has no email address to reply to.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$subject = trim( (string) $request['subject'] );
+		$message = trim( (string) $request['message'] );
+		if ( '' === $subject || '' === $message ) {
+			return new WP_Error( 'invalid', __( 'Subject and message are required.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		// "Hi Jordan," reads better than the full name; no name, "Hi there,".
+		$first = $name ? strtok( wp_strip_all_tags( $name ), " \t" ) : '';
+		$who   = $first ? $first : __( 'there', 'minn-admin' );
+		$sent  = self::minn_send_html_mail( $to, $subject, self::minn_email_html( $subject, $message, $who ) );
+		if ( is_wp_error( $sent ) ) {
+			return $sent;
+		}
+		return rest_ensure_response( array(
+			'ok'    => true,
+			'email' => $to,
 		) );
 	}
 

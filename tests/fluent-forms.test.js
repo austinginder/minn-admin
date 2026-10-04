@@ -11,7 +11,7 @@
  * Fixture: standing "Minn Contact" form (names/email/message) +
  * minn_test_seed_fluent_forms (upsert by email into fluentform_submissions).
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, openEntry, entryAction, entryText, leaveEntry, listSettled } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'fluent-forms' );
@@ -142,28 +142,19 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.fill( '#minn-surface-search', '' );
 		await page.waitForFunction( () => document.querySelectorAll( '.minn-table-row' ).length >= 3, null, { timeout: 20000 } );
 
-		/* ===== Detail modal ===== */
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-table-row' ) ]
-				.find( ( r ) => /Priya/.test( r.textContent ) ).click();
-		} );
-		await page.waitForSelector( '.minn-modal [data-saction]', { timeout: 15000 } );
-		const modal = await page.$eval( '.minn-modal', ( el ) => el.textContent );
+		/* ===== The entry page ===== */
+		await openEntry( page, /Priya/ );
+		const entry = await entryText( page );
 		t.check( 'answers wear their field labels',
-			/Message/i.test( modal ) && /thank-you page 404s/.test( modal ) );
-		t.check( 'entry renders as a contact card', !! ( await page.$( '.minn-modal.entry' ) ) );
-		t.check( 'card links out to Fluent Forms', await page.$$eval( '.minn-modal a[href]', ( els ) =>
+			/Message/i.test( entry ) && /thank-you page 404s/.test( entry ) );
+		t.check( 'entry opens on its own page', /\/fluent-forms\/entry\//.test( page.url() ) && !! ( await page.$( '.minn-entry-page .minn-ep-contact' ) ) );
+		t.check( 'the page links out to Fluent Forms', await page.$$eval( '.minn-entry-page a[href]', ( els ) =>
 			els.some( ( a ) => /page=fluent_forms/.test( a.href ) ) ) );
 
 		/* ===== Trash through status route ===== */
 		const inboxBefore = await restTotal( 'inbox' );
-		page.once( 'dialog', ( d ) => d.accept() );
-		await page.evaluate( () => {
-			window.confirm = () => true;
-			[ ...document.querySelectorAll( '.minn-modal [data-saction]' ) ]
-				.find( ( b ) => /Trash entry/.test( b.textContent ) ).click();
-		} );
-		await page.waitForFunction( () => ! document.querySelector( '.minn-modal' ), null, { timeout: 15000 } );
+		await entryAction( page, /Trash entry/ );
+		await leaveEntry( page );
 		t.check( 'trash left fewer received entries', ( await restTotal( 'inbox' ) ) === inboxBefore - 1,
 			`before=${ inboxBefore } after=${ await restTotal( 'inbox' ) }` );
 		t.check( 'trash bucket has the entry', ( await restTotal( 'trashed' ) ) >= 1 );
@@ -181,23 +172,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		}, null, { timeout: 20000 } );
 		t.check( 'trash filter lists the trashed entry', true );
 
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-table-row' ) ]
-				.find( ( r ) => /Priya/.test( r.textContent ) ).click();
-		} );
-		await page.waitForSelector( '.minn-modal [data-saction]', { timeout: 15000 } );
-		page.once( 'dialog', ( d ) => d.accept() );
-		await page.evaluate( () => {
-			window.confirm = () => true;
-			[ ...document.querySelectorAll( '.minn-modal [data-saction]' ) ]
-				.find( ( b ) => /Delete permanently/.test( b.textContent ) ).click();
-		} );
-		await page.waitForFunction( () => ! document.querySelector( '.minn-modal' ), null, { timeout: 15000 } );
+		await openEntry( page, /Priya/ );
+		await entryAction( page, /Delete permanently/ );
+		await page.waitForFunction( () => ! /\/entry\//.test( location.pathname ), null, { timeout: 15000 } );
 		t.check( 'permanent delete removed the entry', ( await restTotal( 'trashed' ) ) === 0 );
 
 		/* ===== Forms manage view ===== */
 		await page.click( '[data-sview="manage"]' );
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		await listSettled( page );
 		const formRow = await page.evaluate( () => {
 			const rows = [ ...document.querySelectorAll( '.minn-table-row' ) ];
 			const row = rows.find( ( r ) => /Minn Contact/.test( r.textContent ) )

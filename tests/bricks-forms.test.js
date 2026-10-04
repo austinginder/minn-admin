@@ -16,7 +16,7 @@
  * Bricks' own insert path and deletes exactly that one through the UI.
  */
 const { execFileSync } = require( 'child_process' );
-const { launch, login, reporter, BASE, WP } = require( './helpers' );
+const { launch, login, reporter, BASE, WP, leaveEntry } = require( './helpers' );
 
 const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ], { encoding: 'utf8' } ).trim();
 
@@ -79,14 +79,15 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 			Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) )
 				.find( ( r ) => r.textContent.includes( 'Dana Tester' ) ).click();
 		} );
-		await page.waitForSelector( '.minn-modal', { timeout: 15000 } );
+		await page.waitForSelector( '.minn-entry-page .minn-order-main', { timeout: 15000 } );
 		await page.waitForFunction( () =>
-			( document.querySelector( '.minn-modal' ) || { textContent: '' } ).textContent.includes( 'dana@example.com' ),
+			( document.querySelector( '.minn-entry-page' ) || { textContent: '' } ).textContent.includes( 'dana@example.com' ),
 		null, { timeout: 15000 } );
-		const modalText = await page.evaluate( () => document.querySelector( '.minn-modal' ).textContent );
+		const modalText = await page.evaluate( () => document.querySelector( '.minn-entry-page' ).textContent );
+		t.check( 'the submission opens on its own page', /\/bricks-forms\/entry\//.test( page.url() ) );
 		t.check( 'answers carry the form field labels', /Message/.test( modalText ) && /kitchen remodel/.test( modalText ), modalText.slice( 0, 200 ) );
-		t.check( 'submission meta reaches the card', /Browser|Chrome/i.test( modalText ), '' );
-		await page.keyboard.press( 'Escape' );
+		t.check( 'submission meta reaches the page', /Browser|Chrome/i.test( modalText ), '' );
+		await leaveEntry( page );
 
 		/* ===== Search rides the form_data LIKE ===== */
 		const found = await rest( 'GET', 'minn-admin/v1/bricks/entries?search=kitchen' );
@@ -108,11 +109,12 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 			Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) )
 				.find( ( r ) => r.textContent.includes( 'Suite Disposable' ) ).click();
 		} );
-		await page.waitForSelector( '.minn-modal [data-saction]', { timeout: 15000 } );
-		page.once( 'dialog', ( d ) => d.accept() );
+		await page.waitForSelector( '.minn-entry-page [data-epact]', { timeout: 15000 } );
 		await page.evaluate( () => {
-			Array.from( document.querySelectorAll( '[data-saction]' ) ).find( ( b ) => /Delete/.test( b.textContent ) ).click();
+			Array.from( document.querySelectorAll( '[data-epact]' ) ).find( ( b ) => /Delete/.test( b.textContent ) ).click();
 		} );
+		const ask = await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 1500 } ).catch( () => null );
+		if ( ask ) await page.click( '.minn-confirm-modal [data-ok]' );
 		await page.waitForFunction( () =>
 			! Array.from( document.querySelectorAll( '.minn-table-row, .minn-surface-row' ) ).some( ( r ) => r.textContent.includes( 'Suite Disposable' ) ),
 		null, { timeout: 15000 } );

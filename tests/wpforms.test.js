@@ -6,7 +6,7 @@
  * entries' unread state in finally. Caps note: editor-gets-403 was verified
  * at build time via wp eval (helpers login is admin-only).
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, entryActions } = require( './helpers' );
 const { execSync } = require( 'child_process' );
 const path = require( 'path' );
 const fs = require( 'fs' );
@@ -114,26 +114,23 @@ const os = require( 'os' );
 		t.check( 'Surface renders rows', ui.rows >= 1, JSON.stringify( ui ) );
 		t.check( 'Status card renders', ui.card, '' );
 
-		// Detail modal via row click. The clicked standing entry is UNREAD, so
-		// the when-gated action set is Mark read + Star (spam/trash gate on
-		// read). Sections load async after the actions — wait for the answer
-		// content itself, not just the modal chrome.
-		// The forms family renders a CONTACT CARD (renderEntryDetail) — no
-		// "Answers" heading; assert the card's content instead.
+		// The entry page via row click. The clicked standing entry is UNREAD,
+		// so the when-gated action set is Mark read + Star (spam/trash gate on
+		// read): the gates read the row the page was opened from.
 		await page.click( '.minn-table-row .minn-row-title' );
 		await page.waitForFunction( () => {
-			const m = document.querySelector( '.minn-modal' );
-			return m && /@example\.com/.test( m.textContent || '' ) && /Entry #/.test( m.textContent || '' );
+			const m = document.querySelector( '.minn-entry-page .minn-order-main' );
+			return m && /@example\.com/.test( m.textContent || '' );
 		}, null, { timeout: 20000 } ).catch( () => null );
 		const modal = await page.evaluate( () => {
-			const m = document.querySelector( '.minn-modal' );
+			const m = document.querySelector( '.minn-entry-page' );
 			return {
-				open: !! m,
+				open: !! m && /\/wpforms\/entry\//.test( location.pathname ),
 				answers: m ? /@example\.com/.test( m.textContent || '' ) && /Entry #/.test( m.textContent || '' ) : false,
-				labels: Array.from( ( m || document ).querySelectorAll( '[data-saction]' ) ).map( ( b ) => ( b.textContent || '' ).trim() ),
 			};
 		} );
-		t.check( 'Detail modal shows the contact card', modal.open && modal.answers, JSON.stringify( modal ) );
+		modal.labels = await entryActions( page );
+		t.check( 'The entry opens on its own page with the contact card', modal.open && modal.answers, JSON.stringify( modal ) );
 		t.check( 'When-gated actions match the unread row (Mark read + Star)',
 			modal.labels.includes( 'Mark read' ) && modal.labels.includes( 'Star' )
 			&& ! modal.labels.includes( 'Mark spam' ),

@@ -371,4 +371,70 @@ async function activateClassicTheme( page ) {
 	} );
 }
 
-module.exports = { BASE, WP, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, closeBrowser, activateClassicTheme, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath };
+/* ===== Forms family entry page (/{surface}/entry/{id}) =====
+ * A forms entry opens on its own page, not a modal. `match` is a RegExp or a
+ * plain string looked for in the row's text. */
+const matchSource = ( m ) => ( m instanceof RegExp ? m.source : String( m ).replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) );
+
+async function openEntry( page, match ) {
+	await page.waitForFunction( () => {
+		const tbl = document.querySelector( '.minn-table' );
+		return ! tbl || ! tbl.classList.contains( 'minn-busy' );
+	}, null, { timeout: 30000 } ).catch( () => {} );
+	const clicked = await page.evaluate( ( src ) => {
+		const re = new RegExp( src );
+		const row = [ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => re.test( r.textContent ) );
+		if ( row ) row.click();
+		return !! row;
+	}, matchSource( match ) );
+	if ( ! clicked ) throw new Error( 'openEntry: no row matches ' + match );
+	await page.waitForSelector( '.minn-entry-page .minn-order-main', { timeout: 25000 } );
+}
+
+// The page's actions: the side card's buttons and the title's star.
+const entryActions = ( page ) => page.evaluate( () => [ ...document.querySelectorAll( '[data-epact]' ) ]
+	.map( ( b ) => b.textContent.trim() || b.getAttribute( 'aria-label' ) || '' ) );
+
+// Run one action by label (RegExp or exact text); answers Minn's confirm
+// when it asks (or cancels it), then waits for the result's toast.
+async function entryAction( page, label, { cancel = false } = {} ) {
+	await page.evaluate( () => document.querySelectorAll( '.minn-toast' ).forEach( ( e ) => e.remove() ) );
+	const src = label instanceof RegExp ? label.source : '^' + matchSource( label ) + '$';
+	const clicked = await page.evaluate( ( s ) => {
+		const re = new RegExp( s );
+		const b = [ ...document.querySelectorAll( '[data-epact]' ) ]
+			.find( ( x ) => re.test( x.textContent.trim() || x.getAttribute( 'aria-label' ) || '' ) );
+		if ( b ) b.click();
+		return !! b;
+	}, src );
+	if ( ! clicked ) throw new Error( 'entryAction: no action ' + label );
+	const asked = await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 1500 } ).catch( () => null );
+	if ( asked ) {
+		await page.click( cancel ? '.minn-confirm-modal [data-cancel]' : '.minn-confirm-modal [data-ok]' );
+		if ( cancel ) return;
+	}
+	await page.waitForSelector( '.minn-toast', { timeout: 20000 } ).catch( () => {} );
+	await page.waitForTimeout( 300 );
+}
+
+const entryText = ( page ) => page.$eval( '.minn-entry-page', ( el ) => el.textContent );
+
+// Back to the list the page was opened from (a delete already went there).
+async function leaveEntry( page ) {
+	await page.waitForTimeout( 200 );
+	if ( await page.$( '#minn-ep-back' ) ) await page.click( '#minn-ep-back' );
+	await page.waitForFunction( () => ! /\/entry\//.test( location.pathname ), null, { timeout: 20000 } );
+	await page.waitForSelector( '.minn-table, .minn-empty', { timeout: 60000 } );
+}
+
+// A list view switch (Entries → Forms) repaints the old rows dimmed and
+// inert (.minn-busy) until the new collection lands; an evaluate-click
+// ignores pointer-events, so wait for the fresh rows before clicking one.
+async function listSettled( page, timeout = 60000 ) {
+	await page.waitForFunction( () => {
+		const tbl = document.querySelector( '.minn-table' );
+		return !! tbl && ! tbl.classList.contains( 'minn-busy' ) && !! document.querySelector( '.minn-table-row' );
+	}, null, { timeout } );
+}
+
+module.exports = { BASE, WP, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, closeBrowser, activateClassicTheme, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath, openEntry, entryActions, entryAction, entryText, leaveEntry, listSettled };

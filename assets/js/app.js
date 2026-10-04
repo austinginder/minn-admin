@@ -18684,7 +18684,23 @@
 			const listed = ( items || [] ).find( ( x ) => String( x.id ) === String( p.id ) );
 			// The route's own copy of the row wins: it is current, and it is
 			// all there is when the page was reached by a link.
-			p.item = { ...( listed || { id: p.id } ), ...( p.sections.item || {} ) };
+			// A reload has no list: the row it was opened from rides the
+			// session so when-gated actions still decide.
+			// Only the fields those gates read are kept, never the answers.
+			const key = 'minn-entry-row:' + s.id + ':' + p.id;
+			let kept = null;
+			try {
+				if ( listed ) {
+					const gate = { id: listed.id };
+					( coll.actions || [] ).forEach( ( a ) => {
+						const top = a.when && String( a.when.key || '' ).split( '.' )[ 0 ];
+						if ( top && top in listed ) gate[ top ] = listed[ top ];
+					} );
+					sessionStorage.setItem( key, JSON.stringify( gate ) );
+				}
+				else kept = JSON.parse( sessionStorage.getItem( key ) || 'null' );
+			} catch ( e ) { /* storage off: the route's own item, if any */ }
+			p.item = { ...( listed || kept || { id: p.id } ), ...( p.sections.item || {} ) };
 			// Opening marks the entry read on the server; the list follows.
 			if ( listed && p.sections.item && 'is_read' in p.sections.item ) listed.is_read = p.sections.item.is_read;
 		} catch ( e ) {
@@ -18698,6 +18714,7 @@
 	// buttons re-enabled) until the fresh copy lands.
 	function refreshEntryPage( s ) {
 		const p = state.entryPage;
+		if ( p && p.leaving ) return; // a delete is on its way back to the list
 		if ( p && p.sid === s.id ) {
 			p.loading = true;
 			p.loadError = null;
@@ -18794,7 +18811,6 @@
 		} );
 
 		const initials = ( name || email || '?' ).replace( /@.*/, '' ).split( /[\s._-]+/ ).filter( Boolean ).slice( 0, 2 ).map( ( w ) => w[ 0 ] ).join( '' ).toUpperCase() || '?';
-		const replySubject = formTitle ? 'Re: ' + formTitle : '';
 		const answerRows = parts.fieldRows.filter( ( r ) => r !== parts.phoneRow || ! phone );
 		const card = ( title, body, extra = '' ) => `<div class="minn-order-sec${ extra }">
 			<div class="minn-order-card-head"><div class="minn-side-title">${ esc( title ) }</div></div>${ body }</div>`;
@@ -18811,7 +18827,7 @@
 						${ phone ? `<a href="tel:${ esc( phone.replace( /[^\d+]/g, '' ) ) }">${ esc( phone ) }</a>` : '' }
 					</div>
 				</div>
-				${ email ? `<a class="minn-btn-primary minn-ep-reply" href="mailto:${ esc( email ) }${ replySubject ? '?subject=' + esc( encodeURIComponent( replySubject ) ) : '' }">${ icon( 'send' ) } ${ esc( __( 'Reply' ) ) }</a>` : '' }
+				${ email ? `<button type="button" class="minn-btn-primary minn-ep-reply" id="minn-ep-reply">${ icon( 'send' ) } ${ esc( __( 'Reply' ) ) }</button>` : '' }
 			</div>` : '';
 		const bodiesHtml = parts.bodyRows.map( ( r ) => card( r.label || __( 'Message' ), `<div class="minn-ep-message">${ esc( String( r.value == null ? '' : r.value ) ) }</div>` ) ).join( '' );
 		const answersHtml = answerRows.length ? card( __( 'Answers' ), dl( answerRows ) ) : '';
@@ -18881,12 +18897,42 @@
 				</div>` : '' }
 			</div>
 		</div>`;
-		bindEntryPage( s, p, view, nav );
+		bindEntryPage( s, p, view, nav, { name, email, formTitle, composer: composers.length ? composers[ 0 ].a : null } );
 	}
 
-	function bindEntryPage( s, p, view, nav ) {
+	function bindEntryPage( s, p, view, nav, who ) {
 		const coll = s.collection || {};
 		const it = p.item || { id: p.id };
+		// Reply: Minn's email composer, To and Subject filled in, sent from
+		// the site through the entry's own route (the address must be one the
+		// entry holds). The reply lands in the notes trail when there is one.
+		const reply = $( '#minn-ep-reply', view );
+		if ( reply ) reply.addEventListener( 'click', () => {
+			state.modal = {
+				type: 'user-email',
+				title: __( 'Reply' ),
+				sendLabel: __( 'Send reply' ),
+				user: { name: who.name, email: who.email },
+				subject: who.formTitle ? 'Re: ' + who.formTitle : '',
+				message: '',
+				focus: 'message',
+				route: 'minn-admin/v1/entries/reply',
+				extra: { surface: s.id, id: String( p.id ), to: who.email },
+				onSent: async ( r, sent ) => {
+					const a = who.composer;
+					if ( ! a ) return;
+					try {
+						await api( a.route.replace( '{id}', encodeURIComponent( p.id ) ), {
+							method: a.method || 'POST',
+							/* translators: 1: the email address, 2: the subject line. */
+							body: JSON.stringify( { [ a.fields[ 0 ].key ]: sprintf( __( 'Replied by email to %1$s: %2$s' ), ( r && r.email ) || who.email, sent.subject ) } ),
+						} );
+					} catch ( e ) { /* the email went; the note is a courtesy */ }
+					if ( state.route === 'entrypage' && state.entrySid === s.id ) refreshEntryPage( s );
+				},
+			};
+			renderOverlays();
+		} );
 		const stepTo = ( id ) => {
 			if ( coll.open && coll.open.route ) go( coll.open.route.replace( '{id}', encodeURIComponent( id ) ) );
 		};
@@ -18905,12 +18951,16 @@
 				return;
 			}
 			if ( a.confirm && ! await minnConfirm( { title: a.label, body: a.confirm, confirmLabel: a.label, danger: !! a.danger } ) ) return;
-			// A permanent delete leaves nothing to show: back to the list.
-			const gone = 'DELETE' === String( a.method || '' ).toUpperCase() && /[?&]force=(1|true)\b/.test( a.route || '' );
+			// A delete (a trash, or a plugin's permanent delete) takes the entry
+			// out of the list it came from: back to that list, the way a mail
+			// inbox does, with no reload of a page that may no longer exist.
+			const gone = 'DELETE' === String( a.method || '' ).toUpperCase();
+			p.leaving = gone;
 			b.disabled = true;
 			try {
 				await runSurfaceItemAction( s, it, { ...a, confirm: '' } );
 			} catch ( e ) {
+				p.leaving = false;
 				toast( e.message, true );
 				b.disabled = false;
 				return;
@@ -45911,13 +45961,15 @@
 		}
 
 		if ( m.type === 'user-email' ) {
+			// Also the entry page's Reply (m.title, m.route, m.extra, m.onSent):
+			// the same composer, sent through the record's own route.
 			const u = m.user || {};
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">${ esc( __( 'Send email' ) ) }</div>
+							<div class="minn-modal-title">${ esc( m.title || __( 'Send email' ) ) }</div>
 							<div class="minn-modal-sub">${ sprintf( esc( /* translators: %s: name or email address the message was sent to. */ __( 'To %s' ) ), esc( fmtUserLabel( u.name, u.email ) || __( 'user' ) ) ) }</div>
 						</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
@@ -45934,7 +45986,7 @@
 						</div>
 					</div>
 					<div class="minn-modal-actions">
-						<button class="minn-btn-primary" id="minn-ue-send">${ icon( 'send' ) } Send email</button>
+						<button class="minn-btn-primary" id="minn-ue-send">${ icon( 'send' ) } ${ esc( m.sendLabel || __( 'Send email' ) ) }</button>
 						<button class="minn-btn-soft" id="minn-modal-cancel">${ esc( __( 'Cancel' ) ) }</button>
 					</div>
 				</div>
@@ -47251,6 +47303,8 @@
 				const message = ( msg && msg.value || '' ).trim();
 				if ( ! subject || ! message ) {
 					toast( __( 'Subject and message are required' ), true );
+					const empty = ! subject ? sub : msg;
+					if ( empty ) empty.focus();
 					return;
 				}
 				sendBtn.disabled = true;
@@ -47744,23 +47798,29 @@
 		if ( m.type === 'user-email' ) {
 			const sub = $( '#minn-ue-subject' );
 			const msg = $( '#minn-ue-message' );
-			if ( sub ) setTimeout( () => sub.focus(), 30 );
+			if ( 'message' === m.focus && msg ) {
+				setTimeout( () => { msg.focus(); msg.setSelectionRange( msg.value.length, msg.value.length ); }, 30 );
+			} else if ( sub ) setTimeout( () => sub.focus(), 30 );
 			$( '#minn-ue-send' ).addEventListener( 'click', async ( e ) => {
 				const btn = e.currentTarget;
 				const subject = ( sub && sub.value || '' ).trim();
 				const message = ( msg && msg.value || '' ).trim();
 				if ( ! subject || ! message ) {
 					toast( __( 'Subject and message are required' ), true );
+					const empty = ! subject ? sub : msg;
+					if ( empty ) empty.focus();
 					return;
 				}
 				btn.disabled = true;
 				try {
-					const r = await api( `minn-admin/v1/users/${ m.user.id }/email`, {
+					const r = await api( m.route || `minn-admin/v1/users/${ m.user.id }/email`, {
 						method: 'POST',
-						body: JSON.stringify( { subject, message } ),
+						body: JSON.stringify( { ...( m.extra || {} ), subject, message } ),
 					} );
 					toast( __( 'Email sent' ) + ( r && r.email ? ' to ' + r.email : '' ) );
+					const onSent = m.onSent;
 					closeModal();
+					if ( onSent ) onSent( r, { subject, message } );
 				} catch ( err ) {
 					toast( err.message, true );
 					btn.disabled = false;

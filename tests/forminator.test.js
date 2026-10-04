@@ -10,7 +10,7 @@
  * Fixtures: the standing "Feedback Form" + minn_test_seed_forminator
  * (upsert by email through Forminator's own add_form_entry).
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, openEntry, entryAction, entryText, listSettled } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'forminator' );
@@ -67,29 +67,22 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForFunction( () => document.querySelectorAll( '.minn-table-row' ).length >= 3, { timeout: 20000 } );
 
 		/* ===== Detail: labels through their form model ===== */
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( 'Priya' ) ).click();
-		} );
-		// Wait for the action buttons — '.minn-modal' alone matches the
-		// loading state (the duplicator-suite lesson).
-		await page.waitForSelector( '.minn-modal [data-saction]', { timeout: 15000 } );
-		const modal = await page.$eval( '.minn-modal', ( el ) => el.textContent );
-		t.check( 'answers wear their field labels', modal.includes( 'Feedback' ) && modal.includes( 'The thank-you page 404s after submitting.' ) );
-		t.check( 'entry renders as a contact card', !! ( await page.$( '.minn-modal.entry' ) ) );
-		t.check( 'card links out to Forminator', await page.$$eval( '.minn-modal a[href]', ( els ) =>
+		await openEntry( page, 'Priya' );
+		const entry = await entryText( page );
+		t.check( 'answers wear their field labels', entry.includes( 'Feedback' ) && entry.includes( 'The thank-you page 404s after submitting.' ) );
+		t.check( 'entry opens on its own page', /\/forminator\/entry\//.test( page.url() ) && !! ( await page.$( '.minn-entry-page .minn-ep-contact' ) ) );
+		t.check( 'the page links out to Forminator', await page.$$eval( '.minn-entry-page a[href]', ( els ) =>
 			els.some( ( a ) => /page=forminator-entries/.test( a.href ) ) ) );
 
 		/* ===== Permanent delete through their own API ===== */
-		page.once( 'dialog', ( d ) => d.accept() );
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-modal [data-saction]' ) ].find( ( b ) => b.textContent.includes( 'Delete permanently' ) ).click();
-		} );
-		await page.waitForFunction( () => ! document.querySelector( '.minn-modal' ), { timeout: 15000 } );
+		await entryAction( page, 'Delete permanently' );
+		// The entry is gone, so the page returns to the list.
+		await page.waitForFunction( () => ! /\/entry\//.test( location.pathname ), null, { timeout: 20000 } );
 		t.check( 'delete removed the entry (their cleanup ran)', ( await restTotal() ) === 2 );
 
 		/* ===== Forms view ===== */
 		await page.click( '[data-sview="manage"]' );
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		await listSettled( page );
 		const formsBody = await page.$eval( '#minn-view', ( el ) => el.textContent );
 		t.check( 'forms view lists the form with a live count', formsBody.includes( 'Feedback Form' ) && formsBody.includes( '2' ) );
 		await page.evaluate( () => {

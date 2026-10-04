@@ -29,7 +29,7 @@ class Minn_Admin_Surfaces {
 		if ( null === self::$all_cache ) {
 			$surfaces        = apply_filters( 'minn_admin_surfaces', array() );
 			$surfaces        = is_array( $surfaces ) ? $surfaces : array();
-			self::$all_cache = self::with_family_id_columns( $surfaces );
+			self::$all_cache = self::with_family_entry_pages( self::with_family_id_columns( $surfaces ) );
 		}
 		return self::$all_cache;
 	}
@@ -808,6 +808,28 @@ class Minn_Admin_Surfaces {
 	 * @param array $surfaces Registry keyed by id.
 	 * @return array
 	 */
+	/**
+	 * Forms family entries open on the entry page (`/{surface}/entry/{id}`),
+	 * drawn from the entries collection's detail.sectionsRoute, unless the
+	 * collection already says where its rows go (`open`). A form plugin that
+	 * joins the family gets the page with no line of its own.
+	 *
+	 * @param array $surfaces Registry.
+	 * @return array
+	 */
+	private static function with_family_entry_pages( $surfaces ) {
+		foreach ( $surfaces as $id => $s ) {
+			if ( ! is_array( $s ) || ( isset( $s['family'] ) ? $s['family'] : '' ) !== 'forms' ) {
+				continue;
+			}
+			if ( empty( $s['collection']['detail']['sectionsRoute'] ) || ! empty( $s['collection']['open'] ) ) {
+				continue;
+			}
+			$surfaces[ $id ]['collection']['open'] = array( 'route' => sanitize_key( $id ) . '/entry/{id}' );
+		}
+		return $surfaces;
+	}
+
 	private static function with_family_id_columns( $surfaces ) {
 		// No width: the client sizes an id track from the page's longest id,
 		// so a five-digit Gravity entry number gets the room a three-digit

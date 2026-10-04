@@ -91,9 +91,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// submission details — no client-side label mapping.
 				'sectionsRoute' => 'minn-admin/v1/gf/entries/{id}',
 			),
-			// An entry opens on its own page (the Forms family entry page:
-			// contact card, answers, notes timeline, actions), not a modal.
-			'open'      => array( 'route' => 'gravity-forms/entry/{id}' ),
 			// Entry workflow rides the properties shim (is_starred /
 			// is_read / status), capability-gated the way gf/v2 gates its
 			// own route (gravityforms_edit_entries via GF's resolver).

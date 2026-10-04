@@ -10,7 +10,7 @@
  * Fixtures: the standing "Survey Form" (key minn-survey) +
  * minn_test_seed_formidable (upsert by email through FrmEntry::create).
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, openEntry, entryAction, entryText, listSettled } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'formidable' );
@@ -67,27 +67,21 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForFunction( () => document.querySelectorAll( '.minn-table-row' ).length >= 3, { timeout: 20000 } );
 
 		/* ===== Detail: labels through their field model ===== */
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( 'Priya' ) ).click();
-		} );
-		await page.waitForSelector( '.minn-modal [data-saction]', { timeout: 15000 } );
-		const modal = await page.$eval( '.minn-modal', ( el ) => el.textContent );
-		t.check( 'answers wear their field labels', modal.includes( 'Comments' ) && modal.includes( 'Submitting twice showed a duplicate warning.' ) );
-		t.check( 'entry renders as a contact card', !! ( await page.$( '.minn-modal.entry' ) ) );
-		t.check( 'card links out to Formidable', await page.$$eval( '.minn-modal a[href]', ( els ) =>
+		await openEntry( page, 'Priya' );
+		const entry = await entryText( page );
+		t.check( 'answers wear their field labels', entry.includes( 'Comments' ) && entry.includes( 'Submitting twice showed a duplicate warning.' ) );
+		t.check( 'entry opens on its own page', /\/formidable\/entry\//.test( page.url() ) && !! ( await page.$( '.minn-entry-page .minn-ep-contact' ) ) );
+		t.check( 'the page links out to Formidable', await page.$$eval( '.minn-entry-page a[href]', ( els ) =>
 			els.some( ( a ) => /page=formidable-entries/.test( a.href ) ) ) );
 
 		/* ===== Permanent delete through their own model ===== */
-		page.once( 'dialog', ( d ) => d.accept() );
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-modal [data-saction]' ) ].find( ( b ) => b.textContent.includes( 'Delete permanently' ) ).click();
-		} );
-		await page.waitForFunction( () => ! document.querySelector( '.minn-modal' ), { timeout: 15000 } );
+		await entryAction( page, 'Delete permanently' );
+		await page.waitForFunction( () => ! /\/entry\//.test( location.pathname ), null, { timeout: 20000 } );
 		t.check( 'delete removed the entry (their destroy ran)', ( await restTotal() ) === 2 );
 
 		/* ===== Forms view ===== */
 		await page.click( '[data-sview="manage"]' );
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		await listSettled( page );
 		const formsBody = await page.$eval( '#minn-view', ( el ) => el.textContent );
 		t.check( 'forms view lists the form with a live count', formsBody.includes( 'Survey Form' ) && formsBody.includes( '2' ) );
 		await page.evaluate( () => {

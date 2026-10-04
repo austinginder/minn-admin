@@ -12,7 +12,7 @@
  * "Contact Me" form through Ninja Forms' OWN model, upserting per row (the
  * suite trashes Priya's entry; the next run restores exactly that one).
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, openEntry, entryAction, entryText, leaveEntry, listSettled } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -105,20 +105,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			&& ! cell.hasAttribute( 'data-primary' );
 	} ) );
 
-	// Detail modal via the row.
-	await page.evaluate( () => {
-		[ ...document.querySelectorAll( '.minn-table-row' ) ]
-			.find( ( r ) => /dana@example\.com/.test( r.textContent ) ).click();
-	} );
-	await page.waitForFunction( () =>
-		document.querySelector( '.minn-modal' ) && /Woodworking|woodworking/.test( document.querySelector( '.minn-modal' ).textContent ),
-	null, { timeout: 15000 } );
-	t.check( 'entry modal renders the labeled card', await page.evaluate( () =>
-		/Message/.test( document.querySelector( '.minn-modal' ).textContent ) ) );
-	await page.click( '#minn-modal-close' );
+	// The entry page via the row.
+	await openEntry( page, /dana@example\.com/ );
+	const entry = await entryText( page );
+	t.check( 'the entry page renders the labeled answers', /Woodworking|woodworking/.test( entry ) && /Message/.test( entry ) );
+	await leaveEntry( page );
 
 	// Manage view: Forms.
 	await page.click( '[data-sview="manage"]' );
+	await listSettled( page );
 	await page.waitForFunction( () =>
 		[ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => /Contact Me/.test( r.textContent ) ),
 	null, { timeout: 15000 } );
@@ -147,17 +142,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.waitForFunction( () =>
 		[ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => /priya@example\.com/.test( r.textContent ) ),
 	null, { timeout: 15000 } );
-	await page.evaluate( () => {
-		[ ...document.querySelectorAll( '.minn-table-row' ) ]
-			.find( ( r ) => /priya@example\.com/.test( r.textContent ) ).click();
-	} );
-	await page.waitForFunction( () =>
-		[ ...document.querySelectorAll( '.minn-modal button' ) ].some( ( b ) => /Trash entry/.test( b.textContent ) ),
-	null, { timeout: 15000 } );
-	await page.evaluate( () => {
-		window.confirm = () => true;
-		[ ...document.querySelectorAll( '.minn-modal button' ) ].find( ( b ) => /Trash entry/.test( b.textContent ) ).click();
-	} );
+	await openEntry( page, /priya@example\.com/ );
+	await entryAction( page, /Trash entry/ );
 	let trashed = false;
 	for ( let i = 0; i < 10; i++ ) {
 		await page.waitForTimeout( 700 );

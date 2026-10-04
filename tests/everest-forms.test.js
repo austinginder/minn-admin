@@ -9,7 +9,7 @@
  * Fixtures: the standing "Minn EVF Fixture" form + minn_test_seed_everest
  * (upsert by email into their entry tables).
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, openEntry, entryAction, entryText, leaveEntry, listSettled } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'everest-forms' );
@@ -78,23 +78,16 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForFunction( () => document.querySelectorAll( '.minn-table-row' ).length >= 3, { timeout: 20000 } );
 
 		/* ===== Detail: labels from their form field map ===== */
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( 'Priya' ) ).click();
-		} );
-		// Wait for the action buttons — '.minn-modal' alone matches the loading state.
-		await page.waitForSelector( '.minn-modal [data-saction]', { timeout: 15000 } );
-		const modal = await page.$eval( '.minn-modal', ( el ) => el.textContent );
-		t.check( 'answers wear their field labels', modal.includes( 'Message' ) && modal.includes( 'The thank-you page 404s after submitting.' ) );
-		t.check( 'entry renders as a contact card', !! ( await page.$( '.minn-modal.entry' ) ) );
-		t.check( 'card links out to Everest Forms', await page.$$eval( '.minn-modal a[href]', ( els ) =>
+		await openEntry( page, 'Priya' );
+		const entry = await entryText( page );
+		t.check( 'answers wear their field labels', entry.includes( 'Message' ) && entry.includes( 'The thank-you page 404s after submitting.' ) );
+		t.check( 'entry opens on its own page', /\/everest-forms\/entry\//.test( page.url() ) && !! ( await page.$( '.minn-entry-page .minn-ep-contact' ) ) );
+		t.check( 'the page links out to Everest Forms', await page.$$eval( '.minn-entry-page a[href]', ( els ) =>
 			els.some( ( a ) => /page=evf-entries/.test( a.href ) ) ) );
 
 		/* ===== Trash through their update_status (prior status preserved) ===== */
-		page.once( 'dialog', ( d ) => d.accept() );
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-modal [data-saction]' ) ].find( ( b ) => b.textContent.includes( 'Trash entry' ) ).click();
-		} );
-		await page.waitForFunction( () => ! document.querySelector( '.minn-modal' ), { timeout: 15000 } );
+		await entryAction( page, 'Trash entry' );
+		await leaveEntry( page );
 		t.check( 'trash left two received entries', ( await restTotal( 'publish' ) ) === 2 );
 		t.check( 'trash bucket has the entry', ( await restTotal( 'trash' ) ) >= 1 );
 
@@ -106,20 +99,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		}, { timeout: 20000 } );
 		t.check( 'trash filter lists the trashed entry', true );
 
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( 'Priya' ) ).click();
-		} );
-		await page.waitForSelector( '.minn-modal [data-saction]', { timeout: 15000 } );
-		page.once( 'dialog', ( d ) => d.accept() );
-		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-modal [data-saction]' ) ].find( ( b ) => b.textContent.includes( 'Delete permanently' ) ).click();
-		} );
-		await page.waitForFunction( () => ! document.querySelector( '.minn-modal' ), { timeout: 15000 } );
+		await openEntry( page, 'Priya' );
+		await entryAction( page, 'Delete permanently' );
+		await page.waitForFunction( () => ! /\/entry\//.test( location.pathname ), null, { timeout: 20000 } );
 		t.check( 'permanent delete removed the entry', ( await restTotal( 'trash' ) ) === 0 );
 
 		/* ===== Forms view ===== */
 		await page.click( '[data-sview="manage"]' );
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		await listSettled( page );
 		const formRow = await page.evaluate( () => {
 			const row = [ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( 'Minn EVF Fixture' ) );
 			return row ? row.textContent.replace( /\s+/g, ' ' ).trim() : '';

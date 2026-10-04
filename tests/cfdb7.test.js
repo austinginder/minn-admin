@@ -8,7 +8,7 @@
  * semantics via fixed-token blob surgery. Delete is permanent (CFDB7 has no
  * trash), so it runs against a disposable one-shot fixture entry.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, leaveEntry, listSettled } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -36,6 +36,19 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return false;
 	};
 
+	// An aborted run leaves its disposable entry behind, and a later run then
+	// finds a second "Cast Off" still listed after its delete. Sweep first.
+	const sweepLeftovers = () => page.evaluate( async () => {
+		const h = { 'X-WP-Nonce': window.MINN.nonce };
+		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/cfdb7/entries?search=' + encodeURIComponent( 'Cast Off' ) + '&per_page=100&_cb=' + Math.random(), { headers: h, credentials: 'same-origin' } );
+		const body = await r.json().catch( () => ( {} ) );
+		const stale = ( body.items || [] ).filter( ( i ) => JSON.stringify( i ).includes( 'castoff@example.com' ) );
+		for ( const item of stale ) {
+			await fetch( window.MINN.restUrl + 'minn-admin/v1/cfdb7/entries/' + item.id, { method: 'DELETE', headers: h, credentials: 'same-origin' } ).catch( () => {} );
+		}
+		return stale.length;
+	} );
+
 	const rows = () => page.evaluate( () =>
 		Array.from( document.querySelectorAll( '.minn-table-row' ) ).map( ( r ) => r.textContent.replace( /\s+/g, ' ' ).trim() )
 	);
@@ -46,6 +59,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	}, text );
 
 	try {
+		const swept = await sweepLeftovers();
+		t.check( 'Baseline clear of leftover disposables', swept >= 0, `${ swept } swept` );
 		t.check( 'Disposable fixture seeded', await seed() );
 
 		await page.goto( BASE + '/minn-admin/cfdb7', { waitUntil: 'domcontentloaded' } );
@@ -59,26 +74,23 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Unread/read pills from cfdb7_status', list.some( ( r ) => r.includes( 'Cast Off' ) && /unread/i.test( r ) ) && list.some( ( r ) => r.includes( 'Sam Field' ) && ! /unread/i.test( r ) ) );
 
 		// --- Detail: scanner correctness + open-marks-read ------------------------
-		t.check( 'Row opens detail', await clickRow( 'Priya Nair' ) );
-		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
+		t.check( 'Row opens the entry page', await clickRow( 'Priya Nair' ) );
+		await page.waitForSelector( '.minn-entry-page .minn-order-main', { timeout: 15000 } );
 		const detail = await page.evaluate( () => ( {
-			name: ( document.querySelector( '.minn-entry-name' ) || {} ).textContent || '',
-			email: ( document.querySelector( '.minn-entry-email' ) || {} ).textContent || '',
-			body: document.querySelector( '.minn-entry' ).textContent.replace( /\s+/g, ' ' ),
+			name: ( document.querySelector( '.minn-ep-name' ) || {} ).textContent || '',
+			email: ( document.querySelector( '.minn-ep-reach a[href^="mailto:"]' ) || {} ).textContent || '',
+			body: document.querySelector( '.minn-entry-page' ).textContent.replace( /\s+/g, ' ' ),
 		} ) );
 		t.check( 'Contact card hero from parsed fields', detail.name === 'Priya Nair' && detail.email === 'priya@example.org' );
 		t.check( 'Checkbox list array joins its members', detail.body.includes( 'Workshops, Keynote' ) );
 		t.check( 'Blob status token never leaks into the card', ! detail.body.includes( 'cfdb7_status' ) );
-		await page.keyboard.press( 'Escape' );
-		await page.waitForTimeout( 300 );
+		await leaveEntry( page );
 
 		// Opening marks a message read server-side (their own semantics, via
 		// token surgery); the cached list shows it after a fresh load. The
 		// disposable entry is the repeatable subject.
 		await clickRow( 'Cast Off' );
-		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
-		await page.keyboard.press( 'Escape' );
-		await page.waitForTimeout( 300 );
+		await page.waitForSelector( '.minn-entry-page .minn-order-main', { timeout: 15000 } );
 		await page.goto( BASE + '/minn-admin/cfdb7', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-table-row', { timeout: 15000 } );
 		await page.waitForFunction( () =>
@@ -89,25 +101,29 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 		// --- Apostrophes/quotes survive the byte-length scanner -------------------
 		await clickRow( 'Sam Field' );
-		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
-		const sam = await page.evaluate( () => document.querySelector( '.minn-entry' ).textContent );
+		await page.waitForSelector( '.minn-entry-page .minn-order-main', { timeout: 15000 } );
+		const sam = await page.evaluate( () => document.querySelector( '.minn-entry-page' ).textContent );
 		t.check( 'Escaped punctuation survives parsing', sam.includes( '#204' ) && /can.t find it/.test( sam ) );
-		await page.keyboard.press( 'Escape' );
-		await page.waitForTimeout( 300 );
+		await leaveEntry( page );
 
 		// --- Delete (permanent, disposable fixture only) ---------------------------
 		t.check( 'Disposable entry listed', ( await rows() ).some( ( r ) => r.includes( 'Cast Off' ) ) );
 		await clickRow( 'Cast Off' );
-		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
+		await page.waitForSelector( '.minn-entry-page .minn-order-main', { timeout: 15000 } );
 		await page.evaluate( () => {
-			Array.from( document.querySelectorAll( '.minn-modal button' ) ).find( ( b ) => b.textContent.trim() === 'Delete entry' ).click();
+			Array.from( document.querySelectorAll( '[data-epact]' ) ).find( ( b ) => b.textContent.trim() === 'Delete entry' ).click();
 		} );
+		const ask = await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 1500 } ).catch( () => null );
+		if ( ask ) await page.click( '.minn-confirm-modal [data-ok]' );
 		// actionToast prefers the route's {message} ("Entry deleted permanently.")
 		// over the default "⟨label⟩ — done" form.
 		await page.waitForFunction( () =>
 			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) =>
 				/Entry deleted permanently|Delete entry — done/.test( x.textContent ) ),
-		null, { timeout: 10000 } );
+		null, { timeout: 30000 } );
+		// A delete returns to the list (a cold load: the action cleared its cache).
+		await page.waitForFunction( () => ! /\/entry\//.test( location.pathname ), null, { timeout: 20000 } );
+		await listSettled( page );
 		await page.waitForFunction( () =>
 			! Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Cast Off' ) ),
 		null, { timeout: 10000 } );

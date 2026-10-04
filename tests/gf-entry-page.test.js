@@ -6,8 +6,9 @@
  * message with its line breaks, the remaining answers with the form's own
  * labels, the submission card, previous / next through the list (buttons
  * and ← →, never while typing), a link reaching the page with no list
- * loaded, an entry that does not exist, spam from the side card, and the
- * form name opening the form builder.
+ * loaded, an entry that does not exist, Reply through Minn's email composer
+ * (prefilled, sent only to the entry's own address, logged as a note), spam
+ * from the side card, and the form name opening the form builder.
  *
  * Fixtures: GF form 1 "Contact Form" (fields: name 1, email 2, select 3,
  * textarea 4, checkbox 5). The suite adds two disposable entries over
@@ -56,13 +57,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			title: el.querySelector( '.minn-modal-title' ).textContent.trim(),
 			name: el.querySelector( '.minn-ep-name' ).textContent.trim(),
 			mail: ( el.querySelector( '.minn-ep-reach a[href^="mailto:"]' ) || {} ).textContent,
-			reply: ( el.querySelector( '.minn-ep-reply' ) || {} ).href || '',
+			reply: !! el.querySelector( 'button.minn-ep-reply' ),
 			message: ( el.querySelector( '.minn-ep-message' ) || {} ).textContent || '',
 			answers: [ ...el.querySelectorAll( '.minn-order-main .minn-ep-answer' ) ].map( ( a ) => a.querySelector( 'dt' ).textContent.trim() + '=' + a.querySelector( 'dd' ).textContent.trim() ),
 			submitted: !! [ ...el.querySelectorAll( '.minn-ep-side-meta dt' ) ].find( ( d ) => d.textContent.trim() === 'Submitted' ),
 		} ) );
 		t.check( 'the title is the sender', view.title === 'Paige Suite' + stamp && view.name === view.title, JSON.stringify( view.title ) );
-		t.check( 'the email links and Reply carries the form', view.mail === 'paige' + stamp + '@example.org' && /^mailto:paige\d+@example\.org\?subject=Re%3A%20Contact%20Form$/.test( view.reply ), view.reply );
+		t.check( 'the email links and Reply is offered', view.mail === 'paige' + stamp + '@example.org' && view.reply, JSON.stringify( view.mail ) );
 		t.check( 'the message keeps its line breaks', view.message === 'Line one.\nLine two.', JSON.stringify( view.message ) );
 		t.check( 'other answers show with the form’s labels', view.answers.includes( 'Topic=Sales question' ) && view.answers.some( ( a ) => /^Interests=Hosting/.test( a ) ), JSON.stringify( view.answers ) );
 		t.check( 'the submission card sits at the side', view.submitted );
@@ -95,6 +96,32 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'a direct link has no list to step through', ! await page.$( '#minn-ep-next' ) );
 		const stored = ( await gf( `gf/v2/entries/${ ids[ 1 ] }` ) ).body;
 		t.check( 'opening the page marked the entry read', String( stored.is_read ) === '1' );
+
+		// Reply: Minn's email composer, To and Subject filled in, the cursor in
+		// the message; the sent reply joins the notes trail. (Cove delivers
+		// local mail to Mailpit.)
+		await page.click( '#minn-ep-reply' );
+		await page.waitForSelector( '#minn-ue-message', { timeout: 10000 } );
+		const composer = await page.evaluate( () => ( {
+			title: document.querySelector( '.minn-modal .minn-modal-title' ).textContent.trim(),
+			to: document.querySelector( '.minn-modal .minn-modal-sub' ).textContent.trim(),
+			subject: document.getElementById( 'minn-ue-subject' ).value,
+		} ) );
+		await page.waitForFunction( () => document.activeElement && document.activeElement.id === 'minn-ue-message', null, { timeout: 3000 } ).catch( () => {} );
+		t.check( 'Reply opens the email composer, prefilled', composer.title === 'Reply' && /quinn\d+@example\.org/.test( composer.to ) && composer.subject === 'Re: Contact Form', JSON.stringify( composer ) );
+		t.check( 'the cursor waits in the message', await page.evaluate( () => document.activeElement && document.activeElement.id === 'minn-ue-message' ) );
+		await page.click( '#minn-ue-send' );
+		await page.waitForTimeout( 400 );
+		t.check( 'an empty message is refused and the cursor returns to it', !! await page.$( '#minn-ue-message' )
+			&& await page.evaluate( () => document.activeElement && document.activeElement.id === 'minn-ue-message' ) );
+		await page.keyboard.type( 'Thanks for writing in. Talk soon.' );
+		await page.click( '#minn-ue-send' );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-toast' ) ].some( ( x ) => /Email sent/.test( x.textContent ) ), null, { timeout: 30000 } );
+		t.check( 'the reply sends to the entry’s address', await page.evaluate( () => [ ...document.querySelectorAll( '.minn-toast' ) ].some( ( x ) => /quinn\d+@example\.org/.test( x.textContent ) ) ) );
+		await page.waitForFunction( () => /Replied by email to quinn\d+@example\.org: Re: Contact Form/.test( ( document.querySelector( '.minn-ep-notes' ) || {} ).textContent || '' ), null, { timeout: 30000 } ).catch( () => {} );
+		t.check( 'the reply joins the notes trail', /Replied by email to quinn\d+@example\.org: Re: Contact Form/.test( await page.$eval( '.minn-ep-notes', ( el ) => el.textContent ).catch( () => '' ) ) );
+		const relay = await gf( 'minn-admin/v1/entries/reply', { method: 'POST', body: { surface: 'gravity-forms', id: String( ids[ 1 ] ), to: 'someone@else.example', subject: 'x', message: 'y' } } );
+		t.check( 'a reply to an address the entry does not hold is refused', 400 === relay.status, String( relay.status ) );
 
 		// Spam from the side card, through Minn's own confirm.
 		await page.evaluate( () => [ ...document.querySelectorAll( '[data-epact]' ) ].find( ( b ) => b.textContent.trim() === 'Mark as spam' ).click() );

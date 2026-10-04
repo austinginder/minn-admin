@@ -10,7 +10,7 @@
  * spam) plus a disposable one from the minn_test_seed_flamingo one-shot
  * mu-fixture that this suite spams, unspams, and finally trashes.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, leaveEntry } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -48,11 +48,25 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		if ( row ) row.click();
 		return !! row;
 	}, text );
-	const clickModalBtn = ( label ) => page.evaluate( ( l ) => {
-		const btn = Array.from( document.querySelectorAll( '.minn-modal button' ) ).find( ( b ) => b.textContent.trim() === l );
-		if ( btn ) btn.click();
-		return !! btn;
-	}, label );
+	// A message opens on the entry page; its actions sit in the side card
+	// (Minn's own confirm answers any that ask).
+	const openRow = async ( text ) => {
+		const ok = await clickRow( text );
+		if ( ok ) await page.waitForSelector( '.minn-entry-page .minn-order-main', { timeout: 15000 } );
+		return ok;
+	};
+	const clickModalBtn = async ( label ) => {
+		const clicked = await page.evaluate( ( l ) => {
+			const btn = Array.from( document.querySelectorAll( '[data-epact]' ) ).find( ( b ) => b.textContent.trim() === l );
+			if ( btn ) btn.click();
+			return !! btn;
+		}, label );
+		if ( clicked ) {
+			const ask = await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 1500 } ).catch( () => null );
+			if ( ask ) await page.click( '.minn-confirm-modal [data-ok]' );
+		}
+		return clicked;
+	};
 	const waitToast = ( re ) => page.waitForFunction(
 		( src ) => Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => new RegExp( src ).test( x.textContent ) ),
 		re, { timeout: 10000 }
@@ -110,25 +124,23 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await waitRow( 'Dana Tester' );
 
 		// --- Entry detail ------------------------------------------------------
-		t.check( 'Row opens detail', await clickRow( 'Question about pricing' ) );
-		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
+		t.check( 'Row opens the entry page', await openRow( 'Question about pricing' ) && /\/cf7\/entry\//.test( page.url() ) );
 		const detail = await page.evaluate( () => ( {
-			name: ( document.querySelector( '.minn-entry-name' ) || {} ).textContent || '',
-			email: ( document.querySelector( '.minn-entry-email' ) || {} ).textContent || '',
-			body: document.querySelector( '.minn-entry' ).textContent.replace( /\s+/g, ' ' ),
+			name: ( document.querySelector( '.minn-ep-name' ) || {} ).textContent || '',
+			email: ( document.querySelector( '.minn-ep-reach a[href^="mailto:"]' ) || {} ).textContent || '',
+			body: document.querySelector( '.minn-entry-page' ).textContent.replace( /\s+/g, ' ' ),
 		} ) );
 		t.check( 'Contact card hero shows name + email', detail.name === 'Dana Tester' && detail.email === 'dana@example.com', JSON.stringify( detail.name + ' / ' + detail.email ) );
 		t.check( 'Message body renders', detail.body.includes( 'nonprofit discount' ) );
 		t.check( 'CF7 field names humanized (no your- prefix)', ! /your-name|your_message/.test( detail.body ) );
 		t.check( 'Submission meta carries form + IP', detail.body.includes( 'Contact form 1' ) && detail.body.includes( '203.0.113.9' ) );
-		await page.keyboard.press( 'Escape' );
-		await page.waitForTimeout( 300 );
+		await leaveEntry( page );
 
 		// --- Spam → unspam (status filter moves the row between buckets) ---------
-		await clickRow( 'Minn Fixture Disposable' );
-		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
+		await openRow( 'Minn Fixture Disposable' );
 		t.check( 'Fresh message offers Mark as spam', await clickModalBtn( 'Mark as spam' ) );
 		await waitToast( 'Marked as spam' );
+		await leaveEntry( page );
 		// Spam leaves the Received bucket — open the Spam filter to see it.
 		await page.click( '[data-sfilter="spam"]' );
 		await waitRow( 'Minn Fixture Disposable' );
@@ -138,10 +150,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		null, { timeout: 10000 } );
 		t.check( 'Spam filter lists the marked message', true );
 
-		await clickRow( 'Minn Fixture Disposable' );
-		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
+		await openRow( 'Minn Fixture Disposable' );
 		t.check( 'Spam message offers Not spam instead', await clickModalBtn( 'Not spam' ) );
 		await waitToast( 'Marked not spam' );
+		await leaveEntry( page );
 		// Back on Received after unspam.
 		await page.click( '[data-sfilter="inbox"]' );
 		await waitRow( 'Minn Fixture Disposable' );
@@ -155,16 +167,16 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// bucket:'inbox') appears once the fresh inbox item is what's mounted.
 		let trashOffered = false;
 		for ( let i = 0; i < 8 && ! trashOffered; i++ ) {
-			await clickRow( 'Minn Fixture Disposable' );
-			await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
+			await openRow( 'Minn Fixture Disposable' );
 			trashOffered = await clickModalBtn( 'Trash message' );
 			if ( ! trashOffered ) {
-				await page.keyboard.press( 'Escape' );
+				await leaveEntry( page );
 				await page.waitForTimeout( 700 );
 			}
 		}
 		t.check( 'Trash action offered', trashOffered );
 		await waitToast( 'Moved to trash' );
+		await leaveEntry( page );
 		await waitRow( 'Minn Fixture Disposable', false );
 		t.check( 'Trashed message leaves the Received list', true );
 

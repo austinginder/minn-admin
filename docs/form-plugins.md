@@ -6,7 +6,10 @@ with **eleven** providers, including WPForms Pro and SureForms. The adapter
 ladder proved out on Gravity Forms (entries → notifications → form
 settings), and the remaining work is the thin long tail.
 
-**Today:** `family: 'forms'` with a provider switcher. Gravity Forms has a
+**Today:** `family: 'forms'` with a provider switcher. Every provider's
+entries open on the shared **entry page** (`/{surface}/entry/{id}`, the family
+default for any entries collection with a `sectionsRoute`), with Reply through
+Minn's email composer. Gravity Forms has a
 form builder (v0.43 cycle, `gravity-forms-builder.php`); every other
 provider deep-links to its own editor for create/edit of the form document.
 The builder's scope and boundaries live in `docs/native-editors.md`.
