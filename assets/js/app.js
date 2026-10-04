@@ -1237,6 +1237,7 @@
 		gfbuilder: [ __( 'Form' ), 'Gravity Forms' ],
 		gfnotification: [ __( 'Notification' ), 'Gravity Forms' ],
 		gfconfirmation: [ __( 'Confirmation' ), 'Gravity Forms' ],
+		cf7form: [ __( 'Email and messages' ), 'Contact Form 7' ],
 		migrate: [ __( 'Migrate' ), 'WP Migrate' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
@@ -3260,6 +3261,10 @@
 			// /gravity-forms/notification/12:5f0c… (or 12:new) — one notification.
 			state.gfnId = decodeURIComponent( parts[ 2 ] );
 			state.route = 'gfnotification';
+		} else if ( route === 'cf7' && 'form' === parts[ 1 ] && parts[ 2 ] && /^\d+$/.test( parts[ 2 ] ) ) {
+			// /cf7/form/12 — one Contact Form 7 form's emails and messages.
+			state.c7Id = parseInt( parts[ 2 ], 10 );
+			state.route = 'cf7form';
 		} else if ( route === 'gravity-forms' && 'confirmation' === parts[ 1 ] && parts[ 2 ] ) {
 			// /gravity-forms/confirmation/12:5f0c… (or 12:new) — one confirmation.
 			state.gfcId = decodeURIComponent( parts[ 2 ] );
@@ -3367,6 +3372,7 @@
 		if ( 'gfbuilder' === r ) return !! ( state.gfb && state.gfb.dirty );
 		if ( 'gfnotification' === r ) return !! ( state.gfn && state.gfn.dirty );
 		if ( 'gfconfirmation' === r ) return !! ( state.gfc && state.gfc.dirty );
+		if ( 'cf7form' === r ) return !! ( state.c7 && state.c7.dirty );
 		if ( 'entrypage' === r && entryEditDirty( state.entryPage ) ) return true;
 		// Pages that show a save bar, or arm their Save, only once something
 		// changed say so on screen.
@@ -3424,7 +3430,7 @@
 	// page's. An explicit list, so it never reaches a Publish, a Send or a
 	// destructive verb; the post editor keeps its own ⌘S.
 	const SAVE_SHORTCUT_IDS = [
-		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-ep-save', 'minn-sset-save', 'minn-product-save',
+		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-c7m-save', 'minn-ep-save', 'minn-sset-save', 'minn-product-save',
 		'minn-wcm-save', 'minn-wcmp-save', 'minn-order-save', 'minn-look-save', 'minn-save-settings',
 		'minn-save-site-appearance', 'minn-rd-save', 'minn-tax-save', 'minn-cpt-save', 'minn-zone-save',
 		'minn-widget-save', 'minn-pf-save', 'minn-surface-save', 'minn-uf-save', 'minn-coupon-save',
@@ -3481,7 +3487,7 @@
 
 	// The builder page on screen (its state carries .hist once rendered).
 	const builderPage = () => {
-		const b = { fieldgroup: state.fgb, gfbuilder: state.gfb, gfnotification: state.gfn, gfconfirmation: state.gfc }[ state.route ];
+		const b = { fieldgroup: state.fgb, gfbuilder: state.gfb, gfnotification: state.gfn, gfconfirmation: state.gfc, cf7form: state.c7 }[ state.route ];
 		return b && b.hist && ! b.loading ? b : null;
 	};
 
@@ -4663,6 +4669,7 @@
 				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
 				// The form builder keeps Gravity Forms' item (or its family's) lit.
 				|| ( [ 'gfbuilder', 'gfnotification', 'gfconfirmation' ].indexOf( state.route ) !== -1 && ( 'gravity-forms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
+				|| ( 'cf7form' === state.route && ( 'cf7' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
 				// Same for the product detail page and Products.
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
@@ -53343,7 +53350,7 @@
 
 	// The Gravity Forms page on screen (notification or confirmation): the
 	// field, rule and merge tag helpers below serve both.
-	const gfnCur = () => ( 'gfconfirmation' === state.route ? state.gfc : state.gfn );
+	const gfnCur = () => ( { gfconfirmation: state.gfc, cf7form: state.c7 }[ state.route ] || state.gfn );
 
 	function gfnAdopt( r ) {
 		const keep = state.gfn && state.gfn.id === r.id ? state.gfn.preview : null;
@@ -54403,6 +54410,265 @@
 		} );
 	}
 
+	/* ===== Contact Form 7: a form's email and messages page ===== */
+	/**
+	 * /cf7/form/{id}: Mail, the optional Mail (2) and the Messages visitors
+	 * read, saved through CF7's own wpcf7_save_contact_form() with their
+	 * configuration check (adapters/cf7-mail.php). The fields, tag picker,
+	 * undo, ⌘S and the leave guard are the notification page's; the preview
+	 * fills the mail from the form's latest Flamingo message.
+	 */
+	let c7PreviewTimer = null;
+	let c7PreviewSeq = 0;
+	const C7_MAIL_KEYS = [ 'recipient', 'sender', 'subject', 'additional_headers', 'body', 'attachments', 'use_html', 'exclude_blank', 'active' ];
+
+	function c7Adopt( r ) {
+		const keep = state.c7 && state.c7.id === r.id ? { which: state.c7.which } : {};
+		state.c7 = {
+			id: r.id,
+			data: r,
+			n: JSON.parse( JSON.stringify( { mail: r.mail, mail_2: r.mail_2, messages: r.messages } ) ),
+			dirty: false,
+			loading: false,
+			err: null,
+			preview: null,
+			which: keep.which && ( 'mail' === keep.which || r.mail_2.active ) ? keep.which : 'mail',
+		};
+	}
+
+	const c7Get = ( n, path ) => path.split( '.' ).reduce( ( o, k ) => ( o == null ? o : o[ k ] ), n );
+	const c7Set = ( n, path, v ) => {
+		const parts = path.split( '.' );
+		const last = parts.pop();
+		parts.reduce( ( o, k ) => o[ k ], n )[ last ] = v;
+	};
+
+	function renderCf7Page() {
+		const view = $( '#minn-view' );
+		if ( ! state.c7 || state.c7.id !== state.c7Id ) {
+			state.c7 = { id: state.c7Id, loading: true };
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+			api( `minn-admin/v1/cf7/forms/${ state.c7Id }/mail` )
+				.then( ( r ) => {
+					if ( state.route !== 'cf7form' || state.c7Id !== r.id ) return;
+					c7Adopt( r );
+					renderCf7Page();
+					c7RefreshPreview( true );
+				} )
+				.catch( ( e ) => { view.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`; } );
+			return;
+		}
+		const c = state.c7;
+		if ( c.loading ) return;
+		if ( ! c.hist ) {
+			c.hist = makeHistory( () => JSON.stringify( c.n ), ( snap ) => {
+				c.n = JSON.parse( snap );
+				c.dirty = ! c.hist.isClean();
+				if ( 'mail_2' === c.which && ! c.n.mail_2.active ) c.which = 'mail';
+				renderCf7Page();
+				c7RefreshPreview( true );
+			} );
+		}
+		const d = c.data;
+		const n = c.n;
+		const warn = ( key ) => ( ( d.configErrors || {} )[ key ] || [] ).map( ( m ) => `<span class="minn-gfn-warn">${ esc( m ) }</span>` ).join( '' );
+		const sw = ( key, label ) => `<div class="minn-gfn-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( label ) }</span>
+			<button type="button" class="minn-switch${ c7Get( n, key ) ? ' on' : '' }" data-c7sw="${ key }" role="switch" aria-checked="${ !! c7Get( n, key ) }" aria-label="${ esc( label ) }"><span class="minn-switch-knob"></span></button></div>`;
+		const mailFields = ( p ) => `
+			<div class="minn-gfn-pair">
+				${ gfnInput( p + '.recipient', __( 'To' ), n[ p ].recipient, { mono: true, tags: true, after: warn( p + '.recipient' ) } ) }
+				${ gfnInput( p + '.sender', __( 'From' ), n[ p ].sender, { mono: true, tags: true, after: warn( p + '.sender' ) } ) }
+			</div>
+			${ gfnInput( p + '.subject', __( 'Subject' ), n[ p ].subject, { tags: true, after: warn( p + '.subject' ) } ) }
+			${ gfnInput( p + '.additional_headers', __( 'Additional headers' ), n[ p ].additional_headers, { area: true, rows: 2, mono: true, tags: true, help: __( 'One per line, like Reply-To: [your-email].' ), after: warn( p + '.additional_headers' ) } ) }
+			${ gfnInput( p + '.body', __( 'Message' ), n[ p ].body, { area: true, rows: 12, tags: true, after: warn( p + '.body' ) } ) }
+			${ sw( p + '.use_html', __( 'Send as HTML' ) ) }
+			${ sw( p + '.exclude_blank', __( 'Leave out lines whose tags are empty' ) ) }
+			${ gfnInput( p + '.attachments', __( 'Attachments' ), n[ p ].attachments, { area: true, rows: 2, mono: true, tags: true, help: __( 'A file field’s tag, or a file under wp-content, one per line.' ), after: warn( p + '.attachments' ) } ) }`;
+		const scroll = view.scrollTop;
+		view.innerHTML = `
+		<div class="minn-card minn-gfn minn-c7m">
+			<div class="minn-fgb-top">
+				<button type="button" class="minn-btn-soft" id="minn-c7m-back">‹ ${ esc( __( 'Forms' ) ) }</button>
+				<span class="minn-gfn-titleset minn-gfc-fixed"><span class="minn-gfc-name">${ esc( d.title ) }</span></span>
+				<span class="minn-gfb-spring"></span>
+				${ undoButtonsHtml( c.hist ) }
+				${ c.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
+				<a class="minn-btn-soft" href="${ esc( safeHref( d.adminUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in Contact Form 7 ↗' ) ) }</a>
+				<button type="button" class="minn-btn-primary" id="minn-c7m-save">${ esc( __( 'Save' ) ) }</button>
+			</div>
+			<div class="minn-fgb-meta"><span>${ esc( __( 'The emails this form sends, and the messages visitors read.' ) ) }</span></div>
+			<div class="minn-gfn-main">
+				<div class="minn-gfn-edit">
+					<div class="minn-gfn-sec" data-c7sec="mail">
+						<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( __( 'Mail' ) ) }</div></div>
+						${ mailFields( 'mail' ) }
+					</div>
+					<div class="minn-gfn-sec" data-c7sec="mail_2">
+						<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( __( 'Mail (2)' ) ) }</div></div>
+						${ sw( 'mail_2.active', __( 'Send a second email (for example, a reply to the sender)' ) ) }
+						${ n.mail_2.active ? mailFields( 'mail_2' ) : '' }
+					</div>
+					<div class="minn-gfn-sec" data-c7sec="messages">
+						<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( __( 'Messages' ) ) }</div></div>
+						<div class="minn-toggle-desc">${ esc( __( 'What visitors read after sending, or when something needs fixing.' ) ) }</div>
+						${ ( d.messageLabels || [] ).map( ( [ key, label ] ) => gfnInput( 'messages.' + key, label, n.messages[ key ] || '', { after: warn( 'messages.' + key ) } ) ).join( '' ) }
+					</div>
+				</div>
+				<aside class="minn-gfn-side">
+					<div class="minn-gfn-sec minn-gfn-preview">
+						<div class="minn-gfn-sec-head">
+							<div class="minn-side-title">${ esc( __( 'Preview' ) ) }</div>
+							<span class="minn-gfn-preview-note" id="minn-c7m-note"></span>
+							<button type="button" class="minn-btn-soft minn-gfn-mini" id="minn-c7m-refresh">${ esc( __( 'Refresh' ) ) }</button>
+						</div>
+						${ n.mail_2.active ? `<div class="minn-tabs minn-gfn-totype" role="group" aria-label="${ esc( __( 'Which email' ) ) }">
+							${ [ [ 'mail', __( 'Mail' ) ], [ 'mail_2', __( 'Mail (2)' ) ] ].map( ( [ v, l ] ) => `<button type="button" class="minn-tab${ c.which === v ? ' active' : '' }" data-c7which="${ v }" aria-pressed="${ c.which === v }">${ esc( l ) }</button>` ).join( '' ) }
+						</div>` : '' }
+						<div id="minn-c7m-preview"></div>
+					</div>
+				</aside>
+			</div>
+		</div>`;
+		view.scrollTop = scroll;
+		c7PaintPreview();
+		bindCf7Page( $( '.minn-c7m', view ) );
+	}
+
+	function c7PaintPreview() {
+		const body = $( '#minn-c7m-preview' );
+		const note = $( '#minn-c7m-note' );
+		const pv = state.c7 && state.c7.preview;
+		if ( ! body ) return;
+		if ( ! pv ) {
+			body.innerHTML = `<div class="minn-loading" style="padding:18px;">${ esc( __( 'Building the preview…' ) ) }</div>`;
+			return;
+		}
+		if ( note ) {
+			/* translators: %s: a message number. */
+			note.textContent = pv.message ? sprintf( __( 'With message #%s' ), pv.message ) : ( state.c7.data.hasFlamingo ? __( 'No messages yet: tags show as typed' ) : __( 'Tags show as typed' ) );
+		}
+		const line = ( label, v ) => `<div class="minn-c7m-line"><span>${ esc( label ) }</span>${ esc( v || '' ) }</div>`;
+		body.innerHTML = `<div class="minn-gfn-subj">${ line( __( 'To' ), pv.to ) }${ line( __( 'From' ), pv.from ) }${ line( __( 'Subject' ), pv.subject ) }</div>
+			${ previewFrameHtml( pv.html || '', { cls: 'minn-gfn-frame', title: __( 'Email preview' ) } ) }`;
+	}
+
+	function c7RefreshPreview( now ) {
+		clearTimeout( c7PreviewTimer );
+		const run = async () => {
+			const c = state.c7;
+			if ( ! c || ! c.data ) return;
+			const seq = ++c7PreviewSeq;
+			try {
+				const r = await api( `minn-admin/v1/cf7/forms/${ c.id }/mail/preview`, { method: 'POST', body: JSON.stringify( { which: c.which, mail: c.n[ c.which ] } ) } );
+				if ( seq !== c7PreviewSeq || state.c7 !== c ) return;
+				c.preview = r;
+				c7PaintPreview();
+			} catch ( e ) {
+				if ( seq === c7PreviewSeq && state.c7 === c ) {
+					const body = $( '#minn-c7m-preview' );
+					if ( body ) body.innerHTML = `<div class="minn-empty" style="padding:14px;">${ esc( e.message ) }</div>`;
+				}
+			}
+		};
+		if ( now ) run();
+		else c7PreviewTimer = setTimeout( run, 700 );
+	}
+
+	function bindCf7Page( root ) {
+		const c = state.c7;
+		const n = c.n;
+		const markDirty = ( key ) => {
+			c.hist.note( key );
+			syncUndoButtons();
+			if ( c.dirty ) return;
+			c.dirty = true;
+			const top = $( '.minn-fgb-top', root );
+			const link = $( '.minn-fgb-top a.minn-btn-soft', root );
+			if ( top && link && ! top.querySelector( '.minn-fgb-dirty' ) ) {
+				const pill = document.createElement( 'span' );
+				pill.className = 'minn-fgb-dirty';
+				pill.textContent = __( 'Unsaved changes' );
+				top.insertBefore( pill, link );
+			}
+		};
+		const leave = async () => ! c.dirty || minnConfirm( { title: __( 'Leave without saving?' ), body: __( 'Changes to this form’s emails and messages haven’t been saved.' ), confirmLabel: __( 'Leave' ), danger: true } );
+		root.addEventListener( 'input', ( e ) => {
+			const t = e.target;
+			if ( ! t.dataset.gfn ) return;
+			c7Set( n, t.dataset.gfn, t.value );
+			markDirty( t );
+			if ( t.dataset.gfn.startsWith( c.which + '.' ) ) c7RefreshPreview();
+		} );
+		root.addEventListener( 'click', async ( e ) => {
+			const t = e.target;
+			if ( t.closest( '#minn-c7m-back' ) ) {
+				if ( ! await leave() ) return;
+				c.dirty = false;
+				const ss = surfaceState( 'cf7' );
+				if ( ss ) ss.view = 'manage';
+				go( 'cf7' );
+				return;
+			}
+			const sw = t.closest( '[data-c7sw]' );
+			if ( sw ) {
+				const key = sw.dataset.c7sw;
+				c7Set( n, key, ! c7Get( n, key ) );
+				markDirty();
+				if ( 'mail_2.active' === key ) {
+					if ( ! n.mail_2.active && 'mail_2' === c.which ) c.which = 'mail';
+					renderCf7Page();
+					c7RefreshPreview( true );
+					return;
+				}
+				sw.classList.toggle( 'on', !! c7Get( n, key ) );
+				sw.setAttribute( 'aria-checked', !! c7Get( n, key ) );
+				if ( key.startsWith( c.which + '.' ) ) c7RefreshPreview( true );
+				return;
+			}
+			const wh = t.closest( '[data-c7which]' );
+			if ( wh ) {
+				c.which = wh.dataset.c7which;
+				c.preview = null;
+				renderCf7Page();
+				c7RefreshPreview( true );
+				return;
+			}
+			const tagBtn = t.closest( '[data-gfntags]' );
+			if ( tagBtn ) {
+				const key = tagBtn.dataset.gfntags;
+				const target = $( `[data-gfn="${ key }"]`, root );
+				if ( target ) gfnOpenTags( tagBtn, target, true, c.data.mergeTags );
+				return;
+			}
+			if ( t.closest( '#minn-c7m-refresh' ) ) {
+				c.preview = null;
+				c7PaintPreview();
+				c7RefreshPreview( true );
+				return;
+			}
+			if ( t.closest( '#minn-c7m-save' ) ) {
+				const b = t.closest( '#minn-c7m-save' );
+				b.disabled = true;
+				b.textContent = __( 'Saving…' );
+				try {
+					const r = await api( `minn-admin/v1/cf7/forms/${ c.id }/mail`, { method: 'POST', body: JSON.stringify( n ) } );
+					c7Adopt( r );
+					const ss = surfaceState( 'cf7' );
+					if ( ss ) { ss.cache = null; }
+					const found = Object.keys( r.configErrors || {} ).length;
+					toast( found ? __( 'Saved. Contact Form 7 flagged something to check; see the notes on the fields.' ) : __( 'Form saved' ) );
+					renderCf7Page();
+					c7RefreshPreview( true );
+				} catch ( err ) {
+					toast( err.message, true );
+					b.disabled = false;
+					b.textContent = __( 'Save' );
+				}
+			}
+		} );
+	}
+
 	function renderView() {
 		renderTopbar();
 		announceRoute();
@@ -54442,7 +54708,8 @@
 		if ( state.route !== 'gfbuilder' ) state.gfb = null;
 		if ( state.route !== 'gfnotification' ) state.gfn = null;
 		if ( state.route !== 'gfconfirmation' ) state.gfc = null;
-		if ( ! [ 'gfnotification', 'gfconfirmation', 'gfbuilder' ].includes( state.route ) ) $$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
+		if ( state.route !== 'cf7form' ) state.c7 = null;
+		if ( ! [ 'gfnotification', 'gfconfirmation', 'gfbuilder', 'cf7form' ].includes( state.route ) ) $$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
 		// A finished or abandoned migration should not reappear on return.
 		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
@@ -54483,6 +54750,7 @@
 			case 'gfbuilder': renderFormBuilder(); break;
 			case 'gfnotification': renderNotificationPage(); break;
 			case 'gfconfirmation': renderConfirmationPage(); break;
+			case 'cf7form': renderCf7Page(); break;
 			case 'profile': renderProfile(); break;
 			case 'surfaceitem': renderSurfaceItem(); break;
 			case 'entrypage': renderEntryPage(); break;

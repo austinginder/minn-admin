@@ -264,6 +264,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'date', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(),
+			// A row opens the form's email and messages page (cf7-mail.php).
+			'open'      => array( 'route' => 'cf7/form/{id}' ),
 			'actions'   => array(
 				array(
 					'label' => __( 'Edit in Contact Form 7 ↗', 'minn-admin' ),

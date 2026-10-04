@@ -1799,6 +1799,9 @@ button.minn-plugin-ver:hover { color: var(--accent2); }
 .minn-gfc-name { font-size: 16px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
 .minn-gfc-default { font-size: 11.5px; font-weight: 600; color: var(--accent2); background: var(--hover); padding: 2px 8px; border-radius: 5px; white-space: nowrap; }
 .minn-gfc-frame { height: min(40vh, 360px); }
+.minn-c7m-line { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.minn-c7m-line + .minn-c7m-line { margin-top: 4px; }
+.minn-c7m-line > span { display: inline-block; min-width: 64px; font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; }
 .minn-gfc-goes { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
 .minn-gfc-url {
   display: block; width: 100%; box-sizing: border-box; font: 12.5px/1.5 var(--font-mono); color: var(--text); overflow-wrap: anywhere;
