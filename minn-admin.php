@@ -122,6 +122,7 @@ require_once MINN_ADMIN_DIR . 'includes/backup-download.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/jetpack-tiled-gallery.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/status-chart.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/gravity-forms.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/gravity-forms-builder.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/fluent-forms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/ninja-forms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/forminator.php';

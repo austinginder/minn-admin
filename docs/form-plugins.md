@@ -6,16 +6,16 @@ with **eleven** providers, including WPForms Pro and SureForms. The adapter
 ladder proved out on Gravity Forms (entries → notifications → form
 settings), and the remaining work is the thin long tail.
 
-**Today:** `family: 'forms'` with a provider switcher. Deliberately **not**
-a form builder: deep-link to each plugin's editor for create/edit of the
-form document. Scope and boundaries for a future "80% form editor" over
-clean documents live in `docs/native-editors.md` (parked).
+**Today:** `family: 'forms'` with a provider switcher. Gravity Forms has a
+form builder (v0.43 cycle, `gravity-forms-builder.php`); every other
+provider deep-links to its own editor for create/edit of the form document.
+The builder's scope and boundaries live in `docs/native-editors.md`.
 
 ## Coverage (shipped)
 
 | Plugin | Adapter | What Minn surfaces |
 |---|---|---|
-| **Gravity Forms** | `gravity-forms.php` | Entries as contact cards with Received/Spam/Trash, star/read, notes, resend, bulk; **Forms** manage view (activate/deactivate); **Notifications** view (toggle + daily-field edit); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
+| **Gravity Forms** | `gravity-forms.php` | Entries as contact cards with Received/Spam/Trash, star/read, notes, resend, bulk; **Forms** manage view (activate/deactivate, New form; rows open the **form builder**: fields on GF's 12-column grid, add/remove/duplicate/drag, per-field settings from GF's own editor settings, choices, Name/Address parts, widths, conditional logic, saved through GF's editor save); **Notifications** view (toggle + daily-field edit); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
 | **Fluent Forms** | `fluent-forms.php` | Entries list + labeled detail; Received/Spam/Trash filters; search; open marks read; trash/permanent delete; forms manage view. Suite `fluent-forms` (24). Normalized over `fluentform_submissions` (+ form field labels). |
 | **Everest Forms** | `everest-forms.php` | Entries with Received/Spam/Trash through EVF_Admin_Entries; form tabs; search; forms manage. Suite `everest-forms`. |
 | **Elementor Pro Forms** | `elementor-forms.php` | Submissions via Elementor's own Query class; soft-trash through `move_to_trash_submission`. Free Elementor has no submissions store. |
@@ -83,10 +83,10 @@ Sidebar: one **Forms** item. Topbar autocomplete when
 
 ## Out of scope (same as day one)
 
-- Form field builders, conditional-logic rule builders, payment feeds, spam
+- Form builders for providers other than Gravity Forms, payment feeds, spam
   settings UIs that belong to the form plugin's own product.
-- Creating forms inside Minn (the 80% editor, if it ever ships, is a
-  deliberate product bet over clean documents: `docs/native-editors.md`).
+- In the Gravity Forms builder: pricing and product fields, calculations,
+  input masks, feeds and confirmations (deep-linked; `docs/native-editors.md`).
 - Unifying entries across plugins into one merged inbox (the family
   switcher is enough).
 
@@ -96,7 +96,15 @@ Sidebar: one **Forms** item. Topbar autocomplete when
   `GFCommon::current_user_can_any(…)` (never a raw granular cap).
 - Entries: `gf/v2` + status filters + bulk + notes + resend; detail shim
   `minn-admin/v1/gf/entries/{id}` for labeled answers.
-- Forms manage: `minn-admin/v1/gf/forms` activate/deactivate + deep link.
+- Forms manage: `minn-admin/v1/gf/forms` activate/deactivate + deep link;
+  POST creates through GF's editor save (default notification + confirmation
+  included) and the new form opens in the builder.
+- Form builder: `minn-admin/v1/gf/forms/{id}/builder` GET/POST. Per-field
+  settings = GF's `get_form_editor_field_settings()` mapped; new fields take
+  their editor's defaults (js.php SetDefaultValues); save through
+  `GF_Form_CRUD_Handler` with `deletedFields` (entry values go with a removed
+  field, as in their editor); only changed settings overlay; `known` ids
+  refuse a save after the form changed elsewhere.
 - Notifications view: composite row id `form:nid`; toggle via
   `GFFormsModel::update_notification_active`; edits via
   `save_form_notifications`.

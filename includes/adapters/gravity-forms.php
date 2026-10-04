@@ -231,9 +231,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		),
-		// The Manage view: the forms themselves. Deliberately NOT a form
-		// builder — GF's editor (field types, conditional logic, feeds) is one
-		// click away; Minn covers the daily moves: see, toggle, jump.
+		// The Manage view: the forms themselves. A row opens the form builder
+		// (adapters/gravity-forms-builder.php) when this Gravity Forms offers
+		// its editor's save; GF's own editor stays one click away for what the
+		// builder leaves to it (feeds, calculations, pricing fields).
 		'manage'     => array(
 			'viewLabel' => __( 'Forms', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/gf/forms',
@@ -274,6 +275,23 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// actions on the view already refuse them.
 	if ( ! $can_edit_forms ) {
 		unset( $surfaces['gravity-forms']['manage'] );
+	} elseif ( function_exists( 'minn_admin_gfb_available' ) && minn_admin_gfb_available() ) {
+		// The builder page: rows open it (the pages-vs-modals test, as with
+		// ACF field groups: a form carries a whole workflow), and a new form
+		// lands there too.
+		$surfaces['gravity-forms']['manage']['open'] = array( 'route' => 'gravity-forms/form/{id}' );
+		if ( GFCommon::current_user_can_any( array( 'gravityforms_create_form', 'gform_full_access' ) ) ) {
+			$surfaces['gravity-forms']['manage']['create'] = array(
+				'label'  => __( 'New form', 'minn-admin' ),
+				'route'  => 'minn-admin/v1/gf/forms',
+				'method' => 'POST',
+				'open'   => true,
+				'fields' => array(
+					array( 'key' => 'title', 'label' => __( 'Title', 'minn-admin' ) ),
+					array( 'key' => 'description', 'label' => __( 'Description', 'minn-admin' ), 'type' => 'textarea', 'rows' => 2, 'required' => false ),
+				),
+			);
+		}
 	}
 
 	// The Notifications view: every notification across forms (or per form

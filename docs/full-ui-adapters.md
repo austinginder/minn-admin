@@ -58,7 +58,7 @@ still `docs/for-plugin-authors.md` and the validator constants in
 | **1 — form engine** | ✅ shipped (v0.12.0) | One vocabulary renders surface create/edit, editor panels and inspector controls (`required` / `default` / `help` / `placeholder` / `showWhen`, toggles, selects as themed comboboxes in adapter dialects, editor panels, ACF dataForm and repeater rows). |
 | **2 — settings surfaces + mappers** | ✅ shipped (v0.12.0–v0.13.0) | Surface `settings` key (tabs + one GET/POST route per tab); **settings-only** surfaces (no `collection`); **item-scoped** settings (`route` with `{id}`, entered via `settingsItem` actions). Four schema frameworks covered: Gravity SMTP component trees, Minn's form vocabulary, core WP Settings API (Perfmatters), GF Settings framework (form settings). |
 | **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards (incl. chart series, v0.13.0), `views[]` extra list views, manage-slot second collections, **list-row ⋯ menus** from `actions` (v0.13.0). Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. Richer `sectionsRoute` row types (`pill`/`code`/`html-preview`/`kv-table`) shipped v0.18.0; **sortable columns** (`sort` tokens + `sortQuery`) shipped 2026-07-17. The chart shape now has seven adapter consumers (whole mail family + Redirection). Remaining: per-item stat tiles, and the GF form-results chart consumer. |
-| **4 — bespoke** | policy holding | Deep-link everywhere a screen is a canvas. The "80% form editor" over clean documents is scoped in `docs/native-editors.md` (parked, prerequisite plumbing now live). |
+| **4 — bespoke** | policy holding | Deep-link everywhere a screen is a canvas. The one deliberate exception is the Gravity Forms form builder (v0.43 cycle), scoped in `docs/native-editors.md`. |
 
 ### Still open from the Rung-3 list
 
@@ -242,8 +242,10 @@ scale of "Minn builds a second editor", not an adapter feature, and nothing in r
 1-3 forecloses it. That option (the "80% editor"), plus the developer-surface
 siblings, is scoped with its boundaries drawn in `docs/native-editors.md`.
 Of the siblings, the read-only database viewer shipped in the v0.22.0 cycle;
-file browsing stays parked, and the 80% editor remains a deliberate bet not
-yet made.
+file browsing stays parked. The 80% editor shipped in the v0.43 cycle as the
+Gravity Forms form builder (`gravity-forms-builder.php`), saving through GF's
+own editor save rather than a raw document PUT; its boundaries are recorded
+in `docs/native-editors.md`.
 
 ## Case study: Gravity Forms coverage map
 

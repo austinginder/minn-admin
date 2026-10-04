@@ -42,6 +42,24 @@ browser), where the "document" is the site itself.
 
 ## Case study 1: a Gravity Forms form editor (the 80% editor)
 
+> **Shipped in the v0.43 cycle** (`includes/adapters/gravity-forms-builder.php`,
+> the `/gravity-forms/form/{id}` page). The bet was made on a real site: a
+> client's contact form with half-width rows and conditional fields, which a
+> rows-only editor could neither show nor keep honest. So two lines below
+> moved. The page draws the form on Gravity Forms' own 12-column grid, with
+> widths and drag-to-reorder, and conditional-logic rules are editable. The
+> drawing is a static sketch of each control, not GF's live styled canvas.
+> Width is a Full / ¾ / ⅔ / ½ / ⅓ / ¼ control, not drag-resizing. What stayed
+> out: pricing and product wiring, calculations, input masks, feeds, the
+> submit button's width, position and logic, and confirmations. Each type's
+> settings come from GF's own `get_form_editor_field_settings()`, mapped where
+> the builder can store them, so an add-on's type still lists, moves, resizes
+> and relabels. Saves go through GF's own editor save (`GF_Form_CRUD_Handler`).
+> Concurrency: the save overlays only the settings that changed onto the form
+> as stored now. Edits to other properties made elsewhere survive, and a field
+> added or removed elsewhere since the page loaded refuses the save. The text
+> below is the original scoping, kept for the reasoning.
+
 ### Why it passes the test
 
 From the 2026-07-06 source research (details in `full-ui-adapters.md`):

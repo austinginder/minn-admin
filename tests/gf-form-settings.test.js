@@ -1,6 +1,6 @@
 /**
  * Per-form settings — item-scoped settings views + the Gravity Forms
- * Settings-framework mapper. A Forms row's "Form settings" action opens a
+ * Settings-framework mapper. A Forms row's "Form settings" action (row menu) opens a
  * settings view scoped to that form, drawn at request time from
  * GFFormSettings::form_settings_fields(): groups, dependency-driven
  * showWhen rows, locked date-time controls with the GF escape, choice
@@ -46,13 +46,16 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForFunction( () =>
 			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Contact Form' ) ),
 		null, { timeout: 20000 } );
+		// A row click opens the form builder now (gf-builder covers it); the
+		// row's menu carries Form settings with the other actions.
 		await page.evaluate( () => {
-			[ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( 'Contact Form' ) ).click();
+			[ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( 'Contact Form' ) )
+				.dispatchEvent( new MouseEvent( 'contextmenu', { bubbles: true, clientX: 300, clientY: 300 } ) );
 		} );
-		await page.waitForSelector( '.minn-modal', { timeout: 15000 } );
-		const actions = await page.$$eval( '.minn-modal [data-saction]', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 15000 } );
+		const actions = await page.$$eval( '.minn-ctx-menu button, .minn-ctx-menu a', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
 		t.check( 'form row offers Form settings', actions.includes( 'Form settings' ), actions.join( ',' ) );
-		await page.evaluate( () => [ ...document.querySelectorAll( '.minn-modal [data-saction]' ) ].find( ( b ) => b.textContent.trim() === 'Form settings' ).click() );
+		await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( b ) => b.textContent.trim() === 'Form settings' ).click() );
 		await page.waitForSelector( '[data-sset]', { timeout: 20000 } );
 
 		/* ===== The mapped schema renders ===== */

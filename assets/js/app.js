@@ -1234,6 +1234,7 @@
 		order: [ __( 'Order' ), 'WooCommerce' ],
 		surfaceitem: [ __( 'Booking' ), '' ],
 		fieldgroup: [ __( 'Field group' ), ( FGB_SOURCES[ state.fgbSrc ] || FGB_SOURCES.acf ).vendor ],
+		gfbuilder: [ __( 'Form' ), 'Gravity Forms' ],
 		migrate: [ __( 'Migrate' ), 'WP Migrate' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
@@ -3253,6 +3254,10 @@
 			state.fgbSrc = 'acf';
 			state.fgbKey = decodeURIComponent( parts[ 1 ] );
 			state.route = 'fieldgroup';
+		} else if ( route === 'gravity-forms' && 'form' === parts[ 1 ] && parts[ 2 ] && /^\d+$/.test( parts[ 2 ] ) ) {
+			// /gravity-forms/form/12 — one form's builder page.
+			state.gfbFormId = parseInt( parts[ 2 ], 10 );
+			state.route = 'gfbuilder';
 		} else if ( route === 'navigation' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /navigation/2577 — one menu's tree editor.
 			state.navEditId = parseInt( parts[ 1 ], 10 );
@@ -4496,6 +4501,8 @@
 				|| ( [ 'navigation', 'navedit', 'styles' ].indexOf( state.route ) !== -1 && 'templates' === btn.dataset.nav )
 				// The order detail page keeps the Orders item lit.
 				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
+				// The form builder keeps Gravity Forms' item (or its family's) lit.
+				|| ( 'gfbuilder' === state.route && ( 'gravity-forms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
 				// Same for the product detail page and Products.
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
@@ -47101,6 +47108,13 @@
 					) );
 					surfaceState( m.surface.id ).cache = null;
 					closeModal();
+					// create.open: the new record opens on its own page (the
+					// collection's open route) instead of returning to the list.
+					const opened = m.coll || m.surface.collection;
+					if ( cr.open && opened && opened.open && opened.open.route && r && r.id ) {
+						go( opened.open.route.replace( '{id}', encodeURIComponent( r.id ) ) );
+						return;
+					}
 					if ( state.route === m.surface.id ) renderSurface( m.surface );
 				} catch ( e ) {
 					toast( e.message, true );
@@ -51594,6 +51608,917 @@
 		} );
 	}
 
+	/* ===== Gravity Forms: the form builder =====
+	 * /gravity-forms/form/{id}: the form's fields on the same 12-column grid
+	 * Gravity Forms renders, a settings panel for the selected field (the Add
+	 * field palette when none is), drag to reorder or to add, one Save.
+	 *
+	 * What a field offers is the server's answer (adapters/gravity-forms-
+	 * builder.php maps each type's own editor settings), so the client draws
+	 * an add-on's field type and edits its label with no knowledge of it. A
+	 * new field starts as its type's prototype from the palette and carries
+	 * a temp key until the save gives it an id; logic rules point at it as
+	 * "new:<key>" and the server resolves the reference.
+	 */
+	const GFB_WIDTHS = () => [ [ 12, __( 'Full' ) ], [ 9, '¾' ], [ 8, '⅔' ], [ 6, '½' ], [ 4, '⅓' ], [ 3, '¼' ] ];
+	let gfbUnloadBound = false;
+
+	const gfbAt = ( k ) => ( state.gfb && state.gfb.fields ? state.gfb.fields.find( ( f ) => f._k === k ) : null ) || null;
+	const gfbHas = ( f, key ) => !! f && ( f.settings || [] ).includes( key );
+	const gfbRef = ( f ) => ( f.id ? String( f.id ) : 'new:' + f.tempId );
+	// Labels may carry the HTML Gravity Forms allows in them; the canvas and
+	// every list show their text. DOMParser documents are inert (no image
+	// loads, no handlers), unlike a detached element's innerHTML.
+	const gfbText = ( html ) => {
+		const s = String( html == null ? '' : html );
+		if ( ! /[<&]/.test( s ) ) return s.trim();
+		return ( new DOMParser().parseFromString( s, 'text/html' ).body.textContent || '' ).replace( /\s+/g, ' ' ).trim();
+	};
+	const gfbName = ( f ) => gfbText( f.label ) || gfbText( f.adminLabel ) || f.title || f.type;
+	const gfbCopy = ( o ) => JSON.parse( JSON.stringify( o ) );
+	const gfbProto = ( type ) => {
+		for ( const g of state.gfb.palette ) {
+			const t = g.types.find( ( x ) => x.type === type );
+			if ( t ) return t;
+		}
+		return null;
+	};
+
+	function gfbAdopt( r ) {
+		const seq = state.gfb && state.gfb.seq ? state.gfb.seq : 0;
+		state.gfb = {
+			id: r.form.id,
+			form: { ...r.form },
+			fields: r.fields.map( ( f ) => ( { ...gfbCopy( f ), _k: 'f' + f.id } ) ),
+			known: r.fields.map( ( f ) => f.id ),
+			palette: r.palette || [],
+			enums: r.enums || {},
+			sel: null,
+			addAfter: null,
+			dirty: false,
+			loading: false,
+			seq,
+		};
+	}
+
+	function renderFormBuilder() {
+		const view = $( '#minn-view' );
+		if ( ! state.gfb || state.gfb.id !== state.gfbFormId ) {
+			state.gfb = { id: state.gfbFormId, loading: true };
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+			api( `minn-admin/v1/gf/forms/${ state.gfbFormId }/builder` )
+				.then( ( r ) => {
+					if ( state.route !== 'gfbuilder' || state.gfbFormId !== r.form.id ) return;
+					gfbAdopt( r );
+					renderFormBuilder();
+				} )
+				.catch( ( e ) => { view.innerHTML = `<div class="minn-empty">${ esc( e.message ) }</div>`; } );
+			return;
+		}
+		const g = state.gfb;
+		if ( g.loading ) return;
+		if ( ! gfbUnloadBound ) {
+			gfbUnloadBound = true;
+			window.addEventListener( 'beforeunload', ( e ) => {
+				if ( state.route === 'gfbuilder' && state.gfb && state.gfb.dirty ) e.preventDefault();
+			} );
+		}
+		const cells = g.fields.map( gfbCellHtml ).join( '' );
+		view.innerHTML = `
+		<div class="minn-card minn-gfb">
+			<div class="minn-fgb-top">
+				<button type="button" class="minn-btn-soft" id="minn-gfb-back">‹ ${ esc( __( 'Forms' ) ) }</button>
+				<input class="minn-input minn-fgb-title" id="minn-gfb-title" value="${ esc( g.form.title ) }" placeholder="${ esc( __( 'Form title' ) ) }" aria-label="${ esc( __( 'Form title' ) ) }">
+				<label class="minn-fgb-active">${ esc( __( 'Active' ) ) }
+					<button type="button" class="minn-switch${ g.form.active ? ' on' : '' }" id="minn-gfb-active" role="switch" aria-checked="${ !! g.form.active }"><span class="minn-switch-knob"></span></button>
+				</label>
+				<span class="minn-gfb-spring"></span>
+				${ g.dirty ? `<span class="minn-fgb-dirty">${ esc( __( 'Unsaved changes' ) ) }</span>` : '' }
+				<a class="minn-btn-soft" href="${ esc( safeHref( g.form.previewUrl ) ) }" target="_blank" rel="noopener" title="${ esc( __( 'Opens the saved version of the form' ) ) }">${ esc( __( 'Preview' ) ) } ↗</a>
+				<button type="button" class="minn-btn-primary" id="minn-gfb-save">${ esc( __( 'Save form' ) ) }</button>
+			</div>
+			<div class="minn-fgb-meta">
+				<span>${ esc( sprintf( /* translators: %s: localized number of entries. */ _n( '%s entry', '%s entries', g.form.entries ), Number( g.form.entries ).toLocaleString() ) ) }</span>
+				<button type="button" id="minn-gfb-settings">${ esc( __( 'Form settings' ) ) }</button>
+				<a href="${ esc( safeHref( g.form.adminUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in Gravity Forms ↗' ) ) }</a>
+			</div>
+			<div class="minn-gfb-main">
+				<div class="minn-gfb-canvas" id="minn-gfb-canvas">
+					<textarea class="minn-gfb-desc" id="minn-gfb-desc" rows="1" placeholder="${ esc( __( 'Add a description (optional)' ) ) }" aria-label="${ esc( __( 'Form description' ) ) }">${ esc( g.form.description ) }</textarea>
+					<div class="minn-gfb-grid" id="minn-gfb-grid">${ cells || `<div class="minn-gfb-empty">${ esc( __( 'No fields yet. Pick one from the list to start.' ) ) }</div>` }</div>
+					<div class="minn-gfb-submit-row">
+						<button type="button" class="minn-gfb-submit${ 'submit' === g.sel ? ' sel' : '' }" data-gksel="submit">${ esc( g.form.buttonText || __( 'Submit' ) ) }</button>
+					</div>
+				</div>
+				<aside class="minn-gfb-panel" id="minn-gfb-panel" aria-label="${ esc( __( 'Field settings' ) ) }">${ gfbPanelHtml() }</aside>
+			</div>
+		</div>`;
+		gfbFitDesc( $( '#minn-gfb-desc', view ) );
+		// Bind to the freshly rendered card, never the persistent #minn-view
+		// (a container delegate would stack one listener per render).
+		bindFormBuilder( $( '.minn-gfb', view ) );
+	}
+
+	const gfbFitDesc = ( el ) => {
+		if ( ! el ) return;
+		el.style.height = 'auto';
+		el.style.height = el.scrollHeight + 'px';
+	};
+
+	// One field on the canvas: its label and a drawing of its control. The
+	// drawing is inert markup, never a real input, so clicks select.
+	function gfbCellHtml( f ) {
+		const g = state.gfb;
+		const sel = g.sel === f._k;
+		const span = gfbHas( f, 'span' ) ? Math.max( 1, Math.min( 12, Number( f.span ) || 12 ) ) : 12;
+		const chips = [];
+		if ( f.conditionalLogic && ( f.conditionalLogic.rules || [] ).length ) chips.push( __( 'Conditional' ) );
+		if ( 'hidden' === f.visibility ) chips.push( __( 'Hidden' ) );
+		if ( 'administrative' === f.visibility ) chips.push( __( 'Admin only' ) );
+		if ( f.isNew ) chips.push( __( 'New' ) );
+		const label = gfbText( f.label );
+		const shown = label || ( 'page' === f.type ? __( 'Page break' ) : f.title );
+		const canDup = !! gfbProto( f.type );
+		const spacer = Number( f.spacer ) || 0;
+		return `<div class="minn-gfb-cell minn-gfb-t-${ esc( f.type ) }${ sel ? ' sel' : '' }${ label ? '' : ' minn-gfb-nolabel' }" data-gk="${ esc( f._k ) }" style="grid-column: span ${ span }" tabindex="0" role="button" aria-pressed="${ sel }" aria-label="${ esc( shown ) }">
+			<div class="minn-gfb-chead">
+				<span class="minn-gfb-clabel">${ esc( shown ) }${ f.isRequired ? '<span class="minn-gfb-req" aria-hidden="true">*</span>' : '' }</span>
+				${ chips.map( ( c ) => `<span class="minn-gfb-chip">${ esc( c ) }</span>` ).join( '' ) }
+				<span class="minn-gfb-cctl">
+					<span class="minn-gfb-grip" draggable="true" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>
+					${ canDup ? `<button type="button" data-gfbdup="${ esc( f._k ) }" title="${ esc( __( 'Duplicate field' ) ) }" aria-label="${ esc( __( 'Duplicate field' ) ) }">⧉</button>` : '' }
+					<button type="button" data-gfbdel="${ esc( f._k ) }" title="${ esc( __( 'Remove field' ) ) }" aria-label="${ esc( __( 'Remove field' ) ) }">×</button>
+				</span>
+			</div>
+			${ gfbMockHtml( f ) }
+			${ f.description && 'section' !== f.type ? `<div class="minn-gfb-cdesc">${ esc( gfbText( f.description ) ) }</div>` : '' }
+		</div>${ spacer && span + spacer <= 12 ? `<div class="minn-gfb-spacer" style="grid-column: span ${ spacer }" aria-hidden="true"></div>` : '' }`;
+	}
+
+	function gfbMockHtml( f ) {
+		const box = ( text, cls = '' ) => `<div class="minn-gfb-mock${ cls }"><span>${ esc( text || '' ) }</span></div>`;
+		const inputs = ( f.inputs || [] ).filter( ( i ) => ! i.isHidden );
+		const suffix = ( id ) => String( id ).split( '.' )[ 1 ] || '';
+		const subs = ( list, cls = '' ) => `<div class="minn-gfb-subs${ cls }">${ list.map( ( i ) => `
+			<div class="minn-gfb-sub" data-in="${ esc( suffix( i.id ) ) }">${ box( i.placeholder ) }<span class="minn-gfb-sublabel">${ esc( gfbText( i.customLabel ) || gfbText( i.label ) ) }</span></div>` ).join( '' ) }</div>`;
+		const choices = f.choices || [];
+		const listChoices = ( mark ) => `<div class="minn-gfb-choices">${ choices.slice( 0, 5 ).map( ( c ) => `
+			<div class="minn-gfb-choice"><span class="minn-gfb-mark minn-gfb-mark-${ mark }${ c.isSelected ? ' on' : '' }"></span>${ esc( gfbText( c.text ) ) }</div>` ).join( '' ) }
+			${ choices.length > 5 ? `<div class="minn-gfb-more">${ esc( sprintf( /* translators: %s: number of further choices. */ __( '+%s more' ), choices.length - 5 ) ) }</div>` : '' }</div>`;
+		const fmt = ( list, v ) => ( ( list || [] ).find( ( p ) => p[ 0 ] === String( v ) ) || [ '', '' ] )[ 1 ];
+		switch ( f.type ) {
+			case 'section':
+				return `<div class="minn-gfb-rule"></div>${ f.description ? `<div class="minn-gfb-cdesc">${ esc( gfbText( f.description ) ) }</div>` : '' }`;
+			case 'page':
+				return `<div class="minn-gfb-page"><span>${ esc( f.previousButtonText || __( 'Previous' ) ) }</span><span class="minn-gfb-page-line"></span><span>${ esc( f.nextButtonText || __( 'Next' ) ) }</span></div>`;
+			case 'html': {
+				const t = gfbText( f.content );
+				return `<div class="minn-gfb-html">${ esc( t ? ( t.length > 220 ? t.slice( 0, 220 ) + '…' : t ) : __( 'Empty HTML block' ) ) }</div>`;
+			}
+			case 'hidden':
+				return `<div class="minn-gfb-note">${ esc( f.defaultValue ? sprintf( /* translators: %s: the hidden field's value. */ __( 'Value: %s' ), f.defaultValue ) : __( 'Not shown on the form' ) ) }</div>`;
+			case 'textarea':
+				return box( f.placeholder, ' minn-gfb-mock-tall' );
+			case 'select':
+				return `<div class="minn-gfb-mock minn-gfb-mock-icon"><span>${ esc( f.placeholder || ( choices[ 0 ] ? gfbText( choices[ 0 ].text ) : '' ) ) }</span>${ icon( 'chevron-down' ) }</div>`;
+			case 'multiselect':
+				return `<div class="minn-gfb-mock minn-gfb-mock-multi">${ choices.slice( 0, 4 ).map( ( c ) => `<span>${ esc( gfbText( c.text ) ) }</span>` ).join( '' ) }</div>`;
+			case 'radio':
+				return listChoices( 'radio' );
+			case 'checkbox':
+				return listChoices( 'check' );
+			case 'consent':
+				return `<div class="minn-gfb-choice"><span class="minn-gfb-mark minn-gfb-mark-check"></span>${ esc( gfbText( f.checkboxLabel ) ) }</div>`;
+			case 'fileupload':
+				return `<div class="minn-gfb-drop">${ icon( 'upload' ) }<span>${ esc( f.multipleFiles ? __( 'Drop files here or select files' ) : __( 'Choose a file' ) ) }</span></div>`;
+			case 'list':
+				return `<div class="minn-gfb-listrow">${ box( '' ) }<span class="minn-gfb-listbtn">${ icon( 'plus' ) }</span></div>`;
+			case 'email':
+				return f.emailConfirmEnabled && inputs.length > 1 ? subs( inputs, ' minn-gfb-subs-row' ) : box( f.placeholder );
+			case 'date':
+				return 'datepicker' === f.dateType || ! inputs.length
+					? `<div class="minn-gfb-mock minn-gfb-mock-icon"><span>${ esc( f.placeholder || fmt( state.gfb.enums.dateFormat, f.dateFormat ) ) }</span>${ icon( 'calendar' ) }</div>`
+					: subs( inputs, ' minn-gfb-subs-row' );
+			case 'time':
+				return subs( '24' === f.timeFormat ? inputs.slice( 0, 2 ) : inputs, ' minn-gfb-subs-row' );
+			case 'name':
+				return subs( inputs, ' minn-gfb-subs-row' );
+			case 'address':
+				return subs( inputs, ' minn-gfb-subs-address' );
+		}
+		const it = f.inputType || f.type;
+		if ( [ 'text', 'number', 'phone', 'website', 'email', 'password' ].includes( it ) ) return box( f.placeholder );
+		if ( 'textarea' === it ) return box( f.placeholder, ' minn-gfb-mock-tall' );
+		if ( 'select' === it ) return `<div class="minn-gfb-mock minn-gfb-mock-icon"><span>${ esc( choices[ 0 ] ? gfbText( choices[ 0 ].text ) : '' ) }</span>${ icon( 'chevron-down' ) }</div>`;
+		if ( choices.length && ( 'radio' === it || 'checkbox' === it ) ) return listChoices( 'checkbox' === it ? 'check' : 'radio' );
+		if ( inputs.length > 1 ) return subs( inputs, ' minn-gfb-subs-row' );
+		/* translators: %s: the field type's name (Gravity Forms' own). */
+		return `<div class="minn-gfb-mock minn-gfb-mock-other"><span>${ esc( sprintf( __( '%s field' ), f.title || f.type ) ) }</span></div>`;
+	}
+
+	// The side panel: the Add field palette, the selected field's settings,
+	// or the submit button's.
+	function gfbPanelHtml() {
+		const g = state.gfb;
+		if ( 'submit' === g.sel ) {
+			return `<div class="minn-gfb-phead"><strong>${ esc( __( 'Submit button' ) ) }</strong><button type="button" class="minn-gfb-x" data-gfbclose title="${ esc( __( 'Close' ) ) }" aria-label="${ esc( __( 'Close' ) ) }">×</button></div>
+				<label class="minn-gfb-set"><span class="minn-field-label">${ esc( __( 'Button text' ) ) }</span>
+					<input class="minn-input" data-gform="buttonText" value="${ esc( g.form.buttonText ) }" placeholder="${ esc( __( 'Submit' ) ) }"></label>
+				<div class="minn-insp-note">${ esc( __( 'Button width, position and conditional logic stay in Gravity Forms’ editor.' ) ) }</div>`;
+		}
+		const f = g.sel ? gfbAt( g.sel ) : null;
+		if ( ! f ) {
+			const after = g.addAfter ? gfbAt( g.addAfter ) : null;
+			return `<div class="minn-gfb-phead"><strong>${ esc( __( 'Add a field' ) ) }</strong>${ after ? `<button type="button" class="minn-gfb-x" data-gfbclose title="${ esc( __( 'Close' ) ) }" aria-label="${ esc( __( 'Close' ) ) }">×</button>` : '' }</div>
+				<div class="minn-toggle-desc">${ esc( after
+					/* translators: %s: the label of the field new fields go after. */
+					? sprintf( __( 'Adds below “%s”. You can also drag a type onto the form.' ), gfbName( after ) )
+					: __( 'Click a type to add it at the end, or drag it onto the form. Click a field on the form to edit it.' ) ) }</div>
+				${ g.palette.map( ( grp ) => `
+					<div class="minn-gfb-pgroup">${ esc( grp.label ) }</div>
+					<div class="minn-gfb-ptypes">${ grp.types.map( ( t ) => `<button type="button" class="minn-gfb-ptype" data-gfbadd="${ esc( t.type ) }" draggable="true">${ esc( t.title ) }</button>` ).join( '' ) }</div>` ).join( '' ) }`;
+		}
+		const has = ( k ) => gfbHas( f, k );
+		const val = ( k ) => ( f[ k ] == null ? '' : f[ k ] );
+		const inp = ( key, label, o = {} ) => `<label class="minn-gfb-set"><span class="minn-field-label">${ esc( label ) }</span>${ o.area
+			? `<textarea class="minn-input${ o.mono ? ' mono' : '' }" rows="${ o.rows || 2 }" data-gf="${ key }" placeholder="${ esc( o.ph || '' ) }">${ esc( val( key ) ) }</textarea>`
+			: `<input class="minn-input${ o.mono ? ' mono' : '' }" data-gf="${ key }" value="${ esc( val( key ) ) }" placeholder="${ esc( o.ph || '' ) }"${ o.num ? ' inputmode="decimal"' : '' }>` }${ o.help ? `<span class="minn-toggle-desc">${ esc( o.help ) }</span>` : '' }</label>`;
+		const sw = ( key, label ) => `<div class="minn-gfb-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( label ) }</span>
+			<button type="button" class="minn-switch${ f[ key ] ? ' on' : '' }" data-gfsw="${ key }" role="switch" aria-checked="${ !! f[ key ] }" aria-label="${ esc( label ) }"><span class="minn-switch-knob"></span></button></div>`;
+		const combo = ( key, label ) => {
+			const list = g.enums[ key ] || [];
+			const cur = list.find( ( p ) => p[ 0 ] === String( f[ key ] ) );
+			return `<div class="minn-gfb-set"><span class="minn-field-label">${ esc( label ) }</span>
+				<div class="minn-ac" data-gfcombo="${ key }"><input class="minn-input minn-ac-input" value="${ esc( cur ? cur[ 1 ] : String( val( key ) ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( label ) }"><div class="minn-ac-panel" hidden></div></div></div>`;
+		};
+		const pair = ( a, b ) => `<div class="minn-gfb-pair">${ a }${ b }</div>`;
+		const span = Number( f.span ) || 12;
+		const widths = GFB_WIDTHS();
+		const known = widths.some( ( w ) => w[ 0 ] === span );
+		const advanced = [
+			has( 'adminLabel' ) ? inp( 'adminLabel', __( 'Admin label' ), { help: __( 'Replaces the label in entries and notifications.' ) } ) : '',
+			has( 'errorMessage' ) ? inp( 'errorMessage', __( 'Custom error message' ) ) : '',
+			has( 'visibility' ) ? combo( 'visibility', __( 'Visibility' ) ) : '',
+			has( 'cssClass' ) ? inp( 'cssClass', __( 'CSS classes' ), { mono: true } ) : '',
+			has( 'noDuplicates' ) ? sw( 'noDuplicates', __( 'No duplicate answers' ) ) : '',
+		].join( '' );
+		return `<div class="minn-gfb-phead">
+				<strong>${ esc( gfbName( f ) ) }</strong>
+				<span class="minn-gfb-ptag">${ esc( f.title || f.type ) }${ f.id ? ` · #${ f.id }` : '' }</span>
+				<button type="button" class="minn-gfb-x" data-gfbclose title="${ esc( __( 'Close' ) ) }" aria-label="${ esc( __( 'Close' ) ) }">×</button>
+			</div>
+			<div class="minn-gfb-pbody">
+				${ has( 'label' ) ? inp( 'label', 'html' === f.type ? __( 'Name (shown only here)' ) : __( 'Label' ) ) : '' }
+				${ has( 'description' ) ? inp( 'description', 'consent' === f.type ? __( 'Agreement text' ) : __( 'Description' ), { area: true } ) : '' }
+				${ has( 'content' ) ? inp( 'content', __( 'Content' ), { area: true, rows: 6, mono: true, help: __( 'HTML is allowed. Merge tags and shortcodes work as in Gravity Forms.' ) } ) : '' }
+				${ has( 'checkboxLabel' ) ? inp( 'checkboxLabel', __( 'Checkbox label' ) ) : '' }
+				${ has( 'choices' ) ? gfbChoicesHtml( f ) : '' }
+				${ has( 'subInputs' ) ? gfbSubInputsHtml( f ) : '' }
+				${ has( 'placeholder' ) && ! ( 'email' === f.type && f.emailConfirmEnabled ) && ! ( 'date' === f.type && 'datepicker' !== f.dateType ) ? inp( 'placeholder', 'select' === f.type ? __( 'Placeholder (first, empty option)' ) : __( 'Placeholder' ) ) : '' }
+				${ has( 'defaultValue' ) && ! ( 'email' === f.type && f.emailConfirmEnabled ) ? inp( 'defaultValue', __( 'Default value' ), 'textarea' === f.type ? { area: true } : { help: 'hidden' === f.type ? __( 'Merge tags like {user:user_email} work here.' ) : '' } ) : '' }
+				${ has( 'maxLength' ) ? inp( 'maxLength', __( 'Maximum characters' ), { num: true } ) : '' }
+				${ has( 'rangeMin' ) ? pair( inp( 'rangeMin', __( 'Minimum' ), { num: true } ), inp( 'rangeMax', __( 'Maximum' ), { num: true } ) ) : '' }
+				${ has( 'numberFormat' ) ? combo( 'numberFormat', __( 'Number format' ) ) : '' }
+				${ has( 'phoneFormat' ) && ( g.enums.phoneFormat || [] ).length ? combo( 'phoneFormat', __( 'Phone format' ) ) : '' }
+				${ has( 'dateType' ) ? combo( 'dateType', __( 'Input type' ) ) : '' }
+				${ has( 'dateFormat' ) ? combo( 'dateFormat', __( 'Date format' ) ) : '' }
+				${ has( 'timeFormat' ) ? combo( 'timeFormat', __( 'Time format' ) ) : '' }
+				${ has( 'addressType' ) && ( g.enums.addressType || [] ).length ? combo( 'addressType', __( 'Address type' ) ) : '' }
+				${ has( 'emailConfirmEnabled' ) ? sw( 'emailConfirmEnabled', __( 'Ask to confirm the email' ) ) : '' }
+				${ has( 'allowedExtensions' ) ? inp( 'allowedExtensions', __( 'Allowed file types' ), { mono: true, ph: 'jpg, png, pdf', help: __( 'Comma separated. Leave empty to allow the types WordPress allows.' ) } ) : '' }
+				${ has( 'multipleFiles' ) ? sw( 'multipleFiles', __( 'Allow several files' ) ) : '' }
+				${ has( 'maxFiles' ) && f.multipleFiles ? inp( 'maxFiles', __( 'Most files' ), { num: true } ) : '' }
+				${ has( 'maxFileSize' ) ? inp( 'maxFileSize', __( 'Largest file (MB)' ), { num: true } ) : '' }
+				${ has( 'nextButtonText' ) ? pair( inp( 'previousButtonText', __( 'Previous button' ) ), inp( 'nextButtonText', __( 'Next button' ) ) ) : '' }
+				${ has( 'isRequired' ) ? sw( 'isRequired', __( 'Required' ) ) : '' }
+				${ has( 'span' ) ? `<div class="minn-gfb-set"><span class="minn-field-label">${ esc( __( 'Width' ) ) }</span>
+					<div class="minn-tabs minn-gfb-widths" role="group" aria-label="${ esc( __( 'Width' ) ) }">
+						${ widths.map( ( [ n, label ] ) => `<button type="button" class="minn-tab${ n === span ? ' active' : '' }" data-gfw="${ n }" aria-pressed="${ n === span }">${ esc( label ) }</button>` ).join( '' ) }
+					</div>
+					${ known ? '' : `<span class="minn-toggle-desc">${ esc( sprintf( /* translators: %s: the field's width in twelfths of the form. */ __( 'Currently %s/12 of the row.' ), span ) ) }</span>` }
+				</div>` : '' }
+				${ has( 'conditionalLogic' ) ? gfbLogicHtml( f ) : '' }
+				${ advanced ? `<details class="minn-gfb-adv"${ state.gfb.advOpen ? ' open' : '' }><summary>${ esc( __( 'Advanced' ) ) }</summary>${ advanced }</details>` : '' }
+				${ gfbProto( f.type ) ? '' : `<div class="minn-insp-note">${ esc( sprintf( /* translators: %s: the field type's name. */ __( 'The rest of this %s field’s settings stay in Gravity Forms’ editor.' ), f.title || f.type ) ) }</div>` }
+			</div>
+			<div class="minn-gfb-pfoot">
+				<button type="button" class="minn-btn-soft" data-gfbaddafter="${ esc( f._k ) }">+ ${ esc( __( 'Add field below' ) ) }</button>
+				${ gfbProto( f.type ) ? `<button type="button" class="minn-btn-soft" data-gfbdup="${ esc( f._k ) }">${ esc( __( 'Duplicate' ) ) }</button>` : '' }
+				<button type="button" class="minn-btn-soft minn-gfb-del" data-gfbdel="${ esc( f._k ) }">${ esc( __( 'Remove' ) ) }</button>
+			</div>`;
+	}
+
+	function gfbChoicesHtml( f ) {
+		const values = !! f.enableChoiceValue;
+		const multi = 'checkbox' === f.type || 'multiselect' === f.type;
+		return `<div class="minn-gfb-set">
+			<span class="minn-field-label">${ esc( __( 'Choices' ) ) }</span>
+			<div class="minn-gfb-chs${ values ? ' values' : '' }">
+				${ ( f.choices || [] ).map( ( c, i ) => `<div class="minn-gfb-ch" data-ci="${ i }">
+					<span class="minn-gfb-chgrip" draggable="true" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>
+					<button type="button" class="minn-gfb-mark minn-gfb-mark-${ multi ? 'check' : 'radio' }${ c.isSelected ? ' on' : '' }" data-cdef="${ i }" aria-pressed="${ !! c.isSelected }" title="${ esc( __( 'Selected by default' ) ) }" aria-label="${ esc( __( 'Selected by default' ) ) }"></button>
+					<input class="minn-input" data-ctext="${ i }" value="${ esc( c.text ) }" placeholder="${ esc( __( 'Label' ) ) }" aria-label="${ esc( __( 'Choice label' ) ) }">
+					${ values ? `<input class="minn-input mono" data-cval="${ i }" value="${ esc( c.value ) }" placeholder="${ esc( __( 'Value' ) ) }" aria-label="${ esc( __( 'Choice value' ) ) }">` : '' }
+					<button type="button" class="minn-gfb-chx" data-cdel="${ i }" title="${ esc( __( 'Remove choice' ) ) }" aria-label="${ esc( __( 'Remove choice' ) ) }">×</button>
+				</div>` ).join( '' ) }
+			</div>
+			<div class="minn-gfb-chfoot">
+				<button type="button" class="minn-btn-soft" data-cadd>+ ${ esc( __( 'Add choice' ) ) }</button>
+				<span class="minn-gfb-spring"></span>
+				<span class="minn-toggle-desc">${ esc( __( 'Show values' ) ) }</span>
+				<button type="button" class="minn-switch${ values ? ' on' : '' }" data-gfsw="enableChoiceValue" role="switch" aria-checked="${ values }" aria-label="${ esc( __( 'Show values' ) ) }"><span class="minn-switch-knob"></span></button>
+			</div>
+		</div>`;
+	}
+
+	// Name and Address parts: which show, and their sub-labels.
+	function gfbSubInputsHtml( f ) {
+		return `<div class="minn-gfb-set">
+			<span class="minn-field-label">${ esc( __( 'Parts' ) ) }</span>
+			<div class="minn-gfb-parts">
+				${ ( f.inputs || [] ).map( ( i, n ) => `<div class="minn-gfb-part">
+					<button type="button" class="minn-switch${ i.isHidden ? '' : ' on' }" data-gsubsw="${ n }" role="switch" aria-checked="${ ! i.isHidden }" aria-label="${ esc( sprintf( /* translators: %s: a sub-field such as First or City. */ __( 'Show %s' ), gfbText( i.label ) ) ) }"><span class="minn-switch-knob"></span></button>
+					<input class="minn-input" data-gsublabel="${ n }" value="${ esc( i.customLabel || '' ) }" placeholder="${ esc( gfbText( i.label ) ) }" aria-label="${ esc( sprintf( /* translators: %s: a sub-field such as First or City. */ __( 'Label for %s' ), gfbText( i.label ) ) ) }"${ i.isHidden ? ' disabled' : '' }>
+				</div>` ).join( '' ) }
+			</div>
+		</div>`;
+	}
+
+	// Fields a rule can test: those Gravity Forms lets logic read, other
+	// than the field itself.
+	const gfbSources = ( f ) => state.gfb.fields.filter( ( x ) => x !== f && x.logicSource );
+	const gfbSourceOf = ( ref ) => {
+		const base = String( ref ).split( '.' )[ 0 ];
+		return state.gfb.fields.find( ( x ) => gfbRef( x ) === String( ref ) || gfbRef( x ) === base ) || null;
+	};
+
+	function gfbLogicHtml( f ) {
+		const cl = f.conditionalLogic;
+		const on = !! cl;
+		const combo = ( attr, display, cls = '' ) => `<div class="minn-ac${ cls }" ${ attr }><input class="minn-input minn-ac-input" value="${ esc( display ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false"><div class="minn-ac-panel" hidden></div></div>`;
+		const ops = state.gfb.enums.operator || [];
+		const sources = gfbSources( f );
+		const body = ! on ? '' : `<div class="minn-gfb-logic">
+			<div class="minn-gfb-logic-line">
+				${ combo( 'data-glact', 'hide' === cl.actionType ? __( 'Hide' ) : __( 'Show' ) ) }
+				<span>${ esc( /* translators: conditional logic sentence: "Show if any of these match". */ __( 'if' ) ) }</span>
+				${ combo( 'data-gltype', 'any' === cl.logicType ? __( 'any' ) : __( 'all' ) ) }
+				<span>${ esc( __( 'of these match' ) ) }</span>
+			</div>
+			${ ( cl.rules || [] ).map( ( r, i ) => {
+				const src = gfbSourceOf( r.fieldId );
+				const op = ops.find( ( p ) => p[ 0 ] === r.operator );
+				const pick = src && ( src.choices || [] ).length && ( 'is' === r.operator || 'isnot' === r.operator );
+				const choice = pick ? ( src.choices || [] ).find( ( c ) => String( c.value ) === String( r.value ) ) : null;
+				return `<div class="minn-gfb-rule-row">
+					${ combo( `data-glf="${ i }"`, src ? gfbName( src ) : String( r.fieldId ) ) }
+					${ combo( `data-glo="${ i }"`, op ? op[ 1 ] : r.operator, ' minn-gfb-op' ) }
+					${ pick
+						? combo( `data-glv="${ i }"`, choice ? gfbText( choice.text ) : String( r.value ) )
+						: `<input class="minn-input" data-glvt="${ i }" value="${ esc( r.value ) }" placeholder="${ esc( __( 'Value' ) ) }" aria-label="${ esc( __( 'Value' ) ) }">` }
+					<button type="button" class="minn-gfb-chx" data-glx="${ i }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button>
+				</div>`;
+			} ).join( '' ) }
+			<button type="button" class="minn-btn-soft minn-fgb-loc-and" data-gladd>+ ${ esc( __( 'Add rule' ) ) }</button>
+		</div>`;
+		return `<div class="minn-gfb-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Conditional logic' ) ) }</span>
+				<button type="button" class="minn-switch${ on ? ' on' : '' }" data-gflogic role="switch" aria-checked="${ on }" aria-label="${ esc( __( 'Conditional logic' ) ) }"${ ! on && ! sources.length ? ' disabled' : '' }><span class="minn-switch-knob"></span></button>
+			</div>
+			${ ! on && ! sources.length ? `<div class="minn-toggle-desc">${ esc( __( 'Add a field this one can depend on first.' ) ) }</div>` : '' }
+			${ body }`;
+	}
+
+	function gfbNewField( type ) {
+		const g = state.gfb;
+		const pt = gfbProto( type );
+		if ( ! pt || ! pt.proto ) return null;
+		const tempId = 't' + ( ++g.seq );
+		return { ...gfbCopy( pt.proto ), id: 0, isNew: true, tempId, _k: 'n' + tempId };
+	}
+
+	// The save body: each field as the server reads it, the settings it
+	// offers only. Stored fields send their id, new ones type + temp key.
+	function gfbRowOut( f ) {
+		const row = f.id ? { id: f.id } : { type: f.type, tempId: f.tempId };
+		( f.settings || [] ).forEach( ( k ) => {
+			if ( 'subInputs' === k ) {
+				row.subInputs = ( f.inputs || [] ).map( ( i ) => ( { id: i.id, isHidden: !! i.isHidden, customLabel: i.customLabel || '' } ) );
+			} else if ( 'choices' === k ) {
+				row.choices = ( f.choices || [] ).map( ( c ) => ( { text: c.text, value: c.value, isSelected: !! c.isSelected } ) );
+				row.enableChoiceValue = !! f.enableChoiceValue;
+			} else {
+				row[ k ] = f[ k ];
+			}
+		} );
+		return row;
+	}
+
+	function bindFormBuilder( root ) {
+		const g = state.gfb;
+		const canvas = $( '#minn-gfb-canvas', root );
+		const grid = $( '#minn-gfb-grid', root );
+		const panel = $( '#minn-gfb-panel', root );
+		const markDirty = () => {
+			if ( g.dirty ) return;
+			g.dirty = true;
+			const top = $( '.minn-fgb-top', root );
+			const save = $( '#minn-gfb-save', root );
+			if ( top && save && ! top.querySelector( '.minn-fgb-dirty' ) ) {
+				const pill = document.createElement( 'span' );
+				pill.className = 'minn-fgb-dirty';
+				pill.textContent = __( 'Unsaved changes' );
+				top.insertBefore( pill, save.previousElementSibling );
+			}
+		};
+		// Repaint one canvas cell (its markup has no inputs, so focus in the
+		// panel survives) — typing in the panel shows on the form live.
+		const patch = ( f ) => {
+			const cell = $( `.minn-gfb-cell[data-gk="${ f._k }"]`, grid );
+			if ( ! cell ) return;
+			const t = document.createElement( 'template' );
+			t.innerHTML = gfbCellHtml( f );
+			cell.replaceWith( t.content.firstElementChild );
+		};
+		const rerender = () => {
+			const y = panel ? panel.scrollTop : 0;
+			renderFormBuilder();
+			const p = $( '#minn-gfb-panel' );
+			if ( p ) p.scrollTop = y;
+		};
+		const select = ( k, focusLabel ) => {
+			g.sel = k;
+			g.addAfter = null;
+			rerender();
+			// Stacked (narrow) layouts put the panel under the form; bring it up.
+			const p = $( '#minn-gfb-panel' );
+			if ( p && k && window.matchMedia && window.matchMedia( '(max-width: 1100px)' ).matches ) p.scrollIntoView( { block: 'start', behavior: 'smooth' } );
+			if ( focusLabel ) {
+				const el = $( '#minn-gfb-panel [data-gf="label"]' );
+				if ( el ) { el.focus( { preventScroll: !! p } ); el.select(); }
+			}
+		};
+		const idx = ( k ) => g.fields.findIndex( ( f ) => f._k === k );
+		const insert = ( type, at ) => {
+			const f = gfbNewField( type );
+			if ( ! f ) return;
+			g.fields.splice( Math.max( 0, Math.min( at, g.fields.length ) ), 0, f );
+			markDirty();
+			select( f._k, true );
+		};
+		const leave = async ( body ) => ! g.dirty || minnConfirm( { title: __( 'Leave without saving?' ), body, confirmLabel: __( 'Leave' ), danger: true } );
+		const removeField = async ( k ) => {
+			const f = gfbAt( k );
+			if ( ! f ) return;
+			if ( f.id ) {
+				const n = Number( g.form.entries ) || 0;
+				const ok = await minnConfirm( {
+					title: __( 'Remove this field?' ),
+					body: n
+						/* translators: 1: the field's label, 2: localized number of entries. */
+						? sprintf( _n( 'When you save, Gravity Forms deletes “%1$s” along with its answers in this form’s %2$s entry. Other answers stay.', 'When you save, Gravity Forms deletes “%1$s” along with its answers in this form’s %2$s entries. Other answers stay.', n ), gfbName( f ), n.toLocaleString() )
+						: __( 'The field is removed when you save.' ),
+					confirmLabel: __( 'Remove' ),
+					danger: true,
+				} );
+				if ( ! ok ) return;
+			}
+			const ref = gfbRef( f );
+			g.fields.splice( idx( k ), 1 );
+			// Rules that tested it go with it (their save would drop them too).
+			g.fields.forEach( ( x ) => {
+				if ( ! x.conditionalLogic ) return;
+				x.conditionalLogic.rules = ( x.conditionalLogic.rules || [] ).filter( ( r ) => String( r.fieldId ).split( '.' )[ 0 ] !== ref );
+				if ( ! x.conditionalLogic.rules.length ) x.conditionalLogic = null;
+			} );
+			if ( g.sel === k ) g.sel = null;
+			if ( g.addAfter === k ) g.addAfter = null;
+			markDirty();
+			rerender();
+		};
+		const duplicate = ( k ) => {
+			const f = gfbAt( k );
+			if ( ! f || ! gfbProto( f.type ) ) return;
+			const tempId = 't' + ( ++g.seq );
+			const copy = { ...gfbCopy( f ), id: 0, isNew: true, tempId, _k: 'n' + tempId };
+			/* translators: %s: the duplicated field's label. */
+			copy.label = sprintf( __( '%s (copy)' ), gfbText( f.label ) || f.title );
+			g.fields.splice( idx( k ) + 1, 0, copy );
+			markDirty();
+			select( copy._k, true );
+		};
+		const save = async () => {
+			const btn = $( '#minn-gfb-save', root );
+			if ( btn ) { btn.disabled = true; btn.textContent = __( 'Saving…' ); }
+			const selIdx = g.sel && 'submit' !== g.sel ? idx( g.sel ) : -1;
+			const wasSubmit = 'submit' === g.sel;
+			try {
+				const r = await api( `minn-admin/v1/gf/forms/${ g.id }/builder`, {
+					method: 'POST',
+					body: JSON.stringify( {
+						title: g.form.title,
+						description: g.form.description,
+						buttonText: g.form.buttonText,
+						active: !! g.form.active,
+						known: g.known,
+						fields: g.fields.map( gfbRowOut ),
+					} ),
+				} );
+				gfbAdopt( r );
+				if ( wasSubmit ) state.gfb.sel = 'submit';
+				else if ( selIdx >= 0 && state.gfb.fields[ selIdx ] ) state.gfb.sel = state.gfb.fields[ selIdx ]._k;
+				// The Forms list holds stale titles, counts and states now.
+				const ss = surfaceState( 'gravity-forms' );
+				if ( ss ) { ss.cache = null; ss.tabsCache = null; }
+				toast( __( 'Form saved' ) );
+				renderFormBuilder();
+			} catch ( err ) {
+				toast( err.message, true );
+				if ( btn ) { btn.disabled = false; btn.textContent = __( 'Save form' ); }
+			}
+		};
+
+		// The panel's comboboxes: enum settings and the logic rows.
+		const f = g.sel && 'submit' !== g.sel ? gfbAt( g.sel ) : null;
+		if ( f ) {
+			$$( '[data-gfcombo]', panel ).forEach( ( wrap ) => {
+				const key = wrap.dataset.gfcombo;
+				const opts = ( g.enums[ key ] || [] ).map( ( p ) => ( { value: p[ 0 ], label: p[ 1 ] } ) );
+				bindAutocomplete( wrap, opts, { strict: true, value: String( f[ key ] ), onPick: ( v ) => {
+					f[ key ] = v;
+					markDirty();
+					// Input type and confirmation reshape the field's parts.
+					if ( 'dateType' === key ) {
+						const n = f.id || 0;
+						f.inputs = 'datepicker' === v ? null : [ __( 'Month' ), __( 'Day' ), __( 'Year' ) ].map( ( l, i ) => ( { id: `${ n }.${ i + 1 }`, label: l, customLabel: '', placeholder: 'datedropdown' === v ? l : '', isHidden: false } ) );
+						rerender();
+						return;
+					}
+					patch( f );
+				} } );
+			} );
+			const cl = f.conditionalLogic;
+			if ( cl ) {
+				const setRule = () => { markDirty(); patch( f ); };
+				const act = $( '[data-glact]', panel );
+				if ( act ) bindAutocomplete( act, [ { value: 'show', label: __( 'Show' ) }, { value: 'hide', label: __( 'Hide' ) } ], { strict: true, value: cl.actionType, onPick: ( v ) => { cl.actionType = v; setRule(); } } );
+				const typ = $( '[data-gltype]', panel );
+				if ( typ ) bindAutocomplete( typ, [ { value: 'all', label: __( 'all' ) }, { value: 'any', label: __( 'any' ) } ], { strict: true, value: cl.logicType, onPick: ( v ) => { cl.logicType = v; setRule(); } } );
+				const srcOpts = gfbSources( f ).map( ( x ) => ( { value: gfbRef( x ), label: gfbName( x ) } ) );
+				$$( '[data-glf]', panel ).forEach( ( wrap ) => {
+					const r = cl.rules[ Number( wrap.dataset.glf ) ];
+					const opts = srcOpts.some( ( o ) => o.value === String( r.fieldId ) ) ? srcOpts : srcOpts.concat( [ { value: String( r.fieldId ), label: wrap.querySelector( 'input' ).value } ] );
+					bindAutocomplete( wrap, opts, { strict: true, value: String( r.fieldId ), onPick: ( v ) => {
+						r.fieldId = v;
+						const src = gfbSourceOf( v );
+						r.value = src && ( src.choices || [] ).length ? String( src.choices[ 0 ].value ) : '';
+						markDirty();
+						rerender(); // the value control follows the field
+					} } );
+				} );
+				$$( '[data-glo]', panel ).forEach( ( wrap ) => {
+					const r = cl.rules[ Number( wrap.dataset.glo ) ];
+					bindAutocomplete( wrap, ( g.enums.operator || [] ).map( ( p ) => ( { value: p[ 0 ], label: p[ 1 ] } ) ), { strict: true, value: r.operator, onPick: ( v ) => {
+						r.operator = v;
+						markDirty();
+						rerender(); // is / is not pick a choice; the rest type a value
+					} } );
+				} );
+				$$( '[data-glv]', panel ).forEach( ( wrap ) => {
+					const r = cl.rules[ Number( wrap.dataset.glv ) ];
+					const src = gfbSourceOf( r.fieldId );
+					const opts = ( src && src.choices ? src.choices : [] ).map( ( c ) => ( { value: String( c.value ), label: gfbText( c.text ) } ) );
+					if ( ! opts.some( ( o ) => o.value === String( r.value ) ) ) opts.push( { value: String( r.value ), label: String( r.value ) } );
+					bindAutocomplete( wrap, opts, { strict: true, value: String( r.value ), onPick: ( v ) => { r.value = v; markDirty(); } } );
+				} );
+			}
+		}
+
+		root.addEventListener( 'input', ( e ) => {
+			const t = e.target;
+			if ( t.id === 'minn-gfb-title' ) { g.form.title = t.value; markDirty(); return; }
+			if ( t.id === 'minn-gfb-desc' ) { g.form.description = t.value; gfbFitDesc( t ); markDirty(); return; }
+			if ( t.dataset.gform === 'buttonText' ) {
+				g.form.buttonText = t.value;
+				const b = $( '.minn-gfb-submit', root );
+				if ( b ) b.textContent = t.value || __( 'Submit' );
+				markDirty();
+				return;
+			}
+			const cur = g.sel ? gfbAt( g.sel ) : null;
+			if ( ! cur ) return;
+			if ( t.dataset.gf ) {
+				cur[ t.dataset.gf ] = t.value;
+				if ( 'label' === t.dataset.gf ) {
+					const h = $( '.minn-gfb-phead strong', panel );
+					if ( h ) h.textContent = gfbName( cur );
+				}
+			} else if ( t.dataset.ctext != null ) {
+				const i = Number( t.dataset.ctext );
+				const c = cur.choices[ i ];
+				// A value follows its label while hidden, and while shown until
+				// someone gives it one of its own (it still equals the label).
+				if ( ! cur.enableChoiceValue || c.value === c.text ) {
+					c.value = t.value;
+					const v = $( `#minn-gfb-panel [data-cval="${ i }"]` );
+					if ( v ) v.value = t.value;
+				}
+				c.text = t.value;
+			} else if ( t.dataset.cval != null ) {
+				cur.choices[ Number( t.dataset.cval ) ].value = t.value;
+			} else if ( t.dataset.gsublabel != null ) {
+				cur.inputs[ Number( t.dataset.gsublabel ) ].customLabel = t.value;
+			} else if ( t.dataset.glvt != null ) {
+				cur.conditionalLogic.rules[ Number( t.dataset.glvt ) ].value = t.value;
+			} else {
+				return;
+			}
+			markDirty();
+			patch( cur );
+		} );
+		root.addEventListener( 'toggle', ( e ) => {
+			if ( e.target.classList && e.target.classList.contains( 'minn-gfb-adv' ) ) g.advOpen = e.target.open;
+		}, true );
+
+		root.addEventListener( 'click', async ( e ) => {
+			const t = e.target;
+			if ( t.closest( '#minn-gfb-back' ) ) {
+				if ( ! await leave( __( 'Changes to this form haven’t been saved.' ) ) ) return;
+				g.dirty = false;
+				const ss = surfaceState( 'gravity-forms' );
+				if ( ss ) ss.view = 'manage';
+				go( 'gravity-forms' );
+				return;
+			}
+			if ( t.closest( '#minn-gfb-settings' ) ) {
+				if ( ! await leave( __( 'Changes to this form haven’t been saved.' ) ) ) return;
+				g.dirty = false;
+				const ss = surfaceState( 'gravity-forms' );
+				if ( ss ) {
+					ss.view = 'settings';
+					ss.settingsItem = { id: g.id, label: g.form.title };
+				}
+				go( 'gravity-forms' );
+				return;
+			}
+			if ( t.closest( '#minn-gfb-save' ) ) { save(); return; }
+			if ( t.closest( '#minn-gfb-active' ) ) {
+				g.form.active = ! g.form.active;
+				const b = t.closest( '#minn-gfb-active' );
+				b.classList.toggle( 'on', g.form.active );
+				b.setAttribute( 'aria-checked', g.form.active );
+				markDirty();
+				return;
+			}
+			const del = t.closest( '[data-gfbdel]' );
+			if ( del ) { e.stopPropagation(); removeField( del.dataset.gfbdel ); return; }
+			const dup = t.closest( '[data-gfbdup]' );
+			if ( dup ) { e.stopPropagation(); duplicate( dup.dataset.gfbdup ); return; }
+			const add = t.closest( '[data-gfbadd]' );
+			if ( add ) {
+				const after = g.addAfter ? idx( g.addAfter ) : -1;
+				insert( add.dataset.gfbadd, after >= 0 ? after + 1 : g.fields.length );
+				return;
+			}
+			if ( t.closest( '[data-gfbclose]' ) ) { g.sel = null; g.addAfter = null; rerender(); return; }
+			const addAfter = t.closest( '[data-gfbaddafter]' );
+			if ( addAfter ) { g.sel = null; g.addAfter = addAfter.dataset.gfbaddafter; rerender(); return; }
+			const cur = g.sel && 'submit' !== g.sel ? gfbAt( g.sel ) : null;
+			const swb = t.closest( '[data-gfsw]' );
+			if ( swb && cur ) {
+				const key = swb.dataset.gfsw;
+				cur[ key ] = ! cur[ key ];
+				if ( 'enableChoiceValue' === key && ! cur.enableChoiceValue ) {
+					( cur.choices || [] ).forEach( ( c ) => { c.value = c.text; } );
+				}
+				if ( 'emailConfirmEnabled' === key ) {
+					const n = cur.id || 0;
+					cur.inputs = cur.emailConfirmEnabled
+						? [ { id: String( n ), label: __( 'Enter Email' ), customLabel: '', placeholder: cur.placeholder || '', isHidden: false }, { id: `${ n }.2`, label: __( 'Confirm Email' ), customLabel: '', placeholder: '', isHidden: false } ]
+						: null;
+				}
+				markDirty();
+				// Some switches show or hide other settings; the rest repaint in place.
+				if ( [ 'enableChoiceValue', 'emailConfirmEnabled', 'multipleFiles' ].includes( key ) ) {
+					rerender();
+				} else {
+					swb.classList.toggle( 'on', !! cur[ key ] );
+					swb.setAttribute( 'aria-checked', !! cur[ key ] );
+					patch( cur );
+				}
+				return;
+			}
+			const w = t.closest( '[data-gfw]' );
+			if ( w && cur ) { cur.span = Number( w.dataset.gfw ); markDirty(); rerender(); return; }
+			const subsw = t.closest( '[data-gsubsw]' );
+			if ( subsw && cur ) {
+				const i = cur.inputs[ Number( subsw.dataset.gsubsw ) ];
+				if ( ! i.isHidden && cur.inputs.filter( ( x ) => ! x.isHidden ).length <= 1 ) {
+					toast( __( 'Keep at least one part showing.' ), true );
+					return;
+				}
+				i.isHidden = ! i.isHidden;
+				markDirty();
+				rerender();
+				return;
+			}
+			const cdef = t.closest( '[data-cdef]' );
+			if ( cdef && cur ) {
+				const i = Number( cdef.dataset.cdef );
+				const on = ! cur.choices[ i ].isSelected;
+				// Radio buttons and drop-downs default to one choice at most.
+				if ( on && ! ( 'checkbox' === cur.type || 'multiselect' === cur.type ) ) cur.choices.forEach( ( c ) => { c.isSelected = false; } );
+				cur.choices[ i ].isSelected = on;
+				markDirty();
+				rerender();
+				return;
+			}
+			const cdel = t.closest( '[data-cdel]' );
+			if ( cdel && cur ) {
+				if ( cur.choices.length <= 1 ) { toast( __( 'A field with choices needs at least one.' ), true ); return; }
+				cur.choices.splice( Number( cdel.dataset.cdel ), 1 );
+				markDirty();
+				rerender();
+				return;
+			}
+			if ( t.closest( '[data-cadd]' ) && cur ) {
+				/* translators: %s: the new choice's number. */
+				const text = sprintf( __( 'Choice %s' ), cur.choices.length + 1 );
+				cur.choices.push( { text, value: text, isSelected: false } );
+				markDirty();
+				rerender();
+				const inputs = $$( '#minn-gfb-panel [data-ctext]' );
+				const last = inputs[ inputs.length - 1 ];
+				if ( last ) { last.focus(); last.select(); }
+				return;
+			}
+			if ( t.closest( '[data-gflogic]' ) && cur ) {
+				if ( cur.conditionalLogic ) {
+					cur.conditionalLogic = null;
+				} else {
+					const src = gfbSources( cur )[ 0 ];
+					if ( ! src ) return;
+					cur.conditionalLogic = { actionType: 'show', logicType: 'all', rules: [ { fieldId: gfbRef( src ), operator: 'is', value: ( src.choices || [] ).length ? String( src.choices[ 0 ].value ) : '' } ] };
+				}
+				markDirty();
+				rerender();
+				return;
+			}
+			if ( t.closest( '[data-gladd]' ) && cur && cur.conditionalLogic ) {
+				const src = gfbSources( cur )[ 0 ];
+				if ( ! src ) return;
+				cur.conditionalLogic.rules.push( { fieldId: gfbRef( src ), operator: 'is', value: ( src.choices || [] ).length ? String( src.choices[ 0 ].value ) : '' } );
+				markDirty();
+				rerender();
+				return;
+			}
+			const glx = t.closest( '[data-glx]' );
+			if ( glx && cur && cur.conditionalLogic ) {
+				cur.conditionalLogic.rules.splice( Number( glx.dataset.glx ), 1 );
+				if ( ! cur.conditionalLogic.rules.length ) cur.conditionalLogic = null;
+				markDirty();
+				rerender();
+				return;
+			}
+			// Selecting: a field, the submit button, or empty canvas (none).
+			const cell = t.closest( '.minn-gfb-cell' );
+			if ( cell && ! t.closest( '.minn-gfb-grip' ) ) {
+				if ( g.sel !== cell.dataset.gk ) select( cell.dataset.gk );
+				return;
+			}
+			if ( t.closest( '[data-gksel="submit"]' ) ) {
+				if ( 'submit' !== g.sel ) select( 'submit' );
+				return;
+			}
+			if ( canvas && canvas.contains( t ) && ! t.closest( '#minn-gfb-desc' ) && ( g.sel || g.addAfter ) ) {
+				g.sel = null;
+				g.addAfter = null;
+				rerender();
+			}
+		} );
+		root.addEventListener( 'keydown', ( e ) => {
+			const cell = e.target.closest && e.target.closest( '.minn-gfb-cell' );
+			if ( cell && e.target === cell && ( 'Enter' === e.key || ' ' === e.key ) ) {
+				e.preventDefault();
+				select( cell.dataset.gk );
+				const again = $( `.minn-gfb-cell[data-gk="${ cell.dataset.gk }"]` );
+				if ( again ) again.focus();
+				return;
+			}
+			if ( 'Escape' === e.key && g.sel && ! e.target.closest( 'input, textarea, .minn-ac' ) ) {
+				g.sel = null;
+				rerender();
+			}
+		} );
+
+		// Drag and drop: a field's grip moves it; a palette type drops in as
+		// a new field; a choice's grip reorders its list. Beside a partial-
+		// width field the drop side follows the pointer across it, beside a
+		// full-width one, up and down (the grid's own reading order).
+		let drag = null;
+		const clearMarks = () => $$( '.drop-before, .drop-after, .drop-above, .drop-below, .drop-end, .dragging', root ).forEach( ( el ) => el.classList.remove( 'drop-before', 'drop-after', 'drop-above', 'drop-below', 'drop-end', 'dragging' ) );
+		root.addEventListener( 'dragstart', ( e ) => {
+			const grip = e.target.closest( '.minn-gfb-grip' );
+			const ptype = e.target.closest( '[data-gfbadd]' );
+			const chg = e.target.closest( '.minn-gfb-chgrip' );
+			if ( grip ) {
+				const cell = grip.closest( '.minn-gfb-cell' );
+				drag = { k: cell.dataset.gk };
+				cell.classList.add( 'dragging' );
+				try { e.dataTransfer.setDragImage( cell, 24, 18 ); } catch ( err ) {}
+			} else if ( ptype ) {
+				drag = { type: ptype.dataset.gfbadd };
+			} else if ( chg ) {
+				const row = chg.closest( '[data-ci]' );
+				drag = { ci: Number( row.dataset.ci ) };
+				row.classList.add( 'dragging' );
+			} else {
+				return;
+			}
+			e.dataTransfer.effectAllowed = drag.type ? 'copy' : 'move';
+			e.dataTransfer.setData( 'text/plain', 'minn-gfb' );
+		} );
+		root.addEventListener( 'dragend', () => { drag = null; clearMarks(); } );
+		const sideOf = ( cell, e ) => {
+			const r = cell.getBoundingClientRect();
+			const wide = grid && r.width > grid.getBoundingClientRect().width * 0.9;
+			return { wide, after: wide ? e.clientY > r.top + r.height / 2 : e.clientX > r.left + r.width / 2 };
+		};
+		root.addEventListener( 'dragover', ( e ) => {
+			if ( ! drag ) return;
+			if ( drag.ci != null ) {
+				const row = e.target.closest( '[data-ci]' );
+				if ( ! row ) return;
+				e.preventDefault();
+				const r = row.getBoundingClientRect();
+				const below = e.clientY > r.top + r.height / 2;
+				row.classList.toggle( 'drop-below', below );
+				row.classList.toggle( 'drop-above', ! below );
+				return;
+			}
+			const cell = e.target.closest( '.minn-gfb-cell' );
+			if ( cell && cell.dataset.gk !== drag.k ) {
+				e.preventDefault();
+				e.dataTransfer.dropEffect = drag.type ? 'copy' : 'move';
+				const s = sideOf( cell, e );
+				$$( '.minn-gfb-cell', grid ).forEach( ( c ) => { if ( c !== cell ) c.classList.remove( 'drop-before', 'drop-after', 'drop-above', 'drop-below' ); } );
+				cell.classList.toggle( s.wide ? 'drop-below' : 'drop-after', s.after );
+				cell.classList.toggle( s.wide ? 'drop-above' : 'drop-before', ! s.after );
+				cell.classList.remove( s.wide ? 'drop-after' : 'drop-below', s.wide ? 'drop-before' : 'drop-above' );
+				if ( grid ) grid.classList.remove( 'drop-end' );
+				return;
+			}
+			if ( grid && ! cell && ( grid.contains( e.target ) || e.target.closest( '.minn-gfb-submit-row' ) ) ) {
+				e.preventDefault();
+				grid.classList.add( 'drop-end' );
+			}
+		} );
+		root.addEventListener( 'dragleave', ( e ) => {
+			const el = e.target.closest && e.target.closest( '.minn-gfb-cell, [data-ci]' );
+			if ( el && ! el.contains( e.relatedTarget ) ) el.classList.remove( 'drop-before', 'drop-after', 'drop-above', 'drop-below' );
+		} );
+		root.addEventListener( 'drop', ( e ) => {
+			if ( ! drag ) return;
+			const d = drag;
+			drag = null;
+			const cur = g.sel ? gfbAt( g.sel ) : null;
+			if ( d.ci != null ) {
+				const row = e.target.closest( '[data-ci]' );
+				clearMarks();
+				if ( ! row || ! cur ) return;
+				e.preventDefault();
+				const r = row.getBoundingClientRect();
+				let to = Number( row.dataset.ci ) + ( e.clientY > r.top + r.height / 2 ? 1 : 0 );
+				if ( d.ci < to ) to--;
+				if ( to === d.ci ) return;
+				const [ c ] = cur.choices.splice( d.ci, 1 );
+				cur.choices.splice( to, 0, c );
+				markDirty();
+				rerender();
+				return;
+			}
+			const cell = e.target.closest( '.minn-gfb-cell' );
+			let to = g.fields.length;
+			if ( cell ) {
+				if ( cell.dataset.gk === d.k ) { clearMarks(); return; }
+				to = idx( cell.dataset.gk ) + ( sideOf( cell, e ).after ? 1 : 0 );
+			} else if ( ! ( grid && grid.classList.contains( 'drop-end' ) ) ) {
+				clearMarks();
+				return;
+			}
+			e.preventDefault();
+			clearMarks();
+			if ( d.type ) { insert( d.type, to ); return; }
+			const from = idx( d.k );
+			if ( from < 0 ) return;
+			if ( from < to ) to--;
+			if ( to === from ) return;
+			const [ moved ] = g.fields.splice( from, 1 );
+			g.fields.splice( to, 0, moved );
+			markDirty();
+			rerender();
+		} );
+	}
+
 	function renderView() {
 		renderTopbar();
 		announceRoute();
@@ -51630,6 +52555,7 @@
 		// User-edit page data too (same per-visit contract).
 		if ( state.route !== 'useredit' ) state.userEdit = null;
 		if ( state.route !== 'fieldgroup' ) state.fgb = null;
+		if ( state.route !== 'gfbuilder' ) state.gfb = null;
 		// A finished or abandoned migration should not reappear on return.
 		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
@@ -51666,6 +52592,7 @@
 			case 'editor': renderEditor(); break;
 			case 'migrate': renderMigrate(); break;
 			case 'fieldgroup': renderFieldGroupBuilder(); break;
+			case 'gfbuilder': renderFormBuilder(); break;
 			case 'profile': renderProfile(); break;
 			case 'surfaceitem': renderSurfaceItem(); break;
 			default:
