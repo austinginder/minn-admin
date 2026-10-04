@@ -371,9 +371,39 @@ function minn_admin_gfb_payload( $form_id ) {
 			'previewUrl'  => trailingslashit( site_url() ) . '?gf_page=preview&id=' . (int) $form_id,
 		),
 		'fields'  => $fields,
-		'palette' => minn_admin_gfb_palette( $form_id ),
-		'enums'   => minn_admin_gfb_enums( $form_id ),
+		'palette'    => minn_admin_gfb_palette( $form_id ),
+		'enums'      => minn_admin_gfb_enums( $form_id ),
+		// The merge tag picker: the form's tags for HTML content, and the
+		// short list their editor offers for default values.
+		'mergeTags'  => function_exists( 'minn_admin_gfn_merge_tags' ) && is_array( $meta ) ? minn_admin_gfn_merge_tags( $meta, '' ) : array(),
+		'prepopTags' => minn_admin_gfb_prepop_tags(),
 	);
+}
+
+/**
+ * The tags their editor offers in a default value (form_admin.js
+ * getMergeTags with isPrepop): no field, entry or form tags, since none of
+ * those exist yet when a default is filled in.
+ */
+function minn_admin_gfb_prepop_tags() {
+	$tags = array(
+		'{ip}'                    => __( 'User IP Address', 'minn-admin' ),
+		'{date_mdy}'              => __( 'Date (mm/dd/yyyy)', 'minn-admin' ),
+		'{date_dmy}'              => __( 'Date (dd/mm/yyyy)', 'minn-admin' ),
+		'{embed_post:ID}'         => __( 'Embed Post/Page Id', 'minn-admin' ),
+		'{embed_post:post_title}' => __( 'Embed Post/Page Title', 'minn-admin' ),
+		'{embed_url}'             => __( 'Embed URL', 'minn-admin' ),
+		'{user_agent}'            => __( 'HTTP User Agent', 'minn-admin' ),
+		'{referer}'               => __( 'HTTP Referer URL', 'minn-admin' ),
+		'{user:display_name}'     => __( 'User Display Name', 'minn-admin' ),
+		'{user:user_email}'       => __( 'User Email', 'minn-admin' ),
+		'{user:user_login}'       => __( 'User Login', 'minn-admin' ),
+	);
+	$out = array();
+	foreach ( $tags as $tag => $label ) {
+		$out[] = array( 'tag' => $tag, 'label' => $label );
+	}
+	return array( array( 'label' => __( 'Other', 'minn-admin' ), 'tags' => $out ) );
 }
 
 /** Input objects the way their editor's Input() builds them. */

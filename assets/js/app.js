@@ -51804,16 +51804,130 @@
 	// Location rules: OR groups of AND rows over the server's live catalog.
 	// Params outside the catalog render read-only and re-send verbatim —
 	// exotic locations survive saves without being editable here.
+	/* ===== The rule editor: field · test · value ===== */
+	/**
+	 * Every "field / test / value" rule list renders and binds here: a form
+	 * field's conditional logic (the form builder), notification logic and
+	 * routing, confirmation logic, and field-group location rules. A page
+	 * describes its vocabulary with a spec:
+	 *   sources   [ { value, label, choices: [ { value, label } ] } ], what a rule tests
+	 *   ops       [ [ value, label ] ], the tests
+	 *   field     the rule's property naming its source ('fieldId' unless given)
+	 *   pick      the tests whose value is one of the source's choices (default
+	 *             is / is not; true: always a choice), the rest are typed
+	 *   disabled  read only (a group registered in code)
+	 *   opClass   the test box's width class
+	 * Rows carry data-rf / data-ro / data-rv (comboboxes) and data-rvt (a typed
+	 * value), each "list:index"; `rules( list )` hands back that list's array.
+	 */
+	const RULE_PICK = [ 'is', 'isnot' ];
+	const ruleFind = ( spec, v ) => {
+		const s = String( v == null ? '' : v );
+		return spec.sources.find( ( x ) => String( x.value ) === s ) || spec.sources.find( ( x ) => String( x.value ) === s.split( '.' )[ 0 ] ) || null;
+	};
+	const rulePicks = ( spec, src, op ) => !! ( src && ( src.choices || [] ).length && ( true === spec.pick || ( spec.pick || RULE_PICK ).includes( op ) ) );
+	const ruleCombo = ( attr, display, cls, dis ) => `<div class="minn-ac${ cls || '' }" ${ attr }><input class="minn-input minn-ac-input" value="${ esc( display ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false"${ dis ? ' disabled' : '' }><div class="minn-ac-panel" hidden></div></div>`;
+	const ruleAt = ( s ) => { const k = String( s ).lastIndexOf( ':' ); return [ String( s ).slice( 0, k ), Number( String( s ).slice( k + 1 ) ) ]; };
+
+	// One rule's three controls (the row around them is the page's own).
+	function ruleRowHtml( list, r, i, spec ) {
+		const at = `${ list }:${ i }`;
+		const field = r[ spec.field || 'fieldId' ];
+		const src = ruleFind( spec, field );
+		const op = ( spec.ops.find( ( p ) => p[ 0 ] === r.operator ) || [ '', String( r.operator || '' ) ] )[ 1 ];
+		const pick = rulePicks( spec, src, r.operator );
+		const choice = pick ? src.choices.find( ( c ) => String( c.value ) === String( r.value ) ) : null;
+		return `${ ruleCombo( `data-rf="${ at }"`, src ? src.label : ( field ? String( field ) : __( 'Choose a field' ) ), '', spec.disabled ) }
+			${ ruleCombo( `data-ro="${ at }"`, op, spec.opClass, spec.disabled ) }
+			${ pick
+				? ruleCombo( `data-rv="${ at }"`, choice ? choice.label : String( r.value == null ? '' : r.value ), '', spec.disabled )
+				: `<input class="minn-input" data-rvt="${ at }" value="${ esc( r.value == null ? '' : r.value ) }" placeholder="${ esc( __( 'Value' ) ) }" aria-label="${ esc( __( 'Value' ) ) }"${ spec.disabled ? ' disabled' : '' }>` }`;
+	}
+
+	// The logic sentence: "[Show] if [all] of these match", with the page's lead.
+	function ruleSentenceHtml( cl, acts, lead ) {
+		const act = acts ? ( acts.find( ( a ) => a[ 0 ] === cl.actionType ) || acts[ 0 ] )[ 1 ] : '';
+		return `<div class="minn-gfb-logic-line">
+			${ acts ? ruleCombo( 'data-ract', act, ' minn-gfn-act' ) : '' }
+			<span>${ esc( lead ) }</span>
+			${ ruleCombo( 'data-rtype', 'any' === cl.logicType ? __( 'any' ) : __( 'all' ) ) }
+			<span>${ esc( __( 'of these match' ) ) }</span>
+		</div>`;
+	}
+
+	// o: { spec( list ), rules( list ), logic?(), acts?, markDirty( key? ), rerender() }
+	function bindRules( root, o ) {
+		if ( ! root ) return;
+		const bind = ( wrap, options, value, onPick ) => bindAutocomplete( wrap, options, { strict: true, value: String( value == null ? '' : value ), onPick } );
+		const cl = o.logic ? o.logic() : null;
+		const act = $( '[data-ract]', root );
+		if ( act && cl && o.acts ) bind( act, o.acts.map( ( a ) => ( { value: a[ 0 ], label: a[ 1 ] } ) ), cl.actionType, ( v ) => { cl.actionType = v; o.markDirty(); } );
+		const typ = $( '[data-rtype]', root );
+		if ( typ && cl ) bind( typ, [ { value: 'all', label: __( 'all' ) }, { value: 'any', label: __( 'any' ) } ], cl.logicType, ( v ) => { cl.logicType = v; o.markDirty(); } );
+		const each = ( attr, fn ) => $$( `[data-${ attr }]`, root ).forEach( ( wrap ) => {
+			const [ list, i ] = ruleAt( wrap.getAttribute( 'data-' + attr ) );
+			const spec = o.spec( list );
+			const r = ( o.rules( list ) || [] )[ i ];
+			if ( r && ! spec.disabled ) fn( wrap, spec, r );
+		} );
+		each( 'rf', ( wrap, spec, r ) => {
+			const key = spec.field || 'fieldId';
+			const opts = spec.sources.map( ( x ) => ( { value: String( x.value ), label: x.label } ) );
+			if ( r[ key ] && ! opts.some( ( x ) => x.value === String( r[ key ] ) ) ) opts.push( { value: String( r[ key ] ), label: wrap.querySelector( 'input' ).value || String( r[ key ] ) } );
+			bind( wrap, opts, r[ key ], ( v ) => {
+				r[ key ] = v;
+				const src = ruleFind( spec, v );
+				r.value = src && ( src.choices || [] ).length ? String( src.choices[ 0 ].value ) : '';
+				o.markDirty();
+				o.rerender(); // the value control follows the field
+			} );
+		} );
+		each( 'ro', ( wrap, spec, r ) => {
+			bind( wrap, spec.ops.map( ( p ) => ( { value: String( p[ 0 ] ), label: p[ 1 ] } ) ), r.operator, ( v ) => {
+				const src = ruleFind( spec, r[ spec.field || 'fieldId' ] );
+				const before = rulePicks( spec, src, r.operator );
+				r.operator = v;
+				o.markDirty();
+				if ( before !== rulePicks( spec, src, v ) ) o.rerender(); // a choice or a typed value
+			} );
+		} );
+		each( 'rv', ( wrap, spec, r ) => {
+			const src = ruleFind( spec, r[ spec.field || 'fieldId' ] );
+			const opts = ( src ? src.choices : [] ).map( ( c ) => ( { value: String( c.value ), label: c.label } ) );
+			if ( ! opts.some( ( x ) => x.value === String( r.value ) ) ) opts.push( { value: String( r.value ), label: String( r.value ) } );
+			bind( wrap, opts, r.value, ( v ) => { r.value = v; o.markDirty(); } );
+		} );
+		root.addEventListener( 'input', ( e ) => {
+			const t = e.target;
+			if ( ! t.dataset || t.dataset.rvt == null ) return;
+			const [ list, i ] = ruleAt( t.dataset.rvt );
+			const r = ( o.rules( list ) || [] )[ i ];
+			if ( ! r ) return;
+			r.value = t.value;
+			o.markDirty( t );
+		} );
+	}
+
+	// Location rules use the rule editor: ACF's params, is / is not, a value
+	// from the param's list.
+	function fgbRuleSpec( fgb, ro ) {
+		const cat = fgb.locationChoices || {};
+		return {
+			sources: Object.keys( cat ).map( ( k ) => ( { value: k, label: cat[ k ].label, choices: ( cat[ k ].values || [] ).map( ( pr ) => ( { value: String( pr[ 0 ] ), label: String( pr[ 1 ] ) } ) ) } ) ),
+			ops: [ [ '==', __( 'is' ) ], [ '!=', __( 'is not' ) ] ],
+			field: 'param',
+			pick: true,
+			disabled: !! ro,
+			opClass: ' minn-fgb-loc-op',
+		};
+	}
+
 	function fgbLocationHtml( fgb, ro ) {
 		const dis = ro ? ' disabled' : '';
 		const cat = fgb.locationChoices;
-		// Strict comboboxes (bound in bindFieldGroupBuilder). The markup
-		// carries the current LABEL so read-only groups render right unbound
-		// and there's no unlabeled flash before binding.
-		const combo = ( attr, extra, display ) => `<div class="minn-ac${ extra }" ${ attr }>
-			<input class="minn-input minn-ac-input" value="${ esc( display ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false"${ dis }>
-			<div class="minn-ac-panel" hidden></div>
-		</div>`;
+		// The rule editor's comboboxes carry the current LABEL, so read-only
+		// groups render right unbound and nothing flashes before binding.
+		const spec = fgbRuleSpec( fgb, ro );
 		const groups = ( fgb.location || [] ).map( ( rules, gi ) => `
 			${ gi ? `<div class="minn-fgb-loc-or">${ esc( __( 'or' ) ) }</div>` : '' }
 			<div class="minn-fgb-loc-group">
@@ -51826,11 +51940,8 @@
 							<button type="button" data-lgx="${ gi }:${ ri }" title="${ esc( __( 'Remove rule' ) ) }"${ dis }>×</button>
 						</div>`;
 					}
-					const pair = known.values.find( ( p ) => String( p[ 0 ] ) === String( r.value ) );
 					return `<div class="minn-fgb-loc-rule">
-						${ combo( `data-lgp="${ gi }:${ ri }"`, '', known.label ) }
-						${ combo( `data-lgo="${ gi }:${ ri }"`, ' minn-fgb-loc-op', '!=' === r.operator ? __( 'is not' ) : __( 'is' ) ) }
-						${ combo( `data-lgv="${ gi }:${ ri }"`, '', pair ? String( pair[ 1 ] ) : String( r.value ) ) }
+						${ ruleRowHtml( 'g' + gi, r, ri, spec ) }
 						<button type="button" data-lgx="${ gi }:${ ri }" title="${ esc( __( 'Remove rule' ) ) }"${ dis }>×</button>
 					</div>`;
 				} ).join( '' ) }
@@ -52063,37 +52174,7 @@
 				renderFieldGroupBuilder(); // extras change with the type
 			} );
 		} );
-		$$( '[data-lgp]', view ).forEach( ( wrap ) => {
-			const [ gi, ri ] = wrap.dataset.lgp.split( ':' ).map( Number );
-			const rule = fgb.location[ gi ][ ri ];
-			const options = Object.keys( fgb.locationChoices ).map( ( pk ) => ( { value: pk, label: fgb.locationChoices[ pk ].label } ) );
-			bindCombo( wrap, options, rule.param, ( v ) => {
-				rule.param = v;
-				const first = ( fgb.locationChoices[ v ] || { values: [] } ).values[ 0 ];
-				rule.value = first ? String( first[ 0 ] ) : '';
-				markDirty();
-				renderFieldGroupBuilder(); // the value list follows the param
-			} );
-		} );
-		$$( '[data-lgo]', view ).forEach( ( wrap ) => {
-			const [ gi, ri ] = wrap.dataset.lgo.split( ':' ).map( Number );
-			const options = [ { value: '==', label: __( 'is' ) }, { value: '!=', label: __( 'is not' ) } ];
-			bindCombo( wrap, options, '!=' === fgb.location[ gi ][ ri ].operator ? '!=' : '==', ( v ) => {
-				fgb.location[ gi ][ ri ].operator = v;
-				markDirty();
-			} );
-		} );
-		$$( '[data-lgv]', view ).forEach( ( wrap ) => {
-			const [ gi, ri ] = wrap.dataset.lgv.split( ':' ).map( Number );
-			const rule = fgb.location[ gi ][ ri ];
-			const known = fgb.locationChoices[ rule.param ];
-			if ( ! known ) return;
-			const options = known.values.map( ( pair ) => ( { value: String( pair[ 0 ] ), label: String( pair[ 1 ] ) } ) );
-			bindCombo( wrap, options, String( rule.value ), ( v ) => {
-				rule.value = v;
-				markDirty();
-			} );
-		} );
+		bindRules( view, { spec: () => fgbRuleSpec( fgb, ro ), rules: ( list ) => fgb.location[ Number( list.slice( 1 ) ) ] || [], markDirty, rerender: () => renderFieldGroupBuilder() } );
 		// Drag to reorder: the grip drags its row; dropping on another row in
 		// the SAME list lands above or below its midpoint (the menus
 		// precedent). Tokens keep sub rows inside their own repeater — a sub
@@ -52375,6 +52456,8 @@
 			known: r.fields.map( ( f ) => f.id ),
 			palette: r.palette || [],
 			enums: r.enums || {},
+			mergeTags: r.mergeTags || [],
+			prepopTags: r.prepopTags || [],
 			sel: null,
 			addAfter: null,
 			dirty: false,
@@ -52578,9 +52661,16 @@
 		}
 		const has = ( k ) => gfbHas( f, k );
 		const val = ( k ) => ( f[ k ] == null ? '' : f[ k ] );
-		const inp = ( key, label, o = {} ) => `<label class="minn-gfb-set"><span class="minn-field-label">${ esc( label ) }</span>${ o.area
-			? `<textarea class="minn-input${ o.mono ? ' mono' : '' }" rows="${ o.rows || 2 }" data-gf="${ key }" placeholder="${ esc( o.ph || '' ) }">${ esc( val( key ) ) }</textarea>`
-			: `<input class="minn-input${ o.mono ? ' mono' : '' }" data-gf="${ key }" value="${ esc( val( key ) ) }" placeholder="${ esc( o.ph || '' ) }"${ o.num ? ' inputmode="decimal"' : '' }>` }${ o.help ? `<span class="minn-toggle-desc">${ esc( o.help ) }</span>` : '' }</label>`;
+		const inp = ( key, label, o = {} ) => {
+			const control = o.area
+				? `<textarea class="minn-input${ o.mono ? ' mono' : '' }" rows="${ o.rows || 2 }" data-gf="${ key }" placeholder="${ esc( o.ph || '' ) }">${ esc( val( key ) ) }</textarea>`
+				: `<input class="minn-input${ o.mono ? ' mono' : '' }" data-gf="${ key }" value="${ esc( val( key ) ) }" placeholder="${ esc( o.ph || '' ) }"${ o.num ? ' inputmode="decimal"' : '' }>`;
+			// Settings that take merge tags get the picker (the notification page's).
+			const field = o.tags
+				? `<span class="minn-gfn-field has-tags${ o.area ? ' is-area' : '' }">${ control }<button type="button" class="minn-gfn-tagbtn" data-gfbtags="${ key }" title="${ esc( __( 'Insert a merge tag' ) ) }" aria-label="${ esc( __( 'Insert a merge tag' ) ) }">{ }</button></span>`
+				: control;
+			return `<label class="minn-gfb-set"><span class="minn-field-label">${ esc( label ) }</span>${ field }${ o.help ? `<span class="minn-toggle-desc">${ esc( o.help ) }</span>` : '' }</label>`;
+		};
 		const sw = ( key, label ) => `<div class="minn-gfb-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( label ) }</span>
 			<button type="button" class="minn-switch${ f[ key ] ? ' on' : '' }" data-gfsw="${ key }" role="switch" aria-checked="${ !! f[ key ] }" aria-label="${ esc( label ) }"><span class="minn-switch-knob"></span></button></div>`;
 		const combo = ( key, label ) => {
@@ -52608,12 +52698,12 @@
 			<div class="minn-gfb-pbody">
 				${ has( 'label' ) ? inp( 'label', 'html' === f.type ? __( 'Name (shown only here)' ) : __( 'Label' ) ) : '' }
 				${ has( 'description' ) ? inp( 'description', 'consent' === f.type ? __( 'Agreement text' ) : __( 'Description' ), { area: true } ) : '' }
-				${ has( 'content' ) ? inp( 'content', __( 'Content' ), { area: true, rows: 6, mono: true, help: __( 'HTML is allowed. Merge tags and shortcodes work as in Gravity Forms.' ) } ) : '' }
+				${ has( 'content' ) ? inp( 'content', __( 'Content' ), { area: true, rows: 6, mono: true, tags: true, help: __( 'HTML is allowed. Merge tags and shortcodes work as in Gravity Forms.' ) } ) : '' }
 				${ has( 'checkboxLabel' ) ? inp( 'checkboxLabel', __( 'Checkbox label' ) ) : '' }
 				${ has( 'choices' ) ? gfbChoicesHtml( f ) : '' }
 				${ has( 'subInputs' ) ? gfbSubInputsHtml( f ) : '' }
 				${ has( 'placeholder' ) && ! ( 'email' === f.type && f.emailConfirmEnabled ) && ! ( 'date' === f.type && 'datepicker' !== f.dateType ) ? inp( 'placeholder', 'select' === f.type ? __( 'Placeholder (first, empty option)' ) : __( 'Placeholder' ) ) : '' }
-				${ has( 'defaultValue' ) && ! ( 'email' === f.type && f.emailConfirmEnabled ) ? inp( 'defaultValue', __( 'Default value' ), 'textarea' === f.type ? { area: true } : { help: 'hidden' === f.type ? __( 'Merge tags like {user:user_email} work here.' ) : '' } ) : '' }
+				${ has( 'defaultValue' ) && ! ( 'email' === f.type && f.emailConfirmEnabled ) ? inp( 'defaultValue', __( 'Default value' ), 'textarea' === f.type ? { area: true, tags: true } : { tags: true, help: 'hidden' === f.type ? __( 'Merge tags like {user:user_email} work here.' ) : '' } ) : '' }
 				${ has( 'maxLength' ) ? inp( 'maxLength', __( 'Maximum characters' ), { num: true } ) : '' }
 				${ has( 'rangeMin' ) ? pair( inp( 'rangeMin', __( 'Minimum' ), { num: true } ), inp( 'rangeMax', __( 'Maximum' ), { num: true } ) ) : '' }
 				${ has( 'numberFormat' ) ? combo( 'numberFormat', __( 'Number format' ) ) : '' }
@@ -52685,38 +52775,28 @@
 	// Fields a rule can test: those Gravity Forms lets logic read, other
 	// than the field itself.
 	const gfbSources = ( f ) => state.gfb.fields.filter( ( x ) => x !== f && x.logicSource );
-	const gfbSourceOf = ( ref ) => {
-		const base = String( ref ).split( '.' )[ 0 ];
-		return state.gfb.fields.find( ( x ) => gfbRef( x ) === String( ref ) || gfbRef( x ) === base ) || null;
-	};
+
+	// A field's conditional logic: the rule editor over the fields logic can read.
+	const GFB_ACTS = () => [ [ 'show', __( 'Show' ) ], [ 'hide', __( 'Hide' ) ] ];
+	function gfbRuleSpec( f ) {
+		return {
+			sources: gfbSources( f ).map( ( x ) => ( { value: gfbRef( x ), label: gfbName( x ), choices: ( x.choices || [] ).map( ( c ) => ( { value: String( c.value ), label: gfbText( c.text ) } ) ) } ) ),
+			ops: state.gfb.enums.operator || [],
+			opClass: ' minn-gfb-op',
+		};
+	}
 
 	function gfbLogicHtml( f ) {
 		const cl = f.conditionalLogic;
 		const on = !! cl;
-		const combo = ( attr, display, cls = '' ) => `<div class="minn-ac${ cls }" ${ attr }><input class="minn-input minn-ac-input" value="${ esc( display ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false"><div class="minn-ac-panel" hidden></div></div>`;
-		const ops = state.gfb.enums.operator || [];
 		const sources = gfbSources( f );
+		const spec = gfbRuleSpec( f );
 		const body = ! on ? '' : `<div class="minn-gfb-logic">
-			<div class="minn-gfb-logic-line">
-				${ combo( 'data-glact', 'hide' === cl.actionType ? __( 'Hide' ) : __( 'Show' ) ) }
-				<span>${ esc( /* translators: conditional logic sentence: "Show if any of these match". */ __( 'if' ) ) }</span>
-				${ combo( 'data-gltype', 'any' === cl.logicType ? __( 'any' ) : __( 'all' ) ) }
-				<span>${ esc( __( 'of these match' ) ) }</span>
-			</div>
-			${ ( cl.rules || [] ).map( ( r, i ) => {
-				const src = gfbSourceOf( r.fieldId );
-				const op = ops.find( ( p ) => p[ 0 ] === r.operator );
-				const pick = src && ( src.choices || [] ).length && ( 'is' === r.operator || 'isnot' === r.operator );
-				const choice = pick ? ( src.choices || [] ).find( ( c ) => String( c.value ) === String( r.value ) ) : null;
-				return `<div class="minn-gfb-rule-row">
-					${ combo( `data-glf="${ i }"`, src ? gfbName( src ) : String( r.fieldId ) ) }
-					${ combo( `data-glo="${ i }"`, op ? op[ 1 ] : r.operator, ' minn-gfb-op' ) }
-					${ pick
-						? combo( `data-glv="${ i }"`, choice ? gfbText( choice.text ) : String( r.value ) )
-						: `<input class="minn-input" data-glvt="${ i }" value="${ esc( r.value ) }" placeholder="${ esc( __( 'Value' ) ) }" aria-label="${ esc( __( 'Value' ) ) }">` }
+			${ ruleSentenceHtml( cl, GFB_ACTS(), /* translators: conditional logic sentence: "Show if any of these match". */ __( 'if' ) ) }
+			${ ( cl.rules || [] ).map( ( r, i ) => `<div class="minn-gfb-rule-row">
+					${ ruleRowHtml( 'logic', r, i, spec ) }
 					<button type="button" class="minn-gfb-chx" data-glx="${ i }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button>
-				</div>`;
-			} ).join( '' ) }
+				</div>` ).join( '' ) }
 			<button type="button" class="minn-btn-soft minn-fgb-loc-and" data-gladd>+ ${ esc( __( 'Add rule' ) ) }</button>
 		</div>`;
 		return `<div class="minn-gfb-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Conditional logic' ) ) }</span>
@@ -52835,6 +52915,18 @@
 			markDirty();
 			rerender();
 		};
+		// The form's tags for fields still on it (a removed field's tag would
+		// read nothing once saved); new fields get theirs once the form is saved.
+		const fieldTags = () => {
+			const ids = new Set( g.fields.filter( ( x ) => x.id ).map( ( x ) => String( x.id ) ) );
+			return ( g.mergeTags || [] ).map( ( grp ) => ( {
+				label: grp.label,
+				tags: grp.tags.filter( ( tg ) => {
+					const m = /:(\d+)(?:\.\d+)?(?::[^}]*)?\}$/.exec( tg.tag );
+					return ! m || ids.has( m[ 1 ] );
+				} ),
+			} ) ).filter( ( grp ) => grp.tags.length );
+		};
 		const duplicate = ( k ) => {
 			const f = gfbAt( k );
 			if ( ! f || ! gfbProto( f.type ) ) return;
@@ -52897,41 +52989,7 @@
 					patch( f );
 				} } );
 			} );
-			const cl = f.conditionalLogic;
-			if ( cl ) {
-				const setRule = () => { markDirty(); patch( f ); };
-				const act = $( '[data-glact]', panel );
-				if ( act ) bindAutocomplete( act, [ { value: 'show', label: __( 'Show' ) }, { value: 'hide', label: __( 'Hide' ) } ], { strict: true, value: cl.actionType, onPick: ( v ) => { cl.actionType = v; setRule(); } } );
-				const typ = $( '[data-gltype]', panel );
-				if ( typ ) bindAutocomplete( typ, [ { value: 'all', label: __( 'all' ) }, { value: 'any', label: __( 'any' ) } ], { strict: true, value: cl.logicType, onPick: ( v ) => { cl.logicType = v; setRule(); } } );
-				const srcOpts = gfbSources( f ).map( ( x ) => ( { value: gfbRef( x ), label: gfbName( x ) } ) );
-				$$( '[data-glf]', panel ).forEach( ( wrap ) => {
-					const r = cl.rules[ Number( wrap.dataset.glf ) ];
-					const opts = srcOpts.some( ( o ) => o.value === String( r.fieldId ) ) ? srcOpts : srcOpts.concat( [ { value: String( r.fieldId ), label: wrap.querySelector( 'input' ).value } ] );
-					bindAutocomplete( wrap, opts, { strict: true, value: String( r.fieldId ), onPick: ( v ) => {
-						r.fieldId = v;
-						const src = gfbSourceOf( v );
-						r.value = src && ( src.choices || [] ).length ? String( src.choices[ 0 ].value ) : '';
-						markDirty();
-						rerender(); // the value control follows the field
-					} } );
-				} );
-				$$( '[data-glo]', panel ).forEach( ( wrap ) => {
-					const r = cl.rules[ Number( wrap.dataset.glo ) ];
-					bindAutocomplete( wrap, ( g.enums.operator || [] ).map( ( p ) => ( { value: p[ 0 ], label: p[ 1 ] } ) ), { strict: true, value: r.operator, onPick: ( v ) => {
-						r.operator = v;
-						markDirty();
-						rerender(); // is / is not pick a choice; the rest type a value
-					} } );
-				} );
-				$$( '[data-glv]', panel ).forEach( ( wrap ) => {
-					const r = cl.rules[ Number( wrap.dataset.glv ) ];
-					const src = gfbSourceOf( r.fieldId );
-					const opts = ( src && src.choices ? src.choices : [] ).map( ( c ) => ( { value: String( c.value ), label: gfbText( c.text ) } ) );
-					if ( ! opts.some( ( o ) => o.value === String( r.value ) ) ) opts.push( { value: String( r.value ), label: String( r.value ) } );
-					bindAutocomplete( wrap, opts, { strict: true, value: String( r.value ), onPick: ( v ) => { r.value = v; markDirty(); } } );
-				} );
-			}
+			bindRules( panel, { spec: () => gfbRuleSpec( f ), rules: () => ( f.conditionalLogic ? f.conditionalLogic.rules : [] ), logic: () => f.conditionalLogic, acts: GFB_ACTS(), markDirty: ( k ) => { markDirty( k ); patch( f ); }, rerender } );
 		}
 
 		root.addEventListener( 'input', ( e ) => {
@@ -52968,8 +53026,6 @@
 				cur.choices[ Number( t.dataset.cval ) ].value = t.value;
 			} else if ( t.dataset.gsublabel != null ) {
 				cur.inputs[ Number( t.dataset.gsublabel ) ].customLabel = t.value;
-			} else if ( t.dataset.glvt != null ) {
-				cur.conditionalLogic.rules[ Number( t.dataset.glvt ) ].value = t.value;
 			} else {
 				return;
 			}
@@ -53008,6 +53064,14 @@
 				b.classList.toggle( 'on', g.form.active );
 				b.setAttribute( 'aria-checked', g.form.active );
 				markDirty();
+				return;
+			}
+			const tagBtn = t.closest( '[data-gfbtags]' );
+			if ( tagBtn ) {
+				e.preventDefault(); // inside a <label>: keep the click off the input
+				const key = tagBtn.dataset.gfbtags;
+				const target = $( `#minn-gfb-panel [data-gf="${ key }"]` );
+				if ( target ) gfnOpenTags( tagBtn, target, false, 'defaultValue' === key ? g.prepopTags : fieldTags() );
 				return;
 			}
 			const del = t.closest( '[data-gfbdel]' );
@@ -53399,18 +53463,15 @@
 	const gfnPairLabel = ( list, v ) => ( ( list || [] ).find( ( p ) => String( p[ 0 ] ) === String( v ) ) || [ '', String( v || '' ) ] )[ 1 ];
 	const gfnField = ( id ) => ( gfnCur().data.fields || [] ).find( ( f ) => String( f.id ) === String( id ).split( '.' )[ 0 ] || String( f.id ) === String( id ) ) || null;
 
-	// A rule row (routing or logic): field, operator, value. The value is a
-	// choice when the field has choices and the test is is / is not.
-	function gfnRuleHtml( kind, r, i, sources ) {
-		const f = gfnField( r.fieldId );
-		const pick = f && ( f.choices || [] ).length && ( 'is' === r.operator || 'isnot' === r.operator );
-		const choice = pick ? f.choices.find( ( c ) => String( c.value ) === String( r.value ) ) : null;
-		const known = sources.some( ( s ) => String( s.id ) === String( r.fieldId ) );
-		return `${ gfnCombo( `data-gfnrf="${ kind }:${ i }"`, f ? f.label : ( known ? '' : String( r.fieldId || __( 'Choose a field' ) ) ) ) }
-			${ gfnCombo( `data-gfnro="${ kind }:${ i }"`, gfnPairLabel( GFN_OPS(), r.operator ), ' minn-gfn-op' ) }
-			${ pick
-				? gfnCombo( `data-gfnrv="${ kind }:${ i }"`, choice ? choice.text : String( r.value ) )
-				: `<input class="minn-input" data-gfnrvt="${ kind }:${ i }" value="${ esc( r.value ) }" placeholder="${ esc( __( 'Value' ) ) }" aria-label="${ esc( __( 'Value' ) ) }">` }`;
+	// The rule vocabulary on the notification and confirmation pages: the
+	// fields routing (route) or conditional logic (logic) can read.
+	const GFN_ACTS = () => [ [ 'show', __( 'Send' ) ], [ 'hide', __( 'Don’t send' ) ] ];
+	function gfnRuleSpec( kind ) {
+		return {
+			sources: ( gfnCur().data.fields || [] ).filter( ( f ) => ( 'route' === kind ? f.routing : f.logic ) ).map( ( f ) => ( { value: String( f.id ), label: f.label, choices: ( f.choices || [] ).map( ( c ) => ( { value: String( c.value ), label: c.text } ) ) } ) ),
+			ops: GFN_OPS(),
+			opClass: ' minn-gfn-op',
+		};
 	}
 
 	function gfnToHtml( g ) {
@@ -53434,7 +53495,7 @@
 					<div class="minn-gfn-rule minn-gfn-route">
 						<span class="minn-gfn-field has-tags"><input class="minn-input mono" data-gfnremail="${ i }" value="${ esc( r.email ) }" placeholder="${ esc( __( 'team@example.com' ) ) }" aria-label="${ esc( __( 'Send to' ) ) }"><button type="button" class="minn-gfn-tagbtn" data-gfntags="route:${ i }" title="${ esc( __( 'Insert a merge tag' ) ) }" aria-label="${ esc( __( 'Insert a merge tag' ) ) }">{ }</button></span>
 						<span class="minn-gfn-if">${ esc( __( 'if' ) ) }</span>
-						${ gfnRuleHtml( 'route', r, i, sources ) }
+						${ ruleRowHtml( 'route', r, i, gfnRuleSpec( 'route' ) ) }
 						<button type="button" class="minn-gfb-chx" data-gfnrx="route:${ i }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button>
 					</div>` ).join( '' ) || `<div class="minn-toggle-desc">${ esc( __( 'No rules yet.' ) ) }</div>` }</div>
 				${ sources.length ? `<button type="button" class="minn-btn-soft minn-gfn-mini" data-gfnradd="route">+ ${ esc( __( 'Add rule' ) ) }</button>` : `<div class="minn-toggle-desc">${ esc( __( 'Routing tests a field’s answer; this form has none that routing can read.' ) ) }</div>` }
@@ -53512,13 +53573,8 @@
 			<div class="minn-gfn-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Only send when answers match' ) ) }</span>
 				<button type="button" class="minn-switch${ cl ? ' on' : '' }" data-gfnsw="logic" role="switch" aria-checked="${ !! cl }" aria-label="${ esc( __( 'Only send when answers match' ) ) }"${ ! cl && ! sources.length ? ' disabled' : '' }><span class="minn-switch-knob"></span></button></div>
 			${ cl ? `<div class="minn-gfb-logic">
-				<div class="minn-gfb-logic-line">
-					${ gfnCombo( 'data-gfnlact', 'hide' === cl.actionType ? __( 'Don’t send' ) : __( 'Send' ), ' minn-gfn-act' ) }
-					<span>${ esc( /* translators: conditional logic sentence: "Send if all of these match". */ __( 'if' ) ) }</span>
-					${ gfnCombo( 'data-gfnltype', 'any' === cl.logicType ? __( 'any' ) : __( 'all' ) ) }
-					<span>${ esc( __( 'of these match' ) ) }</span>
-				</div>
-				${ cl.rules.map( ( r, i ) => `<div class="minn-gfn-rule">${ gfnRuleHtml( 'logic', r, i, sources ) }
+				${ ruleSentenceHtml( cl, GFN_ACTS(), /* translators: conditional logic sentence: "Send if all of these match". */ __( 'if' ) ) }
+				${ cl.rules.map( ( r, i ) => `<div class="minn-gfn-rule">${ ruleRowHtml( 'logic', r, i, gfnRuleSpec( 'logic' ) ) }
 					<button type="button" class="minn-gfb-chx" data-gfnrx="logic:${ i }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button></div>` ).join( '' ) }
 				<button type="button" class="minn-btn-soft minn-gfn-mini" data-gfnradd="logic">+ ${ esc( __( 'Add rule' ) ) }</button>
 			</div>` : '' }
@@ -53571,9 +53627,9 @@
 	// The merge tag picker: the form's tags by group, filtered as you type,
 	// inserted at the cursor of the field it was opened from. Address fields
 	// leave out {all_fields} (their picker does the same).
-	function gfnOpenTags( btn, target, isMessage ) {
+	function gfnOpenTags( btn, target, isMessage, groupsIn ) {
 		$$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
-		const groups = ( gfnCur().data.mergeTags || [] ).map( ( g ) => ( {
+		const groups = ( groupsIn || gfnCur().data.mergeTags || [] ).map( ( g ) => ( {
 			label: g.label,
 			tags: g.tags.filter( ( t ) => isMessage || '{all_fields}' !== t.tag ),
 		} ) ).filter( ( g ) => g.tags.length );
@@ -53629,45 +53685,6 @@
 
 	const gfnSplit = ( s ) => { const i = s.indexOf( ':' ); return [ s.slice( 0, i ), Number( s.slice( i + 1 ) ) ]; };
 
-	// The rule comboboxes both pages share: the logic sentence (action, all /
-	// any) and each rule's field, operator and choice value. `rules( kind )`
-	// is the rule list a data-gfnr* attribute names ("logic:0", "route:2").
-	function gfnBindRules( root, o ) {
-		const bind = ( wrap, options, value, onPick ) => bindAutocomplete( wrap, options, { strict: true, value: String( value == null ? '' : value ), onPick } );
-		const pairs = ( list ) => ( list || [] ).map( ( p ) => ( { value: String( p[ 0 ] ), label: p[ 1 ] } ) );
-		const cl = o.logic();
-		const act = $( '[data-gfnlact]', root );
-		if ( act && cl && o.acts ) bind( act, o.acts, cl.actionType, ( v ) => { cl.actionType = v; o.markDirty(); } );
-		const typ = $( '[data-gfnltype]', root );
-		if ( typ && cl ) bind( typ, [ { value: 'all', label: __( 'all' ) }, { value: 'any', label: __( 'any' ) } ], cl.logicType, ( v ) => { cl.logicType = v; o.markDirty(); } );
-		$$( '[data-gfnrf]', root ).forEach( ( wrap ) => {
-			const [ kind, i ] = gfnSplit( wrap.dataset.gfnrf );
-			const r = o.rules( kind )[ i ];
-			const opts = o.sourcesOf( kind ).map( ( f ) => ( { value: String( f.id ), label: f.label } ) );
-			if ( r.fieldId && ! opts.some( ( x ) => x.value === String( r.fieldId ) ) ) opts.push( { value: String( r.fieldId ), label: wrap.querySelector( 'input' ).value || String( r.fieldId ) } );
-			bind( wrap, opts, r.fieldId, ( v ) => {
-				r.fieldId = v;
-				const f = gfnField( v );
-				r.value = f && ( f.choices || [] ).length ? String( f.choices[ 0 ].value ) : '';
-				o.markDirty();
-				o.rerender();
-			} );
-		} );
-		$$( '[data-gfnro]', root ).forEach( ( wrap ) => {
-			const [ kind, i ] = gfnSplit( wrap.dataset.gfnro );
-			const r = o.rules( kind )[ i ];
-			bind( wrap, pairs( GFN_OPS() ), r.operator, ( v ) => { r.operator = v; o.markDirty(); o.rerender(); } );
-		} );
-		$$( '[data-gfnrv]', root ).forEach( ( wrap ) => {
-			const [ kind, i ] = gfnSplit( wrap.dataset.gfnrv );
-			const r = o.rules( kind )[ i ];
-			const f = gfnField( r.fieldId );
-			const opts = ( f && f.choices ? f.choices : [] ).map( ( c ) => ( { value: String( c.value ), label: c.text } ) );
-			if ( ! opts.some( ( x ) => x.value === String( r.value ) ) ) opts.push( { value: String( r.value ), label: String( r.value ) } );
-			bind( wrap, opts, r.value, ( v ) => { r.value = v; o.markDirty(); } );
-		} );
-	}
-
 	function bindNotificationPage( root ) {
 		const g = state.gfn;
 		const d = g.data;
@@ -53719,7 +53736,7 @@
 				}
 			} );
 		} );
-		gfnBindRules( root, { logic: () => n.conditionalLogic, rules, sourcesOf, markDirty, rerender, acts: [ { value: 'show', label: __( 'Send' ) }, { value: 'hide', label: __( 'Don’t send' ) } ] } );
+		bindRules( root, { spec: ( kind ) => gfnRuleSpec( kind ), rules, logic: () => n.conditionalLogic, acts: GFN_ACTS(), markDirty, rerender } );
 		const split = gfnSplit;
 
 		root.addEventListener( 'input', ( e ) => {
@@ -53733,9 +53750,6 @@
 				if ( 'subject' === t.dataset.gfn || 'message' === t.dataset.gfn ) gfnRefreshPreview();
 			} else if ( t.dataset.gfnremail != null ) {
 				n.routing[ Number( t.dataset.gfnremail ) ].email = t.value;
-			} else if ( t.dataset.gfnrvt != null ) {
-				const [ kind, i ] = split( t.dataset.gfnrvt );
-				rules( kind )[ i ].value = t.value;
 			} else {
 				return;
 			}
@@ -54092,12 +54106,8 @@
 			<div class="minn-gfn-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Only use when answers match' ) ) }</span>
 				<button type="button" class="minn-switch${ cl ? ' on' : '' }" data-gfcsw="logic" role="switch" aria-checked="${ !! cl }" aria-label="${ esc( __( 'Only use when answers match' ) ) }"${ ! cl && ! sources.length ? ' disabled' : '' }><span class="minn-switch-knob"></span></button></div>
 			${ cl ? `<div class="minn-gfb-logic">
-				<div class="minn-gfb-logic-line">
-					<span>${ esc( /* translators: conditional logic sentence: "Use this confirmation if all of these match". */ __( 'Use this confirmation if' ) ) }</span>
-					${ gfnCombo( 'data-gfnltype', 'any' === cl.logicType ? __( 'any' ) : __( 'all' ) ) }
-					<span>${ esc( __( 'of these match' ) ) }</span>
-				</div>
-				${ cl.rules.map( ( r, i ) => `<div class="minn-gfn-rule">${ gfnRuleHtml( 'logic', r, i, sources ) }
+				${ ruleSentenceHtml( cl, null, /* translators: conditional logic sentence: "Use this confirmation if all of these match". */ __( 'Use this confirmation if' ) ) }
+				${ cl.rules.map( ( r, i ) => `<div class="minn-gfn-rule">${ ruleRowHtml( 'logic', r, i, gfnRuleSpec( 'logic' ) ) }
 					<button type="button" class="minn-gfb-chx" data-gfnrx="logic:${ i }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button></div>` ).join( '' ) }
 				<button type="button" class="minn-btn-soft minn-gfn-mini" data-gfnradd="logic">+ ${ esc( __( 'Add rule' ) ) }</button>
 			</div>` : `<div class="minn-toggle-desc">${ esc( sources.length ? __( 'Shows for every submission unless an earlier confirmation applies.' ) : __( 'This form has no fields that conditions can read.' ) ) }</div>` }
@@ -54201,7 +54211,7 @@
 			g.err = null;
 		};
 
-		gfnBindRules( root, { logic: () => n.conditionalLogic, rules: () => ( n.conditionalLogic ? n.conditionalLogic.rules : [] ), sourcesOf: () => sources, markDirty, rerender, acts: null } );
+		bindRules( root, { spec: () => gfnRuleSpec( 'logic' ), rules: () => ( n.conditionalLogic ? n.conditionalLogic.rules : [] ), logic: () => n.conditionalLogic, markDirty, rerender } );
 		const pagePick = $( '[data-gfccombo="pageId"]', root );
 		if ( pagePick ) {
 			bindAutocomplete( pagePick, ( d.pages || [] ).map( ( p ) => ( { value: String( p[ 0 ] ), label: p[ 1 ] } ) ), {
@@ -54224,9 +54234,6 @@
 			if ( t.dataset.gfn ) {
 				n[ t.dataset.gfn ] = t.value;
 				if ( [ 'message', 'url', 'queryString' ].includes( t.dataset.gfn ) ) gfcRefreshPreview();
-			} else if ( t.dataset.gfnrvt != null ) {
-				const [ , i ] = gfnSplit( t.dataset.gfnrvt );
-				n.conditionalLogic.rules[ i ].value = t.value;
 			} else {
 				return;
 			}
@@ -54435,7 +54442,7 @@
 		if ( state.route !== 'gfbuilder' ) state.gfb = null;
 		if ( state.route !== 'gfnotification' ) state.gfn = null;
 		if ( state.route !== 'gfconfirmation' ) state.gfc = null;
-		if ( state.route !== 'gfnotification' && state.route !== 'gfconfirmation' ) $$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
+		if ( ! [ 'gfnotification', 'gfconfirmation', 'gfbuilder' ].includes( state.route ) ) $$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
 		// A finished or abandoned migration should not reappear on return.
 		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;

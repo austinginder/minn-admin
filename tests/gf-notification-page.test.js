@@ -103,9 +103,9 @@ const { BASE, launch, login, reporter, listSettled } = require( './helpers' );
 
 		// Conditional logic: only when Topic is Sales question.
 		await page.click( '[data-gfnsw="logic"]' );
-		await page.waitForSelector( '[data-gfnrf="logic:0"]', { timeout: 5000 } );
-		await pickCombo( '[data-gfnrf="logic:0"]', 'Topic' );
-		await pickCombo( '[data-gfnrv="logic:0"]', 'Sales question' );
+		await page.waitForSelector( '[data-rf="logic:0"]', { timeout: 5000 } );
+		await pickCombo( '[data-rf="logic:0"]', 'Topic' );
+		await pickCombo( '[data-rv="logic:0"]', 'Sales question' );
 
 		// Create through Gravity Forms' own save.
 		await clearToasts();
@@ -134,9 +134,9 @@ const { BASE, launch, login, reporter, listSettled } = require( './helpers' );
 		await page.waitForSelector( '[data-gfnremail="1"]', { timeout: 5000 } );
 		await page.fill( '[data-gfnremail="1"]', 'sales-team@example.com' );
 		// A new rule starts on the first field routing can read (Email): test Topic.
-		await pickCombo( '[data-gfnrf="route:1"]', 'Topic' );
-		await page.waitForSelector( '[data-gfnrv="route:1"]', { timeout: 5000 } );
-		await pickCombo( '[data-gfnrv="route:1"]', 'Sales question' );
+		await pickCombo( '[data-rf="route:1"]', 'Topic' );
+		await page.waitForSelector( '[data-rv="route:1"]', { timeout: 5000 } );
+		await pickCombo( '[data-rv="route:1"]', 'Sales question' );
 		await clearToasts();
 		await page.click( '#minn-gfn-save' );
 		await toast( 'Notification saved' );

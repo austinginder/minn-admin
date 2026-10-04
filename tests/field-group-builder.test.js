@@ -160,14 +160,14 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 		 * set, save, verify the exact structure — and the invalid-value
 		 * refusal writes nothing. ===== */
 		await page.waitForSelector( '.minn-fgb-loc', { timeout: 10000 } );
-		await comboPick( '[data-lgv="0:0"]', 'page' );
+		await comboPick( '[data-rv="g0:0"]', 'page' );
 		await page.click( '[data-lgand="0"]' );
-		await page.waitForSelector( '[data-lgp="0:1"]', { timeout: 5000 } );
-		await comboPick( '[data-lgp="0:1"]', 'current_user_role' );
+		await page.waitForSelector( '[data-rf="g0:1"]', { timeout: 5000 } );
+		await comboPick( '[data-rf="g0:1"]', 'current_user_role' );
 		await page.waitForTimeout( 300 );
-		await comboPick( '[data-lgo="0:1"]', '!=' );
+		await comboPick( '[data-ro="g0:1"]', '!=' );
 		await page.click( '#minn-fgb-locadd' );
-		await page.waitForSelector( '[data-lgp="1:0"]', { timeout: 5000 } );
+		await page.waitForSelector( '[data-rf="g1:0"]', { timeout: 5000 } );
 		t.check( 'save round-trips', ( await saveGroup() ) === 200 );
 		full = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full?_cb=' + Math.random() ) ).data;
 		t.check( 'location rules save as OR sets of AND rows',

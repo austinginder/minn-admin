@@ -108,9 +108,9 @@ const wpEval = ( php ) => {
 		await typeLabel( 'Work email' );
 		await page.click( '[data-gfw="6"]' );
 		await page.click( '[data-gflogic]' );
-		await page.waitForSelector( '[data-glf="0"]' );
-		await pickCombo( '[data-glf="0"]', 'Topic' );
-		t.check( 'a rule on a choice field offers its choices as values', !! await page.$( '[data-glv="0"]' ) && await page.$eval( '[data-glv="0"] .minn-ac-input', ( el ) => el.value ) === 'Hosting' );
+		await page.waitForSelector( '[data-rf="logic:0"]' );
+		await pickCombo( '[data-rf="logic:0"]', 'Topic' );
+		t.check( 'a rule on a choice field offers its choices as values', !! await page.$( '[data-rv="logic:0"]' ) && await page.$eval( '[data-rv="logic:0"] .minn-ac-input', ( el ) => el.value ) === 'Hosting' );
 		await page.click( '[data-gfbclose]' );
 
 		await page.click( '[data-gfbadd="checkbox"]' );

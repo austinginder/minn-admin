@@ -175,10 +175,10 @@ const wpEval = ( php ) => {
 
 		// Conditional logic: only when Topic is Sales.
 		await page.click( '[data-gfcsw="logic"]' );
-		await page.waitForSelector( '[data-gfnrf="logic:0"]', { timeout: 5000 } );
-		await pickCombo( '[data-gfnrf="logic:0"]', 'Topic' );
-		await page.waitForSelector( '[data-gfnrv="logic:0"]', { timeout: 5000 } );
-		await pickCombo( '[data-gfnrv="logic:0"]', 'Sales' );
+		await page.waitForSelector( '[data-rf="logic:0"]', { timeout: 5000 } );
+		await pickCombo( '[data-rf="logic:0"]', 'Topic' );
+		await page.waitForSelector( '[data-rv="logic:0"]', { timeout: 5000 } );
+		await pickCombo( '[data-rv="logic:0"]', 'Sales' );
 
 		// Create through Gravity Forms' own save.
 		await clearToasts();

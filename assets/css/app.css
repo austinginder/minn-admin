@@ -2014,7 +2014,7 @@ button.minn-plugin-ver:hover { color: var(--accent2); }
   display: grid; grid-template-columns: 116px minmax(0, 1fr) 24px; gap: 6px; align-items: center;
   padding-bottom: 8px; border-bottom: 1px dashed var(--border);
 }
-.minn-gfb-rule-row > [data-glf] { grid-column: 1 / -1; }
+.minn-gfb-rule-row > [data-rf] { grid-column: 1 / -1; }
 .minn-gfb-rule-row .minn-ac, .minn-gfb-rule-row .minn-input { min-width: 0; }
 @media (max-width: 1100px) {
   .minn-gfb-main { grid-template-columns: minmax(0, 1fr); }

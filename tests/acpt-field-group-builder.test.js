@@ -112,7 +112,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		// Location rules ride the editor on the post_type catalog.
 		const loc = await page.evaluate( () => ( {
 			rules: document.querySelectorAll( '.minn-fgb-loc-rule' ).length,
-			param: ( document.querySelector( '[data-lgp] .minn-ac-input' ) || { value: '' } ).value,
+			param: ( document.querySelector( '[data-rf] .minn-ac-input' ) || { value: '' } ).value,
 		} ) );
 		t.check( 'belongs chain renders as an editable location rule', loc.rules >= 1 && /Post type/i.test( loc.param ), JSON.stringify( loc ) );
 
@@ -264,9 +264,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.evaluate( () => {
 			Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) ).find( ( b ) => b.textContent.trim() === 'Delete' ).click();
 		} );
+		// Interval polling: after a native dialog the page's animation frames
+		// can stall in a background window, and rAF polling never re-checks.
 		await page.waitForFunction( () =>
 			! Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Probe Created' ) ),
-		null, { timeout: 15000 } );
+		null, { timeout: 15000, polling: 500 } );
 		t.check( 'delete confirm says it is permanent', /for good/.test( confirmText ), confirmText.slice( 0, 160 ) );
 		t.check( 'deleted group leaves the list', ( await api( 'GET', 'minn-admin/v1/acpt/schema/groups/' + pid + '/full' ) ).status === 404 );
 

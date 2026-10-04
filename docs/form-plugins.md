@@ -119,7 +119,10 @@ Sidebar: one **Forms** item. Topbar autocomplete when
   their editor's defaults (js.php SetDefaultValues); save through
   `GF_Form_CRUD_Handler` with `deletedFields` (entry values go with a removed
   field, as in their editor); only changed settings overlay; `known` ids
-  refuse a save after the form changed elsewhere.
+  refuse a save after the form changed elsewhere. HTML content and default values
+  have the merge tag picker: the form's field tags for content (fields removed on the
+  page left out), and for defaults only the tags their editor offers there
+  (`minn_admin_gfb_prepop_tags()`: user, date, embed, IP, referrer).
 - Notifications view: composite row id `form:nid`; toggle via
   `GFFormsModel::update_notification_active`. The notification page
   (`gravity-forms-notifications.php`, `/gf/notifications/{form}:{nid}/full`)
