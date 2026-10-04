@@ -4137,6 +4137,63 @@ button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px;
   .minn-order-page .minn-order-layout { grid-template-columns: minmax(0, 1fr); }
 }
 .minn-booking-page .minn-order-head-actions { flex-wrap: wrap; justify-content: flex-end; }
+/* The entry page (Forms family): the order page's frame around an inbox
+   message: who wrote, what they wrote, the answers, the notes trail. */
+.minn-ep-contact { display: flex; align-items: center; gap: 14px; }
+.minn-ep-avatar {
+  flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent2); font-weight: 700; font-size: 15px; letter-spacing: 0.02em;
+}
+.minn-ep-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.minn-ep-name { font-size: 17px; font-weight: 700; line-height: 1.25; color: var(--text); overflow-wrap: anywhere; }
+.minn-ep-reach { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13.5px; }
+.minn-ep-reach a, .minn-ep-answer dd a, .minn-ep-note-link { color: var(--accent2); text-decoration: none; }
+.minn-ep-reach a:hover, .minn-ep-answer dd a:hover, .minn-ep-note-link:hover { text-decoration: underline; }
+.minn-ep-reply { flex: none; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.minn-ep-reply svg { width: 15px; height: 15px; }
+.minn-ep-message { font-size: 14.5px; line-height: 1.6; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.minn-ep-answers { margin: 0; display: flex; flex-direction: column; }
+.minn-ep-answer {
+  display: grid; grid-template-columns: minmax(110px, 34%) minmax(0, 1fr); gap: 4px 16px;
+  padding: 9px 0; border-top: 1px solid var(--border);
+}
+.minn-ep-answer:first-child { border-top: 0; padding-top: 2px; }
+.minn-ep-answer:last-child { padding-bottom: 0; }
+.minn-ep-answer dt { font-size: 13px; color: var(--text3); overflow-wrap: anywhere; }
+.minn-ep-answer dd { margin: 0; font-size: 14px; color: var(--text); overflow-wrap: anywhere; }
+.minn-ep-pre { white-space: pre-wrap; }
+.minn-ep-side-meta .minn-ep-answer { grid-template-columns: 84px minmax(0, 1fr); }
+.minn-ep-side-meta .minn-ep-answer dd { font-size: 13.5px; color: var(--text2); }
+.minn-ep-actlist { display: flex; flex-direction: column; gap: 8px; }
+.minn-ep-actlist .minn-btn-soft { width: 100%; justify-content: center; text-align: center; }
+.minn-ep-star {
+  display: inline-grid; place-items: center; width: 30px; height: 28px; padding: 0; cursor: pointer;
+  background: none; border: 1px solid var(--border); border-radius: 8px; color: var(--text3);
+}
+.minn-ep-star:hover { color: var(--amber-text); border-color: var(--border2); }
+.minn-ep-star.on { color: var(--amber-text); }
+.minn-ep-star.on svg { fill: currentColor; }
+.minn-ep-star svg { width: 16px; height: 16px; }
+span.minn-ep-star { border-color: transparent; cursor: default; }
+.minn-ep-formlink {
+  background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--border2); text-underline-offset: 2px;
+}
+.minn-ep-formlink:hover { color: var(--text); text-decoration-color: currentColor; }
+.minn-ep-composer { margin-bottom: 12px; }
+.minn-ep-composer .minn-input { width: 100%; resize: vertical; }
+.minn-ep-note-link { display: inline-block; margin-top: 4px; font-size: 12.5px; }
+.minn-entry-page .minn-order-notes-list { max-height: 420px; }
+.minn-entry-page .minn-order-head-actions { align-items: center; }
+@media (max-width: 640px) {
+  .minn-entry-page .minn-order-page-head .minn-modal-title-block { flex-basis: 100%; }
+  .minn-entry-page .minn-order-page-head .minn-order-head-actions { margin-inline-start: 0; justify-content: flex-start; }
+}
+@media (max-width: 560px) {
+  .minn-ep-contact { flex-wrap: wrap; }
+  .minn-ep-reply { width: 100%; justify-content: center; }
+  .minn-ep-answer { grid-template-columns: minmax(0, 1fr); }
+}
 .minn-booking-page .minn-order-read + .minn-order-read { margin-top: 10px; }
 .minn-booking-page .minn-order-sec > .minn-order-read > .minn-order-read:first-child .minn-order-read-sub { margin-top: 0; }
 @media (max-width: 720px) {

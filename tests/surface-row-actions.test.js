@@ -105,11 +105,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				.find( ( el ) => el.textContent.trim() === 'Open' );
 			if ( b ) b.click();
 		} );
-		await page.waitForFunction( () => {
-			const m = document.querySelector( '.minn-modal' );
-			return m && ( m.querySelector( '.minn-entry' ) || m.querySelector( '[data-saction]' ) );
-		}, { timeout: 15000 } );
-		t.check( 'Open from the row menu opens the detail modal', true );
+		// Gravity Forms entries open on their own page (collection.open).
+		await page.waitForSelector( '.minn-entry-page .minn-order-main', { timeout: 15000 } );
+		t.check( 'Open from the row menu opens the entry page', /\/gravity-forms\/entry\//.test( page.url() ) );
 
 	} finally {
 		if ( id ) {

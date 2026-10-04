@@ -91,6 +91,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// submission details — no client-side label mapping.
 				'sectionsRoute' => 'minn-admin/v1/gf/entries/{id}',
 			),
+			// An entry opens on its own page (the Forms family entry page:
+			// contact card, answers, notes timeline, actions), not a modal.
+			'open'      => array( 'route' => 'gravity-forms/entry/{id}' ),
 			// Entry workflow rides the properties shim (is_starred /
 			// is_read / status), capability-gated the way gf/v2 gates its
 			// own route (gravityforms_edit_entries via GF's resolver).
@@ -573,6 +576,7 @@ add_action( 'rest_api_init', function () {
 			// in GF's own entries screen (same view capability gates both).
 			if ( empty( $entry['is_read'] ) ) {
 				GFAPI::update_entry_property( $entry['id'], 'is_read', 1 );
+				$entry['is_read'] = 1;
 			}
 
 			$sections = array(
@@ -593,6 +597,19 @@ add_action( 'rest_api_init', function () {
 				'status'   => ( 'active' === $entry['status'] ) ? 'received' : $entry['status'],
 				'sections' => $sections,
 				'adminUrl' => admin_url( 'admin.php?page=gf_entries&view=entry&id=' . $entry['form_id'] . '&lid=' . $entry['id'] ),
+				// The row as the list carries it, so the entry page reached by
+				// a link (no list loaded) still knows which actions apply.
+				'item'     => array(
+					'id'         => (int) $entry['id'],
+					'form_id'    => (int) $entry['form_id'],
+					'status'     => (string) $entry['status'],
+					'is_starred' => empty( $entry['is_starred'] ) ? '0' : '1',
+					'is_read'    => empty( $entry['is_read'] ) ? '0' : '1',
+				),
+				// The form's builder page, for the people who may edit forms.
+				'formRoute' => function_exists( 'minn_admin_gfb_available' ) && minn_admin_gfb_available()
+					&& GFCommon::current_user_can_any( array( 'gravityforms_edit_forms', 'gform_full_access' ) )
+					? 'gravity-forms/form/' . (int) $entry['form_id'] : '',
 			) );
 		},
 	) );

@@ -3291,6 +3291,11 @@
 			// /users/123 — the full-page user editor (GH #8).
 			state.userEditId = parseInt( parts[ 1 ], 10 );
 			state.route = 'useredit';
+		} else if ( surfaceById( route ) && 'entry' === parts[ 1 ] && parts[ 2 ] ) {
+			// /gravity-forms/entry/12 — a form entry on its own page.
+			state.entrySid = route;
+			state.entryId = decodeURIComponent( parts[ 2 ] );
+			state.route = 'entrypage';
 		} else if ( surfaceById( route ) && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /amelia/12 — a bookings-family record on its own page
 			// (the orders-page shape).
@@ -4409,7 +4414,8 @@
 
 	function renderTopbar() {
 		const surface = surfaceById( state.route )
-			|| ( state.route === 'surfaceitem' ? surfaceById( state.surfaceItemSid ) : null );
+			|| ( state.route === 'surfaceitem' ? surfaceById( state.surfaceItemSid ) : null )
+			|| ( state.route === 'entrypage' ? surfaceById( state.entrySid ) : null );
 		const [ title, sub ] = surface ? [ surface.label, surface.sub || '' ] : ( titles()[ state.route ] || [ 'minn', '' ] );
 		$( '#minn-title' ).textContent = title;
 		updateVisChip();
@@ -4510,6 +4516,7 @@
 				// And the membership page and its Memberships surface.
 				|| ( ( 'membership' === state.route || 'membershipplan' === state.route ) && ( 'woocommerce-memberships' === btn.dataset.nav || 'memberships' === btn.dataset.family ) )
 				|| ( 'surfaceitem' === state.route && ( btn.dataset.nav === state.surfaceItemSid || ( activeFamily && btn.dataset.family === activeFamily ) ) )
+				|| ( 'entrypage' === state.route && btn.dataset.nav === state.entrySid )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
 			btn.title = on && navBtnIsCurrent( btn ) ? refreshHint : '';
@@ -16471,6 +16478,8 @@
 		if ( state.route === 'surfaceitem' && state.surfaceItemSid === s.id ) {
 			if ( state.surfaceItem ) state.surfaceItem = null;
 			renderSurfaceItem();
+		} else if ( state.route === 'entrypage' && state.entrySid === s.id ) {
+			refreshEntryPage( s );
 		} else if ( state.route === s.id ) renderSurface( s );
 	}
 
@@ -16487,6 +16496,8 @@
 		if ( state.route === 'surfaceitem' && state.surfaceItemSid === s.id ) {
 			if ( state.surfaceItem ) state.surfaceItem = null;
 			renderSurfaceItem();
+		} else if ( state.route === 'entrypage' && state.entrySid === s.id ) {
+			refreshEntryPage( s );
 		} else if ( state.route === s.id ) renderSurface( s );
 	}
 
@@ -17161,34 +17172,44 @@
 	// Contact-form entry layout: identity (name/email) → message body → other
 	// answers → quiet meta. Used for the forms family instead of the generic
 	// right-aligned key/value dump that reads like raw data.
-	function renderEntryDetail( sec ) {
-		const groups = sec.sections || [];
+	const entryEmailish = ( v ) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( v.trim() );
+
+	// A form entry's display model split the way people read a message: who
+	// sent it (name, email, phone), what they wrote (long answers), the rest
+	// of the answers, the submission details, and any further groups (GF's
+	// notes). The entry modal and the entry page read entries the same way.
+	function entryParts( sec ) {
+		const groups = ( sec && sec.sections ) || [];
 		const answersGroup = groups.find( ( g ) => /response/i.test( g.title || '' ) ) || groups[ 0 ] || {};
 		const metaGroup = groups.find( ( g ) => /submission|meta|detail/i.test( g.title || '' ) ) || groups[ 1 ] || {};
 		const answers = answersGroup.rows || [];
 		const meta = metaGroup.rows || [];
 
-		const isEmail = ( r ) => r.type === 'email' || /e-?mail/i.test( r.label || '' ) || isEmailish( r.value );
+		const isEmail = ( r ) => r.type === 'email' || /e-?mail/i.test( r.label || '' ) || entryEmailish( r.value );
 		const isName = ( r ) => r.type === 'name' || /^(full\s*)?name$|your name|first name|last name/i.test( r.label || '' );
 		const isBody = ( r ) => r.type === 'textarea' || r.type === 'post_content'
 			|| /message|comment|how can|tell us|description|details|note/i.test( r.label || '' )
 			|| ( String( r.value || '' ).includes( '\n' ) )
 			|| ( String( r.value || '' ).length > 120 );
 
-		function isEmailish( v ) {
-			return typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( v.trim() );
-		}
-
 		let nameRow = answers.find( isName );
-		let emailRow = answers.find( isEmail );
+		const emailRow = answers.find( isEmail );
 		// Heuristic fallback: first short non-email string as name if no labeled name.
 		if ( ! nameRow ) {
 			nameRow = answers.find( ( r ) => ! isEmail( r ) && ! isBody( r )
 				&& String( r.value || '' ).trim().split( /\s+/ ).length <= 5
 				&& String( r.value || '' ).length <= 60 );
 		}
+		const phoneRow = answers.find( ( r ) => r !== nameRow && r !== emailRow && ( r.type === 'phone' || /phone|mobile|tel\b/i.test( r.label || '' ) ) );
 		const bodyRows = answers.filter( ( r ) => r !== nameRow && r !== emailRow && isBody( r ) );
 		const fieldRows = answers.filter( ( r ) => r !== nameRow && r !== emailRow && ! bodyRows.includes( r ) );
+		const extras = groups.filter( ( g ) => g !== answersGroup && g !== metaGroup && ( g.rows || [] ).length );
+		return { answers, meta, nameRow, emailRow, phoneRow, bodyRows, fieldRows, extras };
+	}
+
+	function renderEntryDetail( sec ) {
+		const { meta, nameRow, emailRow, bodyRows, fieldRows, extras } = entryParts( sec );
+		const isEmailish = entryEmailish;
 
 		const hero = ( nameRow || emailRow ) ? `
 			<div class="minn-entry-hero">
@@ -17238,8 +17259,7 @@
 
 		// Sections beyond Responses/Submission (GF entry notes) render as
 		// quiet titled groups — the card layout used to drop them silently.
-		const extraHtml = groups
-			.filter( ( g ) => g !== answersGroup && g !== metaGroup && ( g.rows || [] ).length )
+		const extraHtml = extras
 			.map( ( g ) => `
 			<div class="minn-entry-extra">
 				${ g.title ? `<div class="minn-entry-field-label">${ esc( g.title ) }</div>` : '' }
@@ -18641,6 +18661,295 @@
 				phone: c.phone || fallback.customer.phone,
 			},
 		};
+	}
+
+	/* ===== The entry page: a form entry on its own page =====
+	 * /{surface}/entry/{id}, for a collection whose `open` route points here
+	 * (Gravity Forms; any Forms family provider opts in with that one line).
+	 * It reads the display model the entry modal reads (detail.sectionsRoute)
+	 * and lays it out like an order: who sent it and what they wrote in the
+	 * main column with a notes timeline and its composer, the entry's actions
+	 * and submission details at the side. Previous / next (and ← →) step
+	 * through the list the page was opened from.
+	 */
+	let entryNav = null; // { sid, ids }: the list order the page steps through
+	let entryKeysBound = false;
+
+	async function loadEntryPage( p, s ) {
+		const coll = s.collection || {};
+		const route = ( ( coll.detail || {} ).sectionsRoute || '' ).replace( '{id}', encodeURIComponent( p.id ) );
+		try {
+			p.sections = route ? await api( route ) : { sections: [] };
+			const items = surfaceState( s.id ).cache && surfaceState( s.id ).cache.items;
+			const listed = ( items || [] ).find( ( x ) => String( x.id ) === String( p.id ) );
+			// The route's own copy of the row wins: it is current, and it is
+			// all there is when the page was reached by a link.
+			p.item = { ...( listed || { id: p.id } ), ...( p.sections.item || {} ) };
+			// Opening marks the entry read on the server; the list follows.
+			if ( listed && p.sections.item && 'is_read' in p.sections.item ) listed.is_read = p.sections.item.is_read;
+		} catch ( e ) {
+			p.loadError = e.message || String( e );
+		}
+		p.loading = false;
+		if ( state.route === 'entrypage' && state.entrySid === s.id && String( state.entryId ) === String( p.id ) ) renderEntryPage();
+	}
+
+	// After an action: fetch the entry again, keeping the page painted (its
+	// buttons re-enabled) until the fresh copy lands.
+	function refreshEntryPage( s ) {
+		const p = state.entryPage;
+		if ( p && p.sid === s.id ) {
+			p.loading = true;
+			p.loadError = null;
+			loadEntryPage( p, s );
+		}
+		renderEntryPage();
+	}
+
+	// Where this entry sits in the list it was opened from (kept while
+	// stepping, so an action that empties the list cache keeps prev / next).
+	function entryPageNav( s, id ) {
+		const items = surfaceState( s.id ).cache && surfaceState( s.id ).cache.items;
+		if ( items && items.some( ( x ) => String( x.id ) === String( id ) ) ) {
+			entryNav = { sid: s.id, ids: items.map( ( x ) => String( x.id ) ) };
+		}
+		if ( ! entryNav || entryNav.sid !== s.id ) return null;
+		const idx = entryNav.ids.indexOf( String( id ) );
+		return idx === -1 || entryNav.ids.length < 2 ? null : { idx, ids: entryNav.ids };
+	}
+
+	// A link's text: a file's name for uploads, the address otherwise.
+	function entryUrlLabel( u ) {
+		try {
+			const url = new URL( u );
+			const last = decodeURIComponent( url.pathname.split( '/' ).filter( Boolean ).pop() || '' );
+			if ( /\.[a-z0-9]{2,5}$/i.test( last ) ) return last;
+			return url.host + ( url.pathname.replace( /\/$/, '' ) || '' );
+		} catch ( e ) {
+			return u;
+		}
+	}
+
+	function entryValueHtml( r ) {
+		const raw = String( r.value == null ? '' : r.value );
+		const lines = raw.split( /\n+/ ).map( ( l ) => l.trim() ).filter( Boolean );
+		if ( lines.length && lines.every( ( l ) => /^https?:\/\//i.test( l ) ) && ( r.type === 'url' || lines.length > 1 || /^https?:\/\/\S+$/i.test( raw.trim() ) ) ) {
+			return lines.map( ( l ) => `<a href="${ esc( safeHref( l ) ) }" target="_blank" rel="noopener">${ esc( entryUrlLabel( l ) ) }</a>` ).join( '<br>' );
+		}
+		if ( entryEmailish( raw ) ) return `<a href="mailto:${ esc( raw.trim() ) }">${ esc( raw ) }</a>`;
+		if ( 'phone' === r.type && /\d/.test( raw ) ) return `<a href="tel:${ esc( raw.replace( /[^\d+]/g, '' ) ) }">${ esc( raw ) }</a>`;
+		return `<span class="minn-ep-pre">${ esc( raw ) }</span>`;
+	}
+
+	function renderEntryPage() {
+		const s = surfaceById( state.entrySid );
+		const view = $( '#minn-view' );
+		if ( ! s ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( 'This entry is not available.' ) ) }</div>`;
+			return;
+		}
+		let p = state.entryPage;
+		if ( ! p || p.sid !== s.id || String( p.id ) !== String( state.entryId ) ) {
+			p = state.entryPage = { sid: s.id, id: state.entryId, item: { id: state.entryId }, sections: null, loading: true };
+			loadEntryPage( p, s );
+		}
+		const arrived = takePageReturn();
+		if ( arrived ) p.back = arrived;
+		const coll = s.collection || {};
+		const back = p.back || { route: s.id, label: chromeLabel( coll.viewLabel || s.label || __( 'Entries' ) ) };
+		const sec = p.sections || {};
+		const it = p.item || { id: p.id };
+		const loading = !! p.loading && ! p.sections;
+		const parts = entryParts( sec );
+		const nav = entryPageNav( s, p.id );
+		const name = parts.nameRow ? String( parts.nameRow.value ).trim() : '';
+		const email = parts.emailRow && entryEmailish( String( parts.emailRow.value ) ) ? String( parts.emailRow.value ).trim() : '';
+		const phone = parts.phoneRow ? String( parts.phoneRow.value ).trim() : '';
+		const submitted = String( ( parts.meta.find( ( r ) => /submitted|date|when/i.test( r.label || '' ) ) || {} ).value || '' );
+		const status = sec.status || it.status || '';
+		const formTitle = sec.title || it.form_title || it.form_name || '';
+		/* translators: %s: the entry's number. */
+		const entryNo = sprintf( __( 'Entry #%s' ), String( p.id ) );
+
+		const visible = ( coll.actions || [] ).map( ( a, i ) => ( { a, i } ) ).filter( ( { a } ) => surfaceActionVisible( a, it, sec ) );
+		// Star rides the title; a one-textarea action (Add note) is the notes
+		// composer; everything else is the side card's list.
+		const starAct = visible.find( ( { a } ) => a.body && Object.prototype.hasOwnProperty.call( a.body, 'is_starred' ) );
+		const composers = visible.filter( ( { a } ) => ! a.href && ( a.fields || [] ).length === 1 && 'textarea' === a.fields[ 0 ].type );
+		const sideActs = visible
+			.filter( ( x ) => x !== starAct && ! composers.includes( x ) )
+			.sort( ( x, y ) => Number( !! x.a.danger ) - Number( !! y.a.danger ) );
+		const starred = '1' === String( it.is_starred ) || true === it.is_starred;
+
+		const notesGroup = parts.extras.find( ( g ) => /note/i.test( g.title || '' ) );
+		const otherExtras = parts.extras.filter( ( g ) => g !== notesGroup );
+		// GF's note rows come as the note, then (when it carried one) its link.
+		const notes = [];
+		( notesGroup ? notesGroup.rows : [] ).forEach( ( r ) => {
+			if ( 'url' === r.type && notes.length ) {
+				notes[ notes.length - 1 ].links.push( r );
+				return;
+			}
+			notes.push( { meta: r.label || '', text: String( r.value == null ? '' : r.value ), links: [] } );
+		} );
+
+		const initials = ( name || email || '?' ).replace( /@.*/, '' ).split( /[\s._-]+/ ).filter( Boolean ).slice( 0, 2 ).map( ( w ) => w[ 0 ] ).join( '' ).toUpperCase() || '?';
+		const replySubject = formTitle ? 'Re: ' + formTitle : '';
+		const answerRows = parts.fieldRows.filter( ( r ) => r !== parts.phoneRow || ! phone );
+		const card = ( title, body, extra = '' ) => `<div class="minn-order-sec${ extra }">
+			<div class="minn-order-card-head"><div class="minn-side-title">${ esc( title ) }</div></div>${ body }</div>`;
+		const dl = ( rows ) => `<dl class="minn-ep-answers">${ rows.map( ( r ) => `
+			<div class="minn-ep-answer"><dt>${ esc( r.label || '' ) }</dt><dd>${ entryValueHtml( r ) }</dd></div>` ).join( '' ) }</dl>`;
+
+		const contactHtml = name || email || phone ? `
+			<div class="minn-order-sec minn-ep-contact">
+				<div class="minn-ep-avatar" aria-hidden="true">${ esc( initials ) }</div>
+				<div class="minn-ep-who">
+					<div class="minn-ep-name">${ esc( name || email || phone ) }</div>
+					<div class="minn-ep-reach">
+						${ email ? `<a href="mailto:${ esc( email ) }">${ esc( email ) }</a>` : '' }
+						${ phone ? `<a href="tel:${ esc( phone.replace( /[^\d+]/g, '' ) ) }">${ esc( phone ) }</a>` : '' }
+					</div>
+				</div>
+				${ email ? `<a class="minn-btn-primary minn-ep-reply" href="mailto:${ esc( email ) }${ replySubject ? '?subject=' + esc( encodeURIComponent( replySubject ) ) : '' }">${ icon( 'send' ) } ${ esc( __( 'Reply' ) ) }</a>` : '' }
+			</div>` : '';
+		const bodiesHtml = parts.bodyRows.map( ( r ) => card( r.label || __( 'Message' ), `<div class="minn-ep-message">${ esc( String( r.value == null ? '' : r.value ) ) }</div>` ) ).join( '' );
+		const answersHtml = answerRows.length ? card( __( 'Answers' ), dl( answerRows ) ) : '';
+		const emptyHtml = ! contactHtml && ! bodiesHtml && ! answersHtml
+			? card( __( 'Answers' ), `<div class="minn-toggle-desc">${ esc( __( 'No answers on this entry.' ) ) }</div>` ) : '';
+		const notesHtml = notesGroup || composers.length ? `
+			<div class="minn-order-sec minn-order-notes minn-ep-notes">
+				<div class="minn-order-card-head"><div class="minn-side-title">${ esc( notesGroup && notesGroup.title ? notesGroup.title : __( 'Notes' ) ) }</div></div>
+				${ composers.map( ( { a, i } ) => `
+				<div class="minn-ep-composer">
+					<textarea class="minn-input" rows="2" data-epnote="${ i }" placeholder="${ esc( a.fields[ 0 ].placeholder || '' ) }" aria-label="${ esc( a.fields[ 0 ].label || a.label ) }"></textarea>
+					<div class="minn-order-composer-foot">
+						<span class="minn-toggle-desc">${ esc( __( '⌘↵ to add' ) ) }</span>
+						<button type="button" class="minn-btn-soft" data-epnoteadd="${ i }">${ esc( a.label ) }</button>
+					</div>
+				</div>` ).join( '' ) }
+				<div class="minn-order-notes-list">
+					${ notes.length ? notes.map( ( n ) => `
+					<div class="minn-order-note">
+						${ n.meta ? `<div class="minn-order-note-meta"><span>${ esc( n.meta ) }</span></div>` : '' }
+						<div class="minn-order-note-body">${ esc( n.text ) }</div>
+						${ n.links.map( ( l ) => `<a class="minn-ep-note-link" href="${ esc( safeHref( l.value ) ) }" target="_blank" rel="noopener">${ esc( l.label || __( 'Link' ) ) } ↗</a>` ).join( '' ) }
+					</div>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No notes yet.' ) ) }</div>` }
+				</div>
+			</div>` : '';
+		const extrasHtml = otherExtras.map( ( g ) => card( g.title || '', dl( g.rows ) ) ).join( '' );
+		const actionsHtml = sideActs.length ? card( __( 'Actions' ), `<div class="minn-ep-actlist">${ sideActs.map( ( { a, i } ) => {
+			if ( ! a.href ) return `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-epact="${ i }">${ esc( a.label ) }</button>`;
+			const href = surfaceFillHref( a.href, it );
+			return `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, href ) ) }</a>`;
+		} ).join( '' ) }</div>` ) : '';
+		const metaHtml = parts.meta.length ? card( __( 'Submission' ), dl( parts.meta ), ' minn-ep-side-meta' ) : '';
+
+		view.innerHTML = `
+		<div class="minn-order-page minn-order-page-wide minn-entry-page">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-ep-back">← ${ esc( back.label ) }</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-order-head-row">
+						<span class="minn-modal-title">${ esc( loading ? entryNo : ( name || email || entryNo ) ) }</span>
+						${ status ? surfacePill( status ) : '' }
+						${ starAct ? `<button type="button" class="minn-ep-star${ starred ? ' on' : '' }" data-epact="${ starAct.i }" aria-pressed="${ starred }" title="${ esc( starAct.a.label ) }" aria-label="${ esc( starAct.a.label ) }">${ icon( 'star' ) }</button>`
+							: ( starred ? `<span class="minn-ep-star on" aria-label="${ esc( __( 'Starred' ) ) }">${ icon( 'star' ) }</span>` : '' ) }
+					</div>
+					<div class="minn-modal-sub">${ [
+						formTitle ? ( sec.formRoute ? `<button type="button" class="minn-ep-formlink" data-epgo="${ esc( sec.formRoute ) }" title="${ esc( __( 'Edit the form' ) ) }">${ esc( formTitle ) }</button>` : esc( formTitle ) ) : '',
+						name || email ? esc( entryNo ) : '',
+						esc( submitted ),
+					].filter( Boolean ).join( ' · ' ) || esc( loading ? __( 'Loading…' ) : '' ) }</div>
+				</div>
+				<div class="minn-order-head-actions">
+					${ nav ? `<span class="minn-modal-count">${ nav.idx + 1 } / ${ nav.ids.length }</span>
+					<button type="button" class="minn-modal-step" id="minn-ep-prev" title="${ esc( __( 'Previous (←)' ) ) }" aria-label="${ esc( __( 'Previous entry' ) ) }"${ nav.idx <= 0 ? ' disabled' : '' }>‹</button>
+					<button type="button" class="minn-modal-step" id="minn-ep-next" title="${ esc( __( 'Next (→)' ) ) }" aria-label="${ esc( __( 'Next entry' ) ) }"${ nav.idx >= nav.ids.length - 1 ? ' disabled' : '' }>›</button>` : '' }
+					${ ! loading && sec.adminUrl ? `<a class="minn-btn-soft" href="${ esc( safeHref( sec.adminUrl ) ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
+				</div>
+			</div>
+			<div class="minn-order-page-body">
+				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading entry…' ) ) }</div></div>` : '' }
+				${ p.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( p.loadError ) }</div>` : '' }
+				${ ! loading && ! p.loadError ? `
+				<div class="minn-order-body">
+					<div class="minn-order-layout">
+						<div class="minn-order-main">${ contactHtml }${ bodiesHtml }${ answersHtml }${ emptyHtml }${ notesHtml }${ extrasHtml }</div>
+						<div class="minn-order-side">${ actionsHtml }${ metaHtml }</div>
+					</div>
+				</div>` : '' }
+			</div>
+		</div>`;
+		bindEntryPage( s, p, view, nav );
+	}
+
+	function bindEntryPage( s, p, view, nav ) {
+		const coll = s.collection || {};
+		const it = p.item || { id: p.id };
+		const stepTo = ( id ) => {
+			if ( coll.open && coll.open.route ) go( coll.open.route.replace( '{id}', encodeURIComponent( id ) ) );
+		};
+		const backBtn = $( '#minn-ep-back', view );
+		if ( backBtn ) backBtn.addEventListener( 'click', () => go( ( p.back && p.back.route ) || s.id ) );
+		const prev = $( '#minn-ep-prev', view );
+		if ( prev && nav ) prev.addEventListener( 'click', () => { if ( nav.idx > 0 ) stepTo( nav.ids[ nav.idx - 1 ] ); } );
+		const next = $( '#minn-ep-next', view );
+		if ( next && nav ) next.addEventListener( 'click', () => { if ( nav.idx < nav.ids.length - 1 ) stepTo( nav.ids[ nav.idx + 1 ] ); } );
+		$$( '[data-epgo]', view ).forEach( ( b ) => b.addEventListener( 'click', () => go( b.dataset.epgo ) ) );
+		$$( '[data-epact]', view ).forEach( ( b ) => b.addEventListener( 'click', async () => {
+			const a = ( coll.actions || [] )[ Number( b.dataset.epact ) ];
+			if ( ! a ) return;
+			if ( a.fields && a.fields.length ) {
+				openSurfaceActionFields( s, it, a );
+				return;
+			}
+			if ( a.confirm && ! await minnConfirm( { title: a.label, body: a.confirm, confirmLabel: a.label, danger: !! a.danger } ) ) return;
+			// A permanent delete leaves nothing to show: back to the list.
+			const gone = 'DELETE' === String( a.method || '' ).toUpperCase() && /[?&]force=(1|true)\b/.test( a.route || '' );
+			b.disabled = true;
+			try {
+				await runSurfaceItemAction( s, it, { ...a, confirm: '' } );
+			} catch ( e ) {
+				toast( e.message, true );
+				b.disabled = false;
+				return;
+			}
+			if ( gone ) {
+				if ( entryNav ) entryNav.ids = entryNav.ids.filter( ( x ) => x !== String( p.id ) );
+				go( ( p.back && p.back.route ) || s.id );
+			}
+		} ) );
+		$$( '[data-epnoteadd]', view ).forEach( ( b ) => {
+			const i = Number( b.dataset.epnoteadd );
+			const a = ( coll.actions || [] )[ i ];
+			const ta = $( `[data-epnote="${ i }"]`, view );
+			if ( ! a || ! ta ) return;
+			const add = async () => {
+				const v = ta.value.trim();
+				if ( ! v ) { ta.focus(); return; }
+				b.disabled = true;
+				try {
+					await runSurfaceFieldsAction( s, it, a, { [ a.fields[ 0 ].key ]: v } );
+				} catch ( e ) {
+					toast( e.message, true );
+					b.disabled = false;
+				}
+			};
+			b.addEventListener( 'click', add );
+			ta.addEventListener( 'keydown', ( e ) => {
+				if ( 'Enter' === e.key && ( e.metaKey || e.ctrlKey ) ) { e.preventDefault(); add(); }
+			} );
+		} );
+		if ( ! entryKeysBound ) {
+			entryKeysBound = true;
+			document.addEventListener( 'keydown', ( e ) => {
+				if ( state.route !== 'entrypage' || state.modal || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey ) return;
+				if ( e.target && e.target.closest && e.target.closest( 'input, textarea, select, [contenteditable="true"], .minn-ac' ) ) return;
+				const btn = 'ArrowLeft' === e.key ? $( '#minn-ep-prev' ) : 'ArrowRight' === e.key ? $( '#minn-ep-next' ) : null;
+				if ( btn && ! btn.disabled ) { e.preventDefault(); btn.click(); }
+			} );
+		}
 	}
 
 	async function loadSurfaceItem( p, s ) {
@@ -52559,6 +52868,7 @@
 		// A finished or abandoned migration should not reappear on return.
 		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
+		if ( state.route !== 'entrypage' ) state.entryPage = null;
 		switch ( state.route ) {
 			case 'content': renderContent(); break;
 			case 'media': renderMedia(); break;
@@ -52595,6 +52905,7 @@
 			case 'gfbuilder': renderFormBuilder(); break;
 			case 'profile': renderProfile(); break;
 			case 'surfaceitem': renderSurfaceItem(); break;
+			case 'entrypage': renderEntryPage(); break;
 			default:
 				if ( surfaceById( state.route ) ) renderSurface( surfaceById( state.route ) );
 				else renderOverview();

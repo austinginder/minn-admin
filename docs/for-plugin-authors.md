@@ -858,6 +858,19 @@ Piece by piece:
   labels ("Name", "Email", "Message…") and value shape (an email-looking string, a
   multi-line or 120+ char value) decide. Send `form_name` on the item and the modal is
   titled with it, subtitled "Entry #id".
+- **The entry page.** Point the entries collection's `open` at `your-surface/entry/{id}`
+  and a row opens the entry on a page of its own instead of the modal, from the same
+  `sectionsRoute`: a contact card (name, email, phone, a Reply link with the form's
+  title in the subject), long answers as message cards, the remaining answers, a notes
+  timeline built from a section titled like "Notes", and the entry's actions and
+  submission details in a side column. Previous / next (and ← →) step through the list
+  the page was opened from. An action whose body sets `is_starred` becomes the star
+  in the page title, and an action with a single `textarea` field becomes the notes
+  composer. Two optional keys on the `sectionsRoute` response make the page complete
+  when it is reached by a link with no list loaded: `item` (the row as your list
+  returns it, so `when`-conditional actions can be decided) and `formRoute` (a Minn
+  route the form's name links to, such as the Gravity Forms builder). Gravity Forms
+  is the reference.
 - **`manage`** is the Forms companion view: the Entries/Forms switcher every forms
   plugin wants. Keep it a list (title, entry count, maybe an activate toggle via a
   `when`-pair of actions); the ID column is prepended with the Entries list. The form
