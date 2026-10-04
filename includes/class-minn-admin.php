@@ -974,6 +974,41 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Minn's own mark as an SVG favicon, in the accent the current person
+	 * sees (their palette, or the site default's), for sites without a Site
+	 * Icon. Preset accents mirror SCHEME_PRESETS in app.js.
+	 *
+	 * @return string data: URI.
+	 */
+	public static function default_favicon_uri() {
+		$ap      = self::effective_appearance();
+		$presets = array(
+			'minn'   => '#6e62f5',
+			'ocean'  => '#3b82f6',
+			'forest' => '#34a06c',
+			'amber'  => '#d4923a',
+			'rose'   => '#d063b0',
+			'coral'  => '#e06b5a',
+			'teal'   => '#2aa8a0',
+			'slate'  => '#7b8599',
+			'dusk'   => '#9b7aef',
+		);
+		$accent = '#6e62f5';
+		$fg     = '#ffffff';
+		if ( 'custom' === $ap['scheme'] ) {
+			$accent = self::sanitize_hex_color( $ap['custom']['dark']['accent'] ) ?: $accent;
+			$fg     = self::sanitize_hex_color( $ap['custom']['dark']['accentFg'] ) ?: $fg;
+		} elseif ( isset( $presets[ $ap['scheme'] ] ) ) {
+			$accent = $presets[ $ap['scheme'] ];
+		}
+		$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+			. '<rect width="64" height="64" rx="15" fill="' . $accent . '"/>'
+			. '<text x="32" y="45" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="42" font-weight="700" fill="' . $fg . '">m</text>'
+			. '</svg>';
+		return 'data:image/svg+xml,' . rawurlencode( $svg );
+	}
+
+	/**
 	 * What a user actually sees: their own record, with a 'site' scheme
 	 * swapped for the site default's palette.
 	 */

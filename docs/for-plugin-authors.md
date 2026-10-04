@@ -895,6 +895,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
+| `minn_admin_favicon` | filter | URL of the browser-tab icon for Minn's app on sites without a Site Icon (a theme's brand mark); without one Minn uses its own mark in the viewer's accent (since 0.43.0) |
 | `minn_admin_shortcode_hints` | filter | Describe your shortcodes for the editor's shortcode tokens: a label and attribute choices with the output each prints (since 0.43.0) |
 | `minn_admin_acf_preview_render` | filter | `( bool, block name )`: return false to keep an ACF v3 block's island preview on the front-end render instead of ACF's preview render (since 0.43.0) |
 | `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |

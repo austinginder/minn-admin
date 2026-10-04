@@ -18,8 +18,19 @@ defined( 'ABSPATH' ) || exit;
 <title>Minn Admin — <?php echo esc_html( get_bloginfo( 'name' ) ); ?></title>
 <?php
 // The site icon (settable from Minn's own Settings → General), when one exists.
+// Without one the browser asks for /favicon.ico, which WordPress answers with
+// its own logo, so Minn names an icon itself: the brand mark a theme or
+// plugin offers (minn_admin_favicon), else Minn's mark in the viewer's accent.
 if ( has_site_icon() ) {
 	wp_site_icon();
+} else {
+	$minn_favicon = apply_filters( 'minn_admin_favicon', '' );
+	if ( is_string( $minn_favicon ) && '' !== $minn_favicon && esc_url( $minn_favicon ) ) {
+		echo '<link rel="icon" href="' . esc_url( $minn_favicon ) . '">' . "\n";
+	} else {
+		// A data: URI, so esc_attr: esc_url refuses the scheme.
+		echo '<link rel="icon" type="image/svg+xml" href="' . esc_attr( Minn_Admin::default_favicon_uri() ) . '">' . "\n";
+	}
 }
 ?>
 <?php
