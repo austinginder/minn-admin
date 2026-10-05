@@ -598,6 +598,38 @@ if ( defined( 'CCJ_UPLOAD_DIR' ) && function_exists( 'minn_admin_ccj_rebuild_tre
 	$skip( 'Custom CSS & JS writes: plugin inactive' );
 }
 
+// --- 08-03 An SEO save keeps an unchanged social image without re-checking it --
+$seo_plugin = function_exists( 'minn_admin_seo_plugin' ) ? minn_admin_seo_plugin() : null;
+$seo_image  = '';
+if ( $seo_plugin && function_exists( 'minn_admin_seo_field_map' ) ) {
+	foreach ( minn_admin_seo_field_map( $seo_plugin, 0 ) as $f => $def ) {
+		if ( 'image' === ( $def['type'] ?? '' ) ) {
+			$seo_image = $f;
+			break;
+		}
+	}
+}
+if ( $seo_image ) {
+	$writer = $temp_user( 'minn-v043-writer', array( 'edit_posts' ) );
+	$pid    = wp_insert_post( array( 'post_title' => 'Minn v043 SEO', 'post_status' => 'draft', 'post_author' => $writer ) );
+	$img    = wp_insert_attachment( array( 'post_title' => 'minn-v043-og', 'post_mime_type' => 'image/png', 'post_status' => 'inherit' ), 'minn-v043-og.png' );
+	call_user_func( $seo_plugin['write'], $pid, $seo_image, $img );
+	wp_set_current_user( $writer );
+	list( $st ) = $call( 'POST', "/wp/v2/posts/{$pid}", array( 'minn_seo' => array( $seo_image => array( 'id' => $img ), 'description' => 'Minn v043 description' ) ) );
+	$check( 'SEO panel: a writer without upload rights can save with the image an editor set', 200 === $st, "status {$st}" );
+	wp_set_current_user( $admin );
+	$img2 = wp_insert_attachment( array( 'post_title' => 'minn-v043-og2', 'post_mime_type' => 'image/png', 'post_status' => 'inherit' ), 'minn-v043-og2.png' );
+	wp_set_current_user( $writer );
+	list( $st ) = $call( 'POST', "/wp/v2/posts/{$pid}", array( 'minn_seo' => array( $seo_image => array( 'id' => $img2 ) ) ) );
+	$check( 'SEO panel: that writer still cannot pick a different image (control)', 403 === $st, "status {$st}" );
+	wp_set_current_user( $admin );
+	wp_delete_attachment( $img2, true );
+	wp_delete_post( $pid, true );
+	wp_delete_attachment( $img, true );
+} else {
+	$skip( 'SEO panel: the active SEO plugin has no image field in Minn' );
+}
+
 if ( $temp_users ) {
 	require_once ABSPATH . 'wp-admin/includes/user.php';
 	foreach ( $temp_users as $id ) {

@@ -2029,7 +2029,17 @@ add_action( 'rest_api_init', function () {
 				}
 
 				if ( 'image' === $type ) {
-					$att = is_array( $raw ) ? (int) ( isset( $raw['id'] ) ? $raw['id'] : 0 ) : ( is_numeric( $raw ) ? (int) $raw : 0 );
+					$att  = is_array( $raw ) ? (int) ( isset( $raw['id'] ) ? $raw['id'] : 0 ) : ( is_numeric( $raw ) ? (int) $raw : 0 );
+					$held = $stored[ $field ] ?? null;
+					$held = is_array( $held ) ? (int) ( $held['id'] ?? 0 ) : ( is_numeric( $held ) ? (int) $held : 0 );
+					// The panel re-sends the image it was given. An unchanged id
+					// is nothing to authorise or write; checking it refused the
+					// whole SEO save for anyone without upload_files (or read
+					// access to someone else's image) after the post body had
+					// already saved. A CHANGED id still answers to the check.
+					if ( $att > 0 && $att === $held ) {
+						continue;
+					}
 					if ( null === $raw || '' === $raw || false === $raw ) {
 						call_user_func( $plugin['write'], $post->ID, $field, null );
 					} elseif ( $att > 0 ) {
