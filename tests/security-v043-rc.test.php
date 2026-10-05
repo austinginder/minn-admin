@@ -97,6 +97,48 @@ list( $st ) = $call( 'POST', '/minn-admin/v1/plugins/upload' );
 $check( 'plugin upload: an administrator still reaches it (control)', 403 !== $st, "status {$st}" );
 remove_filter( 'pre_http_request', $no_http );
 
+// --- 02-core-other-01 Maintenance mode holds front-end form posts --------
+// CF7 (parse_request), Gravity Forms (wp) and WooCommerce (wp_loaded) process
+// a POST to any page before template_redirect paints the holding page.
+$m_was    = get_option( 'minn_admin_maintenance' );
+$m_server = $_SERVER;
+$m_get    = $_GET;
+$m_held   = function ( $method, $uri, $script = '/index.php', $get = array() ) {
+	$_SERVER['REQUEST_METHOD'] = $method;
+	$_SERVER['REQUEST_URI']    = $uri;
+	$_SERVER['SCRIPT_NAME']    = $script;
+	$_GET                      = $get;
+	$thrower = function () {
+		return function () {
+			throw new Exception( 'held' );
+		};
+	};
+	add_filter( 'wp_die_handler', $thrower );
+	try {
+		Minn_Admin::maintenance_admin_entry();
+		$held = false;
+	} catch ( Exception $e ) {
+		$held = true;
+	}
+	remove_filter( 'wp_die_handler', $thrower );
+	return $held;
+};
+update_option( 'minn_admin_maintenance', 1 );
+wp_set_current_user( 0 );
+$check( 'maintenance: a visitor\'s form POST to a page is held', $m_held( 'POST', '/contact/' ) );
+$check( 'maintenance: a visitor\'s GET is left to the holding page (control)', ! $m_held( 'GET', '/contact/' ) );
+$check( 'maintenance: a payment callback (?wc-api=) still gets through (control)', ! $m_held( 'POST', '/?wc-api=stripe', '/index.php', array( 'wc-api' => 'stripe' ) ) );
+$check( 'maintenance: REST is left to its own hold (control)', ! $m_held( 'POST', '/wp-json/wp/v2/posts' ) );
+$check( 'maintenance: signing in still works (control)', ! $m_held( 'POST', '/wp-login.php', '/wp-login.php' ) );
+if ( $editor ) {
+	wp_set_current_user( $editor->ID );
+	$check( 'maintenance: an editor\'s POST passes (control)', ! $m_held( 'POST', '/contact/' ) );
+}
+wp_set_current_user( $admin );
+$_SERVER = $m_server;
+$_GET    = $m_get;
+update_option( 'minn_admin_maintenance', $m_was );
+
 // A throwaway account holding exactly the caps given, on top of Subscriber.
 $temp_users = array();
 $temp_user  = function ( $login, $caps ) use ( &$temp_users ) {

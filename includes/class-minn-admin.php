@@ -1549,7 +1549,20 @@ class Minn_Admin {
 		// that one action the way wp-signup.php is held.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$register = 'wp-login.php' === $script && isset( $_REQUEST['action'] ) && 'register' === $_REQUEST['action'];
-		if ( ! $register && ! in_array( $script, self::MAINTENANCE_ENTRY_SCRIPTS, true ) ) {
+		// Front-end form handlers answer a POST to any page before
+		// template_redirect paints the holding page (Contact Form 7 on
+		// parse_request, Gravity Forms on wp, WooCommerce on wp_loaded), so
+		// mail went out and entries and accounts were created on a closed
+		// site. Hold them here. REST keeps its own hold (maintenance_rest
+		// runs after core has authenticated the caller, which hasn't
+		// happened yet for application passwords at init), and ?wc-api=
+		// stays open for the reason given above MAINTENANCE_ENTRY_SCRIPTS.
+		$method     = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET';
+		$front_post = 'index.php' === $script
+			&& ! in_array( $method, array( 'GET', 'HEAD' ), true )
+			&& ! isset( $_GET['wc-api'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			&& ! self::is_rest_uri();
+		if ( ! $register && ! $front_post && ! in_array( $script, self::MAINTENANCE_ENTRY_SCRIPTS, true ) ) {
 			return;
 		}
 		if ( ! self::maintenance_holds_back() ) {
@@ -1562,6 +1575,21 @@ class Minn_Admin {
 			esc_html__( 'Maintenance', 'minn-admin' ),
 			array( 'response' => 503 )
 		);
+	}
+
+	/**
+	 * Whether this request is for the REST API, judged from the URL because at
+	 * init core has not routed it yet.
+	 *
+	 * @return bool
+	 */
+	private static function is_rest_uri() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['rest_route'] ) ) {
+			return true;
+		}
+		$path = (string) wp_parse_url( isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '', PHP_URL_PATH );
+		return false !== strpos( $path, '/' . trim( rest_get_url_prefix(), '/' ) . '/' );
 	}
 
 	/**

@@ -50,10 +50,13 @@ A few properties worth knowing before auditing (details in
   why the dev-mode flag that relaxes certificate checking is refused on a
   site whose environment type is production, and never applies to the
   package download.
-- Maintenance mode holds back the front end, feeds, the REST API,
-  admin-ajax, admin-post, XML-RPC, comment and trackback posting, signup
-  and activation. `wp-login.php` and `wp-cron.php` are deliberate
-  exemptions: you have to be able to log in to a site you are staging, and
-  scheduled work should keep running behind the holding page.
+- Maintenance mode holds back the front end (including form posts to any
+  page, which plugins process before the holding page is drawn), feeds,
+  the REST API, admin-ajax, admin-post, XML-RPC, comment and trackback
+  posting, signup and activation. `wp-login.php`, `wp-cron.php` and
+  WooCommerce's `?wc-api=` callbacks are deliberate exemptions: you have to
+  be able to log in to a site you are staging, scheduled work should keep
+  running behind the holding page, and a payment provider's callback about
+  an existing order must not be lost.
 - A browser test suite (286 suites at the time of writing) includes an
   enforced zero-external-requests invariant for the app chrome.
