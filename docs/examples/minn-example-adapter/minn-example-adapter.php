@@ -187,10 +187,22 @@ function campfire_item( $row ) {
 	);
 }
 
+/**
+ * The row id from the route's URL. Read it from the URL params, never as
+ * $req['id']: WP_REST_Request resolves the JSON body, then POST, then the
+ * query string BEFORE the URL, so a stray id in a payload would retarget the
+ * request while the path (and any per-row permission check on it) named
+ * another row.
+ */
+function campfire_route_id( WP_REST_Request $req ) {
+	$params = $req->get_url_params();
+	return isset( $params['id'] ) ? (int) $params['id'] : 0;
+}
+
 function campfire_detail( WP_REST_Request $req ) {
 	global $wpdb;
 	$row = $wpdb->get_row(
-		$wpdb->prepare( 'SELECT * FROM ' . campfire_table() . ' WHERE id = %d', (int) $req['id'] ),
+		$wpdb->prepare( 'SELECT * FROM ' . campfire_table() . ' WHERE id = %d', campfire_route_id( $req ) ),
 		ARRAY_A
 	);
 	if ( ! $row ) {
@@ -201,7 +213,7 @@ function campfire_detail( WP_REST_Request $req ) {
 
 function campfire_set_status( WP_REST_Request $req, $status ) {
 	global $wpdb;
-	$id  = (int) $req['id'];
+	$id  = campfire_route_id( $req );
 	$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id FROM ' . campfire_table() . ' WHERE id = %d', $id ) );
 	if ( ! $row ) {
 		return new WP_Error( 'campfire_not_found', 'No such feedback.', array( 'status' => 404 ) );
