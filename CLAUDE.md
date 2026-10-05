@@ -7,7 +7,8 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
 ## The development loop
 
 1. Edit files directly (`assets/js/app.js`, `assets/css/app.css`, `includes/*.php`).
-   Assets are cache-busted by `?ver=MINN_ADMIN_VERSION`, so hard-refresh while iterating.
+   Asset URLs carry the version plus the file's mtime (`template.php`), so a plain reload
+   picks up every edit.
 2. Cheap validation on every change:
    ```bash
    node --check assets/js/app.js && php -l includes/*.php minn-admin.php
@@ -56,6 +57,36 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
 - **Lists over REST:** never request rendered content in list views (`_fields`
   allowlists); no `_fields` on `wp/v2/types`. Capability checks are server-side.
 
+## Writing adapters
+
+- **Never `unserialize()` a third-party blob.** Prefer a regex or `json_decode`; when the
+  store really is PHP-serialized, use `Minn_Admin::decode_serialized( $blob, $default )`
+  (arrays and scalars only, refuses any payload carrying an object).
+- **REST requests don't load wp-admin includes or a vendor's admin classes.** Require what
+  the vendor code needs (`wp-admin/includes/template.php` for Settings API registration,
+  behind a `function_exists` guard). WP-CLI loads those files, holds no FrankenPHP worker
+  and has no cookies, so `wp eval` passes where a real REST request fails: verify over
+  real REST.
+- **`rest_do_request` doesn't parse a query string in the path.** Use `set_param()`; ids
+  belong in the route. Vendor objects with protected properties flatten through
+  `json_decode( wp_json_encode( $obj ), true )`.
+- **Vendor tables may not exist** after a CLI activation or a fresh install (Ninja Forms,
+  Duplicator, Formidable, Matomo, WP Mail SMTP create them in an admin-context migration).
+  Gate routes with `SHOW TABLES` and answer empty; fixtures run the vendor's own installer.
+- **Check what clock each store writes.** Some write site-local time, some UTC (a MySQL
+  `CURRENT_TIMESTAMP` is the DB clock): convert before emitting ISO. Gate through the
+  vendor's own capability resolver rather than a guessed core cap.
+- **A new descriptor key goes into the validator constants in the same commit**
+  (`class-minn-admin-surfaces.php`), or the Integrations card flags plugins that use it.
+
+## UI traps
+
+- An explicit `display` beats the `[hidden]` attribute: style the shown state with
+  `:not([hidden])`.
+- Never `scrollIntoView()`. It scrolls every scroll ancestor, so a re-render yanks the page.
+  Reveal with `scrollTop`/`scrollLeft` math on the one container and
+  `focus( { preventScroll: true } )`.
+
 ## Conventions
 
 - Commits: Emoji-Log — `📦 NEW:` `👌 IMPROVE:` `🐛 FIX:` `📖 DOC:` `🚀 RELEASE:`,
@@ -75,6 +106,19 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
 - Match the file's comment voice: comments state constraints the code can't show —
   especially the hard-won browser facts. Delete nothing labeled "hard-won" without
   re-proving it in a browser.
+- Comments carry the reasoning only: no "reported by", no names, no dates marking when
+  something shipped (`git blame` and the changelog answer who and when). Facts about
+  other software stay ("WP 6.6 autoload value variants"). When an attribution wraps real
+  content, strip the attribution and keep the explanation.
+- `changelog.md` is one unwrapped line per paragraph and per bullet. Never hard wrap it:
+  older installed builds render each source line as its own paragraph, and current
+  builds join lines, so checking the app won't catch it. Before committing changelog
+  prose, look for runs of short lines in the release section:
+  ```bash
+  awk '/^## \*\*vX.Y.Z/,/^### Added/' changelog.md | grep -v '^$' | grep -v '^#' \
+    | awk '{print length($0)}'
+  ```
+  Real paragraphs run 400 to 600 characters; several consecutive ~70s are wrapped.
 
 ## Internationalization
 

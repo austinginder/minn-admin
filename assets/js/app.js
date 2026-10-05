@@ -1224,6 +1224,9 @@
 	// Built on each call so a language switch without a reload picks up
 	// the new catalog. A const map would keep the first paint's language
 	// in the topbar forever (Account / Your profile, Users / People).
+	// A new built-in route must join this map: parseHash() accepts only a
+	// titles() key or a surface id and silently falls back to the overview,
+	// so a missing entry shows the nav item but renders Overview.
 	const titles = () => ( {
 		overview: [ __( 'Overview' ), __( 'Dashboard' ) ],
 		// Sub is dynamic — contentTopbarSub() names the active filter / type set.
@@ -36103,6 +36106,8 @@
 			// Keep a private post private on Update unless the visibility
 			// control changed it (buildSavePayload applies that override).
 			const liveStatus = ed.status === 'private' && ed.visibility === 'private' ? 'private' : 'publish';
+			// REST schedules only when status is 'future' alongside the
+			// future date; a date alone publishes the post with that date.
 			if ( ed.newDate ) {
 				extra.date = ed.newDate.length === 16 ? ed.newDate + ':00' : ed.newDate;
 				extra.status = scheduledInFuture( ed ) ? 'future' : liveStatus;

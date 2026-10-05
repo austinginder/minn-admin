@@ -560,7 +560,39 @@ license data on a lab site.
 | StellarWP Uplink / PUE catch-all | read | real stored data (TEC six-pack) | 2026-07-11 | registry reader; skips slugs claimed by dedicated providers |
 
 Keep this table current when a vendor gets a real-key pass or a new provider
-lands; the expansion runbook lives in the /dev-minn-admin skill.
+lands.
+
+## Adding a vendor
+
+Run this loop per product.
+
+1. **Install and activate the plugin**, one zip at a time (a batch `--activate`
+   fataled on TEC's table-creation race), free bases before their Pro add-ons
+   (the-events-calendar before events-calendar-pro).
+2. **Study the license machinery in source before writing anything.** Find the
+   storage (option or table, wrapped or raw) and the vendor's own activate,
+   deactivate and verify paths, and whether they are public callables,
+   admin-gated classes (require them manually when a couple of includes fix it,
+   as for Slider Revolution) or `$_POST`-locked controllers (mirror the request
+   exactly, as a documented exception: Soflyy). Uplink/PUE, EDD and Freemius
+   each have a known shape; see Phase 1 above.
+3. **Wire the provider** in `includes/adapters/licenses.php`. `read()` stays pure
+   option or table reads. Actions attach only when the vendor code is loaded.
+   Snapshot the key AND the status and restore both on a rejection, so a typo
+   never clobbers a working key. An empty value may need unsetting rather than
+   `''` (Soflyy). The component key drives Off and Turn on.
+4. **Drive the loop through `minn-admin/v1/licenses/action`.** A bad key answers
+   a clean `{ok: false, code: invalid|site_limit}` with nothing stored (check the
+   options). A real key answers valid with the vendor's expiry. Deactivate frees
+   the seat where the vendor supports it and says so honestly where it doesn't
+   (embedded keys re-register: TEC, Kadence; no seats at all: Soflyy). Take at
+   least one product through the UI: the paste form, the toasts, the pill flips.
+5. **Suites** assert the family's shape: a sane state and the allowed controls,
+   never exact pills (embedded keys drift). Never seed fake values into a live
+   vendor's options; their cron validates them.
+6. **Docs:** update the table above and the Licenses row in `plugin-support.md`.
+   Keys never enter the repo: scan `git diff` for key fragments before
+   committing.
 
 ## What Minn will never do here
 

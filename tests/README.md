@@ -199,6 +199,46 @@ Environment (all optional except the password):
   test and check the stored markup (`wp post get <id> --field=post_content` and/or
   `parse_blocks()` via `wp eval`) — the DOM lying is exactly the bug class these tests
   exist to catch.
+- **Never wait for `networkidle`.** Some plugins' admin JS polls forever (Site Kit), so the
+  wait never ends. Wait for a selector, a URL or a response.
+- **Read a fixture option back before navigating.** A REST-exposed fixture option written
+  and then navigated away from can read stale on the next request: write it, read it back
+  with a cache-buster, retry (`setOpt()` in site-kit-traffic.test.js).
+- **No absolute totals.** Live tables accumulate across runs (real logins land in the same
+  security logs): assert a delta, a presence or a shape.
+- **Wait on the request, not the paint.** After a save, wait for its POST response. Toast
+  text from the previous save lingers and satisfies the wait; a bare `.minn-modal` matches
+  the loading state; flat timeouts race. `waitForFunction` takes `( fn, arg, options )`:
+  options in the arg slot keep the default timeout and polling.
+- **Click with the mouse when hit-testing matters.** `el.click()` dispatches straight on the
+  node and passes even when the element is covered or `pointer-events: none`; use
+  `page.mouse.click()` at its box.
+- **Comboboxes go through `pickCombo()`.** Upgraded selects are no longer `<select>`, so
+  `page.selectOption` fails.
+- **Fresh contexts run the light theme.** Playwright defaults to `colorScheme: 'light'` and
+  the app follows the OS until a user picks; set `localStorage['minn-theme']` or
+  `emulateMedia` for dark screenshots.
+- **Seeders run once and use documentation IPs.** A seeder in the fixtures mu-plugin runs
+  on `init` behind an atomic `add_option` lock so concurrent requests don't double-seed,
+  and any IP it writes comes from 192.0.2.0/24, 198.51.100.0/24 or 203.0.113.0/24. Never
+  lock out 127.0.0.1 or a suite login.
+- **Fake a remote service from outside FrankenPHP.** A plugin that calls its remote URL
+  with its own transport can't be mocked through `pre_http_request`, and a fake served by
+  the same site deadlocks the worker pool (each request holds a worker waiting on its
+  loopback). Run the fake as a Node `http.createServer` on 127.0.0.1
+  (connect-matomo-traffic.test.js). `wp eval` holds no worker, so it passes against an
+  in-site fake that wedges real requests.
+
+## Debugging a flaky or slow suite
+
+- **Find who re-rendered.** Wrap `Element.prototype.innerHTML`'s setter to log
+  `new Error().stack` for swaps of `#minn-view`, and wrap `window.fetch` the same way: the
+  stack names the call site even through promise chains.
+- **Find a slow REST write.** A temporary mu-plugin timing `rest_pre_dispatch` /
+  `rest_post_dispatch`, with an `http_api_debug` URL log, shows outbound loopbacks at once.
+- **Read request DONE times, not starts.** A save can sit behind a fresh session's boot
+  requests on the HTTP/1.1 connection pool and look slow while the server answered in a
+  second.
 
 ## What's covered vs. not (yet)
 

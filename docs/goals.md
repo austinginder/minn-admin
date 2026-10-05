@@ -9,7 +9,9 @@ live in [roadmap.md](roadmap.md).
 
 1. **Get out of the way.** The daily work — writing, moderating, checking on the site, managing
    files and users — should be one click away and visually calm. Density serves the reader, not
-   the toolbar.
+   the toolbar. A view's default click stays in Minn: wp-admin is an explicit, secondary link
+   where Minn stops, and there is no persistent "Classic admin" escape in the chrome (the
+   palette and contextual links cover it).
 2. **Real replacement, not a demo.** Minn must hold up on real sites with hundreds of thousands
    of rows (it's developed against a production-scale dataset). Pagination, `_fields` allowlists
    and capability gating are non-negotiable, not optimizations.
