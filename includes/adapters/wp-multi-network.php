@@ -141,6 +141,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => __( 'Delete network and sites', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/wp-multi-network/networks/{id}',
+					// The route requires delete_sites, and this action is the
+					// one that deletes them; without it every click was a 400.
+					'body'    => array( 'delete_sites' => true ),
 					'when'    => array( 'key' => 'canDelete', 'equals' => '1' ),
 					'confirm' => __( 'Delete this network and every site in it permanently? Their posts, pages, media and settings are removed. This cannot be undone.', 'minn-admin' ),
 					'danger'  => true,
