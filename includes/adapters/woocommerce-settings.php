@@ -641,11 +641,17 @@ function minn_admin_wc_settings_post_data( $fields, $edited ) {
 		// so one save turned all of them off.
 		$name = isset( $f['field_name'] ) && '' !== (string) $f['field_name'] ? (string) $f['field_name'] : $id;
 		switch ( $type ) {
-			case 'checkbox':
 			case 'hidden':
-				if ( 'hidden' === $type && 'woocommerce_email_auto_sync_with_theme' !== $id ) {
+				if ( 'woocommerce_email_auto_sync_with_theme' !== $id ) {
 					break;
 				}
+				// Their form posts this hidden input's own yes / no and
+				// save_fields stores it raw, so a checkbox's '1' read as off
+				// and an absent key (off) saved nothing at all.
+				$on = $touched ? ! empty( $edited[ $id ] ) : 'yes' === $cur;
+				minn_admin_wc_post_set( $post, $name, $on ? 'yes' : 'no' );
+				break;
+			case 'checkbox':
 				$on = $touched ? ! empty( $edited[ $id ] ) : ( 'yes' === $cur || true === $cur || '1' === $cur );
 				// wp-admin sends only checked boxes; an absent key saves as "no".
 				if ( $on ) {
@@ -1087,8 +1093,11 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited, $fields = null, $r
 		// Checkboxes are the exception: absent already means "no", and a
 		// stored "yes" is carried as the form would ('1').
 		if ( ! $one ) {
-			$probe = array();
-			if ( null === minn_admin_wc_settings_map_field( $wf, $probe ) ) {
+			$probe  = array();
+			$mapped = minn_admin_wc_settings_map_field( $wf, $probe );
+			// A hidden field is never drawn either (it maps to nothing), and
+			// WooCommerce's own form posts its stored value back the same way.
+			if ( null === $mapped || ( array() === $mapped && 'hidden' === $type ) ) {
 				$stored = $wf['value'];
 				if ( 'checkbox' === $type ) {
 					if ( 'yes' === $stored || true === $stored || '1' === $stored ) {

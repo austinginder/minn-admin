@@ -191,6 +191,40 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'acf_get_setting' ) &&
 	$skip( 'post type manager: ACF post types unavailable' );
 }
 
+// --- 07-01 Store settings: an Emails save keeps theme auto-sync as stored --
+if ( class_exists( 'WooCommerce' ) && function_exists( 'minn_admin_wc_settings_map_field' ) ) {
+	$sync_was = get_option( 'woocommerce_email_auto_sync_with_theme', null );
+	$from_was = get_option( 'woocommerce_email_from_name' );
+	update_option( 'woocommerce_email_auto_sync_with_theme', 'yes' );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/wc/settings/email/default', array( 'values' => array( 'woocommerce_email_from_name' => 'Minn v043 Store' ) ) );
+	wp_cache_delete( 'alloptions', 'options' );
+	$check( 'store settings: an Emails save leaves theme auto-sync on', 'yes' === get_option( 'woocommerce_email_auto_sync_with_theme' ), "status {$st}, now " . var_export( get_option( 'woocommerce_email_auto_sync_with_theme' ), true ) );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/wc/settings/email/default', array( 'values' => array( 'woocommerce_email_auto_sync_with_theme' => false ) ) );
+	wp_cache_delete( 'alloptions', 'options' );
+	$check( 'store settings: the auto-sync switch can turn it off', 'no' === get_option( 'woocommerce_email_auto_sync_with_theme' ), "status {$st}, now " . var_export( get_option( 'woocommerce_email_auto_sync_with_theme' ), true ) );
+	// 07-02: a gateway / email / shipping method's hidden form field is
+	// posted back with its stored value, as WooCommerce's own form does.
+	$gw   = new class() {
+		public $id = 'minn_v043_gw';
+		public function get_field_key( $k ) {
+			return 'woocommerce_minn_v043_gw_' . $k;
+		}
+	};
+	$post = minn_admin_wc_settings_api_post_data(
+		$gw,
+		array( 'enabled' => true ),
+		array( 'enabled' => array( 'type' => 'checkbox', 'title' => 'Enabled' ), 'webhook_id' => array( 'type' => 'hidden' ) ),
+		function ( $k, $d ) {
+			return 'webhook_id' === $k ? 'wh_minn_v043' : $d;
+		}
+	);
+	$check( 'store settings: a gateway\'s hidden field is posted back unchanged', 'wh_minn_v043' === ( $post['woocommerce_minn_v043_gw_webhook_id'] ?? null ), wp_json_encode( $post ) );
+	null === $sync_was ? delete_option( 'woocommerce_email_auto_sync_with_theme' ) : update_option( 'woocommerce_email_auto_sync_with_theme', $sync_was );
+	update_option( 'woocommerce_email_from_name', $from_was );
+} else {
+	$skip( 'store settings: WooCommerce inactive' );
+}
+
 // --- 06-02 ACPT repeater rows keep their checkbox selections ---------------
 if ( function_exists( 'minn_admin_acpt_rows_in' ) && function_exists( 'get_acpt_field' ) ) {
 	$opt  = function ( $v ) {
