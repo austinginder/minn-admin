@@ -90,7 +90,11 @@ async function launch( opts = {} ) {
 		// Nor is the HTML-preview remote-content block doing its job: Chrome
 		// logs each blocked load against the preview's own CSP directives.
 		if ( m.type() === 'error' && ! /Failed to load resource/.test( m.text() )
-			&& ! /violates the following Content Security Policy directive: "(?:img-src data: cid: blob:|style-src 'unsafe-inline'|font-src data:|media-src data:|default-src 'none')"/.test( m.text() ) ) {
+			&& ! /violates the following Content Security Policy directive: "(?:img-src data: cid: blob:|style-src 'unsafe-inline'|font-src data:|media-src data:|default-src 'none')"/.test( m.text() )
+			// Chrome 154's YouTube player asks for the Compute Pressure API
+			// inside an embed preview, and Chrome logs the refusal against the
+			// page. The embed is YouTube's; nothing of Minn's asks for it.
+			&& ! /^Permissions policy violation: compute-pressure is not allowed in this document\.$/.test( m.text() ) ) {
 			errors.push( 'console: ' + m.text() );
 		}
 	} );
