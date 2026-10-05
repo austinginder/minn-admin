@@ -135,7 +135,10 @@ const fs = require( 'fs' );
 		theme: document.documentElement.getAttribute( 'data-theme' ),
 		pref: localStorage.getItem( 'minn-theme' ),
 	} ) );
-	t.check( 'first visit persists System as the default preference', themeBoot.pref === 'system' && themeBoot.theme === 'light', JSON.stringify( themeBoot ) );
+	// Since the site-wide default appearance, a first visit saves nothing: the
+	// device starts in the site's default mode (System unless the site chose
+	// one) and keeps following it until its person picks.
+	t.check( 'first visit follows the site default without saving a preference', null === themeBoot.pref && themeBoot.theme === 'light', JSON.stringify( themeBoot ) );
 	await page.emulateMedia( { colorScheme: 'dark' } );
 	await page.waitForTimeout( 250 ); // the pre-paint listener flips it live
 	const themeDark = await page.evaluate( () => document.documentElement.getAttribute( 'data-theme' ) );
