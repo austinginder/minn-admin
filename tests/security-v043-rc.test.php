@@ -586,6 +586,16 @@ if ( defined( 'CCJ_UPLOAD_DIR' ) && function_exists( 'minn_admin_ccj_rebuild_tre
 	$check( 'CCJ: a write to one snippet leaves another snippet\'s file alone', '/* minn-v043 raw bytes */' === (string) @file_get_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css' ) );
 	$html = $make( array( 'name' => 'Minn v043 html', 'language' => 'html', 'code' => '<p>minn-v043</p>' ) );
 	$check( 'CCJ: an HTML snippet is not published as a file', ! is_file( CCJ_UPLOAD_DIR . '/' . $html . '.html' ) );
+	// Review 08-02 PARTIAL: the edit form resends code and active on every
+	// save, so a rename must still leave the snippet's own file alone.
+	file_put_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css', '/* minn-v043 raw bytes */' );
+	update_post_meta( $own, 'options', array_merge( (array) get_post_meta( $own, 'options', true ), array( 'preprocessor' => 'less' ) ) );
+	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$own}", array( 'name' => 'Minn v043 renamed', 'code' => (string) get_post_field( 'post_content', $own ), 'active' => true ) );
+	$check( 'CCJ: renaming a snippet (code resent unchanged) leaves its file alone', '/* minn-v043 raw bytes */' === (string) @file_get_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css' ) );
+	$check( 'CCJ: option keys Minn doesn\'t edit (Pro preprocessor) survive an edit', 'less' === ( (array) get_post_meta( $own, 'options', true ) )['preprocessor'] ?? null );
+	file_put_contents( CCJ_UPLOAD_DIR . '/' . $html . '.html', '<p>stale</p>' );
+	$call( 'POST', "/minn-admin/v1/ccj/snippets/{$jq}/active", array( 'active' => true ) );
+	$check( 'CCJ: an HTML file an earlier version published is removed on the next write', ! is_file( CCJ_UPLOAD_DIR . '/' . $html . '.html' ) );
 	foreach ( array_filter( $made ) as $id ) {
 		$call( 'DELETE', "/minn-admin/v1/ccj/snippets/{$id}" );
 	}

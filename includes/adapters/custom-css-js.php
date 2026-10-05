@@ -280,7 +280,7 @@ function minn_admin_ccj_drop_files( $id ) {
  * @param int $id Snippet post ID.
  * @return void
  */
-function minn_admin_ccj_write_file( $id ) {
+function minn_admin_ccj_write_file( $id, $code = null ) {
 	if ( ! defined( 'CCJ_UPLOAD_DIR' ) || ! wp_is_writable( CCJ_UPLOAD_DIR ) || ! minn_admin_ccj_is_active( $id ) ) {
 		return;
 	}
@@ -293,7 +293,10 @@ function minn_admin_ccj_write_file( $id ) {
 	if ( 'html' === $language ) {
 		return;
 	}
-	$code   = $post->post_content;
+	// CCJ writes the editor's own bytes (post_content may be kses-filtered
+	// for an author without unfiltered_html); so does a save that changed
+	// the code. Anything else rebuilds from post_content.
+	$code   = null !== $code ? (string) $code : $post->post_content;
 	$before = '';
 	$after  = '';
 	if ( 'internal' === $opts['linking'] ) {
@@ -368,6 +371,16 @@ function minn_admin_ccj_rebuild_tree() {
 			}
 		}
 	}
+	// CCJ never writes an HTML snippet to a file; earlier Minn versions did,
+	// which left admin- and login-side markup publicly fetchable.
+	if ( defined( 'CCJ_UPLOAD_DIR' ) ) {
+		foreach ( (array) glob( CCJ_UPLOAD_DIR . '/*.html' ) as $html ) {
+			$html_id = (int) basename( (string) $html, '.html' );
+			if ( $html_id > 0 && (string) $html_id . '.html' === basename( (string) $html ) && 'custom-css-js' === get_post_type( $html_id ) ) {
+				wp_delete_file( $html );
+			}
+		}
+	}
 	if ( defined( 'CCJ_UPLOAD_DIR' ) && false !== strpos( implode( ',', array_merge( array_keys( $old ), array_keys( $tree ) ) ), 'block-' ) ) {
 		@file_put_contents( CCJ_UPLOAD_DIR . '/block_js.js', $block_js );
 		@file_put_contents( CCJ_UPLOAD_DIR . '/block_css.css', $block_css );
@@ -393,13 +406,16 @@ function minn_admin_ccj_normalize_options( $input, $existing = array() ) {
 	// attacker-chosen key were persisted into the options meta too, so the
 	// snippet's source was duplicated into a store nothing surfaces and CCJ's
 	// own delete path does not know about, and other code regex-scans it.
-	return array(
+	// Keys Minn doesn't edit (CCJ Pro's preprocessor, minify) stay as stored;
+	// only the stored set is merged back, never anything from the request.
+	$keep = is_array( $existing ) ? array_diff_key( $existing, array_flip( array( 'name', 'code', 'active', 'id', 'title', 'content' ) ) ) : array();
+	return array_merge( $keep, array(
 		'language' => $base['language'],
 		'type'     => $base['type'],
 		'linking'  => $base['linking'],
 		'side'     => $base['side'],
 		'priority' => $base['priority'],
-	);
+	) );
 }
 
 function minn_admin_ccj_rows( $args = array() ) {
@@ -718,7 +734,7 @@ add_action( 'rest_api_init', function () {
 				}
 				update_post_meta( $id, 'options', $opts );
 				update_post_meta( $id, '_active', ! empty( $body['active'] ) ? 'yes' : 'no' );
-				minn_admin_ccj_write_file( $id );
+				minn_admin_ccj_write_file( $id, $code );
 				minn_admin_ccj_rebuild_tree();
 				$item = minn_admin_ccj_item( $id );
 				return rest_ensure_response( $item ? $item : array( 'id' => $id ) );
@@ -775,6 +791,11 @@ add_action( 'rest_api_init', function () {
 				if ( ( array_key_exists( 'code', $body ) || $retargets ) && ! minn_admin_ccj_can_write_code( $opts ) ) {
 					return minn_admin_ccj_code_error( $opts );
 				}
+				// The edit form sends code and active on every save, renames
+				// included, so judge what actually changed against the stored
+				// snippet before writing anything.
+				$code_changed   = array_key_exists( 'code', $body ) && (string) $body['code'] !== (string) $post->post_content;
+				$active_changed = array_key_exists( 'active', $body ) && ! empty( $body['active'] ) !== minn_admin_ccj_is_active( $id );
 				$update = array( 'ID' => $id );
 				if ( isset( $body['name'] ) ) {
 					$update['post_title'] = sanitize_text_field( $body['name'] );
@@ -802,9 +823,9 @@ add_action( 'rest_api_init', function () {
 				// new name, so clear all three first and write the one that
 				// now applies; the file under the old name would otherwise
 				// stay reachable at its own address.
-				if ( array_key_exists( 'code', $body ) || $retargets || array_key_exists( 'active', $body ) ) {
+				if ( $code_changed || $retargets || $active_changed ) {
 					minn_admin_ccj_drop_files( $id );
-					minn_admin_ccj_write_file( $id );
+					minn_admin_ccj_write_file( $id, $code_changed ? (string) $body['code'] : null );
 				}
 				minn_admin_ccj_rebuild_tree();
 				return rest_ensure_response( minn_admin_ccj_item( $id ) );
