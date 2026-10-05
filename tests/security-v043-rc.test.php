@@ -642,6 +642,29 @@ if ( function_exists( 'minn_admin_s301_active' ) && minn_admin_s301_active() ) {
 	$skip( 'Simple 301 Redirects inactive' );
 }
 
+// --- 11-02 Folder listings authorize a bounded set ------------------------
+if ( function_exists( 'minn_admin_media_folders_provider' ) && minn_admin_media_folders_provider() && $author ) {
+	$reads = 0;
+	$count = function ( $caps, $cap ) use ( &$reads ) {
+		if ( 'read_post' === $cap ) {
+			++$reads;
+		}
+		return $caps;
+	};
+	wp_set_current_user( $author->ID );
+	add_filter( 'map_meta_cap', $count, 10, 2 );
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/media/folders/0/ids' );
+	remove_filter( 'map_meta_cap', $count, 10 );
+	$ids = (array) ( $d['ids'] ?? array() );
+	$check( 'media folders: every id handed to an Author is one they may read', 200 === $st && count( $ids ) === count( array_filter( $ids, function ( $id ) {
+		return current_user_can( 'read_post', $id );
+	} ) ), "status {$st}" );
+	$check( 'media folders: authorizing the listing stays bounded', $reads <= 1200, "{$reads} read_post checks" );
+	wp_set_current_user( $admin );
+} else {
+	$skip( 'media folders: no folder plugin active' );
+}
+
 // --- 08-04 Snippet edits keep an empty (shortcode-only) location ----------
 $all_surfaces = class_exists( 'Minn_Admin_Surfaces' ) ? Minn_Admin_Surfaces::all() : array();
 foreach ( array( 'wpcode', 'hfcm' ) as $sid ) {

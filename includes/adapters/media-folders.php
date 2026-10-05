@@ -189,23 +189,30 @@ add_action( 'rest_api_init', function () {
 					return $ids;
 				}
 				$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $ids ) ) ) );
-				$ids = array_values( array_filter( $ids, function ( $id ) {
-					// Folder plugins return their whole membership set. Core's
-					// media collection still applies read_post per attachment, so
-					// this include-list helper must preserve the same boundary.
-					return current_user_can( 'read_post', $id );
-				} ) );
 				if ( ! $ids ) {
 					return rest_ensure_response( array( 'ids' => array(), 'capped' => false ) );
 				}
+				// Order and cap in SQL first, then authorize that bounded set.
+				// Checking read_post on every id before the cap cost an
+				// uncached post lookup (and its parent's) per attachment, so
+				// one request on a large library ran tens of thousands of
+				// queries.
 				$in      = implode( ',', $ids );
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- int-cast list built above
 				$ordered = $wpdb->get_col(
 					"SELECT ID FROM {$wpdb->posts} WHERE ID IN ($in) AND post_type = 'attachment' AND post_status != 'trash' ORDER BY post_date DESC LIMIT 501"
 				);
 				$capped  = count( $ordered ) > 500;
+				$ordered = array_map( 'intval', array_slice( $ordered, 0, 500 ) );
+				_prime_post_caches( $ordered, false, false );
+				// Folder plugins return their whole membership set. Core's
+				// media collection still applies read_post per attachment, so
+				// this include-list helper must preserve the same boundary.
+				$ordered = array_values( array_filter( $ordered, function ( $id ) {
+					return current_user_can( 'read_post', $id );
+				} ) );
 				return rest_ensure_response( array(
-					'ids'    => array_map( 'intval', array_slice( $ordered, 0, 500 ) ),
+					'ids'    => $ordered,
 					'capped' => $capped,
 				) );
 			},
