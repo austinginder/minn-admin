@@ -47,6 +47,7 @@ class Minn_Admin {
 		// wp-load.php and so reaches init, while only the two wp-admin ones
 		// reach admin_init. Priority 0 is before any plugin's own handlers.
 		add_action( 'init', array( __CLASS__, 'maintenance_admin_entry' ), 0 );
+		add_action( 'parse_request', array( __CLASS__, 'maintenance_front_post' ), 15 );
 		add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar_link' ), 100 );
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
@@ -1549,20 +1550,7 @@ class Minn_Admin {
 		// that one action the way wp-signup.php is held.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$register = 'wp-login.php' === $script && isset( $_REQUEST['action'] ) && 'register' === $_REQUEST['action'];
-		// Front-end form handlers answer a POST to any page before
-		// template_redirect paints the holding page (Contact Form 7 on
-		// parse_request, Gravity Forms on wp, WooCommerce on wp_loaded), so
-		// mail went out and entries and accounts were created on a closed
-		// site. Hold them here. REST keeps its own hold (maintenance_rest
-		// runs after core has authenticated the caller, which hasn't
-		// happened yet for application passwords at init), and ?wc-api=
-		// stays open for the reason given above MAINTENANCE_ENTRY_SCRIPTS.
-		$method     = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET';
-		$front_post = 'index.php' === $script
-			&& ! in_array( $method, array( 'GET', 'HEAD' ), true )
-			&& ! isset( $_GET['wc-api'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			&& ! self::is_rest_uri();
-		if ( ! $register && ! $front_post && ! in_array( $script, self::MAINTENANCE_ENTRY_SCRIPTS, true ) ) {
+		if ( ! $register && ! in_array( $script, self::MAINTENANCE_ENTRY_SCRIPTS, true ) ) {
 			return;
 		}
 		if ( ! self::maintenance_holds_back() ) {
@@ -1578,18 +1566,32 @@ class Minn_Admin {
 	}
 
 	/**
-	 * Whether this request is for the REST API, judged from the URL because at
-	 * init core has not routed it yet.
+	 * Hold visitors' form posts to the front end while maintenance mode is on.
 	 *
-	 * @return bool
+	 * Contact Form 7 (parse_request 20) and Gravity Forms (wp 9) process a
+	 * POST to any page before template_redirect paints the holding page, so
+	 * mail went out and entries (and, through a registration feed, accounts)
+	 * were created on a closed site. Priority 15 on parse_request lets
+	 * WordPress's own order supply every exemption instead of guessing them
+	 * from the URL: REST is served at parse_request 10 and WooCommerce's
+	 * wc-api payment callbacks at 0, both exiting before this runs, while
+	 * wp-login.php, the login screens login-URL plugins move (they include
+	 * it on wp_loaded) and WooCommerce's account forms (wp_loaded) never
+	 * reach parse_request at all. Guessing at init locked logged-out
+	 * administrators out of a moved login screen.
 	 */
-	private static function is_rest_uri() {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( isset( $_GET['rest_route'] ) ) {
-			return true;
+	public static function maintenance_front_post() {
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET';
+		if ( in_array( $method, array( 'GET', 'HEAD' ), true ) || ! self::maintenance_holds_back() ) {
+			return;
 		}
-		$path = (string) wp_parse_url( isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '', PHP_URL_PATH );
-		return false !== strpos( $path, '/' . trim( rest_get_url_prefix(), '/' ) . '/' );
+		status_header( 503 );
+		nocache_headers();
+		wp_die(
+			esc_html__( 'This site is undergoing maintenance.', 'minn-admin' ),
+			esc_html__( 'Maintenance', 'minn-admin' ),
+			array( 'response' => 503 )
+		);
 	}
 
 	/**

@@ -98,16 +98,16 @@ $check( 'plugin upload: an administrator still reaches it (control)', 403 !== $s
 remove_filter( 'pre_http_request', $no_http );
 
 // --- 02-core-other-01 Maintenance mode holds front-end form posts --------
-// CF7 (parse_request), Gravity Forms (wp) and WooCommerce (wp_loaded) process
-// a POST to any page before template_redirect paints the holding page.
+// CF7 (parse_request 20) and Gravity Forms (wp 9) process a POST to any page
+// before template_redirect paints the holding page. The hold sits on
+// parse_request 15 so WordPress's own order supplies the exemptions (review
+// N1-N3: guessing them from the URL at init locked admins out of a moved
+// login screen and held WooCommerce's /wc-api/ callbacks).
 $m_was    = get_option( 'minn_admin_maintenance' );
 $m_server = $_SERVER;
-$m_get    = $_GET;
-$m_held   = function ( $method, $uri, $script = '/index.php', $get = array() ) {
+$m_held   = function ( $fn, $method, $script = '/index.php' ) {
 	$_SERVER['REQUEST_METHOD'] = $method;
-	$_SERVER['REQUEST_URI']    = $uri;
 	$_SERVER['SCRIPT_NAME']    = $script;
-	$_GET                      = $get;
 	$thrower = function () {
 		return function () {
 			throw new Exception( 'held' );
@@ -115,7 +115,7 @@ $m_held   = function ( $method, $uri, $script = '/index.php', $get = array() ) {
 	};
 	add_filter( 'wp_die_handler', $thrower );
 	try {
-		Minn_Admin::maintenance_admin_entry();
+		call_user_func( array( 'Minn_Admin', $fn ) );
 		$held = false;
 	} catch ( Exception $e ) {
 		$held = true;
@@ -125,18 +125,21 @@ $m_held   = function ( $method, $uri, $script = '/index.php', $get = array() ) {
 };
 update_option( 'minn_admin_maintenance', 1 );
 wp_set_current_user( 0 );
-$check( 'maintenance: a visitor\'s form POST to a page is held', $m_held( 'POST', '/contact/' ) );
-$check( 'maintenance: a visitor\'s GET is left to the holding page (control)', ! $m_held( 'GET', '/contact/' ) );
-$check( 'maintenance: a payment callback (?wc-api=) still gets through (control)', ! $m_held( 'POST', '/?wc-api=stripe', '/index.php', array( 'wc-api' => 'stripe' ) ) );
-$check( 'maintenance: REST is left to its own hold (control)', ! $m_held( 'POST', '/wp-json/wp/v2/posts' ) );
-$check( 'maintenance: signing in still works (control)', ! $m_held( 'POST', '/wp-login.php', '/wp-login.php' ) );
+$check( 'maintenance: a visitor\'s form POST to a page is held', method_exists( 'Minn_Admin', 'maintenance_front_post' ) && $m_held( 'maintenance_front_post', 'POST' ) );
+$check( 'maintenance: a visitor\'s GET is left to the holding page (control)', method_exists( 'Minn_Admin', 'maintenance_front_post' ) && ! $m_held( 'maintenance_front_post', 'GET' ) );
+$check( 'maintenance: the init hold leaves a POST to index.php alone, so a moved login screen still signs in', ! $m_held( 'maintenance_admin_entry', 'POST' ) );
+$prio = has_action( 'parse_request', array( 'Minn_Admin', 'maintenance_front_post' ) );
+$check( 'maintenance: the hold runs after REST is served and before Contact Form 7', is_int( $prio ) && $prio > (int) has_action( 'parse_request', 'rest_api_loaded' ) && $prio < 20, 'priority ' . var_export( $prio, true ) );
+if ( class_exists( '\Automattic\WooCommerce\Internal\Utilities\LegacyRestApiStub' ) ) {
+	$wc_prio = has_action( 'parse_request', array( 'Automattic\WooCommerce\Internal\Utilities\LegacyRestApiStub', 'parse_legacy_rest_api_request' ) );
+	$check( 'maintenance: WooCommerce payment callbacks are served before the hold', is_int( $wc_prio ) && is_int( $prio ) && $wc_prio < $prio, 'wc ' . var_export( $wc_prio, true ) );
+}
 if ( $editor ) {
 	wp_set_current_user( $editor->ID );
-	$check( 'maintenance: an editor\'s POST passes (control)', ! $m_held( 'POST', '/contact/' ) );
+	$check( 'maintenance: an editor\'s POST passes (control)', ! $m_held( 'maintenance_front_post', 'POST' ) );
 }
 wp_set_current_user( $admin );
 $_SERVER = $m_server;
-$_GET    = $m_get;
 update_option( 'minn_admin_maintenance', $m_was );
 
 // --- 02-core-other-02 / -03 Post type manager respects the vendor's store --
