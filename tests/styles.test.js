@@ -96,6 +96,21 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		const before = await frontBaseColor();
 		const midnight = list.find( ( c ) => /Midnight/.test( c.title ) );
 		t.check( 'Midnight is one of the offered styles', !! midnight );
+		// The Apply toast lives 7s from the moment the POST answers, and on a
+		// loaded box the re-render plus the checks below outlast it. Keep hold
+		// of its Undo button as it appears: the click handler still runs the
+		// real Undo once the toast has gone.
+		await page.evaluate( () => {
+			window.__minnApplyUndo = null;
+			const mo = new MutationObserver( () => {
+				const b = document.querySelector( '.minn-toast-action .minn-toast-btn' );
+				if ( b && /Applied/.test( b.closest( '.minn-toast' ).textContent ) ) {
+					window.__minnApplyUndo = b;
+					mo.disconnect();
+				}
+			} );
+			mo.observe( document.body, { childList: true } );
+		} );
 		await page.evaluate( ( id ) => document.querySelector( `[data-style="${ CSS.escape( id ) }"]` ).click(), midnight.id );
 		await page.waitForFunction( () =>
 			[ ...document.querySelectorAll( '[data-style].is-active' ) ].some( ( c ) => /Midnight/.test( c.textContent ) ),
@@ -134,15 +149,8 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		// seconds, so the history dialog is inspected AFTER the Undo step.
 
 		/* ===== Undo restores the previous look ===== */
-		// The toast only exists once the Apply request has answered, which on a
-		// loaded box is later than the checks above take; wait for its button
-		// rather than clicking into thin air (the toast still self-dismisses,
-		// so click the moment it is there).
-		await page.waitForSelector( '.minn-toast button, [data-toast-action]', { timeout: 15000 } ).catch( () => null );
-		await page.evaluate( () => {
-			const b = document.querySelector( '.minn-toast button, [data-toast-action]' );
-			if ( b ) b.click();
-		} );
+		await page.waitForFunction( () => !! window.__minnApplyUndo, null, { timeout: 15000 } );
+		await page.evaluate( () => window.__minnApplyUndo.click() );
 		await page.waitForFunction( () => {
 			const first = document.querySelector( '[data-style="default"]' );
 			return first && first.classList.contains( 'is-active' );
