@@ -1866,6 +1866,12 @@ add_action( 'minn_admin_before_render_blocks', function ( $blocks, $post_id ) {
 	if ( ! function_exists( 'acf_render_block' ) || ! function_exists( 'acf_has_block_type' ) || ! function_exists( 'acf_get_block_id' ) ) {
 		return; // ACF free has no blocks
 	}
+	// ACF's own preview (acf_ajax_fetch_block) refuses a post the user can't
+	// edit. render_blocks() already drops one; this keeps the hook safe for
+	// any other caller of the action.
+	if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
+		$post_id = 0;
+	}
 	add_filter( 'pre_render_block', function ( $pre, $parsed ) use ( $post_id ) {
 		if ( null !== $pre || ! is_array( $parsed ) || empty( $parsed['blockName'] ) || ! empty( $parsed['innerBlocks'] ) ) {
 			return $pre;

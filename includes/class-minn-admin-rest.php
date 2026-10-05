@@ -2744,6 +2744,13 @@ class Minn_Admin_REST {
 		// plugins cache per-post generated CSS the styles filter below can
 		// recover (adapters/otter.php).
 		$post_id = absint( $request['post'] ?? 0 );
+		// The route is gated on edit_posts only, and adapters render against
+		// this id (ACF block fields, Otter's cached CSS), so an id the caller
+		// can't edit would hand back other people's drafts and private posts.
+		// Core's block renderer refuses the same way.
+		if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
+			$post_id = 0;
+		}
 		// GenerateBlocks keeps each block's CSS in a `css` attribute and only
 		// inlines it after wp_head; this documented filter makes every GB
 		// block prepend its own <style> during our render
