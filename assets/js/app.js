@@ -378,6 +378,19 @@
 		return CONTENT_URL_RE.test( v ) ? v : '';
 	};
 
+	// Navigation an ADAPTER or a vendor supplies (admin screens, settings
+	// pages, author sites). http(s), or a reference with no scheme at all
+	// (admin.php?page=…, /wp-admin/…), which safeHref would blank. Any other
+	// scheme, and the //host and backslash forms that leave the origin,
+	// come back empty. Tabs and newlines go first: browsers drop them from
+	// URLs, so java\nscript: would otherwise read as a relative path.
+	const navHref = ( u ) => {
+		const v = String( u == null ? '' : u ).replace( /[\t\n\r]/g, '' ).trim();
+		if ( /^https?:\/\//i.test( v ) ) return v;
+		if ( /^[a-z][a-z0-9+.-]*:/i.test( v ) || /^[\/\\]{2}/.test( v ) ) return '';
+		return v;
+	};
+
 	// Structural parsing of untrusted markup, same inert document and the same
 	// reason as stripTags: a container created from the LIVE document runs the
 	// resource-loading side of parsing, so `<img src=x onerror=…>` fires while
@@ -5953,7 +5966,7 @@
 				} ).join( '' ) }
 			</div>` ).join( '' ) }
 		</div>
-		${ r.adminUrl ? `<div class="minn-traf-foot"><a class="minn-link-btn" href="${ esc( r.adminUrl ) }" target="_blank" rel="noopener">${ esc( sprintf( /* translators: %s: the analytics plugin's name. */ __( 'Open %s' ), r.source || 'analytics' ) ) } ↗</a></div>` : '' }`;
+		${ r.adminUrl ? `<div class="minn-traf-foot"><a class="minn-link-btn" href="${ esc( navHref( r.adminUrl ) ) }" target="_blank" rel="noopener">${ esc( sprintf( /* translators: %s: the analytics plugin's name. */ __( 'Open %s' ), r.source || 'analytics' ) ) } ↗</a></div>` : '' }`;
 		// Row URLs come from the analytics provider's response — tracked
 		// visitor data at a navigation sink, so the same safeHref + noopener
 		// discipline as the drill modal's page rows.
@@ -9847,7 +9860,7 @@
 		// on the transaction ID). It describes the SAVED method and ID, so
 		// the bind hides it while either is edited.
 		const txn = o.minn_transaction && /^https?:\/\//i.test( o.minn_transaction.url || '' ) ? o.minn_transaction : null;
-		const txnLink = txn ? `<a class="minn-order-txn-link" id="minn-o-txn-link" href="${ esc( txn.url ) }" target="_blank" rel="noopener noreferrer" title="${ esc( txn.url ) }">${ esc( txn.provider
+		const txnLink = txn ? `<a class="minn-order-txn-link" id="minn-o-txn-link" href="${ esc( navHref( txn.url ) ) }" target="_blank" rel="noopener noreferrer" title="${ esc( txn.url ) }">${ esc( txn.provider
 			/* translators: %s: payment provider name, e.g. "Stripe". */
 			? sprintf( __( 'View in %s' ), txn.provider )
 			: __( 'View payment' ) ) } ↗</a>` : '';
@@ -16461,7 +16474,7 @@
 		const actions = statusActions.length ? `
 			<div class="minn-sstat-actions">
 				${ statusActions.map( ( { a, i } ) => a.href
-					? `<a class="minn-btn-soft" href="${ esc( a.href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, a.href ) ) }</a>`
+					? `<a class="minn-btn-soft" href="${ esc( navHref( a.href ) ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, a.href ) ) }</a>`
 					: `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-sstatact="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 			</div>` : '';
 		if ( ! rows && ! chart && ! cmd && ! actions ) return '';
@@ -17757,7 +17770,7 @@
 			</div>` : '' }
 			<div class="minn-setup-foot">
 				${ setup.href
-					? `<a class="minn-btn-primary" href="${ esc( setup.href ) }" target="_blank" rel="noopener">${ esc( __( 'Open setup ↗' ) ) }</a>
+					? `<a class="minn-btn-primary" href="${ esc( navHref( setup.href ) ) }" target="_blank" rel="noopener">${ esc( __( 'Open setup ↗' ) ) }</a>
 					   <span class="minn-setup-hint">${ esc( __( "This plugin's setup runs on its own screen; this view comes alive once it's done." ) ) }</span>`
 					: `<button class="minn-btn-primary" id="minn-setup-run">${ esc( __( 'Set up now' ) ) }</button>` }
 			</div>
@@ -18487,7 +18500,7 @@
 			return `${ g.title ? `<div class="minn-fields-sub">${ esc( g.title ) }</div>` : '' }
 				${ g.desc ? `<div class="minn-fields-note">${ esc( g.desc ) }</div>` : '' }
 				<div class="minn-fields">${ rows }</div>
-				${ g.locked ? `<div class="minn-panel-locked">${ sprintf( /* translators: %s: how many settings are hidden here. */ _n( '%s advanced setting', '%s advanced settings', g.locked ), g.locked ) }${ ( g.lockedLabels || [] ).length ? ` (${ g.lockedLabels.map( esc ).join( ', ' ) })` : '' } — ${ data.adminUrl ? `<a href="${ esc( data.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'edit in wp-admin ↗' ) ) }</a>` : esc( __( 'edit in wp-admin' ) ) }</div>` : '' }`;
+				${ g.locked ? `<div class="minn-panel-locked">${ sprintf( /* translators: %s: how many settings are hidden here. */ _n( '%s advanced setting', '%s advanced settings', g.locked ), g.locked ) }${ ( g.lockedLabels || [] ).length ? ` (${ g.lockedLabels.map( esc ).join( ', ' ) })` : '' } — ${ data.adminUrl ? `<a href="${ esc( navHref( data.adminUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'edit in wp-admin ↗' ) ) }</a>` : esc( __( 'edit in wp-admin' ) ) }</div>` : '' }`;
 		} ).join( '<div class="minn-divider"></div>' );
 		const html = `
 			${ groupHtml || `<div class="minn-empty">${ esc( __( 'Nothing to configure here.' ) ) }</div>` }
@@ -19452,7 +19465,7 @@
 						const href = surfaceFillHref( a.href, it );
 						return `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, href ) ) }</a>`;
 					} ).join( '' ) }
-					${ ! loading && sec.adminUrl ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
+					${ ! loading && sec.adminUrl ? `<a class="minn-btn-soft" href="${ esc( navHref( sec.adminUrl ) ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
 				</div>
 			</div>
 			<div class="minn-order-page-body">
@@ -22358,7 +22371,7 @@
 		const d = pluginDoorways( file );
 		const minn = d.minn.slice( 0, 3 ).map( ( l, i ) => `<button type="button" class="minn-plugin-door" data-mdoor="${ esc( file ) }:${ i }">${ esc( l.label ) }</button>` );
 		const first = pluginCardWpLink( d );
-		const wp = first ? [ `<a class="minn-plugin-door is-wp" href="${ esc( first.href ) }" target="_blank" rel="noopener">${ esc( first.label ) } ↗</a>` ] : [];
+		const wp = first ? [ `<a class="minn-plugin-door is-wp" href="${ esc( navHref( first.href ) ) }" target="_blank" rel="noopener">${ esc( first.label ) } ↗</a>` ] : [];
 		if ( ! minn.length && ! wp.length ) return '';
 		return `<div class="minn-plugin-doors">${ minn.length ? `<span class="minn-plugin-doors-in">${ esc( __( 'In Minn' ) ) }</span>` : '' }${ minn.join( '' ) }${ wp.join( '' ) }</div>`;
 	}
@@ -23406,7 +23419,7 @@
 				<button class="minn-switch${ c.on ? ' on' : '' }" data-vistoggle="${ i }" role="switch" aria-checked="${ c.on }" aria-label="${ esc( c.label ) }"><span class="minn-switch-knob"></span></button>
 			</div>`;
 		}
-		return `<a class="minn-btn-soft" href="${ esc( c.url || B.site.adminUrl ) }" target="_blank" rel="noopener">${ esc( c.label ) } ↗</a>`;
+		return `<a class="minn-btn-soft" href="${ esc( navHref( c.url || B.site.adminUrl ) ) }" target="_blank" rel="noopener">${ esc( c.label ) } ↗</a>`;
 	}
 	// Turn a third-party visibility mode off through its registered writer.
 	// The endpoint remembers which mode was on, so Undo restores exactly it
@@ -23773,7 +23786,7 @@
 						</div>
 						<div class="minn-plugin-desc">${ esc( stripTags( ( ( p.description && p.description.rendered ) || '' ).replace( /<cite>[\s\S]*?<\/cite>/, '' ) ) ) }</div>
 						${ p.author ? `<div class="minn-plugin-author">${ esc( __( 'By' ) ) } ${ p.author_uri
-							? `<a href="${ esc( p.author_uri ) }" target="_blank" rel="noopener">${ esc( decodeEntities( stripTags( p.author ) ) ) }</a>`
+							? `<a href="${ esc( navHref( p.author_uri ) ) }" target="_blank" rel="noopener">${ esc( decodeEntities( stripTags( p.author ) ) ) }</a>`
 							: esc( decodeEntities( stripTags( p.author ) ) ) }</div>` : '' }
 						${ pluginDoorwaysHtml( p.plugin, on || net ) }
 						<div class="minn-plugin-foot">
@@ -24202,7 +24215,7 @@
 						<div class="minn-row-title">${ esc( t.name ) }</div>
 						<div class="minn-pi-meta">${ t.version ? `<button type="button" class="minn-theme-ver" data-tchangelog="${ esc( t.stylesheet ) }" title="${ esc( sprintf( /* translators: %s: the theme's name. */ __( 'Changelog for %s' ), t.name ) ) }">v${ esc( t.version ) }</button>` : `<button type="button" class="minn-theme-ver" data-tchangelog="${ esc( t.stylesheet ) }">${ esc( __( 'Changelog' ) ) }</button>` }${ t.author
 							? ( t.author_uri
-								? ` · <a class="minn-theme-author" href="${ esc( t.author_uri ) }" target="_blank" rel="noopener">${ esc( t.author ) }</a>`
+								? ` · <a class="minn-theme-author" href="${ esc( navHref( t.author_uri ) ) }" target="_blank" rel="noopener">${ esc( t.author ) }</a>`
 								: ' · ' + esc( t.author ) )
 							: '' }${ t.parent ? ' · ' + esc( sprintf( /* translators: %s: the parent theme's name. */ __( 'child of %s' ), t.parent ) ) : '' }</div>
 						<div class="minn-theme-actions">
@@ -27322,11 +27335,11 @@
 						${ g.description ? `<div class="minn-toggle-desc">${ esc( g.description ) }</div>` : '' }
 					</div>
 					<button type="button" class="minn-switch${ g.enabled ? ' on' : '' }" role="switch" aria-checked="${ g.enabled ? 'true' : 'false' }" data-gwtog="${ esc( g.id ) }" aria-label="${ esc( g.title ) }"><span class="minn-switch-knob"></span></button>
-					${ g.fields ? `<button type="button" class="minn-btn-soft" data-gwedit="${ esc( g.id ) }">${ esc( __( 'Edit' ) ) }</button>` : `<a class="minn-btn-soft" href="${ esc( g.settingsUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Set up ↗' ) ) }</a>` }
+					${ g.fields ? `<button type="button" class="minn-btn-soft" data-gwedit="${ esc( g.id ) }">${ esc( __( 'Edit' ) ) }</button>` : `<a class="minn-btn-soft" href="${ esc( navHref( g.settingsUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'Set up ↗' ) ) }</a>` }
 				</div>` ).join( '' ) }
 				${ rows.length ? '' : `<div class="minn-empty">${ esc( __( 'No payment methods are installed.' ) ) }</div>` }
 			</div>
-			<div class="minn-toggle-desc">${ esc( __( 'Adding a new provider, WooPayments onboarding and gateways with their own settings screens stay in WooCommerce.' ) ) } ${ c.adminUrl ? `<a href="${ esc( c.adminUrl ) }&tab=checkout" target="_blank" rel="noopener">${ esc( __( 'Open Payments in WooCommerce ↗' ) ) }</a>` : '' }</div>`;
+			<div class="minn-toggle-desc">${ esc( __( 'Adding a new provider, WooPayments onboarding and gateways with their own settings screens stay in WooCommerce.' ) ) } ${ c.adminUrl ? `<a href="${ esc( navHref( c.adminUrl ) ) }&tab=checkout" target="_blank" rel="noopener">${ esc( __( 'Open Payments in WooCommerce ↗' ) ) }</a>` : '' }</div>`;
 		$$( '[data-gwtog]', host ).forEach( ( sw ) =>
 			sw.addEventListener( 'click', async () => {
 				const on = ! sw.classList.contains( 'on' );
@@ -27469,7 +27482,7 @@
 				</div>
 			</div>
 			<div><button type="button" class="minn-btn-soft" id="minn-zone-add">${ icon( 'plus' ) } ${ esc( __( 'Add zone' ) ) }</button></div>
-			<div class="minn-toggle-desc">${ esc( __( 'Local pickup for block checkout has its own screen in WooCommerce.' ) ) } ${ d.adminUrl ? `<a href="${ esc( d.adminUrl ) }&section=pickup_location" target="_blank" rel="noopener">${ esc( __( 'Open Local pickup ↗' ) ) }</a>` : '' }</div>`;
+			<div class="minn-toggle-desc">${ esc( __( 'Local pickup for block checkout has its own screen in WooCommerce.' ) ) } ${ d.adminUrl ? `<a href="${ esc( navHref( d.adminUrl ) ) }&section=pickup_location" target="_blank" rel="noopener">${ esc( __( 'Open Local pickup ↗' ) ) }</a>` : '' }</div>`;
 		$$( '[data-zoneopen]', host ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				c.zoneOpen = parseInt( btn.dataset.zoneopen, 10 );
@@ -28709,7 +28722,7 @@
 							<div class="minn-toggle-desc">${ esc( p.note || ( 'password' === p.kind ? __( 'The site is behind a password.' ) : __( 'Visitors see a maintenance or coming-soon page.' ) ) ) }</div>
 						</div>
 						${ p.can ? `<button class="minn-btn-soft" data-visoff="${ esc( p.id ) }">${ esc( __( 'Turn off' ) ) }</button>` : '' }
-						${ p.url ? `<a class="minn-btn-soft" href="${ esc( p.url ) }" target="_blank" rel="noopener">${ esc( __( 'Open ↗' ) ) }</a>` : '' }
+						${ p.url ? `<a class="minn-btn-soft" href="${ esc( navHref( p.url ) ) }" target="_blank" rel="noopener">${ esc( __( 'Open ↗' ) ) }</a>` : '' }
 					</div>` ).join( '' ) : '';
 				return {
 					sub: __( 'Who can see, index and join your site.' ),
@@ -28810,7 +28823,7 @@
 								<span class="minn-spam-pill${ p.configured ? ' ok' : ' warn' }">${ p.configured ? 'Active' : esc( __( 'Needs setup' ) ) }</span>
 								${ p.blocked ? `<span class="minn-spam-blocked">${ esc( String( p.blocked ) ) } blocked all-time</span>` : '' }
 								${ p.keyProvider && p.configured ? `<button class="minn-spam-link" type="button" data-spamkeychange="${ esc( p.id ) }">${ esc( __( 'Change key…' ) ) }</button>` : '' }
-								${ p.adminUrl ? `<a class="minn-spam-link" href="${ esc( p.adminUrl ) }" target="_blank" rel="noopener"${ p.keyProvider && p.configured ? ' style="margin-left:0"' : '' }>${ esc( __( 'Full settings ↗' ) ) }</a>` : '' }
+								${ p.adminUrl ? `<a class="minn-spam-link" href="${ esc( navHref( p.adminUrl ) ) }" target="_blank" rel="noopener"${ p.keyProvider && p.configured ? ' style="margin-left:0"' : '' }>${ esc( __( 'Full settings ↗' ) ) }</a>` : '' }
 							</div>
 							<div class="minn-toggle-desc">${ esc( p.note ) }</div>
 							${ p.keyProvider ? `
@@ -30520,7 +30533,7 @@
 			} );
 			const html = parts.map( ( p ) => {
 				if ( p.url && /^(https?:|mailto:|tel:|#|\/)/i.test( p.url ) ) {
-					return `<p><a href="${ esc( p.url ) }">${ esc( p.label || p.url ) }</a></p>`;
+					return `<p><a href="${ esc( safeLinkHref( p.url ) ) }">${ esc( p.label || p.url ) }</a></p>`;
 				}
 				return p.label ? `<p>${ esc( p.label ) }</p>` : '';
 			} ).filter( Boolean ).join( '' );
@@ -30868,7 +30881,7 @@
 
 			const divClass = cn ? `wp-block-button ${ cn }` : 'wp-block-button';
 			let aOpen = '<a class="wp-block-button__link wp-element-button"';
-			if ( url ) aOpen += ` href="${ esc( url ) }"`;
+			if ( safeLinkHref( url ) ) aOpen += ` href="${ esc( safeLinkHref( url ) ) }"`;
 			if ( b.newTab ) {
 				aOpen += ` target="_blank" rel="${ esc( attrs.rel || 'noreferrer noopener' ) }"`;
 			}
@@ -35003,7 +35016,7 @@
 		const actions = ( st.actions || [] ).map( ( a, i ) => `
 			<div class="minn-status-act">
 				${ a.href
-					? `<a class="minn-btn-soft" href="${ esc( a.href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, a.href ) ) }</a>`
+					? `<a class="minn-btn-soft" href="${ esc( navHref( a.href ) ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, a.href ) ) }</a>`
 					: `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-panelact="${ i }">${ esc( a.label ) }</button>` }
 				${ a.hint ? `<div class="minn-sstat-hint">${ esc( a.hint ) }</div>` : '' }
 			</div>` ).join( '' );
@@ -41446,7 +41459,7 @@
 			const cls = [ en.danger && 'danger', en.active && 'is-on' ].filter( Boolean ).join( ' ' );
 			const clsAttr = cls ? ` class="${ cls }"` : '';
 			return en.href
-				? `<a href="${ esc( en.href ) }" target="_blank" rel="noopener"${ clsAttr }>${ esc( hrefLabel( en.label, en.href ) ) }</a>`
+				? `<a href="${ esc( navHref( en.href ) ) }" target="_blank" rel="noopener"${ clsAttr }>${ esc( hrefLabel( en.label, en.href ) ) }</a>`
 				: `<button type="button" data-mi="${ i }"${ clsAttr }>${ esc( en.label ) }</button>`;
 		} ).join( '' );
 		document.body.appendChild( minnMenuEl );
@@ -45590,7 +45603,7 @@
 					</div>
 					${ d == null ? `<div class="minn-loading">${ esc( __( 'Loading top pages…' ) ) }</div>`
 					: ! pages.length && ! refs.length ? `
-					<div class="minn-empty">No page breakdown for this period.${ d.adminUrl ? ` <a class="minn-link-btn" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">Open ${ esc( d.source || 'analytics' ) } ↗</a>` : '' }</div>` : `
+					<div class="minn-empty">No page breakdown for this period.${ d.adminUrl ? ` <a class="minn-link-btn" href="${ esc( navHref( d.adminUrl ) ) }" target="_blank" rel="noopener">Open ${ esc( d.source || 'analytics' ) } ↗</a>` : '' }</div>` : `
 					<div class="minn-modal-scroll minn-traf-day">
 						${ pages.length ? `
 						<div class="minn-traf-sec-label">${ esc( __( 'Top pages' ) ) }</div>
@@ -45620,7 +45633,7 @@
 									${ r.pageviews ? `<span title="${ esc( __( 'Pageviews' ) ) }">${ Number( r.pageviews ).toLocaleString( uiLocale() ) } <em>${ esc( __( 'views' ) ) }</em></span>` : '' }
 								</div>
 							</div>` ).join( '' ) }` : '' }
-						${ d.adminUrl ? `<div class="minn-traf-foot"><a class="minn-link-btn" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">Open ${ esc( d.source || 'analytics' ) } ↗</a></div>` : '' }
+						${ d.adminUrl ? `<div class="minn-traf-foot"><a class="minn-link-btn" href="${ esc( navHref( d.adminUrl ) ) }" target="_blank" rel="noopener">Open ${ esc( d.source || 'analytics' ) } ↗</a></div>` : '' }
 					</div>` }
 				</div>
 			</div>`;
@@ -46243,9 +46256,9 @@
 					<div class="minn-modal-actions">
 						${ edit ? `<button class="minn-btn-primary" id="minn-surface-save">${ esc( __( 'Save' ) ) }</button>` : '' }
 						${ message ? `<button class="minn-btn-soft" id="minn-surface-raw">↗ ${ esc( __( 'Open raw' ) ) }</button>` : '' }
-						${ sec && sec.adminUrl && ! isActivity ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin or admin area name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
+						${ sec && sec.adminUrl && ! isActivity ? `<a class="minn-btn-soft" href="${ esc( navHref( sec.adminUrl ) ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin or admin area name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
 						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( activityAdmin ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: activity log provider name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'log' ) ) } ↗</a>` : '' }
-						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( l.url ) }" target="_blank" rel="noopener">${ esc( hrefLabel( l.label, l.url ) ) }</a>` ).join( '' ) }
+						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( navHref( l.url ) ) }" target="_blank" rel="noopener">${ esc( hrefLabel( l.label, l.url ) ) }</a>` ).join( '' ) }
 						${ visibleActions.map( ( { a, i } ) => {
 							if ( ! a.href ) return `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>`;
 							const href = surfaceFillHref( a.href, it );
@@ -51768,7 +51781,7 @@
 			</div>
 			<div class="minn-fgb-meta">
 				<span>${ esc( fgb.group.locationLabel ) }</span>
-				${ fgb.group.adminUrl ? `<a href="${ esc( fgb.group.adminUrl ) }" target="_blank" rel="noopener">${ esc( sprintf( /* translators: %s: the plugin that owns the group (ACF, ACPT). */ __( 'Edit in %s ↗' ), vendor ) ) }</a>` : '' }
+				${ fgb.group.adminUrl ? `<a href="${ esc( navHref( fgb.group.adminUrl ) ) }" target="_blank" rel="noopener">${ esc( sprintf( /* translators: %s: the plugin that owns the group (ACF, ACPT). */ __( 'Edit in %s ↗' ), vendor ) ) }</a>` : '' }
 				${ fgbSource().export ? `<button type="button" id="minn-fgb-export">${ esc( __( 'Export JSON' ) ) }</button>` : '' }
 			</div>
 			<div class="minn-fgb-rows">
@@ -55660,7 +55673,7 @@
 				</div>
 				${ d ? `<span class="minn-status ${ esc( WCM_STATUS_STYLE[ d.status ] || 'draft' ) }">${ esc( d.statusLabel || statusLabel( d.status ) ) }</span>` : '' }
 				${ d ? `<div class="minn-order-head-actions">
-					<a class="minn-btn-soft" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'Open in WooCommerce' ) ) }</a>
+					<a class="minn-btn-soft" href="${ esc( navHref( d.adminUrl ) ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'Open in WooCommerce' ) ) }</a>
 					<button class="minn-btn-soft" id="minn-wcm-more" type="button" aria-haspopup="menu" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
 				</div>` : '' }
 			</div>
@@ -56195,7 +56208,7 @@
 				</div>
 				${ d && ! isNew ? `<span class="minn-status ${ f.status === 'draft' ? 'draft' : 'publish' }">${ esc( statusLabel( f.status ) ) }</span>` : '' }
 				${ d && ! isNew ? `<div class="minn-order-head-actions">
-					<a class="minn-btn-soft" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'Open in WooCommerce' ) ) }</a>
+					<a class="minn-btn-soft" href="${ esc( navHref( d.adminUrl ) ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'Open in WooCommerce' ) ) }</a>
 					<button class="minn-btn-soft" id="minn-wcmp-more" type="button" aria-haspopup="menu" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
 				</div>` : '' }
 			</div>
