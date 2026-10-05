@@ -211,26 +211,72 @@ class Minn_Admin_Updater {
 	 * @return bool|string|WP_Error Local file path on verified download.
 	 */
 	public function verify_package( $reply, $package, $upgrader, $hook_extra = array() ) {
-		if ( false !== $reply || ! is_string( $package ) ) {
+		if ( ! is_string( $package ) ) {
 			return $reply;
+		}
+		$updating = is_array( $hook_extra ) && isset( $hook_extra['plugin'] ) ? (string) $hook_extra['plugin'] : '';
+		$ours_url = $this->is_our_package_url( $package );
+		$ours     = $ours_url || "{$this->plugin_slug}/{$this->plugin_slug}.php" === $updating;
+		if ( false !== $reply ) {
+			// Another download filter answered first (a host's package cache,
+			// a rollback tool). For anything else that is its business; for
+			// Minn's own package the file it hands back still has to match
+			// the pinned hash, or answering first would skip verification.
+			if ( ! $ours || is_wp_error( $reply ) ) {
+				return $reply;
+			}
+			if ( ! $ours_url ) {
+				return $this->foreign_package_error();
+			}
+			if ( ! is_string( $reply ) || ! is_file( $reply ) ) {
+				return new WP_Error(
+					'minn_admin_unverifiable_package',
+					__( 'Minn Admin update rejected: another plugin supplied the download in a form that could not be verified.', 'minn-admin' )
+				);
+			}
+			return $this->verify_file( $reply, $package );
 		}
 		// An update OF THIS PLUGIN must come from this repo's release, the
 		// only package the sha256 pin covers. Anything else offered for
 		// minn-admin/minn-admin.php (a same-slug wordpress.org entry, a stale
 		// transient) would install unverified, so it is refused outright.
-		$updating = is_array( $hook_extra ) && isset( $hook_extra['plugin'] ) ? (string) $hook_extra['plugin'] : '';
-		if ( "{$this->plugin_slug}/{$this->plugin_slug}.php" === $updating && ! $this->is_our_package_url( $package ) ) {
-			return new WP_Error(
-				'minn_admin_foreign_package',
-				__( 'Minn Admin update rejected: the package does not come from Minn Admin\'s own release, so it cannot be verified.', 'minn-admin' )
-			);
+		if ( $ours && ! $ours_url ) {
+			return $this->foreign_package_error();
 		}
 		// Cheap check BEFORE the network call: this filter fires for every
 		// plugin, theme and core download on the site, and request() used to
 		// block each one on a GitHub fetch just to discover it wasn't ours.
-		if ( ! $this->is_our_package_url( $package ) ) {
+		if ( ! $ours_url ) {
 			return $reply;
 		}
+		$expected = $this->expected_hash( $package );
+		if ( is_wp_error( $expected ) ) {
+			return $expected;
+		}
+		if ( ! function_exists( 'download_url' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		$file = download_url( $package, 300 );
+		if ( is_wp_error( $file ) ) {
+			return $file;
+		}
+		return $this->verify_file( $file, $package, $expected );
+	}
+
+	private function foreign_package_error() {
+		return new WP_Error(
+			'minn_admin_foreign_package',
+			__( 'Minn Admin update rejected: the package does not come from Minn Admin\'s own release, so it cannot be verified.', 'minn-admin' )
+		);
+	}
+
+	/**
+	 * The sha256 the remote manifest publishes for this package URL.
+	 *
+	 * @param string $package Package URL.
+	 * @return string|WP_Error
+	 */
+	private function expected_hash( $package ) {
 		// Remote only. The manifest bundled in the zip names a sha256 for the
 		// release it belongs to, but a zip cannot carry its own hash, so that
 		// value is a build-time placeholder. Judging a download against it
@@ -254,12 +300,24 @@ class Minn_Admin_Updater {
 				__( 'Minn Admin update rejected: the release manifest does not publish a sha256 for this package.', 'minn-admin' )
 			);
 		}
-		if ( ! function_exists( 'download_url' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-		}
-		$file = download_url( $package, 300 );
-		if ( is_wp_error( $file ) ) {
-			return $file;
+		return (string) $expected;
+	}
+
+	/**
+	 * Accept the file only if it matches the manifest's hash; delete it
+	 * otherwise.
+	 *
+	 * @param string      $file     Local file.
+	 * @param string      $package  Package URL it stands for.
+	 * @param string|null $expected Known hash, or null to look it up.
+	 * @return string|WP_Error
+	 */
+	private function verify_file( $file, $package, $expected = null ) {
+		if ( null === $expected ) {
+			$expected = $this->expected_hash( $package );
+			if ( is_wp_error( $expected ) ) {
+				return $expected;
+			}
 		}
 		$hash = (string) hash_file( 'sha256', $file );
 		if ( ! hash_equals( strtolower( $expected ), $hash ) ) {

@@ -642,6 +642,31 @@ if ( function_exists( 'minn_admin_s301_active' ) && minn_admin_s301_active() ) {
 	$skip( 'Simple 301 Redirects inactive' );
 }
 
+// --- H1 A package another filter supplies for Minn is still hash-checked ---
+if ( class_exists( 'Minn_Admin_Updater' ) ) {
+	$pkg  = 'https://github.com/austinginder/minn-admin/releases/download/v9.9.9/minn-admin.zip';
+	$good = wp_tempnam( 'minn-v043-good' );
+	file_put_contents( $good, 'minn v043 good package' );
+	$fake = (object) array( 'version' => '9.9.9', 'download_url' => $pkg, 'sha256' => hash_file( 'sha256', $good ) );
+	$mock = function () use ( $fake ) {
+		return $fake;
+	};
+	add_filter( 'pre_transient_minn_admin_updater', $mock );
+	$upd  = new Minn_Admin_Updater();
+	$bad  = wp_tempnam( 'minn-v043-bad' );
+	file_put_contents( $bad, 'something else entirely' );
+	$extra = array( 'plugin' => 'minn-admin/minn-admin.php' );
+	$res   = $upd->verify_package( $bad, $pkg, null, $extra );
+	$check( 'updater: a mismatched file another filter supplies for Minn is refused', is_wp_error( $res ), is_wp_error( $res ) ? $res->get_error_code() : 'accepted' );
+	$res2  = $upd->verify_package( $good, $pkg, null, $extra );
+	$check( 'updater: a matching file from another filter is accepted (control)', $good === $res2, is_wp_error( $res2 ) ? $res2->get_error_code() : '' );
+	$res3  = $upd->verify_package( $bad, 'https://downloads.wordpress.org/plugin/akismet.zip', null, array( 'plugin' => 'akismet/akismet.php' ) );
+	$check( 'updater: another plugin\'s answered download is left alone (control)', $bad === $res3 );
+	remove_filter( 'pre_transient_minn_admin_updater', $mock );
+	@unlink( $good );
+	@unlink( $bad );
+}
+
 // --- 11-02 Folder listings authorize a bounded set ------------------------
 if ( function_exists( 'minn_admin_media_folders_provider' ) && minn_admin_media_folders_provider() && $author ) {
 	$reads = 0;
