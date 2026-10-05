@@ -393,7 +393,8 @@ class Minn_Admin_CPT {
 			$v = ( (array) ( self::acf_taxonomies()[ $slug ] ?? array() ) )['object_type'] ?? array();
 		} elseif ( 'jet' === $source ) {
 			$edit = (array) ( self::jet_taxonomies()[ $slug ]['edit'] ?? array() );
-			$v    = $edit['advanced_settings']['object_type'] ?? ( $edit['object_type'] ?? array() );
+			// Jet's edit item keeps a taxonomy's post types in general_settings.
+			$v    = $edit['general_settings']['object_type'] ?? ( $edit['object_type'] ?? array() );
 		} else {
 			$v = ( (array) ( ( (array) get_option( self::OPTION_TAX, array() ) )[ $slug ] ?? array() ) )['object_types'] ?? array();
 		}
@@ -625,7 +626,9 @@ class Minn_Admin_CPT {
 		// runtime (a theme's post formats, a translation plugin's language
 		// taxonomy) must not be written into the vendor's store.
 		$stored          = self::stored_type_lists( $source, $slug );
-		$def['supports'] = array_values( array_unique( array_merge( $def['supports'], array_values( array_diff( $stored['supports'], self::SUPPORTS ) ) ) ) );
+		// CPT UI's 'none' marker turns every support off when present, so it is
+		// never carried: what the modal ticks has to take effect.
+		$def['supports'] = array_values( array_unique( array_merge( $def['supports'], array_values( array_diff( $stored['supports'], self::SUPPORTS, array( 'none' ) ) ) ) ) );
 		foreach ( $stored['taxonomies'] as $tax_name ) {
 			$tax = get_taxonomy( $tax_name );
 			if ( $tax && ! self::offered_taxonomy( $tax ) && ! in_array( $tax_name, $def['taxonomies'], true ) ) {

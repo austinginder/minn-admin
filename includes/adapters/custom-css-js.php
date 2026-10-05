@@ -794,7 +794,12 @@ add_action( 'rest_api_init', function () {
 				// The edit form sends code and active on every save, renames
 				// included, so judge what actually changed against the stored
 				// snippet before writing anything.
-				$code_changed   = array_key_exists( 'code', $body ) && (string) $body['code'] !== (string) $post->post_content;
+				// Line endings normalised: CCJ's own editor stores CRLF and Minn's
+				// form sends LF back, which read as a change on every save.
+				$eol            = function ( $v ) {
+					return str_replace( "\r\n", "\n", (string) $v );
+				};
+				$code_changed   = array_key_exists( 'code', $body ) && $eol( $body['code'] ) !== $eol( $post->post_content );
 				$active_changed = array_key_exists( 'active', $body ) && ! empty( $body['active'] ) !== minn_admin_ccj_is_active( $id );
 				$update = array( 'ID' => $id );
 				if ( isset( $body['name'] ) ) {

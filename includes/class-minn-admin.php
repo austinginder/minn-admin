@@ -1549,7 +1549,10 @@ class Minn_Admin {
 		// into, but its registration form creates accounts on that site; hold
 		// that one action the way wp-signup.php is held.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$register = 'wp-login.php' === $script && isset( $_REQUEST['action'] ) && 'register' === $_REQUEST['action'];
+		// A login-URL plugin (Perfmatters, WPS Hide Login) serves wp-login.php
+		// from its own slug and says so through $pagenow, not SCRIPT_NAME.
+		$login    = 'wp-login.php' === $script || 'wp-login.php' === ( $GLOBALS['pagenow'] ?? '' );
+		$register = $login && isset( $_REQUEST['action'] ) && 'register' === $_REQUEST['action'];
 		if ( ! $register && ! in_array( $script, self::MAINTENANCE_ENTRY_SCRIPTS, true ) ) {
 			return;
 		}

@@ -52,8 +52,10 @@ A few properties worth knowing before auditing (details in
   why the dev-mode flag that relaxes certificate checking is refused on a
   site whose environment type is production, and never applies to the
   package download.
-- Maintenance mode holds back the front end (including form posts to any
-  page, which plugins process before the holding page is drawn), feeds,
+- Maintenance mode holds back the front end (including form posts that
+  plugins process once the request is routed, such as Contact Form 7 and
+  Gravity Forms; a plugin that answers a post earlier, before routing, is
+  not held), feeds,
   the REST API, admin-ajax, admin-post, XML-RPC, comment and trackback
   posting, signup and activation. Signing in (`wp-login.php`, or a login
   screen a plugin has moved), `wp-cron.php` and WooCommerce's payment

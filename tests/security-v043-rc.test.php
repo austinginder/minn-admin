@@ -128,6 +128,14 @@ wp_set_current_user( 0 );
 $check( 'maintenance: a visitor\'s form POST to a page is held', method_exists( 'Minn_Admin', 'maintenance_front_post' ) && $m_held( 'maintenance_front_post', 'POST' ) );
 $check( 'maintenance: a visitor\'s GET is left to the holding page (control)', method_exists( 'Minn_Admin', 'maintenance_front_post' ) && ! $m_held( 'maintenance_front_post', 'GET' ) );
 $check( 'maintenance: the init hold leaves a POST to index.php alone, so a moved login screen still signs in', ! $m_held( 'maintenance_admin_entry', 'POST' ) );
+// Review R2-2: registering through a moved login screen is held like wp-login.php's.
+$m_page                = $GLOBALS['pagenow'] ?? null;
+$GLOBALS['pagenow']    = 'wp-login.php';
+$_REQUEST['action']    = 'register';
+$check( 'maintenance: registering at a moved login screen is held', $m_held( 'maintenance_admin_entry', 'POST' ) );
+unset( $_REQUEST['action'] );
+$check( 'maintenance: signing in at a moved login screen is not (control)', ! $m_held( 'maintenance_admin_entry', 'POST' ) );
+$GLOBALS['pagenow']    = $m_page;
 $prio = has_action( 'parse_request', array( 'Minn_Admin', 'maintenance_front_post' ) );
 $check( 'maintenance: the hold runs after REST is served and before Contact Form 7', is_int( $prio ) && $prio > (int) has_action( 'parse_request', 'rest_api_loaded' ) && $prio < 20, 'priority ' . var_export( $prio, true ) );
 if ( class_exists( '\Automattic\WooCommerce\Internal\Utilities\LegacyRestApiStub' ) ) {
@@ -152,12 +160,14 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'cptui_get_post_type_d
 	// What CPT UI's own screen can add and Minn's modal can't show.
 	$o                         = (array) get_option( 'cptui_post_types', array() );
 	$o[ $pt ]['supports'][]    = 'post-formats';
+	$o[ $pt ]['supports'][]    = 'none'; // CPT UI's all-off marker (review R2-4)
 	update_option( 'cptui_post_types', $o );
 	add_post_type_support( $pt, 'post-formats' );
 	add_post_type_support( $pt, 'trackbacks' ); // attached by code only, never stored
 	list( $st2 ) = $call( 'POST', "/minn-admin/v1/post-types/{$pt}", array( 'singular' => 'Thing 2', 'plural' => 'Things 2', 'public' => true, 'show_in_rest' => true, 'supports' => $sup, 'taxonomies' => array() ) );
 	$o = (array) get_option( 'cptui_post_types', array() );
 	$check( 'post type edit: support attached only by code is not written into CPT UI (review N7)', 200 === $st2 && ! in_array( 'trackbacks', (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() ), true ) );
+	$check( 'post type edit: CPT UI\'s "none" marker is not carried, so ticked supports apply (review R2-4)', ! in_array( 'none', (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() ), true ) );
 	$check( 'post type edit: a label save keeps Post Formats support', 200 === $st2 && in_array( 'post-formats', (array) ( $o[ $pt ]['supports'] ?? array() ), true ), "create {$st}, update {$st2}, supports " . implode( ',', (array) ( $o[ $pt ]['supports'] ?? array() ) ) );
 	list( $st ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $tx, 'singular' => 'Topic', 'plural' => 'Topics', 'public' => true, 'show_in_rest' => true, 'object_types' => array( 'post' ), 'backend' => 'cptui' ) );
 	register_taxonomy( $tx, 'post', array( 'public' => true, 'label' => 'Topics' ) );
@@ -602,6 +612,14 @@ if ( defined( 'CCJ_UPLOAD_DIR' ) && function_exists( 'minn_admin_ccj_rebuild_tre
 	file_put_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css', '/* minn-v043 raw bytes */' );
 	update_post_meta( $own, 'options', array_merge( (array) get_post_meta( $own, 'options', true ), array( 'preprocessor' => 'less' ) ) );
 	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$own}", array( 'name' => 'Minn v043 renamed', 'code' => (string) get_post_field( 'post_content', $own ), 'active' => true ) );
+	// Review R2-3: CCJ's editor stores CRLF; Minn's form sends LF back.
+	global $wpdb;
+	$wpdb->update( $wpdb->posts, array( 'post_content' => ".minn-v043-a {\r\n\tcolor: blue;\r\n}" ), array( 'ID' => $own ) );
+	clean_post_cache( $own );
+	file_put_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css', '/* minn-v043 crlf bytes */' );
+	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$own}", array( 'name' => 'Minn v043 crlf', 'code' => ".minn-v043-a {\n\tcolor: blue;\n}", 'active' => true ) );
+	$check( 'CCJ: a CRLF-stored snippet resent with LF is not a code change (review R2-3)', '/* minn-v043 crlf bytes */' === (string) @file_get_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css' ) );
+	file_put_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css', '/* minn-v043 raw bytes */' );
 	$check( 'CCJ: renaming a snippet (code resent unchanged) leaves its file alone', '/* minn-v043 raw bytes */' === (string) @file_get_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css' ) );
 	$check( 'CCJ: option keys Minn doesn\'t edit (Pro preprocessor) survive an edit', 'less' === ( (array) get_post_meta( $own, 'options', true ) )['preprocessor'] ?? null );
 	file_put_contents( CCJ_UPLOAD_DIR . '/' . $html . '.html', '<p>stale</p>' );
