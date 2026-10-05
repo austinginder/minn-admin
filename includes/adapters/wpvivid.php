@@ -313,7 +313,13 @@ function minn_admin_wpvivid_status_model() {
  * @return bool
  */
 function minn_admin_wpvivid_can() {
-	return current_user_can( 'administrator' ) || is_super_admin();
+	if ( ! current_user_can( 'administrator' ) && ! is_super_admin() ) {
+		return false;
+	}
+	// And WPvivid's own answer: every one of its ajax handlers asks this
+	// filter, which a site uses to keep backups to its owner. It only ever
+	// narrows here; the administrator floor above still holds.
+	return (bool) apply_filters( 'wpvivid_ajax_check_security', current_user_can( 'manage_options' ) );
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {

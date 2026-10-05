@@ -598,6 +598,36 @@ if ( defined( 'CCJ_UPLOAD_DIR' ) && function_exists( 'minn_admin_ccj_rebuild_tre
 	$skip( 'Custom CSS & JS writes: plugin inactive' );
 }
 
+// --- 09-01 Whole-site tools ask the vendor's own narrowed answer ----------
+if ( function_exists( 'minn_admin_wpvivid_can' ) ) {
+	add_filter( 'wpvivid_ajax_check_security', '__return_false' );
+	$check( 'WPvivid: an administrator the site kept out of backups is kept out here too', ! minn_admin_wpvivid_can() );
+	remove_filter( 'wpvivid_ajax_check_security', '__return_false' );
+	$check( 'WPvivid: an administrator is otherwise let in (control)', minn_admin_wpvivid_can() );
+}
+if ( function_exists( 'minn_admin_tm_ready' ) && minn_admin_tm_ready() ) {
+	$tm      = \AM\TransientsManager\TransientsManager::getInstance();
+	$tm_was  = $tm->capability;
+	$tm->capability = 'minn_v043_transients';
+	$check( 'Transients Manager: its raised capability keeps an administrator out', ! minn_admin_tm_can() );
+	$tm->capability = $tm_was;
+} else {
+	$skip( 'Transients Manager inactive' );
+}
+if ( class_exists( 'WooCommerce' ) && function_exists( 'minn_admin_visibility_toggles' ) ) {
+	$cs_was  = get_option( 'woocommerce_coming_soon', null );
+	$no_wc   = function ( $allcaps ) {
+		$allcaps['manage_woocommerce'] = false;
+		return $allcaps;
+	};
+	add_filter( 'user_has_cap', $no_wc );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/visibility/toggle', array( 'id' => 'wc', 'on' => 'yes' !== $cs_was ) );
+	remove_filter( 'user_has_cap', $no_wc );
+	wp_cache_delete( 'alloptions', 'options' );
+	$check( 'store coming soon: only someone who can manage WooCommerce flips it', 403 === $st && get_option( 'woocommerce_coming_soon', null ) === $cs_was, "status {$st}" );
+	null === $cs_was ? delete_option( 'woocommerce_coming_soon' ) : update_option( 'woocommerce_coming_soon', $cs_was );
+}
+
 // --- 08-04 Snippet edits keep an empty (shortcode-only) location ----------
 $all_surfaces = class_exists( 'Minn_Admin_Surfaces' ) ? Minn_Admin_Surfaces::all() : array();
 foreach ( array( 'wpcode', 'hfcm' ) as $sid ) {

@@ -159,6 +159,26 @@ function minn_admin_visibility_toggles() {
 		} );
 	}
 
+	// The vendor's own capability for changing the switch, where it has one
+	// a site can raise. Each is ANDed with manage_options, so it only ever
+	// narrows: an administrator kept out of LightStart's or SeedProd's
+	// settings must not flip the site open or shut from here.
+	if ( isset( $t['wpmm'] ) && function_exists( 'wpmm_get_capability' ) ) {
+		$t['wpmm']['can'] = function () {
+			return current_user_can( wpmm_get_capability( 'settings' ) );
+		};
+	}
+	if ( isset( $t['seedprod'] ) ) {
+		$t['seedprod']['can'] = function () {
+			return current_user_can( apply_filters( 'seedprod_save_settings_capability', 'edit_others_posts' ) );
+		};
+	}
+	if ( isset( $t['wc'] ) ) {
+		$t['wc']['can'] = function () {
+			return current_user_can( 'manage_woocommerce' );
+		};
+	}
+
 	/**
 	 * Register a writer for a provider your plugin reports via
 	 * `minn_admin_visibility_providers`. See docs/for-plugin-authors.md.
@@ -375,7 +395,8 @@ function minn_admin_site_visibility() {
 			'url'     => isset( $p['url'] ) ? esc_url_raw( (string) $p['url'] ) : '',
 			'minn'    => ! empty( $p['minn'] ),
 			'partial' => ! empty( $p['partial'] ),
-			'can'     => $can_fix && '' !== $id && isset( $toggles[ $id ] ) && is_callable( $toggles[ $id ]['set'] ),
+			'can'     => $can_fix && '' !== $id && isset( $toggles[ $id ] ) && is_callable( $toggles[ $id ]['set'] )
+				&& ( empty( $toggles[ $id ]['can'] ) || ! is_callable( $toggles[ $id ]['can'] ) || call_user_func( $toggles[ $id ]['can'] ) ),
 		);
 	}
 
@@ -526,6 +547,9 @@ add_action( 'rest_api_init', function () {
 				$toggles = minn_admin_visibility_toggles();
 				if ( '' === $id || ! isset( $toggles[ $id ] ) ) {
 					return new WP_Error( 'minn_no_toggle', __( 'No visibility toggle is registered for that provider.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				if ( ! empty( $toggles[ $id ]['can'] ) && is_callable( $toggles[ $id ]['can'] ) && ! call_user_func( $toggles[ $id ]['can'] ) ) {
+					return new WP_Error( 'rest_forbidden', __( 'This site keeps that switch to people with the plugin’s own settings access.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 				$mem = get_option( 'minn_admin_vis_restore', array() );
 				if ( ! is_array( $mem ) ) {

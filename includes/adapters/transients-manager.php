@@ -25,7 +25,20 @@ function minn_admin_tm_ready() {
 }
 
 function minn_admin_tm_can() {
-	return current_user_can( 'manage_options' );
+	// manage_options AND the plugin's own capability: a public property its
+	// screen and actions check at runtime, which a site can raise to keep
+	// transients (cached tokens among them) from some administrators. Same
+	// shape as minn_admin_rri_can(); a lowered value never loosens Minn.
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return false;
+	}
+	if ( class_exists( '\\AM\\TransientsManager\\TransientsManager' ) && method_exists( '\\AM\\TransientsManager\\TransientsManager', 'getInstance' ) ) {
+		$cap = \AM\TransientsManager\TransientsManager::getInstance()->capability ?? '';
+		if ( is_string( $cap ) && '' !== $cap ) {
+			return current_user_can( $cap );
+		}
+	}
+	return true;
 }
 
 /**
