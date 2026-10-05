@@ -9,6 +9,7 @@
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 const { execSync } = require( 'child_process' );
+const fs = require( 'fs' );
 const path = require( 'path' );
 
 ( async () => {
@@ -48,9 +49,10 @@ const path = require( 'path' );
 		}, null, { timeout: 15000 } );
 		const chipText = await page.evaluate( () => document.querySelector( '#minn-upd-chip-text' ).textContent );
 		// Count-agnostic: real pending updates (license-gated paid fixtures)
-		// can ride along with the fixture offer — the phase label just has
-		// to be the plugin phase.
-		t.check( 'Chip appears with the plugin phase', /Updating \d+ plugins?/.test( chipText ), chipText );
+		// can ride along with the fixture offer. Since updates run as one
+		// batch, a run that also carries a theme or language pack is labelled
+		// "updates" rather than "plugins"; either is the running phase.
+		t.check( 'Chip appears with the plugin phase', /Updating \d+ (?:plugins?|updates?)/.test( chipText ), chipText );
 
 		// THE ask: close the panel mid-run — the chip stays as ambient feedback.
 		// evaluate-click: the open panel's overlay intercepts a real click on
@@ -77,6 +79,15 @@ const path = require( 'path' );
 		try {
 			wpCli( 'option delete minn_test_plugin_update' );
 			wpCli( `eval 'delete_site_transient( "update_plugins" ); wp_update_plugins();'` );
+		} catch ( e ) { /* cleanup is best-effort */ }
+		// A PHP worker that dies mid-upgrade leaves the old copy deleted, the
+		// new one unpacked only in upgrade/, and .maintenance in place, so
+		// every later suite gets a 503. Put the fixture back as it was.
+		try {
+			if ( ! fs.existsSync( path.join( wpPath, 'wp-content/plugins/koko-analytics/koko-analytics.php' ) ) ) {
+				wpCli( `plugin install koko-analytics --version=${ beforeVersion } --activate` );
+			}
+			fs.rmSync( path.join( wpPath, '.maintenance' ), { force: true } );
 		} catch ( e ) { /* cleanup is best-effort */ }
 	}
 
