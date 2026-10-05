@@ -43,8 +43,15 @@ function minn_admin_acf_schema_active() {
 		&& function_exists( 'acf_get_setting' );
 }
 
-/** ACF's own admin capability (filterable via their settings). */
+/**
+ * ACF's own admin capability (filterable via their settings), and nobody's
+ * while show_admin is off: developers turn it off to keep field groups away
+ * from client administrators, and acf_current_user_can_admin() asks both.
+ */
 function minn_admin_acf_schema_cap() {
+	if ( ! acf_get_setting( 'show_admin' ) ) {
+		return 'do_not_allow';
+	}
 	return (string) acf_get_setting( 'capability' );
 }
 

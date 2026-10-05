@@ -171,6 +171,15 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'cptui_get_post_type_d
 } else {
 	$skip( 'post type manager: CPT UI inactive' );
 }
+if ( function_exists( 'minn_admin_acf_schema_cap' ) && function_exists( 'acf_get_setting' ) ) {
+	// Review S2: the field-group builder honours the same lock.
+	add_filter( 'acf/settings/show_admin', '__return_false' );
+	list( $st ) = $call( 'GET', '/minn-admin/v1/acf/schema/groups' );
+	remove_filter( 'acf/settings/show_admin', '__return_false' );
+	$check( 'ACF locked away: the field-group builder refuses an administrator', 403 === $st, "status {$st}" );
+	list( $st ) = $call( 'GET', '/minn-admin/v1/acf/schema/groups' );
+	$check( 'ACF unlocked: the field-group builder answers (control)', 200 === $st, "status {$st}" );
+}
 if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'acf_get_setting' ) && acf_get_setting( 'enable_post_types' ) ) {
 	$apt = 'mv043a' . wp_rand( 10, 99 );
 	list( $st ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $apt, 'singular' => 'Gadget', 'plural' => 'Gadgets', 'public' => true, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array(), 'backend' => 'acf' ) );
