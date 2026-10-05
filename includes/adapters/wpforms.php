@@ -457,7 +457,9 @@ add_action( 'rest_api_init', function () {
 					$out[] = array(
 						'id'      => $id,
 						'title'   => $title,
-						'entries' => $counts[ $id ] ?? 0,
+						// WPForms prints a form's entry count only to people who
+						// may read that form's entries; the others get none.
+						'entries' => minn_admin_wpforms_can_form( $id ) ? ( $counts[ $id ] ?? 0 ) : null,
 						'date'    => str_replace( ' ', 'T', (string) get_post_field( 'post_modified_gmt', $id ) ) . 'Z',
 					);
 				}

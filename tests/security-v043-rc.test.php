@@ -333,6 +333,23 @@ if ( function_exists( 'wpforms' ) && function_exists( 'wpforms_current_user_can'
 	wp_set_current_user( $admin );
 	list( $st, $d ) = $wf_pv();
 	$check( 'WPForms preview: an administrator still sees the latest entry (control)', false !== strpos( (string) wp_json_encode( $d ), 'MinnSecretWPF' ), "status {$st}" );
+	// 04-02: the Forms view counts only forms whose entries you may read.
+	// Its own form: wpforms_current_user_can() caches each answer per user,
+	// cap and form, so one the checks above already asked about would stick.
+	$wf_id2 = wpforms()->obj( 'form' )->add( 'Minn v043 WPForms count ' . time(), array(), array( 'template' => 'simple-contact-form-template' ) );
+	$wf_e2  = wpforms()->obj( 'entry' )->add( array( 'form_id' => $wf_id2, 'status' => '', 'fields' => wp_json_encode( array() ) ) );
+	$no_entries = function ( $can, $caps, $id ) use ( $wf_id2 ) {
+		return 'view_entries_form_single' === $caps && (int) $id === (int) $wf_id2 ? false : $can;
+	};
+	add_filter( 'wpforms_current_user_can', $no_entries, 10, 3 );
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/wpforms/forms', null, array( 'manage' => 1 ) );
+	$wf_row = current( array_filter( (array) ( $d['items'] ?? array() ), function ( $r ) use ( $wf_id2 ) {
+		return (int) ( $r['id'] ?? 0 ) === (int) $wf_id2;
+	} ) );
+	$check( 'WPForms Forms view: no entry count for a form whose entries you can\'t read', is_array( $wf_row ) && null === $wf_row['entries'], is_array( $wf_row ) ? 'entries ' . var_export( $wf_row['entries'], true ) : 'row missing' );
+	remove_filter( 'wpforms_current_user_can', $no_entries, 10 );
+	wpforms()->obj( 'entry' )->delete( $wf_e2 );
+	wp_delete_post( $wf_id2, true );
 	wpforms()->obj( 'entry' )->delete( $wf_e );
 	wp_delete_post( $wf_id, true );
 } else {
