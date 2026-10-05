@@ -598,6 +598,27 @@ if ( defined( 'CCJ_UPLOAD_DIR' ) && function_exists( 'minn_admin_ccj_rebuild_tre
 	$skip( 'Custom CSS & JS writes: plugin inactive' );
 }
 
+// --- 08-04 Snippet edits keep an empty (shortcode-only) location ----------
+$all_surfaces = class_exists( 'Minn_Admin_Surfaces' ) ? Minn_Admin_Surfaces::all() : array();
+foreach ( array( 'wpcode', 'hfcm' ) as $sid ) {
+	if ( empty( $all_surfaces[ $sid ]['collection']['detail']['edit']['fields'] ) ) {
+		$skip( "{$sid}: not loaded" );
+		continue;
+	}
+	$loc = current( array_filter( $all_surfaces[ $sid ]['collection']['detail']['edit']['fields'], function ( $f ) {
+		return 'location' === ( $f['key'] ?? '' );
+	} ) );
+	$check( "{$sid}: the edit form keeps an empty stored location instead of seeding the first", ! empty( $loc['clearable'] ) );
+}
+if ( class_exists( 'WPCode_Snippet' ) && ! empty( $all_surfaces['wpcode'] ) ) {
+	$sn = new WPCode_Snippet( array( 'title' => 'Minn v043 shortcode', 'code' => '<p>minn</p>', 'code_type' => 'html', 'auto_insert' => 0, 'active' => false ) );
+	$sn->save();
+	$sid = (int) $sn->get_id();
+	list( $st ) = $call( 'PUT', "/minn-admin/v1/wpcode/snippets/{$sid}", array( 'name' => 'Minn v043 shortcode 2', 'location' => '', 'code_type' => 'html', 'auto_insert' => false ) );
+	$check( 'wpcode: an untouched empty location saves and stays empty', 200 === $st && '' === (string) ( new WPCode_Snippet( $sid ) )->get_location(), "status {$st}" );
+	wp_delete_post( $sid, true );
+}
+
 // --- 08-03 An SEO save keeps an unchanged social image without re-checking it --
 $seo_plugin = function_exists( 'minn_admin_seo_plugin' ) ? minn_admin_seo_plugin() : null;
 $seo_image  = '';

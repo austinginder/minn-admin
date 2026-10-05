@@ -506,7 +506,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 		array( 'key' => 'code_type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options ),
 		array( 'key' => 'auto_insert', 'label' => __( 'Insert automatically', 'minn-admin' ), 'type' => 'toggle' ),
-		array( 'key' => 'location', 'label' => __( 'Location', 'minn-admin' ), 'type' => 'select', 'options' => $location_options ),
+		// clearable: a snippet that is only used as a shortcode stores no
+		// location, and an edit seeded the first one in its place (the server
+		// then refused the save). Empty keeps the stored location.
+		array( 'key' => 'location', 'label' => __( 'Location', 'minn-admin' ), 'type' => 'select', 'options' => $location_options, 'clearable' => true ),
 		array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'type' => 'number' ),
 		array( 'key' => 'tags', 'label' => __( 'Tags', 'minn-admin' ), 'type' => 'tags', 'required' => false ),
 	);

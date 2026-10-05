@@ -181,7 +181,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'placeholder' => __( '<!-- tracking snippet -->', 'minn-admin' ),
 		),
 		array( 'key' => 'snippet_type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options ),
-		array( 'key' => 'location', 'label' => __( 'Location', 'minn-admin' ), 'type' => 'select', 'options' => $location_options ),
+		// clearable: a manual (shortcode) snippet stores an empty location;
+		// an edit wrote the first one over it. Empty is not written.
+		array( 'key' => 'location', 'label' => __( 'Location', 'minn-admin' ), 'type' => 'select', 'options' => $location_options, 'clearable' => true ),
 		array( 'key' => 'device_type', 'label' => __( 'Devices', 'minn-admin' ), 'type' => 'select', 'options' => $device_options ),
 	);
 

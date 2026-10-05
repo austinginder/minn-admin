@@ -890,7 +890,7 @@ class Minn_Admin_Surfaces {
 	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href', 'fields', 'settingsItem', 'list', 'download', 'follow' );
 	const CREATE_KEYS     = array( 'label', 'route', 'method', 'fields', 'defaults', 'open' );
 	const EDIT_KEYS       = array( 'route', 'method', 'preserve', 'fields' );
-	const FIELD_KEYS      = array( 'key', 'label', 'type', 'options', 'value', 'placeholder', 'rows', 'mono', 'required' );
+	const FIELD_KEYS      = array( 'key', 'label', 'type', 'options', 'value', 'placeholder', 'rows', 'mono', 'required', 'clearable' );
 	// Every type formControlHtml renders, plus the aliases formNormField
 	// accepts (true_false, range, radio, color_picker). This list and the form
 	// engine have to move together: a type the engine handles but this does not
