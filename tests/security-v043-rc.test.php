@@ -620,6 +620,7 @@ if ( defined( 'CCJ_UPLOAD_DIR' ) && function_exists( 'minn_admin_ccj_rebuild_tre
 	file_put_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css', '/* minn-v043 raw bytes */' );
 	update_post_meta( $own, 'options', array_merge( (array) get_post_meta( $own, 'options', true ), array( 'preprocessor' => 'less' ) ) );
 	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$own}", array( 'name' => 'Minn v043 renamed', 'code' => (string) get_post_field( 'post_content', $own ), 'active' => true ) );
+	$check( 'CCJ: renaming a snippet (code resent unchanged) leaves its file alone', '/* minn-v043 raw bytes */' === (string) @file_get_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css' ) );
 	// Review R2-3: CCJ's editor stores CRLF; Minn's form sends LF back.
 	global $wpdb;
 	$wpdb->update( $wpdb->posts, array( 'post_content' => ".minn-v043-a {\r\n\tcolor: blue;\r\n}" ), array( 'ID' => $own ) );
@@ -627,9 +628,40 @@ if ( defined( 'CCJ_UPLOAD_DIR' ) && function_exists( 'minn_admin_ccj_rebuild_tre
 	file_put_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css', '/* minn-v043 crlf bytes */' );
 	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$own}", array( 'name' => 'Minn v043 crlf', 'code' => ".minn-v043-a {\n\tcolor: blue;\n}", 'active' => true ) );
 	$check( 'CCJ: a CRLF-stored snippet resent with LF is not a code change (review R2-3)', '/* minn-v043 crlf bytes */' === (string) @file_get_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css' ) );
-	file_put_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css', '/* minn-v043 raw bytes */' );
-	$check( 'CCJ: renaming a snippet (code resent unchanged) leaves its file alone', '/* minn-v043 raw bytes */' === (string) @file_get_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css' ) );
 	$check( 'CCJ: option keys Minn doesn\'t edit (Pro preprocessor) survive an edit', 'less' === ( (array) get_post_meta( $own, 'options', true ) )['preprocessor'] ?? null );
+	// Review R3-3: a designer (no unfiltered_html) renaming CSS an admin wrote
+	// resends its code unchanged; that must not put the body through kses.
+	$des           = $make( array( 'name' => 'Minn v043 designer', 'language' => 'css', 'linking' => 'external', 'code' => '.minn-v043-d > p { color: red; }' ) );
+	$no_unfiltered = function ( $caps ) {
+		$caps['unfiltered_html'] = false;
+		return $caps;
+	};
+	add_filter( 'user_has_cap', $no_unfiltered );
+	kses_init();
+	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$des}", array( 'name' => 'Minn v043 designer renamed', 'code' => '.minn-v043-d > p { color: red; }', 'active' => true ) );
+	remove_filter( 'user_has_cap', $no_unfiltered );
+	kses_init();
+	clean_post_cache( $des );
+	$check( 'CCJ: a designer\'s unchanged save leaves the body as the admin wrote it (review R3-3)', false !== strpos( (string) get_post_field( 'post_content', $des ), '-d > p' ), (string) get_post_field( 'post_content', $des ) );
+	// Review R3-2: post_content holds the kses'd copy, the file CCJ's bytes.
+	// Off then on (the switch, then the edit form) must bring CCJ's bytes back.
+	$wpdb->update( $wpdb->posts, array( 'post_content' => '.minn-v043-d &gt; p { color: red; }' ), array( 'ID' => $des ) );
+	clean_post_cache( $des );
+	$des_path = CCJ_UPLOAD_DIR . '/' . $des . '.css';
+	$des_raw  = "/* minn-v043 ccj bytes */\n.minn-v043-d > p { color: red; }";
+	file_put_contents( $des_path, $des_raw );
+	$call( 'POST', "/minn-admin/v1/ccj/snippets/{$des}/active", array( 'active' => false ) );
+	$check( 'CCJ: switching a snippet off still removes its file', ! is_file( $des_path ) );
+	$call( 'POST', "/minn-admin/v1/ccj/snippets/{$des}/active", array( 'active' => true ) );
+	$check( 'CCJ: switching it back on restores CCJ\'s bytes, not the kses copy (review R3-2)', $des_raw === (string) @file_get_contents( $des_path ), (string) @file_get_contents( $des_path ) );
+	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$des}", array( 'name' => 'Minn v043 designer', 'code' => '.minn-v043-d &gt; p { color: red; }', 'active' => false ) );
+	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$des}", array( 'name' => 'Minn v043 designer', 'code' => '.minn-v043-d &gt; p { color: red; }', 'active' => true ) );
+	$check( 'CCJ: the edit form\'s off and on keep CCJ\'s bytes too (review R3-2)', $des_raw === (string) @file_get_contents( $des_path ) );
+	// Code edited while off: the parked bytes are stale, so the edit wins.
+	$call( 'POST', "/minn-admin/v1/ccj/snippets/{$des}/active", array( 'active' => false ) );
+	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$des}", array( 'name' => 'Minn v043 designer', 'code' => '.minn-v043-d p { color: green; }', 'active' => false ) );
+	$call( 'POST', "/minn-admin/v1/ccj/snippets/{$des}/active", array( 'active' => true ) );
+	$check( 'CCJ: code edited while off is what comes back on', false !== strpos( (string) @file_get_contents( $des_path ), 'green' ) );
 	file_put_contents( CCJ_UPLOAD_DIR . '/' . $html . '.html', '<p>stale</p>' );
 	$call( 'POST', "/minn-admin/v1/ccj/snippets/{$jq}/active", array( 'active' => true ) );
 	$check( 'CCJ: an HTML file an earlier version published is removed on the next write', ! is_file( CCJ_UPLOAD_DIR . '/' . $html . '.html' ) );

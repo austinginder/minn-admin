@@ -270,6 +270,59 @@ function minn_admin_ccj_drop_files( $id ) {
 }
 
 /**
+ * Switch a snippet's file off. The file goes (a cached page could otherwise
+ * keep loading it), but it holds the bytes CCJ wrote, which post_content may
+ * only hold kses-encoded (`a > b` stored as `a &gt; b` for a designer). They
+ * are kept in meta, tagged with the code and options they were written for,
+ * so switching the snippet back on can put them back.
+ *
+ * @param int $id Snippet post ID.
+ * @return void
+ */
+function minn_admin_ccj_park_file( $id ) {
+	$post = get_post( $id );
+	$opts = minn_admin_ccj_get_options( $id );
+	$path = defined( 'CCJ_UPLOAD_DIR' ) ? CCJ_UPLOAD_DIR . '/' . (int) $id . '.' . $opts['language'] : '';
+	if ( $post && $path && is_file( $path ) ) {
+		// Slashed: update_post_meta unslashes, and JS is full of backslashes.
+		update_post_meta( $id, '_minn_ccj_parked', wp_slash( array(
+			'bytes' => (string) file_get_contents( $path ),
+			'for'   => md5( $post->post_content . "\0" . wp_json_encode( $opts ) ),
+		) ) );
+	}
+	minn_admin_ccj_drop_files( $id );
+}
+
+/**
+ * Switch a snippet's file back on: a file already there is CCJ's (its own
+ * save writes one whatever the snippet's state, and its toggle never removes
+ * it), then the bytes parked when Minn switched it off, while the code and
+ * options are the ones they were written for; only then a rebuild from
+ * post_content.
+ *
+ * @param int $id Snippet post ID.
+ * @return void
+ */
+function minn_admin_ccj_restore_file( $id ) {
+	$parked = get_post_meta( $id, '_minn_ccj_parked', true );
+	delete_post_meta( $id, '_minn_ccj_parked' );
+	if ( ! defined( 'CCJ_UPLOAD_DIR' ) || ! wp_is_writable( CCJ_UPLOAD_DIR ) || ! minn_admin_ccj_is_active( $id ) ) {
+		return;
+	}
+	$post = get_post( $id );
+	$opts = minn_admin_ccj_get_options( $id );
+	$path = CCJ_UPLOAD_DIR . '/' . (int) $id . '.' . $opts['language'];
+	if ( ! $post || 'html' === $opts['language'] || is_file( $path ) ) {
+		return;
+	}
+	if ( is_array( $parked ) && isset( $parked['bytes'], $parked['for'] ) && hash_equals( (string) $parked['for'], md5( $post->post_content . "\0" . wp_json_encode( $opts ) ) ) ) {
+		@file_put_contents( $path, (string) $parked['bytes'] );
+		return;
+	}
+	minn_admin_ccj_write_file( $id );
+}
+
+/**
  * Write one snippet's file the way CCJ's own save does
  * (options_save_meta_box_data): only the snippet being saved, and never an
  * HTML snippet, which CCJ prints from the post itself. Other snippets' files
@@ -805,7 +858,9 @@ add_action( 'rest_api_init', function () {
 				if ( isset( $body['name'] ) ) {
 					$update['post_title'] = sanitize_text_field( $body['name'] );
 				}
-				if ( array_key_exists( 'code', $body ) ) {
+				// Only a code change touches the body: an unchanged one would go
+				// back through kses for a designer and lose what CCJ stored.
+				if ( $code_changed ) {
 					$update['post_content'] = (string) $body['code'];
 				}
 				if ( array_key_exists( 'active', $body ) ) {
@@ -828,9 +883,17 @@ add_action( 'rest_api_init', function () {
 				// new name, so clear all three first and write the one that
 				// now applies; the file under the old name would otherwise
 				// stay reachable at its own address.
-				if ( $code_changed || $retargets || $active_changed ) {
+				// Switching it off or on alone keeps CCJ's bytes (park/restore).
+				if ( $code_changed || $retargets ) {
 					minn_admin_ccj_drop_files( $id );
+					delete_post_meta( $id, '_minn_ccj_parked' );
 					minn_admin_ccj_write_file( $id, $code_changed ? (string) $body['code'] : null );
+				} elseif ( $active_changed ) {
+					if ( minn_admin_ccj_is_active( $id ) ) {
+						minn_admin_ccj_restore_file( $id );
+					} else {
+						minn_admin_ccj_park_file( $id );
+					}
 				}
 				minn_admin_ccj_rebuild_tree();
 				return rest_ensure_response( minn_admin_ccj_item( $id ) );
@@ -892,11 +955,11 @@ add_action( 'rest_api_init', function () {
 			update_post_meta( $id, '_active', $active ? 'yes' : 'no' );
 			// Switching a snippet off stops the page loading it, but the file
 			// stays fetchable at the address it already had, so the bytes go
-			// too. Turning it back on writes them again.
+			// too. Turning it back on puts CCJ's bytes back.
 			if ( ! $active ) {
-				minn_admin_ccj_drop_files( $id );
+				minn_admin_ccj_park_file( $id );
 			} else {
-				minn_admin_ccj_write_file( $id );
+				minn_admin_ccj_restore_file( $id );
 			}
 			minn_admin_ccj_rebuild_tree();
 			return rest_ensure_response( minn_admin_ccj_item( $id ) );
