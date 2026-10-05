@@ -53,7 +53,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'WPS Hide Login activates', await setPlugin( 'wps-hide-login/wps-hide-login', 'active' ) );
 		await openSystem();
 		const hidden = await kvValue( 'Login URL' );
-		t.check( 'Login URL reflects the hider (not wp-login.php)', hidden && ! /wp-login\.php/.test( hidden ) && /\/login\/?$/.test( hidden ), hidden );
+		// The site's own slug, whatever it is set to (WPS Hide Login's default
+		// is login/), as one path segment off the home URL.
+		t.check( 'Login URL reflects the hider (not wp-login.php)', hidden && ! /wp-login\.php/.test( hidden ) && /^https?:\/\/[^/]+\/[^/?#]+\/?$/.test( hidden ), hidden );
 		await setPlugin( 'wps-hide-login/wps-hide-login', 'inactive' );
 
 		/* ===== SSL enforcement — Really Simple SSL ===== */
