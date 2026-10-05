@@ -1586,7 +1586,7 @@ class Minn_Admin_REST {
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'upload_theme' ),
 				'permission_callback' => function () {
-					return current_user_can( 'install_themes' ) && current_user_can( 'upload_files' );
+					return current_user_can( 'upload_themes' ) && current_user_can( 'upload_files' );
 				},
 			)
 		);
@@ -1640,8 +1640,10 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'upload_plugin' ),
+				// upload_plugins, not install_plugins: core's own upload screen
+				// asks for it, and hosts deny it to keep installs to wp.org.
 				'permission_callback' => function () {
-					return current_user_can( 'install_plugins' ) && current_user_can( 'upload_files' );
+					return current_user_can( 'upload_plugins' ) && current_user_can( 'upload_files' );
 				},
 			)
 		);
@@ -1654,8 +1656,9 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'install_plugin_from_url' ),
+				// A zip from anywhere is an upload as far as core is concerned.
 				'permission_callback' => function () {
-					return current_user_can( 'install_plugins' );
+					return current_user_can( 'upload_plugins' );
 				},
 				'args'                => array(
 					'url'    => array(
@@ -6993,6 +6996,25 @@ Please click the following link to confirm the invite:
 	 * @param WP_REST_Request $request { surface, id, to?, subject, message }.
 	 * @return WP_REST_Response|WP_Error
 	 */
+	/**
+	 * Who may email a form entry's submitter from the site. A forms surface's
+	 * own cap is only its view floor ('read' for the bundled ones, the vendor
+	 * gating each entry), and anyone can plant an address in an entry by
+	 * submitting the form, so the reply asks more: the descriptor's replyCap
+	 * (Gravity Forms declares its entry-notes cap, which its own "email this
+	 * note" needs), else manage_options.
+	 *
+	 * @param array $surface A forms surface descriptor.
+	 * @return bool
+	 */
+	public static function can_reply_to_entries( $surface ) {
+		if ( current_user_can( 'manage_options' ) ) {
+			return true;
+		}
+		$cap = $surface['collection']['detail']['replyCap'] ?? '';
+		return is_string( $cap ) && '' !== $cap && current_user_can( $cap );
+	}
+
 	public static function entry_reply( WP_REST_Request $request ) {
 		$unavailable = new WP_Error( 'not_found', __( 'That form entry is not available.', 'minn-admin' ), array( 'status' => 404 ) );
 		$sid         = (string) $request['surface'];
@@ -7003,6 +7025,9 @@ Please click the following link to confirm the invite:
 		}
 		if ( ! current_user_can( isset( $surface['cap'] ) ? (string) $surface['cap'] : 'manage_options' ) ) {
 			return $unavailable;
+		}
+		if ( ! self::can_reply_to_entries( $surface ) ) {
+			return new WP_Error( 'rest_forbidden', __( 'Your account can’t email people who submit this form.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$route = str_replace( '{id}', rawurlencode( (string) $request['id'] ), (string) $surface['collection']['detail']['sectionsRoute'] );
 		$parts = wp_parse_url( '/' . ltrim( $route, '/' ) );

@@ -19078,7 +19078,7 @@
 						${ phone ? `<a href="tel:${ esc( phone.replace( /[^\d+]/g, '' ) ) }">${ esc( phone ) }</a>` : '' }
 					</div>
 				</div>
-				${ email ? `<button type="button" class="minn-btn-primary minn-ep-reply" id="minn-ep-reply">${ icon( 'send' ) } ${ esc( __( 'Reply' ) ) }</button>` : '' }
+				${ email && ( ( s.collection || {} ).detail || {} ).canReply ? `<button type="button" class="minn-btn-primary minn-ep-reply" id="minn-ep-reply">${ icon( 'send' ) } ${ esc( __( 'Reply' ) ) }</button>` : '' }
 			</div>` : '';
 		const bodiesHtml = parts.bodyRows.map( ( r ) => card( r.label || __( 'Message' ), `<div class="minn-ep-message">${ esc( String( r.value == null ? '' : r.value ) ) }</div>` ) ).join( '' );
 		const answersHtml = answerRows.length ? card( __( 'Answers' ), dl( answerRows ) ) : '';
@@ -46992,12 +46992,12 @@
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-pi-body">
-						<div class="minn-dropzone compact" id="minn-pi-dropzone">
+						${ B.caps.uploadPlugins ? `<div class="minn-dropzone compact" id="minn-pi-dropzone">
 							${ icon( 'upload' ) }
 							<div class="minn-dropzone-sub">${ sprintf( /* translators: 1: the text ".zip" in bold. 2: a "browse" link. */ __( 'Drop a plugin %1$s here or %2$s' ), `<b>${ esc( __( '.zip' ) ) }</b>`, `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
 							<input type="file" id="minn-pi-file" accept=".zip" hidden>
-						</div>
-						${ ENGINE ? `<p class="minn-pi-engine-note">${ esc( __( 'Minn Engine runs Minn extensions: a folder with a minn.json. Drop one above, or install from a zip URL or GitHub release below. WordPress plugins from the directory would install but never run here.' ) ) }</p>
+						</div>` : '' }
+						${ ENGINE && B.caps.uploadPlugins ? `<p class="minn-pi-engine-note">${ esc( __( 'Minn Engine runs Minn extensions: a folder with a minn.json. Drop one above, or install from a zip URL or GitHub release below. WordPress plugins from the directory would install but never run here.' ) ) }</p>
 						<div class="minn-pi-urlrow">
 							<input class="minn-input" id="minn-pi-url" placeholder="${ esc( __( 'https://…/extension.zip or owner/repo' ) ) }" autocomplete="off" spellcheck="false">
 							<button type="button" class="minn-btn-soft" id="minn-pi-url-go">${ esc( __( 'Install' ) ) }</button>
@@ -47026,11 +47026,11 @@
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-pi-body">
-						<div class="minn-dropzone compact" id="minn-ti-dropzone">
+						${ B.caps.uploadThemes ? `<div class="minn-dropzone compact" id="minn-ti-dropzone">
 							${ icon( 'upload' ) }
 							<div class="minn-dropzone-sub">${ sprintf( /* translators: 1: the text ".zip" in bold. 2: a "browse" link. */ __( 'Drop a theme %1$s here or %2$s' ), `<b>${ esc( __( '.zip' ) ) }</b>`, `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
 							<input type="file" id="minn-ti-file" accept=".zip" hidden>
-						</div>
+						</div>` : '' }
 						<input class="minn-input" id="minn-ti-search" placeholder="${ esc( __( 'Search the WordPress.org theme directory…' ) ) }" value="${ esc( m.q ) }" autocomplete="off">
 						<div class="minn-pi-results">
 							${ m.searching ? `<div class="minn-loading">${ esc( __( 'Searching…' ) ) }</div>`
@@ -48573,6 +48573,7 @@
 				zone.classList.remove( 'minn-busy' );
 			}
 		};
+		if ( ! zone ) return; // no upload capability, so no dropzone
 		zone._accept = uploadZip; // window-level drops route here while the modal is open
 		zone.addEventListener( 'click', () => file.click() );
 		file.addEventListener( 'change', () => uploadZip( file.files[ 0 ] ) );
@@ -49288,6 +49289,7 @@
 				zone.classList.remove( 'minn-busy' );
 			}
 		};
+		if ( ! zone ) return; // no upload capability, so no dropzone
 		zone._accept = uploadZip; // window-level drops route here while the modal is open
 		zone.addEventListener( 'click', () => file.click() );
 		file.addEventListener( 'change', () => uploadZip( file.files[ 0 ] ) );

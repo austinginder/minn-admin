@@ -90,6 +90,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// form's real field labels (in form order), then the
 				// submission details — no client-side label mapping.
 				'sectionsRoute' => 'minn-admin/v1/gf/entries/{id}',
+				// Replying emails the submitter; Gravity Forms' own "also
+				// email this note" asks for its entry-notes cap.
+				'replyCap'      => 'gravityforms_edit_entry_notes',
 			),
 			// Entry workflow rides the properties shim (is_starred /
 			// is_read / status), capability-gated the way gf/v2 gates its

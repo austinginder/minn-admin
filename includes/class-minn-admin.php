@@ -1662,6 +1662,10 @@ class Minn_Admin {
 			// network this maps to the super admin, the same as core.
 			'updateLanguages' => current_user_can( 'update_languages' ),
 			'installThemes' => current_user_can( 'install_themes' ),
+			// Uploading a zip (or installing one from a URL) is core's
+			// separate upload_plugins / upload_themes, which hosts can deny.
+			'uploadPlugins' => current_user_can( 'upload_plugins' ),
+			'uploadThemes'  => current_user_can( 'upload_themes' ),
 			'settings'     => current_user_can( 'manage_options' ),
 			// The System page (and the database viewer it opens) sits behind
 			// core's Site Health floor; don't offer a page that would 403.

@@ -81,6 +81,9 @@ class Minn_Admin_Surfaces {
 			$surface       = self::with_settings_state( $surface );
 			$surface       = self::with_views_state( $surface );
 			$surface       = self::with_route_state( $surface );
+			if ( 'forms' === ( $surface['family'] ?? '' ) && isset( $surface['collection']['detail'] ) && is_array( $surface['collection']['detail'] ) ) {
+				$surface['collection']['detail']['canReply'] = Minn_Admin_REST::can_reply_to_entries( $surface );
+			}
 			$out[]         = $surface;
 		}
 		return self::collapse_owner_surfaces( self::fold_into_site_options( $out ), $owners, $own );
@@ -881,7 +884,7 @@ class Minn_Admin_Surfaces {
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
 	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter', 'filterBar', 'sortQuery', 'open', 'import', 'dateQuery' );
 	const FILTER_KEYS     = array( 'label', 'options', 'query', 'param', 'json', 'route', 'valueKey', 'labelKey', 'allLabel' );
-	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
+	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit', 'replyCap' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc', 'sort' );
 	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'id', 'entry-summary' );
 	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href', 'fields', 'settingsItem', 'list', 'download', 'follow' );

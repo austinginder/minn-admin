@@ -71,6 +71,32 @@ if ( $author ) {
 	$skip( 'render-blocks: no minn-author account' );
 }
 
+// --- 01-02 Zip uploads ask core's upload caps, not just install caps -----
+// A host that keeps installs to wordpress.org denies upload_plugins and
+// upload_themes while leaving install_* alone; core's upload screens honour
+// that. Outbound HTTP is refused so the URL install never downloads.
+$deny_upload = function ( $caps, $cap ) {
+	return in_array( $cap, array( 'upload_plugins', 'upload_themes' ), true ) ? array( 'do_not_allow' ) : $caps;
+};
+$no_http     = function () {
+	return new WP_Error( 'minn_v043_offline', 'offline' );
+};
+add_filter( 'pre_http_request', $no_http );
+add_filter( 'map_meta_cap', $deny_upload, 10, 2 );
+$routes = array(
+	'plugin upload' => array( '/minn-admin/v1/plugins/upload', null ),
+	'theme upload'  => array( '/minn-admin/v1/themes/upload', null ),
+	'URL install'   => array( '/minn-admin/v1/plugins/install-url', array( 'url' => 'https://github.com/example/example/archive/refs/heads/main.zip' ) ),
+);
+foreach ( $routes as $label => $r ) {
+	list( $st ) = $call( 'POST', $r[0], $r[1] );
+	$check( "{$label}: refused where the host denies uploads", 403 === $st, "status {$st}" );
+}
+remove_filter( 'map_meta_cap', $deny_upload, 10 );
+list( $st ) = $call( 'POST', '/minn-admin/v1/plugins/upload' );
+$check( 'plugin upload: an administrator still reaches it (control)', 403 !== $st, "status {$st}" );
+remove_filter( 'pre_http_request', $no_http );
+
 // A throwaway account holding exactly the caps given, on top of Subscriber.
 $temp_users = array();
 $temp_user  = function ( $login, $caps ) use ( &$temp_users ) {
@@ -137,6 +163,41 @@ if ( class_exists( 'GFAPI' ) && function_exists( 'minn_admin_gfn_latest_entry' )
 	wp_delete_post( $private, true );
 } else {
 	$skip( 'Gravity Forms previews: Gravity Forms inactive' );
+}
+
+// --- 01-03 Replying to a submitter needs more than reading entries -------
+// Anyone can put an address in an entry by submitting the form, so a reply
+// From the site to that address asks for the vendor's notes cap (Gravity
+// Forms' own "email this note") or manage_options, not the view floor.
+if ( class_exists( 'GFAPI' ) ) {
+	$rf  = GFAPI::add_form( array(
+		'title'  => 'Minn v043 reply ' . time(),
+		'fields' => array( array( 'id' => 1, 'type' => 'text', 'label' => 'Name' ), array( 'id' => 2, 'type' => 'email', 'label' => 'Email' ) ),
+	) );
+	$re  = GFAPI::add_entry( array( 'form_id' => $rf, '1' => 'Reply Target', '2' => 'minn-v043-reply@example.com' ) );
+	$rv  = $temp_user( 'minn-v043-gf-viewer', array( 'edit_posts', 'gravityforms_view_entries' ) );
+	$rn  = $temp_user( 'minn-v043-gf-notes', array( 'edit_posts', 'gravityforms_view_entries', 'gravityforms_edit_entry_notes' ) );
+	$mails = 0;
+	$count = function ( $atts ) use ( &$mails ) {
+		++$mails;
+		return $atts;
+	};
+	add_filter( 'wp_mail', $count );
+	wp_set_current_user( $rv );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/entries/reply', array( 'surface' => 'gravity-forms', 'id' => (string) $re, 'to' => 'minn-v043-reply@example.com', 'subject' => 'Hello', 'message' => 'From the site' ) );
+	$check( 'entry reply: a view-only user cannot email the submitter', 403 === $st && 0 === $mails, "status {$st}, mails {$mails}" );
+	remove_filter( 'wp_mail', $count );
+	if ( method_exists( 'Minn_Admin_REST', 'can_reply_to_entries' ) ) {
+		$gs = Minn_Admin_Surfaces::all()['gravity-forms'] ?? array();
+		wp_set_current_user( $rn );
+		$check( 'entry reply: a user with Gravity Forms\' notes cap may (control)', Minn_Admin_REST::can_reply_to_entries( $gs ) );
+		wp_set_current_user( $admin );
+		$check( 'entry reply: an administrator may (control)', Minn_Admin_REST::can_reply_to_entries( $gs ) );
+	}
+	wp_set_current_user( $admin );
+	GFAPI::delete_form( $rf );
+} else {
+	$skip( 'entry reply: Gravity Forms inactive' );
 }
 
 // --- 04-01 WPForms emails preview needs the entry-view capability --------
