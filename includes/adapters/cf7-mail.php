@@ -234,15 +234,22 @@ add_action( 'rest_api_init', function () {
 						$messages[ $key ] = (string) $m['default'];
 					}
 				}
-				$saved = wpcf7_save_contact_form( array(
-					'id'       => (int) $form->id(),
-					'mail'     => minn_admin_cf7_mail_in( $body['mail'] ?? array(), $form->prop( 'mail' ) ),
-					'mail_2'   => minn_admin_cf7_mail_in( $body['mail_2'] ?? array(), $form->prop( 'mail_2' ) ),
-					'messages' => $messages,
-				), 'save' );
-				if ( ! $saved ) {
+				// What wpcf7_save_contact_form() does for these three, minus its
+				// wpcf7_save_contact_form action: the panels listening there
+				// (Brevo, AnalyticsWP) rebuild their settings from the editor's
+				// $_POST, which a JSON save doesn't have, so firing it switched
+				// them off. Their save() still fires wpcf7_after_save.
+				$mail           = wpcf7_sanitize_mail( minn_admin_cf7_mail_in( $body['mail'] ?? array(), $form->prop( 'mail' ) ) );
+				$mail['active'] = true;
+				$form->set_properties( array(
+					'mail'     => $mail,
+					'mail_2'   => wpcf7_sanitize_mail( minn_admin_cf7_mail_in( $body['mail_2'] ?? array(), $form->prop( 'mail_2' ) ) ),
+					'messages' => wpcf7_sanitize_messages( $messages ),
+				) );
+				if ( ! $form->save() ) {
 					return new WP_Error( 'minn_cf7_failed', __( 'Contact Form 7 did not save the form.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
+				$saved = wpcf7_contact_form( (int) $form->id() );
 				// Their editor validates the configuration on every save.
 				minn_admin_cf7_config_errors( $saved, true );
 				return rest_ensure_response( minn_admin_cf7_mail_payload( wpcf7_contact_form( (int) $form->id() ) ) );

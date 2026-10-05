@@ -201,6 +201,30 @@ if ( function_exists( 'wpcf7_save_contact_form' ) && class_exists( 'Flamingo_Inb
 	$skip( 'CF7 preview: CF7, Flamingo or minn-editor missing' );
 }
 
+// --- 05-02 A CF7 mail save leaves other panels' settings alone ----------
+// CF7's Brevo module and AnalyticsWP rebuild their per-form settings from the
+// editor's $_POST on wpcf7_save_contact_form; Minn's JSON save has none, so
+// firing that action blanked them. The spy listener has the same shape.
+if ( function_exists( 'wpcf7_save_contact_form' ) ) {
+	$cf  = wpcf7_save_contact_form( array( 'title' => 'Minn v043 CF7 panels ' . time() ) );
+	$cid = (int) $cf->id();
+	update_post_meta( $cid, '_minn_v043_panel', 'yes' );
+	$panel = function ( $form ) {
+		update_post_meta( $form->id(), '_minn_v043_panel', isset( $_POST['minn_v043_panel'] ) ? 'yes' : 'no' ); // phpcs:ignore WordPress.Security.NonceVerification
+	};
+	add_action( 'wpcf7_save_contact_form', $panel );
+	$mail            = (array) wpcf7_contact_form( $cid )->prop( 'mail' );
+	$mail['subject'] = 'Minn v043 subject';
+	list( $st ) = $call( 'POST', "/minn-admin/v1/cf7/forms/{$cid}/mail", array( 'mail' => $mail ) );
+	remove_action( 'wpcf7_save_contact_form', $panel );
+	$stored = (array) wpcf7_contact_form( $cid )->prop( 'mail' );
+	$check( 'CF7 mail save: the subject is saved (control)', 200 === $st && 'Minn v043 subject' === ( $stored['subject'] ?? '' ), "status {$st}" );
+	$check( 'CF7 mail save: a panel that saves from the editor\'s form keeps its setting', 'yes' === get_post_meta( $cid, '_minn_v043_panel', true ), 'now ' . get_post_meta( $cid, '_minn_v043_panel', true ) );
+	wp_delete_post( $cid, true );
+} else {
+	$skip( 'CF7 mail save: Contact Form 7 inactive' );
+}
+
 // --- 05-03 Fluent Forms preview needs the entries-viewer permission ------
 if ( function_exists( 'wpFluent' ) && class_exists( '\FluentForm\App\Modules\Acl\Acl' ) ) {
 	global $wpdb;
