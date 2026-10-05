@@ -226,7 +226,10 @@ away:
   structure is preserved byte for byte. A theme's ACF block opens its
   real fields there, with their own labels, instead of the raw plumbing,
   and a block that keeps a link only in its markup lists it as an
-  editable field. Hovering any ⚙ chip outlines the
+  editable field. The words an ACF block shows can usually be typed over
+  right in the preview, and the edit lands in the field they came from;
+  a shortcode in that text shows as a token you click to change, so
+  typing never overwrites it. Hovering any ⚙ chip outlines the
   block it configures, so nested blocks read as distinct controls. One
   click on "Block editor ↗" opens the same post in Gutenberg whenever you
   want the full toolkit. Posts built with page builders (Elementor,
@@ -421,6 +424,36 @@ panels cover the whole selected range: top pages and referrers from every
 analytics plugin Minn already reads, plus richer dimensions where the
 provider tracks them. Roles without reporting permission see a plain
 explanation instead of numbers.
+
+**Forms**: with a form plugin active (Gravity Forms, WPForms, Fluent
+Forms, Contact Form 7 with Flamingo or CFDB7, Ninja Forms, Formidable,
+Forminator, Everest Forms, SureForms, Elementor Pro and Bricks), Forms
+lists every entry, and an entry opens on its own page: who sent it with
+their email and phone, what they wrote, the rest of their answers and
+the plugin's notes. The arrows, or ← and →, step through the list you
+came from. **Reply** writes back from the site to the address in the
+entry (Gravity Forms logs it in the entry's notes); because anyone can
+put an address in an entry by filling in the form, replying needs the
+form plugin's permission to email entry notes, or administrator access.
+**Edit answers** (Gravity Forms, WPForms Pro, Ninja Forms and Elementor
+Pro) turns the answers into a form, so a mistyped email can be fixed
+before you reply, and saves each answer through the plugin's own edit.
+Files and payments stay in the form plugin, and if someone else changed
+an answer while you were editing, Minn asks you to reload instead of
+overwriting it. A form's own page holds what it sends and shows:
+Gravity Forms notifications (recipients, routing, conditions, a preview
+and Send test) and confirmations (a message, a page or a redirect, with
+conditions), the emails and confirmations of WPForms and Fluent Forms,
+and Contact Form 7's mail, second mail and messages. Previews fill in
+the form's latest entry for people allowed to read its entries; anyone
+else sees the tags as typed. Gravity Forms forms also open in a
+builder: add fields from the list or drag them in, reorder, duplicate
+and remove them, edit their settings, and save through Gravity Forms'
+own save. Removing a field deletes its answers in past entries, as it
+does in Gravity Forms, and Minn says so before you confirm. Minn offers
+only what your edition of each plugin offers: answers are editable where
+the plugin itself allows it, and Fluent Forms' routing and new emails
+need Fluent Forms Pro.
 
 **Cache and backups**: if a caching plugin or host cache is active, ⌘K
 "Clear site cache" purges all of them at once. If a backup plugin is
@@ -745,15 +778,17 @@ group.
   appearance. An administrator can set another user's color scheme and
   defaults there, so a client's Minn looks right before their first
   sign-in, and restore anything that user hid from their own menus.
-  Light or dark mode is the one thing that stays personal to each
-  person's device. On a subsite, this page manages site membership rather
+  Light or dark mode stays personal to each person's device, starting
+  from the site's default until they pick one. On a subsite, this page manages site membership rather
   than network accounts: add an existing account by email or username,
   change its role, or remove it from that site. Network administrators are
   protected from per-site role and removal controls. Administrators also
   get a **Role defaults** tab: per role, choose what happens after sign-in
   (person chooses, or always open Minn) and which toolbar that role gets
   on the public site (person chooses, the Minn bar, the WordPress toolbar,
-  or none). Enforcement is an overlay, never a write: changing a policy
+  or none). An **Every role** row leads the table: any role without a
+  setting of its own follows it, including roles a plugin adds later.
+  Enforcement is an overlay, never a write: changing a policy
   does not erase anyone's saved preference, and a role returned to Person
   chooses hands each person their previous choice back.
 - **Settings** — the settings people actually change: identity and logo,
@@ -762,7 +797,9 @@ group.
   maintenance plugin's mode off in place, with Undo), site language, spam
   protection (with Akismet or CleanTalk, paste or change your key right
   on its card), Connectors (AI providers plus spam services like Akismet
-  and CleanTalk: activate the plugin, then paste the key), custom CSS. The long
+  and CleanTalk: activate the plugin, then paste the key), custom CSS,
+  and **Appearance**: the palette everyone sees in Minn until they pick
+  their own, and the light or dark mode a device starts in. The long
   tail of rarely-touched options deliberately stays in wp-admin, one
   click away. If you look for a setting and don't find it, that is the
   reason, not a bug.
@@ -883,8 +920,8 @@ group.
 
 Your account page covers your name and avatar, password and sessions,
 interface language (each user can pick their own), appearance (theme
-mode, color scheme, and a switch that dresses Minn in wp-admin's fonts
-and styles for people who live in both), everything you have hidden, and
+mode, color scheme with "Site default" first, and a switch that dresses
+Minn in wp-admin's fonts and styles for people who live in both), everything you have hidden, and
 **AI Access**: application passwords for connecting
 an AI assistant or other tool to your site over the standard WordPress
 API, created and revoked per tool. When a role default is in force for
@@ -922,7 +959,8 @@ On Windows and Linux, use Ctrl wherever ⌘ appears.
 - **How do updates arrive?** From the project's GitHub releases, through
   the normal WordPress updates screen. Since v0.21.0 every download is
   verified against a checksum published with the release before it
-  installs; a tampered or broken download refuses to install.
+  installs, including one a host's package cache hands over; a tampered
+  or broken download refuses to install.
 - **Can a plugin misbehave inside Minn?** Not in the ways you are used
   to. Plugins describe their screens to Minn as plain data; their own
   code never draws inside the app, so a broken or pushy plugin cannot
