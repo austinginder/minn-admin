@@ -32,12 +32,6 @@ class Minn_Admin_CPT {
 	const SUPPORTS = array( 'title', 'editor', 'thumbnail', 'excerpt', 'custom-fields', 'comments', 'revisions', 'page-attributes', 'author' );
 
 	// Taxonomies other plugins/core manage internally — never listed.
-	/**
-	 * Core supports the vendors' own screens offer (CPT UI, ACF) and Minn's
-	 * modal doesn't. A save keeps them as stored rather than dropping them.
-	 */
-	const EXTRA_SUPPORTS = array( 'trackbacks', 'post-formats' );
-
 	const TAX_SKIP = array( 'link_category', 'post_format', 'wp_pattern_category', 'nav_menu', 'wp_theme', 'wp_template_part_area' );
 
 	public static function init() {
@@ -356,6 +350,56 @@ class Minn_Admin_CPT {
 			&& ! in_array( $pt->name, array( 'attachment', 'shop_order', 'shop_coupon', 'shop_order_refund', 'scheduled-action', 'product_variation' ), true );
 	}
 
+	/**
+	 * The supports and taxonomies a post type's own store holds.
+	 *
+	 * @param string $source minn, acf, cptui or jet.
+	 * @param string $slug   Post type.
+	 * @return array{supports: string[], taxonomies: string[]}
+	 */
+	private static function stored_type_lists( $source, $slug ) {
+		$row = array();
+		if ( 'cptui' === $source ) {
+			$row = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $slug ] ?? array() );
+		} elseif ( 'acf' === $source ) {
+			$row = (array) ( self::acf_types()[ $slug ] ?? array() );
+		} elseif ( 'jet' === $source ) {
+			// JetEngine keeps a type's taxonomies on the taxonomy (object_type).
+			$edit = (array) ( self::jet_types()[ $slug ]['edit'] ?? array() );
+			$row  = array( 'supports' => $edit['advanced_settings']['supports'] ?? ( $edit['supports'] ?? array() ) );
+		} else {
+			$row = (array) ( ( (array) get_option( self::OPTION, array() ) )[ $slug ] ?? array() );
+		}
+		$list = function ( $v ) {
+			return array_values( array_filter( array_map( 'strval', (array) $v ), 'strlen' ) );
+		};
+		return array(
+			'supports'   => $list( $row['supports'] ?? array() ),
+			'taxonomies' => $list( $row['taxonomies'] ?? array() ),
+		);
+	}
+
+	/**
+	 * The post types a taxonomy's own store attaches it to.
+	 *
+	 * @param string $source minn, acf, cptui or jet.
+	 * @param string $slug   Taxonomy.
+	 * @return string[]
+	 */
+	private static function stored_tax_object_types( $source, $slug ) {
+		if ( 'cptui' === $source ) {
+			$v = ( (array) ( ( (array) get_option( 'cptui_taxonomies', array() ) )[ $slug ] ?? array() ) )['object_types'] ?? array();
+		} elseif ( 'acf' === $source ) {
+			$v = ( (array) ( self::acf_taxonomies()[ $slug ] ?? array() ) )['object_type'] ?? array();
+		} elseif ( 'jet' === $source ) {
+			$edit = (array) ( self::jet_taxonomies()[ $slug ]['edit'] ?? array() );
+			$v    = $edit['advanced_settings']['object_type'] ?? ( $edit['object_type'] ?? array() );
+		} else {
+			$v = ( (array) ( ( (array) get_option( self::OPTION_TAX, array() ) )[ $slug ] ?? array() ) )['object_types'] ?? array();
+		}
+		return array_values( array_filter( array_map( 'strval', (array) $v ), 'strlen' ) );
+	}
+
 	/** Whether the modal's taxonomy checkboxes offer this taxonomy. */
 	private static function offered_taxonomy( $tax ) {
 		return ( $tax->public || $tax->show_ui ) && ! in_array( $tax->name, self::TAX_SKIP, true );
@@ -576,12 +620,16 @@ class Minn_Admin_CPT {
 		// The modal offers nine supports and the listed taxonomies, and sends
 		// the whole definition; what it can't show (post formats, trackbacks,
 		// a taxonomy hidden from it) stays as it was instead of being dropped
-		// by every save.
-		$registered      = array_keys( array_filter( get_all_post_type_supports( $slug ) ) );
-		$def['supports'] = array_values( array_unique( array_merge( $def['supports'], array_intersect( $registered, self::EXTRA_SUPPORTS ) ) ) );
-		foreach ( get_object_taxonomies( $slug, 'objects' ) as $tax ) {
-			if ( ! self::offered_taxonomy( $tax ) && ! in_array( $tax->name, $def['taxonomies'], true ) ) {
-				$def['taxonomies'][] = $tax->name;
+		// by every save. "As it was" is the vendor's STORED definition, not
+		// the registered one: support or a taxonomy other code attaches at
+		// runtime (a theme's post formats, a translation plugin's language
+		// taxonomy) must not be written into the vendor's store.
+		$stored          = self::stored_type_lists( $source, $slug );
+		$def['supports'] = array_values( array_unique( array_merge( $def['supports'], array_values( array_diff( $stored['supports'], self::SUPPORTS ) ) ) ) );
+		foreach ( $stored['taxonomies'] as $tax_name ) {
+			$tax = get_taxonomy( $tax_name );
+			if ( $tax && ! self::offered_taxonomy( $tax ) && ! in_array( $tax_name, $def['taxonomies'], true ) ) {
+				$def['taxonomies'][] = $tax_name;
 			}
 		}
 		if ( ! $def['singular'] || ! $def['plural'] ) {
@@ -764,8 +812,9 @@ class Minn_Admin_CPT {
 		}
 		$def = self::tax_def_from_request( $request );
 		// Same for the post types it attaches to: one the modal doesn't list
-		// (Media, for a media category) stays attached.
-		foreach ( (array) get_taxonomy( $slug )->object_type as $type ) {
+		// (Media, for a media category) stays attached, read from the
+		// vendor's stored definition for the same reason.
+		foreach ( self::stored_tax_object_types( $source, $slug ) as $type ) {
 			$pto = get_post_type_object( $type );
 			if ( $pto && ! self::offered_type( $pto ) && ! in_array( $type, $def['object_types'], true ) ) {
 				$def['object_types'][] = $type;

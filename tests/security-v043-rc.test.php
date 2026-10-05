@@ -154,8 +154,10 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'cptui_get_post_type_d
 	$o[ $pt ]['supports'][]    = 'post-formats';
 	update_option( 'cptui_post_types', $o );
 	add_post_type_support( $pt, 'post-formats' );
+	add_post_type_support( $pt, 'trackbacks' ); // attached by code only, never stored
 	list( $st2 ) = $call( 'POST', "/minn-admin/v1/post-types/{$pt}", array( 'singular' => 'Thing 2', 'plural' => 'Things 2', 'public' => true, 'show_in_rest' => true, 'supports' => $sup, 'taxonomies' => array() ) );
 	$o = (array) get_option( 'cptui_post_types', array() );
+	$check( 'post type edit: support attached only by code is not written into CPT UI (review N7)', 200 === $st2 && ! in_array( 'trackbacks', (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() ), true ) );
 	$check( 'post type edit: a label save keeps Post Formats support', 200 === $st2 && in_array( 'post-formats', (array) ( $o[ $pt ]['supports'] ?? array() ), true ), "create {$st}, update {$st2}, supports " . implode( ',', (array) ( $o[ $pt ]['supports'] ?? array() ) ) );
 	list( $st ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $tx, 'singular' => 'Topic', 'plural' => 'Topics', 'public' => true, 'show_in_rest' => true, 'object_types' => array( 'post' ), 'backend' => 'cptui' ) );
 	register_taxonomy( $tx, 'post', array( 'public' => true, 'label' => 'Topics' ) );
