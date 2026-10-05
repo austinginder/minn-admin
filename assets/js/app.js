@@ -1542,7 +1542,9 @@
 		const t = f.type || 'text';
 		if ( t === 'textarea' ) {
 			const rows = parseInt( f.rows, 10 ) || ( f.mono ? 12 : 3 );
-			return `<textarea class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="textarea" rows="${ rows }" placeholder="${ esc( f.placeholder || '' ) }">${ esc( String( v ) ) }</textarea>`;
+			// The parser drops one newline right after <textarea>, so a value
+			// that starts with a blank line needs one of its own to survive.
+			return `<textarea class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="textarea" rows="${ rows }" placeholder="${ esc( f.placeholder || '' ) }">\n${ esc( String( v ) ) }</textarea>`;
 		}
 		if ( t === 'select' ) {
 			let options = withStoredOption( f.options || [], v );
