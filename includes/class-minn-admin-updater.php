@@ -90,7 +90,9 @@ class Minn_Admin_Updater {
 		add_filter( 'plugins_api', array( $this, 'info' ), 30, 3 );
 		add_filter( 'site_transient_update_plugins', array( $this, 'update' ) );
 		add_action( 'upgrader_process_complete', array( $this, 'purge' ), 10, 2 );
-		add_filter( 'upgrader_pre_download', array( $this, 'verify_package' ), 10, 4 );
+		// Last, so a later download filter can't replace the verified file;
+		// an earlier one that answers for Minn's package is verified below.
+		add_filter( 'upgrader_pre_download', array( $this, 'verify_package' ), PHP_INT_MAX, 4 );
 	}
 
 	/**
@@ -234,7 +236,7 @@ class Minn_Admin_Updater {
 					__( 'Minn Admin update rejected: another plugin supplied the download in a form that could not be verified.', 'minn-admin' )
 				);
 			}
-			return $this->verify_file( $reply, $package );
+			return $this->verify_file( $reply, $package, null, false );
 		}
 		// An update OF THIS PLUGIN must come from this repo's release, the
 		// only package the sha256 pin covers. Anything else offered for
@@ -310,9 +312,12 @@ class Minn_Admin_Updater {
 	 * @param string      $file     Local file.
 	 * @param string      $package  Package URL it stands for.
 	 * @param string|null $expected Known hash, or null to look it up.
+	 * @param bool        $owned    Whether Minn downloaded it. A file another
+	 *                              filter supplied (a host's package cache)
+	 *                              is refused but left where it was.
 	 * @return string|WP_Error
 	 */
-	private function verify_file( $file, $package, $expected = null ) {
+	private function verify_file( $file, $package, $expected = null, $owned = true ) {
 		if ( null === $expected ) {
 			$expected = $this->expected_hash( $package );
 			if ( is_wp_error( $expected ) ) {
@@ -321,7 +326,9 @@ class Minn_Admin_Updater {
 		}
 		$hash = (string) hash_file( 'sha256', $file );
 		if ( ! hash_equals( strtolower( $expected ), $hash ) ) {
-			wp_delete_file( $file );
+			if ( $owned ) {
+				wp_delete_file( $file );
+			}
 			return new WP_Error(
 				'minn_admin_bad_package_hash',
 				__( 'Minn Admin update rejected: the downloaded package does not match the sha256 published in the release manifest.', 'minn-admin' )

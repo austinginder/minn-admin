@@ -49062,6 +49062,12 @@
 			);
 			return;
 		}
+		// A GitHub release installs through install-url, which asks core's
+		// upload_plugins: say so instead of failing with a 403.
+		if ( st === 'install' && entry.github && ! B.caps.uploadPlugins ) {
+			toast( __( 'This site only allows installing plugins from WordPress.org.' ), true );
+			return;
+		}
 		if ( btn ) {
 			btn.disabled = true;
 			btn.classList.add( 'busy' );

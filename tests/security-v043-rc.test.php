@@ -680,6 +680,8 @@ if ( class_exists( 'Minn_Admin_Updater' ) ) {
 	$extra = array( 'plugin' => 'minn-admin/minn-admin.php' );
 	$res   = $upd->verify_package( $bad, $pkg, null, $extra );
 	$check( 'updater: a mismatched file another filter supplies for Minn is refused', is_wp_error( $res ), is_wp_error( $res ) ? $res->get_error_code() : 'accepted' );
+	$check( 'updater: the refused file stays where the other plugin put it (review N8)', is_file( $bad ) );
+	$check( 'updater: verification runs after every other download filter (review N8)', PHP_INT_MAX === has_filter( 'upgrader_pre_download', array( $upd, 'verify_package' ) ) );
 	$res2  = $upd->verify_package( $good, $pkg, null, $extra );
 	$check( 'updater: a matching file from another filter is accepted (control)', $good === $res2, is_wp_error( $res2 ) ? $res2->get_error_code() : '' );
 	$res3  = $upd->verify_package( $bad, 'https://downloads.wordpress.org/plugin/akismet.zip', null, array( 'plugin' => 'akismet/akismet.php' ) );

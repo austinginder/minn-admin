@@ -84,7 +84,7 @@ function minn_admin_ccj_can_write_code( $opts ) {
 	$admin    = (bool) array_intersect( $sides, array( 'admin', 'login' ) );
 	// "CSS is not an execution context" holds only while the bytes never
 	// reach an HTML parser, and that is a property of the SINK, not the
-	// language. With linking=internal (the default) or 'both',
+	// language. With linking=internal (the default),
 	// minn_admin_ccj_write_file() concatenates the caller's bytes between
 	// literal <style type="text/css"> and </style> and the plugin echoes that
 	// file into the page, so a payload can close the element and run script.
