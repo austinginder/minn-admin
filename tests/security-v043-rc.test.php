@@ -139,6 +139,58 @@ $_SERVER = $m_server;
 $_GET    = $m_get;
 update_option( 'minn_admin_maintenance', $m_was );
 
+// --- 02-core-other-02 / -03 Post type manager respects the vendor's store --
+if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'cptui_get_post_type_data' ) ) {
+	$pt  = 'mv043t' . wp_rand( 10, 99 );
+	$tx  = 'mv043x' . wp_rand( 10, 99 );
+	$sup = array( 'title', 'editor' );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $pt, 'singular' => 'Thing', 'plural' => 'Things', 'public' => true, 'show_in_rest' => true, 'supports' => $sup, 'taxonomies' => array(), 'backend' => 'cptui' ) );
+	register_post_type( $pt, array( 'public' => true, 'label' => 'Things', 'supports' => $sup ) ); // CPT UI registers on init
+	// What CPT UI's own screen can add and Minn's modal can't show.
+	$o                         = (array) get_option( 'cptui_post_types', array() );
+	$o[ $pt ]['supports'][]    = 'post-formats';
+	update_option( 'cptui_post_types', $o );
+	add_post_type_support( $pt, 'post-formats' );
+	list( $st2 ) = $call( 'POST', "/minn-admin/v1/post-types/{$pt}", array( 'singular' => 'Thing 2', 'plural' => 'Things 2', 'public' => true, 'show_in_rest' => true, 'supports' => $sup, 'taxonomies' => array() ) );
+	$o = (array) get_option( 'cptui_post_types', array() );
+	$check( 'post type edit: a label save keeps Post Formats support', 200 === $st2 && in_array( 'post-formats', (array) ( $o[ $pt ]['supports'] ?? array() ), true ), "create {$st}, update {$st2}, supports " . implode( ',', (array) ( $o[ $pt ]['supports'] ?? array() ) ) );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $tx, 'singular' => 'Topic', 'plural' => 'Topics', 'public' => true, 'show_in_rest' => true, 'object_types' => array( 'post' ), 'backend' => 'cptui' ) );
+	register_taxonomy( $tx, 'post', array( 'public' => true, 'label' => 'Topics' ) );
+	$t                          = (array) get_option( 'cptui_taxonomies', array() );
+	$t[ $tx ]['object_types'][] = 'attachment';
+	update_option( 'cptui_taxonomies', $t );
+	register_taxonomy_for_object_type( $tx, 'attachment' );
+	list( $st2 ) = $call( 'POST', "/minn-admin/v1/taxonomies/{$tx}", array( 'singular' => 'Topic 2', 'plural' => 'Topics 2', 'public' => true, 'show_in_rest' => true, 'object_types' => array( 'post' ) ) );
+	$t = (array) get_option( 'cptui_taxonomies', array() );
+	$check( 'taxonomy edit: a label save keeps it attached to Media', 200 === $st2 && in_array( 'attachment', (array) ( $t[ $tx ]['object_types'] ?? array() ), true ), "create {$st}, update {$st2}" );
+	$call( 'DELETE', "/minn-admin/v1/post-types/{$pt}" );
+	$call( 'DELETE', "/minn-admin/v1/taxonomies/{$tx}" );
+} else {
+	$skip( 'post type manager: CPT UI inactive' );
+}
+if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'acf_get_setting' ) && acf_get_setting( 'enable_post_types' ) ) {
+	$apt = 'mv043a' . wp_rand( 10, 99 );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $apt, 'singular' => 'Gadget', 'plural' => 'Gadgets', 'public' => true, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array(), 'backend' => 'acf' ) );
+	register_post_type( $apt, array( 'public' => true, 'label' => 'Gadgets' ) );
+	$lock = '__return_false';
+	add_filter( 'acf/settings/show_admin', $lock );
+	list( $st2 ) = $call( 'POST', "/minn-admin/v1/post-types/{$apt}", array( 'singular' => 'Gadget 2', 'plural' => 'Gadgets 2', 'public' => true, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array() ) );
+	list( $st3 ) = $call( 'DELETE', "/minn-admin/v1/post-types/{$apt}" );
+	list( , $list ) = $call( 'GET', '/minn-admin/v1/post-types' );
+	$check( 'ACF locked away: its post type can\'t be edited or deleted in Minn', 200 !== $st2 && 200 !== $st3, "create {$st}, update {$st2}, delete {$st3}" );
+	$check( 'ACF locked away: Minn won\'t create new ACF types', ! in_array( 'acf', (array) ( $list['backends'] ?? array() ), true ) );
+	remove_filter( 'acf/settings/show_admin', $lock );
+	list( $st4 ) = $call( 'DELETE', "/minn-admin/v1/post-types/{$apt}" );
+	$check( 'ACF unlocked: an administrator can still delete it (control)', 200 === $st4, "status {$st4}" );
+	foreach ( (array) get_posts( array( 'post_type' => 'acf-post-type', 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) ) as $pid ) {
+		if ( false !== strpos( (string) get_post_field( 'post_content', $pid ), $apt ) ) {
+			wp_delete_post( $pid, true );
+		}
+	}
+} else {
+	$skip( 'post type manager: ACF post types unavailable' );
+}
+
 // A throwaway account holding exactly the caps given, on top of Subscriber.
 $temp_users = array();
 $temp_user  = function ( $login, $caps ) use ( &$temp_users ) {

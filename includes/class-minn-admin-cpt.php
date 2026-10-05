@@ -32,6 +32,12 @@ class Minn_Admin_CPT {
 	const SUPPORTS = array( 'title', 'editor', 'thumbnail', 'excerpt', 'custom-fields', 'comments', 'revisions', 'page-attributes', 'author' );
 
 	// Taxonomies other plugins/core manage internally — never listed.
+	/**
+	 * Core supports the vendors' own screens offer (CPT UI, ACF) and Minn's
+	 * modal doesn't. A save keeps them as stored rather than dropping them.
+	 */
+	const EXTRA_SUPPORTS = array( 'trackbacks', 'post-formats' );
+
 	const TAX_SKIP = array( 'link_category', 'post_format', 'wp_pattern_category', 'nav_menu', 'wp_theme', 'wp_template_part_area' );
 
 	public static function init() {
@@ -315,9 +321,49 @@ class Minn_Admin_CPT {
 		return $map;
 	}
 
+	/**
+	 * ACF's own admin gate: its settings capability, and show_admin, which
+	 * developers turn off to keep definitions away from client admins. ACF's
+	 * screens, AJAX and the acf-post-type caps all follow it.
+	 */
+	private static function acf_can_admin() {
+		if ( function_exists( 'acf_current_user_can_admin' ) ) {
+			return (bool) acf_current_user_can_admin();
+		}
+		return function_exists( 'acf_get_setting' ) && current_user_can( (string) acf_get_setting( 'capability' ) );
+	}
+
+	private static function acf_locked_error() {
+		return new WP_Error( 'not_editable', __( 'This site keeps ACF’s settings to people with ACF’s own admin access, so this definition can only be changed there.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+
+	/** Where a definition can be edited from Minn by the current user. */
+	private static function editable_sources() {
+		$sources = array( 'cptui', 'jet', 'minn' );
+		if ( self::acf_can_admin() ) {
+			$sources[] = 'acf';
+		}
+		return $sources;
+	}
+
+	/** Whether list_types() offers this post type in the modal. */
+	private static function offered_type( $pt ) {
+		if ( ! $pt->public && ! $pt->show_ui ) {
+			return false; // internals: revisions, nav items…
+		}
+		// Storage/plumbing types other plugins manage themselves.
+		return ! preg_match( '/^(acf-|wp_|edd_|elementor_)/', $pt->name )
+			&& ! in_array( $pt->name, array( 'attachment', 'shop_order', 'shop_coupon', 'shop_order_refund', 'scheduled-action', 'product_variation' ), true );
+	}
+
+	/** Whether the modal's taxonomy checkboxes offer this taxonomy. */
+	private static function offered_taxonomy( $tax ) {
+		return ( $tax->public || $tax->show_ui ) && ! in_array( $tax->name, self::TAX_SKIP, true );
+	}
+
 	private static function writable_backends() {
 		$backends = array();
-		if ( self::acf_available() ) {
+		if ( self::acf_available() && self::acf_can_admin() ) {
 			$backends[] = 'acf';
 		}
 		if ( self::cptui_available() ) {
@@ -392,12 +438,7 @@ class Minn_Admin_CPT {
 	public static function list_types() {
 		$out = array();
 		foreach ( get_post_types( array(), 'objects' ) as $pt ) {
-			if ( ! $pt->public && ! $pt->show_ui ) {
-				continue; // internals: revisions, nav items…
-			}
-			// Storage/plumbing types other plugins manage themselves.
-			if ( preg_match( '/^(acf-|wp_|edd_|elementor_)/', $pt->name )
-				|| in_array( $pt->name, array( 'attachment', 'shop_order', 'shop_coupon', 'shop_order_refund', 'scheduled-action', 'product_variation' ), true ) ) {
+			if ( ! self::offered_type( $pt ) ) {
 				continue;
 			}
 			$counts = (array) wp_count_posts( $pt->name );
@@ -418,13 +459,13 @@ class Minn_Admin_CPT {
 				'taxonomies'   => array_values( get_object_taxonomies( $pt->name ) ),
 				'count'        => array_sum( array_intersect_key( $counts, array_flip( array( 'publish', 'future', 'draft', 'pending', 'private' ) ) ) ),
 				'source'       => $source,
-				'editable'     => in_array( $source, array( 'acf', 'cptui', 'jet', 'minn' ), true ),
+				'editable'     => in_array( $source, self::editable_sources(), true ),
 			);
 		}
 		// Taxonomies a post type can attach to (drives the CPT modal checkboxes).
 		$catalog = array();
 		foreach ( get_taxonomies( array(), 'objects' ) as $tax ) {
-			if ( ( ! $tax->public && ! $tax->show_ui ) || in_array( $tax->name, self::TAX_SKIP, true ) ) {
+			if ( ! self::offered_taxonomy( $tax ) ) {
 				continue;
 			}
 			$catalog[] = array(
@@ -525,10 +566,24 @@ class Minn_Admin_CPT {
 		if ( ! post_type_exists( $slug ) ) {
 			return new WP_Error( 'not_found', __( 'No such post type.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
-		if ( ! in_array( $source, array( 'acf', 'cptui', 'jet', 'minn' ), true ) ) {
+		if ( 'acf' === $source && ! self::acf_can_admin() ) {
+			return self::acf_locked_error();
+		}
+		if ( ! in_array( $source, self::editable_sources(), true ) ) {
 			return new WP_Error( 'not_editable', __( 'This post type is registered in code and can only be changed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$def = self::def_from_request( $request );
+		// The modal offers nine supports and the listed taxonomies, and sends
+		// the whole definition; what it can't show (post formats, trackbacks,
+		// a taxonomy hidden from it) stays as it was instead of being dropped
+		// by every save.
+		$registered      = array_keys( array_filter( get_all_post_type_supports( $slug ) ) );
+		$def['supports'] = array_values( array_unique( array_merge( $def['supports'], array_intersect( $registered, self::EXTRA_SUPPORTS ) ) ) );
+		foreach ( get_object_taxonomies( $slug, 'objects' ) as $tax ) {
+			if ( ! self::offered_taxonomy( $tax ) && ! in_array( $tax->name, $def['taxonomies'], true ) ) {
+				$def['taxonomies'][] = $tax->name;
+			}
+		}
 		if ( ! $def['singular'] || ! $def['plural'] ) {
 			return new WP_Error( 'missing_labels', __( 'Singular and plural labels are required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
@@ -561,6 +616,9 @@ class Minn_Admin_CPT {
 			$existing = self::acf_types()[ $slug ] ?? null;
 			if ( ! $existing || empty( $existing['ID'] ) ) {
 				return new WP_Error( 'not_found', __( 'ACF definition not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( ! self::acf_can_admin() || ! current_user_can( 'delete_post', (int) $existing['ID'] ) ) {
+				return self::acf_locked_error();
 			}
 			wp_trash_post( (int) $existing['ID'] ); // trash, not delete — recoverable in ACF's UI
 		} elseif ( 'cptui' === $source ) {
@@ -636,7 +694,7 @@ class Minn_Admin_CPT {
 				'object_types' => array_values( (array) $tax->object_type ),
 				'count'        => is_wp_error( $count ) ? 0 : (int) $count,
 				'source'       => $source,
-				'editable'     => in_array( $source, array( 'acf', 'cptui', 'jet', 'minn' ), true ),
+				'editable'     => in_array( $source, self::editable_sources(), true ),
 			);
 		}
 		return rest_ensure_response(
@@ -698,10 +756,21 @@ class Minn_Admin_CPT {
 		if ( ! taxonomy_exists( $slug ) ) {
 			return new WP_Error( 'not_found', __( 'No such taxonomy.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
-		if ( ! in_array( $source, array( 'acf', 'cptui', 'jet', 'minn' ), true ) ) {
+		if ( 'acf' === $source && ! self::acf_can_admin() ) {
+			return self::acf_locked_error();
+		}
+		if ( ! in_array( $source, self::editable_sources(), true ) ) {
 			return new WP_Error( 'not_editable', __( 'This taxonomy is registered in code and can only be changed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$def = self::tax_def_from_request( $request );
+		// Same for the post types it attaches to: one the modal doesn't list
+		// (Media, for a media category) stays attached.
+		foreach ( (array) get_taxonomy( $slug )->object_type as $type ) {
+			$pto = get_post_type_object( $type );
+			if ( $pto && ! self::offered_type( $pto ) && ! in_array( $type, $def['object_types'], true ) ) {
+				$def['object_types'][] = $type;
+			}
+		}
 		if ( ! $def['singular'] || ! $def['plural'] ) {
 			return new WP_Error( 'missing_labels', __( 'Singular and plural labels are required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
@@ -734,6 +803,9 @@ class Minn_Admin_CPT {
 			$existing = self::acf_taxonomies()[ $slug ] ?? null;
 			if ( ! $existing || empty( $existing['ID'] ) ) {
 				return new WP_Error( 'not_found', __( 'ACF definition not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( ! self::acf_can_admin() || ! current_user_can( 'delete_post', (int) $existing['ID'] ) ) {
+				return self::acf_locked_error();
 			}
 			wp_trash_post( (int) $existing['ID'] ); // trash, not delete — recoverable in ACF's UI
 		} elseif ( 'cptui' === $source ) {
