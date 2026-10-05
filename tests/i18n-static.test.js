@@ -378,6 +378,8 @@ const PHP_PROSE_ALLOW = new Set( [
 // Keep SHORT, justify each: this is the escape hatch that lets the guard rot.
 const JS_PROSE_ALLOW = new Set( [
 	' MB', ' KB', ' B',             // fmtBytes unit suffixes; units stay untranslated
+	'not all',                      // a media query value that disables a stylesheet
+	'hanken grotesk', 'jetbrains mono', // the app's own font families, matched by name
 	'add column',                   // slash-menu MATCH keyword (data), its label is wrapped
 	// q: search terms sent to the wp.org plugin API, which indexes English.
 	'contact form', 'code snippets', 'gutenberg blocks', 'custom fields',

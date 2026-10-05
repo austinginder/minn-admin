@@ -28915,7 +28915,7 @@
 							<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'Where a device starts until its person picks light or dark on Your profile.' ) ) }</div>
 							${ sa.ownPalette ? `
 							<div class="minn-site-ap-own">
-								<span>${ esc( sprintf( _n( '%d person picked their own colors and doesn’t see this.', '%d people picked their own colors and don’t see this.', sa.ownPalette ), sa.ownPalette ) ) }</span>
+								<span>${ esc( sprintf( /* translators: %d: how many people chose their own colors. */ _n( '%d person picked their own colors and doesn’t see this.', '%d people picked their own colors and don’t see this.', sa.ownPalette ), sa.ownPalette ) ) }</span>
 								<button type="button" class="minn-btn-soft" data-site-ap-reset>${ esc( __( 'Move them to the site default' ) ) }</button>
 							</div>` : '' }
 							<div style="margin-top:20px;"><button class="minn-btn-primary" id="minn-save-site-appearance" type="button">${ esc( __( 'Save changes' ) ) }</button></div>
@@ -37207,7 +37207,7 @@
 			if ( tbEl && preview.contains( tbEl ) ) {
 				e.preventDefault();
 				e.stopPropagation();
-				openMinnMenu( e.clientX, e.clientY, [ { label: acfToolbarTitle( tbEl ) === __( 'Link' ) ? __( 'Edit link…' ) : sprintf( __( 'Edit %s…' ), acfToolbarTitle( tbEl ) ), run: () => openAcfToolbarPop( tbEl ) } ] );
+				openMinnMenu( e.clientX, e.clientY, [ { label: acfToolbarTitle( tbEl ) === __( 'Link' ) ? __( 'Edit link…' ) : sprintf( /* translators: %s: the name of the field being edited. */ __( 'Edit %s…' ), acfToolbarTitle( tbEl ) ), run: () => openAcfToolbarPop( tbEl ) } ] );
 				return;
 			}
 			const anchor = e.target.closest( 'a' );
@@ -38493,7 +38493,7 @@
 			const typed = term ? ( q.value.trim().charAt( 0 ) === '[' ? q.value.trim() : '[' + q.value.trim() + ']' ) : '';
 			const tag = ( typed.match( /^\[([\w-]+)/ ) || [] )[ 1 ];
 			if ( typed && SC_SOURCE.test( typed ) && scHints && ( scHints.tags || [] ).includes( tag ) && ! shown.some( ( it ) => it.src === typed ) ) {
-				shown.push( { label: sprintf( __( 'Insert %s' ), typed ), detail: '', src: typed, preview: scPreview( typed ) } );
+				shown.push( { label: sprintf( /* translators: %s: the shortcode typed so far. */ __( 'Insert %s' ), typed ), detail: '', src: typed, preview: scPreview( typed ) } );
 			}
 			active = 0;
 			list.hidden = ! shown.length;
@@ -38609,7 +38609,7 @@
 		tbChipFor = el;
 		const dest = acfToolbarDest( el );
 		tbChip.innerHTML = `<span class="minn-acf-tb-chip-icon" aria-hidden="true">↗</span><span>${ esc( dest || acfToolbarTitle( el ) ) }</span>`;
-		tbChip.setAttribute( 'aria-label', dest ? sprintf( __( 'Edit link: %s' ), dest ) : acfToolbarTitle( el ) );
+		tbChip.setAttribute( 'aria-label', dest ? sprintf( /* translators: %s: the link's address. */ __( 'Edit link: %s' ), dest ) : acfToolbarTitle( el ) );
 		tbChip.hidden = false;
 		const r = el.getBoundingClientRect();
 		const w = tbChip.offsetWidth;
@@ -38673,7 +38673,7 @@
 				<button class="minn-x-btn" data-close type="button">×</button>
 			</div>
 			<div class="minn-insp-body">
-				${ dest ? `<div class="minn-tb-dest">${ esc( sprintf( __( 'Goes to %s' ), dest ) ) }</div>` : '' }
+				${ dest ? `<div class="minn-tb-dest">${ esc( sprintf( /* translators: %s: the link's address. */ __( 'Goes to %s' ), dest ) ) }</div>` : '' }
 				${ rows || `<div class="minn-insp-note">${ esc( __( 'These fields are edited in the block settings.' ) ) }</div>` }
 			</div>
 			<div class="minn-insp-actions">

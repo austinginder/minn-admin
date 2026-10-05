@@ -167,7 +167,7 @@ function minn_admin_localize_download( $url ) {
 		return true;
 	};
 	if ( ! $pin( $url ) ) {
-		return new WP_Error( 'minn_unsafe_host', 'Refused a non-public address.' );
+		return new WP_Error( 'minn_unsafe_host', __( 'Refused a non-public address.', 'minn-admin' ) );
 	}
 	// Every redirect hop is judged and pinned the same way: core's own
 	// redirect check does not refuse link-local before WP 7.1.
@@ -176,7 +176,7 @@ function minn_admin_localize_download( $url ) {
 			// Requests 2 (WP 6.2+) or Requests 1: either way WP_Http turns
 			// it into a WP_Error for download_url().
 			$cls = class_exists( '\\WpOrg\\Requests\\Exception' ) ? '\\WpOrg\\Requests\\Exception' : 'Requests_Exception';
-			throw new $cls( 'Redirect to a non-public address refused.', 'minn_unsafe_redirect' );
+			throw new $cls( __( 'Redirect to a non-public address refused.', 'minn-admin' ), 'minn_unsafe_redirect' );
 		}
 	};
 	$curl = function ( $handle ) use ( &$pins ) {
