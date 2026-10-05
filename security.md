@@ -53,9 +53,11 @@ A few properties worth knowing before auditing (details in
   site whose environment type is production, and never applies to the
   package download.
 - Maintenance mode holds back the front end (including form posts that
-  plugins process once the request is routed, such as Contact Form 7 and
-  Gravity Forms; a plugin that answers a post earlier, before routing, is
-  not held), feeds,
+  plugins process once the request is routed, from `parse_request`
+  priority 15 on, such as Contact Form 7 and Gravity Forms; a plugin that
+  answers earlier, on `init`, `wp_loaded` or `parse_request` below 15, is
+  not held: Formidable's form posts, LatePoint's booking route and JetTabs'
+  template requests, for example), feeds,
   the REST API, admin-ajax, admin-post, XML-RPC, comment and trackback
   posting, signup and activation. Signing in (`wp-login.php`, or a login
   screen a plugin has moved), `wp-cron.php` and WooCommerce's payment
