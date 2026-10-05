@@ -401,6 +401,16 @@ function minn_admin_acpt_rows_in( $field, $value, $args ) {
 				}
 				continue;
 			}
+			if ( isset( $sub_types[ $name ] ) && 'multicheck' === $sub_types[ $name ] ) {
+				// A Checkbox sub holds a list. The scalar coercion below
+				// turned it into '' and every panel save cleared the
+				// selections of every row; anything but a list keeps what the
+				// row held.
+				if ( is_array( $vals[ $name ] ) ) {
+					$base[ $name ] = array_values( array_map( 'sanitize_text_field', array_filter( $vals[ $name ], 'is_scalar' ) ) );
+				}
+				continue;
+			}
 			$base[ $name ] = is_scalar( $vals[ $name ] ) ? $vals[ $name ] : '';
 		}
 		$rows[] = $base;

@@ -191,6 +191,74 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'acf_get_setting' ) &&
 	$skip( 'post type manager: ACF post types unavailable' );
 }
 
+// --- 06-02 ACPT repeater rows keep their checkbox selections ---------------
+if ( function_exists( 'minn_admin_acpt_rows_in' ) && function_exists( 'get_acpt_field' ) ) {
+	$opt  = function ( $v ) {
+		return new class( $v ) {
+			private $v;
+			public function __construct( $v ) {
+				$this->v = $v;
+			}
+			public function getValue() {
+				return $this->v;
+			}
+			public function getLabel() {
+				return ucfirst( $this->v );
+			}
+		};
+	};
+	$kid  = function ( $name, $type, $options ) {
+		return new class( $name, $type, $options ) {
+			private $n;
+			private $t;
+			private $o;
+			public function __construct( $n, $t, $o ) {
+				$this->n = $n;
+				$this->t = $t;
+				$this->o = $o;
+			}
+			public function getType() {
+				return $this->t;
+			}
+			public function getName() {
+				return $this->n;
+			}
+			public function getLabelOrName() {
+				return $this->n;
+			}
+			public function getOptions() {
+				return $this->o;
+			}
+			public function userPermissions() {
+				return array( 'read' => true, 'edit' => true );
+			}
+		};
+	};
+	$rep  = new class( array( $kid( 'title', 'Text', array() ), $kid( 'tags', 'Checkbox', array( $opt( 'red' ), $opt( 'blue' ) ) ) ) ) {
+		private $c;
+		public function __construct( $c ) {
+			$this->c = $c;
+		}
+		public function getType() {
+			return 'Repeater';
+		}
+		public function getChildren() {
+			return $this->c;
+		}
+		public function getId() {
+			return 'minn_v043_rep';
+		}
+		public function getLabelOrName() {
+			return 'Rows';
+		}
+	};
+	$rows = minn_admin_acpt_rows_in( $rep, array( array( 'values' => array( 'title' => 'One', 'tags' => array( 'red', 'blue' ) ) ) ), array( 'post_id' => 1, 'box_name' => 'minn_v043_box', 'field_name' => 'minn_v043_rep' ) );
+	$check( 'ACPT: a repeater row keeps its checkbox selections', array( 'red', 'blue' ) === ( $rows[0]['tags'] ?? null ), wp_json_encode( $rows ) );
+	$check( 'ACPT: a text sub-field still saves (control)', 'One' === ( $rows[0]['title'] ?? null ) );
+} else {
+	$skip( 'ACPT inactive' );
+}
+
 // --- 03-01 / 03-02 License providers: pinned keys and actions that can't verify --
 if ( function_exists( 'minn_admin_license_default_providers' ) ) {
 	$lp = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
