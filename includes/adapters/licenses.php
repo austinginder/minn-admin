@@ -4200,55 +4200,18 @@ function minn_admin_license_default_providers() {
 	}
 
 	// Divi / Elegant Themes (active theme or an ET plugin loading et-core):
-	// TWO secrets (username + API key) into their site option, then their
-	// own checker validates during the theme-update check and stamps
-	// et_account_status (active / expired / not_found). ET has no per-site
-	// seats; deactivation is clearing the stored credentials.
+	// credentials live in their site option, and only their checker turns
+	// them into et_account_status. That checker is built on admin_init and
+	// runs only in wp-admin or cron, so from REST nothing ever reached
+	// Elegant Themes: an activate read back the old status (a typo replaced
+	// a working pair and was reported valid) and re-verify verified nothing.
+	// Activation stays on their Updates tab; ET has no per-site seats, so
+	// removing the stored credentials is all deactivation is.
 	if ( class_exists( 'ET_Core_Updates' ) ) {
-		$divi_check = function () {
-			delete_site_transient( 'et_update_themes' ); // their own 10-min cache
-			wp_update_themes(); // fires their pre_set_site_transient hook
-			$status = strtolower( (string) get_site_option( 'et_account_status', 'not_active' ) );
-			if ( 'active' === $status ) {
-				return array( 'ok' => true );
-			}
-			$code = 'expired' === $status ? 'expired' : 'invalid';
-			$msgs = array(
-				'expired'    => __( 'Elegant Themes reports the subscription as expired', 'minn-admin' ),
-				'not_found'  => __( 'Elegant Themes does not recognize that username', 'minn-admin' ),
-				'not_active' => __( 'Elegant Themes did not confirm the account', 'minn-admin' ),
-			);
-			return array( 'ok' => false, 'code' => $code, 'message' => isset( $msgs[ $status ] ) ? $msgs[ $status ] : str_replace( '_', ' ', $status ) );
+		$providers['divi']['activate_url'] = function () {
+			return admin_url( 'admin.php?page=' . ( 'Extra' === get_template() ? 'et_extra_options' : 'et_divi_options' ) );
 		};
-		$providers['divi']['secret_fields'] = array(
-			array( 'id' => 'username', 'label' => __( 'Elegant Themes username', 'minn-admin' ) ),
-			array( 'id' => 'api_key', 'label' => __( 'API key', 'minn-admin' ) ),
-		);
-		$providers['divi']['activate'] = function ( $secrets ) use ( $divi_check ) {
-			// Their checker reads the option, so it must be written before
-			// validating. Snapshot first: a failed attempt restores the
-			// previous credentials instead of clobbering a working pair
-			// with a typo (better than Divi's own settings page).
-			$prev_creds  = get_site_option( 'et_automatic_updates_options', array() );
-			$prev_status = get_site_option( 'et_account_status', null );
-			update_site_option( 'et_automatic_updates_options', array(
-				'username' => sanitize_text_field( $secrets['username'] ),
-				'api_key'  => sanitize_text_field( $secrets['api_key'] ),
-			) );
-			$result = $divi_check();
-			if ( empty( $result['ok'] ) ) {
-				update_site_option( 'et_automatic_updates_options', $prev_creds );
-				if ( null === $prev_status ) {
-					delete_site_option( 'et_account_status' );
-				} else {
-					update_site_option( 'et_account_status', $prev_status );
-				}
-				delete_site_transient( 'et_update_themes' );
-			}
-			return $result;
-		};
-		$providers['divi']['verify']     = $divi_check;
-		$providers['divi']['deactivate'] = function () {
+		$providers['divi']['deactivate']   = function () {
 			update_site_option( 'et_automatic_updates_options', array() );
 			delete_site_option( 'et_account_status' );
 			delete_site_transient( 'et_update_themes' );
@@ -4302,6 +4265,11 @@ function minn_admin_license_default_providers() {
 			return array( 'ok' => true, 'message' => __( 'Site unlinked from the license', 'minn-admin' ) );
 		};
 		$providers['gravityforms']['verify'] = $gf_status;
+		// GFCommon::get_key() prefers the constant over the option and GF's
+		// own settings page locks the field when it is set, so a paste or a
+		// deactivate here would register or unlink the site at Gravity for
+		// a key the site never uses.
+		$providers['gravityforms']['key_constant'] = 'GF_LICENSE_KEY';
 	}
 
 	// Gravity SMTP: validate through its container's license connector,
@@ -4420,9 +4388,17 @@ function minn_admin_license_default_providers() {
 		$providers['searchwp']['secret_label'] = __( 'SearchWP license key', 'minn-admin' );
 		$providers['searchwp']['key_constant'] = 'SEARCHWP_LICENSE_KEY';
 	$providers['searchwp']['activate']     = function ( $secret ) {
-			$res = \SearchWP\License::activate( $secret );
+			// Their activate erases the stored license on ANY failure (a typo,
+			// a network blip), so keep the working one to put back.
+			$prev = get_option( 'searchwp_license', null );
+			$res  = \SearchWP\License::activate( $secret );
 			if ( is_array( $res ) && ! empty( $res['success'] ) ) {
 				return array( 'ok' => true );
+			}
+			if ( null === $prev ) {
+				delete_option( 'searchwp_license' );
+			} else {
+				update_option( 'searchwp_license', $prev );
 			}
 			$msg  = ( is_array( $res ) && isset( $res['data'] ) && is_string( $res['data'] ) ) ? wp_strip_all_tags( $res['data'] ) : '';
 			$code = ( false !== stripos( $msg, 'limit' ) ) ? 'site_limit' : ( false !== stripos( $msg, 'expired' ) ? 'expired' : 'invalid' );
@@ -5288,7 +5264,9 @@ function minn_admin_license_default_providers() {
 			// first; snapshot the prior key + status and restore them on
 			// failure (paste-never-retain — no leftover bogus key).
 			$prev = PMXE_Plugin::getInstance()->getOption();
-			PMXE_Plugin::getInstance()->updateOption( 'license', trim( $secret ) );
+			// Clear the status too: on a network error their activator
+			// writes none, and the previous key's 'active' read as success.
+			PMXE_Plugin::getInstance()->updateOption( array( 'license' => trim( $secret ), 'license_status' => '' ) );
 			( new \Wpae\App\Service\License\LicenseActivator() )->activateLicense( PMXE_Plugin::getEddName(), \Wpae\App\Service\License\LicenseActivator::CONTEXT_PMXE );
 			$o      = get_option( 'PMXE_Plugin_Options' );
 			$result = $pmxe_result( is_array( $o ) && isset( $o['license_status'] ) ? $o['license_status'] : '' );
@@ -5404,7 +5382,28 @@ function minn_admin_license_default_providers() {
 			return array( 'ok' => false, 'code' => $code, 'message' => $msg );
 		};
 		$providers['layerslider']['secret_label'] = __( 'LayerSlider license key', 'minn-admin' );
-		$providers['layerslider']['activate']     = $ls_activate;
+		// Any refusal zeroes their authorization, purchase code and
+		// activation id, so a mistyped paste de-authorized a licensed site.
+		// Re-verify keeps their semantics: it re-sends the stored code, and
+		// a refusal of that is Kreatura's answer, not a typo.
+		$providers['layerslider']['activate']     = function ( $code ) use ( $ls_activate ) {
+			$keys   = array( 'layerslider-authorized-site', 'layerslider-purchase-code', 'layerslider-activation-id' );
+			$before = array();
+			foreach ( $keys as $k ) {
+				$before[ $k ] = get_option( $k, null );
+			}
+			$result = $ls_activate( $code );
+			if ( empty( $result['ok'] ) ) {
+				foreach ( $before as $k => $v ) {
+					if ( null === $v ) {
+						delete_option( $k );
+					} else {
+						update_option( $k, $v );
+					}
+				}
+			}
+			return $result;
+		};
 		$providers['layerslider']['verify']       = function () use ( $ls_activate ) {
 			$code = get_option( 'layerslider-purchase-code', '' );
 			if ( '' === $code ) {
@@ -5481,6 +5480,11 @@ function minn_admin_license_default_providers() {
 				return array( 'ok' => true, 'message' => __( 'No active Smash Balloon license on this product', 'minn-admin' ) );
 			}
 			$remote = minn_admin_smash_edd( 'deactivate_license', $store['key'], $item );
+			// Their own deactivate marks the license inactive only when the
+			// answer says the seat was released; otherwise nothing changes.
+			if ( ! is_array( $remote ) || 'deactivated' !== ( $remote['license'] ?? '' ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'smashballoon.com did not confirm the seat was released, so nothing was changed', 'minn-admin' ) );
+			}
 			minn_admin_smash_clear_store( $sp, $remote );
 			return array( 'ok' => true, 'message' => __( 'License deactivated for ', 'minn-admin' ) . $sp['name'] );
 		};

@@ -191,6 +191,21 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'acf_get_setting' ) &&
 	$skip( 'post type manager: ACF post types unavailable' );
 }
 
+// --- 03-01 / 03-02 License providers: pinned keys and actions that can't verify --
+if ( function_exists( 'minn_admin_license_default_providers' ) ) {
+	$lp = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
+	if ( class_exists( 'GFFormsModel' ) && isset( $lp['gravityforms']['activate'] ) ) {
+		$check( 'licenses: Gravity Forms honours a key pinned in wp-config (GF_LICENSE_KEY)', in_array( 'GF_LICENSE_KEY', (array) ( $lp['gravityforms']['key_constant'] ?? array() ), true ) );
+	} else {
+		$skip( 'licenses: Gravity Forms actions not loaded' );
+	}
+	if ( class_exists( 'ET_Core_Updates' ) ) {
+		$check( 'licenses: Divi offers no activate or verify that cannot reach Elegant Themes', empty( $lp['divi']['activate'] ) && empty( $lp['divi']['verify'] ) && ! empty( $lp['divi']['activate_url'] ) );
+	} else {
+		$skip( 'licenses: Divi / Elegant Themes not loaded' );
+	}
+}
+
 // A throwaway account holding exactly the caps given, on top of Subscriber.
 $temp_users = array();
 $temp_user  = function ( $login, $caps ) use ( &$temp_users ) {
