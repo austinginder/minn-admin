@@ -49,6 +49,21 @@ function elementorActive() {
 	execSync( `wp --path=${ WP } post meta update ${ id } _elementor_data "[]"`, { stdio: 'ignore' } );
 	execSync( `wp --path=${ WP } post meta update ${ id } _elementor_edit_mode builder`, { stdio: 'ignore' } );
 
+	// WPForms' payment education pointer (shown 90 days after activation)
+	// prints an inline .pointer() call on every admin footer, and Elementor's
+	// editor doesn't load wp-pointer, so the editor throws a page error that
+	// is WPForms' and Elementor's, not Minn's. Dismiss it the way WPForms
+	// records a dismissal, and put the option back afterwards.
+	let pointersWas = null;
+	try {
+		pointersWas = execSync( `wp --path=${ WP } option get wpforms_pointers --format=json`, { encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ] } ).trim();
+	} catch ( e ) { /* option absent */ }
+	try {
+		const ptrs = pointersWas ? JSON.parse( pointersWas ) : {};
+		ptrs.dismiss = [ ...new Set( [ ...( ptrs.dismiss || [] ), 'admin_menu_payments' ] ) ];
+		execSync( `wp --path=${ WP } option update wpforms_pointers ${ JSON.stringify( JSON.stringify( ptrs ) ) } --format=json`, { stdio: 'ignore' } );
+	} catch ( e ) { /* WPForms not installed */ }
+
 	const editorUrl = `${ BASE }/wp-admin/post.php?post=${ id }&action=elementor`;
 
 	const openExit = async () => {
@@ -112,6 +127,11 @@ function elementorActive() {
 		try {
 			execSync( `wp --path=${ WP } post delete ${ id } --force`, { stdio: 'ignore' } );
 		} catch ( e ) { /* already gone */ }
+		try {
+			execSync( pointersWas
+				? `wp --path=${ WP } option update wpforms_pointers ${ JSON.stringify( pointersWas ) } --format=json`
+				: `wp --path=${ WP } option delete wpforms_pointers`, { stdio: 'ignore' } );
+		} catch ( e ) { /* nothing to restore */ }
 	}
 
 	await t.done( browser, errors );
