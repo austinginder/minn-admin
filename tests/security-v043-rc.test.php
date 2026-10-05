@@ -667,6 +667,42 @@ if ( class_exists( 'Minn_Admin_Updater' ) ) {
 	@unlink( $bad );
 }
 
+// --- H3 The database viewer hides Gravity Forms' REST API secret -----------
+if ( class_exists( 'Minn_Admin_DB' ) && method_exists( 'Minn_Admin_DB', 'is_secret_cell' ) ) {
+	global $wpdb;
+	$secret = new ReflectionMethod( 'Minn_Admin_DB', 'is_secret_cell' );
+	$secret->setAccessible( true );
+	$check( 'database viewer: Gravity Forms\' REST API secret is redacted', true === (bool) $secret->invoke( null, $wpdb->prefix . 'gf_rest_api_keys', 'consumer_secret', array() ) );
+}
+
+// --- H2 Descriptor filter and open routes answer to the route rule --------
+if ( class_exists( 'Minn_Admin_Surfaces' ) ) {
+	$evil = function ( $s ) {
+		$s['minn-v043-probe'] = array(
+			'label'      => 'Probe',
+			'cap'        => 'read',
+			'collection' => array(
+				'route'  => 'minn-admin/v1/minn-v043/items',
+				'filter' => array( 'label' => 'Kind', 'route' => '//evil.example/options' ),
+				'open'   => array( 'route' => 'javascript:alert(1)' ),
+			),
+		);
+		return $s;
+	};
+	$reg = new ReflectionProperty( 'Minn_Admin_Surfaces', 'all_cache' );
+	$reg->setAccessible( true );
+	$reg->setValue( null, null ); // the registry is built once per request
+	add_filter( 'minn_admin_surfaces', $evil );
+	$mine = current( array_filter( Minn_Admin_Surfaces::for_current_user(), function ( $s ) {
+		return 'minn-v043-probe' === ( $s['id'] ?? '' );
+	} ) );
+	remove_filter( 'minn_admin_surfaces', $evil );
+	$reg->setValue( null, null );
+	$coll = is_array( $mine ) ? (array) ( $mine['collection'] ?? array() ) : array();
+	$check( 'surfaces: an off-origin filter route is dropped', is_array( $mine ) && empty( $coll['filter']['route'] ), wp_json_encode( $coll['filter'] ?? null ) );
+	$check( 'surfaces: a scheme in an open route is dropped', is_array( $mine ) && empty( $coll['open']['route'] ), wp_json_encode( $coll['open'] ?? null ) );
+}
+
 // --- 11-02 Folder listings authorize a bounded set ------------------------
 if ( function_exists( 'minn_admin_media_folders_provider' ) && minn_admin_media_folders_provider() && $author ) {
 	$reads = 0;

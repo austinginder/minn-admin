@@ -730,6 +730,14 @@ class Minn_Admin_Surfaces {
 			&& ! Minn_Admin::rest_route_or_null( $group['create']['route'] ) ) {
 			unset( $group['create'] );
 		}
+		// filter and open carry routes the client fetches too (a filter's
+		// options, the page a row opens), so they answer to the same rule.
+		foreach ( array( 'filter', 'open' ) as $key ) {
+			if ( ! empty( $group[ $key ] ) && is_array( $group[ $key ] ) && isset( $group[ $key ]['route'] )
+				&& ! Minn_Admin::rest_route_or_null( $group[ $key ]['route'] ) ) {
+				unset( $group[ $key ]['route'] );
+			}
+		}
 		// import is in COLLECTION_KEYS and carries a route the client POSTs a
 		// file to, so it answers to the same rule create does.
 		if ( ! empty( $group['import'] ) && is_array( $group['import'] ) && isset( $group['import']['route'] )

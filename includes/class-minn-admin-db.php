@@ -419,6 +419,11 @@ class Minn_Admin_DB {
 		if ( 'woocommerce_api_keys' === $base ) {
 			return in_array( $col, array( 'consumer_key', 'consumer_secret' ), true );
 		}
+		// Gravity Forms hashes the key but keeps the REST API secret in
+		// plain text, the same pair WooCommerce's table holds.
+		if ( 'gf_rest_api_keys' === $base ) {
+			return 'consumer_secret' === $col;
+		}
 		// Webhook signing secrets, Wordfence 2FA seeds/recovery codes and multisite signup
 		// activation keys are credentials the same way.
 		if ( 'wc_webhooks' === $base ) {

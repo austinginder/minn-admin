@@ -36,9 +36,11 @@ A few properties worth knowing before auditing (details in
 
 - The app gate requires a logged-in user with `edit_posts`; every REST
   route carries its own server-side `permission_callback` on top of that.
-- Third-party plugins integrate as data descriptors only. Their PHP never
-  runs in Minn's render paths and their HTML/CSS/JS never reaches the app;
-  values are escaped at the render edge.
+- Third-party plugins integrate as data descriptors only. Their HTML/CSS/JS
+  never reaches the app and their PHP never prints into Minn's render paths
+  (the one place it runs, a check of which blocks render cleanly enough to
+  offer for insertion, discards the output); values are escaped at the
+  render edge.
 - When a shim must read third-party serialized storage, it uses a bounded
   parser or constrained decoding, validates the resulting shape, and does
   not instantiate arbitrary classes. An exact vendor class allowlist is
