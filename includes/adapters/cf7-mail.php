@@ -64,6 +64,11 @@ function minn_admin_cf7_latest_message( $contact_form ) {
 	if ( ! class_exists( 'Flamingo_Inbound_Message' ) || '' === (string) $contact_form->name() ) {
 		return null;
 	}
+	// Flamingo shows stored messages only to people who can manage users;
+	// editing a form (any Editor, in CF7) doesn't include reading them.
+	if ( ! current_user_can( 'flamingo_edit_inbound_messages' ) ) {
+		return null;
+	}
 	$found = Flamingo_Inbound_Message::find( array(
 		'channel'        => $contact_form->name(),
 		'posts_per_page' => 1,

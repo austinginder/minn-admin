@@ -53628,7 +53628,7 @@
 		}
 		if ( note ) {
 			/* translators: %s: an entry number. */
-			note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entries yet: tags show as typed' );
+			note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entry to preview with: tags show as typed' );
 		}
 		body.innerHTML = `<div class="minn-gfn-subj"><span>${ esc( __( 'Subject' ) ) }</span>${ esc( pv.subject || '' ) }</div>
 			${ previewFrameHtml( pv.html || '', { cls: 'minn-gfn-frame', title: __( 'Email preview' ) } ) }`;
@@ -54161,7 +54161,7 @@
 		}
 		if ( note ) {
 			/* translators: %s: an entry number. */
-			note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entries yet: tags show as typed' );
+			note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entry to preview with: tags show as typed' );
 		}
 		if ( 'message' === pv.type ) {
 			body.innerHTML = previewFrameHtml( pv.html || '', { cls: 'minn-gfn-frame minn-gfc-frame', title: __( 'Confirmation preview' ) } );
@@ -54843,7 +54843,7 @@
 			return;
 		}
 		/* translators: %s: an entry number. */
-		if ( note ) note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entries yet: tags show as typed' );
+		if ( note ) note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entry to preview with: tags show as typed' );
 		body.innerHTML = `<div class="minn-gfn-subj"><span>${ esc( __( 'Subject' ) ) }</span>${ esc( pv.subject || '' ) }</div>
 			${ previewFrameHtml( pv.html || '', { cls: 'minn-gfn-frame', title: __( 'Email preview' ) } ) }`;
 	}
@@ -55159,7 +55159,7 @@
 			return;
 		}
 		/* translators: %s: an entry number. */
-		if ( note ) note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entries yet: tags show as typed' );
+		if ( note ) note.textContent = pv.entry ? sprintf( __( 'With entry #%s' ), pv.entry ) : __( 'No entry to preview with: tags show as typed' );
 		body.innerHTML = `<div class="minn-gfn-subj"><span>${ esc( __( 'Subject' ) ) }</span>${ esc( pv.subject || '' ) }</div>
 			${ previewFrameHtml( pv.html || '', { cls: 'minn-gfn-frame', title: __( 'Email preview' ) } ) }`;
 	}

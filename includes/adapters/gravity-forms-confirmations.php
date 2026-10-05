@@ -260,7 +260,7 @@ function minn_admin_gfc_preview( $form, $stored, $body ) {
 			'type'              => GFCommon::whitelist( is_scalar( $body['type'] ?? '' ) ? (string) $body['type'] : '', array( 'message', 'page', 'redirect' ) ),
 			'message'           => minn_admin_gfc_kses( is_scalar( $body['message'] ?? '' ) ? (string) $body['message'] : '' ),
 			'disableAutoformat' => ! empty( $body['disableAutoformat'] ),
-			'pageId'            => absint( $body['pageId'] ?? 0 ),
+			'pageId'            => current_user_can( 'read_post', absint( $body['pageId'] ?? 0 ) ) ? absint( $body['pageId'] ?? 0 ) : 0,
 			'url'               => trim( is_scalar( $body['url'] ?? '' ) ? (string) $body['url'] : '' ),
 			'queryString'       => is_scalar( $body['queryString'] ?? '' ) ? (string) $body['queryString'] : '',
 		);

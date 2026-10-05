@@ -181,8 +181,15 @@ function minn_admin_gfn_logic_out( $logic ) {
 	);
 }
 
-/** The latest received entry, for the preview and the test send. */
+/**
+ * The latest received entry, for the previews and the test send. Only for
+ * someone Gravity Forms lets read entries: editing a form doesn't include it,
+ * so without gravityforms_view_entries the previews keep their tags as typed.
+ */
 function minn_admin_gfn_latest_entry( $form_id ) {
+	if ( ! GFCommon::current_user_can_any( 'gravityforms_view_entries' ) ) {
+		return null;
+	}
 	$entries = GFAPI::get_entries( $form_id, array( 'status' => 'active' ), array( 'key' => 'date_created', 'direction' => 'DESC' ), array( 'offset' => 0, 'page_size' => 1 ) );
 	return is_array( $entries ) && $entries ? $entries[0] : null;
 }
@@ -636,6 +643,9 @@ add_action( 'rest_api_init', function () {
 			$me = wp_get_current_user();
 			if ( ! $me || ! is_email( $me->user_email ) ) {
 				return new WP_Error( 'minn_gfn_test', __( 'Your account has no email address to send a test to.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( ! GFCommon::current_user_can_any( 'gravityforms_view_entries' ) ) {
+				return new WP_Error( 'minn_gfn_test', __( 'A test sends the form’s latest entry, and your account can’t view entries.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			$entry = minn_admin_gfn_latest_entry( $form['id'] );
 			if ( ! $entry ) {

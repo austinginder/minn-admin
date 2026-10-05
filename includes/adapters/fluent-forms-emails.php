@@ -32,6 +32,15 @@ function minn_admin_fluent_has_pro() {
 	return defined( 'FLUENTFORMPRO' ) || ( class_exists( '\FluentForm\App\Helpers\Helper' ) && method_exists( '\FluentForm\App\Helpers\Helper', 'hasPro' ) && \FluentForm\App\Helpers\Helper::hasPro() );
 }
 
+/**
+ * Whether the preview may fill in a real entry. Fluent grants Manage Forms
+ * and View Entries separately, so a manager who builds forms without seeing
+ * submissions gets the tags as typed.
+ */
+function minn_admin_ffe_can_read_entries( $form_id ) {
+	return class_exists( '\FluentForm\App\Modules\Acl\Acl' ) && \FluentForm\App\Modules\Acl\Acl::hasPermission( 'fluentform_entries_viewer', (int) $form_id );
+}
+
 /** The form row, or null. */
 function minn_admin_fluent_form( $form_id ) {
 	$form = wpFluent()->table( 'fluentform_forms' )->find( (int) $form_id );
@@ -132,7 +141,7 @@ function minn_admin_fluent_emails_payload( $form ) {
 	foreach ( minn_admin_fluent_notifications( $form->id ) as $id => $n ) {
 		$notifications[] = minn_admin_fluent_notification_out( $id, $n );
 	}
-	$latest = wpFluent()->table( 'fluentform_submissions' )->where( 'form_id', (int) $form->id )->orderBy( 'id', 'DESC' )->first();
+	$latest = minn_admin_ffe_can_read_entries( $form->id ) ? wpFluent()->table( 'fluentform_submissions' )->where( 'form_id', (int) $form->id )->orderBy( 'id', 'DESC' )->first() : null;
 	return array(
 		'id'            => (int) $form->id,
 		'title'         => (string) $form->title,
@@ -286,7 +295,7 @@ add_action( 'rest_api_init', function () {
 			if ( ! current_user_can( 'unfiltered_html' ) && function_exists( 'fluentform_sanitize_html' ) ) {
 				$parts['message'] = fluentform_sanitize_html( $parts['message'] );
 			}
-			$entry = wpFluent()->table( 'fluentform_submissions' )->where( 'form_id', (int) $form->id )->orderBy( 'id', 'DESC' )->first();
+			$entry = minn_admin_ffe_can_read_entries( $form->id ) ? wpFluent()->table( 'fluentform_submissions' )->where( 'form_id', (int) $form->id )->orderBy( 'id', 'DESC' )->first() : null;
 			if ( ! $entry ) {
 				return rest_ensure_response( array( 'entry' => 0, 'subject' => $parts['subject'], 'html' => $parts['message'] ) );
 			}

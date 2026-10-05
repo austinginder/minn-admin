@@ -93,7 +93,7 @@ function minn_admin_wpforms_emails_payload( $data ) {
 	}
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	$latest = (int) $wpdb->get_var( $wpdb->prepare( "SELECT MAX(entry_id) FROM {$wpdb->prefix}wpforms_entries WHERE form_id = %d", (int) $data['id'] ) );
+	$latest = wpforms_current_user_can( 'view_entries_form_single', (int) $data['id'] ) ? (int) $wpdb->get_var( $wpdb->prepare( "SELECT MAX(entry_id) FROM {$wpdb->prefix}wpforms_entries WHERE form_id = %d", (int) $data['id'] ) ) : 0;
 	return array(
 		'id'             => (int) $data['id'],
 		'title'          => (string) ( $settings['form_title'] ?? get_the_title( (int) $data['id'] ) ),
@@ -213,8 +213,10 @@ add_action( 'rest_api_init', function () {
 				$message = wp_strip_all_tags( $message );
 			}
 			global $wpdb;
+			// Editing a form doesn't include reading its entries; WPForms'
+			// own preview renders placeholder content for the same reason.
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$entry = $wpdb->get_row( $wpdb->prepare( "SELECT entry_id, fields FROM {$wpdb->prefix}wpforms_entries WHERE form_id = %d ORDER BY entry_id DESC LIMIT 1", (int) $data['id'] ) );
+			$entry = ! wpforms_current_user_can( 'view_entries_form_single', (int) $data['id'] ) ? null : $wpdb->get_row( $wpdb->prepare( "SELECT entry_id, fields FROM {$wpdb->prefix}wpforms_entries WHERE form_id = %d ORDER BY entry_id DESC LIMIT 1", (int) $data['id'] ) );
 			if ( ! $entry || ! class_exists( '\WPForms\Emails\Notifications' ) ) {
 				return rest_ensure_response( array( 'entry' => 0, 'subject' => $subject, 'html' => wpautop( $message ) ) );
 			}
