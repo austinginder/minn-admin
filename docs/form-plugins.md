@@ -84,6 +84,15 @@ Sidebar: one **Forms** item. Topbar autocomplete when
 | WPForms entries | **WPForms Pro** zip + license (Lite has no local entry store) |
 | SureForms | Active form + entries in its submissions table |
 
+## Paid editions
+
+Minn offers a form plugin's feature only where the plugin itself offers it in the edition
+installed. When a vendor locks something to Pro (answer editing in Fluent Forms,
+Formidable, SureForms and Everest Forms; adding notifications, routing and conditions in
+Fluent Forms), Minn turns it on only with that Pro edition present and writes through
+Pro's own code, never a rebuild from the free plugin's internals. Settings a free page
+can't edit are kept exactly as stored.
+
 ## Out of scope (same as day one)
 
 - Form builders for providers other than Gravity Forms, payment feeds, spam

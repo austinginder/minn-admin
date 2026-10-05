@@ -178,6 +178,23 @@ Environment (all optional except the password):
   real `navigator.clipboard.write` + ⌘V case per suite to prove the wiring.
 - **innerHTML shows entities.** A boundary space may serialize as `&nbsp;` in innerHTML
   reads — match with `(?:&nbsp;| )`, not a character class.
+- **Poll on an interval after a native dialog.** A `confirm()` or `alert()` stalls
+  `requestAnimationFrame` in a background window, so a default `waitForFunction` (rAF
+  polling) right after one can time out though the page already changed. Pass
+  `{ polling: 500 }` (acpt-field-group-builder does).
+- **A page with unsaved edits asks before you leave it.** A suite that navigates away from
+  a dirty builder, settings form or entry edit must answer the "Leave without saving?"
+  dialog (gf-form-settings does).
+- **Run PHP through `wp eval-file`, as a user when the plugin checks caps.** Write it to a
+  temp file (the shell expands `$` inside `wp eval "…"`). WPForms' form reads are
+  capability-checked and return false with no current user, so call
+  `wp_set_current_user( 1 )` first.
+- **Seed form-plugin data the way the plugin's own flow does.** Flamingo's
+  `Flamingo_Inbound_Message::add()` doesn't create the form's channel term (CF7's module
+  does on a form's first submission), so create it under `contact-form-7`
+  (cf7-mail.test.js). Elementor reads a submission's field types from a form snapshot kept
+  in post meta (`Form_Snapshot_Repository`): hang it on a throwaway page
+  (elementor-forms-entry-edit.test.js).
 - **Verify what got SAVED, not just the DOM.** For serializer-touching changes, ⌘S in the
   test and check the stored markup (`wp post get <id> --field=post_content` and/or
   `parse_blocks()` via `wp eval`) — the DOM lying is exactly the bug class these tests

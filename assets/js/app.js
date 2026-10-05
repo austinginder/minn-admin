@@ -3370,7 +3370,9 @@
 	 * button and when the tab closed. The sidebar, ⌘K, the top bar, links
 	 * and the browser's Back went straight through and the edits were gone.
 	 * Every in-app navigation now asks first. (The post editor autosaves on
-	 * the way out instead.)
+	 * the way out instead.) A new page that holds edits joins by adding its
+	 * unsaved test to pageHasUnsaved() and its Save button's id to
+	 * SAVE_SHORTCUT_IDS (for ⌘S).
 	 */
 	let leaveApproved = false;
 	let shownPath = null; // the path on screen, to stay on after a refused Back
@@ -3458,14 +3460,19 @@
 
 	/* ===== Undo / redo on the builder pages ===== */
 	/**
-	 * The form and field group builders and the notification and confirmation
-	 * pages hold their edits in a model until Save. Every change (each page's
+	 * The form and field group builders and the form plugins' notification,
+	 * confirmation and email pages hold their edits in a model until Save.
+	 * Every change (each page's
 	 * markDirty) records a snapshot of that model; typing into one box is one
 	 * step until focus leaves it. ⌘Z / ⇧⌘Z (Ctrl+Y) and the toolbar arrows
 	 * step through the snapshots, and stepping back to what was saved clears
 	 * "Unsaved changes". In a box you are typing in, ⌘Z is the box's own undo
 	 * until its typing is all undone. History starts over on save: a save gives
 	 * new fields their ids, and an older snapshot would bring one back as new.
+	 * A new page joins by creating its `hist` in its render, putting
+	 * undoButtonsHtml() in its toolbar, adding its state to builderPage(), and
+	 * passing the input element to markDirty() from its input listener (so
+	 * typing into one box is one step).
 	 */
 	function makeHistory( read, write ) {
 		const h = { undo: [], redo: [], key: null };
@@ -53386,6 +53393,8 @@
 		if ( ! state.gfn || state.gfn.id !== state.gfnId ) {
 			state.gfn = { id: state.gfnId, loading: true };
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+			// The composite "form:id" goes into REST paths raw: encoded, its
+			// %3A no longer matches the route's pattern (404 "No route").
 			api( `minn-admin/v1/gf/notifications/${ state.gfnId }/full` )
 				.then( ( r ) => {
 					if ( state.route !== 'gfnotification' || state.gfnId !== r.id ) return;
