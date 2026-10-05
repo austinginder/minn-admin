@@ -157,7 +157,12 @@ add_action( 'rest_api_init', function () {
 				if ( '' === $from || '' === $to ) {
 					return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				$rows          = (array) get_option( '301_redirects', array() );
+				$rows = (array) get_option( '301_redirects', array() );
+				// The option is keyed by source, so writing one that is
+				// already there replaced its rule; their own add refuses it.
+				if ( array_key_exists( $from, $rows ) ) {
+					return new WP_Error( 's301_exists', __( 'A redirect from that address already exists. Edit it instead.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
 				$rows[ $from ] = $to;
 				update_option( '301_redirects', $rows );
 				return rest_ensure_response( array(

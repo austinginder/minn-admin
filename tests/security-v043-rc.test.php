@@ -628,6 +628,20 @@ if ( class_exists( 'WooCommerce' ) && function_exists( 'minn_admin_visibility_to
 	null === $cs_was ? delete_option( 'woocommerce_coming_soon' ) : update_option( 'woocommerce_coming_soon', $cs_was );
 }
 
+// --- 10-01 Simple 301 Redirects: adding never replaces an existing rule ---
+if ( function_exists( 'minn_admin_s301_active' ) && minn_admin_s301_active() ) {
+	$s301_was          = get_option( '301_redirects', array() );
+	$rows              = (array) $s301_was;
+	$rows['/minn-v043-old'] = '/minn-v043-kept';
+	update_option( '301_redirects', $rows );
+	list( $st ) = $call( 'POST', '/minn-admin/v1/s301/redirects', array( 'from' => '/minn-v043-old', 'to' => '/minn-v043-new' ) );
+	$after = (array) get_option( '301_redirects', array() );
+	$check( 'Simple 301: adding a source that has a rule is refused, the rule kept', 400 === $st && '/minn-v043-kept' === ( $after['/minn-v043-old'] ?? '' ), "status {$st}, now " . ( $after['/minn-v043-old'] ?? '(none)' ) );
+	update_option( '301_redirects', $s301_was );
+} else {
+	$skip( 'Simple 301 Redirects inactive' );
+}
+
 // --- 08-04 Snippet edits keep an empty (shortcode-only) location ----------
 $all_surfaces = class_exists( 'Minn_Admin_Surfaces' ) ? Minn_Admin_Surfaces::all() : array();
 foreach ( array( 'wpcode', 'hfcm' ) as $sid ) {

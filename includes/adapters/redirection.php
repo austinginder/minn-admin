@@ -86,6 +86,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 			'run'     => function ( $choices ) {
+				// Redirection's own setup route asks its option or support
+				// capability through redirection_capability_check, which a
+				// site can narrow; the manage_options floor stays.
+				if ( class_exists( 'Redirection_Capabilities' )
+					&& ! Redirection_Capabilities::has_access( Redirection_Capabilities::CAP_OPTION_MANAGE )
+					&& ! Redirection_Capabilities::has_access( Redirection_Capabilities::CAP_SUPPORT_MANAGE ) ) {
+					return new WP_Error( 'rest_forbidden', __( 'This site keeps Redirection’s setup to people with its own settings access.', 'minn-admin' ), array( 'status' => 403 ) );
+				}
 				$db = minn_admin_redirection_db_classes();
 				if ( ! $db ) {
 					return new WP_Error( 'no_installer', __( 'Redirection\'s installer could not be found. Run its setup from the Redirection screen.', 'minn-admin' ) );
