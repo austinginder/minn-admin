@@ -1,5 +1,137 @@
 # Changelog
 
+## **v0.43.0** - October 5 2026
+
+The forms release. A form entry now opens on a page of its own with Reply, which writes back from the site, and for Gravity Forms, WPForms Pro, Ninja Forms and Elementor Pro, Edit answers fixes a mistyped email before you do. Gravity Forms forms open in a builder, their notifications and confirmations get pages of their own, and WPForms, Fluent Forms and Contact Form 7 emails and confirmations follow, each with a preview built the way the plugin sends it. Every page with a Save button now answers ⌘S and asks before unsaved edits are lost, and the builders undo and redo. Settings gains a site-wide default appearance, orders can be trashed and restored, and ACF block text can be typed over in place. The cycle opened by fixing every finding from the review of the shipped 0.42.0 and closes with a full review of the release candidate: nothing critical or high, four medium issues (three of them in this cycle's new form pages, closed before they ever shipped), and every fix reviewed twice more before release.
+
+### Added
+
+* **Edit WPForms notifications and confirmations in Minn.** The WPForms surface gains a Forms tab listing each form with its entry count. A form opens a page for its email notifications (on or off for the form, who they go to, the sender, subject and message, with a smart-tag picker) and its confirmations (a message, a page or an address). The preview shows the whole email the way WPForms sends it, built from the form's latest entry for people who can view its entries (anyone else sees the smart tags as typed). Saving goes through WPForms' own form save. Adding notifications and confirmations, and their conditions, stay in the WPForms builder.
+
+* **Edit Fluent Forms emails and confirmations in Minn.** A form on the Fluent Forms Forms tab opens a page for the emails it sends (who they go to, the sender, the subject and message, with a smart-tag picker) and what visitors see after submitting (a message, a page or an address). A preview shows the email built from the form's latest entry for people who can view its entries. Saving goes through Fluent Forms' own settings and checks, so a missing subject is refused on its field. Minn offers what your edition of Fluent Forms offers: adding emails, routing and conditions need Fluent Forms Pro, and any already set up are kept as they are.
+
+* **Edit Contact Form 7 emails and messages in Minn.** A form on the Contact Form 7 Forms tab now opens a page for the email it sends (to, from, subject, headers, the message), the optional second email (often a reply to the sender), and the messages visitors read after sending or when something needs fixing. A { } picker inserts the form's mail tags and the special ones, like the site's title or the date. A preview fills the email with the form's latest message from Flamingo, for people who can read Flamingo's messages. Saving changes only the mail and messages, so the form's other settings (a Brevo contact list, for one) stay as they are, and goes through Contact Form 7's own save and its configuration check, so a warning such as a sender address on another domain shows beside the field it is about. Undo, ⌘S and the unsaved-changes prompt work here too.
+
+* **Edit an entry's answers.** For Gravity Forms, WPForms Pro, Ninja Forms and Elementor Pro, the entry page has an Edit answers button that turns the answers into a form: names, email, phone, drop-downs, checkboxes, dates, numbers and the rest of the everyday fields, empty ones included, so you can fix a mistyped email before you reply or fill in a missing phone number. Each answer is saved through the form plugin's own edit, so its formatting and hooks run: Gravity Forms keeps phones and dates in the form's format and notes who changed which answers, WPForms records "Entry edited." and leaves every other field exactly as it was, and paragraph answers keep their line breaks. Files and payments stay in the form plugin, and the page says so. If someone else changed an answer while you were editing, Minn refuses to overwrite it and asks you to reload. Leaving with unsaved edits asks first, and ⌘S saves.
+
+* **Set up Gravity Forms confirmations in Minn.** A new Confirmations tab beside Notifications lists what visitors see after submitting each form, with Activate and Deactivate. A confirmation opens its own page, and New confirmation starts one (visitors see it only once you create it). Choose a message, with a merge tag picker for the visitor's answers; a page of the site; or a redirect, and pass the answers along in the address. Set the conditions that pick this confirmation over the others. A preview beside it shows the message as the form's latest entry would fill it in, or the exact address a visitor lands on (for people who can view entries; anyone else sees the merge tags as typed). Duplicate and Delete sit in the More menu. The form's default confirmation, the one shown when no other applies, stays on and can't be deleted, as in Gravity Forms. Saving goes through Gravity Forms' own confirmation save, including its filter that strips merge tags from HTML attributes for people who can't post unfiltered HTML.
+
+* **Build Gravity Forms notifications in Minn.** A notification on the Notifications tab now opens its own page, and New notification starts one (nothing sends until you create it). Choose who it goes to: addresses, the form's email field, or routing rules that pick an address by the answer given. Set who it's from and where replies go, write the subject and message with a picker for the form's merge tags, and choose when it sends, including only when certain answers match. A preview beside the editor shows the email as the latest entry would produce it, and Send test mails it to you alone; both need permission to view the form's entries. Duplicate and delete sit in the page's menu. Everything saves through Gravity Forms' own notification save and checks.
+
+* **Build Gravity Forms forms in Minn.** A form on the Forms tab now opens a builder that shows its fields laid out the way Gravity Forms lays them out, side-by-side columns included. Add any standard or advanced field from the list beside it (click, or drag it onto the form), drag fields into order, duplicate or remove them, and edit the selected field's label, description, choices (with values and defaults), placeholder, default value, width, Name and Address parts, formats, file limits and conditional logic. Each field offers the settings Gravity Forms gives that field type, so add-on fields still move, resize and get relabeled. The title, description, submit button text and Active switch sit on the same page, and one Save stores everything through Gravity Forms' own save, so add-ons hear about it as they do from Gravity Forms' editor. Removing a field deletes its answers in past entries, as it does in Gravity Forms, and Minn says so before you confirm. New form creates one and opens it in the builder. Pricing fields, calculations, feeds and confirmations stay one link away in Gravity Forms.
+
+* **A default appearance for the whole site.** Settings → Appearance sets the palette everyone sees in Minn until they pick their own (a named scheme, or a custom one for dark and light) and the light or dark mode a device starts in until its person picks one. Your profile and each user's page offer it first in the row as "Site default", and anyone who never picked a palette follows it. When people already picked their own, the section says how many and can move them back to the site default, keeping their other settings. The Minn admin bar on the site follows it too.
+
+* **Orders can be trashed, restored and deleted.** Move to Trash sits in the order's More menu and in each row's right-click menu, and it offers Undo. The orders list gains a Trash view (All still leaves trashed orders out, as wp-admin does), where a row offers Restore or Delete permanently. A trashed order opens read-only with the same two choices: Restore puts back the status the order had before, and Delete permanently asks first. Trash and delete go through WooCommerce's own REST API with its own permission checks, and Restore, which WooCommerce's API does not offer, is gated the same way: whoever may trash an order may restore it. An order that started a subscription asks first, because WooCommerce Subscriptions cancels that subscription along with it (emailing the customer and stopping its payments) and restoring the order brings it back cancelled. On a site with the Trash turned off, the menus offer Delete permanently instead.
+
+* **Open a payment at its provider from the order.** An order paid through a gateway that links its transactions (Stripe's dashboard, for one) now shows a "View in Stripe" link beside the transaction ID in the Payment card, the same link wp-admin puts on the ID in its "Payment via" line. It opens the live or test dashboard the gateway itself picks, and it steps aside while the method or ID is being edited so it never opens the wrong payment.
+
+* **ACF block copy can be typed over in place.** ACF Pro blocks used to show their text read-only in the editor, with every word behind the block's settings. Their previews now render the way the block editor renders them, so a template that marks its fields with ACF's own inline-editing helper (`acf_inline_text_editing_attrs()`, or a block with autoInlineEditing) gets exactly those fields editable in place, and the edit lands in that field alone. A block that marks nothing gets its text and textarea fields editable where the preview shows the stored value once and nothing else reads the same. Text that holds a shortcode shows it as a token inside the editable text, so typing never overwrites a `[shortcode]` with what it printed: click the token to change or remove the shortcode, Backspace removes it whole, and typing `[` offers the shortcodes a theme or plugin describes through the new `minn_admin_shortcode_hints` filter (a business fact by name, with the value it prints). A textarea shown as a list or as paragraphs is editable line by line. A computed fallback, a value that appears twice or a field the template never shows stays in the block's settings. A button marked with ACF's toolbar helper (`acf_inline_toolbar_editing_attrs()`) opens just the fields behind it, such as its link or the contact request it starts, and a chip on hover says where it goes; a link field searches your own content. Templates that check `$is_preview` now see a preview in Minn, as they do in the block editor; a block that should keep its front-end render can opt out with the `minn_admin_acf_preview_render` filter.
+
+### Improved
+
+* **Merge tags in the form builder.** An HTML block's content and a field's default value now have the same { } merge tag picker as notifications and confirmations, so you no longer type tags from memory. Content offers the form's field tags; a default value offers the ones Gravity Forms fills in before anyone submits, like the signed-in user's email or today's date.
+
+* **Undo and redo in the builders.** The form and field group builders and the notification and confirmation pages now keep a history of your changes. ⌘Z undoes the last one and ⇧⌘Z (Ctrl+Y on Windows) redoes it, and the arrows beside Save do the same. Adding, removing, moving or resizing a field is one step, and so is everything typed into one box. Undo back to what was last saved and the page no longer counts as unsaved, so leaving asks nothing. In a box you're typing in, ⌘Z undoes the typing first, as it always has. History starts over each time you save.
+
+* **Minn asks before unsaved edits are lost.** The form, field group, notification and confirmation pages, settings forms, products, memberships, Styles and role defaults keep your changes until you press Save. They used to ask only from their own Back button and when the tab closed, so a click in the sidebar, a jump through ⌘K, or the browser's Back threw the changes away without a word. Every way out now asks first, and staying keeps everything as it was.
+
+* **⌘S saves on every page with a Save button.** It used to work only in the post editor. Now it presses Save on the builders, a notification or confirmation, settings forms, products, memberships, Styles and the edit dialogs, instead of the browser offering to save the web page.
+
+* **Form entries open on their own page.** An entry used to open in a dialog over the list. Now every form plugin Minn covers (Gravity Forms, WPForms, Fluent Forms, Ninja Forms, Forminator, Formidable, Everest Forms, SureForms, Elementor Pro, Contact Form 7 through Flamingo or CFDB7, and Bricks) opens it on a page: who sent it up top with their email and phone, what they wrote in full, the rest of their answers, and the notes trail with a box to add one where the plugin keeps notes. The entry's actions and its submission details sit beside them, and the arrows (or the ← and → keys) step to the previous and next entry in the list you came from. In Gravity Forms, star it from the title and click the form's name to open it in the form builder. A link to an entry opens straight to it.
+
+* **Reply to a form entry from Minn.** Reply opens Minn's email composer addressed to the person who filled in the form, with "Re:" and the form's name as the subject. It sends from the site as a styled email (their answer comes back to you), and in Gravity Forms the reply is logged in the entry's notes. Minn only sends to an email address the entry itself holds, and since anyone can put an address in an entry by filling in the form, replying needs Gravity Forms' permission to email entry notes, or site administrator access.
+
+* **Repeater rows and page sections can be dragged into order.** Each row of a repeater or flexible content field (in the editor's field panels, Site Settings and anywhere else they appear) has a grip; drop it above or below another row. The up and down buttons stay for the keyboard.
+
+* **Role defaults can cover every role at once.** A new Every role row leads the Role defaults table. Any role without a setting of its own follows it, including roles a plugin adds later, so a new custom role never slips through. A role can still make its own choice, an explicit "Person chooses" included, and each role's first option says what it would follow.
+
+* **Block settings use switches for on/off choices.** An ACF block's true/false fields, and any block setting a plugin declares as a checkbox, now show as the same switches the rest of the block settings use.
+
+* **Align offers the block's own choices.** The setting lists only the alignments a block supports, with None first so an untouched Apply never adds one, and blocks that turn alignment off no longer show an empty Align box.
+
+### Fixed
+
+* **Ninja Forms answers show as typed.** An apostrophe or ampersand in an answer showed as &#039; or &amp;, because Ninja Forms stores answers encoded. Minn now decodes them the way Ninja Forms does.
+
+* **SureForms entries show their field labels.** Entries listed the internal key SureForms stores each answer under instead of the field's label. Minn now reads the label out of the key, as SureForms' own export does, and leaves out its internal fields.
+
+* **Minn's browser tab no longer shows the WordPress logo.** On a site without a Site Icon the tab fell back to WordPress's logo even when the theme has its own icon. It now shows the brand mark a theme or plugin offers through the new `minn_admin_favicon` filter, or Minn's own mark in your accent color.
+
+* **Text stays editable in place after applying block settings.** Applying a block's settings re-rendered its preview without its in-place text, which stayed read-only until the editor reloaded.
+
+* **Clicking a button's label to edit it no longer follows the link.** Text inside a link in a block preview (a button label, a "read more") can be typed over in place, but the click that put the cursor there also opened the link and left the editor.
+
+* **Saving an edit no longer changes settings you did not touch.** Edit forms send every field, and a stored choice missing from a list (a WPCode snippet set to run on demand or behind conditional logic, a Universal snippet, a Code Snippets CSS or JavaScript snippet, a Custom CSS & JS snippet that loads in more than one place) used to be swapped for the list's first option. Renaming a snippet could start its PHP running everywhere, wp-admin included, or turn its CSS into PHP. Forms now keep the stored choice, and the WPCode and Code Snippets lists name every option those plugins offer. WPCode snippets at any of its insert locations can now be edited in Minn, where some used to be refused.
+
+* **Redirection edits keep conditions, flags and order.** Saving a redirect in place used to clear the targets of a login, role or IP rule, drop its case and query handling, and move it to the top of the order. The redirect log and the 404 log are also two separate settings now, so changing one no longer switches the other back on (the 404 log records visitor addresses), and either can be kept forever.
+
+* **A signed-out visit to Minn no longer reveals a hidden login address.** With WPS Hide Login or Solid Security's Hide Backend in place, opening /minn-admin/ while signed out used to redirect to the secret login page. Minn now sends signed-out visitors to wp-admin, where the login-hiding plugin decides what they see.
+
+* **Event details saves keep the rest of the event.** Saving any field in the Event details panel (the cost, say) used to unfeature the event, show a hidden event in listings, turn its map off, unpin it from the month view and move it to the site's timezone. A venue or organizer the editor cannot see is also kept instead of being unlinked, a venue or organizer has to be a real one the editor may see, and saves with Community Events active no longer report an error after landing. A recurring Events Calendar Pro event is left to The Events Calendar, because a save from Minn used to delete its recurrence rules and collapse the series.
+
+* **ACF field edits keep Required on translated sites, colon choices and multi-value defaults.** On a site in another language, relabelling a required field made it optional. Choices like 16:9 or 10:30 were split at the colon on any field group save, and checkbox defaults were cleared.
+
+* **Backslashes survive.** Duplicating a post used to strip every backslash from the copy (code samples, Windows paths, block settings), Custom CSS & JS dropped them from snippet code before writing it to the site, which broke icon font codes, and WPCode removed them from live snippet code on any edit, even a priority change, which could break a regular expression or the snippet itself. WPCode edits also keep the snippet's compress-output setting.
+
+* **Term merges keep the default category.** Merging the default category (or WooCommerce's default product category) into another term used to delete it. That term can only receive merges now, and merges ask the same per-term permissions wp-admin does.
+
+* **System, logs and the database viewer follow Site Health's access.** On a single site they now require the access core requires for Site Health, so a custom role with settings access but no plugin-install rights no longer sees server details, reads or empties logs, or browses the database.
+
+* **Plugin permission settings Minn missed are honoured.** Duplicator 5 backup downloads need its own Export permission, PowerPress's Roles and Capabilities setting now limits the episode panel to podcast editors, Meta Box fields marked read-only or disabled and Pods fields marked read-only or hidden stay locked, Perfmatters' login message now needs the code-editing access its other code fields need, ACPT repeater rows no longer carry sub-fields the editor's role may not see, and Enable Media Replace's own replace permission now adds to the upload permission instead of standing in for it.
+
+* **Bricks and other cached permission answers can't outlive a signed-out request.** Bricks remembers who may see form submissions for the person signed in when the page starts; a request that WordPress treats as signed out partway through could still read submissions. Minn now checks that someone is signed in first.
+
+* **Mail logs and stats stop showing what they should not.** Gravity SMTP's list no longer shows Cc and Bcc recipients to a role that may only see the list, and Jetpack Stats top pages link only to the site's own pages.
+
+* **Gravity Forms notification edits keep HTML email templates.** Renaming a notification used to strip the head and styles from an HTML template and leave the CSS showing as text in the email, and could quietly change a subject containing a percent sign.
+
+* **SEO titles keep their variables.** Saving anything in the SEO panel used to damage untouched titles and descriptions that use Yoast or Rank Math variables, turning %%category%% into %tegory%%.
+
+* **WPForms trash keeps partial entries partial.** A partial or abandoned entry moved to the Trash and restored came back as a completed one. Minn now records and restores the status the way WPForms does, and marking an entry as spam (or not spam) goes through WPForms' own steps, so its spam reason and log are kept.
+
+* **Asset CleanUp saves keep your Google Fonts settings.** Toggling an unrelated setting while font removal was on used to erase the stored font preferences.
+
+* **Store settings keep extension switches.** Saving a WooCommerce settings section whose options are grouped (JetWooBuilder's custom template switches, for one) used to switch every one of them off.
+
+* **The database viewer hides more saved credentials.** Jetpack and WooCommerce.com connection tokens, WP Mail SMTP, Gravity SMTP and Post SMTP keys, payment gateway secrets, Freemius account data, All In One Security captcha secrets, Simba two-factor trusted devices, UpdraftCentral sign-in keys and Gravity Forms' REST API secrets now show as redacted and can't be searched.
+
+* **Block previews stay small.** A Latest Posts or Latest Comments block set to show everything, or a plugin's own posts grid, now previews a readable page of items instead of the whole site.
+
+* **The media modal saves only what you changed.** Saving a new alt text before the caption had loaded used to erase the caption and description, and every save curled straight quotes in the title.
+
+* **Redirects and folders behave like their plugins.** Adding a Safe Redirect Manager or Simple 301 Redirects redirect for an address that already has one used to overwrite that rule (republishing it if it was switched off); it is refused now, as their own screens do. Moving media between Folders folders keeps an item's other folders, as Folders itself does.
+
+* **Minn updates only from its own release.** The plugin now tells WordPress where its updates come from, refuses any other package offered for it, and checks its release's fingerprint even when another plugin (a host's package cache) supplies the download.
+
+* **On a network, Overview and Memberships stay on the current site.** The Users card and the storage figure counted the whole network, and adding or transferring a membership could look up anyone on the network by email. Both now stay on the site you are on.
+
+* **Custom CSS & JS edits keep the plugin's own setup.** After any change made in Minn, the plugin stopped loading jQuery for snippets that need it, and a block editor snippet switched off, deleted or edited in Minn kept running in the block editor with its old code. Externally linked files also lost their cache-busting, so browsers kept the old file. Switching a snippet off and on again, or saving it unchanged, also rebuilt its file from the plugin's stored copy, which for CSS a designer wrote in the plugin's editor holds `>` as `&gt;`, so the rule stopped matching. Minn now rebuilds all of it the way the plugin does, writes only the file of the snippet you changed, keeps the plugin's own bytes through switching off and on and through an unchanged save, and no longer publishes HTML snippets as files.
+
+* **Plugin and theme uploads follow the host's rules.** Uploading a zip, or installing a plugin from a link, now needs WordPress's own permission to upload plugins or themes, not only to install them. Hosts that keep installs to WordPress.org deny it, and Minn now hides the upload area too.
+
+* **Maintenance mode holds form submissions too.** While the holding page was up, a visitor could still submit a Contact Form 7 or Gravity Forms form to any page: the mail went out, the entry was stored, and a Gravity Forms registration feed could create an account on the closed site. Those form posts are now held as well, along with any other a plugin handles once WordPress has routed the request. A few plugins answer earlier than that (Formidable's form posts, LatePoint's booking steps) and are not held. Signing in, scheduled tasks and WooCommerce payment callbacks still get through.
+
+* **Post type edits keep settings Minn doesn't show.** Saving a post type or taxonomy in Minn, even just its name, dropped Post Formats and trackbacks support and detached taxonomies from post types the editor doesn't list, such as Media, and a Custom Post Type UI type set to no supports gained a title and editor. They now stay as they were.
+
+* **ACF respects its own lock.** When a site hides ACF's settings from its administrators (a common setup for client sites), Minn still let them edit or delete ACF post types, taxonomies and field groups. Field groups now stay out of reach and ACF post types show as read-only, the way ACF's own screens treat them.
+
+* **Links that come from plugins are checked before you can click them.** Plugin author sites, settings and admin links supplied by integrations, and button links inside block previews now go through the same address check as the rest of Minn, so an address that would run code is dropped instead of shown as a link.
+
+* **A mistyped license key no longer replaces a working one.** Activating SearchWP, LayerSlider or WP All Export with a wrong key, or during a network hiccup, could erase or replace the working license. The previous license now stays in place. Divi licenses are activated on Elegant Themes' own Updates screen, since Minn couldn't confirm them from outside wp-admin. A Gravity Forms key set in wp-config is now respected, and Smash Balloon deactivation only reports success once smashballoon.com confirms it.
+
+* **ACPT repeater checkboxes keep their selections.** Saving any field in an ACPT panel or options page cleared the checkbox choices in every row of every ACPT repeater on it.
+
+* **Store email settings keep theme syncing.** Saving any WooCommerce email setting in Minn turned off the option that keeps email colours and fonts in step with the theme, and Minn's switch for it couldn't turn it off. Payment, email and shipping settings Minn doesn't show are also now kept exactly as they were.
+
+* **Writers can save SEO changes on posts with a social image.** For someone without permission to upload media, editing a post's SEO description failed with "You cannot use that media item" whenever an editor had already set its social image, even though they hadn't changed it. Only a newly chosen image is checked now.
+
+* **Shortcode-only snippets can be edited.** Editing a WPCode snippet that is only used as a shortcode filled in a location it never had, so the save was refused; Header Footer Code Manager's manual snippets had a location written over them. An empty location now stays empty.
+
+* **Tools a site limits to certain administrators stay limited in Minn.** When a site restricts WPvivid backups, Transients Manager, LightStart or SeedProd maintenance mode, WooCommerce's coming-soon switch or Redirection's first-time setup to particular people, other administrators could still use them through Minn. Minn now asks each plugin's own permission as well.
+
+* **Deleting a network works in WP Multi Network.** "Delete network and sites" always failed, because Minn never sent the confirmation that the network's sites go too.
+
 ## **v0.42.0** - September 27 2026
 
 The one-list release. Update everything now runs plugins, themes and language packs as a single batch that walks one list, and every activity log draws the same fourteen-day chart the mail and forms views already had, with a bar that narrows the list to that day. MonsterInsights, ExactMetrics and self-hosted Matomo join the Traffic chart, logged emails stop firing their senders' tracking pixels when you open them, and Rank Math redirects, Broken Link Checker, Sucuri's audit log and LatePoint event registrations all land in Minn. The cycle closes with the longest security pass yet: a full review of the release candidate found two medium issues and a set of smaller ones, and every fix was then reviewed on its own before it shipped, which turned up and closed an older way for a Contributor to plant script that ran when an administrator saved their post.
@@ -324,7 +456,6 @@ The design release. A block theme keeps the things that decide how a site looks 
 * **Deutsch (Sie) no longer leaves Minn in English.** WordPress treats formal German as its own locale (`de_DE_formal`), and Minn only shipped a catalog for `de_DE`. The dashboard translated; Minn did not, even after updating translations (those are wordpress.org packs, not Minn's). Formal locales, and the same `_formal` / `_informal` shape in other languages, now use the parent catalog.
 * **Activating WooCommerce no longer waits for a reload to show Commerce.** Orders, Products, Customers and Coupons read a one-time snapshot from when Minn first loaded, so installing the plugin left the sidebar looking like a site with no store until you refreshed. The same re-poll that already picks up new block plugins and surfaces now also refreshes those store flags, and the Commerce group appears as soon as WooCommerce is on.
 
-
 ## **v0.36.0** - August 30 2026
 
 The templates release. The two big page builders get a real home in Minn: a Templates surface that lists, renames, duplicates, exports and creates Bricks and Elementor templates, with each builder's own permissions deciding who does what and the design itself one click away. The editor closes its last core-block gaps in the same breath: the Query Loop, the widget blocks, Tabs and Accordion can all be typed in with /, previewed with real content, and configured from the gear. HappyFiles Pro joins the media folder picker and the Licenses tab, list search boxes stop fighting their own results, and a deep security review pass asks two dozen more plugins the permission questions they ask themselves.
@@ -509,7 +640,6 @@ The rest of the release is what people wrote in to say. Long product names stop 
 * **A debug log outside the site is left alone when reading it too.** Where the debug log points at a file outside the site, which on shared hosting is often a log the whole server writes to, clearing it already refused. Reading it did not: the viewer returned the full path on the server and the end of the file. Both now refuse.
 * **User and media lists stop where the caller's permission stops.** WooCommerce gives shop managers a user list, then limits them to customers one account at a time. Minn kept going and showed staff and administrator email addresses, roles and whether they had an active login. The list and its login filters now follow that account-by-account rule. Image blocks and media folders learned the same lesson: an attachment inside a private post is no longer resolved or included for someone who cannot read it.
 * **Duplicate respects post types that cannot be created.** A custom post type may allow an existing item to be edited while deliberately withholding the ability to create another. Duplicate checked only the first half, so it could create a draft anyway. It now asks the post type's own create rule before copying anything.
-
 
 ## **v0.33.0** - August 19, 2026
 
@@ -725,7 +855,6 @@ The translation release. Choosing another language used to paint the edges and l
 * **The subscription badge fits the cell it lives in.** The worded pill was wider than the order-number column, so a Subscription or Renewal mark clipped into a sliver that still looked clickable. The badge is the icon alone now; the word lives in the accessible name and in the popover the badge already opened. The parent order and its renewals also use different shapes, not one shape in two colours.
 * **Card-head actions share one right edge.** More than one button in a card head used to push each other apart, and the icons had no tooltip until a second later, and never on keyboard focus. The actions now sit together, and the tooltip is drawn from the accessible name on hover and on focus.
 * **The add-product picker shows the product picture.** Searching for a line item used to be names and SKUs only. The picker now shows the product image next to the match.
-
 
 ## **v0.29.0** - August 13, 2026
 
@@ -1226,7 +1355,6 @@ The commerce release. WooCommerce day-to-day work lands in Minn: **Products**, *
 ### Fixed
 * **Orders status tabs missed pending / cancelled / failed:** the list tabs cover the full WooCommerce set (All, Processing, Completed, On hold, Pending, Cancelled, Refunded, Failed) so older failed or pending orders are not hidden behind an incomplete filter strip.
 * **Coupons nav when WooCommerce coupons are disabled:** if Enable coupons is off, `shop_coupon` is not registered and `wc/v3/coupons` always returns "Sorry, you cannot list resources." Minn now only offers Coupons when WC has coupons enabled and the post type exists (and shows a clear settings link if the route is hit anyway).
-
 
 ## **v0.13.0** - July 13, 2026
 
