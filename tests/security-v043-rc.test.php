@@ -252,6 +252,63 @@ if ( function_exists( 'wpFluent' ) && class_exists( '\FluentForm\App\Modules\Acl
 	$skip( 'Fluent preview: Fluent Forms inactive' );
 }
 
+// --- 08-01 / 08-02 Custom CSS & JS writes keep the vendor's tree whole -------
+// CCJ builds its tree only from wp-admin, so Minn's writes rebuild it: the
+// jQuery flag, the block-editor bundles and external cache-busters must
+// survive, and a write may only touch the file of the snippet it changed.
+if ( defined( 'CCJ_UPLOAD_DIR' ) && function_exists( 'minn_admin_ccj_rebuild_tree' ) ) {
+	$tree_was  = get_option( 'custom-css-js-tree', array() );
+	$bundles   = array();
+	foreach ( array( 'block_js.js', 'block_css.css' ) as $f ) {
+		$bundles[ $f ] = is_file( CCJ_UPLOAD_DIR . '/' . $f ) ? file_get_contents( CCJ_UPLOAD_DIR . '/' . $f ) : null;
+	}
+	$made = array();
+	$make = function ( $args ) use ( $call, &$made ) {
+		list( $st, $d ) = $call( 'POST', '/minn-admin/v1/ccj/snippets', array_merge( array( 'type' => 'header', 'linking' => 'internal', 'side' => 'frontend', 'priority' => 5, 'active' => true ), $args ) );
+		$made[] = (int) ( $d['id'] ?? 0 );
+		return (int) ( $d['id'] ?? 0 );
+	};
+	$tree = function () {
+		wp_cache_delete( 'custom-css-js-tree', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		return (array) get_option( 'custom-css-js-tree', array() );
+	};
+	$jq = $make( array( 'name' => 'Minn v043 jq', 'language' => 'js', 'code' => 'jQuery( function () { window.minnV043 = 1; } );' ) );
+	$check( 'CCJ: a front-end jQuery snippet keeps CCJ enqueuing jQuery', ! empty( $tree()['jquery'] ), 'tree keys ' . implode( ',', array_keys( $tree() ) ) );
+	$ext   = $make( array( 'name' => 'Minn v043 ext', 'language' => 'css', 'linking' => 'external', 'code' => '.minn-v043-ext{color:red}' ) );
+	$files = (array) ( $tree()['frontend-css-header-external'] ?? array() );
+	$check( 'CCJ: an external file carries its cache-buster', (bool) preg_grep( '/^' . $ext . '\.css\?v=\d+$/', $files ), implode( ',', $files ) );
+	$ba = $make( array( 'name' => 'Minn v043 block A', 'language' => 'js', 'side' => 'block', 'code' => 'window.minnV043BlockA = 1;' ) );
+	$bb = $make( array( 'name' => 'Minn v043 block B', 'language' => 'js', 'side' => 'block', 'code' => 'window.minnV043BlockB = 1;' ) );
+	$bundle = (string) @file_get_contents( CCJ_UPLOAD_DIR . '/block_js.js' );
+	$check( 'CCJ: block-side snippets reach the block editor bundle', false !== strpos( $bundle, 'minnV043BlockA' ) && false !== strpos( $bundle, 'minnV043BlockB' ) );
+	$call( 'POST', "/minn-admin/v1/ccj/snippets/{$ba}/active", array( 'active' => false ) );
+	$bundle = (string) @file_get_contents( CCJ_UPLOAD_DIR . '/block_js.js' );
+	$check( 'CCJ: switching a block snippet off takes it out of the bundle', false === strpos( $bundle, 'minnV043BlockA' ) && false !== strpos( $bundle, 'minnV043BlockB' ) );
+	// An untouched snippet's file holds what CCJ wrote, which can differ from
+	// post_content (CCJ writes the raw editor bytes). A write elsewhere must not
+	// regenerate it.
+	$own = $make( array( 'name' => 'Minn v043 untouched', 'language' => 'css', 'code' => '.minn-v043-own{color:blue}' ) );
+	file_put_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css', '/* minn-v043 raw bytes */' );
+	$call( 'PUT', "/minn-admin/v1/ccj/snippets/{$jq}", array( 'name' => 'Minn v043 jq renamed' ) );
+	$check( 'CCJ: a write to one snippet leaves another snippet\'s file alone', '/* minn-v043 raw bytes */' === (string) @file_get_contents( CCJ_UPLOAD_DIR . '/' . $own . '.css' ) );
+	$html = $make( array( 'name' => 'Minn v043 html', 'language' => 'html', 'code' => '<p>minn-v043</p>' ) );
+	$check( 'CCJ: an HTML snippet is not published as a file', ! is_file( CCJ_UPLOAD_DIR . '/' . $html . '.html' ) );
+	foreach ( array_filter( $made ) as $id ) {
+		$call( 'DELETE', "/minn-admin/v1/ccj/snippets/{$id}" );
+	}
+	update_option( 'custom-css-js-tree', $tree_was );
+	foreach ( $bundles as $f => $bytes ) {
+		if ( null === $bytes ) {
+			@unlink( CCJ_UPLOAD_DIR . '/' . $f );
+		} else {
+			file_put_contents( CCJ_UPLOAD_DIR . '/' . $f, $bytes );
+		}
+	}
+} else {
+	$skip( 'Custom CSS & JS writes: plugin inactive' );
+}
+
 if ( $temp_users ) {
 	require_once ABSPATH . 'wp-admin/includes/user.php';
 	foreach ( $temp_users as $id ) {

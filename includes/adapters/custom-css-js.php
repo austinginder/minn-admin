@@ -27,7 +27,7 @@ function minn_admin_ccj_active() {
  * wp_update_post merges the stored post_content back in and runs it through
  * content_save_pre, where a caller without unfiltered_html gets the kses
  * filters: a rename or a switch-off by a designer would rewrite a JS body
- * (`a<b && c>d`, a literal <script> wrapper) and rebuild_tree() would then
+ * (`a<b && c>d`, a literal <script> wrapper) and write_file() would then
  * write the mangled bytes to the live file. The body is not this caller's
  * to change, so it must not be filtered either: lift kses for the one call
  * the way core's own kses_init() would decide it, then put it back.
@@ -85,7 +85,7 @@ function minn_admin_ccj_can_write_code( $opts ) {
 	// "CSS is not an execution context" holds only while the bytes never
 	// reach an HTML parser, and that is a property of the SINK, not the
 	// language. With linking=internal (the default) or 'both',
-	// minn_admin_ccj_rebuild_tree() concatenates the caller's bytes between
+	// minn_admin_ccj_write_file() concatenates the caller's bytes between
 	// literal <style type="text/css"> and </style> and the plugin echoes that
 	// file into the page, so a payload can close the element and run script.
 	// Only linking=external is genuinely inert: the file is loaded through
@@ -174,7 +174,7 @@ function minn_admin_ccj_default_options( $language = 'css' ) {
  * Force `language` back into the allowlist.
  *
  * minn_admin_ccj_get_options() merges stored meta OVER the validated defaults,
- * so the raw value wins on the very next key — and rebuild_tree() uses it
+ * so the raw value wins on the very next key — and write_file() uses it
  * directly as a FILE EXTENSION:
  * @file_put_contents( CCJ_UPLOAD_DIR . '/' . $post->ID . '.' . $language, … ).
  * A stored 'php' would write executable code into uploads; a '../' would climb
@@ -269,6 +269,59 @@ function minn_admin_ccj_drop_files( $id ) {
 	}
 }
 
+/**
+ * Write one snippet's file the way CCJ's own save does
+ * (options_save_meta_box_data): only the snippet being saved, and never an
+ * HTML snippet, which CCJ prints from the post itself. Other snippets' files
+ * hold the raw bytes CCJ wrote, which can differ from post_content (kses
+ * filters post_content for authors without unfiltered_html), so they are
+ * never regenerated from it.
+ *
+ * @param int $id Snippet post ID.
+ * @return void
+ */
+function minn_admin_ccj_write_file( $id ) {
+	if ( ! defined( 'CCJ_UPLOAD_DIR' ) || ! wp_is_writable( CCJ_UPLOAD_DIR ) || ! minn_admin_ccj_is_active( $id ) ) {
+		return;
+	}
+	$post = get_post( $id );
+	if ( ! $post ) {
+		return;
+	}
+	$opts     = minn_admin_ccj_get_options( $id );
+	$language = $opts['language'];
+	if ( 'html' === $language ) {
+		return;
+	}
+	$code   = $post->post_content;
+	$before = '';
+	$after  = '';
+	if ( 'internal' === $opts['linking'] ) {
+		$before = '<!-- start Simple Custom CSS and JS -->' . PHP_EOL;
+		$after  = '<!-- end Simple Custom CSS and JS -->' . PHP_EOL;
+		if ( 'css' === $language ) {
+			$before .= '<style type="text/css">' . PHP_EOL;
+			$after   = '</style>' . PHP_EOL . $after;
+		}
+		if ( 'js' === $language && ! preg_match( '/<script\b[^>]*>([\s\S]*?)<\/script>/im', $code ) ) {
+			$before .= '<script type="text/javascript">' . PHP_EOL;
+			$after   = '</script>' . PHP_EOL . $after;
+		}
+	}
+	@file_put_contents( CCJ_UPLOAD_DIR . '/' . (int) $id . '.' . $language, $before . $code . $after );
+}
+
+/**
+ * Rebuild CCJ's search tree the way its own build_search_tree() does. CCJ
+ * builds it only from wp-admin, so after a Minn write this is the only
+ * rebuild, and it has to keep all of it: the jQuery flag (CCJ enqueues jQuery
+ * only when a front-end or block JS snippet uses it), the cache-buster on
+ * external files, and the two block-editor bundles, which hold every active
+ * internal block-side snippet and would otherwise keep running code that was
+ * switched off, deleted or edited.
+ *
+ * @return void
+ */
 function minn_admin_ccj_rebuild_tree() {
 	$posts = get_posts( array(
 		'post_type'      => 'custom-css-js',
@@ -277,40 +330,47 @@ function minn_admin_ccj_rebuild_tree() {
 		'orderby'        => 'ID',
 		'order'          => 'ASC',
 	) );
-	$tree = array();
+	$old       = (array) get_option( 'custom-css-js-tree', array() );
+	$tree      = array();
+	$block_css = '';
+	$block_js  = '';
 	foreach ( $posts as $post ) {
 		if ( ! minn_admin_ccj_is_active( $post->ID ) ) {
 			continue;
 		}
 		$opts     = minn_admin_ccj_get_options( $post->ID );
 		$language = $opts['language'];
+		$side     = (string) $opts['side'];
 		$filename = $post->ID . '.' . $language;
-		$branch   = $language . '-' . $opts['type'] . '-' . $opts['linking'];
-		foreach ( explode( ',', (string) $opts['side'] ) as $side ) {
-			$side = trim( $side );
-			if ( $side ) {
-				$tree[ $side . '-' . $branch ][] = $filename;
+		if ( 'external' === $opts['linking'] ) {
+			$filename .= '?v=' . wp_rand( 1, 10000 );
+		}
+		$branch = $language . '-' . $opts['type'] . '-' . $opts['linking'];
+		foreach ( explode( ',', $side ) as $one ) {
+			$one = trim( $one );
+			if ( $one ) {
+				$tree[ $one . '-' . $branch ][] = $filename;
 			}
 		}
-		// Keep the upload file in sync for external/internal loaders.
-		if ( defined( 'CCJ_UPLOAD_DIR' ) && wp_is_writable( CCJ_UPLOAD_DIR ) ) {
-			$code   = $post->post_content;
-			$before = '';
-			$after  = '';
-			if ( 'internal' === $opts['linking'] ) {
-				$before = '<!-- start Simple Custom CSS and JS -->' . PHP_EOL;
-				$after  = '<!-- end Simple Custom CSS and JS -->' . PHP_EOL;
-				if ( 'css' === $language ) {
-					$before .= '<style type="text/css">' . PHP_EOL;
-					$after   = '</style>' . PHP_EOL . $after;
-				}
-				if ( 'js' === $language && ! preg_match( '/<script\b[^>]*>([\s\S]*?)<\/script>/im', $code ) ) {
-					$before .= '<script type="text/javascript">' . PHP_EOL;
-					$after   = '</script>' . PHP_EOL . $after;
-				}
+		$code = $post->post_content;
+		if ( 'js' === $language && ( false !== strpos( $side, 'frontend' ) || false !== strpos( $side, 'block' ) ) ) {
+			$code = preg_replace( '@/\* Add your JavaScript code here[\s\S]*?End of comment \*/@im', '/* Default comment here */', $code );
+			if ( preg_match( '/jquery\s*(\(|\.)/i', $code ) ) {
+				$tree['jquery'] = true;
 			}
-			@file_put_contents( CCJ_UPLOAD_DIR . '/' . $filename, $before . $code . $after );
 		}
+		if ( false !== strpos( $side, 'block' ) && 'internal' === $opts['linking'] ) {
+			if ( 'js' === $language ) {
+				$block_js .= $code . "\n";
+			}
+			if ( 'css' === $language ) {
+				$block_css .= $code . "\n";
+			}
+		}
+	}
+	if ( defined( 'CCJ_UPLOAD_DIR' ) && false !== strpos( implode( ',', array_merge( array_keys( $old ), array_keys( $tree ) ) ), 'block-' ) ) {
+		@file_put_contents( CCJ_UPLOAD_DIR . '/block_js.js', $block_js );
+		@file_put_contents( CCJ_UPLOAD_DIR . '/block_css.css', $block_css );
 	}
 	update_option( 'custom-css-js-tree', $tree );
 }
@@ -658,6 +718,7 @@ add_action( 'rest_api_init', function () {
 				}
 				update_post_meta( $id, 'options', $opts );
 				update_post_meta( $id, '_active', ! empty( $body['active'] ) ? 'yes' : 'no' );
+				minn_admin_ccj_write_file( $id );
 				minn_admin_ccj_rebuild_tree();
 				$item = minn_admin_ccj_item( $id );
 				return rest_ensure_response( $item ? $item : array( 'id' => $id ) );
@@ -706,7 +767,7 @@ add_action( 'rest_api_init', function () {
 				// external is the one shape minn_admin_ccj_can_write_code() lets a
 				// caller without unfiltered_html store raw, because it loads through
 				// wp_enqueue_style and cannot break out. Moving it to internal/both
-				// hands those same stored bytes to rebuild_tree()'s inlined
+				// hands those same stored bytes to write_file()'s inlined
 				// <style>/<script> sink, so the promotion is a code write.
 				$retargets = ( $opts['language'] !== ( isset( $stored['language'] ) ? (string) $stored['language'] : 'css' ) )
 					|| ( $opts['side'] !== ( isset( $stored['side'] ) ? (string) $stored['side'] : 'frontend' ) )
@@ -734,11 +795,17 @@ add_action( 'rest_api_init', function () {
 					minn_admin_ccj_update_post_meta_only( $update );
 				}
 				update_post_meta( $id, 'options', $opts );
-				// Changing a snippet's language writes it under a new name, so
-				// clear all three first and let the rebuild put back the one
-				// that now applies. Otherwise the file under the old name
-				// stays where it was, still reachable at its own address.
-				minn_admin_ccj_drop_files( $id );
+				// The file changes only when what it holds does: the code, the
+				// language, linking or sides, or whether it runs. A rename
+				// leaves it alone (it can hold raw bytes CCJ wrote that differ
+				// from post_content). Changing the language writes it under a
+				// new name, so clear all three first and write the one that
+				// now applies; the file under the old name would otherwise
+				// stay reachable at its own address.
+				if ( array_key_exists( 'code', $body ) || $retargets || array_key_exists( 'active', $body ) ) {
+					minn_admin_ccj_drop_files( $id );
+					minn_admin_ccj_write_file( $id );
+				}
 				minn_admin_ccj_rebuild_tree();
 				return rest_ensure_response( minn_admin_ccj_item( $id ) );
 			},
@@ -802,6 +869,8 @@ add_action( 'rest_api_init', function () {
 			// too. Turning it back on writes them again.
 			if ( ! $active ) {
 				minn_admin_ccj_drop_files( $id );
+			} else {
+				minn_admin_ccj_write_file( $id );
 			}
 			minn_admin_ccj_rebuild_tree();
 			return rest_ensure_response( minn_admin_ccj_item( $id ) );
