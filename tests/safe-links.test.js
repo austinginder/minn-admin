@@ -35,6 +35,9 @@ if ( m ) {
 		[ '//evil.example', false ],
 		[ '/\\evil.example', false ],
 		[ '\\\\evil.example', false ],
+		[ '\x01javascript:alert(1)', false ],
+		[ '\x01//evil.example', false ],
+		[ ' \x00https://example.com', false ],
 	];
 	for ( const [ url, allowed ] of cases ) {
 		const out = navHref( url );
@@ -44,12 +47,28 @@ if ( m ) {
 
 // Every href fed from adapter or vendor data, by the expression that carries
 // it. A new one belongs here, and in navHref.
-const fed = [ 'r.adminUrl', 'txn.url', 'a.href', 'setup.href', 'data.adminUrl', 'sec.adminUrl', 'first.href', 'p.author_uri', 't.author_uri', 'g.settingsUrl', 'c.adminUrl', 'd.adminUrl', 'p.adminUrl', 'en.href', 'l.url', 'fgb.group.adminUrl' ];
+const fed = [ 'c.credentialsUrl', 'activityAdmin', 'r.adminUrl', 'txn.url', 'a.href', 'setup.href', 'data.adminUrl', 'sec.adminUrl', 'first.href', 'p.author_uri', 't.author_uri', 'g.settingsUrl', 'c.adminUrl', 'd.adminUrl', 'p.adminUrl', 'en.href', 'l.url', 'fgb.group.adminUrl' ];
 for ( const e of fed ) {
 	const bare = src.split( `href="\${ esc( ${ e } ) }` ).length - 1;
 	check( `${ e } never reaches an href unchecked`, 0 === bare, bare ? `${ bare } bare` : '' );
 }
-check( 'button links in the editor pass the content allowlist', ! /aOpen \+= ` href="\$\{ esc\( url \) \}"`/.test( src ) );
+check( 'button links in the editor go through authorHref', /aOpen \+= ` href="\$\{ esc\( authorHref\( url \) \) \}"`/.test( src ) );
+check( 'descriptor action hrefs go through navHref (surfaceFillHref)', /function surfaceFillHref[\s\S]{0,600}return navHref\( tpl\.replace/.test( src ) );
+
+// Author links: anything but a scheme that runs code.
+const a = src.match( /const authorHref = \( u \) => \{[\s\S]*?\n\t\};/ );
+check( 'authorHref exists', !! a );
+if ( a ) {
+	// eslint-disable-next-line no-new-func
+	const authorHref = new Function( `${ a[ 0 ] }; return authorHref;` )();
+	for ( const [ url, allowed ] of [
+		[ 'contact/', true ], [ '?add-to-cart=12', true ], [ 'sms:+15555550100', true ], [ 'https://example.com', true ], [ 'mailto:a@example.com', true ],
+		[ 'javascript:alert(1)', false ], [ 'java\nscript:alert(1)', false ], [ '\x01javascript:alert(1)', false ], [ 'data:text/html,x', false ], [ 'VBScript:x', false ],
+	] ) {
+		const out = authorHref( url );
+		check( `authorHref ${ allowed ? 'keeps' : 'refuses' } ${ JSON.stringify( url ) }`, allowed ? out !== '' : out === '', JSON.stringify( out ) );
+	}
+}
 
 console.log( `\nsafe-links: ${ pass }/${ pass + fail } passed` );
 process.exit( fail ? 1 : 0 );

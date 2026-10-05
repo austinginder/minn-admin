@@ -383,12 +383,27 @@
 	// (admin.php?page=…, /wp-admin/…), which safeHref would blank. Any other
 	// scheme, and the //host and backslash forms that leave the origin,
 	// come back empty. Tabs and newlines go first: browsers drop them from
-	// URLs, so java\nscript: would otherwise read as a relative path.
+	// URLs, so java\nscript: would otherwise read as a relative path. Any
+	// other control character is refused outright: the URL parser drops a
+	// leading one too, so \x01javascript: would pass every test below.
 	const navHref = ( u ) => {
-		const v = String( u == null ? '' : u ).replace( /[\t\n\r]/g, '' ).trim();
-		if ( /^https?:\/\//i.test( v ) ) return v;
-		if ( /^[a-z][a-z0-9+.-]*:/i.test( v ) || /^[\/\\]{2}/.test( v ) ) return '';
-		return v;
+		const v = String( u == null ? '' : u ).replace( /[\t\n\r]/g, '' );
+		if ( /[\u0000-\u001f\u007f]/.test( v ) ) return '';
+		const t = v.trim();
+		if ( /^https?:\/\//i.test( t ) ) return t;
+		if ( /^[a-z][a-z0-9+.-]*:/i.test( t ) || /^[\/\\]{2}/.test( t ) ) return '';
+		return t;
+	};
+
+	// A link an AUTHOR put in their own content (a button, a link swapped in
+	// a preview): anything but a scheme that runs code, so relative paths,
+	// ?add-to-cart=12, sms: and the rest survive an edit. Control characters
+	// are refused for the reason navHref gives.
+	const authorHref = ( u ) => {
+		const v = String( u == null ? '' : u ).replace( /[\t\n\r]/g, '' );
+		if ( /[\u0000-\u001f\u007f]/.test( v ) ) return '';
+		const t = v.trim();
+		return /^(javascript|data|vbscript):/i.test( t ) ? '' : t;
 	};
 
 	// Structural parsing of untrusted markup, same inert document and the same
@@ -16548,9 +16563,11 @@
 		const whole = tpl.match( /^\{(\w+)\}$/ );
 		if ( whole ) {
 			const value = String( item[ whole[ 1 ] ] ?? '' );
-			if ( /^https?:\/\//i.test( value ) ) return value;
+			if ( /^https?:\/\//i.test( value ) ) return navHref( value );
 		}
-		return tpl.replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( item[ k ] ?? '' ) );
+		// The template is the descriptor's own, so it answers to navHref
+		// like every other adapter-supplied link.
+		return navHref( tpl.replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( item[ k ] ?? '' ) ) );
 	}
 
 	// External-link honesty: a plugin-supplied href that leaves this site
@@ -28979,7 +28996,7 @@
 								<span class="minn-spam-name">${ esc( c.name ) }</span>
 								${ pill }
 								<span class="minn-spam-blocked">${ esc( TYPE_LABELS[ c.type ] || String( c.type || '' ).replace( /_/g, ' ' ) ) }</span>
-								${ c.credentialsUrl ? `<a class="minn-spam-link" href="${ esc( c.credentialsUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Get an API key ↗' ) ) }</a>` : '' }
+								${ c.credentialsUrl ? `<a class="minn-spam-link" href="${ esc( navHref( c.credentialsUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'Get an API key ↗' ) ) }</a>` : '' }
 							</div>
 							<div class="minn-toggle-desc">${ esc( c.description ) }</div>
 							${ controls }
@@ -30881,7 +30898,7 @@
 
 			const divClass = cn ? `wp-block-button ${ cn }` : 'wp-block-button';
 			let aOpen = '<a class="wp-block-button__link wp-element-button"';
-			if ( safeLinkHref( url ) ) aOpen += ` href="${ esc( safeLinkHref( url ) ) }"`;
+			if ( authorHref( url ) ) aOpen += ` href="${ esc( authorHref( url ) ) }"`;
 			if ( b.newTab ) {
 				aOpen += ` target="_blank" rel="${ esc( attrs.rel || 'noreferrer noopener' ) }"`;
 			}
@@ -38805,7 +38822,7 @@
 	function swapIslandLink( raw, oldUrl, newUrl ) {
 		newUrl = String( newUrl || '' ).trim()
 			.replace( /"/g, '%22' ).replace( /</g, '%3C' ).replace( />/g, '%3E' ).replace( /\s/g, '%20' );
-		if ( ! newUrl || newUrl === oldUrl || /^(javascript|data|vbscript):/i.test( newUrl ) ) return raw;
+		if ( ! newUrl || newUrl === oldUrl || ! authorHref( newUrl ) ) return raw;
 		const encAttr = ( s ) => s.replace( /--/g, '\\u002d\\u002d' ).replace( /</g, '\\u003c' ).replace( />/g, '\\u003e' ).replace( /&/g, '\\u0026' );
 		const slashEsc = ( s ) => s.split( '/' ).join( '\\/' );
 		const q = ( s ) => '"' + s + '"';
@@ -46257,7 +46274,7 @@
 						${ edit ? `<button class="minn-btn-primary" id="minn-surface-save">${ esc( __( 'Save' ) ) }</button>` : '' }
 						${ message ? `<button class="minn-btn-soft" id="minn-surface-raw">↗ ${ esc( __( 'Open raw' ) ) }</button>` : '' }
 						${ sec && sec.adminUrl && ! isActivity ? `<a class="minn-btn-soft" href="${ esc( navHref( sec.adminUrl ) ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin or admin area name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
-						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( activityAdmin ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: activity log provider name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'log' ) ) } ↗</a>` : '' }
+						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( navHref( activityAdmin ) ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: activity log provider name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'log' ) ) } ↗</a>` : '' }
 						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( navHref( l.url ) ) }" target="_blank" rel="noopener">${ esc( hrefLabel( l.label, l.url ) ) }</a>` ).join( '' ) }
 						${ visibleActions.map( ( { a, i } ) => {
 							if ( ! a.href ) return `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>`;
