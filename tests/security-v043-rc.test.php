@@ -169,6 +169,14 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'cptui_get_post_type_d
 	$check( 'post type edit: support attached only by code is not written into CPT UI (review N7)', 200 === $st2 && ! in_array( 'trackbacks', (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() ), true ) );
 	$check( 'post type edit: CPT UI\'s "none" marker is not carried, so ticked supports apply (review R2-4)', ! in_array( 'none', (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() ), true ) );
 	$check( 'post type edit: a label save keeps Post Formats support', 200 === $st2 && in_array( 'post-formats', (array) ( $o[ $pt ]['supports'] ?? array() ), true ), "create {$st}, update {$st2}, supports " . implode( ',', (array) ( $o[ $pt ]['supports'] ?? array() ) ) );
+	// A save that ticks nothing keeps it, or core's defaults (title, editor)
+	// switch on for a type its owner set to none (review R3-1).
+	$o                    = (array) get_option( 'cptui_post_types', array() );
+	$o[ $pt ]['supports'] = array( 'none' );
+	update_option( 'cptui_post_types', $o );
+	list( $st3 ) = $call( 'POST', "/minn-admin/v1/post-types/{$pt}", array( 'singular' => 'Thing 3', 'plural' => 'Things 3', 'public' => true, 'show_in_rest' => true, 'supports' => array(), 'taxonomies' => array() ) );
+	$sup3 = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() );
+	$check( 'post type edit: a save that ticks nothing keeps CPT UI\'s "none" (review R3-1)', 200 === $st3 && in_array( 'none', $sup3, true ), "update {$st3}, supports " . implode( ',', $sup3 ) );
 	list( $st ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $tx, 'singular' => 'Topic', 'plural' => 'Topics', 'public' => true, 'show_in_rest' => true, 'object_types' => array( 'post' ), 'backend' => 'cptui' ) );
 	register_taxonomy( $tx, 'post', array( 'public' => true, 'label' => 'Topics' ) );
 	$t                          = (array) get_option( 'cptui_taxonomies', array() );

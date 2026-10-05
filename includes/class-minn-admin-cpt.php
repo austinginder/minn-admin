@@ -627,8 +627,10 @@ class Minn_Admin_CPT {
 		// taxonomy) must not be written into the vendor's store.
 		$stored          = self::stored_type_lists( $source, $slug );
 		// CPT UI's 'none' marker turns every support off when present, so it is
-		// never carried: what the modal ticks has to take effect.
-		$def['supports'] = array_values( array_unique( array_merge( $def['supports'], array_values( array_diff( $stored['supports'], self::SUPPORTS, array( 'none' ) ) ) ) ) );
+		// dropped once the modal ticks something: what it ticks has to take
+		// effect. With nothing ticked it stays, since an empty list gets core's
+		// default title and editor.
+		$def['supports'] = array_values( array_unique( array_merge( $def['supports'], array_values( array_diff( $stored['supports'], self::SUPPORTS, $def['supports'] ? array( 'none' ) : array() ) ) ) ) );
 		foreach ( $stored['taxonomies'] as $tax_name ) {
 			$tax = get_taxonomy( $tax_name );
 			if ( $tax && ! self::offered_taxonomy( $tax ) && ! in_array( $tax_name, $def['taxonomies'], true ) ) {
