@@ -102,6 +102,7 @@ Expand only the part of Minn you want to explore.
   office does: a status view, search and **Add filter** in one row, active filters as removable
   chips, multi-status, date window, customer and product all narrowing on the server, and the
   whole set living in the URL so a filtered list can be pasted to someone else. Orders can
+  **move to the Trash with Undo** (a Trash view restores or deletes them for good), and can
   **apply and remove coupons**, and an order that belongs to a subscription carries a badge that
   opens its summary. **Coupons**, **Customers**, and **Subscriptions** when WooCommerce
   Subscriptions is active: a subscription opens on its own page in the order page's shape, with
@@ -358,12 +359,15 @@ Expand only the part of Minn you want to explore.
 - **Surfaces** — Minn's answer to plugin sprawl: one sidebar item per *job*, not per plugin,
   with every capable plugin layered in behind it and a provider switcher when more than one is
   active. **Forms** (Gravity Forms, WPForms, Ninja Forms, Fluent Forms, Forminator, Formidable, Everest
-  Forms, SureForms, Elementor Pro, Contact Form 7 via Flamingo or CFDB7) shows entries as
-  contact cards with real field labels and ←/→ stepping, with the full **Gravity Forms
-  workflow** inside Minn: star, spam, trash, restore, **bulk actions**, notes and resent
-  notifications across Received / Spam / Trash views, plus a **Feeds** view listing every
-  add-on integration across your forms (Everest Forms carries the same three status views
-  through its own entry helpers);
+  Forms, SureForms, Elementor Pro, Bricks, Contact Form 7 via Flamingo or CFDB7) opens each entry
+  on **its own page** with real field labels, ←/→ stepping and **Reply** from the site, and
+  **Edit answers** where the plugin itself allows it (Gravity Forms, WPForms Pro, Ninja Forms,
+  Elementor Pro). The full **Gravity Forms workflow** lives inside Minn: a **form builder**,
+  **notification and confirmation pages** with previews and Send test, star, spam, trash,
+  restore, **bulk actions**, notes and resent notifications across Received / Spam / Trash
+  views (Everest Forms carries the same three through its own entry helpers), plus a
+  **Feeds** view listing every add-on integration across your forms. WPForms, Fluent Forms
+  and Contact Form 7 get **email and confirmation pages** of their own;
   **Bookings** (Amelia, LatePoint, Bookly, JetBooking, JetAppointments) lists upcoming
   appointments with pending / today / canceled
   filters, a contact card, a **Next 14 days** chart, and approve / cancel / no-show through
