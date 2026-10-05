@@ -296,12 +296,25 @@ function minn_admin_wpcode_type_needs_raw( $code_type ) {
  * @param string|null     $fallback  Stored location to keep when none was sent.
  * @return string|WP_Error Location slug, or an error when it is not offered.
  */
-function minn_admin_wpcode_location_in( $request, $code_type, $fallback = null ) {
+function minn_admin_wpcode_location_in( $request, $code_type, $fallback = null, $retyped = false ) {
 	$allowed = minn_admin_wpcode_locations_for_type( $code_type );
 	$raw     = $request['location'];
 	if ( null === $raw || '' === $raw ) {
 		if ( null !== $fallback ) {
-			return (string) $fallback;
+			// Keeping the stored location is right unless the type changes
+			// under it: a retype has to pick a location the new type allows
+			// ('' = not inserted automatically, which every type allows). A
+			// stored location outside Minn's list (Pro-only) stays as it is
+			// when the type doesn't change.
+			$fallback = (string) $fallback;
+			if ( $retyped && '' !== $fallback && ! in_array( $fallback, $allowed, true ) ) {
+				return new WP_Error(
+					'forbidden',
+					__( 'That location is not available for this snippet type.', 'minn-admin' ),
+					array( 'status' => 400 )
+				);
+			}
+			return $fallback;
 		}
 		return (string) $allowed[0];
 	}
@@ -809,7 +822,9 @@ add_action( 'rest_api_init', function () {
 					// it was not a write. Activation, promotion and RETARGETING are all
 					// execution without carrying code.
 					$stored_loc  = (string) $snippet->get_location();
-					$want_loc    = null !== $request['location'] ? sanitize_key( (string) $request['location'] ) : $stored_loc;
+					// An empty location (the form's "—") means keep the stored one,
+					// so the guards judge that, not ''.
+					$want_loc    = null !== $request['location'] && '' !== (string) $request['location'] ? sanitize_key( (string) $request['location'] ) : $stored_loc;
 					// A retarget starts execution when it moves into a bucket
 					// that actually runs from one that does not. Compare by
 					// has_runner, not location_executes: on_demand counts as
@@ -851,7 +866,8 @@ add_action( 'rest_api_init', function () {
 					$eff_loc = minn_admin_wpcode_location_in(
 						$request,
 						null !== $new_type ? $new_type : (string) $snippet->get_code_type(),
-						$stored_loc
+						$stored_loc,
+						null !== $new_type && $new_type !== (string) $snippet->get_code_type()
 					);
 					if ( is_wp_error( $eff_loc ) ) {
 						return $eff_loc;

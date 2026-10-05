@@ -748,6 +748,15 @@ if ( class_exists( 'WPCode_Snippet' ) && ! empty( $all_surfaces['wpcode'] ) ) {
 	list( $st ) = $call( 'PUT', "/minn-admin/v1/wpcode/snippets/{$sid}", array( 'name' => 'Minn v043 shortcode 2', 'location' => '', 'code_type' => 'html', 'auto_insert' => false ) );
 	$check( 'wpcode: an untouched empty location saves and stays empty', 200 === $st && '' === (string) ( new WPCode_Snippet( $sid ) )->get_location(), "status {$st}" );
 	wp_delete_post( $sid, true );
+	// Review N6: "—" keeps the stored location only while the type allows it.
+	$sn2 = new WPCode_Snippet( array( 'title' => 'Minn v043 footer', 'code' => '<p>minn</p>', 'code_type' => 'html', 'location' => 'site_wide_footer', 'auto_insert' => 1, 'active' => false ) );
+	$sn2->save();
+	$sid2 = (int) $sn2->get_id();
+	list( $st ) = $call( 'PUT', "/minn-admin/v1/wpcode/snippets/{$sid2}", array( 'location' => '', 'code_type' => 'php' ) );
+	$check( 'wpcode: retyping with "—" can\'t keep a location the new type doesn\'t allow', 400 === $st && 'html' === ( new WPCode_Snippet( $sid2 ) )->get_code_type(), "status {$st}, type " . ( new WPCode_Snippet( $sid2 ) )->get_code_type() );
+	list( $st ) = $call( 'PUT', "/minn-admin/v1/wpcode/snippets/{$sid2}", array( 'location' => '', 'code_type' => 'css' ) );
+	$check( 'wpcode: a retype the stored location still fits saves (control)', 200 === $st && 'site_wide_footer' === ( new WPCode_Snippet( $sid2 ) )->get_location(), "status {$st}" );
+	wp_delete_post( $sid2, true );
 }
 
 // --- 08-03 An SEO save keeps an unchanged social image without re-checking it --
