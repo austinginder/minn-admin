@@ -46792,6 +46792,13 @@
 						<p>${ esc( m.error || ( pl.kind === 'theme' ? __( 'This theme does not publish a changelog WordPress can read.' ) : __( 'This plugin does not publish a changelog WordPress can read.' ) ) ) }</p>
 						${ pl.url && safeHref( pl.url ) ? `<p><a href="${ esc( safeHref( pl.url ) ) }" target="_blank" rel="noopener">${ esc( pl.kind === 'theme' ? __( 'Open the theme\'s own page' ) : __( 'Open the plugin\'s own release notes' ) ) } ↗</a></p>` : '' }
 					</div>` : '';
+			// Minn's changelog is read from GitHub, so it can come back empty
+			// (offline, or before the repository is public).
+			const engEmpty = m.engine && m.md !== null && ! secs.length ? `
+					<div class="minn-cl-empty">
+						<p>${ esc( __( 'Minn\'s changelog could not be read from GitHub just now.' ) ) }</p>
+						<p><a href="https://github.com/austinginder/minn-engine/releases" target="_blank" rel="noopener">${ esc( __( 'Every Minn release on GitHub' ) ) } ↗</a></p>
+					</div>` : '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide minn-cl-modal">
@@ -46811,7 +46818,7 @@
 						`<button type="button" class="minn-tab${ ( id === 'engine' ) === !! m.engine ? ' active' : '' }" data-clproduct="${ id }">${ esc( name ) }</button>` ).join( '' ) }</div>` : '' }
 					${ plMeta }
 					${ m.md === null ? `<div class="minn-loading">${ esc( __( 'Loading changelog…' ) ) }</div>`
-						: plEmpty || `<div class="minn-cl-layout">
+						: plEmpty || engEmpty || `<div class="minn-cl-layout">
 						<nav class="minn-cl-rail" id="minn-cl-rail" aria-label="${ esc( __( 'Versions' ) ) }">
 							${ secs.map( ( s, i ) => `
 							<button type="button" class="minn-cl-ver${ i === m.sec ? ' sel' : '' }" data-clver="${ i }" aria-current="${ i === m.sec ? 'true' : 'false' }">
