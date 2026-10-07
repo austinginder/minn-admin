@@ -23828,7 +23828,7 @@
 			${ extTabsHtml() }
 			${ B.caps.update ? `
 				<span style="margin-inline-start:auto;display:flex;gap:8px;align-items:center;">
-					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }"${ bulkBusy ? ' disabled' : '' }>${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>
+					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( ENGINE ? __( 'Force a fresh check with the Minn update service and licensed vendors' ) : __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }"${ bulkBusy ? ' disabled' : '' }>${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>
 					${ everyCount || bulkBusy ? `
 					<button class="minn-btn-soft" id="minn-update-all"${ bulkBusy ? ' disabled' : '' } title="${ esc( bulkBusy ? __( 'Updates run one at a time' ) : __( 'Update every plugin, theme and language pack with a pending offer' ) ) }">
 						${ icon( 'refresh' ) } ${ bulkBusy
@@ -24256,7 +24256,7 @@
 			${ extTabsHtml() }
 			${ B.caps.updateThemes ? `
 				<span style="margin-inline-start:auto;display:flex;gap:8px;align-items:center;">
-					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }">${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>
+					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( ENGINE ? __( 'Force a fresh check with the Minn update service and licensed vendors' ) : __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }">${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>
 					${ ( () => { const n = updateCount + ( B.caps.update ? Object.keys( state.cache.pluginUpdates || {} ).length : 0 ) + ( B.caps.updateLanguages ? ( state.cache.translationUpdates || 0 ) : 0 ); return n ? `
 					<button class="minn-btn-soft" id="minn-update-all" title="${ esc( __( 'Update every plugin, theme and language pack with a pending offer' ) ) }">${ icon( 'refresh' ) } ${ esc( __( 'Update everything' ) ) } <span aria-hidden="true">(${ n })</span></button>` : ''; } )() }
 				</span>` : '' }
