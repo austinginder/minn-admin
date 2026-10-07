@@ -65,10 +65,10 @@ for locale in "${LOCALES[@]}"; do
 	src="$LANG_DIR/$locale.po"
 	[ -f "$src" ] || { echo "missing $src" >&2; continue; }
 
-	# Some catalogs serve more than one locale byte for byte (see ALIASES in
-	# locales.js: en_GB's spellings are also Australian, Canadian, New Zealand
-	# and South African). Each gets its own pack, because core looks a pack up
-	# by the exact locale code.
+	# Some catalogs serve more than one locale (see ALIASES in locales.js:
+	# en_GB's spellings are also Australian, Canadian, New Zealand and South
+	# African). Each gets its own pack, because core looks a pack up by the
+	# exact locale code.
 	targets="$( node -e "process.stdout.write(require('$HERE/locales.js').packedAs('$locale').join(' '))" )"
 
 	for target in $targets; do
@@ -85,6 +85,15 @@ for locale in "${LOCALES[@]}"; do
 	# The Language: header has to name the locale the pack is FOR, or the
 	# alias packs all announce themselves as en_GB.
 	perl -0pi -e "s/^\"Language: [^\\\\]*/\"Language: $target/m" "$work/minn-admin-$target.po"
+
+	# Swiss German writes ss where German German writes ß (Grösse, schliessen),
+	# and so does core's own de_CH pack. Respell the translations only: a
+	# msgid is the lookup key and must stay exactly what the code asks for.
+	if node -e "process.exit(require('$HERE/locales.js').SWISS.includes('$target')?0:1)"; then
+		perl -CSD -i -pe 'if ( /^(msgctxt|msgid|msgid_plural)\b/ ) { $s = 0 } elsif ( /^msgstr/ ) { $s = 1 } elsif ( ! /^"/ ) { $s = 0 } if ( $s ) { s/\x{df}/ss/g; s/\x{1e9e}/SS/g }' "$work/minn-admin-$target.po"
+		! grep -q '^msgstr.*ß' "$work/minn-admin-$target.po" \
+			|| { echo "FAIL $target: ß survived the Swiss respelling" >&2; exit 1; }
+	fi
 
 	# 1. .mo FIRST, from the complete catalog. Destination must be an explicit
 	#    FILE: given a directory, wp-cli 2.12 tries to write the archive to the

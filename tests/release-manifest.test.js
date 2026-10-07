@@ -44,7 +44,11 @@ try {
 	fs.writeFileSync( path.join( tmp, 'languages/de_DE.po' ), contextual( 'de_DE' ) );
 	fs.writeFileSync( path.join( tmp, 'languages/fr_FR.po' ), contextual( 'fr_FR' ) );
 	fs.writeFileSync( path.join( tmp, 'dist/languages/minn-admin-de_DE.zip' ), 'de-v1' );
-	fs.writeFileSync( path.join( tmp, 'dist/languages/minn-admin-de_DE_formal.zip' ), 'de-v1-formal' );
+	// Every German alias packedAs() expects, or the build counts as incomplete.
+	const deAliases = [ 'de_DE_formal', 'de_CH', 'de_CH_informal', 'de_AT' ];
+	for ( const alias of deAliases ) {
+		fs.writeFileSync( path.join( tmp, `dist/languages/minn-admin-${ alias }.zip` ), `de-v1-${ alias }` );
+	}
 	fs.writeFileSync( path.join( tmp, 'dist/languages/minn-admin-fr_FR.zip' ), 'fr-v1' );
 	fs.writeFileSync( path.join( tmp, 'manifest.json' ), JSON.stringify( { version: '0.30.0' }, null, 4 ) );
 
@@ -56,7 +60,8 @@ try {
 	const first = JSON.parse( fs.readFileSync( path.join( tmp, 'manifest.json' ), 'utf8' ) );
 	check( 'First release attaches both catalogs', /minn-admin-de_DE\.zip/.test( firstOut ) && /minn-admin-fr_FR\.zip/.test( firstOut ) );
 	check( 'First release also attaches the formal German alias', /minn-admin-de_DE_formal\.zip/.test( firstOut ) );
-	check( 'First release stamps a translation entry per packed locale', first.translations.length === 3 );
+	check( 'First release also attaches the Swiss and Austrian German aliases', /minn-admin-de_CH\.zip/.test( firstOut ) && /minn-admin-de_CH_informal\.zip/.test( firstOut ) && /minn-admin-de_AT\.zip/.test( firstOut ) );
+	check( 'First release stamps a translation entry per packed locale', first.translations.length === 6 );
 
 	const oldDe = first.translations.find( ( p ) => p.language === 'de_DE' );
 	const oldFr = first.translations.find( ( p ) => p.language === 'fr_FR' );
@@ -66,7 +71,9 @@ try {
 	fs.writeFileSync( path.join( tmp, 'languages/de_DE.po' ), contextual( 'de_DE', true ) );
 	fs.writeFileSync( path.join( tmp, 'languages/fr_FR.po' ), contextual( 'fr_FR' ).replace( 'Ouvrir', 'Afficher' ) );
 	fs.writeFileSync( path.join( tmp, 'dist/languages/minn-admin-de_DE.zip' ), 'de-rebuilt-different-bytes' );
-	fs.writeFileSync( path.join( tmp, 'dist/languages/minn-admin-de_DE_formal.zip' ), 'de-rebuilt-formal' );
+	for ( const alias of deAliases ) {
+		fs.writeFileSync( path.join( tmp, `dist/languages/minn-admin-${ alias }.zip` ), `de-rebuilt-${ alias }` );
+	}
 	fs.writeFileSync( path.join( tmp, 'dist/languages/minn-admin-fr_FR.zip' ), 'fr-v2' );
 
 	const secondOut = run( 'v0.31.0' );
@@ -77,8 +84,11 @@ try {
 	const oldDeFormal = first.translations.find( ( p ) => p.language === 'de_DE_formal' );
 	check( 'Reordered contextual entries keep the old German pack', de.version === '0.30.0' && de.package === oldDe.package && de.sha256 === oldDe.sha256 );
 	check( 'The formal German alias rides the same catalog hash', deFormal.version === '0.30.0' && deFormal.package === oldDeFormal.package && deFormal.catalog === de.catalog );
+	const deCh = second.translations.find( ( p ) => p.language === 'de_CH' );
+	const oldDeCh = first.translations.find( ( p ) => p.language === 'de_CH' );
+	check( 'The Swiss German alias rides the same catalog hash', deCh.version === '0.30.0' && deCh.package === oldDeCh.package && deCh.catalog === de.catalog );
 	check( 'A real French translation change moves its pack forward', fr.version === '0.31.0' && fr.package.includes( '/v0.31.0/' ) && fr.sha256 !== oldFr.sha256 );
-	check( 'Attach list contains only the changed pack', /carried: de_DE \(still/.test( secondOut ) && /de_DE_formal \(still/.test( secondOut ) && ! /ATTACH[\s\S]*minn-admin-de_DE\.zip/.test( secondOut ) && /ATTACH[\s\S]*minn-admin-fr_FR\.zip/.test( secondOut ) );
+	check( 'Attach list contains only the changed pack', /carried: .*\bde_DE \(still/.test( secondOut ) && /de_DE_formal \(still/.test( secondOut ) && /de_CH \(still/.test( secondOut ) && ! /ATTACH[\s\S]*minn-admin-de_DE\.zip/.test( secondOut ) && /ATTACH[\s\S]*minn-admin-fr_FR\.zip/.test( secondOut ) );
 
 	fs.rmSync( path.join( tmp, 'dist/languages/minn-admin-fr_FR.zip' ) );
 	let partialRefused = false;

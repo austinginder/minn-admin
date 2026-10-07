@@ -533,8 +533,9 @@ more of them.
 Pick a language on **Your profile** and all of Minn follows: buttons,
 table headings, empty states, confirmations, error messages, counts.
 Twenty-four languages ship with the plugin. Formal variants such as
-Deutsch (Sie) use the same catalog as the parent language, so Minn
-matches the WordPress dashboard instead of staying in English. The
+Deutsch (Sie) use the same catalog as the parent language, and Swiss
+and Austrian German use the German one, so Minn matches the WordPress
+dashboard instead of staying in English. The
 switch applies the moment you save; a language you have not installed
 yet downloads in the background, with plugin translations following
 behind, so the interface never sits waiting on them. Your pick is yours

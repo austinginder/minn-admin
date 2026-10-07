@@ -69,20 +69,28 @@ const nplurals = ( locale ) => {
  * The runtime also falls back (Minn_Admin::catalog_locales), so a site that
  * already has the parent pack does not have to wait for this zip.
  *
+ * Swiss and Austrian German share German German's written standard, so
+ * de_CH, de_CH_informal and de_AT ride the de_DE catalog too. Swiss
+ * orthography has no ß; build-packs.sh spells it ss in their packs (see
+ * SWISS), which is the one alias that is not byte for byte.
+ *
  * Nothing where the difference is vocabulary rather than formality or
  * orthography belongs here. pt_PT and es_MX differ from pt_BR and es_ES
  * and get their own catalogs in wave 2.
  */
 const ALIASES = {
 	en_GB: [ 'en_AU', 'en_CA', 'en_NZ', 'en_ZA' ],
-	de_DE: [ 'de_DE_formal' ],
+	de_DE: [ 'de_DE_formal', 'de_CH', 'de_CH_informal', 'de_AT' ],
 	nl_NL: [ 'nl_NL_formal' ],
 };
+
+/** Alias packs whose translations are respelt ß → ss at build time. */
+const SWISS = [ 'de_CH', 'de_CH_informal' ];
 
 /** Every locale a given catalog should be packed for, itself first. */
 const packedAs = ( code ) => [ code, ...( ALIASES[ code ] || [] ) ];
 
-module.exports = { LOCALES, byCode, wave, nplurals, ALIASES, packedAs };
+module.exports = { LOCALES, byCode, wave, nplurals, ALIASES, SWISS, packedAs };
 
 if ( require.main === module ) {
 	const w = process.argv[ 2 ] ? Number( process.argv[ 2 ] ) : null;

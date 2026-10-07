@@ -57,8 +57,8 @@ if ( ! fs.existsSync( DIST ) ) {
 // Refuse a partial build. Enumerating whatever happens to be in dist makes a
 // deleted or failed pack look like an intentional removal from the manifest,
 // and sites on that locale simply stop receiving translation updates. The .po
-// files are the source set; packedAs() adds byte-for-byte aliases such as
-// en_AU, en_CA, en_NZ and en_ZA.
+// files are the source set; packedAs() adds aliases such as en_AU, en_CA,
+// en_NZ, en_ZA and de_CH.
 const expectedFiles = fs.readdirSync( path.join( ROOT, 'languages' ) )
 	.filter( ( file ) => file.endsWith( '.po' ) )
 	.flatMap( ( file ) => packedAs( file.slice( 0, -3 ) ).map( ( locale ) => `minn-admin-${ locale }.zip` ) )
@@ -104,8 +104,9 @@ const catalogHash = ( poPath ) => {
 	return crypto.createHash( 'sha256' ).update( JSON.stringify( rows ) ).digest( 'hex' );
 };
 
-// An alias pack (en_AU …) is built from another locale's catalog byte for
-// byte, so it shares that catalog's content hash.
+// An alias pack (en_AU …) is built from another locale's catalog, byte for
+// byte or (de_CH) through a fixed respelling, so it shares that catalog's
+// content hash.
 const sourceOf = ( locale ) => {
 	if ( byCode( locale ) ) return locale;
 	for ( const [ src, aliases ] of Object.entries( ALIASES ) ) {

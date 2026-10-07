@@ -110,6 +110,10 @@ $check( 'nl_NL_formal lists nl_NL as a catalog parent', array( 'nl_NL_formal', '
 $check( 'pt_PT_ao90 lists pt_PT as a catalog parent', array( 'pt_PT_ao90', 'pt_PT' ) === Minn_Admin::catalog_locales( 'pt_PT_ao90' ) );
 $check( 'de_DE is not rewritten', array( 'de_DE' ) === Minn_Admin::catalog_locales( 'de_DE' ) );
 $check( 'pt_PT does not fall through to pt_BR', array( 'pt_PT' ) === Minn_Admin::catalog_locales( 'pt_PT' ) );
+$check( 'de_CH lists de_DE as a catalog parent', array( 'de_CH', 'de_DE' ) === Minn_Admin::catalog_locales( 'de_CH' ) );
+$check( 'de_CH_informal walks through de_CH to de_DE', array( 'de_CH_informal', 'de_CH', 'de_DE' ) === Minn_Admin::catalog_locales( 'de_CH_informal' ) );
+$check( 'de_AT lists de_DE as a catalog parent', array( 'de_AT', 'de_DE' ) === Minn_Admin::catalog_locales( 'de_AT' ) );
+$check( 'fr_CA does not fall through to fr_FR', array( 'fr_CA' ) === Minn_Admin::catalog_locales( 'fr_CA' ) );
 
 remove_all_filters( 'minn_admin_translation_locales' );
 add_filter( 'minn_admin_translation_locales', function () {
@@ -120,6 +124,21 @@ $formal_offer->translations = array();
 $method->invoke( $updater, $formal_offer, $manifest );
 $offered_formal = wp_list_pluck( $formal_offer->translations, 'language' );
 $check( 'A formal locale still receives the parent pack', in_array( 'de_DE', $offered_formal, true ) );
+
+remove_all_filters( 'minn_admin_translation_locales' );
+add_filter( 'minn_admin_translation_locales', function () {
+	return array( 'de_CH' );
+} );
+$swiss_offer               = new stdClass();
+$swiss_offer->translations = array();
+$method->invoke( $updater, $swiss_offer, $manifest );
+$check( 'A Swiss German site receives the de_DE pack', in_array( 'de_DE', wp_list_pluck( $swiss_offer->translations, 'language' ), true ) );
+
+// The version checks below assume the formal locale above is still wanted.
+remove_all_filters( 'minn_admin_translation_locales' );
+add_filter( 'minn_admin_translation_locales', function () {
+	return array( 'de_DE_formal' );
+} );
 
 $installedLookup = new ReflectionMethod( $updater, 'installed_translations' );
 $installedLookup->setAccessible( true );
@@ -139,6 +158,50 @@ if ( $haveDePack ) {
 		update_user_meta( $uid, 'locale', $prev );
 		clean_user_cache( $uid );
 		$check( 'js_translations serves de_DE strings for de_DE_formal', isset( $formal_map['Overview'] ) && 'Übersicht' === $formal_map['Overview'] );
+
+		$swiss_maps = array();
+		foreach ( array( 'de_CH', 'de_CH_informal', 'de_AT' ) as $regional ) {
+			update_user_meta( $uid, 'locale', $regional );
+			clean_user_cache( $uid );
+			$swiss_maps[ $regional ] = Minn_Admin::js_translations();
+		}
+		update_user_meta( $uid, 'locale', $prev );
+		clean_user_cache( $uid );
+		foreach ( $swiss_maps as $regional => $map ) {
+			$check( "js_translations serves German for {$regional}", isset( $map['Overview'] ) && 'Übersicht' === $map['Overview'] );
+		}
+		$check( 'plugin_locale remaps de_CH onto the installed de_DE catalog', 'de_DE' === Minn_Admin::plugin_locale( 'de_CH', 'minn-admin' ) );
+	}
+
+	/* --- the PHP half loads the parent catalog too -------------------------- */
+	// core's loader only looks for the exact locale's file, so this is what
+	// keeps REST labels German for a de_CH user. load_textdomain() makes its
+	// locale argument current for EVERY domain: the parent must be filed
+	// under de_CH, or the next domain to load flips the controller back and
+	// Minn's strings go dark (English in the browser, German under wp eval).
+	if ( class_exists( 'WP_Translation_Controller' ) ) {
+		$controller  = WP_Translation_Controller::get_instance();
+		$prev_locale = $controller->get_locale();
+		$controller->set_locale( 'de_CH' );
+		unload_textdomain( 'minn-admin' );
+		Minn_Admin::load_parent_catalog( 'de_CH' );
+		$check( 'Loading the parent catalog leaves the current locale alone', 'de_CH' === $controller->get_locale() );
+		$controller->set_locale( 'de_CH' );
+		$check( 'PHP strings are German for de_CH after another domain loads', 'Guten Morgen' === __( 'Good morning', 'minn-admin' ) );
+		unload_textdomain( 'minn-admin' );
+		$controller->set_locale( $prev_locale );
+	}
+
+	if ( in_array( 'de_CH', get_available_languages(), true ) ) {
+		unload_textdomain( 'minn-admin' );
+		switch_to_locale( 'de_CH' );
+		$minn_switched = __( 'Good morning', 'minn-admin' );
+		$core_switched = __( 'Close' );
+		restore_previous_locale();
+		$check( 'A switch to de_CH reloads the parent catalog', 'Guten Morgen' === $minn_switched, $minn_switched );
+		$check( "core's own de_CH strings survive beside it", 'Schliessen' === $core_switched, $core_switched );
+	} else {
+		echo "SKIP  de_CH locale switch (core de_CH language not installed)\n";
 	}
 } else {
 	echo "SKIP  formal catalog fallback (no de_DE pack installed in wp-content/languages/plugins)\n";

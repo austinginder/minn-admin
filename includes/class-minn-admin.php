@@ -21,8 +21,8 @@ class Minn_Admin {
 
 	public static function init() {
 		add_filter( 'determine_locale', array( __CLASS__, 'route_locale' ) );
-		add_filter( 'plugin_locale', array( __CLASS__, 'plugin_locale' ), 10, 2 );
 		add_action( 'init', array( __CLASS__, 'load_textdomain' ) );
+		add_action( 'change_locale', array( __CLASS__, 'load_parent_catalog' ) );
 		add_action( 'init', array( __CLASS__, 'register_route' ) );
 		// The editor's crash net keeps unsaved drafts in localStorage; a
 		// sign-out that lands on wp-login's loggedout=true screen (the default
@@ -2724,6 +2724,40 @@ class Minn_Admin {
 
 	public static function load_textdomain() {
 		load_plugin_textdomain( 'minn-admin', false, dirname( plugin_basename( MINN_ADMIN_FILE ) ) . '/languages' );
+		self::load_parent_catalog( determine_locale() );
+	}
+
+	/**
+	 * Load the parent catalog for a locale that has none of its own.
+	 *
+	 * core only ever looks for minn-admin-<exact locale>.mo. Since 6.7 it
+	 * no longer applies the plugin_locale filter at all, so a de_CH or
+	 * de_DE_formal user got a German app whose PHP half (every REST label,
+	 * the greeting) stayed English. This loads the file plugin_locale()
+	 * picks on every core version.
+	 *
+	 * The parent's file is filed under the locale being SERVED, not the
+	 * parent's code. load_textdomain() makes its locale argument the
+	 * controller's current locale for every domain: passing de_DE would put
+	 * core's de_CH strings out of reach, and the next domain to load would
+	 * flip it back and put Minn's out of reach instead. That is also why
+	 * this is not a plugin_locale filter.
+	 *
+	 * Runs again on change_locale, because a locale switch unloads the
+	 * domain and reloads it under the exact code only.
+	 *
+	 * @param string $locale Locale being served.
+	 */
+	public static function load_parent_catalog( $locale ) {
+		$locale = (string) $locale;
+		if ( '' === $locale || is_textdomain_loaded( 'minn-admin' ) ) {
+			return;
+		}
+		$catalog = self::plugin_locale( $locale, 'minn-admin' );
+		if ( $catalog === $locale ) {
+			return;
+		}
+		load_textdomain( 'minn-admin', WP_LANG_DIR . '/plugins/minn-admin-' . $catalog . '.mo', $locale );
 	}
 
 	/**
@@ -2738,12 +2772,18 @@ class Minn_Admin {
 	 *
 	 * Regional catalogs that are actually different languages (pt_PT vs
 	 * pt_BR, es_MX vs es_ES) are not stripped: only the trailing variant
-	 * token is.
+	 * token is. The exception is a region whose written standard is the
+	 * same language: Swiss and Austrian German read German German, so
+	 * de_CH, de_CH_informal and de_AT end at de_DE rather than at English.
 	 *
 	 * @param string $locale User or site locale.
 	 * @return string[] Unique locales, preferred first.
 	 */
 	public static function catalog_locales( $locale ) {
+		$regional = array(
+			'de_CH' => 'de_DE',
+			'de_AT' => 'de_DE',
+		);
 		$locale = preg_replace( '/[^A-Za-z0-9_@-]/', '', (string) $locale );
 		$out    = array();
 		if ( '' !== $locale ) {
@@ -2751,6 +2791,10 @@ class Minn_Admin {
 		}
 		if ( preg_match( '/^(.+)_(formal|informal|ao90)$/', $locale, $m ) ) {
 			$out[] = $m[1];
+		}
+		$base = end( $out );
+		if ( isset( $regional[ $base ] ) ) {
+			$out[] = $regional[ $base ];
 		}
 		return array_values( array_unique( $out ) );
 	}
