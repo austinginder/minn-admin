@@ -9,6 +9,8 @@
 	// Minn Engine serves the same app with no WordPress behind it: the boot
 	// payload names the engine, and every wp-admin-only control keys off this.
 	const ENGINE = !! ( B && B.engine );
+	// The engine's own version ("Minn Engine/0.1.0" names it); '' on WordPress.
+	const ENGINE_VERSION = ENGINE ? String( B.engine ).split( '/' ).pop() : '';
 
 	// Classic wp-admin screens. The engine has no /wp-admin/, and its
 	// adminUrl is /minn-admin/, so a deep link there is swallowed by the
@@ -1473,7 +1475,57 @@
 		} );
 	}
 
+	// What the update banner, chip, confirm and notifications call core. On
+	// Minn Engine core is Minn itself: minn-admin/v1/core answers the
+	// engine's version and the newest Minn release on GitHub, and installing
+	// it swaps the engine folder (Minn Admin's bundle included) while the
+	// site keeps answering, with no maintenance window.
+	function coreCopy() {
+		if ( ENGINE ) {
+			return {
+				name: 'Minn',
+				update: __( 'Update Minn' ),
+				updating: __( 'Updating Minn…' ),
+				available: __( 'A Minn update is available' ),
+				busy: __( 'Minn is updating' ),
+				denied: __( 'You cannot update Minn.' ),
+				/* translators: %s: the Minn version being offered. */
+				offered: __( 'Minn %s is available' ),
+				/* translators: %s: the new Minn version. */
+				updated: __( 'Minn updated to %s' ),
+				/* translators: %s: the error message. */
+				failed: __( 'Minn: %s' ),
+			};
+		}
+		return {
+			name: 'WordPress',
+			update: __( 'Update WordPress' ),
+			updating: __( 'Updating WordPress…' ),
+			available: __( 'A WordPress update is available' ),
+			busy: __( 'WordPress is updating' ),
+			denied: __( 'You cannot update WordPress.' ),
+			/* translators: %s: the WordPress version being offered. */
+			offered: __( 'WordPress %s is available' ),
+			/* translators: %s: the new WordPress version. */
+			updated: __( 'WordPress updated to %s' ),
+			/* translators: %s: the error message. */
+			failed: __( 'WordPress: %s' ),
+		};
+	}
+
 	function confirmCoreUpdate( version ) {
+		if ( ENGINE ) {
+			const from = state.cache.core && state.cache.core.version;
+			return minnConfirm( {
+				/* translators: %s: the Minn version being installed. */
+				title: version ? sprintf( __( 'Update Minn to %s?' ), version ) : __( 'Update Minn to the latest release?' ),
+				/* translators: 1: the running Minn version. 2: the new Minn version. */
+				changes: [ from && version ? sprintf( __( 'Minn and its Minn Admin (%1$s to %2$s)' ), from, version ) : __( 'Minn and its Minn Admin' ) ],
+				keeps: [ __( 'Your content, media and users' ), __( 'Plugins, themes and their settings' ) ],
+				body: __( 'The release is checked against the checksum GitHub publishes for it, then swapped in. The site keeps answering, and the running release is put back if anything fails. This page reloads when it is done.' ),
+				confirmLabel: __( 'Update Minn' ),
+			} );
+		}
 		return minnConfirm( {
 			/* translators: %s: the WordPress version being installed. */
 			title: version ? sprintf( __( 'Update WordPress to %s?' ), version ) : __( 'Update WordPress to the latest version?' ),
@@ -4481,9 +4533,9 @@
 						<button class="minn-upd-chip" id="minn-upd-chip" hidden title="${ esc( __( 'Updates are running — click for details' ) ) }">${ icon( 'refresh' ) }<span id="minn-upd-chip-text"></span></button>
 						<button class="minn-upd-chip minn-job-chip" id="minn-job-chip" hidden title="${ esc( __( 'A background job is running — click for details' ) ) }">${ icon( 'refresh' ) }<span id="minn-job-chip-text"></span></button>
 					<button class="minn-vis-chip" id="minn-vis-chip" hidden title="${ esc( __( 'Your site is not fully public' ) ) }">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
-						<button class="minn-core-chip" id="minn-core-chip" hidden title="${ esc( __( 'A WordPress update is available' ) ) }">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
+						<button class="minn-core-chip" id="minn-core-chip" hidden title="${ esc( coreCopy().available ) }">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
 						<button class="minn-upd-chip" id="minn-lang-chip" hidden title="${ esc( __( 'Setting up the language' ) ) }">${ icon( 'refresh' ) }<span>${ esc( __( 'Installing language…' ) ) }</span></button>
-						<button class="minn-topbar-ver" id="minn-ver-btn" title="${ esc( __( "What's new — full changelog" ) ) }">v${ esc( B.version ) }</button>
+						<button class="minn-topbar-ver" id="minn-ver-btn" title="${ esc( ENGINE ? __( "What's new in Minn and Minn Admin" ) : __( "What's new — full changelog" ) ) }">v${ esc( ENGINE ? ENGINE_VERSION : B.version ) }</button>
 						<button class="minn-icon-btn" id="minn-help-btn" title="${ esc( __( 'About Minn' ) ) }" aria-label="${ esc( __( 'About Minn' ) ) }">${ icon( 'help' ) }</button>
 						<button class="minn-icon-btn" id="minn-theme-btn" title="${ esc( __( 'Theme: System (click to switch light and dark, right-click for options)' ) ) }" aria-label="${ esc( __( 'Color theme' ) ) }"></button>
 						<button class="minn-icon-btn" id="minn-notif-btn" title="${ esc( __( 'Notifications' ) ) }" aria-label="${ esc( __( 'Notifications' ) ) }">
@@ -4508,7 +4560,7 @@
 			const r = siteSwitch.getBoundingClientRect();
 			openSiteSwitchMenu( r.left, r.bottom + 4 );
 		} );
-		$( '#minn-ver-btn' ).addEventListener( 'click', openChangelog );
+		$( '#minn-ver-btn' ).addEventListener( 'click', () => openChangelog() );
 
 		// Global nav show/hide — a topbar icon button (panel-left glyph, the
 		// anchor-theme icon-button pattern; was a slim left-edge tab). It
@@ -23017,6 +23069,11 @@
 		if ( Array.isArray( res.translationGroups ) ) {
 			state.cache.translationGroups = res.translationGroups;
 		}
+		// Minn Engine asks GitHub for a newer Minn in the same check.
+		if ( res.core && typeof res.core === 'object' ) {
+			state.cache.core = res.core;
+			updateCoreChip();
+		}
 		const pCount = Object.keys( state.cache.pluginUpdates || {} ).length;
 		const tCount = Object.keys( state.cache.themeUpdates || {} ).length;
 		const lCount = state.cache.translationUpdates || 0;
@@ -23027,7 +23084,7 @@
 		// Updates tab picks up newly-unlocked commercial updates.
 		state.cache.notifications = null;
 		loadNotifications().catch( () => {} );
-		const out = { update: res.update || null, plugins: pCount, themes: tCount, translations: lCount };
+		const out = { update: res.update || null, plugins: pCount, themes: tCount, translations: lCount, core: res.core && res.core.update ? 1 : 0 };
 		if ( opts && opts.refetch ) {
 			// Second-pass fetch on a clean request after the license is
 			// already stored — vendors whose key is request-scoped need this.
@@ -23053,7 +23110,7 @@
 		try {
 			const res = await api( 'minn-admin/v1/check-updates', { method: 'POST', body: '{}' } );
 			const applied = applyForcedUpdateCheck( res );
-			const n = ( applied?.plugins || 0 ) + ( applied?.themes || 0 ) + ( applied?.translations || 0 );
+			const n = ( applied?.plugins || 0 ) + ( applied?.themes || 0 ) + ( applied?.translations || 0 ) + ( applied?.core || 0 );
 			toast( n
 				? `${ n } update${ n === 1 ? '' : 's' } available`
 				: __( 'Everything is up to date' ) );
@@ -23063,6 +23120,8 @@
 				if ( state.extTab === 'plugins' ) renderExtensions();
 				else if ( state.extTab === 'themes' ) renderThemes();
 				else if ( state.extTab === 'translations' ) renderTranslations();
+			} else if ( applied?.core && state.route === 'overview' ) {
+				renderOverview();
 			}
 		} catch ( e ) {
 			toast( e.message || __( 'Could not check for updates' ), true );
@@ -23309,8 +23368,9 @@
 		const busy = state.updatingCore || '';
 		chip.hidden = ! u && ! busy;
 		chip.classList.toggle( 'is-busy', !! busy );
-		chip.title = busy ? __( 'WordPress is updating' ) : __( 'A WordPress update is available' );
-		if ( u || busy ) $( '#minn-core-chip-text' ).textContent = `WordPress ${ busy || u.version }`;
+		const c = coreCopy();
+		chip.title = busy ? c.busy : c.available;
+		if ( u || busy ) $( '#minn-core-chip-text' ).textContent = `${ c.name } ${ busy || u.version }`;
 	}
 
 	// Bulk-update progress chip: the ambient "updates are running" signal once
@@ -23573,13 +23633,22 @@
 	function coreBannerHtml() {
 		const core = state.cache.core;
 		if ( ! core || ! core.update ) return '';
+		const c = coreCopy();
+		// On Minn the offer links its GitHub release page.
+		const notes = ENGINE && core.update.url && safeHref( core.update.url )
+			? ` <a href="${ esc( safeHref( core.update.url ) ) }" target="_blank" rel="noopener">${ esc( __( 'Release notes' ) ) } ↗</a>` : '';
+		const desc = ENGINE
+			/* translators: %s: the Minn version currently running. */
+			? __( 'You\'re on %s. Minn swaps in the new release in a moment, and the site keeps answering.' )
+			/* translators: %s: the WordPress version currently installed. */
+			: __( 'You\'re on %s. The site enters maintenance mode for a few seconds while core updates.' );
 		return `
 		<div class="minn-card minn-core-banner">
 			<div class="minn-core-info">
-				<div class="minn-panel-title">${ sprintf( esc( /* translators: %s: the WordPress version being offered. */ __( 'WordPress %s is available' ) ), esc( core.update.version ) ) }</div>
-				<div class="minn-toggle-desc">${ sprintf( esc( /* translators: %s: the WordPress version currently installed. */ __( 'You\'re on %s. The site enters maintenance mode for a few seconds while core updates.' ) ), esc( core.version ) ) }</div>
+				<div class="minn-panel-title">${ sprintf( esc( c.offered ), esc( core.update.version ) ) }</div>
+				<div class="minn-toggle-desc">${ sprintf( esc( desc ), esc( core.version ) ) }${ notes }</div>
 			</div>
-			<button class="minn-btn-primary" id="minn-core-update">${ icon( 'refresh' ) } ${ esc( __( 'Update WordPress' ) ) }</button>
+			<button class="minn-btn-primary" id="minn-core-update">${ icon( 'refresh' ) } ${ esc( c.update ) }</button>
 		</div>`;
 	}
 
@@ -23659,12 +23728,13 @@
 			const core = state.cache.core;
 			const okCore = await confirmCoreUpdate( core.update.version );
 			if ( ! okCore ) return;
+			const c = coreCopy();
 			btn.disabled = true;
-			btn.textContent = __( 'Updating WordPress…' );
+			btn.textContent = c.updating;
 			try {
 				const version = await runCoreUpdate( core.update.version );
-				/* translators: %s: the new WordPress version. */
-				toast( sprintf( __( 'WordPress updated to %s' ), version ) );
+				if ( ENGINE ) return reloadAfterEngineUpdate( version );
+				toast( sprintf( c.updated, version ) );
 				state.cache.notifications = null;
 				updateCoreChip();
 				if ( state.route === 'extensions' ) renderExtensions();
@@ -23672,7 +23742,7 @@
 			} catch ( e ) {
 				toast( e.message, true );
 				btn.disabled = false;
-				btn.textContent = __( 'Update WordPress' );
+				btn.textContent = c.update;
 			}
 		} );
 	}
@@ -25122,6 +25192,14 @@
 			? `Minn Admin updated to v${ version } — reloading…`
 			: __( 'Minn Admin updated — reloading…' ) );
 		// Brief beat so the toast paints before navigation tears the SPA down.
+		setTimeout( () => { window.location.reload(); }, 700 );
+	}
+
+	// A Minn release carries the Minn Admin bundle the engine serves, so the
+	// app on screen is the old one: reload for the new assets and boot payload.
+	function reloadAfterEngineUpdate( version ) {
+		/* translators: %s: the new Minn version. */
+		toast( sprintf( __( 'Minn updated to %s, reloading…' ), version ) );
 		setTimeout( () => { window.location.reload(); }, 700 );
 	}
 
@@ -44802,7 +44880,7 @@
 			parts.push( { kind: 'translations', n: l, label: sprintf( _n( '%d translation', '%d translations', l ), l ) } );
 		}
 		const c = state.cache.core && state.cache.core.update;
-		if ( c && B.caps.core ) parts.push( { kind: 'core', label: `WordPress ${ c.version }` } );
+		if ( c && B.caps.core ) parts.push( { kind: 'core', label: `${ coreCopy().name } ${ c.version }` } );
 		return parts;
 	}
 
@@ -44815,9 +44893,11 @@
 			title: __( 'Update everything?' ),
 			changes: parts.map( ( p ) => p.label ),
 			keeps: [ __( 'Your content, media and users' ), __( 'Plugin and theme settings' ), __( 'Anything without a pending update' ) ],
-			body: hasCore
-				? __( "Each update runs its author's own upgrade routine. Plugins first, then themes, then WordPress core last (visitors see a maintenance notice for a few seconds)." )
-				: __( "Each update runs its author's own upgrade routine. Plugins first, then themes." ),
+			body: ! hasCore
+				? __( "Each update runs its author's own upgrade routine. Plugins first, then themes." )
+				: ENGINE
+					? __( "Each update runs its author's own upgrade routine. Plugins first, then themes, then Minn last (the page reloads when it is done)." )
+					: __( "Each update runs its author's own upgrade routine. Plugins first, then themes, then WordPress core last (visitors see a maintenance notice for a few seconds)." ),
 			confirmLabel: __( 'Update everything' ),
 		} );
 		if ( ! okAll ) return;
@@ -44862,20 +44942,28 @@
 				if ( state.modal && state.modal.type === 'bulk-update' ) closeModal();
 			}
 		}
+		let engineUpdated = '';
 		if ( hasCore ) {
-			setPhase( __( 'Updating WordPress…' ) );
+			const c = coreCopy();
+			setPhase( c.updating );
 			try {
 				const version = await runCoreUpdate( state.cache.core.update.version );
-				doneBits.push( `WordPress ${ version }` );
+				doneBits.push( `${ c.name } ${ version }` );
+				if ( ENGINE ) engineUpdated = version;
 			} catch ( e ) {
-				/* translators: %s: the error message. */
-				failures.push( sprintf( __( 'WordPress: %s' ), e.message ) );
+				failures.push( sprintf( c.failed, e.message ) );
 			}
 		}
 		state.updatingAll = null;
 		updateUpdChip();
-		// Minn self-update: skip the soft cache refresh and hard-reload so
-		// the new version's assets and boot payload replace this SPA.
+		// Minn self-update (the plugin, or Minn itself on the engine): skip
+		// the soft cache refresh and hard-reload so the new version's assets
+		// and boot payload replace this SPA.
+		if ( engineUpdated && ! failures.length ) {
+			renderOverlays();
+			reloadAfterEngineUpdate( engineUpdated );
+			return;
+		}
 		if ( minnSelfUpdated ) {
 			renderOverlays();
 			reloadAfterMinnSelfUpdate( minnOfferVersion );
@@ -44916,7 +45004,7 @@
 		}
 		if ( u.type === 'core' ) {
 			/* translators: %s: the version on offer. */
-			return u.version ? sprintf( __( 'Update to %s' ), u.version ) : __( 'Update WordPress' );
+			return u.version ? sprintf( __( 'Update to %s' ), u.version ) : coreCopy().update;
 		}
 		if ( u.type === 'translations' ) return __( 'Update translations' );
 		return __( 'Update' );
@@ -44968,18 +45056,19 @@
 				state.cache.notifications = null;
 				await loadNotifications();
 			} else if ( u.type === 'core' ) {
-				if ( ! B.caps.core ) throw new Error( __( 'You cannot update WordPress.' ) );
+				const c = coreCopy();
+				if ( ! B.caps.core ) throw new Error( c.denied );
 				if ( ! await confirmCoreUpdate( u.version || '' ) ) {
 					if ( btn ) { btn.disabled = false; btn.textContent = notifUpdateLabel( item ); }
 					return;
 				}
-				state.updatingAll = __( 'Updating WordPress…' );
+				state.updatingAll = c.updating;
 				renderOverlays();
 				updateUpdChip();
 				try {
 					const version = await runCoreUpdate( u.version );
-					/* translators: %s: the new WordPress version. */
-					toast( sprintf( __( 'WordPress updated to %s' ), version ) );
+					if ( ENGINE ) return reloadAfterEngineUpdate( version );
+					toast( sprintf( c.updated, version ) );
 				} finally {
 					state.updatingAll = null;
 					updateUpdChip();
@@ -46711,9 +46800,15 @@
 							? ( pl.offered
 								? sprintf( esc( /* translators: %s: the plugin's name. */ __( 'What\'s new · %s' ) ), esc( pl.name ) )
 								: sprintf( esc( /* translators: %s: the plugin's name. */ __( 'Changelog · %s' ) ), esc( pl.name ) ) )
-							: sprintf( esc( /* translators: %s: the Minn Admin version. */ __( 'What\'s new · v%s' ) ), esc( B.version ) ) }</div>
+							: ! ENGINE
+								? sprintf( esc( /* translators: %s: the Minn Admin version. */ __( 'What\'s new · v%s' ) ), esc( B.version ) )
+								: m.engine
+									? sprintf( esc( /* translators: %s: the Minn version. */ __( 'What\'s new · Minn v%s' ) ), esc( ENGINE_VERSION ) )
+									: sprintf( esc( /* translators: %s: the Minn Admin version. */ __( 'What\'s new · Minn Admin v%s' ) ), esc( B.version ) ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
+					${ ENGINE && ! pl ? `<div class="minn-tabs minn-cl-tabs">${ [ [ 'engine', 'Minn' ], [ 'app', 'Minn Admin' ] ].map( ( [ id, name ] ) =>
+						`<button type="button" class="minn-tab${ ( id === 'engine' ) === !! m.engine ? ' active' : '' }" data-clproduct="${ id }">${ esc( name ) }</button>` ).join( '' ) }</div>` : '' }
 					${ plMeta }
 					${ m.md === null ? `<div class="minn-loading">${ esc( __( 'Loading changelog…' ) ) }</div>`
 						: plEmpty || `<div class="minn-cl-layout">
@@ -46728,7 +46823,9 @@
 					</div>
 					${ pl
 						? ( pl.url && safeHref( pl.url ) ? `<div class="minn-changelog-foot"><a href="${ esc( safeHref( pl.url ) ) }" target="_blank" rel="noopener">${ esc( 'wporg' === pl.source ? __( 'View on WordPress.org' ) : ( pl.kind === 'theme' ? __( 'Theme page' ) : __( 'Plugin page' ) ) ) } ↗</a></div>` : '' )
-						: `<div class="minn-changelog-foot"><a href="https://minnadmin.com/docs/changelog/" target="_blank" rel="noopener">${ esc( __( 'View the full changelog with screenshots on minnadmin.com' ) ) } ↗</a></div>` }` }
+						: m.engine
+							? `<div class="minn-changelog-foot"><a href="https://github.com/austinginder/minn-engine/releases" target="_blank" rel="noopener">${ esc( __( 'Every Minn release on GitHub' ) ) } ↗</a></div>`
+							: `<div class="minn-changelog-foot"><a href="https://minnadmin.com/docs/changelog/" target="_blank" rel="noopener">${ esc( __( 'View the full changelog with screenshots on minnadmin.com' ) ) } ↗</a></div>` }` }
 				</div>
 			</div>`;
 		}
@@ -46901,7 +46998,7 @@
 				<div class="minn-modal">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( __( 'About Minn' ) ) }</div>
-						<span class="minn-panel-sub">v${ esc( B.version ) }</span>
+						<span class="minn-panel-sub">${ ENGINE ? `Minn v${ esc( ENGINE_VERSION ) } · Minn Admin v${ esc( B.version ) }` : `v${ esc( B.version ) }` }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-help-body">
@@ -47182,6 +47279,14 @@
 			const meta = editorSideDoorMeta( m.id );
 			const body = $( '.minn-editor-door-body' );
 			if ( meta && meta.bind && body && state.editor ) meta.bind( body );
+		}
+
+		if ( m.type === 'changelog' && ENGINE && ! m.plugin ) {
+			$$( '[data-clproduct]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					if ( ( btn.dataset.clproduct === 'engine' ) !== !! m.engine ) openChangelog( btn.dataset.clproduct );
+				} )
+			);
 		}
 
 		if ( m.type === 'changelog' && m.sections ) {
@@ -49597,12 +49702,15 @@
 		return sections.map( ( s ) => ( { version: s.version, date: s.date, md: s.lines.join( '\n' ) } ) );
 	}
 
-	function openChangelog() {
-		state.modal = { type: 'changelog', md: null, sections: null, sec: 0 };
+	// Minn Admin's changelog; on Minn Engine the engine's own by default,
+	// with a tab for each (product 'app' opens Minn Admin's).
+	function openChangelog( product ) {
+		const engine = ENGINE && product !== 'app';
+		state.modal = { type: 'changelog', md: null, sections: null, sec: 0, engine };
 		renderOverlays();
-		api( 'minn-admin/v1/changelog' )
+		api( engine ? 'minn-admin/v1/engine-changelog' : 'minn-admin/v1/changelog' )
 			.then( ( r ) => {
-				if ( state.modal && state.modal.type === 'changelog' ) {
+				if ( state.modal && state.modal.type === 'changelog' && ! state.modal.plugin && state.modal.engine === engine ) {
 					state.modal.md = r.markdown || '';
 					state.modal.sections = changelogSections( state.modal.md );
 					state.modal.sec = 0;
@@ -49616,7 +49724,7 @@
 	// (its updater answers plugins_api with a description only), every
 	// other plugin goes through the plugin-changelog route.
 	function openPluginChangelogFor( file, name ) {
-		if ( file === 'minn-admin/minn-admin' ) openChangelog();
+		if ( file === 'minn-admin/minn-admin' ) openChangelog( 'app' );
 		else openPluginChangelog( file, name );
 	}
 
