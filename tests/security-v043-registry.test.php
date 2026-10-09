@@ -912,6 +912,79 @@ if ( ! $ug_upd || ! class_exists( 'ZipArchive' ) || wp_using_ext_object_cache() 
 	wp_set_current_user( $admin );
 }
 
+// --- #24 Novamira routes gate on Novamira's own runtime predicate ------------
+if ( ! function_exists( 'minn_admin_novamira_active' ) || ! minn_admin_novamira_active() ) {
+	$skip( '#24 Novamira inactive' );
+} else {
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	$ug_nv_vendor = function () {
+		return function_exists( 'novamira_current_user_can_manage' ) ? novamira_current_user_can_manage() : current_user_can( novamira_manage_capability() );
+	};
+	$ug_nv_cache = new ReflectionProperty( 'Minn_Admin_Surfaces', 'all_cache' );
+	$ug_nv_cache->setAccessible( true );
+	$ug_nv_probe = function ( $uid ) use ( $ug_nv_cache ) {
+		wp_set_current_user( $uid );
+		$ug_nv_cache->setValue( null, null ); // the registry is built once per request
+		$ids = wp_list_pluck( Minn_Admin_Surfaces::for_current_user(), 'id' );
+		$ug_nv_cache->setValue( null, null );
+		$get = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/novamira/status' ) )->get_status();
+		$mem = minn_admin_novamira_memory_ready() ? rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/novamira/memories' ) )->get_status() : 0;
+		// A save of nothing: on a route that lets the caller in, it rewrites
+		// the ability rules unchanged, so a wrong answer here costs nothing.
+		$w = new WP_REST_Request( 'POST', '/minn-admin/v1/novamira/abilities/context' );
+		$w->set_header( 'content-type', 'application/json' );
+		$w->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+		$w->set_body( wp_json_encode( array( 'values' => array() ) ) );
+		$post = rest_do_request( $w )->get_status();
+		return array( 'surface' => in_array( 'novamira', $ids, true ), 'get' => $get, 'mem' => $mem, 'post' => $post );
+	};
+	// Control: the site's owner (a super admin on a network) reaches it all.
+	$ug_nv_owner = $admin;
+	if ( is_multisite() ) {
+		$ug_nv_sa    = get_user_by( 'login', (string) current( get_super_admins() ) );
+		$ug_nv_owner = $ug_nv_sa ? (int) $ug_nv_sa->ID : 0;
+	}
+	if ( $ug_nv_owner ) {
+		wp_set_current_user( $ug_nv_owner );
+		$ug_nv_ok = $ug_nv_vendor();
+		$ug_nv_p  = $ug_nv_probe( $ug_nv_owner );
+		$check( '#24 control: the user Novamira lets manage reaches the surface, status, memories and saves', $ug_nv_ok && $ug_nv_p['surface'] && 200 === $ug_nv_p['get'] && in_array( $ug_nv_p['mem'], array( 0, 200 ), true ) && 200 === $ug_nv_p['post'], wp_json_encode( $ug_nv_p ) );
+	}
+	// A principal holding the capability string Novamira hands to its menu
+	// (a role plugin's grant) without passing Novamira's own check: on a
+	// network that is anyone short of super admin.
+	$ug_nv_uid = wp_insert_user( array(
+		'user_login' => 'minn_ug_nv_' . wp_generate_password( 6, false, false ),
+		'user_pass'  => wp_generate_password( 24 ),
+		'user_email' => 'minn-ug-nv-' . wp_generate_password( 6, false, false ) . '@example.com',
+		'role'       => is_multisite() ? 'administrator' : 'editor',
+	) );
+	if ( is_wp_error( $ug_nv_uid ) ) {
+		$skip( '#24 could not create the probe user: ' . $ug_nv_uid->get_error_message() );
+	} else {
+		( new WP_User( $ug_nv_uid ) )->add_cap( novamira_manage_capability() );
+		wp_set_current_user( $ug_nv_uid );
+		$ug_nv_ok = $ug_nv_vendor();
+		$ug_nv_p  = $ug_nv_probe( $ug_nv_uid );
+		$ug_nv_dn = function ( $code ) use ( $ug_nv_ok ) {
+			return $ug_nv_ok ? 200 === $code : in_array( $code, array( 401, 403 ), true );
+		};
+		$check( '#24 the surface follows Novamira\'s predicate (' . ( is_multisite() ? 'network' : 'single site' ) . ')', $ug_nv_ok === $ug_nv_p['surface'], wp_json_encode( $ug_nv_p ) );
+		$check( '#24 status read follows Novamira\'s predicate', $ug_nv_dn( $ug_nv_p['get'] ), 'vendor=' . var_export( $ug_nv_ok, true ) . ' got ' . $ug_nv_p['get'] );
+		$check( '#24 memories read follows Novamira\'s predicate', 0 === $ug_nv_p['mem'] || $ug_nv_dn( $ug_nv_p['mem'] ), 'got ' . $ug_nv_p['mem'] );
+		$check( '#24 ability/instructions save follows Novamira\'s predicate', $ug_nv_dn( $ug_nv_p['post'] ), 'got ' . $ug_nv_p['post'] );
+		wp_set_current_user( $admin );
+		if ( is_multisite() ) {
+			require_once ABSPATH . 'wp-admin/includes/ms.php';
+			wpmu_delete_user( $ug_nv_uid );
+		} else {
+			wp_delete_user( $ug_nv_uid );
+		}
+	}
+	$ug_nv_cache->setValue( null, null );
+	wp_set_current_user( $admin );
+}
+
 // @sections
 
 $summary();

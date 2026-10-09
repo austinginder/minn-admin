@@ -19,8 +19,8 @@
  *    plugin that provides it, writing Novamira's own rules option through
  *    its own helper so its policy stays coherent.
  *
- * Everything gates on novamira_manage_capability() (manage_options, or the
- * network option on multisite), the plugin's own boundary. The OAuth tables
+ * Everything gates on Novamira's own runtime check (manage_options, or super
+ * admin on multisite), the plugin's own boundary. The OAuth tables
  * are created lazily when abilities are first enabled, so every read checks
  * novamira's schema marker and answers empty before it exists. Access tokens
  * and passwords never ride a response.
@@ -32,8 +32,24 @@ function minn_admin_novamira_active() {
 	return function_exists( 'novamira_manage_capability' ) && function_exists( 'novamira_get_ability_rules' );
 }
 
+/**
+ * Novamira's own runtime check, the one every one of its handlers and its
+ * novamira/* abilities re-run. On a network that is is_super_admin(), not
+ * the manage_network_options string it hands to add_submenu_page, which a
+ * role plugin or an operator can grant without super admin.
+ */
 function minn_admin_novamira_can() {
-	return minn_admin_novamira_active() && current_user_can( novamira_manage_capability() );
+	if ( ! minn_admin_novamira_active() ) {
+		return false;
+	}
+	return function_exists( 'novamira_current_user_can_manage' )
+		? (bool) novamira_current_user_can_manage()
+		: current_user_can( novamira_manage_capability() );
+}
+
+/** The same gate as a capability name, for the surface registry that takes one. */
+function minn_admin_novamira_cap() {
+	return minn_admin_novamira_can() ? novamira_manage_capability() : 'do_not_allow';
 }
 
 /**
@@ -599,7 +615,7 @@ function minn_admin_novamira_memory_view() {
 	}
 	return array(
 		'viewLabel' => __( 'Memory', 'minn-admin' ),
-		'cap'       => novamira_manage_capability(),
+		'cap'       => minn_admin_novamira_cap(),
 		'route'     => 'minn-admin/v1/novamira/memories',
 		'itemsKey'  => 'items',
 		'totalKey'  => 'total',
@@ -648,7 +664,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Novamira',
 		'plugin'     => array( 'novamira', 'novamira-pro' ),
 		'icon'       => 'plug',
-		'cap'        => novamira_manage_capability(),
+		'cap'        => minn_admin_novamira_cap(),
 		'group'      => 'tools',
 		'status'     => array( 'route' => 'minn-admin/v1/novamira/status' ),
 		'collection' => array(
