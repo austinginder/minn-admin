@@ -90,6 +90,7 @@ the controls in a compact panel with its own Open Minn Admin link. When the
 site needs attention, such as maintenance mode, a password gate, hidden
 search visibility or a staging environment, a status chip waits beside the
 site name and appears with the rest of the bar once you reach the corner.
+When there is a one-step fix (turning maintenance mode off, allowing search engines), the chip's menu offers it and asks you to confirm before it changes anything.
 The page itself stays unmarked except for the two strokes. The corner
 control floats above the site without changing its layout.
 This is a personal choice: other users keep the classic bar until they opt

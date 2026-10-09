@@ -339,7 +339,8 @@ request 404s); Perfmatters, WP All Export and Gravity Perks store the
 pasted key BEFORE validating (their own activation flow reads it from the
 option), so each now snapshots and restores the prior key on failure
 rather than retaining the rejected one, and GP Premium's route (which
-unconditionally writes the key at the end) gets the same restore. Slider
+unconditionally writes the key at the end) gets the same restore. Beaver Builder (its save writes a blank key on a plain refusal and the pasted key when the error carries a code, an outage included) and Bricks (its activate stores the pasted key for any answer with a status, "invalid" and "expired" included, and an outage marks the stored key unverified) got the same restore later, Bricks' status transient with it.
+Slider
 Revolution was DEMOTED to an "Activate ↗" link: its
 `activate_plugin()` is welded to admin-only classes (RevSliderTracking,
 the load balancer that only registers in RevSliderGlobals during admin

@@ -285,7 +285,7 @@ item). Writes and a SQL console stay permanent non-goals there
 
 ### Settings — daily options covered, two screens thin
 Writable today: General (title, tagline, icon, URL, admin email, timezone,
-date/time format, week start, default role, membership, maintenance, default
+date/time format, week start, default role and membership (single site; a network sets both in Network Admin), maintenance, default
 admin), Writing (default category/format, smilies), Reading (front page,
 posts per page, search visibility), Discussion (default comment/ping status,
 moderation, registration required, avatars on/off), Permalinks (structure +

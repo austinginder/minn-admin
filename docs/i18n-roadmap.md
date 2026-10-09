@@ -175,13 +175,12 @@ translation packages rather than lapsing for them.
   publishes no hash (a refusal, not a pass), and `null` when the URL is not
   ours at all, so every other plugin's downloads pass through untouched.
 - A pack that would be refused is never OFFERED either.
+- A pack offered for Minn's slug from anywhere else (another updater's translations, a same-slug listing, a file an earlier download filter hands back) is refused at download and dropped from the update transient. Core's language-pack upgrader names the plugin only through the offer's slug, so the slug is what makes a pack Minn's, whatever its URL.
 - `is_our_package_url()` reads an allowlist of repository paths rather than one
   hardcoded prefix, keeping the anchored (never substring) match. Moving packs
   to their own repository later is one more entry plus a manifest URL.
 
-A `.mo` is data rather than executable code, so the blast radius is smaller than
-a plugin zip. It is still a file that decides what text the admin renders, and
-the plugin's own comments argue that opt out integrity is the thing to avoid.
+A pack is not just data. Beside the `.mo` it carries a `.l10n.php`, which WordPress 6.5+ include()s as PHP on every request in that locale, so an unverified pack is as dangerous as an unverified plugin zip. Core's `check_package()` does not constrain the file names inside a pack, so a hostile offer for another slug could still write a `minn-admin-<locale>.l10n.php`; that is core's translation trust model, beyond what a slug gate can close.
 
 ## Which locales
 
