@@ -2905,6 +2905,344 @@ if ( is_multisite() ) {
 	$skip( '#15 default role (multisite): single site' );
 }
 
+// --- #1 ACPT panel save keeps dates, prefix-sharing siblings and affixes ----
+if ( function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active() && class_exists( '\\ACPT\\Core\\CQRS\\Command\\DeleteMetaGroupCommand' )
+	&& class_exists( '\\ACPT\\Core\\CQRS\\Command\\SaveMetaGroupCommand' ) ) {
+	global $wpdb;
+	$acpt_sfx   = substr( md5( uniqid( '', true ) ), 0, 8 );
+	$acpt_group = 'minn-v043-acpt-panel-' . $acpt_sfx;
+	$acpt_box   = 'minn_v043_acpt_p' . $acpt_sfx;
+	$acpt_gid   = '';
+	try {
+		// Box order matters for the prefix delete: a longer-named sibling
+		// written BEFORE the short field is gone for good once the short
+		// one's LIKE delete runs.
+		$acpt_gid = ( new \ACPT\Core\CQRS\Command\SaveMetaGroupCommand( array(
+			'name'    => $acpt_group,
+			'label'   => 'Minn v043 ACPT panel',
+			'belongs' => array( array( 'belongsTo' => 'customPostType', 'operator' => '=', 'find' => 'post', 'logic' => '' ) ),
+			'boxes'   => array( array( 'name' => $acpt_box, 'label' => 'Box', 'fields' => array(
+				array( 'name' => 'event_date_end', 'type' => 'Text', 'label' => 'Ends' ),
+				array( 'name' => 'event_date', 'type' => 'Date', 'label' => 'Date' ),
+				array( 'name' => 'opens', 'type' => 'Time', 'label' => 'Opens' ),
+				array( 'name' => 'starts_at', 'type' => 'DateTime', 'label' => 'Starts' ),
+				array( 'name' => 'price_sale', 'type' => 'Text', 'label' => 'Sale price' ),
+				array( 'name' => 'price', 'type' => 'Text', 'label' => 'Price' ),
+				array( 'name' => 'qty', 'type' => 'Number', 'label' => 'Qty' ),
+				array( 'name' => 'fee', 'type' => 'Text', 'label' => 'Fee', 'advancedOptions' => array( array( 'key' => 'before', 'value' => '$' ), array( 'key' => 'after', 'value' => ' flat' ) ) ),
+				array( 'name' => 'promo', 'type' => 'Text', 'label' => 'Promo' ),
+				array( 'name' => 'tagline_alt', 'type' => 'Text', 'label' => 'Alt tagline' ),
+				array( 'name' => 'tagline', 'type' => 'Text', 'label' => 'Tagline' ),
+				array( 'name' => 'choice', 'type' => 'Select', 'label' => 'Choice', 'options' => array( array( 'value' => 'a', 'label' => 'A', 'sort' => 1, 'isDefault' => false ), array( 'value' => 'b', 'label' => 'B', 'sort' => 2, 'isDefault' => false ) ) ),
+				array( 'name' => 'venue', 'type' => 'Text', 'label' => 'Venue' ),
+				array( 'name' => 'photo_credit', 'type' => 'Text', 'label' => 'Credit' ),
+				array( 'name' => 'photo', 'type' => 'Image', 'label' => 'Photo' ),
+				array( 'name' => 'seats', 'type' => 'Number', 'label' => 'Seats', 'advancedOptions' => array( array( 'key' => 'min', 'value' => '3' ) ) ),
+			) ) ),
+		) ) )->execute();
+	} catch ( \Throwable $e ) {
+		$skip( 'ACPT panel: could not build the fixture group (' . $e->getMessage() . ')' );
+	}
+	if ( $acpt_gid ) {
+		$acpt_sc = 'minn_v043_acpt_sc_' . $acpt_sfx;
+		add_shortcode( $acpt_sc, function () {
+			return 'EXPANDED';
+		} );
+		$acpt_pid = wp_insert_post( array( 'post_title' => 'Minn v043 ACPT panel', 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $admin ) );
+		$acpt_set = function ( $name, $v, $ctx = null ) use ( &$acpt_pid, $acpt_box ) {
+			return save_acpt_meta_field_value( array_merge( $ctx ? $ctx : array( 'post_id' => $acpt_pid ), array( 'box_name' => $acpt_box, 'field_name' => $name, 'value' => $v ) ) );
+		};
+		$acpt_set( 'event_date_end', 'Nov 3 close' );
+		$acpt_set( 'event_date', '2026-11-01' );
+		$acpt_set( 'opens', '09:30:00' );
+		$acpt_set( 'starts_at', '2026-11-01 09:30:00' );
+		$acpt_set( 'price_sale', '9' );
+		$acpt_set( 'qty', '0' );
+		$acpt_set( 'fee', '10' );
+		$acpt_set( 'promo', '[' . $acpt_sc . ']' );
+		$acpt_set( 'tagline_alt', 'Alt line' );
+		$acpt_set( 'tagline', 'Old line' );
+		$acpt_set( 'choice', 'a' );
+		$acpt_set( 'venue', 'Hall A' );
+		$acpt_set( 'photo_credit', 'Jane' );
+		$acpt_set( 'seats', '5' );
+		$acpt_img = (int) $wpdb->get_var( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type LIKE 'image/%' ORDER BY ID DESC LIMIT 1" );
+		if ( $acpt_img ) {
+			$acpt_set( 'photo', $acpt_img );
+		}
+		// Straight from the table: ACPT's prefix delete is raw SQL, so the
+		// object cache would still answer with the rows it removed. get_row,
+		// not get_var, which answers null for a stored ''.
+		$acpt_meta = function ( $name ) use ( $wpdb, &$acpt_pid, $acpt_box ) {
+			$r = $wpdb->get_row( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $acpt_pid, $acpt_box . '_' . $name ) );
+			return $r ? (string) $r->meta_value : null;
+		};
+		$acpt_ids = array();
+		foreach ( minn_admin_acpt_fields_payload( $acpt_pid, 'post', true )['lookup'] as $id => $f ) {
+			if ( $f->getBox()->getName() === $acpt_box ) {
+				$acpt_ids[ $f->getName() ] = $id;
+			}
+		}
+		// What the client holds: the minn_acpt object from the edit read.
+		$acpt_get = function () use ( $call, &$acpt_pid ) {
+			list( , $d ) = $call( 'GET', '/wp/v2/posts/' . $acpt_pid, null, array( 'context' => 'edit' ) );
+			return json_decode( wp_json_encode( $d['minn_acpt'] ?? array() ), true );
+		};
+		// Every field's id from ACPT itself, offered or not.
+		$acpt_all = array();
+		foreach ( \ACPT\Core\Repository\MetaRepository::get( array( 'id' => $acpt_gid ) )[0]->getBoxes() as $b ) {
+			foreach ( $b->getFields() as $f ) {
+				$acpt_all[ $f->getName() ] = $f->getId();
+			}
+		}
+		$acpt_served = $acpt_get();
+		$acpt_blank_dates = array_filter( array( 'event_date', 'opens', 'starts_at' ), function ( $n ) use ( $acpt_served, $acpt_all ) {
+			return isset( $acpt_all[ $n ] ) && array_key_exists( $acpt_all[ $n ], $acpt_served ) && '' === $acpt_served[ $acpt_all[ $n ] ];
+		} );
+		$check( 'ACPT panel: a stored date is never offered as an empty box', ! $acpt_blank_dates, wp_json_encode( array_values( $acpt_blank_dates ) ) );
+		$acpt_box_shape = null;
+		foreach ( minn_admin_acpt_fields_payload( $acpt_pid, 'post' )['groups'] as $g ) {
+			if ( false !== strpos( $g['group'], 'Minn v043 ACPT panel' ) ) {
+				$acpt_box_shape = $g;
+			}
+		}
+		$check( 'ACPT panel: dates, times and the affixed field count as locked', $acpt_box_shape && 4 === $acpt_box_shape['locked']
+			&& ! array_intersect( array( $acpt_all['event_date'] ?? '', $acpt_all['opens'] ?? '', $acpt_all['starts_at'] ?? '', $acpt_all['fee'] ?? '' ), wp_list_pluck( $acpt_box_shape['fields'], 'name' ) ),
+			wp_json_encode( $acpt_box_shape ? array( $acpt_box_shape['locked'], wp_list_pluck( $acpt_box_shape['fields'], 'label' ) ) : null ) );
+
+		// When ACPT's setter refuses '' and the field model cannot name its
+		// own keys (a build without those methods), the clear is refused out
+		// loud rather than dropped. A stand-in model without them, pointed at
+		// the stored select.
+		$acpt_bare = new class() {
+			public function getType() {
+				return 'Select';
+			}
+			public function getLabelOrName() {
+				return 'Choice';
+			}
+		};
+		$acpt_refused = minn_admin_acpt_write_one( $acpt_bare, null, array( 'post_id' => $acpt_pid, 'box_name' => $acpt_box, 'field_name' => 'choice' ) );
+		$check( 'ACPT panel: a clear that cannot be stored empty answers 400 and changes nothing', is_wp_error( $acpt_refused ) && 400 === ( $acpt_refused->get_error_data()['status'] ?? 0 ) && 'a' === $acpt_meta( 'choice' ),
+			is_wp_error( $acpt_refused ) ? $acpt_refused->get_error_message() . ' / ' . var_export( $acpt_meta( 'choice' ), true ) : var_export( $acpt_refused, true ) );
+
+		// Edit one field, clear two, and send the whole object back the way
+		// the panel does whenever anything in it is dirty.
+		$acpt_send = $acpt_served;
+		if ( isset( $acpt_ids['venue'] ) ) {
+			$acpt_send[ $acpt_ids['venue'] ] = 'Hall B';
+		}
+		if ( isset( $acpt_ids['tagline'] ) ) {
+			$acpt_send[ $acpt_ids['tagline'] ] = '';
+		}
+		if ( isset( $acpt_ids['choice'] ) ) {
+			$acpt_send[ $acpt_ids['choice'] ] = null; // the select's "—" pick
+		}
+		if ( $acpt_img && isset( $acpt_ids['photo'] ) ) {
+			$acpt_send[ $acpt_ids['photo'] ] = null; // the picker's remove
+		}
+		if ( isset( $acpt_ids['seats'] ) ) {
+			$acpt_send[ $acpt_ids['seats'] ] = null; // a number box emptied
+		}
+		// A tab opened before the update still holds the old payload: dates
+		// as '', the affixed field as its formatted read.
+		foreach ( array( 'event_date' => '', 'opens' => '', 'starts_at' => '', 'fee' => '$10 flat' ) as $acpt_n => $acpt_v ) {
+			if ( isset( $acpt_all[ $acpt_n ] ) ) {
+				$acpt_send[ $acpt_all[ $acpt_n ] ] = $acpt_v;
+			}
+		}
+		list( $acpt_st ) = $call( 'POST', '/wp/v2/posts/' . $acpt_pid, array( 'minn_acpt' => $acpt_send ) );
+		$check( 'ACPT panel: the save itself answers 200 (control)', 200 === $acpt_st, (string) $acpt_st );
+		$check( 'ACPT panel: an untouched Date survives a save of another field', '2026-11-01' === $acpt_meta( 'event_date' ), var_export( $acpt_meta( 'event_date' ), true ) );
+		$check( 'ACPT panel: untouched Time and DateTime survive', '09:30:00' === $acpt_meta( 'opens' ) && '2026-11-01 09:30:00' === $acpt_meta( 'starts_at' ), var_export( array( $acpt_meta( 'opens' ), $acpt_meta( 'starts_at' ) ), true ) );
+		$check( 'ACPT panel: a field named after a date field (event_date_end) survives', 'Nov 3 close' === $acpt_meta( 'event_date_end' ), var_export( $acpt_meta( 'event_date_end' ), true ) );
+		$check( 'ACPT panel: an empty field never takes a prefix-sharing sibling (price -> price_sale)', '9' === $acpt_meta( 'price_sale' ), var_export( $acpt_meta( 'price_sale' ), true ) );
+		$check( 'ACPT panel: clearing a field never takes a prefix-sharing sibling (tagline -> tagline_alt)', 'Alt line' === $acpt_meta( 'tagline_alt' ), var_export( $acpt_meta( 'tagline_alt' ), true ) );
+		$check( 'ACPT panel: a Number holding 0 (read back as empty) survives', '0' === $acpt_meta( 'qty' ), var_export( $acpt_meta( 'qty' ), true ) );
+		$check( 'ACPT panel: a before/after affix is never written into the stored value', '10' === $acpt_meta( 'fee' ), var_export( $acpt_meta( 'fee' ), true ) );
+		$check( 'ACPT panel: a shortcode is never stored expanded', '[' . $acpt_sc . ']' === $acpt_meta( 'promo' ), var_export( $acpt_meta( 'promo' ), true ) );
+		$check( 'ACPT panel: the edited field saves (control)', 'Hall B' === $acpt_meta( 'venue' ), var_export( $acpt_meta( 'venue' ), true ) );
+		$check( 'ACPT panel: a cleared text field stores empty, the way ACPT\'s own form does (control)', '' === $acpt_meta( 'tagline' ), var_export( $acpt_meta( 'tagline' ), true ) );
+		$check( 'ACPT panel: a select cleared with its empty pick stores empty (control)', '' === $acpt_meta( 'choice' ), var_export( $acpt_meta( 'choice' ), true ) );
+		$check( 'ACPT panel: a number with a minimum, emptied, stores empty (control)', '' === $acpt_meta( 'seats' ), var_export( $acpt_meta( 'seats' ), true ) );
+		if ( $acpt_img ) {
+			$check( 'ACPT panel: removing an image keeps a prefix-sharing sibling (photo -> photo_credit)', 'Jane' === $acpt_meta( 'photo_credit' ), var_export( $acpt_meta( 'photo_credit' ), true ) );
+			$check( 'ACPT panel: a removed image stores empty (control)', '' === $acpt_meta( 'photo' ), var_export( $acpt_meta( 'photo' ), true ) );
+			// ACPT's own edit screen reads the attachment id before the address.
+			$check( 'ACPT panel: a removed image leaves no attachment id behind', in_array( $acpt_meta( 'photo_attachment_id' ), array( null, '' ), true ), var_export( $acpt_meta( 'photo_attachment_id' ), true ) );
+		} else {
+			$skip( 'ACPT panel: no image attachment to exercise an Image clear' );
+		}
+
+		// A second untouched round trip must be a no-op: nothing compounds.
+		$call( 'POST', '/wp/v2/posts/' . $acpt_pid, array( 'minn_acpt' => $acpt_get() ) );
+		$check( 'ACPT panel: a second untouched save changes nothing', '10' === $acpt_meta( 'fee' ) && '2026-11-01' === $acpt_meta( 'event_date' ) && 'Hall B' === $acpt_meta( 'venue' ) && '9' === $acpt_meta( 'price_sale' ),
+			var_export( array( $acpt_meta( 'fee' ), $acpt_meta( 'event_date' ), $acpt_meta( 'venue' ), $acpt_meta( 'price_sale' ) ), true ) );
+
+		// Option pages write through the same helper. A clear there ran the
+		// same LIKE delete over wp_options. Option pages need an ACPT licence to
+		// be listed, so drive the shared writer with an option-page context.
+		$acpt_page = 'minn-v043-acpt-page-' . $acpt_sfx;
+		$acpt_ctx  = array( 'option_page' => $acpt_page );
+		$acpt_set( 'price_sale', '7', $acpt_ctx );
+		$acpt_set( 'price', '5', $acpt_ctx );
+		$acpt_opt = function ( $name ) use ( $wpdb, $acpt_box ) {
+			$r = $wpdb->get_row( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s", '%' . $wpdb->esc_like( $acpt_box . '_' . $name ) ) );
+			return $r ? (string) $r->option_value : null;
+		};
+		$acpt_price = null;
+		foreach ( minn_admin_acpt_fields_payload( $acpt_pid, 'post', true )['lookup'] as $f ) {
+			if ( $f->getBox()->getName() === $acpt_box && 'price' === $f->getName() ) {
+				$acpt_price = $f;
+			}
+		}
+		if ( $acpt_price && '7' === $acpt_opt( 'price_sale' ) ) {
+			minn_admin_acpt_write_one( $acpt_price, '', array_merge( $acpt_ctx, array( 'box_name' => $acpt_box, 'field_name' => 'price' ) ) );
+			$check( 'ACPT option page: clearing a field keeps a prefix-sharing sibling option', '7' === $acpt_opt( 'price_sale' ), var_export( $acpt_opt( 'price_sale' ), true ) );
+			$check( 'ACPT option page: the cleared field stores empty (control)', '' === $acpt_opt( 'price' ), var_export( $acpt_opt( 'price' ), true ) );
+			$acpt_set( 'choice', 'b', $acpt_ctx );
+			$acpt_ochoice = null;
+			foreach ( minn_admin_acpt_fields_payload( $acpt_pid, 'post', true )['lookup'] as $f ) {
+				if ( $f->getBox()->getName() === $acpt_box && 'choice' === $f->getName() ) {
+					$acpt_ochoice = $f;
+				}
+			}
+			if ( $acpt_ochoice && 'b' === $acpt_opt( 'choice' ) ) {
+				$acpt_or = minn_admin_acpt_write_one( $acpt_ochoice, null, array_merge( $acpt_ctx, array( 'box_name' => $acpt_box, 'field_name' => 'choice' ) ) );
+				$check( 'ACPT option page: a select cleared stores empty under its own option (control)', null === $acpt_or && '' === $acpt_opt( 'choice' ), var_export( $acpt_opt( 'choice' ), true ) );
+			}
+		} else {
+			$skip( 'ACPT option page: could not seed option-page values' );
+		}
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", '%' . $wpdb->esc_like( $acpt_box ) . '%' ) );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_delete_post( $acpt_pid, true );
+		remove_shortcode( $acpt_sc );
+	}
+	if ( $acpt_gid ) {
+		// By id: ACPT caches its by-name lookup from before the group existed.
+		( new \ACPT\Core\CQRS\Command\DeleteMetaGroupCommand( $acpt_gid ) )->execute();
+	}
+} else {
+	$skip( 'ACPT panel: ACPT inactive' );
+}
+
+// --- #17 ACPT repeaters are locked: a row save changes nothing stored ------
+if ( function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active() && class_exists( '\\ACPT\\Core\\CQRS\\Command\\DeleteMetaGroupCommand' )
+	&& class_exists( '\\ACPT\\Core\\CQRS\\Command\\SaveMetaGroupCommand' ) ) {
+	global $wpdb;
+	$acpt_rsfx   = substr( md5( uniqid( '', true ) ), 0, 8 );
+	$acpt_rgroup = 'minn-v043-acpt-rows-' . $acpt_rsfx;
+	$acpt_rbox   = 'minn_v043_acpt_r' . $acpt_rsfx;
+	$acpt_rgid   = '';
+	try {
+		$acpt_rgid = ( new \ACPT\Core\CQRS\Command\SaveMetaGroupCommand( array(
+			'name'    => $acpt_rgroup,
+			'label'   => 'Minn v043 ACPT rows',
+			'belongs' => array( array( 'belongsTo' => 'customPostType', 'operator' => '=', 'find' => 'post', 'logic' => '' ) ),
+			'boxes'   => array( array( 'name' => $acpt_rbox, 'label' => 'Box', 'fields' => array(
+				array( 'name' => 'note', 'type' => 'Text', 'label' => 'Note' ),
+				array( 'name' => 'links', 'type' => 'Repeater', 'label' => 'Links', 'children' => array(
+					array( 'name' => 'title', 'type' => 'Text', 'label' => 'Title' ),
+					array( 'name' => 'pick', 'type' => 'Select', 'label' => 'Pick', 'options' => array( array( 'value' => 'x', 'label' => 'X', 'sort' => 1, 'isDefault' => false ) ) ),
+					array( 'name' => 'url', 'type' => 'Url', 'label' => 'Link' ),
+					array( 'name' => 'when', 'type' => 'Date', 'label' => 'When' ),
+					array( 'name' => 'tel', 'type' => 'Phone', 'label' => 'Tel' ),
+				) ),
+			) ) ),
+		) ) )->execute();
+	} catch ( \Throwable $e ) {
+		$skip( 'ACPT rows: could not build the fixture group (' . $e->getMessage() . ')' );
+	}
+	if ( $acpt_rgid ) {
+		$acpt_rpid = wp_insert_post( array( 'post_title' => 'Minn v043 ACPT rows', 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $admin ) );
+		save_acpt_meta_field_value( array( 'post_id' => $acpt_rpid, 'box_name' => $acpt_rbox, 'field_name' => 'note', 'value' => 'first' ) );
+		save_acpt_meta_field_value( array( 'post_id' => $acpt_rpid, 'box_name' => $acpt_rbox, 'field_name' => 'links', 'value' => array(
+			array( 'title' => 'A', 'pick' => 'x', 'url' => array( 'url' => 'https://a.example/', 'label' => 'Site A' ), 'when' => '2026-11-01', 'tel' => '+15550001' ),
+			array( 'title' => 'B', 'pick' => 'x', 'url' => array( 'url' => 'https://b.example/', 'label' => 'Site B' ), 'when' => '2026-12-24', 'tel' => '+15550002' ),
+			array( 'title' => 'C', 'pick' => 'x', 'url' => array( 'url' => 'https://c.example/', 'label' => 'Site C' ), 'when' => '2027-01-01', 'tel' => '+15550003' ),
+		) ) );
+		// A backslash in a row, stored the way ACPT's own form would keep it
+		// (ACPT's setter unslashes on the way in, so it is placed directly).
+		$acpt_rkey = $acpt_rbox . '_links';
+		$acpt_rraw = get_post_meta( $acpt_rpid, $acpt_rkey, true );
+		if ( isset( $acpt_rraw['title'][1]['value'] ) ) {
+			$acpt_rraw['title'][1]['value'] = 'C:\\path\\B';
+			update_post_meta( $acpt_rpid, $acpt_rkey, wp_slash( $acpt_rraw ) );
+		}
+		// The stored bytes, straight from the table.
+		$acpt_rbytes = function () use ( $wpdb, &$acpt_rpid, $acpt_rkey ) {
+			return (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $acpt_rpid, $acpt_rkey ) );
+		};
+		$acpt_rbefore = $acpt_rbytes();
+		$acpt_rmodel  = null;
+		$acpt_rnote   = '';
+		foreach ( \ACPT\Core\Repository\MetaRepository::get( array( 'id' => $acpt_rgid ) )[0]->getBoxes() as $b ) {
+			foreach ( $b->getFields() as $f ) {
+				if ( 'links' === $f->getName() ) {
+					$acpt_rmodel = $f;
+				}
+				if ( 'note' === $f->getName() ) {
+					$acpt_rnote = $f->getId();
+				}
+			}
+		}
+		if ( $acpt_rmodel && false !== strpos( $acpt_rbefore, 'C:\\path\\B' ) ) {
+			$acpt_rshape = null;
+			foreach ( minn_admin_acpt_fields_payload( $acpt_rpid, 'post' )['groups'] as $g ) {
+				if ( false !== strpos( $g['group'], 'Minn v043 ACPT rows' ) ) {
+					$acpt_rshape = $g;
+				}
+			}
+			$check( 'ACPT rows: a repeater is counted as locked, not offered', $acpt_rshape && 1 === $acpt_rshape['locked'] && ! in_array( $acpt_rmodel->getId(), wp_list_pluck( $acpt_rshape['fields'], 'name' ), true ),
+				wp_json_encode( $acpt_rshape ) );
+			list( , $acpt_rd ) = $call( 'GET', '/wp/v2/posts/' . $acpt_rpid, null, array( 'context' => 'edit' ) );
+			$acpt_rserved = json_decode( wp_json_encode( $acpt_rd['minn_acpt'] ?? array() ), true );
+			$check( 'ACPT rows: the repeater is not in the panel values', ! array_key_exists( $acpt_rmodel->getId(), $acpt_rserved ), wp_json_encode( array_keys( $acpt_rserved ) ) );
+
+			// What a tab opened before the update still sends: the rows it was
+			// served, with one row edited, row A removed (the B,C,C case), a
+			// select sub outside its choices, and the note edited beside it.
+			$acpt_rsend = $acpt_rserved;
+			$acpt_rsend[ $acpt_rnote ] = 'second';
+			$acpt_rsend[ $acpt_rmodel->getId() ] = array(
+				array( '__idx' => 1, 'values' => array( 'title' => 'B edited', 'pick' => 'evil', 'when' => '', 'tel' => '', 'url' => 'javascript:alert(1)' ) ),
+				array( '__idx' => 2, 'values' => array( 'title' => 'C' ) ),
+			);
+			// A row write that throws is a failure to record, not a reason to
+			// stop the run before its cleanup.
+			$acpt_rst = 0;
+			$acpt_rex = '';
+			try {
+				list( $acpt_rst ) = $call( 'POST', '/wp/v2/posts/' . $acpt_rpid, array( 'minn_acpt' => $acpt_rsend ) );
+			} catch ( \Throwable $e ) {
+				$acpt_rex = get_class( $e ) . ': ' . $e->getMessage();
+			}
+			$check( 'ACPT rows: a row save through the panel body changes nothing stored (edit, removal, backslash, bad choice)', '' === $acpt_rex && $acpt_rbefore === $acpt_rbytes(),
+				'' !== $acpt_rex ? 'threw ' . $acpt_rex : ( $acpt_rbefore === $acpt_rbytes() ? 'byte-identical' : wp_json_encode( get_acpt_field( array( 'post_id' => $acpt_rpid, 'box_name' => $acpt_rbox, 'field_name' => 'links', 'format' => 'only_value', 'return' => 'raw' ) ) ) ) );
+			$acpt_rnote_now = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $acpt_rpid, $acpt_rbox . '_note' ) );
+			$check( 'ACPT rows: the field edited beside it still saves (control)', 200 === $acpt_rst && 'second' === $acpt_rnote_now, $acpt_rst . ' ' . var_export( $acpt_rnote_now, true ) );
+
+			// The writer option pages share refuses a repeater too.
+			$acpt_rex = '';
+			try {
+				minn_admin_acpt_write_one( $acpt_rmodel, array( array( 'values' => array( 'title' => 'Z' ) ) ), array( 'post_id' => $acpt_rpid, 'box_name' => $acpt_rbox, 'field_name' => 'links' ) );
+			} catch ( \Throwable $e ) {
+				$acpt_rex = get_class( $e ) . ': ' . $e->getMessage();
+			}
+			$check( 'ACPT rows: the shared writer never writes a repeater', '' === $acpt_rex && $acpt_rbefore === $acpt_rbytes(), '' !== $acpt_rex ? 'threw ' . $acpt_rex : 'post context' );
+		} else {
+			$skip( 'ACPT rows: fixture repeater not seeded' );
+		}
+		wp_delete_post( $acpt_rpid, true );
+	}
+	if ( $acpt_rgid ) {
+		( new \ACPT\Core\CQRS\Command\DeleteMetaGroupCommand( $acpt_rgid ) )->execute();
+	}
+} else {
+	$skip( 'ACPT rows: ACPT inactive' );
+}
+
 // @sections
 
 $summary();

@@ -26,9 +26,10 @@ const MINN_ADMIN_ACPT_SIMPLE = array(
 	'Checkbox' => 'multicheck',
 	'Toggle'   => 'true_false',
 	'Color'    => 'color',
-	'Date'     => 'date',
-	'DateTime' => 'datetime',
-	'Time'     => 'time',
+	// Date, DateTime and Time are not here: get_acpt_field() answers them as
+	// a display array ({ format, object, value } with the date already in the
+	// site's display format), never as the stored value, so the panel showed
+	// a stored date as an empty box and the next save wrote that empty back.
 	// A phone number is a line of text to everything except the keyboard
 	// a browser offers for it, so it round-trips like one.
 	'Phone'    => 'text',
@@ -49,6 +50,30 @@ const MINN_ADMIN_ACPT_STRUCTURED = array(
 	'Phone' => 'value',
 	'Url'   => 'url',
 );
+
+/**
+ * Whether ACPT dresses this field's value with before/after text.
+ *
+ * get_acpt_field() returns such a value with the text already joined on
+ * ("$10 flat"), and a plain control cannot tell the stored part from the
+ * dressing, so a save stored the dressing too and it doubled on every round
+ * trip. These fields are counted as locked rather than offered.
+ *
+ * @param object $field ACPT MetaFieldModel.
+ * @return bool
+ */
+function minn_admin_acpt_has_affix( $field ) {
+	if ( ! method_exists( $field, 'getAdvancedOption' ) ) {
+		return false;
+	}
+	foreach ( array( 'before', 'after' ) as $key ) {
+		$affix = $field->getAdvancedOption( $key );
+		if ( is_scalar( $affix ) && '' !== (string) $affix ) {
+			return true;
+		}
+	}
+	return false;
+}
 
 /** Whether the active ACPT build exposes the APIs used by this adapter. */
 function minn_admin_acpt_active() {
@@ -85,16 +110,22 @@ function minn_admin_acpt_map_field( $field ) {
 	if ( $field->getParentId() || $field->getBlockId() || $field->getForgedBy() ) {
 		return null;
 	}
+	// A repeater counts as locked. ACPT's only public row writer
+	// (save_acpt_meta_field_value) rebuilds each row from bare values: it
+	// drops what ACPT's own form keeps beside them (a phone's dialling code, a
+	// date's format, an image's attachment id), never removes a row, unslashes
+	// twice and does not check a select against its choices, and the rows it
+	// reads back are display shapes that cannot be handed to it again.
 	$type = $field->getType();
-	if ( 'Repeater' !== $type && ! isset( MINN_ADMIN_ACPT_SIMPLE[ $type ] ) ) {
+	if ( ! isset( MINN_ADMIN_ACPT_SIMPLE[ $type ] ) ) {
 		return null;
 	}
 	$permissions = $field->userPermissions();
 	if ( empty( $permissions['read'] ) || empty( $permissions['edit'] ) ) {
 		return null;
 	}
-	if ( 'Repeater' === $type ) {
-		return minn_admin_acpt_map_repeater( $field );
+	if ( minn_admin_acpt_has_affix( $field ) ) {
+		return null;
 	}
 	$mapped = array(
 		'name'  => $field->getId(),
@@ -121,12 +152,12 @@ function minn_admin_acpt_map_field( $field ) {
 }
 
 /**
- * Map an ACPT repeater onto the panel's `rows` control.
+ * The sub-fields of an ACPT repeater a row read may show.
  *
- * One level deep, like the ACF repeater: sub-fields from the simple set edit
- * in row cards, anything else counts as locked and is PRESERVED by the write
- * path's row merge. A repeater whose every sub is unmappable is not offered
- * at all, since an empty row card would only be a place to lose data.
+ * Repeaters are not offered for editing (see minn_admin_acpt_map_field()), so
+ * this only bounds what minn_admin_acpt_value_out() projects from a row: a sub
+ * the caller may not read, or one whose read is a display object, never
+ * leaves the server.
  *
  * @param object $field ACPT MetaFieldModel for the repeater.
  * @return array|null { name, label, type: 'rows', subfields, subLocked, subs }
@@ -136,7 +167,11 @@ function minn_admin_acpt_map_repeater( $field ) {
 	$locked = 0;
 	foreach ( $field->getChildren() as $child ) {
 		$child_type = $child->getType();
-		if ( ! isset( MINN_ADMIN_ACPT_SIMPLE[ $child_type ] ) || 'Repeater' === $child_type ) {
+		// In a row, Phone and Url come back as their stored objects
+		// ({ dial, value }, { after, before, url, label }) with nothing to
+		// unwrap them, and a row card would show the object as text.
+		if ( ! isset( MINN_ADMIN_ACPT_SIMPLE[ $child_type ] ) || 'Repeater' === $child_type
+			|| isset( MINN_ADMIN_ACPT_STRUCTURED[ $child_type ] ) || minn_admin_acpt_has_affix( $child ) ) {
 			++$locked;
 			continue;
 		}
@@ -268,9 +303,9 @@ function minn_admin_acpt_value_out( $field, $value ) {
 	}
 	if ( 'Repeater' === $type ) {
 		// ACPT hands back rows already in row order, keyed by sub name. Each
-		// row is projected onto the subs the panel maps: a sub the caller may
-		// not read (ACPT's per-field permissions) or Minn cannot edit never
-		// leaves the server, and the write path's __idx merge keeps it stored.
+		// row is projected onto the subs a row read may show: a sub the caller
+		// may not read (ACPT's per-field permissions) never leaves the server.
+		// Repeaters are never written from Minn; this is a read only.
 		$map   = minn_admin_acpt_map_repeater( $field );
 		$names = $map ? array_flip( wp_list_pluck( $map['subs'], 'name' ) ) : array();
 		$rows  = array();
@@ -316,17 +351,39 @@ function minn_admin_acpt_read_values( $post_id ) {
 }
 
 /**
- * The rows control's [{ __idx, values }] → the row list ACPT stores.
+ * Whether a submitted value is the one the form was served for this field.
  *
- * `__idx` names the row a card came from, so a sub-field this panel does not
- * offer keeps whatever it already held: an edit overlays only the subs it
- * actually shows. A brand new row starts empty and takes only what was typed.
+ * The editor panel sends back every field it holds whenever any one of them
+ * changes, and what it was served is ACPT's formatted read (a before/after
+ * text joined on, shortcodes run), not the stored value. Writing that echo
+ * back stored the formatting. An untouched field is left alone instead.
+ * Compared through JSON so the shapes a request decodes to (arrays for
+ * objects, a number where a string was served) line up with the read.
  *
- * @param object $field ACPT MetaFieldModel for the repeater.
- * @param mixed  $value Submitted rows.
- * @param array  $args  post_id / box_name / field_name for the read-back.
- * @return array|null Rows for ACPT, or null when the input is unusable.
+ * @param mixed $served What the read hands the form.
+ * @param mixed $sent   What came back.
+ * @return bool
  */
+function minn_admin_acpt_same( $served, $sent ) {
+	$norm = function ( $v ) use ( &$norm ) {
+		if ( is_array( $v ) ) {
+			$out = array();
+			foreach ( $v as $k => $item ) {
+				$out[ $k ] = $norm( $item );
+			}
+			if ( array_keys( $out ) !== array_keys( array_values( $out ) ) ) {
+				ksort( $out );
+			}
+			return $out;
+		}
+		if ( null === $v || false === $v ) {
+			return '';
+		}
+		return true === $v ? '1' : (string) $v;
+	};
+	return $norm( json_decode( wp_json_encode( $served ), true ) ) === $norm( json_decode( wp_json_encode( $sent ), true ) );
+}
+
 /**
  * An incoming Image value, as an attachment id this caller may publish.
  *
@@ -352,90 +409,87 @@ function minn_admin_acpt_image_in( $value ) {
 	return $att;
 }
 
-function minn_admin_acpt_rows_in( $field, $value, $args ) {
-	if ( ! is_array( $value ) ) {
-		return null;
-	}
-	$mapped = minn_admin_acpt_map_repeater( $field );
-	if ( ! $mapped ) {
-		return null;
-	}
-	$names = wp_list_pluck( $mapped['subs'], 'name' );
-	// A row is not a place where a value stops needing the rules its type
-	// answers to at the top level. Writing every sub as a bare scalar skipped
-	// the Image branch in minn_admin_acpt_write_one() entirely, so a repeater
-	// row could carry an attachment this person may neither attach nor read.
-	// Keep each sub's mapped type to hand so the checks travel with it.
-	$sub_types = array();
-	foreach ( $mapped['subs'] as $sub ) {
-		$sub_types[ $sub['name'] ] = $sub['type'];
-	}
-	$orig  = get_acpt_field( array_merge( $args, array( 'format' => 'only_value', 'return' => 'raw' ) ) );
-	$orig  = is_array( $orig ) ? array_values( $orig ) : array();
-	$rows  = array();
-	foreach ( $value as $row ) {
-		$row  = (array) $row;
-		$vals = isset( $row['values'] ) ? (array) $row['values'] : array();
-		$base = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] )
-			? $orig[ (int) $row['__idx'] ]
-			: array();
-		foreach ( $names as $name ) {
-			if ( ! array_key_exists( $name, $vals ) ) {
-				continue;
-			}
-			if ( isset( $sub_types[ $name ] ) && 'image' === $sub_types[ $name ] ) {
-				$att = minn_admin_acpt_image_in( $vals[ $name ] );
-				// A refused id leaves whatever the row already held alone,
-				// rather than blanking a picture that is fine.
-				if ( $att ) {
-					$base[ $name ] = $att;
-				}
-				continue;
-			}
-			if ( isset( $sub_types[ $name ] ) && 'url' === $sub_types[ $name ] ) {
-				// Same schemes as a top-level link, and the same rule for a
-				// refusal: keep the address the row already held.
-				$link = minn_admin_url_clean( $vals[ $name ] );
-				if ( null !== $link ) {
-					$base[ $name ] = $link;
-				}
-				continue;
-			}
-			if ( isset( $sub_types[ $name ] ) && 'multicheck' === $sub_types[ $name ] ) {
-				// A Checkbox sub holds a list. The scalar coercion below
-				// turned it into '' and every panel save cleared the
-				// selections of every row; anything but a list keeps what the
-				// row held.
-				if ( is_array( $vals[ $name ] ) ) {
-					$base[ $name ] = array_values( array_map( 'sanitize_text_field', array_filter( $vals[ $name ], 'is_scalar' ) ) );
-				}
-				continue;
-			}
-			$base[ $name ] = is_scalar( $vals[ $name ] ) ? $vals[ $name ] : '';
-		}
-		$rows[] = $base;
-	}
-	return $rows;
-}
-
-/** Write allowed simple fields through ACPT's public value helpers. */
+/**
+ * Write allowed simple fields through ACPT's public value helpers.
+ *
+ * @return WP_Error|null The first field that could not be written as asked.
+ */
 function minn_admin_acpt_write_values( $post_id, $values ) {
 	$post = get_post( $post_id );
 	if ( ! $post || ! is_array( $values ) ) {
-		return;
+		return null;
 	}
 	$schema = minn_admin_acpt_fields_payload( $post_id, $post->post_type, true );
+	$error  = null;
 	foreach ( $values as $id => $value ) {
 		if ( ! isset( $schema['lookup'][ $id ] ) ) {
 			continue;
 		}
-		$field = $schema['lookup'][ $id ];
-		minn_admin_acpt_write_one( $field, $value, array(
+		$field  = $schema['lookup'][ $id ];
+		$result = minn_admin_acpt_write_one( $field, $value, array(
 			'post_id'    => $post_id,
 			'box_name'   => $field->getBox()->getName(),
 			'field_name' => $field->getName(),
 		) );
+		if ( is_wp_error( $result ) && ! $error ) {
+			$error = $result;
+		}
 	}
+	return $error;
+}
+
+/**
+ * Empty one field under the keys ACPT's own form writes for it.
+ *
+ * ACPT's form saves an emptied field as '' under $field->getDbName(), with the
+ * model labelled for the post type or option page being saved
+ * (SaveCustomPostTypeMetaCommand / SaveOptionPageMetaCommand, then
+ * AbstractSaveMetaCommand::saveField() and Meta::save()), and an image's
+ * attachment id as '' under the same key plus "_attachment_id". Its own edit
+ * screen reads that id before the address, so leaving it showed a removed
+ * picture as still there.
+ *
+ * @param object $field ACPT MetaFieldModel.
+ * @param array  $args  post_id or option_page, plus box_name / field_name.
+ * @return bool Whether the field was emptied.
+ */
+function minn_admin_acpt_clear( $field, $args ) {
+	foreach ( array( 'setBelongsToLabel', 'setFindLabel', 'getDbName' ) as $method ) {
+		if ( ! method_exists( $field, $method ) ) {
+			return false;
+		}
+	}
+	try {
+		if ( isset( $args['post_id'] ) ) {
+			$field->setBelongsToLabel( \ACPT\Constants\MetaTypes::CUSTOM_POST_TYPE );
+			$field->setFindLabel( (string) get_post_type( (int) $args['post_id'] ) );
+		} elseif ( isset( $args['option_page'] ) ) {
+			$field->setBelongsToLabel( \ACPT\Constants\MetaTypes::OPTION_PAGE );
+			$field->setFindLabel( (string) $args['option_page'] );
+		} else {
+			return false;
+		}
+		$key = (string) $field->getDbName();
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+	if ( '' === $key ) {
+		return false;
+	}
+	$keys = array( $key );
+	if ( 'Image' === $field->getType() ) {
+		$keys[] = $key . '_attachment_id';
+	}
+	foreach ( $keys as $i => $k ) {
+		if ( isset( $args['post_id'] ) ) {
+			if ( 0 === $i || metadata_exists( 'post', (int) $args['post_id'], $k ) ) {
+				update_post_meta( (int) $args['post_id'], $k, '' );
+			}
+		} elseif ( 0 === $i || false !== get_option( $k ) ) {
+			update_option( $k, '' );
+		}
+	}
+	return true;
 }
 
 /**
@@ -448,12 +502,32 @@ function minn_admin_acpt_write_values( $post_id, $values ) {
  * @param object $field ACPT MetaFieldModel.
  * @param mixed  $value Submitted value.
  * @param array  $args  Context plus box_name / field_name.
+ * @return WP_Error|null An error only when an emptied field could not be stored empty.
  */
 function minn_admin_acpt_write_one( $field, $value, $args ) {
 	$type = $field->getType();
-	if ( ( '' === $value || null === $value ) && ! in_array( $type, array( 'Checkbox', 'Repeater' ), true ) ) {
-		delete_acpt_meta_field_value( $args );
-		return;
+	if ( 'Repeater' === $type ) {
+		return null; // never written from Minn; see minn_admin_acpt_map_field()
+	}
+	$read = get_acpt_field( array_merge( $args, array( 'format' => 'only_value', 'return' => 'raw' ) ) );
+	if ( minn_admin_acpt_same( minn_admin_acpt_value_out( $field, $read ), $value ) ) {
+		return null;
+	}
+	if ( ( '' === $value || null === $value ) && 'Checkbox' !== $type ) {
+		// Stored as '', the way ACPT's own form stores an emptied field.
+		// delete_acpt_meta_field_value() is not a clear: it deletes every key
+		// matching LIKE '<box>_<field>%' ('_' a wildcard too), so emptying
+		// `price` also took `price_sale`. ACPT's setter refuses '' for some
+		// types (a select, a radio, an image, a number with a minimum).
+		$args['value'] = '';
+		if ( save_acpt_meta_field_value( $args ) || minn_admin_acpt_clear( $field, $args ) ) {
+			return null;
+		}
+		return new WP_Error( 'minn_acpt_clear', sprintf(
+			/* translators: %s: field label. */
+			__( '“%s” could not be cleared here. Clear it in ACPT’s own screen.', 'minn-admin' ),
+			$field->getLabelOrName()
+		), array( 'status' => 400 ) );
 	}
 	if ( 'Toggle' === $type ) {
 		$value = ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
@@ -462,10 +536,10 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 	} elseif ( 'Image' === $type ) {
 		// An id that is not an attachment, or one this person may not attach,
 		// is refused rather than written, so a stray value cannot blank a
-		// picture that is fine. Repeater rows answer to the same helper.
+		// picture that is fine.
 		$att = minn_admin_acpt_image_in( $value );
 		if ( ! $att ) {
-			return;
+			return null;
 		}
 		$value = $att;
 	} elseif ( 'Url' === $type ) {
@@ -473,8 +547,7 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 		// address, sets the label to match it. A label someone wrote is not
 		// Minn's to overwrite, so it is passed back; one that merely mirrored
 		// the old address follows the new one, which is what ACPT would do.
-		$current   = get_acpt_field( array_merge( $args, array( 'format' => 'only_value', 'return' => 'raw' ) ) );
-		$current   = is_array( $current ) ? $current : array();
+		$current   = is_array( $read ) ? $read : array();
 		$old_url   = isset( $current['url'] ) ? (string) $current['url'] : '';
 		$old_label = isset( $current['label'] ) ? (string) $current['label'] : '';
 		// Held to the same schemes as every other link the app writes. A
@@ -483,20 +556,16 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 		// working link because someone pasted something odd over it.
 		$next = minn_admin_url_clean( $value );
 		if ( null === $next ) {
-			return;
+			return null;
 		}
 		$value = array(
 			'url'   => $next,
 			'label' => ( '' !== $old_label && $old_label !== $old_url ) ? $old_label : $next,
 		);
-	} elseif ( 'Repeater' === $type ) {
-		$value = minn_admin_acpt_rows_in( $field, $value, $args );
-		if ( null === $value ) {
-			return; // malformed input never clobbers stored rows
-		}
 	}
 	$args['value'] = $value;
 	save_acpt_meta_field_value( $args );
+	return null;
 }
 
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
@@ -574,7 +643,7 @@ add_action( 'rest_api_init', function () {
 					$value = (array) $value;
 				}
 				if ( is_array( $value ) ) {
-					minn_admin_acpt_write_values( $post->ID, $value );
+					return minn_admin_acpt_write_values( $post->ID, $value );
 				}
 			},
 			'schema'          => array(
@@ -883,11 +952,16 @@ function minn_admin_acpt_option_tab_shape( $slug, $tab_id ) {
 	);
 }
 
-/** Write edited option page values through ACPT's own setter. */
+/**
+ * Write edited option page values through ACPT's own setter.
+ *
+ * @return WP_Error|null The first field that could not be written as asked.
+ */
 function minn_admin_acpt_option_save( $slug, $values ) {
 	if ( ! is_array( $values ) ) {
-		return;
+		return null;
 	}
+	$error  = null;
 	$lookup = array();
 	foreach ( minn_admin_acpt_option_tabs( $slug ) as $t ) {
 		$lookup += $t['lookup'];
@@ -902,8 +976,12 @@ function minn_admin_acpt_option_save( $slug, $values ) {
 			'box_name'    => $field->getBox()->getName(),
 			'field_name'  => $field->getName(),
 		);
-		minn_admin_acpt_write_one( $field, $value, $args );
+		$result = minn_admin_acpt_write_one( $field, $value, $args );
+		if ( is_wp_error( $result ) && ! $error ) {
+			$error = $result;
+		}
 	}
+	return $error;
 }
 
 // Option pages gather under the shared Site options item rather than each
@@ -972,7 +1050,10 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( $req ) use ( $resolve ) {
 				$slug = $resolve( $req );
 				$body = $req->get_json_params();
-				minn_admin_acpt_option_save( $slug, isset( $body['values'] ) ? $body['values'] : array() );
+				$saved = minn_admin_acpt_option_save( $slug, isset( $body['values'] ) ? $body['values'] : array() );
+				if ( is_wp_error( $saved ) ) {
+					return $saved;
+				}
 				return rest_ensure_response( minn_admin_acpt_option_tab_shape( $slug, (string) $req['tab'] ) );
 			},
 		),
