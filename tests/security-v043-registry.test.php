@@ -1613,6 +1613,164 @@ if ( function_exists( 'Ninja_Forms' ) && function_exists( 'minn_admin_ninja_form
 	$skip( 'Ninja Forms inactive' );
 }
 
+// --- #9 An entry reply below manage_options goes From the sender ------------
+// Gravity Forms lets its entry-notes cap email a note From the sender's own
+// address (entry_detail.php). Minn's reply used the site's admin address for
+// everyone, so that delegated cap became a From-the-domain mail primitive.
+if ( class_exists( 'GFAPI' ) && method_exists( 'Minn_Admin_REST', 'entry_reply' ) ) {
+	$fsl_gf_form  = 0;
+	$fsl_gf_email = 0;
+	foreach ( (array) GFAPI::get_forms() as $fsl_gf_f ) {
+		foreach ( $fsl_gf_f['fields'] as $fsl_gf_fl ) {
+			if ( 'email' === $fsl_gf_fl->type && empty( $fsl_gf_fl->emailConfirmEnabled ) ) {
+				$fsl_gf_form  = (int) $fsl_gf_f['id'];
+				$fsl_gf_email = (string) $fsl_gf_fl->id;
+				break 2;
+			}
+		}
+	}
+	if ( $fsl_gf_form ) {
+		global $wp_filter;
+		$fsl_gf_to    = 'minn-v043-reply@example.com';
+		$fsl_gf_entry = GFAPI::add_entry( array( 'form_id' => $fsl_gf_form, $fsl_gf_email => $fsl_gf_to ) );
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		if ( username_exists( 'minn_v043_notes' ) ) {
+			wp_delete_user( (int) username_exists( 'minn_v043_notes' ) );
+		}
+		$fsl_gf_user  = wp_insert_user( array(
+			'user_login'   => 'minn_v043_notes',
+			'user_pass'    => wp_generate_password( 24 ),
+			'user_email'   => 'minn-v043-notes@example.com',
+			'display_name' => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+			'role'         => 'editor',
+		) );
+		$fsl_gf_u = new WP_User( $fsl_gf_user );
+		$fsl_gf_u->add_cap( 'gravityforms_view_entries' );
+		$fsl_gf_u->add_cap( 'gravityforms_edit_entry_notes' );
+		// Capture what reaches wp_mail() without sending it or touching a mail
+		// log: the loggers ride the wp_mail filter, so both hooks are parked.
+		$fsl_gf_parked = array();
+		foreach ( array( 'wp_mail', 'pre_wp_mail' ) as $fsl_gf_hook ) {
+			$fsl_gf_parked[ $fsl_gf_hook ] = isset( $wp_filter[ $fsl_gf_hook ] ) ? $wp_filter[ $fsl_gf_hook ] : null;
+			unset( $wp_filter[ $fsl_gf_hook ] );
+		}
+		$fsl_gf_mail = array();
+		add_filter( 'pre_wp_mail', function ( $ret, $atts ) use ( &$fsl_gf_mail ) {
+			$fsl_gf_mail[] = $atts;
+			return true;
+		}, 10, 2 );
+		$fsl_gf_from = function ( $atts ) {
+			foreach ( (array) ( $atts['headers'] ?? array() ) as $h ) {
+				if ( 0 === stripos( (string) $h, 'From:' ) ) {
+					return (string) $h;
+				}
+			}
+			return '';
+		};
+		$fsl_gf_body  = array( 'surface' => 'gravity-forms', 'id' => (string) $fsl_gf_entry, 'to' => $fsl_gf_to, 'subject' => 'Re: your message', 'message' => 'Thanks, we got it.' );
+		$fsl_gf_admin = (string) get_option( 'admin_email' );
+
+		wp_set_current_user( $fsl_gf_user );
+		list( $fsl_gf_st ) = $call( 'POST', '/minn-admin/v1/entries/reply', $fsl_gf_body );
+		$fsl_gf_sent       = end( $fsl_gf_mail );
+		$fsl_gf_hdrs       = $fsl_gf_sent ? implode( "\n", (array) $fsl_gf_sent['headers'] ) : '';
+		$check( 'Entry reply: a delegated notes cap can still reply (200)', 200 === $fsl_gf_st && $fsl_gf_sent, 'status ' . $fsl_gf_st );
+		$check( 'Entry reply: below manage_options it goes From the sender', $fsl_gf_sent && false !== stripos( $fsl_gf_from( $fsl_gf_sent ), 'minn-v043-notes@example.com' ), $fsl_gf_from( $fsl_gf_sent ?: array() ) );
+		$check( 'Entry reply: below manage_options the site address appears in no header', $fsl_gf_sent && false === stripos( $fsl_gf_hdrs, $fsl_gf_admin ), $fsl_gf_hdrs );
+		$check( 'Entry reply: the sender cannot pose as the site by display name', $fsl_gf_sent && false === strpos( $fsl_gf_hdrs, wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) . ' <' ), $fsl_gf_hdrs );
+		// Hostile: no usable address of their own must not fall back to the site's.
+		global $wpdb;
+		$wpdb->update( $wpdb->users, array( 'user_email' => '' ), array( 'ID' => $fsl_gf_user ) );
+		clean_user_cache( $fsl_gf_user );
+		wp_set_current_user( 0 );
+		wp_set_current_user( $fsl_gf_user );
+		$fsl_gf_count       = count( $fsl_gf_mail );
+		list( $fsl_gf_st2 ) = $call( 'POST', '/minn-admin/v1/entries/reply', $fsl_gf_body );
+		$check( 'Entry reply: a delegated sender with no email address sends nothing', $fsl_gf_st2 >= 400 && count( $fsl_gf_mail ) === $fsl_gf_count, 'status ' . $fsl_gf_st2 . ', sent ' . ( count( $fsl_gf_mail ) - $fsl_gf_count ) );
+
+		// Control: an administrator's reply still goes From the site.
+		wp_set_current_user( $admin );
+		list( $fsl_gf_st3 ) = $call( 'POST', '/minn-admin/v1/entries/reply', $fsl_gf_body );
+		$fsl_gf_sent        = end( $fsl_gf_mail );
+		$check( 'Entry reply: an administrator still replies From the site address (control)', 200 === $fsl_gf_st3 && false !== stripos( $fsl_gf_from( $fsl_gf_sent ), '<' . $fsl_gf_admin . '>' ), $fsl_gf_from( $fsl_gf_sent ?: array() ) );
+
+		remove_all_filters( 'pre_wp_mail' );
+		foreach ( $fsl_gf_parked as $fsl_gf_hook => $fsl_gf_obj ) {
+			if ( null !== $fsl_gf_obj ) {
+				$wp_filter[ $fsl_gf_hook ] = $fsl_gf_obj;
+			}
+		}
+		GFAPI::delete_entry( $fsl_gf_entry );
+		wp_delete_user( $fsl_gf_user );
+	} else {
+		$skip( 'Gravity Forms: no form with an email field' );
+	}
+} else {
+	$skip( 'Gravity Forms inactive' );
+}
+
+// --- #9 sibling: a delegated user manager's email to a user goes From them --
+// The Users "Email" action used the same site-address helper. A role given
+// list_users and edit_users without manage_options (a user-manager role)
+// could make the site mail any member as its admin address.
+if ( method_exists( 'Minn_Admin_REST', 'user_send_email' ) ) {
+	global $wp_filter;
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	foreach ( array( 'minn_v043_usermgr', 'minn_v043_member' ) as $usm_login ) {
+		if ( username_exists( $usm_login ) ) {
+			wp_delete_user( (int) username_exists( $usm_login ) );
+		}
+	}
+	$usm_mgr    = wp_insert_user( array( 'user_login' => 'minn_v043_usermgr', 'user_pass' => wp_generate_password( 24 ), 'user_email' => 'minn-v043-usermgr@example.com', 'role' => 'editor' ) );
+	$usm_member = wp_insert_user( array( 'user_login' => 'minn_v043_member', 'user_pass' => wp_generate_password( 24 ), 'user_email' => 'minn-v043-member@example.com', 'role' => 'subscriber' ) );
+	$usm_u      = new WP_User( $usm_mgr );
+	$usm_u->add_cap( 'list_users' );
+	$usm_u->add_cap( 'edit_users' );
+	// Capture what reaches wp_mail() without sending it or touching a mail log.
+	$usm_parked = array();
+	foreach ( array( 'wp_mail', 'pre_wp_mail' ) as $usm_hook ) {
+		$usm_parked[ $usm_hook ] = isset( $wp_filter[ $usm_hook ] ) ? $wp_filter[ $usm_hook ] : null;
+		unset( $wp_filter[ $usm_hook ] );
+	}
+	$usm_mail = array();
+	add_filter( 'pre_wp_mail', function ( $ret, $atts ) use ( &$usm_mail ) {
+		$usm_mail[] = $atts;
+		return true;
+	}, 10, 2 );
+	$usm_from  = function ( $atts ) {
+		foreach ( (array) ( $atts['headers'] ?? array() ) as $h ) {
+			if ( 0 === stripos( (string) $h, 'From:' ) ) {
+				return (string) $h;
+			}
+		}
+		return '';
+	};
+	$usm_body  = array( 'subject' => 'Account notice', 'message' => 'Please review your profile.' );
+	$usm_admin = (string) get_option( 'admin_email' );
+
+	wp_set_current_user( $usm_mgr );
+	list( $usm_st ) = $call( 'POST', "/minn-admin/v1/users/{$usm_member}/email", $usm_body );
+	$usm_sent       = end( $usm_mail );
+	$usm_hdrs       = $usm_sent ? implode( "\n", (array) $usm_sent['headers'] ) : '';
+	$check( 'User email: a delegated user manager can still email a member (200)', 200 === $usm_st && $usm_sent, 'status ' . $usm_st );
+	$check( 'User email: below manage_options it goes From the sender', $usm_sent && false !== stripos( $usm_from( $usm_sent ), 'minn-v043-usermgr@example.com' ), $usm_from( $usm_sent ?: array() ) );
+	$check( 'User email: below manage_options the site address appears in no header', $usm_sent && false === stripos( $usm_hdrs, $usm_admin ), $usm_hdrs );
+	// Control: an administrator still emails as the site.
+	wp_set_current_user( $admin );
+	list( $usm_st2 ) = $call( 'POST', "/minn-admin/v1/users/{$usm_member}/email", $usm_body );
+	$usm_sent        = end( $usm_mail );
+	$check( 'User email: an administrator still sends From the site address (control)', 200 === $usm_st2 && false !== stripos( $usm_from( $usm_sent ), '<' . $usm_admin . '>' ), $usm_from( $usm_sent ?: array() ) );
+
+	remove_all_filters( 'pre_wp_mail' );
+	foreach ( $usm_parked as $usm_hook => $usm_obj ) {
+		if ( null !== $usm_obj ) {
+			$wp_filter[ $usm_hook ] = $usm_obj;
+		}
+	}
+	wp_delete_user( $usm_mgr );
+	wp_delete_user( $usm_member );
+}
+
 // @sections
 
 $summary();

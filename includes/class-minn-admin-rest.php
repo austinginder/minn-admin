@@ -6957,7 +6957,8 @@ Please click the following link to confirm the invite:
 	}
 
 	/**
-	 * Send a styled HTML email to a user (from the current admin / site mail).
+	 * Send a styled HTML email to a user: as the site for an administrator,
+	 * From the sender's own address otherwise (delegated_sender()).
 	 */
 	public static function user_send_email( WP_REST_Request $request ) {
 		$user = get_userdata( self::target_user_id( $request ) );
@@ -6973,9 +6974,14 @@ Please click the following link to confirm the invite:
 			return new WP_Error( 'invalid_email', __( 'This user has no valid email address.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
+		$sender = self::delegated_sender();
+		if ( is_wp_error( $sender ) ) {
+			return $sender;
+		}
+
 		$who  = $user->display_name ? $user->display_name : $user->user_login;
 		$html = self::minn_email_html( $subject, $message, $who );
-		$sent = self::minn_send_html_mail( $user->user_email, $subject, $html );
+		$sent = self::minn_send_html_mail( $user->user_email, $subject, $html, $sender );
 		if ( is_wp_error( $sent ) ) {
 			return $sent;
 		}
@@ -7099,10 +7105,14 @@ Please click the following link to confirm the invite:
 		if ( '' === $subject || '' === $message ) {
 			return new WP_Error( 'invalid', __( 'Subject and message are required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		$sender = self::delegated_sender();
+		if ( is_wp_error( $sender ) ) {
+			return $sender;
+		}
 		// "Hi Jordan," reads better than the full name; no name, "Hi there,".
 		$first = $name ? strtok( wp_strip_all_tags( $name ), " \t" ) : '';
 		$who   = $first ? $first : __( 'there', 'minn-admin' );
-		$sent  = self::minn_send_html_mail( $to, $subject, self::minn_email_html( $subject, $message, $who ) );
+		$sent  = self::minn_send_html_mail( $to, $subject, self::minn_email_html( $subject, $message, $who ), $sender );
 		if ( is_wp_error( $sent ) ) {
 			return $sent;
 		}
@@ -7578,22 +7588,48 @@ Please click the following link to confirm the invite:
 	}
 
 	/**
-	 * Shared wp_mail HTML send with site From + admin Reply-To.
+	 * Who a free-text email from Minn goes out as. Administrators send as the
+	 * site; anyone else sends From their own address, as Gravity Forms' own
+	 * "email this note" does: a delegated cap (entry notes, a user manager's
+	 * edit_users) lets someone write to a person, not mail as the site.
+	 *
+	 * @return string|WP_Error '' for the site's address, the caller's address, or an error when they have none.
+	 */
+	private static function delegated_sender() {
+		if ( current_user_can( 'manage_options' ) ) {
+			return '';
+		}
+		$me = wp_get_current_user();
+		if ( ! $me || ! is_email( $me->user_email ) ) {
+			return new WP_Error( 'invalid_email', __( 'Your account needs an email address to send from.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		return (string) $me->user_email;
+	}
+
+	/**
+	 * Shared wp_mail HTML send with site From + admin Reply-To, or From a
+	 * given sender's own address.
 	 *
 	 * @param string $to      Recipient address.
 	 * @param string $subject Subject.
 	 * @param string $html    HTML body.
+	 * @param string $sender  Optional. Send From this address instead of the site's.
 	 * @return true|WP_Error
 	 */
-	private static function minn_send_html_mail( $to, $subject, $html ) {
-		$from    = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
-		$headers = array(
-			'Content-Type: text/html; charset=UTF-8',
-			'From: ' . $from . ' <' . get_option( 'admin_email' ) . '>',
-		);
-		$me = wp_get_current_user();
-		if ( $me && $me->user_email && is_email( $me->user_email ) ) {
-			$headers[] = 'Reply-To: ' . $me->display_name . ' <' . $me->user_email . '>';
+	private static function minn_send_html_mail( $to, $subject, $html, $sender = '' ) {
+		$headers = array( 'Content-Type: text/html; charset=UTF-8' );
+		if ( '' !== $sender ) {
+			// Named by the address itself, as Gravity Forms names it: a display
+			// name is the account's own to set and could read as the site.
+			// Replies reach the sender through From, so no Reply-To.
+			$headers[] = 'From: "' . $sender . '" <' . $sender . '>';
+		} else {
+			$from      = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
+			$headers[] = 'From: ' . $from . ' <' . get_option( 'admin_email' ) . '>';
+			$me        = wp_get_current_user();
+			if ( $me && $me->user_email && is_email( $me->user_email ) ) {
+				$headers[] = 'Reply-To: ' . $me->display_name . ' <' . $me->user_email . '>';
+			}
 		}
 		$sent = wp_mail( $to, $subject, $html, $headers );
 		if ( ! $sent ) {
