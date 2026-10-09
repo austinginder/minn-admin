@@ -252,7 +252,8 @@ function minn_admin_ccj_item( $post ) {
  * address the snippet had already published. Nothing else deletes them: the
  * tree rebuild only ever writes. All three extensions go, not just the
  * current one, because changing a snippet's language writes it under a new
- * name and leaves the old file where it was.
+ * name and leaves the old file where it was. The permalink copy goes with
+ * them (minn_admin_ccj_slug_paths()).
  *
  * @param int $id Snippet post ID.
  * @return void
@@ -261,8 +262,11 @@ function minn_admin_ccj_drop_files( $id ) {
 	if ( ! defined( 'CCJ_UPLOAD_DIR' ) ) {
 		return;
 	}
+	$paths = minn_admin_ccj_slug_paths( $id );
 	foreach ( array( 'css', 'js', 'html' ) as $language ) {
-		$path = CCJ_UPLOAD_DIR . '/' . (int) $id . '.' . $language;
+		$paths[] = CCJ_UPLOAD_DIR . '/' . (int) $id . '.' . $language;
+	}
+	foreach ( $paths as $path ) {
 		if ( is_file( $path ) ) {
 			wp_delete_file( $path );
 		}
@@ -270,11 +274,68 @@ function minn_admin_ccj_drop_files( $id ) {
 }
 
 /**
+ * Where a snippet's permalink copies would be, one path per language.
+ *
+ * CCJ's save writes the file twice: <id>.<language>, which the page loads,
+ * and <slug>.<language> under the snippet's Permalink slug (`_slug` meta),
+ * which nothing loads but anyone can fetch, and its own delete removes both.
+ * So the copy must go wherever the snippet's own file goes. The slug is post
+ * meta, so the name is checked, not trusted: a separator or a leading dot is
+ * refused (a sanitize_file_name filter can hand anything back), an all-digit
+ * slug that is a snippet's id names that snippet's own file, and block_js /
+ * block_css are the block-editor bundles holding every block-side snippet,
+ * in any case, because on a case-insensitive disk BLOCK_JS.js is the bundle.
+ *
+ * @param int $id Snippet post ID.
+ * @return string[] Paths keyed by language; none without a usable slug.
+ */
+function minn_admin_ccj_slug_paths( $id ) {
+	$raw = defined( 'CCJ_UPLOAD_DIR' ) ? get_post_meta( (int) $id, '_slug', true ) : '';
+	if ( ! is_string( $raw ) || '' === $raw ) {
+		return array();
+	}
+	$slug = (string) sanitize_file_name( $raw );
+	if ( '' === $slug || '.' === $slug[0] || strlen( $slug ) !== strcspn( $slug, "/\\:\0" ) ) {
+		return array();
+	}
+	if ( ctype_digit( $slug ) && (string) (int) $slug === $slug && (int) $slug > 0 && 'custom-css-js' === get_post_type( (int) $slug ) ) {
+		return array();
+	}
+	$paths = array();
+	foreach ( array( 'css', 'js', 'html' ) as $language ) {
+		$name = $slug . '.' . $language;
+		if ( ! in_array( strtolower( $name ), array( 'block_js.js', 'block_css.css' ), true ) ) {
+			$paths[ $language ] = CCJ_UPLOAD_DIR . '/' . $name;
+		}
+	}
+	return $paths;
+}
+
+/**
+ * What parked bytes were written for: the code, and the language and linking
+ * that chose the wrapper CCJ put round it. Nothing else changes the file. The
+ * whole options array is too wide: a Minn save rewrites it in its own types
+ * (CCJ keeps priority as the string from $_POST, Minn stores an int), so a
+ * rename or a priority change while the snippet was off threw CCJ's bytes
+ * away and the switch-on rebuilt the file from a kses-encoded post_content.
+ *
+ * @param WP_Post $post Snippet.
+ * @param array   $opts Its options (minn_admin_ccj_get_options()).
+ * @return string
+ */
+function minn_admin_ccj_parked_key( $post, $opts ) {
+	$linking = isset( $opts['linking'] ) && is_scalar( $opts['linking'] ) ? (string) $opts['linking'] : 'internal';
+	return md5( (string) $post->post_content . "\0" . (string) $opts['language'] . "\0" . $linking );
+}
+
+/**
  * Switch a snippet's file off. The file goes (a cached page could otherwise
  * keep loading it), but it holds the bytes CCJ wrote, which post_content may
  * only hold kses-encoded (`a > b` stored as `a &gt; b` for a designer). They
- * are kept in meta, tagged with the code and options they were written for,
- * so switching the snippet back on can put them back.
+ * are kept in meta, tagged with what they were written for
+ * (minn_admin_ccj_parked_key()), so switching the snippet back on can put
+ * them back. The permalink copy goes too; CCJ writes it from the same buffer,
+ * so only the name it had is kept.
  *
  * @param int $id Snippet post ID.
  * @return void
@@ -284,10 +345,13 @@ function minn_admin_ccj_park_file( $id ) {
 	$opts = minn_admin_ccj_get_options( $id );
 	$path = defined( 'CCJ_UPLOAD_DIR' ) ? CCJ_UPLOAD_DIR . '/' . (int) $id . '.' . $opts['language'] : '';
 	if ( $post && $path && is_file( $path ) ) {
+		$slug = minn_admin_ccj_slug_paths( $id );
+		$slug = isset( $slug[ $opts['language'] ] ) && is_file( $slug[ $opts['language'] ] ) ? basename( $slug[ $opts['language'] ] ) : '';
 		// Slashed: update_post_meta unslashes, and JS is full of backslashes.
 		update_post_meta( $id, '_minn_ccj_parked', wp_slash( array(
 			'bytes' => (string) file_get_contents( $path ),
-			'for'   => md5( $post->post_content . "\0" . wp_json_encode( $opts ) ),
+			'for'   => minn_admin_ccj_parked_key( $post, $opts ),
+			'slug'  => $slug,
 		) ) );
 	}
 	minn_admin_ccj_drop_files( $id );
@@ -296,9 +360,9 @@ function minn_admin_ccj_park_file( $id ) {
 /**
  * Switch a snippet's file back on: a file already there is CCJ's (its own
  * save writes one whatever the snippet's state, and its toggle never removes
- * it), then the bytes parked when Minn switched it off, while the code and
- * options are the ones they were written for; only then a rebuild from
- * post_content.
+ * it), then the bytes parked when Minn switched it off, while the code,
+ * language and linking are the ones they were written for; only then a
+ * rebuild from post_content.
  *
  * @param int $id Snippet post ID.
  * @return void
@@ -315,8 +379,22 @@ function minn_admin_ccj_restore_file( $id ) {
 	if ( ! $post || 'html' === $opts['language'] || is_file( $path ) ) {
 		return;
 	}
-	if ( is_array( $parked ) && isset( $parked['bytes'], $parked['for'] ) && hash_equals( (string) $parked['for'], md5( $post->post_content . "\0" . wp_json_encode( $opts ) ) ) ) {
+	$for  = is_array( $parked ) && isset( $parked['bytes'], $parked['for'] ) && is_string( $parked['for'] ) ? $parked['for'] : '';
+	$fits = '' !== $for && (
+		hash_equals( $for, minn_admin_ccj_parked_key( $post, $opts ) )
+		// Parked under the older key (the whole options array): still exact
+		// while nothing at all has changed.
+		|| hash_equals( $for, md5( $post->post_content . "\0" . wp_json_encode( $opts ) ) )
+	);
+	if ( $fits ) {
 		@file_put_contents( $path, (string) $parked['bytes'] );
+		// The permalink copy only under the name CCJ itself wrote: a slug
+		// changed since is CCJ's to write on its next save.
+		$slug = minn_admin_ccj_slug_paths( $id );
+		$slug = isset( $slug[ $opts['language'] ] ) ? $slug[ $opts['language'] ] : '';
+		if ( $slug && ! empty( $parked['slug'] ) && basename( $slug ) === (string) $parked['slug'] && ! file_exists( $slug ) && ! is_link( $slug ) ) {
+			@file_put_contents( $slug, (string) $parked['bytes'] );
+		}
 		return;
 	}
 	minn_admin_ccj_write_file( $id );
@@ -330,11 +408,25 @@ function minn_admin_ccj_restore_file( $id ) {
  * filters post_content for authors without unfiltered_html), so they are
  * never regenerated from it.
  *
+ * The permalink copy is removed here, not rewritten: it would be left stale,
+ * these bytes are not the ones CCJ's save would put there, and its name comes
+ * from post meta, so Minn writes under it only to put back bytes CCJ itself
+ * wrote there (restore_file). The permalink answers 404 until the snippet is
+ * next saved in CCJ's own editor, which writes it again.
+ *
  * @param int $id Snippet post ID.
  * @return void
  */
 function minn_admin_ccj_write_file( $id, $code = null ) {
-	if ( ! defined( 'CCJ_UPLOAD_DIR' ) || ! wp_is_writable( CCJ_UPLOAD_DIR ) || ! minn_admin_ccj_is_active( $id ) ) {
+	if ( ! defined( 'CCJ_UPLOAD_DIR' ) ) {
+		return;
+	}
+	foreach ( minn_admin_ccj_slug_paths( $id ) as $slug_path ) {
+		if ( is_file( $slug_path ) ) {
+			wp_delete_file( $slug_path );
+		}
+	}
+	if ( ! wp_is_writable( CCJ_UPLOAD_DIR ) || ! minn_admin_ccj_is_active( $id ) ) {
 		return;
 	}
 	$post = get_post( $id );
