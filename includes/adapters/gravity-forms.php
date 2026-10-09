@@ -830,6 +830,14 @@ add_action( 'rest_api_init', function () {
 			}
 			$body    = $request->get_json_params();
 			$body    = is_array( $body ) ? $body : array();
+			// Their entries screen and ajax move an entry into or out of
+			// Trash only for gravityforms_delete_entries (spam, read and
+			// star are edit-entries work), so neither may ride this route
+			// below that. Checked before any write: a refusal writes nothing.
+			if ( array_key_exists( 'status', $body ) && ( 'trash' === $body['status'] || ( 'trash' === rgar( $entry, 'status' ) && 'trash' !== $body['status'] ) )
+				&& ! GFCommon::current_user_can_any( array( 'gravityforms_delete_entries', 'gform_full_access' ) ) ) {
+				return new WP_Error( 'rest_forbidden', __( 'You are not allowed to move entries to or from the trash.', 'minn-admin' ), array( 'status' => 403 ) );
+			}
 			$written = 0;
 			foreach ( array( 'is_read', 'is_starred' ) as $flag ) {
 				if ( array_key_exists( $flag, $body ) ) {

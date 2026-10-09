@@ -2047,6 +2047,75 @@ if ( class_exists( 'GFAPI' ) && function_exists( 'minn_admin_gfn_build' ) && fun
 	$skip( 'GF rule operators: Gravity Forms inactive' );
 }
 
+// --- #22 GF trash and restore need Gravity Forms' delete-entries capability ---
+// Their entries screen and ajax move entries in or out of Trash only for
+// gravityforms_delete_entries; spam, read and star are edit-entries work.
+if ( class_exists( 'GFAPI' ) ) {
+	if ( ! function_exists( 'wp_delete_user' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+	}
+	$gftr_fid  = GFAPI::add_form( array( 'title' => 'Minn v043 trash ' . time(), 'fields' => array( array( 'id' => 1, 'type' => 'text', 'label' => 'Name' ) ) ) );
+	$gftr_live = GFAPI::add_entry( array( 'form_id' => $gftr_fid, '1' => 'Live' ) );
+	$gftr_bin  = GFAPI::add_entry( array( 'form_id' => $gftr_fid, '1' => 'Binned', 'status' => 'trash' ) );
+	$gftr_mk   = function ( $caps ) {
+		$login = 'minn-v043-gftr-' . wp_rand();
+		$id    = wp_insert_user( array( 'user_login' => $login, 'user_pass' => wp_generate_password( 24 ), 'user_email' => $login . '@example.com', 'role' => 'subscriber' ) );
+		$u     = new WP_User( $id );
+		foreach ( $caps as $cap ) {
+			$u->add_cap( $cap );
+		}
+		return $id;
+	};
+	$gftr_edit = $gftr_mk( array( 'gravityforms_view_entries', 'gravityforms_edit_entries' ) );
+	$gftr_del  = $gftr_mk( array( 'gravityforms_view_entries', 'gravityforms_edit_entries', 'gravityforms_delete_entries' ) );
+	$gftr_put  = function ( $id, $body ) use ( $call ) {
+		return $call( 'PUT', "/minn-admin/v1/gf/entries/{$id}/properties", $body );
+	};
+	$gftr_get  = function ( $id, $key = 'status' ) {
+		return (string) rgar( GFAPI::get_entry( $id ), $key );
+	};
+
+	wp_set_current_user( $gftr_edit );
+	list( $st ) = $gftr_put( $gftr_live, array( 'status' => 'trash' ) );
+	$check( 'GF properties: an edit-only user cannot trash an entry', 403 === $st && 'active' === $gftr_get( $gftr_live ), "status {$st}, now " . $gftr_get( $gftr_live ) );
+	list( $st ) = $gftr_put( $gftr_bin, array( 'status' => 'active' ) );
+	$check( 'GF properties: an edit-only user cannot restore a trashed entry', 403 === $st && 'trash' === $gftr_get( $gftr_bin ), "status {$st}, now " . $gftr_get( $gftr_bin ) );
+	list( $st ) = $gftr_put( $gftr_bin, array( 'status' => 'spam' ) );
+	$check( 'GF properties: nor move it out of Trash by way of spam', 403 === $st && 'trash' === $gftr_get( $gftr_bin ), "status {$st}, now " . $gftr_get( $gftr_bin ) );
+	list( $st ) = $gftr_put( $gftr_bin, array( 'status' => null ) );
+	$check( 'GF properties: an empty status on a trashed entry is refused too', 403 === $st && 'trash' === $gftr_get( $gftr_bin ), "status {$st}, now " . $gftr_get( $gftr_bin ) );
+	list( $st ) = $gftr_put( $gftr_live, array( 'is_read' => 1, 'status' => 'trash' ) );
+	$check( 'GF properties: a refused trash writes none of the request', 403 === $st && '0' === $gftr_get( $gftr_live, 'is_read' ) && 'active' === $gftr_get( $gftr_live ), "status {$st}" );
+	$gftr_was   = $gftr_get( $gftr_live );
+	list( $st ) = $gftr_put( $gftr_live, array( 'status' => 'Trash' ) );
+	$check( 'GF properties: a status in another case is refused', 400 === $st && $gftr_was === $gftr_get( $gftr_live ), "status {$st}" );
+	// Controls: what Gravity Forms gives edit-entries.
+	list( $st ) = $gftr_put( $gftr_live, array( 'status' => 'spam' ) );
+	$check( 'GF properties: an edit-only user still marks spam (control)', 200 === $st && 'spam' === $gftr_get( $gftr_live ), "status {$st}" );
+	list( $st ) = $gftr_put( $gftr_live, array( 'status' => 'active' ) );
+	$check( 'GF properties: an edit-only user still marks not spam (control)', 200 === $st && 'active' === $gftr_get( $gftr_live ), "status {$st}" );
+	list( $st ) = $gftr_put( $gftr_live, array( 'status' => 'active' ) );
+	$check( 'GF properties: active on an active entry is not a restore (control)', 200 === $st && 'active' === $gftr_get( $gftr_live ), "status {$st}" );
+	list( $st ) = $gftr_put( $gftr_bin, array( 'is_read' => 1, 'is_starred' => 1 ) );
+	$check( 'GF properties: an edit-only user still marks read and starred (control)', 200 === $st && '1' === $gftr_get( $gftr_bin, 'is_read' ) && '1' === $gftr_get( $gftr_bin, 'is_starred' ), "status {$st}" );
+
+	wp_set_current_user( $gftr_del );
+	list( $st ) = $gftr_put( $gftr_live, array( 'status' => 'trash' ) );
+	$check( 'GF properties: a delete-entries user still trashes (control)', 200 === $st && 'trash' === $gftr_get( $gftr_live ), "status {$st}" );
+	list( $st ) = $gftr_put( $gftr_live, array( 'status' => 'active' ) );
+	$check( 'GF properties: a delete-entries user still restores (control)', 200 === $st && 'active' === $gftr_get( $gftr_live ), "status {$st}" );
+
+	wp_set_current_user( $admin );
+	list( $st ) = $gftr_put( $gftr_bin, array( 'status' => 'active' ) );
+	$check( 'GF properties: an administrator still restores (control)', 200 === $st && 'active' === $gftr_get( $gftr_bin ), "status {$st}" );
+
+	GFAPI::delete_form( $gftr_fid );
+	wp_delete_user( $gftr_edit );
+	wp_delete_user( $gftr_del );
+} else {
+	$skip( 'GF trash capability: Gravity Forms inactive' );
+}
+
 // @sections
 
 $summary();
