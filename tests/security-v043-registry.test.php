@@ -1431,6 +1431,85 @@ if ( ! is_multisite() ) {
 	}
 }
 
+// --- #23 sibling: a refused Bricks activation keeps the working key ---------
+if ( ! class_exists( '\Bricks\License' ) || ! function_exists( 'minn_admin_license_default_providers' ) ) {
+	$skip( '#23 Bricks inactive' );
+} else {
+	// The real key and status are snapshotted and put back exactly; the key is
+	// never printed, and the Bricks licence server never hears from this section.
+	$brx_prev   = get_option( 'bricks_license_key', null );
+	$brx_status = get_option( '_transient_bricks_license_status', null );
+	$brx_tout   = get_option( '_transient_timeout_bricks_license_status', null );
+	$brx_answer = null;
+	$brx_http   = function ( $pre, $args, $url ) use ( &$brx_answer ) {
+		if ( 'my.bricksbuilder.io' === (string) wp_parse_url( $url, PHP_URL_HOST ) && is_callable( $brx_answer ) ) {
+			return call_user_func( $brx_answer, $url );
+		}
+		return new WP_Error( 'minn_test_offline', 'offline' );
+	};
+	$brx_json   = function ( $body, $code = 200 ) {
+		return array( 'headers' => array(), 'body' => wp_json_encode( $body ), 'response' => array( 'code' => $code, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+	};
+	add_filter( 'pre_http_request', $brx_http, PHP_INT_MAX, 3 );
+	$brx_paste   = function ( $secret ) use ( $call ) {
+		list( $st, $body ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => 'bricks', 'action' => 'activate', 'secret' => $secret ) );
+		return array( $st, is_array( $body ) ? ! empty( $body['ok'] ) : null );
+	};
+	$brx_working = 'minntestbricksworkingkey';
+	$brx_cases   = array(
+		// Bricks stores the pasted key for any answer that carries a status
+		// and is not tagged as an error: a refused or expired key included.
+		'a key the server answers "invalid" for' => function () use ( $brx_json ) {
+			return $brx_json( array( 'status' => 'invalid' ) );
+		},
+		'an expired key'                         => function () use ( $brx_json ) {
+			return $brx_json( array( 'status' => 'expired' ) );
+		},
+		// An outage stores no key, but marks the stored one as unverified.
+		'an unreachable licence server'          => function () {
+			return new WP_Error( 'http_request_failed', 'cURL error 28: Operation timed out' );
+		},
+	);
+	foreach ( $brx_cases as $brx_label => $brx_case ) {
+		update_option( 'bricks_license_key', $brx_working );
+		set_transient( 'bricks_license_status', 'active', HOUR_IN_SECONDS );
+		$brx_answer            = $brx_case;
+		list( $brx_st, $brx_ok ) = $brx_paste( 'minntestbricksbogus' . wp_generate_password( 6, false, false ) );
+		$brx_now               = get_option( 'bricks_license_key', null );
+		$brx_stat              = get_transient( 'bricks_license_status' );
+		$check( "#23 Bricks: {$brx_label} keeps the working key and its status", 200 === $brx_st && false === $brx_ok && $brx_working === $brx_now && 'active' === $brx_stat, $brx_st . ' ok=' . var_export( $brx_ok, true ) . ' stored=' . ( $brx_working === $brx_now ? 'working' : ( null === $brx_now ? 'absent' : 'the pasted key' ) ) . ' status=' . var_export( $brx_stat, true ) );
+	}
+	// No key before: a refused paste leaves none.
+	delete_option( 'bricks_license_key' );
+	delete_transient( 'bricks_license_status' );
+	$brx_answer            = $brx_cases['a key the server answers "invalid" for'];
+	list( $brx_st, $brx_ok ) = $brx_paste( 'minntestbricksabsent' );
+	$check( '#23 Bricks: a refused key on a site with none leaves it absent', false === $brx_ok && null === get_option( 'bricks_license_key', null ) && false === get_transient( 'bricks_license_status' ), var_export( get_transient( 'bricks_license_status' ), true ) );
+	// Control: an accepted key is stored (the provider closure the route calls,
+	// as the Beaver Builder section does).
+	$brx_answer = function () use ( $brx_json ) {
+		return $brx_json( array( 'status' => 'active' ) );
+	};
+	$brx_prov = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
+	$brx_res  = minn_admin_license_result( call_user_func( $brx_prov['bricks']['activate'], 'minntestbricksgoodkey' ) );
+	$check( '#23 Bricks control: an accepted key is stored and reported valid', ! empty( $brx_res['ok'] ) && 'minntestbricksgoodkey' === get_option( 'bricks_license_key', null ), wp_json_encode( $brx_res ) );
+
+	remove_filter( 'pre_http_request', $brx_http, PHP_INT_MAX );
+	if ( null === $brx_prev ) {
+		delete_option( 'bricks_license_key' );
+	} else {
+		update_option( 'bricks_license_key', $brx_prev );
+	}
+	foreach ( array( '_transient_bricks_license_status' => $brx_status, '_transient_timeout_bricks_license_status' => $brx_tout ) as $brx_k => $brx_v ) {
+		if ( null === $brx_v ) {
+			delete_option( $brx_k );
+		} else {
+			update_option( $brx_k, $brx_v, false );
+		}
+	}
+	\Bricks\License::$license_key = $brx_prev;
+}
+
 // @sections
 
 $summary();

@@ -4124,11 +4124,29 @@ function minn_admin_license_default_providers() {
 	if ( class_exists( '\Bricks\License' ) ) {
 		$providers['bricks']['secret_label'] = __( 'Bricks license key', 'minn-admin' );
 		$providers['bricks']['activate']     = function ( $secret ) {
+			// Their activate stores the pasted key for any answer that carries
+			// a status and is not tagged as an error (a refused or an expired
+			// key), and an outage marks the stored key unverified. Either way
+			// a working key is replaced, so keep it and its status to put back.
+			$prev        = get_option( 'bricks_license_key', null );
+			$prev_status = get_transient( 'bricks_license_status' );
+			$prev_ttl    = (int) get_option( '_transient_timeout_bricks_license_status', 0 ) - time();
 			\Bricks\License::$license_key = $secret;
 			$status = \Bricks\License::activate_license();
 			if ( 'active' === $status ) {
 				return array( 'ok' => true );
 			}
+			if ( null === $prev ) {
+				delete_option( 'bricks_license_key' );
+			} else {
+				update_option( 'bricks_license_key', $prev );
+			}
+			if ( false === $prev_status ) {
+				delete_transient( 'bricks_license_status' );
+			} else {
+				set_transient( 'bricks_license_status', $prev_status, $prev_ttl > 0 ? $prev_ttl : 168 * HOUR_IN_SECONDS );
+			}
+			\Bricks\License::$license_key = $prev;
 			if ( 'error_remote' === $status ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The Bricks license server is temporarily unavailable', 'minn-admin' ) );
 			}
