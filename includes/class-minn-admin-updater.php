@@ -17,6 +17,9 @@ class Minn_Admin_Updater {
 
 	const MANIFEST_URL = 'https://raw.githubusercontent.com/austinginder/minn-admin/main/manifest.json';
 
+	/** The plugin header's Update URI (minn-admin.php); core uses it as an offer's slug when an answer names none. */
+	const UPDATE_URI = 'https://github.com/austinginder/minn-admin';
+
 	/**
 	 * Hosts the update package may legitimately come from.
 	 *
@@ -89,6 +92,12 @@ class Minn_Admin_Updater {
 
 		add_filter( 'plugins_api', array( $this, 'info' ), 30, 3 );
 		add_filter( 'site_transient_update_plugins', array( $this, 'update' ) );
+		// Core lists translations from all three update transients. Last, so
+		// an offer another filter adds after Minn's own answer is caught too.
+		foreach ( array( 'plugins', 'themes', 'core' ) as $kind ) {
+			add_filter( "site_transient_update_{$kind}", array( $this, 'scrub_translations' ), PHP_INT_MAX );
+		}
+		add_filter( 'update_plugins_github.com', array( $this, 'drop_foreign_translations' ), PHP_INT_MAX, 3 );
 		add_action( 'upgrader_process_complete', array( $this, 'purge' ), 10, 2 );
 		// Last, so a later download filter can't replace the verified file;
 		// an earlier one that answers for Minn's package is verified below.
@@ -218,7 +227,36 @@ class Minn_Admin_Updater {
 		$offer = (array) $offer;
 		$type  = isset( $offer['type'] ) && is_string( $offer['type'] ) ? $offer['type'] : '';
 		$slug  = isset( $offer['slug'] ) && is_string( $offer['slug'] ) ? $offer['slug'] : '';
-		return ( '' === $type || 'plugin' === $type ) && $this->plugin_slug === sanitize_key( $slug );
+		if ( '' !== $type && 'plugin' !== $type ) {
+			return false;
+		}
+		// An update_plugins_{host} answer with no slug of its own gets the
+		// plugin's Update URI as one (wp-includes/update.php), which
+		// sanitize_key() would mangle out of a match.
+		return $this->plugin_slug === sanitize_key( $slug ) || strtolower( untrailingslashit( self::UPDATE_URI ) ) === strtolower( untrailingslashit( trim( $slug ) ) );
+	}
+
+	/**
+	 * Translations an update_plugins_github.com answer lists for this plugin.
+	 * This plugin never answers there itself (its offers ride the plugins
+	 * transient), so any such list is another updater's, and core would copy
+	 * it into the translations offered for minn-admin.
+	 *
+	 * @param mixed  $update      The answer so far.
+	 * @param array  $plugin_data Header data.
+	 * @param string $plugin_file The plugin being asked about.
+	 * @return mixed
+	 */
+	public function drop_foreign_translations( $update, $plugin_data, $plugin_file ) {
+		if ( "{$this->plugin_slug}/{$this->plugin_slug}.php" !== $plugin_file ) {
+			return $update;
+		}
+		if ( is_array( $update ) ) {
+			unset( $update['translations'] );
+		} elseif ( is_object( $update ) ) {
+			unset( $update->translations );
+		}
+		return $update;
 	}
 
 	/**
@@ -479,12 +517,15 @@ class Minn_Admin_Updater {
 		return $response;
 	}
 
-	public function update( $transient ) {
-		// Language packs first, whether or not plugins were checked:
-		// wordpress.org or another updater can list one for this slug, and a
-		// listed offer is one core's async updater and Update Translations
-		// will try to install. verify_package() refuses it at download; this
-		// keeps it from being offered at all.
+	/**
+	 * Drop translations offered for this plugin from anywhere but its own
+	 * release. Core's wp_get_translation_updates() lists the translations of
+	 * the plugins, themes and core transients alike.
+	 *
+	 * @param mixed $transient An update transient.
+	 * @return mixed
+	 */
+	public function scrub_translations( $transient ) {
 		if ( is_object( $transient ) && isset( $transient->translations ) && is_array( $transient->translations ) ) {
 			$kept = array();
 			foreach ( $transient->translations as $pack ) {
@@ -496,6 +537,16 @@ class Minn_Admin_Updater {
 			}
 			$transient->translations = $kept;
 		}
+		return $transient;
+	}
+
+	public function update( $transient ) {
+		// Language packs first, whether or not plugins were checked:
+		// wordpress.org or another updater can list one for this slug, and a
+		// listed offer is one core's async updater and Update Translations
+		// will try to install. verify_package() refuses it at download; this
+		// keeps it from being offered at all.
+		$transient = $this->scrub_translations( $transient );
 		if ( empty( $transient->checked ) ) {
 			return $transient;
 		}

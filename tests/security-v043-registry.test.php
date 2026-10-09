@@ -3243,6 +3243,329 @@ if ( function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active() && 
 	$skip( 'ACPT rows: ACPT inactive' );
 }
 
+// --- #26 delta: an offer slugged with Minn's Update URI, and one listed late in another transient ---
+// In a closure of its own: the probe bails with return.
+( function () use ( $check, $skip, $call, $admin ) {
+	/**
+	 * Delta probe: the #26 language-pack gate. PASS = the gate holds for that
+	 * input; FAIL = a non-release pack for Minn gets through (or is offered).
+	 * Offline: pre_http_request answers every URL here and refuses the rest.
+	 * Run: wp eval-file ../harness.php p1-updater.php --user=admin --path=<site>
+	 */
+	global $wpdb;
+	$p1_upd = null;
+	foreach ( (array) ( $GLOBALS['wp_filter']['upgrader_pre_download']->callbacks ?? array() ) as $p1_cbs ) {
+		foreach ( $p1_cbs as $p1_cb ) {
+			if ( is_array( $p1_cb['function'] ) && $p1_cb['function'][0] instanceof Minn_Admin_Updater ) {
+				$p1_upd = $p1_cb['function'][0];
+			}
+		}
+	}
+	if ( ! $p1_upd || ! class_exists( 'ZipArchive' ) ) {
+		$skip( 'p1: no updater instance or ZipArchive' );
+		return;
+	}
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+	require_once ABSPATH . 'wp-admin/includes/translation-install.php';
+
+	$p1_dir = trailingslashit( get_temp_dir() ) . 'minn-delta-p1-' . wp_generate_password( 6, false, false );
+	wp_mkdir_p( $p1_dir );
+	$p1_zip = $p1_dir . '/pack.zip';
+	$p1_z   = new ZipArchive();
+	$p1_z->open( $p1_zip, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$p1_z->addFromString( 'minn-admin-zz_ZZ.l10n.php', "<?php\n// minn-admin delta probe pack (inert)\nreturn array( 'messages' => array() );\n" );
+	$p1_z->close();
+	$p1_foreign = 'https://cdn.example.test/gh-updater/minn-admin/zz_ZZ.zip';
+	$p1_landed  = WP_LANG_DIR . '/plugins/minn-admin-zz_ZZ.l10n.php';
+	$p1_landed_themes = WP_LANG_DIR . '/themes/minn-admin-zz_ZZ.l10n.php';
+	$p1_sweep   = function () use ( $p1_landed, $p1_landed_themes ) {
+		foreach ( array( $p1_landed, $p1_landed_themes ) as $f ) {
+			if ( file_exists( $f ) ) {
+				wp_delete_file( $f );
+			}
+		}
+	};
+	$p1_pre_existing = file_exists( $p1_landed ) || file_exists( $p1_landed_themes );
+	if ( $p1_pre_existing ) {
+		$skip( 'p1: a zz_ZZ Minn pack already exists; refusing to touch it' );
+		return;
+	}
+
+	// Raw rows for everything this probe can write, restored byte for byte.
+	$p1_rows = $wpdb->get_results( "SELECT option_name, option_value, autoload FROM {$wpdb->options} WHERE option_name IN ('_site_transient_update_plugins','_site_transient_timeout_update_plugins','_transient_minn_admin_updater','_transient_timeout_minn_admin_updater')", ARRAY_A );
+	$p1_had  = wp_list_pluck( $p1_rows, 'option_name' );
+
+	$p1_api = 0;
+	$p1_http = function ( $pre, $args, $url ) use ( $p1_zip, $p1_foreign, &$p1_api ) {
+		if ( $url === $p1_foreign ) {
+			if ( ! empty( $args['filename'] ) ) {
+				copy( $p1_zip, $args['filename'] );
+			}
+			return array( 'headers' => array(), 'body' => '', 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => $args['filename'] ?? null );
+		}
+		if ( false !== strpos( $url, 'api.wordpress.org/plugins/update-check' ) ) {
+			++$p1_api;
+			return array( 'headers' => array(), 'body' => wp_json_encode( array( 'plugins' => array(), 'translations' => array(), 'no_update' => array() ) ), 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+		}
+		return new WP_Error( 'minn_delta_offline', 'offline' );
+	};
+	add_filter( 'pre_http_request', $p1_http, PHP_INT_MAX, 3 );
+
+	// ---- A. A GitHub updater answering for Minn's Update URI host -------------
+	// Minn's header says Update URI: https://github.com/austinginder/minn-admin,
+	// so core asks update_plugins_github.com about Minn. An updater that answers
+	// with translations but no `slug` gets slug = $update->id = the Update URI
+	// (wp-includes/update.php:578-584).
+	$p1_hostfilter = function ( $update, $plugin_data, $plugin_file ) use ( $p1_foreign ) {
+		if ( 'minn-admin/minn-admin.php' !== $plugin_file ) {
+			return $update;
+		}
+		return array(
+			'version'      => MINN_ADMIN_VERSION,
+			'url'          => 'https://github.com/austinginder/minn-admin',
+			'package'      => '',
+			'translations' => array(
+				array( 'language' => 'zz_ZZ', 'version' => '9.9.9', 'updated' => '2026-10-01 00:00:00', 'package' => $p1_foreign, 'autoupdate' => true ),
+			),
+		);
+	};
+	$p1_locales = function ( $l ) {
+		$l[] = 'zz_ZZ';
+		return $l;
+	};
+	add_filter( 'update_plugins_github.com', $p1_hostfilter, 10, 3 );
+	add_filter( 'plugins_update_check_locales', $p1_locales );
+	delete_site_transient( 'update_plugins' );
+	wp_update_plugins();
+	remove_filter( 'update_plugins_github.com', $p1_hostfilter, 10 );
+	$p1_t     = get_site_transient( 'update_plugins' ); // through Minn's update() scrub
+	$p1_offer = null;
+	foreach ( (array) ( $p1_t->translations ?? array() ) as $p1_e ) {
+		$p1_e = (array) $p1_e;
+		if ( ( $p1_e['package'] ?? '' ) === $p1_foreign ) {
+			$p1_offer = $p1_e;
+		}
+	}
+	printf( "INFO  A: core called the mocked update-check %d time(s); offer after Minn's scrub: %s\n", $p1_api, wp_json_encode( $p1_offer ) );
+	$check( 'A1 the Update-URI-slugged foreign pack is scrubbed from the transient', null === $p1_offer, $p1_offer ? 'slug=' . $p1_offer['slug'] . ' sanitize_key=' . sanitize_key( $p1_offer['slug'] ) : '' );
+	if ( $p1_offer ) {
+		$p1_lpu   = new Language_Pack_Upgrader( new Automatic_Upgrader_Skin() );
+		$p1_extra = array( 'language_update_type' => 'plugin', 'language_update' => (object) $p1_offer );
+		$p1_r     = $p1_upd->verify_package( false, $p1_foreign, $p1_lpu, $p1_extra );
+		$check( 'A2 verify_package refuses it', is_wp_error( $p1_r ), var_export( $p1_r, true ) );
+		// End to end: core's own bulk upgrade of exactly what the transient offers.
+		$p1_skin = new Automatic_Upgrader_Skin();
+		$p1_lpu2 = new Language_Pack_Upgrader( $p1_skin );
+		$p1_res = $p1_lpu2->bulk_upgrade( array( (object) $p1_offer ), array( 'clear_update_cache' => false ) );
+		$p1_in  = file_exists( $p1_landed );
+		printf( "INFO  A3 result: %s | skin: %s\n", wp_json_encode( $p1_res ), wp_json_encode( $p1_skin->get_upgrade_messages() ) );
+		$check( 'A3 core\'s Language_Pack_Upgrader does not install it into WP_LANG_DIR/plugins', ! $p1_in, $p1_in ? 'landed: ' . $p1_landed : '' );
+		$p1_sweep();
+	}
+
+	// ---- B. A plugin-typed Minn pack listed in the THEMES transient -----------
+	// wp_get_translation_updates() merges translations from update_core,
+	// update_plugins AND update_themes, and the type inside each entry decides
+	// the destination; update() only filters site_transient_update_plugins.
+	$p1_themes = function ( $t ) use ( $p1_foreign ) {
+		if ( ! is_object( $t ) ) {
+			$t = new stdClass();
+		}
+		$t->translations   = isset( $t->translations ) && is_array( $t->translations ) ? $t->translations : array();
+		$t->translations[] = array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'zz_ZZ', 'version' => '9.9.9', 'updated' => '2026-10-01 00:00:00', 'package' => $p1_foreign, 'autoupdate' => true );
+		return $t;
+	};
+	add_filter( 'site_transient_update_themes', $p1_themes, 99 );
+	$p1_listed = false;
+	foreach ( wp_get_translation_updates() as $p1_u ) {
+		if ( ( $p1_u->package ?? '' ) === $p1_foreign && 'minn-admin' === ( $p1_u->slug ?? '' ) ) {
+			$p1_listed = true;
+		}
+	}
+	remove_filter( 'site_transient_update_themes', $p1_themes, 99 );
+	$check( 'B1 a Minn pack listed via update_themes is not offered (scrub covers it)', ! $p1_listed, $p1_listed ? 'offered by wp_get_translation_updates()' : '' );
+	$p1_lpu = new Language_Pack_Upgrader( new Automatic_Upgrader_Skin() );
+	$p1_r   = $p1_upd->verify_package( false, $p1_foreign, $p1_lpu, array( 'language_update_type' => 'plugin', 'language_update' => (object) array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'zz_ZZ', 'package' => $p1_foreign ) ) );
+	$check( 'B2 ...but its download is refused', is_wp_error( $p1_r ), var_export( $p1_r, true ) );
+
+	// ---- C. Slug and type variants straight at the gate ------------------------
+	foreach ( array(
+		'C1 slug MINN-ADMIN'                => array( 'plugin', 'MINN-ADMIN' ),
+		'C2 slug with tab/newline'          => array( 'plugin', "\tminn-admin\n" ),
+		'C3 slug minn-admin/ (dir style)'   => array( 'plugin', 'minn-admin/' ),
+		'C4 slug minn-admin/minn-admin.php' => array( 'plugin', 'minn-admin/minn-admin.php' ),
+		'C5 slug minn_admin'                => array( 'plugin', 'minn_admin' ),
+		'C6 type Plugin (capital)'          => array( 'Plugin', 'minn-admin' ),
+		'C7 type theme'                     => array( 'theme', 'minn-admin' ),
+		'C8 type array'                     => array( array( 'plugin' ), 'minn-admin' ),
+		'C9 slug = Update URI'              => array( 'plugin', 'https://github.com/austinginder/minn-admin' ),
+	) as $p1_label => $p1_v ) {
+		$p1_r = $p1_upd->verify_package( false, $p1_foreign, $p1_lpu, array( 'language_update' => (object) array( 'type' => $p1_v[0], 'slug' => $p1_v[1], 'language' => 'zz_ZZ', 'package' => $p1_foreign ) ) );
+		// Where core would put it: 'plugin' === type -> /plugins, 'theme' -> /themes, else WP_LANG_DIR.
+		$p1_dest = 'plugin' === $p1_v[0] ? 'plugins' : ( 'theme' === $p1_v[0] ? 'themes' : 'root' );
+		printf( "INFO  %s -> %s (core destination: %s)\n", $p1_label, is_wp_error( $p1_r ) ? 'refused' : 'PASSES THROUGH', $p1_dest );
+	}
+	// Array offer instead of object in hook_extra.
+	$p1_r = $p1_upd->verify_package( false, $p1_foreign, $p1_lpu, array( 'language_update' => array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'zz_ZZ' ) ) );
+	$check( 'C10 an array (not object) language_update is still Minn\'s', is_wp_error( $p1_r ) );
+	// No hook_extra at all (a caller that does not pass it): only the URL decides.
+	$p1_r = $p1_upd->verify_package( false, $p1_foreign, $p1_lpu, array() );
+	printf( "INFO  C11 no hook_extra -> %s (gate depends on hook_extra)\n", is_wp_error( $p1_r ) ? 'refused' : 'passes through' );
+
+	// ---- D. Filter that answered first, Batch-style prefetch order -------------
+	$p1_r = $p1_upd->verify_package( $p1_zip, $p1_foreign, $p1_lpu, array( 'language_update' => (object) array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'zz_ZZ' ) ) );
+	$check( 'D1 a file an earlier filter supplies for a foreign Minn pack is refused', is_wp_error( $p1_r ) );
+	$p1_order = array();
+	foreach ( (array) ( $GLOBALS['wp_filter']['upgrader_pre_download']->callbacks[ PHP_INT_MAX ] ?? array() ) as $p1_id => $p1_cb ) {
+		$p1_order[] = is_array( $p1_cb['function'] ) ? get_class( $p1_cb['function'][0] ) . '::' . $p1_cb['function'][1] : ( $p1_cb['function'] instanceof Closure ? 'closure' : (string) $p1_cb['function'] );
+	}
+	printf( "INFO  D2 PHP_INT_MAX upgrader_pre_download order now: %s\n", implode( ' , ', $p1_order ) );
+
+	// ---- cleanup --------------------------------------------------------------
+	remove_filter( 'plugins_update_check_locales', $p1_locales );
+	remove_filter( 'pre_http_request', $p1_http, PHP_INT_MAX );
+	$p1_sweep();
+	foreach ( array( '_site_transient_update_plugins', '_site_transient_timeout_update_plugins', '_transient_minn_admin_updater', '_transient_timeout_minn_admin_updater' ) as $p1_k ) {
+		if ( ! in_array( $p1_k, $p1_had, true ) ) {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $p1_k ) );
+		}
+	}
+	foreach ( $p1_rows as $p1_row ) {
+		$p1_exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name = %s", $p1_row['option_name'] ) );
+		if ( $p1_exists ) {
+			$wpdb->update( $wpdb->options, array( 'option_value' => $p1_row['option_value'], 'autoload' => $p1_row['autoload'] ), array( 'option_name' => $p1_row['option_name'] ) );
+		} else {
+			$wpdb->insert( $wpdb->options, $p1_row );
+		}
+	}
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'notoptions', 'options' );
+	foreach ( array( '_site_transient_update_plugins', '_site_transient_timeout_update_plugins', '_transient_minn_admin_updater', '_transient_timeout_minn_admin_updater' ) as $p1_k ) {
+		wp_cache_delete( $p1_k, 'options' );
+	}
+	foreach ( (array) glob( $p1_dir . '/*' ) as $p1_f ) {
+		wp_delete_file( $p1_f );
+	}
+	@rmdir( $p1_dir ); // phpcs:ignore
+	$p1_after = $wpdb->get_results( "SELECT option_name, option_value, autoload FROM {$wpdb->options} WHERE option_name IN ('_site_transient_update_plugins','_site_transient_timeout_update_plugins','_transient_minn_admin_updater','_transient_timeout_minn_admin_updater')", ARRAY_A );
+	printf( "INFO  restore: rows byte-identical = %s\n", md5( serialize( $p1_rows ) ) === md5( serialize( $p1_after ) ) ? 'yes' : 'NO' );
+} )();
+
+// --- #26 delta: Minn's own Update Translations refuses the Update-URI-slugged pack ---
+// In a closure of its own: the probe bails with return.
+( function () use ( $check, $skip, $call, $admin ) {
+	/**
+	 * Delta probe: Minn's own Update Translations button (POST
+	 * /minn-admin/v1/translations/update, Minn_Admin_Batch::run_translations)
+	 * with the offer core builds when a github.com updater answers for Minn's
+	 * Update URI without a slug. Offline; transients answered in-process only.
+	 */
+	if ( ! current_user_can( 'update_languages' ) || ! class_exists( 'ZipArchive' ) ) {
+		$skip( 'p1b: no update_languages or ZipArchive' );
+		return;
+	}
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	$p1b_dir = trailingslashit( get_temp_dir() ) . 'minn-delta-p1b-' . wp_generate_password( 6, false, false );
+	wp_mkdir_p( $p1b_dir );
+	$p1b_zip = $p1b_dir . '/pack.zip';
+	$p1b_z   = new ZipArchive();
+	$p1b_z->open( $p1b_zip, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$p1b_z->addFromString( 'minn-admin-zz_ZZ.l10n.php', "<?php\n// minn-admin delta probe pack (inert)\nreturn array( 'messages' => array() );\n" );
+	$p1b_z->close();
+	$p1b_foreign = 'https://cdn.example.test/gh-updater/minn-admin/zz_ZZ.zip';
+	$p1b_landed  = WP_LANG_DIR . '/plugins/minn-admin-zz_ZZ.l10n.php';
+	if ( file_exists( $p1b_landed ) ) {
+		$skip( 'p1b: a zz_ZZ Minn pack already exists' );
+		return;
+	}
+	$p1b_http = function ( $pre, $args, $url ) use ( $p1b_zip, $p1b_foreign ) {
+		if ( $url === $p1b_foreign ) {
+			if ( ! empty( $args['filename'] ) ) {
+				copy( $p1b_zip, $args['filename'] );
+			}
+			return array( 'headers' => array(), 'body' => '', 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => $args['filename'] ?? null );
+		}
+		return new WP_Error( 'minn_delta_offline', 'offline' );
+	};
+	add_filter( 'pre_http_request', $p1b_http, PHP_INT_MAX, 3 );
+	$p1b_offer = array( 'language' => 'zz_ZZ', 'version' => '9.9.9', 'updated' => '2026-10-01 00:00:00', 'package' => $p1b_foreign, 'autoupdate' => true, 'type' => 'plugin', 'slug' => 'https://github.com/austinginder/minn-admin' );
+	$p1b_plugins = function () use ( $p1b_offer ) {
+		$t               = new stdClass();
+		$t->last_checked = time();
+		$t->checked      = wp_list_pluck( get_plugins(), 'Version' );
+		$t->response     = array();
+		$t->no_update    = array();
+		$t->translations = array( $p1b_offer );
+		return $t;
+	};
+	$p1b_themes = function () {
+		$t               = new stdClass();
+		$t->last_checked = time();
+		$t->checked      = array();
+		foreach ( wp_get_themes() as $ss => $th ) {
+			$t->checked[ $ss ] = $th->get( 'Version' );
+		}
+		$t->response     = array();
+		$t->no_update    = array();
+		$t->translations = array();
+		return $t;
+	};
+	$p1b_core = function () {
+		return (object) array( 'last_checked' => time(), 'version_checked' => get_bloginfo( 'version' ), 'updates' => array(), 'translations' => array() );
+	};
+	$p1b_loc = function ( $l ) {
+		$l[] = 'zz_ZZ';
+		return $l;
+	};
+	add_filter( 'plugins_update_check_locales', $p1b_loc );
+	add_filter( 'pre_site_transient_update_plugins', $p1b_plugins );
+	add_filter( 'pre_site_transient_update_themes', $p1b_themes );
+	add_filter( 'pre_site_transient_update_core', $p1b_core );
+	// Raw rows the route's clear_update_cache may touch, restored exactly.
+	global $wpdb;
+	$p1b_rows = $wpdb->get_results( "SELECT option_name, option_value, autoload FROM {$wpdb->options} WHERE option_name LIKE '\\_site\\_transient\\_%update\\_%' OR option_name LIKE '\\_site\\_transient\\_timeout\\_%update\\_%'", ARRAY_A );
+	list( $p1b_st, $p1b_body ) = $call( 'POST', '/minn-admin/v1/translations/update' );
+	$p1b_in = file_exists( $p1b_landed );
+	$check( 'T1 Update Translations does not install the Update-URI-slugged foreign pack', ! $p1b_in, $p1b_st . ' ' . wp_json_encode( is_array( $p1b_body ) ? array_intersect_key( $p1b_body, array_flip( array( 'updated', 'failed', 'errors' ) ) ) : $p1b_body ) );
+	if ( $p1b_in ) {
+		wp_delete_file( $p1b_landed );
+	}
+	remove_filter( 'plugins_update_check_locales', $p1b_loc );
+	remove_filter( 'pre_site_transient_update_plugins', $p1b_plugins );
+	remove_filter( 'pre_site_transient_update_themes', $p1b_themes );
+	remove_filter( 'pre_site_transient_update_core', $p1b_core );
+	remove_filter( 'pre_http_request', $p1b_http, PHP_INT_MAX );
+	$p1b_names = wp_list_pluck( $p1b_rows, 'option_name' );
+	$p1b_now   = $wpdb->get_results( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE '\\_site\\_transient\\_%update\\_%' OR option_name LIKE '\\_site\\_transient\\_timeout\\_%update\\_%'", ARRAY_A );
+	foreach ( wp_list_pluck( $p1b_now, 'option_name' ) as $n ) {
+		if ( ! in_array( $n, $p1b_names, true ) ) {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $n ) );
+		}
+	}
+	foreach ( $p1b_rows as $r ) {
+		if ( $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name = %s", $r['option_name'] ) ) ) {
+			$wpdb->update( $wpdb->options, array( 'option_value' => $r['option_value'], 'autoload' => $r['autoload'] ), array( 'option_name' => $r['option_name'] ) );
+		} else {
+			$wpdb->insert( $wpdb->options, $r );
+		}
+	}
+	wp_cache_flush();
+	$p1b_after = $wpdb->get_results( "SELECT option_name, option_value, autoload FROM {$wpdb->options} WHERE option_name LIKE '\\_site\\_transient\\_%update\\_%' OR option_name LIKE '\\_site\\_transient\\_timeout\\_%update\\_%'", ARRAY_A );
+	$p1b_key = function ( $rows ) {
+		usort( $rows, function ( $a, $b ) {
+			return strcmp( $a['option_name'], $b['option_name'] );
+		} );
+		return md5( serialize( $rows ) );
+	};
+	foreach ( (array) glob( $p1b_dir . '/*' ) as $f ) {
+		wp_delete_file( $f );
+	}
+	@rmdir( $p1b_dir ); // phpcs:ignore
+	printf( "INFO  restore: update transients identical = %s; stray pack = %s\n", $p1b_key( $p1b_rows ) === $p1b_key( $p1b_after ) ? 'yes' : 'NO', file_exists( $p1b_landed ) ? 'LEFT' : 'none' );
+} )();
+
 // @sections
 
 $summary();
