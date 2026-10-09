@@ -1969,6 +1969,84 @@ if ( class_exists( 'GFAPI' ) && function_exists( 'minn_admin_gf_entry_edit_block
 	$skip( 'GF answer edit recompute: Gravity Forms inactive' );
 }
 
+// --- #7 GF notification and confirmation rules keep Gravity Forms' operators ---
+// The pages send the whole notification back on every save, so a rename
+// must not turn a rule's >=, in, like (or an add-on's operator) into "is".
+if ( class_exists( 'GFAPI' ) && function_exists( 'minn_admin_gfn_build' ) && function_exists( 'minn_admin_gfc_build' ) ) {
+	// An add-on's operator, validated through Gravity Forms' own filter.
+	$gfops_valid = function ( $is_valid, $operator ) {
+		return 'minn_between' === $operator ? true : $is_valid;
+	};
+	add_filter( 'gform_is_valid_conditional_logic_operator', $gfops_valid, 10, 2 );
+	// 'minn_gone' stands for an operator whose add-on is not loaded here.
+	$gfops_ops   = array( '>=', '<=', '<>', 'in', 'not in', 'like', 'minn_between', 'minn_gone' );
+	$gfops_rules = function ( $with_email ) use ( $gfops_ops ) {
+		$out = array();
+		foreach ( $gfops_ops as $i => $op ) {
+			$r = array( 'fieldId' => '1', 'operator' => $op, 'value' => (string) ( 10 + $i ) );
+			$out[] = $with_email ? array( 'email' => "minn-route{$i}@example.com" ) + $r : $r;
+		}
+		return $out;
+	};
+	$gfops_logic = array( 'actionType' => 'show', 'logicType' => 'any', 'rules' => $gfops_rules( false ) );
+	$gfops_fid   = GFAPI::add_form( array(
+		'title'         => 'Minn v043 ops ' . time(),
+		'fields'        => array( array( 'id' => 1, 'type' => 'number', 'label' => 'Age' ), array( 'id' => 2, 'type' => 'email', 'label' => 'Email' ) ),
+		'notifications' => array(
+			'mgfops1' => array( 'id' => 'mgfops1', 'name' => 'Routed', 'event' => 'form_submission', 'toType' => 'routing', 'to' => '', 'routing' => $gfops_rules( true ), 'subject' => 'New', 'message' => '{all_fields}', 'isActive' => true, 'conditionalLogic' => $gfops_logic ),
+		),
+		'confirmations' => array(
+			'mgfopsd' => array( 'id' => 'mgfopsd', 'name' => 'Default Confirmation', 'isDefault' => true, 'type' => 'message', 'message' => 'Thanks' ),
+			'mgfopsc' => array( 'id' => 'mgfopsc', 'name' => 'Grown-ups', 'isDefault' => false, 'type' => 'message', 'message' => 'Hello', 'conditionalLogic' => $gfops_logic ),
+		),
+	) );
+	$gfops_got = function ( $rules ) {
+		return array_map( function ( $r ) {
+			return (string) rgar( $r, 'operator' );
+		}, (array) $rules );
+	};
+
+	// The notification page: load, rename, save what the client holds.
+	list( , $d ) = $call( 'GET', "/minn-admin/v1/gf/notifications/{$gfops_fid}:mgfops1/full" );
+	$gfops_n         = $d['notification'];
+	$gfops_n['name'] = 'Routed (renamed)';
+	list( $st )      = $call( 'POST', "/minn-admin/v1/gf/notifications/{$gfops_fid}:mgfops1/full", $gfops_n );
+	$gfops_saved     = GFAPI::get_form( $gfops_fid )['notifications']['mgfops1'];
+	$check( 'GF notification rename: every routing operator kept', 200 === $st && $gfops_ops === $gfops_got( $gfops_saved['routing'] ), "status {$st} " . wp_json_encode( $gfops_got( $gfops_saved['routing'] ) ) );
+	$check( 'GF notification rename: every condition operator kept', $gfops_ops === $gfops_got( rgars( $gfops_saved, 'conditionalLogic/rules' ) ), wp_json_encode( $gfops_got( rgars( $gfops_saved, 'conditionalLogic/rules' ) ) ) );
+	$check( 'GF notification rename: the rename itself saved (control)', 'Routed (renamed)' === $gfops_saved['name'] );
+
+	// Changing one rule to one of the page's operators still saves (control);
+	// a new operator Gravity Forms does not know becomes "is", as in their save.
+	$gfops_n['routing'][0]['operator']                 = 'isnot';
+	$gfops_n['conditionalLogic']['rules'][1]['operator'] = 'minn_unheard';
+	list( $st )  = $call( 'POST', "/minn-admin/v1/gf/notifications/{$gfops_fid}:mgfops1/full", $gfops_n );
+	$gfops_saved = GFAPI::get_form( $gfops_fid )['notifications']['mgfops1'];
+	$check( 'GF notification: a changed rule operator saves (control)', 200 === $st && 'isnot' === $gfops_saved['routing'][0]['operator'], "status {$st}" );
+	$check( 'GF notification: a new unknown operator becomes "is" as in Gravity Forms\' own save', 'is' === $gfops_saved['conditionalLogic']['rules'][1]['operator'], (string) $gfops_saved['conditionalLogic']['rules'][1]['operator'] );
+	// Hostile shapes: an operator that is not a string, and their check's case folding.
+	$gfops_n['conditionalLogic']['rules'][2]['operator'] = array( 'in' );
+	$gfops_n['routing'][3]['operator']                 = 'IN';
+	list( $st )  = $call( 'POST', "/minn-admin/v1/gf/notifications/{$gfops_fid}:mgfops1/full", $gfops_n );
+	$gfops_saved = GFAPI::get_form( $gfops_fid )['notifications']['mgfops1'];
+	$check( 'GF notification: a non-string operator saves as "is" without an error', 200 === $st && 'is' === $gfops_saved['conditionalLogic']['rules'][2]['operator'], "status {$st}" );
+	$check( 'GF notification: an operator their check accepts in any case is kept as sent', 'IN' === $gfops_saved['routing'][3]['operator'], (string) $gfops_saved['routing'][3]['operator'] );
+
+	// The confirmation page: same round trip.
+	list( , $d ) = $call( 'GET', "/minn-admin/v1/gf/confirmations/{$gfops_fid}:mgfopsc/full" );
+	$gfops_c         = $d['confirmation'];
+	$gfops_c['name'] = 'Grown-ups (renamed)';
+	list( $st )      = $call( 'POST', "/minn-admin/v1/gf/confirmations/{$gfops_fid}:mgfopsc/full", $gfops_c );
+	$gfops_csaved    = GFAPI::get_form( $gfops_fid )['confirmations']['mgfopsc'];
+	$check( 'GF confirmation rename: every condition operator kept', 200 === $st && $gfops_ops === $gfops_got( rgars( $gfops_csaved, 'conditionalLogic/rules' ) ), "status {$st} " . wp_json_encode( $gfops_got( rgars( $gfops_csaved, 'conditionalLogic/rules' ) ) ) );
+	$check( 'GF confirmation rename: the rename itself saved (control)', 'Grown-ups (renamed)' === $gfops_csaved['name'] );
+
+	remove_filter( 'gform_is_valid_conditional_logic_operator', $gfops_valid, 10 );
+	GFAPI::delete_form( $gfops_fid );
+} else {
+	$skip( 'GF rule operators: Gravity Forms inactive' );
+}
+
 // @sections
 
 $summary();

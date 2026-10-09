@@ -265,9 +265,31 @@ function minn_admin_gfn_invalid( $field, $message ) {
 	return new WP_Error( 'minn_gfn_invalid', $message, array( 'status' => 400, 'field' => $field ) );
 }
 
-/** Logic / routing rule operators their sanitizer keeps. */
-function minn_admin_gfn_operators() {
-	return array( 'is', 'isnot', '>', '<', 'contains', 'starts_with', 'ends_with' );
+/**
+ * Routing or logic rules through their sanitizer, as their save runs it: an
+ * operator stays whatever is_valid_operator() accepts (its list is wider than
+ * the page's picker, and add-ons extend it through a filter). The page sends
+ * every rule back on any save, so an operator their check refuses but this
+ * list already stored (an add-on's, with its validator not loaded here) is
+ * kept as stored rather than becoming "is" under an unrelated edit.
+ *
+ * @param array $logic        { rules[], ... } as the page sent it.
+ * @param array $stored_rules The same list's rules as stored.
+ */
+function minn_admin_gfn_sanitize_rules( $logic, $stored_rules ) {
+	$sanitized = GFFormsModel::sanitize_conditional_logic( $logic );
+	$stored    = array();
+	foreach ( (array) $stored_rules as $r ) {
+		if ( is_array( $r ) && isset( $r['operator'] ) && is_string( $r['operator'] ) ) {
+			$stored[] = $r['operator'];
+		}
+	}
+	foreach ( (array) rgar( $logic, 'rules' ) as $i => $r ) {
+		if ( isset( $sanitized['rules'][ $i ]['operator'] ) && $sanitized['rules'][ $i ]['operator'] !== $r['operator'] && in_array( $r['operator'], $stored, true ) ) {
+			$sanitized['rules'][ $i ]['operator'] = $r['operator'];
+		}
+	}
+	return $sanitized;
 }
 
 /**
@@ -349,14 +371,14 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 			$rules[] = array(
 				'email'    => $email,
 				'fieldId'  => $field_id,
-				'operator' => in_array( (string) ( $r['operator'] ?? '' ), minn_admin_gfn_operators(), true ) ? (string) $r['operator'] : 'is',
+				'operator' => is_scalar( $r['operator'] ?? '' ) ? (string) ( $r['operator'] ?? '' ) : '',
 				'value'    => is_scalar( $r['value'] ?? '' ) ? (string) $r['value'] : '',
 			);
 		}
 		if ( ! $rules ) {
 			return minn_admin_gfn_invalid( 'routing', __( 'Add at least one routing rule.', 'minn-admin' ) );
 		}
-		$sanitized = GFFormsModel::sanitize_conditional_logic( array( 'rules' => $rules ) );
+		$sanitized = minn_admin_gfn_sanitize_rules( array( 'rules' => $rules ), rgar( $stored, 'routing' ) );
 		$routing   = $sanitized['rules'];
 	}
 
@@ -394,17 +416,17 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 			if ( is_array( $r ) && '' !== (string) ( $r['fieldId'] ?? '' ) ) {
 				$rules[] = array(
 					'fieldId'  => (string) $r['fieldId'],
-					'operator' => in_array( (string) ( $r['operator'] ?? '' ), minn_admin_gfn_operators(), true ) ? (string) $r['operator'] : 'is',
+					'operator' => is_scalar( $r['operator'] ?? '' ) ? (string) ( $r['operator'] ?? '' ) : '',
 					'value'    => is_scalar( $r['value'] ?? '' ) ? (string) $r['value'] : '',
 				);
 			}
 		}
 		if ( $rules ) {
-			$logic = GFFormsModel::sanitize_conditional_logic( array(
+			$logic = minn_admin_gfn_sanitize_rules( array(
 				'actionType' => 'hide' === ( $body['conditionalLogic']['actionType'] ?? '' ) ? 'hide' : 'show',
 				'logicType'  => 'any' === ( $body['conditionalLogic']['logicType'] ?? '' ) ? 'any' : 'all',
 				'rules'      => $rules,
-			) );
+			), rgars( $stored, 'conditionalLogic/rules' ) );
 		}
 	}
 

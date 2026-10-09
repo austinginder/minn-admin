@@ -198,13 +198,12 @@ function minn_admin_gfc_build( $form, $stored, $body, $is_new ) {
 
 	$logic = array();
 	if ( ! $default && ! empty( $body['conditionalLogic'] ) && is_array( $body['conditionalLogic'] ) && ! empty( $body['conditionalLogic']['rules'] ) ) {
-		$ops   = minn_admin_gfn_operators();
 		$rules = array();
 		foreach ( (array) $body['conditionalLogic']['rules'] as $r ) {
 			if ( is_array( $r ) && '' !== (string) ( $r['fieldId'] ?? '' ) ) {
 				$rules[] = array(
 					'fieldId'  => (string) $r['fieldId'],
-					'operator' => in_array( (string) ( $r['operator'] ?? '' ), $ops, true ) ? (string) $r['operator'] : 'is',
+					'operator' => is_scalar( $r['operator'] ?? '' ) ? (string) ( $r['operator'] ?? '' ) : '',
 					'value'    => is_scalar( $r['value'] ?? '' ) ? (string) $r['value'] : '',
 				);
 			}
@@ -227,7 +226,7 @@ function minn_admin_gfc_build( $form, $stored, $body, $is_new ) {
 	$c['pageId']            = $page_id ? (string) $page_id : '';
 	$c['url']               = $url;
 	$c['queryString']       = $val( 'queryString' );
-	$c['conditionalLogic']  = GFFormsModel::sanitize_conditional_logic( $default ? array() : $logic );
+	$c['conditionalLogic']  = $default || ! $logic ? array() : minn_admin_gfn_sanitize_rules( $logic, rgars( $stored, 'conditionalLogic/rules' ) );
 	return $c;
 }
 
