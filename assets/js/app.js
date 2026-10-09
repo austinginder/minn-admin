@@ -13404,13 +13404,21 @@
 		if ( ! list.length ) {
 			return `<div class="minn-pdl-empty">${ esc( __( 'No attributes yet. Add one to describe this product, or to give a variable product something to vary by.' ) ) }</div>`;
 		}
-		return list.map( ( a, i ) => `
+		return list.map( ( a, i ) => {
+			const values = a.id ? `<div class="minn-ac minn-pattr-terms" data-pattrac="${ i }">
+					<input class="minn-input minn-ac-input" placeholder="${ esc( __( 'Pick or add values' ) ) }" autocomplete="off" spellcheck="false" aria-label="${
+						/* translators: %s: a store-wide product attribute, such as Size. */
+						esc( sprintf( __( 'Values for %s' ), a.name ) ) }">
+					<div class="minn-ac-panel" hidden></div>
+				</div>`
+				: `<input class="minn-input" data-pattrvals="${ i }" value="${ esc( a.options.join( ', ' ) ) }" placeholder="${ esc( __( 'Values, separated by commas' ) ) }" aria-label="${ esc( __( 'Attribute values' ) ) }">`;
+			return `
 			<div class="minn-pattr-row">
 				<div class="minn-pattr-name">
 					${ a.id ? `<span class="minn-pattr-global" title="${ esc( __( 'A store-wide attribute' ) ) }">${ esc( a.name ) }</span>`
 						: `<input class="minn-input" data-pattrname="${ i }" value="${ esc( a.name ) }" placeholder="${ esc( __( 'Name' ) ) }" aria-label="${ esc( __( 'Attribute name' ) ) }">` }
 				</div>
-				<input class="minn-input" data-pattrvals="${ i }" value="${ esc( a.options.join( ', ' ) ) }" placeholder="${ esc( __( 'Values, separated by commas' ) ) }" aria-label="${ esc( __( 'Attribute values' ) ) }">
+				${ values }
 				<label class="minn-pattr-flag">
 					<button type="button" class="minn-switch${ a.visible ? ' on' : '' }" data-pattrvis="${ i }" role="switch" aria-checked="${ a.visible }" aria-label="${ esc( __( 'Show on the product page' ) ) }"><span class="minn-switch-knob"></span></button>
 					<span>${ esc( __( 'Visible' ) ) }</span>
@@ -13420,7 +13428,36 @@
 					<span>${ esc( __( 'Variations' ) ) }</span>
 				</label>
 				<button type="button" class="minn-pdl-x" data-pattrx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( __( 'Remove attribute' ) ) }">×</button>
-			</div>` ).join( '' );
+				${ a.id ? `<div class="minn-chips minn-pattr-chips" data-pattrchips="${ i }">${ productAttrChipsHtml( a ) }</div>` : '' }
+			</div>`;
+		} ).join( '' );
+	}
+
+	// A store-wide attribute's values are the names of terms in its pa_*
+	// taxonomy. wc/v3 matches each name to a term on save and creates the
+	// ones that do not exist yet, so a value typed here needs no request.
+	function productAttrChipsHtml( a ) {
+		return a.options.map( ( v, j ) => `<button type="button" class="minn-chip sel" data-pattrchip="${ j }" title="${ esc( __( 'Remove' ) ) }">${ esc( decodeEntities( v ) ) } ×</button>` ).join( '' );
+	}
+
+	function productAttrHasValue( a, name ) {
+		const key = decodeEntities( name ).toLowerCase();
+		return a.options.some( ( v ) => decodeEntities( v ).toLowerCase() === key );
+	}
+
+	function productAttrTermRowsHtml( a, rows, q ) {
+		if ( rows == null ) return `<div class="minn-ac-empty">${ esc( __( 'Searching…' ) ) }</div>`;
+		const body = rows.map( ( x ) => `<button type="button" class="minn-ac-item minn-ac-check" role="option" aria-selected="${ productAttrHasValue( a, x.name ) ? 'true' : 'false' }" data-pattrpick="${ esc( x.name ) }"><span class="minn-check" aria-hidden="true"></span><span class="minn-cell-clip">${ esc( x.name ) }</span></button>` ).join( '' );
+		// A typed value that is not a term yet is offered as one, which is
+		// the Create value of WooCommerce's own attribute box.
+		const fresh = q && ! rows.some( ( x ) => x.name.toLowerCase() === q.toLowerCase() ) && ! productAttrHasValue( a, q );
+		const add = fresh ? `<div class="minn-ac-foot"><button type="button" class="minn-ac-item minn-ac-add" data-pattradd>${ icon( 'plus' ) }<span>${
+			/* translators: %s: a value typed for a product attribute, such as XL. */
+			esc( sprintf( __( 'Add “%s”' ), q ) ) }</span></button></div>` : '';
+		if ( ! body && ! add ) {
+			return `<div class="minn-ac-empty">${ esc( q ? __( 'No matches' ) : __( 'No values yet. Type one to add it.' ) ) }</div>`;
+		}
+		return body + add;
 	}
 
 	function bindProductAttributes( m ) {
@@ -13450,6 +13487,7 @@
 				m.attributes.splice( parseInt( el.dataset.pattrx, 10 ), 1 );
 				repaint();
 			} ) );
+			$$( '[data-pattrac]', list ).forEach( ( wrap ) => bindProductAttrValues( m, parseInt( wrap.dataset.pattrac, 10 ), wrap ) );
 		};
 		bindRows();
 		const add = $( '#minn-p-attr-add' );
@@ -13478,9 +13516,128 @@
 					// on the list is guarded above instead.
 					const inp = globalWrap.querySelector( '.minn-ac-input' );
 					if ( inp ) inp.value = '';
+					// Straight on to its values: focusing the field opens the
+					// list of terms the attribute already has.
+					const vals = $( `[data-pattrac="${ m.attributes.length - 1 }"] .minn-ac-input`, list );
+					if ( vals ) vals.focus( { preventScroll: true } );
 				},
 			} );
 		}
+	}
+
+	/**
+	 * Values for a store-wide attribute: chips plus the list of terms the
+	 * attribute already has, the same shape the category and brand fields use.
+	 * WooCommerce drops a store-wide attribute saved with no values at all, so
+	 * the save refuses one (see the product save).
+	 */
+	function bindProductAttrValues( m, i, wrap ) {
+		const a = m.attributes[ i ];
+		const row = wrap.closest( '.minn-pattr-row' );
+		const chips = row && row.querySelector( '[data-pattrchips]' );
+		const input = wrap.querySelector( '.minn-ac-input' );
+		const panel = wrap.querySelector( '.minn-ac-panel' );
+		if ( ! a || ! a.id || ! chips || ! input || ! panel ) return;
+		const cache = ( state.cache.attributeTerms = state.cache.attributeTerms || {} );
+		let rows = null;
+		let q = '';
+		// One generation per request, so a slow answer to an earlier keystroke
+		// cannot repaint over a newer one.
+		let seq = 0;
+		const repaintChips = () => {
+			chips.innerHTML = productAttrChipsHtml( a );
+			bindChips();
+			if ( m.syncDirty ) m.syncDirty();
+		};
+		const bindChips = () => $$( '[data-pattrchip]', chips ).forEach( ( ch ) =>
+			ch.addEventListener( 'click', () => {
+				a.options.splice( parseInt( ch.dataset.pattrchip, 10 ), 1 );
+				repaintChips();
+				if ( ! panel.hidden ) renderPanel();
+			} )
+		);
+		const toggle = ( name ) => {
+			const key = decodeEntities( name ).toLowerCase();
+			const at = a.options.findIndex( ( v ) => decodeEntities( v ).toLowerCase() === key );
+			if ( at === -1 ) a.options.push( name );
+			else a.options.splice( at, 1 );
+			repaintChips();
+			renderPanel(); // the tick moves and the list stays open
+		};
+		// Enter adds what is typed. A name that matches a term (in any case)
+		// takes the term's own spelling, so it cannot become a near-duplicate.
+		const addTyped = () => {
+			const names = splitTagNames( input.value );
+			if ( ! names.length ) return;
+			names.forEach( ( n ) => {
+				const term = ( rows || [] ).concat( cache[ a.id ] || [] )
+					.find( ( x ) => x.name.toLowerCase() === n.toLowerCase() );
+				const name = term ? term.name : n;
+				if ( ! productAttrHasValue( a, name ) ) a.options.push( name );
+			} );
+			input.value = '';
+			repaintChips();
+			load( '' );
+		};
+		const renderPanel = () => {
+			panel.innerHTML = productAttrTermRowsHtml( a, rows, q );
+			panel.hidden = false;
+			$$( '[data-pattrpick]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
+				e.preventDefault(); // a plain click blurs the field first
+				toggle( b.dataset.pattrpick );
+			} ) );
+			const addBtn = $( '[data-pattradd]', panel );
+			if ( addBtn ) addBtn.addEventListener( 'mousedown', ( e ) => {
+				e.preventDefault();
+				addTyped();
+			} );
+		};
+		const load = async ( query ) => {
+			const mine = ++seq;
+			q = query;
+			if ( ! query && Array.isArray( cache[ a.id ] ) ) {
+				// A search still in flight set the spinner and, being stale
+				// now, will never clear it.
+				wrap.classList.remove( 'is-loading' );
+				rows = cache[ a.id ];
+				renderPanel();
+				return;
+			}
+			rows = null;
+			wrap.classList.add( 'is-loading' );
+			renderPanel();
+			try {
+				const items = await api( `wc/v3/products/attributes/${ a.id }/terms?${ query ? 'search=' + encodeURIComponent( query ) + '&' : '' }per_page=100&_fields=id,name` );
+				if ( mine !== seq ) return;
+				rows = ( Array.isArray( items ) ? items : [] ).map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) );
+				if ( ! query ) cache[ a.id ] = rows;
+			} catch ( e ) {
+				if ( mine !== seq ) return;
+				rows = [];
+			}
+			wrap.classList.remove( 'is-loading' );
+			renderPanel();
+		};
+		bindChips();
+		let timer = null;
+		let blurTimer = null;
+		// A focus that lands inside the blur's grace period (the save
+		// refusing an empty attribute focuses this field) must not have the
+		// list it opened closed under it, and a click on a field that is
+		// already focused fires no focus, so it opens the list too.
+		input.addEventListener( 'focus', () => { clearTimeout( blurTimer ); load( input.value.trim() ); } );
+		input.addEventListener( 'click', () => { if ( panel.hidden ) load( input.value.trim() ); } );
+		input.addEventListener( 'input', () => {
+			clearTimeout( timer );
+			timer = setTimeout( () => load( input.value.trim() ), 250 );
+		} );
+		input.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Escape' ) { panel.hidden = true; return; }
+			if ( e.key !== 'Enter' ) return;
+			e.preventDefault(); // Enter here must never submit anything
+			addTyped();
+		} );
+		input.addEventListener( 'blur', () => { blurTimer = setTimeout( () => { panel.hidden = true; }, 150 ); } );
 	}
 
 	function productLinkFieldHtml( m, f ) {
@@ -13834,6 +13991,9 @@
 			const load = async ( q ) => {
 				const mine = ++seq;
 				if ( ! q && Array.isArray( cache[ t.key ] ) ) {
+					// A search still in flight set the spinner and, being
+					// stale now, will never clear it.
+					wrap.classList.remove( 'is-loading' );
 					rows = cache[ t.key ];
 					renderPanel();
 					return;
@@ -14175,6 +14335,17 @@
 				toast( priceProblem, true );
 				const saleEl = $( '#minn-p-sale' );
 				if ( saleEl ) saleEl.focus();
+				return;
+			}
+			// And so is a store-wide attribute with no values: wc/v3 answers
+			// 200 and leaves it off the product.
+			const bare = $( '#minn-p-attrs' ) && Array.isArray( m.attributes )
+				? m.attributes.findIndex( ( a ) => a.id && ! a.options.length ) : -1;
+			if ( bare !== -1 ) {
+				/* translators: %s: a store-wide product attribute, such as Size. */
+				toast( sprintf( __( 'Pick at least one value for %s, or remove it.' ), m.attributes[ bare ].name ), true );
+				const valsEl = $( `[data-pattrac="${ bare }"] .minn-ac-input` );
+				if ( valsEl ) valsEl.focus( { preventScroll: true } );
 				return;
 			}
 			const payload = buildProductPayload( m, p );
