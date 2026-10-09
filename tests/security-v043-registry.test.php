@@ -1080,6 +1080,357 @@ if ( ! class_exists( 'FLUpdater' ) || ! method_exists( 'FLUpdater', 'save_subscr
 	wp_set_current_user( $admin );
 }
 
+// --- #2 ACF panel and options saves keep backslashes in every field ---------
+if ( function_exists( 'acf_add_local_field_group' ) && function_exists( 'acf_add_options_page' ) && function_exists( 'minn_admin_acf_write_values' ) ) {
+	// What ACF's own metabox would have stored: it hands update_field() the
+	// slashed $_POST, so these are the values a site really holds.
+	$acf43s_path = 'C:\\Users\\minn\\file.txt';
+	$acf43s_json = '{"a":"x\\"y","re":"\\\\d+","q":"O\'Brien"}';
+	$acf43s_rx   = '^\\d+$';
+	$acf43s_body = '<p>keep \\n and \\\\ here</p>';
+	$acf43s_flex = 'two\\\\slashes';
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn43s',
+		'title'    => 'Minn v043 slash probe',
+		'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ),
+		'fields'   => array(
+			array( 'key' => 'field_minn43s_path', 'name' => 'minn43s_path', 'label' => 'Path', 'type' => 'text' ),
+			array( 'key' => 'field_minn43s_json', 'name' => 'minn43s_json', 'label' => 'JSON', 'type' => 'textarea' ),
+			array( 'key' => 'field_minn43s_title', 'name' => 'minn43s_title', 'label' => 'Title', 'type' => 'text' ),
+			array(
+				'key'        => 'field_minn43s_rows',
+				'name'       => 'minn43s_rows',
+				'label'      => 'Rows',
+				'type'       => 'repeater',
+				'sub_fields' => array(
+					array( 'key' => 'field_minn43s_rx', 'name' => 'rx', 'label' => 'Pattern', 'type' => 'text' ),
+					// wysiwyg has no seat in the row cards: an unmapped sub the
+					// row merge carries through from the stored row.
+					array( 'key' => 'field_minn43s_body', 'name' => 'body', 'label' => 'Body', 'type' => 'wysiwyg' ),
+					// A group sub flattens into the row and is stored nested.
+					array( 'key' => 'field_minn43s_meta', 'name' => 'meta', 'label' => 'Meta', 'type' => 'group', 'sub_fields' => array(
+						array( 'key' => 'field_minn43s_mk', 'name' => 'mk', 'label' => 'Key', 'type' => 'text' ),
+					) ),
+				),
+			),
+			array(
+				'key'     => 'field_minn43s_flex',
+				'name'    => 'minn43s_flex',
+				'label'   => 'Sections',
+				'type'    => 'flexible_content',
+				'layouts' => array(
+					'layout_minn43s' => array(
+						'key'        => 'layout_minn43s',
+						'name'       => 'para',
+						'label'      => 'Para',
+						'display'    => 'block',
+						'sub_fields' => array(
+							array( 'key' => 'field_minn43s_ptext', 'name' => 'ptext', 'label' => 'Text', 'type' => 'text' ),
+						),
+					),
+				),
+			),
+		),
+	) );
+	$acf43s_post = wp_insert_post( array( 'post_title' => 'Minn v043 slash probe', 'post_status' => 'draft', 'post_author' => $admin ) );
+	update_field( 'field_minn43s_path', wp_slash( $acf43s_path ), $acf43s_post );
+	update_field( 'field_minn43s_json', wp_slash( $acf43s_json ), $acf43s_post );
+	update_field( 'field_minn43s_title', 'Before', $acf43s_post );
+	update_field( 'field_minn43s_rows', wp_slash( array( array( 'field_minn43s_rx' => $acf43s_rx, 'field_minn43s_body' => $acf43s_body, 'field_minn43s_meta' => array( 'field_minn43s_mk' => $acf43s_path ) ) ) ), $acf43s_post );
+	update_field( 'field_minn43s_flex', wp_slash( array( array( 'acf_fc_layout' => 'para', 'field_minn43s_ptext' => $acf43s_flex ) ) ), $acf43s_post );
+	$check( 'ACF slash probe: seeded values are stored as typed', $acf43s_path === get_post_meta( $acf43s_post, 'minn43s_path', true ) && $acf43s_rx === get_post_meta( $acf43s_post, 'minn43s_rows_0_rx', true ), get_post_meta( $acf43s_post, 'minn43s_path', true ) );
+
+	// The client: load the post, seed the panel from minn_acf, edit ONE field,
+	// send the whole panel back (app.js sends every value on a dirty panel).
+	list( , $acf43s_got ) = $call( 'GET', '/wp/v2/posts/' . $acf43s_post, null, array( 'context' => 'edit' ) );
+	$acf43s_vals          = json_decode( wp_json_encode( $acf43s_got['minn_acf'] ?? array() ), true );
+	$acf43s_vals['minn43s_title'] = 'Edited \\o/';
+	list( $acf43s_st )    = $call( 'POST', '/wp/v2/posts/' . $acf43s_post, array( 'minn_acf' => $acf43s_vals ) );
+	wp_cache_delete( $acf43s_post, 'post_meta' );
+	$acf43s_meta = function ( $k ) use ( $acf43s_post ) {
+		return get_post_meta( $acf43s_post, $k, true );
+	};
+	$check( 'ACF panel save: an untouched text field keeps its backslashes', 200 === $acf43s_st && $acf43s_path === $acf43s_meta( 'minn43s_path' ), $acf43s_meta( 'minn43s_path' ) );
+	$check( 'ACF panel save: an untouched textarea keeps escaped quotes and \\\\d', $acf43s_json === $acf43s_meta( 'minn43s_json' ), $acf43s_meta( 'minn43s_json' ) );
+	$check( 'ACF panel save: an untouched repeater sub keeps its backslashes', $acf43s_rx === $acf43s_meta( 'minn43s_rows_0_rx' ), $acf43s_meta( 'minn43s_rows_0_rx' ) );
+	$check( 'ACF panel save: a repeater sub the rows cannot show keeps its backslashes', $acf43s_body === $acf43s_meta( 'minn43s_rows_0_body' ), $acf43s_meta( 'minn43s_rows_0_body' ) );
+	$check( 'ACF panel save: an untouched group sub inside a repeater row keeps its backslashes', $acf43s_path === $acf43s_meta( 'minn43s_rows_0_meta_mk' ), $acf43s_meta( 'minn43s_rows_0_meta_mk' ) );
+	$check( 'ACF panel save: an untouched flexible-content sub keeps its backslashes', $acf43s_flex === $acf43s_meta( 'minn43s_flex_0_ptext' ), $acf43s_meta( 'minn43s_flex_0_ptext' ) );
+	$check( 'CONTROL ACF panel save: the edited field stores what was typed, backslash included', 'Edited \\o/' === $acf43s_meta( 'minn43s_title' ), $acf43s_meta( 'minn43s_title' ) );
+	// A second untouched save changes nothing at all.
+	list( , $acf43s_got2 ) = $call( 'GET', '/wp/v2/posts/' . $acf43s_post, null, array( 'context' => 'edit' ) );
+	$call( 'POST', '/wp/v2/posts/' . $acf43s_post, array( 'minn_acf' => json_decode( wp_json_encode( $acf43s_got2['minn_acf'] ?? array() ), true ) ) );
+	wp_cache_delete( $acf43s_post, 'post_meta' );
+	$check( 'ACF panel save: a second round trip is stable', $acf43s_json === $acf43s_meta( 'minn43s_json' ) && $acf43s_rx === $acf43s_meta( 'minn43s_rows_0_rx' ) && 'Edited \\o/' === $acf43s_meta( 'minn43s_title' ), $acf43s_meta( 'minn43s_json' ) );
+	// Without unfiltered_html the markup filter still has the last word: what
+	// is stored is exactly what it returned, backslashes and all.
+	$acf43s_nofilter = function ( $caps ) {
+		$caps['unfiltered_html'] = false;
+		return $caps;
+	};
+	add_filter( 'user_has_cap', $acf43s_nofilter, 99 );
+	$acf43s_hostile = '<b>x\\y</b><script>alert(1)</script><a href="#" onclick="z()">l\\"</a>';
+	$acf43s_vals['minn43s_title'] = $acf43s_hostile;
+	$call( 'POST', '/wp/v2/posts/' . $acf43s_post, array( 'minn_acf' => $acf43s_vals ) );
+	$acf43s_want = wp_kses_post( $acf43s_hostile );
+	remove_filter( 'user_has_cap', $acf43s_nofilter, 99 );
+	wp_cache_delete( $acf43s_post, 'post_meta' );
+	$check( 'ACF panel save without unfiltered_html: the filtered value is stored exactly, no script', $acf43s_want === $acf43s_meta( 'minn43s_title' ) && false === stripos( $acf43s_meta( 'minn43s_title' ), '<script' ) && false === stripos( $acf43s_meta( 'minn43s_title' ), 'onclick' ), $acf43s_meta( 'minn43s_title' ) );
+	wp_delete_post( $acf43s_post, true );
+
+	// Options page: the client sends only the fields the user changed, but a
+	// group sub rewrites its whole group and a repeater its whole rows.
+	acf_add_options_page( array( 'page_title' => 'Minn v043 slash probe', 'menu_slug' => 'minn43s-options', 'post_id' => 'options', 'capability' => 'manage_options', 'redirect' => false ) );
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn43so',
+		'title'    => 'Minn v043 slash options',
+		'location' => array( array( array( 'param' => 'options_page', 'operator' => '==', 'value' => 'minn43s-options' ) ) ),
+		'fields'   => array(
+			array( 'key' => 'field_minn43so_text', 'name' => 'minn43so_text', 'label' => 'Text', 'type' => 'text' ),
+			array(
+				'key'        => 'field_minn43so_grp',
+				'name'       => 'minn43so_grp',
+				'label'      => 'Group',
+				'type'       => 'group',
+				'sub_fields' => array(
+					array( 'key' => 'field_minn43so_ga', 'name' => 'ga', 'label' => 'A', 'type' => 'text' ),
+					array( 'key' => 'field_minn43so_gb', 'name' => 'gb', 'label' => 'B', 'type' => 'text' ),
+				),
+			),
+			array(
+				'key'        => 'field_minn43so_rows',
+				'name'       => 'minn43so_rows',
+				'label'      => 'Rows',
+				'type'       => 'repeater',
+				'sub_fields' => array(
+					array( 'key' => 'field_minn43so_r1', 'name' => 'r1', 'label' => 'R1', 'type' => 'text' ),
+					array( 'key' => 'field_minn43so_r2', 'name' => 'r2', 'label' => 'R2', 'type' => 'text' ),
+				),
+			),
+		),
+	) );
+	update_field( 'field_minn43so_text', 'plain', 'options' );
+	update_field( 'field_minn43so_grp', wp_slash( array( 'field_minn43so_ga' => 'a', 'field_minn43so_gb' => $acf43s_path ) ), 'options' );
+	update_field( 'field_minn43so_rows', wp_slash( array( array( 'field_minn43so_r1' => 'one', 'field_minn43so_r2' => $acf43s_rx ) ) ), 'options' );
+	list( $acf43s_ost, $acf43s_tab ) = $call( 'GET', '/minn-admin/v1/acf/options/minn43s-options/tab-0' );
+	$acf43s_rows = json_decode( wp_json_encode( $acf43s_tab['values']['field_minn43so_rows'] ?? array() ), true );
+	if ( isset( $acf43s_rows[0]['values'] ) ) {
+		$acf43s_rows[0]['values']['r1'] = 'one\\edited';
+	}
+	list( $acf43s_ost2 ) = $call( 'POST', '/minn-admin/v1/acf/options/minn43s-options/tab-0', array( 'values' => array(
+		'field_minn43so_text' => 'typed \\d',
+		'field_minn43so_ga'   => 'a\\b',
+		'field_minn43so_rows' => $acf43s_rows,
+	) ) );
+	wp_cache_delete( 'alloptions', 'options' );
+	$check( 'ACF options save: a typed backslash is stored', 200 === $acf43s_ost && 200 === $acf43s_ost2 && 'typed \\d' === get_option( 'options_minn43so_text' ), (string) get_option( 'options_minn43so_text' ) );
+	$check( 'ACF options save: the edited group sub keeps its backslash', 'a\\b' === get_option( 'options_minn43so_grp_ga' ), (string) get_option( 'options_minn43so_grp_ga' ) );
+	$check( 'ACF options save: an untouched sibling in the same group keeps its backslashes', $acf43s_path === get_option( 'options_minn43so_grp_gb' ), (string) get_option( 'options_minn43so_grp_gb' ) );
+	$check( 'ACF options save: an untouched sub in an edited repeater row keeps its backslashes', $acf43s_rx === get_option( 'options_minn43so_rows_0_r2' ) && 'one\\edited' === get_option( 'options_minn43so_rows_0_r1' ), get_option( 'options_minn43so_rows_0_r2' ) . ' / ' . get_option( 'options_minn43so_rows_0_r1' ) );
+	foreach ( array( 'minn43so_text', 'minn43so_grp', 'minn43so_rows' ) as $acf43s_n ) {
+		delete_field( $acf43s_n, 'options' );
+	}
+	foreach ( array( 'minn43so_grp_ga', 'minn43so_grp_gb', 'minn43so_rows_0_r1', 'minn43so_rows_0_r2' ) as $acf43s_n ) {
+		delete_option( 'options_' . $acf43s_n );
+		delete_option( '_options_' . $acf43s_n );
+	}
+	acf_remove_local_field_group( 'group_minn43s' );
+	acf_remove_local_field_group( 'group_minn43so' );
+} else {
+	$skip( 'ACF Pro inactive' );
+}
+
+// --- #18 ACF dates ACF accepts survive an unrelated panel save --------------
+if ( function_exists( 'acf_add_local_field_group' ) && function_exists( 'acf_add_options_page' ) && function_exists( 'minn_admin_acf_write_values' ) ) {
+	// Shapes ACF itself reads (acf_format_date takes a unix timestamp or any
+	// strtotime() string; the time picker shows whatever is stored), which
+	// Minn's controls cannot display.
+	$acf43d_seed = array(
+		'minn43d_ts'   => '1793404800',          // date_picker, unix timestamp
+		'minn43d_str'  => '2026-10-31 14:00',    // date_picker, strtotime string
+		'minn43d_dt'   => '2026-10-31 09:15:30', // date_time_picker, canonical with seconds
+		'minn43d_dtts' => '1793404800',          // date_time_picker, unix timestamp
+		'minn43d_t'    => '09:15:30',            // time_picker, canonical with seconds
+		'minn43d_t12'  => '9:15 am',             // time_picker, imported 12-hour text
+		'minn43d_ok'   => '20261031',            // date_picker, canonical (the control)
+		'minn43d_tok'  => '18:30:00',            // time_picker, canonical (the control)
+	);
+	$acf43d_types = array(
+		'minn43d_ts'   => 'date_picker',
+		'minn43d_str'  => 'date_picker',
+		'minn43d_dt'   => 'date_time_picker',
+		'minn43d_dtts' => 'date_time_picker',
+		'minn43d_t'    => 'time_picker',
+		'minn43d_t12'  => 'time_picker',
+		'minn43d_ok'   => 'date_picker',
+		'minn43d_tok'  => 'time_picker',
+	);
+	$acf43d_fields = array( array( 'key' => 'field_minn43d_note', 'name' => 'minn43d_note', 'label' => 'Note', 'type' => 'text' ) );
+	foreach ( $acf43d_types as $acf43d_n => $acf43d_t ) {
+		$acf43d_fields[] = array( 'key' => 'field_' . $acf43d_n, 'name' => $acf43d_n, 'label' => $acf43d_n, 'type' => $acf43d_t, 'display_format' => 'time_picker' === $acf43d_t ? 'H:i:s' : 'd/m/Y' );
+	}
+	$acf43d_fields[] = array(
+		'key'        => 'field_minn43d_rows',
+		'name'       => 'minn43d_rows',
+		'label'      => 'Schedule',
+		'type'       => 'repeater',
+		'sub_fields' => array(
+			array( 'key' => 'field_minn43d_when', 'name' => 'when', 'label' => 'When', 'type' => 'date_picker' ),
+			array( 'key' => 'field_minn43d_at', 'name' => 'at', 'label' => 'At', 'type' => 'time_picker' ),
+			array( 'key' => 'field_minn43d_what', 'name' => 'what', 'label' => 'What', 'type' => 'text' ),
+		),
+	);
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn43d',
+		'title'    => 'Minn v043 date probe',
+		'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ),
+		'fields'   => $acf43d_fields,
+	) );
+	$acf43d_post = wp_insert_post( array( 'post_title' => 'Minn v043 date probe', 'post_status' => 'draft', 'post_author' => $admin ) );
+	foreach ( $acf43d_seed as $acf43d_n => $acf43d_v ) {
+		update_field( 'field_' . $acf43d_n, $acf43d_v, $acf43d_post );
+	}
+	update_field( 'field_minn43d_note', 'before', $acf43d_post );
+	update_field( 'field_minn43d_rows', array( array( 'field_minn43d_when' => '1793404800', 'field_minn43d_at' => '18:30:45', 'field_minn43d_what' => 'gig' ) ), $acf43d_post );
+
+	list( , $acf43d_got ) = $call( 'GET', '/wp/v2/posts/' . $acf43d_post, null, array( 'context' => 'edit' ) );
+	$acf43d_vals          = json_decode( wp_json_encode( $acf43d_got['minn_acf'] ?? array() ), true );
+	$acf43d_vals['minn43d_note'] = 'after';
+	if ( isset( $acf43d_vals['minn43d_rows'][0]['values'] ) ) {
+		$acf43d_vals['minn43d_rows'][0]['values']['what'] = 'gig (moved)';
+	}
+	list( $acf43d_st ) = $call( 'POST', '/wp/v2/posts/' . $acf43d_post, array( 'minn_acf' => $acf43d_vals ) );
+	wp_cache_delete( $acf43d_post, 'post_meta' );
+	$acf43d_meta = function ( $k ) use ( $acf43d_post ) {
+		return (string) get_post_meta( $acf43d_post, $k, true );
+	};
+	foreach ( array( 'minn43d_ts' => 'a date stored as a timestamp', 'minn43d_str' => 'a date stored as a strtotime string', 'minn43d_dtts' => 'a date-time stored as a timestamp', 'minn43d_t12' => 'a time stored as 12-hour text' ) as $acf43d_n => $acf43d_why ) {
+		$check( "ACF panel save: {$acf43d_why} is not cleared by an unrelated edit", 200 === $acf43d_st && $acf43d_seed[ $acf43d_n ] === $acf43d_meta( $acf43d_n ), var_export( $acf43d_meta( $acf43d_n ), true ) );
+	}
+	$check( 'ACF panel save: a date-time keeps its seconds', '2026-10-31 09:15:30' === $acf43d_meta( 'minn43d_dt' ), $acf43d_meta( 'minn43d_dt' ) );
+	$check( 'ACF panel save: a time keeps its seconds', '09:15:30' === $acf43d_meta( 'minn43d_t' ), $acf43d_meta( 'minn43d_t' ) );
+	$check( 'ACF panel save: a repeater date sub stored as a timestamp survives a row edit', '1793404800' === $acf43d_meta( 'minn43d_rows_0_when' ), var_export( $acf43d_meta( 'minn43d_rows_0_when' ), true ) );
+	$check( 'ACF panel save: a repeater time sub keeps its seconds', '18:30:45' === $acf43d_meta( 'minn43d_rows_0_at' ), $acf43d_meta( 'minn43d_rows_0_at' ) );
+	$check( 'CONTROL ACF panel save: the edited fields stored', 'after' === $acf43d_meta( 'minn43d_note' ) && 'gig (moved)' === $acf43d_meta( 'minn43d_rows_0_what' ), $acf43d_meta( 'minn43d_note' ) . ' / ' . $acf43d_meta( 'minn43d_rows_0_what' ) );
+	$check( 'CONTROL ACF panel save: an untouched canonical date and time are unchanged', '20261031' === $acf43d_meta( 'minn43d_ok' ) && '18:30:00' === $acf43d_meta( 'minn43d_tok' ), $acf43d_meta( 'minn43d_ok' ) . ' ' . $acf43d_meta( 'minn43d_tok' ) );
+
+	// Real edits still land: a picked date, a typed time, a cleared date, a
+	// new date over a timestamp the control could not show, and a new row.
+	list( , $acf43d_got2 ) = $call( 'GET', '/wp/v2/posts/' . $acf43d_post, null, array( 'context' => 'edit' ) );
+	$acf43d_vals2          = json_decode( wp_json_encode( $acf43d_got2['minn_acf'] ?? array() ), true );
+	$acf43d_vals2['minn43d_ok']  = '2026-11-05';
+	$acf43d_vals2['minn43d_tok'] = '10:45';
+	$acf43d_vals2['minn43d_dt']  = '';
+	$acf43d_vals2['minn43d_ts']  = '2027-01-02';
+	$acf43d_vals2['minn43d_t']   = '09:20';
+	$acf43d_vals2['minn43d_rows'][] = array( 'values' => array( 'when' => '2026-12-24', 'at' => '', 'what' => 'eve' ) );
+	$acf43d_vals2['minn43d_str']  = null;               // the client's empty-value sentinel
+	$acf43d_vals2['minn43d_dtts'] = array( 'x' => 1 );  // not a date at all
+	$call( 'POST', '/wp/v2/posts/' . $acf43d_post, array( 'minn_acf' => $acf43d_vals2 ) );
+	wp_cache_delete( $acf43d_post, 'post_meta' );
+	$check( 'CONTROL ACF panel save: a picked date and a typed time are stored', '20261105' === $acf43d_meta( 'minn43d_ok' ) && '10:45:00' === $acf43d_meta( 'minn43d_tok' ) && '09:20:00' === $acf43d_meta( 'minn43d_t' ), $acf43d_meta( 'minn43d_ok' ) . ' ' . $acf43d_meta( 'minn43d_tok' ) . ' ' . $acf43d_meta( 'minn43d_t' ) );
+	$check( 'CONTROL ACF panel save: clearing a date-time the control showed still clears it', '' === $acf43d_meta( 'minn43d_dt' ), var_export( $acf43d_meta( 'minn43d_dt' ), true ) );
+	$check( 'CONTROL ACF panel save: a date picked over a timestamp replaces it', '20270102' === $acf43d_meta( 'minn43d_ts' ), $acf43d_meta( 'minn43d_ts' ) );
+	$check( 'ACF panel save: null or a non-date over a value the control could not show keeps it', '2026-10-31 14:00' === $acf43d_meta( 'minn43d_str' ) && '1793404800' === $acf43d_meta( 'minn43d_dtts' ) && '9:15 am' === $acf43d_meta( 'minn43d_t12' ), $acf43d_meta( 'minn43d_str' ) . ' / ' . $acf43d_meta( 'minn43d_dtts' ) );
+	$check( 'CONTROL ACF panel save: a new repeater row stores its date', '20261224' === $acf43d_meta( 'minn43d_rows_1_when' ) && '1793404800' === $acf43d_meta( 'minn43d_rows_0_when' ), $acf43d_meta( 'minn43d_rows_1_when' ) . ' / ' . $acf43d_meta( 'minn43d_rows_0_when' ) );
+	wp_delete_post( $acf43d_post, true );
+
+	// Options page: a dirty repeater resends every sub of every row.
+	acf_add_options_page( array( 'page_title' => 'Minn v043 date probe', 'menu_slug' => 'minn43d-options', 'post_id' => 'options', 'capability' => 'manage_options', 'redirect' => false ) );
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn43do',
+		'title'    => 'Minn v043 date options',
+		'location' => array( array( array( 'param' => 'options_page', 'operator' => '==', 'value' => 'minn43d-options' ) ) ),
+		'fields'   => array(
+			array(
+				'key'        => 'field_minn43do_rows',
+				'name'       => 'minn43do_rows',
+				'label'      => 'Dates',
+				'type'       => 'repeater',
+				'sub_fields' => array(
+					array( 'key' => 'field_minn43do_when', 'name' => 'when', 'label' => 'When', 'type' => 'date_time_picker' ),
+					array( 'key' => 'field_minn43do_what', 'name' => 'what', 'label' => 'What', 'type' => 'text' ),
+				),
+			),
+		),
+	) );
+	update_field( 'field_minn43do_rows', array( array( 'field_minn43do_when' => '1793404800', 'field_minn43do_what' => 'launch' ) ), 'options' );
+	list( , $acf43d_tab ) = $call( 'GET', '/minn-admin/v1/acf/options/minn43d-options/tab-0' );
+	$acf43d_orows         = json_decode( wp_json_encode( $acf43d_tab['values']['field_minn43do_rows'] ?? array() ), true );
+	if ( isset( $acf43d_orows[0]['values'] ) ) {
+		$acf43d_orows[0]['values']['what'] = 'launch day';
+	}
+	$call( 'POST', '/minn-admin/v1/acf/options/minn43d-options/tab-0', array( 'values' => array( 'field_minn43do_rows' => $acf43d_orows ) ) );
+	wp_cache_delete( 'alloptions', 'options' );
+	$check( 'ACF options save: a repeater date-time stored as a timestamp survives a row edit', '1793404800' === (string) get_option( 'options_minn43do_rows_0_when' ) && 'launch day' === get_option( 'options_minn43do_rows_0_what' ), var_export( get_option( 'options_minn43do_rows_0_when' ), true ) );
+	delete_field( 'minn43do_rows', 'options' );
+	foreach ( array( 'minn43do_rows_0_when', 'minn43do_rows_0_what' ) as $acf43d_n ) {
+		delete_option( 'options_' . $acf43d_n );
+		delete_option( '_options_' . $acf43d_n );
+	}
+	acf_remove_local_field_group( 'group_minn43d' );
+	acf_remove_local_field_group( 'group_minn43do' );
+} else {
+	$skip( 'ACF Pro inactive' );
+}
+
+// --- #10 Multisite: ACF user fields resolve only this site's members --------
+if ( ! is_multisite() ) {
+	$skip( 'ACF user fields across the network: single site' );
+} elseif ( ! function_exists( 'minn_admin_acf_relation_entry' ) || ! function_exists( 'minn_admin_acf_relation_id_in' ) ) {
+	$skip( 'ACF adapter not loaded' );
+} else {
+	// The resolver needs no ACF code for a user field, so this runs where ACF
+	// is not installed: the field array is the shape acf_get_field() returns.
+	$acf43u_blog  = get_current_blog_id();
+	$acf43u_field = array( 'type' => 'user', 'role' => '', 'multiple' => 0 );
+	$acf43u_sa    = null; // an administrator of THIS site only
+	$acf43u_mem   = null; // another member of this site
+	foreach ( get_users( array( 'blog_id' => $acf43u_blog ) ) as $acf43u_u ) {
+		if ( is_super_admin( $acf43u_u->ID ) ) {
+			continue;
+		}
+		if ( ! $acf43u_sa && in_array( 'administrator', (array) $acf43u_u->roles, true ) ) {
+			$acf43u_sa = $acf43u_u;
+		} elseif ( ! $acf43u_mem ) {
+			$acf43u_mem = $acf43u_u;
+		}
+	}
+	$acf43u_out = null; // an account elsewhere on the network, nothing published here
+	foreach ( get_users( array( 'blog_id' => 0, 'number' => 500 ) ) as $acf43u_u ) {
+		if ( ! is_super_admin( $acf43u_u->ID ) && ! is_user_member_of_blog( $acf43u_u->ID, $acf43u_blog ) && ! count_user_posts( $acf43u_u->ID ) ) {
+			$acf43u_out = $acf43u_u;
+			break;
+		}
+	}
+	if ( ! $acf43u_sa || ! $acf43u_mem || ! $acf43u_out ) {
+		$skip( 'ACF user fields across the network: this site needs a non-super administrator, another member and a non-member account (run with --url=<subsite>)' );
+	} else {
+		wp_set_current_user( $acf43u_sa->ID );
+		$acf43u_read  = minn_admin_acf_relation_entry( 'user', $acf43u_out->ID );
+		$acf43u_write = minn_admin_acf_relation_id_in( $acf43u_field, (string) $acf43u_out->ID );
+		$check( 'Multisite ACF user field: a subsite administrator holds list_users (the premise)', current_user_can( 'list_users' ) && ! current_user_can( 'manage_network_users' ) );
+		$check( 'Multisite ACF user field: an account from another site does not resolve to a name for a subsite administrator', null === $acf43u_read, wp_json_encode( $acf43u_read ) );
+		$check( 'Multisite ACF user field: an account from another site cannot be stored by id', null === $acf43u_write, var_export( $acf43u_write, true ) );
+		$acf43u_m = minn_admin_acf_relation_entry( 'user', $acf43u_mem->ID );
+		$check( 'CONTROL Multisite ACF user field: a member of this site still resolves and stores', is_array( $acf43u_m ) && (string) $acf43u_mem->ID === $acf43u_m['value'] && (string) $acf43u_mem->ID === minn_admin_acf_relation_id_in( $acf43u_field, (string) $acf43u_mem->ID ) );
+		$check( 'CONTROL Multisite ACF user field: your own account resolves', is_array( minn_admin_acf_relation_entry( 'user', $acf43u_sa->ID ) ) );
+		// Someone this site credits publicly stays resolvable after they leave
+		// it: the attribution rule below list_users.
+		$acf43u_pid = wp_insert_post( array( 'post_title' => 'Minn v043 attribution probe', 'post_status' => 'publish', 'post_author' => $acf43u_out->ID ) );
+		$check( 'CONTROL Multisite ACF user field: a non-member credited on this site resolves', is_array( minn_admin_acf_relation_entry( 'user', $acf43u_out->ID ) ) );
+		wp_delete_post( $acf43u_pid, true );
+		wp_set_current_user( $admin );
+		$acf43u_super = get_super_admins();
+		$acf43u_super = $acf43u_super ? get_user_by( 'login', reset( $acf43u_super ) ) : null;
+		if ( $acf43u_super ) {
+			wp_set_current_user( $acf43u_super->ID );
+			$check( 'CONTROL Multisite ACF user field: a network administrator still resolves any account', is_array( minn_admin_acf_relation_entry( 'user', $acf43u_out->ID ) ) && null !== minn_admin_acf_relation_id_in( $acf43u_field, (string) $acf43u_out->ID ) );
+			wp_set_current_user( $admin );
+		}
+	}
+}
+
 // @sections
 
 $summary();

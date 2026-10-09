@@ -385,6 +385,35 @@ function minn_admin_acf_time_in( $value ) {
 }
 
 /**
+ * Did a date, date-time or time come back exactly as it was served?
+ *
+ * Each control speaks one shape, while ACF stores what it was given and reads
+ * it through acf_format_date(): a unix timestamp or any strtotime() string
+ * shows on ACF's screen, and a stored time keeps its seconds. The readers
+ * above serve '' for a shape the control cannot show and the minute for a
+ * value carrying seconds, and the panel resends every field on any edit, so
+ * that projection arriving back is not an edit. Writing it would clear the
+ * date or zero the seconds; the caller leaves the stored value alone.
+ *
+ * @param array $f        Mapped field.
+ * @param mixed $incoming Value the client sent.
+ * @param mixed $stored   Raw stored value.
+ * @return bool
+ */
+function minn_admin_acf_date_untouched( $f, $incoming, $stored ) {
+	if ( ! in_array( $f['type'] ?? '', array( 'date', 'datetime', 'time' ), true ) ) {
+		return false;
+	}
+	if ( null === $stored || '' === $stored || ! is_scalar( $stored ) ) {
+		return false; // nothing stored to keep
+	}
+	if ( null !== $incoming && ! is_scalar( $incoming ) ) {
+		return false;
+	}
+	return (string) $incoming === minn_admin_acf_value_out( $f, $stored );
+}
+
+/**
  * Incoming gallery value ([{ id, url }] entries or bare ids) → validated
  * attachment-id list. An empty list clears (ACF stores an empty array).
  *
@@ -626,7 +655,16 @@ function minn_admin_acf_may_see_user( $u ) {
 	if ( ! $u instanceof WP_User ) {
 		return false;
 	}
-	if ( (int) $u->ID === get_current_user_id() || current_user_can( 'list_users' ) ) {
+	if ( (int) $u->ID === get_current_user_id() ) {
+		return true;
+	}
+	// On a network wp_users is shared by every site, while list_users is a
+	// per-site capability every subsite administrator holds. It lists THIS
+	// site's members, the same set core's users endpoint and ACF's own user
+	// lookup answer for; anyone else on the network falls through to the
+	// attribution rule unless the caller administers the network's users.
+	$member = ! is_multisite() || is_user_member_of_blog( $u->ID ) || current_user_can( 'manage_network_users' );
+	if ( $member && current_user_can( 'list_users' ) ) {
 		return true;
 	}
 	return (bool) count_user_posts( $u->ID );
@@ -1075,6 +1113,12 @@ function minn_admin_acf_raw_value( $field, $post_id ) {
  * @param int|string $post_id Post id or options id.
  */
 function minn_admin_acf_raw_update( $field, $value, $post_id ) {
+	// Slashed: ACF's own form hands its setters the slashed $_POST, and the
+	// stores underneath unslash once (update_metadata() for post meta,
+	// wp_unslash() for options), down through every repeater row and group
+	// sub. The panel resends every field on any edit, so an unslashed value
+	// would lose a level of backslashes from every untouched field per save.
+	$value = wp_slash( $value );
 	if ( ! empty( $field['_acf'] ) && ! acf_get_field( $field['key'] ) ) {
 		acf_update_value( $value, acf_get_valid_post_id( $post_id ), $field['_acf'] );
 		return;
@@ -1314,6 +1358,14 @@ function minn_admin_acf_row_overlay_in( $subs, $vals, $base, $scope = 'post' ) {
 	foreach ( $subs as $sub ) {
 		if ( ! array_key_exists( $sub['name'], $vals ) ) {
 			continue;
+		}
+		$node = $base;
+		foreach ( (array) ( $sub['gpath'] ?? array() ) as $gk ) {
+			$node = is_array( $node ) && isset( $node[ $gk ] ) ? $node[ $gk ] : null;
+		}
+		$held = is_array( $node ) && array_key_exists( $sub['key'], $node ) ? $node[ $sub['key'] ] : null;
+		if ( minn_admin_acf_date_untouched( $sub, $vals[ $sub['name'] ], $held ) ) {
+			continue; // the stored date as served, not an edit
 		}
 		$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ], $scope );
 		if ( null === $v ) {
@@ -1710,8 +1762,12 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 		} elseif ( 'flex' === $field['type'] ) {
 			$value = minn_admin_acf_flex_in( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
 		} else {
+			$stored = minn_admin_acf_raw_value( $field, $post_id );
+			if ( minn_admin_acf_date_untouched( $field, $value, $stored ) ) {
+				continue; // the stored date as served, not an edit
+			}
 			$value = minn_admin_acf_value_in( $field, $value );
-			$value = minn_admin_acf_relation_preserve( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
+			$value = minn_admin_acf_relation_preserve( $field, $value, $stored );
 		}
 		if ( null === $value ) {
 			continue; // invalid input never clobbers a stored value
@@ -2789,8 +2845,12 @@ function minn_admin_acf_options_save( $page, $values ) {
 		} elseif ( 'flex' === $f['type'] ) {
 			$v = minn_admin_acf_flex_in( $f, $v, $stored_at( $f ), 'options' );
 		} else {
+			$stored = $stored_at( $f );
+			if ( minn_admin_acf_date_untouched( $f, $v, $stored ) ) {
+				continue; // the stored date as served, not an edit
+			}
 			$v = minn_admin_acf_value_in( $f, $v, 'options' );
-			$v = minn_admin_acf_relation_preserve( $f, $v, $stored_at( $f ) );
+			$v = minn_admin_acf_relation_preserve( $f, $v, $stored );
 		}
 		if ( null === $v ) {
 			continue; // invalid input never clobbers a stored value
@@ -2821,7 +2881,8 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$ref[ $edit['key'] ] = $edit['value'];
 			unset( $ref );
 		}
-		update_field( $gkey, $base, $post_id );
+		// Through the one writer, which slashes for ACF's unslashing store.
+		minn_admin_acf_raw_update( array( 'key' => $gkey ), $base, $post_id );
 	}
 }
 
