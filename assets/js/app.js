@@ -55034,7 +55034,11 @@
 				b.disabled = true;
 				b.textContent = __( 'Saving…' );
 				try {
-					const r = await api( `minn-admin/v1/cf7/forms/${ c.id }/mail`, { method: 'POST', body: JSON.stringify( n ) } );
+					// Mail (2)'s switch goes only when flipped here; the server
+					// keeps any key the page leaves out (see gfActiveDelta).
+					const body = JSON.parse( JSON.stringify( n ) );
+					if ( body.mail_2 && !! body.mail_2.active === !! ( c.data.mail_2 || {} ).active ) delete body.mail_2.active;
+					const r = await api( `minn-admin/v1/cf7/forms/${ c.id }/mail`, { method: 'POST', body: JSON.stringify( body ) } );
 					c7Adopt( r );
 					const ss = surfaceState( 'cf7' );
 					if ( ss ) { ss.cache = null; }
@@ -55345,8 +55349,16 @@
 					const r = await api( `minn-admin/v1/fluent-forms/forms/${ c.id }/emails`, {
 						method: 'POST',
 						// Only what changed: an untouched notification is not re-validated.
+						// A changed one goes whole except its switch, which goes
+						// only when flipped here (see gfActiveDelta).
 						body: JSON.stringify( {
-							notifications: d.notifications.map( ( x ) => n[ 'n' + x.metaId ] ).filter( ( x ) => JSON.stringify( x ) !== JSON.stringify( d.notifications.find( ( o ) => o.metaId === x.metaId ) ) ),
+							notifications: d.notifications.map( ( o ) => [ o, n[ 'n' + o.metaId ] ] )
+								.filter( ( [ o, x ] ) => JSON.stringify( x ) !== JSON.stringify( o ) )
+								.map( ( [ o, x ] ) => {
+									const out = { ...x };
+									if ( !! out.enabled === !! o.enabled ) delete out.enabled;
+									return out;
+								} ),
 							...( JSON.stringify( n.confirmation ) !== JSON.stringify( d.confirmation ) ? { confirmation: n.confirmation } : {} ),
 						} ),
 					} );

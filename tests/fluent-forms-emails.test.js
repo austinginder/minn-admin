@@ -122,6 +122,17 @@ const wpEval = ( php ) => {
 		t.check( 'the rest of the form’s settings are as they were', JSON.stringify( after.formSettings.restrictions ) === JSON.stringify( before.formSettings.restrictions ) && JSON.stringify( after.formSettings.layout ) === JSON.stringify( before.formSettings.layout ) );
 		t.check( 'the routed notification is untouched', JSON.stringify( after[ 'notifications:' + made.r ].sendTo ) === JSON.stringify( before[ 'notifications:' + made.r ].sendTo ) );
 
+		// Switched off elsewhere after the page loaded: a later save from here
+		// keeps the edit and leaves the switch alone.
+		wpEval( `global $wpdb; $t = $wpdb->prefix . 'fluentform_form_meta'; $v = json_decode( $wpdb->get_var( $wpdb->prepare( "SELECT value FROM {$t} WHERE id = %d", ${ made.n } ) ), true ); $v['enabled'] = false; $wpdb->update( $t, array( 'value' => wp_json_encode( $v ) ), array( 'id' => ${ made.n } ) );` );
+		await page.fill( `[data-gfn="n${ made.n }.subject"]`, 'Edited after it was switched off' );
+		await page.evaluate( () => document.querySelectorAll( '.minn-toast' ).forEach( ( e ) => e.remove() ) );
+		await page.keyboard.press( 'Meta+s' );
+		await toast( 'Form saved' );
+		await page.waitForSelector( `.minn-ffe [data-gfn="n${ made.n }.subject"]`, { timeout: 30000 } );
+		const off = meta( made.form )[ 'notifications:' + made.n ];
+		t.check( 'a save from an open page leaves a notification switched off elsewhere off', false === off.enabled && 'Edited after it was switched off' === off.subject, JSON.stringify( { enabled: off.enabled, subject: off.subject } ) );
+
 		const noEdit = wpEval( `
 			$u = get_user_by( 'login', 'minn-author' );
 			wp_set_current_user( $u ? $u->ID : 0 );

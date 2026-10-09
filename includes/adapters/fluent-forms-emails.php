@@ -229,7 +229,11 @@ add_action( 'rest_api_init', function () {
 						$type = 'email';
 					}
 					$n['name']             = sanitize_text_field( $text( 'name' ) );
-					$n['enabled']          = ! empty( $in['enabled'] );
+					// The switch only when sent: the page sends it only when it
+					// was flipped there, so one turned off elsewhere stays off.
+					if ( array_key_exists( 'enabled', $in ) ) {
+						$n['enabled'] = ! empty( $in['enabled'] );
+					}
 					$n['sendTo']['type']   = $type;
 					if ( 'email' === $type ) {
 						$n['sendTo']['email'] = trim( $text( 'toEmail' ) );

@@ -119,6 +119,17 @@ const wpEval = ( php ) => {
 		t.check( 'the mail body and the form itself are untouched', after.mail.body === before.mail.body && after.form === before.form );
 		t.check( 'CF7’s check flags the foreign sender beside From', await page.$eval( '[data-gfnset="mail.sender"]', ( el ) => !! el.querySelector( '.minn-gfn-warn' ) ) );
 
+		// Mail (2) switched off elsewhere after the page loaded: a later save
+		// from here keeps the edit and leaves the switch alone.
+		wpEval( `wp_set_current_user( 1 ); $f = wpcf7_contact_form( ${ made.form } ); $m = $f->prop( 'mail_2' ); $m['active'] = false; $f->set_properties( array( 'mail_2' => $m ) ); $f->save();` );
+		await page.fill( '[data-gfn="mail.subject"]', 'Edited after Mail (2) was switched off' );
+		await page.evaluate( () => document.querySelectorAll( '.minn-toast' ).forEach( ( e ) => e.remove() ) );
+		await page.keyboard.press( 'Meta+s' );
+		await toast( 'Saved|Form saved' );
+		await page.waitForSelector( '.minn-c7m [data-gfn="mail.subject"]', { timeout: 30000 } );
+		const off = props( made.form );
+		t.check( 'a save from an open page leaves Mail (2) switched off elsewhere off', false === off.mail_2.active && 'Edited after Mail (2) was switched off' === off.mail.subject, JSON.stringify( { active: off.mail_2.active, subject: off.mail.subject } ) );
+
 		// Leaving with unsaved changes asks.
 		await page.fill( '[data-gfn="mail.subject"]', 'Unsaved' );
 		await page.click( '#minn-c7m-back' );
