@@ -75,6 +75,28 @@ $check(
 	false === $drift->verify_package( false, 'https://downloads.wordpress.org/plugin/hello-dolly.zip', null )
 );
 
+/* --- a pack offered FOR this plugin is ours, wherever it comes from ------- */
+// Core's Language_Pack_Upgrader names the plugin only by the offer's slug.
+$pack_extra = function ( $package, $slug ) {
+	return array(
+		'language_update_type' => 'plugin',
+		'language_update'      => (object) array( 'type' => 'plugin', 'slug' => $slug, 'language' => 'de_DE', 'package' => $package ),
+	);
+};
+$foreign_pack = 'https://downloads.wordpress.org/translation/plugin/minn-admin/9.9.9/de_DE.zip';
+$foreign_r    = $drift->verify_package( false, $foreign_pack, null, $pack_extra( $foreign_pack, 'minn-admin' ) );
+$check( 'A Minn language pack from anywhere but the release is refused', is_wp_error( $foreign_r ) && 'minn_admin_foreign_package' === $foreign_r->get_error_code() );
+$other_pack = 'https://downloads.wordpress.org/translation/plugin/akismet/5.0/de_DE.zip';
+$check( 'Another plugin\'s language pack passes through untouched', false === $drift->verify_package( false, $other_pack, null, $pack_extra( $other_pack, 'akismet' ) ) );
+$scrub               = new stdClass();
+$scrub->translations = array(
+	array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'de_DE', 'package' => $foreign_pack ),
+	array( 'type' => 'plugin', 'slug' => 'akismet', 'language' => 'de_DE', 'package' => $other_pack ),
+	array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'de_DE', 'package' => $ok_url ),
+);
+$scrub = $drift->update( $scrub );
+$check( 'The update transient keeps only release packs for Minn, and others\' packs', array( $other_pack, $ok_url ) === wp_list_pluck( $scrub->translations, 'package' ) );
+
 /* --- package URL gate ---------------------------------------------------- */
 $check( 'Accepts a pack under this repo', $updater->is_our_package_url( $ok_url ) );
 $check( 'Rejects a foreign host', ! $updater->is_our_package_url( 'https://evil.example.com/minn-admin-ja.zip' ) );

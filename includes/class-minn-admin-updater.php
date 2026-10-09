@@ -199,12 +199,36 @@ class Minn_Admin_Updater {
 	}
 
 	/**
+	 * Whether a translation offer is one for this plugin.
+	 *
+	 * Core's Language_Pack_Upgrader names the plugin only through the offer's
+	 * slug (its hook_extra carries no 'plugin' key), and the files it installs
+	 * land in WP_LANG_DIR/plugins, where the .l10n.php this plugin loads is
+	 * include()d as PHP. An offer with no type is counted too: nothing
+	 * legitimate omits it. The slug goes through sanitize_key() so a case or
+	 * whitespace variant cannot step around the match.
+	 *
+	 * @param array|object $offer A translations[] entry or hook_extra's language_update.
+	 * @return bool
+	 */
+	public function is_our_language_offer( $offer ) {
+		if ( ! is_array( $offer ) && ! is_object( $offer ) ) {
+			return false;
+		}
+		$offer = (array) $offer;
+		$type  = isset( $offer['type'] ) && is_string( $offer['type'] ) ? $offer['type'] : '';
+		$slug  = isset( $offer['slug'] ) && is_string( $offer['slug'] ) ? $offer['slug'] : '';
+		return ( '' === $type || 'plugin' === $type ) && $this->plugin_slug === sanitize_key( $slug );
+	}
+
+	/**
 	 * Verify the update zip against the manifest's sha256 before install.
 	 *
-	 * Only intercepts our own package URL (https, GitHub host, this repo), and
-	 * REQUIRES the manifest to publish a sha256 for it. The manifest travels
-	 * over TLS from the repo while the zip comes from GitHub's release CDN; the
-	 * pinned hash ties the two together.
+	 * Intercepts our own package URL (https, GitHub host, this repo) and
+	 * anything offered as this plugin, its update or one of its language
+	 * packs, and REQUIRES the manifest to publish a sha256 for it. The
+	 * manifest travels over TLS from the repo while the zip comes from
+	 * GitHub's release CDN; the pinned hash ties the two together.
 	 *
 	 * @param bool|string|WP_Error $reply      Filter chain value.
 	 * @param string               $package    Package URL being downloaded.
@@ -218,7 +242,9 @@ class Minn_Admin_Updater {
 		}
 		$updating = is_array( $hook_extra ) && isset( $hook_extra['plugin'] ) ? (string) $hook_extra['plugin'] : '';
 		$ours_url = $this->is_our_package_url( $package );
-		$ours     = $ours_url || "{$this->plugin_slug}/{$this->plugin_slug}.php" === $updating;
+		$ours     = $ours_url
+			|| "{$this->plugin_slug}/{$this->plugin_slug}.php" === $updating
+			|| ( is_array( $hook_extra ) && isset( $hook_extra['language_update'] ) && $this->is_our_language_offer( $hook_extra['language_update'] ) );
 		if ( false !== $reply ) {
 			// Another download filter answered first (a host's package cache,
 			// a rollback tool). For anything else that is its business; for
@@ -238,10 +264,11 @@ class Minn_Admin_Updater {
 			}
 			return $this->verify_file( $reply, $package, null, false );
 		}
-		// An update OF THIS PLUGIN must come from this repo's release, the
-		// only package the sha256 pin covers. Anything else offered for
-		// minn-admin/minn-admin.php (a same-slug wordpress.org entry, a stale
-		// transient) would install unverified, so it is refused outright.
+		// An update OF THIS PLUGIN, or a language pack for it, must come from
+		// this repo's release, the only package the sha256 pin covers.
+		// Anything else offered as Minn (a same-slug wordpress.org entry, a
+		// stale transient, another updater's translations, a local path)
+		// would install unverified, so it is refused outright.
 		if ( $ours && ! $ours_url ) {
 			return $this->foreign_package_error();
 		}
@@ -453,6 +480,22 @@ class Minn_Admin_Updater {
 	}
 
 	public function update( $transient ) {
+		// Language packs first, whether or not plugins were checked:
+		// wordpress.org or another updater can list one for this slug, and a
+		// listed offer is one core's async updater and Update Translations
+		// will try to install. verify_package() refuses it at download; this
+		// keeps it from being offered at all.
+		if ( is_object( $transient ) && isset( $transient->translations ) && is_array( $transient->translations ) ) {
+			$kept = array();
+			foreach ( $transient->translations as $pack ) {
+				$url = is_array( $pack ) ? ( $pack['package'] ?? '' ) : ( is_object( $pack ) ? ( $pack->package ?? '' ) : '' );
+				if ( $this->is_our_language_offer( $pack ) && ! $this->is_our_package_url( $url ) ) {
+					continue;
+				}
+				$kept[] = $pack;
+			}
+			$transient->translations = $kept;
+		}
 		if ( empty( $transient->checked ) ) {
 			return $transient;
 		}

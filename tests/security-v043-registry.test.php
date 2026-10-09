@@ -666,6 +666,252 @@ if ( function_exists( 'minn_admin_gfb_save' ) && class_exists( 'GFAPI' ) && minn
 	$skip( '#5 Gravity Forms builder not available' );
 }
 
+
+// --- #26 A language pack for Minn installs only from Minn's own release -----
+$ug_upd = null;
+foreach ( (array) ( $GLOBALS['wp_filter']['upgrader_pre_download']->callbacks ?? array() ) as $ug_cbs ) {
+	foreach ( $ug_cbs as $ug_cb ) {
+		if ( is_array( $ug_cb['function'] ) && $ug_cb['function'][0] instanceof Minn_Admin_Updater ) {
+			$ug_upd = $ug_cb['function'][0];
+		}
+	}
+}
+if ( ! $ug_upd || ! class_exists( 'ZipArchive' ) || wp_using_ext_object_cache() ) {
+	$skip( '#26 updater instance, ZipArchive or option-backed transients unavailable' );
+} else {
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+	// A stand-in pack: one inert .l10n.php, which is all core's check_package()
+	// asks of a language pack before it copies the files into WP_LANG_DIR.
+	$ug_dir = trailingslashit( get_temp_dir() ) . 'minn-ug-' . wp_generate_password( 8, false, false );
+	wp_mkdir_p( $ug_dir );
+	$ug_zip = $ug_dir . '/pack.zip';
+	$ug_z   = new ZipArchive();
+	$ug_z->open( $ug_zip, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$ug_z->addFromString( 'minn-admin-zz_ZZ.l10n.php', "<?php\n// minn-admin test pack\nreturn array( 'messages' => array() );\n" );
+	$ug_z->close();
+	$ug_own     = 'https://github.com/austinginder/minn-admin/releases/download/v' . MINN_ADMIN_VERSION . '/minn-admin-zz_ZZ.zip';
+	$ug_foreign = 'https://downloads.wordpress.org/translation/plugin/minn-admin/9.9.9/zz_ZZ.zip';
+	$ug_landed  = WP_LANG_DIR . '/plugins/minn-admin-zz_ZZ.l10n.php';
+	$ug_sweep   = function () {
+		foreach ( (array) glob( WP_LANG_DIR . '/plugins/minn-admin-zz_ZZ*' ) as $ug_f ) {
+			wp_delete_file( $ug_f );
+		}
+	};
+	$ug_sweep();
+	// Offline: both pack URLs are served the stand-in zip from here and every
+	// other request fails, so nothing in this section leaves the machine.
+	$ug_fetched = array();
+	$ug_http    = function ( $pre, $args, $url ) use ( $ug_zip, $ug_own, $ug_foreign, &$ug_fetched ) {
+		if ( $url === $ug_own || $url === $ug_foreign ) {
+			$ug_fetched[] = $url;
+			if ( ! empty( $args['filename'] ) ) {
+				copy( $ug_zip, $args['filename'] );
+			}
+			return array( 'headers' => array(), 'body' => '', 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => $args['filename'] ?? null );
+		}
+		return new WP_Error( 'minn_test_offline', 'offline' );
+	};
+	add_filter( 'pre_http_request', $ug_http, PHP_INT_MAX, 3 );
+	// The release manifest the updater judges against, held in its own cache
+	// for the length of the section (raw options, restored exactly after).
+	$ug_raw = array();
+	foreach ( array( '_transient_minn_admin_updater', '_transient_timeout_minn_admin_updater' ) as $ug_k ) {
+		$ug_raw[ $ug_k ] = get_option( $ug_k, null );
+	}
+	$ug_site_raw = array();
+	foreach ( array( '_site_transient_update_plugins', '_site_transient_update_themes', '_site_transient_update_core' ) as $ug_k ) {
+		$ug_site_raw[ $ug_k ] = get_site_option( $ug_k, null );
+	}
+	set_transient(
+		'minn_admin_updater',
+		(object) array(
+			'version'      => MINN_ADMIN_VERSION,
+			'download_url' => 'https://github.com/austinginder/minn-admin/releases/download/v' . MINN_ADMIN_VERSION . '/minn-admin.zip',
+			'sha256'       => str_repeat( 'a', 64 ),
+			'tested'       => '',
+			'requires_php' => '',
+			'translations' => array(
+				(object) array( 'language' => 'zz_ZZ', 'version' => MINN_ADMIN_VERSION, 'updated' => gmdate( 'Y-m-d H:i:s' ), 'package' => $ug_own, 'sha256' => hash_file( 'sha256', $ug_zip ) ),
+			),
+		),
+		HOUR_IN_SECONDS
+	);
+	// Core's Language_Pack_Upgrader::bulk_upgrade() hook_extra, exactly: no
+	// 'plugin' key, the offer itself under language_update.
+	$ug_extra = function ( $package, $slug = 'minn-admin', $type = 'plugin' ) {
+		return array(
+			'language_update_type' => $type,
+			'language_update'      => (object) array( 'type' => $type, 'slug' => $slug, 'language' => 'zz_ZZ', 'version' => '9.9.9', 'updated' => '2026-10-01 00:00:00', 'package' => $package, 'autoupdate' => true ),
+		);
+	};
+	$ug_lpu = new Language_Pack_Upgrader( new Automatic_Upgrader_Skin() );
+	$ug_dl  = function ( $package, $extra ) use ( $ug_lpu ) {
+		$r = $ug_lpu->download_package( $package, false, $extra );
+		if ( is_string( $r ) && is_file( $r ) && false === strpos( $r, 'minn-ug-' ) ) {
+			wp_delete_file( $r );
+		}
+		return $r;
+	};
+	$ug_code = function ( $r ) {
+		return is_wp_error( $r ) ? $r->get_error_code() : ( is_string( $r ) ? 'file' : var_export( $r, true ) );
+	};
+
+	// The download gate, through core's own download_package() call.
+	$ug_fetched = array();
+	$ug_r       = $ug_dl( $ug_foreign, $ug_extra( $ug_foreign ) );
+	$check( '#26 a same-slug pack from another source is refused before download', is_wp_error( $ug_r ) && 'minn_admin_foreign_package' === $ug_r->get_error_code(), $ug_code( $ug_r ) );
+	$check( '#26 ...and the foreign URL is never fetched', ! in_array( $ug_foreign, $ug_fetched, true ), implode( ' ', $ug_fetched ) );
+	// A local path in the offer: core hands an existing file straight to the
+	// unzipper once the filters pass on it.
+	$ug_local = $ug_dir . '/local-pack.zip';
+	copy( $ug_zip, $ug_local );
+	$ug_r = $ug_dl( $ug_local, $ug_extra( $ug_local ) );
+	$check( '#26 a local file offered as Minn\'s pack is refused', is_wp_error( $ug_r ), $ug_code( $ug_r ) );
+	$ug_r = $ug_dl( $ug_foreign, $ug_extra( $ug_foreign, 'Minn-Admin' ) );
+	$check( '#26 the slug is matched without regard to case (case-insensitive filesystems)', is_wp_error( $ug_r ), $ug_code( $ug_r ) );
+	$ug_r = $ug_dl( $ug_foreign, $ug_extra( $ug_foreign, 'minn-admin', '' ) );
+	$check( '#26 an offer with no type for Minn\'s slug is refused', is_wp_error( $ug_r ), $ug_code( $ug_r ) );
+	$ug_r = $ug_dl( $ug_foreign, $ug_extra( $ug_foreign, ' minn-admin ' ) );
+	$check( '#26 a padded slug is still Minn\'s', is_wp_error( $ug_r ), $ug_code( $ug_r ) );
+	foreach ( array(
+		'https://github.com/austinginder/minn-admin/../../other/repo/releases/download/v1/minn-admin-zz_ZZ.zip',
+		'https://github.com/austinginder/minn-admin/releases/download/%2e%2e/%2e%2e/%2e%2e/other/x.zip',
+		'https://github.com/attacker/repo/raw/main/austinginder/minn-admin/releases/download/v1/x.zip',
+		'http://github.com/austinginder/minn-admin/releases/download/v1/minn-admin-zz_ZZ.zip',
+		'https://github.com.evil.example/austinginder/minn-admin/releases/download/v1/minn-admin-zz_ZZ.zip',
+	) as $ug_bad ) {
+		$ug_r = $ug_upd->verify_package( false, $ug_bad, $ug_lpu, $ug_extra( $ug_bad ) );
+		$check( '#26 refused: ' . $ug_bad, is_wp_error( $ug_r ), $ug_code( $ug_r ) );
+	}
+	// Another filter answering first with a file does not skip the check.
+	$ug_r = $ug_upd->verify_package( $ug_local, $ug_foreign, $ug_lpu, $ug_extra( $ug_foreign ) );
+	$check( '#26 a file another filter supplies for a foreign Minn pack is refused', is_wp_error( $ug_r ), $ug_code( $ug_r ) );
+	// Controls: Minn's own published pack still downloads and verifies, a
+	// tampered copy of it does not, and other plugins' packs pass untouched.
+	$ug_r = $ug_dl( $ug_own, $ug_extra( $ug_own ) );
+	$check( '#26 control: Minn\'s own published pack downloads and matches its sha256', is_string( $ug_r ), $ug_code( $ug_r ) );
+	$ug_tamper = $ug_dir . '/tampered.zip';
+	file_put_contents( $ug_tamper, 'not the published bytes' );
+	$ug_r = $ug_upd->verify_package( $ug_tamper, $ug_own, $ug_lpu, $ug_extra( $ug_own ) );
+	$check( '#26 control: a tampered copy of Minn\'s own pack fails its sha256', is_wp_error( $ug_r ) && 'minn_admin_bad_package_hash' === $ug_r->get_error_code(), $ug_code( $ug_r ) );
+	$ug_other = 'https://downloads.wordpress.org/translation/plugin/akismet/5.0/zz_ZZ.zip';
+	$ug_r     = $ug_upd->verify_package( false, $ug_other, $ug_lpu, $ug_extra( $ug_other, 'akismet' ) );
+	$check( '#26 control: another plugin\'s language pack passes through untouched', false === $ug_r, $ug_code( $ug_r ) );
+	$ug_r = $ug_upd->verify_package( false, $ug_other, $ug_lpu, array( 'plugin' => 'akismet/akismet.php' ) );
+	$check( '#26 control: another plugin\'s own update passes through untouched', false === $ug_r, $ug_code( $ug_r ) );
+
+	// The offer side: update() drops same-slug packs it would refuse.
+	$ug_t               = new stdClass();
+	$ug_t->checked      = array( 'minn-admin/minn-admin.php' => MINN_ADMIN_VERSION );
+	$ug_t->response     = array();
+	$ug_t->translations = array(
+		array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'zz_ZZ', 'version' => '9.9.9', 'updated' => '2026-10-01 00:00:00', 'package' => $ug_foreign, 'autoupdate' => true ),
+		array( 'type' => 'plugin', 'slug' => 'Minn-Admin', 'language' => 'zz_ZZ', 'version' => '9.9.9', 'updated' => '2026-10-01 00:00:00', 'package' => $ug_foreign, 'autoupdate' => true ),
+		(object) array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'zz_ZZ', 'version' => '9.9.9', 'updated' => '2026-10-01 00:00:00', 'package' => $ug_local, 'autoupdate' => true ),
+		array( 'type' => 'plugin', 'slug' => 'akismet', 'language' => 'zz_ZZ', 'version' => '5.0', 'updated' => '2026-10-01 00:00:00', 'package' => $ug_other, 'autoupdate' => true ),
+		array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'zz_ZZ', 'version' => MINN_ADMIN_VERSION, 'updated' => '2026-10-01 00:00:00', 'package' => $ug_own, 'autoupdate' => true ),
+	);
+	$ug_t    = $ug_upd->update( $ug_t );
+	$ug_left = array();
+	foreach ( (array) $ug_t->translations as $ug_e ) {
+		$ug_e      = (array) $ug_e;
+		$ug_left[] = $ug_e['slug'] . ' ' . $ug_e['package'];
+	}
+	$ug_bad_left = array_filter( $ug_left, function ( $l ) use ( $ug_own ) {
+		return 0 === stripos( $l, 'minn-admin ' ) && false === strpos( $l, $ug_own );
+	} );
+	$check( '#26 the update transient drops same-slug packs from anywhere but the release', ! $ug_bad_left, implode( ' | ', $ug_bad_left ) );
+	$check( '#26 control: other plugins\' packs and Minn\'s own stay offered', in_array( 'akismet ' . $ug_other, $ug_left, true ) && in_array( 'minn-admin ' . $ug_own, $ug_left, true ), implode( ' | ', $ug_left ) );
+
+	// End to end: the Update Translations button (POST /translations/update,
+	// Minn_Admin_Batch::run_translations with its prefetch and its own
+	// pre_download), with the foreign offer injected AFTER the updater's
+	// transient filter so only the download gate stands in the way.
+	if ( ! current_user_can( 'update_languages' ) ) {
+		$skip( '#26 end to end: this site disallows language updates' );
+	} else {
+		// The update data is answered from here (checked just now, so core
+		// skips its own network check) with the one offer under test in it.
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$ug_offer   = null;
+		$ug_locales = function ( $l ) {
+			$l[] = 'zz_ZZ';
+			return $l;
+		};
+		$ug_pre_plugins = function () use ( &$ug_offer ) {
+			$t               = new stdClass();
+			$t->last_checked = time();
+			$t->checked      = wp_list_pluck( get_plugins(), 'Version' );
+			$t->response     = array();
+			$t->no_update    = array();
+			$t->translations = $ug_offer ? array( $ug_offer ) : array();
+			return $t;
+		};
+		$ug_pre_themes = function () {
+			$t               = new stdClass();
+			$t->last_checked = time();
+			$t->checked      = array();
+			foreach ( wp_get_themes() as $ug_ss => $ug_th ) {
+				$t->checked[ $ug_ss ] = $ug_th->get( 'Version' );
+			}
+			$t->response     = array();
+			$t->no_update    = array();
+			$t->translations = array();
+			return $t;
+		};
+		$ug_pre_core = function () {
+			return (object) array( 'last_checked' => time(), 'version_checked' => get_bloginfo( 'version' ), 'updates' => array(), 'translations' => array() );
+		};
+		add_filter( 'plugins_update_check_locales', $ug_locales );
+		add_filter( 'pre_site_transient_update_plugins', $ug_pre_plugins );
+		add_filter( 'pre_site_transient_update_themes', $ug_pre_themes );
+		add_filter( 'pre_site_transient_update_core', $ug_pre_core );
+
+		$ug_offer = array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'zz_ZZ', 'version' => '9.9.9', 'updated' => '2026-10-01 00:00:00', 'package' => $ug_foreign, 'autoupdate' => true );
+		list( $ug_st, $ug_body ) = $call( 'POST', '/minn-admin/v1/translations/update' );
+		$ug_hostile_landed = file_exists( $ug_landed );
+		$ug_sweep();
+		$check( '#26 Update Translations does not install a foreign pack for Minn', ! $ug_hostile_landed, $ug_st . ' ' . wp_json_encode( is_array( $ug_body ) ? array_intersect_key( $ug_body, array_flip( array( 'code', 'message', 'updated', 'failed' ) ) ) : $ug_body ) );
+
+		$ug_offer = array( 'type' => 'plugin', 'slug' => 'minn-admin', 'language' => 'zz_ZZ', 'version' => MINN_ADMIN_VERSION, 'updated' => '2026-10-01 00:00:00', 'package' => $ug_own, 'autoupdate' => true );
+		list( $ug_st, $ug_body ) = $call( 'POST', '/minn-admin/v1/translations/update' );
+		$ug_own_landed = file_exists( $ug_landed );
+		$ug_sweep();
+		$check( '#26 control: Update Translations installs Minn\'s own verified pack', $ug_own_landed, $ug_st . ' ' . wp_json_encode( is_array( $ug_body ) ? array_intersect_key( $ug_body, array_flip( array( 'code', 'message', 'updated', 'failed' ) ) ) : $ug_body ) );
+
+		remove_filter( 'plugins_update_check_locales', $ug_locales );
+		remove_filter( 'pre_site_transient_update_plugins', $ug_pre_plugins );
+		remove_filter( 'pre_site_transient_update_themes', $ug_pre_themes );
+		remove_filter( 'pre_site_transient_update_core', $ug_pre_core );
+	}
+
+	foreach ( $ug_site_raw as $ug_k => $ug_v ) {
+		if ( null === $ug_v ) {
+			delete_site_option( $ug_k );
+		} else {
+			update_site_option( $ug_k, $ug_v );
+		}
+	}
+	foreach ( $ug_raw as $ug_k => $ug_v ) {
+		if ( null === $ug_v ) {
+			delete_option( $ug_k );
+		} else {
+			update_option( $ug_k, $ug_v, false );
+		}
+	}
+	wp_cache_delete( 'minn_admin_updater', 'transient' );
+	remove_filter( 'pre_http_request', $ug_http, PHP_INT_MAX );
+	$ug_sweep();
+	foreach ( (array) glob( $ug_dir . '/*' ) as $ug_f ) {
+		wp_delete_file( $ug_f );
+	}
+	@rmdir( $ug_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+	wp_set_current_user( $admin );
+}
+
 // @sections
 
 $summary();
