@@ -46651,7 +46651,7 @@
 						<div>
 							<div class="minn-field-label">${ esc( __( 'Message' ) ) }</div>
 							<textarea class="minn-input minn-insp-textarea" id="minn-ue-message" rows="8" placeholder="${ esc( __( 'Write your message…' ) ) }">${ esc( m.message || '' ) }</textarea>
-							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Sent as a styled Minn Admin HTML email from the site. Blank lines become paragraphs.' ) ) }</div>
+							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( B.caps.settings ? __( 'Sent as a styled Minn Admin HTML email from the site. Blank lines become paragraphs.' ) : __( 'Sent as a styled Minn Admin HTML email from your own address. Blank lines become paragraphs.' ) ) }</div>
 						</div>
 					</div>
 					<div class="minn-modal-actions">
