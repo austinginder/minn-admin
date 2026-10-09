@@ -1771,6 +1771,123 @@ if ( method_exists( 'Minn_Admin_REST', 'user_send_email' ) ) {
 	wp_delete_user( $usm_member );
 }
 
+// --- #25 SEO panel: changed toggles and selects still save (Yoast control) --
+// The panel resends every SEO value when any of them changes, and a toggle or
+// select equal to what the provider reads back is now skipped like text. Yoast
+// refuses to store its own defaults, so its round trip was already exact; this
+// proves the skip never swallows a real change, in either direction.
+if ( defined( 'WPSEO_VERSION' ) && function_exists( 'minn_admin_seo_plugin' ) ) {
+	$fsl_yo_post = wp_insert_post( array( 'post_title' => 'Minn v043 seo toggle probe', 'post_status' => 'draft' ) );
+	update_post_meta( $fsl_yo_post, '_yoast_wpseo_meta-robots-nofollow', '1' );
+	update_post_meta( $fsl_yo_post, '_yoast_wpseo_meta-robots-adv', 'noarchive' );
+	// The client's seeding: a false on a non-true_false field rides back as null.
+	$fsl_yo_seed = function () use ( $call, $fsl_yo_post ) {
+		list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $fsl_yo_post, null, array( 'context' => 'edit' ) );
+		$vals           = (array) ( $read['minn_seo'] ?? array() );
+		foreach ( $vals as $k => $v ) {
+			if ( false === $v ) {
+				$vals[ $k ] = null;
+			}
+		}
+		return $vals;
+	};
+	$fsl_yo_vals                = $fsl_yo_seed();
+	$fsl_yo_vals['description'] = 'Minn v043 probe description';
+	$call( 'POST', '/wp/v2/posts/' . $fsl_yo_post, array( 'minn_seo' => $fsl_yo_vals ) );
+	$check( 'SEO (Yoast): the edited description saves', 'Minn v043 probe description' === get_post_meta( $fsl_yo_post, '_yoast_wpseo_metadesc', true ) );
+	$check( 'SEO (Yoast): untouched robots settings stay as stored', '1' === get_post_meta( $fsl_yo_post, '_yoast_wpseo_meta-robots-nofollow', true ) && 'noarchive' === get_post_meta( $fsl_yo_post, '_yoast_wpseo_meta-robots-adv', true ) );
+	$fsl_yo_vals                     = $fsl_yo_seed();
+	$fsl_yo_vals['robots_nofollow']  = false;
+	$fsl_yo_vals['robots_noarchive'] = null; // switched off: what the toggle sends
+	$fsl_yo_vals['robots_nosnippet'] = true;
+	$fsl_yo_vals['robots_index']     = 'noindex';
+	$call( 'POST', '/wp/v2/posts/' . $fsl_yo_post, array( 'minn_seo' => $fsl_yo_vals ) );
+	$check( 'SEO (Yoast): a toggle switched off is written (control)', ! metadata_exists( 'post', $fsl_yo_post, '_yoast_wpseo_meta-robots-nofollow' ) );
+	$check( 'SEO (Yoast): toggles switched on and off in one save are both written (control)', 'nosnippet' === get_post_meta( $fsl_yo_post, '_yoast_wpseo_meta-robots-adv', true ), wp_json_encode( get_post_meta( $fsl_yo_post, '_yoast_wpseo_meta-robots-adv', true ) ) );
+	$check( 'SEO (Yoast): a select changed is written (control)', '1' === get_post_meta( $fsl_yo_post, '_yoast_wpseo_meta-robots-noindex', true ) );
+	$fsl_yo_vals                    = $fsl_yo_seed();
+	$fsl_yo_vals['robots_nofollow'] = true;
+	$fsl_yo_vals['robots_index']    = '';
+	$call( 'POST', '/wp/v2/posts/' . $fsl_yo_post, array( 'minn_seo' => $fsl_yo_vals ) );
+	$check( 'SEO (Yoast): a toggle switched on is written (control)', '1' === get_post_meta( $fsl_yo_post, '_yoast_wpseo_meta-robots-nofollow', true ) );
+	$check( 'SEO (Yoast): a select set back to default is written (control)', ! metadata_exists( 'post', $fsl_yo_post, '_yoast_wpseo_meta-robots-noindex' ) );
+	wp_delete_post( $fsl_yo_post, true );
+} else {
+	$skip( 'Yoast inactive' );
+}
+
+// --- #25 SEO unchanged-value rule, by field type (every provider) ----------
+if ( function_exists( 'minn_admin_seo_unchanged' ) ) {
+	$fsl_uc = array(
+		// type, submitted, read back, expected "unchanged"
+		array( 'toggle', null, false, true ),    // the editor seeds an untouched false as null
+		array( 'toggle', false, true, false ),
+		array( 'toggle', true, false, false ),
+		array( 'toggle', false, 'no', false ),   // a non-bool read is never folded
+		array( 'number', -1, null, false ),
+		array( 'number', null, '', true ),
+		array( 'number', '5', 5, true ),
+		array( 'number', 'abc', '', false ),
+		array( 'select', null, '', true ),
+		array( 'select', 'index', '', false ),
+		array( 'text', 'a%ABb', 'a%ABb', true ),
+		array( 'text', array( 'a' ), 'a', false ),
+		array( 'image', 5, 5, false ),           // images compare by id in their own branch
+		array( 'note', 'x', 'x', false ),
+	);
+	$fsl_uc_bad = array();
+	foreach ( $fsl_uc as $fsl_uc_row ) {
+		if ( minn_admin_seo_unchanged( $fsl_uc_row[0], $fsl_uc_row[1], $fsl_uc_row[2] ) !== $fsl_uc_row[3] ) {
+			$fsl_uc_bad[] = wp_json_encode( $fsl_uc_row );
+		}
+	}
+	$check( 'SEO: the unchanged-value rule compares each type the way it writes', ! $fsl_uc_bad, implode( ' ', $fsl_uc_bad ) );
+} else {
+	$check( 'SEO: the unchanged-value rule exists for every scalar type', false, 'minn_admin_seo_unchanged() missing' );
+}
+
+// --- #25 SEO panel keeps SureRank's explicit per-post robots 'no' -----------
+// SureRank stores an unticked robots box as 'no', which puts the post in
+// per-post mode (any non-empty value), so a page on a noindexed post type
+// stays indexed. Minn reads 'no' as off and its toggle write deleted it,
+// handing the page back to the site-wide noindex rule. SureRank sits behind
+// Yoast in detection order, so this SKIPs wherever Yoast is also active.
+if ( function_exists( 'minn_admin_seo_plugin' ) && 'SureRank' === ( minn_admin_seo_plugin()['name'] ?? '' ) ) {
+	$fsl_sr_post = wp_insert_post( array( 'post_title' => 'Minn v043 surerank robots probe', 'post_status' => 'draft' ) );
+	update_post_meta( $fsl_sr_post, 'surerank_settings_post_no_index', 'no' );
+	update_post_meta( $fsl_sr_post, 'surerank_settings_post_no_follow', 'no' );
+	$fsl_sr_seed = function () use ( $call, $fsl_sr_post ) {
+		list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $fsl_sr_post, null, array( 'context' => 'edit' ) );
+		$vals           = (array) ( $read['minn_seo'] ?? array() );
+		foreach ( $vals as $k => $v ) {
+			if ( false === $v ) {
+				$vals[ $k ] = null;
+			}
+		}
+		return $vals;
+	};
+	$fsl_sr_vals                = $fsl_sr_seed();
+	$fsl_sr_vals['description'] = 'Minn v043 probe description';
+	list( $fsl_sr_st ) = $call( 'POST', '/wp/v2/posts/' . $fsl_sr_post, array( 'minn_seo' => $fsl_sr_vals ) );
+	$fsl_sr_flat = \SureRank\Inc\Functions\Get::all_post_meta( $fsl_sr_post );
+	$check( 'SEO (SureRank): the edited description saves', 200 === $fsl_sr_st && 'Minn v043 probe description' === ( $fsl_sr_flat['page_description'] ?? '' ), 'status ' . $fsl_sr_st );
+	$check( 'SEO (SureRank): an untouched explicit index ("no") survives', 'no' === get_post_meta( $fsl_sr_post, 'surerank_settings_post_no_index', true ), wp_json_encode( get_post_meta( $fsl_sr_post, 'surerank_settings_post_no_index', true ) ) );
+	$check( 'SEO (SureRank): an untouched explicit follow ("no") survives', 'no' === get_post_meta( $fsl_sr_post, 'surerank_settings_post_no_follow', true ), wp_json_encode( get_post_meta( $fsl_sr_post, 'surerank_settings_post_no_follow', true ) ) );
+	// The provider's own write keeps an explicit 'no' when asked for "off".
+	$fsl_sr_prov = minn_admin_seo_plugin();
+	call_user_func( $fsl_sr_prov['write'], $fsl_sr_post, 'robots_noindex', false );
+	$check( 'SEO (SureRank): writing off over a stored "no" keeps it', 'no' === get_post_meta( $fsl_sr_post, 'surerank_settings_post_no_index', true ), wp_json_encode( get_post_meta( $fsl_sr_post, 'surerank_settings_post_no_index', true ) ) );
+	// Control: a toggle switched on is written.
+	$fsl_sr_vals                   = $fsl_sr_seed();
+	$fsl_sr_vals['robots_noindex'] = true;
+	$call( 'POST', '/wp/v2/posts/' . $fsl_sr_post, array( 'minn_seo' => $fsl_sr_vals ) );
+	$check( 'SEO (SureRank): a toggle switched on is written (control)', 'yes' === get_post_meta( $fsl_sr_post, 'surerank_settings_post_no_index', true ), wp_json_encode( get_post_meta( $fsl_sr_post, 'surerank_settings_post_no_index', true ) ) );
+	$check( 'SEO (SureRank): its untouched sibling still survives', 'no' === get_post_meta( $fsl_sr_post, 'surerank_settings_post_no_follow', true ) );
+	wp_delete_post( $fsl_sr_post, true );
+} else {
+	$skip( 'SureRank is not the active SEO provider' );
+}
+
 // @sections
 
 $summary();

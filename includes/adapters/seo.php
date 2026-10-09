@@ -980,9 +980,13 @@ function minn_admin_seo_surerank_provider() {
 				if ( isset( $robots[ $field ] ) ) {
 					// post_no_* are SCALAR metas (surerank_settings_post_no_index),
 					// not group keys; absent means the site-wide robots rules.
+					// 'no' is what their metabox stores for an unticked box, and
+					// any non-empty value puts the post in per-post mode, so a
+					// stored 'no' is an override of a site-wide noindex or
+					// nofollow: off leaves it, and only a 'yes' is cleared.
 					if ( $clean ) {
 						\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array( $robots[ $field ] => 'yes' ) );
-					} else {
+					} elseif ( 'no' !== (string) get_post_meta( $post_id, 'surerank_settings_' . $robots[ $field ], true ) ) {
 						delete_post_meta( $post_id, 'surerank_settings_' . $robots[ $field ] );
 					}
 					return;
@@ -2010,7 +2014,10 @@ add_action( 'rest_api_init', function () {
 			}
 			// The panel sends every field it shows. A field whose value is what
 			// the provider already holds is left alone, so an untouched title
-			// never goes back through a sanitizer and comes out different.
+			// never goes back through a sanitizer and comes out different, and
+			// an untouched toggle never turns a stored state the read folds
+			// together (SureRank's explicit 'no', an inherited null) into
+			// another one.
 			$stored = isset( $plugin['read'] ) && is_callable( $plugin['read'] ) ? (array) call_user_func( $plugin['read'], $post->ID ) : array();
 			foreach ( minn_admin_seo_field_map( $plugin, $post->ID ) as $field => $def ) {
 				if ( ! array_key_exists( $field, $value ) ) {
@@ -2018,8 +2025,7 @@ add_action( 'rest_api_init', function () {
 				}
 				$type = isset( $def['type'] ) ? $def['type'] : 'text';
 				$raw  = $value[ $field ];
-				if ( is_scalar( $raw ) && array_key_exists( $field, $stored ) && is_scalar( $stored[ $field ] )
-					&& in_array( $type, array( 'text', 'textarea' ), true ) && (string) $raw === (string) $stored[ $field ] ) {
+				if ( array_key_exists( $field, $stored ) && minn_admin_seo_unchanged( $type, $raw, $stored[ $field ] ) ) {
 					continue;
 				}
 
@@ -2125,6 +2131,41 @@ add_action( 'rest_api_init', function () {
 		),
 	) );
 } );
+
+/**
+ * Whether a submitted SEO value is the one the provider read back, compared
+ * the way its field type writes it. Images compare by attachment id in the
+ * write path itself; anything else is never "unchanged".
+ *
+ * @param string $type Declared field type.
+ * @param mixed  $raw  Submitted value.
+ * @param mixed  $held The provider's read value.
+ * @return bool
+ */
+function minn_admin_seo_unchanged( $type, $raw, $held ) {
+	if ( ! ( is_scalar( $raw ) || null === $raw ) || ! ( is_scalar( $held ) || null === $held ) ) {
+		return false;
+	}
+	switch ( $type ) {
+		case 'toggle':
+			// The editor seeds a false toggle as null, so an untouched one
+			// comes back as null.
+			return is_bool( $held ) && (bool) $raw === $held;
+		case 'number':
+			$norm = function ( $v ) {
+				if ( null === $v || '' === $v ) {
+					return '';
+				}
+				return is_numeric( $v ) ? (string) (int) $v : null;
+			};
+			return null !== $norm( $raw ) && $norm( $raw ) === $norm( $held );
+		case 'text':
+		case 'textarea':
+		case 'select':
+			return (string) $raw === (string) $held;
+	}
+	return false;
+}
 
 /**
  * Plain text for an SEO title or description.
