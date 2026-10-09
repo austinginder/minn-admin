@@ -387,8 +387,10 @@ const { execSync } = require( 'child_process' );
 			chip && chip.tone === 'amber' && /Maintenance/.test( chip.text ), JSON.stringify( chip ) );
 		await revealBar();
 		await page.click( '.minn-bar-status' );
-		await page.waitForSelector( '#minn-bar-status-fix', { timeout: 10000 } );
-		await page.click( '#minn-bar-status-fix' );
+		// The fix asks first; only the bar's own Confirm writes.
+		await page.waitForSelector( '[data-barfix="ask"]', { timeout: 10000 } );
+		await page.click( '[data-barfix="ask"]' );
+		await page.click( '[data-barfix="confirm"]' );
 		await page.waitForFunction( () => ! document.querySelector( '.minn-bar-status' ), null, { timeout: 15000 } );
 		// Server truth: a fresh page render decides the chip from the option.
 		// (The settings GET is no oracle here: update_option stores boolean

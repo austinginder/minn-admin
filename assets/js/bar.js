@@ -6,7 +6,15 @@
 ( function () {
 	'use strict';
 	const CFG = window.MINN_BAR || {};
-	const root = document.getElementById( 'minn-bar-root' );
+	// The bar prints after the post content, and post content keeps id, style
+	// and hidden for roles without unfiltered_html, so a document-wide lookup
+	// by a fixed id finds the content's copy first (an invisible full-screen
+	// "fix button", a look-alike account menu). The server marks its own
+	// corner with a per-request key that only MINN_BAR repeats; every control
+	// below is resolved inside that corner, never by document-wide id.
+	const barKey = /^[A-Za-z0-9]{16,}$/.test( String( CFG.key || '' ) ) ? CFG.key : '';
+	const corner = barKey ? document.querySelector( '#minn-cornerbar[data-minn-bar="' + barKey + '"]' ) : null;
+	const root = corner && corner.querySelector( '#minn-bar-root' );
 	if ( ! root ) return;
 
 	/* Same guard app.js applies at its navigation sinks. A command's value can
@@ -37,6 +45,15 @@
 	const triggers = Array.from( root.querySelectorAll( '[data-barmenu]' ) );
 	const markButton = root.querySelector( '.minn-bar-markbtn' );
 	const mobileBar = window.matchMedia( '(max-width: 782px)' );
+	const fixAsk = root.querySelector( '[data-barfix="ask"]' );
+	const fixConfirmRow = root.querySelector( '[data-barfix-confirm]' );
+	const fixConfirm = root.querySelector( '[data-barfix="confirm"]' );
+	const fixCancel = root.querySelector( '[data-barfix="cancel"]' );
+
+	function resetFix() {
+		if ( fixConfirmRow ) fixConfirmRow.hidden = true;
+		if ( fixAsk ) fixAsk.hidden = false;
+	}
 
 	function closeTouchReveal() {
 		root.classList.remove( 'minn-bar-touch-open' );
@@ -47,6 +64,7 @@
 
 	function closeMenus() {
 		menus.forEach( ( m ) => { m.hidden = true; } );
+		resetFix();
 		triggers.forEach( ( b ) => b.setAttribute( 'aria-expanded', 'false' ) );
 		root.classList.remove( 'minn-bar-menu-open' );
 	}
@@ -61,7 +79,7 @@
 
 	triggers.forEach( ( button ) => button.addEventListener( 'click', ( event ) => {
 		event.stopPropagation();
-		const menu = document.getElementById( button.dataset.barmenu );
+		const menu = menus.find( ( m ) => m.id === button.dataset.barmenu );
 		if ( ! menu ) return;
 		const opening = menu.hidden;
 		closeMenus();
@@ -130,7 +148,6 @@
 	// has taken over and the bar belongs behind it. Decorative full-screen
 	// layers do not trip this, because pointer-events:none elements are never
 	// returned by elementFromPoint.
-	const corner = document.getElementById( 'minn-cornerbar' );
 	let overlayFrame = 0;
 	function screenIsTaken() {
 		const el = document.elementFromPoint( innerWidth / 2, innerHeight / 2 );
@@ -269,11 +286,25 @@
 		} );
 	}
 
-	/* ===== Status chip fix ===== */
-	const fixBtn = document.getElementById( 'minn-bar-status-fix' );
-	if ( fixBtn && CFG.fix ) {
-		fixBtn.addEventListener( 'click', async () => {
-			fixBtn.disabled = true;
+	/* ===== Status chip fix: ask, then confirm =====
+	 * Making a site public is not undoable from here, so the menu's fix only
+	 * opens a confirm and the write rides the second, bar-owned button. */
+	if ( fixAsk && fixConfirmRow && fixConfirm && fixCancel && CFG.fix ) {
+		fixAsk.addEventListener( 'click', () => {
+			fixConfirmRow.hidden = false;
+			// Focus moves before the ask hides: hiding a focused button drops
+			// focus out of the bar, which tucks the ghost away mid-confirm.
+			fixConfirm.focus( { preventScroll: true } );
+			fixAsk.hidden = true;
+		} );
+		fixCancel.addEventListener( 'click', () => {
+			fixAsk.hidden = false;
+			fixAsk.focus( { preventScroll: true } );
+			fixConfirmRow.hidden = true;
+		} );
+		fixConfirm.addEventListener( 'click', async () => {
+			if ( fixConfirmRow.hidden ) return;
+			fixConfirm.disabled = true;
 			try {
 				if ( 'provider' === CFG.fix.kind ) {
 					await api( 'minn-admin/v1/visibility/toggle', {
@@ -293,7 +324,7 @@
 				if ( slot ) slot.remove();
 				if ( divider && divider.classList.contains( 'minn-bar-divider' ) ) divider.remove();
 			} catch ( e ) {
-				fixBtn.disabled = false;
+				fixConfirm.disabled = false;
 			}
 		} );
 	}
@@ -321,7 +352,7 @@
 		return { intent: 'notifications' };
 	}
 	function renderNotifItems() {
-		const wrap = document.getElementById( 'minn-bar-notif-items' );
+		const wrap = root.querySelector( '#minn-bar-notif-items' );
 		if ( ! wrap ) return;
 		const items = ( notifItems || [] ).slice( 0, 4 );
 		wrap.innerHTML = items.length ? items.map( ( n, i ) => `
@@ -354,7 +385,7 @@
 		if ( notifItems ) return Promise.resolve();
 		return api( 'minn-admin/v1/notifications' ).then( ( d ) => {
 			notifItems = ( d && d.items ) || [];
-			const dot = document.getElementById( 'minn-bar-notif-dot' );
+			const dot = root.querySelector( '#minn-bar-notif-dot' );
 			if ( dot ) dot.hidden = ! notifItems.some( ( n ) => n.unread );
 			renderNotifItems();
 		} ).catch( () => {
@@ -498,7 +529,7 @@
 	/* ===== Toast: transient feedback under the bar ===== */
 	let toastTimer = 0;
 	function barToast( msg ) {
-		let t = document.getElementById( 'minn-bar-toast' );
+		let t = root.querySelector( '#minn-bar-toast' );
 		if ( ! t ) {
 			t = document.createElement( 'div' );
 			t.id = 'minn-bar-toast';
@@ -567,11 +598,11 @@
 
 	function closePalette() {
 		if ( pal ) pal.classList.remove( 'open' );
-		const btn = document.getElementById( 'minn-bar-search' );
+		const btn = root.querySelector( '#minn-bar-search' );
 		if ( btn ) btn.focus( { preventScroll: true } );
 	}
 
-	const search = document.getElementById( 'minn-bar-search' );
+	const search = root.querySelector( '#minn-bar-search' );
 	if ( search ) search.addEventListener( 'click', ( e ) => {
 		e.stopPropagation();
 		( pal && pal.classList.contains( 'open' ) ) ? closePalette() : openPalette();

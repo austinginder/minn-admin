@@ -2732,6 +2732,64 @@ if ( class_exists( 'Minn_Admin_DB' ) && is_multisite() ) {
 	$skip( 'DB browser sitemeta redaction (multisite only)' );
 }
 
+// --- #16 Minn Bar: the visibility fix is bound to the bar's own corner ------
+// bar.js used to find its root, its menus and the one-click fix by
+// document.getElementById, and the bar prints after the post content, so an
+// author's <div id="minn-bar-status-fix"> (or a <label for> pointing at the
+// real button) took the admin's next click. The browser half, with a real
+// author post and a real click, is tests/bar-content-spoof.test.js; this is
+// the server half: the corner key the client binds by, and the fix it offers.
+if ( class_exists( 'Minn_Admin_Bar' ) ) {
+	$bar_ref    = new ReflectionClass( 'Minn_Admin_Bar' );
+	$bar_config = $bar_ref->getMethod( 'config' );
+	$bar_config->setAccessible( true );
+	$bar_public = get_option( 'blog_public' );
+	update_option( 'blog_public', '0' );
+	$bar_cfg = $bar_config->invoke( null );
+	// A provider's coming-soon mode outranks search visibility, so any fix
+	// counts: the point is that the administrator is still offered one.
+	$check( '#16 Minn Bar: an administrator on a non-public site is still offered its fix (control)',
+		is_array( $bar_cfg['fix'] ) && ! empty( $bar_cfg['fix']['kind'] ), wp_json_encode( $bar_cfg['fix'] ) );
+	$bar_key = isset( $bar_cfg['key'] ) ? (string) $bar_cfg['key'] : '';
+	$check( '#16 Minn Bar: the config names its own corner by an unguessable key',
+		(bool) preg_match( '/^[A-Za-z0-9]{16,}$/', $bar_key ), $bar_key ? $bar_key : 'no key' );
+	if ( $bar_ref->hasProperty( 'key' ) ) {
+		$bar_key_prop = $bar_ref->getProperty( 'key' );
+		$bar_key_prop->setAccessible( true );
+		$bar_again = $bar_config->invoke( null );
+		$check( '#16 Minn Bar: the key is stable within one request', $bar_again['key'] === $bar_key );
+		$bar_key_prop->setValue( null, '' );
+		$bar_next = $bar_config->invoke( null );
+		$check( '#16 Minn Bar: a new request mints a new key', $bar_next['key'] && $bar_next['key'] !== $bar_key );
+	} else {
+		$check( '#16 Minn Bar: the key is minted per request', false, 'no per-request key on Minn_Admin_Bar' );
+	}
+	update_option( 'blog_public', $bar_public );
+
+	// The attack surface the client fix assumes: post content from a role
+	// without unfiltered_html keeps id, style, hidden and <label for>.
+	$bar_author = get_users( array( 'role__in' => array( 'author', 'contributor' ), 'number' => 1 ) );
+	if ( $bar_author ) {
+		wp_set_current_user( $bar_author[0]->ID );
+		kses_init();
+		$bar_payload = '<div id="minn-bar-status-fix" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;opacity:0"></div>'
+			. '<div id="minn-bar-menu-user" hidden><a href="https://example.invalid/">Sign out</a></div>'
+			. '<label for="minn-bar-status-fix" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;opacity:0">.</label>';
+		$bar_kept    = wp_unslash( apply_filters( 'content_save_pre', wp_slash( $bar_payload ) ) ) === $bar_payload;
+		wp_set_current_user( $admin );
+		kses_init();
+		if ( $bar_kept ) {
+			$check( '#16 Minn Bar: (precondition) author content still carries ids, fixed styles and label for', true );
+		} else {
+			$skip( '#16 Minn Bar: core kses no longer keeps the spoof payload for authors' );
+		}
+	} else {
+		$skip( '#16 Minn Bar: no author or contributor to check kses as' );
+	}
+} else {
+	$skip( '#16 Minn Bar not loaded' );
+}
+
 // @sections
 
 $summary();

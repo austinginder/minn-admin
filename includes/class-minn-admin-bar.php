@@ -35,6 +35,23 @@ class Minn_Admin_Bar {
 	/** Set when something told core not to show a toolbar on this request. */
 	private static $vetoed = false;
 
+	/** This request's corner key; see key(). */
+	private static $key = '';
+
+	/**
+	 * A per-request key the bar's corner carries and MINN_BAR repeats, so
+	 * bar.js binds to the bar this request printed. The bar renders after
+	 * the post content, and content from roles without unfiltered_html keeps
+	 * id, style and hidden, so a document-wide lookup by a fixed id finds
+	 * the content's copy first. Content cannot know a key minted per request.
+	 */
+	private static function key() {
+		if ( '' === self::$key ) {
+			self::$key = wp_generate_password( 20, false );
+		}
+		return self::$key;
+	}
+
 	public static function active() {
 		// show_admin_bar can be asked during plugin include. Do not cache a
 		// not-ready answer: cookie auth does not exist yet, and a cached
@@ -151,7 +168,7 @@ class Minn_Admin_Bar {
 	 * The status slot's exception state, or null when there is nothing worth
 	 * saying (public site, production environment).
 	 *
-	 * @return array|null { tone, label, title, sub, fix|null { label, kind, body|id } }
+	 * @return array|null { tone, label, title, sub, fix|null { label, confirm, kind, body|id } }
 	 */
 	private static function status() {
 		$fixable = current_user_can( 'manage_options' );
@@ -171,16 +188,18 @@ class Minn_Admin_Bar {
 			if ( $fixable && $first && 1 === count( $providers ) ) {
 				if ( ! empty( $first['minn'] ) ) {
 					$fix = array(
-						'label' => __( 'Turn off maintenance mode', 'minn-admin' ),
-						'kind'  => 'settings',
-						'body'  => array( 'minn_admin_maintenance' => false ),
+						'label'   => __( 'Turn off maintenance mode', 'minn-admin' ),
+						'confirm' => __( 'Visitors will see the site instead of the holding page.', 'minn-admin' ),
+						'kind'    => 'settings',
+						'body'    => array( 'minn_admin_maintenance' => false ),
 					);
 				} elseif ( ! empty( $first['can'] ) && ! empty( $first['id'] ) ) {
 					$fix = array(
 						/* translators: %s: the plugin providing the coming-soon/maintenance mode. */
-						'label' => sprintf( __( 'Turn off in %s', 'minn-admin' ), $first['name'] ),
-						'kind'  => 'provider',
-						'id'    => $first['id'],
+						'label'   => sprintf( __( 'Turn off in %s', 'minn-admin' ), $first['name'] ),
+						'confirm' => __( 'Visitors will see the site instead of the holding page.', 'minn-admin' ),
+						'kind'    => 'provider',
+						'id'      => $first['id'],
 					);
 				}
 			}
@@ -201,6 +220,9 @@ class Minn_Admin_Bar {
 				);
 			}
 			if ( 'password' === $v['state'] ) {
+				if ( $fix ) {
+					$fix['confirm'] = __( 'Visitors will no longer need a password to browse.', 'minn-admin' );
+				}
 				return array(
 					'tone'  => 'amber',
 					'label' => __( 'Password protected', 'minn-admin' ),
@@ -219,9 +241,10 @@ class Minn_Admin_Bar {
 				'title' => __( 'Search engines are discouraged', 'minn-admin' ),
 				'sub'   => __( 'The site asks search engines not to index it. Visitors can still browse normally.', 'minn-admin' ),
 				'fix'   => $fixable ? array(
-					'label' => __( 'Allow search engines', 'minn-admin' ),
-					'kind'  => 'settings',
-					'body'  => array( 'blog_public' => 1 ),
+					'label'   => __( 'Allow search engines', 'minn-admin' ),
+					'confirm' => __( 'Search engines will be allowed to index the site.', 'minn-admin' ),
+					'kind'    => 'settings',
+					'body'    => array( 'blog_public' => 1 ),
 				) : null,
 			);
 		}
@@ -326,6 +349,7 @@ class Minn_Admin_Bar {
 		list( $edit_url, $edit_label, $edit_hint ) = self::edit_target();
 		$extras = self::template_edits( $edit_url );
 		return array(
+			'key'         => self::key(),
 			'rest'        => esc_url_raw( rest_url() ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'app'         => Minn_Admin::app_url(),
@@ -526,7 +550,8 @@ class Minn_Admin_Bar {
 		// The corner always ships ghosted so the mark never flashes before
 		// bar.js runs. A status chip still renders, but it waits inside the
 		// tucked bar: hover (or the corner-handoff peek) is how it appears.
-		echo '<div id="minn-cornerbar" class="minn-bar-ghost">';
+		// data-minn-bar is the per-request key bar.js binds by (see key()).
+		echo '<div id="minn-cornerbar" class="minn-bar-ghost" data-minn-bar="' . esc_attr( self::key() ) . '">';
 		echo '<div id="minn-bar-root" data-minn-theme="dark" data-minn-scheme="' . esc_attr( $scheme ) . '" data-minn-font="' . esc_attr( $font ) . '">';
 		if ( 'custom' === $scheme ) {
 			echo self::custom_scheme_style( $appearance );
@@ -534,8 +559,10 @@ class Minn_Admin_Bar {
 
 		// Pre-paint the saved Minn theme before first paint of the bar (the
 		// SPA's localStorage key). Unset starts in the site's default mode;
-		// 'system', or no site default, follows the device.
-		echo '<script>(function(){try{var t=localStorage.getItem("minn-theme");if(!t){t=' . wp_json_encode( $site_mode ) . ';}if(t!=="dark"&&t!=="light"){t=window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.getElementById("minn-bar-root").setAttribute("data-minn-theme",t);}catch(e){}})();</script>';
+		// 'system', or no site default, follows the device. Both pre-paint
+		// scripts find the bar through their own position (currentScript's
+		// parent), never by id: post content above can carry the same ids.
+		echo '<script>(function(){try{var r=document.currentScript&&document.currentScript.parentNode;if(!r){return;}var t=localStorage.getItem("minn-theme");if(!t){t=' . wp_json_encode( $site_mode ) . ';}if(t!=="dark"&&t!=="light"){t=window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}r.setAttribute("data-minn-theme",t);}catch(e){}})();</script>';
 
 		// Pre-paint the corner handoff: a fresh flag means the last
 		// navigation started from this same corner (the bar mark, or the
@@ -547,7 +574,7 @@ class Minn_Admin_Bar {
 		// an environment that later turns wide-and-fine (device emulation
 		// dropped, a mouse plugged in, a window widened) starts ghosting
 		// instead of being stuck on the resting mark.
-		echo '<script>(function(){try{var c=document.getElementById("minn-cornerbar");if(!c||!c.classList.contains("minn-bar-ghost")){return;}var ts=0;try{ts=parseInt(sessionStorage.getItem("minn-bar-corner")||"0",10);sessionStorage.removeItem("minn-bar-corner");}catch(e){}if(ts&&Date.now()-ts<60000){c.classList.add("minn-bar-peek");}}catch(e){}})();</script>';
+		echo '<script>(function(){try{var c=document.currentScript&&document.currentScript.parentNode;c=c&&c.parentNode;if(!c||!c.classList||!c.classList.contains("minn-bar-ghost")){return;}var ts=0;try{ts=parseInt(sessionStorage.getItem("minn-bar-corner")||"0",10);sessionStorage.removeItem("minn-bar-corner");}catch(e){}if(ts&&Date.now()-ts<60000){c.classList.add("minn-bar-peek");}}catch(e){}})();</script>';
 
 		echo '<header id="minn-bar" aria-label="' . esc_attr__( 'Minn Admin Bar', 'minn-admin' ) . '">';
 
@@ -614,7 +641,10 @@ class Minn_Admin_Bar {
 		}
 		echo '</div>';
 
-		// Status menu (content is server-known; the fix button is wired in bar.js).
+		// Status menu (content is server-known; the fix is wired in bar.js).
+		// The fix asks, then confirms, and neither button has an id: a
+		// <label for> in post content clicks any labelable element it can
+		// name by id, from anywhere on the page.
 		if ( $status ) {
 			echo '<div class="minn-bar-menu" id="minn-bar-menu-status" role="menu" hidden>';
 			echo '<div class="minn-bar-menu-label">' . esc_html__( 'Site status', 'minn-admin' ) . '</div>';
@@ -623,9 +653,18 @@ class Minn_Admin_Bar {
 				echo '<div class="minn-bar-menu-rule"></div>';
 			}
 			if ( $status['fix'] ) {
-				echo '<button type="button" class="minn-bar-menu-item" role="menuitem" id="minn-bar-status-fix">'
+				echo '<button type="button" class="minn-bar-menu-item" role="menuitem" data-barfix="ask">'
 					. self::icon( '<path d="M18.4 5.6a9 9 0 1 0 .8 8.4"/><path d="M19 3v5h-5"/>' )
 					. '<span class="minn-bar-menu-copy"><span class="minn-bar-menu-title">' . esc_html( $status['fix']['label'] ) . '</span></span></button>';
+				echo '<div data-barfix-confirm hidden>';
+				echo '<div class="minn-bar-menu-item minn-bar-menu-static"><span class="minn-bar-menu-copy"><span class="minn-bar-menu-title">' . esc_html( $status['fix']['label'] ) . '</span><span class="minn-bar-menu-sub minn-bar-menu-wrap">' . esc_html( $status['fix']['confirm'] ) . '</span></span></div>';
+				echo '<button type="button" class="minn-bar-menu-item" role="menuitem" data-barfix="confirm">'
+					. self::icon( '<path d="m5 12 5 5 9-10"/>' )
+					. '<span class="minn-bar-menu-copy"><span class="minn-bar-menu-title">' . esc_html__( 'Confirm', 'minn-admin' ) . '</span></span></button>';
+				echo '<button type="button" class="minn-bar-menu-item" role="menuitem" data-barfix="cancel">'
+					. self::icon( '<path d="M6 6l12 12M18 6 6 18"/>' )
+					. '<span class="minn-bar-menu-copy"><span class="minn-bar-menu-title">' . esc_html__( 'Cancel', 'minn-admin' ) . '</span></span></button>';
+				echo '</div>';
 			}
 			if ( current_user_can( 'manage_options' ) ) {
 				echo self::menu_item( self::app_path( 'settings' ), '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>', __( 'Visibility settings', 'minn-admin' ) );
