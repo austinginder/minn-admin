@@ -15,9 +15,10 @@
  * adding notifications, recipient routing, notification conditions and the
  * extra conditional confirmations to Pro, so without Pro those are neither
  * offered nor touched (a stored routing list or condition set is kept as it
- * is). The preview renders the notification's subject and message with the
- * form's latest entry through their ShortCodeParser, the way their sender
- * does.
+ * is). With Pro the page still has no routing editor, so a routing
+ * notification keeps its list there too. The preview renders the
+ * notification's subject and message with the form's latest entry through
+ * their ShortCodeParser, the way their sender does.
  *
  * @package minn-admin
  */
@@ -207,7 +208,6 @@ add_action( 'rest_api_init', function () {
 				$body    = (array) $request->get_json_params();
 				$service = new \FluentForm\App\Services\Settings\SettingsService();
 				$stored  = minn_admin_fluent_notifications( $form->id );
-				$pro     = minn_admin_fluent_has_pro();
 
 				// Notifications: each existing one through their store().
 				foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
@@ -219,9 +219,12 @@ add_action( 'rest_api_init', function () {
 					$text = function ( $k ) use ( $in ) {
 						return isset( $in[ $k ] ) && is_scalar( $in[ $k ] ) ? (string) $in[ $k ] : '';
 					};
+					// A routing list is Pro's and is edited in Fluent Forms, with
+					// or without Pro here: the page offers no routing editor, so
+					// a stored list is kept as it is on any save.
 					$type = $text( 'toType' );
-					if ( 'routing' === ( $n['sendTo']['type'] ?? '' ) && ! $pro ) {
-						$type = 'routing'; // Pro's routing: kept as it is
+					if ( 'routing' === ( $n['sendTo']['type'] ?? '' ) ) {
+						$type = 'routing';
 					} elseif ( ! in_array( $type, array( 'email', 'field' ), true ) ) {
 						$type = 'email';
 					}

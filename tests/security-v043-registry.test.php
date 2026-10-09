@@ -2116,6 +2116,78 @@ if ( class_exists( 'GFAPI' ) ) {
 	$skip( 'GF trash capability: Gravity Forms inactive' );
 }
 
+// --- #8 Fluent Forms keeps a routing notification routed, with Pro or without ---
+// Fluent Forms Pro is detected by its FLUENTFORMPRO constant. A constant
+// cannot be undefined, so the with-Pro half runs in a child WP-CLI process
+// that defines it, and nothing leaks into the rest of this run.
+if ( function_exists( 'wpFluent' ) && function_exists( 'minn_admin_fluent_has_pro' ) && class_exists( 'WP_CLI' ) ) {
+	global $wpdb;
+	$ffr_p     = $wpdb->prefix;
+	$ffr_src   = $wpdb->get_var( "SELECT form_fields FROM {$ffr_p}fluentform_forms ORDER BY id ASC LIMIT 1" );
+	$wpdb->insert( "{$ffr_p}fluentform_forms", array( 'title' => 'Minn v043 Fluent routing', 'status' => 'published', 'type' => 'form', 'form_fields' => (string) $ffr_src, 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+	$ffr_form  = (int) $wpdb->insert_id;
+	$ffr_route = array(
+		array( 'field' => 'names', 'operator' => '=', 'value' => 'Sales', 'input_value' => 'minn-sales@example.com' ),
+		array( 'field' => 'names', 'operator' => '=', 'value' => 'Support', 'input_value' => 'minn-support@example.com' ),
+	);
+	$ffr_seed  = array( 'name' => 'Routed email', 'sendTo' => array( 'type' => 'routing', 'email' => '{wp.admin_email}', 'field' => '', 'routing' => $ffr_route ), 'fromName' => '', 'fromEmail' => '', 'replyTo' => '', 'bcc' => '', 'subject' => 'New', 'message' => '<p>{all_data}</p>', 'enabled' => true );
+	$wpdb->insert( "{$ffr_p}fluentform_form_meta", array( 'form_id' => $ffr_form, 'meta_key' => 'notifications', 'value' => wp_json_encode( $ffr_seed ) ) );
+	$ffr_meta  = (int) $wpdb->insert_id;
+	$ffr_row   = function () use ( $wpdb, $ffr_p, $ffr_meta ) {
+		return json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT value FROM {$ffr_p}fluentform_form_meta WHERE id=%d", $ffr_meta ) ), true );
+	};
+	// What the page sends on a subject edit: the loaded notification, changed.
+	$ffr_body  = function ( $d, $subject ) {
+		$x            = $d['notifications'][0];
+		$x['subject'] = $subject;
+		return array( 'notifications' => array( $x ) );
+	};
+
+	list( , $d ) = $call( 'GET', "/minn-admin/v1/fluent-forms/forms/{$ffr_form}/emails" );
+	list( $st )  = $call( 'POST', "/minn-admin/v1/fluent-forms/forms/{$ffr_form}/emails", $ffr_body( $d, 'Edited' ) );
+	$ffr_now     = $ffr_row();
+	$check( 'Fluent emails (this site\'s edition): a subject edit keeps the routing', 200 === $st && 'routing' === $ffr_now['sendTo']['type'] && $ffr_route === $ffr_now['sendTo']['routing'] && 'Edited' === $ffr_now['subject'], "status {$st} " . wp_json_encode( $ffr_now['sendTo'] ) );
+
+	if ( defined( 'FLUENTFORMPRO' ) ) {
+		list( , $d ) = $call( 'GET', "/minn-admin/v1/fluent-forms/forms/{$ffr_form}/emails" );
+		list( $st )  = $call( 'POST', "/minn-admin/v1/fluent-forms/forms/{$ffr_form}/emails", $ffr_body( $d, 'Edited with Pro' ) );
+		$ffr_pro     = array( 'status' => $st, 'pro' => minn_admin_fluent_has_pro() );
+	} else {
+		$ffr_tmp = wp_tempnam( 'minn-v043-ffr' );
+		file_put_contents( $ffr_tmp, '<?php
+define( "FLUENTFORMPRO", "minn-test" );
+$q = new WP_REST_Request( "GET", "/minn-admin/v1/fluent-forms/forms/' . $ffr_form . '/emails" );
+$d = rest_do_request( $q )->get_data();
+$x = $d["notifications"][0];
+$x["subject"] = "Edited with Pro";
+$q = new WP_REST_Request( "POST", "/minn-admin/v1/fluent-forms/forms/' . $ffr_form . '/emails" );
+$q->set_header( "content-type", "application/json" );
+$q->set_body( wp_json_encode( array( "notifications" => array( $x ) ) ) );
+echo "\nMINNJSON" . wp_json_encode( array( "status" => rest_do_request( $q )->get_status(), "pro" => minn_admin_fluent_has_pro() ) );
+' );
+		$ffr_out = WP_CLI::runcommand( 'eval-file ' . escapeshellarg( $ffr_tmp ) . ' --user=' . (int) get_current_user_id(), array( 'launch' => true, 'return' => 'all', 'exit_error' => false ) );
+		unlink( $ffr_tmp );
+		$ffr_pro = json_decode( (string) substr( (string) strrchr( (string) $ffr_out->stdout, 'MINNJSON' ), 8 ), true );
+	}
+	$ffr_now = $ffr_row();
+	$check( 'Fluent emails with Pro: the child run saw Pro', ! empty( $ffr_pro['pro'] ), wp_json_encode( $ffr_pro ) );
+	$check( 'Fluent emails with Pro: a subject edit keeps the routing', 200 === (int) ( $ffr_pro['status'] ?? 0 ) && 'routing' === $ffr_now['sendTo']['type'] && $ffr_route === $ffr_now['sendTo']['routing'] && 'Edited with Pro' === $ffr_now['subject'], wp_json_encode( $ffr_pro ) . ' ' . wp_json_encode( $ffr_now['sendTo'] ) );
+
+	// Control: an email notification still switches to a form field and back.
+	$wpdb->update( "{$ffr_p}fluentform_form_meta", array( 'value' => wp_json_encode( array_merge( $ffr_seed, array( 'sendTo' => array( 'type' => 'email', 'email' => 'minn-owner@example.com', 'field' => '', 'routing' => array() ) ) ) ) ), array( 'id' => $ffr_meta ) );
+	list( , $d ) = $call( 'GET', "/minn-admin/v1/fluent-forms/forms/{$ffr_form}/emails" );
+	$ffr_x            = $d['notifications'][0];
+	$ffr_x['toEmail'] = 'minn-other@example.com';
+	list( $st )       = $call( 'POST', "/minn-admin/v1/fluent-forms/forms/{$ffr_form}/emails", array( 'notifications' => array( $ffr_x ) ) );
+	$ffr_now          = $ffr_row();
+	$check( 'Fluent emails: an email notification still takes a new address (control)', 200 === $st && 'email' === $ffr_now['sendTo']['type'] && 'minn-other@example.com' === $ffr_now['sendTo']['email'], "status {$st} " . wp_json_encode( $ffr_now['sendTo'] ) );
+
+	$wpdb->delete( "{$ffr_p}fluentform_form_meta", array( 'form_id' => $ffr_form ) );
+	$wpdb->delete( "{$ffr_p}fluentform_forms", array( 'id' => $ffr_form ) );
+} else {
+	$skip( 'Fluent routing: Fluent Forms inactive' );
+}
+
 // @sections
 
 $summary();

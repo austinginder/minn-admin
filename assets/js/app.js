@@ -55083,7 +55083,9 @@
 		const err = ( key ) => ( c.err && c.err.field === key ? `<span class="minn-gfn-errmsg">${ esc( c.err.message ) }</span>` : '' );
 		const notice = ( k ) => {
 			const x = n[ k ];
-			const to = x.hasRouting && ! d.hasPro
+			// Routing has no editor here, Pro or not: the server keeps a stored
+			// list on every save, so the Email/Field tabs would only mislead.
+			const to = x.hasRouting
 				? `<div class="minn-insp-note">${ esc( __( 'Sent by routing rules set up in Fluent Forms Pro. They are kept as they are.' ) ) }</div>`
 				: `${ tabs( `data-ffeto="${ k }" data-v`, x.toType, [ [ 'email', __( 'Email address' ) ], [ 'field', __( 'Form field' ) ] ] ) }
 					${ 'field' === x.toType
