@@ -244,15 +244,25 @@ function minn_admin_meta_box_write_values( $post_id, $values ) {
 		return;
 	}
 	$allowed = array_flip( minn_admin_meta_box_simple_ids_for_post( $post_id ) );
+	// The panel sends every field back when any one of them changes. A value
+	// equal to what the read handed out is left as stored, so an untouched
+	// field never goes back through Meta Box's sanitizer (sanitize_text_field
+	// deletes anything shaped like a %XX octet).
+	$held = minn_admin_meta_box_read_values( $post_id );
 	foreach ( $values as $key => $value ) {
 		if ( ! isset( $allowed[ $key ] ) ) {
 			continue;
 		}
 		$field = function_exists( 'rwmb_get_field_settings' ) ? rwmb_get_field_settings( $key, array(), $post_id ) : null;
 		$type  = is_array( $field ) && ! empty( $field['type'] ) ? $field['type'] : '';
-		if ( in_array( $type, array( 'checkbox', 'switch' ), true ) ) {
+		$flag  = in_array( $type, array( 'checkbox', 'switch' ), true );
+		if ( $flag ) {
 			// Meta Box checkbox/switch expect 1 or empty/0.
 			$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
+		}
+		if ( array_key_exists( $key, $held ) && ( is_scalar( $value ) || null === $value ) && is_scalar( $held[ $key ] )
+			&& ( $flag ? (bool) $value === (bool) $held[ $key ] : (string) $value === (string) $held[ $key ] ) ) {
+			continue;
 		}
 		if ( 'url' === $type && '' !== trim( (string) $value ) ) {
 			// The house rule every other URL writer applies: an address that
@@ -269,7 +279,10 @@ function minn_admin_meta_box_write_values( $post_id, $values ) {
 			rwmb_delete_meta( $post_id, $key );
 			continue;
 		}
-		rwmb_set_meta( $post_id, $key, $value );
+		// Slashed: Meta Box's own form feeds this pipeline the slashed $_POST
+		// and its storage write (update_metadata()) unslashes, so a raw REST
+		// value lost a level of backslashes (^\d+$ saved as ^d+$).
+		rwmb_set_meta( $post_id, $key, wp_slash( $value ) );
 	}
 }
 

@@ -1510,6 +1510,109 @@ if ( ! class_exists( '\Bricks\License' ) || ! function_exists( 'minn_admin_licen
 	\Bricks\License::$license_key = $brx_prev;
 }
 
+// --- #2 Meta Box panel saves keep backslashes --------------------------------
+// The editor sends the whole panel back when any field in it changes. Meta Box's
+// own form hands rwmb_set_meta()'s pipeline the slashed $_POST, and the storage
+// write unslashes once, so an unslashed REST value lost a level of backslashes.
+if ( function_exists( 'rwmb_get_registry' ) && function_exists( 'minn_admin_meta_box_write_values' ) ) {
+	$fsl_mb_box = rwmb_get_registry( 'meta_box' )->make( array(
+		'id'         => 'minn_v043_mb_slash',
+		'title'      => 'Minn v043 slash probe',
+		'post_types' => array( 'post' ),
+		'fields'     => array(
+			array( 'id' => 'minn_v043_pattern', 'name' => 'Pattern', 'type' => 'text' ),
+			array( 'id' => 'minn_v043_path', 'name' => 'Path', 'type' => 'textarea' ),
+			array( 'id' => 'minn_v043_pct', 'name' => 'Promo', 'type' => 'text' ),
+			array( 'id' => 'minn_v043_note', 'name' => 'Note', 'type' => 'text' ),
+			array( 'id' => 'minn_v043_pick', 'name' => 'Pick', 'type' => 'select', 'options' => array( 'plain' => 'Plain', "it's" => 'Quoted' ) ),
+			array( 'id' => 'minn_v043_flag', 'name' => 'Flag', 'type' => 'checkbox' ),
+		),
+	) );
+	// A box made after init never reaches the field registry the setter reads.
+	if ( method_exists( $fsl_mb_box, 'register_fields' ) ) {
+		$fsl_mb_box->register_fields();
+	}
+	$fsl_mb_post = wp_insert_post( array( 'post_title' => 'Minn v043 meta box slash probe', 'post_status' => 'draft' ) );
+	$fsl_mb_path = "C:\\Temp\\new\n\"quoted\" \\u00e9 \\\\server\\share";
+	update_post_meta( $fsl_mb_post, 'minn_v043_pattern', wp_slash( '^\d+$' ) );
+	update_post_meta( $fsl_mb_post, 'minn_v043_path', wp_slash( $fsl_mb_path ) );
+	update_post_meta( $fsl_mb_post, 'minn_v043_pct', 'Save 50%AB today' );
+	// What the editor does: read the panel, edit one field, send it all back.
+	list( , $fsl_mb_read ) = $call( 'GET', '/wp/v2/posts/' . $fsl_mb_post, null, array( 'context' => 'edit' ) );
+	$fsl_mb_vals                   = (array) ( $fsl_mb_read['minn_meta_box'] ?? array() );
+	$fsl_mb_vals['minn_v043_note'] = 'typed C:\\Users\\me and ^\\w+$';
+	list( $fsl_mb_st ) = $call( 'POST', '/wp/v2/posts/' . $fsl_mb_post, array( 'minn_meta_box' => $fsl_mb_vals ) );
+	$check( 'Meta Box: the panel save answers 200', 200 === $fsl_mb_st, 'status ' . $fsl_mb_st );
+	$check( 'Meta Box: an untouched text field keeps its backslashes', '^\d+$' === get_post_meta( $fsl_mb_post, 'minn_v043_pattern', true ), get_post_meta( $fsl_mb_post, 'minn_v043_pattern', true ) );
+	$check( 'Meta Box: an untouched textarea keeps its backslashes and quotes', $fsl_mb_path === get_post_meta( $fsl_mb_post, 'minn_v043_path', true ), wp_json_encode( get_post_meta( $fsl_mb_post, 'minn_v043_path', true ) ) );
+	$check( 'Meta Box: an untouched text field is not re-sanitized (%AB kept)', 'Save 50%AB today' === get_post_meta( $fsl_mb_post, 'minn_v043_pct', true ), get_post_meta( $fsl_mb_post, 'minn_v043_pct', true ) );
+	$check( 'Meta Box: a typed value keeps its backslashes', 'typed C:\\Users\\me and ^\\w+$' === get_post_meta( $fsl_mb_post, 'minn_v043_note', true ), get_post_meta( $fsl_mb_post, 'minn_v043_note', true ) );
+	// Controls: changed values of every simple kind still write.
+	list( , $fsl_mb_read ) = $call( 'GET', '/wp/v2/posts/' . $fsl_mb_post, null, array( 'context' => 'edit' ) );
+	$fsl_mb_vals                      = (array) ( $fsl_mb_read['minn_meta_box'] ?? array() );
+	$fsl_mb_vals['minn_v043_pattern'] = '^[a-z]+\\d{2}$';
+	$fsl_mb_vals['minn_v043_pick']    = "it's";
+	$fsl_mb_vals['minn_v043_flag']    = true;
+	$fsl_mb_vals['minn_v043_note']    = '';
+	$call( 'POST', '/wp/v2/posts/' . $fsl_mb_post, array( 'minn_meta_box' => $fsl_mb_vals ) );
+	$check( 'Meta Box: a changed text field keeps its backslashes', '^[a-z]+\\d{2}$' === get_post_meta( $fsl_mb_post, 'minn_v043_pattern', true ), get_post_meta( $fsl_mb_post, 'minn_v043_pattern', true ) );
+	$check( 'Meta Box: a picked choice holding a quote is written (control)', "it's" === get_post_meta( $fsl_mb_post, 'minn_v043_pick', true ), get_post_meta( $fsl_mb_post, 'minn_v043_pick', true ) );
+	$check( 'Meta Box: a ticked checkbox is written (control)', '1' === (string) get_post_meta( $fsl_mb_post, 'minn_v043_flag', true ), wp_json_encode( get_post_meta( $fsl_mb_post, 'minn_v043_flag', true ) ) );
+	$check( 'Meta Box: a cleared field is deleted (control)', ! metadata_exists( 'post', $fsl_mb_post, 'minn_v043_note' ) );
+	$check( 'Meta Box: the untouched textarea survives a second save', $fsl_mb_path === get_post_meta( $fsl_mb_post, 'minn_v043_path', true ) );
+	wp_delete_post( $fsl_mb_post, true );
+} else {
+	$skip( 'Meta Box inactive' );
+}
+
+// --- #2 Ninja Forms answer edits leave untouched answers alone (guard) ------
+// Minn sends only the answers that changed, and the route writes only those,
+// so a backslash in an untouched answer is never round-tripped. A typed answer
+// is stored the way Ninja Forms' own submissions screen (its REST update)
+// stores it.
+if ( function_exists( 'Ninja_Forms' ) && function_exists( 'minn_admin_ninja_forms_edit_block' ) && minn_admin_ninja_forms_can_edit() ) {
+	$fsl_nf_form = 0;
+	$fsl_nf_text = 0;
+	$fsl_nf_area = 0;
+	foreach ( (array) Ninja_Forms()->form()->get_forms() as $fsl_nf_f ) {
+		$fsl_nf_t = 0;
+		$fsl_nf_a = 0;
+		foreach ( (array) Ninja_Forms()->form( $fsl_nf_f->get_id() )->get_fields() as $fsl_nf_fl ) {
+			$fsl_nf_type = (string) $fsl_nf_fl->get_setting( 'type' );
+			if ( 'textbox' === $fsl_nf_type && ! $fsl_nf_t ) {
+				$fsl_nf_t = (int) $fsl_nf_fl->get_id();
+			} elseif ( 'textarea' === $fsl_nf_type && ! $fsl_nf_a ) {
+				$fsl_nf_a = (int) $fsl_nf_fl->get_id();
+			}
+		}
+		if ( $fsl_nf_t && $fsl_nf_a ) {
+			$fsl_nf_form = (int) $fsl_nf_f->get_id();
+			$fsl_nf_text = $fsl_nf_t;
+			$fsl_nf_area = $fsl_nf_a;
+			break;
+		}
+	}
+	if ( $fsl_nf_form ) {
+		$fsl_nf_sub = Ninja_Forms()->form( $fsl_nf_form )->sub()->get();
+		$fsl_nf_sub->update_field_value( $fsl_nf_area, wp_slash( 'Path C:\\Temp\\new and ^\\d+$' ) );
+		$fsl_nf_sub->update_field_value( $fsl_nf_text, 'Jordan' );
+		$fsl_nf_sub->save();
+		$fsl_nf_id = (int) $fsl_nf_sub->get_id();
+		list( $fsl_nf_st ) = $call( 'POST', '/minn-admin/v1/ninja-forms/entries/' . $fsl_nf_id . '/answers', array(
+			'values'   => array( (string) $fsl_nf_text => 'Jordan Lee' ),
+			'original' => array( (string) $fsl_nf_text => 'Jordan' ),
+		) );
+		$check( 'Ninja Forms: the answer edit answers 200', 200 === $fsl_nf_st, 'status ' . $fsl_nf_st );
+		$check( 'Ninja Forms: an untouched answer keeps its backslashes', 'Path C:\\Temp\\new and ^\\d+$' === minn_admin_ninja_forms_decode( get_post_meta( $fsl_nf_id, '_field_' . $fsl_nf_area, true ) ), get_post_meta( $fsl_nf_id, '_field_' . $fsl_nf_area, true ) );
+		$check( 'Ninja Forms: the edited answer is written (control)', 'Jordan Lee' === get_post_meta( $fsl_nf_id, '_field_' . $fsl_nf_text, true ) );
+		wp_delete_post( $fsl_nf_id, true );
+	} else {
+		$skip( 'Ninja Forms: no form with a textbox and a paragraph field' );
+	}
+} else {
+	$skip( 'Ninja Forms inactive' );
+}
+
 // @sections
 
 $summary();
