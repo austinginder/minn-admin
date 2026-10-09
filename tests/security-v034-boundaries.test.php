@@ -326,15 +326,16 @@ if ( ! function_exists( 'minn_admin_acf_value_in' ) ) {
 			false === strpos( $as( $writer, $open_field, 'options' ), 'onerror' ),
 			$as( $writer, $open_field, 'options' )
 		);
-		// Controls: the fix must not over-block, and must not change the post
-		// scope, which is ACF's own behaviour over one post the caller owns.
+		// Controls: the fix must not over-block. The post scope holds this
+		// caller to the same rule, as ACF's own metabox save does for anyone
+		// without unfiltered_html.
 		$check(
 			'A user with unfiltered_html still stores markup',
 			false !== strpos( $as( $admin, $open_field, 'options' ), 'onerror' )
 		);
 		$check(
-			'Post scope is unchanged',
-			false !== strpos( $as( $writer, $open_field, 'post' ), 'onerror' )
+			'Post scope strips the handler for the same caller',
+			false === strpos( $as( $writer, $open_field, 'post' ), 'onerror' ) && false !== strpos( $as( $writer, $open_field, 'post' ), 'bad' )
 		);
 		$check(
 			'A declared choice list still drops anything outside it',
