@@ -2188,6 +2188,355 @@ echo "\nMINNJSON" . wp_json_encode( array( "status" => rest_do_request( $q )->ge
 	$skip( 'Fluent routing: Fluent Forms inactive' );
 }
 
+// JetEngine sections share three helpers: the surface form's client model, a
+// way to reshape the fixture Content Type's fields in memory (its table keeps
+// its columns; only JetEngine's in-request field list changes), and a probe
+// that watches what their item handler is asked to store.
+$jet_cct = ( function_exists( 'minn_admin_jet_cct_type' ) && function_exists( 'minn_admin_jet_cct_active' ) && minn_admin_jet_cct_active() )
+	? minn_admin_jet_cct_type( 'minn_contact' ) : null;
+// What the CCT create/edit form posts for one descriptor field, given the
+// value the item read showed (app.js formNormField + comboUpgrade +
+// bindFormComboboxes seeding + formControlValue).
+$jet_form_value = function ( $sf, $v ) {
+	$type = (string) $sf['type'];
+	if ( 'radio' === $type || 'select' === $type ) {
+		$opts = array();
+		foreach ( (array) ( $sf['options'] ?? array() ) as $o ) {
+			$opts[] = (string) $o[0];
+		}
+		if ( ! empty( $sf['clearable'] ) && ! in_array( '', $opts, true ) ) {
+			array_unshift( $opts, '' );
+		}
+		$seed = is_scalar( $v ) ? (string) $v : '';
+		if ( '' !== $seed && ! in_array( $seed, $opts, true ) ) {
+			$opts[] = $seed; // withStoredOption
+		}
+		return in_array( $seed, $opts, true ) ? $seed : $opts[0];
+	}
+	if ( 'number' === $type ) {
+		return ( is_scalar( $v ) && is_numeric( $v ) ) ? (float) $v : null; // a number input drops what it cannot show
+	}
+	if ( 'image' === $type ) {
+		return ( is_array( $v ) && ! empty( $v['id'] ) ) ? array( 'id' => (int) $v['id'], 'url' => (string) ( $v['url'] ?? '' ) ) : null;
+	}
+	if ( 'gallery' === $type ) {
+		return is_array( $v ) ? array_values( $v ) : array();
+	}
+	if ( 'true_false' === $type ) {
+		return (bool) $v;
+	}
+	if ( 'textarea' === $type ) {
+		return str_replace( array( "\r\n", "\r" ), "\n", (string) $v ); // a textarea's value is LF-only
+	}
+	if ( 'text' === $type ) {
+		return str_replace( array( "\r", "\n" ), '', (string) $v ); // an <input> drops line breaks
+	}
+	return is_scalar( $v ) ? (string) $v : '';
+};
+$jet_form_body = function ( $fields, $item ) use ( $jet_form_value ) {
+	$body = array();
+	foreach ( $fields as $sf ) {
+		$body[ $sf['key'] ] = $jet_form_value( $sf, $item[ $sf['key'] ] ?? '' );
+	}
+	return $body;
+};
+// Reshape fields by name ( name => overrides, or name => null to append one ).
+$jet_reshape = function ( $factory, $changes ) {
+	$saved = $factory->fields;
+	foreach ( $factory->fields as $i => $fd ) {
+		if ( isset( $fd['name'] ) && array_key_exists( $fd['name'], $changes ) ) {
+			$factory->fields[ $i ] = array_merge( $fd, (array) $changes[ $fd['name'] ] );
+			unset( $changes[ $fd['name'] ] );
+		}
+	}
+	foreach ( $changes as $name => $def ) {
+		$factory->fields[] = array_merge( array( 'title' => $name, 'name' => $name, 'object_type' => 'field', 'type' => 'text' ), (array) $def );
+	}
+	$cache = new ReflectionProperty( get_class( $factory ), '_formatted_fields' );
+	$cache->setAccessible( true );
+	$cache->setValue( $factory, null );
+	return function () use ( $factory, $saved, $cache ) {
+		$factory->fields = $saved;
+		$cache->setValue( $factory, null );
+	};
+};
+$jet_desc = function ( $factory ) {
+	$coll = minn_admin_jet_cct_collection( 'minn_contact', $factory );
+	return array( $coll['detail']['edit']['fields'], $coll['create']['fields'] );
+};
+
+// --- #11 JetEngine CCT item writes take field values from the JSON body only ---
+if ( $jet_cct ) {
+	global $wpdb;
+	$jet11_route              = '/minn-admin/v1/jet-cct/minn_contact/items';
+	list( $jet11_st, $jet11_c ) = $call( 'POST', $jet11_route, array( 'name' => 'Minn v043 cct11', 'email' => 'cct11@minn.test', 'tier' => 'lead', 'vip' => false, 'notes' => '' ) );
+	$jet11_id                 = (int) ( $jet11_c['id'] ?? 0 );
+	$jet11_ids                = array( $jet11_id );
+	$check( 'JetEngine CCT: a JSON create inserts the item (control)', 200 === $jet11_st && $jet11_id > 0, 'status ' . $jet11_st );
+	if ( $jet11_id ) {
+		// A query-string key that names a field.
+		$jet11_req = new WP_REST_Request( 'POST', $jet11_route . '/' . $jet11_id );
+		$jet11_req->set_query_params( array( 'name' => 'From the query string' ) );
+		$jet11_req->set_header( 'content-type', 'application/json' );
+		$jet11_req->set_body( wp_json_encode( array( 'tier' => 'client' ) ) );
+		rest_do_request( $jet11_req );
+		$jet11_row = minn_admin_jet_cct_row( 'minn_contact', $jet11_id );
+		$check( 'JetEngine CCT: a query-string key never reaches a field', 'Minn v043 cct11' === $jet11_row['name'], $jet11_row['name'] );
+		$check( 'JetEngine CCT: the JSON body still edits (control)', 'client' === $jet11_row['tier'], $jet11_row['tier'] );
+		// A form-encoded body is not the JSON body either.
+		list( $jet11_fst ) = $call( 'POST', $jet11_route . '/' . $jet11_id, null, array( 'name' => 'From a form body' ) );
+		$check( 'JetEngine CCT: a form-encoded key never reaches a field', 'Minn v043 cct11' === minn_admin_jet_cct_row( 'minn_contact', $jet11_id )['name'], minn_admin_jet_cct_row( 'minn_contact', $jet11_id )['name'] );
+		$check( 'JetEngine CCT: an edit with no JSON body is refused, not a silent 200', 400 === $jet11_fst, 'status ' . $jet11_fst );
+
+		// A type whose fields are named after the route's own segments.
+		$jet11_restore = $jet_reshape( $jet_cct, array( 'slug' => array( 'title' => 'Slug' ), 'id' => array( 'title' => 'Id' ) ) );
+		$jet11_seen    = array();
+		$jet11_probe   = function ( $item ) use ( &$jet11_seen ) {
+			$jet11_seen[] = array( 'slug' => $item['slug'] ?? null, 'id' => $item['id'] ?? null );
+			unset( $item['slug'], $item['id'] ); // the table has no such columns: the probe only watches
+			return $item;
+		};
+		add_filter( 'jet-engine/custom-content-types/item-to-update', $jet11_probe );
+		try {
+			$call( 'POST', $jet11_route . '/' . $jet11_id, array( 'tier' => 'lead' ) );
+			list( , $jet11_c2 ) = $call( 'POST', $jet11_route, array( 'name' => 'Minn v043 cct11 b' ) );
+			$jet11_ids[]        = (int) ( $jet11_c2['id'] ?? 0 );
+		} finally {
+			remove_filter( 'jet-engine/custom-content-types/item-to-update', $jet11_probe );
+			$jet11_restore();
+		}
+		$jet11_u = $jet11_seen[0] ?? array();
+		$jet11_n = $jet11_seen[1] ?? array();
+		$check( 'JetEngine CCT: a partial update never writes the route\'s slug and id into fields named slug / id', 2 === count( $jet11_seen ) && 'minn_contact' !== ( $jet11_u['slug'] ?? '' ) && (string) $jet11_id !== (string) ( $jet11_u['id'] ?? '' ), wp_json_encode( $jet11_seen ) );
+		$check( 'JetEngine CCT: a create never writes the route\'s slug into a field named slug', 'minn_contact' !== ( $jet11_n['slug'] ?? '' ), wp_json_encode( $jet11_n ) );
+	}
+	foreach ( array_filter( $jet11_ids ) as $jet11_del ) {
+		$wpdb->delete( minn_admin_jet_cct_table( 'minn_contact' ), array( '_ID' => $jet11_del ) );
+	}
+} else {
+	$skip( 'JetEngine Content Types (minn_contact) inactive' );
+}
+
+// --- #19 JetEngine panel and CCT edit leave untouched fields as stored ------
+if ( function_exists( 'minn_admin_jet_write_values' ) && minn_admin_jet_fields_active() ) {
+	global $wpdb;
+	$jet19_post = wp_insert_post( array( 'post_title' => 'Minn v043 jet19', 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $admin ) );
+	$jet19_att  = wp_insert_attachment( array( 'post_title' => 'minn v043 jet19', 'post_mime_type' => 'image/png', 'post_status' => 'inherit' ), 'minn-v043-jet19.png' );
+	$jet19_dead = (int) $wpdb->get_var( "SELECT MAX(ID) FROM {$wpdb->posts}" ) + 500000; // never an attachment
+	// Two more field shapes on the fixture box, in memory only: a gallery of
+	// ids and a picture stored by url.
+	$jet19_data  = jet_engine()->meta_boxes->data;
+	$jet19_data->get_raw();
+	$jet19_saved = $jet19_data->raw;
+	foreach ( (array) $jet19_data->raw as $jet19_k => $jet19_box ) {
+		if ( 'Minn Post Details' === ( $jet19_box['args']['name'] ?? '' ) ) {
+			$jet19_data->raw[ $jet19_k ]['meta_fields'][] = array( 'title' => 'Gallery', 'name' => 'minn_v043_gallery', 'object_type' => 'field', 'type' => 'gallery', 'value_format' => 'id' );
+			$jet19_data->raw[ $jet19_k ]['meta_fields'][] = array( 'title' => 'Logo', 'name' => 'minn_v043_logo', 'object_type' => 'field', 'type' => 'media', 'value_format' => 'url' );
+		}
+	}
+	try {
+		$jet19_stored = array(
+			'minn_subtitle'     => 'https://ex.com/b?n=Jo%20Ann <b>bold</b>',
+			'minn_priority'     => '1.50',
+			'minn_cover'        => (string) $jet19_dead,
+			'minn_v043_gallery' => $jet19_att . ',' . $jet19_dead,
+			'minn_v043_logo'    => 'https://cdn.example.com/elsewhere.png',
+		);
+		foreach ( $jet19_stored as $jet19_key => $jet19_val ) {
+			update_post_meta( $jet19_post, $jet19_key, $jet19_val );
+		}
+		// The panel: seeded from the read, one field edited, the whole object sent.
+		list( , $jet19_read ) = $call( 'GET', '/wp/v2/posts/' . $jet19_post, null, array( 'context' => 'edit' ) );
+		$jet19_vals           = (array) ( $jet19_read['minn_jet'] ?? array() );
+		$jet19_vals['minn_tier'] = 'gold';
+		$call( 'POST', '/wp/v2/posts/' . $jet19_post, array( 'minn_jet' => $jet19_vals ) );
+		$check( 'JetEngine panel: the edited field saves (control)', 'gold' === get_post_meta( $jet19_post, 'minn_tier', true ) );
+		foreach ( $jet19_stored as $jet19_key => $jet19_val ) {
+			$jet19_now = get_post_meta( $jet19_post, $jet19_key, true );
+			$check( "JetEngine panel: untouched {$jet19_key} is left as stored", $jet19_val === $jet19_now, wp_json_encode( $jet19_now ) );
+		}
+		// A typed text field is cleaned the way JetEngine's own meta box cleans it.
+		$jet19_vals['minn_subtitle'] = 'https://ex.com/?q=Jo%20Ann <em>kept</em><script>x()</script>';
+		$jet19_vals['minn_icon']     = '<b>fa-star</b>';
+		$call( 'POST', '/wp/v2/posts/' . $jet19_post, array( 'minn_jet' => $jet19_vals ) );
+		$jet19_sub = get_post_meta( $jet19_post, 'minn_subtitle', true );
+		$check( 'JetEngine panel: a typed text field keeps %XX and safe markup', false !== strpos( $jet19_sub, 'Jo%20Ann' ) && false !== strpos( $jet19_sub, '<em>kept</em>' ), $jet19_sub );
+		$check( 'JetEngine panel: a typed text field still loses a script tag (control)', false === stripos( $jet19_sub, '<script' ), $jet19_sub );
+		$check( 'JetEngine panel: an icon field still strips every tag like the vendor (control)', 'fa-star' === get_post_meta( $jet19_post, 'minn_icon', true ), get_post_meta( $jet19_post, 'minn_icon', true ) );
+		// Deliberate clears still clear.
+		update_post_meta( $jet19_post, 'minn_cover', (string) $jet19_att );
+		list( , $jet19_read ) = $call( 'GET', '/wp/v2/posts/' . $jet19_post, null, array( 'context' => 'edit' ) );
+		$jet19_vals           = (array) ( $jet19_read['minn_jet'] ?? array() );
+		$jet19_vals['minn_cover']        = null;
+		$jet19_vals['minn_v043_gallery'] = array();
+		$jet19_vals['minn_priority']     = '3';
+		$call( 'POST', '/wp/v2/posts/' . $jet19_post, array( 'minn_jet' => $jet19_vals ) );
+		$check( 'JetEngine panel: clearing a picture that resolves still clears it (control)', '' === get_post_meta( $jet19_post, 'minn_cover', true ), wp_json_encode( get_post_meta( $jet19_post, 'minn_cover', true ) ) );
+		$check( 'JetEngine panel: emptying a gallery still clears it (control)', '' === get_post_meta( $jet19_post, 'minn_v043_gallery', true ), wp_json_encode( get_post_meta( $jet19_post, 'minn_v043_gallery', true ) ) );
+		$check( 'JetEngine panel: a changed number saves (control)', '3' === get_post_meta( $jet19_post, 'minn_priority', true ), get_post_meta( $jet19_post, 'minn_priority', true ) );
+		$jet19_vals['minn_subtitle'] = '';
+		$call( 'POST', '/wp/v2/posts/' . $jet19_post, array( 'minn_jet' => $jet19_vals ) );
+		$check( 'JetEngine panel: emptying a text field still clears it (control)', '' === get_post_meta( $jet19_post, 'minn_subtitle', true ), wp_json_encode( get_post_meta( $jet19_post, 'minn_subtitle', true ) ) );
+	} finally {
+		$jet19_data->raw = $jet19_saved;
+		wp_delete_post( $jet19_post, true );
+		wp_delete_attachment( $jet19_att, true );
+	}
+
+	// The CCT edit modal posts every field it shows.
+	if ( $jet_cct ) {
+		$jet19_t                 = minn_admin_jet_cct_table( 'minn_contact' );
+		list( , $jet19_c )       = $call( 'POST', '/minn-admin/v1/jet-cct/minn_contact/items', array( 'name' => 'Minn v043 cct19', 'email' => 'cct19@minn.test', 'tier' => 'lead', 'vip' => true, 'notes' => 'x' ) );
+		$jet19_id                = (int) ( $jet19_c['id'] ?? 0 );
+		$jet19_raw               = array( 'name' => 'Jo%20Ann <b>x</b> & co', 'notes' => "first\r\nsecond %41 <i>i</i>", 'email' => (string) $jet19_dead );
+		// The email column reads as a picture for this probe: it holds an id
+		// whose attachment is gone.
+		$jet19_restore = $jet_reshape( $jet_cct, array( 'email' => array( 'type' => 'media', 'value_format' => 'id' ) ) );
+		try {
+			$wpdb->update( $jet19_t, $jet19_raw, array( '_ID' => $jet19_id ) );
+			$jet19_item              = minn_admin_jet_cct_item( $jet_cct, minn_admin_jet_cct_row( 'minn_contact', $jet19_id ) );
+			list( $jet19_edit_fields ) = $jet_desc( $jet_cct );
+			$jet19_body              = $jet_form_body( $jet19_edit_fields, $jet19_item );
+			$jet19_body['tier']      = 'client';
+			$call( 'POST', '/minn-admin/v1/jet-cct/minn_contact/items/' . $jet19_id, $jet19_body );
+			$jet19_row = minn_admin_jet_cct_row( 'minn_contact', $jet19_id );
+			$check( 'JetEngine CCT edit: the edited field saves (control)', 'client' === $jet19_row['tier'], $jet19_row['tier'] );
+			foreach ( $jet19_raw as $jet19_col => $jet19_val ) {
+				$check( "JetEngine CCT edit: untouched {$jet19_col} is left byte for byte", $jet19_val === $jet19_row[ $jet19_col ], wp_json_encode( $jet19_row[ $jet19_col ] ) );
+			}
+		} finally {
+			$jet19_restore();
+		}
+		// A number column: a stored '1.50' comes back from the form as 1.5, and a
+		// value a number input cannot show comes back empty.
+		foreach ( array( '1.50', '12 units' ) as $jet19_num ) {
+			$jet19_restore = $jet_reshape( $jet_cct, array( 'email' => array( 'type' => 'number' ) ) );
+			try {
+				$wpdb->update( $jet19_t, array( 'email' => $jet19_num ), array( '_ID' => $jet19_id ) );
+				$jet19_item              = minn_admin_jet_cct_item( $jet_cct, minn_admin_jet_cct_row( 'minn_contact', $jet19_id ) );
+				list( $jet19_edit_fields ) = $jet_desc( $jet_cct );
+				$jet19_body              = $jet_form_body( $jet19_edit_fields, $jet19_item );
+				$jet19_body['tier']      = 'lead';
+				$call( 'POST', '/minn-admin/v1/jet-cct/minn_contact/items/' . $jet19_id, $jet19_body );
+				$jet19_now = minn_admin_jet_cct_row( 'minn_contact', $jet19_id )['email'];
+				$check( "JetEngine CCT edit: an untouched number '{$jet19_num}' is left as stored", $jet19_num === $jet19_now, wp_json_encode( $jet19_now ) );
+			} finally {
+				$jet19_restore();
+			}
+		}
+		// A typed text column goes to their handler as typed (it stores a text
+		// field as given and escapes on output).
+		$jet19_item        = minn_admin_jet_cct_item( $jet_cct, minn_admin_jet_cct_row( 'minn_contact', $jet19_id ) );
+		list( $jet19_edit_fields ) = $jet_desc( $jet_cct );
+		$jet19_body        = $jet_form_body( $jet19_edit_fields, $jet19_item );
+		$jet19_body['name'] = 'Jo%20Ann <i>typed</i> & co';
+		$call( 'POST', '/minn-admin/v1/jet-cct/minn_contact/items/' . $jet19_id, $jet19_body );
+		$jet19_now = minn_admin_jet_cct_row( 'minn_contact', $jet19_id )['name'];
+		$check( 'JetEngine CCT edit: a typed text field is stored as their own screen stores it', 'Jo%20Ann <i>typed</i> & co' === $jet19_now, $jet19_now );
+		$wpdb->delete( $jet19_t, array( '_ID' => $jet19_id ) );
+	}
+} else {
+	$skip( 'JetEngine meta boxes inactive' );
+}
+
+// --- #20 JetEngine CCT edit leaves an empty radio empty ---------------------
+if ( $jet_cct ) {
+	global $wpdb;
+	$jet20_t           = minn_admin_jet_cct_table( 'minn_contact' );
+	list( , $jet20_c ) = $call( 'POST', '/minn-admin/v1/jet-cct/minn_contact/items', array( 'name' => 'Minn v043 cct20', 'email' => 'cct20@minn.test', 'tier' => 'lead', 'vip' => false, 'notes' => '' ) );
+	$jet20_id          = (int) ( $jet20_c['id'] ?? 0 );
+	// The tier column as a JetEngine radio.
+	$jet20_restore = $jet_reshape( $jet_cct, array( 'tier' => array( 'type' => 'radio' ) ) );
+	try {
+		$wpdb->update( $jet20_t, array( 'tier' => '' ), array( '_ID' => $jet20_id ) );
+		list( $jet20_edit_fields, $jet20_create_fields ) = $jet_desc( $jet_cct );
+		$jet20_item         = minn_admin_jet_cct_item( $jet_cct, minn_admin_jet_cct_row( 'minn_contact', $jet20_id ) );
+		$jet20_body         = $jet_form_body( $jet20_edit_fields, $jet20_item );
+		$jet20_body['name'] = 'Minn v043 cct20 renamed';
+		$call( 'POST', '/minn-admin/v1/jet-cct/minn_contact/items/' . $jet20_id, $jet20_body );
+		$jet20_row = minn_admin_jet_cct_row( 'minn_contact', $jet20_id );
+		$check( 'JetEngine CCT edit: renaming an item leaves its empty radio empty', '' === $jet20_row['tier'], wp_json_encode( $jet20_row['tier'] ) );
+		$check( 'JetEngine CCT edit: the rename saves (control)', 'Minn v043 cct20 renamed' === $jet20_row['name'], $jet20_row['name'] );
+		$jet20_body         = $jet_form_body( $jet20_edit_fields, minn_admin_jet_cct_item( $jet_cct, $jet20_row ) );
+		$jet20_body['tier'] = 'client';
+		$call( 'POST', '/minn-admin/v1/jet-cct/minn_contact/items/' . $jet20_id, $jet20_body );
+		$check( 'JetEngine CCT edit: picking a radio choice saves it (control)', 'client' === minn_admin_jet_cct_row( 'minn_contact', $jet20_id )['tier'] );
+		$jet20_new = $jet_form_body( $jet20_create_fields, array() );
+		$check( 'JetEngine CCT create: a fresh form leaves the radio unpicked', '' === ( $jet20_new['tier'] ?? null ), wp_json_encode( $jet20_new['tier'] ?? null ) );
+		// A stored choice the options no longer list survives an unrelated edit.
+		$wpdb->update( $jet20_t, array( 'tier' => 'legacy' ), array( '_ID' => $jet20_id ) );
+		$jet20_body         = $jet_form_body( $jet20_edit_fields, minn_admin_jet_cct_item( $jet_cct, minn_admin_jet_cct_row( 'minn_contact', $jet20_id ) ) );
+		$jet20_body['name'] = 'Minn v043 cct20 again';
+		$call( 'POST', '/minn-admin/v1/jet-cct/minn_contact/items/' . $jet20_id, $jet20_body );
+		$check( 'JetEngine CCT edit: a radio value outside the choices is left as stored', 'legacy' === minn_admin_jet_cct_row( 'minn_contact', $jet20_id )['tier'], minn_admin_jet_cct_row( 'minn_contact', $jet20_id )['tier'] );
+	} finally {
+		$jet20_restore();
+		$wpdb->delete( $jet20_t, array( '_ID' => $jet20_id ) );
+	}
+} else {
+	$skip( 'JetEngine Content Types (minn_contact) inactive' );
+}
+// The same radio on an options page draws with its empty row.
+if ( function_exists( 'minn_admin_jet_options_shape' ) && minn_admin_jet_options_active() && isset( jet_engine()->options_pages->registered_pages['minn-site-options'] ) ) {
+	$jet20_page  = jet_engine()->options_pages->registered_pages['minn-site-options'];
+	$jet20_saved = $jet20_page->meta_box;
+	$jet20_page->meta_box[] = array( 'title' => 'Tier', 'name' => 'minn_v043_tier', 'object_type' => 'field', 'type' => 'radio', 'options' => array( array( 'key' => 'gold', 'value' => 'Gold' ), array( 'key' => 'silver', 'value' => 'Silver' ) ) );
+	try {
+		$jet20_shape = minn_admin_jet_options_shape( 'minn-site-options' );
+		$jet20_field = null;
+		foreach ( $jet20_shape['groups'][0]['fields'] as $jet20_f ) {
+			if ( 'minn_v043_tier' === $jet20_f['name'] ) {
+				$jet20_field = $jet20_f;
+			}
+		}
+		$check( 'JetEngine options: a radio carries the empty row', ! empty( $jet20_field['clearable'] ), wp_json_encode( $jet20_field ) );
+	} finally {
+		$jet20_page->meta_box = $jet20_saved;
+	}
+}
+
+// --- #21 JetEngine options page keeps backslashes ---------------------------
+if ( function_exists( 'minn_admin_jet_options_save' ) && minn_admin_jet_options_active() && isset( jet_engine()->options_pages->registered_pages['minn-site-options'] ) ) {
+	$jet21_before = get_option( 'minn-site-options' );
+	$jet21_page   = jet_engine()->options_pages->registered_pages['minn-site-options'];
+	$jet21_route  = '/minn-admin/v1/jet-engine/options/minn-site-options/tab-0';
+	try {
+		$jet21_val            = 'C:\\files \\d{3}-\\d{4} O\'Brien';
+		list( $jet21_st, $jet21_res ) = $call( 'POST', $jet21_route, array( 'values' => array( 'company_name' => $jet21_val ) ) );
+		$check( 'JetEngine options: a saved backslash reads back in Minn', 200 === $jet21_st && $jet21_val === ( $jet21_res['values']['company_name'] ?? null ), wp_json_encode( $jet21_res['values']['company_name'] ?? $jet21_st ) );
+		$jet21_page->options = null;
+		$check( 'JetEngine options: JetEngine\'s own get() returns it intact', $jet21_val === $jet21_page->get( 'company_name' ), wp_json_encode( $jet21_page->get( 'company_name' ) ) );
+		$jet21_stored = get_option( 'minn-site-options' );
+		$check( 'JetEngine options: untouched fields keep their value (control)', ( $jet21_before['support_email'] ?? null ) === ( $jet21_stored['support_email'] ?? null ) && ( $jet21_before['plan'] ?? null ) === ( $jet21_stored['plan'] ?? null ), wp_json_encode( $jet21_stored ) );
+		// A caller that sends the whole page back as read changes nothing.
+		$call( 'POST', $jet21_route, array( 'values' => $jet21_res['values'] ) );
+		$check( 'JetEngine options: a whole-page resend leaves the stored array byte for byte', get_option( 'minn-site-options' ) === $jet21_stored, wp_json_encode( get_option( 'minn-site-options' ) ) );
+		// Separate storage (one option per field) unslashes on read the same way.
+		$jet21_page->storage_type = 'separate';
+		$jet21_page->options      = null;
+		try {
+			list( , $jet21_sep ) = $call( 'POST', $jet21_route, array( 'values' => array( 'company_name' => 'D:\\sep\\x' ) ) );
+			$jet21_page->options = null;
+			$check( 'JetEngine options: separate storage keeps the backslashes too', 'D:\\sep\\x' === $jet21_page->get( 'company_name' ), wp_json_encode( $jet21_page->get( 'company_name' ) ) );
+		} finally {
+			delete_option( $jet21_page->get_separate_option_name( 'company_name' ) );
+			$jet21_page->storage_type = 'default';
+			$jet21_page->options      = null;
+		}
+		// A form-encoded save carries no JSON body: refused, nothing written.
+		$jet21_was          = get_option( 'minn-site-options' );
+		list( $jet21_fst )  = $call( 'POST', $jet21_route, null, array( 'values' => array( 'company_name' => 'From a form body' ) ) );
+		$check( 'JetEngine options: a save with no JSON body is refused, not a silent 200', 400 === $jet21_fst && get_option( 'minn-site-options' ) === $jet21_was, 'status ' . $jet21_fst );
+		list( , $jet21_res ) = $call( 'POST', $jet21_route, array( 'values' => array( 'company_name' => 'Plain Co', 'weekends' => false ) ) );
+		$check( 'JetEngine options: a plain value and a switch save as typed (control)', 'Plain Co' === ( $jet21_res['values']['company_name'] ?? null ) && false === ( $jet21_res['values']['weekends'] ?? null ), wp_json_encode( $jet21_res['values'] ?? null ) );
+	} finally {
+		update_option( 'minn-site-options', $jet21_before );
+		$jet21_page->options = null;
+	}
+} else {
+	$skip( 'JetEngine options pages inactive' );
+}
+
 // @sections
 
 $summary();

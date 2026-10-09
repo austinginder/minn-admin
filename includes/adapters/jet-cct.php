@@ -95,6 +95,12 @@ function minn_admin_jet_cct_form_field( $f ) {
 			$sf['options'][] = array( (string) $v, (string) $l );
 		}
 	}
+	// A radio has no empty choice of its own, and the form engine seeds an
+	// empty choice control with its first option, which the edit form then
+	// posts. Their screen leaves a radio nobody picked empty.
+	if ( 'radio' === $f['type'] ) {
+		$sf['clearable'] = true;
+	}
 	return $sf;
 }
 
@@ -155,15 +161,36 @@ function minn_admin_jet_cct_item( $factory, $row ) {
 	return $item;
 }
 
-/** Form values → the itemarr their handler expects (stored shapes). */
-function minn_admin_jet_cct_itemarr( $factory, $values ) {
+/**
+ * Form values → the itemarr their handler expects (stored shapes).
+ *
+ * @param object     $factory The type.
+ * @param array      $values  The request's JSON body.
+ * @param array|null $row     The stored row on an edit: the form posts every
+ *                            field it shows, and one whose value the read
+ *                            already shows is skipped (minn_admin_jet_same_value).
+ * @return array
+ */
+function minn_admin_jet_cct_itemarr( $factory, $values, $row = null ) {
 	$set = minn_admin_jet_cct_fields( $factory );
 	$out = array();
 	foreach ( (array) $values as $name => $value ) {
 		if ( ! isset( $set['fields'][ $name ] ) ) {
 			continue;
 		}
-		$stored = minn_admin_jet_value_in( $set['fields'][ $name ], $value );
+		$f = $set['fields'][ $name ];
+		if ( is_array( $row ) && minn_admin_jet_same_value( $f, $value, minn_admin_jet_value_out( $f, isset( $row[ $name ] ) ? minn_admin_jet_cct_decode( $row[ $name ] ) : '' ) ) ) {
+			continue; // untouched: their handler merges, so the column survives
+		}
+		if ( 'text' === $f['type'] && is_scalar( $value ) ) {
+			// Their handler stores a text column as given, and their list
+			// table and dynamic tags kses it on output. The meta box cleaning
+			// in the shared mapper would turn '&' into '&amp;' in a value
+			// their own screen stores as typed.
+			$out[ $name ] = (string) $value;
+			continue;
+		}
+		$stored = minn_admin_jet_value_in( $f, $value );
 		if ( null === $stored ) {
 			continue; // refused: their handler merges, so the column survives
 		}
@@ -326,7 +353,9 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
 				$factory = $type_of( $request );
-				$itemarr = minn_admin_jet_cct_itemarr( $factory, $request->get_params() );
+				// The JSON body only: get_params() would add the route's own
+				// slug and any query-string key as candidate field values.
+				$itemarr = minn_admin_jet_cct_itemarr( $factory, (array) $request->get_json_params() );
 				if ( ! $itemarr ) {
 					return new WP_Error( 'empty', __( 'Fill in at least one field.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
@@ -362,10 +391,17 @@ add_action( 'rest_api_init', function () {
 				$factory = $type_of( $request );
 				$slug    = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
 				$id      = (int) Minn_Admin::path_param( $request );
-				if ( ! minn_admin_jet_cct_row( $slug, $id ) ) {
+				$row     = minn_admin_jet_cct_row( $slug, $id );
+				if ( ! $row ) {
 					return new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				$itemarr = minn_admin_jet_cct_itemarr( $factory, $request->get_params() );
+				// The JSON body only (the route's slug and id are not fields).
+				// Without one there is nothing to apply, and an empty answer
+				// would read as a save that worked.
+				if ( ! is_array( $request->get_json_params() ) ) {
+					return new WP_Error( 'invalid_body', __( 'Send the item as JSON.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$itemarr = minn_admin_jet_cct_itemarr( $factory, $request->get_json_params(), $row );
 				if ( ! $itemarr ) {
 					return rest_ensure_response( minn_admin_jet_cct_item( $factory, minn_admin_jet_cct_row( $slug, $id ) ) );
 				}

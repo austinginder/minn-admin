@@ -564,14 +564,110 @@ function minn_admin_jet_value_in( $f, $value ) {
 			$value = trim( (string) $value );
 			return '' === $value ? false : sanitize_text_field( $value );
 		case 'text':
-			// JetEngine's default sanitizer for a plain text field strips
-			// every tag (sanitize_text_field); kses would keep links and images.
+			// Their meta box gives a text field wp_kses_post and an icon
+			// picker sanitize_text_field. The text field must not get the
+			// stricter one: it also deletes %XX octets, so a URL stored as
+			// "?n=Jo%20Ann" came back "?n=JoAnn".
 			$value = (string) $value;
-			return '' === trim( $value ) ? false : sanitize_text_field( $value );
+			if ( '' === trim( $value ) ) {
+				return false;
+			}
+			return 'iconpicker' === $jt['type'] ? sanitize_text_field( $value ) : wp_kses_post( $value );
 		default:
 			$value = (string) $value;
 			return '' === trim( $value ) ? false : wp_kses_post( $value );
 	}
+}
+
+/**
+ * A value in the shape the read emits, reduced to something comparable.
+ *
+ * @param array $f Mapped field.
+ * @param mixed $v Panel value (read or submitted).
+ * @return int|string|null Comparable key, or null when it cannot be compared.
+ */
+function minn_admin_jet_compare_key( $f, $v ) {
+	switch ( $f['type'] ) {
+		case 'true_false':
+			return ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v ) ? 'true' : 'false';
+		case 'number':
+			if ( null === $v || '' === $v || false === $v ) {
+				return '';
+			}
+			if ( ! is_scalar( $v ) ) {
+				return null;
+			}
+			return is_numeric( $v ) ? 'n:' . ( 0 + $v ) : 's:' . $v;
+		case 'multicheck':
+			$on = array();
+			foreach ( (array) $v as $k ) {
+				if ( is_scalar( $k ) ) {
+					$on[] = (string) $k;
+				}
+			}
+			sort( $on, SORT_STRING );
+			return wp_json_encode( $on );
+		case 'image':
+		case 'gallery':
+			$ids = array();
+			foreach ( ( 'gallery' === $f['type'] && is_array( $v ) ) ? $v : array( $v ) as $it ) {
+				if ( is_object( $it ) || is_array( $it ) ) {
+					$it = (array) $it;
+					$it = isset( $it['id'] ) ? $it['id'] : '';
+				}
+				if ( null === $it || false === $it || '' === $it || 0 === $it || '0' === $it ) {
+					continue;
+				}
+				if ( ! is_scalar( $it ) ) {
+					return null;
+				}
+				$ids[] = is_numeric( $it ) ? (int) $it : 's:' . $it;
+			}
+			return wp_json_encode( $ids );
+		case 'textarea':
+		case 'wysiwyg':
+			// A browser hands a textarea's value back with LF line breaks.
+			return ( is_scalar( $v ) || null === $v ) ? str_replace( array( "\r\n", "\r" ), "\n", (string) $v ) : null;
+		case 'text':
+			// A single-line input drops line breaks from what it shows.
+			return ( is_scalar( $v ) || null === $v ) ? str_replace( array( "\r", "\n" ), '', (string) $v ) : null;
+		default:
+			return ( is_scalar( $v ) || null === $v ) ? (string) $v : null;
+	}
+}
+
+/**
+ * Is a submitted value the one the read already shows?
+ *
+ * Every write here receives whole field sets: the editor panel resends its
+ * seeded values object once any field is dirty, and the CCT edit form posts
+ * every field it shows. Sending an untouched value back through
+ * minn_admin_jet_value_in() rewrites it whenever the read is not the stored
+ * value verbatim: '1.50' returns from a form as 1.5, text meets a cleaner
+ * the stored value never met, a picture whose attachment is gone (or a url
+ * no attachment matches) reads as empty and would be written as a clear, and
+ * a gallery reads only its live ids, so the rest would be dropped. Compared
+ * in the read's own shape, all of those count as untouched and are skipped,
+ * which is what makes an empty read of a stored picture a refusal rather
+ * than a clear.
+ *
+ * @param array $f         Mapped field.
+ * @param mixed $submitted Submitted panel value.
+ * @param mixed $current   minn_admin_jet_value_out() of what is stored.
+ * @return bool
+ */
+function minn_admin_jet_same_value( $f, $submitted, $current ) {
+	$a = minn_admin_jet_compare_key( $f, $submitted );
+	$b = minn_admin_jet_compare_key( $f, $current );
+	if ( null === $a || null === $b ) {
+		return false;
+	}
+	if ( $a === $b ) {
+		return true;
+	}
+	// A number input cannot show a stored value that is not a number
+	// ('12 units' from a form submission), so the form sends it back empty.
+	return 'number' === $f['type'] && '' === $a && 0 === strpos( (string) $b, 's:' );
 }
 
 function minn_admin_jet_read_values( $post_id ) {
@@ -590,6 +686,9 @@ function minn_admin_jet_write_values( $post_id, $values ) {
 	foreach ( $values as $name => $value ) {
 		if ( ! isset( $map[ $name ] ) ) {
 			continue; // only the post's own mapped fields
+		}
+		if ( minn_admin_jet_same_value( $map[ $name ], $value, minn_admin_jet_value_out( $map[ $name ], get_post_meta( $post_id, $name, true ) ) ) ) {
+			continue; // untouched: the panel resends every value it holds
 		}
 		$stored = minn_admin_jet_value_in( $map[ $name ], $value );
 		if ( null === $stored ) {

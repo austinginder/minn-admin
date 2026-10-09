@@ -89,6 +89,9 @@ function minn_admin_jet_options_shape( $slug ) {
 				$sf['options'][] = array( (string) $value, (string) $label );
 			}
 		}
+		if ( 'radio' === $f['type'] ) {
+			$sf['clearable'] = true; // else an unpicked radio shows its first choice
+		}
 		$fields[]        = $sf;
 		$values[ $name ] = minn_admin_jet_value_out( $f, $page->get( $name, false ) );
 	}
@@ -113,6 +116,9 @@ function minn_admin_jet_options_save( $slug, $values ) {
 		if ( ! isset( $set['fields'][ $name ] ) ) {
 			continue; // only the page's own mapped fields
 		}
+		if ( minn_admin_jet_same_value( $set['fields'][ $name ], $value, minn_admin_jet_value_out( $set['fields'][ $name ], $page->get( $name, false ) ) ) ) {
+			continue; // untouched: a caller may send the whole page
+		}
 		$stored = minn_admin_jet_value_in( $set['fields'][ $name ], $value );
 		if ( null === $stored ) {
 			continue; // refused: rewrite=false leaves the stored value alone
@@ -124,7 +130,10 @@ function minn_admin_jet_options_save( $slug, $values ) {
 	}
 	// rewrite=false leaves fields absent from $data alone; sanitize=true
 	// runs their per-field callbacks, exactly as their own Save does.
-	$page->update_options( $data, false, true );
+	// Slashed: their Save hands update_options() the slashed $_REQUEST and
+	// stores what it gets, and get() unslashes every read, so an unslashed
+	// write lost each backslash in Minn, wp-admin and on the front end.
+	$page->update_options( wp_slash( $data ), false, true );
 }
 
 add_filter( 'minn_admin_option_pages', function ( $pages ) {
@@ -173,9 +182,12 @@ add_action( 'rest_api_init', function () {
 				return (bool) $resolve( $req );
 			},
 			'callback'            => function ( $req ) use ( $resolve ) {
-				$slug   = $resolve( $req );
-				$values = $req->get_param( 'values' );
-				minn_admin_jet_options_save( $slug, is_array( $values ) ? $values : array() );
+				$slug = $resolve( $req );
+				$body = $req->get_json_params(); // the body only, like every settings route
+				if ( ! is_array( $body ) ) {
+					return new WP_Error( 'invalid_body', __( 'Send the values as JSON.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				minn_admin_jet_options_save( $slug, isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array() );
 				return rest_ensure_response( minn_admin_jet_options_shape( $slug ) );
 			},
 		),
