@@ -12,7 +12,9 @@
  * the field's own get_value_save_input (each type's sanitizing and formatting:
  * dates from the field's format, numbers cleaned, phones formatted, choices
  * joined), GFAPI::update_entry_field (their gform_save_field_value filters),
- * then gform_after_update_entry with the entry as it was. Like their screen,
+ * the form's calculations recomputed from the new answers and the cached
+ * product summary rebuilt, gform_after_update_entry with the entry as it
+ * was, then add-on entry meta re-run (set_entry_meta). Like their screen,
  * files, pricing, post fields and calculations are not edited here; neither
  * are times, international phone numbers, lists, repeaters, signatures and
  * add-on types, which need their own controls. A value that changed since the
@@ -222,6 +224,40 @@ function minn_admin_gfe_prepare( $form, $field, $kind, $input, $value, $entry ) 
 	return (string) $field->get_value_save_input( $value, $form, $name, $entry['id'], $entry );
 }
 
+/**
+ * After an answer edit, what their entry screen's save does next: every
+ * calculation re-saved from the entry as it now stands (in form order, so a
+ * calculation reading another one sees its new value; pricing calculations
+ * stay as submitted there too), then the cached product summary rebuilt. Only
+ * values that come out different are written.
+ */
+function minn_admin_gfe_recalculate( $form, $entry_id ) {
+	$entry = GFAPI::get_entry( $entry_id );
+	if ( is_wp_error( $entry ) ) {
+		return;
+	}
+	$any = false;
+	foreach ( (array) $form['fields'] as $field ) {
+		if ( ! is_object( $field ) || ! empty( $field->displayOnly ) || GFCommon::is_pricing_field( $field->type ) || ! $field->has_calculation() ) {
+			continue;
+		}
+		$any    = true;
+		$inputs = $field->get_entry_inputs();
+		$ids    = is_array( $inputs ) ? wp_list_pluck( $inputs, 'id' ) : array( $field->id );
+		foreach ( $ids as $input_id ) {
+			$input_id = (string) $input_id;
+			$value    = (string) $field->get_value_save_input( '', $form, 'input_' . str_replace( '.', '_', $input_id ), $entry_id, $entry );
+			if ( (string) rgar( $entry, $input_id ) !== $value ) {
+				GFAPI::update_entry_field( $entry_id, $input_id, $value );
+				$entry[ $input_id ] = $value;
+			}
+		}
+	}
+	if ( $any ) {
+		GFFormsModel::refresh_product_cache( $form, $entry );
+	}
+}
+
 add_action( 'rest_api_init', function () {
 	if ( ! class_exists( 'GFAPI' ) || ! method_exists( 'GFAPI', 'update_entry_field' ) ) {
 		return;
@@ -284,9 +320,13 @@ add_action( 'rest_api_init', function () {
 				$changed[ $w['label'] ] = true;
 			}
 			if ( $changed ) {
+				minn_admin_gfe_recalculate( $form, $entry['id'] );
 				GFAPI::update_entry_property( $entry['id'], 'date_updated', gmdate( 'Y-m-d H:i:s' ) );
 				/** Their entry screen's hook after an edit (gform_after_update_entry). */
 				gf_do_action( array( 'gform_after_update_entry', $form['id'] ), $form, $entry['id'], $original_entry );
+				// Then add-on entry meta (quiz, survey and poll scores) from the
+				// answers as they now stand, as their screen does next.
+				GFFormsModel::set_entry_meta( GFAPI::get_entry( $entry['id'] ), $form );
 				// The notes trail records who changed which answers (labels only).
 				if ( GFCommon::current_user_can_any( array( 'gravityforms_edit_entry_notes', 'gform_full_access' ) ) ) {
 					$me = wp_get_current_user();

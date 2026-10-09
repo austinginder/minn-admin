@@ -1888,6 +1888,87 @@ if ( function_exists( 'minn_admin_seo_plugin' ) && 'SureRank' === ( minn_admin_s
 	$skip( 'SureRank is not the active SEO provider' );
 }
 
+// --- #6 GF answer edits recompute calculations, the product cache and entry meta ---
+// Gravity Forms' own entry edit re-saves every calculation from the edited
+// answers, rebuilds a cached product summary and re-runs add-on entry meta
+// (quiz/survey scores). An answer edit in Minn must leave the same record.
+if ( class_exists( 'GFAPI' ) && function_exists( 'minn_admin_gf_entry_edit_block' ) ) {
+	if ( ! function_exists( 'wp_delete_user' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+	}
+	$gfcalc_fid  = GFAPI::add_form( array(
+		'title'  => 'Minn v043 calc ' . time(),
+		'fields' => array(
+			array( 'id' => 1, 'type' => 'number', 'label' => 'Quantity' ),
+			array( 'id' => 2, 'type' => 'number', 'label' => 'Total', 'enableCalculation' => true, 'calculationFormula' => '{Quantity:1} * 10' ),
+			// A calculation reading another calculation, and an input with a modifier.
+			array( 'id' => 4, 'type' => 'number', 'label' => 'Grand', 'enableCalculation' => true, 'calculationFormula' => '{Total:2} + {Quantity:1:value}' ),
+			array( 'id' => 3, 'type' => 'text', 'label' => 'Note' ),
+			array( 'id' => 5, 'type' => 'product', 'inputType' => 'singleproduct', 'label' => 'Widget', 'basePrice' => '$10.00', 'inputs' => array( array( 'id' => '5.1', 'label' => 'Name' ), array( 'id' => '5.2', 'label' => 'Price' ), array( 'id' => '5.3', 'label' => 'Quantity' ) ) ),
+		),
+	) );
+	// An add-on score kept as entry meta (how the quiz/survey/poll add-ons register theirs).
+	$gfcalc_meta = function ( $meta, $form_id ) use ( $gfcalc_fid ) {
+		if ( (int) $form_id === (int) $gfcalc_fid ) {
+			$meta['minn_gfcalc_score'] = array(
+				'label'                      => 'Score',
+				'is_numeric'                 => true,
+				'update_entry_meta_callback' => function ( $key, $entry, $form ) {
+					return (int) rgar( $entry, '1' ) * 2;
+				},
+			);
+		}
+		return $meta;
+	};
+	add_filter( 'gform_entry_meta', $gfcalc_meta, 10, 2 );
+	$gfcalc_eid = GFAPI::add_entry( array( 'form_id' => $gfcalc_fid, '1' => '3', '2' => '30', '4' => '33', '3' => 'first', '5.1' => 'Widget', '5.2' => '$10.00', '5.3' => '1' ) );
+	gform_update_meta( $gfcalc_eid, 'minn_gfcalc_score', 6 );
+	gform_update_meta( $gfcalc_eid, 'gform_product_info__', array( 'products' => array( 'minn_stale' => array( 'name' => 'minn_stale', 'price' => '$1.00', 'quantity' => 1 ) ), 'shipping' => array() ) );
+	$gfcalc_login = 'minn-v043-gfcalc-' . wp_rand();
+	$gfcalc_user  = wp_insert_user( array( 'user_login' => $gfcalc_login, 'user_pass' => wp_generate_password( 24 ), 'user_email' => $gfcalc_login . '@example.com', 'role' => 'subscriber' ) );
+	$gfcalc_u     = new WP_User( $gfcalc_user );
+	$gfcalc_u->add_cap( 'gravityforms_view_entries' );
+	$gfcalc_u->add_cap( 'gravityforms_edit_entries' );
+	$gfcalc_read = function () use ( $gfcalc_eid ) {
+		$e = GFAPI::get_entry( $gfcalc_eid );
+		return array( (string) rgar( $e, '1' ), (string) rgar( $e, '2' ), (string) rgar( $e, '4' ), (string) gform_get_meta( $gfcalc_eid, 'minn_gfcalc_score' ) );
+	};
+
+	wp_set_current_user( $gfcalc_user );
+	// What the entry page sends: the changed inputs and their loaded values.
+	list( $st, $d ) = $call( 'POST', "/minn-admin/v1/gf/entries/{$gfcalc_eid}/answers", array( 'values' => array( '1' => '5' ), 'original' => array( '1' => '3' ) ) );
+	$gfcalc_now = $gfcalc_read();
+	$check( 'GF answer edit: 200 for an edit-entries user', 200 === $st, "status {$st}" );
+	$check( 'GF answer edit: Quantity 3→5 recomputes Total to 50', '50' === $gfcalc_now[1], wp_json_encode( $gfcalc_now ) );
+	$check( 'GF answer edit: a calculation reading a calculation follows (Grand 55)', '55' === $gfcalc_now[2], wp_json_encode( $gfcalc_now ) );
+	$check( 'GF answer edit: add-on entry meta re-runs (score 10)', '10' === $gfcalc_now[3], wp_json_encode( $gfcalc_now ) );
+	$gfcalc_pc = gform_get_meta( $gfcalc_eid, 'gform_product_info__' );
+	$check( 'GF answer edit: the cached product summary is rebuilt from the entry', false === strpos( (string) wp_json_encode( $gfcalc_pc ), 'minn_stale' ) && 'Widget' === ( $gfcalc_pc['products'][5]['name'] ?? '' ), wp_json_encode( $gfcalc_pc ) );
+
+	// Clearing the input: GF's calculation reads it as zero.
+	list( $st ) = $call( 'POST', "/minn-admin/v1/gf/entries/{$gfcalc_eid}/answers", array( 'values' => array( '1' => '' ), 'original' => array( '1' => '5' ) ) );
+	$gfcalc_now = $gfcalc_read();
+	$check( 'GF answer edit: an emptied input recomputes to 0', 200 === $st && '0' === $gfcalc_now[1] && '0' === $gfcalc_now[2], "status {$st} " . wp_json_encode( $gfcalc_now ) );
+
+	// Controls: the calculation itself stays uneditable, an unreferenced
+	// answer still saves, and an unchanged save writes nothing.
+	$gfcalc_was     = $gfcalc_read()[1];
+	list( $st, $d ) = $call( 'POST', "/minn-admin/v1/gf/entries/{$gfcalc_eid}/answers", array( 'values' => array( '2' => '999' ), 'original' => array( '2' => $gfcalc_was ) ) );
+	$check( 'GF answer edit: a calculated answer is still refused (control)', 400 === $st && $gfcalc_was === $gfcalc_read()[1], "status {$st}" );
+	list( $st ) = $call( 'POST', "/minn-admin/v1/gf/entries/{$gfcalc_eid}/answers", array( 'values' => array( '3' => 'second' ), 'original' => array( '3' => 'first' ) ) );
+	$check( 'GF answer edit: an answer no calculation reads still saves (control)', 200 === $st && 'second' === (string) rgar( GFAPI::get_entry( $gfcalc_eid ), '3' ), "status {$st}" );
+	list( $st, $d ) = $call( 'POST', "/minn-admin/v1/gf/entries/{$gfcalc_eid}/answers", array( 'values' => array( '3' => 'second' ), 'original' => array( '3' => 'second' ) ) );
+	$check( 'GF answer edit: an unchanged save changes nothing (control)', 200 === $st && array() === ( $d['changed'] ?? null ), "status {$st}" );
+
+	wp_set_current_user( $admin );
+	remove_filter( 'gform_entry_meta', $gfcalc_meta, 10 );
+	unset( $GLOBALS['_entry_meta'][ $gfcalc_fid ] );
+	GFAPI::delete_form( $gfcalc_fid );
+	wp_delete_user( $gfcalc_user );
+} else {
+	$skip( 'GF answer edit recompute: Gravity Forms inactive' );
+}
+
 // @sections
 
 $summary();
