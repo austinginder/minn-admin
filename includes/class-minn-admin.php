@@ -647,28 +647,36 @@ class Minn_Admin {
 
 		// wp-admin options core never put behind wp/v2/settings — same pattern
 		// as blog_public above. Writes are gated by manage_options at the endpoint.
-		register_setting(
-			'general',
-			'users_can_register',
-			array(
-				'show_in_rest' => true,
-				'type'         => 'integer',
-				'default'      => 0,
-			)
-		);
-		register_setting(
-			'general',
-			'default_role',
-			array(
-				'show_in_rest'      => true,
-				'type'              => 'string',
-				'default'           => 'subscriber',
-				'sanitize_callback' => function ( $value ) {
-					// Only real roles; a bogus write keeps the current value.
-					return wp_roles()->is_role( $value ) ? $value : get_option( 'default_role', 'subscriber' );
-				},
-			)
-		);
+		// Single site only, as in core: options.php accepts these two only when
+		// ! is_multisite(), because on a network open registration is the
+		// network's call and each site's default role is set from Network
+		// Admin, never by the site's own administrator.
+		if ( ! is_multisite() ) {
+			register_setting(
+				'general',
+				'users_can_register',
+				array(
+					'show_in_rest' => true,
+					'type'         => 'integer',
+					'default'      => 0,
+				)
+			);
+			register_setting(
+				'general',
+				'default_role',
+				array(
+					'show_in_rest'      => true,
+					'type'              => 'string',
+					'default'           => 'subscriber',
+					'sanitize_callback' => function ( $value ) {
+						// Only real roles. Core's own sanitize_option has already
+						// mapped an unknown one to subscriber before this runs.
+						return wp_roles()->is_role( $value ) ? $value : get_option( 'default_role', 'subscriber' );
+					},
+				)
+			);
+			add_filter( 'rest_pre_update_setting', array( __CLASS__, 'keep_excluded_default_role' ), 10, 3 );
+		}
 		foreach ( array( 'comment_moderation', 'comment_registration' ) as $discussion_opt ) {
 			register_setting(
 				'discussion',
@@ -689,6 +697,37 @@ class Minn_Admin {
 				'default'      => 1,
 			)
 		);
+	}
+
+	/**
+	 * Roles core's New User Default Role picker leaves out unless one is
+	 * already the default (options-general.php), through core's own filter.
+	 *
+	 * @return string[]
+	 */
+	public static function default_role_excluded_roles() {
+		return array_values( array_map( 'strval', (array) apply_filters( 'default_role_dropdown_excluded_roles', array( 'administrator', 'editor' ) ) ) );
+	}
+
+	/**
+	 * wp/v2/settings refuses a NEW pick of an excluded default role, as
+	 * core's picker never offers one; re-sending the stored value (the
+	 * settings form sends every field it shows) is not a new pick. Scoped to
+	 * this route rather than the option's sanitize callback: core itself
+	 * stores any real role, and WP-CLI or a role plugin setting one is not
+	 * Minn's to refuse.
+	 *
+	 * @param bool   $handled Whether an earlier filter already handled the write.
+	 * @param string $name    Setting name.
+	 * @param mixed  $value   Value sent.
+	 * @return bool True to skip the write and keep the stored role.
+	 */
+	public static function keep_excluded_default_role( $handled, $name, $value ) {
+		if ( $handled || 'default_role' !== $name || ! is_string( $value ) ) {
+			return $handled;
+		}
+		return $value !== get_option( 'default_role', 'subscriber' )
+			&& in_array( $value, self::default_role_excluded_roles(), true );
 	}
 
 	/**
@@ -1983,6 +2022,8 @@ class Minn_Admin {
 				'pings'    => ( 'open' === get_option( 'default_ping_status', 'open' ) ) ? 'open' : 'closed',
 			),
 			'roles'    => current_user_can( 'list_users' ) ? wp_roles()->get_names() : new \stdClass(),
+			// Roles the Settings default-role picker leaves out, as core's does.
+			'defaultRoleExcluded' => current_user_can( 'manage_options' ) ? self::default_role_excluded_roles() : array(),
 			'surfaces' => Minn_Admin_Surfaces::for_current_user(),
 			'editorPanels' => Minn_Admin_Surfaces::editor_panels_for_current_user(),
 			// Integrations this user hid (Your profile lists them for restore).

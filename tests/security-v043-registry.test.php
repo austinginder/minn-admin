@@ -2790,6 +2790,121 @@ if ( class_exists( 'Minn_Admin_Bar' ) ) {
 	$skip( '#16 Minn Bar not loaded' );
 }
 
+// --- #15 Default role and open registration (single site) ------------------
+// Core's options.php and General screen let an administrator set both on a
+// single site, but its picker leaves out administrator and editor (through
+// default_role_dropdown_excluded_roles) unless one is already the default.
+if ( ! is_multisite() ) {
+	$dr_role = get_option( 'default_role' );
+	$dr_reg  = get_option( 'users_can_register' );
+	list( $dr_st ) = $call( 'POST', '/wp/v2/settings', array( 'default_role' => 'author', 'users_can_register' => 1 ) );
+	$check( '#15 default role (single site): an administrator can pick author and open registration (control)',
+		200 === $dr_st && 'author' === get_option( 'default_role' ) && 1 === (int) get_option( 'users_can_register' ),
+		$dr_st . ' ' . get_option( 'default_role' ) . ' ' . get_option( 'users_can_register' ) );
+	foreach ( array( 'administrator', 'editor' ) as $dr_try ) {
+		$call( 'POST', '/wp/v2/settings', array( 'default_role' => $dr_try ) );
+		$check( '#15 default role (single site): a new pick of "' . $dr_try . '" is refused',
+			'author' === get_option( 'default_role' ), get_option( 'default_role' ) );
+	}
+	// Spellings get_role() does not know: core's own sanitize_option turns
+	// them into subscriber before any filter runs. Never an excluded role.
+	foreach ( array( 'Administrator', ' administrator', 'EDITOR', 'not_a_role' ) as $dr_try ) {
+		$call( 'POST', '/wp/v2/settings', array( 'default_role' => 'author' ) );
+		$call( 'POST', '/wp/v2/settings', array( 'default_role' => $dr_try ) );
+		$check( '#15 default role (single site): "' . $dr_try . '" never becomes an excluded role',
+			! in_array( get_option( 'default_role' ), array( 'administrator', 'editor' ), true ), get_option( 'default_role' ) );
+	}
+	$call( 'POST', '/wp/v2/settings', array( 'default_role' => 'author' ) );
+	list( $dr_arr_st ) = $call( 'POST', '/wp/v2/settings', array( 'default_role' => array( 'administrator' ) ) );
+	$check( '#15 default role (single site): an array value is refused by the schema',
+		400 === $dr_arr_st && 'author' === get_option( 'default_role' ), $dr_arr_st . ' ' . get_option( 'default_role' ) );
+	// The refusal is the REST route's, not the option's: core stores any real
+	// role, and WP-CLI or a role plugin writing one is not Minn's to refuse.
+	update_option( 'default_role', 'editor' );
+	$check( '#15 default role (single site): update_option outside wp/v2/settings still stores an editor default (control)',
+		'editor' === get_option( 'default_role' ), get_option( 'default_role' ) );
+	// An already-stored excluded role survives the client's untouched save
+	// (the settings form sends every field it shows).
+	$call( 'POST', '/wp/v2/settings', array( 'default_role' => 'editor', 'users_can_register' => 1 ) );
+	$check( '#15 default role (single site): an untouched save keeps an editor default already stored',
+		'editor' === get_option( 'default_role' ), get_option( 'default_role' ) );
+	$call( 'POST', '/wp/v2/settings', array( 'default_role' => 'subscriber' ) );
+	$check( '#15 default role (single site): moving off a stored editor default still works (control)',
+		'subscriber' === get_option( 'default_role' ), get_option( 'default_role' ) );
+	// The exclusion is core's filter, not a hard-coded list.
+	$dr_only_admin = function () {
+		return array( 'administrator' );
+	};
+	add_filter( 'default_role_dropdown_excluded_roles', $dr_only_admin );
+	$call( 'POST', '/wp/v2/settings', array( 'default_role' => 'editor' ) );
+	$dr_filtered = get_option( 'default_role' );
+	$call( 'POST', '/wp/v2/settings', array( 'default_role' => 'administrator' ) );
+	$dr_filtered_admin = get_option( 'default_role' );
+	remove_filter( 'default_role_dropdown_excluded_roles', $dr_only_admin );
+	$check( '#15 default role (single site): the exclusion follows default_role_dropdown_excluded_roles',
+		'editor' === $dr_filtered && 'editor' === $dr_filtered_admin, $dr_filtered . ' / ' . $dr_filtered_admin );
+	list( , $dr_get ) = $call( 'GET', '/wp/v2/settings' );
+	$check( '#15 default role (single site): the settings read still carries both for the picker (control)',
+		is_array( $dr_get ) && array_key_exists( 'default_role', $dr_get ) && array_key_exists( 'users_can_register', $dr_get ) );
+	$dr_boot = Minn_Admin::boot_payload();
+	$check( '#15 default role (single site): the boot payload names the roles the picker leaves out',
+		isset( $dr_boot['defaultRoleExcluded'] ) && array( 'administrator', 'editor' ) === $dr_boot['defaultRoleExcluded'],
+		wp_json_encode( $dr_boot['defaultRoleExcluded'] ?? null ) );
+	update_option( 'default_role', $dr_role );
+	update_option( 'users_can_register', $dr_reg );
+} else {
+	$skip( '#15 default role (single site): multisite' );
+}
+
+// --- #15 Default role and open registration stay network-side (multisite) --
+// Core lets options.php save neither on a network (both are Network Admin's
+// per-site settings), so a subsite administrator must not reach them over
+// wp/v2/settings either.
+if ( is_multisite() ) {
+	global $wpdb;
+	if ( ! function_exists( 'wpmu_delete_user' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/ms.php';
+	}
+	// Raw rows: on a network core filters every read of users_can_register
+	// through the network's registration setting, so get_option() would
+	// hide a per-site write.
+	$ms_dr_rawopt = function ( $name ) use ( $wpdb ) {
+		return $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+	};
+	$ms_dr_role = $ms_dr_rawopt( 'default_role' );
+	$ms_dr_reg  = $ms_dr_rawopt( 'users_can_register' );
+	$ms_dr_pub  = get_option( 'blog_public' );
+	$ms_dr_user = wpmu_create_user( 'minnv043dr' . wp_rand( 100, 999 ), wp_generate_password(), 'minn-v043-dr-' . wp_rand() . '@example.com' );
+	add_user_to_blog( get_current_blog_id(), $ms_dr_user, 'administrator' );
+	wp_set_current_user( $ms_dr_user );
+	list( $ms_dr_st ) = $call( 'POST', '/wp/v2/settings', array( 'default_role' => 'administrator', 'users_can_register' => 1 ) );
+	$check( '#15 default role (multisite): a subsite administrator cannot set the default role',
+		$ms_dr_rawopt( 'default_role' ) === $ms_dr_role, $ms_dr_st . ' ' . var_export( $ms_dr_rawopt( 'default_role' ), true ) );
+	$check( '#15 default role (multisite): a subsite administrator cannot write the registration flag',
+		$ms_dr_rawopt( 'users_can_register' ) === $ms_dr_reg, var_export( $ms_dr_rawopt( 'users_can_register' ), true ) );
+	list( , $ms_dr_get ) = $call( 'GET', '/wp/v2/settings' );
+	$check( '#15 default role (multisite): the settings read does not offer either',
+		is_array( $ms_dr_get ) && ! array_key_exists( 'default_role', $ms_dr_get ) && ! array_key_exists( 'users_can_register', $ms_dr_get ) );
+	$call( 'POST', '/wp/v2/settings', array( 'blog_public' => 0 ) );
+	$check( '#15 default role (multisite): search visibility stays a subsite setting (control)',
+		'0' === (string) get_option( 'blog_public' ), var_export( get_option( 'blog_public' ), true ) );
+	wp_set_current_user( $admin );
+	update_option( 'blog_public', $ms_dr_pub );
+	foreach ( array( 'default_role' => $ms_dr_role, 'users_can_register' => $ms_dr_reg ) as $ms_dr_name => $ms_dr_was ) {
+		if ( null === $ms_dr_was ) {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $ms_dr_name ) );
+		} else {
+			$wpdb->update( $wpdb->options, array( 'option_value' => $ms_dr_was ), array( 'option_name' => $ms_dr_name ) );
+		}
+		wp_cache_delete( $ms_dr_name, 'options' );
+	}
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'notoptions', 'options' );
+	wpmu_delete_user( $ms_dr_user );
+} else {
+	$skip( '#15 default role (multisite): single site' );
+}
+
 // @sections
 
 $summary();

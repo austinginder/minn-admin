@@ -28929,7 +28929,13 @@
 					</div>
 				</div>
 			</div>` : '';
-		const roleOptions = Object.entries( B.roles || {} ).map( ( [ value, label ] ) => [ value, chromeLabel( label ) ] );
+		// The default-role picker leaves out what core's does (administrator
+		// and editor unless filtered) unless one is already the default; the
+		// server refuses a new pick of those either way.
+		const excludedRoles = B.defaultRoleExcluded || [];
+		const roleOptions = Object.entries( B.roles || {} )
+			.filter( ( [ value ] ) => ! excludedRoles.includes( value ) || value === s.default_role )
+			.map( ( [ value, label ] ) => [ value, chromeLabel( label ) ] );
 
 		switch ( section ) {
 			case 'Site': return {
@@ -28994,11 +29000,14 @@
 					</div>` ).join( '' ) : '';
 				return {
 					sub: __( 'Who can see, index and join your site.' ),
-					fields: roleOptions.length ? combo( 'default_role', __( 'New user default role' ), roleOptions, s.default_role || 'subscriber' ) : '',
+					// Default role and open registration are single-site settings
+					// (a network sets them in Network Admin), so the settings read
+					// carries them only there; absent keys mean no controls.
+					fields: roleOptions.length && 'default_role' in s ? combo( 'default_role', __( 'New user default role' ), roleOptions, s.default_role || 'subscriber' ) : '',
 					toggles: [
 						{ id: 'blog_public', label: __( 'Search engine visibility' ), desc: __( 'Allow search engines to index this site.' ), on: !! s.blog_public },
 						{ id: 'minn_admin_maintenance', label: __( 'Maintenance mode' ), desc: __( 'Show a coming-soon page to visitors instead of the site.' ), on: !! s.minn_admin_maintenance },
-						{ id: 'users_can_register', label: __( 'Membership' ), desc: __( 'Anyone can register an account (with the default role above).' ), on: !! s.users_can_register },
+						...( 'users_can_register' in s ? [ { id: 'users_can_register', label: __( 'Membership' ), desc: __( 'Anyone can register an account (with the default role above).' ), on: !! s.users_can_register } ] : [] ),
 					].map( toggle ).join( '' ),
 					after: posture,
 				};
