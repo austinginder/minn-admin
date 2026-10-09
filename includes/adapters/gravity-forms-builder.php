@@ -351,6 +351,30 @@ function minn_admin_gfb_enums( $form_id ) {
 	);
 }
 
+/**
+ * A fingerprint of everything a builder save writes back: the stored
+ * display meta (fields, title, description, button), the title column and
+ * the active flag. The page sends back the one it loaded, and a save from a
+ * page that is no longer current is refused, so a form switched off or
+ * edited elsewhere is never put back the way this page saw it. Gravity
+ * Forms leaves a form's date_updated empty, and the active flag lives in
+ * its own column that their Forms list and Minn's switch write without
+ * touching the meta, so both are read raw (no filters, no cache).
+ * Notifications, confirmations and entries are left out: the builder does
+ * not write them, and a submission arriving must not turn an open page stale.
+ *
+ * @param int $form_id The form.
+ * @return string
+ */
+function minn_admin_gfb_stamp( $form_id ) {
+	global $wpdb;
+	$forms = GFFormsModel::get_form_table_name();
+	$meta  = GFFormsModel::get_meta_table_name();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names come from Gravity Forms.
+	$row = $wpdb->get_row( $wpdb->prepare( "SELECT f.is_active, f.title, m.display_meta FROM {$forms} f LEFT JOIN {$meta} m ON m.form_id = f.id WHERE f.id = %d", $form_id ), ARRAY_A );
+	return $row ? md5( (string) $row['is_active'] . "\0" . (string) $row['title'] . "\0" . (string) $row['display_meta'] ) : '';
+}
+
 /** The whole-form payload the builder reads and every save returns. */
 function minn_admin_gfb_payload( $form_id ) {
 	$meta = GFFormsModel::get_form_meta( $form_id );
@@ -360,6 +384,7 @@ function minn_admin_gfb_payload( $form_id ) {
 		$fields[] = minn_admin_gfb_field_row( $field );
 	}
 	return array(
+		'stamp'   => minn_admin_gfb_stamp( $form_id ),
 		'form'    => array(
 			'id'          => (int) $form_id,
 			'title'       => (string) rgar( $meta, 'title' ),
@@ -660,13 +685,23 @@ function minn_admin_gfb_changed( $field, $row ) {
 	return $out;
 }
 
-/** A submitted logic rule's field reference: a stored id ("5", "5.3") or a new field's temp key. */
-function minn_admin_gfb_logic_ref( $ref ) {
-	$ref = (string) $ref;
+/**
+ * A submitted logic rule's subject: a field id ("5", "5.3"), a new field's
+ * temp key, or a subject already stored on this field. Add-ons add their own
+ * subjects to Gravity Forms' rule editor (entry meta, a custom property) and
+ * resolve them at render through gform_rule_source_value; this builder only
+ * offers fields, so it keeps those it finds and never writes a new one.
+ *
+ * @param mixed    $ref    The submitted fieldId.
+ * @param string[] $stored The subjects this field's stored rules test.
+ * @return string The subject, or '' to drop the rule.
+ */
+function minn_admin_gfb_logic_ref( $ref, $stored = array() ) {
+	$ref = is_scalar( $ref ) ? (string) $ref : '';
 	if ( preg_match( '/^\d+(\.\d+)?$/', $ref ) || preg_match( '/^new:[A-Za-z0-9_-]{1,40}$/', $ref ) ) {
 		return $ref;
 	}
-	return '';
+	return '' !== $ref && in_array( $ref, $stored, true ) ? $ref : '';
 }
 
 /**
@@ -820,15 +855,24 @@ function minn_admin_gfb_overlay( $arr, $row, $allowed, $form_id ) {
 
 	// Conditional logic: show/hide when all/any rules match. Rule
 	// references are checked against the final field list in the save.
+	// Subjects and tests an add-on stored here ride through, since the page
+	// round-trips the rules it cannot name.
 	if ( $has( 'conditionalLogic' ) ) {
 		$logic = $row['conditionalLogic'];
 		if ( ! is_array( $logic ) || empty( $logic['rules'] ) || ! is_array( $logic['rules'] ) ) {
 			$arr['conditionalLogic'] = '';
 		} else {
-			$ops   = $enum_keys( $enums['operator'] );
+			$ops         = $enum_keys( $enums['operator'] );
+			$stored_refs = array();
+			foreach ( (array) rgars( $arr, 'conditionalLogic/rules' ) as $sr ) {
+				if ( is_array( $sr ) && is_scalar( $sr['fieldId'] ?? null ) && is_scalar( $sr['operator'] ?? null ) ) {
+					$stored_refs[] = (string) $sr['fieldId'];
+					$ops[]         = (string) $sr['operator'];
+				}
+			}
 			$rules = array();
 			foreach ( $logic['rules'] as $r ) {
-				$ref = is_array( $r ) ? minn_admin_gfb_logic_ref( $r['fieldId'] ?? '' ) : '';
+				$ref = is_array( $r ) ? minn_admin_gfb_logic_ref( $r['fieldId'] ?? '', $stored_refs ) : '';
 				if ( '' === $ref ) {
 					continue;
 				}
@@ -851,9 +895,11 @@ function minn_admin_gfb_overlay( $arr, $row, $allowed, $form_id ) {
 /**
  * Save the builder's form: title, description, submit button text, the
  * active flag and the ordered field list, through their editor's save.
+ * Each form property is written only when sent; the page sends the ones
+ * its user changed.
  *
  * @param int   $form_id The form.
- * @param array $body    { title, description, buttonText, active, known[], fields[] }.
+ * @param array $body    { stamp, known[], fields[], title?, description?, buttonText?, active? }.
  * @return array|WP_Error The fresh payload.
  */
 function minn_admin_gfb_save( $form_id, $body ) {
@@ -875,9 +921,12 @@ function minn_admin_gfb_save( $form_id, $body ) {
 	foreach ( (array) $meta['fields'] as $field ) {
 		$stored[ (int) $field->id ] = $field;
 	}
-	// A field added elsewhere (their editor, another tab) since this page
-	// loaded would read as removed here. Refuse rather than delete it.
-	if ( array_diff( array_keys( $stored ), $known ) ) {
+	// The form changed since this page loaded (switched off in the Forms
+	// list, a field edited in their editor, another tab's save): refuse
+	// rather than write the page's older copy over it. A field added
+	// elsewhere would also read as removed here and be deleted.
+	$stamp = isset( $body['stamp'] ) && is_string( $body['stamp'] ) ? $body['stamp'] : '';
+	if ( '' === $stamp || ! hash_equals( minn_admin_gfb_stamp( $form_id ), $stamp ) || array_diff( array_keys( $stored ), $known ) ) {
 		return new WP_Error( 'minn_gfb_stale', __( 'This form changed since you opened it. Reload to get the latest version, then make your changes again.', 'minn-admin' ), array( 'status' => 409 ) );
 	}
 
@@ -898,6 +947,7 @@ function minn_admin_gfb_save( $form_id, $body ) {
 	$temp      = array();
 	$seen      = array();
 	$out       = array();
+	$logic_set = array();
 	foreach ( $rows as $row ) {
 		if ( ! is_array( $row ) ) {
 			continue;
@@ -912,7 +962,9 @@ function minn_admin_gfb_save( $form_id, $body ) {
 			}
 			$seen[ $rid ] = true;
 			$field        = $stored[ $rid ];
-			$arr          = minn_admin_gfb_overlay( minn_admin_gfb_field_array( $field ), minn_admin_gfb_changed( $field, $row ), minn_admin_gfb_field_settings( $field ), $form_id );
+			$settings     = minn_admin_gfb_field_settings( $field );
+			$changed      = minn_admin_gfb_changed( $field, $row );
+			$arr          = minn_admin_gfb_overlay( minn_admin_gfb_field_array( $field ), $changed, $settings, $form_id );
 		} else {
 			$type = isset( $row['type'] ) ? (string) $row['type'] : '';
 			if ( ! in_array( $type, $creatable, true ) ) {
@@ -922,42 +974,49 @@ function minn_admin_gfb_save( $form_id, $body ) {
 			if ( isset( $row['tempId'] ) && preg_match( '/^[A-Za-z0-9_-]{1,40}$/', (string) $row['tempId'] ) ) {
 				$temp[ 'new:' . $row['tempId'] ] = $nid;
 			}
-			$arr = minn_admin_gfb_new_field( $type, $nid, $form_id );
-			$arr = minn_admin_gfb_overlay( $arr, $row, minn_admin_gfb_field_settings( GF_Fields::create( $arr ) ), $form_id );
+			$arr      = minn_admin_gfb_new_field( $type, $nid, $form_id );
+			$settings = minn_admin_gfb_field_settings( GF_Fields::create( $arr ) );
+			$changed  = $row;
+			$arr      = minn_admin_gfb_overlay( $arr, $row, $settings, $form_id );
 		}
 		if ( is_wp_error( $arr ) ) {
 			return $arr;
 		}
+		if ( array_key_exists( 'conditionalLogic', $changed ) && in_array( 'conditionalLogic', $settings, true ) ) {
+			$logic_set[ count( $out ) ] = true;
+		}
 		$out[] = $arr;
 	}
 
-	// Resolve new fields' temp keys in logic rules, and drop rules that
-	// point at no field this save keeps (their delete would drop them too).
+	// In the logic this save wrote, resolve new fields' temp keys and drop
+	// rules on a field id this save does not keep. Every other subject is an
+	// add-on's and stays. Logic the save did not touch is left as stored:
+	// their delete strips rules on a removed field from every field.
 	$final = array();
 	foreach ( $out as $arr ) {
 		$final[ (string) $arr['id'] ] = true;
 	}
-	foreach ( $out as &$arr ) {
-		if ( empty( $arr['conditionalLogic'] ) || ! is_array( $arr['conditionalLogic'] ) ) {
+	foreach ( array_keys( $logic_set ) as $i ) {
+		if ( empty( $out[ $i ]['conditionalLogic'] ) || ! is_array( $out[ $i ]['conditionalLogic'] ) ) {
 			continue;
 		}
 		$rules = array();
-		foreach ( (array) $arr['conditionalLogic']['rules'] as $r ) {
+		foreach ( (array) $out[ $i ]['conditionalLogic']['rules'] as $r ) {
 			$ref = (string) $r['fieldId'];
 			if ( isset( $temp[ $ref ] ) ) {
-				$r['fieldId'] = (string) $temp[ $ref ];
+				$ref          = (string) $temp[ $ref ];
+				$r['fieldId'] = $ref;
 			}
-			$base = strtok( (string) $r['fieldId'], '.' );
-			if ( isset( $final[ $base ] ) && 0 !== strpos( (string) $r['fieldId'], 'new:' ) ) {
-				$rules[] = $r;
+			if ( 0 === strpos( $ref, 'new:' ) || ( preg_match( '/^\d+(\.\d+)?$/', $ref ) && ! isset( $final[ strtok( $ref, '.' ) ] ) ) ) {
+				continue;
 			}
+			$rules[] = $r;
 		}
-		$arr['conditionalLogic']['rules'] = $rules;
+		$out[ $i ]['conditionalLogic']['rules'] = $rules;
 		if ( ! $rules ) {
-			$arr['conditionalLogic'] = '';
+			$out[ $i ]['conditionalLogic'] = '';
 		}
 	}
-	unset( $arr );
 
 	$meta['fields']        = $out;
 	$meta['deletedFields'] = array_values( array_diff( array_intersect( $known, array_keys( $stored ) ), array_keys( $seen ) ) );

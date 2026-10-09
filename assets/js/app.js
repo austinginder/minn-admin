@@ -52811,6 +52811,11 @@
 		state.gfb = {
 			id: r.form.id,
 			form: { ...r.form },
+			// The form as loaded, so a save sends only the properties edited
+			// here, and the server's stamp of it, so a save over changes made
+			// elsewhere since (switched off, edited in their editor) is refused.
+			loaded: { title: r.form.title, description: r.form.description, buttonText: r.form.buttonText, active: !! r.form.active },
+			stamp: r.stamp || '',
 			fields: r.fields.map( ( f ) => ( { ...gfbCopy( f ), _k: 'f' + f.id } ) ),
 			known: r.fields.map( ( f ) => f.id ),
 			palette: r.palette || [],
@@ -53302,17 +53307,17 @@
 			if ( btn ) { btn.disabled = true; btn.textContent = __( 'Saving…' ); }
 			const selIdx = g.sel && 'submit' !== g.sel ? idx( g.sel ) : -1;
 			const wasSubmit = 'submit' === g.sel;
+			// Form properties go only when edited here: one sent as loaded
+			// would put back what another screen changed since.
+			const body = { stamp: g.stamp, known: g.known, fields: g.fields.map( gfbRowOut ) };
+			[ 'title', 'description', 'buttonText' ].forEach( ( k ) => {
+				if ( g.form[ k ] !== g.loaded[ k ] ) body[ k ] = g.form[ k ];
+			} );
+			if ( !! g.form.active !== g.loaded.active ) body.active = !! g.form.active;
 			try {
 				const r = await api( `minn-admin/v1/gf/forms/${ g.id }/builder`, {
 					method: 'POST',
-					body: JSON.stringify( {
-						title: g.form.title,
-						description: g.form.description,
-						buttonText: g.form.buttonText,
-						active: !! g.form.active,
-						known: g.known,
-						fields: g.fields.map( gfbRowOut ),
-					} ),
+					body: JSON.stringify( body ),
 				} );
 				gfbAdopt( r );
 				if ( wasSubmit ) state.gfb.sel = 'submit';

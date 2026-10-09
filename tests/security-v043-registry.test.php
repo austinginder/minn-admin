@@ -350,6 +350,322 @@ if ( defined( 'CCJ_UPLOAD_DIR' ) && function_exists( 'minn_admin_ccj_park_file' 
 	$skip( 'CCJ #14 park/restore: Simple Custom CSS and JS inactive' );
 }
 
+// --- #4 GF builder keeps logic rules on non-field subjects -------------------
+if ( function_exists( 'minn_admin_gfb_save' ) && class_exists( 'GFAPI' ) && minn_admin_gfb_crud_handler() ) {
+	global $wpdb;
+	// The builder's save body for one field, as gfbRowOut() builds it in app.js.
+	$gfb4_rowout = function ( $f ) {
+		$row = ! empty( $f['id'] ) ? array( 'id' => $f['id'] ) : array( 'type' => $f['type'], 'tempId' => $f['tempId'] );
+		foreach ( (array) $f['settings'] as $k ) {
+			if ( 'subInputs' === $k ) {
+				$row['subInputs'] = array();
+				foreach ( (array) ( $f['inputs'] ?? array() ) as $in ) {
+					$row['subInputs'][] = array( 'id' => $in['id'], 'isHidden' => ! empty( $in['isHidden'] ), 'customLabel' => (string) ( $in['customLabel'] ?? '' ) );
+				}
+			} elseif ( 'choices' === $k ) {
+				$row['choices'] = array();
+				foreach ( (array) ( $f['choices'] ?? array() ) as $c ) {
+					$row['choices'][] = array( 'text' => $c['text'], 'value' => $c['value'], 'isSelected' => ! empty( $c['isSelected'] ) );
+				}
+				$row['enableChoiceValue'] = ! empty( $f['enableChoiceValue'] );
+			} else {
+				$row[ $k ] = $f[ $k ] ?? null;
+			}
+		}
+		return $row;
+	};
+	// Stored conditional logic per field id, read from the table (no cache).
+	// No logic reads as null whether the key is absent or '' (their save
+	// fills unset field properties with '').
+	$gfb4_stored = function ( $form_id ) use ( $wpdb ) {
+		$meta = json_decode( (string) $wpdb->get_var( $wpdb->prepare( 'SELECT display_meta FROM ' . GFFormsModel::get_meta_table_name() . ' WHERE form_id=%d', $form_id ) ), true );
+		$out  = array();
+		foreach ( (array) ( $meta['fields'] ?? array() ) as $f ) {
+			$out[ (int) $f['id'] ] = array( 'label' => $f['label'] ?? '', 'logic' => empty( $f['conditionalLogic'] ) ? null : $f['conditionalLogic'] );
+		}
+		return $out;
+	};
+	$gfb4_refs = function ( $logic ) {
+		$refs = array();
+		foreach ( (array) ( is_array( $logic ) ? ( $logic['rules'] ?? array() ) : array() ) as $r ) {
+			$refs[] = (string) $r['fieldId'] . ' ' . (string) $r['operator'] . ' ' . (string) $r['value'];
+		}
+		return $refs;
+	};
+	$gfb4_logic = function ( $action, $type, $rules ) {
+		return array( 'actionType' => $action, 'logicType' => $type, 'rules' => $rules );
+	};
+	$gfb4_rule = function ( $field, $op, $value ) {
+		return array( 'fieldId' => $field, 'operator' => $op, 'value' => $value );
+	};
+	// Rules an add-on authored in Gravity Forms' editor: a field shown only to
+	// a logged-in user (entry meta created_by) or by a quiz score (an add-on's
+	// entry meta, with an operator Gravity Forms accepts and Minn's list lacks).
+	$gfb4_id = GFAPI::add_form( array(
+		'title'  => 'Minn v043 builder logic ' . wp_generate_password( 6, false, false ),
+		'button' => array( 'type' => 'text', 'text' => 'Submit', 'imageUrl' => '' ),
+		'fields' => array(
+			array( 'id' => 1, 'type' => 'text', 'label' => 'Name' ),
+			array( 'id' => 2, 'type' => 'text', 'label' => 'Staff notes', 'isRequired' => true, 'conditionalLogic' => $gfb4_logic( 'show', 'all', array( $gfb4_rule( 'created_by', 'is', '1' ) ) ) ),
+			array( 'id' => 3, 'type' => 'text', 'label' => 'Mixed', 'conditionalLogic' => $gfb4_logic( 'show', 'any', array( $gfb4_rule( '1', 'is', 'a' ), $gfb4_rule( 'gquiz_score', '>=', '5' ) ) ) ),
+			array( 'id' => 4, 'type' => 'text', 'label' => 'Goes away' ),
+			array( 'id' => 5, 'type' => 'text', 'label' => 'Depends on 4', 'conditionalLogic' => $gfb4_logic( 'show', 'all', array( $gfb4_rule( '4', 'is', 'y' ), $gfb4_rule( 'created_by', 'isnot', '0' ) ) ) ),
+			array( 'id' => 6, 'type' => 'text', 'label' => 'Tests the new field' ),
+			array( 'id' => 7, 'type' => 'text', 'label' => 'Depends on 8', 'conditionalLogic' => $gfb4_logic( 'show', 'all', array( $gfb4_rule( '8', 'is', 'q' ), $gfb4_rule( 'created_by', 'is', '1' ) ) ) ),
+			array( 'id' => 8, 'type' => 'text', 'label' => 'Temp source' ),
+		),
+	) );
+	if ( is_wp_error( $gfb4_id ) || ! $gfb4_id ) {
+		$check( 'GF builder logic seed', false, is_wp_error( $gfb4_id ) ? $gfb4_id->get_error_message() : 'no id' );
+	} else {
+		// An untouched save keeps every stored rule as it was.
+		list( , $gfb4_p3 ) = $call( 'GET', "/minn-admin/v1/gf/forms/{$gfb4_id}/builder" );
+		$gfb4_before       = wp_json_encode( $gfb4_stored( $gfb4_id ) );
+		list( $gfb4_st3 )  = $call( 'POST', "/minn-admin/v1/gf/forms/{$gfb4_id}/builder", array(
+			'stamp'  => $gfb4_p3['stamp'] ?? null,
+			'known'  => array_map( function ( $f ) {
+				return $f['id'];
+			}, $gfb4_p3['fields'] ),
+			'fields' => array_map( $gfb4_rowout, $gfb4_p3['fields'] ),
+		) );
+		$check( 'GF builder logic: an untouched save keeps every stored rule', 200 === $gfb4_st3 && wp_json_encode( $gfb4_stored( $gfb4_id ) ) === $gfb4_before, "status {$gfb4_st3}" );
+
+		// The page loads, the user relabels Name, edits Mixed's field rule,
+		// removes "Goes away" (the client prunes rules that tested it) and adds
+		// a field that "Tests the new field" points at by its temp key.
+		list( , $gfb4_p ) = $call( 'GET', "/minn-admin/v1/gf/forms/{$gfb4_id}/builder" );
+		$gfb4_proto       = null;
+		foreach ( (array) ( $gfb4_p['palette'] ?? array() ) as $gfb4_grp ) {
+			foreach ( $gfb4_grp['types'] as $gfb4_t ) {
+				if ( 'text' === $gfb4_t['type'] ) {
+					$gfb4_proto = $gfb4_t['proto'];
+				}
+			}
+		}
+		$gfb4_rows = array();
+		foreach ( $gfb4_p['fields'] as $gfb4_f ) {
+			if ( 4 === (int) $gfb4_f['id'] ) {
+				continue;
+			}
+			if ( 1 === (int) $gfb4_f['id'] ) {
+				$gfb4_f['label'] = 'Your name';
+			}
+			if ( 3 === (int) $gfb4_f['id'] ) {
+				$gfb4_f['conditionalLogic']['rules'][0]['value'] = 'b';
+				// Hostile: subjects that were never stored on this field.
+				$gfb4_f['conditionalLogic']['rules'][] = $gfb4_rule( 'injected_meta', 'is', 'x' );
+				$gfb4_f['conditionalLogic']['rules'][] = $gfb4_rule( 'CREATED_BY', 'is', '1' );
+				$gfb4_f['conditionalLogic']['rules'][] = $gfb4_rule( 'new:ghost', 'is', 'x' );
+				$gfb4_f['conditionalLogic']['rules'][] = $gfb4_rule( '999', 'is', 'x' );
+			}
+			if ( 5 === (int) $gfb4_f['id'] ) {
+				$gfb4_f['conditionalLogic']['rules'] = array_values( array_filter( $gfb4_f['conditionalLogic']['rules'], function ( $r ) {
+					return '4' !== strtok( (string) $r['fieldId'], '.' );
+				} ) );
+			}
+			if ( 6 === (int) $gfb4_f['id'] ) {
+				$gfb4_f['conditionalLogic'] = $gfb4_logic( 'show', 'all', array( $gfb4_rule( 'new:t1', 'is', 'x' ) ) );
+			}
+			$gfb4_rows[] = $gfb4_rowout( $gfb4_f );
+		}
+		// Hostile: a brand-new field has no stored subjects to keep.
+		$gfb4_new          = array_merge( (array) $gfb4_proto, array( 'id' => 0, 'tempId' => 't1', 'label' => 'Brand new', 'conditionalLogic' => $gfb4_logic( 'show', 'all', array( $gfb4_rule( 'created_by', 'is', '1' ), $gfb4_rule( '1', 'is', 'z' ) ) ) ) );
+		$gfb4_rows[]       = $gfb4_rowout( $gfb4_new );
+		list( $gfb4_st, $gfb4_r ) = $call( 'POST', "/minn-admin/v1/gf/forms/{$gfb4_id}/builder", array(
+			'stamp'  => $gfb4_p['stamp'] ?? null,
+			'known'  => array_map( function ( $f ) {
+				return $f['id'];
+			}, $gfb4_p['fields'] ),
+			'fields' => $gfb4_rows,
+		) );
+		$gfb4_s   = $gfb4_stored( $gfb4_id );
+		$gfb4_nid = 0;
+		foreach ( $gfb4_s as $gfb4_fid => $gfb4_f ) {
+			if ( 'Brand new' === $gfb4_f['label'] ) {
+				$gfb4_nid = $gfb4_fid;
+			}
+		}
+		$check( 'GF builder logic: the save goes through (control)', 200 === $gfb4_st && 'Your name' === ( $gfb4_s[1]['label'] ?? '' ) && ! isset( $gfb4_s[4] ), "status {$gfb4_st} " . ( is_array( $gfb4_r ) && isset( $gfb4_r['message'] ) ? $gfb4_r['message'] : '' ) );
+		$check( 'GF builder logic: a field the user never touched keeps its add-on rule', array( 'created_by is 1' ) === $gfb4_refs( $gfb4_s[2]['logic'] ?? null ), wp_json_encode( $gfb4_s[2]['logic'] ?? null ) );
+		$check( 'GF builder logic: editing a field rule keeps the add-on rule beside it, operator included', array( '1 is b', 'gquiz_score >= 5' ) === $gfb4_refs( $gfb4_s[3]['logic'] ?? null ), wp_json_encode( $gfb4_s[3]['logic'] ?? null ) );
+		$check( 'GF builder logic: subjects never stored on the field are not written (hostile)', ! array_intersect( array( 'injected_meta is x', 'CREATED_BY is 1', 'new:ghost is x', '999 is x' ), $gfb4_refs( $gfb4_s[3]['logic'] ?? null ) ), wp_json_encode( $gfb4_s[3]['logic'] ?? null ) );
+		$check( 'GF builder logic: a rule on the removed field goes, the add-on rule beside it stays', array( 'created_by isnot 0' ) === $gfb4_refs( $gfb4_s[5]['logic'] ?? null ), wp_json_encode( $gfb4_s[5]['logic'] ?? null ) );
+		$check( 'GF builder logic: a rule on a new field resolves to its id (control)', $gfb4_nid && array( $gfb4_nid . ' is x' ) === $gfb4_refs( $gfb4_s[6]['logic'] ?? null ), wp_json_encode( $gfb4_s[6]['logic'] ?? null ) );
+		$check( 'GF builder logic: a new field cannot be given an add-on subject (hostile)', $gfb4_nid && array( '1 is z' ) === $gfb4_refs( $gfb4_s[ $gfb4_nid ]['logic'] ?? null ), wp_json_encode( $gfb4_s[ $gfb4_nid ]['logic'] ?? null ) );
+
+		// A client that does not prune: "Temp source" removed while "Depends
+		// on 8" is sent unchanged. Gravity Forms' own delete drops the rule
+		// on the removed field; the add-on rule stays. In the same save the
+		// user deletes Mixed's add-on rule, which must still be possible.
+		list( , $gfb4_p2 ) = $call( 'GET', "/minn-admin/v1/gf/forms/{$gfb4_id}/builder" );
+		$gfb4_rows2        = array();
+		foreach ( $gfb4_p2['fields'] as $gfb4_f ) {
+			if ( 3 === (int) $gfb4_f['id'] ) {
+				$gfb4_f['conditionalLogic']['rules'] = array_values( array_filter( $gfb4_f['conditionalLogic']['rules'], function ( $r ) {
+					return 'gquiz_score' !== $r['fieldId'];
+				} ) );
+			}
+			if ( 8 !== (int) $gfb4_f['id'] ) {
+				$gfb4_rows2[] = $gfb4_rowout( $gfb4_f );
+			}
+		}
+		list( $gfb4_st2 ) = $call( 'POST', "/minn-admin/v1/gf/forms/{$gfb4_id}/builder", array(
+			'stamp'  => $gfb4_p2['stamp'] ?? null,
+			'known'  => array_map( function ( $f ) {
+				return $f['id'];
+			}, $gfb4_p2['fields'] ),
+			'fields' => $gfb4_rows2,
+		) );
+		$gfb4_s2 = $gfb4_stored( $gfb4_id );
+		$check( 'GF builder logic: removing a field drops rules on it from untouched fields, keeps the add-on rule', 200 === $gfb4_st2 && ! isset( $gfb4_s2[8] ) && array( 'created_by is 1' ) === $gfb4_refs( $gfb4_s2[7]['logic'] ?? null ), "status {$gfb4_st2} " . wp_json_encode( $gfb4_s2[7]['logic'] ?? null ) );
+		$check( 'GF builder logic: an add-on rule the user deletes in the builder goes (control)', array( '1 is b' ) === $gfb4_refs( $gfb4_s2[3]['logic'] ?? null ), wp_json_encode( $gfb4_s2[3]['logic'] ?? null ) );
+
+		GFAPI::delete_form( $gfb4_id );
+	}
+} else {
+	$skip( '#4 Gravity Forms builder not available' );
+}
+
+// --- #5 GF builder refuses a stale save instead of reverting ----------------
+if ( function_exists( 'minn_admin_gfb_save' ) && class_exists( 'GFAPI' ) && minn_admin_gfb_crud_handler() ) {
+	global $wpdb;
+	$gfb5_rowout = function ( $f ) {
+		$row = array( 'id' => $f['id'] );
+		foreach ( (array) $f['settings'] as $k ) {
+			if ( 'subInputs' === $k ) {
+				$row['subInputs'] = array();
+				foreach ( (array) ( $f['inputs'] ?? array() ) as $in ) {
+					$row['subInputs'][] = array( 'id' => $in['id'], 'isHidden' => ! empty( $in['isHidden'] ), 'customLabel' => (string) ( $in['customLabel'] ?? '' ) );
+				}
+			} elseif ( 'choices' === $k ) {
+				$row['choices'] = array();
+				foreach ( (array) ( $f['choices'] ?? array() ) as $c ) {
+					$row['choices'][] = array( 'text' => $c['text'], 'value' => $c['value'], 'isSelected' => ! empty( $c['isSelected'] ) );
+				}
+				$row['enableChoiceValue'] = ! empty( $f['enableChoiceValue'] );
+			} else {
+				$row[ $k ] = $f[ $k ] ?? null;
+			}
+		}
+		return $row;
+	};
+	// What the builder page sends after relabelling field 1: every field row,
+	// the stamp it loaded, and a form property only when edited ($extra).
+	$gfb5_body = function ( $p, $extra = array() ) use ( $gfb5_rowout ) {
+		$rows = array();
+		foreach ( $p['fields'] as $f ) {
+			if ( 1 === (int) $f['id'] ) {
+				$f['label'] = 'First (edited in Minn)';
+			}
+			$rows[] = $gfb5_rowout( $f );
+		}
+		return array_merge( array(
+			'stamp'  => $p['stamp'] ?? null,
+			'known'  => array_map( function ( $f ) {
+				return $f['id'];
+			}, $p['fields'] ),
+			'fields' => $rows,
+		), $extra );
+	};
+	$gfb5_state = function ( $form_id ) use ( $wpdb ) {
+		$meta   = json_decode( (string) $wpdb->get_var( $wpdb->prepare( 'SELECT display_meta FROM ' . GFFormsModel::get_meta_table_name() . ' WHERE form_id=%d', $form_id ) ), true );
+		$labels = array();
+		foreach ( (array) ( $meta['fields'] ?? array() ) as $f ) {
+			$labels[ (int) $f['id'] ] = $f['label'] ?? '';
+		}
+		return array(
+			'active' => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT is_active FROM ' . GFFormsModel::get_form_table_name() . ' WHERE id=%d', $form_id ) ),
+			'title'  => $meta['title'] ?? '',
+			'labels' => $labels,
+		);
+	};
+	$gfb5_rename = function ( $form_id, $field_id, $label ) {
+		$form = GFAPI::get_form( $form_id );
+		foreach ( $form['fields'] as $f ) {
+			if ( (int) $f->id === $field_id ) {
+				$f->label = $label;
+			}
+		}
+		GFAPI::update_form( $form );
+	};
+	$gfb5_title = 'Minn v043 builder stale ' . wp_generate_password( 6, false, false );
+	$gfb5_id    = GFAPI::add_form( array(
+		'title'  => $gfb5_title,
+		'button' => array( 'type' => 'text', 'text' => 'Submit', 'imageUrl' => '' ),
+		'fields' => array(
+			array( 'id' => 1, 'type' => 'text', 'label' => 'First' ),
+			array( 'id' => 2, 'type' => 'text', 'label' => 'Second' ),
+		),
+	) );
+	if ( is_wp_error( $gfb5_id ) || ! $gfb5_id ) {
+		$check( 'GF builder stale seed', false, is_wp_error( $gfb5_id ) ? $gfb5_id->get_error_message() : 'no id' );
+	} else {
+		$gfb5_route = "/minn-admin/v1/gf/forms/{$gfb5_id}/builder";
+
+		// Tab A loads; the form is deactivated from Minn's Forms view.
+		list( , $gfb5_a ) = $call( 'GET', $gfb5_route );
+		$call( 'POST', "/minn-admin/v1/gf/forms/{$gfb5_id}/active", array( 'active' => false ) );
+		list( $gfb5_st ) = $call( 'POST', $gfb5_route, $gfb5_body( $gfb5_a ) );
+		$gfb5_s          = $gfb5_state( $gfb5_id );
+		$check( 'GF builder stale: a save after the form was deactivated elsewhere is refused (409)', 409 === $gfb5_st, "status {$gfb5_st}" );
+		$check( 'GF builder stale: the deactivated form stays off', 0 === $gfb5_s['active'] && 'First' === ( $gfb5_s['labels'][1] ?? '' ), wp_json_encode( $gfb5_s ) );
+		// Hostile: the shipped client's body, every form property sent as loaded.
+		list( $gfb5_st ) = $call( 'POST', $gfb5_route, $gfb5_body( $gfb5_a, array( 'title' => $gfb5_a['form']['title'], 'description' => $gfb5_a['form']['description'], 'buttonText' => $gfb5_a['form']['buttonText'], 'active' => true ) ) );
+		$gfb5_s          = $gfb5_state( $gfb5_id );
+		$check( 'GF builder stale: a body that re-sends active as loaded does not re-activate (hostile)', 409 === $gfb5_st && 0 === $gfb5_s['active'], "status {$gfb5_st} active {$gfb5_s['active']}" );
+
+		// Tab B loads now; field 2 is renamed in Gravity Forms' editor.
+		list( , $gfb5_b ) = $call( 'GET', $gfb5_route );
+		$gfb5_rename( $gfb5_id, 2, 'Second (renamed in GF)' );
+		list( $gfb5_st ) = $call( 'POST', $gfb5_route, $gfb5_body( $gfb5_b ) );
+		$gfb5_s          = $gfb5_state( $gfb5_id );
+		$check( 'GF builder stale: a save after a field was edited in Gravity Forms is refused (409)', 409 === $gfb5_st, "status {$gfb5_st}" );
+		$check( 'GF builder stale: the other editor\'s change is not reverted', 'Second (renamed in GF)' === ( $gfb5_s['labels'][2] ?? '' ) && 'First' === ( $gfb5_s['labels'][1] ?? '' ), wp_json_encode( $gfb5_s['labels'] ) );
+
+		// Hostile: no stamp, or a stamp that is not a string.
+		list( , $gfb5_c ) = $call( 'GET', $gfb5_route );
+		$gfb5_nostamp     = $gfb5_body( $gfb5_c );
+		unset( $gfb5_nostamp['stamp'] );
+		list( $gfb5_st ) = $call( 'POST', $gfb5_route, $gfb5_nostamp );
+		$check( 'GF builder stale: a save without the loaded stamp is refused (hostile)', 409 === $gfb5_st, "status {$gfb5_st}" );
+		list( $gfb5_st ) = $call( 'POST', $gfb5_route, $gfb5_body( $gfb5_c, array( 'stamp' => array( 'x' ) ) ) );
+		$check( 'GF builder stale: a non-string stamp is refused (hostile)', 409 === $gfb5_st, "status {$gfb5_st}" );
+
+		// CONTROL: an entry arriving while the page is open does not stale it,
+		// nor does a notification edited elsewhere (the builder writes
+		// neither), and a save that leaves the switch alone leaves the form
+		// inactive.
+		$gfb5_entry       = GFAPI::add_entry( array( 'form_id' => $gfb5_id, '1' => 'Dana' ) );
+		$gfb5_notes       = (array) ( GFFormsModel::get_form_meta( $gfb5_id )['notifications'] ?? array() );
+		$gfb5_notes['minnv043'] = array( 'id' => 'minnv043', 'name' => 'Minn probe', 'isActive' => true, 'event' => 'form_submission', 'toType' => 'email', 'to' => '{admin_email}', 'subject' => 'Edited elsewhere', 'message' => '{all_fields}' );
+		GFFormsModel::save_form_notifications( $gfb5_id, $gfb5_notes );
+		list( $gfb5_st, $gfb5_r ) = $call( 'POST', $gfb5_route, $gfb5_body( $gfb5_c ) );
+		$gfb5_s           = $gfb5_state( $gfb5_id );
+		$check( 'GF builder stale: a fresh page saves while entries arrive (control)', 200 === $gfb5_st && 'First (edited in Minn)' === ( $gfb5_s['labels'][1] ?? '' ) && 'Second (renamed in GF)' === ( $gfb5_s['labels'][2] ?? '' ), "status {$gfb5_st} " . wp_json_encode( $gfb5_s['labels'] ) );
+		$check( 'GF builder stale: a save that leaves the switch alone keeps the form inactive (control)', 0 === $gfb5_s['active'] && $gfb5_title === $gfb5_s['title'], wp_json_encode( $gfb5_s ) );
+
+		// CONTROL: the next save from the same page (the stamp its last save
+		// returned) turns the form on and renames it.
+		list( $gfb5_st, $gfb5_r2 ) = $call( 'POST', $gfb5_route, $gfb5_body( is_array( $gfb5_r ) ? $gfb5_r : array( 'fields' => array() ), array( 'active' => true, 'title' => $gfb5_title . ' renamed' ) ) );
+		$gfb5_s                    = $gfb5_state( $gfb5_id );
+		$check( 'GF builder stale: the same page saves again and the switch turns the form on (control)', 200 === $gfb5_st && 1 === $gfb5_s['active'] && $gfb5_title . ' renamed' === $gfb5_s['title'], "status {$gfb5_st} " . wp_json_encode( $gfb5_s ) );
+
+		// The form deactivated through Gravity Forms' own list.
+		list( , $gfb5_d ) = $call( 'GET', $gfb5_route );
+		GFFormsModel::update_form_active( $gfb5_id, 0 );
+		list( $gfb5_st ) = $call( 'POST', $gfb5_route, $gfb5_body( $gfb5_d, array( 'active' => true ) ) );
+		$gfb5_s          = $gfb5_state( $gfb5_id );
+		$check( 'GF builder stale: deactivated in Gravity Forms\' list, the stale page cannot turn it back on', 409 === $gfb5_st && 0 === $gfb5_s['active'], "status {$gfb5_st} active {$gfb5_s['active']}" );
+
+		if ( ! is_wp_error( $gfb5_entry ) ) {
+			GFAPI::delete_entry( $gfb5_entry );
+		}
+		GFAPI::delete_form( $gfb5_id );
+	}
+} else {
+	$skip( '#5 Gravity Forms builder not available' );
+}
+
 // @sections
 
 $summary();
