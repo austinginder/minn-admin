@@ -1712,8 +1712,11 @@ if ( class_exists( 'GFAPI' ) && method_exists( 'Minn_Admin_REST', 'entry_reply' 
 // --- #9 sibling: a delegated user manager's email to a user goes From them --
 // The Users "Email" action used the same site-address helper. A role given
 // list_users and edit_users without manage_options (a user-manager role)
-// could make the site mail any member as its admin address.
-if ( method_exists( 'Minn_Admin_REST', 'user_send_email' ) ) {
+// could make the site mail any member as its admin address. On a network
+// core lets only super admins edit other accounts, so there is no such role.
+if ( is_multisite() ) {
+	$skip( 'Delegated user email: a network has no below-administrator user manager' );
+} elseif ( method_exists( 'Minn_Admin_REST', 'user_send_email' ) ) {
 	global $wp_filter;
 	require_once ABSPATH . 'wp-admin/includes/user.php';
 	foreach ( array( 'minn_v043_usermgr', 'minn_v043_member' ) as $usm_login ) {
