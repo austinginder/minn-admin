@@ -985,6 +985,101 @@ if ( ! function_exists( 'minn_admin_novamira_active' ) || ! minn_admin_novamira_
 	wp_set_current_user( $admin );
 }
 
+// --- #23 Beaver Builder: a refused or unreachable activation keeps the key --
+if ( ! class_exists( 'FLUpdater' ) || ! method_exists( 'FLUpdater', 'save_subscription_license' ) || ! function_exists( 'minn_admin_license_default_providers' ) ) {
+	$skip( '#23 Beaver Builder inactive' );
+} else {
+	// The real key is snapshotted and put back exactly; it is never printed,
+	// and Beaver Builder's API never hears from this section.
+	$ug_bb_opt   = 'fl_themes_subscription_email';
+	$ug_bb_prev  = get_site_option( $ug_bb_opt, null );
+	$ug_bb_info  = get_option( '_transient_fl_get_subscription_info', null );
+	$ug_bb_tinfo = get_option( '_transient_timeout_fl_get_subscription_info', null );
+	$ug_bb_site  = array();
+	foreach ( array( '_site_transient_update_plugins', '_site_transient_update_themes' ) as $ug_k ) {
+		$ug_bb_site[ $ug_k ] = get_site_option( $ug_k, null );
+	}
+	$ug_bb_answer = null;
+	$ug_bb_http   = function ( $pre, $args, $url ) use ( &$ug_bb_answer ) {
+		if ( 'updates.wpbeaverbuilder.com' === (string) wp_parse_url( $url, PHP_URL_HOST ) && is_callable( $ug_bb_answer ) ) {
+			return call_user_func( $ug_bb_answer, $url );
+		}
+		return new WP_Error( 'minn_test_offline', 'offline' );
+	};
+	$ug_bb_json = function ( $body ) {
+		return array( 'headers' => array(), 'body' => wp_json_encode( $body ), 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+	};
+	add_filter( 'pre_http_request', $ug_bb_http, PHP_INT_MAX, 3 );
+	$ug_bb_paste = function ( $secret ) use ( $call ) {
+		list( $st, $body ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => 'beaver-builder', 'action' => 'activate', 'secret' => $secret ) );
+		return array( $st, is_array( $body ) ? ! empty( $body['ok'] ) : null );
+	};
+	$ug_bb_working = 'minntestworkingkey';
+	$ug_bb_cases   = array(
+		// Beaver Builder blanks the stored key when its API refuses without a code.
+		'a refused key'                => function () use ( $ug_bb_json ) {
+			return $ug_bb_json( array( 'error' => 'Invalid license key.' ) );
+		},
+		// A transport failure carries a code, so the pasted key is stored.
+		'an unreachable licence server' => function () {
+			return new WP_Error( 'http_request_failed', 'cURL error 28: Operation timed out' );
+		},
+		// So does any refusal the API itself tags with a code.
+		'a refusal that carries a code' => function () use ( $ug_bb_json ) {
+			return $ug_bb_json( array( 'error' => 'Domain limit reached.', 'code' => 'limit' ) );
+		},
+	);
+	foreach ( $ug_bb_cases as $ug_bb_label => $ug_bb_case ) {
+		update_site_option( $ug_bb_opt, $ug_bb_working );
+		$ug_bb_answer        = $ug_bb_case;
+		list( $ug_st, $ug_ok ) = $ug_bb_paste( 'minntestbogus' . wp_generate_password( 6, false, false ) );
+		$ug_bb_now           = get_site_option( $ug_bb_opt, null );
+		$check( "#23 {$ug_bb_label} keeps the working key", 200 === $ug_st && false === $ug_ok && $ug_bb_working === $ug_bb_now, $ug_st . ' ok=' . var_export( $ug_ok, true ) . ' stored=' . ( $ug_bb_working === $ug_bb_now ? 'working' : ( null === $ug_bb_now ? 'absent' : ( '' === $ug_bb_now ? 'blank' : 'the pasted key' ) ) ) );
+	}
+	// No key before: a refused paste leaves none (absent, not a blank row).
+	delete_site_option( $ug_bb_opt );
+	$ug_bb_answer        = $ug_bb_cases['a refused key'];
+	list( $ug_st, $ug_ok ) = $ug_bb_paste( 'minntestbogusabsent' );
+	$ug_bb_now           = get_site_option( $ug_bb_opt, null );
+	$check( '#23 a refused key on a site with none leaves it absent', false === $ug_ok && null === $ug_bb_now, var_export( $ug_bb_now, true ) );
+	// The vendor's own character refusal never wrote anything; still intact.
+	update_site_option( $ug_bb_opt, $ug_bb_working );
+	list( $ug_st, $ug_ok ) = $ug_bb_paste( 'minn test <bad>' );
+	$check( '#23 a key Beaver Builder rejects on sight keeps the working key', false === $ug_ok && $ug_bb_working === get_site_option( $ug_bb_opt, null ) );
+	// Control: an accepted key is stored (the provider closure the route calls;
+	// the route's post-success update check would also flush vendor caches).
+	$ug_bb_answer = function ( $url ) use ( $ug_bb_json ) {
+		return false !== strpos( $url, 'fl-api-method=subscription_info' ) ? $ug_bb_json( array( 'active' => true ) ) : $ug_bb_json( array( 'domain' => 'ok' ) );
+	};
+	$ug_bb_prov = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
+	$ug_bb_res  = minn_admin_license_result( call_user_func( $ug_bb_prov['beaver-builder']['activate'], 'minntestgoodkey' ) );
+	$check( '#23 control: an accepted key is stored and reported valid', ! empty( $ug_bb_res['ok'] ) && 'minntestgoodkey' === get_site_option( $ug_bb_opt, null ), wp_json_encode( $ug_bb_res ) );
+
+	remove_filter( 'pre_http_request', $ug_bb_http, PHP_INT_MAX );
+	if ( null === $ug_bb_prev ) {
+		delete_site_option( $ug_bb_opt );
+	} else {
+		update_site_option( $ug_bb_opt, $ug_bb_prev );
+	}
+	foreach ( array( '_transient_fl_get_subscription_info' => $ug_bb_info, '_transient_timeout_fl_get_subscription_info' => $ug_bb_tinfo ) as $ug_k => $ug_v ) {
+		if ( null === $ug_v ) {
+			delete_option( $ug_k );
+		} else {
+			update_option( $ug_k, $ug_v );
+		}
+	}
+	wp_cache_delete( 'fl_get_subscription_info', 'transient' );
+	foreach ( $ug_bb_site as $ug_k => $ug_v ) {
+		if ( null === $ug_v ) {
+			delete_site_option( $ug_k );
+		} else {
+			update_site_option( $ug_k, $ug_v );
+		}
+	}
+	$check( '#23 cleanup: the site\'s own key is back exactly as it was', get_site_option( $ug_bb_opt, null ) === $ug_bb_prev );
+	wp_set_current_user( $admin );
+}
+
 // @sections
 
 $summary();

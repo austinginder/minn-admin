@@ -3979,15 +3979,25 @@ function minn_admin_license_default_providers() {
 	}
 
 	// Beaver Builder: save_subscription_license() is their whole flow —
-	// remote activate_domain, option write (cleared again on error) and
-	// cache busts. No safe deactivate exists (their form just clears the
-	// field locally), so none is offered.
+	// remote activate_domain, option write and cache busts. No safe
+	// deactivate exists (their form just clears the field locally), so none
+	// is offered.
 	if ( class_exists( 'FLUpdater' ) && method_exists( 'FLUpdater', 'save_subscription_license' ) ) {
 		$providers['beaver-builder']['secret_label'] = __( 'Beaver Builder license key', 'minn-admin' );
 		$providers['beaver-builder']['activate']     = function ( $secret ) {
-			$res = FLUpdater::save_subscription_license( $secret );
-			$err = ( is_object( $res ) && ! empty( $res->error ) ) ? wp_strip_all_tags( (string) $res->error ) : '';
+			// Their save writes whatever the answer was: a blank key when the
+			// API refuses without a code (a typo), the pasted key when the
+			// error carries one (an unreachable server, a seat limit). Either
+			// replaces a working key, so keep it to put back.
+			$prev = get_site_option( 'fl_themes_subscription_email', null );
+			$res  = FLUpdater::save_subscription_license( $secret );
+			$err  = ( is_object( $res ) && ! empty( $res->error ) ) ? wp_strip_all_tags( (string) $res->error ) : '';
 			if ( $err ) {
+				if ( null === $prev ) {
+					delete_site_option( 'fl_themes_subscription_email' );
+				} else {
+					update_site_option( 'fl_themes_subscription_email', $prev );
+				}
 				return array( 'ok' => false, 'code' => 'invalid', 'message' => $err );
 			}
 			FLUpdater::get_subscription_info(); // warm their status cache for read()
