@@ -143,6 +143,17 @@ const { BASE, launch, login, reporter, listSettled } = require( './helpers' );
 		saved = ( await rest( `minn-admin/v1/gf/notifications/${ id }/full` ) ).body;
 		t.check( 'routing rules saved', saved.notification.toType === 'routing' && saved.notification.routing.length === 2 && saved.notification.routing[ 1 ].email === 'sales-team@example.com' && saved.notification.routing[ 1 ].value === 'sales', JSON.stringify( saved.notification.routing ) );
 
+		// Switched off elsewhere (another tab) after this page loaded: a save
+		// from here keeps the edit and leaves the switch alone.
+		await rest( `minn-admin/v1/gf/notifications/${ id }/full`, { method: 'POST', body: { ...saved.notification, isActive: false } } );
+		await page.fill( '[data-gfnremail="1"]', 'sales-desk@example.com' );
+		await clearToasts();
+		await page.click( '#minn-gfn-save' );
+		await toast( 'Notification saved' );
+		saved = ( await rest( `minn-admin/v1/gf/notifications/${ id }/full` ) ).body;
+		t.check( 'a save from an open page leaves a notification switched off elsewhere off', saved.notification.isActive === false && saved.notification.routing[ 1 ].email === 'sales-desk@example.com', JSON.stringify( { active: saved.notification.isActive, email: saved.notification.routing[ 1 ].email } ) );
+		await rest( `minn-admin/v1/gf/notifications/${ id }/full`, { method: 'POST', body: { ...saved.notification, isActive: true } } );
+
 		// A refusal names its field inline and saves nothing.
 		await page.fill( '[data-gfnremail="0"]', 'not-an-address' );
 		await clearToasts();

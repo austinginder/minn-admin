@@ -53718,6 +53718,20 @@
 	// field, rule and merge tag helpers below serve both.
 	const gfnCur = () => ( { gfconfirmation: state.gfc, cf7form: state.c7, ffemails: state.ffe, wpfemails: state.wpfe }[ state.route ] || state.gfn );
 
+	/**
+	 * A notification or confirmation page sends the whole object it holds,
+	 * so its Active switch goes only when it was flipped here (or the item is
+	 * new): the page's loaded copy sent back unchanged would switch one that
+	 * was turned off elsewhere since, in another tab or Gravity Forms' list,
+	 * back on. The server writes the switch only when the key is present.
+	 */
+	function gfActiveDelta( n, g, key ) {
+		const body = { ...n };
+		const loaded = ( ( g.data || {} )[ key ] || {} ).isActive;
+		if ( ! g.isNew && !! body.isActive === !! loaded ) delete body.isActive;
+		return body;
+	}
+
 	function gfnAdopt( r ) {
 		const keep = state.gfn && state.gfn.id === r.id ? state.gfn.preview : null;
 		state.gfn = {
@@ -54295,7 +54309,7 @@
 				b.disabled = true;
 				b.textContent = __( 'Saving…' );
 				try {
-					const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/full`, { method: 'POST', body: JSON.stringify( n ) } );
+					const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/full`, { method: 'POST', body: JSON.stringify( gfActiveDelta( n, g, 'notification' ) ) } );
 					const wasNew = g.isNew;
 					gfnAdopt( r );
 					listCache();
@@ -54746,7 +54760,7 @@
 				b.disabled = true;
 				b.textContent = __( 'Saving…' );
 				try {
-					const r = await api( `minn-admin/v1/gf/confirmations/${ g.id }/full`, { method: 'POST', body: JSON.stringify( n ) } );
+					const r = await api( `minn-admin/v1/gf/confirmations/${ g.id }/full`, { method: 'POST', body: JSON.stringify( gfActiveDelta( n, g, 'confirmation' ) ) } );
 					const wasNew = g.isNew;
 					gfcAdopt( r );
 					listCache();
