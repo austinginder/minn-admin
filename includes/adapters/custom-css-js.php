@@ -256,13 +256,16 @@ function minn_admin_ccj_item( $post ) {
  * them (minn_admin_ccj_slug_paths()).
  *
  * @param int $id Snippet post ID.
+ * @param bool $with_slug Also take the permalink copy under the current
+ *                        language: false right after a language change,
+ *                        when that name may be another snippet's.
  * @return void
  */
-function minn_admin_ccj_drop_files( $id ) {
+function minn_admin_ccj_drop_files( $id, $with_slug = true ) {
 	if ( ! defined( 'CCJ_UPLOAD_DIR' ) ) {
 		return;
 	}
-	$paths = minn_admin_ccj_slug_paths( $id );
+	$paths = $with_slug ? minn_admin_ccj_slug_paths( $id ) : array();
 	foreach ( array( 'css', 'js', 'html' ) as $language ) {
 		$paths[] = CCJ_UPLOAD_DIR . '/' . (int) $id . '.' . $language;
 	}
@@ -420,13 +423,16 @@ function minn_admin_ccj_restore_file( $id ) {
  * next saved in CCJ's own editor, which writes it again.
  *
  * @param int $id Snippet post ID.
+ * @param bool $with_slug Also take the permalink copy under the current
+ *                        language: false right after a language change,
+ *                        when that name may be another snippet's.
  * @return void
  */
-function minn_admin_ccj_write_file( $id, $code = null ) {
+function minn_admin_ccj_write_file( $id, $code = null, $with_slug = true ) {
 	if ( ! defined( 'CCJ_UPLOAD_DIR' ) ) {
 		return;
 	}
-	foreach ( minn_admin_ccj_slug_paths( $id ) as $slug_path ) {
+	foreach ( $with_slug ? minn_admin_ccj_slug_paths( $id ) : array() as $slug_path ) {
 		if ( is_file( $slug_path ) ) {
 			wp_delete_file( $slug_path );
 		}
@@ -972,6 +978,11 @@ add_action( 'rest_api_init', function () {
 				} else {
 					minn_admin_ccj_update_post_meta_only( $update );
 				}
+				// The permalink copy under the STORED language is this snippet's;
+				// after a language change the name under the new one may be
+				// another snippet's (slugs are not unique), so it is read now.
+				$language_changed = $opts['language'] !== ( isset( $stored['language'] ) ? (string) $stored['language'] : 'css' );
+				$slug_before      = minn_admin_ccj_slug_paths( $id );
 				update_post_meta( $id, 'options', $opts );
 				// The file changes only when what it holds does: the code, the
 				// language, linking or sides, or whether it runs. A rename
@@ -982,9 +993,14 @@ add_action( 'rest_api_init', function () {
 				// stay reachable at its own address.
 				// Switching it off or on alone keeps CCJ's bytes (park/restore).
 				if ( $code_changed || $retargets ) {
-					minn_admin_ccj_drop_files( $id );
+					foreach ( $slug_before as $slug_path ) {
+						if ( is_file( $slug_path ) ) {
+							wp_delete_file( $slug_path );
+						}
+					}
+					minn_admin_ccj_drop_files( $id, ! $language_changed );
 					delete_post_meta( $id, '_minn_ccj_parked' );
-					minn_admin_ccj_write_file( $id, $code_changed ? (string) $body['code'] : null );
+					minn_admin_ccj_write_file( $id, $code_changed ? (string) $body['code'] : null, ! $language_changed );
 				} elseif ( $active_changed ) {
 					if ( minn_admin_ccj_is_active( $id ) ) {
 						minn_admin_ccj_restore_file( $id );

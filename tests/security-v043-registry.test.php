@@ -3618,6 +3618,123 @@ if ( function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active() && 
 	printf( "INFO  cleanup: dir gone = %s, posts gone = %s\n", is_dir( $p6_dir ) ? 'NO' : 'yes', ( get_post( $p6_css ) || get_post( $p6_js ) ) ? 'NO' : 'yes' );
 } )();
 
+// --- #3 delta: a language change takes the old permalink copy, never the new name ---
+// In a closure of its own: the probe bails with return.
+( function () use ( $check, $skip, $call, $admin ) {
+	/**
+	 * Round-2 probe for fa599fd6 (CCJ permalink copy, own language only), through
+	 * Minn's REST routes. CCJ is not loaded here, so CCJ_UPLOAD_DIR points at a
+	 * scratch folder and the post type is registered for this process only.
+	 */
+	global $wpdb;
+	if ( defined( 'CCJ_UPLOAD_DIR' ) ) {
+		$skip( 'r2c: CCJ loaded; not touching its upload folder' );
+		return;
+	}
+	$dir = __DIR__ . '/ccj-upload-' . wp_generate_password( 6, false, false );
+	wp_mkdir_p( $dir );
+	define( 'CCJ_UPLOAD_DIR', $dir );
+	if ( ! post_type_exists( 'custom-css-js' ) ) {
+		register_post_type( 'custom-css-js', array( 'public' => false ) );
+	}
+	$tree_row = $wpdb->get_row( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = 'custom-css-js-tree'", ARRAY_A );
+	$wsal     = $wpdb->get_var( "SHOW TABLES LIKE '{$wpdb->prefix}wsal_occurrences'" ) ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wsal_occurrences" ) : null;
+	$routes   = rest_get_server()->get_routes();
+	if ( ! isset( $routes['/minn-admin/v1/ccj/snippets/(?P<id>\d+)'] ) ) {
+		// rest_api_init already ran with CCJ inactive: run Minn's CCJ registrar now.
+		foreach ( (array) ( $GLOBALS['wp_filter']['rest_api_init']->callbacks ?? array() ) as $cbs ) {
+			foreach ( $cbs as $cb ) {
+				if ( $cb['function'] instanceof Closure ) {
+					$rf = new ReflectionFunction( $cb['function'] );
+					if ( false !== strpos( (string) $rf->getFileName(), 'adapters/custom-css-js.php' ) ) {
+						call_user_func( $cb['function'] );
+					}
+				}
+			}
+		}
+		$routes = rest_get_server()->get_routes();
+	}
+	$made     = array();
+	$cleanup  = function () use ( &$made, $dir, $wpdb, $tree_row ) {
+		foreach ( $made as $id ) {
+			wp_delete_post( $id, true );
+		}
+		foreach ( (array) glob( $dir . '/*' ) as $f ) {
+			wp_delete_file( $f );
+		}
+		@rmdir( $dir ); // phpcs:ignore
+		if ( $tree_row ) {
+			$wpdb->update( $wpdb->options, $tree_row, array( 'option_name' => 'custom-css-js-tree' ) );
+		} else {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => 'custom-css-js-tree' ) );
+		}
+		wp_cache_flush();
+	};
+	if ( ! isset( $routes['/minn-admin/v1/ccj/snippets/(?P<id>\d+)'] ) ) {
+		$skip( 'r2c: Minn CCJ routes not registered' );
+		$cleanup();
+		return;
+	}
+	$tag = strtolower( wp_generate_password( 5, false, false ) );
+	$mk  = function ( $lang, $slug, $bytes ) use ( &$made, $admin, $dir ) {
+		$id = wp_insert_post( array( 'post_title' => 'r2c ' . $lang, 'post_type' => 'custom-css-js', 'post_status' => 'publish', 'post_author' => $admin, 'post_content' => '/* ' . $bytes . ' */' ) );
+		update_post_meta( $id, 'options', array( 'language' => $lang, 'type' => 'header', 'side' => 'frontend', 'linking' => 'external', 'priority' => 5 ) );
+		update_post_meta( $id, '_slug', $slug );
+		update_post_meta( $id, '_active', 'yes' );
+		// What CCJ's own save leaves on disk: <id>.<lang> and <slug>.<lang>.
+		file_put_contents( $dir . '/' . $id . '.' . $lang, $bytes );
+		file_put_contents( $dir . '/' . $slug . '.' . $lang, $bytes );
+		$made[] = $id;
+		return $id;
+	};
+
+	// L1: a snippet's language changed in Minn (js -> css). Its permalink copy
+	// under the OLD name holds the pre-change code at a public URL.
+	$s1 = 'r2c-a-' . $tag;
+	$a  = $mk( 'js', $s1, 'A-OLD-JS' );
+	list( $st ) = $call( 'PUT', '/minn-admin/v1/ccj/snippets/' . $a, array( 'language' => 'css' ) );
+	$check( 'L1a control: PUT language js->css saved', 200 === $st && 'css' === minn_admin_ccj_get_options( $a )['language'], (string) $st );
+	$check( 'L1b the old <slug>.js copy (pre-change code) is removed, as the handler comment promises', ! is_file( $dir . '/' . $s1 . '.js' ), is_file( $dir . '/' . $s1 . '.js' ) ? $s1 . '.js still public: ' . file_get_contents( $dir . '/' . $s1 . '.js' ) : '' );
+	$check( 'L1c control: the old <id>.js went', ! is_file( $dir . '/' . $a . '.js' ) );
+	list( $st ) = $call( 'DELETE', '/minn-admin/v1/ccj/snippets/' . $a );
+	$check( 'L1d deleting the snippet afterwards removes every copy it published', ! is_file( $dir . '/' . $s1 . '.js' ), is_file( $dir . '/' . $s1 . '.js' ) ? 'orphaned: ' . $s1 . '.js (DELETE ' . $st . ')' : '' );
+
+	// L2: the language change lands on a name another snippet owns (B: css, same slug).
+	$s2 = 'r2c-b-' . $tag;
+	$a2 = $mk( 'js', $s2, 'A2-JS' );
+	$b2 = $mk( 'css', $s2, 'B2-CSS-COPY' );
+	$call( 'PUT', '/minn-admin/v1/ccj/snippets/' . $a2, array( 'language' => 'css' ) );
+	printf( "INFO  L2 js->css on A while B (css) owns %s.css: B's copy %s; A's old %s.js %s\n", $s2, is_file( $dir . '/' . $s2 . '.css' ) ? 'kept' : 'DELETED', $s2, is_file( $dir . '/' . $s2 . '.js' ) ? 'LEFT' : 'removed' );
+
+	// L3: the fix's own case: code edit / delete on CSS while JS owns the same slug.
+	$s3 = 'r2c-c-' . $tag;
+	$a3 = $mk( 'css', $s3, 'A3-CSS' );
+	$b3 = $mk( 'js', $s3, 'B3-JS-COPY' );
+	$call( 'PUT', '/minn-admin/v1/ccj/snippets/' . $a3, array( 'code' => '/* edited */' ) );
+	$check( 'L3a code edit on the CSS snippet drops its own <slug>.css', ! is_file( $dir . '/' . $s3 . '.css' ) );
+	$check( 'L3b ...and leaves the JS snippet\'s <slug>.js', is_file( $dir . '/' . $s3 . '.js' ) && 'B3-JS-COPY' === file_get_contents( $dir . '/' . $s3 . '.js' ) );
+	file_put_contents( $dir . '/' . $s3 . '.css', 'A3-CSS' );
+	$call( 'POST', '/minn-admin/v1/ccj/snippets/' . $a3 . '/active', array( 'active' => false ) );
+	$check( 'L3c switch-off drops <slug>.css, keeps <slug>.js', ! is_file( $dir . '/' . $s3 . '.css' ) && is_file( $dir . '/' . $s3 . '.js' ) );
+	$call( 'DELETE', '/minn-admin/v1/ccj/snippets/' . $a3 );
+	$check( 'L3d delete keeps the JS snippet\'s <slug>.js', is_file( $dir . '/' . $s3 . '.js' ) );
+
+	// L4: same slug, same language (CCJ parity: its own delete does the same).
+	$s4 = 'r2c-d-' . $tag;
+	$a4 = $mk( 'css', $s4, 'A4' );
+	$c4 = $mk( 'css', $s4, 'C4-LAST-SAVED' );
+	$call( 'DELETE', '/minn-admin/v1/ccj/snippets/' . $a4 );
+	printf( "INFO  L4 delete A while C (same slug, same language, saved last) owns %s.css: %s\n", $s4, is_file( $dir . '/' . $s4 . '.css' ) ? 'kept' : 'deleted (CCJ before_delete_post does the same)' );
+
+	$cleanup();
+	$wsal_after = null !== $wsal ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wsal_occurrences" ) : null;
+	$left       = 0;
+	foreach ( $made as $id ) {
+		$left += get_post( $id ) ? 1 : 0;
+	}
+	printf( "INFO  cleanup: dir gone = %s, posts left = %d, tree option restored = %s, wsal rows added = %s\n", is_dir( $dir ) ? 'NO' : 'yes', $left, ( $tree_row ? $wpdb->get_var( "SELECT option_value FROM {$wpdb->options} WHERE option_name = 'custom-css-js-tree'" ) === $tree_row['option_value'] : null === $wpdb->get_var( "SELECT option_value FROM {$wpdb->options} WHERE option_name = 'custom-css-js-tree'" ) ) ? 'yes' : 'NO', null === $wsal ? 'n/a' : (string) ( $wsal_after - $wsal ) );
+} )();
+
 // @sections
 
 $summary();
