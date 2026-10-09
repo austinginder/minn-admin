@@ -472,8 +472,12 @@ class Minn_Admin_DB {
 		// Core's keys and salts when they live in the database, not wp-config,
 		// and the option rows that hold another vendor's credentials.
 		'options'       => array( 'option_value', 'option_name', self::SECRET_OPTION_KEYS ),
-		// wp_salt() reads network options on multisite.
-		'sitemeta'      => array( 'meta_value', 'meta_key', self::SALT_KEYS ),
+		// The network's options. wp_salt() reads its salts from here on
+		// multisite, and a network-activated vendor keeps here (through
+		// get_site_option) the same credential rows it keeps in options on a
+		// single site, so the two tables share one list: keyed_secret() hands
+		// both secret_option_names().
+		'sitemeta'      => array( 'meta_value', 'meta_key', self::SECRET_OPTION_KEYS ),
 		// Wordfence Login Security: remembered-device cookie keys (whoever
 		// holds them can mark any user as past 2FA) and the reCAPTCHA secret.
 		'wfls_settings' => array( 'value', 'name', array( 'shared-hash-secret', 'shared-symmetric-secret', 'recaptcha-secret' ) ),
@@ -483,7 +487,8 @@ class Minn_Admin_DB {
 	);
 
 	/**
-	 * For a keyed-secret table's value column: [ key column, secret keys ].
+	 * For a keyed-secret table's value column: [ key column, secret keys,
+	 * [ prefix, suffix ] name shapes ].
 	 *
 	 * @return array|null
 	 */
@@ -492,21 +497,74 @@ class Minn_Admin_DB {
 		if ( ! isset( self::KEYED_SECRETS[ $base ] ) || 0 !== strcasecmp( $col, self::KEYED_SECRETS[ $base ][0] ) ) {
 			return null;
 		}
-		$keys     = self::KEYED_SECRETS[ $base ][2];
-		$prefixes = array();
-		if ( 'options' === $base ) {
-			$keys     = array_merge( $keys, self::gateway_option_names() );
-			$prefixes = self::SECRET_OPTION_PREFIXES;
+		$keys   = self::KEYED_SECRETS[ $base ][2];
+		$shapes = array();
+		if ( 'options' === $base || 'sitemeta' === $base ) {
+			$keys   = self::secret_option_names();
+			$shapes = self::SECRET_OPTION_SHAPES;
 		}
-		return array( self::KEYED_SECRETS[ $base ][1], $keys, $prefixes );
+		return array( self::KEYED_SECRETS[ $base ][1], $keys, $shapes );
 	}
 
 	/**
-	 * Option rows redacted by name prefix: Gravity SMTP keeps each mail
-	 * connector's API key in its own gravitysmtp_<connector> row (and its
-	 * licence in gravitysmtp_config); Minn's own adapter masks them.
+	 * Every option name whose row is a credential, for the options table and
+	 * the network's sitemeta alike: the fixed list, the payment gateways'
+	 * settings rows and the core Connectors' key rows.
+	 *
+	 * @return string[]
 	 */
-	const SECRET_OPTION_PREFIXES = array( 'gravitysmtp_' );
+	private static function secret_option_names() {
+		return array_values( array_unique( array_merge( self::SECRET_OPTION_KEYS, self::gateway_option_names(), self::connector_option_names() ) ) );
+	}
+
+	/**
+	 * Option rows redacted by name shape, as [ prefix, suffix ] pairs. The
+	 * value search leaves rows out with LIKE 'prefix%suffix' and keyed_match()
+	 * tests the same pattern (case-sensitively, so a case-folding collation
+	 * only widens what the search leaves out): no row is redacted on screen
+	 * yet still searchable by value.
+	 *
+	 * Gravity SMTP keeps each mail connector's API key in its own
+	 * gravitysmtp_<connector> row (and its licence in gravitysmtp_config);
+	 * Minn's own adapter masks them. Core's Connectors keep a credential in
+	 * connectors_{type}_{id}_api_key or
+	 * connectors_{type}_{id}_application_password unless the connector names
+	 * its own row, and the row outlives the registration: a deactivated
+	 * provider plugin, or a site that turns AI support off, drops the
+	 * connector from wp_get_connectors() and leaves its key behind.
+	 */
+	const SECRET_OPTION_SHAPES = array(
+		array( 'gravitysmtp_', '' ),
+		array( 'connectors_', '_api_key' ),
+		array( 'connectors_', '_application_password' ),
+	);
+
+	/**
+	 * The option each registered core Connector (WP 7.0+) keeps its API key or
+	 * application password in. Core masks these on every wp/v2/settings
+	 * response and Minn's /connectors model sends out only the last four
+	 * characters; a connector may name its own row, which only the live
+	 * registry knows.
+	 *
+	 * @return string[]
+	 */
+	private static function connector_option_names() {
+		if ( ! function_exists( 'wp_get_connectors' ) ) {
+			return array();
+		}
+		$names = array();
+		try {
+			foreach ( (array) wp_get_connectors() as $connector ) {
+				$auth = is_array( $connector ) && isset( $connector['authentication'] ) && is_array( $connector['authentication'] ) ? $connector['authentication'] : array();
+				if ( isset( $auth['setting_name'] ) && is_string( $auth['setting_name'] ) && '' !== $auth['setting_name'] ) {
+					$names[] = $auth['setting_name'];
+				}
+			}
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+		return $names;
+	}
 
 	/**
 	 * Every registered WooCommerce payment gateway's settings row
@@ -546,13 +604,17 @@ class Minn_Admin_DB {
 		return $names;
 	}
 
-	/** Whether a keyed-secret row's key is one of the listed names or prefixes. */
+	/** Whether a keyed-secret row's key is one of the listed names or name shapes. */
 	private static function keyed_match( $key, $keyed ) {
 		if ( in_array( $key, $keyed[1], true ) ) {
 			return true;
 		}
-		foreach ( isset( $keyed[2] ) ? (array) $keyed[2] : array() as $prefix ) {
-			if ( 0 === strpos( $key, $prefix ) ) {
+		foreach ( isset( $keyed[2] ) ? (array) $keyed[2] : array() as $shape ) {
+			list( $prefix, $suffix ) = $shape;
+			// LIKE 'prefix%suffix' never lets the two overlap.
+			if ( strlen( $key ) >= strlen( $prefix ) + strlen( $suffix )
+				&& 0 === strpos( $key, $prefix )
+				&& ( '' === $suffix || substr( $key, -strlen( $suffix ) ) === $suffix ) ) {
 				return true;
 			}
 		}
@@ -565,21 +627,22 @@ class Minn_Admin_DB {
 	 * Security), and the plaintext one-time sign-in tokens the One Time
 	 * Login and WP Freighter routes mint (each signs in as that user).
 	 */
-	/** Core's keys and salts, when stored in the database. */
-	const SALT_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key' );
-
 	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key' );
 
 	/**
-	 * wp_options rows redacted whole: core's salts, plus rows that hold
-	 * another vendor's live credentials, which their own screens mask and
-	 * Minn's adapters read for presence only. Jetpack's blog and per-user
-	 * tokens (a user token signs REST requests as that user and outlives a
-	 * password change), the WooCommerce.com account link, WP Mail SMTP's
-	 * provider keys and the key that seals its SMTP password, and All In One
-	 * Security's captcha secrets (the peer of Wordfence's redacted one).
+	 * Option and network option rows redacted whole: core's keys and salts,
+	 * plus rows that hold another vendor's live credentials, which their own
+	 * screens mask and Minn's adapters read for presence only. Jetpack's blog
+	 * and per-user tokens (a user token signs REST requests as that user and
+	 * outlives a password change), the WooCommerce.com account link, WP Mail
+	 * SMTP's provider keys and the key that seals its SMTP password, All In
+	 * One Security's captcha secrets (the peer of Wordfence's redacted one),
+	 * Post SMTP's settings and its plaintext OAuth access and refresh tokens,
+	 * Freemius accounts (user, install and licence secret keys), the WPMU DEV
+	 * key (the HMAC secret its Hub's remote commands are verified with) and
+	 * Smush's validation cache, which is keyed by that same key.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', 'aio_wp_security_configs', 'postman_options', 'fs_accounts' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
@@ -759,8 +822,8 @@ class Minn_Admin_DB {
 			if ( $keyed ) {
 				$keys   = $keyed[1];
 				$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $keyed[0] ) . ' NOT IN (' . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')', $keys ); // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				foreach ( isset( $keyed[2] ) ? (array) $keyed[2] : array() as $prefix ) {
-					$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $keyed[0] ) . ' NOT LIKE %s', $wpdb->esc_like( $prefix ) . '%' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				foreach ( isset( $keyed[2] ) ? (array) $keyed[2] : array() as $shape ) {
+					$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $keyed[0] ) . ' NOT LIKE %s', $wpdb->esc_like( $shape[0] ) . '%' . $wpdb->esc_like( $shape[1] ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				}
 			}
 		} else {

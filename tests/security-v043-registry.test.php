@@ -2537,6 +2537,198 @@ if ( function_exists( 'minn_admin_jet_options_save' ) && minn_admin_jet_options_
 	$skip( 'JetEngine options pages inactive' );
 }
 
+// --- #12 / #13 DB browser redaction helpers --------------------------------
+// The value cell of the row named exactly $name, as /db/rows renders it to the
+// grid. Details only ever print the cell's SHAPE: a real key that is already
+// stored on the site must not land in test output.
+$dbr_find  = function ( $table, $keycol, $valcol, $name ) use ( $call ) {
+	list( $st, $res ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $table, 'page' => 1, 'per_page' => 50, 'fcol' => $keycol, 'fq' => $name ) );
+	$cols = wp_list_pluck( (array) ( $res['columns'] ?? array() ), 'name' );
+	$ki   = array_search( $keycol, $cols, true );
+	$vi   = array_search( $valcol, $cols, true );
+	foreach ( (array) ( $res['rows'] ?? array() ) as $row ) {
+		if ( false !== $ki && false !== $vi && isset( $row[ $ki ] ) && $name === $row[ $ki ] ) {
+			return array( $st, $row[ $vi ] );
+		}
+	}
+	return array( $st, null );
+};
+$dbr_shape = function ( $cell ) {
+	if ( is_array( $cell ) && ! empty( $cell['redacted'] ) ) {
+		return 'redacted';
+	}
+	return null === $cell ? 'row missing' : 'RAW ' . strlen( is_array( $cell ) ? wp_json_encode( $cell ) : (string) $cell ) . ' bytes';
+};
+$dbr_red   = function ( $cell ) {
+	return is_array( $cell ) && ! empty( $cell['redacted'] );
+};
+
+// --- #12 DB browser redacts Connector keys, the WPMU DEV key and Post SMTP's token
+if ( class_exists( 'Minn_Admin_DB' ) ) {
+	global $wpdb;
+	$dbr_tag   = 'mv43dbr' . wp_rand( 100000, 999999 );
+	// A connector that names its own row: only the live registry knows it.
+	$dbr_reg   = class_exists( 'WP_Connector_Registry' ) ? WP_Connector_Registry::get_instance() : null;
+	$dbr_probe = 'minnv043dbrprobe';
+	if ( $dbr_reg && ! $dbr_reg->is_registered( $dbr_probe ) ) {
+		$dbr_reg->register(
+			$dbr_probe,
+			array(
+				'name'           => 'Minn probe',
+				'type'           => 'spam_filtering',
+				'authentication' => array( 'method' => 'api_key', 'setting_name' => 'minnv043dbr_probe_service_key' ),
+			)
+		);
+	} else {
+		$dbr_reg = null;
+	}
+	$dbr_rows = array(
+		'postman_auth_token'                                         => array( 'access_token' => $dbr_tag . 'a_postman', 'refresh_token' => $dbr_tag . 'a_postref', 'vendor_name' => 'google' ),
+		'wpmudev_apikey'                                             => $dbr_tag . 'b_wpmudev',
+		'wp_smush_api_auth'                                          => array( $dbr_tag . 'c_smush' => array( 'validity' => 'valid', 'timestamp' => time() ) ),
+		'connectors_ai_openai_api_key'                               => $dbr_tag . 'd_openai',
+		// A provider plugin deactivated (or AI support turned off) drops its
+		// connector from the registry and leaves the key row behind.
+		'connectors_ai_minnv043dbrgone_api_key'                      => $dbr_tag . 'e_orphan',
+		'connectors_spam_filtering_minnv043dbrgone_application_password' => array( 'username' => 'minn', 'password' => $dbr_tag . 'f_apppass' ),
+	);
+	if ( $dbr_reg ) {
+		$dbr_rows['minnv043dbr_probe_service_key'] = $dbr_tag . 'g_probe';
+	}
+	// Every registered connector's row that already exists is checked too,
+	// by shape only.
+	if ( function_exists( 'wp_get_connectors' ) ) {
+		foreach ( wp_get_connectors() as $dbr_c ) {
+			$dbr_sn = (string) ( $dbr_c['authentication']['setting_name'] ?? '' );
+			if ( '' !== $dbr_sn && ! isset( $dbr_rows[ $dbr_sn ] ) ) {
+				$dbr_rows[ $dbr_sn ] = null;
+			}
+		}
+	}
+	$dbr_seeded = array();
+	foreach ( $dbr_rows as $dbr_name => $dbr_val ) {
+		// A stored row's byte length (null when absent). An empty value has
+		// nothing to redact and renders as an empty cell.
+		$dbr_len = $wpdb->get_var( $wpdb->prepare( "SELECT LENGTH(option_value) FROM {$wpdb->options} WHERE option_name = %s", $dbr_name ) );
+		$dbr_had = null !== $dbr_len;
+		if ( $dbr_had && 0 === (int) $dbr_len ) {
+			continue;
+		}
+		if ( ! $dbr_had && null !== $dbr_val ) {
+			add_option( $dbr_name, $dbr_val, '', false );
+			$dbr_seeded[ $dbr_name ] = $dbr_val;
+		}
+		if ( ! $dbr_had && ! isset( $dbr_seeded[ $dbr_name ] ) ) {
+			continue; // a registered connector with no stored key: nothing to show
+		}
+		list( $dbr_st, $dbr_cell ) = $dbr_find( $wpdb->options, 'option_name', 'option_value', $dbr_name );
+		$check( "DB browser: {$dbr_name} renders redacted in the grid" . ( $dbr_had ? ' (stored row)' : '' ), 200 === $dbr_st && $dbr_red( $dbr_cell ), $dbr_st . ' ' . $dbr_shape( $dbr_cell ) );
+	}
+	foreach ( $dbr_seeded as $dbr_name => $dbr_val ) {
+		$dbr_mark = is_array( $dbr_val ) ? (string) ( $dbr_val['access_token'] ?? $dbr_val['password'] ?? array_keys( $dbr_val )[0] ) : (string) $dbr_val;
+		$dbr_id   = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $dbr_name ) );
+		list( $dbr_st, $dbr_one ) = $call( 'GET', '/minn-admin/v1/db/row', null, array( 'table' => $wpdb->options, 'pk' => wp_json_encode( array( 'option_id' => $dbr_id ) ) ) );
+		$dbr_json = wp_json_encode( $dbr_one );
+		$check( "DB browser: the {$dbr_name} row detail holds no part of the secret", 200 === $dbr_st && false === strpos( $dbr_json, $dbr_tag ), $dbr_st . ' ' . ( false === strpos( $dbr_json, $dbr_tag ) ? 'clean' : 'secret present' ) );
+		// The LIKE filter is the oracle: a prefix of the secret must not find the row.
+		list( , $dbr_q ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 50, 'fcol' => 'option_value', 'fq' => substr( $dbr_mark, 0, strlen( $dbr_tag ) + 2 ) ) );
+		$check( "DB browser: a value search on a prefix of the {$dbr_name} secret finds nothing", 0 === (int) ( $dbr_q['total'] ?? -1 ) && array() === (array) ( $dbr_q['rows'] ?? array( 'missing' ) ), 'total ' . wp_json_encode( $dbr_q['total'] ?? null ) );
+	}
+	list( , $dbr_sort ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 50, 'orderby' => 'option_value', 'order' => 'asc' ) );
+	$check( 'DB browser: option_value is never a sort key', 'option_value' !== ( $dbr_sort['orderby'] ?? 'option_value' ), (string) wp_json_encode( $dbr_sort['orderby'] ?? null ) );
+	// CONTROL: ordinary rows (including a connectors_ name that is not a
+	// credential shape) still render and stay searchable by value.
+	$dbr_ctl = array(
+		'minnv043dbr_control'                => $dbr_tag . 'x_control',
+		'connectors_ai_minnv043dbr_settings' => $dbr_tag . 'y_settings',
+	);
+	foreach ( $dbr_ctl as $dbr_name => $dbr_val ) {
+		add_option( $dbr_name, $dbr_val, '', false );
+		list( , $dbr_cell ) = $dbr_find( $wpdb->options, 'option_name', 'option_value', $dbr_name );
+		list( , $dbr_q )    = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 50, 'fcol' => 'option_value', 'fq' => $dbr_val ) );
+		$check( "DB browser control: {$dbr_name} renders and a value search finds it", $dbr_val === $dbr_cell && 1 === (int) ( $dbr_q['total'] ?? -1 ), $dbr_shape( $dbr_cell ) . ' / total ' . wp_json_encode( $dbr_q['total'] ?? null ) );
+		delete_option( $dbr_name );
+	}
+	foreach ( array_keys( $dbr_seeded ) as $dbr_name ) {
+		delete_option( $dbr_name );
+	}
+	// Name-shape edges: whatever the grid redacts, the value search must not
+	// find (the search's SQL exclusion has to cover every redacted row).
+	$dbr_edges = array( 'connectors_api_key', 'connectors_ai_minnv043dbr_api_key_old', 'gravitysmtp_', 'POSTMAN_AUTH_TOKEN', 'Connectors_AI_MINNV043DBR_API_KEY' );
+	foreach ( $dbr_edges as $dbr_i => $dbr_name ) {
+		if ( null !== $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $dbr_name ) ) ) {
+			continue; // collides (case-insensitively) with a stored row
+		}
+		$dbr_val = $dbr_tag . 'z' . $dbr_i . '_edge';
+		$wpdb->insert( $wpdb->options, array( 'option_name' => $dbr_name, 'option_value' => $dbr_val, 'autoload' => 'off' ) );
+		list( , $dbr_cell ) = $dbr_find( $wpdb->options, 'option_name', 'option_value', $dbr_name );
+		list( , $dbr_q )    = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 50, 'fcol' => 'option_value', 'fq' => $dbr_val ) );
+		$check( "DB browser: {$dbr_name} is either shown or unsearchable, never redacted yet searchable", ! $dbr_red( $dbr_cell ) || 0 === (int) ( $dbr_q['total'] ?? -1 ), $dbr_shape( $dbr_cell ) . ' / total ' . wp_json_encode( $dbr_q['total'] ?? null ) );
+		$wpdb->delete( $wpdb->options, array( 'option_name' => $dbr_name ) );
+	}
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'notoptions', 'options' );
+	if ( $dbr_reg ) {
+		$dbr_reg->unregister( $dbr_probe );
+	}
+} else {
+	$skip( 'DB browser not loaded' );
+}
+
+// --- #13 DB browser redacts the same credentials in the network's sitemeta --
+if ( class_exists( 'Minn_Admin_DB' ) && is_multisite() ) {
+	global $wpdb;
+	$dbrn_tag  = 'mv43dbrn' . wp_rand( 100000, 999999 );
+	$dbrn_net  = get_current_network_id();
+	$dbrn_rows = array(
+		// Freemius keeps everything but the per-blog keys of fs_accounts in
+		// network storage, so each user's secret_key lands here.
+		'fs_accounts'       => array( 'users' => array( 7 => array( 'id' => 7, 'public_key' => 'pk_minn', 'secret_key' => $dbrn_tag . 'a_freemius' ) ) ),
+		'wpmudev_apikey'    => $dbrn_tag . 'b_wpmudev',
+		'wp_smush_api_auth' => array( $dbrn_tag . 'c_smush' => array( 'validity' => 'valid', 'timestamp' => time() ) ),
+		// One list for both tables: Post SMTP's token and a connector key
+		// shape are redacted here as well.
+		'postman_auth_token' => array( 'access_token' => $dbrn_tag . 'd_postman' ),
+		'connectors_ai_minnv043dbrgone_api_key' => $dbrn_tag . 'e_orphan',
+	);
+	$dbrn_seeded = array();
+	foreach ( $dbrn_rows as $dbrn_name => $dbrn_val ) {
+		$dbrn_len = $wpdb->get_var( $wpdb->prepare( "SELECT LENGTH(meta_value) FROM {$wpdb->sitemeta} WHERE meta_key = %s AND site_id = %d", $dbrn_name, $dbrn_net ) );
+		if ( null !== $dbrn_len ) {
+			if ( 0 === (int) $dbrn_len ) {
+				continue;
+			}
+			list( $dbrn_st, $dbrn_cell ) = $dbr_find( $wpdb->sitemeta, 'meta_key', 'meta_value', $dbrn_name );
+			$check( "DB browser (network): {$dbrn_name} renders redacted in sitemeta (stored row)", 200 === $dbrn_st && $dbr_red( $dbrn_cell ), $dbrn_st . ' ' . $dbr_shape( $dbrn_cell ) );
+			continue;
+		}
+		update_site_option( $dbrn_name, $dbrn_val );
+		$dbrn_seeded[] = $dbrn_name;
+		$dbrn_mark     = is_array( $dbrn_val ) ? (string) ( $dbrn_val['users'][7]['secret_key'] ?? $dbrn_val['access_token'] ?? array_keys( $dbrn_val )[0] ) : (string) $dbrn_val;
+		list( $dbrn_st, $dbrn_cell ) = $dbr_find( $wpdb->sitemeta, 'meta_key', 'meta_value', $dbrn_name );
+		$check( "DB browser (network): {$dbrn_name} renders redacted in sitemeta", 200 === $dbrn_st && $dbr_red( $dbrn_cell ), $dbrn_st . ' ' . $dbr_shape( $dbrn_cell ) );
+		$dbrn_id = (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta_id FROM {$wpdb->sitemeta} WHERE meta_key = %s AND site_id = %d", $dbrn_name, $dbrn_net ) );
+		list( $dbrn_st, $dbrn_one ) = $call( 'GET', '/minn-admin/v1/db/row', null, array( 'table' => $wpdb->sitemeta, 'pk' => wp_json_encode( array( 'meta_id' => $dbrn_id ) ) ) );
+		$dbrn_json = wp_json_encode( $dbrn_one );
+		$check( "DB browser (network): the {$dbrn_name} row detail holds no part of the secret", 200 === $dbrn_st && false === strpos( $dbrn_json, $dbrn_tag ), $dbrn_st . ' ' . ( false === strpos( $dbrn_json, $dbrn_tag ) ? 'clean' : 'secret present' ) );
+		list( , $dbrn_q ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->sitemeta, 'page' => 1, 'per_page' => 50, 'fcol' => 'meta_value', 'fq' => substr( $dbrn_mark, 0, strlen( $dbrn_tag ) + 2 ) ) );
+		$check( "DB browser (network): a value search on a prefix of the {$dbrn_name} secret finds nothing", 0 === (int) ( $dbrn_q['total'] ?? -1 ) && array() === (array) ( $dbrn_q['rows'] ?? array( 'missing' ) ), 'total ' . wp_json_encode( $dbrn_q['total'] ?? null ) );
+	}
+	list( , $dbrn_sort ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->sitemeta, 'page' => 1, 'per_page' => 50, 'orderby' => 'meta_value', 'order' => 'asc' ) );
+	$check( 'DB browser (network): meta_value is never a sort key', 'meta_value' !== ( $dbrn_sort['orderby'] ?? 'meta_value' ), (string) wp_json_encode( $dbrn_sort['orderby'] ?? null ) );
+	// CONTROL: an ordinary network option still renders and is searchable.
+	update_site_option( 'minnv043dbrn_control', $dbrn_tag . 'x_control' );
+	list( , $dbrn_cell ) = $dbr_find( $wpdb->sitemeta, 'meta_key', 'meta_value', 'minnv043dbrn_control' );
+	list( , $dbrn_q )    = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->sitemeta, 'page' => 1, 'per_page' => 50, 'fcol' => 'meta_value', 'fq' => $dbrn_tag . 'x_control' ) );
+	$check( 'DB browser control (network): an ordinary site option renders and a value search finds it', $dbrn_tag . 'x_control' === $dbrn_cell && 1 === (int) ( $dbrn_q['total'] ?? -1 ), $dbr_shape( $dbrn_cell ) . ' / total ' . wp_json_encode( $dbrn_q['total'] ?? null ) );
+	delete_site_option( 'minnv043dbrn_control' );
+	foreach ( $dbrn_seeded as $dbrn_name ) {
+		delete_site_option( $dbrn_name );
+	}
+} else {
+	$skip( 'DB browser sitemeta redaction (multisite only)' );
+}
+
 // @sections
 
 $summary();
