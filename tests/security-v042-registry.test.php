@@ -489,7 +489,11 @@ if ( class_exists( 'GFAPI' ) ) {
 		$gf_html = '<html><head><style>td{padding:8px}</style></head><body><table><tr><td>{all_fields}</td></tr></table></body></html>';
 		$gf_form['notifications'][ $gf_nid ]['message'] = $gf_html;
 		GFAPI::update_form( $gf_form );
-		list( $st ) = $call( 'POST', '/minn-admin/v1/gf/notifications/1:' . $gf_nid, array( 'name' => 'User confirmation (renamed)', 'to_email' => ( 'email' === ( $gf_was['toType'] ?? 'email' ) ? ( $gf_was['to'] ?? '' ) : '' ), 'subject' => $gf_was['subject'] ?? 'Thanks', 'message' => $gf_html ) );
+		// The notification page: load it, rename it, save what the client holds.
+		list( , $gf_page ) = $call( 'GET', '/minn-admin/v1/gf/notifications/1:' . $gf_nid . '/full' );
+		$gf_body           = is_array( $gf_page ) && isset( $gf_page['notification'] ) ? $gf_page['notification'] : array();
+		$gf_body['name']   = 'User confirmation (renamed)';
+		list( $st )        = $call( 'POST', '/minn-admin/v1/gf/notifications/1:' . $gf_nid . '/full', $gf_body );
 		$gf_now = GFAPI::get_form( 1 )['notifications'][ $gf_nid ];
 		$check( 'Gravity Forms: renaming a notification keeps its HTML message byte for byte', 200 === $st && $gf_html === $gf_now['message'], 'status ' . $st . ' ' . substr( (string) $gf_now['message'], 0, 80 ) );
 		$restore = GFAPI::get_form( 1 );
