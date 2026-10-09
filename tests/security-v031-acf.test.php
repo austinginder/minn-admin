@@ -82,11 +82,11 @@ if ( ! function_exists( 'minn_admin_acf_value_in' ) ) {
 		is_string( $stored ) && false === strpos( $stored, '<script' ) && false !== strpos( $stored, '<b>' ),
 		is_string( $stored ) ? $stored : var_export( $stored, true )
 	);
-	// The post scope is ACF's own behaviour over a post the caller owns and is
-	// deliberately unchanged.
+	// The post scope is filtered the same way for this caller, as ACF's own
+	// metabox save does: the_field() does not escape what it prints.
 	$check(
-		'CONTROL the post scope is left as ACF behaves',
-		$payload === minn_admin_acf_value_in( $field, $payload, 'post' )
+		'The post scope filters markup the same way for a caller without unfiltered_html',
+		wp_kses_post( $payload ) === minn_admin_acf_value_in( $field, $payload, 'post' )
 	);
 	remove_filter( 'user_has_cap', $filter, 99 );
 
