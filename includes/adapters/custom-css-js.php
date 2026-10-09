@@ -274,7 +274,7 @@ function minn_admin_ccj_drop_files( $id ) {
 }
 
 /**
- * Where a snippet's permalink copies would be, one path per language.
+ * Where a snippet's permalink copy would be, for its current language.
  *
  * CCJ's save writes the file twice: <id>.<language>, which the page loads,
  * and <slug>.<language> under the snippet's Permalink slug (`_slug` meta),
@@ -287,7 +287,7 @@ function minn_admin_ccj_drop_files( $id ) {
  * in any case, because on a case-insensitive disk BLOCK_JS.js is the bundle.
  *
  * @param int $id Snippet post ID.
- * @return string[] Paths keyed by language; none without a usable slug.
+ * @return string[] The path keyed by language; none without a usable slug.
  */
 function minn_admin_ccj_slug_paths( $id ) {
 	$raw = defined( 'CCJ_UPLOAD_DIR' ) ? get_post_meta( (int) $id, '_slug', true ) : '';
@@ -301,14 +301,19 @@ function minn_admin_ccj_slug_paths( $id ) {
 	if ( ctype_digit( $slug ) && (string) (int) $slug === $slug && (int) $slug > 0 && 'custom-css-js' === get_post_type( (int) $slug ) ) {
 		return array();
 	}
-	$paths = array();
-	foreach ( array( 'css', 'js', 'html' ) as $language ) {
-		$name = $slug . '.' . $language;
-		if ( ! in_array( strtolower( $name ), array( 'block_js.js', 'block_css.css' ), true ) ) {
-			$paths[ $language ] = CCJ_UPLOAD_DIR . '/' . $name;
-		}
+	// Only the snippet's own language: slugs are not unique, so another
+	// snippet can own the same name in another language (brand.css and
+	// brand.js), and CCJ's own delete takes only the current one.
+	$opts     = minn_admin_ccj_get_options( $id );
+	$language = isset( $opts['language'] ) && in_array( $opts['language'], array( 'css', 'js', 'html' ), true ) ? $opts['language'] : '';
+	if ( '' === $language ) {
+		return array();
 	}
-	return $paths;
+	$name = $slug . '.' . $language;
+	if ( in_array( strtolower( $name ), array( 'block_js.js', 'block_css.css' ), true ) ) {
+		return array();
+	}
+	return array( $language => CCJ_UPLOAD_DIR . '/' . $name );
 }
 
 /**

@@ -3566,6 +3566,53 @@ if ( function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active() && 
 	printf( "INFO  restore: update transients identical = %s; stray pack = %s\n", $p1b_key( $p1b_rows ) === $p1b_key( $p1b_after ) ? 'yes' : 'NO', file_exists( $p1b_landed ) ? 'LEFT' : 'none' );
 } )();
 
+// --- #3 delta: a shared Custom CSS & JS slug in another language is left alone ---
+// In a closure of its own: the probe bails with return.
+( function () use ( $check, $skip, $call, $admin ) {
+	/**
+	 * Delta probe: CCJ permalink copies (#3). CCJ never makes a Permalink slug
+	 * unique (admin-screens.php:1686-1691), and its own delete removes only
+	 * <slug>.<the snippet's language> (1751-1757). Minn's helpers take all three
+	 * languages. CCJ_UPLOAD_DIR is pointed at a scratch folder for this process
+	 * when CCJ is not loaded, so no real upload is touched.
+	 */
+	if ( defined( 'CCJ_UPLOAD_DIR' ) ) {
+		$skip( 'p6: CCJ is loaded here; not touching its real upload folder' );
+		return;
+	}
+	$p6_dir = dirname( __FILE__ ) . '/ccj-upload';
+	wp_mkdir_p( $p6_dir );
+	define( 'CCJ_UPLOAD_DIR', $p6_dir );
+	$p6_slug = 'brand-' . wp_generate_password( 6, false, false );
+	$p6_mk   = function ( $lang ) use ( $p6_slug, $admin ) {
+		$id = wp_insert_post( array( 'post_title' => 'p6 ' . $lang, 'post_type' => 'custom-css-js', 'post_status' => 'publish', 'post_author' => $admin, 'post_content' => '/* ' . $lang . ' */' ) );
+		update_post_meta( $id, 'options', array( 'language' => $lang, 'type' => 'header', 'side' => 'frontend', 'linking' => 'external', 'priority' => 5 ) );
+		update_post_meta( $id, '_slug', $p6_slug );
+		return $id;
+	};
+	$p6_css = $p6_mk( 'css' ); // snippet A, writes brand-x.css
+	$p6_js  = $p6_mk( 'js' );  // snippet B, same slug, writes brand-x.js
+	foreach ( array( $p6_css . '.css', $p6_js . '.js', $p6_slug . '.css', $p6_slug . '.js' ) as $p6_f ) {
+		file_put_contents( $p6_dir . '/' . $p6_f, 'bytes of ' . $p6_f );
+	}
+	minn_admin_ccj_drop_files( $p6_css ); // Minn's delete / switch-off of A
+	$check( 'P1 deleting the CSS snippet leaves the JS snippet\'s permalink copy (CCJ\'s own delete would)', is_file( $p6_dir . '/' . $p6_slug . '.js' ), is_file( $p6_dir . '/' . $p6_slug . '.js' ) ? '' : $p6_slug . '.js deleted' );
+	$check( 'P2 control: the CSS snippet\'s own copies go', ! is_file( $p6_dir . '/' . $p6_slug . '.css' ) && ! is_file( $p6_dir . '/' . $p6_css . '.css' ) );
+	// write_file (any Minn code edit) does the same sweep.
+	file_put_contents( $p6_dir . '/' . $p6_slug . '.js', 'bytes again' );
+	minn_admin_ccj_write_file( $p6_css, '/* edited */' );
+	$check( 'P3 editing the CSS snippet\'s code leaves the JS snippet\'s permalink copy', is_file( $p6_dir . '/' . $p6_slug . '.js' ) );
+
+	// ---- cleanup ----
+	wp_delete_post( $p6_css, true );
+	wp_delete_post( $p6_js, true );
+	foreach ( (array) glob( $p6_dir . '/*' ) as $p6_f ) {
+		wp_delete_file( $p6_f );
+	}
+	@rmdir( $p6_dir ); // phpcs:ignore
+	printf( "INFO  cleanup: dir gone = %s, posts gone = %s\n", is_dir( $p6_dir ) ? 'NO' : 'yes', ( get_post( $p6_css ) || get_post( $p6_js ) ) ? 'NO' : 'yes' );
+} )();
+
 // @sections
 
 $summary();
