@@ -16,12 +16,17 @@
  * @package minn-admin
  */
 
+// ACPT's WPAttachment.php calls set_time_limit( 5 ) at file scope, so once a
+// section autoloads it every later section would have five seconds left.
+// Each check and skip lifts the limit again.
 $results = array();
 $check   = function ( $label, $ok, $detail = '' ) use ( &$results ) {
+	set_time_limit( 0 );
 	$results[] = $ok;
 	printf( "%s  %s%s\n", $ok ? 'PASS' : 'FAIL', $label, $detail ? " — {$detail}" : '' );
 };
 $skip    = function ( $label ) {
+	set_time_limit( 0 );
 	printf( "SKIP  %s\n", $label );
 };
 $summary = function () use ( &$results ) {
