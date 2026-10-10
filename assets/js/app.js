@@ -2234,9 +2234,21 @@
 		return RT_SAFE_SCHEMES.includes( p );
 	};
 
+	// Attributes that name an element by id. Post kses keeps id, for and form
+	// on an Author's or Contributor's markup, and stored HTML renders in the
+	// same document as Minn's chrome: a content element wearing one of Minn's
+	// ids comes first in tree order and stands in for it (the side panel
+	// rendered into it and the next save wrote it into the post), and a
+	// <label for> clicks Minn's own Publish button from inside the text.
+	// Minn's ids all start with minn-, so only references into that namespace
+	// sit out; one content element pointing at another keeps working.
+	const RT_ID_ATTRS = [ 'id', 'name', 'for', 'form', 'popovertarget', 'commandfor' ];
+	const rtMinnRef = ( value ) => /^\s*minn-/i.test( String( value == null ? '' : value ) );
+
 	const rtParkName = ( name, value, el ) => {
 		const lower = name.toLowerCase();
 		if ( 0 === lower.indexOf( RT_PARK_PREFIX ) ) return name;
+		if ( RT_ID_ATTRS.includes( lower ) && rtMinnRef( value ) ) return RT_PARK_PREFIX + name;
 		// Every event handler, plus the attributes whose whole purpose is to
 		// reach execution again after the walk (srcdoc, animate's target).
 		if ( 0 === lower.indexOf( 'on' ) || RT_KILL_ATTRS.includes( lower ) ) return RT_PARK_PREFIX + name;
@@ -30586,8 +30598,8 @@
 			const code = stripBlockComments( raw || '' ).trim();
 			return `<div class="minn-block-island minn-shortcode-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 				<button class="minn-island-chip" data-inspect="${ idx }" title="${ esc( __( 'Configure block' ) ) }" type="button" aria-label="${ esc( __( 'Configure shortcode block' ) ) }">⚙ ${ esc( __( 'shortcode' ) ) }</button>
-				<label class="minn-shortcode-label" for="minn-sc-${ idx }">${ esc( __( 'Shortcode' ) ) }</label>
-				<input id="minn-sc-${ idx }" class="minn-shortcode-input" type="text" data-shortcode="${ idx }" value="${ esc( code ) }" placeholder="${ esc( __( '[shortcode attr="value"]' ) ) }" spellcheck="false" autocomplete="off">
+				<label class="minn-shortcode-label">${ esc( __( 'Shortcode' ) ) }</label>
+				<input class="minn-shortcode-input" type="text" data-shortcode="${ idx }" aria-label="${ esc( __( 'Shortcode' ) ) }" value="${ esc( code ) }" placeholder="${ esc( __( '[shortcode attr="value"]' ) ) }" spellcheck="false" autocomplete="off">
 			</div>`;
 		}
 		if ( short === 'details' ) {
