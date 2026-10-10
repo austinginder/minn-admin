@@ -1257,6 +1257,53 @@ function minn_admin_crocoblock_store( $key, $data ) {
 }
 
 /**
+ * The option rows matching some LIKE patterns, raw, so a refused paste can
+ * put back exactly what was there (minn_admin_license_rows_restore()).
+ *
+ * @param string[] $likes LIKE patterns, already escaped.
+ * @return array option_name => row.
+ */
+function minn_admin_license_rows( array $likes ) {
+	global $wpdb;
+	$out = array();
+	foreach ( $likes as $like ) {
+		foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value, autoload FROM {$wpdb->options} WHERE option_name LIKE %s", $like ), ARRAY_A ) as $row ) {
+			$out[ $row['option_name'] ] = $row;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Put the rows a snapshot saw back byte for byte, and remove the ones the
+ * call created (a status row recorded for a key that was never accepted).
+ *
+ * @param string[] $likes The patterns the snapshot was taken with.
+ * @param array    $snap  minn_admin_license_rows() before the call.
+ */
+function minn_admin_license_rows_restore( array $likes, array $snap ) {
+	global $wpdb;
+	$now = minn_admin_license_rows( $likes );
+	foreach ( $now as $name => $row ) {
+		if ( ! isset( $snap[ $name ] ) ) {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) );
+		} elseif ( $row['option_value'] !== $snap[ $name ]['option_value'] || $row['autoload'] !== $snap[ $name ]['autoload'] ) {
+			$wpdb->update( $wpdb->options, array( 'option_value' => $snap[ $name ]['option_value'], 'autoload' => $snap[ $name ]['autoload'] ), array( 'option_name' => $name ) );
+		}
+	}
+	foreach ( $snap as $name => $row ) {
+		if ( ! isset( $now[ $name ] ) ) {
+			$wpdb->insert( $wpdb->options, $row );
+		}
+	}
+	foreach ( array_keys( $now + $snap ) as $name ) {
+		wp_cache_delete( $name, 'options' );
+	}
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'notoptions', 'options' );
+}
+
+/**
  * Whether a Bricks licence status is one Bricks itself runs on: its own
  * License::license_is_valid() also accepts a processed order, a cancelled
  * (not refunded) subscription and a payment past due.
@@ -3456,11 +3503,25 @@ function minn_admin_license_default_providers() {
 				if ( $resource ) {
 					$resource->set_license_key( $secret, 'local' );
 				}
-				$out = $tec_classify( $checker->validate_key( (string) $secret ) );
-				if ( ! $out['ok'] && $resource ) {
-					// Roll the seeded resource key back; the PUE option was
-					// never written (validate_key stores only on success).
-					$resource->set_license_key( (string) $prev, 'local' );
+				// validate_key() stores the key only when it is accepted, but it
+				// records the answer as this product's status (and in the
+				// any-licence-valid transient) whatever it was: a typo or an
+				// outage marked a working key invalid for twelve hours.
+				global $wpdb;
+				$rows = array(
+					$wpdb->esc_like( (string) $checker->pue_key_status_option_name ) . '%',
+					'_transient_' . $wpdb->esc_like( (string) $checker->pue_key_status_transient_name ),
+					'_transient_timeout_' . $wpdb->esc_like( (string) $checker->pue_key_status_transient_name ),
+					'_transient%' . $wpdb->esc_like( 'TEC_IS_ANY_LICENSE_VALID_TRANSIENT' ),
+				);
+				$snap = minn_admin_license_rows( $rows );
+				$out  = $tec_classify( $checker->validate_key( (string) $secret ) );
+				if ( ! $out['ok'] ) {
+					// Roll the seeded resource key back, and the status rows.
+					if ( $resource ) {
+						$resource->set_license_key( (string) $prev, 'local' );
+					}
+					minn_admin_license_rows_restore( $rows, $snap );
 				}
 				return $out;
 			};
@@ -3517,36 +3578,46 @@ function minn_admin_license_default_providers() {
 	// Deactivate mirrors their own Clear button (the option goes away; a key
 	// baked into the plugin build remains as the fallback).
 	if ( defined( 'KBP_VERSION' ) && function_exists( '\KadenceWP\KadenceBlocks\StellarWP\Uplink\validate_license' ) ) {
-		$kbp_snapshot = function () {
-			global $wpdb;
+		// The status rows by pattern: a first failure CREATES one, which the
+		// restore removes. Where Uplink network licensing is on, the key
+		// lives in the network's options instead.
+		global $wpdb;
+		$kbp_rows     = array( $wpdb->esc_like( 'stellarwp_uplink_license_key_status_kadence-blocks-pro_' ) . '%' );
+		$kbp_snapshot = function () use ( $kbp_rows ) {
 			return array(
-				'key'    => get_option( 'stellarwp_uplink_license_key_kadence-blocks-pro' ),
-				'status' => $wpdb->get_results( $wpdb->prepare(
-					"SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s",
-					$wpdb->esc_like( 'stellarwp_uplink_license_key_status_kadence-blocks-pro_' ) . '%'
-				), ARRAY_A ),
+				'key'     => get_option( 'stellarwp_uplink_license_key_kadence-blocks-pro' ),
+				'network' => is_multisite() ? get_network_option( null, 'stellarwp_uplink_license_key_kadence-blocks-pro' ) : false,
+				'status'  => minn_admin_license_rows( $kbp_rows ),
 			);
 		};
-		$kbp_restore  = function ( $snap ) {
+		$kbp_restore  = function ( $snap ) use ( $kbp_rows ) {
 			if ( false === $snap['key'] ) {
 				delete_option( 'stellarwp_uplink_license_key_kadence-blocks-pro' );
 			} else {
 				update_option( 'stellarwp_uplink_license_key_kadence-blocks-pro', $snap['key'] );
 			}
-			foreach ( (array) $snap['status'] as $row ) {
-				update_option( $row['option_name'], $row['option_value'] );
+			if ( is_multisite() ) {
+				if ( false === $snap['network'] ) {
+					delete_network_option( null, 'stellarwp_uplink_license_key_kadence-blocks-pro' );
+				} else {
+					update_network_option( null, 'stellarwp_uplink_license_key_kadence-blocks-pro', $snap['network'] );
+				}
 			}
+			minn_admin_license_rows_restore( $kbp_rows, $snap['status'] );
 		};
 		$kbp_classify = function ( $res ) {
 			if ( ! $res ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The Kadence licensing service did not answer.', 'minn-admin' ) );
 			}
-			if ( $res->is_valid() ) {
+			$result = (string) $res->get_result();
+			// Uplink's answer starts out valid and an unreachable service never
+			// clears it, so a paste during an outage read as accepted and the
+			// unchecked key stayed.
+			if ( 'unreachable' !== $result && $res->is_valid() ) {
 				return array( 'ok' => true, 'code' => '', 'message' => '' );
 			}
-			$result = (string) $res->get_result();
-			$code   = 'expired' === $result ? 'expired' : ( 'unreachable' === $result ? 'error' : 'invalid' );
-			return array( 'ok' => false, 'code' => $code, 'message' => __( 'unreachable', 'minn-admin' ) === $result ? 'The Kadence licensing service is unreachable.' : 'The key was not accepted (' . $result . ').' );
+			$code = 'expired' === $result ? 'expired' : ( 'unreachable' === $result ? 'error' : 'invalid' );
+			return array( 'ok' => false, 'code' => $code, 'message' => 'unreachable' === $result ? __( 'The Kadence licensing service is unreachable.', 'minn-admin' ) : 'The key was not accepted (' . $result . ').' );
 		};
 		$providers['kadence-blocks-pro']['secret_label'] = __( 'Kadence license key', 'minn-admin' );
 		$providers['kadence-blocks-pro']['activate']     = function ( $secret ) use ( $kbp_snapshot, $kbp_restore, $kbp_classify ) {

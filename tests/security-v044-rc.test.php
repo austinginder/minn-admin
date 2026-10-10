@@ -913,6 +913,76 @@ if ( ! class_exists( '\DeliciousBrains\WPMDB\Pro\License' ) || defined( 'WPMDB_L
 	delete_site_transient( 'wpmdb_licence_response' );
 }
 
+// --- 03-03 TEC and Kadence: a refused paste leaves the licence status as it was ---
+// TEC's validate_key() records every answer as the product's status, so a
+// typo or an outage marked a working key invalid for twelve hours (only the
+// Uplink key was rolled back). Kadence's restore put back the status rows it
+// had seen but left the ones a first failure created. Every licence server is
+// offline for this section; the real rows are snapshot and put back exactly.
+global $wpdb;
+$ls_rows = function ( $like ) use ( $wpdb ) {
+	$out = array();
+	foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value, autoload FROM {$wpdb->options} WHERE option_name LIKE %s", $like ), ARRAY_A ) as $r ) {
+		$out[ $r['option_name'] ] = $r;
+	}
+	return $out;
+};
+$ls_put = function ( $like, $snap ) use ( $wpdb, $ls_rows ) {
+	foreach ( array_keys( $ls_rows( $like ) ) as $name ) {
+		$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) );
+	}
+	foreach ( $snap as $row ) {
+		$wpdb->insert( $wpdb->options, $row );
+	}
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'notoptions', 'options' );
+	foreach ( array_keys( $snap ) as $name ) {
+		wp_cache_delete( $name, 'options' );
+	}
+};
+$ls_off = function ( $pre, $args, $url ) {
+	$host = (string) wp_parse_url( $url, PHP_URL_HOST );
+	return ( '' === $host || false !== strpos( $host, 'localhost' ) ) ? $pre : new WP_Error( 'minn_test_offline', 'offline' );
+};
+$ls_vals = function ( $rows ) {
+	return wp_list_pluck( $rows, 'option_value' );
+};
+// Every key and status row either product keeps, held for the whole section:
+// an activate that wrongly reports success leaves the pasted key behind.
+$ls_all  = array( $wpdb->esc_like( 'stellarwp_uplink_license_key_' ) . '%', $wpdb->esc_like( 'pue_' ) . '%' );
+$ls_held = array();
+foreach ( $ls_all as $ls_l ) {
+	$ls_held[ $ls_l ] = $ls_rows( $ls_l );
+}
+add_filter( 'pre_http_request', $ls_off, PHP_INT_MAX, 3 );
+foreach ( array(
+	'tec-event-tickets-plus' => array( 'TEC Event Tickets Plus', $wpdb->esc_like( 'pue_key_status_event-tickets-plus_' ) . '%', class_exists( 'Tribe__PUE__Checker' ) && class_exists( 'Tribe__Tickets_Plus__Main' ), $wpdb->esc_like( 'stellarwp_uplink_license_key_event-tickets-plus' ) ),
+	'kadence-blocks-pro'     => array( 'Kadence Blocks Pro', $wpdb->esc_like( 'stellarwp_uplink_license_key_status_kadence-blocks-pro_' ) . '%', defined( 'KBP_VERSION' ), $wpdb->esc_like( 'stellarwp_uplink_license_key_kadence-blocks-pro' ) ),
+) as $ls_pid => $ls_def ) {
+	list( $ls_name, $ls_like, $ls_on, $ls_key ) = $ls_def;
+	if ( ! $ls_on ) {
+		$skip( "03-03 {$ls_name} inactive" );
+		continue;
+	}
+	$ls_snap = $ls_rows( $ls_like );
+	$ls_ksnap = $ls_vals( $ls_rows( $ls_key ) );
+	// A working key whose status is recorded.
+	if ( $ls_snap ) {
+		list( , $ls_body ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => $ls_pid, 'action' => 'activate', 'secret' => 'minntestlicensetypo' ) );
+		$check( "03-03 {$ls_name}: a refused paste leaves the recorded status as it was", empty( $ls_body['ok'] ) && $ls_vals( $ls_snap ) === $ls_vals( $ls_rows( $ls_like ) ), wp_json_encode( array_values( $ls_vals( $ls_rows( $ls_like ) ) ) ) );
+		$check( "03-03 {$ls_name}: ...and the stored key", $ls_ksnap === $ls_vals( $ls_rows( $ls_key ) ), $ls_ksnap === $ls_vals( $ls_rows( $ls_key ) ) ? 'kept' : 'changed' );
+	}
+	// A key with no status recorded yet: a refused paste records none.
+	$ls_put( $ls_like, array() );
+	list( , $ls_body ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => $ls_pid, 'action' => 'activate', 'secret' => 'minntestlicensetypo' ) );
+	$check( "03-03 {$ls_name}: a refused paste records no status where there was none", empty( $ls_body['ok'] ) && array() === $ls_rows( $ls_like ), wp_json_encode( array_keys( $ls_rows( $ls_like ) ) ) );
+	$ls_put( $ls_like, $ls_snap );
+}
+remove_filter( 'pre_http_request', $ls_off, PHP_INT_MAX );
+foreach ( $ls_held as $ls_l => $ls_rows_was ) {
+	$ls_put( $ls_l, $ls_rows_was );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it
