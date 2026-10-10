@@ -54,6 +54,16 @@ function minn_admin_gravity_smtp_active() {
 }
 
 /**
+ * Who may send a test email: Gravity SMTP's own Send a Test capability (its
+ * endpoint's) and a settings editor's, since the mail goes to any address.
+ *
+ * @return bool
+ */
+function minn_admin_gsmtp_can_send_test() {
+	return current_user_can( minn_admin_gsmtp_cap( 'VIEW_TOOLS_SENDATEST' ) ) && current_user_can( minn_admin_gsmtp_cap( 'EDIT_GENERAL_SETTINGS' ) );
+}
+
+/**
  * A Gravity SMTP capability by Roles constant name, falling back to
  * manage_options when their Roles class isn't loadable.
  */
@@ -1105,7 +1115,7 @@ add_action( 'rest_api_init', function () {
 				$out['chart'] = $chart;
 			}
 			$out['actions'] = array();
-			if ( current_user_can( minn_admin_gsmtp_cap( 'VIEW_TOOLS_SENDATEST' ) ) ) {
+			if ( minn_admin_gsmtp_can_send_test() ) {
 				$out['actions'][] = array(
 					'label'  => __( 'Send a test email', 'minn-admin' ),
 					'route'  => 'minn-admin/v1/gravity-smtp/send-test',
@@ -1190,10 +1200,11 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/send-test', array(
 		'methods'             => 'POST',
-		// Sending real mail to a caller-chosen address is a WRITE. A VIEW_*
-		// capability gating it let a read-only operator drive unlimited
-		// authenticated mail out of the site's ESP.
-		'permission_callback' => $can( 'EDIT_GENERAL_SETTINGS' ),
+		// Sending real mail to a caller-chosen address is a WRITE, so it takes
+		// a settings editor (a VIEW_* capability alone let a read-only
+		// operator drive authenticated mail out of the site's ESP), on top of
+		// Gravity SMTP's own Send a Test capability, which its endpoint asks.
+		'permission_callback' => 'minn_admin_gsmtp_can_send_test',
 		'callback'            => function ( WP_REST_Request $request ) {
 			$body  = $request->get_json_params();
 			$email = sanitize_email( (string) ( isset( $body['email'] ) ? $body['email'] : '' ) );

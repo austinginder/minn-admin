@@ -531,6 +531,30 @@ if ( function_exists( 'minn_admin_wpforms_form_data' ) && function_exists( 'wpfo
 	$skip( '04-01 WPForms inactive' );
 }
 
+// --- 04-02 Gravity SMTP: Send a test email takes Gravity SMTP's own capability too ---
+// Their endpoint asks for VIEW_TOOLS_SENDATEST; Minn asked only for
+// EDIT_GENERAL_SETTINGS. Asked of the route's permission callback directly, so
+// no test mail goes out.
+if ( ! function_exists( 'minn_admin_gsmtp_cap' ) || ! class_exists( 'Gravity_Forms\Gravity_SMTP\Users\Roles' ) ) {
+	$skip( '04-02 Gravity SMTP inactive' );
+} else {
+	$gs_routes = rest_get_server()->get_routes();
+	$gs_perm   = $gs_routes['/minn-admin/v1/gravity-smtp/send-test'][0]['permission_callback'] ?? null;
+	add_role( 'minn_gsmtp_test', 'Minn GSMTP test', array( 'read' => true, minn_admin_gsmtp_cap( 'EDIT_GENERAL_SETTINGS' ) => true, minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG' ) => true ) );
+	$gs_login = 'minn-gsmtp-' . wp_generate_password( 6, false, false );
+	$gs_user  = wp_insert_user( array( 'user_login' => $gs_login, 'user_email' => $gs_login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'minn_gsmtp_test' ) );
+	wp_set_current_user( $gs_user );
+	$check( '04-02 Gravity SMTP: a settings editor without Send a Test cannot send one', is_callable( $gs_perm ) && ! call_user_func( $gs_perm, new WP_REST_Request( 'POST', '/minn-admin/v1/gravity-smtp/send-test' ) ), '' );
+	get_user_by( 'id', $gs_user )->add_cap( minn_admin_gsmtp_cap( 'VIEW_TOOLS_SENDATEST' ) );
+	wp_set_current_user( 0 );
+	wp_set_current_user( $gs_user );
+	$check( '04-02 control: with both capabilities the test is allowed', is_callable( $gs_perm ) && call_user_func( $gs_perm, new WP_REST_Request( 'POST', '/minn-admin/v1/gravity-smtp/send-test' ) ), '' );
+	wp_set_current_user( $admin );
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	wp_delete_user( $gs_user );
+	remove_role( 'minn_gsmtp_test' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it
