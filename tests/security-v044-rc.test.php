@@ -346,6 +346,48 @@ if ( ! class_exists( 'WooCommerce' ) ) {
 	remove_role( 'minn_vendor_test' );
 }
 
+// --- 01-03 A shop manager's order email goes From their own address ---
+// A free subject and body is not WooCommerce's customer note (a fixed subject
+// from the store's sender), so it follows the rule every other Minn composer
+// does: administrators send as the site, anyone else as themselves.
+if ( ! function_exists( 'wc_create_order' ) || ! get_role( 'shop_manager' ) ) {
+	$skip( '01-03 WooCommerce inactive' );
+} else {
+	$om_login = 'minn-shopmgr-' . wp_generate_password( 6, false, false );
+	$om_user  = wp_insert_user( array( 'user_login' => $om_login, 'user_email' => $om_login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'shop_manager' ) );
+	$om_order = wc_create_order();
+	$om_order->set_billing_email( 'minn-order-customer@example.com' );
+	$om_order->set_billing_first_name( 'Minn' );
+	$om_order->save();
+	$om_mail  = array();
+	$om_trap  = function ( $return, $atts ) use ( &$om_mail ) {
+		$om_mail[] = $atts;
+		return true;
+	};
+	add_filter( 'pre_wp_mail', $om_trap, PHP_INT_MAX, 2 );
+	$om_from = function () use ( &$om_mail ) {
+		$last = end( $om_mail );
+		foreach ( (array) ( $last['headers'] ?? array() ) as $h ) {
+			if ( 0 === stripos( $h, 'From:' ) ) {
+				return trim( substr( $h, 5 ) );
+			}
+		}
+		return '';
+	};
+	wp_set_current_user( $om_user );
+	list( $om_st ) = $call( 'POST', '/minn-admin/v1/orders/' . $om_order->get_id() . '/email', array( 'subject' => 'Minn test', 'message' => 'Hello' ) );
+	$om_f = $om_from();
+	$check( '01-03 order email: a shop manager sends From their own address', 200 === $om_st && false !== strpos( $om_f, $om_login . '@example.com' ) && false === strpos( $om_f, (string) get_option( 'admin_email' ) ), $om_st . ' ' . $om_f );
+	wp_set_current_user( $admin );
+	list( $om_st ) = $call( 'POST', '/minn-admin/v1/orders/' . $om_order->get_id() . '/email', array( 'subject' => 'Minn test', 'message' => 'Hello' ) );
+	$om_f = $om_from();
+	$check( '01-03 control: an administrator still sends as the site', 200 === $om_st && false !== strpos( $om_f, (string) get_option( 'admin_email' ) ), $om_st . ' ' . $om_f );
+	remove_filter( 'pre_wp_mail', $om_trap, PHP_INT_MAX );
+	$om_order->delete( true );
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	wp_delete_user( $om_user );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

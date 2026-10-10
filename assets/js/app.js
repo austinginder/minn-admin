@@ -46472,7 +46472,7 @@
 						<div>
 							<div class="minn-field-label">${ esc( __( 'Message' ) ) }</div>
 							<textarea class="minn-input minn-insp-textarea" id="minn-oe-message" rows="9" placeholder="${ esc( __( 'Write your message…' ) ) }">${ esc( m.message || '' ) }</textarea>
-							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Styled Minn Admin HTML email to the order billing address. Blank lines become paragraphs. A button links to pay or view the order.' ) ) }</div>
+							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( B.caps.settings ? __( 'Styled Minn Admin HTML email to the order billing address. Blank lines become paragraphs. A button links to pay or view the order.' ) : __( 'Styled Minn Admin HTML email from your own address to the order billing address. Blank lines become paragraphs. A button links to pay or view the order.' ) ) }</div>
 						</div>
 					</div>
 					<div class="minn-modal-actions">

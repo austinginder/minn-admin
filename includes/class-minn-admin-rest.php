@@ -7166,7 +7166,15 @@ Please click the following link to confirm the invite:
 		$cta_url   = $order->needs_payment() ? $order->get_checkout_payment_url() : $order->get_view_order_url();
 		$cta_label = $order->needs_payment() ? 'Pay for order #' . $order->get_order_number() : 'View order #' . $order->get_order_number();
 		$html      = self::minn_email_html( $subject, $message, $who, $cta_url, $cta_label );
-		$sent      = self::minn_send_html_mail( $to, $subject, $html );
+		// A free subject and body are not WooCommerce's customer note (a
+		// fixed subject from the store's sender), so order staff below an
+		// administrator write From their own address, as every other Minn
+		// composer has them do.
+		$sender = self::delegated_sender();
+		if ( is_wp_error( $sender ) ) {
+			return $sender;
+		}
+		$sent = self::minn_send_html_mail( $to, $subject, $html, $sender );
 		if ( is_wp_error( $sent ) ) {
 			return $sent;
 		}
