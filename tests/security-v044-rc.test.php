@@ -616,6 +616,33 @@ if ( ! class_exists( '\FluentForm\App\Services\Submission\SubmissionService' ) |
 	$wpdb->delete( $fs_table, array( 'id' => $fs_id ) );
 }
 
+// --- 05-03 SureForms: a permanent delete runs SureForms' own delete hook ---
+// Minn deleted the row with raw SQL, so srfm_before_delete_entry (add-ons'
+// per-entry cleanup, uploaded files among them) never fired. Needs SureForms
+// loaded: MINN_SWAP_ADD=sureforms/sureforms.php --require=tests/lib/plugin-swap.php
+if ( ! function_exists( 'minn_admin_sureforms_table' ) || ! defined( 'SRFM_VER' ) ) {
+	$skip( '05-03 SureForms inactive (swap it in)' );
+} else {
+	global $wpdb;
+	$sf_table = minn_admin_sureforms_table();
+	$sf_form  = (int) ( get_posts( array( 'post_type' => 'sureforms_form', 'numberposts' => 1, 'fields' => 'ids', 'post_status' => 'any' ) )[0] ?? 0 );
+	$wpdb->insert( $sf_table, array( 'form_id' => $sf_form, 'user_id' => 0, 'form_data' => wp_json_encode( array( 'srfm-email' => 'minn@example.com' ) ), 'status' => 'read', 'type' => '', 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+	$sf_id    = (int) $wpdb->insert_id;
+	$sf_fired = array();
+	$sf_hook  = function ( $id ) use ( &$sf_fired ) {
+		$sf_fired[] = (int) $id;
+	};
+	add_action( 'srfm_before_delete_entry', $sf_hook );
+	list( $sf_st ) = $call( 'DELETE', "/minn-admin/v1/sureforms/entries/{$sf_id}" );
+	remove_action( 'srfm_before_delete_entry', $sf_hook );
+	$sf_left = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$sf_table} WHERE ID = %d", $sf_id ) );
+	$check( '05-03 SureForms: a permanent delete fires srfm_before_delete_entry for the entry', 200 === $sf_st && array( $sf_id ) === $sf_fired, $sf_st . ' fired ' . wp_json_encode( $sf_fired ) );
+	$check( '05-03 control: the entry is gone', 0 === $sf_left, (string) $sf_left );
+	list( $sf_st ) = $call( 'DELETE', "/minn-admin/v1/sureforms/entries/{$sf_id}" );
+	$check( '05-03 control: deleting it again answers 404', 404 === $sf_st, (string) $sf_st );
+	$wpdb->delete( $sf_table, array( 'ID' => $sf_id ) );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

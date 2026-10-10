@@ -456,8 +456,21 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
 				$table = minn_admin_sureforms_table();
+				$id    = (int) Minn_Admin::path_param( $request );
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE ID = %d", (int) Minn_Admin::path_param( $request ) ) );
+				if ( ! $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM {$table} WHERE ID = %d", $id ) ) ) {
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				// Through their model, as their own delete does: it fires
+				// srfm_before_delete_entry, which add-ons use to remove what
+				// they keep for an entry (uploaded files among them).
+				if ( class_exists( '\SRFM\Inc\Database\Tables\Entries' ) && method_exists( '\SRFM\Inc\Database\Tables\Entries', 'delete' ) ) {
+					$deleted = \SRFM\Inc\Database\Tables\Entries::delete( $id );
+				} else {
+					do_action( 'srfm_before_delete_entry', $id );
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE ID = %d", $id ) );
+				}
 				if ( ! $deleted ) {
 					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
