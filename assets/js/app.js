@@ -32575,12 +32575,24 @@
 			const fam = ( rule.style.getPropertyValue( 'font-family' ) || '' ).trim().replace( /^['"]|['"]$/g, '' ).toLowerCase();
 			return previewGuard.fams.has( fam );
 		}
-		if ( window.CSSKeyframesRule && rule instanceof CSSKeyframesRule ) {
+		if ( CSS_RULE_TYPES.keyframes && rule instanceof CSS_RULE_TYPES.keyframes ) {
 			return /^minn/i.test( rule.name || '' );
 		}
 		const name = rule.name || '';
 		return /^--minn/i.test( name ) || previewGuard.props.has( name );
 	}
+
+	// The CSS rule interfaces scopeCssToPreviews() feature-detects, read once
+	// while this script loads, before any post content is in the page. A
+	// browser that lacks one leaves its name to named access, so a content
+	// element with that id would stand in for it and the instanceof throw.
+	const CSS_RULE_TYPES = {
+		nested: window.CSSNestedDeclarations,
+		layerBlock: window.CSSLayerBlockRule,
+		layerStatement: window.CSSLayerStatementRule,
+		keyframes: window.CSSKeyframesRule,
+		property: window.CSSPropertyRule,
+	};
 
 	function scopeCssToPreviews( cssText, scope ) {
 		let sheet;
@@ -32712,23 +32724,23 @@
 					const own = parent ? resolveNested( rule.selectorText, parent ) : rule.selectorText;
 					out += emit( own, rule.style.cssText );
 					if ( rule.cssRules && rule.cssRules.length ) out += walk( rule.cssRules, own );
-				} else if ( window.CSSNestedDeclarations && rule instanceof CSSNestedDeclarations ) {
+				} else if ( CSS_RULE_TYPES.nested && rule instanceof CSS_RULE_TYPES.nested ) {
 					if ( parent ) out += emit( parent, rule.style.cssText );
 				} else if ( rule instanceof CSSMediaRule ) {
 					out += '@media ' + rule.conditionText + ' {\n' + walk( rule.cssRules, parent ) + '}\n';
 				} else if ( rule instanceof CSSSupportsRule ) {
 					out += '@supports ' + rule.conditionText + ' {\n' + walk( rule.cssRules, parent ) + '}\n';
-				} else if ( window.CSSLayerBlockRule && rule instanceof CSSLayerBlockRule ) {
+				} else if ( CSS_RULE_TYPES.layerBlock && rule instanceof CSS_RULE_TYPES.layerBlock ) {
 					// Compiled Tailwind (atomic-wind et al) wraps everything in
 					// @layer — unwrap and scope the contents. Losing the layer
 					// raises specificity, which is what a preview wants anyway.
 					out += walk( rule.cssRules, parent );
-				} else if ( window.CSSLayerStatementRule && rule instanceof CSSLayerStatementRule ) {
+				} else if ( CSS_RULE_TYPES.layerStatement && rule instanceof CSS_RULE_TYPES.layerStatement ) {
 					// @layer ordering statement — nothing to scope.
 				} else if (
 					rule instanceof CSSFontFaceRule
-					|| ( window.CSSKeyframesRule && rule instanceof CSSKeyframesRule )
-					|| ( window.CSSPropertyRule && rule instanceof CSSPropertyRule )
+					|| ( CSS_RULE_TYPES.keyframes && rule instanceof CSS_RULE_TYPES.keyframes )
+					|| ( CSS_RULE_TYPES.property && rule instanceof CSS_RULE_TYPES.property )
 				) {
 					// Resource definitions, not element styles, so they pass
 					// through unscoped. They are global, though: preview CSS can
@@ -38043,8 +38055,11 @@
 					toast( __( 'Only images can be dropped into the editor' ), true );
 					return;
 				}
-				if ( document.caretRangeFromPoint ) {
-					const r = document.caretRangeFromPoint( e.clientX, e.clientY );
+				// From the prototype: Firefox has no caretRangeFromPoint, so a
+				// content element by that id would answer document's lookup.
+				const caretAt = Document.prototype.caretRangeFromPoint;
+				if ( caretAt ) {
+					const r = caretAt.call( document, e.clientX, e.clientY );
 					if ( r ) {
 						const s = window.getSelection();
 						s.removeAllRanges();
