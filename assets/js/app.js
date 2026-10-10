@@ -50662,7 +50662,8 @@
 		// sites stack 10+ roles and a bare select doesn't type-to-filter.
 		const roleAc = $( '#minn-uf-role-ac' );
 		if ( roleAc ) {
-			const current = userRoleSeed( m.user );
+			// A new user starts on Subscriber, as core's Add User does.
+			const current = m.userId ? userRoleSeed( m.user ) : 'subscriber';
 			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: chromeLabel( l ) } ) ), {
 				strict: true,
 				value: current,
@@ -50951,9 +50952,11 @@
 
 	// The role a user form's picker opens on. A save sends roles only when the
 	// pick differs from it, so a user with no role here (or several) keeps
-	// that on a save that only changed a name or an email.
+	// that on a save that only changed a name or an email. Such a user opens
+	// on an empty picker, so any role picked for them, Subscriber included,
+	// is a change and is sent.
 	function userRoleSeed( user ) {
-		return user && user.roles && user.roles[ 0 ] ? user.roles[ 0 ] : 'subscriber';
+		return user && Array.isArray( user.roles ) && 1 === user.roles.length ? user.roles[ 0 ] : '';
 	}
 
 	function bindUserEdit( ue, view ) {

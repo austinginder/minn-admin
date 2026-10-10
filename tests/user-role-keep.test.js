@@ -6,6 +6,9 @@
  * had no role on this site made them a Subscriber, and a user with two roles
  * lost the second. Roles now go only when the picked one changed.
  *
+ * A user with no role, or several, opens on an empty picker, so picking any
+ * role for them (Subscriber, or the first of their roles) is a change.
+ *
  * Fixtures: two users made through WP-CLI, removed after.
  */
 const fs = require( 'fs' );
@@ -50,6 +53,30 @@ const roles = ( id ) => JSON.parse( wpEval( `$u = get_userdata( ${ id } ); echo 
 			t.check( `...sends no roles`, ! ( 'roles' in sent ), JSON.stringify( sent.roles ) );
 			t.check( `...and keeps ${ what }`, JSON.stringify( roles( id ) ) === JSON.stringify( want ), JSON.stringify( roles( id ) ) );
 		}
+
+		// A user with no role, or several, opens on an empty picker, so any
+		// role picked for them is sent: Subscriber for the role-less one, and
+		// the first of the two for the other.
+		const pick = async ( id, label ) => {
+			await page.goto( `${ BASE }/minn-admin/users/${ id }`, { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '#minn-ue-role', { timeout: 15000 } );
+			const shown = await page.$eval( '#minn-ue-role', ( e ) => [ e.value, e.dataset.acValue ] );
+			await page.click( '#minn-ue-role' );
+			await page.fill( '#minn-ue-role', label );
+			await page.waitForSelector( '#minn-ue-role-ac .minn-ac-item', { timeout: 8000 } );
+			await page.click( `#minn-ue-role-ac .minn-ac-item:has-text("${ label }")` );
+			const done = page.waitForResponse( ( r ) => r.request().method() === 'POST' && new RegExp( `wp/v2/users/${ id }(\\?|$)` ).test( r.url() ), { timeout: 20000 } );
+			await page.click( '[data-ue-save]' );
+			await done;
+			return shown;
+		};
+		const noneShown = await pick( none, 'Subscriber' );
+		t.check( 'a user with no role opens on an empty picker', '' === noneShown[ 1 ], JSON.stringify( noneShown ) );
+		t.check( '...and picking Subscriber gives them Subscriber', JSON.stringify( roles( none ) ) === '["subscriber"]', JSON.stringify( roles( none ) ) );
+		const twoShown = await pick( two, 'Author' );
+		t.check( 'a user with two roles opens on an empty picker', '' === twoShown[ 1 ], JSON.stringify( twoShown ) );
+		t.check( '...and picking the first of them leaves just that one', JSON.stringify( roles( two ) ) === '["author"]', JSON.stringify( roles( two ) ) );
+		wpEval( `( new WP_User( ${ two } ) )->add_role( 'contributor' );` );
 
 		// Control: picking another role still saves it.
 		await page.goto( `${ BASE }/minn-admin/users/${ two }`, { waitUntil: 'domcontentloaded' } );
