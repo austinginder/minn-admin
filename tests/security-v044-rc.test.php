@@ -1028,6 +1028,29 @@ if ( ! class_exists( '\Etch\WpAdmin\License' ) ) {
 	wp_cache_delete( 'notoptions', 'options' );
 }
 
+// --- 04-03 WPForms: calculated answers and the answers they read are left to WPForms ---
+// WPForms' own entry edit re-runs a Calculations formula; Minn's does not, so
+// a calculated field was offered as a plain input and an edit to one it reads
+// left the total stale. Asked of the field mapper directly with a form shaped
+// like the add-on's (it is not installed here).
+if ( ! function_exists( 'minn_admin_wpforms_edit_kind' ) || ! function_exists( 'wpforms' ) ) {
+	$skip( '04-03 WPForms inactive' );
+} else {
+	$wc_form = array(
+		3 => array( 'id' => 3, 'type' => 'number', 'label' => 'Qty' ),
+		4 => array( 'id' => 4, 'type' => 'number', 'label' => 'Price' ),
+		5 => array( 'id' => 5, 'type' => 'number', 'label' => 'Total', 'calculation_is_enabled' => '1', 'calculation_code' => '$F3 * $F4', 'calculation_code_php' => '$F3 * $F4' ),
+		34 => array( 'id' => 34, 'type' => 'text', 'label' => 'Note' ),
+	);
+	$wc_kinds = array();
+	foreach ( $wc_form as $wc_id => $wc_f ) {
+		$wc_kinds[ $wc_id ] = minn_admin_wpforms_edit_kind( $wc_f, $wc_form );
+	}
+	$check( '04-03 WPForms: a calculated field is not offered for editing', '' === $wc_kinds[5], wp_json_encode( $wc_kinds ) );
+	$check( '04-03 WPForms: nor are the fields its formula reads', '' === $wc_kinds[3] && '' === $wc_kinds[4], wp_json_encode( $wc_kinds ) );
+	$check( '04-03 control: a field no formula reads ($F34 is not $F3) is still offered', 'text' === $wc_kinds[34], wp_json_encode( $wc_kinds ) );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

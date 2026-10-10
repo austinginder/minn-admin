@@ -76,11 +76,29 @@ function minn_admin_wpforms_edit_parts( $field ) {
 	return $parts;
 }
 
-/** The page's control for a WPForms field, or '' to leave it to them. */
-function minn_admin_wpforms_edit_kind( $field ) {
+/**
+ * The page's control for a WPForms field, or '' to leave it to them.
+ *
+ * A calculated field (the Calculations add-on) and every field its formula
+ * reads ($F3, $F3_first) are left to WPForms too: its own entry edit re-runs
+ * the formulas, which this page does not, so an edit here overwrote a total
+ * or left it stale in the entry, its exports and resent notifications. The
+ * Gravity Forms side recomputes; this one stays out instead.
+ *
+ * @param array $field       The field.
+ * @param array $form_fields Every field on the form.
+ */
+function minn_admin_wpforms_edit_kind( $field, $form_fields = array() ) {
 	$type = (string) ( $field['type'] ?? '' );
-	if ( ! in_array( $type, wpforms()->obj( 'entry' )->get_editable_field_types(), true ) || ! empty( $field['dynamic_choices'] ) ) {
+	if ( ! in_array( $type, wpforms()->obj( 'entry' )->get_editable_field_types(), true ) || ! empty( $field['dynamic_choices'] ) || ! empty( $field['calculation_is_enabled'] ) ) {
 		return '';
+	}
+	$ref = '/\$F' . preg_quote( (string) ( $field['id'] ?? '' ), '/' ) . '(?![0-9])/';
+	foreach ( (array) $form_fields as $other ) {
+		if ( is_array( $other ) && ! empty( $other['calculation_is_enabled'] )
+			&& preg_match( $ref, (string) ( $other['calculation_code'] ?? '' ) . ' ' . (string) ( $other['calculation_code_php'] ?? '' ) ) ) {
+			return '';
+		}
 	}
 	switch ( $type ) {
 		case 'text':
@@ -140,7 +158,7 @@ function minn_admin_wpforms_edit_block( $row ) {
 		$label = wp_strip_all_tags( (string) ( $field['label'] ?? '' ) );
 		$label = '' !== $label ? $label : sprintf( 'Field %s', $fid );
 		$have  = isset( $stored[ $fid ] ) && is_array( $stored[ $fid ] ) ? $stored[ $fid ] : array();
-		$kind  = minn_admin_wpforms_edit_kind( $field );
+		$kind  = minn_admin_wpforms_edit_kind( $field, (array) ( $form_data['fields'] ?? array() ) );
 		if ( '' === $kind ) {
 			if ( '' !== trim( (string) ( $have['value'] ?? '' ) ) ) {
 				$locked[] = $label;
