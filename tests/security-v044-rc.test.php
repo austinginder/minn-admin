@@ -325,6 +325,27 @@ if ( ! $cb_post ) {
 	}
 }
 
+// --- 01-02 The Overview's store counts take the same cap as their cards ---
+// A marketplace-vendor shape (edit_shop_orders on their own orders, not
+// edit_others_shop_orders) read the store-wide awaiting-payment, on-hold,
+// to-fulfil and failed counts on every Overview load.
+if ( ! class_exists( 'WooCommerce' ) ) {
+	$skip( '01-02 WooCommerce inactive' );
+} else {
+	add_role( 'minn_vendor_test', 'Minn vendor test', array( 'read' => true, 'edit_posts' => true, 'edit_shop_orders' => true, 'read_shop_order' => true ) );
+	$ov_login = 'minn-vendor-' . wp_generate_password( 6, false, false );
+	$ov_id    = wp_insert_user( array( 'user_login' => $ov_login, 'user_email' => $ov_login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'minn_vendor_test' ) );
+	wp_set_current_user( $ov_id );
+	list( $ov_st, $ov_body ) = $call( 'GET', '/minn-admin/v1/overview' );
+	$check( '01-02 overview: an own-orders account gets no store-wide order counts', 200 === $ov_st && null === ( $ov_body['store'] ?? null ), $ov_st . ' ' . wp_json_encode( $ov_body['store'] ?? null ) );
+	wp_set_current_user( $admin );
+	list( $ov_st, $ov_body ) = $call( 'GET', '/minn-admin/v1/overview' );
+	$check( '01-02 control: an administrator still gets them', 200 === $ov_st && is_array( $ov_body['store'] ?? null ), $ov_st . ' ' . wp_json_encode( $ov_body['store'] ?? null ) );
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	wp_delete_user( $ov_id );
+	remove_role( 'minn_vendor_test' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

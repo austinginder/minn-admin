@@ -3880,8 +3880,11 @@ class Minn_Admin_REST {
 		// Store needs-attention counts: the day-to-day order buckets a store
 		// owner actually works (awaiting payment, on hold, to fulfill, failed).
 		// wc_orders_count() is HPOS-safe and rides WooCommerce's own cache.
+		// Store-wide numbers, so the same cap as the catalog's cards for them
+		// and WooCommerce's own processing-count bubble: a marketplace vendor
+		// who edits only their own orders does not read the store's volume.
 		$store = null;
-		if ( class_exists( 'WooCommerce' ) && function_exists( 'wc_orders_count' ) && current_user_can( 'edit_shop_orders' ) ) {
+		if ( class_exists( 'WooCommerce' ) && function_exists( 'wc_orders_count' ) && current_user_can( 'edit_others_shop_orders' ) ) {
 			$store = array(
 				'pending'    => (int) wc_orders_count( 'pending' ),
 				'onhold'     => (int) wc_orders_count( 'on-hold' ),
