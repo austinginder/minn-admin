@@ -1169,6 +1169,32 @@ if ( class_exists( 'Minn_Admin_DB' ) ) {
 	$skip( '2b2-02 DB browser not loaded' );
 }
 
+// --- 2bf-02 / 2bf-04 DB browser: Oxygen 6's validity record; unsortable columns said so ---
+// Oxygen 6 is Breakdance's code under the oxygen_ prefix, and its validity
+// record (the full key and the buyer) printed. And a column that can hold a
+// credential refused a sort without a word; the response now marks it.
+if ( class_exists( 'Minn_Admin_DB' ) ) {
+	global $wpdb;
+	$d4_tag = 'mv44d4' . wp_rand( 100000, 999999 );
+	$d4_had = null !== $wpdb->get_var( "SELECT option_id FROM {$wpdb->options} WHERE option_name = 'oxygen_license_key_validity_info'" );
+	if ( ! $d4_had ) {
+		add_option( 'oxygen_license_key_validity_info', array( 'license_key' => $d4_tag . 'oxy', 'customer_email' => 'buyer@example.com' ), '', false );
+		list( , $d4_res ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 50, 'fcol' => 'option_name', 'fq' => 'oxygen_license_key_validity_info' ) );
+		$check( '2bf-02 DB browser: Oxygen 6\'s licence validity record is redacted', false === strpos( (string) wp_json_encode( $d4_res ), $d4_tag ), false === strpos( (string) wp_json_encode( $d4_res ), $d4_tag ) ? 'redacted' : 'RAW' );
+		delete_option( 'oxygen_license_key_validity_info' );
+	} else {
+		$skip( '2bf-02 a real Oxygen 6 record exists; not seeding over it' );
+	}
+	list( , $d4_rows ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->postmeta, 'page' => 1, 'per_page' => 5 ) );
+	$d4_cols = array();
+	foreach ( (array) ( $d4_rows['columns'] ?? array() ) as $d4_c ) {
+		$d4_cols[ $d4_c['name'] ] = $d4_c['sortable'] ?? null;
+	}
+	$check( '2bf-04 DB browser: post meta values are marked unsortable, keys sortable', false === ( $d4_cols['meta_value'] ?? null ) && true === ( $d4_cols['meta_key'] ?? null ), wp_json_encode( $d4_cols ) );
+} else {
+	$skip( '2bf DB browser not loaded' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

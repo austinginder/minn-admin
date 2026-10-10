@@ -161,6 +161,12 @@ const wp = ( args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], {
 	await page.click( '[data-dbtab="rows"]' );
 	await page.waitForSelector( '.minn-db-grid tbody tr[data-dbrow]', { timeout: 20000 } );
 	t.check( 'Rows tab returns to the grid', await page.$( '.minn-db-grid' ) !== null );
+	// A column that can hold a credential is never sorted (the order would
+	// leak it), and its header says so instead of offering a dead click.
+	const heads = await page.$$eval( '.minn-db-grid th', ( ths ) => ths.map( ( th ) => [ th.textContent.trim().split( /\s/ )[ 0 ], th.hasAttribute( 'data-dbcol' ), th.title ] ) );
+	const mv = heads.find( ( h ) => h[ 0 ] === 'meta_value' ) || [];
+	const mk = heads.find( ( h ) => h[ 0 ] === 'meta_key' ) || [];
+	t.check( 'meta_value offers no sort and says why; meta_key still sorts', false === mv[ 1 ] && /credentials/i.test( mv[ 2 ] || '' ) && true === mk[ 1 ], JSON.stringify( heads ) );
 	await page.click( '#minn-db-back' );
 	await page.waitForSelector( '[data-dbtable]', { timeout: 15000 } );
 

@@ -27157,7 +27157,7 @@
 			<div class="minn-db-scroll">
 				<table class="minn-db-grid">
 					<thead><tr>${ d.columns.map( ( c ) => `
-						<th data-dbcol="${ esc( c.name ) }" title="${ esc( c.type ) }">${ esc( c.name ) }${ arrow( c.name ) }${ c.key === 'PRI' ? ` <span class="minn-db-key">${ esc( __( 'PK' ) ) }</span>` : '' }</th>` ).join( '' ) }
+						<th${ false === c.sortable ? '' : ` data-dbcol="${ esc( c.name ) }"` } title="${ esc( false === c.sortable ? c.type + ' · ' + __( 'Can hold credentials, so it cannot be sorted' ) : c.type ) }">${ esc( c.name ) }${ arrow( c.name ) }${ c.key === 'PRI' ? ` <span class="minn-db-key">${ esc( __( 'PK' ) ) }</span>` : '' }</th>` ).join( '' ) }
 					</tr></thead>
 					<tbody>
 						${ d.rows.length ? d.rows.map( ( r, i ) => `

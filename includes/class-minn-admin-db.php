@@ -889,6 +889,12 @@ class Minn_Admin_DB {
 			$rows[] = $cells;
 		}
 
+		// Say which columns cannot be sorted (they can hold a credential), so
+		// the grid does not offer a sort the server will refuse.
+		foreach ( $columns as &$col ) {
+			$col['sortable'] = ! self::is_secret_column( $meta->name, $col['name'] );
+		}
+		unset( $col );
 		return rest_ensure_response(
 			array(
 				'table'      => $meta->name,
