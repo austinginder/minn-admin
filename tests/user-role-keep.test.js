@@ -76,9 +76,10 @@ const roles = ( id ) => JSON.parse( wpEval( `$u = get_userdata( ${ id } ); echo 
 		const twoShown = await pick( two, 'Author' );
 		t.check( 'a user with two roles opens on an empty picker', '' === twoShown[ 1 ], JSON.stringify( twoShown ) );
 		t.check( '...and picking the first of them leaves just that one', JSON.stringify( roles( two ) ) === '["author"]', JSON.stringify( roles( two ) ) );
-		wpEval( `( new WP_User( ${ two } ) )->add_role( 'contributor' );` );
-
-		// Control: picking another role still saves it.
+		// Control: picking another role still saves it, from a user with ONE
+		// role (Author), so the change back below is to the role the page
+		// first loaded.
+		wpEval( `( new WP_User( ${ two } ) )->set_role( 'author' );` );
 		await page.goto( `${ BASE }/minn-admin/users/${ two }`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-ue-role', { timeout: 15000 } );
 		await page.click( '#minn-ue-role' );
