@@ -635,14 +635,15 @@ class Minn_Admin_DB {
 	 * screens mask and Minn's adapters read for presence only. Jetpack's blog
 	 * and per-user tokens (a user token signs REST requests as that user and
 	 * outlives a password change), the WooCommerce.com account link, WP Mail
-	 * SMTP's provider keys and the key that seals its SMTP password, All In
+	 * SMTP's provider keys, the key that seals its SMTP password and the
+	 * one-hour token its logged-out Connect endpoint is checked against, All In
 	 * One Security's captcha secrets (the peer of Wordfence's redacted one),
 	 * Post SMTP's settings and its plaintext OAuth access and refresh tokens,
 	 * Freemius accounts (user, install and licence secret keys), the WPMU DEV
 	 * key (the HMAC secret its Hub's remote commands are verified with) and
 	 * Smush's validation cache, which is keyed by that same key.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
