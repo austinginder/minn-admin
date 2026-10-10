@@ -584,7 +584,12 @@ Run this loop per product.
    `''` (Soflyy). The component key drives Off and Turn on. Add every option the
    reader takes a key or token from to `minn_admin_license_secret_options()`:
    the database browser redacts those rows, so it never prints a key this
-   screen only reports as present.
+   screen only reports as present. A licence server's answer or an update cache
+   the reader reads is redacted too, unless it is plainly status, flags or
+   versions: download links can carry the key. `tests/license-redaction.test.js`
+   traces what each reader reads and fails on a row that is neither redacted
+   nor listed in it with what it holds, and on a copy of a redacted key in any
+   option or meta row (run it with the vendor's key stored).
 4. **Drive the loop through `minn-admin/v1/licenses/action`.** A bad key answers
    a clean `{ok: false, code: invalid|site_limit}` with nothing stored (check the
    options). A real key answers valid with the vendor's expiry. Deactivate frees

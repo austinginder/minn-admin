@@ -1338,6 +1338,17 @@ function minn_admin_license_secret_options() {
 		'perfmatters_edd_license_key', 'PMXE_Plugin_Options', 'PMXI_Plugin_Options', 'rank_math_connect_data', 'revslider-code',
 		'rg_gforms_key', 'sc_api_token', 'searchwp_license', 'seopress_pro_license_key', 'wordpress_api_key',
 		'wp_rocket_settings', 'wpb_js_js_composer_purchase_code', 'wpforms_license', 'wpmdb_settings',
+		// ACPT's activation record (the licence code and account email), under
+		// a hashed name.
+		hash( 'ripemd128', 'acpt_license_active' ),
+		// CleanTalk's dashboard sign-in token, and WooCommerce.com's product
+		// key per subscription.
+		'cleantalk_data', '_transient__woocommerce_helper_subscriptions',
+		// Licence server answers and update data fetched with the key: Gravity
+		// Forms' licence cache (it holds the key), Divi's update answers,
+		// Beaver Builder's subscription answer and WP Rocket's account answer.
+		'_transient_rg_gforms_license', '_site_transient_et_update_themes', '_site_transient_et_update_plugins',
+		'_transient_fl_get_subscription_info', '_transient_wp_rocket_customer_data',
 	);
 	foreach ( minn_admin_license_smash_products() as $sp ) {
 		foreach ( array( 'key_opt', 'settings_opt', 'info_opt' ) as $field ) {
@@ -1356,6 +1367,10 @@ function minn_admin_license_secret_options() {
 			// activation id), for products the list above cannot name.
 			array( '', '_license_key' ),
 			array( '', '_license_options' ),
+			// Gravity Perks' licence answer per version, and Gravity Forms'
+			// remote-call caches (its reader reads one; another holds the key).
+			array( '_site_transient_gwp_license_data_', '' ),
+			array( '_transient_GFCache_', '' ),
 		),
 	);
 }

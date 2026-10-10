@@ -544,11 +544,20 @@ class Minn_Admin_DB {
 	 * its own row, and the row outlives the registration: a deactivated
 	 * provider plugin, or a site that turns AI support off, drops the
 	 * connector from wp_get_connectors() and leaves its key behind.
+	 *
+	 * Premium plugins' update caches carry the licence key in their download
+	 * links, raw or inside a base64 token: Easy Digital Downloads' updater
+	 * (edd_sl_), Plugin Update Checker (external_updates-), StellarWP
+	 * Uplink's update status and Elementor Pro's remote info.
 	 */
 	const SECRET_OPTION_SHAPES = array(
 		array( 'gravitysmtp_', '' ),
 		array( 'connectors_', '_api_key' ),
 		array( 'connectors_', '_application_password' ),
+		array( 'edd_sl_', '' ),
+		array( 'external_updates-', '' ),
+		array( 'stellarwp_uplink_update_status_', '' ),
+		array( 'elementor_pro_remote_info_api_data_', '' ),
 	);
 
 	/**
@@ -655,9 +664,12 @@ class Minn_Admin_DB {
 	 * Post SMTP's settings and its plaintext OAuth access and refresh tokens,
 	 * Freemius accounts (user, install and licence secret keys), the WPMU DEV
 	 * key (the HMAC secret its Hub's remote commands are verified with) and
-	 * Smush's validation cache, which is keyed by that same key.
+	 * Smush's validation cache, which is keyed by that same key. Core's plugin
+	 * and theme update caches hold every premium vendor's download link, and
+	 * some links carry the licence key; Gravity Forms' telemetry snapshot
+	 * copies its key.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
