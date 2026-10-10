@@ -51242,6 +51242,9 @@
 			const langChanged = langPicked !== undefined && langPicked !== ( ue.languages.current || '' );
 			try {
 				await api( `wp/v2/users/${ u.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				// The user as saved, at once: the language step below can fail
+				// or repaint this page, and the next save compares against it.
+				ue.user = Object.assign( {}, ue.user, payload );
 				let langNote = '';
 				if ( langChanged ) {
 					const lr = await api( `minn-admin/v1/users/${ u.id }/language`, { method: 'POST', body: JSON.stringify( { locale: langPicked } ) } );
@@ -51252,7 +51255,6 @@
 				// Only when an admin changed their OWN language from this
 				// screen; editing somebody else's must not repaint this one.
 				if ( langChanged && u.id === B.user.id && await switchLanguage( true ) ) return;
-				ue.user = Object.assign( {}, ue.user, payload );
 				state.cache.users = null;
 				btn.disabled = false;
 			} catch ( err ) {
@@ -51769,6 +51771,9 @@
 			const langChanged = langPicked !== undefined && langPicked !== ( p.languages.current || '' );
 			try {
 				await api( `wp/v2/users/${ B.user.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				// The profile as saved, at once: the language step below can fail
+				// or repaint this view, and the next save compares against it.
+				p.user = Object.assign( {}, p.user, payload );
 				let langPackInstalled = false;
 				if ( langChanged ) {
 					langBusy( true );
@@ -51794,7 +51799,6 @@
 				// reload. This re-renders the profile view, so it has to come
 				// after the toast and before the local copies below are read.
 				if ( langChanged && await switchLanguage( true ) ) return;
-				p.user = Object.assign( {}, p.user, payload );
 				// Keep the sidebar's name in sync with a display-name edit.
 				if ( payload.name ) {
 					B.user.name = payload.name;

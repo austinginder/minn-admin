@@ -100,6 +100,36 @@ const roles = ( id ) => JSON.parse( wpEval( `$u = get_userdata( ${ id } ); echo 
 		await page.click( '[data-ue-save]' );
 		await back;
 		t.check( 'changing the role back on the same page saves it', JSON.stringify( roles( two ) ) === '["author"]', JSON.stringify( roles( two ) ) );
+
+		// The same when the language step after the role fails: the role has
+		// landed, so the next save compares against it, not against the user
+		// before. The language POST is answered 500 here.
+		await page.route( /minn-admin\/v1\/users\/\d+\/language/, ( r ) => r.fulfill( { status: 500, contentType: 'application/json', body: JSON.stringify( { code: 'minn_test', message: 'Language download failed (test)' } ) } ) );
+		await page.goto( `${ BASE }/minn-admin/users/${ two }`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-ue-role', { timeout: 15000 } );
+		const pickRole = async ( label ) => {
+			await page.click( '#minn-ue-role' );
+			await page.fill( '#minn-ue-role', label );
+			await page.waitForSelector( '#minn-ue-role-ac .minn-ac-item', { timeout: 8000 } );
+			await page.click( `#minn-ue-role-ac .minn-ac-item:has-text("${ label }")` );
+		};
+		const saveUser = async () => {
+			const done = page.waitForResponse( ( r ) => r.request().method() === 'POST' && new RegExp( `wp/v2/users/${ two }(\\?|$)` ).test( r.url() ), { timeout: 20000 } ).catch( () => null );
+			await page.click( '[data-ue-save]' );
+			await done;
+			await page.waitForTimeout( 800 );
+		};
+		await pickRole( 'Editor' );
+		await page.click( '#minn-ue-lang' );
+		await page.fill( '#minn-ue-lang', 'Deutsch' );
+		await page.waitForSelector( '#minn-ue-lang-ac .minn-ac-item', { timeout: 8000 } );
+		await page.click( '#minn-ue-lang-ac .minn-ac-item' );
+		await saveUser();
+		t.check( 'a role saved with a failing language step lands', JSON.stringify( roles( two ) ) === '["editor"]', JSON.stringify( roles( two ) ) );
+		await pickRole( 'Author' );
+		await saveUser();
+		t.check( '...and changing it back after the failure saves it', JSON.stringify( roles( two ) ) === '["author"]', JSON.stringify( roles( two ) ) );
+		await page.unroute( /minn-admin\/v1\/users\/\d+\/language/ );
 	} finally {
 		for ( const id of made ) {
 			if ( id ) wpEval( `require_once ABSPATH . 'wp-admin/includes/user.php'; wp_delete_user( ${ id } );` );
