@@ -33,10 +33,13 @@ function minn_admin_cfdb7_can_view() {
  * Handles the shapes CFDB7 writes: string values, list arrays (checkboxes;
  * their i:N keys are skipped, string members joined), and numeric scalars.
  *
- * @param string $blob Raw form_value column.
+ * @param string $blob         Raw form_value column.
+ * @param bool   $strings_only Keep only values stored as strings (lists and
+ *                             scalars dropped, not flattened): the delete path,
+ *                             where a list is never an upload's filename.
  * @return array<string,string>
  */
-function minn_admin_cfdb7_values( $blob ) {
+function minn_admin_cfdb7_values( $blob, $strings_only = false ) {
 	$out  = array();
 	$blob = (string) $blob;
 
@@ -55,6 +58,9 @@ function minn_admin_cfdb7_values( $blob ) {
 		$data = Minn_Admin::decode_serialized( $blob );
 		if ( is_array( $data ) ) {
 			foreach ( $data as $k => $v ) {
+				if ( $strings_only && ! is_string( $v ) ) {
+					continue;
+				}
 				if ( is_array( $v ) ) {
 					$v = implode( ', ', array_filter( array_map( 'strval', $v ), 'strlen' ) );
 				}
@@ -156,14 +162,21 @@ function minn_admin_cfdb7_values( $blob ) {
 					break;
 				}
 			}
-			$out[ $key ] = implode( ', ', array_filter( $member, 'strlen' ) );
+			if ( ! $strings_only ) {
+				$out[ $key ] = implode( ', ', array_filter( $member, 'strlen' ) );
+			}
 		} elseif ( 'N' === $type ) {
-			$out[ $key ] = '';
-			$pos        += 2;
+			if ( ! $strings_only ) {
+				$out[ $key ] = '';
+			}
+			$pos += 2;
 		} elseif ( '' === $type ) {
 			break;
 		} else { // i / d / b value
-			$out[ $key ] = $skip_scalar();
+			$scalar = $skip_scalar();
+			if ( ! $strings_only ) {
+				$out[ $key ] = $scalar;
+			}
 		}
 		if ( $pos <= $guard ) {
 			break; // no forward progress this iteration — malformed blob
@@ -504,25 +517,42 @@ add_action( 'rest_api_init', function () {
 					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Remove the files the entry uploaded before the row that names
-				// them, exactly as CFDB7's own bulk delete does: the values whose
-				// key carries the cfdb7_file marker are filenames under
-				// uploads/cfdb7_uploads. Dropping only the row would strand a
-				// resume or ID scan on disk at a guessable URL with nothing left
-				// pointing at it. Values come through minn_admin_cfdb7_values()
-				// (the shared data-only decoder, scanner fallback).
+				// them, as CFDB7's own bulk delete does. Dropping only the row
+				// would strand a resume or ID scan on disk at a guessable URL
+				// with nothing left pointing at it.
+				//
+				// Every value in the row is visitor input, and a row stored
+				// before CFDB7 began keeping only its form's own fields can carry
+				// any key the visitor posted, so a value counts as an upload under
+				// exactly CFDB7's rules and no looser: the key ENDS in the
+				// cfdb7_file marker CFDB7 appends, the value is a string that is
+				// already a bare filename (one carrying a path is refused, never
+				// trimmed to the name at its end), it resolves to a file inside
+				// cfdb7_uploads (a link pointing out does not count), and it is
+				// not .php, which is never an upload and is what the folder's
+				// own index.php stub is. Values come through the shared
+				// data-only decoder with the scanner fallback, lists dropped.
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$blob = (string) $wpdb->get_var( $wpdb->prepare( "SELECT form_value FROM {$table} WHERE form_id = %d", (int) Minn_Admin::path_param( $request ) ) );
-				$dir  = wp_upload_dir()['basedir'] . '/cfdb7_uploads/';
-				foreach ( minn_admin_cfdb7_values( $blob ) as $key => $value ) {
-					if ( false === strpos( $key, 'cfdb7_file' ) || '' === trim( (string) $value ) ) {
+				$dir  = wp_upload_dir()['basedir'] . '/cfdb7_uploads';
+				$root = realpath( $dir );
+				foreach ( minn_admin_cfdb7_values( $blob, true ) as $key => $value ) {
+					if ( 'cfdb7_file' !== substr( (string) $key, -10 ) || '' === $value || basename( $value ) !== $value ) {
 						continue;
 					}
-					// basename() so a traversal-shaped value can never reach out
-					// of the uploads directory.
-					$file = $dir . basename( (string) $value );
-					if ( is_readable( $file ) && ! is_dir( $file ) ) {
-						wp_delete_file( $file );
+					// realpath() throws on a NUL byte, which would fail the
+					// whole delete on one stored value; no upload is named so.
+					if ( false !== strpos( $value, "\0" ) ) {
+						continue;
 					}
+					$file = realpath( $dir . '/' . $value );
+					if ( false === $file || false === $root || ! is_file( $file ) || 0 !== strpos( $file, trailingslashit( $root ) ) ) {
+						continue;
+					}
+					if ( 'php' === strtolower( pathinfo( $file, PATHINFO_EXTENSION ) ) ) {
+						continue;
+					}
+					wp_delete_file( $file );
 				}
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$wpdb->delete( $table, array( 'form_id' => (int) Minn_Admin::path_param( $request ) ), array( '%d' ) );
