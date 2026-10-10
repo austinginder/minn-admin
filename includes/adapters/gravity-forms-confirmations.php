@@ -374,7 +374,12 @@ add_action( 'rest_api_init', function () {
 				}
 				list( $form, $stored, $is_new ) = $r;
 				$body = (array) $request->get_json_params();
-				$c    = minn_admin_gfc_build( $form, $stored, $body, $is_new );
+				// What the page leaves out keeps its stored value, as on the
+				// notification page.
+				if ( ! $is_new ) {
+					$body = array_merge( minn_admin_gfc_payload( $form, $stored, false )['confirmation'], $body );
+				}
+				$c = minn_admin_gfc_build( $form, $stored, $body, $is_new );
 				if ( is_wp_error( $c ) ) {
 					return $c;
 				}

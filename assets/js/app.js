@@ -53806,17 +53806,28 @@
 	const gfnCur = () => ( { gfconfirmation: state.gfc, cf7form: state.c7, ffemails: state.ffe, wpfemails: state.wpfe }[ state.route ] || state.gfn );
 
 	/**
-	 * A notification or confirmation page sends the whole object it holds,
-	 * so its Active switch goes only when it was flipped here (or the item is
-	 * new): the page's loaded copy sent back unchanged would switch one that
-	 * was turned off elsewhere since, in another tab or Gravity Forms' list,
-	 * back on. The server writes the switch only when the key is present.
+	 * The keys of an edited object that differ from the copy the page loaded
+	 * (a switch compared as on or off), plus the ones that name it. The email
+	 * and notification pages send only these, and their servers keep every
+	 * key a save leaves out, so a page left open does not put back routing,
+	 * conditions, a recipient or a switch changed elsewhere since.
 	 */
-	function gfActiveDelta( n, g, key ) {
-		const body = { ...n };
-		const loaded = ( ( g.data || {} )[ key ] || {} ).isActive;
-		if ( ! g.isNew && !! body.isActive === !! loaded ) delete body.isActive;
-		return body;
+	function changedKeys( now, was, ids = [] ) {
+		const out = {};
+		const old = was || {};
+		Object.keys( now || {} ).forEach( ( k ) => {
+			const same = 'boolean' === typeof now[ k ]
+				? now[ k ] === !! old[ k ]
+				: JSON.stringify( now[ k ] ) === JSON.stringify( old[ k ] );
+			if ( ids.includes( k ) || ! same ) out[ k ] = now[ k ];
+		} );
+		return out;
+	}
+
+	// A Gravity Forms notification or confirmation page: a new item goes
+	// whole, an existing one only what changed (see changedKeys).
+	function gfDelta( n, g, key ) {
+		return g.isNew ? { ...n } : changedKeys( n, ( g.data || {} )[ key ] );
 	}
 
 	function gfnAdopt( r ) {
@@ -54396,7 +54407,7 @@
 				b.disabled = true;
 				b.textContent = __( 'Saving…' );
 				try {
-					const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/full`, { method: 'POST', body: JSON.stringify( gfActiveDelta( n, g, 'notification' ) ) } );
+					const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/full`, { method: 'POST', body: JSON.stringify( gfDelta( n, g, 'notification' ) ) } );
 					const wasNew = g.isNew;
 					gfnAdopt( r );
 					listCache();
@@ -54847,7 +54858,7 @@
 				b.disabled = true;
 				b.textContent = __( 'Saving…' );
 				try {
-					const r = await api( `minn-admin/v1/gf/confirmations/${ g.id }/full`, { method: 'POST', body: JSON.stringify( gfActiveDelta( n, g, 'confirmation' ) ) } );
+					const r = await api( `minn-admin/v1/gf/confirmations/${ g.id }/full`, { method: 'POST', body: JSON.stringify( gfDelta( n, g, 'confirmation' ) ) } );
 					const wasNew = g.isNew;
 					gfcAdopt( r );
 					listCache();
@@ -55121,10 +55132,13 @@
 				b.disabled = true;
 				b.textContent = __( 'Saving…' );
 				try {
-					// Mail (2)'s switch goes only when flipped here; the server
-					// keeps any key the page leaves out (see gfActiveDelta).
-					const body = JSON.parse( JSON.stringify( n ) );
-					if ( body.mail_2 && !! body.mail_2.active === !! ( c.data.mail_2 || {} ).active ) delete body.mail_2.active;
+					// Only the sections and keys changed here; the server keeps
+					// any the page leaves out (see changedKeys).
+					const body = {};
+					[ 'mail', 'mail_2', 'messages' ].forEach( ( sec ) => {
+						const delta = n[ sec ] ? changedKeys( n[ sec ], ( c.data || {} )[ sec ] ) : {};
+						if ( Object.keys( delta ).length ) body[ sec ] = delta;
+					} );
 					const r = await api( `minn-admin/v1/cf7/forms/${ c.id }/mail`, { method: 'POST', body: JSON.stringify( body ) } );
 					c7Adopt( r );
 					const ss = surfaceState( 'cf7' );
@@ -55435,18 +55449,14 @@
 				try {
 					const r = await api( `minn-admin/v1/fluent-forms/forms/${ c.id }/emails`, {
 						method: 'POST',
-						// Only what changed: an untouched notification is not re-validated.
-						// A changed one goes whole except its switch, which goes
-						// only when flipped here (see gfActiveDelta).
+						// Only what changed: an untouched notification is not
+						// re-validated, and a changed one sends only its changed
+						// keys (see changedKeys).
 						body: JSON.stringify( {
 							notifications: d.notifications.map( ( o ) => [ o, n[ 'n' + o.metaId ] ] )
 								.filter( ( [ o, x ] ) => JSON.stringify( x ) !== JSON.stringify( o ) )
-								.map( ( [ o, x ] ) => {
-									const out = { ...x };
-									if ( !! out.enabled === !! o.enabled ) delete out.enabled;
-									return out;
-								} ),
-							...( JSON.stringify( n.confirmation ) !== JSON.stringify( d.confirmation ) ? { confirmation: n.confirmation } : {} ),
+								.map( ( [ o, x ] ) => changedKeys( x, o, [ 'metaId' ] ) ),
+							...( JSON.stringify( n.confirmation ) !== JSON.stringify( d.confirmation ) ? { confirmation: changedKeys( n.confirmation, d.confirmation ) } : {} ),
 						} ),
 					} );
 					ffeAdopt( r );
@@ -55733,7 +55743,10 @@
 				b.disabled = true;
 				b.textContent = __( 'Saving…' );
 				try {
-					const changed = ( list, p ) => list.map( ( x ) => n[ p + x.key ] ).filter( ( x ) => JSON.stringify( x ) !== JSON.stringify( list.find( ( o ) => o.key === x.key ) ) );
+					// Changed items only, each with only its changed keys (see changedKeys).
+					const changed = ( list, p ) => list.map( ( o ) => [ o, n[ p + o.key ] ] )
+						.filter( ( [ o, x ] ) => JSON.stringify( x ) !== JSON.stringify( o ) )
+						.map( ( [ o, x ] ) => changedKeys( x, o, [ 'key' ] ) );
 					const r = await api( `minn-admin/v1/wpforms/forms/${ c.id }/emails`, {
 						method: 'POST',
 						body: JSON.stringify( {

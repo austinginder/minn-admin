@@ -541,7 +541,14 @@ add_action( 'rest_api_init', function () {
 				}
 				list( $form, $stored, $is_new ) = $r;
 				$body = (array) $request->get_json_params();
-				$n    = minn_admin_gfn_build( $form, $stored, $body, $is_new );
+				// The page sends what it changed; anything it leaves out keeps
+				// its stored value (as the page itself reads it), so a page left
+				// open does not put back routing, conditions or a BCC changed
+				// elsewhere since, and a partial body resets nothing.
+				if ( ! $is_new ) {
+					$body = array_merge( minn_admin_gfn_payload( $form, $stored, false )['notification'], $body );
+				}
+				$n = minn_admin_gfn_build( $form, $stored, $body, $is_new );
 				if ( is_wp_error( $n ) ) {
 					return $n;
 				}

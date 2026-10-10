@@ -167,6 +167,18 @@ add_action( 'rest_api_init', function () {
 					if ( ! isset( $s['confirmations'][ $key ] ) ) {
 						return new WP_Error( 'minn_wpfe_unknown', __( 'That confirmation is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
 					}
+					// Keys the page leaves out keep their stored values.
+					$was = $s['confirmations'][ $key ];
+					$in  = array_merge(
+						array(
+							'name'     => $was['name'] ?? '',
+							'type'     => $was['type'] ?? 'message',
+							'message'  => $was['message'] ?? '',
+							'page'     => $was['page'] ?? '',
+							'redirect' => $was['redirect'] ?? '',
+						),
+						$in
+					);
 					$type = in_array( $text( $in, 'type' ), array( 'message', 'page', 'redirect' ), true ) ? $text( $in, 'type' ) : 'message';
 					$page = absint( $in['page'] ?? 0 );
 					$url  = trim( $text( $in, 'redirect' ) );

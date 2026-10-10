@@ -455,6 +455,82 @@ if ( ! function_exists( 'wc_gc_mask_code' ) || ! function_exists( 'wc_create_ord
 	wp_delete_user( $gc_user );
 }
 
+// --- 04-01 / 05-04 / 14-05 Email and notification saves keep what they leave out ---
+// The pages now send only what changed, and the servers keep every key a save
+// leaves out. Before, a body that named only the subject reset routing,
+// conditions, BCC and Reply-To; one that named only a confirmation's name
+// turned a redirect into an empty message. Each fixture is snapshotted and
+// put back.
+if ( class_exists( 'GFAPI' ) && function_exists( 'minn_admin_gfn_build' ) && ( $pb_form = GFAPI::get_form( (int) ( GFAPI::get_forms() ? GFAPI::get_forms()[0]['id'] : 0 ) ) ) ) {
+	$pb_snap  = $pb_form;
+	$pb_field = (string) $pb_form['fields'][0]->id;
+	$pb_logic = array( 'actionType' => 'show', 'logicType' => 'all', 'rules' => array( array( 'fieldId' => $pb_field, 'operator' => 'is', 'value' => 'minn' ) ) );
+	$pb_nid   = 'minnrc' . strtolower( wp_generate_password( 6, false, false ) );
+	$pb_cid   = 'minnrc' . strtolower( wp_generate_password( 6, false, false ) );
+	$pb_form['notifications'][ $pb_nid ] = array( 'id' => $pb_nid, 'name' => 'Minn RC partial ' . $pb_nid, 'event' => 'form_submission', 'service' => 'wordpress', 'toType' => 'email', 'to' => '{admin_email}', 'bcc' => 'archive@example.com', 'replyTo' => 'reply@example.com', 'subject' => 'Hello', 'message' => '{all_fields}', 'isActive' => true, 'conditionalLogic' => $pb_logic );
+	$pb_form['confirmations'][ $pb_cid ] = array( 'id' => $pb_cid, 'name' => 'Minn RC partial ' . $pb_cid, 'isDefault' => false, 'type' => 'redirect', 'url' => 'https://example.com/thanks', 'message' => '', 'queryString' => 'a=1', 'conditionalLogic' => $pb_logic );
+	GFAPI::update_form( $pb_form );
+	list( $pb_st ) = $call( 'POST', "/minn-admin/v1/gf/notifications/{$pb_form['id']}:{$pb_nid}/full", array( 'subject' => 'Changed' ) );
+	$pb_n = GFAPI::get_form( $pb_form['id'] )['notifications'][ $pb_nid ] ?? array();
+	$check( '04-01 GF notification: a save naming only the subject keeps BCC, Reply-To and conditions', 200 === $pb_st && 'Changed' === ( $pb_n['subject'] ?? '' ) && 'archive@example.com' === ( $pb_n['bcc'] ?? '' ) && 'reply@example.com' === ( $pb_n['replyTo'] ?? '' ) && 1 === count( (array) ( $pb_n['conditionalLogic']['rules'] ?? array() ) ), $pb_st . ' ' . wp_json_encode( array( $pb_n['subject'] ?? null, $pb_n['bcc'] ?? null, $pb_n['replyTo'] ?? null, $pb_n['conditionalLogic'] ?? null ) ) );
+	list( $pb_st ) = $call( 'POST', "/minn-admin/v1/gf/confirmations/{$pb_form['id']}:{$pb_cid}/full", array( 'name' => 'Minn RC renamed ' . $pb_cid ) );
+	$pb_c = GFAPI::get_form( $pb_form['id'] )['confirmations'][ $pb_cid ] ?? array();
+	$check( '04-01 GF confirmation: a save naming only the name keeps the redirect and its conditions', 200 === $pb_st && 'Minn RC renamed ' . $pb_cid === ( $pb_c['name'] ?? '' ) && 'redirect' === ( $pb_c['type'] ?? '' ) && 'https://example.com/thanks' === ( $pb_c['url'] ?? '' ) && 'a=1' === ( $pb_c['queryString'] ?? '' ) && ! empty( $pb_c['conditionalLogic']['rules'] ), $pb_st . ' ' . wp_json_encode( array( $pb_c['type'] ?? null, $pb_c['url'] ?? null, $pb_c['queryString'] ?? null ) ) );
+	GFAPI::update_form( $pb_snap );
+} else {
+	$skip( '04-01 Gravity Forms inactive or no form' );
+}
+
+if ( function_exists( 'minn_admin_fluent_notifications' ) && function_exists( 'wpFluent' ) && class_exists( '\FluentForm\App\Services\Settings\SettingsService' ) ) {
+	global $wpdb;
+	$pf_form = (int) $wpdb->get_var( "SELECT id FROM {$wpdb->prefix}fluentform_forms ORDER BY id LIMIT 1" );
+	if ( ! $pf_form ) {
+		$skip( '05-x Fluent: no form' );
+	} else {
+		$pf_meta = $wpdb->prefix . 'fluentform_form_meta';
+		$wpdb->insert( $pf_meta, array( 'form_id' => $pf_form, 'meta_key' => 'notifications', 'value' => wp_json_encode( array( 'name' => 'Minn RC partial', 'enabled' => false, 'sendTo' => array( 'type' => 'email', 'email' => '{wp.admin_email}', 'field' => '', 'routing' => array() ), 'fromName' => 'Shop', 'fromEmail' => '', 'replyTo' => 'reply@example.com', 'bcc' => 'archive@example.com', 'subject' => 'Hello', 'message' => '<p>{all_data}</p>', 'conditionals' => array( 'status' => false, 'type' => 'all', 'conditions' => array() ) ) ) ) );
+		$pf_mid  = (int) $wpdb->insert_id;
+		$pf_set  = $wpdb->get_row( $wpdb->prepare( "SELECT id, value FROM {$pf_meta} WHERE form_id = %d AND meta_key = 'formSettings'", $pf_form ) );
+		list( $pf_st ) = $call( 'POST', "/minn-admin/v1/fluent-forms/forms/{$pf_form}/emails", array( 'notifications' => array( array( 'metaId' => $pf_mid, 'subject' => 'Changed' ) ) ) );
+		$pf_n = minn_admin_fluent_notifications( $pf_form )[ $pf_mid ] ?? array();
+		$check( '05-x Fluent notification: a save naming only the subject keeps BCC, Reply-To and the name', 200 === $pf_st && 'Changed' === ( $pf_n['subject'] ?? '' ) && 'archive@example.com' === ( $pf_n['bcc'] ?? '' ) && 'reply@example.com' === ( $pf_n['replyTo'] ?? '' ) && 'Minn RC partial' === ( $pf_n['name'] ?? '' ), $pf_st . ' ' . wp_json_encode( array( $pf_n['name'] ?? null, $pf_n['bcc'] ?? null, $pf_n['replyTo'] ?? null ) ) );
+		if ( $pf_set ) {
+			$pf_s = json_decode( (string) $pf_set->value, true );
+			$pf_s['confirmation'] = array_merge( (array) ( $pf_s['confirmation'] ?? array() ), array( 'redirectTo' => 'customUrl', 'customUrl' => 'https://example.com/thanks', 'messageToShow' => 'Thanks' ) );
+			$wpdb->update( $pf_meta, array( 'value' => wp_json_encode( $pf_s ) ), array( 'id' => $pf_set->id ) );
+			list( $pf_st ) = $call( 'POST', "/minn-admin/v1/fluent-forms/forms/{$pf_form}/emails", array( 'confirmation' => array( 'messageToShow' => 'Thanks again' ) ) );
+			$pf_c = (array) ( json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT value FROM {$pf_meta} WHERE id = %d", $pf_set->id ) ), true )['confirmation'] ?? array() );
+			$check( '05-x Fluent confirmation: a save naming only the message keeps the redirect', 200 === $pf_st && 'customUrl' === ( $pf_c['redirectTo'] ?? '' ) && 'https://example.com/thanks' === ( $pf_c['customUrl'] ?? '' ), $pf_st . ' ' . wp_json_encode( array( $pf_c['redirectTo'] ?? null, $pf_c['customUrl'] ?? null ) ) );
+			$wpdb->update( $pf_meta, array( 'value' => $pf_set->value ), array( 'id' => $pf_set->id ) );
+		}
+		$wpdb->delete( $pf_meta, array( 'id' => $pf_mid ) );
+	}
+} else {
+	$skip( '05-x Fluent Forms inactive' );
+}
+
+if ( function_exists( 'minn_admin_wpforms_form_data' ) && function_exists( 'wpforms' ) ) {
+	$pw_ids = get_posts( array( 'post_type' => 'wpforms', 'numberposts' => 1, 'fields' => 'ids' ) );
+	if ( ! $pw_ids ) {
+		$skip( '04-01 WPForms: no form' );
+	} else {
+		global $wpdb;
+		$pw_id   = (int) $pw_ids[0];
+		$pw_raw  = $wpdb->get_var( $wpdb->prepare( "SELECT post_content FROM {$wpdb->posts} WHERE ID = %d", $pw_id ) );
+		$pw_data = wpforms_decode( $pw_raw );
+		$pw_data['settings']['confirmations']['9'] = array( 'name' => 'Minn RC partial', 'type' => 'redirect', 'message' => '', 'page' => '', 'redirect' => 'https://example.com/thanks' );
+		// wpforms_encode() slashes for wp_update_post(), which unslashes.
+		wp_update_post( array( 'ID' => $pw_id, 'post_content' => wpforms_encode( $pw_data ) ) );
+		list( $pw_st ) = $call( 'POST', "/minn-admin/v1/wpforms/forms/{$pw_id}/emails", array( 'confirmations' => array( array( 'key' => '9', 'name' => 'Minn RC renamed' ) ) ) );
+		$pw_c = ( minn_admin_wpforms_form_data( $pw_id )['settings']['confirmations']['9'] ?? array() );
+		$check( '04-01 WPForms confirmation: a save naming only the name keeps the redirect', 200 === $pw_st && 'Minn RC renamed' === ( $pw_c['name'] ?? '' ) && 'redirect' === ( $pw_c['type'] ?? '' ) && 'https://example.com/thanks' === ( $pw_c['redirect'] ?? '' ), $pw_st . ' ' . wp_json_encode( array( $pw_c['type'] ?? null, $pw_c['redirect'] ?? null ) ) );
+		$wpdb->update( $wpdb->posts, array( 'post_content' => $pw_raw ), array( 'ID' => $pw_id ) );
+		clean_post_cache( $pw_id );
+	}
+} else {
+	$skip( '04-01 WPForms inactive' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

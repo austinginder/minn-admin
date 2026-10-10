@@ -219,29 +219,38 @@ add_action( 'rest_api_init', function () {
 					$text = function ( $k ) use ( $in ) {
 						return isset( $in[ $k ] ) && is_scalar( $in[ $k ] ) ? (string) $in[ $k ] : '';
 					};
+					// The page sends the keys it changed; one it leaves out
+					// keeps its stored value.
+					$has = function ( $k ) use ( $in ) {
+						return array_key_exists( $k, $in );
+					};
 					// A routing list is Pro's and is edited in Fluent Forms, with
 					// or without Pro here: the page offers no routing editor, so
 					// a stored list is kept as it is on any save.
-					$type = $text( 'toType' );
+					$type = $has( 'toType' ) ? $text( 'toType' ) : (string) ( $n['sendTo']['type'] ?? 'email' );
 					if ( 'routing' === ( $n['sendTo']['type'] ?? '' ) ) {
 						$type = 'routing';
 					} elseif ( ! in_array( $type, array( 'email', 'field' ), true ) ) {
 						$type = 'email';
 					}
-					$n['name']             = sanitize_text_field( $text( 'name' ) );
+					if ( $has( 'name' ) ) {
+						$n['name'] = sanitize_text_field( $text( 'name' ) );
+					}
 					// The switch only when sent: the page sends it only when it
 					// was flipped there, so one turned off elsewhere stays off.
 					if ( array_key_exists( 'enabled', $in ) ) {
 						$n['enabled'] = ! empty( $in['enabled'] );
 					}
 					$n['sendTo']['type']   = $type;
-					if ( 'email' === $type ) {
+					if ( 'email' === $type && $has( 'toEmail' ) ) {
 						$n['sendTo']['email'] = trim( $text( 'toEmail' ) );
-					} elseif ( 'field' === $type ) {
+					} elseif ( 'field' === $type && $has( 'toField' ) ) {
 						$n['sendTo']['field'] = $text( 'toField' );
 					}
 					foreach ( array( 'fromName', 'fromEmail', 'replyTo', 'bcc', 'subject', 'message' ) as $k ) {
-						$n[ $k ] = $text( $k );
+						if ( $has( $k ) ) {
+							$n[ $k ] = $text( $k );
+						}
 					}
 					try {
 						$service->store( array(
@@ -259,7 +268,17 @@ add_action( 'rest_api_init', function () {
 				if ( isset( $body['confirmation'] ) && is_array( $body['confirmation'] ) ) {
 					$settings = minn_admin_fluent_meta( $form->id, 'formSettings' );
 					$c        = (array) ( $settings['confirmation'] ?? array() );
-					$in       = $body['confirmation'];
+					// Keys the page leaves out keep their stored values.
+					$in = array_merge(
+						array(
+							'redirectTo'           => $c['redirectTo'] ?? 'samePage',
+							'messageToShow'        => $c['messageToShow'] ?? '',
+							'samePageFormBehavior' => $c['samePageFormBehavior'] ?? 'hide_form',
+							'customPage'           => $c['customPage'] ?? 0,
+							'customUrl'            => $c['customUrl'] ?? '',
+						),
+						$body['confirmation']
+					);
 					$to       = (string) ( $in['redirectTo'] ?? 'samePage' );
 					$c['redirectTo']           = in_array( $to, array( 'samePage', 'customPage', 'customUrl' ), true ) ? $to : 'samePage';
 					$c['messageToShow']        = is_scalar( $in['messageToShow'] ?? '' ) ? (string) ( $in['messageToShow'] ?? '' ) : '';
