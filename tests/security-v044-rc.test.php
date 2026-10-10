@@ -738,6 +738,69 @@ if ( function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active() && 
 	$skip( '06-02 ACPT inactive' );
 }
 
+// --- 08-01 / 08-02 / 14-04 SEO robots: a change starts from what the post inherits ---
+// SureRank and Rank Math both apply site or post-type robots while a post has
+// none of its own, and a post's own set replaces them whole. A single switch
+// written over nothing dropped the inherited others, and SureRank's off
+// deleted the last key and handed the post back to a site-wide noindex.
+// Run under tests/lib/seo-swap.php with MINN_SEO_SWAP=rank-math or surerank.
+$rb_prov = function_exists( 'minn_admin_seo_plugin' ) ? ( minn_admin_seo_plugin()['name'] ?? '' ) : '';
+$rb_seed = function ( $pid ) use ( $call ) {
+	list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
+	$vals = (array) ( $read['minn_seo'] ?? array() );
+	foreach ( $vals as $k => $v ) {
+		if ( false === $v ) {
+			$vals[ $k ] = null;
+		}
+	}
+	return array( $vals, (array) ( $read['minn_seo'] ?? array() ) );
+};
+if ( 'SureRank' === $rb_prov ) {
+	$rb_was = get_option( 'surerank_settings', null );
+	update_option( 'surerank_settings', array_merge( (array) $rb_was, array( 'no_index' => array( 'post' ), 'no_follow' => array( 'post' ), 'no_archive' => array() ) ) );
+	$rb_cache = new ReflectionProperty( '\SureRank\Inc\Functions\Settings', 'cached_settings' );
+	$rb_cache->setAccessible( true );
+	$rb_cache->setValue( null, null );
+	$rb_meta = function ( $pid, $k ) {
+		wp_cache_delete( $pid, 'post_meta' );
+		return (string) get_post_meta( $pid, 'surerank_settings_post_' . $k, true );
+	};
+	// An all-empty post on a noindexed, nofollowed type reads as inheriting both.
+	$rb_a = wp_insert_post( array( 'post_title' => 'Minn v044 surerank robots A', 'post_status' => 'draft' ) );
+	list( $rb_vals, $rb_raw ) = $rb_seed( $rb_a );
+	$check( '08-01 SureRank: a post with no robots of its own reads the site-wide noindex and nofollow', true === ( $rb_raw['robots_noindex'] ?? null ) && true === ( $rb_raw['robots_nofollow'] ?? null ) && false === ( $rb_raw['robots_noarchive'] ?? null ), wp_json_encode( array( $rb_raw['robots_noindex'] ?? null, $rb_raw['robots_nofollow'] ?? null, $rb_raw['robots_noarchive'] ?? null ) ) );
+	$rb_vals['robots_noarchive'] = true;
+	$call( 'POST', '/wp/v2/posts/' . $rb_a, array( 'minn_seo' => $rb_vals ) );
+	$check( '08-01 SureRank: switching one on keeps the inherited noindex and nofollow', 'yes' === $rb_meta( $rb_a, 'no_index' ) && 'yes' === $rb_meta( $rb_a, 'no_follow' ) && 'yes' === $rb_meta( $rb_a, 'no_archive' ), wp_json_encode( array( $rb_meta( $rb_a, 'no_index' ), $rb_meta( $rb_a, 'no_follow' ), $rb_meta( $rb_a, 'no_archive' ) ) ) );
+	// 14-04: the last 'yes' switched off is stored as 'no', not deleted.
+	$rb_b = wp_insert_post( array( 'post_title' => 'Minn v044 surerank robots B', 'post_status' => 'draft' ) );
+	update_post_meta( $rb_b, 'surerank_settings_post_no_index', 'yes' );
+	list( $rb_vals ) = $rb_seed( $rb_b );
+	$rb_vals['robots_noindex'] = null;
+	$call( 'POST', '/wp/v2/posts/' . $rb_b, array( 'minn_seo' => $rb_vals ) );
+	$check( '14-04 SureRank: switching off the last per-post noindex stores "no"', 'no' === $rb_meta( $rb_b, 'no_index' ), wp_json_encode( $rb_meta( $rb_b, 'no_index' ) ) );
+	list( , $rb_raw ) = $rb_seed( $rb_b );
+	$check( '14-04 control: and reads back off', false === ( $rb_raw['robots_noindex'] ?? null ), wp_json_encode( $rb_raw['robots_noindex'] ?? null ) );
+	wp_delete_post( $rb_a, true );
+	wp_delete_post( $rb_b, true );
+	null === $rb_was ? delete_option( 'surerank_settings' ) : update_option( 'surerank_settings', $rb_was );
+} elseif ( 'Rank Math' === $rb_prov && function_exists( 'rank_math' ) ) {
+	// In memory for this process only: the post type noindexes its posts.
+	rank_math()->settings->set( 'titles', 'pt_post_custom_robots', 'on' );
+	rank_math()->settings->set( 'titles', 'pt_post_robots', array( 'noindex' ) );
+	$rb_c = wp_insert_post( array( 'post_title' => 'Minn v044 rank math robots', 'post_status' => 'draft' ) );
+	list( $rb_vals, $rb_raw ) = $rb_seed( $rb_c );
+	$check( '08-02 Rank Math: a post with no robots of its own still reads Default for indexing', '' === ( $rb_raw['robots_index'] ?? null ), wp_json_encode( $rb_raw['robots_index'] ?? null ) );
+	$rb_vals['robots_noarchive'] = true;
+	$call( 'POST', '/wp/v2/posts/' . $rb_c, array( 'minn_seo' => $rb_vals ) );
+	wp_cache_delete( $rb_c, 'post_meta' );
+	$rb_set = (array) get_post_meta( $rb_c, 'rank_math_robots', true );
+	$check( '08-02 Rank Math: switching No archive on keeps the post type\'s noindex', in_array( 'noindex', $rb_set, true ) && in_array( 'noarchive', $rb_set, true ), wp_json_encode( $rb_set ) );
+	wp_delete_post( $rb_c, true );
+} else {
+	$skip( '08-x SEO robots: neither SureRank nor Rank Math is the active provider (swap one in)' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

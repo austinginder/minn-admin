@@ -661,16 +661,19 @@ function minn_admin_seo_rank_math_provider() {
 			$post_id = (int) $post_id;
 			$out     = call_user_func( $base_read, $post_id );
 
+			// A post with no robots of its own shows the set it inherits (as
+			// their metabox does); its index select still reads Default.
 			$robots = get_post_meta( $post_id, 'rank_math_robots', true );
-			$robots = is_array( $robots ) ? $robots : array();
-			$out['robots_index'] = in_array( 'noindex', $robots, true ) ? 'noindex'
-				: ( in_array( 'index', $robots, true ) ? 'index' : '' );
+			$own    = is_array( $robots ) && $robots;
+			$robots = $own ? $robots : minn_admin_seo_rank_math_robots_default( $post_id );
+			$out['robots_index'] = ! $own ? '' : ( in_array( 'noindex', $robots, true ) ? 'noindex'
+				: ( in_array( 'index', $robots, true ) ? 'index' : '' ) );
 			foreach ( $robots_toggles as $field => $directive ) {
 				$out[ $field ] = in_array( $directive, $robots, true );
 			}
 
 			$adv = get_post_meta( $post_id, 'rank_math_advanced_robots', true );
-			$adv = is_array( $adv ) ? $adv : array();
+			$adv = is_array( $adv ) && $adv ? $adv : minn_admin_seo_rank_math_robots_default( $post_id, true );
 			foreach ( $adv_keys as $field => $key ) {
 				$v = isset( $adv[ $key ] ) ? $adv[ $key ] : '';
 				// Their shape stores false for a disabled directive.
@@ -700,8 +703,10 @@ function minn_admin_seo_rank_math_provider() {
 			}
 
 			if ( 'robots_index' === $field || isset( $robots_toggles[ $field ] ) ) {
+				// A change to a post with no set of its own starts from the
+				// set it inherits, as their metabox does.
 				$robots = get_post_meta( $post_id, 'rank_math_robots', true );
-				$robots = is_array( $robots ) ? array_map( 'strval', $robots ) : array();
+				$robots = is_array( $robots ) && $robots ? array_map( 'strval', $robots ) : minn_admin_seo_rank_math_robots_default( $post_id );
 				if ( 'robots_index' === $field ) {
 					$robots = array_diff( $robots, array( 'index', 'noindex' ) );
 					if ( 'index' === $clean || 'noindex' === $clean ) {
@@ -728,7 +733,7 @@ function minn_admin_seo_rank_math_provider() {
 
 			if ( isset( $adv_keys[ $field ] ) ) {
 				$adv = get_post_meta( $post_id, 'rank_math_advanced_robots', true );
-				$adv = is_array( $adv ) ? $adv : array();
+				$adv = is_array( $adv ) && $adv ? $adv : minn_admin_seo_rank_math_robots_default( $post_id, true );
 				if ( '' === $clean || null === $clean ) {
 					unset( $adv[ $adv_keys[ $field ] ] );
 				} else {
@@ -786,6 +791,36 @@ function minn_admin_seo_rank_math_provider() {
  * @param int $post_id Post id.
  * @return string Human summary ('Article', 'Article, FAQPage', 'None').
  */
+/**
+ * The robots a post starts from in Rank Math's own metabox when it has none
+ * of its own: the post type's custom robots when that type has them on, else
+ * the global ones, with index added where noindex is not set (their
+ * Helper::get_robots_defaults() and get_advanced_robots_defaults(), for this
+ * post's type). A non-empty set on the post replaces the defaults whole, so a
+ * single directive written over nothing dropped every inherited one.
+ *
+ * @param int  $post_id  Post id.
+ * @param bool $advanced The max-* map instead of the directive list.
+ * @return array
+ */
+function minn_admin_seo_rank_math_robots_default( $post_id, $advanced = false ) {
+	if ( ! class_exists( '\RankMath\Helper' ) ) {
+		return array();
+	}
+	$type   = (string) get_post_type( (int) $post_id );
+	$custom = '' !== $type && \RankMath\Helper::get_settings( "titles.pt_{$type}_custom_robots" );
+	if ( $advanced ) {
+		$set = $custom ? \RankMath\Helper::get_settings( "titles.pt_{$type}_advanced_robots", array() ) : \RankMath\Helper::get_settings( 'titles.advanced_robots_global', array() );
+		return is_array( $set ) ? $set : array();
+	}
+	$set = $custom ? \RankMath\Helper::get_settings( "titles.pt_{$type}_robots", array() ) : \RankMath\Helper::get_settings( 'titles.robots_global', array() );
+	$set = is_array( $set ) ? array_values( array_map( 'strval', $set ) ) : array();
+	if ( ! in_array( 'noindex', $set, true ) ) {
+		$set[] = 'index';
+	}
+	return $set;
+}
+
 function minn_admin_seo_rank_math_schema_in_use( $post_id ) {
 	$types = array();
 	$meta  = get_post_meta( (int) $post_id );
@@ -867,6 +902,24 @@ function minn_admin_seo_surerank_provider() {
 		'robots_nofollow'  => 'post_no_follow',
 		'robots_noarchive' => 'post_no_archive',
 	);
+	// SureRank's robots are all or nothing: while all three of a post's keys
+	// are empty the site-wide lists decide (Robots: no_index, no_follow and
+	// no_archive name the post types), and any non-empty key puts the post in
+	// per-post mode where an empty key means off. Its own box shows an
+	// all-empty post as the site-wide state and stores 'yes' or 'no' for all
+	// three on a change, so Minn reads and writes them the same way.
+	$robots_own  = function ( $post_id ) use ( $robots ) {
+		foreach ( $robots as $key ) {
+			if ( '' !== (string) get_post_meta( (int) $post_id, 'surerank_settings_' . $key, true ) ) {
+				return true;
+			}
+		}
+		return false;
+	};
+	$robots_site = function ( $post_id, $key ) {
+		$list = class_exists( '\SureRank\Inc\Functions\Settings' ) ? \SureRank\Inc\Functions\Settings::get( substr( $key, 5 ) ) : array();
+		return in_array( get_post_type( (int) $post_id ), (array) $list, true );
+	};
 	return array(
 		'name'   => 'SureRank',
 		// SureRank reserves per-post SEO to manage_options, and it says so in
@@ -921,7 +974,7 @@ function minn_admin_seo_surerank_provider() {
 				),
 			);
 		},
-		'read'   => function ( $post_id ) use ( $fields, $site_defaults, $flat, $social_text, $robots ) {
+		'read'   => function ( $post_id ) use ( $fields, $site_defaults, $flat, $social_text, $robots, $robots_own, $robots_site ) {
 			$meta = $flat( $post_id );
 			$def  = $site_defaults();
 			$out  = array();
@@ -954,12 +1007,13 @@ function minn_admin_seo_surerank_provider() {
 			$out['twitter_use_facebook'] = ! isset( $meta['twitter_same_as_facebook'] )
 				|| ! in_array( $meta['twitter_same_as_facebook'], array( false, 'false', 0, '0', '' ), true );
 			$out['twitter_card_type'] = isset( $meta['twitter_card_type'] ) ? (string) $meta['twitter_card_type'] : '';
+			$own = $robots_own( $post_id );
 			foreach ( $robots as $field => $key ) {
-				$out[ $field ] = isset( $meta[ $key ] ) && 'yes' === (string) $meta[ $key ];
+				$out[ $field ] = $own ? isset( $meta[ $key ] ) && 'yes' === (string) $meta[ $key ] : $robots_site( $post_id, $key );
 			}
 			return $out;
 		},
-		'write'  => function ( $post_id, $field, $clean ) use ( $fields, $social_text, $robots ) {
+		'write'  => function ( $post_id, $field, $clean ) use ( $fields, $social_text, $robots, $robots_own, $robots_site ) {
 			$post_id = (int) $post_id;
 			try {
 				if ( 'social_image' === $field ) {
@@ -1013,16 +1067,19 @@ function minn_admin_seo_surerank_provider() {
 				}
 				if ( isset( $robots[ $field ] ) ) {
 					// post_no_* are SCALAR metas (surerank_settings_post_no_index),
-					// not group keys; absent means the site-wide robots rules.
-					// 'no' is what their metabox stores for an unticked box, and
-					// any non-empty value puts the post in per-post mode, so a
-					// stored 'no' is an override of a site-wide noindex or
-					// nofollow: off leaves it, and only a 'yes' is cleared.
-					if ( $clean ) {
-						\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array( $robots[ $field ] => 'yes' ) );
-					} elseif ( 'no' !== (string) get_post_meta( $post_id, 'surerank_settings_' . $robots[ $field ], true ) ) {
-						delete_post_meta( $post_id, 'surerank_settings_' . $robots[ $field ] );
+					// not group keys. As their box does (see $robots_own): a
+					// post leaving the site-wide rules takes all three as the
+					// site set them, then the switch flipped here, and an off
+					// is stored as 'no', never deleted (deleting the last one
+					// handed the post back to a site-wide noindex).
+					$set = array();
+					if ( ! $robots_own( $post_id ) ) {
+						foreach ( $robots as $key ) {
+							$set[ $key ] = $robots_site( $post_id, $key ) ? 'yes' : 'no';
+						}
 					}
+					$set[ $robots[ $field ] ] = $clean ? 'yes' : 'no';
+					\SureRank\Inc\API\Post::update_post_meta_common( $post_id, $set );
 					return;
 				}
 				if ( isset( $social_text[ $field ] ) ) {
