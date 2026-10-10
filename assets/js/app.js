@@ -12135,13 +12135,42 @@
 			regular_price: v.regular_price || '',
 			sale_price: v.sale_price || '',
 			stock_status: v.stock_status || 'instock',
-			manage_stock: !! v.manage_stock,
+			// A variation sharing the parent's stock reads "parent" (with the
+			// parent's quantity); its own switch is off, as WooCommerce's
+			// screen shows it.
+			manage_stock: true === v.manage_stock,
 			// null is "not tracked", which is not the same as none left.
 			stock_quantity: v.stock_quantity == null ? null : v.stock_quantity,
 			image: v.image && v.image.id ? { id: v.image.id, src: v.image.src || '' } : null,
 			attributes: ( v.attributes || [] ).map( ( a ) => ( { id: a.id || 0, name: a.name || '', option: a.option || '' } ) ),
 		} ) );
 		m.variationsRemoved = [];
+		// What each variation would send as loaded, so a save sends only what changed.
+		m.variationsSeeded = {};
+		m.variations.forEach( ( v ) => {
+			if ( v.id ) m.variationsSeeded[ v.id ] = variationBatchRow( v );
+		} );
+	}
+
+	// One variation as the variations batch takes it.
+	function variationBatchRow( v ) {
+		const row = {
+			sku: v.sku,
+			regular_price: v.regular_price,
+			sale_price: v.sale_price,
+			stock_status: v.stock_status,
+			manage_stock: !! v.manage_stock,
+			// { id: 0 } is how WooCommerce is told to drop a variation's
+			// picture; verified against a live store, along with the fact
+			// that null does the same. Sending the pair explicitly keeps
+			// set and clear symmetrical.
+			image: v.image && v.image.id ? { id: v.image.id } : { id: 0 },
+			attributes: ( v.attributes || [] ).map( ( a ) => ( a.id ? { id: a.id, option: a.option } : { name: a.name, option: a.option } ) ),
+		};
+		// Only meaningful while tracking, and WooCommerce reads a null here
+		// as "stop tracking", which the switch above already said.
+		if ( v.manage_stock ) row.stock_quantity = v.stock_quantity == null ? 0 : v.stock_quantity;
+		return row;
 	}
 
 	// The attributes a variable product varies by, with their allowed values.
@@ -12480,24 +12509,19 @@
 		if ( ! Array.isArray( m.variations ) ) return;
 		const body = { create: [], update: [], delete: ( m.variationsRemoved || [] ).slice() };
 		m.variations.forEach( ( v ) => {
-			const row = {
-				sku: v.sku,
-				regular_price: v.regular_price,
-				sale_price: v.sale_price,
-				stock_status: v.stock_status,
-				manage_stock: !! v.manage_stock,
-				// { id: 0 } is how WooCommerce is told to drop a variation's
-				// picture; verified against a live store, along with the fact
-				// that null does the same. Sending the pair explicitly keeps
-				// set and clear symmetrical.
-				image: v.image && v.image.id ? { id: v.image.id } : { id: 0 },
-				attributes: ( v.attributes || [] ).map( ( a ) => ( a.id ? { id: a.id, option: a.option } : { name: a.name, option: a.option } ) ),
-			};
-			// Only meaningful while tracking, and WooCommerce reads a null here
-			// as "stop tracking", which the switch above already said.
-			if ( v.manage_stock ) row.stock_quantity = v.stock_quantity == null ? 0 : v.stock_quantity;
-			if ( v.id ) body.update.push( Object.assign( { id: v.id }, row ) );
-			else body.create.push( row );
+			const row = variationBatchRow( v );
+			if ( ! v.id ) {
+				body.create.push( row );
+				return;
+			}
+			// An existing variation sends only the fields that changed since
+			// it was read, so saving the product leaves untouched ones alone.
+			const was = ( m.variationsSeeded || {} )[ v.id ];
+			const changed = {};
+			Object.keys( row ).forEach( ( k ) => {
+				if ( ! was || JSON.stringify( row[ k ] ) !== JSON.stringify( was[ k ] ) ) changed[ k ] = row[ k ];
+			} );
+			if ( Object.keys( changed ).length ) body.update.push( Object.assign( { id: v.id }, changed ) );
 		} );
 		if ( ! body.create.length && ! body.update.length && ! body.delete.length ) return;
 		const res = await api( `wc/v3/products/${ productId }/variations/batch`, {

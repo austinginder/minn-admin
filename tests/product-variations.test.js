@@ -339,6 +339,35 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			&& ( edited.body || [] ).length === 2,
 			JSON.stringify( ( edited.body || [] ).map( ( v ) => v.regular_price ) ) );
 
+		// Variations that take their stock from the parent keep doing so when
+		// the product is saved for something else. WooCommerce reads them back
+		// as manage_stock "parent" with the parent's quantity; the save used to
+		// resend every variation as tracking its own stock at that number, so
+		// 10 shared units became 10 per variation.
+		await api( `wc/v3/products/${ id }`, { method: 'PUT', body: JSON.stringify( { manage_stock: true, stock_quantity: 10 } ) } );
+		const inherit = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,manage_stock,stock_quantity` );
+		t.check( 'the variations take their stock from the parent (the precondition)',
+			( inherit.body || [] ).length === 2 && ( inherit.body || [] ).every( ( v ) => 'parent' === v.manage_stock ),
+			JSON.stringify( inherit.body ) );
+		await page.goto( BASE + '/minn-admin/products/' + id, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-pvar-row', { timeout: 20000 } );
+		const batches = [];
+		const onBatch = ( r ) => {
+			if ( 'POST' === r.method() && /variations\/batch/.test( r.url() ) ) batches.push( r.postData() || '' );
+		};
+		page.on( 'request', onBatch );
+		await page.fill( '#minn-p-name', 'Variation fixture renamed ' + suffix );
+		await save();
+		page.off( 'request', onBatch );
+		const named = await api( `wc/v3/products/${ id }?_fields=name,stock_quantity` );
+		t.check( 'the rename saves (control)', /renamed/.test( ( named.body || {} ).name || '' ), JSON.stringify( named.body ) );
+		const still = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,manage_stock,stock_quantity` );
+		t.check( 'a rename leaves the variations on the parent\'s stock',
+			( still.body || [] ).length === 2 && ( still.body || [] ).every( ( v ) => 'parent' === v.manage_stock ),
+			JSON.stringify( still.body ) );
+		t.check( 'and sends no variation batch for untouched variations', ! batches.length, batches.join( ' | ' ).slice( 0, 200 ) );
+		await api( `wc/v3/products/${ id }`, { method: 'PUT', body: JSON.stringify( { manage_stock: false } ) } );
+
 		// Remove one and save: it goes from the server too.
 		await page.click( '[data-pvarx="0"]' );
 		await page.waitForTimeout( 300 );
