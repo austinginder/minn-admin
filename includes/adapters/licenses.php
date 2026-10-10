@@ -4184,7 +4184,9 @@ function minn_admin_license_default_providers() {
 	// one here instead of replacing a working key with a typo. The
 	// server's messages classify: "expired" is expired, a domain message
 	// (their s203/e204) is a seat on another site, anything else invalid.
-	if ( function_exists( '\\Novamira\\Pro\\activate_new_license_key' ) ) {
+	// Novamira handles its licence on a page only its own manage check
+	// opens, so the actions attach only for a user who passes that check.
+	if ( function_exists( '\\Novamira\\Pro\\activate_new_license_key' ) && function_exists( 'minn_admin_novamira_can' ) && minn_admin_novamira_can() ) {
 		$nvp_code = function ( $message ) {
 			if ( preg_match( '/expired/i', $message ) ) {
 				return 'expired';
@@ -6046,7 +6048,8 @@ function minn_admin_licenses_surecart( $fingerprints ) {
 /**
  * Who may read or change this site's licences.
  *
- * On multisite the answer is the network administrator, not a site one:
+ * On multisite the answer is a super admin, not a site administrator or an
+ * account handed manage_network_options (which a role plugin can grant):
  * vendor credentials live in NETWORK options (Divi's et_automatic_updates_options,
  * Gravity Perks' gwp_settings), a deactivate is an irreversible seat release
  * at the vendor that the network owner paid for, and the read side carries
@@ -6059,9 +6062,7 @@ function minn_admin_licenses_surecart( $fingerprints ) {
  * @return bool
  */
 function minn_admin_licenses_can_manage() {
-	return is_multisite()
-		? current_user_can( 'manage_network_options' )
-		: current_user_can( 'manage_options' );
+	return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
 }
 
 /**

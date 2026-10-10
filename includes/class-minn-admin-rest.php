@@ -5842,18 +5842,16 @@ class Minn_Admin_REST {
 	/**
 	 * Who may read the System diagnostics (PHP ini, loaded extensions, the
 	 * security-posture checks, backup state, the hidden login URL) and the
-	 * autoload / cron / debug-log tools. On multisite this is server-wide
-	 * information a single subsite's administrator has no business reading,
-	 * so it takes a network administrator there; on a single site it is the
-	 * manage_options administrator who may also open core's Site Health
-	 * (view_site_health_checks, which core maps to install_plugins, so a site
-	 * that locks file changes away from its administrators keeps this page
-	 * from them too, exactly as it does Site Health).
+	 * autoload / cron / debug-log tools: the manage_options administrator who
+	 * may also open core's Site Health. Core grants view_site_health_checks
+	 * with install_plugins and, on a network, only to a super admin, so a
+	 * subsite administrator or an account handed manage_network_options is
+	 * refused this server-wide information, and a site that locks file
+	 * changes away from its administrators keeps this page from them too,
+	 * exactly as it does Site Health.
 	 */
 	public static function can_read_system() {
-		return is_multisite()
-			? current_user_can( 'manage_network_options' )
-			: current_user_can( 'manage_options' ) && current_user_can( 'view_site_health_checks' );
+		return current_user_can( 'manage_options' ) && current_user_can( 'view_site_health_checks' );
 	}
 
 	/**

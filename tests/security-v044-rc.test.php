@@ -114,6 +114,50 @@ if ( ! class_exists( '\Bricks\License' ) || ! function_exists( 'minn_admin_licen
 	\Bricks\License::$license_key = $brx4_prev;
 }
 
+// --- 09-01 / 03-05 Multisite: System, logs, database and licences take a super admin ---
+// manage_network_options maps to itself, so a role plugin can grant it without
+// super admin. Core's Site Health refuses that account; Minn's System page, log
+// viewer, database browser and licences answered it. Read-only probes: nothing
+// here clears a log or touches a licence.
+if ( ! is_multisite() ) {
+	$skip( '09-01 multisite gates: single site' );
+} else {
+	$net_role = 'minn_netops_test';
+	add_role( $net_role, 'Minn network settings test', array( 'read' => true, 'manage_network_options' => true ) );
+	$net_login = 'minn-netops-' . wp_generate_password( 6, false, false );
+	$net_id    = wp_insert_user( array( 'user_login' => $net_login, 'user_email' => $net_login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => $net_role ) );
+	if ( is_wp_error( $net_id ) ) {
+		$check( '09-01 fixture: network settings account', false, $net_id->get_error_message() );
+	} else {
+		wp_set_current_user( $net_id );
+		$check( '09-01 precondition: the account holds manage_network_options and is no super admin', current_user_can( 'manage_network_options' ) && ! is_super_admin(), '' );
+		$check( '09-01 precondition: core\'s Site Health refuses it', ! current_user_can( 'view_site_health_checks' ), '' );
+		global $wpdb;
+		$net_probes = array(
+			'the database browser\'s user table' => array( '/minn-admin/v1/db/rows', array( 'table' => $wpdb->base_prefix . 'users' ) ),
+			'the database table list'           => array( '/minn-admin/v1/db/tables', array() ),
+			'the System page'                   => array( '/minn-admin/v1/system', array() ),
+			'the log sources'                   => array( '/minn-admin/v1/system/logs', array() ),
+			'the licences'                      => array( '/minn-admin/v1/licenses', array() ),
+		);
+		foreach ( $net_probes as $net_label => $net_probe ) {
+			list( $net_st ) = $call( 'GET', $net_probe[0], null, $net_probe[1] );
+			$check( "09-01 multisite: a network settings account cannot read {$net_label}", in_array( $net_st, array( 401, 403 ), true ), (string) $net_st );
+		}
+		wp_set_current_user( $admin );
+		if ( is_super_admin() ) {
+			foreach ( array( 'the database table list' => '/minn-admin/v1/db/tables', 'the System page' => '/minn-admin/v1/system', 'the licences' => '/minn-admin/v1/licenses' ) as $net_label => $net_route ) {
+				list( $net_st ) = $call( 'GET', $net_route );
+				$check( "09-01 control: a super admin still reads {$net_label}", 200 === $net_st, (string) $net_st );
+			}
+		}
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		wpmu_delete_user( $net_id );
+	}
+	remove_role( $net_role );
+	wp_set_current_user( $admin );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

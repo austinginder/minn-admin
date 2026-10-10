@@ -50,14 +50,10 @@ class Minn_Admin_DB {
 		// tables, and every other tenant's wp_N_options sit in the same schema.
 		// A subsite administrator reading them would cross a real boundary —
 		// they cannot install plugins or edit files here either, which is why
-		// the wp-config routes already gate on is_super_admin(). Match that.
-		// Same floor as the System page it opens from, which is core's Site
-		// Health floor on a single site (view_site_health_checks).
-		$manage = function () {
-			return is_multisite()
-				? current_user_can( 'manage_network_options' )
-				: current_user_can( 'manage_options' ) && current_user_can( 'view_site_health_checks' );
-		};
+		// the wp-config routes already gate on is_super_admin(). Same floor as
+		// the System page it opens from: core's Site Health floor, which on a
+		// network takes a super admin.
+		$manage = array( 'Minn_Admin_REST', 'can_read_system' );
 		register_rest_route(
 			self::NS,
 			'/db/tables',
