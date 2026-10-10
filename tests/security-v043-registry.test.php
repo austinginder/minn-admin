@@ -3737,4 +3737,15 @@ if ( function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active() && 
 
 // @sections
 
+// Flamingo files a contact for every user a section creates and keeps it
+// after the user is deleted; the fixtures' leftovers go here.
+if ( post_type_exists( 'flamingo_contact' ) ) {
+	global $wpdb;
+	foreach ( $wpdb->get_results( "SELECT ID, post_title FROM {$wpdb->posts} WHERE post_type = 'flamingo_contact' AND post_title LIKE 'minn-%@example.com'" ) as $minn_contact ) {
+		if ( ! get_user_by( 'email', $minn_contact->post_title ) ) {
+			wp_delete_post( (int) $minn_contact->ID, true );
+		}
+	}
+}
+
 $summary();
