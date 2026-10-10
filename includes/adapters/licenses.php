@@ -1257,6 +1257,18 @@ function minn_admin_crocoblock_store( $key, $data ) {
 }
 
 /**
+ * Whether a Bricks licence status is one Bricks itself runs on: its own
+ * License::license_is_valid() also accepts a processed order, a cancelled
+ * (not refunded) subscription and a payment past due.
+ *
+ * @param mixed $status Status word from the Bricks licence server.
+ * @return bool
+ */
+function minn_admin_bricks_status_valid( $status ) {
+	return in_array( $status, array( 'active', 'processed', 'canceled', 'past_due' ), true );
+}
+
+/**
  * Bundled vendor readers. Every reader only touches wp_options / postmeta
  * through core APIs (which handle their own unserialization); none call
  * into the vendor's classes and none go to the network. Option names and
@@ -1659,9 +1671,9 @@ function minn_admin_license_default_providers() {
 			$note   = 'Status cache lapsed; Bricks re-checks weekly';
 			$stale  = false === $status;
 			if ( is_string( $status ) && '' !== $status ) {
-				if ( 'active' === $status ) {
+				if ( minn_admin_bricks_status_valid( $status ) ) {
 					$state = 'valid';
-					$note  = '';
+					$note  = 'active' === $status ? '' : str_replace( '_', ' ', $status );
 				} elseif ( 'error_remote' === $status ) {
 					$note = __( 'Bricks could not reach its license server', 'minn-admin' );
 				} else {
@@ -4133,7 +4145,7 @@ function minn_admin_license_default_providers() {
 			$prev_ttl    = (int) get_option( '_transient_timeout_bricks_license_status', 0 ) - time();
 			\Bricks\License::$license_key = $secret;
 			$status = \Bricks\License::activate_license();
-			if ( 'active' === $status ) {
+			if ( minn_admin_bricks_status_valid( $status ) ) {
 				return array( 'ok' => true );
 			}
 			if ( null === $prev ) {
@@ -4161,7 +4173,8 @@ function minn_admin_license_default_providers() {
 			delete_transient( 'bricks_license_status' );
 			\Bricks\License::$license_key = $key;
 			$status = \Bricks\License::activate_license();
-			return array( 'ok' => 'active' === $status, 'code' => 'active' === $status ? '' : 'invalid', 'message' => __( 'active', 'minn-admin' ) === $status ? '' : (string) $status );
+			$ok     = minn_admin_bricks_status_valid( $status );
+			return array( 'ok' => $ok, 'code' => $ok ? '' : 'invalid', 'message' => $ok ? '' : (string) $status );
 		};
 	}
 
