@@ -46142,6 +46142,14 @@
 			const loading = !! m.loading && ! m.full && ! m.isNew;
 			const isNew = !! m.isNew;
 			const exp = c.date_expires ? String( c.date_expires ).slice( 0, 10 ) : '';
+			// A type or status outside these lists (a Subscriptions sign-up fee
+			// coupon, a pending or private one) is offered as itself, so the
+			// select keeps it instead of falling back to its first option.
+			const typeOpts = c.discount_type && ! COUPON_TYPES.some( ( [ v ] ) => v === c.discount_type )
+				? [ [ c.discount_type, couponTypeLabel( c.discount_type ) ], ...COUPON_TYPES ]
+				: COUPON_TYPES;
+			const statusOpts = [ [ 'publish', __( 'Published' ) ], [ 'draft', __( 'Draft' ) ] ];
+			if ( c.status && ! statusOpts.some( ( [ v ] ) => v === c.status ) ) statusOpts.unshift( [ c.status, statusLabel( c.status ) ] );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
@@ -46165,15 +46173,14 @@
 									<div><div class="minn-field-label">${ esc( __( 'Code' ) ) }</div><input class="minn-input" id="minn-c-code" value="${ esc( c.code || '' ) }" placeholder="${ esc( __( 'e.g. SAVE10' ) ) }" style="font-family:var(--mono,ui-monospace,monospace); text-transform:uppercase;"></div>
 									<div><div class="minn-field-label">${ esc( __( 'Discount type' ) ) }</div>
 										<select class="minn-input" id="minn-c-type">
-											${ COUPON_TYPES.map( ( [ v, l ] ) => `<option value="${ v }"${ ( c.discount_type || 'percent' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+											${ typeOpts.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ ( c.discount_type || 'percent' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
 										</select>
 									</div>
 									<div class="minn-order-field-row">
 										<div><div class="minn-field-label">${ esc( __( 'Amount' ) ) }</div><input class="minn-input" id="minn-c-amount" type="text" inputmode="decimal" value="${ esc( c.amount != null ? String( c.amount ) : '' ) }" placeholder="10"></div>
 										<div><div class="minn-field-label">${ esc( __( 'Status' ) ) }</div>
 											<select class="minn-input" id="minn-c-status">
-												<option value="publish"${ ( c.status || 'publish' ) === 'publish' ? ' selected' : '' }>${ esc( __( 'Published' ) ) }</option>
-												<option value="draft"${ c.status === 'draft' ? ' selected' : '' }>${ esc( __( 'Draft' ) ) }</option>
+												${ statusOpts.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ ( c.status || 'publish' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
 											</select>
 										</div>
 									</div>
@@ -48064,6 +48071,11 @@
 					free_shipping: !!( $( '#minn-c-ship' ) || {} ).checked,
 					date_expires: expRaw || null,
 				};
+				// An update sends the type and status only when they changed.
+				if ( ! isNew ) {
+					if ( payload.discount_type === c.discount_type ) delete payload.discount_type;
+					if ( payload.status === c.status ) delete payload.status;
+				}
 				saveBtn.disabled = true;
 				saveBtn.textContent = isNew ? __( 'Creating…' ) : __( 'Saving…' );
 				try {

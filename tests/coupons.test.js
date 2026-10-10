@@ -203,9 +203,38 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'menu delete removes the coupon for good', goneStatus === 404, String( goneStatus ) );
 	}
 
-	// Create via UI.
+	// A type and status outside the modal's lists survive an unrelated edit.
+	// The selects used to fall back to their first option, so fixing a
+	// description turned a Subscriptions sign-up fee coupon into a plain
+	// percentage one and published a pending coupon.
 	await page.keyboard.press( 'Escape' );
 	await page.waitForTimeout( 200 );
+	const odd = await api( 'wc/v3/coupons', {
+		method: 'POST',
+		body: JSON.stringify( { code: 'ODD' + suffix.toUpperCase(), discount_type: 'sign_up_fee_percent', amount: '100', status: 'pending', description: 'Odd coupon' } ),
+	} );
+	const oddId = odd.body && odd.body.id;
+	if ( ! oddId ) {
+		t.check( 'a Subscriptions sign-up fee coupon can be created (skip without Subscriptions)', true, JSON.stringify( odd.body ).slice( 0, 160 ) );
+	} else {
+		await page.fill( '#minn-order-search', 'ODD' + suffix.toUpperCase() );
+		await page.waitForSelector( `.minn-table-row[data-coupon="${ oddId }"]`, { timeout: 15000 } );
+		await page.click( `.minn-table-row[data-coupon="${ oddId }"]` );
+		await page.waitForSelector( '#minn-c-desc', { timeout: 15000 } );
+		await page.fill( '#minn-c-desc', 'Odd coupon, reworded' );
+		await page.click( '#minn-coupon-save' );
+		await page.waitForFunction(
+			() => /Coupon updated/i.test( ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ),
+			null, { timeout: 20000 } ).catch( () => null );
+		const oddAfter = await api( `wc/v3/coupons/${ oddId }?_fields=discount_type,status,description` );
+		t.check( 'an edit saves (control)', oddAfter.body && 'Odd coupon, reworded' === oddAfter.body.description, JSON.stringify( oddAfter.body ) );
+		t.check( 'a description edit keeps the sign-up fee type and the pending status', oddAfter.body && 'sign_up_fee_percent' === oddAfter.body.discount_type && 'pending' === oddAfter.body.status, JSON.stringify( oddAfter.body ) );
+		await api( `wc/v3/coupons/${ oddId }?force=true`, { method: 'DELETE' } ).catch( () => null );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 200 );
+	}
+
+	// Create via UI.
 	if ( hasAdd ) {
 		await page.click( '#minn-coupon-add' );
 		await page.waitForSelector( '#minn-c-code', { timeout: 5000 } );
