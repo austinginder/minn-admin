@@ -1784,10 +1784,14 @@
 				<div class="minn-field-gallery-thumbs">${ items.slice( 0, 6 ).map( ( x ) => x.url
 					? `<img src="${ esc( x.url ) }" alt="" loading="lazy">`
 					: `<span class="minn-field-gallery-ph">#${ esc( String( x.id ) ) }</span>` ).join( '' ) }${ items.length > 6 ? `<span class="minn-field-gallery-more">+${ items.length - 6 }</span>` : '' }</div>
-				<button type="button" class="minn-btn-soft" data-gal-edit>${ items.length
+				${ B.caps && B.caps.upload ? `<button type="button" class="minn-btn-soft" data-gal-edit>${ items.length
 					/* translators: %d: number of images in the gallery field. */
 					? sprintf( esc( _n( 'Edit %d image…', 'Edit %d images…', items.length ) ), items.length )
-					: esc( __( 'Add images…' ) ) }</button>
+					: esc( __( 'Add images…' ) ) }</button>`
+					// The save takes a gallery's pictures through the media-library
+					// gate (upload rights) and keeps the stored set when it refuses,
+					// so without access the editor's changes were dropped unseen.
+					: `<span class="minn-toggle-desc">${ esc( __( 'Changing these pictures needs access to the media library.' ) ) }</span>` }
 			</div>`;
 		}
 		const itype = t === 'email' || t === 'url' ? t : 'text';
