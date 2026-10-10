@@ -78,7 +78,7 @@
 
 * **The Overview's store numbers need the store's permission.** An account that edits only its own orders (a marketplace vendor) saw the whole store's order counts on the Overview. Those now need the same permission as WooCommerce's own order counts.
 
-* **Saving a user keeps their roles.** Changing a user's name or email gave a user with no role on the site the Subscriber role, and dropped every role but the first from a user with several. Roles now change only when you pick another.
+* **Saving a user keeps their roles.** Changing a user's name or email gave a user with no role on the site the Subscriber role, and dropped every role but the first from a user with several. Roles now change only when you pick another, and such a user opens on an empty role picker, so any role you pick for them is saved.
 
 * **Menu items keep their markup.** Editing a classic menu item's link stripped any markup from its label (an icon before Home, a New badge). Labels now save as written.
 
