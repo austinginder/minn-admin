@@ -424,6 +424,37 @@ if ( ! function_exists( 'wc_memberships_get_membership_plan' ) ) {
 	}
 }
 
+// --- 07-03 Gift Cards: codes in order notes are masked below administrator ---
+// The vendor masks the code in its order notes for shop managers only on
+// wp-admin screens; Minn's order Timeline reads the notes over wc/v3, where
+// that filter never runs.
+if ( ! function_exists( 'wc_gc_mask_code' ) || ! function_exists( 'wc_create_order' ) || ! get_role( 'shop_manager' ) ) {
+	$skip( '07-03 WooCommerce Gift Cards inactive' );
+} else {
+	$gc_code  = 'MNTS-' . strtoupper( wp_generate_password( 4, false, false ) ) . '-QRST-UVWX';
+	$gc_order = wc_create_order();
+	$gc_order->save();
+	$gc_order->add_order_note( 'Debited $10.00 to gift card code <span class="woocommerce-giftcards-admin-note-code">' . $gc_code . '</span>.' );
+	$gc_login = 'minn-gcmgr-' . wp_generate_password( 6, false, false );
+	$gc_user  = wp_insert_user( array( 'user_login' => $gc_login, 'user_email' => $gc_login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'shop_manager' ) );
+	$gc_notes = function () use ( $call, $gc_order ) {
+		list( $st, $body ) = $call( 'GET', '/wc/v3/orders/' . $gc_order->get_id() . '/notes' );
+		return array( $st, wp_json_encode( $body ) );
+	};
+	$gc_unmask = get_option( 'wc_gc_unmask_codes_for_shop_managers', null );
+	update_option( 'wc_gc_unmask_codes_for_shop_managers', 'no' );
+	wp_set_current_user( $gc_user );
+	list( $gc_st, $gc_json ) = $gc_notes();
+	$check( '07-03 gift cards: a shop manager reads the order note with the code masked', 200 === $gc_st && false === strpos( $gc_json, $gc_code ) && false !== strpos( $gc_json, 'woocommerce-giftcards-admin-note-code' ), $gc_st . ' ' . ( false === strpos( $gc_json, $gc_code ) ? 'masked' : 'full code' ) );
+	wp_set_current_user( $admin );
+	list( $gc_st, $gc_json ) = $gc_notes();
+	$check( '07-03 control: an administrator still reads the full code', 200 === $gc_st && false !== strpos( $gc_json, $gc_code ), $gc_st . ' ' . ( false === strpos( $gc_json, $gc_code ) ? 'masked' : 'full code' ) );
+	null === $gc_unmask ? delete_option( 'wc_gc_unmask_codes_for_shop_managers' ) : update_option( 'wc_gc_unmask_codes_for_shop_managers', $gc_unmask );
+	$gc_order->delete( true );
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	wp_delete_user( $gc_user );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

@@ -243,6 +243,32 @@ function minn_admin_wcgc_send_email( $card ) {
 	do_action( $hook, $card );
 }
 
+/*
+ * Gift Cards writes the full code into order and subscription notes and masks
+ * it below administrator through a get_comment filter that only runs on
+ * wp-admin screens (its admin class only loads there). Minn's Timelines read
+ * those notes over wc/v3, so the answer gets the same mask, by the vendor's
+ * own predicate and masker.
+ */
+add_filter( 'woocommerce_rest_prepare_order_note', function ( $response ) {
+	if ( ! $response instanceof WP_REST_Response || ! function_exists( 'wc_gc_mask_codes' ) || ! function_exists( 'wc_gc_mask_code' ) || ! wc_gc_mask_codes( 'admin' ) ) {
+		return $response;
+	}
+	$data = $response->get_data();
+	if ( ! isset( $data['note'] ) || ! is_string( $data['note'] ) || false === strpos( $data['note'], 'woocommerce-giftcards-admin-note-code' ) ) {
+		return $response;
+	}
+	$data['note'] = preg_replace_callback(
+		'/(<span class="woocommerce-giftcards-admin-note-code">)(.*?)(<\/span>)/',
+		function ( $m ) {
+			return $m[1] . wc_gc_mask_code( $m[2] ) . $m[3];
+		},
+		$data['note']
+	);
+	$response->set_data( $data );
+	return $response;
+} );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_wcgc_active() ) {
 		return $surfaces;
