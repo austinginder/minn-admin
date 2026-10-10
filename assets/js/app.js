@@ -39739,6 +39739,13 @@
 		const rebuilder = ! itemsMode && ( B.imageBlocks || {} )[ String( islandEl && islandEl.dataset.block || '' ) ];
 		const fixed = ! itemsMode && !! info.fixedSlots && ! rebuilder;
 		const canUpload = !! ( B.caps && B.caps.upload );
+		// The plugin's rebuild takes the pictures through the media-library
+		// gate (upload rights), the same one every other picture field asks,
+		// so without it there is nothing this editor could apply.
+		if ( rebuilder && ! canUpload ) {
+			toast( __( 'Changing the pictures in this block needs access to the media library.' ), true );
+			return;
+		}
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-imgedit-overlay';
 		// While this modal is open it owns EVERY window drop (rule of the
@@ -44803,7 +44810,8 @@
 		if ( state.editor && state.editor.mode === 'blocks' ) {
 			Object.keys( B.imageBlocks || {} ).forEach( ( name ) => {
 				const desc = B.imageBlocks[ name ];
-				if ( ! desc || ! desc.insert ) return;
+				// Built from library pictures, which take upload rights.
+				if ( ! desc || ! desc.insert || ! ( B.caps && B.caps.upload ) ) return;
 				items.push( [ icon( 'gallery' ), desc.label, { imageBlock: name }, false, name.split( '/' )[ 0 ], [ 'gallery', 'images' ] ] );
 			} );
 		}
