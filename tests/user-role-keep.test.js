@@ -89,6 +89,16 @@ const roles = ( id ) => JSON.parse( wpEval( `$u = get_userdata( ${ id } ); echo 
 		await page.click( '[data-ue-save]' );
 		await done;
 		t.check( 'picking another role saves it', JSON.stringify( roles( two ) ) === '["editor"]', JSON.stringify( roles( two ) ) );
+		// And changing it back on the same page saves too: the comparison is
+		// against the user as last saved, not as the page first loaded them.
+		await page.click( '#minn-ue-role' );
+		await page.fill( '#minn-ue-role', 'Author' );
+		await page.waitForSelector( '#minn-ue-role-ac .minn-ac-item', { timeout: 8000 } );
+		await page.click( '#minn-ue-role-ac .minn-ac-item:has-text("Author")' );
+		const back = page.waitForResponse( ( r ) => r.request().method() === 'POST' && new RegExp( `wp/v2/users/${ two }(\\?|$)` ).test( r.url() ), { timeout: 20000 } );
+		await page.click( '[data-ue-save]' );
+		await back;
+		t.check( 'changing the role back on the same page saves it', JSON.stringify( roles( two ) ) === '["author"]', JSON.stringify( roles( two ) ) );
 	} finally {
 		for ( const id of made ) {
 			if ( id ) wpEval( `require_once ABSPATH . 'wp-admin/includes/user.php'; wp_delete_user( ${ id } );` );

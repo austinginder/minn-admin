@@ -51022,7 +51022,9 @@
 				description: $( '#minn-ue-bio', view ).value,
 			};
 			const roleSel = $( '#minn-ue-role', view );
-			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue && roleSel.dataset.acValue !== userRoleSeed( u ) ) payload.roles = [ roleSel.dataset.acValue ];
+			// Against the user as last saved (ue.user), not as first loaded, or
+			// changing a role and changing it back sent nothing the second time.
+			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue && roleSel.dataset.acValue !== userRoleSeed( ue.user ) ) payload.roles = [ roleSel.dataset.acValue ];
 			const password = $( '#minn-ue-password', view ).value;
 			if ( password ) payload.password = password;
 			const langSel = $( '#minn-ue-lang', view );
