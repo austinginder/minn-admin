@@ -476,6 +476,12 @@ class Minn_Admin_DB {
 		// single site, so the two tables share one list: keyed_secret() hands
 		// both secret_option_names().
 		'sitemeta'      => array( 'meta_value', 'meta_key', self::SECRET_OPTION_KEYS ),
+		// Licence rows the Licences screen reads outside the options table
+		// (minn_admin_license_secret_options() covers the ones inside it):
+		// Search & Filter Pro keeps its key in its own table, Brizy Pro in
+		// a post's meta.
+		'search_filter_options' => array( 'value', 'name', array( 'license-data' ) ),
+		'postmeta'      => array( 'meta_value', 'meta_key', array( 'brizy-license-key' ) ),
 		// Wordfence Login Security: remembered-device cookie keys (whoever
 		// holds them can mark any user as past 2FA) and the reCAPTCHA secret.
 		'wfls_settings' => array( 'value', 'name', array( 'shared-hash-secret', 'shared-symmetric-secret', 'recaptcha-secret' ) ),

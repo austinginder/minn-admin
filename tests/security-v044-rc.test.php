@@ -1121,6 +1121,54 @@ if ( class_exists( 'Minn_Admin_DB' ) ) {
 	$skip( '2b-02 DB browser not loaded' );
 }
 
+// --- 2b2-02 DB browser: licence rows outside the named list and the options table ---
+// Breakdance's validity record (the full key and the buyer), Admin Columns
+// Pro's activation token, Search & Filter Pro's own table and Brizy Pro's
+// post meta all printed. Rows that exist are checked by shape only; the Brizy
+// row is seeded on a throwaway post.
+if ( class_exists( 'Minn_Admin_DB' ) ) {
+	global $wpdb;
+	$d3_cell = function ( $table, $keycol, $valcol, $name ) use ( $call ) {
+		list( , $res ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $table, 'page' => 1, 'per_page' => 50, 'fcol' => $keycol, 'fq' => $name ) );
+		$cols = wp_list_pluck( (array) ( $res['columns'] ?? array() ), 'name' );
+		$ki   = array_search( $keycol, $cols, true );
+		$vi   = array_search( $valcol, $cols, true );
+		foreach ( (array) ( $res['rows'] ?? array() ) as $row ) {
+			if ( false !== $ki && false !== $vi && isset( $row[ $ki ] ) && $name === $row[ $ki ] ) {
+				return $row[ $vi ];
+			}
+		}
+		return null;
+	};
+	$d3_shape = function ( $c ) {
+		return null === $c ? 'missing' : ( is_array( $c ) && ! empty( $c['redacted'] ) ? 'redacted' : ( '' === $c ? 'empty' : 'RAW' ) );
+	};
+	foreach ( array( 'breakdance_license_key_validity_info', 'acp_activation_key', 'acp_subscription_key', 'acp_subscription_details_key', 'acp_update_plugins_data' ) as $d3_n ) {
+		if ( null === $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $d3_n ) ) ) {
+			continue;
+		}
+		$d3_s = $d3_shape( $d3_cell( $wpdb->options, 'option_name', 'option_value', $d3_n ) );
+		$check( "2b2-02 DB browser: the stored {$d3_n} row is redacted", in_array( $d3_s, array( 'redacted', 'empty' ), true ), $d3_s );
+	}
+	$d3_sf = $wpdb->prefix . 'search_filter_options';
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $d3_sf ) ) && $wpdb->get_var( "SELECT id FROM {$d3_sf} WHERE name = 'license-data'" ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$d3_s = $d3_shape( $d3_cell( $d3_sf, 'name', 'value', 'license-data' ) );
+		$check( '2b2-02 DB browser: Search & Filter Pro\'s licence row is redacted', 'redacted' === $d3_s, $d3_s );
+	}
+	$d3_tag  = 'mv44d3' . wp_rand( 100000, 999999 );
+	$d3_post = wp_insert_post( array( 'post_title' => 'Minn RC brizy probe', 'post_status' => 'draft' ) );
+	add_post_meta( $d3_post, 'brizy-license-key', $d3_tag . 'brizy' );
+	add_post_meta( $d3_post, 'minn_rc_probe_meta', $d3_tag . 'ctl' );
+	$d3_s = $d3_shape( $d3_cell( $wpdb->postmeta, 'meta_key', 'meta_value', 'brizy-license-key' ) );
+	$check( '2b2-02 DB browser: Brizy Pro\'s licence key in post meta is redacted', 'redacted' === $d3_s, $d3_s );
+	list( , $d3_q ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->postmeta, 'page' => 1, 'per_page' => 50, 'fcol' => 'meta_value', 'fq' => $d3_tag ) );
+	$d3_vals = wp_json_encode( $d3_q['rows'] ?? array() );
+	$check( '2b2-02 DB browser: a post meta value search finds the ordinary row and not the key', false !== strpos( $d3_vals, $d3_tag . 'ctl' ) && false === strpos( $d3_vals, $d3_tag . 'brizy' ), 'total ' . wp_json_encode( $d3_q['total'] ?? null ) );
+	wp_delete_post( $d3_post, true );
+} else {
+	$skip( '2b2-02 DB browser not loaded' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

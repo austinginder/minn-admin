@@ -1326,7 +1326,8 @@ function minn_admin_bricks_status_valid( $status ) {
  */
 function minn_admin_license_secret_options() {
 	$names = array(
-		'acf_pro_license', 'analyticswp_slt_license', 'automatic_css_license_key', 'brainstrom_products', 'breakdance_license_key',
+		'acf_pro_license', 'acp_activation_key', 'acp_subscription_details_key', 'acp_subscription_key', 'acp_update_plugins_data',
+		'analyticswp_slt_license', 'automatic_css_license_key', 'brainstrom_products', 'breakdance_license_key', 'breakdance_license_key_validity_info',
 		'bricks_license_key', 'cleantalk_settings', 'elementor_pro_license_key', 'envato_market', 'essential-addons-elementor_license',
 		'essential-addons-elementor-license-key', 'et_automatic_updates_options', 'etch_license_key', 'etch_license_options',
 		'exactmetrics_license', 'exactmetrics_network_license', 'monsterinsights_network_license', 'fl_themes_subscription_email',
