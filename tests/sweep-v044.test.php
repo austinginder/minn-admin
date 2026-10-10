@@ -252,6 +252,155 @@ wp_set_current_user( $admin );
 	}
 } )();
 
+// --- Forminator counts pending entries and keeps payment statuses ------------
+// Forminator 1.58 parks an entry awaiting a Stripe checkout as `pending` and
+// one whose payment failed as `failed`; its own form counts (count_entries, the
+// Forms list and Minn's Manage view) take active + pending. Its payment lookups
+// find an entry only while it is still pending, so a Minn spam/not-spam round
+// trip that lands it on `active` orphans the payment. Spam is offered on a
+// received entry and "Not spam" on a spam one; the routes are what both send.
+( function () use ( $check, $skip, $call ) {
+	global $wpdb;
+	if ( ! class_exists( 'Forminator_API' ) || ! class_exists( 'Forminator_Form_Entry_Model' ) ) {
+		$skip( 'Forminator inactive: pending/failed statuses' );
+		return;
+	}
+	$fms_table = $wpdb->prefix . 'frmt_form_entry';
+	if ( $fms_table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $fms_table ) ) ) {
+		$skip( 'Forminator table missing: pending/failed statuses' );
+		return;
+	}
+	$fms_forms = Forminator_API::get_forms( null, 1, 1 );
+	if ( ! is_array( $fms_forms ) || ! $fms_forms ) {
+		$skip( 'Forminator has no form to hold fixture entries' );
+		return;
+	}
+	$fms_form = (int) $fms_forms[0]->id;
+	$fms_tag  = 'Minn Sweep ' . strtolower( wp_generate_password( 6, false, false ) );
+
+	$fms_ids = array();
+	foreach ( array( 'active', 'pending', 'failed', 'draft', 'spam', 'spamflag' ) as $fms_kind ) {
+		$fms_new = Forminator_API::add_form_entry( $fms_form, array(
+			array( 'name' => 'name-1', 'value' => $fms_tag . ' ' . $fms_kind ),
+		) );
+		if ( is_wp_error( $fms_new ) || ! $fms_new ) {
+			$check( "Forminator fixture entry ({$fms_kind})", false, is_wp_error( $fms_new ) ? $fms_new->get_error_message() : 'no id' );
+			continue;
+		}
+		$fms_ids[ $fms_kind ] = (int) $fms_new;
+	}
+	$fms_set   = function ( $kind, $status, $is_spam ) use ( $wpdb, $fms_table, &$fms_ids ) {
+		if ( isset( $fms_ids[ $kind ] ) ) {
+			$wpdb->update( $fms_table, array( 'status' => $status, 'is_spam' => $is_spam ), array( 'entry_id' => $fms_ids[ $kind ] ), array( '%s', '%d' ), array( '%d' ) );
+		}
+	};
+	$fms_flush = function () use ( $fms_form, &$fms_ids ) {
+		Forminator_Form_Entry_Model::delete_form_entry_cache( $fms_form );
+		foreach ( $fms_ids as $fms_eid ) {
+			wp_cache_delete( $fms_eid, Forminator_Form_Entry_Model::FORM_ENTRY_CACHE_GROUP );
+		}
+	};
+	$fms_row   = function ( $kind ) use ( $wpdb, $fms_table, &$fms_ids ) {
+		return isset( $fms_ids[ $kind ] ) ? $wpdb->get_row( $wpdb->prepare( "SELECT status, is_spam FROM {$fms_table} WHERE entry_id = %d", $fms_ids[ $kind ] ) ) : null; // phpcs:ignore
+	};
+	$fms_desc  = function ( $r ) {
+		return $r ? "status={$r->status} is_spam={$r->is_spam}" : 'missing';
+	};
+	$fms_set( 'pending', 'pending', 0 );
+	$fms_set( 'failed', 'failed', 0 );
+	$fms_set( 'draft', 'draft', 0 );
+	$fms_set( 'spam', 'spam', 1 );    // spam at submit: Forminator writes both
+	$fms_flush();
+
+	if ( 6 === count( $fms_ids ) ) {
+		// Counts: the received list, the status card and Forminator's own count agree.
+		$fms_own = (int) Forminator_Form_Entry_Model::count_entries( $fms_form );
+		list( , $fms_list ) = $call( 'GET', '/minn-admin/v1/forminator/entries', null, array( 'form_id' => $fms_form, 'per_page' => 100 ) );
+		$check( 'Forminator received list total matches its own count_entries (active + pending)', isset( $fms_list['total'] ) && (int) $fms_list['total'] === $fms_own, 'list ' . ( $fms_list['total'] ?? '?' ) . " vs Forminator {$fms_own}" );
+		list( , $fms_manage ) = $call( 'GET', '/minn-admin/v1/forminator/forms', null, array( 'manage' => 1 ) );
+		$fms_manage_n = null;
+		foreach ( (array) $fms_manage as $fms_m ) {
+			if ( (int) $fms_m['id'] === $fms_form ) {
+				$fms_manage_n = (int) $fms_m['entries'];
+			}
+		}
+		$check( 'Forminator Manage view count matches the received list', null !== $fms_manage_n && $fms_manage_n === (int) ( $fms_list['total'] ?? -1 ), "manage {$fms_manage_n}" );
+
+		$fms_all_own = 0;
+		foreach ( (array) $wpdb->get_col( "SELECT DISTINCT form_id FROM {$fms_table} WHERE entry_type = 'custom-forms'" ) as $fms_fid ) { // phpcs:ignore
+			Forminator_Form_Entry_Model::delete_form_entry_cache( (int) $fms_fid );
+			$fms_all_own += (int) Forminator_Form_Entry_Model::count_entries( (int) $fms_fid );
+		}
+		list( , $fms_card ) = $call( 'GET', '/minn-admin/v1/forminator/status' );
+		$fms_card_v = isset( $fms_card['rows'][0]['value'] ) ? (string) $fms_card['rows'][0]['value'] : '?';
+		$check( 'Forminator status card counts what Forminator counts', number_format_i18n( $fms_all_own ) === $fms_card_v, "card {$fms_card_v} vs Forminator {$fms_all_own}" );
+
+		$fms_items = array();
+		foreach ( (array) ( $fms_list['items'] ?? array() ) as $fms_it ) {
+			$fms_items[ (int) $fms_it['id'] ] = $fms_it;
+		}
+		$check( 'Forminator pending entry is listed as pending (so the client offers no spam action)', isset( $fms_items[ $fms_ids['pending'] ] ) && 'pending' === $fms_items[ $fms_ids['pending'] ]['status'], isset( $fms_items[ $fms_ids['pending'] ] ) ? 'status ' . $fms_items[ $fms_ids['pending'] ]['status'] : 'not listed' );
+		$check( 'Forminator active entry is listed as received (control)', isset( $fms_items[ $fms_ids['active'] ] ) && 'received' === $fms_items[ $fms_ids['active'] ]['status'] );
+		$check( 'Forminator failed and draft entries stay off the received list', ! isset( $fms_items[ $fms_ids['failed'] ] ) && ! isset( $fms_items[ $fms_ids['draft'] ] ) );
+
+		// The reviewer's round trip on a pending payment entry.
+		list( $fms_s1 ) = $call( 'POST', "/minn-admin/v1/forminator/entries/{$fms_ids['pending']}/spam" );
+		list( $fms_s2 ) = $call( 'POST', "/minn-admin/v1/forminator/entries/{$fms_ids['pending']}/unspam" );
+		$fms_r          = $fms_row( 'pending' );
+		$check( 'Forminator spam + not-spam leaves a pending payment entry pending', $fms_r && 'pending' === $fms_r->status && 0 === (int) $fms_r->is_spam, $fms_desc( $fms_r ) . " (spam {$fms_s1}, unspam {$fms_s2})" );
+		$check( 'Forminator refuses to mark a pending entry as spam', $fms_s1 >= 400 && $fms_s1 < 500, "status {$fms_s1}" );
+		$check( 'Forminator refuses "not spam" on an entry that is not spam', $fms_s2 >= 400 && $fms_s2 < 500, "status {$fms_s2}" );
+		$fms_found = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$fms_table} WHERE entry_id = %d AND status = %s", $fms_ids['pending'], 'pending' ) ); // phpcs:ignore
+		$check( 'Forminator payment lookups still see the entry as pending', 1 === $fms_found );
+
+		foreach ( array( 'failed', 'draft' ) as $fms_kind ) {
+			list( $fms_st ) = $call( 'POST', "/minn-admin/v1/forminator/entries/{$fms_ids[ $fms_kind ]}/spam" );
+			list( $fms_su ) = $call( 'POST', "/minn-admin/v1/forminator/entries/{$fms_ids[ $fms_kind ]}/unspam" );
+			$fms_r          = $fms_row( $fms_kind );
+			$check( "Forminator spam/not-spam leave a {$fms_kind} entry as it was", $fms_r && $fms_kind === $fms_r->status && 0 === (int) $fms_r->is_spam && $fms_st >= 400 && $fms_su >= 400, $fms_desc( $fms_r ) . " (spam {$fms_st}, unspam {$fms_su})" );
+		}
+
+		// Controls: the real round trip still works.
+		list( $fms_a1, $fms_a1d ) = $call( 'POST', "/minn-admin/v1/forminator/entries/{$fms_ids['active']}/spam" );
+		$fms_r                    = $fms_row( 'active' );
+		$check( 'Forminator marks a received entry as spam (control)', 200 === $fms_a1 && $fms_r && 'spam' === $fms_r->status && 1 === (int) $fms_r->is_spam && 'spam' === ( $fms_a1d['status'] ?? '' ), $fms_desc( $fms_r ) );
+		list( $fms_a2 ) = $call( 'POST', "/minn-admin/v1/forminator/entries/{$fms_ids['active']}/spam" );
+		$check( 'Forminator refuses to mark a spam entry as spam again', $fms_a2 >= 400 && $fms_a2 < 500, "status {$fms_a2}" );
+		// A spam flag on an active row: the shape from before Forminator's
+		// status column, still in Minn's Spam filter. Set after the counts
+		// (Forminator's count_entries reads status alone and would count it).
+		$fms_set( 'spamflag', 'active', 1 );
+		$fms_flush();
+		list( , $fms_sp ) = $call( 'GET', '/minn-admin/v1/forminator/entries', null, array( 'form_id' => $fms_form, 'status' => 'spam', 'per_page' => 100 ) );
+		$fms_spam_ids     = array_map( 'intval', wp_list_pluck( (array) ( $fms_sp['items'] ?? array() ), 'id' ) );
+		$check( 'Forminator spam filter lists the spammed entry and both stored spam shapes (control)', in_array( $fms_ids['active'], $fms_spam_ids, true ) && in_array( $fms_ids['spam'], $fms_spam_ids, true ) && in_array( $fms_ids['spamflag'], $fms_spam_ids, true ) );
+		list( $fms_a3, $fms_a3d ) = $call( 'POST', "/minn-admin/v1/forminator/entries/{$fms_ids['active']}/unspam" );
+		$fms_r                    = $fms_row( 'active' );
+		$check( 'Forminator "not spam" returns a spammed entry to active (control)', 200 === $fms_a3 && $fms_r && 'active' === $fms_r->status && 0 === (int) $fms_r->is_spam && 'received' === ( $fms_a3d['status'] ?? '' ), $fms_desc( $fms_r ) );
+		foreach ( array( 'spam', 'spamflag' ) as $fms_kind ) {
+			list( $fms_u ) = $call( 'POST', "/minn-admin/v1/forminator/entries/{$fms_ids[ $fms_kind ]}/unspam" );
+			$fms_r         = $fms_row( $fms_kind );
+			$check( "Forminator \"not spam\" on stored spam ({$fms_kind}) lands on active (control)", 200 === $fms_u && $fms_r && 'active' === $fms_r->status && 0 === (int) $fms_r->is_spam, $fms_desc( $fms_r ) );
+		}
+		list( $fms_nf ) = $call( 'POST', '/minn-admin/v1/forminator/entries/999999999/spam' );
+		$check( 'Forminator spam on a missing entry is a 404 (control)', 404 === $fms_nf, "status {$fms_nf}" );
+	}
+
+	// Cleanup through Minn's own DELETE (Forminator's complete cleanup), then
+	// anything that survived.
+	foreach ( $fms_ids as $fms_kind => $fms_eid ) {
+		list( $fms_d ) = $call( 'DELETE', "/minn-admin/v1/forminator/entries/{$fms_eid}" );
+		if ( 'pending' === $fms_kind ) {
+			$fms_left = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}frmt_form_entry_meta WHERE entry_id = %d", $fms_eid ) ); // phpcs:ignore
+			$check( 'Forminator delete removes a pending entry and its meta (control)', 200 === $fms_d && ! $fms_row( $fms_kind ) && 0 === $fms_left, "status {$fms_d}, meta rows {$fms_left}" );
+		}
+		if ( $wpdb->get_var( $wpdb->prepare( "SELECT entry_id FROM {$fms_table} WHERE entry_id = %d", $fms_eid ) ) ) { // phpcs:ignore
+			Forminator_Form_Entry_Model::delete_by_entry( $fms_eid );
+		}
+	}
+	$fms_flush();
+} )();
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it
