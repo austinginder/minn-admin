@@ -844,6 +844,42 @@ if ( ! function_exists( 'minn_admin_media_folders_provider' ) || 'HappyFiles' !=
 	wp_delete_term( (int) $hf_b['term_id'], 'happyfiles_category' );
 }
 
+// --- 11-02 /image-block takes pictures through the shared attachment gate ---
+// The Jetpack Tiled Gallery rebuild door checked read_post only, so a
+// Contributor (no upload_files) baked library images into their draft that
+// every other picture-taking mapper refuses, and its id list had no ceiling.
+// A stand-in image block is registered for this process (Jetpack's is the
+// only bundled one).
+$ib_hook = function ( $blocks ) {
+	$blocks['minn-test/gallery'] = array(
+		'label'   => 'Minn test gallery',
+		'rebuild' => function ( $images ) {
+			return '<!-- minn-test -->' . implode( ',', wp_list_pluck( $images, 'id' ) );
+		},
+	);
+	return $blocks;
+};
+add_filter( 'minn_admin_image_blocks', $ib_hook );
+global $wpdb;
+$ib_img = (int) $wpdb->get_var( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type LIKE 'image/%' AND post_parent = 0 ORDER BY ID DESC LIMIT 1" );
+if ( ! $ib_img ) {
+	$skip( '11-02 no unattached image in the library' );
+} else {
+	$ib_login = 'minn-ibcontrib-' . wp_generate_password( 6, false, false );
+	$ib_user  = wp_insert_user( array( 'user_login' => $ib_login, 'user_email' => $ib_login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'contributor' ) );
+	wp_set_current_user( $ib_user );
+	list( $ib_st ) = $call( 'POST', '/minn-admin/v1/image-block', array( 'block' => 'minn-test/gallery', 'ids' => array( $ib_img ), 'raw' => '' ) );
+	$check( '11-02 image-block: a Contributor (no upload_files) cannot bake a library image in', 403 === $ib_st, (string) $ib_st );
+	wp_set_current_user( $admin );
+	list( $ib_st, $ib_body ) = $call( 'POST', '/minn-admin/v1/image-block', array( 'block' => 'minn-test/gallery', 'ids' => array( $ib_img ), 'raw' => '' ) );
+	$check( '11-02 control: an administrator still rebuilds the block', 200 === $ib_st && false !== strpos( (string) ( $ib_body['markup'] ?? '' ), (string) $ib_img ), (string) $ib_st );
+	list( $ib_st ) = $call( 'POST', '/minn-admin/v1/image-block', array( 'block' => 'minn-test/gallery', 'ids' => range( 1, 501 ), 'raw' => '' ) );
+	$check( '11-02 image-block: more than 500 ids is refused before any lookup', 400 === $ib_st, (string) $ib_st );
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	wp_delete_user( $ib_user );
+}
+remove_filter( 'minn_admin_image_blocks', $ib_hook );
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

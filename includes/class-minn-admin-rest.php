@@ -1840,6 +1840,8 @@ class Minn_Admin_REST {
 						'type'     => 'array',
 						'required' => true,
 						'items'    => array( 'type' => 'integer' ),
+						// One lookup per id: the same ceiling as the media folders move.
+						'maxItems' => 500,
 					),
 					'raw'   => array(
 						'type'    => 'string',
@@ -2668,10 +2670,12 @@ class Minn_Admin_REST {
 		}
 		$images = array();
 		foreach ( (array) $req->get_param( 'ids' ) as $id ) {
-			$id = (int) $id;
-			$post = $id ? get_post( $id ) : null;
-			if ( ! $post || 'attachment' !== $post->post_type || ! current_user_can( 'read_post', $id ) ) {
-				continue;
+			// The shared attachment gate every mapper that takes a picture
+			// asks (upload_files, and read_post on the file); a refused id
+			// refuses the set, as the ACF and JetEngine galleries do.
+			$id = minn_admin_attachment_in( (int) $id );
+			if ( ! is_int( $id ) ) {
+				return new WP_Error( 'minn_image_refused', __( 'One of those images cannot be used here.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			$meta = wp_get_attachment_metadata( $id );
 			$full = wp_get_attachment_image_src( $id, 'full' );
