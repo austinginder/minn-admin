@@ -6,6 +6,8 @@
 	'use strict';
 
 	const B = window.MINN;
+	// This copy of Minn as the Plugins and Updates views key it (see isMinnAdminPluginFile).
+	const SELF_PLUGIN = String( B.selfPlugin || 'minn-admin/minn-admin' );
 	// Minn Engine serves the same app with no WordPress behind it: the boot
 	// payload names the engine, and every wp-admin-only control keys off this.
 	const ENGINE = !! ( B && B.engine );
@@ -24160,7 +24162,7 @@
 			const plugin = plugins.find( ( p ) => p.plugin === file );
 			if ( ! plugin || plugin.status === 'network-active' ) return;
 			const activating = plugin.status !== 'active';
-			if ( ! activating && file === 'minn-admin/minn-admin' ) {
+			if ( ! activating && isMinnAdminPluginFile( file ) ) {
 				// Turning Minn off ejects the user — that deserves a real
 				// modal and a readable landing, not a native confirm() and
 				// an instant yank to wp-admin (the bounce-audit P1).
@@ -24179,7 +24181,7 @@
 				plugin.status = activating ? 'active' : 'inactive';
 				/* translators: %s: the plugin's name. */
 				toast( sprintf( activating ? __( '%s activated' ) : __( '%s deactivated' ), pluginDisplayName( plugin.name ) ) );
-				if ( file === 'minn-admin/minn-admin' && ! activating ) {
+				if ( isMinnAdminPluginFile( file ) && ! activating ) {
 					window.location.href = B.site.adminUrl;
 					return;
 				}
@@ -24281,7 +24283,7 @@
 			// when turning off: the card's dedicated flow explains the
 			// consequence of removing the app you are standing in.
 			if ( B.caps.networkPlugins ) {
-				const isSelf = file === 'minn-admin/minn-admin';
+				const isSelf = isMinnAdminPluginFile( file );
 				if ( ! net ) {
 					entries.push( {
 						label: __( 'Activate for the whole network' ),
@@ -25024,7 +25026,7 @@
 			}
 			if ( ( pl.updated || [] ).some( isMinnAdminPluginFile ) ) {
 				minnUpdated = true;
-				minnVersion = offers[ 'minn-admin/minn-admin.php' ] || '';
+				minnVersion = offers[ SELF_PLUGIN + '.php' ] || '';
 			}
 		} catch ( e ) {
 			// The batch usually keeps running server-side after a dropped
@@ -25075,9 +25077,9 @@
 					}
 				} catch ( e2 ) { /* the refresh below reports what it can */ }
 			}
-			if ( bulkDone.has( 'minn-admin/minn-admin' ) ) {
+			if ( bulkDone.has( SELF_PLUGIN ) ) {
 				minnUpdated = true;
-				minnVersion = offers[ 'minn-admin/minn-admin.php' ] || '';
+				minnVersion = offers[ SELF_PLUGIN + '.php' ] || '';
 			}
 		} finally {
 			clearInterval( poll );
@@ -25436,10 +25438,11 @@
 	}
 
 	// Plugin file keys appear as "minn-admin/minn-admin" (list rows) or
-	// "minn-admin/minn-admin.php" (update API / bulk results).
+	// "minn-admin/minn-admin.php" (update API / bulk results), under whatever
+	// folder this copy of Minn was installed in (B.selfPlugin).
 	function isMinnAdminPluginFile( file ) {
 		const f = String( file || '' ).replace( /\.php$/, '' );
-		return f === 'minn-admin/minn-admin';
+		return f === SELF_PLUGIN;
 	}
 
 	function reloadAfterMinnSelfUpdate( version ) {
@@ -50042,7 +50045,7 @@
 	// (its updater answers plugins_api with a description only), every
 	// other plugin goes through the plugin-changelog route.
 	function openPluginChangelogFor( file, name ) {
-		if ( file === 'minn-admin/minn-admin' ) openChangelog( 'app' );
+		if ( isMinnAdminPluginFile( file ) ) openChangelog( 'app' );
 		else openPluginChangelog( file, name );
 	}
 

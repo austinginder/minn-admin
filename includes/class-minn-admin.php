@@ -1873,6 +1873,10 @@ class Minn_Admin {
 			'nonce'    => wp_create_nonce( 'wp_rest' ),
 			'appUrl'   => self::app_url(),
 			'version'  => MINN_ADMIN_VERSION,
+			// This plugin's file without .php (minn-admin/minn-admin, or
+			// minn-admin-main/minn-admin when installed from a source zip), the
+			// key the Plugins and Updates views find Minn itself by.
+			'selfPlugin' => preg_replace( '/\.php$/', '', plugin_basename( MINN_ADMIN_FILE ) ),
 			// Named by the plugin, not only by the engine's boot payload, so
 			// every wp-admin bail-out can hide when there is no /wp-admin/.
 			'engine'   => self::is_engine()
