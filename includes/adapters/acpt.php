@@ -75,6 +75,31 @@ function minn_admin_acpt_has_affix( $field ) {
 	return false;
 }
 
+/**
+ * Whether ACPT's read of this field is not what it stores.
+ *
+ * For the types without a read of their own, get_acpt_field() runs the
+ * stored value through do_shortcode (and decodes it when the field allows
+ * HTML), and ACPT's own box edits the stored value. The panel could only show
+ * the rendered output, so an edit stored that output over the shortcode, and
+ * so did a save of any other field once the output changed between load and
+ * save; ACPT's setter also strips the markup such a field keeps. These count
+ * as locked, like the affixed ones.
+ *
+ * @param object $field ACPT MetaFieldModel.
+ * @param mixed  $raw   The stored value, straight from meta or the option.
+ * @return bool
+ */
+function minn_admin_acpt_renders( $field, $raw ) {
+	if ( ! in_array( $field->getType(), array( 'Text', 'Textarea', 'Number', 'Range', 'Email', 'Select', 'Radio', 'Toggle', 'Color' ), true ) ) {
+		return false;
+	}
+	if ( method_exists( $field, 'getAdvancedOption' ) && 1 == $field->getAdvancedOption( 'allow_html' ) ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual -- ACPT's own test.
+		return true;
+	}
+	return is_string( $raw ) && false !== strpos( $raw, '[' ) && preg_match( '/' . get_shortcode_regex() . '/', $raw );
+}
+
 /** Whether the active ACPT build exposes the APIs used by this adapter. */
 function minn_admin_acpt_active() {
 	return defined( 'ACPT_PLUGIN_VERSION' )
@@ -253,7 +278,7 @@ function minn_admin_acpt_fields_payload( $post_id, $post_type, $with_lookup = fa
 					continue;
 				}
 				$simple = minn_admin_acpt_map_field( $field );
-				if ( ! $simple ) {
+				if ( ! $simple || minn_admin_acpt_renders( $field, $post_id ? get_post_meta( (int) $post_id, $field->getDbName(), true ) : '' ) ) {
 					$locked++;
 					continue;
 				}
@@ -868,7 +893,7 @@ function minn_admin_acpt_option_tabs( $slug ) {
 			$locked = 0;
 			foreach ( $box->getFields() as $field ) {
 				$simple = minn_admin_acpt_map_field( $field );
-				if ( ! $simple ) {
+				if ( ! $simple || minn_admin_acpt_renders( $field, get_option( $field->getDbName() ) ) ) {
 					++$locked;
 					continue;
 				}

@@ -3011,7 +3011,9 @@ if ( function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active() && 
 				$acpt_box_shape = $g;
 			}
 		}
-		$check( 'ACPT panel: dates, times and the affixed field count as locked', $acpt_box_shape && 4 === $acpt_box_shape['locked']
+		// Five since v0.44.0: the field holding a shortcode is locked too
+		// (security-v044-rc 06-02).
+		$check( 'ACPT panel: dates, times, the affixed field and the shortcode field count as locked', $acpt_box_shape && 5 === $acpt_box_shape['locked']
 			&& ! array_intersect( array( $acpt_all['event_date'] ?? '', $acpt_all['opens'] ?? '', $acpt_all['starts_at'] ?? '', $acpt_all['fee'] ?? '' ), wp_list_pluck( $acpt_box_shape['fields'], 'name' ) ),
 			wp_json_encode( $acpt_box_shape ? array( $acpt_box_shape['locked'], wp_list_pluck( $acpt_box_shape['fields'], 'label' ) ) : null ) );
 

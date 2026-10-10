@@ -683,6 +683,61 @@ if ( ! function_exists( 'acf_import_field_group' ) || ! function_exists( 'minn_a
 	}
 }
 
+// --- 06-02 ACPT: a field whose read runs a shortcode or decodes HTML is locked ---
+// get_acpt_field() renders a Text-family value (do_shortcode, and an entity
+// decode when the field allows HTML); ACPT's own box edits the stored value.
+// The panel showed the render, so an edit stored the output over the
+// shortcode, and ACPT's setter stripped an allow_html field's markup.
+if ( function_exists( 'minn_admin_acpt_active' ) && minn_admin_acpt_active() && class_exists( '\\ACPT\\Core\\CQRS\\Command\\SaveMetaGroupCommand' ) && class_exists( '\\ACPT\\Core\\CQRS\\Command\\DeleteMetaGroupCommand' ) ) {
+	$ac_sfx = substr( md5( uniqid( '', true ) ), 0, 8 );
+	$ac_box = 'minn_v044_acpt_sc' . $ac_sfx;
+	$ac_gid = '';
+	try {
+		$ac_gid = ( new \ACPT\Core\CQRS\Command\SaveMetaGroupCommand( array(
+			'name'    => 'minn-v044-acpt-sc-' . $ac_sfx,
+			'label'   => 'Minn v044 ACPT shortcode',
+			'belongs' => array( array( 'belongsTo' => 'customPostType', 'operator' => '=', 'find' => 'post', 'logic' => '' ) ),
+			'boxes'   => array( array( 'name' => $ac_box, 'label' => 'Box', 'fields' => array(
+				array( 'name' => 'note', 'type' => 'Text', 'label' => 'Note' ),
+				array( 'name' => 'rich', 'type' => 'Textarea', 'label' => 'Rich', 'advancedOptions' => array( array( 'key' => 'allow_html', 'value' => '1' ) ) ),
+				array( 'name' => 'plain', 'type' => 'Text', 'label' => 'Plain' ),
+			) ) ),
+		) ) )->execute();
+	} catch ( \Throwable $e ) {
+		$skip( '06-02 ACPT: could not build the fixture group (' . $e->getMessage() . ')' );
+	}
+	if ( $ac_gid ) {
+		$ac_sc = 'minn_v044_acpt_sc_' . $ac_sfx;
+		add_shortcode( $ac_sc, function () {
+			return '19.00';
+		} );
+		$ac_pid = wp_insert_post( array( 'post_title' => 'Minn v044 ACPT shortcode', 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $admin ) );
+		foreach ( array( 'note' => 'Price: [' . $ac_sc . ']', 'plain' => 'Hello' ) as $ac_n => $ac_v ) {
+			save_acpt_meta_field_value( array( 'post_id' => $ac_pid, 'box_name' => $ac_box, 'field_name' => $ac_n, 'value' => $ac_v ) );
+		}
+		update_post_meta( $ac_pid, $ac_box . '_rich', '&lt;b&gt;Bold&lt;/b&gt; text' );
+		$ac_ids = array();
+		foreach ( \ACPT\Core\Repository\MetaRepository::get( array( 'id' => $ac_gid ) )[0]->getBoxes() as $ac_b ) {
+			foreach ( $ac_b->getFields() as $ac_f ) {
+				$ac_ids[ $ac_f->getName() ] = $ac_f->getId();
+			}
+		}
+		$ac_lookup = minn_admin_acpt_fields_payload( $ac_pid, 'post', true )['lookup'];
+		$check( '06-02 ACPT: a field holding a shortcode and an allow_html field are locked, a plain one offered', ! isset( $ac_lookup[ $ac_ids['note'] ] ) && ! isset( $ac_lookup[ $ac_ids['rich'] ] ) && isset( $ac_lookup[ $ac_ids['plain'] ] ), wp_json_encode( array( 'note' => isset( $ac_lookup[ $ac_ids['note'] ] ), 'rich' => isset( $ac_lookup[ $ac_ids['rich'] ] ), 'plain' => isset( $ac_lookup[ $ac_ids['plain'] ] ) ) ) );
+		list( $ac_st ) = $call( 'POST', '/wp/v2/posts/' . $ac_pid, array( 'minn_acpt' => array( $ac_ids['note'] => 'Price: 19.00 each', $ac_ids['rich'] => 'Bold text, edited', $ac_ids['plain'] => 'Hello again' ) ) );
+		$ac_meta = function ( $n ) use ( $ac_pid, $ac_box ) {
+			wp_cache_delete( $ac_pid, 'post_meta' );
+			return (string) get_post_meta( $ac_pid, $ac_box . '_' . $n, true );
+		};
+		$check( '06-02 ACPT: a save keeps the shortcode and the markup as stored', 200 === $ac_st && 'Price: [' . $ac_sc . ']' === $ac_meta( 'note' ) && '&lt;b&gt;Bold&lt;/b&gt; text' === $ac_meta( 'rich' ), $ac_st . ' ' . wp_json_encode( array( $ac_meta( 'note' ), $ac_meta( 'rich' ) ) ) );
+		$check( '06-02 control: the plain field saves', 'Hello again' === $ac_meta( 'plain' ), $ac_meta( 'plain' ) );
+		wp_delete_post( $ac_pid, true );
+		( new \ACPT\Core\CQRS\Command\DeleteMetaGroupCommand( $ac_gid ) )->execute();
+	}
+} else {
+	$skip( '06-02 ACPT inactive' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it
