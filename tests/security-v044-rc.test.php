@@ -880,6 +880,39 @@ if ( ! $ib_img ) {
 }
 remove_filter( 'minn_admin_image_blocks', $ib_hook );
 
+// --- 03-02 WP Migrate: a refused paste never replaces a working key ---
+// WP Migrate's own handler keeps a pasted key the server answers "expired",
+// "activation turned off" or "API down" for, so the person need not paste it
+// again. Over a working key that replaced it with one that cannot serve the
+// site. The licence server never hears from this section; the stored key and
+// settings are put back exactly.
+if ( ! class_exists( '\DeliciousBrains\WPMDB\Pro\License' ) || defined( 'WPMDB_LICENCE' ) ) {
+	$skip( '03-02 WP Migrate Pro inactive (or its key is a constant)' );
+} else {
+	$wm_meta  = 'wpmdb_licence_key';
+	$wm_prev  = get_user_meta( $admin, $wm_meta, true );
+	$wm_set   = get_site_option( 'wpmdb_settings', null );
+	$wm_http  = function ( $pre, $args, $url ) {
+		if ( false !== strpos( (string) wp_parse_url( $url, PHP_URL_HOST ), 'deliciousbrains' ) ) {
+			return array( 'headers' => array(), 'body' => wp_json_encode( array( 'errors' => array( 'subscription_expired' => 'Expired' ) ) ), 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+		}
+		return $pre;
+	};
+	add_filter( 'pre_http_request', $wm_http, PHP_INT_MAX, 3 );
+	update_user_meta( $admin, $wm_meta, 'minntestwpmworkingkey' );
+	list( , $wm_body ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => 'wp-migrate', 'action' => 'activate', 'secret' => 'minntestwpmexpiredkey' ) );
+	$wm_now = get_user_meta( $admin, $wm_meta, true );
+	$check( '03-02 WP Migrate: an expired paste over a working key keeps the working key', empty( $wm_body['ok'] ) && 'minntestwpmworkingkey' === $wm_now, wp_json_encode( array( $wm_body['code'] ?? null, 'minntestwpmworkingkey' === $wm_now ? 'working' : 'replaced' ) ) );
+	delete_user_meta( $admin, $wm_meta );
+	list( , $wm_body ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => 'wp-migrate', 'action' => 'activate', 'secret' => 'minntestwpmexpiredkey' ) );
+	$check( '03-02 control: with no key stored, the expired key is kept as WP Migrate keeps it', 'minntestwpmexpiredkey' === get_user_meta( $admin, $wm_meta, true ), wp_json_encode( get_user_meta( $admin, $wm_meta, true ) ) );
+	remove_filter( 'pre_http_request', $wm_http, PHP_INT_MAX );
+	'' === $wm_prev ? delete_user_meta( $admin, $wm_meta ) : update_user_meta( $admin, $wm_meta, $wm_prev );
+	null === $wm_set ? delete_site_option( 'wpmdb_settings' ) : update_site_option( 'wpmdb_settings', $wm_set );
+	delete_site_transient( 'wpmdb_licence_response_' . $admin );
+	delete_site_transient( 'wpmdb_licence_response' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

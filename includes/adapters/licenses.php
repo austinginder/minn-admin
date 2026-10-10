@@ -3893,8 +3893,10 @@ function minn_admin_license_default_providers() {
 	// the key was refused, and their handler still stores the key for the
 	// three conditions where the license exists but cannot serve this site
 	// (expired, api down, activation turned off), so the person is not made
-	// to paste it again. That behaviour is mirrored here rather than
-	// simplified, because their UI reads the same stored key afterwards.
+	// to paste it again. That is mirrored for a site with no key; over a
+	// stored one it would replace a working key with one the server just
+	// refused (an old expired key, a paste during an outage), so a stored
+	// key stays.
 	// There is no deactivate endpoint in their API at all, so removing is an
 	// honest local removal and the message says the activation is not freed.
 	if ( class_exists( '\DeliciousBrains\WPMDB\Pro\License' ) && class_exists( '\DeliciousBrains\WPMDB\WPMDBDI' ) ) {
@@ -3948,13 +3950,15 @@ function minn_admin_license_default_providers() {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'This site sets its key in wp-config, which always wins. Change it there.', 'minn-admin' ) );
 			}
 			try {
+				$had     = (string) $wpm_license()->get_licence_key();
 				$raw     = $wpm_api()->dbrains_api_request( 'activate_licence', $wpm_args( $secret ) );
 				$decoded = json_decode( (string) $raw, true );
 				$result  = $wpm_classify( $decoded );
 				// Their handler keeps the key for these three: the license is
-				// real, it just cannot serve this site right now.
+				// real, it just cannot serve this site right now. Only where
+				// no key is stored (see above).
 				$keep = ! empty( $result['ok'] );
-				if ( ! $keep && is_array( $decoded ) ) {
+				if ( ! $keep && '' === $had && is_array( $decoded ) ) {
 					$errors = ( isset( $decoded['errors'] ) && is_array( $decoded['errors'] ) ) ? array_keys( $decoded['errors'] ) : array();
 					$word   = isset( $errors[0] ) ? (string) $errors[0] : '';
 					$keep   = in_array( $word, array( 'subscription_expired', 'activation_deactivated' ), true ) || ! empty( $decoded['dbrains_api_down'] );
