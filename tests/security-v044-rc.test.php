@@ -983,6 +983,51 @@ foreach ( $ls_held as $ls_l => $ls_rows_was ) {
 	$ls_put( $ls_l, $ls_rows_was );
 }
 
+// --- 03-01 Etch: a refused paste keeps the working licence's activation record ---
+// Etch's bundled SureCart SDK clears etch_license_options (the working key,
+// licence id and activation id) in its catch when a pasted key is refused,
+// so updates stopped while Etch's own status still read valid. Needs Etch
+// (builders.localhost): MINN_SWAP_ADD=etch/etch.php
+// MINN_SWAP_FORGET=_transient_etch_license_is_active,_transient_timeout_etch_license_is_active
+// (Etch caches that transient on its own once loaded). Licence servers
+// offline; every Etch licence row is snapshot and put back.
+if ( ! class_exists( '\Etch\WpAdmin\License' ) ) {
+	$skip( '03-01 Etch inactive (swap it in on builders.localhost)' );
+} else {
+	global $wpdb;
+	$et_like = $wpdb->esc_like( 'etch_license' ) . '%';
+	$et_tlike = '%' . $wpdb->esc_like( 'etch_license_is_active' );
+	$et_rows = function ( $like ) use ( $wpdb ) {
+		return $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value, autoload FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_name", $like ), ARRAY_A );
+	};
+	$et_held = array( $et_like => $et_rows( $et_like ), $et_tlike => $et_rows( $et_tlike ) );
+	$et_off  = function ( $pre, $args, $url ) {
+		$host = (string) wp_parse_url( $url, PHP_URL_HOST );
+		return ( '' === $host || false !== strpos( $host, 'localhost' ) ) ? $pre : new WP_Error( 'minn_test_offline', 'offline' );
+	};
+	add_filter( 'pre_http_request', $et_off, PHP_INT_MAX, 3 );
+	$et_record = array( 'license_key' => 'minntestetchworking', 'license_id' => 'lic_minn', 'activation_id' => 'act_minn' );
+	update_option( 'etch_license_options', $et_record );
+	update_option( 'etch_license_key', 'minntestetchworking' );
+	update_option( 'etch_license_status', 'valid' );
+	set_transient( 'etch_license_is_active', 'yes', DAY_IN_SECONDS );
+	list( , $et_body ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => 'etch', 'action' => 'activate', 'secret' => 'minntestetchtypo' ) );
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'etch_license_options', 'options' );
+	$check( '03-01 Etch: a refused paste keeps the working activation record', empty( $et_body['ok'] ) && $et_record === get_option( 'etch_license_options' ), wp_json_encode( array( $et_body['ok'] ?? null, get_option( 'etch_license_options' ) === $et_record ? 'kept' : 'cleared' ) ) );
+	remove_filter( 'pre_http_request', $et_off, PHP_INT_MAX );
+	foreach ( $et_held as $et_l => $et_was ) {
+		foreach ( $et_rows( $et_l ) as $et_now ) {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $et_now['option_name'] ) );
+		}
+		foreach ( $et_was as $et_row ) {
+			$wpdb->insert( $wpdb->options, $et_row );
+		}
+	}
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'notoptions', 'options' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

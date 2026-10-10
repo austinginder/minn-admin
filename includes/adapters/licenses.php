@@ -4344,7 +4344,21 @@ function minn_admin_license_default_providers() {
 		$providers['etch']['secret_label'] = __( 'Etch license key', 'minn-admin' );
 		$providers['etch']['key_constant'] = 'ETCH_LICENSE_KEY';
 	$providers['etch']['activate']     = function ( $secret ) {
-			\Etch\WpAdmin\License::get_instance()->activate_license( $secret );
+			// Their bundled SureCart SDK clears the WORKING licence's
+			// activation record (etch_license_options) in its catch when a
+			// pasted key is refused, before Etch throws, so updates stop and
+			// the key shows valid while it is not. The record and the daily
+			// is-active transient are put back exactly; the route still
+			// answers with the refusal.
+			global $wpdb;
+			$rows = array( 'etch\_license\_options', '\_transient%etch\_license\_is\_active' );
+			$snap = minn_admin_license_rows( $rows );
+			try {
+				\Etch\WpAdmin\License::get_instance()->activate_license( $secret );
+			} catch ( \Throwable $e ) {
+				minn_admin_license_rows_restore( $rows, $snap );
+				throw $e;
+			}
 			return array( 'ok' => true );
 		};
 		$providers['etch']['deactivate'] = function () {
