@@ -575,6 +575,47 @@ if ( ! class_exists( '\FluentForm\App\Services\FormBuilder\ShortCodeParser' ) ||
 	}
 }
 
+// --- 05-02 Fluent Forms: status changes go through Fluent's own service ---
+// The status route wrote the column directly, so a status an add-on withholds
+// for an entry was written anyway and the after-update action never fired; the
+// detail view marked entries read even where the site turned auto-read off.
+if ( ! class_exists( '\FluentForm\App\Services\Submission\SubmissionService' ) || ! function_exists( 'wpFluent' ) ) {
+	$skip( '05-02 Fluent Forms inactive' );
+} else {
+	global $wpdb;
+	$fs_table = $wpdb->prefix . 'fluentform_submissions';
+	$fs_form  = (int) $wpdb->get_var( "SELECT id FROM {$wpdb->prefix}fluentform_forms ORDER BY id LIMIT 1" );
+	$wpdb->insert( $fs_table, array( 'form_id' => $fs_form, 'serial_number' => 9999, 'response' => wp_json_encode( array( 'names' => array( 'first_name' => 'Minn' ) ) ), 'source_url' => home_url( '/' ), 'user_id' => 0, 'status' => 'unread', 'is_favourite' => 0, 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+	$fs_id     = (int) $wpdb->insert_id;
+	$fs_status = function () use ( $wpdb, $fs_table, $fs_id ) {
+		return (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$fs_table} WHERE id = %d", $fs_id ) );
+	};
+	$fs_noread = '__return_false';
+	add_filter( 'fluentform/auto_read_submission', $fs_noread );
+	$call( 'GET', "/minn-admin/v1/fluent-forms/entries/{$fs_id}" );
+	remove_filter( 'fluentform/auto_read_submission', $fs_noread );
+	$check( '05-02 Fluent: opening an entry leaves it unread where the site turned auto-read off', 'unread' === $fs_status(), $fs_status() );
+	$fs_hold = function ( $statuses, $form_id, $submission_id ) use ( $fs_id ) {
+		if ( (int) $submission_id === $fs_id ) {
+			unset( $statuses['spam'] );
+		}
+		return $statuses;
+	};
+	add_filter( 'fluentform/entry_statuses_for_mutation', $fs_hold, 10, 3 );
+	list( $fs_st ) = $call( 'POST', "/minn-admin/v1/fluent-forms/entries/{$fs_id}/status", array( 'status' => 'spam' ) );
+	remove_filter( 'fluentform/entry_statuses_for_mutation', $fs_hold, 10 );
+	$check( '05-02 Fluent: a status an add-on withholds for this entry is refused', 400 === $fs_st && 'unread' === $fs_status(), $fs_st . ' ' . $fs_status() );
+	$fs_fired = 0;
+	$fs_count = function () use ( &$fs_fired ) {
+		$fs_fired++;
+	};
+	add_action( 'fluentform/after_submission_status_update', $fs_count );
+	list( $fs_st ) = $call( 'POST', "/minn-admin/v1/fluent-forms/entries/{$fs_id}/status", array( 'status' => 'read' ) );
+	remove_action( 'fluentform/after_submission_status_update', $fs_count );
+	$check( '05-02 Fluent: a status change fires Fluent\'s after-update action (control: it saves)', 200 === $fs_st && 'read' === $fs_status() && 1 === $fs_fired, $fs_st . ' ' . $fs_status() . ' fired ' . $fs_fired );
+	$wpdb->delete( $fs_table, array( 'id' => $fs_id ) );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

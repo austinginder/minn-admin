@@ -605,8 +605,12 @@ add_action( 'rest_api_init', function () {
 					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 
-				// Opening a detail marks unread → read (Fluent Forms' own screen semantics).
-				if ( 'unread' === (string) $row->status ) {
+				// Opening a detail marks unread → read (Fluent Forms' own screen
+				// semantics), unless the site turned that off with their filter.
+				$form_row  = wpFluent()->table( 'fluentform_forms' )->where( 'id', (int) $row->form_id )->first();
+				$auto_read = apply_filters_deprecated( 'fluentform_auto_read', array( true, $form_row ), defined( 'FLUENTFORM_FRAMEWORK_UPGRADE' ) ? FLUENTFORM_FRAMEWORK_UPGRADE : '', 'fluentform/auto_read_submission' );
+				$auto_read = apply_filters( 'fluentform/auto_read_submission', $auto_read, $form_row );
+				if ( 'unread' === (string) $row->status && $auto_read ) {
 					$wpdb->update(
 						$subs_table,
 						array( 'status' => 'read' ),
@@ -777,13 +781,24 @@ add_action( 'rest_api_init', function () {
 			if ( ! $exists ) {
 				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
-			$wpdb->update(
-				$subs_table,
-				array( 'status' => $status ),
-				array( 'id' => $id ),
-				array( '%s' ),
-				array( '%d' )
-			);
+			// Through their service, as the delete below goes through theirs:
+			// it refuses a status an add-on withholds for this entry and fires
+			// the after-update action add-ons listen on.
+			if ( class_exists( '\FluentForm\App\Services\Submission\SubmissionService' ) ) {
+				try {
+					( new \FluentForm\App\Services\Submission\SubmissionService() )->updateStatus( array( 'entry_id' => $id, 'status' => $status ) );
+				} catch ( \Throwable $e ) {
+					return new WP_Error( 'bad_status', $e->getMessage() ? $e->getMessage() : __( 'Unknown status.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+			} else {
+				$wpdb->update(
+					$subs_table,
+					array( 'status' => $status ),
+					array( 'id' => $id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+			}
 			$msgs = array(
 				'unread'  => __( 'Entry restored.', 'minn-admin' ),
 				'read'    => __( 'Marked as read.', 'minn-admin' ),
