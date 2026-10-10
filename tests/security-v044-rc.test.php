@@ -643,6 +643,46 @@ if ( ! function_exists( 'minn_admin_sureforms_table' ) || ! defined( 'SRFM_VER' 
 	$wpdb->delete( $sf_table, array( 'ID' => $sf_id ) );
 }
 
+// --- 06-01 ACF schema saves keep backslashes ---
+// acf_update_field() and acf_update_field_group() unslash what they get (ACF's
+// editor hands them the slashed $_POST). Minn handed them stored or REST
+// values, so every builder save, field edit and move took one level of
+// backslashes off: a ==pattern rule ^\d{5}$ became ^d{5}$.
+if ( ! function_exists( 'acf_import_field_group' ) || ! function_exists( 'minn_admin_acf_builder_save' ) ) {
+	$skip( '06-01 ACF PRO inactive' );
+} else {
+	$as_key  = 'group_minnrc' . strtolower( wp_generate_password( 6, false, false ) );
+	$as_zip  = 'field_' . substr( $as_key, 6 ) . 'zip';
+	$as_note = 'field_' . substr( $as_key, 6 ) . 'note';
+	$as_rule = '^\d{5}$';
+	$as_hint = 'Saved under C:\Temp';
+	$as_g    = acf_import_field_group( wp_slash( array(
+		'key'      => $as_key,
+		'title'    => 'Minn RC slashes',
+		'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ),
+		'fields'   => array(
+			array( 'key' => $as_zip, 'label' => 'Zip', 'name' => 'minnrc_zip', 'type' => 'text' ),
+			array( 'key' => $as_note, 'label' => 'Note', 'name' => 'minnrc_note', 'type' => 'text', 'instructions' => $as_hint, 'conditional_logic' => array( array( array( 'field' => $as_zip, 'operator' => '==pattern', 'value' => $as_rule ) ) ) ),
+		),
+	) ) );
+	$as_read = function () use ( $as_note ) {
+		acf_flush_field_cache( acf_get_field( $as_note ) );
+		$f = acf_get_field( $as_note );
+		return array( (string) ( $f['instructions'] ?? '' ), (string) ( $f['conditional_logic'][0][0]['value'] ?? '' ) );
+	};
+	$check( '06-01 precondition: the fixture stores its backslashes', array( $as_hint, $as_rule ) === $as_read(), wp_json_encode( $as_read() ) );
+	list( , $as_payload ) = $call( 'GET', "/minn-admin/v1/acf/schema/groups/{$as_key}/full" );
+	list( $as_st ) = $call( 'POST', "/minn-admin/v1/acf/schema/groups/{$as_key}/full", (array) $as_payload );
+	$check( '06-01 ACF builder: a save keeps the backslashes in every field\'s settings', 200 === $as_st && array( $as_hint, $as_rule ) === $as_read(), $as_st . ' ' . wp_json_encode( $as_read() ) );
+	list( $as_st ) = $call( 'PUT', "/minn-admin/v1/acf/schema/fields/{$as_note}", array( 'label' => 'Note renamed' ) );
+	$check( '06-01 ACF field edit: a label edit keeps them', 200 === $as_st && array( $as_hint, $as_rule ) === $as_read() && 'Note renamed' === acf_get_field( $as_note )['label'], $as_st . ' ' . wp_json_encode( $as_read() ) );
+	list( $as_st ) = $call( 'POST', "/minn-admin/v1/acf/schema/fields/{$as_note}/move", array( 'dir' => 'up' ) );
+	$check( '06-01 ACF move: a reorder keeps them (control: the order changes)', 200 === $as_st && array( $as_hint, $as_rule ) === $as_read() && 0 === (int) acf_get_field( $as_note )['menu_order'], $as_st . ' ' . wp_json_encode( $as_read() ) );
+	if ( ! empty( $as_g['ID'] ) ) {
+		acf_delete_field_group( $as_g['ID'] );
+	}
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

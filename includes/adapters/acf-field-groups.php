@@ -449,13 +449,16 @@ add_action( 'rest_api_init', function () {
 				if ( ! in_array( $param, array( 'post_type', 'options_page', 'block', 'taxonomy' ), true ) ) {
 					return new WP_Error( 'invalid', __( 'Unsupported location.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				$group = acf_update_field_group( array(
+				// acf_update_field_group() and acf_update_field() unslash what
+				// they are given (ACF's editor hands them the slashed $_POST),
+				// so every write here slashes first or a backslash is lost.
+				$group = acf_update_field_group( wp_slash( array(
 					'key'      => uniqid( 'group_' ),
 					'title'    => $title,
 					'active'   => true,
 					'location' => array( array( array( 'param' => $param, 'operator' => '==', 'value' => $value ) ) ),
 					'fields'   => array(),
-				) );
+				) ) );
 				if ( ! $group ) {
 					return new WP_Error( 'failed', __( 'ACF refused to create the group.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
@@ -517,7 +520,7 @@ add_action( 'rest_api_init', function () {
 			} else {
 				$group['active'] = 'activate' === $verb;
 			}
-			acf_update_field_group( $group );
+			acf_update_field_group( wp_slash( $group ) );
 			return rest_ensure_response( array( 'ok' => true ) );
 		},
 	) );
@@ -606,7 +609,7 @@ add_action( 'rest_api_init', function () {
 		if ( 'image' === $type ) {
 			$field['return_format'] = 'id';
 		}
-		$saved = acf_update_field( $field );
+		$saved = acf_update_field( wp_slash( $field ) );
 		if ( ! $saved ) {
 			return new WP_Error( 'failed', __( 'ACF refused to create the field.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
@@ -669,7 +672,7 @@ add_action( 'rest_api_init', function () {
 					}
 					$field['choices'] = $choices;
 				}
-				acf_update_field( $field );
+				acf_update_field( wp_slash( $field ) );
 				return rest_ensure_response( minn_admin_acf_schema_field_item( acf_get_field( $field['key'] ), $found['group'] + array( 'minn_source' => 'db' ) ) );
 			},
 		),
@@ -717,7 +720,8 @@ add_action( 'rest_api_init', function () {
 			foreach ( $fields as $i => $f ) {
 				if ( (int) $f['menu_order'] !== $i ) {
 					$f['menu_order'] = $i;
-					acf_update_field( $f );
+					// ACF's own reorder: writes the order and nothing else.
+					acf_update_field( wp_slash( $f ), array( 'menu_order' ) );
 				}
 			}
 			return rest_ensure_response( array( 'ok' => true ) );
@@ -1116,7 +1120,8 @@ function minn_admin_acf_builder_save( $group, $body ) {
 		}
 		$group['location'] = $loc;
 	}
-	acf_update_field_group( $group );
+	// Slashed for the unslash inside; see the create route.
+	acf_update_field_group( wp_slash( $group ) );
 
 	// ---- Fields: update / create in payload order, then delete the absent. ----
 	$kept = array();
@@ -1145,7 +1150,7 @@ function minn_admin_acf_builder_save( $group, $body ) {
 		// Repeater children are separate fields written below; ACF's own
 		// update path strips this key too.
 		unset( $field['sub_fields'] );
-		$saved = acf_update_field( $field );
+		$saved = acf_update_field( wp_slash( $field ) );
 		if ( ! $saved ) {
 			continue;
 		}
@@ -1172,7 +1177,7 @@ function minn_admin_acf_builder_save( $group, $body ) {
 				$sub['menu_order'] = $sp['order'];
 				$sub['parent']     = $saved['ID'];
 				unset( $sub['sub_fields'] );
-				$ssaved = acf_update_field( $sub );
+				$ssaved = acf_update_field( wp_slash( $sub ) );
 				if ( $ssaved ) {
 					$kept_subs[ $ssaved['key'] ] = true;
 				}

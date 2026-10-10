@@ -907,9 +907,11 @@ class Minn_Admin_CPT {
 		);
 		if ( $existing ) {
 			$settings = array_merge( $existing, $settings );
-			$saved    = acf_update_internal_post_type( $settings, 'acf-taxonomy' );
+			// ACF's update_post() unslashes what it is given; slash first so
+			// a backslash in a stored or typed setting survives.
+			$saved    = acf_update_internal_post_type( wp_slash( $settings ), 'acf-taxonomy' );
 		} else {
-			$saved = acf_import_internal_post_type( $settings, 'acf-taxonomy' );
+			$saved = acf_import_internal_post_type( wp_slash( $settings ), 'acf-taxonomy' );
 		}
 		if ( empty( $saved ) ) {
 			return new WP_Error( 'acf_failed', __( 'ACF could not save the taxonomy.', 'minn-admin' ), array( 'status' => 500 ) );
@@ -977,9 +979,11 @@ class Minn_Admin_CPT {
 		);
 		if ( $existing ) {
 			$settings = array_merge( $existing, $settings );
-			$saved    = acf_update_internal_post_type( $settings, 'acf-post-type' );
+			// ACF's update_post() unslashes what it is given; slash first so
+			// a backslash in a stored or typed setting survives.
+			$saved    = acf_update_internal_post_type( wp_slash( $settings ), 'acf-post-type' );
 		} else {
-			$saved = acf_import_internal_post_type( $settings, 'acf-post-type' );
+			$saved = acf_import_internal_post_type( wp_slash( $settings ), 'acf-post-type' );
 		}
 		if ( empty( $saved ) ) {
 			return new WP_Error( 'acf_failed', __( 'ACF could not save the post type.', 'minn-admin' ), array( 'status' => 500 ) );
