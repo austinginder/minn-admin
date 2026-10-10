@@ -1,5 +1,91 @@
 # Changelog
 
+## **v0.44.0** - Unreleased
+
+### Added
+
+* **Update Minn, on Minn.** When Minn Admin runs on Minn, the update banner, the header chip, notifications and Update everything now offer new releases of Minn itself, which Minn looks for on GitHub once a day, instead of WordPress. The banner links the release notes, the confirmation says what changes, and the page reloads into the new release when it is done. The version in the header is Minn's, and What's new has a tab for Minn's changelog beside Minn Admin's.
+
+### Fixed
+
+* **Swiss and Austrian German no longer leave Minn in English.** A site or profile set to Deutsch (Schweiz), Deutsch (Schweiz, Du) or Deutsch (Österreich) got the whole of Minn in English, because Minn only shipped a catalog under the German code. These languages now use the German catalog and get language packs of their own, with Swiss spelling (ss for ß) in the Swiss ones.
+
+* **Formal and regional languages translate the server side too.** With Deutsch (Sie), and now Swiss and Austrian German, Minn's interface was German but everything the server sends (the greeting, the overview cards, labels on plugin pages) stayed English on WordPress 6.7 and later, which no longer lets a plugin redirect one locale to another's catalog. Minn now loads the parent catalog itself, and WordPress's own Swiss strings stay as they are beside it.
+
+* **A store-wide attribute offers the values it already has.** Adding an attribute like Size or Condition to a product left a blank box for its values, with none of the terms the store had already set up. Its values now open as a list of those terms, ticked as you pick them and shown as chips, the way categories and brands work, and a value that is not on the list yet can be typed and added. Saving one with no values is refused with a message, because WooCommerce quietly drops a store-wide attribute that has none.
+
+* **Custom CSS & JS snippets stay right at their permalink.** Deleting, editing or switching off a snippet in Minn could leave its old code public at the snippet's permalink, and renaming a switched-off snippet could make switching it back on write an HTML-encoded copy of its code that broke the page. Both now follow what the plugin itself does.
+
+* **Gravity Forms builder saves keep add-on logic and other people's changes.** Saving a form in Minn's builder could silently remove add-on conditional-logic rules (entry meta, a custom property) from every field, and a page left open could switch a form back on after someone switched it off, or undo an edit made in Gravity Forms' own editor. Rules Minn's builder cannot show are now kept, and a save from a page that is out of date is refused with a message to reload. The notification and confirmation pages for Gravity Forms, Contact Form 7, Fluent Forms and WPForms now save only what you changed on them, so a page left open no longer puts back a switch, a recipient, a routing rule or a condition someone changed in the meantime (a Contact Form 7 autoresponder moved off the visitor's address stays moved).
+
+* **Language packs for Minn install only from Minn's own release.** A translation offered for Minn Admin by any other source (another updater, a same-name listing, a file another plugin supplied) could install without being checked, and its fast-loading translation file runs as PHP. Such a pack is now refused and never offered, whatever kind of pack it claims to be, and Minn's own packs still install against their published checksum. A copy of Minn installed under another folder name (GitHub's source download unpacks to minn-admin-main) now gets Minn's releases and the same checks.
+
+* **Agent Access on a network follows Novamira's own rule.** On a multisite network, an account given the network-options permission without being a super admin could use Minn to switch Novamira's AI abilities back on, change which abilities agents may use, rewrite the instructions every agent receives, revoke connections and edit agent memories. Only super admins can now, as in Novamira itself.
+
+* **A failed license paste keeps the working key.** A mistyped key erased the stored Beaver Builder license, and an activation that could not reach the license server replaced it with the pasted key. The previous key is now put back whenever activation fails. The same now holds for Bricks (where a refused or expired key replaced the stored one and an outage marked a working licence as unverified, while a licence Bricks itself runs on, processed, cancelled but paid or past due, still activates), Etch (whose activation record a refused key erased, stopping updates), WP Migrate (where an expired key replaced a working one), The Events Calendar add-ons (where a typo marked a working key invalid for twelve hours) and Kadence Blocks Pro (where a key pasted while its license server was down was taken as valid and kept).
+
+* **ACF saves keep backslashes and dates.** Editing any ACF field in Minn removed a level of backslashes from every other field on the post, its repeater rows and its option-page groups (JSON, regex patterns, Windows paths), and cleared dates ACF accepts but Minn's picker cannot show (timestamps, imported text) or zeroed their seconds. Saving a field group in Minn's builder, editing a field or moving one did the same to every field's settings (a conditional rule matching ^\d{5}$ stopped matching, and with ACF JSON on the change reached your theme's files). Values now save as typed, and untouched dates and times stay as stored.
+
+* **ACF user fields stay inside the site on a network.** On multisite, a subsite administrator could store an account from another site in an ACF user field and read back its name. Only members of the site, or people credited as authors on it, now resolve.
+
+* **Meta Box fields keep their backslashes.** Saving a post in Minn stripped backslashes (regex patterns, Windows paths, escaped quotes) and %XX sequences from every Meta Box text field on it, untouched ones included. Untouched fields are now left as stored, and typed values save exactly as Meta Box's own form saves them.
+
+* **Replies and user emails from a delegated account come from that account.** Someone allowed only to add Gravity Forms entry notes, a user-manager role short of administrator, or a shop manager writing to an order's customer could make the site send any message from its admin address. Anyone who is not an administrator now sends from their own address, as Gravity Forms' own note email does, and an account with no address is refused rather than sent as the site.
+
+* **SureRank keeps a page's own index and follow choice.** Editing any SEO field in Minn deleted SureRank's per-post "index" or "follow" setting and handed the page back to a site-wide noindex or nofollow rule. Untouched toggles, numbers and choices are now left as stored for every SEO plugin.
+
+* **Robots switches start from what the page inherits.** With SureRank or Rank Math, a page that follows a site-wide or post-type noindex or nofollow showed those switches off in Minn, and turning on one other switch (No archive, say) dropped the inherited ones, so the page was indexed. Turning off SureRank's last per-page No index deleted it and left the page noindexed by the site rule while Minn showed it off. Minn now shows what the page inherits and changes only the switch you flip, the way each plugin's own box does.
+
+* **ACPT custom fields keep their values when you save.** Saving a post or an ACPT option page from Minn could erase every date and time field, delete other fields whose names start the same way (price and price_sale), write a field's before/after text into its value, and break repeater rows (links became http://Array, dates and phone numbers went blank). Editing a text field holding a shortcode stored the shortcode's output in its place, and one that allows HTML lost its markup. Minn now leaves fields you did not change alone, clears a field the way ACPT's own screen does, and shows dates, fields with before/after text, fields holding a shortcode or HTML, and repeaters as locked: edit those in ACPT's own screen.
+
+* **Gravity Forms answer edits keep totals right.** Editing an answer that a calculation reads (a quantity, say) left the calculated total, the order summary and add-on scores at their old values. They are now recalculated the way Gravity Forms' own entry screen does it.
+
+* **Gravity Forms rules keep their comparisons.** Saving a notification or confirmation could quietly turn a routing or condition rule that used "greater or equal", "in", "like" or an add-on's comparison into "is", changing who got an email or when it went. Every comparison Gravity Forms accepts is now kept.
+
+* **Moving Gravity Forms entries to and from the trash needs delete rights.** A role allowed to edit entries but not delete them could trash and restore them. That now needs Gravity Forms' delete-entries permission, as on its own screen; spam, read and star stay with editors.
+
+* **Fluent Forms routing survives a save with Pro.** With Fluent Forms Pro installed, saving any change to a notification that routes by rules sent it to a single address from then on. Routing is now kept as it is, and the page says so instead of showing empty address tabs.
+
+* **JetEngine saves keep what you did not touch.** Saving one JetEngine field could rewrite the post's or content item's other fields: links lost encoded characters, formatting was stripped, 1.50 became 1.5, a picture or gallery Minn could not resolve was cleared, and an empty radio was given its first choice. Parts of a content item's address could also land in its fields, and options pages lost every backslash. Untouched values now stay exactly as stored.
+
+* **The database browser hides more credentials.** Core's AI connector keys, the WPMU DEV key (which signs remote commands to the site), Smush's key cache and Post SMTP's OAuth tokens could be read in full in the database viewer, and on a multisite network the network options table showed Freemius secret keys and the WPMU DEV key. They are now redacted in both tables and cannot be found by searching values. WP Mail SMTP's one-hour Connect token, Jetpack's registration secrets and every license key or token the Licenses screen shows only as "key present" (Envato, CleanTalk, Bricks, Elementor Pro, ACF PRO, WPForms, the Smash Balloon family and the rest) are hidden the same way, also on a database server that stores table names in lower case.
+
+* **Deleting a CFDB7 entry removes only that entry's uploads.** On entries an older CFDB7 stored, deleting one in Minn could also remove the uploads folder's protective index.php, a .php file, or another visitor's upload. Minn now follows CFDB7's own rules and removes only the entry's real uploads.
+
+* **Forminator payments waiting on checkout stay pending.** Marking a pending Stripe entry as spam and back made it a completed entry Forminator could no longer match to its payment, and entry counts left pending entries out. Spam now applies only to completed entries, pending ones are listed and counted the way Forminator counts them, and a pending entry shows a Pending label.
+
+* **Folders by Premio works again.** On Folders 3.2.1 and later, Minn's media folder picker and Move to folder never appeared, or another folder plugin's folders showed in their place. They now come from Folders.
+
+* **OttoKit shows its real connection.** The OttoKit card said Not connected on every site. It now shows the connected account and flags a connection that can't reach OttoKit, and the OttoKit token never reaches the browser.
+
+* **AIOSEO keeps what you set in Minn's SEO panel.** A social image saved from Minn never appeared as the page's og:image, a focus keyword set or cleared in Minn stayed hidden from AIOSEO 5's own editor, and editing any other SEO field reset an image AIOSEO had set (featured, attached, or one outside the media library) to the site default. Now the image renders, the keyword matches, and an image Minn does not show is left alone. Every SEO plugin's image fields also refuse a file that is not an image.
+
+* **The Minn Bar's visibility fix ignores lookalikes and asks first.** Something an author put in a post (an invisible full-page box, or a label pointed at the bar's button) could turn an administrator's next click on that post into turning off maintenance mode, ending a coming-soon page or opening the site to search engines. The bar now finds its controls only inside itself, and the fix asks you to confirm before it changes anything.
+
+* **Post content can't reach the editor's own controls.** A post written by an author or contributor could carry the ids and labels of Minn's own controls: clicking its text in the editor could press Publish, and a hidden element could pull the editor's side panel into the post, where the next save wrote it into the content. The same label in a custom field's rich-text editor published the post on the first click inside it, an embedded PDF named querySelector or body stopped the editor from loading at all, and markup dressed as a shortcode block's field could put a script into the post when an editor saved it. Those references now sit idle while the post is open in Minn and are saved back exactly as written, and a block's fields are read only from Minn's own controls.
+
+* **On a network, the System page, logs, database browser and licenses need a super admin.** An account given the network-settings permission without being a super admin could read every account's email from the database browser, read and clear every site's logs, and change licenses, none of which WordPress lets it reach. Those now need a super admin, as WordPress's own Site Health does, and Novamira Pro's license follows Novamira's own rule.
+
+* **Editing a coupon keeps its type and status.** Fixing a coupon's description turned a Subscriptions sign-up fee discount into a percentage off the whole first order, and published a coupon left pending or private. Both are now kept unless you change them.
+
+* **Saving a product leaves what you did not touch.** A product save gave every variation that shares the parent's stock its own copy of it (10 shirts across three sizes became 10 of each), and rewrote the short description and purchase note as plain text (lists, links and shortcodes gone) and a sale ending at 23:59:59 as 23:59:00. Only what you edited is saved now.
+
+* **Membership plans and members keep their status and owner.** Renaming a private or pending WooCommerce Memberships plan published it, so its restrictions, discounts and sign-up grants started applying. Adding a plan from a member's page could create it for a different account that had taken the member's old address as its email. Both are fixed.
+
+* **Gift card codes stay masked for shop managers.** WooCommerce Gift Cards masks codes for shop managers on its own screens, but the order and subscription timeline in Minn showed them in full in their notes. They are masked there too now, following the same setting.
+
+* **Block commenter blocks only that commenter.** Blocking a commenter added their address as a line WordPress matches anywhere in a comment, so a spammer who used a short address like e@gmail.com got everyone else's mail at gmail.com trashed, and a comment without an email blocked an IP shared by others. Minn now blocks only an address that no other commenter's contains, and points you to Spam otherwise.
+
+* **The Overview's store numbers need the store's permission.** An account that edits only its own orders (a marketplace vendor) saw the whole store's order counts on the Overview. Those now need the same permission as WooCommerce's own order counts.
+
+* **Saving a user keeps their roles.** Changing a user's name or email gave a user with no role on the site the Subscriber role, and dropped every role but the first from a user with several. Roles now change only when you pick another.
+
+* **Menu items keep their markup.** Editing a classic menu item's link stripped any markup from its label (an icon before Home, a New badge). Labels now save as written.
+
+* **Form and folder plugins run their own rules.** Gravity SMTP's Send a test email now needs Gravity SMTP's own permission for it; Fluent Forms status changes and opening an entry now honour Fluent's status rules, hooks and auto-read setting; deleting a SureForms entry runs SureForms' own clean-up (an add-on's uploaded files); WPForms answers that a calculation computes or reads are left to WPForms, which recalculates them; HappyFiles' Uncategorized takes an item out of the folder you are viewing only, when files can sit in several folders; and the Fluent Forms email preview no longer fills a cookie tag with your own login cookie.
+
+* **On a network, a site's administrator can't set the default role or open registration.** On multisite, a site administrator could use Minn's Settings to make every new account on their site an Administrator and write the registration switch, both of which WordPress keeps in Network Admin. They are now single-site settings, as in WordPress, and on a single site the role picker leaves out Administrator and Editor, as WordPress's own does.
+
 ## **v0.43.0** - October 5 2026
 
 The forms release. A form entry now opens on a page of its own with Reply, which writes back from the site, and for Gravity Forms, WPForms Pro, Ninja Forms and Elementor Pro, Edit answers fixes a mistyped email before you do. Gravity Forms forms open in a builder, their notifications and confirmations get pages of their own, and WPForms, Fluent Forms and Contact Form 7 emails and confirmations follow, each with a preview built the way the plugin sends it. Every page with a Save button now answers ⌘S and asks before unsaved edits are lost, and the builders undo and redo. Settings gains a site-wide default appearance, orders can be trashed and restored, and ACF block text can be typed over in place. The cycle opened by fixing every finding from the review of the shipped 0.42.0 and closes with a full review of the release candidate: nothing critical or high, four medium issues (three of them in this cycle's new form pages, closed before they ever shipped), and every fix reviewed twice more before release.
