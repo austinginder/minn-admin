@@ -2882,11 +2882,21 @@
 
 	// Inner chrome for the image control, shared between the initial render
 	// (formControlHtml) and bindImageField's repaint after a pick/clear.
+	// A field's picture or file goes through the media-library gate (upload
+	// rights) on save, which keeps the stored one when it refuses, so without
+	// access only Remove is offered (a clear needs no library).
+	const canPickMedia = () => !! ( B.caps && B.caps.upload );
+	const mediaPickNote = () => `<span class="minn-toggle-desc">${ esc( __( 'Changing this needs access to the media library.' ) ) }</span>`;
+
 	function imageControlChrome( has, url ) {
-		return `${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
+		const pick = canPickMedia();
+		return `${ has && url ? ( pick
+				? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>`
+				: `<span class="minn-field-image-thumb" style="background-image:url('${ escCssUrl( url ) }')"></span>` ) : '' }
 			<div class="minn-field-image-actions">
-				<button type="button" class="minn-btn-soft" data-img-pick>${ has ? esc( __( 'Replace' ) ) : esc( __( 'Set image' ) ) }</button>
+				${ pick ? `<button type="button" class="minn-btn-soft" data-img-pick>${ has ? esc( __( 'Replace' ) ) : esc( __( 'Set image' ) ) }</button>` : '' }
 				${ has ? `<button type="button" class="minn-btn-soft danger" data-img-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
+				${ pick ? '' : mediaPickNote() }
 			</div>`;
 	}
 
@@ -2894,8 +2904,9 @@
 	function fileControlChrome( fv ) {
 		return `${ fv ? `<span class="minn-field-file-name">${ esc( fv.name || ( '#' + fv.id ) ) }</span>` : '' }
 			<div class="minn-field-image-actions">
-				<button type="button" class="minn-btn-soft" data-file-pick>${ fv ? esc( __( 'Replace' ) ) : esc( __( 'Choose file' ) ) }</button>
+				${ canPickMedia() ? `<button type="button" class="minn-btn-soft" data-file-pick>${ fv ? esc( __( 'Replace' ) ) : esc( __( 'Choose file' ) ) }</button>` : '' }
 				${ fv ? `<button type="button" class="minn-btn-soft danger" data-file-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
+				${ canPickMedia() ? '' : mediaPickNote() }
 			</div>`;
 	}
 
