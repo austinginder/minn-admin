@@ -12,7 +12,7 @@
  * The same goes for the fields inside the shortcode, details and buttons
  * islands: content wearing their classes must not stand in for them.
  *
- * Fixtures: four posts written as minn-author through wp_insert_post (the
+ * Fixtures: six posts written as minn-author through wp_insert_post (the
  * same kses a REST save runs), removed after.
  */
 const fs = require( 'fs' );
@@ -193,6 +193,57 @@ const stored = ( id ) => JSON.parse( wpEval( `$p = get_post( ${ id } ); echo wp_
 		await save( forged );
 		const realAfter = stored( forged );
 		t.check( 'typing in the real shortcode, summary and label fields saves them', /\[gallery columns="2"\]/.test( realAfter.content ) && /<summary>Edited summary<\/summary>/.test( realAfter.content ) && />Edited label</.test( realAfter.content ), realAfter.content.slice( 0, 300 ) );
+
+		// 6. Content naming the page's own members. document's named lookup
+		// wins over its members, so a kses-clean <object id="querySelector">
+		// replaced document.querySelector and stopped the editor, and
+		// id="body" moved Minn's popovers into the post; any element's id
+		// shadows what window inherits (addEventListener).
+		const uploads = wpEval( `echo wp_upload_dir()['baseurl'];` );
+		const clobber = asAuthor( 'Minn content ids: built-ins', 'pending',
+			'<!-- wp:paragraph --><p id="addEventListener">Edit me.</p><!-- /wp:paragraph -->'
+			+ `<!-- wp:paragraph --><p>Read the PDFs: <object id="querySelector" type="application/pdf" data="${ uploads }/minn-a.pdf"></object><object id="body" type="application/pdf" data="${ uploads }/minn-b.pdf"></object></p><!-- /wp:paragraph -->` );
+		made.push( clobber );
+		t.check( 'kses keeps the object ids on an Author\'s markup (the precondition)', /<object id="querySelector"/.test( stored( clobber ).content ), '' );
+		await openEditor( page, clobber );
+		await page.waitForSelector( '.minn-editor-side #minn-status-state', { timeout: 30000 } ).catch( () => null );
+		await page.waitForTimeout( 1000 );
+		const builtins = await page.evaluate( () => ( {
+			qs: typeof document.querySelector,
+			body: document.body && document.body.tagName,
+			ael: typeof window.addEventListener,
+			side: !! Document.prototype.querySelector.call( document, '.minn-editor-side #minn-status-state' ),
+		} ) );
+		t.check( 'content cannot replace document.querySelector, document.body or window.addEventListener', 'function' === builtins.qs && 'BODY' === builtins.body && 'function' === builtins.ael && builtins.side, JSON.stringify( builtins ) );
+		await typeInFirstParagraph();
+		await save( clobber );
+		const clobberAfter = stored( clobber );
+		t.check( 'the ids save back as written', /id="querySelector"/.test( clobberAfter.content ) && /id="addEventListener"/.test( clobberAfter.content ) && /Edit me\.!/.test( clobberAfter.content ) && ! /data-minn-inert-/.test( clobberAfter.content ), clobberAfter.content.slice( 0, 600 ) );
+
+		// 7. The rich-text modal over the editor. A field's stored HTML seeds
+		// it, and a <label for> in it reached the editor's Publish button
+		// behind the modal: the first click inside published the post.
+		const rt = asAuthor( 'Minn content ids: rich-text modal', 'pending', '<!-- wp:paragraph --><p>Body.</p><!-- /wp:paragraph -->' );
+		made.push( rt );
+		wpEval( `update_post_meta( ${ rt }, 'slideshow_notes', '<p><label for="minn-publish-btn">Please review this note</label></p>' ); update_post_meta( ${ rt }, '_slideshow_notes', 'field_minn_norest_notes' );` );
+		await openEditor( page, rt );
+		const rtSel = '[data-pf$=":slideshow_notes"][data-ftype="wysiwyg"]';
+		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } ).catch( () => null );
+		if ( ! await page.$( '[data-side-door="panel:acf"]' ) ) {
+			t.check( 'ACF panel available (skip)', true, 'no ACF panel' );
+		} else {
+			await page.click( '[data-side-door="panel:acf"]' );
+			await page.waitForSelector( rtSel, { timeout: 15000 } );
+			await page.click( `${ rtSel } [data-rt-edit]` );
+			await page.waitForSelector( '.minn-rt-body label', { timeout: 10000 } );
+			const rtBefore = writes.length;
+			await page.click( '.minn-rt-body label' );
+			await page.waitForTimeout( 2000 );
+			const rtPublished = writes.slice( rtBefore ).filter( ( w ) => /"status":"publish"/.test( w.body ) );
+			t.check( 'clicking a label in the rich-text modal publishes nothing', 'pending' === stored( rt ).status && ! rtPublished.length, stored( rt ).status );
+			t.check( 'the label in the modal points at nothing of Minn\'s', null === await page.$eval( '.minn-rt-body label', ( e ) => e.getAttribute( 'for' ) ), '' );
+			await page.click( '#minn-rt-cancel' ).catch( () => null );
+		}
 	} finally {
 		for ( const id of made ) {
 			if ( id ) wpEval( `wp_delete_post( ${ id }, true );` );

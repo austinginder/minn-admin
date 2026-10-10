@@ -2157,6 +2157,13 @@
 					el.removeAttribute( at.name );
 					return;
 				}
+				// A field value never legitimately names Minn's chrome or one of
+				// the page's own members (see rtIdHazard): a <label for> into
+				// the editor behind this modal clicked its Publish button.
+				if ( rtIdHazard( at.name, at.value, el ) ) {
+					el.removeAttribute( at.name );
+					return;
+				}
 				// A relative or http(s) target is fine; anything else (javascript:,
 				// data:, vbscript:) is not, and safeHref already draws that line.
 				if ( RT_URL_ATTRS.includes( name ) && ! safeHref( at.value ) ) {
@@ -2244,11 +2251,28 @@
 	// sit out; one content element pointing at another keeps working.
 	const RT_ID_ATTRS = [ 'id', 'name', 'for', 'form', 'popovertarget', 'commandfor' ];
 	const rtMinnRef = ( value ) => /^\s*minn-/i.test( String( value == null ? '' : value ) );
+	// The elements document exposes by name (an <object> by id too), and its
+	// named lookup wins over its own members: a kses-clean
+	// <object id="querySelector"> replaced document.querySelector and stopped
+	// the editor, id="body" moved every popover into the post. Any element's
+	// id becomes a window property too, and that one wins over the members
+	// window inherits (addEventListener). Those ids sit out as well.
+	const RT_NAMED_TAGS = [ 'OBJECT', 'EMBED', 'FORM', 'IFRAME', 'IMG' ];
+	const rtIdHazard = ( name, value, el ) => {
+		const lower = String( name ).toLowerCase();
+		if ( ! RT_ID_ATTRS.includes( lower ) ) return false;
+		if ( rtMinnRef( value ) ) return true;
+		const v = String( value == null ? '' : value );
+		if ( '' === v || ( 'id' !== lower && 'name' !== lower ) ) return false;
+		const named = !! el && RT_NAMED_TAGS.includes( String( el.tagName || '' ).toUpperCase() );
+		if ( ( 'id' === lower || named ) && v in EventTarget.prototype ) return true;
+		return named && v in Object.getPrototypeOf( document );
+	};
 
 	const rtParkName = ( name, value, el ) => {
 		const lower = name.toLowerCase();
 		if ( 0 === lower.indexOf( RT_PARK_PREFIX ) ) return name;
-		if ( RT_ID_ATTRS.includes( lower ) && rtMinnRef( value ) ) return RT_PARK_PREFIX + name;
+		if ( rtIdHazard( name, value, el ) ) return RT_PARK_PREFIX + name;
 		// Every event handler, plus the attributes whose whole purpose is to
 		// reach execution again after the walk (srcdoc, animate's target).
 		if ( 0 === lower.indexOf( 'on' ) || RT_KILL_ATTRS.includes( lower ) ) return RT_PARK_PREFIX + name;
