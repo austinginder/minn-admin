@@ -12554,7 +12554,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// DISALLOW_FILE_EDIT counts here too: this endpoint rewrites a PHP file,
 		// which is precisely what that directive exists to forbid, and core maps
 		// it into edit_files for every other PHP-editing path.
-		$disallowed = ! Minn_Admin::code_edits_allowed() || ( is_multisite() && ! is_super_admin() );
+		$disallowed = ! Minn_Admin::code_edits_allowed() || ! Minn_Admin::network_owner();
 		$contents   = ( $path && is_readable( $path ) ) ? (string) file_get_contents( $path ) : '';
 
 		$constants = array();
@@ -12603,7 +12603,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! isset( $consts[ $name ] ) ) {
 			return new WP_Error( 'bad_constant', __( 'That constant is not editable.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		if ( ! Minn_Admin::code_edits_allowed() || ( is_multisite() && ! is_super_admin() ) ) {
+		if ( ! Minn_Admin::code_edits_allowed() || ! Minn_Admin::network_owner() ) {
 			return new WP_Error( 'forbidden', __( 'File modifications are disabled on this site.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$path = self::wpconfig_path();

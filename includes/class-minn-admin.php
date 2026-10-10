@@ -1180,18 +1180,6 @@ class Minn_Admin {
 		return ! is_multisite() || is_super_admin();
 	}
 
-	/**
-	 * The capability meaning "may change settings", widened to the network.
-	 *
-	 * manage_options is PER SITE on multisite, so it is the wrong gate for
-	 * anything the whole network shares. Use this where the state is
-	 * site-wide-or-broader; use network_owner() where a per-site capability
-	 * still has to be checked alongside it.
-	 */
-	public static function manage_cap() {
-		return is_multisite() ? 'manage_network_options' : 'manage_options';
-	}
-
 	public static function app_url() {
 		if ( get_option( 'permalink_structure' ) ) {
 			return home_url( '/minn-admin/' );
