@@ -4,6 +4,8 @@
 
 ### Added
 
+* **Replace an ACF block's photo by clicking it.** Photos in an ACF block's preview now open the media picker on click, the way a core Image block's photo does, and a photo set opens the Images editor at the picture you clicked; the hover chip says Replace image or Edit images. It works for photos a template marks with ACF's own toolbar marker and, with no marker at all, for any picture Minn can match to exactly one of the block's image or gallery fields by its file. A marker that names a photo next to other fields keeps its popover, whose photo row now works and keeps what you typed beside it. Only the field you picked changes, and without media-library access photos stay in the block settings.
+
 * **Update Minn, on Minn.** When Minn Admin runs on Minn, the update banner, the header chip, notifications and Update everything now offer new releases of Minn itself, which Minn looks for on GitHub once a day, instead of WordPress. The banner links the release notes, the confirmation says what changes, and the page reloads into the new release when it is done. The version in the header is Minn's, and What's new has a tab for Minn's changelog beside Minn Admin's.
 
 ### Fixed
