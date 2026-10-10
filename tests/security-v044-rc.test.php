@@ -388,6 +388,42 @@ if ( ! function_exists( 'wc_create_order' ) || ! get_role( 'shop_manager' ) ) {
 	wp_delete_user( $om_user );
 }
 
+// --- 07-04 Memberships: a member is never re-resolved onto another account ---
+// "Add plan" on a member page posted the member's username, and the lookup
+// tried it as an email first: when the username is email-shaped and another
+// account has since set that address as its email, the new membership went
+// to that other account.
+if ( ! function_exists( 'wc_memberships_get_membership_plan' ) ) {
+	$skip( '07-04 WooCommerce Memberships inactive' );
+} else {
+	$wm_plan = get_page_by_path( 'minn-gold', OBJECT, 'wc_membership_plan' );
+	$wm_tag  = wp_generate_password( 6, false, false );
+	$wm_addr = "alice-{$wm_tag}@example.com";
+	$wm_alice = wp_insert_user( array( 'user_login' => $wm_addr, 'user_email' => "alice-new-{$wm_tag}@example.com", 'user_pass' => wp_generate_password( 24 ), 'role' => 'customer' ) );
+	$wm_mal   = wp_insert_user( array( 'user_login' => "mallory-{$wm_tag}", 'user_email' => $wm_addr, 'user_pass' => wp_generate_password( 24 ), 'role' => 'customer' ) );
+	if ( ! $wm_plan || is_wp_error( $wm_alice ) || is_wp_error( $wm_mal ) ) {
+		$check( '07-04 fixtures', false, ! $wm_plan ? 'no minn-gold plan' : 'user create failed' );
+	} else {
+		list( $wm_st, $wm_body ) = $call( 'POST', '/minn-admin/v1/wcm/members', array( 'customer' => $wm_addr, 'plan_id' => $wm_plan->ID ) );
+		$wm_who = ( 200 === $wm_st && ! empty( $wm_body['id'] ) ) ? (int) get_post_field( 'post_author', (int) $wm_body['id'] ) : 0;
+		$check( '07-04 memberships: an address that is one account\'s username and another\'s email is refused', 400 === $wm_st && ! wc_memberships_get_user_membership( $wm_mal, $wm_plan->ID ), $wm_st . ( $wm_who ? ' created for ' . ( $wm_who === $wm_mal ? 'the other account' : 'the member' ) : '' ) );
+		list( $wm_st, $wm_body ) = $call( 'POST', '/minn-admin/v1/wcm/members', array( 'customer_id' => $wm_alice, 'plan_id' => $wm_plan->ID ) );
+		$check( '07-04 control: the member page names its member by id and the plan goes to them', 200 === $wm_st && wc_memberships_get_user_membership( $wm_alice, $wm_plan->ID ) && ! wc_memberships_get_user_membership( $wm_mal, $wm_plan->ID ), $wm_st . ' ' . wp_json_encode( $wm_body['code'] ?? '' ) );
+		foreach ( array( $wm_alice, $wm_mal ) as $wm_u ) {
+			$wm_m = wc_memberships_get_user_membership( $wm_u, $wm_plan->ID );
+			if ( $wm_m ) {
+				wp_delete_post( $wm_m->get_id(), true );
+			}
+		}
+	}
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	foreach ( array( $wm_alice, $wm_mal ) as $wm_u ) {
+		if ( ! is_wp_error( $wm_u ) && $wm_u ) {
+			wp_delete_user( $wm_u );
+		}
+	}
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

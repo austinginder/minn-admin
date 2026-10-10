@@ -260,7 +260,7 @@ function minn_admin_wcm_row( $m ) {
  * Resolve a typed customer (email, login or numeric id) to a user.
  *
  * @param string $raw Typed value.
- * @return WP_User|null
+ * @return WP_User|WP_Error|null An error when the value names two different accounts.
  */
 function minn_admin_wcm_find_user( $raw ) {
 	$raw = trim( (string) $raw );
@@ -270,6 +270,13 @@ function minn_admin_wcm_find_user( $raw ) {
 	$user = null;
 	if ( is_email( $raw ) ) {
 		$user = get_user_by( 'email', $raw );
+		// An email-shaped username can name one account while another has
+		// since taken that address as its email: refuse rather than guess,
+		// or the membership goes to whoever set their email to it.
+		$login = get_user_by( 'login', $raw );
+		if ( $user && $login && (int) $user->ID !== (int) $login->ID ) {
+			return new WP_Error( 'minn_wcm_user', __( 'That is one account\'s email address and another account\'s username. Open the member you mean and add the plan from their page.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
 	}
 	// Login before id: a site can have numeric usernames, and the field asks
 	// for an email or username, never an id. Only fall back to an id lookup
@@ -280,6 +287,16 @@ function minn_admin_wcm_find_user( $raw ) {
 	if ( ! $user && ctype_digit( $raw ) ) {
 		$user = get_user_by( 'id', (int) $raw );
 	}
+	return minn_admin_wcm_user_in_scope( $user );
+}
+
+/**
+ * The account, when the caller may pick it here; null otherwise.
+ *
+ * @param WP_User|false|null $user Account looked up.
+ * @return WP_User|null
+ */
+function minn_admin_wcm_user_in_scope( $user ) {
 	if ( ! $user instanceof WP_User ) {
 		return null;
 	}
@@ -1953,6 +1970,9 @@ add_action( 'rest_api_init', function () {
 				return $m;
 			}
 			$user = minn_admin_wcm_find_user( $request->get_param( 'user' ) );
+			if ( is_wp_error( $user ) ) {
+				return $user;
+			}
 			if ( ! $user ) {
 				return new WP_Error( 'minn_wcm_user', __( 'No account matches that email address or username.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
@@ -2011,7 +2031,13 @@ add_action( 'rest_api_init', function () {
 			return minn_admin_wcm_can() && current_user_can( 'publish_user_memberships' );
 		},
 		'callback'            => function ( $request ) {
-			$user = minn_admin_wcm_find_user( $request->get_param( 'customer' ) );
+			// A member page names its member by id: it already knows who.
+			$user = $request->get_param( 'customer_id' )
+				? minn_admin_wcm_user_in_scope( get_user_by( 'id', absint( $request->get_param( 'customer_id' ) ) ) )
+				: minn_admin_wcm_find_user( $request->get_param( 'customer' ) );
+			if ( is_wp_error( $user ) ) {
+				return $user;
+			}
 			if ( ! $user ) {
 				return new WP_Error( 'minn_wcm_user', __( 'No account matches that email address or username. Create the customer first.', 'minn-admin' ), array( 'status' => 400 ) );
 			}

@@ -56316,7 +56316,7 @@
 				const btn = $( '#minn-wcm-addplan-go' );
 				if ( btn ) btn.disabled = true;
 				try {
-					const res = await api( 'minn-admin/v1/wcm/members', { method: 'POST', body: JSON.stringify( { customer: d.member.login || d.member.email, plan_id: planId } ) } );
+					const res = await api( 'minn-admin/v1/wcm/members', { method: 'POST', body: JSON.stringify( { customer_id: d.member.id, plan_id: planId } ) } );
 					toast( ( res && res.message ) || __( 'Plan added.' ) );
 					if ( res && res.id ) go( 'memberships/' + res.id );
 					else await reload();
