@@ -50638,7 +50638,7 @@
 		// sites stack 10+ roles and a bare select doesn't type-to-filter.
 		const roleAc = $( '#minn-uf-role-ac' );
 		if ( roleAc ) {
-			const current = m.user && m.user.roles && m.user.roles[ 0 ] ? m.user.roles[ 0 ] : 'subscriber';
+			const current = userRoleSeed( m.user );
 			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: chromeLabel( l ) } ) ), {
 				strict: true,
 				value: current,
@@ -50665,7 +50665,7 @@
 			// Strict combobox: the picked slug rides dataset.acValue, the
 			// input's visible value is the display label.
 			const roleSel = $( '#minn-uf-role' );
-			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue ) payload.roles = [ roleSel.dataset.acValue ];
+			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue && ( ! m.userId || roleSel.dataset.acValue !== userRoleSeed( m.user ) ) ) payload.roles = [ roleSel.dataset.acValue ];
 			const password = $( '#minn-uf-password' ).value;
 			if ( password ) payload.password = password;
 			try {
@@ -50925,6 +50925,13 @@
 		bindUserEdit( ue, view );
 	}
 
+	// The role a user form's picker opens on. A save sends roles only when the
+	// pick differs from it, so a user with no role here (or several) keeps
+	// that on a save that only changed a name or an email.
+	function userRoleSeed( user ) {
+		return user && user.roles && user.roles[ 0 ] ? user.roles[ 0 ] : 'subscriber';
+	}
+
 	function bindUserEdit( ue, view ) {
 		const u = ue.user;
 		const back = $( '#minn-ue-back', view );
@@ -50933,7 +50940,7 @@
 		if ( roleAc ) {
 			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: chromeLabel( l ) } ) ), {
 				strict: true,
-				value: u.roles && u.roles[ 0 ] ? u.roles[ 0 ] : 'subscriber',
+				value: userRoleSeed( u ),
 			} );
 		}
 		const langAc = $( '#minn-ue-lang-ac', view );
@@ -50961,7 +50968,7 @@
 				description: $( '#minn-ue-bio', view ).value,
 			};
 			const roleSel = $( '#minn-ue-role', view );
-			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue ) payload.roles = [ roleSel.dataset.acValue ];
+			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue && roleSel.dataset.acValue !== userRoleSeed( u ) ) payload.roles = [ roleSel.dataset.acValue ];
 			const password = $( '#minn-ue-password', view ).value;
 			if ( password ) payload.password = password;
 			const langSel = $( '#minn-ue-lang', view );
@@ -51419,7 +51426,7 @@
 	function bindProfile( p, view ) {
 		const roleAc = $( '#minn-pf-role-ac', view );
 		if ( roleAc ) {
-			const current = p.user.roles && p.user.roles[ 0 ] ? p.user.roles[ 0 ] : 'subscriber';
+			const current = userRoleSeed( p.user );
 			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: chromeLabel( l ) } ) ), {
 				strict: true,
 				value: current,
@@ -51486,7 +51493,7 @@
 				description: $( '#minn-pf-bio', view ).value,
 			};
 			const roleSel = $( '#minn-pf-role', view );
-			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue ) payload.roles = [ roleSel.dataset.acValue ];
+			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue && roleSel.dataset.acValue !== userRoleSeed( p.user ) ) payload.roles = [ roleSel.dataset.acValue ];
 			const password = $( '#minn-pf-password', view ).value;
 			if ( password ) payload.password = password;
 			// Language rides its own endpoint: a not-yet-installed pick needs
