@@ -31029,13 +31029,22 @@
 		return `${ openComment }\n<details class="wp-block-details"${ openAttr }><summary>${ esc( s ) }</summary>${ body }</details>\n<!-- /wp:details -->`;
 	}
 
+	// An island's fields are always <input>s Minn rendered. Post content can
+	// wear their classes and point data-* at any island (kses keeps class,
+	// data-* and a button's value for every role), but never an <input>, so
+	// only a real one may write its island back; a look-alike's value would
+	// otherwise land in the post as that block's markup.
+	const islandField = ( el ) => !! el && 'INPUT' === el.tagName;
+
 	// Keep ed.islands in sync with the in-island shortcode field. Serialize
 	// reads islands[] (not DOM), so every keystroke must land here.
 	// opts.silent: skip scheduleAutosave (used by serialize flush so a save
 	// doesn't re-arm the idle timer).
 	function commitShortcodeInput( input, opts ) {
 		const ed = state.editor;
-		if ( ! ed || ! ed.islands || ! input ) return;
+		if ( ! ed || ! ed.islands || ! islandField( input ) ) return;
+		const island = input.closest( '.minn-shortcode-island' );
+		if ( ! island || island.dataset.island !== input.dataset.shortcode ) return;
 		const idx = parseInt( input.dataset.shortcode, 10 );
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
 		const next = shortcodeTemplate( input.value );
@@ -31053,7 +31062,7 @@
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
 		const sum = islandEl.querySelector( '.minn-details-summary' );
 		const body = islandEl.querySelector( '.minn-details-body' );
-		if ( ! sum || ! body ) return;
+		if ( ! islandField( sum ) || ! body ) return;
 		const prev = parseDetailsRaw( ed.islands[ idx ] );
 		// Read the body back through a clone with the parked attributes put
 		// back, or an untouched details block would be rewritten inert on the
@@ -31238,6 +31247,9 @@
 		if ( ! ed || ! ed.islands || ! islandEl ) return;
 		const idx = parseInt( islandEl.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+		// A real island always keeps one row, each with its two fields.
+		const rows = $$( '.minn-btn-row', islandEl );
+		if ( ! rows.length || ! rows.every( ( row ) => islandField( row.querySelector( '.minn-btn-label' ) ) && islandField( row.querySelector( '.minn-btn-url' ) ) ) ) return;
 		let wrapAttrs = null;
 		try {
 			if ( islandEl.dataset.btnWrapAttrs ) wrapAttrs = JSON.parse( islandEl.dataset.btnWrapAttrs );

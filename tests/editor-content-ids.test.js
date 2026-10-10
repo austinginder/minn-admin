@@ -9,7 +9,10 @@
  * real Publish button from inside the text, so an editor clicking into a
  * Contributor's pending post published it.
  *
- * Fixtures: three posts written as minn-author through wp_insert_post (the
+ * The same goes for the fields inside the shortcode, details and buttons
+ * islands: content wearing their classes must not stand in for them.
+ *
+ * Fixtures: four posts written as minn-author through wp_insert_post (the
  * same kses a REST save runs), removed after.
  */
 const fs = require( 'fs' );
@@ -141,6 +144,55 @@ const stored = ( id ) => JSON.parse( wpEval( `$p = get_post( ${ id } ); echo wp_
 		// blocks, so the bytes around them move; every attribute must not.
 		const kept = [ 'id="intro"', 'href="#intro"', 'for="note"', 'id="note"', 'name="note"' ].filter( ( a ) => ! plainAfter.content.includes( a ) );
 		t.check( 'ids, links, labels and field names the author wrote save back as written', ! kept.length && ! /data-minn-inert-/.test( plainAfter.content ) && /Edit me\.!/.test( plainAfter.content ), kept.length ? 'lost ' + kept.join( ' ' ) : plainAfter.content.slice( 0, 200 ) );
+
+		// 4. Content dressed as an island's fields. kses keeps class, data-*
+		// and a button's value, so an Author's markup can wear the shortcode,
+		// details and buttons field classes and point at a real island. The
+		// save used to read those look-alikes back as the island's value: the
+		// shortcode one went into the post as raw markup, script included,
+		// once someone who can post unfiltered HTML saved.
+		const forged = asAuthor( 'Minn content ids: island fields', 'pending',
+			'<!-- wp:shortcode -->\n[gallery]\n<!-- /wp:shortcode -->'
+			+ '<!-- wp:details --><details class="wp-block-details"><summary>Real summary</summary><!-- wp:paragraph --><p>Hidden text</p><!-- /wp:paragraph --></details><!-- /wp:details -->'
+			+ '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button --><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://real.example/">Real label</a></div><!-- /wp:button --></div><!-- /wp:buttons -->'
+			+ '<!-- wp:paragraph --><p>Edit me.</p><!-- /wp:paragraph -->'
+			+ '<!-- wp:paragraph --><p><button class="minn-shortcode-input" data-shortcode="0" value="&lt;script&gt;window.minnForged=1&lt;/script&gt;">a</button></p><!-- /wp:paragraph -->'
+			+ '<!-- wp:paragraph --><p><span class="minn-block-island minn-details-island" data-island="1"><button class="minn-details-summary" value="Forged summary">b</button><span class="minn-details-body">Forged body</span></span></p><!-- /wp:paragraph -->'
+			+ '<!-- wp:paragraph --><p><span class="minn-block-island minn-buttons-island" data-island="2" data-btn-stamped="1"><span class="minn-btn-row"><button class="minn-btn-label" value="Forged label">c</button><button class="minn-btn-url" value="https://forged.example/">d</button></span></span></p><!-- /wp:paragraph -->' );
+		made.push( forged );
+		const forgedStored = stored( forged );
+		t.check( 'kses keeps the look-alike fields on an Author\'s markup (the precondition)', /class="minn-shortcode-input"/.test( forgedStored.content ) && /value="[^"]*script/.test( forgedStored.content ), forged + '' );
+		await openEditor( page, forged );
+		await page.waitForSelector( '#minn-editor-body input.minn-shortcode-input', { timeout: 30000 } ).catch( () => null );
+		await page.waitForTimeout( 1500 );
+		const islands = await page.evaluate( () => [ 'shortcode', 'details', 'buttons' ].map( ( k ) => {
+			const el = document.querySelector( `#minn-editor-body .minn-${ k }-island:not(span)` );
+			return el ? el.dataset.island : null;
+		} ) );
+		t.check( 'the real islands are 0, 1 and 2 (the look-alikes aim at them)', '0,1,2' === islands.join( ',' ), JSON.stringify( islands ) );
+		await page.click( '#minn-editor-body p:has-text("Edit me.")' );
+		await page.keyboard.press( 'End' );
+		await page.keyboard.type( '!' );
+		await save( forged );
+		const forgedAfter = stored( forged );
+		t.check( 'an edit saves (control)', /Edit me\.!/.test( forgedAfter.content ), forgedAfter.content.slice( 0, 160 ) );
+		// The look-alike itself saves back as written; only a script outside
+		// an attribute value would run.
+		const outsideValues = forgedAfter.content.replace( /value="[^"]*"/g, '' );
+		t.check( 'the shortcode block keeps its shortcode, no script', /<!-- wp:shortcode -->\s*\[gallery\]\s*<!-- \/wp:shortcode -->/.test( forgedAfter.content ) && ! /<script/i.test( outsideValues ), forgedAfter.content.slice( 0, 160 ) );
+		t.check( 'the details block keeps its summary', /<summary>Real summary<\/summary>/.test( forgedAfter.content ) && ! /<summary>Forged summary/.test( forgedAfter.content ), ( forgedAfter.content.match( /<summary>[^<]*<\/summary>/ ) || [ '' ] )[ 0 ] );
+		t.check( 'the buttons block keeps its button', /href="https:\/\/real\.example\/"[^>]*>Real label</.test( forgedAfter.content ) && ! /href="https:\/\/forged\.example/.test( forgedAfter.content ), ( forgedAfter.content.match( /<a class="wp-block-button__link[^>]*>[^<]*/ ) || [ '' ] )[ 0 ] );
+
+		// 5. Control: the real fields still save what was typed in them.
+		await openEditor( page, forged );
+		await page.waitForSelector( '#minn-editor-body input.minn-shortcode-input', { timeout: 30000 } );
+		await page.waitForTimeout( 1000 );
+		await page.fill( '#minn-editor-body input.minn-shortcode-input', '[gallery columns="2"]' );
+		await page.fill( '#minn-editor-body input.minn-details-summary', 'Edited summary' );
+		await page.fill( '#minn-editor-body input.minn-btn-label', 'Edited label' );
+		await save( forged );
+		const realAfter = stored( forged );
+		t.check( 'typing in the real shortcode, summary and label fields saves them', /\[gallery columns="2"\]/.test( realAfter.content ) && /<summary>Edited summary<\/summary>/.test( realAfter.content ) && />Edited label</.test( realAfter.content ), realAfter.content.slice( 0, 300 ) );
 	} finally {
 		for ( const id of made ) {
 			if ( id ) wpEval( `wp_delete_post( ${ id }, true );` );
