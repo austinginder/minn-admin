@@ -3582,18 +3582,21 @@ function minn_admin_license_default_providers() {
 	// itself; the pasted key is stored first (uplink validates the STORED
 	// key) and rolled back with its status if the service rejects it.
 	// Deactivate mirrors their own Clear button (the option goes away; a key
-	// baked into the plugin build remains as the fallback).
-	if ( defined( 'KBP_VERSION' ) && function_exists( '\KadenceWP\KadenceBlocks\StellarWP\Uplink\validate_license' ) ) {
+	// baked into the plugin build remains as the fallback). Where Uplink
+	// licenses the whole network, the key and its status live in the
+	// network's options and Minn offers no actions: that stays on Kadence's
+	// own screen.
+	if ( defined( 'KBP_VERSION' ) && function_exists( '\KadenceWP\KadenceBlocks\StellarWP\Uplink\validate_license' )
+		&& ! ( is_multisite() && function_exists( '\KadenceWP\KadenceBlocks\StellarWP\Uplink\allows_multisite_license' )
+			&& \KadenceWP\KadenceBlocks\StellarWP\Uplink\allows_multisite_license( 'kadence-blocks-pro' ) ) ) {
 		// The status rows by pattern: a first failure CREATES one, which the
-		// restore removes. Where Uplink network licensing is on, the key
-		// lives in the network's options instead.
+		// restore removes.
 		global $wpdb;
 		$kbp_rows     = array( $wpdb->esc_like( 'stellarwp_uplink_license_key_status_kadence-blocks-pro_' ) . '%' );
 		$kbp_snapshot = function () use ( $kbp_rows ) {
 			return array(
-				'key'     => get_option( 'stellarwp_uplink_license_key_kadence-blocks-pro' ),
-				'network' => is_multisite() ? get_network_option( null, 'stellarwp_uplink_license_key_kadence-blocks-pro' ) : false,
-				'status'  => minn_admin_license_rows( $kbp_rows ),
+				'key'    => get_option( 'stellarwp_uplink_license_key_kadence-blocks-pro' ),
+				'status' => minn_admin_license_rows( $kbp_rows ),
 			);
 		};
 		$kbp_restore  = function ( $snap ) use ( $kbp_rows ) {
@@ -3601,13 +3604,6 @@ function minn_admin_license_default_providers() {
 				delete_option( 'stellarwp_uplink_license_key_kadence-blocks-pro' );
 			} else {
 				update_option( 'stellarwp_uplink_license_key_kadence-blocks-pro', $snap['key'] );
-			}
-			if ( is_multisite() ) {
-				if ( false === $snap['network'] ) {
-					delete_network_option( null, 'stellarwp_uplink_license_key_kadence-blocks-pro' );
-				} else {
-					update_network_option( null, 'stellarwp_uplink_license_key_kadence-blocks-pro', $snap['network'] );
-				}
 			}
 			minn_admin_license_rows_restore( $kbp_rows, $snap['status'] );
 		};
