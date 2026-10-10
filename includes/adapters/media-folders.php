@@ -566,18 +566,24 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 	if ( 'full' !== $access ) {
 		return $p;
 	}
-	$p['move'] = function ( $folder_id, array $ids ) {
+	$p['move'] = function ( $folder_id, array $ids, $from = 0 ) {
 		if ( $folder_id && ! term_exists( (int) $folder_id, 'happyfiles_category' ) ) {
 			return new WP_Error( 'minn_folder_missing', __( 'That folder no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		// Mirror their move_item_ids handler: with "multiple folders per
-		// item" enabled a move ADDS the folder, otherwise it replaces; the
-		// contract's folder 0 = out of every folder (their
-		// remove_from_all_folders path).
+		// item" enabled a move ADDS the folder, otherwise it replaces. Folder
+		// 0 (Uncategorized) takes an item out of every folder in single mode
+		// or with their "remove from all folders" on; otherwise only out of
+		// the folder being viewed, and out of nothing from All.
 		$multiple = (bool) get_option( 'happyfiles_multiple_folders', false );
+		$from_all = (bool) get_option( 'happyfiles_remove_from_all_folders', false );
 		foreach ( $ids as $id ) {
 			if ( ! $folder_id ) {
-				wp_delete_object_term_relationships( $id, 'happyfiles_category' );
+				if ( ! $multiple || $from_all ) {
+					wp_delete_object_term_relationships( $id, 'happyfiles_category' );
+				} elseif ( $from ) {
+					wp_remove_object_terms( $id, array( (int) $from ), 'happyfiles_category' );
+				}
 				continue;
 			}
 			$r = wp_set_object_terms( $id, array( (int) $folder_id ), 'happyfiles_category', $multiple );

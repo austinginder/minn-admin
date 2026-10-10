@@ -801,6 +801,49 @@ if ( 'SureRank' === $rb_prov ) {
 	$skip( '08-x SEO robots: neither SureRank nor Rank Math is the active provider (swap one in)' );
 }
 
+// --- 11-01 HappyFiles: Uncategorized follows HappyFiles' own folder settings ---
+// With "multiple folders per item" on and "remove from all folders" off,
+// HappyFiles' own drop on Uncategorized takes an item out of the folder being
+// viewed only (and out of nothing from All). Minn cleared every folder.
+// Needs HappyFiles as the provider: MINN_SWAP_DROP=filebird/filebird.php
+if ( ! function_exists( 'minn_admin_media_folders_provider' ) || 'HappyFiles' !== ( minn_admin_media_folders_provider()['name'] ?? '' ) ) {
+	$skip( '11-01 HappyFiles is not the media folders provider (swap FileBird out)' );
+} else {
+	$hf_opts = array( 'happyfiles_multiple_folders' => get_option( 'happyfiles_multiple_folders', null ), 'happyfiles_remove_from_all_folders' => get_option( 'happyfiles_remove_from_all_folders', null ) );
+	$hf_a    = wp_insert_term( 'Minn RC folder A ' . wp_generate_password( 4, false, false ), 'happyfiles_category' );
+	$hf_b    = wp_insert_term( 'Minn RC folder B ' . wp_generate_password( 4, false, false ), 'happyfiles_category' );
+	$hf_att  = wp_insert_attachment( array( 'post_title' => 'Minn RC HappyFiles item', 'post_mime_type' => 'image/png', 'post_status' => 'inherit', 'post_author' => $admin ) );
+	$hf_in   = function () use ( $hf_att ) {
+		clean_object_term_cache( $hf_att, 'attachment' );
+		$ids = wp_get_object_terms( $hf_att, 'happyfiles_category', array( 'fields' => 'ids' ) );
+		sort( $ids );
+		return array_map( 'intval', $ids );
+	};
+	$hf_both = array( (int) $hf_a['term_id'], (int) $hf_b['term_id'] );
+	sort( $hf_both );
+	$hf_file = function () use ( $hf_att, $hf_both ) {
+		wp_set_object_terms( $hf_att, $hf_both, 'happyfiles_category', false );
+	};
+	update_option( 'happyfiles_multiple_folders', 1 );
+	update_option( 'happyfiles_remove_from_all_folders', 0 );
+	$hf_file();
+	list( $hf_st ) = $call( 'POST', '/minn-admin/v1/media/folders/move', array( 'folder' => 0, 'ids' => array( $hf_att ), 'from' => (int) $hf_a['term_id'] ) );
+	$check( '11-01 HappyFiles: Uncategorized while viewing a folder removes only that folder', 200 === $hf_st && array( (int) $hf_b['term_id'] ) === $hf_in(), $hf_st . ' ' . wp_json_encode( $hf_in() ) );
+	$hf_file();
+	list( $hf_st ) = $call( 'POST', '/minn-admin/v1/media/folders/move', array( 'folder' => 0, 'ids' => array( $hf_att ), 'from' => 0 ) );
+	$check( '11-01 HappyFiles: Uncategorized from All changes nothing', 200 === $hf_st && $hf_both === $hf_in(), $hf_st . ' ' . wp_json_encode( $hf_in() ) );
+	update_option( 'happyfiles_remove_from_all_folders', 1 );
+	$hf_file();
+	list( $hf_st ) = $call( 'POST', '/minn-admin/v1/media/folders/move', array( 'folder' => 0, 'ids' => array( $hf_att ), 'from' => (int) $hf_a['term_id'] ) );
+	$check( '11-01 control: with "remove from all folders" on, every folder is cleared', 200 === $hf_st && array() === $hf_in(), $hf_st . ' ' . wp_json_encode( $hf_in() ) );
+	foreach ( $hf_opts as $hf_k => $hf_v ) {
+		null === $hf_v ? delete_option( $hf_k ) : update_option( $hf_k, $hf_v );
+	}
+	wp_delete_attachment( $hf_att, true );
+	wp_delete_term( (int) $hf_a['term_id'], 'happyfiles_category' );
+	wp_delete_term( (int) $hf_b['term_id'], 'happyfiles_category' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it
