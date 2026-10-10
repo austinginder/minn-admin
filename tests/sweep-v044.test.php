@@ -13,7 +13,9 @@
  *
  * The Folders and OttoKit sections need plugins the dev site keeps off; load
  * them for the run with tests/lib/plugin-swap.php (its header has the
- * command), or those sections SKIP.
+ * command), or those sections SKIP. The AIOSEO sections need AIOSEO in place
+ * of Yoast: --require=tests/lib/aioseo-swap.php, which puts back what
+ * AIOSEO's own load writes.
  *
  * @package minn-admin
  */
@@ -671,6 +673,381 @@ wp_set_current_user( $admin );
 	$check( 'OttoKit descriptor: the Integrations card reports no problems', $otd_row && ! $otd_row['problems'], $otd_row ? wp_json_encode( $otd_row['problems'] ) : 'surface missing' );
 	$otd_cols = wp_list_pluck( (array) ( Minn_Admin_Surfaces::all()['ottokit']['collection']['columns'] ?? array() ), 'format', 'key' );
 	$check( 'OttoKit descriptor: the response code renders as a numeric cell', 'num' === ( $otd_cols['response_code'] ?? '' ), wp_json_encode( $otd_cols ) );
+} )();
+
+// --- SEO sections: shared fixtures (the AIOSEO ones need AIOSEO loaded for the run:
+// --require=tests/lib/aioseo-swap.php; the every-provider ones run under whichever is active)
+
+// Shared by the SEO sections below: a throwaway attachment (a real 1x1 PNG, or
+// a text file) and the panel's seeding of what it sends back untouched.
+$aio_fixture = function ( $kind ) {
+	$name  = 'minn-sweep-v044-seo-' . wp_generate_password( 6, false, false ) . ( 'png' === $kind ? '.png' : '.txt' );
+	$bytes = 'png' === $kind
+		? base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' )
+		: "Minn sweep v044 probe\n";
+	$up = wp_upload_bits( $name, null, $bytes );
+	if ( ! empty( $up['error'] ) ) {
+		return null;
+	}
+	$id = wp_insert_attachment( array(
+		'post_title'     => $name,
+		'post_mime_type' => 'png' === $kind ? 'image/png' : 'text/plain',
+		'post_status'    => 'inherit',
+	), $up['file'] );
+	return $id ? array( 'id' => (int) $id, 'url' => (string) wp_get_attachment_url( $id ) ) : null;
+};
+// The client seeds the panel from the read and turns a false on any field
+// that is not an ACF true_false into null; an untouched save sends that back.
+$aio_seed = function ( $post_id ) use ( $call ) {
+	list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $post_id, null, array( 'context' => 'edit' ) );
+	$vals           = (array) ( $read['minn_seo'] ?? array() );
+	foreach ( $vals as $k => $v ) {
+		if ( false === $v ) {
+			$vals[ $k ] = null;
+		}
+	}
+	return $vals;
+};
+$aio_active = function () {
+	return function_exists( 'minn_admin_seo_plugin' ) ? (string) ( minn_admin_seo_plugin()['name'] ?? '' ) : '';
+};
+
+// --- AIOSEO renders the social and X images Minn sets -----------------------
+// In AIOSEO 'custom' is "Image from Custom Field" and 'custom_image' is the
+// uploaded image whose URL sits in og_image_custom_url. Minn wrote 'custom'
+// with the URL, so AIOSEO looked for a custom field, found none, and the
+// og:image the editor picked never appeared on the page.
+( function () use ( $check, $skip, $call, $aio_fixture, $aio_seed, $aio_active ) {
+	if ( 'AIOSEO' !== $aio_active() ) {
+		$skip( 'AIOSEO is not the active SEO provider (run with the AIOSEO swap)' );
+		return;
+	}
+	$model = '\AIOSEO\Plugin\Common\Models\Post';
+	$img   = $aio_fixture( 'png' );
+	if ( ! $img ) {
+		$skip( 'AIOSEO: no image fixture (uploads not writable)' );
+		return;
+	}
+	$pid   = wp_insert_post( array( 'post_title' => 'Minn v044 aioseo image probe', 'post_status' => 'draft' ) );
+	try {
+		$send = array(
+			'social_image'         => $img,
+			'twitter_use_facebook' => false,
+			'twitter_image'        => $img,
+		);
+		list( $st ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $send ) );
+		$row        = $model::getPost( $pid );
+		$check( 'AIOSEO: the social and X images save', 200 === $st, 'status ' . $st );
+		$check( 'AIOSEO: the social image is stored as an uploaded image', 'custom_image' === $row->og_image_type && $img['url'] === $row->og_image_custom_url, $row->og_image_type . ' ' . $row->og_image_custom_url );
+		$check( 'AIOSEO: the X image is stored as an uploaded image', 'custom_image' === $row->twitter_image_type && $img['url'] === $row->twitter_image_custom_url, $row->twitter_image_type . ' ' . $row->twitter_image_custom_url );
+		aioseo()->meta->metaData->bustPostCache( $pid );
+		$og = aioseo()->social->facebook->getImage( $pid );
+		$og = is_array( $og ) ? (string) $og[0] : (string) $og;
+		$check( 'AIOSEO: its og:image is the image Minn set', $img['url'] === $og, $og );
+		aioseo()->meta->metaData->bustPostCache( $pid );
+		$tw = aioseo()->social->twitter->getImage( $pid );
+		$tw = is_array( $tw ) ? (string) $tw[0] : (string) $tw;
+		$check( 'AIOSEO: its twitter:image is the image Minn set', $img['url'] === $tw, $tw );
+		list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
+		$check( 'AIOSEO: Minn reads both images back', (int) ( $read['minn_seo']['social_image']['id'] ?? 0 ) === $img['id'] && (int) ( $read['minn_seo']['twitter_image']['id'] ?? 0 ) === $img['id'], wp_json_encode( array( $read['minn_seo']['social_image'] ?? null, $read['minn_seo']['twitter_image'] ?? null ) ) );
+
+		// An earlier Minn save: 'custom' plus the URL, no custom field named.
+		$row                 = $model::getPost( $pid );
+		$row->og_image_type  = 'custom';
+		$row->save();
+		list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
+		$check( 'AIOSEO: an image an earlier Minn build saved still shows in the panel', (int) ( $read['minn_seo']['social_image']['id'] ?? 0 ) === $img['id'], wp_json_encode( $read['minn_seo']['social_image'] ?? null ) );
+		$vals                = $aio_seed( $pid );
+		$vals['description'] = 'Minn v044 probe description';
+		$call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $vals ) );
+		$row = $model::getPost( $pid );
+		$check( 'AIOSEO: an untouched save leaves that earlier image as stored', 'custom' === $row->og_image_type && $img['url'] === $row->og_image_custom_url, $row->og_image_type . ' ' . $row->og_image_custom_url );
+
+		// Control: AIOSEO's own "Image from Custom Field" with a field named is
+		// not an uploaded image, even with a stale upload URL in the row.
+		$row                         = $model::getPost( $pid );
+		$row->og_image_custom_fields = 'minn_probe_image_field';
+		$row->save();
+		list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
+		$check( 'AIOSEO: its "Image from Custom Field" source does not read as an uploaded image (control)', null === ( $read['minn_seo']['social_image'] ?? null ), wp_json_encode( $read['minn_seo']['social_image'] ?? null ) );
+	} finally {
+		wp_delete_post( $pid, true );
+		if ( $img ) {
+			wp_delete_attachment( $img['id'], true );
+		}
+	}
+} )();
+
+// --- AIOSEO: editing one field keeps the image sources AIOSEO set ----------
+// Minn folds every image source it does not model (featured, attached, an
+// uploaded URL outside the media library) to an empty image, and an empty
+// image sent back unchanged was written as "clear": editing only the
+// description reset the og:image to the site default and wiped the URL.
+( function () use ( $check, $skip, $call, $aio_fixture, $aio_seed, $aio_active ) {
+	if ( 'AIOSEO' !== $aio_active() ) {
+		$skip( 'AIOSEO is not the active SEO provider (run with the AIOSEO swap)' );
+		return;
+	}
+	$model = '\AIOSEO\Plugin\Common\Models\Post';
+	$img   = $aio_fixture( 'png' );
+	if ( ! $img ) {
+		$skip( 'AIOSEO: no image fixture (uploads not writable)' );
+		return;
+	}
+	$a     = wp_insert_post( array( 'post_title' => 'Minn v044 aioseo sources probe', 'post_status' => 'draft' ) );
+	$b     = wp_insert_post( array( 'post_title' => 'Minn v044 aioseo external image probe', 'post_status' => 'draft' ) );
+	$ext   = 'https://example.com/minn-v044-probe.png';
+	try {
+		$row                     = $model::getPost( $a );
+		$row->og_image_type      = 'featured';
+		$row->twitter_use_og     = false;
+		$row->twitter_image_type = 'attach';
+		$row->save();
+		$raw_row = function ( $post_id ) {
+			global $wpdb;
+			$r = (array) $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}aioseo_posts WHERE post_id = %d", $post_id ), ARRAY_A );
+			unset( $r['updated'] );
+			return $r;
+		};
+		$before              = $raw_row( $a );
+		$vals                = $aio_seed( $a );
+		$vals['description'] = 'Minn v044 probe description';
+		list( $st ) = $call( 'POST', '/wp/v2/posts/' . $a, array( 'minn_seo' => $vals ) );
+		$row = $model::getPost( $a );
+		$check( 'AIOSEO: the edited description saves', 200 === $st && 'Minn v044 probe description' === $row->description, 'status ' . $st );
+		$check( 'AIOSEO: an untouched "featured image" social source stays', 'featured' === $row->og_image_type, (string) $row->og_image_type );
+		$check( 'AIOSEO: an untouched "attached image" X source stays', 'attach' === $row->twitter_image_type, (string) $row->twitter_image_type );
+		$after   = $raw_row( $a );
+		$changed = array_keys( array_diff_assoc( array_map( 'strval', $after ), array_map( 'strval', $before ) ) + array_diff_key( $before, $after ) );
+		$check( 'AIOSEO: an untouched save changes the description column and nothing else', array( 'description' ) === $changed, wp_json_encode( $changed ) );
+		// Every empty shape the image can arrive in, over that empty read.
+		$empties = array( '', false, 0, array( 'id' => 0, 'url' => '' ) );
+		foreach ( $empties as $empty ) {
+			$call( 'POST', '/wp/v2/posts/' . $a, array( 'minn_seo' => array( 'social_image' => $empty, 'twitter_image' => $empty ) ) );
+		}
+		$row = $model::getPost( $a );
+		$check( 'AIOSEO: no empty image shape resets a source it does not show', 'featured' === $row->og_image_type && 'attach' === $row->twitter_image_type, $row->og_image_type . ' ' . $row->twitter_image_type );
+
+		$row                           = $model::getPost( $b );
+		$row->og_image_type            = 'custom_image';
+		$row->og_image_custom_url      = $ext;
+		$row->twitter_use_og           = false;
+		$row->twitter_image_type       = 'custom_image';
+		$row->twitter_image_custom_url = $ext;
+		$row->save();
+		$vals                = $aio_seed( $b );
+		$vals['description'] = 'Minn v044 probe description';
+		$call( 'POST', '/wp/v2/posts/' . $b, array( 'minn_seo' => $vals ) );
+		$row = $model::getPost( $b );
+		$check( 'AIOSEO: an untouched uploaded image from outside the media library stays', 'custom_image' === $row->og_image_type && $ext === $row->og_image_custom_url, $row->og_image_type . ' ' . $row->og_image_custom_url );
+		$check( 'AIOSEO: the same for the X image', 'custom_image' === $row->twitter_image_type && $ext === $row->twitter_image_custom_url, $row->twitter_image_type . ' ' . $row->twitter_image_custom_url );
+
+		// Control: an image the panel shows can still be cleared.
+		$call( 'POST', '/wp/v2/posts/' . $a, array( 'minn_seo' => array( 'social_image' => $img ) ) );
+		$vals                 = $aio_seed( $a );
+		$vals['social_image'] = null;
+		$call( 'POST', '/wp/v2/posts/' . $a, array( 'minn_seo' => $vals ) );
+		$row = $model::getPost( $a );
+		$check( 'AIOSEO: clearing a shown image still clears it (control)', 'default' === $row->og_image_type && empty( $row->og_image_custom_url ), $row->og_image_type . ' ' . $row->og_image_custom_url );
+	} finally {
+		wp_delete_post( $a, true );
+		wp_delete_post( $b, true );
+		if ( $img ) {
+			wp_delete_attachment( $img['id'], true );
+		}
+	}
+} )();
+
+// --- AIOSEO: the focus keyword Minn sets is the one AIOSEO's editor shows ---
+// AIOSEO 5 keeps the keyword in its own focus_keyword column and its editor
+// reads that column first; the old keyphrases blob is copied in only while the
+// column is empty. Minn wrote the blob alone, so after AIOSEO had filled the
+// column once, every keyword Minn set (or cleared) was invisible to it.
+( function () use ( $check, $skip, $call, $aio_seed, $aio_active ) {
+	if ( 'AIOSEO' !== $aio_active() ) {
+		$skip( 'AIOSEO is not the active SEO provider (run with the AIOSEO swap)' );
+		return;
+	}
+	$model = '\AIOSEO\Plugin\Common\Models\Post';
+	if ( ! method_exists( $model, 'getKeywordColumnsWithLegacyFallback' ) || ! method_exists( $model, 'getKeyphrasesFromKeywordColumns' ) ) {
+		$skip( 'AIOSEO before 5.0.0.1 keeps no focus_keyword column' );
+		return;
+	}
+	$shows = function ( $post_id ) use ( $model ) {
+		return (string) $model::getKeywordColumnsWithLegacyFallback( $model::getPost( $post_id ) )['focus_keyword'];
+	};
+	$pid = wp_insert_post( array( 'post_title' => 'Minn v044 aioseo keyword probe', 'post_status' => 'draft' ) );
+	$col = wp_insert_post( array( 'post_title' => 'Minn v044 aioseo column-only probe', 'post_status' => 'draft' ) );
+	try {
+		// What AIOSEO's own editor saves: the column and the blob in step.
+		$extra                    = array( array( 'word' => 'minn extra', 'score' => 0 ) );
+		$row                      = $model::getPost( $pid );
+		$row->focus_keyword       = 'gamma';
+		$row->additional_keywords = wp_json_encode( $extra );
+		$row->keyphrases          = wp_json_encode( $model::getKeyphrasesFromKeywordColumns( 'gamma', $extra, null ) );
+		$row->save();
+		list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
+		$check( 'AIOSEO: Minn reads the keyword AIOSEO set', 'gamma' === ( $read['minn_seo']['focus_keyword'] ?? null ), wp_json_encode( $read['minn_seo']['focus_keyword'] ?? null ) );
+
+		$vals                  = $aio_seed( $pid );
+		$vals['focus_keyword'] = 'delta';
+		$call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $vals ) );
+		$row     = $model::getPost( $pid );
+		$phrases = json_decode( (string) wp_json_encode( $row->keyphrases ), true );
+		$check( 'AIOSEO: a keyword Minn sets is in the focus_keyword column', 'delta' === $row->focus_keyword, wp_json_encode( $row->focus_keyword ) );
+		$check( 'AIOSEO: ...and in the keyphrases blob', 'delta' === ( $phrases['focus']['keyphrase'] ?? null ), wp_json_encode( $phrases['focus'] ?? null ) );
+		$check( 'AIOSEO: its editor shows the keyword Minn set', 'delta' === $shows( $pid ), $shows( $pid ) );
+		$check( 'AIOSEO: the additional keyphrases stay as stored', 'minn extra' === ( $phrases['additional'][0]['keyphrase'] ?? null ) && 'minn extra' === ( json_decode( (string) wp_json_encode( $row->additional_keywords ), true )[0]['word'] ?? null ), wp_json_encode( array( $phrases['additional'] ?? null, $row->additional_keywords ) ) );
+
+		$vals                  = $aio_seed( $pid );
+		$vals['focus_keyword'] = '';
+		$call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $vals ) );
+		$row = $model::getPost( $pid );
+		$check( 'AIOSEO: a keyword Minn clears is gone from the column', empty( $row->focus_keyword ), wp_json_encode( $row->focus_keyword ) );
+		$check( 'AIOSEO: its editor shows no keyword after Minn clears it', '' === $shows( $pid ), $shows( $pid ) );
+		list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
+		$check( 'AIOSEO: Minn reads the cleared keyword as empty', '' === ( $read['minn_seo']['focus_keyword'] ?? null ), wp_json_encode( $read['minn_seo']['focus_keyword'] ?? null ) );
+
+		// A row whose keyword lives only in the column.
+		$row                = $model::getPost( $col );
+		$row->focus_keyword = 'zeta';
+		$row->keyphrases    = null;
+		$row->save();
+		list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $col, null, array( 'context' => 'edit' ) );
+		$check( 'AIOSEO: Minn reads a keyword that lives only in the column', 'zeta' === ( $read['minn_seo']['focus_keyword'] ?? null ), wp_json_encode( $read['minn_seo']['focus_keyword'] ?? null ) );
+		$vals                = $aio_seed( $col );
+		$vals['description'] = 'Minn v044 probe description';
+		$call( 'POST', '/wp/v2/posts/' . $col, array( 'minn_seo' => $vals ) );
+		$check( 'AIOSEO: an untouched save keeps that keyword (control)', 'zeta' === $shows( $col ), $shows( $col ) );
+	} finally {
+		wp_delete_post( $pid, true );
+		wp_delete_post( $col, true );
+	}
+} )();
+
+// --- SEO image fields take only images, and clear only what is shown ---------
+// Every provider. The field is a social image, and the vendors (AIOSEO 5.0.3's
+// own seed-image check among them) answer an attachment that is not an image
+// with a refusal. The untouched and cleared rounds are the controls for the
+// unchanged-image rule above.
+( function () use ( $check, $skip, $call, $aio_fixture, $aio_seed, $aio_active ) {
+	$name = $aio_active();
+	if ( '' === $name ) {
+		$skip( 'no SEO provider active' );
+		return;
+	}
+	$pid = wp_insert_post( array( 'post_title' => 'Minn v044 seo image-type probe', 'post_status' => 'draft' ) );
+	$img = $aio_fixture( 'png' );
+	$txt = $aio_fixture( 'txt' );
+	try {
+		$map = minn_admin_seo_field_map( minn_admin_seo_plugin(), $pid );
+		if ( ! isset( $map['social_image'] ) || ! $img || ! $txt ) {
+			$skip( "SEO ({$name}): no social image field here, or no fixture" );
+			return;
+		}
+		$image_of = function () use ( $call, $pid ) {
+			list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
+			return $read['minn_seo']['social_image'] ?? null;
+		};
+		list( $st ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( 'social_image' => $txt ) ) );
+		$check( "SEO ({$name}): a text file is refused as the social image", $st >= 400 && null === $image_of(), 'status ' . $st . ' ' . wp_json_encode( $image_of() ) );
+		if ( isset( $map['twitter_image'] ) ) {
+			list( $st ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( 'twitter_use_facebook' => false, 'twitter_image' => $txt ) ) );
+			list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
+			$check( "SEO ({$name}): a text file is refused as the X image", $st >= 400 && null === ( $read['minn_seo']['twitter_image'] ?? null ), 'status ' . $st );
+		}
+		list( $st ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( 'social_image' => $img ) ) );
+		$check( "SEO ({$name}): an image still saves (control)", 200 === $st && (int) ( $image_of()['id'] ?? 0 ) === $img['id'], 'status ' . $st . ' ' . wp_json_encode( $image_of() ) );
+		$vals                = $aio_seed( $pid );
+		$vals['description'] = 'Minn v044 probe description';
+		$call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $vals ) );
+		$check( "SEO ({$name}): an untouched image survives an edit to another field", (int) ( $image_of()['id'] ?? 0 ) === $img['id'], wp_json_encode( $image_of() ) );
+		$vals                 = $aio_seed( $pid );
+		$vals['social_image'] = null;
+		$call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $vals ) );
+		$check( "SEO ({$name}): clearing the image clears it (control)", null === $image_of(), wp_json_encode( $image_of() ) );
+	} finally {
+		wp_delete_post( $pid, true );
+		foreach ( array( $img, $txt ) as $att ) {
+			if ( $att ) {
+				wp_delete_attachment( $att['id'], true );
+			}
+		}
+	}
+} )();
+
+// --- SEO text fields ignore a value that is not text ------------------------
+// Every provider. An array or object for a text field was turned into '' and
+// cleared what was stored. The panel never sends one, so it is nothing to
+// write. (The REST schema already refuses one for the three keys it declares,
+// title, description and focus keyword, so this uses the undeclared ones.)
+( function () use ( $check, $skip, $call, $aio_active ) {
+	$name = $aio_active();
+	if ( '' === $name ) {
+		$skip( 'no SEO provider active' );
+		return;
+	}
+	$pid = wp_insert_post( array( 'post_title' => 'Minn v044 seo shape probe', 'post_status' => 'draft' ) );
+	try {
+		$pick = array();
+		foreach ( minn_admin_seo_field_map( minn_admin_seo_plugin(), $pid ) as $field => $def ) {
+			$type = $def['type'] ?? 'text';
+			if ( in_array( $field, array( 'title', 'description', 'focus_keyword' ), true ) || isset( $def['sanitize'] ) || isset( $pick[ $type ] ) ) {
+				continue;
+			}
+			if ( 'text' === $type || 'textarea' === $type ) {
+				$pick[ $type ] = $field;
+			}
+		}
+		if ( ! $pick ) {
+			$skip( "SEO ({$name}): no undeclared text field to probe" );
+			return;
+		}
+		$read_of = function () use ( $call, $pid ) {
+			list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
+			return (array) ( $read['minn_seo'] ?? array() );
+		};
+		$set = array();
+		foreach ( $pick as $field ) {
+			$set[ $field ] = 'Minn v044 probe ' . $field;
+		}
+		$call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $set ) );
+		$bad = array();
+		foreach ( array_values( $pick ) as $i => $field ) {
+			$bad[ $field ] = 0 === $i ? array( 'x' ) : array( 'a' => 1 );
+		}
+		list( $st ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $bad ) );
+		$now        = $read_of();
+		foreach ( $pick as $field ) {
+			$check( "SEO ({$name}): a non-text value sent for {$field} leaves it as stored", $set[ $field ] === ( $now[ $field ] ?? null ), 'status ' . $st . ' ' . wp_json_encode( $now[ $field ] ?? null ) );
+		}
+		// The same for every other scalar type (a toggle cast an array to true).
+		$others = array();
+		foreach ( minn_admin_seo_field_map( minn_admin_seo_plugin(), $pid ) as $field => $def ) {
+			if ( in_array( $def['type'] ?? 'text', array( 'toggle', 'select', 'number' ), true ) ) {
+				$others[ $field ] = array( 'x' );
+			}
+		}
+		if ( $others ) {
+			$was = array_intersect_key( $read_of(), $others );
+			$call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $others ) );
+			$now = array_intersect_key( $read_of(), $others );
+			$check( "SEO ({$name}): an array sent for a toggle, select or number changes nothing", $was === $now, wp_json_encode( array_diff_assoc( array_map( 'wp_json_encode', $now ), array_map( 'wp_json_encode', $was ) ) ) );
+		}
+		$edit = array();
+		foreach ( array_values( $pick ) as $i => $field ) {
+			$edit[ $field ] = 0 === $i ? 'Minn v044 probe edited' : '';
+		}
+		$call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => $edit ) );
+		$now = $read_of();
+		$ok  = true;
+		foreach ( $edit as $field => $want ) {
+			$ok = $ok && $want === ( $now[ $field ] ?? null );
+		}
+		$check( "SEO ({$name}): text still saves and an empty string still clears (control)", $ok, wp_json_encode( array_intersect_key( $now, $edit ) ) );
+	} finally {
+		wp_delete_post( $pid, true );
+	}
 } )();
 
 // @sections

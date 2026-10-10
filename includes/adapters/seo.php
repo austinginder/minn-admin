@@ -63,8 +63,10 @@ function minn_admin_seo_meta_provider( $name, $keys, $can_edit = null ) {
 /**
  * AIOSEO v4 provider — full per-post depth through AIOSEO's own Post model
  * so its table shape, sanitization and caches stay its business. The focus
- * keyword lives inside the `keyphrases` JSON blob; additional keyphrases
- * are preserved untouched.
+ * keyword lives inside the `keyphrases` JSON blob and, from AIOSEO 5, in its
+ * own focus_keyword column, which their editor reads first (the blob is
+ * copied in only while the column is empty), so a write sets both through
+ * their own mapper; additional keyphrases are preserved untouched.
  *
  * Model facts (app/Common/Models/Post.php, verified):
  * - Robots are COLUMNS behind one robots_default switch: ON means inherit
@@ -75,9 +77,13 @@ function minn_admin_seo_meta_provider( $name, $keys, $can_edit = null ) {
  *   per-directive inherit does not exist in their model.
  * - twitter_use_og inherits the OG card like Rank Math's use_facebook;
  *   null means the site option (default on).
- * - Custom social images are URL columns (og_image_type 'custom' +
- *   og_image_custom_url); ids resolve back via attachment_url_to_postid
- *   (the Squirrly-provider convention).
+ * - An uploaded social image is og_image_type 'custom_image' plus the URL
+ *   in og_image_custom_url (twitter_ likewise); ids resolve back via
+ *   attachment_url_to_postid (the Squirrly-provider convention). Their
+ *   'custom' is "Image from Custom Field" and renders the field named in
+ *   og_image_custom_fields, never the URL column. Their other sources
+ *   (featured, attached, first in content, author) are not modelled and
+ *   read as no image.
  * - Groups follow their per-tab access caps (aioseo()->access):
  *   social_settings, advanced_settings, schema_settings.
  */
@@ -111,6 +117,20 @@ function minn_admin_seo_aioseo_provider() {
 		'robots_noimageindex' => 'robots_noimageindex',
 		'robots_nosnippet'    => 'robots_nosnippet',
 	);
+	// The uploaded image for one network ('og' or 'twitter'), or null.
+	// Earlier builds stored the upload under 'custom' (their custom-field
+	// source), which AIOSEO never renders from the URL column; such a row,
+	// with no custom field named on the post, still reads as the image it
+	// was meant to be so the panel shows what was saved.
+	$uploaded_image = function ( $post, $prefix ) {
+		$type   = (string) $post->{$prefix . '_image_type'};
+		$url    = (string) $post->{$prefix . '_image_custom_url'};
+		$fields = trim( (string) $post->{$prefix . '_image_custom_fields'} );
+		if ( '' === $url || ! ( 'custom_image' === $type || ( 'custom' === $type && '' === $fields ) ) ) {
+			return null;
+		}
+		return array( 'id' => (int) attachment_url_to_postid( $url ), 'url' => $url );
+	};
 	return array(
 		'name'    => 'AIOSEO',
 		// AIOSEO gates its own post SEO write on aioseo_page_general_settings
@@ -232,7 +252,7 @@ function minn_admin_seo_aioseo_provider() {
 				return null;
 			}
 		},
-		'read'  => function ( $post_id ) use ( $model, $phrases_of, $robots_toggles ) {
+		'read'  => function ( $post_id ) use ( $model, $phrases_of, $robots_toggles, $uploaded_image ) {
 			$out = array( 'title' => '', 'description' => '', 'focus_keyword' => '' );
 			try {
 				$post = $model::getPost( (int) $post_id );
@@ -241,9 +261,15 @@ function minn_admin_seo_aioseo_provider() {
 				}
 				$out['title']       = (string) $post->title;
 				$out['description'] = (string) $post->description;
-				$phrases            = $phrases_of( $post );
-				if ( ! empty( $phrases['focus']['keyphrase'] ) ) {
-					$out['focus_keyword'] = (string) $phrases['focus']['keyphrase'];
+				if ( method_exists( $model, 'getKeywordColumnsWithLegacyFallback' ) ) {
+					// Their editor's own read: the column, else the blob.
+					$columns              = $model::getKeywordColumnsWithLegacyFallback( $post );
+					$out['focus_keyword'] = isset( $columns['focus_keyword'] ) && is_string( $columns['focus_keyword'] ) ? $columns['focus_keyword'] : '';
+				} else {
+					$phrases = $phrases_of( $post );
+					if ( ! empty( $phrases['focus']['keyphrase'] ) ) {
+						$out['focus_keyword'] = (string) $phrases['focus']['keyphrase'];
+					}
 				}
 				$out['pillar_content'] = ! empty( $post->pillar_content );
 				// null = never explicit = their defaults.
@@ -257,14 +283,12 @@ function minn_admin_seo_aioseo_provider() {
 				$out['canonical']             = (string) $post->canonical_url;
 				$out['facebook_title']        = (string) $post->og_title;
 				$out['facebook_description']  = (string) $post->og_description;
-				$og_url = 'custom' === (string) $post->og_image_type ? (string) $post->og_image_custom_url : '';
-				$out['social_image'] = '' !== $og_url ? array( 'id' => (int) attachment_url_to_postid( $og_url ), 'url' => $og_url ) : null;
+				$out['social_image'] = $uploaded_image( $post, 'og' );
 				$out['twitter_use_facebook'] = null === $post->twitter_use_og ? true : (bool) $post->twitter_use_og;
 				$out['twitter_card_type']    = null === $post->twitter_card || 'default' === (string) $post->twitter_card ? '' : (string) $post->twitter_card;
 				$out['twitter_title']        = (string) $post->twitter_title;
 				$out['twitter_description']  = (string) $post->twitter_description;
-				$tw_url = 'custom' === (string) $post->twitter_image_type ? (string) $post->twitter_image_custom_url : '';
-				$out['twitter_image'] = '' !== $tw_url ? array( 'id' => (int) attachment_url_to_postid( $tw_url ), 'url' => $tw_url ) : null;
+				$out['twitter_image']        = $uploaded_image( $post, 'twitter' );
 				$out['schema_in_use'] = minn_admin_seo_aioseo_schema_in_use( $post, get_post_type( (int) $post_id ) );
 			} catch ( \Throwable $e ) { /* their schema, their exceptions — read as empty */ }
 			return $out;
@@ -280,7 +304,9 @@ function minn_admin_seo_aioseo_provider() {
 					if ( $att > 0 ) {
 						$url = (string) wp_get_attachment_url( $att );
 						if ( '' !== $url ) {
-							$post->$type_col = 'custom';
+							// Their uploaded-image source; 'custom' would render a
+							// custom field instead of this URL.
+							$post->$type_col = 'custom_image';
 							$post->$url_col  = $url;
 						}
 					} else {
@@ -303,6 +329,14 @@ function minn_admin_seo_aioseo_provider() {
 						);
 					}
 					$post->keyphrases = $phrases ? wp_json_encode( $phrases ) : null;
+					// AIOSEO 5 reads the focus_keyword column before the blob and
+					// only fills it while it is empty, so the column must follow
+					// every write and every clear. Their own mapper derives it
+					// (sanitized, cut to the column's 255) exactly as their saves do.
+					if ( method_exists( $model, 'getKeywordColumnsFromKeyphrases' ) ) {
+						$columns             = $model::getKeywordColumnsFromKeyphrases( $phrases );
+						$post->focus_keyword = $columns['focus_keyword'];
+					}
 				} elseif ( 'pillar_content' === $field ) {
 					$post->pillar_content = (bool) $clean;
 				} elseif ( 'robots_default' === $field ) {
@@ -2046,7 +2080,17 @@ add_action( 'rest_api_init', function () {
 					if ( $att > 0 && $att === $held ) {
 						continue;
 					}
-					if ( null === $raw || '' === $raw || false === $raw ) {
+					$empty = null === $raw || '' === $raw || false === $raw;
+					// An empty image is also how the read reports a source a
+					// provider keeps and Minn does not model (AIOSEO's featured or
+					// attached image), so the panel sends one back for every such
+					// post. Over an empty read it says nothing; writing it as a
+					// clear reset that source to the site default and wiped the
+					// stored URL whenever any other SEO field was edited.
+					if ( $empty && array_key_exists( $field, $stored ) && null === $stored[ $field ] ) {
+						continue;
+					}
+					if ( $empty ) {
 						call_user_func( $plugin['write'], $post->ID, $field, null );
 					} elseif ( $att > 0 ) {
 						// edit_post above authorises the POST. It says nothing about
@@ -2062,6 +2106,13 @@ add_action( 'rest_api_init', function () {
 							|| ! current_user_can( 'read_post', $att ) ) {
 							return new WP_Error( 'rest_forbidden', __( 'You cannot use that media item.', 'minn-admin' ), array( 'status' => 403 ) );
 						}
+						// A social image has to be an image. Asked only after the
+						// checks above, so it tells nothing about an item the
+						// caller cannot read; AIOSEO refuses its own seed image
+						// on the same test.
+						if ( ! wp_attachment_is_image( $att ) ) {
+							return new WP_Error( 'rest_invalid_param', __( 'That media item is not an image.', 'minn-admin' ), array( 'status' => 400 ) );
+						}
 						// The URL is DERIVED from the id, never taken from the
 						// caller: every provider resolves it the same way, and
 						// accepting one let anyone who can edit a draft pin an
@@ -2069,6 +2120,13 @@ add_action( 'rest_api_init', function () {
 						// somebody else publishes later.
 						call_user_func( $plugin['write'], $post->ID, $field, $att );
 					}
+					continue;
+				}
+
+				// Every type below takes one scalar, and the panel never sends an
+				// array or object for one. Coerced, it became '' and cleared what
+				// was stored (or "Array"), so it is nothing to write.
+				if ( null !== $raw && ! is_scalar( $raw ) ) {
 					continue;
 				}
 
@@ -2134,8 +2192,9 @@ add_action( 'rest_api_init', function () {
 
 /**
  * Whether a submitted SEO value is the one the provider read back, compared
- * the way its field type writes it. Images compare by attachment id in the
- * write path itself; anything else is never "unchanged".
+ * the way its field type writes it. Images compare in the write path itself
+ * (by attachment id, and an empty image over an empty read); anything else
+ * is never "unchanged".
  *
  * @param string $type Declared field type.
  * @param mixed  $raw  Submitted value.
