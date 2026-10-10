@@ -10,7 +10,22 @@
  * only ever touches a customer account it creates itself. SKIPs when
  * WooCommerce Memberships is not active.
  */
+const fs = require( 'fs' );
+const os = require( 'os' );
+const path = require( 'path' );
+const { execSync } = require( 'child_process' );
 const { BASE, launch, login, reporter } = require( './helpers' );
+
+const WP_PATH = path.resolve( __dirname, '../../../..' );
+const wpEval = ( php ) => {
+	const file = path.join( os.tmpdir(), `minn-wcm-${ process.pid }.php` );
+	fs.writeFileSync( file, '<?php ' + php );
+	try {
+		return execSync( `wp --path=${ JSON.stringify( WP_PATH ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`, { encoding: 'utf8', timeout: 90000 } ).trim();
+	} finally {
+		fs.unlinkSync( file );
+	}
+};
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -346,6 +361,20 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'editing drops the removed rule and keeps the other rule\'s id',
 			pm2.body.name === 'Suite Plan ' + suffix + ' v2' && pm2.body.rules.purchasing_discount.length === 0 && pm2.body.rules.content_restriction[ 0 ].id === cr.id,
 			JSON.stringify( [ pm2.body.name, pm2.body.rules.purchasing_discount.length ] ) );
+
+		// A private (or pending) plan keeps its status through an edit. The page
+		// offered Published and Draft only and seeded anything else as
+		// Published, so renaming a plan that was not launched yet published it
+		// and its rules and grants started applying.
+		wpEval( `wp_update_post( array( 'ID' => ${ planId }, 'post_status' => 'private' ) );` );
+		await page.goto( BASE + '/minn-admin/membership-plans/' + planId, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-wcmp-name', { timeout: 20000 } );
+		await page.fill( '#minn-wcmp-name', 'Suite Plan ' + suffix + ' v3' );
+		await page.click( '#minn-wcmp-save' );
+		await page.waitForFunction( () => document.querySelector( '#minn-wcmp-savebar' ) && document.querySelector( '#minn-wcmp-savebar' ).hidden, { timeout: 15000 } ).catch( () => null );
+		const privAfter = JSON.parse( wpEval( `$p = get_post( ${ planId } ); echo wp_json_encode( array( $p->post_title, $p->post_status ) );` ) || '[]' );
+		t.check( 'renaming a private plan saves the name and keeps it private', 'Suite Plan ' + suffix + ' v3' === privAfter[ 0 ] && 'private' === privAfter[ 1 ], JSON.stringify( privAfter ) );
+		wpEval( `wp_update_post( array( 'ID' => ${ planId }, 'post_status' => 'publish' ) );` );
 
 		const pdup = await post( `minn-admin/v1/wcm/plans/${ planId }/duplicate` );
 		const dupModel = pdup.body && pdup.body.id ? await api( `minn-admin/v1/wcm/plans/${ pdup.body.id }` ) : { body: {} };

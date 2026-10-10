@@ -56396,7 +56396,9 @@
 			name: d.name || '',
 			slug: d.slug || '',
 			description: d.description || '',
-			status: d.status === 'draft' ? 'draft' : 'publish',
+			// As stored: a private or pending plan goes back as itself, not as
+			// Published (which would start applying its rules and grants).
+			status: d.status || 'publish',
 			access_method: ( d.access || {} ).method || 'manual-only',
 			products: ( ( d.access || {} ).products || [] ).map( ( p ) => ( { id: p.id, label: p.label } ) ),
 			length: Object.assign( { type: 'unlimited', amount: 1, period: 'months', start: '', end: '' }, d.length || {} ),
@@ -56461,6 +56463,14 @@
 		m.clean = JSON.stringify( wcmPlanPayload( m.form ) );
 		m.loading = false;
 		if ( state.planPage === m && state.route === 'membershipplan' ) renderPlanPage();
+	}
+
+	// Published and Draft, plus a stored status that is neither (private,
+	// pending) offered as itself so the page keeps it.
+	function wcmPlanStatusOpts( status ) {
+		const opts = [ [ 'publish', __( 'Published' ) ], [ 'draft', __( 'Draft' ) ] ];
+		if ( status && ! opts.some( ( [ v ] ) => v === status ) ) opts.unshift( [ status, statusLabel( status ) ] );
+		return opts;
 	}
 
 	function wcmComboHtml( id, label, value, options, extra = '' ) {
@@ -56591,7 +56601,7 @@
 		const side = `
 							${ card( 'status', __( 'Status' ), `
 								<div class="minn-order-fields">
-									${ wcmComboHtml( 'minn-wcmp-status', __( 'Status' ), f.status, [ [ 'publish', __( 'Published' ) ], [ 'draft', __( 'Draft' ) ] ] ) }
+									${ wcmComboHtml( 'minn-wcmp-status', __( 'Status' ), f.status, wcmPlanStatusOpts( d.status ) ) }
 									<div class="minn-toggle-desc">${ esc( __( 'A draft plan cannot be joined or assigned.' ) ) }</div>
 								</div>` ) }
 							${ isNew ? '' : card( 'members', __( 'Members' ), `
@@ -56714,7 +56724,7 @@
 			sync();
 		} ) );
 
-		combo( 'minn-wcmp-status', [ [ 'publish', __( 'Published' ) ], [ 'draft', __( 'Draft' ) ] ], ( v ) => { f.status = v; sync(); } );
+		combo( 'minn-wcmp-status', wcmPlanStatusOpts( d.status ), ( v ) => { f.status = v; sync(); } );
 		combo( 'minn-wcmp-method', d.vocab.methods || [], ( v ) => { if ( v !== f.access_method ) { f.access_method = v; repaint(); } } );
 		combo( 'minn-wcmp-ltype', [ [ 'unlimited', '' ], [ 'specific', '' ], [ 'fixed', '' ] ].map( ( [ v ] ) => [ v, { unlimited: __( 'Unlimited' ), specific: __( 'A specific length' ), fixed: __( 'Fixed dates' ) }[ v ] ] ), ( v ) => { if ( v !== f.length.type ) { f.length.type = v; repaint(); } } );
 		combo( 'minn-wcmp-lperiod', d.vocab.periods || [], ( v ) => { f.length.period = v; sync(); } );

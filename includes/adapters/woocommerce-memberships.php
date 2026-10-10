@@ -2237,7 +2237,9 @@ add_action( 'rest_api_init', function () {
 		if ( isset( $in['description'] ) ) {
 			$post_update['post_content'] = current_user_can( 'unfiltered_html' ) ? (string) $in['description'] : wp_kses_post( (string) $in['description'] );
 		}
-		if ( isset( $in['status'] ) ) {
+		// The page sends the status it loaded; an unchanged one (a private or
+		// pending plan included) is left as it is.
+		if ( isset( $in['status'] ) && (string) $in['status'] !== get_post_status( $id ) ) {
 			if ( ! in_array( (string) $in['status'], array( 'publish', 'draft' ), true ) ) {
 				return new WP_Error( 'minn_wcm_plan', __( 'A plan is either published or a draft.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
