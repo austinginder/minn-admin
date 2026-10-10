@@ -555,6 +555,26 @@ if ( ! function_exists( 'minn_admin_gsmtp_cap' ) || ! class_exists( 'Gravity_For
 	remove_role( 'minn_gsmtp_test' );
 }
 
+// --- 05-01 Fluent Forms: the email preview never reads the viewer's cookies ---
+// {cookie.NAME} resolves from the current request; in the preview that is the
+// viewer's own, so a planted subject read back the HttpOnly login cookie.
+if ( ! class_exists( '\FluentForm\App\Services\FormBuilder\ShortCodeParser' ) || ! function_exists( 'wpFluent' ) ) {
+	$skip( '05-01 Fluent Forms inactive' );
+} else {
+	$fc_entry = wpFluent()->table( 'fluentform_submissions' )->orderBy( 'id', 'DESC' )->first();
+	if ( ! $fc_entry ) {
+		$skip( '05-01 Fluent Forms: no entry to preview against' );
+	} else {
+		$fc_was = $_COOKIE;
+		$_COOKIE['minn_probe_cookie'] = 'minnprobesecret' . wp_rand( 1000, 9999 );
+		list( $fc_st, $fc_body ) = $call( 'POST', '/minn-admin/v1/fluent-forms/forms/' . (int) $fc_entry->form_id . '/emails/preview', array( 'subject' => 'Hi {cookie.minn_probe_cookie}', 'message' => '<p>{cookie.minn_probe_cookie}</p>' ) );
+		$fc_leak = false !== strpos( wp_json_encode( $fc_body ), $_COOKIE['minn_probe_cookie'] );
+		$check( '05-01 Fluent preview: a {cookie.*} tag does not read the viewer\'s cookie', 200 === $fc_st && ! empty( $fc_body['entry'] ) && ! $fc_leak, $fc_st . ' ' . ( $fc_leak ? 'cookie read back' : 'clean' ) );
+		$check( '05-01 control: the viewer\'s cookies are back after the preview', isset( $_COOKIE['minn_probe_cookie'] ), '' );
+		$_COOKIE = $fc_was;
+	}
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

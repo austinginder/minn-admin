@@ -325,9 +325,18 @@ add_action( 'rest_api_init', function () {
 			if ( ! $entry ) {
 				return rest_ensure_response( array( 'entry' => 0, 'subject' => $parts['subject'], 'html' => $parts['message'] ) );
 			}
-			\FluentForm\App\Services\FormBuilder\ShortCodeParser::resetData();
-			$out = \FluentForm\App\Services\FormBuilder\ShortCodeParser::parse( $parts, (int) $entry->id, json_decode( (string) $entry->response, true ), $form, false, 'notifications' );
-			\FluentForm\App\Services\FormBuilder\ShortCodeParser::resetData();
+			// {cookie.*} reads the current request's cookies: in a real send
+			// the submitter's, here the viewer's own, HttpOnly login cookie
+			// included. The preview resolves them against none.
+			$cookies = $_COOKIE;
+			$_COOKIE = array();
+			try {
+				\FluentForm\App\Services\FormBuilder\ShortCodeParser::resetData();
+				$out = \FluentForm\App\Services\FormBuilder\ShortCodeParser::parse( $parts, (int) $entry->id, json_decode( (string) $entry->response, true ), $form, false, 'notifications' );
+				\FluentForm\App\Services\FormBuilder\ShortCodeParser::resetData();
+			} finally {
+				$_COOKIE = $cookies;
+			}
 			return rest_ensure_response( array(
 				'entry'   => (int) $entry->id,
 				'subject' => wp_strip_all_tags( (string) ( $out['subject'] ?? '' ) ),
