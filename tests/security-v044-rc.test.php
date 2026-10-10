@@ -295,6 +295,36 @@ if ( ! $upd4 ) {
 	$check( '02-01 control: a renamed install still knows a pack offered as minn-admin', $upd4_ren->is_our_language_offer( $upd4_offer( 'plugin' ) ), '' );
 }
 
+// --- 01-01 Block commenter adds a line that stands for that commenter alone ---
+// Core matches each disallowed_keys line as a substring of a new comment's
+// author, email, URL, text and IP and trashes the comment on a match. A short
+// address the commenter picked (e@gmail.com) sits inside other people's, and an
+// IP inside other IPs, so neither may become a line.
+$cb_post = (int) get_option( 'page_on_front' ) ?: (int) get_posts( array( 'post_type' => 'post', 'post_status' => 'publish', 'numberposts' => 1, 'fields' => 'ids' ) )[0];
+if ( ! $cb_post ) {
+	$skip( '01-01 no published post to comment on' );
+} else {
+	$cb_was  = get_option( 'disallowed_keys', '' );
+	$cb_tag  = 'mv44cb' . wp_rand( 1000, 9999 );
+	$cb_make = function ( $email, $ip = '203.0.113.7' ) use ( $cb_post ) {
+		return (int) wp_insert_comment( array( 'comment_post_ID' => $cb_post, 'comment_author' => 'Minn test', 'comment_author_email' => $email, 'comment_author_IP' => $ip, 'comment_content' => 'Minn block test', 'comment_approved' => 0 ) );
+	};
+	$cb_short = $cb_make( "e@{$cb_tag}.example" );
+	$cb_other = $cb_make( "jane@{$cb_tag}.example" );
+	$cb_noip  = $cb_make( '' );
+	$cb_own   = $cb_make( "solo.{$cb_tag}@example.org" );
+	list( $cb_st, $cb_body ) = $call( 'POST', "/minn-admin/v1/comments/{$cb_short}/block" );
+	$check( '01-01 block: an address inside another commenter\'s address is refused', 409 === $cb_st && $cb_was === get_option( 'disallowed_keys', '' ), $cb_st . ' ' . wp_json_encode( $cb_body['added'] ?? $cb_body['code'] ?? null ) );
+	list( $cb_st, $cb_body ) = $call( 'POST', "/minn-admin/v1/comments/{$cb_noip}/block" );
+	$check( '01-01 block: a comment with no email is refused, not blocked by IP', 400 === $cb_st && $cb_was === get_option( 'disallowed_keys', '' ), $cb_st . ' ' . wp_json_encode( $cb_body['added'] ?? $cb_body['code'] ?? null ) );
+	list( $cb_st, $cb_body ) = $call( 'POST', "/minn-admin/v1/comments/{$cb_own}/block" );
+	$check( '01-01 control: an address no one else\'s contains is blocked', 200 === $cb_st && in_array( "solo.{$cb_tag}@example.org", (array) ( $cb_body['added'] ?? array() ), true ), $cb_st . ' ' . wp_json_encode( $cb_body['added'] ?? null ) );
+	update_option( 'disallowed_keys', $cb_was );
+	foreach ( array( $cb_short, $cb_other, $cb_noip, $cb_own ) as $cb_id ) {
+		wp_delete_comment( $cb_id, true );
+	}
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

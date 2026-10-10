@@ -7745,17 +7745,17 @@
 	// Block through core's disallowed_keys — future comments from this
 	// address land in the trash. Undo removes exactly what the block added.
 	async function blockCommenter( cm ) {
-		const who = cm.author_email || cm.author_ip;
-		/* translators: %s: the commenter's email address or IP. */
-		if ( ! confirm( sprintf( __( 'Block %s? The address joins the disallowed list (Settings → Comments) and future comments from it go straight to the trash.' ), who ) ) ) return;
+		const who = cm.author_email;
+		/* translators: %s: the commenter's email address. */
+		if ( ! confirm( sprintf( __( 'Block %s? The address joins the disallowed list (Settings → Comments), and any future comment that contains it anywhere goes straight to the trash.' ), who ) ) ) return;
 		try {
 			const r = await api( `minn-admin/v1/comments/${ cm.id }/block`, { method: 'POST' } );
 			if ( r.already ) {
-				/* translators: %s: the commenter's email address or IP. */
+				/* translators: %s: the commenter's email address. */
 				toast( sprintf( __( '%s is already on the disallowed list' ), who ) );
 				return;
 			}
-			/* translators: %s: the commenter's email address or IP. */
+			/* translators: %s: the commenter's email address. */
 			toastAction( sprintf( __( 'Blocked %s' ), who ), __( 'Undo' ), async () => {
 				try {
 					await api( 'minn-admin/v1/comments/block-undo', { method: 'POST', body: JSON.stringify( { lines: r.added } ) } );
@@ -7964,7 +7964,7 @@
 				if ( postBtn ) entries.push( { label: __( 'Open post in editor' ), run: () => postBtn.click() } );
 				if ( viewLink ) entries.push( { label: __( 'View post' ), href: viewLink.href } );
 				const cm = ( ( state.cache.comments || {} ).items || [] ).find( ( x ) => x.id === parseInt( row.dataset.crow, 10 ) );
-				if ( B.caps.settings && cm && ( cm.author_email || cm.author_ip ) ) {
+				if ( B.caps.settings && cm && cm.author_email ) {
 					entries.push( { label: __( 'Block commenter' ), danger: true, run: () => blockCommenter( cm ) } );
 				}
 				openMinnMenu( e.clientX, e.clientY, entries.concat( btns.map( ( b ) => ( {

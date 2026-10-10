@@ -2484,12 +2484,26 @@ class Minn_Admin_REST {
 		if ( ! $comment ) {
 			return new WP_Error( 'not_found', __( 'Comment not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
+		// Core matches every disallowed_keys line as a substring of a new
+		// comment's author, email, URL, text and IP, so the line has to stand
+		// for this commenter alone. An IP never does (1.2.3.4 is inside
+		// 11.2.3.40, and a proxy's shared address is everyone), and an address
+		// the commenter picked can sit inside other people's (e@gmail.com is
+		// in jane@gmail.com): those go to Spam instead.
 		$candidate = trim( (string) $comment->comment_author_email );
-		if ( '' === $candidate ) {
-			$candidate = trim( (string) $comment->comment_author_IP );
+		if ( '' === $candidate || ! is_email( $candidate ) ) {
+			return new WP_Error( 'no_identity', __( 'This comment carries no email address to block. Mark it as spam instead.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		if ( '' === $candidate ) {
-			return new WP_Error( 'no_identity', __( 'This comment carries no email or IP to block.', 'minn-admin' ), array( 'status' => 400 ) );
+		global $wpdb;
+		$wider = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT comment_author_email FROM {$wpdb->comments} WHERE comment_author_email LIKE %s AND LOWER( comment_author_email ) <> LOWER( %s ) LIMIT 1",
+				'%' . $wpdb->esc_like( $candidate ) . '%',
+				$candidate
+			)
+		);
+		if ( null !== $wider ) {
+			return new WP_Error( 'too_broad', __( 'That address is part of other commenters\' addresses, so blocking it would trash their comments too. Mark this one as spam instead.', 'minn-admin' ), array( 'status' => 409 ) );
 		}
 		$lines = array_filter( array_map( 'trim', explode( "\n", (string) get_option( 'disallowed_keys', '' ) ) ) );
 		$added = array();
