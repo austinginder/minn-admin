@@ -119,9 +119,11 @@ const wpEval = ( php ) => {
 		t.check( 'the mail body and the form itself are untouched', after.mail.body === before.mail.body && after.form === before.form );
 		t.check( 'CF7’s check flags the foreign sender beside From', await page.$eval( '[data-gfnset="mail.sender"]', ( el ) => !! el.querySelector( '.minn-gfn-warn' ) ) );
 
-		// Mail (2) switched off elsewhere after the page loaded: a later save
-		// from here keeps the edit and leaves the switch alone.
-		wpEval( `wp_set_current_user( 1 ); $f = wpcf7_contact_form( ${ made.form } ); $m = $f->prop( 'mail_2' ); $m['active'] = false; $f->set_properties( array( 'mail_2' => $m ) ); $f->save();` );
+		// Mail (2) switched off elsewhere after the page loaded, its recipient
+		// moved off the visitor's address and a message reworded: a later save
+		// from here keeps the edit and leaves all three alone (the page used to
+		// send its loaded Mail (2) and Messages whole).
+		wpEval( `wp_set_current_user( 1 ); $f = wpcf7_contact_form( ${ made.form } ); $m = $f->prop( 'mail_2' ); $m['active'] = false; $m['recipient'] = 'office@example.com'; $msg = $f->prop( 'messages' ); $msg['validation_error'] = 'Changed elsewhere'; $f->set_properties( array( 'mail_2' => $m, 'messages' => $msg ) ); $f->save();` );
 		await page.fill( '[data-gfn="mail.subject"]', 'Edited after Mail (2) was switched off' );
 		await page.evaluate( () => document.querySelectorAll( '.minn-toast' ).forEach( ( e ) => e.remove() ) );
 		await page.keyboard.press( 'Meta+s' );
@@ -129,6 +131,7 @@ const wpEval = ( php ) => {
 		await page.waitForSelector( '.minn-c7m [data-gfn="mail.subject"]', { timeout: 30000 } );
 		const off = props( made.form );
 		t.check( 'a save from an open page leaves Mail (2) switched off elsewhere off', false === off.mail_2.active && 'Edited after Mail (2) was switched off' === off.mail.subject, JSON.stringify( { active: off.mail_2.active, subject: off.mail.subject } ) );
+		t.check( '...and keeps the Mail (2) recipient and the message changed elsewhere', 'office@example.com' === off.mail_2.recipient && 'Changed elsewhere' === off.messages.validation_error, JSON.stringify( { recipient: off.mail_2.recipient, validation_error: off.messages.validation_error } ) );
 
 		// Leaving with unsaved changes asks.
 		await page.fill( '[data-gfn="mail.subject"]', 'Unsaved' );
