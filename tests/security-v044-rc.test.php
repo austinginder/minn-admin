@@ -244,6 +244,57 @@ if ( class_exists( 'Minn_Admin_DB' ) ) {
 	$skip( '02-03 DB browser not loaded' );
 }
 
+// --- 02-01 / 02-02 The updater knows Minn by its real file and every pack type ---
+// A pack offered for Minn's slug under any type but "theme" lands where Minn's
+// catalogs load from (core installs every non-plugin, non-theme type into
+// WP_LANG_DIR), so it has to meet the same gate as a plugin-typed one. And a
+// site that installed Minn under another folder (GitHub's source zips unpack
+// to minn-admin-<version>/) has to keep the sha256 pin and the drop of foreign
+// translations. Nothing here downloads anything: the gate refuses before.
+$upd4 = null;
+foreach ( (array) ( $GLOBALS['wp_filter']['upgrader_pre_download']->callbacks ?? array() ) as $upd4_cbs ) {
+	foreach ( $upd4_cbs as $upd4_cb ) {
+		if ( is_array( $upd4_cb['function'] ) && $upd4_cb['function'][0] instanceof Minn_Admin_Updater ) {
+			$upd4 = $upd4_cb['function'][0];
+		}
+	}
+}
+if ( ! $upd4 ) {
+	$skip( '02-01 updater instance unavailable' );
+} else {
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+	$upd4_pu      = new Language_Pack_Upgrader( new Automatic_Upgrader_Skin() );
+	$upd4_foreign = 'https://evil.example/minn-admin-zz_ZZ.zip';
+	$upd4_offer   = function ( $type, $slug = 'minn-admin' ) use ( $upd4_foreign ) {
+		return array( 'type' => $type, 'slug' => $slug, 'language' => 'zz_ZZ', 'version' => '9.9.9', 'updated' => '2026-10-01 00:00:00', 'package' => $upd4_foreign, 'autoupdate' => true );
+	};
+	$upd4_refused = function ( $offer ) use ( $upd4, $upd4_pu, $upd4_foreign ) {
+		$r = $upd4->verify_package( false, $upd4_foreign, $upd4_pu, array( 'language_update_type' => $offer['type'], 'language_update' => (object) $offer ) );
+		return is_wp_error( $r );
+	};
+	foreach ( array( 'core', 'Plugin', 'translation' ) as $upd4_type ) {
+		$upd4_o = $upd4_offer( $upd4_type );
+		$upd4_t = $upd4->scrub_translations( (object) array( 'translations' => array( $upd4_o ) ) );
+		$check( "02-02 updater: a {$upd4_type}-typed pack for Minn from another source is not offered", array() === $upd4_t->translations, wp_json_encode( $upd4_t->translations ) );
+		$check( "02-02 updater: ...and refused at download", $upd4_refused( $upd4_o ), '' );
+	}
+	// Controls: a theme-typed pack (it cannot leave WP_LANG_DIR/themes) and
+	// another plugin's pack pass untouched.
+	$check( '02-02 control: a theme-typed pack under the same slug is left to core', ! $upd4_refused( $upd4_offer( 'theme' ) ), '' );
+	$check( '02-02 control: another slug\'s core-typed pack is left to core', ! $upd4_refused( $upd4_offer( 'core', 'akismet' ) ), '' );
+
+	// A renamed install, as GitHub's source zip unpacks it.
+	$upd4_ren              = clone $upd4;
+	$upd4_ren->plugin_file = 'minn-admin-main/minn-admin.php';
+	$upd4_ans = $upd4_ren->drop_foreign_translations( array( 'version' => '9.9.9', 'translations' => array( $upd4_offer( 'plugin', 'minn-admin-main' ) ) ), array(), 'minn-admin-main/minn-admin.php' );
+	$check( '02-01 updater: a renamed install drops another updater\'s translations for it', ! isset( $upd4_ans['translations'] ), wp_json_encode( $upd4_ans ) );
+	$upd4_r = $upd4_ren->verify_package( false, 'https://evil.example/m.zip', new Plugin_Upgrader( new Automatic_Upgrader_Skin() ), array( 'plugin' => 'minn-admin-main/minn-admin.php' ) );
+	$check( '02-01 updater: a renamed install still refuses a plugin zip it cannot verify', is_wp_error( $upd4_r ), is_wp_error( $upd4_r ) ? $upd4_r->get_error_code() : var_export( $upd4_r, true ) );
+	$check( '02-01 updater: a pack offered under the renamed folder\'s slug is Minn\'s', $upd4_ren->is_our_language_offer( $upd4_offer( 'plugin', 'minn-admin-main' ) ), '' );
+	$check( '02-01 control: a renamed install still knows a pack offered as minn-admin', $upd4_ren->is_our_language_offer( $upd4_offer( 'plugin' ) ), '' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

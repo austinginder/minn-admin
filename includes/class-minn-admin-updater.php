@@ -11,6 +11,8 @@ defined( 'ABSPATH' ) || exit;
 class Minn_Admin_Updater {
 
 	public $plugin_slug;
+	/** This plugin's file as core keys it (folder/file), whatever folder it was installed under. */
+	public $plugin_file;
 	public $version;
 	public $cache_key;
 	public $cache_allowed;
@@ -82,6 +84,9 @@ class Minn_Admin_Updater {
 			add_filter( 'http_request_args', array( $this, 'dev_mode_request_args' ), 10, 2 );
 		}
 		$this->plugin_slug   = 'minn-admin';
+		// GitHub's source zips unpack to minn-admin-<version>/ and a branch
+		// download to minn-admin-main/, so the folder is not always the slug.
+		$this->plugin_file   = defined( 'MINN_ADMIN_FILE' ) ? plugin_basename( MINN_ADMIN_FILE ) : 'minn-admin/minn-admin.php';
 		$this->version       = MINN_ADMIN_VERSION;
 		$this->cache_key     = 'minn_admin_updater';
 		// Honour the transient. With this false the guard in request() was
@@ -213,9 +218,12 @@ class Minn_Admin_Updater {
 	 * Core's Language_Pack_Upgrader names the plugin only through the offer's
 	 * slug (its hook_extra carries no 'plugin' key), and the files it installs
 	 * land in WP_LANG_DIR/plugins, where the .l10n.php this plugin loads is
-	 * include()d as PHP. An offer with no type is counted too: nothing
-	 * legitimate omits it. The slug goes through sanitize_key() so a case or
-	 * whitespace variant cannot step around the match.
+	 * include()d as PHP. Every type counts but "theme": core installs any
+	 * other type (none included) into WP_LANG_DIR, where a pack's nested
+	 * plugins/ folder lands beside this plugin's catalogs, while a theme pack
+	 * stays in WP_LANG_DIR/themes. The slug goes through sanitize_key() so a
+	 * case or whitespace variant cannot step around the match, and the folder
+	 * this plugin was installed under counts as its slug too.
 	 *
 	 * @param array|object $offer A translations[] entry or hook_extra's language_update.
 	 * @return bool
@@ -227,13 +235,16 @@ class Minn_Admin_Updater {
 		$offer = (array) $offer;
 		$type  = isset( $offer['type'] ) && is_string( $offer['type'] ) ? $offer['type'] : '';
 		$slug  = isset( $offer['slug'] ) && is_string( $offer['slug'] ) ? $offer['slug'] : '';
-		if ( '' !== $type && 'plugin' !== $type ) {
+		if ( 'theme' === $type ) {
 			return false;
 		}
 		// An update_plugins_{host} answer with no slug of its own gets the
 		// plugin's Update URI as one (wp-includes/update.php), which
 		// sanitize_key() would mangle out of a match.
-		return $this->plugin_slug === sanitize_key( $slug ) || strtolower( untrailingslashit( self::UPDATE_URI ) ) === strtolower( untrailingslashit( trim( $slug ) ) );
+		$key = sanitize_key( $slug );
+		return $this->plugin_slug === $key
+			|| ( '' !== $key && sanitize_key( dirname( $this->plugin_file ) ) === $key )
+			|| strtolower( untrailingslashit( self::UPDATE_URI ) ) === strtolower( untrailingslashit( trim( $slug ) ) );
 	}
 
 	/**
@@ -248,7 +259,7 @@ class Minn_Admin_Updater {
 	 * @return mixed
 	 */
 	public function drop_foreign_translations( $update, $plugin_data, $plugin_file ) {
-		if ( "{$this->plugin_slug}/{$this->plugin_slug}.php" !== $plugin_file ) {
+		if ( $this->plugin_file !== $plugin_file ) {
 			return $update;
 		}
 		if ( is_array( $update ) ) {
@@ -281,7 +292,7 @@ class Minn_Admin_Updater {
 		$updating = is_array( $hook_extra ) && isset( $hook_extra['plugin'] ) ? (string) $hook_extra['plugin'] : '';
 		$ours_url = $this->is_our_package_url( $package );
 		$ours     = $ours_url
-			|| "{$this->plugin_slug}/{$this->plugin_slug}.php" === $updating
+			|| $this->plugin_file === $updating
 			|| ( is_array( $hook_extra ) && isset( $hook_extra['language_update'] ) && $this->is_our_language_offer( $hook_extra['language_update'] ) );
 		if ( false !== $reply ) {
 			// Another download filter answered first (a host's package cache,
@@ -553,7 +564,7 @@ class Minn_Admin_Updater {
 		// Whatever else filled the transient (wordpress.org before the Update
 		// URI header shipped, another updater) must not offer this plugin a
 		// package the sha256 pin does not cover.
-		$file = "{$this->plugin_slug}/{$this->plugin_slug}.php";
+		$file = $this->plugin_file;
 		foreach ( array( 'response', 'no_update' ) as $bucket ) {
 			if ( isset( $transient->{$bucket}[ $file ] ) ) {
 				$entry   = $transient->{$bucket}[ $file ];
@@ -575,7 +586,7 @@ class Minn_Admin_Updater {
 		if ( $remote && isset( $remote->version ) && version_compare( $this->version, $remote->version, '<' ) ) {
 			$response               = new \stdClass();
 			$response->slug         = $this->plugin_slug;
-			$response->plugin       = "{$this->plugin_slug}/{$this->plugin_slug}.php";
+			$response->plugin       = $this->plugin_file;
 			$response->new_version  = $remote->version;
 			$response->package      = $remote->download_url;
 			$response->tested       = $remote->tested;
