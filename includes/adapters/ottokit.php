@@ -74,21 +74,37 @@ function minn_admin_ottokit_cap() {
 }
 
 /**
- * Connection state from their own options. The secret key is never read for
- * its value — only for whether one exists.
+ * Connection state as OttoKit itself decides it. Their token (encrypted) and
+ * the connected email live inside the `suretrigger_options` array. Minn never
+ * decrypts or returns the token: `suretriggers_is_user_connected` is the
+ * filter their own sibling plugins ask, and it answers only true or false (a
+ * token is stored and is not the `connection-denied` marker a refused connect
+ * saves). Builds without that filter fall back to whether a token is stored.
  *
  * @return array { connected, email, note }
  */
 function minn_admin_ottokit_connection() {
+	$opts = get_option( 'suretrigger_options', array() );
+	$opts = is_array( $opts ) ? $opts : array();
+	if ( has_filter( 'suretriggers_is_user_connected' ) ) {
+		$has_key = (bool) apply_filters( 'suretriggers_is_user_connected', false );
+	} else {
+		$has_key = ! empty( $opts['secret_key'] );
+	}
+	$email  = isset( $opts['connected_email_key'] ) && is_string( $opts['connected_email_key'] ) ? $opts['connected_email_key'] : '';
 	$verify = (string) get_option( 'suretriggers_verify_connection', '' );
-	$email  = (string) get_option( 'suretriggers_connected_email', '' );
-	$has_key = '' !== (string) get_option( 'suretriggers_secret_key', '' );
-	$connected = $has_key && 'suretriggers_connection_error' !== $verify;
-	$note = '';
+	// Their six-hourly ping records one of these on failure: _error when
+	// OttoKit answered with anything but 200, _wp_error when the request never
+	// got an answer. Their dashboard notice treats both as a broken connection.
+	$broken    = in_array( $verify, array( 'suretriggers_connection_error', 'suretriggers_connection_wp_error' ), true );
+	$connected = $has_key && ! $broken;
+	$note      = '';
 	if ( ! $has_key ) {
 		$note = __( 'no account is connected yet', 'minn-admin' );
 	} elseif ( 'suretriggers_connection_error' === $verify ) {
 		$note = __( 'OttoKit reported a connection error', 'minn-admin' );
+	} elseif ( 'suretriggers_connection_wp_error' === $verify ) {
+		$note = __( 'this site could not reach OttoKit', 'minn-admin' );
 	}
 	return array(
 		'connected' => $connected,
@@ -142,7 +158,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'columns'   => array(
 				array( 'key' => 'request_url', 'label' => __( 'Endpoint', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'response_code', 'label' => __( 'Code', 'minn-admin' ), 'format' => 'text', 'num' => true, 'width' => 80 ),
+				array( 'key' => 'response_code', 'label' => __( 'Code', 'minn-admin' ), 'format' => 'num', 'width' => 80 ),
 				array( 'key' => 'created_at', 'label' => __( 'Sent', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(

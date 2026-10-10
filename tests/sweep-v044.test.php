@@ -524,6 +524,155 @@ wp_set_current_user( $admin );
 	}
 } )();
 
+// --- OttoKit's Account row reads the connection SureTriggers stores ---------
+// SureTriggers keeps its token (encrypted) and the connected email inside the
+// suretrigger_options array; it never wrote the suretriggers_secret_key or
+// suretriggers_connected_email options, so every site read "Not connected".
+// The token must never reach a response.
+( function () use ( $check, $skip, $call, $admin ) {
+	if ( ! function_exists( 'minn_admin_ottokit_active' ) || ! minn_admin_ottokit_active() ) {
+		$skip( 'OttoKit: plugin inactive' );
+		return;
+	}
+	if ( ! class_exists( '\SureTriggers\Models\SaasApiToken' ) || ! class_exists( '\SureTriggers\Controllers\OptionController' ) ) {
+		$skip( 'OttoKit: this build has no SaasApiToken / OptionController' );
+		return;
+	}
+	global $wpdb;
+	$otk_names  = array( 'suretrigger_options', 'suretriggers_verify_connection' );
+	$otk_was    = array();
+	foreach ( $otk_names as $otk_n ) {
+		$otk_was[ $otk_n ] = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $otk_n ), ARRAY_A );
+	}
+	$otk_static = \SureTriggers\Controllers\OptionController::$options;
+	$otk_secret = 'mnottk' . wp_generate_password( 32, false );
+	$otk_email  = 'minn-ottokit-fixture@example.com';
+	$otk_seen   = array();
+	// A connection as their own connect handler (AuthController::save_connection)
+	// stores it: the token through SaasApiToken, the email beside it.
+	$otk_put = function ( $token, $email, $verify ) {
+		\SureTriggers\Controllers\OptionController::$options = array();
+		delete_option( 'suretrigger_options' );
+		if ( null !== $token ) {
+			\SureTriggers\Models\SaasApiToken::save( $token );
+		}
+		if ( null !== $email ) {
+			\SureTriggers\Controllers\OptionController::set_option( 'connected_email_key', $email );
+		}
+		if ( null === $verify ) {
+			delete_option( 'suretriggers_verify_connection' );
+		} else {
+			update_option( 'suretriggers_verify_connection', $verify );
+		}
+	};
+	$otk_account = function () use ( $call, &$otk_seen ) {
+		list( $st, $res ) = $call( 'GET', '/minn-admin/v1/ottokit/status' );
+		$otk_seen[]       = wp_json_encode( $res );
+		$row              = (array) ( $res['rows'][0] ?? array() );
+		return array( $st, (string) ( $row['value'] ?? '' ), (string) ( $row['hint'] ?? '' ) );
+	};
+	try {
+		// Control first: no connection at all.
+		$otk_put( null, null, null );
+		list( $otk_st, $otk_none_value, $otk_none_hint ) = $otk_account();
+		$check( 'OttoKit: a site never connected reads not connected', 200 === $otk_st && $otk_email !== $otk_none_value && '' !== $otk_none_hint, "$otk_st {$otk_none_value} / {$otk_none_hint}" );
+
+		$otk_put( $otk_secret, $otk_email, 'suretriggers_connection_successful' );
+		$otk_cipher = (string) ( get_option( 'suretrigger_options' )['secret_key'] ?? '' );
+		$otk_before = md5( (string) $wpdb->get_var( "SELECT option_value FROM {$wpdb->options} WHERE option_name = 'suretrigger_options'" ) );
+		list( $otk_st, $otk_v, $otk_h ) = $otk_account();
+		$check( 'OttoKit: a verified connection shows the connected account', 200 === $otk_st && $otk_email === $otk_v && '' === $otk_h, "$otk_st {$otk_v} / {$otk_h}" );
+		$otk_after = md5( (string) $wpdb->get_var( "SELECT option_value FROM {$wpdb->options} WHERE option_name = 'suretrigger_options'" ) );
+		$check( 'OttoKit: reading the status writes nothing back to their options', $otk_before === $otk_after );
+
+		$otk_put( $otk_secret, $otk_email, null );
+		list( $otk_st, $otk_v ) = $otk_account();
+		$check( 'OttoKit: a connection their verifier has not checked yet still reads connected', $otk_email === $otk_v, $otk_v );
+
+		$otk_put( $otk_secret, '', 'suretriggers_connection_successful' );
+		list( $otk_st, $otk_v ) = $otk_account();
+		$check( 'OttoKit: a connection with no stored email reads connected, not the empty state', '' !== $otk_v && $otk_none_value !== $otk_v, $otk_v );
+
+		$otk_put( $otk_secret, $otk_email, 'suretriggers_connection_error' );
+		list( $otk_st, $otk_v, $otk_err_hint ) = $otk_account();
+		$check( 'OttoKit: an error from their verifier is reported, not shown as connected', $otk_email !== $otk_v && '' !== $otk_err_hint && $otk_none_hint !== $otk_err_hint, "{$otk_v} / {$otk_err_hint}" );
+
+		$otk_put( $otk_secret, $otk_email, 'suretriggers_connection_wp_error' );
+		list( $otk_st, $otk_v, $otk_h ) = $otk_account();
+		$check( 'OttoKit: their unreachable-service status (connection_wp_error) is reported too', $otk_email !== $otk_v && '' !== $otk_h && $otk_none_hint !== $otk_h, "{$otk_v} / {$otk_h}" );
+
+		// A refused connect stores their 'connection-denied' marker in the token slot.
+		$otk_put( 'connection-denied', '', 'suretriggers_connection_successful' );
+		list( $otk_st, $otk_v, $otk_h ) = $otk_account();
+		$check( 'OttoKit: a refused connect (their connection-denied marker) reads not connected', $otk_none_value === $otk_v && $otk_none_hint === $otk_h, "{$otk_v} / {$otk_h}" );
+
+		// The secret, in either form, never leaves through any OttoKit route.
+		$otk_put( $otk_secret, $otk_email, 'suretriggers_connection_successful' );
+		list( , $otk_list ) = $call( 'GET', '/minn-admin/v1/ottokit/requests' );
+		$otk_seen[]         = wp_json_encode( $otk_list );
+		$otk_first          = (int) ( $otk_list['items'][0]['id'] ?? 0 );
+		if ( $otk_first ) {
+			list( , $otk_view ) = $call( 'GET', '/minn-admin/v1/ottokit/requests/' . $otk_first . '/view' );
+			$otk_seen[]         = wp_json_encode( $otk_view );
+		}
+		$otk_all = implode( "\n", $otk_seen );
+		$check( 'OttoKit: the token appears in no response, plain or encrypted', false === strpos( $otk_all, $otk_secret ) && ( '' === $otk_cipher || false === strpos( $otk_all, $otk_cipher ) ) && false === strpos( $otk_all, substr( $otk_secret, 0, 12 ) ), count( $otk_seen ) . ' responses scanned' );
+
+		// Control: the status stays an administrator's (their menu's manage_options).
+		$otk_editor = get_users( array( 'role' => 'editor', 'number' => 1, 'fields' => 'ID' ) );
+		if ( $otk_editor ) {
+			wp_set_current_user( (int) $otk_editor[0] );
+			try {
+				list( $otk_st ) = $call( 'GET', '/minn-admin/v1/ottokit/status' );
+			} finally {
+				wp_set_current_user( $admin );
+			}
+			$check( 'OttoKit: an Editor still cannot read the status', 403 === $otk_st, (string) $otk_st );
+		} else {
+			$skip( 'OttoKit: no Editor account for the capability control' );
+		}
+	} finally {
+		wp_set_current_user( $admin );
+		foreach ( $otk_was as $otk_n => $otk_row ) {
+			if ( $otk_row ) {
+				$wpdb->replace( $wpdb->options, array( 'option_name' => $otk_n, 'option_value' => $otk_row['option_value'], 'autoload' => $otk_row['autoload'] ) );
+			} else {
+				$wpdb->delete( $wpdb->options, array( 'option_name' => $otk_n ) );
+			}
+			wp_cache_delete( $otk_n, 'options' );
+		}
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		\SureTriggers\Controllers\OptionController::$options = $otk_static;
+		$otk_ok = true;
+		foreach ( $otk_was as $otk_n => $otk_row ) {
+			$otk_now = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $otk_n ) );
+			$otk_ok  = $otk_ok && ( $otk_row ? $otk_row['option_value'] === $otk_now : null === $otk_now );
+		}
+		$check( 'OttoKit: their connection options restored exactly', $otk_ok );
+	}
+} )();
+
+// --- OttoKit's list descriptor passes Minn's own validator -----------------
+// The Code column carried `'num' => true`, which is not a column key (the
+// right-aligned numeric cell is `'format' => 'num'`), so the Integrations card
+// flagged Minn's own adapter.
+( function () use ( $check, $skip ) {
+	if ( ! function_exists( 'minn_admin_ottokit_active' ) || ! minn_admin_ottokit_active() || ! minn_admin_ottokit_has_table() ) {
+		$skip( 'OttoKit descriptor: plugin inactive or its request log table is missing' );
+		return;
+	}
+	$otd_row = null;
+	foreach ( (array) ( Minn_Admin_Surfaces::integrations()['surfaces'] ?? array() ) as $otd_s ) {
+		if ( 'ottokit' === $otd_s['id'] ) {
+			$otd_row = $otd_s;
+		}
+	}
+	$check( 'OttoKit descriptor: the Integrations card reports no problems', $otd_row && ! $otd_row['problems'], $otd_row ? wp_json_encode( $otd_row['problems'] ) : 'surface missing' );
+	$otd_cols = wp_list_pluck( (array) ( Minn_Admin_Surfaces::all()['ottokit']['collection']['columns'] ?? array() ), 'format', 'key' );
+	$check( 'OttoKit descriptor: the response code renders as a numeric cell', 'num' === ( $otd_cols['response_code'] ?? '' ), wp_json_encode( $otd_cols ) );
+} )();
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it
