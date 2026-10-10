@@ -390,10 +390,14 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
  * Bundled provider: Folders by Premio (plain WordPress taxonomy
  * `media_folder`, registered only while "attachment" is enabled on their
  * settings). Terms are the folders; their own admin view includes child
- * folders when filtering, so the ids query does too.
+ * folders when filtering, so the ids query does too. Folders 3.2.1 renamed
+ * its version constant to FOLDERS_VERSION and stopped defining
+ * WCP_FOLDER_VERSION, so either one marks it loaded.
  */
 add_filter( 'minn_admin_media_folders', function ( $provider ) {
-	if ( null !== $provider || ! defined( 'WCP_FOLDER_VERSION' ) || ! taxonomy_exists( 'media_folder' ) ) {
+	if ( null !== $provider
+		|| ! ( defined( 'FOLDERS_VERSION' ) || defined( 'WCP_FOLDER_VERSION' ) )
+		|| ! taxonomy_exists( 'media_folder' ) ) {
 		return $provider;
 	}
 	return array(
@@ -448,10 +452,11 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 			if ( $folder_id && ! term_exists( (int) $folder_id, 'media_folder' ) ) {
 				return new WP_Error( 'minn_folder_missing', __( 'That folder no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
-			// Their move (folders.class.php, the multi-move handler) removes
-			// only the folder the items are being moved out of and ADDS the
-			// target, so an item filed in two folders keeps the other one. An
-			// empty term list is still their "Unassigned".
+			// Their move (FoldersItems::save_folder_items) removes only the
+			// folder being viewed and ADDS the target, so an item filed in two
+			// folders keeps the other one. Folder 0 is their bulk "Unassign"
+			// (folder -1 in bulk_folder_action), which clears every folder; an
+			// empty term list is their "Unassigned".
 			foreach ( $ids as $id ) {
 				if ( ! $folder_id ) {
 					$r = wp_set_object_terms( $id, array(), 'media_folder', false );

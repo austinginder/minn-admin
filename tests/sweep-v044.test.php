@@ -11,6 +11,10 @@
  *
  * Run: wp eval-file tests/sweep-v044.test.php --user=admin --path=<site>   (from the site root)
  *
+ * The Folders and OttoKit sections need plugins the dev site keeps off; load
+ * them for the run with tests/lib/plugin-swap.php (its header has the
+ * command), or those sections SKIP.
+ *
  * @package minn-admin
  */
 
@@ -399,6 +403,125 @@ wp_set_current_user( $admin );
 		}
 	}
 	$fms_flush();
+} )();
+
+// --- Folders by Premio answers the media-folders contract -------------------
+// Folders 3.2.1 and later define FOLDERS_VERSION and never WCP_FOLDER_VERSION,
+// so a provider gated on the old constant alone never registered: no folder
+// combobox, no move route. FileBird and Real Media Library answer the contract
+// before Folders, so this section needs Folders loaded without them.
+( function () use ( $check, $skip, $call, $admin ) {
+	if ( ! defined( 'FOLDERS_VERSION' ) && ! defined( 'WCP_FOLDER_VERSION' ) ) {
+		$skip( 'Folders (Premio): plugin inactive' );
+		return;
+	}
+	if ( ! taxonomy_exists( 'media_folder' ) ) {
+		$skip( 'Folders (Premio): media is not enabled in its settings, so media_folder is unregistered' );
+		return;
+	}
+	if ( defined( 'NJFB_VERSION' ) || function_exists( 'wp_rml_objects' ) ) {
+		$skip( 'Folders (Premio): FileBird or Real Media Library answers the contract first' );
+		return;
+	}
+	$fop_p = minn_admin_media_folders_provider();
+	$check( 'Folders: the provider registers on this Folders build', $fop_p && 'Folders' === $fop_p['name'], ( $fop_p ? $fop_p['name'] : 'null' ) . ' (FOLDERS_VERSION ' . ( defined( 'FOLDERS_VERSION' ) ? FOLDERS_VERSION : 'undefined' ) . ')' );
+	$fop_boot = minn_admin_media_folders_boot();
+	$check( 'Folders: the boot payload names it and offers Move', is_array( $fop_boot ) && 'Folders' === $fop_boot['name'] && ! empty( $fop_boot['move'] ), wp_json_encode( $fop_boot ) );
+	list( $fop_st, $fop_list ) = $call( 'GET', '/minn-admin/v1/media/folders' );
+	// HappyFiles answers after Folders, so on a site running both the list
+	// must still come from Folders.
+	$check( 'Folders: GET media/folders answers from Folders', 200 === $fop_st && 'Folders' === ( $fop_list['name'] ?? '' ), $fop_st . ' ' . ( $fop_list['name'] ?? ( $fop_list['code'] ?? '' ) ) );
+	if ( ! $fop_p || 'Folders' !== $fop_p['name'] || 200 !== $fop_st ) {
+		return;
+	}
+
+	$fop_terms = array();
+	$fop_att   = 0;
+	$fop_tag   = 'minn-sweep-premio-' . wp_generate_password( 6, false );
+	try {
+		foreach ( array( 'a', 'b', 'c' ) as $fop_k ) {
+			$fop_t = wp_insert_term( $fop_tag . '-' . $fop_k, 'media_folder' );
+			$fop_terms[ $fop_k ] = is_wp_error( $fop_t ) ? 0 : (int) $fop_t['term_id'];
+		}
+		$fop_att = (int) wp_insert_attachment( array(
+			'post_title'     => $fop_tag,
+			'post_mime_type' => 'image/png',
+			'post_status'    => 'inherit',
+			'post_author'    => $admin,
+		) );
+		if ( ! $fop_att || in_array( 0, $fop_terms, true ) ) {
+			$check( 'Folders: fixtures created', false, wp_json_encode( array( 'att' => $fop_att, 'terms' => $fop_terms ) ) );
+			return;
+		}
+		$fop_has = function () use ( &$fop_att ) {
+			$ids = wp_get_object_terms( $fop_att, 'media_folder', array( 'fields' => 'ids' ) );
+			$ids = is_wp_error( $ids ) ? array() : array_map( 'intval', $ids );
+			sort( $ids );
+			return $ids;
+		};
+		$fop_sorted = function ( $ids ) {
+			sort( $ids );
+			return $ids;
+		};
+
+		// Into folder A through the route the Move control calls.
+		list( $fop_st, $fop_res ) = $call( 'POST', '/minn-admin/v1/media/folders/move', array( 'folder' => $fop_terms['a'], 'ids' => array( $fop_att ) ) );
+		$check( 'Folders: a move files the attachment in the target folder', 200 === $fop_st && ! empty( $fop_res['ok'] ) && array( $fop_terms['a'] ) === $fop_has(), $fop_st . ' terms ' . wp_json_encode( $fop_has() ) );
+		list( $fop_st, $fop_ids ) = $call( 'GET', '/minn-admin/v1/media/folders/' . $fop_terms['a'] . '/ids' );
+		$check( 'Folders: the folder\'s ids include the moved attachment', 200 === $fop_st && in_array( $fop_att, (array) ( $fop_ids['ids'] ?? array() ), true ), $fop_st . ' ' . wp_json_encode( $fop_ids['ids'] ?? null ) );
+		list( $fop_st, $fop_list ) = $call( 'GET', '/minn-admin/v1/media/folders' );
+		$fop_row = null;
+		foreach ( (array) ( $fop_list['folders'] ?? array() ) as $fop_f ) {
+			if ( (int) $fop_f['id'] === $fop_terms['a'] ) {
+				$fop_row = $fop_f;
+			}
+		}
+		$check( 'Folders: the folder list carries the folder and its count', $fop_row && 1 === (int) $fop_row['count'], wp_json_encode( $fop_row ) );
+
+		// Their move (FoldersItems::save_folder_items) removes only the folder
+		// being viewed and ADDS the target: an item filed in A and B, moved
+		// from A into C, keeps B.
+		wp_set_object_terms( $fop_att, array( $fop_terms['a'], $fop_terms['b'] ), 'media_folder', false );
+		list( $fop_st ) = $call( 'POST', '/minn-admin/v1/media/folders/move', array( 'folder' => $fop_terms['c'], 'ids' => array( $fop_att ), 'from' => $fop_terms['a'] ) );
+		$check( 'Folders: moving out of A into C keeps the attachment\'s other folder (their handler\'s semantics)', 200 === $fop_st && $fop_sorted( array( $fop_terms['b'], $fop_terms['c'] ) ) === $fop_has(), $fop_st . ' terms ' . wp_json_encode( $fop_has() ) );
+
+		// Folder 0 is their bulk "Unassign" (folder -1): every folder cleared.
+		list( $fop_st ) = $call( 'POST', '/minn-admin/v1/media/folders/move', array( 'folder' => 0, 'ids' => array( $fop_att ) ) );
+		$check( 'Folders: moving to 0 clears every folder', 200 === $fop_st && array() === $fop_has(), $fop_st . ' terms ' . wp_json_encode( $fop_has() ) );
+		list( $fop_st, $fop_ids ) = $call( 'GET', '/minn-admin/v1/media/folders/0/ids' );
+		$check( 'Folders: the cleared attachment lists under Unassigned', 200 === $fop_st && in_array( $fop_att, (array) ( $fop_ids['ids'] ?? array() ), true ), (string) $fop_st );
+
+		// Controls: a folder that does not exist is refused, and the move stays
+		// bounded by edit_post for a role below the attachment's owner.
+		list( $fop_st ) = $call( 'POST', '/minn-admin/v1/media/folders/move', array( 'folder' => 999999999, 'ids' => array( $fop_att ) ) );
+		$check( 'Folders: a move into a missing folder is refused and changes nothing', 404 === $fop_st && array() === $fop_has(), $fop_st . ' terms ' . wp_json_encode( $fop_has() ) );
+		list( $fop_st ) = $call( 'GET', '/minn-admin/v1/media/folders/999999999/ids' );
+		$check( 'Folders: the ids of a missing folder answer 404', 404 === $fop_st, (string) $fop_st );
+		$fop_author = get_users( array( 'role' => 'author', 'number' => 1, 'fields' => 'ID' ) );
+		if ( $fop_author ) {
+			wp_set_current_user( (int) $fop_author[0] );
+			try {
+				list( $fop_st ) = $call( 'POST', '/minn-admin/v1/media/folders/move', array( 'folder' => $fop_terms['a'], 'ids' => array( $fop_att ) ) );
+			} finally {
+				wp_set_current_user( $admin );
+			}
+			$check( 'Folders: an Author cannot file an administrator\'s attachment', 403 === $fop_st && array() === $fop_has(), $fop_st . ' terms ' . wp_json_encode( $fop_has() ) );
+		} else {
+			$skip( 'Folders: no Author account for the edit_post control' );
+		}
+	} finally {
+		wp_set_current_user( $admin );
+		if ( $fop_att ) {
+			wp_delete_attachment( $fop_att, true );
+		}
+		foreach ( $fop_terms as $fop_tid ) {
+			if ( $fop_tid ) {
+				wp_delete_term( $fop_tid, 'media_folder' );
+			}
+		}
+		$fop_left = get_terms( array( 'taxonomy' => 'media_folder', 'hide_empty' => false, 'search' => $fop_tag, 'fields' => 'ids' ) );
+		$check( 'Folders: fixtures removed', ! get_post( $fop_att ) && ( is_wp_error( $fop_left ) || ! $fop_left ), 'terms left ' . wp_json_encode( $fop_left ) );
+	}
 } )();
 
 // @sections
