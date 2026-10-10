@@ -19866,7 +19866,9 @@
 			// raw is the stored label (may be empty for post items — WP then
 			// falls back to the post's own title, which is what rendered shows).
 			label: decodeEntities( stripTags( ( it.title && ( it.title.rendered || it.title.raw ) ) || '' ) ) || '(no label)',
-			rawLabel: decodeEntities( ( it.title && it.title.raw ) || '' ),
+			// As stored, markup included (an icon before the text), the way
+			// the classic Menus screen edits it.
+			rawLabel: ( it.title && it.title.raw ) || '',
 			url: it.url || '',
 			parent: it.parent || 0,
 			order: it.menu_order || 0,
@@ -20060,8 +20062,8 @@
 			${ flat.length ? flat.map( ( { it, depth } ) => ms.editing === it.id ? `
 			<div class="minn-menu-row editing" style="padding-left:${ 16 + depth * 26 }px;">
 				<div class="minn-menu-edit">
-					<input class="minn-input" id="minn-mi-label" value="${ esc( it.rawLabel || it.label ) }" placeholder="${ esc( __( 'Label' ) ) }">
-					${ it.type === 'custom' ? `<input class="minn-input mono" id="minn-mi-url" value="${ esc( it.url ) }" placeholder="https://…">` : '' }
+					<input class="minn-input" id="minn-mi-label" value="${ esc( it.rawLabel || it.label ) }" data-seed="${ esc( it.rawLabel || it.label ) }" placeholder="${ esc( __( 'Label' ) ) }">
+					${ it.type === 'custom' ? `<input class="minn-input mono" id="minn-mi-url" value="${ esc( it.url ) }" data-seed="${ esc( it.url ) }" placeholder="https://…">` : '' }
 					<button class="minn-btn-primary" data-misave="${ it.id }">${ esc( __( 'Save' ) ) }</button>
 					<button class="minn-btn-soft" id="minn-mi-cancel">${ esc( __( 'Cancel' ) ) }</button>
 				</div>
@@ -20268,9 +20270,17 @@
 		const miSave = $( '[data-misave]', view );
 		if ( miSave ) miSave.addEventListener( 'click', async () => {
 			const id = parseInt( miSave.dataset.misave, 10 );
-			const payload = { title: $( '#minn-mi-label' ).value.trim() };
-			const urlInput = $( '#minn-mi-url' );
-			if ( urlInput ) payload.url = urlInput.value.trim();
+			// Only what was edited: an untouched label stays as stored (or
+			// keeps following its page's title when it has none of its own).
+			const payload = {};
+			[ [ 'title', $( '#minn-mi-label' ) ], [ 'url', $( '#minn-mi-url' ) ] ].forEach( ( [ key, input ] ) => {
+				if ( input && input.value.trim() !== String( input.dataset.seed || '' ).trim() ) payload[ key ] = input.value.trim();
+			} );
+			if ( ! Object.keys( payload ).length ) {
+				ms.editing = null;
+				renderMenus();
+				return;
+			}
 			miSave.disabled = true;
 			try {
 				await api( `wp/v2/menu-items/${ id }`, { method: 'POST', body: JSON.stringify( payload ) } );
