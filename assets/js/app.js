@@ -16112,7 +16112,7 @@
 			</div>` : '' }
 			${ searchFieldHtml( 'minn-user-search', __( 'Search users…' ), state.userSearch ) }
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user' ) }</div>
-			${ userSession === 'spam' && B.spamUsers && B.spamUsers.checkUrl ? `<a class="minn-btn-soft" id="minn-ct-check-users" href="${ esc( B.spamUsers.checkUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Check for spam ↗' ) ) }</a>` : '' }
+			${ userSession === 'spam' && B.spamUsers && B.spamUsers.checkUrl ? `<a class="minn-btn-soft" id="minn-ct-check-users" href="${ esc( navHref( B.spamUsers.checkUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'Check for spam ↗' ) ) }</a>` : '' }
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } ${ esc( __( 'Add user' ) ) }</button>` : '' }
 			${ B.multisite && B.caps.promoteUsers ? `<button class="minn-btn-soft" id="minn-add-existing-user" style="margin-left:0;" title="${ esc( __( 'Attach an account that already exists on this network' ) ) }">${ icon( 'plus' ) } ${ esc( __( 'Add existing user' ) ) }</button>` : '' }
 		</div>
@@ -29180,7 +29180,7 @@
 									? sprintf( _n( '%s spam user marked', '%s spam users marked', p.userCleanup.count ), String( p.userCleanup.count ) )
 									: __( 'No spam users marked yet' ) }</span>
 								${ B.caps.users ? `<button class="minn-btn-soft" type="button" data-spam-users>${ esc( __( 'Review →' ) ) }</button>` : '' }
-								${ p.userCleanup.checkUrl ? `<a class="minn-btn-soft" href="${ esc( p.userCleanup.checkUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Check for spam ↗' ) ) }</a>` : '' }
+								${ p.userCleanup.checkUrl ? `<a class="minn-btn-soft" href="${ esc( navHref( p.userCleanup.checkUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'Check for spam ↗' ) ) }</a>` : '' }
 							</div>` : '' }
 						</div>` ).join( '' );
 					const empty = sp.providers.length ? '' : `
