@@ -1065,6 +1065,62 @@ if ( ! function_exists( 'minn_admin_wpforms_edit_kind' ) || ! function_exists( '
 	$check( '04-03 control: a field no formula reads ($F34 is not $F3) is still offered', 'text' === $wc_kinds[34], wp_json_encode( $wc_kinds ) );
 }
 
+// --- 2b-02 DB browser: the licence screen's generic sweeps and per-user key ---
+// The licences screen also reads any {slug}_license_key (its EDD sweep), any
+// {name}_license_options (its SureCart sweep) and WP Migrate's per-user key;
+// the database browser printed them. Seeded rows are tagged and removed; a
+// stored per-user key is checked by shape only.
+if ( class_exists( 'Minn_Admin_DB' ) ) {
+	global $wpdb;
+	$d2_tag  = 'mv44d2' . wp_rand( 100000, 999999 );
+	$d2_cell = function ( $table, $keycol, $valcol, $name ) use ( $call ) {
+		list( , $res ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $table, 'page' => 1, 'per_page' => 50, 'fcol' => $keycol, 'fq' => $name ) );
+		$cols = wp_list_pluck( (array) ( $res['columns'] ?? array() ), 'name' );
+		$ki   = array_search( $keycol, $cols, true );
+		$vi   = array_search( $valcol, $cols, true );
+		foreach ( (array) ( $res['rows'] ?? array() ) as $row ) {
+			if ( false !== $ki && false !== $vi && isset( $row[ $ki ] ) && $name === $row[ $ki ] ) {
+				return $row[ $vi ];
+			}
+		}
+		return null;
+	};
+	$d2_red  = function ( $c ) {
+		return is_array( $c ) && ! empty( $c['redacted'] );
+	};
+	$d2_rows = array(
+		'minnrcprobe_license_key'     => $d2_tag . 'a_edd',
+		'minnrcprobe_license_options' => array( 'license_key' => $d2_tag . 'b_sc', 'activation_id' => 'act' ),
+	);
+	foreach ( $d2_rows as $d2_n => $d2_v ) {
+		add_option( $d2_n, $d2_v, '', false );
+		$check( "2b-02 DB browser: the {$d2_n} row is redacted", $d2_red( $d2_cell( $wpdb->options, 'option_name', 'option_value', $d2_n ) ), $d2_red( $d2_cell( $wpdb->options, 'option_name', 'option_value', $d2_n ) ) ? 'redacted' : 'RAW' );
+	}
+	list( , $d2_q ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 50, 'fcol' => 'option_value', 'fq' => $d2_tag ) );
+	$check( '2b-02 DB browser: a value search finds neither', 0 === (int) ( $d2_q['total'] ?? -1 ), 'total ' . wp_json_encode( $d2_q['total'] ?? null ) );
+	add_option( 'minnrcprobe_license_keyring', $d2_tag . 'c_ctl', '', false );
+	$check( '2b-02 control: a row that only starts like one still shows', $d2_tag . 'c_ctl' === $d2_cell( $wpdb->options, 'option_name', 'option_value', 'minnrcprobe_license_keyring' ), '' );
+	foreach ( array_merge( array_keys( $d2_rows ), array( 'minnrcprobe_license_keyring' ) ) as $d2_n ) {
+		delete_option( $d2_n );
+	}
+	// WP Migrate's per-user key, by shape.
+	$d2_um = (string) $wpdb->get_var( $wpdb->prepare( "SELECT umeta_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value <> '' LIMIT 1", 'wpmdb_licence_key' ) );
+	if ( $d2_um ) {
+		list( , $d2_one ) = $call( 'GET', '/minn-admin/v1/db/row', null, array( 'table' => $wpdb->usermeta, 'pk' => wp_json_encode( array( 'umeta_id' => $d2_um ) ) ) );
+		$d2_val = null;
+		foreach ( (array) ( $d2_one['cells'] ?? $d2_one['row'] ?? $d2_one ) as $d2_c ) {
+			if ( is_array( $d2_c ) && ! empty( $d2_c['redacted'] ) ) {
+				$d2_val = 'redacted';
+			}
+		}
+		$check( '2b-02 DB browser: a stored WP Migrate per-user key is redacted', 'redacted' === $d2_val, (string) $d2_val );
+	} else {
+		$skip( '2b-02 no stored WP Migrate per-user key to check' );
+	}
+} else {
+	$skip( '2b-02 DB browser not loaded' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

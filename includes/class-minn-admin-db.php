@@ -617,9 +617,11 @@ class Minn_Admin_DB {
 		}
 		foreach ( isset( $keyed[2] ) ? (array) $keyed[2] : array() as $shape ) {
 			list( $prefix, $suffix ) = $shape;
-			// LIKE 'prefix%suffix' never lets the two overlap.
+			// LIKE 'prefix%suffix' never lets the two overlap. An empty
+			// prefix is tested apart: PHP 7.4's strpos() refuses an empty
+			// needle (false and a warning) where 8.0 answers 0.
 			if ( strlen( $key ) >= strlen( $prefix ) + strlen( $suffix )
-				&& 0 === strpos( $key, $prefix )
+				&& ( '' === $prefix || 0 === strpos( $key, $prefix ) )
 				&& ( '' === $suffix || substr( $key, -strlen( $suffix ) ) === $suffix ) ) {
 				return true;
 			}
@@ -633,7 +635,7 @@ class Minn_Admin_DB {
 	 * Security), and the plaintext one-time sign-in tokens the One Time
 	 * Login and WP Freighter routes mint (each signs in as that user).
 	 */
-	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key' );
+	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key', 'wpmdb_licence_key' );
 
 	/**
 	 * Option and network option rows redacted whole: core's keys and salts,

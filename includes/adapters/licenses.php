@@ -1328,7 +1328,8 @@ function minn_admin_license_secret_options() {
 	$names = array(
 		'acf_pro_license', 'analyticswp_slt_license', 'automatic_css_license_key', 'brainstrom_products', 'breakdance_license_key',
 		'bricks_license_key', 'cleantalk_settings', 'elementor_pro_license_key', 'envato_market', 'essential-addons-elementor_license',
-		'et_automatic_updates_options', 'etch_license_key', 'etch_license_options', 'exactmetrics_license', 'fl_themes_subscription_email',
+		'essential-addons-elementor-license-key', 'et_automatic_updates_options', 'etch_license_key', 'etch_license_options',
+		'exactmetrics_license', 'exactmetrics_network_license', 'monsterinsights_network_license', 'fl_themes_subscription_email',
 		'fusion_registration_data', 'gen_premium_license_key', 'googlesitekit_credentials', 'gwp_settings', 'happyfiles_license_key',
 		'jet-license-data', 'js_composer_purchase_code', 'layerslider-purchase-code', 'monsterinsights_license', 'nvp_license_key',
 		'perfmatters_edd_license_key', 'PMXE_Plugin_Options', 'PMXI_Plugin_Options', 'rank_math_connect_data', 'revslider-code',
@@ -1347,6 +1348,11 @@ function minn_admin_license_secret_options() {
 		array(
 			array( 'pue_install_key_', '' ),
 			array( 'stellarwp_uplink_license_key_', '' ),
+			// The generic EDD sweep reads any {slug}_license_key, and the
+			// SureCart SDK sweep any {name}_license_options (key and
+			// activation id), for products the list above cannot name.
+			array( '', '_license_key' ),
+			array( '', '_license_options' ),
 		),
 	);
 }
