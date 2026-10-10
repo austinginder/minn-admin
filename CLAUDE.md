@@ -78,6 +78,12 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
   vendor's own capability resolver rather than a guessed core cap.
 - **A new descriptor key goes into the validator constants in the same commit**
   (`class-minn-admin-surfaces.php`), or the Integrations card flags plugins that use it.
+- **A network boundary is `Minn_Admin::network_owner()`.** A raw network capability
+  (`manage_network_options` and peers) is right only where core or the vendor asks the
+  same one for the same action; `tests/network-gates.test.js` fails on any other.
+- **A credential row a licence reader reads is redacted** in the database browser
+  (`minn_admin_license_secret_options()`); `tests/license-redaction.test.js` traces the
+  readers and fails on a row that is neither redacted nor listed as holding no key.
 
 ## UI traps
 
