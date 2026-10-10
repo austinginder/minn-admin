@@ -1269,6 +1269,42 @@ function minn_admin_bricks_status_valid( $status ) {
 }
 
 /**
+ * The option rows the readers below take a licence key, token or account
+ * credential from. The database browser redacts them, so the one screen that
+ * would otherwise print one shows no more than this screen does (it reports
+ * a key only as present). A reader that starts reading another credential
+ * row adds it here.
+ *
+ * @return array [ option names, [ prefix, suffix ] name shapes ].
+ */
+function minn_admin_license_secret_options() {
+	$names = array(
+		'acf_pro_license', 'analyticswp_slt_license', 'automatic_css_license_key', 'brainstrom_products', 'breakdance_license_key',
+		'bricks_license_key', 'cleantalk_settings', 'elementor_pro_license_key', 'envato_market', 'essential-addons-elementor_license',
+		'et_automatic_updates_options', 'etch_license_key', 'etch_license_options', 'exactmetrics_license', 'fl_themes_subscription_email',
+		'fusion_registration_data', 'gen_premium_license_key', 'googlesitekit_credentials', 'gwp_settings', 'happyfiles_license_key',
+		'jet-license-data', 'js_composer_purchase_code', 'layerslider-purchase-code', 'monsterinsights_license', 'nvp_license_key',
+		'perfmatters_edd_license_key', 'PMXE_Plugin_Options', 'PMXI_Plugin_Options', 'rank_math_connect_data', 'revslider-code',
+		'rg_gforms_key', 'sc_api_token', 'searchwp_license', 'seopress_pro_license_key', 'wordpress_api_key',
+		'wp_rocket_settings', 'wpb_js_js_composer_purchase_code', 'wpforms_license', 'wpmdb_settings',
+	);
+	foreach ( minn_admin_license_smash_products() as $sp ) {
+		foreach ( array( 'key_opt', 'settings_opt', 'info_opt' ) as $field ) {
+			if ( ! empty( $sp[ $field ] ) ) {
+				$names[] = $sp[ $field ];
+			}
+		}
+	}
+	return array(
+		$names,
+		array(
+			array( 'pue_install_key_', '' ),
+			array( 'stellarwp_uplink_license_key_', '' ),
+		),
+	);
+}
+
+/**
  * Bundled vendor readers. Every reader only touches wp_options / postmeta
  * through core APIs (which handle their own unserialization); none call
  * into the vendor's classes and none go to the network. Option names and

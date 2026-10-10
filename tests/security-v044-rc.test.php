@@ -158,6 +158,92 @@ if ( ! is_multisite() ) {
 	wp_set_current_user( $admin );
 }
 
+// --- 02-03 / 14-06 DB browser redacts the licences screen's key rows --------
+// The licences screen reports these keys only as present; the database browser
+// printed them whole and found them by value. Rows that already hold a real
+// key are checked by shape only and never printed; absent ones are seeded with
+// a tagged value and removed after.
+if ( class_exists( 'Minn_Admin_DB' ) ) {
+	global $wpdb;
+	$dbl_tag  = 'mv44dbl' . wp_rand( 100000, 999999 );
+	$dbl_rows = function ( $args ) use ( $call, $wpdb ) {
+		list( , $res ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array_merge( array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 50 ), $args ) );
+		return $res;
+	};
+	$dbl_cell = function ( $name ) use ( $dbl_rows ) {
+		$res  = $dbl_rows( array( 'fcol' => 'option_name', 'fq' => $name ) );
+		$cols = wp_list_pluck( (array) ( $res['columns'] ?? array() ), 'name' );
+		$ki   = array_search( 'option_name', $cols, true );
+		$vi   = array_search( 'option_value', $cols, true );
+		foreach ( (array) ( $res['rows'] ?? array() ) as $row ) {
+			if ( false !== $ki && false !== $vi && isset( $row[ $ki ] ) && $name === $row[ $ki ] ) {
+				return $row[ $vi ];
+			}
+		}
+		return null;
+	};
+	$dbl_seed = array(
+		'envato_market'                               => array( 'token' => $dbl_tag . 'a_envato' ),
+		'jetpack_secrets'                             => array( 'jetpack_register_1' => array( 'secret_1' => $dbl_tag . 'b_jp1', 'secret_2' => $dbl_tag . 'b_jp2', 'exp' => time() + 600 ) ),
+		'wordpress_api_key'                           => $dbl_tag . 'c_akismet',
+		'elementor_pro_license_key'                   => $dbl_tag . 'd_elementor',
+		'sbi_license_key'                             => $dbl_tag . 'e_smash',
+		'stellarwp_uplink_license_key_minn-rc-probe'  => $dbl_tag . 'f_uplink',
+		'pue_install_key_minn_rc_probe'               => $dbl_tag . 'g_pue',
+		'cleantalk_settings'                          => array( 'apikey' => $dbl_tag . 'h_cleantalk' ),
+	);
+	$dbl_made = array();
+	foreach ( $dbl_seed as $dbl_name => $dbl_val ) {
+		if ( null !== $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $dbl_name ) ) ) {
+			continue;
+		}
+		add_option( $dbl_name, $dbl_val, '', false );
+		$dbl_made[] = $dbl_name;
+	}
+	foreach ( $dbl_made as $dbl_name ) {
+		$dbl_c = $dbl_cell( $dbl_name );
+		$check( "02-03 DB browser: the {$dbl_name} row is redacted", is_array( $dbl_c ) && ! empty( $dbl_c['redacted'] ), is_array( $dbl_c ) && ! empty( $dbl_c['redacted'] ) ? 'redacted' : ( null === $dbl_c ? 'row missing' : 'RAW' ) );
+		$dbl_id = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $dbl_name ) );
+		list( , $dbl_one ) = $call( 'GET', '/minn-admin/v1/db/row', null, array( 'table' => $wpdb->options, 'pk' => wp_json_encode( array( 'option_id' => $dbl_id ) ) ) );
+		$check( "02-03 DB browser: the {$dbl_name} row detail holds no part of the key", false === strpos( (string) wp_json_encode( $dbl_one ), $dbl_tag ), false === strpos( (string) wp_json_encode( $dbl_one ), $dbl_tag ) ? 'clean' : 'key present' );
+	}
+	$dbl_q = $dbl_rows( array( 'fcol' => 'option_value', 'fq' => $dbl_tag ) );
+	$check( '02-03 DB browser: a value search on the keys finds none of them', 0 === (int) ( $dbl_q['total'] ?? -1 ), 'total ' . wp_json_encode( $dbl_q['total'] ?? null ) );
+	// Real keys already stored: shape only.
+	$dbl_existing = function_exists( 'minn_admin_license_secret_options' ) ? array_diff( minn_admin_license_secret_options()[0], $dbl_made ) : array();
+	foreach ( $dbl_existing as $dbl_name ) {
+		if ( null === $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $dbl_name ) ) ) {
+			continue;
+		}
+		// An empty row shows as empty: there is nothing to hide.
+		$dbl_c = $dbl_cell( $dbl_name );
+		$check( "02-03 DB browser: the stored {$dbl_name} row is redacted", '' === $dbl_c || ( is_array( $dbl_c ) && ! empty( $dbl_c['redacted'] ) ), '' === $dbl_c ? 'empty' : ( is_array( $dbl_c ) && ! empty( $dbl_c['redacted'] ) ? 'redacted' : ( null === $dbl_c ? 'row missing' : 'RAW' ) ) );
+	}
+	// Control: an ordinary row still renders and a value search finds it.
+	add_option( 'minnv044dbl_control', $dbl_tag . 'x_control', '', false );
+	$dbl_c = $dbl_cell( 'minnv044dbl_control' );
+	$dbl_q = $dbl_rows( array( 'fcol' => 'option_value', 'fq' => $dbl_tag . 'x_control' ) );
+	$check( '02-03 DB browser control: an ordinary row renders and is found by value', $dbl_tag . 'x_control' === $dbl_c && 1 === (int) ( $dbl_q['total'] ?? -1 ), wp_json_encode( $dbl_q['total'] ?? null ) );
+	delete_option( 'minnv044dbl_control' );
+	foreach ( $dbl_made as $dbl_name ) {
+		delete_option( $dbl_name );
+	}
+
+	// --- 02-04 an upper-case table prefix still finds the keyed secrets ---
+	// A case-folding server reports WP_options as wp_options; the table list
+	// matches case-blind, so the redaction has to strip the prefix the same way.
+	$dbl_base = new ReflectionMethod( 'Minn_Admin_DB', 'secret_base' );
+	$dbl_base->setAccessible( true );
+	$dbl_was  = array( $wpdb->prefix, $wpdb->base_prefix );
+	$wpdb->prefix      = strtoupper( $dbl_was[0] );
+	$wpdb->base_prefix = strtoupper( $dbl_was[1] );
+	$dbl_got = $dbl_base->invoke( null, strtolower( $dbl_was[0] ) . 'options' );
+	list( $wpdb->prefix, $wpdb->base_prefix ) = $dbl_was;
+	$check( '02-04 DB browser: an upper-case prefix still resolves the options table for redaction', 'options' === $dbl_got, (string) $dbl_got );
+} else {
+	$skip( '02-03 DB browser not loaded' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

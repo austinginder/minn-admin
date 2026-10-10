@@ -450,7 +450,9 @@ class Minn_Admin_DB {
 		}
 		$base = $table;
 		foreach ( array_unique( array( $wpdb->prefix, $wpdb->base_prefix ) ) as $prefix ) {
-			if ( '' !== $prefix && 0 === strpos( $base, $prefix ) ) {
+			// Case-blind, as table_index() matches: a case-folding server
+			// reports an upper-case prefix's tables in lower case.
+			if ( '' !== $prefix && 0 === stripos( $base, $prefix ) ) {
 				$base = substr( $base, strlen( $prefix ) );
 				break;
 			}
@@ -497,7 +499,7 @@ class Minn_Admin_DB {
 		$shapes = array();
 		if ( 'options' === $base || 'sitemeta' === $base ) {
 			$keys   = self::secret_option_names();
-			$shapes = self::SECRET_OPTION_SHAPES;
+			$shapes = self::secret_option_shapes();
 		}
 		return array( self::KEYED_SECRETS[ $base ][1], $keys, $shapes );
 	}
@@ -505,12 +507,20 @@ class Minn_Admin_DB {
 	/**
 	 * Every option name whose row is a credential, for the options table and
 	 * the network's sitemeta alike: the fixed list, the payment gateways'
-	 * settings rows and the core Connectors' key rows.
+	 * settings rows, the core Connectors' key rows and the rows the licences
+	 * screen reads a key or token from.
 	 *
 	 * @return string[]
 	 */
 	private static function secret_option_names() {
-		return array_values( array_unique( array_merge( self::SECRET_OPTION_KEYS, self::gateway_option_names(), self::connector_option_names() ) ) );
+		$licences = function_exists( 'minn_admin_license_secret_options' ) ? minn_admin_license_secret_options()[0] : array();
+		return array_values( array_unique( array_merge( self::SECRET_OPTION_KEYS, self::gateway_option_names(), self::connector_option_names(), $licences ) ) );
+	}
+
+	/** The option name shapes redacted with them: the fixed shapes and the licences screen's. */
+	private static function secret_option_shapes() {
+		$licences = function_exists( 'minn_admin_license_secret_options' ) ? minn_admin_license_secret_options()[1] : array();
+		return array_merge( self::SECRET_OPTION_SHAPES, $licences );
 	}
 
 	/**
@@ -639,7 +649,7 @@ class Minn_Admin_DB {
 	 * key (the HMAC secret its Hub's remote commands are verified with) and
 	 * Smush's validation cache, which is keyed by that same key.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must

@@ -581,7 +581,10 @@ Run this loop per product.
    option or table reads. Actions attach only when the vendor code is loaded.
    Snapshot the key AND the status and restore both on a rejection, so a typo
    never clobbers a working key. An empty value may need unsetting rather than
-   `''` (Soflyy). The component key drives Off and Turn on.
+   `''` (Soflyy). The component key drives Off and Turn on. Add every option the
+   reader takes a key or token from to `minn_admin_license_secret_options()`:
+   the database browser redacts those rows, so it never prints a key this
+   screen only reports as present.
 4. **Drive the loop through `minn-admin/v1/licenses/action`.** A bad key answers
    a clean `{ok: false, code: invalid|site_limit}` with nothing stored (check the
    options). A real key answers valid with the vendor's expiry. Deactivate frees
