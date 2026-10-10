@@ -14096,13 +14096,20 @@
 	 */
 	function buildProductPayload( m, p ) {
 		const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
+		// The short description and purchase note show as plain text taken
+		// from WooCommerce's rendered copy (shortcodes run, tags stripped) and
+		// the sale dates to the minute, so each goes back only when it was
+		// edited; otherwise any save wrote that copy over the stored markup.
+		const was = m.loaded || p;
+		const asText = ( v ) => String( v == null ? '' : v ).replace( /\r\n?/g, '\n' ).trim();
 		const payload = {
 			name,
 			sku: ( ( $( '#minn-p-sku' ) || {} ).value || '' ).trim(),
 			status: pcomboValue( 'minn-p-status', p.status ),
 			catalog_visibility: pcomboValue( 'minn-p-vis', 'visible' ),
-			short_description: ( ( $( '#minn-p-short' ) || {} ).value || '' ).trim(),
 		};
+		const short = asText( ( $( '#minn-p-short' ) || {} ).value );
+		if ( short !== asText( wcPlainText( was.short_description ) ) ) payload.short_description = short;
 		if ( productPriceEditable( p ) ) {
 			payload.regular_price = ( ( $( '#minn-p-regular' ) || {} ).value || '' ).trim();
 			payload.sale_price = ( ( $( '#minn-p-sale' ) || {} ).value || '' ).trim();
@@ -14114,8 +14121,8 @@
 			// against wc/v3 directly, both ways.
 			const from = ( ( $( '#minn-p-salefrom' ) || {} ).dataset || {} ).dp || '';
 			const to = ( ( $( '#minn-p-saleto' ) || {} ).dataset || {} ).dp || '';
-			payload.date_on_sale_from = from ? from + ':00' : '';
-			payload.date_on_sale_to = to ? to + ':00' : '';
+			if ( from !== wcDateMachine( was.date_on_sale_from ) ) payload.date_on_sale_from = from ? from + ':00' : '';
+			if ( to !== wcDateMachine( was.date_on_sale_to ) ) payload.date_on_sale_to = to ? to + ':00' : '';
 			payload.manage_stock = pswitchOn( 'minn-p-manage' );
 			payload.stock_status = pcomboValue( 'minn-p-stock', 'instock' );
 			payload.backorders = pcomboValue( 'minn-p-backorders', 'no' );
@@ -14141,7 +14148,10 @@
 			};
 			payload.shipping_class = pcomboValue( 'minn-p-shipclass', '' );
 		}
-		if ( $( '#minn-p-note' ) ) payload.purchase_note = ( $( '#minn-p-note' ).value || '' ).trim();
+		if ( $( '#minn-p-note' ) ) {
+			const note = asText( $( '#minn-p-note' ).value );
+			if ( note !== asText( wcPlainText( was.purchase_note ) ) ) payload.purchase_note = note;
+		}
 		if ( $( '#minn-p-menuorder' ) ) payload.menu_order = parseInt( $( '#minn-p-menuorder' ).value, 10 ) || 0;
 		if ( $( '#minn-p-reviews' ) ) payload.reviews_allowed = pswitchOn( 'minn-p-reviews' );
 		if ( $( '#minn-p-slug' ) ) payload.slug = ( $( '#minn-p-slug' ).value || '' ).trim();

@@ -159,6 +159,38 @@ const { BASE, launch, login, reporter, pickCombo, setSwitch } = require( './help
 		t.check( 'clearing the sale start stores null',
 			( cleared.body || {} ).date_on_sale_from === null || ( cleared.body || {} ).date_on_sale_from === '',
 			JSON.stringify( ( cleared.body || {} ).date_on_sale_from ) );
+
+		// A price edit leaves the short description, the purchase note and the
+		// sale end alone. The page shows the first two as plain text taken from
+		// WooCommerce's rendered copy and the end to the minute; the save used
+		// to send all three back on every save, stripping the markup, freezing
+		// the shortcode's output, eating a backslash and the end's seconds.
+		const shortRaw = '<ul><li><a href="/size-guide/">Size guide</a></li></ul>[minn_no_such_shortcode]';
+		const noteRaw = '<p>Use <strong>C:\\care</strong></p>';
+		// WooCommerce unslashes purchase_note on a REST write, so the fixture
+		// doubles the backslash it wants stored.
+		await api( `wc/v3/products/${ id }`, { method: 'PUT', body: JSON.stringify( {
+			short_description: shortRaw, purchase_note: noteRaw.replace( /\\/g, '\\\\' ), date_on_sale_to: '2030-01-01T23:59:59',
+		} ) } );
+		const rawBefore = await api( `wc/v3/products/${ id }?context=edit&_fields=short_description,purchase_note,date_on_sale_to` );
+		t.check( 'the markup, backslash and seconds are stored (the precondition)',
+			rawBefore.body && rawBefore.body.short_description === shortRaw && rawBefore.body.purchase_note === noteRaw && /23:59:59/.test( rawBefore.body.date_on_sale_to || '' ),
+			JSON.stringify( rawBefore.body ) );
+		await page.goto( BASE + '/minn-admin/products/' + id, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-p-regular', { timeout: 20000 } );
+		await page.fill( '#minn-p-regular', '21.00' );
+		await page.click( '#minn-product-save' );
+		await page.waitForFunction( () => {
+			const btn = document.querySelector( '#minn-product-save' );
+			return btn && ! btn.disabled && /Save/.test( btn.textContent );
+		}, null, { timeout: 20000 } ).catch( () => null );
+		await page.waitForTimeout( 600 );
+		const rawAfter = await api( `wc/v3/products/${ id }?context=edit&_fields=regular_price,short_description,purchase_note,date_on_sale_to` );
+		const ra = rawAfter.body || {};
+		t.check( 'the price edit saves (control)', String( parseFloat( ra.regular_price ) ) === '21', String( ra.regular_price ) );
+		t.check( 'a price edit keeps the short description as stored', ra.short_description === shortRaw, JSON.stringify( ra.short_description ) );
+		t.check( 'and the purchase note', ra.purchase_note === noteRaw, JSON.stringify( ra.purchase_note ) );
+		t.check( 'and the sale end\'s seconds', /23:59:59/.test( ra.date_on_sale_to || '' ), String( ra.date_on_sale_to ) );
 	} finally {
 		if ( id ) await api( `wc/v3/products/${ id }?force=true`, { method: 'DELETE' } ).catch( () => null );
 	}
