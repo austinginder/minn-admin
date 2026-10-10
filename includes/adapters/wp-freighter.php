@@ -148,7 +148,9 @@ function minn_admin_freighter_tenant_can_run_minn( $id, $configs ) {
 	if ( 'dedicated' !== $configs->files ) {
 		return true;
 	}
-	return file_exists( ABSPATH . 'content/' . (int) $id . '/plugins/minn-admin/minn-admin.php' );
+	// Under the same folder the host runs Minn from: the toggle writes that
+	// basename into the tenant's active_plugins.
+	return file_exists( ABSPATH . 'content/' . (int) $id . '/plugins/' . plugin_basename( MINN_ADMIN_FILE ) );
 }
 
 /** Registered accounts on a tenant (its own users table). */
