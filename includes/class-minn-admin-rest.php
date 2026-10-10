@@ -5864,15 +5864,15 @@ class Minn_Admin_REST {
 	 * Who may read the System diagnostics (PHP ini, loaded extensions, the
 	 * security-posture checks, backup state, the hidden login URL) and the
 	 * autoload / cron / debug-log tools: the manage_options administrator who
-	 * may also open core's Site Health. Core grants view_site_health_checks
-	 * with install_plugins and, on a network, only to a super admin, so a
-	 * subsite administrator or an account handed manage_network_options is
-	 * refused this server-wide information, and a site that locks file
-	 * changes away from its administrators keeps this page from them too,
-	 * exactly as it does Site Health.
+	 * may also open core's Site Health, and on a network only a super admin.
+	 * Core grants view_site_health_checks to a role holding install_plugins
+	 * and, on a network, to super admins only, but the capability is a plain
+	 * one a role plugin can hand out, as manage_network_options is, so the
+	 * network test is Minn's own (network_owner(), as licences and the
+	 * wp-config routes ask).
 	 */
 	public static function can_read_system() {
-		return current_user_can( 'manage_options' ) && current_user_can( 'view_site_health_checks' );
+		return current_user_can( 'manage_options' ) && current_user_can( 'view_site_health_checks' ) && Minn_Admin::network_owner();
 	}
 
 	/**

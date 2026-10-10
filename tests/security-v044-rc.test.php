@@ -151,8 +151,22 @@ if ( ! is_multisite() ) {
 				$check( "09-01 control: a super admin still reads {$net_label}", 200 === $net_st, (string) $net_st );
 			}
 		}
+		// 2b-01: the Site Health capability is a plain one a role plugin can
+		// hand a site administrator too; it does not make them a super admin.
+		add_role( 'minn_netops_hc_test', 'Minn site health test', array( 'read' => true, 'manage_options' => true, 'view_site_health_checks' => true ) );
+		$net_hc_login = 'minn-nethc-' . wp_generate_password( 6, false, false );
+		$net_hc       = wp_insert_user( array( 'user_login' => $net_hc_login, 'user_email' => $net_hc_login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'minn_netops_hc_test' ) );
+		wp_set_current_user( $net_hc );
+		$check( '2b-01 precondition: a site admin granted view_site_health_checks, no super admin', current_user_can( 'view_site_health_checks' ) && ! is_super_admin(), '' );
+		foreach ( array( 'the database table list' => '/minn-admin/v1/db/tables', 'the System page' => '/minn-admin/v1/system', 'the log sources' => '/minn-admin/v1/system/logs' ) as $net_label => $net_route ) {
+			list( $net_st ) = $call( 'GET', $net_route );
+			$check( "2b-01 multisite: a site admin granted the Site Health capability cannot read {$net_label}", in_array( $net_st, array( 401, 403 ), true ), (string) $net_st );
+		}
+		wp_set_current_user( $admin );
 		require_once ABSPATH . 'wp-admin/includes/user.php';
 		wpmu_delete_user( $net_id );
+		wpmu_delete_user( $net_hc );
+		remove_role( 'minn_netops_hc_test' );
 	}
 	remove_role( $net_role );
 	wp_set_current_user( $admin );
