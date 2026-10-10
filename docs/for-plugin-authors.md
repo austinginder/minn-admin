@@ -1180,7 +1180,14 @@ follow.
    printed as a list or paragraphs is editable line by line. For fields that are not text (a
    button's URL, a select), mark the element with `acf_inline_toolbar_editing_attrs( array(
    'url', 'style' ) )`: in Minn the element itself opens a popover with just those fields
-   (a URL field searches your content), and a chip on hover shows where a link goes. A
+   (a URL field searches your content), and a chip on hover shows where a link goes. Mark
+   a photo the same way with its image field alone (`acf_inline_toolbar_editing_attrs(
+   array( 'image' ) )`, ACF's own pattern for images, on the `<figure>` or wrapper) and a
+   click opens the media picker; a gallery field alone opens the Images editor. A marker
+   naming a photo and other fields keeps the popover, with a working photo row. A photo
+   left unmarked still gets the same click when Minn can pair its `<img>` with exactly one
+   image or gallery field by the attachment's file URL; a picture two fields share stays
+   sidebar-only. Without upload rights photos stay sidebar-only too. A
    block that marks nothing still gets its text and textarea
    fields edited in place where the template read the field (through `get_field()`), the
    preview shows the stored words once, and nothing else reads the same.

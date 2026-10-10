@@ -30863,6 +30863,10 @@
 				while ( s.firstChild ) s.parentNode.insertBefore( s.firstChild, s );
 				s.remove();
 			} );
+			$$( '[data-minn-acfimg]', clone ).forEach( ( n ) => {
+				n.removeAttribute( 'data-minn-acfimg' );
+				n.removeAttribute( 'data-minn-acfimg-id' );
+			} );
 			const html = clone.innerHTML.trim() || ( rawStr ? stripBlockComments( rawStr ).trim() : '' );
 			// innerText off the LIVE node, not the clone: a detached clone has
 			// no layout, so Chrome runs block children together
@@ -31480,6 +31484,7 @@
 			if ( ISLAND_RUN_SKIP_BLOCKS.includes( short ) ) return;
 			const preview = island.querySelector( '.minn-island-preview' );
 			if ( ! preview ) return;
+			armAcfImages( island, preview, String( ed.islands[ idx ] ) );
 			island._minnRuns = null;
 			// A re-render that adopted the live DOM (rule-18 path) can carry
 			// stale run spans whose arm state is gone — unwrap before walking
@@ -37258,6 +37263,12 @@
 				openAcfToolbarPop( tb );
 				return;
 			}
+			const acfImg = e.target.closest( '.minn-island-preview [data-minn-acfimg]' );
+			if ( acfImg ) {
+				e.preventDefault();
+				openAcfImage( acfImg );
+				return;
+			}
 			const prev = e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview, .minn-block-island[data-cted] > .minn-island-preview' );
 			if ( prev && e.target.closest( 'a' ) ) e.preventDefault(); // a linked photo must not navigate
 			// Text typed over in place can sit inside a link (a button's
@@ -38974,6 +38985,165 @@
 		} catch ( e ) { return href; }
 	};
 
+	/* ACF photos in the preview. A block's image and gallery fields hold
+	 * attachment ids in its comment `data`, so the preview carries no URL of
+	 * the block's own for the core "Replace image" doorway to find. Two ways
+	 * in, both writing exactly what the block settings' image row writes (the
+	 * id plus its `_field` key alias, then one replaceIsland):
+	 * - a template marks the photo with ACF's toolbar contract naming the
+	 *   field (acf_inline_toolbar_editing_attrs, ACF's documented pattern for
+	 *   images), and the click opens the media picker instead of a popover;
+	 * - an unmarked <img> is paired with its field by URL: every size of each
+	 *   attachment the fields name. Only a photo that pairs with exactly one
+	 *   field becomes a doorway; anything ambiguous stays as it was.
+	 * A gallery field opens the Images editor on its id list. Without upload
+	 * rights neither opens: the save takes pictures through the media-library
+	 * gate and keeps the stored ones when it refuses. */
+	const acfMediaField = ( blockName, fname ) => {
+		const df = dataFormFor( blockName );
+		const f = df && df.fields.find( ( x ) => x.name === fname );
+		return f && ( f.control === 'image' || f.control === 'gallery' ) ? { df, f } : null;
+	};
+	// The one image or gallery field a marked element stands for, or null
+	// when the marker also names other fields (those keep the popover).
+	const acfMarkerMedia = ( el ) => {
+		const island = el.closest( '.minn-block-island' );
+		const names = acfToolbarFields( el ).map( ( f ) => f.fieldName );
+		if ( ! island || names.length !== 1 ) return null;
+		const m = acfMediaField( String( island.dataset.block || '' ), names[ 0 ] );
+		return m ? { name: names[ 0 ], control: m.f.control } : null;
+	};
+	const acfMediaLabel = ( control ) => ( control === 'gallery' ? __( 'Edit images' ) : __( 'Replace image' ) );
+
+	function editAcfMediaField( island, fname, opts = {} ) {
+		const ed = state.editor;
+		const idx = parseInt( island && island.dataset.island, 10 );
+		if ( ! ed || ! ed.islands || ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return false;
+		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' || ! B.caps.upload ) return false;
+		// Text typed into the block lands first, so the rebuild keeps it.
+		if ( island._minnRuns ) commitIslandRuns( island, { silent: true } );
+		const parts = blockParts( ed.islands[ idx ] );
+		const m = parts && acfMediaField( parts.name, fname );
+		if ( ! m ) return false;
+		const { df, f } = m;
+		const write = ( val ) => {
+			const attrs = JSON.parse( JSON.stringify( parts.attrs || {} ) );
+			const obj = ( typeof attrs[ df.attr ] === 'object' && attrs[ df.attr ] ) || {};
+			obj[ fname ] = val;
+			const alias = ( df.alias || {} )[ fname ];
+			if ( alias && obj[ '_' + fname ] === undefined ) obj[ '_' + fname ] = alias;
+			attrs[ df.attr ] = obj;
+			const open = buildOpenComment( parts.name, attrs, parts.selfClosing );
+			replaceIsland( idx, island, parts.selfClosing ? open : open + parts.inner + parts.close );
+		};
+		hideTbPop();
+		hideTbChip();
+		closeInspector();
+		const cur = ( parts.attrs && typeof parts.attrs[ df.attr ] === 'object' && parts.attrs[ df.attr ] ) || {};
+		if ( f.control === 'image' ) {
+			openMediaPicker( ( it ) => {
+				if ( ! it || ! it.id ) return;
+				write( it.id );
+				toast( __( 'Image replaced' ) );
+			} );
+			return true;
+		}
+		const ids = ( Array.isArray( cur[ fname ] ) ? cur[ fname ] : [] ).filter( ( x ) => x != null && x !== '' );
+		const thumbs = ids.length
+			? api( 'wp/v2/media?include=' + ids.join( ',' ) + '&per_page=100&_fields=id,source_url,media_details' ).catch( () => [] )
+			: Promise.resolve( [] );
+		thumbs.then( ( media ) => {
+			const byId = {};
+			( media || [] ).forEach( ( x ) => {
+				const sizes = ( x.media_details && x.media_details.sizes ) || {};
+				byId[ String( x.id ) ] = ( sizes.medium && sizes.medium.source_url ) || x.source_url || '';
+			} );
+			const focus = opts.id ? ids.findIndex( ( x ) => String( x ) === String( opts.id ) ) : -1;
+			openImagesEditor( null, null, null, null, {
+				items: ids.map( ( gid ) => ( { id: gid, thumb: byId[ String( gid ) ] || '' } ) ),
+				focus: focus === -1 ? null : focus,
+				onApply: ( newIds ) => {
+					// ACF block data stores gallery ids as strings.
+					write( newIds.map( ( x ) => String( x ) ) );
+					toast( __( 'Gallery updated' ) );
+				},
+			} );
+		} );
+		return true;
+	}
+
+	// Every file URL an attachment is served at (the full file and each
+	// generated size), cached per id for the editor session.
+	const acfImageUrls = new Map();
+	function acfAttachmentUrls( ids ) {
+		const missing = ids.filter( ( id ) => ! acfImageUrls.has( id ) );
+		const req = missing.length
+			? api( 'wp/v2/media?include=' + missing.join( ',' ) + '&per_page=100&_fields=id,source_url,media_details' )
+				.then( ( list ) => {
+					missing.forEach( ( id ) => acfImageUrls.set( id, [] ) );
+					( list || [] ).forEach( ( x ) => {
+						const sizes = ( x.media_details && x.media_details.sizes ) || {};
+						acfImageUrls.set( x.id, [ x.source_url, ...Object.values( sizes ).map( ( sz ) => sz && sz.source_url ) ].filter( Boolean ) );
+					} );
+				} )
+				.catch( () => {} )
+			: Promise.resolve();
+		return req.then( () => ids.reduce( ( m, id ) => m.set( id, acfImageUrls.get( id ) || [] ), new Map() ) );
+	}
+	// Uploads are matched on their path: the preview may print them on
+	// another host or scheme (a CDN rewrite, http vs https) and with a query.
+	const acfUrlKey = ( u ) => {
+		try { return decodeURIComponent( new URL( u, location.href ).pathname ); } catch ( e ) { return ''; }
+	};
+
+	function armAcfImages( island, preview, raw ) {
+		$$( '[data-minn-acfimg]', preview ).forEach( ( n ) => {
+			n.removeAttribute( 'data-minn-acfimg' );
+			n.removeAttribute( 'data-minn-acfimg-id' );
+		} );
+		if ( ! B.caps.upload ) return;
+		const parts = blockParts( raw );
+		const df = parts && dataFormFor( parts.name );
+		const data = df && parts.attrs && typeof parts.attrs[ df.attr ] === 'object' ? parts.attrs[ df.attr ] : null;
+		if ( ! data ) return;
+		const fields = df.fields.filter( ( f ) => f.control === 'image' || f.control === 'gallery' );
+		const idsOf = ( f ) => ( f.control === 'gallery' ? ( Array.isArray( data[ f.name ] ) ? data[ f.name ] : [] ) : [ data[ f.name ] ] )
+			.map( ( x ) => parseInt( x, 10 ) )
+			.filter( ( n ) => n > 0 );
+		const ids = [ ...new Set( fields.flatMap( idsOf ) ) ];
+		if ( ! ids.length ) return;
+		acfAttachmentUrls( ids ).then( ( urls ) => {
+			if ( ! preview.isConnected ) return;
+			// path → [ field, id ], or null when two fields share a picture.
+			const owner = new Map();
+			fields.forEach( ( f ) => idsOf( f ).forEach( ( id ) => ( urls.get( id ) || [] ).forEach( ( u ) => {
+				const k = acfUrlKey( u );
+				if ( ! k ) return;
+				owner.set( k, owner.has( k ) && ( ! owner.get( k ) || owner.get( k )[ 0 ] !== f.name ) ? null : [ f.name, id ] );
+			} ) ) );
+			$$( 'img', preview ).forEach( ( img ) => {
+				// A marked photo is the marker's: its click is already a doorway.
+				if ( img.closest( '[data-acf-inline-fields]' ) ) return;
+				const srcs = [ img.getAttribute( 'src' ), ...String( img.getAttribute( 'srcset' ) || '' ).split( ',' ).map( ( x ) => x.trim().split( /\s+/ )[ 0 ] ) ].filter( Boolean );
+				let hit = null;
+				let clash = false;
+				srcs.forEach( ( u ) => {
+					const o = owner.get( acfUrlKey( u ) );
+					if ( o === null || ( o && hit && hit[ 0 ] !== o[ 0 ] ) ) clash = true;
+					else if ( o ) hit = o;
+				} );
+				if ( ! hit || clash ) return;
+				img.setAttribute( 'data-minn-acfimg', hit[ 0 ] );
+				img.setAttribute( 'data-minn-acfimg-id', String( hit[ 1 ] ) );
+			} );
+		} );
+	}
+
+	function openAcfImage( img ) {
+		const island = img.closest( '.minn-block-island' );
+		if ( island ) editAcfMediaField( island, img.getAttribute( 'data-minn-acfimg' ), { id: img.getAttribute( 'data-minn-acfimg-id' ) } );
+	}
+
 	let tbChip = null;
 	let tbChipFor = null;
 	let tbChipTimer = 0;
@@ -38991,16 +39161,27 @@
 			tbChip.hidden = true;
 			document.body.appendChild( tbChip );
 			tbChip.addEventListener( 'mousedown', ( e ) => e.preventDefault() );
-			tbChip.addEventListener( 'click', () => { if ( tbChipFor && tbChipFor.isConnected ) openAcfToolbarPop( tbChipFor ); } );
+			tbChip.addEventListener( 'click', () => {
+				if ( ! tbChipFor || ! tbChipFor.isConnected ) return;
+				if ( tbChipFor.hasAttribute( 'data-minn-acfimg' ) ) openAcfImage( tbChipFor );
+				else openAcfToolbarPop( tbChipFor );
+			} );
 			tbChip.addEventListener( 'mouseleave', () => { tbChipTimer = setTimeout( hideTbChip, 250 ); } );
 			tbChip.addEventListener( 'mouseenter', () => clearTimeout( tbChipTimer ) );
 			const scroller = document.querySelector( '.minn-scroll' );
 			if ( scroller ) scroller.addEventListener( 'scroll', hideTbChip, { passive: true } );
 		}
 		tbChipFor = el;
-		const dest = acfToolbarDest( el );
-		tbChip.innerHTML = `<span class="minn-acf-tb-chip-icon" aria-hidden="true">↗</span><span>${ esc( dest || acfToolbarTitle( el ) ) }</span>`;
-		tbChip.setAttribute( 'aria-label', dest ? sprintf( /* translators: %s: the link's address. */ __( 'Edit link: %s' ), dest ) : acfToolbarTitle( el ) );
+		// A photo says what its click does; anything else says where it goes.
+		const media = el.hasAttribute( 'data-minn-acfimg' )
+			? acfMediaField( String( ( el.closest( '.minn-block-island' ) || el ).dataset.block || '' ), el.getAttribute( 'data-minn-acfimg' ) )
+			: null;
+		const photo = media ? media.f.control : ( B.caps.upload && acfMarkerMedia( el ) || {} ).control;
+		const dest = photo ? '' : acfToolbarDest( el );
+		tbChip.innerHTML = photo
+			? `<span class="minn-acf-tb-chip-icon" aria-hidden="true">${ icon( 'img' ) }</span><span>${ esc( acfMediaLabel( photo ) ) }</span>`
+			: `<span class="minn-acf-tb-chip-icon" aria-hidden="true">↗</span><span>${ esc( dest || acfToolbarTitle( el ) ) }</span>`;
+		tbChip.setAttribute( 'aria-label', photo ? acfMediaLabel( photo ) : dest ? sprintf( /* translators: %s: the link's address. */ __( 'Edit link: %s' ), dest ) : acfToolbarTitle( el ) );
 		tbChip.hidden = false;
 		const r = el.getBoundingClientRect();
 		const w = tbChip.offsetWidth;
@@ -39010,7 +39191,7 @@
 	function bindAcfToolbarChips( body ) {
 		if ( ! body || body._minnTbChips ) return;
 		body._minnTbChips = true;
-		const markedIn = ( t ) => t && t.closest && t.closest( '.minn-island-preview [data-acf-inline-fields]' );
+		const markedIn = ( t ) => t && t.closest && t.closest( '.minn-island-preview [data-acf-inline-fields], .minn-island-preview [data-minn-acfimg]' );
 		body.addEventListener( 'mouseover', ( e ) => {
 			const el = markedIn( e.target );
 			if ( el ) showTbChip( el );
@@ -39054,7 +39235,10 @@
 		const parts = blockParts( raw );
 		if ( ! parts ) return;
 		const names = acfToolbarFields( el ).map( ( f ) => f.fieldName );
-		const rows = dataFormRows( parts.name, parts.attrs, 'tb', { only: names, media: false } );
+		// A marker that stands for one photo (or photo set) IS the photo:
+		// the click opens the picker, as it does on a core image.
+		if ( names.length === 1 && editAcfMediaField( island, names[ 0 ] ) ) return;
+		const rows = dataFormRows( parts.name, parts.attrs, 'tb', { only: names, media: !! B.caps.upload } );
 		const dest = acfToolbarDest( el );
 		tbPop = document.createElement( 'div' );
 		tbPop.className = 'minn-inspector minn-link-pop minn-tb-pop';
@@ -39134,6 +39318,29 @@
 		};
 		const applyBtn = tbPop.querySelector( '[data-tb-apply]' );
 		if ( applyBtn ) applyBtn.addEventListener( 'click', apply );
+		// Photo rows next to typed fields: what was typed lands first (apply
+		// rebuilds the island), then the photo's own picker writes on top.
+		tbPop.addEventListener( 'click', ( e ) => {
+			const btn = e.target.closest( '[data-inspdfimg], [data-inspdfimgx], [data-inspdfgal]' );
+			if ( ! btn ) return;
+			const ref = btn.dataset.inspdfimg !== undefined ? btn.dataset.inspdfimg : btn.dataset.inspdfimgx !== undefined ? btn.dataset.inspdfimgx : btn.dataset.inspdfgal;
+			const fname = ref.slice( ref.indexOf( ':' ) + 1 );
+			apply();
+			if ( btn.dataset.inspdfimgx !== undefined ) {
+				const now = blockParts( ed.islands[ idx ] );
+				const df = now && dataFormFor( now.name );
+				if ( ! df ) return;
+				const attrs = JSON.parse( JSON.stringify( now.attrs || {} ) );
+				const obj = ( typeof attrs[ df.attr ] === 'object' && attrs[ df.attr ] ) || {};
+				obj[ fname ] = '';
+				attrs[ df.attr ] = obj;
+				const open = buildOpenComment( now.name, attrs, now.selfClosing );
+				replaceIsland( idx, island, now.selfClosing ? open : open + now.inner + now.close );
+				toast( __( 'Image removed' ) );
+				return;
+			}
+			editAcfMediaField( island, fname );
+		} );
 		tbPop.addEventListener( 'keydown', ( e ) => {
 			if ( e.key === 'Enter' && e.target.matches( 'input[data-inspdf]' ) && applyBtn ) { e.preventDefault(); apply(); }
 		} );

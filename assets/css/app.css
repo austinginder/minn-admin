@@ -4716,8 +4716,10 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* ACF inline toolbars (acf_inline_toolbar_editing_attrs): the marked element
    itself opens its fields, and a chip above it says where a link goes. The
    outline sits outside the box so the site's layout never moves. */
-.minn-island-preview [data-acf-inline-fields] { pointer-events: auto; cursor: pointer; }
-.minn-island-preview [data-acf-inline-fields]:hover {
+.minn-island-preview [data-acf-inline-fields],
+.minn-island-preview [data-minn-acfimg] { pointer-events: auto; cursor: pointer; }
+.minn-island-preview [data-acf-inline-fields]:hover,
+.minn-island-preview [data-minn-acfimg]:hover {
   outline: 1px dashed color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 3px;
 }
 #minn-acf-tb-chip {
@@ -4728,7 +4730,8 @@ button.minn-ac-item:hover { background: var(--hover); }
 }
 #minn-acf-tb-chip[hidden] { display: none; }
 #minn-acf-tb-chip:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
-.minn-acf-tb-chip-icon { color: var(--accent); }
+.minn-acf-tb-chip-icon { display: inline-flex; color: var(--accent); }
+.minn-acf-tb-chip-icon svg { width: 13px; height: 13px; }
 .minn-tb-dest { margin-bottom: 10px; font: 12px/1.5 var(--font-mono); color: var(--text3); overflow-wrap: anywhere; }
 /* Container slots (phase 3): a group renders as a shell with its children
    directly editable inside. Full-strength text — an editable interior must
