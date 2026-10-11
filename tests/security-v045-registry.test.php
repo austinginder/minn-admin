@@ -502,4 +502,61 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 15-2: a membership plan save deleted every rule the page did not send
+ * back, a rule added after the page opened included. The page now names
+ * the rules it loaded, and only those can be removed. Run inside a rolled
+ * back transaction on the lab's first plan.
+ */
+( function () use ( $check, $call ) {
+	if ( ! function_exists( 'wc_memberships_get_membership_plans' ) ) {
+		echo "SKIP  15-2 WooCommerce Memberships inactive\n";
+		return;
+	}
+	$plans = wc_memberships_get_membership_plans();
+	if ( ! $plans ) {
+		echo "SKIP  15-2 no membership plan\n";
+		return;
+	}
+	global $wpdb;
+	$id = (int) reset( $plans )->get_id();
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		list( , $d ) = $call( 'GET', "/minn-admin/v1/wcm/plans/{$id}" );
+		$targets = (array) ( $d['vocab']['targets']['content_restriction'] ?? array() );
+		if ( count( $targets ) < 2 ) {
+			echo "SKIP  15-2 fewer than two content targets\n";
+			return;
+		}
+		$row  = function ( $t, $rid = '' ) {
+			$r = array( 'target' => $t, 'object_ids' => array(), 'access_schedule' => array( 'type' => 'immediate' ) );
+			if ( $rid ) {
+				$r['id'] = $rid;
+			}
+			return $r;
+		};
+		$ids  = function () use ( $call, $id ) {
+			wp_cache_flush();
+			list( , $d ) = $call( 'GET', "/minn-admin/v1/wcm/plans/{$id}" );
+			return array_map( function ( $r ) {
+				return (string) $r['id'];
+			}, (array) ( $d['rules']['content_restriction'] ?? array() ) );
+		};
+		$call( 'POST', "/minn-admin/v1/wcm/plans/{$id}", array( 'rules' => array( 'content_restriction' => array( $row( $targets[0][0] ) ) ), 'known_rules' => array() ) );
+		$first = $ids();
+		// Another tab adds a second rule.
+		$call( 'POST', "/minn-admin/v1/wcm/plans/{$id}", array( 'rules' => array( 'content_restriction' => array( $row( $targets[0][0], $first[0] ?? '' ), $row( $targets[1][0] ) ) ), 'known_rules' => $first ) );
+		$both = $ids();
+		// The page opened before that saves what it knows.
+		$call( 'POST', "/minn-admin/v1/wcm/plans/{$id}", array( 'rules' => array( 'content_restriction' => array( $row( $targets[0][0], $first[0] ?? '' ) ) ), 'known_rules' => $first ) );
+		$after = $ids();
+		$check( '15-2 a rule added after the page opened survives its save', 1 === count( $first ) && 2 === count( $both ) && 2 === count( $after ), wp_json_encode( array( $first, $both, $after ) ) );
+		$call( 'POST', "/minn-admin/v1/wcm/plans/{$id}", array( 'rules' => array( 'content_restriction' => array() ), 'known_rules' => $after ) );
+		$check( '15-2 control: rules the page knew and dropped are removed', ! $ids(), wp_json_encode( $ids() ) );
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+} )();
+
 $summary();

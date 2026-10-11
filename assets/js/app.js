@@ -56816,6 +56816,8 @@
 	function planPageAdopt( m, model ) {
 		m.full = model;
 		m.form = wcmPlanFormFrom( model );
+		// The rules this page loaded: the save may remove only these.
+		m.knownRules = WCM_RULE_TYPES.flatMap( ( [ t ] ) => ( m.form.rules[ t ] || [] ).map( ( r ) => r.id ).filter( Boolean ) );
 		m.clean = JSON.stringify( wcmPlanPayload( m.form ) );
 		m.loading = false;
 		if ( state.planPage === m && state.route === 'membershipplan' ) renderPlanPage();
@@ -57197,6 +57199,7 @@
 		on( 'minn-wcmp-save', async () => {
 			const btn = $( '#minn-wcmp-save' );
 			const payload = wcmPlanPayload( f );
+			payload.known_rules = m.knownRules || [];
 			if ( ! payload.name.trim() ) { toast( __( 'A plan needs a name.' ), true ); return; }
 			if ( btn ) btn.disabled = true;
 			try {

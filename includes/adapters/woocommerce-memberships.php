@@ -1087,7 +1087,7 @@ function minn_admin_wcm_plan_rules_clean( $rules_in, $plan = null ) {
  * @param array                          $rules Cleaned rules by type.
  * @return true|WP_Error
  */
-function minn_admin_wcm_plan_rules_apply( $plan, $rules ) {
+function minn_admin_wcm_plan_rules_apply( $plan, $rules, $known = null ) {
 	if ( ! class_exists( '\SkyVerge\WooCommerce\Memberships\Plans\Actions\SetPlanRules' ) ) {
 		return new WP_Error( 'minn_wcm_rule', __( 'This version of WooCommerce Memberships cannot set rules from here.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
@@ -1154,6 +1154,14 @@ function minn_admin_wcm_plan_rules_apply( $plan, $rules ) {
 		return new WP_Error( 'minn_wcm_rule', $e->getMessage() ? $e->getMessage() : __( 'A rule could not be saved.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
 	$remove = array_values( array_diff( $existing, $keep ) );
+	// Only a rule the page loaded and no longer sends was removed there. A
+	// rule added after the page opened (another tab, the plugin's own
+	// screen) is not the page's to delete; the plugin itself deletes only
+	// rules marked for removal. A save that names no known rules deletes
+	// nothing.
+	if ( null !== $known ) {
+		$remove = array_values( array_intersect( $remove, array_map( 'strval', (array) $known ) ) );
+	}
 	if ( $remove ) {
 		$plan->delete_rules( $remove );
 	}
@@ -2299,7 +2307,7 @@ add_action( 'rest_api_init', function () {
 			return $ok;
 		}
 		if ( null !== $rules ) {
-			$ok = minn_admin_wcm_plan_rules_apply( $plan, $rules );
+			$ok = minn_admin_wcm_plan_rules_apply( $plan, $rules, isset( $in['known_rules'] ) && is_array( $in['known_rules'] ) ? $in['known_rules'] : array() );
 			if ( is_wp_error( $ok ) ) {
 				return $ok;
 			}
