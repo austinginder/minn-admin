@@ -1,6 +1,8 @@
 # Changelog
 
-## **v0.44.0** - Unreleased
+## **v0.44.0** - October 11 2026
+
+The keep-what-you-didn't-touch release. Most of this cycle went into saves that change only what you changed: ACF, Meta Box, JetEngine and ACPT fields keep their backslashes, dates and untouched values, a product keeps its variations' stock and its formatting, and coupons, users, menu items, membership plans and the form email pages keep what someone else set. Photos in an ACF block's preview now open the media picker when you click them, Minn on Minn updates itself, Swiss and Austrian German get Minn in German, and a store-wide attribute offers the terms the shop already has. The cycle opened by fixing every finding from the review of the shipped 0.43.0 and closes with a full review of the release candidate: one high issue (markup dressed as Minn's own editor controls could put a script into a post an editor saved), two medium and thirty-four low, all fixed before release, every fix reviewed again, and two new checks in the test suite that fail whenever a network permission or a stored license key slips past Minn's rules.
 
 ### Added
 
