@@ -154,7 +154,8 @@ class Minn_Admin_Fences {
 		}
 		$names         = array_values( array_unique( self::$refused ) );
 		self::$refused = array();
-		error_log( sprintf( 'Minn Admin refused a write to %s during %s %s by user %d', implode( ', ', $names ), $request->get_method(), $request->get_route(), get_current_user_id() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		// One greppable line for the server log, never shown in the UI.
+		error_log( sprintf( 'minn_write_fenced user=%d route="%s %s" refused=%s', get_current_user_id(), $request->get_method(), $request->get_route(), implode( ',', $names ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		return new WP_Error(
 			'minn_write_fenced',
 			__( 'Part of this change was not saved: it would have changed who can run this site, which your account can’t do.', 'minn-admin' ),
