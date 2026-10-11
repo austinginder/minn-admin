@@ -4336,6 +4336,12 @@ span.minn-ep-star { border-color: transparent; cursor: default; }
 .minn-db-cols .mono, .minn-db-tname, .minn-dbd-col .mono { font-family: var(--font-mono); font-size: 13px; }
 .minn-db-cols .num { text-align: end; font-variant-numeric: tabular-nums; }
 .minn-db-cols.minn-table-row { cursor: pointer; }
+.minn-db-cols > .minn-cell-clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* On a phone the fixed columns left the name none: drop Engine, narrow the numbers. */
+@media (max-width: 640px) {
+  .minn-db-cols { grid-template-columns: minmax(0,1fr) 64px 76px; }
+  .minn-db-cols > :nth-child(4) { display: none; }
+}
 .minn-db-dim { color: var(--text3); }
 .minn-db-tabs { flex-shrink: 0; overflow: visible; }
 .minn-db-hc { display: flex; gap: 12px; align-items: flex-start; }
