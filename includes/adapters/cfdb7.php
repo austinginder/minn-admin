@@ -561,7 +561,8 @@ add_action( 'rest_api_init', function () {
 		),
 	) );
 
-	// Mark unread: reverse of the fixed-token read surgery (never re-serialize).
+	// Mark unread: the same rewrite CFDB7's own bulk action makes (decode the
+	// entry, set cfdb7_status, serialize it back).
 	register_rest_route( 'minn-admin/v1', '/cfdb7/entries/(?P<id>\d+)/unread', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'minn_admin_cfdb7_can_view',

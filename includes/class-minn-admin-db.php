@@ -464,8 +464,11 @@ class Minn_Admin_DB {
 		if ( 'suretriggers_webhook_requests' === $base ) {
 			return 'request_data' === $col;
 		}
-		// SearchWP's index keeps search terms in a column called token.
-		if ( 0 === strpos( $base, 'searchwp' ) && 'token' === strtolower( $col ) ) {
+		// SearchWP's index keeps search terms in a column called token, and
+		// Search & Filter its style tokens (spacing, colours) in one called
+		// tokens.
+		if ( ( 0 === strpos( $base, 'searchwp' ) && 'token' === strtolower( $col ) )
+			|| ( 'search_filter_styles' === $base && 'tokens' === strtolower( $col ) ) ) {
 			return false;
 		}
 		return self::secret_column_name( $col );
@@ -1069,7 +1072,8 @@ class Minn_Admin_DB {
 				return true;
 			}
 		}
-		return (bool) preg_match( '/key|licen[cs]e|token|secret|pass|auth|api|seed|salt|nonce|code|sig|hash|^val$|^value$/', (string) end( $segments ) );
+		// code, sig and hash as whole words: a shortcode or a decoder is not one.
+		return (bool) preg_match( '/key|licen[cs]e|token|secret|pass|auth|api|seed|salt|nonce|(^|_)(code|sig|hash)$|^val$|^value$/', (string) end( $segments ) );
 	}
 
 	/**
