@@ -15,8 +15,8 @@ run() { echo "== $1"; shift; "$@" || status=1; }
 run panels   wp eval-file roundtrip-panels.test.php --user=admin --path="$WP_PATH"
 run settings wp eval-file roundtrip-settings.test.php --user=admin --path="$WP_PATH"
 run capture-surfaces node roundtrip-surfaces-capture.js "$TMP/surfaces.json"
-MINN_RT_CAPTURE="$TMP/surfaces.json" run surfaces wp eval-file roundtrip-surfaces.test.php --user=admin --path="$WP_PATH"
+run surfaces env MINN_RT_CAPTURE="$TMP/surfaces.json" wp eval-file roundtrip-surfaces.test.php --user=admin --path="$WP_PATH"
 run capture-pages node roundtrip-pages-capture.js "$TMP/pages.json"
-MINN_RT_CAPTURE="$TMP/pages.json" run pages wp eval-file roundtrip-surfaces.test.php --user=admin --path="$WP_PATH"
+run pages env MINN_RT_CAPTURE="$TMP/pages.json" wp eval-file roundtrip-surfaces.test.php --user=admin --path="$WP_PATH"
 rm -rf "$TMP"
 exit $status
