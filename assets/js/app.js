@@ -28955,6 +28955,16 @@
 	// each render and consumed by renderSettings when binding.
 	let settingsCombos = {};
 
+	// A site on a manual UTC offset stores no timezone_string (REST's
+	// timezone reads ''), only gmt_offset, which wp/v2/settings does not carry.
+	// Name it the way core's own list does (UTC+5.5) rather than a bare UTC
+	// that a save would then store over the offset.
+	function siteTimezoneShown( values ) {
+		if ( values.timezone ) return values.timezone;
+		const off = typeof B.gmtOffset === 'number' ? B.gmtOffset : 0;
+		return off ? 'UTC' + ( off < 0 ? '-' : '+' ) + Math.abs( off ) : 'UTC';
+	}
+
 	function settingsFields( section, s, cache ) {
 		settingsCombos = {};
 		// A caption sitting next to an input is not a label: screen readers
@@ -29083,7 +29093,7 @@
 					+ `<div>
 						<label class="minn-field-label" for="${ fid( 'timezone' ) }">${ esc( __( 'Timezone' ) ) }</label>
 						<div class="minn-ac" id="minn-tz-ac">
-							<input class="minn-input minn-ac-input" id="${ fid( 'timezone' ) }" data-key="timezone" value="${ esc( s.timezone || 'UTC' ) }" placeholder="${ esc( __( 'Start typing — e.g. Chicago, Berlin, UTC' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+							<input class="minn-input minn-ac-input" id="${ fid( 'timezone' ) }" data-key="timezone" value="${ esc( siteTimezoneShown( s ) ) }" placeholder="${ esc( __( 'Start typing — e.g. Chicago, Berlin, UTC' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 							<div class="minn-ac-panel" hidden></div>
 						</div>
 					</div>`
@@ -29778,8 +29788,8 @@
 		if ( tzWrap ) {
 			let zones = [ 'UTC' ];
 			try { zones = [ 'UTC', ...Intl.supportedValuesOf( 'timeZone' ) ]; } catch ( e ) {}
-			const cur = cache.values.timezone;
-			if ( cur && ! zones.includes( cur ) ) zones.unshift( cur );
+			const cur = siteTimezoneShown( cache.values );
+			if ( ! zones.includes( cur ) ) zones.unshift( cur );
 			bindAutocomplete( tzWrap, zones.map( ( z ) => ( { value: z, label: z.replace( /_/g, ' ' ) } ) ) );
 		}
 		// Strict comboboxes (homepage mode + pages, role, category, format)
@@ -29861,6 +29871,9 @@
 						} catch ( err ) { toast( err.message, true ); okAll = false; }
 					}
 				}
+				// Sent only when changed: an untouched field would store UTC
+				// over a manual offset, moving every local time on the site.
+				if ( 'timezone' in payload && payload.timezone.trim() === siteTimezoneShown( s ) ) delete payload.timezone;
 				if ( 'timezone' in payload ) {
 					payload.timezone = payload.timezone.trim();
 					let zones = [ 'UTC', s.timezone ];
