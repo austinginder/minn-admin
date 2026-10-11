@@ -897,11 +897,17 @@ wp_set_current_user( $admin[0]->ID );
 	$undo  = array();
 	try {
 		// 05-3: a vendor's own accounts table.
-		$wpdb->query( "CREATE TABLE `{$t}` ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, email VARCHAR(100), password VARCHAR(255), api_secret VARCHAR(255), account_nonse VARCHAR(100), refreshToken VARCHAR(255), token_expires VARCHAR(30), note TEXT )" );
+		$wpdb->query( "CREATE TABLE `{$t}` ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, email VARCHAR(100), password VARCHAR(255), api_secret VARCHAR(255), account_nonse VARCHAR(100), refreshToken VARCHAR(255), token_expires VARCHAR(30), privkey TEXT, key_local_private TEXT, tokens TEXT, nonce_action VARCHAR(60), token_endpoint_auth_method VARCHAR(60), ts_password_modified VARCHAR(30), note TEXT )" );
 		$undo[] = function () use ( $wpdb, $t ) {
 			$wpdb->query( "DROP TABLE IF EXISTS `{$t}`" );
 		};
-		$wpdb->insert( $t, array( 'email' => 'dana@example.com', 'password' => '$2y$10$abcdefghijklmnopqrstuuWm0Hj7mYkzW8dYbnA5rZp4Qz1v2Kd9W', 'api_secret' => 'live_secret_0123456789abc', 'account_nonse' => 'nonse0123456789abc', 'refreshToken' => 'rt_0123456789abcdef', 'token_expires' => '2026-12-01 10:00:00', 'note' => 'copy: ' . $fake ) );
+		// Created before the browser's first call: it lists tables once a request.
+		$tk = $wpdb->prefix . 'minn_test_sessions';
+		$wpdb->query( "CREATE TABLE `{$tk}` ( token VARCHAR(64) NOT NULL PRIMARY KEY, label VARCHAR(30) )" );
+		$undo[] = function () use ( $wpdb, $tk ) {
+			$wpdb->query( "DROP TABLE IF EXISTS `{$tk}`" );
+		};
+		$wpdb->insert( $t, array( 'email' => 'dana@example.com', 'password' => '$2y$10$abcdefghijklmnopqrstuuWm0Hj7mYkzW8dYbnA5rZp4Qz1v2Kd9W', 'api_secret' => 'live_secret_0123456789abc', 'account_nonse' => 'nonse0123456789abc', 'refreshToken' => 'rt_0123456789abcdef', 'token_expires' => '2026-12-01 10:00:00', 'privkey' => '-----BEGIN PRIVATE KEY-----', 'key_local_private' => '-----BEGIN RSA PRIVATE KEY-----', 'tokens' => 'tok_a,tok_b', 'nonce_action' => 'wc_admin_note_action', 'token_endpoint_auth_method' => 'client_secret_post', 'ts_password_modified' => '2026-01-01 00:00:00', 'note' => 'copy: ' . $fake ) );
 		list( $st, $d ) = $rows( $t );
 		$ok = 200 === $st;
 		foreach ( array( 'password', 'api_secret', 'account_nonse', 'refreshToken' ) as $col ) {
@@ -909,6 +915,14 @@ wp_set_current_user( $admin[0]->ID );
 		}
 		$check( '05-3 a vendor table\'s password, secret, nonse and token columns are hidden by name', $ok, $st . ' ' . $shape( $cell( $d, 'password', 'email', 'dana@example.com' ) ) );
 		$check( '05-3 control: a column that only describes one, and plain data, still show', '2026-12-01 10:00:00' === $cell( $d, 'token_expires', 'email', 'dana@example.com' ) && 'dana@example.com' === $cell( $d, 'email', 'email', 'dana@example.com' ) );
+		$check( '05-3 private keys under either word order, and plural names, are hidden', $hidden( $cell( $d, 'privkey', 'email', 'dana@example.com' ) ) && $hidden( $cell( $d, 'key_local_private', 'email', 'dana@example.com' ) ) && $hidden( $cell( $d, 'tokens', 'email', 'dana@example.com' ) ) );
+		$check( '05-3 control: an action, a method and a modified time named after one still show', 'wc_admin_note_action' === $cell( $d, 'nonce_action', 'email', 'dana@example.com' ) && 'client_secret_post' === $cell( $d, 'token_endpoint_auth_method', 'email', 'dana@example.com' ) && '2026-01-01 00:00:00' === $cell( $d, 'ts_password_modified', 'email', 'dana@example.com' ) );
+		list( , $sorted ) = $rows( $t, array( 'orderby' => 'note' ) );
+		$sortable = wp_list_pluck( (array) ( $sorted['columns'] ?? array() ), 'sortable', 'name' );
+		$check( '05-3 a long text column is not a sort key (a copy can sit there)', 'note' !== ( $sorted['orderby'] ?? '' ) && false === ( $sortable['note'] ?? true ) && true === ( $sortable['email'] ?? false ), wp_json_encode( array( $sorted['orderby'] ?? null, $sortable['note'] ?? null ) ) );
+		$wpdb->insert( $tk, array( 'token' => 'sess_0123456789abcdef', 'label' => 'probe' ) );
+		list( , $sd ) = $rows( $tk );
+		$check( '05-3 a table keyed by a credential is not ordered by it', '' === ( $sd['orderby'] ?? 'x' ), wp_json_encode( $sd['orderby'] ?? null ) );
 		$sortable = wp_list_pluck( (array) ( $d['columns'] ?? array() ), 'sortable', 'name' );
 		list( , $sorted ) = $rows( $t, array( 'orderby' => 'password' ) );
 		list( $fst ) = $rows( $t, array( 'fcol' => 'api_secret', 'fq' => 'live' ) );
@@ -961,7 +975,7 @@ wp_set_current_user( $admin[0]->ID );
 			echo "SKIP  value redaction: no free credential row to plant\n";
 			return;
 		}
-		add_option( $home, $fake, '', false );
+		add_option( $home, $fake . '.' . strrev( $fake ), '', false );
 		add_option( 'minn_test_copy_raw', 'cached link https://vendor.example/dl?key=' . $fake, '', false );
 		$post = (int) wp_insert_post( array( 'post_title' => 'Minn copy probe', 'post_status' => 'draft' ) );
 		add_post_meta( $post, 'minn_test_copy_b64', base64_encode( 'license=' . $fake . '&site=x' ) );
@@ -971,6 +985,12 @@ wp_set_current_user( $admin[0]->ID );
 			wp_delete_post( $post, true );
 		};
 		$check( 'value: a raw copy in an option no rule names is hidden', $hidden( $opt( 'minn_test_copy_raw' ) ), $shape( $opt( 'minn_test_copy_raw' ) ) );
+		// The second half of a dotted token (key.secret) on its own.
+		add_option( 'minn_test_copy_half', 'secret=' . strrev( $fake ), '', false );
+		$undo[] = function () {
+			delete_option( 'minn_test_copy_half' );
+		};
+		$check( 'value: a copy of one part of a dotted token is hidden', $hidden( $opt( 'minn_test_copy_half' ) ), $shape( $opt( 'minn_test_copy_half' ) ) );
 		list( , $d ) = $rows( $wpdb->postmeta, array( 'fcol' => 'meta_key', 'fq' => 'minn_test_copy_b64' ) );
 		$check( 'value: a base64 copy in post meta is hidden', $hidden( $cell( $d, 'meta_value', 'meta_key', 'minn_test_copy_b64' ) ), $shape( $cell( $d, 'meta_value', 'meta_key', 'minn_test_copy_b64' ) ) );
 		list( , $d ) = $rows( $t );

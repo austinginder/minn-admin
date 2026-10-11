@@ -43,6 +43,23 @@ class Minn_Admin_DB {
 	/** credential_needles(), for one request (rows() and row() start it over). */
 	private static $needles = null;
 
+	/** Whether credential_needles() stopped at a cap, so some copies may print. */
+	private static $needles_capped = false;
+
+	/** A value search reaches at most this many rows while copies are left out. */
+	const NEEDLE_COUNT_CAP = 1000;
+
+	/**
+	 * Credential columns redacted by table (is_secret_cell()) whose values are
+	 * also looked for elsewhere: base => columns.
+	 */
+	const SECRET_COLUMN_SOURCES = array(
+		'woocommerce_api_keys' => array( 'consumer_secret' ),
+		'gf_rest_api_keys'     => array( 'consumer_secret' ),
+		'wc_webhooks'          => array( 'secret' ),
+		'wfls_2fa_secrets'     => array( 'secret' ),
+	);
+
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
 	}
@@ -440,6 +457,10 @@ class Minn_Admin_DB {
 		if ( 'suretriggers_webhook_requests' === $base ) {
 			return 'request_data' === $col;
 		}
+		// SearchWP's index keeps search terms in a column called token.
+		if ( 0 === strpos( $base, 'searchwp' ) && 'token' === strtolower( $col ) ) {
+			return false;
+		}
 		return self::secret_column_name( $col );
 	}
 
@@ -457,10 +478,16 @@ class Minn_Admin_DB {
 	 */
 	private static function secret_column_name( $col ) {
 		$n = strtolower( preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', (string) $col ) );
-		if ( preg_match( '/_(id|ids|count|type|status|at|date|time|expires|expiry|expiration|length|name|label|hint|created|updated|used)$/', $n ) ) {
+		if ( preg_match( '/_(id|ids|count|type|status|at|date|time|expires|expiry|expiration|length|name|label|hint|created|updated|modified|used|action|method)$/', $n ) ) {
 			return false;
 		}
-		return (bool) preg_match( '/(^|_)(pass|passwd|password|pwd|secret|token|nonce|nonse|salt|api_?key|licen[cs]e_?key|secret_?key|access_?key|private_?key|auth_?key|consumer_?key|activation_?key|client_?secret|access_?token|refresh_?token)(_|$)/', $n );
+		// A private key under any arrangement of the two words: MainWP's
+		// privkey, UpdraftCentral's key_local_private.
+		if ( preg_match( '/(^|_)priv(ate)?_?keys?(_|$)/', $n )
+			|| ( preg_match( '/(^|_)priv(ate)?(_|$)/', $n ) && preg_match( '/(^|_)keys?(_|$)/', $n ) ) ) {
+			return true;
+		}
+		return (bool) preg_match( '/(^|_)(pass|passwd|passwords?|passphrases?|pwd|secrets?|tokens?|nonces?|nonse|salts?|api_?keys?|licen[cs]e_?keys?|secret_?keys?|access_?keys?|auth_?keys?|consumer_?keys?|activation_?keys?|client_?secrets?|access_?tokens?|refresh_?tokens?)(_|$)/', $n );
 	}
 
 	/**
@@ -832,29 +859,45 @@ class Minn_Admin_DB {
 			return self::$needles;
 		}
 		global $wpdb;
-		$needles = array();
-		$values  = array();
+		$needles     = array();
+		$credentials = array();
+		$values      = array();
+		$capped  = false;
+		$take    = function ( $sql, $limit ) use ( $wpdb, &$values, &$capped ) {
+			$got = (array) $wpdb->get_col( $sql . ' LIMIT ' . (int) $limit ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- prepared by the caller.
+			if ( count( $got ) >= $limit ) {
+				$capped = true;
+			}
+			$values = array_merge( $values, $got );
+		};
 		$names   = self::secret_option_names();
 		$shapes  = self::secret_option_shapes();
-		$stores  = array( array( $wpdb->options, 'option_name', 'option_value' ) );
+		// This site's options and, on a network, the main site's too (a
+		// subsite's browser lists the base-prefixed tables) and the network's.
+		$stores = array( array( $wpdb->options, 'option_name', 'option_value', $names, $shapes ) );
 		if ( is_multisite() ) {
-			$stores[] = array( $wpdb->sitemeta, 'meta_key', 'meta_value' );
+			if ( $wpdb->base_prefix . 'options' !== $wpdb->options ) {
+				$stores[] = array( $wpdb->base_prefix . 'options', 'option_name', 'option_value', $names, $shapes );
+			}
+			$stores[] = array( $wpdb->sitemeta, 'meta_key', 'meta_value', $names, $shapes );
 		}
+		// Every user's credential rows: TOTP seeds, sign-in tokens, licence keys.
+		$stores[] = array( $wpdb->usermeta, 'meta_key', 'meta_value', self::SECRET_USERMETA_KEYS, self::SECRET_USERMETA_SHAPES );
 		foreach ( $stores as $store ) {
-			list( $table, $kcol, $vcol ) = $store;
+			list( $table, $kcol, $vcol, $keys, $key_shapes ) = $store;
 			$or   = array();
 			$args = array();
-			if ( $names ) {
-				$or[] = "`{$kcol}` IN (" . implode( ',', array_fill( 0, count( $names ), '%s' ) ) . ')';
-				$args = $names;
+			if ( $keys ) {
+				$or[] = "`{$kcol}` IN (" . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')';
+				$args = $keys;
 			}
-			foreach ( $shapes as $shape ) {
+			foreach ( $key_shapes as $shape ) {
 				$or[]   = "`{$kcol}` LIKE %s";
 				$args[] = $wpdb->esc_like( $shape[0] ) . '%' . $wpdb->esc_like( $shape[1] );
 			}
 			if ( $or ) {
 				// phpcs:ignore WordPress.DB.PreparedSQL -- identifiers are this class's own; values prepared.
-				$values = array_merge( $values, (array) $wpdb->get_col( $wpdb->prepare( "SELECT `{$vcol}` FROM {$table} WHERE " . implode( ' OR ', $or ) . ' LIMIT 500', $args ) ) );
+				$take( $wpdb->prepare( "SELECT `{$vcol}` FROM `{$table}` WHERE " . implode( ' OR ', $or ), $args ), 2000 );
 			}
 		}
 		// The vendor tables' listed rows (their names folded to lower case,
@@ -874,30 +917,48 @@ class Minn_Admin_DB {
 				}
 				list( $vcol, $kcol, $keys ) = $spec;
 				// phpcs:ignore WordPress.DB.PreparedSQL -- identifiers from SHOW TABLES and the class constant; values prepared.
-				$values = array_merge( $values, (array) $wpdb->get_col( $wpdb->prepare( "SELECT `{$vcol}` FROM `{$t}` WHERE `{$kcol}` IN (" . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ') LIMIT 100', $keys ) ) );
+				$take( $wpdb->prepare( "SELECT `{$vcol}` FROM `{$t}` WHERE `{$kcol}` IN (" . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')', $keys ), 500 );
 			}
 		}
-		$values = array_merge( $values, (array) $wpdb->get_col( "SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'wpmdb_licence_key' LIMIT 100" ) );
+		// The credential columns of the tables is_secret_cell() names.
+		foreach ( self::SECRET_COLUMN_SOURCES as $base => $cols ) {
+			foreach ( array_unique( array( $wpdb->prefix, $wpdb->base_prefix ) ) as $prefix ) {
+				$t = $all[ strtolower( $prefix . $base ) ] ?? '';
+				foreach ( '' === $t ? array() : $cols as $col ) {
+					$take( "SELECT `{$col}` FROM `{$t}` WHERE `{$col}` IS NOT NULL AND `{$col}` <> ''", 2000 );
+				}
+			}
+		}
 		foreach ( $values as $raw ) {
 			foreach ( self::credential_leaves( (string) $raw ) as $leaf ) {
-				if ( ! self::is_credential_leaf( $leaf[0], $leaf[1] ) ) {
-					continue;
-				}
-				$v             = $leaf[1];
-				$needles[ $v ] = true;
-				for ( $s = 0; $s < 3; $s++ ) {
-					$core = base64_encode( substr( $v, $s, (int) floor( ( strlen( $v ) - $s ) / 3 ) * 3 ) );
-					if ( strlen( $core ) >= 16 ) {
-						$needles[ $core ]                      = true;
-						$needles[ strtr( $core, '+/', '-_' ) ] = true;
+				// A dotted token (Jetpack's key.secret, SendGrid's SG.x.y, a
+				// JWT) is copied whole or in parts: each long part counts.
+				$parts = array_merge( array( $leaf[1] ), false !== strpos( $leaf[1], '.' ) ? explode( '.', $leaf[1] ) : array() );
+				foreach ( $parts as $part ) {
+					$part = rtrim( $part, '=' );
+					if ( self::is_credential_leaf( $leaf[0], $part ) ) {
+						$credentials[ $part ] = true;
 					}
-				}
-				if ( count( $needles ) >= 1500 ) {
-					break 2;
 				}
 			}
 		}
-		self::$needles = $needles;
+		foreach ( array_keys( $credentials ) as $v ) {
+			$v             = (string) $v;
+			$needles[ $v ] = true;
+			for ( $s = 0; $s < 3; $s++ ) {
+				$core = base64_encode( substr( $v, $s, (int) floor( ( strlen( $v ) - $s ) / 3 ) * 3 ) );
+				if ( strlen( $core ) >= 16 ) {
+					$needles[ $core ]                      = true;
+					$needles[ strtr( $core, '+/', '-_' ) ] = true;
+				}
+			}
+			if ( count( $needles ) >= 1500 ) {
+				$capped = true;
+				break;
+			}
+		}
+		self::$needles        = $needles;
+		self::$needles_capped = $capped;
 		return $needles;
 	}
 
@@ -950,7 +1011,7 @@ class Minn_Admin_DB {
 	 * dates, URLs and names never count, so a copy of one is never hidden.
 	 */
 	private static function is_credential_leaf( $path, $v ) {
-		if ( strlen( $v ) < 16 || strlen( $v ) > 512 || ! preg_match( '/^[A-Za-z0-9_\-]+$/', $v ) ) {
+		if ( strlen( $v ) < 16 || strlen( $v ) > 512 || ! preg_match( '#^[A-Za-z0-9_\-+/]+$#', $v ) ) {
 			return false;
 		}
 		if ( preg_match_all( '/\d/', $v ) < 3 || preg_match_all( '/[A-Za-z]/', $v ) < 3 ) {
@@ -959,11 +1020,40 @@ class Minn_Admin_DB {
 		if ( '' === $path ) {
 			return true;
 		}
-		$leaf = strtolower( (string) substr( strrchr( '/' . $path, '/' ), 1 ) );
-		if ( preg_match( '/public|status|expir|date|time|count|limit|url|email|name|slug|type|version|item|plugin|theme|site|domain/', $leaf ) ) {
+		$segments = array_map(
+			function ( $seg ) {
+				return strtolower( preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $seg ) );
+			},
+			explode( '/', trim( $path, '/' ) )
+		);
+		$leaf = (string) end( $segments );
+		// Under a licence or key container the entry is a credential whatever
+		// it is keyed by (WP All Import Pro keeps its key at
+		// licenses/<plugin class>).
+		foreach ( array_slice( $segments, 0, -1 ) as $seg ) {
+			if ( preg_match( '/^(licen[cs]es?|license_keys?|keys|tokens|secrets|credentials)$/', $seg ) ) {
+				return true;
+			}
+		}
+		// Whole words: account_key and update_token still count.
+		if ( preg_match( '/(^|[_\-])(public|status|expir\w*|date|time|count|limit|url|email|name|slug|type|version|item|plugin|theme|site|domain)([_\-]|$)/', $leaf ) ) {
 			return false;
 		}
 		return (bool) preg_match( '/key|licen[cs]e|token|secret|code|pass|auth|api|sig|hash|seed|salt|nonce|^val$|^value$|^\d*$/', $leaf );
+	}
+
+	/**
+	 * Whether a column may be a sort key: not a credential column, and not a
+	 * long text, binary or JSON one (a copy of a credential can sit in any of
+	 * those, and sorting crafted rows around it reads it a character at a
+	 * time; nobody sorts by a post body or an option value). A copy in a
+	 * short varchar column stays sortable.
+	 */
+	private static function sortable( $table, $col, $type ) {
+		if ( self::is_secret_column( $table, $col ) ) {
+			return false;
+		}
+		return ! preg_match( '/^(tiny|medium|long)?(text|blob)\b|^json\b/i', $type );
 	}
 
 	private static function is_secret_column( $table, $col ) {
@@ -1102,18 +1192,22 @@ class Minn_Admin_DB {
 		// rows first on log-shaped tables); no PK means natural order.
 		$orderby = (string) $request->get_param( 'orderby' );
 		$order   = 'asc' === strtolower( (string) $request->get_param( 'order' ) ) ? 'ASC' : 'DESC';
-		// A credential column is never a sort key (ordering leaks its value).
-		if ( ! in_array( $orderby, $names, true ) || self::is_secret_column( $meta->name, $orderby ) ) {
+		// A credential column is never a sort key (ordering leaks its value),
+		// nor is a long text or binary one, where a copy of a credential can
+		// sit and a sort over crafted neighbours would read it the same way.
+		$types = wp_list_pluck( $columns, 'type', 'name' );
+		if ( ! in_array( $orderby, $names, true ) || ! self::sortable( $meta->name, $orderby, (string) ( $types[ $orderby ] ?? '' ) ) ) {
 			$orderby = '';
 		}
 		$sorted_default = false;
-		if ( '' === $orderby && count( $primary ) === 1 ) {
+		if ( '' === $orderby && count( $primary ) === 1 && ! self::is_secret_column( $meta->name, $primary[0] ) ) {
 			$orderby        = $primary[0];
 			$sorted_default = true;
 		}
 		$order_sql = $orderby ? ' ORDER BY ' . self::quote_ident( $orderby ) . ' ' . $order : '';
 
 		// Per-column contains-filter: whitelisted column, LIKE-escaped value.
+		$count_cap = self::COUNT_CAP;
 		$fcol  = (string) $request->get_param( 'fcol' );
 		$fq    = (string) $request->get_param( 'fq' );
 		$where = '';
@@ -1142,8 +1236,13 @@ class Minn_Admin_DB {
 			// occur" recovers a redacted value a character at a time.
 			// Compared as bytes: a copy is byte-identical, and a collation-aware
 			// LIKE per needle took seconds over a large options table where
-			// the byte compare takes a tenth of that.
-			if ( ! self::is_activity_log( $meta->name ) ) {
+			// the byte compare takes a tenth of that. The count then stops at
+			// NEEDLE_COUNT_CAP rows, which bounds the work on a broad search.
+			if ( ! self::is_activity_log( $meta->name ) && self::credential_needles() ) {
+				if ( self::$needles_capped ) {
+					return new WP_Error( 'minn_db_search_capped', __( 'This site holds too many credentials for Minn to check a value search against, so values cannot be searched here.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$count_cap = self::NEEDLE_COUNT_CAP;
 				foreach ( array_keys( self::credential_needles() ) as $needle ) {
 					$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $fcol ) . ' NOT LIKE CAST(%s AS BINARY)', '%' . $wpdb->esc_like( (string) $needle ) . '%' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				}
@@ -1164,10 +1263,10 @@ class Minn_Admin_DB {
 		$approx = false;
 		if ( $where ) {
 			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- built from whitelisted parts; value prepared above.
-			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM (SELECT 1 FROM {$ident}{$where} LIMIT " . ( self::COUNT_CAP + 1 ) . ') x' );
-			$capped = $total > self::COUNT_CAP;
+			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM (SELECT 1 FROM {$ident}{$where} LIMIT " . ( $count_cap + 1 ) . ') x' );
+			$capped = $total > $count_cap;
 			if ( $capped ) {
-				$total  = self::COUNT_CAP;
+				$total  = $count_cap;
 				$approx = true;
 			}
 		} else {
@@ -1204,7 +1303,7 @@ class Minn_Admin_DB {
 		// Say which columns cannot be sorted (they can hold a credential), so
 		// the grid does not offer a sort the server will refuse.
 		foreach ( $columns as &$col ) {
-			$col['sortable'] = ! self::is_secret_column( $meta->name, $col['name'] );
+			$col['sortable'] = self::sortable( $meta->name, $col['name'], (string) $col['type'] );
 		}
 		unset( $col );
 		return rest_ensure_response(

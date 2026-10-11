@@ -484,23 +484,12 @@ $leaves = function ( $v, $path = '', $depth = 0 ) use ( &$leaves ) {
 	}
 	return array();
 };
-// A leaf that is a key or token: token alphabet, long, letters and digits
-// both, and (inside a structure) under a name that says so.
-$credential = function ( $path, $v ) {
-	if ( strlen( $v ) < 16 || strlen( $v ) > 512 || ! preg_match( '/^[A-Za-z0-9_\-]+$/', $v ) ) {
-		return false;
-	}
-	if ( preg_match_all( '/\d/', $v ) < 3 || preg_match_all( '/[A-Za-z]/', $v ) < 3 ) {
-		return false;
-	}
-	$leaf = strtolower( (string) substr( strrchr( '/' . $path, '/' ), 1 ) );
-	if ( '' === $path ) {
-		return true;
-	}
-	if ( preg_match( '/public|status|expir|date|time|count|limit|url|email|name|slug|type|version|item|plugin|theme|site|domain/', $leaf ) ) {
-		return false;
-	}
-	return (bool) preg_match( '/key|licen[cs]e|token|secret|code|pass|auth|api|sig|hash|seed|salt|nonce|^val$|^value$|^\d*$/', $leaf );
+// A leaf that is a key or token, by the browser's own test (dotted tokens
+// count part by part, as the browser collects them).
+$credential_test = new ReflectionMethod( 'Minn_Admin_DB', 'is_credential_leaf' );
+$credential_test->setAccessible( true );
+$credential = function ( $path, $v ) use ( $credential_test ) {
+	return (bool) $credential_test->invoke( null, $path, $v );
 };
 // Where the browser redacts a vendor credential row: options and network
 // options, and every keyed table's listed rows.
@@ -508,9 +497,13 @@ $sources = array();
 $add_src = function ( $from, $value ) use ( &$sources, $leaves, $credential ) {
 	$n = 0;
 	foreach ( $leaves( $value ) as $l ) {
-		if ( $credential( $l[0], $l[1] ) ) {
-			$sources[ $l[1] ] = $from . $l[0];
-			$n++;
+		$parts = array_merge( array( $l[1] ), false !== strpos( $l[1], '.' ) ? explode( '.', $l[1] ) : array() );
+		foreach ( $parts as $part ) {
+			$part = rtrim( $part, '=' );
+			if ( $credential( $l[0], $part ) ) {
+				$sources[ $part ] = $from . $l[0];
+				$n++;
+			}
 		}
 	}
 	return $n;
