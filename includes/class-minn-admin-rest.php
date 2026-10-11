@@ -1446,7 +1446,8 @@ class Minn_Admin_REST {
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'merge_terms' ),
 				'permission_callback' => function () {
-					return is_user_logged_in(); // real check is per-taxonomy in the callback
+					// The app's own floor; the real check is per-taxonomy in the callback.
+					return current_user_can( 'edit_posts' );
 				},
 				'args'                => array(
 					'taxonomy' => array( 'type' => 'string', 'required' => true ),
