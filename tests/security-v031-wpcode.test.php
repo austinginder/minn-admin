@@ -188,6 +188,8 @@ $check(
 );
 
 // --- 4. controls: the administrator is unaffected ------------------------
+// Back to the administrator: 3b left the restricted user current.
+wp_set_current_user( $admin );
 $response = $post(
 	'/minn-admin/v1/wpcode/snippets',
 	array( 'name' => 'probe ordinary', 'code_type' => 'php', 'code' => 'return 1;' )
