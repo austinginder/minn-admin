@@ -1079,4 +1079,85 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+// --- 12-3 peers: an edit form keeps a type the vendor left empty ---
+// A strict select with an empty seed falls back to its first option, and the
+// detail form posts every field. WPCode and FluentSnippets run nothing for a
+// snippet with no type, so a rename made an inert snippet PHP; Novamira reads
+// a memory with no type as a project memory, and a rename made it a user one.
+( function () use ( $check, $call ) {
+	$field = function ( $route_part, $key ) {
+		foreach ( Minn_Admin_Surfaces::all() as $sf ) {
+			$edit = $sf['collection']['detail']['edit'] ?? ( $sf['detail']['edit'] ?? null );
+			if ( is_array( $edit ) && false !== strpos( (string) ( $edit['route'] ?? '' ), $route_part ) ) {
+				foreach ( (array) ( $edit['fields'] ?? array() ) as $f ) {
+					if ( $key === ( $f['key'] ?? '' ) ) {
+						return $f;
+					}
+				}
+			}
+		}
+		return null;
+	};
+	// WPCode.
+	if ( post_type_exists( 'wpcode' ) && taxonomy_exists( 'wpcode_type' ) ) {
+		$f = $field( 'wpcode/snippets/', 'code_type' );
+		$check( '12-3 peer WPCode: the Type field is clearable', ! empty( $f['clearable'] ), wp_json_encode( $f['clearable'] ?? null ) );
+		$id = (int) wp_insert_post( array( 'post_type' => 'wpcode', 'post_status' => 'draft', 'post_title' => 'Minn untyped probe', 'post_content' => 'echo 1;' ) );
+		wp_set_object_terms( $id, array(), 'wpcode_type' );
+		try {
+			list( $st, $d ) = $call( 'PUT', '/minn-admin/v1/wpcode/snippets/' . $id, array( 'name' => 'Minn untyped probe 2', 'code_type' => '' ) );
+			$terms = wp_get_object_terms( $id, 'wpcode_type', array( 'fields' => 'slugs' ) );
+			$check( '12-3 peer WPCode: a rename sending the empty type leaves it untyped', in_array( $st, array( 200, 201 ), true ) && array() === $terms && 'Minn untyped probe 2' === get_the_title( $id ), $st . ' ' . wp_json_encode( $terms ) . ' ' . wp_json_encode( $d['code'] ?? null ) );
+		} finally {
+			wp_delete_post( $id, true );
+		}
+	}
+	// Novamira (its read path, on an in-memory post: the lab registers no
+	// memories).
+	if ( function_exists( 'minn_admin_novamira_memory_item' ) ) {
+		$p    = new WP_Post( (object) array( 'ID' => PHP_INT_MAX, 'post_title' => 'Minn untyped memory', 'post_excerpt' => '', 'post_content' => 'note', 'post_modified' => '2026-01-01 00:00:00', 'post_modified_gmt' => '2026-01-01 00:00:00' ) );
+		$item = minn_admin_novamira_memory_item( $p );
+		$check( '12-3 peer Novamira: a memory with no type reads as the project memory Novamira treats it as', 'project' === $item['type'], wp_json_encode( $item['type'] ) );
+	}
+	// Custom CSS & JS: the options normalizer every edit goes through.
+	if ( function_exists( 'minn_admin_ccj_normalize_options' ) ) {
+		$kept  = minn_admin_ccj_normalize_options( array( 'linking' => 'desktop', 'language' => 'html' ), array( 'linking' => 'desktop', 'language' => 'html' ) );
+		$fresh = minn_admin_ccj_normalize_options( array( 'linking' => 'desktop' ), array( 'linking' => 'internal' ) );
+		$check( '12-3 peer CCJ: a Pro linking value round-trips when it is the stored one', 'desktop' === $kept['linking'], wp_json_encode( $kept['linking'] ) );
+		$check( '12-3 peer CCJ: control: a new value outside the list still falls back', 'internal' === $fresh['linking'], wp_json_encode( $fresh['linking'] ) );
+	}
+	// FluentSnippets.
+	if ( function_exists( 'minn_admin_fluent_snippets_active' ) && minn_admin_fluent_snippets_active() ) {
+		$check( '12-3 peer FluentSnippets: Type and Run at are clearable', ! empty( $field( 'fluent-snippets/', 'type' )['clearable'] ) && ! empty( $field( 'fluent-snippets/', 'run_at' )['clearable'] ) );
+		list( , $made ) = $call( 'POST', '/minn-admin/v1/fluent-snippets', array( 'name' => 'Minn untyped fluent', 'code' => '/* nothing */', 'type' => 'css', 'run_at' => 'wp_head', 'active' => false ) );
+		$file = (string) ( $made['id'] ?? '' );
+		$path = \FluentSnippets\App\Helpers\Helper::getStorageDir() . '/' . $file;
+		try {
+			if ( '' === $file || ! is_file( $path ) ) {
+				$check( '12-3 peer FluentSnippets: a probe snippet was created', false, wp_json_encode( $made ) );
+				return;
+			}
+			// Their own parser defaults a missing @type / @run_at line to ''.
+			file_put_contents( $path, preg_replace( '/^\s*\*\s*@(type|run_at):?.*\R/m', '', file_get_contents( $path ) ) );
+			list( $st, $pd ) = $call( 'PUT', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ), array( 'name' => 'Minn untyped fluent 2', 'type' => '', 'run_at' => '' ) );
+			$meta = ( new \FluentSnippets\App\Model\Snippet() )->findByFileName( $file );
+			$meta = is_array( $meta ) ? ( $meta['meta'] ?? array() ) : array();
+			$check( '12-3 peer FluentSnippets: a rename sending the empty type asks for one instead of making it PHP', 400 === $st && 'minn_fluent_no_type' === ( $pd['code'] ?? '' ) && '' === (string) ( $meta['type'] ?? '' ) && 'Minn untyped fluent' === ( $meta['name'] ?? '' ), $st . ' ' . wp_json_encode( array( $meta['type'] ?? null, $pd['code'] ?? null ) ) );
+			list( $st, $pd ) = $call( 'PUT', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ), array( 'name' => 'Minn untyped fluent 2', 'type' => 'css', 'run_at' => '' ) );
+			$check( '12-3 peer FluentSnippets: an empty run-at is asked for too', 400 === $st && 'minn_fluent_no_run_at' === ( $pd['code'] ?? '' ), $st . ' ' . wp_json_encode( $pd['code'] ?? null ) );
+			list( $st ) = $call( 'PUT', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ), array( 'name' => 'Minn untyped fluent 2', 'type' => 'css', 'run_at' => 'wp_head' ) );
+			$meta = ( new \FluentSnippets\App\Model\Snippet() )->findByFileName( $file );
+			$meta = is_array( $meta ) ? ( $meta['meta'] ?? array() ) : array();
+			$check( '12-3 peer FluentSnippets: control: with both picked it saves them', in_array( $st, array( 200, 201 ), true ) && 'css' === ( $meta['type'] ?? '' ) && 'wp_head' === ( $meta['run_at'] ?? '' ), $st . ' ' . wp_json_encode( array( $meta['type'] ?? null, $meta['run_at'] ?? null ) ) );
+		} finally {
+			if ( '' !== $file ) {
+				$call( 'DELETE', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ) );
+				if ( is_file( $path ) ) {
+					unlink( $path );
+				}
+			}
+		}
+	}
+} )();
+
 $summary();

@@ -108,8 +108,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'rows'        => 14,
 			'placeholder' => "add_filter( '…', '…' );",
 		),
-		array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options ),
-		array( 'key' => 'run_at', 'label' => __( 'Run at', 'minn-admin' ), 'type' => 'select', 'options' => $run_options ),
+		// Clearable: a snippet file with no @type line runs nothing, and one with
+		// no @run_at runs everywhere. A form seeding the first option would make
+		// the first into PHP on a rename; an empty value changes nothing.
+		array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options, 'clearable' => true ),
+		array( 'key' => 'run_at', 'label' => __( 'Run at', 'minn-admin' ), 'type' => 'select', 'options' => $run_options, 'clearable' => true ),
 		array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'type' => 'number' ),
 		array( 'key' => 'tags', 'label' => __( 'Tags', 'minn-admin' ), 'type' => 'tags', 'required' => false ),
 	);
@@ -411,10 +414,10 @@ add_action( 'rest_api_init', function () {
 					if ( null !== $request['code'] ) {
 						$code = (string) $request['code'];
 					}
-					if ( null !== $request['type'] ) {
+					if ( null !== $request['type'] && '' !== (string) $request['type'] ) {
 						$meta['type'] = sanitize_text_field( (string) $request['type'] );
 					}
-					if ( null !== $request['run_at'] ) {
+					if ( null !== $request['run_at'] && '' !== (string) $request['run_at'] ) {
 						$meta['run_at'] = sanitize_text_field( (string) $request['run_at'] );
 					}
 					if ( null !== $request['priority'] ) {
@@ -433,6 +436,15 @@ add_action( 'rest_api_init', function () {
 						$meta['condition'] = array( 'status' => 'no' );
 					}
 
+					// A snippet file with no @type runs nothing, one with no
+					// @run_at runs or not depending on its type, and FluentSnippets
+					// saves neither empty: the person picks them.
+					if ( '' === (string) ( $meta['type'] ?? '' ) ) {
+						return new WP_Error( 'minn_fluent_no_type', __( 'This snippet has no type, so FluentSnippets does not run it. Pick a type to save it.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					if ( '' === (string) ( $meta['run_at'] ?? '' ) ) {
+						return new WP_Error( 'minn_fluent_no_run_at', __( 'This snippet has no Run at setting. Pick one to save it.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
 					$result = \FluentSnippets\App\Helpers\Helper::updateSnippet(
 						array(
 							'meta'       => $meta,

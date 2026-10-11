@@ -575,6 +575,12 @@ function minn_admin_novamira_memory_types() {
 function minn_admin_novamira_memory_item( WP_Post $p ) {
 	$types = minn_admin_novamira_memory_types();
 	$type  = (string) get_post_meta( $p->ID, '_novamira_memory_type', true );
+	// Novamira reads a memory with no type as a project memory; serve that, so
+	// the edit form shows (and sends back) what the memory is, not its first
+	// option.
+	if ( '' === $type ) {
+		$type = 'project';
+	}
 	return array(
 		'id'          => $p->ID,
 		'name'        => $p->post_title,

@@ -546,9 +546,18 @@ function minn_admin_ccj_rebuild_tree() {
 
 function minn_admin_ccj_normalize_options( $input, $existing = array() ) {
 	$base = array_merge( minn_admin_ccj_default_options(), $existing, is_array( $input ) ? $input : array() );
-	$base['language'] = in_array( $base['language'], array( 'css', 'js', 'html' ), true ) ? $base['language'] : 'css';
-	$base['type']     = in_array( $base['type'], array( 'header', 'footer' ), true ) ? $base['type'] : 'header';
-	$base['linking']  = in_array( $base['linking'], array( 'internal', 'external', 'both' ), true ) ? $base['linking'] : 'internal';
+	// A value Minn's lists don't offer (CCJ Pro's HTML linking: desktop,
+	// mobile) round-trips when it is the stored one; a new one falls back.
+	$pick = function ( $key, array $allowed, $fallback ) use ( $base, $existing ) {
+		$v = $base[ $key ];
+		if ( in_array( $v, $allowed, true ) || ( is_array( $existing ) && array_key_exists( $key, $existing ) && $existing[ $key ] === $v && is_string( $v ) ) ) {
+			return $v;
+		}
+		return $fallback;
+	};
+	$base['language'] = $pick( 'language', array( 'css', 'js', 'html' ), 'css' );
+	$base['type']     = $pick( 'type', array( 'header', 'footer' ), 'header' );
+	$base['linking']  = $pick( 'linking', array( 'internal', 'external', 'both' ), 'internal' );
 	// side may arrive as comma list or array.
 	if ( is_array( $base['side'] ) ) {
 		$base['side'] = implode( ',', $base['side'] );

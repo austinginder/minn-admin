@@ -517,7 +517,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'rows'        => 14,
 			'placeholder' => "add_filter( '…', '…' );",
 		),
-		array( 'key' => 'code_type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options ),
+		// Clearable: a snippet whose type term is gone has no type, and WPCode
+		// runs nothing for it. A form seeding the first option would turn it
+		// into PHP on a rename; an empty value is sent back and changes nothing.
+		array( 'key' => 'code_type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options, 'clearable' => true ),
 		array( 'key' => 'auto_insert', 'label' => __( 'Insert automatically', 'minn-admin' ), 'type' => 'toggle' ),
 		// clearable: a snippet that is only used as a shortcode stores no
 		// location, and an edit seeded the first one in its place (the server
@@ -852,6 +855,10 @@ add_action( 'rest_api_init', function () {
 					// picked it up. Guard and write must never read different
 					// parameter sources.
 					$new_type = $request['code_type'];
+					// An empty type is the form's clear value: no change.
+					if ( null !== $new_type && '' === sanitize_key( (string) $new_type ) ) {
+						$new_type = null;
+					}
 					if ( null !== $new_type ) {
 						$new_type  = sanitize_key( (string) $new_type );
 						$guard_new = minn_admin_wpcode_guard_type( $new_type, (int) Minn_Admin::path_param( $request ), true, $want_loc );
