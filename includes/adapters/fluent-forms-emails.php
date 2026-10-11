@@ -332,7 +332,11 @@ add_action( 'rest_api_init', function () {
 			$_COOKIE = array();
 			try {
 				\FluentForm\App\Services\FormBuilder\ShortCodeParser::resetData();
-				$out = \FluentForm\App\Services\FormBuilder\ShortCodeParser::parse( $parts, (int) $entry->id, json_decode( (string) $entry->response, true ), $form, false, 'notifications' );
+				$response = json_decode( (string) $entry->response, true );
+				if ( function_exists( 'minn_admin_fluent_forms_mask_passwords' ) ) {
+					$response = minn_admin_fluent_forms_mask_passwords( $response, (int) $form->id );
+				}
+				$out = \FluentForm\App\Services\FormBuilder\ShortCodeParser::parse( $parts, (int) $entry->id, $response, $form, false, 'notifications' );
 				\FluentForm\App\Services\FormBuilder\ShortCodeParser::resetData();
 			} finally {
 				$_COOKIE = $cookies;

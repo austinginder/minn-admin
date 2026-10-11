@@ -130,6 +130,56 @@ function minn_admin_fluent_forms_labels( $form_id ) {
 }
 
 /**
+ * Password answers as Fluent's own screens show them. A password field's
+ * answer is replaced after the entry's integrations run, but until then (a
+ * spam entry marked "skip processing", integrations still queued) the
+ * stored answer is the password. Fluent's entry screens mask it whenever
+ * its truncate_password_values filter says so (its response_render
+ * filter); Minn masks the same answers, by the form's own password fields.
+ *
+ * @param array $map     Answers keyed by input name (or the raw response).
+ * @param int   $form_id Form ID.
+ * @return array
+ */
+function minn_admin_fluent_forms_mask_passwords( $map, $form_id ) {
+	// Helper::shouldHidePassword() answers true only while Fluent's own entry
+	// screens render (they define FLUENTFORM_RENDERING_ENTRY); these views are
+	// entry renderings, so ask the same site-level filter it applies.
+	if ( ! is_array( $map ) || ! defined( 'FLUENTFORM' )
+		|| ! apply_filters( 'fluentform/truncate_password_values', true, (int) $form_id ) ) {
+		return $map;
+	}
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$raw    = $wpdb->get_var( $wpdb->prepare( "SELECT form_fields FROM {$wpdb->prefix}fluentform_forms WHERE id = %d", (int) $form_id ) );
+	$fields = json_decode( (string) $raw, true );
+	$names  = array();
+	$walk   = function ( $list ) use ( &$walk, &$names ) {
+		foreach ( (array) $list as $f ) {
+			if ( ! is_array( $f ) ) {
+				continue;
+			}
+			if ( 'input_password' === ( $f['element'] ?? '' ) && ! empty( $f['attributes']['name'] ) ) {
+				$names[] = (string) $f['attributes']['name'];
+			}
+			foreach ( (array) ( $f['columns'] ?? array() ) as $col ) {
+				$walk( $col['fields'] ?? array() );
+			}
+			if ( ! empty( $f['fields'] ) ) {
+				$walk( $f['fields'] );
+			}
+		}
+	};
+	$walk( is_array( $fields ) ? ( $fields['fields'] ?? array() ) : array() );
+	foreach ( $names as $name ) {
+		if ( isset( $map[ $name ] ) && '' !== (string) ( is_scalar( $map[ $name ] ) ? $map[ $name ] : 'x' ) ) {
+			$map[ $name ] = str_repeat( '*', 6 ) . ' ' . __( '(truncated)', 'fluentform' ); // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch
+		}
+	}
+	return $map;
+}
+
+/**
  * Decode a submission response JSON into a flat string map.
  *
  * @param string|array $response Raw response column or array.
@@ -563,7 +613,7 @@ add_action( 'rest_api_init', function () {
 
 			$items = array();
 			foreach ( (array) $rows as $r ) {
-				$map     = minn_admin_fluent_forms_response_map( $r->response );
+				$map     = minn_admin_fluent_forms_mask_passwords( minn_admin_fluent_forms_response_map( $r->response ), (int) $r->form_id );
 				$status  = $r->status ? (string) $r->status : 'unread';
 				$items[] = array(
 					'id'         => (int) $r->id,
@@ -621,7 +671,7 @@ add_action( 'rest_api_init', function () {
 					$row->status = 'read';
 				}
 
-				$map    = minn_admin_fluent_forms_response_map( $row->response );
+				$map    = minn_admin_fluent_forms_mask_passwords( minn_admin_fluent_forms_response_map( $row->response ), (int) $row->form_id );
 				$labels = minn_admin_fluent_forms_labels( (int) $row->form_id );
 				$answers = array();
 				foreach ( $map as $key => $val ) {

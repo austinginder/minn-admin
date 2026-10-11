@@ -625,4 +625,37 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 13-1: Minn's Fluent Forms entry views printed a password answer Fluent's
+ * own screens mask (an entry whose password Fluent has not replaced yet).
+ * Run on a throwaway form in a rolled-back transaction.
+ */
+( function () use ( $check, $call ) {
+	if ( ! class_exists( '\\FluentForm\\App\\Helpers\\Helper' ) ) {
+		echo "SKIP  13-1 Fluent Forms inactive\n";
+		return;
+	}
+	global $wpdb;
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$fields = array( 'fields' => array(
+			array( 'element' => 'input_text', 'attributes' => array( 'name' => 'nick' ), 'settings' => array( 'label' => 'Nick' ) ),
+			array( 'element' => 'container', 'columns' => array( array( 'fields' => array(
+				array( 'element' => 'input_password', 'attributes' => array( 'name' => 'secret_pw' ), 'settings' => array( 'label' => 'Password' ) ),
+			) ) ) ),
+		) );
+		$wpdb->insert( $wpdb->prefix . 'fluentform_forms', array( 'title' => 'v045 password probe', 'status' => 'published', 'form_fields' => wp_json_encode( $fields ), 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+		$form_id = (int) $wpdb->insert_id;
+		$wpdb->insert( $wpdb->prefix . 'fluentform_submissions', array( 'form_id' => $form_id, 'response' => wp_json_encode( array( 'nick' => 'Dana', 'secret_pw' => 'hunter2-v045' ) ), 'status' => 'unread', 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+		$entry = (int) $wpdb->insert_id;
+		list( $status, $d ) = $call( 'GET', "/minn-admin/v1/fluent-forms/entries/{$entry}" );
+		$out = wp_json_encode( $d );
+		$check( '13-1 a Fluent password answer is masked as Fluent masks it', 200 === $status && false === strpos( $out, 'hunter2-v045' ) && false !== strpos( $out, '******' ), $status . ' ' . substr( $out, 0, 200 ) );
+		$check( '13-1 control: other answers still show', false !== strpos( $out, 'Dana' ) );
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+} )();
+
 $summary();
