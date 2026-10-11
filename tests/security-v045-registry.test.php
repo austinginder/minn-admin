@@ -113,4 +113,50 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 04-4, the class: a surface's edit modal sends its `preserve` keys as they
+ * were when the modal opened. A key one of the same list's actions sets (an
+ * on/off switch) would be put back by any later save from a modal opened
+ * before the action ran, so no surface may preserve one.
+ */
+( function () use ( $check, $call ) {
+	list( $status, $d ) = $call( 'GET', '/minn-admin/v1/surfaces' );
+	$list  = isset( $d['surfaces'] ) ? $d['surfaces'] : (array) $d;
+	$colls = array();
+	foreach ( $list as $s ) {
+		$s = json_decode( wp_json_encode( $s ), true );
+		foreach ( array( $s['collection'] ?? null, $s['manage'] ?? null ) as $c ) {
+			if ( $c ) {
+				$colls[ $s['id'] ][] = $c;
+			}
+		}
+		foreach ( (array) ( $s['views'] ?? array() ) as $v ) {
+			if ( ! empty( $v['collection'] ) ) {
+				$colls[ $s['id'] ][] = $v['collection'];
+			}
+		}
+	}
+	$bad = array();
+	foreach ( $colls as $sid => $list_of ) {
+		foreach ( $list_of as $c ) {
+			$preserve = (array) ( $c['detail']['edit']['preserve'] ?? array() );
+			if ( ! $preserve ) {
+				continue;
+			}
+			$set = array();
+			foreach ( array_merge( (array) ( $c['actions'] ?? array() ), (array) ( $c['bulk'] ?? array() ), (array) ( $c['status']['actions'] ?? array() ) ) as $a ) {
+				foreach ( array_keys( (array) ( $a['body'] ?? array() ) ) as $k ) {
+					$set[ $k ] = true;
+				}
+			}
+			foreach ( $preserve as $k ) {
+				if ( isset( $set[ $k ] ) ) {
+					$bad[] = "{$sid} preserves {$k}";
+				}
+			}
+		}
+	}
+	$check( '04-4 class: no surface preserves a key one of its own actions sets', 200 === $status && ! $bad, implode( '; ', $bad ) );
+} )();
+
 $summary();

@@ -236,7 +236,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'edit'        => array(
 					'route'    => 'minn-admin/v1/hfcm/snippets/{id}',
 					'method'   => 'PUT',
-					'preserve' => array( 'active', 'display_on' ),
+					'preserve' => array( 'display_on' ),
 					'fields'   => $edit_fields,
 				),
 			),

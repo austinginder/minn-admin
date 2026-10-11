@@ -27,9 +27,6 @@
 $known = array(
 	'settings:Content: an unchanged save stores nothing'                                           => '11-1: the Content section resends the permalinks, which rebuilds the rewrite rules',
 	'order: an unchanged save stores nothing'                                                      => 'H3: an empty shipping address is saved with the billing name',
-	'hfcm: a save from a modal opened before an action keeps active as the action set it'          => '04-4: the modal resends the switch it loaded',
-	'wpcode: a save from a modal opened before an action keeps active as the action set it'        => '04-4: the modal resends the switch it loaded',
-	'code-snippets: a save from a modal opened before an action keeps active as the action set it' => '04-4: the modal resends the switch it loaded',
 );
 
 $rt = ( require __DIR__ . '/lib/roundtrip.php' )( 'roundtrip-surfaces', $known );
@@ -460,23 +457,25 @@ foreach ( (array) $captures as $c ) {
 	}
 	$check( "{$label}: changing one field leaves the others", ! $leaks, implode( '; ', array_slice( $leaks, 0, 6 ) ) );
 
-	// Concurrency: a preserved key an action sets.
-	foreach ( (array) $c['preserve'] as $key ) {
-		foreach ( (array) $c['actions'] as $a ) {
-			if ( ! is_array( $a['body'] ) || ! array_key_exists( $key, $a['body'] ) || ! array_key_exists( $key, $body ) || $same( 'toggle', $a['body'][ $key ], $body[ $key ] ) ) {
+	// Concurrency: a key one of the list's actions sets (an on/off switch)
+	// keeps the action's value when a modal opened before the action saves.
+	$current = $detail_of( $c, $id );
+	$seen    = array();
+	foreach ( (array) $c['actions'] as $a ) {
+		foreach ( (array) ( is_array( $a['body'] ) ? $a['body'] : array() ) as $key => $set_to ) {
+			if ( isset( $seen[ $key ] ) || ! is_array( $current ) || ! array_key_exists( $key, $current ) || $same( 'toggle', $set_to, $current[ $key ] ) ) {
 				continue;
 			}
-			$res = $in_tx( function () use ( $c, $a, $body, $key, $call, $replay, $detail_of, $id ) {
+			$seen[ $key ] = true;
+			list( $ast, $after ) = $in_tx( function () use ( $c, $a, $body, $key, $call, $replay, $detail_of, $id ) {
 				list( $ast ) = $call( $a['method'], '/' . ltrim( str_replace( '{id}', rawurlencode( (string) $id ), $a['route'] ), '/' ), $a['body'] );
 				$replay( $c, $body );
 				$now = $detail_of( $c, $id );
 				return array( $ast, is_array( $now ) && array_key_exists( $key, $now ) ? $now[ $key ] : null );
 			} );
-			list( $ast, $after ) = $res;
 			$check( "{$label}: a save from a modal opened before an action keeps {$key} as the action set it",
-				$ast < 400 && $same( 'toggle', $a['body'][ $key ], $after ),
-				"action {$a['label']} ({$ast}) set " . wp_json_encode( $a['body'][ $key ] ) . ', after the stale save ' . wp_json_encode( $after ) );
-			break;
+				$ast < 400 && $same( 'toggle', $set_to, $after ),
+				"action {$a['label']} ({$ast}) set " . wp_json_encode( $set_to ) . ', after the stale save ' . wp_json_encode( $after ) );
 		}
 	}
 }

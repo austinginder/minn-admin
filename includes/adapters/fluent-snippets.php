@@ -168,7 +168,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'edit'        => array(
 					'route'    => 'minn-admin/v1/fluent-snippets/{id}',
 					'method'   => 'PUT',
-					'preserve' => array( 'active', 'type', 'run_at' ),
+					'preserve' => array( 'type', 'run_at' ),
 					'fields'   => $edit_fields,
 				),
 			),

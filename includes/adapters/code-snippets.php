@@ -138,8 +138,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'edit'        => array(
 					'route'    => 'code-snippets/v1/snippets/{id}',
 					'method'   => 'PUT',
-					// Keep activation + network flags when saving content.
-					'preserve' => array( 'active', 'network', 'shared_network', 'condition_id' ),
+					// The network flags name which snippet this is. The on/off
+					// switch is left out: the route keeps a field it is not sent,
+					// and the copy a modal loaded would switch a snippet back on
+					// (or off) after someone changed it.
+					'preserve' => array( 'network', 'shared_network', 'condition_id' ),
 					'fields'   => $edit_fields,
 				),
 			),

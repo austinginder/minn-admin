@@ -581,7 +581,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'edit'        => array(
 					'route'    => 'minn-admin/v1/wpcode/snippets/{id}',
 					'method'   => 'PUT',
-					'preserve' => array( 'active' ),
 					'fields'   => $edit_fields,
 				),
 			),
