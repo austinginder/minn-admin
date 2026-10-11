@@ -487,7 +487,7 @@ class Minn_Admin_DB {
 			|| ( preg_match( '/(^|_)priv(ate)?(_|$)/', $n ) && preg_match( '/(^|_)keys?(_|$)/', $n ) ) ) {
 			return true;
 		}
-		return (bool) preg_match( '/(^|_)(pass|passwd|passwords?|passphrases?|pwd|secrets?|tokens?|nonces?|nonse|salts?|api_?keys?|licen[cs]e_?keys?|secret_?keys?|access_?keys?|auth_?keys?|consumer_?keys?|activation_?keys?|client_?secrets?|access_?tokens?|refresh_?tokens?)(_|$)/', $n );
+		return (bool) preg_match( '/(^|_)(pass|passwd|passwords?|passphrases?|pwd|secrets?|token|nonces?|nonse|salts?|api_?keys?|licen[cs]e_?keys?|secret_?keys?|access_?keys?|auth_?keys?|consumer_?keys?|activation_?keys?|client_?secrets?|access_?tokens?|refresh_?tokens?)(_|$)/', $n );
 	}
 
 	/**
@@ -881,8 +881,17 @@ class Minn_Admin_DB {
 			}
 			$stores[] = array( $wpdb->sitemeta, 'meta_key', 'meta_value', $names, $shapes );
 		}
-		// Every user's credential rows: TOTP seeds, sign-in tokens, licence keys.
-		$stores[] = array( $wpdb->usermeta, 'meta_key', 'meta_value', self::SECRET_USERMETA_KEYS, self::SECRET_USERMETA_SHAPES );
+		// Users' licence keys and connected-account secrets, by exact key (a
+		// leading-wildcard LIKE scanned all of usermeta on every request).
+		// Sessions and application passwords never yield one (token hashes are
+		// array keys, the password a $-hash) and every user who ever signed in
+		// has a session row, so they stay out; so do TOTP seeds, one per user
+		// with two-factor, which would exhaust the needle cap on a large site.
+		$um_keys = array( 'wpmdb_licence_key', 'updraftcentral_login_key' );
+		foreach ( array_unique( array( $wpdb->get_blog_prefix(), $wpdb->base_prefix ) ) as $prefix ) {
+			$um_keys[] = $prefix . 'elementor_connect_common_data';
+		}
+		$stores[] = array( $wpdb->usermeta, 'meta_key', 'meta_value', $um_keys, array() );
 		foreach ( $stores as $store ) {
 			list( $table, $kcol, $vcol, $keys, $key_shapes ) = $store;
 			$or   = array();
@@ -930,17 +939,7 @@ class Minn_Admin_DB {
 			}
 		}
 		foreach ( $values as $raw ) {
-			foreach ( self::credential_leaves( (string) $raw ) as $leaf ) {
-				// A dotted token (Jetpack's key.secret, SendGrid's SG.x.y, a
-				// JWT) is copied whole or in parts: each long part counts.
-				$parts = array_merge( array( $leaf[1] ), false !== strpos( $leaf[1], '.' ) ? explode( '.', $leaf[1] ) : array() );
-				foreach ( $parts as $part ) {
-					$part = rtrim( $part, '=' );
-					if ( self::is_credential_leaf( $leaf[0], $part ) ) {
-						$credentials[ $part ] = true;
-					}
-				}
-			}
+			$credentials += self::credential_strings( (string) $raw );
 		}
 		foreach ( array_keys( $credentials ) as $v ) {
 			$v             = (string) $v;
@@ -960,6 +959,37 @@ class Minn_Admin_DB {
 		self::$needles        = $needles;
 		self::$needles_capped = $capped;
 		return $needles;
+	}
+
+	/**
+	 * The credentials a stored value holds, as value => the path it sits at.
+	 * The browser's needles and the licence guard both come from here.
+	 *
+	 * @param string $raw A stored value.
+	 * @return array Credential => path.
+	 */
+	public static function credential_strings( $raw ) {
+		$out = array();
+		foreach ( self::credential_leaves( (string) $raw ) as $leaf ) {
+			// A dotted token (Jetpack's key.secret, SendGrid's SG.x.y) is
+			// copied whole or in parts, so each long part counts, but only
+			// where the value is named as a credential: a file name in a
+			// settings list is dotted too. A JWT's header and claims are not
+			// secret (the HS256 header is the same everywhere); only its
+			// signature is.
+			$parts = array( $leaf[1] );
+			if ( false !== strpos( $leaf[1], '.' ) && self::credential_named( $leaf[0] ) ) {
+				$split = explode( '.', $leaf[1] );
+				$parts = array_merge( $parts, ( 3 === count( $split ) && 0 === strpos( $split[0], 'eyJ' ) ) ? array( $split[2] ) : $split );
+			}
+			foreach ( $parts as $part ) {
+				$part = rtrim( $part, '=' );
+				if ( self::is_credential_leaf( $leaf[0], $part ) ) {
+					$out[ $part ] = $leaf[0];
+				}
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -1006,12 +1036,39 @@ class Minn_Admin_DB {
 	}
 
 	/**
+	 * Whether a leaf's path names it a credential outright: a bare value, a
+	 * leaf whose own name says key, licence, token, secret and the like, or
+	 * one under a licence or key container. A numbered list item or a generic
+	 * value is not, which keeps the wider rules for real credentials only.
+	 */
+	private static function credential_named( $path ) {
+		if ( '' === $path ) {
+			return true;
+		}
+		$segments = array_map(
+			function ( $seg ) {
+				return strtolower( preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $seg ) );
+			},
+			explode( '/', trim( $path, '/' ) )
+		);
+		foreach ( array_slice( $segments, 0, -1 ) as $seg ) {
+			if ( preg_match( '/^(licen[cs]es?|license_keys?|keys|tokens|secrets|credentials)$/', $seg ) ) {
+				return true;
+			}
+		}
+		return (bool) preg_match( '/key|licen[cs]e|token|secret|pass|auth|api|seed|salt|nonce/', (string) end( $segments ) );
+	}
+
+	/**
 	 * A leaf that is a key or token: token alphabet, long, letters and digits
 	 * both, and (inside a structure) under a name that says so. Statuses,
 	 * dates, URLs and names never count, so a copy of one is never hidden.
 	 */
 	private static function is_credential_leaf( $path, $v ) {
-		if ( strlen( $v ) < 16 || strlen( $v ) > 512 || ! preg_match( '#^[A-Za-z0-9_\-+/]+$#', $v ) ) {
+		// + and / (base64 secrets) only where the value is named as a
+		// credential: a path in a settings list has them too.
+		$alphabet = self::credential_named( $path ) ? '#^[A-Za-z0-9_\-+/]+$#' : '#^[A-Za-z0-9_\-]+$#';
+		if ( strlen( $v ) < 16 || strlen( $v ) > 512 || ! preg_match( $alphabet, $v ) ) {
 			return false;
 		}
 		if ( preg_match_all( '/\d/', $v ) < 3 || preg_match_all( '/[A-Za-z]/', $v ) < 3 ) {
@@ -1039,7 +1096,13 @@ class Minn_Admin_DB {
 		if ( preg_match( '/(^|[_\-])(public|status|expir\w*|date|time|count|limit|url|email|name|slug|type|version|item|plugin|theme|site|domain)([_\-]|$)/', $leaf ) ) {
 			return false;
 		}
-		return (bool) preg_match( '/key|licen[cs]e|token|secret|code|pass|auth|api|sig|hash|seed|salt|nonce|^val$|^value$|^\d*$/', $leaf );
+		// A numbered list item counts at the top of a credential row (a list
+		// of keys); deeper in, a settings list of file names would count too,
+		// so there only a key container (above) makes it one.
+		if ( preg_match( '/^\d+$/', $leaf ) ) {
+			return 1 === count( $segments );
+		}
+		return (bool) preg_match( '/key|licen[cs]e|token|secret|code|pass|auth|api|sig|hash|seed|salt|nonce|^val$|^value$/', $leaf );
 	}
 
 	/**
@@ -1052,6 +1115,11 @@ class Minn_Admin_DB {
 	private static function sortable( $table, $col, $type ) {
 		if ( self::is_secret_column( $table, $col ) ) {
 			return false;
+		}
+		// A title or name is a short display field nothing copies a key into
+		// (core's post_title is a text column); those keep their sort.
+		if ( preg_match( '/(^|_)(title|name)$/i', $col ) && preg_match( '/^(tiny)?text\b/i', $type ) ) {
+			return true;
 		}
 		return ! preg_match( '/^(tiny|medium|long)?(text|blob)\b|^json\b/i', $type );
 	}
@@ -1317,7 +1385,7 @@ class Minn_Admin_DB {
 				'rows'       => $rows,
 				'total'      => $total,
 				'approx'     => $approx,
-				'window'     => self::WINDOW,
+				'window'     => min( self::WINDOW, $count_cap ),
 				'page'       => $page,
 				'per_page'   => $per_page,
 				'orderby'    => $orderby,

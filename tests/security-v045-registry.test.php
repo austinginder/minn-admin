@@ -897,7 +897,7 @@ wp_set_current_user( $admin[0]->ID );
 	$undo  = array();
 	try {
 		// 05-3: a vendor's own accounts table.
-		$wpdb->query( "CREATE TABLE `{$t}` ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, email VARCHAR(100), password VARCHAR(255), api_secret VARCHAR(255), account_nonse VARCHAR(100), refreshToken VARCHAR(255), token_expires VARCHAR(30), privkey TEXT, key_local_private TEXT, tokens TEXT, nonce_action VARCHAR(60), token_endpoint_auth_method VARCHAR(60), ts_password_modified VARCHAR(30), note TEXT )" );
+		$wpdb->query( "CREATE TABLE `{$t}` ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, email VARCHAR(100), password VARCHAR(255), api_secret VARCHAR(255), account_nonse VARCHAR(100), refreshToken VARCHAR(255), token_expires VARCHAR(30), privkey TEXT, key_local_private TEXT, api_keys TEXT, prompt_tokens INT, nonce_action VARCHAR(60), token_endpoint_auth_method VARCHAR(60), ts_password_modified VARCHAR(30), note TEXT )" );
 		$undo[] = function () use ( $wpdb, $t ) {
 			$wpdb->query( "DROP TABLE IF EXISTS `{$t}`" );
 		};
@@ -907,7 +907,7 @@ wp_set_current_user( $admin[0]->ID );
 		$undo[] = function () use ( $wpdb, $tk ) {
 			$wpdb->query( "DROP TABLE IF EXISTS `{$tk}`" );
 		};
-		$wpdb->insert( $t, array( 'email' => 'dana@example.com', 'password' => '$2y$10$abcdefghijklmnopqrstuuWm0Hj7mYkzW8dYbnA5rZp4Qz1v2Kd9W', 'api_secret' => 'live_secret_0123456789abc', 'account_nonse' => 'nonse0123456789abc', 'refreshToken' => 'rt_0123456789abcdef', 'token_expires' => '2026-12-01 10:00:00', 'privkey' => '-----BEGIN PRIVATE KEY-----', 'key_local_private' => '-----BEGIN RSA PRIVATE KEY-----', 'tokens' => 'tok_a,tok_b', 'nonce_action' => 'wc_admin_note_action', 'token_endpoint_auth_method' => 'client_secret_post', 'ts_password_modified' => '2026-01-01 00:00:00', 'note' => 'copy: ' . $fake ) );
+		$wpdb->insert( $t, array( 'email' => 'dana@example.com', 'password' => '$2y$10$abcdefghijklmnopqrstuuWm0Hj7mYkzW8dYbnA5rZp4Qz1v2Kd9W', 'api_secret' => 'live_secret_0123456789abc', 'account_nonse' => 'nonse0123456789abc', 'refreshToken' => 'rt_0123456789abcdef', 'token_expires' => '2026-12-01 10:00:00', 'privkey' => '-----BEGIN PRIVATE KEY-----', 'key_local_private' => '-----BEGIN RSA PRIVATE KEY-----', 'api_keys' => 'k_a,k_b', 'prompt_tokens' => 1234, 'nonce_action' => 'wc_admin_note_action', 'token_endpoint_auth_method' => 'client_secret_post', 'ts_password_modified' => '2026-01-01 00:00:00', 'note' => 'copy: ' . $fake ) );
 		list( $st, $d ) = $rows( $t );
 		$ok = 200 === $st;
 		foreach ( array( 'password', 'api_secret', 'account_nonse', 'refreshToken' ) as $col ) {
@@ -915,8 +915,8 @@ wp_set_current_user( $admin[0]->ID );
 		}
 		$check( '05-3 a vendor table\'s password, secret, nonse and token columns are hidden by name', $ok, $st . ' ' . $shape( $cell( $d, 'password', 'email', 'dana@example.com' ) ) );
 		$check( '05-3 control: a column that only describes one, and plain data, still show', '2026-12-01 10:00:00' === $cell( $d, 'token_expires', 'email', 'dana@example.com' ) && 'dana@example.com' === $cell( $d, 'email', 'email', 'dana@example.com' ) );
-		$check( '05-3 private keys under either word order, and plural names, are hidden', $hidden( $cell( $d, 'privkey', 'email', 'dana@example.com' ) ) && $hidden( $cell( $d, 'key_local_private', 'email', 'dana@example.com' ) ) && $hidden( $cell( $d, 'tokens', 'email', 'dana@example.com' ) ) );
-		$check( '05-3 control: an action, a method and a modified time named after one still show', 'wc_admin_note_action' === $cell( $d, 'nonce_action', 'email', 'dana@example.com' ) && 'client_secret_post' === $cell( $d, 'token_endpoint_auth_method', 'email', 'dana@example.com' ) && '2026-01-01 00:00:00' === $cell( $d, 'ts_password_modified', 'email', 'dana@example.com' ) );
+		$check( '05-3 private keys under either word order, and plural names, are hidden', $hidden( $cell( $d, 'privkey', 'email', 'dana@example.com' ) ) && $hidden( $cell( $d, 'key_local_private', 'email', 'dana@example.com' ) ) && $hidden( $cell( $d, 'api_keys', 'email', 'dana@example.com' ) ) );
+		$check( '05-3 control: an action, a method, a modified time and a token counter named after one still show', '1234' === (string) $cell( $d, 'prompt_tokens', 'email', 'dana@example.com' ) && 'wc_admin_note_action' === $cell( $d, 'nonce_action', 'email', 'dana@example.com' ) && 'client_secret_post' === $cell( $d, 'token_endpoint_auth_method', 'email', 'dana@example.com' ) && '2026-01-01 00:00:00' === $cell( $d, 'ts_password_modified', 'email', 'dana@example.com' ) );
 		list( , $sorted ) = $rows( $t, array( 'orderby' => 'note' ) );
 		$sortable = wp_list_pluck( (array) ( $sorted['columns'] ?? array() ), 'sortable', 'name' );
 		$check( '05-3 a long text column is not a sort key (a copy can sit there)', 'note' !== ( $sorted['orderby'] ?? '' ) && false === ( $sortable['note'] ?? true ) && true === ( $sortable['email'] ?? false ), wp_json_encode( array( $sorted['orderby'] ?? null, $sortable['note'] ?? null ) ) );
@@ -961,6 +961,17 @@ wp_set_current_user( $admin[0]->ID );
 		};
 		list( , $d ) = $rows( $wpdb->usermeta, array( 'fcol' => 'meta_key', 'fq' => $um_key ) );
 		$check( '05-5 Elementor Connect\'s per-user secrets are hidden', $hidden( $cell( $d, 'meta_value', 'umeta_id', $um_id ) ), $shape( $cell( $d, 'meta_value', 'umeta_id', $um_id ) ) );
+
+		// What counts as a credential in a stored value: not a settings list's
+		// paths and file names, and only a JWT's signature.
+		$paths = Minn_Admin_DB::credential_strings( serialize( array( 'exclude' => array( '/wp-content/uploads/2024/', 'hero-banner-2024.jpg', 'IMG_20240512_123456', '/members/2024/area/' ) ) ) );
+		$check( 'value: a settings list of paths and file names yields no credential', array() === $paths, wp_json_encode( array_keys( $paths ) ) );
+		$jwt  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.Sig0123456789abcdefGHIJKLmnop';
+		$got  = Minn_Admin_DB::credential_strings( serialize( array( 'access_token' => $jwt ) ) );
+		$check( 'value: a JWT counts whole and by its signature, not by its shared header', isset( $got['Sig0123456789abcdefGHIJKLmnop'] ) && ! isset( $got['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'] ), wp_json_encode( array_map( 'strlen', array_keys( $got ) ) ) );
+		list( , $pd ) = $rows( $wpdb->posts, array( 'per_page' => 1 ) );
+		$ps = wp_list_pluck( (array) ( $pd['columns'] ?? array() ), 'sortable', 'name' );
+		$check( 'value: control: a post title still sorts, a post body does not', true === ( $ps['post_title'] ?? null ) && false === ( $ps['post_content'] ?? null ), wp_json_encode( array( $ps['post_title'] ?? null, $ps['post_content'] ?? null ) ) );
 
 		// Value redaction: a credential the browser hides by name, and copies
 		// of it under names no rule knows.

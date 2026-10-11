@@ -447,64 +447,15 @@ foreach ( $not_secret as $store => $list ) {
 
 // --- 3. Copies of a credential in a row the browser shows ---------------------
 
-// The string leaves of a stored value, through PHP serialization, JSON and a
-// base64 wrapper (ACF PRO keeps its key as base64 of a serialized array).
-$leaves = function ( $v, $path = '', $depth = 0 ) use ( &$leaves ) {
-	if ( $depth > 6 ) {
-		return array();
-	}
-	if ( is_string( $v ) ) {
-		$t = trim( $v );
-		if ( is_serialized( $t ) ) {
-			$u = @unserialize( $t, array( 'allowed_classes' => false ) ); // phpcs:ignore
-			if ( false !== $u || 'b:0;' === $t ) {
-				return $leaves( $u, $path, $depth + 1 );
-			}
-		}
-		if ( '' !== $t && ( '{' === $t[0] || '[' === $t[0] ) ) {
-			$j = json_decode( $t, true );
-			if ( is_array( $j ) ) {
-				return $leaves( $j, $path, $depth + 1 );
-			}
-		}
-		if ( strlen( $t ) >= 24 && preg_match( '#^[A-Za-z0-9+/]+={0,2}$#', $t ) ) {
-			$b = base64_decode( $t, true );
-			if ( false !== $b && ( is_serialized( $b ) || ( '' !== $b && '{' === $b[0] ) ) ) {
-				return $leaves( $b, $path, $depth + 1 );
-			}
-		}
-		return array( array( $path, $t ) );
-	}
-	if ( is_array( $v ) || is_object( $v ) ) {
-		$out = array();
-		foreach ( (array) $v as $k => $x ) {
-			$out = array_merge( $out, $leaves( $x, $path . '/' . preg_replace( '/^\0[^\0]*\0/', '', (string) $k ), $depth + 1 ) );
-		}
-		return $out;
-	}
-	return array();
-};
-// A leaf that is a key or token, by the browser's own test (dotted tokens
-// count part by part, as the browser collects them).
-$credential_test = new ReflectionMethod( 'Minn_Admin_DB', 'is_credential_leaf' );
-$credential_test->setAccessible( true );
-$credential = function ( $path, $v ) use ( $credential_test ) {
-	return (bool) $credential_test->invoke( null, $path, $v );
-};
 // Where the browser redacts a vendor credential row: options and network
 // options, and every keyed table's listed rows.
 $sources = array();
-$add_src = function ( $from, $value ) use ( &$sources, $leaves, $credential ) {
+// The credentials in a value, by the browser's own reading of it.
+$add_src = function ( $from, $value ) use ( &$sources ) {
 	$n = 0;
-	foreach ( $leaves( $value ) as $l ) {
-		$parts = array_merge( array( $l[1] ), false !== strpos( $l[1], '.' ) ? explode( '.', $l[1] ) : array() );
-		foreach ( $parts as $part ) {
-			$part = rtrim( $part, '=' );
-			if ( $credential( $l[0], $part ) ) {
-				$sources[ $part ] = $from . $l[0];
-				$n++;
-			}
-		}
+	foreach ( Minn_Admin_DB::credential_strings( (string) $value ) as $part => $path ) {
+		$sources[ (string) $part ] = $from . $path;
+		$n++;
 	}
 	return $n;
 };
