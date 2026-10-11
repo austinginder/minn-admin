@@ -932,7 +932,9 @@ class Minn_Admin_CPT {
 				'label'          => $def['plural'],
 				'singular_label' => $def['singular'],
 				'public'         => $b( $def['public'] ),
-				'show_ui'        => 'true',
+				// The dialog never shows it: a new taxonomy gets a screen, an
+				// existing one keeps the owner's choice.
+				'show_ui'        => $taxes[ $slug ]['show_ui'] ?? 'true',
 				'hierarchical'   => $b( $def['hierarchical'] ),
 				'show_in_rest'   => $b( $def['show_in_rest'] ),
 				'object_types'   => $def['object_types'],
@@ -1014,8 +1016,6 @@ class Minn_Admin_CPT {
 				'name'          => $def['plural'],
 				'singular_name' => $def['singular'],
 				'public'        => $b( $def['public'] ),
-				'show_ui'       => 'true',
-				'show_in_menu'  => 'true',
 				'show_in_rest'  => $b( $def['show_in_rest'] ),
 				'has_archive'   => $b( $def['has_archive'] ),
 				'hierarchical'  => $b( $def['hierarchical'] ),
@@ -1025,8 +1025,10 @@ class Minn_Admin_CPT {
 				'admin_filters' => (array) ( $edit['admin_filters'] ?? array() ),
 			)
 		);
+		// Screen and menu are not on the dialog: set for a new type only, so
+		// an edit keeps the owner's stored choice (advanced_settings above).
 		if ( ! $existing ) {
-			$request += array( 'rewrite' => 'true', 'query_var' => 'true', 'map_meta_cap' => 'true' );
+			$request += array( 'rewrite' => 'true', 'query_var' => 'true', 'map_meta_cap' => 'true', 'show_ui' => 'true', 'show_in_menu' => 'true' );
 		}
 		foreach ( array( 'show_edit_link', 'hide_field_names', 'delete_metadata', 'custom_storage' ) as $flag ) {
 			if ( isset( $edit['general_settings'][ $flag ] ) ) {
@@ -1075,14 +1077,13 @@ class Minn_Admin_CPT {
 				'singular_name' => $def['singular'],
 				'object_type'   => $def['object_types'],
 				'public'        => $b( $def['public'] ),
-				'show_ui'       => 'true',
 				'show_in_rest'  => $b( $def['show_in_rest'] ),
 				'hierarchical'  => $b( $def['hierarchical'] ),
 				'meta_fields'   => (array) ( $edit['meta_fields'] ?? array() ),
 			)
 		);
 		if ( ! $existing ) {
-			$request += array( 'rewrite' => 'true', 'query_var' => 'true', 'show_admin_column' => 'true' );
+			$request += array( 'rewrite' => 'true', 'query_var' => 'true', 'show_admin_column' => 'true', 'show_ui' => 'true' );
 		}
 		foreach ( $request as $k => $v ) {
 			if ( false === $v ) {
@@ -1138,7 +1139,9 @@ class Minn_Admin_CPT {
 				'singular_label' => $def['singular'],
 				'description'    => $def['description'],
 				'public'         => $b( $def['public'] ),
-				'show_ui'        => 'true',
+				// The dialog never shows it: a new type gets a screen, an
+				// existing one keeps the owner's choice.
+				'show_ui'        => $types[ $slug ]['show_ui'] ?? 'true',
 				'show_in_rest'   => $b( $def['show_in_rest'] ),
 				'has_archive'    => $b( $def['has_archive'] ),
 				'hierarchical'   => $b( $def['hierarchical'] ),

@@ -391,4 +391,30 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 04-6 (08-4): editing a post type or taxonomy in Minn forced Show UI on
+ * (and JetEngine's Show in menu), undoing an owner's choice the dialog never
+ * shows. Checked on CPT UI, whose store is one option.
+ */
+( function () use ( $check, $call ) {
+	if ( ! function_exists( 'cptui_get_post_type_data' ) && ! defined( 'CPTUI_VERSION' ) ) {
+		echo "SKIP  04-6 CPT UI inactive\n";
+		return;
+	}
+	$slug  = 'minnv045t';
+	$types = (array) get_option( 'cptui_post_types', array() );
+	$was   = $types;
+	$types[ $slug ] = array( 'name' => $slug, 'label' => 'V045s', 'singular_label' => 'V045', 'description' => '', 'public' => 'false', 'show_ui' => 'false', 'show_in_rest' => 'true', 'has_archive' => 'false', 'hierarchical' => 'false', 'supports' => array( 'title' ), 'taxonomies' => array() );
+	update_option( 'cptui_post_types', $types );
+	register_post_type( $slug, array( 'public' => false, 'show_ui' => false, 'show_in_rest' => true, 'label' => 'V045s' ) );
+	try {
+		list( $status, $d ) = $call( 'POST', "/minn-admin/v1/post-types/{$slug}", array( 'singular' => 'V045 renamed', 'plural' => 'V045s', 'public' => false, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array() ) );
+		$now = (array) get_option( 'cptui_post_types', array() );
+		$check( '04-6 a CPT UI type edited in Minn keeps Show UI off', $status < 300 && 'false' === ( $now[ $slug ]['show_ui'] ?? '' ) && 'V045 renamed' === ( $now[ $slug ]['singular_label'] ?? '' ), $status . ' ' . wp_json_encode( $now[ $slug ] ?? null ) );
+	} finally {
+		update_option( 'cptui_post_types', $was );
+		unregister_post_type( $slug );
+	}
+} )();
+
 $summary();
