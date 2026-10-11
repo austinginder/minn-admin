@@ -1425,6 +1425,13 @@ function minn_admin_gsmtp_settings_save( WP_REST_Request $request ) {
 			if ( $next && $next !== $current && ! in_array( $next, array_column( minn_admin_gsmtp_connector_options(), 0 ), true ) ) {
 				return new WP_Error( 'minn_gsmtp_bad_connector', __( 'Unknown sending service.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
+			// The fields on the tab belong to the service it showed. Saved
+			// alongside a switch they would land in the newly picked one
+			// (services share keys such as api_key and from_email), so a
+			// switch goes on its own and the tab reloads with that service.
+			if ( $next && $next !== $current && $vals ) {
+				return new WP_Error( 'minn_gsmtp_switch_alone', __( 'Switch the sending service on its own first, then edit its settings.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
 			if ( $next && $next !== $current ) {
 				// Mirror their Save_Connector_Settings_Endpoint semantics:
 				// the config maps hold ONE truthy primary/enabled entry and

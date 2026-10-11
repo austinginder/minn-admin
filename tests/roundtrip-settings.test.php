@@ -21,9 +21,7 @@
  * @package minn-admin
  */
 
-$known = array(
-	'gravity-smtp/sending: switching the service and editing a field in one save keeps the field out of the new service' => '04-7: the edit is written into the newly picked service',
-);
+$known = array();
 
 $rt = ( require __DIR__ . '/lib/roundtrip.php' )( 'roundtrip-settings', $known );
 extract( $rt ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract
