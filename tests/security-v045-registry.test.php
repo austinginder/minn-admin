@@ -1171,4 +1171,72 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+// --- 05-1 Licence actions follow each vendor's own licence gate ---
+// ACF PRO runs licence actions only on its Updates page, which an agency hides
+// from a client's administrators (show_admin / show_updates); WPForms checks its
+// manage cap, Gravity Forms gravityforms_edit_settings. Minn attached Activate,
+// Deactivate and Re-check for any manage_options holder. Asked of the provider
+// list only: no licence action runs (the lab holds real seats).
+( function () use ( $check, $drop_user ) {
+	$wpf_user = 0;
+	$wpf_was  = 0;
+	if ( ! function_exists( 'minn_admin_license_default_providers' ) ) {
+		echo "SKIP  05-1 licences unavailable\n";
+		return;
+	}
+	$acts = function ( $id ) {
+		$p = minn_admin_license_default_providers()[ $id ] ?? null;
+		return null === $p ? null : array_values( array_filter( array( 'activate', 'deactivate', 'verify' ), function ( $a ) use ( $p ) {
+			return ! empty( $p[ $a ] ) && is_callable( $p[ $a ] );
+		} ) );
+	};
+	$cases = array(
+		'acf-pro'      => array( 'ACF PRO with its Updates page hidden', function () {
+			add_filter( 'acf/settings/show_updates', '__return_false', 99 );
+		}, function () {
+			remove_filter( 'acf/settings/show_updates', '__return_false', 99 );
+		} ),
+		// As a fresh administrator: wpforms_current_user_can() keeps its answer
+		// per user for the rest of the process.
+		'wpforms'      => array( 'WPForms with its manage cap narrowed', function () use ( &$wpf_user, &$wpf_was ) {
+			$wpf_was  = get_current_user_id();
+			$wpf_user = (int) wp_insert_user( array( 'user_login' => 'minn-wpf-' . wp_rand( 1000, 9999 ), 'user_email' => 'minn-wpf-' . wp_rand( 1000, 9999 ) . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'administrator' ) );
+			wp_set_current_user( $wpf_user );
+			add_filter( 'wpforms_manage_cap', 'minn_test_no_cap' );
+		}, function () use ( &$wpf_user, &$wpf_was, $drop_user ) {
+			remove_filter( 'wpforms_manage_cap', 'minn_test_no_cap' );
+			wp_set_current_user( $wpf_was );
+			$drop_user( $wpf_user );
+		} ),
+		'gravityforms' => array( 'Gravity Forms without its settings cap', function () {
+			add_filter( 'user_has_cap', 'minn_test_no_gf_settings', 99 );
+		}, function () {
+			remove_filter( 'user_has_cap', 'minn_test_no_gf_settings', 99 );
+		} ),
+	);
+	if ( ! function_exists( 'minn_test_no_cap' ) ) {
+		function minn_test_no_cap() {
+			return 'do_not_allow';
+		}
+		function minn_test_no_gf_settings( $caps ) {
+			$caps['gravityforms_edit_settings'] = false;
+			$caps['gform_full_access']          = false;
+			return $caps;
+		}
+	}
+	foreach ( $cases as $id => $case ) {
+		list( $label, $narrow, $restore ) = $case;
+		$open = $acts( $id );
+		if ( empty( $open ) ) {
+			echo "SKIP  05-1 {$id}: no licence actions on this site\n";
+			continue;
+		}
+		$narrow();
+		$gated = $acts( $id );
+		$restore();
+		$check( "05-1 {$label}: no licence actions", array() === $gated, wp_json_encode( $gated ) );
+		$check( "05-1 control: {$id} keeps them for its own admin", ! empty( $acts( $id ) ), wp_json_encode( $open ) );
+	}
+} )();
+
 $summary();

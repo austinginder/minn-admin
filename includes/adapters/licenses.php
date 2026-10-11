@@ -5814,7 +5814,57 @@ function minn_admin_license_default_providers() {
 		$providers['js-composer']['activate_url'] = admin_url( 'admin.php?page=vc-updater' );
 	}
 
+	// Each vendor's own licence gate. Their screens refuse licence actions to
+	// a user their rule leaves out (an agency hides ACF's Updates page from a
+	// client's administrators, a site narrows WPForms' manage capability), so
+	// the actions attach only when it passes; anyone else keeps the
+	// read-only row, as with WPMU DEV and Novamira above.
+	foreach ( minn_admin_license_vendor_gates() as $gate_id => $gate ) {
+		if ( isset( $providers[ $gate_id ] ) && ! $gate() ) {
+			unset( $providers[ $gate_id ]['activate'], $providers[ $gate_id ]['deactivate'], $providers[ $gate_id ]['verify'] );
+		}
+	}
+
 	return $providers;
+}
+
+/**
+ * The licence gate each vendor applies on its own screens: provider id =>
+ * a callable answering for the current user.
+ *
+ * - ACF PRO runs licence actions only on its Updates page, which exists only
+ *   for acf_current_user_can_admin() (show_admin and its capability) and while
+ *   acf_pro_is_updates_page_visible() (show_updates).
+ * - WPForms checks wpforms_current_user_can() (its filterable manage cap).
+ * - MonsterInsights and ExactMetrics check {prefix}_save_settings.
+ * - Gravity Forms saves its key through settings gated on
+ *   gravityforms_edit_settings.
+ * - Admin Columns Pro checks manage_admin_columns.
+ *
+ * @return callable[]
+ */
+function minn_admin_license_vendor_gates() {
+	return array(
+		'acf-pro'             => function () {
+			return function_exists( 'acf_current_user_can_admin' ) && acf_current_user_can_admin()
+				&& ( ! function_exists( 'acf_pro_is_updates_page_visible' ) || acf_pro_is_updates_page_visible() );
+		},
+		'wpforms'             => function () {
+			return ! function_exists( 'wpforms_current_user_can' ) || wpforms_current_user_can();
+		},
+		'monsterinsights-pro' => function () {
+			return current_user_can( 'monsterinsights_save_settings' );
+		},
+		'exactmetrics-pro'    => function () {
+			return current_user_can( 'exactmetrics_save_settings' );
+		},
+		'gravityforms'        => function () {
+			return ! class_exists( 'GFCommon' ) || ! method_exists( 'GFCommon', 'current_user_can_any' ) || GFCommon::current_user_can_any( 'gravityforms_edit_settings' );
+		},
+		'admin-columns-pro'   => function () {
+			return current_user_can( 'manage_admin_columns' );
+		},
+	);
 }
 
 /**
