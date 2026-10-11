@@ -159,4 +159,43 @@ wp_set_current_user( $admin[0]->ID );
 	$check( '04-4 class: no surface preserves a key one of its own actions sets', 200 === $status && ! $bad, implode( '; ', $bad ) );
 } )();
 
+/*
+ * 11-1: the Settings Content section resent the permalinks with every save,
+ * and the route rebuilt the rewrite rules (and, where WordPress can't tell
+ * the server rewrites URLs, prefixed /index.php to a custom structure). The
+ * same values now come back untouched; a real change still saves.
+ */
+( function () use ( $check, $call ) {
+	$was = array(
+		'structure'     => (string) get_option( 'permalink_structure' ),
+		'category_base' => (string) get_option( 'category_base' ),
+		'tag_base'      => (string) get_option( 'tag_base' ),
+	);
+	if ( '' === $was['structure'] ) {
+		echo "SKIP  11-1 plain permalinks on this site\n";
+		return;
+	}
+	// WP-CLI cannot tell what the server rewrites, so got_url_rewrite() is
+	// false here and any real change would prefix /index.php. Answer as the
+	// lab's web server does, and put the options back directly whatever
+	// happens.
+	add_filter( 'got_url_rewrite', '__return_true' );
+	try {
+		update_option( 'rewrite_rules', array( 'minn-v045-probe' => 'index.php' ) );
+		list( $status ) = $call( 'POST', '/minn-admin/v1/permalinks', $was );
+		$rules = get_option( 'rewrite_rules' );
+		$check( '11-1 saving the permalinks unchanged leaves the rewrite rules alone', 200 === $status && is_array( $rules ) && isset( $rules['minn-v045-probe'] ), (string) $status );
+		list( $status ) = $call( 'POST', '/minn-admin/v1/permalinks', array_merge( $was, array( 'tag_base' => 'minn-v045-tags' ) ) );
+		$rules = get_option( 'rewrite_rules' );
+		$check( '11-1 control: a changed tag base saves and rebuilds the rules', 200 === $status && 'minn-v045-tags' === get_option( 'tag_base' ) && ! isset( $rules['minn-v045-probe'] ), (string) $status . ' ' . get_option( 'tag_base' ) );
+		$check( '11-1 control: the structure is left as it was', get_option( 'permalink_structure' ) === $was['structure'], (string) get_option( 'permalink_structure' ) );
+	} finally {
+		update_option( 'permalink_structure', $was['structure'] );
+		update_option( 'category_base', $was['category_base'] );
+		update_option( 'tag_base', $was['tag_base'] );
+		remove_filter( 'got_url_rewrite', '__return_true' );
+		flush_rewrite_rules();
+	}
+} )();
+
 $summary();

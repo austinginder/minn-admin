@@ -3224,6 +3224,15 @@ class Minn_Admin_REST {
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 
 		$structure = trim( (string) $request['structure'] );
+		// Nothing changed: the same structure and bases go back unflushed and
+		// un-normalized (normalizing an unchanged structure on a server
+		// WordPress can't identify would add /index.php to every URL).
+		$same = $structure === (string) get_option( 'permalink_structure' )
+			&& ( ! $request->has_param( 'category_base' ) || (string) $request['category_base'] === (string) get_option( 'category_base' ) )
+			&& ( ! $request->has_param( 'tag_base' ) || (string) $request['tag_base'] === (string) get_option( 'tag_base' ) );
+		if ( $same ) {
+			return rest_ensure_response( self::permalink_state() );
+		}
 		if ( '' !== $structure && ! preg_match( '/%[^\/%]+%/', $structure ) ) {
 			return new WP_Error(
 				'invalid_structure',

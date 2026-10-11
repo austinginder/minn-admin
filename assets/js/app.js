@@ -10548,8 +10548,13 @@
 						country: fv( 'minn-os-country', s0.country ),
 					},
 				};
-				// Preserve shipping names from billing when empty (common fix-up).
-				if ( ! ( m.full && m.full.shipping && m.full.shipping.first_name ) ) {
+				// The shipping card edits the address but has no name fields, so
+				// a shipping address typed in here takes the billing name. Only
+				// then: an order saved for anything else (a digital order with no
+				// shipping at all) keeps its shipping name as stored.
+				const shipEdited = [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ]
+					.some( ( k ) => String( payload.shipping[ k ] || '' ) !== String( s0[ k ] || '' ) );
+				if ( shipEdited && ! ( m.full && m.full.shipping && m.full.shipping.first_name ) ) {
 					payload.shipping.first_name = payload.billing.first_name;
 					payload.shipping.last_name = payload.billing.last_name;
 				}
@@ -29914,11 +29919,17 @@
 				}
 
 				// --- Permalinks (minn-admin/v1/permalinks): the Content tab, last. ---
-				if ( $( '[data-permakey]', view ) ) {
-					const pl = {};
-					$$( '[data-permakey]', view ).forEach( ( input ) => {
-						if ( input.dataset.permakey !== '_preset' ) pl[ input.dataset.permakey ] = input.value;
-					} );
+				// Sent only when one of them changed: a save of the section's
+				// other fields must not rebuild the rewrite rules (or, on a
+				// server WordPress can't identify, prefix /index.php).
+				const plWas = cache.permalinks || {};
+				const plNow = {};
+				$$( '[data-permakey]', view ).forEach( ( input ) => {
+					if ( input.dataset.permakey !== '_preset' ) plNow[ input.dataset.permakey ] = input.value;
+				} );
+				const plChanged = Object.keys( plNow ).some( ( k ) => String( plNow[ k ] ) !== String( plWas[ k ] == null ? '' : plWas[ k ] ) );
+				if ( $( '[data-permakey]', view ) && plChanged ) {
+					const pl = plNow;
 					try {
 						const r = await api( 'minn-admin/v1/permalinks', { method: 'POST', body: JSON.stringify( pl ) } );
 						cache.permalinks = r;

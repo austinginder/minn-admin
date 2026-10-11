@@ -25,8 +25,6 @@
  */
 
 $known = array(
-	'settings:Content: an unchanged save stores nothing'                                           => '11-1: the Content section resends the permalinks, which rebuilds the rewrite rules',
-	'order: an unchanged save stores nothing'                                                      => 'H3: an empty shipping address is saved with the billing name',
 );
 
 $rt = ( require __DIR__ . '/lib/roundtrip.php' )( 'roundtrip-surfaces', $known );
