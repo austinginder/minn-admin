@@ -14168,8 +14168,14 @@
 			payload.stock_status = pcomboValue( 'minn-p-stock', 'instock' );
 			payload.backorders = pcomboValue( 'minn-p-backorders', 'no' );
 			if ( payload.manage_stock ) {
+				// The quantity goes back only when it was edited, or when
+				// tracking was just switched on. Orders placed while the page
+				// is open lower the stored stock, and the count the page
+				// loaded would put those units back on sale.
 				const qtyRaw = ( ( $( '#minn-p-qty' ) || {} ).value || '' ).trim();
-				payload.stock_quantity = qtyRaw === '' ? null : parseInt( qtyRaw, 10 );
+				const qty = qtyRaw === '' ? null : parseInt( qtyRaw, 10 );
+				const loadedQty = was.stock_quantity == null ? null : Number( was.stock_quantity );
+				if ( ! was.manage_stock || qty !== loadedQty ) payload.stock_quantity = qty;
 				// Empty means "use the store-wide threshold", which WC
 				// stores as null, not as 0 (0 is a real threshold).
 				const lowRaw = ( ( $( '#minn-p-lowstock' ) || {} ).value || '' ).trim();
@@ -14439,6 +14445,21 @@
 			saveBtn.disabled = true;
 			saveBtn.textContent = __( 'Saving…' );
 			try {
+				// WooCommerce's own screen refuses a stock change when the
+				// stored stock moved since the form loaded (a sale, a refund
+				// restock) and saves the rest. wc/v3 has no such check, so
+				// read the stock first and leave it alone when it moved.
+				let stockMoved = null;
+				const was = m.loaded || p;
+				if ( 'stock_quantity' in payload && was.manage_stock ) {
+					const now = await api( `wc/v3/products/${ p.id }?_fields=stock_quantity,manage_stock` );
+					const nowQty = now && now.stock_quantity != null ? Number( now.stock_quantity ) : null;
+					const loadedQty = was.stock_quantity == null ? null : Number( was.stock_quantity );
+					if ( now && now.manage_stock && nowQty !== loadedQty ) {
+						delete payload.stock_quantity;
+						stockMoved = nowQty;
+					}
+				}
 				const updated = await api( `wc/v3/products/${ p.id }`, {
 					method: 'PUT',
 					body: JSON.stringify( payload ),
@@ -14482,7 +14503,12 @@
 						catalog_visibility: full.catalog_visibility,
 					} );
 				}
-				toast( __( 'Product updated' ) );
+				if ( stockMoved !== null ) {
+					/* translators: %s: the product's stock quantity as stored now. */
+					toast( sprintf( __( 'Product updated, except the stock: it changed to %s since this page opened. Check it and save again.' ), String( stockMoved ) ), true );
+				} else {
+					toast( __( 'Product updated' ) );
+				}
 				state.cache.products = null;
 				if ( state.route === 'products' ) renderProducts();
 				repaint();
