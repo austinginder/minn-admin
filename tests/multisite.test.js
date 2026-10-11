@@ -433,7 +433,7 @@ async function gotoRoute( page, site, route ) {
 			const nu = await page.evaluate( () => ( {
 				navItems: [ ...document.querySelectorAll( '#minn-navgrp-network .minn-nav-btn' ) ].map( ( b ) => b.textContent.trim() ),
 				rows: document.querySelectorAll( '#minn-view [data-sitem]' ).length,
-				supers: [ ...document.querySelectorAll( '#minn-view [data-sitem]' ) ].filter( ( r ) => /network admin/.test( r.textContent ) ).length,
+				supers: [ ...document.querySelectorAll( '#minn-view [data-sitem]' ) ].filter( ( r ) => /network admin/i.test( r.textContent ) ).length,
 				tabs: [ ...document.querySelectorAll( '#minn-view .minn-tab' ) ].map( ( t ) => t.textContent.trim() ),
 			} ) );
 			check( 'Network group carries a users surface', nu.navItems.some( ( n ) => /users/i.test( n ) ), nu.navItems.join( ', ' ) );
@@ -445,7 +445,7 @@ async function gotoRoute( page, site, route ) {
 				await page.evaluate( () => document.querySelectorAll( '.minn-ctx-menu' ).forEach( ( m ) => m.remove() ) );
 				const ok = await page.evaluate( ( wantSuper ) => {
 					const rows = [ ...document.querySelectorAll( '#minn-view [data-sitem]' ) ];
-					const row = rows.find( ( r ) => /network admin/.test( r.textContent ) === wantSuper );
+					const row = rows.find( ( r ) => /network admin/i.test( r.textContent ) === wantSuper );
 					if ( ! row ) return false;
 					const more = row.querySelector( '.minn-row-more' );
 					if ( ! more ) return false;
@@ -507,6 +507,8 @@ async function gotoRoute( page, site, route ) {
 				const pt = await page.evaluate( ( n ) => {
 					const card = [ ...document.querySelectorAll( '.minn-plugin' ) ].find( ( c ) => ( c.querySelector( '.minn-plugin-name' )?.textContent || '' ).includes( n ) );
 					if ( ! card ) return null;
+					// The lab's list outgrows the viewport; a right-click off screen opens nothing.
+					card.scrollIntoView( { block: 'center' } );
 					const b = card.getBoundingClientRect();
 					return { x: b.x + b.width / 2, y: b.y + 40 };
 				}, name );

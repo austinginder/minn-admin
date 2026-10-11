@@ -42,6 +42,17 @@ $call    = function ( $method, $route, $body = null, $params = array() ) {
 	return array( $res->get_status(), $res->get_data() );
 };
 
+// On a network wp_delete_user() only takes an account off this site, so the
+// suite's throwaway accounts would pile up in the network's user list.
+$drop_user = function ( $id ) {
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	if ( is_multisite() ) {
+		require_once ABSPATH . 'wp-admin/includes/ms.php';
+		return wpmu_delete_user( $id );
+	}
+	return wp_delete_user( $id );
+};
+
 $admin = get_users( array( 'role' => 'administrator', 'number' => 1 ) );
 if ( ! $admin ) {
 	echo "SKIP  no administrator to run as\n";
@@ -356,7 +367,7 @@ if ( ! class_exists( 'WooCommerce' ) ) {
 	list( $ov_st, $ov_body ) = $call( 'GET', '/minn-admin/v1/overview' );
 	$check( '01-02 control: an administrator still gets them', 200 === $ov_st && is_array( $ov_body['store'] ?? null ), $ov_st . ' ' . wp_json_encode( $ov_body['store'] ?? null ) );
 	require_once ABSPATH . 'wp-admin/includes/user.php';
-	wp_delete_user( $ov_id );
+	$drop_user( $ov_id );
 	remove_role( 'minn_vendor_test' );
 }
 
@@ -399,7 +410,7 @@ if ( ! function_exists( 'wc_create_order' ) || ! get_role( 'shop_manager' ) ) {
 	remove_filter( 'pre_wp_mail', $om_trap, PHP_INT_MAX );
 	$om_order->delete( true );
 	require_once ABSPATH . 'wp-admin/includes/user.php';
-	wp_delete_user( $om_user );
+	$drop_user( $om_user );
 }
 
 // --- 07-04 Memberships: a member is never re-resolved onto another account ---
@@ -433,7 +444,7 @@ if ( ! function_exists( 'wc_memberships_get_membership_plan' ) ) {
 	require_once ABSPATH . 'wp-admin/includes/user.php';
 	foreach ( array( $wm_alice, $wm_mal ) as $wm_u ) {
 		if ( ! is_wp_error( $wm_u ) && $wm_u ) {
-			wp_delete_user( $wm_u );
+			$drop_user( $wm_u );
 		}
 	}
 }
@@ -466,7 +477,7 @@ if ( ! function_exists( 'wc_gc_mask_code' ) || ! function_exists( 'wc_create_ord
 	null === $gc_unmask ? delete_option( 'wc_gc_unmask_codes_for_shop_managers' ) : update_option( 'wc_gc_unmask_codes_for_shop_managers', $gc_unmask );
 	$gc_order->delete( true );
 	require_once ABSPATH . 'wp-admin/includes/user.php';
-	wp_delete_user( $gc_user );
+	$drop_user( $gc_user );
 }
 
 // --- 04-01 / 05-04 / 14-05 Email and notification saves keep what they leave out ---
@@ -565,7 +576,7 @@ if ( ! function_exists( 'minn_admin_gsmtp_cap' ) || ! class_exists( 'Gravity_For
 	$check( '04-02 control: with both capabilities the test is allowed', is_callable( $gs_perm ) && call_user_func( $gs_perm, new WP_REST_Request( 'POST', '/minn-admin/v1/gravity-smtp/send-test' ) ), '' );
 	wp_set_current_user( $admin );
 	require_once ABSPATH . 'wp-admin/includes/user.php';
-	wp_delete_user( $gs_user );
+	$drop_user( $gs_user );
 	remove_role( 'minn_gsmtp_test' );
 }
 
@@ -890,7 +901,7 @@ if ( ! $ib_img ) {
 	list( $ib_st ) = $call( 'POST', '/minn-admin/v1/image-block', array( 'block' => 'minn-test/gallery', 'ids' => range( 1, 501 ), 'raw' => '' ) );
 	$check( '11-02 image-block: more than 500 ids is refused before any lookup', 400 === $ib_st, (string) $ib_st );
 	require_once ABSPATH . 'wp-admin/includes/user.php';
-	wp_delete_user( $ib_user );
+	$drop_user( $ib_user );
 }
 remove_filter( 'minn_admin_image_blocks', $ib_hook );
 
@@ -1271,7 +1282,7 @@ if ( is_multisite() ) {
 	$p_can_save = current_user_can( 'edit_files' );
 	wp_set_current_user( $admin );
 	require_once ABSPATH . 'wp-admin/includes/user.php';
-	wp_delete_user( $p_user );
+	$drop_user( $p_user );
 	remove_role( 'minn_noedit_test' );
 	$check( '2bp-06 precondition: the save (edit_files) refuses this account', ! $p_can_save, '' );
 	$check( '2bp-06 the System page does not offer it the wp-config switches', 200 === $p_sys_st && empty( $p_sys['config']['editable'] ), wp_json_encode( array( $p_sys_st, $p_sys['config']['editable'] ?? null ) ) );

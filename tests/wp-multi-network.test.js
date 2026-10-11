@@ -129,8 +129,14 @@ async function api( page, method, path, body ) {
 		check( 'Networks joins Minn\'s Network navigation', directory.nav.includes( 'Networks' ), directory.nav.join( ', ' ) );
 		check( 'network directory lists both lab networks', directory.rows.length >= 2 && directory.rows.some( ( row ) => /Lab Network 2/.test( row ) ), `${ directory.rows.length } rows` );
 		check( 'network directory shows operational counts', directory.columns.some( ( c ) => /Sites/.test( c ) ) && directory.columns.some( ( c ) => /Administrators/.test( c ) ), directory.columns.join( ' | ' ) );
-		const primaryDelete = await api( superPage, 'DELETE', 'minn-admin/v1/wp-multi-network/networks/1' );
-		const primaryMove = await api( superPage, 'POST', 'minn-admin/v1/wp-multi-network/sites/1/move', { network: 2 } );
+		// Probes that change nothing whichever guard answers: the route requires
+		// delete_sites (WordPress validates it before any guard), and false keeps
+		// the current-network guard and the vendor's refusal to drop a network
+		// with sites behind the main-network one. The move names the main site's
+		// own network, which the super admin administers, so the destination
+		// check passes and the main-site guard answers before same_network.
+		const primaryDelete = await api( superPage, 'DELETE', 'minn-admin/v1/wp-multi-network/networks/1', { delete_sites: false } );
+		const primaryMove = await api( superPage, 'POST', 'minn-admin/v1/wp-multi-network/sites/1/move', { network: 1 } );
 		check( 'the server protects the primary network', primaryDelete.status === 400 && primaryDelete.data.code === 'main_network', JSON.stringify( primaryDelete ) );
 		check( 'the server protects every network main site', primaryMove.status === 400 && primaryMove.data.code === 'main_site', JSON.stringify( primaryMove ) );
 
@@ -223,7 +229,7 @@ async function api( page, method, path, body ) {
 		const probes = [
 			await api( low.page, 'GET', 'minn-admin/v1/wp-multi-network/networks' ),
 			await api( low.page, 'POST', 'minn-admin/v1/wp-multi-network/networks', { title: 'Unauthorized', domain: 'unauthorized-' + stamp + '.minnms.localhost', path: '/' } ),
-			await api( low.page, 'DELETE', 'minn-admin/v1/wp-multi-network/networks/1' ),
+			await api( low.page, 'DELETE', 'minn-admin/v1/wp-multi-network/networks/1', { delete_sites: false } ),
 			await api( low.page, 'POST', 'minn-admin/v1/wp-multi-network/sites/1/move', { network: 2 } ),
 		];
 		if ( probes[ 1 ].data && probes[ 1 ].data.id ) unauthorizedNetworkId = Number( probes[ 1 ].data.id );
