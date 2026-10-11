@@ -2851,10 +2851,39 @@ class Minn_Admin_REST {
 		};
 		add_action( 'pre_get_posts', $cap_preview_posts, PHP_INT_MAX );
 
+		// Dynamic content in block markup reads a post by an id the markup
+		// names, and the vendors check no read access when they render it:
+		// they rely on a save gate and on treating core's block renderer as
+		// untrusted for anyone who may not author dynamic data. This route
+		// renders unsaved markup the caller wrote, which is that same trust,
+		// so for such a caller no vendor dynamic data resolves here.
+		// GenerateBlocks answers who may author it; its own stripper empties
+		// the tags. Otter's text and image resolvers are taken off for the
+		// render, so its elements show their placeholder text.
+		$gb_untrusted = class_exists( 'GenerateBlocks_Dynamic_Tag_Security' )
+			&& method_exists( 'GenerateBlocks_Dynamic_Tag_Security', 'user_can_author_dynamic_data' )
+			&& method_exists( 'GenerateBlocks_Dynamic_Tag_Security', 'replace_dynamic_tags_with_empty' )
+			&& ! GenerateBlocks_Dynamic_Tag_Security::user_can_author_dynamic_data();
+		$otter_parked = array();
+		if ( ! current_user_can( 'unfiltered_html' ) && ! current_user_can( 'manage_options' )
+			&& class_exists( '\ThemeIsle\GutenbergBlocks\Plugins\Dynamic_Content' ) ) {
+			$otter = \ThemeIsle\GutenbergBlocks\Plugins\Dynamic_Content::instance();
+			foreach ( array( 'apply_dynamic_content', 'apply_dynamic_images' ) as $method ) {
+				$priority = has_filter( 'render_block', array( $otter, $method ) );
+				if ( false !== $priority ) {
+					remove_filter( 'render_block', array( $otter, $method ), $priority );
+					$otter_parked[] = array( array( $otter, $method ), $priority );
+				}
+			}
+		}
+
 		$queue_before = wp_styles()->queue;
 		$rendered     = array();
 		foreach ( array_slice( $blocks, 0, 100 ) as $raw ) {
-			$raw  = (string) $raw;
+			$raw = (string) $raw;
+			if ( $gb_untrusted ) {
+				$raw = GenerateBlocks_Dynamic_Tag_Security::replace_dynamic_tags_with_empty( $raw );
+			}
 			$html = do_blocks( $raw );
 			// Embed blocks keep a bare URL in their saved HTML; the front end
 			// converts it via WP_Embed::autoembed on the_content — run the same
@@ -2872,6 +2901,9 @@ class Minn_Admin_REST {
 			 */
 			$html       = apply_filters( 'minn_admin_rendered_html', $html, $raw, $post_id );
 			$rendered[] = $html;
+		}
+		foreach ( $otter_parked as $parked ) {
+			add_filter( 'render_block', $parked[0], $parked[1] );
 		}
 		remove_filter( 'render_block_data', $clamp_preview_query );
 		remove_action( 'pre_get_posts', $cap_preview_posts, PHP_INT_MAX );
