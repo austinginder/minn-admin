@@ -143,9 +143,10 @@ function minn_admin_spam_providers() {
 				if ( $predefined ) {
 					$key = (string) CLEANTALK_ACCESS_KEY;
 				}
+				// No characters of the key: on a network subsite it can be the
+				// network's, which CleanTalk's own subsite screen withholds.
 				$note = '' !== $key
-					/* translators: %s: first characters of the access key. */
-					? sprintf( __( 'Access key set (%s…)', 'minn-admin' ), substr( $key, 0, 4 ) )
+					? __( 'Access key set', 'minn-admin' )
 					: __( 'Needs an access key from cleantalk.org (free trial, then paid)', 'minn-admin' );
 				return array(
 					'configured'  => '' !== $key,

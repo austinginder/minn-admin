@@ -541,6 +541,22 @@ function minn_admin_cleantalk_register_connector( $registry ) {
 }
 add_action( 'wp_connectors_init', 'minn_admin_cleantalk_register_connector' );
 
+/**
+ * Whether the current user may see the last four characters of the stored
+ * key on the Connectors card. The key is saved only with activate_plugins
+ * (CleanTalk's own gate is skipped under the direct call Minn makes), and on
+ * a network a site's key can be the network's, which CleanTalk's subsite
+ * screen withholds, so there only a super admin sees any of it.
+ *
+ * @return bool
+ */
+function minn_admin_cleantalk_key_tail_allowed() {
+	if ( is_multisite() ) {
+		return is_super_admin();
+	}
+	return current_user_can( 'activate_plugins' );
+}
+
 /** Alias core's connector setting onto the key CleanTalk actually stores. */
 function minn_admin_cleantalk_connector_pre_option() {
 	return minn_admin_cleantalk_stored_key();

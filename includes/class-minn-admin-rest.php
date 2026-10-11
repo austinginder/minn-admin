@@ -11213,7 +11213,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'constantName'   => $const,
 				'envVarName'     => $env,
 				'source'         => $source,
-				'keyTail'        => ( 'database' === $source && strlen( $db_key ) > 8 ) ? substr( $db_key, -4 ) : '',
+				// CleanTalk's key is a vendor's, aliased into the registry, with
+				// its own rule for who sees any of it.
+				'keyTail'        => ( 'database' === $source && strlen( $db_key ) > 8
+					&& ( 'cleantalk' !== (string) $id || ( function_exists( 'minn_admin_cleantalk_key_tail_allowed' ) && minn_admin_cleantalk_key_tail_allowed() ) ) )
+					? substr( $db_key, -4 ) : '',
 				'plugin'         => $plugin,
 			);
 		}
