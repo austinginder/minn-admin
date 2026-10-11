@@ -30,6 +30,7 @@ class Minn_Admin {
 		// core clears its own sessionStorage backups. Session expiry keeps
 		// them on purpose: that is the crash the net exists for.
 		add_action( 'login_footer', array( __CLASS__, 'clear_local_drafts_on_logout' ) );
+		add_action( 'wp_logout', array( __CLASS__, 'mark_logout_for_drafts' ) );
 		add_action( 'wp_loaded', array( __CLASS__, 'maybe_heal_rewrites' ), 20 );
 		add_filter( 'query_vars', array( __CLASS__, 'query_vars' ) );
 		// Both run ahead of everything else on template_redirect: WooCommerce
@@ -105,12 +106,24 @@ class Minn_Admin {
 		wp_send_json_success( array( 'plugin' => $id, 'status' => $status ) );
 	}
 
-	/** On wp-login.php?loggedout=true: drop the editor's localStorage drafts. */
+	/**
+	 * A real sign-out leaves a short-lived marker for the login screen that
+	 * follows it. The loggedout query arg alone can't be trusted: any site
+	 * can link a person to wp-login.php?loggedout=true.
+	 */
+	public static function mark_logout_for_drafts() {
+		if ( ! headers_sent() ) {
+			setcookie( 'minn_net_purge', '1', time() + 120, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), false );
+		}
+	}
+
+	/** After a real sign-out lands on wp-login: drop the editor's localStorage drafts. */
 	public static function clear_local_drafts_on_logout() {
-		if ( empty( $_GET['loggedout'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+		if ( empty( $_GET['loggedout'] ) || empty( $_COOKIE['minn_net_purge'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
 			return;
 		}
-		echo "<script>try{Object.keys(localStorage).forEach(function(k){if(k.indexOf('minn-net-')===0)localStorage.removeItem(k);});}catch(e){}</script>\n";
+		$path = esc_js( COOKIEPATH ? COOKIEPATH : '/' );
+		echo "<script>try{Object.keys(localStorage).forEach(function(k){if(k.indexOf('minn-net-')===0)localStorage.removeItem(k);});document.cookie='minn_net_purge=; Max-Age=0; path={$path}';}catch(e){}</script>\n";
 	}
 
 	/**
