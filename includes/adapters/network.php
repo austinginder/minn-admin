@@ -33,7 +33,33 @@ defined( 'ABSPATH' ) || exit;
 
 /** Every network route needs multisite plus a network capability. */
 function minn_admin_network_can( $cap = 'manage_sites' ) {
-	return is_multisite() && current_user_can( $cap );
+	return is_multisite() && minn_admin_network_user_can( $cap );
+}
+
+/**
+ * A capability check made where core's network admin makes it: on the
+ * network's main site. Network admin redirects every request there, so a
+ * network capability (or edit_user, delete_site) granted only by some
+ * subsite's role table never counts in core; Minn's network routes answer on
+ * every site, and current_user_can() would read the role of whichever site
+ * the request addressed.
+ *
+ * @param string $cap  Capability.
+ * @param mixed  ...$args Object id and the like, as current_user_can() takes.
+ * @return bool
+ */
+function minn_admin_network_user_can( $cap, ...$args ) {
+	if ( ! is_multisite() ) {
+		return false;
+	}
+	$main = (int) get_main_site_id();
+	if ( (int) get_current_blog_id() === $main ) {
+		return current_user_can( $cap, ...$args );
+	}
+	if ( function_exists( 'current_user_can_for_site' ) ) {
+		return current_user_can_for_site( $main, $cap, ...$args );
+	}
+	return current_user_can_for_blog( $main, $cap, ...$args );
 }
 
 /**
@@ -293,7 +319,7 @@ function minn_admin_network_user_row( $user, $site_counts = array(), $super_coun
 	// (core's checkbox lives on user-edit.php); the flags mirror that so a
 	// caller who holds manage_network_options without edit_user is not
 	// offered a button the route will refuse.
-	$edit   = current_user_can( 'edit_user', $id );
+	$edit   = minn_admin_network_user_can( 'edit_user', $id );
 	return array(
 		'id'         => $id,
 		'name'       => $user->display_name,
@@ -1078,7 +1104,7 @@ function minn_admin_network_site_delete( WP_REST_Request $request ) {
 	// the only way a host can say "not this one", and honouring it is the
 	// whole point of a per-target cap. This release added the same pairing for
 	// deleting a user; deleting a site is the more destructive sibling.
-	if ( ! current_user_can( 'delete_site', $id ) ) {
+	if ( ! minn_admin_network_user_can( 'delete_site', $id ) ) {
 		return new WP_Error( 'cannot_delete', __( 'You are not allowed to delete that site.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	// wp_delete_site drops the site's tables and fires wp_delete_site /
@@ -1291,7 +1317,7 @@ function minn_admin_network_user_super( WP_REST_Request $request ) {
 	// target first and is never the caller's own profile page; the
 	// manage_network_options gate on the route is the checkbox's own
 	// condition, not a replacement for those two.
-	if ( ! current_user_can( 'edit_user', $id ) ) {
+	if ( ! minn_admin_network_user_can( 'edit_user', $id ) ) {
 		return new WP_Error( 'forbidden', __( 'You are not allowed to edit that account.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	if ( $on && $id === get_current_user_id() ) {
@@ -1367,7 +1393,7 @@ function minn_admin_network_users_status() {
 		),
 	);
 	$actions = array();
-	if ( current_user_can( 'manage_network' ) ) {
+	if ( minn_admin_network_user_can( 'manage_network' ) ) {
 		$actions[] = array( 'label' => __( 'Add account ↗', 'minn-admin' ), 'href' => network_admin_url( 'user-new.php' ) );
 		$actions[] = array( 'label' => __( 'Network Admin ↗', 'minn-admin' ), 'href' => network_admin_url( 'users.php' ) );
 	}
@@ -1406,7 +1432,7 @@ function minn_admin_network_status() {
 		),
 	);
 	$actions = array();
-	if ( current_user_can( 'manage_network' ) ) {
+	if ( minn_admin_network_user_can( 'manage_network' ) ) {
 		$actions[] = array( 'label' => __( 'Network Admin ↗', 'minn-admin' ), 'href' => network_admin_url( 'sites.php' ) );
 	}
 	return rest_ensure_response( array( 'rows' => $rows, 'actions' => $actions ) );
