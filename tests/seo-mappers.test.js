@@ -281,8 +281,11 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 				} catch ( e ) { return false; }
 			} )() );
 		await writeSeo( postId, { robots_noindex: false, twitter_use_facebook: true, twitter_title: '' } );
-		t.check( 'SureRank depth clears: robots meta deleted',
-			wpEval( `echo wp_json_encode( get_post_meta( ${ postId }, 'surerank_settings_post_no_index', true ) );` ) === '""' );
+		// Switched off is stored as 'no', as SureRank's metabox stores an
+		// unticked box: deleting the last one hands the post back to a
+		// site-wide noindex (08-01 / 14-04).
+		t.check( 'SureRank depth clears: robots switched off stores "no"',
+			wpEval( `echo wp_json_encode( get_post_meta( ${ postId }, 'surerank_settings_post_no_index', true ) );` ) === '"no"' );
 
 		// --- Squirrly: own qss table, read/write only through their API ------
 		t.check( 'Squirrly activated', await activateOnly( 'squirrly' ) );
