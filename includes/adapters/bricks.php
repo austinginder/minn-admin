@@ -355,7 +355,10 @@ function minn_admin_bricks_template_item( $post ) {
 	$param = defined( 'BRICKS_BUILDER_PARAM' ) ? BRICKS_BUILDER_PARAM : 'bricks';
 	return array(
 		'id'         => (int) $post->ID,
-		'title'      => '' !== $post->post_title ? html_entity_decode( $post->post_title, ENT_QUOTES ) : __( '(no title)', 'minn-admin' ),
+		// The stored title, empty included: the edit form seeds from it and
+		// sends it back, so a display fallback would be saved as the title
+		// (the list shows an empty one as a dash).
+		'title'      => html_entity_decode( $post->post_title, ENT_QUOTES ),
 		'type'       => $type,
 		'typeLabel'  => isset( $types[ $type ] ) ? $types[ $type ] : ( '' !== $type ? $type : '—' ),
 		'conditions' => minn_admin_bricks_conditions_summary( $post->ID ),
@@ -861,7 +864,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'method' => 'PUT',
 					'fields' => array(
 						array( 'key' => 'title', 'label' => __( 'Title', 'minn-admin' ) ),
-						array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_select ),
+						// Clearable: an untyped template (an import of a type this
+						// site doesn't offer) seeds empty and sends '' back, which
+						// changes nothing, instead of the first option, Header.
+						array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_select, 'clearable' => true ),
 						// template_tag is not REST-exposed, so the Terms
 						// manager never sees it — this is the one place tags
 						// can be edited in Minn.
@@ -1035,8 +1041,9 @@ add_action( 'rest_api_init', function () {
 					// empty everywhere it is used. Their own type control moves
 					// it; so must this. Ask them which key each type reads,
 					// rather than keeping a copy of that mapping here.
-					if ( $previous && $previous !== $type && class_exists( '\Bricks\Database' )
-						&& method_exists( '\Bricks\Database', 'get_bricks_data_key' ) ) {
+					// An untyped template's design is under the content key,
+					// which is what Bricks answers for an empty type.
+					if ( class_exists( '\Bricks\Database' ) && method_exists( '\Bricks\Database', 'get_bricks_data_key' ) ) {
 						$from = \Bricks\Database::get_bricks_data_key( $previous );
 						$to   = \Bricks\Database::get_bricks_data_key( $type );
 						if ( $from && $to && $from !== $to ) {

@@ -178,6 +178,42 @@ const wpEval = ( code ) => execFileSync( 'wp', [ '--path=' + WP, 'eval', code ],
 		const badImport = await rest( 'POST', 'minn-admin/v1/bricks/templates/import', { content: 'not json {' } );
 		t.check( 'invalid JSON import refuses 400', badImport.status === 400, JSON.stringify( badImport.data ) );
 
+		/* ===== An untitled, untyped template keeps both on a tag save (registry 12-3) ===== */
+		// Minn's import blanks a type this site doesn't offer, and Bricks'
+		// own import can leave one untyped. The edit form used to seed an
+		// empty Type with the first option (Header) and an empty title with
+		// the list's "(no title)", so saving a tag made it a Header titled
+		// "(no title)" with its design left under the content key. A draft,
+		// so Bricks can never pick it as the site header.
+		// As the lab's admin: Bricks refuses its design meta to a user
+		// without builder access, and wp eval runs as nobody.
+		const bare = parseInt( wpEval( 'wp_set_current_user( get_user_by( "login", "admin" )->ID ); add_filter( "wp_insert_post_empty_content", "__return_false" ); $id = wp_insert_post( array( "post_type" => BRICKS_DB_TEMPLATE_SLUG, "post_status" => "draft", "post_title" => "" ) ); update_post_meta( $id, BRICKS_DB_PAGE_CONTENT, array( array( "id" => "minnbare", "name" => "heading", "parent" => 0, "children" => array(), "settings" => array( "text" => "Bare probe" ) ) ) ); echo $id;' ), 10 );
+		if ( bare ) probeIds.push( bare );
+		await page.goto( BASE + '/minn-admin/bricks-templates', { waitUntil: 'domcontentloaded' } );
+		const bareRow = await page.waitForFunction( () => Array.from( document.querySelectorAll( '[data-sitem]' ) ).find( ( r ) => {
+			const title = r.querySelector( '.minn-row-title' );
+			return title && /^(—|\(no title\))$/.test( title.textContent.trim() );
+		} ), null, { timeout: 20000 } );
+		await bareRow.asElement().click();
+		await page.waitForSelector( '[data-editfield="type"] .minn-ac-input', { timeout: 10000 } );
+		const seeded = await page.evaluate( () => ( {
+			type: document.querySelector( '[data-editfield="type"] .minn-ac-input' ).dataset.acValue,
+			title: document.querySelector( '[data-editfield="title"]' ).value,
+		} ) );
+		t.check( 'an untyped template\'s Type seeds empty, not Header', seeded.type === '', JSON.stringify( seeded ) );
+		t.check( 'an untitled template\'s Title seeds empty', seeded.title === '', JSON.stringify( seeded ) );
+		await page.type( '[data-editfield="tags"]', 'suite-bare' );
+		const bareSaved = page.waitForResponse( ( res ) => res.request().method() === 'PUT' && /bricks\/templates\//.test( res.url() ), { timeout: 20000 } );
+		await page.click( '#minn-surface-save' );
+		await bareSaved;
+		const bareState = JSON.parse( wpEval( '$id = ' + bare + '; echo wp_json_encode( array( "type" => (string) get_post_meta( $id, BRICKS_DB_TEMPLATE_TYPE, true ), "title" => get_post( $id )->post_title, "content" => ! empty( get_post_meta( $id, BRICKS_DB_PAGE_CONTENT, true ) ), "tags" => wp_get_post_terms( $id, "template_tag", array( "fields" => "names" ) ) ) );' ) );
+		t.check( 'a tag save leaves it untyped, untitled and its design in place', bareState.type === '' && bareState.title === '' && bareState.content && bareState.tags.includes( 'suite-bare' ), JSON.stringify( bareState ) );
+		// Choosing a type on purpose moves the design to that type's key.
+		const retyped = await rest( 'PUT', 'minn-admin/v1/bricks/templates/' + bare, { title: '', type: 'header', tags: 'suite-bare' } );
+		const moved = JSON.parse( wpEval( '$id = ' + bare + '; echo wp_json_encode( array( "type" => (string) get_post_meta( $id, BRICKS_DB_TEMPLATE_TYPE, true ), "header" => ! empty( get_post_meta( $id, BRICKS_DB_PAGE_HEADER, true ) ), "content" => ! empty( get_post_meta( $id, BRICKS_DB_PAGE_CONTENT, true ) ) ) );' ) );
+		t.check( 'typing it as Header on purpose moves its design to the header key', retyped.status === 200 && moved.type === 'header' && moved.header && ! moved.content, JSON.stringify( moved ) );
+		await page.keyboard.press( 'Escape' ).catch( () => {} );
+
 		/* ===== Duplicate from the detail modal ===== */
 		await page.waitForFunction( () => ! document.querySelector( '[data-editfield="title"]' ), null, { timeout: 15000 } );
 		await page.evaluate( () => {
