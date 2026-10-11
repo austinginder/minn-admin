@@ -40,6 +40,9 @@ class Minn_Admin_DB {
 	// Health results are cached this long so the System page row is free.
 	const HEALTH_TTL = 600;
 
+	/** credential_needles(), for one request (rows() and row() start it over). */
+	private static $needles = null;
+
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
 	}
@@ -432,7 +435,32 @@ class Minn_Admin_DB {
 		if ( 'signups' === $base ) {
 			return 'activation_key' === $col;
 		}
-		return false;
+		// OttoKit's retry writes its SaaS bearer token into the logged
+		// request's headers (its own screen and Minn's OttoKit view drop them).
+		if ( 'suretriggers_webhook_requests' === $base ) {
+			return 'request_data' === $col;
+		}
+		return self::secret_column_name( $col );
+	}
+
+	/**
+	 * Whether a column's NAME says it holds a credential, in any table. A
+	 * vendor's own accounts or API-key table keeps password hashes, reset
+	 * tokens and API secrets that no list above can know about (ACPT's
+	 * api_secret, LatePoint's password and account_nonse, Amelia's
+	 * password_hash and calendar tokens, a wp_users_backup copy's user_pass).
+	 * camelCase names count word by word; a column that only describes one
+	 * (token_expires, secret_id, password_hint) does not.
+	 *
+	 * @param string $col Column name.
+	 * @return bool
+	 */
+	private static function secret_column_name( $col ) {
+		$n = strtolower( preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', (string) $col ) );
+		if ( preg_match( '/_(id|ids|count|type|status|at|date|time|expires|expiry|expiration|length|name|label|hint|created|updated|used)$/', $n ) ) {
+			return false;
+		}
+		return (bool) preg_match( '/(^|_)(pass|passwd|password|pwd|secret|token|nonce|nonse|salt|api_?key|licen[cs]e_?key|secret_?key|access_?key|private_?key|auth_?key|consumer_?key|activation_?key|client_?secret|access_?token|refresh_?token)(_|$)/', $n );
 	}
 
 	/**
@@ -506,6 +534,8 @@ class Minn_Admin_DB {
 		if ( 'options' === $base || 'sitemeta' === $base ) {
 			$keys   = self::secret_option_names();
 			$shapes = self::secret_option_shapes();
+		} elseif ( 'usermeta' === $base ) {
+			$shapes = self::SECRET_USERMETA_SHAPES;
 		}
 		return array( self::KEYED_SECRETS[ $base ][1], $keys, $shapes );
 	}
@@ -564,6 +594,10 @@ class Minn_Admin_DB {
 		array( 'elementor_pro_remote_info_api_data_', '' ),
 		array( '_site_transient_elementor_pro_api_request_', '' ),
 		array( 'wp-all-import-pro_', '' ),
+		// Formidable's Stripe and Square Connect: the passwords the site
+		// signs its Connect requests with.
+		array( 'frm_strp_connect_', '' ),
+		array( 'frm_square_connect_', '' ),
 	);
 
 	/**
@@ -664,6 +698,16 @@ class Minn_Admin_DB {
 	 * Security), and the plaintext one-time sign-in tokens the One Time
 	 * Login and WP Freighter routes mint (each signs in as that user).
 	 */
+	/**
+	 * usermeta rows redacted by name shape. Elementor Connect keeps each
+	 * user's access_token_secret and auth_secret in a user OPTION, stored as
+	 * {blog prefix}elementor_connect_common_data, so every blog's copy ends
+	 * with the same name.
+	 */
+	const SECRET_USERMETA_SHAPES = array(
+		array( '', 'elementor_connect_common_data' ),
+	);
+
 	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key', 'wpmdb_licence_key' );
 
 	/**
@@ -681,9 +725,12 @@ class Minn_Admin_DB {
 	 * Smush's validation cache, which is keyed by that same key. Core's plugin
 	 * and theme update caches hold every premium vendor's download link, and
 	 * some links carry the licence key; Gravity Forms' telemetry snapshot
-	 * copies its key.
+	 * copies its key. Freemius' API cache keeps its licence answers, secret keys
+	 * included, beside the redacted accounts row. WPForms keeps its Stripe
+	 * secret keys in its settings row and its Square tokens in their own row,
+	 * sealed with the key in wpforms_crypto_secret_key.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
@@ -727,6 +774,196 @@ class Minn_Admin_DB {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether the browser prints a cell redacted: a credential by its row,
+	 * column or table (is_secret_cell()), or a copy of one in any other cell.
+	 * The licence guard asks this same question.
+	 *
+	 * @param string   $table Table name as resolved (prefix included).
+	 * @param string   $col   Column name.
+	 * @param string[] $row   The row keyed by column name.
+	 * @return bool
+	 */
+	public static function redacts_cell( $table, $col, $row ) {
+		$v = isset( $row[ $col ] ) ? $row[ $col ] : null;
+		return self::is_secret_cell( $table, $col, $row ) || self::holds_credential( $table, $v );
+	}
+
+	/**
+	 * Tables whose own screen shows the values it logged, credentials
+	 * included (WP Activity Log's metadata, Simple History's contexts). A copy
+	 * there stays as visible here as it is there.
+	 */
+	private static function is_activity_log( $table ) {
+		$base = self::secret_base( $table );
+		return 0 === strpos( $base, 'wsal_' ) || 0 === strpos( $base, 'simple_history' );
+	}
+
+	/** Whether a cell holds a copy of a credential the browser redacts elsewhere. */
+	private static function holds_credential( $table, $value ) {
+		if ( null === $value || strlen( (string) $value ) < 16 || self::is_activity_log( $table ) ) {
+			return false;
+		}
+		$value = (string) $value;
+		foreach ( self::credential_needles() as $needle => $unused ) {
+			if ( false !== strpos( $value, (string) $needle ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Every credential the browser redacts by name, as the strings a copy of
+	 * one would contain. A plugin that logs a settings change or caches a
+	 * licence answer under a hashed name keeps a copy no name rule reaches,
+	 * so the browser looks for these in every cell it prints and leaves rows
+	 * holding one out of a value search. Each key or token is found in the
+	 * redacted rows through PHP serialization (no classes), JSON and a base64
+	 * wrapper, and kept raw and as the part of its base64 encoding that does
+	 * not depend on where it sits, standard and URL-safe.
+	 *
+	 * @return array Needle => true.
+	 */
+	private static function credential_needles() {
+		if ( null !== self::$needles ) {
+			return self::$needles;
+		}
+		global $wpdb;
+		$needles = array();
+		$values  = array();
+		$names   = self::secret_option_names();
+		$shapes  = self::secret_option_shapes();
+		$stores  = array( array( $wpdb->options, 'option_name', 'option_value' ) );
+		if ( is_multisite() ) {
+			$stores[] = array( $wpdb->sitemeta, 'meta_key', 'meta_value' );
+		}
+		foreach ( $stores as $store ) {
+			list( $table, $kcol, $vcol ) = $store;
+			$or   = array();
+			$args = array();
+			if ( $names ) {
+				$or[] = "`{$kcol}` IN (" . implode( ',', array_fill( 0, count( $names ), '%s' ) ) . ')';
+				$args = $names;
+			}
+			foreach ( $shapes as $shape ) {
+				$or[]   = "`{$kcol}` LIKE %s";
+				$args[] = $wpdb->esc_like( $shape[0] ) . '%' . $wpdb->esc_like( $shape[1] );
+			}
+			if ( $or ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL -- identifiers are this class's own; values prepared.
+				$values = array_merge( $values, (array) $wpdb->get_col( $wpdb->prepare( "SELECT `{$vcol}` FROM {$table} WHERE " . implode( ' OR ', $or ) . ' LIMIT 500', $args ) ) );
+			}
+		}
+		// The vendor tables' listed rows (their names folded to lower case,
+		// as table_index() matches them) and WP Migrate's per-user key.
+		$all = array();
+		foreach ( (array) $wpdb->get_col( 'SHOW TABLES' ) as $t ) {
+			$all[ strtolower( $t ) ] = $t;
+		}
+		foreach ( self::KEYED_SECRETS as $base => $spec ) {
+			if ( in_array( $base, array( 'options', 'sitemeta', 'usermeta' ), true ) ) {
+				continue;
+			}
+			foreach ( array_unique( array( $wpdb->prefix, $wpdb->base_prefix ) ) as $prefix ) {
+				$t = $all[ strtolower( $prefix . $base ) ] ?? '';
+				if ( '' === $t ) {
+					continue;
+				}
+				list( $vcol, $kcol, $keys ) = $spec;
+				// phpcs:ignore WordPress.DB.PreparedSQL -- identifiers from SHOW TABLES and the class constant; values prepared.
+				$values = array_merge( $values, (array) $wpdb->get_col( $wpdb->prepare( "SELECT `{$vcol}` FROM `{$t}` WHERE `{$kcol}` IN (" . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ') LIMIT 100', $keys ) ) );
+			}
+		}
+		$values = array_merge( $values, (array) $wpdb->get_col( "SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'wpmdb_licence_key' LIMIT 100" ) );
+		foreach ( $values as $raw ) {
+			foreach ( self::credential_leaves( (string) $raw ) as $leaf ) {
+				if ( ! self::is_credential_leaf( $leaf[0], $leaf[1] ) ) {
+					continue;
+				}
+				$v             = $leaf[1];
+				$needles[ $v ] = true;
+				for ( $s = 0; $s < 3; $s++ ) {
+					$core = base64_encode( substr( $v, $s, (int) floor( ( strlen( $v ) - $s ) / 3 ) * 3 ) );
+					if ( strlen( $core ) >= 16 ) {
+						$needles[ $core ]                      = true;
+						$needles[ strtr( $core, '+/', '-_' ) ] = true;
+					}
+				}
+				if ( count( $needles ) >= 1500 ) {
+					break 2;
+				}
+			}
+		}
+		self::$needles = $needles;
+		return $needles;
+	}
+
+	/**
+	 * The string leaves of a stored value, through PHP serialization (objects
+	 * stay incomplete, nothing is woken), JSON and a base64 wrapper (ACF PRO
+	 * keeps its key as base64 of a serialized array), with their key paths.
+	 *
+	 * @return array[] [ path, value ] pairs.
+	 */
+	private static function credential_leaves( $v, $path = '', $depth = 0 ) {
+		if ( $depth > 6 ) {
+			return array();
+		}
+		if ( is_string( $v ) ) {
+			$t = trim( $v );
+			if ( is_serialized( $t ) ) {
+				$u = @unserialize( $t, array( 'allowed_classes' => false ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,WordPress.PHP.DiscouragedPHPFunctions -- no classes: nothing is woken.
+				if ( false !== $u || 'b:0;' === $t ) {
+					return self::credential_leaves( $u, $path, $depth + 1 );
+				}
+			}
+			if ( '' !== $t && ( '{' === $t[0] || '[' === $t[0] ) ) {
+				$j = json_decode( $t, true );
+				if ( is_array( $j ) ) {
+					return self::credential_leaves( $j, $path, $depth + 1 );
+				}
+			}
+			if ( strlen( $t ) >= 24 && preg_match( '#^[A-Za-z0-9+/]+={0,2}$#', $t ) ) {
+				$b = base64_decode( $t, true );
+				if ( false !== $b && ( is_serialized( $b ) || ( '' !== $b && '{' === $b[0] ) ) ) {
+					return self::credential_leaves( $b, $path, $depth + 1 );
+				}
+			}
+			return array( array( $path, $t ) );
+		}
+		if ( is_array( $v ) || is_object( $v ) ) {
+			$out = array();
+			foreach ( (array) $v as $k => $x ) {
+				$out = array_merge( $out, self::credential_leaves( $x, $path . '/' . preg_replace( '/^\0[^\0]*\0/', '', (string) $k ), $depth + 1 ) );
+			}
+			return $out;
+		}
+		return array();
+	}
+
+	/**
+	 * A leaf that is a key or token: token alphabet, long, letters and digits
+	 * both, and (inside a structure) under a name that says so. Statuses,
+	 * dates, URLs and names never count, so a copy of one is never hidden.
+	 */
+	private static function is_credential_leaf( $path, $v ) {
+		if ( strlen( $v ) < 16 || strlen( $v ) > 512 || ! preg_match( '/^[A-Za-z0-9_\-]+$/', $v ) ) {
+			return false;
+		}
+		if ( preg_match_all( '/\d/', $v ) < 3 || preg_match_all( '/[A-Za-z]/', $v ) < 3 ) {
+			return false;
+		}
+		if ( '' === $path ) {
+			return true;
+		}
+		$leaf = strtolower( (string) substr( strrchr( '/' . $path, '/' ), 1 ) );
+		if ( preg_match( '/public|status|expir|date|time|count|limit|url|email|name|slug|type|version|item|plugin|theme|site|domain/', $leaf ) ) {
+			return false;
+		}
+		return (bool) preg_match( '/key|licen[cs]e|token|secret|code|pass|auth|api|sig|hash|seed|salt|nonce|^val$|^value$|^\d*$/', $leaf );
 	}
 
 	private static function is_secret_column( $table, $col ) {
@@ -847,6 +1084,7 @@ class Minn_Admin_DB {
 	/** GET /db/rows — one page of a table, sorted/filtered, LIMIT-bounded. */
 	public static function rows( $request ) {
 		global $wpdb;
+		self::$needles = null;
 		$meta = self::resolve_table( $request->get_param( 'table' ) );
 		if ( ! $meta ) {
 			return new WP_Error( 'minn_db_no_table', __( 'Unknown table.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -899,6 +1137,17 @@ class Minn_Admin_DB {
 					$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $keyed[0] ) . ' NOT LIKE %s', $wpdb->esc_like( $shape[0] ) . '%' . $wpdb->esc_like( $shape[1] ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				}
 			}
+			// A cell holding a copy of a credential prints redacted, so a value
+			// search must not answer for it either: "does this substring
+			// occur" recovers a redacted value a character at a time.
+			// Compared as bytes: a copy is byte-identical, and a collation-aware
+			// LIKE per needle took seconds over a large options table where
+			// the byte compare takes a tenth of that.
+			if ( ! self::is_activity_log( $meta->name ) ) {
+				foreach ( array_keys( self::credential_needles() ) as $needle ) {
+					$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $fcol ) . ' NOT LIKE CAST(%s AS BINARY)', '%' . $wpdb->esc_like( (string) $needle ) . '%' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				}
+			}
 		} else {
 			$fcol = '';
 			$fq   = '';
@@ -947,7 +1196,7 @@ class Minn_Admin_DB {
 			$assoc = array_combine( $names, array_slice( array_values( $r ), 0, count( $names ) ) ) ?: array();
 			foreach ( $r as $i => $v ) {
 				$col     = isset( $names[ $i ] ) ? $names[ $i ] : '';
-				$cells[] = null !== $v && '' !== (string) $v && self::is_secret_cell( $meta->name, $col, $assoc ) ? self::redacted_cell( $v ) : self::cell( $v, self::CELL_CAP_LIST );
+				$cells[] = null !== $v && '' !== (string) $v && self::redacts_cell( $meta->name, $col, $assoc ) ? self::redacted_cell( $v ) : self::cell( $v, self::CELL_CAP_LIST );
 			}
 			$rows[] = $cells;
 		}
@@ -984,6 +1233,7 @@ class Minn_Admin_DB {
 	/** GET /db/row — one row by primary key, with the roomy per-cell cap. */
 	public static function row( $request ) {
 		global $wpdb;
+		self::$needles = null;
 		$meta = self::resolve_table( $request->get_param( 'table' ) );
 		if ( ! $meta ) {
 			return new WP_Error( 'minn_db_no_table', __( 'Unknown table.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1007,7 +1257,7 @@ class Minn_Admin_DB {
 		$cells = array();
 		foreach ( $columns as $c ) {
 			$v       = array_key_exists( $c['name'], $raw ) ? $raw[ $c['name'] ] : null;
-			$cells[] = null !== $v && '' !== (string) $v && self::is_secret_cell( $meta->name, $c['name'], $raw ) ? self::redacted_cell( $v ) : self::cell( $v, self::CELL_CAP_DETAIL );
+			$cells[] = null !== $v && '' !== (string) $v && self::redacts_cell( $meta->name, $c['name'], $raw ) ? self::redacted_cell( $v ) : self::cell( $v, self::CELL_CAP_DETAIL );
 		}
 		return rest_ensure_response(
 			array(

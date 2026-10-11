@@ -866,4 +866,132 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+// --- 05-3..05-6 The database browser hides credentials by column name, by
+// the vendor rows that keep them, and wherever a copy of one sits ---
+( function () use ( $check, $call ) {
+	global $wpdb;
+	$rows = function ( $table, $params = array() ) use ( $call ) {
+		return $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $table ) + $params );
+	};
+	// The cell in column $col of the row whose $by column equals $val.
+	$cell = function ( $d, $col, $by, $val ) {
+		$cols = wp_list_pluck( (array) ( $d['columns'] ?? array() ), 'name' );
+		$ci   = array_search( $col, $cols, true );
+		$bi   = array_search( $by, $cols, true );
+		foreach ( (array) ( $d['rows'] ?? array() ) as $r ) {
+			if ( false !== $bi && (string) $r[ $bi ] === (string) $val ) {
+				return $r[ $ci ];
+			}
+		}
+		return 'missing';
+	};
+	$hidden = function ( $c ) {
+		return is_array( $c ) && ! empty( $c['redacted'] );
+	};
+	// What a failing check prints: never the cell, only what it was.
+	$shape = function ( $c ) use ( $hidden ) {
+		return $hidden( $c ) ? 'redacted' : ( 'missing' === $c ? 'missing' : 'shown, ' . strlen( is_array( $c ) ? wp_json_encode( $c ) : (string) $c ) . ' bytes' );
+	};
+	$fake  = 'minnFAKEkey' . wp_rand( 100000, 999999 ) . 'abcXYZ42';
+	$t     = $wpdb->prefix . 'minn_test_vendor';
+	$undo  = array();
+	try {
+		// 05-3: a vendor's own accounts table.
+		$wpdb->query( "CREATE TABLE `{$t}` ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, email VARCHAR(100), password VARCHAR(255), api_secret VARCHAR(255), account_nonse VARCHAR(100), refreshToken VARCHAR(255), token_expires VARCHAR(30), note TEXT )" );
+		$undo[] = function () use ( $wpdb, $t ) {
+			$wpdb->query( "DROP TABLE IF EXISTS `{$t}`" );
+		};
+		$wpdb->insert( $t, array( 'email' => 'dana@example.com', 'password' => '$2y$10$abcdefghijklmnopqrstuuWm0Hj7mYkzW8dYbnA5rZp4Qz1v2Kd9W', 'api_secret' => 'live_secret_0123456789abc', 'account_nonse' => 'nonse0123456789abc', 'refreshToken' => 'rt_0123456789abcdef', 'token_expires' => '2026-12-01 10:00:00', 'note' => 'copy: ' . $fake ) );
+		list( $st, $d ) = $rows( $t );
+		$ok = 200 === $st;
+		foreach ( array( 'password', 'api_secret', 'account_nonse', 'refreshToken' ) as $col ) {
+			$ok = $ok && $hidden( $cell( $d, $col, 'email', 'dana@example.com' ) );
+		}
+		$check( '05-3 a vendor table\'s password, secret, nonse and token columns are hidden by name', $ok, $st . ' ' . $shape( $cell( $d, 'password', 'email', 'dana@example.com' ) ) );
+		$check( '05-3 control: a column that only describes one, and plain data, still show', '2026-12-01 10:00:00' === $cell( $d, 'token_expires', 'email', 'dana@example.com' ) && 'dana@example.com' === $cell( $d, 'email', 'email', 'dana@example.com' ) );
+		$sortable = wp_list_pluck( (array) ( $d['columns'] ?? array() ), 'sortable', 'name' );
+		list( , $sorted ) = $rows( $t, array( 'orderby' => 'password' ) );
+		list( $fst ) = $rows( $t, array( 'fcol' => 'api_secret', 'fq' => 'live' ) );
+		$check( '05-3 and they are neither sortable nor searchable', false === ( $sortable['password'] ?? true ) && 'password' !== ( $sorted['orderby'] ?? '' ) && 400 === $fst, wp_json_encode( array( $sortable['password'] ?? null, $sorted['orderby'] ?? null, $fst ) ) );
+
+		// 05-4: OttoKit's logged request, where its retry writes the bearer token.
+		$ot = $wpdb->prefix . 'suretriggers_webhook_requests';
+		if ( $ot === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $ot ) ) ) ) {
+			$wpdb->insert( $ot, array( 'request_method' => 'POST', 'request_url' => 'https://minn-test.example/hook', 'request_data' => wp_json_encode( array( 'headers' => array( 'Authorization' => 'Bearer ' . $fake ) ) ), 'response_code' => 500, 'status' => 'minn_test', 'error_info' => '' ) );
+			$oid    = (int) $wpdb->insert_id;
+			$undo[] = function () use ( $wpdb, $ot, $oid ) {
+				$wpdb->delete( $ot, array( 'id' => $oid ) );
+			};
+			list( , $d ) = $rows( $ot, array( 'fcol' => 'status', 'fq' => 'minn_test' ) );
+			$check( '05-4 OttoKit\'s logged request data is hidden', $hidden( $cell( $d, 'request_data', 'id', $oid ) ), $shape( $cell( $d, 'request_data', 'id', $oid ) ) );
+		}
+
+		// 05-5 / 05-6: rows that keep licence and payment credentials.
+		$opt = function ( $name ) use ( $rows, $cell ) {
+			list( , $d ) = $rows( $GLOBALS['wpdb']->options, array( 'fcol' => 'option_name', 'fq' => $name ) );
+			return $cell( $d, 'option_value', 'option_name', $name );
+		};
+		foreach ( array( 'fs_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm_strp_connect_live_password_server' ) as $name ) {
+			if ( false === get_option( $name ) ) {
+				add_option( $name, 'minn probe ' . $name, '', false );
+				$undo[] = function () use ( $name ) {
+					delete_option( $name );
+				};
+			}
+			$check( "05-5/05-6 option {$name} is hidden", $hidden( $opt( $name ) ), $shape( $opt( $name ) ) );
+		}
+		$um_key = $wpdb->get_blog_prefix() . 'elementor_connect_common_data';
+		$um_id  = add_user_meta( get_current_user_id(), $um_key, array( 'access_token_secret' => 'ats_' . $fake ) );
+		$undo[] = function () use ( $um_key ) {
+			delete_user_meta( get_current_user_id(), $um_key );
+		};
+		list( , $d ) = $rows( $wpdb->usermeta, array( 'fcol' => 'meta_key', 'fq' => $um_key ) );
+		$check( '05-5 Elementor Connect\'s per-user secrets are hidden', $hidden( $cell( $d, 'meta_value', 'umeta_id', $um_id ) ), $shape( $cell( $d, 'meta_value', 'umeta_id', $um_id ) ) );
+
+		// Value redaction: a credential the browser hides by name, and copies
+		// of it under names no rule knows.
+		$home = '';
+		foreach ( array( 'postman_auth_token', 'jetpack_secrets' ) as $name ) {
+			if ( false === get_option( $name ) ) {
+				$home = $name;
+				break;
+			}
+		}
+		if ( '' === $home ) {
+			echo "SKIP  value redaction: no free credential row to plant\n";
+			return;
+		}
+		add_option( $home, $fake, '', false );
+		add_option( 'minn_test_copy_raw', 'cached link https://vendor.example/dl?key=' . $fake, '', false );
+		$post = (int) wp_insert_post( array( 'post_title' => 'Minn copy probe', 'post_status' => 'draft' ) );
+		add_post_meta( $post, 'minn_test_copy_b64', base64_encode( 'license=' . $fake . '&site=x' ) );
+		$undo[] = function () use ( $home, $post ) {
+			delete_option( $home );
+			delete_option( 'minn_test_copy_raw' );
+			wp_delete_post( $post, true );
+		};
+		$check( 'value: a raw copy in an option no rule names is hidden', $hidden( $opt( 'minn_test_copy_raw' ) ), $shape( $opt( 'minn_test_copy_raw' ) ) );
+		list( , $d ) = $rows( $wpdb->postmeta, array( 'fcol' => 'meta_key', 'fq' => 'minn_test_copy_b64' ) );
+		$check( 'value: a base64 copy in post meta is hidden', $hidden( $cell( $d, 'meta_value', 'meta_key', 'minn_test_copy_b64' ) ), $shape( $cell( $d, 'meta_value', 'meta_key', 'minn_test_copy_b64' ) ) );
+		list( , $d ) = $rows( $t );
+		$check( 'value: a copy in a vendor table\'s plain column is hidden', $hidden( $cell( $d, 'note', 'email', 'dana@example.com' ) ), $shape( $cell( $d, 'note', 'email', 'dana@example.com' ) ) );
+		list( $st, $d ) = $rows( $wpdb->options, array( 'fcol' => 'option_value', 'fq' => substr( $fake, 0, 14 ) ) );
+		$check( 'value: a search for part of it does not find the copy', 200 === $st && 'missing' === $cell( $d, 'option_value', 'option_name', 'minn_test_copy_raw' ), $st . ' ' . $shape( $cell( $d, 'option_value', 'option_name', 'minn_test_copy_raw' ) ) );
+		$wl = $wpdb->prefix . 'wsal_metadata';
+		if ( $wl === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $wl ) ) ) ) {
+			$wpdb->insert( $wl, array( 'occurrence_id' => 0, 'name' => 'MinnTestCopy', 'value' => 'new value ' . $fake ) );
+			$wid    = (int) $wpdb->insert_id;
+			$undo[] = function () use ( $wpdb, $wl, $wid ) {
+				$wpdb->delete( $wl, array( 'id' => $wid ) );
+			};
+			list( , $d ) = $rows( $wl, array( 'fcol' => 'name', 'fq' => 'MinnTestCopy' ) );
+			$check( 'value: control: an activity log\'s copy stays as its own screen shows it', 'new value ' . $fake === $cell( $d, 'value', 'id', $wid ), $shape( $cell( $d, 'value', 'id', $wid ) ) );
+		}
+	} finally {
+		foreach ( array_reverse( $undo ) as $fn ) {
+			$fn();
+		}
+	}
+} )();
+
 $summary();

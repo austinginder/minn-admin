@@ -15,10 +15,10 @@
  *    what it holds instead.
  * 3. Copies: every credential the browser redacts in a vendor row is looked
  *    for, raw and base64-encoded, in every other cell of every table. A copy
- *    in an option, network option or meta row the browser shows fails,
- *    whatever that row is called. A copy in any other table (an activity
- *    log that recorded the change) is reported: rows there are not named
- *    for what they hold, so redaction by name cannot reach them.
+ *    in any cell the browser shows fails, whatever its row or table is
+ *    called, except in an activity log (WP Activity Log, Simple History):
+ *    its own screen shows what it recorded, so the browser leaves those
+ *    copies visible too, and they are reported.
  *
  * A row a reader reads that is a licence server's answer or an update cache
  * is redacted unless it is plainly status, flags or versions: those can
@@ -52,10 +52,10 @@ if ( ! function_exists( 'minn_admin_license_default_providers' ) || ! class_exis
 $admin = is_multisite() ? array( (int) get_user_by( 'login', (string) current( get_super_admins() ) )->ID ) : get_users( array( 'role' => 'administrator', 'number' => 1, 'fields' => 'ID' ) );
 wp_set_current_user( $admin ? (int) $admin[0] : 0 );
 
-$is_secret = new ReflectionMethod( 'Minn_Admin_DB', 'is_secret_cell' );
-$is_secret->setAccessible( true );
-$hidden_cell = function ( $table, $col, $row ) use ( $is_secret ) {
-	return (bool) $is_secret->invoke( null, $table, $col, $row );
+// The browser's own question: a credential by row, column or table, or a
+// copy of one in any other cell.
+$hidden_cell = function ( $table, $col, $row ) {
+	return Minn_Admin_DB::redacts_cell( $table, $col, $row );
 };
 $tables = array(
 	'option'      => array( $wpdb->options, 'option_value', 'option_name' ),
@@ -568,7 +568,6 @@ foreach ( $sources as $v => $from ) {
 	}
 }
 $text_types = array( 'char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext', 'json', 'blob', 'mediumblob', 'longblob', 'tinyblob' );
-$kv_tables  = array_map( 'strtolower', array( $wpdb->options, $wpdb->sitemeta, $wpdb->usermeta, $wpdb->postmeta, $wpdb->termmeta, $wpdb->commentmeta ) );
 $copies     = 0;
 $logged     = array();
 $scanned    = 0;
@@ -608,7 +607,8 @@ foreach ( $all_tables as $t ) {
 				$id = isset( $row['option_name'] ) ? $row['option_name'] : ( isset( $row['meta_key'] ) ? $row['meta_key'] : implode( ',', array_map( function ( $k ) use ( $row ) {
 					return $k . '=' . $row[ $k ];
 				}, $keys ) ) );
-				if ( ! in_array( strtolower( $t ), $kv_tables, true ) ) {
+				$base = strtolower( preg_replace( '/^\d+_/', '', substr( $t, strlen( $wpdb->base_prefix ) ) ) );
+				if ( 0 === strpos( $base, 'wsal_' ) || 0 === strpos( $base, 'simple_history' ) ) {
 					$logged[ "{$t}.{$col} copies {$sources[ $v ]}" ] = ( $logged[ "{$t}.{$col} copies {$sources[ $v ]}" ] ?? 0 ) + 1;
 					break;
 				}
@@ -619,9 +619,9 @@ foreach ( $all_tables as $t ) {
 		}
 	}
 }
-$check( 'no option, network option or meta row the browser shows holds a credential it redacts elsewhere', 0 === $copies, "{$scanned} columns, " . count( $sources ) . ' credentials' );
+$check( 'no cell the browser shows holds a credential it redacts elsewhere', 0 === $copies, "{$scanned} columns, " . count( $sources ) . ' credentials' );
 foreach ( $logged as $what => $n ) {
-	printf( "NOTE  %s in %d%s row(s): shown by the browser, not reachable by name\n", $what, $n, 50 === $n ? '+' : '' );
+	printf( "NOTE  %s in %d%s row(s): an activity log, shown as its own screen shows it\n", $what, $n, 50 === $n ? '+' : '' );
 }
 
 // --- 4. What the browser answers ---------------------------------------------
