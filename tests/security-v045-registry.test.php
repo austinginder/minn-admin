@@ -755,4 +755,66 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+// --- 00-1 An ACF User field keeps a stored user whose role no longer matches ---
+// The panel sends every ACF field back on any edit. A multi-value User field
+// limited to a role served each stored user, and the write refused one whose
+// role had changed since, so editing an unrelated field dropped them (and ACF's
+// bidirectional update dropped the post from their side).
+( function () use ( $check, $call, $drop_user ) {
+	if ( ! function_exists( 'acf_add_local_field_group' ) ) {
+		echo "SKIP  00-1 ACF inactive\n";
+		return;
+	}
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn45u',
+		'title'    => 'Minn 00-1',
+		'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ),
+		'fields'   => array(
+			array( 'key' => 'field_minn45u_note', 'name' => 'minn45u_note', 'label' => 'Note', 'type' => 'text' ),
+			array( 'key' => 'field_minn45u_rev', 'name' => 'minn45u_rev', 'label' => 'Reviewers', 'type' => 'user', 'multiple' => 1, 'role' => array( 'editor' ), 'return_format' => 'id' ),
+		),
+	) );
+	$tag  = wp_rand( 1000, 9999 );
+	$mk   = function ( $who, $role ) use ( $tag ) {
+		return (int) wp_insert_user( array( 'user_login' => "minn45u-{$who}-{$tag}", 'user_email' => "minn45u-{$who}-{$tag}@example.com", 'user_pass' => wp_generate_password( 24 ), 'role' => $role, 'display_name' => "Minn {$who}" ) );
+	};
+	$kept   = $mk( 'kept', 'editor' );
+	$moved  = $mk( 'moved', 'editor' );
+	$author = $mk( 'author', 'author' );
+	$post   = (int) wp_insert_post( array( 'post_title' => 'Minn 00-1', 'post_status' => 'draft', 'post_author' => get_current_user_id() ) );
+	$stored = function () use ( $post ) {
+		wp_cache_delete( $post, 'post_meta' );
+		return array_map( 'intval', (array) get_post_meta( $post, 'minn45u_rev', true ) );
+	};
+	try {
+		update_field( 'field_minn45u_note', 'Before', $post );
+		update_field( 'field_minn45u_rev', array( $kept, $moved ), $post );
+		( new WP_User( $moved ) )->set_role( 'author' );
+
+		list( , $got ) = $call( 'GET', '/wp/v2/posts/' . $post, null, array( 'context' => 'edit' ) );
+		$vals = json_decode( wp_json_encode( $got['minn_acf'] ?? array() ), true );
+		$vals['minn45u_note'] = 'After';
+		list( $status ) = $call( 'POST', '/wp/v2/posts/' . $post, array( 'minn_acf' => $vals ) );
+		$check( '00-1 editing another field keeps a reviewer whose role changed', 200 === $status && array( $kept, $moved ) === $stored(), wp_json_encode( $stored() ) );
+		$check( '00-1 control: the edited field saved', 'After' === get_post_meta( $post, 'minn45u_note', true ) );
+
+		// Editing the User field itself: remove the reviewer who still has the
+		// role, keep the one who doesn't, and try to add a new author.
+		list( , $got ) = $call( 'GET', '/wp/v2/posts/' . $post, null, array( 'context' => 'edit' ) );
+		$vals = json_decode( wp_json_encode( $got['minn_acf'] ?? array() ), true );
+		$vals['minn45u_rev'] = array_values( array_filter( (array) $vals['minn45u_rev'], function ( $e ) use ( $moved ) {
+			return (int) ( $e['value'] ?? 0 ) === $moved;
+		} ) );
+		$vals['minn45u_rev'][] = array( 'value' => (string) $author, 'label' => 'Minn author' );
+		$call( 'POST', '/wp/v2/posts/' . $post, array( 'minn_acf' => $vals ) );
+		$check( '00-1 editing the field keeps a stored reviewer that was sent back', array( $moved ) === $stored(), wp_json_encode( $stored() ) );
+		$check( '00-1 control: a NEW user outside the role is still refused', ! in_array( $author, $stored(), true ) );
+	} finally {
+		wp_delete_post( $post, true );
+		foreach ( array( $kept, $moved, $author ) as $id ) {
+			$drop_user( $id );
+		}
+	}
+} )();
+
 $summary();

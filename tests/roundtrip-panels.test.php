@@ -18,7 +18,7 @@
  * A difference a vendor's own form makes too can be listed in $parity with
  * the reason; anything else fails.
  *
- * Run: wp eval-file tests/roundtrip-panels.test.php --user=admin --path=<site> [--panel=minn_acf]
+ * Run: [MINN_RT_PANEL=minn_acf] wp eval-file tests/roundtrip-panels.test.php --user=admin --path=<site>
  *
  * @package minn-admin
  */

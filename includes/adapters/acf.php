@@ -414,6 +414,41 @@ function minn_admin_acf_date_untouched( $f, $incoming, $stored ) {
 }
 
 /**
+ * Whether a field's incoming value is exactly what the read served for it.
+ *
+ * The editor panel sends every ACF field back on any edit, so a field the
+ * person never touched arrives as its own read. Writing that read back
+ * re-runs it through the field's constraints (a relation entry whose user
+ * changed role, a post moved to another type) and its parser, which can
+ * change what is stored. Compared after JSON-level normalisation: scalars as
+ * strings, objects by key.
+ *
+ * @param array $f        Mapped field.
+ * @param mixed $incoming Value the client sent.
+ * @param mixed $stored   Raw stored value.
+ * @return bool
+ */
+function minn_admin_acf_untouched( $f, $incoming, $stored ) {
+	$norm = function ( $v ) use ( &$norm ) {
+		if ( is_object( $v ) ) {
+			$v = (array) $v;
+		}
+		if ( is_array( $v ) ) {
+			$v = array_map( $norm, $v );
+			if ( array_keys( $v ) !== range( 0, count( $v ) - 1 ) ) {
+				ksort( $v );
+			}
+			return $v;
+		}
+		if ( is_bool( $v ) ) {
+			return $v ? '1' : '';
+		}
+		return null === $v ? '' : (string) $v;
+	};
+	return $norm( $incoming ) === $norm( minn_admin_acf_value_out( $f, $stored ) );
+}
+
+/**
  * Incoming gallery value ([{ id, url }] entries or bare ids) → validated
  * attachment-id list. An empty list clears (ACF stores an empty array).
  *
@@ -1688,12 +1723,19 @@ function minn_admin_acf_read_values( $post_id ) {
  * for a single value an empty submission over a withheld id changes nothing.
  * An id the caller COULD see and left out is a real removal and goes.
  *
+ * A stored id that came back is kept too, where it was sent, even when it no
+ * longer meets the field's constraints (a user whose role changed, a post
+ * since moved to another type): the parser refuses such an id as a NEW
+ * choice, but sending back what is stored is not choosing it, and ACF's own
+ * screen keeps it the same way.
+ *
  * @param array        $field  Mapped field (type suggest or relation).
  * @param mixed        $value  Parsed incoming value from minn_admin_acf_value_in.
  * @param mixed        $stored Raw stored value for this field on this object.
+ * @param mixed        $sent   The value as the client sent it, before parsing.
  * @return mixed The value to write, or null to leave the stored value alone.
  */
-function minn_admin_acf_relation_preserve( $field, $value, $stored ) {
+function minn_admin_acf_relation_preserve( $field, $value, $stored, $sent = null ) {
 	if ( null === $value || ! in_array( $field['type'], array( 'suggest', 'relation' ), true ) ) {
 		return $value;
 	}
@@ -1725,6 +1767,17 @@ function minn_admin_acf_relation_preserve( $field, $value, $stored ) {
 	}
 	$stored = array_values( array_filter( array_map( 'strval', (array) $stored ), 'strlen' ) );
 	$value  = array_values( array_map( 'strval', (array) $value ) );
+	if ( is_array( $sent ) ) {
+		$kept = array();
+		foreach ( $sent as $entry ) {
+			$entry = is_array( $entry ) || is_object( $entry ) ? ( ( (array) $entry )['value'] ?? '' ) : $entry;
+			$id    = is_scalar( $entry ) ? (string) $entry : '';
+			if ( '' !== $id && ! in_array( $id, $kept, true ) && ( in_array( $id, $value, true ) || in_array( $id, $stored, true ) ) ) {
+				$kept[] = $id;
+			}
+		}
+		$value = $kept;
+	}
 	foreach ( $stored as $pos => $id ) {
 		if ( in_array( $id, $value, true ) || ! $withheld( $id ) ) {
 			continue;
@@ -1763,11 +1816,12 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 			$value = minn_admin_acf_flex_in( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
 		} else {
 			$stored = minn_admin_acf_raw_value( $field, $post_id );
-			if ( minn_admin_acf_date_untouched( $field, $value, $stored ) ) {
-				continue; // the stored date as served, not an edit
+			if ( minn_admin_acf_untouched( $field, $value, $stored ) ) {
+				continue; // the stored value as served, not an edit
 			}
+			$sent  = $value;
 			$value = minn_admin_acf_value_in( $field, $value );
-			$value = minn_admin_acf_relation_preserve( $field, $value, $stored );
+			$value = minn_admin_acf_relation_preserve( $field, $value, $stored, $sent );
 		}
 		if ( null === $value ) {
 			continue; // invalid input never clobbers a stored value
@@ -2849,8 +2903,9 @@ function minn_admin_acf_options_save( $page, $values ) {
 			if ( minn_admin_acf_date_untouched( $f, $v, $stored ) ) {
 				continue; // the stored date as served, not an edit
 			}
-			$v = minn_admin_acf_value_in( $f, $v, 'options' );
-			$v = minn_admin_acf_relation_preserve( $f, $v, $stored );
+			$sent = $v;
+			$v    = minn_admin_acf_value_in( $f, $v, 'options' );
+			$v    = minn_admin_acf_relation_preserve( $f, $v, $stored, $sent );
 		}
 		if ( null === $v ) {
 			continue; // invalid input never clobbers a stored value
