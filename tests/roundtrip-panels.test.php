@@ -357,7 +357,9 @@ foreach ( $panels as $panel ) {
 			$call( 'POST', "/{$ns}/{$base}/{$id}", array( 'title' => 'Minn round trip ' . $stamp ) );
 			$s0 = $snapshot( $id );
 			$call( 'POST', "/{$ns}/{$base}/{$id}", array( 'title' => 'Minn round trip ' . $stamp ) );
-			$noise = $changed_keys( $s0, $snapshot( $id ) );
+			// Plus meta that logs edits rather than holding a value (TEC's
+			// record of which fields were modified when).
+			$noise = array_merge( $changed_keys( $s0, $snapshot( $id ) ), array( '_tribe_modified_fields', '_edit_lock', '_edit_last' ) );
 
 			// Fidelity: type an awkward value into every typed field at once.
 			$values = $read();
