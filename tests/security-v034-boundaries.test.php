@@ -77,7 +77,10 @@ register_post_type(
 	'minn_boundary_item',
 	array(
 		'public'          => false,
-		'show_ui'         => false,
+		// A screen of its own, so the copy reaches the create check: duplicate
+		// answers "not found" for types nobody edits on a screen.
+		'show_ui'         => true,
+		'show_in_rest'    => true,
 		'capability_type' => array( 'minn_boundary_item', 'minn_boundary_items' ),
 		'map_meta_cap'    => true,
 		'capabilities'    => array( 'create_posts' => 'create_minn_boundary_items' ),
@@ -190,7 +193,7 @@ if ( ! $attachment_id || current_user_can( 'read_post', $attachment_id ) ) {
 	$data     = (array) $response->get_data();
 	$check(
 		'Image-block refuses an attachment the caller cannot read',
-		400 === $response->get_status()
+		403 === $response->get_status()
 			&& false === strpos( (string) ( $data['markup'] ?? '' ), 'MINN PRIVATE ALT' ),
 		'status ' . $response->get_status()
 	);

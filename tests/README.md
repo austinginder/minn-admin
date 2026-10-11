@@ -45,6 +45,13 @@ MINN_MS_SUPER_PASS=<lab super-admin password> node wp-multi-network.test.js
 # one retry per failed suite, full logs + summary in the output dir
 MINN_TEST_PASS=… ./run-all.sh /tmp/minn-run
 
+# every PHP suite (wp eval-file), beside run-all.sh in the release pre-flight:
+# single-site ones on the site this checkout sits in, network ones on a
+# multisite lab (SKIPPED without one), full logs + summary in the output dir
+MINN_PHP_NETWORK=<network root> MINN_PHP_SUBSITE=https://store.<lab>/ \
+  MINN_PHP_NET2_URL=https://lab2.<lab>/ MINN_PHP_NET2_USER=<its super admin> \
+  ./run-php.sh /tmp/minn-php
+
 # the NEXT WordPress (release pre-flight): updates a dedicated Cove site to
 # whatever core is ahead of stable, then runs the core-coupled suites there
 MINN_TEST_PASS=minn-core-latest-1 ./core-latest.sh /tmp/minn-core-latest

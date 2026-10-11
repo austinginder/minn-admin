@@ -110,12 +110,26 @@ $check(
 );
 
 // --- 3. a network administrator is not a target -------------------------
+// Their address gets the invitation's reply, so the route can't be used to
+// ask which addresses belong to a network administrator; no invitation is
+// stored or sent.
+$invite_reply = $data;
+$invites      = function () {
+	return (int) $GLOBALS['wpdb']->get_var( "SELECT COUNT(*) FROM {$GLOBALS['wpdb']->options} WHERE option_name LIKE 'new\\_user\\_%'" );
+};
+$before   = $invites();
 $response = $post( array( 'user' => 'minn_probe_netadmin@example.com', 'role' => 'administrator' ) );
 $check(
 	'A network administrator cannot be pulled into the site',
-	403 === $response->get_status() && ! is_user_member_of_blog( $net_admin, $blog_id ),
+	! is_user_member_of_blog( $net_admin, $blog_id ),
 	'status ' . $response->get_status() . ', member ' . var_export( is_user_member_of_blog( $net_admin, $blog_id ), true )
 );
+$check(
+	'Their address gets the same reply as an invitation',
+	$response->get_status() === 200 && wp_json_encode( $response->get_data() ) === wp_json_encode( $invite_reply ),
+	'status ' . $response->get_status()
+);
+$check( 'No invitation is stored for a network administrator', $invites() === $before, $before . ' → ' . $invites() );
 
 // --- 4. controls: the network administrator still works normally --------
 $super = get_super_admins();

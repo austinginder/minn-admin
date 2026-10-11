@@ -20,7 +20,9 @@
  * itself); the snapshot records the door, not the room.
  *
  * Run: wp eval-file tests/route-gates.test.php --user=admin --path=<site>
- *      (on a network: --url=<a site other than the main one>)
+ *      (on a network: --url=<a site other than the main one>; the network
+ *      snapshot comes from the lab's WooCommerce subsite, the one run-php.sh
+ *      uses, since the accounts and routes differ from site to site)
  * Rewrite the snapshot after reviewing a change: MINN_ROUTE_SNAPSHOT=write
  */
 

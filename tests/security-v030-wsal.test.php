@@ -67,7 +67,13 @@ try {
 		throw new RuntimeException( 'minnsiteadmin fixture missing' );
 	}
 	wp_set_current_user( $user->ID );
-	$check( 'Subsite administrator passes the adapter fallback permission', minn_admin_wsal_can_view() );
+	// WP Activity Log is not loaded in this lab, and without its resolver
+	// Minn answers no. Stand in one that lets a site administrator view, so
+	// the checks below test the tenant scope rather than the permission.
+	if ( ! class_exists( '\WSAL\Helpers\Settings_Helper' ) ) {
+		eval( 'namespace WSAL\Helpers; class Settings_Helper { public static function current_user_can( $action ) { return \current_user_can( "manage_options" ); } }' );
+	}
+	$check( 'Subsite administrator may view through WP Activity Log\'s resolver', minn_admin_wsal_can_view() );
 
 	if ( ! defined( 'WSAL_VERSION' ) ) {
 		define( 'WSAL_VERSION', 'test-fixture' );
