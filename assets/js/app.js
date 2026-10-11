@@ -19099,6 +19099,18 @@
 		return idx === -1 ? null : { items, idx, surface: m.surface };
 	}
 
+	// The item as stored now, in the shape the dialog opened with: through
+	// the detail route when the surface has one, else from the list page it
+	// came from. Null when it can't be found (the dialog's copy is used).
+	async function freshSurfaceItem( s, coll, item ) {
+		const detail = coll.detail || {};
+		if ( detail.detailRoute ) return api( detail.detailRoute.replace( '{id}', item.id ) );
+		const ss = surfaceState( s.id );
+		const body = await api( surfaceRoute( s, ss, ( ss.cache && ss.cache.page ) || 1 ) );
+		const items = coll.itemsKey ? ( body[ coll.itemsKey ] || [] ) : ( Array.isArray( body ) ? body : Object.values( body || {} ) );
+		return items.find( ( x ) => x && String( x.id ) === String( item.id ) ) || null;
+	}
+
 	function surfaceModalNav( dir ) {
 		const m = state.modal;
 		if ( m && m.loading ) return; // don't stack mid-flight detail loads
@@ -48887,22 +48899,44 @@
 				window.open( URL.createObjectURL( blob ), '_blank', 'noopener' );
 			} );
 			const saveBtn = $( '#minn-surface-save' );
+			// What each field showed when the dialog opened, to tell the
+			// fields the person changed from the ones they left alone.
+			if ( ! m.loading && m.editShown !== m.item ) {
+				m.editShown = m.item;
+				m.editInitial = {};
+				$$( '[data-editfield]' ).forEach( ( input ) => {
+					m.editInitial[ input.dataset.editfield ] = JSON.stringify( surfaceFieldValue( input ) );
+				} );
+			}
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const edit = ( ( m.coll || m.surface.collection ).detail || {} ).edit;
+				const coll = m.coll || m.surface.collection;
+				const edit = ( coll.detail || {} ).edit;
 				if ( ! edit ) return;
+				saveBtn.disabled = true;
+				saveBtn.textContent = __( 'Saving…' );
+				// Everything the person left alone is sent as stored NOW, so a
+				// change made since the dialog opened (another tab, the plugin's
+				// own screen, one of this surface's actions) is kept. The plugin
+				// still gets the whole record its sanitizer expects.
+				let now = null;
+				try {
+					now = await freshSurfaceItem( m.surface, coll, m.item );
+				} catch ( e ) { /* the dialog's copy */ }
+				const from = now || m.item;
 				const body = {};
-				// Carry the untouched fields so the plugin's sanitizer doesn't reset them.
 				// Objects are copied: an edit field below may write into one
 				// (action_data.url), and the cached item must stay as loaded.
 				( edit.preserve || [] ).forEach( ( k ) => {
-					const v = surfaceValue( m.item, k );
+					const v = surfaceValue( from, k );
 					if ( v !== undefined ) body[ k ] = ( v && typeof v === 'object' ) ? JSON.parse( JSON.stringify( v ) ) : v;
 				} );
 				$$( '[data-editfield]' ).forEach( ( input ) => {
-					setDeepPath( body, input.dataset.editfield, surfaceFieldValue( input ) );
+					const key = input.dataset.editfield;
+					const v = surfaceFieldValue( input );
+					const untouched = now && m.editInitial && m.editInitial[ key ] === JSON.stringify( v );
+					const stored = untouched ? surfaceValue( now, key ) : undefined;
+					setDeepPath( body, key, stored !== undefined ? stored : v );
 				} );
-				saveBtn.disabled = true;
-				saveBtn.textContent = __( 'Saving…' );
 				try {
 					await api( edit.route.replace( '{id}', m.item.id ), { method: edit.method || 'POST', body: JSON.stringify( body ) } );
 					toast( 'Saved' );
