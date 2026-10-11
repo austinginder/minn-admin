@@ -69,6 +69,7 @@ run() {
 }
 
 # Single site. Suites that switch users themselves take none.
+run core-icons single
 run duplicate-copy single --user=admin
 run language-packs single
 run notice-link-label single

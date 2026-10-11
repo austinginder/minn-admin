@@ -5,10 +5,15 @@ One icon for each name WordPress registers as core/<name>, drawn here from
 scratch (never traced from WordPress's icon library, Dashicons or any other
 set). Every icon sits on a 24 grid with a 1.8 currentColor stroke, round
 caps and joins, about 3px of breathing room, and fill only where a pair
-needs a solid partner (stars, symbols, dots). Minn Engine registers them
-from the JSON under WordPress's names.
+needs a solid partner (stars, symbols, dots).
 
-Run: python3 bin/icons/core-icons.py   (writes assets/icons/core-icons.json)
+These stroke drawings are the design source, and what Minn's own UI can use.
+WordPress's icon registry keeps only filled paths, so bin/icons/outline.py
+turns them into the shipped assets/icons/core-icons.json, which Minn Engine
+registers under WordPress's names.
+
+Run: python3 bin/icons/core-icons.py   (writes bin/icons/core-icons-stroke.json)
+     then bin/icons/outline.py         (writes assets/icons/core-icons.json)
 """
 import json, math, os, sys
 
@@ -141,7 +146,7 @@ I = {
 
 if __name__ == '__main__':
     out = {name: HEAD + body + '</svg>' for name, body in sorted(I.items())}
-    dest = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), '..', '..', 'assets', 'icons', 'core-icons.json')
+    dest = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), 'core-icons-stroke.json')
     with open(dest, 'w') as fh:
         json.dump(out, fh, indent=1, ensure_ascii=False)
         fh.write('\n')
