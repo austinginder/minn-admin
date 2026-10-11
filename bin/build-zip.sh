@@ -61,7 +61,7 @@ leaked="$( grep -cE "$NAME/(tests|bin|dist|languages|\.git)/|\.(po|pot)$|CLAUDE\
 	exit 1
 }
 
-for required in "$NAME/minn-admin.php" "$NAME/manifest.json" "$NAME/assets/js/app.js" "$NAME/docs/user-guide.md"; do
+for required in "$NAME/minn-admin.php" "$NAME/manifest.json" "$NAME/assets/js/app.js" "$NAME/assets/icons/core-icons.json" "$NAME/docs/user-guide.md"; do
 	grep -q " $required\$" <<< "$listing" || { echo "FAIL: $required missing from the zip" >&2; exit 1; }
 done
 
