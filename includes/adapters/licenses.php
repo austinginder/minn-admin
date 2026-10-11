@@ -1304,6 +1304,43 @@ function minn_admin_license_rows_restore( array $likes, array $snap ) {
 }
 
 /**
+ * Transients a refused paste must leave as they were, read through the
+ * transient API. Under a persistent object cache set_transient() never
+ * reaches wp_options, so minn_admin_license_rows() cannot see them there.
+ *
+ * @param array $ttls Transient name => the lifetime its owner gives it.
+ * @return array Name => [ value or false, lifetime ].
+ */
+function minn_admin_license_transients( array $ttls ) {
+	$out = array();
+	foreach ( $ttls as $name => $ttl ) {
+		$out[ $name ] = array( get_transient( $name ), (int) $ttl );
+	}
+	return $out;
+}
+
+/**
+ * Put back what minn_admin_license_transients() saw, when an object cache
+ * holds the transients (otherwise minn_admin_license_rows_restore() already
+ * restored their rows, expiry included). A value that was there comes back
+ * with its owner's full lifetime, as the next check would set it.
+ *
+ * @param array $snap minn_admin_license_transients() before the call.
+ */
+function minn_admin_license_transients_restore( array $snap ) {
+	if ( ! wp_using_ext_object_cache() ) {
+		return;
+	}
+	foreach ( $snap as $name => $was ) {
+		if ( false === $was[0] ) {
+			delete_transient( $name );
+		} else {
+			set_transient( $name, $was[0], $was[1] );
+		}
+	}
+}
+
+/**
  * Whether a Bricks licence status is one Bricks itself runs on: its own
  * License::license_is_valid() also accepts a processed order, a cancelled
  * (not refunded) subscription and a payment past due.
@@ -3542,6 +3579,12 @@ function minn_admin_license_default_providers() {
 					'_transient%' . $wpdb->esc_like( 'TEC_IS_ANY_LICENSE_VALID_TRANSIENT' ),
 				);
 				$snap = minn_admin_license_rows( $rows );
+				$kept = minn_admin_license_transients(
+					array(
+						(string) $checker->pue_key_status_transient_name => max( 1, isset( $checker->check_period ) ? (int) $checker->check_period : 12 ) * HOUR_IN_SECONDS,
+						'TEC_IS_ANY_LICENSE_VALID_TRANSIENT'              => HOUR_IN_SECONDS,
+					)
+				);
 				$out  = $tec_classify( $checker->validate_key( (string) $secret ) );
 				if ( ! $out['ok'] ) {
 					// Roll the seeded resource key back, and the status rows.
@@ -3549,6 +3592,7 @@ function minn_admin_license_default_providers() {
 						$resource->set_license_key( (string) $prev, 'local' );
 					}
 					minn_admin_license_rows_restore( $rows, $snap );
+					minn_admin_license_transients_restore( $kept );
 				}
 				return $out;
 			};
@@ -4376,10 +4420,12 @@ function minn_admin_license_default_providers() {
 			global $wpdb;
 			$rows = array( 'etch\_license\_options', '\_transient%etch\_license\_is\_active' );
 			$snap = minn_admin_license_rows( $rows );
+			$kept = minn_admin_license_transients( array( 'etch_license_is_active' => DAY_IN_SECONDS ) );
 			try {
 				\Etch\WpAdmin\License::get_instance()->activate_license( $secret );
 			} catch ( \Throwable $e ) {
 				minn_admin_license_rows_restore( $rows, $snap );
+				minn_admin_license_transients_restore( $kept );
 				throw $e;
 			}
 			return array( 'ok' => true );

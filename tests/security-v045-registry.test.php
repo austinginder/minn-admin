@@ -994,4 +994,69 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+// --- 05-2 A refused TEC paste leaves TEC's status transients as they were,
+// object cache or not ---
+// TEC records every answer to a pasted key (a refusal, an outage) as the
+// product's status: an option, a 12-hour md5-named transient and the
+// any-licence-valid transient. Minn's snapshot read wp_options rows only, so
+// under a persistent object cache, where set_transient() never reaches
+// wp_options, a typo marked a working key invalid for 12 hours. The object
+// cache is simulated in this process (transients then live in memory only),
+// the licence servers are offline, and every licence row is held and put back.
+( function () use ( $check, $call ) {
+	global $wpdb;
+	if ( ! class_exists( 'Tribe__PUE__Checker' ) || ! class_exists( 'Tribe__Tickets_Plus__Main' ) ) {
+		echo "SKIP  05-2 Event Tickets Plus inactive\n";
+		return;
+	}
+	$likes = array( $wpdb->esc_like( 'stellarwp_uplink_license_key_' ) . '%', $wpdb->esc_like( 'pue_' ) . '%' );
+	$rows  = function ( $like ) use ( $wpdb ) {
+		return $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value, autoload FROM {$wpdb->options} WHERE option_name LIKE %s", $like ), ARRAY_A );
+	};
+	$held = array();
+	foreach ( $likes as $like ) {
+		$held[ $like ] = $rows( $like );
+	}
+	$off = function ( $pre, $args, $url ) {
+		$host = (string) wp_parse_url( $url, PHP_URL_HOST );
+		return ( '' === $host || false !== strpos( $host, 'localhost' ) ) ? $pre : new WP_Error( 'minn_test_offline', 'offline' );
+	};
+	$host   = isset( $_SERVER['SERVER_NAME'] ) ? (string) $_SERVER['SERVER_NAME'] : strtolower( (string) wp_parse_url( get_option( 'siteurl' ), PHP_URL_HOST ) );
+	$status = md5( 'event-tickets-plus' . $host );
+	$any    = 'TEC_IS_ANY_LICENSE_VALID_TRANSIENT';
+	$set    = array();
+	$seen   = function ( $name ) use ( &$set ) {
+		$set[] = $name;
+	};
+	$was_ext = wp_using_ext_object_cache( true );
+	add_filter( 'pre_http_request', $off, PHP_INT_MAX, 3 );
+	add_action( 'setted_transient', $seen );
+	try {
+		set_transient( $status, 'valid', 12 * HOUR_IN_SECONDS );
+		set_transient( $any, array( 'plugins' => array( 'event-tickets-plus' => true ) ), HOUR_IN_SECONDS );
+		$set = array();
+		list( , $body ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => 'tec-event-tickets-plus', 'action' => 'activate', 'secret' => 'minntestlicensetypo' ) );
+		$check( '05-2 TEC wrote its status transients during the refused paste (the names this test watches)', in_array( $status, $set, true ) && in_array( $any, $set, true ), wp_json_encode( array_values( array_unique( $set ) ) ) );
+		$check( '05-2 under an object cache the product\'s status transient is as it was', empty( $body['ok'] ) && 'valid' === get_transient( $status ), wp_json_encode( array( $body['ok'] ?? null, get_transient( $status ) ) ) );
+		$any_now = get_transient( $any );
+		$check( '05-2 and so is the any-licence-valid transient', is_array( $any_now ) && true === ( $any_now['plugins']['event-tickets-plus'] ?? null ), wp_json_encode( $any_now ) );
+	} finally {
+		remove_action( 'setted_transient', $seen );
+		remove_filter( 'pre_http_request', $off, PHP_INT_MAX );
+		delete_transient( $status );
+		delete_transient( $any );
+		wp_using_ext_object_cache( $was_ext );
+		foreach ( $held as $like => $was ) {
+			foreach ( $rows( $like ) as $now ) {
+				$wpdb->delete( $wpdb->options, array( 'option_name' => $now['option_name'] ) );
+			}
+			foreach ( $was as $row ) {
+				$wpdb->insert( $wpdb->options, $row );
+			}
+		}
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+	}
+} )();
+
 $summary();
