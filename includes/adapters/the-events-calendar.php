@@ -321,11 +321,18 @@ add_action( 'rest_api_init', function () {
 					}
 					$data['organizer'] = array( 'OrganizerID' => $oid ? array( $oid ) : array() );
 				}
+				// saveEventMeta() always rewrites the cost (an absent one is
+				// deleted) and stores through add_post_meta(), which unslashes,
+				// as its own form's slashed $_POST expects. So a cost or website
+				// nobody touched goes back exactly as stored, and an edited one is
+				// cleaned; both slashed, or a backslash would be lost.
+				$stored_cost = (string) get_post_meta( $post->ID, '_EventCost', true );
+				$stored_url  = (string) get_post_meta( $post->ID, '_EventURL', true );
 				if ( array_key_exists( 'cost', $value ) ) {
-					$data['EventCost'] = sanitize_text_field( (string) $value['cost'] );
+					$data['EventCost'] = wp_slash( Minn_Admin::unchanged( $value['cost'], $stored_cost ) ? $stored_cost : sanitize_text_field( (string) $value['cost'] ) );
 				}
 				if ( array_key_exists( 'website', $value ) ) {
-					$data['EventURL'] = esc_url_raw( (string) $value['website'] );
+					$data['EventURL'] = wp_slash( Minn_Admin::unchanged( $value['website'], $stored_url ) ? $stored_url : esc_url_raw( (string) $value['website'] ) );
 				}
 				if ( ! $data ) {
 					return null;

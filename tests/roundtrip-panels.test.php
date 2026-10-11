@@ -36,10 +36,6 @@ $only    = isset( $assoc_args['panel'] ) ? (string) $assoc_args['panel'] : ( get
  * failure not listed here is a regression.
  */
 $known = array(
-	'minn_ssp on podcast: saving other fields leaves vendor-stored text as stored' => '14-2: SSP panel re-cleans untouched text',
-	'minn_tec on tribe_events: typed values read back as typed'                    => 'rt-1: TEC panel drops backslashes (unslashed values into saveEventMeta)',
-	'minn_tec on tribe_events: saving other fields leaves vendor-stored text as stored' => 'rt-1: TEC panel re-cleans and unslashes an untouched cost',
-	'minn_tec on tribe_events: saving the values as read changes nothing (round 1)'   => 'rt-1: the same cost loses another layer on the next save',
 );
 $results = array();
 $check   = function ( $label, $ok, $detail = '' ) use ( &$results, &$known ) {
@@ -113,6 +109,15 @@ $hints = array(
  * Where a field's meta key is not its name: the key its vendor stores it
  * under, so a value can be seeded the way the vendor's own form leaves it.
  */
+/*
+ * Raw values for fields whose vendor cleans every save of its own: what its
+ * own form would store, so only Minn's handling is under test. TEC runs
+ * tec_sanitize_string() on every meta string in saveEventMeta() (API.php).
+ */
+$raw_override = array(
+	'minn_tec:cost' => 'Raw\\slash 100 dollars, two  spaces',
+);
+
 $meta_of = array(
 	'minn_tec:cost' => '_EventCost',
 );
@@ -402,7 +407,7 @@ foreach ( $panels as $panel ) {
 				}
 				$key = $meta_of[ "{$vk}:{$name}" ] ?? $name;
 				if ( metadata_exists( 'post', $id, $key ) ) {
-					update_post_meta( $id, $key, wp_slash( $raw_text ) );
+					update_post_meta( $id, $key, wp_slash( $raw_override[ "{$vk}:{$name}" ] ?? $raw_text ) );
 					$seeded[] = $key;
 				}
 			}

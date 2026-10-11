@@ -112,11 +112,18 @@ function minn_admin_ssp_write_values( $post_id, $values ) {
 		return;
 	}
 	$schema = minn_admin_ssp_raw_fields();
+	// The panel sends every field when any one changes; an untouched one is
+	// left as SSP's own form stored it (sanitize_text_field would delete a
+	// %XX-shaped run from it).
+	$held = minn_admin_ssp_read_values( $post_id );
 	foreach ( $values as $key => $value ) {
 		if ( ! isset( $schema[ $key ] ) ) {
 			continue;
 		}
 		$type = isset( $schema[ $key ]['type'] ) ? (string) $schema[ $key ]['type'] : '';
+		if ( array_key_exists( $key, $held ) && Minn_Admin::unchanged( $value, $held[ $key ], 'checkbox' === $type ? 'bool' : 'text' ) ) {
+			continue;
+		}
 		switch ( $type ) {
 			case 'hidden':
 			case 'sync_status':

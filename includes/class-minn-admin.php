@@ -1094,6 +1094,48 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Whether a value sent back equals the value the read served for it.
+	 *
+	 * The editor's field panels send every value they show whenever any one
+	 * of them changes. A write skips (or, where the store needs every key,
+	 * passes back untouched) a value equal to what the read handed out, so an
+	 * untouched field never goes through a cleaner, a parser or a slashing
+	 * layer that could change it: a vendor's own form stored it, and nobody
+	 * edited it. tests/roundtrip-panels.test.php holds every panel to this.
+	 *
+	 * @param mixed  $sent   Value the client sent.
+	 * @param mixed  $served Value the read served for the same field.
+	 * @param string $kind   'bool' (on/off), 'number' (numeric), 'list' (a set)
+	 *                       or 'text' (line endings normalized).
+	 * @return bool
+	 */
+	public static function unchanged( $sent, $served, $kind = 'text' ) {
+		if ( 'bool' === $kind ) {
+			$on = function ( $v ) {
+				return ! empty( $v ) && 'false' !== $v && '0' !== (string) $v && 'off' !== $v;
+			};
+			return $on( $sent ) === $on( $served );
+		}
+		if ( 'list' === $kind ) {
+			$a = array_map( 'strval', (array) $sent );
+			$b = array_map( 'strval', (array) $served );
+			sort( $a );
+			sort( $b );
+			return $a === $b;
+		}
+		if ( ( null === $sent || '' === $sent ) && ( null === $served || '' === $served ) ) {
+			return true;
+		}
+		if ( ! is_scalar( $sent ) || ! is_scalar( $served ) ) {
+			return wp_json_encode( $sent ) === wp_json_encode( $served );
+		}
+		if ( 'number' === $kind && is_numeric( $sent ) && is_numeric( $served ) ) {
+			return (float) $sent === (float) $served;
+		}
+		return str_replace( "\r\n", "\n", (string) $sent ) === str_replace( "\r\n", "\n", (string) $served );
+	}
+
+	/**
 	 * Decode a PHP-serialized blob another plugin stored, as data only.
 	 *
 	 * This is the one sanctioned way for an adapter to read a serialized
