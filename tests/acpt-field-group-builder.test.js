@@ -53,6 +53,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const full = await fullOf( id );
 		if ( full.fields.some( ( b ) => b.name === 'probe_box' ) ) {
 			await api( 'POST', 'minn-admin/v1/acpt/schema/groups/' + id + '/full', {
+				stamp: full.stamp,
 				title: full.group.title,
 				location: full.group.location,
 				fields: full.fields.filter( ( b ) => b.name !== 'probe_box' ).map( rowOf ),
@@ -178,6 +179,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		// Refusals stay refusals at the route level.
 		const bad = await api( 'POST', 'minn-admin/v1/acpt/schema/groups/' + gid + '/full', {
+			stamp: ( await fullOf( gid ) ).stamp,
 			title: full.group.title, location: full.group.location,
 			fields: full.fields.map( rowOf ).concat( [ { type: 'box', name: 'refuse_box', label: 'R', sub_fields: [ { type: 'select', name: 'no_choices', label: 'X', choices: '' } ] } ] ),
 		} );

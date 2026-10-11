@@ -38,7 +38,8 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await api( 'POST', 'minn-admin/v1/acf/schema/groups', { title: 'Import Suite Group', location: 'post_type:post' } );
 		const list = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups?_cb=' + Math.random() ) ).data;
 		gkey = ( list.items.find( ( g ) => g.title === 'Import Suite Group' ) || {} ).id;
-		await api( 'POST', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full', { fields: [
+		const stamp = ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full' ) ).data.stamp;
+		await api( 'POST', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full', { stamp, fields: [
 			{ type: 'text', name: 'suite_note', label: 'Suite Note', placeholder: 'Hm' },
 			{ type: 'select', name: 'suite_pick', label: 'Suite Pick', choices: 'one : One\ntwo : Two' },
 		] } );

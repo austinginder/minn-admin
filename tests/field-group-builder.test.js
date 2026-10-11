@@ -177,6 +177,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter, BASE } = re
 			&& full.group.location[ 0 ][ 1 ].operator === '!=',
 			JSON.stringify( full.group.location ) );
 		const badLoc = await api( 'POST', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full', {
+			stamp: ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full' ) ).data.stamp,
 			fields: full.fields.map( ( f ) => ( { key: f.key } ) ),
 			location: [ [ { param: 'post_type', operator: '==', value: 'no_such_type' } ] ],
 		} );

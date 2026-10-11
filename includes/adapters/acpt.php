@@ -1514,6 +1514,9 @@ function minn_admin_acpt_builder_payload( $group ) {
 		$settings[ $id ] = $def['settings'];
 	}
 	return array(
+		// The whole stored group, as ACPT serializes it: a save rebuilds
+		// all of it, so a change anywhere makes this page's copy stale.
+		'stamp'           => Minn_Admin::stamp( $g ),
 		'group'           => array(
 			'key'           => (string) $g['id'],
 			'title'         => (string) ( '' !== (string) ( $g['label'] ?? '' ) ? $g['label'] : $g['name'] ),
@@ -1930,7 +1933,14 @@ add_action( 'rest_api_init', function () {
 				if ( ! $group ) {
 					return new WP_Error( 'not_found', __( 'Field group not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				$saved = minn_admin_acpt_builder_save( $group, (array) $request->get_json_params() );
+				// The save rebuilds the whole group from what the page sends:
+				// refuse one made from a copy the store has moved past.
+				$body  = (array) $request->get_json_params();
+				$stale = Minn_Admin::stale( $body['stamp'] ?? '', minn_admin_acpt_builder_payload( $group )['stamp'] );
+				if ( $stale ) {
+					return $stale;
+				}
+				$saved = minn_admin_acpt_builder_save( $group, $body );
 				if ( is_wp_error( $saved ) ) {
 					return $saved;
 				}

@@ -1144,6 +1144,37 @@ class Minn_Admin {
 	}
 
 	/**
+	 * A stamp of what a page loaded, for a save to prove it saw the latest.
+	 *
+	 * A page that saves a whole object back (a field group, a form) writes
+	 * its copy over the store. If the store changed after the page loaded
+	 * (another tab, the vendor's own screen, a sync), that copy would put the
+	 * older version back and delete what was added. The read hands out this
+	 * stamp of the object as it was; the save recomputes it and refuses with
+	 * a 409 when they differ, so the person reloads instead of overwriting.
+	 *
+	 * @param mixed $data The object as the page's read serves it.
+	 * @return string
+	 */
+	public static function stamp( $data ) {
+		return md5( (string) wp_json_encode( $data ) );
+	}
+
+	/**
+	 * The 409 a save answers when its stamp no longer matches the store.
+	 *
+	 * @param mixed  $sent    The stamp the client sent.
+	 * @param string $current The stamp of the object as stored now.
+	 * @return WP_Error|null Null when the save may go ahead.
+	 */
+	public static function stale( $sent, $current ) {
+		if ( is_string( $sent ) && '' !== $sent && hash_equals( $current, $sent ) ) {
+			return null;
+		}
+		return new WP_Error( 'minn_stale', __( 'This changed since you opened it. Reload to get the latest version, then make your changes again.', 'minn-admin' ), array( 'status' => 409 ) );
+	}
+
+	/**
 	 * Decode a PHP-serialized blob another plugin stored, as data only.
 	 *
 	 * This is the one sanctioned way for an adapter to read a serialized

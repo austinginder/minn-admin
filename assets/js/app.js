@@ -52554,6 +52554,8 @@
 			location: JSON.parse( JSON.stringify( r.group.location || [] ) ),
 			locationChoices: r.locationChoices || {},
 			types: r.types || Object.keys( FGB_EXTRAS ),
+			// Proof for the save that this page saw the group as stored.
+			stamp: r.stamp || '',
 			// Per-type settings vocabulary when the backend's differs from
 			// the ACF map (ACPT has no placeholder storage, for instance).
 			typeSettings: r.typeSettings || null,
@@ -53182,7 +53184,7 @@
 					return row;
 				};
 				const rows = fgb.fields.map( rowOf );
-				const body = { title: fgb.group.title, location: fgb.location, fields: rows };
+				const body = { stamp: fgb.stamp, title: fgb.group.title, location: fgb.location, fields: rows };
 				// Backends without an on/off flag never rendered the switch.
 				if ( fgb.group.active != null ) body.active = fgb.group.active;
 				try {

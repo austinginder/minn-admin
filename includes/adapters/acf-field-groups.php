@@ -951,7 +951,7 @@ function minn_admin_acf_builder_payload( $group ) {
 	foreach ( (array) acf_get_fields( $group ) as $f ) {
 		$fields[] = minn_admin_acf_builder_field( $f );
 	}
-	return array(
+	$out = array(
 		'group'  => array(
 			'key'           => $group['key'],
 			'title'         => (string) $group['title'],
@@ -965,6 +965,10 @@ function minn_admin_acf_builder_payload( $group ) {
 		'types'           => array_keys( minn_admin_acf_builder_types() ),
 		'locationChoices' => minn_admin_acf_location_choices(),
 	);
+	// The page saves the whole group back; the stamp lets the save refuse
+	// one made from a copy the store has moved past.
+	$out['stamp'] = Minn_Admin::stamp( array( $out['group'], $out['fields'] ) );
+	return $out;
 }
 
 /**
@@ -1385,7 +1389,15 @@ add_action( 'rest_api_init', function () {
 				if ( 'db' !== $group['minn_source'] ) {
 					return new WP_Error( 'read_only', __( 'This group is registered in code — edit it where it is defined.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				return rest_ensure_response( minn_admin_acf_builder_save( $group, (array) $request->get_json_params() ) );
+				// A field added in ACF (or by an acf-json sync) after the page
+				// loaded would read as removed and be deleted; a group switched
+				// off would come back on. Refuse a save from an older copy.
+				$body  = (array) $request->get_json_params();
+				$stale = Minn_Admin::stale( $body['stamp'] ?? '', minn_admin_acf_builder_payload( $group )['stamp'] );
+				if ( $stale ) {
+					return $stale;
+				}
+				return rest_ensure_response( minn_admin_acf_builder_save( $group, $body ) );
 			},
 		),
 	) );

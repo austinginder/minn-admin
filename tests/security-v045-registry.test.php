@@ -462,4 +462,44 @@ wp_set_current_user( $admin[0]->ID );
 	$check( '12-2 choices survive Minn\'s own text round trip', $back === $choices, wp_json_encode( $back ) . ' from ' . wp_json_encode( $text ) );
 } )();
 
+/*
+ * 04-5 (12-1): the ACF field-group builder saved the whole group from the
+ * page's copy, deleting a field added after the page loaded (another admin,
+ * an import, an acf-json sync) and switching a disabled group back on. A
+ * save now carries the stamp of what the page loaded and is refused (409)
+ * when the group moved since.
+ */
+( function () use ( $check, $call ) {
+	if ( ! function_exists( 'acf_update_field_group' ) || ! function_exists( 'acf_update_field' ) ) {
+		echo "SKIP  04-5 ACF inactive\n";
+		return;
+	}
+	$group = acf_update_field_group( array( 'key' => 'group_minn_v045_stale', 'title' => 'v045 stale probe', 'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ) ) );
+	acf_update_field( array( 'key' => 'field_minn_v045_a', 'label' => 'A', 'name' => 'minn_v045_a', 'type' => 'text', 'parent' => $group['ID'] ) );
+	try {
+		list( , $page ) = $call( 'GET', '/minn-admin/v1/acf/schema/groups/group_minn_v045_stale/full' );
+		// Someone adds a field in ACF while the page is open.
+		acf_update_field( array( 'key' => 'field_minn_v045_b', 'label' => 'B', 'name' => 'minn_v045_b', 'type' => 'text', 'parent' => $group['ID'] ) );
+		$rows = array_map( function ( $f ) {
+			return array( 'key' => $f['key'], 'label' => $f['label'] . ' renamed' );
+		}, (array) $page['fields'] );
+		list( $status ) = $call( 'POST', '/minn-admin/v1/acf/schema/groups/group_minn_v045_stale/full', array( 'stamp' => $page['stamp'], 'title' => 'v045 stale probe', 'fields' => $rows ) );
+		$still = (bool) acf_get_field( 'field_minn_v045_b' );
+		$check( '04-5 a save from a page opened before a field was added is refused (409)', 409 === $status && $still, $status . ' field B ' . ( $still ? 'kept' : 'DELETED' ) );
+		list( , $fresh ) = $call( 'GET', '/minn-admin/v1/acf/schema/groups/group_minn_v045_stale/full' );
+		$rows = array_map( function ( $f ) {
+			return array( 'key' => $f['key'], 'label' => $f['label'] );
+		}, (array) $fresh['fields'] );
+		list( $status ) = $call( 'POST', '/minn-admin/v1/acf/schema/groups/group_minn_v045_stale/full', array( 'stamp' => $fresh['stamp'], 'title' => 'v045 stale probe', 'fields' => $rows ) );
+		$check( '04-5 control: a save from the latest copy goes through', 200 === $status && (bool) acf_get_field( 'field_minn_v045_b' ), (string) $status );
+		list( $status ) = $call( 'POST', '/minn-admin/v1/acf/schema/groups/group_minn_v045_stale/full', array( 'title' => 'v045 stale probe', 'fields' => $rows ) );
+		$check( '04-5 a save with no stamp is refused', 409 === $status, (string) $status );
+	} finally {
+		$g = acf_get_field_group( 'group_minn_v045_stale' );
+		if ( $g ) {
+			acf_delete_field_group( $g['ID'] );
+		}
+	}
+} )();
+
 $summary();

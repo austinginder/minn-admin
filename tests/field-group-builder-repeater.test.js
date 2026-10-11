@@ -155,6 +155,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		/* ===== One-level guard: a new sub of type repeater refuses. ===== */
 		const nested = await api( 'POST', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full', {
+			stamp: ( await api( 'GET', 'minn-admin/v1/acf/schema/groups/' + gkey + '/full' ) ).data.stamp,
 			fields: [ {
 				key: full.fields[ 0 ].key,
 				sub_fields: full.fields[ 0 ].sub_fields.map( ( s ) => ( { key: s.key } ) )
