@@ -1253,6 +1253,32 @@ if ( class_exists( 'Minn_Admin_DB' ) ) {
 	$skip( '2bp DB browser not loaded' );
 }
 
+// 2bp-06: the System page offered the wp-config switches to a role the save
+// refuses (edit_files withheld by a role plugin); they now show to exactly
+// who the save answers.
+if ( is_multisite() ) {
+	$skip( '2bp-06 edit_files is super-admin-only on a network; single-site check' );
+} else {
+	$p_caps = get_role( 'administrator' )->capabilities;
+	unset( $p_caps['edit_files'] );
+	add_role( 'minn_noedit_test', 'Minn no file edits test', $p_caps );
+	$p_login = 'minn-noedit-' . wp_generate_password( 6, false, false );
+	$p_user  = wp_insert_user( array( 'user_login' => $p_login, 'user_email' => $p_login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'minn_noedit_test' ) );
+	list( , $p_sys_admin ) = $call( 'GET', '/minn-admin/v1/system' );
+	wp_set_current_user( $p_user );
+	list( $p_sys_st, $p_sys ) = $call( 'GET', '/minn-admin/v1/system' );
+	// The save's own gate, asked directly: a POST here would rewrite wp-config.php.
+	$p_can_save = current_user_can( 'edit_files' );
+	wp_set_current_user( $admin );
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	wp_delete_user( $p_user );
+	remove_role( 'minn_noedit_test' );
+	$check( '2bp-06 precondition: the save (edit_files) refuses this account', ! $p_can_save, '' );
+	$check( '2bp-06 the System page does not offer it the wp-config switches', 200 === $p_sys_st && empty( $p_sys['config']['editable'] ), wp_json_encode( array( $p_sys_st, $p_sys['config']['editable'] ?? null ) ) );
+	$p_admin_cfg = $p_sys_admin['config'] ?? array();
+	$check( '2bp-06 control: an administrator\'s switches follow writability as before', isset( $p_admin_cfg['editable'] ) && (bool) $p_admin_cfg['editable'] === ( ! empty( $p_admin_cfg['writable'] ) && Minn_Admin::code_edits_allowed() ), wp_json_encode( array( $p_admin_cfg['editable'] ?? null, $p_admin_cfg['writable'] ?? null ) ) );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

@@ -12553,8 +12553,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$writable   = $path && wp_is_writable( $path );
 		// DISALLOW_FILE_EDIT counts here too: this endpoint rewrites a PHP file,
 		// which is precisely what that directive exists to forbid, and core maps
-		// it into edit_files for every other PHP-editing path.
-		$disallowed = ! Minn_Admin::code_edits_allowed() || ! Minn_Admin::network_owner();
+		// it into edit_files for every other PHP-editing path. edit_files itself
+		// is what the save asks, so the switches show to exactly who it answers
+		// (a role without it, or a host's file_mod_allowed filter).
+		$disallowed = ! Minn_Admin::code_edits_allowed() || ! Minn_Admin::network_owner() || ! current_user_can( 'edit_files' );
 		$contents   = ( $path && is_readable( $path ) ) ? (string) file_get_contents( $path ) : '';
 
 		$constants = array();
