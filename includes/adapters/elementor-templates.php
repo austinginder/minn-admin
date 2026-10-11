@@ -648,8 +648,13 @@ add_action( 'rest_api_init', function () {
 			}
 			$item      = minn_admin_elementor_template_item( $post );
 			$type      = $item['type'];
-			$is_float  = minn_admin_elementor_is_floating_type( $type );
 			$float_cpt = minn_admin_elementor_floating_cpt();
+			// The copy goes where its source is, the post type the permission
+			// check above was made against. A library template typed as
+			// floating buttons (which Elementor lets a Contributor create) is
+			// copied into the library, not into the administrators-only
+			// Floating Buttons type.
+			$is_float  = $float_cpt && $float_cpt === $post->post_type;
 			$doc_type  = $is_float ? \Elementor\Modules\FloatingButtons\Module::FLOATING_BUTTONS_DOCUMENT_TYPE : $type;
 			$post_type = $is_float ? $float_cpt : \Elementor\TemplateLibrary\Source_Local::CPT;
 			/* translators: %s: the source template's title. */

@@ -356,4 +356,39 @@ wp_set_current_user( $admin[0]->ID );
 	$check( '11-3 control: they are listed for a store manager', (bool) $with, implode( ',', array_slice( $with, 0, 3 ) ) );
 } )();
 
+/*
+ * 13-2: Elementor's template Duplicate took its permission from the source's
+ * post type but wrote the copy into the type its template-type meta named,
+ * so a Contributor's library template typed as floating buttons came out as
+ * an administrators-only Floating Buttons post.
+ */
+( function () use ( $check, $call, $drop_user ) {
+	if ( ! function_exists( 'minn_admin_elementor_floating_cpt' ) || ! minn_admin_elementor_floating_cpt() || ! class_exists( '\\Elementor\\TemplateLibrary\\Source_Local' ) ) {
+		echo "SKIP  13-2 Elementor's floating buttons are not available\n";
+		return;
+	}
+	$admin_id = get_current_user_id();
+	$contrib  = wp_insert_user( array( 'user_login' => 'minn-v045-co-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'contributor', 'user_email' => 'minn-v045-co-' . wp_rand() . '@example.com' ) );
+	$lib      = \Elementor\TemplateLibrary\Source_Local::CPT;
+	$src      = wp_insert_post( array( 'post_type' => $lib, 'post_title' => 'v045 floating probe', 'post_status' => 'draft', 'post_author' => $contrib ) );
+	update_post_meta( $src, '_elementor_template_type', 'floating-buttons' );
+	update_post_meta( $src, '_elementor_edit_mode', 'builder' );
+	$made = 0;
+	try {
+		wp_set_current_user( $contrib );
+		list( $status, $d ) = $call( 'POST', "/minn-admin/v1/elementor/templates/{$src}/duplicate" );
+		$made = is_array( $d ) && ! empty( $d['id'] ) ? (int) $d['id'] : 0;
+		$type = $made ? get_post_type( $made ) : '';
+		$check( "13-2 a Contributor's copy stays out of Floating Buttons", minn_admin_elementor_floating_cpt() !== $type, "{$status} {$type}" );
+	} finally {
+		wp_set_current_user( $admin_id );
+		foreach ( array( $made, $src ) as $id ) {
+			if ( $id ) {
+				wp_delete_post( $id, true );
+			}
+		}
+		$drop_user( $contrib );
+	}
+} )();
+
 $summary();
