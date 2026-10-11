@@ -1,7 +1,9 @@
 /**
- * Extensions → "What's new" on a plugin with a pending update, and the
- * version number on every plugin card, open the plugin's own changelog in
- * the changelog modal (minn-admin/v1/plugin-changelog).
+ * Extensions → the version number on every plugin card opens the plugin's
+ * own changelog in the changelog modal (minn-admin/v1/plugin-changelog);
+ * with an update pending it names the installed and offered versions. No
+ * card carries a separate "What's new" link: it promised notes for the
+ * offered release, which the author's changelog may not have.
  *
  * Two offers are armed through the dev-fixtures mu-plugin: a VENDOR-hosted
  * one (plugins_api answered by a hook, with a script tag and inline handlers
@@ -86,15 +88,16 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 
 		/* ===== UI ===== */
 		await page.goto( BASE + '/minn-admin/extensions', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( `.minn-plugin[data-plugin="${ VENDOR }"] [data-whatsnew]`, { timeout: 20000 } );
+		await page.waitForSelector( `.minn-plugin[data-plugin="${ VENDOR }"] .minn-badge-update`, { timeout: 20000 } );
 		const updatesTab = await page.$( '[data-xfilter="updates"]' );
 		if ( updatesTab ) {
 			await updatesTab.click();
 			await page.waitForTimeout( 400 );
 		}
-		t.check( 'the update filter still shows the card with its What\'s new link',
-			!! await page.$( `.minn-plugin[data-plugin="${ VENDOR }"] [data-whatsnew]` ) );
-		await page.click( `.minn-plugin[data-plugin="${ VENDOR }"] [data-whatsnew]` );
+		t.check( 'the update filter shows the card with its version button and no What\'s new link',
+			!! await page.$( `.minn-plugin[data-plugin="${ VENDOR }"] button.minn-plugin-ver[data-changelog]` )
+				&& ! /What.s new/.test( await page.$eval( `.minn-plugin[data-plugin="${ VENDOR }"]`, ( c ) => c.textContent ) ) );
+		await page.click( `.minn-plugin[data-plugin="${ VENDOR }"] [data-changelog]` );
 		await page.waitForSelector( '.minn-cl-modal [data-clver]', { timeout: 15000 } );
 		const modal = await page.evaluate( () => ( {
 			title: document.querySelector( '.minn-cl-modal .minn-modal-title' ).textContent.trim(),
@@ -104,7 +107,7 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 			foot: ( document.querySelector( '.minn-cl-modal .minn-changelog-foot a' ) || {} ).href || '',
 			xss: window.minnFixtureXss,
 		} ) );
-		t.check( 'modal names the plugin', /Akismet/.test( modal.title ), modal.title );
+		t.check( 'modal is the plugin\'s Changelog, offer or not', /^Changelog · .*Akismet/.test( modal.title ), modal.title );
 		t.check( 'modal states installed and offered versions', /Installed v5.*update to v5/.test( modal.meta ), modal.meta );
 		t.check( 'version rail lists both releases', modal.chips.length === 2 && modal.chips[ 0 ] === '9.9.9', JSON.stringify( modal.chips ) );
 		t.check( 'first release renders and nothing ran', /Fixture <strong>bold<\/strong>/.test( modal.body ) && ! modal.xss && ! /onclick/.test( modal.body ), modal.body.slice( 0, 160 ) );
@@ -124,7 +127,7 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		}, VENDOR );
 		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
 		const entries = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].map( ( b ) => b.textContent.trim() ) );
-		t.check( 'card context menu offers What\'s new', entries.some( ( e ) => /What.s new in/.test( e ) ), JSON.stringify( entries ) );
+		t.check( 'card context menu offers the changelog, not What\'s new', entries.includes( 'Changelog' ) && ! entries.some( ( e ) => /What.s new/.test( e ) ), JSON.stringify( entries ) );
 		await page.keyboard.press( 'Escape' );
 		await page.waitForTimeout( 200 );
 
@@ -136,8 +139,8 @@ const { BASE, WP, launch, login, reporter } = require( './helpers' );
 		}
 		const NOOFFER = 'hello-dolly/hello';
 		await page.waitForSelector( `.minn-plugin[data-plugin="${ NOOFFER }"] [data-changelog]`, { timeout: 20000 } );
-		t.check( 'a card with no pending update has no What\'s new link but a version button',
-			! await page.$( `.minn-plugin[data-plugin="${ NOOFFER }"] [data-whatsnew]` ) && !! await page.$( `.minn-plugin[data-plugin="${ NOOFFER }"] button.minn-plugin-ver` ) );
+		t.check( 'a card with no pending update opens the changelog from its version button',
+			!! await page.$( `.minn-plugin[data-plugin="${ NOOFFER }"] button.minn-plugin-ver` ) );
 		await page.click( `.minn-plugin[data-plugin="${ NOOFFER }"] [data-changelog]` );
 		await page.waitForFunction( () => document.querySelector( '.minn-cl-modal' ) && ! document.querySelector( '.minn-cl-modal .minn-loading' ), null, { timeout: 15000 } );
 		const plain = await page.evaluate( () => ( {

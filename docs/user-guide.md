@@ -760,12 +760,13 @@ group.
   untouched. Toggle, update and
   delete with plain confirmations. The version number on every plugin and
   theme card opens its changelog, one release per chip with the one you
-  are running marked, whether or not an update is pending; a card with an
-  update waiting also shows a "What's new" link with the installed and
-  offered versions named above the notes, so you can read what changes
-  before you run it. An active plugin's card carries a row of doorways:
-  chips for every Minn view built on it (Forms for Gravity Forms, Store
-  settings for WooCommerce, its Licenses row) and its own screen in
+  are running marked, whether or not an update is pending; with an update
+  waiting, the installed and offered versions are named above the notes.
+  The notes are whatever the plugin's author publishes, so they may not
+  describe the release on offer yet. An active plugin's card carries a
+  row of doorways: chips for every Minn view built on it (Forms for
+  Gravity Forms, Store settings for WooCommerce, its Licenses row) and
+  its own screen in
   wp-admin for whatever Minn does not cover yet; the right-click menu
   lists every screen the plugin has, and the provider name in the top bar
   of a plugin-backed view opens the same menu the other way. Every plugin and theme card carries an

@@ -24174,7 +24174,6 @@
 							${ offered || isUpdating ? ( B.caps.update
 								? `<button class="minn-badge-update as-btn" data-update="${ esc( p.plugin ) }" data-minn-offered="${ esc( offered ) }" ${ isUpdating ? 'disabled' : '' } title="${ esc( badgeTitle ) }">${ esc( badgeLabel ) }</button>`
 								: `<span class="minn-badge-update">${ esc( __( 'Update' ) ) }</span>` ) : '' }
-							${ offered ? `<button type="button" class="minn-linkish minn-plugin-whatsnew" data-whatsnew="${ esc( p.plugin ) }" title="${ esc( sprintf( /* translators: %s: the version on offer. */ __( 'What changed in %s' ), offered ) ) }">${ esc( __( 'What\'s new' ) ) }</button>` : '' }
 						</div>
 						<div class="minn-plugin-desc">${ esc( stripTags( ( ( p.description && p.description.rendered ) || '' ).replace( /<cite>[\s\S]*?<\/cite>/, '' ) ) ) }</div>
 						${ p.author ? `<div class="minn-plugin-author">${ esc( __( 'By' ) ) } ${ p.author_uri
@@ -24349,11 +24348,11 @@
 					run: () => queuePluginUpdate( file, name ),
 				} );
 			}
+			// "Changelog", not "What's new in X": the notes are whatever the
+			// plugin's author publishes, and they may not cover the release
+			// on offer at all.
 			entries.push( {
-				label: offered
-					/* translators: %s: the version on offer. */
-					? sprintf( __( 'What\'s new in %s' ), offered )
-					: __( 'Changelog' ),
+				label: __( 'Changelog' ),
 				run: () => openPluginChangelogFor( file, name ),
 			} );
 			if ( on || net ) {
@@ -24424,9 +24423,9 @@
 			} )
 		);
 
-		$$( '[data-whatsnew], [data-changelog]', view ).forEach( ( btn ) =>
+		$$( '[data-changelog]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				const plugin = plugins.find( ( p ) => p.plugin === ( btn.dataset.whatsnew || btn.dataset.changelog ) );
+				const plugin = plugins.find( ( p ) => p.plugin === btn.dataset.changelog );
 				if ( plugin ) openPluginChangelogFor( plugin.plugin, pluginDisplayName( plugin.name ) );
 			} )
 		);
@@ -47485,9 +47484,9 @@
 				<div class="minn-modal wide minn-cl-modal">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ pl
-							? ( pl.offered
-								? sprintf( esc( /* translators: %s: the plugin's name. */ __( 'What\'s new · %s' ) ), esc( pl.name ) )
-								: sprintf( esc( /* translators: %s: the plugin's name. */ __( 'Changelog · %s' ) ), esc( pl.name ) ) )
+							// A plugin's notes are its author's, offer or not: never
+							// promised as what the offered release brings.
+							? sprintf( esc( /* translators: %s: the plugin's name. */ __( 'Changelog · %s' ) ), esc( pl.name ) )
 							: ! ENGINE
 								? sprintf( esc( /* translators: %s: the Minn Admin version. */ __( 'What\'s new · v%s' ) ), esc( B.version ) )
 								: m.engine
