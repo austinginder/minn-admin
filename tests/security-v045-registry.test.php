@@ -444,4 +444,22 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 12-2: the ACF builder and the Fields view re-parse a field's choices from
+ * the text Minn wrote for them. The parser trimmed each line before looking
+ * for ' : ', so '' => 'None' came back as ': None' and 'x' => '' as 'x :'
+ * on every save. Encoded with Minn's own writer, decoded with its parser.
+ */
+( function () use ( $check ) {
+	if ( ! function_exists( 'minn_admin_acf_schema_field_item' ) || ! function_exists( 'minn_admin_acf_schema_parse_choices' ) ) {
+		echo "SKIP  12-2 no ACF schema adapter\n";
+		return;
+	}
+	$choices = array( '' => 'None', 'a' => 'Apple', 'x' => '', '16:9' => 'Wide', 'b' => 'b' );
+	$item    = minn_admin_acf_schema_field_item( array( 'key' => 'field_minn_v045', 'name' => 'v045', 'label' => 'V045', 'type' => 'select', 'choices' => $choices ), array( 'key' => 'group_minn_v045', 'title' => 'V045' ) );
+	$text    = (string) ( $item['choices'] ?? '' );
+	$back    = minn_admin_acf_schema_parse_choices( $text );
+	$check( '12-2 choices survive Minn\'s own text round trip', $back === $choices, wp_json_encode( $back ) . ' from ' . wp_json_encode( $text ) );
+} )();
+
 $summary();

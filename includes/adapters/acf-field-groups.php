@@ -180,22 +180,26 @@ function minn_admin_acf_schema_field_item( $f, $group ) {
  * @return array
  */
 function minn_admin_acf_schema_parse_choices( $text ) {
+	// ACF's own decoder, so text Minn wrote from a field's choices comes back
+	// as those choices: an empty value (' : None') and an empty label
+	// ('x : ') included.
+	if ( function_exists( 'acf_decode_choices' ) ) {
+		$decoded = acf_decode_choices( (string) $text );
+		return is_array( $decoded ) ? $decoded : array();
+	}
 	$out = array();
 	foreach ( preg_split( '/\r?\n/', (string) $text ) as $line ) {
-		$line = trim( $line );
-		if ( '' === $line ) {
+		if ( '' === trim( $line ) ) {
 			continue;
 		}
-		// Split on ' : ' (spaces included) exactly as acf_decode_choices does,
-		// so a value that itself carries a colon (16:9, 10:30, a URL) survives
-		// the round trip instead of being cut at its first ':'.
+		// The same rule: split on ' : ' (spaces included) before trimming,
+		// so a value with a colon of its own (16:9, a URL) survives and an
+		// empty value or label stays empty.
 		if ( false !== strpos( $line, ' : ' ) ) {
-			$parts         = explode( ' : ', $line );
-			$value         = trim( $parts[0] );
-			$label         = trim( $parts[1] );
-			$out[ $value ] = '' !== $label ? $label : $value;
+			$parts                   = explode( ' : ', $line );
+			$out[ trim( $parts[0] ) ] = trim( $parts[1] );
 		} else {
-			$out[ $line ] = $line;
+			$out[ trim( $line ) ] = trim( $line );
 		}
 	}
 	return $out;
