@@ -83,8 +83,8 @@ Expand only the part of Minn you want to explore.
   Replace; the **SVG** filter tab appears with Safe SVG or SVG Support active, and
   **↻ Thumbnails** works through Regenerate Thumbnails or Force Regenerate Thumbnails
 - **Comments** — full moderation (pending / approved / spam / trash) with **bulk moderation**
-  (each tab offers its own verbs), inline replies, in-place comment editing, **Block
-  commenter** (core's disallowed list, with Undo) and a right-click menu for the same verbs
+  (each tab offers its own verbs), inline replies, in-place comment editing and a right-click
+  menu for the same verbs
 - **Ecommerce** — full WooCommerce day-to-day in Minn: **Orders** open as full pages (linkable,
   refreshable, with a **Quick view** modal from the list) with search, status, notes, a **Payment
   card** that records hand-received payments through WooCommerce's own machinery, **itemized

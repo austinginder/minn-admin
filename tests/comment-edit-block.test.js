@@ -1,11 +1,12 @@
 /**
- * Comment body/author editing + Block commenter.
+ * Comment body/author editing, and no one-click Block commenter.
  *
  * Edit: inline box on Pending/Approved rows — body for everyone, author
  * name/email only on guest comments (registered comments keep their account
- * identity). Block: right-click → Block commenter appends the email to
- * core's disallowed_keys (manage_options), with a toast Undo that removes
- * exactly what the block added.
+ * identity). Block commenter was removed in v0.45.0: core matches each
+ * disallowed_keys line as a substring of every later comment, so an address
+ * the commenter chose can't stand for them alone. The right-click menu no
+ * longer offers it and its route is gone.
  *
  * minnadmin runs Disable Comments as a resident fixture — deactivated for
  * the run, restored in finally (rule-53 pattern).
@@ -78,30 +79,20 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		t.check( 'registered comment hides author fields', ! ( await page.$( '#minn-cedit-name' ) ), '' );
 		await page.click( '#minn-cedit-cancel' );
 
-		// Block the guest via the row's right-click menu.
+		// The right-click menu offers the row's verbs and nothing that writes
+		// the disallowed list.
 		const before = String( ( await spamState() ).disallowed_keys || '' );
-		t.check( 'guest email not yet disallowed', ! before.includes( guestEmail ), '' );
 		const row = await page.$( `.minn-comment-row[data-crow="${ guestId }"]` );
 		await row.click( { button: 'right' } );
-		await page.waitForFunction( () => Array.from( document.querySelectorAll( 'button, a' ) ).some( ( b ) => /Block commenter/.test( b.textContent ) ), null, { timeout: 8000 } );
-		await page.evaluate( () => {
-			const b = Array.from( document.querySelectorAll( 'button, a' ) ).find( ( x ) => /Block commenter/.test( x.textContent ) );
-			b.click();
-		} );
-		await page.waitForFunction( () => Array.from( document.querySelectorAll( 'button' ) ).some( ( b ) => b.textContent.trim() === 'Undo' ), null, { timeout: 10000 } );
-		const blocked = String( ( await spamState() ).disallowed_keys || '' );
-		t.check( 'block appends the email to disallowed_keys', blocked.includes( guestEmail ), '' );
-
-		// Undo removes exactly that line.
-		await page.evaluate( () => {
-			const b = Array.from( document.querySelectorAll( 'button' ) ).find( ( x ) => x.textContent.trim() === 'Undo' );
-			b.click();
-		} );
-		await page.waitForTimeout( 1200 );
-		const undone = String( ( await spamState() ).disallowed_keys || '' );
-		t.check( 'undo removes the line and nothing else', ! undone.includes( guestEmail ) && undone === before, '' );
+		await page.waitForFunction( () => Array.from( document.querySelectorAll( 'button, a' ) ).some( ( b ) => /Open post in editor|View post/.test( b.textContent ) ), null, { timeout: 8000 } );
+		const offered = await page.evaluate( () => Array.from( document.querySelectorAll( 'button, a' ) ).some( ( b ) => /Block commenter/.test( b.textContent ) ) );
+		t.check( 'the menu offers no Block commenter', ! offered, '' );
+		await page.keyboard.press( 'Escape' );
+		const gone = await api( `minn-admin/v1/comments/${ guestId }/block`, { method: 'POST' } );
+		t.check( 'the block route is gone', 404 === gone.status, String( gone.status ) );
+		const keysNow = String( ( await spamState() ).disallowed_keys || '' );
+		t.check( 'the disallowed list is untouched', keysNow === before, '' );
 	} finally {
-		await api( 'minn-admin/v1/comments/block-undo', { method: 'POST', body: JSON.stringify( { lines: [ guestEmail ] } ) } ).catch( () => {} );
 		await deletePost( page, postId );
 		await setPlugin( 'disable-comments/disable-comments', 'active' ).catch( () => {} );
 	}

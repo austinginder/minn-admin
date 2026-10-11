@@ -2234,41 +2234,6 @@ class Minn_Admin_REST {
 			)
 		);
 
-		// Block a commenter: their email (or IP when the comment carries no
-		// email) joins core's disallowed_keys, so future comments land in
-		// the trash — core's own mechanism, no new storage. Undo removes
-		// exactly the lines the block added. manage_options mirrors who may
-		// edit the disallowed list in wp-admin.
-		register_rest_route(
-			self::NS,
-			'/comments/(?P<id>\d+)/block',
-			array(
-				'methods'             => 'POST',
-				'callback'            => array( __CLASS__, 'comment_block' ),
-				'permission_callback' => function () {
-					return current_user_can( 'manage_options' );
-				},
-			)
-		);
-		register_rest_route(
-			self::NS,
-			'/comments/block-undo',
-			array(
-				'methods'             => 'POST',
-				'callback'            => array( __CLASS__, 'comment_block_undo' ),
-				'permission_callback' => function () {
-					return current_user_can( 'manage_options' );
-				},
-				'args'                => array(
-					'lines' => array(
-						'type'     => 'array',
-						'required' => true,
-						'items'    => array( 'type' => 'string' ),
-					),
-				),
-			)
-		);
-
 		// Months that actually hold uploads — feeds the Media view's date
 		// filter combobox (wp-admin's months_dropdown, minus the markup).
 		register_rest_route(
@@ -2475,61 +2440,6 @@ class Minn_Admin_REST {
 	 */
 	private static function debug_log_path() {
 		return Minn_Admin_Logs::debug_log_path();
-	}
-
-	/**
-	 * Add a commenter's identity to core's disallowed_keys. Email is the
-	 * identity of record; the IP stands in only when the comment has none.
-	 */
-	public static function comment_block( WP_REST_Request $request ) {
-		$comment = get_comment( (int) Minn_Admin::path_param( $request ) );
-		if ( ! $comment ) {
-			return new WP_Error( 'not_found', __( 'Comment not found.', 'minn-admin' ), array( 'status' => 404 ) );
-		}
-		// Core matches every disallowed_keys line as a substring of a new
-		// comment's author, email, URL, text and IP, so the line has to stand
-		// for this commenter alone. An IP never does (1.2.3.4 is inside
-		// 11.2.3.40, and a proxy's shared address is everyone), and an address
-		// the commenter picked can sit inside other people's (e@gmail.com is
-		// in jane@gmail.com): those go to Spam instead.
-		$candidate = trim( (string) $comment->comment_author_email );
-		if ( '' === $candidate || ! is_email( $candidate ) ) {
-			return new WP_Error( 'no_identity', __( 'This comment carries no email address to block. Mark it as spam instead.', 'minn-admin' ), array( 'status' => 400 ) );
-		}
-		global $wpdb;
-		$wider = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT comment_author_email FROM {$wpdb->comments} WHERE comment_author_email LIKE %s AND LOWER( comment_author_email ) <> LOWER( %s ) LIMIT 1",
-				'%' . $wpdb->esc_like( $candidate ) . '%',
-				$candidate
-			)
-		);
-		if ( null !== $wider ) {
-			return new WP_Error( 'too_broad', __( 'That address is part of other commenters\' addresses, so blocking it would trash their comments too. Mark this one as spam instead.', 'minn-admin' ), array( 'status' => 409 ) );
-		}
-		$lines = array_filter( array_map( 'trim', explode( "\n", (string) get_option( 'disallowed_keys', '' ) ) ) );
-		$added = array();
-		if ( ! in_array( $candidate, $lines, true ) ) {
-			$lines[] = $candidate;
-			$added[] = $candidate;
-			update_option( 'disallowed_keys', implode( "\n", $lines ) );
-		}
-		return rest_ensure_response(
-			array(
-				'blocked' => $candidate,
-				'added'   => $added,
-				'already' => empty( $added ),
-			)
-		);
-	}
-
-	/** Remove exactly the lines a block added (the toast's Undo). */
-	public static function comment_block_undo( WP_REST_Request $request ) {
-		$remove = array_filter( array_map( 'trim', (array) $request['lines'] ) );
-		$lines  = array_filter( array_map( 'trim', explode( "\n", (string) get_option( 'disallowed_keys', '' ) ) ) );
-		$lines  = array_values( array_diff( $lines, $remove ) );
-		update_option( 'disallowed_keys', implode( "\n", $lines ) );
-		return rest_ensure_response( array( 'removed' => array_values( $remove ) ) );
 	}
 
 	/**

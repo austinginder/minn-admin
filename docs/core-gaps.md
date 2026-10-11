@@ -336,8 +336,11 @@ Tabs for pending/approved/spam/trash, full per-row moderation, bulk
 moderation with per-tab verbs (shipped v0.11.0), inline reply
 (auto-approves like core), context menu. The last two gaps closed in the
 v0.20.0 cycle: inline comment editing (text always; author name/email for
-guest comments) and Block commenter (adds the author's email or IP to
-core's disallowed list, visible under Settings → Comments, with Undo).
+guest comments) and Block commenter. Block commenter was removed in v0.45.0:
+core matches each disallowed-list line as a substring of every later
+comment, so no address a commenter chose can stand for that commenter alone.
+Spam is the one-click answer; the disallowed list stays editable under
+Settings → Comments.
 
 ### Multisite — daily network operations covered
 Minn boots on main sites and subsites, heals routes after network activation,

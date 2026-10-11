@@ -658,4 +658,29 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+// --- 08-3 A short address no commenter's contains yet still trashed later comments ---
+// Core matches each disallowed_keys line as a substring of every later comment.
+// The block's breadth check consulted only commenters who already exist, so a
+// spammer's short address (x@<domain>) was accepted and every later comment
+// from a longer address containing it went to the trash. The block is gone.
+( function () use ( $check, $call ) {
+	$post = (int) get_option( 'page_on_front' ) ?: (int) get_posts( array( 'post_type' => 'post', 'post_status' => 'publish', 'numberposts' => 1, 'fields' => 'ids' ) )[0];
+	if ( ! $post ) {
+		echo "SKIP  08-3 no published post to comment on\n";
+		return;
+	}
+	$was   = get_option( 'disallowed_keys', '' );
+	$tag   = 'mv45cb' . wp_rand( 1000, 9999 );
+	$short = (int) wp_insert_comment( array( 'comment_post_ID' => $post, 'comment_author' => 'Minn test', 'comment_author_email' => "x@{$tag}.example", 'comment_author_IP' => '203.0.113.9', 'comment_content' => 'Minn 08-3', 'comment_approved' => 0 ) );
+	try {
+		list( $status ) = $call( 'POST', "/minn-admin/v1/comments/{$short}/block" );
+		$lines = array_map( 'trim', explode( "\n", (string) get_option( 'disallowed_keys', '' ) ) );
+		$check( '08-3 a short address is not added to the disallowed list', 404 === $status && ! in_array( "x@{$tag}.example", $lines, true ), (string) $status );
+		$check( '08-3 so a later comment from a longer address is not trashed', ! wp_check_comment_disallowed_list( 'Jane', "jax@{$tag}.example", '', 'Hello', '198.51.100.4', 'Mozilla/5.0' ) );
+	} finally {
+		update_option( 'disallowed_keys', $was );
+		wp_delete_comment( $short, true );
+	}
+} )();
+
 $summary();
