@@ -46,6 +46,13 @@ class Minn_Admin_DB {
 	/** Whether credential_needles() stopped at a cap, so some copies may print. */
 	private static $needles_capped = false;
 
+	/**
+	 * A path segment that holds credentials whatever its entries are keyed by:
+	 * licences, keys, tokens, secrets, credentials, codes, alone or after a
+	 * word (Jetpack's user_tokens, api_keys, purchase_codes, licence_keys).
+	 */
+	const CREDENTIAL_CONTAINER = '/^(\w+_)?(licen[cs]es?|licen[cs]e_keys?|keys|tokens|secrets|credentials|codes)$/';
+
 	/** A value search reaches at most this many rows while copies are left out. */
 	const NEEDLE_COUNT_CAP = 1000;
 
@@ -481,13 +488,17 @@ class Minn_Admin_DB {
 		if ( preg_match( '/_(id|ids|count|type|status|at|date|time|expires|expiry|expiration|length|name|label|hint|created|updated|modified|used|action|method)$/', $n ) ) {
 			return false;
 		}
+		// Token counts (AI usage, design tokens), not tokens.
+		if ( preg_match( '/(^|_)(prompt|completion|total|num|max|min|input|output|remaining|cached|reasoning|design)_tokens$/', $n ) ) {
+			return false;
+		}
 		// A private key under any arrangement of the two words: MainWP's
 		// privkey, UpdraftCentral's key_local_private.
 		if ( preg_match( '/(^|_)priv(ate)?_?keys?(_|$)/', $n )
 			|| ( preg_match( '/(^|_)priv(ate)?(_|$)/', $n ) && preg_match( '/(^|_)keys?(_|$)/', $n ) ) ) {
 			return true;
 		}
-		return (bool) preg_match( '/(^|_)(pass|passwd|passwords?|passphrases?|pwd|secrets?|token|nonces?|nonse|salts?|api_?keys?|licen[cs]e_?keys?|secret_?keys?|access_?keys?|auth_?keys?|consumer_?keys?|activation_?keys?|client_?secrets?|access_?tokens?|refresh_?tokens?)(_|$)/', $n );
+		return (bool) preg_match( '/(^|_)(pass|passwd|passwords?|passphrases?|pwd|secrets?|tokens?|nonces?|nonse|salts?|api_?keys?|licen[cs]e_?keys?|secret_?keys?|access_?keys?|auth_?keys?|consumer_?keys?|activation_?keys?|client_?secrets?|access_?tokens?|refresh_?tokens?)(_|$)/', $n );
 	}
 
 	/**
@@ -887,7 +898,9 @@ class Minn_Admin_DB {
 		// array keys, the password a $-hash) and every user who ever signed in
 		// has a session row, so they stay out; so do TOTP seeds, one per user
 		// with two-factor, which would exhaust the needle cap on a large site.
-		$um_keys = array( 'wpmdb_licence_key', 'updraftcentral_login_key' );
+		// One Time Login keeps its sign-in token raw, and a delayed delete
+		// copies it into the cron option's arguments.
+		$um_keys = array( 'wpmdb_licence_key', 'updraftcentral_login_key', 'one_time_login_token' );
 		foreach ( array_unique( array( $wpdb->get_blog_prefix(), $wpdb->base_prefix ) ) as $prefix ) {
 			$um_keys[] = $prefix . 'elementor_connect_common_data';
 		}
@@ -1052,11 +1065,11 @@ class Minn_Admin_DB {
 			explode( '/', trim( $path, '/' ) )
 		);
 		foreach ( array_slice( $segments, 0, -1 ) as $seg ) {
-			if ( preg_match( '/^(licen[cs]es?|license_keys?|keys|tokens|secrets|credentials)$/', $seg ) ) {
+			if ( preg_match( self::CREDENTIAL_CONTAINER, $seg ) ) {
 				return true;
 			}
 		}
-		return (bool) preg_match( '/key|licen[cs]e|token|secret|pass|auth|api|seed|salt|nonce/', (string) end( $segments ) );
+		return (bool) preg_match( '/key|licen[cs]e|token|secret|pass|auth|api|seed|salt|nonce|code|sig|hash|^val$|^value$/', (string) end( $segments ) );
 	}
 
 	/**
@@ -1088,7 +1101,7 @@ class Minn_Admin_DB {
 		// it is keyed by (WP All Import Pro keeps its key at
 		// licenses/<plugin class>).
 		foreach ( array_slice( $segments, 0, -1 ) as $seg ) {
-			if ( preg_match( '/^(licen[cs]es?|license_keys?|keys|tokens|secrets|credentials)$/', $seg ) ) {
+			if ( preg_match( self::CREDENTIAL_CONTAINER, $seg ) ) {
 				return true;
 			}
 		}
