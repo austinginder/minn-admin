@@ -470,6 +470,24 @@ function minn_admin_gfn_store( $form, $n, $is_new ) {
 	return (string) $n['id'];
 }
 
+/**
+ * {created_by:<key>} reads any meta of the account that submitted an entry
+ * (Gravity Forms answers it through WP_User::get()). A preview or a test
+ * send made from a real entry shows only the profile fields Gravity Forms'
+ * entry screen shows; any other key stays a placeholder. Real sends are
+ * unchanged.
+ *
+ * @param string $text Subject or message with merge tags.
+ * @return string
+ */
+function minn_admin_gfn_neutral_created_by( $text ) {
+	return (string) preg_replace_callback( '/\{created_by:([^}\s]*)\}/i', function ( $m ) {
+		$safe = array( 'ID', 'id', 'display_name', 'user_login', 'user_email', 'first_name', 'last_name', 'nickname', 'roles', 'user_url' );
+		/* translators: %s: a user property named in a merge tag. */
+		return in_array( $m[1], $safe, true ) ? $m[0] : sprintf( __( '[user meta: %s]', 'minn-admin' ), sanitize_key( $m[1] ) );
+	}, (string) $text );
+}
+
 /** A notification built from the page's unsaved fields, for preview and test. */
 function minn_admin_gfn_draft( $form, $stored, $body ) {
 	$n = $stored;
@@ -651,8 +669,8 @@ add_action( 'rest_api_init', function () {
 			$autoformat = empty( $n['disableAutoformat'] );
 			return rest_ensure_response( array(
 				'entry'   => (int) $entry['id'],
-				'subject' => (string) GFCommon::replace_variables( (string) $n['subject'], $form, $entry, false, false, false, 'text' ),
-				'html'    => (string) GFCommon::replace_variables( (string) $n['message'], $form, $entry, false, false, $autoformat, 'html' ),
+				'subject' => (string) GFCommon::replace_variables( minn_admin_gfn_neutral_created_by( (string) $n['subject'] ), $form, $entry, false, false, false, 'text' ),
+				'html'    => (string) GFCommon::replace_variables( minn_admin_gfn_neutral_created_by( (string) $n['message'] ), $form, $entry, false, false, $autoformat, 'html' ),
 			) );
 		},
 	) );
@@ -691,7 +709,8 @@ add_action( 'rest_api_init', function () {
 			$n['cc']      = '';
 			$n['bcc']     = '';
 			$n['routing'] = null;
-			$n['subject'] = '[' . __( 'Test', 'minn-admin' ) . '] ' . (string) rgar( $n, 'subject' );
+			$n['subject'] = '[' . __( 'Test', 'minn-admin' ) . '] ' . minn_admin_gfn_neutral_created_by( (string) rgar( $n, 'subject' ) );
+			$n['message'] = minn_admin_gfn_neutral_created_by( (string) rgar( $n, 'message' ) );
 			$result       = GFCommon::send_notification( $n, $form, $entry );
 			if ( ! is_array( $result ) ) {
 				return new WP_Error( 'minn_gfn_test', __( 'Gravity Forms could not send the test. Check the site’s mail settings.', 'minn-admin' ), array( 'status' => 500 ) );

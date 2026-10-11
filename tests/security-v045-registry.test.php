@@ -584,4 +584,45 @@ wp_set_current_user( $admin[0]->ID );
 	$check( '11-2 only a literal true/false define is a switch', ! $bad, implode( '; ', $bad ) );
 } )();
 
+/*
+ * 15-1: email previews made from a form's latest entry resolved tags that
+ * read the submitter's own user meta (Gravity Forms {created_by:<key>},
+ * WPForms {user_meta key=…}), so whoever may preview could read any meta
+ * of that account: a 2FA seed, a licence key. Profile fields the entry
+ * screen already shows still resolve.
+ */
+( function () use ( $check, $call, $drop_user ) {
+	if ( ! class_exists( 'GFAPI' ) ) {
+		echo "SKIP  15-1 Gravity Forms inactive\n";
+		return;
+	}
+	$form = null;
+	foreach ( GFAPI::get_forms() as $f ) {
+		if ( rgar( $f, 'notifications' ) ) {
+			$form = $f;
+			break;
+		}
+	}
+	if ( ! $form ) {
+		echo "SKIP  15-1 no form with a notification\n";
+		return;
+	}
+	$nid    = array_keys( $form['notifications'] )[0];
+	$uid    = wp_insert_user( array( 'user_login' => 'minn-v045-sub-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'subscriber', 'user_email' => 'minn-v045-sub-' . wp_rand() . '@example.com', 'display_name' => 'V045 Submitter' ) );
+	$secret = 'seed-' . wp_generate_password( 12, false );
+	update_user_meta( $uid, 'minn_v045_secret', $secret );
+	$entry  = GFAPI::add_entry( array( 'form_id' => $form['id'], 'created_by' => $uid, 'date_created' => gmdate( 'Y-m-d H:i:s', time() + 60 ) ) );
+	try {
+		list( $status, $d ) = $call( 'POST', "/minn-admin/v1/gf/notifications/{$form['id']}:{$nid}/preview", array( 'subject' => 'S {created_by:minn_v045_secret}', 'message' => 'M {created_by:minn_v045_secret} by {created_by:display_name}' ) );
+		$out = wp_json_encode( $d );
+		$check( '15-1 a Gravity Forms preview does not resolve a submitter\'s meta', 200 === $status && false === strpos( $out, $secret ), $status . ' ' . substr( $out, 0, 160 ) );
+		$check( '15-1 control: a profile field the entry screen shows still resolves', false !== strpos( $out, 'V045 Submitter' ), substr( $out, 0, 160 ) );
+	} finally {
+		if ( $entry && ! is_wp_error( $entry ) ) {
+			GFAPI::delete_entry( $entry );
+		}
+		$drop_user( $uid );
+	}
+} )();
+
 $summary();

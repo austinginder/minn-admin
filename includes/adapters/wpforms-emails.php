@@ -224,6 +224,18 @@ add_action( 'rest_api_init', function () {
 			if ( ! current_user_can( 'unfiltered_html' ) ) {
 				$message = wp_strip_all_tags( $message );
 			}
+			// {user_meta key="…"} resolves against the account that submitted
+			// the entry the preview uses: any of its meta (a 2FA seed, a licence
+			// key). WPForms' own preview never fills tags from a real entry, so
+			// here the tag shows as a placeholder; a real send is unchanged.
+			$neutral = function ( $text ) {
+				return preg_replace_callback( '/\{user_meta\s+key=["\']?([^"\'}\s]*)["\']?\s*\}/i', function ( $m ) {
+					/* translators: %s: a user meta key named in an email smart tag. */
+					return sprintf( __( '[user meta: %s]', 'minn-admin' ), sanitize_key( $m[1] ) );
+				}, (string) $text );
+			};
+			$subject = $neutral( $subject );
+			$message = $neutral( $message );
 			global $wpdb;
 			// Editing a form doesn't include reading its entries; WPForms'
 			// own preview renders placeholder content for the same reason.
