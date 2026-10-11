@@ -417,4 +417,31 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 04-8: the PowerPress panel compared each title after sanitize_text_field
+ * with the stored one, so a stored title the cleaner alters ("Episode <3")
+ * never matched and was rewritten on every save of the panel. Driven through
+ * the adapter's writer, which does not need PowerPress active.
+ */
+( function () use ( $check ) {
+	if ( ! function_exists( 'minn_admin_powerpress_write_values' ) ) {
+		echo "SKIP  04-8 no PowerPress adapter\n";
+		return;
+	}
+	$id    = wp_insert_post( array( 'post_title' => 'v045 PowerPress probe', 'post_status' => 'draft' ) );
+	$extra = serialize( array( 'episode_title' => 'Episode <3 & more', 'subtitle' => '100%Accurate notes', 'episode_no' => '7' ) );
+	update_post_meta( $id, 'enclosure', wp_slash( "https://example.com/ep.mp3\n1234\naudio/mpeg\n" . $extra ) );
+	try {
+		$vals = minn_admin_powerpress_read_values( $id );
+		$vals['season'] = '2';
+		minn_admin_powerpress_write_values( $id, $vals );
+		wp_cache_delete( $id, 'post_meta' );
+		$now = minn_admin_powerpress_read_values( $id );
+		$check( '04-8 an untouched episode title is left as stored', 'Episode <3 & more' === $now['episode_title'] && '100%Accurate notes' === $now['subtitle'], wp_json_encode( $now ) );
+		$check( '04-8 control: the edited field saves', '2' === $now['season'], (string) $now['season'] );
+	} finally {
+		wp_delete_post( $id, true );
+	}
+} )();
+
 $summary();

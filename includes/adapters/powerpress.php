@@ -151,7 +151,10 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 		}
 	}
 	foreach ( array( 'subtitle', 'episode_title' ) as $key ) {
-		if ( ! array_key_exists( $key, $values ) ) {
+		// The panel resends every field: compare what came in with what the
+		// read served BEFORE cleaning it, or a stored value the cleaner would
+		// alter ("Episode <3") never compares equal and is rewritten.
+		if ( ! array_key_exists( $key, $values ) || Minn_Admin::unchanged( $values[ $key ], $current[ $key ] ) ) {
 			continue;
 		}
 		$val = sanitize_text_field( (string) $values[ $key ] );
@@ -165,7 +168,7 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 		}
 	}
 	foreach ( array( 'episode_no', 'season' ) as $key ) {
-		if ( ! array_key_exists( $key, $values ) ) {
+		if ( ! array_key_exists( $key, $values ) || Minn_Admin::unchanged( $values[ $key ], $current[ $key ], 'number' ) ) {
 			continue;
 		}
 		$val = preg_replace( '/[^0-9]/', '', (string) $values[ $key ] );
