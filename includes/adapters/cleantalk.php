@@ -552,7 +552,7 @@ add_action( 'wp_connectors_init', 'minn_admin_cleantalk_register_connector' );
  */
 function minn_admin_cleantalk_key_tail_allowed() {
 	if ( is_multisite() ) {
-		return is_super_admin();
+		return Minn_Admin::network_owner();
 	}
 	return current_user_can( 'activate_plugins' );
 }
