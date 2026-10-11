@@ -93,8 +93,12 @@ class Minn_Admin_Logs {
 			$sources['php-error'] = self::file_source( __( 'PHP error log', 'minn-admin' ), __( 'Server', 'minn-admin' ), $ini, true );
 		}
 
-		// One source per WooCommerce log channel, via WC's own controller.
+		// One source per WooCommerce log channel, via WC's own controller,
+		// for whoever WooCommerce shows its logs to: webhook and gateway
+		// logs carry customer data, and a role can hold the System page's
+		// caps without manage_woocommerce.
 		if ( class_exists( 'WooCommerce' )
+			&& current_user_can( 'manage_woocommerce' )
 			&& function_exists( 'wc_get_container' )
 			&& class_exists( '\Automattic\WooCommerce\Internal\Admin\Logging\FileV2\FileController' ) ) {
 			try {

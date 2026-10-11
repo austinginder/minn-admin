@@ -326,4 +326,34 @@ wp_set_current_user( $admin[0]->ID );
 	$check( '09-2 control: the edit context still carries it', isset( $d['meta']['show_admin_bar_front'] ), wp_json_encode( $d['meta'] ?? null ) );
 } )();
 
+/*
+ * 11-3: the System log viewer listed WooCommerce's log channels to anyone
+ * the page admits, whether or not WooCommerce would show them its logs.
+ */
+( function () use ( $check ) {
+	if ( ! class_exists( 'WooCommerce' ) || ! class_exists( 'Minn_Admin_Logs' ) ) {
+		echo "SKIP  11-3 WooCommerce inactive\n";
+		return;
+	}
+	$wc = function () {
+		return array_values( array_filter( array_keys( Minn_Admin_Logs::sources() ), function ( $k ) {
+			return 0 === strpos( $k, 'wc:' );
+		} ) );
+	};
+	$with = $wc();
+	if ( ! $with ) {
+		echo "SKIP  11-3 no WooCommerce log channels on this site\n";
+		return;
+	}
+	$deny = function ( $caps ) {
+		$caps['manage_woocommerce'] = false;
+		return $caps;
+	};
+	add_filter( 'user_has_cap', $deny );
+	$without = $wc();
+	remove_filter( 'user_has_cap', $deny );
+	$check( '11-3 WooCommerce logs need manage_woocommerce', ! $without, implode( ',', $without ) );
+	$check( '11-3 control: they are listed for a store manager', (bool) $with, implode( ',', array_slice( $with, 0, 3 ) ) );
+} )();
+
 $summary();
