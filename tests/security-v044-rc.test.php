@@ -1195,6 +1195,64 @@ if ( class_exists( 'Minn_Admin_DB' ) ) {
 	$skip( '2bf DB browser not loaded' );
 }
 
+// --- 2bp-01..06 review of the guard commits: key copies, a key in a row's name, the wp-config switches ---
+if ( class_exists( 'Minn_Admin_DB' ) ) {
+	global $wpdb;
+	// Vendors' rows are judged by name through the browser's own test, so
+	// nothing is written under a name a vendor reads.
+	$p_cell = new ReflectionMethod( 'Minn_Admin_DB', 'is_secret_cell' );
+	$p_cell->setAccessible( true );
+	$p_hidden = function ( $table, $name ) use ( $p_cell ) {
+		$meta = false !== stripos( $table, 'sitemeta' );
+		return $p_cell->invoke( null, $table, $meta ? 'meta_value' : 'option_value', array( $meta ? 'meta_key' : 'option_name' => $name ) );
+	};
+	$p_sitemeta = $wpdb->base_prefix . 'sitemeta';
+	foreach ( array(
+		'2bp-01 a network\'s Gravity Forms cache (sitemeta)'      => array( $p_sitemeta, '_site_transient_GFCache_0f3c' ),
+		'2bp-02 Elementor Pro\'s updater copy of its remote info' => array( $wpdb->options, '_site_transient_elementor_pro_api_request_0f3c2a' ),
+		'2bp-04 CleanTalk\'s network settings (sitemeta)'          => array( $p_sitemeta, 'cleantalk_network_settings' ),
+		'2bp-04 CleanTalk\'s network data (sitemeta)'              => array( $p_sitemeta, 'cleantalk_network_data' ),
+		'2bp-05 an older EDD updater\'s answer cache'              => array( $wpdb->options, 'edd_api_request_0f3c2a' ),
+		'2bp-05 Plugin Update Checker\'s theme state'              => array( $wpdb->options, 'puc_external_updates_theme-some-theme' ),
+		'2bp-05 WP Rocket\'s update data'                          => array( $wpdb->options, '_site_transient_wp_rocket_update_data' ),
+		'2bp-05 WP All Import Pro\'s version cache'                => array( $wpdb->options, 'wp-all-import-pro_0f3c2a' ),
+	) as $p_label => $p_row ) {
+		$check( "{$p_label} is redacted", $p_hidden( $p_row[0], $p_row[1] ), $p_row[1] );
+	}
+	$check( '2bp control: an ordinary cache row is not', ! $p_hidden( $wpdb->options, '_site_transient_wp_rocket_preload' ) && ! $p_hidden( $p_sitemeta, '_site_transient_theme_roots' ), '' );
+
+	// And one through the route, under a name no vendor reads.
+	$p_tag  = 'mv44p' . wp_rand( 100000, 999999 );
+	$p_edd  = 'edd_api_request_' . $p_tag;
+	$wpdb->insert( $wpdb->options, array( 'option_name' => $p_edd, 'option_value' => 'https://example.com/?edd_action=package_download&license=' . $p_tag . 'key', 'autoload' => 'off' ) );
+	list( , $p_res ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 50, 'fcol' => 'option_name', 'fq' => $p_edd ) );
+	$p_json = (string) wp_json_encode( $p_res );
+	$check( '2bp-05 through the route: the cache row is listed with its link redacted', false !== strpos( $p_json, $p_edd ) && false === strpos( $p_json, $p_tag . 'key' ), false === strpos( $p_json, $p_tag . 'key' ) ? 'redacted' : 'RAW' );
+	$wpdb->delete( $wpdb->options, array( 'option_name' => $p_edd ) );
+
+	// 2bp-03: classic Oxygen caches each update check under a name ending in
+	// the key. Seeded with a made-up key Oxygen never reads, beside a control.
+	$p_oxy  = '_transient_edd_get_version_Oxygen' . $p_tag . 'key';
+	$p_ctl  = '_transient_' . $p_tag . '_control';
+	$wpdb->insert( $wpdb->options, array( 'option_name' => $p_oxy, 'option_value' => 'a', 'autoload' => 'off' ) );
+	$p_oxy_id = (int) $wpdb->insert_id;
+	$wpdb->insert( $wpdb->options, array( 'option_name' => $p_ctl, 'option_value' => 'a', 'autoload' => 'off' ) );
+	$p_seen = function ( $params ) use ( $call, $wpdb, $p_tag ) {
+		list( , $d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array_merge( array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 100 ), $params ) );
+		return false !== strpos( (string) wp_json_encode( $d ), $p_tag . 'key' );
+	};
+	$check( '2bp-03 a name search does not reach a row whose name holds the key', ! $p_seen( array( 'fcol' => 'option_name', 'fq' => 'edd_get_version_' ) ) );
+	$check( '...nor a search for the key itself', ! $p_seen( array( 'fcol' => 'option_name', 'fq' => $p_tag ) ) );
+	list( $p_st ) = $call( 'GET', '/minn-admin/v1/db/row', null, array( 'table' => $wpdb->options, 'pk' => wp_json_encode( array( 'option_id' => $p_oxy_id ) ) ) );
+	$check( '...and the row itself answers 404', 404 === $p_st, (string) $p_st );
+	list( , $p_ctl_res ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'page' => 1, 'per_page' => 50, 'fcol' => 'option_name', 'fq' => $p_tag ) );
+	$check( '2bp-03 control: another transient under the same search is still listed', false !== strpos( (string) wp_json_encode( $p_ctl_res ), $p_ctl ) );
+	$wpdb->delete( $wpdb->options, array( 'option_name' => $p_oxy ) );
+	$wpdb->delete( $wpdb->options, array( 'option_name' => $p_ctl ) );
+} else {
+	$skip( '2bp DB browser not loaded' );
+}
+
 // @sections
 
 // Flamingo files a contact for every user a section creates and keeps it

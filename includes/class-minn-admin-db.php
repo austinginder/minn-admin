@@ -547,18 +547,32 @@ class Minn_Admin_DB {
 	 *
 	 * Premium plugins' update caches carry the licence key in their download
 	 * links, raw or inside a base64 token: Easy Digital Downloads' updater
-	 * (edd_sl_), Plugin Update Checker (external_updates-), StellarWP
-	 * Uplink's update status and Elementor Pro's remote info.
+	 * (edd_sl_, and edd_api_request_ in older copies of it), Plugin Update
+	 * Checker (external_updates-, puc_external_updates_ for themes), StellarWP
+	 * Uplink's update status, Elementor Pro's remote info and the copy its
+	 * updater keeps of it, and WP All Import Pro's version cache.
 	 */
 	const SECRET_OPTION_SHAPES = array(
 		array( 'gravitysmtp_', '' ),
 		array( 'connectors_', '_api_key' ),
 		array( 'connectors_', '_application_password' ),
 		array( 'edd_sl_', '' ),
+		array( 'edd_api_request_', '' ),
 		array( 'external_updates-', '' ),
+		array( 'puc_external_updates_', '' ),
 		array( 'stellarwp_uplink_update_status_', '' ),
 		array( 'elementor_pro_remote_info_api_data_', '' ),
+		array( '_site_transient_elementor_pro_api_request_', '' ),
+		array( 'wp-all-import-pro_', '' ),
 	);
+
+	/**
+	 * Option name prefixes whose NAME carries a licence key, so redacting the
+	 * value is not enough: classic Oxygen caches each update check under
+	 * edd_get_version_<product><key>. The browser leaves these rows out of
+	 * every list, count, search and sort, and a single-row read answers 404.
+	 */
+	const SECRET_NAME_PREFIXES = array( '_transient_edd_get_version_', '_transient_timeout_edd_get_version_' );
 
 	/**
 	 * The option each registered core Connector (WP 7.0+) keeps its API key or
@@ -669,7 +683,7 @@ class Minn_Admin_DB {
 	 * some links carry the licence key; Gravity Forms' telemetry snapshot
 	 * copies its key.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
@@ -683,6 +697,38 @@ class Minn_Admin_DB {
 	 * @param string $col   Column name.
 	 * @return bool
 	 */
+	/**
+	 * The SQL condition that leaves out the rows SECRET_NAME_PREFIXES names,
+	 * for an options table (a site's or a network blog's), else ''.
+	 *
+	 * @param string   $table Table name.
+	 * @param string[] $names Its column names.
+	 */
+	private static function hidden_rows_sql( $table, $names ) {
+		global $wpdb;
+		if ( 'options' !== self::secret_base( $table ) || ! in_array( 'option_name', $names, true ) ) {
+			return '';
+		}
+		$not = array();
+		foreach ( self::SECRET_NAME_PREFIXES as $prefix ) {
+			$not[] = $wpdb->prepare( '`option_name` NOT LIKE %s', $wpdb->esc_like( $prefix ) . '%' );
+		}
+		return implode( ' AND ', $not );
+	}
+
+	/** Whether a fetched row is one hidden_rows_sql() leaves out. */
+	private static function is_hidden_row( $table, $row ) {
+		if ( 'options' !== self::secret_base( $table ) || ! isset( $row['option_name'] ) ) {
+			return false;
+		}
+		foreach ( self::SECRET_NAME_PREFIXES as $prefix ) {
+			if ( 0 === stripos( (string) $row['option_name'], $prefix ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private static function is_secret_column( $table, $col ) {
 		return null !== self::keyed_secret( $table, $col ) || self::is_secret_cell( $table, $col, array() );
 	}
@@ -857,6 +903,11 @@ class Minn_Admin_DB {
 			$fcol = '';
 			$fq   = '';
 		}
+		// Rows whose name carries a key never come back, filtered or not.
+		$hide = self::hidden_rows_sql( $meta->name, $names );
+		if ( '' !== $hide ) {
+			$where = $where ? $where . ' AND ' . $hide : ' WHERE ' . $hide;
+		}
 
 		// Count. Unfiltered: information_schema estimate, verified exactly
 		// only when small. Filtered: exact but capped (the subquery LIMIT
@@ -950,7 +1001,7 @@ class Minn_Admin_DB {
 		}
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifiers whitelisted; values prepared above.
 		$raw = $wpdb->get_row( 'SELECT * FROM ' . self::quote_ident( $meta->name ) . ' WHERE ' . implode( ' AND ', $where ) . ' LIMIT 1', ARRAY_A );
-		if ( null === $raw ) {
+		if ( null === $raw || self::is_hidden_row( $meta->name, $raw ) ) {
 			return new WP_Error( 'minn_db_no_row', __( 'Row not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$cells = array();

@@ -1341,9 +1341,10 @@ function minn_admin_license_secret_options() {
 		// ACPT's activation record (the licence code and account email), under
 		// a hashed name.
 		hash( 'ripemd128', 'acpt_license_active' ),
-		// CleanTalk's dashboard sign-in token, and WooCommerce.com's product
-		// key per subscription.
-		'cleantalk_data', '_transient__woocommerce_helper_subscriptions',
+		// CleanTalk's dashboard sign-in token (and, on a network, its network
+		// copies of the key, the hoster key and the token), and WooCommerce.com's
+		// product key per subscription.
+		'cleantalk_data', 'cleantalk_network_settings', 'cleantalk_network_data', '_transient__woocommerce_helper_subscriptions',
 		// Licence server answers and update data fetched with the key: Gravity
 		// Forms' licence cache (it holds the key), Divi's update answers,
 		// Beaver Builder's subscription answer and WP Rocket's account answer.
@@ -1368,9 +1369,11 @@ function minn_admin_license_secret_options() {
 			array( '', '_license_key' ),
 			array( '', '_license_options' ),
 			// Gravity Perks' licence answer per version, and Gravity Forms'
-			// remote-call caches (its reader reads one; another holds the key).
+			// remote-call caches (its reader reads one; another holds the key),
+			// which a network keeps as site transients.
 			array( '_site_transient_gwp_license_data_', '' ),
 			array( '_transient_GFCache_', '' ),
+			array( '_site_transient_GFCache_', '' ),
 		),
 	);
 }
