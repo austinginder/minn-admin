@@ -5794,7 +5794,7 @@ class Minn_Admin_REST {
 	 * bulk call rather than the per-item loop themes need.
 	 */
 	/** Every pending language pack as one batch (Minn_Admin_Batch::run_translations). */
-	public static function update_translations( WP_REST_Request $request = null ) {
+	public static function update_translations( ?WP_REST_Request $request = null ) {
 		$batch = self::batch( $request ? (string) $request->get_param( 'token' ) : '' );
 		$r     = $batch->run_translations();
 		$batch->finish( $r['errors'] );
@@ -11515,7 +11515,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	/** Every pending plugin as one batch (Minn_Admin_Batch::run_plugins). */
-	public static function update_all_plugins( WP_REST_Request $request = null ) {
+	public static function update_all_plugins( ?WP_REST_Request $request = null ) {
 		$batch = self::batch( $request ? (string) $request->get_param( 'token' ) : '' );
 		$r     = $batch->run_plugins();
 		$batch->finish( $r['errors'] );
