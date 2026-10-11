@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.43.0. This file ships inside the plugin, so the copy you
+*Current as of v0.44.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -230,7 +230,9 @@ away:
   editable field. The words an ACF block shows can usually be typed over
   right in the preview, and the edit lands in the field they came from;
   a shortcode in that text shows as a token you click to change, so
-  typing never overwrites it. Hovering any ⚙ chip outlines the
+  typing never overwrites it. Its photos open the media picker when you
+  click them, and a set of photos opens the images editor at the one you
+  clicked, changing only that field. Hovering any ⚙ chip outlines the
   block it configures, so nested blocks read as distinct controls. One
   click on "Block editor ↗" opens the same post in Gutenberg whenever you
   want the full toolkit. Posts built with page builders (Elementor,
@@ -297,8 +299,9 @@ Many sites carry structured fields beside the post body: a subtitle, an
 event date, a team list, a page assembled from sections. With Advanced
 Custom Fields active, all of it edits in Minn (sites using Pods, Meta
 Box or ACPT get their fields in the same place, ACPT covering the
-everyday types with its images, repeating sections and the rest editing
-right on the post):
+everyday types with its images and the rest editing right on the post,
+while its dates, repeaters and fields holding a shortcode or HTML are
+counted as locked, with a link to edit them in wp-admin):
 
 - **Every field group appears.** The editor sidebar's Custom fields card
   opens a dialog with every group that applies to what you are editing,
@@ -309,7 +312,8 @@ right on the post):
   checkboxes, colors with a real picker, dates and times on the same
   calendar the editor's scheduling uses, files and images from the media
   library, and links to other content, where the picker only ever offers
-  what the field allows.
+  what the field allows. Image, file and gallery fields are read-only for
+  someone who cannot use the media library.
 - **The structured types are real too.** A repeater is a stack of row
   cards you add, reorder and remove. Flexible content, the field theme
   page builders are made of, reads as a list of named sections, each
@@ -362,7 +366,8 @@ panel shows what the post actually emits.
 
 **Comments**: approve, reply, edit in place, mark spam, or block a
 commenter (future comments from that address go straight to the trash,
-with Undo). Bulk-select works across the list.
+with Undo; when another commenter's address contains theirs, Minn points
+you to Spam instead, so nobody else's comments are caught). Bulk-select works across the list.
 
 **Media**: drop files anywhere in the app to upload. Images can be
 cropped and rotated right in Minn, and regenerating thumbnails is one
@@ -395,7 +400,9 @@ down the list, and a closing line with the totals. Hide the panel and the
 batch keeps running; a chip in the top bar counts it down and reopens it.
 While WordPress holds the site in maintenance mode for a plugin swap, the
 panel keeps moving and says so rather than going blank, and a package is
-only ever installed after Minn's own checksum check has accepted it. Translations are worth calling out because WordPress keeps
+only ever installed after Minn's own checksum check has accepted it. When
+Minn Admin runs on Minn rather than WordPress, the banner, the chip and
+Update everything offer Minn's own releases instead. Translations are worth calling out because WordPress keeps
 language packs apart from everything else: a site can be current on plugins,
 themes and core and still owe translations, so they are counted here rather
 than left for the WordPress updates screen to mention. While a
@@ -680,7 +687,9 @@ group.
   and either paste a URL or pick it from your media library. An external
   product asks for the address and button text that send shoppers away. A
   variable product gains a Variations card: give an attribute some values
-  and turn on its Variations switch, then Generate from attributes builds
+  (a store-wide one such as Size offers the terms the shop already has as
+  a ticked list, and a new value can be typed and added) and turn on its
+  Variations switch, then Generate from attributes builds
   every combination you do not already have. The card reads as a list of
   what the product sells, one row per variation with its picture, its name,
   its price and what is available. Click a row to open that variation on
@@ -908,9 +917,11 @@ group.
   change or delete anything in the database, because doing so behind a
   plugin's back is how sites break in ways nobody can trace. Credentials
   are described rather than shown: password hashes, pending reset keys,
-  sign-in session tokens, application-password hashes and WooCommerce API
-  secrets appear as a placeholder with their size, in the list and in the
-  row detail. And where a
+  sign-in session tokens, application-password hashes, WooCommerce API
+  secrets, license keys, the API keys and sign-in tokens plugins store, and
+  the update caches that carry a license key appear as a placeholder with
+  their size, in the list and in the row detail. Searching values skips
+  the rows that hold them, and a column that can hold them cannot be sorted. And where a
   Health check finds something worth cleaning up, Minn gives you the exact
   command to run rather than a button that runs it: copy it, back up, and
   run it yourself or hand it to whoever looks after the site. If you need
