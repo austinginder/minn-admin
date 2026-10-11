@@ -108,6 +108,13 @@ const { launch, login, reporter, BASE, WP } = require( './helpers' );
 			&& ( await page.$( '#minn-spam-queue' ) ) === null );
 
 		/* ===== Toggle + blocklist save round-trip ===== */
+		// What reaches minn-admin/v1/spam: only what changed since the tab
+		// loaded (resending every toggle and the list put back anything
+		// changed elsewhere meanwhile).
+		const spamPosts = [];
+		page.on( 'request', ( r ) => {
+			if ( 'POST' === r.method() && /minn-admin\/v1\/spam(\?|$)/.test( r.url() ) ) spamPosts.push( r.postData() || '' );
+		} );
 		await page.click( '[data-spamtog="antispam-bee:email_notify"]' );
 		await page.fill( '#minn-spam-keys', 'minn-spam-test-token' );
 		await page.click( '#minn-save-settings' );
@@ -116,6 +123,10 @@ const { launch, login, reporter, BASE, WP } = require( './helpers' );
 		t.check( 'toggle persisted through the provider option',
 			asb && asb.toggles.find( ( x ) => x.id === 'email_notify' ).on === true );
 		t.check( 'disallowed_keys blocklist saved', st.disallowed_keys === 'minn-spam-test-token' );
+		const sent = JSON.parse( spamPosts[ 0 ] || '{}' );
+		t.check( 'the save sent the one toggle changed and the list, nothing else',
+			JSON.stringify( sent.toggles ) === JSON.stringify( { 'antispam-bee': { email_notify: true } } ) && 'minn-spam-test-token' === sent.disallowed_keys,
+			( spamPosts[ 0 ] || 'no request' ).slice( 0, 160 ) );
 
 		// Restore both. Re-open the section fresh so the toggle reflects the
 		// committed server state (ON) before we click it off — clicking a
@@ -133,6 +144,12 @@ const { launch, login, reporter, BASE, WP } = require( './helpers' );
 		t.check( 'restore round-trips clean',
 			st.disallowed_keys === ''
 			&& st.providers.find( ( p ) => p.id === 'antispam-bee' ).toggles.find( ( x ) => x.id === 'email_notify' ).on === false );
+		// A save of the tab that leaves the spam section alone writes nothing there.
+		await openSpam();
+		const before = spamPosts.length;
+		await page.click( '#minn-save-settings' );
+		await page.waitForTimeout( 1500 );
+		t.check( 'saving the tab with the spam section untouched sends no spam write', spamPosts.length === before, String( spamPosts.length - before ) );
 
 		/* ===== With comments enabled, the queue row counts + navigates ===== */
 		t.check( 'disable-comments deactivates over REST', await setPlugin( 'disable-comments/disable-comments', 'inactive' ) );

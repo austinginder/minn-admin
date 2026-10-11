@@ -29873,17 +29873,32 @@
 
 				// --- Spam (minn-admin/v1/spam): only when the Comments tab shows it. ---
 				if ( $( '[data-spamtog]', view ) || $( '#minn-spam-keys', view ) ) {
+					// Only what changed since the tab loaded: resending every
+					// toggle and the whole list put back anything someone else
+					// changed meanwhile, and wrote every provider's settings.
+					const was = {};
+					( ( cache.spam && cache.spam.providers ) || [] ).forEach( ( p ) =>
+						( p.toggles || [] ).forEach( ( tg ) => { was[ p.id + ':' + tg.id ] = !! tg.on; } ) );
 					const toggles = {};
+					let changed = false;
 					$$( '[data-spamtog]', view ).forEach( ( btn ) => {
+						const on = btn.classList.contains( 'on' );
+						if ( was[ btn.dataset.spamtog ] === on ) return;
 						const [ pid, tid ] = btn.dataset.spamtog.split( ':' );
-						( toggles[ pid ] = toggles[ pid ] || {} )[ tid ] = btn.classList.contains( 'on' );
+						( toggles[ pid ] = toggles[ pid ] || {} )[ tid ] = on;
+						changed = true;
 					} );
 					const body = { toggles };
 					const keysEl = $( '#minn-spam-keys', view );
-					if ( keysEl ) body.disallowed_keys = keysEl.value;
-					try {
-						cache.spam = await api( 'minn-admin/v1/spam', { method: 'POST', body: JSON.stringify( body ) } );
-					} catch ( err ) { toast( err.message, true ); okAll = false; }
+					if ( keysEl && keysEl.value !== String( ( cache.spam && cache.spam.disallowed_keys ) || '' ) ) {
+						body.disallowed_keys = keysEl.value;
+						changed = true;
+					}
+					if ( changed ) {
+						try {
+							cache.spam = await api( 'minn-admin/v1/spam', { method: 'POST', body: JSON.stringify( body ) } );
+						} catch ( err ) { toast( err.message, true ); okAll = false; }
+					}
 				}
 
 				// --- Custom CSS (minn-admin/v1/custom-css): the Design tab.
