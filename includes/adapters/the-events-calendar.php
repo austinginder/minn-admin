@@ -86,6 +86,34 @@ function minn_admin_tec_multi_organizer( $post_id ) {
 }
 
 /**
+ * The event panel's values as stored, the shape the editor reads and sends.
+ *
+ * @param int $id Event id.
+ * @return array
+ */
+function minn_admin_tec_panel_values( $id ) {
+	$values = array(
+		'start'   => minn_admin_tec_panel_datetime( get_post_meta( $id, '_EventStartDate', true ) ),
+		'end'     => minn_admin_tec_panel_datetime( get_post_meta( $id, '_EventEndDate', true ) ),
+		// Their own reader: TEC now stores the flag as '1' (older
+		// events carry 'yes'), so a string compare misread every
+		// all-day event as timed.
+		'all_day' => function_exists( 'tribe_event_is_all_day' )
+			? (bool) tribe_event_is_all_day( $id )
+			: in_array( (string) get_post_meta( $id, '_EventAllDay', true ), array( 'yes', '1', 'true' ), true ),
+		'cost'    => (string) get_post_meta( $id, '_EventCost', true ),
+		'website' => (string) get_post_meta( $id, '_EventURL', true ),
+	);
+	if ( ! minn_admin_tec_multi_venue( $id ) ) {
+		$values['venue'] = minn_admin_tec_linked_pick( get_post_meta( $id, '_EventVenueID', true ) );
+	}
+	if ( ! minn_admin_tec_multi_organizer( $id ) ) {
+		$values['organizer'] = minn_admin_tec_linked_pick( get_post_meta( $id, '_EventOrganizerID', true ) );
+	}
+	return $values;
+}
+
+/**
  * Whether this event carries more than one venue (locks the field). Events
  * Calendar Pro links several; TEC links exactly the venues a save submits and
  * unlinks the rest, so a single pick would drop all but the first.
@@ -248,25 +276,7 @@ add_action( 'rest_api_init', function () {
 				if ( ! $id || ! current_user_can( 'edit_post', $id ) || minn_admin_tec_is_recurring( $id ) ) {
 					return new stdClass();
 				}
-				$values = array(
-					'start'   => minn_admin_tec_panel_datetime( get_post_meta( $id, '_EventStartDate', true ) ),
-					'end'     => minn_admin_tec_panel_datetime( get_post_meta( $id, '_EventEndDate', true ) ),
-					// Their own reader: TEC now stores the flag as '1' (older
-					// events carry 'yes'), so a string compare misread every
-					// all-day event as timed.
-					'all_day' => function_exists( 'tribe_event_is_all_day' )
-						? (bool) tribe_event_is_all_day( $id )
-						: in_array( (string) get_post_meta( $id, '_EventAllDay', true ), array( 'yes', '1', 'true' ), true ),
-					'cost'    => (string) get_post_meta( $id, '_EventCost', true ),
-					'website' => (string) get_post_meta( $id, '_EventURL', true ),
-				);
-				if ( ! minn_admin_tec_multi_venue( $id ) ) {
-					$values['venue'] = minn_admin_tec_linked_pick( get_post_meta( $id, '_EventVenueID', true ) );
-				}
-				if ( ! minn_admin_tec_multi_organizer( $id ) ) {
-					$values['organizer'] = minn_admin_tec_linked_pick( get_post_meta( $id, '_EventOrganizerID', true ) );
-				}
-				return (object) $values;
+				return (object) minn_admin_tec_panel_values( $id );
 			},
 			'update_callback' => function ( $value, $post ) {
 				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
@@ -275,9 +285,15 @@ add_action( 'rest_api_init', function () {
 				if ( is_object( $value ) ) {
 					$value = (array) $value;
 				}
-				if ( ! is_array( $value ) ) {
+				if ( ! is_array( $value ) || ! $value ) {
 					return null;
 				}
+				// The editor sends only the fields that changed, and
+				// saveEventMeta() is a full-form save: an absent all-day flag
+				// reads as off and an absent cost is deleted. Fields the body
+				// leaves out take what the event holds now, so they go back as
+				// stored (see the unchanged checks below).
+				$value = $value + minn_admin_tec_panel_values( $post->ID );
 				// Suggest fields arrive as { value, label } (untouched) or as
 				// the picked '' / { value, label } — normalize to the id.
 				$linked_id = function ( $v ) {

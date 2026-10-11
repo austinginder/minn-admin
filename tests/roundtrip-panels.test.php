@@ -11,7 +11,11 @@
  *   fidelity   a value typed into a field reads back as typed;
  *   no-op      saving the values exactly as read changes nothing stored,
  *              and saving them again changes nothing either;
- *   isolation  changing one field leaves every other field as it was.
+ *   isolation  changing one field leaves every other field as it was;
+ *   partial    a save carrying only some fields leaves the absent ones;
+ *   concurrent a field someone else changed after the page loaded keeps
+ *              that change when the page saves a different field (or the
+ *              save answers 409 so the person reloads).
  *
  * Values are deliberately awkward but legitimate (backslashes, %XX octets,
  * a literal <3, decimals, line breaks), the shapes past findings were made of.
@@ -146,6 +150,20 @@ $coupled = array(
 	'minn_tec:end'   => array( 'start' ),
 );
 
+/*
+ * The body the editor sends for a panel: only the fields that differ from
+ * what it loaded (changedKeys in app.js).
+ */
+$client_body = function ( $loaded, $edits ) {
+	$out = array();
+	foreach ( $edits as $k => $v ) {
+		if ( wp_json_encode( $v ) !== wp_json_encode( $loaded[ $k ] ?? null ) ) {
+			$out[ $k ] = $v;
+		}
+	}
+	return $out;
+};
+
 $typed = array( 'text', 'textarea', 'wysiwyg', 'number', 'email', 'url', 'color_picker', 'date', 'time', 'select', 'radio', 'multicheck', 'true_false', 'toggle' );
 
 $value_for = function ( $f, $variant, $current, $key = '' ) use ( $hints ) {
@@ -192,6 +210,17 @@ $value_for = function ( $f, $variant, $current, $key = '' ) use ( $hints ) {
 		case 'true_false':
 		case 'toggle':
 			return ! ( ! empty( $current ) && 'false' !== $current && '0' !== (string) $current );
+	}
+	return null;
+};
+
+// A value for a field that differs from what it holds now.
+$pick = function ( $f, $current, $key ) use ( $value_for, &$same ) {
+	foreach ( array( 1, 2 ) as $variant ) {
+		$v = $value_for( $f, $variant, $current, $key );
+		if ( null !== $v && ! $same( $f['type'], $v, $current ) ) {
+			return $v;
+		}
 	}
 	return null;
 };
@@ -451,6 +480,83 @@ foreach ( $panels as $panel ) {
 				}
 			}
 			$check( "{$label}: changing one field leaves the others", ! $leaks, implode( '; ', array_slice( $leaks, 0, 6 ) ) );
+
+			$typed_names = array();
+			foreach ( $fields as $name => $f ) {
+				if ( in_array( $f['type'], $typed, true ) && ! isset( $untyped[ "{$vk}:{$name}" ] ) ) {
+					$typed_names[] = $name;
+				}
+			}
+
+			// Partial: a body naming one field leaves every absent one. Every
+			// switch is on first: a full-form save (TEC's) reads an absent
+			// switch as off.
+			$on = $read();
+			foreach ( $fields as $name => $f ) {
+				if ( in_array( $f['type'], array( 'true_false', 'toggle' ), true ) ) {
+					$on[ $name ] = true;
+				}
+			}
+			$write( $on );
+			$dropped = array();
+			foreach ( $typed_names as $name ) {
+				$was = $read();
+				$v   = $pick( $fields[ $name ], $was[ $name ] ?? null, "{$vk}:{$name}" );
+				if ( null === $v ) {
+					continue;
+				}
+				$write( array( $name => $v ) );
+				$now     = $read();
+				$exempt  = isset( $parity[ "{$vk}:{$name}" ] ) || isset( $parity[ "{$vk}:{$fields[ $name ]['type']}" ] ) || isset( $coupled[ "{$vk}:{$name}" ] );
+				if ( ! $exempt && ! $same( $fields[ $name ]['type'], $v, $now[ $name ] ?? null ) ) {
+					$dropped[] = "a body with only {$name} did not store it: sent " . wp_json_encode( $v ) . ' read ' . wp_json_encode( $now[ $name ] ?? null );
+				}
+				foreach ( $fields as $other => $of ) {
+					if ( $other === $name || in_array( $other, $coupled[ "{$vk}:{$name}" ] ?? array(), true ) ) {
+						continue;
+					}
+					if ( ! $same( $of['type'], $was[ $other ] ?? null, $now[ $other ] ?? null ) ) {
+						$dropped[] = "a body with only {$name} changed {$other}: " . wp_json_encode( $was[ $other ] ?? null ) . ' -> ' . wp_json_encode( $now[ $other ] ?? null );
+					}
+				}
+			}
+			$check( "{$label}: a save naming one field stores it and leaves the rest", ! $dropped, implode( '; ', array_slice( $dropped, 0, 6 ) ) );
+
+			// Concurrent: this page loads, another tab saves one field, then this
+			// page saves a different one the way the client does.
+			$lost  = array();
+			$pairs = 0;
+			$n     = count( $typed_names );
+			foreach ( $typed_names as $i => $theirs ) {
+				$mine = $typed_names[ ( $i + 1 ) % max( 1, $n ) ];
+				if ( $mine === $theirs || in_array( $theirs, $coupled[ "{$vk}:{$mine}" ] ?? array(), true ) ) {
+					continue;
+				}
+				$page  = $read();
+				$other = $read();
+				$tv    = $pick( $fields[ $theirs ], $other[ $theirs ] ?? null, "{$vk}:{$theirs}" );
+				$mv    = $pick( $fields[ $mine ], $page[ $mine ] ?? null, "{$vk}:{$mine}" );
+				if ( null === $tv || null === $mv ) {
+					continue;
+				}
+				$write( $client_body( $other, array( $theirs => $tv ) ) );
+				// What their save stored, as the vendor normalised it.
+				$stored = $read();
+				if ( $same( $fields[ $theirs ]['type'], $stored[ $theirs ] ?? null, $other[ $theirs ] ?? null ) ) {
+					if ( getenv( 'MINN_RT_DEBUG' ) ) {
+						echo "DEBUG {$label}: {$theirs} ({$fields[ $theirs ]['type']}) sent " . wp_json_encode( $tv ) . ' stored ' . wp_json_encode( $stored[ $theirs ] ?? null ) . "\n";
+					}
+					continue; // their change did not take; nothing to keep
+				}
+				++$pairs;
+				list( $status ) = $write( $client_body( $page, array( $mine => $mv ) ) );
+				$now = $read();
+				if ( 409 !== $status && ! $same( $fields[ $theirs ]['type'], $stored[ $theirs ] ?? null, $now[ $theirs ] ?? null ) ) {
+					$lost[] = "saving {$mine} put back {$theirs}: " . wp_json_encode( $stored[ $theirs ] ?? null ) . ' -> ' . wp_json_encode( $now[ $theirs ] ?? null );
+				}
+			}
+			$check( "{$label}: a change made elsewhere survives saving another field", ! $lost, $lost ? implode( '; ', array_slice( $lost, 0, 6 ) ) : "{$pairs} of {$n} pairs" );
+
 		} finally {
 			wp_delete_post( $id, true );
 		}

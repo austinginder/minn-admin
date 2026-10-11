@@ -33238,6 +33238,7 @@
 	async function loadEditorPanels( ed, post ) {
 		ed.panels = [];
 		ed.panelValues = {};
+		ed.panelBase = {};
 		ed.panelDirty = {};
 		await Promise.all( ( B.editorPanels || [] ).map( async ( desc ) => {
 			if ( desc.statusRoute ) {
@@ -33272,6 +33273,7 @@
 					if ( f.type !== 'true_false' && seeded[ f.name ] === false ) seeded[ f.name ] = null;
 				} ) );
 				ed.panelValues[ desc.id ] = seeded;
+				ed.panelBase[ desc.id ] = JSON.parse( JSON.stringify( seeded ) );
 			} catch ( e ) { /* panel just doesn't render */ }
 		} ) );
 		if ( ed.panels.length && state.route === 'editor' && state.editor === ed ) renderEditorSide();
@@ -33845,7 +33847,11 @@
 		}
 		( ed.panels || [] ).forEach( ( p ) => {
 			if ( ed.panelDirty && ed.panelDirty[ p.desc.id ] && p.desc.writeKey ) {
-				payload[ p.desc.writeKey ] = ed.panelValues[ p.desc.id ];
+				// Only the fields changed since the panel loaded or last
+				// saved: a field someone else changed meanwhile (another tab,
+				// the plugin's own screen) keeps their value.
+				const changed = changedKeys( ed.panelValues[ p.desc.id ], ( ed.panelBase || {} )[ p.desc.id ] );
+				if ( Object.keys( changed ).length ) payload[ p.desc.writeKey ] = changed;
 			}
 		} );
 		if ( ed.featuredDirty ) {
@@ -33953,6 +33959,7 @@
 				const v = el._rowsResync();
 				if ( store ) store[ pf.slice( sep + 1 ) ] = v;
 			} );
+			ed.panelBase = JSON.parse( JSON.stringify( ed.panelValues || {} ) );
 			ed.panelDirty = {};
 			ed.featuredDirty = false;
 			ed.parentDirty = false;
