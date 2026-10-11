@@ -14,6 +14,9 @@
  * - an unmarked <img> is paired with its field by URL and gets the same
  *   click, unless the picture belongs to two fields (it stays unpaired).
  * Without upload rights nothing pairs and a marked photo keeps the popover.
+ * Markup in a preview posing as another island (kses keeps class and
+ * data-*) is never a doorway, and stored gallery values reach the thumbnail
+ * query as ids only.
  *
  * Fixture: acf/minn-photo in minn-dev-fixtures.php. SKIPs (exit 0) without
  * ACF Pro.
@@ -57,6 +60,8 @@ const ISL = '.minn-block-island[data-block="acf/minn-photo"]';
 		block( { title: 'Marked card', photo: A, photo2: B, shots: [ S( A ), S( C ) ], marked: 1 } ),
 		block( { title: 'Shared photo', photo: B, photo2: B, shots: [ S( C ), S( A ) ], marked: 0 } ),
 		block( { title: 'Plain card', photo: C, photo2: A, shots: [ S( B ) ], marked: 0 } ),
+		// A gallery value that is not an id, for the thumbnail query below.
+		block( { title: 'Probe card', photo: A, photo2: C, shots: [ S( B ), S( C ) + '&minn_probe=1' ], marked: 1 } ),
 	].join( '\n\n' );
 
 	const saved = async ( pid ) => {
@@ -153,6 +158,68 @@ const ISL = '.minn-block-island[data-block="acf/minn-photo"]';
 		t.check( 'an unmarked gallery picture opens the Images editor at its tile', tile.n === 2 && tile.flash === '1', JSON.stringify( tile ) );
 		await page.keyboard.press( 'Escape' );
 		await page.waitForTimeout( 600 );
+
+		// Markup posing as another island is not a doorway. A template that
+		// prints a field's HTML can carry .minn-block-island and data-island
+		// (kses keeps class and data-*), so a photo or a toolbar marker inside
+		// it must not write to the block it names.
+		const planted = await page.evaluate( ( isl ) => {
+			const all = document.querySelectorAll( isl );
+			const host = all[ 2 ] && all[ 2 ].querySelector( '.minn-island-preview .minn-test-photo' );
+			const real = all[ 2 ] && all[ 2 ].querySelector( '.mph-photo img' );
+			const marker = all[ 0 ] && all[ 0 ].querySelector( '.mph-photo[data-acf-inline-fields]' );
+			if ( ! host || ! real || ! marker ) return false;
+			const wrap = document.createElement( 'div' );
+			wrap.className = 'minn-block-island';
+			wrap.dataset.island = all[ 0 ].dataset.island;
+			wrap.dataset.block = 'acf/minn-photo';
+			const img = document.createElement( 'img' );
+			img.src = real.getAttribute( 'src' );
+			img.className = 'mph-planted-img';
+			img.setAttribute( 'data-minn-acfimg', 'photo' );
+			img.style.cssText = 'display:block;width:60px;height:60px';
+			const tb = document.createElement( 'div' );
+			tb.className = 'mph-planted-tb';
+			tb.setAttribute( 'data-acf-inline-fields', marker.getAttribute( 'data-acf-inline-fields' ) );
+			tb.style.cssText = 'display:block;width:80px;height:30px';
+			tb.textContent = 'Planted';
+			wrap.append( img, tb );
+			host.appendChild( wrap );
+			return true;
+		}, ISL );
+		const opened = () => page.evaluate( () => ( { picker: !! document.querySelector( '.minn-picker-item, .minn-modal-overlay.minn-picker-over' ), pop: !! document.querySelector( '.minn-tb-pop' ) } ) );
+		const shut = async ( o ) => {
+			if ( o.picker || o.pop ) await page.keyboard.press( 'Escape' );
+			await page.waitForTimeout( 500 );
+		};
+		await page.locator( '.mph-planted-img' ).click();
+		await page.waitForTimeout( 1200 );
+		const viaImg = await opened();
+		await shut( viaImg );
+		await page.locator( '.mph-planted-tb' ).click();
+		await page.waitForTimeout( 1200 );
+		const viaTb = await opened();
+		await shut( viaTb );
+		t.check( 'a photo inside markup posing as another block opens nothing', planted && ! viaImg.picker && ! viaImg.pop, JSON.stringify( { planted, viaImg } ) );
+		t.check( 'a toolbar marker inside it opens nothing', planted && ! viaTb.picker && ! viaTb.pop, JSON.stringify( viaTb ) );
+		// It matches ISL too, so it goes before the next step counts islands.
+		await page.evaluate( () => { const w = document.querySelector( '.mph-planted-img' ); if ( w ) w.parentElement.remove(); } );
+
+		// Stored gallery values reach the thumbnail query as ids only.
+		const media = [];
+		const onReq = ( r ) => {
+			const u = decodeURIComponent( r.url() );
+			if ( /wp\/v2\/media/.test( u ) && /include=/.test( u ) ) media.push( u );
+		};
+		page.on( 'request', onReq );
+		await page.locator( `${ ISL } >> nth=3 >> .mph-shots` ).click( { position: { x: 12, y: 12 } } );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 15000 } );
+		page.off( 'request', onReq );
+		const probeTiles = ( await page.$$( '.minn-imgedit-tile' ) ).length;
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 600 );
+		t.check( 'a gallery value that is not an id stays out of the thumbnail query', media.length > 0 && media.every( ( u ) => ! /minn_probe/.test( u ) ), media.join( ' ' ) );
+		t.check( '...and the Images editor still lists every stored value', probeTiles === 2, String( probeTiles ) );
 
 		// Without upload rights: no pairing, and a marked photo keeps the popover.
 		// A second tab whose boot payload never had them (the editor reads it

@@ -37275,7 +37275,7 @@
 				return;
 			}
 			const acfImg = e.target.closest( '.minn-island-preview [data-minn-acfimg]' );
-			if ( acfImg ) {
+			if ( acfImg && acfStamped.has( acfImg ) ) {
 				e.preventDefault();
 				openAcfImage( acfImg );
 				return;
@@ -39015,10 +39015,25 @@
 		const f = df && df.fields.find( ( x ) => x.name === fname );
 		return f && ( f.control === 'image' || f.control === 'gallery' ) ? { df, f } : null;
 	};
+	// The island whose own preview holds el, or null. kses keeps class and
+	// data-*, so a preview can carry a .minn-block-island naming another
+	// block's data-island; it cannot carry contenteditable, which every
+	// island Minn renders has, and Minn never renders an island inside a
+	// preview.
+	const previewIsland = ( el ) => {
+		const preview = el && el.closest( '.minn-island-preview' );
+		const island = preview && preview.parentElement;
+		if ( ! island || ! island.classList.contains( 'minn-block-island' ) || 'false' !== island.getAttribute( 'contenteditable' ) ) return null;
+		if ( island.parentElement && island.parentElement.closest( '.minn-island-preview' ) ) return null;
+		return el.closest( '.minn-block-island' ) === island ? island : null;
+	};
+	// The photos armAcfImages paired. A data-minn-acfimg the preview arrived
+	// with is content, not a doorway.
+	const acfStamped = new WeakSet();
 	// The one image or gallery field a marked element stands for, or null
 	// when the marker also names other fields (those keep the popover).
 	const acfMarkerMedia = ( el ) => {
-		const island = el.closest( '.minn-block-island' );
+		const island = previewIsland( el );
 		const names = acfToolbarFields( el ).map( ( f ) => f.fieldName );
 		if ( ! island || names.length !== 1 ) return null;
 		const m = acfMediaField( String( island.dataset.block || '' ), names[ 0 ] );
@@ -39060,8 +39075,10 @@
 			return true;
 		}
 		const ids = ( Array.isArray( cur[ fname ] ) ? cur[ fname ] : [] ).filter( ( x ) => x != null && x !== '' );
-		const thumbs = ids.length
-			? api( 'wp/v2/media?include=' + ids.join( ',' ) + '&per_page=100&_fields=id,source_url,media_details' ).catch( () => [] )
+		// Stored values go into the query as ids only, as armAcfImages sends them.
+		const fetchIds = ids.map( ( x ) => parseInt( x, 10 ) ).filter( ( n ) => n > 0 );
+		const thumbs = fetchIds.length
+			? api( 'wp/v2/media?include=' + fetchIds.join( ',' ) + '&per_page=100&_fields=id,source_url,media_details' ).catch( () => [] )
 			: Promise.resolve( [] );
 		thumbs.then( ( media ) => {
 			const byId = {};
@@ -39111,6 +39128,7 @@
 		$$( '[data-minn-acfimg]', preview ).forEach( ( n ) => {
 			n.removeAttribute( 'data-minn-acfimg' );
 			n.removeAttribute( 'data-minn-acfimg-id' );
+			acfStamped.delete( n );
 		} );
 		if ( ! B.caps.upload ) return;
 		const parts = blockParts( raw );
@@ -39135,6 +39153,8 @@
 			$$( 'img', preview ).forEach( ( img ) => {
 				// A marked photo is the marker's: its click is already a doorway.
 				if ( img.closest( '[data-acf-inline-fields]' ) ) return;
+				// So is one inside markup posing as another island.
+				if ( previewIsland( img ) !== island ) return;
 				const srcs = [ img.getAttribute( 'src' ), ...String( img.getAttribute( 'srcset' ) || '' ).split( ',' ).map( ( x ) => x.trim().split( /\s+/ )[ 0 ] ) ].filter( Boolean );
 				let hit = null;
 				let clash = false;
@@ -39146,12 +39166,13 @@
 				if ( ! hit || clash ) return;
 				img.setAttribute( 'data-minn-acfimg', hit[ 0 ] );
 				img.setAttribute( 'data-minn-acfimg-id', String( hit[ 1 ] ) );
+				acfStamped.add( img );
 			} );
 		} );
 	}
 
 	function openAcfImage( img ) {
-		const island = img.closest( '.minn-block-island' );
+		const island = acfStamped.has( img ) && previewIsland( img );
 		if ( island ) editAcfMediaField( island, img.getAttribute( 'data-minn-acfimg' ), { id: img.getAttribute( 'data-minn-acfimg-id' ) } );
 	}
 
@@ -39174,7 +39195,7 @@
 			tbChip.addEventListener( 'mousedown', ( e ) => e.preventDefault() );
 			tbChip.addEventListener( 'click', () => {
 				if ( ! tbChipFor || ! tbChipFor.isConnected ) return;
-				if ( tbChipFor.hasAttribute( 'data-minn-acfimg' ) ) openAcfImage( tbChipFor );
+				if ( acfStamped.has( tbChipFor ) ) openAcfImage( tbChipFor );
 				else openAcfToolbarPop( tbChipFor );
 			} );
 			tbChip.addEventListener( 'mouseleave', () => { tbChipTimer = setTimeout( hideTbChip, 250 ); } );
@@ -39184,9 +39205,8 @@
 		}
 		tbChipFor = el;
 		// A photo says what its click does; anything else says where it goes.
-		const media = el.hasAttribute( 'data-minn-acfimg' )
-			? acfMediaField( String( ( el.closest( '.minn-block-island' ) || el ).dataset.block || '' ), el.getAttribute( 'data-minn-acfimg' ) )
-			: null;
+		const own = acfStamped.has( el ) && previewIsland( el );
+		const media = own ? acfMediaField( String( own.dataset.block || '' ), el.getAttribute( 'data-minn-acfimg' ) ) : null;
 		const photo = media ? media.f.control : ( B.caps.upload && acfMarkerMedia( el ) || {} ).control;
 		const dest = photo ? '' : acfToolbarDest( el );
 		tbChip.innerHTML = photo
@@ -39202,7 +39222,10 @@
 	function bindAcfToolbarChips( body ) {
 		if ( ! body || body._minnTbChips ) return;
 		body._minnTbChips = true;
-		const markedIn = ( t ) => t && t.closest && t.closest( '.minn-island-preview [data-acf-inline-fields], .minn-island-preview [data-minn-acfimg]' );
+		const markedIn = ( t ) => {
+			const el = t && t.closest && t.closest( '.minn-island-preview [data-acf-inline-fields], .minn-island-preview [data-minn-acfimg]' );
+			return el && ( el.hasAttribute( 'data-acf-inline-fields' ) || acfStamped.has( el ) ) ? el : null;
+		};
 		body.addEventListener( 'mouseover', ( e ) => {
 			const el = markedIn( e.target );
 			if ( el ) showTbChip( el );
@@ -39235,7 +39258,7 @@
 	async function openAcfToolbarPop( el ) {
 		hideTbPop();
 		hideTbChip();
-		const island = el.closest( '.minn-block-island' );
+		const island = previewIsland( el );
 		const ed = state.editor;
 		const idx = parseInt( island && island.dataset.island, 10 );
 		if ( ! island || ! ed || ! ed.islands || ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
