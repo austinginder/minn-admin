@@ -559,4 +559,29 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 11-2: the System page's wp-config switches rewrote any define of their
+ * constant with true or false, so a WP_DEBUG_LOG set to a private file path
+ * became true (the public wp-content/debug.log), and an expression define
+ * was replaced by a fixed value. Only a literal true/false is a switch now.
+ */
+( function () use ( $check ) {
+	$cases = array(
+		array( "define( 'WP_DEBUG_LOG', true );", 'bool' ),
+		array( "define('WP_DEBUG_LOG',FALSE);", 'bool' ),
+		array( "define( 'WP_DEBUG_LOG', '/srv/private/wp-debug.log' );", 'custom' ),
+		array( "define( 'WP_DEBUG', WP_ENVIRONMENT_TYPE !== 'production' );", 'custom' ),
+		array( "// nothing here", 'absent' ),
+	);
+	$bad = array();
+	foreach ( $cases as $c ) {
+		$name = false !== strpos( $c[0], 'WP_DEBUG_LOG' ) || 'absent' === $c[1] ? 'WP_DEBUG_LOG' : 'WP_DEBUG';
+		$kind = Minn_Admin_REST::config_define_kind( $name, $c[0] );
+		if ( $kind !== $c[1] ) {
+			$bad[] = "{$c[0]} => {$kind}";
+		}
+	}
+	$check( '11-2 only a literal true/false define is a switch', ! $bad, implode( '; ', $bad ) );
+} )();
+
 $summary();

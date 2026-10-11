@@ -12523,6 +12523,25 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	/**
+	 * How wp-config.php defines a constant: 'absent', 'bool' (a literal true
+	 * or false, which a switch may rewrite) or 'custom' (anything else: a log
+	 * file path for WP_DEBUG_LOG, an expression). A switch writes only true or
+	 * false, so it must never replace a custom value: a private log path
+	 * would become true and move the log to the public wp-content/debug.log.
+	 *
+	 * @param string $name     Constant name.
+	 * @param string $contents wp-config.php source.
+	 * @return string
+	 */
+	public static function config_define_kind( $name, $contents ) {
+		if ( ! preg_match( self::const_pattern( $name ), (string) $contents ) ) {
+			return 'absent';
+		}
+		$literal = "/define\\(\\s*(['\"])" . preg_quote( $name, '/' ) . "\\1\\s*,\\s*(true|false)\\s*\\)\\s*;/i";
+		return preg_match( $literal, (string) $contents ) ? 'bool' : 'custom';
+	}
+
+	/**
 	 * Locate the wp-config.php this install actually loads (core's own rule:
 	 * ABSPATH first, then one level up when there's no wp-settings.php there).
 	 */
@@ -12624,7 +12643,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		$constants = array();
 		foreach ( self::debug_constants() as $name => $meta ) {
-			$in_config = '' !== $contents && (bool) preg_match( self::const_pattern( $name ), $contents );
+			$kind      = '' !== $contents ? self::config_define_kind( $name, $contents ) : 'absent';
+			$in_config = 'absent' !== $kind;
 			$defined   = defined( $name );
 			$constants[] = array(
 				'name'      => $name,
@@ -12632,7 +12652,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'desc'      => $meta['desc'],
 				'value'     => $defined ? (bool) constant( $name ) : false,
 				'in_config' => $in_config,
-				'locked'    => $defined && ! $in_config,
+				// Defined elsewhere, or to a custom value the switch would
+				// flatten into true or false.
+				'locked'    => ( $defined && ! $in_config ) || 'custom' === $kind,
 			);
 		}
 
@@ -12683,6 +12705,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$line    = "define( '" . $name . "', " . ( $value ? 'true' : 'false' ) . " );";
 		$pattern = self::const_pattern( $name );
 
+		if ( 'custom' === self::config_define_kind( $name, $contents ) ) {
+			/* translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG. */
+			return new WP_Error( 'custom_value', sprintf( __( '%s is set to a custom value in wp-config.php, so it can only be changed there.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
+		}
 		if ( preg_match( $pattern, $contents ) ) {
 			$new = preg_replace( $pattern, $line, $contents, 1 );
 		} elseif ( defined( $name ) ) {
