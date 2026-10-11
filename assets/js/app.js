@@ -30488,6 +30488,27 @@
 		return n && n.nodeType === Node.ELEMENT_NODE && n.parentNode === root ? n : null;
 	}
 
+	// Islands are Minn's own elements: rendered with contenteditable="false"
+	// (post kses strips that attribute, so content can only imitate the class
+	// and data-*) and never inside another island's preview. Anything that
+	// leads to ed.islands[] finds its island through these, never through a
+	// bare selector, so a look-alike in content cannot name another block.
+	function isRealIsland( el ) {
+		return !! el && 1 === el.nodeType && el.classList.contains( 'minn-block-island' )
+			&& 'false' === el.getAttribute( 'contenteditable' )
+			&& ! ( el.parentElement && el.parentElement.closest( '.minn-island-preview' ) );
+	}
+	// The nearest real island around el, skipping look-alikes in between.
+	function islandOf( el ) {
+		let n = el && el.closest ? el.closest( '.minn-block-island' ) : null;
+		while ( n && ! isRealIsland( n ) ) n = n.parentElement ? n.parentElement.closest( '.minn-block-island' ) : null;
+		return n;
+	}
+	// The real island rendered for block idx under root.
+	function islandByIdx( root, idx ) {
+		return root ? $$( `.minn-block-island[data-island="${ idx }"]`, root ).find( isRealIsland ) || null : null;
+	}
+
 	// Direct-DOM edits inside a container slot never fire `input`, so the
 	// slot's dirty stamp (which gates flushSlotIsland) must be set by hand.
 	// execCommand paths need no call — Blink fires `input` on the slot host
@@ -30509,7 +30530,7 @@
 	// by the serializer and by the inspector (which must see current text
 	// before it builds its model). No-op while the slot is clean.
 	function flushSlotIsland( el, islands ) {
-		if ( ! el || ! el.dataset || ! el.dataset.minnSlotDirty || ! islands ) return;
+		if ( ! isRealIsland( el ) || ! el.dataset.minnSlotDirty || ! islands ) return;
 		const idx = parseInt( el.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || islands[ idx ] == null ) return;
 		const shortName = String( el.dataset.block || '' ).replace( /^core\//, '' );
@@ -30521,7 +30542,8 @@
 		// OWN slots only — with nesting, a descendant query would also grab
 		// the slots of nested containers (and misalign the columns walk).
 		// Nested slot islands flush through serializeToBlocks' recursion.
-		const slots = $$( '.minn-slot', el ).filter( ( s ) => s.closest( '.minn-slot-island' ) === el );
+		// A slot is editable (Minn renders it so); a .minn-slot in content is not.
+		const slots = $$( '.minn-slot', el ).filter( ( s ) => 'true' === s.getAttribute( 'contenteditable' ) && s.closest( '.minn-slot-island' ) === el );
 		if ( ! slots.length ) return;
 		if ( el.classList.contains( 'minn-cols-island' ) ) {
 			// Column-by-column: each column's serialized children splice back
@@ -30960,7 +30982,7 @@
 		try {
 			const holder = document.createElement( 'div' );
 			blocks.forEach( ( el ) => {
-				const isIsland = el.classList && el.classList.contains( 'minn-block-island' );
+				const isIsland = isRealIsland( el );
 				if ( isIsland || rangeFullyCoversNode( range, el ) ) {
 					holder.appendChild( el.cloneNode( true ) );
 					return;
@@ -31010,13 +31032,13 @@
 
 		const blocks = editorSelectionBlocks( body, range );
 		if ( ! blocks.length ) return;
-		const hasIsland = blocks.some( ( el ) => el.classList && el.classList.contains( 'minn-block-island' ) );
+		const hasIsland = blocks.some( isRealIsland );
 		if ( ! hasIsland ) return;
 
 		const htmlParts = [];
 		const textParts = [];
 		blocks.forEach( ( el ) => {
-			if ( el.classList && el.classList.contains( 'minn-block-island' ) ) {
+			if ( isRealIsland( el ) ) {
 				const p = islandClipboardParts( el, ed2.islands );
 				if ( p.html ) htmlParts.push( p.html );
 				if ( p.text ) textParts.push( p.text );
@@ -31049,7 +31071,9 @@
 		for ( let i = blocks.length - 1; i >= 0; i-- ) {
 			const el = blocks[ i ];
 			if ( ! el.isConnected ) continue;
-			if ( el.classList && el.classList.contains( 'minn-block-island' ) ) {
+			// A look-alike in the text is cut as text: nulling the raw it names
+			// would drop that other block on save.
+			if ( isRealIsland( el ) ) {
 				const idx = parseInt( el.dataset.island, 10 );
 				if ( ed2.islands && Number.isFinite( idx ) ) ed2.islands[ idx ] = null;
 				el.remove();
@@ -31505,7 +31529,7 @@
 
 	function armIslandTextRuns( body, ed ) {
 		if ( ! body || ! ed || ! ed.islands || ed.mode === 'locked' ) return;
-		$$( '.minn-block-island', body ).forEach( ( island ) => {
+		$$( '.minn-block-island', body ).filter( isRealIsland ).forEach( ( island ) => {
 			const idx = parseInt( island.dataset.island, 10 );
 			if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
 			if ( isLiveFieldIsland( island ) ) return;
@@ -31782,7 +31806,7 @@
 		} );
 		// Measure image boxes now rather than on first hover, or the wash
 		// covers the whole card for the frame before the pointer settles.
-		$$( '.minn-block-island[data-imgtool]', body ).forEach( placeImgBadge );
+		$$( '.minn-block-island[data-imgtool]', body ).filter( isRealIsland ).forEach( placeImgBadge );
 	}
 
 	// Splice the current span texts back into the island's raw markup. Reads
@@ -31946,7 +31970,7 @@
 		const html = rtNeutralizedHtml( islandHtml( idx, blockName, template, ed ) );
 		if ( anchor ) anchor.insertAdjacentHTML( 'beforebegin', html );
 		else body.insertAdjacentHTML( 'beforeend', html );
-		const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
+		const islandEl = islandByIdx( body, idx );
 		// insertAdjacentHTML fires no input — a slot ancestor must re-splice.
 		stampSlotDirtyFor( islandEl || anchor );
 		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ], post: ( state.editor && state.editor.id ) || 0 } ) } )
@@ -32068,7 +32092,7 @@
 	// image figures) that bindIslandGuards arms with the red outline.
 	function removeAtomicBlockWithUndo( el ) {
 		if ( ! el || ! el.parentNode ) return;
-		if ( el.classList && el.classList.contains( 'minn-block-island' ) ) {
+		if ( isRealIsland( el ) ) {
 			removeIslandWithUndo( el );
 			return;
 		}
@@ -32546,7 +32570,7 @@
 	const PREVIEW_CLAMP_AT = 560;
 	function clampTallImagePreview( el ) {
 		if ( ! el || ! el.isConnected ) return;
-		const island = el.closest( '.minn-block-island' );
+		const island = islandOf( el );
 		if ( ! island || island.dataset.imgtool !== 'edit' ) return;
 		if ( el.classList.contains( 'minn-preview-clamped' ) ) return;
 		if ( el.dataset.sliderCollapsed ) return;   // already showing one slide
@@ -32888,7 +32912,7 @@
 			$$( '.minn-shortcode-input', root ).forEach( ( el ) => commitShortcodeInput( el, { silent: true } ) );
 			$$( '.minn-details-island', root ).forEach( ( el ) => commitDetailsIsland( el, { silent: true } ) );
 			$$( '.minn-buttons-island', root ).forEach( ( el ) => commitButtonsIsland( el, { silent: true } ) );
-			$$( '.minn-block-island', root ).forEach( ( el ) => { if ( el._minnRuns ) commitIslandRuns( el, { silent: true } ); } );
+			$$( '.minn-block-island', root ).filter( isRealIsland ).forEach( ( el ) => { if ( el._minnRuns ) commitIslandRuns( el, { silent: true } ); } );
 		}
 		const out = [];
 		// serializeBlockAttrs applies Gutenberg's comment-safe escaping ("--", <, >, &).
@@ -33007,7 +33031,7 @@
 			// Islands pass through byte-for-byte from the original markup —
 			// except an edited container slot, whose children re-serialize
 			// between the wrapper's verbatim bytes first.
-			if ( n.classList.contains( 'minn-block-island' ) ) {
+			if ( isRealIsland( n ) ) {
 				if ( n.classList.contains( 'minn-slot-island' ) ) flushSlotIsland( n, islands );
 				const raw = islands && islands[ parseInt( n.dataset.island, 10 ) ];
 				if ( raw != null ) out.push( raw.trim() );
@@ -34404,9 +34428,9 @@
 	function fanIslandChips( body ) {
 		// Cheap bail on the common page: no nested island carries a chip.
 		if ( ! body.querySelector( '.minn-block-island .minn-block-island > .minn-island-chip' ) ) return;
-		$$( '.minn-block-island .minn-block-island > .minn-island-chip', body ).forEach( ( chip ) => {
+		$$( '.minn-block-island .minn-block-island > .minn-island-chip', body ).filter( ( c ) => isRealIsland( c.parentElement ) ).forEach( ( chip ) => {
 			chip.style.transform = '';
-			const own = chip.closest( '.minn-block-island' );
+			const own = chip.parentElement;
 			const r = chip.getBoundingClientRect();
 			if ( ! r.width ) return;
 			let dx = 0;
@@ -34608,7 +34632,9 @@
 		islandSelRaf = 0;
 		const body = $( '#minn-editor-body' );
 		if ( ! body ) return;
-		const islands = $$( '.minn-block-island', body );
+		// Real islands only: a look-alike is the writer's content, and a class
+		// toggled on it would be saved with it.
+		const islands = $$( '.minn-block-island', body ).filter( isRealIsland );
 		if ( ! islands.length ) return;
 		const sel = window.getSelection();
 		const live = sel && sel.rangeCount && ! sel.isCollapsed ? sel.getRangeAt( 0 ) : null;
@@ -37159,7 +37185,8 @@
 			const chip = e.target.closest( '.minn-island-chip' );
 			if ( chip ) {
 				e.preventDefault();
-				const island = chip.closest( '.minn-block-island' );
+				// A chip is Minn's only as its island's own child.
+				const island = isRealIsland( chip.parentElement ) ? chip.parentElement : null;
 				if ( ! island ) return;
 				// Modifier grammar on the handle: ⌥ duplicates, ⇧⌥ removes.
 				// NOT ⌃⌥: on macOS Control+click IS the secondary click, so it
@@ -37207,14 +37234,19 @@
 			// Nested-content cards first: the whole card is the doorway to the
 			// content editor (GitHub #12) — in-place editable text still wins
 			// the press, exactly like the image doorway below.
-			const cbadge = e.target.closest && e.target.closest( '[data-ctedbadge]' );
-			const cprev = cbadge
+			// A badge is Minn's only as its island's own child, and a card only
+			// when its preview's parent is a real island: content can wear the
+			// classes and name another block's index.
+			const cbadge0 = e.target.closest && e.target.closest( '[data-ctedbadge]' );
+			const cbadge = cbadge0 && isRealIsland( cbadge0.parentElement ) ? cbadge0 : null;
+			const cprev0 = cbadge
 				? cbadge.parentElement.querySelector( ':scope > .minn-island-preview' )
-				: ( e.target.closest && e.target.closest( '.minn-block-island[data-cted] > .minn-island-preview' ) );
+				: ( ! cbadge0 && e.target.closest && e.target.closest( '.minn-block-island[data-cted] > .minn-island-preview' ) );
+			const cprev = cprev0 && isRealIsland( cprev0.parentElement ) ? cprev0 : null;
 			if ( cprev ) {
 				const ceditable = ! cbadge && e.target.closest( '[contenteditable="true"]' );
 				if ( ! cbadge && ( e.target.closest( '.minn-island-run' ) || ( ceditable && cprev.contains( ceditable ) ) ) ) return;
-				const cisland = cprev.closest( '.minn-block-island' );
+				const cisland = cprev.parentElement;
 				if ( ! cisland || ! ed.islands || ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
 				const cidx = parseInt( cisland.dataset.island, 10 );
 				const craw = ed.islands[ cidx ];
@@ -37238,10 +37270,12 @@
 			// padding) have to open the editor too — clicking a photo simply
 			// opens it with that photo's tile highlighted
 			// (only the images themselves were live).
-			const badge = e.target.closest && e.target.closest( '.minn-imgtool-badge' );
-			const prev = badge
+			const badge0 = e.target.closest && e.target.closest( '.minn-imgtool-badge' );
+			const badge = badge0 && isRealIsland( badge0.parentElement ) ? badge0 : null;
+			const prev0 = badge
 				? badge.parentElement.querySelector( ':scope > .minn-island-preview' )
-				: ( e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' ) );
+				: ( ! badge0 && e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' ) );
+			const prev = prev0 && isRealIsland( prev0.parentElement ) ? prev0 : null;
 			if ( ! prev ) return;
 			// Text a writer can edit in place inside the card wins the click —
 			// unless the press is on the badge, which says what it does.
@@ -37249,7 +37283,7 @@
 			// itself is contenteditable, so an unscoped check bails always.
 			const editable = ! badge && e.target.closest( '[contenteditable="true"]' );
 			if ( ! badge && ( e.target.closest( '.minn-island-run' ) || ( editable && prev.contains( editable ) ) ) ) return;
-			const island = prev.closest( '.minn-block-island' );
+			const island = prev.parentElement;
 			if ( ! island || ! ed.islands || ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
 			const idx = parseInt( island.dataset.island, 10 );
 			const raw = ed.islands[ idx ];
@@ -37316,7 +37350,7 @@
 		// (the chip-density perf rule).
 		body.addEventListener( 'mouseover', ( e ) => {
 			const chip = e.target.closest && e.target.closest( '.minn-island-chip' );
-			const isl = chip && chip.closest( '.minn-block-island' );
+			const isl = chip && isRealIsland( chip.parentElement ) ? chip.parentElement : null;
 			$$( '.minn-chip-hover', body ).forEach( ( el ) => { if ( el !== isl ) el.classList.remove( 'minn-chip-hover' ); } );
 			if ( isl ) isl.classList.add( 'minn-chip-hover' );
 		} );
@@ -37349,7 +37383,7 @@
 				if ( sc ) { commitShortcodeInput( sc ); return; }
 				const runEl = e.target.closest && e.target.closest( '.minn-island-run' );
 				if ( runEl ) {
-					const island = runEl.closest( '.minn-block-island' );
+					const island = islandOf( runEl );
 					if ( island ) commitIslandRuns( island );
 					return;
 				}
@@ -37412,7 +37446,7 @@
 					// [ in ACF copy offers the shortcodes a theme or plugin
 					// describes (openScPicker); plain runs type it as usual.
 					if ( e.key === '[' && ! appShortcut && ! e.altKey && scHints && Object.keys( scHints.hints || {} ).length ) {
-						const island = runEl.closest( '.minn-block-island' );
+						const island = islandOf( runEl );
 						const arm = island && island._minnRuns;
 						const r = arm ? arm.runs[ arm.spans.indexOf( runEl ) ] : null;
 						const sel = window.getSelection();
@@ -37627,8 +37661,8 @@
 		// destination was only reachable by knowing the ⚙ popover lists it.
 		body.addEventListener( 'contextmenu', ( e ) => {
 			const preview = e.target.closest && e.target.closest( '.minn-block-island > .minn-island-preview' );
-			if ( ! preview ) return;
-			const island = preview.closest( '.minn-block-island' );
+			if ( ! preview || ! isRealIsland( preview.parentElement ) ) return;
+			const island = preview.parentElement;
 			const ed2 = state.editor;
 			if ( ! island || ! ed2 || ! ed2.islands ) return;
 			const idx = parseInt( island.dataset.island, 10 );
@@ -37670,7 +37704,8 @@
 		// Hovering editable text inside an image card: the card stops advertising
 		// itself as one button, because right there it is not one.
 		body.addEventListener( 'pointerover', ( e ) => {
-			const isl = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool]' );
+			const isl0 = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool]' );
+			const isl = isRealIsland( isl0 ) ? isl0 : null;
 			$$( '.minn-run-hover', body ).forEach( ( el ) => { if ( el !== isl ) el.classList.remove( 'minn-run-hover' ); } );
 			if ( ! isl ) return;
 			isl.classList.toggle( 'minn-run-hover', !! e.target.closest( '.minn-island-run' ) );
@@ -38056,15 +38091,15 @@
 			const markCovered = ( innermost ) => {
 				coveredMarks.forEach( ( el ) => el.classList.remove( 'minn-island-covered' ) );
 				coveredMarks = [];
-				let a = innermost && innermost.parentElement && innermost.parentElement.closest( '.minn-block-island' );
+				let a = innermost && innermost.parentElement && islandOf( innermost.parentElement );
 				while ( a ) {
 					a.classList.add( 'minn-island-covered' );
 					coveredMarks.push( a );
-					a = a.parentElement && a.parentElement.closest( '.minn-block-island' );
+					a = a.parentElement && islandOf( a.parentElement );
 				}
 			};
 			const coveredFrom = ( e ) => {
-				const isl = e.target.closest && e.target.closest( '.minn-block-island' );
+				const isl = islandOf( e.target );
 				markCovered( isl && body.contains( isl ) ? isl : null );
 			};
 			body.addEventListener( 'mouseover', coveredFrom );
@@ -38809,7 +38844,7 @@
 	function openScTokenPop( tok ) {
 		hideScPop();
 		const run = tok.closest( '.minn-island-run' );
-		const island = run && run.closest( '.minn-block-island' );
+		const island = run && islandOf( run );
 		if ( ! island || ! island._minnRuns ) return;
 		const src = tok.dataset.sc || '';
 		const hint = scHintFor( tok.dataset.tag || '' );
@@ -38880,7 +38915,7 @@
 	// describes. Escape types the bracket after all.
 	function openScPicker( run, range ) {
 		hideScPop();
-		const island = run.closest( '.minn-block-island' );
+		const island = islandOf( run );
 		if ( ! island ) return;
 		const items = [];
 		Object.keys( ( scHints && scHints.hints ) || {} ).forEach( ( tag ) => {
@@ -41329,7 +41364,9 @@
 	function rebuildIslandFromRaw( islandEl, idx, newRaw ) {
 		const ed = state.editor;
 		if ( ! ed || ! ed.islands || ed.islands[ idx ] == null || ! islandEl ) return false;
-		$$( '.minn-block-island', islandEl ).forEach( ( n ) => {
+		// Only the container's own nested islands: a look-alike in a slot's
+		// text naming another block must not null that block's raw.
+		$$( '.minn-block-island', islandEl ).filter( isRealIsland ).forEach( ( n ) => {
 			const i = parseInt( n.dataset.island, 10 );
 			if ( Number.isFinite( i ) && i !== idx ) ed.islands[ i ] = null;
 		} );
@@ -41787,7 +41824,7 @@
 		// (a misbehaving render callback must never break the editor).
 		// Live-field islands (shortcode/details) use in-card editors instead of
 		// a preview slot — sync those fields so an inspector Apply is visible.
-		const islandEl = insp.islandEl || document.querySelector( `.minn-block-island[data-island="${ insp.idx }"]` );
+		const islandEl = insp.islandEl || islandByIdx( document, insp.idx );
 		// A nested island's raw changed via popover buttons (no input event)
 		// — ancestor slot islands must re-splice on save.
 		stampSlotDirtyFor( islandEl );
@@ -41847,7 +41884,7 @@
 				injectPreviewStyles( r && r.styles );
 				if ( ! r || ! Array.isArray( r.rendered ) || ! document.contains( body ) ) return;
 				r.rendered.forEach( ( html, i ) => {
-					const island = body.querySelector( `.minn-block-island[data-island="${ i }"]` );
+					const island = islandByIdx( body, i );
 					// Shortcode/details host live fields — never clobber them.
 					if ( isLiveFieldIsland( island ) ) return;
 					const el = body.querySelector( `.minn-island-preview[data-preview="${ i }"]` );
@@ -42946,7 +42983,7 @@
 			if ( armed ) armed.classList.remove( 'minn-island-armed' );
 			armed = null;
 		};
-		const isIsland = ( el ) => !!( el && el.classList && el.classList.contains( 'minn-block-island' ) );
+		const isIsland = isRealIsland;
 		// The guards run PER BLOCK ROOT: islands live at the top level AND
 		// inside container slots (nested islands), so "root child" means a
 		// direct child of the body or of a .minn-slot. The keydown handler
@@ -42983,7 +43020,7 @@
 			if ( ! el || ! el.closest ) return null;
 			const field = el.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body, .minn-btn-label, .minn-btn-url' );
 			if ( ! field ) return null;
-			const island = field.closest( '.minn-block-island' );
+			const island = islandOf( field );
 			if ( ! island || ! isRootChild( island ) ) return null;
 			if ( field.matches( '.minn-details-body' ) ) {
 				if ( field.textContent.replace( /\u00a0/g, ' ' ).trim() ) return null;
@@ -43216,7 +43253,7 @@
 		const root = blockRootOf( anchor, body );
 		let block = anchor;
 		if ( block.nodeType === Node.ELEMENT_NODE && block.closest ) {
-			const isl = block.closest( '.minn-block-island' );
+			const isl = islandOf( block );
 			if ( isl && isl.parentNode === root ) block = isl;
 		}
 		while ( block && block.parentNode !== root ) block = block.parentNode;
@@ -44987,7 +45024,7 @@
 			const sel = window.getSelection();
 			sel.removeAllRanges();
 			sel.addRange( range );
-			const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
+			const islandEl = islandByIdx( body, idx );
 			api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ action.template ], post: ( state.editor && state.editor.id ) || 0 } ) } )
 				.then( ( r ) => {
 					injectPreviewStyles( r && r.styles );
