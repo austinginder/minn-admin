@@ -84,6 +84,12 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
 - **A credential row a licence reader reads is redacted** in the database browser
   (`minn_admin_license_secret_options()`); `tests/license-redaction.test.js` traces the
   readers and fails on a row that is neither redacted nor listed as holding no key.
+- **Writes that hand over the site are fenced** (`includes/class-minn-admin-fences.php`):
+  during a `minn-admin/v1` request, takeover options, network settings, powerful role or
+  capability grants and a powerful account's sign-in need the caller's own capability.
+  Write through the options, user and metadata APIs so the fence sees it, never raw SQL
+  to those tables; a new takeover option or power goes into its lists, and
+  `tests/write-fences.test.php` gets a case for it.
 
 ## UI traps
 

@@ -88,9 +88,11 @@ run security-v043-registry single --user=admin
 run security-v044-rc single --user=admin
 run security-v045-registry single --user=admin
 run sweep-v044 single --user=admin
+run write-fences single --user=admin
 
 # A network, from a site that is not the main one.
 run route-gates subsite --user=admin
+run write-fences subsite --user=admin
 run multisite-db-redaction subsite --user=admin
 run multisite-languages subsite --user=admin
 run multisite-network-caps subsite --user=admin
