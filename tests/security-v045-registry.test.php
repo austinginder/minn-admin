@@ -817,4 +817,53 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+// --- 04-3 A TEC event with several venues keeps them all on a panel save ---
+// Events Calendar Pro links several venues, and TEC links exactly the venues a
+// save submits. The panel read the first venue only and sent it back with any
+// edit, so changing the cost unlinked the rest. Seeded as two _EventVenueID
+// rows, the way Pro stores them.
+( function () use ( $check, $call ) {
+	if ( ! class_exists( 'Tribe__Events__API' ) ) {
+		echo "SKIP  04-3 The Events Calendar inactive\n";
+		return;
+	}
+	$ids   = array();
+	$venue = function ( $name ) use ( &$ids ) {
+		$id    = (int) wp_insert_post( array( 'post_type' => 'tribe_venue', 'post_status' => 'publish', 'post_title' => $name ) );
+		$ids[] = $id;
+		return $id;
+	};
+	$v1    = $venue( 'Minn 04-3 Hall A' );
+	$v2    = $venue( 'Minn 04-3 Hall B' );
+	$event = (int) wp_insert_post( array( 'post_type' => 'tribe_events', 'post_status' => 'draft', 'post_title' => 'Minn 04-3' ) );
+	$ids[] = $event;
+	try {
+		update_post_meta( $event, '_EventStartDate', '2026-12-01 10:00:00' );
+		update_post_meta( $event, '_EventEndDate', '2026-12-01 12:00:00' );
+		update_post_meta( $event, '_EventCost', '10' );
+		add_post_meta( $event, '_EventVenueID', $v1 );
+		add_post_meta( $event, '_EventVenueID', $v2 );
+
+		list( , $fields ) = $call( 'GET', '/minn-admin/v1/tec/fields', null, array( 'post_id' => $event, 'post_type' => 'tribe_events' ) );
+		$names = wp_list_pluck( (array) ( $fields['groups'][0]['fields'] ?? array() ), 'name' );
+		$check( '04-3 the venue field is locked on an event with two venues', ! in_array( 'venue', $names, true ) && in_array( 'cost', $names, true ), wp_json_encode( $names ) );
+
+		list( , $got ) = $call( 'GET', '/wp/v2/tribe_events/' . $event, null, array( 'context' => 'edit' ) );
+		$vals         = json_decode( wp_json_encode( $got['minn_tec'] ?? array() ), true );
+		$vals['cost'] = '15';
+		// An older client still sending the first venue changes nothing either.
+		$vals['venue'] = array( 'value' => (string) $v1, 'label' => 'Minn 04-3 Hall A' );
+		list( $status ) = $call( 'POST', '/wp/v2/tribe_events/' . $event, array( 'minn_tec' => $vals ) );
+		wp_cache_delete( $event, 'post_meta' );
+		$venues = array_map( 'intval', (array) get_post_meta( $event, '_EventVenueID' ) );
+		sort( $venues );
+		$check( '04-3 changing the cost keeps both venues', 200 === $status && array( $v1, $v2 ) === $venues, $status . ' ' . wp_json_encode( $venues ) );
+		$check( '04-3 control: the cost saved', '15' === (string) get_post_meta( $event, '_EventCost', true ), (string) get_post_meta( $event, '_EventCost', true ) );
+	} finally {
+		foreach ( $ids as $id ) {
+			wp_delete_post( $id, true );
+		}
+	}
+} )();
+
 $summary();

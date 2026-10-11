@@ -85,6 +85,15 @@ function minn_admin_tec_multi_organizer( $post_id ) {
 	return count( (array) get_post_meta( (int) $post_id, '_EventOrganizerID' ) ) > 1;
 }
 
+/**
+ * Whether this event carries more than one venue (locks the field). Events
+ * Calendar Pro links several; TEC links exactly the venues a save submits and
+ * unlinks the rest, so a single pick would drop all but the first.
+ */
+function minn_admin_tec_multi_venue( $post_id ) {
+	return count( (array) get_post_meta( (int) $post_id, '_EventVenueID' ) ) > 1;
+}
+
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 	if ( ! minn_admin_tec_active() ) {
 		return $panels;
@@ -142,7 +151,6 @@ add_action( 'rest_api_init', function () {
 				array( 'name' => 'start', 'label' => __( 'Starts', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
 				array( 'name' => 'end', 'label' => __( 'Ends', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
 				array( 'name' => 'all_day', 'label' => __( 'All-day event', 'minn-admin' ), 'type' => 'true_false' ),
-				array( 'name' => 'venue', 'label' => __( 'Venue', 'minn-admin' ), 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=venue', 'placeholder' => __( 'Search venues…', 'minn-admin' ) ),
 			);
 			if ( $post_id && minn_admin_tec_is_recurring( $post_id ) ) {
 				// Every field is TEC's on a recurring event (see the helper).
@@ -153,6 +161,12 @@ add_action( 'rest_api_init', function () {
 				) );
 			}
 			$locked = 0;
+			if ( $post_id && minn_admin_tec_multi_venue( $post_id ) ) {
+				// Several venues: single-pick would silently drop the rest.
+				$locked++;
+			} else {
+				$fields[] = array( 'name' => 'venue', 'label' => __( 'Venue', 'minn-admin' ), 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=venue', 'placeholder' => __( 'Search venues…', 'minn-admin' ) );
+			}
 			if ( $post_id && minn_admin_tec_multi_organizer( $post_id ) ) {
 				// Several organizers: single-pick would silently drop the rest.
 				$locked++;
@@ -243,10 +257,12 @@ add_action( 'rest_api_init', function () {
 					'all_day' => function_exists( 'tribe_event_is_all_day' )
 						? (bool) tribe_event_is_all_day( $id )
 						: in_array( (string) get_post_meta( $id, '_EventAllDay', true ), array( 'yes', '1', 'true' ), true ),
-					'venue'   => minn_admin_tec_linked_pick( get_post_meta( $id, '_EventVenueID', true ) ),
 					'cost'    => (string) get_post_meta( $id, '_EventCost', true ),
 					'website' => (string) get_post_meta( $id, '_EventURL', true ),
 				);
+				if ( ! minn_admin_tec_multi_venue( $id ) ) {
+					$values['venue'] = minn_admin_tec_linked_pick( get_post_meta( $id, '_EventVenueID', true ) );
+				}
 				if ( ! minn_admin_tec_multi_organizer( $id ) ) {
 					$values['organizer'] = minn_admin_tec_linked_pick( get_post_meta( $id, '_EventOrganizerID', true ) );
 				}
@@ -307,7 +323,7 @@ add_action( 'rest_api_init', function () {
 					}
 					return $type === get_post_type( $id ) && current_user_can( 'read_post', $id );
 				};
-				if ( array_key_exists( 'venue', $value ) ) {
+				if ( array_key_exists( 'venue', $value ) && ! minn_admin_tec_multi_venue( $post->ID ) ) {
 					$vid = $linked_id( $value['venue'] );
 					if ( ! $linkable( $vid, 'tribe_venue', '_EventVenueID' ) ) {
 						return new WP_Error( 'minn_tec_bad_venue', __( 'Pick a venue from the list.', 'minn-admin' ), array( 'status' => 400 ) );
