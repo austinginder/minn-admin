@@ -138,7 +138,7 @@ function minn_admin_ai1wm_status_model() {
 			),
 		),
 		'actions' => array_values( array_filter( array(
-			minn_admin_ai1wm_rest_ready() ? array(
+			minn_admin_ai1wm_can_export() ? array(
 				'label'  => __( 'Export site', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/ai1wm/export',
 				'method' => 'POST',
@@ -165,6 +165,16 @@ function minn_admin_ai1wm_status_model() {
 /** Their REST controller (7.1+) is what makes an export drivable from here. */
 function minn_admin_ai1wm_rest_ready() {
 	return class_exists( 'Ai1wm_Rest_Controller' ) && defined( 'AI1WM_SECRET_KEY' );
+}
+
+/**
+ * Who may start, poll or stop an export: AI1WM's own export capability
+ * (export plus manage_options), and on a network its owner only. AI1WM's
+ * REST gate behind the dispatch asks the same; `export` alone also admitted
+ * a shop manager and every subsite administrator at Minn's door.
+ */
+function minn_admin_ai1wm_can_export() {
+	return minn_admin_ai1wm_rest_ready() && current_user_can( 'ai1wm_export_site' ) && Minn_Admin::network_owner();
 }
 
 /** One request to ai1wm/v1 through the REST server, so their gates run. */
@@ -402,7 +412,7 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/ai1wm/export', array(
 		'methods'             => 'POST',
 		'permission_callback' => function () {
-			return minn_admin_ai1wm_rest_ready() && current_user_can( 'export' );
+			return minn_admin_ai1wm_can_export();
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			$options = array();
@@ -438,7 +448,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'GET',
 			'permission_callback' => function () {
-				return minn_admin_ai1wm_rest_ready() && current_user_can( 'export' );
+				return minn_admin_ai1wm_can_export();
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				// A stop races the loopback step still running: their cancel
@@ -459,7 +469,7 @@ add_action( 'rest_api_init', function () {
 		array(
 			'methods'             => 'DELETE',
 			'permission_callback' => function () {
-				return minn_admin_ai1wm_rest_ready() && current_user_can( 'export' );
+				return minn_admin_ai1wm_can_export();
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				$r = minn_admin_ai1wm_dispatch( 'DELETE', 'exports/' . Minn_Admin::path_param( $request, 'job' ) );

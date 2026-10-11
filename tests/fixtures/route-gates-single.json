@@ -19,7 +19,6 @@
             "administrator"
         ],
         "DELETE /minn-admin/v1/ai1wm/export/(?P<job>[a-f0-9]{13,40})": [
-            "shop_manager",
             "administrator"
         ],
         "DELETE /minn-admin/v1/ai1wm/exports/(?P<id>[A-Za-z0-9_-]+)": [
@@ -252,7 +251,6 @@
             "administrator"
         ],
         "GET /minn-admin/v1/ai1wm/export/(?P<job>[a-f0-9]{13,40})": [
-            "shop_manager",
             "administrator"
         ],
         "GET /minn-admin/v1/ai1wm/exports": [
@@ -1318,7 +1316,6 @@
             "administrator"
         ],
         "POST /minn-admin/v1/ai1wm/export": [
-            "shop_manager",
             "administrator"
         ],
         "POST /minn-admin/v1/amelia/appointments/(?P<id>\\d+)/status": [
