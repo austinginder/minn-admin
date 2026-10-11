@@ -40,6 +40,16 @@ $call    = function ( $method, $route, $body = null, $params = array() ) {
 	return array( $res->get_status(), $res->get_data() );
 };
 
+// On a network wp_delete_user() only takes an account off this site.
+$drop_user = function ( $id ) {
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	if ( is_multisite() ) {
+		require_once ABSPATH . 'wp-admin/includes/ms.php';
+		return wpmu_delete_user( $id );
+	}
+	return wp_delete_user( $id );
+};
+
 $admin = get_users( array( 'role' => 'administrator', 'number' => 1 ) );
 if ( ! $admin ) {
 	echo "SKIP  no administrator to run as\n";
@@ -219,6 +229,63 @@ wp_set_current_user( $admin[0]->ID );
 	} finally {
 		@rmdir( $probe . '/sub' ); // phpcs:ignore
 		@rmdir( $probe ); // phpcs:ignore
+	}
+} )();
+
+/*
+ * 08-2: the duplicate route took any post type the caller could edit_post,
+ * internal ones included: an Editor's copy of a privacy request handed back
+ * the requester's email. 08-5: /builders/new checked the type's edit cap
+ * where core's create paths check create_posts.
+ */
+( function () use ( $check, $call, $drop_user ) {
+	$admin_id = get_current_user_id();
+	$editor   = wp_insert_user( array( 'user_login' => 'minn-v045-ed-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'editor', 'user_email' => 'minn-v045-ed-' . wp_rand() . '@example.com' ) );
+	$req      = function_exists( 'wp_create_user_request' ) ? wp_create_user_request( 'minn-v045-requester@example.com', 'export_personal_data' ) : 0;
+	$post     = wp_insert_post( array( 'post_title' => 'v045 duplicate control', 'post_status' => 'draft', 'post_author' => $admin_id ) );
+	$made     = array();
+	try {
+		wp_set_current_user( $editor );
+		if ( $req && ! is_wp_error( $req ) ) {
+			$before = (int) wp_count_posts( 'user_request' )->{'request-pending'};
+			list( $status, $d ) = $call( 'POST', "/minn-admin/v1/posts/{$req}/duplicate" );
+			$after = (int) wp_count_posts( 'user_request' )->{'request-pending'};
+			if ( is_array( $d ) && ! empty( $d['id'] ) ) {
+				$made[] = (int) $d['id'];
+			}
+			$check( '08-2 an Editor cannot duplicate a privacy request', 404 === $status && false === strpos( wp_json_encode( $d ), 'minn-v045-requester' ), (string) $status );
+		}
+		list( $status, $d ) = $call( 'POST', "/minn-admin/v1/posts/{$post}/duplicate" );
+		if ( is_array( $d ) && ! empty( $d['id'] ) ) {
+			$made[] = (int) $d['id'];
+		}
+		$check( '08-2 control: an Editor still duplicates a post', $status < 300, (string) $status );
+
+		$routes = rest_get_server()->get_routes();
+		if ( isset( $routes['/minn-admin/v1/builders/new'] ) ) {
+			$type = get_post_type_object( 'page' );
+			$was  = $type->cap->create_posts;
+			$type->cap->create_posts = 'minn_v045_create_pages';
+			try {
+				list( $status, $d ) = $call( 'POST', '/minn-admin/v1/builders/new', array( 'builder' => array_key_first( minn_admin_page_builders() ), 'type' => 'pages', 'title' => 'v045 probe' ) );
+				if ( is_array( $d ) && ! empty( $d['id'] ) ) {
+					$made[] = (int) $d['id'];
+				}
+				$check( "08-5 /builders/new asks the type's create cap", 403 === $status, (string) $status );
+			} finally {
+				$type->cap->create_posts = $was;
+			}
+		} else {
+			echo "SKIP  08-5 no page builder active\n";
+		}
+	} finally {
+		wp_set_current_user( $admin_id );
+		foreach ( array_merge( $made, array( $post, $req ) ) as $id ) {
+			if ( $id && ! is_wp_error( $id ) ) {
+				wp_delete_post( $id, true );
+			}
+		}
+		$drop_user( $editor );
 	}
 } )();
 

@@ -473,7 +473,9 @@ add_action(
 					}
 					$type     = 'posts' === $request['type'] ? 'post' : 'page';
 					$type_obj = get_post_type_object( $type );
-					if ( ! current_user_can( $type_obj->cap->edit_posts ) ) {
+					// Creating, as core's own create paths check it (a site can
+					// grant editing without creating).
+					if ( ! current_user_can( $type_obj->cap->create_posts ) ) {
 						return new WP_Error( 'forbidden', __( 'You are not allowed to create this.', 'minn-admin' ), array( 'status' => 403 ) );
 					}
 					$title = sanitize_text_field( (string) $request['title'] );

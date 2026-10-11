@@ -11339,7 +11339,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$type = get_post_type_object( $post->post_type );
-		if ( ! $type || ! current_user_can( $type->cap->create_posts ) ) {
+		// Only content someone edits on a screen: internal types (privacy
+		// requests, changesets) map to ordinary post caps, so an Editor
+		// passes edit_post on them, and a copy hands back what only their
+		// own screens show (a requester's email address).
+		if ( ! $type || empty( $type->show_ui ) || empty( $type->show_in_rest ) ) {
+			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		if ( ! current_user_can( $type->cap->create_posts ) ) {
 			return new WP_Error( 'forbidden', __( 'You are not allowed to create this type of content.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		// wp_insert_post() unslashes its input, so stored values go in
