@@ -5471,10 +5471,17 @@ class Minn_Admin_REST {
 	}
 
 	/**
-	 * Locales that a real reader depends on: the configured site language and
-	 * every locale a user has personally selected. These can never be removed.
-	 * Returns a map locale => in-use count (site language counts as 1 even
-	 * with no user on it) plus a companion flag set.
+	 * Locales that a real reader depends on: the configured site language,
+	 * every locale a user has personally selected and, on a network, the
+	 * language of every other site. These can never be removed. Returns the
+	 * site language, a map locale => user count and a map locale => site
+	 * count, plus whether the network was too large to walk.
+	 *
+	 * Every site of a network reads the one shared WP_LANG_DIR, and each
+	 * keeps its own WPLANG (a site with none falls back to the network's), so
+	 * a language another site runs in is in use even when this site and its
+	 * users are English. A network too large to walk counts every language as
+	 * in use.
 	 */
 	private static function protected_locales() {
 		global $wpdb;
@@ -5488,9 +5495,23 @@ class Minn_Admin_REST {
 			}
 			$users[ $loc ] = isset( $users[ $loc ] ) ? $users[ $loc ] + 1 : 1;
 		}
+		$sites = array();
+		$large = is_multisite() && wp_is_large_network();
+		if ( is_multisite() && ! $large ) {
+			$network = (string) get_site_option( 'WPLANG', '' );
+			foreach ( get_sites( array( 'fields' => 'ids', 'number' => 0 ) ) as $blog_id ) {
+				$loc = $wpdb->get_var( 'SELECT option_value FROM ' . $wpdb->get_blog_prefix( (int) $blog_id ) . "options WHERE option_name = 'WPLANG'" );
+				$loc = null === $loc ? $network : (string) $loc;
+				if ( '' !== $loc && 'en_US' !== $loc ) {
+					$sites[ $loc ] = isset( $sites[ $loc ] ) ? $sites[ $loc ] + 1 : 1;
+				}
+			}
+		}
 		return array(
 			'site'  => 'en_US' === $site ? '' : $site,
 			'users' => $users,
+			'sites' => $sites,
+			'large' => $large,
 		);
 	}
 
@@ -5555,7 +5576,8 @@ class Minn_Admin_REST {
 				: ( is_array( $translations ) && isset( $translations[ $locale ]['native_name'] ) ? $translations[ $locale ]['native_name'] : $locale );
 			$is_site  = $protected['site'] === $locale;
 			$users    = isset( $protected['users'][ $locale ] ) ? (int) $protected['users'][ $locale ] : 0;
-			$reason   = $is_site ? 'site' : ( $users > 0 ? 'users' : '' );
+			$sites    = isset( $protected['sites'][ $locale ] ) ? (int) $protected['sites'][ $locale ] : 0;
+			$reason   = $is_site ? 'site' : ( $users > 0 ? 'users' : ( $sites > 0 ? 'sites' : ( $protected['large'] ? 'network' : '' ) ) );
 			$total    = ( $counts['core'] ? 1 : 0 ) + $counts['plugin'] + $counts['theme'];
 			$out[]    = array(
 				'locale'    => $locale,
@@ -5567,6 +5589,7 @@ class Minn_Admin_REST {
 				'pending'   => isset( $pending[ $locale ] ) ? (int) $pending[ $locale ] : 0,
 				'site'      => $is_site,
 				'users'     => $users,
+				'sites'     => $sites,
 				'removable' => '' === $reason,
 				'reason'    => $reason,
 			);
@@ -5705,6 +5728,12 @@ class Minn_Admin_REST {
 		}
 		if ( isset( $protected['users'][ $locale ] ) ) {
 			return new WP_Error( 'minn_admin_locale_in_use', __( 'A user has chosen this language, so it cannot be removed.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( isset( $protected['sites'][ $locale ] ) ) {
+			return new WP_Error( 'minn_admin_locale_network', __( 'Another site on the network uses this language, so it cannot be removed.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( $protected['large'] ) {
+			return new WP_Error( 'minn_admin_locale_large_network', __( 'This network has too many sites to check which languages they use, so languages cannot be removed here.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		// Only ever act on a locale this site actually has installed: a
 		// request for anything else is refused rather than answered with a

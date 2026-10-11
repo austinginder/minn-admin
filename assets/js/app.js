@@ -25197,6 +25197,9 @@
 		if ( lang.reason === 'site' ) return __( 'Site language' );
 		/* translators: %d is a number of users who chose this language. */
 		if ( lang.reason === 'users' ) return sprintf( _n( 'Chosen by %d user', 'Chosen by %d users', lang.users ), lang.users );
+		/* translators: %d is a number of sites on the network that use this language. */
+		if ( lang.reason === 'sites' ) return sprintf( _n( 'Used by %d site on the network', 'Used by %d sites on the network', lang.sites ), lang.sites );
+		if ( lang.reason === 'network' ) return __( 'Kept: too many sites to check' );
 		return '';
 	}
 
