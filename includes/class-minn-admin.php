@@ -1276,6 +1276,30 @@ class Minn_Admin {
 		return ! is_multisite() || is_super_admin();
 	}
 
+	/**
+	 * Whether the current user owns install-wide state: the database, the
+	 * logs, wp-config. On a single network that is network_owner(). An
+	 * install with several networks (WP Multi Network) shares one database
+	 * and one set of logs, and is_super_admin() answers only for the CURRENT
+	 * network's site_admins, so a secondary network's super admin would read
+	 * the primary network's main site and every network's settings. They
+	 * belong to the main network's super admins (the per-network test the WP
+	 * Multi Network adapter makes; a global $super_admins list is one list).
+	 *
+	 * @return bool
+	 */
+	public static function install_owner() {
+		if ( ! self::network_owner() ) {
+			return false;
+		}
+		if ( ! is_multisite() || is_main_network() || isset( $GLOBALS['super_admins'] ) ) {
+			return true;
+		}
+		$admins = array_map( 'strtolower', (array) get_network_option( get_main_network_id(), 'site_admins', array() ) );
+		$user   = wp_get_current_user();
+		return $user && $user->exists() && in_array( strtolower( $user->user_login ), $admins, true );
+	}
+
 	public static function app_url() {
 		if ( get_option( 'permalink_structure' ) ) {
 			return home_url( '/minn-admin/' );

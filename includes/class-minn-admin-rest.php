@@ -5852,7 +5852,7 @@ class Minn_Admin_REST {
 	 * wp-config routes ask).
 	 */
 	public static function can_read_system() {
-		return current_user_can( 'manage_options' ) && current_user_can( 'view_site_health_checks' ) && Minn_Admin::network_owner();
+		return current_user_can( 'manage_options' ) && current_user_can( 'view_site_health_checks' ) && Minn_Admin::install_owner();
 	}
 
 	/**
@@ -12354,7 +12354,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// same line on its own equivalent screen: Site Health Info sits behind
 		// view_site_health_checks, which is granted only to super admins on
 		// multisite. Their own site's WordPress and PHP facts stay.
-		$network_owner = Minn_Admin::network_owner();
+		$network_owner = Minn_Admin::install_owner();
 
 		$groups = array(
 			array( 'title' => 'WordPress', 'icon' => 'wp', 'rows' => self::kv_rows( $wordpress ) ),
