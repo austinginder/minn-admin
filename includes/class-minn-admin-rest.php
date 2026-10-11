@@ -7723,6 +7723,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// Update offers are only meaningful to someone who can act on them;
 		// core suppresses them on multisite for the same reason.
 		$show_updates = current_user_can( 'update_themes' );
+		// Offers checked against the installed version: the transient keeps an
+		// old one for hours after a theme is replaced outside the upgrader.
+		$real_updates = $show_updates ? self::real_theme_updates() : array();
 		$items      = array();
 		foreach ( $all as $stylesheet => $theme ) {
 			// update_themes lists only themes WordPress.org (or a licensed
@@ -7748,8 +7751,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				// allowedthemes list). Not the same as being active anywhere.
 				// The policy itself is the operator's, so only they read it.
 				'network'    => $owner && is_multisite() && ! empty( $network_themes[ $stylesheet ] ),
-				'update'     => $show_updates && $updates && isset( $updates->response[ $stylesheet ]['new_version'] )
-					? $updates->response[ $stylesheet ]['new_version'] : null,
+				'update'     => isset( $real_updates[ $stylesheet ]['new_version'] ) ? $real_updates[ $stylesheet ]['new_version'] : null,
 				// Block themes live-preview through the Site Editor, classic
 				// themes through the Customizer.
 				'block'      => $theme->is_block_theme(),
@@ -7871,16 +7873,19 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 		require_once ABSPATH . 'wp-admin/includes/update.php';
 
-		// Only re-hit the API when this stylesheet is not already known pending
-		// (mirrors update_single_plugin — avoid a full check on every click).
-		$updates = get_site_transient( 'update_themes' );
-		if ( ! $updates || empty( $updates->response[ $stylesheet ] ) ) {
+		// Only re-hit the API when this stylesheet has no offer newer than the
+		// installed theme (mirrors update_single_plugin, which avoids a full
+		// check on every click). The transient keeps an offer until its next
+		// refresh, so after a theme is replaced outside the upgrader it can
+		// offer an older release, and the upgrader compares no versions: an
+		// offer only counts while it is newer than what is installed.
+		if ( ! isset( self::real_theme_updates()[ $stylesheet ] ) ) {
 			wp_update_themes();
-			$updates = get_site_transient( 'update_themes' );
 		}
-		if ( ! $updates || empty( $updates->response[ $stylesheet ] ) ) {
+		if ( ! isset( self::real_theme_updates()[ $stylesheet ] ) ) {
 			return new WP_Error( 'no_update', __( 'No update available for that theme.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		$updates = get_site_transient( 'update_themes' );
 
 		// Snapshot every pending offer — upgrade() wipes the transient.
 		$pending_before = is_array( $updates->response ) ? $updates->response : array();
@@ -10889,14 +10894,17 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// races when two updates fire close together (network + transient
 		// rewrite) and is the slow half of "Failed to fetch" after a second
 		// concurrent upgrade recycled the worker.
-		$updates = get_site_transient( 'update_plugins' );
-		if ( ! $updates || empty( $updates->response[ $file ] ) ) {
+		// An offer counts only while it is newer than the installed plugin: the
+		// transient keeps one until its next refresh, so after a plugin is
+		// replaced or deleted outside the upgrader it can offer an older
+		// release or a plugin that is gone, and the upgrader compares nothing.
+		if ( ! isset( self::real_plugin_updates()[ $file ] ) ) {
 			wp_update_plugins();
-			$updates = get_site_transient( 'update_plugins' );
 		}
-		if ( ! $updates || empty( $updates->response[ $file ] ) ) {
+		if ( ! isset( self::real_plugin_updates()[ $file ] ) ) {
 			return new WP_Error( 'no_update', __( 'No update available for that plugin.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		$updates = get_site_transient( 'update_plugins' );
 
 		// Snapshot every pending offer — bulk_upgrade wipes the transient.
 		$pending_before = is_array( $updates->response ) ? $updates->response : array();

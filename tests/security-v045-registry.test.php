@@ -683,4 +683,76 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+// --- 10-1 An update offer older than what is installed is neither shown nor applied ---
+// The update transients keep an offer until their next refresh, so after a
+// theme or plugin is replaced (or a plugin deleted) outside the upgrader they
+// can offer an older release, and neither upgrader compares versions. Every
+// HTTP request is refused here, so no package downloads and no update check
+// can turn a forged offer into a real one; the transients are put back after.
+( function () use ( $check, $call ) {
+	$theme  = 'twentytwentyfour';
+	$plugin = 'eps-301-redirects/eps-301-redirects.php';
+	$gone   = 'minn-gone-test/minn-gone-test.php';
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	$plugins = get_plugins();
+	if ( ! wp_get_theme( $theme )->exists() || get_stylesheet() === $theme || ! isset( $plugins[ $plugin ] ) || is_plugin_active( $plugin ) || isset( $plugins[ $gone ] ) ) {
+		echo "SKIP  10-1 needs {$theme} installed and inactive and {$plugin} installed and inactive\n";
+		return;
+	}
+	$themes_was  = get_site_transient( 'update_themes' );
+	$plugins_was = get_site_transient( 'update_plugins' );
+	$offline     = function () {
+		return new WP_Error( 'minn_test_offline', 'offline' );
+	};
+	add_filter( 'pre_http_request', $offline, 1 );
+	$offer_theme = function ( $version ) use ( $theme, $themes_was ) {
+		$t = is_object( $themes_was ) ? clone $themes_was : new stdClass();
+		$t->last_checked = time();
+		$t->checked      = array( $theme => wp_get_theme( $theme )->get( 'Version' ) ) + (array) ( $t->checked ?? array() );
+		$t->response     = array( $theme => array( 'theme' => $theme, 'new_version' => $version, 'url' => 'https://wordpress.org/themes/' . $theme . '/', 'package' => 'https://downloads.wordpress.org/theme/' . $theme . '.' . $version . '.zip' ) );
+		set_site_transient( 'update_themes', $t );
+	};
+	$offer_plugins = function ( array $offers ) use ( $plugins_was ) {
+		$t = is_object( $plugins_was ) ? clone $plugins_was : new stdClass();
+		$t->last_checked = time();
+		$t->response     = array();
+		foreach ( $offers as $file => $version ) {
+			$t->response[ $file ] = (object) array( 'slug' => dirname( $file ), 'plugin' => $file, 'new_version' => $version, 'package' => 'https://downloads.wordpress.org/plugin/' . dirname( $file ) . '.' . $version . '.zip' );
+		}
+		set_site_transient( 'update_plugins', $t );
+	};
+	$listed = function () use ( $call, $theme ) {
+		list( , $d ) = $call( 'GET', '/minn-admin/v1/themes' );
+		foreach ( (array) ( $d['themes'] ?? array() ) as $row ) {
+			if ( $theme === ( $row['stylesheet'] ?? '' ) ) {
+				return $row['update'];
+			}
+		}
+		return 'missing';
+	};
+	try {
+		$offer_theme( '1.0' );
+		$check( '10-1 the Themes list shows no update older than the installed theme', null === $listed(), wp_json_encode( $listed() ) );
+		list( $status, $d ) = $call( 'POST', '/minn-admin/v1/themes/update', array( 'stylesheet' => $theme ) );
+		$check( '10-1 a theme update older than what is installed is refused', 400 === $status && 'no_update' === ( $d['code'] ?? '' ), $status . ' ' . ( $d['code'] ?? '' ) );
+		$offer_theme( '99.0' );
+		$check( '10-1 control: a newer one is still listed', '99.0' === $listed(), wp_json_encode( $listed() ) );
+		list( $status, $d ) = $call( 'POST', '/minn-admin/v1/themes/update', array( 'stylesheet' => $theme ) );
+		$check( '10-1 control: and its update goes ahead (the download fails offline)', 500 === $status && 'update_failed' === ( $d['code'] ?? '' ), $status . ' ' . ( $d['code'] ?? '' ) );
+
+		$offer_plugins( array( $plugin => '1.0', $gone => '1.0' ) );
+		list( $status, $d ) = $call( 'POST', '/minn-admin/v1/plugins/update', array( 'plugin' => $plugin ) );
+		$check( '10-1 a plugin update older than what is installed is refused', 400 === $status && 'no_update' === ( $d['code'] ?? '' ), $status . ' ' . ( $d['code'] ?? '' ) );
+		list( $status, $d ) = $call( 'POST', '/minn-admin/v1/plugins/update', array( 'plugin' => $gone ) );
+		$check( '10-1 an offer for a plugin that is no longer installed is refused', 400 === $status && 'no_update' === ( $d['code'] ?? '' ) && ! is_dir( WP_PLUGIN_DIR . '/minn-gone-test' ), $status . ' ' . ( $d['code'] ?? '' ) );
+		$offer_plugins( array( $plugin => '99.0' ) );
+		list( $status, $d ) = $call( 'POST', '/minn-admin/v1/plugins/update', array( 'plugin' => $plugin ) );
+		$check( '10-1 control: a newer plugin offer goes ahead (the download fails offline)', 500 === $status && 'update_failed' === ( $d['code'] ?? '' ), $status . ' ' . ( $d['code'] ?? '' ) );
+	} finally {
+		remove_filter( 'pre_http_request', $offline, 1 );
+		set_site_transient( 'update_themes', $themes_was );
+		set_site_transient( 'update_plugins', $plugins_was );
+	}
+} )();
+
 $summary();
