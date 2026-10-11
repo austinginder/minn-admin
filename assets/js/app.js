@@ -28010,13 +28010,19 @@
 		if ( methodPick ) bindFormComboboxes( host, 'data-zonefield', [ { key: 'method', type: 'combobox', options: d.available.map( ( a ) => [ a.id, a.title ] ) } ], () => {} );
 
 		const saveBtn = $( '#minn-zone-save', host );
+		const zoneForm = () => ( {
+			name: $( '#minn-zone-name', host ).value.trim(),
+			regions: formControlValue( regionsEl ).map( ( x ) => x.value ),
+			postcodes: $( '#minn-zone-postcodes', host ).value,
+		} );
+		// A saved zone sends only what changed since it opened (the route
+		// keeps what a body leaves out): a region someone added in
+		// WooCommerce meanwhile is not dropped by saving the name.
+		const zoneClean = isNew ? null : zoneForm();
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-			const body = {
-				name: $( '#minn-zone-name', host ).value.trim(),
-				regions: formControlValue( regionsEl ).map( ( x ) => x.value ),
-				postcodes: $( '#minn-zone-postcodes', host ).value,
-			};
-			if ( ! body.name ) { toast( __( 'A zone needs a name.' ), true ); return; }
+			const form = zoneForm();
+			if ( ! form.name ) { toast( __( 'A zone needs a name.' ), true ); return; }
+			const body = zoneClean ? changedKeys( form, zoneClean ) : form;
 			saveBtn.disabled = true;
 			try {
 				const r = isNew
@@ -48215,8 +48221,21 @@
 			$( '#minn-widget-save' ).addEventListener( 'click', async ( e ) => {
 				const btn = e.currentTarget;
 				btn.disabled = true;
-				const raw = { ...( ( m.widget.instance && m.widget.instance.raw ) || {} ) };
-				$$( '[data-wfield]' ).forEach( ( input ) => { raw[ input.dataset.wfield ] = input.value; } );
+				// WordPress replaces a widget's settings whole, so the body is
+				// the widget as stored NOW with this dialog's edits on top: a
+				// setting changed meanwhile (the Customizer, the block widget
+				// editor) is not put back.
+				const loaded = ( m.widget.instance && m.widget.instance.raw ) || {};
+				let base = loaded;
+				try {
+					const fresh = await api( `wp/v2/widgets/${ m.widget.id }?context=edit` );
+					if ( fresh && fresh.instance && fresh.instance.raw ) base = fresh.instance.raw;
+				} catch ( e2 ) { /* the dialog's copy */ }
+				const raw = { ...base };
+				$$( '[data-wfield]' ).forEach( ( input ) => {
+					const k = input.dataset.wfield;
+					if ( input.value !== String( loaded[ k ] ?? '' ) ) raw[ k ] = input.value;
+				} );
 				try {
 					await api( `wp/v2/widgets/${ m.widget.id }`, { method: 'POST', body: JSON.stringify( { instance: { raw } } ) } );
 					toast( __( 'Widget saved' ) );
@@ -48514,17 +48533,13 @@
 			const c = m.full || m.coupon || {};
 			const isNew = !! m.isNew;
 			const saveBtn = $( '#minn-coupon-save' );
-			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const code = ( ( $( '#minn-c-code' ) || {} ).value || '' ).trim();
-				if ( ! code ) { toast( __( 'Code is required' ), true ); return; }
-				const amount = ( ( $( '#minn-c-amount' ) || {} ).value || '' ).trim();
-				if ( amount === '' ) { toast( __( 'Amount is required' ), true ); return; }
+			const couponForm = () => {
 				const limRaw = ( ( $( '#minn-c-limit' ) || {} ).value || '' ).trim();
 				const limUserRaw = ( ( $( '#minn-c-limit-user' ) || {} ).value || '' ).trim();
 				const expRaw = ( ( $( '#minn-c-expires' ) || {} ).value || '' ).trim();
-				const payload = {
-					code,
-					amount,
+				return {
+					code: ( ( $( '#minn-c-code' ) || {} ).value || '' ).trim(),
+					amount: ( ( $( '#minn-c-amount' ) || {} ).value || '' ).trim(),
 					discount_type: ( $( '#minn-c-type' ) || {} ).value || 'percent',
 					status: ( $( '#minn-c-status' ) || {} ).value || 'publish',
 					description: ( ( $( '#minn-c-desc' ) || {} ).value || '' ).trim(),
@@ -48535,11 +48550,19 @@
 					free_shipping: !!( $( '#minn-c-ship' ) || {} ).checked,
 					date_expires: expRaw || null,
 				};
-				// An update sends the type and status only when they changed.
-				if ( ! isNew ) {
-					if ( payload.discount_type === c.discount_type ) delete payload.discount_type;
-					if ( payload.status === c.status ) delete payload.status;
-				}
+			};
+			// What the form held when it opened on this coupon: an update sends
+			// only what differs, so a balance a store-credit plugin lowered or a
+			// limit someone else changed meanwhile is not put back.
+			if ( ! isNew && $( '#minn-c-code' ) && m.cleanCouponFor !== c ) {
+				m.cleanCouponFor = c;
+				m.cleanCoupon = couponForm();
+			}
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				const form = couponForm();
+				if ( ! form.code ) { toast( __( 'Code is required' ), true ); return; }
+				if ( form.amount === '' ) { toast( __( 'Amount is required' ), true ); return; }
+				const payload = isNew ? form : changedDeep( form, m.cleanCoupon || {} );
 				saveBtn.disabled = true;
 				saveBtn.textContent = isNew ? __( 'Creating…' ) : __( 'Saving…' );
 				try {
@@ -48551,10 +48574,12 @@
 						} );
 						toast( __( 'Coupon created' ) );
 					} else {
-						await api( `wc/v3/coupons/${ c.id }`, {
-							method: 'PUT',
-							body: JSON.stringify( payload ),
-						} );
+						if ( Object.keys( payload ).length ) {
+							await api( `wc/v3/coupons/${ c.id }`, {
+								method: 'PUT',
+								body: JSON.stringify( payload ),
+							} );
+						}
 						full = await api( `wc/v3/coupons/${ c.id }?_fields=${ COUPON_DETAIL_FIELDS }` );
 						toast( __( 'Coupon updated' ) );
 					}
@@ -51418,11 +51443,15 @@
 			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue && roleSel.dataset.acValue !== userRoleSeed( ue.user ) ) payload.roles = [ roleSel.dataset.acValue ];
 			const password = $( '#minn-ue-password', view ).value;
 			if ( password ) payload.password = password;
+			// Only the profile fields changed since the page loaded or last
+			// saved: the person can change their own name, email or bio
+			// meanwhile, and a WooCommerce checkout writes their names.
+			dropUnchangedProfile( payload, ue.user );
 			const langSel = $( '#minn-ue-lang', view );
 			const langPicked = langSel ? langSel.dataset.acValue : undefined;
 			const langChanged = langPicked !== undefined && langPicked !== ( ue.languages.current || '' );
 			try {
-				await api( `wp/v2/users/${ u.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				if ( Object.keys( payload ).length ) await api( `wp/v2/users/${ u.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
 				// The user as saved, at once: the language step below can fail
 				// or repaint this page, and the next save compares against it.
 				ue.user = Object.assign( {}, ue.user, payload );
@@ -51950,8 +51979,11 @@
 			const langSel = $( '#minn-pf-lang', view );
 			const langPicked = langSel ? langSel.dataset.acValue : undefined;
 			const langChanged = langPicked !== undefined && langPicked !== ( p.languages.current || '' );
+			// Only what changed since the page loaded (a checkout or a second
+			// tab may have changed the rest).
+			dropUnchangedProfile( payload, p.user );
 			try {
-				await api( `wp/v2/users/${ B.user.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				if ( Object.keys( payload ).length ) await api( `wp/v2/users/${ B.user.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
 				// The profile as saved, at once: the language step below can fail
 				// or repaint this view, and the next save compares against it.
 				p.user = Object.assign( {}, p.user, payload );
@@ -54275,6 +54307,18 @@
 			if ( ids.includes( k ) || ! same ) out[ k ] = now[ k ];
 		} );
 		return out;
+	}
+
+	// The user profile fields (user edit page, own profile) as typed equal to
+	// the user as loaded go: inputs trim, the bio keeps its text.
+	function dropUnchangedProfile( payload, was ) {
+		const w = was || {};
+		[ 'name', 'email', 'first_name', 'last_name', 'url' ].forEach( ( k ) => {
+			if ( k in payload && payload[ k ] === String( w[ k ] ?? '' ).trim() ) delete payload[ k ];
+		} );
+		const text = ( v ) => String( v ?? '' ).replace( /\r\n?/g, '\n' );
+		if ( 'description' in payload && text( payload.description ) === text( w.description ) ) delete payload.description;
+		return payload;
 	}
 
 	// changedKeys one level down: a plain-object field (an address, a

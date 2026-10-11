@@ -6,7 +6,10 @@
  * edit on the page. The other change must survive. Order: paid and its
  * billing city changed while the page is open, then the customer note is
  * edited here. Product: the price and short description changed, then the
- * name. Settings: the tagline changed, then the site title.
+ * name. Coupon: its amount lowered (a store-credit plugin), then the
+ * description. User: the last name changed (their own profile), then the
+ * bio. Widget: its text changed (the Customizer), then the title.
+ * Settings: the tagline changed, then the site title.
  *
  * Every clean save sending nothing is roundtrip-pages-capture.js's check;
  * this suite saves real edits end to end.
@@ -32,6 +35,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	let pid = 0;
 	let oid = 0;
 	let settingsWas = null;
+	let couponId = 0;
+	let userId = 0;
+	let widgetId = '';
 	try {
 		await login( page );
 
@@ -88,6 +94,73 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			}
 		}
 
+		/* ===== Coupon ===== */
+		if ( 200 === wc.status ) {
+			const code = 'minnconc' + suffix;
+			const made = await api( 'wc/v3/coupons', { method: 'POST', body: JSON.stringify( { code, amount: '10', discount_type: 'fixed_cart', description: 'as the dialog opened' } ) } );
+			couponId = made.body && made.body.id;
+			t.check( 'Coupon: fixture created', !! couponId, String( made.status ) );
+			if ( couponId ) {
+				await page.goto( `${ BASE }/minn-admin/coupons`, { waitUntil: 'domcontentloaded' } );
+				await page.waitForSelector( `.minn-table-row[data-coupon="${ couponId }"]`, { timeout: 20000 } );
+				await page.click( `.minn-table-row[data-coupon="${ couponId }"]` );
+				await page.waitForSelector( '#minn-c-desc', { timeout: 15000 } );
+				await page.waitForTimeout( 400 );
+				const elsewhere = await api( `wc/v3/coupons/${ couponId }`, { method: 'PUT', body: JSON.stringify( { amount: '4' } ) } );
+				t.check( 'Coupon: balance lowered elsewhere', 200 === elsewhere.status, String( elsewhere.status ) );
+				await page.fill( '#minn-c-desc', 'described here ' + suffix );
+				const couponSaved = page.waitForResponse( ( r ) => r.url().includes( `coupons/${ couponId }` ) && 'PUT' === r.request().method(), { timeout: 30000 } );
+				await page.click( '#minn-coupon-save' );
+				await couponSaved;
+				const after = ( await api( `wc/v3/coupons/${ couponId }?_fields=amount,description` ) ).body || {};
+				t.check( 'Coupon: the description saved', after.description === 'described here ' + suffix, after.description );
+				t.check( 'Coupon: the lowered amount is kept', parseFloat( after.amount ) === 4, String( after.amount ) );
+			}
+		}
+
+		/* ===== User ===== */
+		const uname = 'minn-conc-' + suffix;
+		const user = await api( 'wp/v2/users', { method: 'POST', body: JSON.stringify( { username: uname, email: uname + '@example.com', password: 'Conc-' + suffix + '-pw-1!', first_name: 'Conc', last_name: 'Loaded', roles: [ 'subscriber' ] } ) } );
+		userId = user.body && user.body.id;
+		t.check( 'User: fixture created', !! userId, String( user.status ) );
+		if ( userId ) {
+			await page.goto( `${ BASE }/minn-admin/users/${ userId }`, { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '#minn-ue-bio', { timeout: 15000 } );
+			await page.waitForLoadState( 'networkidle' ).catch( () => {} );
+			const elsewhere = await api( `wp/v2/users/${ userId }`, { method: 'POST', body: JSON.stringify( { last_name: 'ChangedElsewhere' } ) } );
+			t.check( 'User: last name changed elsewhere', 200 === elsewhere.status, String( elsewhere.status ) );
+			await page.fill( '#minn-ue-bio', 'Bio from the page ' + suffix );
+			const userSaved = page.waitForResponse( ( r ) => r.url().includes( `users/${ userId }` ) && 'POST' === r.request().method(), { timeout: 30000 } );
+			await page.click( '[data-ue-save]' );
+			await userSaved;
+			const after = ( await api( `wp/v2/users/${ userId }?context=edit&_fields=last_name,description` ) ).body || {};
+			t.check( 'User: the bio saved', after.description === 'Bio from the page ' + suffix, after.description );
+			t.check( 'User: the last name changed elsewhere is kept', after.last_name === 'ChangedElsewhere', after.last_name );
+		}
+
+		/* ===== Widget ===== */
+		const widget = await api( 'wp/v2/widgets', { method: 'POST', body: JSON.stringify( { id_base: 'text', sidebar: 'minn-dev-sidebar', instance: { raw: { title: 'Conc title ' + suffix, text: 'as the dialog opened', filter: false, visual: false } } } ) } );
+		widgetId = widget.body && widget.body.id;
+		if ( ! widgetId ) {
+			console.log( 'SKIP  Widget: no classic sidebar to hold a text widget' );
+		} else {
+			await page.goto( `${ BASE }/minn-admin/widgets`, { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( `[data-wedit="${ widgetId }"]`, { timeout: 20000 } );
+			await page.click( `[data-wedit="${ widgetId }"]` );
+			await page.waitForSelector( '[data-wfield="title"]', { timeout: 10000 } );
+			const elsewhere = await api( `wp/v2/widgets/${ widgetId }`, { method: 'POST', body: JSON.stringify( { instance: { raw: { title: 'Conc title ' + suffix, text: 'changed elsewhere', filter: false, visual: false } } } ) } );
+			t.check( 'Widget: text changed elsewhere', 200 === elsewhere.status, String( elsewhere.status ) );
+			await page.fill( '[data-wfield="title"]', 'Retitled ' + suffix );
+			// The save reads the widget fresh first, then writes it.
+			const widgetSaved = page.waitForResponse( ( r ) => r.url().includes( `widgets/${ widgetId }` ) && 'POST' === r.request().method(), { timeout: 30000 } );
+			await page.click( '#minn-widget-save' );
+			await widgetSaved;
+			const after = ( ( await api( `wp/v2/widgets/${ widgetId }?context=edit` ) ).body || {} ).instance || {};
+			const raw = after.raw || {};
+			t.check( 'Widget: the title saved', raw.title === 'Retitled ' + suffix, raw.title );
+			t.check( 'Widget: the text changed elsewhere is kept', raw.text === 'changed elsewhere', raw.text );
+		}
+
 		/* ===== Settings ===== */
 		settingsWas = ( await api( 'wp/v2/settings' ) ).body;
 		await page.goto( `${ BASE }/minn-admin/settings`, { waitUntil: 'domcontentloaded' } );
@@ -112,6 +185,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		if ( settingsWas ) {
 			await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { title: settingsWas.title, description: settingsWas.description } ) } ).catch( () => {} );
 		}
+		if ( widgetId ) await api( `wp/v2/widgets/${ widgetId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( userId ) await api( `wp/v2/users/${ userId }?force=true&reassign=1`, { method: 'DELETE' } ).catch( () => {} );
+		if ( couponId ) await api( `wc/v3/coupons/${ couponId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( oid ) await api( `wc/v3/orders/${ oid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( pid ) await api( `wc/v3/products/${ pid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		await t.done( browser, errors );
