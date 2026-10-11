@@ -101,6 +101,68 @@ if ( false !== $minn_admin_reporting_was ) {
 	);
 }
 
+// A second copy of Minn Admin in another folder. GitHub's source zips unpack
+// to minn-admin-<version>/ and a branch download to minn-admin-main/, which
+// WordPress installs beside minn-admin/ instead of replacing it. The copy that
+// loads first defines the constants below, so a second one used to run on the
+// first one's folder (and fatal on any file it lacks) while the first kept
+// running. Now the second copy stays out of the way, and activating it
+// switches the site over to it.
+if ( defined( 'MINN_ADMIN_FILE' ) ) {
+	$minn_admin_running = MINN_ADMIN_FILE;
+	register_activation_hook(
+		__FILE__,
+		function ( $network_wide ) use ( $minn_admin_running ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			$other   = plugin_basename( $minn_admin_running );
+			$for_net = is_multisite() && is_plugin_active_for_network( $other );
+			// One site's activation leaves the copy the whole network runs;
+			// the running copy's notice says which one that is.
+			if ( $for_net && ! $network_wide ) {
+				return;
+			}
+			$was = get_plugin_data( $minn_admin_running, false, false );
+			deactivate_plugins( $other, true, $for_net );
+			set_site_transient(
+				'minn_admin_copy_switch',
+				array(
+					'from' => (string) ( $was['Version'] ?? '' ),
+					'off'  => $other,
+					'to'   => plugin_basename( __FILE__ ),
+				),
+				HOUR_IN_SECONDS
+			);
+		}
+	);
+	// A running copy from before 0.45 has no notice of its own for this.
+	if ( ! method_exists( 'Minn_Admin', 'copies_notice' ) ) {
+		$minn_admin_twice = function () use ( $minn_admin_running ) {
+			if ( ! current_user_can( 'activate_plugins' ) ) {
+				return;
+			}
+			$running = get_plugin_data( $minn_admin_running, false, false );
+			$idle    = get_plugin_data( __FILE__, false, false );
+			printf(
+				'<div class="notice notice-warning"><p>%s</p></div>',
+				esc_html(
+					sprintf(
+						/* translators: 1: running version, 2: its plugin folder, 3: the other version, 4: its plugin folder. */
+						__( 'Two copies of Minn Admin are active, but only one can run. Version %1$s in plugins/%2$s is running. Version %3$s in plugins/%4$s is not. Deactivate the copy you don\'t want, then delete it.', 'minn-admin' ),
+						$running['Version'] ?? '',
+						dirname( plugin_basename( $minn_admin_running ) ),
+						$idle['Version'] ?? '',
+						dirname( plugin_basename( __FILE__ ) )
+					)
+				)
+			);
+		};
+		add_action( 'admin_notices', $minn_admin_twice );
+		add_action( 'network_admin_notices', $minn_admin_twice );
+	}
+	unset( $minn_admin_running, $minn_admin_twice );
+	return;
+}
+
 define( 'MINN_ADMIN_VERSION', '0.44.0' );
 define( 'MINN_ADMIN_FILE', __FILE__ );
 define( 'MINN_ADMIN_DIR', plugin_dir_path( __FILE__ ) );

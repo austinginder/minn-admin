@@ -51,6 +51,8 @@ class Minn_Admin {
 		add_action( 'parse_request', array( __CLASS__, 'maintenance_front_post' ), 15 );
 		add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar_link' ), 100 );
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'copies_notice' ) );
+		add_action( 'network_admin_notices', array( __CLASS__, 'copies_notice' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
 		add_filter( 'admin_url', array( __CLASS__, 'default_admin_url' ), 10, 2 );
@@ -1535,6 +1537,79 @@ class Minn_Admin {
 				'href' => $minn,
 			)
 		);
+	}
+
+	/**
+	 * Says which copy runs when Minn Admin is installed more than once.
+	 *
+	 * GitHub's source zips unpack to minn-admin-<version>/ and a branch
+	 * download to minn-admin-main/, which WordPress installs beside
+	 * minn-admin/ instead of replacing it. Only the copy that loads first runs
+	 * (minn-admin.php keeps a second one out of the way), so a second copy
+	 * that is active gets a notice on every admin screen, and one that is only
+	 * installed gets a notice on Plugins. Also confirms the switch made when a
+	 * second copy was activated.
+	 */
+	public static function copies_notice() {
+		global $pagenow;
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			return;
+		}
+		$own    = plugin_basename( MINN_ADMIN_FILE );
+		$active = (array) get_option( 'active_plugins', array() );
+		if ( is_multisite() ) {
+			$active = array_merge( $active, array_keys( (array) get_site_option( 'active_sitewide_plugins', array() ) ) );
+		}
+		$on_plugins = 'plugins.php' === $pagenow;
+		$switch     = $on_plugins ? get_site_transient( 'minn_admin_copy_switch' ) : false;
+		if ( false !== $switch ) {
+			delete_site_transient( 'minn_admin_copy_switch' );
+		}
+		// Only while the switch still stands: one made from WP-CLI is read on
+		// the next visit to Plugins, by when it may have been undone.
+		if ( is_array( $switch ) && ( $switch['to'] ?? '' ) === $own && ! in_array( $switch['off'] ?? '', $active, true ) ) {
+			printf(
+				'<div class="notice notice-info is-dismissible"><p>%s</p></div>',
+				esc_html(
+					sprintf(
+						/* translators: 1: the version now running, 2: the version switched off, 3: its plugin folder. */
+						__( 'Minn Admin %1$s is now the copy that runs. The other copy (version %2$s in plugins/%3$s) was deactivated, and you can delete it.', 'minn-admin' ),
+						MINN_ADMIN_VERSION,
+						(string) ( $switch['from'] ?? '' ),
+						dirname( (string) ( $switch['off'] ?? '' ) )
+					)
+				)
+			);
+			return;
+		}
+		$others = array();
+		foreach ( ( $on_plugins ? array_keys( get_plugins() ) : $active ) as $file ) {
+			if ( ! is_string( $file ) || $file === $own || 'minn-admin.php' !== basename( $file ) || ! is_file( WP_PLUGIN_DIR . '/' . $file ) ) {
+				continue;
+			}
+			$data = get_plugin_data( WP_PLUGIN_DIR . '/' . $file, false, false );
+			if ( 'Minn Admin' === $data['Name'] ) {
+				$others[ $file ] = (string) $data['Version'];
+			}
+		}
+		foreach ( $others as $file => $version ) {
+			if ( in_array( $file, $active, true ) ) {
+				/* translators: 1: running version, 2: its plugin folder, 3: the other version, 4: its plugin folder. */
+				$text  = __( 'Two copies of Minn Admin are active, but only one can run. Version %1$s in plugins/%2$s is running. Version %3$s in plugins/%4$s is not. Deactivate the copy you don\'t want, then delete it.', 'minn-admin' );
+				$class = 'notice-warning';
+			} elseif ( $on_plugins ) {
+				/* translators: 1: running version, 2: its plugin folder, 3: the other version, 4: its plugin folder. */
+				$text  = __( 'Another copy of Minn Admin is installed. Version %1$s in plugins/%2$s is the copy that runs. Version %3$s in plugins/%4$s is not active and gets no updates. If you don\'t need it, delete it.', 'minn-admin' );
+				$class = 'notice-info';
+			} else {
+				continue;
+			}
+			printf(
+				'<div class="notice %s"><p>%s</p></div>',
+				esc_attr( $class ),
+				esc_html( sprintf( $text, MINN_ADMIN_VERSION, dirname( $own ), $version, dirname( $file ) ) )
+			);
+		}
 	}
 
 	public static function admin_menu() {

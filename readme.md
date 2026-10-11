@@ -22,7 +22,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 
 ## Install
 
-1. Download or clone into `wp-content/plugins/minn-admin`.
+1. Download [`minn-admin.zip`](https://github.com/austinginder/minn-admin/releases/latest/download/minn-admin.zip) from the latest release and upload it under Plugins › Add Plugin › Upload Plugin, or run `wp plugin install https://github.com/austinginder/minn-admin/releases/latest/download/minn-admin.zip`. Use that zip rather than GitHub's Code › Download ZIP or a release's Source code zip: those unpack to `minn-admin-main/` or `minn-admin-<version>/`, which WordPress installs beside an existing copy instead of updating it. For development, clone into `wp-content/plugins/minn-admin`.
 2. Activate through the Plugins screen.
 3. Visit `/minn-admin/`. It is also linked from the admin bar and the wp-admin menu.
 
