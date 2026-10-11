@@ -377,6 +377,42 @@ function minn_admin_pods_read_values( $post_id ) {
 }
 
 /**
+ * A number or currency value as Pods' own form would send it.
+ *
+ * The panel's number input holds a dot-decimal. Pods parses what it is given
+ * in the field's own format: it deletes the thousands separator, then turns
+ * the decimal mark into a dot. Where '.' is the thousands separator (a de_DE
+ * site's localized default, or an explicit 9.999,99 format), '19.99' would be
+ * stored as 1999.00, so the dot becomes the field's decimal mark first.
+ *
+ * @param string $pod_name Pod (post type) name.
+ * @param string $name     Field name.
+ * @param string $value    Dot-decimal value from the panel.
+ * @return string
+ */
+function minn_admin_pods_number_in( $pod_name, $name, $value ) {
+	if ( ! class_exists( 'PodsForm' ) || ! is_numeric( $value ) ) {
+		return $value;
+	}
+	try {
+		$field = pods_api()->load_field( array( 'pod' => $pod_name, 'name' => $name ) );
+		$type  = $field ? (string) pods_v( 'type', $field ) : '';
+		if ( ! in_array( $type, array( 'number', 'currency' ), true ) || 'slider' === pods_v( $type . '_format_type', $field ) ) {
+			return $value;
+		}
+		$loader = PodsForm::field_loader( $type );
+		if ( ! $loader || ! method_exists( $loader, 'get_number_format_args' ) ) {
+			return $value;
+		}
+		$args = $loader->get_number_format_args( $field );
+		$dot  = isset( $args['dot'] ) ? (string) $args['dot'] : '.';
+		return '.' === $dot || '' === $dot ? $value : str_replace( '.', $dot, $value );
+	} catch ( Throwable $e ) {
+		return $value;
+	}
+}
+
+/**
  * Write simple field values through Pods' own saver.
  *
  * @param int   $post_id Post ID.
@@ -391,7 +427,11 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 		return;
 	}
 	$allowed = minn_admin_pods_simple_map_for_post( $post_id );
-	$data    = array();
+	// The panel sends every field back when any one of them changes. A value
+	// equal to what the read handed out is left as stored, so an untouched
+	// field never goes back through Pods' parser.
+	$held = minn_admin_pods_read_values( $post_id );
+	$data = array();
 	foreach ( $values as $key => $value ) {
 		if ( ! isset( $allowed[ $key ] ) ) {
 			continue;
@@ -399,6 +439,19 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 		$panel_type = $allowed[ $key ];
 		if ( 'true_false' === $panel_type ) {
 			$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
+		}
+		if ( array_key_exists( $key, $held ) && ( is_scalar( $value ) || null === $value ) && ( is_scalar( $held[ $key ] ) || null === $held[ $key ] ) ) {
+			$was = $held[ $key ];
+			if ( 'true_false' === $panel_type ) {
+				$same = (bool) $value === (bool) $was;
+			} elseif ( 'number' === $panel_type && is_numeric( $value ) && is_numeric( $was ) ) {
+				$same = (float) $value === (float) $was;
+			} else {
+				$same = (string) $value === (string) $was;
+			}
+			if ( $same ) {
+				continue;
+			}
 		}
 		// Empty select: clear meta.
 		if ( ( '' === $value || null === $value ) && 'true_false' !== $panel_type ) {
@@ -423,8 +476,15 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 	try {
 		$pod_obj = pods( $post->post_type, $post_id );
 		if ( $pod_obj && method_exists( $pod_obj, 'save' ) ) {
-			// pods()->save accepts field map for an existing item.
-			$pod_obj->save( $data );
+			// pods()->save accepts field map for an existing item, and parses
+			// numbers in each field's own format.
+			$in = $data;
+			foreach ( $in as $key => $value ) {
+				if ( 'number' === $allowed[ $key ] && is_scalar( $value ) && '' !== (string) $value ) {
+					$in[ $key ] = minn_admin_pods_number_in( $post->post_type, $key, (string) $value );
+				}
+			}
+			$pod_obj->save( $in );
 			return;
 		}
 	} catch ( Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
