@@ -1134,10 +1134,13 @@ function minn_admin_freighter_settings_post( WP_REST_Request $request ) {
 	$values  = $request->get_param( 'values' );
 	$values  = is_array( $values ) ? $values : array();
 	$configs = minn_admin_freighter_configs();
-	$next    = array(
-		'files'          => $configs->files,
-		'domain_mapping' => $configs->domain_mapping,
-	);
+	// Configurations::update() replaces the whole stored option, so start
+	// from all of it (as their own CLI does): keys Minn does not edit, such
+	// as the bootstrap lines it could not write, stay.
+	$next = (array) ( new \WPFreighter\Configurations() )->get();
+	unset( $next['errors'] );
+	$next['files']          = $configs->files;
+	$next['domain_mapping'] = $configs->domain_mapping;
 	if ( array_key_exists( 'files', $values ) ) {
 		$files = (string) $values['files'];
 		if ( ! in_array( $files, array( 'shared', 'hybrid', 'dedicated' ), true ) ) {
@@ -1148,7 +1151,7 @@ function minn_admin_freighter_settings_post( WP_REST_Request $request ) {
 	if ( array_key_exists( 'domain_mapping', $values ) ) {
 		$next['domain_mapping'] = rest_sanitize_boolean( $values['domain_mapping'] ) ? 'on' : 'off';
 	}
-	if ( $next !== array( 'files' => $configs->files, 'domain_mapping' => $configs->domain_mapping ) ) {
+	if ( $next['files'] !== $configs->files || $next['domain_mapping'] !== $configs->domain_mapping ) {
 		( new \WPFreighter\Configurations() )->update( $next );
 		( new \WPFreighter\Sites() )->update( (array) \WPFreighter\Sites::fetch() );
 	}
