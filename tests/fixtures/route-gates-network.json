@@ -1,0 +1,545 @@
+{
+    "principals": [
+        "signed_out",
+        "subscriber",
+        "contributor",
+        "author",
+        "editor",
+        "shop_manager",
+        "administrator",
+        "site_network_role"
+    ],
+    "routes": {
+        "DELETE /minn-admin/v1/ai1wm/export/(?P<job>[a-f0-9]{13,40})": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/ai1wm/exports/(?P<id>[A-Za-z0-9_-]+)": [],
+        "DELETE /minn-admin/v1/backwpup/backups/(?P<id>.+)": [],
+        "DELETE /minn-admin/v1/backwpup/job/(?P<token>[A-Za-z0-9]{12})": [],
+        "DELETE /minn-admin/v1/duplicator/build/(?P<token>[A-Za-z0-9]{12})": [],
+        "DELETE /minn-admin/v1/duplicator/packages/(?P<id>\\d+)": [],
+        "DELETE /minn-admin/v1/network/sites/(?P<id>\\d+)": [],
+        "DELETE /minn-admin/v1/post-types/(?P<slug>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/system/debug-log": [],
+        "DELETE /minn-admin/v1/system/logs/(?P<id>[a-zA-Z0-9:_.\\-]+)": [],
+        "DELETE /minn-admin/v1/taxonomies/(?P<slug>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/updraft/backups/(?P<id>\\d+)": [],
+        "DELETE /minn-admin/v1/updraft/job/(?P<token>[A-Za-z0-9]{12})": [],
+        "DELETE /minn-admin/v1/users/(?P<id>\\d+)/sessions": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/users/(?P<id>\\d+)/sessions/(?P<verifier>[a-f0-9]{40,64})": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wp-multi-network/networks/(?P<id>\\d+)": [],
+        "DELETE /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wpvivid/backups/(?P<id>[A-Za-z0-9_-]+)": [],
+        "DELETE /minn-admin/v1/wpvivid/task/(?P<task>[A-Za-z0-9_-]+)": [],
+        "GET /minn-admin/v1": [
+            "signed_out",
+            "subscriber",
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator",
+            "site_network_role"
+        ],
+        "GET /minn-admin/v1/ai1wm/export/(?P<job>[a-f0-9]{13,40})": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ai1wm/exports": [],
+        "GET /minn-admin/v1/ai1wm/status": [],
+        "GET /minn-admin/v1/backwpup/backups": [],
+        "GET /minn-admin/v1/backwpup/job/(?P<token>[A-Za-z0-9]{12})": [],
+        "GET /minn-admin/v1/backwpup/status": [],
+        "GET /minn-admin/v1/boot-locale": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/boot-status": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/builders": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/changelog": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/connectors": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/core": [],
+        "GET /minn-admin/v1/custom-css": [],
+        "GET /minn-admin/v1/db/health": [],
+        "GET /minn-admin/v1/db/row": [],
+        "GET /minn-admin/v1/db/rows": [],
+        "GET /minn-admin/v1/db/structure": [],
+        "GET /minn-admin/v1/db/tables": [],
+        "GET /minn-admin/v1/duplicator/packages": [],
+        "GET /minn-admin/v1/duplicator/status": [],
+        "GET /minn-admin/v1/editor-blocks": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/editor-styles": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/guide": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/languages": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/licenses": [],
+        "GET /minn-admin/v1/me/appearance": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/media/months": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/my-sites": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/navigation/usage": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/network/settings/(?P<tab>[a-z0-9_-]+)": [],
+        "GET /minn-admin/v1/network/sites": [],
+        "GET /minn-admin/v1/network/status": [],
+        "GET /minn-admin/v1/network/users": [],
+        "GET /minn-admin/v1/network/users/status": [],
+        "GET /minn-admin/v1/notifications": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/options/(?P<tab>tab-\\d+)": [],
+        "GET /minn-admin/v1/overview": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/overview/activity": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/overview/traffic-day": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/pattern": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/patterns": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/permalinks": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugin-changelog": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugin-links": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugin-meta": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugin-updates": [],
+        "GET /minn-admin/v1/plugins/info": [],
+        "GET /minn-admin/v1/plugins/search": [],
+        "GET /minn-admin/v1/plugins/update-progress": [],
+        "GET /minn-admin/v1/post-types": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/revision-fields/(?P<id>\\d+)/(?P<revision>\\d+)": [],
+        "GET /minn-admin/v1/role-defaults": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/shortcodes": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/site-appearance": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/site-logo": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/solid-security/lockouts": [],
+        "GET /minn-admin/v1/solid-security/status": [],
+        "GET /minn-admin/v1/spam": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/stats": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/stats/report": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/styles/history": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/styles/variations": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/surfaces": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/system": [],
+        "GET /minn-admin/v1/system/autoload": [],
+        "GET /minn-admin/v1/system/cron": [],
+        "GET /minn-admin/v1/system/debug-log": [],
+        "GET /minn-admin/v1/system/logs": [],
+        "GET /minn-admin/v1/system/logs/(?P<id>[a-zA-Z0-9:_.\\-]+)": [],
+        "GET /minn-admin/v1/taxonomies": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/templates": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/templates/usage": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/term-taxonomies": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/theme-changelog": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/themes": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/themes/search": [],
+        "GET /minn-admin/v1/translations": [],
+        "GET /minn-admin/v1/translations/installed": [],
+        "GET /minn-admin/v1/translations/update-progress": [],
+        "GET /minn-admin/v1/updraft/backups": [],
+        "GET /minn-admin/v1/updraft/card": [],
+        "GET /minn-admin/v1/updraft/job/(?P<token>[A-Za-z0-9]{12})": [],
+        "GET /minn-admin/v1/updraft/status": [],
+        "GET /minn-admin/v1/users": [
+            "administrator",
+            "site_network_role"
+        ],
+        "GET /minn-admin/v1/users/(?P<id>\\d+)/appearance": [],
+        "GET /minn-admin/v1/users/(?P<id>\\d+)/hidden": [],
+        "GET /minn-admin/v1/users/(?P<id>\\d+)/sessions": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/visibility": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wordfence/logins": [],
+        "GET /minn-admin/v1/wordfence/status": [],
+        "GET /minn-admin/v1/wp-migrate/backups": [],
+        "GET /minn-admin/v1/wp-migrate/backups/status": [],
+        "GET /minn-admin/v1/wp-migrate/connection": [],
+        "GET /minn-admin/v1/wp-multi-network/networks": [],
+        "GET /minn-admin/v1/wpcode/snippets": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpcode/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpvivid/backups": [],
+        "GET /minn-admin/v1/wpvivid/card": [],
+        "GET /minn-admin/v1/wpvivid/status": [],
+        "GET /minn-admin/v1/wpvivid/task/(?P<task>[A-Za-z0-9_-]+)": [],
+        "POST /minn-admin/v1/ai1wm/export": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/auto-updates": [],
+        "POST /minn-admin/v1/backwpup/run": [],
+        "POST /minn-admin/v1/cache/purge": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/check-updates": [],
+        "POST /minn-admin/v1/core/network-upgrade": [],
+        "POST /minn-admin/v1/core/update": [],
+        "POST /minn-admin/v1/custom-css": [],
+        "POST /minn-admin/v1/duplicator/build": [],
+        "POST /minn-admin/v1/duplicator/build/(?P<token>[A-Za-z0-9]{12})": [],
+        "POST /minn-admin/v1/entries/reply": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/image-block": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/integrations/hide": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/integrations/unhide": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/licenses/action": [],
+        "POST /minn-admin/v1/me/appearance": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/me/language": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/network/plugins/activate": [],
+        "POST /minn-admin/v1/network/settings/(?P<tab>[a-z0-9_-]+)": [],
+        "POST /minn-admin/v1/network/sites": [],
+        "POST /minn-admin/v1/network/sites/(?P<id>\\d+)/flag": [],
+        "POST /minn-admin/v1/network/themes/enable": [],
+        "POST /minn-admin/v1/network/users/(?P<id>\\d+)/super": [],
+        "POST /minn-admin/v1/notices/ajax": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/notices/hide": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/notices/unhide": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/notifications/read": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/options/(?P<tab>tab-\\d+)": [],
+        "POST /minn-admin/v1/overview/metric-defaults": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/overview/metrics": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/permalinks": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/plugins/install-url": [],
+        "POST /minn-admin/v1/plugins/update": [],
+        "POST /minn-admin/v1/plugins/update-all": [],
+        "POST /minn-admin/v1/plugins/upload": [],
+        "POST /minn-admin/v1/post-types": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/post-types/(?P<slug>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/duplicate": [],
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/lock": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/restore": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/unlock": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/render-blocks": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/role-defaults": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/site-appearance": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/site-logo": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/site/language": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/solid-security/lockouts/(?P<id>\\d+)/release": [],
+        "POST /minn-admin/v1/spam": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/styles/mix": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/styles/restore": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/styles/update": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/surfaces/(?P<id>[a-z0-9_-]+)/setup": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/system/config": [],
+        "POST /minn-admin/v1/taxonomies": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/taxonomies/(?P<slug>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/terms/merge": [
+            "contributor",
+            "author",
+            "editor",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/themes/activate": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/themes/delete": [],
+        "POST /minn-admin/v1/themes/install": [],
+        "POST /minn-admin/v1/themes/update": [],
+        "POST /minn-admin/v1/themes/upload": [],
+        "POST /minn-admin/v1/translations/remove": [],
+        "POST /minn-admin/v1/translations/update": [],
+        "POST /minn-admin/v1/updates/all": [],
+        "POST /minn-admin/v1/updraft/backup-now": [],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/appearance": [],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/email": [
+            "administrator",
+            "site_network_role"
+        ],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/integrations/unhide": [],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/language": [],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/remove": [],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/reset-password": [
+            "administrator",
+            "site_network_role"
+        ],
+        "POST /minn-admin/v1/users/add-existing": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/visibility/toggle": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wp-migrate/accept": [],
+        "POST /minn-admin/v1/wp-migrate/backups/(?P<id>[^/]+)/delete": [],
+        "POST /minn-admin/v1/wp-multi-network/networks": [],
+        "POST /minn-admin/v1/wp-multi-network/sites/(?P<id>\\d+)/move": [],
+        "POST /minn-admin/v1/wpcode/snippets": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)/active": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpvivid/backup-now": [],
+        "PUT /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)": [
+            "administrator"
+        ]
+    }
+}

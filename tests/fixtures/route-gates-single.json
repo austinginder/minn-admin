@@ -1,0 +1,2113 @@
+{
+    "principals": [
+        "signed_out",
+        "subscriber",
+        "contributor",
+        "author",
+        "editor",
+        "shop_manager",
+        "administrator"
+    ],
+    "routes": {
+        "DELETE /minn-admin/v1/acf/schema/fields/(?P<key>[a-zA-Z0-9_\\-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/acpt/schema/groups/(?P<id>[A-Za-z0-9_\\-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/ai1wm/export/(?P<job>[a-f0-9]{13,40})": [
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/ai1wm/exports/(?P<id>[A-Za-z0-9_-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/backwpup/backups/(?P<id>.+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/backwpup/job/(?P<token>[A-Za-z0-9]{12})": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/cf7/messages/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/cfdb7/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/crontrol/events/(?P<id>[A-Za-z0-9_-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/duplicator/build/(?P<token>[A-Za-z0-9]{12})": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/duplicator/packages/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/elementor/submissions/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/elementor/templates/(?P<id>\\d+)": [],
+        "DELETE /minn-admin/v1/everest/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/fluent-forms/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/fluent-smtp/emails/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/fluent-snippets/(?P<file>[^/]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/formidable/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/forminator/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/gf/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/gf/feeds/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/gravity-smtp/events/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/gravity-smtp/routing/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/hfcm/snippets/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/jet-appointments/appointments/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/jet-booking/bookings/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\\d+)": [],
+        "DELETE /minn-admin/v1/jet-reviews/reviews/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/jet-search/suggestions/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/jet-smart-filters/filters/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/jet-smart-filters/reindex/(?P<token>[A-Za-z0-9]{12})": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/jet-theme-core/templates/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/post-types/(?P<slug>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/scrutoscope/profiles/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/system/debug-log": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/system/logs/(?P<id>[a-zA-Z0-9:_.\\-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/taxonomies/(?P<slug>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/transients/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/updraft/backups/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/updraft/job/(?P<token>[A-Za-z0-9]{12})": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/users/(?P<id>\\d+)/sessions": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/users/(?P<id>\\d+)/sessions/(?P<verifier>[a-f0-9]{40,64})": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wc/api-keys/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)/methods/(?P<instance>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wcm/members/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wcm/members/(?P<id>\\d+)/notes/(?P<note>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wcm/plans/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wpforms/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wpml/emails/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wpvivid/backups/(?P<id>[A-Za-z0-9_-]+)": [
+            "administrator"
+        ],
+        "DELETE /minn-admin/v1/wpvivid/task/(?P<task>[A-Za-z0-9_-]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1": [
+            "signed_out",
+            "subscriber",
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acf/fields": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acf/options/(?P<page>[A-Za-z0-9_%.\\-]+)/(?P<tab>tab-\\d+)": [],
+        "GET /minn-admin/v1/acf/relation": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acf/schema/fields": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acf/schema/group-tabs": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acf/schema/groups": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)/export": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)/fields": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)/full": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acpt/fields": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acpt/groups": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acpt/options/(?P<page>[A-Za-z0-9_%.\\-]+)/(?P<tab>tab-\\d+)": [],
+        "GET /minn-admin/v1/acpt/schema/groups/(?P<id>[A-Za-z0-9_\\-]+)/export": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/acpt/schema/groups/(?P<id>[A-Za-z0-9_\\-]+)/full": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ai1wm/export/(?P<job>[a-f0-9]{13,40})": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ai1wm/exports": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ai1wm/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/amelia/appointments": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/amelia/appointments/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/amelia/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/asset-cleanup/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/autoptimize/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/backwpup/backups": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/backwpup/job/(?P<token>[A-Za-z0-9]{12})": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/backwpup/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/bookly/appointments": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/bookly/appointments/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/bookly/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/boot-locale": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/boot-status": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/builders": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cf7/channels": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cf7/forms": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cf7/forms/(?P<id>\\d+)/mail": [
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cf7/messages": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cf7/messages/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cf7/status": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cfdb7/entries": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cfdb7/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cfdb7/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/cfdb7/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/changelog": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/code-snippets/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/connectors": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/core": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/crontrol/events": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/crontrol/events/(?P<id>[A-Za-z0-9_-]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/crontrol/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/custom-css": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/db/health": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/db/row": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/db/rows": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/db/structure": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/db/tables": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/disembark/sessions": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/disembark/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/duplicator/packages": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/duplicator/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/editor-blocks": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/editor-styles": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/elementor-mcp/connections": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/elementor-mcp/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/elementor/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/elementor/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/elementor/submissions": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/elementor/submissions/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/elementor/templates": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/elementor/templates/(?P<id>\\d+)/export": [],
+        "GET /minn-admin/v1/elementor/templates/status": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/everest/entries": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/everest/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/everest/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/everest/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fixture-gsmtp-raw": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-forms/entries": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-forms/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-forms/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-forms/forms/(?P<id>\\d+)/emails": [],
+        "GET /minn-admin/v1/fluent-forms/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-smtp/emails": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-smtp/emails/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-smtp/emails/(?P<id>\\d+)/view": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-smtp/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-smtp/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-snippets": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-snippets/(?P<file>[^/]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/fluent-snippets/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/formidable/entries": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/formidable/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/formidable/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/formidable/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/forminator/entries": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/forminator/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/forminator/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/forminator/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/generateblocks/designs": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/confirmations": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)/full": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/entries": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/feeds": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/forms/(?P<form>\\d+)/confirmations": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/forms/(?P<form>\\d+)/entries": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/forms/(?P<form>\\d+)/feeds": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/forms/(?P<form>\\d+)/notifications": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/forms/(?P<id>\\d+)/builder": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/forms/(?P<id>\\d+)/settings/(?P<tab>[a-z_-]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/notifications": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/full": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gravity-smtp/debug": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gravity-smtp/events": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gravity-smtp/events/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gravity-smtp/events/(?P<id>\\d+)/view": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gravity-smtp/routing": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gravity-smtp/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gravity-smtp/sources": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gravity-smtp/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/gravity-smtp/suppressed": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/guide": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/hfcm/snippets": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/hfcm/snippets/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/hfcm/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-appointments/appointments": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-appointments/appointments/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-appointments/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-booking/bookings": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-booking/bookings/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-booking/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-cct/(?P<slug>[a-z0-9_]+)/items": [],
+        "GET /minn-admin/v1/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\\d+)": [],
+        "GET /minn-admin/v1/jet-engine/fields": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-engine/options/(?P<page>[A-Za-z0-9_%.\\-]+)/(?P<tab>tab-0)": [],
+        "GET /minn-admin/v1/jet-reviews/reviews": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-reviews/reviews/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-reviews/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-search/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-search/suggestions": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-search/suggestions/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-smart-filters/filters": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-smart-filters/filters/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-smart-filters/reindex/(?P<token>[A-Za-z0-9]{12})": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-smart-filters/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-theme-core/templates": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-theme-core/templates/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/jet-theme-core/templates/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/kadence/designs": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/languages": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/latepoint/bookings": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/latepoint/bookings/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/latepoint/event-registrations": [],
+        "GET /minn-admin/v1/latepoint/event-registrations/(?P<id>\\d+)": [],
+        "GET /minn-admin/v1/latepoint/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/licenses": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/llar/log": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/llar/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/me/appearance": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/media/folders": [
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/media/folders/(?P<id>\\d+)/ids": [
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/media/months": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/meta-box/fields": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/minn-fold/settings/(?P<tab>tab-\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/navigation/usage": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ninja-forms/entries": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ninja-forms/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ninja-forms/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/notifications": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/novamira/abilities/(?P<tab>[a-z0-9_\\-]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/novamira/connections": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/novamira/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/options/(?P<tab>tab-\\d+)": [],
+        "GET /minn-admin/v1/orders/(?P<id>\\d+)/emails": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/overview": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/overview/activity": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/overview/traffic-day": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/pattern": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/patterns": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/perfmatters/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/performance-lab/features": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/performance-lab/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/permalinks": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugin-changelog": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugin-links": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugin-meta": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugin-updates": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugins/info": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugins/search": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/plugins/update-progress": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/pods/fields": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/post-types": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ppp/(?P<id>\\d+)": [],
+        "GET /minn-admin/v1/pwgc/gift-cards": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/pwgc/gift-cards/(?P<id>\\d+)/view": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/pwgc/status": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/redirection/settings/(?P<tab>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/redirection/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/revision-fields/(?P<id>\\d+)/(?P<revision>\\d+)": [],
+        "GET /minn-admin/v1/rewrite-rules": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/rewrite-rules/(?P<id>[a-f0-9]{16})": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/rewrite-rules/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/role-defaults": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/scrutoscope/cron": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/scrutoscope/profiles": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/scrutoscope/profiles/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/scrutoscope/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/seo/fields": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/shortcodes": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/site-appearance": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/site-logo": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/spam": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ssp/fields": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/stackable/designs": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/stats": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/stats/report": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/styles/history": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/styles/variations": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/surfaces": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/system": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/system/autoload": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/system/cron": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/system/debug-log": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/system/logs": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/system/logs/(?P<id>[a-zA-Z0-9:_.\\-]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/taxonomies": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/tec/fields": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/tec/suggest": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/templates": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/templates/usage": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/term-taxonomies": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/theme-changelog": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/themes": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/themes/search": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/transients": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/transients/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/transients/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/translations": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/translations/installed": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/translations/update-progress": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/updraft/backups": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/updraft/card": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/updraft/job/(?P<token>[A-Za-z0-9]{12})": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/updraft/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/users": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/users/(?P<id>\\d+)/appearance": [],
+        "GET /minn-admin/v1/users/(?P<id>\\d+)/hidden": [],
+        "GET /minn-admin/v1/users/(?P<id>\\d+)/sessions": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/visibility": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/api-keys": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/emails": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/emails/(?P<id>[\\w-]+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/gateways": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/lookup": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/orders/(?P<id>\\d+)/refund-state": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/orders/subscription-relations": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/payment_gateways": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/payment_gateways/(?P<id>(?!order$)[\\w-]+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/settings": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/settings/(?P<page>[\\w-]+)/(?P<section>[\\w-]+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/shipping": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)/methods/(?P<instance>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wc/webhook-topics": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcgc/gift-cards": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcgc/gift-cards/(?P<id>\\d+)/view": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcgc/status": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcm/lookup": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcm/members": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcm/members/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcm/members/(?P<id>\\d+)/view": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcm/plans": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcm/plans/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcm/plans/(?P<id>\\d+)/view": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcm/plans/blank": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wcm/status": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wp-migrate/backups": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wp-migrate/backups/status": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wp-migrate/connection": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpcode/snippets": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpcode/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpforms/entries": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpforms/entries/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpforms/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpforms/forms/(?P<id>\\d+)/emails": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpforms/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpjm/fields": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpml/emails": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpml/emails/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpml/emails/(?P<id>\\d+)/view": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpml/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpvivid/backups": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpvivid/card": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpvivid/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wpvivid/task/(?P<task>[A-Za-z0-9_-]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wsal/events": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wsal/events/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/wsal/status": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ywgc/gift-cards": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ywgc/gift-cards/(?P<id>\\d+)/view": [
+            "shop_manager",
+            "administrator"
+        ],
+        "GET /minn-admin/v1/ywgc/status": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acf/options/(?P<page>[A-Za-z0-9_%.\\-]+)/(?P<tab>tab-\\d+)": [],
+        "POST /minn-admin/v1/acf/schema/fields/(?P<key>[a-zA-Z0-9_\\-]+)/move": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acf/schema/groups": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)/(?P<verb>activate|deactivate|rename|duplicate)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)/fields": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)/full": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acf/schema/import": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acpt/options/(?P<page>[A-Za-z0-9_%.\\-]+)/(?P<tab>tab-\\d+)": [],
+        "POST /minn-admin/v1/acpt/schema/groups": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acpt/schema/groups/(?P<id>[A-Za-z0-9_\\-]+)/duplicate": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acpt/schema/groups/(?P<id>[A-Za-z0-9_\\-]+)/full": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/acpt/schema/import": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/ai1wm/export": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/amelia/appointments/(?P<id>\\d+)/status": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/asset-cleanup/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/auto-updates": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/autoptimize/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/backwpup/run": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/bookly/appointments/(?P<id>\\d+)/status": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/builders/new": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/cache/purge": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/cf7/forms/(?P<id>\\d+)/mail": [
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/cf7/forms/(?P<id>\\d+)/mail/preview": [
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/cf7/messages/(?P<id>\\d+)/restore": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/cf7/messages/(?P<id>\\d+)/spam": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/cf7/messages/(?P<id>\\d+)/trash": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/cf7/messages/(?P<id>\\d+)/unspam": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/cfdb7/entries/(?P<id>\\d+)/unread": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/check-updates": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/core/network-upgrade": [],
+        "POST /minn-admin/v1/core/update": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/pause": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/resume": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/run": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/custom-css": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/disembark/cleanup": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/disembark/regenerate-token": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/disembark/sessions/(?P<id>[A-Za-z0-9]{4,64})/delete": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/duplicator/build": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/duplicator/build/(?P<token>[A-Za-z0-9]{12})": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/elementor-mcp/connections/(?P<uid>\\d+):(?P<uuid>[0-9a-fA-F-]{36})/revoke": [],
+        "POST /minn-admin/v1/elementor-mcp/toggle": [],
+        "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/answers": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/read": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/restore": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/trash": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/elementor/templates": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/elementor/templates/(?P<id>\\d+)/duplicate": [],
+        "POST /minn-admin/v1/entries/reply": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/everest/entries/(?P<id>\\d+)/restore": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/everest/entries/(?P<id>\\d+)/spam": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/everest/entries/(?P<id>\\d+)/trash": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/everest/entries/(?P<id>\\d+)/unspam": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/fluent-forms/entries/(?P<id>\\d+)/status": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/fluent-forms/forms/(?P<id>\\d+)/emails": [],
+        "POST /minn-admin/v1/fluent-forms/forms/(?P<id>\\d+)/emails/preview": [],
+        "POST /minn-admin/v1/fluent-smtp/emails/(?P<id>\\d+)/resend": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/fluent-smtp/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/fluent-smtp/test": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/fluent-snippets": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/fluent-snippets/(?P<file>[^/]+)/active": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/forminator/entries/(?P<id>\\d+)/spam": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/forminator/entries/(?P<id>\\d+)/unspam": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/generateblocks/designs/(?P<id>[^/]+)": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)/active": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)/duplicate": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)/full": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)/preview": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/confirmations/new": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/entries/(?P<id>\\d+)/answers": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/entries/(?P<id>\\d+)/notes": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/entries/(?P<id>\\d+)/notifications": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/feeds/(?P<id>\\d+)/active": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/forms": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/forms/(?P<id>\\d+)/active": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/forms/(?P<id>\\d+)/builder": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/forms/(?P<id>\\d+)/settings/(?P<tab>[a-z_-]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/active": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/duplicate": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/full": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/preview": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/test": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gf/notifications/new": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gravity-smtp/events/(?P<id>\\d+)/resend": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gravity-smtp/routing/(?P<id>\\d+)/disable": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gravity-smtp/routing/(?P<id>\\d+)/enable": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gravity-smtp/send-test": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gravity-smtp/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gravity-smtp/suppressed": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/gravity-smtp/suppressed/(?P<id>\\d+)/reactivate": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/hfcm/snippets": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/hfcm/snippets/(?P<id>\\d+)/active": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/image-block": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/integrations/hide": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/integrations/unhide": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/jet-appointments/appointments/(?P<id>\\d+)/status": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/jet-booking/bookings/(?P<id>\\d+)/status": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/jet-cct/(?P<slug>[a-z0-9_]+)/items": [],
+        "POST /minn-admin/v1/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\\d+)": [],
+        "POST /minn-admin/v1/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\\d+)/status": [],
+        "POST /minn-admin/v1/jet-engine/options/(?P<page>[A-Za-z0-9_%.\\-]+)/(?P<tab>tab-0)": [],
+        "POST /minn-admin/v1/jet-reviews/reviews/(?P<id>\\d+)/approve": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/jet-search/dedupe": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/jet-search/suggestions": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/jet-search/suggestions/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/jet-smart-filters/reindex": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/jet-theme-core/templates": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/kadence/designs/(?P<id>\\d+)": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/latepoint/bookings/(?P<id>\\d+)/status": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/latepoint/event-registrations/(?P<id>\\d+)/cancel": [],
+        "POST /minn-admin/v1/licenses/action": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/llar/log/(?P<id>[a-f0-9]{32})/unlock": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/me/appearance": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/me/language": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/media/(?P<id>\\d+)/regenerate": [],
+        "POST /minn-admin/v1/media/(?P<id>\\d+)/replace": [],
+        "POST /minn-admin/v1/media/folders/move": [
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/minn-fold/settings/(?P<tab>tab-\\d+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/minn-test/license-seed": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/minn-test/seed-sessions": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/minn-test/wpm-license": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)/answers": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)/restore": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)/trash": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/notices/ajax": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/notices/hide": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/notices/unhide": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/notifications/read": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/novamira/abilities/(?P<tab>[a-z0-9_\\-]+)": [],
+        "POST /minn-admin/v1/novamira/connections/(?P<id>[a-z]+:[A-Za-z0-9_\\-]+)/revoke": [],
+        "POST /minn-admin/v1/novamira/enabled/(?P<state>on|off)": [],
+        "POST /minn-admin/v1/options/(?P<tab>tab-\\d+)": [],
+        "POST /minn-admin/v1/orders/(?P<id>\\d+)/email": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/orders/(?P<id>\\d+)/emails": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/otl/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/overview/metric-defaults": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/overview/metrics": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/perfmatters/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/performance-lab/features/(?P<id>[a-z0-9_-]+)/activate": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/performance-lab/features/(?P<id>[a-z0-9_-]+)/deactivate": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/permalinks": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/plugins/install-url": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/plugins/update": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/plugins/update-all": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/plugins/upload": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/post-types": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/post-types/(?P<slug>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/duplicate": [],
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/lock": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/restore": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/unlock": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/ppp/(?P<id>\\d+)": [],
+        "POST /minn-admin/v1/pwgc/gift-cards": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/pwgc/gift-cards/(?P<id>\\d+)/balance": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/pwgc/gift-cards/(?P<id>\\d+)/resend": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/pwgc/gift-cards/(?P<id>\\d+)/status": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/redirection/settings/(?P<tab>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/render-blocks": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/rewrite-rules/flush": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/rewrite-rules/test": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/role-defaults": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/scrutoscope/cron/(?P<id>[a-f0-9]{32})/profile": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/site-appearance": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/site-logo": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/site/language": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/spam": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/stackable/designs/(?P<id>[\\w-]+)": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/styles/mix": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/styles/restore": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/styles/update": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/surfaces/(?P<id>[a-z0-9_-]+)/setup": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/system/config": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/taxonomies": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/taxonomies/(?P<slug>[a-z0-9_-]+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/terms/merge": [
+            "contributor",
+            "author",
+            "editor",
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/themes/activate": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/themes/delete": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/themes/install": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/themes/update": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/themes/upload": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/transients/delete-expired": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/translations/remove": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/translations/update": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/updates/all": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/updraft/backup-now": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/appearance": [],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/email": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/integrations/unhide": [],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/language": [],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/remove": [],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/reset-password": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/users/add-existing": [],
+        "POST /minn-admin/v1/visibility/toggle": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/api-keys": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/api-keys/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/emails/(?P<id>[\\w-]+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/orders/(?P<id>\\d+)/restore": [],
+        "POST /minn-admin/v1/wc/payment_gateways/(?P<id>(?!order$)[\\w-]+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/payment_gateways/order": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/settings/(?P<page>[\\w-]+)/(?P<section>[\\w-]+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/shipping/zones": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)/methods": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)/methods/(?P<instance>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)/methods/order": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wc/shipping/zones/order": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcgc/gift-cards": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcgc/gift-cards/(?P<id>\\d+)/balance": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcgc/gift-cards/(?P<id>\\d+)/resend": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcgc/gift-cards/(?P<id>\\d+)/status": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/members": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/cancel": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/end-date": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/notes": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/pause": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/resume": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/subscription": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/transfer": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/plans": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/plans/(?P<id>\\d+)": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcm/plans/(?P<id>\\d+)/duplicate": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wp-migrate/accept": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wp-migrate/backups/(?P<id>[^/]+)/delete": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpcode/snippets": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)/active": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpforms/entries/(?P<id>\\d+)/answers": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpforms/entries/(?P<id>\\d+)/star": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpforms/entries/(?P<id>\\d+)/status": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpforms/forms/(?P<id>\\d+)/emails": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpforms/forms/(?P<id>\\d+)/emails/preview": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpml/emails/(?P<id>\\d+)/resend": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wpvivid/backup-now": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/ywgc/gift-cards": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/ywgc/gift-cards/(?P<id>\\d+)/balance": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/ywgc/gift-cards/(?P<id>\\d+)/resend": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/ywgc/gift-cards/(?P<id>\\d+)/status": [
+            "shop_manager",
+            "administrator"
+        ],
+        "PUT /minn-admin/v1/acf/schema/fields/(?P<key>[a-zA-Z0-9_\\-]+)": [
+            "administrator"
+        ],
+        "PUT /minn-admin/v1/elementor/templates/(?P<id>\\d+)": [],
+        "PUT /minn-admin/v1/fluent-snippets/(?P<file>[^/]+)": [
+            "administrator"
+        ],
+        "PUT /minn-admin/v1/gf/entries/(?P<id>\\d+)/properties": [
+            "administrator"
+        ],
+        "PUT /minn-admin/v1/hfcm/snippets/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "PUT /minn-admin/v1/jet-theme-core/templates/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "PUT /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)": [
+            "administrator"
+        ]
+    }
+}
