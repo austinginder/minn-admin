@@ -191,7 +191,15 @@ class Minn_Admin {
 				'type'              => 'string',
 				'single'            => true,
 				'default'           => 'true',
-				'show_in_rest'      => true,
+				// Edit context only, as core registers persisted_preferences:
+				// the public users endpoint lists every author who published
+				// something, and a person's toolbar choice is not for it.
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type'    => 'string',
+						'context' => array( 'edit' ),
+					),
+				),
 				'sanitize_callback' => function ( $value ) {
 					return 'false' === $value ? 'false' : 'true';
 				},

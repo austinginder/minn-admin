@@ -289,4 +289,41 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 09-1: a session's expiry is its sign-in time plus two or fourteen days, so
+ * it gave back what the route withholds from a role that may only edit the
+ * user (a Shop Manager over a customer). 09-2: show_admin_bar_front was in
+ * every context, so the public users endpoint listed each author's choice.
+ */
+( function () use ( $check, $call, $drop_user ) {
+	$admin_id = get_current_user_id();
+	if ( ! get_role( 'shop_manager' ) ) {
+		echo "SKIP  09-1 no shop_manager role\n";
+	} else {
+		$sm   = wp_insert_user( array( 'user_login' => 'minn-v045-sm-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'shop_manager', 'user_email' => 'minn-v045-sm-' . wp_rand() . '@example.com' ) );
+		$cust = wp_insert_user( array( 'user_login' => 'minn-v045-cu-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'customer', 'user_email' => 'minn-v045-cu-' . wp_rand() . '@example.com' ) );
+		WP_Session_Tokens::get_instance( $cust )->create( time() + 2 * DAY_IN_SECONDS );
+		try {
+			wp_set_current_user( $sm );
+			list( $status, $d ) = $call( 'GET', "/minn-admin/v1/users/{$cust}/sessions" );
+			$s = is_array( $d ) && ! empty( $d['sessions'] ) ? $d['sessions'][0] : null;
+			$check( '09-1 a Shop Manager gets no session expiry for a customer', 200 === $status && $s && 0 === (int) $s['expiration'] && 0 === (int) $s['login'], wp_json_encode( $s ) );
+			wp_set_current_user( $admin_id );
+			list( , $d ) = $call( 'GET', "/minn-admin/v1/users/{$cust}/sessions" );
+			$s = is_array( $d ) && ! empty( $d['sessions'] ) ? $d['sessions'][0] : null;
+			$check( '09-1 control: an administrator still gets it', $s && (int) $s['expiration'] > time(), wp_json_encode( $s ) );
+		} finally {
+			wp_set_current_user( $admin_id );
+			$drop_user( $sm );
+			$drop_user( $cust );
+		}
+	}
+	wp_set_current_user( 0 );
+	list( $status, $d ) = $call( 'GET', '/wp/v2/users/' . $admin_id );
+	wp_set_current_user( $admin_id );
+	$check( '09-2 the public users endpoint carries no toolbar preference', ! isset( $d['meta']['show_admin_bar_front'] ), $status . ' ' . wp_json_encode( $d['meta'] ?? null ) );
+	list( , $d ) = $call( 'GET', '/wp/v2/users/' . $admin_id, null, array( 'context' => 'edit' ) );
+	$check( '09-2 control: the edit context still carries it', isset( $d['meta']['show_admin_bar_front'] ), wp_json_encode( $d['meta'] ?? null ) );
+} )();
+
 $summary();

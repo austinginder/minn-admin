@@ -36,7 +36,7 @@ const ALLOWED = {
 	},
 	'includes/class-minn-admin-rest.php': {
 		"'upgrade_network'": [ 2, 'core: network/upgrade.php' ],
-		"'manage_network_users'": [ 3, "core: user-new.php's username lookup and the network user screens" ],
+		"'manage_network_users'": [ 2, "core: user-new.php's username lookup and the network user screens" ],
 	},
 	'includes/class-minn-admin-surfaces.php': {
 		"'delete_site'": [ 1, 'descriptor validator: meta caps core maps for a bare check (not a gate)' ],

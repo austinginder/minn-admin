@@ -6932,9 +6932,13 @@ Please click the following link to confirm the invite:
 		// reviewing an account; core shows it to nobody else, not even a
 		// role that may edit the user (WooCommerce hands shop managers
 		// edit_user over every customer). Everyone else still gets the
-		// session count and the sign-out verbs.
+		// session count and the sign-out verbs. The expiry counts as
+		// detail too: core sets it to the sign-in time plus two or fourteen
+		// days, so it gives the sign-in time back to the second. On a
+		// network the reviewer is the network's owner, not whoever holds a
+		// network capability through some site's role.
 		$detail = get_current_user_id() === $uid
-			|| current_user_can( is_multisite() ? 'manage_network_users' : 'manage_options' );
+			|| ( is_multisite() ? Minn_Admin::network_owner() : current_user_can( 'manage_options' ) );
 		$now    = time();
 		$items  = array();
 		foreach ( $tokens as $verifier => $session ) {
@@ -6947,7 +6951,7 @@ Please click the following link to confirm the invite:
 				'ip'         => $detail && isset( $session['ip'] ) ? $session['ip'] : '',
 				'ua'         => $detail && isset( $session['ua'] ) ? $session['ua'] : '',
 				'login'      => $detail && isset( $session['login'] ) ? (int) $session['login'] : 0,
-				'expiration' => $expiration,
+				'expiration' => $detail ? $expiration : 0,
 				'current'    => $verifier === $current,
 			);
 		}
