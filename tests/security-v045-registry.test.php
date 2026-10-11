@@ -198,4 +198,28 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 06-1: theme delete and activate took any directory under the themes root
+ * (wp_get_theme()->exists() is true for one), so '..' named wp-content and a
+ * theme's own subfolder passed too. Probed only on a throwaway directory, so
+ * a regression can delete nothing that matters.
+ */
+( function () use ( $check, $call ) {
+	$root  = get_theme_root();
+	$probe = $root . '/minn-v045-probe';
+	wp_mkdir_p( $probe . '/sub' );
+	try {
+		$check( '06-1 a theme subfolder is not a theme', null === Minn_Admin_REST::get_valid_theme( 'minn-v045-probe/sub' ) );
+		$check( "06-1 '..' is not a theme", null === Minn_Admin_REST::get_valid_theme( 'minn-v045-probe/sub/..' ) && null === Minn_Admin_REST::get_valid_theme( '..' ) );
+		$check( '06-1 control: the active theme is a theme', null !== Minn_Admin_REST::get_valid_theme( get_stylesheet() ) );
+		foreach ( array( 'minn-v045-probe/sub', 'minn-v045-probe/sub/..' ) as $name ) {
+			list( $status ) = $call( 'POST', '/minn-admin/v1/themes/delete', array( 'stylesheet' => $name ) );
+			$check( "06-1 delete refuses {$name}", 404 === $status && is_dir( $probe . '/sub' ), (string) $status );
+		}
+	} finally {
+		@rmdir( $probe . '/sub' ); // phpcs:ignore
+		@rmdir( $probe ); // phpcs:ignore
+	}
+} )();
+
 $summary();

@@ -1150,8 +1150,8 @@ function minn_admin_network_theme_enable( WP_REST_Request $request ) {
 	if ( validate_file( $stylesheet ) ) {
 		return new WP_Error( 'bad_theme', __( 'That theme name is not valid.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
-	$theme = wp_get_theme( $stylesheet );
-	if ( ! $theme->exists() ) {
+	$theme = Minn_Admin_REST::get_valid_theme( $stylesheet );
+	if ( ! $theme ) {
 		return new WP_Error( 'no_such_theme', __( 'That theme is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	if ( $on ) {

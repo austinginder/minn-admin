@@ -7822,7 +7822,18 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		) );
 	}
 
-	private static function get_valid_theme( $stylesheet ) {
+	/**
+	 * The installed theme a request names, or null. Only a stylesheet
+	 * WordPress lists as a theme counts (broken ones included, so they can
+	 * still be deleted, as on wp-admin's screen): wp_get_theme()->exists()
+	 * is true for any directory under the themes root, '..' and a theme's own
+	 * subfolder among them, and delete_theme() deletes whatever it is given.
+	 */
+	public static function get_valid_theme( $stylesheet ) {
+		$stylesheet = (string) $stylesheet;
+		if ( '' === $stylesheet || validate_file( $stylesheet ) || ! array_key_exists( $stylesheet, wp_get_themes( array( 'errors' => null ) ) ) ) {
+			return null;
+		}
 		$theme = wp_get_theme( $stylesheet );
 		return $theme->exists() ? $theme : null;
 	}
