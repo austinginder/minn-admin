@@ -10543,13 +10543,29 @@
 						payload.transaction_id = pay.transaction_id;
 					}
 				}
+				// Only what changed since the order loaded: a status, note or
+				// address changed meanwhile (a payment completing, the customer
+				// editing their address) is not put back. The payment fields
+				// above already go only when changed.
+				const body = changedDeep(
+					{ status: payload.status, customer_note: payload.customer_note, billing: payload.billing, shipping: payload.shipping },
+					{ status: cur.status || o.status, customer_note: cur.customer_note, billing: b0, shipping: s0 }
+				);
+				[ 'payment_method', 'payment_method_title', 'transaction_id' ].forEach( ( k ) => {
+					if ( k in payload ) body[ k ] = payload[ k ];
+				} );
+				if ( ! Object.keys( body ).length ) {
+					m.edits = {};
+					rerender();
+					return true;
+				}
 				const label = btn.textContent;
 				btn.disabled = true;
 				btn.textContent = __( 'Saving…' );
 				try {
 					const updated = await api( `wc/v3/orders/${ o.id }`, {
 						method: 'PUT',
-						body: JSON.stringify( payload ),
+						body: JSON.stringify( body ),
 					} );
 					// Re-fetch full detail so refunds/totals stay accurate.
 					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
@@ -14272,7 +14288,12 @@
 		// form needs is fetched BEFORE the first paint (loadProductDetail waits
 		// on all of them), so the first bind sees the product exactly as it
 		// arrived and no late render can move the line under it.
-		if ( m.clean == null ) m.clean = productFingerprint( m );
+		if ( m.clean == null ) {
+			m.clean = productFingerprint( m );
+			// And what a save of the clean form would send, so a save sends
+			// only what differs from it.
+			m.cleanPayload = JSON.parse( JSON.stringify( buildProductPayload( m, m.full || m.product ) ) );
+		}
 		const sync = () => { bar.hidden = productFingerprint( m ) === m.clean; };
 		m.syncDirty = sync;
 		sync();
@@ -14415,7 +14436,9 @@
 				if ( valsEl ) valsEl.focus( { preventScroll: true } );
 				return;
 			}
-			const payload = buildProductPayload( m, p );
+			// Only what changed since the page opened: a price, status or
+			// description changed meanwhile (an import, another tab) is kept.
+			const payload = changedDeep( buildProductPayload( m, p ), m.cleanPayload || {} );
 			saveBtn.disabled = true;
 			saveBtn.textContent = __( 'Saving…' );
 			try {
@@ -14434,10 +14457,10 @@
 						stockMoved = nowQty;
 					}
 				}
-				const updated = await api( `wc/v3/products/${ p.id }`, {
+				const updated = Object.keys( payload ).length ? await api( `wc/v3/products/${ p.id }`, {
 					method: 'PUT',
 					body: JSON.stringify( payload ),
-				} );
+				} ) : null;
 				// After the product, never before: a variation's attributes
 				// have to exist on the parent for WooCommerce to accept them.
 				await saveProductVariations( m, p.id );
@@ -29826,6 +29849,14 @@
 					if ( NUMERIC.includes( key ) ) value = parseInt( value, 10 ) || 0;
 					payload[ key ] = value;
 				} );
+				// Only the fields changed since the tab loaded: a setting changed
+				// meanwhile (another tab, a plugin) is not put back. Toggles in
+				// `pending` are already change-only; the logo and language are
+				// judged below.
+				Object.keys( payload ).forEach( ( k ) => {
+					if ( k in pending || k === 'minn_site_logo' || k === 'minn_language' ) return;
+					if ( s && k in s && String( s[ k ] ?? '' ) === String( payload[ k ] ?? '' ) ) delete payload[ k ];
+				} );
 				// Custom logo is a theme_mod — its own route, gated on theme
 				// support server-side.
 				if ( 'minn_site_logo' in payload ) {
@@ -29917,7 +29948,8 @@
 				// Structural validation happens server-side (balanced braces,
 				// closed comments — the Customizer's refusal, mirrored). ---
 				const cssEl = $( '#minn-custom-css', view );
-				if ( cssEl ) {
+				const cssWas = String( ( cache.customCss && cache.customCss.css ) || '' ).replace( /\r\n?/g, '\n' );
+				if ( cssEl && cssEl.value.replace( /\r\n?/g, '\n' ) !== cssWas ) {
 					try {
 						cache.customCss = await api( 'minn-admin/v1/custom-css', { method: 'POST', body: JSON.stringify( { css: cssEl.value } ) } );
 					} catch ( err ) {
@@ -54245,6 +54277,35 @@
 		return out;
 	}
 
+	// changedKeys one level down: a plain-object field (an address, a
+	// product's dimensions) sends only its own changed keys, so use it only
+	// where the route merges such an object key by key; a route that
+	// replaces an object whole gets changedKeys. Values compare as a form
+	// field reads them (5 and '5', '' and null are the same); a key the
+	// baseline does not have at all always goes.
+	function changedDeep( now, was ) {
+		const out = {};
+		const old = was || {};
+		Object.keys( now || {} ).forEach( ( k ) => {
+			const a = now[ k ];
+			if ( ! Object.prototype.hasOwnProperty.call( old, k ) ) {
+				out[ k ] = a;
+				return;
+			}
+			const b = old[ k ];
+			if ( a && typeof a === 'object' && ! Array.isArray( a ) ) {
+				const sub = changedDeep( a, b && typeof b === 'object' ? b : {} );
+				if ( Object.keys( sub ).length ) out[ k ] = sub;
+				return;
+			}
+			const scalar = ( v ) => v == null || typeof v !== 'object';
+			const same = JSON.stringify( a ?? '' ) === JSON.stringify( b ?? '' )
+				|| ( scalar( a ) && scalar( b ) && String( a ?? '' ) === String( b ?? '' ) );
+			if ( ! same ) out[ k ] = a;
+		} );
+		return out;
+	}
+
 	// A Gravity Forms notification or confirmation page: a new item goes
 	// whole, an existing one only what changed (see changedKeys).
 	function gfDelta( n, g, key ) {
@@ -56592,7 +56653,20 @@
 		// Dirty bar: the line is drawn at the first bind, when the form is
 		// exactly the model that arrived.
 		const bar = $( '#minn-wcm-savebar' );
-		if ( m.clean == null ) m.clean = membershipFingerprint();
+		const memberForm = () => {
+			const start = ( $( '#minn-wcm-start' ) || {} ).dataset ? ( $( '#minn-wcm-start' ).dataset.dp || '' ) : '';
+			const end = ( $( '#minn-wcm-end' ) || {} ).dataset ? ( $( '#minn-wcm-end' ).dataset.dp || '' ) : '';
+			return {
+				plan_id: parseInt( pcomboValue( 'minn-wcm-plan', String( d.plan ? d.plan.id : 0 ) ), 10 ) || 0,
+				status: pcomboValue( 'minn-wcm-status', d.status ),
+				start_date: start.slice( 0, 10 ),
+				end_date: end.slice( 0, 10 ),
+			};
+		};
+		if ( m.clean == null ) {
+			m.clean = membershipFingerprint();
+			m.cleanForm = memberForm();
+		}
 		const sync = () => { if ( bar ) bar.hidden = membershipFingerprint() === m.clean; };
 		sync();
 		const body = bar && bar.parentElement;
@@ -56608,18 +56682,14 @@
 		} );
 		on( 'minn-wcm-save', async () => {
 			const btn = $( '#minn-wcm-save' );
-			const start = ( $( '#minn-wcm-start' ) || {} ).dataset ? ( $( '#minn-wcm-start' ).dataset.dp || '' ) : '';
-			const end = ( $( '#minn-wcm-end' ) || {} ).dataset ? ( $( '#minn-wcm-end' ).dataset.dp || '' ) : '';
-			const body = {
-				plan_id: parseInt( pcomboValue( 'minn-wcm-plan', String( d.plan ? d.plan.id : 0 ) ), 10 ) || 0,
-				status: pcomboValue( 'minn-wcm-status', d.status ),
-				start_date: start.slice( 0, 10 ),
-				end_date: end.slice( 0, 10 ),
-			};
-			if ( ! body.start_date ) {
+			const form = memberForm();
+			if ( ! form.start_date ) {
 				toast( __( 'A membership needs a start date.' ), true );
 				return;
 			}
+			// Only what changed since the page opened: a status changed
+			// meanwhile (a renewal, an expiry) is not put back.
+			const body = changedDeep( form, m.cleanForm || {} );
 			if ( btn ) btn.disabled = true;
 			try {
 				const res = await api( `minn-admin/v1/wcm/members/${ m.id }`, { method: 'POST', body: JSON.stringify( body ) } );
@@ -57276,9 +57346,20 @@
 		on( 'minn-wcmp-discard', () => planPageAdopt( m, m.full ) );
 		on( 'minn-wcmp-save', async () => {
 			const btn = $( '#minn-wcmp-save' );
-			const payload = wcmPlanPayload( f );
+			const form = wcmPlanPayload( f );
+			if ( ! form.name.trim() ) { toast( __( 'A plan needs a name.' ), true ); return; }
+			// A saved plan sends only the fields that changed since the page
+			// opened (its route keeps what a body leaves out), so a change made
+			// meanwhile on another field is not put back. Each field goes
+			// whole: the rules are reconciled against known_rules, so a part
+			// of them would delete the rest. A new plan sends everything.
+			let payload = form;
+			if ( ! isNew && m.clean ) {
+				try {
+					payload = changedKeys( form, JSON.parse( m.clean ) );
+				} catch ( e ) { /* send the whole form */ }
+			}
 			payload.known_rules = m.knownRules || [];
-			if ( ! payload.name.trim() ) { toast( __( 'A plan needs a name.' ), true ); return; }
 			if ( btn ) btn.disabled = true;
 			try {
 				const res = await api( isNew ? 'minn-admin/v1/wcm/plans' : `minn-admin/v1/wcm/plans/${ d.id }`, { method: 'POST', body: JSON.stringify( payload ) } );

@@ -90,6 +90,14 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
   Write through the options, user and metadata APIs so the fence sees it, never raw SQL
   to those tables; a new takeover option or power goes into its lists, and
   `tests/write-fences.test.php` gets a case for it.
+- **A save sends only what the person changed.** Anything else in the body is a value the
+  page loaded, and it puts back whatever changed since (a payment, an import, another
+  tab). Keep what the page loaded and send `changedKeys()` / `changedDeep()` of it
+  (editor panels, the order, product, membership and settings pages do); a route that
+  needs the whole record either reads it fresh at save time (surface edit dialogs) or
+  checks a stamp and answers 409 (`Minn_Admin::stamp()` / `stale()`: field groups, the
+  form builder). `tests/roundtrip-pages-capture.js` fails a page whose clean save sends
+  anything, unless it is listed as stamped.
 
 ## UI traps
 

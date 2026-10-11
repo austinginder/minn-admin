@@ -122,8 +122,28 @@ const PAGES = [
 	fs.writeFileSync( out, JSON.stringify( captures, null, 1 ) );
 	captures.forEach( ( c ) => console.log( `${ c.skip ? 'SKIP' : 'CAUGHT' }  ${ c.surface }${ c.skip ? ' — ' + c.skip : ' ' + c.writes.map( ( w ) => w.method + ' ' + w.path ).join( ' + ' ) }` ) );
 	console.log( 'wrote ' + out );
+	// A clean save sends nothing: every field it carries is a value the page
+	// loaded, which puts back whatever changed since (another tab, a
+	// payment, an import). Pages that send the whole object on purpose prove
+	// they saw the latest with a stamp and answer 409 instead.
+	const STAMPED = { 'acf-field-group': 'field group stamp, 409 when stale', 'gf-builder': 'form stamp, 409 when stale' };
+	const resent = [];
+	captures.filter( ( c ) => ! c.skip && ! STAMPED[ c.surface ] ).forEach( ( c ) => {
+		c.writes.forEach( ( w ) => {
+			if ( /\/preview$/.test( w.path ) ) return; // renders, saves nothing
+			let b = w.body;
+			try { b = typeof b === 'string' ? JSON.parse( b ) : b; } catch ( e ) { /* raw body */ }
+			const full = b && typeof b === 'object'
+				? Object.keys( b ).filter( ( k ) => k !== 'known_rules' && ! [ null, '' ].includes( b[ k ] ) && JSON.stringify( b[ k ] ) !== '[]' && JSON.stringify( b[ k ] ) !== '{}' )
+				: ( b ? [ '(raw body)' ] : [] );
+			if ( full.length ) resent.push( `${ c.surface } ${ w.method } ${ w.path }: ${ full.join( ', ' ) }` );
+		} );
+	} );
+	console.log( resent.length
+		? 'FAIL  a clean save sends loaded values back:\n      ' + resent.join( '\n      ' )
+		: 'PASS  every clean save sends nothing (stamped pages aside)' );
 	await browser.close();
-	process.exit( 0 );
+	process.exit( resent.length ? 1 : 0 );
 } )().catch( ( e ) => {
 	console.error( e );
 	process.exit( 1 );
