@@ -47,6 +47,10 @@ function minn_admin_jet_search_item( $r ) {
 		'id'     => (int) $r->id,
 		'name'   => (string) $r->name,
 		'weight' => (int) $r->weight,
+		// The weight as served, carried back by the edit form: JetSearch adds
+		// to it on every search, so a save that did not change it must not
+		// write back the count it loaded.
+		'weight_seen' => (int) $r->weight,
 		'parent' => (string) $r->parent,
 	);
 }
@@ -93,10 +97,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 			'detail'    => array(
-				'skip' => array( 'id' ),
+				'skip' => array( 'id', 'weight_seen' ),
 				'edit' => array(
-					'route'  => 'minn-admin/v1/jet-search/suggestions/{id}',
-					'method' => 'POST',
+					'route'    => 'minn-admin/v1/jet-search/suggestions/{id}',
+					'method'   => 'POST',
+					'preserve' => array( 'weight_seen' ),
 					'fields' => array(
 						array( 'key' => 'name', 'label' => __( 'Suggestion', 'minn-admin' ) ),
 						array( 'key' => 'weight', 'label' => __( 'Weight', 'minn-admin' ), 'type' => 'number' ),
@@ -223,7 +228,8 @@ add_action( 'rest_api_init', function () {
 					}
 					$data['name'] = $name;
 				}
-				if ( null !== $request->get_param( 'weight' ) ) {
+				$seen = $request->get_param( 'weight_seen' );
+				if ( null !== $request->get_param( 'weight' ) && ( null === $seen || (int) $request->get_param( 'weight' ) !== (int) $seen ) ) {
 					$data['weight'] = max( 0, (int) $request->get_param( 'weight' ) );
 				}
 				if ( $data ) {

@@ -1245,4 +1245,31 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+// --- A JetSearch suggestion edit keeps searches counted while it was open ---
+// JetSearch adds 1 to a suggestion's weight on every search, and the edit form
+// sent back the weight it loaded, so a rename put the count back to then.
+( function () use ( $check, $call ) {
+	global $wpdb;
+	if ( ! function_exists( 'minn_admin_jet_search_has_table' ) || ! minn_admin_jet_search_has_table() ) {
+		echo "SKIP  JetSearch suggestions unavailable\n";
+		return;
+	}
+	$t = minn_admin_jet_search_table();
+	$wpdb->insert( $t, array( 'name' => 'minn weight probe', 'weight' => 5, 'parent' => '', 'term' => '' ), array( '%s', '%d', '%s', '%s' ) );
+	$id = (int) $wpdb->insert_id;
+	try {
+		list( , $item ) = $call( 'GET', '/minn-admin/v1/jet-search/suggestions/' . $id );
+		// Visitors search it while the form is open.
+		$wpdb->update( $t, array( 'weight' => 9 ), array( 'id' => $id ) );
+		// The form: its fields plus the preserved weight_seen.
+		$call( 'POST', '/minn-admin/v1/jet-search/suggestions/' . $id, array( 'name' => 'minn weight probe 2', 'weight' => $item['weight'], 'weight_seen' => $item['weight_seen'] ?? null ) );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT name, weight FROM {$t} WHERE id = %d", $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$check( 'JetSearch: a rename keeps the searches counted while the form was open', 'minn weight probe 2' === $row->name && 9 === (int) $row->weight, wp_json_encode( $row ) );
+		$call( 'POST', '/minn-admin/v1/jet-search/suggestions/' . $id, array( 'name' => 'minn weight probe 2', 'weight' => 20, 'weight_seen' => 9 ) );
+		$check( 'JetSearch control: a weight you change is saved', 20 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT weight FROM {$t} WHERE id = %d", $id ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	} finally {
+		$wpdb->delete( $t, array( 'id' => $id ), array( '%d' ) );
+	}
+} )();
+
 $summary();
