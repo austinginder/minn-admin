@@ -1,7 +1,8 @@
 /**
- * Create product + create order + Orders analytics view.
+ * Create product (from Products and from the + New menu) + create order +
+ * Orders analytics view.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -80,6 +81,40 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		}
 		await page.keyboard.press( 'Escape' );
 	}
+
+	// The + New menu offers Product too, from any screen, and it opens the
+	// same New product dialog rather than the writing editor.
+	let menuProductId = null;
+	await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '#minn-new-btn', { timeout: 20000 } );
+	await page.click( '#minn-new-btn' );
+	const productRow = await page.waitForSelector( '#minn-new-menu [data-newproduct]', { timeout: 5000 } ).catch( () => null );
+	t.check( '+ New menu offers Product', !! productRow, '' );
+	if ( productRow ) {
+		await productRow.click();
+		const dialog = await page.waitForSelector( '#minn-pn-create', { timeout: 5000 } ).catch( () => null );
+		t.check( 'it opens the New product dialog', !! dialog && ! /\/editor/.test( page.url() ), page.url() );
+		const name = 'Minn Menu Prod ' + suffix;
+		await page.fill( '#minn-pn-name', name );
+		await page.click( '#minn-pn-create' );
+		await page.waitForSelector( '#minn-p-fullpage', { timeout: 15000 } ).catch( () => null );
+		const listed = await api( `wc/v3/products?search=${ encodeURIComponent( name ) }&status=draft&_fields=id,name,status` );
+		const hit = ( listed.body || [] ).find( ( p ) => p.name === name );
+		menuProductId = hit && hit.id;
+		t.check( 'a draft product is created from the menu and its quick view opens',
+			!! hit && !! await page.$( '#minn-p-fullpage' ), JSON.stringify( listed.body ) );
+		await page.keyboard.press( 'Escape' );
+	}
+	if ( menuProductId ) await api( `wc/v3/products/${ menuProductId }?force=true`, { method: 'DELETE' } ).catch( () => null );
+
+	// An Author cannot make products, so the row is not there for them.
+	const author = await loginAs( browser, 'minn-author', 'minn-author-pass-1' );
+	await author.page.waitForSelector( '#minn-new-btn', { timeout: 20000 } );
+	await author.page.click( '#minn-new-btn' );
+	await author.page.waitForSelector( '#minn-new-menu', { timeout: 5000 } ).catch( () => null );
+	const authorRow = await author.page.$( '#minn-new-menu [data-newproduct]' );
+	t.check( 'no Product row for an Author', ! authorRow, '' );
+	await author.ctx.close();
 
 	// Create order via UI.
 	await page.goto( BASE + '/minn-admin/orders', { waitUntil: 'domcontentloaded' } );

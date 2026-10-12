@@ -3279,6 +3279,12 @@
 		return !!( B.caps && B.caps.moderate && B.comments !== false );
 	}
 
+	// A store's products are made in the New product dialog (the Products
+	// view's Add product), not the writing editor, so the row opens that.
+	const newProductRow = () => ( B.wc && B.caps.products
+		? `<button data-newproduct><span class="minn-row-icon">${ icon( 'tag' ) }</span> ${ esc( __( 'Product' ) ) }</button>`
+		: '' );
+
 	// Small "Post / Page" menu under the + New button. Users who can't edit
 	// pages skip the menu entirely and go straight to a new post.
 	function toggleNewMenu( btn ) {
@@ -3309,6 +3315,7 @@
 			${ B.caps.editPages ? `<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( __( 'Page' ) ) }</button>` : '' }
 			<button data-newtype="blocks"><span class="minn-row-icon">${ icon( 'block' ) }</span> ${ esc( __( 'Pattern' ) ) }</button>
 			${ cptRows }
+			${ newProductRow() }
 			${ builderRows }`;
 		document.body.appendChild( menu );
 		const r = btn.getBoundingClientRect();
@@ -3328,6 +3335,11 @@
 				newContent( b.dataset.newtype );
 			} )
 		);
+		const productRow = $( 'button[data-newproduct]', menu );
+		if ( productRow ) productRow.addEventListener( 'click', () => {
+			menu.remove();
+			openNewProductModal();
+		} );
 		$$( 'button[data-newbuilder]', menu ).forEach( ( b ) =>
 			b.addEventListener( 'click', async () => {
 				menu.remove();
@@ -4707,8 +4719,9 @@
 		$( '#minn-new-btn' ).addEventListener( 'click', ( e ) => {
 			e.stopPropagation();
 			// The menu is worth opening whenever it holds more than the plain
-			// post row — pages by capability, or any creatable CPT (GH #26).
-			if ( B.caps.editPages || creatableCpts().length ) toggleNewMenu( e.currentTarget );
+			// post row — pages by capability, any creatable CPT (GH #26), or
+			// a store's products.
+			if ( B.caps.editPages || creatableCpts().length || newProductRow() ) toggleNewMenu( e.currentTarget );
 			else newContent( 'posts' );
 		} );
 		renderThemeBtn();
