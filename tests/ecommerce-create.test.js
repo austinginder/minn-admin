@@ -1,8 +1,8 @@
 /**
- * Create product (from Products and from the + New menu) + create order +
- * Orders analytics view.
+ * Create product (on the product page, from Products and from the + New
+ * menu) + create order + Orders analytics view.
  */
-const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
+const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -37,7 +37,8 @@ const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
 	let createdProductId = null;
 	let createdOrderId = null;
 
-	// Create product via UI.
+	// Create product via UI: Add product opens the full product page over a
+	// blank product, and its first save creates it.
 	await page.goto( BASE + '/minn-admin/products', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-product-add, #minn-order-search', { timeout: 20000 } );
 	await page.waitForSelector( '.minn-table-row[data-product], .minn-empty', { timeout: 20000 } ).catch( () => null );
@@ -45,45 +46,92 @@ const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
 	t.check( 'Add product button present', !! addProd, '' );
 	if ( addProd ) {
 		await addProd.click();
-		await page.waitForSelector( '#minn-pn-create', { timeout: 5000 } );
+		await page.waitForSelector( '#minn-p-name', { timeout: 20000 } );
+		const blank = await page.evaluate( () => ( {
+			url: location.pathname,
+			title: ( document.querySelector( '.minn-order-page-head .minn-modal-title' ) || {} ).textContent,
+			save: ( document.querySelector( '#minn-product-save' ) || {} ).textContent,
+			bar: !! document.querySelector( '#minn-p-savebar:not([hidden])' ),
+			cards: [ ...document.querySelectorAll( '[data-pcard]' ) ].map( ( c ) => c.dataset.pcard ),
+			dialog: !! document.querySelector( '#minn-modal-overlay' ),
+			focus: document.activeElement && document.activeElement.id,
+		} ) );
+		t.check( 'Add product opens the full page for a new product',
+			/\/products\/new$/.test( blank.url ) && 'New product' === blank.title && /Create product/.test( blank.save || '' )
+				&& blank.bar && ! blank.dialog && 'minn-p-name' === blank.focus
+				&& [ 'basics', 'media', 'pricing', 'inventory', 'status', 'organization' ].every( ( c ) => blank.cards.includes( c ) ),
+			JSON.stringify( blank ) );
+
+		// Untouched, it is not unsaved work: leaving asks nothing.
+		await page.click( '#minn-pp-back' );
+		await page.waitForSelector( '#minn-product-add', { timeout: 20000 } );
+		const asked = await page.$( '.minn-confirm, [role="alertdialog"]' );
+		t.check( 'leaving an untouched new product asks nothing', ! asked && /\/products$/.test( new URL( page.url() ).pathname ), page.url() );
+
+		await page.click( '#minn-product-add' );
+		await page.waitForSelector( '#minn-p-name', { timeout: 20000 } );
 		const name = 'Minn Create Prod ' + suffix;
-		await page.fill( '#minn-pn-name', name );
-		await page.fill( '#minn-pn-price', '11.25' );
-		await page.selectOption( '#minn-pn-status', 'publish' );
-		await page.click( '#minn-pn-create' );
-		await page.waitForSelector( '#minn-p-name, #minn-product-save', { timeout: 15000 } ).catch( () => null );
-		await page.waitForSelector( '#minn-p-fullpage', { timeout: 8000 } ).catch( () => null );
-		const listed = await api( `wc/v3/products?search=${ encodeURIComponent( name ) }&_fields=id,name,regular_price` );
+		await page.fill( '#minn-p-name', name );
+		await page.fill( '#minn-p-regular', '11.25' );
+		await page.fill( '#minn-p-sku', 'MINN-CP-' + suffix );
+		await pickCombo( page, '#minn-p-status', 'publish' );
+		await page.click( '#minn-product-save' );
+		await page.waitForFunction( () => /\/products\/\d+$/.test( location.pathname ), null, { timeout: 20000 } ).catch( () => null );
+		// The created product's page loads it like any other product.
+		await page.waitForSelector( '#minn-p-editor', { timeout: 20000 } ).catch( () => null );
+		const listed = await api( `wc/v3/products?search=${ encodeURIComponent( name ) }&_fields=id,name,regular_price,status,sku` );
 		const hit = ( listed.body || [] ).find( ( p ) => p.name === name );
 		t.check( 'product created via UI', !! hit, JSON.stringify( listed.body && listed.body[ 0 ] ) );
 		createdProductId = hit && hit.id;
 		if ( hit ) {
-			t.check( 'created product has price', String( hit.regular_price ) === '11.25', JSON.stringify( hit ) );
-		}
-		// A create drops the reader in the quick view, which is a modal. The
-		// full editing screen is a route, so the modal has to offer the way
-		// over to it or a fresh product is a dead end.
-		const fullBtn = await page.$( '#minn-p-fullpage' );
-		t.check( 'quick view offers the full page', !! fullBtn, '' );
-		if ( fullBtn && hit ) {
-			await page.click( '#minn-p-fullpage' );
-			await page.waitForSelector( '#minn-pp-back', { timeout: 15000 } ).catch( () => null );
+			t.check( 'created product has the price, SKU and status entered',
+				String( hit.regular_price ) === '11.25' && hit.sku === 'MINN-CP-' + suffix && hit.status === 'publish', JSON.stringify( hit ) );
 			const landed = await page.evaluate( () => ( {
-				url: location.href,
-				onPage: !! document.querySelector( '#minn-pp-back' ),
-				modal: !! document.querySelector( '#minn-modal-overlay' ),
+				url: location.pathname,
+				title: ( document.querySelector( '.minn-order-page-head .minn-modal-title' ) || {} ).textContent,
+				editor: !! document.querySelector( '#minn-p-editor' ),
 			} ) );
-			t.check( 'full page button lands on the product page',
-				landed.onPage && ! landed.modal && landed.url.indexOf( '/products/' + hit.id ) > -1,
-				JSON.stringify( landed ) );
-			await page.goto( BASE + '/minn-admin/products', { waitUntil: 'domcontentloaded' } );
-			await page.waitForSelector( '.minn-table-row[data-product], .minn-empty', { timeout: 20000 } ).catch( () => null );
+			t.check( 'the save lands on the new product\'s own page',
+				landed.url.endsWith( '/products/' + hit.id ) && landed.title === name && landed.editor, JSON.stringify( landed ) );
+			// The new page replaced /products/new in history.
+			await page.goBack();
+			await page.waitForSelector( '#minn-product-add', { timeout: 20000 } ).catch( () => null );
+			t.check( 'Back returns to the list, not a blank form', /\/products$/.test( new URL( page.url() ).pathname ), page.url() );
 		}
-		await page.keyboard.press( 'Escape' );
 	}
 
+	// A variable product in one go: its variations need the product's id,
+	// so they save right after the product is created.
+	await page.goto( BASE + '/minn-admin/products/new', { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '#minn-p-name', { timeout: 20000 } );
+	const varName = 'Minn Create Variable ' + suffix;
+	await page.fill( '#minn-p-name', varName );
+	await pickCombo( page, '#minn-p-type', 'variable' );
+	await page.waitForSelector( '#minn-p-var-gen', { timeout: 10000 } );
+	await page.click( '#minn-p-attr-add' );
+	await page.waitForSelector( '[data-pattrname="0"]', { timeout: 10000 } );
+	await page.fill( '[data-pattrname="0"]', 'Colour' );
+	await page.fill( '[data-pattrvals="0"]', 'Red, Blue' );
+	if ( ! await page.$eval( '[data-pattrvar="0"]', ( e ) => e.classList.contains( 'on' ) ) ) await page.click( '[data-pattrvar="0"]' );
+	await page.click( '#minn-p-var-gen' );
+	await page.waitForSelector( '.minn-pvar-row', { timeout: 10000 } );
+	for ( let i = 0; i < 2; i++ ) {
+		await page.click( `[data-pvaropen="${ i }"]` );
+		await page.waitForSelector( '#minn-var-dialog', { timeout: 15000 } );
+		await page.fill( '#minn-var-regular', String( 10 + i ) );
+		await page.click( '#minn-var-dialog [data-var-done]' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
+	}
+	await page.click( '#minn-product-save' );
+	await page.waitForFunction( () => /\/products\/\d+$/.test( location.pathname ), null, { timeout: 30000 } ).catch( () => null );
+	const varId = parseInt( new URL( page.url() ).pathname.split( '/' ).pop(), 10 ) || null;
+	const varRows = varId ? await api( `wc/v3/products/${ varId }/variations?_fields=regular_price,attributes` ) : { body: [] };
+	const prices = ( Array.isArray( varRows.body ) ? varRows.body : [] ).map( ( v ) => v.regular_price ).sort();
+	t.check( 'a new variable product saves with its variations', !! varId && '10,11' === prices.join( ',' ), JSON.stringify( { varId, body: varRows.body } ) );
+	if ( varId ) await api( `wc/v3/products/${ varId }?force=true`, { method: 'DELETE' } ).catch( () => null );
+
 	// The + New menu offers Product too, from any screen, and it opens the
-	// same New product dialog rather than the writing editor.
+	// same page.
 	let menuProductId = null;
 	await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-new-btn', { timeout: 20000 } );
@@ -92,18 +140,22 @@ const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
 	t.check( '+ New menu offers Product', !! productRow, '' );
 	if ( productRow ) {
 		await productRow.click();
-		const dialog = await page.waitForSelector( '#minn-pn-create', { timeout: 5000 } ).catch( () => null );
-		t.check( 'it opens the New product dialog', !! dialog && ! /\/editor/.test( page.url() ), page.url() );
+		const opened = await page.waitForSelector( '#minn-p-name', { timeout: 20000 } ).catch( () => null );
+		t.check( 'it opens the new product page', !! opened && /\/products\/new$/.test( new URL( page.url() ).pathname ), page.url() );
 		const name = 'Minn Menu Prod ' + suffix;
-		await page.fill( '#minn-pn-name', name );
-		await page.click( '#minn-pn-create' );
-		await page.waitForSelector( '#minn-p-fullpage', { timeout: 15000 } ).catch( () => null );
+		await page.fill( '#minn-p-name', name );
+		// Something entered is unsaved work: leaving asks first.
+		await page.click( '.minn-nav-btn[data-nav="overview"]' );
+		const confirm = await page.waitForSelector( '.minn-confirm, [role="alertdialog"]', { timeout: 5000 } ).catch( () => null );
+		t.check( 'leaving a new product with a name typed asks first', !! confirm, '' );
+		if ( confirm ) await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 300 );
+		await page.click( '#minn-product-save' );
+		await page.waitForFunction( () => /\/products\/\d+$/.test( location.pathname ), null, { timeout: 20000 } ).catch( () => null );
 		const listed = await api( `wc/v3/products?search=${ encodeURIComponent( name ) }&status=draft&_fields=id,name,status` );
 		const hit = ( listed.body || [] ).find( ( p ) => p.name === name );
 		menuProductId = hit && hit.id;
-		t.check( 'a draft product is created from the menu and its quick view opens',
-			!! hit && !! await page.$( '#minn-p-fullpage' ), JSON.stringify( listed.body ) );
-		await page.keyboard.press( 'Escape' );
+		t.check( 'a product left at the default status is created as a draft', !! hit, JSON.stringify( listed.body ) );
 	}
 	if ( menuProductId ) await api( `wc/v3/products/${ menuProductId }?force=true`, { method: 'DELETE' } ).catch( () => null );
 

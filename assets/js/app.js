@@ -3279,8 +3279,8 @@
 		return !!( B.caps && B.caps.moderate && B.comments !== false );
 	}
 
-	// A store's products are made in the New product dialog (the Products
-	// view's Add product), not the writing editor, so the row opens that.
+	// A store's products are made on the product page (/products/new, the
+	// Products view's Add product), not the writing editor.
 	const newProductRow = () => ( B.wc && B.caps.products
 		? `<button data-newproduct><span class="minn-row-icon">${ icon( 'tag' ) }</span> ${ esc( __( 'Product' ) ) }</button>`
 		: '' );
@@ -3338,7 +3338,7 @@
 		const productRow = $( 'button[data-newproduct]', menu );
 		if ( productRow ) productRow.addEventListener( 'click', () => {
 			menu.remove();
-			openNewProductModal();
+			go( 'products/new' );
 		} );
 		$$( 'button[data-newbuilder]', menu ).forEach( ( b ) =>
 			b.addEventListener( 'click', async () => {
@@ -3458,9 +3458,10 @@
 			// section; the bare route lands on the first one.
 			state.storeSection = parts[ 1 ] ? decodeURIComponent( parts[ 1 ] ) : '';
 			state.route = 'store-settings';
-		} else if ( route === 'products' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
-			// /products/482 — the product detail page.
-			state.productPageId = parseInt( parts[ 1 ], 10 );
+		} else if ( route === 'products' && parts[ 1 ] && ( /^\d+$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
+			// /products/482 — the product detail page; /products/new is the
+			// same page over a blank product.
+			state.productPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
 			state.route = 'product';
 		} else if ( route === 'users' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /users/123 — the full-page user editor (GH #8).
@@ -3541,7 +3542,7 @@
 		// Pages that show a save bar, or arm their Save, only once something
 		// changed say so on screen.
 		const view = $( '#minn-view' );
-		if ( view && $( '#minn-p-savebar:not([hidden]), #minn-wcm-savebar:not([hidden]), #minn-wcmp-savebar:not([hidden]), #minn-look-save:not([disabled]), #minn-rd-save:not([disabled])', view ) ) return true;
+		if ( view && $( '#minn-p-savebar:not([hidden]):not([data-pristine]), #minn-wcm-savebar:not([hidden]), #minn-wcmp-savebar:not([hidden]), #minn-look-save:not([disabled]), #minn-rd-save:not([disabled])', view ) ) return true;
 		const f = activeSettingsForm;
 		return !! ( f && f.route === r && f.host && f.host.isConnected && f.isDirty() );
 	}
@@ -11350,13 +11351,6 @@
 		renderOverlays();
 	}
 
-	function openNewProductModal() {
-		state.modal = {
-			type: 'product-new',
-		};
-		renderOverlays();
-	}
-
 	/* ===== Subscriptions (WooCommerce Subscriptions) ===== */
 
 	// Daily ops via wc/v3/subscriptions (extension REST). shop_subscription is
@@ -13094,6 +13088,48 @@
 	}
 
 	/**
+	 * /products/new: the product page over a blank product. The vocabularies
+	 * the form needs load first, as they do for an existing product, and the
+	 * first save creates it. The blank values are WooCommerce's own defaults
+	 * for a new product, except the status: it starts as a draft.
+	 */
+	function loadNewProduct( m ) {
+		Promise.all( [ loadShippingClasses(), loadTaxClasses(), loadAttributeDefs() ] )
+			.then( () => {
+				if ( state.productPage !== m ) return;
+				m.full = {
+					id: 0, name: '', type: 'simple', status: 'draft', catalog_visibility: 'visible', featured: false,
+					short_description: '', sku: '', global_unique_id: '',
+					regular_price: '', sale_price: '', date_on_sale_from: '', date_on_sale_to: '',
+					tax_status: 'taxable', tax_class: '', manage_stock: false, stock_quantity: null,
+					low_stock_amount: null, stock_status: 'instock', backorders: 'no', sold_individually: false,
+					virtual: false, downloadable: false, downloads: [], download_limit: -1, download_expiry: -1,
+					weight: '', dimensions: { length: '', width: '', height: '' }, shipping_class: '',
+					categories: [], tags: [], brands: [], images: [], attributes: [],
+					upsell_ids: [], cross_sell_ids: [], external_url: '', button_text: '',
+					purchase_note: '', menu_order: 0, reviews_allowed: true, slug: '',
+				};
+				m.loading = false;
+				m.loaded = JSON.parse( JSON.stringify( m.full ) );
+				m.loadedVariations = [];
+				m.linkNames = {};
+				seedProductTerms( m );
+				seedProductImages( m );
+				seedProductDownloads( m );
+				seedProductVariations( m, [] );
+				seedProductLinks( m, {} );
+				seedProductAttributes( m );
+				renderProductPage();
+			} )
+			.catch( ( e ) => {
+				if ( state.productPage !== m ) return;
+				m.loading = false;
+				m.loadError = e.message || __( 'Could not load product' );
+				renderProductPage();
+			} );
+	}
+
+	/**
 	 * Product detail body — shared by the quick-view modal and the
 	 * /products/{id} page. Both surfaces edit the same fields; only the
 	 * chrome around this differs (m.page tells them apart).
@@ -13280,10 +13316,10 @@
 							${ side ? `<div class="minn-order-side">${ side }</div>` : '' }
 						</div>
 						${ canEdit && m.page ? `
-						<div class="minn-psavebar" id="minn-p-savebar" hidden>
-							<span class="minn-psavebar-note">${ esc( __( 'Unsaved changes' ) ) }</span>
-							<button class="minn-btn-soft" id="minn-p-discard" type="button">${ esc( __( 'Discard' ) ) }</button>
-							<button class="minn-btn-primary" id="minn-product-save" type="button">${ esc( __( 'Save changes' ) ) }</button>
+						<div class="minn-psavebar" id="minn-p-savebar" ${ m.isNew ? 'data-pristine' : 'hidden' }>
+							<span class="minn-psavebar-note">${ esc( m.isNew ? __( 'New product' ) : __( 'Unsaved changes' ) ) }</span>
+							<button class="minn-btn-soft" id="minn-p-discard" type="button">${ esc( m.isNew ? __( 'Cancel' ) : __( 'Discard' ) ) }</button>
+							<button class="minn-btn-primary" id="minn-product-save" type="button">${ esc( m.isNew ? __( 'Create product' ) : __( 'Save changes' ) ) }</button>
 						</div>` : '' }
 						${ canEdit && ! m.page ? `
 						<div class="minn-media-edit minn-order-status">
@@ -13291,12 +13327,12 @@
 							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Saves the fields on this page and the short description.' ) ) }</div>
 						</div>` : '' }
 					</div>
-					<div class="minn-modal-actions">
+					${ m.isNew ? '' : `<div class="minn-modal-actions">
 						${ m.page ? '' : `<button type="button" class="minn-btn-soft" id="minn-p-fullpage">${ icon( 'columns' ) } ${ esc( __( 'Open full page' ) ) }</button>` }
 						${ p.permalink ? `<a class="minn-btn-soft" href="${ esc( p.permalink ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'View product' ) ) }</a>` : '' }
 						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } ${ esc( __( 'Edit description' ) ) }</button>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ ${ esc( __( 'Edit in WooCommerce' ) ) }</a>
-					</div>`;
+					</div>` }`;
 	}
 
 	/**
@@ -14307,7 +14343,11 @@
 			// only what differs from it.
 			m.cleanPayload = JSON.parse( JSON.stringify( buildProductPayload( m, m.full || m.product ) ) );
 		}
-		const sync = () => { bar.hidden = productFingerprint( m ) === m.clean; };
+		// A new product keeps its bar, since Create is on it; only whether
+		// anything was entered changes, which is what the leave guard reads.
+		const sync = m.isNew
+			? () => { bar.toggleAttribute( 'data-pristine', productFingerprint( m ) === m.clean ); }
+			: () => { bar.hidden = productFingerprint( m ) === m.clean; };
 		m.syncDirty = sync;
 		sync();
 		const body = bar.parentElement;
@@ -14317,6 +14357,10 @@
 		}
 		const discard = $( '#minn-p-discard' );
 		if ( discard ) discard.addEventListener( 'click', () => {
+			if ( m.isNew ) {
+				go( 'products' );
+				return;
+			}
 			if ( ! m.loaded ) return;
 			// Rebuild from the untouched copy, not from m.full: a type flip
 			// harvests the form into m.full, so by now it can hold the very
@@ -14330,6 +14374,48 @@
 			seedProductAttributes( m );
 			renderProductPage();
 		} );
+	}
+
+	/**
+	 * The first save on /products/new. The whole form goes, not only what
+	 * changed: there is nothing stored to keep yet, and WooCommerce's own
+	 * defaults differ from the form's (it publishes unless told otherwise).
+	 * Variations need the product's id, so they follow it. Then the product's
+	 * own page takes this address's place, so Back returns to the list rather
+	 * than to a blank form.
+	 */
+	async function createProduct( m, p, saveBtn ) {
+		saveBtn.disabled = true;
+		saveBtn.textContent = __( 'Creating…' );
+		let created;
+		try {
+			created = await api( 'wc/v3/products', {
+				method: 'POST',
+				body: JSON.stringify( buildProductPayload( m, p ) ),
+			} );
+		} catch ( e ) {
+			toast( e.message, true );
+			saveBtn.disabled = false;
+			saveBtn.textContent = __( 'Create product' );
+			return;
+		}
+		let variationError = '';
+		try {
+			await saveProductVariations( m, created.id );
+		} catch ( e ) {
+			variationError = e.message || '';
+		}
+		state.cache.products = null;
+		if ( variationError ) {
+			/* translators: %s: why WooCommerce refused the variations. */
+			toast( sprintf( __( 'Product created, but its variations were not saved: %s' ), variationError ), true );
+		} else {
+			toast( __( 'Product created' ) );
+		}
+		if ( state.productPage !== m ) return;
+		state.productPage = null;
+		setPath( 'products/' + created.id, true );
+		onRouteChange();
 	}
 
 	/**
@@ -14449,6 +14535,10 @@
 				if ( valsEl ) valsEl.focus( { preventScroll: true } );
 				return;
 			}
+			if ( m.isNew ) {
+				await createProduct( m, p, saveBtn );
+				return;
+			}
 			// Only what changed since the page opened: a price, status or
 			// description changed meanwhile (an import, another tab) is kept.
 			const payload = changedDeep( buildProductPayload( m, p ), m.cleanPayload || {} );
@@ -14542,8 +14632,9 @@
 		}
 		let m = state.productPage;
 		if ( ! m || m.product.id !== state.productPageId ) {
-			m = state.productPage = { type: 'product', page: true, product: { id: state.productPageId }, full: null, loading: true };
-			loadProductDetail( m );
+			m = state.productPage = { type: 'product', page: true, product: { id: state.productPageId }, full: null, loading: true, isNew: ! state.productPageId };
+			if ( m.isNew ) loadNewProduct( m );
+			else loadProductDetail( m );
 		}
 		const p = m.full || m.product;
 		const loading = !! m.loading && ! m.full;
@@ -14557,10 +14648,10 @@
 			<div class="minn-order-page-head">
 				<button type="button" class="minn-btn-soft" id="minn-pp-back">← ${ esc( __( 'Products' ) ) }</button>
 				<div class="minn-modal-title-block">
-					<div class="minn-modal-title">${ esc( p.name || __( 'Product' ) ) }</div>
+					<div class="minn-modal-title">${ esc( m.isNew ? __( 'New product' ) : ( p.name || __( 'Product' ) ) ) }</div>
 					<div class="minn-modal-sub">${ loading ? esc( __( 'Loading…' ) ) : esc( sub ) }</div>
 				</div>
-				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span>` : '' }
+				${ p.status && ! m.isNew ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span>` : '' }
 			</div>
 			<div class="minn-order-page-body">
 				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading product…' ) ) }</div></div>` : '' }
@@ -14571,6 +14662,13 @@
 		const back = $( '#minn-pp-back' );
 		if ( back ) back.addEventListener( 'click', () => go( 'products' ) );
 		if ( ! loading && ! m.loadError ) bindProductDetail( m );
+		// A new product starts at its name, once: later repaints (a type
+		// flip) must not pull the cursor back up.
+		if ( m.isNew && ! loading && ! m.focused ) {
+			m.focused = true;
+			const nameEl = $( '#minn-p-name' );
+			if ( nameEl ) nameEl.focus( { preventScroll: true } );
+		}
 	}
 
 	function productsEmptyMessage() {
@@ -14598,7 +14696,7 @@
 	function bindProductToolbar( view ) {
 		bindListFilterBar( view );
 		const addProd = $( '#minn-product-add', view );
-		if ( addProd ) addProd.addEventListener( 'click', () => openNewProductModal() );
+		if ( addProd ) addProd.addEventListener( 'click', () => go( 'products/new' ) );
 	}
 
 	function renderProducts() {
@@ -46813,38 +46911,6 @@
 			</div>`;
 		}
 
-		if ( m.type === 'product-new' ) {
-			return `
-			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal">
-					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ esc( __( 'New product' ) ) }</div>
-						<button class="minn-x-btn" id="minn-modal-close">×</button>
-					</div>
-					<div class="minn-modal-form">
-						<div class="minn-order-fields" style="padding:4px 2px 8px;">
-							<div><div class="minn-field-label">${ esc( __( 'Name' ) ) }</div><input class="minn-input" id="minn-pn-name" placeholder="${ esc( __( 'Product name' ) ) }"></div>
-							<div class="minn-order-field-row">
-								<div><div class="minn-field-label">${ esc( __( 'Regular price' ) ) }</div><input class="minn-input" id="minn-pn-price" type="text" inputmode="decimal" placeholder="0.00"></div>
-								<div><div class="minn-field-label">${ esc( __( 'SKU' ) ) }</div><input class="minn-input" id="minn-pn-sku" placeholder="${ esc( __( 'Optional' ) ) }"></div>
-							</div>
-							<div><div class="minn-field-label">${ esc( __( 'Status' ) ) }</div>
-								<select class="minn-input" id="minn-pn-status">
-									<option value="publish">${ esc( __( 'Published' ) ) }</option>
-									<option value="draft" selected>${ esc( __( 'Draft' ) ) }</option>
-								</select>
-							</div>
-							<div class="minn-toggle-desc">${ esc( __( 'Creates a simple product. Variations, gallery and long description stay in WooCommerce.' ) ) }</div>
-						</div>
-					</div>
-					<div class="minn-modal-actions">
-						<button class="minn-btn-soft" id="minn-modal-close2" type="button">${ esc( __( 'Cancel' ) ) }</button>
-						<button class="minn-btn-primary" id="minn-pn-create" type="button">${ esc( __( 'Create product' ) ) }</button>
-					</div>
-				</div>
-			</div>`;
-		}
-
 		if ( m.type === 'order-new' ) {
 			const pick = m.productPick;
 			const hits = m.productHits || [];
@@ -48077,41 +48143,6 @@
 			} );
 			const custDel = $( '#minn-cust-delete' );
 			if ( custDel ) custDel.addEventListener( 'click', () => deleteCustomerFlow( m.full || m.customer ) );
-		}
-
-		if ( m.type === 'product-new' ) {
-			const nameEl = $( '#minn-pn-name' );
-			if ( nameEl ) setTimeout( () => nameEl.focus(), 30 );
-			const createBtn = $( '#minn-pn-create' );
-			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
-				const name = ( ( $( '#minn-pn-name' ) || {} ).value || '' ).trim();
-				if ( ! name ) { toast( __( 'Name is required' ), true ); return; }
-				const price = ( ( $( '#minn-pn-price' ) || {} ).value || '' ).trim();
-				const payload = {
-					name,
-					type: 'simple',
-					status: ( $( '#minn-pn-status' ) || {} ).value || 'draft',
-					regular_price: price,
-					sku: ( ( $( '#minn-pn-sku' ) || {} ).value || '' ).trim(),
-				};
-				createBtn.disabled = true;
-				createBtn.textContent = __( 'Creating…' );
-				try {
-					const created = await api( 'wc/v3/products', {
-						method: 'POST',
-						body: JSON.stringify( payload ),
-					} );
-					toast( __( 'Product created' ) );
-					state.cache.products = null;
-					closeModal();
-					if ( state.route === 'products' ) renderProducts();
-					if ( created && created.id ) openProductModal( created );
-				} catch ( e ) {
-					toast( e.message, true );
-					createBtn.disabled = false;
-					createBtn.textContent = __( 'Create product' );
-				}
-			} );
 		}
 
 		if ( m.type === 'order-new' ) {
