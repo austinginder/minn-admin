@@ -946,6 +946,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
 | `minn_admin_respect_removed_menus` | filter | Return false to stop Minn's nav mirroring `remove_menu_page()` removals (since 0.26.0) |
 | `minn_admin_watched_admin_menus` | filter | Adjust which admin-menu slugs map to which Minn nav items for removal mirroring (since 0.26.0) |
+| `minn_admin_admin_page_hidden` | filter | `( bool, page slug, parent slug )`: return true when your menu tool hid this admin page from the current user on purpose (the parent is `''` for a top-level page). A plugin whose every menu page is hidden, and at least one of them vouched for this way, leaves Minn for that user: its surfaces drop out of the nav, ⌘K and Extensions. Absence alone never counts, because plugins hide their own setup pages too. The bundled White Label CMS adapter is the example (since 0.45.0) |
 | `minn_admin_visibility_providers` | filter | Report an active maintenance / coming-soon / password mode (Overview banner, topbar chip, System check) |
 | `minn_admin_media_folders` | filter | Feed the Media view's folder filter from your folder plugin (since 0.18.0) |
 | `minn_admin_log_sources` | filter | Add a log to System's log viewer (since 0.19.0) |

@@ -5,8 +5,23 @@
  * removals; the nav filters them. Cosmetic like the original — the route
  * stays reachable by URL. Fixture: minn_test_remove_menus (mu-plugin)
  * remove_menu_page()s the listed slugs at admin_menu 999.
+ *
+ * A plugin's whole menu hidden the same way (the White Label CMS case: an
+ * agency hides a plugin from clients) takes that plugin's surfaces out of
+ * Minn for the same user, and brings them back when the menu returns. The
+ * fixture vouches for its removals through minn_admin_admin_page_hidden,
+ * as a menu tool's adapter does; white-label-cms.test.js drives the real
+ * plugin on the builders lab.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { execSync } = require( 'child_process' );
+const { BASE, WP, launch, login, reporter } = require( './helpers' );
+
+// The app re-captures only when its last capture is stale; dropping the
+// stored capture makes the next boot run one, which is the live path.
+const forgetCapture = () => execSync(
+	`wp --path=${ JSON.stringify( WP ) } transient delete minn_admin_notices_v5_1`,
+	{ stdio: 'ignore', timeout: 60000 }
+);
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -80,6 +95,40 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-nav-btn[data-nav="media"]', { timeout: 20000 } );
 		t.check( 'Media back in nav after restore', true, '' );
+
+		// A plugin's whole menu removed: Gravity Forms' only top-level page.
+		const surfaceIds = () => page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/surfaces?_cb=' + Date.now(), {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'include',
+			} );
+			return ( await r.json() ).map( ( s ) => s.id );
+		} );
+		t.check( 'Gravity Forms is a surface before', ( await surfaceIds() ).includes( 'gravity-forms' ), '' );
+		t.check( 'armed fixture (Gravity Forms menu removed)', await setOpt( 'gf_edit_forms' ), '' );
+		const cap3 = await capture();
+		t.check( 'capture says the surfaces changed', cap3 && cap3.ok && true === cap3.surfaces_changed, JSON.stringify( cap3 && cap3.surfaces_changed ) );
+		const after = await surfaceIds();
+		t.check( 'Gravity Forms surface gone, other forms kept', ! after.includes( 'gravity-forms' ) && after.includes( 'wpforms' ), JSON.stringify( after ) );
+		const cap4 = await capture();
+		t.check( 'an unchanged capture says nothing changed', cap4 && cap4.ok && false === cap4.surfaces_changed, JSON.stringify( cap4 && cap4.surfaces_changed ) );
+		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-sidebar', { timeout: 20000 } );
+		const bootIds = await page.evaluate( () => ( window.MINN.surfaces || [] ).map( ( s ) => s.id ) );
+		t.check( 'boot payload leaves it out', ! bootIds.includes( 'gravity-forms' ) && bootIds.length > 0, JSON.stringify( bootIds ) );
+
+		// Live: the menu comes back, the app's own stale capture notices and
+		// re-reads its surfaces without a reload.
+		t.check( 'disarmed fixture (Gravity Forms back)', await setOpt( '' ), '' );
+		forgetCapture();
+		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-sidebar', { timeout: 20000 } );
+		const back = await page.waitForFunction( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/surfaces?_cb=' + Date.now(), {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'include',
+			} );
+			return ( await r.json() ).some( ( s ) => s.id === 'gravity-forms' );
+		}, null, { timeout: 30000, polling: 1000 } ).then( () => true, () => false );
+		t.check( 'the app\'s own capture brings Gravity Forms back', back, '' );
 	} finally {
 		await setOpt( '' ).catch( () => {} );
 		await capture().catch( () => {} );

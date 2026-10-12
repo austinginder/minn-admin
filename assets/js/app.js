@@ -57847,6 +57847,9 @@
 						B.menuRemoved = d.menu_removed;
 						renderNavWorkspace();
 					}
+					// A plugin's whole menu was hidden or brought back
+					// (White Label CMS and the like): re-read the surfaces.
+					if ( d.surfaces_changed ) refreshSurfaces();
 				} )
 				.catch( () => {} );
 		}

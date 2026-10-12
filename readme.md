@@ -397,7 +397,8 @@ Expand only the part of Minn you want to explore.
   their own first-run install get a **setup card** that runs their installer in place. The sidebar
   organizes into **Workspace / Tools / Manage** groups so daily inboxes stay separate from site plumbing,
   and **admin menus a developer removed with `remove_menu_page` stay hidden in Minn too**
-  (cosmetic like the original; opt out with `minn_admin_respect_removed_menus`)
+  (cosmetic like the original; opt out with `minn_admin_respect_removed_menus`), as do
+  plugins **White Label CMS** hides from clients
 - **Backups** — with **UpdraftPlus** or **WPvivid**: sets listed, status cards, a System health
   check answering "is my site backed up?", and **Back up site now** from ⌘K. With **BackWPup**:
   local folder archives and run-now. With **All-in-One WP Migration**: local `.wpress` exports

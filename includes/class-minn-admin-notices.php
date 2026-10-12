@@ -23,6 +23,9 @@ class Minn_Admin_Notices {
 	const NONCE_ACTION = 'minn-notices';
 	const STALE_AFTER  = 15 * MINUTE_IN_SECONDS;
 
+	/** User option (per site) holding the last capture's menu removals. */
+	const REMOVED_OPTION = 'minn_admin_menu_removed';
+
 	/** Core callbacks Minn already covers with its own notifications. */
 	const SKIP_CALLBACKS = array( 'update_nag', 'maintenance_nag', 'site_admin_notice' );
 
@@ -58,13 +61,18 @@ class Minn_Admin_Notices {
 		}
 		$items        = self::capture();
 		$menu_removed = self::capture_removed_menus();
-		self::store( $items, $menu_removed );
+		$owners       = self::capture_removed_owners();
+		$owners_were  = self::removed_owners();
+		self::store( $items, $menu_removed, $owners );
 		wp_send_json(
 			array(
-				'ok'           => true,
-				'count'        => count( $items ),
-				'captured'     => time(),
-				'menu_removed' => $menu_removed,
+				'ok'               => true,
+				'count'            => count( $items ),
+				'captured'         => time(),
+				'menu_removed'     => $menu_removed,
+				// The app re-reads its surface list when this flips, so a
+				// plugin hidden from wp-admin leaves Minn's nav right away.
+				'surfaces_changed' => $owners !== $owners_were,
 			)
 		);
 	}
@@ -119,10 +127,135 @@ class Minn_Admin_Notices {
 		return $removed;
 	}
 
-	/** Stored admin-menu removals for the boot payload (last capture's view). */
+	/**
+	 * Plugins and themes whose every wp-admin menu page is gone for this
+	 * user. This is how agencies hide a plugin from clients: White Label
+	 * CMS, Adminimize or a remove_menu_page() snippet takes the plugin's
+	 * menu away, and Minn drops that plugin's surfaces for the same user
+	 * (Minn_Admin_Surfaces::for_current_user()). Runs in the same capture
+	 * pageload as capture_removed_menus(), after every admin_menu callback.
+	 *
+	 * A page counts only when this user could open it. WordPress hooks a
+	 * top-level page's callback, and adds a submenu page at all, only for
+	 * users with its capability, so a plugin absent because of normal
+	 * capability gating is never reported. A plugin with even one page
+	 * still in the menu (or moved elsewhere in it) is not reported either.
+	 *
+	 * Absence alone proves nothing: plugins hide their own setup and
+	 * wizard pages exactly the way an agency hides a menu. So a plugin is
+	 * reported only when a menu tool vouches for at least one of its pages
+	 * through `minn_admin_admin_page_hidden` (adapters/white-label-cms.php
+	 * answers from White Label CMS's own settings).
+	 *
+	 * @return string[] Owner keys spelled like a surface's `plugin` key:
+	 *                  the plugin's folder, or 'theme:<folder>'.
+	 */
+	public static function capture_removed_owners() {
+		if ( ! apply_filters( 'minn_admin_respect_removed_menus', true ) ) {
+			return array();
+		}
+		global $menu, $submenu, $admin_page_hooks, $_parent_pages;
+		$hooks = is_array( $admin_page_hooks ) ? $admin_page_hooks : array();
+		// What the user sees: every top-level item, and the submenus of the
+		// top-level items still there.
+		$shown = array();
+		foreach ( (array) $menu as $item ) {
+			if ( isset( $item[2] ) ) {
+				$shown[ (string) $item[2] ] = true;
+			}
+		}
+		foreach ( array_keys( $shown ) as $top ) {
+			foreach ( (array) ( $submenu[ $top ] ?? array() ) as $item ) {
+				if ( isset( $item[2] ) ) {
+					$shown[ (string) $item[2] ] = true;
+				}
+			}
+		}
+		// Every page the user could open, by owner: slug => parent ('' for
+		// a top-level page). Pages registered without a menu parent are
+		// never in a menu, so they are left out.
+		$pages = array();
+		foreach ( $hooks as $slug => $unused ) {
+			$owner = self::page_owner( get_plugin_page_hookname( (string) $slug, '' ) );
+			if ( '' !== $owner ) {
+				$pages[ $owner ][ (string) $slug ] = '';
+			}
+		}
+		foreach ( (array) $_parent_pages as $slug => $parent ) {
+			if ( ! isset( $hooks[ (string) $parent ] ) ) {
+				continue;
+			}
+			$owner = self::page_owner( get_plugin_page_hookname( (string) $slug, (string) $parent ) );
+			if ( '' !== $owner && ! isset( $pages[ $owner ][ (string) $slug ] ) ) {
+				$pages[ $owner ][ (string) $slug ] = (string) $parent;
+			}
+		}
+		$removed = array();
+		foreach ( $pages as $owner => $slugs ) {
+			if ( array_intersect_key( $slugs, $shown ) ) {
+				continue;
+			}
+			foreach ( $slugs as $slug => $parent ) {
+				/**
+				 * Filter whether a menu tool hid this admin page from the
+				 * current user on purpose.
+				 *
+				 * @param bool   $hidden Default false.
+				 * @param string $slug   The page's menu slug.
+				 * @param string $parent Its parent menu slug, '' for a
+				 *                       top-level page.
+				 */
+				if ( apply_filters( 'minn_admin_admin_page_hidden', false, (string) $slug, $parent ) ) {
+					$removed[] = (string) $owner;
+					break;
+				}
+			}
+		}
+		sort( $removed );
+		return $removed;
+	}
+
+	/** The plugin or theme that owns an admin page hook, or ''. */
+	private static function page_owner( $hook ) {
+		if ( '' === $hook || empty( $GLOBALS['wp_filter'][ $hook ] ) ) {
+			return '';
+		}
+		foreach ( $GLOBALS['wp_filter'][ $hook ]->callbacks as $cbs ) {
+			foreach ( $cbs as $registered ) {
+				$owner = self::owner_of( $registered['function'] );
+				if ( 'plugin' === $owner['type'] && '' !== $owner['slug'] ) {
+					return $owner['slug'];
+				}
+				if ( 'theme' === $owner['type'] && '' !== $owner['slug'] ) {
+					return 'theme:' . $owner['slug'];
+				}
+				return '';
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Stored admin-menu removals for the boot payload (last capture's view).
+	 * Kept per user and per site, without expiry, so a client never sees a
+	 * hidden item come back for a moment while a fresh capture runs.
+	 */
 	public static function menu_removed() {
+		$kept = get_user_option( self::REMOVED_OPTION );
+		if ( is_array( $kept ) && isset( $kept['nav'] ) && is_array( $kept['nav'] ) ) {
+			return $kept['nav'];
+		}
 		$stored = self::stored();
 		return isset( $stored['menu_removed'] ) && is_array( $stored['menu_removed'] ) ? $stored['menu_removed'] : array();
+	}
+
+	/** Owners whose whole wp-admin menu the last capture found removed. */
+	public static function removed_owners() {
+		if ( ! get_current_user_id() || ! apply_filters( 'minn_admin_respect_removed_menus', true ) ) {
+			return array();
+		}
+		$kept = get_user_option( self::REMOVED_OPTION );
+		return is_array( $kept ) && isset( $kept['owners'] ) && is_array( $kept['owners'] ) ? $kept['owners'] : array();
 	}
 
 	/**
@@ -805,7 +938,7 @@ class Minn_Admin_Notices {
 		return 'minn_admin_notices_v5_' . get_current_user_id();
 	}
 
-	private static function store( $items, $menu_removed = array() ) {
+	private static function store( $items, $menu_removed = array(), $owners = array() ) {
 		set_transient(
 			self::store_key(),
 			array(
@@ -815,6 +948,13 @@ class Minn_Admin_Notices {
 			),
 			DAY_IN_SECONDS
 		);
+		$removed = array(
+			'nav'    => array_values( $menu_removed ),
+			'owners' => array_values( $owners ),
+		);
+		if ( get_user_option( self::REMOVED_OPTION ) !== $removed ) {
+			update_user_option( get_current_user_id(), self::REMOVED_OPTION, $removed );
+		}
 
 		// First-seen stamps drive notification time + unread state. Absent
 		// hashes are kept 30 days so a flickering notice doesn't re-surface

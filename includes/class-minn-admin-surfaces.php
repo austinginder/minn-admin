@@ -41,6 +41,7 @@ class Minn_Admin_Surfaces {
 	 */
 	public static function for_current_user() {
 		$hidden = self::hidden_map();
+		$gone   = Minn_Admin_Notices::removed_owners();
 		// The authoritative surface list comes from all() (apply_filters), the
 		// SAME resolution hide validation and the restore list use, so what
 		// surfaces exist never diverges per endpoint. contributions() runs a
@@ -68,6 +69,12 @@ class Minn_Admin_Surfaces {
 			// payload entirely — nav, palette and routes never see it. The
 			// registry itself is untouched; Your profile lists it for restore.
 			if ( isset( $hidden[ 'surface:' . sanitize_key( $id ) ] ) ) {
+				continue;
+			}
+			// A plugin whose whole wp-admin menu is hidden from this user
+			// (White Label CMS, Adminimize, an agency's remove_menu_page)
+			// is hidden here too. The notices capture finds those owners.
+			if ( $gone && array_intersect( (array) ( $surface['plugin'] ?? array() ), $gone ) ) {
 				continue;
 			}
 			// Attention budget (v1.0 gate G3): workspace is for inbox-shaped
