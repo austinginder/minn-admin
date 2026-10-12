@@ -8,6 +8,8 @@
 
 ### Improved
 
+* **Customers get a page of their own.** A customer on the Customers screen, a subscription or a membership opens `/customers/{id}` instead of a dialog: WooCommerce's own order count and total spent, their last order and how long they have been a customer, every order a page at a time, their subscriptions and memberships, and their profile, billing and shipping addresses, each edited in place. An edit sends only what you changed, so an address the customer updated at checkout meanwhile stays. New order starts an order for them with their details filled in, and the ⋯ menu emails them, lists their orders, opens their user account in Minn or deletes the customer. An order's Customer card opens the customer too, and each page leads back to the other.
+
 * **New orders get a page of their own.** New order on the Orders screen opens a full page in the order page's layout instead of a one-item dialog: several products (a variable product asks which variation), coupons, a shipping charge, the payment method and transaction ID, a customer picked from your store (which fills in their details) or a guest, billing and shipping addresses, a note and the starting status. Nothing is saved until you create the order, and WooCommerce works out discounts, tax and the total as it does. If it refuses a coupon, no order is created, not even a leftover draft, and the page tells you why. You land on the new order's page, where Record payment and the emails are.
 
 * **Adding a product to an order or a subscription picks the variation.** Choosing a variable product in the items search now lists its variations to pick from, instead of adding the parent product, which is not something a customer can buy.
