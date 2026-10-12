@@ -8,7 +8,7 @@
 
 ### Improved
 
-* **New products from the New menu.** On a WooCommerce store, + New now offers Product beside Post and Page, from any screen. It opens the same New product dialog as Add product on the Products screen, and only for people who can make products.
+* **New products start on the full product page.** Add product on the Products screen, and the new Product item in + New (shown on a WooCommerce store to people who can make products), open the same page you edit products on, so images, pricing, inventory, shipping, attributes, variations and organization are all there from the start. The product is created when you first save it, as a draft unless you pick another status, and a variable product saves with its variations in the same go.
 
 * **One changelog link per plugin.** Plugin cards with an update waiting no longer carry a separate "What's new" link: the version number already opens the same notes. Those notes are whatever the plugin's author publishes, so they may not describe the update on offer, and the window and the right-click menu now call them the Changelog.
 
