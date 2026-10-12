@@ -3437,9 +3437,9 @@
 			// /navigation/2577 — one menu's tree editor.
 			state.navEditId = parseInt( parts[ 1 ], 10 );
 			state.route = 'navedit';
-		} else if ( route === 'orders' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
-			// /orders/123 — the order detail page.
-			state.orderPageId = parseInt( parts[ 1 ], 10 );
+		} else if ( route === 'orders' && parts[ 1 ] && ( /^\d+$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
+			// /orders/123 — the order detail page; /orders/new makes one.
+			state.orderPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
 			state.route = 'order';
 		} else if ( route === 'subscriptions' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /subscriptions/42 — the subscription detail page.
@@ -3542,7 +3542,7 @@
 		// Pages that show a save bar, or arm their Save, only once something
 		// changed say so on screen.
 		const view = $( '#minn-view' );
-		if ( view && $( '#minn-p-savebar:not([hidden]):not([data-pristine]), #minn-wcm-savebar:not([hidden]), #minn-wcmp-savebar:not([hidden]), #minn-look-save:not([disabled]), #minn-rd-save:not([disabled])', view ) ) return true;
+		if ( view && $( '#minn-p-savebar:not([hidden]):not([data-pristine]), #minn-no-savebar:not([data-pristine]), #minn-wcm-savebar:not([hidden]), #minn-wcmp-savebar:not([hidden]), #minn-look-save:not([disabled]), #minn-rd-save:not([disabled])', view ) ) return true;
 		const f = activeSettingsForm;
 		return !! ( f && f.route === r && f.host && f.host.isConnected && f.isDirty() );
 	}
@@ -9804,6 +9804,120 @@
 	}
 
 	/**
+	 * Product search for adding a line: the order and subscription items
+	 * dialogs and the new order page. A variable product is not what a
+	 * customer buys, one of its variations is, so picking one lists its
+	 * variations and a variation picks as its parent plus its own id.
+	 *
+	 * opts: { alive() — false once the host is gone, onPick( line ) } where
+	 * line is { product_id, variation_id?, name, price, thumb }.
+	 */
+	function bindProductPicker( search, opts ) {
+		let timer = null;
+		let panel = null;
+		// The search is a round trip; it says so while it runs, and a
+		// stale reply never paints over a newer one (seq).
+		let seq = 0;
+		let spin = null;
+		const setSearching = ( on, label ) => {
+			if ( on && ! spin && search.parentNode ) {
+				spin = document.createElement( 'div' );
+				spin.className = 'minn-loading minn-ei-searching';
+				spin.textContent = label || __( 'Searching products…' );
+				search.parentNode.appendChild( spin );
+			} else if ( ! on && spin ) {
+				spin.remove();
+				spin = null;
+			}
+		};
+		const closePanel = () => { if ( panel ) { panel.remove(); panel = null; } };
+		const pick = ( line ) => {
+			search.value = '';
+			closePanel();
+			opts.onPick( line );
+		};
+		// Rows wear the same shape as the filter bar's product picker:
+		// picture, then the label. No inline style on them: an inline
+		// display:block would beat .minn-of-item's flex and leave the thumb
+		// inline, where its size is ignored.
+		const showRows = ( rows, onRow ) => {
+			closePanel();
+			if ( ! rows.length ) return;
+			panel = document.createElement( 'div' );
+			panel.className = 'minn-ac-panel';
+			panel.style.cssText = 'position:relative; display:block; margin-top:6px; max-height:200px; overflow:auto;';
+			panel.innerHTML = rows.map( ( r, i ) => `<button type="button" class="minn-ac-item minn-of-item" data-ei-pick="${ i }"><span class="minn-of-thumb">${ r.thumb ? `<img src="${ esc( r.thumb ) }" alt="" loading="lazy">` : '' }</span><span class="minn-cell-clip">${ esc( r.label ) }</span></button>` ).join( '' );
+			search.parentNode.appendChild( panel );
+			$$( '[data-ei-pick]', panel ).forEach( ( bn ) =>
+				bn.addEventListener( 'click', () => onRow( rows[ parseInt( bn.dataset.eiPick, 10 ) ] ) )
+			);
+		};
+		const priceOf = ( p ) => String( p.price || p.regular_price || '0' );
+		const variationsOf = async ( hit ) => {
+			const mine = ++seq;
+			closePanel();
+			setSearching( true, __( 'Loading variations…' ) );
+			let vars = [];
+			try {
+				vars = await api( `wc/v3/products/${ hit.id }/variations?per_page=100&_fields=id,sku,price,regular_price,attributes,image,status` );
+			} catch ( e ) {
+				vars = [];
+			}
+			if ( mine !== seq || ! opts.alive() ) return;
+			setSearching( false );
+			const rows = ( Array.isArray( vars ) ? vars : [] )
+				.filter( ( v ) => v.status !== 'private' && v.status !== 'trash' )
+				.map( ( v ) => {
+					// An attribute left as "Any" has no option of its own.
+					const named = ( v.attributes || [] ).map( ( a ) => a.option || sprintf( /* translators: %s: a product attribute, such as Size. */ __( 'Any %s' ), a.name ) ).join( ', ' );
+					const name = hit.name + ( named ? ' — ' + named : '' );
+					return {
+						label: name + ( v.sku ? ' · ' + v.sku : '' ) + ' · ' + orderMoney( {}, priceOf( v ) ),
+						thumb: ( v.image || {} ).src || hit.thumb,
+						line: { product_id: hit.id, variation_id: v.id, name, price: priceOf( v ), thumb: ( v.image || {} ).src || hit.thumb },
+					};
+				} );
+			if ( ! rows.length ) {
+				toast( __( 'This product has no variations to add yet.' ), true );
+				return;
+			}
+			showRows( rows, ( r ) => pick( r.line ) );
+		};
+		search.addEventListener( 'input', () => {
+			clearTimeout( timer );
+			closePanel();
+			setSearching( !! search.value.trim() );
+			timer = setTimeout( async () => {
+				const q = search.value.trim();
+				closePanel();
+				if ( ! q ) { setSearching( false ); return; }
+				const mine = ++seq;
+				try {
+					const hits = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,type,price,regular_price,images` );
+					if ( mine !== seq || ! opts.alive() ) return;
+					setSearching( false );
+					const rows = ( Array.isArray( hits ) ? hits : [] ).map( ( p ) => {
+						const thumb = ( ( p.images || [] )[ 0 ] || {} ).src || '';
+						const variable = p.type === 'variable';
+						return {
+							/* translators: %s: a variable product's name. */
+							label: variable ? sprintf( __( '%s · choose a variation' ), p.name ) : p.name + ( p.sku ? ' · ' + p.sku : '' ) + ' · ' + orderMoney( {}, priceOf( p ) ),
+							thumb,
+							hit: { id: p.id, name: p.name, thumb, variable },
+							line: { product_id: p.id, name: p.name, price: priceOf( p ), thumb },
+						};
+					} );
+					showRows( rows, ( r ) => ( r.hit.variable ? variationsOf( r.hit ) : pick( r.line ) ) );
+				} catch ( e ) {
+					// A failed search paints nothing, but must never leave the
+					// loading line spinning forever.
+					if ( mine === seq ) setSearching( false );
+				}
+			}, 280 );
+		} );
+	}
+
+	/**
 	 * The items dialog's behaviour, shared by orders and subscriptions: per-line
 	 * quantities, removals (strike, then quantity:0 on save) and an add-product
 	 * search. Quantity edits rewrite subtotal/total from the line's unit price —
@@ -9842,66 +9956,12 @@
 			);
 		};
 		const search = $( '#minn-ei-search', sub.overlay );
-		let timer = null;
-		let panel = null;
-		// The search is a round trip; it says so while it runs, and a
-		// stale reply never paints over a newer one (seq).
-		let seq = 0;
-		let spin = null;
-		const setSearching = ( on ) => {
-			if ( on && ! spin && search && search.parentNode ) {
-				spin = document.createElement( 'div' );
-				spin.className = 'minn-loading minn-ei-searching';
-				spin.textContent = __( 'Searching products…' );
-				search.parentNode.appendChild( spin );
-			} else if ( ! on && spin ) {
-				spin.remove();
-				spin = null;
-			}
-		};
-		if ( search ) search.addEventListener( 'input', () => {
-			clearTimeout( timer );
-			if ( panel ) { panel.remove(); panel = null; }
-			setSearching( !! search.value.trim() );
-			timer = setTimeout( async () => {
-				const q = search.value.trim();
-				if ( panel ) { panel.remove(); panel = null; }
-				if ( ! q ) { setSearching( false ); return; }
-				const mine = ++seq;
-				try {
-					const hits = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,price,regular_price,images` );
-					if ( mine !== seq || ! sub.overlay.isConnected ) return;
-					setSearching( false );
-					if ( ! Array.isArray( hits ) || ! hits.length ) return;
-					panel = document.createElement( 'div' );
-					panel.className = 'minn-ac-panel';
-					panel.style.cssText = 'position:relative; display:block; margin-top:6px; max-height:160px; overflow:auto;';
-					// Rows wear the same shape as the filter bar's product
-					// picker: picture, then the label. No inline style here —
-					// an inline display:block would beat .minn-of-item's flex
-					// and leave the thumb inline, where its size is ignored.
-					panel.innerHTML = hits.map( ( p ) => {
-						const thumb = ( ( p.images || [] )[ 0 ] || {} ).src || '';
-						const label = esc( p.name ) + ( p.sku ? ' · ' + esc( p.sku ) : '' ) + ' · $' + esc( String( p.price || p.regular_price || '0' ) );
-						return `<button type="button" class="minn-ac-item minn-of-item" data-ei-pick="${ p.id }"><span class="minn-of-thumb">${ thumb ? `<img src="${ esc( thumb ) }" alt="" loading="lazy">` : '' }</span><span class="minn-cell-clip">${ label }</span></button>`;
-					} ).join( '' );
-					search.parentNode.appendChild( panel );
-					$$( '[data-ei-pick]', panel ).forEach( ( bn ) =>
-						bn.addEventListener( 'click', () => {
-							const hit = hits.find( ( p ) => p.id === parseInt( bn.dataset.eiPick, 10 ) );
-							if ( ! hit ) return;
-							adds.push( { product_id: hit.id, qty: 1, name: hit.name, price: hit.price || hit.regular_price || '0' } );
-							search.value = '';
-							if ( panel ) { panel.remove(); panel = null; }
-							paintAdds();
-						} )
-					);
-				} catch ( e ) {
-					// A failed search paints nothing, but must never
-					// leave the loading line spinning forever.
-					if ( mine === seq ) setSearching( false );
-				}
-			}, 280 );
+		if ( search ) bindProductPicker( search, {
+			alive: () => sub.overlay.isConnected,
+			onPick: ( line ) => {
+				adds.push( { product_id: line.product_id, variation_id: line.variation_id, qty: 1, name: line.name, price: line.price } );
+				paintAdds();
+			},
 		} );
 		if ( sv ) sv.addEventListener( 'click', async () => {
 			const line_items = [];
@@ -9919,7 +9979,9 @@
 					} );
 				}
 			} );
-			adds.forEach( ( a ) => line_items.push( { product_id: a.product_id, quantity: a.qty } ) );
+			adds.forEach( ( a ) => line_items.push( a.variation_id
+				? { product_id: a.product_id, variation_id: a.variation_id, quantity: a.qty }
+				: { product_id: a.product_id, quantity: a.qty } ) );
 			if ( ! line_items.length ) { sub.close(); return; }
 			sv.disabled = true;
 			sv.textContent = 'Saving…';
@@ -10925,6 +10987,10 @@
 			view.innerHTML = `<div class="minn-empty">${ esc( __( "You don't have access to orders on this site." ) ) }</div>`;
 			return;
 		}
+		if ( ! state.orderPageId ) {
+			renderNewOrderPage();
+			return;
+		}
 		let m = state.orderPage;
 		const arrived = takePageReturn();
 		if ( ! m || m.order.id !== state.orderPageId ) {
@@ -10965,6 +11031,473 @@
 		const backBtn = $( '#minn-op-back' );
 		if ( backBtn ) backBtn.addEventListener( 'click', () => go( back.route ) );
 		if ( ! loading && ! m.loadError ) bindOrderDetail( m );
+	}
+
+	/* ===== New order (/orders/new) ===== */
+
+	// The statuses a new order can start in: the rest describe what happened
+	// to an order (cancelled, refunded, failed), not where one begins.
+	const NEW_ORDER_STATUSES = [ 'pending', 'processing', 'on-hold', 'completed' ];
+	const NO_BILLING_IDS = { first: 'first_name', last: 'last_name', email: 'email', phone: 'phone', addr1: 'address_1', addr2: 'address_2', city: 'city', state: 'state', postcode: 'postcode', country: 'country' };
+	const NO_SHIPPING_IDS = { addr1: 'address_1', addr2: 'address_2', city: 'city', state: 'state', postcode: 'postcode', country: 'country' };
+
+	/** An address with its empty fields left out, so typing a value and
+	 *  deleting it again reads as no change. */
+	function newOrderFilled( addr, keys ) {
+		const out = {};
+		( keys || Object.keys( addr || {} ) ).forEach( ( k ) => {
+			const v = String( ( addr || {} )[ k ] == null ? '' : addr[ k ] ).trim();
+			if ( v ) out[ k ] = v;
+		} );
+		return out;
+	}
+
+	function newOrderFingerprint( m ) {
+		return JSON.stringify( [
+			m.items.map( ( it ) => [ it.product_id, it.variation_id || 0, it.qty ] ),
+			m.coupons,
+			m.customer ? m.customer.id : 0,
+			newOrderFilled( m.billing ),
+			newOrderFilled( m.shipping ),
+			String( m.note || '' ).trim(),
+			m.status,
+			newOrderFilled( m.pay ),
+			newOrderFilled( m.shipLine ),
+		] );
+	}
+
+	function newOrderLinesHtml( m ) {
+		if ( ! m.items.length ) {
+			return `<div class="minn-toggle-desc">${ esc( __( 'No items yet. Search for a product below to add it.' ) ) }</div>`;
+		}
+		return m.items.map( ( it, i ) => `
+			<div class="minn-ei-line" data-noline="${ i }">
+				<span class="minn-of-thumb">${ it.thumb ? `<img src="${ esc( it.thumb ) }" alt="" loading="lazy">` : '' }</span>
+				<span class="minn-cell-clip">${ esc( it.name ) }</span>
+				<span class="minn-ei-unit">${ esc( orderMoney( {}, it.price ) ) }</span>
+				<input class="minn-input minn-ei-qty" data-noqty="${ i }" type="number" min="1" step="1" value="${ it.qty }" aria-label="${ esc( sprintf( /* translators: %s: a product's name. */ __( 'Quantity of %s' ), it.name ) ) }">
+				<button type="button" class="minn-pdl-x" data-nodel="${ i }" title="${ esc( __( 'Remove item' ) ) }">×</button>
+			</div>` ).join( '' );
+	}
+
+	// What the page can add up itself. Discounts, tax and the total are
+	// WooCommerce's to work out, and it does when the order is created.
+	function newOrderSumsHtml( m ) {
+		const subtotal = m.items.reduce( ( n, it ) => n + ( parseFloat( it.price ) || 0 ) * it.qty, 0 );
+		const ship = parseFloat( m.shipLine.total );
+		return `
+			<div class="minn-order-item"><span></span><span>${ esc( __( 'Subtotal' ) ) }</span><span class="minn-order-line-total">${ esc( orderMoney( {}, subtotal ) ) }</span></div>
+			${ ship > 0 ? `<div class="minn-order-item"><span></span><span>${ esc( __( 'Shipping' ) ) }</span><span class="minn-order-line-total">${ esc( orderMoney( {}, ship ) ) }</span></div>` : '' }
+			<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'Discounts, tax and the total are worked out by WooCommerce when the order is created.' ) ) }</div>`;
+	}
+
+	function newOrderCountLabel( m ) {
+		const n = m.items.reduce( ( c, it ) => c + it.qty, 0 );
+		/* translators: %d: number of items on the order. */
+		return n ? sprintf( _n( '%d item', '%d items', n ), n ) : __( 'Items' );
+	}
+
+	function newOrderCouponsHtml( m ) {
+		return m.coupons.map( ( code, i ) => `
+			<div class="minn-ei-line" data-nocoupon="${ esc( code ) }">
+				<span class="minn-cell-clip">${ esc( code ) }</span>
+				<button type="button" class="minn-pdl-x" data-nocdel="${ i }" title="${ esc( __( 'Remove coupon' ) ) }">×</button>
+			</div>` ).join( '' );
+	}
+
+	/**
+	 * /orders/new: an order put together on the order page's own cards,
+	 * edited in place and kept here until Create. Nothing is stored before
+	 * then. WooCommerce creates the order, applies its coupons and works out
+	 * discounts, tax and the total in that one request, and the order's own
+	 * page takes over from there (Record payment, emails, refunds).
+	 */
+	function renderNewOrderPage() {
+		const view = $( '#minn-view' );
+		let m = state.newOrder;
+		if ( ! m ) {
+			m = state.newOrder = {
+				loading: true,
+				items: [],
+				coupons: [],
+				customer: null,
+				billing: {},
+				shipping: {},
+				note: '',
+				status: 'pending',
+				pay: { method: '', title: '', txn: '' },
+				shipLine: { title: '', total: '' },
+				gateways: null,
+			};
+			m.clean = newOrderFingerprint( m );
+			// The payment methods load before the first paint, as a product
+			// page's vocabularies do, so nothing repaints under the typing.
+			loadWcGateways().then( ( g ) => {
+				m.gateways = g || [];
+				m.loading = false;
+				if ( state.newOrder === m && state.route === 'order' && ! state.orderPageId ) renderNewOrderPage();
+			} );
+		}
+		const field = ( kind, values ) => orderEditFormHtml( { full: values }, kind );
+		view.innerHTML = `
+		<div class="minn-order-page minn-order-page-wide minn-order-new">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-op-back">← ${ esc( __( 'Orders' ) ) }</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-order-head-row"><span class="minn-modal-title">${ esc( __( 'New order' ) ) }</span></div>
+					<div class="minn-modal-sub">${ esc( __( 'Nothing is saved until you create the order.' ) ) }</div>
+				</div>
+			</div>
+			<div class="minn-order-page-body">
+				${ m.loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading…' ) ) }</div></div>` : `
+				<div class="minn-order-body">
+					<div class="minn-order-layout">
+						<div class="minn-order-main">
+							<div class="minn-order-sec minn-order-itemscard" data-nocard="items">
+								<div class="minn-order-card-head"><div class="minn-side-title" id="minn-no-count">${ esc( newOrderCountLabel( m ) ) }</div></div>
+								<div class="minn-order-fields">
+									<div class="minn-ei-lines" id="minn-no-lines">${ newOrderLinesHtml( m ) }</div>
+									<div><div class="minn-field-label">${ esc( __( 'Add product' ) ) }</div>
+										<input class="minn-input" id="minn-no-search" placeholder="${ esc( __( 'Search products…' ) ) }" autocomplete="off">
+									</div>
+								</div>
+								<div class="minn-order-items" id="minn-no-sums" style="margin-top:12px;">${ newOrderSumsHtml( m ) }</div>
+							</div>
+							<div class="minn-order-sec" data-nocard="coupons">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Coupons' ) ) }</div></div>
+								<div class="minn-order-fields">
+									<div class="minn-ei-lines" id="minn-no-coupons">${ newOrderCouponsHtml( m ) }</div>
+									<div style="display:flex; gap:8px;">
+										<input class="minn-input" id="minn-no-coupon" placeholder="${ esc( __( 'Coupon code' ) ) }" autocomplete="off" style="flex:1; min-width:0;">
+										<button type="button" class="minn-btn-soft" id="minn-no-coupon-add">${ esc( __( 'Add' ) ) }</button>
+									</div>
+									<div class="minn-toggle-desc">${ esc( __( 'Applied when the order is created. If WooCommerce refuses a code, no order is created and it says why.' ) ) }</div>
+								</div>
+							</div>
+							<div class="minn-order-sec" data-nocard="shipcharge">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Shipping' ) ) }</div></div>
+								<div class="minn-order-field-row">
+									<div><div class="minn-field-label">${ esc( __( 'Method name' ) ) }</div><input class="minn-input" id="minn-no-shiptitle" data-nof="shipLine.title" value="${ esc( m.shipLine.title ) }" placeholder="${ esc( __( 'Shipping' ) ) }"></div>
+									<div><div class="minn-field-label">${ esc( __( 'Amount' ) ) }</div><input class="minn-input" id="minn-no-shiptotal" data-nof="shipLine.total" value="${ esc( m.shipLine.total ) }" inputmode="decimal" placeholder="0.00"></div>
+								</div>
+								<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Optional. A shipping charge to add to the order.' ) ) }</div>
+							</div>
+							<div class="minn-order-sec minn-order-payment" data-nocard="payment">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Payment' ) ) }</div></div>
+								<div class="minn-order-field-row">
+									<div>
+										<div class="minn-field-label">${ esc( __( 'Payment method' ) ) }</div>
+										<div class="minn-ac" data-noc="paymethod"><input class="minn-input minn-ac-input" placeholder="${ esc( __( 'Payment method' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Payment method' ) ) }"><div class="minn-ac-panel" hidden></div></div>
+									</div>
+									<div>
+										<div class="minn-field-label">${ esc( __( 'Transaction ID' ) ) }</div>
+										<input class="minn-input" id="minn-no-txn" data-nof="pay.txn" spellcheck="false" value="${ esc( m.pay.txn ) }" placeholder="${ esc( __( 'Check number, reference…' ) ) }">
+									</div>
+								</div>
+								<div id="minn-no-paytitle-wrap" style="margin-top:8px;${ m.pay.method === 'other' ? '' : ' display:none;' }">
+									<div class="minn-field-label">${ esc( __( 'Method name' ) ) }</div>
+									<input class="minn-input" id="minn-no-paytitle" data-nof="pay.title" value="${ esc( m.pay.title ) }" placeholder="${ esc( __( 'How this method reads on the order' ) ) }">
+								</div>
+								<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'To mark the order paid, use Record payment on its page once it is created.' ) ) }</div>
+							</div>
+						</div>
+						<div class="minn-order-side">
+							<div class="minn-order-sec" data-nocard="status">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Status' ) ) }</div></div>
+								<div class="minn-ac" data-noc="status"><input class="minn-input minn-ac-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Status' ) ) }"><div class="minn-ac-panel" hidden></div></div>
+							</div>
+							<div class="minn-order-sec minn-order-customer" data-nocard="customer">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Customer' ) ) }</div></div>
+								${ m.customer ? `
+								<div class="minn-ei-line" id="minn-no-custchip" style="margin-bottom:12px;">
+									<span class="minn-cell-clip"><strong>${ esc( m.customer.name ) }</strong>${ m.customer.email ? ' · ' + esc( m.customer.email ) : '' }</span>
+									<button type="button" class="minn-pdl-x" id="minn-no-cust-clear" title="${ esc( __( 'Make it a guest order' ) ) }">×</button>
+								</div>` : `
+								<div style="margin-bottom:12px;">
+									<input class="minn-input" id="minn-no-cust-search" placeholder="${ esc( __( 'Search customers…' ) ) }" autocomplete="off">
+									<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'Pick a customer to fill in their details, or type them in for a guest order.' ) ) }</div>
+								</div>` }
+								${ field( 'customer', { billing: m.billing } ) }
+							</div>
+							<div class="minn-order-sec minn-order-shipto" data-nocard="shipping">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Shipping address' ) ) }</div></div>
+								${ field( 'shipping', { shipping: m.shipping } ) }
+								<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Leave it empty for an order with nothing to ship.' ) ) }</div>
+							</div>
+							<div class="minn-order-sec minn-order-custnote" data-nocard="note">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Notes' ) ) }</div></div>
+								${ field( 'note', { customer_note: m.note } ) }
+							</div>
+						</div>
+					</div>
+					<div class="minn-psavebar" id="minn-no-savebar" data-pristine>
+						<span class="minn-psavebar-note">${ esc( __( 'New order' ) ) }</span>
+						<button class="minn-btn-soft" id="minn-no-cancel" type="button">${ esc( __( 'Cancel' ) ) }</button>
+						<button class="minn-btn-primary" id="minn-no-create" type="button">${ esc( __( 'Create order' ) ) }</button>
+					</div>
+				</div>` }
+			</div>
+		</div>`;
+		const backBtn = $( '#minn-op-back' );
+		if ( backBtn ) backBtn.addEventListener( 'click', () => go( 'orders' ) );
+		if ( ! m.loading ) bindNewOrderPage( m );
+	}
+
+	function bindNewOrderPage( m ) {
+		const host = $( '.minn-order-new' );
+		const bar = $( '#minn-no-savebar' );
+		const syncDirty = () => { if ( bar ) bar.toggleAttribute( 'data-pristine', newOrderFingerprint( m ) === m.clean ); };
+		const paintItems = () => {
+			$( '#minn-no-lines' ).innerHTML = newOrderLinesHtml( m );
+			$( '#minn-no-count' ).textContent = newOrderCountLabel( m );
+			$( '#minn-no-sums' ).innerHTML = newOrderSumsHtml( m );
+			syncDirty();
+		};
+		const paintCoupons = () => {
+			$( '#minn-no-coupons' ).innerHTML = newOrderCouponsHtml( m );
+			syncDirty();
+		};
+		// Everything typed lands on the model as it is typed, so a repaint
+		// (picking a customer fills the address) never loses it.
+		host.addEventListener( 'input', ( e ) => {
+			const t = e.target;
+			if ( ! t ) return;
+			if ( t.dataset.noqty != null ) {
+				const it = m.items[ parseInt( t.dataset.noqty, 10 ) ];
+				if ( it ) it.qty = Math.max( 1, parseInt( t.value, 10 ) || 1 );
+				$( '#minn-no-count' ).textContent = newOrderCountLabel( m );
+				$( '#minn-no-sums' ).innerHTML = newOrderSumsHtml( m );
+			} else if ( t.dataset.nof ) {
+				const [ group, key ] = t.dataset.nof.split( '.' );
+				m[ group ][ key ] = t.value;
+				if ( 'shipLine' === group ) $( '#minn-no-sums' ).innerHTML = newOrderSumsHtml( m );
+			} else if ( t.id && t.id.indexOf( 'minn-ob-' ) === 0 && NO_BILLING_IDS[ t.id.slice( 8 ) ] ) {
+				m.billing[ NO_BILLING_IDS[ t.id.slice( 8 ) ] ] = t.value;
+			} else if ( t.id && t.id.indexOf( 'minn-os-' ) === 0 && NO_SHIPPING_IDS[ t.id.slice( 8 ) ] ) {
+				m.shipping[ NO_SHIPPING_IDS[ t.id.slice( 8 ) ] ] = t.value;
+			} else if ( t.id === 'minn-o-note' ) {
+				m.note = t.value;
+			}
+			syncDirty();
+		} );
+		host.addEventListener( 'click', ( e ) => {
+			const del = e.target.closest( '[data-nodel]' );
+			if ( del ) {
+				m.items.splice( parseInt( del.dataset.nodel, 10 ), 1 );
+				paintItems();
+				return;
+			}
+			const cdel = e.target.closest( '[data-nocdel]' );
+			if ( cdel ) {
+				m.coupons.splice( parseInt( cdel.dataset.nocdel, 10 ), 1 );
+				paintCoupons();
+			}
+		} );
+		const search = $( '#minn-no-search' );
+		if ( search ) bindProductPicker( search, {
+			alive: () => state.newOrder === m && search.isConnected,
+			onPick: ( line ) => {
+				// The same product again is one more of it, as in a cart.
+				const same = m.items.find( ( it ) => it.product_id === line.product_id && ( it.variation_id || 0 ) === ( line.variation_id || 0 ) );
+				if ( same ) same.qty += 1;
+				else m.items.push( Object.assign( {}, line, { qty: 1 } ) );
+				paintItems();
+				search.focus();
+			},
+		} );
+		const couponIn = $( '#minn-no-coupon' );
+		const addCoupon = () => {
+			// WooCommerce stores codes lowercased, so a duplicate is a
+			// duplicate whatever the case it was typed in.
+			const code = ( ( couponIn && couponIn.value ) || '' ).trim().toLowerCase();
+			if ( ! code ) return;
+			if ( m.coupons.indexOf( code ) !== -1 ) {
+				toast( __( 'That coupon is already on this order' ), true );
+				return;
+			}
+			m.coupons.push( code );
+			couponIn.value = '';
+			paintCoupons();
+			couponIn.focus();
+		};
+		const couponAdd = $( '#minn-no-coupon-add' );
+		if ( couponAdd ) couponAdd.addEventListener( 'click', addCoupon );
+		if ( couponIn ) couponIn.addEventListener( 'keydown', ( e ) => {
+			if ( e.key !== 'Enter' ) return;
+			e.preventDefault();
+			addCoupon();
+		} );
+		const copyAddr = $( '[data-ocopyaddr]', $( '[data-nocard="shipping"]' ) );
+		if ( copyAddr ) copyAddr.addEventListener( 'click', () => {
+			Object.keys( NO_SHIPPING_IDS ).forEach( ( id ) => {
+				const el = $( '#minn-os-' + id );
+				if ( el ) el.value = m.billing[ NO_SHIPPING_IDS[ id ] ] || '';
+				m.shipping[ NO_SHIPPING_IDS[ id ] ] = el ? el.value : '';
+			} );
+			syncDirty();
+		} );
+		const statusWrap = $( '[data-noc="status"]' );
+		if ( statusWrap ) bindAutocomplete( statusWrap,
+			NEW_ORDER_STATUSES.map( ( st ) => ( { value: st, label: orderStatusLabel( st ) } ) ),
+			{ strict: true, value: m.status, onPick: ( v ) => { m.status = v; syncDirty(); } } );
+		const payWrap = $( '[data-noc="paymethod"]' );
+		if ( payWrap ) bindAutocomplete( payWrap,
+			orderPayChoices( { gateways: m.gateways }, {} ).map( ( g ) => ( { value: g.id, label: g.title } ) ),
+			{
+				strict: true,
+				value: m.pay.method,
+				onPick: ( v ) => {
+					m.pay.method = v;
+					const w = $( '#minn-no-paytitle-wrap' );
+					if ( w ) w.style.display = v === 'other' ? '' : 'none';
+					syncDirty();
+				},
+			} );
+		bindNewOrderCustomerSearch( m );
+		const clearCust = $( '#minn-no-cust-clear' );
+		if ( clearCust ) clearCust.addEventListener( 'click', () => {
+			// A guest order keeps the details already filled in; only the
+			// link to the account goes.
+			m.customer = null;
+			renderNewOrderPage();
+		} );
+		const cancel = $( '#minn-no-cancel' );
+		if ( cancel ) cancel.addEventListener( 'click', () => go( 'orders' ) );
+		const create = $( '#minn-no-create' );
+		if ( create ) create.addEventListener( 'click', () => createNewOrder( m, create ) );
+		syncDirty();
+	}
+
+	// Picking a customer links the order to their account and fills in the
+	// details from it; the fields stay editable for this order alone.
+	function bindNewOrderCustomerSearch( m ) {
+		const input = $( '#minn-no-cust-search' );
+		if ( ! input ) return;
+		let timer = null;
+		let seq = 0;
+		let panel = null;
+		const closePanel = () => { if ( panel ) { panel.remove(); panel = null; } };
+		input.addEventListener( 'input', () => {
+			clearTimeout( timer );
+			closePanel();
+			timer = setTimeout( async () => {
+				const q = input.value.trim();
+				if ( ! q ) return;
+				const mine = ++seq;
+				let rows = [];
+				try {
+					rows = await api( `wc/v3/customers?search=${ encodeURIComponent( q ) }&per_page=8&role=all&_fields=id,first_name,last_name,email,billing,shipping` );
+				} catch ( e ) {
+					rows = [];
+				}
+				if ( mine !== seq || state.newOrder !== m || ! input.isConnected ) return;
+				rows = Array.isArray( rows ) ? rows : [];
+				if ( ! rows.length ) return;
+				panel = document.createElement( 'div' );
+				panel.className = 'minn-ac-panel';
+				panel.style.cssText = 'position:relative; display:block; margin-top:6px; max-height:200px; overflow:auto;';
+				panel.innerHTML = rows.map( ( c, i ) => {
+					const name = [ c.first_name, c.last_name ].filter( Boolean ).join( ' ' ) || c.email || ( '#' + c.id );
+					return `<button type="button" class="minn-ac-item" data-nocust="${ i }"><span class="minn-cell-clip">${ esc( name ) }${ c.email ? ' · ' + esc( c.email ) : '' }</span></button>`;
+				} ).join( '' );
+				input.parentNode.appendChild( panel );
+				$$( '[data-nocust]', panel ).forEach( ( bn ) =>
+					bn.addEventListener( 'click', () => {
+						const c = rows[ parseInt( bn.dataset.nocust, 10 ) ];
+						if ( ! c ) return;
+						const b = c.billing || {};
+						const sh = c.shipping || {};
+						m.customer = {
+							id: c.id,
+							name: [ c.first_name, c.last_name ].filter( Boolean ).join( ' ' ) || c.email || ( '#' + c.id ),
+							email: c.email || '',
+						};
+						m.billing = Object.assign( {}, b, {
+							first_name: b.first_name || c.first_name || '',
+							last_name: b.last_name || c.last_name || '',
+							email: b.email || c.email || '',
+						} );
+						m.shipping = Object.assign( {}, sh );
+						renderNewOrderPage();
+					} )
+				);
+			}, 280 );
+		} );
+	}
+
+	async function createNewOrder( m, btn ) {
+		if ( ! m.items.length ) {
+			toast( __( 'Add at least one product to the order.' ), true );
+			const s = $( '#minn-no-search' );
+			if ( s ) s.focus();
+			return;
+		}
+		const shipTotal = String( m.shipLine.total || '' ).trim();
+		if ( shipTotal !== '' && Number.isNaN( parseFloat( shipTotal ) ) ) {
+			toast( __( 'The shipping amount has to be a number.' ), true );
+			return;
+		}
+		const billing = newOrderFilled( m.billing );
+		const body = {
+			status: m.status,
+			billing,
+			line_items: m.items.map( ( it ) => ( it.variation_id
+				? { product_id: it.product_id, variation_id: it.variation_id, quantity: it.qty }
+				: { product_id: it.product_id, quantity: it.qty } ) ),
+		};
+		if ( m.customer ) body.customer_id = m.customer.id;
+		// The address card has no name fields, as on the order page: an
+		// address typed in takes the billing name, unless the picked
+		// customer's own shipping address brought one.
+		const shipping = newOrderFilled( m.shipping );
+		if ( Object.keys( NO_SHIPPING_IDS ).some( ( id ) => shipping[ NO_SHIPPING_IDS[ id ] ] ) ) {
+			body.shipping = Object.assign( { first_name: billing.first_name || '', last_name: billing.last_name || '' }, shipping );
+		}
+		if ( m.coupons.length ) body.coupon_lines = m.coupons.map( ( code ) => ( { code } ) );
+		if ( shipTotal !== '' ) {
+			body.shipping_lines = [ {
+				method_id: 'other',
+				method_title: String( m.shipLine.title || '' ).trim() || __( 'Shipping' ),
+				total: parseFloat( shipTotal ).toFixed( 2 ),
+			} ];
+		}
+		const note = String( m.note || '' ).trim();
+		if ( note ) body.customer_note = note;
+		if ( m.pay.method ) {
+			const choice = orderPayChoices( { gateways: m.gateways }, {} ).find( ( g ) => g.id === m.pay.method );
+			body.payment_method = m.pay.method;
+			body.payment_method_title = m.pay.method === 'other'
+				? ( String( m.pay.title || '' ).trim() || 'Other' )
+				: ( choice ? choice.title : m.pay.method );
+		}
+		const txn = String( m.pay.txn || '' ).trim();
+		if ( txn ) body.transaction_id = txn;
+		btn.disabled = true;
+		btn.textContent = __( 'Creating…' );
+		let created;
+		try {
+			created = await api( 'wc/v3/orders', { method: 'POST', body: JSON.stringify( body ) } );
+		} catch ( e ) {
+			// A coupon WooCommerce refuses fails the request, but the order it
+			// had started is left behind as a draft. As far as the person can
+			// tell nothing was created, so that draft goes too.
+			const draft = e.data ? parseInt( e.data.new_draft_order_id, 10 ) : 0;
+			if ( draft ) await api( `wc/v3/orders/${ draft }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+			toast( decodeEntities( e.message ), true );
+			btn.disabled = false;
+			btn.textContent = __( 'Create order' );
+			return;
+		}
+		state.cache.orders = null;
+		state.cache.orderSummary = null;
+		/* translators: %s: the new order's number. */
+		toast( sprintf( __( 'Order #%s created' ), created.number || created.id ) );
+		if ( state.newOrder !== m ) return;
+		// The order's own page takes this address's place, so Back returns to
+		// the list rather than to an empty form.
+		state.newOrder = null;
+		setPath( 'orders/' + created.id, true );
+		onRouteChange();
 	}
 
 	// The store's currency symbol from the boot payload. The fallback only
@@ -11205,7 +11738,7 @@
 				} )
 			);
 			const addEarly = $( '#minn-order-add', view );
-			if ( addEarly ) addEarly.addEventListener( 'click', () => openNewOrderModal() );
+			if ( addEarly ) addEarly.addEventListener( 'click', () => go( 'orders/new' ) );
 			Promise.all( [ loadOrders(), state.cache.orderSummary ? null : loadOrderSummary() ] )
 				.then( renderIfCurrent( 'orders' ) ).catch( showErr );
 			return;
@@ -11259,7 +11792,7 @@
 			} )
 		);
 		const addOrderBtn = $( '#minn-order-add', view );
-		if ( addOrderBtn ) addOrderBtn.addEventListener( 'click', () => openNewOrderModal() );
+		if ( addOrderBtn ) addOrderBtn.addEventListener( 'click', () => go( 'orders/new' ) );
 		bindListFilterBar( view );
 		// Clicking an order is navigation now — the /orders/{id} page is the
 		// primary detail surface; the modal survives as Quick view (the row's
@@ -11340,15 +11873,6 @@
 		// dropped, presets normalized) and turn any restored id into a name.
 		syncOrderFiltersUrl();
 		resolveOrderFilterLabels( view );
-	}
-
-	function openNewOrderModal() {
-		state.modal = {
-			type: 'order-new',
-			productPick: null,
-			productHits: [],
-		};
-		renderOverlays();
 	}
 
 	/* ===== Subscriptions (WooCommerce Subscriptions) ===== */
@@ -46911,61 +47435,6 @@
 			</div>`;
 		}
 
-		if ( m.type === 'order-new' ) {
-			const pick = m.productPick;
-			const hits = m.productHits || [];
-			return `
-			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal wide">
-					<div class="minn-modal-head">
-						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">${ esc( __( 'New order' ) ) }</div>
-							<div class="minn-modal-sub">${ esc( __( 'Simple draft or processing order with one line item' ) ) }</div>
-						</div>
-						<button class="minn-x-btn" id="minn-modal-close">×</button>
-					</div>
-					<div class="minn-order-body">
-						<div class="minn-order-grid">
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Customer' ) ) }</div>
-								<div class="minn-order-fields">
-									<div class="minn-order-field-row">
-										<div><div class="minn-field-label">${ esc( __( 'First name' ) ) }</div><input class="minn-input" id="minn-on-first" value=""></div>
-										<div><div class="minn-field-label">${ esc( __( 'Last name' ) ) }</div><input class="minn-input" id="minn-on-last" value=""></div>
-									</div>
-									<div><div class="minn-field-label">${ esc( __( 'Email' ) ) }</div><input class="minn-input" id="minn-on-email" type="email" placeholder="customer@example.com"></div>
-									<div><div class="minn-field-label">${ esc( __( 'Status' ) ) }</div>
-										<select class="minn-input" id="minn-on-status">
-											<option value="pending">${ esc( __( 'Pending payment' ) ) }</option>
-											<option value="processing" selected>${ esc( __( 'Processing' ) ) }</option>
-											<option value="on-hold">${ esc( __( 'On hold' ) ) }</option>
-										</select>
-									</div>
-								</div>
-							</div>
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Line item' ) ) }</div>
-								<div class="minn-order-fields">
-									<div><div class="minn-field-label">${ esc( __( 'Product' ) ) }</div>
-										<input class="minn-input" id="minn-on-prod-search" placeholder="${ esc( __( 'Search products…' ) ) }" autocomplete="off">
-										${ hits.length ? `<div class="minn-ac-panel" id="minn-on-prod-hits" style="position:relative; display:block; margin-top:6px; max-height:160px; overflow:auto;">
-											${ hits.map( ( p ) => `<button type="button" class="minn-ac-item" data-pick-prod="${ p.id }" style="display:block; width:100%; text-align:left;">${ esc( p.name ) }${ p.sku ? ' · ' + esc( p.sku ) : '' } · $${ esc( String( p.price || p.regular_price || '0' ) ) }</button>` ).join( '' ) }
-										</div>` : '' }
-									</div>
-									${ pick ? `<div class="minn-toggle-desc">${ esc( __( 'Selected:' ) ) } <strong>${ esc( pick.name ) }</strong> (#${ pick.id })</div>` : `<div class="minn-toggle-desc">${ esc( __( 'Pick a published product to add.' ) ) }</div>` }
-									<div><div class="minn-field-label">${ esc( __( 'Quantity' ) ) }</div><input class="minn-input" id="minn-on-qty" type="number" min="1" value="1"></div>
-								</div>
-							</div>
-						</div>
-					</div>
-					<div class="minn-modal-actions">
-						<button class="minn-btn-soft" id="minn-modal-close2" type="button">${ esc( __( 'Cancel' ) ) }</button>
-						<button class="minn-btn-primary" id="minn-on-create" type="button" ${ pick ? '' : 'disabled' }>${ esc( __( 'Create order' ) ) }</button>
-					</div>
-				</div>
-			</div>`;
-		}
-
 		if ( m.type === 'order-email' ) {
 			const o = m.order || {};
 			return `
@@ -48143,121 +48612,6 @@
 			} );
 			const custDel = $( '#minn-cust-delete' );
 			if ( custDel ) custDel.addEventListener( 'click', () => deleteCustomerFlow( m.full || m.customer ) );
-		}
-
-		if ( m.type === 'order-new' ) {
-			const search = $( '#minn-on-prod-search' );
-			const paintHits = ( hits ) => {
-				if ( state.modal && state.modal.type === 'order-new' ) state.modal.productHits = hits;
-				let panel = $( '#minn-on-prod-hits' );
-				if ( ! hits.length ) {
-					if ( panel ) panel.remove();
-					return;
-				}
-				const html = hits.map( ( p ) =>
-					`<button type="button" class="minn-ac-item" data-pick-prod="${ p.id }" style="display:block; width:100%; text-align:left;">${ esc( p.name ) }${ p.sku ? ' · ' + esc( p.sku ) : '' } · $${ esc( String( p.price || p.regular_price || '0' ) ) }</button>`
-				).join( '' );
-				if ( ! panel ) {
-					panel = document.createElement( 'div' );
-					panel.id = 'minn-on-prod-hits';
-					panel.className = 'minn-ac-panel';
-					panel.style.cssText = 'position:relative; display:block; margin-top:6px; max-height:160px; overflow:auto;';
-					if ( search && search.parentNode ) search.parentNode.appendChild( panel );
-				}
-				panel.innerHTML = html;
-				$$( '[data-pick-prod]', panel ).forEach( ( btn ) =>
-					btn.addEventListener( 'click', () => {
-						const id = parseInt( btn.dataset.pickProd, 10 );
-						const hit = hits.find( ( p ) => p.id === id );
-						if ( ! hit || ! state.modal || state.modal.type !== 'order-new' ) return;
-						state.modal.productPick = hit;
-						state.modal.productHits = [];
-						// Update selection line + enable create without wiping the form.
-						const createBtn = $( '#minn-on-create' );
-						if ( createBtn ) createBtn.disabled = false;
-						let sel = $( '#minn-on-picked' );
-						if ( ! sel && search && search.parentNode ) {
-							sel = document.createElement( 'div' );
-							sel.id = 'minn-on-picked';
-							sel.className = 'minn-toggle-desc';
-							search.parentNode.appendChild( sel );
-						}
-						if ( sel ) sel.innerHTML = `Selected: <strong>${ esc( hit.name ) }</strong> (#${ hit.id })`;
-						if ( panel ) panel.remove();
-					} )
-				);
-			};
-			let searchTimer = null;
-			if ( search ) {
-				search.addEventListener( 'input', () => {
-					clearTimeout( searchTimer );
-					searchTimer = setTimeout( async () => {
-						const q = search.value.trim();
-						if ( q.length < 1 ) { paintHits( [] ); return; }
-						try {
-							const r = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,price,regular_price` );
-							if ( ! state.modal || state.modal.type !== 'order-new' ) return;
-							paintHits( Array.isArray( r ) ? r : [] );
-						} catch ( e ) { /* ignore */ }
-					}, 280 );
-				} );
-			}
-			// Initial hits from a prior paint (if any).
-			$$( '[data-pick-prod]' ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					const id = parseInt( btn.dataset.pickProd, 10 );
-					const hit = ( m.productHits || [] ).find( ( p ) => p.id === id );
-					if ( ! hit || ! state.modal || state.modal.type !== 'order-new' ) return;
-					state.modal.productPick = hit;
-					state.modal.productHits = [];
-					const createBtn = $( '#minn-on-create' );
-					if ( createBtn ) createBtn.disabled = false;
-					let sel = $( '#minn-on-picked' );
-					if ( ! sel && search && search.parentNode ) {
-						sel = document.createElement( 'div' );
-						sel.id = 'minn-on-picked';
-						sel.className = 'minn-toggle-desc';
-						search.parentNode.appendChild( sel );
-					}
-					if ( sel ) sel.innerHTML = `Selected: <strong>${ esc( hit.name ) }</strong> (#${ hit.id })`;
-					const panel = $( '#minn-on-prod-hits' );
-					if ( panel ) panel.remove();
-				} )
-			);
-			const createBtn = $( '#minn-on-create' );
-			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
-				const pick = m.productPick;
-				if ( ! pick ) { toast( __( 'Pick a product' ), true ); return; }
-				const email = ( ( $( '#minn-on-email' ) || {} ).value || '' ).trim();
-				const qty = parseInt( ( ( $( '#minn-on-qty' ) || {} ).value || '1' ), 10 ) || 1;
-				const payload = {
-					status: ( $( '#minn-on-status' ) || {} ).value || 'processing',
-					billing: {
-						first_name: ( ( $( '#minn-on-first' ) || {} ).value || '' ).trim(),
-						last_name: ( ( $( '#minn-on-last' ) || {} ).value || '' ).trim(),
-						email,
-					},
-					line_items: [ { product_id: pick.id, quantity: qty } ],
-				};
-				createBtn.disabled = true;
-				createBtn.textContent = __( 'Creating…' );
-				try {
-					const created = await api( 'wc/v3/orders', {
-						method: 'POST',
-						body: JSON.stringify( payload ),
-					} );
-					toast( __( 'Order #' ) + ( created.number || created.id ) + ' created' );
-					state.cache.orders = null;
-					state.cache.orderSummary = null;
-					closeModal();
-					if ( created && created.id ) go( 'orders/' + created.id );
-					else if ( state.route === 'orders' ) renderOrders();
-				} catch ( e ) {
-					toast( e.message, true );
-					createBtn.disabled = false;
-					createBtn.textContent = __( 'Create order' );
-				}
-			} );
 		}
 
 		if ( m.type === 'widget' ) {
@@ -56376,7 +56730,10 @@
 		// Profile data is per-visit (the old modal refetched on every open).
 		if ( state.route !== 'profile' ) state.profile = null;
 		// Order-page data too — a revisit refetches, like the modal always did.
-		if ( state.route !== 'order' ) state.orderPage = null;
+		if ( state.route !== 'order' ) {
+			state.orderPage = null;
+			state.newOrder = null;
+		}
 		if ( state.route !== 'product' ) state.productPage = null;
 		if ( state.route !== 'subscription' ) state.subPage = null;
 		if ( state.route !== 'membership' ) state.memberPage = null;

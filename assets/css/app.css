@@ -4411,7 +4411,10 @@ span.minn-ep-star { border-color: transparent; cursor: default; }
 .minn-order-item.total { font-weight: 700; }
 .minn-order-qty { color: var(--text3); width: 34px; flex-shrink: 0; }
 .minn-order-item > .minn-cell-clip { flex: 1; }
-.minn-order-line-total { font-variant-numeric: tabular-nums; color: var(--text2); }
+/* The amount sits at the row's end whatever comes before it: the summary rows
+   (Subtotal, Total, Paid) carry a plain label that does not stretch, and
+   their amounts sat beside it instead of in the column the items form. */
+.minn-order-line-total { font-variant-numeric: tabular-nums; color: var(--text2); margin-inline-start: auto; }
 .minn-order-item.total .minn-order-line-total { color: var(--text); }
 
 /* Shared confirm modal — scope disclosure + typed confirmation */

@@ -33,6 +33,23 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 		return { status: r.status, body };
 	}, { path, opts } );
 
+	// A crashed earlier run leaves its fixtures behind; sweep them by name
+	// first so this run's lookups never pick up a stale one.
+	for ( const pre of [ 'Minn Create Prod', 'Minn Menu Prod', 'Minn Create Variable', 'Minn Order Variable' ] ) {
+		const rows = await api( `wc/v3/products?search=${ encodeURIComponent( pre ) }&status=any&per_page=50&_fields=id,name` );
+		for ( const r of ( Array.isArray( rows.body ) ? rows.body : [] ).filter( ( x ) => String( x.name ).startsWith( pre ) ) ) {
+			await api( `wc/v3/products/${ r.id }?force=true`, { method: 'DELETE' } ).catch( () => null );
+		}
+	}
+	const oldCoupons = await api( 'wc/v3/coupons?search=minn-oc-&per_page=50&_fields=id,code' );
+	for ( const c of ( Array.isArray( oldCoupons.body ) ? oldCoupons.body : [] ).filter( ( x ) => String( x.code ).startsWith( 'minn-oc-' ) ) ) {
+		await api( `wc/v3/coupons/${ c.id }?force=true`, { method: 'DELETE' } ).catch( () => null );
+	}
+	const oldCustomers = await api( 'wc/v3/customers?search=order-create-&role=all&per_page=50&_fields=id,email' );
+	for ( const c of ( Array.isArray( oldCustomers.body ) ? oldCustomers.body : [] ).filter( ( x ) => /^order-create-.*@example\.com$/.test( x.email || '' ) ) ) {
+		await api( `wc/v3/customers/${ c.id }?force=true&reassign=0`, { method: 'DELETE' } ).catch( () => null );
+	}
+
 	const suffix = Date.now().toString( 36 );
 	let createdProductId = null;
 	let createdOrderId = null;
@@ -168,87 +185,170 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 	t.check( 'no Product row for an Author', ! authorRow, '' );
 	await author.ctx.close();
 
-	// Create order via UI.
+	// Create order via UI: New order opens /orders/new, the order page's
+	// cards over a blank order, and nothing is stored until Create.
 	await page.goto( BASE + '/minn-admin/orders', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-order-add, [data-oview]', { timeout: 20000 } );
 	const addOrder = await page.$( '#minn-order-add' );
 	t.check( 'New order button present', !! addOrder, '' );
 
-	// Ensure we have a product to pick.
+	// Fixtures: a simple product (the one made above, or a fallback), a
+	// variable product with two priced variations, a coupon and a customer.
 	if ( ! createdProductId ) {
-		const p = await api( 'wc/v3/products', {
-			method: 'POST',
-			body: JSON.stringify( {
-				name: 'Order create fallback ' + suffix,
-				type: 'simple',
-				regular_price: '8.00',
-				status: 'publish',
-			} ),
-		} );
+		const p = await api( 'wc/v3/products', { method: 'POST', body: JSON.stringify( { name: 'Minn Create Prod ' + suffix, type: 'simple', regular_price: '11.25', status: 'publish' } ) } );
 		createdProductId = p.body && p.body.id;
 	}
+	const simple = await api( `wc/v3/products/${ createdProductId }?_fields=id,name,price` );
+	const varMade = await api( 'wc/v3/products', { method: 'POST', body: JSON.stringify( {
+		name: 'Minn Order Variable ' + suffix, type: 'variable', status: 'publish',
+		attributes: [ { name: 'Colour', visible: true, variation: true, options: [ 'Red', 'Blue' ] } ],
+	} ) } );
+	const orderVarId = varMade.body && varMade.body.id;
+	if ( orderVarId ) {
+		await api( `wc/v3/products/${ orderVarId }/variations/batch`, { method: 'POST', body: JSON.stringify( { create: [
+			{ regular_price: '5.00', attributes: [ { name: 'Colour', option: 'Red' } ] },
+			{ regular_price: '6.00', attributes: [ { name: 'Colour', option: 'Blue' } ] },
+		] } ) } );
+	}
+	const couponCode = 'minn-oc-' + suffix;
+	const couponMade = await api( 'wc/v3/coupons', { method: 'POST', body: JSON.stringify( { code: couponCode, discount_type: 'percent', amount: '10' } ) } );
+	const couponId = couponMade.body && couponMade.body.id;
+	const custEmail = `order-create-${ suffix }@example.com`;
+	const custMade = await api( 'wc/v3/customers', { method: 'POST', body: JSON.stringify( {
+		email: custEmail, first_name: 'Create', last_name: 'Suite', username: 'minn-oc-' + suffix,
+		billing: { first_name: 'Create', last_name: 'Suite', email: custEmail, address_1: '1 Test Lane', city: 'Testville', postcode: '15001', country: 'US', state: 'PA' },
+	} ) } );
+	const customerId = custMade.body && custMade.body.id;
+	t.check( 'order fixtures made', !! ( simple.body && simple.body.id && orderVarId && couponId && customerId ),
+		JSON.stringify( { simple: simple.status, varMade: varMade.status, coupon: couponMade.status, cust: custMade.status } ) );
+	const draftCount = async () => {
+		const r = await api( 'wc/v3/orders?status=checkout-draft&per_page=100&_fields=id' );
+		return Array.isArray( r.body ) ? r.body.length : -1;
+	};
 
-	if ( addOrder && createdProductId ) {
-		await addOrder.click();
-		await page.waitForSelector( '#minn-on-create', { timeout: 5000 } );
-		await page.fill( '#minn-on-first', 'Create' );
-		await page.fill( '#minn-on-last', 'Suite' );
-		await page.fill( '#minn-on-email', `order-create-${ suffix }@example.com` );
-		const prod = await api( `wc/v3/products/${ createdProductId }?_fields=id,name,sku,price,regular_price` );
-		const pname = ( prod.body && prod.body.name ) || String( createdProductId );
-		await page.fill( '#minn-on-prod-search', pname.slice( 0, 24 ) );
-		await page.waitForFunction( ( id ) => !! document.querySelector( `[data-pick-prod="${ id }"]` ), createdProductId, { timeout: 10000 } ).catch( () => null );
-		let picked = await page.evaluate( ( id ) => {
-			const btn = document.querySelector( `[data-pick-prod="${ id }"]` )
-				|| document.querySelector( '[data-pick-prod]' );
-			if ( btn ) { btn.click(); return true; }
-			return false;
-		}, createdProductId );
-		// If WC search missed, still allow create by programmatically enabling
-		// the same path the pick handler uses (productPick on modal state is
-		// internal — fall back to REST create after asserting the form).
-		t.check( 'order create modal fields present',
-			!!( await page.$( '#minn-on-email' ) ) && !!( await page.$( '#minn-on-create' ) ), '' );
-		if ( picked ) {
-			await page.waitForFunction( () => {
-				const b = document.querySelector( '#minn-on-create' );
-				return b && ! b.disabled;
-			}, null, { timeout: 3000 } ).catch( () => null );
-			await page.click( '#minn-on-create' );
-			// Creating an order navigates to its /orders/{id} page now.
-			await page.waitForFunction( () => {
-				const p = document.querySelector( '.minn-order-page' );
-				return p && /Order #/.test( p.textContent || '' ) && !! document.querySelector( '#minn-order-save' );
-			}, null, { timeout: 20000 } ).catch( () => null );
-			await page.waitForTimeout( 500 );
-			const ui = await page.evaluate( () => {
-				const p = document.querySelector( '.minn-order-page' );
-				return p && /Order #/.test( p.textContent || '' ) && location.pathname.indexOf( '/orders/' ) !== -1;
-			} );
-			t.check( 'order created via UI opens its page', !! ui, '' );
-			if ( ui ) {
-				const oid = await page.evaluate( () => {
-					const t = document.querySelector( '.minn-order-page .minn-modal-title' )?.textContent || '';
-					const m = t.match( /#(\d+)/ );
-					return m ? parseInt( m[ 1 ], 10 ) : null;
-				} );
-				createdOrderId = oid;
-			}
-		} else {
-			const ord = await api( 'wc/v3/orders', {
-				method: 'POST',
-				body: JSON.stringify( {
-					status: 'processing',
-					billing: { first_name: 'Create', last_name: 'Suite', email: `order-create-${ suffix }@example.com` },
-					line_items: [ { product_id: createdProductId, quantity: 1 } ],
-				} ),
-			} );
-			t.check( 'order created via UI opens detail',
-				ord.status === 201 || ord.status === 200,
-				'product search miss; REST create ' + JSON.stringify( ord.status ) );
-			createdOrderId = ord.body && ord.body.id;
+	if ( addOrder && simple.body && orderVarId && couponId && customerId ) {
+		await page.click( '#minn-order-add' );
+		await page.waitForSelector( '#minn-no-create', { timeout: 20000 } );
+		const blankOrder = await page.evaluate( () => ( {
+			url: location.pathname,
+			title: ( document.querySelector( '.minn-order-page-head .minn-modal-title' ) || {} ).textContent,
+			pristine: !! document.querySelector( '#minn-no-savebar[data-pristine]' ),
+			cards: [ ...document.querySelectorAll( '[data-nocard]' ) ].map( ( c ) => c.dataset.nocard ),
+			dialog: !! document.querySelector( '#minn-modal-overlay' ),
+		} ) );
+		t.check( 'New order opens the new order page',
+			/\/orders\/new$/.test( blankOrder.url ) && 'New order' === blankOrder.title && blankOrder.pristine && ! blankOrder.dialog
+				&& [ 'items', 'coupons', 'shipcharge', 'payment', 'status', 'customer', 'shipping', 'note' ].every( ( c ) => blankOrder.cards.includes( c ) ),
+			JSON.stringify( blankOrder ) );
+
+		// Nothing to create without an item: it says so and stays put.
+		await page.click( '#minn-no-create' );
+		await page.waitForTimeout( 400 );
+		t.check( 'Create with no items stays on the page', /\/orders\/new$/.test( new URL( page.url() ).pathname ), page.url() );
+
+		// The simple product twice (a second pick is one more of it) and a
+		// variation picked through its variable parent.
+		const pickProduct = async ( q, rowText ) => {
+			await page.fill( '#minn-no-search', q );
+			const row = await page.waitForFunction( ( txt ) => [ ...document.querySelectorAll( '[data-nocard="items"] [data-ei-pick]' ) ].find( ( b ) => b.textContent.includes( txt ) ), rowText, { timeout: 15000 } ).catch( () => null );
+			if ( row ) await row.asElement().click();
+			return !! row;
+		};
+		await pickProduct( simple.body.name, simple.body.name );
+		await pickProduct( simple.body.name, simple.body.name );
+		await pickProduct( 'Minn Order Variable ' + suffix, 'choose a variation' );
+		const blueRow = await page.waitForFunction( () => [ ...document.querySelectorAll( '[data-nocard="items"] [data-ei-pick]' ) ].find( ( b ) => /Blue/.test( b.textContent ) ), null, { timeout: 15000 } ).catch( () => null );
+		if ( blueRow ) await blueRow.asElement().click();
+		const lines = await page.evaluate( () => [ ...document.querySelectorAll( '#minn-no-lines [data-noline]' ) ].map( ( r ) => ( {
+			name: r.querySelector( '.minn-cell-clip' ).textContent,
+			qty: r.querySelector( '[data-noqty]' ).value,
+		} ) ) );
+		t.check( 'items: the simple product twice, then the picked variation',
+			2 === lines.length && '2' === lines[ 0 ].qty && /Blue/.test( lines[ 1 ].name ) && '1' === lines[ 1 ].qty, JSON.stringify( lines ) );
+
+		// A code WooCommerce refuses stops the create, and leaves no draft.
+		const draftsBefore = await draftCount();
+		await page.fill( '#minn-no-coupon', 'nope-' + suffix );
+		await page.click( '#minn-no-coupon-add' );
+		await page.click( '#minn-no-create' );
+		await page.waitForFunction( () => {
+			const b = document.querySelector( '#minn-no-create' );
+			return b && ! b.disabled;
+		}, null, { timeout: 20000 } ).catch( () => null );
+		const draftsAfter = await draftCount();
+		t.check( 'a refused coupon creates nothing and leaves no draft behind',
+			/\/orders\/new$/.test( new URL( page.url() ).pathname ) && draftsAfter === draftsBefore, JSON.stringify( { url: page.url(), draftsBefore, draftsAfter } ) );
+		await page.click( '#minn-no-coupons [data-nocdel="0"]' );
+		await page.fill( '#minn-no-coupon', couponCode.toUpperCase() );
+		await page.press( '#minn-no-coupon', 'Enter' );
+
+		// A customer fills the details from their account.
+		await page.fill( '#minn-no-cust-search', custEmail );
+		const custRow = await page.waitForSelector( '[data-nocust="0"]', { timeout: 15000 } ).catch( () => null );
+		if ( custRow ) await custRow.click();
+		await page.waitForSelector( '#minn-no-custchip', { timeout: 10000 } ).catch( () => null );
+		const filled = await page.evaluate( () => ( {
+			first: ( document.querySelector( '#minn-ob-first' ) || {} ).value,
+			city: ( document.querySelector( '#minn-ob-city' ) || {} ).value,
+			chip: ( document.querySelector( '#minn-no-custchip' ) || {} ).textContent || '',
+			kept: [ ...document.querySelectorAll( '#minn-no-lines [data-noline]' ) ].length,
+		} ) );
+		t.check( 'picking a customer fills their details and keeps the items',
+			'Create' === filled.first && 'Testville' === filled.city && filled.chip.includes( custEmail ) && 2 === filled.kept, JSON.stringify( filled ) );
+
+		await page.fill( '#minn-no-shiptitle', 'Courier' );
+		await page.fill( '#minn-no-shiptotal', '5' );
+		await page.click( '[data-nocard="shipping"] [data-ocopyaddr]' );
+		await page.fill( '#minn-o-note', 'Leave it on the porch' );
+		await pickCombo( page, '[data-noc="status"] .minn-ac-input', 'processing' );
+		await pickCombo( page, '[data-noc="paymethod"] .minn-ac-input', 'other' );
+		await page.fill( '#minn-no-paytitle', 'Phone order' );
+		await page.fill( '#minn-no-txn', 'REF-' + suffix );
+
+		// Typed work is unsaved work: leaving asks first.
+		await page.click( '.minn-nav-btn[data-nav="overview"]' );
+		const askLeave = await page.waitForSelector( '[role="alertdialog"]', { timeout: 5000 } ).catch( () => null );
+		t.check( 'leaving a new order with details entered asks first', !! askLeave, '' );
+		if ( askLeave ) await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 300 );
+
+		await page.click( '#minn-no-create' );
+		await page.waitForFunction( () => /\/orders\/\d+$/.test( location.pathname ), null, { timeout: 30000 } ).catch( () => null );
+		await page.waitForSelector( '#minn-order-save', { timeout: 20000 } ).catch( () => null );
+		createdOrderId = parseInt( new URL( page.url() ).pathname.split( '/' ).pop(), 10 ) || null;
+		t.check( 'Create lands on the new order\'s own page', !! createdOrderId && !! await page.$( '#minn-order-save' ), page.url() );
+		if ( createdOrderId ) {
+			const o = ( await api( `wc/v3/orders/${ createdOrderId }?_fields=status,customer_id,billing,shipping,line_items,coupon_lines,shipping_lines,customer_note,payment_method,payment_method_title,transaction_id,discount_total,total` ) ).body || {};
+			const got = {
+				status: o.status,
+				customer: o.customer_id === customerId,
+				items: ( o.line_items || [] ).map( ( l ) => [ l.product_id, l.variation_id, l.quantity ] ),
+				coupons: ( o.coupon_lines || [] ).map( ( c ) => c.code ),
+				shipping: ( o.shipping_lines || [] ).map( ( l ) => [ l.method_title, l.total ] ),
+				shipTo: ( o.shipping || {} ).city + '/' + ( o.shipping || {} ).first_name,
+				note: o.customer_note,
+				pay: [ o.payment_method, o.payment_method_title, o.transaction_id ],
+				discount: o.discount_total,
+				total: o.total,
+			};
+			const unit = parseFloat( simple.body.price );
+			const expected = ( ( unit * 2 + 6 ) * 0.9 + 5 ).toFixed( 2 );
+			t.check( 'the order WooCommerce stored is the one entered, totals worked out by it',
+				'processing' === got.status && got.customer
+					&& 2 === got.items.length && got.items[ 0 ][ 2 ] === 2 && got.items[ 1 ][ 0 ] === orderVarId && got.items[ 1 ][ 1 ] > 0
+					&& got.coupons[ 0 ] === couponCode && 'Courier' === got.shipping[ 0 ][ 0 ] && '5.00' === got.shipping[ 0 ][ 1 ]
+					&& 'Testville/Create' === got.shipTo && 'Leave it on the porch' === got.note
+					&& 'other' === got.pay[ 0 ] && 'Phone order' === got.pay[ 1 ] && 'REF-' + suffix === got.pay[ 2 ]
+					&& parseFloat( got.discount ) > 0 && got.total === expected,
+				JSON.stringify( { got, expected } ) );
+			await page.goBack();
+			await page.waitForSelector( '#minn-order-add, [data-oview]', { timeout: 20000 } ).catch( () => null );
+			t.check( 'Back from the new order returns to the list', /\/orders$/.test( new URL( page.url() ).pathname ), page.url() );
 		}
 	}
+	if ( orderVarId ) await api( `wc/v3/products/${ orderVarId }?force=true`, { method: 'DELETE' } ).catch( () => null );
+	if ( couponId ) await api( `wc/v3/coupons/${ couponId }?force=true`, { method: 'DELETE' } ).catch( () => null );
+	if ( customerId ) await api( `wc/v3/customers/${ customerId }?force=true&reassign=0`, { method: 'DELETE' } ).catch( () => null );
 
 	// Analytics view (wc-analytics revenue stats can take several seconds).
 	await page.keyboard.press( 'Escape' ).catch( () => null );
