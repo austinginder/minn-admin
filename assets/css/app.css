@@ -2874,6 +2874,8 @@ button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; 
 /* User edit page head — the order-page back-link pattern. */
 .minn-ue-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
 .minn-ue-head .minn-btn-soft { flex-shrink: 0; }
+/* The new-user page's Create bar keeps to the grid's width. */
+.minn-ue-new .minn-psavebar { max-width: 1060px; }
 /* Status-panel doors tint their summary by server-declared tone. */
 .minn-side-door-sum.green { color: var(--green-text); }
 .minn-side-door-sum.amber { color: var(--amber-text); }

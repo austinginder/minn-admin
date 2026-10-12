@@ -1106,6 +1106,19 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Per-object meta cap — see $sessions_perm above for why the plural
+		// primitive is not enough on a WooCommerce site — plus the same role
+		// floor the email route carries. edit_user short-circuits against
+		// one's own id, so without it any Subscriber could have the site mint
+		// them a reset link from the admin API. wp-login already offers that
+		// to everyone, so nothing is lost by refusing it here, where these
+		// routes exist for an administrator emailing somebody else a link.
+		$reset_link_gate = function ( WP_REST_Request $request ) {
+			$uid = self::target_user_id( $request );
+			return is_user_logged_in() && $uid > 0 && current_user_can( 'edit_user', $uid )
+				&& ( get_current_user_id() !== $uid || current_user_can( 'list_users' ) );
+		};
+
 		// Password-reset email (wp-admin "Send password reset").
 		register_rest_route(
 			self::NS,
@@ -1113,19 +1126,20 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'user_reset_password' ),
-				// Per-object meta cap — see $sessions_perm above for why the
-				// plural primitive is not enough on a WooCommerce site — plus
-				// the same role floor the email route carries. edit_user
-				// short-circuits against one's own id, so without it any
-				// Subscriber could have the site mint them a reset link from
-				// the admin API. wp-login already offers that to everyone, so
-				// nothing is lost by refusing it here, where the route exists
-				// for an administrator resetting somebody else.
-				'permission_callback' => function ( WP_REST_Request $request ) {
-					$uid = self::target_user_id( $request );
-					return is_user_logged_in() && $uid > 0 && current_user_can( 'edit_user', $uid )
-						&& ( get_current_user_id() !== $uid || current_user_can( 'list_users' ) );
-				},
+				'permission_callback' => $reset_link_gate,
+			)
+		);
+
+		// The new-account email (wp-admin Add User's "Send the new user an
+		// email about their account"): the username and a link to set a
+		// password, the same kind of link the reset route mints.
+		register_rest_route(
+			self::NS,
+			'/users/(?P<id>\d+)/welcome',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'user_send_welcome' ),
+				'permission_callback' => $reset_link_gate,
 			)
 		);
 
@@ -6953,6 +6967,71 @@ Please click the following link to confirm the invite:
 		if ( true !== $result ) {
 			$msg = is_wp_error( $result ) ? $result->get_error_message() : __( 'Could not send the reset email.', 'minn-admin' );
 			return new WP_Error( 'reset_failed', $msg, array( 'status' => 500 ) );
+		}
+		return rest_ensure_response( array(
+			'ok'    => true,
+			'email' => $user->user_email,
+		) );
+	}
+
+	/**
+	 * Email the user WordPress's new-account message, as core's Add User
+	 * screen does when its notification box is ticked.
+	 */
+	public static function user_send_welcome( WP_REST_Request $request ) {
+		$user = get_userdata( self::target_user_id( $request ) );
+		if ( ! $user ) {
+			return new WP_Error( 'not_found', __( 'User not found.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		// The message carries a set-password link, and on a network only a
+		// super admin may hand one to another super admin (core's edit_user).
+		if ( is_multisite() && is_super_admin( $user->ID ) && ! Minn_Admin::network_owner() ) {
+			return new WP_Error( 'forbidden', __( 'You cannot send a super admin a password link.', 'minn-admin' ), array( 'status' => 403 ) );
+		}
+		// A site that turned resets off for this account (a forced-2FA or
+		// lockdown plugin) would make the email skip itself; say so instead.
+		// wp_is_password_reset_allowed_for_user() is WP 6.3+; before it, the
+		// same allow_password_reset filter is the whole test.
+		$allowed = function_exists( 'wp_is_password_reset_allowed_for_user' )
+			? wp_is_password_reset_allowed_for_user( $user )
+			: apply_filters( 'allow_password_reset', true, $user->ID );
+		if ( true !== $allowed ) {
+			return new WP_Error( 'minn_welcome_blocked', __( 'This site does not let this account set a password by email, so WordPress sent no email.', 'minn-admin' ), array( 'status' => 409 ) );
+		}
+		// wp_new_user_notification() returns nothing and also stays silent
+		// when a plugin turns this email off. Its email filter runs only once
+		// a set-password key exists and the email is being sent; a failed
+		// send shows only on wp_mail_failed, which can also carry another
+		// email that fails meanwhile, so only one addressed to them counts.
+		$built  = false;
+		$failed = null;
+		$mark   = static function ( $email ) use ( &$built ) {
+			$built = true;
+			return $email;
+		};
+		$catch  = static function ( $error ) use ( &$failed, $user ) {
+			$data = is_wp_error( $error ) ? $error->get_error_data() : null;
+			$to   = is_array( $data ) && isset( $data['to'] ) ? (array) $data['to'] : null;
+			if ( null === $to || in_array( $user->user_email, array_map( 'strval', $to ), true ) ) {
+				$failed = $error;
+			}
+		};
+		add_filter( 'wp_new_user_notification_email', $mark, PHP_INT_MAX );
+		add_action( 'wp_mail_failed', $catch );
+		wp_send_new_user_notifications( $user->ID, 'user' );
+		remove_action( 'wp_mail_failed', $catch );
+		remove_filter( 'wp_new_user_notification_email', $mark, PHP_INT_MAX );
+		// The function is pluggable, and a replacement need not run that
+		// filter: only core's own silence means nothing went out.
+		$core_sender = realpath( ( new ReflectionFunction( 'wp_new_user_notification' ) )->getFileName() ) === realpath( ABSPATH . WPINC . '/pluggable.php' );
+		if ( ! $built && $core_sender ) {
+			return new WP_Error( 'minn_welcome_off', __( 'A plugin on this site turned off the new-account email, so WordPress sent none.', 'minn-admin' ), array( 'status' => 409 ) );
+		}
+		if ( $failed instanceof WP_Error ) {
+			// The mailer's own text can carry server or API detail: the log
+			// keeps it, the caller gets the plain fact.
+			error_log( sprintf( 'minn_welcome_failed user=%d target=%d error="%s"', get_current_user_id(), $user->ID, str_replace( '"', "'", $failed->get_error_message() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			return new WP_Error( 'minn_welcome_failed', __( 'The account email could not be sent. Check that this site can send email.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		return rest_ensure_response( array(
 			'ok'    => true,

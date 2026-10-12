@@ -1288,7 +1288,7 @@
 		customers: [ __( 'Customers' ), 'WooCommerce' ],
 		customer: [ __( 'Customer' ), 'WooCommerce' ],
 		users: [ __( 'Users' ), __( 'People' ) ],
-		useredit: [ __( 'Edit user' ), __( 'People' ) ],
+		useredit: [ state.userEditId ? __( 'Edit user' ) : __( 'Add user' ), __( 'People' ) ],
 		terms: [ __( 'Terms' ), __( 'Categories & Tags' ) ],
 		menus: [ __( 'Menus' ), __( 'Navigation' ) ],
 		templates: [ __( 'Design' ), __( 'Templates' ) ],
@@ -3473,9 +3473,10 @@
 			// /customers/57 — a store customer's page.
 			state.customerPageId = parseInt( parts[ 1 ], 10 );
 			state.route = 'customer';
-		} else if ( route === 'users' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
-			// /users/123 — the full-page user editor (GH #8).
-			state.userEditId = parseInt( parts[ 1 ], 10 );
+		} else if ( route === 'users' && parts[ 1 ] && ( /^\d+$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
+			// /users/123 — the full-page user editor (GH #8); /users/new is
+			// the same page for an account not created yet.
+			state.userEditId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
 			state.route = 'useredit';
 		} else if ( surfaceById( route ) && 'entry' === parts[ 1 ] && parts[ 2 ] ) {
 			// /gravity-forms/entry/12 — a form entry on its own page.
@@ -3552,7 +3553,7 @@
 		// Pages that show a save bar, or arm their Save, only once something
 		// changed say so on screen.
 		const view = $( '#minn-view' );
-		if ( view && $( '#minn-p-savebar:not([hidden]):not([data-pristine]), #minn-no-savebar:not([data-pristine]), #minn-co-savebar:not([hidden]):not([data-pristine]), #minn-wcm-savebar:not([hidden]), #minn-wcmp-savebar:not([hidden]), #minn-look-save:not([disabled]), #minn-rd-save:not([disabled])', view ) ) return true;
+		if ( view && $( '#minn-p-savebar:not([hidden]):not([data-pristine]), #minn-no-savebar:not([data-pristine]), #minn-co-savebar:not([hidden]):not([data-pristine]), #minn-un-savebar:not([data-pristine]), #minn-wcm-savebar:not([hidden]), #minn-wcmp-savebar:not([hidden]), #minn-look-save:not([disabled]), #minn-rd-save:not([disabled])', view ) ) return true;
 		const f = activeSettingsForm;
 		return !! ( f && f.route === r && f.host && f.host.isConnected && f.isDirty() );
 	}
@@ -3608,7 +3609,7 @@
 		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-c7m-save', 'minn-ffe-save', 'minn-wpfe-save', 'minn-ep-save', 'minn-sset-save', 'minn-product-save',
 		'minn-wcm-save', 'minn-wcmp-save', 'minn-order-save', 'minn-look-save', 'minn-save-settings',
 		'minn-save-site-appearance', 'minn-rd-save', 'minn-tax-save', 'minn-cpt-save', 'minn-zone-save',
-		'minn-widget-save', 'minn-pf-save', 'minn-surface-save', 'minn-uf-save', 'minn-coupon-save',
+		'minn-widget-save', 'minn-pf-save', 'minn-surface-save', 'minn-un-save', 'minn-coupon-save',
 		'minn-cedit-save', 'minn-media-save', 'minn-metric-save',
 	];
 	function pageSaveButton() {
@@ -4857,6 +4858,7 @@
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				|| ( 'customer' === state.route && 'customers' === btn.dataset.nav )
 				|| ( 'coupon' === state.route && 'coupons' === btn.dataset.nav )
+				|| ( 'useredit' === state.route && 'users' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
 				|| ( 'subscription' === state.route && 'subscriptions' === btn.dataset.nav )
 				// And the membership page and its Memberships surface.
@@ -17639,7 +17641,7 @@
 			runUserSearch();
 		} );
 		const addBtn = $( '#minn-add-user', view );
-		if ( addBtn ) addBtn.addEventListener( 'click', () => openUserModal( null ) );
+		if ( addBtn ) addBtn.addEventListener( 'click', () => go( 'users/new' ) );
 		const addExistingBtn = $( '#minn-add-existing-user', view );
 		if ( addExistingBtn ) addExistingBtn.addEventListener( 'click', () => {
 			state.modal = { type: 'user-add-existing', who: '' };
@@ -17663,7 +17665,7 @@
 				// The user modal reads context=edit — without edit_users the
 				// fetch 403s, so the entry only renders when it can work
 				// (multisite subsite admins manage role + membership instead).
-				...( B.caps.editUsers || isSelf ? [ { label: __( 'View user' ), run: () => openUserModal( u.id ) } ] : [] ),
+				...( B.caps.editUsers || isSelf ? [ { label: __( 'View user' ), run: () => openUserPage( u.id ) } ] : [] ),
 				// wp-admin's per-row tool for promote-but-not-edit admins:
 				// role changes ride promote_users and work per-site.
 				...( ! B.caps.editUsers && B.caps.promoteUsers && ! isSelf && ! u.super ? [
@@ -17790,7 +17792,7 @@
 				// users too — surface the actions that DO work (role,
 				// remove, email copy) instead of a dead tab.
 				const rowId = parseInt( row.dataset.user, 10 );
-				if ( B.caps.editUsers || rowId === B.user.id ) openUserModal( rowId );
+				if ( B.caps.editUsers || rowId === B.user.id ) openUserPage( rowId );
 				else openUserMenu( e.clientX, e.clientY, userFromRow( row ) );
 			} );
 			row.addEventListener( 'contextmenu', ( e ) => {
@@ -48107,78 +48109,6 @@
 			</div>`;
 		}
 
-		if ( m.type === 'user' ) {
-			// Add user / edit ANOTHER user. Your own profile is the
-			// /minn-admin/profile route (openUserModal redirects self).
-			const u = m.user;
-			const isNew = ! m.userId;
-			const roles = Object.entries( B.roles || {} ).map( ( [ value, label ] ) => [ value, chromeLabel( label ) ] );
-			if ( ! isNew && ! u ) {
-				return `<div class="minn-modal-overlay" id="minn-modal-overlay"><div class="minn-modal"><div class="minn-modal-head"><div class="minn-modal-title">${ esc( __( 'Edit user' ) ) }</div><span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span><button class="minn-x-btn" id="minn-modal-close">×</button></div><div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div></div></div>`;
-			}
-			const role = u && u.roles && u.roles[ 0 ] ? u.roles[ 0 ] : 'subscriber';
-			return `
-			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal">
-					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? esc( __( 'Add user' ) ) : sprintf( /* translators: %s: the user's name. */ esc( __( 'Edit %s' ) ), esc( u.name ) ) }</div>
-						${ ! isNew ? `<span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span>` : '' }
-						<button class="minn-x-btn" id="minn-modal-close">×</button>
-					</div>
-					<div class="minn-modal-form">
-						${ isNew ? `
-						<div>
-							<div class="minn-field-label">${ esc( __( 'Username' ) ) }</div>
-							<input class="minn-input mono" id="minn-uf-username" autocomplete="off">
-						</div>` : '' }
-						<div>
-							<div class="minn-field-label">${ esc( __( 'Display name' ) ) }</div>
-							<input class="minn-input" id="minn-uf-name" value="${ esc( u ? u.name : '' ) }">
-						</div>
-						<div>
-							<div class="minn-field-label">${ esc( __( 'Email' ) ) }</div>
-							<input class="minn-input mono" id="minn-uf-email" value="${ esc( u ? u.email : '' ) }">
-						</div>
-						<div>
-							<div class="minn-field-label">${ esc( __( 'Role' ) ) }</div>
-							${ roles.length && B.caps.promoteUsers ? `
-							<div class="minn-ac" id="minn-uf-role-ac">
-								<input class="minn-input minn-ac-input" id="minn-uf-role" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
-								<div class="minn-ac-panel" hidden></div>
-							</div>` : `
-							<input class="minn-input" value="${ esc( role ) }" disabled>` }
-						</div>
-						<div>
-							<div class="minn-field-label">${ isNew ? esc( __( 'Password' ) ) : esc( __( 'New password (leave blank to keep)' ) ) }</div>
-							<div style="display:flex; gap:8px;">
-								<input class="minn-input mono" id="minn-uf-password" autocomplete="new-password">
-								<button class="minn-btn-soft" id="minn-uf-genpass" style="flex-shrink:0;">${ esc( __( 'Generate' ) ) }</button>
-							</div>
-						</div>
-					</div>
-					${ ! isNew ? `
-					<div class="minn-sessions" id="minn-uf-sessions">
-						<div class="minn-side-title" style="margin:0 0 4px;">${ esc( __( 'Sessions' ) ) }</div>
-						${ m.sessions == null ? `<div class="minn-loading" style="padding:14px;">${ esc( __( 'Loading sessions…' ) ) }</div>`
-							: ! m.sessions.length ? `<div class="minn-session-empty">${ esc( __( 'No active sessions.' ) ) }</div>`
-							: m.sessions.map( ( sess ) => `
-							<div class="minn-session-row">
-								<div class="minn-session-info">
-									<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ` <span class="minn-session-current">${ esc( __( 'this session' ) ) }</span>` : '' }</div>
-									<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
-								</div>
-								<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
-							</div>` ).join( '' ) }
-						${ m.sessions && m.sessions.length ? `<button class="minn-comment-action danger" id="minn-uf-killall" style="margin:10px 0 0;">${ esc( __( 'Sign out everywhere' ) ) }</button>` : '' }
-					</div>` : '' }
-					<div class="minn-modal-actions">
-						<button class="minn-btn-primary" id="minn-uf-save">${ isNew ? esc( __( 'Create user' ) ) : esc( __( 'Save changes' ) ) }</button>
-						${ ! isNew && B.caps.deleteUsers && u && u.id !== B.user.id ? `<button class="minn-btn-soft danger" id="minn-uf-delete">${ esc( __( 'Delete user' ) ) }</button>` : '' }
-					</div>
-				</div>
-			</div>`;
-		}
-
 		if ( m.type === 'user-email' ) {
 			// Also the entry page's Reply (m.title, m.route, m.extra, m.onSent):
 			// the same composer, sent through the record's own route.
@@ -49790,10 +49720,6 @@
 					}
 				} )
 			);
-		}
-
-		if ( m.type === 'user' ) {
-			bindUserModal( m );
 		}
 
 		if ( m.type === 'user-email' ) {
@@ -51760,43 +51686,15 @@
 		return browser + ( os ? ' · ' + os : '' );
 	}
 
-	function openUserModal( userId ) {
-		// Your own profile is a full page now — every self entry point
-		// (avatar, palette, your row in Users) lands there instead.
-		if ( userId && userId === B.user.id ) {
+	function openUserPage( userId ) {
+		// Your own profile is a full page — every self entry point (avatar,
+		// palette, your row in Users) lands there instead.
+		if ( userId === B.user.id ) {
 			go( 'profile' );
 			return;
 		}
-		// Editing another user is a full page too (GH #8) — deep-linkable at
-		// /minn-admin/users/{id}. The modal below remains the Add-user flow.
-		if ( userId ) {
-			go( 'users/' + userId );
-			return;
-		}
-		state.modal = { type: 'user', userId: userId || null, user: null, sessions: null };
-		renderOverlays();
-		if ( ! userId ) return;
-		api( `wp/v2/users/${ userId }?context=edit&_fields=id,name,email,roles,username` )
-			.then( ( u ) => {
-				if ( state.modal && state.modal.type === 'user' && state.modal.userId === userId ) {
-					state.modal.user = u;
-					renderOverlays();
-				}
-			} )
-			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
-		api( `minn-admin/v1/users/${ userId }/sessions` )
-			.then( ( r ) => {
-				if ( state.modal && state.modal.type === 'user' && state.modal.userId === userId ) {
-					state.modal.sessions = r.sessions;
-					renderOverlays();
-				}
-			} )
-			.catch( () => {
-				if ( state.modal && state.modal.type === 'user' ) {
-					state.modal.sessions = [];
-					renderOverlays();
-				}
-			} );
+		// Another user's page is deep-linkable at /minn-admin/users/{id} (GH #8).
+		go( 'users/' + userId );
 	}
 
 	function generatePassword() {
@@ -51859,108 +51757,6 @@
 		return L.join( '\n' );
 	}
 
-	function bindUserModal( m ) {
-		if ( ! $( '#minn-uf-save' ) ) return; // still in the loading state
-
-		// Role rides the strict combobox (same as the Users filter) — real
-		// sites stack 10+ roles and a bare select doesn't type-to-filter.
-		const roleAc = $( '#minn-uf-role-ac' );
-		if ( roleAc ) {
-			// A new user starts on Subscriber, as core's Add User does.
-			const current = m.userId ? userRoleSeed( m.user ) : 'subscriber';
-			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: chromeLabel( l ) } ) ), {
-				strict: true,
-				value: current,
-			} );
-		}
-
-		const isNew = ! m.userId;
-		const gen = $( '#minn-uf-genpass' );
-		if ( gen ) {
-			gen.addEventListener( 'click', () => {
-				const input = $( '#minn-uf-password' );
-				input.value = generatePassword();
-				input.type = 'text';
-			} );
-		}
-
-		$( '#minn-uf-save' ).addEventListener( 'click', async ( e ) => {
-			const btn = e.currentTarget;
-			btn.disabled = true;
-			const payload = {
-				name: $( '#minn-uf-name' ).value.trim(),
-				email: $( '#minn-uf-email' ).value.trim(),
-			};
-			// Strict combobox: the picked slug rides dataset.acValue, the
-			// input's visible value is the display label.
-			const roleSel = $( '#minn-uf-role' );
-			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue && ( ! m.userId || roleSel.dataset.acValue !== userRoleSeed( m.user ) ) ) payload.roles = [ roleSel.dataset.acValue ];
-			const password = $( '#minn-uf-password' ).value;
-			if ( password ) payload.password = password;
-			try {
-				if ( isNew ) {
-					payload.username = $( '#minn-uf-username' ).value.trim();
-					if ( ! payload.username || ! payload.email || ! password ) {
-						throw new Error( __( 'Username, email and password are required.' ) );
-					}
-					await api( 'wp/v2/users', { method: 'POST', body: JSON.stringify( payload ) } );
-					toast( __( 'User created' ) );
-				} else {
-					await api( `wp/v2/users/${ m.userId }`, { method: 'POST', body: JSON.stringify( payload ) } );
-					toast( __( 'User updated' ) );
-				}
-				closeModal();
-				state.cache.users = null;
-				if ( state.route === 'users' ) renderUsers();
-			} catch ( err ) {
-				toast( err.message, true );
-				btn.disabled = false;
-			}
-		} );
-
-		const del = $( '#minn-uf-delete' );
-		if ( del ) {
-			// Same reassign flow as the users row menu.
-			del.addEventListener( 'click', () => {
-				if ( ! m.user ) return;
-				closeModal();
-				openUserDeleteModal( m.user );
-			} );
-		}
-
-		$$( '[data-kill]' ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', async () => {
-				btn.disabled = true;
-				try {
-					await api( `minn-admin/v1/users/${ m.userId }/sessions/${ btn.dataset.kill }`, { method: 'DELETE' } );
-					toast( __( 'Session signed out' ) );
-					m.sessions = m.sessions.filter( ( sess ) => sess.verifier !== btn.dataset.kill );
-					renderOverlays();
-				} catch ( err ) {
-					toast( err.message, true );
-					btn.disabled = false;
-				}
-			} )
-		);
-
-		const killAll = $( '#minn-uf-killall' );
-		if ( killAll ) {
-			killAll.addEventListener( 'click', async () => {
-				if ( ! confirm( __( 'Sign this user out of all sessions?' ) ) ) return;
-				killAll.disabled = true;
-				try {
-					await api( `minn-admin/v1/users/${ m.userId }/sessions`, { method: 'DELETE' } );
-					toast( __( 'Signed out everywhere' ) );
-					m.sessions = m.sessions.filter( ( sess ) => sess.current );
-					renderOverlays();
-				} catch ( err ) {
-					toast( err.message, true );
-					killAll.disabled = false;
-				}
-			} );
-		}
-	}
-
 	/* ===== Edit user ( /minn-admin/users/{id} ) — GH #8 =====
 	 * Editing another user is a full page like Your profile: identity,
 	 * public profile, appearance, sessions, delete. Appearance is settable
@@ -51991,7 +51787,243 @@
 			.catch( () => { if ( mine() ) { ue.languages = { installed: B.languages || [], available: [], canInstall: false, current: '' }; paint(); } } );
 	}
 
+	/* /minn-admin/users/new — the same page for an account not created yet,
+	 * holding what core's Add User screen asks: the account, a password it
+	 * generates, the role new accounts get, their language, the public
+	 * profile, and whether WordPress emails them. Nothing exists until
+	 * Create; the account's own page then takes this address, where its
+	 * appearance and sessions are. */
+	function renderUserNew() {
+		const view = $( '#minn-view' );
+		if ( ! B.caps.createUsers ) {
+			view.innerHTML = `<div class="minn-card minn-empty">${ esc( __( 'You do not have permission to add users.' ) ) }</div>`;
+			return;
+		}
+		let ue = state.userEdit;
+		if ( ! ue || ue.id !== 0 ) {
+			ue = state.userEdit = { id: 0, languages: null, password: generatePassword(), clean: null };
+			api( 'minn-admin/v1/languages' )
+				.then( ( r ) => { ue.languages = r; } )
+				.catch( () => { ue.languages = { installed: B.languages || [], available: [] }; } )
+				.then( () => { if ( state.userEdit === ue && state.route === 'useredit' ) renderUserNew(); } );
+		}
+		if ( ! ue.languages ) {
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
+			return;
+		}
+		const defRole = B.defaultRole || 'subscriber';
+		const field = ( label, inner ) => `<div><div class="minn-field-label">${ esc( label ) }</div>${ inner }</div>`;
+		view.innerHTML = `
+		<div class="minn-ue-new">
+			<div class="minn-ue-head">
+				<button type="button" class="minn-btn-soft" id="minn-un-back">← ${ esc( __( 'Users' ) ) }</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-modal-title">${ esc( __( 'New user' ) ) }</div>
+					<div class="minn-modal-sub">${ esc( __( 'Add someone to this site' ) ) }</div>
+				</div>
+			</div>
+			<div class="minn-profile-grid">
+				<div class="minn-profile-col">
+					<div class="minn-card minn-panel-pad">
+						<div class="minn-panel-title">${ esc( __( 'Account' ) ) }</div>
+						<div class="minn-profile-fields">
+							${ field( __( 'Username' ), '<input class="minn-input mono" id="minn-un-username" autocomplete="off" spellcheck="false">' ) }
+							${ field( __( 'Email' ), '<input class="minn-input mono" id="minn-un-email" autocomplete="off" spellcheck="false">' ) }
+							${ field( __( 'Role' ), B.caps.promoteUsers && Object.keys( B.roles || {} ).length ? `
+							<div class="minn-ac" id="minn-un-role-ac">
+								<input class="minn-input minn-ac-input" id="minn-un-role" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Role' ) ) }">
+								<div class="minn-ac-panel" hidden></div>
+							</div>` : `<input class="minn-input" value="${ esc( chromeLabel( ( B.roles || {} )[ defRole ] || defRole ) ) }" disabled>` ) }
+							${ field( __( 'Language' ), `
+							<div class="minn-ac" id="minn-un-lang-ac">
+								<input class="minn-input minn-ac-input" id="minn-un-lang" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Language' ) ) }">
+								<div class="minn-ac-panel" hidden></div>
+							</div>` ) }
+							${ field( __( 'Password' ), `
+							<div style="display:flex; gap:8px;">
+								<input class="minn-input mono" id="minn-un-password" value="${ esc( ue.password ) }" autocomplete="new-password" spellcheck="false" data-1p-ignore data-lpignore="true">
+								<button type="button" class="minn-btn-soft" id="minn-un-genpass" style="flex-shrink:0;">${ esc( __( 'Generate' ) ) }</button>
+							</div>` ) }
+							<div class="minn-toggle-rows minn-side-toggles">
+								<div class="minn-toggle-row">
+									<button type="button" class="minn-switch on" id="minn-un-notify" role="switch" aria-checked="true" aria-label="${ esc( __( 'Send them an email about their account' ) ) }"><span class="minn-switch-knob"></span></button>
+									<div class="minn-toggle-info">
+										<div class="minn-toggle-label">${ esc( __( 'Send them an email about their account' ) ) }</div>
+										<div class="minn-toggle-desc">${ esc( __( 'WordPress’s welcome email, with their username and a link to set their own password.' ) ) }</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="minn-profile-col">
+					<div class="minn-card minn-panel-pad">
+						<div class="minn-panel-title">${ esc( __( 'Public profile' ) ) } <span class="minn-panel-sub">${ esc( __( 'author boxes & archives' ) ) }</span></div>
+						<div class="minn-profile-fields">
+							<div class="minn-pf-cols">
+								${ field( __( 'First name' ), '<input class="minn-input" id="minn-un-first" autocomplete="off">' ) }
+								${ field( __( 'Last name' ), '<input class="minn-input" id="minn-un-last" autocomplete="off">' ) }
+							</div>
+							${ field( __( 'Display name' ), `<input class="minn-input" id="minn-un-name" autocomplete="off" placeholder="${ esc( __( 'From their name, or their username' ) ) }">` ) }
+							${ field( __( 'Website' ), '<input class="minn-input mono" id="minn-un-url" autocomplete="off" placeholder="https://…">' ) }
+							${ field( __( 'Bio' ), '<textarea class="minn-input" id="minn-un-bio" rows="4"></textarea>' ) }
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="minn-psavebar" id="minn-un-savebar" data-pristine>
+				<span class="minn-psavebar-note">${ esc( __( 'New user' ) ) }</span>
+				<button type="button" class="minn-btn-soft" id="minn-un-cancel">${ esc( __( 'Cancel' ) ) }</button>
+				<button type="button" class="minn-btn-primary" id="minn-un-save">${ esc( __( 'Create user' ) ) }</button>
+			</div>
+		</div>`;
+		bindUserNew( ue, view, defRole );
+	}
+
+	function bindUserNew( ue, view, defRole ) {
+		// Listeners go on the page's own wrapper: #minn-view outlives it.
+		const root = $( '.minn-ue-new', view );
+		// The bar says "unsaved" once the form differs from how it opened
+		// (with its generated password), which arms the leave guard.
+		const bar = $( '#minn-un-savebar', root );
+		let clean = null;
+		const fingerprint = () => JSON.stringify( userNewForm( root ) );
+		const sync = () => bar.toggleAttribute( 'data-pristine', fingerprint() === clean );
+		$( '#minn-un-back', root ).addEventListener( 'click', () => go( 'users' ) );
+		$( '#minn-un-cancel', root ).addEventListener( 'click', () => go( 'users' ) );
+		const roleAc = $( '#minn-un-role-ac', root );
+		if ( roleAc ) {
+			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: chromeLabel( l ) } ) ), {
+				strict: true,
+				value: defRole,
+			} );
+		}
+		const langOpts = [ ...( ue.languages.installed || [] ), ...( ue.languages.available || [] ) ]
+			.map( ( [ v, l ] ) => ( { value: v, label: l } ) );
+		bindAutocomplete( $( '#minn-un-lang-ac', root ), langOpts, { strict: true, value: '' } );
+		$( '#minn-un-genpass', root ).addEventListener( 'click', () => {
+			$( '#minn-un-password', root ).value = generatePassword();
+			sync();
+		} );
+		const notify = $( '#minn-un-notify', root );
+		notify.addEventListener( 'click', () => {
+			const on = notify.getAttribute( 'aria-checked' ) !== 'true';
+			notify.classList.toggle( 'on', on );
+			notify.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+			sync();
+		} );
+
+		clean = fingerprint();
+		[ 'input', 'change' ].forEach( ( ev ) => root.addEventListener( ev, sync ) );
+		// A combobox pick lands after its click.
+		root.addEventListener( 'click', () => setTimeout( sync, 0 ) );
+
+		const save = $( '#minn-un-save', root );
+		save.addEventListener( 'click', () => createUserFromPage( ue, root, save ) );
+		root.addEventListener( 'keydown', ( e ) => {
+			if ( 'Enter' === e.key && 'INPUT' === e.target.tagName && ! e.target.closest( '.minn-ac' ) ) {
+				e.preventDefault();
+				createUserFromPage( ue, root, save );
+			}
+		} );
+		$( '#minn-un-username', root ).focus( { preventScroll: true } );
+	}
+
+	function userNewForm( view ) {
+		const val = ( id ) => { const el = $( '#' + id, view ); return el ? el.value : ''; };
+		const pick = ( id ) => { const el = $( '#' + id, view ); return el ? ( el.dataset.acValue || '' ) : ''; };
+		const notify = $( '#minn-un-notify', view );
+		return {
+			username: val( 'minn-un-username' ).trim(),
+			email: val( 'minn-un-email' ).trim(),
+			password: val( 'minn-un-password' ),
+			role: pick( 'minn-un-role' ),
+			locale: pick( 'minn-un-lang' ),
+			welcome: !! notify && 'true' === notify.getAttribute( 'aria-checked' ),
+			first_name: val( 'minn-un-first' ).trim(),
+			last_name: val( 'minn-un-last' ).trim(),
+			name: val( 'minn-un-name' ).trim(),
+			url: val( 'minn-un-url' ).trim(),
+			description: val( 'minn-un-bio' ),
+		};
+	}
+
+	// Which field a refused create points at: core's wp_insert_user codes,
+	// the REST controller's own, and a schema refusal's first parameter.
+	const USER_NEW_ERROR_FIELD = {
+		existing_user_login: 'username', user_login_too_long: 'username', invalid_username: 'username',
+		empty_user_login: 'username', rest_user_invalid_username: 'username',
+		existing_user_email: 'email', rest_user_invalid_email: 'email', rest_user_invalid_password: 'password',
+	};
+
+	async function createUserFromPage( ue, view, btn ) {
+		if ( btn.disabled ) return;
+		const f = userNewForm( view );
+		const missing = [ 'username', 'email', 'password' ].find( ( k ) => ! f[ k ] );
+		if ( missing ) {
+			toast( __( 'Username, email and password are required.' ), true );
+			$( '#minn-un-' + missing, view ).focus();
+			return;
+		}
+		const payload = { username: f.username, email: f.email, password: f.password };
+		// Optional fields go only when filled: with no display name WordPress
+		// composes one from the names or the username, as its Add User does.
+		[ 'first_name', 'last_name', 'name', 'url' ].forEach( ( k ) => { if ( f[ k ] ) payload[ k ] = f[ k ]; } );
+		if ( f.description.trim() ) payload.description = f.description;
+		if ( B.caps.promoteUsers && f.role ) payload.roles = [ f.role ];
+		const label = btn.textContent;
+		btn.disabled = true;
+		btn.textContent = __( 'Creating…' );
+		let made;
+		try {
+			made = await api( 'wp/v2/users', { method: 'POST', body: JSON.stringify( payload ) } );
+		} catch ( e ) {
+			toast( e.message, true );
+			btn.disabled = false;
+			btn.textContent = label;
+			const params = e.data && e.data.params ? Object.keys( e.data.params ) : [];
+			const at = USER_NEW_ERROR_FIELD[ e.code ] || params.find( ( k ) => $( '#minn-un-' + k, view ) );
+			if ( at && $( '#minn-un-' + at, view ) ) $( '#minn-un-' + at, view ).focus();
+			return;
+		}
+		// The account exists from here on. A later step that fails is
+		// reported, and the account's page is still where this ends.
+		const problems = [];
+		if ( f.locale ) {
+			try {
+				await api( `minn-admin/v1/users/${ made.id }/language`, { method: 'POST', body: JSON.stringify( { locale: f.locale } ) } );
+			} catch ( e ) {
+				problems.push( e.message );
+			}
+		}
+		// After the language, so the email arrives in it.
+		if ( f.welcome ) {
+			try {
+				await api( `minn-admin/v1/users/${ made.id }/welcome`, { method: 'POST' } );
+			} catch ( e ) {
+				problems.push( e.message );
+			}
+		}
+		if ( problems.length ) {
+			/* translators: %s: what went wrong after the account was made. */
+			toast( sprintf( __( 'User created, but: %s' ), problems.join( ' ' ) ), true );
+		} else {
+			toast( f.welcome ? __( 'User created and emailed' ) : __( 'User created' ) );
+		}
+		state.cache.users = null;
+		if ( state.userEdit !== ue ) return;
+		// The account's own page takes this address's place, so Back returns
+		// to the list rather than to an empty form.
+		state.userEdit = null;
+		setPath( 'users/' + made.id, true );
+		onRouteChange();
+	}
+
 	function renderUserEdit() {
+		if ( ! state.userEditId ) {
+			renderUserNew();
+			return;
+		}
 		const view = $( '#minn-view' );
 		let ue = state.userEdit;
 		if ( ! ue || ue.id !== state.userEditId ) {
@@ -52463,10 +52495,9 @@
 
 	/* ===== Your profile ( /minn-admin/profile ) =====
 	 * The self-profile outgrew the user modal (identity, appearance, hidden
-	 * integrations, AI Access, sessions) — it's a route page now. The modal
-	 * above keeps Add user / Edit other users; openUserModal redirects self
-	 * here. applyIntegrationState and the appearance rebuilds repaint this
-	 * route directly. */
+	 * integrations, AI Access, sessions) — it's a route page now, and
+	 * openUserPage sends your own row here. applyIntegrationState and the
+	 * appearance rebuilds repaint this route directly. */
 
 	function loadProfile() {
 		const p = state.profile;

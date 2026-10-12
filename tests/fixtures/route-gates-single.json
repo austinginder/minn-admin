@@ -1919,6 +1919,10 @@
             "shop_manager",
             "administrator"
         ],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/welcome": [
+            "shop_manager",
+            "administrator"
+        ],
         "POST /minn-admin/v1/users/add-existing": [],
         "POST /minn-admin/v1/visibility/toggle": [
             "administrator"

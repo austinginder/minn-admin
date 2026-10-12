@@ -659,6 +659,11 @@
             "administrator",
             "site_network_role"
         ],
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/welcome": [
+            "shop_manager",
+            "administrator",
+            "site_network_role"
+        ],
         "POST /minn-admin/v1/users/add-existing": [
             "administrator"
         ],

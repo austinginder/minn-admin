@@ -6,9 +6,10 @@
  *     shows the value once. Seen in the Delete-user subtitle and the
  *     "Reassign content to" combobox options.
  *  2. A combobox inside a modal (overflow-y:auto) had its dropdown panel
- *     clipped at the modal edge, hiding lower options (the Add-user Role
- *     picker lost roles). The panel now escapes to the viewport (fixed)
- *     when it has a scroll-clipping ancestor.
+ *     clipped at the modal edge, hiding lower options (the old Add-user
+ *     dialog's Role picker lost roles). The panel now escapes to the
+ *     viewport (fixed) when it has a scroll-clipping ancestor; the Delete
+ *     dialog's reassign picker carries the check now that Add user is a page.
  *
  * Creates a throwaway user whose display name equals its email; never
  * actually deletes a real user (the delete modal is opened and cancelled).
@@ -39,41 +40,6 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		uid = created.body && created.body.id;
 		t.check( 'name==email test user created', !! uid, String( uid ) );
 
-		/* ===== Bug 2: modal combobox panel escapes the modal ===== */
-		await page.goto( BASE + '/minn-admin/users', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '#minn-add-user', { timeout: 20000 } );
-		await page.click( '#minn-add-user' );
-		await page.waitForSelector( '.minn-modal .minn-ac-input', { timeout: 5000 } );
-		await page.click( '.minn-modal .minn-ac-input' );
-		await page.waitForSelector( '.minn-modal .minn-ac-panel:not([hidden])', { timeout: 5000 } );
-		// The modal's entrance animation transforms it, which makes it the
-		// containing block for the fixed panel until the animation ends; the
-		// app re-places the panel on animationend, so measure after that (on a
-		// loaded machine the click lands mid-animation).
-		await page.waitForFunction( () => getComputedStyle( document.querySelector( '.minn-modal' ) ).transform === 'none', null, { timeout: 5000 } ).catch( () => {} );
-		await page.waitForTimeout( 100 );
-		const roleGeo = await page.evaluate( () => {
-			const modal = document.querySelector( '.minn-modal' );
-			const panel = document.querySelector( '.minn-modal .minn-ac-panel' );
-			const m = modal.getBoundingClientRect(), p = panel.getBoundingClientRect();
-			return {
-				pos: getComputedStyle( panel ).position,
-				escapesModal: p.bottom > m.bottom + 1, // panel extends past the modal box (no longer clipped by it)
-				withinViewport: p.bottom <= window.innerHeight + 1,
-				items: panel.querySelectorAll( '.minn-ac-item' ).length,
-			};
-		} );
-		t.check( 'modal dropdown is fixed-positioned', roleGeo.pos === 'fixed', roleGeo.pos );
-		t.check( 'modal dropdown escapes the modal overflow box', roleGeo.escapesModal, JSON.stringify( roleGeo ) );
-		t.check( 'modal dropdown stays within the viewport', roleGeo.withinViewport, JSON.stringify( roleGeo ) );
-		t.check( 'all roles present in the panel', roleGeo.items >= 5, String( roleGeo.items ) );
-		// Picking still works.
-		await page.click( '.minn-modal .minn-ac-item[data-acv="editor"]' );
-		const picked = await page.evaluate( () => document.querySelector( '.minn-modal .minn-ac-input' ).dataset.acValue );
-		t.check( 'picking a role through the escaped panel works', picked === 'editor', picked );
-		await page.click( '#minn-modal-close' ).catch( () => {} );
-		await page.keyboard.press( 'Escape' ).catch( () => {} );
-
 		/* ===== Bug 1: no "email · email" duplication ===== */
 		// Open the delete modal for our name==email user via its row menu.
 		await page.goto( BASE + '/minn-admin/users', { waitUntil: 'domcontentloaded' } );
@@ -101,8 +67,24 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				.some( ( txt ) => { const parts = txt.split( ' · ' ); return parts.length === 2 && parts[ 0 ].trim() === parts[ 1 ].trim(); } );
 		} );
 		t.check( 'reassign options never read "X · X"', dupOption === false );
-		const reassignFixed = await page.evaluate( () => getComputedStyle( document.querySelector( '#minn-ud-reassign-ac .minn-ac-panel' ) ).position );
-		t.check( 'reassign dropdown also escapes the modal (fixed)', reassignFixed === 'fixed', reassignFixed );
+		/* ===== Bug 2: the modal combobox panel escapes the modal ===== */
+		// The modal's entrance animation transforms it, which makes it the
+		// containing block for the fixed panel until the animation ends; the
+		// app re-places the panel on animationend, so measure after that.
+		await page.waitForFunction( () => getComputedStyle( document.querySelector( '.minn-modal' ) ).transform === 'none', null, { timeout: 5000 } ).catch( () => {} );
+		await page.waitForTimeout( 100 );
+		const geo = await page.evaluate( () => {
+			const panel = document.querySelector( '#minn-ud-reassign-ac .minn-ac-panel' );
+			const p = panel.getBoundingClientRect();
+			return { pos: getComputedStyle( panel ).position, withinViewport: p.bottom <= window.innerHeight + 1, items: panel.querySelectorAll( '.minn-ac-item' ).length };
+		} );
+		t.check( 'modal dropdown is fixed-positioned', geo.pos === 'fixed', JSON.stringify( geo ) );
+		t.check( 'modal dropdown stays within the viewport', geo.withinViewport, JSON.stringify( geo ) );
+		t.check( 'modal dropdown lists the people to reassign to', geo.items >= 2, JSON.stringify( geo ) );
+		// Picking still works through the escaped panel.
+		const target = await page.evaluate( () => ( document.querySelector( '#minn-ud-reassign-ac .minn-ac-item' ) || {} ).dataset.acv );
+		await page.click( `#minn-ud-reassign-ac .minn-ac-item[data-acv="${ target }"]` );
+		t.check( 'picking through the escaped panel works', target && target === await page.evaluate( () => document.querySelector( '#minn-ud-reassign' ).dataset.acValue ), String( target ) );
 
 	} finally {
 		if ( uid ) await rest( `wp/v2/users/${ uid }?force=true&reassign=1`, { method: 'DELETE' } ).catch( () => {} );

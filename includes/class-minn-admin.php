@@ -2207,6 +2207,8 @@ class Minn_Admin {
 				'pings'    => ( 'open' === get_option( 'default_ping_status', 'open' ) ) ? 'open' : 'closed',
 			),
 			'roles'    => current_user_can( 'list_users' ) ? wp_roles()->get_names() : new \stdClass(),
+			// The role a new account starts on, as core's Add User picker does.
+			'defaultRole' => current_user_can( 'create_users' ) ? (string) get_option( 'default_role', 'subscriber' ) : '',
 			// Roles the Settings default-role picker leaves out, as core's does.
 			'defaultRoleExcluded' => current_user_can( 'manage_options' ) ? self::default_role_excluded_roles() : array(),
 			'surfaces' => Minn_Admin_Surfaces::for_current_user(),
