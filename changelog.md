@@ -8,6 +8,12 @@
 
 ### Improved
 
+* **New orders get a page of their own.** New order on the Orders screen opens a full page in the order page's layout instead of a one-item dialog: several products (a variable product asks which variation), coupons, a shipping charge, the payment method and transaction ID, a customer picked from your store (which fills in their details) or a guest, billing and shipping addresses, a note and the starting status. Nothing is saved until you create the order, and WooCommerce works out discounts, tax and the total as it does. If it refuses a coupon, no order is created, not even a leftover draft, and the page tells you why. You land on the new order's page, where Record payment and the emails are.
+
+* **Adding a product to an order or a subscription picks the variation.** Choosing a variable product in the items search now lists its variations to pick from, instead of adding the parent product, which is not something a customer can buy.
+
+* **Order totals line up.** The Subtotal, Total and Paid amounts on an order or subscription sit in the same right-hand column as the items and refunds, instead of beside their labels.
+
 * **New products start on the full product page.** Add product on the Products screen, and the new Product item in + New (shown on a WooCommerce store to people who can make products), open the same page you edit products on, so images, pricing, inventory, shipping, attributes, variations and organization are all there from the start. The product is created when you first save it, as a draft unless you pick another status, and a variable product saves with its variations in the same go.
 
 * **One changelog link per plugin.** Plugin cards with an update waiting no longer carry a separate "What's new" link: the version number already opens the same notes. Those notes are whatever the plugin's author publishes, so they may not describe the update on offer, and the window and the right-click menu now call them the Changelog.
