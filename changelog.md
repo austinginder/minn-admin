@@ -1,5 +1,109 @@
 # Changelog
 
+## **v0.45.0** - Unreleased
+
+### Added
+
+* **Plugins hidden from clients stay hidden in Minn.** When White Label CMS hides a plugin's whole menu from your clients (Bricks, say), Minn hides that plugin's screens from the same people: its sidebar item, its ⌘K entries and its doorway on Extensions. Your White Label CMS Admins still see everything. Other menu tools can tell Minn the same through the new `minn_admin_admin_page_hidden` filter.
+
+### Improved
+
+* **One changelog link per plugin.** Plugin cards with an update waiting no longer carry a separate "What's new" link: the version number already opens the same notes. Those notes are whatever the plugin's author publishes, so they may not describe the update on offer, and the window and the right-click menu now call them the Changelog.
+
+* **A safety net under every save.** Whatever a screen in Minn saves, it can no longer change who runs your site unless your own account could make that change in WordPress: opening registration or changing the role new accounts get, switching plugins on, moving the site's address, giving an account a role with administrative powers, or changing a more powerful account's email or password. On a network, a site's administrators can't move their site or name a network administrator. Everyday changes go through as before, like a store making a buyer a customer when a subscription starts.
+
+### Fixed
+
+* **Changes made elsewhere survive your save.** Saving a post sent every field of each custom-field panel you had touched (ACF, ACPT, JetEngine, Meta Box, Pods, The Events Calendar, WP Job Manager, Seriously Simple Podcasting and the SEO panel), so a field someone else changed after you opened the post went back to what you had loaded. Minn now sends only the fields you changed. The edit dialogs on plugin screens (Code Snippets, Redirection and the others with a Save button) read the item again as they save, so whatever you left alone is saved as it is stored now. The order, product, membership, membership plan and settings pages send only what you changed too: saving a note on an order that was paid while it was open used to set it back to Pending payment, and saving a product put back a price changed by an import. Coupons (a store-credit balance lowered meanwhile), user accounts and your profile, shipping zones and widgets keep changes made elsewhere the same way.
+
+* **Block previews no longer show other people's private posts.** A preview of a GenerateBlocks dynamic tag or an Otter dynamic element that named another post by its id showed that post's title or text, even when it was a draft, private or trashed post the person writing could not open. For anyone who may not author dynamic content (Contributors and Authors, and Editors on a network), previews in Minn now leave those tags empty, as GenerateBlocks does in WordPress's own block preview, and Otter's show their placeholder text. Administrators and Editors see them resolved as before.
+
+* **Saving a product keeps stock sold while its page was open.** A product page or quick view left open while orders came in wrote back the stock count it had loaded on any save, so sold units went back on sale and a product that had sold out could be bought again. The quantity is now sent only when you change it, and if the stock moved since the page opened, Minn leaves it as stored, saves your other changes and tells you the current count, the way WooCommerce's own product screen does.
+
+* **A snippet switched off stays off.** Saving a snippet's name, code or notes from its details (Header Footer Code Manager, WPCode, Code Snippets, Custom CSS & JS, FluentSnippets) sent back the on/off state the dialog had when it opened, so a snippet switched off in the meantime, by someone else or by WPCode itself after an error, came back on. The edit now leaves the switch to the Activate and Deactivate actions.
+
+* **Gravity SMTP keeps each service's settings apart.** Picking another sending service and editing a field (a From address, an API key) in the same save wrote that field into the newly picked service, so one provider's key could end up on another. A switch now saves on its own, and the tab reloads with the new service's settings before you edit them.
+
+* **Podcast episode fields you didn't touch stay as they were.** Saving any field in the editor's Podcast episode panel (Seriously Simple Podcasting) re-cleaned every other text field on the episode, deleting runs shaped like 100%Ac from an iTunes title or file size that went out in the podcast feed. Untouched fields are now left as stored.
+
+* **Event costs keep their backslashes.** Saving The Events Calendar's Event details panel dropped backslashes from the cost (and re-cleaned a cost nobody edited), because the values reached the calendar's own save in a form it unslashes. Costs and websites now go through exactly as typed, and an untouched one exactly as stored.
+
+* **Saving the Content settings leaves your permalinks alone.** Saving anything on Settings › Content (the default category, say) also resent the permalink settings, which rebuilt the site's rewrite rules and, on a web server WordPress can't identify, put /index.php into every URL. The permalinks now save only when you change them.
+
+* **An order keeps its empty shipping address.** Saving an order (its status or a note) copied the billing name into the shipping address when that was empty, so a digital order with nothing to ship gained a shipping name. The billing name now fills in only when you type a shipping address on the order.
+
+* **Theme actions take only real themes.** Activating or deleting a theme accepted any folder under the themes directory, including one named with .. (which reached wp-content itself) or a theme's own subfolder, so a role allowed to delete themes could delete far more than a theme. Only a theme WordPress lists is accepted now, broken ones included so they can still be removed.
+
+* **Duplicate stays on content.** The Duplicate action worked on WordPress's internal records too, so an Editor could copy a privacy request and read the requester's email address, which only administrators see on the privacy screens. It now works on content types that have a screen of their own.
+
+* **New builder pages follow who may create them.** Starting a page in a page builder from Minn checked who may edit pages rather than who may create them, which a site can set apart. It now checks the same permission WordPress's own new-page screen does.
+
+* **Session details stay with administrators.** A user's sessions list still told a role that may only edit that user (a Shop Manager looking at a customer) when each session expires, which gives the exact sign-in time back, and on a network it showed every session's address and browser to an account holding a network permission through a site's role. Expiry now counts as a detail, and on a network the details go to super admins.
+
+* **Your toolbar choice is private.** The Show toolbar setting was readable by anyone through the public list of authors. It is now part of your profile's edit view only.
+
+* **WooCommerce logs follow WooCommerce's own rule.** System › Logs listed WooCommerce's log files (webhook and payment gateway logs, which carry customer details) to anyone who can open the System page, even a role WooCommerce itself would not show them to. They now need WooCommerce's store-management permission.
+
+* **Duplicating an Elementor template keeps it where it was.** Duplicating a library template that carried the floating-buttons type wrote the copy into Elementor's Floating Buttons, which only administrators may create, so a Contributor could put a post there. A copy now always lands in the same place as its original.
+
+* **Editing a content type keeps it hidden if you hid it.** Renaming a post type or taxonomy kept in Custom Post Type UI or JetEngine switched its admin screen back on (and JetEngine's menu entry), undoing a choice the dialog never shows. Those settings are now set only when a type is created.
+
+* **PowerPress episode titles you didn't touch stay as they were.** Saving any field in the PowerPress panel rewrote an untouched episode title or subtitle through a text cleaner, so a title like "Episode <3" went out in the podcast feed as "Episode &lt;3". Untouched fields are now compared before cleaning and left as stored.
+
+* **ACF choices keep empty values and labels.** Saving a field group in Minn's builder, or editing a field in the Fields view, rewrote choices that had an empty value or an empty label (a "None" option, say) into new choices with stray colons. Choices are now read back with ACF's own reader.
+
+* **The field group builder won't save over newer changes.** With a field group open in Minn's builder (ACF or ACPT), a field someone added in the plugin's own editor, or that an import or an acf-json sync brought in, was deleted by your next save, and a group switched off since came back on. The builder now notices when the group changed after you opened it and asks you to reload instead of saving over it.
+
+* **A membership plan keeps rules added elsewhere.** Saving a plan's page in Minn deleted every content, product or discount rule it hadn't loaded, so a rule someone added in WooCommerce Memberships while the page was open disappeared (members-only content could become public, or member pricing vanish). A save now removes only rules you deleted on that page.
+
+* **Unsaved editor drafts survive a stray link.** Opening the sign-in page with ?loggedout=true in the address (which any website can link to) erased the drafts the editor keeps in your browser in case it crashes. They are now cleared only after you actually sign out.
+
+* **The wp-config switches leave custom values alone.** On System, the Log to file switch replaced a WP_DEBUG_LOG set to a private file path with a plain on, which moved the log to the public wp-content/debug.log, and any switch replaced a define written as an expression. A switch now changes only a define that is a plain true or false; anything else shows as locked and stays as written.
+
+* **Email previews don't reveal the submitter's account data.** A Gravity Forms or WPForms email preview (and a Gravity Forms test email) built from the form's latest entry filled in tags that read the submitting account's stored settings, so whoever could preview the email could read any of them, including two-factor seeds and licence keys. Those tags now show as a placeholder in previews and tests; the profile details the entry screen already shows still fill in, and real notifications are unchanged.
+
+* **Fluent Forms passwords stay masked.** Minn's Fluent Forms entry list, entry page and email preview showed a password answer in full while Fluent still held it (a spam entry it skipped, integrations still queued), where Fluent's own screens show it masked. Minn now masks it the same way.
+
+* **Pods number and price fields keep their values.** On a site whose language writes thousands with a dot (German, Spanish, Italian, Dutch and others), or where a field uses the 9.999,99 format, saving any Pods field from the editor's Custom fields panel turned 19.99 into 1,999.00, and every later save multiplied it again. Untouched fields are now left as stored, and a number you type is handed to Pods in the field's own format.
+
+* **A manual UTC offset survives a Settings save.** On a site set to a manual offset (UTC+5:30, say) rather than a city, the Site tab showed the timezone as UTC and saved it on every save, so changing the tagline stored UTC and moved every local time on the site. The field now shows the offset as WordPress names it and saves the timezone only when you change it.
+
+* **A language another site uses stays installed.** On a network, Languages offered to remove any language this site and its users don't use, but every site shares the same language files, so removing one switched another site that runs in it back to English, and that site's administrator couldn't reinstall it. A language any site on the network uses (or the network's default) is now kept and says how many sites use it, and on a network too large to check, nothing is offered for removal.
+
+* **Block commenter is gone; Spam stays.** WordPress matches each line of its disallowed list against every later comment's name, email, website, text and IP as a fragment, so a blocked address like x@example.com also trashed comments from anyone whose address contained it (jax@example.com), including people who had never commented before. Minn could only check commenters who already exist, so the right-click Block commenter action is removed. Mark a comment as spam instead; the disallowed list itself is still under Settings › Comments.
+
+* **Update won't install an older version.** WordPress remembers an available update for hours. If a theme or plugin was replaced another way in the meantime (a deploy, SFTP, a host's file manager), Minn's Themes tab still offered that remembered update, and clicking Update installed the older release over the newer one and reported success; a plugin deleted that way could be reinstalled. An update now has to be newer than what is installed, and Minn checks again with WordPress.org first when it isn't, as WordPress's own screens do.
+
+* **ACF User fields keep people whose role changed.** A User field limited to a role (Reviewers: editors only, say) lost anyone whose role had changed since they were picked whenever you saved any custom field on the post, and ACF then removed the post from their side of a two-way field. Fields you don't touch are now left as stored, and a person already in the field stays when you edit it; the role still applies to people you add.
+
+* **Events with several venues keep them all.** With Events Calendar Pro, an event can have more than one venue, but the editor's Event details panel showed only the first and sent it back with any edit, so changing the cost unlinked the others. On an event with several venues the Venue field is now left to the calendar's own screen, as the Organizer field already was for several organizers.
+
+* **Bricks templates without a type or title keep them.** A Bricks template with no type (an import of a type this site doesn't offer) opened in Minn with Type set to Header and its empty title filled in as "(no title)", so saving a tag turned it into an empty Header called "(no title)", with its design left where Bricks no longer looked. Both now stay empty unless you change them, and choosing a type for such a template moves its design along, as it does for any other.
+
+* **The database browser hides more credentials, and copies of them.** System › Database showed password hashes, reset tokens and API secrets kept in other plugins' own tables (ACPT, LatePoint, Amelia and the like), OttoKit's saved API token, Freemius' cached licence keys, Elementor Connect's account secrets, and the payment keys WPForms and Formidable keep. Columns named like a password, secret or token are now hidden in every table and can't be sorted or searched, those rows are hidden by name, and any cell holding a copy of a credential the browser hides elsewhere (raw or base64-encoded, under a name nothing could predict) is hidden too and left out of value searches. Activity logs still show what they recorded, as their own screens do.
+
+* **CleanTalk's access key stays out of view.** The spam settings showed the first four characters of CleanTalk's key and the Connectors card its last four to anyone who can change settings, though only someone who may manage plugins can change the key, and on a network a site's key can be the network's, which CleanTalk hides from site administrators. The spam note now just says a key is set, and the card's last four characters show only to people who may manage plugins (super admins on a network).
+
+* **A mistyped Events Calendar key no longer marks the working one invalid.** On sites with a persistent object cache (Redis, Memcached), pasting a wrong key for an Events Calendar product (or a key during an outage of their licence server) left the working licence marked invalid for twelve hours, with the calendar's licence warnings, although Minn showed it as fine. A refused key now leaves the recorded status exactly as it was on every site. The same goes for Etch.
+
+* **Renaming a snippet keeps its type.** A WPCode or FluentSnippets snippet with no type (one whose type was lost in an import, which therefore never runs) opened in Minn with PHP picked, so renaming it turned it into a PHP snippet; a Novamira memory with no type became a user memory; and a Custom CSS & JS Pro HTML snippet set to desktop or mobile only went back to internal linking on any edit. Each now stays as it was unless you change it, and FluentSnippets, which won't save a snippet without a type and a Run at setting, asks you to pick them.
+
+* **Licence actions follow each plugin's own rules.** Minn offered Activate, Deactivate and Re-check for ACF PRO, WPForms, MonsterInsights, ExactMetrics, Gravity Forms and Admin Columns Pro to anyone who can manage settings, even where the plugin itself refuses them: an agency that hides ACF's Updates page from a client's administrators still left that client able to deactivate the agency's ACF PRO licence from Minn. Each now offers them only to the people its own licence screen would, and everyone else sees the licence read-only.
+
+* **Network screens check permissions where WordPress does.** WordPress reads network permissions on the network's main site, so a "network manager" role created on one subsite gives its holder nothing in Network Admin. Minn read them on whichever site the request came from, so that role could list and change the network's sites, accounts and settings from Minn, and make an account a network administrator. Minn now checks on the main site too.
+
+* **With several networks, install-wide tools stay with the main network.** On a WordPress install running more than one network (WP Multi Network), the database browser, the logs and the wp-config switches treated any network's super admin as the owner of the whole install, so a secondary network's administrator could read the main network's site and every network's settings and clear the debug log. Those tools now belong to the main network's super admins.
+
+* **Look-alike blocks in a post can't change other blocks.** A writer could put an element in a post (inside a paragraph or a Group) wearing the class Minn's editor uses for its protected blocks and naming another block's number. When an Editor or Administrator then saved the post in Minn, cut that element, or applied a setting to the Group, Minn copied, rewrote or dropped the other block. The editor now only treats the blocks it drew itself as protected; anything else in the text is saved as the writer's text.
+
+* **Editing a JetSearch suggestion keeps its search count.** JetSearch counts every search for a suggestion, and saving a renamed suggestion in Minn put back the count from when you opened it. The count is now saved only when you change it.
+
+* **Saving the Comments settings changes only what you changed.** Saving that tab sent every spam setting and the blocked-words list back as they were when the tab opened, undoing a change someone made elsewhere meanwhile. Only the settings you changed are saved now.
+
+* **WP Freighter keeps the rest of its configuration.** Changing the files mode or domain mapping from Minn replaced WP Freighter's whole configuration with those two settings. The rest of it now stays.
+
+* **Activating a second copy of Minn switches to it.** A zip from GitHub's Code › Download ZIP or a release's Source code link unpacks to minn-admin-main or minn-admin-0.43.0, so WordPress installs it beside an existing minn-admin instead of updating it. Activating that second copy failed with a fatal error, or "activated" while the old copy kept running and every page logged warnings. Activating it now deactivates the old copy and says so, a copy that can't run stays quiet instead of erroring, and Plugins names any other copy that is installed so you can delete it. (GitHub #67)
+
 ## **v0.44.0** - October 11 2026
 
 The keep-what-you-didn't-touch release. Most of this cycle went into saves that change only what you changed: ACF, Meta Box, JetEngine and ACPT fields keep their backslashes, dates and untouched values, a product keeps its variations' stock and its formatting, and coupons, users, menu items, membership plans and the form email pages keep what someone else set. Photos in an ACF block's preview now open the media picker when you click them, Minn on Minn updates itself, Swiss and Austrian German get Minn in German, and a store-wide attribute offers the terms the shop already has. The cycle opened by fixing every finding from the review of the shipped 0.43.0 and closes with a full review of the release candidate: one high issue (markup dressed as Minn's own editor controls could put a script into a post an editor saved), two medium and thirty-four low, all fixed before release, every fix reviewed again, and two new checks in the test suite that fail whenever a network permission or a stored license key slips past Minn's rules.
