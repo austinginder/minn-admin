@@ -93,18 +93,17 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'clicked coupon row', clicked, '' );
 
 	if ( clicked ) {
-		await page.waitForFunction( () => {
-			const m = document.querySelector( '.minn-modal' );
-			return m && ! m.textContent.includes( 'Loading coupon' );
-		}, null, { timeout: 15000 } ).catch( () => null );
+		await page.waitForSelector( '#minn-c-code', { timeout: 20000 } ).catch( () => null );
 
 		const ui = await page.evaluate( () => ( {
+			url: location.pathname,
 			hasCode: !! document.querySelector( '#minn-c-code' ),
 			hasAmount: !! document.querySelector( '#minn-c-amount' ),
 			hasSave: !! document.querySelector( '#minn-coupon-save' ),
-			hasWc: /Edit in WooCommerce/.test( document.querySelector( '.minn-modal' )?.textContent || '' ),
+			hasWc: /Edit in WooCommerce/.test( document.querySelector( '#minn-view' )?.textContent || '' ),
 		} ) );
-		t.check( 'coupon modal has edit fields', ui.hasCode && ui.hasAmount && ui.hasSave, JSON.stringify( ui ) );
+		t.check( 'a coupon row opens the coupon page with its fields, and no wp-admin link',
+			/\/coupons\/\d+$/.test( ui.url ) && ui.hasCode && ui.hasAmount && ui.hasSave && ! ui.hasWc, JSON.stringify( ui ) );
 
 		if ( ui.hasSave ) {
 			await page.fill( '#minn-c-amount', '20' );
@@ -121,30 +120,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				JSON.stringify( verify.body ) );
 		}
 
-		// Layout: the option checkboxes are real rows, not the term-picker's
-		// 15px tick glyph (a class collision squeezed both labels into each
-		// other and the usage line), and Save/Delete share one row.
+		// Layout: the option switches are full rows that do not overlap, and
+		// the page's own verbs sit in its header.
 		const layout = await page.evaluate( () => {
-			const indRow = document.querySelector( '#minn-c-individual' )?.closest( 'label' );
-			const shipRow = document.querySelector( '#minn-c-ship' )?.closest( 'label' );
-			const save = document.querySelector( '#minn-coupon-save' );
-			const del = document.querySelector( '#minn-coupon-delete' );
-			const r1 = indRow && indRow.getBoundingClientRect();
-			const r2 = shipRow && shipRow.getBoundingClientRect();
+			const r1 = document.querySelector( '#minn-c-individual' )?.closest( '.minn-toggle-row' )?.getBoundingClientRect();
+			const r2 = document.querySelector( '#minn-c-nosale' )?.closest( '.minn-toggle-row' )?.getBoundingClientRect();
+			const head = document.querySelector( '.minn-order-head-actions' );
 			return {
 				w: r1 ? Math.round( r1.width ) : 0,
 				overlap: r1 && r2 ? r2.top < r1.bottom - 2 : true,
-				sameRow: save && del
-					? Math.abs( save.getBoundingClientRect().top - del.getBoundingClientRect().top ) < 4
-					: false,
+				headVerbs: !! ( head && head.querySelector( '#minn-co-copy' ) && head.querySelector( '#minn-co-delete' ) ),
 			};
 		} );
-		t.check( 'option checkboxes render as full rows without overlap', layout.w > 100 && ! layout.overlap, JSON.stringify( layout ) );
-		t.check( 'Save and Delete share one row', layout.sameRow, JSON.stringify( layout ) );
+		t.check( 'option switches render as full rows without overlap', layout.w > 100 && ! layout.overlap, JSON.stringify( layout ) );
+		t.check( 'Copy code and Delete sit in the page header', layout.headVerbs, JSON.stringify( layout ) );
 
 		// Right-click menu: verbs present, status flips through it, and its
 		// Delete (behind the app confirm) really removes the coupon.
-		await page.keyboard.press( 'Escape' );
+		await page.click( '#minn-co-back' );
 		// The save nulled the list cache — wait for the cold refetch to put
 		// the row back before right-clicking it.
 		await page.waitForSelector( `.minn-table-row[data-coupon="${ couponId }"]`, { timeout: 15000 } );
@@ -169,7 +162,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'coupon context menu offers the verbs',
 			/Open coupon/.test( menuText ) && /Copy code/.test( menuText )
 			&& /Move to draft/.test( menuText ) && /Delete/.test( menuText )
-			&& /Edit in WooCommerce/.test( menuText ), menuText );
+			&& ! /Edit in WooCommerce/.test( menuText ), menuText );
 		// Evaluate-click menu items after a right-click opens them (the
 		// mousedown+contextmenu pair can re-open and detach the first node).
 		await page.evaluate( () => {
@@ -207,8 +200,6 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	// The selects used to fall back to their first option, so fixing a
 	// description turned a Subscriptions sign-up fee coupon into a plain
 	// percentage one and published a pending coupon.
-	await page.keyboard.press( 'Escape' );
-	await page.waitForTimeout( 200 );
 	const odd = await api( 'wc/v3/coupons', {
 		method: 'POST',
 		body: JSON.stringify( { code: 'ODD' + suffix.toUpperCase(), discount_type: 'sign_up_fee_percent', amount: '100', status: 'pending', description: 'Odd coupon' } ),
@@ -217,6 +208,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	if ( ! oddId ) {
 		t.check( 'a Subscriptions sign-up fee coupon can be created (skip without Subscriptions)', true, JSON.stringify( odd.body ).slice( 0, 160 ) );
 	} else {
+		await page.goto( BASE + '/minn-admin/coupons', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-order-search', { timeout: 20000 } );
 		await page.fill( '#minn-order-search', 'ODD' + suffix.toUpperCase() );
 		await page.waitForSelector( `.minn-table-row[data-coupon="${ oddId }"]`, { timeout: 15000 } );
 		await page.click( `.minn-table-row[data-coupon="${ oddId }"]` );
@@ -230,14 +223,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'an edit saves (control)', oddAfter.body && 'Odd coupon, reworded' === oddAfter.body.description, JSON.stringify( oddAfter.body ) );
 		t.check( 'a description edit keeps the sign-up fee type and the pending status', oddAfter.body && 'sign_up_fee_percent' === oddAfter.body.discount_type && 'pending' === oddAfter.body.status, JSON.stringify( oddAfter.body ) );
 		await api( `wc/v3/coupons/${ oddId }?force=true`, { method: 'DELETE' } ).catch( () => null );
-		await page.keyboard.press( 'Escape' );
-		await page.waitForTimeout( 200 );
 	}
 
 	// Create via UI.
 	if ( hasAdd ) {
+		await page.goto( BASE + '/minn-admin/coupons', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-coupon-add', { timeout: 20000 } );
 		await page.click( '#minn-coupon-add' );
-		await page.waitForSelector( '#minn-c-code', { timeout: 5000 } );
+		await page.waitForSelector( '#minn-c-code', { timeout: 20000 } );
 		const newCode = 'NEW' + suffix.toUpperCase();
 		await page.fill( '#minn-c-code', newCode );
 		await page.fill( '#minn-c-amount', '5' );
@@ -250,6 +243,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const listed = await api( `wc/v3/coupons?search=${ encodeURIComponent( newCode ) }&_fields=id,code` );
 		const hit = ( listed.body || [] ).find( ( c ) => ( c.code || '' ).toLowerCase() === newCode.toLowerCase() );
 		t.check( 'Add coupon creates via UI', !! hit, JSON.stringify( listed.body ) );
+		await page.waitForFunction( () => /\/coupons\/\d+$/.test( location.pathname ), null, { timeout: 15000 } ).catch( () => null );
+		t.check( 'and lands on the new coupon\'s page', !! hit && page.url().endsWith( '/coupons/' + hit.id ), page.url() );
 		if ( hit ) await api( `wc/v3/coupons/${ hit.id }?force=true`, { method: 'DELETE' } ).catch( () => null );
 	}
 

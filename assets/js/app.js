@@ -1283,6 +1283,7 @@
 		products: [ __( 'Products' ), 'WooCommerce' ],
 		product: [ __( 'Product' ), 'WooCommerce' ],
 		coupons: [ __( 'Coupons' ), 'WooCommerce' ],
+		coupon: [ __( 'Coupon' ), 'WooCommerce' ],
 		'store-settings': [ __( 'Store settings' ), 'WooCommerce' ],
 		customers: [ __( 'Customers' ), 'WooCommerce' ],
 		customer: [ __( 'Customer' ), 'WooCommerce' ],
@@ -3464,6 +3465,10 @@
 			// same page over a blank product.
 			state.productPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
 			state.route = 'product';
+		} else if ( route === 'coupons' && parts[ 1 ] && ( /^\d+$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
+			// /coupons/12 — a coupon's page; /coupons/new makes one.
+			state.couponPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
+			state.route = 'coupon';
 		} else if ( route === 'customers' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /customers/57 — a store customer's page.
 			state.customerPageId = parseInt( parts[ 1 ], 10 );
@@ -3547,7 +3552,7 @@
 		// Pages that show a save bar, or arm their Save, only once something
 		// changed say so on screen.
 		const view = $( '#minn-view' );
-		if ( view && $( '#minn-p-savebar:not([hidden]):not([data-pristine]), #minn-no-savebar:not([data-pristine]), #minn-wcm-savebar:not([hidden]), #minn-wcmp-savebar:not([hidden]), #minn-look-save:not([disabled]), #minn-rd-save:not([disabled])', view ) ) return true;
+		if ( view && $( '#minn-p-savebar:not([hidden]):not([data-pristine]), #minn-no-savebar:not([data-pristine]), #minn-co-savebar:not([hidden]):not([data-pristine]), #minn-wcm-savebar:not([hidden]), #minn-wcmp-savebar:not([hidden]), #minn-look-save:not([disabled]), #minn-rd-save:not([disabled])', view ) ) return true;
 		const f = activeSettingsForm;
 		return !! ( f && f.route === r && f.host && f.host.isConnected && f.isDirty() );
 	}
@@ -4851,6 +4856,7 @@
 				// Same for the product detail page and Products.
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				|| ( 'customer' === state.route && 'customers' === btn.dataset.nav )
+				|| ( 'coupon' === state.route && 'coupons' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
 				|| ( 'subscription' === state.route && 'subscriptions' === btn.dataset.nav )
 				// And the membership page and its Memberships surface.
@@ -14314,8 +14320,8 @@
 	 * use, searching products instead of terms. This product is excluded from
 	 * its own results, since linking a thing to itself does nothing.
 	 */
-	function bindProductLinkFields( m, p ) {
-		PRODUCT_LINK_FIELDS.forEach( ( f ) => {
+	function bindProductLinkFields( m, p, fields ) {
+		( fields || PRODUCT_LINK_FIELDS ).forEach( ( f ) => {
 			const wrap = $( `[data-plac="${ f.key }"]` );
 			const chips = $( `[data-plchips="${ f.key }"]` );
 			if ( ! wrap || ! chips ) return;
@@ -14422,8 +14428,9 @@
 				: `<div class="minn-ac-empty">${ t.create ? esc( __( 'No matches. Press Enter to create it.' ) ) : esc( __( 'No matches' ) ) }</div>` );
 		// Every taxonomy can be added to from here, hierarchy included: the
 		// dialog behind this asks for the name (and the parent) on purpose,
-		// which is the deliberate step Enter-to-create never had.
-		const foot = `<div class="minn-ac-foot"><button type="button" class="minn-ac-item minn-ac-add" data-ptadd>${ icon( 'plus' ) }<span>${ esc( t.addLabel || __( 'Add new' ) ) }</span></button></div>`;
+		// which is the deliberate step Enter-to-create never had. A field that
+		// only narrows by what exists (a coupon's categories) says noAdd.
+		const foot = t.noAdd ? '' : `<div class="minn-ac-foot"><button type="button" class="minn-ac-item minn-ac-add" data-ptadd>${ icon( 'plus' ) }<span>${ esc( t.addLabel || __( 'Add new' ) ) }</span></button></div>`;
 		return body + foot;
 	}
 
@@ -14557,8 +14564,8 @@
 	 * Tags and brands are flat, so Enter (or Add new) creates one that does not
 	 * exist yet; categories are pick-only.
 	 */
-	function bindProductTermFields( m ) {
-		PRODUCT_TERM_FIELDS.forEach( ( t ) => {
+	function bindProductTermFields( m, fields ) {
+		( fields || PRODUCT_TERM_FIELDS ).forEach( ( t ) => {
 			const wrap = $( `[data-ptac="${ t.key }"]` );
 			const chips = $( `[data-ptchips="${ t.key }"]` );
 			if ( ! wrap || ! chips || ! Array.isArray( ( m.terms || {} )[ t.key ] ) ) return;
@@ -15436,7 +15443,15 @@
 		[ 'fixed_product', __( 'Fixed product discount' ) ],
 	];
 	const COUPON_LIST_FIELDS = 'id,code,amount,status,discount_type,description,date_expires,usage_count,usage_limit,usage_limit_per_user,individual_use,free_shipping,minimum_amount,maximum_amount,date_created';
-	const COUPON_DETAIL_FIELDS = COUPON_LIST_FIELDS + ',exclude_sale_items,date_expires_gmt';
+	const COUPON_DETAIL_FIELDS = COUPON_LIST_FIELDS + ',exclude_sale_items,date_expires_gmt,product_ids,excluded_product_ids,product_categories,excluded_product_categories,email_restrictions,limit_usage_to_x_items,used_by';
+	const COUPON_PRODUCT_FIELDS = [
+		{ key: 'product_ids', label: __( 'Products' ), hint: __( 'The discount applies only to these. None means every product.' ) },
+		{ key: 'excluded_product_ids', label: __( 'Exclude products' ), hint: __( 'Never discounted, and an order of only these cannot use the code.' ) },
+	];
+	const COUPON_TERM_FIELDS = [
+		{ key: 'product_categories', label: __( 'Product categories' ), route: 'products/categories', noAdd: true, placeholder: __( 'Search categories' ) },
+		{ key: 'excluded_product_categories', label: __( 'Exclude categories' ), route: 'products/categories', noAdd: true, placeholder: __( 'Search categories' ) },
+	];
 
 	const couponCtx = () => JSON.stringify( orderFilters( LIST_FILTER_SPECS.coupons ) ) + '|' + ( state.couponSearch || '' );
 
@@ -15488,49 +15503,6 @@
 		state.cache.coupons = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
-	function openCouponModal( listCoupon, isNew ) {
-		if ( isNew ) {
-			state.modal = {
-				type: 'coupon',
-				isNew: true,
-				coupon: {},
-				full: {
-					code: '',
-					amount: '',
-					discount_type: 'percent',
-					status: 'publish',
-					description: '',
-					usage_limit: null,
-					usage_limit_per_user: null,
-					individual_use: false,
-					free_shipping: false,
-					minimum_amount: '',
-					date_expires: null,
-				},
-				loading: false,
-			};
-			renderOverlays();
-			return;
-		}
-		const id = listCoupon && listCoupon.id;
-		if ( ! id ) return;
-		state.modal = { type: 'coupon', coupon: listCoupon, full: null, loading: true, isNew: false };
-		renderOverlays();
-		api( `wc/v3/coupons/${ id }?_fields=${ COUPON_DETAIL_FIELDS }` )
-			.then( ( full ) => {
-				if ( ! state.modal || state.modal.type !== 'coupon' || ( state.modal.coupon && state.modal.coupon.id !== id ) ) return;
-				state.modal.full = full;
-				state.modal.loading = false;
-				renderOverlays();
-			} )
-			.catch( ( e ) => {
-				if ( ! state.modal || state.modal.type !== 'coupon' ) return;
-				state.modal.loading = false;
-				state.modal.loadError = e.message || __( 'Could not load coupon' );
-				renderOverlays();
-			} );
-	}
-
 	function couponsEmptyMessage() {
 		if ( state.couponSearch ) {
 			/* translators: %s: the search term that matched no coupons. */
@@ -15554,7 +15526,7 @@
 	function bindCouponToolbar( view ) {
 		bindListFilterBar( view );
 		const addBtn = $( '#minn-coupon-add', view );
-		if ( addBtn ) addBtn.addEventListener( 'click', () => openCouponModal( null, true ) );
+		if ( addBtn ) addBtn.addEventListener( 'click', () => go( 'coupons/new' ) );
 	}
 
 	function renderCoupons() {
@@ -15612,7 +15584,7 @@
 		$$( '[data-coupon]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
 				const cp = c.items.find( ( x ) => x.id === parseInt( row.dataset.coupon, 10 ) );
-				if ( cp ) openCouponModal( cp );
+				if ( cp ) go( 'coupons/' + cp.id );
 			} )
 		);
 		// Right-click a coupon: open + copy + status flip + delete, one row
@@ -15632,7 +15604,7 @@
 				if ( ! cp ) return;
 				e.preventDefault();
 				openMinnMenu( e.clientX, e.clientY, [
-					{ label: __( 'Open coupon' ), run: () => openCouponModal( cp ) },
+					{ label: __( 'Open coupon' ), run: () => go( 'coupons/' + cp.id ) },
 					...( cp.code ? [ { label: __( 'Copy code' ), run: async () => {
 						try { await navigator.clipboard.writeText( cp.code ); toast( __( 'Code copied' ) ); }
 						catch ( err ) { toast( __( 'Could not copy' ), true ); }
@@ -15654,13 +15626,444 @@
 							} catch ( err ) { toast( err.message, true ); }
 						},
 					} ] : [] ),
-					{ label: __( 'Edit in WooCommerce' ), href: B.site.adminUrl + 'post.php?post=' + cp.id + '&action=edit' },
 				] );
 			} )
 		);
 		bindPager( view, c.page, loadCoupons, () => { if ( state.route === 'coupons' ) renderCoupons(); } );
 		// Arriving on a filtered URL: keep the address bar canonical.
 		syncOrderFiltersUrl();
+	}
+
+	/* ===== Coupon page (/coupons/{id}, /coupons/new) ===== */
+
+	/**
+	 * A coupon on a page of its own, in the product page's shape: every
+	 * setting WooCommerce's coupon screen has (the code and discount, the
+	 * spend window, which products, categories and emails it applies to,
+	 * the limits), a save bar that appears once something changes, and on
+	 * an existing coupon the orders that used it. An existing coupon saves
+	 * only what changed; a new one is created by its first save.
+	 */
+	function renderCouponPage() {
+		const view = $( '#minn-view' );
+		if ( ! B.wc || ! B.caps.coupons ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( 'Coupons are turned off in WooCommerce (Settings → General → Enable coupons), or you do not have permission to manage them.' ) ) }</div>`;
+			return;
+		}
+		let m = state.couponPage;
+		if ( ! m || m.id !== state.couponPageId ) {
+			m = state.couponPage = { id: state.couponPageId, isNew: ! state.couponPageId, full: null, loading: true, usedIn: null };
+			loadCouponPage( m );
+		}
+		const c = m.full || {};
+		const loading = !! m.loading && ! m.full;
+		view.innerHTML = `
+		<div class="minn-order-page minn-order-page-wide minn-coupon-page">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-co-back">← ${ esc( __( 'Coupons' ) ) }</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-order-head-row">
+						<span class="minn-modal-title"${ m.isNew ? '' : ' style="font-family:var(--mono,ui-monospace,monospace);"' }>${ esc( m.isNew ? __( 'New coupon' ) : ( c.code || __( 'Coupon' ) ) ) }</span>
+						${ ! m.isNew && c.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ c.status ] || 'draft' }">${ esc( statusLabel( c.status ) ) }</span>` : '' }
+					</div>
+					<div class="minn-modal-sub">${ loading ? esc( __( 'Loading…' ) ) : esc( m.isNew ? __( 'Create a promo code' ) : couponTypeLabel( c.discount_type ) + ' · #' + c.id ) }</div>
+				</div>
+				${ m.isNew || loading || m.loadError ? '' : `
+				<div class="minn-order-head-actions">
+					<button class="minn-btn-soft" id="minn-co-copy" type="button">${ icon( 'copy' ) } ${ esc( __( 'Copy code' ) ) }</button>
+					<button class="minn-btn-soft danger" id="minn-co-delete" type="button">${ icon( 'trash' ) } ${ esc( __( 'Delete' ) ) }</button>
+				</div>` }
+			</div>
+			<div class="minn-order-page-body">
+				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading coupon…' ) ) }</div></div>` : '' }
+				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+				${ ! loading && ! m.loadError ? couponPageBodyHtml( m ) : '' }
+			</div>
+		</div>`;
+		const back = $( '#minn-co-back' );
+		if ( back ) back.addEventListener( 'click', () => go( 'coupons' ) );
+		if ( ! loading && ! m.loadError ) bindCouponPage( m );
+	}
+
+	function couponPageSeed( m ) {
+		const c = m.full || {};
+		m.links = {};
+		COUPON_PRODUCT_FIELDS.forEach( ( f ) => {
+			m.links[ f.key ] = ( Array.isArray( c[ f.key ] ) ? c[ f.key ] : [] ).map( ( id ) => ( { id, name: ( m.linkNames || {} )[ id ] || `#${ id }` } ) );
+		} );
+		m.terms = {};
+		COUPON_TERM_FIELDS.forEach( ( t ) => {
+			m.terms[ t.key ] = ( Array.isArray( c[ t.key ] ) ? c[ t.key ] : [] ).map( ( id ) => ( { id, name: ( m.termNames || {} )[ id ] || `#${ id }` } ) );
+		} );
+	}
+
+	// The coupon, then the names behind its product and category ids, all
+	// before the first paint: filling chips in later would repaint over a
+	// form being typed in.
+	async function loadCouponPage( m ) {
+		const isCur = () => state.couponPage === m;
+		const repaint = () => { if ( isCur() && state.route === 'coupon' ) renderCouponPage(); };
+		if ( m.isNew ) {
+			m.full = {
+				code: '', description: '', discount_type: 'percent', amount: '', status: 'publish',
+				free_shipping: false, date_expires: null, minimum_amount: '', maximum_amount: '',
+				individual_use: false, exclude_sale_items: false, email_restrictions: [],
+				usage_limit: null, usage_limit_per_user: null, limit_usage_to_x_items: null,
+				product_ids: [], excluded_product_ids: [], product_categories: [], excluded_product_categories: [],
+			};
+			m.linkNames = {};
+			m.termNames = {};
+			couponPageSeed( m );
+			m.loading = false;
+			repaint();
+			return;
+		}
+		try {
+			const full = await api( `wc/v3/coupons/${ m.id }?_fields=${ COUPON_DETAIL_FIELDS }` );
+			const productIds = [].concat( full.product_ids || [], full.excluded_product_ids || [] );
+			const catIds = [].concat( full.product_categories || [], full.excluded_product_categories || [] );
+			const [ prods, cats ] = await Promise.all( [
+				productIds.length ? api( `wc/v3/products?include=${ productIds.join( ',' ) }&per_page=100&_fields=id,name` ).catch( () => [] ) : [],
+				catIds.length ? api( `wc/v3/products/categories?include=${ catIds.join( ',' ) }&per_page=100&_fields=id,name` ).catch( () => [] ) : [],
+			] );
+			if ( ! isCur() ) return;
+			m.linkNames = {};
+			( Array.isArray( prods ) ? prods : [] ).forEach( ( r ) => { m.linkNames[ r.id ] = decodeEntities( r.name || '' ); } );
+			m.termNames = {};
+			( Array.isArray( cats ) ? cats : [] ).forEach( ( r ) => { m.termNames[ r.id ] = decodeEntities( r.name || '' ); } );
+			m.full = full;
+			m.loaded = JSON.parse( JSON.stringify( full ) );
+			couponPageSeed( m );
+			m.loading = false;
+			repaint();
+			loadCouponOrders( m );
+		} catch ( e ) {
+			if ( ! isCur() ) return;
+			m.loading = false;
+			m.loadError = e.message || __( 'Could not load coupon' );
+			repaint();
+		}
+	}
+
+	// The orders that used the code. WooCommerce's order search matches a
+	// coupon line by its code; anything else the search caught (a product
+	// named like the code) is dropped by checking the lines themselves. The
+	// card repaints alone, so a form being edited is left as it is.
+	async function loadCouponOrders( m ) {
+		const code = String( ( m.full || {} ).code || '' ).toLowerCase();
+		if ( ! code ) return;
+		let rows = [];
+		try {
+			rows = await api( `wc/v3/orders?search=${ encodeURIComponent( code ) }&per_page=50&orderby=date&order=desc&_fields=id,number,status,total,currency_symbol,date_created,coupon_lines` );
+		} catch ( e ) {
+			rows = [];
+		}
+		if ( state.couponPage !== m ) return;
+		m.usedIn = ( Array.isArray( rows ) ? rows : [] ).filter( ( o ) => ( o.coupon_lines || [] ).some( ( l ) => String( l.code || '' ).toLowerCase() === code ) );
+		const host = $( '#minn-co-orders' );
+		if ( host ) {
+			host.innerHTML = couponOrdersHtml( m );
+			bindCouponOrders( host );
+		}
+	}
+
+	function couponOrdersHtml( m ) {
+		if ( m.usedIn == null ) return `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading orders…' ) ) }</div>`;
+		// WooCommerce's use count never goes down, so a code used by orders
+		// since deleted can count uses with no order left to show.
+		if ( ! m.usedIn.length ) return `<div class="minn-toggle-desc">${ esc( __( 'No orders in the store carry this code.' ) ) }</div>`;
+		return m.usedIn.map( ( o ) => `
+			<button type="button" class="minn-sub-order-row" data-coorder="${ o.id }">
+				<span>#${ esc( o.number || o.id ) }</span>
+				<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>
+				<span>${ esc( orderMoney( o, o.total ) ) }</span>
+				<span style="color:var(--text3); font-size:12.5px;">${ esc( timeAgo( o.date_created ) ) }</span>
+			</button>` ).join( '' );
+	}
+
+	function bindCouponOrders( host ) {
+		const m = state.couponPage;
+		$$( '[data-coorder]', host ).forEach( ( row ) => row.addEventListener( 'click', () => {
+			if ( m && m.full ) setPageReturn( 'coupons/' + m.id, m.full.code || __( 'Coupon' ) );
+			go( 'orders/' + row.dataset.coorder );
+		} ) );
+	}
+
+	function couponPageBodyHtml( m ) {
+		const c = m.full || {};
+		const money = ( v ) => ( v && parseFloat( v ) ? String( v ) : '' );
+		const num = ( v ) => ( v == null || v === '' ? '' : String( v ) );
+		const exp = c.date_expires ? String( c.date_expires ).slice( 0, 10 ) : '';
+		const card = ( key, title, inner ) => `
+							<div class="minn-order-sec" data-cocard="${ esc( key ) }">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( title ) }</div></div>
+								${ inner }
+							</div>`;
+		const used = c.usage_count || 0;
+		return `
+				<div class="minn-order-body">
+					<div class="minn-order-layout">
+						<div class="minn-order-main">
+							${ card( 'general', __( 'Code & discount' ), `
+								<div class="minn-order-fields">
+									<div>
+										<div class="minn-field-label">${ esc( __( 'Code' ) ) }</div>
+										<div style="display:flex; gap:8px;">
+											<input class="minn-input" id="minn-c-code" value="${ esc( c.code || '' ) }" placeholder="${ esc( __( 'e.g. SAVE10' ) ) }" autocomplete="off" spellcheck="false" style="flex:1; min-width:0; font-family:var(--mono,ui-monospace,monospace); text-transform:uppercase;">
+											<button type="button" class="minn-btn-soft" id="minn-c-generate">${ esc( __( 'Generate' ) ) }</button>
+										</div>
+										<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'What shoppers type at checkout. Capital letters make no difference.' ) ) }</div>
+									</div>
+									<div><div class="minn-field-label">${ esc( __( 'Description' ) ) }</div><textarea class="minn-input" id="minn-c-desc" rows="2" placeholder="${ esc( __( 'Internal note' ) ) }">${ esc( c.description || '' ) }</textarea></div>
+									<div class="minn-order-field-row">
+										${ productComboHtml( couponComboSpecs( c ).find( ( x ) => x.id === 'minn-c-type' ) ) }
+										<div><div class="minn-field-label">${ esc( __( 'Amount' ) ) }</div><input class="minn-input" id="minn-c-amount" type="text" inputmode="decimal" value="${ esc( c.amount != null ? String( c.amount ).replace( /\.00$/, '' ) : '' ) }" placeholder="10"></div>
+									</div>
+									<div><div class="minn-field-label">${ esc( __( 'Expires' ) ) }</div><input class="minn-input" id="minn-c-expires" readonly placeholder="${ esc( __( 'Never' ) ) }" data-dp="${ esc( exp ) }" value="${ esc( dpPretty( exp ) ) }"></div>
+									${ productToggleHtml( 'minn-c-ship', __( 'Allow free shipping' ), !! c.free_shipping ) }
+									<div class="minn-toggle-desc">${ esc( __( 'Free shipping applies when the store has a free shipping method that asks for a coupon.' ) ) }</div>
+								</div>` ) }
+							${ card( 'restrictions', __( 'Usage restriction' ), `
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">${ esc( __( 'Minimum spend' ) ) }</div><input class="minn-input" id="minn-c-min" type="text" inputmode="decimal" value="${ esc( money( c.minimum_amount ) ) }" placeholder="${ esc( __( 'None' ) ) }"></div>
+										<div><div class="minn-field-label">${ esc( __( 'Maximum spend' ) ) }</div><input class="minn-input" id="minn-c-max" type="text" inputmode="decimal" value="${ esc( money( c.maximum_amount ) ) }" placeholder="${ esc( __( 'None' ) ) }"></div>
+									</div>
+									${ productToggleHtml( 'minn-c-individual', __( 'Individual use only' ), !! c.individual_use ) }
+									<div class="minn-toggle-desc">${ esc( __( 'It cannot be combined with other coupons.' ) ) }</div>
+									${ productToggleHtml( 'minn-c-nosale', __( 'Exclude sale items' ), !! c.exclude_sale_items ) }
+									${ COUPON_PRODUCT_FIELDS.map( ( f ) => productLinkFieldHtml( m, f ) ).join( '' ) }
+									${ COUPON_TERM_FIELDS.map( ( t ) => productTermFieldHtml( m, t ) ).join( '' ) }
+									<div>
+										<div class="minn-field-label">${ esc( __( 'Allowed emails' ) ) }</div>
+										<textarea class="minn-input" id="minn-c-emails" rows="2" placeholder="${ esc( __( 'Anyone' ) ) }">${ esc( ( c.email_restrictions || [] ).join( ', ' ) ) }</textarea>
+										<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'Billing emails that may use it, separated by commas. A * matches any part, as in *@example.com.' ) ) }</div>
+									</div>
+								</div>` ) }
+							${ card( 'limits', __( 'Usage limits' ), `
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">${ esc( __( 'Usage limit per coupon' ) ) }</div><input class="minn-input" id="minn-c-limit" type="number" min="0" step="1" value="${ esc( num( c.usage_limit ) ) }" placeholder="${ esc( __( 'Unlimited' ) ) }"></div>
+										<div><div class="minn-field-label">${ esc( __( 'Usage limit per user' ) ) }</div><input class="minn-input" id="minn-c-limit-user" type="number" min="0" step="1" value="${ esc( num( c.usage_limit_per_user ) ) }" placeholder="${ esc( __( 'Unlimited' ) ) }"></div>
+									</div>
+									<div><div class="minn-field-label">${ esc( __( 'Limit usage to X items' ) ) }</div><input class="minn-input" id="minn-c-xitems" type="number" min="0" step="1" value="${ esc( num( c.limit_usage_to_x_items ) ) }" placeholder="${ esc( __( 'Every qualifying item' ) ) }"></div>
+									<div class="minn-toggle-desc">${ esc( __( 'For percentage and fixed product discounts: how many items in the cart it discounts.' ) ) }</div>
+								</div>` ) }
+						</div>
+						<div class="minn-order-side">
+							${ card( 'status', __( 'Status' ), `
+								<div class="minn-order-fields">
+									${ productComboHtml( couponComboSpecs( c ).find( ( x ) => x.id === 'minn-c-status' ) ) }
+									${ m.isNew ? '' : `<div class="minn-toggle-desc">${ esc( c.usage_limit
+										/* translators: 1: how many times the coupon was used. 2: its usage limit. */
+										? sprintf( __( 'Used %1$s of %2$s times.' ), String( used ), String( c.usage_limit ) )
+										/* translators: %s: how many orders used the coupon. */
+										: sprintf( _n( 'Used %s time.', 'Used %s times.', used ), String( used ) ) ) }</div>` }
+								</div>` ) }
+							${ m.isNew ? '' : card( 'orders', __( 'Orders' ), `<div id="minn-co-orders">${ couponOrdersHtml( m ) }</div>` ) }
+						</div>
+					</div>
+					<div class="minn-psavebar" id="minn-co-savebar" ${ m.isNew ? 'data-pristine' : 'hidden' }>
+						<span class="minn-psavebar-note">${ esc( m.isNew ? __( 'New coupon' ) : __( 'Unsaved changes' ) ) }</span>
+						<button class="minn-btn-soft" id="minn-co-discard" type="button">${ esc( m.isNew ? __( 'Cancel' ) : __( 'Discard' ) ) }</button>
+						<button class="minn-btn-primary" id="minn-coupon-save" type="button">${ esc( m.isNew ? __( 'Create coupon' ) : __( 'Save changes' ) ) }</button>
+					</div>
+				</div>`;
+	}
+
+	// A type or status outside these lists (a Subscriptions sign-up fee
+	// coupon, a pending or private one) is offered as itself, so the field
+	// keeps it instead of falling back to its first option.
+	function couponComboSpecs( c ) {
+		const types = c.discount_type && ! COUPON_TYPES.some( ( [ v ] ) => v === c.discount_type )
+			? [ [ c.discount_type, couponTypeLabel( c.discount_type ) ], ...COUPON_TYPES ]
+			: COUPON_TYPES;
+		const statuses = [ [ 'publish', __( 'Published' ) ], [ 'draft', __( 'Draft' ) ], [ 'pending', __( 'Pending review' ) ], [ 'private', __( 'Private' ) ] ];
+		if ( c.status && ! statuses.some( ( [ v ] ) => v === c.status ) ) statuses.unshift( [ c.status, statusLabel( c.status ) ] );
+		return [
+			{ id: 'minn-c-type', label: __( 'Discount type' ), value: c.discount_type || 'percent', options: types },
+			{ id: 'minn-c-status', label: __( 'Status' ), value: c.status || 'publish', options: statuses },
+		];
+	}
+
+	// Everything the form says, in WooCommerce's coupon shape. The save bar
+	// and the save both read it, so they cannot disagree.
+	function buildCouponPayload( m ) {
+		const v = ( id ) => ( ( $( '#' + id ) || {} ).value || '' ).trim();
+		const count = ( id ) => {
+			const raw = v( id );
+			return raw === '' ? null : Math.max( 0, parseInt( raw, 10 ) || 0 );
+		};
+		const exp = ( ( $( '#minn-c-expires' ) || {} ).dataset || {} ).dp || '';
+		const payload = {
+			code: v( 'minn-c-code' ),
+			description: v( 'minn-c-desc' ),
+			discount_type: pcomboValue( 'minn-c-type', 'percent' ),
+			amount: v( 'minn-c-amount' ),
+			status: pcomboValue( 'minn-c-status', 'publish' ),
+			date_expires: exp ? exp.slice( 0, 10 ) : null,
+			free_shipping: pswitchOn( 'minn-c-ship' ),
+			minimum_amount: v( 'minn-c-min' ),
+			maximum_amount: v( 'minn-c-max' ),
+			individual_use: pswitchOn( 'minn-c-individual' ),
+			exclude_sale_items: pswitchOn( 'minn-c-nosale' ),
+			email_restrictions: v( 'minn-c-emails' ).split( /[\s,]+/ ).filter( Boolean ),
+			usage_limit: count( 'minn-c-limit' ),
+			usage_limit_per_user: count( 'minn-c-limit-user' ),
+			limit_usage_to_x_items: count( 'minn-c-xitems' ),
+		};
+		COUPON_PRODUCT_FIELDS.forEach( ( f ) => { payload[ f.key ] = ( ( m.links || {} )[ f.key ] || [] ).map( ( x ) => x.id ); } );
+		COUPON_TERM_FIELDS.forEach( ( t ) => { payload[ t.key ] = ( ( m.terms || {} )[ t.key ] || [] ).map( ( x ) => x.id ); } );
+		return payload;
+	}
+
+	function bindCouponPage( m ) {
+		const c = m.full || {};
+		couponComboSpecs( c ).forEach( ( spec ) => {
+			const input = $( '#' + spec.id );
+			const wrap = input && input.closest( '.minn-ac' );
+			if ( wrap ) bindAutocomplete( wrap, spec.options.map( ( [ value, label ] ) => ( { value, label } ) ), { strict: true, value: spec.value, onPick: () => { if ( m.syncDirty ) m.syncDirty(); } } );
+		} );
+		$$( '.minn-coupon-page .minn-switch' ).forEach( ( sw ) => sw.addEventListener( 'click', () => {
+			const on = sw.classList.toggle( 'on' );
+			sw.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+		} ) );
+		bindProductLinkFields( m, c, COUPON_PRODUCT_FIELDS );
+		bindProductTermFields( m, COUPON_TERM_FIELDS );
+		const expires = $( '#minn-c-expires' );
+		if ( expires ) bindDatePicker( expires, () => { if ( m.syncDirty ) m.syncDirty(); }, { dateOnly: true, marks: false } );
+		const gen = $( '#minn-c-generate' );
+		if ( gen ) gen.addEventListener( 'click', () => {
+			// Eight characters from an alphabet without the look-alikes (0/O,
+			// 1/I/L), so a code read aloud or off a flyer still works.
+			const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+			const bytes = new Uint8Array( 8 );
+			crypto.getRandomValues( bytes );
+			const code = $( '#minn-c-code' );
+			code.value = Array.from( bytes, ( b ) => abc[ b % abc.length ] ).join( '' );
+			code.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		} );
+		if ( ! m.isNew ) {
+			const host = $( '#minn-co-orders' );
+			if ( host ) bindCouponOrders( host );
+			const copy = $( '#minn-co-copy' );
+			if ( copy ) copy.addEventListener( 'click', async () => {
+				try { await navigator.clipboard.writeText( c.code || '' ); toast( __( 'Code copied' ) ); }
+				catch ( err ) { toast( __( 'Could not copy' ), true ); }
+			} );
+			const del = $( '#minn-co-delete' );
+			if ( del ) del.addEventListener( 'click', async () => {
+				/* translators: %s: the coupon code. */
+				if ( ! await minnConfirm( { title: sprintf( __( 'Delete coupon “%s”?' ), c.code || c.id ), body: __( 'It is removed for good; orders that already used it keep their totals.' ), danger: true, confirmLabel: __( 'Delete coupon' ) } ) ) return;
+				del.disabled = true;
+				try {
+					await api( `wc/v3/coupons/${ c.id }?force=true`, { method: 'DELETE' } );
+					toast( __( 'Coupon deleted' ) );
+					state.cache.coupons = null;
+					state.couponPage = null;
+					go( 'coupons', { force: true } );
+				} catch ( e ) {
+					toast( e.message, true );
+					del.disabled = false;
+				}
+			} );
+		}
+
+		// The save bar: hidden until the form stops matching the coupon as it
+		// loaded (always there on a new one, which Create lives on).
+		const bar = $( '#minn-co-savebar' );
+		const fingerprint = () => JSON.stringify( buildCouponPayload( m ) );
+		if ( m.clean == null ) {
+			m.clean = fingerprint();
+			m.cleanPayload = buildCouponPayload( m );
+		}
+		const sync = () => {
+			if ( ! bar ) return;
+			const dirty = fingerprint() !== m.clean;
+			if ( m.isNew ) bar.toggleAttribute( 'data-pristine', ! dirty );
+			else bar.hidden = ! dirty;
+		};
+		m.syncDirty = sync;
+		sync();
+		const body = $( '.minn-coupon-page .minn-order-body' );
+		if ( body ) {
+			[ 'input', 'change' ].forEach( ( ev ) => body.addEventListener( ev, sync ) );
+			body.addEventListener( 'click', () => setTimeout( sync, 0 ) );
+		}
+		const discard = $( '#minn-co-discard' );
+		if ( discard ) discard.addEventListener( 'click', () => {
+			if ( m.isNew ) {
+				go( 'coupons' );
+				return;
+			}
+			m.full = JSON.parse( JSON.stringify( m.loaded ) );
+			couponPageSeed( m );
+			m.clean = null;
+			renderCouponPage();
+		} );
+		const save = $( '#minn-coupon-save' );
+		if ( save ) save.addEventListener( 'click', () => saveCouponPage( m, save ) );
+	}
+
+	async function saveCouponPage( m, btn ) {
+		const form = buildCouponPayload( m );
+		if ( ! form.code ) {
+			toast( __( 'Code is required' ), true );
+			$( '#minn-c-code' ).focus();
+			return;
+		}
+		if ( form.amount === '' || Number.isNaN( parseFloat( form.amount ) ) ) {
+			toast( __( 'Amount is required' ), true );
+			$( '#minn-c-amount' ).focus();
+			return;
+		}
+		// A new coupon sends the whole form; an existing one only what changed
+		// since the page opened, so a balance a store-credit plugin lowered or
+		// a limit someone else changed meanwhile is not put back.
+		const payload = m.isNew ? form : changedDeep( form, m.cleanPayload || {} );
+		const label = btn.textContent;
+		btn.disabled = true;
+		btn.textContent = m.isNew ? __( 'Creating…' ) : __( 'Saving…' );
+		try {
+			if ( m.isNew ) {
+				const made = await api( 'wc/v3/coupons', { method: 'POST', body: JSON.stringify( payload ) } );
+				toast( __( 'Coupon created' ) );
+				state.cache.coupons = null;
+				if ( state.couponPage !== m ) return;
+				// The coupon's own page takes this address's place, so Back
+				// returns to the list rather than to an empty form.
+				state.couponPage = null;
+				setPath( 'coupons/' + made.id, true );
+				onRouteChange();
+				return;
+			}
+			if ( Object.keys( payload ).length ) {
+				await api( `wc/v3/coupons/${ m.id }`, { method: 'PUT', body: JSON.stringify( payload ) } );
+			}
+			const full = await api( `wc/v3/coupons/${ m.id }?_fields=${ COUPON_DETAIL_FIELDS }` );
+			toast( __( 'Coupon updated' ) );
+			state.cache.coupons = null;
+			if ( state.couponPage !== m ) return;
+			// Names for anything just picked are already known; the saved
+			// coupon is the new baseline for the bar and for Discard.
+			( m.links ? Object.values( m.links ) : [] ).forEach( ( list ) => list.forEach( ( x ) => { m.linkNames[ x.id ] = x.name; } ) );
+			( m.terms ? Object.values( m.terms ) : [] ).forEach( ( list ) => list.forEach( ( x ) => { m.termNames[ x.id ] = x.name; } ) );
+			const codeWas = String( ( m.loaded || {} ).code || '' ).toLowerCase();
+			m.full = full;
+			m.loaded = JSON.parse( JSON.stringify( full ) );
+			couponPageSeed( m );
+			m.clean = null;
+			renderCouponPage();
+			// A renamed code is a different set of orders.
+			if ( m.usedIn == null || String( full.code || '' ).toLowerCase() !== codeWas ) {
+				m.usedIn = null;
+				loadCouponOrders( m );
+			}
+		} catch ( e ) {
+			toast( decodeEntities( e.message ), true );
+			btn.disabled = false;
+			btn.textContent = label;
+		}
 	}
 
 	/* ===== Customers (WooCommerce) ===== */
@@ -47534,108 +47937,6 @@
 			</div>`;
 		}
 
-		if ( m.type === 'coupon' ) {
-			const listC = m.coupon || {};
-			const c = m.full || listC;
-			const canEdit = B.caps.coupons;
-			const loading = !! m.loading && ! m.full && ! m.isNew;
-			const isNew = !! m.isNew;
-			const exp = c.date_expires ? String( c.date_expires ).slice( 0, 10 ) : '';
-			// A type or status outside these lists (a Subscriptions sign-up fee
-			// coupon, a pending or private one) is offered as itself, so the
-			// select keeps it instead of falling back to its first option.
-			const typeOpts = c.discount_type && ! COUPON_TYPES.some( ( [ v ] ) => v === c.discount_type )
-				? [ [ c.discount_type, couponTypeLabel( c.discount_type ) ], ...COUPON_TYPES ]
-				: COUPON_TYPES;
-			const statusOpts = [ [ 'publish', __( 'Published' ) ], [ 'draft', __( 'Draft' ) ] ];
-			if ( c.status && ! statusOpts.some( ( [ v ] ) => v === c.status ) ) statusOpts.unshift( [ c.status, statusLabel( c.status ) ] );
-			return `
-			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal wide">
-					<div class="minn-modal-head">
-						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">${ isNew ? esc( __( 'New coupon' ) ) : esc( c.code || listC.code || 'Coupon' ) }</div>
-							<div class="minn-modal-sub">${ isNew ? esc( __( 'Create a promo code' ) ) : ( couponTypeLabel( c.discount_type ) + ( c.id ? ' · #' + c.id : '' ) ) }</div>
-						</div>
-						${ ! isNew ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ c.status ] || 'draft' }">${ esc( statusLabel( c.status ) ) }</span>` : '' }
-						<button class="minn-x-btn" id="minn-modal-close">×</button>
-					</div>
-					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading coupon…' ) ) }</div>` : '' }
-					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
-					${ ! loading && ! m.loadError ? `
-					<div class="minn-order-body">
-						<div class="minn-order-grid">
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Code & discount' ) ) }</div>
-								${ canEdit ? `
-								<div class="minn-order-fields">
-									<div><div class="minn-field-label">${ esc( __( 'Code' ) ) }</div><input class="minn-input" id="minn-c-code" value="${ esc( c.code || '' ) }" placeholder="${ esc( __( 'e.g. SAVE10' ) ) }" style="font-family:var(--mono,ui-monospace,monospace); text-transform:uppercase;"></div>
-									<div><div class="minn-field-label">${ esc( __( 'Discount type' ) ) }</div>
-										<select class="minn-input" id="minn-c-type">
-											${ typeOpts.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ ( c.discount_type || 'percent' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-										</select>
-									</div>
-									<div class="minn-order-field-row">
-										<div><div class="minn-field-label">${ esc( __( 'Amount' ) ) }</div><input class="minn-input" id="minn-c-amount" type="text" inputmode="decimal" value="${ esc( c.amount != null ? String( c.amount ) : '' ) }" placeholder="10"></div>
-										<div><div class="minn-field-label">${ esc( __( 'Status' ) ) }</div>
-											<select class="minn-input" id="minn-c-status">
-												${ statusOpts.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ ( c.status || 'publish' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-											</select>
-										</div>
-									</div>
-									<div><div class="minn-field-label">${ esc( __( 'Description' ) ) }</div><input class="minn-input" id="minn-c-desc" value="${ esc( c.description || '' ) }" placeholder="${ esc( __( 'Internal note' ) ) }"></div>
-								</div>` : `
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Code' ) ) }</span><span style="font-family:var(--mono,ui-monospace,monospace);">${ esc( c.code || '' ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Amount' ) ) }</span><span>${ esc( couponAmountLabel( c ) ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Type' ) ) }</span><span>${ esc( couponTypeLabel( c.discount_type ) ) }</span></div>
-								</div>` }
-							</div>
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Limits & options' ) ) }</div>
-								${ canEdit ? `
-								<div class="minn-order-fields">
-									<div class="minn-order-field-row">
-										<div><div class="minn-field-label">${ esc( __( 'Usage limit' ) ) }</div><input class="minn-input" id="minn-c-limit" type="number" min="0" value="${ c.usage_limit != null ? esc( String( c.usage_limit ) ) : '' }" placeholder="${ esc( __( 'Unlimited' ) ) }"></div>
-										<div><div class="minn-field-label">${ esc( __( 'Per user' ) ) }</div><input class="minn-input" id="minn-c-limit-user" type="number" min="0" value="${ c.usage_limit_per_user != null ? esc( String( c.usage_limit_per_user ) ) : '' }" placeholder="${ esc( __( 'Unlimited' ) ) }"></div>
-									</div>
-									<div class="minn-order-field-row">
-										<div><div class="minn-field-label">${ esc( __( 'Minimum spend' ) ) }</div><input class="minn-input" id="minn-c-min" type="text" inputmode="decimal" value="${ esc( c.minimum_amount && c.minimum_amount !== '0.00' ? String( c.minimum_amount ) : '' ) }" placeholder="${ esc( __( 'None' ) ) }"></div>
-										<div><div class="minn-field-label">${ esc( __( 'Expires' ) ) }</div><input class="minn-input" id="minn-c-expires" type="date" value="${ esc( exp ) }"></div>
-									</div>
-									<label class="minn-check-row">
-										<input type="checkbox" id="minn-c-individual"${ c.individual_use ? ' checked' : '' }>
-										<span>${ esc( __( 'Individual use only' ) ) }</span>
-									</label>
-									<label class="minn-check-row">
-										<input type="checkbox" id="minn-c-ship"${ c.free_shipping ? ' checked' : '' }>
-										<span>${ esc( __( 'Allow free shipping' ) ) }</span>
-									</label>
-									${ ! isNew ? `<div class="minn-toggle-desc">${ esc( sprintf( /* translators: %s: how many orders used the coupon. */ _n( 'Used %s time.', 'Used %s times.', c.usage_count || 0 ), String( c.usage_count || 0 ) ) ) }</div>` : '' }
-								</div>` : `
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Usage' ) ) }</span><span>${ esc( couponUsageLabel( c ) ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Expires' ) ) }</span><span>${ esc( couponExpiresLabel( c ) ) }</span></div>
-								</div>` }
-							</div>
-						</div>
-						${ canEdit ? `
-						<div class="minn-media-edit minn-order-status">
-							<div style="display:flex; gap:8px; align-items:center;">
-								<button class="minn-btn-primary" id="minn-coupon-save" type="button">${ isNew ? __( 'Create coupon' ) : __( 'Save changes' ) }</button>
-								${ ! isNew ? `<button class="minn-btn-soft danger" id="minn-coupon-delete" type="button">${ esc( __( 'Delete' ) ) }</button>` : '' }
-							</div>
-							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Saves code, amount, limits and options through WooCommerce.' ) ) }</div>
-						</div>` : '' }
-					</div>
-					${ ! isNew ? `
-					<div class="minn-modal-actions">
-						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ c.id }&action=edit" target="_blank" rel="noopener">↗ ${ esc( __( 'Edit in WooCommerce' ) ) }</a>
-					</div>` : '' }` : '' }
-				</div>
-			</div>`;
-		}
-
 		if ( m.type === 'order-email' ) {
 			const o = m.order || {};
 			return `
@@ -49073,94 +49374,6 @@
 				} catch ( err ) {
 					toast( err.message, true );
 					sendBtn.disabled = false;
-				}
-			} );
-		}
-
-		if ( m.type === 'coupon' ) {
-			const c = m.full || m.coupon || {};
-			const isNew = !! m.isNew;
-			const saveBtn = $( '#minn-coupon-save' );
-			const couponForm = () => {
-				const limRaw = ( ( $( '#minn-c-limit' ) || {} ).value || '' ).trim();
-				const limUserRaw = ( ( $( '#minn-c-limit-user' ) || {} ).value || '' ).trim();
-				const expRaw = ( ( $( '#minn-c-expires' ) || {} ).value || '' ).trim();
-				return {
-					code: ( ( $( '#minn-c-code' ) || {} ).value || '' ).trim(),
-					amount: ( ( $( '#minn-c-amount' ) || {} ).value || '' ).trim(),
-					discount_type: ( $( '#minn-c-type' ) || {} ).value || 'percent',
-					status: ( $( '#minn-c-status' ) || {} ).value || 'publish',
-					description: ( ( $( '#minn-c-desc' ) || {} ).value || '' ).trim(),
-					usage_limit: limRaw === '' ? null : parseInt( limRaw, 10 ),
-					usage_limit_per_user: limUserRaw === '' ? null : parseInt( limUserRaw, 10 ),
-					minimum_amount: ( ( $( '#minn-c-min' ) || {} ).value || '' ).trim() || '0',
-					individual_use: !!( $( '#minn-c-individual' ) || {} ).checked,
-					free_shipping: !!( $( '#minn-c-ship' ) || {} ).checked,
-					date_expires: expRaw || null,
-				};
-			};
-			// What the form held when it opened on this coupon: an update sends
-			// only what differs, so a balance a store-credit plugin lowered or a
-			// limit someone else changed meanwhile is not put back.
-			if ( ! isNew && $( '#minn-c-code' ) && m.cleanCouponFor !== c ) {
-				m.cleanCouponFor = c;
-				m.cleanCoupon = couponForm();
-			}
-			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const form = couponForm();
-				if ( ! form.code ) { toast( __( 'Code is required' ), true ); return; }
-				if ( form.amount === '' ) { toast( __( 'Amount is required' ), true ); return; }
-				const payload = isNew ? form : changedDeep( form, m.cleanCoupon || {} );
-				saveBtn.disabled = true;
-				saveBtn.textContent = isNew ? __( 'Creating…' ) : __( 'Saving…' );
-				try {
-					let full;
-					if ( isNew ) {
-						full = await api( 'wc/v3/coupons', {
-							method: 'POST',
-							body: JSON.stringify( payload ),
-						} );
-						toast( __( 'Coupon created' ) );
-					} else {
-						if ( Object.keys( payload ).length ) {
-							await api( `wc/v3/coupons/${ c.id }`, {
-								method: 'PUT',
-								body: JSON.stringify( payload ),
-							} );
-						}
-						full = await api( `wc/v3/coupons/${ c.id }?_fields=${ COUPON_DETAIL_FIELDS }` );
-						toast( __( 'Coupon updated' ) );
-					}
-					state.cache.coupons = null;
-					if ( state.route === 'coupons' ) renderCoupons();
-					if ( isNew && full && full.id ) {
-						state.modal = { type: 'coupon', coupon: full, full, loading: false, isNew: false };
-					} else if ( state.modal && state.modal.type === 'coupon' ) {
-						state.modal.full = full;
-						state.modal.coupon = Object.assign( {}, state.modal.coupon, full );
-						state.modal.isNew = false;
-					}
-					renderOverlays();
-				} catch ( e ) {
-					toast( e.message, true );
-					saveBtn.disabled = false;
-					saveBtn.textContent = isNew ? __( 'Create coupon' ) : __( 'Save changes' );
-				}
-			} );
-			const delBtn = $( '#minn-coupon-delete' );
-			if ( delBtn ) delBtn.addEventListener( 'click', async () => {
-				if ( ! c.id ) return;
-				if ( ! await minnConfirm( { title: `Delete coupon “${ c.code || c.id }”?`, body: __( 'It is removed for good; orders that already used it keep their totals.' ), danger: true, confirmLabel: __( 'Delete coupon' ) } ) ) return;
-				delBtn.disabled = true;
-				try {
-					await api( `wc/v3/coupons/${ c.id }?force=true`, { method: 'DELETE' } );
-					toast( __( 'Coupon deleted' ) );
-					closeModal();
-					state.cache.coupons = null;
-					if ( state.route === 'coupons' ) renderCoupons();
-				} catch ( e ) {
-					toast( e.message, true );
-					delBtn.disabled = false;
 				}
 			} );
 		}
@@ -56887,6 +57100,7 @@
 		}
 		if ( state.route !== 'product' ) state.productPage = null;
 		if ( state.route !== 'customer' ) state.customerPage = null;
+		if ( state.route !== 'coupon' ) state.couponPage = null;
 		if ( state.route !== 'subscription' ) state.subPage = null;
 		if ( state.route !== 'membership' ) state.memberPage = null;
 		if ( state.route !== 'membershipplan' ) state.planPage = null;
@@ -56917,6 +57131,7 @@
 			case 'products': renderProducts(); break;
 			case 'product': renderProductPage(); break;
 			case 'coupons': renderCoupons(); break;
+			case 'coupon': renderCouponPage(); break;
 			case 'customers': renderCustomers(); break;
 			case 'customer': renderCustomerPage(); break;
 			case 'users': renderUsers(); break;
