@@ -241,27 +241,28 @@ const wpEval = ( php ) => {
 			200 === model.status && Array.isArray( model.body.plans ) && model.body.plans.length >= 2 && Array.isArray( model.body.statuses ) && Array.isArray( model.body.memberships ),
 			JSON.stringify( Object.keys( model.body || {} ) ) );
 
-		// The member's card opens the customer modal, which lists every
+		// The member's card opens the customer page, which lists every
 		// membership the person holds beside their orders and subscriptions.
 		await page.click( '#minn-wcm-open-customer' );
-		await page.waitForSelector( '[data-open-membership]', { timeout: 20000 } ).catch( () => null );
-		const custRows = await page.$$eval( '[data-open-membership]', ( els ) => els.map( ( e ) => e.textContent.replace( /\s+/g, ' ' ).trim() ) ).catch( () => [] );
-		t.check( 'the customer modal lists the member\'s memberships with plan and status', custRows.some( ( r ) => /Minn Gold/.test( r ) && /Active/.test( r ) ), JSON.stringify( custRows ) );
-		// Find in Users leaves the modal for the Users list searched for this
-		// person (the link used to carry a hash route and no handler).
-		await page.click( '#minn-cust-users' );
-		await page.waitForFunction( () => /\/users$/.test( location.pathname ) && !! document.querySelector( '#minn-user-search' ), null, { timeout: 15000 } ).catch( () => null );
-		await page.waitForFunction( () => { const rows = document.querySelectorAll( '.minn-table-row' ); return rows.length === 1 && /dana-member@example.com/.test( rows[ 0 ].textContent ); }, null, { timeout: 15000 } ).catch( () => null );
-		const userRows = await page.$$eval( '.minn-table-row', ( els ) => els.map( ( e ) => e.textContent.replace( /\s+/g, ' ' ).trim().slice( 0, 60 ) ) );
-		t.check( 'Find in Users opens the Users list searched down to the customer',
-			/\/users$/.test( page.url() ) && 'dana-member@example.com' === ( await page.$eval( '#minn-user-search', ( i ) => i.value ).catch( () => '' ) ) && userRows.length === 1 && /Dana Member/.test( userRows[ 0 ] ), JSON.stringify( userRows ) );
+		await page.waitForSelector( '[data-cpmember]', { timeout: 20000 } ).catch( () => null );
+		const custRows = await page.$$eval( '[data-cpmember]', ( els ) => els.map( ( e ) => e.textContent.replace( /\s+/g, ' ' ).trim() ) ).catch( () => [] );
+		t.check( 'the customer page lists the member\'s memberships with plan and status', custRows.some( ( r ) => /Minn Gold/.test( r ) && /Active/.test( r ) ), JSON.stringify( custRows ) );
+		// Back from the customer returns to the membership it was opened from.
+		const backLabel = await page.$eval( '#minn-cp-back', ( b ) => b.textContent ).catch( () => '' );
+		t.check( 'the customer page leads back to the membership', /Membership/.test( backLabel ), backLabel );
+		// The account behind the customer is one menu away, on the user page.
+		await page.click( '#minn-cp-more' );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 8000 } );
+		await page.evaluate( () => Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) ).find( ( n ) => /Open user account/.test( n.textContent ) ).click() );
+		await page.waitForFunction( ( id ) => location.pathname.endsWith( '/users/' + id ), dana.user_id, { timeout: 15000 } ).catch( () => null );
+		t.check( 'Open user account goes to the member\'s user page', page.url().endsWith( '/users/' + dana.user_id ), page.url() );
 		await page.goto( BASE + '/minn-admin/memberships/' + pageId, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-wcm-open-customer', { timeout: 20000 } );
 		await page.click( '#minn-wcm-open-customer' );
-		await page.waitForSelector( '[data-open-membership]', { timeout: 20000 } );
-		await page.click( '[data-open-membership]' );
+		await page.waitForSelector( '[data-cpmember]', { timeout: 20000 } );
+		await page.click( '[data-cpmember]' );
 		await page.waitForFunction( ( id ) => location.pathname.endsWith( '/memberships/' + id ), pageId, { timeout: 10000 } ).catch( () => null );
-		t.check( 'a membership row in the customer modal opens the membership page', page.url().endsWith( '/memberships/' + pageId ), page.url() );
+		t.check( 'a membership row on the customer page opens the membership page', page.url().endsWith( '/memberships/' + pageId ), page.url() );
 
 		// The subscription link: the record page links, moves and unlinks a
 		// subscription the way the plugin's own Edit Link control does. Needs

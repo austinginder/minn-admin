@@ -84,20 +84,18 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.evaluate( ( id ) => {
 			document.querySelector( `.minn-table-row[data-customer="${ id }"]` ).click();
 		}, cid );
-		await page.waitForFunction( () => {
-			const m = document.querySelector( '.minn-modal' );
-			return m && ! m.textContent.includes( 'Loading customer' );
-		}, null, { timeout: 15000 } ).catch( () => null );
-		const ui = await page.evaluate( () => {
-			const text = document.querySelector( '.minn-modal' )?.textContent || '';
-			return {
-				open: !! document.querySelector( '.minn-modal' ),
-				hasOrders: /Recent orders/.test( text ),
-				hasBilling: /Billing/.test( text ),
-				hasProfile: /Username|Registered/.test( text ),
-			};
-		} );
-		t.check( 'customer modal shows profile and orders', ui.open && ui.hasOrders && ui.hasBilling, JSON.stringify( ui ) );
+		await page.waitForSelector( '[data-ccard="orders"]', { timeout: 20000 } ).catch( () => null );
+		const ui = await page.evaluate( () => ( {
+			url: location.pathname,
+			cards: [ ...document.querySelectorAll( '[data-ccard]' ) ].map( ( c ) => c.dataset.ccard ),
+			tiles: [ ...document.querySelectorAll( '.minn-cp-stats .minn-stat-label' ) ].map( ( l ) => l.textContent ),
+			dialog: !! document.querySelector( '#minn-modal-overlay' ),
+		} ) );
+		t.check( 'a customer row opens the customer page: orders, profile and both addresses',
+			ui.url.endsWith( '/customers/' + cid ) && ! ui.dialog
+				&& [ 'orders', 'profile', 'billing', 'shipping' ].every( ( c ) => ui.cards.includes( c ) )
+				&& [ 'Orders', 'Total spent', 'Last order', 'Customer since' ].every( ( l ) => ui.tiles.includes( l ) ),
+			JSON.stringify( ui ) );
 	}
 
 	// Cleanup: delete customer (force) if possible.

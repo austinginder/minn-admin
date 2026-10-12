@@ -3870,6 +3870,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 	text-align: start;
 }
 .minn-sub-order-row:hover { background: var(--hover, rgba(127,127,127,.08)); }
+/* The customer page's Orders card heads its list with the lifetime count. */
+.minn-cp-count { color: var(--text3); font-weight: 500; margin-inline-start: 4px; }
 /* The reference and its eye sit side by side. The eye follows the list's
    reveal-on-hover idiom, and :focus-within is not optional here: revealed by
    hover alone, a keyboard user tabs into a control at opacity 0. */

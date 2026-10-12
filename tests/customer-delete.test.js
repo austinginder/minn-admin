@@ -163,20 +163,20 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				!! ( ord.body && ord.body.billing && ord.body.billing.email ), ( ord.body && ord.body.billing && ord.body.billing.email ) || '' );
 		}
 
-		// ---- entry point 2: the detail modal's action row ----
+		// ---- entry point 2: the customer page's ⋯ menu ----
 		const row2 = await findRow( viaModal );
 		t.check( 'second fixture row on the list', !! row2, '' );
 		await page.evaluate( ( id ) => document.querySelector( `.minn-table-row[data-customer="${ id }"]` ).click(), viaModal.id );
-		await page.waitForFunction( () => {
-			const m = document.querySelector( '.minn-modal' );
-			return m && ! m.textContent.includes( 'Loading customer' );
-		}, null, { timeout: 15000 } ).catch( () => null );
-		t.check( 'customer modal carries a Delete customer button', !! ( await page.$( '#minn-cust-delete' ) ), '' );
-		await page.click( '#minn-cust-delete' );
+		await page.waitForSelector( '#minn-cp-more', { timeout: 20000 } );
+		await page.click( '#minn-cp-more' );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 8000 } );
+		const pageMenu = await page.evaluate( () => !! Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) ).find( ( n ) => /Delete customer/i.test( n.textContent ) ) );
+		t.check( 'the customer page offers Delete customer', pageMenu, '' );
+		await page.evaluate( () => Array.from( document.querySelectorAll( '.minn-ctx-menu button' ) ).find( ( n ) => /Delete customer/i.test( n.textContent ) ).click() );
 		await page.waitForSelector( '#minn-ud-confirm', { timeout: 10000 } );
-		const fromModal = await page.evaluate( () => document.querySelector( '.minn-modal' ).textContent );
-		t.check( 'modal button opens the same delete flow',
-			/Reassign content to/i.test( fromModal ) && /orders stay/i.test( fromModal ), '' );
+		const fromPage = await page.evaluate( () => document.querySelector( '.minn-modal' ).textContent );
+		t.check( 'the page opens the same delete flow',
+			/Reassign content to/i.test( fromPage ) && /orders stay/i.test( fromPage ), '' );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {

@@ -1285,6 +1285,7 @@
 		coupons: [ __( 'Coupons' ), 'WooCommerce' ],
 		'store-settings': [ __( 'Store settings' ), 'WooCommerce' ],
 		customers: [ __( 'Customers' ), 'WooCommerce' ],
+		customer: [ __( 'Customer' ), 'WooCommerce' ],
 		users: [ __( 'Users' ), __( 'People' ) ],
 		useredit: [ __( 'Edit user' ), __( 'People' ) ],
 		terms: [ __( 'Terms' ), __( 'Categories & Tags' ) ],
@@ -3463,6 +3464,10 @@
 			// same page over a blank product.
 			state.productPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
 			state.route = 'product';
+		} else if ( route === 'customers' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
+			// /customers/57 — a store customer's page.
+			state.customerPageId = parseInt( parts[ 1 ], 10 );
+			state.route = 'customer';
 		} else if ( route === 'users' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /users/123 — the full-page user editor (GH #8).
 			state.userEditId = parseInt( parts[ 1 ], 10 );
@@ -4845,6 +4850,7 @@
 				|| ( 'wpfemails' === state.route && ( 'wpforms' === btn.dataset.nav || 'forms' === btn.dataset.family ) )
 				// Same for the product detail page and Products.
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
+				|| ( 'customer' === state.route && 'customers' === btn.dataset.nav )
 				// And the subscription detail page and Subscriptions.
 				|| ( 'subscription' === state.route && 'subscriptions' === btn.dataset.nav )
 				// And the membership page and its Memberships surface.
@@ -10156,7 +10162,7 @@
 								<div class="minn-order-read">${ o.customer_note ? `<span style="white-space:pre-line;">${ esc( o.customer_note ) }</span>` : `<span class="minn-order-read-empty">${ __( 'No notes from customer' ) }</span>` }</div>
 							</div>
 							<div class="minn-order-sec minn-order-customer">
-								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Customer' ) ) }</div>${ pencil( 'customer', __( 'Edit customer details' ) ) }</div>
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Customer' ) ) }</div>${ o.customer_id && B.caps.customers ? `<button type="button" class="minn-order-editpen" data-ocustomer="${ o.customer_id }" aria-label="${ esc( __( 'Open customer' ) ) }" title="${ esc( __( 'Open customer' ) ) }">${ icon( 'users' ) }</button>` : '' }${ pencil( 'customer', __( 'Edit customer details' ) ) }</div>
 								<div class="minn-order-read">
 									<div class="minn-order-read-name">${ esc( customerName( o ) ) }</div>
 									<div class="minn-order-read-sub">${ __( 'Contact information' ) }</div>
@@ -10298,6 +10304,14 @@
 					// sibling opens on its own page (quick view closes first).
 					closeHost();
 					go( 'orders/' + oid );
+				} )
+			);
+			$$( '[data-ocustomer]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					closeHost();
+					/* translators: %s: the order number. */
+					if ( m.page ) setPageReturn( 'orders/' + o.id, sprintf( __( 'Order #%s' ), String( o.number || o.id ) ) );
+					go( 'customers/' + btn.dataset.ocustomer );
 				} )
 			);
 			const viewAllBtn = $( '#minn-o-viewall' );
@@ -11129,6 +11143,16 @@
 				shipLine: { title: '', total: '' },
 				gateways: null,
 			};
+			// Started from a customer's page: their account and details are
+			// the starting point, not something the person typed.
+			const handed = state.newOrderFor;
+			state.newOrderFor = null;
+			if ( handed ) {
+				m.customer = { id: handed.id, name: handed.name, email: handed.email };
+				m.billing = Object.assign( {}, handed.billing );
+				m.shipping = Object.assign( {}, handed.shipping );
+			}
+			m.back = takePageReturn();
 			m.clean = newOrderFingerprint( m );
 			// The payment methods load before the first paint, as a product
 			// page's vocabularies do, so nothing repaints under the typing.
@@ -11142,7 +11166,7 @@
 		view.innerHTML = `
 		<div class="minn-order-page minn-order-page-wide minn-order-new">
 			<div class="minn-order-page-head">
-				<button type="button" class="minn-btn-soft" id="minn-op-back">← ${ esc( __( 'Orders' ) ) }</button>
+				<button type="button" class="minn-btn-soft" id="minn-op-back">← ${ esc( ( m.back || {} ).label || __( 'Orders' ) ) }</button>
 				<div class="minn-modal-title-block">
 					<div class="minn-order-head-row"><span class="minn-modal-title">${ esc( __( 'New order' ) ) }</span></div>
 					<div class="minn-modal-sub">${ esc( __( 'Nothing is saved until you create the order.' ) ) }</div>
@@ -11239,7 +11263,7 @@
 			</div>
 		</div>`;
 		const backBtn = $( '#minn-op-back' );
-		if ( backBtn ) backBtn.addEventListener( 'click', () => go( 'orders' ) );
+		if ( backBtn ) backBtn.addEventListener( 'click', () => go( ( m.back || {} ).route || 'orders' ) );
 		if ( ! m.loading ) bindNewOrderPage( m );
 	}
 
@@ -11362,7 +11386,7 @@
 			renderNewOrderPage();
 		} );
 		const cancel = $( '#minn-no-cancel' );
-		if ( cancel ) cancel.addEventListener( 'click', () => go( 'orders' ) );
+		if ( cancel ) cancel.addEventListener( 'click', () => go( ( m.back || {} ).route || 'orders' ) );
 		const create = $( '#minn-no-create' );
 		if ( create ) create.addEventListener( 'click', () => createNewOrder( m, create ) );
 		syncDirty();
@@ -12276,14 +12300,10 @@
 			const cur = m.full || m.sub || {};
 			const cid = parseInt( cur.customer_id, 10 );
 			if ( ! cid ) return;
-			const b = cur.billing || {};
 			closeHost();
-			openCustomerModal( {
-				id: cid,
-				email: b.email || '',
-				first_name: b.first_name || '',
-				last_name: b.last_name || '',
-			} );
+			/* translators: %s: the subscription number. */
+			if ( m.page ) setPageReturn( 'subscriptions/' + cur.id, sprintf( __( 'Subscription #%s' ), String( cur.number || cur.id ) ) );
+			go( 'customers/' + cid );
 		};
 		const custBtn = $( '#minn-sub-open-customer' );
 		if ( custBtn ) custBtn.addEventListener( 'click', openCustomer );
@@ -12595,12 +12615,7 @@
 					{ label: __( 'Quick view' ), run: () => openSubscriptionModal( s ) },
 					...( s.customer_id && B.caps.customers ? [ {
 						label: __( 'View customer' ),
-						run: () => openCustomerModal( {
-							id: s.customer_id,
-							email: b.email || '',
-							first_name: b.first_name || '',
-							last_name: b.last_name || '',
-						} ),
+						run: () => go( 'customers/' + s.customer_id ),
 					} ] : [] ),
 					...( s.parent_id && B.caps.orders ? [ {
 						label: __( 'Open parent order' ),
@@ -15682,79 +15697,6 @@
 		state.cache.customers = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
-	function openCustomerModal( listCustomer ) {
-		const id = listCustomer && listCustomer.id;
-		if ( ! id ) return;
-		state.modal = {
-			type: 'customer',
-			customer: listCustomer,
-			full: null,
-			orders: null,
-			// Subscriptions strip only when WCS is active.
-			subscriptions: B.wcs ? null : [],
-			// Memberships strip only where the memberships surface is on.
-			memberships: surfaceById( 'woocommerce-memberships' ) ? null : [],
-			loading: true,
-		};
-		renderOverlays();
-		if ( surfaceById( 'woocommerce-memberships' ) ) {
-			api( `minn-admin/v1/wcm/members?customer=${ id }&per_page=10` )
-				.then( ( r ) => {
-					if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
-						state.modal.memberships = { items: ( r && r.items ) || [], total: ( r && r.total ) || 0 };
-						renderOverlays();
-					}
-				} )
-				.catch( () => {
-					if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
-						state.modal.memberships = { items: [], total: 0 };
-						renderOverlays();
-					}
-				} );
-		}
-		api( `wc/v3/customers/${ id }?_fields=${ CUSTOMER_LIST_FIELDS }` )
-			.then( ( full ) => {
-				if ( ! state.modal || state.modal.type !== 'customer' || state.modal.customer.id !== id ) return;
-				state.modal.full = full;
-				state.modal.loading = false;
-				renderOverlays();
-			} )
-			.catch( ( e ) => {
-				if ( ! state.modal || state.modal.type !== 'customer' ) return;
-				state.modal.loading = false;
-				state.modal.loadError = e.message || __( 'Could not load customer' );
-				renderOverlays();
-			} );
-		apiPaged( `wc/v3/orders?customer=${ id }&per_page=10&orderby=date&order=desc&_fields=id,number,status,total,currency_symbol,date_created` )
-			.then( ( r ) => {
-				if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
-					state.modal.orders = r;
-					renderOverlays();
-				}
-			} )
-			.catch( () => {
-				if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
-					state.modal.orders = { items: [], total: 0 };
-					renderOverlays();
-				}
-			} );
-		if ( B.wcs ) {
-			apiPaged( `wc/v3/subscriptions?customer=${ id }&per_page=10&orderby=date&order=desc&_fields=${ SUB_LIST_FIELDS }` )
-				.then( ( r ) => {
-					if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
-						state.modal.subscriptions = r;
-						renderOverlays();
-					}
-				} )
-				.catch( () => {
-					if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
-						state.modal.subscriptions = { items: [], total: 0 };
-						renderOverlays();
-					}
-				} );
-		}
-	}
-
 	// Deleting a customer IS deleting their WordPress account, so it rides the
 	// same flow as the Users row menu (reassignment picker, danger confirm,
 	// wp/v2/users force delete). What differs is the copy: their orders are not
@@ -15765,7 +15707,7 @@
 		return ! B.multisite && !! B.caps.deleteUsers && !! ( cu && cu.id ) && cu.id !== B.user.id;
 	}
 
-	function deleteCustomerFlow( cu ) {
+	function deleteCustomerFlow( cu, then ) {
 		if ( ! canDeleteCustomer( cu ) ) return;
 		openUserDeleteModal(
 			{ id: cu.id, name: customerDisplayName( cu ), email: cu.email || ( cu.billing && cu.billing.email ) || '' },
@@ -15774,7 +15716,8 @@
 				after: () => {
 					state.cache.customers = null;
 					state.cache.users = null;
-					if ( state.route === 'customers' ) renderCustomers();
+					if ( then ) then();
+					else if ( state.route === 'customers' ) renderCustomers();
 				},
 			}
 		);
@@ -15841,7 +15784,7 @@
 		$$( '[data-customer]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
 				const cu = c.items.find( ( x ) => x.id === parseInt( row.dataset.customer, 10 ) );
-				if ( cu ) openCustomerModal( cu );
+				if ( cu ) go( 'customers/' + cu.id );
 			} )
 		);
 		// Right-click a customer: open, reach out, or jump to their orders.
@@ -15851,7 +15794,7 @@
 				if ( ! cu ) return;
 				e.preventDefault();
 				openMinnMenu( e.clientX, e.clientY, [
-					{ label: __( 'Open customer' ), run: () => openCustomerModal( cu ) },
+					{ label: __( 'Open customer' ), run: () => go( 'customers/' + cu.id ) },
 					...( cu.email ? [
 						/* translators: %s: the customer's email address. */
 						{ label: sprintf( __( 'Email %s' ), cu.email ), href: 'mailto:' + cu.email },
@@ -15865,7 +15808,7 @@
 							},
 						} ] : [] ),
 					] : [] ),
-					...( cu.id && B.caps.users ? [ { label: __( 'Edit user in wp-admin ↗' ), href: B.site.adminUrl + 'user-edit.php?user_id=' + cu.id } ] : [] ),
+					...( cu.id && B.caps.editUsers ? [ { label: __( 'Open user account' ), run: () => go( 'users/' + cu.id ) } ] : [] ),
 					...( canDeleteCustomer( cu ) ? [
 						{ heading: __( 'Danger zone' ) },
 						{ label: __( 'Delete customer…' ), danger: true, run: () => deleteCustomerFlow( cu ) },
@@ -15874,6 +15817,358 @@
 			} )
 		);
 		bindPager( view, c.page, loadCustomers, () => { if ( state.route === 'customers' ) renderCustomers(); } );
+	}
+
+	/* ===== Customer page (/customers/{id}) ===== */
+
+	const CUSTOMER_ORDER_FIELDS = 'id,number,status,total,currency_symbol,date_created';
+	const CUSTOMER_ORDERS_PER_PAGE = 10;
+
+	/**
+	 * A store customer on a page of their own: who they are and where to
+	 * reach them in the sidebar, everything they bought in the main column.
+	 * The sidebar cards read as text and each pencil opens an edit dialog
+	 * that saves only what changed, the order page's pattern. The account
+	 * itself (role, password, sessions) stays on the user page, one click
+	 * away, and deleting the customer is deleting that account.
+	 */
+	function renderCustomerPage() {
+		const view = $( '#minn-view' );
+		if ( ! B.wc || ! B.caps.customers ) {
+			view.innerHTML = `<div class="minn-empty">${ esc( __( "You don't have access to customers on this site." ) ) }</div>`;
+			return;
+		}
+		let m = state.customerPage;
+		const arrived = takePageReturn();
+		if ( ! m || m.id !== state.customerPageId ) {
+			m = state.customerPage = {
+				id: state.customerPageId,
+				full: null,
+				loading: true,
+				stats: null,
+				orders: null,
+				// Subscriptions only with WooCommerce Subscriptions, memberships
+				// only where the memberships surface is on.
+				subscriptions: B.wcs ? null : false,
+				memberships: surfaceById( 'woocommerce-memberships' ) ? null : false,
+				back: arrived,
+			};
+			loadCustomerPage( m );
+		} else if ( arrived ) {
+			m.back = arrived;
+		}
+		const back = m.back || { route: 'customers', label: __( 'Customers' ) };
+		const c = m.full || {};
+		const loading = !! m.loading && ! m.full;
+		view.innerHTML = `
+		<div class="minn-order-page minn-order-page-wide minn-customer-page">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-cp-back">← ${ esc( back.label ) }</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-order-head-row">
+						<span class="minn-modal-title">${ esc( loading ? __( 'Customer' ) : customerDisplayName( c ) ) }</span>
+						${ c.is_paying_customer ? `<span class="minn-status publish">${ esc( __( 'Paying customer' ) ) }</span>` : '' }
+					</div>
+					<div class="minn-modal-sub">${ loading ? esc( __( 'Loading…' ) ) : esc( [ c.email, '#' + c.id ].filter( Boolean ).join( ' · ' ) ) }</div>
+				</div>
+				${ loading || m.loadError ? '' : `
+				<div class="minn-order-head-actions">
+					${ B.caps.orders ? `<button class="minn-btn-soft" id="minn-cp-neworder" type="button">${ icon( 'plus' ) } ${ esc( __( 'New order' ) ) }</button>` : '' }
+					<button class="minn-btn-soft" id="minn-cp-more" type="button" aria-haspopup="menu" aria-label="${ esc( __( 'More actions' ) ) }" title="${ esc( __( 'More actions' ) ) }">⋯</button>
+				</div>` }
+			</div>
+			<div class="minn-order-page-body">
+				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading customer…' ) ) }</div></div>` : '' }
+				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+				${ ! loading && ! m.loadError ? customerPageBodyHtml( m ) : '' }
+			</div>
+		</div>`;
+		const backBtn = $( '#minn-cp-back' );
+		if ( backBtn ) backBtn.addEventListener( 'click', () => go( back.route ) );
+		if ( ! loading && ! m.loadError ) bindCustomerPage( m );
+	}
+
+	function loadCustomerPage( m ) {
+		const id = m.id;
+		const isCur = () => state.customerPage === m;
+		const repaint = () => { if ( isCur() && state.route === 'customer' ) renderCustomerPage(); };
+		api( `wc/v3/customers/${ id }?_fields=${ CUSTOMER_LIST_FIELDS }` )
+			.then( ( full ) => {
+				if ( ! isCur() ) return;
+				m.full = full;
+				m.loading = false;
+				repaint();
+			} )
+			.catch( ( e ) => {
+				if ( ! isCur() ) return;
+				m.loading = false;
+				m.loadError = e.message || __( 'Could not load customer' );
+				repaint();
+			} );
+		// WooCommerce's own lifetime figures (the ones its Users screen
+		// shows) live on the v2 customer route; v3 dropped them. Without
+		// them the tiles say so rather than adding up a partial list.
+		api( `wc/v2/customers/${ id }?_fields=orders_count,total_spent` )
+			.then( ( r ) => { if ( isCur() ) { m.stats = r || false; repaint(); } } )
+			.catch( () => { if ( isCur() ) { m.stats = false; repaint(); } } );
+		loadCustomerOrders( m, 1 ).then( repaint );
+		if ( m.subscriptions !== false ) {
+			apiPaged( `wc/v3/subscriptions?customer=${ id }&per_page=20&orderby=date&order=desc&_fields=${ SUB_LIST_FIELDS }` )
+				.then( ( r ) => { if ( isCur() ) { m.subscriptions = r; repaint(); } } )
+				.catch( () => { if ( isCur() ) { m.subscriptions = { items: [], total: 0 }; repaint(); } } );
+		}
+		if ( m.memberships !== false ) {
+			api( `minn-admin/v1/wcm/members?customer=${ id }&per_page=20` )
+				.then( ( r ) => { if ( isCur() ) { m.memberships = { items: ( r && r.items ) || [], total: ( r && r.total ) || 0 }; repaint(); } } )
+				.catch( () => { if ( isCur() ) { m.memberships = { items: [], total: 0 }; repaint(); } } );
+		}
+	}
+
+	// One page of the customer's orders, newest first; later pages append.
+	async function loadCustomerOrders( m, page ) {
+		try {
+			const r = await apiPaged( `wc/v3/orders?customer=${ m.id }&per_page=${ CUSTOMER_ORDERS_PER_PAGE }&page=${ page }&orderby=date&order=desc&_fields=${ CUSTOMER_ORDER_FIELDS }` );
+			if ( state.customerPage !== m ) return;
+			const prev = page > 1 && m.orders ? m.orders.items : [];
+			m.orders = { items: prev.concat( r.items || [] ), total: r.total, totalPages: r.totalPages, page };
+		} catch ( e ) {
+			if ( state.customerPage !== m ) return;
+			if ( page === 1 ) m.orders = { items: [], total: 0, totalPages: 1, page: 1, error: e.message };
+			else toast( e.message, true );
+		}
+	}
+
+	function customerAddressText( a, withContact ) {
+		const lines = [
+			[ a.first_name, a.last_name ].filter( Boolean ).join( ' ' ),
+			a.company, a.address_1, a.address_2,
+			[ a.city, a.state, a.postcode ].filter( Boolean ).join( ', ' ),
+			a.country,
+		];
+		if ( withContact ) lines.push( a.email, a.phone );
+		else lines.push( a.phone );
+		return lines.filter( Boolean ).join( '\n' );
+	}
+
+	function customerPageBodyHtml( m ) {
+		const c = m.full || {};
+		const b = c.billing || {};
+		const sh = c.shipping || {};
+		const canEdit = !! B.caps.customers;
+		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-cedit="${ key }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
+		const st = m.stats;
+		const ords = m.orders;
+		const last = ords && ords.items && ords.items[ 0 ];
+		const since = c.date_created ? parseWpDate( c.date_created ) : null;
+		const tiles = [
+			[ __( 'Orders' ), st == null ? '…' : ( st ? String( st.orders_count ) : '—' ) ],
+			[ __( 'Total spent' ), st == null ? '…' : ( st ? orderMoney( {}, st.total_spent ) : '—' ) ],
+			[ __( 'Last order' ), ords == null ? '…' : ( last ? timeAgo( last.date_created ) : '—' ) ],
+			[ __( 'Customer since' ), since && ! isNaN( since.getTime() ) ? since.toLocaleDateString( uiLocale(), { month: 'short', year: 'numeric' } ) : '—' ],
+		];
+		const shipEmpty = ! [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ].some( ( k ) => sh[ k ] );
+		const relatedRows = ( list, row ) => ( list.items || [] ).map( row ).join( '' );
+		return `
+				<div class="minn-stats minn-cp-stats">
+					${ tiles.map( ( [ label, value ] ) => `
+					<div class="minn-card minn-stat">
+						<div class="minn-stat-label">${ esc( label ) }</div>
+						<div class="minn-stat-value">${ esc( value ) }</div>
+					</div>` ).join( '' ) }
+				</div>
+				<div class="minn-order-body">
+					<div class="minn-order-layout">
+						<div class="minn-order-main">
+							<div class="minn-order-sec" data-ccard="orders">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Orders' ) ) }${ ords && ords.total ? ` <span class="minn-cp-count">${ esc( String( ords.total ) ) }</span>` : '' }</div></div>
+								${ ords == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading orders…' ) ) }</div>`
+									: ords.error ? `<div class="minn-toggle-desc">${ esc( ords.error ) }</div>`
+									: ! ords.items.length ? `<div class="minn-toggle-desc">${ esc( __( 'No orders for this customer.' ) ) }</div>`
+									: relatedRows( ords, ( o ) => `
+									<button type="button" class="minn-sub-order-row" data-cporder="${ o.id }">
+										<span>#${ esc( o.number || o.id ) }</span>
+										<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>
+										<span>${ esc( orderMoney( o, o.total ) ) }</span>
+										<span style="color:var(--text3); font-size:12.5px;">${ esc( timeAgo( o.date_created ) ) }</span>
+									</button>` ) + ( ords.page < ords.totalPages ? `<button type="button" class="minn-btn-soft" id="minn-cp-more-orders" style="margin-top:6px;">${ esc( __( 'Show more orders' ) ) }</button>` : '' ) }
+							</div>
+							${ m.subscriptions === false ? '' : `
+							<div class="minn-order-sec" data-ccard="subscriptions">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Subscriptions' ) ) }</div></div>
+								${ m.subscriptions == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading subscriptions…' ) ) }</div>`
+									: ! ( m.subscriptions.items || [] ).length ? `<div class="minn-toggle-desc">${ esc( __( 'No subscriptions for this customer.' ) ) }</div>`
+									: relatedRows( m.subscriptions, ( sub ) => `
+									<button type="button" class="minn-sub-order-row" data-cpsub="${ sub.id }">
+										<span>#${ esc( sub.number || sub.id ) }</span>
+										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( subStatusLabel( sub.status ) ) }</span>
+										<span>${ esc( subMoney( sub, sub.total ) ) } ${ esc( subPeriodLabel( sub ) ) }</span>
+									</button>` ) }
+							</div>` }
+							${ m.memberships === false ? '' : `
+							<div class="minn-order-sec" data-ccard="memberships">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Memberships' ) ) }</div></div>
+								${ m.memberships == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading memberships…' ) ) }</div>`
+									: ! ( m.memberships.items || [] ).length ? `<div class="minn-toggle-desc">${ esc( __( 'No memberships for this customer.' ) ) }</div>`
+									: relatedRows( m.memberships, ( mem ) => `
+									<button type="button" class="minn-sub-order-row" data-cpmember="${ mem.id }">
+										<span>${ esc( mem.plan || '' ) }</span>
+										${ surfacePill( mem.status ) }
+										<span>${ esc( mem.expires ? sprintf( /* translators: %s: relative time. */ __( 'Expires %s' ), timeAgo( mem.expires ) ) : __( 'No end date' ) ) }</span>
+									</button>` ) }
+							</div>` }
+						</div>
+						<div class="minn-order-side">
+							<div class="minn-order-sec" data-ccard="profile">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Profile' ) ) }</div>${ pencil( 'profile', __( 'Edit name and email' ) ) }</div>
+								<div class="minn-order-read">
+									<div class="minn-order-read-name">${ esc( customerDisplayName( c ) ) }</div>
+									<div>${ c.email ? esc( c.email ) : `<span class="minn-order-read-empty">${ esc( __( 'No email address' ) ) }</span>` }</div>
+									<div class="minn-order-read-sub">${ esc( __( 'Account' ) ) }</div>
+									<div>${ esc( c.username || '—' ) }${ c.role ? ' · ' + esc( statusLabel( c.role ) ) : '' }</div>
+								</div>
+							</div>
+							<div class="minn-order-sec" data-ccard="billing">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Billing address' ) ) }</div>${ pencil( 'billing', __( 'Edit billing address' ) ) }</div>
+								<div class="minn-order-read" style="white-space:pre-line;">${ customerAddressText( b, true ) ? esc( customerAddressText( b, true ) ) : `<span class="minn-order-read-empty">${ esc( __( 'No billing address' ) ) }</span>` }</div>
+							</div>
+							<div class="minn-order-sec" data-ccard="shipping">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( __( 'Shipping address' ) ) }</div>${ pencil( 'shipping', __( 'Edit shipping address' ) ) }</div>
+								<div class="minn-order-read" style="white-space:pre-line;">${ shipEmpty ? `<span class="minn-order-read-empty">${ esc( __( 'No shipping address' ) ) }</span>` : esc( customerAddressText( sh, false ) ) }</div>
+							</div>
+						</div>
+					</div>
+				</div>`;
+	}
+
+	function customerAddressFormHtml( kind, a ) {
+		const f = ( key, label, attrs ) => `<div><div class="minn-field-label">${ esc( label ) }</div><input class="minn-input" data-caf="${ key }" value="${ esc( a[ key ] || '' ) }"${ attrs || '' }></div>`;
+		return `
+			<div class="minn-order-fields">
+				${ kind === 'shipping' ? `<div><button type="button" class="minn-btn-soft" data-ccopy>${ icon( 'copy' ) } ${ esc( __( 'Same as billing address' ) ) }</button></div>` : '' }
+				<div class="minn-order-field-row">${ f( 'first_name', __( 'First name' ) ) }${ f( 'last_name', __( 'Last name' ) ) }</div>
+				${ f( 'company', __( 'Company' ) ) }
+				${ kind === 'billing' ? `<div class="minn-order-field-row">${ f( 'email', __( 'Email' ), ' type="email"' ) }${ f( 'phone', __( 'Phone' ) ) }</div>` : f( 'phone', __( 'Phone' ) ) }
+				${ f( 'address_1', __( 'Address line 1' ) ) }
+				${ f( 'address_2', __( 'Address line 2' ) ) }
+				<div class="minn-order-field-row">${ f( 'city', __( 'City' ) ) }${ f( 'state', __( 'State' ) ) }${ f( 'postcode', __( 'Postcode' ) ) }</div>
+				${ f( 'country', __( 'Country' ), ' placeholder="US"' ) }
+			</div>`;
+	}
+
+	function bindCustomerPage( m ) {
+		const c = m.full || {};
+		const nameOf = () => customerDisplayName( m.full || {} );
+		const leaveTrail = () => setPageReturn( 'customers/' + m.id, nameOf().length > 32 ? nameOf().slice( 0, 31 ) + '…' : nameOf() );
+		$$( '[data-cporder]' ).forEach( ( row ) => row.addEventListener( 'click', () => {
+			leaveTrail();
+			go( 'orders/' + row.dataset.cporder );
+		} ) );
+		$$( '[data-cpsub]' ).forEach( ( row ) => row.addEventListener( 'click', () => {
+			leaveTrail();
+			go( 'subscriptions/' + row.dataset.cpsub );
+		} ) );
+		$$( '[data-cpmember]' ).forEach( ( row ) => row.addEventListener( 'click', () => go( 'memberships/' + row.dataset.cpmember ) ) );
+		const more = $( '#minn-cp-more-orders' );
+		if ( more ) more.addEventListener( 'click', async () => {
+			more.disabled = true;
+			more.textContent = __( 'Loading orders…' );
+			await loadCustomerOrders( m, ( m.orders.page || 1 ) + 1 );
+			if ( state.customerPage === m ) renderCustomerPage();
+		} );
+		const newOrder = $( '#minn-cp-neworder' );
+		if ( newOrder ) newOrder.addEventListener( 'click', () => {
+			state.newOrderFor = { id: m.id, name: nameOf(), email: c.email || '', billing: c.billing || {}, shipping: c.shipping || {} };
+			leaveTrail();
+			go( 'orders/new' );
+		} );
+		const moreBtn = $( '#minn-cp-more' );
+		if ( moreBtn ) moreBtn.addEventListener( 'click', () => {
+			const email = c.email || ( c.billing || {} ).email || '';
+			const entries = [
+				/* translators: %s: the customer's email address. */
+				...( email ? [ { label: sprintf( __( 'Email %s' ), email ), href: 'mailto:' + email } ] : [] ),
+				...( email && B.caps.orders ? [ {
+					label: __( 'View orders' ),
+					run: () => {
+						state.orderView = 'list';
+						state.orderFilters = orderFiltersDefault( LIST_FILTER_SPECS.orders );
+						state.orderSearch = email;
+						state.cache.orders = null;
+						go( 'orders' );
+					},
+				} ] : [] ),
+				...( B.caps.editUsers ? [ { label: __( 'Open user account' ), run: () => go( 'users/' + m.id ) } ] : [] ),
+				...( canDeleteCustomer( c ) ? [
+					{ heading: __( 'Danger zone' ) },
+					{ label: __( 'Delete customer…' ), danger: true, run: () => deleteCustomerFlow( c, () => {
+						state.customerPage = null;
+						go( 'customers' );
+					} ) },
+				] : [] ),
+			];
+			const r = moreBtn.getBoundingClientRect();
+			openMinnMenu( r.left - 180, r.bottom + 6, entries );
+		} );
+		$$( '[data-cedit]' ).forEach( ( btn ) => btn.addEventListener( 'click', () => openCustomerEdit( m, btn.dataset.cedit ) ) );
+	}
+
+	/**
+	 * The sidebar's edit dialogs. Each sends only the fields that changed
+	 * since the page loaded, so an address the customer updated at checkout
+	 * meanwhile is not put back by an edit to their name.
+	 */
+	function openCustomerEdit( m, kind ) {
+		const c = m.full || {};
+		const titles = { profile: __( 'Profile' ), billing: __( 'Billing address' ), shipping: __( 'Shipping address' ) };
+		const body = kind === 'profile' ? `
+			<div class="minn-order-fields">
+				<div class="minn-order-field-row">
+					<div><div class="minn-field-label">${ esc( __( 'First name' ) ) }</div><input class="minn-input" data-caf="first_name" value="${ esc( c.first_name || '' ) }"></div>
+					<div><div class="minn-field-label">${ esc( __( 'Last name' ) ) }</div><input class="minn-input" data-caf="last_name" value="${ esc( c.last_name || '' ) }"></div>
+				</div>
+				<div><div class="minn-field-label">${ esc( __( 'Email' ) ) }</div><input class="minn-input" data-caf="email" type="email" value="${ esc( c.email || '' ) }"></div>
+				<div class="minn-toggle-desc">${ esc( __( 'The email is also the address they sign in with.' ) ) }</div>
+			</div>` : customerAddressFormHtml( kind, c[ kind ] || {} );
+		const sub = openEditDialog( titles[ kind ] || '', body, true );
+		const read = () => {
+			const out = {};
+			$$( '[data-caf]', sub.overlay ).forEach( ( el ) => { out[ el.dataset.caf ] = el.value.trim(); } );
+			return out;
+		};
+		const copy = $( '[data-ccopy]', sub.overlay );
+		if ( copy ) copy.addEventListener( 'click', () => {
+			const bill = c.billing || {};
+			$$( '[data-caf]', sub.overlay ).forEach( ( el ) => { el.value = bill[ el.dataset.caf ] || ''; } );
+		} );
+		const sv = $( '[data-esave]', sub.overlay );
+		if ( sv ) sv.addEventListener( 'click', async () => {
+			const now = read();
+			const patch = kind === 'profile'
+				? changedDeep( now, { first_name: c.first_name, last_name: c.last_name, email: c.email } )
+				: ( () => {
+					const diff = changedDeep( now, c[ kind ] || {} );
+					return Object.keys( diff ).length ? { [ kind ]: diff } : {};
+				} )();
+			if ( ! Object.keys( patch ).length ) {
+				sub.close();
+				return;
+			}
+			sv.disabled = true;
+			sv.textContent = __( 'Saving…' );
+			try {
+				await api( `wc/v3/customers/${ m.id }`, { method: 'PUT', body: JSON.stringify( patch ) } );
+				const full = await api( `wc/v3/customers/${ m.id }?_fields=${ CUSTOMER_LIST_FIELDS }` );
+				if ( state.customerPage === m ) m.full = full;
+				state.cache.customers = null;
+				toast( __( 'Customer updated' ) );
+				sub.close();
+				if ( state.customerPage === m && state.route === 'customer' ) renderCustomerPage();
+			} catch ( e ) {
+				toast( decodeEntities( e.message ), true );
+				sv.disabled = false;
+				sv.textContent = __( 'Save' );
+			}
+		} );
 	}
 
 	/* ===== Terms (categories, tags, custom taxonomies) ===== */
@@ -47341,100 +47636,6 @@
 			</div>`;
 		}
 
-		if ( m.type === 'customer' ) {
-			const listC = m.customer || {};
-			const c = m.full || listC;
-			const b = c.billing || {};
-			const loading = !! m.loading && ! m.full;
-			const ords = m.orders;
-			const spent = ords && ords.items
-				? ords.items.reduce( ( s, o ) => s + ( parseFloat( o.total ) || 0 ), 0 )
-				: null;
-			// The orders' own symbol (a GBP store printed this total in
-			// dollars once); the store's when the list is empty or unsymboled.
-			const spentSym = ( ords && ords.items && ords.items.find( ( o ) => o.currency_symbol ) || {} ).currency_symbol || storeSym();
-			return `
-			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal wide">
-					<div class="minn-modal-head">
-						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">${ esc( customerDisplayName( c ) ) }</div>
-							<div class="minn-modal-sub">${ esc( c.email || '' ) }${ c.id ? ' · #' + c.id : '' }</div>
-						</div>
-						<button class="minn-x-btn" id="minn-modal-close">×</button>
-					</div>
-					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading customer…' ) ) }</div>` : '' }
-					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
-					${ ! loading && ! m.loadError ? `
-					<div class="minn-order-body">
-						<div class="minn-order-grid">
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Profile' ) ) }</div>
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Username' ) ) }</span><span>${ esc( c.username || '—' ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Role' ) ) }</span><span>${ esc( c.role || '—' ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Registered' ) ) }</span><span>${ esc( c.date_created ? timeAgo( c.date_created ) : '—' ) }</span></div>
-									${ ords ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Orders' ) ) }</span><span>${ esc( String( ords.total ) ) }</span></div>` : '' }
-									${ spent != null ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Recent total' ) ) }</span><span>${ esc( spentSym ) }${ spent.toFixed( 2 ) }</span></div>` : '' }
-								</div>
-							</div>
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Billing' ) ) }</div>
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Name' ) ) }</span><span>${ esc( [ b.first_name, b.last_name ].filter( Boolean ).join( ' ' ) || '—' ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Email' ) ) }</span><span>${ esc( b.email || c.email || '—' ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Phone' ) ) }</span><span>${ esc( b.phone || '—' ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Address' ) ) }</span><span style="white-space:pre-line;">${ esc( [ b.address_1, b.address_2, [ b.city, b.state, b.postcode ].filter( Boolean ).join( ', ' ), b.country ].filter( Boolean ).join( '\n' ) || '—' ) }</span></div>
-								</div>
-							</div>
-						</div>
-						<div class="minn-media-edit">
-							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Recent orders' ) ) }</div>
-							${ ords == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading orders…' ) ) }</div>` : (
-								( ords.items || [] ).length ? ( ords.items || [] ).map( ( o ) => `
-									<button type="button" class="minn-order-note" data-open-order="${ o.id }" style="width:100%; text-align:left; cursor:pointer; background:var(--surface2,var(--panel)); border:1px solid var(--border); margin-bottom:8px;">
-										<div class="minn-order-note-meta">
-											<span>#${ esc( o.number || o.id ) }</span>
-											<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>
-											<span>${ esc( timeAgo( o.date_created ) ) }</span>
-										</div>
-										<div class="minn-order-note-body">${ esc( ( o.currency_symbol || storeSym() ) + o.total ) }</div>
-									</button>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No orders for this customer.' ) ) }</div>`
-							) }
-						</div>
-						${ m.memberships && ! Array.isArray( m.memberships ) ? `
-						<div class="minn-media-edit">
-							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Memberships' ) ) }</div>
-							${ ( m.memberships.items || [] ).length ? ( m.memberships.items || [] ).map( ( mem ) => `
-								<button type="button" class="minn-sub-order-row" data-open-membership="${ mem.id }">
-									<span>${ esc( mem.plan || '' ) }</span>
-									${ surfacePill( mem.status ) }
-									<span>${ esc( mem.expires ? sprintf( /* translators: %s: relative time. */ __( 'Expires %s' ), timeAgo( mem.expires ) ) : __( 'No end date' ) ) }</span>
-								</button>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No memberships for this customer.' ) ) }</div>` }
-						</div>` : ( m.memberships == null ? `<div class="minn-media-edit"><div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Memberships' ) ) }</div><div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading memberships…' ) ) }</div></div>` : '' ) }
-						${ B.wcs ? `
-						<div class="minn-media-edit">
-							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Subscriptions' ) ) }</div>
-							${ m.subscriptions == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading subscriptions…' ) ) }</div>` : (
-								( m.subscriptions.items || [] ).length ? ( m.subscriptions.items || [] ).map( ( sub ) => `
-									<button type="button" class="minn-sub-order-row" data-open-sub="${ sub.id }">
-										<span>#${ esc( sub.number || sub.id ) }</span>
-										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( subStatusLabel( sub.status ) ) }</span>
-										<span>${ esc( subMoney( sub, sub.total ) ) }</span>
-									</button>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No subscriptions for this customer.' ) ) }</div>`
-							) }
-						</div>` : '' }
-					</div>
-					<div class="minn-modal-actions">
-						${ B.wcs && B.caps.subscriptions ? `<button type="button" class="minn-btn-soft" id="minn-cust-subs-goto">${ esc( __( 'All subscriptions' ) ) }</button>` : '' }
-						${ B.caps.users ? `<a class="minn-btn-soft" href="${ esc( PATH_MODE ? BASE + 'users' : '#/users' ) }" id="minn-cust-users" data-goto-users="${ c.id }">${ esc( __( 'Find in Users' ) ) }</a>` : '' }
-						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }user-edit.php?user_id=${ c.id }" target="_blank" rel="noopener">↗ ${ esc( __( 'Edit in WordPress' ) ) }</a>
-						${ canDeleteCustomer( c ) ? `<button type="button" class="minn-btn-soft danger" id="minn-cust-delete">${ esc( __( 'Delete customer' ) ) }</button>` : '' }
-					</div>` : '' }
-				</div>
-			</div>`;
-		}
-
 		if ( m.type === 'order-email' ) {
 			const o = m.order || {};
 			return `
@@ -48562,56 +48763,6 @@
 					}
 				} )
 			);
-		}
-
-		if ( m.type === 'customer' ) {
-			$$( '[data-open-order]' ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					const id = parseInt( btn.dataset.openOrder, 10 );
-					if ( ! id ) return;
-					closeModal();
-					go( 'orders/' + id );
-				} )
-			);
-			// The Users list, searched for this person: the link used to carry
-			// the legacy hash route and no handler, so under path routing a
-			// click only appended "#/users" to the address and went nowhere.
-			const usersBtn = $( '#minn-cust-users' );
-			if ( usersBtn ) usersBtn.addEventListener( 'click', ( e ) => {
-				e.preventDefault();
-				const who = ( m.full && m.full.email ) || ( m.customer && m.customer.email ) || '';
-				closeModal();
-				state.userSearch = who;
-				state.userRole = '_all';
-				// The view paints whatever list is cached before it consults the
-				// search state, so a list loaded earlier would show every user
-				// beneath a prefilled box.
-				state.cache.users = null;
-				go( 'users' );
-			} );
-			$$( '[data-open-membership]' ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					const id = parseInt( btn.dataset.openMembership, 10 );
-					if ( ! id ) return;
-					closeModal();
-					go( 'memberships/' + id );
-				} )
-			);
-			$$( '[data-open-sub]' ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					const id = parseInt( btn.dataset.openSub, 10 );
-					const row = ( m.subscriptions && m.subscriptions.items || [] ).find( ( s ) => s.id === id );
-					if ( row ) openSubscriptionModal( row );
-					else openSubscriptionModal( { id } );
-				} )
-			);
-			const allSubs = $( '#minn-cust-subs-goto' );
-			if ( allSubs ) allSubs.addEventListener( 'click', () => {
-				closeModal();
-				go( 'subscriptions' );
-			} );
-			const custDel = $( '#minn-cust-delete' );
-			if ( custDel ) custDel.addEventListener( 'click', () => deleteCustomerFlow( m.full || m.customer ) );
 		}
 
 		if ( m.type === 'widget' ) {
@@ -56735,6 +56886,7 @@
 			state.newOrder = null;
 		}
 		if ( state.route !== 'product' ) state.productPage = null;
+		if ( state.route !== 'customer' ) state.customerPage = null;
 		if ( state.route !== 'subscription' ) state.subPage = null;
 		if ( state.route !== 'membership' ) state.memberPage = null;
 		if ( state.route !== 'membershipplan' ) state.planPage = null;
@@ -56766,6 +56918,7 @@
 			case 'product': renderProductPage(); break;
 			case 'coupons': renderCoupons(); break;
 			case 'customers': renderCustomers(); break;
+			case 'customer': renderCustomerPage(); break;
 			case 'users': renderUsers(); break;
 			case 'useredit': renderUserEdit(); break;
 			case 'terms': renderStructure(); break;
@@ -57193,8 +57346,9 @@
 		// this membership came from.
 		on( 'minn-wcm-open-customer', () => {
 			const mem = d.member || {};
-			const parts = String( mem.name || '' ).split( ' ' );
-			openCustomerModal( { id: mem.id, email: mem.email || '', first_name: parts[ 0 ] || '', last_name: parts.slice( 1 ).join( ' ' ) } );
+			if ( ! mem.id ) return;
+			setPageReturn( 'memberships/' + m.id, __( 'Membership' ) );
+			go( 'customers/' + mem.id );
 		} );
 		on( 'minn-wcm-open-order', () => { if ( d.order ) { setPageReturn( 'memberships/' + m.id, __( 'Membership' ) ); go( 'orders/' + d.order.id ); } } );
 		on( 'minn-wcm-open-product', () => { if ( d.product ) { setPageReturn( 'memberships/' + m.id, __( 'Membership' ) ); go( 'products/' + d.product.id ); } } );

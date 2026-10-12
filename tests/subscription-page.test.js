@@ -432,13 +432,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			const item = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( el ) => el.textContent.trim() === 'View customer' );
 			if ( item ) item.click();
 		} );
-		await page.waitForFunction( ( wanted ) => {
-			const modal = document.querySelector( '.minn-modal' );
-			return modal && modal.textContent.includes( wanted );
-		}, email, { timeout: 15000 } );
-		t.check( 'the context menu opens the related customer', true, email );
-		await page.keyboard.press( 'Escape' );
-		await page.waitForFunction( () => ! document.querySelector( '.minn-modal-overlay' ) );
+		await page.waitForFunction( ( wanted ) => /\/customers\/\d+$/.test( location.pathname )
+			&& ( document.querySelector( '.minn-order-page-head .minn-modal-sub' ) || {} ).textContent.includes( wanted ), email, { timeout: 15000 } );
+		t.check( 'the context menu opens the related customer\'s page', true, email );
+		await page.goBack();
+		await page.waitForSelector( `.minn-table-row[data-sub="${ subId }"]`, { timeout: 25000 } );
 		// Click the title cell, not the row's centre: the Items cell lives there
 		// and swallows its own clicks so the list can pop instead of navigating.
 		await page.click( `.minn-table-row[data-sub="${ subId }"] .minn-row-title` );
