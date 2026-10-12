@@ -8,6 +8,8 @@
 
 ### Improved
 
+* **New products from the New menu.** On a WooCommerce store, + New now offers Product beside Post and Page, from any screen. It opens the same New product dialog as Add product on the Products screen, and only for people who can make products.
+
 * **One changelog link per plugin.** Plugin cards with an update waiting no longer carry a separate "What's new" link: the version number already opens the same notes. Those notes are whatever the plugin's author publishes, so they may not describe the update on offer, and the window and the right-click menu now call them the Changelog.
 
 * **A safety net under every save.** Whatever a screen in Minn saves, it can no longer change who runs your site unless your own account could make that change in WordPress: opening registration or changing the role new accounts get, switching plugins on, moving the site's address, giving an account a role with administrative powers, or changing a more powerful account's email or password. On a network, a site's administrators can't move their site or name a network administrator. Everyday changes go through as before, like a store making a buyer a customer when a subscription starts.
