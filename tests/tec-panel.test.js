@@ -15,6 +15,22 @@ const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
 	await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
 
+	// A run that crashed after creating its fixtures leaves them behind, and the
+	// venue pick below finds the stale "Minn Suite Hall" first: sweep this
+	// suite's own leftovers by name before making new ones.
+	await page.evaluate( async () => {
+		const head = { 'X-WP-Nonce': window.MINN.nonce };
+		for ( const type of [ 'tribe_events', 'tribe_venue', 'tribe_organizer' ] ) {
+			const r = await fetch( window.MINN.restUrl + `wp/v2/${ type }?search=${ encodeURIComponent( 'Minn Suite' ) }&status=any&per_page=100&context=edit&_fields=id,title`, { headers: head, credentials: 'same-origin' } );
+			const rows = r.ok ? await r.json() : [];
+			for ( const row of Array.isArray( rows ) ? rows : [] ) {
+				if ( /^Minn Suite /.test( ( row.title && ( row.title.raw || row.title.rendered ) ) || '' ) ) {
+					await fetch( window.MINN.restUrl + `wp/v2/${ type }/${ row.id }?force=true`, { method: 'DELETE', headers: head, credentials: 'same-origin' } ).catch( () => {} );
+				}
+			}
+		}
+	} ).catch( () => {} );
+
 	// Fixtures over core REST: a venue, an organizer, a bare draft event.
 	const fx = await page.evaluate( async () => {
 		const jhead = { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce };

@@ -43,6 +43,17 @@ const ALLOWED = {
 		"'setup_network'": [ 1, 'descriptor validator: meta caps core maps for a bare check (not a gate)' ],
 		"'upgrade_network'": [ 1, 'descriptor validator: meta caps core maps for a bare check (not a gate)' ],
 	},
+	'includes/class-minn-admin-fences.php': {
+		'is_super_admin()': [ 1, "core: map_meta_cap's edit_user, where only a super admin changes a super admin" ],
+		"'manage_network'": [ 1, 'fence POWERS list: what a role grant must not carry without the right to promote (a list, not a gate)' ],
+		"'manage_sites'": [ 1, 'fence POWERS list: what a role grant must not carry without the right to promote (a list, not a gate)' ],
+		"'manage_network_users'": [ 1, 'fence POWERS list: what a role grant must not carry without the right to promote (a list, not a gate)' ],
+		"'manage_network_plugins'": [ 1, 'fence POWERS list: what a role grant must not carry without the right to promote (a list, not a gate)' ],
+		"'manage_network_themes'": [ 1, 'fence POWERS list: what a role grant must not carry without the right to promote (a list, not a gate)' ],
+		"'manage_network_options'": [ 1, 'fence POWERS list: what a role grant must not carry without the right to promote (a list, not a gate)' ],
+		"'upgrade_network'": [ 1, 'fence POWERS list: what a role grant must not carry without the right to promote (a list, not a gate)' ],
+		"'setup_network'": [ 1, 'fence POWERS list: what a role grant must not carry without the right to promote (a list, not a gate)' ],
+	},
 	'includes/adapters/network.php': {
 		"'manage_sites'": [ 4, 'core: Network Admin > Sites' ],
 		"'manage_network_options'": [ 4, 'core: Network Admin > Settings and user-edit.php super admin toggle' ],

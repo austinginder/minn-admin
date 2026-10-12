@@ -50,7 +50,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			return response.json();
 		} );
 		const plausible = plugins.find( ( plugin ) => plugin.plugin === 'plausible-analytics/plausible-analytics' );
-		t.check( 'Plausible 2.6.1 installed', !! plausible && plausible.version === '2.6.1', plausible && `${ plausible.version } ${ plausible.status }` );
+		// The lab's plugins are kept current, so a floor rather than a pin.
+		const atLeast = ( v, floor ) => {
+			const a = String( v || '' ).split( '.' ).map( Number ), b = floor.split( '.' ).map( Number );
+			for ( let i = 0; i < Math.max( a.length, b.length ); i++ ) {
+				if ( ( a[ i ] || 0 ) !== ( b[ i ] || 0 ) ) return ( a[ i ] || 0 ) > ( b[ i ] || 0 );
+			}
+			return true;
+		};
+		t.check( 'Plausible 2.6.1 or newer installed', !! plausible && atLeast( plausible.version, '2.6.1' ), plausible && `${ plausible.version } ${ plausible.status }` );
 		if ( ! plausible ) throw new Error( 'Plausible Analytics is not installed' );
 		originalStatus = plausible.status;
 		if ( originalStatus !== 'active' ) await setStatus( plausible.plugin, 'active' );

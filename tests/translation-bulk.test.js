@@ -3,12 +3,14 @@
  * request with the same panel the plugin batch uses (packages fetched side
  * by side, then installed one after another, each row moving Queued →
  * fetched → Extracting → Installing → Updated). The mu-fixture
- * minn_test_translation_pack offers three fake-locale packs for Minn Admin
+ * minn_test_translation_pack offers three fake-locale packs for Hello Dolly
  * whose zips this suite serves from a Node server on 127.0.0.1 (never a
  * loopback into the site), so three rows are deterministic and their order
  * provable; whatever real packs the site has pending ride along, so nothing
  * here asserts on their outcome. Cleanup removes the fake locales through
- * the translations/remove route.
+ * the translations/remove route. Not Minn Admin's own packs: those must come
+ * from its GitHub release and match the manifest's sha256 pin, so the
+ * updater scrubs a fixture offer for them, as it should.
  */
 const http = require( 'http' );
 const fs = require( 'fs' );
@@ -16,8 +18,8 @@ const path = require( 'path' );
 const { BASE, launch, login, reporter } = require( './helpers' );
 
 const LOCALES = [ 'xa_XA', 'xb_XB', 'xc_XC' ];
-const ZIPS = Object.fromEntries( LOCALES.map( ( l ) => [ l, fs.readFileSync( path.join( __dirname, 'fixtures', `minn-admin-${ l }.zip` ) ) ] ) );
-const ROW = 'Minn Admin · xa_XA';
+const ZIPS = Object.fromEntries( LOCALES.map( ( l ) => [ l, fs.readFileSync( path.join( __dirname, 'fixtures', `hello-dolly-${ l }.zip` ) ) ] ) );
+const ROW = 'Hello Dolly · xa_XA';
 
 const serve = () => new Promise( ( resolve ) => {
 	let hits = 0;
@@ -29,7 +31,7 @@ const serve = () => new Promise( ( resolve ) => {
 		res.setHeader( 'Content-Length', zip.length );
 		res.end( zip );
 	} );
-	server.listen( 0, '127.0.0.1', () => resolve( { server, url: `http://127.0.0.1:${ server.address().port }/minn-admin.zip`, hits: () => hits } ) );
+	server.listen( 0, '127.0.0.1', () => resolve( { server, url: `http://127.0.0.1:${ server.address().port }/hello-dolly.zip`, hits: () => hits } ) );
 } );
 
 ( async () => {
@@ -75,8 +77,8 @@ const serve = () => new Promise( ( resolve ) => {
 		t.check( 'Fixture on (write verified)', await setOpt( fake.url ), fake.url );
 
 		const before = await rest( 'GET', 'minn-admin/v1/translations' );
-		const offered = LOCALES.filter( ( l ) => ( before.json && before.json.groups || [] ).some( ( g ) => g.locale === l && ( g.components || [] ).some( ( c ) => c.slug === 'minn-admin' ) ) );
-		t.check( 'fixture packs are offered for all three locales (Minn Admin)', offered.length === 3, offered.join( ',' ) );
+		const offered = LOCALES.filter( ( l ) => ( before.json && before.json.groups || [] ).some( ( g ) => g.locale === l && ( g.components || [] ).some( ( c ) => c.slug === 'hello-dolly' ) ) );
+		t.check( 'fixture packs are offered for all three locales (Hello Dolly)', offered.length === 3, offered.join( ',' ) );
 		const pending = ( before.json && before.json.count ) || 0;
 
 		await page.goto( BASE + '/minn-admin/extensions', { waitUntil: 'domcontentloaded' } );
@@ -126,8 +128,8 @@ const serve = () => new Promise( ( resolve ) => {
 		const walks = order.length >= 3 && order.every( ( v, i ) => i === 0 || v > order[ i - 1 ] );
 		t.check( 'ticks walk down the list in order', walks, order.join( ',' ) );
 		const listed = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-bulk-row .minn-bulk-name' ) ].map( ( n ) => n.textContent.trim() ) );
-		const fixtureRows = listed.filter( ( l ) => /Minn Admin · x/.test( l ) );
-		t.check( 'rows are listed by language then component', fixtureRows.join( ',' ) === LOCALES.map( ( l ) => `Minn Admin · ${ l }` ).join( ',' ), fixtureRows.join( ',' ) );
+		const fixtureRows = listed.filter( ( l ) => /Hello Dolly · x/.test( l ) );
+		t.check( 'rows are listed by language then component', fixtureRows.join( ',' ) === LOCALES.map( ( l ) => `Hello Dolly · ${ l }` ).join( ',' ), fixtureRows.join( ',' ) );
 
 		await page.click( '#minn-modal-close2' );
 		const after = await rest( 'GET', 'minn-admin/v1/translations' );
