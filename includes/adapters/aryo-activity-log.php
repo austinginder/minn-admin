@@ -59,15 +59,19 @@ function minn_admin_aryo_can_view() {
  * keeps an account to the object types its capabilities cover and to the
  * actors whose role its own role outranks (an account holding
  * manage_options through a custom role reads no administrator's actions).
- * '' when Aryo's class is missing, false when Aryo shows this viewer
- * nothing. Its literals are escaped and carry no placeholders; a % is
- * doubled for prepare().
+ * false when Aryo shows this viewer nothing. Before 2.14 Aryo ships no
+ * AAL_Log_Query; its scoping then lives in its list table, so this reads
+ * '' only for the accounts that rule leaves unscoped (an administrator by
+ * first role, a super admin, view_all_aryo_activity_log) and false for
+ * everyone else. Its literals are escaped and carry no placeholders; a %
+ * is doubled for prepare().
  *
  * @return string|false SQL without a leading AND.
  */
 function minn_admin_aryo_scope_sql() {
 	if ( ! class_exists( 'AAL_Log_Query' ) || ! method_exists( 'AAL_Log_Query', 'get_where_by_role' ) ) {
-		return '';
+		$caps = (array) wp_get_current_user()->caps;
+		return 'administrator' === strtolower( (string) array_key_first( $caps ) ) || is_super_admin() || current_user_can( 'view_all_aryo_activity_log' ) ? '' : false;
 	}
 	$sql = ( new AAL_Log_Query() )->get_where_by_role();
 	if ( ! is_string( $sql ) || '' === trim( $sql ) ) {

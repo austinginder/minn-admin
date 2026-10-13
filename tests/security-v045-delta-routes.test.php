@@ -281,6 +281,66 @@ if ( ! class_exists( '\\FluentForm\\App\\Services\\FormBuilder\\ShortCodeParser'
 	}
 }
 
+// --- OS-8 Aryo Activity Log before 2.14: rows still follow Aryo's role scoping --
+// Aryo 2.13 and older ship no AAL_Log_Query, so the scope came back '' and
+// every query ran unscoped. Where Aryo is not loaded, a stand-in AAL_Main
+// gives this request the routes an old Aryo would, without the class.
+global $wpdb;
+$aal_table = $wpdb->prefix . 'aryo_activity_log';
+if ( class_exists( 'AAL_Log_Query' ) ) {
+	$skip( 'OS-8 this Aryo ships AAL_Log_Query (2.14+): 10-03 in security-v045-rc covers it' );
+} elseif ( $aal_table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $aal_table ) ) ) {
+	$skip( 'OS-8 no Aryo log table on this site' );
+} else {
+	if ( ! class_exists( 'AAL_Main' ) ) {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in class for this request only.
+		eval( 'class AAL_Main {}' );
+		// rest_api_init has usually run by now; hand the adapter its turn.
+		if ( did_action( 'rest_api_init' ) ) {
+			foreach ( $GLOBALS['wp_filter']['rest_api_init']->callbacks as $aal_prio ) {
+				foreach ( $aal_prio as $aal_cb ) {
+					if ( $aal_cb['function'] instanceof Closure && 'aryo-activity-log.php' === basename( ( new ReflectionFunction( $aal_cb['function'] ) )->getFileName() ) ) {
+						call_user_func( $aal_cb['function'] );
+					}
+				}
+			}
+		}
+	}
+	add_role( 'minn_d45_manager', 'D45 manager', array( 'read' => true, 'manage_options' => true, 'edit_posts' => true ) );
+	add_role( 'minn_d45_auditor', 'D45 auditor', array( 'read' => true, 'view_all_aryo_activity_log' => true ) );
+	$aal_uid = $make_user( 'minn_d45_manager' );
+	$aal_aud = $make_user( 'minn_d45_auditor' );
+	$wpdb->insert( $aal_table, array( 'user_caps' => 'administrator', 'action' => 'activated', 'object_type' => 'Plugin', 'object_subtype' => '', 'object_name' => 'MinnD45AdminAction', 'object_id' => 0, 'user_id' => $admin, 'hist_ip' => '203.0.113.46', 'hist_time' => (int) current_time( 'timestamp' ) ) );
+	$aal_row = (int) $wpdb->insert_id;
+	try {
+		if ( ! $aal_uid || ! $aal_aud || ! $aal_row ) {
+			$check( 'OS-8 fixtures', false );
+		} else {
+			wp_set_current_user( $aal_uid );
+			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
+			$aal_out = wp_json_encode( $aal_d );
+			$check( 'OS-8 without AAL_Log_Query a custom role holding manage_options reads no administrator\'s action', 200 === $aal_st && false === strpos( $aal_out, 'MinnD45AdminAction' ) && false === strpos( $aal_out, '203.0.113.46' ), $aal_st . ' ' . substr( $aal_out, 0, 160 ) );
+			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/status' );
+			$check( 'OS-8 and its status card counts none of them', 200 === $aal_st && '0' === ( $aal_d['rows'][1]['value'] ?? null ), $aal_st . ' ' . substr( wp_json_encode( $aal_d['rows'] ?? null ), 0, 160 ) );
+			wp_set_current_user( $aal_aud );
+			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
+			$check( 'OS-8 control: an account Aryo lets view everything still reads it', 200 === $aal_st && false !== strpos( wp_json_encode( $aal_d ), 'MinnD45AdminAction' ), (string) $aal_st );
+			wp_set_current_user( $admin );
+			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
+			$check( 'OS-8 control: an administrator still reads it', 200 === $aal_st && false !== strpos( wp_json_encode( $aal_d ), 'MinnD45AdminAction' ), (string) $aal_st );
+		}
+	} finally {
+		wp_set_current_user( $admin );
+		if ( $aal_row ) {
+			$wpdb->delete( $aal_table, array( 'histid' => $aal_row ) );
+		}
+		$drop_user( $aal_uid );
+		$drop_user( $aal_aud );
+		remove_role( 'minn_d45_manager' );
+		remove_role( 'minn_d45_auditor' );
+	}
+}
+
 // --- NI-4, OS-10 WooCommerce: settings and shipping act on the page and zone in the URL
 // The settings save checked the URL's page against the sections Minn lists
 // but saved the body's, and the shipping helpers read zone and instance
