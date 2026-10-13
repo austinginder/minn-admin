@@ -99,6 +99,15 @@ $dialog_checks = function ( $tag, $s, $item ) use ( $check, $dialog, $raw_rows )
 		return (string) $v === $d['title'];
 	} ) );
 	$check( "{$tag}: no detail row repeats the title", ! $dup, implode( ', ', $dup ) );
+	// A lowercase single token ("local", "locked", "s3") is a stored slug;
+	// the client prints a detail value as sent.
+	$slugs = array();
+	foreach ( $d['rows'] as $k => $v ) {
+		if ( is_string( $v ) && preg_match( '/^[a-z][a-z0-9_-]*$/', $v ) ) {
+			$slugs[] = $k . '=' . $v;
+		}
+	}
+	$check( "{$tag}: no detail row shows a raw lowercase value", ! $slugs, implode( ', ', $slugs ) );
 };
 
 $admin_login = wp_get_current_user()->user_login;
@@ -278,7 +287,7 @@ if ( ! function_exists( 'minn_admin_wpvivid_active' ) || ! minn_admin_wpvivid_ac
 		}
 		return $z->close();
 	};
-	$vv_set = function ( $prefix, $job, $children ) use ( $vv_dir, $vv_stamp, $vv_zip, &$vv_made ) {
+	$vv_set = function ( $prefix, $job, $children, $lock = 0 ) use ( $vv_dir, $vv_stamp, $vv_zip, &$vv_made ) {
 		$id   = 'wpvivid-' . substr( md5( uniqid( 'minnd23', true ) ), 0, 13 );
 		$base = ( '' !== $prefix ? $prefix . '_' : '' ) . $id . '_' . $vv_stamp;
 		$name = $base . '_' . $job . '.zip';
@@ -301,7 +310,7 @@ if ( ! function_exists( 'minn_admin_wpvivid_active' ) || ! minn_admin_wpvivid_ac
 			'log'           => '',
 			'backup'        => array( 'result' => 'success', 'files' => array( array( 'file_name' => $name, 'size' => (int) filesize( $vv_dir . $name ) ) ) ),
 			'remote'        => array(),
-			'lock'          => 0,
+			'lock'          => $lock,
 		);
 		WPvivid_Setting::update_option( 'wpvivid_backup_list', $list );
 		$vv_made[] = $id;
@@ -310,7 +319,8 @@ if ( ! function_exists( 'minn_admin_wpvivid_active' ) || ! minn_admin_wpvivid_ac
 	try {
 		$vv_full  = $vv_set( 'minn-d23.test', 'backup_all', array( 'backup_db', 'backup_themes', 'backup_plugin', 'backup_uploads', 'backup_content', 'backup_core' ) );
 		$vv_only  = $vv_set( 'minn-d23.test', 'backup_all', array( 'backup_themes', 'backup_plugin', 'backup_uploads', 'backup_content', 'backup_core' ) );
-		$vv_db    = $vv_set( 'www.minn-d23.test', 'backup_db', array() );
+		// Locked from their list's padlock: kept until deleted by hand.
+		$vv_db    = $vv_set( 'www.minn-d23.test', 'backup_db', array(), 1 );
 		$vv_rows  = array();
 		foreach ( minn_admin_wpvivid_rows() as $row ) {
 			$vv_rows[ $row['id'] ] = $row;
@@ -330,10 +340,34 @@ if ( ! function_exists( 'minn_admin_wpvivid_active' ) || ! minn_admin_wpvivid_ac
 					$item = $row;
 				}
 			}
-			if ( $item ) {
+			$locked = null;
+			foreach ( (array) ( $d23['items'] ?? array() ) as $row ) {
+				if ( $vv_db === $row['id'] ) {
+					$locked = $row;
+				}
+			}
+			if ( $item && $locked ) {
 				$dialog_checks( 'D-23 WPvivid', $s, $item );
+				$dialog_checks( 'D-23 WPvivid, a locked set', $s, $locked );
+				// Download and Delete are gated on the raw where and locked
+				// values, which stay as stored beside the labels.
+				$vv_offered = function ( $row, $pick ) use ( $s ) {
+					foreach ( (array) $s['collection']['actions'] as $a ) {
+						if ( $pick( $a ) ) {
+							return empty( $a['when'] ) || (string) ( $row[ $a['when']['key'] ] ?? '' ) === (string) $a['when']['equals'];
+						}
+					}
+					return null;
+				};
+				$vv_download = function ( $a ) {
+					return ! empty( $a['href'] );
+				};
+				$vv_delete = function ( $a ) {
+					return 'DELETE' === ( $a['method'] ?? '' );
+				};
+				$check( 'D-23 WPvivid control: Download is still offered on a set kept here, Delete still refused on a locked one and offered on an unlocked one', true === $vv_offered( $locked, $vv_download ) && false === $vv_offered( $locked, $vv_delete ) && true === $vv_offered( $item, $vv_delete ), wp_json_encode( array( 'where' => $locked['where'] ?? null, 'locked' => $locked['locked'] ?? null ) ) );
 			} else {
-				$check( 'D-23 WPvivid: the fixture set is on the route', false, wp_json_encode( $d23 ) );
+				$check( 'D-23 WPvivid: the fixture sets are on the route', false, wp_json_encode( $d23 ) );
 			}
 		}
 	} finally {
@@ -478,6 +512,7 @@ if ( ! function_exists( 'minn_admin_novamira_active' ) || ! minn_admin_novamira_
 		. "\$ctx = minn_admin_novamira_tab_shape( 'context' ); \$out['context'] = array();\n"
 		. "foreach ( (array) ( is_wp_error( \$ctx ) ? array() : \$ctx['groups'] ) as \$g ) { foreach ( (array) ( \$g['fields'] ?? array() ) as \$f ) { \$out['context'][] = \$f['key']; } }\n"
 		. "\$out['agent_context'] = (bool) wp_get_ability( 'novamira/agent-context' );\n"
+		. "foreach ( minn_admin_novamira_abilities() as \$a ) { \$out['providers'][ sanitize_key( minn_admin_novamira_ability_group( \$a ) ) ][ \$a['provider'] ] = true; }\n"
 		. "echo 'MINNPROBE ' . wp_json_encode( \$out ) . \"\\n\";\n"
 	);
 	$nt_run = function ( $require ) use ( $nt_base, $admin_login ) {
@@ -533,6 +568,17 @@ if ( ! function_exists( 'minn_admin_novamira_active' ) || ! minn_admin_novamira_
 			} ) );
 			$check( 'D-26 Novamira: no two Abilities tabs share a name', ! $nt_twice, implode( ', ', $nt_twice ) );
 			$check( 'D-26 Novamira: no tab for the bundled MCP adapter their Hub hides', ! in_array( 'c-novamira-mcp-adapter', $nt_ids, true ), implode( ', ', $nt_ids ) );
+			// Novamira's own tabs lead: the categories it registers for its
+			// abilities, ahead of every tab no Novamira ability is in.
+			$nt_core   = array_values( array_intersect( $nt_ids, array( 'c-filesystem', 'c-code-execution', 'c-admin-access', 'c-gutenberg', 'c-skill', 'c-design-system', 'c-memory' ) ) );
+			$nt_others = array_values( array_filter( $nt_ids, function ( $id ) use ( $nt_on ) {
+				return 'context' !== $id && ! isset( $nt_on['providers'][ $id ]['novamira'] );
+			} ) );
+			$nt_last   = $nt_core ? max( array_map( function ( $id ) use ( $nt_ids ) {
+				return array_search( $id, $nt_ids, true );
+			}, $nt_core ) ) : -1;
+			$nt_first  = $nt_others ? array_search( $nt_others[0], $nt_ids, true ) : PHP_INT_MAX;
+			$check( 'D-26 Novamira: its own tabs (Filesystem, Code Execution and the rest) come before every other plugin\'s', in_array( 'c-filesystem', $nt_core, true ) && in_array( 'c-code-execution', $nt_core, true ) && $nt_last < $nt_first, implode( ', ', array_slice( $nt_ids, 0, 12 ) ) );
 			$nt_ctx = (array) ( $nt_on['context'] ?? array() );
 			if ( empty( $nt_on['agent_context'] ) ) {
 				$check( 'D-26 Novamira control: the Context tab holds the site instructions', in_array( 'context', $nt_ctx, true ), wp_json_encode( $nt_ctx ) );

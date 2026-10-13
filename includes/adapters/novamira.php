@@ -436,8 +436,11 @@ function minn_admin_novamira_ability_tabs() {
 	foreach ( minn_admin_novamira_abilities() as $a ) {
 		$by[ minn_admin_novamira_ability_group( $a ) ][] = $a;
 	}
+	// The categories Novamira registers for its own abilities (Pro adds
+	// memory). Pro's specializations take the name of the plugin they
+	// drive and sort among the other plugins.
 	$own = function ( $g ) {
-		return 0 === strpos( $g, 'p-novamira' ) || in_array( $g, array( 'c-novamira', 'c-skill', 'c-design-system', 'c-memory', 'c-files', 'c-php', 'c-wp-cli', 'c-gutenberg' ), true );
+		return 0 === strpos( $g, 'p-novamira' ) || in_array( $g, array( 'c-filesystem', 'c-code-execution', 'c-admin-access', 'c-context', 'c-gutenberg', 'c-skill', 'c-design-system', 'c-memory', 'c-novamira-mcp-adapter' ), true );
 	};
 	uksort( $by, function ( $x, $y ) use ( $by, $own ) {
 		if ( $own( $x ) !== $own( $y ) ) return $own( $x ) ? -1 : 1;
