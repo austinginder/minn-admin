@@ -107,6 +107,40 @@ class Minn_Admin_Updater {
 		// Last, so a later download filter can't replace the verified file;
 		// an earlier one that answers for Minn's package is verified below.
 		add_filter( 'upgrader_pre_download', array( $this, 'verify_package' ), PHP_INT_MAX, 4 );
+		add_filter( 'upgrader_source_selection', array( $this, 'keep_folder' ), 10, 4 );
+	}
+
+	/**
+	 * An update of the running copy lands in the folder it runs from.
+	 *
+	 * Minn can run from a folder other than minn-admin/ (a GitHub source
+	 * zip, or a copy the site was switched to). Its release unpacks to
+	 * minn-admin/, and core installs into the folder a package names, then
+	 * deletes the running one: active_plugins pointed at a file that was
+	 * gone and Minn switched itself off.
+	 *
+	 * @param string|WP_Error $source        The unpacked package's folder.
+	 * @param string          $remote_source Where it was unpacked.
+	 * @param mixed           $upgrader      The upgrader.
+	 * @param array           $hook_extra    What is being upgraded.
+	 * @return string|WP_Error
+	 */
+	public function keep_folder( $source, $remote_source, $upgrader, $hook_extra = array() ) {
+		global $wp_filesystem;
+		if ( is_wp_error( $source ) || ! is_array( $hook_extra ) || ( $hook_extra['plugin'] ?? '' ) !== $this->plugin_file ) {
+			return $source;
+		}
+		$want = dirname( $this->plugin_file );
+		if ( '.' === $want || basename( untrailingslashit( $source ) ) === $want ) {
+			return $source;
+		}
+		$to = trailingslashit( dirname( untrailingslashit( $source ) ) ) . $want . '/';
+		if ( $wp_filesystem && $wp_filesystem->move( untrailingslashit( $source ), untrailingslashit( $to ), true ) ) {
+			return $to;
+		}
+		// Installing under the package's own name would delete the running
+		// copy, so stop instead.
+		return new WP_Error( 'minn_admin_folder', __( 'The update could not be unpacked into the folder Minn Admin runs from, so it was not installed.', 'minn-admin' ) );
 	}
 
 	/**

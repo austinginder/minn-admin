@@ -53,6 +53,7 @@ class Minn_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'copies_notice' ) );
 		add_action( 'network_admin_notices', array( __CLASS__, 'copies_notice' ) );
+		add_action( 'delete_plugin', array( __CLASS__, 'keep_language_files' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
 		add_filter( 'admin_url', array( __CLASS__, 'default_admin_url' ), 10, 2 );
@@ -1586,12 +1587,16 @@ class Minn_Admin {
 		}
 		$on_plugins = 'plugins.php' === $pagenow;
 		$switch     = $on_plugins ? get_site_transient( 'minn_admin_copy_switch' ) : false;
-		if ( false !== $switch ) {
+		// The record is network-wide, so it is used up only by the copy it
+		// names: another site's Plugins screen, where this copy is not the
+		// one switched to, leaves it for the screen it was meant for.
+		$mine = is_array( $switch ) && ( $switch['to'] ?? '' ) === $own;
+		if ( $mine ) {
 			delete_site_transient( 'minn_admin_copy_switch' );
 		}
 		// Only while the switch still stands: one made from WP-CLI is read on
 		// the next visit to Plugins, by when it may have been undone.
-		if ( is_array( $switch ) && ( $switch['to'] ?? '' ) === $own && ! in_array( $switch['off'] ?? '', $active, true ) ) {
+		if ( $mine && ! in_array( $switch['off'] ?? '', $active, true ) ) {
 			printf(
 				'<div class="notice notice-info is-dismissible"><p>%s</p></div>',
 				esc_html(
@@ -1633,6 +1638,60 @@ class Minn_Admin {
 				esc_attr( $class ),
 				esc_html( sprintf( $text, MINN_ADMIN_VERSION, dirname( $own ), $version, dirname( $file ) ) )
 			);
+		}
+	}
+
+	/**
+	 * Deleting an idle copy in plugins/minn-admin from Plugins makes core
+	 * delete every Minn language file too: it takes a plugin's folder for its
+	 * text domain, and minn-admin is Minn's. The copy running from another
+	 * folder still reads them, so they are kept aside and put back once the
+	 * deletion is done.
+	 *
+	 * @param string $plugin_file The plugin being deleted.
+	 */
+	public static function keep_language_files( $plugin_file ) {
+		$kept = self::language_files_at_risk( (string) $plugin_file, plugin_basename( MINN_ADMIN_FILE ) );
+		if ( $kept ) {
+			add_action(
+				'shutdown',
+				function () use ( $kept ) {
+					self::put_back_files( $kept );
+				}
+			);
+		}
+	}
+
+	/**
+	 * Minn's language files, with their contents, when deleting $plugin_file
+	 * would take them with it while $own keeps running.
+	 *
+	 * @param string $plugin_file The plugin being deleted.
+	 * @param string $own         The running copy's plugin file.
+	 * @return array<string,string>
+	 */
+	public static function language_files_at_risk( $plugin_file, $own ) {
+		if ( 'minn-admin' !== dirname( $plugin_file ) || $plugin_file === $own || 'minn-admin' === dirname( $own ) ) {
+			return array();
+		}
+		$kept = array();
+		foreach ( (array) glob( WP_LANG_DIR . '/plugins/minn-admin-*' ) as $file ) {
+			if ( is_string( $file ) && is_file( $file ) ) {
+				$bytes = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+				if ( false !== $bytes ) {
+					$kept[ $file ] = $bytes;
+				}
+			}
+		}
+		return $kept;
+	}
+
+	/** @param array<string,string> $kept What language_files_at_risk() kept. */
+	public static function put_back_files( array $kept ) {
+		foreach ( $kept as $file => $bytes ) {
+			if ( ! file_exists( $file ) ) {
+				file_put_contents( $file, $bytes ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			}
 		}
 	}
 
