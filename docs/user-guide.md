@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.44.0. This file ships inside the plugin, so the copy you
+*Current as of v0.45.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -169,7 +169,7 @@ and Minn will not offer to deactivate itself network-wide from inside Minn.
 **The topbar** carries the page title, a button that shows or hides the
 sidebar (⌘. does the same), the version badge (click it for what's new),
 a View site link, the theme toggle (click switches light and dark; right-click to follow the system), notifications,
-and the New button. Amber chips appear here only when something needs
+and the New button (on a store it also offers Product). Amber chips appear here only when something needs
 you: a pending WordPress update, or a site that is not fully public.
 
 ## Writing
@@ -306,7 +306,8 @@ counted as locked, with a link to edit them in wp-admin):
 - **Every field group appears.** The editor sidebar's Custom fields card
   opens a dialog with every group that applies to what you are editing,
   with no plugin settings to change first, and everything saves with the
-  post. Fields show and hide the way their rules intend as you flip the
+  post. A save sends only the fields you changed, so one someone else
+  changed meanwhile keeps their value. Fields show and hide the way their rules intend as you flip the
   switches that control them, and a hidden field always keeps its value.
 - **The everyday types edit in place**: text, choices, switches,
   checkboxes, colors with a real picker, dates and times on the same
@@ -364,10 +365,9 @@ panel shows what the post actually emits.
 
 ## Daily site care
 
-**Comments**: approve, reply, edit in place, mark spam, or block a
-commenter (future comments from that address go straight to the trash,
-with Undo; when another commenter's address contains theirs, Minn points
-you to Spam instead, so nobody else's comments are caught). Bulk-select works across the list.
+**Comments**: approve, reply, edit in place or mark spam. Bulk-select
+works across the list. WordPress's own Disallowed comment keys list is
+still under Settings → Comments.
 
 **Media**: drop files anywhere in the app to upload. Images can be
 cropped and rotated right in Minn, and regenerating thumbnails is one
@@ -525,8 +525,19 @@ site itself:
 - Hide any notice from the Notices tab.
 - If a developer already hid admin menus in wp-admin with code (a common
   client-site setup), Minn notices and keeps those entries out of its
-  sidebar too, automatically. Like the wp-admin original this is
-  cosmetic; the screens stay reachable by address and from the palette.
+  sidebar too, automatically: Comments, Media, Users, Plugins and
+  Settings. Like the wp-admin original this is cosmetic; the screens stay
+  reachable by address and from the palette.
+- When White Label CMS hides a plugin's (or a theme's) whole menu from
+  your clients, Minn hides the screens it adds for that plugin from the
+  same people: its sidebar item, its ⌘K entries and its doorway on
+  Extensions. A screen several plugins share (Field Groups, Site Options)
+  goes only once all of them are hidden, and a plugin whose content list
+  is still in the menu (Elementor's Templates, say) stays. Minn's own
+  screens, like the store's Orders and Products, stay too, and your White
+  Label CMS Admins still see everything. This tidies the interface rather
+  than locking anything: the plugin still answers to whoever its own
+  permissions allow.
 
 Everything hidden is listed under **Your profile**, where one click
 restores it, and an administrator can restore items for you from your
@@ -566,9 +577,12 @@ progress visible in the top bar, so you can continue working while they
 finish. Languages nothing uses get a Remove action that deletes their
 files and stops the downloads; WordPress otherwise keeps every installed
 language current forever. The site language and any language a person has
-chosen on their profile cannot be removed, and the row says which of the
-two is holding them. Removing is not permanent: WordPress reinstalls a
-language the moment it is selected again.
+chosen on their profile cannot be removed, and the row says which is
+holding it. On a network every site shares the same language files, so a
+language another site runs in (its own or the network's default) is kept
+too, and its row says how many sites use it; on a very large network
+nothing is offered for removal. Removing is not permanent: WordPress
+reinstalls a language the moment it is selected again.
 
 ## Your store
 
@@ -584,7 +598,8 @@ group.
   items with the money broken down, status, payment, refunds, mail and the
   timeline. The sidebar holds the context: customer, shipping,
   attribution and other orders from the same customer, each card showing
-  text until its pencil opens the form. You can take a payment by hand,
+  text until its pencil opens the form, and the Customer card has a
+  button to the customer's own page. You can take a payment by hand,
   refund whole lines or an arbitrary amount, apply or remove a coupon,
   resend an email and read the order's notes without leaving Minn, and
   the Back button returns you to wherever the visit started. When the
@@ -593,6 +608,15 @@ group.
   stays in the header; sending an email, copying the payment URL, the PDF
   documents, the WooCommerce link and Move to Trash live behind a More
   menu.
+- **New order** opens a page in the same layout: several products (a
+  variable product asks which variation), coupons, a shipping charge,
+  the payment method and transaction ID, a customer from your store
+  (which fills in their details) or a guest, billing and shipping
+  addresses, a note and the starting status. Nothing is saved until you
+  press Create order, and WooCommerce works out discounts, tax and the
+  total as it does. If it refuses a coupon, the page tells you why and
+  no order is left behind. You then land on the new order's page, where
+  Record payment and the emails are.
 - **Trashing an order is undoable.** Move to Trash (from the More menu or
   by right-clicking a row) offers Undo, and the list's Trash view holds
   what was trashed. A trashed order opens read-only, as in wp-admin, with
@@ -610,6 +634,12 @@ group.
   title WooCommerce stored on the order (Stripe, PayPal, a bank transfer).
   Orders that belong to a subscription carry a small badge that opens a
   summary of it.
+- **Customers** open on a page of their own: WooCommerce's order count
+  and total spent, their orders ten at a time, their subscriptions and
+  memberships, and their profile, billing and shipping addresses, each
+  with a pencil to edit it. New order starts an order for them with
+  their details filled in, and the ⋯ menu emails them, lists their
+  orders, opens their user account or deletes the customer.
 - **Subscriptions** open on their own page in the order page's shape,
   with editable items and schedule, coupons, a notes timeline and a quick
   view of related orders. The subscriptions list wears the same filter
@@ -644,7 +674,7 @@ group.
   restriction rules and purchasing discounts as plain lists, and the
   sections shown in a member's account. Duplicate makes a draft copy; a
   plan with active members cannot be deleted. A customer's memberships
-  also appear on their card from Orders and Customers. CSV import and
+  also appear on their customer page. CSV import and
   export, the members directory and the plugin's emails stay in
   WooCommerce, one click from the status card.
 - **Gift cards** (YITH WooCommerce Gift Cards, official WooCommerce Gift
@@ -672,7 +702,14 @@ group.
   slug, featured, and linked products. A purchase note sits with the rest.
   Everything saves together: a bar rises along the bottom as soon as
   something changes, offering Discard beside Save, so a long product is
-  never a scroll away from either.
+  never a scroll away from either. A save sends only what you changed,
+  so a price an import set while the page was open stays.
+
+  **Add product** (and Product in the New menu) opens this same page
+  over a blank product, with every card there from the start. The
+  product is created when you first save it, as a draft unless you pick
+  another status, and a variable product's variations are saved right
+  after it, in the same click.
 
   The products list wears the same filter bar as Orders. Status is the
   dropdown (one at a time, because that is what WooCommerce accepts).
@@ -713,12 +750,22 @@ group.
   and revisions, rather than sending you elsewhere, and the editor carries
   a button back to the product you came from. If you would rather see
   a product without leaving the list, hover its row and click the eye for a
-  quick look with the same fields. Creating a product from the list opens
-  that quick view; **Open full page** takes you to the real product page.
+  quick look with the same fields, which saves only what you change there
+  too; **Open full page** takes you to the real product page.
 
   Two jobs stay in WooCommerce on purpose: creating a brand new store-wide
   attribute, which belongs to the whole shop rather than to one product,
   and the children of a grouped product.
+- **Coupons**: Add coupon and every coupon in the list open a page with
+  everything WooCommerce's coupon screen has: the code (with Generate),
+  discount type and amount, expiry, free shipping, minimum and maximum
+  spend, individual use, excluding sale items, the products and
+  categories it applies to, allowed emails and the usage limits.
+  Emptying a usage limit saves it as unlimited and clearing the expiry
+  removes it. Editing a coupon saves only what you changed, so a limit
+  someone raised meanwhile stays. For people who can open orders, the
+  page lists the orders that used the code, twenty at a time with Show
+  more, and says so when it couldn't load them.
 - **Store settings** is the last item in the Commerce group, for anyone
   who can manage WooCommerce. It carries a section for each page
   WooCommerce registers (General, Products, Tax, Shipping, Accounts &
@@ -782,10 +829,21 @@ group.
   rather than licenses.
 - **Users** — create, edit, change roles in bulk, reset passwords, sign
   out sessions, and (with the User Switching plugin) switch into an
-  account to see what they see. Where each session came from (its address,
-  browser and sign-in time) is shown to administrators and to the account
-  holder; a role that may merely edit the user sees the count and the
-  sign-out buttons. Opening a user is a full page: identity,
+  account to see what they see. **Add user** opens a page of its own: the
+  username and email, the role (starting on the one your site gives new
+  accounts), their language, a password generated for you, and their
+  public profile. WordPress's welcome email, on by default, gives them
+  their username and a link to set their own password; if the site keeps
+  WordPress from sending it, the page tells you instead. Nothing is
+  created until you press Create user. On a network that lets site
+  administrators add users, WordPress keeps editing accounts for network
+  administrators, so a site administrator's page leaves out the language
+  and the email (pass the password on yourself) and returns to the Users
+  list. Where each session came from (its address, browser, sign-in time
+  and expiry) is shown to administrators (on a network, to network
+  administrators) and to the account holder; a role that may merely edit
+  the user sees the count and the sign-out buttons. Opening a user is a
+  full page: identity,
   public profile, language, password and sessions, plus their Minn
   appearance. An administrator can set another user's color scheme and
   defaults there, so a client's Minn looks right before their first
@@ -811,9 +869,10 @@ group.
   on its card), Connectors (AI providers plus spam services like Akismet
   and CleanTalk: activate the plugin, then paste the key), custom CSS,
   and **Appearance**: the palette everyone sees in Minn until they pick
-  their own, and the light or dark mode a device starts in. The long
-  tail of rarely-touched options deliberately stays in wp-admin, one
-  click away. If you look for a setting and don't find it, that is the
+  their own, and the light or dark mode a device starts in. A save the
+  site refuses leaves the form as you typed it, to correct and try
+  again. The long tail of rarely-touched options deliberately stays in
+  wp-admin, one click away. If you look for a setting and don't find it, that is the
   reason, not a bug.
 - **System** — a health check (PHP, HTTPS, caching, backups, loopback),
   an activity view of what is installed, and debug tools when someone
@@ -922,7 +981,15 @@ group.
   secrets, license keys, the API keys and sign-in tokens plugins store, and
   the update caches that carry a license key appear as a placeholder with
   their size, in the list and in the row detail. Searching values skips
-  the rows that hold them, and a column that can hold them cannot be sorted. And where a
+  the rows that hold them, and a column that can hold them cannot be
+  sorted. A column named like a password, secret or token is hidden in every
+  table, other plugins' own tables included, and can't be sorted or
+  searched. A copy of a hidden credential is hidden wherever it sits,
+  even encoded, and value searches leave it out; activity logs still show
+  what they recorded, as their own screens do. To keep that safe, long
+  text columns (a post's content, an option's value) can't be sorted, and
+  a value search may stop at the first 1,000 matching rows, and says so
+  when it does. And where a
   Health check finds something worth cleaning up, Minn gives you the exact
   command to run rather than a button that runs it: copy it, back up, and
   run it yourself or hand it to whoever looks after the site. If you need
@@ -945,12 +1012,12 @@ returned to Person chooses.
 
 ## Keyboard shortcuts
 
-Pages that keep your edits until you press Save (the builders, a notification or confirmation, settings forms, products, memberships, Styles) ask before you leave them with unsaved changes, whichever way you leave: the sidebar, ⌘K, a link, or the browser's Back and Forward.
+Pages that keep your edits until you press Save (the builders, a notification or confirmation, settings forms, products, coupons, a new order, a new user, memberships, Styles) ask before you leave them with unsaved changes, whichever way you leave: the sidebar, ⌘K, a link, or the browser's Back and Forward.
 
 | Keys | Does |
 |---|---|
 | **⌘K** | Command palette (with text selected in the editor: link) |
-| **⌘S** | Save, keeping the current status. On any page or dialog with a Save button (the form and field group builders, a notification or confirmation, settings forms, products, memberships…), presses it |
+| **⌘S** | Save, keeping the current status. On any page or dialog with a Save button (the form and field group builders, a notification or confirmation, settings forms, products, coupons, memberships…), presses it. Create order and Create user are left to a click, because they can send an email |
 | **⌘Z / ⇧⌘Z** | On the form and field group builders and the notification and confirmation pages: undo and redo your last changes (the arrows beside Save do the same). In a box you're typing in, ⌘Z undoes the typing first. History starts over when you save |
 | **⌘⏎** | Publish, Update or Schedule |
 | **⌘/** | Block library |
@@ -986,6 +1053,19 @@ On Windows and Linux, use Ctrl wherever ⌘ appears.
 - **Who can open `/minn-admin/`?** Only logged-in users your site already
   trusts to edit content, and each person sees only what their role
   allows. Everything is re-checked on the server on every action.
+- **Could a save in Minn hand my site to someone?** No. Whatever a
+  screen in Minn saves, it can't change who runs your site unless the
+  person's own account could make that change in WordPress: opening
+  registration or changing the role new accounts get, changing the site's admin email or
+  address, switching plugins on or off, changing the theme, giving an
+  account a powerful role (Administrator, Editor, Shop Manager) or taking
+  one away, or changing a more powerful account's username, email,
+  password or password-reset link. On a network, a site's administrators
+  can't move their site, change network settings or name a network
+  administrator. Everyday changes go through as before, like WooCommerce
+  Subscriptions making a buyer a Subscriber when their subscription
+  starts. When a save is held back, the screen tells you part of the
+  change wasn't saved.
 - **Multisite?** Yes. Site members can switch among the sites they may use,
   subsite administrators can manage local membership, and network
   administrators get daily Sites, Users, Settings, plugin and theme controls.

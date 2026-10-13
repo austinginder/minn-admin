@@ -39,7 +39,7 @@ make out loud:
   not on this page are internal") and reference adapters that are genuinely
   readable. Ninety-four bundled adapter modules prove the primitives generalize
   across four different settings-schema frameworks.
-- **The quality bar**: 286 browser suites, verification on clean and
+- **The quality bar**: 430 browser suites and 29 PHP suites, verification on clean and
   production-scale sites, zero-console-error gates.
 
 ## v1.0 gates

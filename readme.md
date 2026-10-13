@@ -22,7 +22,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 
 ## Install
 
-1. Download [`minn-admin.zip`](https://github.com/austinginder/minn-admin/releases/latest/download/minn-admin.zip) from the latest release and upload it under Plugins › Add Plugin › Upload Plugin, or run `wp plugin install https://github.com/austinginder/minn-admin/releases/latest/download/minn-admin.zip`. Use that zip rather than GitHub's Code › Download ZIP or a release's Source code zip: those unpack to `minn-admin-main/` or `minn-admin-<version>/`, which WordPress installs beside an existing copy instead of updating it. For development, clone into `wp-content/plugins/minn-admin`.
+1. Download [`minn-admin.zip`](https://github.com/austinginder/minn-admin/releases/latest/download/minn-admin.zip) from the latest release and upload it under Plugins › Add Plugin › Upload Plugin, or run `wp plugin install https://github.com/austinginder/minn-admin/releases/latest/download/minn-admin.zip`. Use that zip rather than GitHub's Code › Download ZIP or a release's Source code zip: those unpack to `minn-admin-main/` or `minn-admin-<version>/`, which WordPress installs beside an existing copy instead of updating it. If a site already runs such a copy, activating it switches Minn over, its updates land in the folder it runs from, and deleting the idle `minn-admin/` copy leaves Minn's language files in place. For development, clone into `wp-content/plugins/minn-admin`.
 2. Activate through the Plugins screen.
 3. Visit `/minn-admin/`. It is also linked from the admin bar and the wp-admin menu.
 
@@ -88,7 +88,9 @@ Expand only the part of Minn you want to explore.
 - **Ecommerce** — full WooCommerce day-to-day in Minn: **Orders** open as full pages (linkable,
   refreshable, with a **Quick view** modal from the list) with search, status, notes, a **Payment
   card** that records hand-received payments through WooCommerce's own machinery, **itemized
-  refunds** with quantity steppers and restocking, resend/custom email, pay URL, **New order**,
+  refunds** with quantity steppers and restocking, resend/custom email, pay URL, **New order** on a
+  page of its own (several products with a variation pick, coupons, shipping, payment, a store
+  customer or a guest),
   **Analytics** with long-range revenue and top products, and a Store strip on the Overview naming
   the orders that need work today.
   **Products** open as full pages as well, in the order page's shape: a main column for what the
@@ -98,13 +100,17 @@ Expand only the part of Minn you want to explore.
   sidebar for what it is filed under (status, type, categories, tags and brands as checkable lists
   you can add to, upsells and cross-sells), with a save bar that offers Discard beside Save and the
   long description in Minn's own editor. The products list carries stock filters, bulk actions and
-  **Add product**. The orders list filters the way a storefront back
+  **Add product**, which opens the same page over a blank product (also in + New on a store). The
+  orders list filters the way a storefront back
   office does: a status view, search and **Add filter** in one row, active filters as removable
   chips, multi-status, date window, customer and product all narrowing on the server, and the
   whole set living in the URL so a filtered list can be pasted to someone else. Orders can
   **move to the Trash with Undo** (a Trash view restores or deletes them for good), and can
   **apply and remove coupons**, and an order that belongs to a subscription carries a badge that
-  opens its summary. **Coupons**, **Customers**, and **Subscriptions** when WooCommerce
+  opens its summary. **Coupons** and **Customers** each open on a page of their own: a coupon with
+  every setting of WooCommerce's coupon screen and the orders that used its code, a customer with
+  WooCommerce's order count and total spent, their orders, subscriptions and memberships, their
+  addresses and New order. **Subscriptions** when WooCommerce
   Subscriptions is active: a subscription opens on its own page in the order page's shape, with
   editable items and schedule, coupons, a notes timeline, a quick view of related orders, and
   the same filter bar with its own status vocabulary. **Memberships** when WooCommerce
@@ -126,6 +132,8 @@ Expand only the part of Minn you want to explore.
   zones and classes**, **Tax rates** per class with CSV export, **Webhooks** and **REST API keys**
   (secret shown once, WooCommerce's owner rule on edit and revoke).
 - **Users** — directory with search, a role filter, create/edit users, roles, passwords,
+  an **Add user** page (the role your site gives new accounts, a generated password, their
+  language and public profile, and WordPress's welcome email with a set-password link),
   **bulk role change**, **per-user login sessions with one-click sign-out**, **Switch to
   this user** when the User Switching plugin is active (a switched session shows a **Switch
   back** bar in Minn), and **Copy one-time login link** when One Time Login is active.

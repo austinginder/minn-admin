@@ -307,7 +307,15 @@ application passwords ("AI Access" with generated agent guide). The
 long-tail profile fields all shipped v0.17.0 on the /minn-admin/profile
 page (first/last name, bio, website, per-user language with automatic
 pack installs, the front-end toolbar preference). Application passwords
-and reassign-on-delete are better surfaced than classic.
+and reassign-on-delete are better surfaced than classic. Adding a user is
+a page of its own (`/users/new`, v0.45.0) with what core's Add User screen
+asks plus display name and bio: the role starts on the site's
+`default_role`, the password is generated, and WordPress's welcome email
+(on by default, as in core) carries a set-password link; the page says so
+when the site keeps that email from sending. On a network that lets site administrators
+add users, core keeps `edit_users` for network administrators, so a site
+administrator's page leaves out the language and the email and lands on
+the Users list.
 
 ### Media — grid solid, editing caught up
 Grid with type filter/search/pagination, multi-upload, drag-drop, image

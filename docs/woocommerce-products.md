@@ -39,6 +39,24 @@ media picker and the date picker, call `m.syncDirty()` themselves.
 Discard rebuilds from a copy of the product taken at load. `m.full` is not
 that copy: flipping the type harvests the form into it, on purpose.
 
+**A save sends only what changed.** The same fingerprint pass also keeps what a
+save of the clean form would send (`m.cleanPayload`), and a save sends
+`changedDeep()` of the form against it, so a price an import set or stock sold
+while the page was open stays as stored. The quick view has no bar but saves
+against the same line; it paints while the product is still loading, so its
+line is drawn once the product has arrived, never from the empty first paint.
+
+**A new product** (Add product on the list, Product in + New) is
+`/products/new`: this page over a blank product, with every card, a bar that
+reads Cancel and Create product, and the cursor in Name. The first save posts
+the whole form, not a changed-only body: there is nothing stored to keep yet,
+and WooCommerce's defaults differ from the form's (it publishes unless told
+otherwise), so it is a draft unless another status is picked. Variations need
+the product's id, so they save right after it in the same click; if that batch
+is refused the product exists without them and the toast says so. The product's
+own address then replaces `/products/new`, so Back returns to the list. An
+untouched new page leaves without asking; one with anything entered asks first.
+
 The page therefore has no card wrapper around the body. An `overflow: hidden`
 wrapper would become the sticky bar's containing block, and the bar would
 stick to nothing.
@@ -109,9 +127,8 @@ its own.
 1. **The page** (shipped): route, shared renderer, quick-view modal kept, parity
    with the old modal fields, editor link for the description. The modal carries
    an Open full page button, the way an order and a subscription do, so a quick
-   view can hand off to the route. Creating a product from the list toolbar
-   lands in that same quick view, which is why the button is the difference
-   between a fresh product and a dead end.
+   view can hand off to the route. Creating a product no longer goes through the
+   quick view: see "A new product" above.
 2. **Inventory and shipping** (shipped): GTIN, backorders, low stock, sold
    individually, weight, dimensions, shipping class. This wave also settled the
    page's shape: four cards in a two-column grid named the way WooCommerce

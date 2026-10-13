@@ -55,7 +55,10 @@ happens (money returned outside the site).
 
 An order whose payment has not completed is editable, exactly as WooCommerce decides it
 (`is_editable`), and the items card grows a pencil there. The dialog changes quantities,
-removes lines and adds products through a search of the catalogue.
+removes lines and adds products through a search of the catalogue. Picking a variable
+product lists its variations to choose from instead of adding the parent, which is not
+something a customer can buy; the same picker (`bindProductPicker`) serves a
+subscription's items and the new-order page.
 
 One hard-won detail: **a quantity change has to rewrite the line's money.** WooCommerce's
 REST keeps the old `subtotal` and `total` when only `quantity` moves, so an order for
@@ -63,6 +66,25 @@ three would still be billed as one. Minn rescales both from the line's unit pric
 Removing a line is `quantity: 0`, which is WooCommerce's own idiom for it. Taxes and
 shipping are not recalculated, and the dialog says so rather than quietly leaving a wrong
 number on screen.
+
+## A new order
+
+`/orders/new` is the order page's cards over a local draft: items with quantities,
+coupons, a shipping charge, the payment method and transaction ID, a customer search that
+fills in the billing and shipping details (or a guest), the addresses, a note and the
+starting status. Nothing reaches the server before Create order, and Create is one
+`wc/v3/orders` POST, so WooCommerce applies the coupons and works out discounts, tax and
+the total the way it always does. Started from a customer's page, the draft opens with
+that customer and their details filled in. The order's own page then takes the
+address's place, so Back returns to the list. An untouched page leaves without asking;
+⌘S does nothing here, since Create can send an email.
+
+One hard-won detail: **a refused coupon still leaves an order behind.** WooCommerce saves
+the order and runs its totals before it applies coupons, so a code it refuses fails the
+request after an order number has been used and the new-order hooks have fired. It parks
+that order as a checkout-draft and names it in the error (`new_draft_order_id`). The page
+deletes it (force) before showing why the coupon was refused, so as far as the person can
+tell nothing was created.
 
 ## The list: filters over native parameters
 
@@ -172,7 +194,8 @@ their stacking on a narrow viewport and in the modal, the header's badges and ac
 the read-first sidebar and its dialogs, the copy-from-billing button, refund as a header
 action, items editing (quantity, add, remove) against the saved order, the attribution
 card, and the status label. `order-page`, `order-payment` and `order-refunds` cover the
-behavior underneath it.
+behavior underneath it, and `ecommerce-create` covers the new-order page, including the
+refused coupon's draft being deleted.
 
 For walking the screen by hand, `tests/seed-orders.js` creates one order per status on a
 throwaway lab.

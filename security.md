@@ -65,5 +65,38 @@ A few properties worth knowing before auditing (details in
   to be able to log in to a site you are staging, scheduled work should keep
   running behind the holding page, and a payment provider's callback about
   an existing order must not be lost.
-- A browser test suite (286 suites at the time of writing) includes an
-  enforced zero-external-requests invariant for the app chrome.
+- Writes that would hand over the site are fenced under every
+  `minn-admin/v1` request, whatever the route's own gate let through
+  (`includes/class-minn-admin-fences.php`): the registration, default-role,
+  admin-email, address and upload-path options, active plugins and the
+  theme, role definitions, network settings, a role or capability grant or
+  removal that carries power, and a powerful account's login, password,
+  email or password-reset key each need the caller's own capability, the
+  one WordPress asks on its own screens. Names are matched without regard
+  to case, as MySQL matches them. A refusal answers 403
+  `minn_write_fenced` and logs one line,
+  `minn_write_fenced user= route= refused=`. The main network's super
+  admin (`Minn_Admin::install_owner()`) is not fenced. Writes made with raw
+  SQL are outside the fence, as they are outside every WordPress hook.
+- The database browser is read-only and redacts credentials three ways: by
+  column name (a column named like a password, secret or token, in any
+  table, which also cannot be sorted or filtered), by known vendor row
+  (options and user meta that hold keys, tokens or license answers), and
+  by value (a cell holding a copy of a redacted credential, raw or
+  base64-encoded, under any name). Value searches leave those rows out,
+  long text, binary and JSON columns are not sort keys, and a value search
+  counts at most 1,000 rows (or is refused when the site holds too many
+  credentials to check). Activity-log tables are shown as their own
+  screens show them.
+- On a network, Minn's network routes read network capabilities on the
+  main site, as core's Network Admin does, so a network capability granted
+  through one subsite's role counts for nothing. On an install with several
+  networks (WP Multi Network), install-wide tools (the database browser,
+  the logs, the wp-config switches) belong to the main network's super
+  admins.
+- Hiding a plugin's screens because a menu tool (White Label CMS) hid its
+  wp-admin menu is presentation only; the plugin's routes keep their own
+  permission checks.
+- A browser test suite (430 suites at the time of writing, beside 29 PHP
+  suites) includes an enforced zero-external-requests invariant for the
+  app chrome.

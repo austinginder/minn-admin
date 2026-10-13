@@ -46,11 +46,15 @@ MINN_MS_SUPER_PASS=<lab super-admin password> node wp-multi-network.test.js
 MINN_TEST_PASS=… ./run-all.sh /tmp/minn-run
 
 # every PHP suite (wp eval-file), beside run-all.sh in the release pre-flight:
-# single-site ones on the site this checkout sits in, network ones on a
-# multisite lab (SKIPPED without one), full logs + summary in the output dir
+# single-site ones on the site this checkout sits in (or MINN_PHP_SITE),
+# network ones on a multisite lab (SKIPPED without one), full logs + summary
+# in the output dir
 MINN_PHP_NETWORK=<network root> MINN_PHP_SUBSITE=https://store.<lab>/ \
   MINN_PHP_NET2_URL=https://lab2.<lab>/ MINN_PHP_NET2_USER=<its super admin> \
   ./run-php.sh /tmp/minn-php
+
+# the round-trip harnesses (what each kind of save really stores); see below
+MINN_TEST_PASS=… ./roundtrip.sh
 
 # the NEXT WordPress (release pre-flight): updates a dedicated Cove site to
 # whatever core is ahead of stable, then runs the core-coupled suites there
@@ -71,6 +75,58 @@ knowing before you believe a full-run failure:
 - **A long run outlives a terminal.** For an overnight run, detach it
   (`nohup ./run-all.sh <dir> &`) so it survives the shell that started it; stop it
   with `pkill -f run-all.sh`.
+
+## Round trips (`roundtrip.sh`)
+
+A save is only as good as what it stores. `roundtrip.sh` runs the four round-trip
+harnesses in order, each replaying what the real client sends for one kind of write and
+checking what got stored: a value typed reads back as typed, a save that changes nothing
+stores nothing, and a change to one field leaves the rest.
+
+1. **Panels** (`roundtrip-panels.test.php`): every editor field panel, per post type,
+   for fidelity, no-op, isolation, a partial body that names one field, and a change
+   made elsewhere surviving this page saving another field.
+2. **Settings** (`roundtrip-settings.test.php`): every surface settings tab. These are
+   live options on a shared lab, so each one is backed up raw and put back after every
+   tab, and on any exit.
+3. **Surface edit dialogs**: `roundtrip-surfaces-capture.js` opens each surface's first
+   item in the real app, presses Save without touching anything and records the request
+   (answered in the browser, so it never reaches the server); `roundtrip-surfaces.test.php`
+   replays the bodies for no-op, isolation and concurrency.
+4. **Minn's own pages**: `roundtrip-pages-capture.js` does the same for settings
+   sections, the builders, the email pages, membership plans, orders, products, users
+   and store settings, and the same PHP harness replays them. A page whose clean save
+   sends anything fails, unless it proves freshness with a stamp (409 on a stale copy).
+
+Passes 3 and 4 replay inside a database transaction that is rolled back, so the lab's
+items end exactly as they started. Each harness keeps a ratchet of open findings in its
+`$known` list: a listed failure reports KNOWN and does not fail the run, one that starts
+passing fails until its line is removed, and an unlisted failure is a regression, so the
+list only shrinks. Narrow a run with `MINN_RT_PANEL=<panel id>` (panels) or
+`MINN_RT_SURFACE=<surface id>` (settings); `MINN_RT_VERBOSE=1` prints the stored values
+around each replay's first difference, and `MINN_RT_DEBUG=1` explains skipped panel
+concurrency pairs. `MINN_RT_CAPTURE` names the capture file a replay reads; the runner
+sets it. `run-php.sh` skips the replay pass because it needs a browser capture first:
+run `./roundtrip.sh`.
+
+## Route gates (`route-gates.test.php`)
+
+Who reaches each `minn-admin/v1` route is pinned in
+`tests/fixtures/route-gates-single.json` and `route-gates-network.json`. The suite asks
+every endpoint's permission callback as each kind of account (signed out, Subscriber
+through Administrator, a Shop Manager, and on a network a site administrator and an
+account holding network capabilities only through a site role) and compares. A route the
+snapshot does not list fails, and so does a gate that got wider; a narrower gate, or a
+route whose plugin is off, is only reported. After adding or changing a route, review
+its gate, then rewrite the snapshot:
+
+```bash
+MINN_ROUTE_SNAPSHOT=write wp eval-file tests/route-gates.test.php --user=admin --path=<site>
+```
+
+The network snapshot comes from the lab's WooCommerce subsite (the one `run-php.sh`
+uses, `--url=<that site>`), since accounts and routes differ from site to site. Commit
+the rewritten snapshot with the route.
 
 ## The next WordPress (`core-latest.sh`)
 
@@ -148,6 +204,14 @@ Environment (all optional except the password):
 | `MINN_MS_URL` / `MINN_MS_STORE` / `MINN_MS_BLOG` | `https://minnms.localhost` / `store.` / `blog.` |
 | `MINN_CORE_SITE` | `minnadmin-core-latest` (`core-latest.sh` only; the Cove site name) |
 | `MINN_CORE_ROOT` | `~/Cove/Sites/$MINN_CORE_SITE.localhost/public` |
+| `MINN_PHP_SITE` | the site this checkout sits in (`run-php.sh`'s single-site suites) |
+| `MINN_PHP_NETWORK` / `MINN_PHP_SUBSITE` | — (`run-php.sh`'s network suites: the network root and a site on it other than the main one; unset ⇒ SKIP) |
+| `MINN_PHP_NET2_URL` / `MINN_PHP_NET2_USER` | — (a site on a second network and that network's super admin; unset ⇒ SKIP) |
+| `MINN_RT_PANEL` / `MINN_RT_SURFACE` | unset (round trips: run one panel or one settings surface) |
+| `MINN_RT_VERBOSE` / `MINN_RT_DEBUG` | unset (round trips: print stored values at a difference, explain skipped pairs) |
+| `MINN_RT_CAPTURE` | `$TMPDIR/minn-surface-saves.json` (the capture a replay reads; `roundtrip.sh` sets it) |
+| `MINN_ROUTE_SNAPSHOT` | unset. `write` rewrites the route-gates snapshot instead of comparing |
+| `MINN_COPY_SRC` | this checkout's `minn-admin.php` (duplicate-copy: another main file, for a before run) |
 
 ## Conventions (read before writing a suite)
 

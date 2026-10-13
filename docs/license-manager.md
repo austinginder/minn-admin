@@ -578,10 +578,20 @@ Run this loop per product.
    exactly, as a documented exception: Soflyy). Uplink/PUE, EDD and Freemius
    each have a known shape; see Phase 1 above.
 3. **Wire the provider** in `includes/adapters/licenses.php`. `read()` stays pure
-   option or table reads. Actions attach only when the vendor code is loaded.
-   Snapshot the key AND the status and restore both on a rejection, so a typo
-   never clobbers a working key. An empty value may need unsetting rather than
-   `''` (Soflyy). The component key drives Off and Turn on. Add every option the
+   option or table reads. Actions attach only when the vendor code is loaded,
+   and only for someone the vendor's own licence screen would let act: when the
+   vendor gates that screen tighter than `manage_options` (ACF PRO's Updates
+   page, WPForms' manage capability, Gravity Forms' settings capability), add
+   its test to `minn_admin_license_vendor_gates()`, and everyone else gets the
+   row read-only. Snapshot the key AND the status and restore both on a
+   rejection, so a typo never clobbers a working key. That snapshot reads and
+   restores `wp_options` rows, which is not where a transient lives under a
+   persistent object cache: when the vendor records its answer in a transient
+   (TEC's key status, Etch's daily check), take it with
+   `minn_admin_license_transients()` before the call and put it back with
+   `minn_admin_license_transients_restore()` after a rejection. An empty value
+   may need unsetting rather than `''` (Soflyy). The component key drives Off
+   and Turn on. Add every option the
    reader takes a key or token from to `minn_admin_license_secret_options()`:
    the database browser redacts those rows, so it never prints a key this
    screen only reports as present. A licence server's answer or an update cache

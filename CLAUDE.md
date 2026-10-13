@@ -29,6 +29,7 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
 | `includes/class-minn-admin.php` | Routing, auth gate, boot payload (`window.MINN`), oEmbed shims |
 | `includes/class-minn-admin-rest.php` | `minn-admin/v1` endpoints (overview, render-blocks, editor-styles, …) |
 | `includes/adapters/` | Bundled third-party integrations — each guards on its plugin; `acf.php` is the panel reference, `seo.php` the REST-field reference |
+| `assets/icons/core-icons.json` | Minn's own icons under WordPress's core icon names, shipped for Minn Engine to register; the plugin never reads it. Built by `bin/icons/core-icons.py` then `outline.py`, checked by `tests/core-icons.test.php`, required by `bin/build-zip.sh` |
 | `docs/` | Decisions live here. `editor-direction.md` (safety model — read before touching editor scope), `editor-roadmap.md` (where it's going), `wp-cli-roadmap.md` (future command plan), `block-inspector.md`, `for-plugin-authors.md`, `plugin-support.md` (coverage map), `adapter-coverage.md` (primitive matrix for adapter sweeps) |
 | `tests/` | Self-contained Playwright suites + `helpers.js` harness |
 
@@ -38,6 +39,11 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
   (`contenteditable=false`) pass through byte-identical from `ed.islands[]`; locked posts
   never send `content`. Grow `SIMPLE_BLOCKS` / `EDITABLE_ATTRS` one proven attribute at a
   time — every allowed attribute must be reproducible from the live DOM at serialize time.
+- **Find islands by reference, never by class or `data-island`.** Post kses keeps both,
+  so content can wear an island's markup and name another block. Anything that reaches
+  `ed.islands[]` goes through `isRealIsland()` / `islandOf()` / `islandByIdx()`;
+  `tests/island-lookup-guard.test.js` fails on a new bare lookup that is not listed with
+  why it cannot steer a write.
 - **Never trust contenteditable defaults.** The recurring traps, all documented at their
   fix sites in `app.js`: Chrome rebalances boundary whitespace destructively; `insertHTML`
   rewrites `<code>` into styled spans; new lists nest inside the source paragraph
@@ -81,6 +87,11 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
 - **A network boundary is `Minn_Admin::network_owner()`.** A raw network capability
   (`manage_network_options` and peers) is right only where core or the vendor asks the
   same one for the same action; `tests/network-gates.test.js` fails on any other.
+  Install-wide state (the database, the logs, wp-config) asks `Minn_Admin::install_owner()`
+  instead: on a WP Multi Network install, only the main network's super admins. A network route
+  asks its capability through `minn_admin_network_user_can()`, which reads it on the
+  main site as core's Network Admin does, never `current_user_can()` on the addressed
+  subsite.
 - **A credential row a licence reader reads is redacted** in the database browser
   (`minn_admin_license_secret_options()`); `tests/license-redaction.test.js` traces the
   readers and fails on a row that is neither redacted nor listed as holding no key.

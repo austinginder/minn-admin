@@ -52,6 +52,18 @@ byte-comparing nested group/columns and shortcode blocks through a full edit-and
 Known cosmetic effect: the first Minn save normalizes inter-block whitespace to the Gutenberg
 standard blank line.
 
+**Islands are found by reference, never by what content can wear.** Post kses keeps `class`
+and `data-*`, so a writer can put an element wearing `.minn-block-island` and `data-island="K"`
+into a post, and a `<div>` inside a paragraph is hoisted out into the editor body as a
+top-level node. Every lookup that reaches `ed.islands[]` (the serializer, `flushSlotIsland`,
+`rebuildIslandFromRaw`, cut, copy and delete, the doorways, chips and runs) goes through
+`isRealIsland()` / `islandOf()` / `islandByIdx()`: an element Minn rendered
+(`contenteditable="false"`, which kses strips from content) and not inside another island's
+preview. A look-alike then saves as the writer's own text instead of naming another block.
+`tests/island-lookup-guard.test.js` (no browser) fails on any new lookup by that class or by
+`data-island` that neither uses the helpers nor is listed with why it cannot steer a write,
+and `tests/island-lookalike.test.js` drives the look-alike through a save and a cut.
+
 ## The writing surface
 
 The hybrid model decides what's *safe* to edit; these are the affordances that make the

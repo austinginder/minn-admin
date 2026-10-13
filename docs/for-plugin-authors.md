@@ -214,7 +214,7 @@ arrived in that release; unmarked keys have been stable since the API shipped.
 |---|---|
 | `label` | Sidebar label and page title |
 | `sub` | Subtitle badge (usually your plugin name) |
-| `plugin` | The plugin folder this surface belongs to, as its directory slug (`'gravityforms'`), or a list when one surface serves a free and a Pro build (`array( 'wpforms-lite', 'wpforms' )`); a theme is `'theme:slug'`. Optional, and worth declaring: with it, the plugin's card on Extensions carries a chip straight to this surface, beside the Settings link the plugin declares to wp-admin |
+| `plugin` | The plugin folder this surface belongs to, as its directory slug (`'gravityforms'`), or a list when one surface serves a free and a Pro build (`array( 'wpforms-lite', 'wpforms' )`); a theme is `'theme:slug'`. Optional, and worth declaring: with it, the plugin's card on Extensions carries a chip straight to this surface, beside the Settings link the plugin declares to wp-admin. It is also how a surface leaves Minn for someone a menu tool hid the plugin from (see `minn_admin_admin_page_hidden` in the [hook reference](#hook-reference)): a surface without it stays |
 | `icon` | Icon name from Minn's set — the full list is under [Icons](#icons) below. An unknown name renders an empty icon, so copy from the list |
 | `cap` | Capability required. Checked server-side; the surface is absent from the app for users without it. Plugins with their own access model gate inside the shim instead — see [Capability patterns](#capability-patterns) |
 | `collection` | The list definition (below). Optional when the surface declares `settings`: a settings-only surface renders its settings view as the whole page (right for settings-shaped plugins with no list to show; the bundled Perfmatters adapter is the example) |
@@ -694,13 +694,23 @@ earns a page when it has sub-resources or workflows of its own, or a URL worth s
 with a teammate. WooCommerce orders are the precedent: the order page at `/orders/{id}`
 hosts the full working surface (items, payment, refunds, emails, notes, related orders)
 while Quick view stays a modal for the one-click look from the list. Both presentations
-share one detail body, so neither drifts.
+share one detail body, so neither drifts. Subscriptions, products, coupons, customers,
+users, memberships and membership plans have pages by the same test, and customers and
+coupons have no modal at all.
 
-Plugin surfaces get the modal by design. Entries, log rows and packages are
-glance-shaped, and the `sectionsRoute` detail plus row actions cover them; a surface
-whose records genuinely carry sub-resources should link out to its own screen (the
-`href` action) rather than simulate a page inside the modal. If Minn later promotes a
-surface detail to a real page, it will be by this same test, not by popularity.
+Creating a page-worthy record happens on its page, never in a dialog. `/orders/new`,
+`/products/new`, `/coupons/new`, `/users/new` and `/membership-plans/new` are the
+record's own page over a blank record; nothing is stored until Create (or the first
+Save), which then puts the new record's own address in place of the `new` one, so Back
+returns to the list.
+
+Plugin surfaces get the modal by default. Entries, log rows and packages are
+glance-shaped, and the `sectionsRoute` detail plus row actions cover them. A record that
+passes the test gets a page through `collection.open` (a builder, a plan), or through its
+family's own page (bookings and Forms entries, below). A surface whose records carry
+sub-resources Minn cannot draw should link out to its own screen (the `href` action)
+rather than simulate a page inside the modal. If Minn promotes a surface detail to a
+real page, it will be by this same test, not by popularity.
 
 ### `detail.edit` — inline editing in the detail modal
 
@@ -728,6 +738,17 @@ reads and writes `{ "action_data": { "url": … } }`), `mono` renders a monospac
 fields (`textarea`, `select` with `options`, `tags`, `rows`, `placeholder`): both render
 through the same form engine. Fields shown as inputs are hidden from the static
 detail rows automatically. The bundled Redirection adapter is the reference.
+
+The save still sends the whole record your sanitizer expects, but not as the dialog
+loaded it. On Save the dialog reads the item again (through `detailRoute`, or the list
+page it came from) and sends the fields the person edited plus every other edit field
+and `preserve` key as stored now, so a change made while the dialog was open (another
+tab, your own screen, one of the surface's actions) is kept. One rule follows, and
+Minn's own suite holds its bundled adapters to it: never `preserve` a key one of the
+surface's actions sets in its `body`, such as an on/off switch with Activate and
+Deactivate actions. Leave that key to the actions and have your route keep a field it
+is not sent: if the fresh read fails, the dialog falls back to the copy it opened with,
+and a preserved switch would go back to that state.
 
 ### `detail.sectionsRoute` — server-built detail view
 
@@ -944,9 +965,9 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
 | `minn_admin_license_providers` | filter | Report your license state on the Licenses card, optionally with activate / deactivate / re-verify |
 | `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
-| `minn_admin_respect_removed_menus` | filter | Return false to stop Minn's nav mirroring `remove_menu_page()` removals (since 0.26.0) |
+| `minn_admin_respect_removed_menus` | filter | Return false to stop Minn's nav mirroring `remove_menu_page()` removals (since 0.26.0). It also turns off the plugin hiding `minn_admin_admin_page_hidden` drives: no plugin leaves Minn for being hidden in wp-admin |
 | `minn_admin_watched_admin_menus` | filter | Adjust which admin-menu slugs map to which Minn nav items for removal mirroring (since 0.26.0) |
-| `minn_admin_admin_page_hidden` | filter | `( bool, page slug, parent slug )`: return true when your menu tool hid this admin page from the current user on purpose (the parent is `''` for a top-level page). A plugin whose every menu page is hidden, and at least one of them vouched for this way, leaves Minn for that user: its surfaces drop out of the nav, ⌘K and Extensions. Absence alone never counts, because plugins hide their own setup pages too. The bundled White Label CMS adapter is the example (since 0.45.0) |
+| `minn_admin_admin_page_hidden` | filter | `( bool, page slug, parent slug )`: return true when your menu tool hid this admin page from the current user on purpose (the parent is `''` for a top-level page). A plugin (or theme) whose every menu page is hidden, and at least one of them vouched for this way, leaves Minn for that user: the surfaces that declare it as their `plugin` drop out of the nav, ⌘K and Extensions, and a surface without a `plugin` key stays. A surface that lists several plugins (Field Groups, Site Options) leaves only when every one of them that has admin pages of its own is gone; a plugin with no pages (a Pro add-on extending the free plugin's screens) has no say. A plugin's content screens count as its pages: a post type or taxonomy list it registered that is still in the menu (Elementor's Templates) keeps it. Absence alone never counts, because plugins hide their own setup pages too, so only a tool answering this filter hides anything: Adminimize or a `remove_menu_page()` snippet does not. The answer comes from the notices capture (the hidden wp-admin load Minn runs when the app opens and the last capture is 15 minutes old), is kept per user and per site, and lapses after a week with no fresh capture. Hiding is presentation only: your routes keep their own gates. The bundled White Label CMS adapter is the example and, today, the only tool that answers (since 0.45.0) |
 | `minn_admin_visibility_providers` | filter | Report an active maintenance / coming-soon / password mode (Overview banner, topbar chip, System check) |
 | `minn_admin_media_folders` | filter | Feed the Media view's folder filter from your folder plugin (since 0.18.0) |
 | `minn_admin_log_sources` | filter | Add a log to System's log viewer (since 0.19.0) |
@@ -1496,6 +1517,17 @@ repeater support is the reference. Values ride the normal
 post save (autosave included), so your plugin only needs its values readable/writable on the
 post REST response (`register_rest_field`, the way the bundled ACF adapter's `minn_acf`
 field works).
+
+**What a save sends (since 0.45.0).** The object under `writeKey` holds only the fields
+that changed since the panel loaded or last saved; a field the person left alone is not
+in it at all (a `rows` field that changed goes whole). So a field someone else changed
+after the post opened (another tab, your own screen) keeps their value. Your write path
+must leave an absent field as stored, never read it as cleared. If your plugin's save
+takes the whole form at once and empties what it is not given, fill the absent fields
+from storage before calling it, as the bundled Events Calendar adapter does for
+`saveEventMeta()`. After a save each panel's baseline moves to what that save sent, so a
+field edited while the save was in flight still differs and goes with the next one, and
+a field the post comes back holding empty although the save sent a value stays changed.
 
 **`suggest` (since 0.18.0)** is an async-searching picker for linked records whose option
 list is too large or too live for a `select` (venues, organizers, related posts). The field
@@ -2113,6 +2145,31 @@ plus a descriptor. Rules of the road: check capabilities in `permission_callback
 for stored blobs. If a plugin's own storage leaves no safer option, disable object instantiation
 and validate the decoded scalar or array shape. Allow exact vendor value classes only when its API
 requires them.
+
+## Writes that hand over the site are fenced (since 0.45.0)
+
+While a `minn-admin/v1` request runs, and anything inside it (a route Minn dispatches
+internally, a vendor handler an adapter calls), a short list of writes needs the
+caller's own capability, the one WordPress asks for the same change on its own screens:
+the registration, default-role, admin-email, address and upload-path options, the
+active plugins and the theme, the role definitions, on a network its settings
+(`site_admins`, `active_sitewide_plugins`, registration and peers), a role or
+capability grant or removal that carries power (settings, code, accounts, the network,
+unfiltered markup, the store's payments), and a powerful account's login, password,
+email or password-reset key. The full lists live in
+`includes/class-minn-admin-fences.php`. A refused update never happens and a refused
+add or delete is put back; the request answers 403 `minn_write_fenced` with the refused
+names in `data.fenced`, and the server log gets one line,
+`minn_write_fenced user=<id> route="<method> <route>" refused=<names>`. Option names and
+user meta keys are matched without regard to case, as MySQL matches them. Grants that
+carry no power pass, so a vendor's side effect (WooCommerce Subscriptions making a buyer
+a Subscriber) keeps working, and on a network the main network's super admin, who owns
+the whole install, is not fenced at all.
+
+The fence sees writes through the options, user and metadata APIs, which is how every
+vendor save handler writes. Write through them in your own code too: raw SQL to those
+tables is outside the fence, as it is outside every other hook. Requests to your own
+REST namespace are left to your own `permission_callback`.
 
 ## Notes
 

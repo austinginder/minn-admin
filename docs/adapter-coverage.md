@@ -187,6 +187,7 @@ Reference depth: **Gravity Forms**.
 | wp-crontrol | Diagnostics family (list + detail + status; run/pause/resume/delete) | Y | 2026-07-13 | family `diagnostics`; add/edit PHP/URL jobs = **L** |
 | transients-manager | Diagnostics family (list + detail + status; delete + delete-expired) | Y | 2026-07-13 | family `diagnostics`; never unserialize; edit UI = **L** |
 | rewrite-rules-inspector | Diagnostics family (list + detail + status; flush + test URL) | Y | 2026-07-13 | family `diagnostics`; via their RewriteRules / UrlTester; hard .htaccess flush not offered |
+| white-label-cms | Filter adapter, not a surface: answers `minn_admin_admin_page_hidden` | Y | 2026-10-12 | Reads their `admin_menus` setting (`main` + `sub` lists, slugs compared their way, submenus through `get_submenu_placeholder()`), behind the gate their own `rebuild_user_admin_menu()` applies (`enable_admin_menu()` / `is_legacy_menu_role()`, and never for `is_wlcms_admin()`). The capture (`Minn_Admin_Notices::capture_removed_owners()`) does the rest: content screens count as pages, a shared surface leaves only when every owner with pages is gone, stored hides lapse after a week. Suites `white-label-cms` and `removed-owners` (PHP) |
 
 ## Deliberate deep-links (do not re-propose as Axis B)
 
