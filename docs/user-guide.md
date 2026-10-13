@@ -509,6 +509,11 @@ email shows it without loading its remote images, styles or fonts, so
 reading it never fires a sender's tracking pixel; a bar above the message
 loads them for that one email when you ask.
 
+Dates and times throughout Minn are on your site's clock, the timezone set
+in Settings, whatever timezone your browser is in. A booking at 9:00 am
+reads 9:00 am for everyone who opens it, and the charts count each day on
+the site's calendar.
+
 Backups and exports start from the Backups page's status card and run in
 the background, so you can carry on working or close the tab. A pill in
 the top bar shows how far along the run is on whatever page you are on;
