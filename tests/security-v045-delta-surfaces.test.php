@@ -298,7 +298,7 @@ if ( ! function_exists( 'minn_admin_asset_cleanup_active' ) || ! minn_admin_asse
 		"<?php\n"
 		. "\$shape = function () { \$d = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/asset-cleanup/settings/cleanup' ) ); \$n = 0; \$l = 0;\n"
 		. "\tforeach ( (array) ( \$d->get_data()['groups'] ?? array() ) as \$g ) { \$n += count( (array) ( \$g['fields'] ?? array() ) ); \$l += (int) ( \$g['locked'] ?? 0 ); }\n"
-		. "\treturn array( \$d->get_status(), \$n, \$l ); };\n"
+		. "\treturn array( \$d->get_status(), \$n, \$l, (string) ( \$d->get_data()['groups'][0]['desc'] ?? '' ) ); };\n"
 		. "\$out = array( 'loaded' => class_exists( '\\\\WpAssetCleanUp\\\\Settings', false ), 'get' => \$shape() );\n"
 		. "if ( defined( 'MINN_PROBE_ACU_UNSAVED' ) ) {\n"
 		. "\t\$p = new WP_REST_Request( 'POST', '/minn-admin/v1/asset-cleanup/settings/cleanup' ); \$p->set_header( 'content-type', 'application/json' ); \$p->set_body( wp_json_encode( array( 'values' => array( 'disable_emojis' => true ) ) ) );\n"
@@ -327,6 +327,9 @@ if ( ! function_exists( 'minn_admin_asset_cleanup_active' ) || ! minn_admin_asse
 			list( $acu_st, $acu_n, $acu_l ) = $acu_unsaved['get'];
 			$check( 'NI-11 Asset CleanUp, never saved, on a REST request: the tab draws no editable field and locks them all', 200 === $acu_st && 0 === $acu_n && $acu_l > 0, "{$acu_st} fields {$acu_n} locked {$acu_l}" );
 			$check( 'NI-11 control: a save there is still refused, and the stored row is untouched', 409 === ( $acu_unsaved['post'] ?? null ) && $acu_row() === $acu_was, wp_json_encode( $acu_unsaved['post'] ?? null ) );
+			// Asset CleanUp deletes its row when a save leaves every value at
+			// its default, so "save its Settings page once" never unlocks it.
+			$check( 'Asset CleanUp: the lock no longer says one save of its Settings page unlocks it', '' !== (string) ( $acu_unsaved['get'][3] ?? '' ) && false === strpos( (string) $acu_unsaved['get'][3], 'Save its Settings page once' ), (string) ( $acu_unsaved['get'][3] ?? '' ) );
 		}
 		if ( ! $acu_was || '' === (string) $acu_was['option_value'] ) {
 			$skip( 'NI-11 Asset CleanUp: no saved settings here for the control' );

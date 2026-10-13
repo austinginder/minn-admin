@@ -267,15 +267,16 @@ function minn_admin_asset_cleanup_tab_shape( $tab_id ) {
 	$tab      = $schema[ $tab_id ];
 	$groups   = array();
 	$values   = array();
-	// A save is refused until Asset CleanUp has saved its settings once
-	// (minn_admin_asset_cleanup_save()), so until then every field is
-	// locked, with the reason and the way to its Settings page.
+	// A save is refused while Asset CleanUp has no stored settings
+	// (minn_admin_asset_cleanup_save()): never saved, or saved with every
+	// value at its default, which deletes the row. Until one differs every
+	// field is locked, with the reason and the way to its Settings page.
 	$unknown = null === minn_admin_asset_cleanup_stored_settings();
 	foreach ( $tab['groups'] as $group ) {
 		if ( $unknown ) {
 			$groups[] = array(
 				'title'  => $group['title'],
-				'desc'   => $groups ? '' : __( 'Asset CleanUp has not saved its settings yet, so Minn cannot tell its defaults from your choices. Save its Settings page once, then try again.', 'minn-admin' ),
+				'desc'   => $groups ? '' : __( 'Asset CleanUp stores no settings while every one is at its default, and Minn cannot tell its defaults from your choices. Change one on its Settings page, then edit them here.', 'minn-admin' ),
 				'fields' => array(),
 				'locked' => count( $group['fields'] ),
 			);
@@ -327,7 +328,7 @@ function minn_admin_asset_cleanup_save( $values ) {
 	// must start from the stored copy, and their updateOption() does.
 	$settings = minn_admin_asset_cleanup_stored_settings();
 	if ( null === $settings ) {
-		return new WP_Error( 'minn_acu_unknown', __( 'Asset CleanUp has not saved its settings yet, so Minn cannot tell its defaults from your choices. Save its Settings page once, then try again.', 'minn-admin' ), array( 'status' => 409 ) );
+		return new WP_Error( 'minn_acu_unknown', __( 'Asset CleanUp stores no settings while every one is at its default, and Minn cannot tell its defaults from your choices. Change one on its Settings page, then edit them here.', 'minn-admin' ), array( 'status' => 409 ) );
 	}
 	$changed  = false;
 	foreach ( (array) $values as $key => $v ) {
