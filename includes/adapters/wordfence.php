@@ -243,7 +243,9 @@ add_action( 'rest_api_init', function () {
 					'who'     => $r->username ? $r->username : '—',
 					'ip'      => $ip ? $ip : '—',
 					'result'  => ( (int) $r->fail ) ? 'failed' : 'success',
-					'action'  => $r->action,
+					// The event page reads this as the level: their code
+					// ("loginOK") in words.
+					'action'  => minn_admin_wordfence_action_label( $r->action, (int) $r->fail ),
 					// ctime is a UTC float epoch.
 					'date'    => gmdate( 'Y-m-d\TH:i:s\Z', (int) $r->ctime ),
 				);
