@@ -412,10 +412,16 @@ add_action( 'rest_api_init', function () {
 			if ( '' !== $notes ) {
 				$when[] = array( 'label' => __( 'Notes', 'minn-admin' ), 'value' => $notes );
 			}
-			$info = trim( (string) $row->info );
-			if ( '' !== $info ) {
+			// Amelia's own booking form writes info as JSON: the customer's
+			// details as typed (firstName, lastName, phone, locale, timeZone,
+			// urlParams), not a note. Only something else stored there is one.
+			$info   = trim( (string) $row->info );
+			$booked = '' !== $info ? json_decode( $info, true ) : null;
+			if ( '' !== $info && ! is_array( $booked ) ) {
 				$when[] = array( 'label' => __( 'Booking note', 'minn-admin' ), 'value' => $info );
 			}
+			// The answers are visitor text, sent as typed for the client to
+			// escape. A file field's value is a list of { name, fileName }.
 			$fields = json_decode( (string) $row->customFields, true );
 			$extra  = array();
 			if ( is_array( $fields ) ) {
@@ -423,15 +429,41 @@ add_action( 'rest_api_init', function () {
 					if ( ! is_array( $field ) ) {
 						continue;
 					}
-					$label = isset( $field['label'] ) ? (string) $field['label'] : '';
+					$label = isset( $field['label'] ) && is_scalar( $field['label'] ) ? Minn_Admin::plain_text( $field['label'] ) : '';
 					$value = isset( $field['value'] ) ? $field['value'] : '';
 					if ( is_array( $value ) ) {
-						$value = implode( ', ', array_filter( array_map( 'strval', $value ) ) );
+						$parts = array();
+						foreach ( $value as $part ) {
+							$part = is_array( $part ) ? ( $part['name'] ?? '' ) : $part;
+							if ( is_scalar( $part ) && '' !== (string) $part ) {
+								$parts[] = (string) $part;
+							}
+						}
+						$value = implode( ', ', $parts );
 					}
-					if ( '' === $label ) {
+					if ( '' === $label || ! is_scalar( $value ) ) {
 						continue;
 					}
 					$extra[] = array( 'label' => $label, 'value' => '' !== (string) $value ? (string) $value : '—' );
+				}
+			}
+			// What the form's details add to the customer card: the name and
+			// phone as typed when they differ from the record, and the
+			// customer's time zone.
+			if ( is_array( $booked ) ) {
+				$part   = function ( $k ) use ( $booked ) {
+					return isset( $booked[ $k ] ) && is_scalar( $booked[ $k ] ) ? trim( (string) $booked[ $k ] ) : '';
+				};
+				$as     = trim( $part( 'firstName' ) . ' ' . $part( 'lastName' ) );
+				$record = trim( trim( (string) $row->customer_first ) . ' ' . trim( (string) $row->customer_last ) );
+				if ( '' !== $as && $as !== $record ) {
+					$extra[] = array( 'label' => __( 'Booked as', 'minn-admin' ), 'value' => $as );
+				}
+				if ( '' !== $part( 'phone' ) && $part( 'phone' ) !== trim( (string) $row->customer_phone ) ) {
+					$extra[] = array( 'label' => __( 'Phone at booking', 'minn-admin' ), 'value' => $part( 'phone' ) );
+				}
+				if ( '' !== $part( 'timeZone' ) ) {
+					$extra[] = array( 'label' => __( 'Time zone', 'minn-admin' ), 'value' => $part( 'timeZone' ) );
 				}
 			}
 			$sections = array(
