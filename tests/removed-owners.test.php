@@ -239,6 +239,46 @@ try {
 		}
 	}
 
+	// --- WooCommerce Memberships leaves with its Members list -----------------
+	// For a shop manager its Members and Plans lists are WooCommerce
+	// submenus (Memberships removes the Plans item except on the plans
+	// screen), and its Import / Export and Profile Fields pages hang under
+	// the Members list. So it has no menu page the capture counts as its
+	// own, and the Members list hosts the whole area. The menu below is that
+	// shape, with a menu tool hiding WooCommerce > Memberships.
+	if ( ! isset( $registry['woocommerce-memberships'] ) ) {
+		echo "SKIP  WooCommerce Memberships inactive\n";
+	} else {
+		$wcm_list   = 'edit.php?post_type=wc_user_membership';
+		$wcm_hidden = static function ( $hidden, $slug, $parent ) use ( $wcm_list ) {
+			return $hidden || ( $wcm_list === $slug && 'woocommerce' === $parent );
+		};
+		$wcm_in     = static function () {
+			return in_array( 'woocommerce-memberships', wp_list_pluck( Minn_Admin_Surfaces::for_current_user(), 'id' ), true );
+		};
+		$menu             = array( array( 'WooCommerce', 'manage_woocommerce', 'woocommerce' ) );
+		$submenu          = array( 'woocommerce' => array( array( 'Orders', 'manage_woocommerce', 'admin.php?page=wc-orders' ) ) );
+		$admin_page_hooks = array( 'woocommerce' => 'woocommerce' );
+		$_parent_pages    = array(
+			$wcm_list                               => 'woocommerce',
+			'edit.php?post_type=wc_membership_plan' => 'woocommerce',
+			'wc_memberships_import_export'          => $wcm_list,
+			'wc_memberships_profile_fields'         => $wcm_list,
+		);
+		add_filter( 'minn_admin_admin_page_hidden', $wcm_hidden, 10, 3 );
+		Minn_Admin_Notices::capture_removed_owners();
+		remove_filter( 'minn_admin_admin_page_hidden', $wcm_hidden, 10 );
+		$wcm_pages = (array) $capture_state( 'pages_hidden' );
+		$check( 'Memberships: the capture records its Members list as hidden by the menu tool', in_array( $wcm_list, $wcm_pages, true ), wp_json_encode( $wcm_pages ) );
+		$check( 'Memberships: its own pages under the Members list are not counted as menu pages of its own', ! in_array( 'woocommerce-memberships', (array) $capture_state( 'owners_with_pages' ), true ), wp_json_encode( $capture_state( 'owners_with_pages' ) ) );
+		$store_hiding( array( 'pages' => $wcm_pages ) );
+		$check( 'Memberships leaves Minn, members and plans together, when WooCommerce > Memberships is hidden', ! $wcm_in() );
+		$store_hiding( array( 'pages' => array( 'edit.php?post_type=wc_membership_plan' ) ) );
+		$check( 'control: a hidden Plans item alone does not take Memberships away', $wcm_in() );
+		$store_hiding( array() );
+		$check( 'control: with nothing hidden, Memberships stays', $wcm_in() );
+	}
+
 	// --- NI-6: JetSmartFilters' Filters do not leave with JetSearch -----------
 	if ( ! isset( $registry['jet-search'] ) || ! function_exists( 'minn_admin_jsf_active' ) || ! minn_admin_jsf_active() ) {
 		echo "SKIP  NI-6 needs JetSearch and JetSmartFilters\n";

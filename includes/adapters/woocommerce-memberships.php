@@ -1416,6 +1416,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'memberships',
 		'sub'        => 'WooCommerce',
 		'plugin'     => 'woocommerce-memberships',
+		// Memberships' own pages (Import / Export, Profile Fields) hang under
+		// its Members list, a WooCommerce submenu, and are reached from that
+		// list's tabs with the Plans list, whose menu item shows only on the
+		// plans screen. Hiding the Members list hides the whole area, so it
+		// is the page that hosts this surface.
+		'adminPages' => array( 'edit.php?post_type=wc_user_membership' ),
 		'icon'       => 'key',
 		'cap'        => 'manage_woocommerce_user_memberships',
 		'group'      => 'commerce',
