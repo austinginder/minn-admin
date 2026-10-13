@@ -1387,6 +1387,10 @@ function minn_admin_license_secret_options() {
 		// Beaver Builder's subscription answer and WP Rocket's account answer.
 		'_transient_rg_gforms_license', '_site_transient_et_update_themes', '_site_transient_et_update_plugins',
 		'_transient_fl_get_subscription_info', '_transient_wp_rocket_customer_data',
+		// ACF PRO's record of a failed activation of the key pinned in
+		// ACF_PRO_LICENSE, which keeps that key beside the error (a legacy
+		// network keeps it as a site transient).
+		'_transient_acf_activation_error', '_site_transient_acf_activation_error',
 	);
 	foreach ( minn_admin_license_smash_products() as $sp ) {
 		foreach ( array( 'key_opt', 'settings_opt', 'info_opt' ) as $field ) {
@@ -3834,10 +3838,14 @@ function minn_admin_license_default_providers() {
 			// On any refusal or transport error their client records an
 			// error (which wp-admin then shows as an invalid licence for a
 			// working key) and, on a transport error, an hour's back-off that
-			// blocks its own licence calls. A refused paste puts back what
-			// was there.
-			$rows = array( 'essential-addons-elementor\_license%', 'essential-addons-elementor-license%', 'wpdeveloper\_sl\_failed\_http\_%' );
-			$snap = minn_admin_license_rows( $rows );
+			// blocks its own licence calls. A refused paste puts back those
+			// two rows and nothing else: their refusal writes no key or
+			// status, and another administrator may be activating on their
+			// own screen meanwhile.
+			global $wpdb;
+			$prefix = defined( 'EAEL_SL_ITEM_SLUG' ) ? EAEL_SL_ITEM_SLUG : 'essential-addons-elementor';
+			$rows   = array( $wpdb->esc_like( $prefix . '_license_data_error' ), 'wpdeveloper\_sl\_failed\_http\_%' );
+			$snap   = minn_admin_license_rows( $rows );
 			try {
 				$res = $mgr->activate( array( 'license_key' => $secret ) );
 			} catch ( \Throwable $e ) {
@@ -3905,9 +3913,15 @@ function minn_admin_license_default_providers() {
 			// ACF removes the working licence's status and its last
 			// activation error before it asks, so a typo or an outage left a
 			// working key reading as unchecked until its next check. Both are
-			// put back, through ACF's own helpers (a legacy network keeps
-			// them on the main site), when the key is refused.
-			$helpers    = function_exists( 'acf_pro_get_license_option' ) && function_exists( 'acf_pro_update_license_option' ) && function_exists( 'acf_pro_get_license_transient' ) && function_exists( 'acf_pro_set_license_transient' );
+			// put back, through ACF's own helpers, when the key is refused.
+			// Not on a legacy network: the status ACF removes is the one that
+			// marks the network legacy, so its helpers would then write to
+			// this site instead of the main one. And not an error that holds
+			// a key: ACF records one only for the key pinned in wp-config,
+			// which this route refuses to replace, so such a row is left from
+			// a key no longer pinned and ACF drops it itself.
+			$helpers    = function_exists( 'acf_pro_get_license_option' ) && function_exists( 'acf_pro_update_license_option' ) && function_exists( 'acf_pro_get_license_transient' ) && function_exists( 'acf_pro_set_license_transient' )
+				&& ! ( function_exists( 'acf_pro_is_legacy_multisite' ) && acf_pro_is_legacy_multisite() );
 			$status_was = $helpers ? acf_pro_get_license_option( 'acf_pro_license_status', false ) : false;
 			$error_was  = $helpers ? acf_pro_get_license_transient( 'acf_activation_error' ) : false;
 			$res        = acf_pro_activate_license( $secret, true );
@@ -3918,7 +3932,7 @@ function minn_admin_license_default_providers() {
 						acf_get_store( 'acf_pro_license_status' )->reset();
 					}
 				}
-				if ( false !== $error_was ) {
+				if ( false !== $error_was && ! ( is_array( $error_was ) && ! empty( $error_was['license'] ) ) ) {
 					acf_pro_set_license_transient( 'acf_activation_error', $error_was );
 				}
 			}
@@ -5863,7 +5877,18 @@ function minn_admin_license_default_providers() {
  *   through its {prefix}_settings_pages_capability filter (Social Wall and
  *   Feed Analytics ask manage_options, Minn's own floor).
  * - Kadence Blocks Pro draws its licence field only while
- *   kadence_blocks_pro_should_display_uplink_license_field allows it.
+ *   kadence_blocks_pro_should_display_uplink_license_field allows it, except
+ *   on a site with Liquid Web's Harbor library, where its licence modal
+ *   replaces the field for everyone.
+ * - LayerSlider's licence handler checks only a nonce printed on its
+ *   dashboard, whose menu asks layerslider_custom_capability (manage_options
+ *   unless a site owner chose another).
+ * - Slider Revolution's licence actions ask the capability its Permission
+ *   setting names (Author, Editor or Administrator), unless
+ *   revslider_restrict_role lifts that.
+ * - Freemius (Independent Analytics Pro) registers its licence actions only
+ *   for activate_plugins on a single site (manage_options on a network,
+ *   where Minn's own rule is a super admin).
  * - Essential Addons Pro's licence API checks delete_users.
  * - Gravity Perks and Brainstorm Force products (their form sits on the
  *   Plugins screen) check activate_plugins, as does CleanTalk's key screen.
@@ -5904,7 +5929,27 @@ function minn_admin_license_vendor_gates() {
 		'smash-reviews'       => $smash( 'manage_reviews_feed_options', 'sbr_settings_pages_capability' ),
 		'smash-tiktok'        => $smash( 'manage_tiktok_feed_options', 'sbtt_settings_pages_capability' ),
 		'kadence-blocks-pro'  => function () {
-			return (bool) apply_filters( 'kadence_blocks_pro_should_display_uplink_license_field', true );
+			// With Liquid Web's Harbor library Kadence turns the field off for
+			// everyone and draws a licence modal instead, which still manages
+			// the key; the page's manage_options is then the only gate.
+			return function_exists( 'lw_harbor_get_product_activation_base_url' )
+				|| (bool) apply_filters( 'kadence_blocks_pro_should_display_uplink_license_field', true );
+		},
+		'layerslider'         => function () {
+			return current_user_can( (string) get_option( 'layerslider_custom_capability', 'manage_options' ) );
+		},
+		'revslider'           => function () {
+			$gs   = get_option( 'revslider-global-settings', '' );
+			$gs   = apply_filters( 'rs_get_global_settings', is_array( $gs ) ? $gs : json_decode( (string) $gs, true ) );
+			$role = is_array( $gs ) && isset( $gs['permission'] ) ? (string) $gs['permission'] : 'administrator';
+			$caps = array(
+				'author' => 'edit_published_posts',
+				'editor' => 'edit_pages',
+			);
+			return current_user_can( $caps[ $role ] ?? 'manage_options' ) || ! apply_filters( 'revslider_restrict_role', true );
+		},
+		'independent-analytics-pro' => function () {
+			return is_multisite() || current_user_can( 'activate_plugins' );
 		},
 		'essential-addons-elementor' => function () {
 			return current_user_can( 'delete_users' );

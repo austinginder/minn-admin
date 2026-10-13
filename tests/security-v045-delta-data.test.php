@@ -431,7 +431,235 @@ $check( 'NI-12(a) control: off the cap, the long cell prints', 200 === $st && $s
 list( $st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $d45['plug'], 'fcol' => 'payload', 'fq' => 'Minnd45' ) );
 $check( 'NI-12(a) control: and a value search answers', 200 === $st, (string) $st );
 
+// --- OS-5 ACF PRO's failed-activation record holds the pinned key ------------
+$acf_key = 'MINND45ACF' . wp_generate_password( 30, false );
+$check( 'OS-5 the licence secret rows name ACF\'s activation-error transients', function_exists( 'minn_admin_license_secret_options' ) && ! array_diff( array( '_transient_acf_activation_error', '_site_transient_acf_activation_error' ), minn_admin_license_secret_options()[0] ) );
+if ( wp_using_ext_object_cache() ) {
+	$skip( 'OS-5 a persistent object cache keeps transients out of the database' );
+} else {
+	$acf_names = array( '_transient_acf_activation_error', '_transient_timeout_acf_activation_error' );
+	$acf_was   = array();
+	foreach ( $acf_names as $n ) {
+		$acf_was[ $n ] = $lic_raw( $n );
+	}
+	set_transient( 'acf_activation_error', array( 'error' => 'Minn D45 earlier error', 'license' => $acf_key ), HOUR_IN_SECONDS );
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->options, 'fcol' => 'option_name', 'fq' => 'acf_activation_error' ) );
+	$check( 'OS-5 the database browser prints no key from ACF\'s activation error', 200 === $st && $has_text( $d['rows'] ?? null, '_transient_acf_activation_error' ) && ! $has_text( $d['rows'] ?? null, $acf_key ), $st . ' ' . substr( wp_json_encode( $d['rows'] ?? $d ), 0, 200 ) );
+	foreach ( $acf_was as $n => $raw ) {
+		$lic_put( $n, $raw );
+	}
+	// The network's copy: a site transient, in sitemeta on a network.
+	$site_table = is_multisite() ? $wpdb->sitemeta : $wpdb->options;
+	$site_kcol  = is_multisite() ? 'meta_key' : 'option_name';
+	$site_vcol  = is_multisite() ? 'meta_value' : 'option_value';
+	$site_rows  = function () use ( $wpdb, $site_table, $site_kcol ) {
+		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM `{$site_table}` WHERE `{$site_kcol}` IN ( '_site_transient_acf_activation_error', '_site_transient_timeout_acf_activation_error' )" . ( is_multisite() ? ' AND site_id = %d' : ' AND 1 = %d' ), is_multisite() ? get_current_network_id() : 1 ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	};
+	$site_was = $site_rows();
+	set_site_transient( 'acf_activation_error', array( 'error' => 'Minn D45 earlier error', 'license' => $acf_key ), HOUR_IN_SECONDS );
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $site_table, 'fcol' => $site_kcol, 'fq' => 'acf_activation_error' ) );
+	$check( "OS-5 nor from its network copy ({$site_table})", 200 === $st && $has_text( $d['rows'] ?? null, '_site_transient_acf_activation_error' ) && ! $has_text( $d['rows'] ?? null, $acf_key ), $st . ' ' . substr( wp_json_encode( $d['rows'] ?? $d ), 0, 200 ) );
+	delete_site_transient( 'acf_activation_error' );
+	foreach ( $site_was as $row ) {
+		$wpdb->replace( $site_table, $row );
+	}
+	wp_cache_flush();
+}
+
 $d45_drop();
 $check( 'cleanup: the fixture tables are gone', ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $d45['blank'] ) ) ) && ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $d45['um_dot'] ) ) ) );
+
+// ============================================================================
+// Licences and the spam card.
+// ============================================================================
+$lic_can = function ( $source ) {
+	foreach ( (array) ( minn_admin_licenses()['items'] ?? array() ) as $r ) {
+		if ( ( $r['source'] ?? '' ) === $source ) {
+			return (array) ( $r['can'] ?? array() );
+		}
+	}
+	return null;
+};
+$lic_act = function ( $provider, $secret ) use ( $call ) {
+	return $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => $provider, 'action' => 'activate', 'secret' => $secret ) );
+};
+
+// --- OS-5 A refused paste puts back no ACF error that holds a key ------------
+if ( ! function_exists( 'acf_pro_get_license_option' ) || ! $lic_can( 'acf-pro' ) ) {
+	$skip( 'OS-5 restore: ACF PRO offers no actions here' );
+} elseif ( function_exists( 'acf_pro_is_legacy_multisite' ) && acf_pro_is_legacy_multisite() ) {
+	$skip( 'OS-5 restore: legacy network (NI-13(b) covers it)' );
+} elseif ( defined( 'ACF_PRO_LICENSE' ) && ACF_PRO_LICENSE ) {
+	$skip( 'OS-5 restore: a key is pinned here, so the route refuses before ACF runs' );
+} elseif ( wp_using_ext_object_cache() ) {
+	$skip( 'OS-5 restore: a persistent object cache keeps transients out of the database' );
+} else {
+	$acf_names = array( 'acf_pro_license_status', '_transient_acf_activation_error', '_transient_timeout_acf_activation_error' );
+	$acf_was   = array();
+	foreach ( $acf_names as $n ) {
+		$acf_was[ $n ] = $lic_raw( $n );
+	}
+	update_option( 'acf_pro_license_status', array( 'status' => 'active', 'name' => 'MinnD45', 'lifetime' => true, 'next_check' => time() + DAY_IN_SECONDS ), true );
+	set_transient( 'acf_activation_error', array( 'error' => 'Minn D45 pinned-key error', 'license' => $acf_key ) );
+	if ( function_exists( 'acf_get_store' ) && acf_get_store( 'acf_pro_license_status' ) ) {
+		acf_get_store( 'acf_pro_license_status' )->reset();
+	}
+	$acf_mock = function ( $pre, $args, $url ) {
+		if ( false === strpos( (string) $url, 'connect.advancedcustomfields.com' ) ) {
+			return new WP_Error( 'http_request_failed', 'Minn D45: offline' );
+		}
+		return array( 'headers' => array(), 'body' => wp_json_encode( array( 'status' => 0, 'message' => 'Minn D45: that key is not valid.' ) ), 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+	};
+	add_filter( 'pre_http_request', $acf_mock, 1, 3 );
+	list( $acf_st, $acf_d ) = $lic_act( 'acf-pro', 'minn-d45-not-a-key' );
+	remove_filter( 'pre_http_request', $acf_mock, 1 );
+	wp_cache_delete( 'acf_pro_license_status', 'options' );
+	wp_cache_delete( '_transient_acf_activation_error', 'options' );
+	$acf_err    = get_transient( 'acf_activation_error' );
+	$acf_status = get_option( 'acf_pro_license_status' );
+	foreach ( $acf_was as $n => $raw ) {
+		$lic_put( $n, $raw );
+	}
+	$check( 'OS-5 a refused ACF paste does not put back an activation error holding a key', false === strpos( (string) wp_json_encode( $acf_err ), $acf_key ), $acf_st . ' ' . wp_json_encode( $acf_err ) );
+	$check( 'OS-5 control: the working licence\'s status is still put back', is_array( $acf_status ) && 'MinnD45' === ( $acf_status['name'] ?? '' ) && empty( $acf_d['ok'] ), wp_json_encode( $acf_status ) );
+}
+// NI-13(b) needs a network whose ACF licence is legacy multisite, which no
+// lab has; the closure skips its restore there (verified by reading).
+$skip( 'NI-13(b) no legacy-multisite ACF network in the lab; verified by reading' );
+
+// --- NI-13(a) EAEL: a refused paste rolls back only its error and back-off ---
+// Essential Addons Pro, installed but inactive, is loaded for this run only:
+// its hooks have all fired, so only its classes arrive. Nothing activates it.
+$eael_file = WP_PLUGIN_DIR . '/essential-addons-elementor/essential_adons_elementor.php';
+if ( ! defined( 'EAEL_PRO_PLUGIN_FILE' ) && file_exists( $eael_file ) && defined( 'EAEL_PLUGIN_VERSION' ) ) {
+	require_once $eael_file;
+}
+if ( ! class_exists( '\Essential_Addons_Elementor\Pro\Classes\License\Manager' ) || ! $lic_can( 'essential-addons-elementor' ) ) {
+	$skip( 'NI-13(a) Essential Addons Pro unavailable' );
+} else {
+	$eael_like = array( 'essential-addons-elementor\_license%', 'essential-addons-elementor-license%', 'wpdeveloper\_sl\_failed\_http\_%' );
+	$eael_snap = function () use ( $wpdb, $eael_like ) {
+		$out = array();
+		foreach ( $eael_like as $l ) {
+			foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $l ), ARRAY_A ) as $r ) {
+				$out[ $r['option_name'] ] = $r['option_value'];
+			}
+		}
+		return $out;
+	};
+	$eael_was  = $eael_snap();
+	// Another administrator activates a key on EAEL's own screen while
+	// Minn's paste is waiting on the licence server.
+	$eael_mock = function ( $pre, $args, $url ) {
+		update_option( 'essential-addons-elementor_license', 'MINND45-CONCURRENT-KEY', 'no' );
+		update_option( 'essential-addons-elementor_license_status', 'valid', 'no' );
+		return new WP_Error( 'http_request_failed', 'Minn D45: offline' );
+	};
+	add_filter( 'pre_http_request', $eael_mock, 1, 3 );
+	list( $eael_st, $eael_d ) = $lic_act( 'essential-addons-elementor', 'minn-d45-not-a-key' );
+	remove_filter( 'pre_http_request', $eael_mock, 1 );
+	wp_cache_delete( 'alloptions', 'options' );
+	$eael_after = $eael_snap();
+	$eael_err   = 'essential-addons-elementor_license_data_error';
+	foreach ( array_keys( $eael_was + $eael_after ) as $eael_n ) {
+		$lic_put( $eael_n, $eael_was[ $eael_n ] ?? null );
+	}
+	$check( 'NI-13(a) a concurrent activation on EAEL\'s own screen survives a refused paste', 'MINND45-CONCURRENT-KEY' === ( $eael_after['essential-addons-elementor_license'] ?? '' ) && 'valid' === ( $eael_after['essential-addons-elementor_license_status'] ?? '' ), wp_json_encode( array( $eael_after['essential-addons-elementor_license'] ?? null, $eael_after['essential-addons-elementor_license_status'] ?? null ) ) );
+	$backoff_was   = array_filter( $eael_was, function ( $k ) { return 0 === strpos( $k, 'wpdeveloper_sl_failed_http_' ); }, ARRAY_FILTER_USE_KEY );
+	$backoff_after = array_filter( $eael_after, function ( $k ) { return 0 === strpos( $k, 'wpdeveloper_sl_failed_http_' ); }, ARRAY_FILTER_USE_KEY );
+	$check( 'NI-13(a) control: the error and back-off rows are still put back', ( $eael_was[ $eael_err ] ?? null ) === ( $eael_after[ $eael_err ] ?? null ) && $backoff_was === $backoff_after && empty( $eael_d['ok'] ), $eael_st . ' ' . wp_json_encode( array( $eael_after[ $eael_err ] ?? null, $backoff_after ) ) );
+	$check( 'NI-13(a) cleanup: EAEL\'s licence rows are as they were', $eael_was === $eael_snap() );
+}
+
+// --- OS-9 LayerSlider: licence actions follow its custom capability ----------
+// No action runs, so an inactive LayerSlider gets a stand-in for its updater.
+$ls_stub = false;
+if ( empty( $GLOBALS['LS_AutoUpdate'] ) ) {
+	$GLOBALS['LS_AutoUpdate'] = new class() {
+		public function handleActivation( $code, $args = array() ) {
+			return (object) array( 'errCode' => 'minn-d45', 'message' => 'Minn D45 stand-in' );
+		}
+	};
+	$ls_stub = true;
+}
+$ls_default = $lic_can( 'layerslider' );
+if ( ! $ls_default ) {
+	$skip( 'OS-9 LayerSlider not installed' );
+} else {
+	$ls_was = $lic_raw( 'layerslider_custom_capability' );
+	update_option( 'layerslider_custom_capability', 'minn_d45_ls_cap' );
+	$ls_narrow = $lic_can( 'layerslider' );
+	update_option( 'layerslider_custom_capability', 'edit_posts' );
+	$ls_held = $lic_can( 'layerslider' );
+	$lic_put( 'layerslider_custom_capability', $ls_was );
+	$check( 'OS-9 no LayerSlider licence actions for an administrator its custom capability leaves out', array() === $ls_narrow, wp_json_encode( $ls_narrow ) );
+	$check( 'OS-9 control: an administrator who holds the custom capability keeps them', (bool) $ls_held, wp_json_encode( $ls_held ) );
+	$check( 'OS-9 control: with no custom capability set, the administrator keeps them', (bool) $ls_default, wp_json_encode( $ls_default ) );
+}
+if ( $ls_stub ) {
+	unset( $GLOBALS['LS_AutoUpdate'] );
+}
+
+// --- OS-9 sweep: Freemius and Slider Revolution ask their own caps -----------
+if ( ! $lic_can( 'independent-analytics-pro' ) ) {
+	$skip( 'OS-9 sweep: Independent Analytics Pro offers no actions here' );
+} elseif ( is_multisite() ) {
+	$skip( 'OS-9 sweep: Freemius asks activate_plugins on a single site only' );
+} else {
+	$fs_uid = $make_user( 'administrator' );
+	if ( ! $fs_uid ) {
+		$check( 'OS-9 sweep fixture user', false );
+	} else {
+		( new WP_User( $fs_uid ) )->add_cap( 'activate_plugins', false );
+		wp_set_current_user( $fs_uid );
+		$fs_can = $lic_can( 'independent-analytics-pro' );
+		wp_set_current_user( $admin );
+		$drop_user( $fs_uid );
+		$check( 'OS-9 sweep: no Freemius licence actions without activate_plugins (Independent Analytics Pro)', array() === $fs_can, wp_json_encode( $fs_can ) );
+		$check( 'OS-9 sweep control: an administrator keeps them', (bool) $lic_can( 'independent-analytics-pro' ) );
+	}
+}
+$rs_gate = function_exists( 'minn_admin_license_vendor_gates' ) ? ( minn_admin_license_vendor_gates()['revslider'] ?? null ) : null;
+$rs_was  = $lic_raw( 'revslider-global-settings' );
+$rs_uid  = $make_user( 'administrator' );
+if ( ! $rs_uid ) {
+	$check( 'OS-9 sweep fixture user', false );
+} else {
+	( new WP_User( $rs_uid ) )->add_cap( 'edit_pages', false );
+	update_option( 'revslider-global-settings', wp_json_encode( array( 'permission' => 'editor' ) ) );
+	wp_set_current_user( $rs_uid );
+	$rs_narrow = is_callable( $rs_gate ) ? $rs_gate() : true;
+	wp_set_current_user( $admin );
+	$rs_admin = is_callable( $rs_gate ) ? $rs_gate() : null;
+	update_option( 'revslider-global-settings', wp_json_encode( array( 'permission' => 'admin' ) ) );
+	$rs_default = is_callable( $rs_gate ) ? $rs_gate() : null;
+	$lic_put( 'revslider-global-settings', $rs_was );
+	$drop_user( $rs_uid );
+	$check( 'OS-9 sweep: Slider Revolution set to Editor leaves out a role without edit_pages', false === $rs_narrow, var_export( $rs_narrow, true ) );
+	$check( 'OS-9 sweep control: an administrator passes it, either setting', true === $rs_admin && true === $rs_default );
+}
+
+// --- NI-7 Kadence Blocks Pro on a site with Liquid Web's Harbor library ------
+// Last: the Harbor stand-in cannot be removed from this process.
+if ( ! $lic_can( 'kadence-blocks-pro' ) ) {
+	$skip( 'NI-7 Kadence Blocks Pro offers no actions here' );
+} else {
+	add_filter( 'kadence_blocks_pro_should_display_uplink_license_field', '__return_false', 999 );
+	$kb_without = function_exists( 'lw_harbor_get_product_activation_base_url' ) ? null : $lic_can( 'kadence-blocks-pro' );
+	if ( ! function_exists( 'lw_harbor_get_product_activation_base_url' ) ) {
+		/** Stand-in for Liquid Web's Harbor library. */
+		function lw_harbor_get_product_activation_base_url() {
+			return 'https://example.com/minn-d45-harbor/';
+		}
+	}
+	$kb_with = $lic_can( 'kadence-blocks-pro' );
+	remove_filter( 'kadence_blocks_pro_should_display_uplink_license_field', '__return_false', 999 );
+	$check( 'NI-7 on a Harbor site, Kadence\'s hidden legacy field leaves the administrator their actions', (bool) $kb_with, wp_json_encode( $kb_with ) );
+	if ( null === $kb_without ) {
+		$skip( 'NI-7 control: Harbor is really installed here' );
+	} else {
+		$check( 'NI-7 control: without Harbor, the hidden field still removes them', array() === $kb_without, wp_json_encode( $kb_without ) );
+	}
+}
 
 $summary();
