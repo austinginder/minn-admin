@@ -18,8 +18,8 @@
  * the booking form stay in JetBooking.
  *
  * Epochs are stored the way the plugin formats them, with date_i18n() on
- * the raw value: WP-local naive timestamps, never UTC. They are shifted
- * by the site offset before an ISO Z leaves this adapter, or a midnight
+ * the raw value: WP-local naive timestamps, never UTC. They leave this
+ * adapter as that site-local midnight with its own offset, or a midnight
  * check-in would render as the evening before west of Greenwich.
  * Statuses are theirs (created, pending, processing, on-hold, completed,
  * cancelled, refunded, failed), read live from the Statuses class so a
@@ -125,14 +125,21 @@ function minn_admin_jet_booking_nights( $in, $out ) {
 	return max( 0, (int) round( ( minn_admin_jet_booking_day( $out ) - minn_admin_jet_booking_day( $in ) ) / DAY_IN_SECONDS ) );
 }
 
-/** WP-local naive epoch (their date_i18n convention) → ISO-8601 Z. */
+/**
+ * WP-local naive epoch (their date_i18n convention) → ISO-8601 with the
+ * site's offset on that day. Today's gmt_offset put a check-in in the other
+ * half of the year an hour off, on the evening before.
+ */
 function minn_admin_jet_booking_iso( $naive ) {
 	$naive = minn_admin_jet_booking_day( $naive );
 	if ( $naive <= 0 ) {
 		return '';
 	}
-	$offset = (int) ( (float) get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
-	return gmdate( 'Y-m-d\TH:i:s\Z', $naive - $offset );
+	try {
+		return ( new DateTimeImmutable( gmdate( 'Y-m-d', $naive ), wp_timezone() ) )->format( 'c' );
+	} catch ( \Exception $e ) {
+		return '';
+	}
 }
 
 /** The date label their screen shows for a check-in/out day. */
@@ -181,6 +188,21 @@ function minn_admin_jet_booking_customer_label( $row ) {
 		return $c['name'];
 	}
 	return '' !== $c['email'] ? $c['email'] : __( '(no name)', 'minn-admin' );
+}
+
+/**
+ * The booking's note. JetBooking has none of its own: a site adds one as an
+ * extra booking column, so it is the first of those named or labelled as a
+ * note or comment. It is the guest's own text, which the client escapes.
+ */
+function minn_admin_jet_booking_note( $row ) {
+	foreach ( minn_admin_jet_booking_extra_columns() as $col => $label ) {
+		$v = isset( $row->$col ) ? trim( (string) $row->$col ) : '';
+		if ( '' !== $v && preg_match( '/note|comment/i', $col . ' ' . $label ) ) {
+			return $v;
+		}
+	}
+	return '';
 }
 
 /** The site's extra booking columns, name => label. */
@@ -361,7 +383,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'customer', 'label' => __( 'Customer', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.6fr)' ),
 				array( 'key' => 'service', 'label' => __( 'Booked', 'minn-admin' ) ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
-				array( 'key' => 'date', 'label' => __( 'Check-in', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
+				// A stay starts on a day, not at an hour: "in 11h" for a midnight
+				// check-in read as a time. The day reads as their screen shows it.
+				array( 'key' => 'check_in', 'label' => __( 'Check-in', 'minn-admin' ) ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/jet-booking/bookings/{id}',
@@ -398,9 +422,10 @@ add_action( 'rest_api_init', function () {
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
 			$count_sql = "SELECT COUNT(*) FROM {$from} {$where_sql}";
 			$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );
+			// b.* so a guest's name, which lives in a site-added column, is
+			// read here as the detail reads it.
 			$rows      = $wpdb->get_results( $wpdb->prepare(
-				"SELECT b.booking_id, b.status, b.apartment_id, b.apartment_unit, b.check_in_date, b.check_out_date, b.user_id, b.user_email, b.order_id,
-					p.post_title AS item_title, u.display_name AS user_name
+				"SELECT b.*, p.post_title AS item_title, u.display_name AS user_name
 				FROM {$from} {$where_sql}
 				ORDER BY {$order}
 				LIMIT %d OFFSET %d",
@@ -419,6 +444,7 @@ add_action( 'rest_api_init', function () {
 					) : $title,
 					'status'   => (string) $r->status,
 					'date'     => minn_admin_jet_booking_iso( $r->check_in_date ),
+					'check_in' => minn_admin_jet_booking_day_label( $r->check_in_date ),
 				);
 			}, $rows ? $rows : array() );
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
@@ -492,7 +518,7 @@ add_action( 'rest_api_init', function () {
 						'ends'    => minn_admin_jet_booking_iso( $row->check_out_date ),
 						'allDay'  => true,
 						'nights'  => $nights,
-						'notes'   => '',
+						'notes'   => minn_admin_jet_booking_note( $row ),
 					),
 					'sections' => $sections,
 					'adminUrl' => minn_admin_jet_booking_admin_url(),
