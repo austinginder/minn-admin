@@ -48231,7 +48231,7 @@
 			const it = m.item;
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal media wide">
+				<div class="minn-modal media wide" role="dialog" aria-modal="true" aria-label="${ esc( sprintf( /* translators: %s: file name of the image being edited. */ __( 'Edit image · %s' ), it.name ) ) }" tabindex="-1">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: file name of the image being edited. */ __( 'Edit image · %s' ) ), esc( it.name ) ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
@@ -48291,7 +48291,7 @@
 				: '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal media${ canEdit ? ' wide' : '' }">
+				<div class="minn-modal media${ canEdit ? ' wide' : '' }" role="dialog" aria-modal="true" aria-label="${ esc( it.name ) }" tabindex="-1">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( it.name ) }</div>
 						${ ctx ? `<span class="minn-modal-count">${ ctx.idx + 1 } / ${ ctx.items.length }</span>` : '' }
@@ -49511,6 +49511,16 @@
 			if ( tnext ) tnext.addEventListener( 'click', () => chartTrafficNav( 1 ) );
 		}
 
+		// The media dialog takes focus as the app's other dialogs do, on itself
+		// rather than its first field: ← / → step through the library from
+		// anywhere in it but a text field. A repaint (a step, a save) puts
+		// focus back only when it fell out with the old nodes.
+		if ( m.type === 'media' ) {
+			const box = $( '#minn-modal-overlay .minn-modal.media' );
+			if ( box ) setTimeout( () => {
+				if ( box.isConnected && ! box.contains( document.activeElement ) ) box.focus( { preventScroll: true } );
+			}, 30 );
+		}
 		if ( m.type === 'media' && m.editing ) {
 			bindImageEditor( m );
 		} else if ( m.type === 'media' ) {

@@ -3603,6 +3603,8 @@ a.minn-btn-soft { text-decoration: none; }
 .minn-email-frame.minn-detail-frame { margin: 0; width: 100%; }
 /* Larger media overlay + inline edit. */
 .minn-modal.media.wide { width: 900px; }
+/* The dialog holds focus itself on open; the box is not a control, so no ring. */
+.minn-modal.media:focus { outline: none; }
 .minn-modal-preview.media-lg { min-height: 300px; max-height: 66vh; }
 .minn-modal-preview.media-lg img, .minn-modal-preview.media-lg video { max-height: 66vh; }
 .minn-media-edit { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
