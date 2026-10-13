@@ -901,6 +901,8 @@
 			Administrator: __( 'Administrator' ), Editor: __( 'Editor' ), Author: __( 'Author' ),
 			Contributor: __( 'Contributor' ), Subscriber: __( 'Subscriber' ), Customer: __( 'Customer' ),
 			Available: __( 'Available' ), Installed: __( 'Installed' ), Manual: __( 'Manual' ),
+			'No Show': __( 'No show' ), 'Payment Pending': __( 'Payment pending' ), 'Checked In': __( 'Checked in' ),
+			'Fully Paid': __( 'Fully paid' ), 'Failed Login': __( 'Failed login' ), 'On Demand': __( 'On demand' ),
 		};
 		return Object.prototype.hasOwnProperty.call( labels, raw ) ? labels[ raw ] : raw;
 	}
@@ -939,9 +941,14 @@
 		return esc( chromeLabel( stripTags( str ) ) );
 	}
 
+	// Vendor slugs ("payment_pending", "no-show") read as words. A
+	// parenthetical is detail and keeps its words as they came: "Failed login
+	// (unknown user)", not "(Unknown User)".
 	function statusLabel( value ) {
-		const raw = String( value || '' ).replace( /-/g, ' ' );
-		return chromeLabel( raw.replace( /(^|\s)\S/g, ( c ) => c.toUpperCase() ) );
+		const raw = String( value || '' ).replace( /[-_]/g, ' ' );
+		const cut = raw.indexOf( '(' );
+		const head = cut < 0 ? raw : raw.slice( 0, cut );
+		return chromeLabel( head.replace( /(^|\s)\S/g, ( c ) => c.toUpperCase() ) + ( cut < 0 ? '' : raw.slice( cut ) ) );
 	}
 
 	// ‹ 1 … 4 [5] 6 … 20 › — first, last and a window around the current page.
