@@ -1207,8 +1207,12 @@ function minn_admin_wcm_plan_general_clean( $plan, $in ) {
 	if ( ! in_array( $ltype, array( 'unlimited', 'specific', 'fixed' ), true ) ) {
 		return new WP_Error( 'minn_wcm_plan', __( 'Pick a membership length.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
-	$amount = isset( $in['length_amount'] ) ? (int) $in['length_amount'] : (int) $plan->get_access_length_amount();
-	$period = isset( $in['length_period'] ) ? (string) $in['length_period'] : (string) $plan->get_access_length_period();
+	// An amount or period the body leaves out is the one the page shows
+	// for it: what is stored, or 1 and months on a plan with no length.
+	// The page sends only what changed, so switching an unlimited plan to
+	// a specific length with what it shows sends the type alone.
+	$amount = isset( $in['length_amount'] ) ? (int) $in['length_amount'] : max( 1, (int) $plan->get_access_length_amount() );
+	$period = isset( $in['length_period'] ) ? (string) $in['length_period'] : ( (string) $plan->get_access_length_period() ?: 'months' );
 	$start  = isset( $in['length_start'] ) ? trim( (string) $in['length_start'] ) : minn_admin_wcm_local_day( $plan->get_access_start_date( 'mysql' ) );
 	$end    = isset( $in['length_end'] ) ? trim( (string) $in['length_end'] ) : minn_admin_wcm_local_day( $plan->get_access_end_date( 'mysql' ) );
 	if ( 'specific' === $ltype && ( $amount < 1 || ! in_array( $period, array( 'days', 'weeks', 'months', 'years' ), true ) ) ) {

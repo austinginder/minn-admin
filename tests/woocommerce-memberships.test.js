@@ -377,6 +377,37 @@ const wpEval = ( php ) => {
 		t.check( 'renaming a private plan saves the name and keeps it private', 'Suite Plan ' + suffix + ' v3' === privAfter[ 0 ] && 'private' === privAfter[ 1 ], JSON.stringify( privAfter ) );
 		wpEval( `wp_update_post( array( 'ID' => ${ planId }, 'post_status' => 'publish' ) );` );
 
+		// An unlimited plan switched to a specific length saves with what the
+		// page shows for it. The page fills in 1 months, and the changed-only
+		// save sent the type alone, which the server read against the plan's
+		// stored (empty) amount and period and refused.
+		const lengthNow = () => JSON.parse( wpEval( `$p = wc_memberships_get_membership_plan( ${ planId } ); echo wp_json_encode( array( $p->get_access_length_type(), (int) $p->get_access_length_amount(), (string) $p->get_access_length_period() ) );` ) || '[]' );
+		const saveLength = async () => {
+			const res = page.waitForResponse( ( r ) => 'POST' === r.request().method() && new RegExp( `/wcm/plans/${ planId }$` ).test( r.url() ), { timeout: 20000 } ).catch( () => null );
+			await page.click( '#minn-wcmp-save' );
+			const r = await res;
+			await page.waitForTimeout( 300 );
+			return r ? r.status() : 0;
+		};
+		wpEval( `wc_memberships_get_membership_plan( ${ planId } )->delete_access_length();` );
+		await page.goto( BASE + '/minn-admin/membership-plans/' + planId, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-wcmp-name', { timeout: 20000 } );
+		await pickCombo( 'minn-wcmp-ltype', 'specific' );
+		const shownStatus = await saveLength();
+		const shown = lengthNow();
+		t.check( 'an unlimited plan switched to a specific length saves the 1 months it shows',
+			200 === shownStatus && 'specific' === shown[ 0 ] && 1 === shown[ 1 ] && 'months' === shown[ 2 ], JSON.stringify( { shownStatus, shown } ) );
+		wpEval( `wc_memberships_get_membership_plan( ${ planId } )->delete_access_length();` );
+		await page.goto( BASE + '/minn-admin/membership-plans/' + planId, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-wcmp-name', { timeout: 20000 } );
+		await pickCombo( 'minn-wcmp-ltype', 'specific' );
+		await page.fill( '[data-wcmpf="length.amount"]', '3' );
+		const threeStatus = await saveLength();
+		const three = lengthNow();
+		t.check( 'and with a number typed and the months it shows',
+			200 === threeStatus && 'specific' === three[ 0 ] && 3 === three[ 1 ] && 'months' === three[ 2 ], JSON.stringify( { threeStatus, three } ) );
+		wpEval( `wc_memberships_get_membership_plan( ${ planId } )->set_access_length( '3 months' );` );
+
 		const pdup = await post( `minn-admin/v1/wcm/plans/${ planId }/duplicate` );
 		const dupModel = pdup.body && pdup.body.id ? await api( `minn-admin/v1/wcm/plans/${ pdup.body.id }` ) : { body: {} };
 		t.check( 'duplicate makes a draft copy carrying the rules',
