@@ -19580,7 +19580,9 @@
 		// --- IP ---
 		let ip = it.ip || it.client_ip || '';
 		if ( ! ip && it.ip_addresses && typeof it.ip_addresses === 'object' ) {
-			const ips = Object.keys( it.ip_addresses );
+			// Simple History keys each address by where it came from
+			// (_server_remote_addr): the value is the address.
+			const ips = Object.values( it.ip_addresses ).filter( ( v ) => 'string' === typeof v && v );
 			if ( ips.length ) ip = ips[ 0 ];
 		}
 		if ( ! ip && groups.length ) {
