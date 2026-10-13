@@ -3576,6 +3576,9 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-modal-nav.prev { left: 10px; }
 .minn-modal-nav.next { right: 10px; }
 .minn-modal-meta { padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; border-bottom: 1px solid var(--border); }
+/* Inside a page card the rows are the card's own list (unpadded), not a
+   modal section: the section rule would sit flush under the last row. */
+.minn-order-sec > .minn-modal-meta { border-bottom: 0; }
 .minn-modal-url { margin-top: 4px; }
 .minn-modal-actions { display: flex; gap: 8px; padding: 14px 18px; flex-wrap: wrap; }
 .minn-btn-soft.danger { color: var(--red-text); background: rgba(228,107,107,0.1); border-color: rgba(228,107,107,0.12); }
