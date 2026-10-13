@@ -328,6 +328,16 @@ add_action( 'rest_api_init', function () {
 			// {cookie.*} reads the current request's cookies: in a real send
 			// the submitter's, here the viewer's own, HttpOnly login cookie
 			// included. The preview resolves them against none.
+			// {embed_post.*} reads the page the entry names: its author's
+			// meta, any of its meta, any field of a private or draft page.
+			// Fluent matches a tag wherever the name sits inside the braces,
+			// and so does this; the tag stays a placeholder.
+			foreach ( $parts as $part => $text ) {
+				$parts[ $part ] = (string) preg_replace_callback( '/\{+([^}]*embed_post\.[^}]*)\}/', function ( $m ) {
+					/* translators: %s: a field of the page a form was sent from, named in a merge tag. */
+					return sprintf( __( '[page field: %s]', 'minn-admin' ), sanitize_text_field( substr( $m[1], strpos( $m[1], 'embed_post.' ) + 11 ) ) );
+				}, $text );
+			}
 			$cookies = $_COOKIE;
 			$_COOKIE = array();
 			try {
@@ -336,7 +346,11 @@ add_action( 'rest_api_init', function () {
 				if ( function_exists( 'minn_admin_fluent_forms_mask_passwords' ) ) {
 					$response = minn_admin_fluent_forms_mask_passwords( $response, (int) $form->id );
 				}
-				$out = \FluentForm\App\Services\FormBuilder\ShortCodeParser::parse( $parts, (int) $entry->id, $response, $form, false, 'notifications' );
+				// The row goes in with its answers masked: given only an id,
+				// Fluent reloads the raw row for {submission.response} and
+				// {all_data}.
+				$entry->response = wp_json_encode( $response );
+				$out = \FluentForm\App\Services\FormBuilder\ShortCodeParser::parse( $parts, $entry, $response, $form, false, 'notifications' );
 				\FluentForm\App\Services\FormBuilder\ShortCodeParser::resetData();
 			} finally {
 				$_COOKIE = $cookies;

@@ -248,6 +248,40 @@ if ( ! function_exists( 'wpforms' ) || ! class_exists( '\WPForms\Emails\Notifica
 	}
 }
 
+// --- 05-01, 05-02 Fluent Forms: the email preview masks the row and the page -----
+// The preview masked the answers it handed Fluent's parser but passed the
+// entry as an id, so Fluent reloaded the raw row for {submission.response},
+// password included. And {embed_post.*} read the sending page's meta, its
+// author's meta and a draft's body. Run on a throwaway form in a rolled-back
+// transaction.
+if ( ! class_exists( '\\FluentForm\\App\\Services\\FormBuilder\\ShortCodeParser' ) ) {
+	$skip( '05-01/05-02 Fluent Forms inactive' );
+} else {
+	global $wpdb;
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$ff_page   = wp_insert_post( array( 'post_type' => 'page', 'post_title' => 'MinnRc45FfPage', 'post_status' => 'draft', 'post_author' => $admin, 'post_content' => 'rc45ffbody' ) );
+		$ff_secret = 'rc45ff' . wp_generate_password( 10, false );
+		update_post_meta( $ff_page, '_minn_rc45_ff', $ff_secret );
+		update_user_meta( $admin, 'minn_rc45_ff_user', $ff_secret );
+		$ff_fields = array( 'fields' => array(
+			array( 'element' => 'input_text', 'attributes' => array( 'name' => 'nick' ), 'settings' => array( 'label' => 'Nick' ) ),
+			array( 'element' => 'input_password', 'attributes' => array( 'name' => 'secret_pw' ), 'settings' => array( 'label' => 'Password' ) ),
+		) );
+		$wpdb->insert( $wpdb->prefix . 'fluentform_forms', array( 'title' => 'rc45 preview probe', 'status' => 'published', 'form_fields' => wp_json_encode( $ff_fields ), 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+		$ff_form = (int) $wpdb->insert_id;
+		$wpdb->insert( $wpdb->prefix . 'fluentform_submissions', array( 'form_id' => $ff_form, 'response' => wp_json_encode( array( 'nick' => 'Dana', 'secret_pw' => 'hunter2-rc45', '__fluent_form_embded_post_id' => $ff_page ) ), 'status' => 'unread', 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+		list( $ff_st, $ff_d ) = $call( 'POST', "/minn-admin/v1/fluent-forms/forms/{$ff_form}/emails/preview", array( 'subject' => 'S', 'message' => 'A {submission.response} B {embed_post.meta._minn_rc45_ff} C {embed_post.post_content} D {embed_post.author.minn_rc45_ff_user} E {inputs.nick}' ) );
+		$ff_out = wp_json_encode( $ff_d );
+		$check( '05-01 the Fluent preview shows no stored password through {submission.response}', 200 === $ff_st && false === strpos( $ff_out, 'hunter2-rc45' ), $ff_st . ' ' . substr( $ff_out, 0, 220 ) );
+		$check( '05-02 the Fluent preview resolves no field or meta of the sending page or its author', false === strpos( $ff_out, $ff_secret ) && false === strpos( $ff_out, 'rc45ffbody' ), substr( $ff_out, 0, 220 ) );
+		$check( '05-01 control: an answer tag still fills', false !== strpos( $ff_out, 'Dana' ), substr( $ff_out, 0, 220 ) );
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+}
+
 // @sections
 
 $summary();
