@@ -441,4 +441,67 @@ if ( ! class_exists( 'WooCommerce' ) || ! function_exists( 'minn_admin_wc_settin
 	}
 }
 
+// --- NI-9 Plugin update: an administrator's failed reactivation says so --------
+// switched_off was also true when an administrator's reactivation failed, so
+// the toast told an administrator their account can't switch plugins on.
+// The "update" here drops the plugin's main file, so switching it back on
+// fails the way a missing dependency would.
+if ( is_multisite() ) {
+	$skip( 'NI-9 single site only' );
+} elseif ( ! class_exists( 'ZipArchive' ) ) {
+	$skip( 'NI-9 no ZipArchive' );
+} else {
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	$up_slug = 'minn-d45-upd';
+	$up_file = "{$up_slug}/{$up_slug}.php";
+	$up_dir  = WP_PLUGIN_DIR . "/{$up_slug}";
+	$up_zip  = get_temp_dir() . 'minn-d45-upd-1.1.zip';
+	$up_wipe = function () use ( $up_dir ) {
+		foreach ( (array) glob( $up_dir . '/*' ) as $up_f ) {
+			unlink( $up_f );
+		}
+		if ( is_dir( $up_dir ) ) {
+			rmdir( $up_dir );
+		}
+	};
+	$up_wipe();
+	$up_zipf = new ZipArchive();
+	$up_zipf->open( $up_zip, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$up_zipf->addFromString( "{$up_slug}/renamed.php", "<?php\n/**\n * Plugin Name: Minn D45 update probe\n * Version: 1.1\n */\n" );
+	$up_zipf->close();
+	wp_mkdir_p( $up_dir );
+	file_put_contents( "{$up_dir}/{$up_slug}.php", "<?php\n/**\n * Plugin Name: Minn D45 update probe\n * Version: 1.0\n */\n" );
+	wp_clean_plugins_cache( false );
+	activate_plugin( $up_file );
+	$up_t = get_site_transient( 'update_plugins' );
+	$up_t = is_object( $up_t ) ? $up_t : new stdClass();
+	$up_t->response = isset( $up_t->response ) ? (array) $up_t->response : array();
+	$up_t->response[ $up_file ] = (object) array( 'id' => $up_file, 'slug' => $up_slug, 'plugin' => $up_file, 'new_version' => '1.1', 'url' => '', 'package' => $up_zip );
+	set_site_transient( 'update_plugins', $up_t );
+	// The vendor's upgrade routine switches it off.
+	$up_off = function () use ( $up_file ) {
+		deactivate_plugins( $up_file, true );
+	};
+	add_action( 'upgrader_process_complete', $up_off, 1 );
+	try {
+		list( $up_st, $up_d ) = $call( 'POST', '/minn-admin/v1/plugins/update', array( 'plugin' => $up_file ) );
+		$check( 'NI-9 an administrator whose reactivation fails is not told their account can\'t switch plugins on', 200 === $up_st && empty( $up_d['switched_off'] ), $up_st . ' ' . wp_json_encode( $up_d ) );
+		$check( 'NI-9 the failed reactivation comes back as such, with WordPress\'s reason', ! empty( $up_d['reactivation_failed'] ) && '' !== (string) ( $up_d['reactivate_error'] ?? '' ), wp_json_encode( $up_d ) );
+		$check( 'NI-9 control: the update itself landed', 200 === $up_st && ! empty( $up_d['updated'] ) && file_exists( "{$up_dir}/renamed.php" ), $up_st );
+	} finally {
+		remove_action( 'upgrader_process_complete', $up_off, 1 );
+		deactivate_plugins( $up_file, true );
+		$up_t = get_site_transient( 'update_plugins' );
+		if ( is_object( $up_t ) && isset( $up_t->response[ $up_file ] ) ) {
+			unset( $up_t->response[ $up_file ] );
+			set_site_transient( 'update_plugins', $up_t );
+		}
+		$up_wipe();
+		if ( file_exists( $up_zip ) ) {
+			unlink( $up_zip );
+		}
+		wp_clean_plugins_cache( false );
+	}
+}
+
 $summary();

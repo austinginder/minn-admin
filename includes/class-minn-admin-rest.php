@@ -11098,9 +11098,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// active_plugins write refused by the write fence, whose 403 then hid
 		// that the update itself landed; it gets the plugin back inactive and
 		// is told so.
-		$can_activate = $was_network ? current_user_can( 'manage_network_plugins' ) : current_user_can( 'activate_plugin', $file );
+		$can_activate     = $was_network ? current_user_can( 'manage_network_plugins' ) : current_user_can( 'activate_plugin', $file );
+		$reactivate_error = null;
 		if ( $was_active && ! is_plugin_active( $file ) && $can_activate ) {
-			activate_plugin( $file, '', $was_network, true );
+			$activated = activate_plugin( $file, '', $was_network, true );
+			if ( ! is_plugin_active( $file ) ) {
+				$reactivate_error = is_wp_error( $activated ) ? wp_strip_all_tags( $activated->get_error_message() ) : '';
+			}
 		}
 
 		// Put every other pending offer back (Jetpack update must not clear
@@ -11110,11 +11114,16 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$plugins = get_plugins();
 		return rest_ensure_response(
 			array(
-				'updated'      => true,
-				'version'      => isset( $plugins[ $file ]['Version'] ) ? $plugins[ $file ]['Version'] : '',
+				'updated'             => true,
+				'version'             => isset( $plugins[ $file ]['Version'] ) ? $plugins[ $file ]['Version'] : '',
 				// The update switched it off and this caller may not switch it
 				// back on.
-				'switched_off' => $was_active && ! is_plugin_active( $file ),
+				'switched_off'        => $was_active && ! is_plugin_active( $file ) && ! $can_activate,
+				// It was switched back on and WordPress refused (a missing
+				// dependency, a main file the new version renamed), with
+				// WordPress's reason when it gave one.
+				'reactivation_failed' => null !== $reactivate_error,
+				'reactivate_error'    => (string) $reactivate_error,
 			)
 		);
 	}
