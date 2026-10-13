@@ -357,6 +357,9 @@
             "shop_manager",
             "administrator"
         ],
+        "GET /minn-admin/v1/code-snippets/(?P<id>\\d+)": [
+            "administrator"
+        ],
         "GET /minn-admin/v1/code-snippets/status": [
             "administrator"
         ],
