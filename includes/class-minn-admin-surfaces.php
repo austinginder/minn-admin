@@ -41,8 +41,7 @@ class Minn_Admin_Surfaces {
 	 */
 	public static function for_current_user() {
 		$hidden = self::hidden_map();
-		$gone   = Minn_Admin_Notices::removed_owners();
-		$paged  = $gone ? Minn_Admin_Notices::owners_with_pages() : array();
+		$tool   = self::menu_tool_context();
 		// The authoritative surface list comes from all() (apply_filters), the
 		// SAME resolution hide validation and the restore list use, so what
 		// surfaces exist never diverges per endpoint. contributions() runs a
@@ -74,11 +73,23 @@ class Minn_Admin_Surfaces {
 			}
 			// A plugin whose whole wp-admin menu a menu tool hid from this
 			// user (White Label CMS, through minn_admin_admin_page_hidden)
-			// is hidden here too. The notices capture finds those owners.
+			// is hidden here too, and so is a view another plugin added to
+			// the surface. The notices capture finds those owners.
 			// Presentation only: the plugin's routes keep their own gates.
-			if ( $gone && self::owners_gone( (array) ( $surface['plugin'] ?? array() ), $gone, $paged ) ) {
+			if ( self::hidden_by_menu_tool( $surface, $tool ) ) {
 				continue;
 			}
+			if ( ! empty( $surface['views'] ) && is_array( $surface['views'] ) ) {
+				$surface['views'] = array_values(
+					array_filter(
+						$surface['views'],
+						function ( $view ) use ( $tool ) {
+							return ! is_array( $view ) || ! self::hidden_by_menu_tool( $view, $tool );
+						}
+					)
+				);
+			}
+			unset( $surface['contentTypes'], $surface['adminPages'] );
 			// Attention budget (v1.0 gate G3): workspace is for inbox-shaped
 			// surfaces. Anything else claiming it degrades to Tools.
 			if ( isset( $surface['group'] ) && 'workspace' === $surface['group'] && ! self::inbox_shaped( $surface ) ) {
@@ -110,6 +121,76 @@ class Minn_Admin_Surfaces {
 	 * @param string[] $gone    Owners the capture found removed.
 	 * @param string[] $paged   Owners the capture found with pages.
 	 */
+	/**
+	 * What the last capture found a menu tool hid from the current user:
+	 * [ removed owners, owners with pages, owners kept only by a content
+	 * list, hidden hosting pages ].
+	 *
+	 * @return array
+	 */
+	private static function menu_tool_context() {
+		$gone = Minn_Admin_Notices::removed_owners();
+		return array(
+			$gone,
+			$gone ? Minn_Admin_Notices::owners_with_pages() : array(),
+			$gone ? Minn_Admin_Notices::owners_kept_by_content() : array(),
+			Minn_Admin_Notices::hidden_admin_pages(),
+		);
+	}
+
+	/**
+	 * Whether a menu tool hid a surface, or one of its views, from the
+	 * current user. Its plugins are gone (owners_gone()), unless the
+	 * surface is a list of a content type one of them registered whose
+	 * wp-admin list is still in the menu (contentTypes, as 'pt:x' or
+	 * 'tax:y'); or every admin page it names as hosting it (adminPages,
+	 * for a plugin whose screens a shared dashboard draws) is hidden.
+	 *
+	 * @param array $item A surface or a view: plugin, contentTypes, adminPages.
+	 * @param array $ctx  menu_tool_context().
+	 * @return bool
+	 */
+	private static function hidden_by_menu_tool( array $item, array $ctx ) {
+		list( $gone, $paged, $content, $pages ) = $ctx;
+		$hosts = array_map( 'strval', (array) ( $item['adminPages'] ?? array() ) );
+		if ( $hosts && ! array_diff( $hosts, $pages ) ) {
+			return true;
+		}
+		$plugins = (array) ( $item['plugin'] ?? array() );
+		if ( ! $gone || ! $plugins ) {
+			return false;
+		}
+		$types = (array) ( $item['contentTypes'] ?? array() );
+		foreach ( $content as $owner => $keys ) {
+			if ( $types && array_intersect( $types, (array) $keys ) ) {
+				$gone = array_diff( $gone, array( $owner ) );
+			}
+		}
+		return $gone && self::owners_gone( $plugins, array_values( $gone ), $paged );
+	}
+
+	/**
+	 * Every admin page a surface or view names as hosting it (adminPages),
+	 * for the notices capture to ask the menu tools about.
+	 *
+	 * @return string[]
+	 */
+	public static function declared_admin_pages() {
+		$out = array();
+		foreach ( self::all() as $surface ) {
+			if ( ! is_array( $surface ) ) {
+				continue;
+			}
+			$items = array_merge( array( $surface ), is_array( $surface['views'] ?? null ) ? $surface['views'] : array() );
+			foreach ( $items as $item ) {
+				foreach ( is_array( $item ) ? (array) ( $item['adminPages'] ?? array() ) : array() as $slug ) {
+					$out[ (string) $slug ] = true;
+				}
+			}
+		}
+		return array_keys( $out );
+	}
+
 	public static function owners_gone( array $plugins, array $gone, array $paged ) {
 		if ( ! array_intersect( $plugins, $gone ) ) {
 			return false;
@@ -1399,7 +1480,12 @@ class Minn_Admin_Surfaces {
 
 		$surfaces = self::contributions( 'minn_admin_surfaces' );
 		$s_rows   = array();
+		// A plugin a menu tool hid from this user is not named here either.
+		$tool = self::menu_tool_context();
 		foreach ( (array) $surfaces['value'] as $id => $s ) {
+			if ( is_array( $s ) && self::hidden_by_menu_tool( $s, $tool ) ) {
+				continue;
+			}
 			$s_rows[] = array(
 				'id'       => sanitize_key( (string) $id ),
 				'label'    => is_array( $s ) && isset( $s['label'] ) ? (string) $s['label'] : '',

@@ -161,7 +161,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 	if ( isset( $surfaces['jet-search'] ) ) {
-		$surfaces['jet-search']['views'][] = minn_admin_jsf_collection();
+		// Its own owner, so a menu tool that hides JetSmartFilters takes
+		// this view away and leaves JetSearch's.
+		$surfaces['jet-search']['views'][] = array( 'plugin' => 'jet-smart-filters' ) + minn_admin_jsf_collection();
 		return $surfaces;
 	}
 	$surfaces['jet-smart-filters'] = array(

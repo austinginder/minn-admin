@@ -70,6 +70,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Search', 'minn-admin' ),
 		'sub'        => 'JetSearch',
 		'plugin'     => 'jet-search',
+		// JetSearch has no admin page of its own: its settings are a tab of
+		// Crocoblock's JetPlugins Settings, which a menu tool hides with the
+		// Crocoblock menu.
+		'adminPages' => array( 'jet-dashboard-settings-page' ),
 		'icon'       => 'search',
 		'group'      => 'tools',
 		'cap'        => 'manage_options',

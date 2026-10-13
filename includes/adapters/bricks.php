@@ -810,6 +810,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Templates', 'minn-admin' ),
 		'sub'        => 'Bricks',
 		'plugin'     => 'theme:bricks',
+		'contentTypes' => array( 'pt:bricks_template' ),
 		'family'     => 'builder-templates',
 		'icon'       => 'columns',
 		// Their answer is a resolver, not a capability name; the guard above

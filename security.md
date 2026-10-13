@@ -111,7 +111,11 @@ A few properties worth knowing before auditing (details in
   their connection keys) belong to the main network's super admins.
 - Hiding a plugin's screens because a menu tool (White Label CMS) hid its
   wp-admin menu is presentation only; the plugin's routes keep their own
-  permission checks.
+  permission checks. It follows what Minn last saw in wp-admin for that
+  user, so it starts with the first capture after the app opens, never
+  reaches a user whose dashboard redirects or fails before the capture
+  runs, and lapses a week after the last capture that came back. System ›
+  Integrations leaves out the surfaces it hides.
 - A browser test suite (430 suites at the time of writing, beside 29 PHP
   suites) includes an enforced zero-external-requests invariant for the
   app chrome.

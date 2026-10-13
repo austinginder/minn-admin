@@ -7,9 +7,15 @@
  * - A surface several plugins share (Field Groups, Site Options) stays
  *   while any of them with admin pages of its own is still in the menu; a
  *   pro add-on with no pages of its own has no say.
- * - A plugin whose own page is hidden but whose content screen (a list of
- *   a post type it registered) is still in the menu is not gone.
+ * - A plugin whose own page is hidden is gone even while its content screen
+ *   (a list of a post type it registered) is still in the menu; only a
+ *   surface that is that list (contentTypes) stays.
  * - Who registered a post type is read from the registration itself.
+ * - A page a shared framework draws (Crocoblock's jet-dashboard) belongs to
+ *   none of the plugins bundling it.
+ * - A surface naming the pages that host it (adminPages) leaves when all of
+ *   them are hidden, and a view with its own plugin leaves with it.
+ * - System › Integrations names no surface a menu tool hid.
  * - A stored removal no capture has refreshed for a week no longer counts.
  *
  * The capture runs over synthetic menu globals; the user option it reads
@@ -70,14 +76,75 @@ try {
 		return $hidden || 'minn-probe-owner' === $slug;
 	};
 	add_filter( 'minn_admin_admin_page_hidden', $vouch, 10, 2 );
-	$kept_by_content = Minn_Admin_Notices::capture_removed_owners();
-	$check( 'a plugin whose post type list is still in the menu is not gone', ! in_array( 'minn-probe-owner', $kept_by_content, true ), wp_json_encode( $kept_by_content ) );
+	// A capture's working state, or null where this build keeps none.
+	$capture_state = static function ( $name ) {
+		if ( ! property_exists( 'Minn_Admin_Notices', $name ) ) {
+			return null;
+		}
+		$ref = new ReflectionProperty( 'Minn_Admin_Notices', $name );
+		$ref->setAccessible( true );
+		return $ref->getValue();
+	};
+	$with_list = Minn_Admin_Notices::capture_removed_owners();
+	$check( 'a plugin whose own pages are hidden is gone though its post type list is in the menu', in_array( 'minn-probe-owner', $with_list, true ), wp_json_encode( $with_list ) );
+	$check( 'and the capture records the list it still has', array( 'pt:minn_probe_pt' ) === ( ( (array) $capture_state( 'content_kept' ) )['minn-probe-owner'] ?? null ), wp_json_encode( $capture_state( 'content_kept' ) ) );
 	$menu = array();
 	$gone_without = Minn_Admin_Notices::capture_removed_owners();
 	$check( 'control: with that list hidden too, it is gone', in_array( 'minn-probe-owner', $gone_without, true ), wp_json_encode( $gone_without ) );
-	$paged_ref = new ReflectionProperty( 'Minn_Admin_Notices', 'owners_with_pages' );
-	$paged_ref->setAccessible( true );
-	$check( 'the capture records which plugins have pages', in_array( 'minn-probe-owner', (array) $paged_ref->getValue(), true ) );
+	$check( 'and keeps no list', null !== $capture_state( 'content_kept' ) && ! isset( ( (array) $capture_state( 'content_kept' ) )['minn-probe-owner'] ) );
+	$check( 'the capture records which plugins have pages', in_array( 'minn-probe-owner', (array) $capture_state( 'owners_with_pages' ), true ) );
+
+	// --- a shared framework's page is no one's --------------------------------
+	wp_mkdir_p( $probe_dir . '/jet-dashboard' );
+	file_put_contents( $probe_dir . '/jet-dashboard/page.php', "<?php\nfunction minn_probe_owner_dash() {}\n" );
+	include_once $probe_dir . '/jet-dashboard/page.php';
+	remove_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_page' );
+	add_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_dash' );
+	Minn_Admin_Notices::capture_removed_owners();
+	$check( 'a page a bundled framework draws is not credited to the plugin bundling it', ! in_array( 'minn-probe-owner', (array) $capture_state( 'owners_with_pages' ), true ), wp_json_encode( $capture_state( 'owners_with_pages' ) ) );
+	remove_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_dash' );
+
+	// --- hosting pages and the surfaces that name them ------------------------
+	$all_ref = new ReflectionProperty( 'Minn_Admin_Surfaces', 'all_cache' );
+	$all_ref->setAccessible( true );
+	$probe_surfaces = function ( $surfaces ) {
+		$base = array( 'cap' => 'read', 'collection' => array( 'route' => 'minn-admin/v1/overview' ) );
+		$surfaces['minn-probe-list']   = $base + array( 'label' => 'Probe list', 'plugin' => 'minn-probe-owner', 'contentTypes' => array( 'pt:minn_probe_pt' ) );
+		$surfaces['minn-probe-config'] = $base + array( 'label' => 'Probe config', 'plugin' => 'minn-probe-owner' );
+		$surfaces['minn-probe-hosted'] = $base + array( 'label' => 'Probe hosted', 'plugin' => 'minn-probe-nopage', 'adminPages' => array( 'minn-probe-host' ) );
+		$surfaces['minn-probe-viewed'] = $base + array( 'label' => 'Probe viewed', 'plugin' => 'minn-probe-base', 'views' => array( array( 'viewLabel' => 'Mine', 'route' => 'minn-admin/v1/overview' ), array( 'viewLabel' => 'Theirs', 'plugin' => 'minn-probe-viewer', 'route' => 'minn-admin/v1/overview' ) ) );
+		return $surfaces;
+	};
+	add_filter( 'minn_admin_surfaces', $probe_surfaces, 999 );
+	$all_ref->setValue( null, null );
+	$menu             = array( array( 'Probe items', 'edit_posts', 'edit.php?post_type=minn_probe_pt' ) );
+	$admin_page_hooks = array();
+	$_parent_pages    = array( 'minn-probe-host' => 'minn-probe-parent' );
+	$host_vouch       = static function ( $hidden, $slug, $parent ) {
+		return $hidden || ( 'minn-probe-host' === $slug && 'minn-probe-parent' === $parent );
+	};
+	add_filter( 'minn_admin_admin_page_hidden', $host_vouch, 10, 3 );
+	Minn_Admin_Notices::capture_removed_owners();
+	$check( 'the capture records a hosting page a menu tool hid', in_array( 'minn-probe-host', (array) $capture_state( 'pages_hidden' ), true ), wp_json_encode( $capture_state( 'pages_hidden' ) ) );
+	remove_filter( 'minn_admin_admin_page_hidden', $host_vouch, 10 );
+
+	update_user_option( $uid, Minn_Admin_Notices::REMOVED_OPTION, array( 'nav' => array(), 'owners' => array( 'minn-probe-owner', 'minn-probe-viewer' ), 'paged' => array( 'minn-probe-owner', 'minn-probe-viewer', 'minn-probe-base' ), 'content' => array( 'minn-probe-owner' => array( 'pt:minn_probe_pt' ) ), 'pages' => array( 'minn-probe-host' ), 'at' => time() ) );
+	$probe_by_id = array();
+	foreach ( Minn_Admin_Surfaces::for_current_user() as $probe_s ) {
+		$probe_by_id[ $probe_s['id'] ] = $probe_s;
+	}
+	$check( 'the surface that is the list still in the menu stays', isset( $probe_by_id['minn-probe-list'] ) );
+	$check( 'the same plugin\'s other surface leaves', ! isset( $probe_by_id['minn-probe-config'] ) );
+	$check( 'a surface whose every hosting page is hidden leaves', ! isset( $probe_by_id['minn-probe-hosted'] ) );
+	$probe_views = isset( $probe_by_id['minn-probe-viewed'] ) ? wp_list_pluck( (array) ( $probe_by_id['minn-probe-viewed']['views'] ?? array() ), 'viewLabel' ) : null;
+	$check( 'a view whose own plugin is gone leaves, and the surface stays', array( 'Mine' ) === $probe_views, wp_json_encode( $probe_views ) );
+	$probe_rows = wp_list_pluck( (array) ( Minn_Admin_Surfaces::integrations()['surfaces'] ?? array() ), 'id' );
+	$check( 'System › Integrations does not name a hidden surface', ! in_array( 'minn-probe-config', $probe_rows, true ) && in_array( 'minn-probe-list', $probe_rows, true ), wp_json_encode( array_values( array_filter( $probe_rows, function ( $r ) { return 0 === strpos( $r, 'minn-probe' ); } ) ) ) );
+	update_user_option( $uid, Minn_Admin_Notices::REMOVED_OPTION, array( 'nav' => array(), 'owners' => array(), 'paged' => array(), 'at' => time() ) );
+	$probe_ids = wp_list_pluck( Minn_Admin_Surfaces::for_current_user(), 'id' );
+	$check( 'control: with nothing hidden every probe surface shows', ! array_diff( array( 'minn-probe-list', 'minn-probe-config', 'minn-probe-hosted', 'minn-probe-viewed' ), $probe_ids ) );
+	remove_filter( 'minn_admin_surfaces', $probe_surfaces, 999 );
+	$all_ref->setValue( null, null );
 	remove_filter( 'minn_admin_admin_page_hidden', $vouch, 10 );
 
 	// --- stored removals expire without a fresh capture ----------------------
@@ -112,10 +179,13 @@ try {
 	if ( post_type_exists( 'minn_probe_pt' ) ) {
 		unregister_post_type( 'minn_probe_pt' );
 	}
-	foreach ( array( 'probe.php', 'page.php' ) as $f ) {
+	foreach ( array( 'probe.php', 'page.php', 'jet-dashboard/page.php' ) as $f ) {
 		if ( is_file( $probe_dir . '/' . $f ) ) {
 			unlink( $probe_dir . '/' . $f );
 		}
+	}
+	if ( is_dir( $probe_dir . '/jet-dashboard' ) ) {
+		rmdir( $probe_dir . '/jet-dashboard' );
 	}
 	if ( is_dir( $probe_dir ) ) {
 		rmdir( $probe_dir );

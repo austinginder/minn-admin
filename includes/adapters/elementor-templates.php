@@ -325,6 +325,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => __( 'Templates', 'minn-admin' ),
 		'sub'        => 'Elementor',
 		'plugin'     => 'elementor',
+		// The list of these post types: it stays while their wp-admin list
+		// does, even when a menu tool hides the rest of Elementor.
+		'contentTypes' => array( 'pt:elementor_library', 'pt:e-floating-buttons' ),
 		'family'     => 'builder-templates',
 		'icon'       => 'columns',
 		'cap'        => 'edit_posts',

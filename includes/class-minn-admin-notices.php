@@ -40,6 +40,23 @@ class Minn_Admin_Notices {
 	/** On a capture request: the owners that have admin pages of their own. */
 	private static $owners_with_pages = array();
 
+	/**
+	 * On a capture request: removed owners a list of a content type they
+	 * registered still stands for in the menu, owner => [ 'pt:x', 'tax:y' ].
+	 */
+	private static $content_kept = array();
+
+	/** On a capture request: admin pages surfaces name as theirs (adminPages) that a menu tool hid. */
+	private static $pages_hidden = array();
+
+	/**
+	 * Folders of frameworks several plugins bundle and load once, from
+	 * whichever copy is newest. A page such a framework draws (Crocoblock's
+	 * dashboard and its JetPlugins Settings page) belongs to none of the
+	 * plugins that bundle it.
+	 */
+	const SHARED_FRAMEWORKS = array( '/jet-dashboard/' );
+
 	/** Core callbacks Minn already covers with its own notifications. */
 	const SKIP_CALLBACKS = array( 'update_nag', 'maintenance_nag', 'site_admin_notice' );
 
@@ -184,10 +201,12 @@ class Minn_Admin_Notices {
 	 * top-level page's callback, and adds a submenu page at all, only for
 	 * users with its capability, so a plugin absent because of normal
 	 * capability gating is never reported. A plugin with even one page
-	 * still in the menu (or moved elsewhere in it) is not reported either,
-	 * and its content screens count as its pages: a list of a post type or
-	 * taxonomy it registered (Elementor's Templates) that is still in the
-	 * menu keeps it.
+	 * still in the menu (or moved elsewhere in it) is not reported either.
+	 * A list of a post type or taxonomy it registered that is still in the
+	 * menu (Elementor's Templates) keeps only the surface that is that list
+	 * (its contentTypes); the plugin's other surfaces leave. Pages a shared
+	 * framework draws are no one's, and a surface whose plugin has no page
+	 * of its own names the pages that host it (adminPages).
 	 *
 	 * Absence alone proves nothing: plugins hide their own setup and
 	 * wizard pages exactly the way an agency hides a menu. So a plugin is
@@ -203,6 +222,8 @@ class Minn_Admin_Notices {
 			return array();
 		}
 		global $menu, $submenu, $admin_page_hooks, $_parent_pages;
+		self::$content_kept = array();
+		self::$pages_hidden = array();
 		$hooks = is_array( $admin_page_hooks ) ? $admin_page_hooks : array();
 		// What the user sees: every top-level item, and the submenus of the
 		// top-level items still there.
@@ -252,14 +273,14 @@ class Minn_Admin_Notices {
 				continue;
 			}
 			if ( isset( self::$content_owners[ $key ] ) ) {
-				$content_shown[ self::$content_owners[ $key ] ] = true;
+				$content_shown[ self::$content_owners[ $key ] ][] = $key;
 			}
 		}
 		self::$owners_with_pages = array_keys( $pages );
 		sort( self::$owners_with_pages );
 		$removed = array();
 		foreach ( $pages as $owner => $slugs ) {
-			if ( isset( $content_shown[ $owner ] ) || array_intersect_key( $slugs, $shown ) ) {
+			if ( array_intersect_key( $slugs, $shown ) ) {
 				continue;
 			}
 			foreach ( $slugs as $slug => $parent ) {
@@ -274,11 +295,27 @@ class Minn_Admin_Notices {
 				 */
 				if ( apply_filters( 'minn_admin_admin_page_hidden', false, (string) $slug, $parent ) ) {
 					$removed[] = (string) $owner;
+					if ( isset( $content_shown[ $owner ] ) ) {
+						self::$content_kept[ (string) $owner ] = array_values( array_unique( $content_shown[ $owner ] ) );
+					}
 					break;
 				}
 			}
 		}
 		sort( $removed );
+		ksort( self::$content_kept );
+		// The hosting pages surfaces name, hidden from this user on purpose.
+		foreach ( Minn_Admin_Surfaces::declared_admin_pages() as $slug ) {
+			if ( isset( $shown[ $slug ] ) ) {
+				continue;
+			}
+			$parent = is_array( $_parent_pages ) && isset( $_parent_pages[ $slug ] ) ? (string) $_parent_pages[ $slug ] : '';
+			/** This filter is documented above. */
+			if ( apply_filters( 'minn_admin_admin_page_hidden', false, $slug, $parent ) ) {
+				self::$pages_hidden[] = $slug;
+			}
+		}
+		sort( self::$pages_hidden );
 		return $removed;
 	}
 
@@ -289,7 +326,14 @@ class Minn_Admin_Notices {
 		}
 		foreach ( $GLOBALS['wp_filter'][ $hook ]->callbacks as $cbs ) {
 			foreach ( $cbs as $registered ) {
-				$owner = self::owner_of( $registered['function'] );
+				$ref  = self::reflect( $registered['function'] );
+				$file = $ref && $ref->getFileName() ? wp_normalize_path( $ref->getFileName() ) : '';
+				foreach ( self::SHARED_FRAMEWORKS as $dir ) {
+					if ( false !== strpos( $file, $dir ) ) {
+						return '';
+					}
+				}
+				$owner = self::owner_of_file( $file );
 				if ( 'plugin' === $owner['type'] && '' !== $owner['slug'] ) {
 					return $owner['slug'];
 				}
@@ -335,6 +379,28 @@ class Minn_Admin_Notices {
 	public static function owners_with_pages() {
 		$kept = self::kept_removals();
 		return is_array( $kept ) && isset( $kept['paged'] ) && is_array( $kept['paged'] ) ? $kept['paged'] : array();
+	}
+
+	/**
+	 * Removed owners a list of a content type they registered still stands
+	 * for in the menu: owner => [ 'pt:x', 'tax:y' ]. A surface that is one
+	 * of those lists (its contentTypes) stays; the owner's others leave.
+	 */
+	public static function owners_kept_by_content() {
+		if ( ! get_current_user_id() || ! apply_filters( 'minn_admin_respect_removed_menus', true ) ) {
+			return array();
+		}
+		$kept = self::kept_removals();
+		return is_array( $kept ) && isset( $kept['content'] ) && is_array( $kept['content'] ) ? $kept['content'] : array();
+	}
+
+	/** Hosting pages surfaces name (adminPages) that the last capture found hidden. */
+	public static function hidden_admin_pages() {
+		if ( ! get_current_user_id() || ! apply_filters( 'minn_admin_respect_removed_menus', true ) ) {
+			return array();
+		}
+		$kept = self::kept_removals();
+		return is_array( $kept ) && isset( $kept['pages'] ) && is_array( $kept['pages'] ) ? $kept['pages'] : array();
 	}
 
 	/** The stored removals, unless no capture has refreshed them for REMOVED_FOR. */
@@ -1046,9 +1112,11 @@ class Minn_Admin_Notices {
 			DAY_IN_SECONDS
 		);
 		$removed = array(
-			'nav'    => array_values( $menu_removed ),
-			'owners' => array_values( $owners ),
-			'paged'  => array_values( self::$owners_with_pages ),
+			'nav'     => array_values( $menu_removed ),
+			'owners'  => array_values( $owners ),
+			'paged'   => array_values( self::$owners_with_pages ),
+			'content' => self::$content_kept,
+			'pages'   => array_values( self::$pages_hidden ),
 		);
 		// Rewritten when what it says changes, and at least daily so its
 		// stamp shows captures are still coming back.
