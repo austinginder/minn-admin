@@ -73,24 +73,12 @@ class Minn_Admin_Surfaces {
 			}
 			// A plugin whose whole wp-admin menu a menu tool hid from this
 			// user (White Label CMS, through minn_admin_admin_page_hidden)
-			// is hidden here too, and so is a view (manage or views) that
-			// names a plugin of its own. The notices capture finds those owners.
-			// Presentation only: the plugin's routes keep their own gates.
-			if ( self::hidden_by_menu_tool( $surface, $tool ) ) {
+			// is hidden here too, and so is a list (collection, manage or a
+			// view) that names a plugin of its own. The notices capture finds
+			// those owners. Presentation only: the routes keep their own gates.
+			$surface = self::after_menu_tool( $surface, $tool );
+			if ( null === $surface ) {
 				continue;
-			}
-			if ( isset( $surface['manage'] ) && is_array( $surface['manage'] ) && self::hidden_by_menu_tool( $surface['manage'], $tool ) ) {
-				unset( $surface['manage'] );
-			}
-			if ( ! empty( $surface['views'] ) && is_array( $surface['views'] ) ) {
-				$surface['views'] = array_values(
-					array_filter(
-						$surface['views'],
-						function ( $view ) use ( $tool ) {
-							return ! is_array( $view ) || ! self::hidden_by_menu_tool( $view, $tool );
-						}
-					)
-				);
 			}
 			unset( $surface['contentTypes'], $surface['adminPages'] );
 			// Attention budget (v1.0 gate G3): workspace is for inbox-shaped
@@ -173,8 +161,72 @@ class Minn_Admin_Surfaces {
 	}
 
 	/**
-	 * Every admin page a surface or view names as hosting it (adminPages),
-	 * for the notices capture to ask the menu tools about.
+	 * A surface as a menu tool leaves it for the current user: null when it
+	 * is hidden, otherwise without the lists hidden on their own, and with a
+	 * hidden main list replaced by the next one (with_next_list()).
+	 *
+	 * @param array $surface The surface.
+	 * @param array $ctx     menu_tool_context().
+	 * @return array|null
+	 */
+	private static function after_menu_tool( array $surface, array $ctx ) {
+		if ( self::hidden_by_menu_tool( $surface, $ctx ) ) {
+			return null;
+		}
+		if ( isset( $surface['manage'] ) && is_array( $surface['manage'] ) && self::hidden_by_menu_tool( $surface['manage'], $ctx ) ) {
+			unset( $surface['manage'] );
+		}
+		if ( ! empty( $surface['views'] ) && is_array( $surface['views'] ) ) {
+			$surface['views'] = array_values(
+				array_filter(
+					$surface['views'],
+					function ( $view ) use ( $ctx ) {
+						return ! is_array( $view ) || ! self::hidden_by_menu_tool( $view, $ctx );
+					}
+				)
+			);
+		}
+		if ( isset( $surface['collection'] ) && is_array( $surface['collection'] ) && self::hidden_by_menu_tool( $surface['collection'], $ctx ) ) {
+			return self::with_next_list( $surface );
+		}
+		return $surface;
+	}
+
+	/**
+	 * A surface whose main list a menu tool hid, with the next list the
+	 * user may see in its place (manage, then the first view whose cap they
+	 * hold), or null when none is left. For a surface two plugins share,
+	 * whose main list is one plugin's (Flamingo's inbox before Contact Form
+	 * 7's forms; ACF's groups before ACPT's).
+	 *
+	 * The status card leaves with the main list: it reports on that list,
+	 * and its chart narrows it.
+	 *
+	 * @param array $surface The surface, its hidden lists already removed.
+	 * @return array|null
+	 */
+	private static function with_next_list( array $surface ) {
+		unset( $surface['status'] );
+		if ( isset( $surface['manage'] ) && is_array( $surface['manage'] ) && ! empty( $surface['manage']['route'] ) ) {
+			$surface['collection'] = $surface['manage'];
+			unset( $surface['manage'] );
+			return $surface;
+		}
+		foreach ( (array) ( $surface['views'] ?? array() ) as $i => $view ) {
+			if ( ! is_array( $view ) || empty( $view['route'] ) || ( ! empty( $view['cap'] ) && ! current_user_can( $view['cap'] ) ) ) {
+				continue;
+			}
+			unset( $view['cap'], $surface['views'][ $i ] );
+			$surface['collection'] = $view;
+			$surface['views']      = array_values( $surface['views'] );
+			return $surface;
+		}
+		return null;
+	}
+
+	/**
+	 * Every admin page a surface or one of its lists names as hosting it
+	 * (adminPages), for the notices capture to ask the menu tools about.
 	 *
 	 * @return string[]
 	 */
@@ -184,7 +236,10 @@ class Minn_Admin_Surfaces {
 			if ( ! is_array( $surface ) ) {
 				continue;
 			}
-			$items = array_merge( array( $surface ), is_array( $surface['views'] ?? null ) ? $surface['views'] : array() );
+			$items = array_merge(
+				array( $surface, $surface['collection'] ?? null, $surface['manage'] ?? null ),
+				is_array( $surface['views'] ?? null ) ? $surface['views'] : array()
+			);
 			foreach ( $items as $item ) {
 				foreach ( is_array( $item ) ? (array) ( $item['adminPages'] ?? array() ) : array() as $slug ) {
 					$out[ (string) $slug ] = true;
@@ -1004,8 +1059,9 @@ class Minn_Admin_Surfaces {
 	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href', 'cap' );
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
 	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter', 'filterBar', 'sortQuery', 'open', 'import', 'dateQuery' );
-	// A view (manage, or an entry in views) may name its own plugin, list or
-	// hosting pages, and leaves without the surface when a menu tool hides them.
+	// Any list (collection, manage, or an entry in views) may name its own
+	// plugin, list or hosting pages, and leaves without the surface when a
+	// menu tool hides them; a hidden main list gives way to the next one.
 	const VIEW_KEYS       = array( 'plugin', 'contentTypes', 'adminPages' );
 	const FILTER_KEYS     = array( 'label', 'options', 'query', 'param', 'json', 'route', 'valueKey', 'labelKey', 'allLabel' );
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit', 'replyCap' );
@@ -1312,11 +1368,11 @@ class Minn_Admin_Surfaces {
 		// Every list view validates with the same collection vocabulary:
 		// `collection`, `manage`, and each `views` entry (which additionally
 		// needs a viewLabel to name its switcher tab and may carry `cap`).
-		// manage and each views entry may also carry VIEW_KEYS.
+		// Each of them may also carry VIEW_KEYS.
 		$colls = array();
 		foreach ( array( 'collection', 'manage' ) as $ck ) {
 			if ( ! empty( $surface[ $ck ] ) && is_array( $surface[ $ck ] ) ) {
-				$colls[ $ck ] = 'manage' === $ck ? array_diff_key( $surface[ $ck ], array_flip( self::VIEW_KEYS ) ) : $surface[ $ck ];
+				$colls[ $ck ] = array_diff_key( $surface[ $ck ], array_flip( self::VIEW_KEYS ) );
 			}
 		}
 		if ( isset( $surface['views'] ) ) {
@@ -1490,7 +1546,7 @@ class Minn_Admin_Surfaces {
 		// A plugin a menu tool hid from this user is not named here either.
 		$tool = self::menu_tool_context();
 		foreach ( (array) $surfaces['value'] as $id => $s ) {
-			if ( is_array( $s ) && self::hidden_by_menu_tool( $s, $tool ) ) {
+			if ( is_array( $s ) && null === self::after_menu_tool( $s, $tool ) ) {
 				continue;
 			}
 			$s_rows[] = array(

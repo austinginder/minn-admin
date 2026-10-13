@@ -263,8 +263,10 @@ class Minn_Admin_Notices {
 		// a top-level page). Pages registered without a menu parent are
 		// never in a menu, so they are left out.
 		$pages = array();
+		$tops  = array();
 		foreach ( $hooks as $slug => $unused ) {
-			$owner = self::page_owner( get_plugin_page_hookname( (string) $slug, '' ) );
+			$owner                  = self::page_owner( get_plugin_page_hookname( (string) $slug, '' ) );
+			$tops[ (string) $slug ] = $owner;
 			if ( '' !== $owner ) {
 				$pages[ $owner ][ (string) $slug ] = '';
 			}
@@ -273,7 +275,7 @@ class Minn_Admin_Notices {
 			if ( ! isset( $hooks[ (string) $parent ] ) ) {
 				continue;
 			}
-			$owner = self::page_owner( get_plugin_page_hookname( (string) $slug, (string) $parent ) );
+			$owner = self::page_owner( get_plugin_page_hookname( (string) $slug, (string) $parent ), $tops[ (string) $parent ] ?? '' );
 			if ( '' !== $owner && ! isset( $pages[ $owner ][ (string) $slug ] ) ) {
 				$pages[ $owner ][ (string) $slug ] = (string) $parent;
 			}
@@ -338,8 +340,21 @@ class Minn_Admin_Notices {
 		return $removed;
 	}
 
-	/** The plugin or theme that owns an admin page hook, or ''. */
-	private static function page_owner( $hook ) {
+	/**
+	 * The plugin or theme that owns an admin page hook, or ''.
+	 *
+	 * A page a shared framework draws is no one's, except under a top-level
+	 * menu a plugin draws itself when the framework copy that drew it is
+	 * that same plugin's (Rank Math's CMB2 settings pages under its own
+	 * menu). Both have to agree: another plugin's Freemius Account page
+	 * drawn from Post SMTP's copy, or a YITH panel under the menu YITH's
+	 * framework draws, stays no one's.
+	 *
+	 * @param string $hook The page's hook name.
+	 * @param string $host The owner of the top-level menu it sits under, or ''.
+	 * @return string
+	 */
+	private static function page_owner( $hook, $host = '' ) {
 		if ( '' === $hook || empty( $GLOBALS['wp_filter'][ $hook ] ) ) {
 			return '';
 		}
@@ -348,7 +363,8 @@ class Minn_Admin_Notices {
 				$ref  = self::reflect( $registered['function'] );
 				$file = $ref && $ref->getFileName() ? wp_normalize_path( $ref->getFileName() ) : '';
 				if ( self::in_shared_framework( $file ) ) {
-					return '';
+					$carrier = self::owner_of_file( $file );
+					return '' !== $host && 'plugin' === $carrier['type'] && $carrier['slug'] === $host ? $host : '';
 				}
 				$owner = self::owner_of_file( $file );
 				if ( 'plugin' === $owner['type'] && '' !== $owner['slug'] ) {

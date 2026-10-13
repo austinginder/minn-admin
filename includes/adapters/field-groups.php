@@ -101,23 +101,31 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$plugins = array_merge( $plugins, $source['plugin'] );
 	}
 	$first     = array_shift( $sources );
+	// Every list names the plugin it belongs to, so a menu tool that hides
+	// one plugin takes its lists away and leaves the others: with the first
+	// plugin's gone, the next plugin's list becomes the main one.
+	$list_keys = function ( $source ) {
+		$keys = array();
+		if ( $source['plugin'] ) {
+			$keys['plugin'] = $source['plugin'];
+		}
+		if ( $source['contentTypes'] ) {
+			$keys['contentTypes'] = $source['contentTypes'];
+		}
+		return $keys;
+	};
 	// The first provider's own extra views stay directly behind its list, so
 	// its two lists remain neighbours however many other plugins are here.
-	$views = $first['views'];
+	$views = array();
+	foreach ( $first['views'] as $own ) {
+		$views[] = $list_keys( $first ) + $own;
+	}
 	foreach ( $sources as $source ) {
 		// Per-view capability, so a reader who may see one plugin's schema
 		// but not another's gets only the view they may have. The route's own
-		// permission callback is still the real gate. And the view's own
-		// plugin, so a menu tool that hides that plugin takes its views away
-		// and leaves the others.
-		$own_keys = array( 'cap' => $source['cap'] );
-		if ( $source['plugin'] ) {
-			$own_keys['plugin'] = $source['plugin'];
-		}
-		if ( $source['contentTypes'] ) {
-			$own_keys['contentTypes'] = $source['contentTypes'];
-		}
-		$views[] = $own_keys + $source['collection'];
+		// permission callback is still the real gate.
+		$own_keys = array( 'cap' => $source['cap'] ) + $list_keys( $source );
+		$views[]  = $own_keys + $source['collection'];
 		foreach ( $source['views'] as $own ) {
 			$views[] = $own_keys + $own;
 		}
@@ -130,7 +138,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'plugin'     => array_values( array_unique( $plugins ) ),
 		'icon'       => 'grid',
 		'cap'        => $first['cap'],
-		'collection' => $first['collection'],
+		'collection' => $list_keys( $first ) + $first['collection'],
 	);
 	if ( $first['contentTypes'] ) {
 		$surfaces[ MINN_ADMIN_FIELD_GROUPS_SURFACE ]['contentTypes'] = $first['contentTypes'];

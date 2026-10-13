@@ -130,15 +130,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => $cf7 ? 'Contact Form 7' : 'Flamingo',
 		'plugin'     => array( 'contact-form-7', 'flamingo' ),
-		// The messages are Flamingo's inbox, so they leave with that page
-		// even while Contact Form 7 is still in the menu; the forms view
-		// leaves with Contact Form 7.
-		'adminPages' => array( 'flamingo_inbound' ),
 		'status'     => array( 'route' => 'minn-admin/v1/cf7/status' ),
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'collection' => array(
 			'viewLabel' => __( 'Messages', 'minn-admin' ),
+			// The messages are Flamingo's inbox, so they leave with Flamingo
+			// or that page, and Contact Form 7's forms list takes their place
+			// while Contact Form 7 is still in the menu; the forms list leaves
+			// with Contact Form 7.
+			'plugin'    => 'flamingo',
+			'adminPages' => array( 'flamingo_inbound' ),
 			'route'     => 'minn-admin/v1/cf7/messages',
 			// A status-chart bar narrows the list to that day (the chart's
 			// points carry from/to; the route reads after/before).

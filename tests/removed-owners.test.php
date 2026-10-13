@@ -234,6 +234,10 @@ try {
 			$store_hiding( array( 'owners' => array( 'advanced-custom-post-type' ), 'paged' => array( $fg_dir, 'advanced-custom-post-type' ) ) );
 			$fg_after = $fg_now();
 			$check( 'with only ACPT hidden, its view leaves Field Groups and ACF\'s groups stay', null !== $fg_after && ! $fg_has_acpt( $fg_after ) );
+			$store_hiding( array( 'owners' => array( $fg_dir ), 'paged' => array( $fg_dir, 'advanced-custom-post-type' ) ) );
+			$fg_after = $fg_now();
+			$fg_acf_left = $fg_after ? array_filter( (array) ( $fg_after['views'] ?? array() ), function ( $v ) { return false !== strpos( (string) ( $v['route'] ?? '' ), 'acf/schema' ); } ) : array();
+			$check( 'with ACF hidden and ACPT shown, ACPT\'s groups become the Field Groups list and ACF\'s lists leave', $fg_after && false !== strpos( (string) ( $fg_after['collection']['route'] ?? '' ), 'acpt/groups' ) && ! $fg_acf_left, wp_json_encode( $fg_after ? $fg_after['collection']['route'] ?? null : null ) );
 			$store_hiding( array() );
 			$check( 'control: with nothing hidden, the ACPT view shows', $fg_has_acpt( $fg_now() ) );
 		}
@@ -311,18 +315,29 @@ try {
 		$check( 'OS-11 control: with the panel shown it stays', in_array( 'yith-gift-cards', $ids(), true ) );
 	}
 
-	// --- OS-16 and NI-14 (b): a view follows its own plugin -------------------
+	// --- OS-16 and NI-14 (b): a list follows its own plugin -------------------
+	$surface_now = static function ( $id ) {
+		foreach ( Minn_Admin_Surfaces::for_current_user() as $s ) {
+			if ( $id === $s['id'] ) {
+				return $s;
+			}
+		}
+		return null;
+	};
 	if ( ! isset( $registry['cf7']['manage'] ) ) {
 		echo "SKIP  OS-16 needs Contact Form 7 and Flamingo\n";
 	} else {
 		$cf7_paged = array( 'contact-form-7', 'flamingo' );
 		$store_hiding( array( 'pages' => array( 'flamingo_inbound' ), 'owners' => array( 'flamingo' ), 'paged' => $cf7_paged ) );
-		$check( 'OS-16 with only Flamingo hidden, its inbox leaves', ! in_array( 'cf7', $ids(), true ) );
+		$cf7_s = $surface_now( 'cf7' );
+		$check( 'CF7 with only Flamingo hidden, its inbox leaves and Contact Form 7\'s forms stay as the list', $cf7_s && false !== strpos( (string) ( $cf7_s['collection']['route'] ?? '' ), 'cf7/forms' ) && ! isset( $cf7_s['manage'] ) && ! isset( $cf7_s['status'] ), wp_json_encode( $cf7_s ? array( $cf7_s['collection']['route'] ?? null, array_keys( $cf7_s ) ) : null ) );
+		$store_hiding( array( 'pages' => array( 'flamingo_inbound' ) ) );
+		$cf7_s = $surface_now( 'cf7' );
+		$check( 'CF7 with only Flamingo\'s inbox page hidden, the same', $cf7_s && false !== strpos( (string) ( $cf7_s['collection']['route'] ?? '' ), 'cf7/forms' ) );
+		$store_hiding( array( 'pages' => array( 'flamingo_inbound' ), 'owners' => array( 'flamingo', 'contact-form-7' ), 'paged' => $cf7_paged ) );
+		$check( 'control: with both hidden, the surface leaves', null === $surface_now( 'cf7' ) );
 		$store_hiding( array( 'owners' => array( 'contact-form-7' ), 'paged' => $cf7_paged ) );
-		$cf7_s = null;
-		foreach ( Minn_Admin_Surfaces::for_current_user() as $s ) {
-			$cf7_s = 'cf7' === $s['id'] ? $s : $cf7_s;
-		}
+		$cf7_s = $surface_now( 'cf7' );
 		$check( 'OS-16 with only Contact Form 7 hidden, the inbox stays and the Forms view leaves', $cf7_s && ! isset( $cf7_s['manage'] ) );
 		$store_hiding( array() );
 		$cf7_s = null;
@@ -338,7 +353,7 @@ try {
 			'cap'        => 'read',
 			'plugin'     => 'minn-probe-owner',
 			'collection' => array( 'route' => $route, 'columns' => array( array( 'key' => 'a', 'label' => 'A' ) ), 'plugin' => 'minn-probe-x', 'adminPages' => array( 'minn-probe-y' ) ),
-			'manage'     => array( 'route' => $route, 'viewLabel' => 'Theirs', 'plugin' => 'minn-probe-viewer', 'columns' => array( array( 'key' => 'a', 'label' => 'A' ) ) ),
+			'manage'     => array( 'route' => $route, 'viewLabel' => 'Theirs', 'plugin' => 'minn-probe-viewer', 'adminPages' => array( 'minn-probe-m' ), 'columns' => array( array( 'key' => 'a', 'label' => 'A' ) ) ),
 			'views'      => array( array( 'viewLabel' => 'Listed', 'route' => $route, 'plugin' => 'minn-probe-viewer', 'contentTypes' => array( 'pt:minn_probe_pt' ), 'adminPages' => array( 'minn-probe-z' ), 'columns' => array( array( 'key' => 'a', 'label' => 'A' ) ) ) ),
 		);
 		return $surfaces;
@@ -352,7 +367,9 @@ try {
 	}
 	$keys_problems = (array) ( $keys_row['problems'] ?? array() );
 	$check( 'NI-14b a view\'s own contentTypes is not reported as unknown', $keys_row && ! preg_grep( '/^views\[0\]: unknown key/', $keys_problems ), wp_json_encode( $keys_problems ) );
-	$check( 'NI-14b plugin and adminPages on a surface\'s main collection are reported, as they do nothing there', (bool) preg_grep( '/^collection: unknown key "plugin"/', $keys_problems ) && (bool) preg_grep( '/^collection: unknown key "adminPages"/', $keys_problems ), wp_json_encode( $keys_problems ) );
+	$check( 'plugin and adminPages on a surface\'s main collection are not reported, as the main list now follows them', ! preg_grep( '/^collection: unknown key/', $keys_problems ), wp_json_encode( $keys_problems ) );
+	$keys_declared = Minn_Admin_Surfaces::declared_admin_pages();
+	$check( 'the capture asks about the hosting pages a main list and manage name', in_array( 'minn-probe-y', $keys_declared, true ) && in_array( 'minn-probe-m', $keys_declared, true ), wp_json_encode( array_values( array_filter( $keys_declared, function ( $p ) { return 0 === strpos( $p, 'minn-probe' ); } ) ) ) );
 	$check( 'NI-14b manage\'s own plugin is not reported', ! preg_grep( '/^manage: unknown key/', $keys_problems ), wp_json_encode( $keys_problems ) );
 	$store_hiding( array( 'owners' => array( 'minn-probe-viewer' ), 'paged' => array( 'minn-probe-owner', 'minn-probe-viewer' ) ) );
 	$keys_s = null;
@@ -360,6 +377,14 @@ try {
 		$keys_s = 'minn-probe-keys' === $s['id'] ? $s : $keys_s;
 	}
 	$check( 'NI-14b manage leaves with its own plugin, as a view does, and the surface stays', $keys_s && ! isset( $keys_s['manage'] ) && array() === (array) ( $keys_s['views'] ?? array() ), wp_json_encode( $keys_s ? array_keys( $keys_s ) : null ) );
+	$store_hiding( array( 'owners' => array( 'minn-probe-x' ), 'paged' => array( 'minn-probe-owner', 'minn-probe-x' ) ) );
+	$keys_s = $surface_now( 'minn-probe-keys' );
+	$check( 'a main list whose own plugin is hidden gives way to the next list, and the surface stays', $keys_s && 'Theirs' === ( $keys_s['collection']['viewLabel'] ?? null ) && ! isset( $keys_s['manage'] ), wp_json_encode( $keys_s ? $keys_s['collection'] : null ) );
+	$store_hiding( array( 'owners' => array( 'minn-probe-x', 'minn-probe-viewer' ), 'paged' => array( 'minn-probe-owner', 'minn-probe-x', 'minn-probe-viewer' ) ) );
+	$check( 'and with every list hidden, the surface leaves', null === $surface_now( 'minn-probe-keys' ) );
+	$store_hiding( array() );
+	$keys_s = $surface_now( 'minn-probe-keys' );
+	$check( 'control: with nothing hidden, the main list is its own', $keys_s && ! isset( $keys_s['collection']['viewLabel'] ) && isset( $keys_s['manage'] ) );
 	remove_filter( 'minn_admin_surfaces', $probe_keys, 999 );
 	$all_ref->setValue( null, null );
 
@@ -382,6 +407,34 @@ try {
 	Minn_Admin_Notices::capture_removed_owners();
 	$check( 'OS-12 control: the plugin\'s own page is still credited to it', in_array( 'minn-probe-owner', (array) $capture_state( 'owners_with_pages' ), true ) );
 	remove_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_page' );
+
+	// --- FW: a framework page under the plugin's own menu, from its own copy -
+	// Rank Math's CMB2 settings pages sit under its own top-level menu. With
+	// its Dashboard hidden, WordPress makes the first page left the menu's
+	// link, and that settings page is still in front of the client.
+	$other_dir = WP_PLUGIN_DIR . '/minn-probe-other';
+	wp_mkdir_p( $other_dir . '/cmb2' );
+	file_put_contents( $other_dir . '/cmb2/page.php', "<?php\nfunction minn_probe_other_fw() {}\n" );
+	include_once $other_dir . '/cmb2/page.php';
+	$fw_capture = function ( $fn ) use ( $vouch ) {
+		global $menu, $submenu, $admin_page_hooks, $_parent_pages;
+		$menu             = array( array( 'Probe', 'read', 'minn-probe-fw' ) );
+		$submenu          = array( 'minn-probe-fw' => array( array( 'Settings', 'read', 'minn-probe-fw' ) ) );
+		$admin_page_hooks = array( 'minn-probe-owner' => 'minn-probe-owner', 'minn-probe-fw' => 'minn-probe-fw' );
+		$_parent_pages    = array( 'minn-probe-owner' => false, 'minn-probe-fw' => 'minn-probe-owner' );
+		add_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_page' );
+		add_action( get_plugin_page_hookname( 'minn-probe-fw', 'minn-probe-owner' ), $fn );
+		add_filter( 'minn_admin_admin_page_hidden', $vouch, 10, 2 );
+		$removed = Minn_Admin_Notices::capture_removed_owners();
+		remove_filter( 'minn_admin_admin_page_hidden', $vouch, 10 );
+		remove_action( get_plugin_page_hookname( 'minn-probe-fw', 'minn-probe-owner' ), $fn );
+		remove_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_page' );
+		return $removed;
+	};
+	$fw_removed = $fw_capture( 'minn_probe_owner_fw_' . substr( md5( 'CMB2' ), 0, 8 ) );
+	$check( 'FW a framework settings page under the plugin\'s own menu, from its own copy, keeps the plugin while it is shown', ! in_array( 'minn-probe-owner', $fw_removed, true ), wp_json_encode( $fw_removed ) );
+	$fw_removed = $fw_capture( 'minn_probe_other_fw' );
+	$check( 'control: drawn from another plugin\'s copy of the framework, it is not the plugin\'s, which is hidden', in_array( 'minn-probe-owner', $fw_removed, true ), wp_json_encode( $fw_removed ) );
 
 	// --- NI-14 (c): a docroot named like a framework keeps hiding -------------
 	// Only a fresh process can have another plugins folder, so a child run
@@ -557,6 +610,15 @@ try {
 	foreach ( array( 'probe.php', 'page.php' ) as $f ) {
 		if ( is_file( $probe_dir . '/' . $f ) ) {
 			unlink( $probe_dir . '/' . $f );
+		}
+	}
+	$other_dir = WP_PLUGIN_DIR . '/minn-probe-other';
+	if ( is_file( $other_dir . '/cmb2/page.php' ) ) {
+		unlink( $other_dir . '/cmb2/page.php' );
+	}
+	foreach ( array( $other_dir . '/cmb2', $other_dir ) as $d ) {
+		if ( is_dir( $d ) ) {
+			rmdir( $d );
 		}
 	}
 	if ( is_dir( $probe_dir ) ) {
