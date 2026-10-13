@@ -574,6 +574,28 @@ if ( ! function_exists( 'cptui_get_post_type_data' ) && ! defined( 'CPTUI_VERSIO
 	$check( '02-04 control: unlocked, the administrator may still edit it', is_array( $cu_before ) && ! empty( $cu_before['editable'] ), wp_json_encode( $cu_before ) );
 }
 
+// --- 06-02 ACPT: the builder's choices round-trip -----------------------------
+// The builder resends every choice field on any group save. Its parser
+// trimmed before splitting, so an empty-value option (" : None") came back as
+// a new, selectable ": None" and the stored one (and its default) was lost:
+// the defect fabda202 fixed for ACF.
+if ( ! function_exists( 'minn_admin_acpt_builder_choices_in' ) || ! function_exists( 'minn_admin_acpt_builder_choices_out' ) ) {
+	$skip( '06-02 ACPT adapter not loaded' );
+} else {
+	$ap_stored = array(
+		array( 'id' => 'opt-none', 'value' => '', 'label' => 'None', 'isDefault' => true ),
+		array( 'id' => 'opt-wide', 'value' => '16:9', 'label' => 'Wide', 'isDefault' => false ),
+		array( 'id' => 'opt-a', 'value' => 'a', 'label' => 'A', 'isDefault' => false ),
+	);
+	$ap_back = minn_admin_acpt_builder_choices_in( minn_admin_acpt_builder_choices_out( $ap_stored ), $ap_stored );
+	$ap_pick = function ( $rows ) {
+		return array_map( function ( $r ) {
+			return array( $r['id'] ?? null, $r['value'], $r['label'], ! empty( $r['isDefault'] ) );
+		}, $rows );
+	};
+	$check( '06-02 an ACPT group\'s choices come back as stored, an empty value and its default included', $ap_pick( $ap_back ) === $ap_pick( $ap_stored ), wp_json_encode( $ap_pick( $ap_back ) ) );
+}
+
 // @sections
 
 $summary();

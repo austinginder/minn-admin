@@ -1311,15 +1311,16 @@ function minn_admin_acpt_builder_choices_in( $lines, $stored ) {
 	}
 	$out = array();
 	foreach ( preg_split( '/\r\n|\r|\n/', (string) $lines ) as $line ) {
-		$line = trim( $line );
-		if ( '' === $line ) {
+		if ( '' === trim( $line ) ) {
 			continue;
 		}
-		// "value : Label", spaces required, the shape the encoder writes:
-		// a value that itself holds a colon (16:9, 10:30) is not split.
-		$parts = preg_split( '/\s+:\s+/', $line, 2 );
-		$value = $parts[0];
-		$label = isset( $parts[1] ) && '' !== $parts[1] ? $parts[1] : $value;
+		// "value : Label", the shape the encoder writes, split on ' : '
+		// BEFORE trimming as ACF's own decoder does: an empty value
+		// (' : None') stays empty, and a value that holds a colon of its own
+		// (16:9, 10:30) is not split.
+		$parts = explode( ' : ', $line, 2 );
+		$value = trim( $parts[0] );
+		$label = isset( $parts[1] ) && '' !== trim( $parts[1] ) ? trim( $parts[1] ) : $value;
 		$row   = array( 'label' => $label, 'value' => $value, 'isDefault' => false );
 		if ( isset( $by_value[ $value ] ) ) {
 			$row['id']        = $by_value[ $value ]['id'] ?? null;
