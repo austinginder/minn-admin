@@ -35110,6 +35110,7 @@
 		const restBase = state.editorType;
 		const tid = String( state.editorId );
 		const p = await api( `wp/v2/${ restBase }/${ tplSeg( tid ) }?context=edit&_fields=id,slug,title,content,status,source,origin,has_theme_file,type,modified,area` );
+		if ( ! editorTargetIs( restBase, tid ) ) return false;
 		const raw = ( p.content && ( p.content.raw != null ? p.content.raw : '' ) ) || '';
 		const mode = editorModeFor( raw );
 		state.editor = {
@@ -35184,9 +35185,16 @@
 		return ( await editorBasesPromise ).includes( type );
 	}
 
+	// Is the editor's address still the one a load was started for? Two quick
+	// navigations start two loads, and the first can finish last: it must
+	// not paint its item (or its error) at the second address.
+	const editorTargetIs = ( type, id ) => state.route === 'editor' && state.editorType === type
+		&& String( state.editorId == null ? '' : state.editorId ) === String( id == null ? '' : id );
+
 	async function loadEditor() {
 		// Read once: an in-app navigation during an await below changes the
-		// route, never what this load fetches and builds.
+		// route, never what this load fetches and builds. A load whose
+		// address has moved on answers false and builds nothing.
 		const type = state.editorType;
 		const id = state.editorId;
 		if ( id && isTemplateType( type ) ) {
@@ -35209,6 +35217,7 @@
 			// native builders (Etch, Divi 5) stay editable; islands protect them.
 			const builder = p.minn_builder || null;
 			const mode = builder && builder.owns_content ? 'locked' : editorModeFor( raw );
+			if ( ! editorTargetIs( type, id ) ) return false;
 			state.editor = {
 				id: p.id,
 				type: type,
@@ -35364,6 +35373,7 @@
 			// discussion, excerpt or page attributes. New patterns are synced
 			// (the default: no 'unsynced' status meta is written on create).
 			const isPattern = newType === 'blocks';
+			if ( ! editorTargetIs( type, id ) ) return false;
 			state.editor = {
 				id: null, type: newType, title: '', content: '', status: 'draft', mode: 'blocks',
 				date: null, newDate: null, slug: '', slugValue: '', link: '', savedAt: null, categoryIds: new Set(),
@@ -38774,7 +38784,11 @@
 		if ( ! state.editor || ( state.editorId && state.editor.id !== state.editorId ) || ( ! state.editorId && state.editor.id ) ) {
 			state.editor = null;
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading editor…' ) ) }</div>`;
-			loadEditor().then( renderIfCurrent( 'editor' ) ).catch( showErr );
+			const forType = state.editorType;
+			const forId = state.editorId;
+			loadEditor()
+				.then( ( kept ) => { if ( false !== kept ) renderIfCurrent( 'editor' )(); } )
+				.catch( ( e ) => { if ( editorTargetIs( forType, forId ) ) showErr( e ); } );
 			return;
 		}
 		const ed = state.editor;

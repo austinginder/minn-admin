@@ -24,13 +24,15 @@
  *   type      The editor refuses a REST base from its address that is not
  *             a content type.
  *   locked    A settings tab with every group locked offers no Save.
+ *   race      An editor load that answers after its address moved on
+ *             paints nothing there.
  *
  * Every request that could change something outside a fixture is answered
  * by a route mock: the H1 probes never reach the server, and the WP Migrate
  * run is mocked end to end (nothing is migrated). Fixtures (a draft post,
  * a variable product) are made over REST and removed on the way out.
  *
- * MINN_DELTA_ONLY=rows|flex|stock|ids|href|migrate|nav|gallery|default|type|locked
+ * MINN_DELTA_ONLY=rows|flex|stock|ids|href|migrate|nav|gallery|default|type|race|locked
  * runs those sections (comma-separated).
  */
 const fs = require( 'fs' );
@@ -106,6 +108,7 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 	let post2Id = null;
 	let productId = null;
 	let cptId = null;
+	const raceMade = [];
 
 	try {
 		/* ===== NI-2 · rows edited while a structural save is in flight ===== */
@@ -681,6 +684,66 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 			}
 		}
 
+		/* ===== Final · an editor load whose address moved on ===== */
+		if ( want( 'race' ) ) {
+			const mk = async ( base, title ) => {
+				const r = await api( 'wp/v2/' + base, { method: 'POST', body: JSON.stringify( { title, status: 'draft', content: '<p>x</p>' } ) } );
+				const nid = r.body && Number.isInteger( r.body.id ) && r.body.id > 1 ? r.body.id : null;
+				if ( nid ) raceMade.push( [ base, nid ] );
+				return nid;
+			};
+			const jobId = await mk( 'job-listings', 'Delta race job' );
+			const aId = await mk( 'posts', 'Delta race A' );
+			const bId = await mk( 'posts', 'Delta race B' );
+			const navTo = ( to ) => page.evaluate( ( p ) => {
+				history.pushState( null, '', p );
+				window.dispatchEvent( new PopStateEvent( 'popstate' ) );
+			}, to );
+			const titleShown = () => page.evaluate( () => ( document.querySelector( '#minn-editor-title' ) || {} ).value || '' );
+			if ( jobId && aId && bId ) {
+				// Control: a normal open.
+				await page.goto( BASE + '/minn-admin/editor/posts/' + aId, { waitUntil: 'domcontentloaded' } );
+				await page.waitForFunction( () => !! document.querySelector( '#minn-editor-title' ), null, { timeout: 60000 } ).catch( () => {} );
+				await page.waitForTimeout( 800 );
+				t.check( 'race control: a normal open shows its item', 'Delta race A' === await titleShown(), await titleShown() );
+				// Control: a normal in-app move between two posts, and back.
+				await navTo( '/minn-admin/editor/posts/' + bId );
+				await page.waitForFunction( () => 'Delta race B' === ( document.querySelector( '#minn-editor-title' ) || {} ).value, null, { timeout: 60000 } ).catch( () => {} );
+				const onB = await titleShown();
+				await navTo( '/minn-admin/editor/posts/' + aId );
+				await page.waitForFunction( () => 'Delta race A' === ( document.querySelector( '#minn-editor-title' ) || {} ).value, null, { timeout: 60000 } ).catch( () => {} );
+				t.check( 'race control: an in-app move between two posts shows each in turn', 'Delta race B' === onB && 'Delta race A' === await titleShown(), JSON.stringify( [ onB, await titleShown() ] ) );
+
+				// The first of two quick moves answers last: /editor/job-listings/N
+				// is held, then /editor/posts/N (no such post) answers first.
+				let asked = false;
+				const jobItem = ( u ) => new RegExp( 'wp/v2/job-listings/' + jobId + '(\\?|$)' ).test( u.pathname + ( u.searchParams.get( 'rest_route' ) || '' ) ) && 'edit' === u.searchParams.get( 'context' );
+				const holdJob = async ( route ) => {
+					asked = true;
+					await new Promise( ( r ) => setTimeout( r, 6000 ) );
+					await route.continue().catch( () => {} );
+				};
+				await page.route( jobItem, holdJob );
+				try {
+					await navTo( '/minn-admin/editor/job-listings/' + jobId );
+					for ( let i = 0; i < 150 && ! asked; i++ ) await page.waitForTimeout( 100 );
+					await page.waitForTimeout( 200 );
+					await navTo( '/minn-admin/editor/posts/' + jobId );
+					await page.waitForTimeout( 9000 );
+					const after = await page.evaluate( () => ( {
+						path: location.pathname,
+						title: ( document.querySelector( '#minn-editor-title' ) || {} ).value || '',
+						view: ( ( document.querySelector( '#minn-view' ) || {} ).textContent || '' ).trim().slice( 0, 90 ),
+					} ) );
+					t.check( 'race: a load that answers after its address moved on paints nothing at the new address', asked && 'Delta race job' !== after.title, JSON.stringify( after ) );
+				} finally {
+					await page.unroute( jobItem, holdJob ).catch( () => {} );
+				}
+			} else {
+				console.log( 'SKIP  race: fixtures not created' );
+			}
+		}
+
 		/* ===== Round 2 · a fully locked settings tab ===== */
 		if ( want( 'locked' ) && surfaces.includes( 'asset-cleanup' ) ) {
 			const lockedRoute = ( u ) => /asset-cleanup\/settings\/optimize/.test( u.pathname + decodeURIComponent( u.search ) );
@@ -807,6 +870,7 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 		if ( postId ) await deletePost( page, postId ).catch( () => {} );
 		if ( post2Id ) await deletePost( page, post2Id ).catch( () => {} );
 		if ( cptId ) await api( `wp/v2/job-listings/${ cptId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		for ( const [ base, rid ] of raceMade ) await api( `wp/v2/${ base }/${ rid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( productId ) await api( `wc/v3/products/${ productId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		await t.done( browser, errors );
 	}
