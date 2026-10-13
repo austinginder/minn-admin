@@ -61,15 +61,34 @@ function minn_admin_scrutoscope_has_table_stats() {
 	return method_exists( '\\Scrutoscope\\Profiler\\Storage', 'get_table_stats' );
 }
 
-/** Human label for a route_class value; unknown classes pass through. */
+/**
+ * Human label for a route_class value; unknown classes pass through. Their
+ * classifier (Report::classify_route() and classify_frontend_route(), plus
+ * the Profiler's own fallbacks) writes the hyphenated names.
+ */
 function minn_admin_scrutoscope_route_class_label( $class ) {
 	$map = array(
-		'front'   => __( 'Front end', 'minn-admin' ),
-		'admin'   => __( 'Admin', 'minn-admin' ),
-		'ajax'    => __( 'Ajax', 'minn-admin' ),
-		'rest'    => __( 'REST', 'minn-admin' ),
-		'wp-cron' => __( 'Cron', 'minn-admin' ),
-		'cli'     => __( 'CLI', 'minn-admin' ),
+		'front'                => __( 'Front end', 'minn-admin' ),
+		'admin'                => __( 'Admin', 'minn-admin' ),
+		'ajax'                 => __( 'Ajax', 'minn-admin' ),
+		'rest'                 => __( 'REST', 'minn-admin' ),
+		'wp-cron'              => __( 'Cron', 'minn-admin' ),
+		'cli'                  => __( 'CLI', 'minn-admin' ),
+		'frontend'             => __( 'Front end', 'minn-admin' ),
+		'frontend-home'        => __( 'Home page', 'minn-admin' ),
+		'singular'             => __( 'Single page', 'minn-admin' ),
+		'archive'              => __( 'Archive', 'minn-admin' ),
+		'search'               => __( 'Search', 'minn-admin' ),
+		'not-found'            => __( 'Not found', 'minn-admin' ),
+		'woocommerce-shop'     => __( 'Shop', 'minn-admin' ),
+		'woocommerce-cart'     => __( 'Cart', 'minn-admin' ),
+		'woocommerce-checkout' => __( 'Checkout', 'minn-admin' ),
+		'woocommerce-product'  => __( 'Product', 'minn-admin' ),
+		'wp-admin'             => __( 'Admin', 'minn-admin' ),
+		'admin-ajax'           => __( 'Ajax', 'minn-admin' ),
+		'rest-api'             => __( 'REST', 'minn-admin' ),
+		'wp-login'             => __( 'Login', 'minn-admin' ),
+		'unknown'              => __( 'Unknown', 'minn-admin' ),
 	);
 	$class = (string) $class;
 	if ( isset( $map[ $class ] ) ) {
@@ -92,6 +111,11 @@ function minn_admin_scrutoscope_shape_row( array $r ) {
 	$route = (string) ( $r['route'] ?? '' );
 	$type  = (string) ( $r['profile_type'] ?? '' );
 	$type  = '' !== $type ? $type : 'session';
+	$types = array(
+		'session'    => __( 'Session', 'minn-admin' ),
+		'background' => __( 'Background', 'minn-admin' ),
+		'on_demand'  => __( 'On demand', 'minn-admin' ),
+	);
 
 	return array(
 		'id'          => (int) ( $r['id'] ?? 0 ),
@@ -102,8 +126,10 @@ function minn_admin_scrutoscope_shape_row( array $r ) {
 		'duration'    => $ms . ' ms',
 		'duration_ms' => $ms,
 		'type'        => $type,
+		'type_label'  => $types[ $type ] ?? $type,
 		'role'        => (string) ( $r['user_role'] ?? '' ) ?: '—',
-		'status'      => ! empty( $r['is_pinned'] ) ? 'pinned' : $type,
+		// The pill title-cases its value and turns hyphens into spaces.
+		'status'      => ! empty( $r['is_pinned'] ) ? 'pinned' : str_replace( '_', '-', $type ),
 		'pinned'      => ! empty( $r['is_pinned'] ),
 		// captured_at is current_time('mysql') = site-local; emit raw.
 		'date'        => (string) ( $r['captured_at'] ?? '' ),
@@ -233,6 +259,31 @@ function minn_admin_scrutoscope_profile_sections( $id ) {
 	}
 
 	$summary = isset( $data['summary'] ) && is_array( $data['summary'] ) ? $data['summary'] : array();
+
+	// Their route reads summary.total_callbacks and each source's
+	// callback_count, neither of which their report writes (it stores
+	// summary.callback_count and a per-source call_count), so both always
+	// read 0. The counts come from the stored profile; get_profile()
+	// re-applies their sanitizer on read. Its captured_at is also what
+	// their route stamps +00:00 although it is current_time('mysql'),
+	// site-local.
+	$stored = \Scrutoscope\Profiler\Storage::get_profile( (int) $id );
+	$pdata  = is_array( $stored['profile_data'] ?? null ) ? $stored['profile_data'] : array();
+	$calls  = array();
+	foreach ( (array) ( $pdata['sources'] ?? array() ) as $s ) {
+		if ( is_array( $s ) && isset( $s['call_count'] ) ) {
+			$calls[ (string) ( $s['type'] ?? 'unknown' ) . ':' . (string) ( $s['slug'] ?? 'unknown' ) ] = (int) $s['call_count'];
+		}
+	}
+	if ( isset( $pdata['summary']['callback_count'] ) ) {
+		$summary['total_callbacks'] = (int) $pdata['summary']['callback_count'];
+	}
+	$local    = (string) ( $stored['captured_at'] ?? '' );
+	$local_at = '' !== $local ? date_create_immutable_from_format( 'Y-m-d H:i:s', $local, wp_timezone() ) : false;
+	$captured = $local_at
+		? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $local_at->getTimestamp() )
+		: '';
+
 	$meta    = array(
 		array( 'label' => __( 'Route', 'minn-admin' ), 'value' => (string) ( $data['route'] ?? '' ) ),
 		array( 'label' => __( 'Duration', 'minn-admin' ), 'value' => ( isset( $data['duration_ms'] ) ? $data['duration_ms'] . ' ms' : '—' ) ),
@@ -246,7 +297,7 @@ function minn_admin_scrutoscope_profile_sections( $id ) {
 					. ( isset( $summary['unattributed_pct'] ) ? ' (' . $summary['unattributed_pct'] . '%)' : '' )
 				: '—',
 		),
-		array( 'label' => __( 'Captured', 'minn-admin' ), 'value' => (string) ( $data['captured_at'] ?? '' ) ),
+		array( 'label' => __( 'Captured', 'minn-admin' ), 'value' => $captured ),
 		array( 'label' => __( 'Pinned', 'minn-admin' ), 'value' => ! empty( $data['pinned'] ) ? 'Yes' : 'No' ),
 		array( 'label' => __( 'Note', 'minn-admin' ), 'value' => (string) ( $data['note'] ?? '' ) ),
 		array( 'label' => __( 'Tags', 'minn-admin' ), 'value' => ! empty( $data['tags'] ) && is_array( $data['tags'] ) ? implode( ', ', $data['tags'] ) : '' ),
@@ -261,10 +312,12 @@ function minn_admin_scrutoscope_profile_sections( $id ) {
 		$type  = (string) ( $src['type'] ?? '' );
 		$excl  = isset( $src['exclusive_ms'] ) ? $src['exclusive_ms'] . ' ms' : '—';
 		$pct   = isset( $src['exclusive_pct'] ) ? $src['exclusive_pct'] . '%' : '';
+		$n     = $calls[ ( '' !== $type ? $type : 'unknown' ) . ':' . $label ] ?? null;
 		$sources[] = array(
 			'label' => $type ? ( $label . ' (' . $type . ')' ) : $label,
 			'value' => trim( $excl . ( $pct ? ' · ' . $pct : '' )
-				. ( isset( $src['callback_count'] ) ? ' · ' . (int) $src['callback_count'] . ' callbacks' : '' ) ),
+				/* translators: %s: number of callbacks the source ran. */
+				. ( null !== $n ? ' · ' . sprintf( _n( '%s callback', '%s callbacks', $n, 'minn-admin' ), number_format_i18n( $n ) ) : '' ) ),
 		);
 	}
 
@@ -466,12 +519,21 @@ function minn_admin_scrutoscope_status_model() {
 		? scrutoscope_query_profiling_state()
 		: array( 'active' => false, 'managed' => true );
 	$light = (bool) get_option( 'scrutoscope_lightweight_mode', false );
+	// Their background sampler skips requests outside its user scope.
+	$scope = (string) get_option( 'scrutoscope_user_scope', 'all' );
+	if ( 'anonymous' === $scope ) {
+		$sampled = __( 'Sampled requests from signed-out visitors', 'minn-admin' );
+	} elseif ( 'logged_in' === $scope ) {
+		$sampled = __( 'Sampled requests from signed-in users', 'minn-admin' );
+	} else {
+		$sampled = __( 'Sampled front-end and admin requests', 'minn-admin' );
+	}
 
 	$rows = array(
 		array(
 			'label' => __( 'Background capture', 'minn-admin' ),
 			'value' => $bg ? ( 'On · ' . rtrim( rtrim( sprintf( '%.1f', $rate ), '0' ), '.' ) . '% sample' ) : 'Off',
-			'hint'  => $bg ? __( 'Sampled front-end and admin requests', 'minn-admin' ) : __( 'Start a session or enable sampling in Scrutoscope', 'minn-admin' ),
+			'hint'  => $bg ? $sampled : __( 'Start a session or enable sampling in Scrutoscope', 'minn-admin' ),
 		),
 		array(
 			'label' => __( 'Profiles stored', 'minn-admin' ),
@@ -846,7 +908,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'route', 'label' => __( 'Route', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'context', 'label' => __( 'Context', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'duration', 'label' => __( 'Duration', 'minn-admin' ), 'format' => 'text' ),
-				array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'type_label', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'role', 'label' => __( 'Role', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'http', 'label' => 'HTTP', 'format' => 'text' ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
