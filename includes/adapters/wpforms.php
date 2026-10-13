@@ -597,7 +597,6 @@ add_action( 'rest_api_init', function () {
 				$meta   = array(
 					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
 					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->entry_id ),
-					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => minn_admin_wpforms_display_status( $row ) ),
 				);
 				if ( $row->date ) {
 					// `date` is UTC: shown on the site's clock, as the other
