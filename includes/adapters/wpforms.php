@@ -299,9 +299,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'param'    => 'form_id',
 				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
+			// The first option is the default: everything received, as on
+			// the other form surfaces, so read entries are not hidden.
 			'filter'    => array(
 				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
+					array( 'inbox', 'Received' ),
 					array( 'unread', 'Unread' ),
 					array( 'read', 'Read' ),
 					array( 'starred', 'Starred' ),
