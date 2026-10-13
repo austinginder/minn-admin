@@ -48469,8 +48469,12 @@
 			// Fields shown as editable inputs shouldn't also appear as static rows.
 			const skip = new Set( [ 'id', ...( detail.skip || [] ), ...editFields.map( ( f ) => f.key.split( '.' )[ 0 ] ) ] );
 			const labels = m.labels || {};
+			// An on/off boolean (Code Snippets' `active`, Redirection's `enabled`)
+			// is the header's pill when there is no status, not a row of "true".
+			const onOff = typeof it.active === 'boolean' ? 'active' : ( typeof it.enabled === 'boolean' ? 'enabled' : '' );
 			const rows = m.loading ? [] : Object.keys( it )
 				.filter( ( k ) => ! skip.has( k ) && k !== detail.messageKey && ! k.startsWith( '_' ) )
+				.filter( ( k ) => ! ( k === onOff && ! it.status ) )
 				.filter( ( k ) => ! ( k === 'status' && it.status_label ) )
 				.map( ( k ) => [ surfaceDetailLabel( k, labels[ k ] ), k === 'status' || k === 'status_label' ? statusLabel( it[ k ] ) : it[ k ] ] )
 				.filter( ( [ , v ] ) => v != null && v !== '' && typeof v !== 'object' )
@@ -48543,7 +48547,7 @@
 						</div>
 						${ showId ? `<span class="minn-modal-id-tag">#${ esc( idStr ) }</span>` : '' }
 						${ headStatus ? surfacePill( headStatus )
-							: ( typeof it.active === 'boolean' ? surfacePill( it.active ? 'active' : 'inactive' ) : '' ) }
+							: ( onOff ? surfacePill( it[ onOff ] ? 'active' : 'inactive' ) : '' ) }
 						${ canStep ? `<span class="minn-modal-count">${ sctx.idx + 1 } / ${ sctx.items.length }</span>
 						<button class="minn-modal-step" id="minn-surface-prev" type="button" title="${ esc( __( 'Previous (←)' ) ) }"${ sctx.idx <= 0 ? ' disabled' : '' }>‹</button>
 						<button class="minn-modal-step" id="minn-surface-next" type="button" title="${ esc( __( 'Next (→)' ) ) }"${ sctx.idx >= sctx.items.length - 1 ? ' disabled' : '' }>›</button>` : '' }
