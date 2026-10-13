@@ -77,7 +77,15 @@ A few properties worth knowing before auditing (details in
   `minn_write_fenced` and logs one line,
   `minn_write_fenced user= route= refused=`. The main network's super
   admin (`Minn_Admin::install_owner()`) is not fenced. Writes made with raw
-  SQL are outside the fence, as they are outside every WordPress hook.
+  SQL are outside the fence, as they are outside every WordPress hook. A
+  network setting deleted under another spelling of its name is refused and
+  logged but only the super admins and network-active plugins can be put
+  back, since core fires no hook before that delete. The fence guards the
+  stored value, not code that runs before it: activating a plugin loads it
+  and switching a theme fires its hooks first, so Minn's routes that do
+  either ask the activation capability themselves (a plugin update leaves a
+  plugin the update switched off inactive for a caller who may not activate
+  plugins, and says so).
 - The database browser is read-only and redacts credentials three ways: by
   column name (a column named like a password, secret or token, in any
   table, which also cannot be sorted or filtered), by known vendor row

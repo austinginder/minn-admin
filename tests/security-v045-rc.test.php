@@ -838,6 +838,88 @@ if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . 'w
 }
 $wpdb->query( "DROP TABLE IF EXISTS `{$db_copy}`, `{$db_bare}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+// --- 14-02 Plugin update: the safety net reactivates only for who may --------
+// A throwaway plugin gets a local "update" whose upgrade switches it off (as
+// a vendor's own upgrade routine can). A role that may update plugins but not
+// activate them had the new file loaded and the active_plugins write refused
+// by the write fence, whose 403 hid that the update landed.
+if ( is_multisite() ) {
+	$skip( '14-02 single site only' );
+} elseif ( ! class_exists( 'ZipArchive' ) ) {
+	$skip( '14-02 no ZipArchive' );
+} else {
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	$up_slug = 'minn-rc45-upd';
+	$up_file = "{$up_slug}/{$up_slug}.php";
+	$up_dir  = WP_PLUGIN_DIR . "/{$up_slug}";
+	$up_zip  = get_temp_dir() . 'minn-rc45-upd-1.1.zip';
+	$up_src  = function ( $v ) {
+		return "<?php\n/**\n * Plugin Name: Minn RC45 update probe\n * Version: {$v}\n */\n";
+	};
+	$up_zipf = new ZipArchive();
+	$up_zipf->open( $up_zip, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$up_zipf->addFromString( "{$up_slug}/{$up_slug}.php", $up_src( '1.1' ) );
+	$up_zipf->close();
+	// Installs 1.0, switches it on, offers 1.1.
+	$up_reset = function () use ( $up_dir, $up_slug, $up_file, $up_zip, $up_src ) {
+		wp_mkdir_p( $up_dir );
+		file_put_contents( "{$up_dir}/{$up_slug}.php", $up_src( '1.0' ) );
+		wp_clean_plugins_cache( false );
+		activate_plugin( $up_file );
+		$t = get_site_transient( 'update_plugins' );
+		$t = is_object( $t ) ? $t : new stdClass();
+		$t->response = isset( $t->response ) ? (array) $t->response : array();
+		$t->response[ $up_file ] = (object) array( 'id' => $up_file, 'slug' => $up_slug, 'plugin' => $up_file, 'new_version' => '1.1', 'url' => '', 'package' => $up_zip );
+		set_site_transient( 'update_plugins', $t );
+	};
+	// The vendor's upgrade routine, run as an administrator so the fence
+	// lets the deactivation through whoever started the update.
+	$up_off = function () use ( $up_file, $admin ) {
+		$was = get_current_user_id();
+		wp_set_current_user( $admin );
+		deactivate_plugins( $up_file, true );
+		wp_set_current_user( $was );
+	};
+	add_action( 'upgrader_process_complete', $up_off, 1 );
+
+	$up_reset();
+	list( $up_st, $up_d ) = $call( 'POST', '/minn-admin/v1/plugins/update', array( 'plugin' => $up_file ) );
+	$check( '14-02 control: an administrator\'s update switches the plugin back on', 200 === $up_st && is_plugin_active( $up_file ) && empty( $up_d['switched_off'] ), $up_st . ' ' . wp_json_encode( $up_d ) );
+
+	add_role( 'minn_rc45_updater', 'RC45 updater', array( 'read' => true, 'update_plugins' => true ) );
+	$up_uid = $make_user( 'minn_rc45_updater' );
+	if ( $up_uid ) {
+		$up_reset();
+		wp_set_current_user( $up_uid );
+		list( $up_st, $up_d ) = $call( 'POST', '/minn-admin/v1/plugins/update', array( 'plugin' => $up_file ) );
+		wp_set_current_user( $admin );
+		$up_ver = get_plugin_data( "{$up_dir}/{$up_slug}.php", false, false )['Version'] ?? '';
+		$check( '14-02 a role that may update but not activate gets an honest answer', 200 === $up_st && ! empty( $up_d['switched_off'] ) && '1.1' === $up_ver, $up_st . ' ' . wp_json_encode( $up_d ) . ' v' . $up_ver );
+		$check( '14-02 and the plugin is left off, not half switched on', ! is_plugin_active( $up_file ) );
+		$drop_user( $up_uid );
+	} else {
+		$check( '14-02 fixture user', false );
+	}
+	remove_role( 'minn_rc45_updater' );
+	remove_action( 'upgrader_process_complete', $up_off, 1 );
+	deactivate_plugins( $up_file, true );
+	$t = get_site_transient( 'update_plugins' );
+	if ( is_object( $t ) && isset( $t->response[ $up_file ] ) ) {
+		unset( $t->response[ $up_file ] );
+		set_site_transient( 'update_plugins', $t );
+	}
+	foreach ( (array) glob( $up_dir . '/*' ) as $up_f ) {
+		unlink( $up_f );
+	}
+	if ( is_dir( $up_dir ) ) {
+		rmdir( $up_dir );
+	}
+	if ( file_exists( $up_zip ) ) {
+		unlink( $up_zip );
+	}
+	wp_clean_plugins_cache( false );
+}
+
 // @sections
 
 $summary();

@@ -24437,8 +24437,15 @@
 				const version = ( r && r.version ) || offered || '';
 				applyPluginUpdateOptimistic( file, version );
 				succeeded = true;
-				/* translators: 1: the plugin's name. 2: the new version. */
-				toast( version ? sprintf( __( '%1$s updated to v%2$s' ), name, version ) : sprintf( __( '%s updated' ), name ) );
+				if ( r && r.switched_off ) {
+					const p = Array.isArray( state.cache.plugins ) ? state.cache.plugins.find( ( x ) => x.plugin === file ) : null;
+					if ( p ) p.status = 'inactive';
+					/* translators: %s: the plugin's name. */
+					toast( sprintf( __( '%s updated, but the update switched it off and your account can’t switch plugins on. Ask an administrator to turn it back on.' ), name ), true );
+				} else {
+					/* translators: 1: the plugin's name. 2: the new version. */
+					toast( version ? sprintf( __( '%1$s updated to v%2$s' ), name, version ) : sprintf( __( '%s updated' ), name ) );
+				}
 			} catch ( e ) {
 				// One more settle + offer check before blaming the user.
 				if ( isFetchDrop( e ) ) {

@@ -10,6 +10,14 @@
  * minn-admin/v1 request runs, those writes go ahead only when the caller
  * holds the capability WordPress asks for the same change on its own
  * screens. Otherwise the stored value stays and the request answers 403.
+ * One write cannot be undone: core fires no hook before a network setting is
+ * deleted under another spelling of its name, so only the super admins and
+ * the network-active plugins are put back (site_variant_deleted()).
+ *
+ * The fence guards the stored value, not code that runs on the way to it.
+ * activate_plugin() loads a plugin and switch_theme() fires its hooks before
+ * the option write the fence refuses, so a route that activates a plugin or
+ * switches a theme asks the activation capability itself first.
  *
  * The line is drawn at power, not at every account change: vendors change
  * roles as a side effect (a subscription that activates makes its customer

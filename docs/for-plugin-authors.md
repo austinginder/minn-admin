@@ -2158,7 +2158,9 @@ capability grant or removal that carries power (settings, code, accounts, the ne
 unfiltered markup, the store's payments), and a powerful account's login, password,
 email or password-reset key. The full lists live in
 `includes/class-minn-admin-fences.php`. A refused update never happens and a refused
-add or delete is put back; the request answers 403 `minn_write_fenced` with the refused
+add or delete is put back (except a network setting deleted under another spelling of its
+name, where core gives no hook before the row goes: only the super admins and the
+network-active plugins are restored); the request answers 403 `minn_write_fenced` with the refused
 names in `data.fenced`, and the server log gets one line,
 `minn_write_fenced user=<id> route="<method> <route>" refused=<names>`. Option names and
 user meta keys are matched without regard to case, as MySQL matches them. Grants that
@@ -2168,7 +2170,10 @@ the whole install, is not fenced at all.
 
 The fence sees writes through the options, user and metadata APIs, which is how every
 vendor save handler writes. Write through them in your own code too: raw SQL to those
-tables is outside the fence, as it is outside every other hook. Requests to your own
+tables is outside the fence, as it is outside every other hook. It guards the stored
+value, not code that runs on the way to it: `activate_plugin()` loads the plugin and
+`switch_theme()` fires its hooks before the option write is refused, so gate a route
+that calls either on the activation capability yourself. Requests to your own
 REST namespace are left to your own `permission_callback`.
 
 ## Notes

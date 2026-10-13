@@ -11092,8 +11092,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'update_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Update failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
-		// Safety net: whatever the upgrade path did, an active plugin stays active.
-		if ( $was_active && ! is_plugin_active( $file ) ) {
+		// Safety net: whatever the upgrade path did, an active plugin stays
+		// active, for whoever may switch it on. A role that may update plugins
+		// but not activate them would have the new file loaded and the
+		// active_plugins write refused by the write fence, whose 403 then hid
+		// that the update itself landed; it gets the plugin back inactive and
+		// is told so.
+		$can_activate = $was_network ? current_user_can( 'manage_network_plugins' ) : current_user_can( 'activate_plugin', $file );
+		if ( $was_active && ! is_plugin_active( $file ) && $can_activate ) {
 			activate_plugin( $file, '', $was_network, true );
 		}
 
@@ -11104,8 +11110,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$plugins = get_plugins();
 		return rest_ensure_response(
 			array(
-				'updated' => true,
-				'version' => isset( $plugins[ $file ]['Version'] ) ? $plugins[ $file ]['Version'] : '',
+				'updated'      => true,
+				'version'      => isset( $plugins[ $file ]['Version'] ) ? $plugins[ $file ]['Version'] : '',
+				// The update switched it off and this caller may not switch it
+				// back on.
+				'switched_off' => $was_active && ! is_plugin_active( $file ),
 			)
 		);
 	}
