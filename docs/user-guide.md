@@ -322,7 +322,14 @@ counted as locked, with a link to edit them in wp-admin):
   editor the editor's gallery blocks use, and a rich-text field opens a
   focused writing window that hands you back to the dialog when you
   finish. Anything a row or dialog cannot show is preserved untouched
-  through every edit, reorder and removal.
+  through every edit, reorder and removal, and a new row starts at each
+  field's default, as in ACF's own screen.
+- **A few ACF fields stay in wp-admin.** Where Minn could not save a field
+  without losing something, it leaves that field to ACF's own screen and
+  counts it as locked: flexible content with sections switched off or
+  renamed in ACF, a repeater holding a taxonomy field that saves terms,
+  and fields that come from a seamless clone. The rest of the post saves
+  as usual.
 - **Theme settings pages.** ACF options pages (a footer, an announcement
   banner, a logo strip) live under the sidebar's Site Options entry with
   their tabs intact, editing the same field types and saving through
@@ -454,7 +461,10 @@ and Send test) and confirmations (a message, a page or a redirect, with
 conditions), the emails and confirmations of WPForms and Fluent Forms,
 and Contact Form 7's mail, second mail and messages. Previews fill in
 the form's latest entry for people allowed to read its entries; anyone
-else sees the tags as typed. Gravity Forms forms also open in a
+else sees the tags as typed. Tags that reach past the entry (the
+submitter's account settings, the page the form was sent from, a
+password-reset or activation link) stay placeholders in every preview and
+test email; real emails fill them in as usual. Gravity Forms forms also open in a
 builder: add fields from the list or drag them in, reorder, duplicate
 and remove them, edit their settings, and save through Gravity Forms'
 own save. Removing a field deletes its answers in past entries, as it
@@ -532,7 +542,8 @@ site itself:
   your clients, Minn hides the screens it adds for that plugin from the
   same people: its sidebar item, its ⌘K entries and its doorway on
   Extensions. A screen several plugins share (Field Groups, Site Options)
-  goes only once all of them are hidden, and a plugin whose content list
+  goes only once all of them are hidden, and until then hiding one takes
+  only its own list off that screen; a plugin whose content list
   is still in the menu (Elementor's Templates, say) stays. Minn's own
   screens, like the store's Orders and Products, stay too, and your White
   Label CMS Admins still see everything. This tidies the interface rather
