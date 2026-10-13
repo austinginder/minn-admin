@@ -14,7 +14,7 @@
  *   name     string
  *   status   callable(): array {
  *              configured  bool     key/setup state
- *              note        string   one-line status ("API key set (a1b2…)")
+ *              note        string   one-line status ("API key set")
  *              blocked     int      all-time blocked count
  *              toggles     array[]  { id, label, desc, on }
  *              adminUrl    string   the provider's wp-admin screen
@@ -50,11 +50,12 @@ function minn_admin_spam_providers() {
 				try {
 					$predefined = (bool) Akismet::predefined_api_key();
 				} catch ( \Throwable $e ) { /* treat as editable */ }
+				// No part of the key: Akismet shows none when it is pinned in
+				// code, and on a network every site's administrator reads this.
 				return array(
 					'configured' => '' !== $key,
 					'note'       => '' !== $key
-						/* translators: %s: first characters of the API key. */
-						? sprintf( __( 'API key set (%s…)', 'minn-admin' ), substr( $key, 0, 4 ) )
+						? __( 'API key set', 'minn-admin' )
 						: __( 'Needs an API key from akismet.com (free for personal sites)', 'minn-admin' ),
 					// Paste-a-key in place via the akismet connections
 					// provider — hidden when the key is supplied in code.

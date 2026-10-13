@@ -342,6 +342,32 @@ if ( ! is_multisite() ) {
 	wp_set_current_user( $admin );
 }
 
+// --- 03-02 Akismet: the spam card names no part of the key --------------------
+// The card printed the key's first four characters, which Akismet itself
+// withholds when the key is pinned in code, to whoever reads /spam (every
+// site administrator, on a network). An installed but inactive Akismet is
+// loaded for this run only; nothing activates it.
+if ( ! class_exists( 'Akismet' ) && file_exists( WP_PLUGIN_DIR . '/akismet/class.akismet.php' ) ) {
+	require_once WP_PLUGIN_DIR . '/akismet/class.akismet.php';
+}
+if ( ! class_exists( 'Akismet' ) ) {
+	$skip( '03-02 Akismet inactive' );
+} elseif ( defined( 'WPCOM_API_KEY' ) ) {
+	$skip( '03-02 the key is pinned in code here; the probe sets the option' );
+} else {
+	$ak_prev = get_option( 'wordpress_api_key', null );
+	update_option( 'wordpress_api_key', 'qz7xminnrc45' );
+	list( $ak_st, $ak_d ) = $call( 'GET', '/minn-admin/v1/spam' );
+	$ak_out = wp_json_encode( $ak_d );
+	if ( null === $ak_prev ) {
+		delete_option( 'wordpress_api_key' );
+	} else {
+		update_option( 'wordpress_api_key', $ak_prev );
+	}
+	$check( '03-02 the spam card names no part of the Akismet key', 200 === $ak_st && false === strpos( $ak_out, 'qz7x' ), $ak_st . ' ' . substr( $ak_out, 0, 160 ) );
+	$check( '03-02 control: the card still says a key is set', false !== strpos( $ak_out, '"configured":true' ), substr( $ak_out, 0, 160 ) );
+}
+
 // @sections
 
 $summary();
