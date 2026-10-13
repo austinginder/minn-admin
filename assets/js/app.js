@@ -918,6 +918,7 @@
 			size: __( 'Size' ), where: __( 'Stored' ), type: __( 'Type' ), date: __( 'Date' ),
 			owner: __( 'By' ), created: __( 'Created' ), locked: __( 'Lock' ),
 			filename: __( 'File' ), url: __( 'URL' ), email: __( 'Email' ), modified: __( 'Modified' ),
+			stored: __( 'Stored' ), lock: __( 'Lock' ),
 		};
 		if ( labels[ key ] ) return labels[ key ];
 		// downloadUrl → "Download url", last_run → "Last run".
