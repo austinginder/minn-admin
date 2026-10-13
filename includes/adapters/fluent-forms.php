@@ -491,6 +491,8 @@ add_action( 'rest_api_init', function () {
 			$forms_table = $wpdb->prefix . 'fluentform_forms';
 			$subs_table  = $wpdb->prefix . 'fluentform_submissions';
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived tables.
+			// A form's count is what its Received list holds: spam and trash
+			// are their own buckets.
 			// Scope the form estate the same way the entries are scoped. Fluent's
 			// own dropdowns, reports and search all wrap this in
 			// whereIn('id', $allowForms ?: [0]); without it a manager scoped to
@@ -503,7 +505,7 @@ add_action( 'rest_api_init', function () {
 				$rows = $wpdb->get_results( $wpdb->prepare(
 					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived tables; ids bound below.
 					"SELECT f.id, f.title, f.status, f.updated_at,
-						(SELECT COUNT(*) FROM `{$subs_table}` s WHERE s.form_id = f.id) AS entries
+						(SELECT COUNT(*) FROM `{$subs_table}` s WHERE s.form_id = f.id AND s.status NOT IN ('spam','trashed')) AS entries
 					 FROM `{$forms_table}` f
 					 WHERE f.id IN ({$in})
 					 ORDER BY f.title ASC",
@@ -512,7 +514,7 @@ add_action( 'rest_api_init', function () {
 			} else {
 				$rows = $wpdb->get_results(
 					"SELECT f.id, f.title, f.status, f.updated_at,
-						(SELECT COUNT(*) FROM `{$subs_table}` s WHERE s.form_id = f.id) AS entries
+						(SELECT COUNT(*) FROM `{$subs_table}` s WHERE s.form_id = f.id AND s.status NOT IN ('spam','trashed')) AS entries
 					 FROM `{$forms_table}` f
 					 ORDER BY f.title ASC"
 				);
