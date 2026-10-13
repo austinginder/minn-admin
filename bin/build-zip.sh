@@ -19,8 +19,11 @@
 #   dist/                        build output, including the packs themselves
 #   languages/                   translation SOURCES + reviewed notes; runtime
 #                                reads language PACKS from WP_LANG_DIR/plugins
-#
-# docs/ SHIPS: includes/class-minn-admin-rest.php serves docs/user-guide.md.
+#   docs/, all but user-guide.md the author guide, plans and notes, read on
+#                                GitHub; the app serves docs/user-guide.md
+#                                itself (the /guide route in
+#                                includes/class-minn-admin-rest.php) and sends
+#                                the guide's own links to GitHub
 #
 # Usage: bin/build-zip.sh   → ../minn-admin.zip (from wp-content/plugins/)
 set -euo pipefail
@@ -46,7 +49,9 @@ zip -r -q -X "$OUT" "$NAME" \
 	-x "$NAME/dist/*" \
 	-x "$NAME/CLAUDE.md" \
 	-x "$NAME/languages/*" \
+	-x "$NAME/docs/*" \
 	-x "*.DS_Store"
+zip -q -X "$OUT" "$NAME/docs/" "$NAME/docs/user-guide.md"
 
 # Assert rather than trust: a silently fattened zip is invisible until someone
 # downloads it, and a silently EMPTIED one bricks the plugin.
@@ -56,10 +61,11 @@ zip -r -q -X "$OUT" "$NAME" \
 # the first hit, unzip takes SIGPIPE, and the pipeline inherits its status.
 listing="$( unzip -l "$OUT" )"
 
-leaked="$( grep -cE "$NAME/(tests|bin|dist|languages|\.git)/|\.(po|pot)$|CLAUDE\.md" <<< "$listing" || true )"
-[ "$leaked" = "0" ] || {
-	echo "FAIL: $leaked dev file(s) leaked into the zip" >&2
-	grep -E "$NAME/(tests|bin|dist|languages)/|\.(po|pot)$" <<< "$listing" | head >&2
+dev="$NAME/(tests|bin|dist|languages|\.git)/|\.(po|pot)$|CLAUDE\.md|$NAME/docs/.*[^/]$"
+leaked="$( grep -E "$dev" <<< "$listing" | grep -v " $NAME/docs/user-guide\.md$" || true )"
+[ -z "$leaked" ] || {
+	echo "FAIL: $( wc -l <<< "$leaked" | tr -d ' ' ) dev file(s) leaked into the zip" >&2
+	head <<< "$leaked" >&2
 	exit 1
 }
 
