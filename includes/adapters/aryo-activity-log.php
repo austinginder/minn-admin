@@ -127,6 +127,21 @@ function minn_admin_aryo_admin_url() {
 }
 
 /**
+ * An action in words ("failed_login" is "Failed Login"): the plugin's own
+ * label where its presenter is loaded, the same casing otherwise. The tabs,
+ * the pills and the status card all read it, so they say the same thing.
+ *
+ * @param string $action Stored action.
+ * @return string
+ */
+function minn_admin_aryo_action_label( $action ) {
+	if ( class_exists( 'AAL_Log_Presenter' ) && method_exists( 'AAL_Log_Presenter', 'get_action_label' ) ) {
+		return (string) AAL_Log_Presenter::get_action_label( (string) $action );
+	}
+	return ucwords( str_replace( array( '-', '_' ), ' ', (string) $action ) );
+}
+
+/**
  * Whether the log table carries the request_source column (Activity Log 2.14+
  * after its migration has run). The column is what the SQL needs, so this asks
  * the table, not the plugin's version option.
@@ -283,7 +298,7 @@ function minn_admin_aryo_status_model() {
 	}
 	$top_label = '—';
 	if ( $top && ! empty( $top->action ) ) {
-		$top_label = ucwords( str_replace( array( '-', '_' ), ' ', (string) $top->action ) )
+		$top_label = minn_admin_aryo_action_label( $top->action )
 			. ' (' . number_format_i18n( (int) $top->c ) . ')';
 	}
 
@@ -410,7 +425,7 @@ add_action( 'rest_api_init', function () {
 			foreach ( (array) $cols as $a ) {
 				$out[] = array(
 					'id'    => (string) $a,
-					'title' => ucwords( str_replace( array( '-', '_' ), ' ', (string) $a ) ),
+					'title' => minn_admin_aryo_action_label( $a ),
 				);
 			}
 			return rest_ensure_response( $out );
@@ -488,7 +503,8 @@ add_action( 'rest_api_init', function () {
 					'id'      => (int) $r->histid,
 					'message' => trim( $r->object_type . ( $r->object_name ? ': ' . $r->object_name : '' ) ),
 					'who'     => $uid ? $users[ $uid ] : 'Guest',
-					'action'  => $r->action,
+					// In words, as the tabs above the list say it.
+					'action'  => minn_admin_aryo_action_label( $r->action ),
 					'type'    => $r->object_type . ( $r->object_subtype ? ' / ' . $r->object_subtype : '' ),
 					'ip'      => $r->hist_ip,
 					// Aryo stores current_time('timestamp') — WP's LOCAL epoch,
