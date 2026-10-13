@@ -117,6 +117,21 @@ if ( is_multisite() ) {
 		$list[] = get_userdata( $target )->user_login;
 		update_site_option( 'site_admins', $list );
 	};
+	// WP Multi Network's add_network() sets up the new network's main site
+	// while switched into that network, whose site_admins is not written
+	// yet and reads as core's fallback, array( 'admin' ). Its creator is
+	// no super admin there, so every check made in that moment says no.
+	$cases['owner_switched'] = static function () use ( $target ) {
+		$fallback = static function () {
+			return array( 'admin' );
+		};
+		add_filter( 'site_option_site_admins', $fallback );
+		try {
+			( new WP_User( $target ) )->set_role( 'administrator' );
+		} finally {
+			remove_filter( 'site_option_site_admins', $fallback );
+		}
+	};
 }
 
 rest_get_server();
@@ -243,6 +258,16 @@ try {
 		}
 		$response = $send( $site_admin, 'default_role' );
 		$check( 'Site administrator: default_role (a site setting) goes through', 200 === $response->get_status() && 'administrator' === $state()['default_role'], 'status ' . $response->get_status() );
+		$put_back();
+	}
+
+	// --- the install's owner, inside a network a route switched into --------
+	if ( is_multisite() ) {
+		$owner = $mk( 'owner', 'subscriber' );
+		grant_super_admin( $owner );
+		$reload();
+		$response = $send( $owner, 'owner_switched' );
+		$check( 'Super admin (not named admin): a write while switched into a network that does not list them yet goes through', 200 === $response->get_status() && true === $state()['make_admin'], 'status ' . $response->get_status() );
 		$put_back();
 	}
 

@@ -108,6 +108,17 @@ class Minn_Admin_Fences {
 	/** Set while the fence itself puts a value back. */
 	private static $restoring = false;
 
+	/**
+	 * Whether the running request's caller owns the whole install, read as
+	 * the request arms. A super admin of the main network passes every
+	 * check here, but a route can switch into a context where WordPress no
+	 * longer knows them: WP Multi Network sets up a new network's main site
+	 * from inside that network, whose site_admins is not written yet, so
+	 * each check made in that moment said no and left the new site without
+	 * roles or an administrator.
+	 */
+	private static $owner = false;
+
 	public static function init() {
 		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'arm' ), 0, 3 );
 		add_filter( 'rest_request_after_callbacks', array( __CLASS__, 'disarm' ), PHP_INT_MAX, 3 );
@@ -129,15 +140,16 @@ class Minn_Admin_Fences {
 		add_filter( 'wp_pre_insert_user_data', array( __CLASS__, 'user_row' ), PHP_INT_MAX, 3 );
 	}
 
-	/** Whether a fence is up: a minn-admin/v1 request is running. */
+	/** Whether a fence is up: a minn-admin/v1 request by anyone but the install's owner is running. */
 	public static function armed() {
-		return self::$depth > 0 && ! self::$restoring;
+		return self::$depth > 0 && ! self::$restoring && ! self::$owner;
 	}
 
 	public static function arm( $response, $handler, $request ) {
 		if ( self::ours( $request ) ) {
 			if ( 0 === self::$depth ) {
 				self::$refused = array();
+				self::$owner   = is_multisite() && Minn_Admin::install_owner();
 			}
 			++self::$depth;
 		}
@@ -149,6 +161,9 @@ class Minn_Admin_Fences {
 			return $response;
 		}
 		--self::$depth;
+		if ( 0 === self::$depth ) {
+			self::$owner = false;
+		}
 		if ( self::$depth > 0 || ! self::$refused ) {
 			return $response;
 		}
