@@ -77,7 +77,16 @@ A few properties worth knowing before auditing (details in
   `minn_write_fenced` and logs one line,
   `minn_write_fenced user= route= refused=`. The main network's super
   admin (`Minn_Admin::install_owner()`) is not fenced. Writes made with raw
-  SQL are outside the fence, as they are outside every WordPress hook. A
+  SQL are outside the fence, as they are outside every WordPress hook. Minn
+  makes one itself: under WP Freighter, switching Minn on or off for a
+  tenant edits that tenant's `active_plugins` row directly, for a caller
+  with `manage_options` (Freighter's owner role), and touches only Minn's
+  own entry. A refused account change is put back after core has acted on
+  it, so a listener on `wp_set_password` has already run and the "your
+  password or email changed" notice may still go out; no Minn route below
+  `edit_user` reaches that write, so the fence there is a backstop. A role
+  grant is judged by what the role can do when it is granted; making that
+  role more powerful later is a role-definition write, which is fenced. A
   network setting deleted under another spelling of its name is refused and
   logged but only the super admins and network-active plugins can be put
   back, since core fires no hook before that delete. The fence guards the
