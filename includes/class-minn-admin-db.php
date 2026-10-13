@@ -377,9 +377,10 @@ class Minn_Admin_DB {
 	/**
 	 * wpDiscuz's own tables, which it names with WooCommerce's wc_ prefix
 	 * (votes, phrases, subscriptions, follows, feedback forms, ratings, the
-	 * avatar cache). A copy of one is left to the rule above.
+	 * avatar cache, and its Report & Flagging and Online Users add-ons'
+	 * tables). A copy of one is left to the rule above.
 	 */
-	const WPDISCUZ_TABLES = array( 'wc_users_voted', 'wc_phrases', 'wc_comments_subscription', 'wc_follow_users', 'wc_feedback_forms', 'wc_users_rated', 'wc_avatars_cache' );
+	const WPDISCUZ_TABLES = array( 'wc_users_voted', 'wc_phrases', 'wc_comments_subscription', 'wc_follow_users', 'wc_feedback_forms', 'wc_users_rated', 'wc_avatars_cache', 'wc_flagged', 'wc_online_users' );
 
 	private static function quote_ident( $name ) {
 		return '`' . str_replace( '`', '``', $name ) . '`';

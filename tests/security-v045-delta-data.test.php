@@ -179,7 +179,7 @@ $d45 = array(
 );
 // wpDiscuz's own tables, made only where wpDiscuz has not made them.
 $wpd_tables = array();
-foreach ( array( 'wc_phrases', 'wc_users_voted' ) as $wpd_base ) {
+foreach ( array( 'wc_phrases', 'wc_users_voted', 'wc_flagged', 'wc_online_users' ) as $wpd_base ) {
 	if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $p . $wpd_base ) ) ) ) {
 		$wpd_tables[] = $p . $wpd_base;
 	}
@@ -441,7 +441,7 @@ if ( is_multisite() ) {
 		list( $st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $d45['plug'] ) );
 		$check( 'OS-4 control: that role still browses a plugin\'s own table', 200 === $st, (string) $st );
 		// WC-wpDiscuz: wpDiscuz names its own tables wc_*.
-		foreach ( array( 'wc_phrases', 'wc_users_voted' ) as $wpd_base ) {
+		foreach ( array( 'wc_phrases', 'wc_users_voted', 'wc_flagged', 'wc_online_users' ) as $wpd_base ) {
 			list( $st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $p . $wpd_base ) );
 			$check( "WC-wpDiscuz that role browses wpDiscuz's {$p}{$wpd_base}", 200 === $st && in_array( $p . $wpd_base, $listed, true ), (string) $st );
 		}
