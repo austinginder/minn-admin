@@ -471,21 +471,29 @@ function minn_admin_gfn_store( $form, $n, $is_new ) {
 }
 
 /**
- * {created_by:<key>} reads any meta of the account that submitted an entry
- * (Gravity Forms answers it through WP_User::get()). A preview or a test
- * send made from a real entry shows only the profile fields Gravity Forms'
- * entry screen shows; any other key stays a placeholder. Real sends are
+ * Merge tags that read past the entry: {created_by:<key>} reads any meta of
+ * the account that submitted it (Gravity Forms answers it through
+ * WP_User::get()), {custom_field:<key>} any meta of the page it was sent
+ * from, protected keys included, and {embed_post:<field>} any field of that
+ * page, private or draft. A preview or a test send made from a real entry
+ * shows only the profile fields Gravity Forms' entry screen shows; every
+ * other such tag stays a placeholder. Gravity Forms reads a key up to the
+ * closing brace, spaces included, and so does this. Real sends are
  * unchanged.
  *
- * @param string $text Subject or message with merge tags.
+ * @param string $text Subject, message or address with merge tags.
  * @return string
  */
-function minn_admin_gfn_neutral_created_by( $text ) {
-	return (string) preg_replace_callback( '/\{created_by:([^}\s]*)\}/i', function ( $m ) {
+function minn_admin_gfn_neutral_tags( $text ) {
+	$text = (string) preg_replace_callback( '/\{created_by:([^}]*)\}/i', function ( $m ) {
 		$safe = array( 'ID', 'id', 'display_name', 'user_login', 'user_email', 'first_name', 'last_name', 'nickname', 'roles', 'user_url' );
 		/* translators: %s: a user property named in a merge tag. */
 		return in_array( $m[1], $safe, true ) ? $m[0] : sprintf( __( '[user meta: %s]', 'minn-admin' ), sanitize_key( $m[1] ) );
 	}, (string) $text );
+	return (string) preg_replace_callback( '/\{(?:custom_field|embed_post):([^}]*)\}/i', function ( $m ) {
+		/* translators: %s: a field of the page a form was sent from, named in a merge tag. */
+		return sprintf( __( '[page field: %s]', 'minn-admin' ), sanitize_key( $m[1] ) );
+	}, $text );
 }
 
 /** A notification built from the page's unsaved fields, for preview and test. */
@@ -669,8 +677,8 @@ add_action( 'rest_api_init', function () {
 			$autoformat = empty( $n['disableAutoformat'] );
 			return rest_ensure_response( array(
 				'entry'   => (int) $entry['id'],
-				'subject' => (string) GFCommon::replace_variables( minn_admin_gfn_neutral_created_by( (string) $n['subject'] ), $form, $entry, false, false, false, 'text' ),
-				'html'    => (string) GFCommon::replace_variables( minn_admin_gfn_neutral_created_by( (string) $n['message'] ), $form, $entry, false, false, $autoformat, 'html' ),
+				'subject' => (string) GFCommon::replace_variables( minn_admin_gfn_neutral_tags( (string) $n['subject'] ), $form, $entry, false, false, false, 'text' ),
+				'html'    => (string) GFCommon::replace_variables( minn_admin_gfn_neutral_tags( (string) $n['message'] ), $form, $entry, false, false, $autoformat, 'html' ),
 			) );
 		},
 	) );
@@ -709,8 +717,8 @@ add_action( 'rest_api_init', function () {
 			$n['cc']      = '';
 			$n['bcc']     = '';
 			$n['routing'] = null;
-			$n['subject'] = '[' . __( 'Test', 'minn-admin' ) . '] ' . minn_admin_gfn_neutral_created_by( (string) rgar( $n, 'subject' ) );
-			$n['message'] = minn_admin_gfn_neutral_created_by( (string) rgar( $n, 'message' ) );
+			$n['subject'] = '[' . __( 'Test', 'minn-admin' ) . '] ' . minn_admin_gfn_neutral_tags( (string) rgar( $n, 'subject' ) );
+			$n['message'] = minn_admin_gfn_neutral_tags( (string) rgar( $n, 'message' ) );
 			$result       = GFCommon::send_notification( $n, $form, $entry );
 			if ( ! is_array( $result ) ) {
 				return new WP_Error( 'minn_gfn_test', __( 'Gravity Forms could not send the test. Check the site’s mail settings.', 'minn-admin' ), array( 'status' => 500 ) );

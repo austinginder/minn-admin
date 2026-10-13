@@ -228,10 +228,13 @@ add_action( 'rest_api_init', function () {
 			// the entry the preview uses: any of its meta (a 2FA seed, a licence
 			// key). WPForms' own preview never fills tags from a real entry, so
 			// here the tag shows as a placeholder; a real send is unchanged.
+			// The whole tag is matched as WPForms finds it, and its key read as
+			// WPForms reads attributes: in any order, spaces included.
 			$neutral = function ( $text ) {
-				return preg_replace_callback( '/\{user_meta\s+key=["\']?([^"\'}\s]*)["\']?\s*\}/i', function ( $m ) {
+				return preg_replace_callback( '~\{user_meta(?:[ =][^\n}]*)?\}~i', function ( $m ) {
+					$key = preg_match( '/\bkey=(["\'])(.+?)\1/', $m[0], $k ) ? $k[2] : '';
 					/* translators: %s: a user meta key named in an email smart tag. */
-					return sprintf( __( '[user meta: %s]', 'minn-admin' ), sanitize_key( $m[1] ) );
+					return sprintf( __( '[user meta: %s]', 'minn-admin' ), sanitize_key( $key ) );
 				}, (string) $text );
 			};
 			$subject = $neutral( $subject );

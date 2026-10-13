@@ -249,7 +249,8 @@ function minn_admin_gfc_store( $form, $c, $is_new ) {
  * The preview: the message as a visitor sees it, or the address they land
  * on, built from the page's unsaved fields and the form's latest entry
  * through their own rendering (GFFormDisplay). Shortcodes in a message are
- * left as typed; running them here could act on the site.
+ * left as typed; running them here could act on the site. Tags that read
+ * past the entry stay placeholders, as in the notification preview.
  */
 function minn_admin_gfc_preview( $form, $stored, $body ) {
 	$c = minn_admin_gfc_build( $form, $stored, $body, empty( $stored ) );
@@ -266,6 +267,13 @@ function minn_admin_gfc_preview( $form, $stored, $body ) {
 	}
 	$entry = minn_admin_gfn_latest_entry( $form['id'] );
 	$out   = array( 'entry' => $entry ? (int) $entry['id'] : 0, 'type' => $c['type'], 'html' => '', 'url' => '' );
+	if ( $entry ) {
+		foreach ( array( 'message', 'url', 'queryString' ) as $key ) {
+			if ( isset( $c[ $key ] ) ) {
+				$c[ $key ] = minn_admin_gfn_neutral_tags( (string) $c[ $key ] );
+			}
+		}
+	}
 	if ( 'message' === $c['type'] ) {
 		$html = (string) $c['message'];
 		if ( $entry ) {

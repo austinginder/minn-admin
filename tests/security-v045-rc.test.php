@@ -150,6 +150,104 @@ if ( is_multisite() ) {
 	$check( '01-02 cleanup: the structure is back', $pl_prev === get_option( 'permalink_structure' ), get_option( 'permalink_structure' ) );
 }
 
+// --- 04-01, 04-02 Gravity Forms: previews resolve no tag that reads past the entry
+// {created_by:<key>} reads the submitter's meta, {custom_field:<key>} the
+// sending page's meta and {embed_post:<field>} any field of that page. The
+// notification preview and test left only the first as a placeholder, and
+// missed a key with a space; the confirmation preview resolved all three.
+if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_neutral_tags' ) && ! function_exists( 'minn_admin_gfn_neutral_created_by' ) ) {
+	$skip( '04-01/04-02 Gravity Forms inactive' );
+} else {
+	$gf_form = null;
+	foreach ( GFAPI::get_forms() as $gf_f ) {
+		if ( rgar( $gf_f, 'notifications' ) && rgar( $gf_f, 'confirmations' ) ) {
+			$gf_form = $gf_f;
+			break;
+		}
+	}
+	if ( ! $gf_form ) {
+		$skip( '04-01/04-02 no form with a notification and a confirmation' );
+	} else {
+		$gf_uid    = $make_user( 'subscriber' );
+		$gf_secret = 'rc45seed' . wp_generate_password( 10, false );
+		$gf_page   = wp_insert_post( array( 'post_type' => 'page', 'post_title' => 'MinnRc45GfPage', 'post_status' => 'draft', 'post_password' => 'rc45pagepw', 'post_content' => 'rc45pagebody' ) );
+		update_user_meta( $gf_uid, 'minn_rc45_secret', $gf_secret );
+		update_user_meta( $gf_uid, 'minn rc45 spaced', $gf_secret );
+		update_post_meta( $gf_page, '_minn_rc45_gf', $gf_secret );
+		wp_update_user( array( 'ID' => $gf_uid, 'display_name' => 'Rc45 Submitter' ) );
+		$gf_entry = GFAPI::add_entry( array( 'form_id' => $gf_form['id'], 'created_by' => $gf_uid, 'source_id' => $gf_page, 'source_url' => get_permalink( $gf_page ), 'date_created' => gmdate( 'Y-m-d H:i:s', time() + 120 ) ) );
+		$gf_tags   = 'A {created_by:minn_rc45_secret} B {created_by:minn rc45 spaced} C {custom_field:_minn_rc45_gf} D {embed_post:post_password} E {embed_post:post_content} by {created_by:display_name}';
+		$gf_leaks  = function ( $out ) use ( $gf_secret ) {
+			return false !== strpos( $out, $gf_secret ) || false !== strpos( $out, 'rc45pagepw' ) || false !== strpos( $out, 'rc45pagebody' );
+		};
+		try {
+			$gf_nid = array_keys( $gf_form['notifications'] )[0];
+			list( $gf_st, $gf_d ) = $call( 'POST', "/minn-admin/v1/gf/notifications/{$gf_form['id']}:{$gf_nid}/preview", array( 'subject' => 'S', 'message' => $gf_tags ) );
+			$gf_out = wp_json_encode( $gf_d );
+			$check( '04-02 the notification preview resolves no page field, page meta or spaced user-meta key', 200 === $gf_st && ! $gf_leaks( $gf_out ), $gf_st . ' ' . substr( $gf_out, 0, 200 ) );
+			$check( '04-02 control: a profile field the entry screen shows still resolves', false !== strpos( $gf_out, 'Rc45 Submitter' ), substr( $gf_out, 0, 200 ) );
+			$gf_cid = array_keys( $gf_form['confirmations'] )[0];
+			list( $gf_st, $gf_d ) = $call( 'POST', "/minn-admin/v1/gf/confirmations/{$gf_form['id']}:{$gf_cid}/preview", array( 'type' => 'message', 'message' => $gf_tags ) );
+			$gf_out = wp_json_encode( $gf_d );
+			$check( '04-01 the confirmation preview resolves no submitter meta, page meta or page field', 200 === $gf_st && ! $gf_leaks( $gf_out ), $gf_st . ' ' . substr( $gf_out, 0, 200 ) );
+			$check( '04-01 control: the confirmation preview still resolves a profile field', false !== strpos( $gf_out, 'Rc45 Submitter' ), substr( $gf_out, 0, 200 ) );
+			list( $gf_st, $gf_d ) = $call( 'POST', "/minn-admin/v1/gf/confirmations/{$gf_form['id']}:{$gf_cid}/preview", array( 'type' => 'redirect', 'url' => 'https://example.com/thanks', 'queryString' => 'a={created_by:minn_rc45_secret}&b={custom_field:_minn_rc45_gf}&c={embed_post:post_password}' ) );
+			$gf_out = wp_json_encode( $gf_d );
+			$check( '04-01 the redirect preview address carries no submitter meta or page field', 200 === $gf_st && ! $gf_leaks( urldecode( $gf_out ) ), $gf_st . ' ' . substr( $gf_out, 0, 200 ) );
+		} finally {
+			if ( $gf_entry && ! is_wp_error( $gf_entry ) ) {
+				GFAPI::delete_entry( $gf_entry );
+			}
+			if ( $gf_page && ! is_wp_error( $gf_page ) ) {
+				wp_delete_post( $gf_page, true );
+			}
+			if ( $gf_uid ) {
+				$drop_user( $gf_uid );
+			}
+		}
+	}
+}
+
+// --- 04-02 sweep, WPForms: the preview resolves no {user_meta} in any spelling --
+// WPForms reads a smart tag's attributes in any order and a quoted key with
+// spaces. The neutralizer only knew {user_meta key=…} written first, without
+// spaces, so another attribute ahead of the key read the submitter's meta.
+global $wpdb;
+$wpf_table = $wpdb->prefix . 'wpforms_entries';
+if ( ! function_exists( 'wpforms' ) || ! class_exists( '\WPForms\Emails\Notifications' ) || $wpf_table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpf_table ) ) ) {
+	$skip( '04-02 WPForms with entries inactive' );
+} else {
+	$wpf_form = get_posts( array( 'post_type' => 'wpforms', 'post_status' => 'publish', 'numberposts' => 1, 'fields' => 'ids' ) );
+	if ( ! $wpf_form ) {
+		$skip( '04-02 no WPForms form' );
+	} else {
+		$wpf_form   = (int) $wpf_form[0];
+		$wpf_data   = (array) wpforms_decode( get_post_field( 'post_content', $wpf_form ) );
+		$wpf_keys   = array_keys( (array) ( $wpf_data['settings']['notifications'] ?? array() ) );
+		$wpf_uid    = $make_user( 'subscriber' );
+		$wpf_secret = 'rc45wpf' . wp_generate_password( 10, false );
+		update_user_meta( $wpf_uid, 'minn_rc45_secret', $wpf_secret );
+		update_user_meta( $wpf_uid, 'minn rc45 spaced', $wpf_secret );
+		wp_update_user( array( 'ID' => $wpf_uid, 'display_name' => 'Rc45 Wpf Submitter' ) );
+		$wpf_now = gmdate( 'Y-m-d H:i:s' );
+		$wpdb->insert( $wpf_table, array( 'form_id' => $wpf_form, 'post_id' => 0, 'user_id' => $wpf_uid, 'status' => '', 'type' => '', 'fields' => '{}', 'meta' => '', 'date' => $wpf_now, 'date_modified' => $wpf_now, 'ip_address' => '', 'user_agent' => '', 'user_uuid' => '' ) );
+		$wpf_eid = (int) $wpdb->insert_id;
+		try {
+			list( $wpf_st, $wpf_d ) = $call( 'POST', "/minn-admin/v1/wpforms/forms/{$wpf_form}/emails/preview", array( 'key' => (string) ( $wpf_keys[0] ?? '1' ), 'subject' => 'S', 'message' => 'A {user_meta x="1" key="minn_rc45_secret"} B {user_meta key="minn rc45 spaced"} C {user_meta key="minn_rc45_secret"} by {user_display}' ) );
+			$wpf_out = wp_json_encode( $wpf_d );
+			$check( '04-02 the WPForms preview resolves no {user_meta}, whatever its attribute order or spacing', 200 === $wpf_st && (int) ( $wpf_d['entry'] ?? 0 ) === $wpf_eid && false === strpos( $wpf_out, $wpf_secret ), $wpf_st . ' ' . substr( $wpf_out, 0, 220 ) );
+			$check( '04-02 control: the WPForms preview still fills a profile tag', false !== strpos( $wpf_out, 'Rc45 Wpf Submitter' ), substr( $wpf_out, 0, 220 ) );
+		} finally {
+			if ( $wpf_eid ) {
+				$wpdb->delete( $wpf_table, array( 'entry_id' => $wpf_eid ) );
+			}
+			if ( $wpf_uid ) {
+				$drop_user( $wpf_uid );
+			}
+		}
+	}
+}
+
 // @sections
 
 $summary();
