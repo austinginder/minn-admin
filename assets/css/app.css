@@ -1417,6 +1417,10 @@ button.minn-plugin-ver:hover { color: var(--accent2); }
 
 /* Busy state for cards while a background operation runs */
 .minn-busy { opacity: 0.45; pointer-events: none; animation: minnPulse 1.4s ease infinite; }
+/* A list waiting on its new rows stays dim for the whole wait: the card
+   pulse peaks at full strength, where the old rows read as the answer. */
+.minn-table.minn-busy, .minn-media-grid.minn-busy, .minn-media-list.minn-busy, .minn-plugin-grid.minn-busy { animation-name: minnListPulse; }
+@keyframes minnListPulse { 0%,100% { opacity: 0.45; } 50% { opacity: 0.25; } }
 
 /* ===== Media upload dropzone ===== */
 .minn-dropzone {

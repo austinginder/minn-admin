@@ -1039,6 +1039,14 @@
 			// Toolbar-only cards (rare) still get dimmed; that's fine.
 			el.classList.add( 'minn-busy' );
 		} );
+		// pointer-events only stops the mouse: the old rows' ⋯ menus and
+		// checkboxes stayed a Tab away while the new filter loaded, and a menu
+		// opened there acts on a row the new list may not hold. The list body
+		// goes inert; never the toolbar or a card that may hold the caret.
+		$$( '.minn-table, .minn-media-grid, .minn-media-list, .minn-plugin-grid', view ).forEach( ( el ) => {
+			el.inert = true;
+			el.setAttribute( 'aria-busy', 'true' );
+		} );
 	}
 
 	// Routes with a soft reload in flight (route → count). Cold-paint branches
@@ -1063,7 +1071,13 @@
 	 */
 	function unmarkListBusy( view ) {
 		if ( ! view ) return;
-		$$( '.minn-busy', view ).forEach( ( el ) => el.classList.remove( 'minn-busy' ) );
+		$$( '.minn-busy', view ).forEach( ( el ) => {
+			el.classList.remove( 'minn-busy' );
+			if ( el.hasAttribute( 'aria-busy' ) ) {
+				el.inert = false;
+				el.removeAttribute( 'aria-busy' );
+			}
+		} );
 	}
 
 	// The list container inside a chrome-preserving view (all view types share
