@@ -169,7 +169,296 @@ try {
 	} else {
 		echo "SKIP  Field Groups has fewer than two plugins on this site\n";
 	}
+
+	// The stored removals, spelled out; anything not given is empty.
+	$store_hiding = static function ( $say ) use ( $uid ) {
+		update_user_option( $uid, Minn_Admin_Notices::REMOVED_OPTION, $say + array( 'nav' => array(), 'owners' => array(), 'paged' => array(), 'content' => array(), 'pages' => array(), 'at' => time() ) );
+	};
+
+	// --- NI-5: a plugin's own content list stays with its other pages hidden --
+	// Simple Custom CSS and JS is the list's whole plugin; while it is not
+	// active here its post type is registered in memory so its surface shows.
+	if ( ! post_type_exists( 'custom-css-js' ) ) {
+		register_post_type( 'custom-css-js', array( 'public' => false, 'show_ui' => true ) );
+		$ccj_temp = true;
+	}
+	$all_ref->setValue( null, null );
+	$registry = Minn_Admin_Surfaces::all();
+	foreach ( array( 'jet-theme-core' => 'pt:jet-theme-core', 'custom-css-js' => 'pt:custom-css-js' ) as $own_id => $own_list ) {
+		if ( ! isset( $registry[ $own_id ] ) ) {
+			echo "SKIP  NI-5 {$own_id}: its surface is not registered here\n";
+			continue;
+		}
+		$store_hiding( array( 'owners' => array( $own_id ), 'paged' => array( $own_id ), 'content' => array( $own_id => array( $own_list ) ) ) );
+		$check( "NI-5 {$own_id}'s list stays while its wp-admin list is in the menu and its other pages are hidden", in_array( $own_id, $ids(), true ) );
+		$store_hiding( array( 'owners' => array( $own_id ), 'paged' => array( $own_id ) ) );
+		$check( "NI-5 control: with that list hidden too, {$own_id} leaves", ! in_array( $own_id, $ids(), true ) );
+	}
+	if ( ! empty( $ccj_temp ) ) {
+		unregister_post_type( 'custom-css-js' );
+		$ccj_temp = false;
+		$all_ref->setValue( null, null );
+		$registry = Minn_Admin_Surfaces::all();
+	}
+
+	// --- NI-6: JetSmartFilters' Filters do not leave with JetSearch -----------
+	if ( ! isset( $registry['jet-search'] ) || ! function_exists( 'minn_admin_jsf_active' ) || ! minn_admin_jsf_active() ) {
+		echo "SKIP  NI-6 needs JetSearch and JetSmartFilters\n";
+	} else {
+		$store_hiding( array( 'pages' => array( 'jet-dashboard-settings-page' ) ) );
+		$jsf_ids = $ids();
+		$check( 'NI-6 with JetSearch\'s hosting page hidden, JetSmartFilters\' Filters still show', ! in_array( 'jet-search', $jsf_ids, true ) && in_array( 'jet-smart-filters', $jsf_ids, true ), wp_json_encode( array_values( array_filter( $jsf_ids, function ( $i ) { return 0 === strpos( $i, 'jet-s' ); } ) ) ) );
+		$store_hiding( array() );
+		$jsf_lists = array();
+		foreach ( Minn_Admin_Surfaces::for_current_user() as $jsf_s ) {
+			foreach ( array_merge( array( $jsf_s['collection'] ?? null, $jsf_s['manage'] ?? null ), (array) ( $jsf_s['views'] ?? array() ) ) as $jsf_c ) {
+				if ( is_array( $jsf_c ) && false !== strpos( (string) ( $jsf_c['route'] ?? '' ), 'jet-smart-filters/filters' ) ) {
+					$jsf_lists[] = $jsf_s['id'];
+				}
+			}
+		}
+		$check( 'NI-6 with nothing hidden, Search and Filters both show and the filters list appears once', array( 'jet-smart-filters' ) === $jsf_lists && in_array( 'jet-search', $ids(), true ), wp_json_encode( $jsf_lists ) );
+		$jsf_card = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/jet-search/status' ) )->get_data();
+		$check( 'NI-6 the indexer row is on the Filters card only, not repeated on Search\'s', ! in_array( __( 'Indexer', 'minn-admin' ), wp_list_pluck( (array) ( $jsf_card['rows'] ?? array() ), 'label' ), true ), wp_json_encode( $jsf_card['rows'] ?? null ) );
+	}
+
+	// --- OS-11: YITH Gift Cards follows its panel -----------------------------
+	if ( ! isset( $registry['yith-gift-cards'] ) ) {
+		echo "SKIP  OS-11 YITH Gift Cards inactive\n";
+	} else {
+		$check( 'OS-11 the capture asks about the YITH Gift Cards panel', in_array( 'yith_woocommerce_gift_cards_panel', Minn_Admin_Surfaces::declared_admin_pages(), true ) );
+		$store_hiding( array( 'pages' => array( 'yith_woocommerce_gift_cards_panel' ) ) );
+		$check( 'OS-11 YITH Gift Cards leaves when a menu tool hides its panel', ! in_array( 'yith-gift-cards', $ids(), true ) );
+		$store_hiding( array() );
+		$check( 'OS-11 control: with the panel shown it stays', in_array( 'yith-gift-cards', $ids(), true ) );
+	}
+
+	// --- OS-16 and NI-14 (b): a view follows its own plugin -------------------
+	if ( ! isset( $registry['cf7']['manage'] ) ) {
+		echo "SKIP  OS-16 needs Contact Form 7 and Flamingo\n";
+	} else {
+		$cf7_paged = array( 'contact-form-7', 'flamingo' );
+		$store_hiding( array( 'pages' => array( 'flamingo_inbound' ), 'owners' => array( 'flamingo' ), 'paged' => $cf7_paged ) );
+		$check( 'OS-16 with only Flamingo hidden, its inbox leaves', ! in_array( 'cf7', $ids(), true ) );
+		$store_hiding( array( 'owners' => array( 'contact-form-7' ), 'paged' => $cf7_paged ) );
+		$cf7_s = null;
+		foreach ( Minn_Admin_Surfaces::for_current_user() as $s ) {
+			$cf7_s = 'cf7' === $s['id'] ? $s : $cf7_s;
+		}
+		$check( 'OS-16 with only Contact Form 7 hidden, the inbox stays and the Forms view leaves', $cf7_s && ! isset( $cf7_s['manage'] ) );
+		$store_hiding( array() );
+		$cf7_s = null;
+		foreach ( Minn_Admin_Surfaces::for_current_user() as $s ) {
+			$cf7_s = 'cf7' === $s['id'] ? $s : $cf7_s;
+		}
+		$check( 'OS-16 control: with nothing hidden, messages and forms both show', $cf7_s && isset( $cf7_s['manage'] ) );
+	}
+	$probe_keys = function ( $surfaces ) {
+		$route = 'minn-admin/v1/overview';
+		$surfaces['minn-probe-keys'] = array(
+			'label'      => 'Probe keys',
+			'cap'        => 'read',
+			'plugin'     => 'minn-probe-owner',
+			'collection' => array( 'route' => $route, 'columns' => array( array( 'key' => 'a', 'label' => 'A' ) ), 'plugin' => 'minn-probe-x', 'adminPages' => array( 'minn-probe-y' ) ),
+			'manage'     => array( 'route' => $route, 'viewLabel' => 'Theirs', 'plugin' => 'minn-probe-viewer', 'columns' => array( array( 'key' => 'a', 'label' => 'A' ) ) ),
+			'views'      => array( array( 'viewLabel' => 'Listed', 'route' => $route, 'plugin' => 'minn-probe-viewer', 'contentTypes' => array( 'pt:minn_probe_pt' ), 'adminPages' => array( 'minn-probe-z' ), 'columns' => array( array( 'key' => 'a', 'label' => 'A' ) ) ) ),
+		);
+		return $surfaces;
+	};
+	add_filter( 'minn_admin_surfaces', $probe_keys, 999 );
+	$all_ref->setValue( null, null );
+	$store_hiding( array() );
+	$keys_row = null;
+	foreach ( (array) ( Minn_Admin_Surfaces::integrations()['surfaces'] ?? array() ) as $row ) {
+		$keys_row = 'minn-probe-keys' === ( $row['id'] ?? '' ) ? $row : $keys_row;
+	}
+	$keys_problems = (array) ( $keys_row['problems'] ?? array() );
+	$check( 'NI-14b a view\'s own contentTypes is not reported as unknown', $keys_row && ! preg_grep( '/^views\[0\]: unknown key/', $keys_problems ), wp_json_encode( $keys_problems ) );
+	$check( 'NI-14b plugin and adminPages on a surface\'s main collection are reported, as they do nothing there', (bool) preg_grep( '/^collection: unknown key "plugin"/', $keys_problems ) && (bool) preg_grep( '/^collection: unknown key "adminPages"/', $keys_problems ), wp_json_encode( $keys_problems ) );
+	$check( 'NI-14b manage\'s own plugin is not reported', ! preg_grep( '/^manage: unknown key/', $keys_problems ), wp_json_encode( $keys_problems ) );
+	$store_hiding( array( 'owners' => array( 'minn-probe-viewer' ), 'paged' => array( 'minn-probe-owner', 'minn-probe-viewer' ) ) );
+	$keys_s = null;
+	foreach ( Minn_Admin_Surfaces::for_current_user() as $s ) {
+		$keys_s = 'minn-probe-keys' === $s['id'] ? $s : $keys_s;
+	}
+	$check( 'NI-14b manage leaves with its own plugin, as a view does, and the surface stays', $keys_s && ! isset( $keys_s['manage'] ) && array() === (array) ( $keys_s['views'] ?? array() ), wp_json_encode( $keys_s ? array_keys( $keys_s ) : null ) );
+	remove_filter( 'minn_admin_surfaces', $probe_keys, 999 );
+	$all_ref->setValue( null, null );
+
+	// --- OS-12: pages bundled frameworks draw are no one's --------------------
+	foreach ( array( 'freemius', 'plugin-fw', 'CMB2' ) as $fw ) {
+		$fw_fn = 'minn_probe_owner_fw_' . substr( md5( $fw ), 0, 8 );
+		wp_mkdir_p( $probe_dir . '/' . $fw );
+		file_put_contents( $probe_dir . '/' . $fw . '/page.php', "<?php\nfunction {$fw_fn}() {}\n" );
+		include_once $probe_dir . '/' . $fw . '/page.php';
+		$menu             = array();
+		$submenu          = array();
+		$admin_page_hooks = array( 'minn-probe-owner' => 'minn-probe-owner' );
+		$_parent_pages    = array( 'minn-probe-owner' => false );
+		add_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), $fw_fn );
+		Minn_Admin_Notices::capture_removed_owners();
+		$check( "OS-12 a page the bundled {$fw} draws is not credited to the plugin carrying it", ! in_array( 'minn-probe-owner', (array) $capture_state( 'owners_with_pages' ), true ), wp_json_encode( $capture_state( 'owners_with_pages' ) ) );
+		remove_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), $fw_fn );
+	}
+	add_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_page' );
+	Minn_Admin_Notices::capture_removed_owners();
+	$check( 'OS-12 control: the plugin\'s own page is still credited to it', in_array( 'minn-probe-owner', (array) $capture_state( 'owners_with_pages' ), true ) );
+	remove_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_page' );
+
+	// --- NI-14 (c): a docroot named like a framework keeps hiding -------------
+	// Only a fresh process can have another plugins folder, so a child run
+	// loads this site with WP_PLUGIN_DIR under a .../jet-dashboard/ folder
+	// (Minn symlinked in, nothing else active) and asks who owns a page.
+	if ( ! class_exists( 'WP_CLI' ) || ! function_exists( 'proc_open' ) || ! function_exists( 'symlink' ) ) {
+		echo "SKIP  NI-14c needs WP-CLI and a child process\n";
+	} else {
+		$dr_base = realpath( sys_get_temp_dir() ) . '/minn-probe-docroot-' . wp_generate_password( 8, false, false );
+		$dr_dir  = $dr_base . '/jet-dashboard/plugins';
+		wp_mkdir_p( $dr_dir . '/minn-probe-owner' );
+		file_put_contents( $dr_dir . '/minn-probe-owner/page.php', "<?php\nfunction minn_probe_owner_page() {}\n" );
+		$dr_linked = @symlink( wp_normalize_path( dirname( MINN_ADMIN_FILE ) ), $dr_dir . '/' . basename( dirname( MINN_ADMIN_FILE ) ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$dr_main   = basename( dirname( MINN_ADMIN_FILE ) ) . '/' . basename( MINN_ADMIN_FILE );
+		file_put_contents(
+			$dr_base . '/require.php',
+			"<?php\ndefine( 'WP_PLUGIN_DIR', " . var_export( $dr_dir, true ) . " );\n"
+			. "WP_CLI::add_wp_hook( 'pre_option_active_plugins', function () { return array( " . var_export( $dr_main, true ) . " ); } );\n"
+			. "WP_CLI::add_wp_hook( 'pre_site_option_active_sitewide_plugins', function () { return array(); } );\n"
+			. "WP_CLI::add_wp_hook( 'pre_option_minn_admin_rewrites_healed', function () { return defined( 'MINN_ADMIN_VERSION' ) ? MINN_ADMIN_VERSION : false; } );\n"
+		);
+		file_put_contents(
+			$dr_base . '/child.php',
+			"<?php\nglobal \$menu, \$submenu, \$admin_page_hooks, \$_parent_pages;\n"
+			. "include_once WP_PLUGIN_DIR . '/minn-probe-owner/page.php';\n"
+			. "\$menu = array(); \$submenu = array(); \$admin_page_hooks = array( 'minn-probe-owner' => 'minn-probe-owner' ); \$_parent_pages = array( 'minn-probe-owner' => false );\n"
+			. "add_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_page' );\n"
+			. "Minn_Admin_Notices::capture_removed_owners();\n"
+			. "\$r = new ReflectionProperty( 'Minn_Admin_Notices', 'owners_with_pages' ); \$r->setAccessible( true );\n"
+			. "echo 'MINNPROBE ' . wp_json_encode( array( 'dir' => WP_PLUGIN_DIR, 'paged' => \$r->getValue() ) ) . \"\\n\";\n"
+		);
+		$dr_out = $dr_linked ? WP_CLI::runcommand( 'eval-file ' . escapeshellarg( $dr_base . '/child.php' ) . ' --skip-themes --require=' . escapeshellarg( $dr_base . '/require.php' ), array( 'launch' => true, 'return' => 'all', 'exit_error' => false ) ) : null;
+		$dr_got = $dr_out && preg_match( '/^MINNPROBE (.+)$/m', (string) $dr_out->stdout, $dr_m ) ? json_decode( $dr_m[1], true ) : null;
+		if ( ! is_array( $dr_got ) || $dr_got['dir'] !== $dr_dir ) {
+			echo 'SKIP  NI-14c the child run did not load from the probe plugins folder' . ( $dr_out ? ': ' . substr( trim( $dr_out->stderr . ' ' . $dr_out->stdout ), 0, 200 ) : '' ) . "\n";
+		} else {
+			$check( 'NI-14c under a docroot with a /jet-dashboard/ folder, a plugin\'s own page is still credited to it', in_array( 'minn-probe-owner', (array) $dr_got['paged'], true ), wp_json_encode( $dr_got ) );
+		}
+		if ( is_link( $dr_dir . '/' . basename( dirname( MINN_ADMIN_FILE ) ) ) ) {
+			unlink( $dr_dir . '/' . basename( dirname( MINN_ADMIN_FILE ) ) );
+		}
+		foreach ( array( $dr_dir . '/minn-probe-owner/page.php', $dr_base . '/require.php', $dr_base . '/child.php' ) as $f ) {
+			if ( is_file( $f ) ) {
+				unlink( $f );
+			}
+		}
+		foreach ( array( $dr_dir . '/minn-probe-owner', $dr_dir, $dr_base . '/jet-dashboard', $dr_base ) as $d ) {
+			if ( is_dir( $d ) ) {
+				rmdir( $d );
+			}
+		}
+	}
+
+	// --- NI-14 (a): a hide that only pages or lists carry refreshes the nav ----
+	// The capture answers surfaces_changed so the app re-reads its surfaces
+	// at once. wp_send_json() ends the request, so its die is turned into an
+	// exception and the JSON caught.
+	$respond = function () {
+		$saved = array();
+		foreach ( array( 'admin_notices', 'all_admin_notices' ) as $h ) {
+			$saved[ $h ] = $GLOBALS['wp_filter'][ $h ] ?? null;
+			unset( $GLOBALS['wp_filter'][ $h ] );
+		}
+		$levels = ob_get_level();
+		while ( ob_get_level() ) {
+			ob_end_flush();
+		}
+		$started = false;
+		$start   = function ( $v ) use ( &$started ) {
+			if ( ! $started ) {
+				$started = true;
+				ob_start();
+			}
+			return $v;
+		};
+		$die     = function () {
+			return function () {
+				throw new RuntimeException( 'minn-probe-die' );
+			};
+		};
+		add_filter( 'minn_admin_respect_removed_menus', $start, 1 );
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		add_filter( 'wp_die_ajax_handler', $die );
+		$json = '';
+		try {
+			Minn_Admin_Notices::capture_and_respond();
+		} catch ( RuntimeException $e ) {
+			$json = $started ? (string) ob_get_clean() : '';
+		}
+		remove_filter( 'minn_admin_respect_removed_menus', $start, 1 );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		remove_filter( 'wp_die_ajax_handler', $die );
+		foreach ( $saved as $h => $was ) {
+			if ( null !== $was ) {
+				$GLOBALS['wp_filter'][ $h ] = $was;
+			}
+		}
+		for ( $i = 0; $i < $levels; $i++ ) {
+			ob_start();
+		}
+		$data = json_decode( $json, true );
+		return is_array( $data ) ? $data : array();
+	};
+	$notices_key  = 'minn_admin_notices_v5_' . $uid;
+	$notices_was  = get_transient( $notices_key );
+	$seen_was     = get_user_meta( $uid, 'minn_admin_notice_seen', true );
+	$notices_kept = true;
+	$host_surface = function ( $surfaces ) {
+		$surfaces['minn-probe-hosted'] = array( 'label' => 'Probe hosted', 'cap' => 'read', 'plugin' => 'minn-probe-nopage', 'adminPages' => array( 'minn-probe-host' ), 'collection' => array( 'route' => 'minn-admin/v1/overview' ) );
+		return $surfaces;
+	};
+	$host_hidden = static function ( $hidden, $slug ) {
+		return $hidden || 'minn-probe-host' === $slug;
+	};
+	add_filter( 'minn_admin_surfaces', $host_surface, 999 );
+	add_filter( 'minn_admin_admin_page_hidden', $host_hidden, 10, 2 );
+	$all_ref->setValue( null, null );
+	$menu             = array();
+	$submenu          = array();
+	$admin_page_hooks = array();
+	$_parent_pages    = array( 'minn-probe-host' => 'minn-probe-parent' );
+	$store_hiding( array() );
+	$r = $respond();
+	$check( 'NI-14a a hosting page newly hidden says the surfaces changed', true === ( $r['surfaces_changed'] ?? null ), wp_json_encode( $r ) );
+	$r = $respond();
+	$check( 'NI-14a control: the same capture again says nothing changed', array_key_exists( 'surfaces_changed', $r ) && false === $r['surfaces_changed'], wp_json_encode( $r ) );
+	remove_filter( 'minn_admin_admin_page_hidden', $host_hidden, 10 );
+	$r = $respond();
+	$check( 'NI-14a that page shown again says the surfaces changed', true === ( $r['surfaces_changed'] ?? null ), wp_json_encode( $r ) );
+	$admin_page_hooks = array( 'minn-probe-owner' => 'minn-probe-owner' );
+	$_parent_pages    = array( 'minn-probe-owner' => false );
+	add_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_page' );
+	add_filter( 'minn_admin_admin_page_hidden', $vouch, 10, 2 );
+	$r = $respond();
+	$check( 'NI-14a control: a plugin newly hidden still says the surfaces changed', true === ( $r['surfaces_changed'] ?? null ), wp_json_encode( $r ) );
+	remove_filter( 'minn_admin_admin_page_hidden', $vouch, 10 );
+	remove_action( get_plugin_page_hookname( 'minn-probe-owner', '' ), 'minn_probe_owner_page' );
+	remove_filter( 'minn_admin_surfaces', $host_surface, 999 );
+	$all_ref->setValue( null, null );
 } finally {
+	if ( ! empty( $ccj_temp ) && post_type_exists( 'custom-css-js' ) ) {
+		unregister_post_type( 'custom-css-js' );
+	}
+	if ( ! empty( $notices_kept ) ) {
+		if ( false === $notices_was ) {
+			delete_transient( $notices_key );
+		} else {
+			set_transient( $notices_key, $notices_was, DAY_IN_SECONDS );
+		}
+		if ( '' === $seen_was ) {
+			delete_user_meta( $uid, 'minn_admin_notice_seen' );
+		} else {
+			update_user_meta( $uid, 'minn_admin_notice_seen', $seen_was );
+		}
+	}
 	if ( null === $option_was ) {
 		$wpdb->delete( $wpdb->usermeta, array( 'user_id' => $uid, 'meta_key' => $option_key ) );
 	} else {
@@ -179,13 +468,18 @@ try {
 	if ( post_type_exists( 'minn_probe_pt' ) ) {
 		unregister_post_type( 'minn_probe_pt' );
 	}
-	foreach ( array( 'probe.php', 'page.php', 'jet-dashboard/page.php' ) as $f ) {
+	foreach ( array( 'jet-dashboard', 'freemius', 'plugin-fw', 'CMB2' ) as $f ) {
+		if ( is_file( $probe_dir . '/' . $f . '/page.php' ) ) {
+			unlink( $probe_dir . '/' . $f . '/page.php' );
+		}
+		if ( is_dir( $probe_dir . '/' . $f ) ) {
+			rmdir( $probe_dir . '/' . $f );
+		}
+	}
+	foreach ( array( 'probe.php', 'page.php' ) as $f ) {
 		if ( is_file( $probe_dir . '/' . $f ) ) {
 			unlink( $probe_dir . '/' . $f );
 		}
-	}
-	if ( is_dir( $probe_dir . '/jet-dashboard' ) ) {
-		rmdir( $probe_dir . '/jet-dashboard' );
 	}
 	if ( is_dir( $probe_dir ) ) {
 		rmdir( $probe_dir );

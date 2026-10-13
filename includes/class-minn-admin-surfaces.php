@@ -73,11 +73,14 @@ class Minn_Admin_Surfaces {
 			}
 			// A plugin whose whole wp-admin menu a menu tool hid from this
 			// user (White Label CMS, through minn_admin_admin_page_hidden)
-			// is hidden here too, and so is a view another plugin added to
-			// the surface. The notices capture finds those owners.
+			// is hidden here too, and so is a view (manage or views) that
+			// names a plugin of its own. The notices capture finds those owners.
 			// Presentation only: the plugin's routes keep their own gates.
 			if ( self::hidden_by_menu_tool( $surface, $tool ) ) {
 				continue;
+			}
+			if ( isset( $surface['manage'] ) && is_array( $surface['manage'] ) && self::hidden_by_menu_tool( $surface['manage'], $tool ) ) {
+				unset( $surface['manage'] );
 			}
 			if ( ! empty( $surface['views'] ) && is_array( $surface['views'] ) ) {
 				$surface['views'] = array_values(
@@ -1000,8 +1003,10 @@ class Minn_Admin_Surfaces {
 	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'plugin', 'contentTypes', 'adminPages', 'collection', 'manage', 'views', 'status', 'setup', 'settings' );
 	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href', 'cap' );
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
-	// plugin and adminPages: a view another plugin appends leaves with it.
-	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter', 'filterBar', 'sortQuery', 'open', 'import', 'dateQuery', 'plugin', 'adminPages' );
+	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter', 'filterBar', 'sortQuery', 'open', 'import', 'dateQuery' );
+	// A view (manage, or an entry in views) may name its own plugin, list or
+	// hosting pages, and leaves without the surface when a menu tool hides them.
+	const VIEW_KEYS       = array( 'plugin', 'contentTypes', 'adminPages' );
 	const FILTER_KEYS     = array( 'label', 'options', 'query', 'param', 'json', 'route', 'valueKey', 'labelKey', 'allLabel' );
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit', 'replyCap' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc', 'sort' );
@@ -1307,10 +1312,11 @@ class Minn_Admin_Surfaces {
 		// Every list view validates with the same collection vocabulary:
 		// `collection`, `manage`, and each `views` entry (which additionally
 		// needs a viewLabel to name its switcher tab and may carry `cap`).
+		// manage and each views entry may also carry VIEW_KEYS.
 		$colls = array();
 		foreach ( array( 'collection', 'manage' ) as $ck ) {
 			if ( ! empty( $surface[ $ck ] ) && is_array( $surface[ $ck ] ) ) {
-				$colls[ $ck ] = $surface[ $ck ];
+				$colls[ $ck ] = 'manage' === $ck ? array_diff_key( $surface[ $ck ], array_flip( self::VIEW_KEYS ) ) : $surface[ $ck ];
 			}
 		}
 		if ( isset( $surface['views'] ) ) {
@@ -1327,7 +1333,7 @@ class Minn_Admin_Surfaces {
 						$problems[] = "$vk: missing viewLabel (entry dropped)";
 					}
 					unset( $v['cap'] ); // view-level gate, legal here only
-					$colls[ $vk ] = $v;
+					$colls[ $vk ] = array_diff_key( $v, array_flip( self::VIEW_KEYS ) );
 				}
 			}
 		}

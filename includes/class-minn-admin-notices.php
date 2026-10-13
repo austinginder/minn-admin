@@ -51,11 +51,14 @@ class Minn_Admin_Notices {
 
 	/**
 	 * Folders of frameworks several plugins bundle and load once, from
-	 * whichever copy is newest. A page such a framework draws (Crocoblock's
-	 * dashboard and its JetPlugins Settings page) belongs to none of the
-	 * plugins that bundle it.
+	 * whichever copy is newest (or first). A page such a framework draws
+	 * belongs to none of the plugins that bundle it: Crocoblock's dashboard
+	 * and its JetPlugins Settings page, Freemius' Account and Contact pages,
+	 * YITH's plugin panels, Tools › Scheduled Actions, CMB2, Redux, Codestar
+	 * and Carbon Fields options pages, ThemeIsle's About pages. Matched in
+	 * the path below the plugins folder, ignoring case.
 	 */
-	const SHARED_FRAMEWORKS = array( '/jet-dashboard/' );
+	const SHARED_FRAMEWORKS = array( '/jet-dashboard/', '/freemius/', '/plugin-fw/', '/action-scheduler/', '/cmb2/', '/redux-core/', '/reduxcore/', '/redux-framework/', '/codestar-framework/', '/carbon-fields/', '/themeisle-sdk/' );
 
 	/** Core callbacks Minn already covers with its own notifications. */
 	const SKIP_CALLBACKS = array( 'update_nag', 'maintenance_nag', 'site_admin_notice' );
@@ -123,7 +126,7 @@ class Minn_Admin_Notices {
 		$items        = self::capture();
 		$menu_removed = self::capture_removed_menus();
 		$owners       = self::capture_removed_owners();
-		$owners_were  = self::removed_owners();
+		$hiding_was   = self::surface_hiding();
 		self::store( $items, $menu_removed, $owners );
 		wp_send_json(
 			array(
@@ -133,8 +136,24 @@ class Minn_Admin_Notices {
 				'menu_removed'     => $menu_removed,
 				// The app re-reads its surface list when this flips, so a
 				// plugin hidden from wp-admin leaves Minn's nav right away.
-				'surfaces_changed' => $owners !== $owners_were,
+				'surfaces_changed' => self::surface_hiding() !== $hiding_was,
 			)
+		);
+	}
+
+	/**
+	 * Everything the stored removals say that decides which surfaces the
+	 * current user keeps: removed owners, owners with pages, lists that
+	 * keep a surface, hidden hosting pages.
+	 *
+	 * @return array
+	 */
+	public static function surface_hiding() {
+		return array(
+			self::removed_owners(),
+			self::owners_with_pages(),
+			self::owners_kept_by_content(),
+			self::hidden_admin_pages(),
 		);
 	}
 
@@ -328,10 +347,8 @@ class Minn_Admin_Notices {
 			foreach ( $cbs as $registered ) {
 				$ref  = self::reflect( $registered['function'] );
 				$file = $ref && $ref->getFileName() ? wp_normalize_path( $ref->getFileName() ) : '';
-				foreach ( self::SHARED_FRAMEWORKS as $dir ) {
-					if ( false !== strpos( $file, $dir ) ) {
-						return '';
-					}
+				if ( self::in_shared_framework( $file ) ) {
+					return '';
 				}
 				$owner = self::owner_of_file( $file );
 				if ( 'plugin' === $owner['type'] && '' !== $owner['slug'] ) {
@@ -344,6 +361,28 @@ class Minn_Admin_Notices {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Whether a file is part of a framework several plugins bundle
+	 * (SHARED_FRAMEWORKS). Only the path below the plugins folder counts, so
+	 * a site whose own folders carry one of those names keeps its hiding.
+	 *
+	 * @param string $file Normalized absolute path.
+	 * @return bool
+	 */
+	private static function in_shared_framework( $file ) {
+		$root = trailingslashit( wp_normalize_path( WP_PLUGIN_DIR ) );
+		if ( '' === $file || 0 !== strpos( $file, $root ) ) {
+			return false;
+		}
+		$rel = '/' . strtolower( substr( $file, strlen( $root ) ) );
+		foreach ( self::SHARED_FRAMEWORKS as $dir ) {
+			if ( false !== strpos( $rel, $dir ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

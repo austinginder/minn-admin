@@ -670,6 +670,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'snippets',
 		'sub'        => 'Simple Custom CSS and JS',
 		'plugin'     => 'custom-css-js',
+		// The list of these snippets: it stays while their wp-admin list
+		// does, even when a menu tool hides the plugin's Settings page.
+		'contentTypes' => array( 'pt:custom-css-js' ),
 		'icon'       => 'code',
 		'cap'        => 'read',
 		// Status card (v0.18.0): family parity with Code Snippets.

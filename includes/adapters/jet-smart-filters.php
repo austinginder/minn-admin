@@ -71,7 +71,7 @@ function minn_admin_jsf_item( $post, $types ) {
 	);
 }
 
-/** The indexer rows + Reindex, shared with the JetSearch status card. */
+/** The indexer rows + Reindex for the Filters status card. */
 function minn_admin_jsf_status_rows() {
 	global $wpdb;
 	$counts = wp_count_posts( 'jet-smart-filters' );
@@ -154,16 +154,10 @@ function minn_admin_jsf_reindex_worker( $token ) {
 }
 add_action( 'minn_admin_jsf_reindex', 'minn_admin_jsf_reindex_worker' );
 
-// Runs after jet-search.php's filter (require order), so the Search
-// surface, when JetSearch is active, is there to join.
+// Its own surface even beside JetSearch: JetSmartFilters keeps its own
+// top-level menu, so a menu tool that hides one leaves the other in place.
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_jsf_active() || ! minn_admin_jsf_can() ) {
-		return $surfaces;
-	}
-	if ( isset( $surfaces['jet-search'] ) ) {
-		// Its own owner, so a menu tool that hides JetSmartFilters takes
-		// this view away and leaves JetSearch's.
-		$surfaces['jet-search']['views'][] = array( 'plugin' => 'jet-smart-filters' ) + minn_admin_jsf_collection();
 		return $surfaces;
 	}
 	$surfaces['jet-smart-filters'] = array(
@@ -179,11 +173,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-/** The filters list as a collection descriptor (its own surface or a Search view). */
+/** The filters list as a collection descriptor. */
 function minn_admin_jsf_collection() {
 	return array(
 			'viewLabel' => __( 'Filters', 'minn-admin' ),
-			'cap'       => 'manage_options',
 			'route'     => 'minn-admin/v1/jet-smart-filters/filters',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',

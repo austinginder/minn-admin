@@ -63,9 +63,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_jet_search_active() || ! minn_admin_jet_search_can() ) {
 		return $surfaces;
 	}
-	// One Tools item for the site-search plugins: JetSearch's suggestions
-	// here, JetSmartFilters' filters as a second view when it is active
-	// (jet-smart-filters.php appends it), the indexer on this status card.
+	// JetSearch's suggestions. JetSmartFilters' filters and indexer are a
+	// Tools item of their own (jet-smart-filters.php), as their menu is.
 	$surfaces['jet-search'] = array(
 		'label'      => __( 'Search', 'minn-admin' ),
 		'sub'        => 'JetSearch',
@@ -312,12 +311,6 @@ add_action( 'rest_api_init', function () {
 				array( 'label' => __( 'Top', 'minn-admin' ), 'value' => $top ? (string) $top->name : '—', 'hint' => $top ? sprintf( /* translators: %s: weight */ __( 'weight %s', 'minn-admin' ), number_format_i18n( (int) $top->weight ) ) : '' ),
 				array( 'label' => __( 'Duplicates', 'minn-admin' ), 'value' => number_format_i18n( $dupes ) ),
 			);
-			// JetSmartFilters shares this card: its indexer row and Reindex.
-			if ( function_exists( 'minn_admin_jsf_status_rows' ) && function_exists( 'minn_admin_jsf_active' ) && minn_admin_jsf_active() && minn_admin_jsf_can() ) {
-				$jsf     = minn_admin_jsf_status_rows();
-				$rows    = array_merge( $rows, $jsf['rows'] );
-				$actions = array_merge( $actions, $jsf['actions'] );
-			}
 			return rest_ensure_response( array( 'rows' => $rows, 'actions' => array_merge( $actions, $open ) ) );
 		},
 	) );

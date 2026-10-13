@@ -340,6 +340,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'gift-cards',
 		'sub'        => 'YITH',
 		'plugin'     => array( 'yith-woocommerce-gift-cards', 'yith-woocommerce-gift-cards-premium' ),
+		// YITH's plugin framework draws every YITH panel, from whichever
+		// plugin carries its newest copy, so the panel names this surface's
+		// page rather than the plugin folder.
+		'adminPages' => array( 'yith_woocommerce_gift_cards_panel' ),
 		'icon'       => 'gift',
 		'cap'        => 'manage_woocommerce',
 		'group'      => 'commerce',
