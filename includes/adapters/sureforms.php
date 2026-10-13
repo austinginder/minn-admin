@@ -7,8 +7,8 @@
  * is JSON keyed per block with the label encoded in the key
  * (minn_admin_sureforms_answers() reads it back the way SureForms does). Read/unread/trash status, per-form tabs
  * from the sureforms_form CPT, search, delete, and a status card. Prefix-scoped
- * SELECTs; json_decode only, never unserialize. `created_at` is a DB timestamp
- * (session zone) normalized to UTC via the shared helper.
+ * SELECTs; json_decode only, never unserialize. `created_at` is written on the
+ * site's clock (current_time), converted to UTC via the shared helper.
  *
  * last-sweep: 2026-07-17
  *
@@ -357,8 +357,8 @@ add_action( 'rest_api_init', function () {
 				$params[] = '%' . $wpdb->esc_like( $search ) . '%';
 			}
 			// A status-chart bar narrows the list to that day. created_at is
-			// stored UTC, so the site-local bounds convert before comparing.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created_at', 'utc' );
+			// site-local, like the bounds, so they compare as they come.
+			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created_at', 'local' );
 			$where = array_merge( $where, $range_sql );
 			$params = array_merge( $params, $range_args );
 			$where_sql = 'WHERE ' . implode( ' AND ', $where );
@@ -514,18 +514,12 @@ add_action( 'rest_api_init', function () {
 			$unread = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'unread'" ); // phpcs:ignore
 			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status <> 'trash'" ); // phpcs:ignore
 			$forms  = count( minn_admin_sureforms_form_titles() );
-			// created_at rides the DB session clock (UTC on managed hosts, local on
-			// dev): shift the window bound the same way the list shifts rows.
-			$chart = minn_admin_chart_days();
-			$db_offset   = function_exists( 'minn_admin_db_utc_offset' ) ? (int) minn_admin_db_utc_offset() : 0;
-			$chart_since = gmdate( 'Y-m-d H:i:s', strtotime( minn_admin_chart_utc_since() . ' UTC' ) + $db_offset );
 			// Group onto the site's day in SQL rather than fetching a row per
 			// entry: this table is filled by unauthenticated submissions, so a
-			// per-row fetch has no bound. The column is on the DB session
-			// clock, so come back to UTC before applying the site's offset.
-			$site_offset = (int) round( (float) get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
-			$chart_day   = sprintf( 'DATE(created_at + INTERVAL %d SECOND)', $site_offset - $db_offset );
-			$chart_rows  = $wpdb->get_results( $wpdb->prepare( "SELECT {$chart_day} AS d, COUNT(*) AS c FROM {$table} WHERE status <> 'trash' AND created_at >= %s GROUP BY d", $chart_since ) ); // phpcs:ignore
+			// per-row fetch has no bound. created_at is site-local, so DATE()
+			// is already the site's day.
+			$chart      = minn_admin_chart_days();
+			$chart_rows = $wpdb->get_results( $wpdb->prepare( "SELECT DATE(created_at) AS d, COUNT(*) AS c FROM {$table} WHERE status <> 'trash' AND created_at >= %s GROUP BY d", minn_admin_chart_local_since() ) ); // phpcs:ignore
 			foreach ( (array) $chart_rows as $cr ) {
 				minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
 			}

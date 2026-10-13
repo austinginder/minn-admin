@@ -8,8 +8,8 @@
  * search, single + bulk delete, a status card, and a sections detail (status
  * pill, sandboxed HTML body). Delivery is the cloud's job, so there is no
  * local resend; the card links out to Site Mailer's own log for that. Its
- * `created_at` defaults to the DB CURRENT_TIMESTAMP (DB session zone) —
- * normalized to UTC via the shared minn_admin_db_local_to_utc_iso() helper.
+ * `created_at` is written on the site's clock (current_time), converted to
+ * UTC by the shared minn_admin_db_local_to_utc_iso() helper.
  *
  * last-sweep: 2026-07-17
  *
@@ -172,7 +172,7 @@ add_action( 'rest_api_init', function () {
 				array_push( $params, $like, $like );
 			}
 			// A status-chart bar narrows the list to that day. The bounds are
-			// minted in the DB's own clock (the same one the chart buckets in
+			// minted on the site's clock (the same one the chart buckets in
 			// and the column is stored in), so this compares like for like and
 			// nothing has to convert.
 			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
@@ -279,12 +279,13 @@ add_action( 'rest_api_init', function () {
 			$failed    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status IN ('failed','bounce','dropped')" ); // phpcs:ignore
 			$opened    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE opened = 1" ); // phpcs:ignore
 
-			$db_now = time() + minn_admin_db_utc_offset();
-			$since  = gmdate( 'Y-m-d 00:00:00', $db_now - 13 * DAY_IN_SECONDS );
-			$byday  = array();
+			// created_at is site-local, so DATE(created_at) is already the
+			// site's day: build the day keys on the site's clock too.
+			$since = minn_admin_chart_local_since();
+			$byday = array();
 			for ( $i = 13; $i >= 0; $i-- ) {
-				$d           = gmdate( 'Y-m-d', $db_now - $i * DAY_IN_SECONDS );
-				// The bounds a clicked bar sends back, in the DB's clock.
+				$d           = wp_date( 'Y-m-d', time() - $i * DAY_IN_SECONDS );
+				// The bounds a clicked bar sends back, on the site's clock.
 				$byday[ $d ] = array(
 					'label'     => gmdate( 'M j', strtotime( $d ) ),
 					'value'     => 0,

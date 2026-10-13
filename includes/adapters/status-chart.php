@@ -5,9 +5,9 @@
  *
  * Days are the SITE's days (wp_date), which is the only calendar a person
  * reading the card has. Each adapter decides how its own timestamps map onto
- * those days: a site-local column groups by DATE() directly, a UTC column is
- * bucketed through minn_admin_chart_utc_day(), and a column on the DB session
- * clock goes through the mail family's minn_admin_db_local_to_utc_iso() first.
+ * those days: a site-local column (current_time( 'mysql' ), as SureForms,
+ * SureMails and Site Mailer write) groups by DATE() directly, and a UTC column
+ * is bucketed through minn_admin_chart_utc_day().
  *
  * @package minn-admin
  */

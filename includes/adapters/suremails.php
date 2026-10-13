@@ -8,8 +8,8 @@
  * sections detail (status pill, sandboxed HTML body, response peek). It logs
  * only while SureMails is the active mailer; the surface gates on the table
  * existing. `email_to`/`headers`/`response` are maybe_serialize'd — decoded by
- * REGEX only, never unserialize (adapter ground rule). `created_at` defaults to
- * the DB CURRENT_TIMESTAMP (UTC), so timestamps emit as UTC.
+ * REGEX only, never unserialize (adapter ground rule). `created_at` is written
+ * on the site's clock (current_time), and timestamps emit converted to UTC.
  *
  * last-sweep: 2026-07-17
  *
@@ -23,38 +23,24 @@ function minn_admin_suremails_active() {
 }
 
 /**
- * Convert a `DEFAULT current_timestamp()` datetime to a UTC ISO-8601 string.
+ * Convert a site-local datetime to a UTC ISO-8601 string.
  *
- * Plugins that store timestamps via the DB's own CURRENT_TIMESTAMP inherit
- * the database session timezone, which is UTC on many managed hosts but
- * SITE-LOCAL on others (Cove's dev MariaDB runs the OS zone). Rather than
- * guess, ask the DB its offset from UTC once and shift. Correct on every
- * host: a UTC database yields offset 0 and the value passes through.
+ * SureMails, Site Mailer and SureForms all write `created_at` with
+ * current_time( 'mysql' ), the site's wall clock, whatever the column's
+ * CURRENT_TIMESTAMP default says. So the shift is the site's zone (and its
+ * DST), never the database server's: the two agree only where the database
+ * happens to run in the site's zone.
  *
- * @param string $mysql_datetime "Y-m-d H:i:s" in the DB session zone.
+ * @param string $mysql_datetime "Y-m-d H:i:s" on the site's clock.
  * @return string ISO-8601 with a trailing Z, or '' when unparseable.
  */
 if ( ! function_exists( 'minn_admin_db_local_to_utc_iso' ) ) {
 	function minn_admin_db_local_to_utc_iso( $mysql_datetime ) {
 		$dt = trim( (string) $mysql_datetime );
-		if ( '' === $dt || 0 === strpos( $dt, '0000-00-00' ) ) {
+		if ( '' === $dt || 0 === strpos( $dt, '0000-00-00' ) || false === strtotime( $dt ) ) {
 			return '';
 		}
-		$naive = strtotime( $dt . ' UTC' );
-		if ( false === $naive ) {
-			return '';
-		}
-		return gmdate( 'Y-m-d\TH:i:s\Z', $naive - minn_admin_db_utc_offset() );
-	}
-
-	/** Seconds the DB session clock is ahead of UTC (0 on a UTC database). */
-	function minn_admin_db_utc_offset() {
-		static $offset = null;
-		if ( null === $offset ) {
-			global $wpdb;
-			$offset = (int) $wpdb->get_var( 'SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW())' );
-		}
-		return $offset;
+		return get_gmt_from_date( $dt, 'Y-m-d\TH:i:s\Z' );
 	}
 }
 
@@ -192,7 +178,7 @@ add_action( 'rest_api_init', function () {
 				$params[] = $status;
 			}
 			// A status-chart bar narrows the list to that day. The bounds are
-			// minted in the DB's own clock (the same one the chart buckets in
+			// minted on the site's clock (the same one the chart buckets in
 			// and the column is stored in), so this compares like for like.
 			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
 				$bound = (string) $request->get_param( $param );
@@ -221,9 +207,8 @@ add_action( 'rest_api_init', function () {
 					'subject'    => (string) $r->subject,
 					'to'         => minn_admin_suremails_recipients( $r->email_to ),
 					'status'     => (string) $r->status,
-					// created_at rides the DB session zone (may be local, not
-					// UTC): convert to an absolute ISO-Z so the client never
-					// shifts it by gmt_offset.
+					// created_at is site-local: convert to an absolute ISO-Z
+					// so the client never shifts it by gmt_offset.
 					'created_at' => minn_admin_db_local_to_utc_iso( $r->created_at ),
 				);
 			}, $rows ? $rows : array() );
@@ -309,15 +294,14 @@ add_action( 'rest_api_init', function () {
 			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore
 			$failed = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'failed'" ); // phpcs:ignore
 
-			// 14-day sent/failed chart. DATE(created_at) buckets in the DB
-			// session zone, so build the day keys in that same zone (DB-now =
-			// UTC + offset) — correct whether the DB runs UTC or local.
-			$db_now = time() + minn_admin_db_utc_offset();
-			$since  = gmdate( 'Y-m-d 00:00:00', $db_now - 13 * DAY_IN_SECONDS );
-			$byday  = array();
+			// 14-day sent/failed chart. created_at is site-local, so
+			// DATE(created_at) is already the site's day: build the day keys
+			// on the site's clock too.
+			$since = minn_admin_chart_local_since();
+			$byday = array();
 			for ( $i = 13; $i >= 0; $i-- ) {
-				$d           = gmdate( 'Y-m-d', $db_now - $i * DAY_IN_SECONDS );
-				// The bounds a clicked bar sends back, in the DB's clock.
+				$d           = wp_date( 'Y-m-d', time() - $i * DAY_IN_SECONDS );
+				// The bounds a clicked bar sends back, on the site's clock.
 				$byday[ $d ] = array(
 					'label'     => gmdate( 'M j', strtotime( $d ) ),
 					'value'     => 0,
