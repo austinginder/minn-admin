@@ -505,9 +505,10 @@ function minn_admin_acf_layout_meta_held( $f, $name, $object_id, $depth = 0 ) {
  *   page attach to no real object, there as on ACF's own screen.
  * - A field from a seamless clone. Its composed key (field_CLONE_field_ORIG)
  *   is one get_field() and update_field() cannot resolve, so both fall back
- *   to a meta key of that name and an edit never reaches the real field.
- *   Flexible content keeps its resolved definition (`_acf`) and reads and
- *   writes through it.
+ *   to a meta key of that name and an edit never reaches the real field. A
+ *   flexible one written through its resolved definition (`_acf`) stores
+ *   that composed key as its `_{name}` reference, where ACF's clone save
+ *   restores the original, and get_field() then no longer finds it.
  *
  * @param array      $f         Top-level ACF field definition.
  * @param int|string $object_id Post id or options id (0 for a post not yet saved).
@@ -518,7 +519,7 @@ function minn_admin_acf_wp_admin_only( $f, $object_id, $terms ) {
 	if ( ! is_array( $f ) ) {
 		return false;
 	}
-	if ( ! empty( $f['_clone'] ) && 'flexible_content' !== ( $f['type'] ?? '' ) ) {
+	if ( ! empty( $f['_clone'] ) ) {
 		return true;
 	}
 	$decoded = function_exists( 'acf_decode_post_id' ) ? acf_decode_post_id( $object_id ) : array();
@@ -2946,6 +2947,9 @@ function minn_admin_acf_options_tabs( $page ) {
 	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
 	$groups  = acf_get_field_groups( array( 'options_page' => $page['menu_slug'] ) );
 	$terms   = minn_admin_acf_groups_term_writes( $groups );
+	// Where ACF reads and writes this page's values: options_{lang} on a
+	// multilingual site.
+	$acf_id = function_exists( 'acf_get_valid_post_id' ) ? acf_get_valid_post_id( $post_id ) : $post_id;
 	foreach ( $groups as $group ) {
 		$current = -1;
 		foreach ( (array) acf_get_fields( $group ) as $f ) {
@@ -2957,7 +2961,7 @@ function minn_admin_acf_options_tabs( $page ) {
 			if ( in_array( $type, MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 				continue;
 			}
-			$gate = minn_admin_acf_gate( $f, $post_id );
+			$gate = minn_admin_acf_gate( $f, $acf_id );
 			if ( $current < 0 ) {
 				$open( $group['title'] );
 			}
@@ -2969,7 +2973,7 @@ function minn_admin_acf_options_tabs( $page ) {
 			}
 			// A group goes back whole on any edit of its subs, so it answers
 			// for everything inside it.
-			if ( minn_admin_acf_wp_admin_only( $f, $post_id, $terms ) ) {
+			if ( minn_admin_acf_wp_admin_only( $f, $acf_id, $terms ) ) {
 				$lock( $f['label'] ?? '' );
 				continue;
 			}

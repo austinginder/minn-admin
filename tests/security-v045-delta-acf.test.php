@@ -6,10 +6,10 @@
  * and checks what ACF stored, with a control where a fix could over-block:
  * NI-1 (a new repeater row or flexible section inherits the stored values of
  * the row that sat at its index), OS-1 (disabled sections and renamed labels
- * lost to a flexible-content write), r2 / OS-13 (fields from a seamless
+ * lost to a flexible-content write), r2 / OS-13 / S1 (fields from a seamless
  * clone), OS-15 (a term-saving taxonomy field in rows) and, from the second
- * review round, A1 (a new row's defaults). Sections SKIP when ACF PRO is
- * inactive.
+ * review round, A1 (a new row's defaults) and A2 (the OS-1 lock on a
+ * multilingual options page). Sections SKIP when ACF PRO is inactive.
  *
  * Run: wp eval-file tests/security-v045-delta-acf.test.php --user=admin --path=<site>
  *
@@ -85,9 +85,9 @@ foreach ( array( 'minn-d1-alpha', 'minn-d1-beta', 'minn-d1-gamma' ) as $old_slug
 	}
 }
 $drop_opts = function () use ( $wpdb ) {
-	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'minn\\_d1\\_opts\\_%' OR option_name LIKE '\\_minn\\_d1\\_opts\\_%'" );
-	wp_cache_delete( 'alloptions', 'options' );
-	wp_cache_delete( 'notoptions', 'options' );
+	foreach ( $wpdb->get_col( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE 'minn\\_d1\\_opts\\_%' OR option_name LIKE '\\_minn\\_d1\\_opts\\_%'" ) as $name ) {
+		delete_option( $name );
+	}
 };
 $drop_opts();
 
@@ -583,11 +583,99 @@ if ( array( 1 ) !== ( $opt_meta( 'minn_d1_ofx' )['disabled'] ?? null ) || 'Renam
 acf_remove_local_field_group( 'group_minn_d1_opts' );
 $drop_opts();
 
-// --- r2 / OS-13 fields from a seamless clone ---------------------------------
+// --- A2 the OS-1 lock reads the options page's own language -----------------
+// On WPML or Polylang ACF keeps an options page's values under options_{lang}
+// (acf_get_valid_post_id()). The lock read plain `options`, so a secondary
+// language's disabled section was not seen and the save deleted it, and the
+// default language's could lock a secondary language's field. The language
+// is set through ACF's own settings, the seam both plugins use.
+$lang      = 'en';
+$lang_dflt = function () {
+	return 'en';
+};
+$lang_cur  = function () use ( &$lang ) {
+	return $lang;
+};
+add_filter( 'acf/settings/default_language', $lang_dflt, 99 );
+add_filter( 'acf/settings/current_language', $lang_cur, 99 );
+// Through delete_option(), so no cached copy outlives its row.
+$drop_lang = function () use ( $wpdb ) {
+	foreach ( $wpdb->get_col( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE '%minn\\_d1\\_l%'" ) as $name ) {
+		delete_option( $name );
+	}
+	if ( function_exists( 'acf_get_field_type' ) && acf_get_field_type( 'flexible_content' ) ) {
+		acf_get_field_type( 'flexible_content' )->layout_meta = array();
+	}
+};
+$drop_lang();
+acf_add_options_page( array( 'page_title' => 'MinnD1 lang', 'menu_title' => 'MinnD1 lang', 'menu_slug' => 'minn-d1-lang', 'capability' => 'edit_posts', 'redirect' => false ) );
+acf_add_local_field_group( array(
+	'key'      => 'group_minn_d1_lang',
+	'title'    => 'MinnD1 lang',
+	'fields'   => array(
+		array( 'key' => 'field_minn_d1_ltext', 'name' => 'minn_d1_ltext', 'label' => 'Text', 'type' => 'text' ),
+		array(
+			'key'     => 'field_minn_d1_lfx',
+			'name'    => 'minn_d1_lfx',
+			'label'   => 'Blocks',
+			'type'    => 'flexible_content',
+			'layouts' => array( 'layout_minn_d1_l_hero' => array( 'key' => 'layout_minn_d1_l_hero', 'name' => 'hero', 'label' => 'Hero', 'display' => 'block', 'sub_fields' => array( array( 'key' => 'field_minn_d1_l_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text' ) ) ) ),
+		),
+	),
+	'location' => array( array( array( 'param' => 'options_page', 'operator' => '==', 'value' => 'minn-d1-lang' ) ) ),
+) );
+$lang_opt  = function ( $name ) {
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( $name, 'options' );
+	return get_option( $name );
+};
+$lang_meta = function ( $id ) {
+	wp_cache_delete( 'alloptions', 'options' );
+	$m = acf_get_metadata_by_field( $id, array( 'name' => '_minn_d1_lfx_layout_meta' ) );
+	return is_array( $m ) ? $m : array();
+};
+// A section disabled in the French copy.
+$lang = 'fr';
+update_field( 'field_minn_d1_ltext', 'Old', 'options' );
+update_field( 'field_minn_d1_lfx', array( array( 'acf_fc_layout' => 'hero', 'field_minn_d1_l_title' => 'F0' ), array( 'acf_fc_layout' => 'hero', 'field_minn_d1_l_title' => 'F1', 'acf_fc_layout_disabled' => 1 ) ), 'options' );
+if ( array( 1 ) !== ( $lang_meta( 'options_fr' )['disabled'] ?? null ) || $lang_meta( 'options' ) ) {
+	$check( 'A2 fixture: ACF stored the French layout meta under options_fr', false, wp_json_encode( array( $lang_meta( 'options_fr' ), $lang_meta( 'options' ) ) ) );
+} else {
+	wp_set_current_user( $contrib );
+	list( $l_st ) = $call( 'POST', '/minn-admin/v1/acf/options/minn-d1-lang/tab-0', array( 'values' => array( 'field_minn_d1_ltext' => 'New', 'field_minn_d1_lfx' => array( array( '__idx' => 0, '__layout' => 'hero', 'values' => array( 'title' => 'F0 edited' ) ) ) ) ) );
+	$check( 'A2 an options-page save in a second language keeps its disabled section', 200 === $l_st && array( 'hero', 'hero' ) === $lang_opt( 'options_fr_minn_d1_lfx' ) && array( 1 ) === ( $lang_meta( 'options_fr' )['disabled'] ?? null ), $l_st . ' ' . wp_json_encode( array( $lang_opt( 'options_fr_minn_d1_lfx' ), $lang_meta( 'options_fr' ) ) ) );
+	$check( 'A2 control: the page\'s other field saves in that language', 'New' === $lang_opt( 'options_fr_minn_d1_ltext' ), wp_json_encode( $lang_opt( 'options_fr_minn_d1_ltext' ) ) );
+	wp_set_current_user( $admin );
+}
+// The reverse: disabled in the default language, plain in the French copy.
+$drop_lang();
+$lang = 'en';
+update_field( 'field_minn_d1_lfx', array( array( 'acf_fc_layout' => 'hero', 'field_minn_d1_l_title' => 'E0', 'acf_fc_layout_disabled' => 1 ) ), 'options' );
+$lang = 'fr';
+update_field( 'field_minn_d1_lfx', array( array( 'acf_fc_layout' => 'hero', 'field_minn_d1_l_title' => 'F0' ) ), 'options' );
+if ( array( 0 ) !== ( $lang_meta( 'options' )['disabled'] ?? null ) || ! empty( $lang_meta( 'options_fr' )['disabled'] ) ) {
+	$check( 'A2 fixture (reverse): the default language holds the disabled section', false, wp_json_encode( array( $lang_meta( 'options' ), $lang_meta( 'options_fr' ) ) ) );
+} else {
+	wp_set_current_user( $contrib );
+	list( , $l_get ) = $call( 'GET', '/minn-admin/v1/acf/options/minn-d1-lang/tab-0' );
+	$l_served = is_array( $l_get['values']['field_minn_d1_lfx'] ?? null ) && 1 === count( $l_get['values']['field_minn_d1_lfx'] );
+	list( $l_st2 ) = $call( 'POST', '/minn-admin/v1/acf/options/minn-d1-lang/tab-0', array( 'values' => array( 'field_minn_d1_lfx' => array( array( '__idx' => 0, '__layout' => 'hero', 'values' => array( 'title' => 'F0 edited' ) ) ) ) ) );
+	$check( 'A2 a second language\'s flexible field is not locked by the default language\'s disabled section', $l_served && 200 === $l_st2 && 'F0 edited' === $lang_opt( 'options_fr_minn_d1_lfx_0_title' ), $l_st2 . ' ' . wp_json_encode( array( $l_served, $lang_opt( 'options_fr_minn_d1_lfx_0_title' ) ) ) );
+	$check( 'A2 control: the default language\'s disabled section is untouched', array( 'hero' ) === $lang_opt( 'options_minn_d1_lfx' ) && 'E0' === $lang_opt( 'options_minn_d1_lfx_0_title' ) && array( 0 ) === ( $lang_meta( 'options' )['disabled'] ?? null ), wp_json_encode( array( $lang_opt( 'options_minn_d1_lfx' ), $lang_meta( 'options' ) ) ) );
+	wp_set_current_user( $admin );
+}
+acf_remove_local_field_group( 'group_minn_d1_lang' );
+remove_filter( 'acf/settings/default_language', $lang_dflt, 99 );
+remove_filter( 'acf/settings/current_language', $lang_cur, 99 );
+$drop_lang();
+
+// --- r2 / OS-13 / S1 fields from a seamless clone ----------------------------
 // ACF composes their keys (field_CLONE_field_ORIG), which acf_get_field()
-// cannot resolve. A flexible field keeps its definition, but the link
-// upgrade asked acf_get_field() for it and did nothing (r2); a repeater or a
-// simple field read and wrote a stand-in meta key of the composed name (OS-13).
+// cannot resolve. A repeater or a simple field read and wrote a stand-in
+// meta key of the composed name (OS-13). A flexible field written through its
+// resolved definition stored the composed key as its `_{name}` reference
+// (S1), so a strict get_field() no longer found it; before r2 the write also
+// emptied an old-shape link in a sub Minn does not show.
 acf_add_local_field_group( array(
 	'key'      => 'group_minn_d1_src',
 	'title'    => 'MinnD1 source',
@@ -656,15 +744,11 @@ if ( ! $c_pid ) {
 		update_post_meta( $c_pid, '_' . $c_k, $c_v[1] );
 	}
 	$c_vals = $panel( $c_pid );
-	$c_fx   = $c_vals['minn_d1_src_fx'] ?? null;
-	if ( ! is_array( $c_fx ) || 1 !== count( $c_fx ) ) {
-		$check( 'r2 the panel serves the cloned flexible field', false, wp_json_encode( $c_vals ) );
-	} else {
-		$c_fx[0]['values']['title'] = 'Blk 2';
-		$c_st = $save( $c_pid, array( 'minn_d1_src_fx' => $c_fx ) );
-		$check( 'r2 a cloned flexible field\'s old-shape link in a nested repeater survives a section edit', 200 === $c_st && 'https://c.example/' === $link_url( $meta( $c_pid, 'minn_d1_src_fx_0_items_0_cta' ) ), $c_st . ' ' . wp_json_encode( $meta( $c_pid, 'minn_d1_src_fx_0_items_0_cta' ) ) );
-		$check( 'r2 control: the edited section title saves to the real field', 'Blk 2' === $meta( $c_pid, 'minn_d1_src_fx_0_title' ), wp_json_encode( $meta( $c_pid, 'minn_d1_src_fx_0_title' ) ) );
-	}
+	$check( 'S1 a cloned flexible field is not served', ! array_key_exists( 'minn_d1_src_fx', $c_vals ), wp_json_encode( $c_vals['minn_d1_src_fx'] ?? null ) );
+	// What a client that was served it sends after editing the section title.
+	$c_st = $save( $c_pid, array( 'minn_d1_src_fx' => array( array( '__idx' => 0, '__layout' => 'blk', 'values' => array( 'title' => 'Blk 2' ) ) ) ) );
+	$check( 'S1 a cloned flexible field keeps its own key as its reference', 200 === $c_st && 'field_minn_d1_src_fx' === $meta( $c_pid, '_minn_d1_src_fx' ), $c_st . ' ' . wp_json_encode( $meta( $c_pid, '_minn_d1_src_fx' ) ) );
+	$check( 'S1 that edit changes nothing stored: its section and a nested old-shape link (r2) stay as they were', 'Blk' === $meta( $c_pid, 'minn_d1_src_fx_0_title' ) && 'https://c.example/' === $link_url( $meta( $c_pid, 'minn_d1_src_fx_0_items_0_cta' ) ), wp_json_encode( array( $meta( $c_pid, 'minn_d1_src_fx_0_title' ), $meta( $c_pid, 'minn_d1_src_fx_0_items_0_cta' ) ) ) );
 	$check( 'OS-13 a cloned text field is not served from a stand-in key', ! array_key_exists( 'minn_d1_src_text', $c_vals ) || 'Real' === $c_vals['minn_d1_src_text'], wp_json_encode( $c_vals['minn_d1_src_text'] ?? null ) );
 	$check( 'OS-13 a cloned repeater is not served from a stand-in key', ! array_key_exists( 'minn_d1_src_rep', $c_vals ) || 1 === count( (array) $c_vals['minn_d1_src_rep'] ), wp_json_encode( $c_vals['minn_d1_src_rep'] ?? null ) );
 	$c_st2 = $save( $c_pid, array( 'minn_d1_src_text' => 'Edited', 'minn_d1_src_rep' => array( array( 'values' => array( 't' => 'New' ) ) ), 'minn_d1_host_note' => 'Host 2' ) );
@@ -676,7 +760,7 @@ if ( ! $c_pid ) {
 	$check( 'OS-13 the real cloned values are untouched', 'Real' === $meta( $c_pid, 'minn_d1_src_text' ) && 'R0' === $meta( $c_pid, 'minn_d1_src_rep_0_t' ) );
 	$check( 'OS-13 control: the host group\'s own field saves', 'Host 2' === $meta( $c_pid, 'minn_d1_host_note' ) );
 	$c_g = $payload_group( $c_pid, 'MinnD1 host' );
-	$check( 'OS-13 the cloned text and repeater count as living in wp-admin, the cloned flexible field is served', 2 === $c_g['locked'] && in_array( 'minn_d1_src_fx', $c_g['names'], true ) && ! in_array( 'minn_d1_src_text', $c_g['names'], true ), wp_json_encode( $c_g ) );
+	$check( 'OS-13 S1 the cloned text, repeater and flexible field count as living in wp-admin', 3 === $c_g['locked'] && array( 'minn_d1_host_note' ) === $c_g['names'], wp_json_encode( $c_g ) );
 	wp_delete_post( $c_pid, true );
 }
 acf_remove_local_field_group( 'group_minn_d1_host' );
