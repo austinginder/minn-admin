@@ -322,8 +322,10 @@ if ( class_exists( 'AAL_Log_Query' ) ) {
 		array( 'administrator', 'MinnD45AdminAction', '203.0.113.46' ),
 		array( 'editor', 'MinnD45EditorAction', '203.0.113.47' ),
 		array( 'guest', 'MinnD45GuestAction', '203.0.113.48' ),
+		// A type a third party logs outside Aryo's module table.
+		array( 'administrator', 'MinnD45CustomType', '203.0.113.49', 'MinnD45Custom' ),
 	) as $aal_seed ) {
-		$wpdb->insert( $aal_table, array( 'user_caps' => $aal_seed[0], 'action' => 'activated', 'object_type' => 'Plugin', 'object_subtype' => '', 'object_name' => $aal_seed[1], 'object_id' => 0, 'user_id' => $admin, 'hist_ip' => $aal_seed[2], 'hist_time' => (int) current_time( 'timestamp' ) ) );
+		$wpdb->insert( $aal_table, array( 'user_caps' => $aal_seed[0], 'action' => 'activated', 'object_type' => $aal_seed[3] ?? 'Plugin', 'object_subtype' => '', 'object_name' => $aal_seed[1], 'object_id' => 0, 'user_id' => $admin, 'hist_ip' => $aal_seed[2], 'hist_time' => (int) current_time( 'timestamp' ) ) );
 		$aal_rows[] = (int) $wpdb->insert_id;
 	}
 	try {
@@ -357,6 +359,15 @@ if ( class_exists( 'AAL_Log_Query' ) ) {
 			wp_set_current_user( $admin );
 			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
 			$check( 'OS-8 control: an administrator still reads it', 200 === $aal_st && false !== strpos( wp_json_encode( $aal_d ), 'MinnD45AdminAction' ), (string) $aal_st );
+			$check( 'OS-8 an object type outside Aryo\'s module table stays hidden, from an administrator too', 200 === $aal_st && false === strpos( wp_json_encode( $aal_d ), 'MinnD45CustomType' ), substr( wp_json_encode( $aal_d ), 0, 160 ) );
+			$aal_types = function ( $roles ) {
+				$roles['manage_options'][] = 'MinnD45Custom';
+				return $roles;
+			};
+			add_filter( 'aal_init_roles', $aal_types );
+			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
+			remove_filter( 'aal_init_roles', $aal_types );
+			$check( 'OS-8 control: a type the site adds through aal_init_roles shows', 200 === $aal_st && false !== strpos( wp_json_encode( $aal_d ), 'MinnD45CustomType' ), (string) $aal_st );
 		}
 	} finally {
 		wp_set_current_user( $admin );

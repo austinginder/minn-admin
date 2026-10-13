@@ -67,15 +67,29 @@ function minn_admin_aryo_can_view() {
  * administrator sees the default actors plus every registered role, an
  * editor editor/author/guest, an author author/guest; a super admin or a
  * view_all_aryo_activity_log holder gets the administrator row; anyone
- * else sees nothing. Everyone reaching Minn's view holds manage_options,
- * so the object-type half of Aryo's clause is its full set and drops out.
- * Its literals are escaped and carry no placeholders; a % is doubled for
- * prepare().
+ * else sees nothing. The object types come from Aryo's module table the
+ * same way (aal_init_roles): each capability's list the viewer holds, all
+ * of them for view_all_aryo_activity_log, so a type a third party logs
+ * outside that table stays hidden, as Aryo hides it. Its literals are
+ * escaped and carry no placeholders; a % is doubled for prepare().
  *
  * @return string|false SQL without a leading AND.
  */
 function minn_admin_aryo_scope_sql() {
 	if ( ! class_exists( 'AAL_Log_Query' ) || ! method_exists( 'AAL_Log_Query', 'get_where_by_role' ) ) {
+		$modules = apply_filters(
+			'aal_init_roles',
+			array(
+				'manage_options' => array( 'Core', 'Export', 'Posts', 'Taxonomies', 'Users', 'Emails', 'Options', 'Attachments', 'Plugins', 'Widgets', 'Themes', 'Menus', 'Comments', 'Post', 'Taxonomy', 'User', 'Plugin', 'Widget', 'Theme', 'Menu' ),
+				'edit_pages'     => array( 'Posts', 'Taxonomies', 'Attachments', 'Comments', 'Post', 'Taxonomy', 'Attachment' ),
+			)
+		);
+		$types   = array();
+		foreach ( is_array( $modules ) ? $modules : array() as $cap => $list ) {
+			if ( current_user_can( (string) $cap ) || current_user_can( 'view_all_aryo_activity_log' ) ) {
+				$types = array_merge( $types, (array) $list );
+			}
+		}
 		$roles = array_keys( (array) wp_roles()->roles );
 		$table = apply_filters(
 			'aal_init_caps',
@@ -88,13 +102,18 @@ function minn_admin_aryo_scope_sql() {
 		$table = is_array( $table ) ? $table : array();
 		$first = strtolower( (string) array_key_first( (array) wp_get_current_user()->caps ) );
 		$allow = is_super_admin() || current_user_can( 'view_all_aryo_activity_log' ) ? ( $table['administrator'] ?? array() ) : ( $table[ $first ] ?? array() );
-		$where = array();
-		foreach ( array_unique( array_filter( (array) $allow, 'is_scalar' ) ) as $cap ) {
-			if ( '' !== (string) $cap ) {
-				$where[] = "user_caps = '" . esc_sql( (string) $cap ) . "'";
+		$in = static function ( $column, $values ) {
+			$or = array();
+			foreach ( array_unique( array_filter( (array) $values, 'is_scalar' ) ) as $v ) {
+				if ( '' !== (string) $v ) {
+					$or[] = "`{$column}` = '" . esc_sql( (string) $v ) . "'";
+				}
 			}
-		}
-		return $where ? '( ' . implode( ' OR ', $where ) . ' )' : false;
+			return $or ? '( ' . implode( ' OR ', $or ) . ' )' : '';
+		};
+		$type_sql = $in( 'object_type', $types );
+		$cap_sql  = $in( 'user_caps', $allow );
+		return '' !== $type_sql && '' !== $cap_sql ? $type_sql . ' AND ' . $cap_sql : false;
 	}
 	$sql = ( new AAL_Log_Query() )->get_where_by_role();
 	if ( ! is_string( $sql ) || '' === trim( $sql ) ) {
