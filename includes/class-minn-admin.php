@@ -2169,7 +2169,9 @@ class Minn_Admin {
 				array_keys( self::scheme_slots() )
 			),
 			'site'     => array(
-				'name'       => get_bloginfo( 'name' ),
+				// WordPress stores the title HTML-escaped ("Smith &amp; Sons");
+				// the client escapes what it prints, so it gets plain text.
+				'name'       => self::plain_text( get_bloginfo( 'name' ) ),
 				// The WordPress Site Icon (Settings → Site icon), used as the
 				// sidebar mark when set; the client falls back to the Minn
 				// "m" tile. '' when no icon is configured.
