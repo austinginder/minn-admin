@@ -35,9 +35,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		// The nonce is what lets the page drive their chunked loop, so it
 		// has to be there, and it must never ship without their capability.
-		t.check( 'boot carries their REST base, ajax URL and migrate nonce',
-			boot.restBase === 'mdb-api/v1' && !! boot.ajax && !! boot.nonce,
-			JSON.stringify( { restBase: boot.restBase, ajax: !! boot.ajax, nonce: !! boot.nonce } ) );
+		// Their table loop posts to Minn's own admin-ajax URL, so the boot
+		// carries no address of its own a page could be pointed elsewhere by.
+		t.check( 'boot carries their REST base and migrate nonce, and no ajax URL of its own',
+			boot.restBase === 'mdb-api/v1' && ! ( 'ajax' in boot ) && !! boot.nonce,
+			JSON.stringify( { restBase: boot.restBase, ajax: 'ajax' in boot, nonce: !! boot.nonce } ) );
 
 		// The local end is described by their own code; a wrong table list
 		// here would migrate the wrong set.

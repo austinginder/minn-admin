@@ -387,6 +387,7 @@ const JS_PROSE_ALLOW = new Set( [
 	// English by design (its sibling lines are template text, also English).
 	'- (nothing beyond core detected)',
 	'Refused a cross-origin API route: ',   // a thrown developer error, never shown
+	'Refused an item id: ',                 // a thrown developer error, never shown
 	'horizontal rule',                       // slash-menu MATCH keyword (data), like 'add column'
 ] );
 {

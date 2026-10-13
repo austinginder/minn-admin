@@ -38,7 +38,6 @@ function minn_admin_frt_boot() {
 		return null;
 	}
 	return array(
-		'ajax'  => admin_url( 'admin-ajax.php' ),
 		'nonce' => wp_create_nonce( 'force-regenerate-attachment' ),
 	);
 }
