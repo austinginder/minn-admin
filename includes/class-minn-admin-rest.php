@@ -1328,6 +1328,31 @@ class Minn_Admin_REST {
 					'permission_callback' => $order_cap,
 				)
 			);
+			// The orders that used a coupon, found by their coupon lines.
+			// WooCommerce's order search matches the code anywhere (a
+			// product named like it, an address), so its newest hits could
+			// hold none of the real uses. Ids only: the client reads the
+			// orders through wc/v3, under WooCommerce's own read check.
+			register_rest_route(
+				self::NS,
+				'/coupons/(?P<id>\d+)/orders',
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'coupon_orders' ),
+					'permission_callback' => function ( WP_REST_Request $request ) {
+						$url = $request->get_url_params();
+						$id  = absint( $url['id'] ?? 0 );
+						return $id > 0 && current_user_can( 'edit_shop_orders' ) && current_user_can( 'edit_post', $id );
+					},
+					'args'                => array(
+						'page' => array(
+							'type'    => 'integer',
+							'default' => 1,
+							'minimum' => 1,
+						),
+					),
+				)
+			);
 			// Restore a trashed order. WooCommerce's REST API trashes and
 			// deletes (DELETE wc/v3/orders/{id}) but has no way back, so this
 			// is the one piece Minn adds. Gated exactly like that DELETE: the
@@ -7208,6 +7233,31 @@ Please click the following link to confirm the invite:
 	/**
 	 * Send a styled HTML email to an order's billing address (order context).
 	 */
+	/** Order ids carrying a coupon's code in a coupon line, newest first. */
+	public static function coupon_orders( WP_REST_Request $request ) {
+		global $wpdb;
+		$url = $request->get_url_params();
+		$id  = absint( $url['id'] ?? 0 );
+		if ( 'shop_coupon' !== get_post_type( $id ) ) {
+			return new WP_Error( 'rest_not_found', __( 'No such coupon.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		$code  = ( new WC_Coupon( $id ) )->get_code();
+		$per   = 20;
+		$page  = max( 1, (int) $request['page'] );
+		$table = $wpdb->prefix . 'woocommerce_order_items';
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$ids   = '' === $code ? array() : $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT order_id FROM {$table} WHERE order_item_type = 'coupon' AND order_item_name = %s ORDER BY order_id DESC LIMIT %d OFFSET %d", $code, $per, ( $page - 1 ) * $per ) );
+		$total = '' === $code ? 0 : (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT( DISTINCT order_id ) FROM {$table} WHERE order_item_type = 'coupon' AND order_item_name = %s", $code ) );
+		// phpcs:enable
+		return rest_ensure_response(
+			array(
+				'ids'      => array_map( 'intval', $ids ),
+				'total'    => $total,
+				'per_page' => $per,
+			)
+		);
+	}
+
 	public static function order_send_email( WP_REST_Request $request ) {
 		if ( ! function_exists( 'wc_get_order' ) ) {
 			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );

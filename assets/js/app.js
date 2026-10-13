@@ -15445,7 +15445,7 @@
 		[ 'fixed_product', __( 'Fixed product discount' ) ],
 	];
 	const COUPON_LIST_FIELDS = 'id,code,amount,status,discount_type,description,date_expires,usage_count,usage_limit,usage_limit_per_user,individual_use,free_shipping,minimum_amount,maximum_amount,date_created';
-	const COUPON_DETAIL_FIELDS = COUPON_LIST_FIELDS + ',exclude_sale_items,date_expires_gmt,product_ids,excluded_product_ids,product_categories,excluded_product_categories,email_restrictions,limit_usage_to_x_items,used_by';
+	const COUPON_DETAIL_FIELDS = COUPON_LIST_FIELDS + ',exclude_sale_items,date_expires_gmt,product_ids,excluded_product_ids,product_categories,excluded_product_categories,email_restrictions,limit_usage_to_x_items';
 	const COUPON_PRODUCT_FIELDS = [
 		{ key: 'product_ids', label: __( 'Products' ), hint: __( 'The discount applies only to these. None means every product.' ) },
 		{ key: 'excluded_product_ids', label: __( 'Exclude products' ), hint: __( 'Never discounted, and an order of only these cannot use the code.' ) },
@@ -15747,21 +15747,34 @@
 		}
 	}
 
-	// The orders that used the code. WooCommerce's order search matches a
-	// coupon line by its code; anything else the search caught (a product
-	// named like the code) is dropped by checking the lines themselves. The
-	// card repaints alone, so a form being edited is left as it is.
-	async function loadCouponOrders( m ) {
-		const code = String( ( m.full || {} ).code || '' ).toLowerCase();
-		if ( ! code ) return;
+	// The orders that used the code: Minn finds them by their coupon lines
+	// (WooCommerce's order search matches the code anywhere, so its newest
+	// hits could be products named like it), then reads them through
+	// wc/v3, newest first, a page at a time. The card repaints alone, so a
+	// form being edited is left as it is.
+	async function loadCouponOrders( m, page = 1 ) {
+		if ( ! B.caps.orders || m.usedLoading ) return;
+		m.usedLoading = true;
+		let found = null;
 		let rows = [];
 		try {
-			rows = await api( `wc/v3/orders?search=${ encodeURIComponent( code ) }&per_page=50&orderby=date&order=desc&_fields=id,number,status,total,currency_symbol,date_created,coupon_lines` );
+			found = await api( `minn-admin/v1/coupons/${ m.id }/orders?page=${ page }` );
+			const ids = ( found && found.ids ) || [];
+			rows = ids.length ? await api( `wc/v3/orders?include=${ ids.join( ',' ) }&per_page=${ ids.length }&orderby=date&order=desc&_fields=id,number,status,total,currency_symbol,date_created` ) : [];
 		} catch ( e ) {
-			rows = [];
+			found = null;
 		}
+		m.usedLoading = false;
 		if ( state.couponPage !== m ) return;
-		m.usedIn = ( Array.isArray( rows ) ? rows : [] ).filter( ( o ) => ( o.coupon_lines || [] ).some( ( l ) => String( l.code || '' ).toLowerCase() === code ) );
+		if ( found ) {
+			const list = Array.isArray( rows ) ? rows : [];
+			m.usedIn = page === 1 ? list : ( m.usedIn || [] ).concat( list );
+			m.usedPage = page;
+			m.usedMore = page * ( found.per_page || 20 ) < ( found.total || 0 );
+		} else if ( page === 1 ) {
+			// Could not look: say so, rather than that no order used it.
+			m.usedIn = false;
+		}
 		const host = $( '#minn-co-orders' );
 		if ( host ) {
 			host.innerHTML = couponOrdersHtml( m );
@@ -15770,6 +15783,7 @@
 	}
 
 	function couponOrdersHtml( m ) {
+		if ( m.usedIn === false ) return `<div class="minn-toggle-desc">${ esc( __( 'Couldn’t load the orders that used this code.' ) ) }</div>`;
 		if ( m.usedIn == null ) return `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading orders…' ) ) }</div>`;
 		// WooCommerce's use count never goes down, so a code used by orders
 		// since deleted can count uses with no order left to show.
@@ -15780,7 +15794,8 @@
 				<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>
 				<span>${ esc( orderMoney( o, o.total ) ) }</span>
 				<span style="color:var(--text3); font-size:12.5px;">${ esc( timeAgo( o.date_created ) ) }</span>
-			</button>` ).join( '' );
+			</button>` ).join( '' )
+			+ ( m.usedMore ? `<button type="button" class="minn-btn-soft" id="minn-co-more-orders" style="margin-top:6px;">${ esc( __( 'Show more orders' ) ) }</button>` : '' );
 	}
 
 	function bindCouponOrders( host ) {
@@ -15789,6 +15804,13 @@
 			if ( m && m.full ) setPageReturn( 'coupons/' + m.id, m.full.code || __( 'Coupon' ) );
 			go( 'orders/' + row.dataset.coorder );
 		} ) );
+		const more = $( '#minn-co-more-orders', host );
+		if ( more && m ) {
+			more.addEventListener( 'click', () => {
+				more.disabled = true;
+				loadCouponOrders( m, ( m.usedPage || 1 ) + 1 );
+			} );
+		}
 	}
 
 	function couponPageBodyHtml( m ) {
@@ -15862,7 +15884,7 @@
 										/* translators: %s: how many orders used the coupon. */
 										: sprintf( _n( 'Used %s time.', 'Used %s times.', used ), String( used ) ) ) }</div>` }
 								</div>` ) }
-							${ m.isNew ? '' : card( 'orders', __( 'Orders' ), `<div id="minn-co-orders">${ couponOrdersHtml( m ) }</div>` ) }
+							${ m.isNew || ! B.caps.orders ? '' : card( 'orders', __( 'Orders' ), `<div id="minn-co-orders">${ couponOrdersHtml( m ) }</div>` ) }
 						</div>
 					</div>
 					<div class="minn-psavebar" id="minn-co-savebar" ${ m.isNew ? 'data-pristine' : 'hidden' }>
@@ -15892,9 +15914,11 @@
 	// and the save both read it, so they cannot disagree.
 	function buildCouponPayload( m ) {
 		const v = ( id ) => ( ( $( '#' + id ) || {} ).value || '' ).trim();
+		// An empty box is 0 (WooCommerce's "no limit") and a cleared expiry
+		// is '': WooCommerce skips a null, so clearing either saved nothing.
 		const count = ( id ) => {
 			const raw = v( id );
-			return raw === '' ? null : Math.max( 0, parseInt( raw, 10 ) || 0 );
+			return raw === '' ? 0 : Math.max( 0, parseInt( raw, 10 ) || 0 );
 		};
 		const exp = ( ( $( '#minn-c-expires' ) || {} ).dataset || {} ).dp || '';
 		const payload = {
@@ -15903,7 +15927,7 @@
 			discount_type: pcomboValue( 'minn-c-type', 'percent' ),
 			amount: v( 'minn-c-amount' ),
 			status: pcomboValue( 'minn-c-status', 'publish' ),
-			date_expires: exp ? exp.slice( 0, 10 ) : null,
+			date_expires: exp ? exp.slice( 0, 10 ) : '',
 			free_shipping: pswitchOn( 'minn-c-ship' ),
 			minimum_amount: v( 'minn-c-min' ),
 			maximum_amount: v( 'minn-c-max' ),

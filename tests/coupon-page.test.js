@@ -1,8 +1,10 @@
 /**
  * The coupon page (/coupons/{id}, /coupons/new): every setting of
  * WooCommerce's coupon screen, created by the first save, an existing
- * coupon saving only what changed, Discard, the orders that used the code,
- * the leave guard, Delete, and no page without the coupons capability.
+ * coupon saving only what changed, clearing a limit or the expiry, Discard,
+ * the orders that used the code (found by their coupon lines, and a failed
+ * lookup said as such), the leave guard, Delete, and no page without the
+ * coupons capability.
  *
  * Fixtures (made here, swept by name at the start, deleted at the end): two
  * products, a product category, a coupon made through the page, and an
@@ -14,6 +16,10 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 	const { browser, page, errors } = await launch();
 	const t = reporter( 'coupon-page' );
 	page.on( 'dialog', ( d ) => d.accept().catch( () => {} ) );
+	const couponReads = [];
+	page.on( 'request', ( r ) => {
+		if ( 'GET' === r.method() && /\/wc\/v3\/coupons\/\d+\?/.test( r.url() ) ) couponReads.push( decodeURIComponent( r.url() ) );
+	} );
 	await login( page );
 
 	const caps = await page.evaluate( () => ( { wc: !! window.MINN.wc, coupons: !! ( window.MINN.caps || {} ).coupons } ) );
@@ -159,6 +165,25 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 		const discarded = await page.evaluate( () => ( { amount: document.querySelector( '#minn-c-amount' ).value, hidden: document.querySelector( '#minn-co-savebar' ).hidden } ) );
 		t.check( 'Discard puts the saved values back and hides the bar', '15' === discarded.amount && discarded.hidden, JSON.stringify( discarded ) );
 
+		// ---- Clearing a limit and the expiry saves the clears ----
+		await page.waitForSelector( '#minn-c-limit', { timeout: 10000 } );
+		await page.fill( '#minn-c-limit', '' );
+		await page.fill( '#minn-c-xitems', '' );
+		await page.click( '#minn-c-expires' );
+		await page.waitForSelector( '.minn-dp-pop [data-dp-clear]', { timeout: 10000 } );
+		await page.click( '.minn-dp-pop [data-dp-clear]' );
+		await page.waitForSelector( '#minn-co-savebar:not([hidden])', { timeout: 5000 } );
+		const clearPut = page.waitForResponse( ( r ) => 'PUT' === r.request().method() && /\/wc\/v3\/coupons\/\d+$/.test( r.url() ), { timeout: 20000 } ).catch( () => null );
+		await page.click( '#minn-coupon-save' );
+		const clearSent = await clearPut;
+		const cleared = ( await api( `wc/v3/coupons/${ made.coupon }?_fields=usage_limit,limit_usage_to_x_items,date_expires,usage_limit_per_user` ) ).body || {};
+		t.check( 'emptying a limit and clearing the expiry are saved',
+			! cleared.usage_limit && ! cleared.limit_usage_to_x_items && ! cleared.date_expires && 2 === cleared.usage_limit_per_user,
+			JSON.stringify( { sent: clearSent && clearSent.request().postData(), cleared } ) );
+		t.check( 'the page reads the coupon without the list of everyone who used it',
+			couponReads.length > 0 && couponReads.every( ( u ) => ! /used_by/.test( u ) ),
+			JSON.stringify( couponReads.slice( -1 ) ) );
+
 		// Unsaved work: leaving asks.
 		await page.fill( '#minn-c-desc', 'About to leave' );
 		await page.click( '.minn-nav-btn[data-nav="overview"]' );
@@ -177,9 +202,22 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 		} ) } );
 		made.order = ord.body && ord.body.id;
 		t.check( 'an order using the code was made', !! made.order, JSON.stringify( ord.body && ( ord.body.message || ord.status ) ) );
+		// An order whose product is named like the code but carries no
+		// coupon line is not one of its uses.
+		const decoyProduct = await api( 'wc/v3/products', { method: 'POST', body: JSON.stringify( { name: `Minn CPG Prod ${ code }`, type: 'simple', regular_price: '5.00', status: 'publish' } ) } );
+		if ( decoyProduct.body && decoyProduct.body.id ) made.products.push( decoyProduct.body );
+		const decoy = await api( 'wc/v3/orders', { method: 'POST', body: JSON.stringify( {
+			status: 'processing',
+			billing: { email: 'decoy@example.com', first_name: 'Decoy', last_name: 'Buyer' },
+			line_items: [ { product_id: decoyProduct.body && decoyProduct.body.id, quantity: 1 } ],
+		} ) } );
+		made.decoy = decoy.body && decoy.body.id;
+		const found = await api( `minn-admin/v1/coupons/${ made.coupon }/orders` );
+		t.check( 'Minn finds the uses by their coupon lines', 200 === found.status && ( found.body.ids || [] ).includes( made.order ) && ! ( found.body.ids || [] ).includes( made.decoy ) && 1 === found.body.total,
+			JSON.stringify( found.body ) );
 		await page.goto( BASE + '/minn-admin/coupons/' + made.coupon, { waitUntil: 'domcontentloaded' } );
 		const usedRow = await page.waitForSelector( `#minn-co-orders [data-coorder="${ made.order }"]`, { timeout: 20000 } ).catch( () => null );
-		t.check( 'the Orders card lists the order that used it', !! usedRow, '' );
+		t.check( 'the Orders card lists the order that used it', !! usedRow && ! await page.$( `#minn-co-orders [data-coorder="${ made.decoy }"]` ), '' );
 		if ( usedRow ) {
 			await usedRow.click();
 			await page.waitForSelector( '#minn-op-back', { timeout: 20000 } );
@@ -188,6 +226,17 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 			await page.click( '#minn-op-back' );
 			await page.waitForSelector( '#minn-co-delete', { timeout: 20000 } );
 		}
+
+		// A lookup that fails says so, instead of that no order used the code.
+		const refuse = ( route ) => route.fulfill( { status: 500, contentType: 'application/json', body: JSON.stringify( { code: 'boom', message: 'boom' } ) } );
+		await page.route( /\/coupons\/\d+\/orders|\/wc\/v3\/orders\?search=/, refuse );
+		await page.goto( BASE + '/minn-admin/coupons/' + made.coupon, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-co-orders .minn-toggle-desc', { timeout: 20000 } ).catch( () => null );
+		const failedCard = await page.$eval( '#minn-co-orders', ( el ) => el.textContent.trim() ).catch( () => '' );
+		t.check( 'a failed lookup says it could not load the orders', /Couldn.t load/i.test( failedCard ), failedCard );
+		await page.unroute( /\/coupons\/\d+\/orders|\/wc\/v3\/orders\?search=/, refuse );
+		await page.goto( BASE + '/minn-admin/coupons/' + made.coupon, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-co-delete', { timeout: 20000 } );
 
 		// ---- Delete from the page ----
 		await page.click( '#minn-co-delete' );
@@ -204,11 +253,14 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 		await author.page.waitForSelector( '#minn-view', { timeout: 20000 } );
 		await author.page.waitForTimeout( 1500 );
 		t.check( 'an Author gets no coupon page', ! await author.page.$( '#minn-c-code' ), '' );
+		const authorLookup = await author.page.evaluate( async ( id ) => ( await fetch( window.MINN.restUrl + `minn-admin/v1/coupons/${ id }/orders`, { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } ) ).status, 1 );
+		t.check( 'an Author cannot list a coupon\'s orders', 401 === authorLookup || 403 === authorLookup, String( authorLookup ) );
 		await author.ctx.close();
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {
 		if ( made.order ) await api( `wc/v3/orders/${ made.order }?force=true`, { method: 'DELETE' } ).catch( () => null );
+		if ( made.decoy ) await api( `wc/v3/orders/${ made.decoy }?force=true`, { method: 'DELETE' } ).catch( () => null );
 		if ( made.coupon ) await api( `wc/v3/coupons/${ made.coupon }?force=true`, { method: 'DELETE' } ).catch( () => null );
 		for ( const p of made.products ) await api( `wc/v3/products/${ p.id }?force=true`, { method: 'DELETE' } ).catch( () => null );
 		if ( made.category ) await api( `wc/v3/products/categories/${ made.category.id }?force=true`, { method: 'DELETE' } ).catch( () => null );

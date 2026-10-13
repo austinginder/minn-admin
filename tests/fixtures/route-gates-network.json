@@ -107,6 +107,7 @@
             "administrator"
         ],
         "GET /minn-admin/v1/core": [],
+        "GET /minn-admin/v1/coupons/(?P<id>\\d+)/orders": [],
         "GET /minn-admin/v1/custom-css": [],
         "GET /minn-admin/v1/db/health": [],
         "GET /minn-admin/v1/db/row": [],
