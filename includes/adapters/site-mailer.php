@@ -70,6 +70,23 @@ function minn_admin_site_mailer_status( $status ) {
 	return $s ?: 'pending';
 }
 
+/**
+ * The `to` column as a readable list. Site Mailer stores what wp_mail() got
+ * through wp_json_encode(): a quoted string, or an array of addresses. Any
+ * other value passes through as stored. Plain text: the client escapes it.
+ */
+function minn_admin_site_mailer_recipients( $raw ) {
+	$raw     = (string) $raw;
+	$decoded = json_decode( $raw, true );
+	if ( is_string( $decoded ) ) {
+		return $decoded;
+	}
+	if ( is_array( $decoded ) ) {
+		return implode( ', ', array_map( 'strval', array_filter( $decoded, 'is_scalar' ) ) );
+	}
+	return $raw;
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_site_mailer_active() ) {
 		return $surfaces;
@@ -195,7 +212,7 @@ add_action( 'rest_api_init', function () {
 				return array(
 					'id'         => (int) $r->id,
 					'subject'    => (string) $r->subject,
-					'to'         => (string) $r->to,
+					'to'         => minn_admin_site_mailer_recipients( $r->to ),
 					'status'     => minn_admin_site_mailer_status( $r->status ),
 					'created_at' => minn_admin_db_local_to_utc_iso( $r->created_at ),
 				);
@@ -217,7 +234,7 @@ add_action( 'rest_api_init', function () {
 			}
 			$delivery = array(
 				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => minn_admin_site_mailer_status( $row->status ), 'type' => 'pill' ),
-				array( 'label' => __( 'To', 'minn-admin' ), 'value' => (string) $row->to ),
+				array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_site_mailer_recipients( $row->to ) ),
 			);
 			if ( '' !== (string) $row->source ) {
 				$delivery[] = array( 'label' => __( 'Source', 'minn-admin' ), 'value' => (string) $row->source );

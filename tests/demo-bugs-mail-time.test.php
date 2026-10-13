@@ -301,6 +301,22 @@ try {
 			$date = $row_of( $sec, __( 'Date', 'minn-admin' ) );
 			$check( 'D-40 Site Mailer: the detail\'s Date is the moment it was sent', $date && strtotime( (string) $date['value'] ) === $ml_ts, $st . ' ' . ( $date ? $hours_off( $date['value'], $ml_ts ) : 'row missing' ) );
 
+			// D-41: Site Mailer keeps `to` as wp_mail() got it, through
+			// wp_json_encode(): a quoted string, or an array of addresses.
+			// Minn printed it as stored. The decoded value is visitor-shaped
+			// text, so it must reach the client as a text column and a plain
+			// detail row, which app.js escapes.
+			$many = $find( $list['items'] ?? array(), $ml_many );
+			$to   = $row_of( $sec, __( 'To', 'minn-admin' ) );
+			$check( 'D-41 Site Mailer: the list shows the recipient as an address, not a quoted JSON string', $one && 'nadia.petrov@example.org' === $one['to'], wp_json_encode( $one['to'] ?? null ) );
+			$check( 'D-41 Site Mailer: several recipients list as a comma list', $many && 'june@example.com, José Ortiz <jose@example.com>' === $many['to'], wp_json_encode( $many['to'] ?? null ) );
+			$check( 'D-41 Site Mailer: the detail\'s To is the address', $to && 'nadia.petrov@example.org' === $to['value'], $st . ' ' . wp_json_encode( $to['value'] ?? null ) );
+			$cols  = ( Minn_Admin_Surfaces::all()['site-mailer']['collection']['columns'] ?? array() );
+			$tocol = array_values( array_filter( $cols, function ( $c ) {
+				return 'to' === ( $c['key'] ?? '' );
+			} ) );
+			$check( 'D-41 guard: To stays an escaped text cell and a plain detail row', $tocol && 'text' === ( $tocol[0]['format'] ?? '' ) && $to && ! isset( $to['type'] ), wp_json_encode( array( $tocol[0]['format'] ?? null, $to['type'] ?? null ) ) );
+
 			list( $st, $ml_after ) = $call( 'GET', '/minn-admin/v1/site-mailer/status' );
 			$d_t = (int) ( $point( $ml_after, $today )['value'] ?? 0 ) - (int) ( $point( $ml_before, $today )['value'] ?? 0 );
 			$check( 'D-40 Site Mailer: the 14-day chart ends on the site\'s today and counts the sends there', $today . ' 00:00:00' === $last_from( $ml_after ) && 2 === $d_t, "{$st} last bar " . $last_from( $ml_after ) . ", today +{$d_t}" . ( $day_differs ? '' : ' (site and database share a day: not a repro this run)' ) );
