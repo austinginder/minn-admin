@@ -91,33 +91,52 @@ function minn_admin_wpvivid_components_label( $backup_files, $type = '' ) {
 }
 
 /**
- * Infer components from filenames when backup_files isn't on the row
- * (completed sets store file_name entries under backup.files).
+ * The job an archive came from, read off WPvivid's own name for it:
+ * {prefix}_backup_{job}.zip, or .partNNN.zip when split. "all" is their
+ * merge of several jobs into one archive, the default.
+ */
+function minn_admin_wpvivid_archive_job( $file_name ) {
+	return preg_match( '/_backup_(db|themes|plugin|uploads|content|core|all)(\.part\d+)?\.zip$/i', (string) $file_name, $m ) ? strtolower( $m[1] ) : '';
+}
+
+/**
+ * Infer components from the archives when backup_files isn't on the row:
+ * WPvivid's own list rows never carry it, only file_name entries under
+ * backup.files. The words of the whole name are no guide (the prefix is
+ * the site's host, www. and all), so each archive's job is read off its
+ * name, and a merged archive, which is named the same whatever went in,
+ * by the parts inside it, listed the way their restore lists them.
  */
 function minn_admin_wpvivid_components_from_files( $backup ) {
-	$names = array();
+	$jobs = array();
 	if ( ! empty( $backup['backup']['files'] ) && is_array( $backup['backup']['files'] ) ) {
 		foreach ( $backup['backup']['files'] as $file ) {
-			if ( ! empty( $file['file_name'] ) ) {
-				$names[] = strtolower( (string) $file['file_name'] );
+			$job = minn_admin_wpvivid_archive_job( $file['file_name'] ?? '' );
+			if ( 'all' !== $job ) {
+				$jobs[] = $job;
+				continue;
+			}
+			if ( empty( $backup['local']['path'] ) || ! class_exists( 'WPvivid_Backup_Item' ) || ! method_exists( 'WPvivid_Backup_Item', 'get_child_files' ) ) {
+				continue;
+			}
+			try {
+				$children = ( new WPvivid_Backup_Item( $backup ) )->get_child_files( (string) $file['file_name'] );
+			} catch ( \Throwable $e ) {
+				$children = array();
+			}
+			foreach ( (array) $children as $child ) {
+				$jobs[] = minn_admin_wpvivid_archive_job( $child['file_name'] ?? '' );
 			}
 		}
 	} elseif ( ! empty( $backup['backup']['data']['type'] ) && is_array( $backup['backup']['data']['type'] ) ) {
+		// The older shape lists its parts by job already.
 		foreach ( $backup['backup']['data']['type'] as $type ) {
-			foreach ( (array) ( $type['files'] ?? array() ) as $file ) {
-				if ( ! empty( $file['file_name'] ) ) {
-					$names[] = strtolower( (string) $file['file_name'] );
-				}
-			}
+			$jobs[] = preg_replace( '/^backup_/', '', strtolower( (string) ( $type['type_name'] ?? '' ) ) );
 		}
 	}
-	if ( ! $names ) {
-		return '';
-	}
-	$joined = implode( ' ', $names );
-	$has_db = (bool) preg_match( '/(^|[^a-z])db([^a-z]|$)|database|sql/i', $joined );
-	// "all" / themes / plugins / uploads / content → files side.
-	$has_files = (bool) preg_match( '/themes|plugins|uploads|content|www|files|all/i', $joined );
+	$jobs      = array_filter( $jobs );
+	$has_db    = in_array( 'db', $jobs, true );
+	$has_files = (bool) array_intersect( $jobs, array( 'themes', 'plugin', 'uploads', 'content', 'core' ) );
 	if ( $has_db && $has_files ) {
 		return 'Database · Files';
 	}
@@ -169,6 +188,9 @@ function minn_admin_wpvivid_rows() {
 		$locked = ! empty( $set['lock'] ) && (string) $set['lock'] !== '0';
 		$items[] = array(
 			'id'         => (string) $id,
+			// The detail dialog is headed by an item's name, else only by
+			// the family label ("Backups").
+			'name'       => $components,
 			'components' => $components,
 			'size'       => $bytes ? size_format( $bytes ) : '—',
 			'where'      => $where,
@@ -355,7 +377,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'date', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
-				'skip' => array( 'components', 'ts' ),
+				'skip' => array( 'name', 'components', 'ts' ),
 			),
 			'actions'   => array(
 				// Only sets with files on this server; remote-only rows say

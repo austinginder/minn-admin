@@ -52,10 +52,14 @@ function minn_admin_updraft_history() {
 			}
 		}
 		$service = isset( $set['service'] ) ? implode( ', ', array_diff( (array) $set['service'], array( 'none', '' ) ) ) : '';
+		$what    = $entities ? implode( ' · ', $entities ) : '—';
 		$items[] = array(
 			'id'         => (int) $ts,
+			// The detail dialog is headed by an item's name, else only by
+			// the family label ("Backups").
+			'name'       => $what,
 			'date'       => gmdate( 'Y-m-d\TH:i:s\Z', (int) $ts ),
-			'components' => $entities ? implode( ' · ', $entities ) : '—',
+			'components' => $what,
 			'size'       => $bytes ? size_format( $bytes ) : '—',
 			'where'      => $service ? $service : 'local',
 			'label'      => isset( $set['label'] ) ? (string) $set['label'] : '',
@@ -302,7 +306,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'where', 'label' => __( 'Stored', 'minn-admin' ), 'format' => 'pill' ),
 				array( 'key' => 'date', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
-			'detail'    => array( 'skip' => array( 'components' ) ),
+			'detail'    => array( 'skip' => array( 'name', 'components' ) ),
 			'actions'   => array(
 				// A set is one file per component (a big one splits into
 				// parts); the door streams a lone file and lists several.

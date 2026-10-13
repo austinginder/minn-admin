@@ -227,6 +227,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'size', 'label' => __( 'On disk', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'date', 'label' => __( 'Scanned', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
+			// The name heads the dialog; ts is the sort key behind date.
+			'detail'    => array( 'skip' => array( 'name', 'ts' ) ),
 			'actions'   => array(
 				array(
 					'label'   => __( 'Delete session files', 'minn-admin' ),

@@ -293,7 +293,7 @@ function minn_admin_wpm_backups() {
 			'name'       => isset( $row['name'] ) ? (string) $row['name'] : $raw,
 			'file'       => $raw,
 			'kind'       => $kind,
-			'compressed' => $gz,
+			'compressed' => $gz ? __( 'Yes', 'minn-admin' ) : __( 'No', 'minn-admin' ),
 			'size'       => $size ? size_format( $size ) : '',
 			'bytes'      => $size,
 			// mtime is a UTC epoch; the column is marked utc so it renders
@@ -370,6 +370,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'size', 'label' => __( 'Size', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'created', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
+			// The name heads the dialog; bytes is the status card's sum
+			// behind the size already shown.
+			'detail'   => array( 'skip' => array( 'name', 'bytes' ) ),
 			'actions' => array(
 				array(
 					'label' => __( 'Download', 'minn-admin' ),

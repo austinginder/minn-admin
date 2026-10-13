@@ -150,6 +150,9 @@ function minn_admin_backwpup_rows() {
 			$time         = isset( $file['time'] ) ? (int) $file['time'] : 0;
 			$items[]      = array(
 				'id'       => $jobid . ':' . $filename,
+				// The detail dialog is headed by an item's name, else
+				// only by the family label ("Backups").
+				'name'     => $filename,
 				'filename' => $filename,
 				'job'      => $job_name,
 				'jobid'    => $jobid,
@@ -318,7 +321,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'date', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
-				'skip' => array( 'filename', 'size_raw', 'ts', 'jobid' ),
+				'skip' => array( 'name', 'filename', 'size_raw', 'ts', 'jobid' ),
 			),
 			// Conditioned like Delete above and Run now on the status card:
 			// their own screen hides it without this capability, and the door
