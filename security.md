@@ -99,12 +99,15 @@ A few properties worth knowing before auditing (details in
   column name (a column named like a password, secret or token, in any
   table, which also cannot be sorted or filtered), by known vendor row
   (options and user meta that hold keys, tokens or license answers, and
-  copies of those tables: a table counts as a copy of user meta, options,
-  network options or post meta when it has that table's columns, whatever
-  it is called, or when its name contains the table's name, such as
-  `wp_usermeta_backup` or `wp_usermeta-bak`; copies of Wordfence's and
-  Search & Filter's key stores, of Wordfence's two-factor secrets and of
-  OttoKit's request log keep the live table's redaction), and by value (a
+  copies of those tables: a table counts as a copy of user meta, network
+  options or post meta when it has `user_id`, `site_id` or `post_id` beside
+  `meta_key` and `meta_value`, and of options when it has `option_name` and
+  `option_value`, whatever it is called and whatever other columns it kept,
+  or when its name contains the table's name, such as `wp_usermeta_backup`;
+  copies of Wordfence's and Search & Filter's key stores, of Wordfence's
+  two-factor secrets and of OttoKit's request log keep the live table's
+  redaction, and a plugin's own table that happens to match only has those
+  credential rows redacted), and by value (a
   cell holding a copy of a redacted credential, raw or base64-encoded,
   under any name). Value searches leave those rows out, long text, binary
   and JSON columns are not sort keys, and a value search counts at most
@@ -113,11 +116,13 @@ A few properties worth knowing before auditing (details in
   is withheld rather than printed unchecked. Activity-log tables are shown
   as their own screens show them. WooCommerce's own tables (orders,
   addresses, sessions, and its logs when it keeps them in the database), and
-  copies of them under any leading word or separator (`wp_bak_wc_orders`),
-  are left out for anyone without `manage_woocommerce`, as WooCommerce's log
+  copies of them (a name containing `woocommerce`, or `wc` with no letter
+  directly before or after it, such as `wp_bak_wc_orders`), are left out for
+  anyone without `manage_woocommerce`, as WooCommerce's log
   screen is; store data a site keeps in core's tables (orders in the posts
   table when High-Performance Order Storage is off, customer addresses in
-  user meta) stays readable to whoever may use the browser.
+  user meta) stays readable to whoever may use the browser, and so do
+  wpDiscuz's own `wc_` tables.
 - On a network, Minn's network routes read network capabilities on the
   main site, as core's Network Admin does, so a network capability granted
   through one subsite's role counts for nothing. On an install with several
