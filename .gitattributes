@@ -1,0 +1,3 @@
+# The "Source code" archives GitHub attaches to each release leave these out.
+# The release zip (bin/build-zip.sh) already ships nothing from bin/.
+/bin/demo export-ignore

@@ -9,7 +9,8 @@
 # bin/i18n/build-packs.sh and downloaded only for the locales a site uses.
 #
 # What is excluded and why:
-#   .git, .gitignore, .DS_Store  repository plumbing
+#   .git, .gitignore,            repository plumbing
+#   .gitattributes, .DS_Store
 #   .github/                     repo assets (screenshots)
 #   .wp-playground/              Playground blueprint, a README artifact
 #   tests/                       dev only, and 18MB of it
@@ -37,6 +38,7 @@ cd "$PARENT"
 zip -r -q -X "$OUT" "$NAME" \
 	-x "$NAME/.git/*" \
 	-x "$NAME/.gitignore" \
+	-x "$NAME/.gitattributes" \
 	-x "$NAME/.github/*" \
 	-x "$NAME/.wp-playground/*" \
 	-x "$NAME/tests/*" \
