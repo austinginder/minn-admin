@@ -310,10 +310,23 @@ if ( class_exists( 'AAL_Log_Query' ) ) {
 	add_role( 'minn_d45_auditor', 'D45 auditor', array( 'read' => true, 'view_all_aryo_activity_log' => true ) );
 	$aal_uid = $make_user( 'minn_d45_manager' );
 	$aal_aud = $make_user( 'minn_d45_auditor' );
-	$wpdb->insert( $aal_table, array( 'user_caps' => 'administrator', 'action' => 'activated', 'object_type' => 'Plugin', 'object_subtype' => '', 'object_name' => 'MinnD45AdminAction', 'object_id' => 0, 'user_id' => $admin, 'hist_ip' => '203.0.113.46', 'hist_time' => (int) current_time( 'timestamp' ) ) );
-	$aal_row = (int) $wpdb->insert_id;
+	// An editor granted manage_options as an extra cap: its first role (the
+	// key Aryo reads) is editor, so Aryo shows it editor/author/guest rows.
+	$aal_ed  = $make_user( 'editor' );
+	if ( $aal_ed ) {
+		$u = new WP_User( $aal_ed );
+		$u->add_cap( 'manage_options' );
+	}
+	$aal_rows = array();
+	foreach ( array(
+		array( 'administrator', 'MinnD45AdminAction', '203.0.113.46' ),
+		array( 'editor', 'MinnD45EditorAction', '203.0.113.47' ),
+	) as $aal_seed ) {
+		$wpdb->insert( $aal_table, array( 'user_caps' => $aal_seed[0], 'action' => 'activated', 'object_type' => 'Plugin', 'object_subtype' => '', 'object_name' => $aal_seed[1], 'object_id' => 0, 'user_id' => $admin, 'hist_ip' => $aal_seed[2], 'hist_time' => (int) current_time( 'timestamp' ) ) );
+		$aal_rows[] = (int) $wpdb->insert_id;
+	}
 	try {
-		if ( ! $aal_uid || ! $aal_aud || ! $aal_row ) {
+		if ( ! $aal_uid || ! $aal_aud || ! $aal_ed || in_array( 0, $aal_rows, true ) ) {
 			$check( 'OS-8 fixtures', false );
 		} else {
 			wp_set_current_user( $aal_uid );
@@ -322,6 +335,10 @@ if ( class_exists( 'AAL_Log_Query' ) ) {
 			$check( 'OS-8 without AAL_Log_Query a custom role holding manage_options reads no administrator\'s action', 200 === $aal_st && false === strpos( $aal_out, 'MinnD45AdminAction' ) && false === strpos( $aal_out, '203.0.113.46' ), $aal_st . ' ' . substr( $aal_out, 0, 160 ) );
 			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/status' );
 			$check( 'OS-8 and its status card counts none of them', 200 === $aal_st && '0' === ( $aal_d['rows'][1]['value'] ?? null ), $aal_st . ' ' . substr( wp_json_encode( $aal_d['rows'] ?? null ), 0, 160 ) );
+			wp_set_current_user( $aal_ed );
+			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
+			$aal_out = wp_json_encode( $aal_d );
+			$check( 'OS-8 an editor granted manage_options reads editor actions but not an administrator\'s', 200 === $aal_st && false !== strpos( $aal_out, 'MinnD45EditorAction' ) && false === strpos( $aal_out, 'MinnD45AdminAction' ), $aal_st . ' ' . substr( $aal_out, 0, 160 ) );
 			wp_set_current_user( $aal_aud );
 			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
 			$check( 'OS-8 control: an account Aryo lets view everything still reads it', 200 === $aal_st && false !== strpos( wp_json_encode( $aal_d ), 'MinnD45AdminAction' ), (string) $aal_st );
@@ -331,11 +348,14 @@ if ( class_exists( 'AAL_Log_Query' ) ) {
 		}
 	} finally {
 		wp_set_current_user( $admin );
-		if ( $aal_row ) {
-			$wpdb->delete( $aal_table, array( 'histid' => $aal_row ) );
+		foreach ( $aal_rows as $aal_row ) {
+			if ( $aal_row ) {
+				$wpdb->delete( $aal_table, array( 'histid' => $aal_row ) );
+			}
 		}
 		$drop_user( $aal_uid );
 		$drop_user( $aal_aud );
+		$drop_user( $aal_ed );
 		remove_role( 'minn_d45_manager' );
 		remove_role( 'minn_d45_auditor' );
 	}
