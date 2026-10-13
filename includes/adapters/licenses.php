@@ -3843,8 +3843,10 @@ function minn_admin_license_default_providers() {
 			// status, and another administrator may be activating on their
 			// own screen meanwhile.
 			global $wpdb;
+			// Older builds wrote the error row without the underscore (the
+			// newer store migrates it), so that name is put back too.
 			$prefix = defined( 'EAEL_SL_ITEM_SLUG' ) ? EAEL_SL_ITEM_SLUG : 'essential-addons-elementor';
-			$rows   = array( $wpdb->esc_like( $prefix . '_license_data_error' ), 'wpdeveloper\_sl\_failed\_http\_%' );
+			$rows   = array( $wpdb->esc_like( $prefix . '_license_data_error' ), $wpdb->esc_like( $prefix . 'license_data_error' ), 'wpdeveloper\_sl\_failed\_http\_%' );
 			$snap   = minn_admin_license_rows( $rows );
 			try {
 				$res = $mgr->activate( array( 'license_key' => $secret ) );
@@ -5931,9 +5933,12 @@ function minn_admin_license_vendor_gates() {
 		'kadence-blocks-pro'  => function () {
 			// With Liquid Web's Harbor library Kadence turns the field off for
 			// everyone and draws a licence modal instead, which still manages
-			// the key; the page's manage_options is then the only gate.
-			return function_exists( 'lw_harbor_get_product_activation_base_url' )
-				|| (bool) apply_filters( 'kadence_blocks_pro_should_display_uplink_license_field', true );
+			// the key; the page's manage_options is then the only gate. Not
+			// with network authorize on: Harbor leaves the field alone there,
+			// so the filter is a site owner's again.
+			$harbor = function_exists( 'lw_harbor_get_product_activation_base_url' )
+				&& ! ( function_exists( 'kadence_blocks_is_network_authorize_enabled' ) && kadence_blocks_is_network_authorize_enabled() );
+			return $harbor || (bool) apply_filters( 'kadence_blocks_pro_should_display_uplink_license_field', true );
 		},
 		'layerslider'         => function () {
 			return current_user_can( (string) get_option( 'layerslider_custom_capability', 'manage_options' ) );

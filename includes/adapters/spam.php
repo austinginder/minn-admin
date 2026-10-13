@@ -278,7 +278,13 @@ function minn_admin_spam_key_providers() {
 		|| ! minn_admin_licenses_can_manage() ) {
 		return array();
 	}
-	$providers = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
+	// A licence provider or filter that throws leaves the page without a
+	// paste box, not without a page.
+	try {
+		$providers = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
+	} catch ( \Throwable $e ) {
+		return array();
+	}
 	return array_filter(
 		(array) $providers,
 		function ( $p ) {

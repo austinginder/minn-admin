@@ -602,6 +602,9 @@ if ( ! function_exists( 'acf_pro_get_license_option' ) || ! $lic_can( 'acf-pro' 
 // NI-13(b) needs a network whose ACF licence is legacy multisite, which no
 // lab has; the closure skips its restore there (verified by reading).
 $skip( 'NI-13(b) no legacy-multisite ACF network in the lab; verified by reading' );
+// Older Essential Addons Pro builds wrote {prefix}license_data_error; the lab
+// has only 7.0.1, whose store migrates that row as it loads.
+$skip( 'NI-13(a) older EAEL error row: verified by reading' );
 
 // --- NI-13(a) EAEL: a refused paste rolls back only its error and back-off ---
 // Essential Addons Pro, installed but inactive, is loaded for this run only:
@@ -830,8 +833,33 @@ if ( is_multisite() ) {
 } else {
 	$skip( 'OS-16 the refused-user case is a network case' );
 }
+// A licence provider list that throws while it is built.
+$spam_throw = function () {
+	throw new RuntimeException( 'Minn D45: a licence provider fails' );
+};
+add_filter( 'minn_admin_license_providers', $spam_throw, 99 );
+try {
+	list( $sp_st, $sp ) = $spam_keys();
+} catch ( \Throwable $e ) {
+	$sp_st = 'threw: ' . $e->getMessage();
+	$sp    = array();
+}
+remove_filter( 'minn_admin_license_providers', $spam_throw, 99 );
+$check( 'spam page: a licence provider that throws leaves Settings › Spam working, with no paste box', 200 === $sp_st && '' === ( $sp['minn-d45-spam-act'] ?? null ), wp_json_encode( array( $sp_st, $sp ) ) );
 remove_filter( 'minn_admin_license_providers', $spam_lic );
 remove_filter( 'minn_admin_spam_providers', $spam_card );
+
+// --- Kadence network authorize: Harbor leaves the field to the filter there --
+// Network authorize exists only on a network, and no lab network runs
+// Kadence, so this reads the gate's own source.
+$kb_gate = function_exists( 'minn_admin_license_vendor_gates' ) ? ( minn_admin_license_vendor_gates()['kadence-blocks-pro'] ?? null ) : null;
+if ( ! $kb_gate instanceof Closure ) {
+	$check( 'Kadence network authorize: the gate exists', false );
+} else {
+	$kb_rf  = new ReflectionFunction( $kb_gate );
+	$kb_src = implode( '', array_slice( file( $kb_rf->getFileName() ), $kb_rf->getStartLine() - 1, $kb_rf->getEndLine() - $kb_rf->getStartLine() + 1 ) );
+	$check( 'Kadence network authorize: the Harbor exception asks kadence_blocks_is_network_authorize_enabled() (source check)', false !== strpos( $kb_src, 'kadence_blocks_is_network_authorize_enabled()' ) );
+}
 
 // --- NI-7 Kadence Blocks Pro on a site with Liquid Web's Harbor library ------
 // Last: the Harbor stand-in cannot be removed from this process.
