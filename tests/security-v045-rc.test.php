@@ -385,6 +385,28 @@ if ( ! function_exists( 'minn_admin_cleantalk_connector_rest_mask' ) || ! functi
 	}
 }
 
+// --- 03-05 Antispam Bee: a toggle saved from Minn reaches the plugin -----------
+// Antispam Bee reads its options through its own object-cache entry and only
+// its own writer refreshes it, so under a persistent cache Minn's toggle read
+// as saved while the plugin kept the old value. The request's own cache
+// stands in for a persistent one: it is primed before the save.
+if ( ! class_exists( 'Antispam_Bee' ) || ! method_exists( 'Antispam_Bee', 'get_option' ) ) {
+	$skip( '03-05 Antispam Bee inactive' );
+} else {
+	$asb_prev = get_option( 'antispam_bee', null );
+	$asb_was  = (int) Antispam_Bee::get_option( 'flag_spam' );
+	list( $asb_st ) = $call( 'POST', '/minn-admin/v1/spam', array( 'toggles' => array( 'antispam-bee' => array( 'flag_spam' => ! $asb_was ) ) ) );
+	$asb_now = (int) Antispam_Bee::get_option( 'flag_spam' );
+	if ( null === $asb_prev ) {
+		delete_option( 'antispam_bee' );
+	} else {
+		update_option( 'antispam_bee', $asb_prev );
+	}
+	wp_cache_delete( 'antispam_bee' );
+	$check( '03-05 Antispam Bee itself reads the toggle Minn saved', 200 === $asb_st && $asb_now === ( $asb_was ? 0 : 1 ), "status {$asb_st}, was {$asb_was}, plugin reads {$asb_now}" );
+	$check( '03-05 cleanup: the option is back', $asb_prev === get_option( 'antispam_bee', null ) );
+}
+
 // @sections
 
 $summary();

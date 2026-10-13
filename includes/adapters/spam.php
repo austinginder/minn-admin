@@ -120,9 +120,17 @@ function minn_admin_spam_providers() {
 				if ( ! in_array( $id, array( 'flag_spam', 'email_notify' ), true ) ) {
 					return;
 				}
+				// Antispam Bee reads its options through its own object-cache
+				// entry, which only its own writer refreshes; under a
+				// persistent cache a plain option write never reaches it.
+				if ( method_exists( 'Antispam_Bee', 'update_options' ) ) {
+					Antispam_Bee::update_options( array( $id => $on ? 1 : 0 ) );
+					return;
+				}
 				$o        = $asb_read();
 				$o[ $id ] = $on ? 1 : 0;
 				update_option( 'antispam_bee', $o );
+				wp_cache_delete( 'antispam_bee' );
 			},
 		);
 	}
