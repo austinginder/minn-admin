@@ -159,6 +159,16 @@ function minn_admin_latepoint_utc_iso( $mysql_datetime ) {
 }
 
 /**
+ * A UTC MySQL datetime as the site writes dates and times, in the site's
+ * zone. Detail rows print their value as text, so an ISO string reached the
+ * dialog as "2026-10-09T19:44:00Z".
+ */
+function minn_admin_latepoint_when_label( $mysql_datetime ) {
+	$iso = minn_admin_latepoint_utc_iso( $mysql_datetime );
+	return '' === $iso ? '' : wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $iso ) );
+}
+
+/**
  * A status as the pill reads it. The client tidies and colours hyphenated
  * slugs ('no-show' reads "No Show", as Amelia's does) but prints underscores
  * as stored, so no_show, payment_pending and checked_in showed raw. Display
@@ -721,7 +731,9 @@ add_action( 'rest_api_init', function () {
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', __( 'Registration not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
-			$registered = minn_admin_latepoint_utc_iso( $row->created_at );
+			$registered = minn_admin_latepoint_when_label( $row->created_at );
+			$starts     = minn_admin_latepoint_when_label( $row->start_datetime_utc );
+			$ends       = minn_admin_latepoint_when_label( $row->end_datetime_utc );
 			return rest_ensure_response( array(
 				'sections' => array(
 					array(
@@ -747,8 +759,8 @@ add_action( 'rest_api_init', function () {
 						'title' => __( 'Event', 'minn-admin' ),
 						'rows'  => array_values( array_filter( array(
 							array( 'label' => __( 'Event', 'minn-admin' ), 'value' => (string) $row->event_name ),
-							minn_admin_latepoint_utc_iso( $row->start_datetime_utc ) ? array( 'label' => __( 'Starts', 'minn-admin' ), 'value' => minn_admin_latepoint_utc_iso( $row->start_datetime_utc ) ) : null,
-							minn_admin_latepoint_utc_iso( $row->end_datetime_utc ) ? array( 'label' => __( 'Ends', 'minn-admin' ), 'value' => minn_admin_latepoint_utc_iso( $row->end_datetime_utc ) ) : null,
+							'' !== $starts ? array( 'label' => __( 'Starts', 'minn-admin' ), 'value' => $starts ) : null,
+							'' !== $ends ? array( 'label' => __( 'Ends', 'minn-admin' ), 'value' => $ends ) : null,
 						) ) ),
 					),
 				),
