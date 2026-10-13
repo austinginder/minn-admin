@@ -10,7 +10,10 @@
  * The "sale" is an inventory_delta through wc/v3, which lowers _stock the
  * way an order does, from outside the open page.
  *
- * Fixture: one product, created and removed over REST.
+ * A variation's stock gets the same check on the same Save.
+ *
+ * Fixture: one simple and one variable product, created and removed over
+ * REST.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
@@ -56,6 +59,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	};
 
 	let id = null;
+	let varParent = null;
 	try {
 		const made = await api( 'wc/v3/products', {
 			method: 'POST',
@@ -96,8 +100,50 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await save();
 		s = await stock();
 		t.check( 'a stock edit saves when the stock did not move', s.stock_quantity === 9, String( s.stock_quantity ) );
+
+		/* 4. A variation's stock gets the same check. */
+		const defs = await api( 'wc/v3/products/attributes?_fields=id,name' );
+		const attr = ( defs.body || [] )[ 0 ];
+		if ( ! attr ) {
+			console.log( 'SKIP  no global attribute to vary by' );
+		} else {
+			const vmade = await api( 'wc/v3/products', { method: 'POST', body: JSON.stringify( { name: 'Variation stock race ' + Date.now(), type: 'variable', status: 'publish' } ) } );
+			varParent = vmade.body && vmade.body.id;
+			await api( `wc/v3/products/${ varParent }`, { method: 'PUT', body: JSON.stringify( { attributes: [ { id: attr.id, visible: true, variation: true, options: [ 'Small', 'Large' ] } ] } ) } );
+			const vv = await api( `wc/v3/products/${ varParent }/variations`, { method: 'POST', body: JSON.stringify( { attributes: [ { id: attr.id, option: 'Small' } ], regular_price: '10.00', manage_stock: true, stock_quantity: 5 } ) } );
+			const vid = vv.body && vv.body.id;
+			t.check( 'a variation with 5 in stock is made', !! vid && vv.body.stock_quantity === 5, String( vv.status ) );
+			const vstock = async () => ( ( await api( `wc/v3/products/${ varParent }/variations/${ vid }?_fields=stock_quantity` ) ).body || {} ).stock_quantity;
+			const openVar = async () => {
+				await page.goto( BASE + '/minn-admin/products/' + varParent, { waitUntil: 'domcontentloaded' } );
+				await page.waitForSelector( '[data-pvaropen="0"]', { timeout: 20000 } );
+			};
+			const setVarQty = async ( q ) => {
+				await page.click( '[data-pvaropen="0"]' );
+				await page.waitForSelector( '#minn-var-qty', { timeout: 15000 } );
+				await page.fill( '#minn-var-qty', q );
+				await page.click( '#minn-var-dialog [data-var-done]' );
+				await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
+			};
+			if ( vid ) {
+				await openVar();
+				await api( `wc/v3/products/${ varParent }/variations/${ vid }`, { method: 'PUT', body: JSON.stringify( { inventory_delta: -2 } ) } );
+				await setVarQty( '10' );
+				const toastSeen = page.waitForSelector( '.minn-toast', { timeout: 20000 } ).then( ( el ) => el.textContent() ).then( ( x ) => ( x || '' ).trim() ).catch( () => '' );
+				await save();
+				const toastText = await toastSeen;
+				t.check( 'a variation stock edit over a stock that moved is refused (3 stays)', 3 === await vstock(), String( await vstock() ) );
+				t.check( 'and the save says why', /stock of 1 variation/.test( toastText ), toastText );
+
+				await openVar();
+				await setVarQty( '8' );
+				await save();
+				t.check( 'control: a variation stock edit saves when it did not move', 8 === await vstock(), String( await vstock() ) );
+			}
+		}
 	} finally {
 		if ( id ) await api( `wc/v3/products/${ id }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( varParent ) await api( `wc/v3/products/${ varParent }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		await t.done( browser, errors );
 	}
 } )().catch( ( e ) => {

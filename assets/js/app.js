@@ -8158,11 +8158,19 @@
 					parent,
 					content: text.trim(),
 				} ) } );
-				// Same behavior as wp-admin: replying to a pending comment approves it.
+				// Same behavior as wp-admin: replying to a pending comment
+				// approves it. The reply stands either way, so a refused approval
+				// is reported rather than thrown.
+				let approveErr = null;
 				if ( wasPending ) {
-					await api( `wp/v2/comments/${ parent }`, { method: 'POST', body: JSON.stringify( { status: 'approved' } ) } ).catch( () => {} );
+					await api( `wp/v2/comments/${ parent }`, { method: 'POST', body: JSON.stringify( { status: 'approved' } ) } ).catch( ( err ) => { approveErr = err; } );
 				}
-				toast( wasPending ? __( 'Reply posted, comment approved' ) : __( 'Reply posted' ) );
+				if ( approveErr ) {
+					/* translators: %s: why the comment could not be approved. */
+					toast( sprintf( __( 'Reply posted, but the comment was not approved: %s' ), approveErr.message ), true );
+				} else {
+					toast( wasPending ? __( 'Reply posted, comment approved' ) : __( 'Reply posted' ) );
+				}
 				state.commentReply = null;
 				state.cache.comments = null;
 				refreshCommentBadge();
@@ -13112,8 +13120,17 @@
 		} );
 	}
 
+	// A WooCommerce batch answers 200 even when it refused an item: the
+	// refusal rides INSIDE that item ({ id, error }). The items refused.
+	function batchRefused( res ) {
+		return [ 'create', 'update', 'delete' ]
+			.reduce( ( all, k ) => all.concat( Array.isArray( ( res || {} )[ k ] ) ? res[ k ] : [] ), [] )
+			.filter( ( row ) => row && row.error );
+	}
+
 	// Variations save through their own batch route, after the product itself,
 	// because a variation's attributes have to exist on the parent first.
+	// Answers the variations whose stock was left alone because it moved.
 	async function saveProductVariations( m, productId ) {
 		if ( ! Array.isArray( m.variations ) ) return;
 		const body = { create: [], update: [], delete: ( m.variationsRemoved || [] ).slice() };
@@ -13132,18 +13149,37 @@
 			} );
 			if ( Object.keys( changed ).length ) body.update.push( Object.assign( { id: v.id }, changed ) );
 		} );
-		if ( ! body.create.length && ! body.update.length && ! body.delete.length ) return;
+		// WooCommerce's own screen refuses a variation's stock change when the
+		// stored stock moved since the form loaded (a sale, a refund restock)
+		// and saves the rest, as it does for the parent. wc/v3 has no such
+		// check, so read the stored stock first and leave a moved one alone.
+		const stockMoved = [];
+		const stockRows = body.update.filter( ( row ) => 'stock_quantity' in row );
+		if ( stockRows.length ) {
+			const now = await api( `wc/v3/products/${ productId }/variations?include=${ stockRows.map( ( row ) => row.id ).join( ',' ) }&per_page=100&_fields=id,stock_quantity,manage_stock` );
+			const byId = {};
+			( Array.isArray( now ) ? now : [] ).forEach( ( v ) => { byId[ v.id ] = v; } );
+			stockRows.forEach( ( row ) => {
+				const stored = byId[ row.id ];
+				const was = ( m.variationsSeeded || {} )[ row.id ] || {};
+				const nowQty = stored && stored.stock_quantity != null ? Number( stored.stock_quantity ) : null;
+				const loadedQty = was.stock_quantity == null ? null : Number( was.stock_quantity );
+				if ( stored && stored.manage_stock && nowQty !== loadedQty ) {
+					delete row.stock_quantity;
+					stockMoved.push( { id: row.id, now: nowQty } );
+				}
+			} );
+			body.update = body.update.filter( ( row ) => Object.keys( row ).length > 1 );
+		}
+		if ( ! body.create.length && ! body.update.length && ! body.delete.length ) return stockMoved;
 		const res = await api( `wc/v3/products/${ productId }/variations/batch`, {
 			method: 'POST',
 			body: JSON.stringify( body ),
 		} );
-		// A batch answers 200 even when it refused an item: the refusal rides
-		// INSIDE that item. Verified with a duplicate SKU, which comes back as
+		// Verified with a duplicate SKU, which comes back as
 		// product_invalid_sku and even names a SKU that is free. Swallowing it
 		// let a save report success while the variation kept its old value.
-		const refused = [ 'create', 'update', 'delete' ]
-			.reduce( ( all, k ) => all.concat( Array.isArray( ( res || {} )[ k ] ) ? res[ k ] : [] ), [] )
-			.filter( ( row ) => row && row.error );
+		const refused = batchRefused( res );
 		if ( refused.length ) {
 			const err = refused[ 0 ].error || {};
 			const free = err.data && err.data.unique_sku;
@@ -13153,6 +13189,7 @@
 				: ( err.message || __( 'A variation was refused.' ) ) );
 		}
 		m.variationsRemoved = [];
+		return stockMoved;
 	}
 
 	// Attributes come in two kinds. A custom one belongs to this product and
@@ -15146,7 +15183,7 @@
 				} ) : null;
 				// After the product, never before: a variation's attributes
 				// have to exist on the parent for WooCommerce to accept them.
-				await saveProductVariations( m, p.id );
+				const variationStockMoved = await saveProductVariations( m, p.id ) || [];
 				const full = await api( `wc/v3/products/${ p.id }?_fields=${ PRODUCT_DETAIL_FIELDS }` );
 				// Freshly created variations only have ids on the server; without
 				// re-reading them a second save would create duplicates.
@@ -15186,6 +15223,9 @@
 				if ( stockMoved !== null ) {
 					/* translators: %s: the product's stock quantity as stored now. */
 					toast( sprintf( __( 'Product updated, except the stock: it changed to %s since this page opened. Check it and save again.' ), String( stockMoved ) ), true );
+				} else if ( variationStockMoved.length ) {
+					/* translators: %d: how many variations kept their stored stock. */
+					toast( sprintf( _n( 'Product updated, except the stock of %d variation: it changed since this page opened. Check it and save again.', 'Product updated, except the stock of %d variations: it changed since this page opened. Check them and save again.', variationStockMoved.length ), variationStockMoved.length ), true );
 				} else {
 					toast( __( 'Product updated' ) );
 				}
@@ -15374,13 +15414,22 @@
 						return row;
 					} );
 					try {
-						await api( 'wc/v3/products/batch', {
+						const res = await api( 'wc/v3/products/batch', {
 							method: 'POST',
 							body: JSON.stringify( { update } ),
 						} );
-						/* translators: %s: how many products changed. */
-						toast( sprintf( _n( 'Updated %s product', 'Updated %s products', ids.length ), ids.length ) );
+						const refused = batchRefused( res );
+						if ( refused.length ) {
+							const err = refused[ 0 ].error || {};
+							/* translators: 1: how many products changed, 2: how many were selected, 3: WooCommerce's reason for the first one it refused. */
+							toast( sprintf( _n( 'Updated %1$s of %2$s product. %3$s', 'Updated %1$s of %2$s products. %3$s', ids.length ), ids.length - refused.length, ids.length, err.message || __( 'WooCommerce refused the rest.' ) ), true );
+						} else {
+							/* translators: %s: how many products changed. */
+							toast( sprintf( _n( 'Updated %s product', 'Updated %s products', ids.length ), ids.length ) );
+						}
 						psel.clear();
+						// The refused stay selected, to try again or look at.
+						refused.forEach( ( row ) => { if ( row.id ) psel.add( row.id ); } );
 						state.cache.products = null;
 						await loadProducts( c.page ).catch( showErr );
 						if ( state.route === 'products' ) renderProducts();
@@ -29852,8 +29901,14 @@
 				ids.splice( to, 0, moved );
 				dragId = null;
 				try {
-					await api( 'wc/v3/taxes/batch', { method: 'POST', body: JSON.stringify( { update: ids.map( ( id, i ) => ( { id: Number( id ), order: i } ) ) } ) } );
-					toast( __( 'Rate order saved' ) );
+					const res = await api( 'wc/v3/taxes/batch', { method: 'POST', body: JSON.stringify( { update: ids.map( ( id, i ) => ( { id: Number( id ), order: i } ) ) } ) } );
+					const refused = batchRefused( res );
+					if ( refused.length ) {
+						/* translators: %s: WooCommerce's reason for refusing part of the change. */
+						toast( sprintf( __( 'Part of the rate order was not saved: %s' ), ( refused[ 0 ].error || {} ).message || __( 'WooCommerce refused it.' ) ), true );
+					} else {
+						toast( __( 'Rate order saved' ) );
+					}
 					refresh();
 				} catch ( err ) {
 					toast( err.message, true );
