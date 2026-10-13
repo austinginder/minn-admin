@@ -242,6 +242,9 @@ function minn_admin_elementor_template_item( $post ) {
 	} else {
 		$type = (string) \Elementor\TemplateLibrary\Source_Local::get_template_type( $post->ID );
 	}
+	// post_modified_gmt is UTC; sent bare, the detail dialog read it as
+	// site-local, so it goes out with its zone.
+	$modified = '0000-00-00 00:00:00' !== $post->post_modified_gmt ? strtotime( $post->post_modified_gmt . ' UTC' ) : false;
 	return array(
 		'id'         => (int) $post->ID,
 		'title'      => '' !== $post->post_title ? html_entity_decode( $post->post_title, ENT_QUOTES ) : __( '(no title)', 'minn-admin' ),
@@ -249,7 +252,7 @@ function minn_admin_elementor_template_item( $post ) {
 		'typeLabel'  => isset( $types[ $type ] ) ? $types[ $type ] : ( '' !== $type ? $type : '—' ),
 		'conditions' => minn_admin_elementor_conditions_summary( $post->ID ),
 		'status'     => (string) $post->post_status,
-		'modified'   => (string) $post->post_modified_gmt,
+		'modified'   => $modified ? gmdate( 'c', $modified ) : '',
 		'editUrl'    => minn_admin_elementor_template_edit_url( $post->ID ),
 	);
 }
@@ -347,6 +350,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'title', 'label' => __( 'Template', 'minn-admin' ), 'format' => 'title', 'sort' => 'title' ),
 				array( 'key' => 'typeLabel', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'pill', 'width' => '130px' ),
 				array( 'key' => 'conditions', 'label' => __( 'Conditions', 'minn-admin' ), 'width' => 'minmax(0,1.2fr)' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
 				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago', 'utc' => true, 'sort' => 'modified' ),
 			),
 			'create'    => minn_admin_elementor_can_create() ? array(
@@ -398,11 +402,27 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => $perm,
 		'callback'            => function () {
-			$lib = wp_count_posts( \Elementor\TemplateLibrary\Source_Local::CPT );
-			$n   = 0;
-			foreach ( array( 'publish', 'draft', 'pending', 'future', 'private' ) as $st ) {
-				$n += isset( $lib->$st ) ? (int) $lib->$st : 0;
-			}
+			// Counted the way the list's All tab queries, so the library
+			// posts it leaves out (the Default Kit, types it does not list)
+			// are left out here too.
+			$listed = array_values( array_filter( array_keys( minn_admin_elementor_template_types() ), function ( $t ) {
+				return ! minn_admin_elementor_is_floating_type( $t );
+			} ) );
+			$lib    = $listed ? new WP_Query( array(
+				'post_type'      => \Elementor\TemplateLibrary\Source_Local::CPT,
+				'post_status'    => array( 'publish', 'draft', 'pending', 'future', 'private' ),
+				'perm'           => 'editable',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'meta_query'     => array(
+					array(
+						'key'     => \Elementor\Core\Base\Document::TYPE_META_KEY,
+						'value'   => $listed,
+						'compare' => 'IN',
+					),
+				),
+			) ) : null;
+			$n    = $lib ? (int) $lib->found_posts : 0;
 			$rows = array(
 				array( 'label' => __( 'Templates', 'minn-admin' ), 'value' => number_format_i18n( $n ) ),
 			);
