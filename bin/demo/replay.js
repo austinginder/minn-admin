@@ -5,10 +5,13 @@
  *
  * The REST root sits under the demo's own path, so a request that ever got
  * past the fetch stand-in would 404 on the host site rather than reach its
- * real API. Reads answer from the recording (exact URL first, then the same
- * route with any query); writes answer with a refusal the app shows as an
- * ordinary error. Links into the recorded site (wp-admin, front-end pages)
- * point at example.com after scrubbing, so clicks on them stay in the page.
+ * real API. Reads answer from the recording: the exact URL first, else the
+ * recording of the same route whose query shares the most with it (a search
+ * or a second page shows the first page of that list). Writes answer with a
+ * refusal the app shows as an ordinary error, except a POST that only
+ * renders (an email preview), which answers like a read. Links into the
+ * recorded site (wp-admin, front-end pages) point at example.com after
+ * scrubbing, so clicks on them stay in the page.
  */
 ( function () {
 	'use strict';
@@ -30,15 +33,69 @@
 	B.nonce = 'demo';
 	window.MINN = B;
 
-	var exact = {};
+	// The same pattern as READ_POST in record.js.
+	var READ_POST = /\/preview$/;
+	var pairs = function ( query ) {
+		return query ? query.split( '&' ) : [];
+	};
+	var routeOf = function ( key ) {
+		return key.split( '?' )[ 0 ];
+	};
+	var known = {};
 	var byRoute = {};
-	Object.keys( D.responses ).forEach( function ( key ) {
-		var r = D.responses[ key ];
-		exact[ key ] = r;
-		var route = key.split( '?' )[ 0 ];
-		if ( ! byRoute[ route ] ) byRoute[ route ] = r;
-	} );
+	var add = function ( responses ) {
+		Object.keys( responses ).forEach( function ( key ) {
+			var at = key.indexOf( '?' );
+			known[ key ] = responses[ key ];
+			( byRoute[ routeOf( key ) ] = byRoute[ routeOf( key ) ] || [] ).push( { q: pairs( at < 0 ? '' : key.slice( at + 1 ) ), r: responses[ key ] } );
+		} );
+	};
+	add( D.responses );
+	// What only one view asked for waits in data/<view>.json (see build.js)
+	// until the app first asks for one of its routes.
+	var parts = D.parts || {};
+	var loading = {};
+	var load = function ( key ) {
+		var view = parts[ routeOf( key ) ];
+		if ( ! view ) return Promise.resolve();
+		if ( ! loading[ view ] ) {
+			loading[ view ] = realFetch( base + 'data/' + view + '.json?v=' + ( D.build || '' ) )
+				.then( function ( r ) {
+					return r.ok ? r.json() : {};
+				} )
+				.then( add, function () {
+					delete loading[ view ]; // a dropped connection: try again next time
+				} );
+		}
+		return loading[ view ];
+	};
+	// The recording of this route that shares the most query pairs with the
+	// request; on a tie the fewest extra pairs, then the first recorded (a
+	// view's default list, recorded before its tabs and filters).
+	var closest = function ( key ) {
+		if ( known[ key ] ) return known[ key ];
+		var at = key.indexOf( '?' );
+		var all = byRoute[ at < 0 ? key : key.slice( 0, at ) ];
+		if ( ! all ) return null;
+		var want = pairs( at < 0 ? '' : key.slice( at + 1 ) );
+		var best = null;
+		var bestScore = -1;
+		var bestExtra = 0;
+		all.forEach( function ( c ) {
+			var score = c.q.filter( function ( p ) {
+				return want.indexOf( p ) >= 0;
+			} ).length;
+			var extra = c.q.length - score;
+			if ( score > bestScore || ( score === bestScore && extra < bestExtra ) ) {
+				best = c.r;
+				bestScore = score;
+				bestExtra = extra;
+			}
+		} );
+		return best;
+	};
 
+	var realFetch = window.fetch.bind( window );
 	var reply = function ( status, body, headers ) {
 		var h = { 'Content-Type': 'application/json' };
 		Object.keys( headers || {} ).forEach( function ( name ) {
@@ -50,21 +107,24 @@
 		return reply( 'minn_demo' === code ? 403 : 404, JSON.stringify( { code: code, message: message, data: { status: 'minn_demo' === code ? 403 : 404 } } ) );
 	};
 
-	var realFetch = window.fetch.bind( window );
 	window.fetch = function ( input, init ) {
 		var url = typeof input === 'string' ? input : ( input && input.url ) || String( input );
 		var abs = new URL( url, location.href ).href;
 		if ( abs.indexOf( here ) !== 0 ) return realFetch( input, init );
 		var method = String( ( init && init.method ) || ( input && input.method ) || 'GET' ).toUpperCase();
-		if ( 'GET' !== method && 'HEAD' !== method ) {
-			return refuse( 'minn_demo', 'This is a demo, so nothing is saved.' );
-		}
 		var key = null;
 		if ( abs.indexOf( B.restUrl ) === 0 ) key = 'rest:' + abs.slice( B.restUrl.length );
 		else if ( abs.indexOf( B.ajaxUrl ) === 0 ) key = 'ajax:' + abs.slice( B.ajaxUrl.length );
-		var hit = key && ( exact[ key ] || byRoute[ key.split( '?' )[ 0 ] ] );
-		if ( ! hit ) return refuse( 'minn_demo_missing', 'This view is not part of the demo.' );
-		return reply( hit.status, fill( hit.body ), hit.headers );
+		if ( 'POST' === method && key && READ_POST.test( key.split( '?' )[ 0 ] ) ) key = 'POST ' + key;
+		else if ( 'GET' !== method && 'HEAD' !== method ) {
+			return refuse( 'minn_demo', 'This is a demo, so nothing is saved.' );
+		}
+		if ( ! key ) return refuse( 'minn_demo_missing', 'This view is not part of the demo.' );
+		return load( key ).then( function () {
+			var hit = closest( key );
+			if ( ! hit ) return refuse( 'minn_demo_missing', 'This view is not part of the demo.' );
+			return reply( hit.status, fill( hit.body ), hit.headers );
+		} );
 	};
 
 	// Links into the recorded site lead nowhere real: say where they go instead.

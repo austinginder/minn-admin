@@ -3,10 +3,17 @@
  *
  * Writes <theme>/demo/: app.js, app.css and fonts as committed at a git ref
  * (HEAD unless --ref names a release tag, so work in progress in the tree
- * never reaches the site), the replay script, the recording (data.js +
- * uploads/) and catalog.json with `demo: true` on every plugin whose surface
- * the recording holds. The theme reads only that folder, so the site always
- * shows the app build and the plugin list that were bundled together.
+ * never reaches the site), the replay script, the recording and catalog.json
+ * with `demo: true` on every plugin whose surface the recording holds. The
+ * theme reads only that folder, so the site always shows the app build and
+ * the plugin list that were bundled together.
+ *
+ * The recording splits so the demo opens without loading all of it:
+ * data.js holds the boot payload and every response more than one view asked
+ * for; data/<view>.json holds what only that view asked for (its entries,
+ * its pages), fetched the first time the app asks for one of them. A route
+ * (the URL before its query) lives in one place, so the closest-query match
+ * in replay.js always sees all of a route's recordings.
  *
  * Usage (from the plugin root):
  *   node bin/demo/build.js <recording-dir> <theme-dir> [--ref=v0.45.0]
@@ -57,9 +64,34 @@ if ( fs.existsSync( path.join( REC, 'uploads' ) ) ) {
 	fs.cpSync( path.join( REC, 'uploads' ), path.join( OUT, 'uploads' ), { recursive: true } );
 }
 
-// The recording is scrubbed JSON, but it lands inside a <script> element:
-// escape anything that could end the element or open a comment.
-const data = JSON.stringify( { boot, responses } ).replace( /</g, '\\u003c' ).replace( /\u2028/g, '\\u2028' ).replace( /\u2029/g, '\\u2029' );
+const routeOf = ( key ) => key.split( '?' )[ 0 ];
+const views = {};
+for ( const [ key, r ] of Object.entries( responses ) ) {
+	const set = views[ routeOf( key ) ] = views[ routeOf( key ) ] || new Set();
+	for ( const v of r.from || [ '' ] ) set.add( v );
+}
+const shared = {};
+const parts = {};
+const files = {};
+for ( const [ key, r ] of Object.entries( responses ) ) {
+	const { from, ...response } = r;
+	const set = views[ routeOf( key ) ];
+	const view = 1 === set.size ? [ ...set ][ 0 ] : '';
+	if ( ! /^[a-z0-9-]+$/.test( view ) ) {
+		shared[ key ] = response;
+		continue;
+	}
+	parts[ routeOf( key ) ] = view;
+	( files[ view ] = files[ view ] || {} )[ key ] = response;
+}
+fs.mkdirSync( path.join( OUT, 'data' ) );
+for ( const [ view, part ] of Object.entries( files ) ) {
+	fs.writeFileSync( path.join( OUT, 'data', view + '.json' ), JSON.stringify( part ) );
+}
+// The recording is scrubbed JSON, but data.js lands inside a <script>
+// element: escape anything that could end the element or open a comment.
+// `build` versions the view files, which the theme does not enqueue.
+const data = JSON.stringify( { boot, responses: shared, parts, build: Date.now().toString( 36 ) } ).replace( /</g, '\\u003c' ).replace( /\u2028/g, '\\u2028' ).replace( /\u2029/g, '\\u2029' );
 fs.writeFileSync( path.join( OUT, 'data.js' ), 'window.MINN_DEMO = ' + data + ';\n' );
 
 const recorded = new Set( meta.surfaces );
@@ -79,5 +111,6 @@ fs.writeFileSync( path.join( OUT, 'catalog.json' ), JSON.stringify( catalog, nul
 
 const size = ( f ) => ( fs.statSync( path.join( OUT, f ) ).size / 1024 ).toFixed( 0 ) + ' KB';
 console.log( `v${ version } demo (app from ${ REF }) → ${ OUT }` );
-console.log( `  app.js ${ size( 'app/js/app.js' ) }, data.js ${ size( 'data.js' ) }` );
+const partsKB = Object.keys( files ).reduce( ( n, v ) => n + fs.statSync( path.join( OUT, 'data', v + '.json' ) ).size, 0 ) / 1024;
+console.log( `  app.js ${ size( 'app/js/app.js' ) }, data.js ${ size( 'data.js' ) }, ${ Object.keys( files ).length } view files ${ partsKB.toFixed( 0 ) } KB` );
 console.log( `  ${ linked } catalog plugins link a demo; ${ meta.skipped.length } catalog surfaces were not recorded` );
