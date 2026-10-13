@@ -4,6 +4,10 @@
  * "Failed to fetch", blanking Extensions. This suite
  * stubs the update endpoint to measure concurrency and asserts the page
  * never paints the empty showErr card when two Updates are clicked.
+ *
+ * The second update answers that WordPress refused to switch the plugin back
+ * on (a missing dependency, say): the toast says so, with WordPress's reason,
+ * instead of reporting a plain success.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
@@ -68,11 +72,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify( {
-				updated: true,
-				version: plugin.includes( 'one' ) ? '1.1.0' : '2.1.0',
-			} ),
+			body: JSON.stringify( plugin.includes( 'one' )
+				? { updated: true, version: '1.1.0', switched_off: false, reactivation_failed: false, reactivate_error: '' }
+				: { updated: true, version: '2.1.0', switched_off: false, reactivation_failed: true, reactivate_error: 'Acme Two requires Acme Core.' } ),
 		} );
+	} );
+
+	// Every toast, in order: each one replaces the last after 2.6 s.
+	await page.addInitScript( () => {
+		window.__minnToasts = [];
+		new MutationObserver( ( muts ) => {
+			for ( const m of muts ) {
+				for ( const n of m.addedNodes ) {
+					if ( n.nodeType === 1 && n.classList.contains( 'minn-toast' ) ) {
+						window.__minnToasts.push( { text: n.textContent.trim(), error: n.getAttribute( 'role' ) === 'alert' } );
+					}
+				}
+			}
+		} ).observe( document, { childList: true, subtree: true } );
 	} );
 
 	await page.goto( `${ BASE }/minn-admin/extensions`, { waitUntil: 'domcontentloaded' } );
@@ -97,7 +114,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// Both buttons gone or no longer "Updating" after optimistic badge clear
 		// OR both finished toasts.
 		const text = document.body.textContent;
-		return /Acme One updated/.test( text ) && /Acme Two updated/.test( text );
+		return ( window.__minnToasts || [] ).some( ( x ) => /^Acme Two updated/.test( x.text ) );
 	}, null, { timeout: 20000 } ).catch( () => null );
 
 	// Give the chain a beat to settle finished[].
@@ -113,6 +130,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// started, first must already be finished — check via sequence log
 		// by ensuring maxConcurrent stayed 1 (already) and both completed.
 		maxConcurrent === 1 && finished.length === 2 );
+
+	const toasts = await page.evaluate( () => window.__minnToasts || [] );
+	const two = toasts.find( ( x ) => /^Acme Two updated/.test( x.text ) );
+	t.check( 'an update WordPress could not switch back on says so, with its reason, as an error',
+		!! two && two.error && /could not switch it back on: Acme Two requires Acme Core\./.test( two.text ), JSON.stringify( two || toasts.map( ( x ) => x.text ) ) );
+	t.check( 'control: a plain update still reports its new version',
+		toasts.some( ( x ) => x.text === 'Acme One updated to v1.1.0' && ! x.error ), JSON.stringify( toasts.map( ( x ) => x.text ) ) );
 
 	// The crash: Extensions painted "Something went wrong: Failed to fetch".
 	const blanked = await page.evaluate( () => /Something went wrong/.test( document.body.textContent ) );

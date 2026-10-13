@@ -24537,6 +24537,14 @@
 					if ( p ) p.status = 'inactive';
 					/* translators: %s: the plugin's name. */
 					toast( sprintf( __( '%s updated, but the update switched it off and your account can’t switch plugins on. Ask an administrator to turn it back on.' ), name ), true );
+				} else if ( r && r.reactivation_failed ) {
+					const p = Array.isArray( state.cache.plugins ) ? state.cache.plugins.find( ( x ) => x.plugin === file ) : null;
+					if ( p ) p.status = 'inactive';
+					toast( r.reactivate_error
+						/* translators: 1: the plugin's name. 2: WordPress's reason, as it gave it. */
+						? sprintf( __( '%1$s updated, but WordPress could not switch it back on: %2$s' ), name, r.reactivate_error )
+						/* translators: %s: the plugin's name. */
+						: sprintf( __( '%s updated, but WordPress could not switch it back on.' ), name ), true );
 				} else {
 					/* translators: 1: the plugin's name. 2: the new version. */
 					toast( version ? sprintf( __( '%1$s updated to v%2$s' ), name, version ) : sprintf( __( '%s updated' ), name ) );
