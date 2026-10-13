@@ -170,8 +170,10 @@ add_action( 'rest_api_init', function () {
 	};
 
 	// Status card: rule counts + lifetime hits from their `count` column.
-	// Rows with status 404 are their 404 LOG, not rules — counted separately,
-	// the same split the list route makes.
+	// The 404 log is counted on its own: current versions keep it in the
+	// eps_redirects_404_log option (newest first, capped by their
+	// eps_301_max_404_logs filter, 50 by default), and older ones wrote it
+	// into this table as status 404 rows, which the list route leaves out.
 	register_rest_route( 'minn-admin/v1', '/eps301/status', array(
 		'methods'             => 'GET',
 		'permission_callback' => $perm,
@@ -184,7 +186,10 @@ add_action( 'rest_api_init', function () {
 			$active   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status IN ('301','302','307')" ); // phpcs:ignore
 			$inactive = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = 'inactive'" ); // phpcs:ignore
 			$hits     = (int) $wpdb->get_var( "SELECT COALESCE(SUM(count),0) FROM {$t} WHERE status IN ('301','302','307','inactive')" ); // phpcs:ignore
-			$misses   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = '404'" ); // phpcs:ignore
+			$log      = get_option( 'eps_redirects_404_log', array() );
+			$misses   = is_array( $log ) && $log
+				? count( $log )
+				: (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = '404'" ); // phpcs:ignore
 			$rows     = array(
 				array(
 					'label' => __( 'Redirect rules', 'minn-admin' ),
