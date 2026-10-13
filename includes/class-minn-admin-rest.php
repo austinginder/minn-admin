@@ -4683,10 +4683,25 @@ class Minn_Admin_REST {
 	 * Restore a trashed post — core wp/v2 has no untrash, so Minn provides one.
 	 * wp_untrash_post lands on draft by default (core behavior since 5.6).
 	 */
+	/**
+	 * Whether a post is content someone edits on a screen. Internal types
+	 * (privacy requests, changesets) map to ordinary post caps, so an Editor
+	 * passes edit_post and delete_post on them; Minn's per-post routes answer
+	 * only for types with an admin screen and a REST base, as its lists and
+	 * editor do.
+	 *
+	 * @param WP_Post|null $post Post.
+	 * @return bool
+	 */
+	private static function screen_type( $post ) {
+		$type = $post ? get_post_type_object( $post->post_type ) : null;
+		return $type && ! empty( $type->show_ui ) && ! empty( $type->show_in_rest );
+	}
+
 	public static function restore_post( WP_REST_Request $request ) {
 		$id   = (int) Minn_Admin::path_param( $request );
 		$post = get_post( $id );
-		if ( ! $post ) {
+		if ( ! $post || ! self::screen_type( $post ) ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		if ( 'trash' !== $post->post_status ) {
@@ -4778,7 +4793,7 @@ class Minn_Admin_REST {
 	public static function lock_post( WP_REST_Request $request ) {
 		$id   = (int) Minn_Admin::path_param( $request );
 		$post = get_post( $id );
-		if ( ! $post ) {
+		if ( ! $post || ! self::screen_type( $post ) ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		if ( ! current_user_can( 'edit_post', $id ) ) {
@@ -4811,7 +4826,7 @@ class Minn_Admin_REST {
 	public static function unlock_post( WP_REST_Request $request ) {
 		$id   = (int) Minn_Admin::path_param( $request );
 		$post = get_post( $id );
-		if ( ! $post ) {
+		if ( ! $post || ! self::screen_type( $post ) ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		if ( ! current_user_can( 'edit_post', $id ) ) {
@@ -11443,14 +11458,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $post || 'trash' === $post->post_status ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
-		$type = get_post_type_object( $post->post_type );
-		// Only content someone edits on a screen: internal types (privacy
-		// requests, changesets) map to ordinary post caps, so an Editor
-		// passes edit_post on them, and a copy hands back what only their
-		// own screens show (a requester's email address).
-		if ( ! $type || empty( $type->show_ui ) || empty( $type->show_in_rest ) ) {
+		// A copy of an internal type would hand back what only its own
+		// screens show (a requester's email address).
+		if ( ! self::screen_type( $post ) ) {
 			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
+		$type = get_post_type_object( $post->post_type );
 		if ( ! current_user_can( $type->cap->create_posts ) ) {
 			return new WP_Error( 'forbidden', __( 'You are not allowed to create this type of content.', 'minn-admin' ), array( 'status' => 403 ) );
 		}

@@ -407,6 +407,42 @@ if ( ! class_exists( 'Antispam_Bee' ) || ! method_exists( 'Antispam_Bee', 'get_o
 	$check( '03-05 cleanup: the option is back', $asb_prev === get_option( 'antispam_bee', null ) );
 }
 
+// --- 15-03 Restore, lock and unlock answer only for types with a screen --------
+// Internal types (a privacy request) map to ordinary post caps, so an Editor
+// passed delete_post and edit_post on them: duplicate refused them (08-2),
+// restore, lock and unlock did not.
+$sc_uid = $make_user( 'editor' );
+$sc_req = wp_insert_post( array( 'post_type' => 'user_request', 'post_name' => 'export_personal_data', 'post_title' => 'rc45-requester@example.com', 'post_status' => 'request-pending', 'post_author' => $admin ) );
+$sc_own = wp_insert_post( array( 'post_type' => 'post', 'post_title' => 'Rc45 own post', 'post_status' => 'draft', 'post_author' => $sc_uid ) );
+if ( ! $sc_uid || ! $sc_req || is_wp_error( $sc_req ) || ! $sc_own || is_wp_error( $sc_own ) ) {
+	$check( '15-03 fixtures', false );
+} else {
+	wp_set_current_user( $sc_uid );
+	list( $sc_st ) = $call( 'POST', "/minn-admin/v1/posts/{$sc_req}/lock", array() );
+	$check( '15-03 an Editor may not lock a privacy request', 404 === $sc_st, (string) $sc_st );
+	list( $sc_st ) = $call( 'POST', "/minn-admin/v1/posts/{$sc_req}/unlock", array() );
+	$check( '15-03 an Editor may not unlock a privacy request', 404 === $sc_st, (string) $sc_st );
+	wp_set_current_user( $admin );
+	wp_trash_post( $sc_req );
+	wp_set_current_user( $sc_uid );
+	list( $sc_st ) = $call( 'POST', "/minn-admin/v1/posts/{$sc_req}/restore", array() );
+	$check( '15-03 an Editor may not restore a trashed privacy request', 404 === $sc_st && 'trash' === get_post_status( $sc_req ), $sc_st . ' ' . get_post_status( $sc_req ) );
+	list( $sc_st, $sc_d ) = $call( 'POST', "/minn-admin/v1/posts/{$sc_own}/lock", array() );
+	$check( '15-03 control: an Editor still locks their own post', 200 === $sc_st && ! empty( $sc_d['acquired'] ), $sc_st . ' ' . wp_json_encode( $sc_d ) );
+	wp_trash_post( $sc_own );
+	list( $sc_st ) = $call( 'POST', "/minn-admin/v1/posts/{$sc_own}/restore", array() );
+	$check( '15-03 control: an Editor still restores their own post', 200 === $sc_st && 'trash' !== get_post_status( $sc_own ), $sc_st . ' ' . get_post_status( $sc_own ) );
+}
+wp_set_current_user( $admin );
+foreach ( array( $sc_req, $sc_own ) as $sc_p ) {
+	if ( $sc_p && ! is_wp_error( $sc_p ) ) {
+		wp_delete_post( $sc_p, true );
+	}
+}
+if ( $sc_uid ) {
+	$drop_user( $sc_uid );
+}
+
 // @sections
 
 $summary();
