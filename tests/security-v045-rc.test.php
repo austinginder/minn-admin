@@ -753,6 +753,91 @@ if ( ! function_exists( 'acf_add_local_field_group' ) || ! defined( 'ACF_PRO' ) 
 	}
 }
 
+// --- 02-01, 02-02, 02-05 Database browser: copies, store tables, the cap -------
+// The table list is memoized per request, so every fixture table is made
+// before the first browser call in this run.
+$db_cell   = function ( $table, $pk_col, $pk, $col ) use ( $call ) {
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/db/row', null, array( 'table' => $table, 'pk' => wp_json_encode( array( $pk_col => (string) $pk ) ) ) );
+	if ( 200 !== $st ) {
+		return array( $st, null );
+	}
+	$i = array_search( $col, wp_list_pluck( $d['columns'], 'name' ), true );
+	return array( $st, false === $i ? null : $d['cells'][ $i ] );
+};
+$db_shown  = function ( $cell, $needle ) {
+	$text = is_array( $cell ) ? (string) ( $cell['v'] ?? '' ) : (string) $cell;
+	return false !== strpos( $text, $needle );
+};
+global $wpdb;
+$db_copy   = $wpdb->prefix . 'usermeta_minnrc45';
+$db_bare   = $wpdb->prefix . 'usermeta_minnrc45b';
+$db_seed   = 'MINNRC45TOTPSEEDABCDEFGHIJKLMNOP';
+$db_hooks  = array();
+$db_opt    = 'minn_rc45_secret_copy';
+$wpdb->query( "CREATE TABLE `{$db_copy}` LIKE `{$wpdb->usermeta}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->query( "CREATE TABLE `{$db_bare}` ( `umeta_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT, `meta_value` longtext, PRIMARY KEY (`umeta_id`) )" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->insert( $db_copy, array( 'user_id' => $admin, 'meta_key' => '_two_factor_totp_key', 'meta_value' => $db_seed ) );
+$db_seed_id = (int) $wpdb->insert_id;
+$wpdb->insert( $db_copy, array( 'user_id' => $admin, 'meta_key' => 'first_name', 'meta_value' => 'Minnrc45 Plainname here' ) );
+$db_plain_id = (int) $wpdb->insert_id;
+$wpdb->insert( $db_bare, array( 'meta_value' => $db_seed ) );
+$db_bare_id = (int) $wpdb->insert_id;
+
+// 02-01: a copy of usermeta keeps the live table's key list.
+list( $db_st, $db_c ) = $db_cell( $db_copy, 'umeta_id', $db_seed_id, 'meta_value' );
+$check( '02-01 a usermeta copy\'s TOTP seed prints redacted', 200 === $db_st && is_array( $db_c ) && ! empty( $db_c['redacted'] ), $db_st . ' ' . wp_json_encode( $db_c ) );
+list( , $db_d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $db_copy, 'fcol' => 'meta_value', 'fq' => 'TOTPSEED' ) );
+$check( '02-01 and a value search does not find it', is_array( $db_d ) && 0 === (int) ( $db_d['total'] ?? -1 ), wp_json_encode( $db_d['total'] ?? $db_d ) );
+list( $db_st, $db_c ) = $db_cell( $db_bare, 'umeta_id', $db_bare_id, 'meta_value' );
+$check( '02-01 a copy without its key column prints no value', 200 === $db_st && is_array( $db_c ) && ! empty( $db_c['redacted'] ), $db_st . ' ' . wp_json_encode( $db_c ) );
+list( $db_st, $db_c ) = $db_cell( $db_copy, 'umeta_id', $db_plain_id, 'meta_value' );
+$check( '02-01 control: an ordinary row in the copy prints', 200 === $db_st && $db_shown( $db_c, 'Minnrc45 Plainname' ), $db_st . ' ' . wp_json_encode( $db_c ) );
+
+// 02-02: WooCommerce's tables follow the log viewer's rule.
+if ( ! class_exists( 'WooCommerce' ) ) {
+	$skip( '02-02 WooCommerce inactive' );
+} else {
+	$db_role_uid = $make_user( 'administrator' );
+	$db_wc_table = $wpdb->prefix . 'woocommerce_order_items';
+	if ( ! $db_role_uid ) {
+		$check( '02-02 fixture user', false );
+	} else {
+		$db_u = new WP_User( $db_role_uid );
+		$db_u->add_cap( 'manage_woocommerce', false );
+		wp_set_current_user( $db_role_uid );
+		list( $db_st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $db_wc_table ) );
+		$check( '02-02 a System-page role without manage_woocommerce cannot browse its order items', 404 === $db_st, (string) $db_st );
+		list( , $db_list ) = $call( 'GET', '/minn-admin/v1/db/tables' );
+		$check( '02-02 and the table list leaves WooCommerce\'s tables out', is_array( $db_list ) && ! in_array( $db_wc_table, wp_list_pluck( (array) ( $db_list['tables'] ?? array() ), 'name' ), true ) );
+		list( $db_st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->posts ) );
+		$check( '02-02 control: that role still browses the posts table', 200 === $db_st, (string) $db_st );
+		wp_set_current_user( $admin );
+		$drop_user( $db_role_uid );
+	}
+	list( $db_st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $db_wc_table ) );
+	$check( '02-02 control: an administrator with manage_woocommerce browses it', 200 === $db_st, (string) $db_st );
+}
+
+// 02-05: once the copies list is capped, a long cell is withheld.
+if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . 'wc_webhooks' ) ) ) {
+	$skip( '02-05 no wc_webhooks table to hold the credentials' );
+} else {
+	for ( $i = 0; $i < 400; $i++ ) {
+		$wpdb->insert( $wpdb->prefix . 'wc_webhooks', array( 'status' => 'disabled', 'name' => 'minn-rc45-cap', 'user_id' => $admin, 'delivery_url' => 'https://example.com/', 'secret' => 'mrc45' . wp_generate_password( 40, false ), 'topic' => 'order.created', 'api_version' => 3 ) );
+		$db_hooks[] = (int) $wpdb->insert_id;
+	}
+	$db_late = (string) $wpdb->get_var( $wpdb->prepare( "SELECT secret FROM {$wpdb->prefix}wc_webhooks WHERE webhook_id = %d", end( $db_hooks ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	add_option( $db_opt, 'copied for a support ticket: ' . $db_late, '', 'no' );
+	$db_oid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $db_opt ) );
+	list( $db_st, $db_c ) = $db_cell( $wpdb->options, 'option_id', $db_oid, 'option_value' );
+	$check( '02-05 past the cap, a copy of a late credential does not print', 200 === $db_st && ! $db_shown( $db_c, $db_late ), $db_st . ' ' . wp_json_encode( $db_c ) );
+	list( $db_st, $db_c ) = $db_cell( $wpdb->options, 'option_id', $db_oid, 'autoload' );
+	$check( '02-05 control: a short cell still prints', 200 === $db_st && is_string( $db_c ) && '' !== $db_c, $db_st . ' ' . wp_json_encode( $db_c ) );
+	$wpdb->query( "DELETE FROM {$wpdb->prefix}wc_webhooks WHERE name = 'minn-rc45-cap'" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	delete_option( $db_opt );
+}
+$wpdb->query( "DROP TABLE IF EXISTS `{$db_copy}`, `{$db_bare}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
 // @sections
 
 $summary();

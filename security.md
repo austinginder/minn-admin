@@ -81,13 +81,20 @@ A few properties worth knowing before auditing (details in
 - The database browser is read-only and redacts credentials three ways: by
   column name (a column named like a password, secret or token, in any
   table, which also cannot be sorted or filtered), by known vendor row
-  (options and user meta that hold keys, tokens or license answers), and
-  by value (a cell holding a copy of a redacted credential, raw or
-  base64-encoded, under any name). Value searches leave those rows out,
-  long text, binary and JSON columns are not sort keys, and a value search
-  counts at most 1,000 rows (or is refused when the site holds too many
-  credentials to check). Activity-log tables are shown as their own
-  screens show them.
+  (options and user meta that hold keys, tokens or license answers, and
+  copies of those tables such as `wp_usermeta_backup`), and by value (a
+  cell holding a copy of a redacted credential, raw or base64-encoded,
+  under any name). Value searches leave those rows out, long text, binary
+  and JSON columns are not sort keys, and a value search counts at most
+  1,000 rows. On a site holding too many credentials to check (more than
+  about 200), value searches are refused and every cell of 16 bytes or more
+  is withheld rather than printed unchecked. Activity-log tables are shown
+  as their own screens show them. WooCommerce's own tables (orders,
+  addresses, sessions, and its logs when it keeps them in the database) are
+  left out for anyone without `manage_woocommerce`, as WooCommerce's log
+  screen is; store data a site keeps in core's tables (orders in the posts
+  table when High-Performance Order Storage is off, customer addresses in
+  user meta) stays readable to whoever may use the browser.
 - On a network, Minn's network routes read network capabilities on the
   main site, as core's Network Admin does, so a network capability granted
   through one subsite's role counts for nothing. On an install with several

@@ -43,7 +43,7 @@ class Minn_Admin_DB {
 	/** credential_needles(), for one request (rows() and row() start it over). */
 	private static $needles = null;
 
-	/** Whether credential_needles() stopped at a cap, so some copies may print. */
+	/** Whether credential_needles() stopped at a cap, so long cells are withheld (shown_cell()). */
 	private static $needles_capped = false;
 
 	/**
@@ -343,10 +343,30 @@ class Minn_Admin_DB {
 	private static function resolve_table( $name ) {
 		foreach ( self::table_index() as $t ) {
 			if ( 0 === strcasecmp( (string) $t->name, (string) $name ) ) {
-				return $t;
+				return self::store_table_hidden( $t->name ) ? null : $t;
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Whether a table is WooCommerce's own and the viewer is someone
+	 * WooCommerce keeps out of it. Its tables hold orders, addresses,
+	 * sessions and customer records, and its logs when they are kept in the
+	 * database, and a role can hold the System page's caps without
+	 * manage_woocommerce: the log viewer leaves WooCommerce's channels out
+	 * for that role (Minn_Admin_Logs), so the browser leaves these out too.
+	 * Asked whether or not WooCommerce is active, since its tables outlive it.
+	 *
+	 * @param string $table Table name as resolved (prefix included).
+	 * @return bool
+	 */
+	private static function store_table_hidden( $table ) {
+		if ( current_user_can( 'manage_woocommerce' ) ) {
+			return false;
+		}
+		$base = self::secret_base( $table );
+		return 0 === strpos( $base, 'wc_' ) || 0 === strpos( $base, 'woocommerce_' );
 	}
 
 	private static function quote_ident( $name ) {
@@ -436,6 +456,11 @@ class Minn_Admin_DB {
 		}
 		$keyed = self::keyed_secret( $table, $col );
 		if ( $keyed ) {
+			// A copy that kept the value column but not the key column cannot
+			// say which of its rows are credentials, so none of them prints.
+			if ( $row && ! array_key_exists( $keyed[0], $row ) ) {
+				return true;
+			}
 			$key = isset( $row[ $keyed[0] ] ) ? (string) $row[ $keyed[0] ] : '';
 			return self::keyed_match( $key, $keyed );
 		}
@@ -560,13 +585,32 @@ class Minn_Admin_DB {
 	);
 
 	/**
+	 * The KEYED_SECRETS store a table is, or is a copy of. A copy made before
+	 * a migration (wp_usermeta_backup, wp_options_old, wp_2_postmeta2) keeps
+	 * the same rows under another name, and the usermeta list is the only
+	 * thing that hides its TOTP seeds and sign-in tokens: the value search's
+	 * copies rule leaves those out on purpose. Core's four key/value stores
+	 * count wherever they stand as a whole word in the name.
+	 *
+	 * @param string $table Table name as resolved (prefix included).
+	 * @return string
+	 */
+	private static function keyed_base( $table ) {
+		$base = self::secret_base( $table );
+		if ( ! isset( self::KEYED_SECRETS[ $base ] ) && preg_match( '/(^|_)(usermeta|sitemeta|postmeta|options)\d*(_|$)/', $base, $m ) ) {
+			return $m[2];
+		}
+		return $base;
+	}
+
+	/**
 	 * For a keyed-secret table's value column: [ key column, secret keys,
 	 * [ prefix, suffix ] name shapes ].
 	 *
 	 * @return array|null
 	 */
 	private static function keyed_secret( $table, $col ) {
-		$base = self::secret_base( $table );
+		$base = self::keyed_base( $table );
 		if ( ! isset( self::KEYED_SECRETS[ $base ] ) || 0 !== strcasecmp( $col, self::KEYED_SECRETS[ $base ][0] ) ) {
 			return null;
 		}
@@ -794,7 +838,7 @@ class Minn_Admin_DB {
 	 */
 	private static function hidden_rows_sql( $table, $names ) {
 		global $wpdb;
-		if ( 'options' !== self::secret_base( $table ) || ! in_array( 'option_name', $names, true ) ) {
+		if ( 'options' !== self::keyed_base( $table ) || ! in_array( 'option_name', $names, true ) ) {
 			return '';
 		}
 		$not = array();
@@ -806,7 +850,7 @@ class Minn_Admin_DB {
 
 	/** Whether a fetched row is one hidden_rows_sql() leaves out. */
 	private static function is_hidden_row( $table, $row ) {
-		if ( 'options' !== self::secret_base( $table ) || ! isset( $row['option_name'] ) ) {
+		if ( 'options' !== self::keyed_base( $table ) || ! isset( $row['option_name'] ) ) {
 			return false;
 		}
 		foreach ( self::SECRET_NAME_PREFIXES as $prefix ) {
@@ -1152,6 +1196,33 @@ class Minn_Admin_DB {
 	}
 
 	/**
+	 * One cell as the browser prints it: redacted when it holds a credential
+	 * or a copy of one, withheld (redacted, marked unchecked) when it is long
+	 * enough to hold a copy and the copies list stopped at its cap, so a
+	 * credential left out of the list cannot print through it. A value search
+	 * is refused in the same case.
+	 *
+	 * @param string   $table Table name as resolved (prefix included).
+	 * @param string   $col   Column name.
+	 * @param string[] $row   The row keyed by column name.
+	 * @param int      $cap   Byte cap for a printed cell.
+	 * @return mixed
+	 */
+	private static function shown_cell( $table, $col, $row, $cap ) {
+		$v = isset( $row[ $col ] ) ? $row[ $col ] : null;
+		if ( null === $v || '' === (string) $v ) {
+			return self::cell( $v, $cap );
+		}
+		if ( self::redacts_cell( $table, $col, $row ) ) {
+			return self::redacted_cell( $v );
+		}
+		if ( strlen( (string) $v ) >= 16 && ! self::is_activity_log( $table ) && self::credential_needles() && self::$needles_capped ) {
+			return self::redacted_cell( $v ) + array( 'unchecked' => true );
+		}
+		return self::cell( $v, $cap );
+	}
+
+	/**
 	 * Reduce a raw cell value to a JSON-safe payload. Serialized blobs stay
 	 * RAW text by design (the standing shim rule: never unserialize protects
 	 * even a viewer). Binary/invalid-UTF-8 values become a hex preview so
@@ -1201,6 +1272,9 @@ class Minn_Admin_DB {
 		foreach ( $index as $t ) {
 			$own    = 0 === stripos( $t->name, $prefix );
 			$total += (int) $t->size;
+			if ( self::store_table_hidden( $t->name ) ) {
+				continue;
+			}
 			if ( ! $own ) {
 				$foreign++;
 				if ( ! $all ) {
@@ -1302,6 +1376,10 @@ class Minn_Admin_DB {
 		// KEYED_SECRETS) is ordinary data on almost every row; it stays
 		// searchable, with the credential rows left out of the match (below).
 		$keyed = in_array( $fcol, $names, true ) ? self::keyed_secret( $meta->name, $fcol ) : null;
+		// A copy without the key column has no rows to leave out by key.
+		if ( $keyed && ! in_array( $keyed[0], $names, true ) ) {
+			$keyed = null;
+		}
 		if ( '' !== $fq && in_array( $fcol, $names, true ) && self::is_secret_column( $meta->name, $fcol ) && ! $keyed ) {
 			return new WP_Error( 'minn_db_secret_filter', __( 'That column holds passwords or tokens, so it cannot be searched.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
@@ -1382,7 +1460,7 @@ class Minn_Admin_DB {
 			$assoc = array_combine( $names, array_slice( array_values( $r ), 0, count( $names ) ) ) ?: array();
 			foreach ( $r as $i => $v ) {
 				$col     = isset( $names[ $i ] ) ? $names[ $i ] : '';
-				$cells[] = null !== $v && '' !== (string) $v && self::redacts_cell( $meta->name, $col, $assoc ) ? self::redacted_cell( $v ) : self::cell( $v, self::CELL_CAP_LIST );
+				$cells[] = self::shown_cell( $meta->name, $col, $assoc + array( $col => $v ), self::CELL_CAP_LIST );
 			}
 			$rows[] = $cells;
 		}
@@ -1442,8 +1520,7 @@ class Minn_Admin_DB {
 		}
 		$cells = array();
 		foreach ( $columns as $c ) {
-			$v       = array_key_exists( $c['name'], $raw ) ? $raw[ $c['name'] ] : null;
-			$cells[] = null !== $v && '' !== (string) $v && self::redacts_cell( $meta->name, $c['name'], $raw ) ? self::redacted_cell( $v ) : self::cell( $v, self::CELL_CAP_DETAIL );
+			$cells[] = self::shown_cell( $meta->name, $c['name'], $raw, self::CELL_CAP_DETAIL );
 		}
 		return rest_ensure_response(
 			array(

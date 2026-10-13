@@ -28326,6 +28326,10 @@
 	function dbCellInfo( cell ) {
 		if ( cell === null ) return { text: 'NULL', cls: 'null' };
 		if ( typeof cell === 'string' ) return { text: cell, cls: '' };
+		if ( cell.redacted && cell.unchecked ) {
+			/* translators: %s: human-readable byte size of a database value the browser withholds because it could not check it for copies of credentials. */
+			return { text: sprintf( __( '(%s, not shown: too many credentials on this site to check it)' ), dbBytes( cell.bytes ) ), cls: 'null' };
+		}
 		if ( cell.redacted ) {
 			/* translators: %s: human-readable byte size of a credential the database browser does not display. */
 			return { text: sprintf( __( '(credential, %s, not shown)' ), dbBytes( cell.bytes ) ), cls: 'null' };
