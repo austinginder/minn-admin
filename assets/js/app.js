@@ -3609,9 +3609,17 @@
 		'minn-fgb-save', 'minn-gfb-save', 'minn-gfn-save', 'minn-gfc-save', 'minn-c7m-save', 'minn-ffe-save', 'minn-wpfe-save', 'minn-ep-save', 'minn-sset-save', 'minn-product-save',
 		'minn-wcm-save', 'minn-wcmp-save', 'minn-order-save', 'minn-look-save', 'minn-save-settings',
 		'minn-save-site-appearance', 'minn-rd-save', 'minn-tax-save', 'minn-cpt-save', 'minn-zone-save',
-		'minn-widget-save', 'minn-pf-save', 'minn-surface-save', 'minn-un-save', 'minn-coupon-save',
+		'minn-widget-save', 'minn-pf-save', 'minn-surface-save', 'minn-coupon-save',
 		'minn-cedit-save', 'minn-media-save', 'minn-metric-save',
 	];
+	// Creates that can email someone (a new order's customer, a new
+	// account's welcome) are left to a click. ⌘S on their page does
+	// nothing, rather than open the browser's Save Page As.
+	const SAVE_SHORTCUT_HELD_IDS = [ 'minn-no-create', 'minn-un-save' ];
+	function pageHoldsSave() {
+		const view = $( '#minn-view' );
+		return !! view && SAVE_SHORTCUT_HELD_IDS.some( ( id ) => view.querySelector( '#' + id ) );
+	}
 	function pageSaveButton() {
 		const dialogs = $$( '.minn-modal-overlay' );
 		const scope = dialogs.length ? dialogs[ dialogs.length - 1 ] : $( '#minn-view' );
@@ -51849,6 +51857,12 @@
 			return;
 		}
 		const defRole = B.defaultRole || 'subscriber';
+		// Setting the language and sending the welcome email act on the
+		// new account, which needs the right to edit it. On a network a
+		// site's administrator may add users but not edit them (core
+		// keeps that for network administrators), so those two stay off
+		// the page rather than failing after the account is made.
+		const canEdit = !! B.caps.editUsers;
 		const field = ( label, inner ) => `<div><div class="minn-field-label">${ esc( label ) }</div>${ inner }</div>`;
 		view.innerHTML = `
 		<div class="minn-ue-new">
@@ -51871,16 +51885,17 @@
 								<input class="minn-input minn-ac-input" id="minn-un-role" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Role' ) ) }">
 								<div class="minn-ac-panel" hidden></div>
 							</div>` : `<input class="minn-input" value="${ esc( chromeLabel( ( B.roles || {} )[ defRole ] || defRole ) ) }" disabled>` ) }
-							${ field( __( 'Language' ), `
+							${ canEdit ? field( __( 'Language' ), `
 							<div class="minn-ac" id="minn-un-lang-ac">
 								<input class="minn-input minn-ac-input" id="minn-un-lang" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Language' ) ) }">
 								<div class="minn-ac-panel" hidden></div>
-							</div>` ) }
+							</div>` ) : '' }
 							${ field( __( 'Password' ), `
 							<div style="display:flex; gap:8px;">
 								<input class="minn-input mono" id="minn-un-password" value="${ esc( ue.password ) }" autocomplete="new-password" spellcheck="false" data-1p-ignore data-lpignore="true">
 								<button type="button" class="minn-btn-soft" id="minn-un-genpass" style="flex-shrink:0;">${ esc( __( 'Generate' ) ) }</button>
 							</div>` ) }
+							${ canEdit ? `
 							<div class="minn-toggle-rows minn-side-toggles">
 								<div class="minn-toggle-row">
 									<button type="button" class="minn-switch on" id="minn-un-notify" role="switch" aria-checked="true" aria-label="${ esc( __( 'Send them an email about their account' ) ) }"><span class="minn-switch-knob"></span></button>
@@ -51889,7 +51904,7 @@
 										<div class="minn-toggle-desc">${ esc( __( 'WordPress’s welcome email, with their username and a link to set their own password.' ) ) }</div>
 									</div>
 								</div>
-							</div>
+							</div>` : `<div class="minn-toggle-desc" id="minn-un-noemail">${ esc( __( 'Your account can’t email new users or set their language, so pass the password on to them yourself.' ) ) }</div>` }
 						</div>
 					</div>
 				</div>
@@ -51925,7 +51940,9 @@
 		const bar = $( '#minn-un-savebar', root );
 		let clean = null;
 		const fingerprint = () => JSON.stringify( userNewForm( root ) );
-		const sync = () => bar.toggleAttribute( 'data-pristine', fingerprint() === clean );
+		// Once the account exists nothing on the page is unsaved, even
+		// while its language and email are still on their way.
+		const sync = () => bar.toggleAttribute( 'data-pristine', !! ue.made || fingerprint() === clean );
 		$( '#minn-un-back', root ).addEventListener( 'click', () => go( 'users' ) );
 		$( '#minn-un-cancel', root ).addEventListener( 'click', () => go( 'users' ) );
 		const roleAc = $( '#minn-un-role-ac', root );
@@ -51935,20 +51952,25 @@
 				value: defRole,
 			} );
 		}
-		const langOpts = [ ...( ue.languages.installed || [] ), ...( ue.languages.available || [] ) ]
-			.map( ( [ v, l ] ) => ( { value: v, label: l } ) );
-		bindAutocomplete( $( '#minn-un-lang-ac', root ), langOpts, { strict: true, value: '' } );
+		const langAc = $( '#minn-un-lang-ac', root );
+		if ( langAc ) {
+			const langOpts = [ ...( ue.languages.installed || [] ), ...( ue.languages.available || [] ) ]
+				.map( ( [ v, l ] ) => ( { value: v, label: l } ) );
+			bindAutocomplete( langAc, langOpts, { strict: true, value: '' } );
+		}
 		$( '#minn-un-genpass', root ).addEventListener( 'click', () => {
 			$( '#minn-un-password', root ).value = generatePassword();
 			sync();
 		} );
 		const notify = $( '#minn-un-notify', root );
-		notify.addEventListener( 'click', () => {
-			const on = notify.getAttribute( 'aria-checked' ) !== 'true';
-			notify.classList.toggle( 'on', on );
-			notify.setAttribute( 'aria-checked', on ? 'true' : 'false' );
-			sync();
-		} );
+		if ( notify ) {
+			notify.addEventListener( 'click', () => {
+				const on = notify.getAttribute( 'aria-checked' ) !== 'true';
+				notify.classList.toggle( 'on', on );
+				notify.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				sync();
+			} );
+		}
 
 		clean = fingerprint();
 		[ 'input', 'change' ].forEach( ( ev ) => root.addEventListener( ev, sync ) );
@@ -52025,6 +52047,9 @@
 		}
 		// The account exists from here on. A later step that fails is
 		// reported, and the account's page is still where this ends.
+		ue.made = made.id;
+		const madeBar = $( '#minn-un-savebar', view );
+		if ( madeBar ) madeBar.setAttribute( 'data-pristine', '' );
 		const problems = [];
 		if ( f.locale ) {
 			try {
@@ -52048,11 +52073,14 @@
 			toast( f.welcome ? __( 'User created and emailed' ) : __( 'User created' ) );
 		}
 		state.cache.users = null;
-		if ( state.userEdit !== ue ) return;
+		// Someone who went elsewhere while the email was sending stays there.
+		if ( state.userEdit !== ue || state.route !== 'useredit' ) return;
 		// The account's own page takes this address's place, so Back returns
-		// to the list rather than to an empty form.
+		// to the list rather than to an empty form. Someone who may not
+		// edit the account (a network site's administrator) could not
+		// open that page, so the list takes it instead.
 		state.userEdit = null;
-		setPath( 'users/' + made.id, true );
+		setPath( B.caps.editUsers ? 'users/' + made.id : 'users', true );
 		onRouteChange();
 	}
 
@@ -58506,6 +58534,8 @@
 					e.preventDefault();
 					e.stopPropagation();
 					btn.click();
+				} else if ( ! $$( '.minn-modal-overlay' ).length && pageHoldsSave() ) {
+					e.preventDefault();
 				}
 				return;
 			}

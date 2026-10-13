@@ -12,7 +12,12 @@
  * sent. The welcome route's email is read through core's own filter, its gate
  * refuses an Author, and it reports (never claims) an email a plugin turned
  * off, an account barred from resets and a failed send, keeping the mailer's
- * detail to the log. An Author on /users/new gets the permission note.
+ * detail to the log. ⌘S never creates (Create user can send an email). Once
+ * the account exists, leaving while its email is still on the way asks
+ * nothing and stays where it went. An account that may add users but not
+ * edit them (a network site's administrator; here a role made for it) gets
+ * no language or email, which it could not set, and lands on the list. An
+ * Author on /users/new gets the permission note.
  */
 const { BASE, WP, launch, login, loginAs, reporter, pickCombo, comboValue, setSwitch, switchOn } = require( './helpers' );
 const { execSync } = require( 'child_process' );
@@ -95,6 +100,14 @@ const userId = ( login ) => parseInt( wp( `user get ${ JSON.stringify( login ) }
 		t.check( 'staying keeps the page and what was typed',
 			/\/users\/new$/.test( page.url() ) && 'leave-me' === await page.inputValue( '#minn-un-username' ), page.url() );
 
+		/* ===== ⌘S leaves Create user to a click ===== */
+		const beforeShortcut = flow.length;
+		await page.fill( '#minn-un-email', `minn-shortcut-${ stamp }@example.com` );
+		await page.keyboard.press( 'Meta+s' );
+		await page.waitForTimeout( 800 );
+		t.check( '⌘S creates nothing', flow.length === beforeShortcut && /\/users\/new$/.test( page.url() ), JSON.stringify( flow.slice( beforeShortcut ) ) );
+		await page.fill( '#minn-un-email', '' );
+
 		/* ===== A missing field: nothing is sent ===== */
 		const before = flow.length;
 		await page.click( '#minn-un-save' );
@@ -172,6 +185,31 @@ const userId = ( login ) => parseInt( wp( `user get ${ JSON.stringify( login ) }
 		t.check( 'no language and no names are stored', '' === bareSaved.locale && '' === bareSaved.first, JSON.stringify( bareSaved ) );
 		t.check( 'no set-password link was minted', false === bareSaved.key );
 
+		/* ===== Leaving while the email is on its way ===== */
+		const slow = { username: `minn-slow-${ stamp }`, email: `minn-slow-${ stamp }@example.com` };
+		const hold = async ( route ) => {
+			await new Promise( ( r ) => setTimeout( r, 3000 ) );
+			await route.continue().catch( () => {} );
+		};
+		await page.route( /\/users\/\d+\/welcome/, hold );
+		await page.goto( BASE + '/minn-admin/users/new', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-un-username', { timeout: 15000 } );
+		await page.fill( '#minn-un-username', slow.username );
+		await page.fill( '#minn-un-email', slow.email );
+		const created = page.waitForResponse( ( r ) => 'POST' === r.request().method() && /\/wp\/v2\/users$/.test( r.url().split( '?' )[ 0 ] ), { timeout: 20000 } );
+		await page.click( '#minn-un-save' );
+		await created;
+		await page.waitForTimeout( 200 );
+		await page.click( '.minn-nav-btn[data-nav="overview"]' );
+		const askedWhileSending = await page.waitForSelector( '.minn-confirm-overlay', { timeout: 1500 } ).catch( () => null );
+		t.check( 'leaving after the account exists asks nothing', ! askedWhileSending );
+		if ( askedWhileSending ) await page.click( '.minn-confirm-overlay [data-cancel]' ).catch( () => {} );
+		await page.waitForTimeout( 3800 );
+		const slowId = userId( slow.username );
+		if ( slowId ) made.push( slowId );
+		t.check( 'and the finished create leaves them where they went', !! slowId && ! /\/users\/\d+$/.test( new URL( page.url() ).pathname ), page.url() );
+		await page.unroute( /\/users\/\d+\/welcome/, hold );
+
 		/* ===== The welcome route: core's email, and its gate ===== */
 		author = userId( 'minn-author' );
 		const probe = JSON.parse( evalFile( `<?php
@@ -229,6 +267,39 @@ const userId = ( login ) => parseInt( wp( `user get ${ JSON.stringify( login ) }
 		t.check( 'their email failing is reported', probe.mine && 500 === probe.mine.status && 'minn_welcome_failed' === probe.mine.code, said( 'mine' ) );
 		t.check( 'without the mailer’s own detail', probe.mine && ! /relay\.secret|SMTP/.test( probe.mine.message ), said( 'mine' ) );
 
+		/* ===== Someone who may add users but not edit them ===== */
+		const adder = { username: `minn-adder-${ stamp }`, pass: `minn-adder-pass-${ stamp }` };
+		const added = { username: `minn-added-${ stamp }`, email: `minn-added-${ stamp }@example.com` };
+		wp( `eval 'add_role( "minn_adder_role", "Minn adder", array( "read" => true, "edit_posts" => true, "list_users" => true, "create_users" => true ) );'` );
+		const adderId = parseInt( wp( `user create ${ adder.username } ${ adder.username }@example.com --role=minn_adder_role --user_pass=${ adder.pass } --porcelain` ), 10 ) || 0;
+		if ( adderId ) made.push( adderId );
+		const { ctx: dctx, page: dp } = await loginAs( browser, adder.username, adder.pass );
+		const dflow = [];
+		dp.on( 'response', ( r ) => {
+			if ( 'POST' !== r.request().method() ) return;
+			const u = r.url();
+			if ( /\/wp-json\/wp\/v2\/users$/.test( u.split( '?' )[ 0 ] ) ) dflow.push( 'create' );
+			else if ( /\/users\/\d+\/(language|welcome)/.test( u ) ) dflow.push( u.match( /\/(language|welcome)/ )[ 1 ] );
+		} );
+		await dp.goto( BASE + '/minn-admin/users/new', { waitUntil: 'domcontentloaded' } );
+		await dp.waitForSelector( '#minn-un-username', { timeout: 15000 } );
+		const adderPage = await dp.evaluate( () => ( {
+			lang: !! document.querySelector( '#minn-un-lang' ),
+			notify: !! document.querySelector( '#minn-un-notify' ),
+			note: ( document.querySelector( '#minn-un-noemail' ) || {} ).textContent || '',
+		} ) );
+		t.check( 'an account that can\'t edit users gets no language or email, and is told why',
+			! adderPage.lang && ! adderPage.notify && /pass the password on/.test( adderPage.note ), JSON.stringify( adderPage ) );
+		await dp.fill( '#minn-un-username', added.username );
+		await dp.fill( '#minn-un-email', added.email );
+		await dp.click( '#minn-un-save' );
+		await dp.waitForFunction( () => /\/minn-admin\/users$/.test( location.pathname ), null, { timeout: 30000 } ).catch( () => {} );
+		const addedId = userId( added.username );
+		if ( addedId ) made.push( addedId );
+		t.check( 'it creates the account and lands on the Users list', !! addedId && /\/minn-admin\/users$/.test( new URL( dp.url() ).pathname ), dp.url() );
+		t.check( 'sending only the account', 'create' === dflow.join( ',' ), dflow.join( ',' ) );
+		await dctx.close();
+
 		/* ===== Someone who may not add users ===== */
 		const { ctx: actx, page: ap } = await loginAs( browser, 'minn-author', 'minn-author-pass-1' );
 		const aerr = [];
@@ -241,6 +312,7 @@ const userId = ( login ) => parseInt( wp( `user get ${ JSON.stringify( login ) }
 		await actx.close();
 	} finally {
 		made.forEach( ( id ) => { try { wp( `user delete ${ id } --yes` ); } catch ( e ) {} } );
+		try { wp( `eval 'remove_role( "minn_adder_role" );'` ); } catch ( e ) {}
 		try { wp( `option update default_role ${ origDefault }` ); } catch ( e ) {}
 	}
 	await t.done( browser, errors );
