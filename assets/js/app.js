@@ -13175,8 +13175,13 @@
 		// stored stock moved since the form loaded (a sale, a refund restock)
 		// and saves the rest, as it does for the parent. wc/v3 has no such
 		// check, so read the stored stock first and leave a moved one alone.
+		// Only a variation that tracked its own stock when the form loaded
+		// and still does: one sharing the parent's reads the parent's
+		// quantity, which is not its own. Quantities compare as WooCommerce's
+		// wc_stock_amount() does, so a stored null is 0, as the form seeds it.
+		// The form loads at most 100 variations, so one read covers them all.
 		const stockMoved = [];
-		const stockRows = body.update.filter( ( row ) => 'stock_quantity' in row );
+		const stockRows = body.update.filter( ( row ) => 'stock_quantity' in row && true === ( ( m.variationsSeeded || {} )[ row.id ] || {} ).manage_stock );
 		if ( stockRows.length ) {
 			const now = await api( `wc/v3/products/${ productId }/variations?include=${ stockRows.map( ( row ) => row.id ).join( ',' ) }&per_page=100&_fields=id,stock_quantity,manage_stock` );
 			const byId = {};
@@ -13184,9 +13189,9 @@
 			stockRows.forEach( ( row ) => {
 				const stored = byId[ row.id ];
 				const was = ( m.variationsSeeded || {} )[ row.id ] || {};
-				const nowQty = stored && stored.stock_quantity != null ? Number( stored.stock_quantity ) : null;
-				const loadedQty = was.stock_quantity == null ? null : Number( was.stock_quantity );
-				if ( stored && stored.manage_stock && nowQty !== loadedQty ) {
+				const nowQty = Number( ( stored && stored.stock_quantity ) || 0 );
+				const loadedQty = Number( was.stock_quantity || 0 );
+				if ( stored && true === stored.manage_stock && nowQty !== loadedQty ) {
 					delete row.stock_quantity;
 					stockMoved.push( { id: row.id, now: nowQty } );
 				}
