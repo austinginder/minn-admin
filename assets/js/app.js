@@ -35166,13 +35166,16 @@
 
 	// The REST base in the editor's address goes into wp/v2/<base>/<id> for
 	// the load and every save, so it has to name a content type: one of the
-	// core three, or a type wp/v2/types lists for this user.
+	// core three, or any type wp/v2/types lists. Not the edit-context list:
+	// that leaves out a type whose edit_posts the user lacks, though a single
+	// item may still be theirs to edit (map_meta_cap); the item request's own
+	// permission decides that.
 	let editorBasesPromise = null;
 	async function editorTypeKnown( type ) {
 		if ( [ 'posts', 'pages', 'blocks' ].includes( type ) ) return true;
 		if ( ! /^[a-z0-9_-]+$/i.test( String( type ) ) ) return false;
 		if ( ! editorBasesPromise ) {
-			editorBasesPromise = api( 'wp/v2/types?context=edit' )
+			editorBasesPromise = api( 'wp/v2/types' )
 				.then( ( r ) => Object.values( r || {} )
 					.filter( ( t ) => t && t.rest_base && ( ! t.rest_namespace || 'wp/v2' === t.rest_namespace ) )
 					.map( ( t ) => t.rest_base ) )
@@ -35182,19 +35185,23 @@
 	}
 
 	async function loadEditor() {
-		if ( state.editorId && isTemplateType( state.editorType ) ) {
+		// Read once: an in-app navigation during an await below changes the
+		// route, never what this load fetches and builds.
+		const type = state.editorType;
+		const id = state.editorId;
+		if ( id && isTemplateType( type ) ) {
 			return loadTemplateEditor();
 		}
-		if ( state.editorId ) {
-			if ( ! await editorTypeKnown( state.editorType ) ) throw new Error( 'Refused a content type: ' + state.editorType );
+		if ( id ) {
+			if ( ! await editorTypeKnown( type ) ) throw new Error( 'Refused a content type: ' + type );
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
 			// Patterns only: wp_pattern_sync_status is computed FROM the
 			// prepared meta field, so `meta` must ride the _fields list or it
 			// silently reads '' (meta is too heavy to fetch for other types).
-			const syncKeys = state.editorType === 'blocks' ? ',meta,wp_pattern_sync_status' : '';
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,format,minn_builder${ syncKeys }${ extraKeys }` );
+			const syncKeys = type === 'blocks' ? ',meta,wp_pattern_sync_status' : '';
+			const p = await api( `wp/v2/${ type }/${ id }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,format,minn_builder${ syncKeys }${ extraKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			// A builder that OWNS the canvas (Elementor/Beaver/Brizy/Divi-4:
 			// canonical content lives outside post_content) forces locked mode —
@@ -35204,7 +35211,7 @@
 			const mode = builder && builder.owns_content ? 'locked' : editorModeFor( raw );
 			state.editor = {
 				id: p.id,
-				type: state.editorType,
+				type: type,
 				title: decodeEntities( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || '' ),
 				content: '',
 				islands: [],
@@ -35262,7 +35269,7 @@
 				// edits here change every post that references it.
 				syncedPattern: 'wp_pattern_sync_status' in p && p.wp_pattern_sync_status !== 'unsynced',
 			};
-			if ( state.editorType === 'posts' && ( p.tags || [] ).length ) {
+			if ( type === 'posts' && ( p.tags || [] ).length ) {
 				api( `wp/v2/tags?include=${ p.tags.join( ',' ) }&per_page=100&_fields=id,name` )
 					.then( ( t ) => {
 						if ( state.editor && state.editor.id === p.id ) {
@@ -35306,7 +35313,7 @@
 			loadEditorPpp( state.editor );
 			// A crash or an abandoned session leaves an autosave revision newer
 			// than the post — surface it instead of silently forgetting it.
-			api( `wp/v2/${ state.editorType }/${ p.id }/autosaves?_fields=id,modified` )
+			api( `wp/v2/${ type }/${ p.id }/autosaves?_fields=id,modified` )
 				.then( ( revs ) => {
 					const latest = Array.isArray( revs ) && revs[ 0 ];
 					if ( latest && p.modified && latest.modified > p.modified
@@ -35319,7 +35326,7 @@
 			if ( mode === 'locked' ) {
 				// Try to upgrade the read-only preview to fully rendered markup;
 				// fall back to the stripped raw markup if rendering fails.
-				api( `wp/v2/${ state.editorType }/${ p.id }?_fields=content.rendered` )
+				api( `wp/v2/${ type }/${ p.id }?_fields=content.rendered` )
 					.then( ( r ) => {
 						if ( state.editor && state.editor.id === p.id && r.content && r.content.rendered ) {
 							state.editor.content = r.content.rendered;
@@ -35340,13 +35347,13 @@
 			// types cache is cap-filtered server-side, so a type the user
 			// can't edit never resolves here; unknown types start as a post.
 			let cpt = null;
-			if ( ! [ 'posts', 'pages', 'blocks' ].includes( state.editorType ) ) {
+			if ( ! [ 'posts', 'pages', 'blocks' ].includes( type ) ) {
 				try {
-					cpt = ( await loadTypes() ).find( ( t ) => t.restBase === state.editorType && t.slug !== 'wp_block' ) || null;
+					cpt = ( await loadTypes() ).find( ( t ) => t.restBase === type && t.slug !== 'wp_block' ) || null;
 				} catch ( e ) { /* types unreachable — fall back to a post */ }
 			}
-			const newType = state.editorType === 'pages' && B.caps.editPages ? 'pages'
-				: state.editorType === 'blocks' ? 'blocks'
+			const newType = type === 'pages' && B.caps.editPages ? 'pages'
+				: type === 'blocks' ? 'blocks'
 				: cpt ? cpt.restBase
 				: 'posts';
 			// Sidebar controls on a blank CPT document come from the type's

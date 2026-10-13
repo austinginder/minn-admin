@@ -621,6 +621,61 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 				const opened = await page.waitForSelector( '#minn-editor-body', { timeout: 60000 } ).then( () => true ).catch( () => false );
 				const title = await page.evaluate( () => ( document.querySelector( '#minn-editor-title' ) || {} ).value || '' );
 				t.check( 'type control: a custom post type item still opens in the editor', opened && 'Delta type control' === title, title );
+
+				const isTypes = ( u ) => /(^|\/)wp\/v2\/types$/.test( u.pathname ) || /^\/wp\/v2\/types$/.test( u.searchParams.get( 'rest_route' ) || '' );
+				const editCtx = ( u ) => 'edit' === u.searchParams.get( 'context' );
+
+				// A user granted one item of a type whose edit_posts they lack
+				// (map_meta_cap) sees the type left out of the edit-context
+				// list; the item still opens, and its own request decides.
+				const narrowed = ( u ) => isTypes( u ) && editCtx( u );
+				const onNarrowed = async ( route ) => {
+					const res = await route.fetch();
+					const json = await res.json().catch( () => ( {} ) );
+					delete json.job_listing;
+					await route.fulfill( { response: res, json } );
+				};
+				await page.route( narrowed, onNarrowed );
+				try {
+					await page.goto( BASE + '/minn-admin/editor/job-listings/' + cptId, { waitUntil: 'domcontentloaded' } );
+					const opened2 = await page.waitForSelector( '#minn-editor-body', { timeout: 30000 } ).then( () => true ).catch( () => false );
+					const shown = await page.evaluate( () => ( document.querySelector( '#minn-view .minn-empty' ) || {} ).textContent || '' );
+					t.check( 'type: an item whose type the edit-context types list leaves out still opens', opened2, shown.trim().slice( 0, 90 ) );
+				} finally {
+					await page.unroute( narrowed, onNarrowed ).catch( () => {} );
+				}
+
+				// An in-app link followed while the editor waits for the types
+				// list: the first load fetches what it was opened for.
+				const seen = [];
+				let typesAsked = false;
+				const holdTypes = async ( route ) => {
+					typesAsked = true;
+					await new Promise( ( r ) => setTimeout( r, 5000 ) );
+					await route.continue().catch( () => {} );
+				};
+				const usersProbe = ( u ) => new RegExp( 'wp/v2/users/' + cptId + '(\\?|$)' ).test( u.pathname + ( u.searchParams.get( 'rest_route' ) || '' ) );
+				const onUsers = ( route ) => {
+					seen.push( route.request().method() + ' ' + route.request().url() );
+					return route.fulfill( { status: 404, contentType: 'application/json', body: JSON.stringify( { code: 'rest_no_route', message: 'probe', data: { status: 404 } } ) } );
+				};
+				await page.route( isTypes, holdTypes );
+				await page.route( usersProbe, onUsers );
+				try {
+					await page.goto( BASE + '/minn-admin/editor/job-listings/' + cptId, { waitUntil: 'domcontentloaded' } );
+					await page.waitForFunction( () => /Loading editor/.test( ( document.querySelector( '#minn-view' ) || {} ).textContent || '' ), null, { timeout: 30000 } ).catch( () => {} );
+					for ( let i = 0; i < 100 && ! typesAsked; i++ ) await page.waitForTimeout( 100 );
+					await page.waitForTimeout( 300 );
+					await page.evaluate( ( to ) => {
+						history.pushState( null, '', to );
+						window.dispatchEvent( new PopStateEvent( 'popstate' ) );
+					}, '/minn-admin/editor/users/' + cptId );
+					await page.waitForTimeout( 9000 );
+					t.check( 'type: a load still waiting for the types list fetches the type it was opened for, not one navigated to meanwhile', 0 === seen.length, JSON.stringify( seen ).slice( 0, 160 ) );
+				} finally {
+					await page.unroute( isTypes, holdTypes ).catch( () => {} );
+					await page.unroute( usersProbe, onUsers ).catch( () => {} );
+				}
 			} else {
 				console.log( 'SKIP  type control: no job-listings type to make an item in' );
 			}
