@@ -27926,14 +27926,16 @@
 
 	const migRest = async ( route, body ) => {
 		const W = B.wpMigrate;
-		const r = await fetch( restUrlFor( W.restBase + '/' + route ), {
-			method: 'POST', credentials: 'same-origin',
-			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': B.nonce },
-			body: JSON.stringify( body || {} ),
-		} );
-		const j = await r.json().catch( () => null );
 		// Their handlers answer {success, data}; data carries the message on
 		// failure, so surface theirs rather than inventing one.
+		let j = null;
+		try {
+			const r = await apiRes( W.restBase + '/' + route, { method: 'POST', body: JSON.stringify( body || {} ) } );
+			j = await r.json().catch( () => null );
+		} catch ( e ) {
+			if ( typeof e.data === 'string' && e.data ) throw new Error( e.data );
+			throw e;
+		}
 		if ( ! j || ! j.success ) {
 			const msg = j && typeof j.data === 'string' ? j.data : __( 'WP Migrate did not accept that request.' );
 			throw new Error( msg );
@@ -28319,7 +28321,7 @@
 					body.append( 'gzip', '1' );
 					body.append( 'nonce', W.nonce );
 					if ( stateId ) body.append( 'migration_state_id', String( stateId ) );
-					const r = await fetch( W.ajax, { method: 'POST', credentials: 'same-origin', body } );
+					const r = await fetch( B.ajaxUrl, { method: 'POST', credentials: 'same-origin', body } );
 					const j = await r.json().catch( () => null );
 					if ( ! j || ! j.success ) {
 						throw new Error( ( j && typeof j.data === 'string' ) ? j.data : /* translators: %s: table name. */ sprintf( __( 'WP Migrate stopped on %s.' ), table ) );
@@ -49518,7 +49520,7 @@
 						toast( sprintf( _n( 'Regenerated %s thumbnail size', 'Regenerated %s thumbnail sizes', r.sizes ), r.sizes ) );
 					} else {
 						const body = new URLSearchParams( { action: 'regeneratethumbnail', id: String( it.id ), frt_wpnonce: B.frt.nonce } );
-						const res = await fetch( B.frt.ajax, { method: 'POST', credentials: 'same-origin', body } );
+						const res = await fetch( B.ajaxUrl, { method: 'POST', credentials: 'same-origin', body } );
 						const out = await res.json();
 						if ( out && out.error ) throw new Error( out.error.replace( /<[^>]*>/g, '' ).trim() || __( 'Regenerate failed' ) );
 						toast( __( 'Thumbnails rebuilt (Force Regenerate Thumbnails)' ) );

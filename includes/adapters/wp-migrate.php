@@ -147,7 +147,6 @@ function minn_admin_wp_migrate_boot() {
 	$settings = is_array( $settings ) ? $settings : array();
 	return array(
 		'restBase'  => 'mdb-api/v1',
-		'ajax'      => admin_url( 'admin-ajax.php' ),
 		// Util::create_nonce runs wp_create_nonce with their nonce filters
 		// removed, which is what their handler verifies against.
 		'nonce'     => \DeliciousBrains\WPMDB\Common\Util\Util::create_nonce( 'migrate-table' ),
