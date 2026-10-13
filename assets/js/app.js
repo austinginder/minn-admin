@@ -2558,6 +2558,22 @@
 		body.focus( { preventScroll: true } );
 	}
 
+	// A rows / flex value: a list of { __idx?, __layout?, values } rows.
+	const rowsShaped = ( v ) => Array.isArray( v ) && v.every( ( r ) => r && 'object' === typeof r && 'values' in r );
+
+	// Rows anchored to the stored order a save replaced, re-anchored to the
+	// order that save stored: each kept row's new anchor is its position in
+	// the sent list. A row the sent list does not hold (added since) is new.
+	function rowsReanchor( list, sent ) {
+		return list.map( ( r ) => {
+			const at = r && null != r.__idx ? sent.findIndex( ( s ) => s && s.__idx === r.__idx ) : -1;
+			const out = Object.assign( {}, r );
+			if ( at < 0 ) delete out.__idx;
+			else out.__idx = at;
+			return out;
+		} );
+	}
+
 	// Arm one repeating control: `rows` (ACF repeaters, one schema for every
 	// row) or `flex` (ACF flexible content, where each row picks its schema by
 	// layout). The wrap owns its state: [{ __idx?, __layout?, values }] where
@@ -2596,9 +2612,15 @@
 		// A save stores exactly the order that was sent, so every row's anchor
 		// is its own position again. A host that keeps editing the same
 		// control after a save calls this; without it the NEXT structural edit
-		// merges against the previous order and moves the wrong row.
-		wrap._rowsResync = () => {
-			rows.forEach( ( r, i ) => { r.__idx = i; } );
+		// merges against the previous order and moves the wrong row. Given
+		// the list the save sent (the control changed while it was in
+		// flight), each row is anchored to where that list put it instead.
+		wrap._rowsResync = ( sent ) => {
+			if ( Array.isArray( sent ) ) {
+				rowsReanchor( rows, sent ).forEach( ( a, i ) => { rows[ i ].__idx = a.__idx; } );
+			} else {
+				rows.forEach( ( r, i ) => { r.__idx = i; } );
+			}
 			wrap._rowsValue = payload();
 			return wrap._rowsValue;
 		};
@@ -35373,7 +35395,8 @@
 			const w = pn.desc.writeKey;
 			if ( w && payload[ w ] && 'object' === typeof payload[ w ] ) panelsSent[ pn.desc.id ] = JSON.parse( JSON.stringify( payload[ w ] ) );
 		} );
-		saveChain = saveChain.then( () => doSaveEditor( ed, payload, capturedAt, panelsSent ) );
+		const rowsSeen = ed.rowsLandedSeq || 0;
+		saveChain = saveChain.then( () => doSaveEditor( ed, payload, capturedAt, panelsSent, rowsSeen ) );
 		return saveChain;
 	}
 
@@ -35443,9 +35466,26 @@
 		return payload;
 	}
 
-	async function doSaveEditor( ed, payload, capturedAt, panelsSent = {} ) {
+	async function doSaveEditor( ed, payload, capturedAt, panelsSent = {}, rowsSeen = null ) {
 		state.saving = true;
 		try {
+			// Rows taken while an earlier save was in flight name the stored
+			// order that save replaced: re-anchor them through what it sent.
+			if ( null !== rowsSeen ) {
+				( ed.rowsLanded || [] ).filter( ( l ) => l.seq > rowsSeen ).forEach( ( l ) => {
+					( ed.panels || [] ).forEach( ( pn ) => {
+						const w = pn.desc.writeKey;
+						const pid = pn.desc.id;
+						const was = l.sent[ pid ];
+						if ( ! w || ! was || ! payload[ w ] || 'object' !== typeof payload[ w ] ) return;
+						Object.keys( was ).forEach( ( k ) => {
+							if ( ! rowsShaped( payload[ w ][ k ] ) ) return;
+							payload[ w ][ k ] = rowsReanchor( payload[ w ][ k ], was[ k ] );
+							if ( panelsSent[ pid ] && rowsShaped( panelsSent[ pid ][ k ] ) ) panelsSent[ pid ][ k ] = rowsReanchor( panelsSent[ pid ][ k ], was[ k ] );
+						} );
+					} );
+				} );
+			}
 			let p;
 			if ( ed.id && isTemplateType( ed.type ) ) {
 				// A template id is a string with a slash in it, and templates
@@ -35506,9 +35546,12 @@
 			// the STORED order, which this save just replaced with the order it
 			// sent. Re-point the anchors so a structural edit made after a save
 			// (reorder, then delete) still merges against the right rows. Only
-			// rows this save sent, and only while the control still holds what
-			// it sent: rows changed while the save was in flight are anchored
-			// to the order the server holds now, which is the one they name.
+			// controls this save sent; a control the save did not send still
+			// names the order the server holds. One that still holds what it
+			// sent takes its own positions. One changed while the save was in
+			// flight (a row typed in, deleted or added) takes, for each row,
+			// its position in what was sent, and a row added since stays new.
+			const resynced = {};
 			$$( '[data-pf][data-ftype="rows"], [data-pf][data-ftype="flex"]' ).forEach( ( el ) => {
 				if ( typeof el._rowsResync !== 'function' ) return;
 				const pf = el.dataset.pf || '';
@@ -35517,25 +35560,36 @@
 				const pid = pf.slice( 0, sep );
 				const key = pf.slice( sep + 1 );
 				const sent = panelsSent[ pid ] ? panelsSent[ pid ][ key ] : undefined;
-				if ( undefined === sent || JSON.stringify( el._rowsValue ) !== JSON.stringify( sent ) ) return;
+				if ( ! Array.isArray( sent ) ) return;
 				const store = ed.panelValues ? ed.panelValues[ pid ] : null;
-				const v = el._rowsResync();
+				const now = undefined !== el._rowsValue ? el._rowsValue : ( store ? store[ key ] : undefined );
+				const v = el._rowsResync( JSON.stringify( now ) === JSON.stringify( sent ) ? null : sent );
 				if ( store ) store[ key ] = v;
+				resynced[ pf ] = true;
 			} );
 			// The same for rows whose control is not on screen (the panel is
-			// a dialog, usually closed by the time Update is pressed): the
-			// rows this save sent are anchored to their own positions now.
-			const isRows = ( v ) => Array.isArray( v ) && v.length > 0 && v.every( ( r ) => r && 'object' === typeof r && 'values' in r );
+			// a dialog, usually closed by the time Update is pressed). What
+			// this save sent is kept for a save already queued behind it.
+			const landed = {};
 			Object.keys( panelsSent ).forEach( ( pid ) => {
 				const sent = panelsSent[ pid ];
 				const live = ed.panelValues && ed.panelValues[ pid ];
 				Object.keys( sent ).forEach( ( k ) => {
-					if ( ! isRows( sent[ k ] ) ) return;
-					const untouched = live && JSON.stringify( live[ k ] ) === JSON.stringify( sent[ k ] );
-					sent[ k ] = sent[ k ].map( ( r, i ) => Object.assign( {}, r, { __idx: i } ) );
-					if ( untouched ) live[ k ] = JSON.parse( JSON.stringify( sent[ k ] ) );
+					if ( ! rowsShaped( sent[ k ] ) || ! sent[ k ].length ) return;
+					( landed[ pid ] = landed[ pid ] || {} )[ k ] = sent[ k ];
+					const stored = sent[ k ].map( ( r, i ) => Object.assign( {}, r, { __idx: i } ) );
+					if ( live && Array.isArray( live[ k ] ) && ! resynced[ pid + ':' + k ] ) {
+						live[ k ] = JSON.stringify( live[ k ] ) === JSON.stringify( sent[ k ] )
+							? JSON.parse( JSON.stringify( stored ) )
+							: rowsReanchor( live[ k ], sent[ k ] );
+					}
+					sent[ k ] = stored;
 				} );
 			} );
+			if ( Object.keys( landed ).length ) {
+				ed.rowsLandedSeq = ( ed.rowsLandedSeq || 0 ) + 1;
+				ed.rowsLanded = ( ed.rowsLanded || [] ).concat( { seq: ed.rowsLandedSeq, sent: landed } ).slice( -20 );
+			}
 			// Each panel's baseline moves for what this save sent, to what it
 			// sent. A field the post came back holding empty although the
 			// save sent a value was not stored (PowerPress has no episode to
