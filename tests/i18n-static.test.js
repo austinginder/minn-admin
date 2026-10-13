@@ -388,6 +388,7 @@ const JS_PROSE_ALLOW = new Set( [
 	'- (nothing beyond core detected)',
 	'Refused a cross-origin API route: ',   // a thrown developer error, never shown
 	'Refused an item id: ',                 // a thrown developer error, never shown
+	'Refused a content type: ',             // a thrown error, reached only from a crafted editor address
 	'horizontal rule',                       // slash-menu MATCH keyword (data), like 'add column'
 ] );
 {
