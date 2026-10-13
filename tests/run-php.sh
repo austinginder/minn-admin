@@ -70,6 +70,13 @@ run() {
 
 # Single site. Suites that switch users themselves take none.
 run core-icons single
+run demo-bugs-backups-builders single --user=admin
+run demo-bugs-bookings single
+run demo-bugs-forms single --user=admin
+run demo-bugs-logs single --user=admin
+# SureForms, SureMails and Site Mailer rest inactive; the swap loads them for this process only.
+MINN_SWAP_ADD=sureforms/sureforms.php,suremails/suremails.php,site-mailer/site-mailer.php run demo-bugs-mail-time single --user=admin --require=tests/lib/plugin-swap.php
+run demo-bugs-tools single --user=admin
 run duplicate-copy single --user=admin
 run language-packs single
 run notice-link-label single
