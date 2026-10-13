@@ -2876,9 +2876,15 @@
 			}
 			const add = e.target.closest( '[data-radd]' );
 			if ( add ) {
+				// A new row starts each sub at its default, as ACF's own new
+				// row does; a default only counts in the control's shape.
 				const seed = ( subfields ) => {
 					const values = {};
-					( subfields || [] ).forEach( ( sf ) => { values[ sf.name ] = sf.type === 'true_false' ? false : ''; } );
+					( subfields || [] ).forEach( ( sf ) => {
+						const toggle = sf.type === 'true_false';
+						const has = 'default' in sf && ( toggle ? 'boolean' === typeof sf.default : null != sf.default && false !== sf.default );
+						values[ sf.name ] = has ? ( Array.isArray( sf.default ) ? sf.default.slice() : sf.default ) : ( toggle ? false : '' );
+					} );
 					return values;
 				};
 				// Flex picks the section's layout first — the schema choice IS
