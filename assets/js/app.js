@@ -321,8 +321,14 @@
 	// Scheme allowlist AND origin guard. The leading-slash branch must refuse a
 	// second slash or a backslash: "//evil.com", "/\evil.com" and "///evil.com"
 	// are authority forms that resolve off-origin, so a bare /^\// would let a
-	// third-party URL through every sink this protects.
-	const safeHref = ( u ) => ( /^(https?:\/\/|\/(?![/\\]))/i.test( String( u == null ? '' : u ).trim() ) ? String( u ).trim() : '' );
+	// third-party URL through every sink this protects. Tabs and newlines go
+	// first and other control characters are refused, as navHref says why.
+	const safeHref = ( u ) => {
+		const v = String( u == null ? '' : u ).replace( /[\t\n\r]/g, '' );
+		if ( /[\u0000-\u001f\u007f]/.test( v ) ) return '';
+		const t = v.trim();
+		return /^(https?:\/\/|\/(?![/\\]))/i.test( t ) ? t : '';
+	};
 
 	// The client half of Minn_Admin::rest_route_or_null. Descriptor routes are
 	// validated server-side before the app is pointed at them, but a job's
@@ -344,6 +350,19 @@
 		if ( ! /^[a-z0-9_\-/{}]+$/i.test( path ) ) return null;
 		if ( query && ! /^[a-z0-9_\-/{}=&%.,:[\]]*$/i.test( query ) ) return null;
 		return bare;
+	};
+
+	// An item id as ONE segment of a REST route. Ids reach routes from list
+	// rows and from the app's own address (decoded), and the browser resolves
+	// ../, ? and # in a path before the request leaves, so a raw id can send
+	// an action, with its method and the nonce, to another route on the site.
+	// Encoded, they stay inside the segment. The colon stays as it is: the
+	// composite form:id routes match it literally, and %3A no longer does.
+	// A dot segment resolves even encoded (%2e), so it is refused outright.
+	const idSeg = ( id ) => {
+		const s = String( id == null ? '' : id );
+		if ( /^\.\.?$/.test( s ) ) throw new Error( 'Refused an item id: ' + s );
+		return encodeURIComponent( s ).replace( /%3A/gi, ':' );
 	};
 
 	// Is this URL actually ON that host? A substring test says yes to
@@ -18468,7 +18487,7 @@
 		// browser a file. Nothing changes server-side, so no cache bust and
 		// an open detail modal stays put.
 		if ( action.download ) {
-			const r = await api( action.route.replace( '{id}', item.id ) );
+			const r = await api( action.route.replace( '{id}', idSeg( item.id ) ) );
 			minnBlobDownload( r.filename || 'download.txt', r.content || '', r.mime );
 			toast( r.filename || action.label );
 			return;
@@ -18484,7 +18503,7 @@
 		if ( action.confirm && ! confirm( action.confirm ) ) return;
 		let r = null;
 		try {
-			r = await api( action.route.replace( '{id}', item.id ), {
+			r = await api( action.route.replace( '{id}', idSeg( item.id ) ), {
 				method: action.method || 'POST',
 				...( action.body ? { body: JSON.stringify( action.body ) } : {} ),
 			} );
@@ -18525,7 +18544,7 @@
 	}
 
 	async function runSurfaceFieldsAction( s, item, action, body ) {
-		const r = await api( action.route.replace( '{id}', item.id ), {
+		const r = await api( action.route.replace( '{id}', idSeg( item.id ) ), {
 			method: action.method || 'POST',
 			body: JSON.stringify( body ),
 		} );
@@ -20283,7 +20302,7 @@
 				continue;
 			}
 			try {
-				await api( action.route.replace( '{id}', it.id ), {
+				await api( action.route.replace( '{id}', idSeg( it.id ) ), {
 					method: action.method || 'POST',
 					body: action.body ? JSON.stringify( action.body ) : undefined,
 				} );
@@ -20511,7 +20530,7 @@
 		const routeFor = ( t ) => {
 			const own = ( cfg.tabs || [] ).find( ( x ) => x.id === t );
 			return ( own && own.route ? own.route : cfg.route ).replace( '{tab}', t )
-				.replace( '{id}', itemScoped ? encodeURIComponent( ss.settingsItem.id ) : '' );
+				.replace( '{id}', itemScoped ? idSeg( ss.settingsItem.id ) : '' );
 		};
 		if ( ! ss.settingsTab || ! cfg.tabs.some( ( t ) => t.id === ss.settingsTab ) ) ss.settingsTab = cfg.tabs[ 0 ].id;
 		ss.settingsCache = ss.settingsCache || {};
@@ -20543,7 +20562,7 @@
 		if ( ! data ) {
 			view.innerHTML = head + `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
 			bindChrome();
-			api( routeFor( tab ) )
+			Promise.resolve().then( () => api( routeFor( tab ) ) )
 				.then( ( r ) => {
 					ss.settingsCache[ cacheKey ] = r || { groups: [] };
 					if ( state.route === s.id ) renderSurface( s );
@@ -20570,15 +20589,15 @@
 		const detail = ( coll.detail || {} );
 		try {
 			if ( detail.detailRoute ) {
-				state.modal.item = await api( detail.detailRoute.replace( '{id}', item.id ) );
+				state.modal.item = await api( detail.detailRoute.replace( '{id}', idSeg( item.id ) ) );
 			}
 			// A sections route returns the whole display model (grouped rows,
 			// labels resolved server-side) — no client label mapping needed.
 			if ( detail.sectionsRoute ) {
-				state.modal.sections = await api( detail.sectionsRoute.replace( '{id}', item.id ) );
+				state.modal.sections = await api( detail.sectionsRoute.replace( '{id}', idSeg( item.id ) ) );
 			} else if ( detail.labels ) {
 				const ss = surfaceState( s.id );
-				const route = detail.labels.route.replace( /\{(\w+)\}/g, ( _, k ) => item[ k ] );
+				const route = detail.labels.route.replace( /\{(\w+)\}/g, ( _, k ) => idSeg( item[ k ] ) );
 				if ( ! ss.labels[ route ] ) {
 					const body = await api( route );
 					const defs = detail.labels.itemsKey ? ( body[ detail.labels.itemsKey ] || [] ) : body;
@@ -20618,7 +20637,7 @@
 	// came from. Null when it can't be found (the dialog's copy is used).
 	async function freshSurfaceItem( s, coll, item ) {
 		const detail = coll.detail || {};
-		if ( detail.detailRoute ) return api( detail.detailRoute.replace( '{id}', item.id ) );
+		if ( detail.detailRoute ) return api( detail.detailRoute.replace( '{id}', idSeg( item.id ) ) );
 		const ss = surfaceState( s.id );
 		const body = await api( surfaceRoute( s, ss, ( ss.cache && ss.cache.page ) || 1 ) );
 		const items = coll.itemsKey ? ( body[ coll.itemsKey ] || [] ) : ( Array.isArray( body ) ? body : Object.values( body || {} ) );
@@ -20734,8 +20753,8 @@
 
 	async function loadEntryPage( p, s ) {
 		const coll = s.collection || {};
-		const route = ( ( coll.detail || {} ).sectionsRoute || '' ).replace( '{id}', encodeURIComponent( p.id ) );
 		try {
+			const route = ( ( coll.detail || {} ).sectionsRoute || '' ).replace( '{id}', idSeg( p.id ) );
 			p.sections = route ? await api( route ) : { sections: [] };
 			const items = surfaceState( s.id ).cache && surfaceState( s.id ).cache.items;
 			const listed = ( items || [] ).find( ( x ) => String( x.id ) === String( p.id ) );
@@ -21048,7 +21067,7 @@
 					const a = who.composer;
 					if ( ! a ) return;
 					try {
-						await api( a.route.replace( '{id}', encodeURIComponent( p.id ) ), {
+						await api( a.route.replace( '{id}', idSeg( p.id ) ), {
 							method: a.method || 'POST',
 							/* translators: 1: the email address, 2: the subject line. */
 							body: JSON.stringify( { [ a.fields[ 0 ].key ]: sprintf( __( 'Replied by email to %1$s: %2$s' ), ( r && r.email ) || who.email, sent.subject ) } ),
@@ -21211,7 +21230,7 @@
 			save.disabled = true;
 			save.textContent = __( 'Saving…' );
 			try {
-				const r = await api( ed.route.replace( '{id}', encodeURIComponent( p.id ) ), { method: 'POST', body: JSON.stringify( { values: changed, original } ) } );
+				const r = await api( ed.route.replace( '{id}', idSeg( p.id ) ), { method: 'POST', body: JSON.stringify( { values: changed, original } ) } );
 				p.editing = null;
 				const ss = surfaceState( s.id );
 				if ( ss ) ss.cache = null; // the list's names and emails may have changed
@@ -21234,8 +21253,8 @@
 
 	async function loadSurfaceItem( p, s ) {
 		const coll = surfaceColl( s, surfaceState( s.id ) );
-		const route = ( ( coll.detail || {} ).sectionsRoute || '' ).replace( '{id}', p.id );
 		try {
+			const route = ( ( coll.detail || {} ).sectionsRoute || '' ).replace( '{id}', idSeg( p.id ) );
 			if ( route ) p.sections = await api( route );
 			const items = surfaceState( s.id ).cache && surfaceState( s.id ).cache.items;
 			const listed = ( items || [] ).find( ( x ) => String( x.id ) === String( p.id ) );
@@ -49971,7 +49990,7 @@
 					setDeepPath( body, key, stored !== undefined ? stored : v );
 				} );
 				try {
-					await api( edit.route.replace( '{id}', m.item.id ), { method: edit.method || 'POST', body: JSON.stringify( body ) } );
+					await api( edit.route.replace( '{id}', idSeg( m.item.id ) ), { method: edit.method || 'POST', body: JSON.stringify( body ) } );
 					toast( 'Saved' );
 					surfaceState( m.surface.id ).cache = null;
 					closeModal();
@@ -53718,7 +53737,7 @@
 		if ( ! state.fgb || state.fgb.key !== state.fgbKey || state.fgb.src !== src ) {
 			state.fgb = { key: state.fgbKey, src, loading: true };
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
-			api( FGB_SOURCES[ src ].base + encodeURIComponent( state.fgbKey ) + '/full' )
+			Promise.resolve().then( () => api( FGB_SOURCES[ src ].base + idSeg( state.fgbKey ) + '/full' ) )
 				.then( ( r ) => {
 					if ( state.route !== 'fieldgroup' || state.fgbKey !== r.group.key ) return;
 					fgbAdopt( r, src );
@@ -54139,7 +54158,7 @@
 		const exportBtn = $( '#minn-fgb-export', view );
 		if ( exportBtn ) exportBtn.addEventListener( 'click', async () => {
 			try {
-				const r = await api( fgbSource().base + encodeURIComponent( fgb.key ) + '/export' );
+				const r = await api( fgbSource().base + idSeg( fgb.key ) + '/export' );
 				minnBlobDownload( r.filename || 'acf-export.json', r.content || '', r.mime );
 				toast( r.filename || __( 'Exported' ) );
 			} catch ( e ) {
@@ -54427,7 +54446,7 @@
 				// Backends without an on/off flag never rendered the switch.
 				if ( fgb.group.active != null ) body.active = fgb.group.active;
 				try {
-					const r = await api( fgbSource().base + encodeURIComponent( fgb.key ) + '/full', {
+					const r = await api( fgbSource().base + idSeg( fgb.key ) + '/full', {
 						method: 'POST',
 						body: JSON.stringify( body ),
 					} );
@@ -55473,9 +55492,9 @@
 		if ( ! state.gfn || state.gfn.id !== state.gfnId ) {
 			state.gfn = { id: state.gfnId, loading: true };
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
-			// The composite "form:id" goes into REST paths raw: encoded, its
+			// The composite "form:id" keeps its colon (idSeg): encoded, its
 			// %3A no longer matches the route's pattern (404 "No route").
-			api( `minn-admin/v1/gf/notifications/${ state.gfnId }/full` )
+			Promise.resolve().then( () => api( `minn-admin/v1/gf/notifications/${ idSeg( state.gfnId ) }/full` ) )
 				.then( ( r ) => {
 					if ( state.route !== 'gfnotification' || state.gfnId !== r.id ) return;
 					gfnAdopt( r );
@@ -55716,7 +55735,7 @@
 			if ( ! g || ! g.data ) return;
 			const seq = ++gfnPreviewSeq;
 			try {
-				const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/preview`, {
+				const r = await api( `minn-admin/v1/gf/notifications/${ idSeg( g.id ) }/preview`, {
 					method: 'POST',
 					body: JSON.stringify( { subject: g.n.subject, message: g.n.message, disableAutoformat: !! g.n.disableAutoformat, name: g.n.name } ),
 				} );
@@ -55977,7 +55996,7 @@
 						run: async () => {
 							if ( ! await leave() ) return;
 							try {
-								const res = await api( `minn-admin/v1/gf/notifications/${ g.id }/duplicate`, { method: 'POST' } );
+								const res = await api( `minn-admin/v1/gf/notifications/${ idSeg( g.id ) }/duplicate`, { method: 'POST' } );
 								g.dirty = false;
 								listCache();
 								toast( ( res && res.message ) || __( 'Notification duplicated' ) );
@@ -55998,7 +56017,7 @@
 								danger: true,
 							} ) ) return;
 							try {
-								await api( `minn-admin/v1/gf/notifications/${ g.id }`, { method: 'DELETE' } );
+								await api( `minn-admin/v1/gf/notifications/${ idSeg( g.id ) }`, { method: 'DELETE' } );
 								g.dirty = false;
 								listCache();
 								toast( __( 'Notification deleted' ) );
@@ -56013,7 +56032,7 @@
 				const b = t.closest( '#minn-gfn-test' );
 				b.disabled = true;
 				try {
-					const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/test`, {
+					const r = await api( `minn-admin/v1/gf/notifications/${ idSeg( g.id ) }/test`, {
 						method: 'POST',
 						body: JSON.stringify( { name: n.name, subject: n.subject, message: n.message, from: n.from, fromName: n.fromName, replyTo: n.replyTo, disableAutoformat: !! n.disableAutoformat } ),
 					} );
@@ -56030,7 +56049,7 @@
 				b.disabled = true;
 				b.textContent = __( 'Saving…' );
 				try {
-					const r = await api( `minn-admin/v1/gf/notifications/${ g.id }/full`, { method: 'POST', body: JSON.stringify( gfDelta( n, g, 'notification' ) ) } );
+					const r = await api( `minn-admin/v1/gf/notifications/${ idSeg( g.id ) }/full`, { method: 'POST', body: JSON.stringify( gfDelta( n, g, 'notification' ) ) } );
 					const wasNew = g.isNew;
 					gfnAdopt( r );
 					listCache();
@@ -56098,7 +56117,7 @@
 		if ( ! state.gfc || state.gfc.id !== state.gfcId ) {
 			state.gfc = { id: state.gfcId, loading: true };
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
-			api( `minn-admin/v1/gf/confirmations/${ state.gfcId }/full` )
+			Promise.resolve().then( () => api( `minn-admin/v1/gf/confirmations/${ idSeg( state.gfcId ) }/full` ) )
 				.then( ( r ) => {
 					if ( state.route !== 'gfconfirmation' || state.gfcId !== r.id ) return;
 					gfcAdopt( r );
@@ -56258,7 +56277,7 @@
 			const seq = ++gfcPreviewSeq;
 			const n = g.n;
 			try {
-				const r = await api( `minn-admin/v1/gf/confirmations/${ g.id }/preview`, {
+				const r = await api( `minn-admin/v1/gf/confirmations/${ idSeg( g.id ) }/preview`, {
 					method: 'POST',
 					body: JSON.stringify( { name: n.name, type: n.type, message: n.message, disableAutoformat: !! n.disableAutoformat, pageId: n.pageId, url: n.url, queryString: n.queryString } ),
 				} );
@@ -56444,7 +56463,7 @@
 						run: async () => {
 							if ( ! await leave() ) return;
 							try {
-								const res = await api( `minn-admin/v1/gf/confirmations/${ g.id }/duplicate`, { method: 'POST' } );
+								const res = await api( `minn-admin/v1/gf/confirmations/${ idSeg( g.id ) }/duplicate`, { method: 'POST' } );
 								g.dirty = false;
 								listCache();
 								toast( ( res && res.message ) || __( 'Confirmation duplicated' ) );
@@ -56465,7 +56484,7 @@
 								danger: true,
 							} ) ) return;
 							try {
-								await api( `minn-admin/v1/gf/confirmations/${ g.id }`, { method: 'DELETE' } );
+								await api( `minn-admin/v1/gf/confirmations/${ idSeg( g.id ) }`, { method: 'DELETE' } );
 								g.dirty = false;
 								listCache();
 								toast( __( 'Confirmation deleted' ) );
@@ -56481,7 +56500,7 @@
 				b.disabled = true;
 				b.textContent = __( 'Saving…' );
 				try {
-					const r = await api( `minn-admin/v1/gf/confirmations/${ g.id }/full`, { method: 'POST', body: JSON.stringify( gfDelta( n, g, 'confirmation' ) ) } );
+					const r = await api( `minn-admin/v1/gf/confirmations/${ idSeg( g.id ) }/full`, { method: 'POST', body: JSON.stringify( gfDelta( n, g, 'confirmation' ) ) } );
 					const wasNew = g.isNew;
 					gfcAdopt( r );
 					listCache();
