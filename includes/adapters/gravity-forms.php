@@ -63,10 +63,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			// inside the same JSON `search` criteria the search box uses
 			// (gf/v2's shape), so the json form merges with it instead of
 			// clobbering the param.
+			// Unread and Starred are Gravity Forms' own list views: received
+			// entries narrowed by a flag (the shim below adds it).
 			'filter'    => array(
 				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'active', 'Received' ),
+					array( 'unread', __( 'Unread', 'minn-admin' ) ),
+					array( 'starred', __( 'Starred', 'minn-admin' ) ),
 					array( 'spam', 'Spam' ),
 					array( 'trash', 'Trash' ),
 				),
@@ -81,7 +85,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'columns'   => array(
 				array( 'key' => '_summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'entry-summary' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'starred', 'label' => '★', 'width' => '40px' ),
+				// `state` is the shown status (unread, read, spam, trash), the
+				// one the entry page shows; `status` stays GF's own for the
+				// action gates.
+				array( 'key' => 'state', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
 				// GF stores entry dates in UTC (MySQL, no zone).
 				array( 'key' => 'date_created', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
@@ -547,6 +555,54 @@ function minn_admin_gf_can_manage_feed( $feed ) {
 	return (bool) $addons[ $slug ]->current_user_can_any( $caps );
 }
 
+/**
+ * The status an entry shows, on its list row and its page alike: spam and
+ * trash as they are, a received ("active") entry as unread or read, which
+ * is how Gravity Forms' own list tells them apart.
+ *
+ * @param array $entry Entry from GFAPI.
+ * @return string
+ */
+function minn_admin_gf_entry_state( $entry ) {
+	$status = (string) rgar( $entry, 'status' );
+	if ( 'active' !== $status ) {
+		return $status;
+	}
+	return empty( $entry['is_read'] ) ? 'unread' : 'read';
+}
+
+/**
+ * The list row's line: the first short answers, each field read whole the
+ * way the entry page reads it (get_value_export), so a name reads as one
+ * name and not as its parts. Null when the form is gone (the client then
+ * summarizes the raw values itself).
+ *
+ * @param array|false $form  Form from GFAPI.
+ * @param array       $entry Entry from GFAPI.
+ * @return string|null
+ */
+function minn_admin_gf_entry_summary( $form, $entry ) {
+	if ( ! is_array( $form ) || empty( $form['fields'] ) ) {
+		return null;
+	}
+	$values = array();
+	foreach ( $form['fields'] as $field ) {
+		if ( ! is_object( $field ) || in_array( $field->type, array( 'html', 'section', 'page', 'captcha', 'fileupload', 'password' ), true ) ) {
+			continue;
+		}
+		$value = trim( (string) $field->get_value_export( $entry, (string) $field->id, true ) );
+		if ( '' !== $value ) {
+			$values[] = $value;
+		}
+	}
+	// Long or multi-line answers belong to the entry page, not the row.
+	$short = array_values( array_filter( $values, function ( $v ) {
+		return false === strpos( $v, "\n" ) && mb_strlen( $v ) <= 60;
+	} ) );
+	$pick  = array_slice( $short ? $short : $values, 0, 3 );
+	return $pick ? implode( ' · ', $pick ) : __( '(empty entry)', 'minn-admin' );
+}
+
 add_action( 'rest_api_init', function () {
 	if ( ! class_exists( 'GFAPI' ) ) {
 		return;
@@ -661,9 +717,9 @@ add_action( 'rest_api_init', function () {
 				// into a hero; never dump every answer into the modal title.
 				'kind'     => 'entry',
 				'title'    => $form['title'],
-				// GF's "active" just means not spam/trash — surface as
-				// "received" so the pill doesn't look like a form toggle.
-				'status'   => ( 'active' === $entry['status'] ) ? 'received' : $entry['status'],
+				// The list row's pill, so the two agree (GF's "active" only
+				// means neither spam nor trash).
+				'status'   => minn_admin_gf_entry_state( $entry ),
 				'sections' => $sections,
 				'adminUrl' => admin_url( 'admin.php?page=gf_entries&view=entry&id=' . $entry['form_id'] . '&lid=' . $entry['id'] ),
 				// The row as the list carries it, so the entry page reached by
@@ -789,12 +845,40 @@ add_action( 'rest_api_init', function () {
 		if ( ! isset( $search['status'] ) ) {
 			$search['status'] = 'active';
 		}
+		// Unread and Starred: received entries plus the flag Gravity Forms'
+		// own list views add (GFEntryList::get_filter_links).
+		$views = array(
+			'unread'  => array( 'key' => 'is_read', 'value' => false ),
+			'starred' => array( 'key' => 'is_starred', 'value' => true ),
+		);
+		if ( is_string( $search['status'] ) && isset( $views[ $search['status'] ] ) ) {
+			$search['field_filters']   = isset( $search['field_filters'] ) && is_array( $search['field_filters'] ) ? $search['field_filters'] : array();
+			$search['field_filters'][] = $views[ $search['status'] ];
+			$search['status']          = 'active';
+		}
 		// The All route has no form in its path, and reads every form.
 		$form_id = (int) Minn_Admin::path_param( $request, 'form' );
 		$total   = 0;
 		$entries = GFAPI::get_entries( $form_id, $search, $sorting, array( 'offset' => $offset, 'page_size' => $page_size ), $total );
 		if ( is_wp_error( $entries ) ) {
 			return new WP_Error( $entries->get_error_code(), $entries->get_error_message(), array( 'status' => 400 ) );
+		}
+		// The row's line, its pill and its star, from the raw entry.
+		$forms = array();
+		foreach ( $entries as $i => $entry ) {
+			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+			$entry_form = (int) rgar( $entry, 'form_id' );
+			if ( ! array_key_exists( $entry_form, $forms ) ) {
+				$forms[ $entry_form ] = GFAPI::get_form( $entry_form );
+			}
+			$summary = minn_admin_gf_entry_summary( $forms[ $entry_form ], $entry );
+			if ( null !== $summary ) {
+				$entries[ $i ]['summary'] = $summary;
+			}
+			$entries[ $i ]['state']   = minn_admin_gf_entry_state( $entry );
+			$entries[ $i ]['starred'] = empty( $entry['is_starred'] ) ? '' : '★';
 		}
 		return rest_ensure_response( array(
 			'total_count' => (int) $total,
