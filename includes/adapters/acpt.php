@@ -1039,7 +1039,7 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	$resolve = function ( $req ) {
-		$slug  = rawurldecode( (string) $req['page'] );
+		$slug  = rawurldecode( Minn_Admin::path_param( $req, 'page' ) );
 		$pages = minn_admin_acpt_option_pages_allowed();
 		return isset( $pages[ $slug ] ) ? $slug : null;
 	};
@@ -1050,7 +1050,7 @@ add_action( 'rest_api_init', function () {
 				return (bool) $resolve( $req ); // the page's own capability decided this
 			},
 			'callback'            => function ( $req ) use ( $resolve ) {
-				return rest_ensure_response( minn_admin_acpt_option_tab_shape( $resolve( $req ), (string) $req['tab'] ) );
+				return rest_ensure_response( minn_admin_acpt_option_tab_shape( $resolve( $req ), (string) Minn_Admin::path_param( $req, 'tab' ) ) );
 			},
 		),
 		array(
@@ -1079,7 +1079,7 @@ add_action( 'rest_api_init', function () {
 				if ( is_wp_error( $saved ) ) {
 					return $saved;
 				}
-				return rest_ensure_response( minn_admin_acpt_option_tab_shape( $slug, (string) $req['tab'] ) );
+				return rest_ensure_response( minn_admin_acpt_option_tab_shape( $slug, (string) Minn_Admin::path_param( $req, 'tab' ) ) );
 			},
 		),
 	) );

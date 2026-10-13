@@ -1688,7 +1688,7 @@ add_action(
 						// integration) saves through WC_Settings_API, which blanks
 						// every field it is not sent, so an arbitrary pair here
 						// could disable a gateway and wipe its credentials.
-						$page_id = sanitize_key( $req['page'] );
+						$page_id = sanitize_key( Minn_Admin::path_param( $req, 'page' ) );
 						$listed  = false;
 						foreach ( minn_admin_wc_settings_sections() as $sec ) {
 							if ( ! isset( $sec['kind'] ) && $sec['page'] === $page_id && (string) $sec['section'] === (string) $section ) {
@@ -1747,7 +1747,7 @@ add_action(
 					'methods'             => 'GET',
 					'permission_callback' => $can,
 					'callback'            => static function ( $req ) {
-						$email = minn_admin_wc_settings_email( (string) $req['id'] );
+						$email = minn_admin_wc_settings_email( (string) Minn_Admin::path_param( $req, 'id' ) );
 						if ( ! $email ) {
 							return new WP_Error( 'minn_wc_no_email', __( 'That email is not registered.', 'minn-admin' ), array( 'status' => 404 ) );
 						}
@@ -1758,7 +1758,7 @@ add_action(
 					'methods'             => 'POST',
 					'permission_callback' => $can,
 					'callback'            => static function ( $req ) {
-						$email = minn_admin_wc_settings_email( (string) $req['id'] );
+						$email = minn_admin_wc_settings_email( (string) Minn_Admin::path_param( $req, 'id' ) );
 						if ( ! $email ) {
 							return new WP_Error( 'minn_wc_no_email', __( 'That email is not registered.', 'minn-admin' ), array( 'status' => 404 ) );
 						}
@@ -1842,7 +1842,7 @@ add_action(
 					'methods'             => 'GET',
 					'permission_callback' => $can,
 					'callback'            => static function ( $req ) {
-						$gateway = minn_admin_wc_settings_gateway( (string) $req['id'] );
+						$gateway = minn_admin_wc_settings_gateway( (string) Minn_Admin::path_param( $req, 'id' ) );
 						if ( ! $gateway ) {
 							return new WP_Error( 'minn_wc_no_gateway', __( 'That payment method is not registered.', 'minn-admin' ), array( 'status' => 404 ) );
 						}
@@ -1856,7 +1856,7 @@ add_action(
 					'methods'             => 'POST',
 					'permission_callback' => $can,
 					'callback'            => static function ( $req ) {
-						$gateway = minn_admin_wc_settings_gateway( (string) $req['id'] );
+						$gateway = minn_admin_wc_settings_gateway( (string) Minn_Admin::path_param( $req, 'id' ) );
 						if ( ! $gateway ) {
 							return new WP_Error( 'minn_wc_no_gateway', __( 'That payment method is not registered.', 'minn-admin' ), array( 'status' => 404 ) );
 						}
@@ -2207,7 +2207,7 @@ add_action(
 					'permission_callback' => $can,
 					'callback'            => static function ( $req ) {
 						global $wpdb;
-						$id = absint( $req['id'] );
+						$id = absint( Minn_Admin::path_param( $req, 'id' ) );
 						if ( ! $wpdb->get_var( $wpdb->prepare( "SELECT key_id FROM {$wpdb->prefix}woocommerce_api_keys WHERE key_id = %d", $id ) ) ) {
 							return new WP_Error( 'minn_wc_no_key', __( 'That API key no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
 						}
@@ -2226,10 +2226,10 @@ add_action(
 						// Revoke = the Keys screen's revoke_key: the same owner rule,
 						// then the row goes, the hash with it, and any client holding
 						// the key is out.
-						if ( ! minn_admin_wc_api_key_owned( absint( $req['id'] ) ) ) {
+						if ( ! minn_admin_wc_api_key_owned( absint( Minn_Admin::path_param( $req, 'id' ) ) ) ) {
 							return new WP_Error( 'minn_wc_key_user', __( 'You do not have permission to revoke this API key.', 'minn-admin' ), array( 'status' => 403 ) );
 						}
-						$wpdb->delete( $wpdb->prefix . 'woocommerce_api_keys', array( 'key_id' => absint( $req['id'] ) ), array( '%d' ) );
+						$wpdb->delete( $wpdb->prefix . 'woocommerce_api_keys', array( 'key_id' => absint( Minn_Admin::path_param( $req, 'id' ) ) ), array( '%d' ) );
 						return array( 'keys' => minn_admin_wc_api_keys() );
 					},
 				),

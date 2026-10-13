@@ -438,7 +438,7 @@ add_action( 'rest_api_init', function () {
 				'methods'             => 'POST',
 				'permission_callback' => $can_redirects,
 				'callback'            => function ( WP_REST_Request $request ) {
-					$row = \RankMath\Redirections\DB::get_redirection_by_id( (int) $request['id'] );
+					$row = \RankMath\Redirections\DB::get_redirection_by_id( (int) Minn_Admin::path_param( $request, 'id' ) );
 					if ( ! $row ) {
 						return new WP_Error( 'not_found', __( 'Redirect not found', 'minn-admin' ), array( 'status' => 404 ) );
 					}
@@ -493,7 +493,7 @@ add_action( 'rest_api_init', function () {
 				'methods'             => 'DELETE',
 				'permission_callback' => $can_redirects,
 				'callback'            => function ( WP_REST_Request $request ) {
-					$id = (int) $request['id'];
+					$id = (int) Minn_Admin::path_param( $request, 'id' );
 					if ( ! \RankMath\Redirections\DB::get_redirection_by_id( $id ) ) {
 						return new WP_Error( 'not_found', __( 'Redirect not found', 'minn-admin' ), array( 'status' => 404 ) );
 					}
@@ -511,7 +511,7 @@ add_action( 'rest_api_init', function () {
 				if ( ! in_array( $status, array( 'active', 'inactive', 'trashed' ), true ) ) {
 					return new WP_Error( 'minn_rm_status', __( 'Unknown redirect status.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				$id = (int) $request['id'];
+				$id = (int) Minn_Admin::path_param( $request, 'id' );
 				if ( ! \RankMath\Redirections\DB::get_redirection_by_id( $id ) ) {
 					return new WP_Error( 'not_found', __( 'Redirect not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -553,7 +553,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => $can_404,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$count = \RankMath\Monitor\DB::delete_log( array( (int) $request['id'] ) );
+				$count = \RankMath\Monitor\DB::delete_log( array( (int) Minn_Admin::path_param( $request, 'id' ) ) );
 				if ( ! $count ) {
 					return new WP_Error( 'not_found', __( 'Log entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
@@ -581,7 +581,7 @@ add_action( 'rest_api_init', function () {
 				return minn_admin_rm_can_404() && minn_admin_rm_can_redirects();
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
-				$res = \RankMath\Monitor\DB::get_logs( array( 'ids' => array( (int) $request['id'] ), 'limit' => 1 ) );
+				$res = \RankMath\Monitor\DB::get_logs( array( 'ids' => array( (int) Minn_Admin::path_param( $request, 'id' ) ), 'limit' => 1 ) );
 				$log = $res['logs'][0] ?? null;
 				if ( ! $log ) {
 					return new WP_Error( 'not_found', __( 'Log entry not found', 'minn-admin' ), array( 'status' => 404 ) );

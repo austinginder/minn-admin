@@ -3213,8 +3213,8 @@ add_action( 'rest_api_init', function () {
 	// capability already filtered through pages_allowed).
 	$resolve = function ( $req ) {
 		$pages = minn_admin_acf_options_pages_allowed();
-		$slug  = rawurldecode( (string) $req['page'] );
-		$tab   = (string) $req['tab'];
+		$slug  = rawurldecode( Minn_Admin::path_param( $req, 'page' ) );
+		$tab   = Minn_Admin::path_param( $req, 'tab' );
 		if ( MINN_ADMIN_ACF_OPTIONS_ALL === $slug ) {
 			return minn_admin_acf_options_all_target( $tab );
 		}

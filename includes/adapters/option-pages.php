@@ -193,12 +193,12 @@ add_action( 'rest_api_init', function () {
 				// A tab that does not resolve is either not there or not this
 				// reader's; either way the honest answer is that there is no
 				// such settings tab, and the provider decides the rest.
-				return minn_admin_option_tab_target( (string) $req['tab'] )
+				return minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) )
 					? true
 					: new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
 			},
 			'callback'            => function ( $req ) {
-				$target = minn_admin_option_tab_target( (string) $req['tab'] );
+				$target = minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) );
 				return minn_admin_option_dispatch( $target, 'GET' );
 			},
 		),
@@ -208,12 +208,12 @@ add_action( 'rest_api_init', function () {
 				// A tab that does not resolve is either not there or not this
 				// reader's; either way the honest answer is that there is no
 				// such settings tab, and the provider decides the rest.
-				return minn_admin_option_tab_target( (string) $req['tab'] )
+				return minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) )
 					? true
 					: new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
 			},
 			'callback'            => function ( $req ) {
-				$target = minn_admin_option_tab_target( (string) $req['tab'] );
+				$target = minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) );
 				return minn_admin_option_dispatch( $target, 'POST', (array) $req->get_json_params() );
 			},
 		),

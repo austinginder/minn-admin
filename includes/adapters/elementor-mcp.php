@@ -268,11 +268,11 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => function ( WP_REST_Request $request ) {
 			// Core's own rule for another account's application passwords.
-			return minn_admin_elementor_mcp_can_write( $request ) && current_user_can( 'edit_user', (int) $request['uid'] );
+			return minn_admin_elementor_mcp_can_write( $request ) && current_user_can( 'edit_user', (int) Minn_Admin::path_param( $request, 'uid' ) );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$uid  = (int) $request['uid'];
-			$uuid = (string) $request['uuid'];
+			$uid  = (int) Minn_Admin::path_param( $request, 'uid' );
+			$uuid = (string) Minn_Admin::path_param( $request, 'uuid' );
 			$pw   = class_exists( 'WP_Application_Passwords' ) ? WP_Application_Passwords::get_user_application_password( $uid, $uuid ) : null;
 			// Only a password their setup flow created: this route is not a
 			// general revoke for the account's other application passwords.

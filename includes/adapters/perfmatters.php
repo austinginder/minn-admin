@@ -391,7 +391,7 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'GET',
 			'permission_callback' => 'minn_admin_perfmatters_can',
 			'callback'            => function ( $req ) {
-				return rest_ensure_response( minn_admin_perfmatters_tab_shape( $req['tab'] ) );
+				return rest_ensure_response( minn_admin_perfmatters_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
 			},
 		),
 		array(
@@ -401,7 +401,7 @@ add_action( 'rest_api_init', function () {
 				$body   = $req->get_json_params();
 				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
 				minn_admin_perfmatters_save( $values );
-				return rest_ensure_response( minn_admin_perfmatters_tab_shape( $req['tab'] ) );
+				return rest_ensure_response( minn_admin_perfmatters_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
 			},
 		),
 	) );

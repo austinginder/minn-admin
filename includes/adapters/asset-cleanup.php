@@ -407,7 +407,7 @@ add_action( 'rest_api_init', function () {
 				return minn_admin_asset_cleanup_can();
 			},
 			'callback'            => function ( $req ) {
-				return rest_ensure_response( minn_admin_asset_cleanup_tab_shape( $req['tab'] ) );
+				return rest_ensure_response( minn_admin_asset_cleanup_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
 			},
 		),
 		array(
@@ -422,7 +422,7 @@ add_action( 'rest_api_init', function () {
 				if ( is_wp_error( $saved ) ) {
 					return $saved;
 				}
-				return rest_ensure_response( minn_admin_asset_cleanup_tab_shape( $req['tab'] ) );
+				return rest_ensure_response( minn_admin_asset_cleanup_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
 			},
 		),
 	) );

@@ -982,7 +982,8 @@ add_action( 'rest_api_init', function () {
 
 	// List: one form's notifications, or every form's (the All tab).
 	$list_notifications = function ( WP_REST_Request $request ) use ( $notification_row ) {
-		$form_id  = (int) $request['form'];
+		// The All route has no form in its path, and reads every form.
+		$form_id  = (int) Minn_Admin::path_param( $request, 'form' );
 		$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 		$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 		$rows     = array();
@@ -1109,7 +1110,8 @@ add_action( 'rest_api_init', function () {
 		return $out;
 	};
 	$list_feeds = function ( WP_REST_Request $request ) use ( $feed_addon_titles ) {
-		$form_id  = (int) $request['form'];
+		// The All route has no form in its path, and reads every form.
+		$form_id  = (int) Minn_Admin::path_param( $request, 'form' );
 		$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 		$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 		$feeds    = GFAPI::get_feeds( null, $form_id ? $form_id : null, null, null );

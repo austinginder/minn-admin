@@ -326,7 +326,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) $request['id'] );
+			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
 			if ( is_wp_error( $link ) ) {
 				return $link;
 			}
@@ -367,7 +367,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) $request['id'] );
+			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
 			if ( is_wp_error( $link ) ) {
 				return $link;
 			}
@@ -394,7 +394,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) $request['id'] );
+			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
 			if ( is_wp_error( $link ) ) {
 				return $link;
 			}
@@ -431,7 +431,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) $request['id'] );
+			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
 			if ( is_wp_error( $link ) ) {
 				return $link;
 			}
@@ -450,7 +450,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) $request['id'] );
+			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
 			if ( is_wp_error( $link ) ) {
 				return $link;
 			}
@@ -478,7 +478,7 @@ add_action( 'rest_api_init', function () {
 			),
 		),
 		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) $request['id'] );
+			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
 			if ( is_wp_error( $link ) ) {
 				return $link;
 			}
