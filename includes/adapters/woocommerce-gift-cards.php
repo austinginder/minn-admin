@@ -107,8 +107,11 @@ function minn_admin_wcgc_currency( $card ) {
  * Minn status slug for one card.
  *
  * There is no status column. Expired wins (the money is gone), then
- * redeemed (account-linked, not spent), then disabled, then scheduled,
- * then active.
+ * redeemed (account-linked, not spent), then scheduled, then disabled,
+ * then active. Scheduled comes before disabled because their order flow
+ * stores a card with a future delivery date inactive until it is sent.
+ * is_delivered() answers false for "not yet" and the user id that sent it
+ * otherwise, which is 0 for their own scheduler, so only false is unsent.
  *
  * @param WC_GC_Gift_Card_Data $card Card.
  * @return string
@@ -120,11 +123,11 @@ function minn_admin_wcgc_status( $card ) {
 	if ( method_exists( $card, 'is_redeemed' ) && $card->is_redeemed() ) {
 		return 'redeemed';
 	}
+	if ( (int) $card->get_deliver_date() > 0 && false === $card->is_delivered() ) {
+		return 'scheduled';
+	}
 	if ( ! $card->is_active() ) {
 		return 'disabled';
-	}
-	if ( (int) $card->get_deliver_date() > 0 && ! $card->is_delivered() ) {
-		return 'scheduled';
 	}
 	return 'active';
 }
@@ -461,7 +464,9 @@ add_action( 'rest_api_init', function () {
 			// their args cannot express) are filtered after a broader fetch
 			// is sliced in PHP: their query has no OR of computed labels.
 			$single = ( 1 === count( $wanted ) ) ? $wanted[0] : '';
-			$filter_after = $wanted && ! in_array( $single, array( 'disabled', 'redeemed', 'expired' ), true );
+			// Disabled narrows on is_active and is still computed: a card waiting
+			// for its delivery date is inactive too, and reads Scheduled.
+			$filter_after = $wanted && ! in_array( $single, array( 'redeemed', 'expired' ), true );
 			if ( 'disabled' === $single ) {
 				$args['is_active'] = 'off';
 			} elseif ( 'redeemed' === $single ) {
@@ -570,7 +575,7 @@ add_action( 'rest_api_init', function () {
 				'label' => __( 'Delivery', 'minn-admin' ),
 				'value' => $card->is_virtual() ? __( 'Digital', 'minn-admin' ) : __( 'Physical', 'minn-admin' ),
 			);
-			if ( $card->is_delivered() ) {
+			if ( false !== $card->is_delivered() ) {
 				$origin[] = array(
 					'label' => __( 'Delivered', 'minn-admin' ),
 					'value' => __( 'Yes', 'minn-admin' ),
