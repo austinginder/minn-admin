@@ -582,9 +582,14 @@ Run this loop per product.
    option or table reads. Actions attach only when the vendor code is loaded,
    and only for someone the vendor's own licence screen would let act: when the
    vendor gates that screen tighter than `manage_options` (ACF PRO's Updates
-   page, WPForms' manage capability, Gravity Forms' settings capability), add
-   its test to `minn_admin_license_vendor_gates()`, and everyone else gets the
-   row read-only. Snapshot the key AND the status and restore both on a
+   page, WPForms' manage capability, Gravity Forms' settings capability,
+   LayerSlider's custom capability, Slider Revolution's Permission setting,
+   Freemius' `activate_plugins`), add its test to
+   `minn_admin_license_vendor_gates()`, and everyone else gets the row
+   read-only. Read a vendor filter as a gate only when it means one: Kadence
+   Blocks Pro turns its licence field off for everyone on a site with Liquid
+   Web's Harbor library, because a modal manages the key there, so that filter
+   is skipped when Harbor is present. Snapshot the key AND the status and restore both on a
    rejection, so a typo never clobbers a working key. That snapshot reads and
    restores `wp_options` rows, which is not where a transient lives under a
    persistent object cache: when the vendor records its answer in a transient
