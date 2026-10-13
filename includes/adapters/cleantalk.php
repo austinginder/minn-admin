@@ -110,8 +110,12 @@ function minn_admin_cleantalk_save_access_key( $key ) {
 	// pass, so the vendor's own gate never runs. Enforce that cap here, or
 	// on multisite a main-site administrator (who keeps manage_options but
 	// loses activate_plugins) could disable spam filtering through the
-	// wp/v2/settings connector.
-	if ( ! current_user_can( 'activate_plugins' ) ) {
+	// wp/v2/settings connector. A save also follows the key-tail rule, since
+	// core answers it by reading the setting back through that mask: on a
+	// network the key is the network owner's to set, which is less than
+	// CleanTalk's own subsite screen allows a site administrator holding
+	// activate_plugins.
+	if ( ! current_user_can( 'activate_plugins' ) || ! minn_admin_cleantalk_key_tail_allowed() ) {
 		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'You are not allowed to change the CleanTalk access key.', 'minn-admin' ) );
 	}
 	$key = trim( (string) $key );
@@ -543,10 +547,11 @@ add_action( 'wp_connectors_init', 'minn_admin_cleantalk_register_connector' );
 
 /**
  * Whether the current user may see the last four characters of the stored
- * key on the Connectors card. The key is saved only with activate_plugins
- * (CleanTalk's own gate is skipped under the direct call Minn makes), and on
- * a network a site's key can be the network's, which CleanTalk's subsite
- * screen withholds, so there only a super admin sees any of it.
+ * key on the Connectors card, and so may save one. The key is saved only with
+ * activate_plugins (CleanTalk's own gate is skipped under the direct call Minn
+ * makes), and on a network a site's key can be the network's, which
+ * CleanTalk's subsite screen withholds, so there only a super admin sees or
+ * sets any of it.
  *
  * @return bool
  */

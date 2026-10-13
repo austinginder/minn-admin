@@ -23,7 +23,9 @@
  *                                   field driving minn-admin/v1/licenses/action
  *                                   (same guardrails: secret rides one request,
  *                                   never stored by Minn). Omit when the key is
- *                                   supplied in code or managed cloud-side.
+ *                                   supplied in code or managed cloud-side. The
+ *                                   page sends it only to a user that route
+ *                                   would let activate that provider.
  *            }
  *   set      callable( $toggle_id, $on ) apply one toggle
  *
@@ -263,9 +265,32 @@ function minn_admin_spam_providers() {
 	return apply_filters( 'minn_admin_spam_providers', $providers );
 }
 
+/**
+ * The licence providers a spam card's paste-a-key box may name for this
+ * user: the ones whose activate the licences route would run. The box saves
+ * through that route, so a user it refuses (a site administrator on a
+ * network), or one a provider's own licence gate leaves out, gets no box.
+ *
+ * @return array Provider id => provider.
+ */
+function minn_admin_spam_key_providers() {
+	if ( ! function_exists( 'minn_admin_licenses_can_manage' ) || ! function_exists( 'minn_admin_license_default_providers' )
+		|| ! minn_admin_licenses_can_manage() ) {
+		return array();
+	}
+	$providers = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
+	return array_filter(
+		(array) $providers,
+		function ( $p ) {
+			return is_array( $p ) && ! empty( $p['activate'] ) && is_callable( $p['activate'] );
+		}
+	);
+}
+
 /** The Settings → Spam page state. */
 function minn_admin_spam_state() {
 	$providers = array();
+	$keyed     = null;
 	foreach ( minn_admin_spam_providers() as $p ) {
 		if ( ! is_array( $p ) || empty( $p['id'] ) ) {
 			continue;
@@ -274,6 +299,11 @@ function minn_admin_spam_state() {
 		try {
 			$st = is_callable( $p['status'] ?? null ) ? (array) call_user_func( $p['status'] ) : array();
 		} catch ( \Throwable $e ) { /* a broken provider never breaks the page */ }
+		$key_provider = isset( $st['keyProvider'] ) ? (string) $st['keyProvider'] : '';
+		if ( '' !== $key_provider ) {
+			$keyed        = null === $keyed ? minn_admin_spam_key_providers() : $keyed;
+			$key_provider = isset( $keyed[ $key_provider ] ) ? $key_provider : '';
+		}
 		$providers[] = array(
 			'id'         => (string) $p['id'],
 			'name'       => isset( $p['name'] ) ? (string) $p['name'] : (string) $p['id'],
@@ -284,7 +314,7 @@ function minn_admin_spam_state() {
 			'adminUrl'   => isset( $st['adminUrl'] ) ? (string) $st['adminUrl'] : '',
 			// License/connection provider id for paste-a-key in place; the
 			// licenses/action endpoint re-validates it server-side.
-			'keyProvider' => isset( $st['keyProvider'] ) ? (string) $st['keyProvider'] : '',
+			'keyProvider' => $key_provider,
 			'userCleanup' => ( isset( $st['userCleanup'] ) && is_array( $st['userCleanup'] ) )
 				? array(
 					'count'    => isset( $st['userCleanup']['count'] ) ? (int) $st['userCleanup']['count'] : 0,

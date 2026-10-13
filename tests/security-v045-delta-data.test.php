@@ -639,6 +639,89 @@ if ( ! $rs_uid ) {
 	$check( 'OS-9 sweep control: an administrator passes it, either setting', true === $rs_admin && true === $rs_default );
 }
 
+// --- NI-8 CleanTalk: a key save asks the card's key-tail rule ----------------
+$ct_refusal = __( 'You are not allowed to change the CleanTalk access key.', 'minn-admin' );
+if ( ! function_exists( 'minn_admin_cleantalk_save_access_key' ) ) {
+	$skip( 'NI-8 CleanTalk adapter not loaded' );
+} else {
+	add_filter( 'pre_http_request', $offline, 1, 3 );
+	if ( is_multisite() ) {
+		$ct_uid = $make_user( 'administrator' );
+		if ( ! $ct_uid ) {
+			$check( 'NI-8 fixture user', false );
+		} else {
+			wp_set_current_user( $ct_uid );
+			$ct_fixture = current_user_can( 'activate_plugins' ) && ! is_super_admin();
+			$ct_res     = minn_admin_cleantalk_save_access_key( 'minnd45key' );
+			wp_set_current_user( $admin );
+			$drop_user( $ct_uid );
+			if ( ! $ct_fixture ) {
+				$skip( 'NI-8 this network does not give site administrators the Plugins menu' );
+			} else {
+				$check( 'NI-8 a site administrator holding activate_plugins cannot save the network\'s CleanTalk key', $ct_refusal === ( $ct_res['message'] ?? '' ), wp_json_encode( $ct_res ) );
+			}
+		}
+	} else {
+		$skip( 'NI-8 the refusal is a network case' );
+	}
+	$ct_res = minn_admin_cleantalk_save_access_key( 'minnd45key' );
+	$check( 'NI-8 control: ' . ( is_multisite() ? 'a super admin' : 'an administrator' ) . ' still reaches CleanTalk\'s save', $ct_refusal !== ( $ct_res['message'] ?? '' ), wp_json_encode( $ct_res ) );
+	remove_filter( 'pre_http_request', $offline, 1 );
+}
+
+// --- OS-16 The spam card offers a paste box only to whom the route accepts ---
+// One licence provider with an activate, one without, and a card for each.
+$spam_lic  = function ( $providers ) {
+	$providers['minn-d45-act']   = array( 'name' => 'Minn D45', 'detect' => '__return_false', 'read' => '__return_empty_array', 'activate' => function () {
+		return array( 'ok' => false );
+	} );
+	$providers['minn-d45-noact'] = array( 'name' => 'Minn D45 read-only', 'detect' => '__return_false', 'read' => '__return_empty_array' );
+	return $providers;
+};
+$spam_card = function ( $providers ) {
+	foreach ( array( 'act', 'noact' ) as $kind ) {
+		$providers[] = array(
+			'id'     => 'minn-d45-spam-' . $kind,
+			'name'   => 'Minn D45 ' . $kind,
+			'status' => function () use ( $kind ) {
+				return array( 'configured' => false, 'note' => '', 'keyProvider' => 'minn-d45-' . $kind );
+			},
+			'set'    => function () {},
+		);
+	}
+	return $providers;
+};
+add_filter( 'minn_admin_license_providers', $spam_lic );
+add_filter( 'minn_admin_spam_providers', $spam_card );
+$spam_keys = function () use ( $call ) {
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/spam' );
+	$out = array();
+	foreach ( (array) ( $d['providers'] ?? array() ) as $prov ) {
+		$out[ $prov['id'] ] = $prov['keyProvider'];
+	}
+	return array( $st, $out );
+};
+list( $sp_st, $sp ) = $spam_keys();
+$check( 'OS-16 no paste box for a provider whose activate the licence route lacks', 200 === $sp_st && '' === ( $sp['minn-d45-spam-noact'] ?? null ), $sp_st . ' ' . wp_json_encode( $sp ) );
+$check( 'OS-16 control: ' . ( is_multisite() ? 'a super admin' : 'an administrator' ) . ' keeps the paste box', 'minn-d45-act' === ( $sp['minn-d45-spam-act'] ?? null ), wp_json_encode( $sp ) );
+if ( is_multisite() ) {
+	$sp_uid = $make_user( 'administrator' );
+	if ( ! $sp_uid ) {
+		$check( 'OS-16 fixture user', false );
+	} else {
+		wp_set_current_user( $sp_uid );
+		$sp_refused = false === $perm_for( '/minn-admin/v1/licenses/action', 'POST' );
+		list( $sp_st, $sp ) = $spam_keys();
+		wp_set_current_user( $admin );
+		$drop_user( $sp_uid );
+		$check( 'OS-16 a site administrator the licence route refuses gets no paste box', $sp_refused && 200 === $sp_st && '' === ( $sp['minn-d45-spam-act'] ?? null ), $sp_st . ' route refuses: ' . var_export( $sp_refused, true ) . ' ' . wp_json_encode( $sp ) );
+	}
+} else {
+	$skip( 'OS-16 the refused-user case is a network case' );
+}
+remove_filter( 'minn_admin_license_providers', $spam_lic );
+remove_filter( 'minn_admin_spam_providers', $spam_card );
+
 // --- NI-7 Kadence Blocks Pro on a site with Liquid Web's Harbor library ------
 // Last: the Harbor stand-in cannot be removed from this process.
 if ( ! $lic_can( 'kadence-blocks-pro' ) ) {
