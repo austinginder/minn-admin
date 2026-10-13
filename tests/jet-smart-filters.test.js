@@ -52,7 +52,7 @@ const { evalPhp, apiFor, paintSurface } = require( './_jet-common' );
 		}
 		const del = await api( `minn-admin/v1/jet-smart-filters/filters/${ id }`, { method: 'DELETE' } );
 		t.check( 'trash moves the filter to the trash', del.status === 200 && evalPhp( 'sf2', `echo get_post_status( ${ id } );` ) === 'trash' );
-		t.check( 'the Filters view paints on the shared Search surface', await paintSurface( page, BASE, 'jet-search', 'Indexer' ) );
+		t.check( 'the Filters surface paints with its indexer card', await paintSurface( page, BASE, 'jet-smart-filters', 'Indexer' ) );
 	} finally {
 		if ( id ) evalPhp( 'sf3', `wp_delete_post( ${ id }, true );` );
 		await t.done( browser, errors );

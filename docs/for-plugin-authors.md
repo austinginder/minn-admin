@@ -1972,8 +1972,12 @@ provider id from `status()` as `keyProvider`. The card then renders a key field 
 posts to `minn-admin/v1/licenses/action`, so the same guardrails hold: the key rides
 one request, is verified and stored by YOUR code, and is never retained by Minn.
 Omit `keyProvider` when the key is supplied in code (a constant or filter) or managed
-cloud-side. Akismet is the reference: its card field and its Licenses row drive the
-same provider.
+cloud-side. The field shows only to a user that route would let activate the
+provider: someone with `manage_options` who, on a network, is a super admin, and
+only while the provider still carries its `activate` callable for them (a
+provider whose own licence gate leaves the user out has it removed). Anyone else
+gets the card without the field (since 0.45.0). Akismet is the reference: its card
+field and its Licenses row drive the same provider.
 
 **Existing-account cleanup (optional).** `userCleanup: { count, checkUrl }` on
 `status()` adds a row under the card: how many accounts the plugin has already
