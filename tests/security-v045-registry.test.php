@@ -975,6 +975,18 @@ wp_set_current_user( $admin[0]->ID );
 			'settings'     => array( array( 'value' => 'c2VjcmV0+VmFsdWUx/MjM0NTY3OA' ) ),
 		) ) );
 		$check( 'value: lists under compound containers and a value field still count', isset( $named['abcdEFGH1234567890'], $named['ijklMNOP0987654321'], $named['ABCD1234EFGH5678IJKL'], $named['c2VjcmV0+VmFsdWUx/MjM0NTY3OA'] ), wp_json_encode( array_map( 'strlen', array_keys( $named ) ) ) );
+		// code, sig and hash are whole words anywhere in a name (and
+		// signature one too), split on - as well as _; a shortcode is not one.
+		$words = Minn_Admin_DB::credential_strings( serialize( array(
+			'signature'     => 'Ab3+De4/Gh5Ij6Kl7Mn8Op9Q',
+			'sig_value'     => 'Rs3+Tu4/Vw5Xy6Za7Bc8De9F',
+			'code_verifier' => 'Qr5+St6/Uv7Wx8Yz9Ab0Cd1E',
+			'access-code'   => 'Ef2+Gh3/Ij4Kl5Mn6Op7Qr8S',
+			'shortcode'     => 'Tu9+Vw0/Xy1Za2Bc3De4Fg5H',
+		) ) );
+		$check( 'value: code, sig and hash count as whole words anywhere in a name, and a shortcode does not',
+			isset( $words['Ab3+De4/Gh5Ij6Kl7Mn8Op9Q'], $words['Rs3+Tu4/Vw5Xy6Za7Bc8De9F'], $words['Qr5+St6/Uv7Wx8Yz9Ab0Cd1E'], $words['Ef2+Gh3/Ij4Kl5Mn6Op7Qr8S'] ) && ! isset( $words['Tu9+Vw0/Xy1Za2Bc3De4Fg5H'] ),
+			wp_json_encode( array_keys( $words ) ) );
 		list( , $pd ) = $rows( $wpdb->posts, array( 'per_page' => 1 ) );
 		$ps = wp_list_pluck( (array) ( $pd['columns'] ?? array() ), 'sortable', 'name' );
 		$check( 'value: control: a post title still sorts, a post body does not', true === ( $ps['post_title'] ?? null ) && false === ( $ps['post_content'] ?? null ), wp_json_encode( array( $ps['post_title'] ?? null, $ps['post_content'] ?? null ) ) );

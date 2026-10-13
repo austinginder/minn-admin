@@ -1072,8 +1072,10 @@ class Minn_Admin_DB {
 				return true;
 			}
 		}
-		// code, sig and hash as whole words: a shortcode or a decoder is not one.
-		return (bool) preg_match( '/key|licen[cs]e|token|secret|pass|auth|api|seed|salt|nonce|(^|_)(code|sig|hash)$|^val$|^value$/', (string) end( $segments ) );
+		// code, sig and hash as whole words wherever they sit in the name
+		// (code_verifier, access-code, sig_value; signature too): a
+		// shortcode or a decoder is not one.
+		return (bool) preg_match( '/key|licen[cs]e|token|secret|pass|auth|api|seed|salt|nonce|(^|[_\-])(code|sig|signature|hash)([_\-]|$)|^val$|^value$/', (string) end( $segments ) );
 	}
 
 	/**
