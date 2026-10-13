@@ -12216,6 +12216,13 @@
 		const relatedOnly = Array.isArray( related )
 			? related.filter( ( o ) => ! parentId || o.id !== parentId )
 			: related;
+		// The parent's own row in that list, so it reads like a renewal: status,
+		// date and total (the list's own request; until it lands, just "Initial").
+		const parentRow = parentId && Array.isArray( related ) ? related.find( ( o ) => o.id === parentId ) : null;
+		const orderFacts = ( o ) => `
+											<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>
+											<span class="minn-row-meta">${ esc( timeAgo( o.date_created ) ) }</span>
+											<span>${ esc( subMoney( s, o.total ) ) }</span>`;
 		const canOpenCustomer = !!( s.customer_id && B.caps.customers );
 		const itemCount = ( s.line_items || [] ).reduce( ( n, li ) => n + ( li.quantity || 0 ), 0 );
 		/* translators: %d: number of items on the subscription. */
@@ -12267,7 +12274,9 @@
 							</div>` : '' }
 							<div class="minn-order-sec minn-sub-orders">
 								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Orders' ) }</div></div>
-								${ parentId ? orderRow( parentId, `
+								${ parentId ? orderRow( parentId, parentRow ? `
+											<span>#${ esc( parentRow.number || parentId ) } <span class="minn-row-meta">${ __( 'Initial' ) }</span></span>
+											${ orderFacts( parentRow ) }` : `
 											<span>#${ esc( String( parentId ) ) }</span>
 											<span class="minn-row-meta">${ __( 'Initial' ) }</span>
 											<span>›</span>`, __( 'Order that started this subscription' ) ) : '' }
@@ -12275,8 +12284,7 @@
 									: ! ( relatedOnly && relatedOnly.length ) ? `<div class="minn-toggle-desc">${ __( 'No renewal orders yet.' ) }</div>`
 									: relatedOnly.map( ( o ) => orderRow( o.id, `
 											<span>#${ esc( o.number || o.id ) }</span>
-											<span class="minn-status ${ orderStatusStyle( o.status ) }">${ esc( orderStatusLabel( o.status ) ) }</span>
-											<span>${ esc( subMoney( s, o.total ) ) }</span>` ) ).join( '' ) }
+											${ orderFacts( o ) }` ) ).join( '' ) }
 							</div>
 							${ notesTimelineHtml( m.notes, canEdit, 'minn-s', 'minn-sub-notes' ) }
 						</div>
@@ -12286,7 +12294,7 @@
 								<div class="minn-order-read">
 									<div class="minn-order-read-name">${ esc( customerName( s ) ) }</div>
 									<div>${ b.email ? esc( b.email ) : `<span class="minn-order-read-empty">${ __( 'No email address' ) }</span>` }</div>
-									${ s.customer_id ? `<div class="minn-order-read-sub">${ __( 'Account' ) }</div><div>#${ esc( String( s.customer_id ) ) }</div>` : '' }
+									${ s.customer_id ? `<div class="minn-order-read-sub">${ __( 'Account' ) }</div><div>${ esc( m.account ? customerDisplayName( m.account ) : '#' + s.customer_id ) }</div>` : '' }
 								</div>
 								${ canOpenCustomer ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-customer" style="margin-top:10px;">${ __( 'View customer' ) }</button>` : '' }
 							</div>
@@ -12351,6 +12359,18 @@
 					}
 				}
 				rr();
+				// The account by name, not its bare user id; on its own request,
+				// and a failure (no customer access) leaves the id.
+				const cid = parseInt( full.customer_id, 10 ) || 0;
+				if ( cid && B.caps.customers ) {
+					api( `wc/v3/customers/${ cid }?_fields=id,first_name,last_name,email,username` )
+						.then( ( c ) => {
+							if ( ! isCur() || ! c || ! c.id ) return;
+							m.account = c;
+							rr();
+						} )
+						.catch( () => {} );
+				}
 				// Renewal orders arrive on their own request; a failure leaves
 				// the card empty rather than breaking the detail.
 				api( `wc/v3/subscriptions/${ id }/orders?per_page=10&_fields=id,number,status,total,date_created,currency` )
