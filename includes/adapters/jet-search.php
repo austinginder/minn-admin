@@ -4,8 +4,8 @@
  *
  * JetSearch records what visitors type into its search suggestions table,
  * {prefix}jet_search_suggestions (id, name, weight = how often it was
- * searched or how strongly it is boosted, parent = a parent suggestion's
- * name, term), and offers a manage-suggestions screen behind
+ * searched or how strongly it is boosted, parent = the parent suggestion's
+ * id, "0" for none, term), and offers a manage-suggestions screen behind
  * manage_options. This surface is that screen's daily half: the list
  * ordered by weight, search, add and edit (name and weight), delete, and
  * the plugin's own remove-duplicates sweep (its exact two-statement SQL:
@@ -42,7 +42,47 @@ function minn_admin_jet_search_row( $id ) {
 	return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE id = %d", (int) $id ) );
 }
 
-function minn_admin_jet_search_item( $r ) {
+/**
+ * id => name for the parents a set of rows points at, in one query. Their
+ * manage screen stores a child's parent as the parent's id, which the list
+ * printed as "71".
+ */
+function minn_admin_jet_search_parent_names( $rows ) {
+	global $wpdb;
+	$ids = array();
+	foreach ( (array) $rows as $r ) {
+		$p = trim( (string) $r->parent );
+		if ( ctype_digit( $p ) && (int) $p > 0 ) {
+			$ids[] = (int) $p;
+		}
+	}
+	$ids = array_values( array_unique( $ids ) );
+	if ( ! $ids ) {
+		return array();
+	}
+	$t     = minn_admin_jet_search_table();
+	$in    = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+	$names = array();
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders
+	foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, name FROM {$t} WHERE id IN ({$in})", $ids ) ) as $row ) {
+		$names[ (int) $row->id ] = (string) $row->name;
+	}
+	return $names;
+}
+
+/** The parent as a name: '' for none or a parent since deleted. */
+function minn_admin_jet_search_parent_label( $r, $names ) {
+	$p = trim( (string) $r->parent );
+	if ( ! ctype_digit( $p ) ) {
+		return $p;
+	}
+	return isset( $names[ (int) $p ] ) ? $names[ (int) $p ] : '';
+}
+
+function minn_admin_jet_search_item( $r, $names = null ) {
+	if ( null === $names ) {
+		$names = minn_admin_jet_search_parent_names( array( $r ) );
+	}
 	return array(
 		'id'     => (int) $r->id,
 		'name'   => (string) $r->name,
@@ -51,7 +91,7 @@ function minn_admin_jet_search_item( $r ) {
 		// to it on every search, so a save that did not change it must not
 		// write back the count it loaded.
 		'weight_seen' => (int) $r->weight,
-		'parent' => (string) $r->parent,
+		'parent' => minn_admin_jet_search_parent_label( $r, $names ),
 	);
 }
 
@@ -170,7 +210,13 @@ add_action( 'rest_api_init', function () {
 					array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
 				) );
 				// phpcs:enable
-				return rest_ensure_response( array( 'items' => array_map( 'minn_admin_jet_search_item', $rows ? $rows : array() ), 'total' => $total ) );
+				$rows  = $rows ? $rows : array();
+				$names = minn_admin_jet_search_parent_names( $rows );
+				$items = array();
+				foreach ( $rows as $r ) {
+					$items[] = minn_admin_jet_search_item( $r, $names );
+				}
+				return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
 			},
 		),
 		array(
