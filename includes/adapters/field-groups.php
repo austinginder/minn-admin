@@ -19,6 +19,7 @@
  *             'id'         => 'my-plugin',
  *             'label'      => 'My Plugin',   // names the view's tab
  *             'cap'        => 'manage_options',
+ *             'plugin'     => 'my-plugin',   // its folder: the view leaves with it
  *             'collection' => array( … ),    // the usual collection descriptor
  *         );
  *         return $sources;
@@ -26,7 +27,10 @@
  *
  * `collection` is the ordinary collection vocabulary from
  * docs/for-plugin-authors.md, so a provider that already had a surface keeps
- * whatever it offered: columns, tabs, actions, create, import, open.
+ * whatever it offered: columns, tabs, actions, create, import, open. A
+ * source whose list is a post type it registered names it in `contentTypes`
+ * (ACF's groups are its acf-field-group post type), so the list stays while
+ * its wp-admin list does, as a surface's contentTypes does.
  *
  * @package minn-admin
  */
@@ -70,13 +74,15 @@ function minn_admin_field_group_sources() {
 				$extra[] = $view;
 			}
 		}
+		$types = isset( $source['contentTypes'] ) ? (array) $source['contentTypes'] : ( 'acf' === (string) $source['id'] ? array( 'pt:acf-field-group' ) : array() );
 		$out[] = array(
-			'id'         => (string) $source['id'],
-			'label'      => $label,
-			'cap'        => $cap,
-			'plugin'     => (array) ( $source['plugin'] ?? array() ),
-			'collection' => $collection,
-			'views'      => $extra,
+			'id'           => (string) $source['id'],
+			'label'        => $label,
+			'cap'          => $cap,
+			'plugin'       => (array) ( $source['plugin'] ?? array() ),
+			'contentTypes' => array_values( array_map( 'strval', $types ) ),
+			'collection'   => $collection,
+			'views'        => $extra,
 		);
 	}
 	return $out;
@@ -101,13 +107,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	foreach ( $sources as $source ) {
 		// Per-view capability, so a reader who may see one plugin's schema
 		// but not another's gets only the view they may have. The route's own
-		// permission callback is still the real gate.
-		$view        = $source['collection'];
-		$view['cap'] = $source['cap'];
-		$views[]     = $view;
+		// permission callback is still the real gate. And the view's own
+		// plugin, so a menu tool that hides that plugin takes its views away
+		// and leaves the others.
+		$own_keys = array( 'cap' => $source['cap'] );
+		if ( $source['plugin'] ) {
+			$own_keys['plugin'] = $source['plugin'];
+		}
+		if ( $source['contentTypes'] ) {
+			$own_keys['contentTypes'] = $source['contentTypes'];
+		}
+		$views[] = $own_keys + $source['collection'];
 		foreach ( $source['views'] as $own ) {
-			$own['cap'] = $source['cap'];
-			$views[]    = $own;
+			$views[] = $own_keys + $own;
 		}
 	}
 	$surfaces[ MINN_ADMIN_FIELD_GROUPS_SURFACE ] = array(
@@ -120,6 +132,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => $first['cap'],
 		'collection' => $first['collection'],
 	);
+	if ( $first['contentTypes'] ) {
+		$surfaces[ MINN_ADMIN_FIELD_GROUPS_SURFACE ]['contentTypes'] = $first['contentTypes'];
+	}
 	if ( $views ) {
 		$surfaces[ MINN_ADMIN_FIELD_GROUPS_SURFACE ]['views'] = $views;
 	}

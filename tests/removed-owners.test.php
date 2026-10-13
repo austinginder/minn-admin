@@ -201,6 +201,44 @@ try {
 		$registry = Minn_Admin_Surfaces::all();
 	}
 
+	// --- Field Groups: ACF's list stays with it, ACPT's view leaves with ACPT -
+	$fg_s      = $fg_id && isset( $registry[ $fg_id ] ) ? $registry[ $fg_id ] : null;
+	$fg_active = array_map( 'dirname', (array) get_option( 'active_plugins', array() ) );
+	$fg_dir    = (string) current( array_intersect( array( 'advanced-custom-fields-pro', 'advanced-custom-fields', 'secure-custom-fields' ), $fg_active ) );
+	$fg_now    = static function () use ( $fg_id ) {
+		foreach ( Minn_Admin_Surfaces::for_current_user() as $s ) {
+			if ( $fg_id === $s['id'] ) {
+				return $s;
+			}
+		}
+		return null;
+	};
+	$fg_has_acpt = static function ( $s ) {
+		foreach ( (array) ( $s['views'] ?? array() ) as $v ) {
+			if ( false !== strpos( (string) ( $v['route'] ?? '' ), 'acpt/groups' ) ) {
+				return true;
+			}
+		}
+		return false;
+	};
+	if ( ! $fg_s || '' === $fg_dir || false === strpos( (string) ( $fg_s['collection']['route'] ?? '' ), 'acf/schema/groups' ) ) {
+		echo "SKIP  Field Groups: ACF's groups are not its main list here\n";
+	} else {
+		$store_hiding( array( 'owners' => array( $fg_dir ), 'paged' => array( $fg_dir ), 'content' => array( $fg_dir => array( 'pt:acf-field-group' ) ) ) );
+		$check( 'Field Groups stays while ACF\'s Field Groups list is in the menu and its other pages are hidden', null !== $fg_now() );
+		$store_hiding( array( 'owners' => array( $fg_dir ), 'paged' => array( $fg_dir ) ) );
+		$check( 'control: with that list hidden too, Field Groups leaves', null === $fg_now() );
+		if ( ! $fg_has_acpt( $fg_s ) ) {
+			echo "SKIP  Field Groups has no ACPT view here\n";
+		} else {
+			$store_hiding( array( 'owners' => array( 'advanced-custom-post-type' ), 'paged' => array( $fg_dir, 'advanced-custom-post-type' ) ) );
+			$fg_after = $fg_now();
+			$check( 'with only ACPT hidden, its view leaves Field Groups and ACF\'s groups stay', null !== $fg_after && ! $fg_has_acpt( $fg_after ) );
+			$store_hiding( array() );
+			$check( 'control: with nothing hidden, the ACPT view shows', $fg_has_acpt( $fg_now() ) );
+		}
+	}
+
 	// --- NI-6: JetSmartFilters' Filters do not leave with JetSearch -----------
 	if ( ! isset( $registry['jet-search'] ) || ! function_exists( 'minn_admin_jsf_active' ) || ! minn_admin_jsf_active() ) {
 		echo "SKIP  NI-6 needs JetSearch and JetSmartFilters\n";
