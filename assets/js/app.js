@@ -30499,18 +30499,23 @@
 				};
 			}
 			case 'Homepage': {
-				const modeField = combo( 'show_on_front', __( 'Your homepage displays' ), [ [ 'posts', __( 'Latest posts' ) ], [ 'page', __( 'A static page' ) ] ], s.show_on_front );
+				// The mode shown can run ahead of the stored one. The pick
+				// lives beside the cached settings, never in them: the save
+				// compares against those, and a pick written into them read
+				// as unchanged and was never sent.
+				const mode = cache.homepageMode || s.show_on_front;
+				const modeField = combo( 'show_on_front', __( 'Your homepage displays' ), [ [ 'posts', __( 'Latest posts' ) ], [ 'page', __( 'A static page' ) ] ], mode );
 				// Re-render when the mode flips so the page pickers appear —
 				// a strict combobox pick fires no change event, only onPick.
 				settingsCombos.show_on_front.onPick = ( v ) => {
-					if ( v === cache.values.show_on_front ) return;
-					cache.values.show_on_front = v;
+					if ( v === mode ) return;
+					cache.homepageMode = v;
 					renderSettings();
 				};
 				return {
 					sub: __( 'What visitors land on, and how much shows.' ),
 					fields: modeField
-						+ ( s.show_on_front === 'page' ? combo( 'page_on_front', __( 'Homepage' ), pageOptions, s.page_on_front ) + combo( 'page_for_posts', __( 'Posts page' ), pageOptions, s.page_for_posts ) : '' )
+						+ ( mode === 'page' ? combo( 'page_on_front', __( 'Homepage' ), pageOptions, s.page_on_front ) + combo( 'page_for_posts', __( 'Posts page' ), pageOptions, s.page_for_posts ) : '' )
 						+ text( 'posts_per_page', __( 'Blog pages show at most' ), s.posts_per_page ),
 					toggles: '',
 				};
@@ -30794,6 +30799,7 @@
 		$$( '.minn-settings-nav-item', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				state.settingsSection = btn.dataset.section;
+				cache.homepageMode = null;
 				renderTopbar();
 				renderSettings();
 			} )
@@ -31245,6 +31251,7 @@
 				if ( Object.keys( payload ).length ) {
 					try {
 						cache.values = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( payload ) } );
+						cache.homepageMode = null;
 						// Maintenance mode / search-engine visibility live here —
 						// refresh the banner + chip without a reload.
 						if ( 'minn_admin_maintenance' in payload || 'blog_public' in payload ) refreshVisibility();
