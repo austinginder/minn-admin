@@ -598,6 +598,9 @@ add_action( 'rest_api_init', function () {
 			$args  = array_merge( $args, $range_args );
 			$where_sql = implode( ' AND ', $where );
 
+			// Newest submission first by the time Fluent stored, so an entry
+			// added out of order (an import) lands where it belongs; the id
+			// breaks ties so pages never overlap.
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$total = (int) ( $args
 				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$subs_table}` s WHERE {$where_sql}", ...$args ) )
@@ -607,7 +610,7 @@ add_action( 'rest_api_init', function () {
 				 FROM `{$subs_table}` s
 				 LEFT JOIN `{$forms_table}` f ON f.id = s.form_id
 				 WHERE {$where_sql}
-				 ORDER BY s.id DESC
+				 ORDER BY s.created_at DESC, s.id DESC
 				 LIMIT %d OFFSET %d",
 				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );

@@ -531,8 +531,11 @@ add_action( 'rest_api_init', function () {
 			$where_sql = 'WHERE ' . implode( ' AND ', $where );
 			$count_sql = "SELECT COUNT(*) FROM {$table} {$where_sql}";
 			$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );
+			// Newest submission first by the date WPForms stored, so an entry
+			// added out of order (an import) lands where it belongs; the id
+			// breaks ties so pages never overlap.
 			$rows      = $wpdb->get_results( $wpdb->prepare(
-				"SELECT entry_id, form_id, status, viewed, starred, fields, date FROM {$table} {$where_sql} ORDER BY entry_id DESC LIMIT %d OFFSET %d",
+				"SELECT entry_id, form_id, status, viewed, starred, fields, date FROM {$table} {$where_sql} ORDER BY `date` DESC, entry_id DESC LIMIT %d OFFSET %d",
 				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
 			// phpcs:enable

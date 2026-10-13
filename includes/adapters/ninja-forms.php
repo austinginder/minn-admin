@@ -413,8 +413,13 @@ add_action( 'rest_api_init', function () {
 				'date_query'     => $date_query,
 				'posts_per_page' => $per_page,
 				'paged'          => $page,
-				'orderby'        => 'ID',
-				'order'          => 'DESC',
+				// Newest submission first by its post date, so an entry added
+				// out of order (an import) lands where it belongs; the id breaks
+				// ties so pages never overlap.
+				'orderby'        => array(
+					'date' => 'DESC',
+					'ID'   => 'DESC',
+				),
 				'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 				'no_found_rows'  => false,
 			) );
