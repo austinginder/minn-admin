@@ -267,7 +267,20 @@ function minn_admin_asset_cleanup_tab_shape( $tab_id ) {
 	$tab      = $schema[ $tab_id ];
 	$groups   = array();
 	$values   = array();
+	// A save is refused until Asset CleanUp has saved its settings once
+	// (minn_admin_asset_cleanup_save()), so until then every field is
+	// locked, with the reason and the way to its Settings page.
+	$unknown = null === minn_admin_asset_cleanup_stored_settings();
 	foreach ( $tab['groups'] as $group ) {
+		if ( $unknown ) {
+			$groups[] = array(
+				'title'  => $group['title'],
+				'desc'   => $groups ? '' : __( 'Asset CleanUp has not saved its settings yet, so Minn cannot tell its defaults from your choices. Save its Settings page once, then try again.', 'minn-admin' ),
+				'fields' => array(),
+				'locked' => count( $group['fields'] ),
+			);
+			continue;
+		}
 		$fields = array();
 		foreach ( $group['fields'] as $f ) {
 			$out = array(

@@ -273,4 +273,87 @@ if ( ! function_exists( 'minn_admin_autoptimize_active' ) || ! minn_admin_autopt
 	}
 }
 
+// --- NI-11 class: Asset CleanUp before its settings were ever saved -----------
+// Asset CleanUp Lite does not load on REST requests, so its defaults are not
+// there for a save to start from, and Minn refuses every save until its own
+// Settings page has been saved once. The tab drew editable fields anyway. A
+// child run makes the request look like the app's (REST, so it does not
+// load) and reads the row as never saved; writes to the row are blocked
+// there, and the row is compared before and after.
+if ( ! function_exists( 'minn_admin_asset_cleanup_active' ) || ! minn_admin_asset_cleanup_active() ) {
+	$skip( 'NI-11 Asset CleanUp inactive' );
+} elseif ( ! class_exists( 'WP_CLI' ) || ! function_exists( 'proc_open' ) ) {
+	$skip( 'NI-11 Asset CleanUp needs WP-CLI and a child process' );
+} else {
+	global $wpdb;
+	$acu_key  = minn_admin_asset_cleanup_option_key();
+	$acu_row  = function () use ( $wpdb, $acu_key ) {
+		return $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $acu_key ), ARRAY_A );
+	};
+	$acu_was  = $acu_row();
+	$acu_base = realpath( sys_get_temp_dir() ) . '/minn-probe-acu-' . wp_generate_password( 8, false, false );
+	wp_mkdir_p( $acu_base );
+	file_put_contents(
+		$acu_base . '/child.php',
+		"<?php\n"
+		. "\$shape = function () { \$d = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/asset-cleanup/settings/cleanup' ) ); \$n = 0; \$l = 0;\n"
+		. "\tforeach ( (array) ( \$d->get_data()['groups'] ?? array() ) as \$g ) { \$n += count( (array) ( \$g['fields'] ?? array() ) ); \$l += (int) ( \$g['locked'] ?? 0 ); }\n"
+		. "\treturn array( \$d->get_status(), \$n, \$l ); };\n"
+		. "\$out = array( 'loaded' => class_exists( '\\\\WpAssetCleanUp\\\\Settings', false ), 'get' => \$shape() );\n"
+		. "if ( defined( 'MINN_PROBE_ACU_UNSAVED' ) ) {\n"
+		. "\t\$p = new WP_REST_Request( 'POST', '/minn-admin/v1/asset-cleanup/settings/cleanup' ); \$p->set_header( 'content-type', 'application/json' ); \$p->set_body( wp_json_encode( array( 'values' => array( 'disable_emojis' => true ) ) ) );\n"
+		. "\t\$out['post'] = rest_do_request( \$p )->get_status();\n"
+		. "}\n"
+		. "echo 'MINNPROBE ' . wp_json_encode( \$out ) . \"\\n\";\n"
+	);
+	$acu_rest = "<?php\nWP_CLI::add_wp_hook( 'muplugins_loaded', function () { \$_SERVER['REQUEST_URI'] = '/wp-json/minn-admin/v1/asset-cleanup/settings/cleanup'; } );\n";
+	file_put_contents( $acu_base . '/rest.php', $acu_rest );
+	file_put_contents(
+		$acu_base . '/unsaved.php',
+		$acu_rest
+		. "define( 'MINN_PROBE_ACU_UNSAVED', true );\n"
+		. "WP_CLI::add_wp_hook( 'pre_option_' . " . var_export( $acu_key, true ) . ", function () { return ''; } );\n"
+		. "WP_CLI::add_wp_hook( 'pre_update_option_' . " . var_export( $acu_key, true ) . ", function ( \$value, \$old ) { return \$old; }, 10, 2 );\n"
+	);
+	$acu_run = function ( $require ) use ( $acu_base ) {
+		$o = WP_CLI::runcommand( 'eval-file ' . escapeshellarg( $acu_base . '/child.php' ) . ' --require=' . escapeshellarg( $acu_base . '/' . $require ), array( 'launch' => true, 'return' => 'all', 'exit_error' => false ) );
+		return preg_match( '/^MINNPROBE (.+)$/m', (string) $o->stdout, $m ) ? (array) json_decode( $m[1], true ) : array( 'error' => substr( trim( $o->stderr . ' ' . $o->stdout ), 0, 200 ) );
+	};
+	try {
+		$acu_unsaved = $acu_run( 'unsaved.php' );
+		if ( ! isset( $acu_unsaved['get'] ) || ! empty( $acu_unsaved['loaded'] ) ) {
+			$skip( 'NI-11 Asset CleanUp: the child run did not answer as a REST request would — ' . wp_json_encode( $acu_unsaved ) );
+		} else {
+			list( $acu_st, $acu_n, $acu_l ) = $acu_unsaved['get'];
+			$check( 'NI-11 Asset CleanUp, never saved, on a REST request: the tab draws no editable field and locks them all', 200 === $acu_st && 0 === $acu_n && $acu_l > 0, "{$acu_st} fields {$acu_n} locked {$acu_l}" );
+			$check( 'NI-11 control: a save there is still refused, and the stored row is untouched', 409 === ( $acu_unsaved['post'] ?? null ) && $acu_row() === $acu_was, wp_json_encode( $acu_unsaved['post'] ?? null ) );
+		}
+		if ( ! $acu_was || '' === (string) $acu_was['option_value'] ) {
+			$skip( 'NI-11 Asset CleanUp: no saved settings here for the control' );
+		} else {
+			$acu_saved = $acu_run( 'rest.php' );
+			list( $acu_st, $acu_n, $acu_l ) = array_pad( (array) ( $acu_saved['get'] ?? array() ), 3, 0 );
+			$check( 'NI-11 control: with its settings saved once, the tab has editable fields', 200 === $acu_st && $acu_n > 0 && 0 === $acu_l, "{$acu_st} fields {$acu_n} locked {$acu_l}" );
+		}
+	} finally {
+		foreach ( array( 'child.php', 'rest.php', 'unsaved.php' ) as $f ) {
+			if ( is_file( $acu_base . '/' . $f ) ) {
+				unlink( $acu_base . '/' . $f );
+			}
+		}
+		if ( is_dir( $acu_base ) ) {
+			rmdir( $acu_base );
+		}
+		if ( $acu_row() !== $acu_was ) {
+			if ( is_array( $acu_was ) ) {
+				$wpdb->update( $wpdb->options, $acu_was, array( 'option_name' => $acu_key ) );
+			} else {
+				$wpdb->delete( $wpdb->options, array( 'option_name' => $acu_key ) );
+			}
+			wp_cache_delete( $acu_key, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+		}
+	}
+}
+
 $summary();
