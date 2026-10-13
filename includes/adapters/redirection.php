@@ -146,12 +146,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'url', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)', 'sort' => 'source' ),
 				array( 'key' => 'action_data.url', 'label' => __( 'Target', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
 				array( 'key' => 'action_code', 'label' => __( 'Code', 'minn-admin' ), 'format' => 'mono', 'width' => '64px' ),
+				// Their enabled flag: a disabled rule reads Inactive.
+				array( 'key' => 'enabled', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
 				array( 'key' => 'hits', 'label' => __( 'Hits', 'minn-admin' ), 'format' => 'num', 'width' => '72px', 'sort' => 'last_count' ),
-				// last_access is stored via gmdate (UTC, no zone).
-				array( 'key' => 'last_access', 'label' => __( 'Last hit', 'minn-admin' ), 'format' => 'ago', 'utc' => true, 'sort' => 'last_access' ),
+				// last_hit is added to their list below (ISO, UTC); their own
+				// last_access is the date alone.
+				array( 'key' => 'last_hit', 'label' => __( 'Last hit', 'minn-admin' ), 'format' => 'ago', 'sort' => 'last_access' ),
 			),
 			'detail'    => array(
-				'skip' => array( 'match_data', 'match_type', 'match_url', 'position', 'group_id' ),
+				'skip' => array( 'match_data', 'match_type', 'match_url', 'position', 'group_id', 'last_access' ),
 				// Basic in-place edit — Redirection's own update endpoint (POST /redirect/{id}).
 				// That endpoint rebuilds the WHOLE row from the payload, so `preserve`
 				// carries everything the form does not edit: source flags and options
@@ -231,6 +234,48 @@ add_action( 'rest_api_init', function () {
 	if ( ! defined( 'REDIRECTION_VERSION' ) || ! function_exists( 'red_get_options' ) ) {
 		return;
 	}
+
+	// Their redirect list sends last_access as a date with no time
+	// (date_i18n with the date format), so a hit an hour ago read as hours
+	// older, counted from midnight. The time is in their table, written by
+	// visit() with MySQL NOW(), the database's own clock and zone, which
+	// UNIX_TIMESTAMP() reads back in the same zone. Added to each item of
+	// that list as last_hit; nothing else about their answer changes.
+	add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
+		if ( ! $request instanceof WP_REST_Request || 'GET' !== $request->get_method() || '/redirection/v1/redirect' !== $request->get_route() ) {
+			return $response;
+		}
+		$data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
+		if ( ! is_array( $data ) || empty( $data['items'] ) || ! is_array( $data['items'] ) ) {
+			return $response;
+		}
+		$ids = array();
+		foreach ( $data['items'] as $item ) {
+			if ( is_array( $item ) && ! empty( $item['id'] ) ) {
+				$ids[] = (int) $item['id'];
+			}
+		}
+		if ( ! $ids ) {
+			return $response;
+		}
+		global $wpdb;
+		// A rule never hit (or reset) holds 1970-01-01 00:00:00.
+		$stamps = $wpdb->get_results( 'SELECT id, CASE WHEN last_access > \'1970-01-02\' THEN UNIX_TIMESTAMP(last_access) ELSE 0 END AS ts FROM ' . $wpdb->prefix . 'redirection_items WHERE id IN (' . implode( ',', $ids ) . ')' ); // phpcs:ignore WordPress.DB.PreparedSQL -- integer ids
+		$at = array();
+		foreach ( (array) $stamps as $r ) {
+			$at[ (int) $r->id ] = (int) $r->ts > 0 ? gmdate( 'c', (int) $r->ts ) : '';
+		}
+		foreach ( $data['items'] as $i => $item ) {
+			if ( is_array( $item ) && isset( $item['id'] ) ) {
+				$data['items'][ $i ]['last_hit'] = $at[ (int) $item['id'] ] ?? '';
+			}
+		}
+		if ( $response instanceof WP_REST_Response ) {
+			$response->set_data( $data );
+			return $response;
+		}
+		return $data;
+	}, 10, 3 );
 	$perm = function () {
 		$cap = apply_filters( 'redirection_role', 'manage_options' );
 		return current_user_can( $cap );
