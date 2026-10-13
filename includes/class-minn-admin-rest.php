@@ -2807,13 +2807,17 @@ class Minn_Admin_REST {
 		// untrusted for anyone who may not author dynamic data. This route
 		// renders unsaved markup the caller wrote, which is that same trust,
 		// so for such a caller no vendor dynamic data resolves here.
-		// GenerateBlocks answers who may author it; its own stripper empties
-		// the tags. Otter's text and image resolvers are taken off for the
-		// render, so its elements show their placeholder text.
-		$gb_untrusted = class_exists( 'GenerateBlocks_Dynamic_Tag_Security' )
-			&& method_exists( 'GenerateBlocks_Dynamic_Tag_Security', 'user_can_author_dynamic_data' )
-			&& method_exists( 'GenerateBlocks_Dynamic_Tag_Security', 'replace_dynamic_tags_with_empty' )
-			&& ! GenerateBlocks_Dynamic_Tag_Security::user_can_author_dynamic_data();
+		// GenerateBlocks answers who may author it (before 2.4, its 2.4
+		// default rule stands in); its own stripper empties the tags. Otter's
+		// text and image resolvers are taken off for the render, so its
+		// elements show their placeholder text.
+		$gb_untrusted = false;
+		if ( class_exists( 'GenerateBlocks_Dynamic_Content' ) ) {
+			$gb_untrusted = class_exists( 'GenerateBlocks_Dynamic_Tag_Security' )
+				&& method_exists( 'GenerateBlocks_Dynamic_Tag_Security', 'user_can_author_dynamic_data' )
+				? ! GenerateBlocks_Dynamic_Tag_Security::user_can_author_dynamic_data()
+				: ! current_user_can( 'unfiltered_html' ) && ! current_user_can( 'manage_options' );
+		}
 		$otter_parked = array();
 		if ( ! current_user_can( 'unfiltered_html' ) && ! current_user_can( 'manage_options' )
 			&& class_exists( '\ThemeIsle\GutenbergBlocks\Plugins\Dynamic_Content' ) ) {
@@ -2832,7 +2836,23 @@ class Minn_Admin_REST {
 		foreach ( array_slice( $blocks, 0, 100 ) as $raw ) {
 			$raw = (string) $raw;
 			if ( $gb_untrusted ) {
-				$raw = GenerateBlocks_Dynamic_Tag_Security::replace_dynamic_tags_with_empty( $raw );
+				// GenerateBlocks' first blocks (headline, button, image,
+				// container) read dynamic data from their attributes, with no
+				// tag to strip, and GenerateBlocks blanks them only on core's
+				// block renderer. A block its own save gate would flag
+				// previews empty here.
+				$gb_marked = method_exists( 'GenerateBlocks_Dynamic_Content', 'content_has_dynamic_attribute_markers' )
+					? GenerateBlocks_Dynamic_Content::content_has_dynamic_attribute_markers( $raw )
+					: false !== stripos( $raw, 'useDynamicData' );
+				$gb_strip  = class_exists( 'GenerateBlocks_Dynamic_Tag_Security' )
+					&& method_exists( 'GenerateBlocks_Dynamic_Tag_Security', 'replace_dynamic_tags_with_empty' );
+				if ( $gb_marked || ( ! $gb_strip && false !== strpos( $raw, '{{' ) ) ) {
+					$rendered[] = '';
+					continue;
+				}
+				if ( $gb_strip ) {
+					$raw = GenerateBlocks_Dynamic_Tag_Security::replace_dynamic_tags_with_empty( $raw );
+				}
 			}
 			$html = do_blocks( $raw );
 			// Embed blocks keep a bare URL in their saved HTML; the front end
