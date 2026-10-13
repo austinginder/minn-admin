@@ -193,6 +193,13 @@ try {
 			$item = $find( $list['items'] ?? array(), $sf_now );
 			$check( 'D-09 SureForms: an entry sent just now lists at the moment it was sent', $item && strtotime( (string) $item['date'] ) === $sf_now_ts, $st . ' ' . ( $item ? $hours_off( $item['date'], $sf_now_ts ) : 'row missing' ) );
 
+			// D-04: the entry header and the Submission panel print the
+			// Submitted row as it comes, and it came as a raw ISO string.
+			list( $st, $sec ) = $call( 'GET', "/minn-admin/v1/sureforms/entries/{$sf_now}" );
+			$sub  = $row_of( $sec, __( 'Submitted', 'minn-admin' ) );
+			$want = wp_date( 'M j, Y g:i a', $sf_now_ts );
+			$check( 'D-04 SureForms: the entry header and Submission panel get the date on the site\'s clock, not a raw ISO string', $sub && $want === $sub['value'], $st . ' got ' . wp_json_encode( $sub['value'] ?? null ) . ' want ' . wp_json_encode( $want ) );
+
 			list( $st, $sf_after ) = $call( 'GET', '/minn-admin/v1/sureforms/status' );
 			$d_y = (int) ( $point( $sf_after, $yesterday )['value'] ?? 0 ) - (int) ( $point( $sf_before, $yesterday )['value'] ?? 0 );
 			$d_t = (int) ( $point( $sf_after, $today )['value'] ?? 0 ) - (int) ( $point( $sf_before, $today )['value'] ?? 0 );

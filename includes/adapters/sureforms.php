@@ -415,9 +415,12 @@ add_action( 'rest_api_init', function () {
 					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->ID ),
 					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
 				);
+				// The entry header and the Submission panel print this as it
+				// comes, so it is a date on the site's clock, as on the other
+				// form providers, not an ISO string.
 				$iso = minn_admin_db_local_to_utc_iso( $row->created_at );
 				if ( '' !== $iso ) {
-					$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => $iso );
+					$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => wp_date( 'M j, Y g:i a', strtotime( $iso ) ) );
 				}
 				// Their entry activity log (2.12.8+ also records the
 				// notification emails): newest first, { title, messages[],
