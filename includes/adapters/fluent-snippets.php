@@ -22,6 +22,19 @@ function minn_admin_fluent_snippets_active() {
 }
 
 /**
+ * A snippet's updated_at as ISO 8601 UTC. FluentSnippets stamps it with
+ * gmdate() on create and date() on update, which is UTC under WordPress,
+ * and stores it bare, which the client would read as site time.
+ *
+ * @param string $stamp Stored updated_at.
+ * @return string
+ */
+function minn_admin_fluent_utc_iso( $stamp ) {
+	$ts = '' !== (string) $stamp ? strtotime( $stamp . ' UTC' ) : false;
+	return $ts ? gmdate( 'c', $ts ) : '';
+}
+
+/**
  * Map a Fluent snippet (list index row or full find result) to the shared shape.
  *
  * @param array $row List row or full snippet with meta/code.
@@ -50,7 +63,7 @@ function minn_admin_fluent_item( $row ) {
 			'run_at'   => isset( $meta['run_at'] ) ? (string) $meta['run_at'] : 'all',
 			'active'   => ( 'published' === $status ),
 			'priority' => isset( $meta['priority'] ) ? (int) $meta['priority'] : 10,
-			'modified' => isset( $meta['updated_at'] ) ? (string) $meta['updated_at'] : '',
+			'modified' => isset( $meta['updated_at'] ) ? minn_admin_fluent_utc_iso( $meta['updated_at'] ) : '',
 		);
 	}
 
@@ -66,7 +79,7 @@ function minn_admin_fluent_item( $row ) {
 		'run_at'   => isset( $row['run_at'] ) ? (string) $row['run_at'] : 'all',
 		'active'   => ( isset( $row['status'] ) && 'published' === $row['status'] ),
 		'priority' => isset( $row['priority'] ) ? (int) $row['priority'] : 10,
-		'modified' => isset( $row['updated_at'] ) ? (string) $row['updated_at'] : '',
+		'modified' => isset( $row['updated_at'] ) ? minn_admin_fluent_utc_iso( $row['updated_at'] ) : '',
 	);
 }
 
