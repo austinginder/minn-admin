@@ -508,6 +508,7 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 			const offsite = [];
 			const isOff = ( u ) => 'h3-probe.invalid' === u.hostname;
 			const onOff = ( route ) => { offsite.push( route.request().url() ); return route.abort(); };
+			let liveNonce = null;
 			await page.route( isMdb, onMdb );
 			await page.route( '**/admin-ajax.php**', onAjax );
 			await page.route( isOff, onOff );
@@ -529,7 +530,7 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 				t.check( 'H3: a WP Migrate route naming another host is refused, nonce unsent', 0 === offsite.length && /cross-origin/i.test( err ), JSON.stringify( { offsite, err: err.trim().slice( 0, 80 ) } ) );
 
 				// A stale nonce is refreshed and the call retried, as every apiRes call is.
-				const liveNonce = await page.evaluate( () => window.MINN.nonce );
+				liveNonce = await page.evaluate( () => window.MINN.nonce );
 				await page.evaluate( () => { window.MINN.wpMigrate.licensed = true; window.MINN.nonce = 'h3-stale'; } );
 				calls.length = 0;
 				err = await connect();
@@ -554,6 +555,8 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 					t.check( 'H3 control: the run button is offered once connected', false, 'no enabled [data-migrun]' );
 				}
 			} finally {
+				// The fixtures below are removed with this nonce.
+				await page.evaluate( ( n ) => { if ( n && 'h3-stale' === window.MINN.nonce ) window.MINN.nonce = n; }, liveNonce ).catch( () => {} );
 				await page.unroute( isMdb, onMdb ).catch( () => {} );
 				await page.unroute( '**/admin-ajax.php**', onAjax ).catch( () => {} );
 				await page.unroute( isOff, onOff ).catch( () => {} );
