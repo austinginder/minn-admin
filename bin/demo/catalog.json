@@ -1,0 +1,426 @@
+{
+	"categories": [
+		{
+			"id": "forms",
+			"title": "Forms",
+			"role": "Entries as contact cards",
+			"plugins": [
+				{"name": "Gravity Forms", "url": "https://www.gravityforms.com/", "adapters": ["gravity-forms.php", "gravity-forms-builder.php", "gravity-forms-confirmations.php", "gravity-forms-notifications.php", "gravity-forms-entry-edit.php"], "surface": "gravity-forms"},
+				{"name": "WPForms", "url": "https://wpforms.com/", "adapters": ["wpforms.php", "wpforms-emails.php", "wpforms-entry-edit.php"], "surface": "wpforms"},
+				{"name": "Ninja Forms", "url": "https://wordpress.org/plugins/ninja-forms/", "adapters": ["ninja-forms.php", "ninja-forms-entry-edit.php"], "surface": "ninja-forms"},
+				{"name": "Fluent Forms", "url": "https://wordpress.org/plugins/fluentform/", "adapters": ["fluent-forms.php", "fluent-forms-emails.php"], "surface": "fluent-forms"},
+				{"name": "Elementor Pro", "url": "https://elementor.com/", "adapters": ["elementor-forms.php", "elementor-forms-entry-edit.php"], "surface": "elementor-forms"},
+				{"name": "Contact Form 7 + Flamingo", "url": "https://wordpress.org/plugins/flamingo/", "adapters": ["cf7-flamingo.php", "cf7-mail.php"], "surface": "cf7"},
+				{"name": "CFDB7", "url": "https://wordpress.org/plugins/contact-form-cfdb7/", "adapters": ["cfdb7.php"], "surface": "cfdb7"},
+				{"name": "Forminator", "url": "https://wordpress.org/plugins/forminator/", "adapters": ["forminator.php"], "surface": "forminator"},
+				{"name": "Formidable", "url": "https://wordpress.org/plugins/formidable/", "adapters": ["formidable.php"], "surface": "formidable"},
+				{"name": "Everest Forms", "url": "https://wordpress.org/plugins/everest-forms/", "adapters": ["everest-forms.php"], "surface": "everest-forms"},
+				{"name": "SureForms", "url": "https://wordpress.org/plugins/sureforms/", "adapters": ["sureforms.php"], "surface": "sureforms"},
+				{"name": "Bricks", "url": "https://bricksbuilder.io/", "adapters": ["bricks.php"], "surface": "bricks-forms"}
+			]
+		},
+		{
+			"id": "email",
+			"title": "Email",
+			"role": "Log, settings, routing, resend",
+			"plugins": [
+				{"name": "Gravity SMTP", "url": "https://www.gravityforms.com/gravity-smtp/", "adapters": ["gravity-smtp.php"], "surface": "gravity-smtp"},
+				{"name": "FluentSMTP", "url": "https://wordpress.org/plugins/fluent-smtp/", "adapters": ["fluent-smtp.php"], "surface": "fluent-smtp"},
+				{"name": "WP Mail SMTP", "url": "https://wordpress.org/plugins/wp-mail-smtp/", "adapters": ["wp-mail-smtp.php"], "surface": "wp-mail-smtp"},
+				{"name": "Post SMTP", "url": "https://wordpress.org/plugins/post-smtp/", "adapters": ["post-smtp.php"], "surface": "post-smtp"},
+				{"name": "WP Mail Logging", "url": "https://wordpress.org/plugins/wp-mail-logging/", "adapters": ["wp-mail-logging.php"], "surface": "wp-mail-logging"},
+				{"name": "SureMails", "url": "https://wordpress.org/plugins/suremails/", "adapters": ["suremails.php"], "surface": "suremails"},
+				{"name": "Site Mailer", "url": "https://wordpress.org/plugins/site-mailer/", "adapters": ["site-mailer.php"], "surface": "site-mailer"}
+			]
+		},
+		{
+			"id": "activity-log",
+			"title": "Activity Log",
+			"role": "One audit feed",
+			"plugins": [
+				{"name": "Simple History", "url": "https://wordpress.org/plugins/simple-history/", "adapters": ["simple-history.php"], "surface": "simple-history"},
+				{"name": "WP Activity Log", "url": "https://wordpress.org/plugins/wp-security-audit-log/", "adapters": ["wp-activity-log.php"], "surface": "wp-activity-log"},
+				{"name": "Activity Log", "url": "https://wordpress.org/plugins/aryo-activity-log/", "adapters": ["aryo-activity-log.php"], "surface": "aryo-activity-log"},
+				{"name": "Stream", "url": "https://wordpress.org/plugins/stream/", "adapters": ["stream.php"], "surface": "stream"},
+				{"name": "All-In-One Security", "url": "https://wordpress.org/plugins/all-in-one-wp-security-and-firewall/", "adapters": ["all-in-one-security.php"], "surface": "all-in-one-security"},
+				{"name": "Wordfence", "url": "https://wordpress.org/plugins/wordfence/", "adapters": ["wordfence.php"], "surface": "wordfence"},
+				{"name": "Limit Login Attempts", "url": "https://wordpress.org/plugins/limit-login-attempts-reloaded/", "adapters": ["limit-login-attempts.php"], "surface": "limit-login-attempts"},
+				{"name": "Solid Security", "url": "https://wordpress.org/plugins/better-wp-security/", "adapters": ["solid-security.php"], "surface": "solid-security"},
+				{"name": "Sucuri", "url": "https://wordpress.org/plugins/sucuri-scanner/", "adapters": ["sucuri.php"], "surface": "sucuri"}
+			]
+		},
+		{
+			"id": "redirects",
+			"title": "Redirects",
+			"role": "Redirects, 404s and broken links",
+			"plugins": [
+				{"name": "Redirection", "url": "https://wordpress.org/plugins/redirection/", "adapters": ["redirection.php"], "surface": "redirection"},
+				{"name": "Rank Math", "url": "https://wordpress.org/plugins/seo-by-rank-math/", "adapters": ["rank-math-redirections.php"], "surface": "rank-math-redirections"},
+				{"name": "Safe Redirect Manager", "url": "https://wordpress.org/plugins/safe-redirect-manager/", "adapters": ["safe-redirect-manager.php"], "surface": "safe-redirect-manager"},
+				{"name": "Simple 301 Redirects", "url": "https://wordpress.org/plugins/simple-301-redirects/", "adapters": ["simple-301-redirects.php"], "surface": "simple-301-redirects"},
+				{"name": "301 Redirects", "url": "https://wordpress.org/plugins/eps-301-redirects/", "adapters": ["eps-301-redirects.php"], "surface": "eps-301-redirects"},
+				{"name": "Broken Link Checker", "url": "https://wordpress.org/plugins/broken-link-checker/", "adapters": ["broken-link-checker.php"], "surface": "broken-links"}
+			]
+		},
+		{
+			"id": "snippets",
+			"title": "Snippets",
+			"role": "List, toggle, edit, create",
+			"plugins": [
+				{"name": "Code Snippets", "url": "https://wordpress.org/plugins/code-snippets/", "adapters": ["code-snippets.php"], "surface": "code-snippets"},
+				{"name": "WPCode", "url": "https://wordpress.org/plugins/insert-headers-and-footers/", "adapters": ["wpcode.php"], "surface": "wpcode"},
+				{"name": "FluentSnippets", "url": "https://wordpress.org/plugins/easy-code-manager/", "adapters": ["fluent-snippets.php"], "surface": "fluent-snippets"},
+				{"name": "Simple Custom CSS and JS", "url": "https://wordpress.org/plugins/custom-css-js/", "adapters": ["custom-css-js.php"], "surface": "custom-css-js"},
+				{"name": "Header Footer Code Manager", "url": "https://wordpress.org/plugins/header-footer-code-manager/", "adapters": ["hfcm.php"], "surface": "hfcm"}
+			]
+		},
+		{
+			"id": "backups",
+			"title": "Backups",
+			"role": "Sets, health check, back up now",
+			"plugins": [
+				{"name": "UpdraftPlus", "url": "https://wordpress.org/plugins/updraftplus/", "adapters": ["updraftplus.php"], "surface": "updraftplus"},
+				{"name": "WPvivid", "url": "https://wordpress.org/plugins/wpvivid-backuprestore/", "adapters": ["wpvivid.php"], "surface": "wpvivid"},
+				{"name": "BackWPup", "url": "https://wordpress.org/plugins/backwpup/", "adapters": ["backwpup.php"], "surface": "backwpup"},
+				{"name": "All-in-One WP Migration", "url": "https://wordpress.org/plugins/all-in-one-wp-migration/", "adapters": ["ai1wm.php"], "surface": "ai1wm"},
+				{"name": "Duplicator", "url": "https://wordpress.org/plugins/duplicator/", "adapters": ["duplicator.php"], "surface": "duplicator"},
+				{"name": "Disembark", "url": "https://disembark.host/", "adapters": ["disembark.php"], "surface": "disembark"},
+				{"name": "WP Migrate", "url": "https://wpengine.com/plugin/wp-migrate/", "adapters": ["wp-migrate.php"], "surface": "wpmigrate-backups"}
+			]
+		},
+		{
+			"id": "performance",
+			"title": "Performance",
+			"role": "Settings and feature toggles",
+			"plugins": [
+				{"name": "Perfmatters", "url": "https://perfmatters.io/", "adapters": ["perfmatters.php"], "surface": "perfmatters"},
+				{"name": "Autoptimize", "url": "https://wordpress.org/plugins/autoptimize/", "adapters": ["autoptimize.php"], "surface": "autoptimize"},
+				{"name": "Asset CleanUp", "url": "https://wordpress.org/plugins/wp-asset-clean-up/", "adapters": ["asset-cleanup.php"], "surface": "asset-cleanup"},
+				{"name": "Performance Lab", "url": "https://wordpress.org/plugins/performance-lab/", "adapters": ["performance-lab.php"], "surface": "performance-lab"}
+			]
+		},
+		{
+			"id": "analytics",
+			"title": "Analytics",
+			"role": "The Overview traffic chart",
+			"plugins": [
+				{"name": "Koko Analytics", "url": "https://wordpress.org/plugins/koko-analytics/", "adapters": ["koko-analytics.php"]},
+				{"name": "WP Statistics", "url": "https://wordpress.org/plugins/wp-statistics/", "adapters": ["wp-statistics.php"]},
+				{"name": "Burst", "url": "https://wordpress.org/plugins/burst-statistics/", "adapters": ["burst-statistics.php"]},
+				{"name": "Independent Analytics", "url": "https://wordpress.org/plugins/independent-analytics/", "adapters": ["independent-analytics.php"]},
+				{"name": "AnalyticsWP", "url": "https://analyticswp.com/", "adapters": ["analyticswp.php"]},
+				{"name": "Plausible Analytics", "url": "https://wordpress.org/plugins/plausible-analytics/", "adapters": ["plausible-analytics.php"]},
+				{"name": "Matomo", "url": "https://wordpress.org/plugins/matomo/", "adapters": ["matomo.php"]},
+				{"name": "Connect Matomo", "url": "https://wordpress.org/plugins/wp-piwik/", "adapters": ["connect-matomo.php"]},
+				{"name": "MonsterInsights", "url": "https://wordpress.org/plugins/google-analytics-for-wordpress/", "adapters": ["monsterinsights.php"]},
+				{"name": "ExactMetrics", "url": "https://wordpress.org/plugins/google-analytics-dashboard-for-wp/", "adapters": ["monsterinsights.php"]},
+				{"name": "Site Kit", "url": "https://wordpress.org/plugins/google-site-kit/", "adapters": ["site-kit.php"]},
+				{"name": "Jetpack Stats", "url": "https://wordpress.org/plugins/jetpack/", "adapters": ["jetpack-stats.php"]}
+			]
+		},
+		{
+			"id": "caching",
+			"title": "Caching",
+			"role": "Clear site cache from ⌘K",
+			"plugins": [
+				{"name": "Kinsta", "url": "https://kinsta.com/", "adapters": ["cache-purge.php"]},
+				{"name": "LiteSpeed Cache", "url": "https://wordpress.org/plugins/litespeed-cache/", "adapters": ["cache-purge.php"]},
+				{"name": "WP Super Cache", "url": "https://wordpress.org/plugins/wp-super-cache/", "adapters": ["cache-purge.php"]},
+				{"name": "W3 Total Cache", "url": "https://wordpress.org/plugins/w3-total-cache/", "adapters": ["cache-purge.php"]},
+				{"name": "WP Rocket", "url": "https://wp-rocket.me/", "adapters": ["cache-purge.php"]},
+				{"name": "WP Fastest Cache", "url": "https://wordpress.org/plugins/wp-fastest-cache/", "adapters": ["cache-purge.php"]},
+				{"name": "SiteGround Optimizer", "url": "https://wordpress.org/plugins/sg-cachepress/", "adapters": ["cache-purge.php"]},
+				{"name": "Autoptimize", "url": "https://wordpress.org/plugins/autoptimize/", "adapters": ["cache-purge.php"]},
+				{"name": "WP-Optimize", "url": "https://wordpress.org/plugins/wp-optimize/", "adapters": ["cache-purge.php"]},
+				{"name": "Cache Enabler", "url": "https://wordpress.org/plugins/cache-enabler/", "adapters": ["cache-purge.php"]},
+				{"name": "Hummingbird", "url": "https://wordpress.org/plugins/hummingbird-performance/", "adapters": ["cache-purge.php"]},
+				{"name": "Elementor CSS", "url": "https://elementor.com/", "adapters": ["cache-purge.php"]},
+				{"name": "SpeedyCache", "url": "https://wordpress.org/plugins/speedycache/", "adapters": ["cache-purge.php"]},
+				{"name": "Redis Object Cache", "url": "https://wordpress.org/plugins/redis-cache/", "adapters": ["cache-purge.php"]},
+				{"name": "Breeze", "url": "https://wordpress.org/plugins/breeze/", "adapters": ["cache-purge.php"]},
+				{"name": "Nginx Helper", "url": "https://wordpress.org/plugins/nginx-helper/", "adapters": ["cache-purge.php"]},
+				{"name": "Cloudflare", "url": "https://wordpress.org/plugins/cloudflare/", "adapters": ["cache-purge.php"]}
+			]
+		},
+		{
+			"id": "seo",
+			"title": "SEO",
+			"role": "Editor sidebar panel",
+			"plugins": [
+				{"name": "Yoast SEO", "url": "https://wordpress.org/plugins/wordpress-seo/", "adapters": ["seo.php"]},
+				{"name": "Rank Math", "url": "https://wordpress.org/plugins/seo-by-rank-math/", "adapters": ["seo.php"]},
+				{"name": "All in One SEO", "url": "https://wordpress.org/plugins/all-in-one-seo-pack/", "adapters": ["seo.php"]},
+				{"name": "SEOPress", "url": "https://wordpress.org/plugins/wp-seopress/", "adapters": ["seo.php"]},
+				{"name": "SureRank", "url": "https://wordpress.org/plugins/surerank/", "adapters": ["seo.php"]},
+				{"name": "SiteSEO", "url": "https://wordpress.org/plugins/siteseo/", "adapters": ["seo.php"]},
+				{"name": "Squirrly SEO", "url": "https://wordpress.org/plugins/squirrly-seo/", "adapters": ["seo.php"]}
+			]
+		},
+		{
+			"id": "licenses",
+			"title": "Licenses",
+			"role": "Keys, connections, activate, verify",
+			"plugins": [
+				{"name": "Elementor Pro", "url": "https://elementor.com/", "adapters": ["licenses.php"]},
+				{"name": "ACF PRO", "url": "https://www.advancedcustomfields.com/pro/", "adapters": ["licenses.php"]},
+				{"name": "WP Rocket", "url": "https://wp-rocket.me/", "adapters": ["licenses.php"]},
+				{"name": "Gravity Forms", "url": "https://www.gravityforms.com/", "adapters": ["licenses.php"]},
+				{"name": "WPForms Pro", "url": "https://wpforms.com/", "adapters": ["licenses.php"]},
+				{"name": "Breakdance Pro", "url": "https://breakdance.com/", "adapters": ["licenses.php"]},
+				{"name": "Divi", "url": "https://www.elegantthemes.com/gallery/divi/", "adapters": ["licenses.php"]},
+				{"name": "Beaver Builder", "url": "https://www.wpbeaverbuilder.com/", "adapters": ["licenses.php"]},
+				{"name": "Bricks", "url": "https://bricksbuilder.io/", "adapters": ["licenses.php"]},
+				{"name": "Brizy Pro", "url": "https://www.brizy.io/", "adapters": ["licenses.php"]},
+				{"name": "Etch", "url": "https://etchwp.com/", "adapters": ["licenses.php"]},
+				{"name": "The Events Calendar", "url": "https://theeventscalendar.com/", "adapters": ["licenses.php"]},
+				{"name": "Kadence Blocks Pro", "url": "https://www.kadencewp.com/kadence-blocks/", "adapters": ["licenses.php"]},
+				{"name": "Smash Balloon", "url": "https://smashballoon.com/", "adapters": ["licenses.php"]},
+				{"name": "Yoast SEO Premium", "url": "https://yoast.com/wordpress/plugins/seo/", "adapters": ["licenses.php"]},
+				{"name": "WPMU DEV", "url": "https://wpmudev.com/", "adapters": ["licenses.php"]},
+				{"name": "SearchWP", "url": "https://searchwp.com/", "adapters": ["licenses.php"]},
+				{"name": "Search & Filter Pro", "url": "https://searchandfilter.com/", "adapters": ["licenses.php"]},
+				{"name": "Admin Columns Pro", "url": "https://www.admincolumns.com/", "adapters": ["licenses.php"]},
+				{"name": "Gravity Perks", "url": "https://gravitywiz.com/", "adapters": ["licenses.php"]},
+				{"name": "GP Premium", "url": "https://generatepress.com/", "adapters": ["licenses.php"]},
+				{"name": "Perfmatters", "url": "https://perfmatters.io/", "adapters": ["licenses.php"]},
+				{"name": "WP All Import", "url": "https://www.wpallimport.com/", "adapters": ["licenses.php"]},
+				{"name": "Slider Revolution", "url": "https://www.sliderrevolution.com/", "adapters": ["licenses.php"]},
+				{"name": "LayerSlider", "url": "https://layerslider.com/", "adapters": ["licenses.php"]},
+				{"name": "Avada", "url": "https://avada.com/", "adapters": ["licenses.php"]},
+				{"name": "Akismet", "url": "https://wordpress.org/plugins/akismet/", "adapters": ["licenses.php"]},
+				{"name": "WooCommerce.com", "url": "https://woocommerce.com/", "adapters": ["licenses.php"]},
+				{"name": "Site Kit", "url": "https://wordpress.org/plugins/google-site-kit/", "adapters": ["licenses.php"]},
+				{"name": "Jetpack", "url": "https://wordpress.org/plugins/jetpack/", "adapters": ["licenses.php"]},
+				{"name": "Freemius", "url": "https://freemius.com/", "adapters": ["licenses.php"]},
+				{"name": "EDD", "url": "https://easydigitaldownloads.com/", "adapters": ["licenses.php"]},
+				{"name": "SureCart", "url": "https://surecart.com/", "adapters": ["licenses.php"]},
+				{"name": "WP Migrate", "url": "https://wpengine.com/plugin/wp-migrate/", "adapters": ["licenses.php"]},
+				{"name": "Automatic.css", "url": "https://automaticcss.com/", "adapters": ["licenses.php"]},
+				{"name": "SEOPress Pro", "url": "https://www.seopress.org/seopress-pro/", "adapters": ["licenses.php"]},
+				{"name": "ACPT", "url": "https://acpt.io/", "adapters": ["licenses.php"]},
+				{"name": "HappyFiles Pro", "url": "https://happyfiles.io/", "adapters": ["licenses.php"]},
+				{"name": "Essential Addons", "url": "https://essential-addons.com/", "adapters": ["licenses.php"]},
+				{"name": "Crocoblock", "url": "https://crocoblock.com/", "adapters": ["licenses.php"]},
+				{"name": "Independent Analytics Pro", "url": "https://independentwp.com/", "adapters": ["licenses.php"]}
+			]
+		},
+		{
+			"id": "site-posture",
+			"title": "Site posture",
+			"role": "Visibility + security checks",
+			"plugins": [
+				{"name": "Wordfence", "url": "https://wordpress.org/plugins/wordfence/", "adapters": ["site-status.php", "wordfence.php"]},
+				{"name": "Solid Security", "url": "https://wordpress.org/plugins/better-wp-security/", "adapters": ["site-status.php"]},
+				{"name": "Really Simple SSL", "url": "https://wordpress.org/plugins/really-simple-ssl/", "adapters": ["site-status.php"]},
+				{"name": "WPS Hide Login", "url": "https://wordpress.org/plugins/wps-hide-login/", "adapters": ["wps-hide-login.php"]},
+				{"name": "WP Maintenance Mode", "url": "https://wordpress.org/plugins/wp-maintenance-mode/", "adapters": ["site-status.php"]},
+				{"name": "SeedProd", "url": "https://www.seedprod.com/", "adapters": ["site-status.php"]},
+				{"name": "Under Construction", "url": "https://wordpress.org/plugins/under-construction-page/", "adapters": ["site-status.php"]},
+				{"name": "Password Protected", "url": "https://wordpress.org/plugins/password-protected/", "adapters": ["site-status.php"]}
+			]
+		},
+		{
+			"id": "page-builders",
+			"title": "Page builders",
+			"role": "Detected, fenced, templates, edit-in",
+			"plugins": [
+				{"name": "Elementor", "url": "https://wordpress.org/plugins/elementor/", "adapters": ["page-builders.php", "elementor-templates.php"], "surface": "elementor-templates"},
+				{"name": "Divi", "url": "https://www.elegantthemes.com/gallery/divi/", "adapters": ["page-builders.php"]},
+				{"name": "Beaver Builder", "url": "https://www.wpbeaverbuilder.com/", "adapters": ["page-builders.php"]},
+				{"name": "Brizy", "url": "https://wordpress.org/plugins/brizy/", "adapters": ["page-builders.php"]},
+				{"name": "Bricks", "url": "https://bricksbuilder.io/", "adapters": ["page-builders.php", "bricks.php"], "surface": "bricks-templates"},
+				{"name": "Breakdance", "url": "https://breakdance.com/", "adapters": ["page-builders.php"]},
+				{"name": "WPBakery", "url": "https://wpbakery.com/", "adapters": ["page-builders.php"]},
+				{"name": "Etch", "url": "https://etchwp.com/", "adapters": ["page-builders.php", "etch.php"]},
+				{"name": "JetThemeCore", "url": "https://crocoblock.com/plugins/jetthemecore/", "adapters": ["jet-theme-core.php"], "surface": "jet-theme-core"},
+				{"name": "SiteOrigin Page Builder", "url": "https://wordpress.org/plugins/siteorigin-panels/", "adapters": ["page-builders.php"]},
+				{"name": "Oxygen", "url": "https://oxygenbuilder.com/", "adapters": ["page-builders.php"]}
+			]
+		},
+		{
+			"id": "block-libraries",
+			"title": "Block libraries",
+			"role": "Designs in the block picker",
+			"plugins": [
+				{"name": "Stackable", "url": "https://wordpress.org/plugins/stackable-ultimate-gutenberg-blocks/", "adapters": ["stackable.php"]},
+				{"name": "Kadence Blocks", "url": "https://wordpress.org/plugins/kadence-blocks/", "adapters": ["kadence.php"]},
+				{"name": "GenerateBlocks", "url": "https://wordpress.org/plugins/generateblocks/", "adapters": ["generateblocks.php"]}
+			]
+		},
+		{
+			"id": "block-previews",
+			"title": "Block previews",
+			"role": "Real front-end styling",
+			"plugins": [
+				{"name": "Otter", "url": "https://wordpress.org/plugins/otter-blocks/", "adapters": ["otter.php"]},
+				{"name": "Essential Blocks", "url": "https://wordpress.org/plugins/essential-blocks/", "adapters": ["essential-blocks.php"]},
+				{"name": "Spectra", "url": "https://wordpress.org/plugins/ultimate-addons-for-gutenberg/", "adapters": [], "core": true},
+				{"name": "Kadence", "url": "https://www.kadencewp.com/", "adapters": ["kadence.php"]},
+				{"name": "GenerateBlocks", "url": "https://wordpress.org/plugins/generateblocks/", "adapters": ["generateblocks.php"]},
+				{"name": "Stackable", "url": "https://wordpress.org/plugins/stackable-ultimate-gutenberg-blocks/", "adapters": ["stackable.php"]}
+			]
+		},
+		{
+			"id": "ecommerce",
+			"title": "Ecommerce",
+			"role": "Orders, products, coupons, customers, subscriptions, memberships",
+			"plugins": [
+				{"name": "WooCommerce", "url": "https://wordpress.org/plugins/woocommerce/", "adapters": ["woocommerce-settings.php"], "core": true},
+				{"name": "WooCommerce Subscriptions", "url": "https://woocommerce.com/products/woocommerce-subscriptions/", "adapters": [], "core": true},
+				{"name": "WooCommerce Memberships", "url": "https://woocommerce.com/products/woocommerce-memberships/", "adapters": ["woocommerce-memberships.php"], "surface": "woocommerce-memberships"}
+			]
+		},
+		{
+			"id": "gift-cards",
+			"title": "Gift cards",
+			"role": "Balance, issue, resend",
+			"plugins": [
+				{"name": "YITH WooCommerce Gift Cards", "url": "https://wordpress.org/plugins/yith-woocommerce-gift-cards/", "adapters": ["yith-gift-cards.php"], "surface": "yith-gift-cards"},
+				{"name": "WooCommerce Gift Cards", "url": "https://woocommerce.com/products/gift-cards/", "adapters": ["woocommerce-gift-cards.php"], "surface": "woocommerce-gift-cards"},
+				{"name": "PW WooCommerce Gift Cards", "url": "https://wordpress.org/plugins/pw-woocommerce-gift-cards/", "adapters": ["pw-gift-cards.php"], "surface": "pw-gift-cards"}
+			]
+		},
+		{
+			"id": "bookings",
+			"title": "Bookings",
+			"role": "Appointments, status and customer context",
+			"plugins": [
+				{"name": "Amelia", "url": "https://wordpress.org/plugins/ameliabooking/", "adapters": ["amelia.php"], "surface": "amelia"},
+				{"name": "LatePoint", "url": "https://wordpress.org/plugins/latepoint/", "adapters": ["latepoint.php"], "surface": "latepoint"},
+				{"name": "Bookly", "url": "https://wordpress.org/plugins/bookly-responsive-appointment-booking-tool/", "adapters": ["bookly.php"], "surface": "bookly"},
+				{"name": "JetBooking", "url": "https://crocoblock.com/plugins/jetbooking/", "adapters": ["jet-booking.php"], "surface": "jet-booking"},
+				{"name": "JetAppointments", "url": "https://crocoblock.com/plugins/jetappointment/", "adapters": ["jet-appointments.php"], "surface": "jet-appointments"}
+			]
+		},
+		{
+			"id": "reviews",
+			"title": "Reviews",
+			"role": "Approve, ratings, bulk moderation",
+			"plugins": [
+				{"name": "JetReviews", "url": "https://crocoblock.com/plugins/jetreviews/", "adapters": ["jet-reviews.php"], "surface": "jet-reviews"}
+			]
+		},
+		{
+			"id": "content-types",
+			"title": "Content types",
+			"role": "Custom tables as real lists",
+			"plugins": [
+				{"name": "JetEngine CCT", "url": "https://crocoblock.com/plugins/jetengine/", "adapters": ["jet-cct.php"], "surface": "jet-cct"}
+			]
+		},
+		{
+			"id": "search-and-filters",
+			"title": "Search & filters",
+			"role": "Suggestions and filter indexing",
+			"plugins": [
+				{"name": "JetSearch", "url": "https://crocoblock.com/plugins/jetsearch/", "adapters": ["jet-search.php"], "surface": "jet-search"},
+				{"name": "JetSmartFilters", "url": "https://crocoblock.com/plugins/jetsmartfilters/", "adapters": ["jet-smart-filters.php"], "surface": "jet-smart-filters"}
+			]
+		},
+		{
+			"id": "multisite-and-tenants",
+			"title": "Multisite & tenants",
+			"role": "Networks, sites, tenants and guarded moves",
+			"plugins": [
+				{"name": "WP Multi Network", "url": "https://wordpress.org/plugins/wp-multi-network/", "adapters": ["wp-multi-network.php"], "surface": "wp-multi-network"},
+				{"name": "WP Freighter", "url": "https://wpfreighter.com/", "adapters": ["wp-freighter.php"], "surface": "freighter-sites"}
+			]
+		},
+		{
+			"id": "custom-fields",
+			"title": "Custom fields",
+			"role": "Fields, options pages, field group builder",
+			"plugins": [
+				{"name": "ACF", "url": "https://wordpress.org/plugins/advanced-custom-fields/", "adapters": ["acf.php", "acf-field-groups.php"]},
+				{"name": "ACF Pro", "url": "https://www.advancedcustomfields.com/pro/", "adapters": ["acf.php", "acf-field-groups.php"]},
+				{"name": "ACPT", "url": "https://acpt.io/", "adapters": ["acpt.php"]},
+				{"name": "Meta Box", "url": "https://wordpress.org/plugins/meta-box/", "adapters": ["meta-box.php"]},
+				{"name": "Pods", "url": "https://wordpress.org/plugins/pods/", "adapters": ["pods.php"]},
+				{"name": "JetEngine", "url": "https://crocoblock.com/plugins/jetengine/", "adapters": ["jet-engine-fields.php", "jet-engine-options.php"]}
+			]
+		},
+		{
+			"id": "events-jobs-and-podcasts",
+			"title": "Events, jobs & podcasts",
+			"role": "Their fields, in the editor sidebar",
+			"plugins": [
+				{"name": "The Events Calendar", "url": "https://theeventscalendar.com/", "adapters": ["the-events-calendar.php"]},
+				{"name": "WP Job Manager", "url": "https://wordpress.org/plugins/wp-job-manager/", "adapters": ["wp-job-manager.php"]},
+				{"name": "Seriously Simple Podcasting", "url": "https://wordpress.org/plugins/seriously-simple-podcasting/", "adapters": ["seriously-simple-podcasting.php"]},
+				{"name": "PowerPress", "url": "https://wordpress.org/plugins/powerpress/", "adapters": ["powerpress.php"]}
+			]
+		},
+		{
+			"id": "media-library",
+			"title": "Media library",
+			"role": "Folders, filters, replace in place",
+			"plugins": [
+				{"name": "FileBird", "url": "https://wordpress.org/plugins/filebird/", "adapters": ["media-folders.php"]},
+				{"name": "Real Media Library", "url": "https://wordpress.org/plugins/real-media-library-lite/", "adapters": ["media-folders.php"]},
+				{"name": "Folders by Premio", "url": "https://wordpress.org/plugins/folders/", "adapters": ["media-folders.php"]},
+				{"name": "HappyFiles Pro", "url": "https://happyfiles.io/", "adapters": ["media-folders.php"]},
+				{"name": "Enable Media Replace", "url": "https://wordpress.org/plugins/enable-media-replace/", "adapters": ["enable-media-replace.php"]},
+				{"name": "Safe SVG", "url": "https://wordpress.org/plugins/safe-svg/", "adapters": ["safe-svg.php"]},
+				{"name": "SVG Support", "url": "https://wordpress.org/plugins/svg-support/", "adapters": ["safe-svg.php"]},
+				{"name": "Regenerate Thumbnails", "url": "https://wordpress.org/plugins/regenerate-thumbnails/", "adapters": ["regenerate-thumbnails.php"]},
+				{"name": "Force Regenerate Thumbnails", "url": "https://wordpress.org/plugins/force-regenerate-thumbnails/", "adapters": ["regenerate-thumbnails.php"]}
+			]
+		},
+		{
+			"id": "spam",
+			"title": "Spam",
+			"role": "Settings → Spam cards",
+			"plugins": [
+				{"name": "Akismet", "url": "https://wordpress.org/plugins/akismet/", "adapters": ["spam.php"]},
+				{"name": "Antispam Bee", "url": "https://wordpress.org/plugins/antispam-bee/", "adapters": ["spam.php"]},
+				{"name": "CleanTalk", "url": "https://wordpress.org/plugins/cleantalk-spam-protect/", "adapters": ["spam.php", "cleantalk.php"]},
+				{"name": "WP Armour", "url": "https://wordpress.org/plugins/honeypot/", "adapters": ["spam.php"]},
+				{"name": "Disable Comments", "url": "https://wordpress.org/plugins/disable-comments/", "adapters": ["spam.php"]}
+			]
+		},
+		{
+			"id": "little-extras",
+			"title": "Little extras",
+			"role": "Right where you need them",
+			"plugins": [
+				{"name": "User Switching", "url": "https://wordpress.org/plugins/user-switching/", "adapters": ["user-switching.php"]},
+				{"name": "One Time Login", "url": "https://wordpress.org/plugins/one-time-login/", "adapters": ["one-time-login.php"]},
+				{"name": "Public Post Preview", "url": "https://wordpress.org/plugins/public-post-preview/", "adapters": ["public-post-preview.php"]},
+				{"name": "PDF Invoices & Packing Slips", "url": "https://wordpress.org/plugins/woocommerce-pdf-invoices-packing-slips/", "adapters": ["wcpdf.php"]},
+				{"name": "White Label CMS", "url": "https://wordpress.org/plugins/white-label-cms/", "adapters": ["white-label-cms.php"]},
+				{"name": "Jetpack Tiled Gallery", "url": "https://wordpress.org/plugins/jetpack/", "adapters": ["jetpack-tiled-gallery.php"]}
+			]
+		},
+		{
+			"id": "dev-tools",
+			"title": "Dev tools",
+			"role": "One Diagnostics surface + QM panel",
+			"plugins": [
+				{"name": "Query Monitor", "url": "https://wordpress.org/plugins/query-monitor/", "adapters": ["query-monitor.php"]},
+				{"name": "Scrutoscope", "url": "https://scrutoscope.dev/", "adapters": ["scrutoscope.php"], "surface": "scrutoscope"},
+				{"name": "WP Crontrol", "url": "https://wordpress.org/plugins/wp-crontrol/", "adapters": ["wp-crontrol.php"], "surface": "wp-crontrol"},
+				{"name": "Transients Manager", "url": "https://wordpress.org/plugins/transients-manager/", "adapters": ["transients-manager.php"], "surface": "transients-manager"},
+				{"name": "Rewrite Rules Inspector", "url": "https://wordpress.org/plugins/rewrite-rules-inspector/", "adapters": ["rewrite-rules-inspector.php"], "surface": "rewrite-rules-inspector"}
+			]
+		},
+		{
+			"id": "automation",
+			"title": "Automation",
+			"role": "Outgoing requests, search, retry",
+			"plugins": [
+				{"name": "OttoKit", "url": "https://ottokit.com/", "adapters": ["ottokit.php"], "surface": "ottokit"}
+			]
+		},
+		{
+			"id": "ai-agents",
+			"title": "AI agents",
+			"role": "Agent Access: connections, abilities, memory",
+			"plugins": [
+				{"name": "Novamira", "url": "https://novamira.ai", "adapters": ["novamira.php"], "surface": "novamira"},
+				{"name": "Novamira Pro", "url": "https://novamira.ai", "adapters": ["novamira.php"], "surface": "novamira"},
+				{"name": "Elementor MCP", "url": "https://wordpress.org/plugins/elementor/", "adapters": ["elementor-mcp.php"], "surface": "elementor-mcp"}
+			]
+		}
+	],
+	"shared": ["core-blocks.php", "field-groups.php", "media-localize.php", "network.php", "option-pages.php", "shared-links.php", "shared-media.php", "shared-meta.php", "status-chart.php"]
+}
