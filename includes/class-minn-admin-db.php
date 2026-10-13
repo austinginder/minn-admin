@@ -356,7 +356,9 @@ class Minn_Admin_DB {
 	 * database, and a role can hold the System page's caps without
 	 * manage_woocommerce: the log viewer leaves WooCommerce's channels out
 	 * for that role (Minn_Admin_Logs), so the browser leaves these out too.
-	 * Asked whether or not WooCommerce is active, since its tables outlive it.
+	 * Asked whether or not WooCommerce is active, since its tables outlive it,
+	 * and of copies under any leading word or separator (wp_bak_wc_orders,
+	 * wp_old_woocommerce_log, wp_wp_wc_order_addresses, wp_woocommerce-log).
 	 *
 	 * @param string $table Table name as resolved (prefix included).
 	 * @return bool
@@ -366,7 +368,7 @@ class Minn_Admin_DB {
 			return false;
 		}
 		$base = self::secret_base( $table );
-		return 0 === strpos( $base, 'wc_' ) || 0 === strpos( $base, 'woocommerce_' );
+		return false !== strpos( $base, 'woocommerce' ) || (bool) preg_match( '/(^|[^a-z])wc([^a-z]|$)/', $base );
 	}
 
 	private static function quote_ident( $name ) {
@@ -477,16 +479,19 @@ class Minn_Admin_DB {
 		if ( 'wc_webhooks' === $base ) {
 			return 'secret' === $col;
 		}
-		// The TOTP seed and the raw recovery codes (each bypasses 2FA once).
-		if ( 'wfls_2fa_secrets' === $base ) {
+		// The TOTP seed and the raw recovery codes (each bypasses 2FA once),
+		// in the live table or a copy of it (wp_wfls_2fa_secrets_old), where
+		// a binary cell would otherwise print as hex.
+		if ( false !== strpos( $base, 'wfls_2fa_secrets' ) ) {
 			return in_array( $col, array( 'secret', 'recovery' ), true );
 		}
 		if ( 'signups' === $base ) {
 			return 'activation_key' === $col;
 		}
 		// OttoKit's retry writes its SaaS bearer token into the logged
-		// request's headers (its own screen and Minn's OttoKit view drop them).
-		if ( 'suretriggers_webhook_requests' === $base ) {
+		// request's headers (its own screen and Minn's OttoKit view drop them),
+		// and a copy of the log keeps it.
+		if ( false !== strpos( $base, 'suretriggers_webhook_requests' ) ) {
 			return 'request_data' === $col;
 		}
 		// SearchWP's index keeps search terms in a column called token, and
@@ -586,21 +591,36 @@ class Minn_Admin_DB {
 
 	/**
 	 * The KEYED_SECRETS store a table is, or is a copy of. A copy made before
-	 * a migration (wp_usermeta_backup, wp_options_old, wp_2_postmeta2) keeps
-	 * the same rows under another name, and the usermeta list is the only
-	 * thing that hides its TOTP seeds and sign-in tokens: the value search's
-	 * copies rule leaves those out on purpose. Core's four key/value stores
-	 * count wherever they stand as a whole word in the name.
+	 * a migration (wp_usermeta_backup, wp_usermeta-bak, wp_optionsbak,
+	 * wp_2_postmeta2) keeps the same rows under another name, and the store's
+	 * list is the only thing that hides its TOTP seeds and sign-in tokens:
+	 * the value search's copies rule leaves those out on purpose. A copy of a
+	 * vendor's store (wp_wfconfig_old) made before a key rotation holds a key
+	 * the live table no longer does, so no needle names it either. A store's
+	 * name counts wherever it stands in the table's name, the leftmost (and
+	 * then longest) one deciding; a plugin table that merely contains one
+	 * (wp_myplugin_options) only gains redaction from that.
 	 *
 	 * @param string $table Table name as resolved (prefix included).
 	 * @return string
 	 */
 	private static function keyed_base( $table ) {
+		static $any = null;
 		$base = self::secret_base( $table );
-		if ( ! isset( self::KEYED_SECRETS[ $base ] ) && preg_match( '/(^|_)(usermeta|sitemeta|postmeta|options)\d*(_|$)/', $base, $m ) ) {
-			return $m[2];
+		if ( isset( self::KEYED_SECRETS[ $base ] ) ) {
+			return $base;
 		}
-		return $base;
+		if ( null === $any ) {
+			$stores = array_keys( self::KEYED_SECRETS );
+			usort(
+				$stores,
+				static function ( $a, $b ) {
+					return strlen( $b ) - strlen( $a );
+				}
+			);
+			$any = '/' . implode( '|', array_map( 'preg_quote', $stores ) ) . '/';
+		}
+		return preg_match( $any, $base, $m ) ? $m[0] : $base;
 	}
 
 	/**
@@ -1216,10 +1236,22 @@ class Minn_Admin_DB {
 		if ( self::redacts_cell( $table, $col, $row ) ) {
 			return self::redacted_cell( $v );
 		}
-		if ( strlen( (string) $v ) >= 16 && ! self::is_activity_log( $table ) && self::credential_needles() && self::$needles_capped ) {
+		if ( strlen( (string) $v ) >= 16 && ! self::is_activity_log( $table ) && self::needles_capped() ) {
 			return self::redacted_cell( $v ) + array( 'unchecked' => true );
 		}
 		return self::cell( $v, $cap );
+	}
+
+	/**
+	 * Whether credential_needles() stopped at a cap. Asked on its own: a
+	 * source that reached its limit says the list is incomplete even when
+	 * nothing it read so far parsed to a credential.
+	 *
+	 * @return bool
+	 */
+	private static function needles_capped() {
+		self::credential_needles();
+		return self::$needles_capped;
 	}
 
 	/**
@@ -1403,10 +1435,10 @@ class Minn_Admin_DB {
 			// LIKE per needle took seconds over a large options table where
 			// the byte compare takes a tenth of that. The count then stops at
 			// NEEDLE_COUNT_CAP rows, which bounds the work on a broad search.
+			if ( ! self::is_activity_log( $meta->name ) && self::needles_capped() ) {
+				return new WP_Error( 'minn_db_search_capped', __( 'This site holds too many credentials for Minn to check a value search against, so values cannot be searched here.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
 			if ( ! self::is_activity_log( $meta->name ) && self::credential_needles() ) {
-				if ( self::$needles_capped ) {
-					return new WP_Error( 'minn_db_search_capped', __( 'This site holds too many credentials for Minn to check a value search against, so values cannot be searched here.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
 				$count_cap = self::NEEDLE_COUNT_CAP;
 				foreach ( array_keys( self::credential_needles() ) as $needle ) {
 					$where .= $wpdb->prepare( ' AND ' . self::quote_ident( $fcol ) . ' NOT LIKE CAST(%s AS BINARY)', '%' . $wpdb->esc_like( (string) $needle ) . '%' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -1553,10 +1585,18 @@ class Minn_Admin_DB {
 		return array( min( $n, self::COUNT_CAP ), $n > self::COUNT_CAP );
 	}
 
-	/** Estimated rows for a table, or -1 when it does not exist. */
+	/**
+	 * Estimated rows for a table, or -1 when it does not exist. Read from the
+	 * table list, not resolve_table(): a check runs for whoever happens to
+	 * fill the shared cache, and only counts reach the result.
+	 */
 	private static function rows_est( $name ) {
-		$t = self::resolve_table( $name );
-		return $t ? (int) $t->rows_est : -1;
+		foreach ( self::table_index() as $t ) {
+			if ( 0 === strcasecmp( (string) $t->name, (string) $name ) ) {
+				return (int) $t->rows_est;
+			}
+		}
+		return -1;
 	}
 
 	/**
