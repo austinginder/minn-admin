@@ -739,8 +739,13 @@ add_action( 'rest_api_init', function () {
 		),
 		array(
 			'methods'             => 'POST',
+			// Core lets any create_sites holder add a site, but a new site's
+			// roles and its first administrator are writes the write fence
+			// keeps for whoever may run that site, which only a super admin
+			// may before it exists. Anyone else would get a site with no
+			// roles and a 403, so they are refused before anything is made.
 			'permission_callback' => function () {
-				return minn_admin_network_can( 'create_sites' );
+				return minn_admin_network_can( 'create_sites' ) && Minn_Admin::network_owner();
 			},
 			'callback'            => 'minn_admin_network_sites_create',
 			'args'                => array(

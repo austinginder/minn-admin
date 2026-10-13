@@ -152,7 +152,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 
-	if ( current_user_can( 'create_networks' ) ) {
+	if ( current_user_can( 'create_networks' ) && Minn_Admin::install_owner() ) {
 		$surfaces['wp-multi-network']['collection']['create'] = array(
 			'label'    => __( 'Add network', 'minn-admin' ),
 			'route'    => 'minn-admin/v1/wp-multi-network/networks',
@@ -205,8 +205,13 @@ add_action( 'rest_api_init', function () {
 		),
 		array(
 			'methods'             => 'POST',
+			// Creating, deleting or moving between networks reshapes the
+			// install, which every network shares: the main network's super
+			// admins. (A secondary network's super admin, whom WP Multi
+			// Network admits, would also be refused the new network's roles
+			// and administrator by the write fence, leaving it half built.)
 			'permission_callback' => function () {
-				return current_user_can( 'create_networks' );
+				return current_user_can( 'create_networks' ) && Minn_Admin::install_owner();
 			},
 			'callback'            => 'minn_admin_wpmn_network_create',
 			'args'                => array(
@@ -228,6 +233,7 @@ add_action( 'rest_api_init', function () {
 			// minn_admin_wpmn_network_target).
 			$id = minn_admin_wpmn_path_id( $request );
 			return current_user_can( 'delete_network', $id )
+				&& Minn_Admin::install_owner()
 				&& true === minn_admin_wpmn_network_target( $id );
 		},
 		'callback'            => 'minn_admin_wpmn_network_delete',
@@ -239,7 +245,7 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/wp-multi-network/sites/(?P<id>\d+)/move', array(
 		'methods'             => 'POST',
 		'permission_callback' => function () {
-			return current_user_can( 'manage_networks' );
+			return current_user_can( 'manage_networks' ) && Minn_Admin::install_owner();
 		},
 		'callback'            => 'minn_admin_wpmn_site_move',
 		'args'                => array(

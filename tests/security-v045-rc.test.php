@@ -69,7 +69,24 @@ if ( ! $admin ) {
 	return;
 }
 $admin = (int) $admin[0]->ID;
+// The account the suite was started as (--user), for the sections that
+// must run as it (a secondary network's super admin).
+$cli_user = get_current_user_id();
 wp_set_current_user( $admin );
+
+// Whether a route's permission callback admits the current user, without
+// running the route.
+$perm_for = function ( $route, $method, $url_params = array() ) {
+	$routes = rest_get_server()->get_routes();
+	foreach ( $routes[ $route ] ?? array() as $handler ) {
+		if ( ! empty( $handler['methods'][ $method ] ) ) {
+			$req = new WP_REST_Request( $method, $route );
+			$req->set_url_params( $url_params );
+			return true === call_user_func( $handler['permission_callback'], $req );
+		}
+	}
+	return null;
+};
 
 // --- 01-01 GenerateBlocks: island previews resolve no legacy dynamic data -----
 // GenerateBlocks' first blocks read a post's title, excerpt, author email or
@@ -280,6 +297,49 @@ if ( ! class_exists( '\\FluentForm\\App\\Services\\FormBuilder\\ShortCodeParser'
 		$wpdb->query( 'ROLLBACK' );
 		wp_cache_flush();
 	}
+}
+
+// --- 09-02 Networks and sites are refused before anything is half built --------
+// A secondary network's super admin may create a network through WP Multi
+// Network, but the write fence keeps the new network's roles and
+// administrator for the install's owners, so the network was made without
+// them and the request answered 403. A create_sites holder who is not a super
+// admin got the same for a new site.
+if ( ! is_multisite() ) {
+	$skip( '09-02 network only' );
+} else {
+	wp_set_current_user( $cli_user );
+	$nw_owner = Minn_Admin::install_owner();
+	if ( ! function_exists( 'switch_to_network' ) || ! function_exists( 'add_network' ) ) {
+		$skip( '09-02 WP Multi Network inactive' );
+	} elseif ( is_super_admin() && ! $nw_owner ) {
+		$check( '09-02 a secondary network\'s super admin may not create a network', false === $perm_for( '/minn-admin/v1/wp-multi-network/networks', 'POST' ) );
+		$check( '09-02 a secondary network\'s super admin may not move a site between networks', false === $perm_for( '/minn-admin/v1/wp-multi-network/sites/(?P<id>\d+)/move', 'POST', array( 'id' => get_current_blog_id() ) ) );
+	} elseif ( $nw_owner ) {
+		$check( '09-02 control: the install\'s owner may create a network', true === $perm_for( '/minn-admin/v1/wp-multi-network/networks', 'POST' ) );
+		$check( '09-02 control: the install\'s owner may move a site', true === $perm_for( '/minn-admin/v1/wp-multi-network/sites/(?P<id>\d+)/move', 'POST', array( 'id' => get_current_blog_id() ) ) );
+	} else {
+		$skip( '09-02 WP Multi Network: run as a super admin' );
+	}
+	if ( is_super_admin() ) {
+		$check( '09-02 control: a super admin may add a site', true === $perm_for( '/minn-admin/v1/network/sites', 'POST' ) );
+	}
+	$ns_uid = $make_user( 'subscriber' );
+	if ( $ns_uid ) {
+		$ns_grant = function ( $caps, $cap, $args ) use ( $ns_uid ) {
+			if ( (int) ( $args[1] ?? 0 ) === $ns_uid ) {
+				$caps['create_sites'] = true;
+			}
+			return $caps;
+		};
+		add_filter( 'user_has_cap', $ns_grant, 10, 3 );
+		wp_set_current_user( $ns_uid );
+		$check( '09-02 a create_sites holder who is not a super admin may not add a site', current_user_can( 'create_sites' ) && false === $perm_for( '/minn-admin/v1/network/sites', 'POST' ), current_user_can( 'create_sites' ) ? '' : 'precondition: the grant did not take' );
+		remove_filter( 'user_has_cap', $ns_grant, 10 );
+		wp_set_current_user( $admin );
+		$drop_user( $ns_uid );
+	}
+	wp_set_current_user( $admin );
 }
 
 // @sections
