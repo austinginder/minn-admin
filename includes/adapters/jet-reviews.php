@@ -70,13 +70,21 @@ function minn_admin_jet_reviews_row( $id ) {
 	return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE id = %d", (int) $id ) );
 }
 
+/**
+ * The reviewed item's name as plain text. get_the_title() runs wptexturize,
+ * so a quote arrives as &#8216;, and the client escapes what it is sent.
+ */
+function minn_admin_jet_reviews_item_title( $r ) {
+	return $r->post_id ? Minn_Admin::plain_text( get_the_title( (int) $r->post_id ) ) : '';
+}
+
 function minn_admin_jet_reviews_item( $r ) {
 	$a     = minn_admin_jet_reviews_author( $r->author );
-	$title = $r->post_id ? get_the_title( (int) $r->post_id ) : '';
+	$title = minn_admin_jet_reviews_item_title( $r );
 	return array(
 		'id'       => (int) $r->id,
 		'author'   => '' !== $a['mail'] && 'email@example.com' !== $a['mail'] ? $a['name'] . ' · ' . $a['mail'] : $a['name'],
-		'item'     => '' !== $title ? wp_strip_all_tags( $title ) : ( $r->post_id ? '#' . (int) $r->post_id : '—' ),
+		'item'     => '' !== $title ? $title : ( $r->post_id ? '#' . (int) $r->post_id : '—' ),
 		'rating'   => (int) $r->rating ? sprintf( '%d/5', (int) round( (int) $r->rating / 20 ) ) : '—',
 		'status'   => (int) $r->approved ? 'approved' : 'pending',
 		'date'     => $r->date ? mysql2date( 'c', $r->date, false ) : '',
@@ -203,7 +211,7 @@ add_action( 'rest_api_init', function () {
 				}
 				$a     = minn_admin_jet_reviews_author( $r->author );
 				$item  = minn_admin_jet_reviews_item( $r );
-				$title = $r->post_id ? wp_strip_all_tags( get_the_title( (int) $r->post_id ) ) : '';
+				$title = minn_admin_jet_reviews_item_title( $r );
 				$rows  = array(
 					array( 'label' => __( 'Rating', 'minn-admin' ), 'value' => $item['rating'] ),
 					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $item['status'] ),
@@ -213,14 +221,21 @@ add_action( 'rest_api_init', function () {
 					array( 'label' => __( 'Likes / dislikes', 'minn-admin' ), 'value' => (int) $r->likes . ' / ' . (int) $r->dislikes ),
 					array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $r->date ? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $r->date ) ) : '—' ),
 				);
-				// Per-field scores from their rating_data blob, decoded only
-				// as JSON; a serialized blob stays opaque.
-				$breakdown = is_string( $r->rating_data ) ? json_decode( $r->rating_data, true ) : null;
+				// Per-question scores, in the shape their submit endpoint stores:
+				// maybe_serialize() of [ { field_label, field_value, field_step,
+				// field_max } ], read through decode_serialized (arrays and
+				// scalars only).
+				$breakdown = Minn_Admin::decode_serialized( $r->rating_data, null );
 				if ( is_array( $breakdown ) ) {
 					foreach ( $breakdown as $f ) {
-						if ( is_array( $f ) && isset( $f['title'], $f['value'] ) ) {
-							$rows[] = array( 'label' => (string) $f['title'], 'value' => (string) $f['value'] );
+						if ( ! is_array( $f ) || ! isset( $f['field_label'], $f['field_value'] ) || ! is_scalar( $f['field_label'] ) || ! is_numeric( $f['field_value'] ) ) {
+							continue;
 						}
+						$max    = isset( $f['field_max'] ) && is_numeric( $f['field_max'] ) ? 0 + $f['field_max'] : 0;
+						$rows[] = array(
+							'label' => Minn_Admin::plain_text( $f['field_label'] ),
+							'value' => $max > 0 ? ( 0 + $f['field_value'] ) . '/' . $max : (string) ( 0 + $f['field_value'] ),
+						);
 					}
 				}
 				return rest_ensure_response( array(
