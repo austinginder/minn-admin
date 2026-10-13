@@ -596,6 +596,71 @@ if ( ! function_exists( 'minn_admin_acpt_builder_choices_in' ) || ! function_exi
 	$check( '06-02 an ACPT group\'s choices come back as stored, an empty value and its default included', $ap_pick( $ap_back ) === $ap_pick( $ap_stored ), wp_json_encode( $ap_pick( $ap_back ) ) );
 }
 
+// --- 07-01 Membership plans: a save keeps rules changed or removed elsewhere ---
+// The plan page sent every rule as it loaded them whenever any rule
+// changed, so a rule deleted elsewhere came back under a new id and an edit
+// made elsewhere reverted. Untouched rules now go as their id alone, and an
+// edited rule that was removed meanwhile is refused (409). Rolled back.
+if ( ! function_exists( 'wc_memberships_get_membership_plans' ) ) {
+	$skip( '07-01 WooCommerce Memberships inactive' );
+} else {
+	$mp_plans = wc_memberships_get_membership_plans();
+	if ( ! $mp_plans ) {
+		$skip( '07-01 no membership plan' );
+	} else {
+		global $wpdb;
+		$mp_id = (int) reset( $mp_plans )->get_id();
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			list( , $mp_d ) = $call( 'GET', "/minn-admin/v1/wcm/plans/{$mp_id}" );
+			$mp_t = (array) ( $mp_d['vocab']['targets']['content_restriction'] ?? array() );
+			if ( count( $mp_t ) < 2 ) {
+				$skip( '07-01 fewer than two content targets' );
+			} else {
+				$mp_row  = function ( $t, $rid = '', $delay = 0 ) {
+					$r = array( 'target' => $t, 'object_ids' => array(), 'access_schedule' => $delay ? array( 'type' => 'delayed', 'amount' => $delay, 'period' => 'weeks' ) : array( 'type' => 'immediate' ) );
+					if ( $rid ) {
+						$r['id'] = $rid;
+					}
+					return $r;
+				};
+				$mp_read = function () use ( $call, $mp_id ) {
+					wp_cache_flush();
+					list( , $d ) = $call( 'GET', "/minn-admin/v1/wcm/plans/{$mp_id}" );
+					$out = array();
+					foreach ( (array) ( $d['rules']['content_restriction'] ?? array() ) as $r ) {
+						$out[ (string) $r['id'] ] = $r;
+					}
+					return $out;
+				};
+				$mp_save = function ( $rules, $known ) use ( $call, $mp_id ) {
+					list( $st ) = $call( 'POST', "/minn-admin/v1/wcm/plans/{$mp_id}", array( 'rules' => array( 'content_restriction' => $rules ), 'known_rules' => $known ) );
+					return $st;
+				};
+				$mp_save( array( $mp_row( $mp_t[0][0] ), $mp_row( $mp_t[1][0] ) ), array() );
+				$mp_known = array_keys( $mp_read() );
+				list( $mp_r1, $mp_r2 ) = array_pad( $mp_known, 2, '' );
+				// Elsewhere: R2 is removed, and R1 gets a two-week delay.
+				$mp_save( array( $mp_row( $mp_t[0][0], $mp_r1, 2 ) ), $mp_known );
+				// The page (opened before that) saves a new rule; R1 and R2 untouched.
+				$mp_st  = $mp_save( array( array( 'id' => $mp_r1 ), array( 'id' => $mp_r2 ), $mp_row( $mp_t[1][0] ) ), $mp_known );
+				$mp_now = $mp_read();
+				$check( '07-01 a rule removed elsewhere is not brought back by a save', 200 === $mp_st && ! isset( $mp_now[ $mp_r2 ] ) && 2 === count( $mp_now ), $mp_st . ' ' . wp_json_encode( array_keys( $mp_now ) ) );
+				$check( '07-01 an edit made elsewhere to a rule the page left alone stays', 'delayed' === ( $mp_now[ $mp_r1 ]['schedule']['type'] ?? $mp_now[ $mp_r1 ]['access_schedule']['type'] ?? '' ), wp_json_encode( $mp_now[ $mp_r1 ] ?? null ) );
+				// The page edits R2 itself, which someone removed meanwhile.
+				$mp_st = $mp_save( array( array( 'id' => $mp_r1 ), $mp_row( $mp_t[1][0], $mp_r2, 3 ) ), $mp_known );
+				$check( '07-01 editing a rule removed elsewhere is refused, not re-created', 409 === $mp_st && 2 === count( $mp_read() ), $mp_st . ' ' . wp_json_encode( array_keys( $mp_read() ) ) );
+				// The body the earlier client sent: every rule in full, R2 as it loaded.
+				$mp_st = $mp_save( array( $mp_row( $mp_t[0][0], $mp_r1, 2 ), $mp_row( $mp_t[1][0], $mp_r2 ) ), $mp_known );
+				$check( '07-01 a whole-rules body does not re-create a rule removed elsewhere', 409 === $mp_st && 2 === count( $mp_read() ), $mp_st . ' ' . wp_json_encode( array_keys( $mp_read() ) ) );
+			}
+		} finally {
+			$wpdb->query( 'ROLLBACK' );
+			wp_cache_flush();
+		}
+	}
+}
+
 // @sections
 
 $summary();

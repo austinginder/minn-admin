@@ -58373,6 +58373,18 @@
 					payload = changedKeys( form, JSON.parse( m.clean ) );
 				} catch ( e ) { /* send the whole form */ }
 			}
+			// A rule nobody touched here goes back as its id only, so the
+			// server keeps it as stored now: an edit made elsewhere since the
+			// page opened stays, and a rule removed meanwhile stays removed.
+			if ( ! isNew && payload.rules && m.clean ) {
+				try {
+					const was = JSON.parse( m.clean ).rules || {};
+					Object.keys( payload.rules ).forEach( ( t ) => {
+						const before = new Map( ( was[ t ] || [] ).filter( ( r ) => r.id ).map( ( r ) => [ r.id, JSON.stringify( r ) ] ) );
+						payload.rules[ t ] = payload.rules[ t ].map( ( r ) => ( r.id && before.get( r.id ) === JSON.stringify( r ) ? { id: r.id } : r ) );
+					} );
+				} catch ( e ) { /* send them whole */ }
+			}
 			payload.known_rules = m.knownRules || [];
 			if ( btn ) btn.disabled = true;
 			try {

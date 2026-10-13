@@ -988,7 +988,7 @@ function minn_admin_wcm_plan_model( $plan ) {
  * @param array $rules_in { type => [ rule, ... ] } from the request.
  * @return array|WP_Error
  */
-function minn_admin_wcm_plan_rules_clean( $rules_in, $plan = null ) {
+function minn_admin_wcm_plan_rules_clean( $rules_in, $plan = null, $known = null ) {
 	$out = array( 'content_restriction' => array(), 'product_restriction' => array(), 'purchasing_discount' => array() );
 	if ( ! is_array( $rules_in ) ) {
 		return $out;
@@ -997,13 +997,18 @@ function minn_admin_wcm_plan_rules_clean( $rules_in, $plan = null ) {
 	// cap) ride through untouched: the page sends them back as it got them,
 	// and apply() keeps the stored rule instead of rebuilding it.
 	$locked = array();
+	$stored = array();
 	if ( $plan ) {
 		foreach ( (array) $plan->get_rules( 'all', true ) as $rule ) {
-			if ( $rule instanceof WC_Memberships_Membership_Plan_Rule && ! minn_admin_wcm_rule_editable( $rule ) ) {
-				$locked[ (string) $rule->get_id() ] = true;
+			if ( $rule instanceof WC_Memberships_Membership_Plan_Rule ) {
+				$stored[ (string) $rule->get_id() ] = true;
+				if ( ! minn_admin_wcm_rule_editable( $rule ) ) {
+					$locked[ (string) $rule->get_id() ] = true;
+				}
 			}
 		}
 	}
+	$known = null === $known ? array() : array_flip( array_map( 'strval', (array) $known ) );
 	$periods = array( 'days', 'weeks', 'months', 'years' );
 	foreach ( $out as $type => $_ ) {
 		$targets = array_map( function ( $t ) {
@@ -1016,6 +1021,18 @@ function minn_admin_wcm_plan_rules_clean( $rules_in, $plan = null ) {
 			if ( ! empty( $r['id'] ) && is_string( $r['id'] ) && isset( $locked[ sanitize_key( $r['id'] ) ] ) ) {
 				$out[ $type ][] = array( 'id' => sanitize_key( $r['id'] ), 'locked' => true );
 				continue;
+			}
+			// A rule the page sends as its id alone was not touched there:
+			// the stored rule stays as it is now (an edit made elsewhere
+			// meanwhile included), and one removed meanwhile stays removed.
+			if ( ! empty( $r['id'] ) && is_string( $r['id'] ) && array( 'id' ) === array_keys( $r ) ) {
+				$out[ $type ][] = array( 'id' => sanitize_key( $r['id'] ), 'keep' => true );
+				continue;
+			}
+			// An edited rule someone removed since the page loaded it would
+			// come back under a new id; the page reloads instead.
+			if ( $plan && ! empty( $r['id'] ) && is_string( $r['id'] ) && isset( $known[ sanitize_key( $r['id'] ) ] ) && ! isset( $stored[ sanitize_key( $r['id'] ) ] ) ) {
+				return new WP_Error( 'minn_wcm_stale', __( 'A rule you changed was removed from this plan since the page opened. Reload to see the plan as it is now.', 'minn-admin' ), array( 'status' => 409 ) );
 			}
 			$target = (string) ( isset( $r['target'] ) ? $r['target'] : '' );
 			if ( '' === $target && isset( $r['content_type'], $r['content_type_name'] ) ) {
@@ -1117,6 +1134,12 @@ function minn_admin_wcm_plan_rules_apply( $plan, $rules, $known = null ) {
 		foreach ( $rules as $type => $list ) {
 			foreach ( $list as $data ) {
 				if ( ! empty( $data['locked'] ) ) {
+					continue;
+				}
+				if ( ! empty( $data['keep'] ) ) {
+					if ( in_array( $data['id'], $existing, true ) && ! in_array( $data['id'], $keep, true ) ) {
+						$keep[] = $data['id'];
+					}
 					continue;
 				}
 				$rule = $builder->build( $plan, $type, $data );
@@ -2291,7 +2314,7 @@ add_action( 'rest_api_init', function () {
 		// does not leave a renamed or republished plan behind.
 		$rules = null;
 		if ( array_key_exists( 'rules', $in ) ) {
-			$rules = minn_admin_wcm_plan_rules_clean( $in['rules'], $plan );
+			$rules = minn_admin_wcm_plan_rules_clean( $in['rules'], $plan, isset( $in['known_rules'] ) && is_array( $in['known_rules'] ) ? $in['known_rules'] : null );
 			if ( is_wp_error( $rules ) ) {
 				return $rules;
 			}
