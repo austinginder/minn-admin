@@ -20676,7 +20676,15 @@
 					ss.settingsCache[ cacheKey ] = r || { groups: [] };
 					if ( state.route === s.id ) renderSurface( s );
 				} )
-				.catch( showErr );
+				// A tab that fails says so in its own body: showErr() took the
+				// tab bar with it, and the failed tab, still selected, failed
+				// again on every return until a reload. Nothing is cached, so
+				// coming back to it tries again.
+				.catch( ( e ) => {
+					if ( state.route !== s.id || ss.settingsTab !== tab || ! ( ss.view === 'settings' || ! s.collection ) ) return;
+					view.innerHTML = head + `<div class="minn-card minn-empty">${ sprintf( esc( /* translators: %s: the error message. */ __( 'Something went wrong: %s' ) ), esc( e.message ) ) }</div>`;
+					bindChrome();
+				} );
 			return;
 		}
 		const form = settingsFormHtml( data );
