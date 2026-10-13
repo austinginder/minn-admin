@@ -14887,18 +14887,20 @@
 	 * m.syncDirty() themselves, because their clicks never reach here.
 	 */
 	function bindProductDirtyBar( m ) {
-		const bar = $( '#minn-p-savebar' );
-		if ( ! bar ) return;
 		// The line is drawn here rather than at load time: every vocabulary the
 		// form needs is fetched BEFORE the first paint (loadProductDetail waits
 		// on all of them), so the first bind sees the product exactly as it
-		// arrived and no late render can move the line under it.
-		if ( m.clean == null ) {
+		// arrived and no late render can move the line under it. The quick
+		// view has no bar but saves against the same line; it paints while
+		// still loading, so its line waits for the product itself.
+		if ( m.clean == null && ( m.page || m.full ) ) {
 			m.clean = productFingerprint( m );
 			// And what a save of the clean form would send, so a save sends
 			// only what differs from it.
 			m.cleanPayload = JSON.parse( JSON.stringify( buildProductPayload( m, m.full || m.product ) ) );
 		}
+		const bar = $( '#minn-p-savebar' );
+		if ( ! bar ) return;
 		// A new product keeps its bar, since Create is on it; only whether
 		// anything was entered changes, which is what the leave guard reads.
 		const sync = m.isNew

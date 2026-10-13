@@ -91,6 +91,27 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				t.check( 'Product: the name saved', after.name === 'Minn conc renamed ' + suffix, after.name );
 				t.check( 'Product: the price changed elsewhere is kept', String( after.regular_price ) === '22.00', String( after.regular_price ) );
 				t.check( 'Product: the short description changed elsewhere is kept', /changed elsewhere/.test( after.short_description || '' ), after.short_description );
+
+				// The quick view from the list saves the same way.
+				await page.goto( `${ BASE }/minn-admin/products`, { waitUntil: 'domcontentloaded' } );
+				await page.waitForSelector( `.minn-table-row[data-product="${ pid }"] [data-pqv]`, { timeout: 20000 } );
+				await page.click( `.minn-table-row[data-product="${ pid }"] [data-pqv]` );
+				await page.waitForFunction( () => {
+					const m = document.querySelector( '.minn-modal' );
+					return m && ! m.textContent.includes( 'Loading product' ) && document.querySelector( '.minn-modal #minn-p-name' );
+				}, null, { timeout: 20000 } );
+				await page.waitForLoadState( 'networkidle' ).catch( () => {} );
+				const qvElsewhere = await api( `wc/v3/products/${ pid }`, { method: 'PUT', body: JSON.stringify( { regular_price: '33.00' } ) } );
+				t.check( 'Product quick view: repriced elsewhere', 200 === qvElsewhere.status, String( qvElsewhere.status ) );
+				await page.fill( '.minn-modal #minn-p-name', 'Minn conc quick ' + suffix );
+				const qvPut = page.waitForResponse( ( r ) => 'PUT' === r.request().method() && new RegExp( `/wc/v3/products/${ pid }$` ).test( r.url() ), { timeout: 20000 } ).catch( () => null );
+				await page.click( '.minn-modal #minn-product-save' );
+				const qvSent = await qvPut;
+				await page.waitForTimeout( 500 );
+				const qvAfter = ( await api( `wc/v3/products/${ pid }?_fields=name,regular_price` ) ).body || {};
+				t.check( 'Product quick view: the name saved', qvAfter.name === 'Minn conc quick ' + suffix, qvAfter.name );
+				t.check( 'Product quick view: the price changed elsewhere is kept', String( qvAfter.regular_price ) === '33.00',
+					JSON.stringify( { price: qvAfter.regular_price, sent: qvSent && qvSent.request().postData() } ) );
 			}
 		}
 
