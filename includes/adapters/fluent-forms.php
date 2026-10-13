@@ -717,10 +717,19 @@ add_action( 'rest_api_init', function () {
 					);
 				}
 
+				$status = $row->status ? (string) $row->status : 'unread';
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
 					'title'    => $form_title ?: ( 'Form #' . (int) $row->form_id ),
-					'status'   => $row->status ? (string) $row->status : 'unread',
+					'status'   => $status,
+					// The row as it stands now, after opening marked it read:
+					// the page's actions gate on it, not on the list's copy.
+					'item'     => array(
+						'id'      => (int) $row->id,
+						'form_id' => (int) $row->form_id,
+						'status'  => $status,
+						'bucket'  => in_array( $status, array( 'spam', 'trashed' ), true ) ? $status : 'inbox',
+					),
 					'sections' => array(
 						array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
 						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),

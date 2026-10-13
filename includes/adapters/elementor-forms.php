@@ -475,6 +475,13 @@ add_action( 'rest_api_init', function () {
 					// Form name in the title; answers render in the entry body.
 					'title'    => $item['form_name'] ?: 'Submission',
 					'status'   => $item['status'],
+					// The row as it stands now, after opening marked it read:
+					// the page's actions gate on it, not on the list's copy.
+					'item'     => array(
+						'id'     => $item['id'],
+						'status' => $item['status'],
+						'bucket' => $item['bucket'],
+					),
 					'sections' => array(
 						array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
 						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
