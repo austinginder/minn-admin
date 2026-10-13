@@ -200,6 +200,15 @@ function minn_admin_cfdb7_form_titles() {
 	return $out;
 }
 
+/**
+ * An answer as the visitor typed it. CFDB7 saves quotes, apostrophes and
+ * slashes as HTML entities (&quot; &#039; &#047; &#092;), and its own screen
+ * shows them decoded; Minn escapes on output, so it reads them decoded too.
+ */
+function minn_admin_cfdb7_text( $value ) {
+	return html_entity_decode( (string) $value, ENT_QUOTES, 'UTF-8' );
+}
+
 /** First few real answers as the list-row summary (fluent-forms style). */
 function minn_admin_cfdb7_summary( $values ) {
 	$parts = array();
@@ -207,7 +216,7 @@ function minn_admin_cfdb7_summary( $values ) {
 		if ( 'cfdb7_status' === $key || '' === trim( (string) $v ) || false !== strpos( $key, 'cfdb7_file' ) ) {
 			continue;
 		}
-		$parts[] = trim( (string) $v );
+		$parts[] = trim( minn_admin_cfdb7_text( $v ) );
 		if ( count( $parts ) >= 3 ) {
 			break;
 		}
@@ -466,6 +475,8 @@ add_action( 'rest_api_init', function () {
 					if ( false !== strpos( $key, 'cfdb7_file' ) ) {
 						$key     = str_replace( 'cfdb7_file', '', $key );
 						$is_file = true;
+					} else {
+						$value = minn_admin_cfdb7_text( $value );
 					}
 					$label     = preg_replace( '/^your[-_]/', '', (string) $key );
 					$label     = ucwords( str_replace( array( '-', '_' ), ' ', $label ) );
