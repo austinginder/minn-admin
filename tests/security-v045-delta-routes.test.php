@@ -232,6 +232,55 @@ if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_neutral_tag
 	}
 }
 
+// --- OS-16 Fluent Forms Pro: a preview runs no ChatGPT feed -------------------
+// {chat_gpt_response.<form>_<feed>} asks OpenAI for an answer when Fluent
+// Forms Pro's ChatGPT module is on, and stores it on the entry. Where Pro is
+// not installed, a stand-in with Pro's names records whether the parser
+// reached it. Run on a throwaway form in a rolled-back transaction.
+if ( ! class_exists( '\\FluentForm\\App\\Services\\FormBuilder\\ShortCodeParser' ) ) {
+	$skip( 'OS-16 Fluent Forms inactive' );
+} else {
+	$ff_calls = array();
+	$ff_stub  = ! defined( 'FLUENTFORMPRO' ) && ! class_exists( '\\FluentFormPro\\classes\\Chat\\ChatFieldController' );
+	if ( $ff_stub ) {
+		define( 'FLUENTFORMPRO', true );
+		$GLOBALS['minn_d45_chat_calls'] = &$ff_calls;
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a namespaced stand-in can only be declared this way mid-file.
+		eval( 'namespace FluentFormPro\classes\Chat; class ChatFieldController { public $api; public function __construct( $app = null ) { $this->api = new class() { public function isApiEnabled() { return true; } }; } public function chatGPTSubmissionMessageHandler( $form_id, $feed_id, $parser = null ) { $GLOBALS["minn_d45_chat_calls"][] = array( $form_id, $feed_id ); return "d45-openai-answer"; } }' );
+	}
+	$ff_http = array();
+	$ff_mock = function ( $pre, $args, $url ) use ( &$ff_http ) {
+		if ( false !== strpos( (string) $url, 'openai.com' ) ) {
+			$ff_http[] = $url;
+			return array( 'headers' => array(), 'body' => '{"choices":[{"message":{"content":"d45-openai-answer"}}]}', 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array() );
+		}
+		return $pre;
+	};
+	add_filter( 'pre_http_request', $ff_mock, 1, 3 );
+	global $wpdb;
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$ff_fields = array( 'fields' => array( array( 'element' => 'input_text', 'attributes' => array( 'name' => 'nick' ), 'settings' => array( 'label' => 'Nick' ) ) ) );
+		$wpdb->insert( $wpdb->prefix . 'fluentform_forms', array( 'title' => 'd45 chat probe', 'status' => 'published', 'form_fields' => wp_json_encode( $ff_fields ), 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+		$ff_form = (int) $wpdb->insert_id;
+		$wpdb->insert( $wpdb->prefix . 'fluentform_submissions', array( 'form_id' => $ff_form, 'response' => wp_json_encode( array( 'nick' => 'Dana' ) ), 'status' => 'unread', 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+		$ff_entry = (int) $wpdb->insert_id;
+		list( $ff_st, $ff_d ) = $call( 'POST', "/minn-admin/v1/fluent-forms/forms/{$ff_form}/emails/preview", array( 'subject' => "S {chat_gpt_response.{$ff_form}_7}", 'message' => "A {chat_gpt_response.{$ff_form}_7} B {{x chat_gpt_response.{$ff_form}_8} C {inputs.nick}" ) );
+		$ff_out  = wp_json_encode( $ff_d );
+		$ff_meta = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}fluentform_submission_meta WHERE response_id = %d AND meta_key LIKE %s", $ff_entry, 'chat\_gpt\_response%' ) );
+		$check( 'OS-16 the Fluent preview asks no ChatGPT feed for an answer and stores none', 200 === $ff_st && ! $ff_calls && ! $ff_http && 0 === $ff_meta && false === strpos( $ff_out, 'd45-openai-answer' ), $ff_st . ' calls ' . count( $ff_calls ) . ' http ' . count( $ff_http ) . ' meta ' . $ff_meta . ' ' . substr( $ff_out, 0, 200 ) );
+		$check( 'OS-16 the ChatGPT tag stays a placeholder', 3 === substr_count( $ff_out, "chat_gpt_response.{$ff_form}_" ), substr( $ff_out, 0, 220 ) );
+		$check( 'OS-16 control: an answer tag still fills', false !== strpos( $ff_out, 'Dana' ), substr( $ff_out, 0, 220 ) );
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+		remove_filter( 'pre_http_request', $ff_mock, 1 );
+	}
+	if ( $ff_stub ) {
+		echo "      (Fluent Forms Pro is not installed: its ChatGPT module was a stand-in)\n";
+	}
+}
+
 // --- NI-4, OS-10 WooCommerce: settings and shipping act on the page and zone in the URL
 // The settings save checked the URL's page against the sections Minn lists
 // but saved the body's, and the shipping helpers read zone and instance

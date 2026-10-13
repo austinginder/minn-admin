@@ -332,10 +332,17 @@ add_action( 'rest_api_init', function () {
 			// meta, any of its meta, any field of a private or draft page.
 			// Fluent matches a tag wherever the name sits inside the braces,
 			// and so does this; the tag stays a placeholder.
+			// {chat_gpt_response.*} (Fluent Forms Pro) asks OpenAI for an
+			// answer and stores it on the entry. It is matched the same way
+			// and stays as its name in square brackets, with no brace left
+			// to rebuild a tag from.
 			foreach ( $parts as $part => $text ) {
-				$parts[ $part ] = (string) preg_replace_callback( '/\{+([^}]*embed_post\.[^}]*)\}/', function ( $m ) {
+				$text           = (string) preg_replace_callback( '/\{+([^}]*embed_post\.[^}]*)\}/', function ( $m ) {
 					/* translators: %s: a field of the page a form was sent from, named in a merge tag. */
 					return sprintf( __( '[page field: %s]', 'minn-admin' ), sanitize_text_field( substr( $m[1], strpos( $m[1], 'embed_post.' ) + 11 ) ) );
+				}, $text );
+				$parts[ $part ] = (string) preg_replace_callback( '/\{+([^}]*chat_gpt_response\.[^}]*)\}/', function ( $m ) {
+					return '[' . preg_replace( '/[^\w.]/', '', substr( $m[1], strpos( $m[1], 'chat_gpt_response.' ) ) ) . ']';
 				}, $text );
 			}
 			$cookies = $_COOKIE;
