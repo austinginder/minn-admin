@@ -263,18 +263,35 @@ function minn_admin_autoptimize_save( $values ) {
  * @return bool
  */
 function minn_admin_autoptimize_can() {
-	if ( class_exists( 'autoptimizeOptionWrapper', false )
-		&& method_exists( 'autoptimizeOptionWrapper', 'is_ao_active_for_network' ) ) {
-		try {
-			if ( autoptimizeOptionWrapper::is_ao_active_for_network()
-				&& 'on' !== autoptimizeOptionWrapper::get_option( 'autoptimize_enable_site_config' ) ) {
-				return current_user_can( 'manage_network_options' );
-			}
-		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
-			// Fall through to the per-site test below.
-		}
+	if ( minn_admin_autoptimize_network_wide() ) {
+		// Asked where core's network admin asks it: on the main site, so a
+		// network capability one subsite's role grants counts for nothing.
+		return function_exists( 'minn_admin_network_user_can' )
+			? minn_admin_network_user_can( 'manage_network_options' )
+			: Minn_Admin::network_owner();
 	}
 	return current_user_can( 'manage_options' );
+}
+
+/**
+ * Whether Autoptimize runs on the network's settings: network-active with
+ * per-site configuration off. Its reader then returns the network's values,
+ * and its writer reaches them only from Network Admin (any other write lands
+ * in a per-site option it never reads).
+ *
+ * @return bool
+ */
+function minn_admin_autoptimize_network_wide() {
+	if ( ! class_exists( 'autoptimizeOptionWrapper', false )
+		|| ! method_exists( 'autoptimizeOptionWrapper', 'is_ao_active_for_network' ) ) {
+		return false;
+	}
+	try {
+		return autoptimizeOptionWrapper::is_ao_active_for_network()
+			&& 'on' !== autoptimizeOptionWrapper::get_option( 'autoptimize_enable_site_config' );
+	} catch ( \Throwable $e ) {
+		return false;
+	}
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
@@ -323,6 +340,9 @@ add_action( 'rest_api_init', function () {
 				return minn_admin_autoptimize_can();
 			},
 			'callback'            => function ( $req ) {
+				if ( minn_admin_autoptimize_network_wide() ) {
+					return new WP_Error( 'minn_autoptimize_network', __( 'Autoptimize runs on the network’s settings here, so change them in Network Admin.', 'minn-admin' ), array( 'status' => 409 ) );
+				}
 				$body   = $req->get_json_params();
 				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
 				minn_admin_autoptimize_save( $values );

@@ -661,6 +661,42 @@ if ( ! function_exists( 'wc_memberships_get_membership_plans' ) ) {
 	}
 }
 
+// --- 11-02 Autoptimize network-wide: no lost save, the gate on the main site -----
+// With Autoptimize network-active and per-site configuration off, its reader
+// returns the network's values and only Network Admin writes them. Minn's
+// save landed in a per-site option it never reads and answered "saved", and
+// the gate read manage_network_options from the addressed subsite's roles.
+if ( ! function_exists( 'minn_admin_autoptimize_active' ) || ! minn_admin_autoptimize_active() ) {
+	$skip( '11-02 Autoptimize inactive' );
+} elseif ( ! class_exists( 'autoptimizeOptionWrapper', false ) || ! method_exists( 'autoptimizeOptionWrapper', 'is_ao_active_for_network' ) || ! autoptimizeOptionWrapper::is_ao_active_for_network() || 'on' === autoptimizeOptionWrapper::get_option( 'autoptimize_enable_site_config' ) ) {
+	list( $ao_st ) = $call( 'POST', '/minn-admin/v1/autoptimize/settings/js', array( 'values' => new stdClass() ) );
+	$check( '11-02 control: a per-site Autoptimize still saves', 200 === $ao_st, (string) $ao_st );
+} else {
+	wp_set_current_user( $cli_user );
+	$ao_before = get_option( 'autoptimize_js', null );
+	list( $ao_st ) = $call( 'POST', '/minn-admin/v1/autoptimize/settings/js', array( 'values' => array( 'autoptimize_js' => 'on' === autoptimizeOptionWrapper::get_option( 'autoptimize_js' ) ? false : true ) ) );
+	$check( '11-02 a save of the network\'s Autoptimize settings is refused, not lost', 409 === $ao_st && get_option( 'autoptimize_js', null ) === $ao_before, $ao_st . ' per-site ' . wp_json_encode( get_option( 'autoptimize_js', null ) ) );
+	if ( get_option( 'autoptimize_js', null ) !== $ao_before ) {
+		null === $ao_before ? delete_option( 'autoptimize_js' ) : update_option( 'autoptimize_js', $ao_before );
+	}
+	$ao_uid = $make_user( 'administrator' );
+	if ( $ao_uid ) {
+		$ao_grant = function ( $caps, $cap, $args ) use ( $ao_uid ) {
+			if ( (int) ( $args[1] ?? 0 ) === $ao_uid && ! is_main_site() ) {
+				$caps['manage_network_options'] = true;
+			}
+			return $caps;
+		};
+		add_filter( 'user_has_cap', $ao_grant, 10, 3 );
+		wp_set_current_user( $ao_uid );
+		$check( '11-02 a subsite-granted network capability does not open the network\'s Autoptimize settings', is_main_site() || ( current_user_can( 'manage_network_options' ) && false === $perm_for( '/minn-admin/v1/autoptimize/settings/(?P<tab>[a-z]+)', 'POST', array( 'tab' => 'js' ) ) ), is_main_site() ? 'main site: run from a subsite' : '' );
+		remove_filter( 'user_has_cap', $ao_grant, 10 );
+		wp_set_current_user( $admin );
+		$drop_user( $ao_uid );
+	}
+	wp_set_current_user( $admin );
+}
+
 // @sections
 
 $summary();
