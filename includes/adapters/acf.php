@@ -311,10 +311,16 @@ function minn_admin_acf_links_upgraded( $field, $value ) {
 /**
  * The ACF definition for a mapped field, for minn_admin_acf_links_upgraded().
  *
- * @param array $field Mapped field (carries the ACF key).
+ * A field from a seamless clone carries a composed key (field_CLONE_field_ORIG)
+ * that acf_get_field() cannot resolve; its mapper keeps the resolved array.
+ *
+ * @param array $field Mapped field (carries the ACF key, may carry `_acf`).
  * @return array|null
  */
 function minn_admin_acf_definition( $field ) {
+	if ( ! empty( $field['_acf'] ) && is_array( $field['_acf'] ) ) {
+		return $field['_acf'];
+	}
 	if ( ! function_exists( 'acf_get_field' ) || empty( $field['key'] ) ) {
 		return null;
 	}
@@ -348,6 +354,182 @@ function minn_admin_acf_def_children( $f ) {
 		$subs = (array) acf_get_fields( $f );
 	}
 	return $subs;
+}
+
+/**
+ * Is there a flexible-content field at or under this definition?
+ *
+ * @param array $f     ACF field definition.
+ * @param int   $depth Recursion guard.
+ * @return bool
+ */
+function minn_admin_acf_def_has_flex( $f, $depth = 0 ) {
+	if ( ! is_array( $f ) || $depth > 8 ) {
+		return false;
+	}
+	if ( 'flexible_content' === ( $f['type'] ?? '' ) ) {
+		return true;
+	}
+	foreach ( minn_admin_acf_def_children( $f ) as $sub ) {
+		if ( minn_admin_acf_def_has_flex( $sub, $depth + 1 ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * How many times writing these fields whole has a term-saving taxonomy field
+ * set the object's terms, per taxonomy. One inside rows (a repeater's or a
+ * flexible layout's) counts as two: it runs once per row.
+ *
+ * @param array $fields ACF field definitions.
+ * @param bool  $rows   Whether these sit inside rows.
+ * @param int   $depth  Recursion guard.
+ * @return array Taxonomy => count.
+ */
+function minn_admin_acf_term_writes( $fields, $rows = false, $depth = 0 ) {
+	$out = array();
+	if ( $depth > 8 ) {
+		return $out;
+	}
+	foreach ( (array) $fields as $f ) {
+		if ( ! is_array( $f ) ) {
+			continue;
+		}
+		$type = (string) ( $f['type'] ?? '' );
+		if ( 'taxonomy' === $type ) {
+			$tax = isset( $f['taxonomy'] ) && is_string( $f['taxonomy'] ) ? $f['taxonomy'] : '';
+			if ( ! empty( $f['save_terms'] ) && '' !== $tax ) {
+				$out[ $tax ] = ( $out[ $tax ] ?? 0 ) + ( $rows ? 2 : 1 );
+			}
+			continue;
+		}
+		$in_rows = $rows || in_array( $type, array( 'repeater', 'flexible_content' ), true );
+		foreach ( minn_admin_acf_term_writes( minn_admin_acf_def_children( $f ), $in_rows, $depth + 1 ) as $tax => $n ) {
+			$out[ $tax ] = ( $out[ $tax ] ?? 0 ) + $n;
+		}
+	}
+	return $out;
+}
+
+/**
+ * minn_admin_acf_term_writes() over every field of these groups: the set a
+ * save on one object answers to.
+ *
+ * @param array $groups ACF field groups.
+ * @return array Taxonomy => count.
+ */
+function minn_admin_acf_groups_term_writes( $groups ) {
+	$all = array();
+	foreach ( (array) $groups as $group ) {
+		$all = array_merge( $all, (array) acf_get_fields( $group ) );
+	}
+	return minn_admin_acf_term_writes( $all );
+}
+
+/**
+ * Does a flexible-content field at or under this one hold disabled sections
+ * or renamed labels (ACF 6.5+) on this object? Walks the stored rows, since a
+ * flexible field inside a repeater keeps that meta per row
+ * (`_rep_0_fx_layout_meta`).
+ *
+ * @param array      $f         ACF field definition.
+ * @param string     $name      Its full stored name.
+ * @param int|string $object_id Post id or options id.
+ * @param int        $depth     Recursion guard.
+ * @return bool
+ */
+function minn_admin_acf_layout_meta_held( $f, $name, $object_id, $depth = 0 ) {
+	if ( '' === $name || $depth > 8 || ! function_exists( 'acf_get_metadata_by_field' ) || ! minn_admin_acf_def_has_flex( $f ) ) {
+		return false;
+	}
+	$walk = function ( $subs, $prefix ) use ( $object_id, $depth ) {
+		foreach ( (array) $subs as $sub ) {
+			if ( is_array( $sub ) && '' !== (string) ( $sub['name'] ?? '' ) && minn_admin_acf_layout_meta_held( $sub, $prefix . $sub['name'], $object_id, $depth + 1 ) ) {
+				return true;
+			}
+		}
+		return false;
+	};
+	$type = (string) ( $f['type'] ?? '' );
+	if ( 'flexible_content' === $type ) {
+		$meta = acf_get_metadata_by_field( $object_id, array( 'name' => '_' . $name . '_layout_meta' ) );
+		if ( is_array( $meta ) && ( ! empty( $meta['disabled'] ) || ! empty( $meta['renamed'] ) ) ) {
+			return true;
+		}
+		$layouts = array();
+		foreach ( (array) ( $f['layouts'] ?? array() ) as $layout ) {
+			if ( is_array( $layout ) && isset( $layout['name'] ) ) {
+				$layouts[ (string) $layout['name'] ] = $layout['sub_fields'] ?? array();
+			}
+		}
+		foreach ( (array) acf_get_metadata_by_field( $object_id, array( 'name' => $name ) ) as $i => $layout ) {
+			if ( is_scalar( $layout ) && isset( $layouts[ (string) $layout ] ) && $walk( $layouts[ (string) $layout ], "{$name}_{$i}_" ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+	if ( 'repeater' === $type ) {
+		$count = (int) acf_get_metadata_by_field( $object_id, array( 'name' => $name ) );
+		for ( $i = 0; $i < $count; $i++ ) {
+			if ( $walk( minn_admin_acf_def_children( $f ), "{$name}_{$i}_" ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+	// A group's subs store under its own name, a clone's under its parent's.
+	$prefix = 'group' === $type ? $name . '_' : substr( $name, 0, strlen( $name ) - strlen( (string) ( $f['name'] ?? '' ) ) );
+	return $walk( minn_admin_acf_def_children( $f ), $prefix );
+}
+
+/**
+ * Must this field stay in wp-admin, because writing it from Minn would lose
+ * something ACF keeps beside its value?
+ *
+ * Minn writes a repeater, a flexible-content field or an options-page group
+ * whole, through each sub-field's update_value, outside ACF's acf/save_post.
+ * Three things do not survive that, so such a field counts as living in
+ * wp-admin and is neither read nor written here:
+ *
+ * - Disabled sections and renamed labels (ACF 6.5+), kept in a flexible
+ *   field's `_{name}_layout_meta`. Its load_value drops a disabled section
+ *   outside wp-admin and its update_value rebuilds that meta from the rows it
+ *   is given, so a write deletes the one and clears the other, at any depth.
+ * - Terms saved by a taxonomy field. Outside acf/save_post every call sets
+ *   the object's terms outright, where ACF's screen collects them all first,
+ *   so one in rows, or a second field saving the same taxonomy, leaves the
+ *   object holding only the last call's terms. Terms saved from an options
+ *   page attach to no real object, there as on ACF's own screen.
+ * - A field from a seamless clone. Its composed key (field_CLONE_field_ORIG)
+ *   is one get_field() and update_field() cannot resolve, so both fall back
+ *   to a meta key of that name and an edit never reaches the real field.
+ *   Flexible content keeps its resolved definition (`_acf`) and reads and
+ *   writes through it.
+ *
+ * @param array      $f         Top-level ACF field definition.
+ * @param int|string $object_id Post id or options id (0 for a post not yet saved).
+ * @param array      $terms     minn_admin_acf_groups_term_writes() for the object.
+ * @return bool
+ */
+function minn_admin_acf_wp_admin_only( $f, $object_id, $terms ) {
+	if ( ! is_array( $f ) ) {
+		return false;
+	}
+	if ( ! empty( $f['_clone'] ) && 'flexible_content' !== ( $f['type'] ?? '' ) ) {
+		return true;
+	}
+	$decoded = function_exists( 'acf_decode_post_id' ) ? acf_decode_post_id( $object_id ) : array();
+	if ( 'option' !== ( $decoded['type'] ?? '' ) ) {
+		foreach ( minn_admin_acf_term_writes( array( $f ) ) as $tax => $n ) {
+			if ( max( $n, $terms[ $tax ] ?? 0 ) > 1 ) {
+				return true;
+			}
+		}
+	}
+	return $object_id && minn_admin_acf_layout_meta_held( $f, (string) ( $f['name'] ?? '' ), $object_id );
 }
 
 /**
@@ -1170,8 +1352,11 @@ function minn_admin_acf_client_subs( $subs ) {
  * write path's row merge (an edit overlays only the mapped subs onto the
  * original row).
  *
+ * `_acf` is the resolved ACF field array, as on map_flex(): internal, stripped
+ * before the payload ships.
+ *
  * @param array $f ACF repeater field array.
- * @return array|null { name, label, type: 'rows', subfields, subLocked, key, subs }
+ * @return array|null { name, label, type: 'rows', subfields, subLocked, key, subs, _acf }
  */
 function minn_admin_acf_map_repeater( $f ) {
 	if ( empty( $f['name'] ) || empty( $f['key'] ) ) {
@@ -1189,6 +1374,7 @@ function minn_admin_acf_map_repeater( $f ) {
 		'subLocked' => $flat['locked'],
 		'key'       => $f['key'],
 		'subs'      => $flat['subs'],
+		'_acf'      => $f,
 	);
 }
 
@@ -1705,7 +1891,9 @@ function minn_admin_acf_flex_in( $field, $value, $orig, $scope = 'post' ) {
 function minn_admin_acf_fields_payload( $post_id, $post_type ) {
 	$out    = array();
 	$by_key = array(); // mapped field key => name, across ALL groups (ACF conditions may cross groups)
-	foreach ( minn_admin_acf_groups_for( $post_id, $post_type ) as $group ) {
+	$groups = minn_admin_acf_groups_for( $post_id, $post_type );
+	$terms  = minn_admin_acf_groups_term_writes( $groups );
+	foreach ( $groups as $group ) {
 		$fields = acf_get_fields( $group );
 		$mapped = array();
 		$locked = 0;
@@ -1713,7 +1901,7 @@ function minn_admin_acf_fields_payload( $post_id, $post_type ) {
 			if ( in_array( $f['type'] ?? '', MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 				continue;
 			}
-			if ( '' !== minn_admin_acf_gate( $f, $post_id ? $post_id : null ) ) {
+			if ( '' !== minn_admin_acf_gate( $f, $post_id ? $post_id : null ) || minn_admin_acf_wp_admin_only( $f, $post_id, $terms ) ) {
 				$locked++;
 				continue;
 			}
@@ -1821,12 +2009,15 @@ function minn_admin_acf_simple_fields_for_post( $post_id ) {
 	if ( ! $post ) {
 		return array();
 	}
-	$out = array();
-	foreach ( minn_admin_acf_groups_for( $post_id, $post->post_type ) as $group ) {
+	$out    = array();
+	$groups = minn_admin_acf_groups_for( $post_id, $post->post_type );
+	$terms  = minn_admin_acf_groups_term_writes( $groups );
+	foreach ( $groups as $group ) {
 		foreach ( (array) acf_get_fields( $group ) as $f ) {
-			// Hidden or read-only for this user on ACF's screen: neither
-			// read into minn_acf nor accepted back from it.
-			if ( '' !== minn_admin_acf_gate( $f, (int) $post_id ) ) {
+			// Hidden or read-only for this user on ACF's screen, or not
+			// writable from here without loss: neither read into minn_acf
+			// nor accepted back from it.
+			if ( '' !== minn_admin_acf_gate( $f, (int) $post_id ) || minn_admin_acf_wp_admin_only( $f, (int) $post_id, $terms ) ) {
 				continue;
 			}
 			if ( 'repeater' === ( $f['type'] ?? '' ) ) {
@@ -2742,7 +2933,10 @@ function minn_admin_acf_options_tabs( $page ) {
 		}
 		return $out;
 	};
-	foreach ( acf_get_field_groups( array( 'options_page' => $page['menu_slug'] ) ) as $group ) {
+	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
+	$groups  = acf_get_field_groups( array( 'options_page' => $page['menu_slug'] ) );
+	$terms   = minn_admin_acf_groups_term_writes( $groups );
+	foreach ( $groups as $group ) {
 		$current = -1;
 		foreach ( (array) acf_get_fields( $group ) as $f ) {
 			$type = $f['type'] ?? '';
@@ -2753,7 +2947,7 @@ function minn_admin_acf_options_tabs( $page ) {
 			if ( in_array( $type, MINN_ADMIN_ACF_CHROME_TYPES, true ) ) {
 				continue;
 			}
-			$gate = minn_admin_acf_gate( $f, ! empty( $page['post_id'] ) ? $page['post_id'] : 'options' );
+			$gate = minn_admin_acf_gate( $f, $post_id );
 			if ( $current < 0 ) {
 				$open( $group['title'] );
 			}
@@ -2761,6 +2955,12 @@ function minn_admin_acf_options_tabs( $page ) {
 				// A hidden field is counted but never named: the site chose
 				// to keep it from this user, label included.
 				$lock( 'hide' === $gate ? '' : ( $f['label'] ?? '' ) );
+				continue;
+			}
+			// A group goes back whole on any edit of its subs, so it answers
+			// for everything inside it.
+			if ( minn_admin_acf_wp_admin_only( $f, $post_id, $terms ) ) {
+				$lock( $f['label'] ?? '' );
 				continue;
 			}
 			$cond = ! empty( $f['conditional_logic'] ) && is_array( $f['conditional_logic'] ) ? $f['conditional_logic'] : null;
@@ -2844,8 +3044,7 @@ function minn_admin_acf_options_tabs( $page ) {
 	// otherwise a one-time evaluation against stored values, hiding the
 	// field like ACF's own screen would. A flattened group sub's stored
 	// value reads through its parent.
-	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
-	$stored  = function ( $key ) use ( $post_id ) {
+	$stored = function ( $key ) use ( $post_id ) {
 		$acf = acf_get_field( $key );
 		if ( $acf && ! empty( $acf['parent'] ) ) {
 			$parent = acf_get_field( $acf['parent'] );

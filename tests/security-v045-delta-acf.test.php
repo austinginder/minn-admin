@@ -5,7 +5,10 @@
  * Each section replays what Minn's client sends through the route it calls,
  * and checks what ACF stored, with a control where a fix could over-block:
  * NI-1 (a new repeater row or flexible section inherits the stored values of
- * the row that sat at its index). Sections SKIP when ACF PRO is inactive.
+ * the row that sat at its index), OS-1 (disabled sections and renamed labels
+ * lost to a flexible-content write), r2 / OS-13 (fields from a seamless
+ * clone) and OS-15 (a term-saving taxonomy field in rows). Sections SKIP when
+ * ACF PRO is inactive.
  *
  * Run: wp eval-file tests/security-v045-delta-acf.test.php --user=admin --path=<site>
  *
@@ -289,6 +292,413 @@ if ( ! $n4_pid ) {
 	wp_delete_post( $n4_pid, true );
 }
 acf_remove_local_field_group( 'group_minn_d1_rows' );
+
+// --- OS-1 disabled sections and renamed labels stay in wp-admin -------------
+// ACF 6.5+ keeps them in `_{name}_layout_meta`. Its flexible field drops a
+// disabled section from every read outside wp-admin, and its update_value
+// rebuilds that meta from the rows it is given, so a write from Minn deleted
+// the section and cleared every label, at any depth.
+acf_add_local_field_group( array(
+	'key'      => 'group_minn_d1_flex',
+	'title'    => 'MinnD1 flex',
+	'fields'   => array(
+		array( 'key' => 'field_minn_d1_note', 'name' => 'minn_d1_note', 'label' => 'Note', 'type' => 'text' ),
+		array(
+			'key'     => 'field_minn_d1_page',
+			'name'    => 'minn_d1_page',
+			'label'   => 'Page',
+			'type'    => 'flexible_content',
+			'layouts' => array(
+				'layout_minn_d1_p_hero' => array( 'key' => 'layout_minn_d1_p_hero', 'name' => 'hero', 'label' => 'Hero', 'display' => 'block', 'sub_fields' => array( array( 'key' => 'field_minn_d1_p_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text' ) ) ),
+				'layout_minn_d1_p_cta'  => array( 'key' => 'layout_minn_d1_p_cta', 'name' => 'cta', 'label' => 'CTA', 'display' => 'block', 'sub_fields' => array( array( 'key' => 'field_minn_d1_p_label', 'name' => 'label', 'label' => 'Label', 'type' => 'text' ) ) ),
+				'layout_minn_d1_p_text' => array( 'key' => 'layout_minn_d1_p_text', 'name' => 'text', 'label' => 'Text', 'display' => 'block', 'sub_fields' => array( array( 'key' => 'field_minn_d1_p_body', 'name' => 'body', 'label' => 'Body', 'type' => 'textarea' ) ) ),
+			),
+		),
+		array(
+			'key'        => 'field_minn_d1_wrap',
+			'name'       => 'minn_d1_wrap',
+			'label'      => 'Wrap',
+			'type'       => 'repeater',
+			'sub_fields' => array(
+				array( 'key' => 'field_minn_d1_w_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text' ),
+				array(
+					'key'     => 'field_minn_d1_w_inner',
+					'name'    => 'inner',
+					'label'   => 'Inner',
+					'type'    => 'flexible_content',
+					'layouts' => array(
+						'layout_minn_d1_w_a' => array( 'key' => 'layout_minn_d1_w_a', 'name' => 'a', 'label' => 'A', 'display' => 'block', 'sub_fields' => array( array( 'key' => 'field_minn_d1_w_at', 'name' => 't', 'label' => 'T', 'type' => 'text' ) ) ),
+						'layout_minn_d1_w_b' => array( 'key' => 'layout_minn_d1_w_b', 'name' => 'b', 'label' => 'B', 'display' => 'block', 'sub_fields' => array( array( 'key' => 'field_minn_d1_w_bt', 'name' => 't', 'label' => 'T', 'type' => 'text' ) ) ),
+					),
+				),
+			),
+		),
+	),
+	'location' => $post_location,
+) );
+$layout_meta = function ( $pid, $name ) {
+	wp_cache_delete( $pid, 'post_meta' );
+	$m = acf_get_metadata_by_field( $pid, array( 'name' => '_' . $name . '_layout_meta' ) );
+	return is_array( $m ) ? $m : array();
+};
+// Disabled and renamed through ACF's own update_value, as its screen saves them.
+$o1_pid = $make_post( 'flex meta', $contrib );
+if ( ! $o1_pid ) {
+	$check( 'OS-1 fixture', false );
+} else {
+	update_field( 'field_minn_d1_note', 'Note', $o1_pid );
+	update_field(
+		'field_minn_d1_page',
+		array(
+			array( 'acf_fc_layout' => 'hero', 'field_minn_d1_p_title' => 'Hero' ),
+			array( 'acf_fc_layout' => 'cta', 'field_minn_d1_p_label' => 'Buy', 'acf_fc_layout_disabled' => 1 ),
+			array( 'acf_fc_layout' => 'text', 'field_minn_d1_p_body' => 'Body', 'acf_fc_layout_custom_label' => 'Intro text' ),
+		),
+		$o1_pid
+	);
+	update_field(
+		'field_minn_d1_wrap',
+		array(
+			array(
+				'field_minn_d1_w_title' => 'W',
+				'field_minn_d1_w_inner' => array(
+					array( 'acf_fc_layout' => 'a', 'field_minn_d1_w_at' => 'A0', 'acf_fc_layout_disabled' => 1 ),
+					array( 'acf_fc_layout' => 'b', 'field_minn_d1_w_bt' => 'B1' ),
+				),
+			),
+		),
+		$o1_pid
+	);
+	$o1_meta  = $layout_meta( $o1_pid, 'minn_d1_page' );
+	$o1_inner = $layout_meta( $o1_pid, 'minn_d1_wrap_0_inner' );
+	if ( array( 1 ) !== ( $o1_meta['disabled'] ?? null ) || 'Intro text' !== ( $o1_meta['renamed'][2] ?? '' ) || array( 0 ) !== ( $o1_inner['disabled'] ?? null ) ) {
+		$check( 'OS-1 fixture: ACF stored the layout meta', false, wp_json_encode( array( $o1_meta, $o1_inner ) ) );
+	} else {
+		wp_set_current_user( $contrib );
+		// What the client sends after editing the text section: the read it
+		// was served leaves the disabled section out.
+		$o1_st = $save(
+			$o1_pid,
+			array(
+				'minn_d1_note' => 'Note 2',
+				'minn_d1_page' => array(
+					array( '__idx' => 0, '__layout' => 'hero', 'values' => array( 'title' => 'Hero' ) ),
+					array( '__idx' => 1, '__layout' => 'text', 'values' => array( 'body' => 'Body 2' ) ),
+				),
+				'minn_d1_wrap' => array( array( '__idx' => 0, 'values' => array( 'title' => 'W2' ) ) ),
+			)
+		);
+		$o1_after = $layout_meta( $o1_pid, 'minn_d1_page' );
+		$check( 'OS-1 a flexible save keeps the section disabled in wp-admin', 200 === $o1_st && array( 'hero', 'cta', 'text' ) === $meta( $o1_pid, 'minn_d1_page' ) && 'Buy' === $meta( $o1_pid, 'minn_d1_page_1_label' ), $o1_st . ' ' . wp_json_encode( $meta( $o1_pid, 'minn_d1_page' ) ) );
+		$check( 'OS-1 and its disabled and renamed layout meta', array( 1 ) === ( $o1_after['disabled'] ?? null ) && 'Intro text' === ( $o1_after['renamed'][2] ?? '' ), wp_json_encode( $o1_after ) );
+		$check( 'OS-1 a repeater save keeps a disabled section of a flexible field in its row', array( 'a', 'b' ) === $meta( $o1_pid, 'minn_d1_wrap_0_inner' ) && array( 0 ) === ( $layout_meta( $o1_pid, 'minn_d1_wrap_0_inner' )['disabled'] ?? null ), wp_json_encode( array( $meta( $o1_pid, 'minn_d1_wrap_0_inner' ), $layout_meta( $o1_pid, 'minn_d1_wrap_0_inner' ) ) ) );
+		$check( 'OS-1 control: the rest of the post still saves', 'Note 2' === $meta( $o1_pid, 'minn_d1_note' ), wp_json_encode( $meta( $o1_pid, 'minn_d1_note' ) ) );
+		$o1_g = $payload_group( $o1_pid, 'MinnD1 flex' );
+		$check( 'OS-1 both fields count as living in wp-admin', ! in_array( 'minn_d1_page', $o1_g['names'], true ) && ! in_array( 'minn_d1_wrap', $o1_g['names'], true ) && 2 === $o1_g['locked'] && ! array_key_exists( 'minn_d1_page', $panel( $o1_pid ) ), wp_json_encode( $o1_g ) );
+		wp_set_current_user( $admin );
+	}
+	wp_delete_post( $o1_pid, true );
+}
+// Control: no disabled or renamed section, still served and saved.
+$o2_pid = $make_post( 'flex plain', $contrib );
+if ( ! $o2_pid ) {
+	$check( 'OS-1 fixture (plain)', false );
+} else {
+	update_field( 'field_minn_d1_page', array( array( 'acf_fc_layout' => 'hero', 'field_minn_d1_p_title' => 'Hero' ), array( 'acf_fc_layout' => 'text', 'field_minn_d1_p_body' => 'Body' ) ), $o2_pid );
+	update_field( 'field_minn_d1_wrap', array( array( 'field_minn_d1_w_title' => 'W', 'field_minn_d1_w_inner' => array( array( 'acf_fc_layout' => 'a', 'field_minn_d1_w_at' => 'A0' ) ) ) ), $o2_pid );
+	wp_set_current_user( $contrib );
+	$o2_vals = $panel( $o2_pid );
+	$o2_page = $o2_vals['minn_d1_page'] ?? null;
+	$o2_wrap = $o2_vals['minn_d1_wrap'] ?? null;
+	if ( ! is_array( $o2_page ) || 2 !== count( $o2_page ) || ! is_array( $o2_wrap ) || 1 !== count( $o2_wrap ) ) {
+		$check( 'OS-1 control: a flexible field with no disabled or renamed section is served', false, wp_json_encode( array( $o2_page, $o2_wrap ) ) );
+	} else {
+		$o2_page[1]['values']['body'] = 'Body 2';
+		$o2_wrap[0]['values']['title'] = 'W2';
+		$o2_st = $save( $o2_pid, array( 'minn_d1_page' => $o2_page, 'minn_d1_wrap' => $o2_wrap ) );
+		$check( 'OS-1 control: a flexible field with no disabled or renamed section still saves', 200 === $o2_st && 'Body 2' === $meta( $o2_pid, 'minn_d1_page_1_body' ) && 'W2' === $meta( $o2_pid, 'minn_d1_wrap_0_title' ) && 'A0' === $meta( $o2_pid, 'minn_d1_wrap_0_inner_0_t' ), $o2_st . ' ' . wp_json_encode( array( $meta( $o2_pid, 'minn_d1_page_1_body' ), $meta( $o2_pid, 'minn_d1_wrap_0_title' ) ) ) );
+	}
+	wp_set_current_user( $admin );
+	wp_delete_post( $o2_pid, true );
+}
+acf_remove_local_field_group( 'group_minn_d1_flex' );
+
+// Options page: a top-level flexible field and one inside a group (the group
+// is written whole on any edit of its subs).
+acf_add_options_page( array( 'page_title' => 'MinnD1 opts', 'menu_title' => 'MinnD1 opts', 'menu_slug' => 'minn-d1-opts', 'post_id' => 'minn_d1_opts', 'capability' => 'edit_posts', 'redirect' => false ) );
+acf_add_local_field_group( array(
+	'key'      => 'group_minn_d1_opts',
+	'title'    => 'MinnD1 opts',
+	'fields'   => array(
+		array( 'key' => 'field_minn_d1_otext', 'name' => 'minn_d1_otext', 'label' => 'Text', 'type' => 'text' ),
+		array(
+			'key'     => 'field_minn_d1_ofx',
+			'name'    => 'minn_d1_ofx',
+			'label'   => 'Blocks',
+			'type'    => 'flexible_content',
+			'layouts' => array( 'layout_minn_d1_o_hero' => array( 'key' => 'layout_minn_d1_o_hero', 'name' => 'hero', 'label' => 'Hero', 'display' => 'block', 'sub_fields' => array( array( 'key' => 'field_minn_d1_o_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text' ) ) ) ),
+		),
+		array(
+			'key'        => 'field_minn_d1_og',
+			'name'       => 'minn_d1_og',
+			'label'      => 'Banner',
+			'type'       => 'group',
+			'sub_fields' => array(
+				array( 'key' => 'field_minn_d1_og_tag', 'name' => 'tag', 'label' => 'Tag', 'type' => 'text' ),
+				array(
+					'key'     => 'field_minn_d1_og_fx',
+					'name'    => 'fx',
+					'label'   => 'Parts',
+					'type'    => 'flexible_content',
+					'layouts' => array( 'layout_minn_d1_og_a' => array( 'key' => 'layout_minn_d1_og_a', 'name' => 'a', 'label' => 'A', 'display' => 'block', 'sub_fields' => array( array( 'key' => 'field_minn_d1_og_t', 'name' => 't', 'label' => 'T', 'type' => 'text' ) ) ) ),
+				),
+			),
+		),
+	),
+	'location' => array( array( array( 'param' => 'options_page', 'operator' => '==', 'value' => 'minn-d1-opts' ) ) ),
+) );
+update_field( 'field_minn_d1_otext', 'Old', 'minn_d1_opts' );
+update_field( 'field_minn_d1_ofx', array( array( 'acf_fc_layout' => 'hero', 'field_minn_d1_o_title' => 'H0' ), array( 'acf_fc_layout' => 'hero', 'field_minn_d1_o_title' => 'H1', 'acf_fc_layout_disabled' => 1 ) ), 'minn_d1_opts' );
+update_field( 'field_minn_d1_og', array( 'field_minn_d1_og_tag' => 'Tag', 'field_minn_d1_og_fx' => array( array( 'acf_fc_layout' => 'a', 'field_minn_d1_og_t' => 'T0', 'acf_fc_layout_custom_label' => 'Renamed' ) ) ), 'minn_d1_opts' );
+$opt_meta = function ( $name ) {
+	wp_cache_delete( 'alloptions', 'options' );
+	$m = acf_get_metadata_by_field( 'minn_d1_opts', array( 'name' => '_' . $name . '_layout_meta' ) );
+	return is_array( $m ) ? $m : array();
+};
+$opt_raw = function ( $name ) {
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'minn_d1_opts_' . $name, 'options' );
+	return get_option( 'minn_d1_opts_' . $name );
+};
+if ( array( 1 ) !== ( $opt_meta( 'minn_d1_ofx' )['disabled'] ?? null ) || 'Renamed' !== ( $opt_meta( 'minn_d1_og_fx' )['renamed'][0] ?? '' ) ) {
+	$check( 'OS-1 fixture: ACF stored the options layout meta', false, wp_json_encode( array( $opt_meta( 'minn_d1_ofx' ), $opt_meta( 'minn_d1_og_fx' ) ) ) );
+} else {
+	wp_set_current_user( $contrib );
+	list( $op_st ) = $call(
+		'POST',
+		'/minn-admin/v1/acf/options/minn-d1-opts/tab-0',
+		array(
+			'values' => array(
+				'field_minn_d1_otext'  => 'New',
+				'field_minn_d1_ofx'    => array( array( '__idx' => 0, '__layout' => 'hero', 'values' => array( 'title' => 'H0 edited' ) ) ),
+				'field_minn_d1_og_tag' => 'Tag 2',
+			),
+		)
+	);
+	$check( 'OS-1 an options-page flexible save keeps a disabled section', 200 === $op_st && array( 'hero', 'hero' ) === $opt_raw( 'minn_d1_ofx' ) && array( 1 ) === ( $opt_meta( 'minn_d1_ofx' )['disabled'] ?? null ), $op_st . ' ' . wp_json_encode( array( $opt_raw( 'minn_d1_ofx' ), $opt_meta( 'minn_d1_ofx' ) ) ) );
+	$check( 'OS-1 an options-page group save keeps its flexible field\'s renamed label', 'Renamed' === ( $opt_meta( 'minn_d1_og_fx' )['renamed'][0] ?? '' ), wp_json_encode( $opt_meta( 'minn_d1_og_fx' ) ) );
+	$check( 'OS-1 control: the options page\'s other field still saves', 'New' === $opt_raw( 'minn_d1_otext' ), wp_json_encode( $opt_raw( 'minn_d1_otext' ) ) );
+	wp_set_current_user( $admin );
+}
+acf_remove_local_field_group( 'group_minn_d1_opts' );
+$drop_opts();
+
+// --- r2 / OS-13 fields from a seamless clone ---------------------------------
+// ACF composes their keys (field_CLONE_field_ORIG), which acf_get_field()
+// cannot resolve. A flexible field keeps its definition, but the link
+// upgrade asked acf_get_field() for it and did nothing (r2); a repeater or a
+// simple field read and wrote a stand-in meta key of the composed name (OS-13).
+acf_add_local_field_group( array(
+	'key'      => 'group_minn_d1_src',
+	'title'    => 'MinnD1 source',
+	'fields'   => array(
+		array( 'key' => 'field_minn_d1_src_text', 'name' => 'minn_d1_src_text', 'label' => 'Source text', 'type' => 'text' ),
+		array(
+			'key'        => 'field_minn_d1_src_rep',
+			'name'       => 'minn_d1_src_rep',
+			'label'      => 'Source rows',
+			'type'       => 'repeater',
+			'sub_fields' => array( array( 'key' => 'field_minn_d1_src_rep_t', 'name' => 't', 'label' => 'T', 'type' => 'text' ) ),
+		),
+		array(
+			'key'     => 'field_minn_d1_src_fx',
+			'name'    => 'minn_d1_src_fx',
+			'label'   => 'Source sections',
+			'type'    => 'flexible_content',
+			'layouts' => array(
+				'layout_minn_d1_src_blk' => array(
+					'key'        => 'layout_minn_d1_src_blk',
+					'name'       => 'blk',
+					'label'      => 'Block',
+					'display'    => 'block',
+					'sub_fields' => array(
+						array( 'key' => 'field_minn_d1_src_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text' ),
+						array(
+							'key'        => 'field_minn_d1_src_items',
+							'name'       => 'items',
+							'label'      => 'Items',
+							'type'       => 'repeater',
+							'sub_fields' => array( array( 'key' => 'field_minn_d1_src_cta', 'name' => 'cta', 'label' => 'CTA', 'type' => 'link' ) ),
+						),
+					),
+				),
+			),
+		),
+	),
+	'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'minn_d1_nowhere' ) ) ),
+) );
+acf_add_local_field_group( array(
+	'key'      => 'group_minn_d1_host',
+	'title'    => 'MinnD1 host',
+	'fields'   => array(
+		array( 'key' => 'field_minn_d1_host_note', 'name' => 'minn_d1_host_note', 'label' => 'Host note', 'type' => 'text' ),
+		array( 'key' => 'field_minn_d1_clone', 'name' => 'minn_d1_clone', 'label' => 'Clone', 'type' => 'clone', 'clone' => array( 'group_minn_d1_src' ), 'display' => 'seamless', 'layout' => 'block', 'prefix_label' => 0, 'prefix_name' => 0 ),
+	),
+	'location' => $post_location,
+) );
+$c_pid = $make_post( 'clone', $admin );
+if ( ! $c_pid ) {
+	$check( 'OS-13 fixture', false );
+} else {
+	foreach (
+		array(
+			'minn_d1_host_note'                => array( 'Host', 'field_minn_d1_host_note' ),
+			'minn_d1_src_text'                 => array( 'Real', 'field_minn_d1_src_text' ),
+			'minn_d1_src_rep'                  => array( 1, 'field_minn_d1_src_rep' ),
+			'minn_d1_src_rep_0_t'              => array( 'R0', 'field_minn_d1_src_rep_t' ),
+			'minn_d1_src_fx'                   => array( array( 'blk' ), 'field_minn_d1_src_fx' ),
+			'minn_d1_src_fx_0_title'           => array( 'Blk', 'field_minn_d1_src_title' ),
+			'minn_d1_src_fx_0_items'           => array( 1, 'field_minn_d1_src_items' ),
+			'minn_d1_src_fx_0_items_0_cta'     => array( 'https://c.example/', 'field_minn_d1_src_cta' ),
+		) as $c_k => $c_v
+	) {
+		update_post_meta( $c_pid, $c_k, $c_v[0] );
+		update_post_meta( $c_pid, '_' . $c_k, $c_v[1] );
+	}
+	$c_vals = $panel( $c_pid );
+	$c_fx   = $c_vals['minn_d1_src_fx'] ?? null;
+	if ( ! is_array( $c_fx ) || 1 !== count( $c_fx ) ) {
+		$check( 'r2 the panel serves the cloned flexible field', false, wp_json_encode( $c_vals ) );
+	} else {
+		$c_fx[0]['values']['title'] = 'Blk 2';
+		$c_st = $save( $c_pid, array( 'minn_d1_src_fx' => $c_fx ) );
+		$check( 'r2 a cloned flexible field\'s old-shape link in a nested repeater survives a section edit', 200 === $c_st && 'https://c.example/' === $link_url( $meta( $c_pid, 'minn_d1_src_fx_0_items_0_cta' ) ), $c_st . ' ' . wp_json_encode( $meta( $c_pid, 'minn_d1_src_fx_0_items_0_cta' ) ) );
+		$check( 'r2 control: the edited section title saves to the real field', 'Blk 2' === $meta( $c_pid, 'minn_d1_src_fx_0_title' ), wp_json_encode( $meta( $c_pid, 'minn_d1_src_fx_0_title' ) ) );
+	}
+	$check( 'OS-13 a cloned text field is not served from a stand-in key', ! array_key_exists( 'minn_d1_src_text', $c_vals ) || 'Real' === $c_vals['minn_d1_src_text'], wp_json_encode( $c_vals['minn_d1_src_text'] ?? null ) );
+	$check( 'OS-13 a cloned repeater is not served from a stand-in key', ! array_key_exists( 'minn_d1_src_rep', $c_vals ) || 1 === count( (array) $c_vals['minn_d1_src_rep'] ), wp_json_encode( $c_vals['minn_d1_src_rep'] ?? null ) );
+	$c_st2 = $save( $c_pid, array( 'minn_d1_src_text' => 'Edited', 'minn_d1_src_rep' => array( array( 'values' => array( 't' => 'New' ) ) ), 'minn_d1_host_note' => 'Host 2' ) );
+	wp_cache_delete( $c_pid, 'post_meta' );
+	$c_stray = array_values( array_filter( array_keys( (array) get_post_meta( $c_pid ) ), function ( $k ) {
+		return false !== strpos( $k, 'field_minn_d1_clone_field_' );
+	} ) );
+	$check( 'OS-13 an edit never lands in a stand-in meta key', 200 === $c_st2 && ! $c_stray, $c_st2 . ' ' . wp_json_encode( $c_stray ) );
+	$check( 'OS-13 the real cloned values are untouched', 'Real' === $meta( $c_pid, 'minn_d1_src_text' ) && 'R0' === $meta( $c_pid, 'minn_d1_src_rep_0_t' ) );
+	$check( 'OS-13 control: the host group\'s own field saves', 'Host 2' === $meta( $c_pid, 'minn_d1_host_note' ) );
+	$c_g = $payload_group( $c_pid, 'MinnD1 host' );
+	$check( 'OS-13 the cloned text and repeater count as living in wp-admin, the cloned flexible field is served', 2 === $c_g['locked'] && in_array( 'minn_d1_src_fx', $c_g['names'], true ) && ! in_array( 'minn_d1_src_text', $c_g['names'], true ), wp_json_encode( $c_g ) );
+	wp_delete_post( $c_pid, true );
+}
+acf_remove_local_field_group( 'group_minn_d1_host' );
+acf_remove_local_field_group( 'group_minn_d1_src' );
+
+// --- OS-15 term-saving taxonomy fields that ACF would call more than once ---
+// With no acf/save_post on a REST write, each call sets the post's terms
+// outright: rows leave only the last row's, and a second field saving the
+// same taxonomy loses its terms to an edit of the first.
+$t_ids = array();
+foreach ( array( 'alpha', 'beta', 'gamma' ) as $t_slug ) {
+	$t = wp_insert_term( 'MinnD1 ' . $t_slug, 'post_tag', array( 'slug' => 'minn-d1-' . $t_slug ) );
+	if ( is_array( $t ) && (int) $t['term_id'] > 1 ) {
+		$t_ids[ $t_slug ] = (int) $t['term_id'];
+	}
+}
+$post_terms = function ( $pid ) {
+	clean_object_term_cache( $pid, 'post' );
+	$ids = wp_get_object_terms( $pid, 'post_tag', array( 'fields' => 'ids' ) );
+	$ids = is_array( $ids ) ? array_map( 'intval', $ids ) : array();
+	sort( $ids );
+	return $ids;
+};
+if ( 3 !== count( $t_ids ) ) {
+	$check( 'OS-15 fixture: three tags', false );
+} else {
+	$tax = function ( $key, $name, $save, $type = 'select' ) {
+		return array( 'key' => $key, 'name' => $name, 'label' => $name, 'type' => 'taxonomy', 'taxonomy' => 'post_tag', 'field_type' => $type, 'save_terms' => $save, 'load_terms' => 0, 'return_format' => 'id', 'allow_null' => 1 );
+	};
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn_d1_terms',
+		'title'    => 'MinnD1 terms',
+		'fields'   => array(
+			array( 'key' => 'field_minn_d1_tagrows', 'name' => 'minn_d1_tagrows', 'label' => 'Tag rows', 'type' => 'repeater', 'sub_fields' => array( array( 'key' => 'field_minn_d1_tr_label', 'name' => 'label', 'label' => 'Label', 'type' => 'text' ), $tax( 'field_minn_d1_tr_tag', 'tag', 1 ) ) ),
+			array( 'key' => 'field_minn_d1_plainrows', 'name' => 'minn_d1_plainrows', 'label' => 'Plain rows', 'type' => 'repeater', 'sub_fields' => array( array( 'key' => 'field_minn_d1_pr_label', 'name' => 'label', 'label' => 'Label', 'type' => 'text' ), $tax( 'field_minn_d1_pr_tag', 'tag', 0 ) ) ),
+		),
+		'location' => $post_location,
+	) );
+	$s_pid = $make_post( 'terms rows', $admin );
+	if ( ! $s_pid ) {
+		$check( 'OS-15 fixture', false );
+	} else {
+		$seed( $s_pid, 'minn_d1_tagrows', 'field_minn_d1_tagrows', array( array( 'label' => 'A', 'tag' => $t_ids['alpha'] ), array( 'label' => 'B', 'tag' => $t_ids['beta'] ) ), array( 'label' => 'field_minn_d1_tr_label', 'tag' => 'field_minn_d1_tr_tag' ) );
+		$seed( $s_pid, 'minn_d1_plainrows', 'field_minn_d1_plainrows', array( array( 'label' => 'P', 'tag' => $t_ids['gamma'] ) ), array( 'label' => 'field_minn_d1_pr_label', 'tag' => 'field_minn_d1_pr_tag' ) );
+		wp_set_object_terms( $s_pid, array( $t_ids['alpha'], $t_ids['beta'] ), 'post_tag', false );
+		$s_vals = $panel( $s_pid );
+		// What the client sends when row A's label is edited.
+		$s_st = $save( $s_pid, array( 'minn_d1_tagrows' => array( array( '__idx' => 0, 'values' => array( 'label' => 'A2' ) ), array( '__idx' => 1, 'values' => array( 'label' => 'B' ) ) ) ) );
+		$s_want = array( $t_ids['alpha'], $t_ids['beta'] );
+		sort( $s_want );
+		$check( 'OS-15 a rows save keeps every row\'s saved terms on the post', 200 === $s_st && $s_want === $post_terms( $s_pid ), $s_st . ' ' . wp_json_encode( $post_terms( $s_pid ) ) );
+		$check( 'OS-15 the term-saving repeater counts as living in wp-admin', ! array_key_exists( 'minn_d1_tagrows', $s_vals ) && ! in_array( 'minn_d1_tagrows', $payload_group( $s_pid, 'MinnD1 terms' )['names'], true ), wp_json_encode( array_keys( $s_vals ) ) );
+		$s_plain = $s_vals['minn_d1_plainrows'] ?? null;
+		if ( ! is_array( $s_plain ) || 1 !== count( $s_plain ) ) {
+			$check( 'OS-15 control: a repeater whose taxonomy sub saves no terms is served', false, wp_json_encode( $s_plain ) );
+		} else {
+			$s_plain[0]['values']['label'] = 'P2';
+			$s_st2 = $save( $s_pid, array( 'minn_d1_plainrows' => $s_plain ) );
+			$check( 'OS-15 control: a repeater whose taxonomy sub saves no terms still saves', 200 === $s_st2 && 'P2' === $meta( $s_pid, 'minn_d1_plainrows_0_label' ) && (string) $t_ids['gamma'] === (string) $meta( $s_pid, 'minn_d1_plainrows_0_tag' ), $s_st2 . ' ' . wp_json_encode( $meta( $s_pid, 'minn_d1_plainrows_0_label' ) ) );
+		}
+		wp_delete_post( $s_pid, true );
+	}
+	acf_remove_local_field_group( 'group_minn_d1_terms' );
+
+	// Two top-level fields saving the same taxonomy.
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn_d1_terms2',
+		'title'    => 'MinnD1 terms2',
+		'fields'   => array( $tax( 'field_minn_d1_primary', 'minn_d1_primary', 1 ), $tax( 'field_minn_d1_more', 'minn_d1_more', 1, 'multi_select' ) ),
+		'location' => $post_location,
+	) );
+	$s2_pid = $make_post( 'terms pair', $admin );
+	if ( ! $s2_pid ) {
+		$check( 'OS-15 fixture (pair)', false );
+	} else {
+		update_post_meta( $s2_pid, 'minn_d1_primary', $t_ids['alpha'] );
+		update_post_meta( $s2_pid, '_minn_d1_primary', 'field_minn_d1_primary' );
+		update_post_meta( $s2_pid, 'minn_d1_more', array( (string) $t_ids['beta'] ) );
+		update_post_meta( $s2_pid, '_minn_d1_more', 'field_minn_d1_more' );
+		wp_set_object_terms( $s2_pid, array( $t_ids['alpha'], $t_ids['beta'] ), 'post_tag', false );
+		$s2_st = $save( $s2_pid, array( 'minn_d1_primary' => array( 'value' => (string) $t_ids['gamma'] ) ) );
+		$check( 'OS-15 an edit of one term-saving field keeps the other\'s terms on the post', 200 === $s2_st && in_array( $t_ids['beta'], $post_terms( $s2_pid ), true ), $s2_st . ' ' . wp_json_encode( $post_terms( $s2_pid ) ) );
+		wp_delete_post( $s2_pid, true );
+	}
+	acf_remove_local_field_group( 'group_minn_d1_terms2' );
+
+	// Control: one term-saving field alone still edits, and sets the terms.
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn_d1_terms3',
+		'title'    => 'MinnD1 terms3',
+		'fields'   => array( $tax( 'field_minn_d1_solo', 'minn_d1_solo', 1 ) ),
+		'location' => $post_location,
+	) );
+	$s3_pid = $make_post( 'terms solo', $admin );
+	if ( ! $s3_pid ) {
+		$check( 'OS-15 fixture (solo)', false );
+	} else {
+		update_post_meta( $s3_pid, 'minn_d1_solo', $t_ids['alpha'] );
+		update_post_meta( $s3_pid, '_minn_d1_solo', 'field_minn_d1_solo' );
+		wp_set_object_terms( $s3_pid, array( $t_ids['alpha'] ), 'post_tag', false );
+		$s3_served = array_key_exists( 'minn_d1_solo', $panel( $s3_pid ) );
+		$s3_st     = $save( $s3_pid, array( 'minn_d1_solo' => array( 'value' => (string) $t_ids['gamma'] ) ) );
+		$check( 'OS-15 control: a single term-saving field is served and saves its terms', $s3_served && 200 === $s3_st && (string) $t_ids['gamma'] === (string) $meta( $s3_pid, 'minn_d1_solo' ) && array( $t_ids['gamma'] ) === $post_terms( $s3_pid ), $s3_st . ' ' . wp_json_encode( array( $s3_served, $meta( $s3_pid, 'minn_d1_solo' ), $post_terms( $s3_pid ) ) ) );
+		wp_delete_post( $s3_pid, true );
+	}
+	acf_remove_local_field_group( 'group_minn_d1_terms3' );
+}
+foreach ( $t_ids as $t_id ) {
+	if ( $t_id > 1 ) {
+		wp_delete_term( $t_id, 'post_tag' );
+	}
+}
 
 $drop_user( $contrib );
 
