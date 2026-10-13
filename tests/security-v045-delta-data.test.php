@@ -167,9 +167,25 @@ $d45 = array(
 	'wc_dash'  => $p . 'woocommerce-log',
 	'wc_addr'  => $p . 'bak_wc_order_addresses',
 	'blank'    => $p . 'minnd45_blank',
+	// OS-2r: copies whose name holds no store's name, known by their columns.
+	'um_noname' => $p . 'user_meta_backup',
+	'um_short'  => $p . 'um_bak',
+	'um_misled' => $p . 'options_copy_2',
+	'op_noname' => $p . 'opt_bak',
+	'sm_noname' => $p . 'net_meta_bak',
+	'pm_noname' => $p . 'pm_bak',
+	'wcmeta'    => $p . 'minnd45_order_meta',
+	'wpd_copy'  => $p . 'wc_phrases_bak',
 );
-$d45_drop = function () use ( $wpdb, $d45 ) {
-	foreach ( $d45 as $t ) {
+// wpDiscuz's own tables, made only where wpDiscuz has not made them.
+$wpd_tables = array();
+foreach ( array( 'wc_phrases', 'wc_users_voted' ) as $wpd_base ) {
+	if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $p . $wpd_base ) ) ) ) {
+		$wpd_tables[] = $p . $wpd_base;
+	}
+}
+$d45_drop = function () use ( $wpdb, $d45, &$wpd_tables ) {
+	foreach ( array_merge( array_values( $d45 ), $wpd_tables ) as $t ) {
 		$wpdb->query( 'DROP TABLE IF EXISTS `' . str_replace( '`', '``', $t ) . '`' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 };
@@ -237,6 +253,31 @@ foreach ( array( 'wc_bak', 'wc_old', 'wc_wp', 'wc_dash', 'wc_addr' ) as $k ) {
 }
 $wpdb->query( "CREATE TABLE {$q( $d45['blank'] )} ( `id` int(11) unsigned NOT NULL AUTO_INCREMENT, `v` varchar(1) NOT NULL DEFAULT '', PRIMARY KEY (`id`) )" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 $wpdb->query( "INSERT INTO {$q( $d45['blank'] )} (`v`) VALUES " . implode( ',', array_fill( 0, 2000, "('')" ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+foreach ( array( 'um_noname', 'um_short', 'um_misled' ) as $k ) {
+	$wpdb->query( "CREATE TABLE {$q( $d45[ $k ] )} LIKE `{$wpdb->usermeta}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$ids[ $k ]['seed']  = $um_put( $d45[ $k ], '_two_factor_totp_key', $sec['seed'] );
+	$ids[ $k ]['plain'] = $um_put( $d45[ $k ], 'first_name', 'Minnd45 Plainname here' );
+}
+$wpdb->query( "CREATE TABLE {$q( $d45['op_noname'] )} LIKE `{$wpdb->options}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->insert( $d45['op_noname'], array( 'option_name' => 'auth_salt', 'option_value' => $sec['salt'], 'autoload' => 'no' ) );
+$ids['op_noname']['salt'] = (int) $wpdb->insert_id;
+$wpdb->insert( $d45['op_noname'], array( 'option_name' => 'blogdescription', 'option_value' => 'Minnd45 plain tagline words', 'autoload' => 'no' ) );
+$ids['op_noname']['plain'] = (int) $wpdb->insert_id;
+$wpdb->query( "CREATE TABLE {$q( $d45['sm_noname'] )} ( `meta_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT, `site_id` bigint(20) unsigned NOT NULL DEFAULT 0, `meta_key` varchar(255), `meta_value` longtext, PRIMARY KEY (`meta_id`) )" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->insert( $d45['sm_noname'], array( 'site_id' => 1, 'meta_key' => 'auth_salt', 'meta_value' => $sec['salt'] ) );
+$ids['sm_noname']['salt'] = (int) $wpdb->insert_id;
+$wpdb->query( "CREATE TABLE {$q( $d45['pm_noname'] )} LIKE `{$wpdb->postmeta}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->insert( $d45['pm_noname'], array( 'post_id' => 1, 'meta_key' => 'brizy-license-key', 'meta_value' => $sec['mudev'] ) );
+$ids['pm_noname']['key'] = (int) $wpdb->insert_id;
+// A WooCommerce-shaped meta table (HPOS order meta) is no core store.
+$wpdb->query( "CREATE TABLE {$q( $d45['wcmeta'] )} ( `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT, `order_id` bigint(20) unsigned, `meta_key` varchar(255), `meta_value` text, PRIMARY KEY (`id`) )" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->insert( $d45['wcmeta'], array( 'order_id' => 1, 'meta_key' => '_billing_note', 'meta_value' => 'Minnd45 order meta plain value' ) );
+$ids['wcmeta']['plain'] = (int) $wpdb->insert_id;
+foreach ( array_merge( $wpd_tables, array( $d45['wpd_copy'] ) ) as $t ) {
+	$wpdb->query( "CREATE TABLE {$q( $t )} ( `id` int(11) NOT NULL AUTO_INCREMENT, `phrase_key` varchar(100), `phrase_value` text, PRIMARY KEY (`id`) )" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$wpdb->insert( $t, array( 'phrase_key' => 'minnd45', 'phrase_value' => 'Minnd45 wpDiscuz phrase' ) );
+}
 
 $made = array();
 foreach ( $d45 as $k => $t ) {
@@ -320,6 +361,32 @@ if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $amelia ) ) ) {
 	$check( "OS-2 control: a real plugin table ({$amelia}) still browses", 200 === $st && isset( $d['rows'] ), (string) $st );
 }
 
+// --- OS-2r A copy named without its store's name is known by its columns -----
+foreach ( array( 'um_noname', 'um_short', 'um_misled' ) as $k ) {
+	$t = $d45[ $k ];
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $t, 'fcol' => 'meta_key', 'fq' => '_two_factor_totp_key' ) );
+	$check( "OS-2r {$t}: a usermeta-shaped copy prints no TOTP seed", 200 === $st && 1 === (int) ( $d['total'] ?? 0 ) && ! $has_text( $d['rows'] ?? null, $sec['seed'] ), $st . ' ' . substr( wp_json_encode( $d['rows'] ?? $d ), 0, 160 ) );
+	list( $st, $c ) = $db_cell( $t, 'umeta_id', $ids[ $k ]['plain'], 'meta_value' );
+	$check( "OS-2r control: {$t}'s ordinary row prints", 200 === $st && $shown( $c, 'Minnd45 Plainname' ), $st . ' ' . wp_json_encode( $c ) );
+}
+list( $st, $c ) = $db_cell( $d45['op_noname'], 'option_id', $ids['op_noname']['salt'], 'option_value' );
+$check( "OS-2r {$d45['op_noname']}: an options-shaped copy prints a salt redacted", 200 === $st && $redacted( $c ), $st . ' ' . wp_json_encode( $c ) );
+list( $st, $c ) = $db_cell( $d45['op_noname'], 'option_id', $ids['op_noname']['plain'], 'option_value' );
+$check( "OS-2r control: {$d45['op_noname']}'s ordinary row prints", 200 === $st && $shown( $c, 'Minnd45 plain tagline' ), $st . ' ' . wp_json_encode( $c ) );
+list( $st, $c ) = $db_cell( $d45['sm_noname'], 'meta_id', $ids['sm_noname']['salt'], 'meta_value' );
+$check( "OS-2r {$d45['sm_noname']}: a sitemeta-shaped copy prints a salt redacted", 200 === $st && $redacted( $c ), $st . ' ' . wp_json_encode( $c ) );
+list( $st, $c ) = $db_cell( $d45['pm_noname'], 'meta_id', $ids['pm_noname']['key'], 'meta_value' );
+$check( "OS-2r {$d45['pm_noname']}: a postmeta-shaped copy prints a Brizy key redacted", 200 === $st && $redacted( $c ), $st . ' ' . wp_json_encode( $c ) );
+list( $st, $c ) = $db_cell( $d45['wcmeta'], 'id', $ids['wcmeta']['plain'], 'meta_value' );
+$check( 'OS-2r control: a WooCommerce-shaped order meta table is no core store and prints', 200 === $st && $shown( $c, 'Minnd45 order meta' ) && $db_private( 'keyed_base', array( $d45['wcmeta'] ) ) === $db_private( 'secret_base', array( $d45['wcmeta'] ) ), $st . ' ' . wp_json_encode( $c ) );
+$real_wc_meta = array();
+foreach ( array( 'wc_orders_meta', 'woocommerce_order_itemmeta', 'woocommerce_payment_tokenmeta', 'termmeta', 'commentmeta' ) as $wc_meta ) {
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . $wc_meta ) ) ) {
+		$real_wc_meta[ $wc_meta ] = method_exists( 'Minn_Admin_DB', 'store_by_columns' ) ? $db_private( 'store_by_columns', array( $wpdb->prefix . $wc_meta ) ) : 'no column rule';
+	}
+}
+$check( 'OS-2r control: no real meta table of another kind reads as a core store', $real_wc_meta && ! array_filter( $real_wc_meta ), wp_json_encode( $real_wc_meta ) );
+
 // --- OS-3 Copies of Wordfence's 2FA secrets and OttoKit's request log --------
 list( $st, $c ) = $db_cell( $d45['wf2fa'], 'id', $ids['wf2fa']['row'], 'recovery' );
 $check( 'OS-3 a wfls_2fa_secrets copy prints its recovery codes redacted, not as hex', 200 === $st && $redacted( $c ) && ! isset( $c['hex'] ), $st . ' ' . substr( wp_json_encode( $c ), 0, 120 ) );
@@ -373,6 +440,15 @@ if ( is_multisite() ) {
 		}
 		list( $st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $d45['plug'] ) );
 		$check( 'OS-4 control: that role still browses a plugin\'s own table', 200 === $st, (string) $st );
+		// WC-wpDiscuz: wpDiscuz names its own tables wc_*.
+		foreach ( array( 'wc_phrases', 'wc_users_voted' ) as $wpd_base ) {
+			list( $st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $p . $wpd_base ) );
+			$check( "WC-wpDiscuz that role browses wpDiscuz's {$p}{$wpd_base}", 200 === $st && in_array( $p . $wpd_base, $listed, true ), (string) $st );
+		}
+		list( $st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $d45['wpd_copy'] ) );
+		$check( 'WC-wpDiscuz control: a wc_ copy of one stays hidden from that role', 404 === $st, (string) $st );
+		list( $st ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->prefix . 'woocommerce_order_items' ) );
+		$check( 'WC-wpDiscuz control: WooCommerce\'s own order items stay hidden from that role', 404 === $st || ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . 'woocommerce_order_items' ) ), (string) $st );
 
 		// NI-12(b): the health checks are cached for everyone, whoever runs them.
 		$sessions = $wpdb->prefix . 'woocommerce_sessions';

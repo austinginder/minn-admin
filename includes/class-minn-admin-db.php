@@ -368,8 +368,18 @@ class Minn_Admin_DB {
 			return false;
 		}
 		$base = self::secret_base( $table );
+		if ( in_array( $base, self::WPDISCUZ_TABLES, true ) ) {
+			return false;
+		}
 		return false !== strpos( $base, 'woocommerce' ) || (bool) preg_match( '/(^|[^a-z])wc([^a-z]|$)/', $base );
 	}
+
+	/**
+	 * wpDiscuz's own tables, which it names with WooCommerce's wc_ prefix
+	 * (votes, phrases, subscriptions, follows, feedback forms, ratings, the
+	 * avatar cache). A copy of one is left to the rule above.
+	 */
+	const WPDISCUZ_TABLES = array( 'wc_users_voted', 'wc_phrases', 'wc_comments_subscription', 'wc_follow_users', 'wc_feedback_forms', 'wc_users_rated', 'wc_avatars_cache' );
 
 	private static function quote_ident( $name ) {
 		return '`' . str_replace( '`', '``', $name ) . '`';
@@ -599,7 +609,9 @@ class Minn_Admin_DB {
 	 * the live table no longer does, so no needle names it either. A store's
 	 * name counts wherever it stands in the table's name, the leftmost (and
 	 * then longest) one deciding; a plugin table that merely contains one
-	 * (wp_myplugin_options) only gains redaction from that.
+	 * (wp_myplugin_options) only gains redaction from that. A copy whose name
+	 * holds no store's name (wp_user_meta_backup, wp_um_bak) is known by its
+	 * columns (STORE_COLUMNS), which decide first.
 	 *
 	 * @param string $table Table name as resolved (prefix included).
 	 * @return string
@@ -609,6 +621,10 @@ class Minn_Admin_DB {
 		$base = self::secret_base( $table );
 		if ( isset( self::KEYED_SECRETS[ $base ] ) ) {
 			return $base;
+		}
+		$by_columns = self::store_by_columns( $table );
+		if ( '' !== $by_columns ) {
+			return $by_columns;
 		}
 		if ( null === $any ) {
 			$stores = array_keys( self::KEYED_SECRETS );
@@ -621,6 +637,45 @@ class Minn_Admin_DB {
 			$any = '/' . implode( '|', array_map( 'preg_quote', $stores ) ) . '/';
 		}
 		return preg_match( $any, $base, $m ) ? $m[0] : $base;
+	}
+
+	/**
+	 * The columns each of core's key/value stores is made of, all of which a
+	 * copy keeps whatever it is called. No other core or WooCommerce table
+	 * holds a full set: WooCommerce's meta tables key their rows by order,
+	 * order item or token, never by post_id beside meta_id.
+	 */
+	const STORE_COLUMNS = array(
+		'usermeta' => array( 'umeta_id', 'user_id', 'meta_key', 'meta_value' ),
+		'options'  => array( 'option_id', 'option_name', 'option_value', 'autoload' ),
+		'sitemeta' => array( 'meta_id', 'site_id', 'meta_key', 'meta_value' ),
+		'postmeta' => array( 'meta_id', 'post_id', 'meta_key', 'meta_value' ),
+	);
+
+	/**
+	 * The core store a table's columns say it is a copy of, or ''.
+	 *
+	 * @param string $table Table name as resolved (prefix included).
+	 * @return string
+	 */
+	private static function store_by_columns( $table ) {
+		static $memo = array();
+		$k = strtolower( (string) $table );
+		if ( ! isset( $memo[ $k ] ) ) {
+			$memo[ $k ] = '';
+			if ( -1 === self::rows_est( $table ) ) {
+				return '';
+			}
+			list( $columns ) = self::columns_of( $table );
+			$names = array_map( 'strtolower', wp_list_pluck( $columns, 'name' ) );
+			foreach ( self::STORE_COLUMNS as $store => $needed ) {
+				if ( ! array_diff( $needed, $names ) ) {
+					$memo[ $k ] = $store;
+					break;
+				}
+			}
+		}
+		return $memo[ $k ];
 	}
 
 	/**
