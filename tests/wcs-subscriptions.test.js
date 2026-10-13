@@ -191,7 +191,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			t.check( 'parent order affordance present', polish.parentBtn || polish.parentLabel, JSON.stringify( polish ) );
 			t.check( 'view customer button present', polish.viewCustomer );
 
-			// Open customer → subscriptions strip (section only appears after customer full load).
+			// Open customer → their page's Subscriptions card (it fills in after the customer loads).
 			const custBtn = await page.$( '#minn-sub-open-customer' ) || await page.$( '#minn-sub-open-customer-foot' );
 			if ( custBtn ) {
 				await custBtn.click();
@@ -200,25 +200,25 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 					return titles.some( ( x ) => x === 'Subscriptions' );
 				}, null, { timeout: 15000 } );
 				await page.waitForFunction( () => {
-					return document.querySelector( '[data-open-sub]' )
+					return document.querySelector( '[data-cpsub]' )
 						|| /No subscriptions for this customer/i.test( document.body.innerText || '' );
 				}, null, { timeout: 15000 } );
 				const custUi = await page.evaluate( () => {
 					const titles = [ ...document.querySelectorAll( '.minn-side-title' ) ].map( ( e ) => e.textContent.trim() );
-					const subRows = document.querySelectorAll( '[data-open-sub]' ).length;
+					const subRows = document.querySelectorAll( '[data-cpsub]' ).length;
 					return { titles, subRows, hasSubsSection: titles.some( ( x ) => x === 'Subscriptions' ) };
 				} );
-				t.check( 'customer modal has Subscriptions section', custUi.hasSubsSection, custUi.titles.join( '|' ) );
-				t.check( 'customer subscriptions strip has rows', custUi.subRows >= 1, String( custUi.subRows ) );
+				t.check( 'customer page has a Subscriptions card', custUi.hasSubsSection, custUi.titles.join( '|' ) );
+				t.check( 'the customer page lists their subscriptions', custUi.subRows >= 1, String( custUi.subRows ) );
 			} else {
-				t.check( 'customer modal has Subscriptions section', false, 'no view customer' );
-				t.check( 'customer subscriptions strip has rows', false );
+				t.check( 'customer page has a Subscriptions card', false, 'no view customer' );
+				t.check( 'the customer page lists their subscriptions', false );
 			}
 		} else {
 			t.check( 'parent order affordance present', true, 'no parent_id fixture — skipped' );
 			t.check( 'view customer button present', true, 'skipped' );
-			t.check( 'customer modal has Subscriptions section', true, 'skipped' );
-			t.check( 'customer subscriptions strip has rows', true, 'skipped' );
+			t.check( 'customer page has a Subscriptions card', true, 'skipped' );
+			t.check( 'the customer page lists their subscriptions', true, 'skipped' );
 		}
 
 		// shop_subscription fenced from content types.
