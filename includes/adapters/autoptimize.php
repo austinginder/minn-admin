@@ -190,7 +190,20 @@ function minn_admin_autoptimize_tab_shape( $tab_id ) {
 	$tab    = $schema[ $tab_id ];
 	$groups = array();
 	$values = array();
+	// Network-wide, these are the network's settings and only Network Admin
+	// writes them (a save here answers 409), so every field is locked with
+	// the way there.
+	$network = minn_admin_autoptimize_network_wide();
 	foreach ( $tab['groups'] as $group ) {
+		if ( $network ) {
+			$groups[] = array(
+				'title'  => $group['title'],
+				'desc'   => $groups ? '' : __( 'Autoptimize runs on the network’s settings here, so change them in Network Admin.', 'minn-admin' ),
+				'fields' => array(),
+				'locked' => count( $group['fields'] ),
+			);
+			continue;
+		}
 		$fields = array();
 		foreach ( $group['fields'] as $f ) {
 			$out = array(
@@ -217,7 +230,7 @@ function minn_admin_autoptimize_tab_shape( $tab_id ) {
 	return array(
 		'groups'   => $groups,
 		'values'   => $values,
-		'adminUrl' => admin_url( 'options-general.php?page=autoptimize' ),
+		'adminUrl' => $network ? network_admin_url( 'settings.php?page=autoptimize' ) : admin_url( 'options-general.php?page=autoptimize' ),
 	);
 }
 

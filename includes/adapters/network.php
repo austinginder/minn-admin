@@ -294,6 +294,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		),
 	);
+	// Offered only to whoever the route behind each would let through.
+	if ( ! ( minn_admin_network_can( 'create_sites' ) && Minn_Admin::network_owner() ) ) {
+		unset( $surfaces['network-sites']['collection']['create'] );
+	}
+	if ( ! minn_admin_network_can( 'delete_sites' ) ) {
+		$surfaces['network-sites']['collection']['actions'] = array_values(
+			array_filter(
+				$surfaces['network-sites']['collection']['actions'],
+				function ( $a ) {
+					return 'DELETE' !== ( $a['method'] ?? '' );
+				}
+			)
+		);
+	}
 	return $surfaces;
 } );
 
@@ -643,6 +657,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 	if ( $locked ) {
 		$surfaces['network-users']['sub'] = __( 'Set in wp-config', 'minn-admin' );
+	}
+	// Granting and revoking answer to manage_network_options, as core's
+	// Super Admin checkbox does; a network user manager without it is not
+	// offered them.
+	if ( ! minn_admin_network_can( 'manage_network_options' ) ) {
+		$surfaces['network-users']['collection']['actions'] = array_values(
+			array_filter(
+				$surfaces['network-users']['collection']['actions'],
+				function ( $a ) {
+					return empty( $a['route'] );
+				}
+			)
+		);
 	}
 	return $surfaces;
 } );

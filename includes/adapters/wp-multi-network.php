@@ -69,9 +69,12 @@ function minn_admin_wpmn_network_row( $network ) {
 		'visit'          => $visit,
 		'edit'           => minn_admin_wpmn_edit_url( $id ),
 		// Only offer the verb the route will actually accept: not the primary
-		// network, not the one being worked in, and one the caller administers.
+		// network, not the one being worked in, one the caller administers,
+		// and only to the install's owners.
 		'canDelete'      => ( ! is_main_network( $id )
 			&& $id !== (int) get_current_network_id()
+			&& current_user_can( 'delete_network', $id )
+			&& Minn_Admin::install_owner()
 			&& true === minn_admin_wpmn_network_target( $id ) ) ? '1' : '0',
 	);
 }
@@ -167,7 +170,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		);
 	}
 
-	$destinations = minn_admin_wpmn_network_options( get_current_network_id() );
+	// Moving a site between networks is the install owners' (the route's gate).
+	$destinations = current_user_can( 'manage_networks' ) && Minn_Admin::install_owner()
+		? minn_admin_wpmn_network_options( get_current_network_id() )
+		: array();
 	if ( isset( $surfaces['network-sites']['collection']['actions'] ) && $destinations ) {
 		$surfaces['network-sites']['collection']['actions'][] = array(
 			'label'   => __( 'Move to another network', 'minn-admin' ),
