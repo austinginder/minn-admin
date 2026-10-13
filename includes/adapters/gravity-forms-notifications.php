@@ -508,12 +508,19 @@ function minn_admin_gfn_neutral_tags( $text ) {
  * page ({embed_url} reads empty), and the submitter's meta reads empty
  * except the profile fields the entry screen shows.
  *
+ * Add-ons answer their own tags on gform_replace_merge_tags, and what they
+ * do there is theirs: User Registration's {set_password_url} mints a
+ * password reset for the account tied to the entry, which can be an
+ * administrator's, and writes its key. Only Gravity Forms' own callbacks
+ * run on that filter here, so an add-on's tag stays as typed, and those
+ * two tags become placeholders ahead of any callback, composed or not.
+ *
  * @param array    $entry  The entry.
  * @param callable $render Called with the guarded entry.
  * @return mixed What $render returns.
  */
 function minn_admin_gfn_guarded( $entry, $render ) {
-	global $wpdb;
+	global $wpdb, $wp_filter;
 	$uid  = (int) rgar( $entry, 'created_by' );
 	$keep = array( 'first_name', 'last_name', 'nickname', $wpdb->get_blog_prefix() . 'capabilities', $wpdb->get_blog_prefix() . 'user_level' );
 	$deny = function ( $value, $object_id, $meta_key, $single ) use ( $uid, $keep ) {
@@ -524,12 +531,58 @@ function minn_admin_gfn_guarded( $entry, $render ) {
 	};
 	$entry['source_id']  = '';
 	$entry['source_url'] = '';
+	$hook = 'gform_replace_merge_tags';
+	$held = isset( $wp_filter[ $hook ] ) && $wp_filter[ $hook ] instanceof WP_Hook ? $wp_filter[ $hook ] : null;
+	$only = new WP_Hook();
+	foreach ( $held ? $held->callbacks : array() as $priority => $callbacks ) {
+		foreach ( $callbacks as $cb ) {
+			if ( minn_admin_gfn_is_core_callback( $cb['function'] ) ) {
+				$only->add_filter( $hook, $cb['function'], $priority, $cb['accepted_args'] );
+			}
+		}
+	}
+	$only->add_filter( $hook, function ( $text ) {
+		return str_replace( array( '{set_password_url}', '{activation_url}' ), array( '[set_password_url]', '[activation_url]' ), (string) $text );
+	}, 9, 1 );
+	$wp_filter[ $hook ] = $only;
 	add_filter( 'get_user_metadata', $deny, PHP_INT_MAX, 4 );
 	try {
 		return $render( $entry );
 	} finally {
 		remove_filter( 'get_user_metadata', $deny, PHP_INT_MAX );
+		if ( $held ) {
+			$wp_filter[ $hook ] = $held;
+		} else {
+			unset( $wp_filter[ $hook ] );
+		}
 	}
+}
+
+/**
+ * Whether a hook callback is Gravity Forms' own: its code lives in the
+ * Gravity Forms plugin folder. Anything that can't be traced is not.
+ *
+ * @param callable $fn Callback.
+ * @return bool
+ */
+function minn_admin_gfn_is_core_callback( $fn ) {
+	try {
+		if ( is_string( $fn ) && false !== strpos( $fn, '::' ) ) {
+			$fn = explode( '::', $fn, 2 );
+		}
+		if ( is_array( $fn ) ) {
+			$ref = new ReflectionMethod( $fn[0], $fn[1] );
+		} elseif ( is_object( $fn ) && ! $fn instanceof Closure ) {
+			$ref = new ReflectionMethod( $fn, '__invoke' );
+		} else {
+			$ref = new ReflectionFunction( $fn );
+		}
+	} catch ( Throwable $e ) {
+		return false;
+	}
+	$file = $ref->getFileName();
+	$base = trailingslashit( wp_normalize_path( (string) GFCommon::get_base_path() ) );
+	return is_string( $file ) && 0 === strpos( wp_normalize_path( $file ), $base );
 }
 
 /** A notification built from the page's unsaved fields, for preview and test. */

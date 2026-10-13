@@ -564,4 +564,127 @@ try {
 	$check( 'OS-14 cleanup: the structure and bases are back', array( (string) get_option( 'permalink_structure' ), (string) get_option( 'category_base' ), (string) get_option( 'tag_base' ) ) === $pl_prev, wp_json_encode( $pl_prev ) );
 }
 
+// --- UR Gravity Forms User Registration: a preview mints no password-reset link
+// With GF User Registration active, {set_password_url} and {activation_url}
+// resolve through its gform_replace_merge_tags callback to a working reset
+// link for the account tied to the latest entry (an administrator, through an
+// update feed), and minting one writes a new reset key. The guard holds back
+// every non-core callback on that filter during a preview or test send and
+// neutralizes both tags itself, so they never resolve and no key is written.
+if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_guarded' ) ) {
+	$skip( 'UR Gravity Forms inactive' );
+} else {
+	// Find GF User Registration without a hardcoded path: it is either active
+	// here, or installed in a sibling Cove site's plugins folder.
+	$ur_loaded = class_exists( 'GF_User_Registration' );
+	if ( ! $ur_loaded ) {
+		$ur_sites = (string) dirname( ABSPATH, 2 );
+		$ur_hits  = (array) glob( $ur_sites . '/*/public/wp-content/plugins/gravityformsuserregistration/userregistration.php' );
+		if ( $ur_hits ) {
+			require_once $ur_hits[0];
+			if ( class_exists( 'GF_User_Registration_Bootstrap' ) && method_exists( 'GF_User_Registration_Bootstrap', 'load' ) ) {
+				GF_User_Registration_Bootstrap::load();
+			}
+			$ur_loaded = class_exists( 'GF_User_Registration' ) && function_exists( 'gf_user_registration' );
+		}
+	}
+	if ( ! $ur_loaded ) {
+		$skip( 'UR GF User Registration not installed in any sibling site' );
+	} else {
+		$ur_http = function () {
+			return new WP_Error( 'minn_d45_no_http', 'blocked' );
+		};
+		add_filter( 'pre_http_request', $ur_http, 1 );
+		// Register the add-on's merge-tag callback the way its pre_init does,
+		// unless this site already loaded it.
+		$ur       = gf_user_registration();
+		$ur_cb    = array( $ur, 'replace_merge_tags' );
+		$ur_added = false;
+		if ( false === has_filter( 'gform_replace_merge_tags', $ur_cb ) ) {
+			add_filter( 'gform_replace_merge_tags', $ur_cb, 10, 7 );
+			$ur_added = true;
+		}
+		foreach ( GFAPI::get_forms( null ) as $ur_old ) {
+			if ( 0 === strpos( (string) $ur_old['title'], 'MinnD45UR ' ) ) {
+				GFAPI::delete_form( (int) $ur_old['id'] );
+			}
+		}
+		add_role( 'minn_d45_urmgr', 'D45 UR manager', array( 'read' => true, 'gravityforms_edit_forms' => true, 'gravityforms_view_entries' => true ) );
+		$ur_mgr  = $make_user( 'minn_d45_urmgr' );
+		$ur_reg  = $make_user( 'administrator' );
+		$ur_note = array( 'd45ur' => array( 'id' => 'd45ur', 'name' => 'D45', 'event' => 'form_submission', 'toType' => 'email', 'to' => '{admin_email}', 'subject' => 'S', 'message' => 'M', 'isActive' => true ) );
+		$ur_conf = array( 'd45urc' => array( 'id' => 'd45urc', 'name' => 'D45', 'isDefault' => true, 'type' => 'message', 'message' => 'Thanks' ) );
+		$ur_form = GFAPI::add_form( array( 'title' => 'MinnD45UR form', 'fields' => array(), 'notifications' => $ur_note, 'confirmations' => $ur_conf ) );
+		$ur_form = is_int( $ur_form ) && $ur_form > 0 ? $ur_form : 0;
+		$ur_entry = 0;
+		$ur_feed  = 0;
+		try {
+			if ( ! $ur_mgr || ! $ur_reg || ! $ur_form ) {
+				$check( 'UR fixtures', false, 'could not create the accounts or the form' );
+			} else {
+				$ur_entry = GFAPI::add_entry( array( 'form_id' => $ur_form, 'created_by' => $ur_reg ) );
+				$ur_entry = is_int( $ur_entry ) ? $ur_entry : 0;
+				// The add-on links the registrant to the entry through user meta.
+				update_user_meta( $ur_reg, 'entry_id', $ur_entry );
+				if ( is_callable( array( 'GFAPI', 'add_feed' ) ) ) {
+					$ur_feed = (int) GFAPI::add_feed( $ur_form, array( 'feedName' => 'D45', 'feedType' => 'create', 'password' => '', 'sendEmail' => true ), 'gravityformsuserregistration' );
+				}
+				$ur_key_before = (string) $wpdb->get_var( $wpdb->prepare( "SELECT user_activation_key FROM {$wpdb->users} WHERE ID = %d", $ur_reg ) );
+				$ur_leaks = function ( $out ) {
+					$out = urldecode( (string) $out );
+					return false !== strpos( $out, 'action=rp' ) || false !== strpos( $out, 'gfur_activation=' );
+				};
+				$ur_tags = 'A {set_password_url} B {activation_url} C {form_title}';
+				wp_set_current_user( $ur_mgr );
+				list( $ur_st, $ur_d ) = $call( 'POST', "/minn-admin/v1/gf/notifications/{$ur_form}:d45ur/preview", array( 'subject' => 'S ' . $ur_tags, 'message' => 'M ' . $ur_tags ) );
+				$ur_out = wp_json_encode( $ur_d );
+				$check( 'UR the notification preview mints no reset or activation link', 200 === $ur_st && ! $ur_leaks( $ur_out ), $ur_st . ' ' . substr( $ur_out, 0, 200 ) );
+				$check( 'UR the notification preview leaves both tags as placeholders', false !== strpos( $ur_out, '[set_password_url]' ) && false !== strpos( $ur_out, '[activation_url]' ), substr( $ur_out, 0, 200 ) );
+				list( $ur_st, $ur_d ) = $call( 'POST', "/minn-admin/v1/gf/confirmations/{$ur_form}:d45urc/preview", array( 'type' => 'message', 'message' => 'M ' . $ur_tags ) );
+				$ur_out = wp_json_encode( $ur_d );
+				$check( 'UR the confirmation preview mints no reset or activation link', 200 === $ur_st && ! $ur_leaks( $ur_out ), $ur_st . ' ' . substr( $ur_out, 0, 200 ) );
+				// The test send is mailed to the caller; catch it before it leaves.
+				$ur_mail = array();
+				$ur_trap = function ( $pre, $atts ) use ( &$ur_mail ) {
+					$ur_mail[] = $atts;
+					return true;
+				};
+				add_filter( 'pre_wp_mail', $ur_trap, 1, 2 );
+				try {
+					list( $ur_st, $ur_d ) = $call( 'POST', "/minn-admin/v1/gf/notifications/{$ur_form}:d45ur/test", array( 'subject' => 'S ' . $ur_tags, 'message' => 'M ' . $ur_tags ) );
+				} finally {
+					remove_filter( 'pre_wp_mail', $ur_trap, 1 );
+				}
+				$check( 'UR the test send mails no reset or activation link', ! $ur_leaks( wp_json_encode( $ur_mail ) ) && ( 200 !== $ur_st || 1 === count( $ur_mail ) ), $ur_st . ' ' . count( $ur_mail ) . ' ' . substr( wp_json_encode( $ur_mail ), 0, 200 ) );
+				$ur_key_after = (string) $wpdb->get_var( $wpdb->prepare( "SELECT user_activation_key FROM {$wpdb->users} WHERE ID = %d", $ur_reg ) );
+				$check( 'UR no reset key was written for the registrant', $ur_key_before === $ur_key_after, "before '{$ur_key_before}' after '{$ur_key_after}'" );
+				// Control: the add-on's tag still resolves on a real render, so
+				// only the preview/test guard holds it back.
+				wp_set_current_user( $admin );
+				$ur_entry_obj = GFAPI::get_entry( $ur_entry );
+				$ur_real = (string) GFCommon::replace_variables( '{set_password_url}', GFAPI::get_form( $ur_form ), $ur_entry_obj, false, false, false, 'text' );
+				$check( 'UR control: a real render still resolves the reset link', false !== strpos( urldecode( $ur_real ), 'action=rp' ) && false !== strpos( $ur_real, 'key=' ), substr( $ur_real, 0, 120 ) );
+			}
+		} finally {
+			wp_set_current_user( $admin );
+			if ( $ur_feed && is_callable( array( 'GFAPI', 'delete_feed' ) ) ) {
+				GFAPI::delete_feed( $ur_feed );
+			}
+			if ( $ur_entry ) {
+				GFAPI::delete_entry( $ur_entry );
+			}
+			if ( $ur_form ) {
+				GFAPI::delete_form( $ur_form );
+			}
+			$drop_user( $ur_mgr );
+			$drop_user( $ur_reg );
+			remove_role( 'minn_d45_urmgr' );
+			if ( $ur_added ) {
+				remove_filter( 'gform_replace_merge_tags', $ur_cb, 10 );
+			}
+			remove_filter( 'pre_http_request', $ur_http, 1 );
+		}
+	}
+}
+
 $summary();
