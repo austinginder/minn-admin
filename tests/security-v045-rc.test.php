@@ -466,6 +466,41 @@ if ( ! function_exists( 'red_get_options' ) || ! function_exists( 'red_set_optio
 	}
 }
 
+// --- 11-03 The Events Calendar: an untouched date keeps its seconds ------------
+// The panel reads dates to the minute and refilled any it was not sent, so
+// a cost-only save moved a 23:59:59 end to 23:59:00. TEC keeps stored dates
+// when none are sent, and takes new times only as a pair.
+if ( ! function_exists( 'minn_admin_tec_active' ) || ! minn_admin_tec_active() ) {
+	$skip( '11-03 The Events Calendar inactive' );
+} else {
+	$tec_id = wp_insert_post( array( 'post_type' => 'tribe_events', 'post_title' => 'Rc45 seconds', 'post_status' => 'draft', 'post_author' => $admin ) );
+	if ( ! $tec_id || is_wp_error( $tec_id ) ) {
+		$check( '11-03 fixture', false );
+	} else {
+		$tec_set = function () use ( $tec_id ) {
+			update_post_meta( $tec_id, '_EventStartDate', '2026-10-20 10:00:30' );
+			update_post_meta( $tec_id, '_EventEndDate', '2026-10-20 23:59:59' );
+			update_post_meta( $tec_id, '_EventStartDateUTC', '2026-10-20 14:00:30' );
+			update_post_meta( $tec_id, '_EventEndDateUTC', '2026-10-21 03:59:59' );
+			delete_post_meta( $tec_id, '_EventAllDay' );
+		};
+		$tec_save = function ( $vals ) use ( $call, $tec_id ) {
+			list( $st ) = $call( 'POST', "/wp/v2/tribe_events/{$tec_id}", array( 'minn_tec' => $vals ) );
+			return array( $st, get_post_meta( $tec_id, '_EventStartDate', true ), get_post_meta( $tec_id, '_EventEndDate', true ) );
+		};
+		$tec_set();
+		list( $tec_st, $tec_s, $tec_e ) = $tec_save( array( 'cost' => '25' ) );
+		$check( '11-03 a cost-only save leaves both dates to the second', 200 === $tec_st && '2026-10-20 10:00:30' === $tec_s && '2026-10-20 23:59:59' === $tec_e, "{$tec_st} {$tec_s} / {$tec_e}" );
+		$tec_set();
+		list( $tec_st, $tec_s, $tec_e ) = $tec_save( array( 'end' => '2026-10-20 22:00' ) );
+		$check( '11-03 control: an end-only change saves, the start kept to the second', 200 === $tec_st && '2026-10-20 10:00:30' === $tec_s && '2026-10-20 22:00:00' === $tec_e, "{$tec_st} {$tec_s} / {$tec_e}" );
+		$tec_set();
+		list( $tec_st, $tec_s, $tec_e ) = $tec_save( array( 'start' => '2026-10-20 09:15', 'end' => '2026-10-20 23:59' ) );
+		$check( '11-03 control: a start change saves; the end sent back as read keeps its seconds', 200 === $tec_st && '2026-10-20 09:15:00' === $tec_s && '2026-10-20 23:59:59' === $tec_e, "{$tec_st} {$tec_s} / {$tec_e}" );
+		wp_delete_post( $tec_id, true );
+	}
+}
+
 // @sections
 
 $summary();

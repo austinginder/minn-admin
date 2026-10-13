@@ -292,8 +292,11 @@ add_action( 'rest_api_init', function () {
 				// saveEventMeta() is a full-form save: an absent all-day flag
 				// reads as off and an absent cost is deleted. Fields the body
 				// leaves out take what the event holds now, so they go back as
-				// stored (see the unchanged checks below).
-				$value = $value + minn_admin_tec_panel_values( $post->ID );
+				// stored (see the unchanged checks below). Not the dates: TEC
+				// keeps the stored ones when none are sent, to the second, and
+				// the panel reads them to the minute.
+				$served = minn_admin_tec_panel_values( $post->ID );
+				$value  = $value + array_diff_key( $served, array( 'start' => true, 'end' => true ) );
 				// Suggest fields arrive as { value, label } (untouched) or as
 				// the picked '' / { value, label } — normalize to the id.
 				$linked_id = function ( $v ) {
@@ -314,6 +317,9 @@ add_action( 'rest_api_init', function () {
 					if ( '' === $raw ) {
 						continue; // dates can't be unset; TEC events always have them
 					}
+					if ( isset( $served[ $key ] ) && Minn_Admin::unchanged( $raw, $served[ $key ] ) ) {
+						continue; // sent back as read: left to the second
+					}
 					$ts = strtotime( $raw );
 					if ( ! $ts ) {
 						/* translators: %s: which date could not be parsed, "start" or "end". */
@@ -322,6 +328,18 @@ add_action( 'rest_api_init', function () {
 					// The exact shape TEC's own REST endpoint sends.
 					$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
 					$data[ "Event{$side}Time" ] = date( 'H:i:s', $ts );
+				}
+				// TEC takes new times only as a pair (both or it keeps the
+				// stored ones), so a changed side goes with the other as
+				// stored, to the second.
+				foreach ( array( 'Start' => 'End', 'End' => 'Start' ) as $side => $other ) {
+					if ( isset( $data[ "Event{$other}Date" ] ) && ! isset( $data[ "Event{$side}Date" ] ) ) {
+						$ts = strtotime( (string) get_post_meta( $post->ID, "_Event{$side}Date", true ) );
+						if ( $ts ) {
+							$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
+							$data[ "Event{$side}Time" ] = date( 'H:i:s', $ts );
+						}
+					}
 				}
 				if ( array_key_exists( 'all_day', $value ) ) {
 					$data['EventAllDay'] = ( ! empty( $value['all_day'] ) && 'false' !== (string) $value['all_day'] ) ? 'yes' : 'no';
