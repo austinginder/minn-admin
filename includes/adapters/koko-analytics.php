@@ -145,13 +145,20 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 
 	$referrers = array();
 	$ref_stats = $wpdb->prefix . 'koko_analytics_referrer_stats';
-	$ref_urls  = $wpdb->prefix . 'koko_analytics_referrer_urls';
+	// Koko 2.x renamed referrer_urls (url) to referrer_labels (value); a site
+	// whose migration has not run yet still has the old table.
+	$ref_urls  = $wpdb->prefix . 'koko_analytics_referrer_labels';
+	$ref_col   = 'value';
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $ref_urls ) ) !== $ref_urls ) {
+		$ref_urls = $wpdb->prefix . 'koko_analytics_referrer_urls';
+		$ref_col  = 'url';
+	}
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $ref_stats ) ) === $ref_stats
 		&& $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $ref_urls ) ) === $ref_urls ) {
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$ref_rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT ru.url, SUM(rs.unique_hits) AS v, SUM(rs.hits) AS p
+				"SELECT ru.{$ref_col} AS url, SUM(rs.unique_hits) AS v, SUM(rs.hits) AS p
 				FROM {$ref_stats} rs
 				INNER JOIN {$ref_urls} ru ON ru.id = rs.id
 				WHERE rs.date >= %s AND rs.date <= %s
