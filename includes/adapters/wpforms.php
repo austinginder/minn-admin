@@ -592,7 +592,9 @@ add_action( 'rest_api_init', function () {
 					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => minn_admin_wpforms_display_status( $row ) ),
 				);
 				if ( $row->date ) {
-					$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => gmdate( 'c', strtotime( $row->date . ' UTC' ) ) );
+					// `date` is UTC: shown on the site's clock, as the other
+					// form adapters show theirs (the page prints this as is).
+					$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $row->date ) ) ) );
 				}
 				if ( '' !== (string) $row->ip_address ) {
 					$meta[] = array( 'label' => __( 'IP address', 'minn-admin' ), 'value' => (string) $row->ip_address );
