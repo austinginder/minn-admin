@@ -247,6 +247,141 @@ function minn_admin_simple_history_status_model() {
 	);
 }
 
+/**
+ * Their label for an initiator ("web_user" is "Anonymous web user"), the
+ * words their own screen prints for an event with no user behind it.
+ *
+ * @param string $initiator Stored initiator.
+ * @return string
+ */
+function minn_admin_simple_history_initiator_label( $initiator ) {
+	$initiator = (string) $initiator;
+	try {
+		if ( method_exists( '\\Simple_History\\Log_Initiators', 'get_initiator_label' ) ) {
+			return (string) \Simple_History\Log_Initiators::get_initiator_label( $initiator );
+		}
+		if ( method_exists( '\\Simple_History\\Log_Initiators', 'get_initiator_text_from_row' ) ) {
+			$text = \Simple_History\Log_Initiators::get_initiator_text_from_row( (object) array( 'initiator' => $initiator, 'context' => array() ) );
+			return is_string( $text ) && '' !== $text ? $text : $initiator;
+		}
+	} catch ( \Throwable $e ) { /* fall through */ }
+	return $initiator;
+}
+
+/**
+ * Split the changes their JSON runs together back into one item each.
+ *
+ * Their post logger renders a post's field changes as one HTML block of
+ * <dt>label</dt><dd>diff</dd> pairs, and their JSON describes that block by
+ * its stripped text: "status Deleted: draftAdded: future", every change in
+ * one value. An item whose value is exactly the stripped text of such a
+ * block is replaced by that block's pairs, each with its old and new value;
+ * anything else passes through untouched. Their own comment holds that the
+ * pairs never nest and never occur inside a value. Values are plain text.
+ *
+ * @param array  $groups Their details_data.
+ * @param string $html   Their details_html for the same event.
+ * @return array
+ */
+function minn_admin_simple_history_split_details( array $groups, $html ) {
+	$blocks = array();
+	if ( preg_match_all( '#<dl class="SimpleHistoryLogitem__keyValueTable">(.*?)</dl>#s', (string) $html, $m ) ) {
+		foreach ( $m[0] as $i => $whole ) {
+			$blocks[ trim( wp_strip_all_tags( $whole ) ) ] = $m[1][ $i ];
+		}
+	}
+	if ( ! $blocks ) {
+		return $groups;
+	}
+	// One side of WordPress's diff table: the deleted or the added lines,
+	// without the "Deleted:" / "Added:" screen-reader prefix.
+	$side = function ( $dd, $kind ) {
+		if ( ! preg_match_all( '#<td class=([\'"])diff-' . $kind . 'line\1>(.*?)</td>#s', $dd, $cells ) ) {
+			return '';
+		}
+		$lines = array();
+		foreach ( $cells[2] as $cell ) {
+			$lines[] = trim( Minn_Admin::plain_text( preg_replace( '#<span[^>]*screen-reader-text[^>]*>.*?</span>#s', '', $cell ) ) );
+		}
+		return implode( "\n", $lines );
+	};
+	foreach ( $groups as $g => $group ) {
+		if ( ! is_array( $group ) || empty( $group['items'] ) || ! is_array( $group['items'] ) ) {
+			continue;
+		}
+		$items = array();
+		foreach ( $group['items'] as $item ) {
+			$flat = is_array( $item ) && isset( $item['new_value'] ) && is_string( $item['new_value'] ) && ! isset( $item['prev_value'] ) ? trim( $item['new_value'] ) : null;
+			if ( null === $flat || ! isset( $blocks[ $flat ] ) || ! preg_match_all( '#<dt>(.*?)</dt>\s*<dd>(.*?)</dd>#s', $blocks[ $flat ], $pairs ) ) {
+				$items[] = $item;
+				continue;
+			}
+			foreach ( $pairs[1] as $i => $label ) {
+				$prev = $side( $pairs[2][ $i ], 'deleted' );
+				$new  = $side( $pairs[2][ $i ], 'added' );
+				if ( '' === $prev && '' === $new ) {
+					// Not a line diff (their content diff): its text as one value.
+					$new = trim( Minn_Admin::plain_text( $pairs[2][ $i ] ) );
+				}
+				$items[] = array(
+					'name'       => trim( Minn_Admin::plain_text( $label ) ),
+					'prev_value' => $prev,
+					'new_value'  => $new,
+				);
+			}
+		}
+		$groups[ $g ]['items'] = $items;
+	}
+	return $groups;
+}
+
+/*
+ * Minn reads their events route directly, and their JSON leaves three things
+ * raw that their own screen renders: who acted when no user did (the bare
+ * initiator), how many times a grouped run happened (their "Show 7 similar
+ * events"), and a post's changes (one run-together value). The surface asks
+ * with minn_view=1, so only Minn's own reading of the list changes; their
+ * screens and every other client get the response as they ship it. This runs
+ * after their permission check and their query, on rows the caller was
+ * already given.
+ */
+add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
+	if ( ! $response instanceof WP_REST_Response || $response->is_error()
+		|| ! $request instanceof WP_REST_Request
+		|| 'GET' !== $request->get_method()
+		|| '/simple-history/v1/events' !== $request->get_route()
+		|| ! $request->get_param( 'minn_view' ) ) {
+		return $response;
+	}
+	$events = $response->get_data();
+	if ( ! is_array( $events ) ) {
+		return $response;
+	}
+	foreach ( $events as $i => $event ) {
+		if ( ! is_array( $event ) ) {
+			continue;
+		}
+		if ( isset( $event['initiator'] ) && is_string( $event['initiator'] ) ) {
+			$event['who'] = minn_admin_simple_history_initiator_label( $event['initiator'] );
+		}
+		$times = isset( $event['subsequent_occasions_count'] ) ? (int) $event['subsequent_occasions_count'] : 1;
+		if ( $times > 1 && isset( $event['message'] ) && is_string( $event['message'] ) ) {
+			$event['message'] = sprintf(
+				/* translators: 1: an activity log event, 2: how many times it happened in a row. */
+				_n( '%1$s · %2$s time', '%1$s · %2$s times', $times, 'minn-admin' ),
+				$event['message'],
+				number_format_i18n( $times )
+			);
+		}
+		if ( ! empty( $event['details_data'] ) && is_array( $event['details_data'] ) && isset( $event['details_html'] ) && is_string( $event['details_html'] ) ) {
+			$event['details_data'] = minn_admin_simple_history_split_details( $event['details_data'], $event['details_html'] );
+		}
+		$events[ $i ] = $event;
+	}
+	$response->set_data( $events );
+	return $response;
+}, 10, 3 );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// Ask the same question the routes ask. Stealth mode hides the plugin by
 	// removing its own pages, so registering the surface anyway put the name
@@ -266,6 +401,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'status'     => array( 'route' => 'minn-admin/v1/simple-history/status' ),
 		'collection' => array(
 			'route'     => 'simple-history/v1/events',
+			// Asks for the readable rows (the rest_request_after_callbacks filter above).
+			'query'     => 'minn_view=1',
 			'pageQuery' => 'per_page=25&page={page}',
 			// Their events route sorts by date|id|level|logger|message (5.34+;
 			// older builds ignore the unregistered params and keep newest
@@ -289,7 +426,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'columns'   => array(
 				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title', 'sort' => 'message' ),
-				array( 'key' => 'initiator_data.user_login', 'altKey' => 'initiator', 'label' => __( 'Who', 'minn-admin' ) ),
+				array( 'key' => 'initiator_data.user_login', 'altKey' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
 				array( 'key' => 'loglevel', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill', 'sort' => 'level' ),
 				// date_local is site-local (matches parseWpDate). date_gmt
 				// without a zone suffix used to render "in 4h" on EDT.
