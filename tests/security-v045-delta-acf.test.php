@@ -7,8 +7,9 @@
  * NI-1 (a new repeater row or flexible section inherits the stored values of
  * the row that sat at its index), OS-1 (disabled sections and renamed labels
  * lost to a flexible-content write), r2 / OS-13 (fields from a seamless
- * clone) and OS-15 (a term-saving taxonomy field in rows). Sections SKIP when
- * ACF PRO is inactive.
+ * clone), OS-15 (a term-saving taxonomy field in rows) and, from the second
+ * review round, A1 (a new row's defaults). Sections SKIP when ACF PRO is
+ * inactive.
  *
  * Run: wp eval-file tests/security-v045-delta-acf.test.php --user=admin --path=<site>
  *
@@ -292,6 +293,95 @@ if ( ! $n4_pid ) {
 	wp_delete_post( $n4_pid, true );
 }
 acf_remove_local_field_group( 'group_minn_d1_rows' );
+
+// --- A1 a new row starts at each sub's default ------------------------------
+// ACF's own new-row form posts every sub at its default_value, and a row
+// appended before NI-1 left them absent, so ACF's read fell back to it. A
+// sub Minn does not show (rich text here) takes the default; a sub it shows
+// takes what the client sends, the default it was seeded with or a blank.
+acf_add_local_field_group( array(
+	'key'      => 'group_minn_d1_def',
+	'title'    => 'MinnD1 defaults',
+	'fields'   => array(
+		array(
+			'key'        => 'field_minn_d1_cards',
+			'name'       => 'minn_d1_cards',
+			'label'      => 'Cards',
+			'type'       => 'repeater',
+			'sub_fields' => array(
+				array( 'key' => 'field_minn_d1_c_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text' ),
+				array( 'key' => 'field_minn_d1_c_btn', 'name' => 'btn', 'label' => 'Button', 'type' => 'text', 'default_value' => 'Learn more' ),
+				array( 'key' => 'field_minn_d1_c_tone', 'name' => 'tone', 'label' => 'Tone', 'type' => 'select', 'choices' => array( 'red' => 'Red', 'blue' => 'Blue' ), 'default_value' => 'blue' ),
+				array( 'key' => 'field_minn_d1_c_on', 'name' => 'on', 'label' => 'On', 'type' => 'true_false', 'default_value' => 1 ),
+				array( 'key' => 'field_minn_d1_c_note', 'name' => 'note', 'label' => 'Note', 'type' => 'wysiwyg', 'default_value' => 'Default note' ),
+			),
+		),
+		array(
+			'key'     => 'field_minn_d1_dfx',
+			'name'    => 'minn_d1_dfx',
+			'label'   => 'Default sections',
+			'type'    => 'flexible_content',
+			'layouts' => array(
+				'layout_minn_d1_d_card' => array(
+					'key'        => 'layout_minn_d1_d_card',
+					'name'       => 'card',
+					'label'      => 'Card',
+					'display'    => 'block',
+					'sub_fields' => array(
+						array( 'key' => 'field_minn_d1_d_head', 'name' => 'head', 'label' => 'Head', 'type' => 'text' ),
+						array( 'key' => 'field_minn_d1_d_body', 'name' => 'body', 'label' => 'Body', 'type' => 'wysiwyg', 'default_value' => 'Body default' ),
+					),
+				),
+			),
+		),
+	),
+	'location' => $post_location,
+) );
+$a1_pid = $make_post( 'defaults', $contrib );
+if ( ! $a1_pid ) {
+	$check( 'A1 fixture', false );
+} else {
+	$seed( $a1_pid, 'minn_d1_cards', 'field_minn_d1_cards', array( array( 'title' => 'A', 'btn' => 'Go', 'tone' => 'red', 'on' => 0, 'note' => 'A note' ) ), array( 'title' => 'field_minn_d1_c_title', 'btn' => 'field_minn_d1_c_btn', 'tone' => 'field_minn_d1_c_tone', 'on' => 'field_minn_d1_c_on', 'note' => 'field_minn_d1_c_note' ) );
+	wp_set_current_user( $contrib );
+	list( , $a1_payload ) = $call( 'GET', '/minn-admin/v1/acf/fields', null, array( 'post_id' => $a1_pid, 'post_type' => 'post' ) );
+	$a1_subs = array();
+	foreach ( (array) ( $a1_payload['groups'] ?? array() ) as $a1_g ) {
+		foreach ( (array) ( $a1_g['fields'] ?? array() ) as $a1_f ) {
+			if ( 'minn_d1_cards' === ( $a1_f['name'] ?? '' ) ) {
+				foreach ( (array) $a1_f['subfields'] as $a1_sf ) {
+					$a1_subs[ $a1_sf['name'] ] = $a1_sf;
+				}
+			}
+		}
+	}
+	$check( 'A1 the panel ships each shown sub\'s default for the client to seed a new row with', 'Learn more' === ( $a1_subs['btn']['default'] ?? null ) && 'blue' === ( $a1_subs['tone']['default'] ?? null ) && true === ( $a1_subs['on']['default'] ?? null ) && ! array_key_exists( 'default', $a1_subs['title'] ?? array() ), wp_json_encode( $a1_subs ) );
+	$a1_rows = $panel( $a1_pid )['minn_d1_cards'] ?? null;
+	if ( ! is_array( $a1_rows ) || 1 !== count( $a1_rows ) ) {
+		$check( 'A1 the panel serves the repeater', false, wp_json_encode( $a1_rows ) );
+	} else {
+		$a1_st = $save(
+			$a1_pid,
+			array(
+				'minn_d1_cards' => array(
+					// A client that seeds blanks, the person leaving them blank.
+					array( 'values' => array( 'title' => 'C', 'btn' => '', 'tone' => '', 'on' => false ) ),
+					// A client that seeds the shipped defaults.
+					array( 'values' => array( 'title' => 'D', 'btn' => 'Learn more', 'tone' => 'blue', 'on' => true ) ),
+					$a1_rows[0],
+				),
+			)
+		);
+		$check( 'A1 a new row stores the default of a sub Minn does not show', 200 === $a1_st && 'Default note' === $meta( $a1_pid, 'minn_d1_cards_0_note' ) && 'Default note' === $meta( $a1_pid, 'minn_d1_cards_1_note' ), $a1_st . ' ' . wp_json_encode( array( $meta( $a1_pid, 'minn_d1_cards_0_note' ), $meta( $a1_pid, 'minn_d1_cards_1_note' ) ) ) );
+		$check( 'A1 control: a shown sub sent blank stores the blank', '' === (string) $meta( $a1_pid, 'minn_d1_cards_0_btn' ) && '' === (string) $meta( $a1_pid, 'minn_d1_cards_0_tone' ) && empty( $meta( $a1_pid, 'minn_d1_cards_0_on' ) ), wp_json_encode( array( $meta( $a1_pid, 'minn_d1_cards_0_btn' ), $meta( $a1_pid, 'minn_d1_cards_0_tone' ), $meta( $a1_pid, 'minn_d1_cards_0_on' ) ) ) );
+		$check( 'A1 control: a shown sub sent at its default stores the default', 'Learn more' === $meta( $a1_pid, 'minn_d1_cards_1_btn' ) && 'blue' === $meta( $a1_pid, 'minn_d1_cards_1_tone' ) && '1' === (string) $meta( $a1_pid, 'minn_d1_cards_1_on' ), wp_json_encode( array( $meta( $a1_pid, 'minn_d1_cards_1_btn' ), $meta( $a1_pid, 'minn_d1_cards_1_tone' ), $meta( $a1_pid, 'minn_d1_cards_1_on' ) ) ) );
+		$check( 'A1 control: the stored row keeps its values', 'A' === $meta( $a1_pid, 'minn_d1_cards_2_title' ) && 'Go' === $meta( $a1_pid, 'minn_d1_cards_2_btn' ) && 'red' === $meta( $a1_pid, 'minn_d1_cards_2_tone' ) && '0' === (string) $meta( $a1_pid, 'minn_d1_cards_2_on' ) && 'A note' === $meta( $a1_pid, 'minn_d1_cards_2_note' ) );
+	}
+	$a1_fst = $save( $a1_pid, array( 'minn_d1_dfx' => array( array( '__layout' => 'card', 'values' => array( 'head' => 'H' ) ) ) ) );
+	$check( 'A1 a new flexible section stores the default of a sub Minn does not show', 200 === $a1_fst && 'H' === $meta( $a1_pid, 'minn_d1_dfx_0_head' ) && 'Body default' === $meta( $a1_pid, 'minn_d1_dfx_0_body' ), $a1_fst . ' ' . wp_json_encode( $meta( $a1_pid, 'minn_d1_dfx_0_body' ) ) );
+	wp_set_current_user( $admin );
+	wp_delete_post( $a1_pid, true );
+}
+acf_remove_local_field_group( 'group_minn_d1_def' );
 
 // --- OS-1 disabled sections and renamed labels stay in wp-admin -------------
 // ACF 6.5+ keeps them in `_{name}_layout_meta`. Its flexible field drops a

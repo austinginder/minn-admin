@@ -1310,7 +1310,7 @@ function minn_admin_acf_flatten_subs( $sub_fields ) {
 			$locked++;
 			return;
 		}
-		$subs[] = array(
+		$one = array(
 			'name'      => $name_prefix . $m['name'],
 			'label'     => $label_prefix . $m['label'],
 			'type'      => $m['type'],
@@ -1319,6 +1319,12 @@ function minn_admin_acf_flatten_subs( $sub_fields ) {
 			'key'       => $m['key'],
 			'gpath'     => $gpath ? $gpath : null,
 		);
+		// What a row added on ACF's screen starts with, in the control's
+		// shape, for the client to seed a new row with.
+		if ( isset( $sub['default_value'] ) && '' !== $sub['default_value'] && array() !== $sub['default_value'] ) {
+			$one['default'] = minn_admin_acf_value_out( $m, $sub['default_value'] );
+		}
+		$subs[] = $one;
 	};
 	foreach ( (array) $sub_fields as $sub ) {
 		$push( $sub, '', '', array() );
@@ -1684,14 +1690,15 @@ function minn_admin_acf_row_values_out( $subs, $raw_row ) {
 }
 
 /**
- * A new row the way ACF's own form posts one: every sub-field present and
- * empty, a group's or clone's subs nested under it.
+ * A new row the way ACF's own form posts one: every sub-field present, at
+ * its default value or empty, a group's or clone's subs nested under it.
  *
  * update_row() writes only the subs a row carries and leaves the rest as the
  * row that last sat at that index stored them, so a row added above another,
  * or in place of a deleted one, would take that row's values for every sub it
  * leaves blank and every sub Minn does not show. A group's update_value skips
- * an absent sub the same way.
+ * an absent sub the same way. A sub the row shows takes what the client sends
+ * instead, so a default the person cleared stays cleared.
  *
  * @param array $sub_fields ACF sub-field definitions (a repeater's, or one layout's).
  * @param int   $depth      Recursion guard.
@@ -1703,8 +1710,11 @@ function minn_admin_acf_blank_row( $sub_fields, $depth = 0 ) {
 		if ( ! is_array( $sub ) || empty( $sub['key'] ) || '' === (string) ( $sub['name'] ?? '' ) ) {
 			continue;
 		}
-		$nested             = in_array( $sub['type'] ?? '', array( 'group', 'clone' ), true ) && $depth < 8;
-		$row[ $sub['key'] ] = $nested ? minn_admin_acf_blank_row( minn_admin_acf_def_children( $sub ), $depth + 1 ) : '';
+		if ( in_array( $sub['type'] ?? '', array( 'group', 'clone' ), true ) && $depth < 8 ) {
+			$row[ $sub['key'] ] = minn_admin_acf_blank_row( minn_admin_acf_def_children( $sub ), $depth + 1 );
+		} else {
+			$row[ $sub['key'] ] = isset( $sub['default_value'] ) ? $sub['default_value'] : '';
+		}
 	}
 	return $row;
 }
