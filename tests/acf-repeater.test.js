@@ -248,6 +248,45 @@ const { launch, login, deletePost, openEditor, reporter, BASE, pickCombo } = req
 		t.check( 'and the edit lands on the row it was made to', 2 === rows.length && 'B edited' === rows[ 0 ].values[ textSub ] && 'C' === rows[ 1 ].values[ textSub ],
 			JSON.stringify( rows.map( ( r ) => r.values[ textSub ] ) ) );
 
+		// Rows changed while a save is in flight keep their anchors: edit row
+		// A, save with the response held, delete row B meanwhile. The rows
+		// left (A and C) still name their stored positions (0 and 2), which
+		// the server holds until the next save; re-anchoring them to 0 and 1
+		// would merge C onto B's stored row.
+		await page.evaluate( async ( args ) => {
+			const mk = ( v ) => ( { values: { [ args.textSub ]: v } } );
+			await fetch( window.MINN.restUrl + 'wp/v2/posts/' + args.id, {
+				method: 'POST', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				body: JSON.stringify( { minn_acf: { [ args.F ]: [ mk( 'A' ), mk( 'B' ), mk( 'C' ) ] } } ),
+			} );
+		}, { id, F, textSub } );
+		await openEditor( page, id );
+		await openPanel();
+		await page.fill( `[data-rowsub="0:${ textSub }"]`, 'A in flight' );
+		const postUrl = new RegExp( 'wp/v2/posts/' + id + '(\\?|$)' );
+		const holdSave = async ( route ) => {
+			if ( 'POST' === route.request().method() ) await new Promise( ( r ) => setTimeout( r, 3000 ) );
+			await route.continue().catch( () => {} );
+		};
+		await page.route( postUrl, holdSave );
+		const firstFlight = page.waitForResponse( ( res ) => res.request().method() === 'POST' && postUrl.test( res.url() ), { timeout: 20000 } );
+		await page.keyboard.press( 'Meta+s' );
+		await page.waitForTimeout( 600 );
+		await page.click( `[data-pf$=":${ F }"] [data-rdel="1"]` );
+		await firstFlight;
+		await page.unroute( postUrl, holdSave );
+		await page.waitForTimeout( 500 );
+		const secondFlight = page.waitForResponse( ( res ) => res.request().method() === 'POST' && postUrl.test( res.url() ), { timeout: 20000 } );
+		await page.keyboard.press( 'Meta+s' );
+		const keptRows = ( ( JSON.parse( ( await secondFlight ).request().postData() || '{}' ).minn_acf || {} )[ F ] || [] );
+		await page.waitForTimeout( 500 );
+		t.check( 'rows changed while a save was in flight keep their stored anchors',
+			'0,2' === keptRows.map( ( r ) => r.__idx ).join( ',' ), JSON.stringify( keptRows.map( ( r ) => [ r.__idx, r.values && r.values[ textSub ] ] ) ) );
+		rows = await readRows();
+		t.check( 'and the rows left are the ones kept', 2 === rows.length && 'A in flight' === rows[ 0 ].values[ textSub ] && 'C' === rows[ 1 ].values[ textSub ],
+			JSON.stringify( rows.map( ( r ) => r.values[ textSub ] ) ) );
+
 		// Emptying the repeater is a legitimate save.
 		await openEditor( page, id );
 		await openPanel();

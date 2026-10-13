@@ -70,6 +70,29 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		const res3 = await third;
 		const body3 = JSON.parse( res3.request().postData() || '{}' );
 		t.check( 'a save after that sends neither again', ! ( 'minn_acf' in body3 ) && ! ( 'acf' in body3 ), JSON.stringify( Object.keys( body3 ) ) );
+
+		// A panel the save did not send: change only the title, save, and
+		// edit a field while that save is in flight.
+		await page.waitForTimeout( 400 );
+		await page.route( saveUrl, hold );
+		await page.fill( '#minn-editor-title', 'Panel in-flight test, retitled' );
+		const fourth = nextSave();
+		await page.keyboard.press( 'Meta+s' );
+		await page.waitForTimeout( 600 );
+		await page.fill( subtitle, 'Typed while the title saved' );
+		const res4 = await fourth;
+		await page.unroute( saveUrl, hold );
+		const body4 = JSON.parse( res4.request().postData() || '{}' );
+		t.check( 'control: the title-only save sent no panel', ! ( 'minn_acf' in body4 ) && ! ( 'acf' in body4 ), JSON.stringify( Object.keys( body4 ) ) );
+		await page.waitForTimeout( 500 );
+		const fifth = nextSave();
+		await page.keyboard.press( 'Meta+s' );
+		const res5 = await fifth;
+		const body5 = JSON.parse( res5.request().postData() || '{}' );
+		await page.waitForTimeout( 400 );
+		const sent5 = body5.minn_acf || body5.acf || {};
+		t.check( 'an edit to a panel the in-flight save did not send goes with the next one', 'Typed while the title saved' === sent5.subtitle, JSON.stringify( sent5 ) );
+		t.check( 'and it is stored', 'Typed while the title saved' === ( await readAcf() ).subtitle );
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {

@@ -35450,14 +35450,22 @@
 			// Row and section controls anchor each kept row to its position in
 			// the STORED order, which this save just replaced with the order it
 			// sent. Re-point the anchors so a structural edit made after a save
-			// (reorder, then delete) still merges against the right rows.
+			// (reorder, then delete) still merges against the right rows. Only
+			// rows this save sent, and only while the control still holds what
+			// it sent: rows changed while the save was in flight are anchored
+			// to the order the server holds now, which is the one they name.
 			$$( '[data-pf][data-ftype="rows"], [data-pf][data-ftype="flex"]' ).forEach( ( el ) => {
 				if ( typeof el._rowsResync !== 'function' ) return;
 				const pf = el.dataset.pf || '';
 				const sep = pf.indexOf( ':' );
-				const store = sep > 0 && ed.panelValues ? ed.panelValues[ pf.slice( 0, sep ) ] : null;
+				if ( sep <= 0 ) return;
+				const pid = pf.slice( 0, sep );
+				const key = pf.slice( sep + 1 );
+				const sent = panelsSent[ pid ] ? panelsSent[ pid ][ key ] : undefined;
+				if ( undefined === sent || JSON.stringify( el._rowsValue ) !== JSON.stringify( sent ) ) return;
+				const store = ed.panelValues ? ed.panelValues[ pid ] : null;
 				const v = el._rowsResync();
-				if ( store ) store[ pf.slice( sep + 1 ) ] = v;
+				if ( store ) store[ key ] = v;
 			} );
 			// The same for rows whose control is not on screen (the panel is
 			// a dialog, usually closed by the time Update is pressed): the
@@ -35477,15 +35485,22 @@
 			// sent. A field the post came back holding empty although the
 			// save sent a value was not stored (PowerPress has no episode to
 			// attach a duration to before its media URL), so it stays changed;
-			// so does a field edited while the save was in flight. A panel
-			// the save did not touch takes its values as they stand.
+			// so does a field edited while the save was in flight. A panel the
+			// save did not send keeps its baseline while it holds a change (one
+			// made while the save was in flight goes with the next save) and
+			// otherwise takes its values as they stand.
 			const blank = ( v ) => v == null || '' === v || false === v || ( Array.isArray( v ) && ! v.length );
 			const stillDirty = {};
 			( ed.panels || [] ).forEach( ( pn ) => {
 				const pid = pn.desc.id;
 				const sent = panelsSent[ pid ];
 				if ( ! sent ) {
-					ed.panelBase[ pid ] = JSON.parse( JSON.stringify( ( ed.panelValues || {} )[ pid ] || {} ) );
+					const vals = ( ed.panelValues || {} )[ pid ] || {};
+					if ( ed.panelDirty && ed.panelDirty[ pid ] && Object.keys( changedKeys( vals, ed.panelBase[ pid ] || {} ) ).length ) {
+						stillDirty[ pid ] = true;
+						return;
+					}
+					ed.panelBase[ pid ] = JSON.parse( JSON.stringify( vals ) );
 					return;
 				}
 				const back = pn.desc.valuesKey && p && p[ pn.desc.valuesKey ] && 'object' === typeof p[ pn.desc.valuesKey ] ? p[ pn.desc.valuesKey ] : null;
