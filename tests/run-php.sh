@@ -73,6 +73,7 @@ run core-icons single
 run duplicate-copy single --user=admin
 run language-packs single
 run notice-link-label single
+run removed-owners single --user=admin
 run roundtrip-panels single --user=admin
 run roundtrip-settings single --user=admin
 run route-gates single --user=admin
@@ -104,7 +105,7 @@ run security-v044-rc subsite --user=admin
 run multi-network-system net2
 
 # roundtrip-surfaces replays bodies a browser run captured; see its header.
-echo "SKIP  roundtrip-surfaces: needs a capture from roundtrip-surfaces-capture.js" | tee -a "$OUT/summary.txt"
+echo "SKIP  roundtrip-surfaces: needs a browser capture first; run ./roundtrip.sh" | tee -a "$OUT/summary.txt"
 
 echo "PHP suites: $pass passed, $fail failed, $((skip + 1)) skipped → $OUT" | tee -a "$OUT/summary.txt"
 for f in "${failed[@]+"${failed[@]}"}"; do

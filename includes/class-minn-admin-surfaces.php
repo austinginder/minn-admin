@@ -42,6 +42,7 @@ class Minn_Admin_Surfaces {
 	public static function for_current_user() {
 		$hidden = self::hidden_map();
 		$gone   = Minn_Admin_Notices::removed_owners();
+		$paged  = $gone ? Minn_Admin_Notices::owners_with_pages() : array();
 		// The authoritative surface list comes from all() (apply_filters), the
 		// SAME resolution hide validation and the restore list use, so what
 		// surfaces exist never diverges per endpoint. contributions() runs a
@@ -71,10 +72,11 @@ class Minn_Admin_Surfaces {
 			if ( isset( $hidden[ 'surface:' . sanitize_key( $id ) ] ) ) {
 				continue;
 			}
-			// A plugin whose whole wp-admin menu is hidden from this user
-			// (White Label CMS, Adminimize, an agency's remove_menu_page)
+			// A plugin whose whole wp-admin menu a menu tool hid from this
+			// user (White Label CMS, through minn_admin_admin_page_hidden)
 			// is hidden here too. The notices capture finds those owners.
-			if ( $gone && array_intersect( (array) ( $surface['plugin'] ?? array() ), $gone ) ) {
+			// Presentation only: the plugin's routes keep their own gates.
+			if ( $gone && self::owners_gone( (array) ( $surface['plugin'] ?? array() ), $gone, $paged ) ) {
 				continue;
 			}
 			// Attention budget (v1.0 gate G3): workspace is for inbox-shaped
@@ -94,6 +96,26 @@ class Minn_Admin_Surfaces {
 			$out[]         = $surface;
 		}
 		return self::collapse_owner_surfaces( self::fold_into_site_options( $out ), $owners, $own );
+	}
+
+	/**
+	 * Whether a surface's plugins are gone for this user. A surface several
+	 * plugins share (Field Groups, Site Options) stays while any of them
+	 * with admin pages of its own is still in the menu; a plugin with no
+	 * pages of its own (a pro add-on that only extends the free one's
+	 * screens) has no say. Before a capture has recorded who has pages,
+	 * one listed plugin gone is enough, as it always was.
+	 *
+	 * @param string[] $plugins The surface's `plugin` list.
+	 * @param string[] $gone    Owners the capture found removed.
+	 * @param string[] $paged   Owners the capture found with pages.
+	 */
+	public static function owners_gone( array $plugins, array $gone, array $paged ) {
+		if ( ! array_intersect( $plugins, $gone ) ) {
+			return false;
+		}
+		$voting = $paged ? array_intersect( $plugins, $paged ) : array();
+		return $voting ? ! array_diff( $voting, $gone ) : true;
 	}
 
 	/**

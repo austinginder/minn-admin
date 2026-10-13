@@ -26,11 +26,55 @@ class Minn_Admin_Notices {
 	/** User option (per site) holding the last capture's menu removals. */
 	const REMOVED_OPTION = 'minn_admin_menu_removed';
 
+	/**
+	 * How long a stored removal stands without a fresh capture. A capture
+	 * runs whenever the app opens and the last one is 15 minutes old, so
+	 * this only ends removals for someone whose captures stopped coming
+	 * back (a dashboard that redirects them, or fatals).
+	 */
+	const REMOVED_FOR = WEEK_IN_SECONDS;
+
+	/** On a capture request: which plugin or theme registered each post type and taxonomy. */
+	private static $content_owners = array();
+
+	/** On a capture request: the owners that have admin pages of their own. */
+	private static $owners_with_pages = array();
+
 	/** Core callbacks Minn already covers with its own notifications. */
 	const SKIP_CALLBACKS = array( 'update_nag', 'maintenance_nag', 'site_admin_notice' );
 
 	public static function init() {
 		add_action( 'admin_init', array( __CLASS__, 'maybe_arm' ), PHP_INT_MAX );
+		// Only the capture load needs to know who registered each content
+		// type, and it has to listen before init, when they are registered.
+		if ( ! empty( $_GET['minn_notices'] ) && is_admin() ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			add_action( 'registered_post_type', array( __CLASS__, 'note_content_owner' ), 10, 1 );
+			add_action( 'registered_taxonomy', array( __CLASS__, 'note_content_owner' ), 10, 1 );
+		}
+	}
+
+	/**
+	 * Remember which plugin or theme registered a post type or taxonomy,
+	 * from the first frame of the call outside WordPress itself.
+	 *
+	 * @param string $name The post type or taxonomy.
+	 */
+	public static function note_content_owner( $name ) {
+		$kind = 'registered_taxonomy' === current_action() ? 'tax:' : 'pt:';
+		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 12 ) as $frame ) { // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace
+			if ( empty( $frame['file'] ) ) {
+				continue;
+			}
+			$owner = self::owner_of_file( wp_normalize_path( $frame['file'] ) );
+			if ( 'plugin' === $owner['type'] && '' !== $owner['slug'] && dirname( plugin_basename( MINN_ADMIN_FILE ) ) !== $owner['slug'] ) {
+				self::$content_owners[ $kind . $name ] = $owner['slug'];
+				return;
+			}
+			if ( 'theme' === $owner['type'] && '' !== $owner['slug'] ) {
+				self::$content_owners[ $kind . $name ] = 'theme:' . $owner['slug'];
+				return;
+			}
+		}
 	}
 
 	/**
@@ -129,17 +173,21 @@ class Minn_Admin_Notices {
 
 	/**
 	 * Plugins and themes whose every wp-admin menu page is gone for this
-	 * user. This is how agencies hide a plugin from clients: White Label
-	 * CMS, Adminimize or a remove_menu_page() snippet takes the plugin's
-	 * menu away, and Minn drops that plugin's surfaces for the same user
-	 * (Minn_Admin_Surfaces::for_current_user()). Runs in the same capture
-	 * pageload as capture_removed_menus(), after every admin_menu callback.
+	 * user. This is how agencies hide a plugin from clients: a menu tool
+	 * takes the plugin's menu away, and Minn drops that plugin's surfaces
+	 * for the same user (Minn_Admin_Surfaces::for_current_user()). Only a
+	 * tool that vouches through the filter below counts (the bundled White
+	 * Label CMS adapter does). Runs in the same capture pageload as
+	 * capture_removed_menus(), after every admin_menu callback.
 	 *
 	 * A page counts only when this user could open it. WordPress hooks a
 	 * top-level page's callback, and adds a submenu page at all, only for
 	 * users with its capability, so a plugin absent because of normal
 	 * capability gating is never reported. A plugin with even one page
-	 * still in the menu (or moved elsewhere in it) is not reported either.
+	 * still in the menu (or moved elsewhere in it) is not reported either,
+	 * and its content screens count as its pages: a list of a post type or
+	 * taxonomy it registered (Elementor's Templates) that is still in the
+	 * menu keeps it.
 	 *
 	 * Absence alone proves nothing: plugins hide their own setup and
 	 * wizard pages exactly the way an agency hides a menu. So a plugin is
@@ -190,9 +238,28 @@ class Minn_Admin_Notices {
 				$pages[ $owner ][ (string) $slug ] = (string) $parent;
 			}
 		}
+		// Owners with a content screen still in the menu.
+		$content_shown = array();
+		foreach ( array_keys( $shown ) as $slug ) {
+			$screen = strtok( (string) $slug, '?' );
+			$q      = array();
+			parse_str( (string) wp_parse_url( (string) $slug, PHP_URL_QUERY ), $q );
+			if ( in_array( $screen, array( 'edit.php', 'post-new.php' ), true ) && ! empty( $q['post_type'] ) ) {
+				$key = 'pt:' . $q['post_type'];
+			} elseif ( 'edit-tags.php' === $screen && ! empty( $q['taxonomy'] ) ) {
+				$key = 'tax:' . $q['taxonomy'];
+			} else {
+				continue;
+			}
+			if ( isset( self::$content_owners[ $key ] ) ) {
+				$content_shown[ self::$content_owners[ $key ] ] = true;
+			}
+		}
+		self::$owners_with_pages = array_keys( $pages );
+		sort( self::$owners_with_pages );
 		$removed = array();
 		foreach ( $pages as $owner => $slugs ) {
-			if ( array_intersect_key( $slugs, $shown ) ) {
+			if ( isset( $content_shown[ $owner ] ) || array_intersect_key( $slugs, $shown ) ) {
 				continue;
 			}
 			foreach ( $slugs as $slug => $parent ) {
@@ -237,11 +304,12 @@ class Minn_Admin_Notices {
 
 	/**
 	 * Stored admin-menu removals for the boot payload (last capture's view).
-	 * Kept per user and per site, without expiry, so a client never sees a
-	 * hidden item come back for a moment while a fresh capture runs.
+	 * Kept per user and per site, so a client never sees a hidden item come
+	 * back for a moment while a fresh capture runs, for a week since the
+	 * last capture that came back (REMOVED_FOR).
 	 */
 	public static function menu_removed() {
-		$kept = get_user_option( self::REMOVED_OPTION );
+		$kept = self::kept_removals();
 		if ( is_array( $kept ) && isset( $kept['nav'] ) && is_array( $kept['nav'] ) ) {
 			return $kept['nav'];
 		}
@@ -254,8 +322,32 @@ class Minn_Admin_Notices {
 		if ( ! get_current_user_id() || ! apply_filters( 'minn_admin_respect_removed_menus', true ) ) {
 			return array();
 		}
-		$kept = get_user_option( self::REMOVED_OPTION );
+		$kept = self::kept_removals();
 		return is_array( $kept ) && isset( $kept['owners'] ) && is_array( $kept['owners'] ) ? $kept['owners'] : array();
+	}
+
+	/**
+	 * Owners the last capture found with admin pages of their own, hidden
+	 * or not. A surface several plugins share leaves only when every one of
+	 * them with pages is gone (Minn_Admin_Surfaces::owners_gone()); empty
+	 * when no capture has recorded it yet.
+	 */
+	public static function owners_with_pages() {
+		$kept = self::kept_removals();
+		return is_array( $kept ) && isset( $kept['paged'] ) && is_array( $kept['paged'] ) ? $kept['paged'] : array();
+	}
+
+	/** The stored removals, unless no capture has refreshed them for REMOVED_FOR. */
+	private static function kept_removals() {
+		$kept = get_user_option( self::REMOVED_OPTION );
+		if ( ! is_array( $kept ) ) {
+			return null;
+		}
+		// Kept without a time by older versions: valid until the next capture stamps it.
+		if ( isset( $kept['at'] ) && time() - (int) $kept['at'] > self::REMOVED_FOR ) {
+			return null;
+		}
+		return $kept;
 	}
 
 	/**
@@ -855,6 +947,11 @@ class Minn_Admin_Notices {
 	public static function owner_of( $cb ) {
 		$ref  = self::reflect( $cb );
 		$file = $ref && $ref->getFileName() ? wp_normalize_path( $ref->getFileName() ) : '';
+		return self::owner_of_file( $file );
+	}
+
+	/** The plugin, theme or core a file belongs to. */
+	private static function owner_of_file( $file ) {
 		if ( ! $file ) {
 			return array( 'type' => 'unknown', 'slug' => '', 'name' => 'Unknown' );
 		}
@@ -951,9 +1048,15 @@ class Minn_Admin_Notices {
 		$removed = array(
 			'nav'    => array_values( $menu_removed ),
 			'owners' => array_values( $owners ),
+			'paged'  => array_values( self::$owners_with_pages ),
 		);
-		if ( get_user_option( self::REMOVED_OPTION ) !== $removed ) {
-			update_user_option( get_current_user_id(), self::REMOVED_OPTION, $removed );
+		// Rewritten when what it says changes, and at least daily so its
+		// stamp shows captures are still coming back.
+		$was     = get_user_option( self::REMOVED_OPTION );
+		$was_at  = is_array( $was ) ? (int) ( $was['at'] ?? 0 ) : 0;
+		$was_say = is_array( $was ) ? array_diff_key( $was, array( 'at' => true ) ) : null;
+		if ( $was_say !== $removed || time() - $was_at > DAY_IN_SECONDS ) {
+			update_user_option( get_current_user_id(), self::REMOVED_OPTION, $removed + array( 'at' => time() ) );
 		}
 
 		// First-seen stamps drive notification time + unread state. Absent
