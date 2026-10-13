@@ -5,7 +5,9 @@
  * customer, and no page for someone without the customers capability.
  *
  * Fixtures (made here, swept by email at the start, deleted at the end): a
- * customer, a product and eleven orders for them, one of them paid.
+ * customer, a product and eleven orders for them, one of them paid; a
+ * second customer who never filled in a billing address; an Editor and a
+ * Shop Manager to look at both).
  */
 const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
 
@@ -46,6 +48,9 @@ const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
 	const email = `minn-cp-${ suffix }@example.com`;
 	let customerId = null;
 	let productId = null;
+	let bareId = null;
+	let smId = null;
+	let editorId = null;
 	const orderIds = [];
 	try {
 		const made = await api( 'wc/v3/customers', { method: 'POST', body: JSON.stringify( {
@@ -162,6 +167,49 @@ const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
 			JSON.stringify( menu ) );
 		await page.keyboard.press( 'Escape' );
 
+		// A customer who never filled in a billing address: New order starts
+		// from their account's names and email, as the order page's own
+		// customer search does.
+		const bareEmail = `minn-cp-bare-${ suffix }@example.com`;
+		const bare = await api( 'wc/v3/customers', { method: 'POST', body: JSON.stringify( { email: bareEmail, first_name: 'Bare', last_name: 'Buyer', username: 'minn-cp-bare-' + suffix } ) } );
+		bareId = bare.body && bare.body.id;
+		if ( bareId ) {
+			await page.goto( BASE + '/minn-admin/customers/' + bareId, { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '#minn-cp-neworder', { timeout: 20000 } );
+			await page.click( '#minn-cp-neworder' );
+			await page.waitForSelector( '#minn-no-custchip', { timeout: 20000 } );
+			const bareFill = await page.evaluate( () => ( {
+				first: ( document.querySelector( '#minn-ob-first' ) || {} ).value,
+				last: ( document.querySelector( '#minn-ob-last' ) || {} ).value,
+				email: ( document.querySelector( '#minn-ob-email' ) || {} ).value,
+			} ) );
+			t.check( 'New order for a customer with no billing address fills in their names and email',
+				'Bare' === bareFill.first && 'Buyer' === bareFill.last && bareEmail === bareFill.email, JSON.stringify( bareFill ) );
+			await page.click( '#minn-no-cancel' );
+			await page.waitForSelector( '#minn-cp-back', { timeout: 20000 } );
+		}
+
+		// A Shop Manager may edit customers but no other role (WooCommerce's
+		// woocommerce_shop_manager_editable_roles), so an Editor's page has
+		// no pencils for them.
+		const sm = { login: 'minn-cp-sm-' + suffix, pass: 'minn-cp-sm-pass-' + suffix };
+		const smMade = await api( 'wp/v2/users', { method: 'POST', body: JSON.stringify( { username: sm.login, email: sm.login + '@example.com', password: sm.pass, roles: [ 'shop_manager' ] } ) } );
+		smId = smMade.body && smMade.body.id;
+		const ed = await api( 'wp/v2/users', { method: 'POST', body: JSON.stringify( { username: 'minn-cp-ed-' + suffix, email: `minn-cp-ed-${ suffix }@example.com`, password: 'minn-cp-ed-pass-' + suffix, roles: [ 'editor' ], first_name: 'Eddie', last_name: 'Editor' } ) } );
+		editorId = ed.body && ed.body.id;
+		if ( smId && editorId ) {
+			const shop = await loginAs( browser, sm.login, sm.pass );
+			const pencils = async ( id ) => {
+				await shop.page.goto( BASE + '/minn-admin/customers/' + id, { waitUntil: 'domcontentloaded' } );
+				await shop.page.waitForSelector( '[data-ccard]', { timeout: 20000 } ).catch( () => null );
+				await shop.page.waitForTimeout( 800 );
+				return shop.page.$$eval( '[data-cedit]', ( els ) => els.length );
+			};
+			t.check( 'a Shop Manager gets pencils on a customer', ( await pencils( customerId ) ) > 0 );
+			t.check( 'and none on an Editor', 0 === await pencils( editorId ) );
+			await shop.ctx.close();
+		}
+
 		// No customers capability, no customer page.
 		const author = await loginAs( browser, 'minn-author', 'minn-author-pass-1' );
 		await author.page.goto( BASE + '/minn-admin/customers/' + customerId, { waitUntil: 'domcontentloaded' } );
@@ -176,6 +224,9 @@ const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
 		for ( const id of orderIds ) await api( `wc/v3/orders/${ id }?force=true`, { method: 'DELETE' } ).catch( () => null );
 		if ( productId ) await api( `wc/v3/products/${ productId }?force=true`, { method: 'DELETE' } ).catch( () => null );
 		if ( customerId ) await api( `wc/v3/customers/${ customerId }?force=true&reassign=0`, { method: 'DELETE' } ).catch( () => null );
+		for ( const id of [ bareId, smId, editorId ] ) {
+			if ( id ) await api( `wp/v2/users/${ id }?force=true&reassign=1`, { method: 'DELETE' } ).catch( () => null );
+		}
 	}
 
 	await t.done( browser, errors );

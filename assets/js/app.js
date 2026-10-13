@@ -12431,15 +12431,23 @@
 		);
 		// Themed combobox: the status select was the last OS-drawn control here.
 		const statusWrap = $( '[data-oc="substatus"]' );
-		let picked = s.status || 'active';
+		const loadedStatus = s.status || 'active';
+		let picked = loadedStatus;
 		if ( statusWrap ) bindAutocomplete( statusWrap,
 			SUB_TABS.filter( ( [ id ] ) => id !== 'any' ).map( ( [ id, label ] ) => ( { value: id, label } ) ),
 			{ strict: true, value: picked, onPick: ( v ) => { picked = v; } } );
 		const saveBtn = $( '#minn-sub-save' );
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 			if ( ! picked ) return;
+			// Only a status someone picked: sending the one the page loaded
+			// undid a change made meanwhile (a failed renewal putting the
+			// subscription on hold came back active).
+			if ( picked === loadedStatus ) {
+				toast( __( 'Nothing changed yet' ) );
+				return;
+			}
 			saveBtn.disabled = true;
-			saveBtn.textContent = 'Saving…';
+			saveBtn.textContent = __( 'Saving…' );
 			try {
 				const updated = await api( `wc/v3/subscriptions/${ m.sub.id }`, {
 					method: 'PUT',
@@ -16157,7 +16165,17 @@
 	// details captured at checkout, and WooCommerce resets customer_id to 0, so
 	// it reads as a guest order afterwards.
 	function canDeleteCustomer( cu ) {
-		return ! B.multisite && !! B.caps.deleteUsers && !! ( cu && cu.id ) && cu.id !== B.user.id;
+		return ! B.multisite && !! B.caps.deleteUsers && !! ( cu && cu.id ) && cu.id !== B.user.id && canEditCustomer( cu );
+	}
+
+	// WooCommerce lets a Shop Manager edit and delete only the roles
+	// woocommerce_shop_manager_editable_roles names (customers) and their
+	// own account; anyone else edits by capability. The list lists people
+	// of any role who have ordered, so the pencils follow the same rule.
+	function canEditCustomer( cu ) {
+		if ( ! B.caps.customers || ! cu || ! cu.id ) return false;
+		if ( ! Array.isArray( B.shopManagerRoles ) ) return true;
+		return cu.id === B.user.id || B.shopManagerRoles.includes( cu.role );
 	}
 
 	function deleteCustomerFlow( cu, then ) {
@@ -16261,7 +16279,7 @@
 							},
 						} ] : [] ),
 					] : [] ),
-					...( cu.id && B.caps.editUsers ? [ { label: __( 'Open user account' ), run: () => go( 'users/' + cu.id ) } ] : [] ),
+					...( cu.id && B.caps.editUsers && canEditCustomer( cu ) ? [ { label: __( 'Open user account' ), run: () => go( 'users/' + cu.id ) } ] : [] ),
 					...( canDeleteCustomer( cu ) ? [
 						{ heading: __( 'Danger zone' ) },
 						{ label: __( 'Delete customer…' ), danger: true, run: () => deleteCustomerFlow( cu ) },
@@ -16407,7 +16425,7 @@
 		const c = m.full || {};
 		const b = c.billing || {};
 		const sh = c.shipping || {};
-		const canEdit = !! B.caps.customers;
+		const canEdit = canEditCustomer( c );
 		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-cedit="${ key }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
 		const st = m.stats;
 		const ords = m.orders;
@@ -16523,14 +16541,28 @@
 		$$( '[data-cpmember]' ).forEach( ( row ) => row.addEventListener( 'click', () => go( 'memberships/' + row.dataset.cpmember ) ) );
 		const more = $( '#minn-cp-more-orders' );
 		if ( more ) more.addEventListener( 'click', async () => {
+			// The flag outlives a repaint that redraws this button while the
+			// page is loading, so one page is never fetched twice.
+			if ( m.ordersLoading ) return;
+			m.ordersLoading = true;
 			more.disabled = true;
 			more.textContent = __( 'Loading orders…' );
-			await loadCustomerOrders( m, ( m.orders.page || 1 ) + 1 );
+			try {
+				await loadCustomerOrders( m, ( m.orders.page || 1 ) + 1 );
+			} finally {
+				m.ordersLoading = false;
+			}
 			if ( state.customerPage === m ) renderCustomerPage();
 		} );
 		const newOrder = $( '#minn-cp-neworder' );
 		if ( newOrder ) newOrder.addEventListener( 'click', () => {
-			state.newOrderFor = { id: m.id, name: nameOf(), email: c.email || '', billing: c.billing || {}, shipping: c.shipping || {} };
+			// The account's names and email stand in for a billing address
+			// they never filled in, as the order page's own customer search does.
+			const b = c.billing || {};
+			state.newOrderFor = {
+				id: m.id, name: nameOf(), email: c.email || '', shipping: c.shipping || {},
+				billing: Object.assign( {}, b, { first_name: b.first_name || c.first_name || '', last_name: b.last_name || c.last_name || '', email: b.email || c.email || '' } ),
+			};
 			leaveTrail();
 			go( 'orders/new' );
 		} );
@@ -16550,7 +16582,7 @@
 						go( 'orders' );
 					},
 				} ] : [] ),
-				...( B.caps.editUsers ? [ { label: __( 'Open user account' ), run: () => go( 'users/' + m.id ) } ] : [] ),
+				...( B.caps.editUsers && canEditCustomer( c ) ? [ { label: __( 'Open user account' ), run: () => go( 'users/' + m.id ) } ] : [] ),
 				...( canDeleteCustomer( c ) ? [
 					{ heading: __( 'Danger zone' ) },
 					{ label: __( 'Delete customer…' ), danger: true, run: () => deleteCustomerFlow( c, () => {
@@ -49117,9 +49149,13 @@
 					if ( fresh && fresh.instance && fresh.instance.raw ) base = fresh.instance.raw;
 				} catch ( e2 ) { /* the dialog's copy */ }
 				const raw = { ...base };
+				// A textarea hands back its text with LF line endings and no
+				// leading newline, so text saved with CRLF (wp-admin's own
+				// forms) read as edited and overwrote a newer copy.
+				const asShown = ( v ) => String( v ?? '' ).replace( /\r\n?/g, '\n' ).replace( /^\n/, '' );
 				$$( '[data-wfield]' ).forEach( ( input ) => {
 					const k = input.dataset.wfield;
-					if ( input.value !== String( loaded[ k ] ?? '' ) ) raw[ k ] = input.value;
+					if ( asShown( input.value ) !== asShown( loaded[ k ] ) ) raw[ k ] = input.value;
 				} );
 				try {
 					await api( `wp/v2/widgets/${ m.widget.id }`, { method: 'POST', body: JSON.stringify( { instance: { raw } } ) } );

@@ -180,6 +180,21 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			const raw = after.raw || {};
 			t.check( 'Widget: the title saved', raw.title === 'Retitled ' + suffix, raw.title );
 			t.check( 'Widget: the text changed elsewhere is kept', raw.text === 'changed elsewhere', raw.text );
+
+			// Text saved with CRLF line endings (wp-admin's own forms) reads
+			// as untouched too, though the textarea hands it back with LF.
+			await api( `wp/v2/widgets/${ widgetId }`, { method: 'POST', body: JSON.stringify( { instance: { raw: { title: 'CRLF ' + suffix, text: 'line one\r\nline two', filter: false, visual: false } } } ) } );
+			await page.goto( `${ BASE }/minn-admin/widgets`, { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( `[data-wedit="${ widgetId }"]`, { timeout: 20000 } );
+			await page.click( `[data-wedit="${ widgetId }"]` );
+			await page.waitForSelector( '[data-wfield="title"]', { timeout: 10000 } );
+			await api( `wp/v2/widgets/${ widgetId }`, { method: 'POST', body: JSON.stringify( { instance: { raw: { title: 'CRLF ' + suffix, text: 'changed elsewhere again', filter: false, visual: false } } } ) } );
+			await page.fill( '[data-wfield="title"]', 'CRLF retitled ' + suffix );
+			const crlfSaved = page.waitForResponse( ( r ) => r.url().includes( `widgets/${ widgetId }` ) && 'POST' === r.request().method(), { timeout: 30000 } );
+			await page.click( '#minn-widget-save' );
+			await crlfSaved;
+			const crlfRaw = ( ( ( await api( `wp/v2/widgets/${ widgetId }?context=edit` ) ).body || {} ).instance || {} ).raw || {};
+			t.check( 'Widget: CRLF text left alone is not sent back over a newer copy', crlfRaw.text === 'changed elsewhere again' && crlfRaw.title === 'CRLF retitled ' + suffix, JSON.stringify( crlfRaw ) );
 		}
 
 		/* ===== Settings ===== */

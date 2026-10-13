@@ -2268,6 +2268,11 @@ class Minn_Admin {
 			'roles'    => current_user_can( 'list_users' ) ? wp_roles()->get_names() : new \stdClass(),
 			// The role a new account starts on, as core's Add User picker does.
 			'defaultRole' => current_user_can( 'create_users' ) ? (string) get_option( 'default_role', 'subscriber' ) : '',
+			// WooCommerce's rule for a Shop Manager: they edit only these roles
+			// (and themselves). Null for anyone WooCommerce doesn't narrow.
+			'shopManagerRoles' => class_exists( 'WooCommerce' ) && function_exists( 'wc_current_user_has_role' ) && wc_current_user_has_role( 'shop_manager' )
+				? array_values( array_unique( array_map( 'strval', (array) apply_filters( 'woocommerce_shop_manager_editable_roles', array( 'customer' ) ) ) ) )
+				: null,
 			// Roles the Settings default-role picker leaves out, as core's does.
 			'defaultRoleExcluded' => current_user_can( 'manage_options' ) ? self::default_role_excluded_roles() : array(),
 			'surfaces' => Minn_Admin_Surfaces::for_current_user(),
