@@ -193,9 +193,13 @@ function minn_admin_wpvivid_rows() {
 			'name'       => $components,
 			'components' => $components,
 			'size'       => $bytes ? size_format( $bytes ) : '—',
+			// where and locked stay raw: the Download and Delete gates
+			// read them. stored and lock are what the detail dialog shows.
 			'where'      => $where,
+			'stored'     => 'remote' === $where ? __( 'Remote', 'minn-admin' ) : __( 'Local', 'minn-admin' ),
 			'type'       => isset( $set['type'] ) ? (string) $set['type'] : '',
 			'locked'     => $locked ? 'locked' : '',
+			'lock'       => $locked ? __( 'Locked', 'minn-admin' ) : '',
 			'date'       => $ts ? gmdate( 'Y-m-d\TH:i:s\Z', $ts ) : '',
 			'ts'         => $ts,
 		);
@@ -377,7 +381,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'date', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
-				'skip' => array( 'name', 'components', 'ts' ),
+				'skip' => array( 'name', 'components', 'where', 'locked', 'ts' ),
 			),
 			'actions'   => array(
 				// Only sets with files on this server; remote-only rows say

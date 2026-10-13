@@ -34,7 +34,9 @@ function minn_admin_updraft_history() {
 		return array();
 	}
 	krsort( $history, SORT_NUMERIC );
-	$items = array();
+	// Their own names for each remote storage ("Amazon S3" for s3).
+	$methods = isset( $GLOBALS['updraftplus']->backup_methods ) && is_array( $GLOBALS['updraftplus']->backup_methods ) ? $GLOBALS['updraftplus']->backup_methods : array();
+	$items   = array();
 	foreach ( $history as $ts => $set ) {
 		if ( ! is_array( $set ) ) {
 			continue;
@@ -51,8 +53,13 @@ function minn_admin_updraft_history() {
 				$bytes += (int) $value;
 			}
 		}
-		$service = isset( $set['service'] ) ? implode( ', ', array_diff( (array) $set['service'], array( 'none', '' ) ) ) : '';
-		$what    = $entities ? implode( ' · ', $entities ) : '—';
+		$services = isset( $set['service'] ) ? array_diff( (array) $set['service'], array( 'none', '' ) ) : array();
+		$service  = implode( ', ', $services );
+		$stored   = array();
+		foreach ( $services as $id ) {
+			$stored[] = isset( $methods[ $id ] ) ? (string) $methods[ $id ] : (string) $id;
+		}
+		$what = $entities ? implode( ' · ', $entities ) : '—';
 		$items[] = array(
 			'id'         => (int) $ts,
 			// The detail dialog is headed by an item's name, else only by
@@ -62,6 +69,9 @@ function minn_admin_updraft_history() {
 			'components' => $what,
 			'size'       => $bytes ? size_format( $bytes ) : '—',
 			'where'      => $service ? $service : 'local',
+			// What the detail dialog shows for where; `where` keeps their
+			// service ids for the list's pill.
+			'stored'     => $stored ? implode( ', ', $stored ) : __( 'Local', 'minn-admin' ),
 			'label'      => isset( $set['label'] ) ? (string) $set['label'] : '',
 		);
 	}
@@ -306,7 +316,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'where', 'label' => __( 'Stored', 'minn-admin' ), 'format' => 'pill' ),
 				array( 'key' => 'date', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
-			'detail'    => array( 'skip' => array( 'name', 'components' ) ),
+			'detail'    => array( 'skip' => array( 'name', 'components', 'where' ) ),
 			'actions'   => array(
 				// A set is one file per component (a big one splits into
 				// parts); the door streams a lone file and lists several.
