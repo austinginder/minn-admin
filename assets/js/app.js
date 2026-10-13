@@ -31342,6 +31342,12 @@
 					saveBtn.disabled = false;
 					return;
 				}
+				// A refused save leaves the form as typed, to correct and
+				// retry: the re-render rebuilds it from the stored values.
+				if ( ! okAll ) {
+					saveBtn.disabled = false;
+					return;
+				}
 				renderSettings();
 				saveBtn.disabled = false;
 			} );
