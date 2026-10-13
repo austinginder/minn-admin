@@ -30122,6 +30122,9 @@
 		[ '/archives/%post_id%', __( 'Numeric' ) ],
 		[ '/%postname%/', __( 'Post name' ) ],
 	];
+	// Where WordPress can't tell the server rewrites URLs, its presets carry
+	// /index.php (options-permalink.php); a custom structure stays as typed.
+	const permalinkPresets = ( pl ) => PERMALINK_PRESETS.map( ( [ v, l ] ) => [ v && pl && pl.index_prefix ? pl.index_prefix + v : v, l ] );
 
 	async function loadSettings() {
 		state.siteAppearanceDraft = null;
@@ -30625,7 +30628,7 @@
 				if ( ! pl ) {
 					perma = subhead( 'URLs' ) + `<div class="minn-editor-locked-note">${ esc( __( 'Permalink settings couldn’t be loaded.' ) ) } <a href="${ esc( B.site.adminUrl ) }options-permalink.php">${ esc( __( 'Open in the classic admin ↗' ) ) }</a></div>`;
 				} else {
-					const isPreset = PERMALINK_PRESETS.some( ( [ v ] ) => v === pl.structure );
+					const isPreset = permalinkPresets( pl ).some( ( [ v ] ) => v === pl.structure );
 					perma = subhead( 'URLs' )
 						+ `<div class="minn-fields">`
 						+ permaCombo( '_preset', __( 'Permalink structure' ), isPreset ? pl.structure : '_custom' )
@@ -31239,15 +31242,16 @@
 		const presetWrap = $( '[data-permacombo="_preset"]', view );
 		if ( presetWrap ) {
 			const structInput = $( '[data-permakey="structure"]', view );
+			const presets     = permalinkPresets( cache.permalinks );
 			bindAutocomplete( presetWrap,
-				[ ...PERMALINK_PRESETS, [ '_custom', __( 'Custom structure' ) ] ].map( ( [ v, l ] ) => ( { value: v, label: l } ) ),
+				[ ...presets, [ '_custom', __( 'Custom structure' ) ] ].map( ( [ v, l ] ) => ( { value: v, label: l } ) ),
 				{
 					strict: true,
 					value: presetWrap.dataset.pcValue,
 					onPick: ( v ) => { if ( v !== '_custom' ) structInput.value = v; },
 				} );
 			structInput.addEventListener( 'input', () => {
-				presetWrap._acSet( PERMALINK_PRESETS.some( ( [ v ] ) => v === structInput.value ) ? structInput.value : '_custom' );
+				presetWrap._acSet( presets.some( ( [ v ] ) => v === structInput.value ) ? structInput.value : '_custom' );
 			} );
 		}
 
@@ -31391,8 +31395,7 @@
 
 				// --- Permalinks (minn-admin/v1/permalinks): the Content tab, last. ---
 				// Sent only when one of them changed: a save of the section's
-				// other fields must not rebuild the rewrite rules (or, on a
-				// server WordPress can't identify, prefix /index.php).
+				// other fields must not rebuild the rewrite rules.
 				const plWas = cache.permalinks || {};
 				const plNow = {};
 				$$( '[data-permakey]', view ).forEach( ( input ) => {

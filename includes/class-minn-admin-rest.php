@@ -3171,8 +3171,12 @@ class Minn_Admin_REST {
 	 * changing them needs a rewrite flush, so Minn exposes its own endpoint.
 	 */
 	private static function permalink_state() {
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
 		return array(
 			'structure'     => (string) get_option( 'permalink_structure' ),
+			// Where WordPress can't tell the server rewrites URLs, its presets
+			// carry /index.php; a custom structure is stored as typed.
+			'index_prefix'  => got_url_rewrite() ? '' : '/index.php',
 			'category_base' => (string) get_option( 'category_base' ),
 			'tag_base'      => (string) get_option( 'tag_base' ),
 			'pretty'        => (bool) get_option( 'permalink_structure' ),
@@ -3194,9 +3198,7 @@ class Minn_Admin_REST {
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 
 		$structure = trim( (string) $request['structure'] );
-		// Nothing changed: the same structure and bases go back unflushed and
-		// un-normalized (normalizing an unchanged structure on a server
-		// WordPress can't identify would add /index.php to every URL).
+		// Nothing changed: the same structure and bases go back unflushed.
 		$same = $structure === (string) get_option( 'permalink_structure' )
 			&& ( ! $request->has_param( 'category_base' ) || (string) $request['category_base'] === (string) get_option( 'category_base' ) )
 			&& ( ! $request->has_param( 'tag_base' ) || (string) $request['tag_base'] === (string) get_option( 'tag_base' ) );
@@ -3211,12 +3213,10 @@ class Minn_Admin_REST {
 			);
 		}
 		if ( '' !== $structure ) {
-			// Same normalization as options-permalink.php: no hash, single slashes,
-			// leading slash, and an /index.php prefix where URL rewriting is unavailable.
+			// Same normalization as options-permalink.php: no hash, single
+			// slashes, a leading slash. Core adds no /index.php to what was
+			// typed on a single site; its presets carry it (index_prefix).
 			$structure = preg_replace( '#/+#', '/', '/' . str_replace( '#', '', $structure ) );
-			if ( ! got_url_rewrite() && 0 !== strpos( $structure, '/index.php' ) ) {
-				$structure = '/index.php' . $structure;
-			}
 		}
 		$wp_rewrite->set_permalink_structure( $structure );
 

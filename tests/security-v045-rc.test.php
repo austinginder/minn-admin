@@ -120,6 +120,36 @@ if ( ! class_exists( 'GenerateBlocks_Dynamic_Content' ) ) {
 	}
 }
 
+// --- 01-02 Permalinks: a typed structure is stored as typed -------------------
+// Where WordPress can't tell the server rewrites URLs, core puts /index.php in
+// its presets and stores a typed structure verbatim on a single site. Minn
+// prefixed every structure it saved there.
+if ( is_multisite() ) {
+	$skip( '01-02 single-site rule (a network adds its own /blog handling)' );
+} else {
+	global $wp_rewrite;
+	$pl_prev  = (string) get_option( 'permalink_structure' );
+	$pl_norew = function () {
+		return false;
+	};
+	add_filter( 'got_url_rewrite', $pl_norew );
+	list( , $pl_state ) = $call( 'GET', '/minn-admin/v1/permalinks' );
+	$check( '01-02 the state names the /index.php preset prefix where rewriting is unknown', '/index.php' === ( $pl_state['index_prefix'] ?? null ), wp_json_encode( $pl_state['index_prefix'] ?? null ) );
+	$pl_try = '/%postname%/' === $pl_prev ? '/%year%/%postname%/' : '/%postname%/';
+	list( $pl_st, $pl_body ) = $call( 'POST', '/minn-admin/v1/permalinks', array( 'structure' => $pl_try ) );
+	$check( '01-02 a typed structure is stored as typed', 200 === $pl_st && $pl_try === get_option( 'permalink_structure' ), $pl_st . ' ' . get_option( 'permalink_structure' ) );
+	list( $pl_st, $pl_body ) = $call( 'POST', '/minn-admin/v1/permalinks', array( 'structure' => '/index.php' . $pl_try ) );
+	$check( '01-02 control: the /index.php preset is stored with its prefix', 200 === $pl_st && '/index.php' . $pl_try === get_option( 'permalink_structure' ), get_option( 'permalink_structure' ) );
+	remove_filter( 'got_url_rewrite', $pl_norew );
+	add_filter( 'got_url_rewrite', '__return_true' );
+	list( , $pl_state ) = $call( 'GET', '/minn-admin/v1/permalinks' );
+	remove_filter( 'got_url_rewrite', '__return_true' );
+	$check( '01-02 control: no preset prefix where the server rewrites', '' === ( $pl_state['index_prefix'] ?? null ), wp_json_encode( $pl_state['index_prefix'] ?? null ) );
+	$wp_rewrite->set_permalink_structure( $pl_prev );
+	flush_rewrite_rules();
+	$check( '01-02 cleanup: the structure is back', $pl_prev === get_option( 'permalink_structure' ), get_option( 'permalink_structure' ) );
+}
+
 // @sections
 
 $summary();
