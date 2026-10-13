@@ -139,9 +139,26 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 		await page.click( '#minn-var-dialog [data-var-done]' );
 		await page.waitForFunction( () => ! document.querySelector( '#minn-var-dialog' ), null, { timeout: 15000 } );
 	}
+	// Hold the variations a moment, and leave meanwhile: the product exists
+	// by then, so leaving asks nothing and the finished create leaves the
+	// person where they went.
+	const holdVariations = async ( route ) => {
+		await new Promise( ( r ) => setTimeout( r, 3000 ) );
+		await route.continue().catch( () => {} );
+	};
+	await page.route( /\/products\/\d+\/variations\/batch/, holdVariations );
+	const varCreated = page.waitForResponse( ( r ) => 'POST' === r.request().method() && /\/wc\/v3\/products$/.test( r.url().split( '?' )[ 0 ] ), { timeout: 30000 } ).catch( () => null );
 	await page.click( '#minn-product-save' );
-	await page.waitForFunction( () => /\/products\/\d+$/.test( location.pathname ), null, { timeout: 30000 } ).catch( () => null );
-	const varId = parseInt( new URL( page.url() ).pathname.split( '/' ).pop(), 10 ) || null;
+	const varRes = await varCreated;
+	const varId = varRes ? ( ( await varRes.json().catch( () => ( {} ) ) ).id || null ) : null;
+	await page.waitForTimeout( 200 );
+	await page.click( '.minn-nav-btn[data-nav="overview"]' );
+	const askedVar = await page.waitForSelector( '.minn-confirm-overlay, [role="alertdialog"]', { timeout: 1500 } ).catch( () => null );
+	t.check( 'leaving while a new product\'s variations save asks nothing', ! askedVar, '' );
+	if ( askedVar ) await page.keyboard.press( 'Escape' );
+	await page.waitForTimeout( 3800 );
+	t.check( 'and the finished create leaves them where they went', ! /\/products\/\d+$/.test( new URL( page.url() ).pathname ), page.url() );
+	await page.unroute( /\/products\/\d+\/variations\/batch/, holdVariations );
 	const varRows = varId ? await api( `wc/v3/products/${ varId }/variations?_fields=regular_price,attributes` ) : { body: [] };
 	const prices = ( Array.isArray( varRows.body ) ? varRows.body : [] ).map( ( v ) => v.regular_price ).sort();
 	t.check( 'a new variable product saves with its variations', !! varId && '10,11' === prices.join( ',' ), JSON.stringify( { varId, body: varRows.body } ) );

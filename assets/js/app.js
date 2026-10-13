@@ -3439,15 +3439,17 @@
 			// /navigation/2577 — one menu's tree editor.
 			state.navEditId = parseInt( parts[ 1 ], 10 );
 			state.route = 'navedit';
-		} else if ( route === 'orders' && parts[ 1 ] && ( /^\d+$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
+		} else if ( route === 'orders' && parts[ 1 ] && ( /^[1-9]\d*$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
 			// /orders/123 — the order detail page; /orders/new makes one.
+			// Ids start at 1 here and on the other pages with a new form:
+			// id 0 is the new form's own, so /orders/0 opened a blank order.
 			state.orderPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
 			state.route = 'order';
 		} else if ( route === 'subscriptions' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /subscriptions/42 — the subscription detail page.
 			state.subPageId = parseInt( parts[ 1 ], 10 );
 			state.route = 'subscription';
-		} else if ( route === 'membership-plans' && parts[ 1 ] && ( 'new' === parts[ 1 ] || /^\d+$/.test( parts[ 1 ] ) ) ) {
+		} else if ( route === 'membership-plans' && parts[ 1 ] && ( 'new' === parts[ 1 ] || /^[1-9]\d*$/.test( parts[ 1 ] ) ) ) {
 			// /membership-plans/12 or /membership-plans/new — a plan's own page.
 			state.planPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
 			state.route = 'membershipplan';
@@ -3460,12 +3462,12 @@
 			// section; the bare route lands on the first one.
 			state.storeSection = parts[ 1 ] ? decodeURIComponent( parts[ 1 ] ) : '';
 			state.route = 'store-settings';
-		} else if ( route === 'products' && parts[ 1 ] && ( /^\d+$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
+		} else if ( route === 'products' && parts[ 1 ] && ( /^[1-9]\d*$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
 			// /products/482 — the product detail page; /products/new is the
 			// same page over a blank product.
 			state.productPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
 			state.route = 'product';
-		} else if ( route === 'coupons' && parts[ 1 ] && ( /^\d+$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
+		} else if ( route === 'coupons' && parts[ 1 ] && ( /^[1-9]\d*$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
 			// /coupons/12 — a coupon's page; /coupons/new makes one.
 			state.couponPageId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
 			state.route = 'coupon';
@@ -3473,7 +3475,7 @@
 			// /customers/57 — a store customer's page.
 			state.customerPageId = parseInt( parts[ 1 ], 10 );
 			state.route = 'customer';
-		} else if ( route === 'users' && parts[ 1 ] && ( /^\d+$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
+		} else if ( route === 'users' && parts[ 1 ] && ( /^[1-9]\d*$/.test( parts[ 1 ] ) || 'new' === parts[ 1 ] ) ) {
 			// /users/123 — the full-page user editor (GH #8); /users/new is
 			// the same page for an account not created yet.
 			state.userEditId = 'new' === parts[ 1 ] ? 0 : parseInt( parts[ 1 ], 10 );
@@ -12266,16 +12268,22 @@
 			return;
 		}
 		let m = state.subPage;
+		// A trail from the page that opened this one (a customer, a
+		// membership) is what Back answers, as on an order's page.
+		const arrived = takePageReturn();
 		if ( ! m || m.sub.id !== state.subPageId ) {
-			m = state.subPage = { type: 'subscription', page: true, sub: { id: state.subPageId, number: String( state.subPageId ) }, full: null, loading: true, relatedOrders: null, notes: null };
+			m = state.subPage = { type: 'subscription', page: true, sub: { id: state.subPageId, number: String( state.subPageId ) }, full: null, loading: true, relatedOrders: null, notes: null, back: arrived };
 			loadSubscriptionDetail( m );
+		} else if ( arrived ) {
+			m.back = arrived;
 		}
+		const subBack = m.back || { route: 'subscriptions', label: __( 'Subscriptions' ) };
 		const s = m.full || m.sub;
 		const loading = !! m.loading && ! m.full;
 		view.innerHTML = `
 		<div class="minn-order-page minn-order-page-wide minn-sub-page">
 			<div class="minn-order-page-head">
-				<button type="button" class="minn-btn-soft" id="minn-sp-back">← ${ __( 'Subscriptions' ) }</button>
+				<button type="button" class="minn-btn-soft" id="minn-sp-back">← ${ esc( subBack.label ) }</button>
 				<div class="minn-modal-title-block">
 					<div class="minn-order-head-row">
 						<span class="minn-modal-title">${ __( 'Subscription' ) } #${ esc( s.number || s.id ) }</span>
@@ -12292,7 +12300,7 @@
 			</div>
 		</div>`;
 		const back = $( '#minn-sp-back' );
-		if ( back ) back.addEventListener( 'click', () => go( 'subscriptions' ) );
+		if ( back ) back.addEventListener( 'click', () => go( subBack.route ) );
 		if ( ! loading && ! m.loadError ) bindSubscriptionDetail( m );
 	}
 
@@ -14904,7 +14912,7 @@
 		// A new product keeps its bar, since Create is on it; only whether
 		// anything was entered changes, which is what the leave guard reads.
 		const sync = m.isNew
-			? () => { bar.toggleAttribute( 'data-pristine', productFingerprint( m ) === m.clean ); }
+			? () => { bar.toggleAttribute( 'data-pristine', !! m.made || productFingerprint( m ) === m.clean ); }
 			: () => { bar.hidden = productFingerprint( m ) === m.clean; };
 		m.syncDirty = sync;
 		sync();
@@ -14957,6 +14965,11 @@
 			saveBtn.textContent = __( 'Create product' );
 			return;
 		}
+		// The product exists from here on: nothing on the page is unsaved,
+		// even while its variations are still on their way.
+		m.made = created.id;
+		const madeBar = $( '#minn-p-savebar' );
+		if ( madeBar ) madeBar.setAttribute( 'data-pristine', '' );
 		let variationError = '';
 		try {
 			await saveProductVariations( m, created.id );
@@ -14970,7 +14983,8 @@
 		} else {
 			toast( __( 'Product created' ) );
 		}
-		if ( state.productPage !== m ) return;
+		// Someone who went elsewhere meanwhile stays there.
+		if ( state.productPage !== m || state.route !== 'product' ) return;
 		state.productPage = null;
 		setPath( 'products/' + created.id, true );
 		onRouteChange();
@@ -57310,6 +57324,11 @@
 				else renderOverview();
 		}
 		stripWpAdminLinks( $( '#minn-view' ) );
+		// A trail is spent once the next route has drawn, whether its page
+		// took it or not. One left before a refused leave, or toward a page
+		// with no Back of its own, was picked up by whichever page took one
+		// next: an order opened from the sidebar answered Back with a coupon.
+		pageReturn = null;
 	}
 
 	/* ===== WooCommerce Memberships: the membership page ===== */

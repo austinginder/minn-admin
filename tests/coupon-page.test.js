@@ -227,6 +227,30 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 			await page.waitForSelector( '#minn-co-delete', { timeout: 20000 } );
 		}
 
+		// A leave that is refused leaves no trail behind: the order row set
+		// one, the person stayed, and a customer opened later from the
+		// sidebar answered Back with this coupon.
+		await page.waitForSelector( `#minn-co-orders [data-coorder="${ made.order }"]`, { timeout: 20000 } );
+		await page.fill( '#minn-c-desc', 'Unsaved for the trail check' );
+		await page.click( `#minn-co-orders [data-coorder="${ made.order }"]` );
+		const stayAsk = await page.waitForSelector( '.minn-confirm-overlay [data-cancel]', { timeout: 5000 } ).catch( () => null );
+		if ( stayAsk ) await page.click( '.minn-confirm-overlay [data-cancel]' );
+		await page.waitForTimeout( 300 );
+		await page.click( '#minn-co-discard' );
+		await page.click( '.minn-nav-btn[data-nav="customers"]' );
+		await page.waitForFunction( () => /\/minn-admin\/customers$/.test( location.pathname ), null, { timeout: 15000 } );
+		const anyCustomer = await page.waitForSelector( '.minn-table-row[data-customer]', { timeout: 25000 } ).catch( () => null );
+		if ( anyCustomer ) {
+			await anyCustomer.click();
+			await page.waitForSelector( '#minn-cp-back', { timeout: 20000 } );
+			const custBack = await page.$eval( '#minn-cp-back', ( b ) => b.textContent );
+			t.check( 'a leave refused earlier leaves no Back trail for a later page', ! custBack.toLowerCase().includes( code.toLowerCase() ), custBack );
+		}
+		// An id of 0 is the list, not a blank new coupon.
+		await page.goto( BASE + '/minn-admin/coupons/0', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-coupon-add', { timeout: 20000 } ).catch( () => null );
+		t.check( '/coupons/0 opens the list', !! await page.$( '#minn-coupon-add' ) && ! await page.$( '#minn-c-code' ), page.url() );
+
 		// A lookup that fails says so, instead of that no order used the code.
 		const refuse = ( route ) => route.fulfill( { status: 500, contentType: 'application/json', body: JSON.stringify( { code: 'boom', message: 'boom' } ) } );
 		await page.route( /\/coupons\/\d+\/orders|\/wc\/v3\/orders\?search=/, refuse );

@@ -147,6 +147,23 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const saved = await api( `wc/v3/subscriptions/${ subId }?_fields=status` );
 		t.check( 'page status save persists through WC', saved.body && saved.body.status === 'on-hold', JSON.stringify( saved.body ) );
 
+		// ---- A Save with the status untouched sends none, so one changed elsewhere stays ----
+		await api( `wc/v3/subscriptions/${ subId }`, { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+		let statusPuts = 0;
+		const countPut = ( r ) => {
+			if ( 'PUT' === r.method() && new RegExp( `/subscriptions/${ subId }$` ).test( r.url().split( '?' )[ 0 ] ) ) statusPuts++;
+		};
+		page.on( 'request', countPut );
+		await page.click( '#minn-sub-save' );
+		await page.waitForTimeout( 1500 );
+		page.off( 'request', countPut );
+		const keptStatus = await api( `wc/v3/subscriptions/${ subId }?_fields=status` );
+		t.check( 'a Save with the status untouched sends none, so one changed elsewhere stays',
+			0 === statusPuts && keptStatus.body && 'active' === keptStatus.body.status, JSON.stringify( { statusPuts, status: keptStatus.body && keptStatus.body.status } ) );
+		await api( `wc/v3/subscriptions/${ subId }`, { method: 'PUT', body: JSON.stringify( { status: 'on-hold' } ) } );
+		await page.goto( `${ BASE }/minn-admin/subscriptions/${ subId }`, { waitUntil: 'domcontentloaded' } );
+		await pageReady();
+
 		// ---- Items are editable, and the money follows the quantity ----
 		await page.click( '[data-soedit="items"]' );
 		await page.waitForSelector( '.minn-order-submodal [data-eiqty]', { timeout: 10000 } );
@@ -377,6 +394,32 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '#minn-op-back', { timeout: 25000 } );
 		t.check( 'an order opened directly still goes back to Orders',
 			( await page.evaluate( () => document.getElementById( 'minn-op-back' ).textContent.trim() ) ).indexOf( 'Subscription' ) === -1, '' );
+
+		// ---- Opened from its customer, Back returns to the customer ----
+		await page.goto( `${ BASE }/minn-admin/customers/${ customerId }`, { waitUntil: 'domcontentloaded' } );
+		const subRow = await page.waitForSelector( `[data-cpsub="${ subId }"]`, { timeout: 25000 } ).catch( () => null );
+		if ( subRow ) {
+			await subRow.click();
+			await pageReady();
+			const fromCustomer = await page.evaluate( () => ( document.getElementById( 'minn-sp-back' ) || {} ).textContent || '' );
+			t.check( 'a subscription opened from its customer offers the customer as its way back', /Paige Subscriber/.test( fromCustomer ), fromCustomer );
+			await page.click( '#minn-sp-back' );
+			await page.waitForFunction( ( id ) => location.pathname.endsWith( '/customers/' + id ), customerId, { timeout: 15000 } ).catch( () => null );
+			t.check( 'and Back lands on the customer', page.url().endsWith( '/customers/' + customerId ), page.url() );
+			// Then the sidebar to the orders, and an order: its Back is the
+			// orders list, not the customer from before.
+			await page.click( '.minn-nav-btn[data-nav="orders"]' );
+			await page.waitForFunction( () => /\/minn-admin\/orders$/.test( location.pathname ), null, { timeout: 15000 } );
+			const orderRow = await page.waitForSelector( `[data-order="${ orderId }"]`, { timeout: 25000 } ).catch( () => null );
+			if ( orderRow ) {
+				await orderRow.click();
+				await page.waitForSelector( '#minn-op-back', { timeout: 25000 } );
+				const orderBack = await page.evaluate( () => document.getElementById( 'minn-op-back' ).textContent.trim() );
+				t.check( 'an order reached from the sidebar afterwards goes back to Orders', ! /Paige/.test( orderBack ), orderBack );
+			}
+		} else {
+			t.check( 'the customer page lists the subscription', false, '' );
+		}
 
 		// ---- Back to the list, and the row navigates ----
 		// Restore the fixture's opening state so the row-menu assertions prove
