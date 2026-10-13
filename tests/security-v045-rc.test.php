@@ -501,6 +501,37 @@ if ( ! function_exists( 'minn_admin_tec_active' ) || ! minn_admin_tec_active() )
 	}
 }
 
+// --- 10-03 Aryo Activity Log: rows follow Aryo's own role scoping --------------
+// Aryo appends a role clause to every query its screens run, so an account
+// holding manage_options through a custom role reads no administrator's
+// actions. Minn served every row to any manage_options holder.
+global $wpdb;
+$aal_table = $wpdb->prefix . 'aryo_activity_log';
+if ( ! class_exists( 'AAL_Main' ) || ! class_exists( 'AAL_Log_Query' ) || $aal_table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $aal_table ) ) ) {
+	$skip( '10-03 Aryo Activity Log inactive' );
+} else {
+	add_role( 'minn_rc45_manager', 'Rc45 manager', array( 'read' => true, 'manage_options' => true, 'edit_posts' => true ) );
+	$aal_uid = $make_user( 'minn_rc45_manager' );
+	$wpdb->insert( $aal_table, array( 'user_caps' => 'administrator', 'action' => 'activated', 'object_type' => 'Plugin', 'object_subtype' => '', 'object_name' => 'MinnRc45AdminAction', 'object_id' => 0, 'user_id' => $admin, 'hist_ip' => '203.0.113.45', 'hist_time' => (int) current_time( 'timestamp' ) ) );
+	$aal_row = (int) $wpdb->insert_id;
+	try {
+		wp_set_current_user( $aal_uid );
+		list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
+		$aal_out = wp_json_encode( $aal_d );
+		$check( '10-03 a custom role holding manage_options reads no administrator\'s action', 200 === $aal_st && false === strpos( $aal_out, 'MinnRc45AdminAction' ), $aal_st . ' ' . substr( $aal_out, 0, 160 ) );
+		wp_set_current_user( $admin );
+		list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
+		$check( '10-03 control: an administrator still reads it', 200 === $aal_st && false !== strpos( wp_json_encode( $aal_d ), 'MinnRc45AdminAction' ), (string) $aal_st );
+	} finally {
+		wp_set_current_user( $admin );
+		$wpdb->delete( $aal_table, array( 'histid' => $aal_row ) );
+		if ( $aal_uid ) {
+			$drop_user( $aal_uid );
+		}
+		remove_role( 'minn_rc45_manager' );
+	}
+}
+
 // @sections
 
 $summary();

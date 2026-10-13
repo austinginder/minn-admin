@@ -53,6 +53,29 @@ function minn_admin_aryo_can_view() {
 	);
 }
 
+/**
+ * Aryo's own row scoping for the viewer: the clause its screens and REST
+ * route append to every query (AAL_Log_Query::get_where_by_role()), which
+ * keeps an account to the object types its capabilities cover and to the
+ * actors whose role its own role outranks (an account holding
+ * manage_options through a custom role reads no administrator's actions).
+ * '' when Aryo's class is missing, false when Aryo shows this viewer
+ * nothing. Its literals are escaped and carry no placeholders; a % is
+ * doubled for prepare().
+ *
+ * @return string|false SQL without a leading AND.
+ */
+function minn_admin_aryo_scope_sql() {
+	if ( ! class_exists( 'AAL_Log_Query' ) || ! method_exists( 'AAL_Log_Query', 'get_where_by_role' ) ) {
+		return '';
+	}
+	$sql = ( new AAL_Log_Query() )->get_where_by_role();
+	if ( ! is_string( $sql ) || '' === trim( $sql ) ) {
+		return false;
+	}
+	return str_replace( '%', '%%', (string) preg_replace( '/^\s*AND\s+/i', '', $sql ) );
+}
+
 function minn_admin_aryo_admin_url() {
 	return admin_url( 'admin.php?page=activity-log-page' );
 }
@@ -172,17 +195,20 @@ function minn_admin_aryo_status_model() {
 			'actions' => array( array( 'label' => __( 'Open Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_aryo_admin_url() ) ),
 		);
 	}
+	// The counts cover only the rows Aryo would show this viewer.
+	$scope = minn_admin_aryo_scope_sql();
+	$scope = false === $scope ? '1=0' : ( '' === $scope ? '1=1' : $scope );
 	// hist_time is site-local epoch — compare against current_time('timestamp').
 	$now     = (int) current_time( 'timestamp' );
 	$since_d = $now - DAY_IN_SECONDS;
 	$since_w = $now - ( 7 * DAY_IN_SECONDS );
-	$total   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE hist_time >= %d", $since_d ) );
-	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE hist_time >= %d", $since_w ) );
-	$last    = $wpdb->get_var( "SELECT hist_time FROM {$table} ORDER BY histid DESC LIMIT 1" );
+	$total   = (int) $wpdb->get_var( str_replace( '%%', '%', "SELECT COUNT(*) FROM {$table} WHERE {$scope}" ) );
+	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE hist_time >= %d AND {$scope}", $since_d ) );
+	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE hist_time >= %d AND {$scope}", $since_w ) );
+	$last    = $wpdb->get_var( str_replace( '%%', '%', "SELECT hist_time FROM {$table} WHERE {$scope} ORDER BY histid DESC LIMIT 1" ) );
 	$top     = $wpdb->get_row( $wpdb->prepare(
 		"SELECT action, COUNT(*) AS c FROM {$table}
-		 WHERE hist_time >= %d AND action != ''
+		 WHERE hist_time >= %d AND action != '' AND {$scope}
 		 GROUP BY action ORDER BY c DESC LIMIT 1",
 		$since_w
 	) );
@@ -192,7 +218,7 @@ function minn_admin_aryo_status_model() {
 	$days   = minn_admin_chart_days();
 	$day_ex = minn_admin_chart_epoch_day_sql( 'hist_time', 'local-epoch' );
 	$series = $wpdb->get_results( $wpdb->prepare(
-		"SELECT {$day_ex} AS d, COUNT(*) AS c FROM {$table} WHERE hist_time >= %d GROUP BY d",
+		"SELECT {$day_ex} AS d, COUNT(*) AS c FROM {$table} WHERE hist_time >= %d AND {$scope} GROUP BY d",
 		minn_admin_chart_epoch_since( 14, 'local-epoch' )
 	) );
 	// phpcs:enable
@@ -327,8 +353,13 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function () {
 			global $wpdb;
 			$table = $wpdb->prefix . 'aryo_activity_log';
+			$scope = minn_admin_aryo_scope_sql();
+			if ( false === $scope ) {
+				return rest_ensure_response( array() );
+			}
+			$scope = '' === $scope ? '' : ' AND ' . str_replace( '%%', '%', $scope );
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$cols = $wpdb->get_col( "SELECT DISTINCT action FROM {$table} WHERE action != '' ORDER BY action ASC" );
+			$cols = $wpdb->get_col( "SELECT DISTINCT action FROM {$table} WHERE action != ''{$scope} ORDER BY action ASC" );
 			$out  = array();
 			foreach ( (array) $cols as $a ) {
 				$out[] = array(
@@ -350,6 +381,12 @@ add_action( 'rest_api_init', function () {
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
 			$where    = array( '1=1' );
 			$args     = array();
+			$scope    = minn_admin_aryo_scope_sql();
+			if ( false === $scope ) {
+				$where[] = '1=0';
+			} elseif ( '' !== $scope ) {
+				$where[] = $scope;
+			}
 
 			if ( $request['action'] ) {
 				$where[] = 'action = %s';
@@ -383,7 +420,7 @@ add_action( 'rest_api_init', function () {
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-derived; WHERE is placeholder-built.
 			$total = (int) ( $args
 				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", ...$args ) )
-				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}" ) );
+				: $wpdb->get_var( str_replace( '%%', '%', "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}" ) ) );
 			$source_col = $source_ready ? ', request_source' : '';
 			$rows = $wpdb->get_results( $wpdb->prepare(
 				"SELECT histid, action, object_type, object_subtype, object_name, user_id, hist_ip, hist_time{$source_col}
