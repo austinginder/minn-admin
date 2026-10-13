@@ -206,6 +206,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! $code_edits ) {
 		unset( $surfaces['code-snippets']['collection']['create'] );
 		unset( $surfaces['code-snippets']['collection']['detail']['edit'] );
+		// The page still shows the snippet, read-only, from a view of Minn's
+		// own that answers GET alone, so there is no write for the client to
+		// send through it. detailRoute stays: Deactivate keys on its fresh
+		// active flag.
+		$surfaces['code-snippets']['collection']['detail']['sectionsRoute'] = 'minn-admin/v1/code-snippets/{id}';
 		// Activating a snippet runs its code. Deactivating one stops code
 		// running, so it stays available on a hardened site.
 		// Identify the activation by the request it sends, never by its label:
@@ -309,6 +314,41 @@ add_action( 'rest_api_init', function () {
 				);
 			}
 			return rest_ensure_response( array( 'rows' => $rows ) );
+		},
+	) );
+
+	// One snippet, read-only: the snippet page on a site that disallows code
+	// edits. It reads through their own route, so their capability and
+	// network rules decide what it returns, and it registers GET alone.
+	register_rest_route( 'minn-admin/v1', '/code-snippets/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'permission_callback' => function () {
+			return current_user_can( minn_admin_code_snippets_cap() );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			$res = rest_do_request( new WP_REST_Request( 'GET', '/code-snippets/v1/snippets/' . (int) Minn_Admin::path_param( $request ) ) );
+			if ( $res->is_error() ) {
+				return $res->as_error();
+			}
+			$snippet = (array) $res->get_data();
+			if ( empty( $snippet['id'] ) ) {
+				return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$tags     = is_array( $snippet['tags'] ?? null ) ? implode( ', ', array_map( 'strval', $snippet['tags'] ) ) : (string) ( $snippet['tags'] ?? '' );
+			$modified = ! empty( $snippet['modified'] ) ? strtotime( (string) $snippet['modified'] ) : false;
+			$rows     = array_values( array_filter( array(
+				array( 'label' => __( 'Name', 'minn-admin' ), 'value' => Minn_Admin::plain_text( $snippet['name'] ?? '' ) ),
+				array( 'label' => __( 'Description', 'minn-admin' ), 'value' => Minn_Admin::plain_text( $snippet['desc'] ?? '' ) ),
+				array( 'label' => __( 'Scope', 'minn-admin' ), 'value' => (string) ( $snippet['scope'] ?? '' ) ),
+				array( 'label' => __( 'Priority', 'minn-admin' ), 'value' => isset( $snippet['priority'] ) ? (string) (int) $snippet['priority'] : '' ),
+				array( 'label' => __( 'Tags', 'minn-admin' ), 'value' => Minn_Admin::plain_text( $tags ) ),
+				array( 'label' => __( 'Modified', 'minn-admin' ), 'value' => $modified ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $modified ) : '' ),
+				array( 'label' => __( 'Editing', 'minn-admin' ), 'value' => Minn_Admin::code_edits_allowed() ? '' : __( 'Off: this site disallows editing code from the dashboard', 'minn-admin' ) ),
+				array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) ( $snippet['code'] ?? '' ), 'type' => 'code' ),
+			), function ( $r ) {
+				return '' !== $r['value'];
+			} ) );
+			return rest_ensure_response( array( 'sections' => array( array( 'title' => __( 'Snippet', 'minn-admin' ), 'rows' => $rows ) ) ) );
 		},
 	) );
 } );
