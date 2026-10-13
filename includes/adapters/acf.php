@@ -201,8 +201,11 @@ function minn_admin_acf_file_out( $val ) {
 function minn_admin_acf_link_out( $val ) {
 	// ACF before 5.6 stored a link as a post id or a bare URL, and its own
 	// field still reads both (get_link()): a field changed to Link from URL
-	// or Page Link holds them. A post id shows only to who may read it, and
-	// 0 is no post (get_permalink( 0 ) would name the current one).
+	// or Page Link holds them. A post id shows here only to who may read it,
+	// and 0 is no post (get_permalink( 0 ) would name the current one). A
+	// save that writes the structure holding it whole stores it in the array
+	// shape (minn_admin_acf_links_upgraded()), title and URL included, as
+	// ACF's own screen and front end show them to anyone.
 	if ( is_scalar( $val ) && ! is_bool( $val ) && '' !== trim( (string) $val ) ) {
 		$val = is_numeric( $val )
 			? ( (int) $val > 0 && current_user_can( 'read_post', (int) $val ) ? array( 'title' => get_the_title( (int) $val ), 'url' => (string) get_permalink( (int) $val ) ) : array() )
@@ -240,6 +243,83 @@ function minn_admin_acf_link_legacy( $held ) {
 		return '' === $url ? null : array( 'title' => (string) get_the_title( (int) $held ), 'url' => $url, 'target' => '' );
 	}
 	return array( 'title' => '', 'url' => (string) $held, 'target' => '' );
+}
+
+/**
+ * A whole stored structure (a repeater's rows, flexible sections, a group)
+ * with every old-shape link in it, at any depth, in the array shape ACF's own
+ * form posts. ACF writes such a structure through each sub-field's
+ * update_value, and a link's empties anything but an array with a url, so a
+ * link the form never showed (inside a nested repeater, a clone, a sub hidden
+ * by prepare_field or a condition) was lost to an edit of its neighbour.
+ * ACF's screen renders and reposts each of those, or does not post it.
+ *
+ * @param array $field An ACF field definition (acf_get_field()).
+ * @param mixed $value Its stored value, keyed by sub-field key.
+ * @return mixed
+ */
+function minn_admin_acf_links_upgraded( $field, $value ) {
+	$type = is_array( $field ) ? (string) ( $field['type'] ?? '' ) : '';
+	if ( 'link' === $type ) {
+		$v = minn_admin_acf_link_legacy( $value );
+		return null === $v ? $value : $v;
+	}
+	if ( ! is_array( $value ) || ! in_array( $type, array( 'group', 'repeater', 'flexible_content', 'clone' ), true ) ) {
+		return $value;
+	}
+	$subs_of = function ( $parent ) {
+		$subs = isset( $parent['sub_fields'] ) && is_array( $parent['sub_fields'] ) ? $parent['sub_fields'] : array();
+		if ( ! $subs && function_exists( 'acf_get_fields' ) && ! empty( $parent['key'] ) ) {
+			$subs = (array) acf_get_fields( $parent );
+		}
+		return $subs;
+	};
+	$keyed = function ( $subs, $row ) {
+		foreach ( $subs as $sub ) {
+			if ( is_array( $sub ) && ! empty( $sub['key'] ) && is_array( $row ) && array_key_exists( $sub['key'], $row ) ) {
+				$row[ $sub['key'] ] = minn_admin_acf_links_upgraded( $sub, $row[ $sub['key'] ] );
+			}
+		}
+		return $row;
+	};
+	if ( 'group' === $type || 'clone' === $type ) {
+		return $keyed( $subs_of( $field ), $value );
+	}
+	if ( 'repeater' === $type ) {
+		$subs = $subs_of( $field );
+		foreach ( $value as $i => $row ) {
+			$value[ $i ] = $keyed( $subs, $row );
+		}
+		return $value;
+	}
+	// Flexible content: each section by its own layout's sub-fields.
+	$layouts = array();
+	foreach ( (array) ( $field['layouts'] ?? array() ) as $layout ) {
+		if ( is_array( $layout ) && isset( $layout['name'] ) ) {
+			$layouts[ (string) $layout['name'] ] = isset( $layout['sub_fields'] ) && is_array( $layout['sub_fields'] ) ? $layout['sub_fields'] : array();
+		}
+	}
+	foreach ( $value as $i => $row ) {
+		$name = is_array( $row ) && isset( $row['acf_fc_layout'] ) ? (string) $row['acf_fc_layout'] : '';
+		if ( isset( $layouts[ $name ] ) ) {
+			$value[ $i ] = $keyed( $layouts[ $name ], $row );
+		}
+	}
+	return $value;
+}
+
+/**
+ * The ACF definition for a mapped field, for minn_admin_acf_links_upgraded().
+ *
+ * @param array $field Mapped field (carries the ACF key).
+ * @return array|null
+ */
+function minn_admin_acf_definition( $field ) {
+	if ( ! function_exists( 'acf_get_field' ) || empty( $field['key'] ) ) {
+		return null;
+	}
+	$def = acf_get_field( $field['key'] );
+	return is_array( $def ) ? $def : null;
 }
 
 /**
@@ -1828,10 +1908,13 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 			continue;
 		}
 		$field = $allowed[ $name ];
-		if ( 'rows' === $field['type'] ) {
-			$value = minn_admin_acf_rows_in( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
-		} elseif ( 'flex' === $field['type'] ) {
-			$value = minn_admin_acf_flex_in( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
+		if ( 'rows' === $field['type'] || 'flex' === $field['type'] ) {
+			$value = 'rows' === $field['type']
+				? minn_admin_acf_rows_in( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) )
+				: minn_admin_acf_flex_in( $field, $value, minn_admin_acf_raw_value( $field, $post_id ) );
+			if ( null !== $value ) {
+				$value = minn_admin_acf_links_upgraded( minn_admin_acf_definition( $field ), $value );
+			}
 		} else {
 			$stored = minn_admin_acf_raw_value( $field, $post_id );
 			if ( minn_admin_acf_untouched( $field, $value, $stored ) ) {
@@ -2912,10 +2995,13 @@ function minn_admin_acf_options_save( $page, $values ) {
 			continue;
 		}
 		$f = $byKey[ $key ];
-		if ( 'rows' === $f['type'] ) {
-			$v = minn_admin_acf_rows_in( $f, $v, $stored_at( $f ), 'options' );
-		} elseif ( 'flex' === $f['type'] ) {
-			$v = minn_admin_acf_flex_in( $f, $v, $stored_at( $f ), 'options' );
+		if ( 'rows' === $f['type'] || 'flex' === $f['type'] ) {
+			$v = 'rows' === $f['type']
+				? minn_admin_acf_rows_in( $f, $v, $stored_at( $f ), 'options' )
+				: minn_admin_acf_flex_in( $f, $v, $stored_at( $f ), 'options' );
+			if ( null !== $v ) {
+				$v = minn_admin_acf_links_upgraded( minn_admin_acf_definition( $f ), $v );
+			}
 		} else {
 			$stored = $stored_at( $f );
 			if ( minn_admin_acf_untouched( $f, $v, $stored ) ) {
@@ -2954,6 +3040,9 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$ref[ $edit['key'] ] = $edit['value'];
 			unset( $ref );
 		}
+		// The group goes back whole through ACF, so an old-shape link
+		// anywhere in it goes in the shape ACF's own form posts.
+		$base = minn_admin_acf_links_upgraded( minn_admin_acf_definition( array( 'key' => $gkey ) ), $base );
 		// Through the one writer, which slashes for ACF's unslashing store.
 		minn_admin_acf_raw_update( array( 'key' => $gkey ), $base, $post_id );
 	}

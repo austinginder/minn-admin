@@ -1123,6 +1123,98 @@ if ( ! $lic_can( 'smash-instagram' ) ) {
 	}
 }
 
+// --- 06-01 review R1, R2 ACF: whole-structure writes keep old-shape links -----
+// ACF writes a group or a repeater's rows back through each sub's
+// update_value, which empties a Link still holding a plain URL. R1: an
+// options-page group whose sibling sub is edited. R2: a link in a nested
+// repeater Minn does not render, inside a row whose title is edited.
+if ( ! function_exists( 'acf_add_local_field_group' ) || ! defined( 'ACF_PRO' ) || ! function_exists( 'acf_add_options_page' ) ) {
+	$skip( '06-01 R1/R2 ACF PRO inactive' );
+} else {
+	$lk_url = function ( $v ) {
+		return is_array( $v ) ? (string) ( $v['url'] ?? '' ) : (string) $v;
+	};
+
+	// R1: options page group.
+	acf_add_options_page( array( 'page_title' => 'Rc45 opts', 'menu_title' => 'Rc45 opts', 'menu_slug' => 'minn-rc45-opts', 'post_id' => 'minn_rc45_opts', 'capability' => 'edit_posts', 'redirect' => false ) );
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn_rc45_opts',
+		'title'    => 'Rc45 opts',
+		'fields'   => array(
+			array(
+				'key'        => 'field_minn_rc45g',
+				'name'       => 'rc45g',
+				'label'      => 'Rc45 group',
+				'type'       => 'group',
+				'sub_fields' => array(
+					array( 'key' => 'field_minn_rc45g_tag', 'name' => 'tag', 'label' => 'Tagline', 'type' => 'text' ),
+					array( 'key' => 'field_minn_rc45g_cta', 'name' => 'cta', 'label' => 'CTA', 'type' => 'link' ),
+				),
+			),
+		),
+		'location' => array( array( array( 'param' => 'options_page', 'operator' => '==', 'value' => 'minn-rc45-opts' ) ) ),
+	) );
+	$lk_opts = array( 'minn_rc45_opts_rc45g' => '', '_minn_rc45_opts_rc45g' => 'field_minn_rc45g', 'minn_rc45_opts_rc45g_tag' => 'Old', '_minn_rc45_opts_rc45g_tag' => 'field_minn_rc45g_tag', 'minn_rc45_opts_rc45g_cta' => 'https://x.example/', '_minn_rc45_opts_rc45g_cta' => 'field_minn_rc45g_cta' );
+	foreach ( $lk_opts as $lk_k => $lk_v ) {
+		update_option( $lk_k, $lk_v, false );
+	}
+	list( $lk_st ) = $call( 'POST', '/minn-admin/v1/acf/options/minn-rc45-opts/tab-0', array( 'values' => array( 'field_minn_rc45g_tag' => 'New' ) ) );
+	wp_cache_delete( 'minn_rc45_opts_rc45g_cta', 'options' );
+	wp_cache_delete( 'minn_rc45_opts_rc45g_tag', 'options' );
+	$check( '06-01 R1 an options-page group\'s old-shape link survives a sibling edit', 200 === $lk_st && 'https://x.example/' === $lk_url( get_option( 'minn_rc45_opts_rc45g_cta' ) ), $lk_st . ' ' . wp_json_encode( get_option( 'minn_rc45_opts_rc45g_cta' ) ) );
+	$check( '06-01 R1 control: the edited sibling saves', 'New' === get_option( 'minn_rc45_opts_rc45g_tag' ), wp_json_encode( get_option( 'minn_rc45_opts_rc45g_tag' ) ) );
+	foreach ( array_keys( $lk_opts ) as $lk_k ) {
+		delete_option( $lk_k );
+	}
+	acf_remove_local_field_group( 'group_minn_rc45_opts' );
+
+	// R2: a nested repeater's link.
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn_rc45_nest',
+		'title'    => 'Rc45 nest',
+		'fields'   => array(
+			array(
+				'key'        => 'field_minn_rc45_nest',
+				'name'       => 'minn_rc45_nest',
+				'label'      => 'Rc45 nest',
+				'type'       => 'repeater',
+				'sub_fields' => array(
+					array( 'key' => 'field_minn_rc45_nest_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text' ),
+					array(
+						'key'        => 'field_minn_rc45_nest_inner',
+						'name'       => 'inner',
+						'label'      => 'Inner',
+						'type'       => 'repeater',
+						'sub_fields' => array( array( 'key' => 'field_minn_rc45_nest_cta', 'name' => 'cta', 'label' => 'CTA', 'type' => 'link' ) ),
+					),
+				),
+			),
+		),
+		'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ),
+	) );
+	$nest_pid = wp_insert_post( array( 'post_type' => 'post', 'post_title' => 'Rc45 nest', 'post_status' => 'draft', 'post_author' => $admin ) );
+	if ( ! $nest_pid || is_wp_error( $nest_pid ) ) {
+		$check( '06-01 R2 fixture', false );
+	} else {
+		foreach ( array( 'minn_rc45_nest' => 1, '_minn_rc45_nest' => 'field_minn_rc45_nest', 'minn_rc45_nest_0_title' => 'T', '_minn_rc45_nest_0_title' => 'field_minn_rc45_nest_title', 'minn_rc45_nest_0_inner' => 1, '_minn_rc45_nest_0_inner' => 'field_minn_rc45_nest_inner', 'minn_rc45_nest_0_inner_0_cta' => 'https://n.example/', '_minn_rc45_nest_0_inner_0_cta' => 'field_minn_rc45_nest_cta' ) as $nk => $nv ) {
+			update_post_meta( $nest_pid, $nk, $nv );
+		}
+		list( , $nest_get ) = $call( 'GET', "/wp/v2/posts/{$nest_pid}", null, array( 'context' => 'edit' ) );
+		$nest_get  = json_decode( wp_json_encode( $nest_get ), true );
+		$nest_rows = $nest_get['minn_acf']['minn_rc45_nest'] ?? null;
+		if ( ! is_array( $nest_rows ) || ! $nest_rows ) {
+			$check( '06-01 R2 the panel serves the outer repeater', false, wp_json_encode( $nest_get['minn_acf'] ?? null ) );
+		} else {
+			$nest_rows[0]['values']['title'] = 'T2';
+			list( $nest_st ) = $call( 'POST', "/wp/v2/posts/{$nest_pid}", array( 'minn_acf' => array( 'minn_rc45_nest' => $nest_rows ) ) );
+			$check( '06-01 R2 a nested repeater\'s old-shape link survives an edit of its row', 200 === $nest_st && 'https://n.example/' === $lk_url( get_post_meta( $nest_pid, 'minn_rc45_nest_0_inner_0_cta', true ) ), $nest_st . ' ' . wp_json_encode( get_post_meta( $nest_pid, 'minn_rc45_nest_0_inner_0_cta', true ) ) );
+			$check( '06-01 R2 control: the edited title saves', 'T2' === get_post_meta( $nest_pid, 'minn_rc45_nest_0_title', true ) );
+		}
+		wp_delete_post( $nest_pid, true );
+	}
+	acf_remove_local_field_group( 'group_minn_rc45_nest' );
+}
+
 // @sections
 
 $summary();
