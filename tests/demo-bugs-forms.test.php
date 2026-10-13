@@ -156,6 +156,32 @@ if ( ! function_exists( 'minn_admin_wpforms_active' ) || ! minn_admin_wpforms_ac
 			$sub  = (string) ( $rows['Submitted']['value'] ?? '' );
 			$want = date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( '2026-10-09 19:44:00' ) ) );
 			$check( 'D-04: WPForms sends the submission date formatted, not raw ISO', 200 === $st && ! $is_raw_iso( $sub ) && $want === $sub, $sub . ' (want ' . $want . ')' );
+
+			// The D-10 class: the page's actions gate on the route's copy of
+			// the row over the list's, which said unread before opening.
+			$listed = array();
+			foreach ( (array) ( $all['items'] ?? array() ) as $it ) {
+				if ( (int) $it['id'] === $wpf_new ) {
+					$listed = $it;
+				}
+			}
+			$shown = array();
+			foreach ( (array) $surfaces['wpforms']['collection']['actions'] as $a ) {
+				if ( empty( $a['href'] ) && $visible( $a, $page_item( $listed, $det ) ) ) {
+					$shown[] = (string) $a['label'];
+				}
+			}
+			global $wpdb;
+			$viewed = $wpdb->get_var( $wpdb->prepare( "SELECT viewed FROM {$wpdb->prefix}wpforms_entries WHERE entry_id = %d", $wpf_new ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$check( 'D-10 class: a WPForms entry opened unread offers what a read entry offers', 'unread' === ( $listed['status'] ?? '' ) && '1' === (string) $viewed
+				&& array( 'Mark unread', 'Star', 'Mark spam', 'Trash' ) === $shown, implode( ', ', $shown ) );
+
+			// The D-12 class: the page's pill shows the status; the panel
+			// printed it again as a raw word.
+			$raw = array_filter( $rows, function ( $r ) {
+				return in_array( (string) ( $r['value'] ?? '' ), array( 'read', 'unread', 'spam', 'trash' ), true );
+			} );
+			$check( 'D-12 class: the WPForms Submission panel prints no raw status', ! $raw, implode( ', ', array_keys( $raw ) ) );
 		}
 	} finally {
 		foreach ( $wpf_ids as $id ) {
@@ -302,6 +328,16 @@ if ( ! function_exists( 'minn_admin_cfdb7_ready' ) || ! minn_admin_cfdb7_ready()
 				}
 			}
 			$check( 'D-08: the CFDB7 row line reads as typed', false !== strpos( (string) ( $row['summary'] ?? '' ), "Ana O'Neil" ), (string) ( $row['summary'] ?? '(no row)' ) );
+
+			// Search: a term with an apostrophe or quotes finds the entry
+			// CFDB7 stored as entities; LIKE wildcards in a term stay literal.
+			$finds = function ( $term ) use ( $call, $cf_id ) {
+				list( , $hit ) = $call( 'GET', '/minn-admin/v1/cfdb7/entries', array( 'search' => $term, 'per_page' => 100 ) );
+				return in_array( $cf_id, array_map( 'intval', array_column( (array) ( $hit['items'] ?? array() ), 'id' ) ), true );
+			};
+			$check( 'D-08 class: a CFDB7 search for a typed apostrophe or quotes finds the entry', $finds( "O'Neil" ) && $finds( 'a "fern" from' ) && $finds( $token ),
+				wp_json_encode( array( "O'Neil" => $finds( "O'Neil" ), '"fern"' => $finds( 'a "fern" from' ), 'plain' => $finds( $token ) ) ) );
+			$check( 'D-08 class: a CFDB7 search keeps LIKE wildcards literal', ! $finds( 'O_Neil' ) && ! $finds( 'Ana%Neil' ) );
 			list( , $det ) = $call( 'GET', '/minn-admin/v1/cfdb7/entries/' . $cf_id );
 			$rows = $rows_of( $det );
 			$check( 'D-08: the CFDB7 entry shows the answers as typed, entities decoded',
