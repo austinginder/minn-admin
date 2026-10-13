@@ -2198,6 +2198,10 @@ class Minn_Admin {
 			// client to parse WP REST site-local dates (no zone suffix) so
 			// timeAgo / tooltips aren't skewed by gmt_offset.
 			'gmtOffset' => (float) get_option( 'gmt_offset' ),
+			// The site's timezone (an IANA name, or "+05:30" on a manual
+			// offset), so the client prints wall-clock times on the site's
+			// clock across a DST change, not only at today's offset.
+			'timezone'  => wp_timezone_string(),
 			// SPA translation map for the client's __()/_n() (empty for
 			// English; object cast so an empty map serializes as {}).
 			// The reader's effective locale and writing direction. The client

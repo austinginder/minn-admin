@@ -174,6 +174,10 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 			if ( soon && far ) {
 				// A browser nine hours from the site: Tokyo, unless the site is there.
 				const siteOff = await page.evaluate( () => window.MINN.gmtOffset );
+				// Without the zone's name the client knows only today's offset,
+				// which is an hour off for a date across a DST change.
+				const bootZone = await page.evaluate( () => window.MINN.timezone || '' );
+				t.check( 'D-03 the boot payload names the site\'s timezone', bootZone === amelia.tz, bootZone + ' vs ' + amelia.tz );
 				const zone = 9 === siteOff ? 'America/Los_Angeles' : 'Asia/Tokyo';
 				const inZone = ( iso, o ) => new Date( iso ).toLocaleString( 'en-US', Object.assign( { timeZone: zone }, o ) );
 				tzCtx = await browser.newContext( { ignoreHTTPSErrors: true, storageState: loadAuthState() || undefined, timezoneId: zone } );
