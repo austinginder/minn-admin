@@ -365,6 +365,11 @@
 		return encodeURIComponent( s ).replace( /%3A/gi, ':' );
 	};
 
+	// A block template's id is "<theme>//<slug>". Core's own editor sends
+	// the two slashes raw (a server keeping Apache's AllowEncodedSlashes
+	// default answers %2F with a 404), so each half goes in as one segment.
+	const tplSeg = ( id ) => String( id == null ? '' : id ).split( '//' ).map( idSeg ).join( '//' );
+
 	// Is this URL actually ON that host? A substring test says yes to
 	// https://evil.com/?x=wordpress.org and to https://evil.com/github.com/,
 	// and the answer decides whether the UI puts a well-known name to a link
@@ -23050,7 +23055,7 @@
 							confirmLabel: __( 'Reset to theme' ),
 						} ) ) return;
 						try {
-							await api( `wp/v2/${ 'wp_template' === t.type ? 'templates' : 'template-parts' }/${ encodeURIComponent( t.id ) }?force=true`, { method: 'DELETE' } );
+							await api( `wp/v2/${ 'wp_template' === t.type ? 'templates' : 'template-parts' }/${ tplSeg( t.id ) }?force=true`, { method: 'DELETE' } );
 							toast( __( 'Reset to the theme version' ) );
 							reload();
 						} catch ( e ) {
@@ -23093,7 +23098,7 @@
 							confirmLabel: isPart ? __( 'Delete part' ) : __( 'Delete template' ),
 						} ) ) return;
 						try {
-							await api( `wp/v2/${ 'wp_template' === t.type ? 'templates' : 'template-parts' }/${ encodeURIComponent( t.id ) }?force=true`, { method: 'DELETE' } );
+							await api( `wp/v2/${ 'wp_template' === t.type ? 'templates' : 'template-parts' }/${ tplSeg( t.id ) }?force=true`, { method: 'DELETE' } );
 							toast( isPart ? __( 'Template part deleted' ) : __( 'Template deleted' ) );
 							reload();
 						} catch ( e ) {
@@ -35081,7 +35086,7 @@
 	// REST path that carries one has to encode it or the route never matches.
 	// A post id is a number and encoding it is a no-op, so this is safe for both.
 	const editorItemPath = ( type, id ) =>
-		`wp/v2/${ type }/${ isTemplateType( type ) ? encodeURIComponent( id ) : id }`;
+		`wp/v2/${ type }/${ isTemplateType( type ) ? tplSeg( id ) : id }`;
 
 	/**
 	 * Block templates and template parts open in this same editor the way
@@ -35104,7 +35109,7 @@
 	async function loadTemplateEditor() {
 		const restBase = state.editorType;
 		const tid = String( state.editorId );
-		const p = await api( `wp/v2/${ restBase }/${ encodeURIComponent( tid ) }?context=edit&_fields=id,slug,title,content,status,source,origin,has_theme_file,type,modified,area` );
+		const p = await api( `wp/v2/${ restBase }/${ tplSeg( tid ) }?context=edit&_fields=id,slug,title,content,status,source,origin,has_theme_file,type,modified,area` );
 		const raw = ( p.content && ( p.content.raw != null ? p.content.raw : '' ) ) || '';
 		const mode = editorModeFor( raw );
 		state.editor = {
@@ -35159,11 +35164,29 @@
 		loadEditorRevisions( state.editor );
 	}
 
+	// The REST base in the editor's address goes into wp/v2/<base>/<id> for
+	// the load and every save, so it has to name a content type: one of the
+	// core three, or a type wp/v2/types lists for this user.
+	let editorBasesPromise = null;
+	async function editorTypeKnown( type ) {
+		if ( [ 'posts', 'pages', 'blocks' ].includes( type ) ) return true;
+		if ( ! /^[a-z0-9_-]+$/i.test( String( type ) ) ) return false;
+		if ( ! editorBasesPromise ) {
+			editorBasesPromise = api( 'wp/v2/types?context=edit' )
+				.then( ( r ) => Object.values( r || {} )
+					.filter( ( t ) => t && t.rest_base && ( ! t.rest_namespace || 'wp/v2' === t.rest_namespace ) )
+					.map( ( t ) => t.rest_base ) )
+				.catch( ( e ) => { editorBasesPromise = null; throw e; } );
+		}
+		return ( await editorBasesPromise ).includes( type );
+	}
+
 	async function loadEditor() {
 		if ( state.editorId && isTemplateType( state.editorType ) ) {
 			return loadTemplateEditor();
 		}
 		if ( state.editorId ) {
+			if ( ! await editorTypeKnown( state.editorType ) ) throw new Error( 'Refused a content type: ' + state.editorType );
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
@@ -35532,7 +35555,7 @@
 			if ( ed.id && isTemplateType( ed.type ) ) {
 				// A template id is a string with a slash in it, and templates
 				// take no Minn lock — the guard header stays off.
-				p = await api( `wp/v2/${ ed.type }/${ encodeURIComponent( ed.id ) }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				p = await api( `wp/v2/${ ed.type }/${ tplSeg( ed.id ) }`, { method: 'POST', body: JSON.stringify( payload ) } );
 			} else if ( ed.id ) {
 				// The lock guard header: the server rejects this save with a
 				// 409 if someone else holds a fresh edit lock — closes the
@@ -38094,7 +38117,7 @@
 					confirmLabel: __( 'Reset to theme' ),
 				} ) ) return;
 				try {
-					await api( `wp/v2/${ ed.type }/${ encodeURIComponent( ed.id ) }?force=true`, { method: 'DELETE' } );
+					await api( `wp/v2/${ ed.type }/${ tplSeg( ed.id ) }?force=true`, { method: 'DELETE' } );
 					try { localStorage.removeItem( localNetKey( ed ) ); } catch ( e ) {}
 					toast( __( 'Reset to the theme version' ) );
 					if ( state.tplData ) { state.tplData.templates = null; state.tplData.parts = null; state.tplData.usage = null; }

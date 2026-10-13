@@ -124,11 +124,16 @@ const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 		t.check( 'no Reset offered while the theme file is still the live version', ! themeChrome.reset );
 
 		const before = ( await saved( 'twentytwentyfive//index' ) ).content.raw;
-		await Promise.all( [
-			page.waitForResponse( ( r ) => r.url().includes( 'twentytwentyfive%2F%2Findex' ) && r.request().method() === 'POST', { timeout: 20000 } ),
+		const [ indexSave ] = await Promise.all( [
+			page.waitForResponse( ( r ) => /twentytwentyfive(\/\/|%2F%2F)index/.test( r.url() ) && r.request().method() === 'POST', { timeout: 20000 } ),
 			page.click( '#minn-publish-btn' ),
 		] );
 		indexCustomized = true;
+		// Core's own editor sends the id's two slashes raw: a server keeping
+		// Apache's AllowEncodedSlashes default answers %2F%2F with a 404.
+		t.check( 'the template id rides with its slashes raw, as core\'s editor sends it',
+			/\/templates\/twentytwentyfive\/\/index/.test( indexSave.url() ) && ! /%2F/i.test( indexSave.url() ),
+			indexSave.url() );
 		await page.waitForTimeout( 600 );
 		const copied = await saved( 'twentytwentyfive//index' );
 		t.check( 'saving created the site copy', copied.source === 'custom', copied.source );
