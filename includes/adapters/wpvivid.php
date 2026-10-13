@@ -25,11 +25,16 @@ function minn_admin_wpvivid_active() {
 	// WPvivid keeps its archives in one network-shared wp-content/wpvividbackups
 	// directory and registers its admin under network_admin_menu on multisite,
 	// so the backup sets, the delete and the run-now all belong to the network
-	// owner there. manage_options is per site and would admit every subsite
-	// administrator.
-	if ( ! Minn_Admin::network_owner() ) {
+	// owner there (the install's, on several networks: the archives hold the
+	// shared database). manage_options is per site and would admit every
+	// subsite administrator.
+	if ( ! Minn_Admin::install_owner() ) {
 		return false;
 	}
+	return minn_admin_wpvivid_present();
+}
+
+function minn_admin_wpvivid_present() {
 	return defined( 'WPVIVID_PLUGIN_DIR' )
 		&& class_exists( 'WPvivid_Backuplist' )
 		&& class_exists( 'WPvivid_Setting' );
@@ -43,7 +48,9 @@ function minn_admin_wpvivid_active() {
  */
 function minn_admin_wpvivid_run_task( $task_id ) {
 	global $wpvivid_plugin;
-	if ( ! minn_admin_wpvivid_active() || ! $wpvivid_plugin || ! is_string( $task_id ) || '' === $task_id ) {
+	// Cron runs signed out, so the owner test belongs to the route that
+	// prepared the task; here only the task WPvivid holds is run.
+	if ( ! minn_admin_wpvivid_present() || ! $wpvivid_plugin || ! is_string( $task_id ) || '' === $task_id ) {
 		return;
 	}
 	if ( ! class_exists( 'WPvivid_taskmanager' ) ) {
@@ -409,7 +416,7 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-shared archive directory (see minn_admin_wpvivid_active).
-		return minn_admin_wpvivid_can() && Minn_Admin::network_owner();
+		return minn_admin_wpvivid_can() && Minn_Admin::install_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/wpvivid/backups', array(

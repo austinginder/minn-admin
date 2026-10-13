@@ -92,8 +92,8 @@ A few properties worth knowing before auditing (details in
   main site, as core's Network Admin does, so a network capability granted
   through one subsite's role counts for nothing. On an install with several
   networks (WP Multi Network), install-wide tools (the database browser,
-  the logs, the wp-config switches) belong to the main network's super
-  admins.
+  the logs, the wp-config switches, backup archives and migrations and
+  their connection keys) belong to the main network's super admins.
 - Hiding a plugin's screens because a menu tool (White Label CMS) hid its
   wp-admin menu is presentation only; the plugin's routes keep their own
   permission checks.

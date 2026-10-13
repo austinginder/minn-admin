@@ -25,7 +25,7 @@ function minn_admin_disembark_active() {
 	// The connect token pulls the database, and Disembark's pull routes build
 	// their table list from an unscoped SHOW TABLES, so on a network that token
 	// reaches every tenant's tables however per-site the option storing it is.
-	if ( ! Minn_Admin::network_owner() ) {
+	if ( ! Minn_Admin::install_owner() ) {
 		return false;
 	}
 	return class_exists( '\\Disembark\\Token' );
@@ -247,7 +247,7 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-reaching connect token (see minn_admin_disembark_active).
-		return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
+		return current_user_can( 'manage_options' ) && Minn_Admin::install_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/disembark/status', array(

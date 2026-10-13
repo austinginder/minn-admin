@@ -188,5 +188,17 @@ for ( const [ rel, toks ] of Object.entries( ALLOWED ) ) {
 	}
 }
 
+// Install-wide state asks Minn_Admin::install_owner(): every network of a WP
+// Multi Network install shares one database, so a backup archive, a
+// migration and their credentials hold all of it. A secondary network's
+// super admin passes network_owner() and must not pass these.
+const INSTALL_WIDE = [ 'duplicator', 'wpvivid', 'updraftplus', 'backwpup', 'ai1wm', 'disembark', 'wp-migrate' ];
+for ( const slug of INSTALL_WIDE ) {
+	const rel = `includes/adapters/${ slug }.php`;
+	const src = code( fs.readFileSync( path.join( ROOT, rel ), 'utf8' ) );
+	check( `${ rel } gates on Minn_Admin::install_owner(), never network_owner() (backups hold the shared database)`,
+		/Minn_Admin::install_owner\(\)/.test( src ) && ! /Minn_Admin::network_owner\(\)/.test( src ) );
+}
+
 console.log( `\nnetwork-gates: ${ pass }/${ pass + fail } passed` );
 process.exit( fail ? 1 : 0 );

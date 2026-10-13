@@ -39,7 +39,7 @@ function minn_admin_ai1wm_active() {
 	// menu on a subsite at all. `export` would otherwise let every subsite
 	// administrator through, since core's multisite capability pass never
 	// strips it.
-	if ( ! Minn_Admin::network_owner() ) {
+	if ( ! Minn_Admin::install_owner() ) {
 		return false;
 	}
 	return defined( 'AI1WM_BACKUPS_PATH' )
@@ -174,7 +174,7 @@ function minn_admin_ai1wm_rest_ready() {
  * a shop manager and every subsite administrator at Minn's door.
  */
 function minn_admin_ai1wm_can_export() {
-	return minn_admin_ai1wm_rest_ready() && current_user_can( 'ai1wm_export_site' ) && Minn_Admin::network_owner();
+	return minn_admin_ai1wm_rest_ready() && current_user_can( 'ai1wm_export_site' ) && Minn_Admin::install_owner();
 }
 
 /** One request to ai1wm/v1 through the REST server, so their gates run. */
@@ -249,7 +249,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// `export` while every route it points at asks ai1wm_import_site, so the
 	// nav offered a Backups item that answered 403 on open — and told the
 	// System page a lower bar than the one actually enforced.
-	if ( ! current_user_can( 'ai1wm_import_site' ) || ! Minn_Admin::network_owner() ) {
+	if ( ! current_user_can( 'ai1wm_import_site' ) || ! Minn_Admin::install_owner() ) {
 		return $surfaces;
 	}
 
@@ -300,7 +300,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
  * proves it is really inside the backups folder before streaming.
  */
 function minn_admin_ai1wm_download_files( $id ) {
-	if ( ! current_user_can( 'ai1wm_import_site' ) || ! Minn_Admin::network_owner() ) {
+	if ( ! current_user_can( 'ai1wm_import_site' ) || ! Minn_Admin::install_owner() ) {
 		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	if ( ! defined( 'AI1WM_BACKUPS_PATH' ) ) {
@@ -343,7 +343,7 @@ add_action( 'rest_api_init', function () {
 		// nobody and AI1WM withdraws the archive list from everyone. Reading
 		// an archive's name is most of the way to downloading it, so it
 		// answers to the same capability their own list does.
-		return current_user_can( 'ai1wm_import_site' ) && Minn_Admin::network_owner();
+		return current_user_can( 'ai1wm_import_site' ) && Minn_Admin::install_owner();
 	};
 	// Deleting an archive is destructive (a bare unlink, no trash), and
 	// AI1WM gates its OWN delete on ai1wm_import_site — a meta cap mapping to
@@ -351,7 +351,7 @@ add_action( 'rest_api_init', function () {
 	// turns off site-wide. Listing at `export` is parity; deleting at
 	// `export` is not.
 	$perm_delete = function () {
-		return current_user_can( 'ai1wm_import_site' ) && Minn_Admin::network_owner();
+		return current_user_can( 'ai1wm_import_site' ) && Minn_Admin::install_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/ai1wm/exports', array(

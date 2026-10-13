@@ -21,7 +21,7 @@ function minn_admin_updraftplus_active() {
 	// and every neighbouring subsite's tables to the network owner's remote
 	// storage. The plugin says so itself, in an error-level notice on its own
 	// screen that Minn does not reproduce. Same rule as every sibling here.
-	if ( ! Minn_Admin::network_owner() ) {
+	if ( ! Minn_Admin::install_owner() ) {
 		return false;
 	}
 	return class_exists( 'UpdraftPlus_Options' ) && class_exists( 'UpdraftPlus_Backup_History' );
@@ -329,7 +329,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
  */
 function minn_admin_updraftplus_download_files( $id ) {
 	global $updraftplus;
-	if ( ! minn_admin_updraftplus_active() || ! minn_admin_updraftplus_can() || ! Minn_Admin::network_owner() ) {
+	if ( ! minn_admin_updraftplus_active() || ! minn_admin_updraftplus_can() || ! Minn_Admin::install_owner() ) {
 		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	$history = UpdraftPlus_Backup_History::get_history();
@@ -373,7 +373,7 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-shared archives (see minn_admin_updraftplus_active).
-		return minn_admin_updraftplus_can() && Minn_Admin::network_owner();
+		return minn_admin_updraftplus_can() && Minn_Admin::install_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/updraft/backups/(?P<id>\d+)', array(

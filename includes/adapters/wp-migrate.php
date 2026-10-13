@@ -40,7 +40,9 @@ function minn_admin_wp_migrate_cap() {
 }
 
 function minn_admin_wp_migrate_can() {
-	return minn_admin_wp_migrate_active() && current_user_can( minn_admin_wp_migrate_cap() );
+	// A migration reads or replaces the whole database, which every network
+	// of an install shares: install-wide, the main network's super admins.
+	return minn_admin_wp_migrate_active() && current_user_can( minn_admin_wp_migrate_cap() ) && Minn_Admin::install_owner();
 }
 
 /**

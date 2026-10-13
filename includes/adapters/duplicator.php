@@ -65,7 +65,7 @@ function minn_admin_duplicator_active() {
 	// Duplicator keeps ONE packages table on base_prefix and its archives
 	// hold the WHOLE network's database — on multisite that's super-admin
 	// data (its own menu lives in Network Admin there).
-	if ( ! Minn_Admin::network_owner() ) {
+	if ( ! Minn_Admin::install_owner() ) {
 		return false;
 	}
 	$table = minn_admin_duplicator_table();
@@ -572,7 +572,7 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-shared packages table (see minn_admin_duplicator_active).
-		if ( ! Minn_Admin::network_owner() ) {
+		if ( ! Minn_Admin::install_owner() ) {
 			return false;
 		}
 		// 5.0 replaced the filtered capability NAME with a capability

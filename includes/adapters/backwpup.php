@@ -26,7 +26,7 @@ function minn_admin_backwpup_active() {
 	// and their backups belong to the network owner. The plugin registers its
 	// whole admin under network_admin_menu there, which means a subsite
 	// administrator has no BackWPup screen at all.
-	if ( ! Minn_Admin::network_owner() ) {
+	if ( ! Minn_Admin::install_owner() ) {
 		return false;
 	}
 	return defined( 'BACKWPUP_PLUGIN_LOADED' )
@@ -57,7 +57,7 @@ function minn_admin_backwpup_folder_job_ids() {
 /** The one archive a row stands for ("{jobid}:{filename}"), for the download door. */
 function minn_admin_backwpup_download_files( $id ) {
 	// Their own download capability, the one their Backups screen checks.
-	if ( ! minn_admin_backwpup_active() || ! current_user_can( 'backwpup_backups_download' ) || ! Minn_Admin::network_owner() ) {
+	if ( ! minn_admin_backwpup_active() || ! current_user_can( 'backwpup_backups_download' ) || ! Minn_Admin::install_owner() ) {
 		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	$pos = strpos( (string) $id, ':' );
@@ -340,11 +340,11 @@ add_action( 'rest_api_init', function () {
 	// answer WHICH verb, this answers WHOSE data.
 	$perm = function () {
 		return current_user_can( 'backwpup_backups' )
-			&& Minn_Admin::network_owner();
+			&& Minn_Admin::install_owner();
 	};
 	$perm_delete = function () {
 		return current_user_can( 'backwpup_backups_delete' )
-			&& Minn_Admin::network_owner();
+			&& Minn_Admin::install_owner();
 	};
 	// STARTING a job is a different capability from viewing the list.
 	// BackWPup ships a real non-admin role, backwpup_check ("jobs checker"),
@@ -354,7 +354,7 @@ add_action( 'rest_api_init', function () {
 	// backup runs on demand.
 	$perm_run = function () {
 		return current_user_can( 'backwpup_jobs_start' )
-			&& Minn_Admin::network_owner();
+			&& Minn_Admin::install_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/backwpup/backups', array(
