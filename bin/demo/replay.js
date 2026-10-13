@@ -39,8 +39,12 @@
 		if ( ! byRoute[ route ] ) byRoute[ route ] = r;
 	} );
 
-	var reply = function ( status, body ) {
-		return Promise.resolve( new Response( body, { status: status, headers: { 'Content-Type': 'application/json' } } ) );
+	var reply = function ( status, body, headers ) {
+		var h = { 'Content-Type': 'application/json' };
+		Object.keys( headers || {} ).forEach( function ( name ) {
+			h[ name ] = headers[ name ];
+		} );
+		return Promise.resolve( new Response( body, { status: status, headers: h } ) );
 	};
 	var refuse = function ( code, message ) {
 		return reply( 'minn_demo' === code ? 403 : 404, JSON.stringify( { code: code, message: message, data: { status: 'minn_demo' === code ? 403 : 404 } } ) );
@@ -60,7 +64,7 @@
 		else if ( abs.indexOf( B.ajaxUrl ) === 0 ) key = 'ajax:' + abs.slice( B.ajaxUrl.length );
 		var hit = key && ( exact[ key ] || byRoute[ key.split( '?' )[ 0 ] ] );
 		if ( ! hit ) return refuse( 'minn_demo_missing', 'This view is not part of the demo.' );
-		return reply( hit.status, fill( hit.body ) );
+		return reply( hit.status, fill( hit.body ), hit.headers );
 	};
 
 	// Links into the recorded site lead nowhere real: say where they go instead.

@@ -93,6 +93,65 @@ function scrubber( boot ) {
 	return { walk, body, host, root };
 }
 
+// Upload thumbnails keep the camera's metadata (model, time, GPS position):
+// the demo needs the pixels only. JPEG loses its Exif/XMP, IPTC, comment and
+// multi-picture segments (the ICC profile and the Adobe colour segment stay,
+// they change how it looks); PNG its text, time and eXIf chunks; WebP its
+// EXIF and XMP chunks and the header flags that announce them. Any other
+// format answers null and stays out of the demo.
+function stripMeta( buf ) {
+	if ( buf[ 0 ] === 0xff && buf[ 1 ] === 0xd8 ) {
+		const out = [ buf.subarray( 0, 2 ) ];
+		let i = 2;
+		while ( i + 4 <= buf.length && buf[ i ] === 0xff ) {
+			const marker = buf[ i + 1 ];
+			if ( 0xda === marker ) {
+				out.push( buf.subarray( i ) );
+				return Buffer.concat( out );
+			}
+			const len = buf.readUInt16BE( i + 2 );
+			const seg = buf.subarray( i, i + 2 + len );
+			const icc = 0xe2 === marker && 'ICC_PROFILE' === seg.subarray( 4, 15 ).toString( 'latin1' );
+			if ( ! ( 0xe1 === marker || 0xed === marker || 0xfe === marker || ( 0xe2 === marker && ! icc ) ) ) out.push( seg );
+			i += 2 + len;
+		}
+		return null;
+	}
+	if ( buf.subarray( 0, 8 ).equals( Buffer.from( [ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a ] ) ) ) {
+		const out = [ buf.subarray( 0, 8 ) ];
+		let i = 8;
+		while ( i + 12 <= buf.length ) {
+			const len = buf.readUInt32BE( i );
+			const type = buf.subarray( i + 4, i + 8 ).toString( 'latin1' );
+			if ( ! [ 'eXIf', 'tEXt', 'iTXt', 'zTXt', 'tIME' ].includes( type ) ) out.push( buf.subarray( i, i + 12 + len ) );
+			i += 12 + len;
+			if ( 'IEND' === type ) return Buffer.concat( out );
+		}
+		return null;
+	}
+	if ( 'RIFF' === buf.subarray( 0, 4 ).toString( 'latin1' ) && 'WEBP' === buf.subarray( 8, 12 ).toString( 'latin1' ) ) {
+		const chunks = [];
+		let i = 12;
+		while ( i + 8 <= buf.length ) {
+			const type = buf.subarray( i, i + 4 ).toString( 'latin1' );
+			const len = buf.readUInt32LE( i + 4 );
+			const end = i + 8 + len + ( len % 2 );
+			const chunk = Buffer.from( buf.subarray( i, end ) );
+			// VP8X flag bits: 0x08 EXIF present, 0x04 XMP present.
+			if ( 'VP8X' === type ) chunk[ 8 ] &= ~0x0c;
+			if ( 'EXIF' !== type && 'XMP ' !== type ) chunks.push( chunk );
+			i = end;
+		}
+		const body = Buffer.concat( chunks );
+		const head = Buffer.alloc( 12 );
+		head.write( 'RIFF', 0, 'latin1' );
+		head.writeUInt32LE( body.length + 4, 4 );
+		head.write( 'WEBP', 8, 'latin1' );
+		return Buffer.concat( [ head, body ] );
+	}
+	return null;
+}
+
 function audit( text, { host, root, nonce } ) {
 	const found = [];
 	const look = ( label, re ) => {
@@ -158,7 +217,13 @@ async function capture() {
 			if ( u.startsWith( restUrl ) ) key = 'rest:' + u.slice( restUrl.length );
 			else if ( u.startsWith( ajaxUrl ) ) key = 'ajax:' + u.slice( ajaxUrl.length );
 			if ( ! key ) return;
-			responses[ key ] = { status: res.status(), body: await res.text() };
+			// List totals and page counts ride in headers, not the body.
+			const h = res.headers();
+			const headers = {};
+			for ( const name of [ 'x-wp-total', 'x-wp-totalpages' ] ) {
+				if ( undefined !== h[ name ] ) headers[ name ] = h[ name ];
+			}
+			responses[ key ] = { status: res.status(), body: await res.text(), ...( Object.keys( headers ).length ? { headers } : {} ) };
 		} catch ( e ) { /* the page navigated away mid-read */ }
 	};
 	// Chrome can die under memory pressure on a loaded dev box, and every
@@ -248,13 +313,23 @@ async function capture() {
 }
 
 function finish( raw ) {
-	const { boot, responses, images, routes, surfaces, skipped, failed } = raw;
+	const { boot, responses, routes, surfaces, skipped, failed } = raw;
 	const s = scrubber( boot );
+	const images = [];
+	for ( const [ rel, b64 ] of raw.images ) {
+		const clean = stripMeta( Buffer.from( b64, 'base64' ) );
+		if ( clean ) images.push( [ rel, clean ] );
+		else console.warn( `  left out ${ rel }: not a JPEG, PNG or WebP the metadata strip understands` );
+	}
 	const cleanBoot = s.walk( boot );
 	const cleanResponses = {};
-	for ( const [ k, r ] of Object.entries( responses ) ) cleanResponses[ s.walk( k ) ] = { status: r.status, body: s.body( r.body ) };
+	for ( const [ k, r ] of Object.entries( responses ) ) {
+		cleanResponses[ s.walk( k ) ] = { status: r.status, body: s.body( r.body ), ...( r.headers ? { headers: r.headers } : {} ) };
+	}
 
 	const findings = audit( JSON.stringify( cleanBoot ) + JSON.stringify( cleanResponses ), { host: s.host, root: s.root, nonce: boot.nonce } );
+	const tagged = images.filter( ( [ , buf ] ) => buf.includes( 'Exif\0\0' ) || buf.includes( '<x:xmpmeta' ) ).map( ( [ rel ] ) => rel );
+	if ( tagged.length ) findings.push( 'image metadata: ' + tagged.join( ', ' ) );
 	if ( findings.length ) {
 		console.error( '\nNOT WRITTEN: the scrubbed recording still carries\n  ' + findings.join( '\n  ' ) );
 		console.error( 'Fix the fixture data, or map the value in a MINN_DEMO_SCRUB file, then rerun with --from-raw.' );
@@ -263,11 +338,11 @@ function finish( raw ) {
 
 	fs.rmSync( OUT, { recursive: true, force: true } );
 	fs.mkdirSync( path.join( OUT, 'uploads' ), { recursive: true } );
-	for ( const [ rel, b64 ] of images ) {
+	for ( const [ rel, buf ] of images ) {
 		const dest = path.join( OUT, 'uploads', rel );
 		if ( ! dest.startsWith( path.join( OUT, 'uploads' ) + path.sep ) ) continue;
 		fs.mkdirSync( path.dirname( dest ), { recursive: true } );
-		fs.writeFileSync( dest, Buffer.from( b64, 'base64' ) );
+		fs.writeFileSync( dest, buf );
 	}
 	fs.writeFileSync( path.join( OUT, 'boot.json' ), JSON.stringify( cleanBoot ) );
 	fs.writeFileSync( path.join( OUT, 'responses.json' ), JSON.stringify( cleanResponses ) );

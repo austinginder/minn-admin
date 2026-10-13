@@ -37,7 +37,8 @@ node bin/demo/build.js /tmp/minn-demo ../../themes/minn-admin-theme
 (`{ "real@person.example": "jordan@example.com" }`) for fixture rows that carry
 a real person's details. Keep it outside the repository. The recorder already
 replaces the site's host and path, Gravatar URLs, nonces and the session
-nonce, and it stops without writing when a `.localhost` host, a filesystem
+nonce, strips image metadata (WordPress thumbnails keep a phone photo's camera,
+time and GPS position), and it stops without writing when a `.localhost` host, a filesystem
 path, a Gravatar hash, a nonce or any email outside the reserved domains
 (`example.com`, `.org`, `.net`, and any `.test`, `.example` or `.invalid`)
 remains. A refused run keeps its unscrubbed capture at `<out-dir>.raw.json`:
@@ -61,6 +62,7 @@ usual.
 
 - Reads replay from the recording: the exact URL first, then the same route
   with any query, so a search or a second page shows the recorded first page.
+  List totals (`X-WP-Total`, `X-WP-TotalPages`) replay with them.
 - Writes answer "This is a demo, so nothing is saved."
 - Links into the recorded site (wp-admin, front-end pages) point at
   `example.com` after scrubbing; clicks on them stay in the demo with a note.
