@@ -153,7 +153,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'filter'    => array(
 				'label'   => __( 'Status', 'minn-admin' ),
+				// The first option is where the list opens: everything
+				// received, as on the other form providers.
 				'options' => array(
+					array( 'all', 'Received' ),
 					array( 'unread', 'Unread' ),
 					array( 'read', 'Read' ),
 					array( 'trash', 'Trash' ),

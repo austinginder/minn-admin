@@ -200,6 +200,16 @@ try {
 			$want = wp_date( 'M j, Y g:i a', $sf_now_ts );
 			$check( 'D-04 SureForms: the entry header and Submission panel get the date on the site\'s clock, not a raw ISO string', $sub && $want === $sub['value'], $st . ' got ' . wp_json_encode( $sub['value'] ?? null ) . ' want ' . wp_json_encode( $want ) );
 
+			// D-14: the list opened on Unread, so read entries stayed hidden
+			// until someone picked Read.
+			$surface = Minn_Admin_Surfaces::all()['sureforms'] ?? array();
+			$first   = (string) ( $surface['collection']['filter']['options'][0][0] ?? '' );
+			list( $st, $list ) = $call( 'GET', '/minn-admin/v1/sureforms/entries', array( 'search' => $marker, 'per_page' => 100, 'status' => $first ) );
+			$items = $list['items'] ?? array();
+			$check( 'D-14 SureForms: the list opens on every received entry, read ones included', $find( $items, $sf_read ) && $find( $items, $sf_now ), $st . ' default filter ' . wp_json_encode( $first ) . ', ' . count( $items ) . ' of 3 rows' );
+			list( , $list ) = $call( 'GET', '/minn-admin/v1/sureforms/entries', array( 'search' => $marker, 'per_page' => 100, 'status' => 'unread' ) );
+			$check( 'D-14 control: Unread still narrows to the unread ones', ! $find( $list['items'] ?? array(), $sf_read ) && $find( $list['items'] ?? array(), $sf_now ), count( $list['items'] ?? array() ) . ' rows' );
+
 			list( $st, $sf_after ) = $call( 'GET', '/minn-admin/v1/sureforms/status' );
 			$d_y = (int) ( $point( $sf_after, $yesterday )['value'] ?? 0 ) - (int) ( $point( $sf_before, $yesterday )['value'] ?? 0 );
 			$d_t = (int) ( $point( $sf_after, $today )['value'] ?? 0 ) - (int) ( $point( $sf_before, $today )['value'] ?? 0 );
