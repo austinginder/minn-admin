@@ -175,7 +175,10 @@ function minn_admin_backwpup_last_run() {
 			$latest = $run;
 		}
 	}
-	return $latest;
+	// lastrun is their start_time, time() shifted by gmt_offset: the site's
+	// wall clock written as an epoch. Read back in the site's zone, the
+	// offset in force on that date included.
+	return $latest > 0 ? (int) get_gmt_from_date( gmdate( 'Y-m-d H:i:s', $latest ), 'U' ) : 0;
 }
 
 /** True when a job is currently running (their working-data transient). */
