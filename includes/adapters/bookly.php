@@ -372,7 +372,7 @@ add_action( 'rest_api_init', function () {
 			}
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT ca.id, ca.status, ca.number_of_persons, a.start_date, a.end_date,
+				"SELECT ca.id, ca.status, ca.number_of_persons, ca.notes AS customer_notes, a.start_date, a.end_date, a.internal_note,
 					s.title AS service_name,
 					c.first_name AS customer_first, c.last_name AS customer_last, c.full_name AS customer_full,
 					c.email AS customer_email, c.phone AS customer_phone,
@@ -403,6 +403,25 @@ add_action( 'rest_api_init', function () {
 				array( 'label' => __( 'Ends', 'minn-admin' ), 'value' => minn_admin_bookly_local_iso( $row->end_date ) ),
 				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
 			);
+			// The staff's note is on the appointment, the customer's on their
+			// booking of it. Both are text the client escapes.
+			$internal = trim( (string) $row->internal_note );
+			$comment  = trim( (string) $row->customer_notes );
+			if ( '' !== $internal ) {
+				$when[] = array( 'label' => __( 'Notes', 'minn-admin' ), 'value' => $internal );
+			}
+			if ( '' !== $comment ) {
+				$when[] = array( 'label' => __( 'Booking note', 'minn-admin' ), 'value' => $comment );
+			}
+			$sections = array(
+				array( 'title' => __( 'Customer', 'minn-admin' ), 'rows' => $who ),
+				array( 'title' => __( 'Appointment', 'minn-admin' ), 'rows' => $when ),
+			);
+			// The page's Notes card holds one note: the internal one, else the
+			// customer's. With both, the customer's gets a card of its own.
+			if ( '' !== $internal && '' !== $comment ) {
+				$sections[] = array( 'title' => __( 'From the customer', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Booking note', 'minn-admin' ), 'value' => $comment ) ) );
+			}
 			$service = $row->service_name ? (string) $row->service_name : '';
 			return rest_ensure_response( array(
 				'kind'     => 'booking',
@@ -419,12 +438,9 @@ add_action( 'rest_api_init', function () {
 					'starts'   => minn_admin_bookly_local_iso( $row->start_date ),
 					'ends'     => minn_admin_bookly_local_iso( $row->end_date ),
 					'people'   => max( 1, (int) $row->number_of_persons ),
-					'notes'    => '',
+					'notes'    => '' !== $internal ? $internal : $comment,
 				),
-				'sections' => array(
-					array( 'title' => __( 'Customer', 'minn-admin' ), 'rows' => $who ),
-					array( 'title' => __( 'Appointment', 'minn-admin' ), 'rows' => $when ),
-				),
+				'sections' => $sections,
 				'adminUrl' => minn_admin_bookly_admin_url(),
 			) );
 		},

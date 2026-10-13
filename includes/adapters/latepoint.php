@@ -74,6 +74,18 @@ function minn_admin_latepoint_has_tables() {
 	return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t;
 }
 
+/** Whether LatePoint 5's orders exist (bookings hang off their order items). */
+function minn_admin_latepoint_has_orders() {
+	global $wpdb;
+	foreach ( array( 'orders', 'order_items' ) as $suffix ) {
+		$t = minn_admin_latepoint_table( $suffix );
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) !== $t ) {
+			return false;
+		}
+	}
+	return true;
+}
+
 /**
  * The dimensions LatePoint scopes bookings on, for the current user.
  *
@@ -549,16 +561,28 @@ add_action( 'rest_api_init', function () {
 				$scope_sql = ' AND ' . implode( ' AND ', $scope['sql'] );
 				$params    = array_merge( $params, $scope['params'] );
 			}
+			// LatePoint 5 keeps the customer's comment on the booking's order
+			// (booking -> order item -> order); the admin-only note is on the
+			// customer.
+			$comment_sql = "'' AS customer_comment";
+			$orders_join = '';
+			if ( minn_admin_latepoint_has_orders() ) {
+				$comment_sql = 'o.customer_comment';
+				$orders_join = 'LEFT JOIN ' . minn_admin_latepoint_table( 'order_items' ) . ' oi ON oi.id = b.order_item_id
+				LEFT JOIN ' . minn_admin_latepoint_table( 'orders' ) . ' o ON o.id = oi.order_id';
+			}
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT b.id, b.status, b.start_datetime_utc, b.end_datetime_utc, b.booking_code, b.total_attendees,
 					s.name AS service_name,
 					c.first_name AS customer_first, c.last_name AS customer_last, c.email AS customer_email, c.phone AS customer_phone,
+					c.admin_notes AS customer_admin_notes, {$comment_sql},
 					a.first_name AS agent_first, a.last_name AS agent_last
 				FROM {$bookings} b
 				LEFT JOIN {$customers} c ON c.id = b.customer_id
 				LEFT JOIN {$services} s ON s.id = b.service_id
 				LEFT JOIN {$agents} a ON a.id = b.agent_id
+				{$orders_join}
 				WHERE b.id = %d{$scope_sql}
 				LIMIT 1",
 				$params
@@ -583,6 +607,24 @@ add_action( 'rest_api_init', function () {
 			if ( $row->booking_code ) {
 				$when[] = array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) $row->booking_code );
 			}
+			// Both are text the client escapes: the comment is the visitor's own.
+			$internal = trim( (string) $row->customer_admin_notes );
+			$comment  = trim( (string) $row->customer_comment );
+			if ( '' !== $internal ) {
+				$when[] = array( 'label' => __( 'Notes', 'minn-admin' ), 'value' => $internal );
+			}
+			if ( '' !== $comment ) {
+				$when[] = array( 'label' => __( 'Booking note', 'minn-admin' ), 'value' => $comment );
+			}
+			$sections = array(
+				array( 'title' => __( 'Customer', 'minn-admin' ), 'rows' => $who ),
+				array( 'title' => __( 'Appointment', 'minn-admin' ), 'rows' => $when ),
+			);
+			// The page's Notes card holds one note: the internal one, else the
+			// customer's. With both, the customer's gets a card of its own.
+			if ( '' !== $internal && '' !== $comment ) {
+				$sections[] = array( 'title' => __( 'From the customer', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Booking note', 'minn-admin' ), 'value' => $comment ) ) );
+			}
 			$service = $row->service_name ? (string) $row->service_name : '';
 			return rest_ensure_response( array(
 				'kind'     => 'booking',
@@ -600,12 +642,9 @@ add_action( 'rest_api_init', function () {
 					'ends'     => minn_admin_latepoint_utc_iso( $row->end_datetime_utc ),
 					'people'   => max( 1, (int) $row->total_attendees ),
 					'code'     => $row->booking_code ? (string) $row->booking_code : '',
-					'notes'    => '',
+					'notes'    => '' !== $internal ? $internal : $comment,
 				),
-				'sections' => array(
-					array( 'title' => __( 'Customer', 'minn-admin' ), 'rows' => $who ),
-					array( 'title' => __( 'Appointment', 'minn-admin' ), 'rows' => $when ),
-				),
+				'sections' => $sections,
 				'adminUrl' => minn_admin_latepoint_admin_url(),
 			) );
 		},
