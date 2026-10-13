@@ -789,7 +789,8 @@ add_action( 'rest_api_init', function () {
 		if ( ! isset( $search['status'] ) ) {
 			$search['status'] = 'active';
 		}
-		$form_id = (int) $request->get_param( 'form' );
+		// The All route has no form in its path, and reads every form.
+		$form_id = (int) Minn_Admin::path_param( $request, 'form' );
 		$total   = 0;
 		$entries = GFAPI::get_entries( $form_id, $search, $sorting, array( 'offset' => $offset, 'page_size' => $page_size ), $total );
 		if ( is_wp_error( $entries ) ) {

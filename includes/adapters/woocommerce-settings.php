@@ -1626,8 +1626,9 @@ add_action(
 		};
 		$resolve = static function ( $req ) {
 			$pages   = minn_admin_wc_settings_pages();
-			$page_id = sanitize_key( $req['page'] );
-			$section = 'default' === $req['section'] ? '' : sanitize_key( $req['section'] );
+			$page_id = sanitize_key( Minn_Admin::path_param( $req, 'page' ) );
+			$section = Minn_Admin::path_param( $req, 'section' );
+			$section = 'default' === $section ? '' : sanitize_key( $section );
 			if ( ! isset( $pages[ $page_id ] ) ) {
 				return new WP_Error( 'minn_wc_no_page', __( 'That settings page is not registered.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
@@ -1688,7 +1689,7 @@ add_action(
 						// integration) saves through WC_Settings_API, which blanks
 						// every field it is not sent, so an arbitrary pair here
 						// could disable a gateway and wipe its credentials.
-						$page_id = sanitize_key( Minn_Admin::path_param( $req, 'page' ) );
+						$page_id = $page->get_id();
 						$listed  = false;
 						foreach ( minn_admin_wc_settings_sections() as $sec ) {
 							if ( ! isset( $sec['kind'] ) && $sec['page'] === $page_id && (string) $sec['section'] === (string) $section ) {
@@ -1904,14 +1905,14 @@ add_action(
 		);
 
 		$zone_of = static function ( $req ) {
-			$id = absint( $req['zone'] );
+			$id = absint( Minn_Admin::path_param( $req, 'zone' ) );
 			if ( $id && ! WC_Shipping_Zones::get_zone( $id ) ) {
 				return new WP_Error( 'minn_wc_no_zone', __( 'That shipping zone no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			return $id ? WC_Shipping_Zones::get_zone( $id ) : new WC_Shipping_Zone( 0 );
 		};
 		$method_of = static function ( $req, $zone ) {
-			$instance = absint( $req['instance'] );
+			$instance = absint( Minn_Admin::path_param( $req, 'instance' ) );
 			$method   = $instance ? WC_Shipping_Zones::get_shipping_method( $instance ) : false;
 			if ( ! $method ) {
 				return new WP_Error( 'minn_wc_no_method', __( 'That shipping method no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );

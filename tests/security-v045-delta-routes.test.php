@@ -203,6 +203,17 @@ if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_neutral_tag
 				remove_filter( 'pre_wp_mail', $gf_trap, 1 );
 			}
 
+			// --- OS-16 Gravity Forms: one form's entries list reads the form in its URL
+			list( $gf_st, $gf_d ) = $call_q( 'GET', "/minn-admin/v1/gf/forms/{$gf_a}/entries", array( 'form' => (string) $gf_b ) );
+			$gf_forms = array_values( array_unique( array_map( function ( $e ) {
+				return (int) ( $e['form_id'] ?? 0 );
+			}, (array) ( $gf_d['entries'] ?? array() ) ) ) );
+			$check( 'OS-16 a form\'s entries list reads the form in its URL, not ?form=', 200 === $gf_st && array( $gf_a ) === $gf_forms, $gf_st . ' forms ' . wp_json_encode( $gf_forms ) );
+			list( $gf_st, $gf_d ) = $call( 'GET', '/minn-admin/v1/gf/entries' );
+			$gf_forms = array_map( function ( $e ) {
+				return (int) ( $e['form_id'] ?? 0 );
+			}, (array) ( $gf_d['entries'] ?? array() ) );
+			$check( 'OS-16 control: the all-forms list still reads every form', 200 === $gf_st && in_array( $gf_a, $gf_forms, true ) && in_array( $gf_b, $gf_forms, true ), $gf_st . ' forms ' . wp_json_encode( array_values( array_unique( $gf_forms ) ) ) );
 		}
 	} finally {
 		wp_set_current_user( $admin );
@@ -218,6 +229,106 @@ if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_neutral_tag
 			$drop_user( $gf_u );
 		}
 		remove_role( 'minn_d45_gf' );
+	}
+}
+
+// --- NI-4, OS-10 WooCommerce: settings and shipping act on the page and zone in the URL
+// The settings save checked the URL's page against the sections Minn lists
+// but saved the body's, and the shipping helpers read zone and instance
+// from the body, so a DELETE of zone 5 carrying {"zone":7} deleted zone 7.
+if ( ! class_exists( 'WooCommerce' ) || ! function_exists( 'minn_admin_wc_settings_pages' ) ) {
+	$skip( 'NI-4/OS-10 WooCommerce inactive' );
+} else {
+	$wc_uid = $make_user( 'shop_manager' );
+	if ( ! $wc_uid ) {
+		$check( 'NI-4 fixture user', false );
+	} else {
+		wp_set_current_user( $wc_uid );
+		// Every listener of a settings save is held back for the run, so
+		// nothing is written, and a recorder on each page's first hook says
+		// which page the save reached.
+		global $wp_filter;
+		$wc_saved = array();
+		$wc_held  = array();
+		$wc_flush = get_option( 'woocommerce_queue_flush_rewrite_rules', null );
+		$wc_hooks = array( 'woocommerce_update_options', 'woocommerce_settings_saved' );
+		foreach ( array_keys( minn_admin_wc_settings_pages() ) as $wc_tab ) {
+			$wc_hooks[] = 'woocommerce_settings_save_' . $wc_tab;
+			$wc_hooks[] = 'woocommerce_update_options_' . $wc_tab;
+		}
+		foreach ( $wc_hooks as $wc_h ) {
+			$wc_held[ $wc_h ] = $wp_filter[ $wc_h ] ?? null;
+			unset( $wp_filter[ $wc_h ] );
+			if ( 0 === strpos( $wc_h, 'woocommerce_settings_save_' ) ) {
+				$wc_tab = substr( $wc_h, strlen( 'woocommerce_settings_save_' ) );
+				add_action( $wc_h, function () use ( $wc_tab, &$wc_saved ) {
+					$wc_saved[] = $wc_tab;
+				} );
+			}
+		}
+		try {
+			$wc_pages = minn_admin_wc_settings_pages();
+			$wc_other = array_values( array_intersect( array( 'subscriptions', 'checkout' ), array_keys( $wc_pages ) ) );
+			foreach ( $wc_other as $wc_tab ) {
+				$wc_saved = array();
+				list( $wc_st ) = $call( 'POST', '/minn-admin/v1/wc/settings/general/default', array( 'page' => $wc_tab, 'section' => 'default', 'values' => array( 'woocommerce_store_city' => 'D45 City' ) ) );
+				$check( "NI-4 a save to general/default whose body names {$wc_tab} saves no {$wc_tab} page", ! in_array( $wc_tab, $wc_saved, true ), $wc_st . ' saved ' . wp_json_encode( $wc_saved ) );
+			}
+			if ( ! $wc_other ) {
+				$skip( 'NI-4 neither Subscriptions nor Payments is registered' );
+			}
+			$wc_saved = array();
+			list( $wc_st ) = $call( 'POST', '/minn-admin/v1/wc/settings/general/default', array( 'values' => array( 'woocommerce_store_city' => 'D45 City' ) ) );
+			$check( 'NI-4 control: the URL\'s own page is the one saved', array( 'general' ) === $wc_saved, $wc_st . ' saved ' . wp_json_encode( $wc_saved ) );
+			list( $wc_st, $wc_d ) = $call_q( 'GET', '/minn-admin/v1/wc/settings/general/default', array( 'page' => 'tax', 'section' => 'standard' ) );
+			$check( 'NI-4 the GET serves the URL\'s section, not ?page=&section=', 200 === $wc_st && 'general' === ( $wc_d['page'] ?? null ) && '' === ( $wc_d['section'] ?? null ), $wc_st . ' ' . wp_json_encode( array( $wc_d['page'] ?? null, $wc_d['section'] ?? null ) ) );
+		} finally {
+			foreach ( $wc_held as $wc_h => $wc_hook ) {
+				if ( null === $wc_hook ) {
+					unset( $wp_filter[ $wc_h ] );
+				} else {
+					$wp_filter[ $wc_h ] = $wc_hook;
+				}
+			}
+			if ( null === $wc_flush ) {
+				delete_option( 'woocommerce_queue_flush_rewrite_rules' );
+			} else {
+				update_option( 'woocommerce_queue_flush_rewrite_rules', $wc_flush );
+			}
+		}
+
+		// Throwaway zones, each with one flat rate.
+		foreach ( WC_Shipping_Zones::get_zones() as $wc_old ) {
+			if ( 0 === strpos( (string) $wc_old['zone_name'], 'MinnD45 ' ) ) {
+				WC_Shipping_Zones::delete_zone( (int) $wc_old['id'] );
+			}
+		}
+		$wc_zone = function ( $name ) {
+			$z = new WC_Shipping_Zone( null );
+			$z->set_zone_name( $name );
+			$z->save();
+			return array( (int) $z->get_id(), (int) $z->add_shipping_method( 'flat_rate' ) );
+		};
+		list( $wc_za, $wc_ia ) = $wc_zone( 'MinnD45 A' );
+		list( $wc_zb, $wc_ib ) = $wc_zone( 'MinnD45 B' );
+		try {
+			if ( ! $wc_za || ! $wc_zb || ! $wc_ia || ! $wc_ib ) {
+				$check( 'OS-10 fixtures', false );
+			} else {
+				list( $wc_st ) = $call( 'DELETE', "/minn-admin/v1/wc/shipping/zones/{$wc_za}/methods/{$wc_ia}", array( 'zone' => $wc_zb, 'instance' => $wc_ib ) );
+				$check( 'OS-10 a method DELETE removes the method in its URL, not the body\'s', 200 === $wc_st && ! WC_Shipping_Zones::get_shipping_method( $wc_ia ) && WC_Shipping_Zones::get_shipping_method( $wc_ib ), $wc_st . ' a ' . wp_json_encode( (bool) WC_Shipping_Zones::get_shipping_method( $wc_ia ) ) . ' b ' . wp_json_encode( (bool) WC_Shipping_Zones::get_shipping_method( $wc_ib ) ) );
+				list( $wc_st ) = $call( 'DELETE', "/minn-admin/v1/wc/shipping/zones/{$wc_za}", array( 'zone' => $wc_zb ) );
+				$check( 'OS-10 a zone DELETE removes the zone in its URL, not the body\'s', 200 === $wc_st && ! WC_Shipping_Zones::get_zone( $wc_za ) && WC_Shipping_Zones::get_zone( $wc_zb ), $wc_st . ' a ' . wp_json_encode( (bool) WC_Shipping_Zones::get_zone( $wc_za ) ) . ' b ' . wp_json_encode( (bool) WC_Shipping_Zones::get_zone( $wc_zb ) ) );
+			}
+		} finally {
+			foreach ( array( $wc_za, $wc_zb ) as $wc_z ) {
+				if ( $wc_z && WC_Shipping_Zones::get_zone( $wc_z ) ) {
+					WC_Shipping_Zones::delete_zone( $wc_z );
+				}
+			}
+		}
+		wp_set_current_user( $admin );
+		$drop_user( $wc_uid );
 	}
 }
 
