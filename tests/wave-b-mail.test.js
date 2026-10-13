@@ -4,9 +4,9 @@
  * the active mail resident), so the suite activates each, seeds a sent + a
  * failed row directly into its own table (the Post SMTP / WPMS seeding
  * pattern), drives list / tabs / search / detail (sandboxed HTML body) /
- * status card / delete, then restores inactive. Timestamps are stored in the
- * DB session zone and normalized to UTC by the adapter — the suite asserts the
- * emitted date is an absolute Z string.
+ * status card / delete, then restores inactive. Timestamps are written on the
+ * site's clock (current_time) and converted to UTC with the site's zone by the
+ * adapter; the suite asserts the emitted date is an absolute Z string.
  */
 const { execSync } = require( 'child_process' );
 const fs = require( 'fs' );

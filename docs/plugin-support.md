@@ -157,9 +157,10 @@ Source-verified 2026-07-17 (installed all four on minnadmin):
    sandboxed HTML preview). **GoSMTP SKIPPED**: its `\GOSMTP\Logger` is
    Pro-only and the free build stores no logs (the WP Mail SMTP-free
    pattern). Easy WP SMTP's full log is Pro-only too (free has debug
-   events). NOTE: both created_at columns ride the DB session timezone
-   (UTC on managed hosts, site-local on Cove dev); the shared
-   `minn_admin_db_local_to_utc_iso()` helper normalizes at runtime.
+   events). NOTE: both plugins (and SureForms) write `created_at` with
+   `current_time( 'mysql' )`, on the site's clock; the shared
+   `minn_admin_db_local_to_utc_iso()` helper converts with the site's
+   zone (`get_gmt_from_date()`), never the database server's.
 2. ~~**Security leftover** — All-In-One Security~~ **SHIPPED 2026-07-17**:
    activity-log audit feed ({base_prefix}aiowps_audit_log; JSON details
    flattened to Context rows; level tabs + search + status card;

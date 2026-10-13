@@ -52,7 +52,7 @@ Reference depth: **Gravity SMTP**. Family doc: `mail-plugins.md`.
 | post-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-17 | Status + chart + tabs; resend; search + delete; **sections detail** (pill, HTML body, failure code row); transcript still not exposed |
 | wp-mail-smtp | Y | Y | · | Y | — | · | · | · | · | Y | 2026-07-14 | Free = debug events only; full log is Pro |
 | wp-mail-logging | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-17 | Log-only; bulk delete; status + chart; **sections detail** (pill, HTML body, raw headers + error code rows) |
-| suremails | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-17 | Wave B: {prefix}suremails_email_log; sent/failed tabs; search; single+bulk delete; status+chart; sections detail; DB-tz→UTC helper; installed-inactive |
+| suremails | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-17 | Wave B: {prefix}suremails_email_log; sent/failed tabs; search; single+bulk delete; status+chart; sections detail; site-zone→UTC helper (`created_at` is written with `current_time`); installed-inactive |
 | site-mailer | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-17 | Wave B: site_mail_logs (Elementor cloud sender); delivered/failed tabs; search; delete; status+chart; sections detail; no local resend (cloud); installed-inactive |
 
 ### forms
