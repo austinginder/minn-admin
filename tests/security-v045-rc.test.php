@@ -920,6 +920,209 @@ if ( is_multisite() ) {
 	wp_clean_plugins_cache( false );
 }
 
+// --- 03-01 Licence actions follow each vendor's own licence gate -------------
+// Only which actions Minn offers is read here (a row's `can`); no action runs,
+// so no real seat is ever touched.
+$lic_can = function ( $source ) {
+	foreach ( (array) ( minn_admin_licenses()['items'] ?? array() ) as $r ) {
+		if ( ( $r['source'] ?? '' ) === $source ) {
+			return (array) ( $r['can'] ?? array() );
+		}
+	}
+	return null;
+};
+$lic_gate = function ( $label, $source, $narrow, $widen ) use ( $lic_can, $check, $skip ) {
+	$before = $lic_can( $source );
+	if ( ! $before ) {
+		$skip( "03-01 {$label}: no actions offered here (inactive or unlicensable)" );
+		return;
+	}
+	$narrow();
+	$during = $lic_can( $source );
+	$widen();
+	$check( "03-01 {$label}: no licence actions once the vendor's own gate says no", array() === $during, wp_json_encode( $during ) );
+	$check( "03-01 control: {$label} keeps its actions otherwise", (bool) $lic_can( $source ) );
+};
+$lic_filter = function ( $hook, $value ) {
+	$cb = function () use ( $value ) {
+		return $value;
+	};
+	return array(
+		function () use ( $hook, $cb ) {
+			add_filter( $hook, $cb, 999 );
+		},
+		function () use ( $hook, $cb ) {
+			remove_filter( $hook, $cb, 999 );
+		},
+	);
+};
+$lic_deny = function ( $cap ) use ( $make_user, $admin, $drop_user ) {
+	$uid = 0;
+	return array(
+		function () use ( $cap, $make_user, &$uid ) {
+			$uid = $make_user( 'administrator' );
+			( new WP_User( $uid ) )->add_cap( $cap, false );
+			wp_set_current_user( $uid );
+		},
+		function () use ( $admin, $drop_user, &$uid ) {
+			wp_set_current_user( $admin );
+			if ( $uid ) {
+				$drop_user( $uid );
+			}
+		},
+	);
+};
+list( $n, $w ) = $lic_filter( 'tribe_events_show_licenses_tab', false );
+$lic_gate( 'Event Tickets Plus (TEC Licenses tab hidden)', 'tec-event-tickets-plus', $n, $w );
+list( $n, $w ) = $lic_deny( 'gravitysmtp_edit_license_key' );
+$lic_gate( 'Gravity SMTP (licence key cap denied)', 'gravitysmtp', $n, $w );
+list( $n, $w ) = $lic_filter( 'kadence_blocks_pro_should_display_uplink_license_field', false );
+$lic_gate( 'Kadence Blocks Pro (licence field hidden)', 'kadence-blocks-pro', $n, $w );
+list( $n, $w ) = $lic_filter( 'wpmdb_ajax_cap', 'do_not_allow' );
+$lic_gate( 'WP Migrate (wpmdb_ajax_cap narrowed)', 'wp-migrate', $n, $w );
+list( $n, $w ) = $lic_deny( 'activate_plugins' );
+$lic_gate( 'Schema Pro (BSF, no activate_plugins)', 'bsf-wp-schema-pro', $n, $w );
+list( $n, $w ) = $lic_filter( 'sbi_settings_pages_capability', 'do_not_allow' );
+$lic_gate( 'Instagram Feed Pro (settings cap narrowed)', 'smash-instagram', $n, $w );
+list( $n, $w ) = $lic_deny( 'delete_users' );
+$lic_gate( 'Essential Addons Pro (no delete_users)', 'essential-addons-elementor', $n, $w );
+wp_set_current_user( $admin );
+
+// --- 03-04 A refused paste leaves the vendor's stored licence state ----------
+// Every vendor answer is mocked: no request leaves the site.
+$lic_mock = function ( $match, $reply ) {
+	$cb = function ( $pre, $args, $url ) use ( $match, $reply ) {
+		return false !== strpos( (string) $url, $match ) ? $reply : $pre;
+	};
+	add_filter( 'pre_http_request', $cb, 1, 3 );
+	return $cb;
+};
+$lic_json = function ( $body ) {
+	return array( 'headers' => array(), 'body' => wp_json_encode( $body ), 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+};
+$lic_act = function ( $provider, $secret ) use ( $call ) {
+	return $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => $provider, 'action' => 'activate', 'secret' => $secret ) );
+};
+$lic_raw = function ( $name ) {
+	global $wpdb;
+	return $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+};
+$lic_put = function ( $name, $raw ) {
+	global $wpdb;
+	if ( null === $raw ) {
+		$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) );
+	} elseif ( null === $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $name ) ) ) {
+		$wpdb->insert( $wpdb->options, array( 'option_name' => $name, 'option_value' => $raw, 'autoload' => 'off' ) );
+	} else {
+		$wpdb->update( $wpdb->options, array( 'option_value' => $raw ), array( 'option_name' => $name ) );
+	}
+	wp_cache_delete( $name, 'options' );
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'notoptions', 'options' );
+};
+
+// ACF PRO: its status and last activation error survive a refused key.
+if ( ! $lic_can( 'acf-pro' ) || ! function_exists( 'acf_pro_get_license_option' ) || ( function_exists( 'acf_pro_is_legacy_multisite' ) && acf_pro_is_legacy_multisite() ) ) {
+	$skip( '03-04 ACF PRO: no actions here' );
+} else {
+	$acf_status_raw = $lic_raw( 'acf_pro_license_status' );
+	$acf_err_raw    = $lic_raw( '_transient_acf_activation_error' );
+	$acf_err_to     = $lic_raw( '_transient_timeout_acf_activation_error' );
+	$acf_seed       = array( 'status' => 'active', 'name' => 'MinnRc45', 'lifetime' => true, 'next_check' => time() + DAY_IN_SECONDS );
+	update_option( 'acf_pro_license_status', $acf_seed, true );
+	set_transient( 'acf_activation_error', 'minn-rc45-earlier-error' );
+	if ( function_exists( 'acf_get_store' ) && acf_get_store( 'acf_pro_license_status' ) ) {
+		acf_get_store( 'acf_pro_license_status' )->reset();
+	}
+	$acf_mock = $lic_mock( 'connect.advancedcustomfields.com', $lic_json( array( 'status' => 0, 'message' => 'Minn RC45: that key is not valid.' ) ) );
+	list( $acf_st, $acf_d ) = $lic_act( 'acf-pro', 'minn-rc45-not-a-key' );
+	remove_filter( 'pre_http_request', $acf_mock, 1 );
+	wp_cache_delete( 'acf_pro_license_status', 'options' );
+	$acf_after = get_option( 'acf_pro_license_status' );
+	$check( '03-04 ACF PRO: a refused key leaves the working licence\'s status', is_array( $acf_after ) && 'MinnRc45' === ( $acf_after['name'] ?? '' ), $acf_st . ' ' . wp_json_encode( $acf_after ) );
+	$check( '03-04 ACF PRO: and its last activation error', 'minn-rc45-earlier-error' === get_transient( 'acf_activation_error' ), wp_json_encode( get_transient( 'acf_activation_error' ) ) );
+	$check( '03-04 control: ACF PRO reports the refusal', empty( $acf_d['ok'] ), wp_json_encode( $acf_d['ok'] ?? null ) );
+	$lic_put( 'acf_pro_license_status', $acf_status_raw );
+	$lic_put( '_transient_acf_activation_error', $acf_err_raw );
+	$lic_put( '_transient_timeout_acf_activation_error', $acf_err_to );
+}
+
+// Essential Addons Pro: no error row or back-off is left behind.
+if ( ! $lic_can( 'essential-addons-elementor' ) ) {
+	$skip( '03-04 Essential Addons Pro inactive' );
+} else {
+	global $wpdb;
+	$eael_like = array( 'essential-addons-elementor\_license\_data\_error', 'wpdeveloper\_sl\_failed\_http\_%' );
+	$eael_rows = function () use ( $wpdb, $eael_like ) {
+		$out = array();
+		foreach ( $eael_like as $l ) {
+			$out = array_merge( $out, (array) $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", $l ) ) );
+		}
+		return $out;
+	};
+	$eael_before = $eael_rows();
+	$eael_mock   = function ( $pre, $args, $url ) {
+		return false === strpos( (string) $url, 'wpdeveloper' ) ? $pre : new WP_Error( 'http_request_failed', 'Minn RC45: offline' );
+	};
+	add_filter( 'pre_http_request', $eael_mock, 1, 3 );
+	list( $eael_st, $eael_d ) = $lic_act( 'essential-addons-elementor', 'minn-rc45-not-a-key' );
+	remove_filter( 'pre_http_request', $eael_mock, 1 );
+	$eael_after = $eael_rows();
+	$check( '03-04 Essential Addons Pro: an outage during a refused paste leaves no error or back-off', $eael_before === $eael_after, wp_json_encode( array_values( array_diff( $eael_after, $eael_before ) ) ) );
+	$check( '03-04 control: Essential Addons Pro reports the refusal', empty( $eael_d['ok'] ), $eael_st . ' ' . wp_json_encode( $eael_d['ok'] ?? null ) );
+	foreach ( array_diff( $eael_after, $eael_before ) as $eael_n ) {
+		delete_option( $eael_n );
+	}
+}
+
+// Admin Columns Pro: a refused key's fallback permissions are not applied.
+if ( ! $lic_can( 'admin-columns-pro' ) ) {
+	$skip( '03-04 Admin Columns Pro inactive' );
+} else {
+	$acp_raw = $lic_raw( '_acp_access_permissions' );
+	update_option( '_acp_access_permissions', array( 'usage', 'update' ) );
+	$acp_mock = $lic_mock( 'admincolumns.com', $lic_json( array( 'error' => true, 'code' => 'expired', 'message' => 'Minn RC45: expired.', 'data' => array( 'permissions' => array() ) ) ) );
+	list( $acp_st, $acp_d ) = $lic_act( 'admin-columns-pro', 'minn-rc45-0000-not-a-key' );
+	remove_filter( 'pre_http_request', $acp_mock, 1 );
+	wp_cache_delete( '_acp_access_permissions', 'options' );
+	$check( '03-04 Admin Columns Pro: a refused key leaves the working activation\'s permissions', array( 'usage', 'update' ) === get_option( '_acp_access_permissions' ), $acp_st . ' ' . wp_json_encode( get_option( '_acp_access_permissions' ) ) );
+	$check( '03-04 control: Admin Columns Pro reports the refusal', empty( $acp_d['ok'] ), wp_json_encode( $acp_d['ok'] ?? null ) );
+	$lic_put( '_acp_access_permissions', $acp_raw );
+}
+
+// Search & Filter Pro: the prior row comes back as it was.
+if ( ! $lic_can( 'search-filter-pro' ) || ! class_exists( '\Search_Filter\Options' ) ) {
+	$skip( '03-04 Search & Filter Pro inactive' );
+} else {
+	$sfp_was  = \Search_Filter\Options::get( 'license-data' );
+	$sfp_seed = array( 'status' => 'invalid', 'license' => '', 'minn_rc45' => 1 );
+	\Search_Filter\Options::update( 'license-data', $sfp_seed );
+	$sfp_mock = $lic_mock( 'searchandfilter.com', $lic_json( array( 'success' => false, 'license' => 'invalid', 'error' => 'missing' ) ) );
+	list( $sfp_st, $sfp_d ) = $lic_act( 'search-filter-pro', 'minn-rc45-not-a-key' );
+	remove_filter( 'pre_http_request', $sfp_mock, 1 );
+	$sfp_after = \Search_Filter\Options::get( 'license-data' );
+	$check( '03-04 Search & Filter Pro: a refused key leaves the prior row as it was', is_array( $sfp_after ) && 1 === (int) ( $sfp_after['minn_rc45'] ?? 0 ), $sfp_st . ' ' . wp_json_encode( $sfp_after ) );
+	\Search_Filter\Options::update( 'license-data', is_array( $sfp_was ) ? $sfp_was : array() );
+}
+
+// Smash Balloon: a refusal does not rewrite the store.
+if ( ! $lic_can( 'smash-instagram' ) ) {
+	$skip( '03-04 Instagram Feed Pro inactive' );
+} else {
+	$sb_raw = array( 'sbi_license_key' => $lic_raw( 'sbi_license_key' ), 'sbi_license_status' => $lic_raw( 'sbi_license_status' ), 'sbi_license_data' => $lic_raw( 'sbi_license_data' ) );
+	update_option( 'sbi_license_key', ' MinnRc45Working ' );
+	update_option( 'sbi_license_status', 'Valid' );
+	$sb_mock = $lic_mock( 'smashballoon.com', $lic_json( array( 'success' => false, 'license' => 'invalid', 'error' => 'missing' ) ) );
+	list( $sb_st, $sb_d ) = $lic_act( 'smash-instagram', 'minn-rc45-not-a-key' );
+	remove_filter( 'pre_http_request', $sb_mock, 1 );
+	wp_cache_delete( 'sbi_license_key', 'options' );
+	wp_cache_delete( 'sbi_license_status', 'options' );
+	$check( '03-04 Instagram Feed Pro: a refused key leaves the stored key and status exactly', ' MinnRc45Working ' === get_option( 'sbi_license_key' ) && 'Valid' === get_option( 'sbi_license_status' ), $sb_st . ' ' . wp_json_encode( array( get_option( 'sbi_license_key' ), get_option( 'sbi_license_status' ) ) ) );
+	foreach ( $sb_raw as $sb_n => $sb_v ) {
+		$lic_put( $sb_n, $sb_v );
+	}
+}
+
 // @sections
 
 $summary();

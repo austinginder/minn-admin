@@ -3831,7 +3831,23 @@ function minn_admin_license_default_providers() {
 			if ( ! $mgr ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Essential Addons Pro is not loaded.', 'minn-admin' ) );
 			}
-			$res = $mgr->activate( array( 'license_key' => $secret ) );
+			// On any refusal or transport error their client records an
+			// error (which wp-admin then shows as an invalid licence for a
+			// working key) and, on a transport error, an hour's back-off that
+			// blocks its own licence calls. A refused paste puts back what
+			// was there.
+			$rows = array( 'essential-addons-elementor\_license%', 'essential-addons-elementor-license%', 'wpdeveloper\_sl\_failed\_http\_%' );
+			$snap = minn_admin_license_rows( $rows );
+			try {
+				$res = $mgr->activate( array( 'license_key' => $secret ) );
+			} catch ( \Throwable $e ) {
+				minn_admin_license_rows_restore( $rows, $snap );
+				throw $e;
+			}
+			$otp = is_object( $res ) && isset( $res->license ) && 'required_otp' === $res->license;
+			if ( ! $otp && ( is_wp_error( $res ) || ! ( is_object( $res ) && ( ! empty( $res->success ) || ( isset( $res->license ) && 'valid' === $res->license ) ) ) ) ) {
+				minn_admin_license_rows_restore( $rows, $snap );
+			}
 			if ( is_wp_error( $res ) ) {
 				$err  = $res->get_error_code();
 				$code = ( 'no_activations_left' === $err ) ? 'site_limit' : ( 'expired' === $err ? 'expired' : 'invalid' );
@@ -3886,7 +3902,26 @@ function minn_admin_license_default_providers() {
 		$providers['acf-pro']['key_constant'] = 'ACF_PRO_LICENSE';
 		$providers['acf-pro']['secret_label'] = __( 'ACF PRO license key', 'minn-admin' );
 		$providers['acf-pro']['activate']     = function ( $secret ) {
-			$res = acf_pro_activate_license( $secret, true );
+			// ACF removes the working licence's status and its last
+			// activation error before it asks, so a typo or an outage left a
+			// working key reading as unchecked until its next check. Both are
+			// put back, through ACF's own helpers (a legacy network keeps
+			// them on the main site), when the key is refused.
+			$helpers    = function_exists( 'acf_pro_get_license_option' ) && function_exists( 'acf_pro_update_license_option' ) && function_exists( 'acf_pro_get_license_transient' ) && function_exists( 'acf_pro_set_license_transient' );
+			$status_was = $helpers ? acf_pro_get_license_option( 'acf_pro_license_status', false ) : false;
+			$error_was  = $helpers ? acf_pro_get_license_transient( 'acf_activation_error' ) : false;
+			$res        = acf_pro_activate_license( $secret, true );
+			if ( $helpers && ( is_wp_error( $res ) || ! is_array( $res ) || empty( $res['success'] ) ) ) {
+				if ( false !== $status_was ) {
+					acf_pro_update_license_option( 'acf_pro_license_status', $status_was, true );
+					if ( function_exists( 'acf_get_store' ) && acf_get_store( 'acf_pro_license_status' ) ) {
+						acf_get_store( 'acf_pro_license_status' )->reset();
+					}
+				}
+				if ( false !== $error_was ) {
+					acf_pro_set_license_transient( 'acf_activation_error', $error_was );
+				}
+			}
 			if ( is_wp_error( $res ) ) {
 				return $res;
 			}
@@ -5008,11 +5043,9 @@ function minn_admin_license_default_providers() {
 			// sites where somebody is mistyping a key. Restore in both
 			// directions, and from a throw as well as a refusal.
 			$restore = function () use ( $prior ) {
-				if ( is_array( $prior ) && ! empty( $prior['license'] ) ) {
-					\Search_Filter\Options::update( 'license-data', $prior );
-					return;
-				}
-				\Search_Filter\Options::update( 'license-data', array() );
+				// The prior row as it was, licence or not (a row recording a
+				// refused key, {status: invalid, license: ''}, included).
+				\Search_Filter\Options::update( 'license-data', is_array( $prior ) ? $prior : array() );
 			};
 			try {
 				$req = new \WP_REST_Request( 'GET', '/search-filter-pro/v1/license/connect' );
@@ -5082,14 +5115,18 @@ function minn_admin_license_default_providers() {
 			$response = $acp->get( \ACP\ApiFactory::class )->create()->dispatch(
 				new \ACP\API\Request\Activate( $license_key, $acp->get( \ACP\Type\SiteUrl::class ) )
 			);
+			// A refused key changes nothing. Their handler applies the
+			// response's permissions first, and a refusal's fallback
+			// permissions (an expired or seat-limited key) could strip the
+			// working activation's update permission until its next check.
+			if ( $response->has_error() ) {
+				return $acp_classify_error( $response->get_error() );
+			}
 			// Permissions ride the API response in their handler; keep that.
 			$acp->get( \ACP\Access\PermissionCheckerFactory::class )->create()
 				->add_rule( new \ACP\Access\Rule\ApiPermissionResponse( $response ) )
 				->add_rule( new \ACP\Access\Rule\ApiErrorResponse( $response ) )
 				->apply();
-			if ( $response->has_error() ) {
-				return $acp_classify_error( $response->get_error() );
-			}
 			try {
 				$activation_key = new \ACP\Type\Activation\Key( (string) $response->get( 'activation_key' ) );
 			} catch ( \Throwable $e ) {
@@ -5670,42 +5707,14 @@ function minn_admin_license_default_providers() {
 			if ( '' === $secret || '' === $item ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Missing license key or product name', 'minn-admin' ) );
 			}
-			$snap = minn_admin_smash_read_store( $sp );
 			$remote = minn_admin_smash_edd( 'activate_license', $secret, $item );
 			$out    = minn_admin_smash_classify( $remote );
+			// The store is written only on success. A refusal writes nothing,
+			// so nothing is put back: rewriting the store from a normalised
+			// read (trimmed, lowercased, a status taken from the data row)
+			// could only change it.
 			if ( ! empty( $out['ok'] ) ) {
 				minn_admin_smash_write_store( $sp, $secret, $remote );
-				return $out;
-			}
-			// Snapshot-restore: never leave a rejected key as "active".
-			if ( '' !== $snap['key'] ) {
-				if ( 'info' === $sp['storage'] ) {
-					update_option(
-						$sp['info_opt'],
-						array(
-							'key'     => $snap['key'],
-							'status'  => $snap['status'],
-							'expires' => $snap['expires'],
-						)
-					);
-				} elseif ( 'settings' === $sp['storage'] ) {
-					$settings = get_option( $sp['settings_opt'], array() );
-					if ( ! is_array( $settings ) ) {
-						$settings = array();
-					}
-					$settings[ $sp['key_field'] ]    = $snap['key'];
-					$settings[ $sp['status_field'] ] = $snap['status'];
-					update_option( $sp['settings_opt'], $settings );
-				} else {
-					update_option( $sp['key_opt'], $snap['key'] );
-					update_option( $sp['status_opt'], $snap['status'] );
-					if ( $snap['data'] ) {
-						update_option( $sp['data_opt'], $snap['data'] );
-					}
-				}
-			} else {
-				// No prior key: ensure we did not partially write on a weird path.
-				// activate_license only writes on success above, so nothing to undo.
 			}
 			return $out;
 		};
@@ -5819,8 +5828,11 @@ function minn_admin_license_default_providers() {
 	// client's administrators, a site narrows WPForms' manage capability), so
 	// the actions attach only when it passes; anyone else keeps the
 	// read-only row, as with WPMU DEV and Novamira above.
-	foreach ( minn_admin_license_vendor_gates() as $gate_id => $gate ) {
-		if ( isset( $providers[ $gate_id ] ) && ! $gate() ) {
+	$gates = minn_admin_license_vendor_gates();
+	foreach ( array_keys( $providers ) as $gate_id ) {
+		// Brainstorm Force products are one provider each, under bsf-<id>.
+		$gate = $gates[ $gate_id ] ?? ( 0 === strpos( (string) $gate_id, 'bsf-' ) ? $gates['bsf'] : null );
+		if ( $gate && ! $gate() ) {
 			unset( $providers[ $gate_id ]['activate'], $providers[ $gate_id ]['deactivate'], $providers[ $gate_id ]['verify'] );
 		}
 	}
@@ -5840,11 +5852,73 @@ function minn_admin_license_default_providers() {
  * - Gravity Forms saves its key through settings gated on
  *   gravityforms_edit_settings.
  * - Admin Columns Pro checks manage_admin_columns.
+ * - The Events Calendar's add-ons take keys only on its Licenses tab, which
+ *   shows for activate_plugins unless tribe_events_show_licenses_tab says
+ *   otherwise, inside a settings screen gated on tribe_settings_req_cap.
+ * - Gravity SMTP saves through an endpoint needing
+ *   gravitysmtp_edit_general_settings and shows the key field only with
+ *   gravitysmtp_edit_license_key; a Members denial of either is kept.
+ * - SearchWP checks its filterable settings capability.
+ * - Each Smash Balloon product checks its own manage cap, or manage_options,
+ *   through its {prefix}_settings_pages_capability filter (Social Wall and
+ *   Feed Analytics ask manage_options, Minn's own floor).
+ * - Kadence Blocks Pro draws its licence field only while
+ *   kadence_blocks_pro_should_display_uplink_license_field allows it.
+ * - Essential Addons Pro's licence API checks delete_users.
+ * - Gravity Perks and Brainstorm Force products (their form sits on the
+ *   Plugins screen) check activate_plugins, as does CleanTalk's key screen.
+ * - WP Migrate checks its filterable wpmdb_ajax_cap (export, or
+ *   manage_network_options on a network).
  *
  * @return callable[]
  */
 function minn_admin_license_vendor_gates() {
+	$tec   = function () {
+		return (bool) apply_filters( 'tribe_events_show_licenses_tab', current_user_can( 'activate_plugins' ) )
+			&& current_user_can( (string) apply_filters( 'tribe_settings_req_cap', 'manage_options' ) );
+	};
+	$smash = function ( $own, $filter ) {
+		return function () use ( $own, $filter ) {
+			$cap = current_user_can( $own ) ? $own : 'manage_options';
+			return current_user_can( (string) apply_filters( $filter, $cap ) );
+		};
+	};
+	$plugins = function () {
+		return current_user_can( 'activate_plugins' );
+	};
 	return array(
+		'tec-events-calendar-pro' => $tec,
+		'tec-event-tickets-plus'  => $tec,
+		'tec-filterbar'           => $tec,
+		'tec-community'           => $tec,
+		'gravitysmtp'         => function () {
+			return current_user_can( 'gravitysmtp_edit_general_settings' ) && current_user_can( 'gravitysmtp_edit_license_key' );
+		},
+		'searchwp'            => function () {
+			return current_user_can( class_exists( '\SearchWP\Settings' ) && method_exists( '\SearchWP\Settings', 'get_capability' ) ? \SearchWP\Settings::get_capability() : 'manage_options' );
+		},
+		'smash-instagram'     => $smash( 'manage_instagram_feed_options', 'sbi_settings_pages_capability' ),
+		'smash-facebook'      => $smash( 'manage_custom_facebook_feed_options', 'cff_settings_pages_capability' ),
+		'smash-youtube'       => $smash( 'manage_youtube_feed_options', 'sby_settings_pages_capability' ),
+		'smash-twitter'       => $smash( 'manage_twitter_feed_options', 'ctf_settings_pages_capability' ),
+		'smash-reviews'       => $smash( 'manage_reviews_feed_options', 'sbr_settings_pages_capability' ),
+		'smash-tiktok'        => $smash( 'manage_tiktok_feed_options', 'sbtt_settings_pages_capability' ),
+		'kadence-blocks-pro'  => function () {
+			return (bool) apply_filters( 'kadence_blocks_pro_should_display_uplink_license_field', true );
+		},
+		'essential-addons-elementor' => function () {
+			return current_user_can( 'delete_users' );
+		},
+		'gravityperks'        => function () use ( $plugins ) {
+			return class_exists( 'GWPerks' ) && method_exists( 'GWPerks', 'can_manage_license' ) ? (bool) GWPerks::can_manage_license() : $plugins();
+		},
+		'wp-migrate'          => function () {
+			return current_user_can( (string) apply_filters( 'wpmdb_ajax_cap', is_multisite() ? 'manage_network_options' : 'export' ) );
+		},
+		'cleantalk'           => function () use ( $plugins ) {
+			return function_exists( 'minn_admin_cleantalk_can_manage' ) ? minn_admin_cleantalk_can_manage() : $plugins();
+		},
+		'bsf'                 => $plugins,
 		'acf-pro'             => function () {
 			return function_exists( 'acf_current_user_can_admin' ) && acf_current_user_can_admin()
 				&& ( ! function_exists( 'acf_pro_is_updates_page_visible' ) || acf_pro_is_updates_page_visible() );
@@ -6859,8 +6933,10 @@ add_action( 'rest_api_init', function () {
 					unset( $checks[ $provider_id ] );
 					update_option( 'minn_admin_license_checks', $checks, false );
 				} elseif ( 'verify' === $action || ( 'activate' === $action && ! empty( $result['ok'] ) ) ) {
-					// A failed activate leaves the vendor's stored state
-					// unchanged, so the previous memory stays truthful.
+					// A failed activate leaves the vendor's stored state as it
+					// was (each provider puts back what its vendor writes
+					// locally; docs/license-manager.md names the remote effects
+					// it cannot), so the previous memory stays truthful.
 					$checks[ $provider_id ] = array(
 						'ok'   => ! empty( $result['ok'] ),
 						'code' => isset( $result['code'] ) ? (string) $result['code'] : '',
