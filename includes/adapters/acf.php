@@ -1321,9 +1321,11 @@ function minn_admin_acf_flatten_subs( $sub_fields ) {
 			'gpath'     => $gpath ? $gpath : null,
 		);
 		// What a row added on ACF's screen starts with, in the control's
-		// shape, for the client to seed a new row with.
-		if ( isset( $sub['default_value'] ) && '' !== $sub['default_value'] && array() !== $sub['default_value'] ) {
-			$one['default'] = minn_admin_acf_value_out( $m, $sub['default_value'] );
+		// shape, for the client to seed a new row with. An unticked toggle
+		// is the client's own seed already.
+		$default = minn_admin_acf_default_of( $sub );
+		if ( null !== $default && ( 'true_false' !== $m['type'] || ! empty( $default ) ) ) {
+			$one['default'] = minn_admin_acf_value_out( $m, $default );
 		}
 		$subs[] = $one;
 	};
@@ -1691,6 +1693,19 @@ function minn_admin_acf_row_values_out( $subs, $raw_row ) {
 }
 
 /**
+ * A sub-field's default value, or null when it has none: ACF leaves false,
+ * null, '' or an empty list in default_value for "no default" (a select's
+ * stays false unless one is chosen).
+ *
+ * @param array $sub ACF sub-field definition.
+ * @return mixed|null
+ */
+function minn_admin_acf_default_of( $sub ) {
+	$default = is_array( $sub ) && isset( $sub['default_value'] ) ? $sub['default_value'] : null;
+	return in_array( $default, array( null, false, '', array() ), true ) ? null : $default;
+}
+
+/**
  * A new row the way ACF's own form posts one: every sub-field present, at
  * its default value or empty, a group's or clone's subs nested under it.
  *
@@ -1714,7 +1729,8 @@ function minn_admin_acf_blank_row( $sub_fields, $depth = 0 ) {
 		if ( in_array( $sub['type'] ?? '', array( 'group', 'clone' ), true ) && $depth < 8 ) {
 			$row[ $sub['key'] ] = minn_admin_acf_blank_row( minn_admin_acf_def_children( $sub ), $depth + 1 );
 		} else {
-			$row[ $sub['key'] ] = isset( $sub['default_value'] ) ? $sub['default_value'] : '';
+			$default            = minn_admin_acf_default_of( $sub );
+			$row[ $sub['key'] ] = null === $default ? '' : $default;
 		}
 	}
 	return $row;
