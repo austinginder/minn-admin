@@ -114,8 +114,10 @@ function minn_admin_novamira_connections() {
 		$now = gmdate( 'Y-m-d H:i:s' );
 		// The same query the plugin's Connections page runs: a connection is
 		// a client with an unrevoked, unexpired refresh token for this user.
+		// Their access tokens keep no creation time; the client row's is
+		// when the app registered.
 		$rows = $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			"SELECT c.client_name, at.client_id, MAX(rt.expires_at) AS expires_at, MAX(at.created_at) AS created_at
+			"SELECT c.client_name, at.client_id, MAX(rt.expires_at) AS expires_at, MAX(c.created_at) AS created_at
 			   FROM `{$r}` rt
 			   JOIN `{$t}` at ON at.identifier_hash = rt.access_token_hash
 			   JOIN `{$c}` c ON c.client_id = at.client_id
@@ -316,6 +318,29 @@ function minn_admin_novamira_pro_row() {
 }
 
 /**
+ * Every ability as registered, before Novamira's policy unregistered the
+ * switched-off ones. The policy runs on every request but their Hub and
+ * the routes below (which lift it), so the boot payload, built outside
+ * them, knew a switched-off ability by its rule alone and filed it under
+ * its provider: a tab the route, seeing it under its category, did not
+ * serve. Noted one priority ahead of the policy (theirs is PHP_INT_MAX)
+ * and only read for name, label and category; nothing here is run.
+ *
+ * @param WP_Abilities_Registry|null $registry Set when called as the hook.
+ * @return array<string, WP_Ability>
+ */
+function minn_admin_novamira_preregistered( $registry = null ) {
+	static $abilities = array();
+	if ( null !== $registry && function_exists( 'novamira_get_ability_rules' ) && function_exists( 'wp_get_abilities' ) ) {
+		foreach ( wp_get_abilities() as $ability ) {
+			$abilities[ $ability->get_name() ] = $ability;
+		}
+	}
+	return $abilities;
+}
+add_action( 'wp_abilities_api_init', 'minn_admin_novamira_preregistered', PHP_INT_MAX - 1 );
+
+/**
  * Every registered ability with Novamira's rule applied: [ { name, label,
  * description, provider, disabled, off } ]. `off` marks an ability whose
  * Novamira feature is switched off (Design, Skills, Chat): the rule cannot
@@ -329,9 +354,21 @@ function minn_admin_novamira_abilities( $fresh = false ) {
 	$rules = novamira_get_ability_rules();
 	$out   = array();
 	$seen  = array();
+	// Their Hub leaves out the bundled MCP adapter's meta-abilities, the
+	// bridge itself rather than something to switch per ability.
+	$hidden = function ( $name ) {
+		return function_exists( 'novamira_ability_is_hub_hidden' ) && novamira_ability_is_hub_hidden( (string) $name );
+	};
 	if ( function_exists( 'wp_get_abilities' ) ) {
+		$registered = minn_admin_novamira_preregistered();
 		foreach ( wp_get_abilities() as $ability ) {
-			$name     = $ability->get_name();
+			$registered[ $ability->get_name() ] = $ability;
+		}
+		foreach ( $registered as $ability ) {
+			$name = $ability->get_name();
+			if ( $hidden( $name ) ) {
+				continue;
+			}
 			$category = method_exists( $ability, 'get_category' ) ? (string) $ability->get_category() : '';
 			$off      = false;
 			if ( class_exists( '\\Novamira\\Features\\Manager' ) && function_exists( '\\Novamira\\Features\\features' ) ) {
@@ -358,7 +395,7 @@ function minn_admin_novamira_abilities( $fresh = false ) {
 	// plugin is off, or the policy unregistered it before this read); keep
 	// it visible so the switch can be flipped back.
 	foreach ( $rules as $name => $rule ) {
-		if ( isset( $seen[ $name ] ) || empty( $rule['disabled'] ) ) {
+		if ( isset( $seen[ $name ] ) || empty( $rule['disabled'] ) || $hidden( $name ) ) {
 			continue;
 		}
 		$out[] = array(
@@ -411,6 +448,12 @@ function minn_admin_novamira_ability_tabs() {
 		$tabs[] = array( 'id' => 'context', 'label' => __( 'Context', 'minn-admin' ) );
 	}
 	foreach ( $by as $group => $list ) {
+		// Novamira's own Context category, the ability that serves the
+		// instructions to agents, sits on the Context tab with them rather
+		// than on a second tab of the same name.
+		if ( 'c-context' === $group && $tabs && 'context' === $tabs[0]['id'] ) {
+			continue;
+		}
 		$tabs[] = array( 'id' => sanitize_key( $group ), 'label' => minn_admin_novamira_group_label( $group ) );
 	}
 	return $tabs;
@@ -457,14 +500,14 @@ function minn_admin_novamira_provider_label( $provider ) {
 
 function minn_admin_novamira_tab_shape( $tab ) {
 	$tab = sanitize_key( $tab );
-	if ( 'context' === $tab ) {
-		return minn_admin_novamira_context_shape();
-	}
+	// The Context tab carries Novamira's Context category under the
+	// instructions (see minn_admin_novamira_ability_tabs()).
+	$group  = 'context' === $tab ? 'c-context' : $tab;
 	$fields = array();
 	$values = array();
 	$locked = 0;
 	foreach ( minn_admin_novamira_abilities() as $a ) {
-		if ( sanitize_key( minn_admin_novamira_ability_group( $a ) ) !== $tab ) {
+		if ( sanitize_key( minn_admin_novamira_ability_group( $a ) ) !== $group ) {
 			continue;
 		}
 		if ( $a['off'] ) {
@@ -480,20 +523,27 @@ function minn_admin_novamira_tab_shape( $tab ) {
 		);
 		$values[ $key ] = ! $a['disabled'];
 	}
+	$abilities = array(
+		'title'  => __( 'Abilities an agent may call', 'minn-admin' ),
+		'desc'   => ( minn_admin_novamira_enabled() ? '' : __( 'AI abilities are off: Novamira registers its own PHP, WP-CLI and file abilities only while they are on, so this list is what other plugins provide. ', 'minn-admin' ) ) . ( $locked
+			? sprintf( /* translators: %d: abilities of a switched-off Novamira feature. */ _n( '%d ability belongs to a Novamira feature that is switched off; turn the feature on in Novamira to offer it.', '%d abilities belong to Novamira features that are switched off; turn the feature on in Novamira to offer them.', $locked, 'minn-admin' ), $locked )
+			: '' ),
+		'fields' => $fields,
+		'locked' => $locked,
+	);
+	if ( 'context' === $tab ) {
+		$shape = minn_admin_novamira_context_shape();
+		if ( $fields || $locked ) {
+			$shape['groups'][] = $abilities;
+			$shape['values']   = $shape['values'] + $values;
+		}
+		return $shape;
+	}
 	if ( ! $fields && ! $locked ) {
 		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	return array(
-		'groups'   => array(
-			array(
-				'title'  => __( 'Abilities an agent may call', 'minn-admin' ),
-				'desc'   => ( minn_admin_novamira_enabled() ? '' : __( 'AI abilities are off: Novamira registers its own PHP, WP-CLI and file abilities only while they are on, so this list is what other plugins provide. ', 'minn-admin' ) ) . ( $locked
-					? sprintf( /* translators: %d: abilities of a switched-off Novamira feature. */ _n( '%d ability belongs to a Novamira feature that is switched off; turn the feature on in Novamira to offer it.', '%d abilities belong to Novamira features that are switched off; turn the feature on in Novamira to offer them.', $locked, 'minn-admin' ), $locked )
-					: '' ),
-				'fields' => $fields,
-				'locked' => $locked,
-			),
-		),
+		'groups'   => array( $abilities ),
 		'values'   => $values,
 		'adminUrl' => admin_url( 'admin.php?page=novamira-abilities' ),
 	);
