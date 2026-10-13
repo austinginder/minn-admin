@@ -582,7 +582,9 @@ add_action( 'rest_api_init', function () {
 					&& minn_admin_wpforms_can( 'edit_entries' )
 					&& ! is_wp_error( minn_admin_wpforms_guard_entry( (int) $row->entry_id, 'edit_entries_form_single' ) ) ) {
 					try {
-						wpforms()->obj( 'entry' )->update( (int) $row->entry_id, array( 'viewed' => 1 ) );
+						if ( wpforms()->obj( 'entry' )->update( (int) $row->entry_id, array( 'viewed' => 1 ) ) ) {
+							$row->viewed = 1;
+						}
 					} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 						// Read-only view still renders.
 					}
@@ -610,6 +612,13 @@ add_action( 'rest_api_init', function () {
 				}
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
+					// The row as it stands now, after opening marked it viewed:
+					// the page's actions gate on it, not on the list's copy.
+					'item'     => array(
+						'id'      => (int) $row->entry_id,
+						'status'  => minn_admin_wpforms_display_status( $row ),
+						'starred' => (int) $row->starred ? '★' : '',
+					),
 					'sections' => array(
 						array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $answers ),
 						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),

@@ -114,9 +114,10 @@ const os = require( 'os' );
 		t.check( 'Surface renders rows', ui.rows >= 1, JSON.stringify( ui ) );
 		t.check( 'Status card renders', ui.card, '' );
 
-		// The entry page via row click. The clicked standing entry is UNREAD,
-		// so the when-gated action set is Mark read + Star (spam/trash gate on
-		// read): the gates read the row the page was opened from.
+		// The entry page via row click. The clicked standing entry is UNREAD
+		// and opening it marks it viewed; the gates read the route's copy of
+		// the row over the list's, so the page offers what a read entry
+		// offers: Mark unread, Star, Mark spam and Trash, never Mark read.
 		await page.click( '.minn-table-row .minn-row-title' );
 		await page.waitForFunction( () => {
 			const m = document.querySelector( '.minn-entry-page .minn-order-main' );
@@ -131,9 +132,9 @@ const os = require( 'os' );
 		} );
 		modal.labels = await entryActions( page );
 		t.check( 'The entry opens on its own page with the contact card', modal.open && modal.answers, JSON.stringify( modal ) );
-		t.check( 'When-gated actions match the unread row (Mark read + Star)',
-			modal.labels.includes( 'Mark read' ) && modal.labels.includes( 'Star' )
-			&& ! modal.labels.includes( 'Mark spam' ),
+		t.check( 'When-gated actions follow the entry opening marked read (Mark unread + Star + Mark spam + Trash)',
+			[ 'Mark unread', 'Star', 'Mark spam', 'Trash' ].every( ( l ) => modal.labels.includes( l ) )
+			&& ! modal.labels.includes( 'Mark read' ),
 			JSON.stringify( modal.labels ) );
 	} finally {
 		// Leave no residue: drop a straggler doomed row and restore the
