@@ -504,4 +504,44 @@ if ( is_multisite() ) {
 	}
 }
 
+// --- OS-14 Permalinks: the main site of a subdirectory network keeps /blog -----
+// Core shows that site's structure and bases without the /blog prefix it
+// keeps there, and puts it back on save (options-permalink.php); Minn
+// stored what the client sent, so picking "Post name" moved every post off
+// /blog. No lab network is a subdirectory install, so "this is that site"
+// comes from the filter that carries core's test.
+global $wp_rewrite;
+$pl_prev = array( (string) get_option( 'permalink_structure' ), (string) get_option( 'category_base' ), (string) get_option( 'tag_base' ) );
+try {
+	$wp_rewrite->set_permalink_structure( '/blog/%year%/%monthnum%/%day%/%postname%/' );
+	$wp_rewrite->set_category_base( '/blog/topics' );
+	$wp_rewrite->set_tag_base( '' );
+	add_filter( 'minn_admin_subdirectory_main_site', '__return_true' );
+	add_filter( 'got_url_rewrite', '__return_true' );
+	list( $pl_st, $pl_d ) = $call( 'GET', '/minn-admin/v1/permalinks' );
+	$check( 'OS-14 the structure and bases are served without /blog, as core shows them', 200 === $pl_st && '/%year%/%monthnum%/%day%/%postname%/' === ( $pl_d['structure'] ?? null ) && '/topics' === ( $pl_d['category_base'] ?? null ) && '' === ( $pl_d['tag_base'] ?? null ), $pl_st . ' ' . wp_json_encode( array( $pl_d['structure'] ?? null, $pl_d['category_base'] ?? null, $pl_d['tag_base'] ?? null ) ) );
+	list( $pl_st, $pl_d ) = $call( 'POST', '/minn-admin/v1/permalinks', array( 'structure' => '/%postname%/', 'category_base' => '/topics', 'tag_base' => 'labels' ) );
+	$check( 'OS-14 picking a preset keeps the posts under /blog', 200 === $pl_st && '/blog/%postname%/' === get_option( 'permalink_structure' ), $pl_st . ' ' . get_option( 'permalink_structure' ) );
+	// Core reads a base back without its slashes (_wp_filter_taxonomy_base).
+	$check( 'OS-14 and a base keeps /blog too', 'blog/topics' === get_option( 'category_base' ) && 'blog/labels' === get_option( 'tag_base' ), wp_json_encode( array( get_option( 'category_base' ), get_option( 'tag_base' ) ) ) );
+	remove_filter( 'got_url_rewrite', '__return_true' );
+	add_filter( 'got_url_rewrite', '__return_false' );
+	list( $pl_st ) = $call( 'POST', '/minn-admin/v1/permalinks', array( 'structure' => '/index.php/%year%/%postname%/', 'category_base' => '/topics', 'tag_base' => '/labels' ) );
+	$check( 'OS-14 where rewriting is unknown, /index.php stands in for /blog, as core does', 200 === $pl_st && '/index.php/%year%/%postname%/' === get_option( 'permalink_structure' ), $pl_st . ' ' . get_option( 'permalink_structure' ) );
+	remove_filter( 'got_url_rewrite', '__return_false' );
+	remove_filter( 'minn_admin_subdirectory_main_site', '__return_true' );
+	$wp_rewrite->set_permalink_structure( '/blog/%postname%/' );
+	list( $pl_st ) = $call( 'POST', '/minn-admin/v1/permalinks', array( 'structure' => '/%year%/%postname%/' ) );
+	$check( 'OS-14 control: anywhere else a typed structure is stored as typed', 200 === $pl_st && '/%year%/%postname%/' === get_option( 'permalink_structure' ), $pl_st . ' ' . get_option( 'permalink_structure' ) );
+} finally {
+	remove_filter( 'minn_admin_subdirectory_main_site', '__return_true' );
+	remove_filter( 'got_url_rewrite', '__return_true' );
+	remove_filter( 'got_url_rewrite', '__return_false' );
+	$wp_rewrite->set_permalink_structure( $pl_prev[0] );
+	$wp_rewrite->set_category_base( $pl_prev[1] );
+	$wp_rewrite->set_tag_base( $pl_prev[2] );
+	flush_rewrite_rules();
+	$check( 'OS-14 cleanup: the structure and bases are back', array( (string) get_option( 'permalink_structure' ), (string) get_option( 'category_base' ), (string) get_option( 'tag_base' ) ) === $pl_prev, wp_json_encode( $pl_prev ) );
+}
+
 $summary();

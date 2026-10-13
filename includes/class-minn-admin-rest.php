@@ -3172,18 +3172,34 @@ class Minn_Admin_REST {
 	 */
 	private static function permalink_state() {
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		$blog  = self::permalink_blog_prefix();
+		$shown = static function ( $value ) use ( $blog ) {
+			return '' === $blog ? (string) $value : (string) preg_replace( '|^/?blog|', '', (string) $value );
+		};
 		return array(
-			'structure'     => (string) get_option( 'permalink_structure' ),
+			'structure'     => $shown( get_option( 'permalink_structure' ) ),
 			// Where WordPress can't tell the server rewrites URLs, its presets
 			// carry /index.php; a custom structure is stored as typed.
 			'index_prefix'  => got_url_rewrite() ? '' : '/index.php',
-			'category_base' => (string) get_option( 'category_base' ),
-			'tag_base'      => (string) get_option( 'tag_base' ),
+			'category_base' => $shown( get_option( 'category_base' ) ),
+			'tag_base'      => $shown( get_option( 'tag_base' ) ),
 			'pretty'        => (bool) get_option( 'permalink_structure' ),
 			// Where the app lives under the new structure — the client hard-redirects
 			// here when saving flips between path routing and ?minn_admin=1.
 			'app_url'       => Minn_Admin::app_url(),
 		);
+	}
+
+	/**
+	 * The /blog prefix of the main site of a subdirectory network, which
+	 * keeps its posts and archives under /blog so they can't collide with a
+	 * site's path, while its stored structure still starts with it. Core
+	 * shows that site's structure and bases without it and puts it back on
+	 * save (options-permalink.php); '' everywhere else.
+	 */
+	private static function permalink_blog_prefix() {
+		$main = (bool) apply_filters( 'minn_admin_subdirectory_main_site', is_multisite() && ! is_subdomain_install() && is_main_site() );
+		return $main && 0 === strpos( (string) get_option( 'permalink_structure' ), '/blog/' ) ? '/blog' : '';
 	}
 
 	public static function get_permalinks() {
@@ -3198,12 +3214,14 @@ class Minn_Admin_REST {
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 
 		$structure = trim( (string) $request['structure'] );
+		$blog      = self::permalink_blog_prefix();
+		$state     = self::permalink_state();
 		// Nothing changed: the same structure and bases go back unflushed.
-		$same = $structure === (string) get_option( 'permalink_structure' )
-			&& ( ! $request->has_param( 'category_base' ) || (string) $request['category_base'] === (string) get_option( 'category_base' ) )
-			&& ( ! $request->has_param( 'tag_base' ) || (string) $request['tag_base'] === (string) get_option( 'tag_base' ) );
+		$same = $structure === $state['structure']
+			&& ( ! $request->has_param( 'category_base' ) || (string) $request['category_base'] === $state['category_base'] )
+			&& ( ! $request->has_param( 'tag_base' ) || (string) $request['tag_base'] === $state['tag_base'] );
 		if ( $same ) {
-			return rest_ensure_response( self::permalink_state() );
+			return rest_ensure_response( $state );
 		}
 		if ( '' !== $structure && ! preg_match( '/%[^\/%]+%/', $structure ) ) {
 			return new WP_Error(
@@ -3216,15 +3234,26 @@ class Minn_Admin_REST {
 			// Same normalization as options-permalink.php: no hash, single
 			// slashes, a leading slash. Core adds no /index.php to what was
 			// typed on a single site; its presets carry it (index_prefix).
+			// Where it keeps /blog it puts that back, or /index.php in its
+			// place where rewriting is unknown.
 			$structure = preg_replace( '#/+#', '/', '/' . str_replace( '#', '', $structure ) );
+			if ( '' !== $blog ) {
+				$structure = '' !== $state['index_prefix'] ? $state['index_prefix'] . preg_replace( '#^/?index\.php#', '', $structure ) : $blog . $structure;
+			}
 		}
 		$wp_rewrite->set_permalink_structure( $structure );
 
+		$based = static function ( $base ) use ( $blog ) {
+			if ( '' !== $blog && ! empty( $base ) ) {
+				$base = $blog . preg_replace( '#/+#', '/', '/' . str_replace( '#', '', $base ) );
+			}
+			return $base;
+		};
 		if ( $request->has_param( 'category_base' ) ) {
-			$wp_rewrite->set_category_base( sanitize_option( 'category_base', (string) $request['category_base'] ) );
+			$wp_rewrite->set_category_base( sanitize_option( 'category_base', $based( (string) $request['category_base'] ) ) );
 		}
 		if ( $request->has_param( 'tag_base' ) ) {
-			$wp_rewrite->set_tag_base( sanitize_option( 'tag_base', (string) $request['tag_base'] ) );
+			$wp_rewrite->set_tag_base( sanitize_option( 'tag_base', $based( (string) $request['tag_base'] ) ) );
 		}
 
 		flush_rewrite_rules();
