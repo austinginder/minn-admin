@@ -61,39 +61,40 @@ function minn_admin_aryo_can_view() {
  * manage_options through a custom role reads no administrator's actions).
  * false when Aryo shows this viewer nothing. Before 2.14 Aryo ships no
  * AAL_Log_Query; its scoping then lives in its list table, which keys the
- * actor set on the viewer's FIRST role (key( $user->caps )) through the same
- * small table its current release carries: an administrator (or a super
- * admin, or view_all_aryo_activity_log) sees every actor, an editor sees
- * editor/author/guest actions, an author author/guest, and anyone else
- * nothing. Everyone reaching Minn's view holds manage_options, so the
- * object-type half of Aryo's clause is its full set and drops out. Its
- * literals are escaped and carry no placeholders; a % is doubled for
+ * actor set on the viewer's FIRST role (key( $user->caps )) through the
+ * same table its current release carries, built the same way and passed
+ * through the same aal_init_caps filter (Aryo 2.0.5+): by default an
+ * administrator sees the default actors plus every registered role, an
+ * editor editor/author/guest, an author author/guest; a super admin or a
+ * view_all_aryo_activity_log holder gets the administrator row; anyone
+ * else sees nothing. Everyone reaching Minn's view holds manage_options,
+ * so the object-type half of Aryo's clause is its full set and drops out.
+ * Its literals are escaped and carry no placeholders; a % is doubled for
  * prepare().
  *
  * @return string|false SQL without a leading AND.
  */
 function minn_admin_aryo_scope_sql() {
 	if ( ! class_exists( 'AAL_Log_Query' ) || ! method_exists( 'AAL_Log_Query', 'get_where_by_role' ) ) {
-		if ( is_super_admin() || current_user_can( 'view_all_aryo_activity_log' ) ) {
-			return '';
-		}
-		// Aryo's own pre-2.14 caps table, keyed on the first role.
-		$first = strtolower( (string) array_key_first( (array) wp_get_current_user()->caps ) );
-		if ( 'administrator' === $first ) {
-			return '';
-		}
-		$allow = array(
-			'editor' => array( 'editor', 'author', 'guest' ),
-			'author' => array( 'author', 'guest' ),
+		$roles = array_keys( (array) wp_roles()->roles );
+		$table = apply_filters(
+			'aal_init_caps',
+			array(
+				'administrator' => array_unique( array_merge( array( 'administrator', 'editor', 'author', 'guest' ), $roles ) ),
+				'editor'        => array( 'editor', 'author', 'guest' ),
+				'author'        => array( 'author', 'guest' ),
+			)
 		);
-		if ( ! isset( $allow[ $first ] ) ) {
-			return false;
-		}
+		$table = is_array( $table ) ? $table : array();
+		$first = strtolower( (string) array_key_first( (array) wp_get_current_user()->caps ) );
+		$allow = is_super_admin() || current_user_can( 'view_all_aryo_activity_log' ) ? ( $table['administrator'] ?? array() ) : ( $table[ $first ] ?? array() );
 		$where = array();
-		foreach ( $allow[ $first ] as $cap ) {
-			$where[] = "user_caps = '" . esc_sql( $cap ) . "'";
+		foreach ( array_unique( array_filter( (array) $allow, 'is_scalar' ) ) as $cap ) {
+			if ( '' !== (string) $cap ) {
+				$where[] = "user_caps = '" . esc_sql( (string) $cap ) . "'";
+			}
 		}
-		return '( ' . implode( ' OR ', $where ) . ' )';
+		return $where ? '( ' . implode( ' OR ', $where ) . ' )' : false;
 	}
 	$sql = ( new AAL_Log_Query() )->get_where_by_role();
 	if ( ! is_string( $sql ) || '' === trim( $sql ) ) {

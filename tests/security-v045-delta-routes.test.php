@@ -321,6 +321,7 @@ if ( class_exists( 'AAL_Log_Query' ) ) {
 	foreach ( array(
 		array( 'administrator', 'MinnD45AdminAction', '203.0.113.46' ),
 		array( 'editor', 'MinnD45EditorAction', '203.0.113.47' ),
+		array( 'guest', 'MinnD45GuestAction', '203.0.113.48' ),
 	) as $aal_seed ) {
 		$wpdb->insert( $aal_table, array( 'user_caps' => $aal_seed[0], 'action' => 'activated', 'object_type' => 'Plugin', 'object_subtype' => '', 'object_name' => $aal_seed[1], 'object_id' => 0, 'user_id' => $admin, 'hist_ip' => $aal_seed[2], 'hist_time' => (int) current_time( 'timestamp' ) ) );
 		$aal_rows[] = (int) $wpdb->insert_id;
@@ -339,6 +340,17 @@ if ( class_exists( 'AAL_Log_Query' ) ) {
 			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
 			$aal_out = wp_json_encode( $aal_d );
 			$check( 'OS-8 an editor granted manage_options reads editor actions but not an administrator\'s', 200 === $aal_st && false !== strpos( $aal_out, 'MinnD45EditorAction' ) && false === strpos( $aal_out, 'MinnD45AdminAction' ), $aal_st . ' ' . substr( $aal_out, 0, 160 ) );
+			// Aryo's own aal_init_caps filter narrows that row, and old Aryo
+			// shows the editor only what is left.
+			$aal_narrow = function ( $caps ) {
+				$caps['editor'] = array( 'guest' );
+				return $caps;
+			};
+			add_filter( 'aal_init_caps', $aal_narrow );
+			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
+			remove_filter( 'aal_init_caps', $aal_narrow );
+			$aal_out = wp_json_encode( $aal_d );
+			$check( 'OS-8 a site narrowing editor\'s row through aal_init_caps shows that editor only the rows left', 200 === $aal_st && false !== strpos( $aal_out, 'MinnD45GuestAction' ) && false === strpos( $aal_out, 'MinnD45EditorAction' ) && false === strpos( $aal_out, 'MinnD45AdminAction' ), $aal_st . ' ' . substr( $aal_out, 0, 160 ) );
 			wp_set_current_user( $aal_aud );
 			list( $aal_st, $aal_d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'per_page' => 100 ) );
 			$check( 'OS-8 control: an account Aryo lets view everything still reads it', 200 === $aal_st && false !== strpos( wp_json_encode( $aal_d ), 'MinnD45AdminAction' ), (string) $aal_st );
