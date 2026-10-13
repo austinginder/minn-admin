@@ -199,6 +199,15 @@ function minn_admin_acf_file_out( $val ) {
  * @return array|string
  */
 function minn_admin_acf_link_out( $val ) {
+	// ACF before 5.6 stored a link as a post id or a bare URL, and its own
+	// field still reads both (get_link()): a field changed to Link from URL
+	// or Page Link holds them. A post id shows only to who may read it, and
+	// 0 is no post (get_permalink( 0 ) would name the current one).
+	if ( is_scalar( $val ) && ! is_bool( $val ) && '' !== trim( (string) $val ) ) {
+		$val = is_numeric( $val )
+			? ( (int) $val > 0 && current_user_can( 'read_post', (int) $val ) ? array( 'title' => get_the_title( (int) $val ), 'url' => (string) get_permalink( (int) $val ) ) : array() )
+			: array( 'url' => (string) $val );
+	}
 	if ( ! is_array( $val ) ) {
 		return '';
 	}
@@ -207,6 +216,30 @@ function minn_admin_acf_link_out( $val ) {
 		'url'    => isset( $val['url'] ) && is_scalar( $val['url'] ) ? (string) $val['url'] : '',
 		'target' => empty( $val['target'] ) ? '' : '_blank',
 	);
+}
+
+/**
+ * A pre-5.6 link (a post id or a bare URL) in the array shape ACF's own form
+ * posts for it. ACF's update_value keeps only an array with a url, so a link
+ * written back in its old shape (a repeater row saved whole) is emptied. A
+ * post id converts whether or not the caller may read that post, as ACF's
+ * own screen and front end resolve it; the caller cannot choose the id.
+ *
+ * @param mixed $held Stored value.
+ * @return array|null Null when the value is not an old-shape link.
+ */
+function minn_admin_acf_link_legacy( $held ) {
+	if ( ! is_scalar( $held ) || is_bool( $held ) || '' === trim( (string) $held ) ) {
+		return null;
+	}
+	if ( is_numeric( $held ) ) {
+		if ( (int) $held <= 0 ) {
+			return null;
+		}
+		$url = (string) get_permalink( (int) $held );
+		return '' === $url ? null : array( 'title' => (string) get_the_title( (int) $held ), 'url' => $url, 'target' => '' );
+	}
+	return array( 'title' => '', 'url' => (string) $held, 'target' => '' );
 }
 
 /**
@@ -385,43 +418,19 @@ function minn_admin_acf_time_in( $value ) {
 }
 
 /**
- * Did a date, date-time or time come back exactly as it was served?
- *
- * Each control speaks one shape, while ACF stores what it was given and reads
- * it through acf_format_date(): a unix timestamp or any strtotime() string
- * shows on ACF's screen, and a stored time keeps its seconds. The readers
- * above serve '' for a shape the control cannot show and the minute for a
- * value carrying seconds, and the panel resends every field on any edit, so
- * that projection arriving back is not an edit. Writing it would clear the
- * date or zero the seconds; the caller leaves the stored value alone.
- *
- * @param array $f        Mapped field.
- * @param mixed $incoming Value the client sent.
- * @param mixed $stored   Raw stored value.
- * @return bool
- */
-function minn_admin_acf_date_untouched( $f, $incoming, $stored ) {
-	if ( ! in_array( $f['type'] ?? '', array( 'date', 'datetime', 'time' ), true ) ) {
-		return false;
-	}
-	if ( null === $stored || '' === $stored || ! is_scalar( $stored ) ) {
-		return false; // nothing stored to keep
-	}
-	if ( null !== $incoming && ! is_scalar( $incoming ) ) {
-		return false;
-	}
-	return (string) $incoming === minn_admin_acf_value_out( $f, $stored );
-}
-
-/**
  * Whether a field's incoming value is exactly what the read served for it.
  *
  * The editor panel sends every ACF field back on any edit, so a field the
  * person never touched arrives as its own read. Writing that read back
  * re-runs it through the field's constraints (a relation entry whose user
  * changed role, a post moved to another type) and its parser, which can
- * change what is stored. Compared after JSON-level normalisation: scalars as
- * strings, objects by key.
+ * change what is stored. Dates are the sharpest case: ACF stores what it was
+ * given and reads it through acf_format_date() (a unix timestamp or any
+ * strtotime() string shows on its screen, a stored time keeps its seconds),
+ * while the readers serve '' for a shape the control cannot show and the
+ * minute for a value carrying seconds, so writing the read back would clear
+ * the date or zero the seconds. Compared after JSON-level normalisation:
+ * scalars as strings, objects by key.
  *
  * @param array $f        Mapped field.
  * @param mixed $incoming Value the client sent.
@@ -1399,10 +1408,19 @@ function minn_admin_acf_row_overlay_in( $subs, $vals, $base, $scope = 'post' ) {
 			$node = is_array( $node ) && isset( $node[ $gk ] ) ? $node[ $gk ] : null;
 		}
 		$held = is_array( $node ) && array_key_exists( $sub['key'], $node ) ? $node[ $sub['key'] ] : null;
-		if ( minn_admin_acf_date_untouched( $sub, $vals[ $sub['name'] ], $held ) ) {
-			continue; // the stored date as served, not an edit
+		// A row comes back whole whenever any sub in any row changes; a sub
+		// sent as served stays as stored, never re-parsed (a value the read
+		// can't show, served empty, would otherwise be written empty). The
+		// rows are written whole through ACF, so an old-shape link goes in
+		// the shape ACF's own form posts for it.
+		if ( minn_admin_acf_untouched( $sub, $vals[ $sub['name'] ], $held ) ) {
+			$v = 'link' === ( $sub['type'] ?? '' ) ? minn_admin_acf_link_legacy( $held ) : null;
+			if ( null === $v ) {
+				continue; // the stored value as served, not an edit
+			}
+		} else {
+			$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ], $scope );
 		}
-		$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ], $scope );
 		if ( null === $v ) {
 			continue; // invalid input keeps the stored sub value
 		}
@@ -2900,8 +2918,8 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$v = minn_admin_acf_flex_in( $f, $v, $stored_at( $f ), 'options' );
 		} else {
 			$stored = $stored_at( $f );
-			if ( minn_admin_acf_date_untouched( $f, $v, $stored ) ) {
-				continue; // the stored date as served, not an edit
+			if ( minn_admin_acf_untouched( $f, $v, $stored ) ) {
+				continue; // the stored value as served, not an edit
 			}
 			$sent = $v;
 			$v    = minn_admin_acf_value_in( $f, $v, 'options' );

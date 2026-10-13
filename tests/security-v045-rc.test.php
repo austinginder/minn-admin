@@ -697,6 +697,62 @@ if ( ! function_exists( 'minn_admin_autoptimize_active' ) || ! minn_admin_autopt
 	wp_set_current_user( $admin );
 }
 
+// --- 06-01 ACF: a repeater row's untouched sub-fields stay as stored ----------
+// A repeater comes back whole whenever any sub in any row changes. Its subs
+// skipped only untouched dates, so a value the read can't show (a Link
+// sub-field still holding a plain URL, as after a type change) was served
+// empty and written back empty for every row.
+if ( ! function_exists( 'acf_add_local_field_group' ) || ! defined( 'ACF_PRO' ) ) {
+	$skip( '06-01 ACF PRO inactive' );
+} else {
+	acf_add_local_field_group( array(
+		'key'      => 'group_minn_rc45',
+		'title'    => 'Rc45 links',
+		'fields'   => array(
+			array(
+				'key'        => 'field_minn_rc45_links',
+				'name'       => 'minn_rc45_links',
+				'label'      => 'Rc45 links',
+				'type'       => 'repeater',
+				'sub_fields' => array(
+					array( 'key' => 'field_minn_rc45_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text' ),
+					array( 'key' => 'field_minn_rc45_cta', 'name' => 'cta', 'label' => 'CTA', 'type' => 'link' ),
+				),
+			),
+		),
+		'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ),
+	) );
+	$ar_pid = wp_insert_post( array( 'post_type' => 'post', 'post_title' => 'Rc45 repeater', 'post_status' => 'draft', 'post_author' => $admin ) );
+	if ( ! $ar_pid || is_wp_error( $ar_pid ) ) {
+		$check( '06-01 fixture', false );
+	} else {
+		foreach ( array( 'minn_rc45_links' => 2, '_minn_rc45_links' => 'field_minn_rc45_links', 'minn_rc45_links_0_title' => 'A', '_minn_rc45_links_0_title' => 'field_minn_rc45_title', 'minn_rc45_links_0_cta' => 'https://a.example/', '_minn_rc45_links_0_cta' => 'field_minn_rc45_cta', 'minn_rc45_links_1_title' => 'B', '_minn_rc45_links_1_title' => 'field_minn_rc45_title', 'minn_rc45_links_1_cta' => 'https://b.example/', '_minn_rc45_links_1_cta' => 'field_minn_rc45_cta' ) as $ar_k => $ar_v ) {
+			update_post_meta( $ar_pid, $ar_k, $ar_v );
+		}
+		list( , $ar_get ) = $call( 'GET', "/wp/v2/posts/{$ar_pid}", null, array( 'context' => 'edit' ) );
+		$ar_get  = json_decode( wp_json_encode( $ar_get ), true );
+		$ar_rows = $ar_get['minn_acf']['minn_rc45_links'] ?? null;
+		if ( ! is_array( $ar_rows ) || count( $ar_rows ) < 2 ) {
+			$check( '06-01 the panel serves the repeater', false, wp_json_encode( $ar_get['minn_acf'] ?? null ) );
+		} else {
+			$ar_rows[0]['values']['title'] = 'A2';
+			list( $ar_st ) = $call( 'POST', "/wp/v2/posts/{$ar_pid}", array( 'minn_acf' => array( 'minn_rc45_links' => $ar_rows ) ) );
+			// Kept as stored, or in the array shape ACF's own form saves it in.
+			$ar_url = function ( $i ) use ( $ar_pid ) {
+				$v = get_post_meta( $ar_pid, "minn_rc45_links_{$i}_cta", true );
+				return is_array( $v ) ? (string) ( $v['url'] ?? '' ) : (string) $v;
+			};
+			$check( '06-01 editing one row\'s title leaves every row\'s link', 200 === $ar_st && 'https://a.example/' === $ar_url( 0 ) && 'https://b.example/' === $ar_url( 1 ), $ar_st . ' ' . wp_json_encode( array( get_post_meta( $ar_pid, 'minn_rc45_links_0_cta', true ), get_post_meta( $ar_pid, 'minn_rc45_links_1_cta', true ) ) ) );
+			$check( '06-01 the panel shows an old-shape link\'s address', 'https://a.example/' === ( $ar_rows[0]['values']['cta']['url'] ?? '' ), wp_json_encode( $ar_rows[0]['values']['cta'] ?? null ) );
+			$check( '06-01 control: the edited title saves', 'A2' === get_post_meta( $ar_pid, 'minn_rc45_links_0_title', true ), (string) get_post_meta( $ar_pid, 'minn_rc45_links_0_title', true ) );
+		}
+		wp_delete_post( $ar_pid, true );
+	}
+	if ( function_exists( 'acf_remove_local_field_group' ) ) {
+		acf_remove_local_field_group( 'group_minn_rc45' );
+	}
+}
+
 // @sections
 
 $summary();
