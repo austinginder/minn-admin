@@ -71,6 +71,14 @@ function minn_admin_blc_iso( $ts ) {
 }
 
 /**
+ * A check time for the link page, in the site's zone: its rows print their
+ * values as text, so an ISO stamp would reach the screen raw.
+ */
+function minn_admin_blc_when( $ts ) {
+	return ( is_numeric( $ts ) && (int) $ts > 0 ) ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $ts ) : '';
+}
+
+/**
  * Where a link instance lives: title + edit URL, from their container.
  *
  * @return array { title, edit }
@@ -336,9 +344,9 @@ add_action( 'rest_api_init', function () {
 				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $item['status'] ),
 				'' !== $item['http_code'] ? array( 'label' => __( 'HTTP code', 'minn-admin' ), 'value' => $item['http_code'] ) : null,
 				(int) $link->redirect_count > 0 && $link->final_url ? array( 'label' => __( 'Redirects to', 'minn-admin' ), 'value' => (string) $link->final_url, 'type' => 'code' ) : null,
-				$item['last_check'] ? array( 'label' => __( 'Last checked', 'minn-admin' ), 'value' => $item['last_check'] ) : null,
-				minn_admin_blc_iso( $link->first_failure ) ? array( 'label' => __( 'Failing since', 'minn-admin' ), 'value' => minn_admin_blc_iso( $link->first_failure ) ) : null,
-				minn_admin_blc_iso( $link->last_success ) ? array( 'label' => __( 'Last worked', 'minn-admin' ), 'value' => minn_admin_blc_iso( $link->last_success ) ) : null,
+				minn_admin_blc_when( $link->last_check ) ? array( 'label' => __( 'Last checked', 'minn-admin' ), 'value' => minn_admin_blc_when( $link->last_check ) ) : null,
+				minn_admin_blc_when( $link->first_failure ) ? array( 'label' => __( 'Failing since', 'minn-admin' ), 'value' => minn_admin_blc_when( $link->first_failure ) ) : null,
+				minn_admin_blc_when( $link->last_success ) ? array( 'label' => __( 'Last worked', 'minn-admin' ), 'value' => minn_admin_blc_when( $link->last_success ) ) : null,
 			) ) );
 			$where = array();
 			foreach ( array_slice( (array) $link->get_instances(), 0, 25 ) as $inst ) {
