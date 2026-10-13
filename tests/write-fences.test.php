@@ -43,7 +43,7 @@ $before  = array();
 foreach ( $watched as $name ) {
 	$before[ $name ] = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $name ), ARRAY_A );
 }
-$admin_row  = $wpdb->get_row( $wpdb->prepare( "SELECT user_email, user_pass FROM {$wpdb->users} WHERE ID = %d", $admin ), ARRAY_A );
+$admin_row  = $wpdb->get_row( $wpdb->prepare( "SELECT user_email, user_pass, user_activation_key FROM {$wpdb->users} WHERE ID = %d", $admin ), ARRAY_A );
 $admin_caps = get_user_meta( $admin, $wpdb->get_blog_prefix() . 'capabilities', true );
 $site_admins = is_multisite() ? get_site_option( 'site_admins' ) : null;
 
@@ -110,12 +110,34 @@ $cases = array(
 	'member_email'      => static function () use ( $target ) {
 		wp_update_user( array( 'ID' => $target, 'user_email' => 'minn-fence-member@example.com' ) );
 	},
+	// A reset key the caller knows is a password reset away from the account.
+	'owner_reset_key'   => static function () use ( $admin ) {
+		wp_update_user( array( 'ID' => $admin, 'user_activation_key' => '1:minn-fence-known-key' ) );
+	},
+	// MySQL matches option names and meta keys without regard to case.
+	'case_registration' => static function () {
+		update_option( 'USERS_CAN_REGISTER', '1' );
+	},
+	'case_make_admin'   => static function () use ( $target, $wpdb ) {
+		update_user_meta( $target, strtoupper( $wpdb->get_blog_prefix() . 'capabilities' ), array( 'administrator' => true ) );
+	},
+	'case_demote_owner' => static function () use ( $admin, $wpdb ) {
+		update_user_meta( $admin, strtoupper( $wpdb->get_blog_prefix() . 'capabilities' ), array( 'subscriber' => true ) );
+	},
 );
 if ( is_multisite() ) {
 	$cases['name_super_admin'] = static function () use ( $target ) {
 		$list   = (array) get_site_option( 'site_admins', array() );
 		$list[] = get_userdata( $target )->user_login;
 		update_site_option( 'site_admins', $list );
+	};
+	$cases['case_super_admin'] = static function () use ( $target ) {
+		$list   = (array) get_site_option( 'site_admins', array() );
+		$list[] = get_userdata( $target )->user_login;
+		update_site_option( 'SITE_ADMINS', $list );
+	};
+	$cases['case_drop_admins'] = static function () {
+		delete_site_option( 'SITE_ADMINS' );
 	};
 	// WP Multi Network's add_network() sets up the new network's main site
 	// while switched into that network, whose site_admins is not written
@@ -214,6 +236,12 @@ $state = static function () use ( $target, $admin, $wpdb ) {
 		'owner_email'       => $wpdb->get_var( $wpdb->prepare( "SELECT user_email FROM {$wpdb->users} WHERE ID = %d", $admin ) ),
 		'member_email'      => $wpdb->get_var( $wpdb->prepare( "SELECT user_email FROM {$wpdb->users} WHERE ID = %d", $target ) ),
 		'name_super_admin'  => is_multisite() && in_array( get_userdata( $target )->user_login, (array) get_site_option( 'site_admins', array() ), true ),
+		'owner_reset_key'   => $wpdb->get_var( $wpdb->prepare( "SELECT user_activation_key FROM {$wpdb->users} WHERE ID = %d", $admin ) ),
+		'case_registration' => (string) get_option( 'users_can_register' ),
+		'case_make_admin'   => in_array( 'administrator', $tu->roles, true ),
+		'case_demote_owner' => ( new WP_User( $admin ) )->roles,
+		'case_super_admin'  => is_multisite() && in_array( get_userdata( $target )->user_login, (array) get_site_option( 'site_admins', array() ), true ),
+		'case_drop_admins'  => is_multisite() ? wp_json_encode( get_site_option( 'site_admins' ) ) : '',
 	);
 };
 
@@ -223,9 +251,9 @@ try {
 	$rest = $state();
 
 	// --- refused for accounts without the power, value kept -----------------
-	$fenced = array( 'default_role', 'open_registration', 'add_plugin', 'add_upload_path', 'drop_plugins', 'move_site', 'role_gets_power', 'make_admin', 'raw_power', 'demote_owner', 'owner_email' );
+	$fenced = array( 'default_role', 'open_registration', 'add_plugin', 'add_upload_path', 'drop_plugins', 'move_site', 'role_gets_power', 'make_admin', 'raw_power', 'demote_owner', 'owner_email', 'owner_reset_key', 'case_registration', 'case_make_admin', 'case_demote_owner' );
 	if ( is_multisite() ) {
-		$fenced[] = 'name_super_admin';
+		array_push( $fenced, 'name_super_admin', 'case_super_admin', 'case_drop_admins' );
 	}
 	$callers = array_filter( array( 'Editor' => $editor, 'Shop Manager' => $shop ) );
 	foreach ( $callers as $label => $who ) {

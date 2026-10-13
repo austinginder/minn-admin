@@ -119,6 +119,13 @@ class Minn_Admin_Fences {
 	 */
 	private static $owner = false;
 
+	/**
+	 * The network's super admins and network-active plugins as the request
+	 * armed. Core preloads both, so the copy costs nothing; it is what a
+	 * refused delete under another spelling of the name is put back from.
+	 */
+	private static $network_was = array();
+
 	public static function init() {
 		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'arm' ), 0, 3 );
 		add_filter( 'rest_request_after_callbacks', array( __CLASS__, 'disarm' ), PHP_INT_MAX, 3 );
@@ -133,6 +140,12 @@ class Minn_Admin_Fences {
 			add_action( "pre_delete_site_option_{$name}", array( __CLASS__, 'site_delete' ), 0, 2 );
 			add_action( "delete_site_option_{$name}", array( __CLASS__, 'site_deleted' ), PHP_INT_MAX, 2 );
 		}
+		// The same names in another case: MySQL matches meta_key without
+		// regard to case, so SITE_ADMINS writes site_admins, and core has
+		// per-name hooks only for the exact spelling.
+		add_action( 'update_site_option', array( __CLASS__, 'site_variant_updated' ), PHP_INT_MAX, 4 );
+		add_action( 'add_site_option', array( __CLASS__, 'site_variant_added' ), 0, 3 );
+		add_action( 'delete_site_option', array( __CLASS__, 'site_variant_deleted' ), PHP_INT_MAX, 2 );
 
 		add_filter( 'add_user_metadata', array( __CLASS__, 'meta_add' ), PHP_INT_MAX, 4 );
 		add_filter( 'update_user_metadata', array( __CLASS__, 'meta_update' ), PHP_INT_MAX, 4 );
@@ -150,6 +163,11 @@ class Minn_Admin_Fences {
 			if ( 0 === self::$depth ) {
 				self::$refused = array();
 				self::$owner   = is_multisite() && Minn_Admin::install_owner();
+				self::$network_was = is_multisite() && ! self::$owner ? array(
+					'network'                 => get_current_network_id(),
+					'site_admins'             => get_site_option( 'site_admins' ),
+					'active_sitewide_plugins' => get_site_option( 'active_sitewide_plugins' ),
+				) : array();
 			}
 			++self::$depth;
 		}
@@ -271,6 +289,64 @@ class Minn_Admin_Fences {
 		);
 	}
 
+	public static function site_variant_updated( $option, $value, $old_value, $network_id ) {
+		if ( ! self::site_variant( $option ) || ! self::armed() || self::site_allowed() ) {
+			return;
+		}
+		if ( maybe_serialize( $value ) !== maybe_serialize( $old_value ) ) {
+			self::$refused[] = $option;
+			self::restore(
+				function () use ( $option, $old_value, $network_id ) {
+					update_network_option( $network_id, $option, $old_value );
+				}
+			);
+		}
+	}
+
+	/** An add under another spelling lands only when the real name is unset: remove that row alone. */
+	public static function site_variant_added( $option, $value, $network_id ) {
+		if ( ! self::site_variant( $option ) || ! self::armed() || self::site_allowed() ) {
+			return;
+		}
+		global $wpdb;
+		self::$refused[] = $option;
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->sitemeta} WHERE site_id = %d AND meta_key = %s AND BINARY meta_key = %s", $network_id, $option, $option ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		wp_cache_delete( $network_id . ':' . $option, 'site-options' );
+		wp_cache_delete( $network_id . ':' . strtolower( $option ), 'site-options' );
+	}
+
+	/**
+	 * Core gives a delete under another spelling no hook before the row
+	 * goes, so only what the request armed with can be put back: the super
+	 * admins and network-active plugins. The rest of the list is refused
+	 * and logged but stays deleted (registration closes, a list falls back
+	 * to core's default).
+	 */
+	public static function site_variant_deleted( $option, $network_id ) {
+		if ( ! self::site_variant( $option ) || ! self::armed() || self::site_allowed() ) {
+			return;
+		}
+		self::$refused[] = $option;
+		$name = strtolower( $option );
+		if ( isset( self::$network_was[ $name ] ) && (int) self::$network_was['network'] === (int) $network_id && false !== self::$network_was[ $name ] ) {
+			$value = self::$network_was[ $name ];
+			// Core cleared the cache under the spelling it was handed; the
+			// real name's copy would make the add a no-op.
+			wp_cache_delete( $network_id . ':' . $name, 'site-options' );
+			self::restore(
+				function () use ( $name, $value, $network_id ) {
+					add_network_option( $network_id, $name, $value );
+				}
+			);
+		}
+	}
+
+	/** A network setting's name in a case other than its own. */
+	private static function site_variant( $option ) {
+		$option = (string) $option;
+		return ! in_array( $option, self::SITE_OPTIONS, true ) && in_array( strtolower( $option ), self::SITE_OPTIONS, true );
+	}
+
 	public static function meta_add( $check, $user_id, $key, $value ) {
 		return self::meta_write( $check, (int) $user_id, (string) $key, $value );
 	}
@@ -284,9 +360,10 @@ class Minn_Admin_Fences {
 	}
 
 	/**
-	 * Another account's sign-in (login, password, email) stays as stored
-	 * when that account is powerful and the caller may not edit it: a new
-	 * email address is a password reset away from the account.
+	 * Another account's sign-in (login, password, email, password-reset key)
+	 * stays as stored when that account is powerful and the caller may not
+	 * edit it: a new email address, or a reset key the caller knows, is a
+	 * password reset away from the account.
 	 */
 	public static function user_row( $data, $update, $user_id ) {
 		if ( ! $update || ! $user_id || ! self::armed() || current_user_can( 'edit_user', $user_id ) ) {
@@ -296,7 +373,7 @@ class Minn_Admin_Fences {
 		if ( ! $user || ( ! is_super_admin( $user_id ) && ! self::empowers( (array) $user->caps ) ) ) {
 			return $data;
 		}
-		foreach ( array( 'user_login', 'user_pass', 'user_email' ) as $field ) {
+		foreach ( array( 'user_login', 'user_pass', 'user_email', 'user_activation_key' ) as $field ) {
 			if ( isset( $data[ $field ] ) && (string) $data[ $field ] !== (string) $user->$field ) {
 				$data[ $field ]  = $user->$field;
 				self::$refused[] = $field;
@@ -312,8 +389,11 @@ class Minn_Admin_Fences {
 
 	private static function option_allowed( $option ) {
 		global $wpdb;
-		if ( isset( self::OPTIONS[ $option ] ) ) {
-			$need = self::OPTIONS[ $option ];
+		// MySQL compares option names without regard to case, so a write
+		// to USERS_CAN_REGISTER lands on users_can_register.
+		$key = strtolower( (string) $option );
+		if ( isset( self::OPTIONS[ $key ] ) ) {
+			$need = self::OPTIONS[ $key ];
 			if ( 'network' === $need ) {
 				return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
 			}
@@ -321,7 +401,7 @@ class Minn_Admin_Fences {
 		}
 		// The role definitions themselves: adding a capability to a role
 		// grants it to everyone holding the role.
-		if ( preg_match( '/^' . preg_quote( $wpdb->base_prefix, '/' ) . '(\d+_)?user_roles$/', (string) $option ) ) {
+		if ( preg_match( '/^' . preg_quote( $wpdb->base_prefix, '/' ) . '(\d+_)?user_roles$/i', (string) $option ) ) {
 			return current_user_can( 'manage_options' ) && current_user_can( 'promote_users' );
 		}
 		return true;
@@ -331,25 +411,30 @@ class Minn_Admin_Fences {
 		return is_multisite() ? Minn_Admin::network_owner() : current_user_can( 'manage_options' );
 	}
 
-	/** Which access record a user meta key is: 'caps', 'level' or ''. */
+	/**
+	 * Which access record a user meta key is ('caps', 'level' or '') and
+	 * the key it is stored under. Matched without regard to case, as MySQL
+	 * matches meta_key: WP_CAPABILITIES writes wp_capabilities.
+	 */
 	private static function access_key( $key ) {
 		global $wpdb;
-		if ( ! preg_match( '/^' . preg_quote( $wpdb->base_prefix, '/' ) . '(\d+_)?(capabilities|user_level)$/', $key, $m ) ) {
-			return '';
+		if ( ! preg_match( '/^' . preg_quote( $wpdb->base_prefix, '/' ) . '(\d+_)?(capabilities|user_level)$/i', $key, $m ) ) {
+			return array( '', '' );
 		}
-		return 'capabilities' === $m[2] ? 'caps' : 'level';
+		$kind = 'capabilities' === strtolower( $m[2] ) ? 'caps' : 'level';
+		return array( $kind, $wpdb->base_prefix . $m[1] . ( 'caps' === $kind ? 'capabilities' : 'user_level' ) );
 	}
 
 	private static function meta_write( $check, $user_id, $key, $value ) {
 		if ( null !== $check || ! self::armed() ) {
 			return $check;
 		}
-		$kind = self::access_key( $key );
+		list( $kind, $stored ) = self::access_key( $key );
 		if ( '' === $kind ) {
 			return $check;
 		}
 		$ok = 'caps' === $kind
-			? self::may_change_caps( $user_id, $key, $value )
+			? self::may_change_caps( $user_id, $stored, $value )
 			: ( 0 === (int) ( is_scalar( $value ) ? $value : 0 ) || self::may_promote( $user_id ) );
 		if ( $ok ) {
 			return $check;
