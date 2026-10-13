@@ -323,6 +323,34 @@ function minn_admin_acf_definition( $field ) {
 }
 
 /**
+ * The sub-fields ACF writes under a field: a repeater's, group's or clone's,
+ * or those of every flexible layout.
+ *
+ * @param array $f ACF field definition.
+ * @return array
+ */
+function minn_admin_acf_def_children( $f ) {
+	$type = is_array( $f ) ? (string) ( $f['type'] ?? '' ) : '';
+	if ( 'flexible_content' === $type ) {
+		$subs = array();
+		foreach ( (array) ( $f['layouts'] ?? array() ) as $layout ) {
+			if ( is_array( $layout ) && ! empty( $layout['sub_fields'] ) && is_array( $layout['sub_fields'] ) ) {
+				$subs = array_merge( $subs, $layout['sub_fields'] );
+			}
+		}
+		return $subs;
+	}
+	if ( ! in_array( $type, array( 'repeater', 'group', 'clone' ), true ) ) {
+		return array();
+	}
+	$subs = isset( $f['sub_fields'] ) && is_array( $f['sub_fields'] ) ? $f['sub_fields'] : array();
+	if ( ! $subs && 'clone' !== $type && function_exists( 'acf_get_fields' ) && ! empty( $f['key'] ) ) {
+		$subs = (array) acf_get_fields( $f );
+	}
+	return $subs;
+}
+
+/**
  * Incoming link value → ACF's stored { title, url, target } array.
  * '' clears; null = invalid (script-running URLs refuse the whole write).
  *
@@ -1470,12 +1498,38 @@ function minn_admin_acf_row_values_out( $subs, $raw_row ) {
 }
 
 /**
+ * A new row the way ACF's own form posts one: every sub-field present and
+ * empty, a group's or clone's subs nested under it.
+ *
+ * update_row() writes only the subs a row carries and leaves the rest as the
+ * row that last sat at that index stored them, so a row added above another,
+ * or in place of a deleted one, would take that row's values for every sub it
+ * leaves blank and every sub Minn does not show. A group's update_value skips
+ * an absent sub the same way.
+ *
+ * @param array $sub_fields ACF sub-field definitions (a repeater's, or one layout's).
+ * @param int   $depth      Recursion guard.
+ * @return array
+ */
+function minn_admin_acf_blank_row( $sub_fields, $depth = 0 ) {
+	$row = array();
+	foreach ( (array) $sub_fields as $sub ) {
+		if ( ! is_array( $sub ) || empty( $sub['key'] ) || '' === (string) ( $sub['name'] ?? '' ) ) {
+			continue;
+		}
+		$nested             = in_array( $sub['type'] ?? '', array( 'group', 'clone' ), true ) && $depth < 8;
+		$row[ $sub['key'] ] = $nested ? minn_admin_acf_blank_row( minn_admin_acf_def_children( $sub ), $depth + 1 ) : '';
+	}
+	return $row;
+}
+
+/**
  * Overlay a form row's edited subs onto the stored row it references. Only
  * mapped subs are written, so values the form never rendered survive.
  *
  * @param array $subs Flattened subs (incl. key/gpath).
  * @param array $vals Incoming { sub name => value }.
- * @param array $base The stored row (empty for a new row).
+ * @param array $base The stored row (a blank one for a new row).
  * @return array
  */
 function minn_admin_acf_row_overlay_in( $subs, $vals, $base, $scope = 'post' ) {
@@ -1487,19 +1541,24 @@ function minn_admin_acf_row_overlay_in( $subs, $vals, $base, $scope = 'post' ) {
 		foreach ( (array) ( $sub['gpath'] ?? array() ) as $gk ) {
 			$node = is_array( $node ) && isset( $node[ $gk ] ) ? $node[ $gk ] : null;
 		}
-		$held = is_array( $node ) && array_key_exists( $sub['key'], $node ) ? $node[ $sub['key'] ] : null;
+		$held = is_array( $node ) && array_key_exists( $sub['key'], $node );
+		$was  = $held ? $node[ $sub['key'] ] : null;
 		// A row comes back whole whenever any sub in any row changes; a sub
 		// sent as served stays as stored, never re-parsed (a value the read
 		// can't show, served empty, would otherwise be written empty). The
 		// rows are written whole through ACF, so an old-shape link goes in
-		// the shape ACF's own form posts for it.
-		if ( minn_admin_acf_untouched( $sub, $vals[ $sub['name'] ], $held ) ) {
-			$v = 'link' === ( $sub['type'] ?? '' ) ? minn_admin_acf_link_legacy( $held ) : null;
+		// the shape ACF's own form posts for it. A sub the row does not hold
+		// has nothing stored to keep: left out, ACF keeps another row's.
+		if ( $held && minn_admin_acf_untouched( $sub, $vals[ $sub['name'] ], $was ) ) {
+			$v = 'link' === ( $sub['type'] ?? '' ) ? minn_admin_acf_link_legacy( $was ) : null;
 			if ( null === $v ) {
 				continue; // the stored value as served, not an edit
 			}
 		} else {
 			$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ], $scope );
+		}
+		if ( null === $v && ! $held ) {
+			$v = minn_admin_acf_value_in( $sub, '', $scope );
 		}
 		if ( null === $v ) {
 			continue; // invalid input keeps the stored sub value
@@ -1523,8 +1582,8 @@ function minn_admin_acf_row_overlay_in( $subs, $vals, $base, $scope = 'post' ) {
  * Incoming rows → merged stored rows. Each kept row overlays ONLY its
  * mapped subs onto the original stored row it references (__idx), so
  * complex sub values the form never rendered survive edits, reorders and
- * deletions. Rows without __idx are new; omission deletes; the incoming
- * order is the new order.
+ * deletions. Rows without __idx are new and start blank; omission deletes;
+ * the incoming order is the new order.
  *
  * @param array $field Mapped repeater.
  * @param mixed $value Incoming [{ __idx?, values }] list.
@@ -1535,14 +1594,15 @@ function minn_admin_acf_rows_in( $field, $value, $orig, $scope = 'post' ) {
 	if ( ! is_array( $value ) ) {
 		return null;
 	}
-	$orig = is_array( $orig ) ? array_values( $orig ) : array();
-	$new  = array();
+	$orig  = is_array( $orig ) ? array_values( $orig ) : array();
+	$blank = minn_admin_acf_blank_row( minn_admin_acf_def_children( minn_admin_acf_definition( $field ) ) );
+	$new   = array();
 	foreach ( $value as $row ) {
 		$row  = (array) $row;
 		$vals = isset( $row['values'] ) ? (array) $row['values'] : array();
 		$base = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] )
 			? $orig[ (int) $row['__idx'] ]
-			: array();
+			: $blank;
 		$new[] = minn_admin_acf_row_overlay_in( $field['subs'], $vals, $base, $scope );
 	}
 	return $new;
@@ -1585,8 +1645,8 @@ function minn_admin_acf_flex_out( $field, $val ) {
  * an incoming mismatch is bad input rather than an edit, and re-keying a row
  * would orphan every sub value under it. A NEW row's layout must be one the
  * field declares — anything else is dropped rather than stored as a section
- * ACF cannot render. Rows whose stored layout the field no longer declares
- * pass through verbatim.
+ * ACF cannot render — and it starts blank. Rows whose stored layout the field
+ * no longer declares pass through verbatim.
  *
  * @param array $field Mapped flex field.
  * @param mixed $value Incoming [{ __idx?, __layout, values }] list.
@@ -1597,15 +1657,22 @@ function minn_admin_acf_flex_in( $field, $value, $orig, $scope = 'post' ) {
 	if ( ! is_array( $value ) ) {
 		return null;
 	}
-	$orig = is_array( $orig ) ? array_values( $orig ) : array();
-	$new  = array();
+	$orig   = is_array( $orig ) ? array_values( $orig ) : array();
+	$def    = minn_admin_acf_definition( $field );
+	$blanks = array();
+	foreach ( (array) ( $def['layouts'] ?? array() ) as $lay ) {
+		if ( is_array( $lay ) && isset( $lay['name'] ) && ! isset( $blanks[ (string) $lay['name'] ] ) ) {
+			$blanks[ (string) $lay['name'] ] = minn_admin_acf_blank_row( $lay['sub_fields'] ?? array() );
+		}
+	}
+	$new = array();
 	foreach ( $value as $row ) {
 		$row      = (array) $row;
 		$anchored = isset( $row['__idx'] ) && is_numeric( $row['__idx'] ) && isset( $orig[ (int) $row['__idx'] ] ) && is_array( $orig[ (int) $row['__idx'] ] );
-		$base     = $anchored ? $orig[ (int) $row['__idx'] ] : array();
 		$layout   = $anchored
-			? (string) ( $base['acf_fc_layout'] ?? '' )
+			? (string) ( $orig[ (int) $row['__idx'] ]['acf_fc_layout'] ?? '' )
 			: ( isset( $row['__layout'] ) ? (string) $row['__layout'] : '' );
+		$base     = $anchored ? $orig[ (int) $row['__idx'] ] : ( $blanks[ $layout ] ?? array() );
 		if ( ! isset( $field['layoutSubs'][ $layout ] ) ) {
 			if ( $anchored ) {
 				$new[] = $base;
