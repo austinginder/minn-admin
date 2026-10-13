@@ -213,11 +213,48 @@ const { launch, login, deletePost, openEditor, reporter, BASE, pickCombo } = req
 		t.check( 'reorder + delete persisted', rows.length === 1 && rows[ 0 ].values[ textSub ] === 'Row two',
 			JSON.stringify( rows ) );
 
-		// Emptying the repeater is a legitimate save.
+		// A save made with the panel closed re-anchors the rows too: delete
+		// the first of three, close the dialog, save; the next edit has to
+		// name rows by their new stored positions, or the server merges it
+		// onto the wrong stored row (and its sub-values the form never
+		// renders).
+		await page.evaluate( async ( args ) => {
+			const mk = ( v ) => ( { values: { [ args.textSub ]: v } } );
+			await fetch( window.MINN.restUrl + 'wp/v2/posts/' + args.id, {
+				method: 'POST', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				body: JSON.stringify( { minn_acf: { [ args.F ]: [ mk( 'A' ), mk( 'B' ), mk( 'C' ) ] } } ),
+			} );
+		}, { id, F, textSub } );
 		await openEditor( page, id );
 		await openPanel();
 		await page.click( `[data-pf$=":${ F }"] [data-rdel="0"]` );
 		await page.waitForTimeout( 300 );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForSelector( `[data-pf$=":${ F }"]`, { state: 'detached', timeout: 5000 } ).catch( () => null );
+		t.check( 'the panel dialog is closed for the save', ! await page.$( `[data-pf$=":${ F }"]` ) );
+		await save();
+		await openPanel();
+		await page.fill( `[data-rowsub="0:${ textSub }"]`, 'B edited' );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForSelector( `[data-pf$=":${ F }"]`, { state: 'detached', timeout: 5000 } ).catch( () => null );
+		const anchored = page.waitForResponse( ( res ) => res.request().method() === 'POST' && new RegExp( 'wp/v2/posts/' + id ).test( res.url() ), { timeout: 20000 } );
+		await page.keyboard.press( 'Meta+s' );
+		const sentRows = ( ( JSON.parse( ( await anchored ).request().postData() || '{}' ).minn_acf || {} )[ F ] || [] );
+		await page.waitForTimeout( 500 );
+		t.check( 'after a save with the dialog closed, rows are sent at their new positions',
+			'0,1' === sentRows.map( ( r ) => r.__idx ).join( ',' ), JSON.stringify( sentRows.map( ( r ) => [ r.__idx, r.values && r.values[ textSub ] ] ) ) );
+		rows = await readRows();
+		t.check( 'and the edit lands on the row it was made to', 2 === rows.length && 'B edited' === rows[ 0 ].values[ textSub ] && 'C' === rows[ 1 ].values[ textSub ],
+			JSON.stringify( rows.map( ( r ) => r.values[ textSub ] ) ) );
+
+		// Emptying the repeater is a legitimate save.
+		await openEditor( page, id );
+		await openPanel();
+		while ( await page.$( `[data-pf$=":${ F }"] [data-rdel="0"]` ) ) {
+			await page.click( `[data-pf$=":${ F }"] [data-rdel="0"]` );
+			await page.waitForTimeout( 300 );
+		}
 		await save();
 		rows = await readRows();
 		t.check( 'emptied repeater persisted', Array.isArray( rows ) && rows.length === 0, JSON.stringify( rows ) );

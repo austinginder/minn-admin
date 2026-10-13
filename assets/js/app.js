@@ -35250,7 +35250,15 @@
 		}
 		const payload = buildSavePayload( ed, extra );
 		const capturedAt = Date.now();
-		saveChain = saveChain.then( () => doSaveEditor( ed, payload, capturedAt ) );
+		// What each panel sends, as sent: after the save its baseline moves
+		// to exactly this, so a field edited while the save is in flight
+		// still differs and goes with the next one.
+		const panelsSent = {};
+		( ed.panels || [] ).forEach( ( pn ) => {
+			const w = pn.desc.writeKey;
+			if ( w && payload[ w ] && 'object' === typeof payload[ w ] ) panelsSent[ pn.desc.id ] = JSON.parse( JSON.stringify( payload[ w ] ) );
+		} );
+		saveChain = saveChain.then( () => doSaveEditor( ed, payload, capturedAt, panelsSent ) );
 		return saveChain;
 	}
 
@@ -35320,7 +35328,7 @@
 		return payload;
 	}
 
-	async function doSaveEditor( ed, payload, capturedAt ) {
+	async function doSaveEditor( ed, payload, capturedAt, panelsSent = {} ) {
 		state.saving = true;
 		try {
 			let p;
@@ -35374,7 +35382,8 @@
 			if ( p.modified ) ed.modified = p.modified;
 			if ( payload.date ) ed.newDate = null;
 			ed.savedAt = Date.now();
-			ed.dirty = false;
+			// An edit made after this save's payload was taken is not in it.
+			ed.dirty = ( ed.editedAt || 0 ) > capturedAt;
 			// A saved pattern changes what the slash menu / picker offer.
 			if ( ed.type === 'blocks' ) bustUserPatterns();
 			localNetClear( ed, capturedAt );
@@ -35390,8 +35399,44 @@
 				const v = el._rowsResync();
 				if ( store ) store[ pf.slice( sep + 1 ) ] = v;
 			} );
-			ed.panelBase = JSON.parse( JSON.stringify( ed.panelValues || {} ) );
-			ed.panelDirty = {};
+			// The same for rows whose control is not on screen (the panel is
+			// a dialog, usually closed by the time Update is pressed): the
+			// rows this save sent are anchored to their own positions now.
+			const isRows = ( v ) => Array.isArray( v ) && v.length > 0 && v.every( ( r ) => r && 'object' === typeof r && 'values' in r );
+			Object.keys( panelsSent ).forEach( ( pid ) => {
+				const sent = panelsSent[ pid ];
+				const live = ed.panelValues && ed.panelValues[ pid ];
+				Object.keys( sent ).forEach( ( k ) => {
+					if ( ! isRows( sent[ k ] ) ) return;
+					const untouched = live && JSON.stringify( live[ k ] ) === JSON.stringify( sent[ k ] );
+					sent[ k ] = sent[ k ].map( ( r, i ) => Object.assign( {}, r, { __idx: i } ) );
+					if ( untouched ) live[ k ] = JSON.parse( JSON.stringify( sent[ k ] ) );
+				} );
+			} );
+			// Each panel's baseline moves for what this save sent, to what it
+			// sent. A field the post came back holding empty although the
+			// save sent a value was not stored (PowerPress has no episode to
+			// attach a duration to before its media URL), so it stays changed;
+			// so does a field edited while the save was in flight. A panel
+			// the save did not touch takes its values as they stand.
+			const blank = ( v ) => v == null || '' === v || false === v || ( Array.isArray( v ) && ! v.length );
+			const stillDirty = {};
+			( ed.panels || [] ).forEach( ( pn ) => {
+				const pid = pn.desc.id;
+				const sent = panelsSent[ pid ];
+				if ( ! sent ) {
+					ed.panelBase[ pid ] = JSON.parse( JSON.stringify( ( ed.panelValues || {} )[ pid ] || {} ) );
+					return;
+				}
+				const back = pn.desc.valuesKey && p && p[ pn.desc.valuesKey ] && 'object' === typeof p[ pn.desc.valuesKey ] ? p[ pn.desc.valuesKey ] : null;
+				const base = ed.panelBase[ pid ] = ed.panelBase[ pid ] || {};
+				Object.keys( sent ).forEach( ( k ) => {
+					if ( back && k in back && blank( back[ k ] ) && ! blank( sent[ k ] ) ) return;
+					base[ k ] = sent[ k ];
+				} );
+				if ( Object.keys( changedKeys( ( ed.panelValues || {} )[ pid ], base ) ).length ) stillDirty[ pid ] = true;
+			} );
+			ed.panelDirty = stillDirty;
 			ed.featuredDirty = false;
 			ed.parentDirty = false;
 			ed.templateDirty = false;
