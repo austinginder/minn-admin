@@ -37,6 +37,7 @@ const ALLOWED = {
 	'includes/class-minn-admin-rest.php': {
 		"'upgrade_network'": [ 2, 'core: network/upgrade.php' ],
 		"'manage_network_users'": [ 2, "core: user-new.php's username lookup and the network user screens" ],
+		"'manage_network_plugins'": [ 1, 'core: network activation, to switch a network-active plugin back on after its update' ],
 	},
 	'includes/class-minn-admin-surfaces.php': {
 		"'delete_site'": [ 1, 'descriptor validator: meta caps core maps for a bare check (not a gate)' ],
@@ -76,6 +77,12 @@ const ALLOWED = {
 	},
 	'includes/adapters/wp-migrate.php': {
 		"'manage_network_options'": [ 1, "WP Migrate: wpmdb_ajax_cap's default on a network" ],
+	},
+	'includes/adapters/licenses.php': {
+		"'manage_network_options'": [ 1, "WP Migrate: wpmdb_ajax_cap's default on a network, for its licence actions" ],
+	},
+	'includes/adapters/aryo-activity-log.php': {
+		'is_super_admin()': [ 1, "Activity Log (Aryo): AAL_Log_Query's role scoping, where a super admin sees every row (fallback before 2.14)" ],
 	},
 	'includes/adapters/wordfence.php': {
 		"'manage_network'": [ 1, 'Wordfence: wfUtils::isAdmin() fallback' ],
