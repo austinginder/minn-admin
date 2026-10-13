@@ -162,6 +162,11 @@ add_action( 'rest_api_init', function () {
 			foreach ( array_slice( $rows, ( $page - 1 ) * $per_page, $per_page ) as $e ) {
 				$e['when'] = gmdate( 'Y-m-d\TH:i:s\Z', $e['timestamp'] );
 				unset( $e['timestamp'] );
+				// The event page reads the activity-log names for the time,
+				// address and level the list shows under its own keys.
+				$e['date']     = $e['when'];
+				$e['ip']       = $e['remote_addr'];
+				$e['severity'] = $e['event'];
 				$items[] = $e;
 			}
 			return rest_ensure_response( array( 'items' => $items, 'total' => count( $rows ) ) );
