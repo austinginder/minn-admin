@@ -176,6 +176,9 @@ $d45 = array(
 	'pm_noname' => $p . 'pm_bak',
 	'wcmeta'    => $p . 'minnd45_order_meta',
 	'wpd_copy'  => $p . 'wc_phrases_bak',
+	// Copies made from a subset of the columns, under neutral names.
+	'um_subset' => $p . 'minnd45_snap',
+	'op_subset' => $p . 'minnd45_optsnap',
 );
 // wpDiscuz's own tables, made only where wpDiscuz has not made them.
 $wpd_tables = array();
@@ -278,6 +281,8 @@ foreach ( array_merge( $wpd_tables, array( $d45['wpd_copy'] ) ) as $t ) {
 	$wpdb->query( "CREATE TABLE {$q( $t )} ( `id` int(11) NOT NULL AUTO_INCREMENT, `phrase_key` varchar(100), `phrase_value` text, PRIMARY KEY (`id`) )" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	$wpdb->insert( $t, array( 'phrase_key' => 'minnd45', 'phrase_value' => 'Minnd45 wpDiscuz phrase' ) );
 }
+$wpdb->query( "CREATE TABLE {$q( $d45['um_subset'] )} AS SELECT user_id, meta_key, meta_value FROM {$q( $d45['um_dash'] )}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->query( "CREATE TABLE {$q( $d45['op_subset'] )} AS SELECT option_name, option_value FROM {$q( $d45['op_dash'] )}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 $made = array();
 foreach ( $d45 as $k => $t ) {
@@ -379,6 +384,20 @@ list( $st, $c ) = $db_cell( $d45['pm_noname'], 'meta_id', $ids['pm_noname']['key
 $check( "OS-2r {$d45['pm_noname']}: a postmeta-shaped copy prints a Brizy key redacted", 200 === $st && $redacted( $c ), $st . ' ' . wp_json_encode( $c ) );
 list( $st, $c ) = $db_cell( $d45['wcmeta'], 'id', $ids['wcmeta']['plain'], 'meta_value' );
 $check( 'OS-2r control: a WooCommerce-shaped order meta table is no core store and prints', 200 === $st && $shown( $c, 'Minnd45 order meta' ) && $db_private( 'keyed_base', array( $d45['wcmeta'] ) ) === $db_private( 'secret_base', array( $d45['wcmeta'] ) ), $st . ' ' . wp_json_encode( $c ) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $d45['um_subset'], 'fcol' => 'meta_key', 'fq' => '_two_factor_totp_key' ) );
+$check( "OS-2r {$d45['um_subset']}: a copy of three usermeta columns prints no TOTP seed", 200 === $st && 1 === (int) ( $d['total'] ?? 0 ) && ! $has_text( $d['rows'] ?? null, $sec['seed'] ), $st . ' ' . substr( wp_json_encode( $d['rows'] ?? $d ), 0, 160 ) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $d45['um_subset'], 'fcol' => 'meta_key', 'fq' => 'first_name' ) );
+$check( "OS-2r control: {$d45['um_subset']}'s ordinary row prints", 200 === $st && $has_text( $d['rows'] ?? null, 'Minnd45 Plainname' ), $st . ' ' . substr( wp_json_encode( $d['rows'] ?? $d ), 0, 160 ) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $d45['op_subset'], 'fcol' => 'option_name', 'fq' => 'auth_salt' ) );
+$check( "OS-2r {$d45['op_subset']}: a copy of two options columns prints no salt", 200 === $st && 1 === (int) ( $d['total'] ?? 0 ) && ! $has_text( $d['rows'] ?? null, $sec['salt'] ), $st . ' ' . substr( wp_json_encode( $d['rows'] ?? $d ), 0, 160 ) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $d45['op_subset'], 'fcol' => 'option_name', 'fq' => 'blogdescription' ) );
+$check( "OS-2r control: {$d45['op_subset']}'s ordinary row prints", 200 === $st && $has_text( $d['rows'] ?? null, 'Minnd45 plain tagline' ), $st . ' ' . substr( wp_json_encode( $d['rows'] ?? $d ), 0, 160 ) );
+// A real plugin table holding an option pair (Matomo's) still browses.
+$matomo = $wpdb->prefix . 'matomo_option';
+if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $matomo ) ) ) {
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $matomo ) );
+	$check( "OS-2r control: {$matomo} still browses", 200 === $st && ! empty( $d['rows'] ), (string) $st );
+}
 $real_wc_meta = array();
 foreach ( array( 'wc_orders_meta', 'woocommerce_order_itemmeta', 'woocommerce_payment_tokenmeta', 'termmeta', 'commentmeta' ) as $wc_meta ) {
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . $wc_meta ) ) ) {

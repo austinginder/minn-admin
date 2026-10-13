@@ -641,16 +641,19 @@ class Minn_Admin_DB {
 	}
 
 	/**
-	 * The columns each of core's key/value stores is made of, all of which a
-	 * copy keeps whatever it is called. No other core or WooCommerce table
-	 * holds a full set: WooCommerce's meta tables key their rows by order,
-	 * order item or token, never by post_id beside meta_id.
+	 * The columns that carry each of core's key/value stores' rows: its owner
+	 * column (none for options), key and value. A copy keeps them whatever it
+	 * is called, even one made from a subset of the columns (CREATE TABLE ...
+	 * AS SELECT user_id, meta_key, meta_value), so the id columns are not
+	 * asked for. No other core or WooCommerce table holds a set: term and
+	 * comment meta and WooCommerce's meta tables key their rows by term,
+	 * comment, order, order item or token.
 	 */
 	const STORE_COLUMNS = array(
-		'usermeta' => array( 'umeta_id', 'user_id', 'meta_key', 'meta_value' ),
-		'options'  => array( 'option_id', 'option_name', 'option_value', 'autoload' ),
-		'sitemeta' => array( 'meta_id', 'site_id', 'meta_key', 'meta_value' ),
-		'postmeta' => array( 'meta_id', 'post_id', 'meta_key', 'meta_value' ),
+		'usermeta' => array( 'user_id', 'meta_key', 'meta_value' ),
+		'sitemeta' => array( 'site_id', 'meta_key', 'meta_value' ),
+		'postmeta' => array( 'post_id', 'meta_key', 'meta_value' ),
+		'options'  => array( 'option_name', 'option_value' ),
 	);
 
 	/**
