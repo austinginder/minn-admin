@@ -666,6 +666,41 @@ if ( ! function_exists( 'minn_admin_cleantalk_save_access_key' ) ) {
 	}
 	$ct_res = minn_admin_cleantalk_save_access_key( 'minnd45key' );
 	$check( 'NI-8 control: ' . ( is_multisite() ? 'a super admin' : 'an administrator' ) . ' still reaches CleanTalk\'s save', $ct_refusal !== ( $ct_res['message'] ?? '' ), wp_json_encode( $ct_res ) );
+
+	// The Connectors card asks the same rule, so it offers no key box the
+	// save would refuse (the client then says the key is not theirs to change).
+	$ct_card = function () use ( $call ) {
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/connectors' );
+		foreach ( (array) ( $d['connectors'] ?? array() ) as $c ) {
+			if ( 'cleantalk' === ( $c['id'] ?? '' ) ) {
+				return array( $st, $c );
+			}
+		}
+		return array( $st, null );
+	};
+	list( $cc_st, $cc ) = $ct_card();
+	if ( null === $cc ) {
+		$skip( 'NI-8 no CleanTalk card on Connectors here (' . $cc_st . ')' );
+	} else {
+		$check( 'NI-8 control: ' . ( is_multisite() ? 'a super admin' : 'an administrator' ) . '\'s CleanTalk card keeps its key box', empty( $cc['keyLocked'] ), wp_json_encode( array_intersect_key( $cc, array_flip( array( 'source', 'registered', 'keyLocked' ) ) ) ) );
+		if ( is_multisite() ) {
+			$cc_uid = $make_user( 'administrator' );
+			if ( ! $cc_uid ) {
+				$check( 'NI-8 card fixture user', false );
+			} else {
+				wp_set_current_user( $cc_uid );
+				$cc_fixture         = current_user_can( 'activate_plugins' ) && ! is_super_admin();
+				list( $cc_st, $cc ) = $ct_card();
+				wp_set_current_user( $admin );
+				$drop_user( $cc_uid );
+				if ( ! $cc_fixture ) {
+					$skip( 'NI-8 this network does not give site administrators the Plugins menu' );
+				} else {
+					$check( 'NI-8 a site administrator\'s CleanTalk card offers no key box the save would refuse', null !== $cc && true === ( $cc['keyLocked'] ?? null ), $cc_st . ' ' . wp_json_encode( $cc ? array_intersect_key( $cc, array_flip( array( 'source', 'registered', 'keyLocked' ) ) ) : null ) );
+				}
+			}
+		}
+	}
 	remove_filter( 'pre_http_request', $offline, 1 );
 }
 

@@ -30934,6 +30934,8 @@
 								<span class="minn-toggle-desc">${ esc( __( 'The provider plugin is installed but not active.' ) ) }</span>
 								${ c.plugin.canActivate ? `<button class="minn-btn-soft" data-conn-activate="${ esc( c.plugin.file ) }">${ esc( __( 'Activate' ) ) }</button>` : '' }
 							</div>`;
+						} else if ( c.keyLocked ) {
+							controls = `<div class="minn-toggle-desc">${ esc( __( 'You are not allowed to change the CleanTalk access key.' ) ) }</div>`;
 						} else if ( ! c.registered ) {
 							controls = `<div class="minn-toggle-desc">${ esc( __( 'This connector’s key isn’t writable right now: its plugin registers the setting while active.' ) ) }</div>`;
 						} else {

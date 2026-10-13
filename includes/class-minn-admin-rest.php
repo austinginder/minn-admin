@@ -11430,6 +11430,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'keyTail'        => ( 'database' === $source && strlen( $db_key ) > 8
 					&& ( 'cleantalk' !== (string) $id || ( function_exists( 'minn_admin_cleantalk_key_tail_allowed' ) && minn_admin_cleantalk_key_tail_allowed() ) ) )
 					? substr( $db_key, -4 ) : '',
+				// The key save asks the same rule (minn_admin_cleantalk_save_access_key),
+				// so a card that would only be refused offers no key box.
+				'keyLocked'      => 'cleantalk' === (string) $id
+					&& ! ( current_user_can( 'activate_plugins' ) && function_exists( 'minn_admin_cleantalk_key_tail_allowed' ) && minn_admin_cleantalk_key_tail_allowed() ),
 				'plugin'         => $plugin,
 			);
 		}
