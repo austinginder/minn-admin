@@ -70,6 +70,14 @@ function minn_admin_everest_load_entries_class() {
 	return class_exists( 'EVF_Admin_Entries' );
 }
 
+/**
+ * The status an entry shows: Everest keeps a live entry as "publish", which
+ * the forms family calls received (the Received filter's own word).
+ */
+function minn_admin_everest_state( $status ) {
+	return 'publish' === (string) $status ? 'received' : (string) $status;
+}
+
 /** Field types that carry no answer (chrome, not data). */
 function minn_admin_everest_skip_types() {
 	return array(
@@ -467,7 +475,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+				// `state` is the shown status; `status` stays Everest's own
+				// for the action gates.
+				array( 'key' => 'state', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
 				// date_created is current_time( 'mysql', true ) — UTC.
 				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
@@ -708,6 +718,7 @@ add_action( 'rest_api_init', function () {
 					'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
 					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
 					'status'     => (string) $row->status,
+					'state'      => minn_admin_everest_state( $row->status ),
 					'date'       => str_replace( ' ', 'T', (string) $row->date_created ),
 				);
 			}
@@ -758,7 +769,6 @@ add_action( 'rest_api_init', function () {
 				$meta = array(
 					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
 					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->entry_id ),
-					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
 					array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $row->date_created ) ) ) ),
 				);
 				if ( ! empty( $row->user_ip_address ) ) {
@@ -776,7 +786,8 @@ add_action( 'rest_api_init', function () {
 				}
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
-					'status'   => (string) $row->status,
+					// The page's pill; a raw "publish" read as a published post.
+					'status'   => minn_admin_everest_state( $row->status ),
 					'sections' => array(
 						array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
 						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),

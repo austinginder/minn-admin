@@ -108,6 +108,14 @@ function minn_admin_ninja_forms_titles() {
 	return $titles;
 }
 
+/**
+ * The status an entry shows: a live submission is a published nf_sub post,
+ * which the forms family calls received (the Received filter's own word).
+ */
+function minn_admin_ninja_forms_state( $post_status ) {
+	return 'publish' === (string) $post_status ? 'received' : (string) $post_status;
+}
+
 /** A stored answer as Ninja Forms reads it back (their decode_submission_value). */
 function minn_admin_ninja_forms_decode( $value ) {
 	if ( class_exists( 'WPN_Helper' ) && method_exists( 'WPN_Helper', 'decode_submission_value' ) ) {
@@ -236,7 +244,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+				// `state` is the shown status; `status` stays the post's own
+				// for the action gates.
+				array( 'key' => 'state', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
 				array( 'key' => 'seq', 'label' => '#', 'format' => 'num' ),
 				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
@@ -429,6 +439,7 @@ add_action( 'rest_api_init', function () {
 					'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
 					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
 					'status'     => (string) $post->post_status,
+					'state'      => minn_admin_ninja_forms_state( $post->post_status ),
 					'seq'        => (int) get_post_meta( $post->ID, '_seq_num', true ),
 					// post_date is site-local; emit naked (client parses local).
 					'date'       => str_replace( ' ', 'T', (string) $post->post_date ),
@@ -470,12 +481,12 @@ add_action( 'rest_api_init', function () {
 			$meta = array(
 				array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
 				array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) get_post_meta( $post->ID, '_seq_num', true ) ),
-				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $post->post_status ),
 				array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( $post->post_date ) ) ),
 			);
 			return rest_ensure_response( array(
 				'kind'     => 'entry',
-				'status'   => (string) $post->post_status,
+				// The page's pill; a raw "publish" read as a published post.
+				'status'   => minn_admin_ninja_forms_state( $post->post_status ),
 				'sections' => array(
 					array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
 					array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
